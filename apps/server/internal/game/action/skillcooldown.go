@@ -61,3 +61,25 @@ func (rt *Runtime) registerPlayerSkillCooldown(division string, character *enter
 	skill.CoolTimeMs = rt.playerSkillCooldown(division, character, skill)
 	registerOffensiveCooldown(character, skill, now)
 }
+
+/*
+================
+EntryActionSpeed
+
+Local bootstrap and remote scope entry read the same keeper as admission.
+No live record fields are read outside the character snapshot boundary.
+================
+*/
+func (rt *Runtime) EntryActionSpeed(division, name string) float32 {
+	character := rt.characterSnapshot(division, rt.findCharacter(division, name))
+	if character == nil {
+		return 100
+	}
+	stats, _, err := rt.playerCombatStats(division, character)
+	if err != nil {
+		log.WithError(err).Error("entry action-speed keeper projection failed")
+		return 100
+	}
+	percent, _ := stats.Param(actionSpeedParameter)
+	return percent
+}

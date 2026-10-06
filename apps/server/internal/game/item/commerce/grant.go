@@ -53,7 +53,7 @@ func GrantPackage(inv *inventory.Inventory, contents []Content, quantity uint16,
 			if stackable {
 				amount = uint16(min(units, math.MaxUint16))
 			}
-			item := inventory.Item{RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: amount}
+			item := inventory.Item{TradeOwner: template.TradeOwner, RefObjID: template.Ref.RefObjID, Codename: template.Ref.Codename, TypeFlags: template.Ref.TypeFlags(), Plus: template.Plus, VarianceBits: template.Variance, Durability: template.Data, MagicOptions: append([]uint64(nil), template.Magic...), Quantity: amount}
 			var slot uint8
 			if stackable {
 				grant, fault := inv.GrantStack(item, template.Stack)

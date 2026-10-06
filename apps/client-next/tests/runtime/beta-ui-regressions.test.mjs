@@ -238,7 +238,26 @@ function createFixture( held = [] ) {
 		return step();
 	}
 	step();
-	return { ui, commands, step, setGame, setEntities, deliver, scene: () => scene };
+	return {
+		ui,
+		commands,
+		step,
+		setGame,
+		setEntities,
+		deliver,
+		scene: () => scene,
+		/*
+  ================
+  tick
+
+  Advance simulation time without replacing inventory or forcing an input repaint.
+  ================
+  */
+		tick( milliseconds ) {
+			view = { ...view, simulationTimeMs: milliseconds };
+			return ui.step( view, milliseconds );
+		}
+	};
 }
 
 test("pet window rejects empty and dead rosters and closes when its last pet disappears", () => {
@@ -457,6 +476,119 @@ test("a companion inventory never replays the standalone inventory's close ident
 		assert.equal( service?.controls.filter( c => c.id === "close" ).length, 1 );
 		assert.ok( service?.controls.some( c => c.id === "companion-close" ) );
 		assert.ok( service?.controls.some( c => c.id === "slot:13" ) );
+	} finally {
+		f.ui.dispose();
+	}
+});
+
+/*
+================
+SOX inventory publication
+
+Exercise the real bag/equipment painter: helper-only tests missed its absent
+call to the animated overlay owner.
+================
+*/
+test("SOX bag and equipped icons publish advancing sparkle quads and stop when closed", () => {
+	const f = createFixture();
+	const sparkle = "/assets/images/Media_extracted/icon/item/etc/icon_edge_rare.png";
+	try {
+		f.setGame( {
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [ 6, 35 ].map( slot => ({
+				slot,
+				refObjId: 4161,
+				name: "Bronz Bow",
+				icon: "item/china/weapon/bow_02.ddj",
+				typeFlags: 13100,
+				quantity: 1,
+				plus: 0,
+				durability: 53,
+				variance: "0",
+				magic: [],
+				tooltip: { fields: { rarity: 2, itemClass: 4 } }
+			}) )
+		} );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.step();
+		const first = f.scene()?.quads.filter( q => q.texture === sparkle );
+		assert.equal( first?.length, 2, "both the bag and worn socket draw the SOX overlay" );
+		f.tick( 10000 );
+		const before = f.scene()?.quads.filter( q => q.texture === sparkle ).map( q => q.uv );
+		f.tick( 10040 );
+		const after = f.scene()?.quads.filter( q => q.texture === sparkle ).map( q => q.uv );
+		assert.notDeepEqual( before, after, "simulation time alone advances the visible frame" );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.step();
+		assert.equal( f.scene()?.quads.filter( q => q.texture === sparkle ).length, 0 );
+	} finally {
+		f.ui.dispose();
+	}
+});
+
+test("merchant offers and buyback use their item instances for rare sparkle", () => {
+	const f = createFixture();
+	const sparkle = "/assets/images/Media_extracted/icon/item/etc/icon_edge_rare.png";
+	const bow = {
+		slot: 13,
+		refObjId: 4161,
+		name: "Bronz Bow",
+		icon: "item/china/weapon/bow_02.ddj",
+		typeFlags: 13100,
+		quantity: 1,
+		plus: 0,
+		durability: 53,
+		variance: "0",
+		magic: [],
+		tooltip: { fields: { rarity: 2, itemClass: 4 } }
+	};
+	const shop = {
+		npc: 42,
+		name: "Merchant",
+		offers: [ {
+			tab: 0,
+			slot: 0,
+			refObjId: 4161,
+			name: "Bronz Bow",
+			icon: bow.icon,
+			price: "100",
+			maxStack: 1,
+			items: [ bow ]
+		} ],
+		buyback: [ {
+			index: 0,
+			id: 1,
+			refObjId: 4161,
+			name: "Bronz Bow",
+			icon: bow.icon,
+			price: "50",
+			quantity: 1,
+			plus: 0,
+			item: bow
+		} ]
+	};
+	try {
+		f.setGame( { target: 42, inventorySlotCount: 45 } );
+		f.ui.event( { kind: "activate", id: "shop-open" } );
+		f.setGame( { shop, shopCompletionRevision: 1 } );
+		const controls = f.step()?.controls;
+		assert.ok( controls?.some( c => c.id === "shop-offer:0" ) );
+		assert.ok( controls?.some( c => c.id === "shop-buyback:0" ) );
+		assert.equal( f.scene()?.quads.filter( q => q.texture === sparkle ).length, 2 );
+		f.tick( 20000 );
+		const before = f.scene()?.quads.filter( q => q.texture === sparkle ).map( q => q.uv );
+		f.tick( 20040 );
+		assert.notDeepEqual( f.scene()?.quads.filter( q => q.texture === sparkle ).map( q => q.uv ), before );
+		const ordinary = { ...bow, tooltip: { fields: { rarity: 0, itemClass: 4 } } };
+		f.setGame( {
+			shop: {
+				...shop,
+				offers: [ { ...shop.offers[0], items: [ ordinary ] } ],
+				buyback: [ { ...shop.buyback[0], item: ordinary } ]
+			}
+		} );
+		assert.equal( f.scene()?.quads.filter( q => q.texture === sparkle ).length, 0 );
 	} finally {
 		f.ui.dispose();
 	}

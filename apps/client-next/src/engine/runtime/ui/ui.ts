@@ -116,6 +116,7 @@ import { npcTalkLayout, npcChoiceColor } from "@/engine/foundation/ui/npc-talk";
 import {
 	merchantBinding,
 	merchantSelection,
+	merchantCommand,
 	merchantQuote,
 	merchantPage,
 	merchantDialogPage,
@@ -136,7 +137,7 @@ import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
-import { createFortressWarHud } from "./hud/fortress-war-hud";
+import { createFortressWarHud, createFortressScheduleHud, FORTRESS_SCHEDULE_ROWS } from "./hud/fortress-war-hud";
 import { createUnionHud } from "./hud/union-hud";
 import { createExchangeHud } from "./hud/exchange-hud";
 import {
@@ -474,6 +475,7 @@ const BUG_REPLAY_OPTION = "option-bug-replay";
 const SKIN_PANEL = "Skin change";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
 const FORTRESS_WAR_PANEL = "Fortress war application";
+const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
 // The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
 const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
@@ -672,6 +674,7 @@ export function createUi(
 	const skinHud = createSkinChangeHud();
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
+	const fortressScheduleHud = createFortressScheduleHud();
 	const unionHud = createUnionHud();
 	const exchangeHud = createExchangeHud();
 	const stallHud = createStallHud();
@@ -1085,6 +1088,7 @@ export function createUi(
 		shopOpenRequest = null;
 		if ( next !== SKIN_PANEL ) skinHud.close();
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
+		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -1380,6 +1384,16 @@ export function createUi(
 	}
 	/*
 	================
+	merchantRows
+	================
+	*/
+	function merchantRows( game: UiView["gameplay"] | undefined ) {
+		return game?.shop?.cosGid ?
+			game.cosRecords?.find( record => record.gid === game.shop?.cosGid )?.inventory ?? [] :
+			game?.inventory ?? [];
+	}
+	/*
+	================
 	openShopSale
 	================
 	*/
@@ -1391,10 +1405,11 @@ export function createUi(
 		const game = view?.gameplay;
 		if ( !game?.shop ) return;
 		if ( game.inventoryPending || game.shop.error || game.target !== game.shop.npc ) return;
-		const choice = merchantSelection( "sell", item.slot, game.shop, game.inventory );
-		if ( !choice ) return;
+		const choice = merchantSelection( "sell", item.slot, game.shop, merchantRows( game ) );
+		if ( !choice || choice.binding !== merchantBinding( item ) ) return;
 		const sale = game.shop.saleQuotes?.find( q =>
-			q.slot === item.slot && q.refObjId === item.refObjId && q.quantity === item.quantity
+			q.slot === item.slot && (q.cosGid ?? 0) === (game.shop?.cosGid ?? 0) && q.refObjId === item.refObjId &&
+			q.quantity === item.quantity
 		);
 		if ( !acknowledged && sale?.noBuyback ) {
 			shopWarning = { selection: choice, name: item.name ?? "", quick };
@@ -1404,7 +1419,7 @@ export function createUi(
 			return;
 		}
 		if ( quick ) {
-			sendGameplay( { kind: "shop-sell", slot: item.slot, quantity: item.quantity } );
+			sendGameplay( merchantCommand( choice, item.quantity ) );
 			return;
 		}
 		beginShopDialog( choice, String( item.quantity ) );
@@ -1497,7 +1512,7 @@ export function createUi(
 		shopPosition = null;
 		composing = false;
 		const game = view?.gameplay,
-			quote = merchantQuote( choice, game?.shop, game?.inventory ?? [], quantity, game?.progression?.gold );
+			quote = merchantQuote( choice, game?.shop, merchantRows( game ), quantity, game?.progression?.gold );
 		if ( quote?.quantityMode === "editable" ) focusAndSelect( "shop-quantity", 0, quantity.length );
 		else {
 			focus = null;
@@ -2923,6 +2938,21 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "npc-fortress-schedule" ) {
+			const game = view?.gameplay, conversation = game?.npcConversation, state = game?.fortress;
+			const world = state?.worlds.find( row => row.id === (state.worldId & 0xffff) );
+			const fortress = state?.fortresses.find( row => row.code === world?.code );
+			if ( conversation?.phase === "menu" && fortress ) {
+				fortressScheduleHud.request( conversation.gid, state?.serviceSequence ?? 0 );
+				sendGameplay( { kind: "fortress-schedule", gid: conversation.gid, fortress: fortress.id } );
+			}
+		} else if ( id === "fortress-schedule-close" ) {
+			setPanel( "" );
+		} else if ( id === "fortress-schedule-prev" || id === "fortress-schedule-next" ) {
+			fortressScheduleHud.page(
+				id === "fortress-schedule-prev" ? -1 : 1,
+				view?.gameplay?.fortress?.service?.applicants?.length ?? 0
+			);
 		} else if ( id === "npc-fortress-war" ) {
 			// 5D8930 action 0x34 row 1: 0x71E1 subtype 6 asks for the status.
 			const conversation = view.gameplay?.npcConversation;
@@ -3090,7 +3120,7 @@ export function createUi(
 						id.startsWith( "shop-offer:" ) ? "buy" : "buyback",
 						Number( id.slice( id.indexOf( ":" ) + 1 ) ),
 						view.gameplay.shop,
-						view.gameplay.inventory
+						merchantRows( view.gameplay )
 					),
 					"1"
 				);
@@ -3100,7 +3130,7 @@ export function createUi(
 			const q = merchantQuote(
 				shopChoice,
 				view.gameplay?.shop,
-				view.gameplay?.inventory ?? [],
+				merchantRows( view.gameplay ),
 				shopQuantity,
 				view.gameplay?.progression?.gold
 			);
@@ -3179,7 +3209,7 @@ export function createUi(
 				quote = merchantQuote(
 					shopChoice,
 					game?.shop,
-					game?.inventory ?? [],
+					merchantRows( game ),
 					shopQuantity,
 					game?.progression?.gold
 				);
@@ -3187,17 +3217,7 @@ export function createUi(
 				shopDialog && shopChoice && quote?.valid && game && !game.inventoryPending &&
 				game.target === shopChoice.npc
 			) {
-				const command = shopChoice.kind === "buy" ?
-					{
-						kind: "shop-buy" as const,
-						tab: shopChoice.tab,
-						slot: shopChoice.slot,
-						quantity: quote.quantity
-					} :
-					shopChoice.kind === "sell" ?
-					{ kind: "shop-sell" as const, slot: shopChoice.slot, quantity: quote.quantity } :
-					{ kind: "shop-buyback" as const, id: shopChoice.id };
-				sendGameplay( command );
+				sendGameplay( merchantCommand( shopChoice, quote.quantity ) );
 				closeShopDialog();
 			}
 		} else if ( id === "mount" && view.gameplay?.target ) {
@@ -3436,11 +3456,12 @@ export function createUi(
 					shopWarning = null;
 					dirty = true;
 					const game = view?.gameplay,
-						item = game?.inventory.find( i =>
+						item = merchantRows( game ).find( i =>
 							pending.selection.kind === "sell" && i.slot === pending.selection.slot
 						);
 					if (
 						item && game?.shop && pending.selection.npc === game.shop.npc &&
+						(pending.selection.kind === "buyback" || pending.selection.cosGid === game.shop.cosGid) &&
 						merchantBinding( item ) === pending.selection.binding
 					) openShopSale( item, pending.quick, true );
 					return;
@@ -3770,7 +3791,7 @@ export function createUi(
 					merchantQuote(
 							shopChoice,
 							view?.gameplay?.shop,
-							view?.gameplay?.inventory ?? [],
+							merchantRows( view?.gameplay ),
 							shopQuantity,
 							view?.gameplay?.progression?.gold
 						)?.quantityMode !== "editable"
@@ -4220,7 +4241,8 @@ export function createUi(
 					return;
 				}
 				if (
-					panel === "COS inventory" && event.id.startsWith( "cos-slot:" ) && view?.gameplay &&
+					(panel === "COS inventory" || panel === "Shop" && view?.gameplay?.shop?.cosGid === cosGid) &&
+					event.id.startsWith( "cos-slot:" ) && view?.gameplay &&
 					!view.gameplay.inventoryPending
 				) {
 					const target = topmostControlAt( controls, event.x, event.y );
@@ -4228,7 +4250,8 @@ export function createUi(
 						record = view.gameplay.cosRecords?.find( r => r.gid === cosGid ),
 						item = record?.inventory?.find( r => r.slot === source );
 					if ( record && item && target && !target.disabled ) {
-						if ( target.id.startsWith( "slot:" ) ) {
+						if ( panel === "Shop" && target.id.startsWith( "shop-" ) ) openShopSale( item );
+						else if ( target.id.startsWith( "slot:" ) ) {
 							sendGameplay( {
 								kind: "cos-transfer",
 								gid: cosGid,
@@ -4409,9 +4432,11 @@ export function createUi(
 			}
 			if ( event.kind === "double-activate" && (event.ctrl || event.shift || event.alt) ) return;
 			if ( event.kind === "double-activate" && view?.gameplay && !view.gameplay.inventoryPending ) {
-				if ( panel === "Shop" && event.id.startsWith( "slot:" ) ) {
-					const item = view.gameplay.inventory.find( r => r.slot === Number( event.id.slice( 5 ) ) );
-					if ( item && item.slot >= 13 ) {
+				if ( panel === "Shop" && event.id.startsWith( view.gameplay.shop?.cosGid ? "cos-slot:" : "slot:" ) ) {
+					const item = merchantRows( view.gameplay ).find( r =>
+						r.slot === Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) )
+					);
+					if ( item ) {
 						openShopSale( item );
 						dirty = true;
 					}
@@ -4794,23 +4819,34 @@ export function createUi(
 				// 570120 / 567290: CTRL shop transaction takes priority over SHIFT/ALT.
 				if (
 					event.ctrl && panel === "Shop" && view?.gameplay?.shop &&
-					(event.id.startsWith( "shop-offer:" ) || event.id.startsWith( "slot:" ))
+					(event.id.startsWith( "shop-offer:" ) ||
+						event.id.startsWith( view.gameplay.shop.cosGid ? "cos-slot:" : "slot:" ))
 				) {
 					const game = view.gameplay, shop = game.shop!;
 					if ( game.inventoryPending || shop.error || game.target !== shop.npc ) return;
 					if ( event.id.startsWith( "shop-offer:" ) ) {
 						const offer = shop.offers[Number( event.id.slice( 11 ) )];
 						if ( offer ) {
-							sendGameplay( {
-								kind: "shop-buy",
-								tab: offer.tab,
-								slot: offer.slot,
-								quantity: (offer.contents?.length ?? 1) > 1 ? 1 : offer.maxStack
-							} );
+							const choice = merchantSelection(
+								"buy",
+								Number( event.id.slice( 11 ) ),
+								shop,
+								merchantRows( game )
+							);
+							if ( choice ) {
+								sendGameplay(
+									merchantCommand(
+										choice,
+										(offer.contents?.length ?? 1) > 1 ? 1 : offer.purchaseLimit ?? offer.maxStack
+									)
+								);
+							}
 						}
 					} else {
-						const item = game.inventory.find( row => row.slot === Number( event.id.slice( 5 ) ) );
-						if ( item && item.slot >= 13 ) {
+						const item = merchantRows( game ).find( row =>
+							row.slot === Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) )
+						);
+						if ( item ) {
 							if ( (item.typeFlags & 0x1f) === 0xd || item.summon?.state === 2 ) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
@@ -5023,7 +5059,7 @@ export function createUi(
 					const quote = merchantQuote(
 						shopChoice,
 						game?.shop,
-						game?.inventory ?? [],
+						merchantRows( game ),
 						event.value,
 						game?.progression?.gold
 					);
@@ -5220,6 +5256,18 @@ export function createUi(
 				dirty = true;
 			}
 			// The official's answer opens or refreshes the application window.
+			fortressScheduleHud.observe( next.gameplay?.fortress, next.gameplay?.target ?? undefined );
+			if ( fortressScheduleHud.isOpen() && panel !== FORTRESS_SCHEDULE_PANEL && canLeavePanel() ) {
+				setPanel( FORTRESS_SCHEDULE_PANEL );
+				dirty = true;
+			}
+			if (
+				panel === FORTRESS_SCHEDULE_PANEL &&
+				(!fortressScheduleHud.isOpen() || next.gameplay?.npcConversation?.phase !== "menu")
+			) {
+				setPanel( "" );
+				dirty = true;
+			}
 			fortressWarHud.observe( next.gameplay?.fortressApplication?.sequence );
 			if ( fortressWarHud.npc() !== null && panel !== FORTRESS_WAR_PANEL && canLeavePanel() ) {
 				setPanel( FORTRESS_WAR_PANEL );
@@ -6456,6 +6504,34 @@ export function createUi(
 			}
 			/*
 			================
+			itemEffects
+
+			Item-slot painters share the same overlays and animation clock.
+			================
+			*/
+			function itemEffects( id: string, owned: import("@/engine/contracts/gameplay").InventoryItem, r: UiRect ) {
+				// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
+				// companion wash, then the animated sheets. 0x3645 flashes target
+				// the inventory and equipment slots.
+				const wash = itemSlotWash( owned );
+				if ( wash ) rect( r, wash );
+				const flashes = id.startsWith( "slot:" ) ?
+					(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
+					[];
+				const overlays = itemSlotOverlays(
+					owned,
+					r,
+					slotSeed( id + ":" + owned.refObjId ),
+					next.simulationTimeMs ?? 0,
+					flashes
+				);
+				for ( const overlay of overlays ) {
+					image( overlay.rect, overlay.path, white, overlay.uv );
+					slotEffects.mark();
+				}
+			}
+			/*
+			================
 			nativeItem
 			================
 			*/
@@ -6472,25 +6548,7 @@ export function createUi(
 					if ( item && "typeFlags" in item ) {
 						const owned = item as import("@/engine/contracts/gameplay").InventoryItem;
 						equipmentOverlay( owned, r );
-						// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
-						// companion wash, then the animated sheets. 0x3645 flashes target
-						// the inventory and equipment slots.
-						const wash = itemSlotWash( owned );
-						if ( wash ) rect( r, wash );
-						const flashes = id.startsWith( "slot:" ) ?
-							(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
-							[];
-						const overlays = itemSlotOverlays(
-							owned,
-							r,
-							slotSeed( id + ":" + owned.refObjId ),
-							next.simulationTimeMs ?? 0,
-							flashes
-						);
-						for ( const overlay of overlays ) {
-							image( overlay.rect, overlay.path, white, overlay.uv );
-							slotEffects.mark();
-						}
+						itemEffects( id, owned, r );
 					}
 				}
 				controls.push( {
@@ -7805,11 +7863,12 @@ export function createUi(
 						if ( feedback ) quads.push( ...feedback.quads );
 					}
 					if ( item ) {
+						itemEffects( "hotbar:" + slot, item, r );
 						paths.push( ...quickslotTimerPaths() );
 						quads.push(
 							...quickslotItemCooldownQuads(
 								game?.itemCooldowns ?? [],
-								item.typeFlags,
+								item,
 								quickslotTime,
 								r,
 								full
@@ -9510,7 +9569,7 @@ export function createUi(
 				}
 				if (
 					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
-					hudData
+					!(panel === "Shop" && game?.shop?.cosGid) && hudData
 				) {
 					const admission = beginWindow();
 					const popup = mainPopupGeometry( "Inventory", hudData.windows.ifmainpopup!, w, h, popupPosition ),
@@ -9569,6 +9628,7 @@ export function createUi(
 						if ( path ) {
 							image( r, path );
 							equipmentOverlay( item, r );
+							if ( enabled && item ) itemEffects( "slot:" + slot, item, r );
 						}
 						controls.push( {
 							id: "slot:" + slot,
@@ -9588,7 +9648,7 @@ export function createUi(
 							for (
 								const q of inventoryItemCooldownQuads(
 									game?.itemCooldowns ?? [],
-									item.typeFlags,
+									item,
 									quickslotTime,
 									r,
 									full
@@ -9671,6 +9731,7 @@ export function createUi(
 								paths.push( icon );
 								if ( resources.has( icon ) ) rect( r, white, icon );
 								equipmentOverlay( item, r );
+								if ( item ) itemEffects( "avatar:" + type, item, r );
 							}
 							controls.push( {
 								id: "avatar:" + type,
@@ -10920,7 +10981,7 @@ export function createUi(
 						top: npcPanel.top(),
 						// NPC capability bits: 1 shop, 2 talk, 4 storage, 0x40 recall, 0x80 teleport,
 						// 0x20000000 reverse return.
-						canShop: !!(capabilities & 1),
+						canShop: !!(capabilities & 0x801),
 						branches: target?.merchantBranches,
 						choiceColor: symbol =>
 							npcChoiceColor(
@@ -10943,6 +11004,7 @@ export function createUi(
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
 						canFortressOfficial: !!(capabilities & 0x800000),
+						canFortressManager: !!(capabilities & 0x400000),
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
@@ -11017,6 +11079,10 @@ export function createUi(
 							authoredRect( node, px, py ),
 							!valid || busy || !e
 						);
+						const offered = e?.item.items?.find( item => item.refObjId === e.item.refObjId );
+						if ( e && offered ) {
+							itemEffects( "shop-offer:" + e.index, offered, authoredRect( node, px, py ) );
+						}
 					}
 					for ( let i = 0; i < 5; i++ ) {
 						const entry = restoreSlotEntry( shop?.buyback ?? [], i ),
@@ -11028,6 +11094,9 @@ export function createUi(
 							authoredRect( node, px, py ),
 							!valid || busy || !entry
 						);
+						if ( entry?.item ) {
+							itemEffects( "shop-buyback:" + index, entry.item, authoredRect( node, px, py ) );
+						}
 					}
 					nativeSpin( page.GDR_STORE_SPIN_PAGE!, px, py, "shop-prev", "shop-next", shopPage, pages );
 					// Repair remains a typed gameplay operation; never route its button to buy/sell.
@@ -11191,6 +11260,88 @@ export function createUi(
 						authoredText( { ...money, color: shown.color }, px, py, shown.text );
 					}
 					endWindow( admission, "service:Storage" );
+				}
+				if (
+					panel === FORTRESS_SCHEDULE_PANEL && fortressScheduleHud.isOpen() &&
+					hudData?.windows.iffortressbusiness && hudData.windows.iffortressbusinessslot &&
+					hudData.root.GDR_FORTRESS_BUSINESS
+				) {
+					const admission = beginWindow(), root = hudData.root.GDR_FORTRESS_BUSINESS;
+					const layout = hudData.windows.iffortressbusiness, slots = hudData.windows.iffortressbusinessslot;
+					const [px, py] = windowOrigin( FORTRESS_SCHEDULE_PANEL, [
+						Math.max( 0, (w - root.rect[2]) / 2 ),
+						Math.max( 0, (h - root.rect[3]) / 2 ),
+						root.rect[2],
+						root.rect[3]
+					] );
+					nativeFrame( root, px, py, hudCopy( root.text ), "fortress-schedule-close" );
+					nativePage( layout, px, py, [ 520, 521, 550, 551, 552, 553, 554 ] );
+					for ( const [id, width] of [ [ 550, 146 ], [ 551, 48 ], [ 552, 96 ] ] as const ) {
+						const node = Object.values( layout ).find( row => row.id === id );
+						if ( node ) {
+							authoredLabeledButton(
+								{ ...node, rect: [ node.rect[0], node.rect[1], width, 20 ] },
+								px,
+								py,
+								"fortress-schedule-head:" + id,
+								hudCopy( node.text ),
+								true
+							);
+						}
+					}
+					const reply = game?.fortress?.service;
+					for (
+						const [index, name] of [
+							"GDR_FORTRESS_BUSINESS_PREWAR_EDIT",
+							"GDR_FORTRESS_BUSINESS_NEXTWAR_EDIT"
+						].entries()
+					) {
+						const node = layout[name], date = reply?.schedules?.[index];
+						if ( node && date?.[0] ) {
+							const weekday = [ "SUN", "MON", "TUS", "WED", "THU", "FRI", "SAT" ][date[2] ?? 0];
+							authoredText(
+								node,
+								px,
+								py,
+								fortressWarFormat( hudCopy( "UIIT_STT_FORT_MANAGER_WAR_SCHEDULE_TIME" ), [
+									date[0],
+									date[1] ?? 0,
+									date[3] ?? 0,
+									hudCopy( "UIIT_STT_FORT_MANAGER_WAR_SCHEDULE_" + weekday ),
+									date[4] ?? 0,
+									date[5] ?? 0
+								] )
+							);
+						}
+					}
+					const applicants = reply?.applicants ?? [], top = fortressScheduleHud.offset();
+					for ( const [index, guild] of applicants.slice( top, top + FORTRESS_SCHEDULE_ROWS ).entries() ) {
+						const lx = px + 26, ly = py + 268 + index * 25;
+						image( [ lx, ly, 290, 25 ], ROOT + "interface/guild/gil_bar02_deselect.png" );
+						for (
+							const [id, value] of [ [ 10, guild.name ], [ 11, String( guild.level ) ], [
+								12,
+								hudCopy(
+									guild.side === 0 ?
+										"UIIT_CTL_FORT_OFFICAL_OCCUPYAPPLY" :
+										"UIIT_CTL_FORT_OFFICAL_UNIONAPPLY"
+								)
+							] ] as const
+						) {
+							const node = Object.values( slots ).find( row => row.id === id );
+							if ( node ) authoredText( node, lx, ly, value );
+						}
+					}
+					button( "fortress-schedule-prev", "<", px + 260, py + 222, 28, top === 0 );
+					button(
+						"fortress-schedule-next",
+						">",
+						px + 292,
+						py + 222,
+						28,
+						top + FORTRESS_SCHEDULE_ROWS >= applicants.length
+					);
+					endWindow( admission, "service:" + FORTRESS_SCHEDULE_PANEL );
 				}
 				const fortressWar = panel === FORTRESS_WAR_PANEL ? fortressWarView() : null;
 				if (
@@ -11457,17 +11608,21 @@ export function createUi(
 					}
 					endWindow( admission, "service:" + SKIN_PANEL );
 				}
-				if ( panel === "COS inventory" && hudData ) {
+				if ( (panel === "COS inventory" || panel === "Shop" && game?.shop?.cosGid) && hudData ) {
 					const admission = beginWindow(),
 						root = hudData.root.GDR_COS_WND!,
 						[px, py] = windowOrigin( "COS inventory", [
-							Math.max( 0, w - 388 - 371 ),
+							panel === "Shop" ? Math.max( 0, w - 371 ) : Math.max( 0, w - 388 - 371 ),
 							Math.max( 0, h - 478 ),
 							root.rect[2],
 							root.rect[3]
 						] ),
 						records = game?.cosRecords?.filter( r => !r.dead && r.hp > 0 ) ?? [];
-					if ( !records.some( r => r.gid === cosGid ) ) {
+					if ( panel === "Shop" ) {
+						cosGid = game?.shop?.cosGid ?? 0;
+						cosTab = 1;
+					}
+					if ( panel !== "Shop" && !records.some( r => r.gid === cosGid ) ) {
 						cosGid = records[0]?.gid ?? 0;
 						cosSlot = -1;
 						cosPage = 0;
@@ -11488,7 +11643,7 @@ export function createUi(
 							[ px + 18 + i * 78, py + 44, 72, 24 ],
 							cosTab === i,
 							"com_long_tab",
-							i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false
+							panel === "Shop" || (i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false)
 						)
 					);
 					const ox = px + 12,
@@ -11730,6 +11885,7 @@ export function createUi(
 							const icon = row ? iconPath( row.item.icon ) : null;
 							if ( row && icon ) {
 								image( r, icon );
+								itemEffects( (mine ? "exchange-my:" : "exchange-their:") + slot, row.item, r );
 								itemCount( row.item, r );
 							}
 							controls.push( {
@@ -11868,6 +12024,7 @@ export function createUi(
 						const icon = offer ? iconPath( offer.item.icon ) : null;
 						if ( offer && icon ) {
 							image( r, icon );
+							itemEffects( "stall-slot:" + slot, offer.item, r );
 							itemCount( offer.item, r );
 						}
 						if ( offer ) {
@@ -12018,6 +12175,7 @@ export function createUi(
 						const r = authoredRect( part( 12 ), ox, oy ), icon = iconPath( row.item.icon );
 						if ( icon ) {
 							image( r, icon );
+							itemEffects( "stall-net-row:" + index, row.item, r );
 							itemCount( row.item, r );
 						}
 						authoredText( part( 11 ), ox, oy, String( network.page * 15 + index + 1 ) );
@@ -13704,7 +13862,13 @@ export function createUi(
 					layout = messageBox( w, h, 327, confirm ? 175 : 177, shopPosition ),
 					[mx, my] = layout.frame,
 					shop = game.shop,
-					quote = merchantQuote( shopChoice, shop, game.inventory, shopQuantity, game.progression?.gold ),
+					quote = merchantQuote(
+						shopChoice,
+						shop,
+						merchantRows( game ),
+						shopQuantity,
+						game.progression?.gold
+					),
 					item = quote?.item;
 				const page = confirm ?
 						merchantDialogPage( hud.data()!.windows.ifmessagebox!, true ) :
@@ -15335,6 +15499,7 @@ export function createUi(
 					if ( path ) image( cell.rect, path );
 					if ( cell.enabled && item ) {
 						equipmentOverlay( item, cell.rect );
+						itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
 						itemCount( item, cell.rect );
 						controls.push( {
 							id: "item-mall-slot:" + cell.slot,

@@ -16,6 +16,8 @@ export const HELPER_ACTION_ID = 1011;
 const HOTBAR_PAGE_COUNT = 4;
 const HOTBAR_PAGE_SLOTS = 10;
 const EQUIPMENT_SLOT_COUNT = 13;
+// Inventory move addresses are bytes; the live capacity narrows this wire bound.
+export const MAX_INVENTORY_SLOT_COUNT = 256;
 const QUICK_SLOT_COUNT = 51;
 const EXTENDED_SLOT_START = 41;
 
@@ -146,7 +148,10 @@ export function quickSlot( value: QuickSlot ): QuickSlot {
 		![ 0, 0x25, 0x46, 0x47, 0x49, 0x4a, 0x4e ].includes( kind ) || !Number.isInteger( payload ) || payload < 0 ||
 		payload > 0xffffffff
 	) throw new Error( "Invalid quickslot binding" );
-	if ( kind === 0x46 && payload >= 45 || kind === 0x47 && payload >= 13 || kind === 0x4e && payload >= 4 ) {
+	if (
+		kind === 0x46 && payload >= MAX_INVENTORY_SLOT_COUNT - EQUIPMENT_SLOT_COUNT || kind === 0x47 && payload >= 13 ||
+		kind === 0x4e && payload >= 4
+	) {
 		throw new Error( "Invalid quickslot item slot" );
 	}
 	return { slot, kind, payload: kind === 0 ? 0 : payload };
@@ -221,7 +226,8 @@ export function quickSlotDrag(
 	}
 	if ( source.startsWith( "slot:" ) ) {
 		const id = Number( source.slice( 5 ) );
-		return id < 58 && state.inventory.some( r => r.slot === id ) ?
+		return Number.isInteger( id ) && id >= 0 && id < (state.inventorySlotCount ?? MAX_INVENTORY_SLOT_COUNT) &&
+				state.inventory.some( r => r.slot === id ) ?
 			quickSlot( { slot, kind: id < 13 ? 0x47 : 0x46, payload: id < 13 ? id : id - 13 } ) :
 			null;
 	}

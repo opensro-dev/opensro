@@ -27,7 +27,7 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	door := s.Fortresses()
-	saved := domain.FortressRecord{FortressID: 1, GuildID: 7, TempGuildID: 9,
+	saved := domain.FortressRecord{FortressID: 1, GuildID: 7, TempGuildID: 9, TaxRate: 20, TaxGold: 45678,
 		BattleRecords: []domain.FortressBattleRecord{{CharacterID: 7, Kills: 151, Deaths: 21, Rank: 6, RankAtMs: 123456}}}
 	if err := door.SaveFortress(testDivision, saved); err != nil {
 		t.Fatal(err)
@@ -62,6 +62,33 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 	}
 	if other, _, err := reopened.Fortresses().FortressState("other"); err != nil || len(other) != 0 {
 		t.Fatalf("another division sees %+v (%v)", other, err)
+	}
+}
+
+/*
+================
+TestFortressTaxStateSurvivesReopen
+================
+*/
+func TestFortressTaxStateSurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	want := domain.FortressRecord{FortressID: 1, GuildID: 41, TaxRate: -20, TaxGold: 12345}
+	if err := s.Fortresses().SaveFortress(testDivision, want); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []domain.FortressRecord{
+		{FortressID: 1, TaxRate: -21}, {FortressID: 1, TaxRate: 21}, {FortressID: 1, TaxGold: -1},
+	} {
+		if err := s.Fortresses().SaveFortress(testDivision, invalid); err == nil {
+			t.Fatalf("invalid tax accepted: %+v", invalid)
+		}
+	}
+	s.Close()
+	s = openTest(t, dir, newTestClock())
+	rows, _, err := s.Fortresses().FortressState(testDivision)
+	if err != nil || len(rows) != 1 || !reflect.DeepEqual(rows[0], want) {
+		t.Fatalf("tax state after reopen: %+v, %v", rows, err)
 	}
 }
 

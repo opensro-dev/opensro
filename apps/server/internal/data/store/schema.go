@@ -50,7 +50,10 @@ func isVersionMismatch(err error) bool {
 // GameWorldID beside each point, and the optional fortress-return cooldown
 // (fortressReturnUntilMs). Table layout 6 adds the fortress and union tables; schema 15
 // records convert unchanged.
-const CurrentVersion = 16
+// Version 17 retains trade-cargo owner aliases and personal weekly reward
+// contributions, with the shard-wide reward pools in metadata. Layout stays 6;
+// the preserving offline upgrade leaves existing records unchanged.
+const CurrentVersion = 17
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
@@ -69,9 +72,10 @@ Meta
 ================
 */
 type Meta struct {
-	GidCounter  uint32           `json:"gidCounter"`
-	NextCharID  map[string]int64 `json:"nextCharId,omitempty"`
-	NextGuildID map[string]int64 `json:"nextGuildId,omitempty"`
+	GidCounter   uint32                            `json:"gidCounter"`
+	NextCharID   map[string]int64                  `json:"nextCharId,omitempty"`
+	NextGuildID  map[string]int64                  `json:"nextGuildId,omitempty"`
+	TradeRewards map[string]domain.TradeRewardPool `json:"tradeRewards,omitempty"`
 }
 
 // retiredCharacterFields are v13 record keys no current field owns. Records

@@ -490,7 +490,7 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 	for _, effect := range rows {
 		// 59CDC0 omits source-phase linked rows from ordinary spawn effects;
 		// they use the private B5ED relationship presentation instead.
-		if effect.LinkToken != 0 && effect.Phase == 1 {
+		if (effect.LinkToken != 0 || effect.SourceTargetGID != 0) && effect.Phase == 1 {
 			continue
 		}
 		if effect.StopRequested || effect.Expired(nowMs) {

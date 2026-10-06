@@ -9,6 +9,7 @@ package enterworld
 
 import (
 	"fmt"
+	"opensro.online/server/internal/domain"
 	"strings"
 	"time"
 
@@ -70,15 +71,17 @@ type Deps struct {
 	PrepareEntry         func(divisionID, characterName string) error
 	EntryPopulationLease func(divisionID, characterName string) (instance.Lease, bool)
 	// Pure quest projection on the detached entry snapshot; never grants items.
-	NormalizeEntryQuests   func(character *Character) error
-	AdmitCharacterSession  func(divisionID, characterName string, session uint64) error
-	RetireCharacterSession func(divisionID, characterName string, session uint64)
-	EntryMovementSpeeds    func(divisionID, characterName string) (float32, float32)
-	EntryCompanionSpawn    func(string, *Character, *CharacterCOS) simulation.Spawn
-	EntrySkills            func(divisionID, characterName string) []EntrySkill
-	ObjectListRows         func(divisionID string, character *Character, entry *LocalPlayerEntry) []Packet
-	MonsterState           *simulation.MonsterState
-	RefObjSnapshot         func() []RefObjRow
+	NormalizeEntryQuests      func(character *Character) error
+	AdmitCharacterSession     func(divisionID, characterName string, session uint64) error
+	RetireCharacterSession    func(divisionID, characterName string, session uint64)
+	EntryActionSpeed          func(divisionID, characterName string) float32
+	EntryCompanionActionSpeed func(division string, character *Character, pet *CharacterCOS) float32
+	EntryMovementSpeeds       func(divisionID, characterName string) (float32, float32)
+	EntryCompanionSpawn       func(string, *Character, *CharacterCOS) simulation.Spawn
+	EntrySkills               func(divisionID, characterName string) []EntrySkill
+	ObjectListRows            func(divisionID string, character *Character, entry *LocalPlayerEntry) []Packet
+	MonsterState              *simulation.MonsterState
+	RefObjSnapshot            func() []RefObjRow
 	// ExtraRefItemCodenames names the division-dependent item references a
 	// login carries (the ground). StaticRefItemCodenames names the fixed set
 	// every viewer needs; it is published once in BrowserReferences.
@@ -114,6 +117,7 @@ type Deps struct {
 	MutateCharacters func(characters []*Character, label string, mutate func())
 	UpdateCharacter  func(character *Character, label string, update func() bool) bool
 	UpdateCharacters func(characters []*Character, label string, update func() bool) bool
+	UpdateTrade      func(characters []*Character, label string, update func(*domain.TradeRewardPool) bool) bool
 	ReadCharacter    func(divisionID string, read func())
 
 	SystemMessages    func(character *Character) interface{}
@@ -232,6 +236,24 @@ func (d *Deps) UpdateMany(characters []*Character, label string, update func() b
 		return changed
 	}
 	return update()
+}
+
+/*
+================
+SettleTrade
+
+Production supplies the shard pool transaction. The in-memory fallback is
+for isolated gameplay fixtures, which do not run a durable authority.
+================
+*/
+func (d *Deps) SettleTrade(characters []*Character, label string, update func(*domain.TradeRewardPool) bool) bool {
+	if d.UpdateTrade != nil {
+		return d.UpdateTrade(characters, label, update)
+	}
+	return d.UpdateMany(characters, label, func() bool {
+		pool := domain.TradeRewardPool{}
+		return update(&pool)
+	})
 }
 
 // Read routes mutable character reads through the authority read door.
@@ -353,6 +375,7 @@ func (d *Deps) Validate() error {
 	require("MutateCharacters", d.MutateCharacters == nil)
 	require("UpdateCharacter", d.UpdateCharacter == nil)
 	require("UpdateCharacters", d.UpdateCharacters == nil)
+	require("UpdateTrade", d.UpdateTrade == nil)
 	require("ReadCharacter", d.ReadCharacter == nil)
 	require("Letters", d.Letters == nil)
 	require("Guilds", d.Guilds == nil)

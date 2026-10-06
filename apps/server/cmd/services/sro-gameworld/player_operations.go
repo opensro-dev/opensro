@@ -21,6 +21,7 @@ import (
 
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/transport"
 )
 
@@ -56,6 +57,22 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 	}
 	return api.InstallPlayerOperations(agentapi.PlayerOperations{
 		Token: strings.TrimSpace(string(bytes)), AuditPath: filepath.Join(state, "operator-audit.jsonl"), Read: read,
+		GrantItems: func(request agentapi.PlayerOperation) (any, error) {
+			if authority.Health().LastError != "" {
+				return nil, fmt.Errorf("storage is unhealthy; item grant refused")
+			}
+			grants := make([]inventory.ItemAmount, len(request.Items))
+			for i, item := range request.Items {
+				grants[i] = inventory.ItemAmount{Codename: item.Codename, Count: item.Count}
+			}
+			if err := game.items.OperatorGrantItems(shard, request.Character, grants); err != nil {
+				return nil, err
+			}
+			if authority.Health().LastError != "" {
+				return nil, fmt.Errorf("item grant persistence failed; inspect storage before retrying")
+			}
+			return read(request.Character)
+		},
 		Rescue: func(request agentapi.PlayerOperation) (any, error) {
 			valid := false
 			for _, town := range game.items.OperatorTowns() {

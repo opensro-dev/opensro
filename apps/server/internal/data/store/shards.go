@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+shards.go - validate persisted shard ownership before serving the authority
+
+===========================================================================
+*/
 package store
 
 import (
@@ -14,6 +21,11 @@ import (
 // This is a boot gate, never a repair. Unknown shards and overflow characters
 // require an explicit operator migration; silently merging, deleting, or
 // reassigning authoritative state would destroy shard isolation.
+/*
+================
+ValidateShardState
+================
+*/
 func (s *Store) ValidateShardState(configuredShardIDs []string) error {
 	allowed := make(map[string]bool, len(configuredShardIDs))
 	for _, shardID := range configuredShardIDs {
@@ -43,6 +55,7 @@ func (s *Store) ValidateShardState(configuredShardIDs []string) error {
 	collectKeys(persisted, s.campMembers)
 	collectKeys(persisted, s.meta.NextCharID)
 	collectKeys(persisted, s.meta.NextGuildID)
+	collectKeys(persisted, s.meta.TradeRewards)
 
 	var unknown []string
 	for shardID := range persisted {
@@ -97,6 +110,11 @@ func (s *Store) ValidateShardState(configuredShardIDs []string) error {
 	return nil
 }
 
+/*
+================
+collectKeys
+================
+*/
 func collectKeys[T any](destination map[string]bool, source map[string]T) {
 	for key := range source {
 		destination[key] = true

@@ -173,7 +173,10 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		}
 		entry.Population = lease
 	}
-	entry.WalkSpeed, entry.RunSpeed = 20, 50
+	entry.WalkSpeed, entry.RunSpeed, entry.ActionSpeed = 20, 50, 100
+	if deps.EntryActionSpeed != nil {
+		entry.ActionSpeed = deps.EntryActionSpeed(divisionID, character.Name)
+	}
 	if deps.EntrySkills != nil {
 		entry.SpawnSkills = deps.EntrySkills(divisionID, character.Name)
 	}
@@ -358,6 +361,10 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 				pose := deps.EntryCompanionSpawn(divisionID, character, cos)
 				position = wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle}
 			}
+			actionSpeed := float32(100)
+			if deps.EntryCompanionActionSpeed != nil {
+				actionSpeed = deps.EntryCompanionActionSpeed(divisionID, character, cos)
+			}
 			spawnPayload := wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 				BodyStatus: cos.NativeBodyStatus,
 				Band:       uint8(ref.TidWord >> 11),
@@ -366,7 +373,7 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 				Position:   position,
 				Walk:       ref.WalkSpeed,
 				Run:        ref.RunSpeed,
-				Scale:      ref.Scale,
+				Scale:      actionSpeed,
 				Name:       name,
 				OwnerName:  character.Name,
 				OwnerGid:   objectID,
@@ -621,6 +628,7 @@ func (c *refItemCollector) finish() []RefItemRow {
 			continue
 		}
 		c.rows[i].DescriptionSymbol = item.DescriptionSymbol
+		c.rows[i].NativeFields = ItemUseNativeFields(item, c.deps.Skills)
 		if characters == nil || item.AssociatedCharacterCodename == "" {
 			continue
 		}

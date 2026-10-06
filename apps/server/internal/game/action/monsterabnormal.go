@@ -139,8 +139,8 @@ func (c monsterAbnormalContext) Param(instance monster.Instance, id uint16) floa
 		return float32(instance.WalkSpeed())
 	case id == 0x18:
 		return float32(instance.RunSpeed())
-	case id == 0x8c:
-		base = 100
+	case id == actionSpeedParameter:
+		return float32(instance.ActionSpeed())
 	case id >= 0x1b && id <= 0x20:
 		// The reference loader already converts authored columns to keeper
 		// order. Swapping again gives burn the shock resistance and vice versa.
@@ -297,7 +297,8 @@ func (rt *Runtime) monsterAbnormalFrames(division string, instance monster.Insta
 		frames = append(frames, wire.Frame{Opcode: 0xB2F5, Payload: simulation.MonsterCorrectionPayload(instance.Gid, *effects.Halted)})
 	}
 	if effects.SpeedChanged {
-		frames = append(frames, wire.Frame{Opcode: 0x376F, Payload: simulation.MonsterSpeedPayload(instance)})
+		frames = append(frames, wire.Frame{Opcode: 0x376F, Payload: simulation.MonsterSpeedPayload(instance)},
+			wire.ActionSpeedFrame(instance.Gid, float32(instance.ActionSpeed())))
 	}
 	if effects.MaskChanged {
 		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.MonsterAbnormalPayload(instance)})

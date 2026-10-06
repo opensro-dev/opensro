@@ -62,8 +62,8 @@ func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) (
 				return nil, fmt.Errorf("unsupported COS item body")
 			}
 			group := row.TypeFlags & 0x780
-			if row.TypeFlags&0x60 == 0x60 && (group == 0x280 || group == 0x400) {
-				return nil, fmt.Errorf("COS item requires a wider or labeled durable body")
+			if row.TypeFlags&0x60 == 0x60 && group == 0x280 {
+				return nil, fmt.Errorf("COS item requires a wider durable body")
 			}
 			seen[row.Slot] = true
 			body := BuildItemBody(InventoryWireItems([]InventoryRow{row})[0])

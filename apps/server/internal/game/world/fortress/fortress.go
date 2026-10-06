@@ -41,6 +41,9 @@ type Record struct {
 	// TempGuildID holds the fortress between a war's capture and its end
 	// (UPDATE _SiegeFortress SET TempGuildID).
 	TempGuildID int64
+	// 61DA40 serializes the signed tax ratio and accumulated tax gold.
+	TaxRate int16
+	TaxGold int64
 	// MaxEntrance, RequestFee and OfficialNpc copy the catalog row.
 	MaxEntrance uint32
 	RequestFee  uint64

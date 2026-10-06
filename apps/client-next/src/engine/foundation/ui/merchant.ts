@@ -34,6 +34,7 @@ export function merchantDialogPage( layout: AuthoredLayout, confirm: boolean ): 
 export type MerchantSelection =
 	| {
 		readonly kind: "buy";
+		readonly cosGid?: number;
 		readonly npc: number;
 		readonly tab: number;
 		readonly slot: number;
@@ -41,6 +42,7 @@ export type MerchantSelection =
 	}
 	| {
 		readonly kind: "sell";
+		readonly cosGid?: number;
 		readonly npc: number;
 		readonly slot: number;
 		readonly binding: string;
@@ -90,7 +92,8 @@ export function merchantBinding( item: InventoryItem | ShopOffer | BuybackOffer 
 			item.magic,
 			item.typeFlags,
 			item.summon,
-			item.durationMs
+			item.durationMs,
+			item.label
 		] );
 	}
 	if ( "maxStack" in item ) {
@@ -112,13 +115,23 @@ export function merchantSelection(
 ): MerchantSelection | null {
 	if ( kind === "buy" ) {
 		const item = shop.offers[index];
-		return item ? { kind, npc: shop.npc, tab: item.tab, slot: item.slot, binding: merchantBinding( item ) } : null;
+		return item ?
+			{
+				kind,
+				cosGid: shop.cosGid,
+				npc: shop.npc,
+				tab: item.tab,
+				slot: item.slot,
+				binding: merchantBinding( item )
+			} :
+			null;
 	}
 	if ( kind === "sell" ) {
 		const item = inventory.find( i => i.slot === index );
-		return item && item.slot >= 13 ?
+		return item && item.slot >= (shop.cosGid ? 0 : 13) ?
 			{
 				kind,
+				cosGid: shop.cosGid,
 				npc: shop.npc,
 				slot: item.slot,
 				binding: merchantBinding( item ),
@@ -143,6 +156,7 @@ export function merchantQuote(
 	gold: string | undefined
 ) {
 	if ( !selection || !shop || shop.error || shop.npc !== selection.npc ) return null;
+	if ( selection.kind !== "buyback" && (selection.cosGid ?? 0) !== (shop.cosGid ?? 0) ) return null;
 	const item = selection.kind === "buy" ?
 		shop.offers.find( i => i.tab === selection.tab && i.slot === selection.slot ) :
 		selection.kind === "sell" ?
@@ -159,11 +173,17 @@ export function merchantQuote(
 	// quote. Only the inventory owner replaces this array on a catalogue reply.
 	const sale = selection.kind === "sell" && shop.saleQuotes !== selection.previousQuotes ?
 		shop.saleQuotes?.find( q =>
-			q.slot === selection.slot && q.refObjId === item.refObjId && q.quantity === maximum
+			q.slot === selection.slot && (q.cosGid ?? 0) === (selection.cosGid ?? 0) && q.refObjId === item.refObjId &&
+			q.quantity === maximum
 		) :
 		undefined;
 	const unit = selection.kind === "sell" ? sale?.price : "price" in item ? item.price : undefined;
-	const total = unit === undefined ? null : BigInt( unit ) * BigInt( selection.kind === "buyback" ? 1 : quantity );
+	const quotedTotal = sale?.totals?.[quantity - 1];
+	const total = sale?.totals ?
+		(quotedTotal === undefined ? null : BigInt( quotedTotal )) :
+		unit === undefined ?
+		null :
+		BigInt( unit ) * BigInt( selection.kind === "buyback" ? 1 : quantity );
 	// Honor is not a balance this client holds; the server answers a short
 	// honor balance with the native UIIT_MSG_TC_LACK_HONOR_POINT refusal.
 	const honor = "currency" in item && item.currency === SHOP_CURRENCY_HONOR;
@@ -197,4 +217,30 @@ export function merchantPage( shop: ShopState | undefined, tab: number, page: nu
 		pages,
 		slots: Array.from( { length: 30 }, ( _, i ) => offers.find( r => r.item.slot === current * 30 + i ) )
 	};
+}
+
+/*
+================
+merchantCommand
+
+Container identity is captured with the quote, so a replaced transport cannot
+inherit a pending buy or sell confirmation.
+================
+*/
+export function merchantCommand( selection: MerchantSelection, quantity: number ) {
+	if ( selection.kind === "buyback" ) return { kind: "shop-buyback" as const, id: selection.id };
+	if ( selection.kind === "buy" ) {
+		return selection.cosGid ?
+			{
+				kind: "cos-shop-buy" as const,
+				gid: selection.cosGid,
+				tab: selection.tab,
+				slot: selection.slot,
+				quantity
+			} :
+			{ kind: "shop-buy" as const, tab: selection.tab, slot: selection.slot, quantity };
+	}
+	return selection.cosGid ?
+		{ kind: "cos-shop-sell" as const, gid: selection.cosGid, slot: selection.slot, quantity } :
+		{ kind: "shop-sell" as const, slot: selection.slot, quantity };
 }

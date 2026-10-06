@@ -126,6 +126,7 @@ export interface NpcTalkInput {
 	readonly canReverseReturn?: boolean;
 	// 5D8FF0 0x800000: the fortress official's application row.
 	readonly canFortressOfficial?: boolean;
+	readonly canFortressManager?: boolean;
 	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
 	readonly jobRows?: readonly { readonly id: string; readonly label: string; }[];
 }
@@ -206,6 +207,9 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						} ] :
 						[]),
 					...(input.jobRows ?? []),
+					...(input.canFortressManager ?
+						[ { id: "npc-fortress-schedule", label: copy( "SN_FORTRESS_MANAGER_SERVICE" ) } ] :
+						[]),
 					// 5D7AD0 action 0x34: the official's one row.
 					...(input.canFortressOfficial ?
 						[ { id: "npc-fortress-war", label: copy( "SN_FORTRESS_OFFICIAL_WARAPPLY" ) } ] :

@@ -144,6 +144,8 @@ export function createHudResources(
 		"ifstorageroom",
 		"iffortresswarapplywnd",
 		"iffortresswarapplywndslot",
+		"iffortressbusiness",
+		"iffortressbusinessslot",
 		"ifchangeplayermodel",
 		"ifgrantmagicattributewnd",
 		"ifnewalchemybox",

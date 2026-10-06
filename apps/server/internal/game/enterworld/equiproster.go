@@ -225,6 +225,7 @@ binary writer, plus the semantic item identity and stat record.
 ==================
 */
 type WireItem struct {
+	TradeOwner   string
 	Summon       *domain.CharacterCOS
 	Icon         string
 	Slot         int64
@@ -476,6 +477,7 @@ func InventoryWireItems(rows []InventoryRow) []WireItem {
 			variance = 0
 		}
 		out = append(out, WireItem{
+			TradeOwner:        row.TradeOwner,
 			Slot:              row.Slot,
 			RefObjID:          row.RefObjID,
 			TypeFlags:         row.TypeFlags,

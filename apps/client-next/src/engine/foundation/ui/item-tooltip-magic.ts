@@ -22,7 +22,8 @@ itemTooltipMagic
 export function itemTooltipMagic( item: InventoryItem, text: ( symbol: string ) => string ): TooltipRow[] {
 	const rows: TooltipRow[] = [],
 		references = item.magicReferences ?? [],
-		degree = Math.floor( ((item.tooltip?.fields.itemClass ?? 1) - 1) / 3 ) + 1;
+		// 55B608 uses signed division toward zero: class zero still selects degree one.
+		degree = Math.trunc( ((item.tooltip?.fields.itemClass ?? 1) - 1) / 3 ) + 1;
 	for (
 		const encoded of [ ...item.magic ].sort( ( a, b ) =>
 			Number( BigInt( a ) & 65535n ) - Number( BigInt( b ) & 65535n )
@@ -33,6 +34,8 @@ export function itemTooltipMagic( item: InventoryItem, text: ( symbol: string ) 
 		const source = ref.degree === degree ?
 			ref :
 			references.find( r => r.optionName === ref.optionName && r.degree === degree );
+		// 55B632 returns without a positive row when the matching degree is absent.
+		if ( ref.paramName.includes( "+" ) && !source ) continue;
 		const n = ref.optionName, amount = Number( bits >> 32n ), words = source?.rangeWords;
 		let min = 0, max = 0;
 		if ( words ) {
@@ -85,6 +88,11 @@ export function itemTooltipMagic( item: InventoryItem, text: ( symbol: string ) 
 				value = `${text( "PARAM_REPAIR" )} (${Math.max( 0, amount - 1 )}${text( "UIIT_STT_COUNT" )})`;
 			} else if ( n === "MATTR_STR_3JOB" || n === "MATTR_INT_3JOB" ) {
 				value = `${text( n === "MATTR_STR_3JOB" ? "PARAM_STR" : "PARAM_INT" )} ${amount} ${increase}`;
+			} else if ( n === "MATTR_STR_AVATAR" || n === "MATTR_INT_AVATAR" ) {
+				// 55C150/55C1FB: these older avatar options have no percentage suffix.
+				value = `${text( n === "MATTR_STR_AVATAR" ? "PARAM_STR" : "PARAM_INT" )} ${
+					amount || ref.degree
+				} ${increase}`;
 			} else if ( n === "MATTR_REINFORCE_ITEM" && ref.rangeWords ) {
 				const duration = amount >= 60000 ?
 					`${Math.trunc( amount / 60000 )}${text( "PARAM_MINUTE" )} ${Math.trunc( amount % 60000 / 1000 )}${
@@ -105,7 +113,8 @@ export function itemTooltipMagic( item: InventoryItem, text: ( symbol: string ) 
 				}% ${increase})`;
 			}
 		}
-		if ( value ) rows.push( { value, color } );
+		// 55B540 passes style 3; the native font selector maps flag 0x2 to bold.
+		if ( value ) rows.push( { value, color, strong: true } );
 	}
 	return rows;
 }

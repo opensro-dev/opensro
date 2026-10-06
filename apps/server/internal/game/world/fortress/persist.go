@@ -62,6 +62,10 @@ func (a *Authority) Restore(divisionID string, store domain.FortressStore) error
 			record.battles[battle.CharacterID] = battle
 			record.battleCheckpoints[battle.CharacterID] = battle
 		}
+		if row.TaxRate < -20 || row.TaxRate > 20 || row.TaxGold < 0 {
+			return fmt.Errorf("fortress: invalid tax state for fortress %d", row.FortressID)
+		}
+		record.TaxRate, record.TaxGold = row.TaxRate, row.TaxGold
 	}
 	for _, row := range requests {
 		record, ok := state.records[row.FortressID]
@@ -92,6 +96,7 @@ func (a *Authority) saveRecordLocked(divisionID string, record *Record) error {
 	return a.store.SaveFortress(divisionID, domain.FortressRecord{
 		FortressID: record.ID, GuildID: record.GuildID, TempGuildID: record.TempGuildID,
 		BattleRecords: battleRows(record),
+		TaxRate:       record.TaxRate, TaxGold: record.TaxGold,
 	})
 }
 

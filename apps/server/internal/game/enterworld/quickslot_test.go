@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+quickslot_test.go - native hotbar configuration wire and persistence tests
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -5,10 +12,20 @@ import (
 	"testing"
 )
 
+/*
+================
+quickSlotSavePayload
+================
+*/
 func quickSlotSavePayload(slot, kind uint8, value uint32) []byte {
 	return []byte{1, slot, kind, byte(value), byte(value >> 8), byte(value >> 16), byte(value >> 24)}
 }
 
+/*
+================
+TestQuickSlotSavePersistsReplacesAndClears
+================
+*/
 func TestQuickSlotSavePersistsReplacesAndClears(t *testing.T) {
 	character := &Character{Name: "quickbar-owner"}
 	deps := &Deps{}
@@ -28,6 +45,11 @@ func TestQuickSlotSavePersistsReplacesAndClears(t *testing.T) {
 	}
 }
 
+/*
+================
+TestQuickSlotSaveRejectsMalformedStateAtomically
+================
+*/
 func TestQuickSlotSaveRejectsMalformedStateAtomically(t *testing.T) {
 	character := &Character{Name: "quickbar-owner", QuickSlots: []QuickSlotBinding{{Slot: 2, Kind: 0x46, Payload: 6}}}
 	deps := &Deps{}
@@ -35,7 +57,7 @@ func TestQuickSlotSaveRejectsMalformedStateAtomically(t *testing.T) {
 		{1, 2},
 		quickSlotSavePayload(51, 0x49, 1),
 		quickSlotSavePayload(2, 0x48, 1),
-		quickSlotSavePayload(2, 0x46, 45),
+		quickSlotSavePayload(2, 0x46, quickSlotBagPayloadLimit),
 		quickSlotSavePayload(2, 0x47, 13),
 		quickSlotSavePayload(2, 0x4e, 4),
 	}
@@ -49,6 +71,11 @@ func TestQuickSlotSaveRejectsMalformedStateAtomically(t *testing.T) {
 	}
 }
 
+/*
+================
+TestQuickSlotMissionRevealRequestIsAcceptedWithoutMutation
+================
+*/
 func TestQuickSlotMissionRevealRequestIsAcceptedWithoutMutation(t *testing.T) {
 	character := &Character{
 		Name:       "quickbar-owner",
@@ -63,6 +90,11 @@ func TestQuickSlotMissionRevealRequestIsAcceptedWithoutMutation(t *testing.T) {
 	}
 }
 
+/*
+================
+TestQuickSlotHudStatePayloadIsModeSevenSortedAndPacked
+================
+*/
 func TestQuickSlotHudStatePayloadIsModeSevenSortedAndPacked(t *testing.T) {
 	character := &Character{QuickSlots: []QuickSlotBinding{
 		{Slot: 9, Kind: 0x49, Payload: 0x11223344},
@@ -75,5 +107,26 @@ func TestQuickSlotHudStatePayloadIsModeSevenSortedAndPacked(t *testing.T) {
 	}
 	if got := buildQuickSlotHudStatePayload(character); !bytes.Equal(got, want) {
 		t.Fatalf("hud state = %x, want %x", got, want)
+	}
+}
+
+/*
+================
+TestQuickSlotExpandedBagIndicesRoundTrip
+
+The packet carries a bag-relative index, not a default inventory capacity.
+================
+*/
+func TestQuickSlotExpandedBagIndicesRoundTrip(t *testing.T) {
+	for _, index := range []uint32{44, 45, 63, 95, quickSlotBagPayloadLimit - 1} {
+		character := &Character{Name: "expanded-bag"}
+		payload := quickSlotSavePayload(50, 0x46, index)
+		if changed, err := HandleQuickSlotSave(&Deps{}, character, payload); err != nil || !changed {
+			t.Fatalf("index %d: changed %v, err %v", index, changed, err)
+		}
+		want := []byte{7, 1, 50, 0x46, byte(index), 0, 0, 0}
+		if got := buildQuickSlotHudStatePayload(character); !bytes.Equal(got, want) {
+			t.Fatalf("index %d: state %x, want %x", index, got, want)
+		}
 	}
 }
