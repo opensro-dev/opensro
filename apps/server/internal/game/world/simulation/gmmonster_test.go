@@ -85,6 +85,39 @@ func TestGMMonstersSpawnAtTheGMWithNativeClamps(t *testing.T) {
 
 /*
 ================
+TestGMMonstersFaceAroundTheFullTurn
+
+The heading is a radian draw converted to the wire word, so random draws
+spread over the whole circle rather than collapsing near zero.
+================
+*/
+func TestGMMonstersFaceAroundTheFullTurn(t *testing.T) {
+	state, lease := gmMonsterState(t, 0)
+	draws := []float64{0, 0.25, 0.5, 0.75}
+	next := 0
+	state.SetRandomSource(func() float64 {
+		value := draws[next%len(draws)]
+		next++
+		return value
+	})
+	request := GMMonsterSpawn{Division: "gm", Population: lease, RefObjID: 1, Count: 4,
+		Position: Spawn{RegionID: 0x655e, X: 253, Y: 85, Z: 449}, NowMs: 1000}
+	if state.SpawnGMMonsters(request) != 4 {
+		t.Fatal("load refused")
+	}
+	largest := uint16(0)
+	for _, actor := range state.MaterializedInstances("gm") {
+		if actor.SpawnHeading > largest {
+			largest = actor.SpawnHeading
+		}
+	}
+	if largest < 0x8000 {
+		t.Fatalf("headings stay below %#x; radians were not converted to the wire word", largest)
+	}
+}
+
+/*
+================
 TestGMSpawnRarityMatchesNative520D90
 ================
 */

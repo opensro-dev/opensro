@@ -69,7 +69,9 @@ SpawnGMMonsters
 
 Returns how many monsters were created; zero refuses the command. Every
 instance shares the GM's point; only its heading is drawn, as rand()/32767
-of a full turn (520B85..520BB3).
+of a full turn in radians (520B85..520BB3), passed as a float to the world
+factory (5F6EB0) like the nest path's heading. SpawnHeading is the wire
+word, so it takes the same radians -> word conversion as nest spawns.
 ================
 */
 func (s *MonsterState) SpawnGMMonsters(request GMMonsterSpawn) int {
@@ -108,7 +110,7 @@ func (s *MonsterState) SpawnGMMonsters(request GMMonsterSpawn) int {
 		s.counter++
 		actor := monster.Instance{
 			Gid: monster.GidBase + s.counter, Ref: ref, Spawn: spawn, NestDetached: true,
-			SpawnHeading: uint16(angle),
+			SpawnHeading: HeadingWordFromRadians(angle),
 			Nest: monster.NestRow{
 				SpawnPoint: spawn, PolicyPinned: true, HasRarityOverride: true, RarityOverride: rarity,
 			},
