@@ -31,15 +31,15 @@ Bitwarden and Dashlane; otherwise clicking one offers to save a login.
 
 The login edits are drawn at opacity 0.1 instead of 0: Bitwarden treats a
 field under 0.1 as hidden and never fills its password (only the focused
-username). Their text, caret and background are already transparent, so the
-change is not visible.
+username). The credential CSS suppresses browser paint in normal mode;
+forced-colors mode keeps the accessible DOM controls visible.
 ================
 */
 function configureCredentialHints( element: HTMLInputElement, id: string ): void {
 	const token = LOGIN_AUTOCOMPLETE[id];
 	if ( token ) {
 		element.autocomplete = token as AutoFill;
-		element.style.opacity = "0.1";
+		element.classList.add( "gpu-ui-credential" );
 		return;
 	}
 	element.autocomplete = "off";

@@ -911,3 +911,40 @@ sent or dismissed. The replay's capture <video> is never visible.
 	overflow-wrap: anywhere;
 	user-select: text;
 }
+
+/*
+================
+GPU semantic credential controls
+
+Bitwarden excludes opacity below 0.1. The canvas still owns normal login
+pixels, including focus and selection. Browser autofill uses important UA
+colors; defer that paint while the login controls exist. Keep this workaround
+out of forced-colors mode, where the DOM is the visible accessible interface.
+================
+*/
+@media (forced-colors: none) {
+	.gpu-ui-credential {
+		opacity: 0.1 !important;
+		outline: none;
+		caret-color: transparent;
+		-webkit-text-fill-color: transparent;
+	}
+
+	.gpu-ui-credential::selection {
+		color: transparent;
+		background: transparent;
+	}
+
+	.gpu-ui-credential:autofill {
+		transition: background-color 0s 86400s, color 0s 86400s;
+	}
+}
+
+@media (forced-colors: active) {
+	.gpu-ui-control {
+		opacity: 1 !important;
+		color: ButtonText !important;
+		background: ButtonFace !important;
+		outline: 1px solid !important;
+	}
+}
