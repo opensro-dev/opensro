@@ -39,6 +39,14 @@ const STALL_LEGS = {
 	edge: { approach: { x: 0, z: 120 }, turn: { x: 120, z: 120 } }
 };
 const STALL_MS = [ 0, 150, 300, 600 ];
+// The existing merchant fixture stays inside Jangan's safe town. Field
+// recovery remains available, but level-one peers cannot survive its mobs.
+const TOWN_FIXTURE = {
+	id: "jangan-accessory-merchant-recovery",
+	movementMode: 3,
+	start: { regionId: 25000, x: 1600, y: 0, z: 1078 },
+	startYawRadians: 0
+};
 const CHARACTER = process.env.SRO_PROBE_CHARACTER ?? "asd2";
 // The GameWorld's local operator snapshot (two-second capture cache).
 const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
@@ -403,11 +411,19 @@ run
 */
 async function run( options ) {
 	assert.ok( Number.isInteger( options.peers ) && options.peers >= 0, "peers must be a nonnegative integer" );
+	assert.ok( options.scene === "field" || options.scene === "town", "scene must be field or town" );
+	if ( options.scene === "town" ) {
+		assert.ok(
+			options.only.every( lane => lane === "network-delay" || lane === "bidirectional-delay" ),
+			"town supports only network-delay and bidirectional-delay; field-specific paths require --scene field"
+		);
+	}
+	const fixture = options.scene === "town" ? TOWN_FIXTURE : MISSION_MOVEMENT_FIXTURES.region_cross;
 	if ( options.peers ) {
 		assert.ok( options.tokenPath && options.provisioningUrl, "explicit local crowd authority required" );
 	}
 	await mkdir( options.out, { recursive: true } );
-	const client = await openClient( MISSION_MOVEMENT_FIXTURES.region_cross, {
+	const client = await openClient( fixture, {
 		spans: true,
 		uncapped: false,
 		cpuRate: options.cpuRate,
@@ -425,7 +441,7 @@ async function run( options ) {
 		if ( options.peers ) {
 			crowd = await createCrowd( {
 				count: options.peers,
-				fixture: MISSION_MOVEMENT_FIXTURES.region_cross,
+				fixture,
 				provisioningUrl: options.provisioningUrl,
 				tokenPath: options.tokenPath,
 				journalPath: `${options.out}/crowd-cleanup.json`
@@ -445,9 +461,18 @@ async function run( options ) {
 				crowdNames,
 				{ timeout: SETTLE_TIMEOUT_MS }
 			);
+			const admission = {
+				...await crowdEvidence( page, crowdNames ),
+				server: await serverPose( CHARACTER, crowdNames )
+			};
 			await writeFile(
 				`${options.out}/crowd-admitted.json`,
-				JSON.stringify( await crowdEvidence( page, crowdNames ), null, 2 )
+				JSON.stringify( admission, null, 2 )
+			);
+			assertCrowd( admission );
+			assert.ok(
+				admission.server.hp > 0 && admission.server.peers.every( peer => peer.hp > 0 ),
+				"observer and every crowd peer must survive setup before starting recovery"
 			);
 		}
 		const results = [];
@@ -638,6 +663,7 @@ await run( parseOptions(
 	process.argv.slice( 2 ),
 	{
 		cpuRate: 1,
+		scene: "field",
 		out: "temp/artifacts/recovery",
 		trace: false,
 		video: false,
@@ -647,5 +673,5 @@ await run( parseOptions(
 		only: [ "main", "worker", "transport", ...STALL_LANES ]
 	},
 	"recovery-bench.mjs [--cpu-rate 4] [--out DIR] [--only main,worker,transport,network-delay,bidirectional-delay] " +
-		"[--trace] [--video] [--peers N --provisioning-url URL --token-path PATH]"
+		"[--trace] [--video] [--scene field|town] [--peers N --provisioning-url URL --token-path PATH]"
 ) );
