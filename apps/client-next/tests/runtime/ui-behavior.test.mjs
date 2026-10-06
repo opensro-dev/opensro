@@ -91,6 +91,14 @@ test("UI demand is compared by content, whichever array carries it", () => {
 	f.resources.step( [ "/a.png", "/c.png" ], 4 );
 	assert.equal( f.requests.length, 3, "a same-length demand naming a new image requests it" );
 	assert.match( f.requests[2], /c\.png$/ );
+	// Edited, then frozen: frozen now, but not when it was handed in.
+	const late = [ "/a.png", "/c.png" ];
+	f.resources.step( late, 5 );
+	late[1] = "/d.png";
+	Object.freeze( late );
+	f.resources.step( late, 6 );
+	assert.equal( f.requests.length, 4, "an array frozen after an edit is still read" );
+	assert.match( f.requests[3], /d\.png$/ );
 });
 test("UI textures recover with backoff, release demand and cannot restart after disposal", () => {
 	const f = assetFixture(), paths = [ "/button.png" ];

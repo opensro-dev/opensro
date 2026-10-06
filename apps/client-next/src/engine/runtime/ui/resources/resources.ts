@@ -54,9 +54,10 @@ export function createUiAssets(
 	let disposed = false;
 	let wanted = new Set<string>();
 	let previousPaths: readonly string[] = [], settled = false;
-	// The array the caller last handed in; with Object.isFrozen it proves an
-	// unchanged demand without reading it.
-	let previousArray: readonly string[] | null = null;
+	// The array the caller last handed in, if it was already frozen when it
+	// was adopted: only then can it prove an unchanged demand without being
+	// read (an array frozen later may have changed before it was frozen).
+	let frozenArray: readonly string[] | null = null;
 	// Counts removals from `loaded`. Between two removals the resident set only
 	// grows, so a list found fully resident stays so until the count moves.
 	let evictions = 0;
@@ -132,9 +133,9 @@ export function createUiAssets(
 		step( paths: readonly string[], now: number ) {
 			if ( disposed ) return false;
 			let demandChanged = paths.length !== previousPaths.length;
-			// A frozen array handed in again cannot have changed; any other array,
-			// including the same one edited in place, is compared by content.
-			if ( !demandChanged && !(paths === previousArray && Object.isFrozen( paths )) ) {
+			// The same array, frozen since it was adopted, cannot have changed; any
+			// other array, including one edited in place, is compared by content.
+			if ( !demandChanged && paths !== frozenArray ) {
 				for ( let i = 0; i < paths.length; i++ ) {
 					if ( paths[i] !== previousPaths[i] ) {
 						demandChanged = true;
@@ -142,7 +143,7 @@ export function createUiAssets(
 					}
 				}
 			}
-			previousArray = paths;
+			frozenArray = Object.isFrozen( paths ) ? paths : null;
 			if ( !demandChanged && settled ) return false;
 			if ( demandChanged ) {
 				previousPaths = [ ...paths ];
@@ -286,7 +287,7 @@ export function createUiAssets(
 			if ( disposed ) return;
 			disposed = true;
 			previousPaths = [];
-			previousArray = null;
+			frozenArray = null;
 			settled = false;
 			const errors: unknown[] = [];
 			for ( const id of pending.values() ) {
