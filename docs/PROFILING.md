@@ -76,9 +76,10 @@ Useful options:
 | `--paced` | Retain the browser's display pacing |
 | `--frame-limit 60` | Exercise the player's 60 FPS limit; also accepts 120, 240 or 0 (the default, uncapped) |
 | `--cpu-rate 4` | Apply Chrome CPU throttling after world warm-up |
+| `--shadow-detail 2` | Enable detailed character shadows; `1` selects blobs and `0` (the default) disables shadows |
 
 For the default player setting, use `--paced --frame-limit 60`. Frame limits
-and CPU rates are recorded in the result JSON. Keep the default uncapped run
+and CPU rates, along with shadow detail, are recorded in the result JSON. Keep the default uncapped run
 for throughput comparisons; a capped acceptance run does not measure the 500 FPS goal.
 
 Captures go to `temp/artifacts/fps-bench/<location>-<scenario>.*`.
