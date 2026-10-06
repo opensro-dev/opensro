@@ -25,6 +25,8 @@ import type { GeometryCommands, GeometryDraw, ImageDraw } from "../internal/gpu-
 
 // Packed floats per vertex (packGeometryVertices).
 const VERTEX_FLOATS = 14;
+const MIN_LAYER_CAPACITY = 1024;
+const LAYER_GROWTH = 2;
 const IDENTITY = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 
 type Member = { layer: Layer; base: number; vertices: number; chosen: Uint32Array; count: number; };
@@ -55,11 +57,12 @@ type Layer = {
 ================
 capacityFor
 
-The next power of two at or above twice need, so growth is rare.
+Round a known requirement to a buffer capacity. A rebuild adds headroom;
+initial admission already knows every member of the incoming scene.
 ================
 */
 function capacityFor( need: number ): number {
-	return 2 ** Math.ceil( Math.log2( Math.max( 1024, need * 2 ) ) );
+	return 2 ** Math.ceil( Math.log2( Math.max( MIN_LAYER_CAPACITY, need ) ) );
 }
 
 /*
@@ -161,8 +164,8 @@ export function createTerrainLayers() {
 			vertices += member.vertices;
 			indices += group.geometry.indices.length;
 		}
-		layer.vertexCapacity = Math.max( layer.vertexCapacity, capacityFor( vertices ) );
-		layer.indexCapacity = Math.max( layer.indexCapacity, capacityFor( indices ) );
+		layer.vertexCapacity = Math.max( layer.vertexCapacity, capacityFor( vertices * LAYER_GROWTH ) );
+		layer.indexCapacity = Math.max( layer.indexCapacity, capacityFor( indices * LAYER_GROWTH ) );
 		geometry.release( layer.draw );
 		revision++;
 		layer.draw = allocate( geometry, layer, layer.vertexCapacity, layer.indexCapacity );
@@ -204,8 +207,8 @@ export function createTerrainLayers() {
 					key,
 					image,
 					material: group.geometry.material ?? group.material,
-					vertexCapacity: capacityFor( planned?.vertices ?? vertices ),
-					indexCapacity: capacityFor( planned?.indices ?? indices ),
+					vertexCapacity: capacityFor( planned?.vertices ?? vertices * LAYER_GROWTH ),
+					indexCapacity: capacityFor( planned?.indices ?? indices * LAYER_GROWTH ),
 					top: 0,
 					members: new Map<WorldGroup, Member>(),
 					indices: new Uint32Array( 0 ),

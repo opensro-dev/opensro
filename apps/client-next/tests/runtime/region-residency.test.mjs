@@ -473,7 +473,7 @@ test("a complete scene reserves each terrain layer once across incremental admis
 			writes.slice( recovery * groups.length ).map( row => row.base ),
 			groups.map( ( _, i ) => i * 600 )
 		);
-		assert.ok( uploads[recovery].capacity >= 5400 );
+		assert.equal( uploads[recovery].capacity, 8192, "known scene totals do not reserve another growth band" );
 		if ( recovery === 0 ) layers.clear();
 	}
 	layers.dispose( geometry );

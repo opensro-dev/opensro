@@ -560,6 +560,9 @@ export function createUiBridge(
 				if ( identities.has( control.id ) ) throw Error( "Duplicate UI control identity: " + control.id );
 				identities.add( control.id );
 			}
+			// Read geometry once before DOM writes. A changing status label must
+			// not force layout before every publication's control reconciliation.
+			const box = canvas.getBoundingClientRect(), scale = displayScale();
 			if ( root.getAttribute( "aria-label" ) !== state.title ) root.setAttribute( "aria-label", state.title );
 			if ( message.textContent !== state.message ) message.textContent = state.message;
 			// Hit geometry this publication changes. Pointer motion over unchanged
@@ -567,14 +570,12 @@ export function createUiBridge(
 			// changed layout under a still pointer needs the hit test (which forces a
 			// synchronous layout, so it no longer runs on every frame).
 			let hitLayoutChanged = false;
-			const wanted = new Set( state.controls.map( c => c.id ) );
 			for ( const id of controls.keys() ) {
-				if ( !wanted.has( id ) ) {
+				if ( !identities.has( id ) ) {
 					retire( id );
 					hitLayoutChanged = true;
 				}
 			}
-			const box = canvas.getBoundingClientRect();
 			for ( const [order, control] of state.controls.entries() ) {
 				let slot = controls.get( control.id );
 				if ( slot && slot.value.kind !== control.kind ) {
@@ -668,8 +669,7 @@ export function createUiBridge(
 					el.value = control.value ?? "";
 				}
 				// UI pixels to CSS pixels (platform displayScale: the chosen screen size).
-				const scale = displayScale(),
-					[x, y, w, h] = control.rect,
+				const [x, y, w, h] = control.rect,
 					left = box.left + x * scale,
 					top = box.top + y * scale,
 					width = w * scale,
