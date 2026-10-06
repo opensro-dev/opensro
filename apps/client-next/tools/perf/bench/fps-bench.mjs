@@ -6,7 +6,7 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--json FILE]
-       [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240]
+       [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]
 
 For each location (--at) resets the scratch character there, boots the dev
 client uncapped at 1600x900 (core/client.mjs) and runs the location's
@@ -78,7 +78,7 @@ const LOCATIONS = [ {
 	scenarios: [ "skill" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
-	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240]";
+	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]";
 
 /*
 ================
@@ -131,7 +131,8 @@ async function session( options, location, results ) {
 		spans: options.spans,
 		uncapped: !options.paced,
 		cpuRate: options.cpuRate,
-		frameLimit: options.frameLimit
+		frameLimit: options.frameLimit,
+		shadowDetail: options.shadowDetail
 	} );
 	try {
 		const captures = await createCaptures( client.page, {
@@ -149,6 +150,7 @@ async function session( options, location, results ) {
 			const result = await measure( client.page, `${location.name}/${name}`, ms, input );
 			result.frameLimit = options.frameLimit;
 			result.cpuRate = options.cpuRate;
+			result.shadowDetail = options.shadowDetail;
 			const allocated = await captures.stop( `${location.name}-${name}` );
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
 			results.push( result );
@@ -188,6 +190,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	paced: false,
 	cpuRate: 1,
 	frameLimit: 0,
+	shadowDetail: 0,
 	spans: false,
 	cpu: false,
 	heap: false,
@@ -197,4 +200,5 @@ const options = parseOptions( process.argv.slice( 2 ), {
 }, USAGE );
 if ( !frameLimits().includes( options.frameLimit ) ) throw Error( `unsupported frame limit ${options.frameLimit}` );
 for ( const name of options.only ) if ( !SCENARIOS.includes( name ) ) throw Error( `unknown scenario ${name}` );
+if ( ![ 0, 1, 2 ].includes( options.shadowDetail ) ) throw Error( `unsupported shadow detail ${options.shadowDetail}` );
 await run( options );

@@ -9,7 +9,6 @@ as the native does; the blob form is used past the shadow limit.
 
 ===========================================================================
 */
-import type { TerrainRange } from "@/engine/contracts/scene";
 import type { Geometry } from "@/engine/contracts/geometry";
 import { identity } from "./world-math";
 import { terrainCellKey, type TerrainCells } from "./terrain-interaction";
@@ -17,6 +16,11 @@ import { hypot2 } from "@/engine/foundation/math/hypot";
 export const SHADOW_LIMIT = 10;
 export const SHADOW_DISTANCE = 3000;
 export const BLOB_SHADOW_TEXTURE = "/assets/images/Map_extracted/skybox/shadowsphere.png";
+/*
+================
+ShadowProjection
+================
+*/
 export interface ShadowProjection {
 	readonly point: readonly [number, number, number];
 	readonly size: number;
@@ -58,12 +62,22 @@ export function shadowProjection( point: readonly [number, number, number], heig
 }
 // 87EF50: native 20-unit terrain quads, alternating diagonals. Receiver
 // attenuation uses the horizontal post-render view; no receiver on water.
+/*
+================
+ShadowTerrainSurface
+================
+*/
 export interface ShadowTerrainSurface {
 	readonly positions: Float32Array;
 	readonly indices: Uint32Array;
 	readonly start: number;
 	readonly count: number;
 }
+/*
+================
+ShadowReceiverBounds
+================
+*/
 export interface ShadowReceiverBounds {
 	readonly tx: number;
 	readonly tz: number;
@@ -104,6 +118,33 @@ export function shadowReceiverBounds(
 
 /*
 ================
+clipShadowPolygon
+
+Return the same vertices when a bound clips nothing. Keep intersection
+arithmetic and polygon order unchanged so terrain seams and fade edges match.
+================
+*/
+function clipShadowPolygon( polygon: number[][], axis: number, bound: number, lower: boolean ): number[][] {
+	let insideCount = 0;
+	for ( const p of polygon ) if ( lower ? p[axis]! >= bound : p[axis]! <= bound ) insideCount++;
+	if ( insideCount === polygon.length ) return polygon;
+	const out: number[][] = [];
+	if ( !insideCount ) return out;
+	for ( let j = 0; j < polygon.length; j++ ) {
+		const a = polygon[j]!, b = polygon[(j + 1) % polygon.length]!;
+		const ai = lower ? a[axis]! >= bound : a[axis]! <= bound;
+		const bi = lower ? b[axis]! >= bound : b[axis]! <= bound;
+		if ( ai ) out.push( a );
+		if ( ai !== bi ) {
+			const t = (bound - a[axis]!) / (b[axis]! - a[axis]!);
+			out.push( [ a[0]! + (b[0]! - a[0]!) * t, a[1]! + (b[1]! - a[1]!) * t, a[2]! + (b[2]! - a[2]!) * t ] );
+		}
+	}
+	return out;
+}
+
+/*
+================
 characterShadowReceiver
 ================
 */
@@ -119,6 +160,11 @@ export function characterShadowReceiver(
 		colors: number[] = [],
 		indices: number[] = [];
 	const { tx, tz, extent, loX, hiX, loZ, hiZ } = shadowReceiverBounds( point, blobSize );
+	/*
+	================
+	append
+	================
+	*/
 	const append = ( q: readonly (readonly number[])[] ) => {
 		if ( blobSize === undefined && q.every( p => p[0]! > point[0] ) ) return;
 		const n = positions.length / 3;
@@ -152,14 +198,31 @@ export function characterShadowReceiver(
 			for ( let cx = Math.floor( loX / 320 ); cx <= Math.floor( hiX / 320 ); cx++ ) {
 				for ( const surface of surfaces.get( terrainCellKey( cx, cz ) ) ?? [] ) {
 					for ( let i = surface.start; i < surface.start + surface.count; i += 3 ) {
-						const q = [ 0, 1, 2 ].map( j => {
-							const v = surface.indices[i + j]! * 3;
-							return [ surface.positions[v]!, surface.positions[v + 1]!, surface.positions[v + 2]! ];
-						} );
+						const vertices = surface.positions,
+							a = surface.indices[i]! * 3,
+							b = surface.indices[i + 1]! * 3,
+							c = surface.indices[i + 2]! * 3;
+						const ax = vertices[a]!,
+							az = vertices[a + 2]!,
+							bx = vertices[b]!,
+							bz = vertices[b + 2]!,
+							cx = vertices[c]!,
+							cz = vertices[c + 2]!;
+						const minX = Math.min( ax, bx, cx ),
+							maxX = Math.max( ax, bx, cx ),
+							minZ = Math.min( az, bz, cz ),
+							maxZ = Math.max( az, bz, cz );
+						// Most submitted triangles are outside this receiver. Reject them before
+						// allocating vertices, closures or duplicate keys; moving actors repeat this.
 						if (
-							q.every( p => p[0]! < loX ) || q.every( p => p[0]! > hiX ) || q.every( p => p[2]! < loZ ) ||
-							q.every( p => p[2]! > hiZ )
+							maxX < loX || minX > hiX || maxZ < loZ || minZ > hiZ ||
+							blobSize === undefined && minX > point[0]
 						) continue;
+						const q = [ [ ax, vertices[a + 1]!, az ], [ bx, vertices[b + 1]!, bz ], [
+							cx,
+							vertices[c + 1]!,
+							cz
+						] ];
 						const key = q.map( p => p.join( "," ) ).sort().join( ";" );
 						if ( seen.has( key ) ) continue;
 						seen.add( key );
@@ -171,36 +234,16 @@ export function characterShadowReceiver(
 						// at coarse LOD vertices loses the entire narrow fade band (or stretches
 						// it across a terrain triangle). Split on the native grid while retaining
 						// the submitted triangle's plane, so receivers cannot sink below terrain.
-						const clip = ( polygon: number[][], axis: number, bound: number, lower: boolean ) => {
-							const out: number[][] = [];
-							for ( let j = 0; j < polygon.length; j++ ) {
-								const a = polygon[j]!,
-									b = polygon[(j + 1) % polygon.length]!,
-									inside = ( p: number[] ) => lower ? p[axis]! >= bound : p[axis]! <= bound,
-									ai = inside( a ),
-									bi = inside( b );
-								if ( ai ) out.push( a );
-								if ( ai !== bi ) {
-									const t = (bound - a[axis]!) / (b[axis]! - a[axis]!);
-									out.push( a.map( ( v, k ) => v + (b[k]! - v) * t ) );
-								}
-							}
-							return out;
-						};
-						const x0 = Math.max( tx - extent, Math.floor( Math.min( ...q.map( p => p[0]! ) ) / 20 ) ),
-							x1 = Math.min( tx + extent, Math.ceil( Math.max( ...q.map( p => p[0]! ) ) / 20 ) - 1 );
-						const z0 = Math.max( tz - extent, Math.floor( Math.min( ...q.map( p => p[2]! ) ) / 20 ) ),
-							z1 = Math.min( tz + extent, Math.ceil( Math.max( ...q.map( p => p[2]! ) ) / 20 ) - 1 );
+						const x0 = Math.max( tx - extent, Math.floor( minX / 20 ) ),
+							x1 = Math.min( tx + extent, Math.ceil( maxX / 20 ) - 1 );
+						const z0 = Math.max( tz - extent, Math.floor( minZ / 20 ) ),
+							z1 = Math.min( tz + extent, Math.ceil( maxZ / 20 ) - 1 );
 						for ( let z = z0; z <= z1; z++ ) {
 							for ( let x = x0; x <= x1; x++ ) {
-								let polygon = q;
-								for (
-									const [axis, bound, lower] of [ [ 0, x * 20, true ], [ 0, (x + 1) * 20, false ], [
-										2,
-										z * 20,
-										true
-									], [ 2, (z + 1) * 20, false ] ] as const
-								) polygon = clip( polygon, axis, bound, lower );
+								let polygon = clipShadowPolygon( q, 0, x * 20, true );
+								polygon = clipShadowPolygon( polygon, 0, (x + 1) * 20, false );
+								polygon = clipShadowPolygon( polygon, 2, z * 20, true );
+								polygon = clipShadowPolygon( polygon, 2, (z + 1) * 20, false );
 								if ( polygon.length >= 3 ) append( polygon );
 							}
 						}

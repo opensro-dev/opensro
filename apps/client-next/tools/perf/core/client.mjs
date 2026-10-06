@@ -251,6 +251,7 @@ export async function openClient(
 		uncapped = true,
 		cpuRate = 1,
 		frameLimit = 0,
+		shadowDetail = 0,
 		headed = false,
 		beforeLogin = undefined
 	} = {}
@@ -261,7 +262,13 @@ export async function openClient(
 	try {
 		await page.addInitScript( options => {
 			localStorage.setItem( "sro:v1150:video-options:1", JSON.stringify( options ) );
-		}, { ...defaultVideoOptions(), frameLimit } );
+		}, {
+			...defaultVideoOptions(),
+			frameLimit,
+			records: defaultVideoOptions().records.map( row =>
+				row.map( ( value, slot ) => slot === 1 ? shadowDetail : value )
+			)
+		} );
 		await page.addInitScript( instrument, { counts, spans } );
 		await bootPlayableSession( page, CHARACTER, beforeLogin );
 		await page.evaluate( () => globalThis.__benchRuntime = globalThis.__playableRuntime );
