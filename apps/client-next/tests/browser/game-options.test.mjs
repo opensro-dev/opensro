@@ -182,7 +182,11 @@ test(
 			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental.png" } );
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
 			await click( "experimental-developer-diagnostics" );
-			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false, "draft must not enable diagnostics" );
+			assert.equal(
+				await page.locator( "#developer-toggle" ).isVisible(),
+				false,
+				"draft must not enable diagnostics"
+			);
 			await click( "experimental-chat-timestamps" );
 			await click( "experimental-cancel" );
 			assert.equal(
@@ -198,7 +202,11 @@ test(
 			);
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
 			await click( "experimental-developer-diagnostics" );
-			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false, "draft must not enable diagnostics" );
+			assert.equal(
+				await page.locator( "#developer-toggle" ).isVisible(),
+				false,
+				"draft must not enable diagnostics"
+			);
 			await click( "experimental-chat-timestamps" );
 			await click( "experimental-confirm" );
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), true );

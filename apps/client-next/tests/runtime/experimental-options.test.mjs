@@ -41,7 +41,10 @@ test("experimental drafts require Confirm and Default only changes the draft", (
 	hud.reset();
 	assert.deepEqual( hud.confirm(), { chatTimestamps: false, developerDiagnostics: false } );
 	hud.restore( { chatTimestamps: true, developerDiagnostics: false } );
-	assert.deepEqual( hud.state(), { saved: { chatTimestamps: true, developerDiagnostics: false }, draft: { chatTimestamps: true, developerDiagnostics: false } } );
+	assert.deepEqual( hud.state(), {
+		saved: { chatTimestamps: true, developerDiagnostics: false },
+		draft: { chatTimestamps: true, developerDiagnostics: false }
+	} );
 });
 
 /*
@@ -49,7 +52,7 @@ test("experimental drafts require Confirm and Default only changes the draft", (
 Developer diagnostics opt-in
 ================
 */
-test( "diagnostics default off and follow the same draft lifecycle", () => {
+test("diagnostics default off and follow the same draft lifecycle", () => {
 	for ( const value of [ undefined, null, [], {}, { developerDiagnostics: "true" }, { developerDiagnostics: 1 } ] ) {
 		assert.equal( experimentalOptions( value ).developerDiagnostics, false );
 	}
@@ -67,4 +70,4 @@ test( "diagnostics default off and follow the same draft lifecycle", () => {
 	assert.equal( hud.state().draft.developerDiagnostics, true );
 	hud.reset();
 	assert.equal( hud.confirm().developerDiagnostics, false );
-} );
+});

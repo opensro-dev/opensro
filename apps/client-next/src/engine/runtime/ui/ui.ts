@@ -8932,50 +8932,65 @@ export function createUi(
 					);
 					// Browser-only section reuses the native Set Game header and inset frame.
 					const section = hudData.windows.ifoption_game!.GDR_GAME_OPTION_TAB_1!;
-					for ( const [offset, title, key, id, label, description] of [
-						[ 0, "Chat", "chatTimestamps", "experimental-chat-timestamps", "Chat timestamps", "Show message time on hover." ],
-						[ 112, "Developer", "developerDiagnostics", "experimental-developer-diagnostics", "Developer diagnostics", "Show a diagnostics icon beside FPS." ]
-					] as const ) {
-
-					authoredImage( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py + offset );
-					authoredText( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py + offset, "Chat" );
-					authoredChrome(
-						{
-							...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,
-							rect: [ 25, 70, 336, 78 ]
-						},
-						px,
-						py + offset
-					);
-					const enabled = experimental.state().draft[key];
-					authoredText(
-						{ ...slot.GDR_GAME_OPTION_SLOT_STA1!, rect: [ 39, 82, 270, 16 ], client: [ 0, 2, 0, 0 ] },
-						px,
-						py + offset,
-						label
-					);
-					image(
-						[ px + 331, py + offset + 82, 16, 16 ],
-						ROOT + "interface/ifcommon/com_checkbutton_" + (enabled ? "on" : "off") + ".png"
-					);
-					controls.push( {
-						id,
-						label: label,
-						kind: "button",
-						rect: [ px + 35, py + offset + 78, 316, 28 ],
-						selected: enabled
-					} );
-					authoredText(
-						{
-							...slot.GDR_GAME_OPTION_SLOT_STA1!,
-							rect: [ 39, 113, 304, 16 ],
-							client: [ 0, 0, 0, 0 ],
-							color: [ 180 / 255, 180 / 255, 180 / 255, 1 ]
-						},
-						px,
-						py + offset,
-						description
-					);
+					for (
+						const [offset, title, key, id, label, description] of [
+							[
+								0,
+								"Chat",
+								"chatTimestamps",
+								"experimental-chat-timestamps",
+								"Chat timestamps",
+								"Show message time on hover."
+							],
+							[
+								112,
+								"Developer",
+								"developerDiagnostics",
+								"experimental-developer-diagnostics",
+								"Developer diagnostics",
+								"Show a diagnostics icon beside FPS."
+							]
+						] as const
+					) {
+						authoredImage( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py + offset );
+						authoredText( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py + offset, title );
+						authoredChrome(
+							{
+								...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,
+								rect: [ 25, 70, 336, 78 ]
+							},
+							px,
+							py + offset
+						);
+						const enabled = experimental.state().draft[key];
+						authoredText(
+							{ ...slot.GDR_GAME_OPTION_SLOT_STA1!, rect: [ 39, 82, 270, 16 ], client: [ 0, 2, 0, 0 ] },
+							px,
+							py + offset,
+							label
+						);
+						image(
+							[ px + 331, py + offset + 82, 16, 16 ],
+							ROOT + "interface/ifcommon/com_checkbutton_" + (enabled ? "on" : "off") + ".png"
+						);
+						controls.push( {
+							id,
+							label,
+							kind: "button",
+							rect: [ px + 35, py + offset + 78, 316, 28 ],
+							selected: enabled
+						} );
+						authoredText(
+							{
+								...slot.GDR_GAME_OPTION_SLOT_STA1!,
+								rect: [ 39, 113, 304, 16 ],
+								client: [ 0, 0, 0, 0 ],
+								color: [ 180 / 255, 180 / 255, 180 / 255, 1 ]
+							},
+							px,
+							py + offset,
+							description
+						);
 					}
 					for (
 						const [index, key, id] of [ [ 0, "DEF", "default" ], [ 1, "OK", "confirm" ], [

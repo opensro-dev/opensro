@@ -98,7 +98,16 @@ export function createPlatform(
 	let experimental = experimentalOptions();
 	try {
 		const stored = localStorage.getItem( experimentalKey );
-		if ( stored !== null ) experimental = experimentalOptions( JSON.parse( stored ) );
+		const value = stored === null ? null : JSON.parse( stored );
+		experimental = experimentalOptions( value );
+		// Preserve a prior explicit console opt-in until the unified preference is saved.
+		if (
+			(value === null ||
+				(typeof value === "object" && !Array.isArray( value ) && !("developerDiagnostics" in value))) &&
+			localStorage.getItem( "sro.developerDiagnostics" ) === "true"
+		) {
+			experimental = { ...experimental, developerDiagnostics: true };
+		}
 	} catch ( error ) {
 		status.value = "Experimental options could not be restored: " + String( error );
 	}
@@ -300,7 +309,29 @@ export function createPlatform(
 	}
 	status.hidden = import.meta.env.MODE === "beta" || !new URLSearchParams( location.search ).has( "diagnostics" );
 	const fpsChip = document.getElementById( "fps-chip" );
-	const telemetry = createTelemetry();
+	const telemetry = createTelemetry( {
+		enabled: experimental.developerDiagnostics,
+		onChange: enabled => saveExperimentalOptions( { ...experimental, developerDiagnostics: enabled } )
+	} );
+	/*
+	================
+	saveExperimentalOptions
+
+	One owner for settings and console changes. Storage denial must not leave
+	the current tab's saved preference and diagnostics icon disagreeing.
+	================
+	*/
+	function saveExperimentalOptions( value: ExperimentalOptions ) {
+		experimental = experimentalOptions( value );
+		try {
+			localStorage.setItem( experimentalKey, JSON.stringify( experimental ) );
+			localStorage.removeItem( "sro.developerDiagnostics" );
+		} catch ( error ) {
+			status.value = "Experimental options could not be saved: " + String( error );
+		}
+		telemetry.setDiagnostics( experimental.developerDiagnostics );
+		onUi( { kind: "experimental-preferences", value: experimental } );
+	}
 	window.addEventListener( "pointerdown", onGesture, { signal: lifetime.signal, capture: true } );
 	window.addEventListener( "pagehide", onClose, { signal: lifetime.signal } );
 	const bridge = createUiBridge(
@@ -443,16 +474,7 @@ export function createPlatform(
 	const viewport = { width: 1, height: 1 };
 	return {
 		displayScale,
-		/*
-		================
-		saveExperimentalOptions
-		================
-		*/
-		saveExperimentalOptions( value: ExperimentalOptions ) {
-			const next = experimentalOptions( value );
-			localStorage.setItem( experimentalKey, JSON.stringify( next ) );
-			onUi( { kind: "experimental-preferences", value: next } );
-		},
+		saveExperimentalOptions,
 		/*
 		================
 		saveVideoOptions
@@ -635,19 +657,19 @@ export function createPlatform(
 					"Preparing graphics and checking cached files" :
 					"Waiting for the server to accept your connection"
 			);
-			transferText( "bytes", p ? `${(p.bytesReceived / 1e6).toFixed( 1 )} MB` : "—" );
+			transferText( "bytes", p ? `${(p.bytesReceived / 1e6).toFixed( 1 )} MB` : "â€”" );
 			transferText(
 				"speed",
-				p && p.filesActive && p.bytesPerSecond > 0 ? `${(p.bytesPerSecond / 1e6).toFixed( 1 )} MB/s` : "—"
+				p && p.filesActive && p.bytesPerSecond > 0 ? `${(p.bytesPerSecond / 1e6).toFixed( 1 )} MB/s` : "â€”"
 			);
-			transferText( "files", p ? String( p.filesReady ) : "—" );
-			transferText( "cache", p ? String( p.cacheHits ) : "—" );
+			transferText( "files", p ? String( p.filesReady ) : "â€”" );
+			transferText( "cache", p ? String( p.cacheHits ) : "â€”" );
 			transferText(
 				"queue",
 				p ?
 					p.filesActive ?
-						`${p.filesActive} files being prepared · more may be discovered` :
-						"Downloads settled · preparing the scene" :
+						`${p.filesActive} files being prepared Â· more may be discovered` :
+						"Downloads settled Â· preparing the scene" :
 					"Your character stays here until the server is ready"
 			);
 		},
