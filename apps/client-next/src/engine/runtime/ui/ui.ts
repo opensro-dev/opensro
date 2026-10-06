@@ -805,6 +805,24 @@ export function createUi(
 		}
 		return changed;
 	}
+	/*
+	================
+	requestRebirthPrompt
+
+	6B3E90 and corpse selection reach 6813E0: dead self-selection creates
+	confirmation type 3 immediately, retaining it when already present.
+	================
+	*/
+	function requestRebirthPrompt( gid: number ) {
+		if (
+			!gid || view?.session?.phase !== "world" || gid !== deathIdentity ||
+			gid !== view.gameplay?.localGid || rebirthDue && !deathDismissed
+		) return;
+		deathRequested = true;
+		deathDismissed = false;
+		deathPosition = null;
+		dirty = true;
+	}
 	let inviteIdentity = "",
 		invitePosition: readonly [number, number] | null = null,
 		disconnectPosition: readonly [number, number] | null = null;
@@ -3330,6 +3348,7 @@ export function createUi(
 			sendGameplay( { kind: "select", gid: Number( id.slice( 13 ) ) } );
 		} else if ( id === "self-target" && view.gameplay?.localGid ) {
 			sendGameplay( { kind: "select", gid: view.gameplay.localGid } );
+			requestRebirthPrompt( view.gameplay.localGid );
 		} else if ( id === "clear-target" ) sendGameplay( { kind: "release-target" } );
 		else if ( id === "inventory-next" ) {
 			inventoryPage = Math.min(
@@ -3503,19 +3522,8 @@ export function createUi(
 				if ( view?.session?.phase !== "world" || !entity ) return;
 				event = { kind: "activate", id: "whisper-name:" + entity.name };
 			}
-			// 681428..68147F: dead self-selection creates type 3 only when absent.
-			// Explicit selection does not wait for the automatic death-state timer.
 			if ( event.kind === "world-select" ) {
-				if (
-					view?.session?.phase === "world" && event.gid === deathIdentity &&
-					event.gid === view.gameplay?.localGid &&
-					(!rebirthDue || deathDismissed)
-				) {
-					deathRequested = true;
-					deathDismissed = false;
-					deathPosition = null;
-					dirty = true;
-				}
+				requestRebirthPrompt( event.gid );
 				return;
 			}
 			// Both physical Enter keys are native VK_RETURN, including modal handlers.
@@ -5836,7 +5844,7 @@ export function createUi(
 			}
 			// 7644E0 (types 4 and 8) clears the pending death-box timer 0xF and
 			// retires the death box (kind 3) when a question opens; selecting
-			// oneself while dead brings it back (6813E0, the world-select path).
+			// oneself while dead brings it back (6813E0, portrait or corpse).
 			const proposer = phase === "world" || retainedWorld ? next.gameplay?.social?.resurrection?.gid ?? 0 : 0;
 			if ( proposer && resurrectionPrompt.opens( proposer ) ) {
 				deathDismissed = true;

@@ -1405,6 +1405,55 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 	}
 });
 
+test("portrait selection immediately restores the dead player's prompt without requesting resurrection", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		/** @type {any} */ let latest;
+		const step = now => (latest = f.ui.step( f.state, now ) ?? latest);
+		const prompt = () => latest.controls.find( control => control.id === "rebirth-body" );
+		f.state.gameplay = { ...f.state.gameplay, progression: { level: 11, masteries: [] } };
+		for ( let now = 0; now <= 1100; now += 100 ) step( now );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1200 );
+		assert.equal( prompt(), undefined, "living portrait selection cannot open rebirth" );
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ];
+		f.state.gameplay = { ...f.state.gameplay, vitals: [ { gid: 1, hp: 0, mp: 0 } ] };
+		step( 1300 );
+		assert.equal( prompt(), undefined, "the automatic death timer has not elapsed" );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1301 );
+		assert.ok( prompt(), "dead portrait selection must bypass the automatic timer" );
+		assert.deepEqual( prompt().rect, [ 600, 345, 400, 210 ] );
+		f.ui.event( { kind: "drag", id: "rebirth-drag", dx: 100, dy: 40 } );
+		step( 1310 );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1320 );
+		assert.deepEqual( prompt().rect, [ 700, 385, 400, 210 ], "an existing prompt keeps its position" );
+		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
+		step( 1330 );
+		assert.equal( prompt(), undefined, "the level-11 alternate choice dismisses locally" );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1340 );
+		assert.deepEqual( prompt().rect, [ 600, 345, 400, 210 ], "reopening creates a centered prompt" );
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 1, 0, 0 ] } ];
+		f.state.gameplay = { ...f.state.gameplay, vitals: [ { gid: 1, hp: 100, mp: 0 } ] };
+		step( 1400 );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1410 );
+		assert.equal( prompt(), undefined, "revival clears the explicit prompt request" );
+		assert.ok( sent.length > 0 );
+		assert.ok(
+			sent.every( command =>
+				command.kind === "gameplay" && command.command.kind === "select" &&
+				command.command.gid === 1
+			),
+			"portrait activation never requests resurrection"
+		);
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a resurrection question retires the death box at native geometry; selecting oneself restores it", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
