@@ -21,7 +21,13 @@ it in the Option window; otherwise it follows the server's default.
 import type { BugReportControl, BugReportField, ReplayState } from "@/engine/contracts/bug-report";
 import { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } from "@/engine/foundation/release/protocol";
 import { muxMp4, type Mp4Track } from "@/engine/foundation/media/mp4";
-import { replayRecoveryLink, replayReportState, replayTrackBytes } from "@/engine/foundation/media/replay-window";
+import {
+	replayLinkedReport,
+	replayRecoveryLink,
+	replayReportState,
+	replayTrackBytes,
+	reportIdIn
+} from "@/engine/foundation/media/replay-window";
 import { createReplayRecorder } from "./recorder";
 import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./dialog";
 import { createReportArchive } from "./archive";
@@ -36,8 +42,6 @@ const MAX_CONTEXT_FIELDS = 16;
 const MAX_FIELD_NAME = 40;
 const MAX_FIELD_VALUE = 200;
 const MEGABYTE = 1024 * 1024;
-// A report ID inside a whisper or a #bug= link (reportId()).
-const REPORT_ID = /\bBR-\d{6}-\d{4}-[0-9A-F]{4}\b/;
 const WHISPER_CHANNEL = 2;
 // Waits before asking for the settings again after a failed read.
 const SETTINGS_RETRY_MS = [ 5000, 15000, 30000, 60000 ] as const;
@@ -611,7 +615,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 				outgoing: line.outgoing
 			} );
 			if ( line.outgoing || line.channel !== WHISPER_CHANNEL ) continue;
-			const id = REPORT_ID.exec( line.text )?.[0];
+			const id = reportIdIn( line.text );
 			if ( id ) offer( id, line.name, false );
 		}
 		const now = performance.now();
@@ -640,9 +644,23 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		}, failure => note( "Reading saved reports failed: " + String( failure ) ) );
 	}
 
+	/*
+	================
+	offerLinked
+
+	A recovery link (#bug=<id>) offers its report. It is read at load and on
+	every hash change: a player who already has the game open and pastes the
+	link into the same tab gets a same-document navigation, not a reload.
+	================
+	*/
+	function offerLinked() {
+		const linked = replayLinkedReport( location.hash );
+		if ( linked ) offer( linked, "", true );
+	}
+
 	loadSettings();
-	const linked = REPORT_ID.exec( new URLSearchParams( location.hash.slice( 1 ) ).get( "bug" ) ?? "" )?.[0];
-	if ( linked ) offer( linked, "", true );
+	offerLinked();
+	addEventListener( "hashchange", offerLinked, { signal: lifetime.signal } );
 
 	return {
 		reportsEnabled: () => availability === "on",

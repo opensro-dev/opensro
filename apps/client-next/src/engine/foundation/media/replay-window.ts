@@ -211,3 +211,30 @@ subpath (/play) keeps it, one served at the root stays /#bug=<id>.
 export function replayRecoveryLink( origin: string, pathname: string, id: string ): string {
 	return `${origin}${pathname}#bug=${id}`;
 }
+
+// A report ID inside a whisper or a recovery link: BR-YYMMDD-HHMM-XXXX.
+// Kept as source text: a shared RegExp would carry mutable match state.
+const REPORT_ID_PATTERN = "\\bBR-\\d{6}-\\d{4}-[0-9A-F]{4}\\b";
+
+/*
+================
+reportIdIn
+
+The first report ID in a line of text (a whisper), or null.
+================
+*/
+export function reportIdIn( text: string ): string | null {
+	return new RegExp( REPORT_ID_PATTERN ).exec( text )?.[0] ?? null;
+}
+
+/*
+================
+replayLinkedReport
+
+The report a recovery link names, from the page's hash ("#bug=<id>"), or
+null when the hash names none.
+================
+*/
+export function replayLinkedReport( hash: string ): string | null {
+	return reportIdIn( new URLSearchParams( hash.replace( /^#/, "" ) ).get( "bug" ) ?? "" );
+}
