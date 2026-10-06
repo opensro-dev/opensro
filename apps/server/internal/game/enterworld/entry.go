@@ -52,6 +52,7 @@ type LocalPlayerEntry struct {
 	Population  instance.Lease `json:"-"`
 	PVPState    uint8          `json:"pvpState"`
 	ArenaTeam   uint8          `json:"arenaTeam"`
+	ActionSpeed float32        `json:"actionSpeed"`
 	WalkSpeed   float32        `json:"walkSpeed"`
 	RunSpeed    float32        `json:"runSpeed"`
 	SpawnSkills []EntrySkill   `json:"spawnSkills"`

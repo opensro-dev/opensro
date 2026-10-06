@@ -150,6 +150,7 @@ test("stalled presentation retains one sampled pose per mover without dropping l
 		p[25] = 3;
 		p.writeFloatLE( 8, 32 );
 		p.writeFloatLE( 22, 36 );
+		p.writeFloatLE( 100, 40 );
 		p[45] = 1;
 		owner.receive( { opcode: 0x30d7, payload: p }, 0 );
 		const move = Buffer.alloc( 14 );
@@ -812,6 +813,7 @@ spawn
 		p[25] = 3;
 		p.writeFloatLE( 8, 32 );
 		p.writeFloatLE( 22, 36 );
+		p.writeFloatLE( 100, 40 );
 		p[45] = 1;
 		owner.receive( { opcode: 0x30d7, payload: p }, 0 );
 	}
@@ -1192,6 +1194,7 @@ test("movement activity clears on death, revival, teleport and explicit stop", (
 	spawn[25] = 3;
 	spawn.writeFloatLE( 8, 32 );
 	spawn.writeFloatLE( 22, 36 );
+	spawn.writeFloatLE( 100, 40 );
 	spawn[45] = 1;
 	owner.receive( { opcode: 0x30d7, payload: spawn }, 0 );
 	flush( owner );

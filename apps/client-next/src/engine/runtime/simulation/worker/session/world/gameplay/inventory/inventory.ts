@@ -182,7 +182,8 @@ present
 		const cached = presentations.get( item );
 		if ( cached ) return cached;
 		const tooltip = tooltipRefs.get( item.refObjId ),
-			degree = Math.floor( ((tooltip?.fields.itemClass ?? 1) - 1) / 3 ) + 1,
+			// 55B608 selects degree one for class zero by signed division toward zero.
+			degree = Math.trunc( ((tooltip?.fields.itemClass ?? 1) - 1) / 3 ) + 1,
 			definitions = new Map<
 				number,
 				import("@/engine/foundation/gameplay/item-tooltip-reference").ItemMagicReference

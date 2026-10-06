@@ -85,3 +85,28 @@ test("stationary casts cannot acquire an arrival deadline from targeting metadat
 	assert.equal( combat.state().casts[0].cancelledAtMs, undefined );
 	assert.deepEqual( combat.takeCancellations(), [] );
 });
+
+test("cast control releases stationary WAIT but preserves existing and newly installed guided WAIT", () => {
+	for ( const local of [ true, false ] ) {
+		for ( const initialTravel of [ true, false ] ) {
+			for ( const continuedTravel of [ true, false ] ) {
+				const combat = createCombat();
+				if ( local ) combat.cooldownReferences( CASTER, [ METADATA ] );
+				combat.receive( 0xb245, castPacket( initialTravel ), 100 );
+				const body = castPacket( continuedTravel ).subarray( 14 );
+				const control = Buffer.alloc( 5 + body.length );
+				control[0] = 1;
+				control.writeUInt32LE( TOKEN, 1 );
+				body.copy( control, 5 );
+				combat.receive( 0xb505, control, 200 );
+				const guided = initialTravel || continuedTravel;
+				assert.equal( combat.state().casts[0].shotAtMs, guided ? undefined : 200 );
+				combat.receive( 0xb505, control, 250 );
+				assert.equal( combat.state().casts[0].shotAtMs, guided ? undefined : 200 );
+				combat.guidedArrival( TOKEN, ARRIVAL_MS );
+				combat.step( ARRIVAL_MS );
+				assert.equal( combat.state().casts[0].cancelledAtMs, guided ? ARRIVAL_MS : undefined );
+			}
+		}
+	}
+});

@@ -1,12 +1,12 @@
 /*
 ===========================================================================
 
-operator.go - authenticated player diagnostics and audited rescue requests
+operator.go - authenticated player diagnostics and audited mutations
 
 Only the local console gateway holds this dedicated credential. The endpoint
 rejects browser origins and forwarding headers independently of that secret.
-An fsynced intent precedes every rescue. Request IDs remain consumed across
-restarts, so a lost HTTP response cannot silently replay a relocation.
+An fsynced intent precedes every mutation. Request IDs remain consumed across
+restarts, so a lost HTTP response cannot silently replay a relocation or item grant.
 
 ===========================================================================
 */
@@ -28,6 +28,9 @@ import (
 
 const operatorBodyLimit = 4096
 const operatorAuditLimit = 16 << 20
+const operatorMaxGrantRows = 32
+const operatorMaxItemCodeBytes = 128
+const operatorMaxGrantCount = 1<<16 - 1
 
 var operatorRequestID = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,80}$`)
 
@@ -37,11 +40,25 @@ PlayerOperation
 ================
 */
 type PlayerOperation struct {
-	ID        string `json:"id"`
-	Operator  string `json:"operator"`
-	Character string `json:"character"`
-	Town      uint32 `json:"town"`
-	Reason    string `json:"reason"`
+	ID        string              `json:"id"`
+	Operator  string              `json:"operator"`
+	Character string              `json:"character"`
+	Action    string              `json:"action,omitempty"`
+	Items     []OperatorItemGrant `json:"items,omitempty"`
+	Town      uint32              `json:"town"`
+	Reason    string              `json:"reason"`
+}
+
+/*
+================
+OperatorItemGrant
+
+Authored identities and counts only; the authority supplies item properties.
+================
+*/
+type OperatorItemGrant struct {
+	Codename string `json:"codename"`
+	Count    uint32 `json:"count"`
 }
 
 /*
@@ -50,10 +67,11 @@ PlayerOperations
 ================
 */
 type PlayerOperations struct {
-	Token     string
-	AuditPath string
-	Read      func(string) (any, error)
-	Rescue    func(PlayerOperation) (any, error)
+	Token      string
+	AuditPath  string
+	Read       func(string) (any, error)
+	Rescue     func(PlayerOperation) (any, error)
+	GrantItems func(PlayerOperation) (any, error)
 }
 
 /*
@@ -141,11 +159,34 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	if err := decodeJSONRequest(http.MaxBytesReader(w, r.Body, operatorBodyLimit), &request); err != nil ||
 		!operatorRequestID.MatchString(request.ID) || len(request.Operator) == 0 || len(request.Operator) > 80 ||
 		len(request.Character) == 0 || len(request.Character) > 64 || len(strings.TrimSpace(request.Reason)) < 5 || len(request.Reason) > 500 {
-		http.Error(w, "invalid rescue request", http.StatusBadRequest)
+		http.Error(w, "invalid player operation", http.StatusBadRequest)
+		return
+	}
+	operation := endpoint.config.Rescue
+	switch request.Action {
+	case "", "rescue":
+		if len(request.Items) != 0 {
+			http.Error(w, "rescue cannot grant items", http.StatusBadRequest)
+			return
+		}
+	case "grant-items":
+		if endpoint.config.GrantItems == nil || request.Town != 0 || len(request.Items) == 0 || len(request.Items) > operatorMaxGrantRows {
+			http.Error(w, "invalid item grant", http.StatusBadRequest)
+			return
+		}
+		for _, item := range request.Items {
+			if len(item.Codename) == 0 || len(item.Codename) > operatorMaxItemCodeBytes || item.Count == 0 || item.Count > operatorMaxGrantCount {
+				http.Error(w, "invalid item grant", http.StatusBadRequest)
+				return
+			}
+		}
+		operation = endpoint.config.GrantItems
+	default:
+		http.Error(w, "unknown player operation", http.StatusBadRequest)
 		return
 	}
 	if endpoint.seen[request.ID] {
-		http.Error(w, "request already recorded; inspect player before submitting another rescue", http.StatusConflict)
+		http.Error(w, "request already recorded; inspect player before submitting another operation", http.StatusConflict)
 		return
 	}
 	before, err := endpoint.config.Read(request.Character)
@@ -154,21 +195,21 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if err := endpoint.audit(map[string]any{"id": request.ID, "phase": "intent", "request": request, "before": before}); err != nil {
-		http.Error(w, "cannot write rescue audit", http.StatusServiceUnavailable)
+		http.Error(w, "cannot write operation audit", http.StatusServiceUnavailable)
 		return
 	}
 	endpoint.seen[request.ID] = true
-	result, rescueErr := endpoint.config.Rescue(request)
+	result, operationErr := operation(request)
 	outcome := map[string]any{"id": request.ID, "phase": "complete", "result": result}
-	if rescueErr != nil {
-		outcome["error"] = rescueErr.Error()
+	if operationErr != nil {
+		outcome["error"] = operationErr.Error()
 	}
 	if err := endpoint.audit(outcome); err != nil {
-		http.Error(w, "rescue outcome audit failed; inspect player before retrying", http.StatusServiceUnavailable)
+		http.Error(w, "operation outcome audit failed; inspect player before retrying", http.StatusServiceUnavailable)
 		return
 	}
-	if rescueErr != nil {
-		http.Error(w, rescueErr.Error(), http.StatusConflict)
+	if operationErr != nil {
+		http.Error(w, operationErr.Error(), http.StatusConflict)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)

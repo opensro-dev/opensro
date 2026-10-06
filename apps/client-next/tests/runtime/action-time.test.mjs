@@ -223,23 +223,28 @@ test("live presenter holds the authored WAIT clip and consumes the authoritative
 	for ( let i = 0; i < 30; i++ ) step( i / 30 );
 	gameplay.casts = [ { token: 1, caster: 1, target: 1, skill: 1, receivedAtMs: 2000, damage: 0, fatal: false } ];
 	step( 2 );
-	assert.equal( actors[0].layers, undefined );
+	assert.deepEqual( actors[0].layers.map( row => row.clip ), [ "stand" ] );
 	step( 2.1 );
 	assert.equal( actors[0].layers[0].clip, "ready01" );
 	assert.ok( Math.abs( actors[0].layers[0].weight - .5 ) < 1e-9 );
+	assert.ok( Math.abs( actors[0].layers.find( row => row.clip === "wait01" ).time - .1 ) < 1e-9 );
+	assert.ok( Math.abs( actors[0].layers.find( row => row.clip === "stand" ).weight - .5 ) < 1e-9 );
 	step( 3 );
+	assert.ok( !actors[0].layers.some( row => row.clip === "stand" ) );
 	assert.equal( actors[0].layers[0].clip, "ready01" );
-	step( 3.1 );
+	step( 3.3 );
 	assert.equal( actors[0].layers[0].clip, "wait01" );
 	step( 5 );
 	assert.equal( actors[0].layers[0].loop, true );
 	gameplay.casts = [ { ...gameplay.casts[0], shotAtMs: 5000 } ];
 	step( 5.25 );
 	assert.equal( actors[0].layers[0].clip, "attack1" );
-	assert.equal( actors[0].layers[0].time, .25 );
+	assert.equal( actors[0].layers[0].time, .05 );
 	gameplay.casts = [];
 	step( 5.3 );
-	assert.equal( actors[0].layers, undefined );
+	assert.equal( actors[0].layers[0].clip, "attack1" );
+	step( 5.51 );
+	assert.ok( !(actors[0].layers ?? []).some( row => row.clip === "attack1" || row.clip === "wait01" ) );
 	assert.equal( p.error(), null );
 	p.dispose();
 });
@@ -363,34 +368,34 @@ test("live presenter uses admitted BAN callbacks for multi-hit effects and reset
 	assert.equal( actors.find( a => a.gid === 1 ).layers[0].clip, "attack1" );
 	step( 2.2 );
 	assert.equal( actors.filter( a => a.gid < 0 ).length, 0 );
-	step( 2.201 );
-	step( 2.21 );
+	step( 2.402 );
+	step( 2.41 );
 	assert.equal( actors.filter( a => a.gid < 0 ).length, 1 );
 	const first = actors.find( a => a.gid < 0 ).gid;
-	step( 2.601 );
+	step( 2.802 );
 	assert.equal( actors.filter( a => a.gid < 0 ).length, 1 );
 	assert.notEqual( actors.find( a => a.gid < 0 ).gid, first );
 	assert.ok( actors.find( a => a.gid === 2 ).layers[0].time < 0.01, "second hit restarts the reaction" );
 	gameplay.casts = [];
-	step( 2.65 );
+	step( 2.85 );
 	assert.equal(
 		actors.filter( a => a.gid < 0 ).length,
 		1,
 		"a released one-shot finishes independently of cast finalization"
 	);
-	step( 2.86 );
+	step( 3.06 );
 	assert.equal(
 		actors.filter( a => a.gid < 0 ).length,
 		0,
 		"the admitted one-shot expires at its own visual lifetime"
 	);
-	step( 3 );
-	presenter.step( entities, gameplay, 3, 3000, -1 );
-	presenter.step( entities, gameplay, 3.25, 3250, -1 );
+	step( 3.2 );
+	presenter.step( entities, gameplay, 3.2, 3200, -1 );
+	presenter.step( entities, gameplay, 3.45, 3450, -1 );
 	assert.equal( actors.find( a => a.gid === 1 ).opacity, 127 / 255 );
 	assert.equal( actors.find( a => a.gid === 2 ).opacity, undefined );
-	presenter.step( entities, gameplay, 3.25, 3250, -0.8999999761581421 );
-	presenter.step( entities, gameplay, 3.5, 3500, -0.8999999761581421 );
+	presenter.step( entities, gameplay, 3.45, 3450, -0.8999999761581421 );
+	presenter.step( entities, gameplay, 3.7, 3700, -0.8999999761581421 );
 	assert.equal( actors.find( a => a.gid === 1 ).opacity, 191 / 255, "boundary restores from current alpha" );
 	presenter.reset();
 	assert.deepEqual( actors, [] );

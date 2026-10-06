@@ -128,7 +128,7 @@ func TestProjectileAdmissionRequiresCompleteSingleArrowShape(t *testing.T) {
 			}
 			fields[0], fields[16] = "1", "400"
 			copy(fields[69:], []string{"6386804", "6", "150", "13", "18", "150", "1668182893", "4", "1", "1"})
-			row := SkillRow{CombatPinned: true, TimingPinned: true, ActionRangePinned: true, TargetRequired: true, ActionCastingTimeMs: 300, RequiredWeaponKinds: [2]uint8{6, 255}, Attack: SkillAttack{Present: true, ImpactCount: 1}}
+			row := SkillRow{CombatPinned: true, TimingPinned: true, ActionRangePinned: true, TargetRequired: true, ActionCastingTimeMs: 300, ActionHandler: SkillActionProjectile, RequiredWeaponKinds: [2]uint8{6, 255}, Attack: SkillAttack{Present: true, ImpactCount: 1}}
 			switch branch {
 			case "zero-count":
 				fields[78] = "0"
@@ -171,7 +171,7 @@ func TestProjectileAdmissionRequiresCompleteSingleArrowShape(t *testing.T) {
 			// the area's own shape is the efr parser's to validate.
 			// Several impacts (BOW_CHAIN) resolve at release and spend
 			// count x impacts arrows (action/ammunition.go).
-			if row.DirectOffensePinned != (branch == "arrow" || branch == "area" || branch == "thrown-blade" || branch == "multi-impact") {
+			if row.DirectOffensePinned != (branch == "arrow" || branch == "zero-speed" || branch == "area" || branch == "thrown-blade" || branch == "multi-impact") {
 				t.Fatalf("%s admission %+v", branch, row)
 			}
 		})

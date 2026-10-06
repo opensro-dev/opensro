@@ -468,7 +468,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	plan, planned := rt.planAreaVictims(areaPlanInput{
 		division: division, caster: character, snapshot: snapshot, skill: skill, attacker: attacker, victims: victims,
 		reduction: area.ReductionPercent, impacts: int(skill.Attack.ImpactCount), chained: chained,
-		lifeStealBase: stealBase, posePrimary: skill.ProjectileSpeed != 0, now: nowMs,
+		lifeStealBase: stealBase, posePrimary: skill.ActionHandler == enterworld.SkillActionProjectile, now: nowMs,
 	})
 	if !planned {
 		return OpResult{}, skillCastRefused
@@ -543,7 +543,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		success = wire.SkillCastAreaReleaseFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: caster, InstanceToken: token}, primary.gid, published.targets)
 		lifetime = uint64(skill.ActionDurationMs)
 	}
-	if skill.ProjectileSpeed != 0 {
+	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		// The original target sample determines flight, even when impact
 		// displaces or kills it. Zero-preparation area shots retain it too.
 		pose := plan.victims[0].pose

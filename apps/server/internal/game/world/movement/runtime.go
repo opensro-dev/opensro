@@ -104,6 +104,7 @@ type Runtime struct {
 	CompanionPresentations func(divisionID, characterName string) []*simulation.PeerCOS
 	// SpawnSkills is the character's active effect projection (the same one
 	// the local entry snapshot carries); peer spawn rows publish it.
+	ActionSpeed func(divisionID, characterName string) float32
 	SpawnSkills func(divisionID, characterName string) []enterworld.EntrySkill
 	// Now abstracts the clock for deterministic tests.
 	Now func() time.Time

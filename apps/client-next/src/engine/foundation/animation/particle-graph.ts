@@ -39,6 +39,13 @@ import {
 } from "@/engine/foundation/animation/particle-presentation";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 
+/*
+================
+ParticleEmitter
+
+Immutable authored commands and linkage for one native EFP element group.
+================
+*/
 export interface ParticleEmitter {
 	readonly emission?: EmissionParameters;
 	readonly capacity?: number;
@@ -47,6 +54,9 @@ export interface ParticleEmitter {
 		readonly name: string;
 		readonly frames: readonly number[];
 		readonly program: ParticleProgram;
+		readonly rotations?: readonly (readonly number[])[];
+		readonly positions?: readonly (readonly number[])[];
+		readonly flags?: number;
 	}[];
 	readonly parent: number;
 	readonly parents: readonly number[];
@@ -255,6 +265,27 @@ function commands(
 	for ( let c = 0; c < list.length; c++ ) {
 		const command = list[c]!;
 		if ( !command.frames.includes( age ) ) continue;
+		const flags = command.flags ?? 0;
+		const rotation = command.rotations?.[Math.min( age, command.rotations.length - 1 )];
+		if ( rotation ) {
+			// AF4581: BAN mode 2 is frame * parent in native row storage.
+			// Our transposed storage reverses those operands.
+			if ( flags === 3 && !sibling ) continue;
+			if ( flags === 0 ) element.matrix.set( rotation );
+			else {
+				const basis = flags === 1 ? element.matrix : flags === 2 ? element.parent.matrix : sibling!.matrix;
+				// AF4559 appends BAN frames; AF448A prepends constant rotations.
+				if ( flags === 1 && command.name === "SetBANRot" ) multiply( rotation, basis, history.scratch.matrix );
+				else multiply( basis, rotation, history.scratch.matrix );
+				element.matrix.set( history.scratch.matrix );
+			}
+			continue;
+		}
+		const position = command.positions?.[Math.min( age, command.positions.length - 1 )];
+		if ( position ) {
+			setPosition( element, position, flags, history.scratch.vector, sibling );
+			continue;
+		}
 		const program = command.program;
 		if ( program.vectors ) {
 			// A command's vectors all run on the frame the command fires.
@@ -277,17 +308,17 @@ function commands(
 			attract( element, element.parent, program.attraction );
 			continue;
 		}
-		const flags = program.coneFlags ?? program.coneForceFlags ?? 0;
-		if ( flags === 3 && !sibling ) continue;
+		const coneFlags = program.coneFlags ?? program.coneForceFlags ?? 0;
+		if ( coneFlags === 3 && !sibling ) continue;
 		// 0x39 runs only with a sibling and draws no random numbers otherwise.
 		const sphereFlags = program.sphereFlags ?? SPHERE_POS_PARENT;
 		if ( program.sphere && sphereFlags === SPHERE_POS_SIBLING && !sibling ) continue;
-		const basis = flags === 1 ? element.matrix : flags === 3 ? sibling!.matrix : element.parent.matrix;
+		const basis = coneFlags === 1 ? element.matrix : coneFlags === 3 ? sibling!.matrix : element.parent.matrix;
 		const sample = initializeParticle(
 			{
 				...program,
-				coneFlags: flags ? 2 : 0,
-				coneForceFlags: flags ? 2 : 0,
+				coneFlags: coneFlags ? 2 : 0,
+				coneForceFlags: coneFlags ? 2 : 0,
 				sphereFlags: SPHERE_POS_PARENT
 			},
 			table,
@@ -320,6 +351,34 @@ function commands(
 
 /*
 ================
+setPosition
+
+AF4410 modes 0..11 select an additive origin and an optional matrix.
+BAN position commands use the same modes as constant positions.
+================
+*/
+function setPosition(
+	element: ParticleElement,
+	value: readonly number[],
+	flag: number,
+	work: number[],
+	sibling?: ParticleElement
+): void {
+	const originMode = flag % 3;
+	if ( (originMode === 2 || flag >= 9) && !sibling ) return;
+	copy3( value, work );
+	if ( flag >= 3 ) {
+		const basis = flag < 6 ? element.matrix : flag < 9 ? element.parent.matrix : sibling!.matrix;
+		affineInto( basis, work[0]!, work[1]!, work[2]!, work );
+	}
+	const base = originMode === 1 ? element.parent : originMode === 2 ? sibling : undefined;
+	const position = element.state.position;
+	if ( base ) copy3( base.state.position, position );
+	for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( position[i]! + work[i]! );
+}
+
+/*
+================
 vectors
 
 Apply SetPosition / SetVelocity / Force operations scheduled on frame,
@@ -340,18 +399,7 @@ function vectors(
 		const flag = op.flags;
 		copy3( op.value, work );
 		if ( op.name === "SetPosition" ) {
-			if ( (flag === 2 || flag === 5) && !sibling ) continue;
-			const base = flag === 1 || flag === 4 || flag === 7 ?
-				element.parent :
-				flag === 2 || flag === 5 ?
-				sibling :
-				undefined;
-			if ( flag >= 3 ) {
-				affineInto( flag >= 6 ? element.parent.matrix : element.matrix, work[0]!, work[1]!, work[2]!, work );
-			}
-			if ( base ) element.state.position = [ ...base.state.position ];
-			const position = element.state.position;
-			for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( position[i]! + work[i]! );
+			setPosition( element, op.value, flag, work, sibling );
 		} else {
 			if ( flag === 3 && !sibling ) continue;
 			if ( flag ) {
@@ -639,7 +687,7 @@ export function advanceParticleGraph(
 						element.matrix.set( identity() );
 						element.matrix.set( translation, 12 );
 					}
-					if ( def.matrix ) element.matrix.set( def.matrix );
+					if ( def.matrix && !def.commands ) element.matrix.set( def.matrix );
 					const follow = ancestor( element, def.followDepth );
 					for ( let i = 0; i < 3; i++ ) {
 						inherited[i] = Math.fround( inherited[i]! - (follow?.state.velocity[i] ?? 0) );
@@ -720,13 +768,13 @@ export function advanceParticleGraph(
 					// Every particle owns a fresh scale array (initializeParticle,
 					// sampleScale), so the frame's scale is written into it.
 					if ( at >= 0 ) copy3( def.scales[at]!, element.state.scale );
-					const pos = def.positions[Math.min( age, def.positions.length - 1 )];
+					const pos = !def.commands && def.positions[Math.min( age, def.positions.length - 1 )];
 					if ( pos ) {
 						const position = element.state.position, from = parent.state.position;
 						affineInto( parent.matrix, pos[0]!, pos[1]!, pos[2]!, position );
 						for ( let i = 0; i < 3; i++ ) position[i] = Math.fround( position[i]! + from[i]! );
 					}
-					const rot = def.rotations[Math.min( age, def.rotations.length - 1 )];
+					const rot = !def.commands && def.rotations[Math.min( age, def.rotations.length - 1 )];
 					if ( rot ) element.matrix.set( rot );
 					if ( keptMatrix ) {
 						inverseInto( scratch.previous, scratch.inverse );

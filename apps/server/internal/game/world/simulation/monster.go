@@ -253,7 +253,7 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 		RefObjID: ref.RefObjID, TidWord: ref.TidWord, Codename: ref.Codename,
 		// The live speeds: graded (4C1690) and under any slowing status.
 		Name: ref.DisplayName(), WalkSpeed: instance.WalkSpeed(), RunSpeed: instance.RunSpeed(),
-		ScaleDenom: ref.ScaleDenom, Rarity: instance.Rarity(),
+		ScaleDenom: instance.ActionSpeed(), Rarity: instance.Rarity(),
 		MotionState: instance.Motion.StateAt(nowMs),
 		Structure:   ref.Structure, CurrentHP: instance.CurrentHP,
 		EventStructID: instance.Nest.EventStructID, TypeID4: ref.TypeID4,

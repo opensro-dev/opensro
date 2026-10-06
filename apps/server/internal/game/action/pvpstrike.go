@@ -433,7 +433,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 		frame = wire.SkillCastReleaseResultFrame(result)
 		closeAt = now + int64(skill.ActionDurationMs)
 	}
-	if skill.ProjectileSpeed != 0 {
+	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		closeAt = max(closeAt, now+projectileFlightMs(casterAt, target.at, skill.ProjectileSpeed)+1)
 	}
 	if !skill.PositionEffect.Charge {

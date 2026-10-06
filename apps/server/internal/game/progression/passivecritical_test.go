@@ -16,12 +16,27 @@ import (
 	"opensro.online/server/internal/testsupport/licensed"
 )
 
+/*
+================
+passiveItemSource
+================
+*/
 type passiveItemSource struct{ ref *enterworld.ItemRef }
 
+/*
+================
+ItemRefByCodename
+================
+*/
 func (s passiveItemSource) ItemRefByCodename(name string) (*enterworld.ItemRef, bool) {
 	return s.ref, name == s.ref.Codename
 }
 
+/*
+================
+TestPassiveLearnUpgradeAndStoreRestoration
+================
+*/
 func TestPassiveLearnUpgradeAndStoreRestoration(t *testing.T) {
 	licensed.RequireGameData(t)
 	source := enterworld.NewTextdataSkills(licensed.RetailTextdataDir(t))
@@ -29,6 +44,8 @@ func TestPassiveLearnUpgradeAndStoreRestoration(t *testing.T) {
 		t.Fatal(err)
 	}
 	seed := testCharacter()
+	seed.ModelCodename = "CHAR_EU_MAN_ADVENTURER"
+	seed.RaceIndex = int64Ptr(enterworld.RaceEurope)
 	seed.Level = int64Ptr(90)
 	seed.MaxLevel = int64Ptr(90)
 	seed.SkillPoints = int64Ptr(1000000)
