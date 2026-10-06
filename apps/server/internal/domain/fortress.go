@@ -5,6 +5,7 @@ fortress.go - the persisted fortress state
 
 The shard rows a fortress war leaves behind: who occupies each fortress
 and who holds it during a war (_SiegeFortress GuildID and TempGuildID),
+its signed tax rate and accumulated tax gold,
 the guilds registered for the coming war (_SiegeFortressRequest), and the
 structures standing on its event zones with their hit points and state
 (_SiegeFortressStruct). They are cross-character state, so they live in
@@ -23,9 +24,13 @@ One _SiegeFortress row.
 ================
 */
 type FortressRecord struct {
-	FortressID  uint32 `json:"fortressId"`
-	GuildID     int64  `json:"guildId,omitempty"`
-	TempGuildID int64  `json:"tempGuildId,omitempty"`
+	StaffFlags    uint8                  `json:"staffFlags,omitempty"`
+	FortressID    uint32                 `json:"fortressId"`
+	GuildID       int64                  `json:"guildId,omitempty"`
+	TempGuildID   int64                  `json:"tempGuildId,omitempty"`
+	TaxRate       int16                  `json:"taxRate,omitempty"`
+	TaxGold       int64                  `json:"taxGold,omitempty"`
+	BattleRecords []FortressBattleRecord `json:"battleRecords,omitempty"`
 }
 
 /*
@@ -81,3 +86,36 @@ type FortressStore interface {
 	// SaveFortressStructure writes (present) or removes one zone's structure.
 	SaveFortressStructure(divisionID string, structure FortressStructureRecord, present bool) error
 }
+
+/*
+================
+FortressBattleRecord
+
+_SiegeFortressBattleRecord: the fortress is the containing row; rank and
+its last promotion time survive reconnect independently of a live buff.
+================
+*/
+type FortressBattleRecord struct {
+	CharacterID int64  `json:"characterId"`
+	Kills       uint32 `json:"kills"`
+	Deaths      uint32 `json:"deaths"`
+	Rank        uint8  `json:"rank"`
+	RankAtMs    int64  `json:"rankAtMs"`
+}
+
+/*
+================
+FortressStaffStore
+
+The hire commit owns the fortress flags, guild points and master's gold in
+one transaction. Refusals are the v1.150 fortress notice's low byte.
+================
+*/
+type FortressStaffStore interface {
+	HireFortressStaff(divisionID string, record FortressRecord, actorID int64, requested uint8) (uint8, error)
+}
+
+const (
+	FortressStaffGold int64  = 30000
+	FortressStaffGP   uint32 = 3000
+)

@@ -196,10 +196,11 @@ BootstrapResult is the /mission/bootstrap response.
 ================
 */
 type BootstrapResult struct {
-	NativeResult    int
-	NativeErrorCode int
-	NativeError     *NativeAgentError
-	Reason          string
+	DiagnosticSessionID string
+	NativeResult        int
+	NativeErrorCode     int
+	NativeError         *NativeAgentError
+	Reason              string
 
 	DivisionID           string
 	Character            *Character
@@ -245,6 +246,7 @@ bootstrapSuccessView
 ================
 */
 type bootstrapSuccessView struct {
+	DiagnosticSessionID       string                   `json:"diagnosticSessionId,omitempty"`
 	InventorySlotCount        uint8                    `json:"inventorySlotCount"`
 	EquipmentSlotCount        uint8                    `json:"equipmentSlotCount"`
 	SimulationProtocolVersion int                      `json:"simulationProtocolVersion"`
@@ -314,6 +316,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		}
 	}
 	return json.Marshal(bootstrapSuccessView{
+		DiagnosticSessionID:       r.DiagnosticSessionID,
 		InventorySlotCount:        inventory.BagSlotEnd,
 		EquipmentSlotCount:        inventory.EquipmentSlotEnd,
 		SimulationProtocolVersion: 1,

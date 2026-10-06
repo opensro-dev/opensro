@@ -113,6 +113,13 @@ func compileTimedItemEffect(fields []string, row SkillRow) (SkillTimedEffect, bo
 			modifiers = true
 		case itemEffectAlchemyLuck, itemEffectAlchemyStone:
 			modifiers = true
+		case tagTimedHaste, tagTimedOverride, tagTimedIndependent:
+			// 59642C chooses the movement lane; 594AC0 installs the other
+			// modifier blocks in the same cbuf context (fortress commander).
+			if op.Count != 1 || !row.MovementModifier.Present || row.MovementModifier.Percent == 0 {
+				return SkillTimedEffect{}, false
+			}
+			// Movement-only rows retain encodedMovementModifier as their producer.
 		case itemEffectDamage, itemEffectAbsorb:
 			// parseSkillOffense already decodes these shared modifier blocks;
 			// the common installer owns their arithmetic and removal.

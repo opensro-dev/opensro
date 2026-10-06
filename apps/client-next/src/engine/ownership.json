@@ -3,6 +3,7 @@
   "root": "src/engine/runtime/runtime.ts",
   "bootstrap": "src/bootstrap.ts",
   "modules": {
+    "src/engine/runtime/ui/hud/experimental-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/action-session.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/characters/mall-preview.ts": "src/engine/runtime/characters/characters.ts",
@@ -20,6 +21,7 @@
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/fortress-war-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/union-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/guild-war-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/exchange-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/stall-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/stall-network-categories.ts": "src/engine/runtime/ui/ui.ts",
@@ -143,9 +145,13 @@
     "src/engine/runtime/characters/damage-feedback.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/audio/preparation.ts": "src/engine/runtime/audio/audio.ts",
     "src/engine/runtime/ui/hud/item-mall.ts": "src/engine/runtime/ui/ui.ts",
-    "src/engine/runtime/bug-report/bug-report.ts": "src/engine/runtime/runtime.ts"
+    "src/engine/runtime/bug-report/bug-report.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/build-info/build-info.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/frame-work.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/frame-pacing.ts": "src/engine/runtime/runtime.ts"
   },
   "internals": {
+    "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",
     "src/engine/runtime/runtime-errors.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/frame-probes.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/renderer/device/pipelines.ts": "src/engine/runtime/renderer/device/device.ts",

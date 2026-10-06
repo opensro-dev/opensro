@@ -94,7 +94,10 @@ export interface BuybackOffer {
 	readonly plus: number;
 }
 export interface ShopState {
+	readonly cosGid?: number;
 	readonly saleQuotes?: readonly {
+		readonly cosGid?: number;
+		readonly totals?: readonly string[];
 		readonly noBuyback?: boolean;
 		readonly slot: number;
 		readonly refObjId: number;
@@ -205,20 +208,32 @@ export function shopCatalog( p: Uint8Array ): ShopState {
 			seenTabs.add( index );
 		}
 	}
+	if ( r.cosGid !== undefined ) commerceInteger( r.cosGid, 0xffffffff, 1 );
 	if ( r.buyback !== undefined && r.buyback !== null ) buybackEntries( r.buyback );
 	if ( r.saleQuotes !== undefined && r.saleQuotes !== null ) {
 		if ( !Array.isArray( r.saleQuotes ) || r.saleQuotes.length > 256 ) throw Error( "Invalid sale quotes" );
-		const slots = new Set<number>();
+		const slots = new Set<string>();
 		for ( const q of r.saleQuotes ) {
 			if ( !q || typeof q !== "object" ) throw Error( "Invalid sale quote" );
 			if ( q.noBuyback !== undefined && typeof q.noBuyback !== "boolean" ) {
 				throw Error( "Invalid buyback policy" );
 			}
-			const slot = commerceInteger( q.slot, 255, 13 );
+			const cos = q.cosGid === undefined ? 0 : commerceInteger( q.cosGid, 0xffffffff, 1 );
+			const slot = commerceInteger( q.slot, 255, cos ? 0 : 13 );
+			const key = `${cos}:${slot}`;
 			commerceInteger( q.refObjId, 0xffffffff, 1 );
 			commerceInteger( q.quantity, 65535, 1 );
-			if ( slots.has( slot ) || !commerceGold( q.price ) ) throw Error( "Invalid sale quote" );
-			slots.add( slot );
+			if (
+				q.totals !== undefined && (!Array.isArray( q.totals ) || q.totals.length !== q.quantity ||
+					q.totals.length > 40)
+			) throw Error( "Invalid cargo sale totals" );
+			if ( Array.isArray( q.totals ) ) {
+				for ( const total of q.totals ) {
+					if ( !commerceGold( total ) ) throw Error( "Invalid cargo sale total" );
+				}
+			}
+			if ( slots.has( key ) || !commerceGold( q.price ) ) throw Error( "Invalid sale quote" );
+			slots.add( key );
 		}
 	}
 	return r as unknown as ShopState;

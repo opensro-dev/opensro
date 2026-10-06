@@ -33,6 +33,7 @@ source owner is a logical session, so reconnecting cannot inherit old attacks.
 ================
 */
 type Effect struct {
+	StructureRepair                  bool // item-owned linked heal; source cancellation lives in statuseffect.
 	StopRequested                    bool
 	Division, SourceName             string
 	SourceSession                    uint64
@@ -92,7 +93,7 @@ Other targets never consume this link's capacity. Same-ID recasts are refused.
 */
 func refusal(active []Effect, next Effect) uint16 {
 	if next.Division == "" || next.SourceGID == 0 || next.TargetGID == 0 || next.SkillID == 0 ||
-		next.LinkGroup == 0 || next.PeriodMs == 0 || next.DurationMs == 0 {
+		next.LinkGroup == 0 && !next.StructureRepair || next.PeriodMs == 0 || next.DurationMs == 0 {
 		return ErrInvalid
 	}
 	var count uint32

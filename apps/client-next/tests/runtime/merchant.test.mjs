@@ -15,7 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
 
-const { merchantSelection, merchantQuote, merchantPage } = await import(
+const { merchantSelection, merchantQuote, merchantPage, merchantCommand } = await import(
 	sourceFileUrl( "src/engine/foundation/ui/merchant.ts" ).href
 );
 const offer = ( tab, slot, price = "60" ) => ({ tab, slot, refObjId: 100 + slot, name: "Item", price, maxStack: 50 });
@@ -159,4 +159,33 @@ test("merchant branches preserve every authored tab without the four-tab truncat
 			} ] ),
 		/branch tabs/
 	);
+});
+
+/*
+================
+cargoQuoteAndContainerIdentity
+================
+*/
+test("cargo quotes use whole-quantity rounding and bind owner and transport", () => {
+	const item = { ...inventory[0], slot: 0, quantity: 3, typeFlags: 0xc6c, label: "Victim" };
+	const quote = {
+		cosGid: 42,
+		slot: 0,
+		refObjId: item.refObjId,
+		quantity: 3,
+		price: "75",
+		totals: [ "75", "151", "227" ]
+	};
+	const shop = { ...fixture(), cosGid: 42, saleQuotes: [ quote ] };
+	const selection = merchantSelection( "sell", 0, shop, [ item ] );
+	assert.ok( selection );
+	assert.equal( merchantQuote( selection, shop, [ item ], "2", "0" ).valid, false );
+	const refreshed = { ...shop, saleQuotes: [ { ...quote } ] };
+	assert.equal( merchantQuote( selection, refreshed, [ item ], "2", "0" ).total, 151n );
+	assert.equal( merchantQuote( selection, refreshed, [ item ], "3", "0" ).total, 227n );
+	assert.equal( merchantQuote( selection, { ...refreshed, cosGid: 43 }, [ item ], "2", "0" ), null );
+	assert.equal( merchantQuote( selection, refreshed, [ { ...item, label: "Other" } ], "2", "0" ), null );
+	assert.deepEqual( merchantCommand( selection, 2 ), { kind: "cos-shop-sell", gid: 42, slot: 0, quantity: 2 } );
+	const purchase = merchantSelection( "buy", 0, shop, [ item ] );
+	assert.deepEqual( merchantCommand( purchase, 3 ), { kind: "cos-shop-buy", gid: 42, slot: 2, tab: 0, quantity: 3 } );
 });

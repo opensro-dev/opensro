@@ -156,10 +156,11 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 			return combat.WallOutcome{Defender: *in.fixed}, nil
 		case in.skill.LifeSteal.Present:
 			// 58F4B5: the percent rides into 40F750, after its HP cap.
-			return combat.WallOutcome{Defender: lifeStealResult(in.lifeStealBase, in.attacker, defender, uint32(max(hp, 0)), uint32(percent))}, nil
+			steal := lifeStealResult(in.lifeStealBase, in.attacker, defender, uint32(max(hp, 0)), uint32(percent))
+			return combat.WallOutcome{Defender: combat.FinishImpact(steal, combat.ImpactTail{PercentApplied: true, Attack: in.skill.Attack.Present})}, nil
 		}
 		out, err := rt.resolvePlayerImpactBehindWall(in.division, in.snapshot.Name, in.skill, in.attacker, defender, in.now, in.chained, wall)
-		out.Defender.Damage = uint32(uint64(out.Defender.Damage) * percent / fullAreaPercent)
+		out.Defender = combat.FinishImpact(out.Defender, combat.ImpactTail{Percent: percent, Attack: in.skill.Attack.Present})
 		out.Absorbed = uint32(uint64(out.Absorbed) * percent / fullAreaPercent)
 		return out, err
 	}
@@ -272,7 +273,7 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 	}
 	mask := admitExecution
 	if st.rootID != 0 {
-		mask &^= admitCooldown | admitResources
+		mask &^= admitCooldown
 	}
 	struck := &admitTarget{at: target.at, player: target.snapshot, motion: rt.playerTargetMotion(division, target.snapshot, now)}
 	if code := rt.skillAdmission(division, snapshot, skill, now, struck, st.release, mask); code != 0 {
@@ -284,7 +285,7 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 	if skill.Threat.Only {
 		return offensiveRefusal(0x3006), skillCastRefused
 	}
-	if st.advanced && st.rootID == 0 {
+	if st.advanced {
 		if _, refusal := rt.offensivePhaseCost(division, snapshot, skill, now, st.release); refusal != 0 {
 			return offensiveRefusal(refusal), skillCastRefused
 		}
@@ -361,7 +362,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	var refusal uint16
 	if !rt.deps.UpdateMany([]*enterworld.Character{character, target.player}, "player-strike-player", func() bool {
 		var cost skillCharge
-		if st.advanced && st.rootID == 0 {
+		if st.advanced {
 			if cost, refusal = rt.offensivePhaseCost(division, character, skill, now, st.release); refusal != 0 {
 				return false
 			}
@@ -385,7 +386,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 		if st.consumeAmmo {
 			ammo = applyAmmunitionDebit(character, debit)
 		}
-		if st.advanced && st.rootID == 0 {
+		if st.advanced {
 			rt.commitOffensivePhaseCost(division, character, skill, cost, now, st.release != nil)
 		} else if st.release == nil {
 			rt.registerPlayerSkillCooldown(division, character, skill, now)
@@ -433,7 +434,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 		frame = wire.SkillCastReleaseResultFrame(result)
 		closeAt = now + int64(skill.ActionDurationMs)
 	}
-	if skill.ProjectileSpeed != 0 {
+	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		closeAt = max(closeAt, now+projectileFlightMs(casterAt, target.at, skill.ProjectileSpeed)+1)
 	}
 	if !skill.PositionEffect.Charge {
@@ -456,7 +457,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	actor = append(actor, wear.actor...)
 	private = append(private, wear.actor...)
 	public = append(public, wear.public...)
-	if st.advanced && st.rootID == 0 {
+	if st.advanced {
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(caster, rt.publishedVitals(division, character))}
 		actor = append(actor, vitals)
 		private = append(private, vitals)

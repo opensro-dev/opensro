@@ -14,6 +14,11 @@ import (
 )
 
 // Dependencies is the character and itemdata surface consumed by action.
+/*
+================
+Dependencies
+================
+*/
 type Dependencies interface {
 	domain.CharacterSource
 	CharacterBodyRadius(character *domain.Character) (float64, bool)
@@ -21,6 +26,7 @@ type Dependencies interface {
 	Mutate(character *domain.Character, label string, fn func())
 	Update(character *domain.Character, label string, update func() bool) bool
 	UpdateMany(characters []*domain.Character, label string, update func() bool) bool
+	SettleTrade(characters []*domain.Character, label string, update func(*domain.TradeRewardPool) bool) bool
 	Read(divisionID string, fn func())
 	ItemReferences() enterworld.ItemRefSource
 	LevelData() enterworld.LevelDataSource

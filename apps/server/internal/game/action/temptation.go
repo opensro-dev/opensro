@@ -11,9 +11,8 @@ module resolves that hit, and the struck monster's answer, through the
 shared combat formula and the one monster HP door, and publishes it as the
 same B245 bracket a monster's attack on a player uses.
 
-Owner's rule: a tempted monster attacks other monsters nearby for the
-duration instead of players, and only regular monsters and regular party
-monsters are affected (monster.Instance.RegularMonster).
+58D2F2..58D30A rejects a Confusion cast against a nonzero base monster
+grade with 0x3033. Party grade flags and TID4 are not part of that test.
 
 Inferred, recorded deliberately:
   - a monster fight rolls no abnormal status and resolves a casting
@@ -33,6 +32,7 @@ import (
 
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -121,7 +121,8 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 		if err != nil {
 			return simulation.MonsterAttackResult{}
 		}
-		formulas = append(formulas, formula)
+		formulas = append(formulas, combat.FinishImpact(formula, combat.ImpactTail{MonsterAttacker: true,
+			AttackerRarity: instance.Rarity(), Attack: skill.Attack.Present}))
 	}
 	if len(formulas) == 0 {
 		return simulation.MonsterAttackResult{}
@@ -214,25 +215,21 @@ func (rt *Runtime) temptedOpponentCandidate(division string, struck monster.Inst
 	return monster.OpponentCandidate{GID: gid, Eligible: true, Distance: simulation.WorldDistance2D(from, to), ActorDistance: monster.NativeActorDistance(monster.Pose{RegionID: from.RegionID, X: from.X, Y: from.Y, Z: from.Z}, pose)}, true
 }
 
+// confusionTag is ca, the Confusion parameter block Temptation rolls.
+const confusionTag = 0x6361
+
 /*
 ================
-untemptableConfusion
+temptationTargetRefusal
 
-Owner's rule: Temptation does not affect champions, giants, uniques or
-event and quest monsters. Their rolled Confusion record is dropped, so the
-status never lands (no icon, no AI event); the roll's random draws were
-already consumed in native order.
+58D2F2..58D30A tests ca (+0x458), then the monster's base-grade getter
+(vtable +0x12C). Nonzero base grade returns 0x3033 at 58D424.
 ================
 */
-func untemptableConfusion(target monster.Instance, records []abnormal.Record) []abnormal.Record {
-	if target.RegularMonster() {
-		return records
+func temptationTargetRefusal(skill enterworld.SkillRow, target monster.Instance) uint16 {
+	index, ok := abnormal.SourceIndex(confusionTag)
+	if !ok || !skill.Abnormal.Params[index].Present || target.Rarity()&0x0f == 0 {
+		return 0
 	}
-	kept := records[:0]
-	for _, record := range records {
-		if record.Status != abnormal.Confusion {
-			kept = append(kept, record)
-		}
-	}
-	return kept
+	return 0x3033
 }

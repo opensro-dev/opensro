@@ -65,14 +65,16 @@ func hostileJobs(killer, victim uint8) bool {
 ================
 guildsAtWar
 
-4EB390: the killer's alliance holds the victim's guild as a war enemy.
-The v1.150 client carries the war table (GuildWarTable); the port has no
-guild-war owner yet, so no guild is at war and no kill is a guild-war
-kill until that system lands.
+4EB390 asks the killer guild's enemy map. The shared guild-war authority
+publishes immutable relation snapshots safe to read inside character doors.
 ================
 */
 func (rt *Runtime) guildsAtWar(division string, killer, victim *enterworld.Character) bool {
-	return false
+	if killer == nil || victim == nil || killer.GuildID == nil || victim.GuildID == nil {
+		return false
+	}
+	_, hostile := rt.GuildWars.Find(division, *killer.GuildID, *victim.GuildID)
+	return hostile
 }
 
 // A murderer's refusals, v1.188 error low bytes the v1.150 client names

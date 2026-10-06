@@ -80,7 +80,27 @@ func (rt *Runtime) captureAbnormalSource(division string, gid uint32) abnormalSo
 	}
 	character := rt.findCharacterByGid(division, gid)
 	if character == nil {
-		return abnormalSourceState{}
+		owner := rt.characterByCosGID(division, gid)
+		if owner == nil {
+			return abnormalSourceState{}
+		}
+		snapshot := rt.characterSnapshot(division, owner)
+		if snapshot == nil {
+			return abnormalSourceState{}
+		}
+		pet := snapshot.CompanionByGID(gid)
+		if pet == nil {
+			return abnormalSourceState{}
+		}
+		level := pet.Level
+		if level == 0 {
+			if ref, ok := rt.cosReference(pet); ok {
+				level = ref.Level
+			}
+		}
+		// 5C7000 attributes a COS kill to its owner but scores the COS level.
+		return abnormalSourceState{exists: true, dead: pet.CurrentHP == 0,
+			killer: deathKiller{player: snapshot, strikerLevel: int64(level)}}
 	}
 	snapshot := rt.characterSnapshot(division, character)
 	return abnormalSourceState{exists: true, dead: snapshot == nil || !enterworld.CharacterAlive(snapshot), killer: deathKiller{player: snapshot}}

@@ -2,6 +2,13 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/foundation/ui/fortress-mini-info.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/renderer/world/terrain-layers.ts",
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"functions": [
@@ -40,22 +47,30 @@
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-			"functions": [ "callback:createCombat:2" ]
+			"functions": [
+				"callback:createCombat:2"
+			]
 		},
 		{
 			"consumer": "src/engine/foundation/gameplay/combat-result.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts",
-			"functions": [ "callback:skillPulse:1" ]
+			"functions": [
+				"callback:skillPulse:1"
+			]
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
-			"functions": ["callback:createGameplay:3"]
+			"functions": [
+				"callback:createGameplay:3"
+			]
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/cos-pickup.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
-			"functions": ["callback"]
+			"functions": [
+				"callback"
+			]
 		},
 		{
 			"consumer": "src/engine/runtime/characters/mall-preview.ts",
@@ -656,7 +671,8 @@
 			"provider": "src/engine/runtime/renderer/characters/characters.ts",
 			"functions": [
 				"currentActors",
-				"stats"
+				"stats",
+				"frameWork"
 			]
 		},
 		{
@@ -804,7 +820,8 @@
 				"callback:createUi:13",
 				"callback:createUi:14",
 				"callback:createUi:15",
-				"callback:createUi:16"
+				"callback:createUi:16",
+				"saveExperimental"
 			]
 		},
 		{
@@ -1846,6 +1863,30 @@
 				"callback:createStaleDrawGuard:0",
 				"callback:createStaleDrawGuard:1"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/frame-work.ts",
+			"functions": [
+				"level"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
+			"provider": "src/engine/runtime/frame-work.ts",
+			"functions": [
+				"level",
+				"remaining",
+				"spend"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/platform/telemetry.ts",
+			"functions": [
+				"present",
+				"active"
+			]
 		}
 	],
 	"boundaries": [
@@ -2058,6 +2099,20 @@
 			"function": "listen",
 			"kind": "callback",
 			"reason": "Chrome's MediaStreamTrackProcessor (outside TypeScript's DOM library) reads the captured game sound as AudioData for the replay's AAC track."
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"expression": "frameProbe()?.characterCount",
+			"function": "frame",
+			"kind": "callback",
+			"reason": "Optional read-only frame profiler correlation; no state mutation or scheduling."
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"expression": "frameProbe()?.movement",
+			"function": "frame",
+			"kind": "callback",
+			"reason": "Optional read-only frame profiler correlation; no state mutation or scheduling."
 		}
 	],
 	"sequences": [
@@ -2065,8 +2120,6 @@
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
 			"calls": [
-				"src/engine/runtime/input/input.ts#drain",
-				"src/engine/runtime/simulation/host.ts#sendInput",
 				"src/engine/runtime/simulation/host.ts#poll",
 				"src/engine/runtime/audio/audio.ts#step",
 				"src/engine/runtime/audio/audio.ts#world",
@@ -2088,13 +2141,23 @@
 					"target": "src/engine/runtime/world/world.ts#step"
 				}
 			]
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"function": "displayFrame",
+			"calls": [
+				"src/engine/runtime/input/input.ts#drain",
+				"src/engine/runtime/simulation/host.ts#sendInput",
+				"src/engine/runtime/frame-pacing.ts#admit",
+				"src/engine/runtime/runtime.ts#frame"
+			]
 		}
 	],
 	"frameBarriers": [
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "b5c2cd72103ab2fe50aedab15c2498d34f8254dfbedbbe6ede7720c3c550f09b",
+			"sourceSha256": "fe3bcdbe0b0da1d7ac1b61ae07d68e3c2be838bf7768b3904eb0c6cf34439849",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

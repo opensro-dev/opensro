@@ -161,3 +161,38 @@ func TestMonsterAreaStrikesACompanionInside(t *testing.T) {
 		t.Fatal("the pet is missing from the area result")
 	}
 }
+
+/*
+================
+TestGradedMonsterStrikeTakesTheNativeDamageScale
+
+SkillCombat_GetMonsterDamageScale (5874D0) at 58FD05: a giant's (grade 4)
+landed strike deals 1.5 times the damage the same strike from a normal
+monster deals, truncated after the multiply.
+================
+*/
+func TestGradedMonsterStrikeTakesTheNativeDamageScale(t *testing.T) {
+	loss := func(rarity uint8) int64 {
+		rt, clock, c, m := newCombatTestRuntime(t, 100)
+		rt.CombatRoll = func() (uint32, error) { return 0, nil }
+		skills := rt.deps.SkillData().(staticSkillSource)
+		skill := skills[2]
+		skill.Attack.Min, skill.Attack.Max, skill.Attack.Percent, skill.Attack.ImpactCount = 20, 20, 100, 1
+		skills[2] = skill
+		m.Ref.DefaultSkillIDs[0] = 2
+		m.Nest.HasRarityOverride, m.Nest.RarityOverride = true, rarity
+		before := enterworld.CurrentHP(c)
+		result := rt.MonsterBasicAttack(testDivision, m, enterworld.ObjectIDForCharacter(c), 2, clock.NowMs())
+		if !result.Accepted {
+			t.Fatalf("rarity %#x: strike refused: %+v", rarity, result)
+		}
+		return int64(before - enterworld.CurrentHP(c))
+	}
+	normal, giant := loss(0x00), loss(0x04)
+	if normal == 0 {
+		t.Fatal("the normal monster dealt no damage")
+	}
+	if want := normal * 3 / 2; giant != want {
+		t.Fatalf("giant loss %d, want %d (1.5 x the normal %d)", giant, want, normal)
+	}
+}

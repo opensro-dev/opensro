@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+db_write.go - normalized authority writes within the caller's transaction
+
+===========================================================================
+*/
 package store
 
 import (
@@ -12,12 +19,22 @@ import (
 
 // Transaction writers translate dirty in-memory authority records into the
 // normalized SQLite layout. They never own transaction lifecycle.
+/*
+================
+upsertMetaTx
+================
+*/
 func upsertMetaTx(tx *sql.Tx, key, value string) error {
 	_, err := tx.Exec("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
 	return err
 }
 
 // upsertCharacterTx writes one character row inside a transaction.
+/*
+================
+upsertCharacterTx
+================
+*/
 func upsertCharacterTx(tx *sql.Tx, division string, c *domain.Character) error {
 	record, err := json.Marshal(c)
 	if err != nil {
@@ -35,6 +52,11 @@ func upsertCharacterTx(tx *sql.Tx, division string, c *domain.Character) error {
 // replaceGroundTx replaces the WHOLE ground plane inside a transaction.
 // Ground rows are TTL-bounded drops - a handful of rows - so a replace
 // on ground-dirty commits is simpler than row diffing and still O(small).
+/*
+================
+replaceGroundTx
+================
+*/
 func replaceGroundTx(tx *sql.Tx, divisions map[string][]domain.GroundItemRecord) error {
 	if _, err := tx.Exec("DELETE FROM ground_items"); err != nil {
 		return err
@@ -63,6 +85,11 @@ func replaceGroundTx(tx *sql.Tx, divisions map[string][]domain.GroundItemRecord)
 // whole-mailbox replace on dirty commits is O(small) like the ground
 // plane, and it keeps seq == list position - the wire-index contract the
 // letter lane's u8 indices rely on.
+/*
+================
+replaceMailboxTx
+================
+*/
 func replaceMailboxTx(tx *sql.Tx, division string, charID int64, mailbox []domain.LetterRecord) error {
 	if _, err := tx.Exec("DELETE FROM memos WHERE division = ? AND char_id = ?", division, charID); err != nil {
 		return err
@@ -84,6 +111,11 @@ func replaceMailboxTx(tx *sql.Tx, division string, charID int64, mailbox []domai
 // (guildKey), and a member set is bounded by the client's u8 member count,
 // so the whole-set replace is O(small) like a mailbox, and it keeps
 // seq == list position - the wire order the 0x32C4 member loop emits.
+/*
+================
+replaceGuildTx
+================
+*/
 func replaceGuildTx(tx *sql.Tx, division string, guildID int64, guild domain.GuildRecord, members []domain.GuildMemberRecord) error {
 	if _, err := tx.Exec("DELETE FROM guilds WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
@@ -113,6 +145,11 @@ func replaceGuildTx(tx *sql.Tx, division string, guildID int64, guild domain.Gui
 // deleteGuildTx removes ONE guild's rows - the guild row plus its whole
 // member set - inside a transaction (replaceGuildTx's DELETE half with
 // no re-insert: the dissolution door's persistence action).
+/*
+================
+deleteGuildTx
+================
+*/
 func deleteGuildTx(tx *sql.Tx, division string, guildID int64) error {
 	if _, err := tx.Exec("DELETE FROM guilds WHERE division = ? AND guild_id = ?", division, guildID); err != nil {
 		return err
@@ -129,6 +166,11 @@ func deleteGuildTx(tx *sql.Tx, division string, guildID int64) error {
 // @0x0082917b "TraningCampMember is Over than 8", so the whole-set
 // replace is O(small), and seq == list position is the wire order the
 // 0x3AC5 status-10 sub-1 roster loop emits).
+/*
+================
+replaceCampTx
+================
+*/
 func replaceCampTx(tx *sql.Tx, division string, campID int64, camp domain.TrainingCampRecord, members []domain.TrainingCampMemberRecord) error {
 	if _, err := tx.Exec("DELETE FROM training_camps WHERE division = ? AND camp_id = ?", division, campID); err != nil {
 		return err
@@ -158,6 +200,11 @@ func replaceCampTx(tx *sql.Tx, division string, campID int64, camp domain.Traini
 // seedAuthorityDBTx populates a freshly created current-schema database.
 // Transaction ownership stays with the caller so publishing cannot expose a
 // partial seed.
+/*
+================
+seedAuthorityDBTx
+================
+*/
 func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 	divisionSet := map[string]bool{}
 	for divisionID := range data.characters {
@@ -208,6 +255,9 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 		return err
 	}
 	if err := upsertMetaTx(tx, metaKeyGidCounter, fmt.Sprintf("%d", data.meta.GidCounter)); err != nil {
+		return err
+	}
+	if err := writeTradeRewards(tx, data.meta.TradeRewards); err != nil {
 		return err
 	}
 	return upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", data.updatedAt))

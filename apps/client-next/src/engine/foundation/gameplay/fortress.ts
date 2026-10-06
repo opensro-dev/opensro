@@ -14,7 +14,30 @@ the fortress official's protocol: 0x71E1 requests
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "./system-notices";
-import { fortressServiceReply, FORTRESS_SERVICE_REPLY, type FortressServiceReply } from "./fortress-services";
+import {
+	fortressServiceRequest,
+	fortressServiceReply,
+	FORTRESS_SERVICE_REPLY,
+	type FortressServiceReply
+} from "./fortress-services";
+
+// Enabled v1.150 siegefortressbattlerank.txt rows, in unsigned threshold
+// order (7E1C60); names are the 7BB8C0 switch, icons are row column 5.
+/*
+================
+fortressBattleRanks
+================
+*/
+export function fortressBattleRanks() {
+	return [
+		{ kills: 15, name: "SN_SKILL_ASSAULTING_SOILDER", icon: "rank_assault_soilder" },
+		{ kills: 25, name: "SN_SKILL_ELITE_ASSAULTING_SOILDER", icon: "rank_elite_assault_soilder" },
+		{ kills: 45, name: "SN_SKILL_CENTURION", icon: "rank_centurion" },
+		{ kills: 70, name: "SN_SKILL_ASSAULTING_LEADER", icon: "rank_assault_leader" },
+		{ kills: 100, name: "SN_SKILL_ELITE_IMPERIAL_GUARD", icon: "rank_elite_guard" },
+		{ kills: 150, name: "SN_SKILL_COMBAT_COMMANDER", icon: "rank_combat_commander" }
+	] as const;
+}
 
 export const OP_FORTRESS_INTERACTION = 0x71e1;
 export const OP_FORTRESS_INTERACTION_RESULT = 0xb1e1;
@@ -60,16 +83,25 @@ FortressState
 export interface FortressState {
 	readonly localKills?: number;
 	readonly localDeaths?: number;
-	readonly role?: number;
+	readonly staffFlags?: number;
+	readonly staffFortress?: number;
 	readonly worldId: number;
 	readonly worlds: readonly { id: number; code: string; }[];
 	readonly fortresses: readonly FortressRow[];
-	readonly wars: readonly { id: number; name: string; flags: number; }[];
+	readonly wars: readonly {
+		id: number;
+		name: string;
+		flags: number;
+		captureWait?: number;
+		stoneWait?: number;
+	}[];
+	readonly countdownAtMs?: number;
 	readonly registered: readonly number[];
 	readonly listId: number;
 	// The last fortress staff answer (fortress-services.ts); the official's
 	// application answers also reach fortressManagerReply.
 	readonly service?: FortressServiceReply;
+	readonly serviceSequence?: number;
 }
 
 /*
@@ -115,6 +147,9 @@ export function fortressBootstrap( value: unknown ): FortressState {
 	return { worldId, worlds, fortresses, wars: [], registered: [], listId: 0 };
 }
 
+const FORTRESS_TIMER_PERIOD_MS = 1000;
+const FORTRESS_STONE_WAIT_SECONDS = 180;
+
 /*
 ================
 fortressPacket
@@ -123,10 +158,19 @@ Folds one 0x3887 frame, or a fortress staff 0xB1E1 answer, into the
 state; null for frames it does not own.
 ================
 */
-export function fortressPacket( state: FortressState, frame: WireFrame ): FortressState | null {
+export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 ): FortressState | null {
 	if ( frame.opcode === FORTRESS_SERVICE_REPLY ) {
 		const service = fortressServiceReply( frame );
-		return service ? { ...state, service } : null;
+		return service ?
+			{
+				...state,
+				service,
+				serviceSequence: (state.serviceSequence ?? 0) + 1,
+				...(service.result === 1 && (service.action === 3 || service.action === 4) ?
+					{ staffFlags: service.flags } :
+					{})
+			} :
+			null;
 	}
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE ) return null;
 	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -151,18 +195,29 @@ export function fortressPacket( state: FortressState, frame: WireFrame ): Fortre
 		for ( let i = 0; i < count; i++ ) {
 			const id = u32(), name = str();
 			for ( let j = 0; j < 4; j++ ) u32();
-			if ( u8() === 1 ) u32();
-			if ( u8() === 1 ) u32();
-			const at = wars.findIndex( r => r.id === id ), row = { id, name, flags: 0 };
+			const captureWait = u8() === 1 ? u32() : 0, stoneWait = u8() === 1 ? u32() : 0;
+			const at = wars.findIndex( r => r.id === id ), row = { id, name, flags: 0, captureWait, stoneWait };
 			if ( at < 0 ) wars.push( row );
 			else wars[at] = row;
 		}
 		const flags = u8(), listId = u32();
-		next = { ...state, wars: wars.map( r => ({ ...r, flags }) ), listId };
+		next = {
+			...state,
+			wars: wars.map( r => ({ ...r, flags }) ),
+			listId,
+			countdownAtMs: state.countdownAtMs ?? now
+		};
 	} else if ( subtype === 8 ) {
 		const id = u32(), name = str();
 		for ( let j = 0; j < 4; j++ ) u32();
 		next = { ...state, wars: state.wars.map( r => r.id === id ? { ...r, name } : r ) };
+	} else if ( subtype === 0x0a ) {
+		const id = u32();
+		next = {
+			...state,
+			countdownAtMs: state.countdownAtMs ?? now,
+			wars: state.wars.map( row => row.id === id ? { ...row, stoneWait: FORTRESS_STONE_WAIT_SECONDS } : row )
+		};
 	} else if ( subtype === 0x0c || subtype === 0x0d ) {
 		const id = u32();
 		u8();
@@ -172,8 +227,8 @@ export function fortressPacket( state: FortressState, frame: WireFrame ): Fortre
 		const localKills = u32(), localDeaths = u32();
 		next = { ...state, localKills, localDeaths };
 	} else if ( subtype === 0x12 ) {
-		u32();
-		next = { ...state, role: u8() };
+		const staffFortress = u32();
+		next = { ...state, staffFortress, staffFlags: u8() };
 	} else if ( subtype === 0x10 ) {
 		u32();
 		const count = u8(), registered: number[] = [];
@@ -186,7 +241,14 @@ export function fortressPacket( state: FortressState, frame: WireFrame ): Fortre
 		const bit = subtype === 2 || subtype === 6 ? 1 : subtype < 0x33 ? 4 : 2,
 			set = subtype === 2 || subtype === 0x31 || subtype === 0x33;
 		// 7E2100 uses XOR on the off arm, not AND-NOT.
-		next = { ...state, wars: state.wars.map( r => ({ ...r, flags: set ? r.flags | bit : r.flags ^ bit }) ) };
+		next = {
+			...state,
+			wars: state.wars.map( r => ({
+				...r,
+				flags: set ? r.flags | bit : r.flags ^ bit,
+				...(subtype === 6 ? { captureWait: 0, stoneWait: 0 } : {})
+			}) )
+		};
 	} else if ( ![ 1, 3, 4, 5, 9 ].includes( subtype ) ) return null;
 	if ( o !== p.length ) throw Error( "Trailing fortress frame bytes" );
 	return next;
@@ -212,6 +274,36 @@ export function fortressRegistrationNotice( state: FortressState, frame: WireFra
 		"UIIT_MSG_FORT_OFFICIAL_UNIONAPPLY_CANCEL";
 	const name = state.fortresses.find( r => r.id === id )?.nameStrId ?? null;
 	return { key, value: 0, localizedArguments: [ name ], banner: true, bannerOnly: true };
+}
+
+/*
+================
+fortressBattleRankNotice
+
+76C870 case 0x0E reads either the local player or an explicit name, then
+7BB8C0's rank name. Both the notice banner and system chat receive it.
+================
+*/
+export function fortressBattleRankNotice( frame: WireFrame, localName: string ): SystemNotice | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_FORTRESS_WAR_STATE || p[0] !== 0x0e ) return null;
+	if ( p.length < 3 ) throw Error( "Truncated fortress battle rank" );
+	let name = localName, rank = p[2]!;
+	if ( p[1] === 0 ) {
+		if ( p.length < 5 ) throw Error( "Truncated fortress battle rank name" );
+		const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 2, true );
+		if ( p.length !== n + 5 ) throw Error( "Invalid fortress battle rank length" );
+		name = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 4, 4 + n ) );
+		rank = p[4 + n]!;
+	} else if ( p.length !== 3 ) throw Error( "Trailing fortress battle rank bytes" );
+	if ( !name ) return null;
+	return {
+		key: "UIIT_MSG_FORT_BATTLERANK_GRANT",
+		value: 0,
+		arguments: [ name, "" ],
+		localizedArguments: [ null, fortressBattleRanks()[rank - 1]?.name ?? null ],
+		banner: true
+	};
 }
 
 export const FORTRESS_CONQUEST = 0x08;
@@ -382,15 +474,7 @@ fortressInteraction
 ================
 */
 export function fortressInteraction( npc: number, subtype: number, fortress = 0, kind = 0 ): WireFrame {
-	const status = subtype === FORTRESS_WAR_STATUS;
-	const payload = new Uint8Array( status ? 5 : 10 ), v = new DataView( payload.buffer );
-	v.setUint32( 0, npc >>> 0, true );
-	v.setUint8( 4, subtype );
-	if ( !status ) {
-		v.setUint32( 5, fortress >>> 0, true );
-		v.setUint8( 9, kind );
-	}
-	return { opcode: OP_FORTRESS_INTERACTION, payload };
+	return fortressServiceRequest( { target: npc, action: subtype, fortress, flag: kind } );
 }
 
 /*
@@ -473,4 +557,54 @@ export function fortressManagerReply(
 	if ( p.length !== 7 ) throw Error( "Invalid fortress application result" );
 	const applied = subtype === FORTRESS_WAR_APPLY ? { fortress: v.getUint32( 2, true ), kind: p[6]! } : null;
 	return { ok: true, subtype, application: { warStart: previous?.warStart ?? null, applied } };
+}
+
+/*
+================
+advanceFortressCountdowns
+
+7E22F0 decrements every nonzero counter once. A00BE0 fires an overdue
+state timer once and resets its baseline to now, without catch-up ticks.
+The timer stops on the following tick after all counters reach zero.
+================
+*/
+export function advanceFortressCountdowns( state: FortressState, now: number ): FortressState {
+	if ( state.countdownAtMs === undefined || now - state.countdownAtMs < FORTRESS_TIMER_PERIOD_MS ) return state;
+	if ( !state.wars.some( row => (row.captureWait ?? 0) > 0 || (row.stoneWait ?? 0) > 0 ) ) {
+		return { ...state, countdownAtMs: undefined };
+	}
+	return {
+		...state,
+		countdownAtMs: now,
+		wars: state.wars.map( row => ({
+			...row,
+			captureWait: Math.max( 0, (row.captureWait ?? 0) - 1 ),
+			stoneWait: Math.max( 0, (row.stoneWait ?? 0) - 1 )
+		}) )
+	};
+}
+
+/*
+================
+fortressCountdownNotices
+
+6B5A50 announces whole minutes, 90 seconds, and each of the last 30
+seconds. These are banner-only notices for the guild's active fortress.
+================
+*/
+export function fortressCountdownNotices( state: FortressState ): SystemNotice[] {
+	const war = state.wars.find( row => row.id === state.listId && (row.flags & 1) !== 0 );
+	if ( !war ) return [];
+	const out: SystemNotice[] = [];
+	for (
+		const [seconds, key] of [
+			[ war.captureWait ?? 0, "UIIT_MSG_FORT_ETC_ENTER_COUNTDOWN" ],
+			[ war.stoneWait ?? 0, "UIIT_MSG_FORT_ATTACK_FORT_STONE_COUNTDOWN" ]
+		] as const
+	) {
+		if ( seconds > 0 && (seconds % 60 === 0 || seconds === 90 || seconds <= 30) ) {
+			out.push( { key, value: seconds, banner: true, bannerOnly: true } );
+		}
+	}
+	return out;
 }

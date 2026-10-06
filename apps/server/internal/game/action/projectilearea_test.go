@@ -111,19 +111,19 @@ same thrown blade with a single target (no efr).
 ==================
 */
 func TestThrownBladesResolveAtReleaseWithoutAmmunition(t *testing.T) {
-	for _, name := range []string{"SKILL_CH_SWORD_SPECIAL_A_01", "SKILL_CH_SWORD_SPECIAL_B_01", "SKILL_CH_SWORD_GEOMGI_A_01"} {
+	for _, name := range []string{"SKILL_CH_SWORD_SPECIAL_A_01", "SKILL_CH_SWORD_SPECIAL_B_01", "SKILL_CH_SWORD_GEOMGI_A_01", "SKILL_CH_SPEAR_SHOOT_A_01"} {
 		t.Run(name, func(t *testing.T) {
 			rt, targets := areaFixture(t, 100000)
 			c := rt.findCharacter(testDivision, "asd2")
+			skill := shippedOffense(t, name)
 			items := rt.deps.ItemReferences().(staticItemSource)
 			sword := *items[c.MissionInventory[0].Codename]
-			sword.Codename, sword.RefObjID, sword.TypeIDs[3] = "ITEM_CH_SWORD_01_A", 73, 2
+			sword.Codename, sword.RefObjID, sword.TypeIDs[3] = "TEST_THROWN_WEAPON", 73, int64(skill.RequiredWeaponKinds[0])
 			items[sword.Codename] = &sword
 			c.MissionInventory[0].Codename, c.MissionInventory[0].RefObjID, c.MissionInventory[0].TypeFlags = sword.Codename, sword.RefObjID, sword.TypeFlags()
 			inventory := len(c.MissionInventory)
 
-			skill := shippedOffense(t, name)
-			if !skill.DirectOffensePinned || skill.ProjectileSpeed == 0 || skill.Ammunition.Count != 0 {
+			if !skill.DirectOffensePinned || skill.ActionHandler != enterworld.SkillActionProjectile || skill.Ammunition.Count != 0 {
 				t.Fatalf("not admitted: %+v", skill)
 			}
 			skill.Consumption.MP = 100 // the shipped cost exceeds the level-1 keeper maximum

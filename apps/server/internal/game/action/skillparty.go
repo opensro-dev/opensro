@@ -88,12 +88,22 @@ type auraUpdate struct {
 }
 
 // auraStatsOwner is one character owed a 0x343C.
+/*
+================
+auraStatsOwner
+================
+*/
 type auraStatsOwner struct {
 	division string
 	c        *enterworld.Character
 }
 
 // oweStats records that c's stats moved in this pass.
+/*
+================
+oweStats
+================
+*/
 func (u *auraUpdate) oweStats(division string, c *enterworld.Character) {
 	key := simulation.WorldKey(division, c.Name)
 	if u.owed[key] {
@@ -196,6 +206,11 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 
 // auraRadius is the efr radius plus the caster's MUER (+0x544) and DSER
 // (+0x54C) when the row asks for them.
+/*
+================
+auraRadius
+================
+*/
 func (rt *Runtime) auraRadius(division string, caster *enterworld.Character, skill enterworld.SkillRow) (uint32, bool) {
 	stats, _, err := rt.playerCombatStats(division, caster)
 	if err != nil {
@@ -313,18 +328,28 @@ func (rt *Runtime) installAuraStep(u *auraUpdate, aura *partyAura, now int64) {
 	if caster == nil || !known {
 		return
 	}
-	u.frames = append(u.frames, rt.healAura(aura, caster, skill)...)
+	u.frames = append(u.frames, rt.healAura(aura, caster, skill, now)...)
 	rt.joinAura(u, aura, caster, skill, now)
 }
 
 // auraInstanceLive reports the caster's persistent instance still installed
 // and not asked to stop.
+/*
+================
+auraInstanceLive
+================
+*/
 func (rt *Runtime) auraInstanceLive(aura partyAura) bool {
 	return rt.instanceLive(aura.division, aura.casterName, aura.skillID, aura.token)
 }
 
 // instanceLive reports one instance of skillID still installed on name and
 // not asked to stop.
+/*
+================
+instanceLive
+================
+*/
 func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bool {
 	for _, effect := range rt.effects.Snapshot(division, name) {
 		if effect.SkillID == skillID && effect.InstanceToken == token {
@@ -390,6 +415,11 @@ func (rt *Runtime) auraPulseCost(division string, caster *enterworld.Character, 
 }
 
 // retireAura ends the caster's instance and every child.
+/*
+================
+retireAura
+================
+*/
 func (rt *Runtime) retireAura(u *auraUpdate, aura partyAura) {
 	rt.endAuraInstance(u, aura, aura.casterName, aura.token)
 	for name, token := range aura.members {
@@ -590,6 +620,11 @@ func (rt *Runtime) auraStatsFrames(division string, c *enterworld.Character, ski
 }
 
 // instanceWrites reports that c's instance token writes parameters.
+/*
+================
+instanceWrites
+================
+*/
 func (rt *Runtime) instanceWrites(division string, c *enterworld.Character, token uint32) bool {
 	for _, effect := range rt.effects.Snapshot(division, c.Name) {
 		if effect.InstanceToken == token {
@@ -601,6 +636,11 @@ func (rt *Runtime) instanceWrites(division string, c *enterworld.Character, toke
 
 // auraParty is the caster's party (actor+0x1CB8) as a gid set, empty when
 // the caster has no party.
+/*
+================
+auraParty
+================
+*/
 func (rt *Runtime) auraParty(division string, caster *enterworld.Character) map[uint32]bool {
 	out := map[uint32]bool{}
 	if rt.RewardParties == nil {
@@ -623,6 +663,11 @@ func (rt *Runtime) auraParty(division string, caster *enterworld.Character) map[
 
 // auraReplacementAllowed is CSkillManager_ValidateBuffReplacement on the
 // member's own manager.
+/*
+================
+auraReplacementAllowed
+================
+*/
 func (rt *Runtime) auraReplacementAllowed(division string, member *enterworld.Character, skill enterworld.SkillRow) bool {
 	if !skill.ReplacementPinned || skill.Replacement.Lnks {
 		return true
@@ -755,6 +800,11 @@ func (rt *Runtime) rivalInstrumentLoser() int {
 }
 
 // danceInParty reports an open dance aura whose Bard is in party.
+/*
+================
+danceInParty
+================
+*/
 func (rt *Runtime) danceInParty(division string, party map[uint32]bool) bool {
 	for _, aura := range rt.partyAuras {
 		row, ok := rt.deps.SkillData().SkillByID(aura.skillID)
@@ -770,6 +820,11 @@ func (rt *Runtime) danceInParty(division string, party map[uint32]bool) bool {
 
 // auraLevel is the level rule 3 compares: the row's first required mastery
 // level (see settleRivalInstruments).
+/*
+================
+auraLevel
+================
+*/
 func auraLevel(row enterworld.SkillRow) int64 {
 	return row.Masteries[0].Level
 }
@@ -824,7 +879,7 @@ healAura
 CSkillManager_ApplyHealRecovery (5A09F0).
 ==================
 */
-func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow) []simulation.DivisionFrames {
+func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow, now int64) []simulation.DivisionFrames {
 	if !skill.Aura.Eshp {
 		return nil
 	}
@@ -834,14 +889,19 @@ func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill
 	}
 
 	var frame wire.Frame
+	healingThreat := makeSkillHealingThreat(aura.division, caster, who, skill)
 	healed := rt.deps.Update(who, "aura-heal", func() bool {
 		hp, mp, ok := rt.skillHealAmounts(aura.division, who, caster, skill, healAura)
 		if !ok {
 			return false
 		}
+		healingThreat.amount = hp + mp
 		frame, ok = rt.applySkillRecovery(aura.division, who, hp, mp)
 		return ok
 	})
+	if healed {
+		rt.publishSkillHealingThreat(healingThreat, now)
+	}
 	if !healed || frame.Opcode == 0 {
 		return nil
 	}
@@ -856,9 +916,7 @@ pickHealTarget
 plus the caster when select bit 0 put the caster in the set. Dead members
 are scored too.
 
-The ratio is float32(current / max * 100). The running minimum starts at 0
-and 0 means unset: the first scored actor is taken, a later one only when
-strictly lower, and an actor at 0 is always replaced by the next.
+The choice itself is lowestHPRatio's.
 ==================
 */
 func (rt *Runtime) pickHealTarget(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow) *enterworld.Character {
@@ -871,6 +929,20 @@ func (rt *Runtime) pickHealTarget(aura *partyAura, caster *enterworld.Character,
 			set = append(set, member)
 		}
 	}
+	return rt.lowestHPRatio(aura.division, set)
+}
+
+/*
+==================
+lowestHPRatio
+
+584D95's choice over set, in ascending gid order. The ratio is
+float32(current / max * 100). The running minimum starts at 0 and 0 means
+unset: the first scored actor is taken, a later one only when strictly
+lower, and an actor at 0 is always replaced by the next.
+==================
+*/
+func (rt *Runtime) lowestHPRatio(division string, set []*enterworld.Character) *enterworld.Character {
 	sort.Slice(set, func(i, j int) bool {
 		return enterworld.ObjectIDForCharacter(set[i]) < enterworld.ObjectIDForCharacter(set[j])
 	})
@@ -878,7 +950,7 @@ func (rt *Runtime) pickHealTarget(aura *partyAura, caster *enterworld.Character,
 	var who *enterworld.Character
 	var lowest float32
 	for _, one := range set {
-		maxHP, _, currentHP, _ := rt.playerKeeperVitals(aura.division, one)
+		maxHP, _, currentHP, _ := rt.playerKeeperVitals(division, one)
 		ratio := float32(float64(currentHP) / float64(maxHP) * 100)
 		if lowest == 0 || ratio < lowest {
 			who, lowest = one, ratio
@@ -896,6 +968,11 @@ HELPERS
 */
 
 // simFrames carries wire frames into the tick's routed form unchanged.
+/*
+================
+simFrames
+================
+*/
 func simFrames(in []wire.Frame) []simulation.Frame {
 	out := make([]simulation.Frame, len(in))
 	for i, frame := range in {

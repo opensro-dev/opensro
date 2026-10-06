@@ -36,6 +36,63 @@ const response = {
 };
 const settle = () => new Promise( resolve => setImmediate( resolve ) );
 
+test("incident retries preserve the reference and account credential", async t => {
+	let socket, clock = 0;
+	const reports = [];
+	class Socket {
+		static OPEN = 1;
+		readyState = 1;
+		bufferedAmount = 0;
+		constructor() {
+			socket = this;
+		}
+		send() {}
+		close() {}
+	}
+	const descriptor = Object.getOwnPropertyDescriptor( globalThis, "WebSocket" );
+	Object.defineProperty( globalThis, "WebSocket", { value: Socket, configurable: true } );
+	t.after( () => {
+		if ( descriptor ) Object.defineProperty( globalThis, "WebSocket", descriptor );
+		else delete globalThis.WebSocket;
+	} );
+	t.mock.method( performance, "now", () => clock );
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/client/incident" ) ) {
+			const body = JSON.parse( options.body );
+			reports.push( { body, headers: options.headers } );
+			return reports.length === 1 ?
+				Response.json( { ok: false }, { status: 503 } ) :
+				Response.json( { ok: true, id: body.id } );
+		}
+		return Response.json( url.endsWith( "/title/login" ) ? response : { ok: true, token: "fixture-ticket" } );
+	} );
+	const session = createSession();
+	t.after( () => session.dispose() );
+	session.command( command );
+	session.step( 0 );
+	await settle();
+	session.step( 1 );
+	session.command( { kind: "enter-world", character: "fixture" } );
+	await settle();
+	session.step( 2 );
+	defined( socket ).onopen();
+	defined( socket ).onmessage( { data: Uint8Array.of( 2, 0, 255 ).buffer } );
+	await settle();
+	session.step( 3 );
+	assert.equal( reports.length, 1 );
+	assert.match( reports[0].body.id, /^[a-f0-9]{32}$/ );
+	assert.notEqual( reports[0].body.build, "2" );
+	clock = 7000;
+	session.step( 7000 );
+	await settle();
+	assert.equal( reports.length, 2 );
+	assert.deepEqual( reports[1], reports[0] );
+	clock = 60000;
+	session.step( 60000 );
+	await settle();
+	assert.equal( reports.length, 2 );
+});
+
 test("repeated logout commands preserve pending cookie removal and allow a failed request to retry", async t => {
 	const pending = [];
 	t.mock.method(

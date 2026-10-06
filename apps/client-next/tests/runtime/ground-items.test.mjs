@@ -302,6 +302,7 @@ test("COS record gates mounting; result feedback never invents a ride and despaw
 	spawn.writeUInt16LE( 257, 8 );
 	spawn[25] = 1;
 	spawn[45] = 1;
+	spawn.writeFloatLE( 100, 40 );
 	spawn[51] = 3;
 	spawn.writeUInt32LE( 7, 52 );
 	core.receive( { opcode: 0x30d7, payload: spawn }, 0 );
@@ -362,6 +363,7 @@ test("a mounted rider's position correction moves the local pose to the mount, n
 	spawn.writeUInt16LE( 257, 8 );
 	spawn[25] = 1;
 	spawn[45] = 1;
+	spawn.writeFloatLE( 100, 40 );
 	spawn.writeUInt32LE( 7, 52 );
 	core.receive( { opcode: 0x30d7, payload: spawn }, 0 );
 	core.receive( { opcode: 0xb4b5, payload: Buffer.from( [ 1, 7, 0, 0, 0, 1, 8, 0, 0, 0 ] ) }, 0 );

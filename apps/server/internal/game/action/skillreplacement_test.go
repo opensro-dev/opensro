@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+skillreplacement_test.go - replacement admission and effect retirement
+
+Checks current-command conflicts, rank rejection and the old token's
+retirement before a replacement publishes its new state.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -7,6 +17,11 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+/*
+================
+TestSelfEffectAdmissionUsesCurrentCommandConflicts
+================
+*/
 func TestSelfEffectAdmissionUsesCurrentCommandConflicts(t *testing.T) {
 	rt, c, target, arrow, now := arrowFixture(t)
 	row := shippedOffense(t, "SKILL_CH_LIGHTNING_GYEONGGONG_A_01")
@@ -37,6 +52,11 @@ func TestSelfEffectAdmissionUsesCurrentCommandConflicts(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSelfEffectRankReplacementRetiresOldToken
+================
+*/
 func TestSelfEffectRankReplacementRetiresOldToken(t *testing.T) {
 	for _, lower := range []bool{false, true} {
 		rt, _, c, _ := newCombatTestRuntime(t, 100000)
@@ -54,17 +74,27 @@ func TestSelfEffectRankReplacementRetiresOldToken(t *testing.T) {
 		if !rt.effects.Apply(statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: old.ID, SkillGroup: old.Group, InstanceToken: 100000, State: statuseffect.StateActive, Phase: 2}) {
 			t.Fatal("seed")
 		}
-		rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
+		out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
 		rows := rt.effects.Snapshot(testDivision, c.Name)
 		if lower {
 			if len(rows) != 1 || rows[0].StopRequested || *c.CurrentMP != 1000 {
 				t.Fatal("weaker buff replaced old rank", rows)
 			}
 		} else {
-			if len(rows) != 2 || !rows[0].StopRequested || rows[1].StopRequested || rows[1].InstanceToken == rows[0].InstanceToken || *c.CurrentMP == 1000 {
+			if len(rows) != 1 || rows[0].StopRequested || rows[0].InstanceToken == 100000 || *c.CurrentMP == 1000 {
 				t.Fatal("equal rank did not replace", rows)
 			}
-			rt.drainStoppedCharacterEffects()
+			frame, ok := findFrame(out.Frames, wire.OpEndedEffectInstances)
+			if !ok {
+				t.Fatal("replacement omitted old token teardown")
+			}
+			ended, err := wire.DecodeEndedEffectInstances(frame.Payload)
+			if err != nil || len(ended.InstanceTokens) != 1 || ended.InstanceTokens[0] != 100000 {
+				t.Fatal("wrong retired token", ended, err)
+			}
+			if batches := rt.drainStoppedCharacterEffects(); len(batches) != 0 {
+				t.Fatal("replacement retired twice", batches)
+			}
 			remaining := rt.effects.Snapshot(testDivision, c.Name)
 			if len(remaining) != 1 || remaining[0].SkillID != row.ID {
 				t.Fatal("new buff was retired with old", remaining)

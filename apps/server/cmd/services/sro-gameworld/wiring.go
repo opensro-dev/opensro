@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
+	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -57,6 +58,7 @@ writer, releases the lease, and closes durable authority last.
 */
 
 type gameWorldApplication struct {
+	history         *history.Journal
 	skillCache      io.Closer
 	itemCache       io.Closer
 	populationCache io.Closer
@@ -167,6 +169,18 @@ func newGameWorldApplication(
 	}
 	application.authority = authority.store
 	application.controlAPI = authority.agentAPI
+	journal, err := history.Open(filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "history.sqlite"), "gameworld", ownedShard.ID, history.Build())
+	if err != nil {
+		return nil, fmt.Errorf("operator history: %w", err)
+	}
+	application.history = journal
+	ts.Hub.History = historyObserver{journal}
+	log.AddHook(journal)
+	historyHandler, err := history.OperatorHandler(journal, filepath.Join(store.DirForShardFromEnv(ownedShard.ID), "operator-token"))
+	if err != nil {
+		return nil, err
+	}
+	authority.agentAPI.InstallHistory(historyHandler)
 	if err := authority.textdata.Skills.UseBoundedCache(512); err != nil {
 		return nil, fmt.Errorf("skill cache: %w", err)
 	}
@@ -340,6 +354,9 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	}
 	application.leaseOwned = false
 	log.Info("shutdown: complete")
+	if application.history != nil {
+		drainErr = errors.Join(drainErr, application.history.Close())
+	}
 
 	return errors.Join(runErr, drainErr)
 }
@@ -454,6 +471,9 @@ func (application *gameWorldApplication) rollback() {
 	}
 	application.releaseLease()
 	application.leaseOwned = false
+	if application.history != nil {
+		_ = application.history.Close()
+	}
 }
 
 /*

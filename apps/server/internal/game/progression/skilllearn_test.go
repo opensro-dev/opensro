@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+skilllearn_test.go - skill training admission, spending and rank replacement
+
+===========================================================================
+*/
 package progression
 
 import (
@@ -16,8 +23,18 @@ import (
 // groups, requirement pairs and SP costs verified against the extracted
 // file), so the gate semantics are exercised on real authority values;
 // the higher ids are synthetic rows for the upgrade/edge cases.
+/*
+================
+staticSkills
+================
+*/
 type staticSkills map[uint32]enterworld.SkillRow
 
+/*
+================
+SkillByID
+================
+*/
 func (s staticSkills) SkillByID(id uint32) (enterworld.SkillRow, bool) {
 	row, ok := s[id]
 	return row, ok
@@ -45,6 +62,11 @@ const (
 	euMasteryWarlock uint32 = 513
 )
 
+/*
+================
+testSkills
+================
+*/
 func testSkills() staticSkills {
 	return staticSkills{
 		skillPunch:     {ID: skillPunch, Group: 172, Level: 1},
@@ -61,13 +83,18 @@ func testSkills() staticSkills {
 		skillChain3S:   {ID: skillChain3S, Group: 177, Level: 1, ChainSub: true, Masteries: [2]enterworld.SkillRequirement{{ID: chMastery, Level: 7}}},
 		skillSmashA2:   {ID: skillSmashA2, Group: 174, Level: 2, Masteries: [2]enterworld.SkillRequirement{{ID: chMastery, Level: 5}}, SPCost: 5},
 		skillSmashA9:   {ID: skillSmashA9, Group: 174, Level: 9, Masteries: [2]enterworld.SkillRequirement{{ID: chMastery, Level: 20}}, SPCost: 10},
-		skillStrGated:  {ID: skillStrGated, Group: 9110, Level: 1, ReqStr: 200},
-		skillIntGated:  {ID: skillIntGated, Group: 9111, Level: 1, ReqInt: 200},
-		skillEUReserve: {ID: skillEUReserve, Group: 9210, Level: 1, Masteries: [2]enterworld.SkillRequirement{{ID: euMasteryWarlock, Level: 0}}},
+		skillStrGated:  {ID: skillStrGated, Group: 9110, Level: 1, SPCost: 1, ReqStr: 200},
+		skillIntGated:  {ID: skillIntGated, Group: 9111, Level: 1, SPCost: 1, ReqInt: 200},
+		skillEUReserve: {ID: skillEUReserve, Group: 9210, Level: 1, SPCost: 1, Masteries: [2]enterworld.SkillRequirement{{ID: euMasteryWarlock, Level: 0}}},
 	}
 }
 
 // newSkillTestRuntime wires a runtime with the skill table attached.
+/*
+================
+newSkillTestRuntime
+================
+*/
 func newSkillTestRuntime(character *enterworld.Character) *Runtime {
 	deps := &enterworld.Deps{
 		Characters: enterworld.StaticCharacterSource{testDivision: {character}},
@@ -83,6 +110,11 @@ func newSkillTestRuntime(character *enterworld.Character) *Runtime {
 }
 
 // setMastery raises one mastery record on the test character.
+/*
+================
+setMastery
+================
+*/
 func setMastery(character *enterworld.Character, masteryID uint32, level int64) {
 	for i := range character.Masteries {
 		if character.Masteries[i].ID == masteryID {
@@ -93,10 +125,20 @@ func setMastery(character *enterworld.Character, masteryID uint32, level int64) 
 }
 
 // skillPayload encodes a 0x72CB body.
+/*
+================
+skillPayload
+================
+*/
 func skillPayload(skillID uint32) []byte {
 	return wire.NewWriter(4).U32(skillID).Payload()
 }
 
+/*
+================
+TestSkillLearnGrantsAndChargesSP
+================
+*/
 func TestSkillLearnGrantsAndChargesSP(t *testing.T) {
 	character := testCharacter()
 	setMastery(character, chMastery, 5)
@@ -138,14 +180,20 @@ func TestSkillLearnGrantsAndChargesSP(t *testing.T) {
 	}
 }
 
-func TestSkillLearnZeroCostSkillStillRefreshesSP(t *testing.T) {
+/*
+================
+TestSkillLearnZeroCostSkillRefuses
+================
+*/
+func TestSkillLearnZeroCostSkillRefuses(t *testing.T) {
 	character := testCharacter()
 	rt := newSkillTestRuntime(character)
 
 	result := rt.HandleSkillLearn(testDivision, character, skillPayload(skillPunch))
 
-	if result.Frames[0].Payload[0] != wire.ResultSuccess {
-		t.Fatalf("free learn refused: %v", result.Frames[0].Payload)
+	assertSkillRefusal(t, result, skillLearnUnavailable)
+	if len(character.Skills) != 0 {
+		t.Fatal("zero-SP learning changed the learned list")
 	}
 	if got := *character.SkillPoints; got != 100 {
 		t.Fatalf("skill points = %d, want 100 (sp cost 0)", got)
@@ -155,6 +203,11 @@ func TestSkillLearnZeroCostSkillStillRefreshesSP(t *testing.T) {
 // The client's ack handler REPLACES the group's previous-level entry
 // (sub_8509f0 @0x00850ac9), so the persisted list must do the same: one
 // id per group, never both levels.
+/*
+================
+TestSkillLearnUpgradeReplacesTheGroupEntry
+================
+*/
 func TestSkillLearnUpgradeReplacesTheGroupEntry(t *testing.T) {
 	character := testCharacter()
 	setMastery(character, chMastery, 10)
@@ -178,14 +231,19 @@ func TestSkillLearnUpgradeReplacesTheGroupEntry(t *testing.T) {
 // gate alone would PASS a 2S/3S learn (level 1-1 == 0), so only the
 // chain-sub gate stands between a modified client and a learned list
 // holding a state retail cannot reach.
+/*
+================
+TestSkillLearnRefusesChainSubRows
+================
+*/
 func TestSkillLearnRefusesChainSubRows(t *testing.T) {
 	character := testCharacter()
 	setMastery(character, chMastery, 7)
 	rt := newSkillTestRuntime(character)
 
-	// Fresh group: both sub-rows refuse silently (0x01), nothing written.
-	assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillChain2S)), wire.ErrCodeSkillLearnRefused)
-	assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillChain3S)), wire.ErrCodeSkillLearnRefused)
+	// Fresh group: both zero-SP sub-rows refuse silently (0x09), nothing written.
+	assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillChain2S)), skillLearnUnavailable)
+	assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillChain3S)), skillLearnUnavailable)
 	if len(character.Skills) != 0 {
 		t.Fatalf("refused chain sub-row learn still wrote %v", character.Skills)
 	}
@@ -206,9 +264,14 @@ func TestSkillLearnRefusesChainSubRows(t *testing.T) {
 	}
 
 	// With the root learned the sub-rows still refuse.
-	assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillChain2S)), wire.ErrCodeSkillLearnRefused)
+	assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillChain2S)), skillLearnUnavailable)
 }
 
+/*
+================
+TestSkillLearnPrerequisiteGroupGate
+================
+*/
 func TestSkillLearnPrerequisiteGroupGate(t *testing.T) {
 	character := testCharacter()
 	setMastery(character, chMastery, 27)
@@ -217,7 +280,7 @@ func TestSkillLearnPrerequisiteGroupGate(t *testing.T) {
 
 	// Group 174 unlearned: SMASH_B (prereq grp 174@9) must refuse.
 	result := rt.HandleSkillLearn(testDivision, character, skillPayload(skillSmashB1))
-	assertSkillRefusal(t, result, wire.ErrCodeSkillLearnRefused)
+	assertSkillRefusal(t, result, skillLearnPrerequisiteMissing)
 	if len(character.Skills) != 0 {
 		t.Fatalf("refused learn still wrote %v", character.Skills)
 	}
@@ -233,11 +296,16 @@ func TestSkillLearnPrerequisiteGroupGate(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSkillLearnRefusals
+================
+*/
 func TestSkillLearnRefusals(t *testing.T) {
 	t.Run("unknown skill id", func(t *testing.T) {
 		character := testCharacter()
 		rt := newSkillTestRuntime(character)
-		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(0xdead)), wire.ErrCodeSkillLearnRefused)
+		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(0xdead)), skillLearnUnavailable)
 	})
 
 	t.Run("already learned (the client asserts on a wrong success ack)", func(t *testing.T) {
@@ -245,7 +313,7 @@ func TestSkillLearnRefusals(t *testing.T) {
 		character.Skills = []uint32{skillPunch}
 		rt := newSkillTestRuntime(character)
 		result := rt.HandleSkillLearn(testDivision, character, skillPayload(skillPunch))
-		assertSkillRefusal(t, result, wire.ErrCodeSkillLearnRefused)
+		assertSkillRefusal(t, result, skillLearnUnavailable)
 		if len(character.Skills) != 1 {
 			t.Fatalf("duplicate learn mutated the list: %v", character.Skills)
 		}
@@ -257,13 +325,13 @@ func TestSkillLearnRefusals(t *testing.T) {
 		rt := newSkillTestRuntime(character)
 		// Level 2 of group 174 with the group unlearned: the client's own
 		// mark-learned walk has nothing to replace.
-		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillSmashA2)), wire.ErrCodeSkillLearnRefused)
+		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillSmashA2)), skillLearnRankRefusal)
 	})
 
 	t.Run("mastery level below the requirement", func(t *testing.T) {
 		character := testCharacter() // Bicheon at the seeded level 1 < 5
 		rt := newSkillTestRuntime(character)
-		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillSmashA1)), wire.ErrCodeSkillLearnRefused)
+		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillSmashA1)), skillLearnMasteryLevelRefusal)
 		if got := *character.SkillPoints; got != 100 {
 			t.Fatalf("refused learn charged SP: %d", got)
 		}
@@ -314,12 +382,17 @@ func TestSkillLearnRefusals(t *testing.T) {
 		character := testCharacter()
 		character.DeletePending = true
 		rt := newSkillTestRuntime(character)
-		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillPunch)), wire.ErrCodeSkillLearnRefused)
+		assertSkillRefusal(t, rt.HandleSkillLearn(testDivision, character, skillPayload(skillPunch)), skillLearnUnavailable)
 	})
 }
 
 // An unavailable skilldata table must refuse, never learn for free: the
 // cost and prerequisites are authority DATA (the leveldata posture).
+/*
+================
+TestSkillLearnRefusesWithoutATable
+================
+*/
 func TestSkillLearnRefusesWithoutATable(t *testing.T) {
 	character := testCharacter()
 	rt := newTestRuntime(character) // Deps.Skills nil
@@ -332,6 +405,11 @@ func TestSkillLearnRefusesWithoutATable(t *testing.T) {
 	}
 }
 
+/*
+================
+assertSkillRefusal
+================
+*/
 func assertSkillRefusal(t *testing.T, result OpResult, wantCode uint8) {
 	t.Helper()
 	if len(result.Frames) != 1 {
@@ -351,6 +429,11 @@ func assertSkillRefusal(t *testing.T, result OpResult, wantCode uint8) {
 
 // The commit door makes check-spend-append atomic: a storm of concurrent
 // learns can spend at most the SP pool.
+/*
+================
+TestConcurrentSkillLearnsNeverOverspend
+================
+*/
 func TestConcurrentSkillLearnsNeverOverspend(t *testing.T) {
 	skills := staticSkills{}
 	const cost = 10
@@ -408,6 +491,11 @@ func TestConcurrentSkillLearnsNeverOverspend(t *testing.T) {
 // Store-backed continuity: a granted learn commits through the authority
 // door, so a watchdog reboot resumes with the skill learned and the SP
 // spent - never the pre-spend state.
+/*
+================
+TestSkillLearnSurvivesRestart
+================
+*/
 func TestSkillLearnSurvivesRestart(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "authority")
 

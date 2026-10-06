@@ -101,6 +101,7 @@ func (game *gameplayPlane) worldBound(
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
 	game.unions.DropPendingInvite(divisionID, character.Name)
+	game.guildWars.DropPendingInvite(divisionID, character.Name)
 	game.items.AbandonExchange(divisionID, character.Name)
 	game.items.AbandonStall(divisionID, character.Name)
 	game.mentorInvites.WorldBound(session, divisionID, character)
@@ -113,6 +114,8 @@ func (game *gameplayPlane) worldBound(
 		cooldown = action.FortressReturnCooldownFrames(character, game.items.Now().UnixMilli())
 	})
 	game.siege.WorldBound(session, guildID)
+	cooldown = append(cooldown, game.items.FortressHolderFrames(divisionID, character)...)
+	cooldown = append(cooldown, game.items.FortressBattleFrames(divisionID, character)...)
 	for _, frame := range cooldown {
 		_ = session.Send(frame.Opcode, frame.Payload)
 	}
@@ -130,6 +133,7 @@ func (game *gameplayPlane) sessionClosed(session *transport.Session) {
 	game.matches.SessionClosed(session)
 	game.guildInvites.SessionClosed(session)
 	game.unions.SessionClosed(session)
+	game.guildWars.SessionClosed(session)
 	game.mentorInvites.SessionClosed(session)
 
 	character, divisionID, bound := enterworld.SessionCharacter(game.deps, session)

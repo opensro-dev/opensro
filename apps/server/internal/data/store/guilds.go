@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+guilds.go - guilds
+
+===========================================================================
+*/
 package store
 
 // The guild plane's door (domain.GuildStore over the guilds and
@@ -15,6 +22,11 @@ import (
 
 // Guilds returns the guild door (domain.GuildStore over the guilds /
 // guild_members tables). Same lifetime contract as Characters().
+/*
+================
+Guilds
+================
+*/
 func (s *Store) Guilds() domain.GuildStore {
 	return storeGuildDoor{s: s}
 }
@@ -23,6 +35,11 @@ type storeGuildDoor struct{ s *Store }
 
 // Guild returns copies of the guild row and its member list in wire order;
 // ok=false when no such guild is stored.
+/*
+================
+Guild
+================
+*/
 func (door storeGuildDoor) Guild(divisionID string, guildID int64) (domain.GuildRecord, []domain.GuildMemberRecord, bool) {
 	door.s.mu.RLock()
 	defer door.s.mu.RUnlock()
@@ -43,6 +60,11 @@ func (door storeGuildDoor) Guild(divisionID string, guildID int64) (domain.Guild
 // GuildOfCharacter answers the guild a character is a MEMBER of, resolved
 // from the stored member sets (the honest source: the character record's
 // GuildID FK points here, never the other way around).
+/*
+================
+GuildOfCharacter
+================
+*/
 func (door storeGuildDoor) GuildOfCharacter(divisionID string, characterID int64) (int64, bool) {
 	door.s.mu.RLock()
 	defer door.s.mu.RUnlock()
@@ -59,6 +81,11 @@ func (door storeGuildDoor) GuildOfCharacter(divisionID string, characterID int64
 // UpdateGuildAs is the existing-guild metadata/member-field command door.
 // Authorization and the update execute under the same store lock; roster
 // topology cannot pass through this callback.
+/*
+================
+UpdateGuildAs
+================
+*/
 func (door storeGuildDoor) UpdateGuildAs(
 	divisionID string,
 	actorID int64,
@@ -131,6 +158,11 @@ func (door storeGuildDoor) UpdateGuildAs(
 // CreateCharacter applies to character names (a DECISION documented in
 // internal/game/social/guild; no native pin exists for guild-name collation). Write
 // failures follow the door's fail-open-loud rule like every other commit.
+/*
+================
+CreateGuild
+================
+*/
 func (door storeGuildDoor) CreateGuild(divisionID string, guild domain.GuildRecord, leader domain.GuildMemberRecord, leaderCharacter *domain.Character) (int64, error) {
 	s := door.s
 	if leaderCharacter == nil {
@@ -206,6 +238,11 @@ func (door storeGuildDoor) CreateGuild(divisionID string, guild domain.GuildReco
 }
 
 // KickGuildMember authorizes and applies one exact-name kick under one lock.
+/*
+================
+KickGuildMember
+================
+*/
 func (door storeGuildDoor) KickGuildMember(
 	divisionID string,
 	actorID int64,
@@ -257,6 +294,11 @@ func (door storeGuildDoor) KickGuildMember(
 
 // LeaveGuild removes the acting non-leader under the same authority lock that
 // proves their current membership and FK.
+/*
+================
+LeaveGuild
+================
+*/
 func (door storeGuildDoor) LeaveGuild(
 	divisionID string,
 	actorID int64,
@@ -289,6 +331,11 @@ func (door storeGuildDoor) LeaveGuild(
 
 // AddGuildMemberAs authorizes the inviter and installs the member row plus
 // joining character FK under one lock.
+/*
+================
+AddGuildMemberAs
+================
+*/
 func (door storeGuildDoor) AddGuildMemberAs(
 	divisionID string,
 	expectedGuildID int64,
@@ -360,6 +407,11 @@ func (door storeGuildDoor) AddGuildMemberAs(
 
 // DissolveGuildAs authorizes the acting leader and dissolves the coherent
 // aggregate under one lock. Any FK drift refuses the entire command.
+/*
+================
+DissolveGuildAs
+================
+*/
 func (door storeGuildDoor) DissolveGuildAs(
 	divisionID string,
 	actorID int64,
@@ -377,6 +429,15 @@ func (door storeGuildDoor) DissolveGuildAs(
 		)
 	if refusal.Refused() {
 		return refused, refusal
+	}
+	// 5C6870 refuses disbanding while the guild has any war enemy.
+	var warCount int
+	if err := s.db.QueryRow("SELECT count(*) FROM guild_wars WHERE division = ? AND (guild_a = ? OR guild_b = ?)", divisionID, guildID, guildID).Scan(&warCount); err != nil {
+		s.recordWriteFailureLocked("guild-dissolve-war-check", err)
+		return refused, domain.GuildRefusalUpdateRejected
+	}
+	if warCount != 0 {
+		return refused, domain.GuildRefusalWarActive
 	}
 	memberCharacters := make([]*domain.Character, 0, len(members))
 	for _, member := range members {
@@ -424,6 +485,11 @@ func (door storeGuildDoor) DissolveGuildAs(
 // neither the guild GP nor the member DonatedGP u32 may wrap. Returns
 // the new guild GP and the donor's new DonatedGP; a non-zero refusal
 // means no mutation and no commit.
+/*
+================
+DonateGuildPoints
+================
+*/
 func (door storeGuildDoor) DonateGuildPoints(
 	divisionID string,
 	characterID int64,
@@ -489,6 +555,11 @@ func (door storeGuildDoor) DonateGuildPoints(
 // leader's guild pays the next level's GP, the leader pays its gold, and
 // the level rises by one, under ONE lock hold and ONE commit. 5C6240 tests
 // the gold (0x4C31) before the GP (0x4C32).
+/*
+================
+LevelUpGuildAs
+================
+*/
 func (door storeGuildDoor) LevelUpGuildAs(divisionID string, actorID int64) (domain.GuildSnapshot, domain.GuildRefusal) {
 	var refused domain.GuildSnapshot
 	s := door.s
@@ -525,6 +596,11 @@ func (door storeGuildDoor) LevelUpGuildAs(divisionID string, actorID int64) (dom
 // manager's 0x73F7, v1.188 0x7113 -> 5C7330, guild job 0x1E): the acting
 // leader is paid what guild wars owe the guild and the debt clears, under
 // ONE lock hold and ONE commit. Nothing owed refuses (0x4C45).
+/*
+================
+ClaimWarCompensationAs
+================
+*/
 func (door storeGuildDoor) ClaimWarCompensationAs(divisionID string, actorID int64) (int64, domain.GuildRefusal) {
 	s := door.s
 	s.mu.Lock()
@@ -556,6 +632,11 @@ func (door storeGuildDoor) ClaimWarCompensationAs(divisionID string, actorID int
 	return amount, domain.GuildRefusalNone
 }
 
+/*
+================
+guildOfCharacterLocked
+================
+*/
 func (door storeGuildDoor) guildOfCharacterLocked(
 	divisionID string,
 	characterID int64,
@@ -570,6 +651,11 @@ func (door storeGuildDoor) guildOfCharacterLocked(
 	return 0, false
 }
 
+/*
+================
+authorizedGuildActorLocked
+================
+*/
 func (door storeGuildDoor) authorizedGuildActorLocked(
 	divisionID string,
 	actorID int64,
@@ -628,6 +714,11 @@ func (door storeGuildDoor) authorizedGuildActorLocked(
 	return guildID, guild, members, actorIndex, actor, domain.GuildRefusalNone
 }
 
+/*
+================
+validGuildUpdateLocked
+================
+*/
 func (door storeGuildDoor) validGuildUpdateLocked(
 	divisionID string,
 	guildID int64,
@@ -669,6 +760,11 @@ func (door storeGuildDoor) validGuildUpdateLocked(
 	return leaders == 1
 }
 
+/*
+================
+removeGuildMemberLocked
+================
+*/
 func (door storeGuildDoor) removeGuildMemberLocked(
 	divisionID string,
 	guildID int64,
@@ -709,6 +805,11 @@ func (door storeGuildDoor) removeGuildMemberLocked(
 // guildMemberViewsLocked projects character-owned roster fields while the
 // store lock keeps membership and character state coherent. Stored guild rows
 // deliberately carry no mutable character level.
+/*
+================
+guildMemberViewsLocked
+================
+*/
 func (door storeGuildDoor) guildMemberViewsLocked(
 	divisionID string,
 	members []domain.GuildMemberRecord,
@@ -728,6 +829,11 @@ func (door storeGuildDoor) guildMemberViewsLocked(
 // guildMembersForStorage strips character-owned projections before a member
 // set becomes live or durable. This makes accidental stale-level retention
 // impossible even in the in-memory aggregate.
+/*
+================
+guildMembersForStorage
+================
+*/
 func guildMembersForStorage(members []domain.GuildMemberRecord) []domain.GuildMemberRecord {
 	stored := make([]domain.GuildMemberRecord, len(members))
 	for index, member := range members {
@@ -737,6 +843,11 @@ func guildMembersForStorage(members []domain.GuildMemberRecord) []domain.GuildMe
 	return stored
 }
 
+/*
+================
+guildMemberLevel
+================
+*/
 func guildMemberLevel(character *domain.Character) uint8 {
 	level := resolvedCharacterLevel(character)
 	if level > 0xff {
@@ -748,6 +859,11 @@ func guildMemberLevel(character *domain.Character) uint8 {
 // maxGuildIDLocked is the watermark safety net for an unseeded division
 // (maxCharIDLocked's twin): live guild rows only - a division that has
 // ever allocated through the watermark carries the row instead.
+/*
+================
+maxGuildIDLocked
+================
+*/
 func (s *Store) maxGuildIDLocked(divisionID string) int64 {
 	max := int64(0)
 	for guildID := range s.guilds[divisionID] {

@@ -53,6 +53,7 @@ const (
 	itemUseGenderTool
 	itemUsePremiumTicket
 	itemUseSkillTimeTicket
+	itemUseStructureRepair
 )
 
 /*
@@ -79,6 +80,9 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if ref.TypeIDs[0] == 3 && ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 13 && ref.TypeIDs[3] >= 1 && ref.TypeIDs[3] <= 3 {
 		return itemUseSkill
+	}
+	if ref.TypeIDs == [4]int64{3, 3, 1, 10} {
+		return itemUseStructureRepair
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 1, 8} {
 		return itemUseBerserk

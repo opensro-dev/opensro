@@ -246,6 +246,9 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if target.CurrentHP == 0 {
 		return OpResult{}, skillCastRefused
 	}
+	if code := temptationTargetRefusal(skill, target); code != 0 {
+		return offensiveRefusal(code), skillCastRefused
+	}
 	if d := skill.TimedEffect.Periodic; d.Pinned {
 		code := rt.periodicEffects.Refusal(linkedpulse.Effect{Division: divisionID,
 			SourceGID: enterworld.ObjectIDForCharacter(snapshot), TargetGID: target.Gid,
@@ -260,11 +263,11 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if err != nil {
 		return OpResult{}, skillCastRefused
 	}
-	// Execution runs the full mask. A linked stage is charged and cooled by
-	// its root, so it drops those two checks.
+	// 4AECE7 returns the linked row to admission state 2. Each stage
+	// checks and pays its own resources; root ownership only skips the shared cooldown.
 	mask := admitExecution
 	if rootID != 0 {
-		mask &^= admitCooldown | admitResources
+		mask &^= admitCooldown
 	}
 	mover, ok := rt.Monsters.Mover(divisionID, target.Gid)
 	if !ok {
@@ -283,7 +286,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if code := rt.skillAdmission(divisionID, snapshot, skill, nowMs, struck, release, mask); code != 0 {
 		return offensiveRefusal(code), skillCastRefused
 	}
-	if advanced && rootID == 0 {
+	if advanced {
 		if _, refusal := rt.offensivePhaseCost(divisionID, snapshot, skill, nowMs, release); refusal != 0 {
 			return offensiveRefusal(refusal), skillCastRefused
 		}
@@ -342,14 +345,15 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	for range skill.Attack.ImpactCount {
 		if skill.LifeSteal.Present {
-			formulas = append(formulas, lifeStealResult(stealBase, attacker, defender, target.CurrentHP, fullAreaPercent))
+			steal := lifeStealResult(stealBase, attacker, defender, target.CurrentHP, fullAreaPercent)
+			formulas = append(formulas, combat.FinishImpact(steal, combat.ImpactTail{PercentApplied: true, Attack: skill.Attack.Present}))
 			continue
 		}
 		formula, resolveErr := rt.resolvePlayerImpact(divisionID, snapshot.Name, skill, attacker, defender, nowMs, false)
 		if resolveErr != nil {
 			return OpResult{}, skillCastRefused
 		}
-		formulas = append(formulas, formula)
+		formulas = append(formulas, combat.FinishImpact(formula, combat.ImpactTail{Attack: skill.Attack.Present}))
 	}
 	if len(formulas) == 0 {
 		return OpResult{}, skillCastRefused
@@ -386,7 +390,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		// debit is the non-refusing tail after the HP authority accepts damage.
 		if !rt.deps.UpdateMany(roster.characters, "player-basic-attack", func() bool {
 			var cost skillCharge
-			if advanced && rootID == 0 {
+			if advanced {
 				cost, refusal = rt.offensivePhaseCost(divisionID, character, skill, nowMs, release)
 				if refusal != 0 {
 					return false
@@ -411,7 +415,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 			if consumeAmmo {
 				ammo = applyAmmunitionDebit(character, debit)
 			}
-			if advanced && rootID == 0 {
+			if advanced {
 				rt.commitOffensivePhaseCost(divisionID, character, skill, cost, nowMs, release != nil)
 			} else if release == nil {
 				rt.registerPlayerSkillCooldown(divisionID, character, skill, nowMs)
@@ -477,7 +481,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		success = wire.SkillCastReleaseResultFrame(wireResult)
 		closeAt = nowMs + int64(skill.ActionDurationMs)
 	}
-	if skill.ProjectileSpeed != 0 {
+	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		flight := projectileFlightMs(playerPose, targetAt, skill.ProjectileSpeed)
 		// 5860D2 retains zero-preparation shots too. A fast shot or linked
 		// stage must not lose its effect actor before the projectile arrives.
@@ -546,7 +550,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		privateFrames = append(ammunitionFrames(ammo), privateFrames...)
 	}
 	privateFrames = append(privateFrames, wear.actor...)
-	if advanced && rootID == 0 {
+	if advanced {
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(enterworld.ObjectIDForCharacter(character), rt.publishedVitals(divisionID, character))}
 		actorFrames = append(actorFrames, vitals)
 		privateFrames = append(privateFrames, vitals)
@@ -590,7 +594,7 @@ func (rt *Runtime) prepareOffensiveCast(divisionID string, character, snapshot *
 		if !enterworld.CharacterAlive(character) {
 			return false
 		}
-		if advanced && rootID == 0 {
+		if advanced {
 			_, refusal = rt.offensiveCost(divisionID, character, skill, nowMs)
 			if refusal != 0 {
 				return false

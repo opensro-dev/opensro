@@ -130,6 +130,9 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 			appearance.StallTitle = s.Title
 		}
 	}
+	if appearance != nil && p.rt.ActionSpeed != nil {
+		appearance.ActionSpeed = p.rt.ActionSpeed(p.divisionID, captured.name)
+	}
 	if appearance != nil && p.rt.SpawnSkills != nil {
 		appearance.SpawnSkills = peerSpawnSkills(p.rt.SpawnSkills(p.divisionID, captured.name))
 	}

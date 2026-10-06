@@ -93,15 +93,16 @@ func (in monsterStrikeInput) origin() simulation.Spawn {
 
 /*
 ================
-scaleAreaDamage
+finishMonsterImpact
 
-Every impact of an area victim deals its share of the formula's damage,
-as the player area does (skillarea.go planAreaVictims).
+The shared impact tail (combat.FinishImpact) for a monster's strike: this
+victim's area share, then the monster attacker's damage scale (5874D0, by
+its rarity byte), then the att floor.
 ================
 */
-func scaleAreaDamage(formula combat.Result, percent uint64) combat.Result {
-	formula.Damage = uint32(uint64(formula.Damage) * percent / 100)
-	return formula
+func finishMonsterImpact(in monsterStrikeInput, formula combat.Result) combat.Result {
+	return combat.FinishImpact(formula, combat.ImpactTail{Percent: in.percent, MonsterAttacker: true,
+		AttackerRarity: in.instance.Rarity(), Attack: in.skill.Attack.Present})
 }
 
 /*
@@ -122,7 +123,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	if !rt.planPlayerStrike(&strike,
 		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
 			outcome, err := rt.resolveCombatBehindWall(actor, skill, in.attacker, defender, wall)
-			outcome.Defender = scaleAreaDamage(outcome.Defender, in.percent)
+			outcome.Defender = finishMonsterImpact(in, outcome.Defender)
 			outcome.Absorbed = uint32(uint64(outcome.Absorbed) * in.percent / 100)
 			return outcome, err
 		},
@@ -190,7 +191,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	var formulas []combat.Result
 	for range skill.Attack.ImpactCount {
 		formula, resolveErr := rt.resolveCombat(criticalActor{division: divisionID, monster: instance.Gid}, skill, in.attacker, defender)
-		formula = scaleAreaDamage(formula, in.percent)
+		formula = finishMonsterImpact(in, formula)
 		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked {
 			return out
 		}

@@ -1048,6 +1048,29 @@ test("Academy main popup and matching board have separate native entry lifecycle
 	}
 });
 
+test("the player panel selects the local character and frames itself while selected", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const framed = () => f.scenes.at( -1 ).quads.some( q => q.texture?.endsWith( "/playerminiinfo/pmi_select.png" ) );
+	try {
+		let semantics;
+		for ( let t = 0; t < 1200; t += 100 ) semantics = f.ui.step( f.state, t ) ?? semantics;
+		const panel = semantics.controls.find( c => c.id === "self-target" );
+		assert.ok( panel );
+		// The panel's own buttons stay above it.
+		const order = id => semantics.controls.findIndex( c => c.id === id );
+		assert.ok( order( "ability-details" ) > order( "self-target" ) );
+		assert.equal( framed(), false );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		assert.deepEqual( sent.map( c => c.command ), [ { kind: "select", gid: f.state.gameplay.localGid } ] );
+		f.state.gameplay = { ...f.state.gameplay, target: f.state.gameplay.localGid };
+		for ( let t = 1200; t < 2400; t += 100 ) f.ui.step( f.state, t );
+		assert.equal( framed(), true );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("contextual Shop entry leaves Alchemy through the same lifecycle; locked Magic Pop rejects entry", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
@@ -1105,22 +1128,23 @@ test("a new inventory icon keeps the previous popup visible and navigation avail
 	}
 });
 
-test("retail System menu replaces fallback actions with four compact authored controls", () => {
+test("System menu inserts Experimental below Options using the authored buttons", () => {
 	const f = uiFixture();
 	try {
 		for ( let t = 0; t < 1200; t += 100 ) f.ui.step( f.state, t );
 		f.ui.event( { kind: "key", code: "Escape" } );
 		const scene = f.ui.step( f.state, 1300 );
 		const buttons = scene.controls.filter( c =>
-			[ "open-window:Option", "open-window:Game Guide", "system-restart", "system-exit" ].includes( c.id )
+			[
+				"open-window:Option",
+				"open-window:Experimental",
+				"open-window:Game Guide",
+				"system-restart",
+				"system-exit"
+			].includes( c.id )
 		);
-		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Help", "Restart", "Exit" ] );
-		assert.deepEqual( buttons.map( c => c.rect ), [ [ 724, 402, 152, 24 ], [ 724, 436, 152, 24 ], [
-			724,
-			470,
-			152,
-			24
-		], [ 724, 504, 152, 24 ] ] );
+		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Experimental", "Help", "Restart", "Exit" ] );
+		assert.deepEqual( buttons.map( c => c.rect ), [ 385, 419, 453, 487, 521 ].map( y => [ 724, y, 152, 24 ] ) );
 		assert.ok( !scene.controls.some( c => c.id === "disconnect" || c.id === "logout" ) );
 		f.ui.event( { kind: "activate", id: "system-restart" } );
 		const restarted = f.ui.step( f.state, 1400 );
@@ -1377,6 +1401,55 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.equal( prompt( 16800 ), false );
 		f.ui.event( { kind: "world-select", gid: 1 } );
 		assert.equal( prompt( 16801 ), true, "explicit selection bypasses the automatic death timer" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("portrait selection immediately restores the dead player's prompt without requesting resurrection", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		/** @type {any} */ let latest;
+		const step = now => (latest = f.ui.step( f.state, now ) ?? latest);
+		const prompt = () => latest.controls.find( control => control.id === "rebirth-body" );
+		f.state.gameplay = { ...f.state.gameplay, progression: { level: 11, masteries: [] } };
+		for ( let now = 0; now <= 1100; now += 100 ) step( now );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1200 );
+		assert.equal( prompt(), undefined, "living portrait selection cannot open rebirth" );
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ];
+		f.state.gameplay = { ...f.state.gameplay, vitals: [ { gid: 1, hp: 0, mp: 0 } ] };
+		step( 1300 );
+		assert.equal( prompt(), undefined, "the automatic death timer has not elapsed" );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1301 );
+		assert.ok( prompt(), "dead portrait selection must bypass the automatic timer" );
+		assert.deepEqual( prompt().rect, [ 600, 345, 400, 210 ] );
+		f.ui.event( { kind: "drag", id: "rebirth-drag", dx: 100, dy: 40 } );
+		step( 1310 );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1320 );
+		assert.deepEqual( prompt().rect, [ 700, 385, 400, 210 ], "an existing prompt keeps its position" );
+		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
+		step( 1330 );
+		assert.equal( prompt(), undefined, "the level-11 alternate choice dismisses locally" );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1340 );
+		assert.deepEqual( prompt().rect, [ 600, 345, 400, 210 ], "reopening creates a centered prompt" );
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 1, 0, 0 ] } ];
+		f.state.gameplay = { ...f.state.gameplay, vitals: [ { gid: 1, hp: 100, mp: 0 } ] };
+		step( 1400 );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1410 );
+		assert.equal( prompt(), undefined, "revival clears the explicit prompt request" );
+		assert.ok( sent.length > 0 );
+		assert.ok(
+			sent.every( command =>
+				command.kind === "gameplay" && command.command.kind === "select" &&
+				command.command.gid === 1
+			),
+			"portrait activation never requests resurrection"
+		);
 	} finally {
 		f.dispose();
 	}
@@ -2567,6 +2640,26 @@ test("Options resizes all five pages without moving the window origin", () => {
 			);
 			assert.equal( result.controls.some( c => c.id === "option-apply" ), tab === 0 );
 			assert.deepEqual( result.controls.find( c => c.id === "option-tab:0" ).rect.slice( 0, 2 ), [ 647, 283 ] );
+			// Native 5404BB centers the font board inside the nine-pixel tab client height.
+			for ( const control of result.controls.filter( c => c.id.startsWith( "option-tab:" ) ) ) {
+				const face = control.selected ? fontAtlas.fonts["0"].styles["2"] : fontAtlas.fonts["0"];
+				const glyph = face.glyphs[control.label.codePointAt( 0 )];
+				const uv = [
+					glyph.x / fontAtlas.atlasWidth,
+					glyph.y / fontAtlas.atlasHeight,
+					glyph.width / fontAtlas.atlasWidth,
+					glyph.height / fontAtlas.atlasHeight
+				];
+				const ink = f.scenes.at( -1 ).quads.find( q =>
+					q.texture === fontAtlas.image &&
+					q.rect[0] >= control.rect[0] && q.rect[0] < control.rect[0] + control.rect[2] &&
+					q.rect[1] >= control.rect[1] && q.rect[1] < control.rect[1] + control.rect[3] &&
+					q.uv.every( ( value, i ) => value === uv[i] )
+				);
+				assert.ok( ink, control.label + " renders its native glyph" );
+				const baseline = control.rect[1] + 9 + Math.floor( (9 - (face.recordHeight + 5)) / 2 ) + face.ascent;
+				assert.equal( ink.rect[1], baseline - glyph.originY, control.label + " stays vertically centered" );
+			}
 			if ( tab === 0 ) {
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-up" ).rect, [ 945, 415, 16, 16 ] );
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-down" ).rect, [
@@ -2704,6 +2797,36 @@ test("Input binding capture removes conflicts, rejects reserved keys and commits
 		f.ui.event( { kind: "activate", id: "option-default" } );
 		f.ui.event( { kind: "activate", id: "option-cancel" } );
 		assert.equal( saved.length, 1 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("frame limit uses the video draft and survives Apply, Cancel and defaults", () => {
+	const saved = [], f = uiFixture( () => {}, () => false, () => {}, () => {}, () => {}, v => saved.push( v ) );
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Option" } );
+		let result;
+		for ( let i = 1; i < 15; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		for ( let i = 0; i < 10; i++ ) f.ui.event( { kind: "activate", id: "option-video-down" } );
+		result = f.ui.step( f.state, 1500 ) ?? result;
+		assert.equal( result.controls.find( c => c.id === "option-video-combo:-3" ).label, "Frame rate" );
+		f.ui.event( { kind: "activate", id: "option-video-combo:-3" } );
+		result = f.ui.step( f.state, 1600 ) ?? result;
+		assert.equal( result.controls.filter( c => c.id.startsWith( "option-video-choice:-3:" ) ).length, 4 );
+		assert.equal( result.controls.find( c => c.id === "option-video-choice:-3:3" ).label, "Display refresh rate" );
+		f.ui.event( { kind: "activate", id: "option-video-choice:-3:1" } );
+		assert.equal( saved.length, 0 );
+		f.ui.event( { kind: "activate", id: "option-apply" } );
+		assert.equal( saved[0].frameLimit, 120 );
+		f.ui.event( { kind: "activate", id: "option-video-choice:-3:3" } );
+		f.ui.event( { kind: "activate", id: "option-cancel" } );
+		assert.equal( saved.length, 1 );
+		f.ui.event( { kind: "activate", id: "open-window:Option" } );
+		f.ui.event( { kind: "activate", id: "option-default" } );
+		f.ui.event( { kind: "activate", id: "option-ok" } );
+		assert.equal( saved[1].frameLimit, 0 );
 	} finally {
 		f.dispose();
 	}
@@ -4902,6 +5025,42 @@ test("an attack pet shows its mini window under the player mini window", () => {
 		f.state.gameplay.cosRecords = [ { ...f.state.gameplay.cosRecords[0], band: 4 } ];
 		for ( let i = 0; i < 5; i++ ) f.ui.step( f.state, 1100 + i );
 		assert.ok( !f.hasText( "Fang" ), "a pickup pet has no mini window" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the player panel draws native siege rank and guild status and removes them on war end", () => {
+	const f = uiFixture( () => {} );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			social: { ...f.state.gameplay.social, guild: { id: 1, name: "Owner", members: [] } },
+			fortress: {
+				...f.state.gameplay.fortress,
+				worldId: 7,
+				listId: 1,
+				worlds: [ { id: 7, code: "FORTRESS_JANGAN" } ],
+				fortresses: [ { id: 1, code: "FORTRESS_JANGAN", nameStrId: "FORTRESS_NAME" } ],
+				wars: [ { id: 1, name: "Owner", flags: 1, stoneWait: 29 } ],
+				localKills: 150,
+				localDeaths: 3
+			}
+		};
+		let semantics;
+		for ( let t = 0; t < 1200; t += 100 ) semantics = f.ui.step( { ...f.state }, t ) ?? semantics;
+		assert.ok( semantics.controls.some( c => c.id === "GDR_PMI_BATTLE_GRADE" ) );
+		assert.ok( semantics.controls.some( c => c.id === "GDR_PMI_FORTRESS_INFO" && c.helpText.includes( "Owner" ) ) );
+		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture?.endsWith( "/rank_combat_commander.png" ) ) );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			fortress: { ...f.state.gameplay.fortress, wars: [ { id: 1, name: "Owner", flags: 0 } ] }
+		};
+		for ( let t = 1200; t < 2400; t += 100 ) semantics = f.ui.step( { ...f.state }, t ) ?? semantics;
+		assert.ok(
+			!semantics.controls.some( c => [ "GDR_PMI_BATTLE_GRADE", "GDR_PMI_FORTRESS_INFO" ].includes( c.id ) ),
+			JSON.stringify( semantics.controls.filter( c => c.id.includes( "PMI" ) ) )
+		);
 	} finally {
 		f.dispose();
 	}

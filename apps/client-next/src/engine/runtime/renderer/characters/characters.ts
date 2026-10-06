@@ -194,9 +194,18 @@ export function createCharacters() {
 	// frame's characterPoseBytes reservation. Both maps retire together.
 	const ownedPoses = new Map<
 		number,
-		{ model: string; pose: ReturnType<typeof createCharacterPose>; lod: ReturnType<typeof createPoseLod>; }
+		{
+			model: string;
+			pose: ReturnType<typeof createCharacterPose>;
+			lod: ReturnType<typeof createPoseLod>;
+			sampled?: number;
+			clip?: string;
+		}
 	>();
 	let poseFrame = 0;
+	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
+	let poseSeconds = 0;
+	const poseOrder: CharacterActor[] = [];
 	// Birth transforms belong to the actor lifetime, not GPU batches. Keep them
 	// across culling, batch membership changes and device recreation.
 	const particleRandom: ParticleRandom = { table: particleRandomTable(), index: 0 };
@@ -295,10 +304,24 @@ export function createCharacters() {
 			ownedPoses.set( actor.gid, state );
 		}
 		poses.set( actor.gid, state );
+		const optional = actor.animationLod?.optional && !actor.attachment && !actor.mountedOn &&
+			!resource!.plan.emission;
+		const mustSample = state.sampled === undefined || state.clip !== actor.clip ||
+			actor.animationLod?.optional === false || actor.layers?.some( layer => layer.lane === "event" );
+		const lodAllowed = !actor.animationLod ||
+			state.lod.sample( actor.animationLod.fraction, actor.animationLod.crowded, poseFrame );
+		const interval = frameWork?.level() === 2 ? .1 : frameWork?.level() === 1 ? .05 : 0;
 		if (
-			actor.animationLod &&
-			!state.lod.sample( actor.animationLod.fraction, actor.animationLod.crowded, poseFrame )
-		) return state.pose;
+			optional && !mustSample && state.sampled !== undefined &&
+			(frameWork?.remaining() === 0 || poseSeconds >= state.sampled && poseSeconds - state.sampled < interval)
+		) {
+			probe?.characterCount( "cosmetic-pose-deferred" );
+			return state.pose;
+		}
+		// A cold evaluator contains only rest transforms. Resource replacement,
+		// action entry and protected actors must initialize before any LOD gate.
+		if ( !mustSample && !lodAllowed ) return state.pose;
+		const started = optional && frameWork ? performance.now() : 0;
 		state.pose.bodyVolume( actor.bodyVolume?.index, actor.bodyVolume?.female );
 		if (
 			state.pose.evaluate(
@@ -309,6 +332,9 @@ export function createCharacters() {
 				deferPoses && resource!.plan.sharedPalette
 			)
 		) poseEvaluations++;
+		state.sampled = poseSeconds;
+		state.clip = actor.clip;
+		if ( optional && frameWork ) frameWork.spend( performance.now() - started );
 		if ( share ) {
 			let samples = framePoses!.get( actor.model );
 			if ( !samples ) {
@@ -526,6 +552,14 @@ export function createCharacters() {
 		return matrix;
 	}
 	return {
+		/*
+		================
+		frameWork
+		================
+		*/
+		frameWork( work: import("@/engine/contracts/runtime").FrameWork ) {
+			frameWork = work;
+		},
 		/*
 		================
 		profile
@@ -1204,6 +1238,7 @@ export function createCharacters() {
 			deferredEnabled = true,
 			night = true
 		) {
+			poseSeconds = seconds;
 			probe?.characterBegin();
 			if ( !continuation ) {
 				poseFrame++;
@@ -1538,7 +1573,17 @@ export function createCharacters() {
 				}
 			}
 			probe?.characterMark( "character-plan" );
-			for ( const actor of frameActors ) {
+			// Oldest cosmetic samples get the next budget slice. Admission and
+			// draw order remain unchanged; a busy crowd cannot starve its tail.
+			poseOrder.length = 0;
+			poseOrder.push( ...frameActors );
+			if ( frameWork ) {
+				poseOrder.sort( ( a, b ) =>
+					Number( !!a.animationLod?.optional ) - Number( !!b.animationLod?.optional ) ||
+					(ownedPoses.get( a.gid )?.sampled ?? -1) - (ownedPoses.get( b.gid )?.sampled ?? -1)
+				);
+			}
+			for ( const actor of poseOrder ) {
 				if ( !needed.has( actor.gid ) ) {
 					continue;
 				}

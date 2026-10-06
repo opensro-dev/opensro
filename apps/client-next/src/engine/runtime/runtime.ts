@@ -31,9 +31,12 @@ import { createAssets } from "./assets/assets";
 import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
+import { createBuildInfo } from "./build-info/build-info";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
+import { createFrameWork } from "./frame-work";
+import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
@@ -120,6 +123,8 @@ export function startRuntime(
 			createAudio( assets, new URL( "/", import.meta.url ).href, random, Math.trunc( performance.now() ) >>> 0 )
 		);
 		const input = createInput();
+		const frameWork = createFrameWork();
+		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
 		const renderer = own(
 			createRenderer( canvas, random, audio.enqueue, diagnostics )
@@ -156,6 +161,7 @@ export function startRuntime(
 		*/
 		function uiEvent( event: import("@/engine/contracts/ui").UiEvent ) {
 			if ( event.kind === "video-preferences" ) {
+				framePacing.setFrameLimit( event.value.frameLimit );
 				renderer.videoOptions( event.value );
 				effectDetail = event.value.records[event.value.active][13] ?? 2;
 				normalFortressClothes = event.value.records[event.value.active][15] === 1;
@@ -243,6 +249,9 @@ export function startRuntime(
 				import.meta.env.VITE_AGENT_API_BASE || "/api",
 			location.origin
 		).href.replace( /\/$/, "" );
+		const buildInfo = own(
+			createBuildInfo( apiBase, import.meta.env.SRO_CLIENT_REVISION, import.meta.env.SRO_CLIENT_SUBJECT )
+		);
 		const bugReport = own(
 			createBugReport( {
 				canvas,
@@ -252,6 +261,12 @@ export function startRuntime(
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
 					return [
 						{ name: "Phase", value: sessionState?.phase ?? "starting" },
+						...(sessionState?.incidentID ?
+							[ { name: "Incident", value: sessionState.incidentID }, {
+								name: "Incident delivery",
+								value: sessionState.incidentDelivery ?? "not sent"
+							} ] :
+							[]),
 						...(sessionState?.nativeServerName ?
 							[ { name: "Shard", value: sessionState.nativeServerName } ] :
 							[]),
@@ -299,7 +314,7 @@ export function startRuntime(
 				value => platform.saveVideoOptions( value ),
 				value => platform.saveChatBlocks( value ),
 				value => platform.saveQuickslotOptions( value ),
-				bugReport
+				{ bugReport, saveExperimental: value => platform.saveExperimentalOptions( value ) }
 			)
 		);
 		let lastDockPick = "none";
@@ -430,6 +445,7 @@ export function startRuntime(
 		);
 		let releasePhase: string | undefined;
 		let simulationTimeMs = 0;
+		let workerDebtMs = 0;
 		const frameHistory: number[] = [], cpuHistory: number[] = [];
 		let lastFrameAt = 0, lastTelemetry = 0;
 		const stageTotals: Record<string, number> = {};
@@ -475,16 +491,46 @@ export function startRuntime(
 		let latestSequence = 0, acceptedInput = 0, frameId = 0;
 		/*
 		================
+		displayFrame
+
+		Deliver input on each display opportunity, then admit presentation work.
+		================
+		*/
+		function displayFrame( now: number ): void {
+			if ( disposed ) {
+				return;
+			}
+			const visible = globalThis.document?.visibilityState !== "hidden";
+			try {
+				// Input is delivered even when this display refresh needs no new draw.
+				const commands = input.drain();
+				if ( commands ) simulation.sendInput( commands );
+				if ( !framePacing.admit( now, visible ) ) {
+					raf = requestAnimationFrame( displayFrame );
+					return;
+				}
+			} catch ( error ) {
+				platform.report( `Runtime failed: Input: ${String( error )}`, error );
+				dispose();
+				return;
+			}
+			void frame( now );
+		}
+		/*
+		================
 		frame
 		================
 		*/
 		async function frame( now: number ): Promise<void> {
-			if ( disposed ) {
-				return;
-			}
+			if ( disposed ) return;
+			const visible = globalThis.document?.visibilityState !== "hidden";
 			// Whichever of RAF and a hidden delivery ran this frame, retire the other.
 			frameToken++;
 			const cpuStart = performance.now();
+			frameWork.begin( now, globalThis.document?.visibilityState !== "hidden" );
+			renderer.setFrameWork?.( frameWork );
+			characters.frameWork( frameWork );
+			let waitMs = 0;
 			frameId++;
 			stageAt = cpuStart;
 			frameProbe()?.begin( frameId );
@@ -495,10 +541,6 @@ export function startRuntime(
 				const assetHealth = assets.health();
 				if ( assetHealth.phase === "failed" ) {
 					throw new Error( `Assets failed: ${assetHealth.error}. Reload to restart.` );
-				}
-				const commands = input.drain();
-				if ( commands ) {
-					simulation.sendInput( commands );
 				}
 				const inputError = input.error();
 				if ( inputError ) {
@@ -532,6 +574,7 @@ export function startRuntime(
 				}
 				const snapshot = simulation.poll();
 				if ( snapshot ) {
+					workerDebtMs = snapshot.clock?.debtMs ?? 0;
 					latestSequence = snapshot.sequence;
 					simulationTimeMs = snapshot.timeMs;
 					acceptedInput = snapshot.acceptedInputSequence;
@@ -671,6 +714,20 @@ export function startRuntime(
 				// behind the drawn body's turning yaw (+0x88, written per step by
 				// 86CBA0), not the logical heading, which snaps on each click.
 				const cameraFollow = characters.cameraTarget();
+				const movement = presentation.gameplay();
+				if ( movement?.pose ) {
+					frameProbe()?.movement?.( {
+						atMs: now,
+						workerAtMs: movement.poseAtMs ?? simulationTimeMs,
+						workerDebtMs,
+						revision: movement.movementRevision ?? 0,
+						transition: movement.movementTransition,
+						logical: movement.pose,
+						displayed: cameraFollow?.pose ?? null,
+						pending: movement.pendingMoves,
+						acknowledged: movement.acknowledgedMove
+					} );
+				}
 				world.step(
 					[ "loading-world", "world" ].includes( frontendState.phase ) ?
 						presentation.gameplay()?.pose ?? null :
@@ -775,13 +832,21 @@ export function startRuntime(
 				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
 				markStage( "ui" );
 				renderer.setDamageText( characters.damageText() );
-				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
-				if ( rendered ) await rendered;
+				// Hidden maintenance still acknowledges every ordered publication, but
+				// cannot display a frame. Avoid GPU preparation and visibility queries.
+				const rendered = visible ?
+					renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() ) :
+					undefined;
+				if ( rendered ) {
+					await rendered;
+				}
+				waitMs = visible ? renderer.readbackWaitMs?.() ?? 0 : 0;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
 				const hoverLocal = presentation.gameplay()?.localGid,
-					hoverGid = diagnostics.hoverPicking !== false && worldPointer && frontendState.phase === "world" &&
+					hoverGid = visible && diagnostics.hoverPicking !== false && worldPointer &&
+							frontendState.phase === "world" &&
 							hoverLocal &&
 							!ui.blocks(
 								worldPointer[0] * platform.canvasSize().width / platform.displayScale(),
@@ -819,11 +884,17 @@ export function startRuntime(
 				// frame cost; the callback span is this runtime's share of it.
 				if ( lastFrameAt ) sample( frameHistory, now - lastFrameAt );
 				lastFrameAt = now;
-				sample( cpuHistory, performance.now() - cpuStart );
+				const cpuMs = performance.now() - cpuStart - waitMs;
+				sample( cpuHistory, cpuMs );
+				frameWork.recordCpu( cpuMs );
+				frameProbe()?.characterCount( "cpu-ms", cpuMs );
+				frameProbe()?.characterCount( "readback-wait-ms", waitMs );
+				frameProbe()?.characterCount( "cosmetic-level", frameWork.level() );
 				if ( frameHistory.length && now - lastTelemetry >= TELEMETRY_INTERVAL_MS ) {
 					lastTelemetry = now;
 					const frameMs = average( frameHistory ), drawn = renderer.characterStats();
 					platform.presentTelemetry( {
+						overload: frameWork.stats(),
 						frameId,
 						stages: diagnostics.stages ?
 							Object.fromEntries(
@@ -838,7 +909,9 @@ export function startRuntime(
 						p95CpuMs: percentile( cpuHistory, 0.95 ),
 						actors: drawn.actors,
 						draws: drawn.draws,
-						visibleGroups: renderer.worldStats().visibleGroups
+						visibleGroups: renderer.worldStats().visibleGroups,
+						pingMs: sessionState?.phase === "world" ? sessionState.pingMs : null,
+						build: buildInfo.readout( now, platform.diagnosticsActive(), sessionState?.phase )
 					} );
 					for ( const name in stageTotals ) stageTotals[name] = 0;
 					stageFrames = 0;
@@ -874,7 +947,7 @@ World: ${
 World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldStats().pendingGroups} pending groups` );
 				}
 				frameProbe()?.end();
-				raf = requestAnimationFrame( frame );
+				raf = requestAnimationFrame( displayFrame );
 				hiddenFrame( frameToken, now );
 			} catch ( error ) {
 				platform.report( `Runtime failed: ${String( error )}`, error );
@@ -900,10 +973,10 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 					return;
 				}
 				cancelAnimationFrame( raf );
-				void frame( now );
+				displayFrame( now );
 			} );
 		}
-		raf = requestAnimationFrame( frame );
+		raf = requestAnimationFrame( displayFrame );
 		hiddenFrame( frameToken, performance.now() );
 		return {
 			dispose,

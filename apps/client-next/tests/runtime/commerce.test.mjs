@@ -73,3 +73,24 @@ test("the repurchase tab shows the newest sale in slot 1 and the oldest in slot 
 	const two = ledger( 2 );
 	assert.deepEqual( [ 0, 1, 2 ].map( slot => restoreSlotEntry( two, slot )?.id ), [ 101, 100, undefined ] );
 });
+
+/*
+================
+cargoQuoteValidation
+================
+*/
+test("cargo quotations preserve container identity and reject incomplete total tables", () => {
+	const quote = { cosGid: 42, slot: 0, refObjId: 2151, quantity: 3, price: "75", totals: [ "75", "151", "227" ] };
+	const decode = quotes =>
+		shopCatalog(
+			new TextEncoder().encode(
+				JSON.stringify( { version: 1, npc: 17, name: "Trader", offers: [], cosGid: 42, saleQuotes: quotes } )
+			)
+		);
+	assert.equal( decode( [ quote ] ).saleQuotes[0].totals[1], "151" );
+	assert.equal( decode( [ quote, { ...quote, cosGid: 43 } ] ).saleQuotes.length, 2 );
+	assert.throws( () => decode( [ quote, quote ] ) );
+	for ( const totals of [ [ "75" ], [ "75", "151", "-1" ], [ "75", "151", 227 ], null ] ) {
+		assert.throws( () => decode( [ { ...quote, totals } ] ) );
+	}
+});

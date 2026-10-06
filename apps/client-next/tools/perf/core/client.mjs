@@ -18,6 +18,7 @@ import {
 	DEFAULT_BROWSER_EVENT_LOOP_TRACE_CATEGORIES
 } from "../../../../../scripts/lib/chromeTraceCapture.mjs";
 import { resetMissionMovementFixture } from "../../../../../scripts/lib/missionMovementFixture.mjs";
+import { defaultVideoOptions, frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { bootPlayableSession } from "../../../tests/browser/helpers/playable-session.mjs";
 
 export const CHARACTER = "asd2";
@@ -42,13 +43,31 @@ a profiler's overhead.
 function instrument( { counts, spans } ) {
 	const now = () => performance.now();
 	let frameStart = 0, worldStart = 0, worldEnd = 0, frameMark = 0, renderMark = 0, characterMark = 0;
+	let displayed;
 	const tally = {}, opened = {};
 	const add = ( key, value ) => {
 		tally[key] = (tally[key] ?? 0) + value;
 	};
 	globalThis.__benchRows = [];
+	globalThis.__benchMovement = [];
+	globalThis.__benchInputs = [];
 	globalThis.__benchTally = tally;
 	globalThis.__worldProbeFrameProfiler = {
+		/*
+		================
+		movement
+		================
+		*/
+		movement( sample ) {
+			displayed = sample;
+			const rows = globalThis.__benchMovement;
+			const root = globalThis.__benchRuntime, game = root?.gameplay();
+			sample.path = game?.movementPath;
+			const actor = root?.characterActors().find( actor => actor.gid === game?.localGid );
+			if ( actor ) sample.body = { pose: { ...actor.pose }, clip: actor.clip, mountedOn: actor.mountedOn };
+			rows.push( sample );
+			if ( rows.length > 4096 ) rows.splice( 0, 1024 );
+		},
 		detailBegin( stage ) {
 			if ( spans ) opened[stage] = now();
 		},
@@ -87,7 +106,14 @@ function instrument( { counts, spans } ) {
 			worldEnd = now();
 		},
 		begin() {
+			displayed = undefined;
 			frameStart = frameMark = now();
+			if ( globalThis.__benchLoop ) {
+				if ( globalThis.__benchLastFrame !== undefined ) {
+					globalThis.__benchIntervals.push( frameStart - globalThis.__benchLastFrame );
+				}
+				globalThis.__benchLastFrame = frameStart;
+			}
 			worldStart = worldEnd = 0;
 			for ( const key in tally ) tally[key] = 0;
 		},
@@ -98,7 +124,9 @@ function instrument( { counts, spans } ) {
 			frameMark = at;
 		},
 		end() {
+			if ( displayed ) displayed.presentedAtMs = now();
 			globalThis.__benchRows.push( [ now() - frameStart, worldEnd - worldStart, { ...tally } ] );
+			if ( globalThis.__benchRows.length > 16384 ) globalThis.__benchRows.splice( 0, 4096 );
 		}
 	};
 	if ( !counts ) return;
@@ -136,21 +164,22 @@ main-thread frame and world time.
 export async function measure( page, name, ms, drive ) {
 	await page.evaluate( () => {
 		globalThis.__benchRows.length = 0;
+		globalThis.__benchMovement.length = 0;
+		globalThis.__benchInputs.length = 0;
 		globalThis.__benchIntervals = [];
 		globalThis.__benchLoop = true;
-		let last = performance.now();
-		const tick = now => {
-			globalThis.__benchIntervals.push( now - last );
-			last = now;
-			if ( globalThis.__benchLoop ) requestAnimationFrame( tick );
-		};
-		requestAnimationFrame( tick );
+		globalThis.__benchLastFrame = undefined;
 	} );
 	const started = Date.now();
 	await drive( () => Date.now() - started < ms );
-	const [intervals, rows] = await page.evaluate( () => {
+	const [intervals, rows, movement, inputs] = await page.evaluate( () => {
 		globalThis.__benchLoop = false;
-		return [ globalThis.__benchIntervals.slice( 2 ), globalThis.__benchRows.slice( 2 ) ];
+		return [
+			globalThis.__benchIntervals.slice( 2 ),
+			globalThis.__benchRows.slice( 2 ),
+			globalThis.__benchMovement,
+			globalThis.__benchInputs
+		];
 	} );
 	const sorted = [ ...intervals ].sort( ( a, b ) => a - b ), at = q => sorted[Math.floor( (sorted.length - 1) * q )];
 	const mean = list => list.reduce( ( a, b ) => a + b, 0 ) / Math.max( 1, list.length );
@@ -162,10 +191,14 @@ export async function measure( page, name, ms, drive ) {
 		frames: intervals.length,
 		fps: 1000 / mean( intervals ),
 		p50: at( .5 ),
+		p95: at( .95 ),
 		p99: at( .99 ),
 		max: sorted.at( -1 ),
 		main: mean( rows.map( r => r[0] ) ),
 		world: mean( rows.map( r => r[1] ) ),
+		callbacksOver50Ms: rows.filter( r => (r[2]["cpu-ms"] ?? r[0]) > 50 ).length,
+		movement,
+		inputs,
 		counts: tally
 	};
 }
@@ -179,7 +212,7 @@ corpse measures nothing. Revives it in place (rebirth choice 2) and waits
 for health.
 ================
 */
-async function revive( page ) {
+export async function revive( page ) {
 	const alive = () =>
 		page.evaluate( () => {
 			const game = globalThis.__benchRuntime.gameplay();
@@ -206,18 +239,43 @@ browser and page; close the browser when done. counts and spans are
 instrument's options.
 ================
 */
-export async function openClient( fixture, { counts = false, spans = false } = {} ) {
-	process.env.SRO_PROBE_UNLOCK_FPS = "1";
+export async function openClient(
+	fixture,
+	{
+		counts = false,
+		spans = false,
+		uncapped = true,
+		cpuRate = 1,
+		frameLimit = 0,
+		headed = false,
+		beforeLogin = undefined
+	} = {}
+) {
+	process.env.SRO_PROBE_UNLOCK_FPS = uncapped ? "1" : "0";
 	await resetMissionMovementFixture( { characterName: CHARACTER, fixture, timeoutMs: 60000 } );
-	const { browser, page } = await launchProbeBrowser();
+	const { browser, page } = await launchProbeBrowser( { headed } );
 	try {
+		await page.addInitScript( options => {
+			localStorage.setItem( "sro:v1150:video-options:1", JSON.stringify( options ) );
+		}, { ...defaultVideoOptions(), frameLimit } );
 		await page.addInitScript( instrument, { counts, spans } );
-		await bootPlayableSession( page, CHARACTER );
+		await bootPlayableSession( page, CHARACTER, beforeLogin );
 		await page.evaluate( () => globalThis.__benchRuntime = globalThis.__playableRuntime );
 		await page.setViewportSize( VIEWPORT );
 		await revive( page );
 		await page.waitForTimeout( SETTLE_MS );
+		if ( cpuRate !== 1 ) {
+			const cdp = await page.context().newCDPSession( page );
+			await cdp.send( "Emulation.setCPUThrottlingRate", { rate: cpuRate } );
+		}
 	} catch ( error ) {
+		console.error(
+			"Client boot evidence:",
+			await page.evaluate( () => ({
+				status: document.querySelector( "output" )?.textContent,
+				session: globalThis.__playableRuntime?.sessionState()?.phase
+			}) ).catch( () => null )
+		);
 		await browser.close();
 		throw error;
 	}
@@ -232,6 +290,24 @@ closeClient
 export async function closeClient( { browser, page } ) {
 	await page.evaluate( () => globalThis.__benchRuntime?.session( { kind: "logout" } ) ).catch( () => {} );
 	await browser.close();
+}
+
+/*
+================
+selectFrameLimit
+
+Use the real option draft and Apply path; leave the window open for inspection.
+================
+*/
+export async function selectFrameLimit( page, limit ) {
+	const index = frameLimits().indexOf( limit );
+	if ( index < 0 ) throw Error( `Unsupported frame limit ${limit}` );
+	await page.keyboard.press( "Escape" );
+	await page.locator( '[data-ui-id="open-window:Option"]' ).click();
+	for ( let i = 0; i < 10; i++ ) await page.locator( '[data-ui-id="option-video-down"]' ).click();
+	await page.locator( '[data-ui-id="option-video-combo:-3"]' ).click();
+	await page.locator( `[data-ui-id="option-video-choice:-3:${index}"]` ).click();
+	await page.locator( '[data-ui-id="option-apply"]' ).click();
 }
 
 /*
@@ -295,11 +371,7 @@ export async function createCaptures( page, { dir = null, cpu = false, heap = fa
 		*/
 		async finish() {
 			if ( !tracing ) return;
-			const captured = await tracing.stop();
-			await writeFile(
-				trace,
-				JSON.stringify( { traceEvents: captured.traceEvents, metadata: captured.metadata } )
-			);
+			await tracing.stop( { rawOutputPath: trace } );
 		}
 	};
 }

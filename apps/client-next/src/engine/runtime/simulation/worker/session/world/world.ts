@@ -16,6 +16,7 @@ import { createDeparture } from "./departure";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
 import {
 	type ClientIncident,
+	type NetworkFailure,
 	INCIDENT_DUMP_BYTES,
 	INCIDENT_MESSAGE_LENGTH,
 	type WireFrame
@@ -47,18 +48,38 @@ export function createWorldSession(
 	reportIncident: ( incident: ClientIncident ) => void
 ) {
 	let failure: string | null = null, epoch = 0, disposed = false, controller: AbortController | null = null;
+	let diagnosticSession = "", disconnectMessage = "", incidentID = "";
 	/*
 ================
 onNetworkFailure
 ================
 	*/
-	function onNetworkFailure( error: string, frame?: WireFrame ) {
+	function onNetworkFailure( error: string, frame?: WireFrame, reason?: NetworkFailure ) {
 		failure = error;
+		disconnectMessage = reason?.message ?? "A game error interrupted your session.";
+		if ( reason?.category === "expected" ) {
+			incidentID = "";
+			return;
+		}
+		incidentID = crypto.randomUUID().replaceAll( "-", "" );
 		// The socket closes on the client side, so the server only sees a
 		// disconnect. Report what failed and on which frame (client_incident.go).
 		const dump = frame?.payload.subarray( 0, INCIDENT_DUMP_BYTES );
 		reportIncident( {
-			kind: frame ? "packet" : "transport",
+			id: incidentID,
+			stack: reason?.stack,
+			category: reason?.category,
+			session: diagnosticSession || undefined,
+			code: reason?.code ?? (frame ? "packet_application_failed" : "connection_closed"),
+			kind: reason?.code === "unsupported_feature" ?
+				"unsupported" :
+				reason?.code === "reference_loading_failed" ?
+				"asset" :
+				frame ?
+				"packet" :
+				reason?.category === "software" ?
+				"runtime" :
+				"transport",
 			message: error.slice( 0, INCIDENT_MESSAGE_LENGTH ),
 			...(frame ?
 				{
@@ -72,6 +93,7 @@ onNetworkFailure
 		} );
 	}
 	const network = createNetwork( onNetworkFailure );
+	let pingMs: number | null = null;
 	const core = createWorldCore( network.send );
 	const departure = createDeparture( network.send, core.notice );
 	let completedDeparture: 1 | 2 | 0 = 0;
@@ -150,6 +172,8 @@ connect
 		boundThisTransport = false;
 		resumedTransport = false;
 		failure = null;
+		disconnectMessage = "";
+		incidentID = "";
 		lastError = undefined;
 		transition( hasWorld ? "reconnecting" : "connecting" );
 		request( "transport" );
@@ -192,6 +216,11 @@ receive
 				bootstrap?: unknown;
 				references?: unknown;
 			};
+			const sessionKey = (wrapper.bootstrap as { diagnosticSessionId?: unknown; } | undefined)
+				?.diagnosticSessionId;
+			if ( typeof sessionKey === "string" && /^[a-f0-9]{32}:[0-9]{1,20}$/.test( sessionKey ) ) {
+				diagnosticSession = sessionKey;
+			}
 			if ( wrapper.v === 2 ) {
 				if (
 					!wrapper.bootstrap || typeof wrapper.bootstrap !== "object" || Array.isArray( wrapper.bootstrap ) ||
@@ -217,7 +246,7 @@ receive
 				return;
 			}
 			if ( wrapper.v !== 1 ) {
-				throw new Error( "Unsupported EnterWorld blob version" );
+				throw new Error( "Unsupported EnterWorld blob version", { cause: "unsupported_feature" } );
 			}
 			core.bootstrap( wrapper.bootstrap );
 			boundThisTransport = true;
@@ -241,7 +270,7 @@ receive
 			if ( frame.opcode === 4 ) {
 				return;
 			}
-			throw new Error( `Unsupported transport control ${frame.opcode}` );
+			throw new Error( `Unsupported transport control ${frame.opcode}`, { cause: "unsupported_feature" } );
 		}
 		if ( !boundThisTransport && !resumedTransport ) {
 			throw new Error( `Native packet 0x${frame.opcode.toString( 16 )} before EnterWorld` );
@@ -379,6 +408,9 @@ disconnect
 			departure.reset();
 			completedDeparture = 0;
 			if ( forget ) {
+				diagnosticSession = "";
+				disconnectMessage = "";
+				incidentID = "";
 				if ( hasWorld ) {
 					core.clear();
 				}
@@ -436,22 +468,53 @@ step
 					ready = false;
 					deadline = now + ADMISSION_TIMEOUT_MS;
 				} catch ( error ) {
-					failure = String( error );
+					onNetworkFailure( String( error ), undefined, {
+						category: "software",
+						code: "bootstrap_invalid",
+						message: "Game data could not be applied. Please try again.",
+						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+					} );
 				}
 			} else if ( references.kind === "failed" ) {
-				failure = references.error;
+				onNetworkFailure( references.error, undefined, {
+					category: "unknown",
+					code: "reference_loading_failed",
+					message: "Game data could not be loaded. Please try again."
+				} );
 				references = { kind: "idle" };
 			}
 			if ( !failure ) network.drain( receive );
+			const nextPing = !failure && phase === "world" ? network.pingMs() : null;
+			if ( nextPing !== pingMs ) {
+				pingMs = nextPing;
+				revision++;
+			}
 			if ( phase === "world" && !failure ) {
 				try {
 					departure.step( now );
 					core.step( now );
 				} catch ( error ) {
-					failure = String( error );
+					onNetworkFailure( String( error ), undefined, {
+						category: "software",
+						code: "simulation_failed",
+						message: "A game error interrupted your session."
+					} );
 				}
 			}
-			if ( phase !== "world" || failure ) core.step( now, false );
+			if ( phase !== "world" || failure ) {
+				try {
+					core.step( now, false );
+				} catch ( error ) {
+					if ( !failure ) {
+						onNetworkFailure( String( error ), undefined, {
+							category: "software",
+							code: "simulation_failed",
+							message: "A game error interrupted your session.",
+							stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+						} );
+					}
+				}
+			}
 			if ( phase === "entering-world" && boundThisTransport && core.synchronized() ) {
 				transition( "world" );
 				deadline = 0;
@@ -498,8 +561,11 @@ status
 				admitted: hasWorld,
 				revision,
 				error: lastError,
+				disconnectMessage,
+				incidentID,
 				character,
 				entities: core.count(),
+				pingMs,
 				attempt
 			};
 		},

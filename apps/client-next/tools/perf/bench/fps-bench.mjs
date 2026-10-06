@@ -6,6 +6,7 @@ fps-bench.mjs - frame rate of the real client in the scenarios that matter
 Usage:
   node tools/perf/bench/fps-bench.mjs [--seconds N] [--at a,b] [--only a,b]
        [--counts] [--spans] [--cpu] [--heap] [--out DIR] [--trace] [--json FILE]
+       [--paced] [--cpu-rate N]
 
 For each location (--at) resets the scratch character there, boots the dev
 client uncapped at 1600x900 (core/client.mjs) and runs the location's
@@ -29,6 +30,8 @@ main thread's frame and world-preparation time per frame. Options add:
   --heap    a sampled allocation profile per scenario (.heapprofile) and
             the allocation rate in the row;
   --trace   a Chrome trace per location, OUT/<location>.json.
+  --paced   retain display pacing; the default remains uncapped throughput.
+  --cpu-rate N  apply Chrome CPU throttling after warm-up (for example 4).
 
 Read the captures with tools/perf/analyze (profile.mjs, trace.mjs).
 
@@ -39,7 +42,7 @@ The goal these measure: 500 frames a second in every scenario.
 import { writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
-import { openClient, closeClient, createCaptures, measure } from "../core/client.mjs";
+import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
 import { keepGoing, drag, walk, approach, fight, cross } from "./scenarios.mjs";
 
 const GOAL_FPS = 500;
@@ -72,7 +75,7 @@ const LOCATIONS = [ {
 	scenarios: [ "skill" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
-	"[--trace] [--json FILE]";
+	"[--trace] [--json FILE] [--paced] [--cpu-rate N]";
 
 /*
 ================
@@ -119,7 +122,12 @@ One location: open the client there and run its scenarios.
 ================
 */
 async function session( options, location, results ) {
-	const client = await openClient( location.fixture, { counts: options.counts, spans: options.spans } );
+	const client = await openClient( location.fixture, {
+		counts: options.counts,
+		spans: options.spans,
+		uncapped: !options.paced,
+		cpuRate: options.cpuRate
+	} );
 	try {
 		const captures = await createCaptures( client.page, {
 			dir: options.out,
@@ -129,6 +137,7 @@ async function session( options, location, results ) {
 		} );
 		for ( const name of location.scenarios ) {
 			if ( !options.only.includes( name ) ) continue;
+			await revive( client.page );
 			const [ms, input] = await drive( client.page, name, location, options.seconds * 1000 );
 			await captures.start();
 			const started = Date.now();
@@ -136,6 +145,7 @@ async function session( options, location, results ) {
 			const allocated = await captures.stop( `${location.name}-${name}` );
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
 			results.push( result );
+			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 			console.log( row( result ) );
 		}
 		await captures.finish();
@@ -157,7 +167,9 @@ async function run( options ) {
 	if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 	const worst = Math.min( ...results.map( r => r.fps ) );
 	console.log(
-		`slowest scenario ${worst.toFixed( 0 )} fps; goal ${GOAL_FPS} ${worst >= GOAL_FPS ? "MET" : "not met"}`
+		options.paced ?
+			`slowest paced scenario ${worst.toFixed( 0 )} fps; see frame-interval percentiles` :
+			`slowest scenario ${worst.toFixed( 0 )} fps; goal ${GOAL_FPS} ${worst >= GOAL_FPS ? "MET" : "not met"}`
 	);
 }
 
@@ -166,6 +178,8 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	at: LOCATIONS.map( l => l.name ),
 	only: SCENARIOS,
 	counts: false,
+	paced: false,
+	cpuRate: 1,
 	spans: false,
 	cpu: false,
 	heap: false,

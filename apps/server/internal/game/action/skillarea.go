@@ -126,6 +126,7 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 			if in.skill.LifeSteal.Present {
 				// 58F4B5: the percent rides into 40F750, after its HP cap.
 				formula := lifeStealResult(in.lifeStealBase, in.attacker, defender, target.CurrentHP, uint32(percent))
+				formula = combat.FinishImpact(formula, combat.ImpactTail{PercentApplied: true, Attack: in.skill.Attack.Present})
 				total += uint64(formula.Damage)
 				plan.formulas = append(plan.formulas, formula)
 				continue
@@ -134,7 +135,7 @@ func (rt *Runtime) planAreaVictims(in areaPlanInput) (areaStrikePlan, bool) {
 			if err != nil {
 				return areaStrikePlan{}, false
 			}
-			formula.Damage = uint32(uint64(formula.Damage) * percent / fullAreaPercent)
+			formula = combat.FinishImpact(formula, combat.ImpactTail{Percent: percent, Attack: in.skill.Attack.Present})
 			total += uint64(formula.Damage)
 			plan.formulas = append(plan.formulas, formula)
 		}
@@ -468,7 +469,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	plan, planned := rt.planAreaVictims(areaPlanInput{
 		division: division, caster: character, snapshot: snapshot, skill: skill, attacker: attacker, victims: victims,
 		reduction: area.ReductionPercent, impacts: int(skill.Attack.ImpactCount), chained: chained,
-		lifeStealBase: stealBase, posePrimary: skill.ProjectileSpeed != 0, now: nowMs,
+		lifeStealBase: stealBase, posePrimary: skill.ActionHandler == enterworld.SkillActionProjectile, now: nowMs,
 	})
 	if !planned {
 		return OpResult{}, skillCastRefused
@@ -481,7 +482,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	var stolen wire.Frame
 	if !rt.deps.UpdateMany(roster.characters, "player-area-attack", func() bool {
 		var cost skillCharge
-		if charged && rootID == 0 {
+		if charged {
 			cost, refusal = rt.offensivePhaseCost(division, character, skill, nowMs, release)
 			if refusal != 0 {
 				return false
@@ -506,7 +507,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		if consumeAmmo {
 			ammo = applyAmmunitionDebit(character, debit)
 		}
-		if charged && rootID == 0 {
+		if charged {
 			rt.commitOffensivePhaseCost(division, character, skill, cost, nowMs, release != nil)
 		} else if release == nil {
 			rt.registerPlayerSkillCooldown(division, character, skill, nowMs)
@@ -543,7 +544,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 		success = wire.SkillCastAreaReleaseFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: caster, InstanceToken: token}, primary.gid, published.targets)
 		lifetime = uint64(skill.ActionDurationMs)
 	}
-	if skill.ProjectileSpeed != 0 {
+	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		// The original target sample determines flight, even when impact
 		// displaces or kills it. Zero-preparation area shots retain it too.
 		pose := plan.victims[0].pose
@@ -557,7 +558,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	}
 	actor := append([]wire.Frame{}, public...)
 	private := wire.ProgressionPrivateFrames(commit.progression)
-	if rootID == 0 {
+	if charged {
 		vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(enterworld.ObjectIDForCharacter(character), rt.publishedVitals(division, character))}
 		actor = append(actor, vitals)
 		private = append(private, vitals)

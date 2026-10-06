@@ -171,6 +171,9 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		nowMs := rt.Now().UnixMilli()
+		if family == itemUseStructureRepair {
+			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, tail, &result)
+		}
 		if family == itemUseQuestTool {
 			if len(tail) != 0 || rt.UseQuestItem == nil || character.NativeTeleportMode != 0 {
 				return false

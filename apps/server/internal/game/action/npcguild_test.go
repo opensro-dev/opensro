@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/guild"
+	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -101,6 +102,13 @@ func TestGuildMasterHandsTheGuildToAMember(t *testing.T) {
 	if out := leave(99); !bytes.Equal(out.Frames[0].Payload, []byte{2, guild.GuildErrMemberNotFound}) {
 		t.Fatalf("an absent member answered %x", out.Frames[0].Payload)
 	}
+	d.rt.Fortresses = fortress.New([]fortress.Catalog{{ID: 1}})
+	d.rt.Fortresses.Occupy(testDivision, 1, guildID)
+	d.rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, true)
+	if out := leave(2); !bytes.Equal(out.Frames[0].Payload, []byte{2, guildMasterFortressWar}) {
+		t.Fatalf("fortress master transfer % X", out.Frames[0].Payload)
+	}
+	d.rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, false)
 	out := leave(2)
 	assertOpcodes(t, out.Frames, opGuildMasterLeaveDone, guild.OpGuildUpdatePush, guild.OpGuildUpdatePush)
 	_, members, _ := guilds.Guild(testDivision, guildID)

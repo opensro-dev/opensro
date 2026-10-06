@@ -88,7 +88,20 @@ export function createRenderer(
 	let preview: import("@/engine/contracts/scene").WorldCamera | null = null;
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null;
+	let readbackWait = 0;
 	return {
+		setFrameWork: characters.frameWork,
+		/*
+		================
+		readbackWaitMs
+
+		Only the pending visibility query is wait time. Deferred preparation
+		and the second submission remain CPU work in the runtime's budget.
+		================
+		*/
+		readbackWaitMs() {
+			return readbackWait;
+		},
 		/*
 		================
 		setTeleportGates
@@ -363,6 +376,7 @@ export function createRenderer(
 		================
 		*/
 		frame( viewport, timeSeconds = 0, frameId, probe ) {
+			readbackWait = 0;
 			probe?.renderBegin();
 			characters.profile( probe );
 			world.profile( probe );
@@ -600,11 +614,20 @@ export function createRenderer(
 				const deferredPass = deferredPlan ?
 					{
 						asynchronous: deferredPlan.query,
-						prepare: () =>
-							deferredPlan.query ?
-								device.particleQuery( deferredPlan.points, scene.matrix, color, targetSurface.depth() )
-									.then( finishDeferred ) :
-								finishDeferred()
+						prepare: () => {
+							if ( !deferredPlan.query ) return finishDeferred();
+							const query = device.particleQuery(
+								deferredPlan.points,
+								scene.matrix,
+								color,
+								targetSurface.depth()
+							);
+							const started = performance.now();
+							return query.then( results => {
+								readbackWait += performance.now() - started;
+								return finishDeferred( results );
+							} );
+						}
 					} :
 					undefined;
 				// Each owner's list is checked under its own name.

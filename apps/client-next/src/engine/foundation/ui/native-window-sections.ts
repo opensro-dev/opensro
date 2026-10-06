@@ -43,6 +43,13 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 			return [ "Create", "NotifySubBox", "NotifyContents" ]; // 5C5B60.
 		case "ifskill":
 			return [ "Create", "MainSkillWnd" ];
+		case "ifguildwarrequest":
+			return [ "Create", "Message", "Condition", "InputGuild" ]; // 618260.
+		case "ifguildwarconfirm":
+		case "ifguildwaragree":
+			return [ "Create", "Message", "Condition" ]; // 617B10 / 617C30.
+		case "ifhostileguild":
+			return [ "Create", "GuildDetail", "HostileList", "CommandButton" ]; // 600120.
 		case "ifguild":
 			return [ "Create", "GuildInfo", "NotifySubBox", "MemberView", "Command", "SortBtn" ]; // 5EA9D0.
 		case "ifpartymatch":

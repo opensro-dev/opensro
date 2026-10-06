@@ -64,8 +64,20 @@ export async function walk( page, more ) {
 	const ends = [ { ...start, x: start.x - 140 }, start ];
 	for ( let leg = 0; more(); leg++ ) {
 		await page.evaluate(
-			destination =>
-				globalThis.__benchRuntime.session( { kind: "gameplay", command: { kind: "move", destination } } ),
+			destination => {
+				const root = globalThis.__benchRuntime, game = root.gameplay();
+				if ( globalThis.__benchInputs ) {
+					const body = root.characterActors().find( actor => actor.gid === game.localGid );
+					globalThis.__benchInputs.push( {
+						atMs: performance.now(),
+						revision: game.movementRevision,
+						from: { ...(body?.pose ?? game.pose) },
+						destination
+					} );
+					if ( globalThis.__benchInputs.length > 128 ) globalThis.__benchInputs.shift();
+				}
+				root.session( { kind: "gameplay", command: { kind: "move", destination } } );
+			},
 			ends[leg % 2]
 		);
 		const legStart = Date.now();

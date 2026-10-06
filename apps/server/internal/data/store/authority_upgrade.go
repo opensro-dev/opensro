@@ -3,8 +3,7 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13/14/15 (and a schema 16 authority still at layout 5) to
-schema 16, layout 6. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 17 to schema 17, layout 7. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6. Existing tables and
@@ -30,8 +29,10 @@ const UpgradeFromVersion = 13
 
 const preMallLayoutVersion = 4
 const preFortressLayoutVersion = 5
+const preGuildWarLayoutVersion = 6
 const preCompanionVersion = 14
 const preWorldPointVersion = 15
+const preTradeRewardVersion = 16
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -93,17 +94,28 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	case UpgradeFromVersion:
 		sourceLayout = preMallLayoutVersion
 	case preCompanionVersion, preWorldPointVersion:
+	case preTradeRewardVersion:
+		if layout >= preGuildWarLayoutVersion && layout <= CurrentLayoutVersion {
+			sourceLayout = layout
+		}
 	case CurrentVersion:
-		if layout != preFortressLayoutVersion {
+		if layout < preFortressLayoutVersion || layout >= CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
+		sourceLayout = layout
 	default:
 		return "", fmt.Errorf("authority upgrade: unsupported source schema %d", schema)
 	}
 	if _, err := loadDB(db, schema, sourceLayout); err != nil {
 		return "", fmt.Errorf("authority upgrade: source validation: %w", err)
 	}
-	added := []string{"fortresses", "fortress_requests", "fortress_structures", "alliances"}
+	var added []string
+	if sourceLayout < preGuildWarLayoutVersion {
+		added = []string{"fortresses", "fortress_requests", "fortress_structures", "alliances"}
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		added = append(added, "guild_wars")
+	}
 	if sourceLayout == preMallLayoutVersion {
 		added = append(added, "mall_accounts", "account_storage")
 	}
@@ -159,8 +171,15 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return backupPath, err
 		}
 	}
-	if _, err := tx.Exec(fortressSchema + allianceSchema); err != nil {
-		return backupPath, err
+	if sourceLayout < preGuildWarLayoutVersion {
+		if _, err := tx.Exec(fortressSchema + allianceSchema); err != nil {
+			return backupPath, err
+		}
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		if _, err := tx.Exec(guildWarSchema); err != nil {
+			return backupPath, err
+		}
 	}
 	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprint(CurrentLayoutVersion)); err != nil {
 		return backupPath, err

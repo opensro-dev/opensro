@@ -673,6 +673,7 @@ function fixture(
 		step
 		================
 		*/
+		/** @param {Record<string, unknown> | null} [gameplay] Partial gameplay fixture for this owner. */
 		step( entities, time, gameplay = null ) {
 			presentation.step( entities, gameplay, time );
 			return characters.prepare( gpu, {
@@ -763,6 +764,8 @@ test("level-up admits a cold one-shot effect, follows the entity, and expires wi
 	assert.equal( effect.attachment.gid, 1 );
 	f.step( [ entity( 1, { kind: "local-player", x: 50 } ) ], 1.5 );
 	assert.equal( f.actors.find( a => a.gid === effect.gid ).attachment.gid, 1 );
+	assert.equal( f.actors.find( a => a.gid === 1 ).pose.x, 10, "a stalled frame retains the displayed pose" );
+	f.step( [ entity( 1, { kind: "local-player", x: 50 } ) ], 1.6 );
 	assert.equal( f.actors.find( a => a.gid === 1 ).pose.x, 50 );
 	f.step( entities, 3 );
 	assert.ok( !f.actors.some( a => a.model.includes( "system_levelup" ) ) );
@@ -917,6 +920,8 @@ test("missing equipment metadata does not stop current poses or unrelated actors
 		casts: []
 	};
 	f.step( [ entity( 1 ) ], 1, gameplay );
+	assert.equal( f.actors[0].pose.x, 10, "asset failure does not bypass stall recovery" );
+	f.step( [ entity( 1 ) ], 1.1, gameplay );
 	assert.equal( f.actors[0].pose.x, 90 );
 	assert.match( f.presentation.error(), /Missing native equipment visual catalog/ );
 	f.step( [], 2, gameplay );
@@ -1092,6 +1097,8 @@ test("crowd admission preserves local player and nearest actors without stopping
 	assert.ok( !f.actors.some( a => a.gid === 1 ) );
 	gameplay.pose.x = 800;
 	f.step( entities, 2, gameplay );
+	assert.equal( f.actors[0].pose.x, 690, "crowd admission retains presentation continuity after a stall" );
+	f.step( entities, 2.1, gameplay );
 	assert.equal( f.actors[0].pose.x, 800 );
 	f.step( [], 3, gameplay );
 	assert.equal( f.actors.length, 0 );
