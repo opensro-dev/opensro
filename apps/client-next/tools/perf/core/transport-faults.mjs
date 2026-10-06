@@ -74,7 +74,9 @@ export async function installFaults( page ) {
 					if ( this.readyState !== OriginalSocket.OPEN ) return;
 					deliver();
 					if ( hold > 0 ) {
-						const view = bytes && new Uint8Array( bytes instanceof ArrayBuffer ? bytes : bytes.buffer );
+						const view = bytes && (bytes instanceof ArrayBuffer ?
+							new Uint8Array( bytes ) :
+							new Uint8Array( bytes.buffer, bytes.byteOffset, bytes.byteLength ));
 						link.log.push( {
 							direction,
 							opcode: view && view.byteLength >= 2 ? view[0] | (view[1] << 8) : null,

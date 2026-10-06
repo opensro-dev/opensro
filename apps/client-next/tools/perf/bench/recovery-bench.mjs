@@ -27,12 +27,15 @@ import { captureVisual } from "../core/visual-capture.mjs";
 // tick or blocked handler, NOT proof of a paused tick: server AI and
 // existing movement keep advancing while the bytes are held.
 const STALL_LANES = [ "network-delay", "bidirectional-delay" ];
-const STALL_MS = [ 150, 300, 600 ];
+const STALL_MS = [ 0, 150, 300, 600 ];
+const CHARACTER = process.env.SRO_PROBE_CHARACTER ?? "asd2";
 // The GameWorld's local operator snapshot (two-second capture cache).
 const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
 	"http://127.0.0.1:8791/internal/diagnostics/observatory";
 const OBSERVATORY_CACHE_MS = 2000;
 const SERVER_POSE_TOLERANCE = 1;
+const METRICS_URL = process.env.SRO_BENCH_TRANSPORT_METRICS ?? "http://127.0.0.1:8788/transport/metrics";
+const ANCHOR_TIMEOUT_MS = 15000;
 
 /*
 ================
@@ -44,7 +47,67 @@ function moveTo( page, offset ) {
 		const root = globalThis.__benchRuntime, pose = root.gameplay().pose;
 		const destination = { ...pose, x: pose.x + offset.x, z: pose.z + offset.z };
 		root.session( { kind: "gameplay", command: { kind: "move", destination } } );
+		return destination;
 	}, offset );
+}
+
+/*
+================
+movementState
+
+The worker's movement owner as the stall left it: the fields a receipt is
+supposed to reconcile.
+================
+*/
+function movementState( page ) {
+	return page.evaluate( () => {
+		const game = globalThis.__benchRuntime.gameplay();
+		return {
+			atMs: Date.now(),
+			pose: game.pose,
+			authoritativePose: game.authoritativePose,
+			poseAtMs: game.poseAtMs,
+			pendingMoves: game.pendingMoves,
+			moving: game.moving,
+			movementPath: game.movementPath,
+			movementRevision: game.movementRevision
+		};
+	} );
+}
+
+/*
+================
+returnToAnchor
+
+Walks back to the lane's start point and waits until the move is settled, so
+every step starts on the same open ground instead of drifting into an edge.
+================
+*/
+async function returnToAnchor( page, anchor ) {
+	await page.evaluate( destination => {
+		globalThis.__benchRuntime.session( { kind: "gameplay", command: { kind: "move", destination } } );
+	}, anchor );
+	const until = Date.now() + ANCHOR_TIMEOUT_MS;
+	while ( Date.now() < until ) {
+		await page.waitForTimeout( 100 );
+		const state = await movementState( page );
+		if ( !state.moving && state.pendingMoves === 0 ) return;
+	}
+	throw Error( "the character did not return to the stall anchor" );
+}
+
+/*
+================
+transportMetrics
+
+The GameWorld's lifetime timing counters; the lane artifact keeps a
+snapshot from before and after so its deltas are attributable.
+================
+*/
+async function transportMetrics() {
+	const response = await fetch( METRICS_URL );
+	assert.ok( response.ok, `transport metrics ${response.status}` );
+	return { fetchedAtMs: Date.now(), metrics: await response.json() };
 }
 
 /*
@@ -53,21 +116,37 @@ stallTurns
 
 For each stall length: start a walk, open the stall, and send a sharp turn
 or a stop a third of the way into it, then let it release and settle. The
-turn or stop is the command the coordinator saw answered wrong.
+turn or stop is the command the coordinator saw answered wrong. A stop is an
+explicit move to the current pose, not a key release. Length 0 is the
+no-hold control. Every step records its exact request and, after the
+observatory cache has turned over, the client's movement state beside the
+server's pose.
 ================
 */
-async function stallTurns( page, lane ) {
+async function stallTurns( page, lane, name ) {
 	const stall = lane === "bidirectional-delay" ? ms => stallServer( page, ms ) : ms => holdStream( page, "rx", ms );
 	const steps = [];
+	const anchor = (await movementState( page )).pose;
 	for ( const ms of STALL_MS ) {
 		for ( const action of [ "turn", "stop" ] ) {
+			await returnToAnchor( page, anchor );
 			await moveTo( page, { x: 120, z: 0 } );
 			await page.waitForTimeout( 400 );
-			await stall( ms );
+			if ( ms > 0 ) await stall( ms );
 			await page.waitForTimeout( Math.round( ms / 3 ) );
-			await (action === "turn" ? moveTo( page, { x: -120, z: 60 } ) : moveTo( page, { x: 0, z: 0 } ));
-			steps.push( { ms, action } );
-			await page.waitForTimeout( ms + 900 );
+			const requested = await moveTo( page, action === "turn" ? { x: -120, z: 60 } : { x: 0, z: 0 } );
+			await page.waitForTimeout( ms + 900 + OBSERVATORY_CACHE_MS );
+			const client = await movementState( page );
+			const server = await serverPose( name );
+			steps.push( {
+				ms,
+				action,
+				requested,
+				client,
+				server,
+				xz: Math.hypot( server.x - client.pose.x, server.z - client.pose.z ),
+				y: server.y - client.pose.y
+			} );
 		}
 	}
 	return steps;
@@ -86,7 +165,16 @@ async function serverPose( name ) {
 	assert.ok( response.ok, `observatory ${response.status}` );
 	const player = (await response.json()).players.find( row => row.name.toLowerCase() === name.toLowerCase() );
 	assert.ok( player, `the GameWorld reports no online ${name}` );
-	return { regionId: player.region, x: player.x, y: player.y, z: player.z };
+	// The body carries no capture time; the snapshot is at most the cache age old.
+	const fetchedAtMs = Date.now();
+	return {
+		regionId: player.region,
+		x: player.x,
+		y: player.y,
+		z: player.z,
+		capturedAfterMs: fetchedAtMs - OBSERVATORY_CACHE_MS,
+		fetchedAtMs
+	};
 }
 
 /*
@@ -129,7 +217,8 @@ async function run( options ) {
 			*/
 			const drive = async more => {
 				if ( STALL_LANES.includes( lane ) ) {
-					result.stalls = await stallTurns( page, lane );
+					result.timing = { before: await transportMetrics() };
+					result.stalls = await stallTurns( page, lane, CHARACTER );
 					while ( more() ) await page.waitForTimeout( 50 );
 					return;
 				}
@@ -147,7 +236,7 @@ async function run( options ) {
 			};
 			await captures.start();
 			const result = {};
-			Object.assign( result, await measure( page, lane, STALL_LANES.includes( lane ) ? 14000 : 7000, drive ) );
+			Object.assign( result, await measure( page, lane, STALL_LANES.includes( lane ) ? 90000 : 7000, drive ) );
 			await captures.stop( lane );
 			await captures.finish();
 			if ( options.video && lane === "main" ) {
@@ -159,6 +248,7 @@ async function run( options ) {
 			result.transport = await worker.evaluate( () => ({ ...globalThis.__recoveryLink, log: undefined }) );
 			if ( STALL_LANES.includes( lane ) ) {
 				result.faults = await faultLog( page );
+				result.timing.after = await transportMetrics();
 				// Settle past the snapshot cache, then compare the server's own pose.
 				await page.waitForTimeout( OBSERVATORY_CACHE_MS + 1000 );
 				const local = await page.evaluate( () => {
@@ -166,7 +256,7 @@ async function run( options ) {
 					const body = root.characterActors().find( actor => actor.gid === game.localGid );
 					return { logical: game.pose, drawn: body?.pose ?? null };
 				} );
-				const server = await serverPose( process.env.SRO_PROBE_CHARACTER ?? "asd2" );
+				const server = await serverPose( CHARACTER );
 				result.serverPose = {
 					...local,
 					server,
@@ -177,7 +267,13 @@ async function run( options ) {
 				await writeFile(
 					`${options.out}/stall-${lane}.json`,
 					JSON.stringify(
-						{ lane, stalls: result.stalls, faults: result.faults, serverPose: result.serverPose },
+						{
+							lane,
+							stalls: result.stalls,
+							faults: result.faults,
+							serverPose: result.serverPose,
+							timing: result.timing
+						},
 						null,
 						2
 					)
@@ -187,10 +283,12 @@ async function run( options ) {
 				assert.equal( server.regionId, local.logical.regionId, JSON.stringify( result.serverPose ) );
 				// y is recorded, not asserted: whether the server's y is the wire Y
 				// or a surface height is still open.
-				assert.ok(
-					result.serverPose.xz <= SERVER_POSE_TOLERANCE,
-					`settled client and server poses differ: ${JSON.stringify( result.serverPose )}`
-				);
+				for ( const step of [ ...result.stalls, result.serverPose ] ) {
+					assert.ok(
+						step.xz <= SERVER_POSE_TOLERANCE,
+						`settled client and server poses differ: ${JSON.stringify( step )}`
+					);
+				}
 			}
 			assert.ok(
 				result.transport.rx > 0 && result.transport.tx > 0,
