@@ -250,6 +250,10 @@ type Ticker struct {
 	Monsters *MonsterMoverOps
 	// PlayerMap enables the beta world map roster leg (playermap.go).
 	PlayerMap bool
+	// StallReport is how long a tick runs before the watchdog logs what it
+	// is doing (tick_watchdog.go). Values <= 0 use DefaultTickStallReport.
+	StallReport time.Duration
+	watch       tickWatch
 
 	// tickIndex is the coordinator-owned server-clock tick counter fed to
 	// the patrol function.
@@ -370,6 +374,7 @@ func (t *Ticker) run(ctx context.Context) {
 		}(inboxes[i])
 	}
 
+	go t.watchStalls(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	defer workers.Wait()
@@ -428,12 +433,16 @@ prepared division work on the fixed shard workers.
 */
 func (t *Ticker) RunTick(nowMs int64) {
 	defer recoverTickPanic("tick")
+	t.watch.begin(time.Now())
+	defer t.watch.end()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)
+	t.watch.phase.Store(tickPhaseDivisions)
 	for _, division := range work {
 		t.runDivision(division, tick, nowMs)
 	}
+	t.watch.phase.Store(tickPhaseHooks)
 	t.runHooks(nowMs, work)
 }
 
@@ -444,9 +453,12 @@ runScheduledTick
 */
 func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []chan shardTickBatch) {
 	defer recoverTickPanic("scheduled tick")
+	t.watch.begin(time.Now())
+	defer t.watch.end()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)
+	t.watch.phase.Store(tickPhaseDivisions)
 	batches := make([]shardTickBatch, len(inboxes))
 	for i := range batches {
 		batches[i] = shardTickBatch{tick: tick, nowMs: nowMs, done: make(chan struct{})}
@@ -475,6 +487,7 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 		<-batch.done
 	}
 	if ctx.Err() == nil {
+		t.watch.phase.Store(tickPhaseHooks)
 		t.runHooks(nowMs, work)
 	}
 }
@@ -632,6 +645,8 @@ func (t *Ticker) runHookList(hooks []TickHook, nowMs int64, work []divisionTickW
 	for _, hook := range hooks {
 		func() {
 			defer recoverTickPanic("hook")
+			t.watch.enterHook(hook)
+			defer t.watch.leaveHook()
 			for _, routed := range hook(nowMs) {
 				if len(routed.Frames) == 0 {
 					continue
