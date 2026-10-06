@@ -100,5 +100,6 @@ job labels were saved and read back in snapshot 2 of the isolated
 `.state/native/SR_ShardManager.guildwar.bndb` copy. Each ShardManager address was
 checked against original executable bytes and then the pinned Binary Ninja view;
 the shared executor's active view can change when another agent uses it.
-GameServer label-save/readback work is tracked separately from runtime test
-results; a timed-out executor call is not evidence of a completed readback.
+GameServer snapshot 449 was read back and contains the corrected timed-job
+predicates, GP-donation name, delayed-surrender submitter and fortress
+participation predicate. Focused guild-war authority race tests also passed.
