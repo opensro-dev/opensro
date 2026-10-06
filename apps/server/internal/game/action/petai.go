@@ -396,7 +396,7 @@ func (rt *Runtime) companionPresentation(division string, state *petSession, cos
 		Fresh: state.summonedAtMs != 0 && now-state.summonedAtMs <= petAppearWindowMs,
 		Row: wire.CosSpawnBand2{Band: uint8(ref.TidWord >> 11), RefObjID: cos.RefObjID, Gid: cos.GID,
 			Walk: cosParameter(ref, cos, block, movementWalkParameter), Run: cosParameter(ref, cos, block, movementRunParameter),
-			Scale: ref.Scale, Name: name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c)}}
+			Scale: cosParameter(ref, cos, block, actionSpeedParameter), Name: name, OwnerName: c.Name, OwnerGid: enterworld.ObjectIDForCharacter(c)}}
 	if block != nil && block.Mask != 0 {
 		result.AbnormalVitals = abnormalVitalsPayload(cos.GID, block)
 	}

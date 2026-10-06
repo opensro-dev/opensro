@@ -70,7 +70,7 @@ func (rt *Runtime) OperatorCharacter(division, name string) (map[string]any, err
 	world := rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
 	return map[string]any{"id": c.ID, "name": c.Name, "level": c.Level, "hp": c.CurrentHP, "mp": c.CurrentMP,
 		"savedWorld": c.World, "liveWorld": world, "teleportMode": c.NativeTeleportMode,
-		"bodyStatus": c.NativeBodyStatus, "companions": c.Companions()}, nil
+		"bodyStatus": c.NativeBodyStatus, "companions": c.Companions(), "inventory": c.MissionInventory}, nil
 }
 
 /*

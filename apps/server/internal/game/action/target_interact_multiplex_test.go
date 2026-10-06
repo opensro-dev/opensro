@@ -26,8 +26,8 @@ func TestPickupPayloadsStillReachThePickupDecoderAfterTheAcceptLanding(t *testin
 	grant := rt.HandleTargetInteract(testDivision, character,
 		wire.TargetInteract{Gid: heap.Gid}.Encode())
 	assertOpcodes(t, grant.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpPointsUpdate, wire.OpObjectDespawn)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 	if rt.Ground.Count(testDivision) != 0 {
 		t.Fatal("underfoot pickup did not consume the heap")
 	}
@@ -40,7 +40,7 @@ func TestPickupPayloadsStillReachThePickupDecoderAfterTheAcceptLanding(t *testin
 	// A pickup of a gone gid still answers the genuine pickup refusal pair.
 	refusal := rt.HandleTargetInteract(testDivision, character,
 		wire.TargetInteract{Gid: heap.Gid}.Encode())
-	assertOpcodes(t, refusal.Frames, wire.OpActionState, wire.OpItemMoveResponse)
+	assertOpcodes(t, refusal.Frames, wire.OpItemMoveResponse, wire.OpActionState)
 }
 
 // Family ownership is decided before strict decoding. These are either
@@ -77,6 +77,6 @@ func TestNonPickup72CDFamiliesNeverFallThroughToPickup(t *testing.T) {
 
 	grant := rt.HandleTargetInteract(testDivision, character, wire.TargetInteract{Gid: heap.Gid}.Encode())
 	assertOpcodes(t, grant.Frames,
-		wire.OpActionState, wire.OpPickupAnim, wire.OpItemMoveResponse,
-		wire.OpPointsUpdate, wire.OpObjectDespawn)
+		wire.OpPickupAnim, wire.OpItemMoveResponse,
+		wire.OpPointsUpdate, wire.OpObjectDespawn, wire.OpActionState)
 }

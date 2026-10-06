@@ -26,7 +26,10 @@ reads it). varianceBits persists as a decimal string because JSON has no
 ==================
 */
 type InventoryRow struct {
-	Summon *CharacterCOS `json:"summon,omitempty"`
+	// TradeOwner is the original job alias in the goods record's owner string
+	// (490930). A transfer changes the holder, never this sale-admission identity.
+	TradeOwner string        `json:"tradeOwner,omitempty"`
+	Summon     *CharacterCOS `json:"summon,omitempty"`
 	// Portable persistence for an already supplied native +20/+24 identity.
 	// This is not a serial allocator or a native SQL column declaration.
 	RecordID     uint64 `json:"recordId,omitempty,string"`
@@ -625,11 +628,12 @@ again (v1.188 CGObjPC_HandleJobLeave70E2's seven-day timed job).
 ==================
 */
 type CharacterJob struct {
-	Type       uint8  `json:"type,omitempty"`
-	Grade      uint8  `json:"grade,omitempty"`
-	Exp        uint32 `json:"exp,omitempty"`
-	Alias      string `json:"alias,omitempty"`
-	RejoinAtMs int64  `json:"rejoinAtMs,omitempty"`
+	WeeklyReward int32  `json:"weeklyReward,omitempty"`
+	Type         uint8  `json:"type,omitempty"`
+	Grade        uint8  `json:"grade,omitempty"`
+	Exp          uint32 `json:"exp,omitempty"`
+	Alias        string `json:"alias,omitempty"`
+	RejoinAtMs   int64  `json:"rejoinAtMs,omitempty"`
 }
 
 /*

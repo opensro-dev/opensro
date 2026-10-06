@@ -1,7 +1,3 @@
-import { isNameColorGuard } from "./name-color";
-import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
-import type { EntityState } from "@/engine/contracts/world";
-
 /*
 ===========================================================================
 
@@ -13,6 +9,10 @@ class's tail: COS 854FA0 / 8554E0, monster 861B00, fortress structure
 
 ===========================================================================
 */
+import { animationRate } from "../animation/animation-rate";
+import { isNameColorGuard } from "./name-color";
+import { decodeSpawnSkills, type SpawnSkillReference } from "./spawn-skills";
+import type { EntityState } from "@/engine/contracts/world";
 
 const STRUCTURE_HEADQUARTERS_BAND = 5;
 
@@ -134,6 +134,7 @@ export function decodeCharacterSpawn(
 		name,
 		walkSpeed,
 		runSpeed,
+		animationRate: animationRate( scale ),
 		movementMode,
 		spawnDestination,
 		ownerName,

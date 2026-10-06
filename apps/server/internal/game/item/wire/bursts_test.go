@@ -28,7 +28,7 @@ func assertOpcodeOrder(t *testing.T, frames []Frame, want []uint16) {
 }
 
 // THE BUG B REGRESSION PIN. The 0x36AB despawn rides the SAME burst as the
-// 0x35C7 scoop and the 0xB06D grant - packet arrival is the native trigger,
+// 0x35C7 scoop and the 0xB06D grant, ahead of the closing release - packet arrival is the native trigger,
 // and the visible linger after the scoop is the client's own fixed 1.5s
 // dissolve. Anyone tempted to defer the despawn to an animation event turns
 // a verified-native behavior into a divergence; this test is here to stop
@@ -38,25 +38,25 @@ func TestPickupGoldGrantBurstOrder(t *testing.T) {
 	frames := PickupGoldGrantFrames(anim, 1500, 99_000, 300007, false)
 
 	assertOpcodeOrder(t, frames, []uint16{
-		OpActionState, OpPickupAnim, OpItemMoveResponse, OpPointsUpdate, OpObjectDespawn,
+		OpPickupAnim, OpItemMoveResponse, OpPointsUpdate, OpObjectDespawn, OpActionState,
 	})
 
-	if !bytes.Equal(frames[0].Payload, []byte{0x02, 0x00}) {
-		t.Fatalf("the burst does not lead with the latch release: % X", frames[0].Payload)
-	}
-	if !bytes.Equal(frames[1].Payload, anim.Encode()) {
+	if !bytes.Equal(frames[0].Payload, anim.Encode()) {
 		t.Fatal("the anim frame does not carry the picker's scoop")
 	}
-	if !bytes.Equal(frames[2].Payload, []byte{0x01, 0x06, 0xFE, 0xDC, 0x05, 0x00, 0x00}) {
-		t.Fatalf("gold grant payload = % X, want [01 06 FE][1500 le]", frames[2].Payload)
+	if !bytes.Equal(frames[1].Payload, []byte{0x01, 0x06, 0xFE, 0xDC, 0x05, 0x00, 0x00}) {
+		t.Fatalf("gold grant payload = % X, want [01 06 FE][1500 le]", frames[1].Payload)
 	}
-	refresh, err := DecodeGoldRefresh(frames[3].Payload)
+	refresh, err := DecodeGoldRefresh(frames[2].Payload)
 	if err != nil || refresh.Balance != 99_000 {
 		t.Fatalf("gold refresh = %+v (%v), want balance 99000", refresh, err)
 	}
-	despawn, err := DecodeObjectDespawn(frames[4].Payload)
+	despawn, err := DecodeObjectDespawn(frames[3].Payload)
 	if err != nil || despawn.Gid != 300007 {
 		t.Fatalf("despawn = %+v (%v), want gid 300007", despawn, err)
+	}
+	if !bytes.Equal(frames[4].Payload, []byte{0x02, 0x00}) {
+		t.Fatalf("the burst does not end with the latch release: % X", frames[4].Payload)
 	}
 }
 
@@ -65,12 +65,13 @@ func TestPickupItemGrantBurstDespawnsInTheSameBurst(t *testing.T) {
 	body := ItemBody{RefObjID: 11459, Plus: 3, VarianceBits: 0x1234, Durability: 96}
 	typeFlags := PackTypeFlags(3, 1, 6, 2)
 
-	frames := PickupItemGrantFrames(anim, 15, body, 300009, 0)
+	progress := Frame{Opcode: OpExpUpdate, Payload: []byte{9}}
+	frames := PickupItemGrantFrames(anim, 15, body, 300009, 0, []Frame{progress})
 	assertOpcodeOrder(t, frames, []uint16{
-		OpActionState, OpPickupAnim, OpItemMoveResponse, OpObjectDespawn,
+		OpPickupAnim, OpItemMoveResponse, OpObjectDespawn, OpExpUpdate, OpActionState,
 	})
 
-	grant, err := DecodeItemMoveResult(frames[2].Payload, typeFlags)
+	grant, err := DecodeItemMoveResult(frames[1].Payload, typeFlags)
 	if err != nil {
 		t.Fatalf("grant payload did not decode: %v", err)
 	}
@@ -84,9 +85,9 @@ func TestPickupItemGrantBurstWithholdsTheDespawnOnRemainder(t *testing.T) {
 	anim := PickupAnim{Gid: 100001, Heading: 7}
 	body := ItemBody{RefObjID: 3630}
 
-	frames := PickupItemGrantFrames(anim, 15, body, 300009, 12)
+	frames := PickupItemGrantFrames(anim, 15, body, 300009, 12, nil)
 	assertOpcodeOrder(t, frames, []uint16{
-		OpActionState, OpPickupAnim, OpItemMoveResponse,
+		OpPickupAnim, OpItemMoveResponse, OpActionState,
 	})
 	for _, frame := range frames {
 		if frame.Opcode == OpObjectDespawn {
@@ -146,13 +147,13 @@ func TestProgressionPrivateFramesExcludePublicLevelPresentation(t *testing.T) {
 
 func TestPickupRefusalFramesReleaseTheLatch(t *testing.T) {
 	frames := PickupRefusalFrames(ErrCodeCannotBePicked)
-	assertOpcodeOrder(t, frames, []uint16{OpActionState, OpItemMoveResponse})
+	assertOpcodeOrder(t, frames, []uint16{OpItemMoveResponse, OpActionState})
 
-	if !bytes.Equal(frames[0].Payload, []byte{0x02, 0x00}) {
-		t.Fatalf("refusal does not release the latch: % X", frames[0].Payload)
+	if !bytes.Equal(frames[0].Payload, []byte{0x02, 0x39}) {
+		t.Fatalf("refusal notice = % X, want [02 39]", frames[0].Payload)
 	}
-	if !bytes.Equal(frames[1].Payload, []byte{0x02, 0x39}) {
-		t.Fatalf("refusal notice = % X, want [02 39]", frames[1].Payload)
+	if !bytes.Equal(frames[1].Payload, []byte{0x02, 0x00}) {
+		t.Fatalf("refusal does not release the latch: % X", frames[1].Payload)
 	}
 }
 

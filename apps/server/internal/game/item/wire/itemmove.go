@@ -40,6 +40,7 @@ ItemBody
 ================
 */
 type ItemBody struct {
+	TradeOwner   string
 	Summon       *domain.CharacterCOS
 	RefObjID     uint32
 	TypeFlags    uint16
@@ -74,6 +75,9 @@ func (b ItemBody) EncodedSize() int {
 	}
 	if b.TypeFlags != 0 && IsEtcBand(b.TypeFlags) {
 		size := 4 + 2
+		if EtcCarriesTradeOwner(b.TypeFlags) {
+			size += 2 + len(b.TradeOwner)
+		}
 		if EtcCarriesPlusByte(b.TypeFlags) {
 			size++
 		}
@@ -113,6 +117,12 @@ func (b ItemBody) Encode() []byte {
 			quantity = 1
 		}
 		w.U16(quantity)
+		if EtcCarriesTradeOwner(b.TypeFlags) {
+			if len(b.TradeOwner) > 65535 {
+				return nil
+			}
+			w.U16(uint16(len(b.TradeOwner))).Bytes([]byte(b.TradeOwner))
+		}
 		if EtcCarriesPlusByte(b.TypeFlags) {
 			w.U8(b.Plus)
 		}
@@ -161,6 +171,17 @@ func readItemBody(r *Reader, typeFlags uint16) (ItemBody, error) {
 	if typeFlags != 0 && IsEtcBand(typeFlags) {
 		if out.Quantity, err = r.U16(); err != nil {
 			return out, err
+		}
+		if EtcCarriesTradeOwner(typeFlags) {
+			length, e := r.U16()
+			if e != nil {
+				return out, e
+			}
+			owner, e := r.Bytes(int(length))
+			if e != nil {
+				return out, e
+			}
+			out.TradeOwner = string(owner)
 		}
 		if EtcCarriesPlusByte(typeFlags) {
 			if out.Plus, err = r.U8(); err != nil {
@@ -769,3 +790,12 @@ func DecodeItemMoveResult(payload []byte, pickupTypeFlags uint16) (ItemMoveResul
 	}
 	return out, nil
 }
+
+/*
+================
+EtcCarriesTradeOwner
+
+78C830: TID 3.3.8 reads the original trader string after the quantity.
+================
+*/
+func EtcCarriesTradeOwner(flags uint16) bool { return flags&0x7fe == 0x46c }

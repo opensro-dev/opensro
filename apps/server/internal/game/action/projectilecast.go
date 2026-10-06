@@ -153,9 +153,9 @@ func (rt *Runtime) advanceProjectileCasts(now int64) []simulation.DivisionFrames
 		// invalidate a waiting cast; checking only at release lets a
 		// temporary shortage disappear and resurrect an invalid command.
 		// Do not recheck the cooldown this preparation already installed,
-		// or recompute its immutable execution cost. Persistent effects
-		// and cost-free server-owned chain stages have separate owners.
-		if valid && !p.selfEffect && p.rootID == 0 {
+		// or recompute its immutable execution cost. Linked stages own fresh
+		// execution contexts and must retain the same resource check.
+		if valid && !p.selfEffect {
 			source := rt.deps.SkillData()
 			if source == nil {
 				valid = false

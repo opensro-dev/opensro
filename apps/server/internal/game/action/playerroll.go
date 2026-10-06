@@ -44,6 +44,7 @@ func (rt *Runtime) rollCreatureOnPlayer(division string, source uint32, level ui
 		return nil, nil
 	}
 	in := playerVictimRollInput(params, target, defender, wall)
+	rt.fileEffectResistance(division, target, &in.Resistance)
 	in.CasterLevel = level
 	in.SourceGID = source
 	random := &abnormalRandom{rt: rt, actor: criticalActor{division: division, monster: source}}
@@ -66,6 +67,7 @@ func (rt *Runtime) rollPlayerOnPlayer(division string, caster *enterworld.Charac
 	}
 	values := casterStats.SkillParameters
 	in := playerVictimRollInput(params, target, defender, wall)
+	rt.fileEffectResistance(division, target, &in.Resistance)
 	in.CasterLevel = casterStats.Level
 	in.CasterModifier = func(key uint32) (uint32, bool) {
 		slot, known := enterworld.SkillParameterFromKey(key)
@@ -113,4 +115,30 @@ func playerVictimRollInput(params *abnormal.SkillParams, target *enterworld.Char
 		in.TargetFlat[i] = param(abnormalFlatResistanceBase + uint16(i))
 	}
 	return in
+}
+
+/*
+==================
+fileEffectResistance
+
+59DF20 files a real under the execution context that installs it, so a
+resistance buff (Holy Word, Poison Circle) resists like a learned passive
+while its instance lives. The victim's installed effects join the learned
+buckets with the same highest-grade/highest-flat rule (combat.FileStatusResistance).
+==================
+*/
+func (rt *Runtime) fileEffectResistance(division string, target *enterworld.Character, buckets *[17]abnormal.Resistance) {
+	skills := rt.deps.SkillData()
+	if target == nil || skills == nil || rt.effects == nil {
+		return
+	}
+	var filed [17]bool
+	for i := range buckets {
+		filed[i] = buckets[i] != (abnormal.Resistance{})
+	}
+	for _, effect := range rt.effects.Snapshot(division, target.Name) {
+		if row, ok := skills.SkillByID(effect.SkillID); ok && row.TimedEffect.Pinned {
+			combat.FileStatusResistance(buckets, &filed, row.TimedEffect.Real)
+		}
+	}
 }

@@ -392,7 +392,7 @@ func TestImbueProjectileConsumesReleaseTimeEffect(t *testing.T) {
 			if burnSlot(after).Active {
 				t.Fatal("prepare applied burn")
 			}
-			due := now + 301
+			due := now + int64(arrow.ActionCastingTimeMs) + 1
 			if mode == "cancelled" {
 				effect := rt.effects.Snapshot(testDivision, c.Name)[0]
 				rt.HandleTargetInteract(testDivision, c, wire.CancelActiveEffectRequest{EffectID: fire.ID, InstanceToken: effect.InstanceToken}.Encode())

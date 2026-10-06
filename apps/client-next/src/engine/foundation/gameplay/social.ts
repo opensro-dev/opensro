@@ -9,98 +9,11 @@ is decoded completely before any state is published.
 
 ===========================================================================
 */
+import { GUILD_WAR_PROPOSAL, guildWarProposalReply, type GuildWarTerms } from "./guild-war";
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
-/*
-================
-PartyMember
-================
-*/
-export interface PartyMember {
-	readonly guild?: string;
-	readonly native41?: number;
-	// 75DB30 +0x50/+0x54 (mask bit 8): the member's main mastery ids, 0 when untrained.
-	readonly primaryMastery?: number;
-	readonly secondaryMastery?: number;
-	// Resolved from the member's model reference by the world catalog (0 China, 1 Europe).
-	readonly country?: number;
-	readonly id: number;
-	readonly name: string;
-	readonly model: number;
-	readonly level: number;
-	readonly status: number;
-	readonly region: number;
-	readonly x: number;
-	readonly y: number;
-	readonly z: number;
-	readonly war: number;
-}
-/*
-================
-GuildMember
-================
-*/
-export interface GuildMember {
-	readonly warScore?: number;
-	readonly warKills?: number;
-	readonly warDeaths?: number;
-	readonly id: number;
-	readonly name: string;
-	readonly grade: number;
-	readonly level: number;
-	readonly donated: number;
-	readonly permissions: number;
-	readonly grant: string;
-	readonly model: number;
-	readonly role: number;
-	readonly offline: number;
-}
-// One open guild vote (826610's vote tail, 0x3A6C type 1): the master
-// release vote is kind 0. remainingMs is as of its arrival.
-/*
-================
-GuildVote
-================
-*/
-export interface GuildVote {
-	readonly id: number;
-	readonly kind: number;
-	readonly remainingMs: number;
-}
-/*
-================
-Guild
-================
-*/
-export interface Guild {
-	readonly votes?: readonly GuildVote[];
-	readonly crest?: number;
-	readonly flags?: number;
-	readonly id: number;
-	readonly name: string;
-	readonly level: number;
-	readonly gp: number;
-	readonly subject: string;
-	readonly contents: string;
-	readonly members: readonly GuildMember[];
-}
-// 75AD90 / 828D50: peer-relative projection; retain opaque native words by offset.
-/*
-================
-GuildWar
-================
-*/
-export interface GuildWar {
-	readonly id: number;
-	readonly enemyId: number;
-	readonly name: string;
-	readonly type: number;
-	readonly localScore: number;
-	readonly enemyScore: number;
-	readonly word38: number;
-	readonly word3c: number;
-	readonly ending?: boolean;
-}
+import type { PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
+export type { PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 // The 0x3393 type a resurrection skill proposes to a dead player.
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
@@ -114,6 +27,14 @@ SocialState
 */
 export interface SocialState {
 	readonly wars?: readonly GuildWar[];
+	readonly warPending?: 0 | 1 | 2;
+	readonly warCountdown?: { readonly remaining: number; readonly nextAt: number; };
+	readonly warResult?: {
+		readonly key: string;
+		readonly additionalKey?: string;
+		readonly names: readonly string[];
+		readonly sequence: number;
+	};
 	readonly roleUpdates?: readonly { name: string; role: number; }[];
 	readonly crestUpdates?: readonly {
 		name: string;
@@ -139,7 +60,8 @@ export interface SocialState {
 	readonly allianceMaster?: number;
 	readonly allianceCrests?: readonly [number, number];
 	readonly invitation: {
-		readonly type: 1 | 2 | 3 | 5 | 6;
+		readonly type: 1 | 2 | 3 | 5 | 6 | 10;
+		readonly war?: GuildWarTerms;
 		readonly options?: number;
 		readonly gid: number;
 	} | null;
@@ -211,12 +133,14 @@ server-emitted arms enter this projection.
 export function socialPacket(
 	state: SocialState,
 	frame: WireFrame,
-	noticeContext: NativeNoticeContext = {}
+	noticeContext: NativeNoticeContext & { readonly now?: number; } = {}
 ): SocialState | null {
 	const op = frame.opcode, p = frame.payload;
 	if (
 		![
 			0x3393,
+			0xb71b,
+			0xb465,
 			0xb0d5,
 			0xb452,
 			0xb51a,
@@ -386,7 +310,8 @@ export function socialPacket(
 			localScore: local === a ? scoreA : scoreB,
 			enemyScore: local === a ? scoreB : scoreA,
 			word38,
-			word3c
+			word3c,
+			clockAt: noticeContext.now ?? 0
 		};
 	}
 	/*
@@ -443,7 +368,7 @@ export function socialPacket(
 		} else throw Error( "Unsupported crest update" );
 		next = { ...next, crestUpdates: updates };
 	} else if ( op === 0x32bb ) {
-		let wars = state.wars ?? [];
+		let wars: readonly GuildWar[] = state.wars ?? [];
 		const count = u8();
 		for ( let i = 0; i < count; i++ ) wars = mergeWar( wars, readWar() );
 		next = { ...next, wars };
@@ -462,11 +387,14 @@ export function socialPacket(
 		const type = u8();
 		if (
 			type !== 1 && type !== 2 && type !== 3 && type !== RESURRECTION_PROPOSAL && type !== 5 &&
-			type !== UNION_PROPOSAL && type !== MUTATION_PROPOSAL
+			type !== UNION_PROPOSAL && type !== MUTATION_PROPOSAL && type !== GUILD_WAR_PROPOSAL
 		) {
 			return null;
 		}
 		const gid = u32();
+		const war = type === GUILD_WAR_PROPOSAL ?
+			{ name: str(), mode: u8(), period: u32(), scoreIndex: u8(), stake: u32() } :
+			undefined;
 		if ( !gid ) {
 			throw Error( "Invalid invitation" );
 		}
@@ -474,10 +402,25 @@ export function socialPacket(
 		// They fill their own slot and leave a pending invitation untouched.
 		next = type === RESURRECTION_PROPOSAL || type === MUTATION_PROPOSAL ?
 			{ ...next, resurrection: { gid, ...(type === MUTATION_PROPOSAL ? { mutation: true } : {}) } } :
-			{ ...next, invitation: { type, gid, ...(type === 2 || type === 3 ? { options: u8() } : {}) } };
+			{
+				...next,
+				...(war ? { warPending: 2 as const } : {}),
+				invitation: {
+					type,
+					gid,
+					...(war ? { war } : {}),
+					...(type === 2 || type === 3 ? { options: u8() } : {})
+				}
+			};
 	} // 75B450 / 75B4B0 / 75B520 use category ONE, unlike invite failures.
 	// Membership remains authoritative on 3E58, not these acknowledgements.
-	else if ( op === 0xb095 || op === 0xb34a || op === 0xb2db ) {
+	else if ( op === 0xb71b || op === 0xb465 ) {
+		if ( op === 0xb71b ) next = { ...next, warPending: 0 };
+		if ( u8() === 2 ) {
+			const resolution = resolveNativeNotice( 0x10, u8(), noticeContext );
+			next = { ...next, notice: resolution.kind === "notice" ? resolution.notice : undefined };
+		}
+	} else if ( op === 0xb095 || op === 0xb34a || op === 0xb2db ) {
 		if ( u8() === 2 ) {
 			const resolution = resolveNativeNotice( 1, u8(), noticeContext );
 			next = {
@@ -620,24 +563,21 @@ export function socialPacket(
 		if ( type === 0 || guildUpdateIgnored( type ) ) o = p.length;
 		else if ( type === 0x32 ) {
 			// 76309C: 0 refuses the proposal, 2 times a pending one out, and 3
-			// opens the native suggestion dialog, which no owner here renders.
+			// opens the two-line native suggestion dialog (7632F5).
 			const result = u8();
-			if ( result === 0 || result === 2 ) {
-				const name = str();
-				next = {
-					...next,
-					notice: {
-						key: result === 0 ?
-							"UIIT_MSG_GUILDWAR_WARREFUSAL" :
-							"UIIT_MSG_GUILDWARERR_REQUISITION_TIME_OUT",
-						value: 0,
-						text: name
-					}
-				};
-			}
+			next = guildWarProposalReply( next, result, result === 0 || result === 2 ? str() : "" );
 			// Every other reply, including the suggestion dialog, reads no body.
 		} else if ( type === 1 ) {
-			next = { ...next, guild: null, alliances: [], allianceMaster: 0, allianceCrests: undefined, wars: [] };
+			next = {
+				...next,
+				guild: null,
+				alliances: [],
+				allianceMaster: 0,
+				allianceCrests: undefined,
+				wars: [],
+				warCountdown: undefined,
+				warResult: undefined
+			};
 		} else {
 			if ( !next.guild ) {
 				throw Error( "Guild update without baseline" );
@@ -682,14 +622,65 @@ export function socialPacket(
 					alliances: clear ? [] : next.alliances?.filter( a => a.id !== id ),
 					...(clear ? { allianceCrests: undefined, allianceMaster: 0 } : {})
 				};
-			} else if ( type === 0x19 ) next = { ...next, wars: mergeWar( next.wars ?? [], readWar() ) };
-			else if ( type === 0x1a || type === 0x1b ) {
+			} else if ( type === 0x19 ) {
+				const row = readWar();
+				next = {
+					...next,
+					wars: mergeWar( next.wars ?? [], row ),
+					...(row ?
+						{
+							notice: {
+								key: "UIIT_MSG_GUILDWAR_GOTOWAR",
+								value: 0,
+								arguments: [ guild.name, row.name ],
+								notificationBanner: true,
+								bannerOnly: true
+							}
+						} :
+						{})
+				};
+			} else if ( type === 0x1a || type === 0x1b ) {
 				const id = u32();
-				next = { ...next, wars: next.wars?.map( w => w.id === id ? { ...w, ending: true } : w ) };
+				const row = next.wars?.find( w => w.id === id );
+				next = {
+					...next,
+					wars: next.wars?.map( w => w.id === id ? { ...w, ending: true } : w ),
+					...(row ?
+						{
+							warCountdown: { remaining: 60, nextAt: (noticeContext.now ?? 0) + 1000 },
+							warResult: {
+								sequence: (state.warResult?.sequence ?? 0) + 1,
+								key: "UIIT_CTL_GUILDWAR_ENDCOUNT",
+								names: [ guild.name, row.name ]
+							},
+							notice: {
+								key: "UIIT_MSG_GUILDWAR_END_COUNTDOWN",
+								value: 60,
+								notificationBanner: true,
+								bannerOnly: true
+							}
+						} :
+						{})
+				};
 			} else if ( type === 0x1c ) {
 				const id = u32();
-				u32();
-				next = { ...next, wars: next.wars?.filter( w => w.id !== id ) };
+				const winner = u32(), row = next.wars?.find( w => w.id === id );
+				next = {
+					...next,
+					wars: next.wars?.filter( w => w.id !== id ),
+					warCountdown: undefined,
+					...(row ?
+						{
+							warResult: {
+								sequence: (state.warResult?.sequence ?? 0) + 1,
+								key: winner === guild.id ?
+									"UIIT_MSG_GUILDWAR_WINERGUILD" :
+									"UIIT_MSG_GUILDWAR_LOSEGUILD",
+								names: [ row.name ]
+							}
+						} :
+						{})
+				};
 			} else if ( type === 0x1d ) {
 				const mode = u8(), id = u32(), delta = u32(), memberId = u32();
 				if ( !str() ) str();
@@ -723,7 +714,10 @@ export function socialPacket(
 				};
 			} else if ( type === 0x1f ) {
 				const id = u32(), word3c = u32();
-				next = { ...next, wars: next.wars?.map( w => w.id === id ? { ...w, word3c } : w ) };
+				next = {
+					...next,
+					wars: next.wars?.map( w => w.id === id ? { ...w, word3c, clockAt: noticeContext.now ?? 0 } : w )
+				};
 			} else if ( type === 0x23 ) {
 				const enemyId = u32(), name = str();
 				next = { ...next, wars: next.wars?.map( w => w.enemyId === enemyId ? { ...w, name } : w ) };
@@ -742,7 +736,9 @@ export function socialPacket(
 						alliances: [],
 						allianceMaster: 0,
 						allianceCrests: undefined,
-						wars: []
+						wars: [],
+						warCountdown: undefined,
+						warResult: undefined
 					};
 				}
 				guild = { ...guild, members: guild.members.filter( m => m.id !== id ) };
@@ -876,7 +872,16 @@ export function socialPacket(
 		} else if ( op === 0xb663 ) {
 			next = { ...next, guild: guildBlock() };
 		} else if ( op === 0xb56e || op === 0xb66e ) {
-			next = { ...next, guild: null, alliances: [], allianceMaster: 0, allianceCrests: undefined, wars: [] };
+			next = {
+				...next,
+				guild: null,
+				alliances: [],
+				allianceMaster: 0,
+				allianceCrests: undefined,
+				wars: [],
+				warCountdown: undefined,
+				warResult: undefined
+			};
 		} else if ( op === 0xb40f ) {
 			// 766B52: acknowledgement is a guide, not an SP/GP mutation.
 			const amount = u32();

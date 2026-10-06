@@ -1048,6 +1048,29 @@ test("Academy main popup and matching board have separate native entry lifecycle
 	}
 });
 
+test("the player panel selects the local character and frames itself while selected", () => {
+	const sent = [], f = uiFixture( c => sent.push( c ) );
+	const framed = () => f.scenes.at( -1 ).quads.some( q => q.texture?.endsWith( "/playerminiinfo/pmi_select.png" ) );
+	try {
+		let semantics;
+		for ( let t = 0; t < 1200; t += 100 ) semantics = f.ui.step( f.state, t ) ?? semantics;
+		const panel = semantics.controls.find( c => c.id === "self-target" );
+		assert.ok( panel );
+		// The panel's own buttons stay above it.
+		const order = id => semantics.controls.findIndex( c => c.id === id );
+		assert.ok( order( "ability-details" ) > order( "self-target" ) );
+		assert.equal( framed(), false );
+		sent.length = 0;
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		assert.deepEqual( sent.map( c => c.command ), [ { kind: "select", gid: f.state.gameplay.localGid } ] );
+		f.state.gameplay = { ...f.state.gameplay, target: f.state.gameplay.localGid };
+		for ( let t = 1200; t < 2400; t += 100 ) f.ui.step( f.state, t );
+		assert.equal( framed(), true );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("contextual Shop entry leaves Alchemy through the same lifecycle; locked Magic Pop rejects entry", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {
@@ -4902,6 +4925,42 @@ test("an attack pet shows its mini window under the player mini window", () => {
 		f.state.gameplay.cosRecords = [ { ...f.state.gameplay.cosRecords[0], band: 4 } ];
 		for ( let i = 0; i < 5; i++ ) f.ui.step( f.state, 1100 + i );
 		assert.ok( !f.hasText( "Fang" ), "a pickup pet has no mini window" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the player panel draws native siege rank and guild status and removes them on war end", () => {
+	const f = uiFixture( () => {} );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			social: { ...f.state.gameplay.social, guild: { id: 1, name: "Owner", members: [] } },
+			fortress: {
+				...f.state.gameplay.fortress,
+				worldId: 7,
+				listId: 1,
+				worlds: [ { id: 7, code: "FORTRESS_JANGAN" } ],
+				fortresses: [ { id: 1, code: "FORTRESS_JANGAN", nameStrId: "FORTRESS_NAME" } ],
+				wars: [ { id: 1, name: "Owner", flags: 1, stoneWait: 29 } ],
+				localKills: 150,
+				localDeaths: 3
+			}
+		};
+		let semantics;
+		for ( let t = 0; t < 1200; t += 100 ) semantics = f.ui.step( { ...f.state }, t ) ?? semantics;
+		assert.ok( semantics.controls.some( c => c.id === "GDR_PMI_BATTLE_GRADE" ) );
+		assert.ok( semantics.controls.some( c => c.id === "GDR_PMI_FORTRESS_INFO" && c.helpText.includes( "Owner" ) ) );
+		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture?.endsWith( "/rank_combat_commander.png" ) ) );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			fortress: { ...f.state.gameplay.fortress, wars: [ { id: 1, name: "Owner", flags: 0 } ] }
+		};
+		for ( let t = 1200; t < 2400; t += 100 ) semantics = f.ui.step( { ...f.state }, t ) ?? semantics;
+		assert.ok(
+			!semantics.controls.some( c => [ "GDR_PMI_BATTLE_GRADE", "GDR_PMI_FORTRESS_INFO" ].includes( c.id ) ),
+			JSON.stringify( semantics.controls.filter( c => c.id.includes( "PMI" ) ) )
+		);
 	} finally {
 		f.dispose();
 	}

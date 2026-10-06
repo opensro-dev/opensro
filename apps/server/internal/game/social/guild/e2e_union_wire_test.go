@@ -23,6 +23,7 @@ import (
 	presence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/game/social/guild"
+	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/simulation"
@@ -43,7 +44,7 @@ startUnionServer
 The invite server's composition plus the union lane as its consent arm.
 ================
 */
-func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (*transport.Server, *store.Store, *guild.UnionRuntime) {
+func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (*transport.Server, *store.Store, *guild.UnionRuntime, *guild.WarRuntime) {
 	t.Helper()
 	authority, err := store.Open(dir, store.Options{DefaultSkills: guildSkillSeeder})
 	if err != nil {
@@ -85,10 +86,20 @@ func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (
 		t.Fatal(err)
 	}
 	lane := guild.NewUnionRuntime(deps, directory, unions, nil)
+	warOwner, err := guildwar.New(guildE2EDivision, authority.GuildWars())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wars := guild.NewWarRuntime(deps, directory, lane, warOwner)
+	wars.Near = func(string, *enterworld.Character, *enterworld.Character) bool { return true }
+	lane.GuildWars = warOwner
 	communitySeeds := community.SeedFramesFunc(directory, deps.Letters)
 	deps.CommunitySeedFramesFor = func(divisionID string, character *enterworld.Character) []enterworld.Packet {
 		frames := guild.AppendSeedFrame(communitySeeds(divisionID, character), deps.Guilds, directory, divisionID, character)
 		if frame, ok := lane.SeedFrame(divisionID, character); ok {
+			frames = append(frames, frame)
+		}
+		if frame, ok := wars.SeedFrame(divisionID, character); ok {
 			frames = append(frames, frame)
 		}
 		return frames
@@ -98,6 +109,7 @@ func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (
 		return simulation.Spawn{RegionID: 0x6A48, X: 900, Z: 900}
 	})
 	parties.AddConsentArm(lane)
+	parties.AddConsentArm(wars)
 	lane.PeerPending = parties.Registry().HasPendingInviteFor
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {
 		srv.Hub.BindExclusive(presence.BindKey(divisionID, character.Name), s)
@@ -106,16 +118,18 @@ func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (
 	srv.Hub.OnSessionClose(func(s *transport.Session, _ error) {
 		parties.SessionClosed(s)
 		lane.SessionClosed(s)
+		wars.SessionClosed(s)
 	})
 	enterworld.Register(srv.Hub, deps)
 	parties.Register(srv.Hub)
 	guild.Register(srv.Hub, deps, directory, nil, lane)
 	lane.Register(srv.Hub)
+	wars.Register(srv.Hub)
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { guildShutdownServer(t, srv) })
-	return srv, authority, lane
+	return srv, authority, lane, wars
 }
 
 /*
@@ -176,7 +190,7 @@ func TestUnionFoundAndDissolveOverWire(t *testing.T) {
 		{Name: unionE2ENameF, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: race(), Gender: gender()},
 		{Name: unionE2ENameG, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: race(), Gender: gender()},
 	}
-	srv, authority, lane := startUnionServer(t, dir, seeds)
+	srv, authority, lane, _ := startUnionServer(t, dir, seeds)
 	echo := guildE2ECharacter(t, authority, unionE2ENameE)
 	fox := guildE2ECharacter(t, authority, unionE2ENameF)
 	golf := guildE2ECharacter(t, authority, unionE2ENameG)
@@ -185,10 +199,10 @@ func TestUnionFoundAndDissolveOverWire(t *testing.T) {
 
 	connE := guildDialWS(t, srv)
 	guildHelloWS(t, connE)
-	guildEnterWorld(t, connE, unionE2ENameE)
+	guildEnterWorldWithWar(t, connE, unionE2ENameE)
 	connF := guildDialWS(t, srv)
 	guildHelloWS(t, connF)
-	guildEnterWorld(t, connF, unionE2ENameF)
+	guildEnterWorldWithWar(t, connF, unionE2ENameF)
 	connG := guildDialWS(t, srv)
 	guildHelloWS(t, connG)
 	guildEnterWorldSeeds(t, connG, unionE2ENameG)

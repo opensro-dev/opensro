@@ -284,6 +284,10 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
 	}
+	if row.TimedEffect.Pinned && row.TimedEffect.Reat.Mask != 0 {
+		// 595542..59568F: a buff's reat, as a resistance passive's.
+		writes = append(writes, combat.StatusReductionWrites(row.TimedEffect.Reat)...)
+	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Defense {
 		stats, _, err := rt.playerCombatStats(divisionID, character)
 		if err != nil {
@@ -518,7 +522,7 @@ func (rt *Runtime) entrySkillsAt(divisionID, characterName string, nowMs int64) 
 	for _, effect := range rows {
 		// 59CDC0 omits source-phase linked rows from ordinary spawn effects;
 		// they use the private B5ED relationship presentation instead.
-		if effect.LinkToken != 0 && effect.Phase == 1 {
+		if (effect.LinkToken != 0 || effect.SourceTargetGID != 0) && effect.Phase == 1 {
 			continue
 		}
 		if effect.StopRequested || effect.Expired(nowMs) {

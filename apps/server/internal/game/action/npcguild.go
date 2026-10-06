@@ -44,7 +44,8 @@ const (
 
 	// guildNpcRefused is the answer to a request whose NPC is missing,
 	// out of range or without the guild service.
-	guildNpcRefused uint8 = 0x03
+	guildNpcRefused        uint8 = 0x03
+	guildMasterFortressWar uint8 = 0x5d
 )
 
 /*
@@ -148,8 +149,8 @@ HandleGuildMasterLeave
 member (v1.188 5C6900, guild job 0x13). The member becomes grade 0 with
 the master's permissions. INFERENCE: the shard's job is unseen; the old
 master keeps the guild as an ordinary joiner (guild.JoinerGrade, no
-permissions). v1.188's guild-war and siege-title refusals (0x4C5D,
-0x4C55) have no v1.150 notice and no owner in this port.
+permissions). The 5C5760 fortress-war refusal reads the existing fortress
+authority; client category 0x10 code 0x5D names the corresponding notice.
 ================
 */
 func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Character, payload []byte) OpResult {
@@ -170,8 +171,13 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 	}
 	code := uint8(0)
 	var master, heir domain.GuildMemberRecord
+	blockedByFortress := c.GuildID != nil && rt.Fortresses != nil && rt.Fortresses.GuildInWar(division, *c.GuildID)
 	snapshot, refusal := store.UpdateGuildAs(division, c.ID, "guild-master-leave", domain.GuildAuthorization{LeaderOnly: true},
 		func(record domain.GuildRecord, members []domain.GuildMemberRecord) (domain.GuildRecord, []domain.GuildMemberRecord, bool) {
+			if blockedByFortress {
+				code = guildMasterFortressWar
+				return record, members, false
+			}
 			from, to := -1, -1
 			for index, member := range members {
 				if member.CharID == c.ID {

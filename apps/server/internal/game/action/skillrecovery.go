@@ -92,10 +92,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	resu := skill.Abnormal.AdmitDeadParty
 	targeted := ((skill.Heal.Present && !skill.Aura.Eshp) || resu) && skill.TargetRequired
 	partyHeal := skill.Recovery.PartyHealPinned
+	lowestHeal := skill.Recovery.LowestHealPinned
 	partyResu := skill.Recovery.PartyResurrectPinned
 	overTime := skill.Recovery.HealOverTimePinned
 	partyOverTime := overTime && !skill.TargetRequired
-	supported := skill.Recovery.SelfFlatPinned || cure || targeted || partyHeal || partyResu || partyOverTime
+	supported := skill.Recovery.SelfFlatPinned || cure || targeted || partyHeal || lowestHeal || partyResu || partyOverTime
 	selfHealOnly := skill.Recovery.SelfFlatPinned && !cure && !targeted
 	casterReady := enterworld.SkillLearned(snapshot, skill.ID) &&
 		enterworld.CharacterAlive(snapshot)
@@ -198,15 +199,34 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	if targeted && !resu && !overTime {
 		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, now)
 	}
+	// Healing Division: the lowest HP ratio of the party around the caster
+	// takes the whole heal, the members nearest it the reduction's share.
+	var lowest *enterworld.Character
+	if lowestHeal {
+		area := skill.Abnormal.EffectArea
+		var set []*enterworld.Character
+		for _, gid := range rt.partyCureTargets(division, snapshot, area.Radius, area.Select&1 != 0, false, now) {
+			if member := rt.characterSnapshot(division, rt.findCharacterByGid(division, gid)); member != nil {
+				set = append(set, member)
+			}
+		}
+		if lowest = rt.lowestChainHealTarget(division, set); lowest == nil {
+			return OpResult{DiagnosticRefusal: "recovery-admission-refused"}, skillCastRefused
+		}
+		at := rt.liveSpawn(simulation.WorldKey(division, lowest.Name), lowest, now)
+		secondary = rt.secondaryHealTargets(division, snapshot, lowest, at, area, now)
+	}
 	casterGID := enterworld.ObjectIDForCharacter(snapshot)
 	healCaster := !overTime && (skill.Recovery.SelfFlatPinned ||
 		targeted && recipient == character ||
-		partyHeal && slices.Contains(party, casterGID))
+		partyHeal && slices.Contains(party, casterGID) ||
+		lowest != nil && lowest.ID == snapshot.ID)
 
 	var refusal uint16
 	var vitals wire.Frame
 	var cureActor, curePublic []wire.Frame
 	var cureRecipients []RecipientFrames
+	selfThreat := makeSkillHealingThreat(division, character, character, skill)
 
 	if !rt.deps.Update(character, "skill-self-recovery", func() bool {
 		if !enterworld.CharacterAlive(character) || !enterworld.SkillLearned(character, skill.ID) {
@@ -237,7 +257,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		// self heal (Rave Melody) publish a charge-only 0x33A6; the other
 		// support rows keep the caster frames they always had
 		// (supportCostVitals).
-		chargeVitals := partyHeal || partyResu || overTime ||
+		chargeVitals := partyHeal || lowestHeal || partyResu || overTime ||
 			skill.Recovery.SelfFlatPinned && cost.hp != 0
 		if !healCaster {
 			if chargeVitals {
@@ -251,6 +271,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			return false
 		}
 
+		selfThreat.amount = hp + mp
 		vitals, ok = rt.applySkillRecovery(division, character, hp, mp)
 		if ok && vitals.Opcode == 0 && chargeVitals {
 			vitals = rt.supportCostVitals(division, character, cost)
@@ -264,6 +285,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		return OpResult{DiagnosticRefusal: "recovery-commit-refused"}, skillCastRefused
 	}
 
+	rt.publishSkillHealingThreat(selfThreat, now)
 	switch {
 	case overTime:
 		recipients := []*enterworld.Character{recipient}
@@ -277,7 +299,14 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	case partyResu:
 		cureRecipients = append(cureRecipients, rt.proposePartyResurrection(division, snapshot, skill, party, now)...)
 	case partyHeal:
-		cureRecipients = append(cureRecipients, rt.applyPartyHeal(division, character, skill, party, fullHealPercent)...)
+		cureRecipients = append(cureRecipients, rt.applyPartyHeal(partyHealRequest{
+			division: division, caster: character, skill: skill, targets: party, percent: fullHealPercent, now: now})...)
+	case lowestHeal:
+		if lowest.ID != character.ID {
+			cureRecipients = append(cureRecipients, rt.applyPartyHeal(partyHealRequest{
+				division: division, caster: character, skill: skill,
+				targets: []uint32{enterworld.ObjectIDForCharacter(lowest)}, percent: fullHealPercent, now: now})...)
+		}
 	case resu:
 		if prompt := rt.proposeResurrection(division, snapshot, recipientView, skill, now); len(prompt) != 0 {
 			cureRecipients = append(cureRecipients, RecipientFrames{
@@ -287,6 +316,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		}
 	case targeted && recipient != character:
 		var frame wire.Frame
+		healingThreat := makeSkillHealingThreat(division, character, recipient, skill)
 		if !rt.deps.Update(recipient, "skill-target-heal", func() bool {
 			hp, mp, ok := rt.skillHealAmounts(division, recipient, character, skill, healCast)
 			if !ok {
@@ -294,12 +324,14 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			}
 
 			var applied bool
+			healingThreat.amount = hp + mp
 			frame, applied = rt.applySkillRecovery(division, recipient, hp, mp)
 			return applied
 		}) {
 			return OpResult{DiagnosticRefusal: "recovery-commit-refused"}, skillCastRefused
 		}
 
+		rt.publishSkillHealingThreat(healingThreat, now)
 		if frame.Opcode != 0 {
 			cureRecipients = append(cureRecipients, RecipientFrames{
 				CharacterID: recipient.ID,
@@ -309,7 +341,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	}
 	if len(secondary) != 0 {
 		share := fullHealPercent - skill.Abnormal.EffectArea.Reduction
-		cureRecipients = append(cureRecipients, rt.applyPartyHeal(division, character, skill, secondary, share)...)
+		for _, gid := range secondary {
+			cureRecipients = append(cureRecipients, rt.applyPartyHeal(partyHealRequest{
+				division: division, caster: character, skill: skill, targets: []uint32{gid}, percent: share, now: now})...)
+			share = share * (fullHealPercent - skill.Abnormal.EffectArea.Reduction) / fullHealPercent
+		}
 	}
 
 	var token uint32
@@ -400,11 +436,28 @@ func (rt *Runtime) supportCostVitals(division string, caster *enterworld.Charact
 }
 
 /*
+================
+partyHealRequest
+
+All recipients share the cast's authoritative release instant.
+================
+*/
+type partyHealRequest struct {
+	division string
+	caster   *enterworld.Character
+	skill    enterworld.SkillRow
+	targets  []uint32
+	percent  uint32
+	now      int64
+}
+
+/*
 ==================
 applyPartyHeal
 
-The 5A0850 heal for every party entry but the caster, whose own heal ran
-inside its door. Each member is healed inside its own door and receives its
+The 5A0850 heal for selected party entries. Ordinary party healing already
+healed the caster inside its door; a chain can select the caster as a secondary
+recipient. Each member is healed inside its own door and receives its
 0x33A6 frame alone. Inferred: a member whose door refuses (gone, or its
 stats unavailable) is skipped, since the caster has already paid and the
 others are still healed.
@@ -414,11 +467,12 @@ a party heal, less for the secondary targets of a shape-6 heal
 (secondaryHealTargets).
 ==================
 */
-func (rt *Runtime) applyPartyHeal(division string, caster *enterworld.Character, skill enterworld.SkillRow, party []uint32, percent uint32) []RecipientFrames {
+func (rt *Runtime) applyPartyHeal(request partyHealRequest) []RecipientFrames {
+	division, caster, skill, percent := request.division, request.caster, request.skill, request.percent
 	casterGID := enterworld.ObjectIDForCharacter(caster)
 	var out []RecipientFrames
-	for _, gid := range party {
-		if gid == casterGID {
+	for _, gid := range request.targets {
+		if gid == casterGID && skill.Abnormal.EffectArea.Shape != healSecondaryShape {
 			continue
 		}
 		member := rt.findCharacterByGid(division, gid)
@@ -427,26 +481,50 @@ func (rt *Runtime) applyPartyHeal(division string, caster *enterworld.Character,
 		}
 
 		var frame wire.Frame
+		healingThreat := makeSkillHealingThreat(division, caster, member, skill)
 		if !rt.deps.Update(member, "skill-party-heal", func() bool {
-			hp, mp, ok := rt.skillHealAmounts(division, member, caster, skill, healCast)
+			hp, mp, ok := rt.skillHealShareAmounts(division, member, caster, skill, percent)
 			if !ok {
 				return false
 			}
-			if percent != fullHealPercent {
-				hp = hp * int64(percent) / fullHealPercent
-				mp = mp * int64(percent) / fullHealPercent
-			}
 
 			var applied bool
+			healingThreat.amount = hp + mp
 			frame, applied = rt.applySkillRecovery(division, member, hp, mp)
 			return applied
-		}) || frame.Opcode == 0 {
+		}) {
+			continue
+		}
+		rt.publishSkillHealingThreat(healingThreat, request.now)
+		if frame.Opcode == 0 {
 			continue
 		}
 
 		out = append(out, RecipientFrames{CharacterID: member.ID, Frames: []wire.Frame{frame}})
 	}
 	return out
+}
+
+/*
+================
+lowestChainHealTarget
+
+58C660 sorts party candidates using 58C0E0's double-precision HP ratio.
+Unlike the persistent aura's 584D95 scan, zero is not an unset sentinel.
+Stable ties retain the party vector order (the party has at most eight).
+================
+*/
+func (rt *Runtime) lowestChainHealTarget(division string, set []*enterworld.Character) *enterworld.Character {
+	var who *enterworld.Character
+	var lowest float64
+	for _, one := range set {
+		maxHP, _, currentHP, _ := rt.playerKeeperVitals(division, one)
+		ratio := float64(currentHP) / float64(maxHP) * 100
+		if who == nil || ratio < lowest {
+			who, lowest = one, ratio
+		}
+	}
+	return who
 }
 
 /*
@@ -457,15 +535,12 @@ The secondary half of a targeted heal whose efr is shape 6 (Mana Wind,
 efr(1,6,100,3,50,4)): up to MaxTargets - 1 other living members of the
 caster's party within the radius of the primary target's position, the
 nearest first (the offensive shape 6 orders its secondary victims by
-centre distance from the primary, skillarea.go), ties in gid order. Rows
+centre distance from the primary, skillarea.go), ties in roster order. Rows
 without a shape-6 party efr return nothing.
 
-Owner's rule 8 (Bard specification): Mana Wind gives MP to the target and
-50 % to up to 2 nearby members. Inferred: each secondary receives the
-reduction word's share of the full heal (applyPartyHeal), not the offense's
-compounding 100 / 50 / 25 %; the caster is never a secondary, as the
-shipped select word 4 leaves it out of 58BEF0; and the secondaries are
-resolved at release, before the caster's door, like the party vector.
+58C9C2..58CA28 assigns the current percentage to the recipient, then
+multiplies it by (100 - reduction) / 100 with truncation for the next.
+Select bit 0 includes the caster in the chain candidates (58C5E0).
 ==================
 */
 func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterworld.Character, center simulation.Spawn, area abnormal.EffectArea, now int64) []uint32 {
@@ -479,6 +554,12 @@ func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterw
 		distance float64
 	}
 	var near []candidate
+	if area.Select&1 != 0 && caster.ID != primary.ID {
+		at := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
+		if partyAreaReach(center, at, area.Radius) {
+			near = append(near, candidate{gid: enterworld.ObjectIDForCharacter(caster), distance: distance3D(center, at)})
+		}
+	}
 	for _, gid := range rt.partyMembersAround(division, caster, center, area.Radius, false, now) {
 		other := rt.findCharacterByGid(division, gid)
 		if gid == primaryGID || other == nil {
@@ -487,12 +568,7 @@ func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterw
 		at := rt.liveSpawn(simulation.WorldKey(division, other.Name), other, now)
 		near = append(near, candidate{gid: gid, distance: distance3D(center, at)})
 	}
-	sort.Slice(near, func(i, j int) bool {
-		if near[i].distance != near[j].distance {
-			return near[i].distance < near[j].distance
-		}
-		return near[i].gid < near[j].gid
-	})
+	sort.SliceStable(near, func(i, j int) bool { return near[i].distance < near[j].distance })
 
 	out := make([]uint32, 0, len(near))
 	for _, one := range near {

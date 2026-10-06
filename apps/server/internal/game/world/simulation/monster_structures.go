@@ -207,3 +207,24 @@ func (s *MonsterState) RestoreStructure(divisionID string, gid uint32, hp uint32
 	population.instances.set(gid, row)
 	return true
 }
+
+/*
+================
+HealStructure
+
+The population remains the only HP owner. A destroyed structure cannot be
+revived by a delayed pulse after its target snapshot was taken.
+================
+*/
+func (s *MonsterState) HealStructure(division string, gid uint32, amount uint32) (monster.Instance, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	population := s.populationForObject(division, gid)
+	row, ok := population.instances.lookup(gid)
+	if !ok || !row.Ref.Structure || row.CurrentHP == 0 || row.StructureState&structureStateDestroyed != 0 {
+		return monster.Instance{}, false
+	}
+	row.CurrentHP += min(amount, row.EffectiveMaxHP()-row.CurrentHP)
+	population.instances.set(gid, row)
+	return row, true
+}

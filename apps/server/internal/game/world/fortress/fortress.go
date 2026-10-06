@@ -33,14 +33,19 @@ One fortress row: the CRefSiegeFortress identity joined to its live state.
 ================
 */
 type Record struct {
-	ID       uint32
-	CodeName string
+	// _SiegeFortress +0x30: hired staff, independent of the war period.
+	StaffFlags uint8
+	ID         uint32
+	CodeName   string
 	// GuildID is the occupying guild (_SiegeFortress.GuildID); zero when
 	// nobody holds the fortress.
 	GuildID int64
 	// TempGuildID holds the fortress between a war's capture and its end
 	// (UPDATE _SiegeFortress SET TempGuildID).
 	TempGuildID int64
+	// 61DA40 serializes the signed tax ratio and accumulated tax gold.
+	TaxRate int16
+	TaxGold int64
 	// MaxEntrance, RequestFee and OfficialNpc copy the catalog row.
 	MaxEntrance uint32
 	RequestFee  uint64
@@ -56,6 +61,8 @@ type Record struct {
 	EntryOpen bool
 	// The capture state of a running war (capture.go).
 	capture
+	battles           map[int64]domain.FortressBattleRecord
+	battleCheckpoints map[int64]domain.FortressBattleRecord
 }
 
 /*
@@ -206,6 +213,8 @@ func (a *Authority) Get(divisionID string, fortressID uint32) (Record, bool) {
 		return Record{}, false
 	}
 	copied := *record
+	copied.battleCheckpoints = nil
+	copied.battles = nil // Scores are read through BattleRecord, never a mutable map alias.
 	copied.Applicants = make(map[int64]RequestKind, len(record.Applicants))
 	for guild, kind := range record.Applicants {
 		copied.Applicants[guild] = kind

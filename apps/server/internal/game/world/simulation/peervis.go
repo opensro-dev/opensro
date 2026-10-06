@@ -34,9 +34,10 @@ PeerAppearance
 ================
 */
 type PeerAppearance struct {
-	PVPState  uint8
-	EventTeam *uint8
-	Walk, Run float32
+	PVPState    uint8
+	EventTeam   *uint8
+	Walk, Run   float32
+	ActionSpeed float32
 	// RefObjID is the character-model RefObjData id (character.ModelRef,
 	// the same record the local player resolves through sub_850c60).
 	RefObjID uint32
@@ -108,6 +109,10 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 	if run <= 0 {
 		run = RunSpeed
 	}
+	actionSpeed := appearance.ActionSpeed
+	if actionSpeed <= 0 {
+		actionSpeed = PeerScaleDenom
+	}
 	row := wire.PlayerSpawnRow{
 		RefObjID:      appearance.RefObjID,
 		BodyShapeByte: appearance.BodyShapeByte,
@@ -124,7 +129,7 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 		},
 		WalkSpeed:          walk,
 		RunSpeed:           run,
-		ScaleDenom:         PeerScaleDenom,
+		ScaleDenom:         actionSpeed,
 		Name:               appearance.Name,
 		JobType:            appearance.JobType,
 		JobGrade:           appearance.JobGrade,

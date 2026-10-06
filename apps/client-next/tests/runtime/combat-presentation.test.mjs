@@ -294,14 +294,14 @@ test("authored impact events produce damage text and sparse head reactions while
 	}) );
 	presenter.step( entities, game, 1, 1000 );
 	assert.equal( presenter.damageText().length, 0, "packet receipt is not a hit marker" );
-	presenter.step( entities, game, 1.11, 1110 );
+	presenter.step( entities, game, 1.31, 1310 );
 	assert.equal( presenter.damageText().length, 2 );
 	assert.deepEqual(
 		actors.find( a => a.gid === 1 ).layers.slice( 0, 2 ).map( l => l.clip ),
 		[ "hit1", "attack1" ],
 		"attack must not suppress sparse hit reaction"
 	);
-	presenter.step( entities, game, 1.2, 1200 );
+	presenter.step( entities, game, 1.4, 1400 );
 	assert.equal( presenter.damageText().length, 2, "same marker cannot publish twice" );
 	assert.deepEqual( presenter.damageText().map( row => row.color ), [ [ 1, 1, 1 ], [ 1, 58 / 255, 58 / 255 ] ] );
 	game.casts = [ {
@@ -315,7 +315,7 @@ test("authored impact events produce damage text and sparse head reactions while
 		impacts: [ { damage: 9, fatal: false, type: 7, flags: 0, secondaryAmount: 0 } ]
 	} ];
 	presenter.step( entities, game, 3, 3000 );
-	presenter.step( entities, game, 3.11, 3110 );
+	presenter.step( entities, game, 3.31, 3310 );
 	assert.equal(
 		actors.find( a => a.gid === 1 ).layers?.some( l => l.clip === "hit1" ) ?? false,
 		false,
@@ -333,7 +333,7 @@ test("authored impact events produce damage text and sparse head reactions while
 		impacts: [ { damage: 9, fatal: false, type: 0, flags: 0, secondaryAmount: 0 } ]
 	} ];
 	presenter.step( entities, game, 5, 5000 );
-	presenter.step( entities, game, 5.11, 5110 );
+	presenter.step( entities, game, 5.31, 5310 );
 	assert.equal(
 		presenter.damageText().some( row => row.anchor.x === 211 ),
 		false,
@@ -341,7 +341,7 @@ test("authored impact events produce damage text and sparse head reactions while
 	);
 	game.casts = [ { ...game.casts[0], token: 5, caster: 1, receivedAtMs: 6000 } ];
 	presenter.step( entities, game, 6, 6000 );
-	presenter.step( entities, game, 6.11, 6110 );
+	presenter.step( entities, game, 6.31, 6310 );
 	assert.equal(
 		presenter.damageText().some( row => row.anchor.x === 211 ),
 		true,
@@ -392,7 +392,7 @@ test("authored impact events produce damage text and sparse head reactions while
 	} ];
 	presenter.step( entities, game, 19, 19000 );
 	assert.equal( presenter.damageText().length, 0 );
-	presenter.step( entities, game, 19.11, 19110 );
+	presenter.step( entities, game, 19.31, 19310 );
 	assert.equal(
 		presenter.damageText().length,
 		1,

@@ -44,7 +44,8 @@ Effect
 ================
 */
 type Effect struct {
-	DamageToMP        bool // dgmp instance contribution; retirement removes it with its owner.
+	SourceTargetGID   uint32 // source-only B5ED relationship to a population-owned recipient.
+	DamageToMP        bool   // dgmp instance contribution; retirement removes it with its owner.
 	DamageToMPPercent uint32
 	ForcedTargetGID   uint32 // hitm context+28; zero means no target constraint.
 	jobClock          relativeJobClock

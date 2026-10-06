@@ -57,7 +57,7 @@ export function planContainerMove(
 	const a = slots.get( move.source ), b = slots.get( move.destination );
 	if ( !a ) throw Error( `Empty ${label} source slot` );
 	const cap = stackCap( a, caps, label );
-	if ( cap > 1 && b?.refObjId === a.refObjId ) {
+	if ( cap > 1 && b && sameStackIdentity( a, b ) ) {
 		const dest = b.quantity >= cap ? a.quantity : Math.min( cap, a.quantity + b.quantity );
 		const remain = b.quantity >= cap ? b.quantity : a.quantity + b.quantity - dest;
 		slots.set( move.destination, { ...b, quantity: dest } );
@@ -95,7 +95,7 @@ export function planWholeTransfer(
 	const item = a.get( source );
 	if ( !item ) throw Error( "Transfer requires a source item" );
 	const other = b.get( destination );
-	if ( other && other.refObjId === item.refObjId && stackable( item ) ) {
+	if ( other && sameStackIdentity( item, other ) && stackable( item ) ) {
 		const cap = caps.get( item.refObjId );
 		if (
 			cap === undefined || !Number.isInteger( cap ) || cap < 1 || cap > 65535 ||
@@ -113,4 +113,19 @@ export function planWholeTransfer(
 	}
 	const sort = ( rows: Map<number, InventoryItem> ) => [ ...rows.values() ].sort( ( x, y ) => x.slot - y.slot );
 	return { from: sort( a ), to: sort( b ) };
+}
+
+/*
+================
+sameStackIdentity
+
+490230 compares the original cargo-owner string before merging trade goods.
+================
+*/
+export function sameStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
+	if ( a.refObjId !== b.refObjId ) return false;
+	if ( (a.typeFlags & 0x7fe) === 0x46c || (b.typeFlags & 0x7fe) === 0x46c ) {
+		return (a.label ?? "") === (b.label ?? "");
+	}
+	return true;
 }

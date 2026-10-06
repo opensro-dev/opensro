@@ -90,3 +90,33 @@ func TestRecoveryAuraHealReadsFaithLikeACast(t *testing.T) {
 		t.Errorf("restored %d MP, want %d (%d %% of %d)", got, wantMP, faithFixtureUp, maxMP)
 	}
 }
+
+/*
+================
+TestChainHealSharePrecedesBonuses
+
+Odd flat words expose the native truncation before Faith; an equipped
+weapon contributes its whole term even to the last chain recipient.
+================
+*/
+func TestChainHealSharePrecedesBonuses(t *testing.T) {
+	skill := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_DIVIDE_A_01")
+	skill.Heal.HP, skill.Heal.MP = 103, 107
+	skill.Heal.HPPercent, skill.Heal.MPPercent = 0, 0
+	p := newSupportPair(t, skill, faithPassive(faithFixtureUp))
+	bonusHP, bonusMP, ok := p.rt.weaponHealBonus(testDivision, p.c, skill.Heal)
+	if !ok || bonusHP == 0 {
+		t.Fatal("fixture needs an active weapon heal contribution")
+	}
+	for _, tc := range []struct {
+		share  uint32
+		hp, mp int64
+	}{
+		{100, 113, 117}, {50, 56, 58}, {25, 27, 28},
+	} {
+		hp, mp, ok := p.rt.skillHealShareAmounts(testDivision, p.m, p.c, skill, tc.share)
+		if !ok || hp != tc.hp+bonusHP || mp != tc.mp+bonusMP {
+			t.Fatalf("share %d: heal %d/%d, want %d/%d", tc.share, hp, mp, tc.hp+bonusHP, tc.mp+bonusMP)
+		}
+	}
+}

@@ -312,7 +312,15 @@ UpdateCharacters
 func (s *Store) UpdateCharacters(cs []*domain.Character, label string, update func() bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.updateCharactersLocked(cs, label, update)
+}
 
+/*
+================
+updateCharactersLocked
+================
+*/
+func (s *Store) updateCharactersLocked(cs []*domain.Character, label string, update func() bool) bool {
 	if len(cs) == 0 || update == nil {
 		return false
 	}

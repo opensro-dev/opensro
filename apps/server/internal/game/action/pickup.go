@@ -167,7 +167,7 @@ func (rt *Runtime) grantPickup(
 			return true
 		})
 		if !removed {
-			return pickupRefusal(wire.ErrCodeCannotBePicked)
+			return pickupRefusal(wire.ErrCodeTargetGone)
 		}
 		result := OpResult{Broadcast: wire.PickupBroadcastFrames(anim, groundItem.Gid, 0)}
 		for i, s := range shares {
@@ -207,6 +207,7 @@ func (rt *Runtime) grantPickup(
 		var fault *inventory.Fault
 		grant, fault = inv.GrantStack(inventory.Item{
 			RecordID:          groundItem.RecordID,
+			TradeOwner:        groundItem.TradeOwner,
 			RefObjID:          groundItem.RefObjID,
 			Codename:          groundItem.Codename,
 			TypeFlags:         groundItem.TypeFlags,
@@ -240,12 +241,13 @@ func (rt *Runtime) grantPickup(
 		return true
 	}) {
 		if !removed {
-			return pickupRefusal(wire.ErrCodeCannotBePicked)
+			return pickupRefusal(wire.ErrCodeTargetGone)
 		}
 		return result
 	}
 
 	body := wire.ItemBody{
+		TradeOwner:        grantedItem.TradeOwner,
 		TypeFlags:         grantedItem.TypeFlags,
 		Quantity:          grantedItem.Quantity,
 		RefObjID:          grantedItem.RefObjID,
@@ -256,7 +258,7 @@ func (rt *Runtime) grantPickup(
 		TransformRefObjID: grantedItem.TransformRefObjID, Summon: domain.CloneCOS(grantedItem.Summon),
 	}
 	return OpResult{
-		Frames:    append(wire.PickupItemGrantFrames(anim, grant.DestSlot, body, groundItem.Gid, grant.GroundRemainder), questFrames...),
+		Frames:    wire.PickupItemGrantFrames(anim, grant.DestSlot, body, groundItem.Gid, grant.GroundRemainder, questFrames),
 		Broadcast: wire.PickupBroadcastFrames(anim, groundItem.Gid, grant.GroundRemainder),
 	}
 }
