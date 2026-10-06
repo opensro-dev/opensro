@@ -2109,8 +2109,6 @@
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
 			"calls": [
-				"src/engine/runtime/input/input.ts#drain",
-				"src/engine/runtime/simulation/host.ts#sendInput",
 				"src/engine/runtime/simulation/host.ts#poll",
 				"src/engine/runtime/audio/audio.ts#step",
 				"src/engine/runtime/audio/audio.ts#world",
@@ -2132,13 +2130,23 @@
 					"target": "src/engine/runtime/world/world.ts#step"
 				}
 			]
+		},
+		{
+			"file": "src/engine/runtime/runtime.ts",
+			"function": "displayFrame",
+			"calls": [
+				"src/engine/runtime/input/input.ts#drain",
+				"src/engine/runtime/simulation/host.ts#sendInput",
+				"src/engine/runtime/frame-pacing.ts#admit",
+				"src/engine/runtime/runtime.ts#frame"
+			]
 		}
 	],
 	"frameBarriers": [
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "f950cb485ffc4f2715e6b7dc94234cb37a2a3b75ab414654877bd1a2128c306e",
+			"sourceSha256": "28a80bff8161181131ed3a28c7c443e1d848c38a5ce7c4f6152b8d5b94c9c137",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

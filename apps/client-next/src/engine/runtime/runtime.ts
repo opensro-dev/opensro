@@ -35,6 +35,7 @@ import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
+import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
@@ -122,6 +123,7 @@ export function startRuntime(
 		);
 		const input = createInput();
 		const frameWork = createFrameWork();
+		const framePacing = createFramePacing();
 		const simulation = own( createSimulationHost() );
 		const renderer = own(
 			createRenderer( canvas, random, audio.enqueue, diagnostics )
@@ -158,6 +160,7 @@ export function startRuntime(
 		*/
 		function uiEvent( event: import("@/engine/contracts/ui").UiEvent ) {
 			if ( event.kind === "video-preferences" ) {
+				framePacing.setFrameLimit( event.value.frameLimit );
 				renderer.videoOptions( event.value );
 				effectDetail = event.value.records[event.value.active][13] ?? 2;
 				normalFortressClothes = event.value.records[event.value.active][15] === 1;
@@ -478,13 +481,39 @@ export function startRuntime(
 		let latestSequence = 0, acceptedInput = 0, frameId = 0;
 		/*
 		================
+		displayFrame
+
+		Deliver input on each display opportunity, then admit presentation work.
+		================
+		*/
+		function displayFrame( now: number ): void {
+			if ( disposed ) {
+				return;
+			}
+			const visible = globalThis.document?.visibilityState !== "hidden";
+			try {
+				// Input is delivered even when this display refresh needs no new draw.
+				const commands = input.drain();
+				if ( commands ) simulation.sendInput( commands );
+				if ( !framePacing.admit( now, visible ) ) {
+					raf = requestAnimationFrame( displayFrame );
+					return;
+				}
+			} catch ( error ) {
+				platform.report( `Runtime failed: Input: ${String( error )}`, error );
+				dispose();
+				return;
+			}
+			void frame( now );
+		}
+		/*
+		================
 		frame
 		================
 		*/
 		async function frame( now: number ): Promise<void> {
-			if ( disposed ) {
-				return;
-			}
+			if ( disposed ) return;
+			const visible = globalThis.document?.visibilityState !== "hidden";
 			// Whichever of RAF and a hidden delivery ran this frame, retire the other.
 			frameToken++;
 			const cpuStart = performance.now();
@@ -502,10 +531,6 @@ export function startRuntime(
 				const assetHealth = assets.health();
 				if ( assetHealth.phase === "failed" ) {
 					throw new Error( `Assets failed: ${assetHealth.error}. Reload to restart.` );
-				}
-				const commands = input.drain();
-				if ( commands ) {
-					simulation.sendInput( commands );
 				}
 				const inputError = input.error();
 				if ( inputError ) {
@@ -797,16 +822,21 @@ export function startRuntime(
 				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
 				markStage( "ui" );
 				renderer.setDamageText( characters.damageText() );
-				const rendered = renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() );
+				// Hidden maintenance still acknowledges every ordered publication, but
+				// cannot display a frame. Avoid GPU preparation and visibility queries.
+				const rendered = visible ?
+					renderer.frame( platform.readViewport(), now / 1000, frameId, frameProbe() ) :
+					undefined;
 				if ( rendered ) {
 					await rendered;
 				}
-				waitMs = renderer.readbackWaitMs?.() ?? 0;
+				waitMs = visible ? renderer.readbackWaitMs?.() ?? 0 : 0;
 				if ( disposed ) return;
 				markStage( "render-preparation-submit" );
 				renderer.setTeleportGates( worldPresented ? presentation.entities() : [] );
 				const hoverLocal = presentation.gameplay()?.localGid,
-					hoverGid = diagnostics.hoverPicking !== false && worldPointer && frontendState.phase === "world" &&
+					hoverGid = visible && diagnostics.hoverPicking !== false && worldPointer &&
+							frontendState.phase === "world" &&
 							hoverLocal &&
 							!ui.blocks(
 								worldPointer[0] * platform.canvasSize().width / platform.displayScale(),
@@ -905,7 +935,7 @@ World: ${
 World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldStats().pendingGroups} pending groups` );
 				}
 				frameProbe()?.end();
-				raf = requestAnimationFrame( frame );
+				raf = requestAnimationFrame( displayFrame );
 				hiddenFrame( frameToken, now );
 			} catch ( error ) {
 				platform.report( `Runtime failed: ${String( error )}`, error );
@@ -931,10 +961,10 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 					return;
 				}
 				cancelAnimationFrame( raf );
-				void frame( now );
+				displayFrame( now );
 			} );
 		}
-		raf = requestAnimationFrame( frame );
+		raf = requestAnimationFrame( displayFrame );
 		hiddenFrame( frameToken, performance.now() );
 		return {
 			dispose,

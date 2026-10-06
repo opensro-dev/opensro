@@ -2732,6 +2732,35 @@ test("Input binding capture removes conflicts, rejects reserved keys and commits
 	}
 });
 
+test("frame limit uses the video draft and survives Apply, Cancel and defaults", () => {
+	const saved = [], f = uiFixture( () => {}, () => false, () => {}, () => {}, () => {}, v => saved.push( v ) );
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Option" } );
+		let result;
+		for ( let i = 1; i < 15; i++ ) result = f.ui.step( f.state, i * 100 ) ?? result;
+		for ( let i = 0; i < 10; i++ ) f.ui.event( { kind: "activate", id: "option-video-down" } );
+		result = f.ui.step( f.state, 1500 ) ?? result;
+		assert.equal( result.controls.find( c => c.id === "option-video-combo:-3" ).label, "Frame rate" );
+		f.ui.event( { kind: "activate", id: "option-video-combo:-3" } );
+		result = f.ui.step( f.state, 1600 ) ?? result;
+		assert.equal( result.controls.filter( c => c.id.startsWith( "option-video-choice:-3:" ) ).length, 4 );
+		f.ui.event( { kind: "activate", id: "option-video-choice:-3:1" } );
+		assert.equal( saved.length, 0 );
+		f.ui.event( { kind: "activate", id: "option-apply" } );
+		assert.equal( saved[0].frameLimit, 120 );
+		f.ui.event( { kind: "activate", id: "option-video-choice:-3:3" } );
+		f.ui.event( { kind: "activate", id: "option-cancel" } );
+		assert.equal( saved.length, 1 );
+		f.ui.event( { kind: "activate", id: "open-window:Option" } );
+		f.ui.event( { kind: "activate", id: "option-default" } );
+		f.ui.event( { kind: "activate", id: "option-ok" } );
+		assert.equal( saved[1].frameLimit, 60 );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("the screen size combo opens and its choice is applied", () => {
 	const saved = [],
 		f = uiFixture( () => {}, () => false, () => {}, () => {}, () => {}, v => saved.push( v ) );

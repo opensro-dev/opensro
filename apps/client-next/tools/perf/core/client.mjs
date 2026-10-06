@@ -18,6 +18,7 @@ import {
 	DEFAULT_BROWSER_EVENT_LOOP_TRACE_CATEGORIES
 } from "../../../../../scripts/lib/chromeTraceCapture.mjs";
 import { resetMissionMovementFixture } from "../../../../../scripts/lib/missionMovementFixture.mjs";
+import { defaultVideoOptions, frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { bootPlayableSession } from "../../../tests/browser/helpers/playable-session.mjs";
 
 export const CHARACTER = "asd2";
@@ -107,6 +108,12 @@ function instrument( { counts, spans } ) {
 		begin() {
 			displayed = undefined;
 			frameStart = frameMark = now();
+			if ( globalThis.__benchLoop ) {
+				if ( globalThis.__benchLastFrame !== undefined ) {
+					globalThis.__benchIntervals.push( frameStart - globalThis.__benchLastFrame );
+				}
+				globalThis.__benchLastFrame = frameStart;
+			}
 			worldStart = worldEnd = 0;
 			for ( const key in tally ) tally[key] = 0;
 		},
@@ -161,13 +168,7 @@ export async function measure( page, name, ms, drive ) {
 		globalThis.__benchInputs.length = 0;
 		globalThis.__benchIntervals = [];
 		globalThis.__benchLoop = true;
-		let last = performance.now();
-		const tick = now => {
-			globalThis.__benchIntervals.push( now - last );
-			last = now;
-			if ( globalThis.__benchLoop ) requestAnimationFrame( tick );
-		};
-		requestAnimationFrame( tick );
+		globalThis.__benchLastFrame = undefined;
 	} );
 	const started = Date.now();
 	await drive( () => Date.now() - started < ms );
@@ -240,12 +241,23 @@ instrument's options.
 */
 export async function openClient(
 	fixture,
-	{ counts = false, spans = false, uncapped = true, cpuRate = 1, beforeLogin = undefined } = {}
+	{
+		counts = false,
+		spans = false,
+		uncapped = true,
+		cpuRate = 1,
+		frameLimit = 0,
+		headed = false,
+		beforeLogin = undefined
+	} = {}
 ) {
 	process.env.SRO_PROBE_UNLOCK_FPS = uncapped ? "1" : "0";
 	await resetMissionMovementFixture( { characterName: CHARACTER, fixture, timeoutMs: 60000 } );
-	const { browser, page } = await launchProbeBrowser();
+	const { browser, page } = await launchProbeBrowser( { headed } );
 	try {
+		await page.addInitScript( options => {
+			localStorage.setItem( "sro:v1150:video-options:1", JSON.stringify( options ) );
+		}, { ...defaultVideoOptions(), frameLimit } );
 		await page.addInitScript( instrument, { counts, spans } );
 		await bootPlayableSession( page, CHARACTER, beforeLogin );
 		await page.evaluate( () => globalThis.__benchRuntime = globalThis.__playableRuntime );
@@ -278,6 +290,24 @@ closeClient
 export async function closeClient( { browser, page } ) {
 	await page.evaluate( () => globalThis.__benchRuntime?.session( { kind: "logout" } ) ).catch( () => {} );
 	await browser.close();
+}
+
+/*
+================
+selectFrameLimit
+
+Use the real option draft and Apply path; leave the window open for inspection.
+================
+*/
+export async function selectFrameLimit( page, limit ) {
+	const index = frameLimits().indexOf( limit );
+	if ( index < 0 ) throw Error( `Unsupported frame limit ${limit}` );
+	await page.keyboard.press( "Escape" );
+	await page.locator( '[data-ui-id="open-window:Option"]' ).click();
+	for ( let i = 0; i < 10; i++ ) await page.locator( '[data-ui-id="option-video-down"]' ).click();
+	await page.locator( '[data-ui-id="option-video-combo:-3"]' ).click();
+	await page.locator( `[data-ui-id="option-video-choice:-3:${index}"]` ).click();
+	await page.locator( '[data-ui-id="option-apply"]' ).click();
 }
 
 /*
