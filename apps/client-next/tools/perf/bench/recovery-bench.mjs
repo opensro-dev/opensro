@@ -20,6 +20,7 @@ import { parseOptions } from "../core/report.mjs";
 import { walk } from "./scenarios.mjs";
 import { createCrowd } from "../core/crowd.mjs";
 import { waitForMovementSettlement } from "../core/movement-settlement.mjs";
+import { installMovementContinuity } from "../core/movement-continuity.mjs";
 
 import { installFaults, holdStream, stallServer, faultLog } from "../core/transport-faults.mjs";
 
@@ -438,6 +439,7 @@ async function run( options ) {
 	let crowd, failure;
 	const crowdNames = [];
 	try {
+		await page.evaluate( installMovementContinuity, {} );
 		let worker;
 		for ( const candidate of page.workers() ) {
 			if ( await candidate.evaluate( () => !!globalThis.__recoveryLink ) ) worker = candidate;
@@ -534,7 +536,21 @@ async function run( options ) {
 				assertCrowd( result.crowdBefore );
 			}
 			let faultMark = 0;
-			Object.assign( result, await measure( page, lane, STALL_LANES.includes( lane ) ? 90000 : 7000, drive ) );
+			await page.evaluate( () => globalThis.__recoveryContinuity.reset() );
+			try {
+				Object.assign(
+					result,
+					await measure( page, lane, STALL_LANES.includes( lane ) ? 90000 : 7000, drive )
+				);
+			} finally {
+				result.continuity = await page.evaluate( () => globalThis.__recoveryContinuity.stop() );
+				await writeFile(
+					`${options.out}/continuity-${lane}.json`,
+					JSON.stringify( result.continuity, null, 2 )
+				);
+			}
+			assert.equal( result.continuity.invalidSpeed, 0, "continuity requires observed movement speeds" );
+			assert.equal( result.continuity.invalidTime, 0, "continuity requires increasing frame timestamps" );
 			await captures.stop( lane );
 			await captures.finish();
 			if ( crowd ) {
