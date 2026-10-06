@@ -135,6 +135,7 @@ import { createCosHud } from "./hud/cos-hud";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
+import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import { createFortressWarHud } from "./hud/fortress-war-hud";
 import { createUnionHud } from "./hud/union-hud";
 import { createExchangeHud } from "./hud/exchange-hud";
@@ -6851,6 +6852,8 @@ export function createUi(
 						mpGauge.target,
 						game?.localGid,
 						game?.target === game?.localGid,
+						game?.fortress,
+						game?.social?.guild,
 						game?.guide?.country,
 						next.session?.character,
 						game?.progression?.level ?? character?.level,
@@ -6985,6 +6988,28 @@ export function createUi(
 								if ( value !== undefined ) {
 									authoredText( p["GDR_PMI_TXT_" + key + "DAT"]!, px, py, value );
 								}
+							}
+						}
+						if ( game?.fortress ) {
+							for (
+								const indicator of fortressMiniIndicators(
+									game.fortress,
+									!!game.social?.guild,
+									hudCopy
+								)
+							) {
+								const node = p[indicator.control];
+								if ( !node ) continue;
+								authoredImage( node, px, py, indicator.image ?? node.texture );
+								const rect = authoredRect( node, px, py );
+								controls.push( {
+									id: indicator.control,
+									kind: "region",
+									label: indicator.text,
+									helpText: indicator.text,
+									rect
+								} );
+								blocks.push( rect );
 							}
 						}
 						authoredText( p.GDR_PMI_TXT_ID!, px, py, next.session?.character ?? "" );

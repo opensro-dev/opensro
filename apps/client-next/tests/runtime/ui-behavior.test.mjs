@@ -4929,3 +4929,39 @@ test("an attack pet shows its mini window under the player mini window", () => {
 		f.dispose();
 	}
 });
+
+test("the player panel draws native siege rank and guild status and removes them on war end", () => {
+	const f = uiFixture( () => {} );
+	try {
+		f.state.gameplay = {
+			...f.state.gameplay,
+			social: { ...f.state.gameplay.social, guild: { id: 1, name: "Owner", members: [] } },
+			fortress: {
+				...f.state.gameplay.fortress,
+				worldId: 7,
+				listId: 1,
+				worlds: [ { id: 7, code: "FORTRESS_JANGAN" } ],
+				fortresses: [ { id: 1, code: "FORTRESS_JANGAN", nameStrId: "FORTRESS_NAME" } ],
+				wars: [ { id: 1, name: "Owner", flags: 1, stoneWait: 29 } ],
+				localKills: 150,
+				localDeaths: 3
+			}
+		};
+		let semantics;
+		for ( let t = 0; t < 1200; t += 100 ) semantics = f.ui.step( { ...f.state }, t ) ?? semantics;
+		assert.ok( semantics.controls.some( c => c.id === "GDR_PMI_BATTLE_GRADE" ) );
+		assert.ok( semantics.controls.some( c => c.id === "GDR_PMI_FORTRESS_INFO" && c.helpText.includes( "Owner" ) ) );
+		assert.ok( f.scenes.at( -1 ).quads.some( q => q.texture?.endsWith( "/rank_combat_commander.png" ) ) );
+		f.state.gameplay = {
+			...f.state.gameplay,
+			fortress: { ...f.state.gameplay.fortress, wars: [ { id: 1, name: "Owner", flags: 0 } ] }
+		};
+		for ( let t = 1200; t < 2400; t += 100 ) semantics = f.ui.step( { ...f.state }, t ) ?? semantics;
+		assert.ok(
+			!semantics.controls.some( c => [ "GDR_PMI_BATTLE_GRADE", "GDR_PMI_FORTRESS_INFO" ].includes( c.id ) ),
+			JSON.stringify( semantics.controls.filter( c => c.id.includes( "PMI" ) ) )
+		);
+	} finally {
+		f.dispose();
+	}
+});

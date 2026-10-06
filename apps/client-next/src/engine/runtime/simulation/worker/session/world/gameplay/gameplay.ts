@@ -94,6 +94,8 @@ import {
 import { gmRequest, gmReply, gmItemReferences, type GmReply } from "@/engine/foundation/gameplay/gm-command";
 import {
 	fortressBootstrap,
+	advanceFortressCountdowns,
+	fortressCountdownNotices,
 	fortressPacket,
 	fortressMusicActive,
 	fortressMusicMode,
@@ -2389,12 +2391,17 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				const fortressNext = fortressPacket( fortress, frame );
+				const fortressNext = fortressPacket( fortress, frame, now );
 				if ( fortressNext ) {
 					if ( frame.opcode === 0x3887 ) {
 						musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
 					}
 					fortress = fortressNext;
+					if ( social.guild && frame.opcode === 0x3887 && frame.payload[0] === 0 ) {
+						for ( const notice of fortressCountdownNotices( fortress ) ) {
+							notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						}
+					}
 					dirty = true;
 				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
@@ -3149,6 +3156,16 @@ before take assembles the presentation snapshot.
 		*/
 		step( now: number, local?: EntityState ) {
 			flushBindingRepairs();
+			const fortressNext = advanceFortressCountdowns( fortress, now );
+			if ( fortressNext !== fortress ) {
+				fortress = fortressNext;
+				if ( social.guild ) {
+					for ( const notice of fortressCountdownNotices( fortress ) ) {
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+				}
+				dirty = true;
+			}
 			if ( moveReservation.holding() && (!local || local.appearanceState?.[0] === 2) ) {
 				moveReservation.clear();
 				if ( selectionDecal?.kind === "ground" ) selectionDecal = null;
