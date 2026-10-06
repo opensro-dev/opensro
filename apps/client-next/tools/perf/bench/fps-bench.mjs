@@ -96,6 +96,10 @@ const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [-
 // Units the character may stand from where a sample expects it (the boot
 // fixture start, or its place before a revive) before the sample is rejected.
 const REVIVE_TOLERANCE = 50;
+// The local GameWorld's own view, for counting GM-loaded residue; its snapshot is cached.
+const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
+	"http://127.0.0.1:8791/internal/diagnostics/observatory";
+const OBSERVATORY_CACHE_MS = 2000;
 
 // The GameWorld's transport metrics; its tick count dates the server's start
 // (artifacts record minutes since start: a fresh server measures boot state).
@@ -136,16 +140,28 @@ function sceneAlive( page, scene ) {
 ================
 recordResidue
 
-Fights the scene down, then counts what is left. The count and gids go to
-their own artifact (a rejected window has no result row) and onto each of
-the location's results; any residue, or none known, fails the run.
+Fights the scene down, then decides what is left from three sources: the
+deaths the client saw (proof of a kill), the GameWorld's monster list, and
+the client's view. A gid alive in either, or absent from a truncated server
+list without a seen death, is residue and fails the run. The record goes
+to its own artifact (a rejected window has no result row) and onto each of
+the location's results.
 ================
 */
 async function recordResidue( page, scene, location, results, options ) {
-	await clearCombat( page, scene ).catch( () => null );
-	const left = await sceneAlive( page, scene ).catch( () => null );
-	const residue = { codename: scene.codename, loaded: scene.count, alive: left?.length ?? null, gids: left };
-	if ( residue.alive !== 0 ) process.exitCode = 1;
+	const dead = new Set( await clearCombat( page, scene ).catch( () => [] ) );
+	const inView = new Set( await sceneAlive( page, scene ) );
+	const server = await serverMonsters();
+	const alive = [], unknown = [];
+	for ( const gid of scene.gids ) {
+		if ( dead.has( gid ) ) continue;
+		const row = server.monsters.get( gid );
+		if ( inView.has( gid ) || row && row.hp > 0 ) alive.push( gid );
+		// Absent from a truncated server list and never seen dying: not proven gone.
+		else if ( !row && server.truncated ) unknown.push( gid );
+	}
+	const residue = { codename: scene.codename, loaded: scene.count, dead: dead.size, alive, unknown };
+	if ( alive.length || unknown.length ) process.exitCode = 1;
 	await mkdir( options.out, { recursive: true } );
 	await writeFile( `${options.out}/${location.name}-residue.json`, JSON.stringify( residue, null, 2 ) );
 	for ( const result of results ) {
@@ -153,11 +169,30 @@ async function recordResidue( page, scene, location, results, options ) {
 	}
 	if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 	console.log(
-		residue.alive === 0 ?
-			`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} were fought down` :
-			`  combat residue: ${residue.alive ?? "unknown"} of ${scene.count} GM-loaded ${scene.codename} ` +
-			"still alive; restart the GameWorld (announce it first) before other measurements"
+		!alive.length && !unknown.length ?
+			`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} were seen to die or are gone from the server` :
+			`  combat residue: ${alive.length} alive, ${unknown.length} unknown of ${scene.count} GM-loaded ` +
+			`${scene.codename}; restart the GameWorld (announce it first) before other measurements`
 	);
+}
+
+/*
+================
+serverMonsters
+
+The GameWorld's own monster list (the local observatory), read after its
+snapshot cache has turned over so it postdates the fight-down.
+================
+*/
+async function serverMonsters() {
+	await new Promise( resolve => setTimeout( resolve, OBSERVATORY_CACHE_MS + 250 ) );
+	const response = await fetch( OBSERVATORY_URL, { headers: { "X-SRO-Local-Diagnostics": "1" } } );
+	if ( !response.ok ) throw Error( `observatory ${response.status}` );
+	const population = (await response.json()).population;
+	return {
+		truncated: !!population.truncated,
+		monsters: new Map( population.monsters.map( row => [ row.gid, row ] ) )
+	};
 }
 
 /*
