@@ -3144,7 +3144,13 @@ Packet handling must not depend on which HUD panel is currently open.
 						inventoryBefore,
 						inventoryAfter,
 						moves,
-						{ country: localCountry, progression, maxHp: potionFacts.maxHp, maxMp: potionFacts.maxMp },
+						{
+							inventorySlotCount: inventory.state().inventorySlotCount,
+							country: localCountry,
+							progression,
+							maxHp: potionFacts.maxHp,
+							maxMp: potionFacts.maxMp
+						},
 						frame.opcode === 0xb5bd && frame.payload[0] === 1
 					);
 					for ( let i = 0; i < next.length; i++ ) {

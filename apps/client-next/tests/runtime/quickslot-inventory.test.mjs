@@ -89,22 +89,21 @@ test("swap, merge, split and bag/equipment moves preserve each reference", () =>
 	const a = potion( 13, 1, 100 ),
 		b = { ...potion( 14, 2, 0 ), typeFlags: 0x6c },
 		rows = [ binding( 9, 13 ), binding( 10, 14 ), binding( 50, 13 ) ];
-	const swap = { source: 13, destination: 14, sourceRemains: false, destinationMoves: true };
+	const swap = { source: 13, destination: 14, destinationMoves: true };
 	assert.deepEqual( repair( rows, [ a, b ], [ { ...a, slot: 14 }, { ...b, slot: 13 } ], [ swap ], facts ), [
 		binding( 9, 14 ),
 		binding( 10, 13 ),
 		binding( 50, 14 )
 	] );
-	const move = { source: 13, destination: 14, sourceRemains: false, destinationMoves: false };
+	const move = { source: 13, destination: 14, destinationMoves: false };
 	assert.deepEqual( repair( [ binding( 9, 13 ) ], [ a ], [ { ...a, slot: 14 } ], [ move ], facts ), [
 		binding( 9, 14 )
 	] );
 	assert.deepEqual(
 		repair( [ binding( 9, 13 ) ], [ a ], [ { ...a, quantity: 25 }, { ...a, slot: 14, quantity: 25 } ], [ {
-			...move,
-			sourceRemains: true
+			...move
 		} ], facts ),
-		[ binding( 9, 13 ) ]
+		[ binding( 9, 14 ) ]
 	);
 	assert.deepEqual(
 		repair( [ binding( 9, 13 ) ], [ a ], [ { ...a, slot: 7 } ], [ { ...move, destination: 7 } ], facts ),

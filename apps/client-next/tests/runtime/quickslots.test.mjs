@@ -13,6 +13,11 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( "src/engine/" + file ).href );
 }
@@ -143,7 +148,7 @@ test("native quickslot wire and bootstrap retain all 51 slots and reject invalid
 	assert.deepEqual( state.skills, [ 7 ] );
 	assert.throws( () => skillBindings( { character: { skills: [ 7, 7 ] } } ) );
 	assert.throws( () => quickSlotPacket( { slot: 51, kind: 0, payload: 0 } ) );
-	assert.throws( () => quickSlotPacket( { slot: 0, kind: 0x46, payload: 45 } ) );
+	assert.throws( () => quickSlotPacket( { slot: 0, kind: 0x46, payload: 243 } ) );
 });
 test("binding configuration writes only after send and cannot grant an unlearned skill", () => {
 	const frames = [], g = createGameplay( frame => frames.push( frame ) );

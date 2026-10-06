@@ -93,7 +93,6 @@ for ( const [name, source, destination, expected] of mergeCases ) {
 		assert.deepEqual( owner.takeBindingMoves(), [ {
 			source: 13,
 			destination: 14,
-			sourceRemains: expected.length === 2,
 			destinationMoves: false
 		} ] );
 	});
@@ -114,7 +113,6 @@ test("different references swap whole stacks and quickslot identities", () => {
 	assert.deepEqual( owner.takeBindingMoves(), [ {
 		source: 13,
 		destination: 14,
-		sourceRemains: false,
 		destinationMoves: true
 	} ] );
 });

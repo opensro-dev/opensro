@@ -9,7 +9,7 @@ Child owners handle process-specific state while this owner commits item rows.
 ===========================================================================
 */
 import { cosItemUseTail, type CosItemUseContext } from "@/engine/foundation/gameplay/cos-item-use";
-import { planContainerMove, stackable } from "@/engine/foundation/gameplay/container-transfer";
+import { planContainerMove, sameStackIdentity, stackable } from "@/engine/foundation/gameplay/container-transfer";
 import { createMall } from "./mall/mall";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
 import {
@@ -319,12 +319,11 @@ transfer
 			);
 			next.clear();
 			for ( const row of rows ) next.set( row.slot, row );
-			return stackable( a ) && (cap ?? 0) > 1 && (!b || b.refObjId === a.refObjId);
+			return;
 		}
 		next.set( destination, { ...a, slot: destination } );
 		if ( b ) next.set( source, { ...b, slot: source } );
 		else next.delete( source );
-		return false;
 	}
 	return {
 		/*
@@ -1577,13 +1576,18 @@ receive
 			const committedMoves: typeof bindingMoves = [];
 			const moveCues: { item: InventoryItem; warn: boolean; }[] = [];
 			const applyMove = ( source: number, destination: number, quantity: number ) => {
-				const b = next.get( destination );
-				const stacking = transfer( next, source, destination, quantity );
+				const a = next.get( source ), b = next.get( destination );
+				// 757652 reads destination +68 (plus), not +7C (count). Preserve
+				// that native flag: 574800 always moves source bindings, while this
+				// flag keeps destination bindings attached to the destination control.
+				const keepDestination = !!a && !!b && source >= (equipmentSlotCount ?? 13) &&
+					destination >= (equipmentSlotCount ?? 13) && stackable( a ) && sameStackIdentity( a, b ) &&
+					a.quantity + b.plus <= (tooltipRefs.get( a.refObjId )?.fields.maxStack ?? 0);
+				transfer( next, source, destination, quantity );
 				committedMoves.push( {
 					source,
 					destination,
-					sourceRemains: stacking && next.has( source ),
-					destinationMoves: !stacking && !!b
+					destinationMoves: !!b && !keepDestination
 				} );
 				const item = next.get( destination )!;
 				moveCues.push( {

@@ -97,7 +97,6 @@ apps/client-next/src/engine/foundation/gameplay/peer-appearance.ts
 apps/client-next/src/engine/foundation/gameplay/player-stats.ts
 apps/client-next/src/engine/foundation/gameplay/position-skill.ts
 apps/client-next/src/engine/foundation/gameplay/quest.ts
-apps/client-next/src/engine/foundation/gameplay/quickslot-inventory.ts
 apps/client-next/src/engine/foundation/gameplay/recall-appointment.ts
 apps/client-next/src/engine/foundation/gameplay/skill-notices.ts
 apps/client-next/src/engine/foundation/gameplay/spawn-skills.ts

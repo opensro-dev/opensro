@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+quickslot.go - native hotbar configuration wire and persistence
+
+===========================================================================
+*/
 package enterworld
 
 import (
@@ -16,6 +23,10 @@ const OpcodeQuickSlotBinding uint16 = 0x7541
 
 const quickSlotSaveMode uint8 = 1
 
+// The binding stores a bag-relative index; inventory move slots are bytes.
+// 572E00 checks the current bag capacity, not a fixed 45-slot inventory.
+const quickSlotBagPayloadLimit = (1 << 8) - 13
+
 // Native CGInterface_OnMissionLoadingRevealed (client sub_683b40) can emit
 // the exact two-byte body {0,7} when its world-entry quickslot block was not
 // mode 7. It is a reveal/request marker, not a slot mutation. Our normal
@@ -24,12 +35,22 @@ const quickSlotSaveMode uint8 = 1
 // seven-byte save decoder.
 var quickSlotMissionRevealRequest = [...]byte{0, 7}
 
+/*
+================
+QuickSlotSaveRequest
+================
+*/
 type QuickSlotSaveRequest struct {
 	Slot    uint8
 	Kind    uint8
 	Payload uint32
 }
 
+/*
+================
+DecodeQuickSlotSaveRequest
+================
+*/
 func DecodeQuickSlotSaveRequest(payload []byte) (QuickSlotSaveRequest, error) {
 	if len(payload) != 7 {
 		return QuickSlotSaveRequest{}, fmt.Errorf("quickslot payload length %d, want 7", len(payload))
@@ -53,8 +74,8 @@ func DecodeQuickSlotSaveRequest(payload []byte) (QuickSlotSaveRequest, error) {
 	// their gameplay lanes and remain opaque client configuration here.
 	switch request.Kind {
 	case 0x46:
-		if request.Payload >= 45 {
-			return QuickSlotSaveRequest{}, fmt.Errorf("inventory quickslot payload %d outside 0..44", request.Payload)
+		if request.Payload >= quickSlotBagPayloadLimit {
+			return QuickSlotSaveRequest{}, fmt.Errorf("inventory quickslot payload %d exceeds the inventory wire range", request.Payload)
 		}
 	case 0x47:
 		if request.Payload >= 0x0d {
@@ -74,6 +95,11 @@ func DecodeQuickSlotSaveRequest(payload []byte) (QuickSlotSaveRequest, error) {
 // HandleQuickSlotSave persists one binding with copy-then-swap semantics.
 // Kind zero deletes the row because CIFUnderBar OnCreate already owns the
 // empty default; enter-world therefore emits only meaningful state records.
+/*
+================
+HandleQuickSlotSave
+================
+*/
 func HandleQuickSlotSave(deps *Deps, character *Character, payload []byte) (bool, error) {
 	request, err := DecodeQuickSlotSaveRequest(payload)
 	if err != nil {
@@ -117,6 +143,11 @@ func HandleQuickSlotSave(deps *Deps, character *Character, payload []byte) (bool
 // mission-reveal marker {0,7}, mode-1 binding save, or mode-2 auto-potion save. The
 // marker is deliberately side-effect free; the authoritative mode-7 state is
 // already carried by the enter-world payload.
+/*
+================
+HandleQuickSlotMessage
+================
+*/
 func HandleQuickSlotMessage(deps *Deps, character *Character, payload []byte) (bool, error) {
 	if len(payload) > 0 && payload[0] == 2 {
 		return handleAutoPotionSave(deps, character, payload)
@@ -132,6 +163,11 @@ func HandleQuickSlotMessage(deps *Deps, character *Character, payload []byte) (b
 	return HandleQuickSlotSave(deps, character, payload)
 }
 
+/*
+================
+RegisterQuickSlotBindings
+================
+*/
 func RegisterQuickSlotBindings(hub *transport.Hub, deps *Deps) {
 	hub.Handle(OpcodeQuickSlotBinding, func(s *transport.Session, opcode uint16, payload []byte) {
 		character, _, bound := SessionCharacter(deps.Characters, s)
