@@ -130,6 +130,8 @@ SkillRow is one skilldata record's learn-plane fields.
 ================
 */
 type SkillRow struct {
+	// Column 47, native server +C4: 0 China, 1 Europe, 3 unrestricted.
+	RequiredRace    uint8
 	StructureRepair SkillStructureRepair
 	// Validated replacement inputs, independent from executable admission.
 	// A refusal is retained instead of treating a malformed program as neutral.
@@ -297,10 +299,12 @@ type SkillRow struct {
 	// distinction from a malformed cell.
 	ActionRange       float64
 	ActionRangePinned bool
-	// AIWeight is column 66 (RefSkill +0x164, a byte): a monster's chance
+	// AIWeight is column 66 (RefSkill +0x164, a word): a monster's chance
 	// weight for this default skill in 561B00's weighted choice, and a
 	// summon's health band in 562060. Zero never takes part in the choice.
-	AIWeight uint8
+	AIWeight uint16
+	// Column 67, RefSkill +166: AI registration and healing-threat category.
+	Category uint8
 	// Masteries are the two required-mastery slots (cols 34/36, 35/37).
 	Masteries [2]SkillRequirement
 	// ReqStr/ReqInt gate on the character's STR/INT words (cols 38/39;
@@ -404,6 +408,10 @@ type SkillDataSource interface {
 // Column indices (0-based over the full 118-column row; see the header
 // comment for the parser-offset derivation and use-site pins).
 const (
+	SkillRaceAny = 3
+	// Columns 10 and 15 are retained metadata in the traced native owners:
+	// infer no extra action timer. Column 14 owns reuse delay; 5894E3 folds
+	// preparation into casting. The column audit records this inference's scope.
 	skilldataColID              = 1
 	skilldataColGroup           = 2
 	skilldataColCodename        = 3
@@ -427,10 +435,12 @@ const (
 	skilldataColReqGroupLv2     = 44
 	skilldataColReqGroupLv3     = 45
 	skilldataColReqSP           = 46
+	skilldataColReqRace         = 47
 	skilldataColTargetRequired  = 22
 	skilldataColWeaponKind1     = 50
 	skilldataColWeaponKind2     = 51
 	skilldataColAIWeight        = 66
+	skilldataColCategory        = 67
 	skilldataColActionHandler   = 68
 	skilldataColPrimaryTag      = 69
 	skilldataColAttackFlags     = 70
@@ -622,6 +632,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				continue
 			}
 			row := SkillRow{
+				RequiredRace:           SkillRaceAny,
 				ContinueBasicAttack:    textdataU32(fields[continueBasicAttackColumn]) == resumesBasicAttack,
 				CancellationDeferred:   nativeSkillDefersCancellation(fields, spawnParamArity),
 				NameAttackContent:      nativeNameAttackContent(fields),
@@ -663,6 +674,10 @@ func (t *TextdataSkills) parse(shards []string) {
 				Sight:                  encodedStatusLevel(fields, 0x647474),
 				DetectRange:            encodedDetectRange(fields),
 			}
+			// Historical learn-only fixtures stop before the country column.
+			if len(fields) > skilldataColReqRace {
+				row.RequiredRace = uint8(textdataU32(fields[skilldataColReqRace]))
+			}
 			// Presentation columns are absent from historical learn-only fixtures.
 			if len(fields) > 62 {
 				row.NameSymbol, row.Icon = fields[62], fields[61]
@@ -703,9 +718,10 @@ func (t *TextdataSkills) parse(shards []string) {
 				row.ActionRange = float64(actionRange)
 				row.ActionRangePinned = true
 			}
-			if weight, ok := textdataByte(fields[skilldataColAIWeight]); ok {
-				row.AIWeight = weight
+			if weight, ok := textdataInt(fields[skilldataColAIWeight]); ok && weight >= 0 && weight <= 0xffff {
+				row.AIWeight = uint16(weight)
 			}
+			row.Category = uint8(textdataU32(fields[skilldataColCategory]))
 			if len(fields) > skilldataColAttackValue5 {
 				targetRequired, targetOK := textdataInt(fields[skilldataColTargetRequired])
 				weapon1, weapon1OK := textdataByte(fields[skilldataColWeaponKind1])

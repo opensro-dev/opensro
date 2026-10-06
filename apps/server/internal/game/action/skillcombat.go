@@ -477,7 +477,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		success = wire.SkillCastReleaseResultFrame(wireResult)
 		closeAt = nowMs + int64(skill.ActionDurationMs)
 	}
-	if skill.ProjectileSpeed != 0 {
+	if skill.ActionHandler == enterworld.SkillActionProjectile {
 		flight := projectileFlightMs(playerPose, targetAt, skill.ProjectileSpeed)
 		// 5860D2 retains zero-preparation shots too. A fast shot or linked
 		// stage must not lose its effect actor before the projectile arrives.

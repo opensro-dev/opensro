@@ -113,6 +113,7 @@ func newCombatTestRuntimeAtLevel(t *testing.T, monsterHP uint32, level uint8) (*
 
 	ref := monster.MonsterRef{
 		RefObjID:   1933,
+		TidWord:    0x00c6, // Authored monster class; actor-class gates must run in fixtures too.
 		Codename:   "MOB_CH_MANGNYANG",
 		Level:      level,
 		MaxHP:      monsterHP,

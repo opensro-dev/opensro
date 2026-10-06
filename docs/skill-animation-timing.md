@@ -34,6 +34,101 @@ constants are not by themselves missing features: other parsers own targets,
 encoded parameters, UI placement and descriptions. This timing correction
 does not establish equivalence for all those owners.
 
+## Column and handler follow-up
+
+Column 68 selects the server action handler (`589B98..589C14`): 0 instant,
+1 projectile, 3 persistent, 4 continuous. Slots 2, 5 and 6 are null. The
+v1.150 data uses only 0, 1, 3 and 4. Flight speed is independent: the
+projectile handler explicitly stores zero flight time at `585DF1` when
+column 16 is zero. Offense admission, primary-area pose retention and
+projectile lifetime retention now use the handler rather than nonzero speed.
+Tests include the authored zero-speed Spear Shoot alongside thrown swords.
+The existing MP-cost owner already distinguishes handlers correctly.
+
+Column 47 is the learning country requirement. Native `59E579..59E591`
+accepts 3 unconditionally and otherwise compares the character country
+(0 China, 1 Europe), refusing with `3405` on mismatch. The requirement now
+survives the loader and resident-row compaction and is checked inside the
+learning transaction. The v1.150 response carries error byte 05 without a
+guide notice. Tests cover both countries against requirements 0, 1, 2 and 3,
+including unchanged SP/skills on refusal. European passive persistence tests
+now use European characters rather than Chinese characters with EU masteries.
+
+The learning validator now also preserves `59E450`'s first-failure order and
+distinct refusal codes: unavailable or zero-SP row (09), missing mastery
+(01), low mastery (02), STR (03), INT (04), country (05), wrong next rank
+(0C), missing prerequisite (06), low prerequisite (07), insufficient SP
+(0A). A regression starts with simultaneous failures and satisfies them one
+at a time; every refused transaction preserves SP and learned skills.
+
+Column 67 has an execution consumer: `5A0650` generates healing threat only
+for category H (0x48). Its previous database name, "ApplyDamageReturn", was
+wrong. It snapshots the healed actor's target squad, filters actor classes
+through `589CC0`, and publishes half the signed, wrapping HP+MP recovery sum,
+truncated toward zero. The sum is taken before recovery reductions and gauge
+clamping. Even a one-point heal publishes its resulting zero-threat event;
+an actual zero sum publishes none. Linked threat goes to the source before
+the healer, without damage credit or monster HP changes.
+
+The port uses existing population targets and hostility ownership. Self,
+targeted, party, timed, aura and fortress repair-kit recovery now publish
+after their HP transaction succeeds, including overheal. Tests exercise these
+routes, category refusal, another target's squad, linked transfer, zero-half
+events and native actor-class predicates. Column 66 is retained as a native
+word rather than a byte. All 27,835 rows are checked after resident compaction
+for preparation, country, category and AI weight.
+
+Saved server snapshot 449 was read back and contains the corrected healing,
+actor-filter, squad-lookup and supporting container/exception labels.
+Client snapshot 404 was also read back for the board-construction,
+learnability, mastery/group index, requirement-tooltip and container labels.
+The final source pass completed all 13 gates, including the full server gate;
+fresh licensed recovery, repair, learning and 27,835-row census tests passed.
+
+This column inventory distinguishes runtime ownership from authored metadata.
+It is not a claim of whole-program machine equivalence:
+
+| Source columns | Existing owner or current finding |
+| --- | --- |
+| 0 | Service filtering in the asset loader; all 27,835 audited rows are enabled. |
+| 1–3 | Skill identity, group/rank lookup and codename lookup. |
+| 4 | Authored descriptive name; player-facing names use localized column 62. |
+| 5–6 | Basic/original identity used by replacement and client audio/effect resolution. |
+| 7–9 | Level, activity, linked-stage graph and learn-root handling. |
+| 10 | Authored 0/99999999 metadata. No execution consumer found in the traced skill handlers; see inference boundary below. |
+| 11–14 | Preparation normalization, casting, recovery and cooldown; preparation omission fixed. |
+| 15 | Retained native reference field, distinct from column 14 cooldown. No timing consumer found in the traced owners; see below. |
+| 16 | Flight speed, including zero-speed projectile branch fixed above. |
+| 17 | Zero throughout the audited data; offense envelope currently validates zero. |
+| 18–19 | Packed replacement/cooldown states and exact-value basic-attack continuation. |
+| 20 | Zero throughout the audited data. |
+| 21 | Action reach, separate from equipment range. |
+| 22–33 | Target requirement, animal/land/building, relations and corpse selection (`skilltargets.go`). |
+| 34–46 | Two masteries, STR/INT, three prerequisite groups/ranks and learning SP; native refusal ladder now preserved. |
+| 47 | Explicit country requirement, newly wired end to end. |
+| 48–49 | Zero in every v1.150 row. Native `59E450` skips these bytes between country and weapon fields; no additional learning gate is inferred. |
+| 50–51 | Required weapon alternatives and encoded equipment-requirement integration. |
+| 52–55 | Flat and percentage HP/MP costs. |
+| 56 | Zero throughout the audited data; offense envelope currently validates zero. |
+| 57–60 | Skill-pane tab/row/column owners use 57/59/60. Column 58 is loaded at client +788 but is not used by the traced board construction. |
+| 61–65 | Icon/localized name/description/study projection; column 63 is `xxx` in all rows. |
+| 66 | AI selection weight/summon health band, native word width preserved. |
+| 67 | Healing threat H; existing AI classification. D has no authored character-default references; S references are fortress structures; later X/Y categories are absent in v1.150. |
+| 68 | Action-handler selector, independently traced above. |
+| 69–117 | Tagged parameter program with argument-dependent strides, not 49 independent feature switches. |
+
+For columns 10/15/58 the port decision is to retain the existing execution
+and board behavior, rather than invent another timer or layout axis. This is
+a bounded inference: native copying alone does not establish a runtime use.
+The client check inspected all 52 direct callers of `7F8560`, the direct
+record-offset references, and board construction `7F1320`/insertion `7F1090`.
+The apparent +F4 consumers use indexed effect parameters on the CSkillData
+object, not column 58 in its extended-info block. The server's apparent +80
+consumers in the traced skill kernel read positions, character references
+or SP; they are not column 15 reads. These checks justify no additional
+feature in this pass, but do not prove absence through every possible
+aliased pointer in the executable.
+
 The v1.150 client holds a one-shot animation at its first pose during the
 entry blend. The webport previously advanced its pose, sound and stage-key
 cursors during that interval. Both the Anti Devil Bow READY/SHOT clips and

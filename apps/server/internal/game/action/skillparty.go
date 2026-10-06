@@ -88,12 +88,22 @@ type auraUpdate struct {
 }
 
 // auraStatsOwner is one character owed a 0x343C.
+/*
+================
+auraStatsOwner
+================
+*/
 type auraStatsOwner struct {
 	division string
 	c        *enterworld.Character
 }
 
 // oweStats records that c's stats moved in this pass.
+/*
+================
+oweStats
+================
+*/
 func (u *auraUpdate) oweStats(division string, c *enterworld.Character) {
 	key := simulation.WorldKey(division, c.Name)
 	if u.owed[key] {
@@ -196,6 +206,11 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 
 // auraRadius is the efr radius plus the caster's MUER (+0x544) and DSER
 // (+0x54C) when the row asks for them.
+/*
+================
+auraRadius
+================
+*/
 func (rt *Runtime) auraRadius(division string, caster *enterworld.Character, skill enterworld.SkillRow) (uint32, bool) {
 	stats, _, err := rt.playerCombatStats(division, caster)
 	if err != nil {
@@ -313,18 +328,28 @@ func (rt *Runtime) installAuraStep(u *auraUpdate, aura *partyAura, now int64) {
 	if caster == nil || !known {
 		return
 	}
-	u.frames = append(u.frames, rt.healAura(aura, caster, skill)...)
+	u.frames = append(u.frames, rt.healAura(aura, caster, skill, now)...)
 	rt.joinAura(u, aura, caster, skill, now)
 }
 
 // auraInstanceLive reports the caster's persistent instance still installed
 // and not asked to stop.
+/*
+================
+auraInstanceLive
+================
+*/
 func (rt *Runtime) auraInstanceLive(aura partyAura) bool {
 	return rt.instanceLive(aura.division, aura.casterName, aura.skillID, aura.token)
 }
 
 // instanceLive reports one instance of skillID still installed on name and
 // not asked to stop.
+/*
+================
+instanceLive
+================
+*/
 func (rt *Runtime) instanceLive(division, name string, skillID, token uint32) bool {
 	for _, effect := range rt.effects.Snapshot(division, name) {
 		if effect.SkillID == skillID && effect.InstanceToken == token {
@@ -390,6 +415,11 @@ func (rt *Runtime) auraPulseCost(division string, caster *enterworld.Character, 
 }
 
 // retireAura ends the caster's instance and every child.
+/*
+================
+retireAura
+================
+*/
 func (rt *Runtime) retireAura(u *auraUpdate, aura partyAura) {
 	rt.endAuraInstance(u, aura, aura.casterName, aura.token)
 	for name, token := range aura.members {
@@ -590,6 +620,11 @@ func (rt *Runtime) auraStatsFrames(division string, c *enterworld.Character, ski
 }
 
 // instanceWrites reports that c's instance token writes parameters.
+/*
+================
+instanceWrites
+================
+*/
 func (rt *Runtime) instanceWrites(division string, c *enterworld.Character, token uint32) bool {
 	for _, effect := range rt.effects.Snapshot(division, c.Name) {
 		if effect.InstanceToken == token {
@@ -601,6 +636,11 @@ func (rt *Runtime) instanceWrites(division string, c *enterworld.Character, toke
 
 // auraParty is the caster's party (actor+0x1CB8) as a gid set, empty when
 // the caster has no party.
+/*
+================
+auraParty
+================
+*/
 func (rt *Runtime) auraParty(division string, caster *enterworld.Character) map[uint32]bool {
 	out := map[uint32]bool{}
 	if rt.RewardParties == nil {
@@ -623,6 +663,11 @@ func (rt *Runtime) auraParty(division string, caster *enterworld.Character) map[
 
 // auraReplacementAllowed is CSkillManager_ValidateBuffReplacement on the
 // member's own manager.
+/*
+================
+auraReplacementAllowed
+================
+*/
 func (rt *Runtime) auraReplacementAllowed(division string, member *enterworld.Character, skill enterworld.SkillRow) bool {
 	if !skill.ReplacementPinned || skill.Replacement.Lnks {
 		return true
@@ -755,6 +800,11 @@ func (rt *Runtime) rivalInstrumentLoser() int {
 }
 
 // danceInParty reports an open dance aura whose Bard is in party.
+/*
+================
+danceInParty
+================
+*/
 func (rt *Runtime) danceInParty(division string, party map[uint32]bool) bool {
 	for _, aura := range rt.partyAuras {
 		row, ok := rt.deps.SkillData().SkillByID(aura.skillID)
@@ -770,6 +820,11 @@ func (rt *Runtime) danceInParty(division string, party map[uint32]bool) bool {
 
 // auraLevel is the level rule 3 compares: the row's first required mastery
 // level (see settleRivalInstruments).
+/*
+================
+auraLevel
+================
+*/
 func auraLevel(row enterworld.SkillRow) int64 {
 	return row.Masteries[0].Level
 }
@@ -824,7 +879,7 @@ healAura
 CSkillManager_ApplyHealRecovery (5A09F0).
 ==================
 */
-func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow) []simulation.DivisionFrames {
+func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill enterworld.SkillRow, now int64) []simulation.DivisionFrames {
 	if !skill.Aura.Eshp {
 		return nil
 	}
@@ -834,14 +889,19 @@ func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill
 	}
 
 	var frame wire.Frame
+	healingThreat := makeSkillHealingThreat(aura.division, caster, who, skill)
 	healed := rt.deps.Update(who, "aura-heal", func() bool {
 		hp, mp, ok := rt.skillHealAmounts(aura.division, who, caster, skill, healAura)
 		if !ok {
 			return false
 		}
+		healingThreat.amount = hp + mp
 		frame, ok = rt.applySkillRecovery(aura.division, who, hp, mp)
 		return ok
 	})
+	if healed {
+		rt.publishSkillHealingThreat(healingThreat, now)
+	}
 	if !healed || frame.Opcode == 0 {
 		return nil
 	}
@@ -896,6 +956,11 @@ HELPERS
 */
 
 // simFrames carries wire frames into the tick's routed form unchanged.
+/*
+================
+simFrames
+================
+*/
 func simFrames(in []wire.Frame) []simulation.Frame {
 	out := make([]simulation.Frame, len(in))
 	for i, frame := range in {

@@ -39,7 +39,7 @@ func TestSkillPreparationNormalization(t *testing.T) {
 	} {
 		t.Run(tc.prepare+"/"+tc.casting, func(t *testing.T) {
 			dir := t.TempDir()
-			row := syntheticSkillRow(map[int]string{1: "999", 3: "NORMALIZED", 11: tc.prepare, 12: tc.casting, 13: "530", 14: "4000"})
+			row := syntheticSkillRow(map[int]string{1: "999", 3: "NORMALIZED", 11: tc.prepare, 12: tc.casting, 13: "530", 14: "4000", 66: "513", 67: "72"})
 			if err := os.WriteFile(filepath.Join(dir, "skilldata_virtual.txt"), []byte(row+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -51,6 +51,9 @@ func TestSkillPreparationNormalization(t *testing.T) {
 				got, ok := skills.SkillByID(999)
 				if !ok || got.ActionCastingTimeMs != tc.want || got.ActionCastingTimePinned != tc.pinned || got.ActionDurationMs != 530 || got.CoolTimeMs != 4000 {
 					t.Fatalf("normalization pass %d: %+v", i, got)
+				}
+				if got.AIWeight != 513 || got.Category != 'H' {
+					t.Fatalf("native word weight/category did not survive reload: %d/%d", got.AIWeight, got.Category)
 				}
 			}
 		})
@@ -84,6 +87,12 @@ func TestEveryShippedSkillIncludesPreparationExactlyOnce(t *testing.T) {
 			row, ok := skills.SkillByID(id)
 			if !ok || !row.ActionCastingTimePinned || row.ActionCastingTimeMs != uint32(prepare+casting) {
 				t.Fatalf("%d preparation lost: %d + %d -> %d", id, prepare, casting, row.ActionCastingTimeMs)
+			}
+			if row.RequiredRace != uint8(textdataU32(f[47])) {
+				t.Fatalf("%d race requirement lost: %s -> %d", id, f[47], row.RequiredRace)
+			}
+			if row.AIWeight != uint16(textdataU32(f[66])) || row.Category != uint8(textdataU32(f[67])) {
+				t.Fatalf("%d AI weight/category lost: %s/%s -> %d/%d", id, f[66], f[67], row.AIWeight, row.Category)
 			}
 			if prepare != 0 {
 				changed++

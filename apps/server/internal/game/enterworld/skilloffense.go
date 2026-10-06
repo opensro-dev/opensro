@@ -467,13 +467,9 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 			// Crossbow stages own their cnsm debit (585FB6), including
 			// zero-preparation linked shots. Keep other weapon families on
 			// their reviewed envelope; graph validation remains root-owned.
-			// FIXME: routing still keys on the flying speed, so ActionHandler 1
-			// rows at speed 0 (SKILL_CH_SPEAR_SHOOT_*, area shape 4) run the
-			// instant owner. SkillAction_Projectile (5857B0) at speed 0 flies
-			// 0 ms but, unlike SkillAction_Instant (586700), applies no
-			// position effect, registers no hostile target and hits when the
-			// bow-shot record lands. Only the MP rule follows the handler so far.
-			if row.ProjectileSpeed != 0 || seen[0x636e736d] {
+			// 589B98 dispatches on the handler, not flight speed. Handler 1
+			// explicitly accepts speed zero at 585DF1 (zero flight time).
+			if row.ActionHandler == SkillActionProjectile || seen[0x636e736d] {
 				crossbow := row.RequiredWeaponKinds == ([2]uint8{crossbowWeaponKind, 255})
 				// SkillAction_Projectile (5857B0) links stages for any
 				// launcher: the bow's Arrow Combo C and D chain zero-preparation
@@ -481,7 +477,7 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 				chained := crossbow || row.RequiredWeaponKinds == ([2]uint8{bowWeaponKind, 255})
 				// Several mc impacts resolve at release together and spend
 				// cnsm count x impacts arrows (585AF0).
-				if row.ProjectileSpeed == 0 ||
+				if row.ActionHandler != SkillActionProjectile ||
 					!chained && (row.ActionCastingTimeMs == 0 || row.ChainSub || row.ChainNext != 0) ||
 					row.Attack.ImpactCount == 0 ||
 					!(row.Ammunition == (SkillAmmunition{4, 1, 1}) && row.RequiredWeaponKinds == ([2]uint8{6, 255}) ||

@@ -34,6 +34,16 @@ import (
 // level-up gate enforces (sub_5841d0: level < 0x78).
 const MasteryLevelCap int64 = 120
 
+// 59E450 returns 34xx; the v1.150 learning response carries the low byte.
+const (
+	skillLearnMasteryLevelRefusal uint8 = 0x02
+	skillLearnRaceRefusal         uint8 = 0x05
+	skillLearnPrerequisiteMissing uint8 = 0x06
+	skillLearnPrerequisiteLevel   uint8 = 0x07
+	skillLearnUnavailable         uint8 = 0x09
+	skillLearnRankRefusal         uint8 = 0x0c
+)
+
 // Total-mastery allowance (notice 07:05): the budget the v1.150 client
 // itself DISPLAYS on the skill board but never locally enforces, which is
 // why the gate is server-owned. Client pin (re-verified against
@@ -600,39 +610,11 @@ plus the absolute SP refresh on 0x30B3 type 2 - the ack handler
 sub_75bb20 never touches the client's SP, so without the refresh its
 display goes stale).
 
-Every gate is authority DATA from the shipped skilldata (see
-bootstrap/skilldata.go for the column pins); nothing here is a formula.
-Gate order: the impossible-request shapes first, then the pinned-notice
-causes, so the code the player reads (SP) only fires once everything
-the retail UI enforces has passed:
-
- 1. the row must exist in skilldata (an unknown id cannot be priced);
- 2. the row must not be a chain SUB-row (a row another row's chain link
-    names, skilldata col 9 / info+0x64). PINNED: the 1S/2S/3S
-    rows of a chain are never delivered as learned skills at all - the
-    client resolves them FROM the learned root via the link (the sole
-    info+0x64 read is the tooltip walk sub_806ee0 @0x00807009), and its
-    skill board can only compose 0x72CB with the ROOT id (sub_588af0
-    @0x00588c03 -> sub_7efff0 first-match-by-level; the root is first
-    in parse order and lowest-id in all 401 shipped chain sets). So a
-    sub-row learn is a retail-impossible shape; without this gate a
-    FRESH group's 2S/3S row would pass gate 3 (level 1-1 == 0) and ack
-    a client state retail cannot reach;
- 3. the skill's GROUP must currently be learned at EXACTLY level-1.
-    This single check is both the duplicate gate and the level ladder:
-    the client ASSERTS on a success ack whose group is already learned
-    at >= the acked level (sub_75bb20 @0x0075bb71), and its own
-    mark-learned walk only ever REPLACES the entry whose level+1 equals
-    the new level (sub_8509f0 @0x00850ac9), so a skipped level would
-    leave the collection in a state retail cannot reach;
- 4. both required-mastery slots: the mastery record must EXIST on the
-    character (races only carry their own set) at >= the required
-    level (sub_8507f0's compare direction, @0x00850889/@0x00850897);
- 5. required STR/INT (notice codes 05:03/05:04; all-zero in shipped
-    skilldata, so live only for custom data);
- 6. all three prerequisite-group slots at >= their required level
-    (sub_850150's group-key/level-byte walk, @0x008501e6);
- 7. the character must hold the SP cost (m_nReq_Sp, notice 05:0a).
+The native 59E450 validator checks row/SP eligibility, masteries, STR/INT,
+country, the exact next rank, three prerequisite groups and finally SP.
+Keep this order: simultaneous failures must return the same refusal byte.
+Chain children remain internal execution records rather than learned entries.
+The authority door owns all character reads, SP debit and rank replacement.
 
 ==================
 */
@@ -648,8 +630,9 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 		return skillLearnRefusal(wire.ErrCodeSkillLearnRefused)
 	}
 	row, known := rt.deps.SkillData().SkillByID(request.SkillID)
-	if !known {
-		return skillLearnRefusal(wire.ErrCodeSkillLearnRefused)
+	if !known || row.SPCost == 0 {
+		// 59E47D / 59E4A3: absent and zero-SP rows are not trainable.
+		return skillLearnRefusal(skillLearnUnavailable)
 	}
 
 	// Gate 2: chain sub-rows are never learnable - the retail client can
@@ -673,15 +656,16 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 		if character.DeletePending {
 			return false
 		}
-		if rt.learnedGroupLevel(character, row.Group) != row.Level-1 {
-			return false
-		}
 		for _, requirement := range row.Masteries {
 			if requirement.ID == 0 {
 				continue
 			}
 			level, exists := enterworld.MasteryLevel(character, requirement.ID)
-			if !exists || level < requirement.Level {
+			if !exists {
+				return false
+			}
+			if level < requirement.Level {
+				refusal = skillLearnMasteryLevelRefusal
 				return false
 			}
 		}
@@ -693,9 +677,26 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 			refusal = wire.ErrCodeSkillLearnInt
 			return false
 		}
+		// 59E579..59E591: country 3 is unrestricted; other bytes must match.
+		if row.RequiredRace != enterworld.SkillRaceAny && int(row.RequiredRace) != enterworld.NativeCountryByte9C(character) {
+			refusal = skillLearnRaceRefusal
+			return false
+		}
+		if rt.learnedGroupLevel(character, row.Group) != row.Level-1 {
+			refusal = skillLearnRankRefusal
+			return false
+		}
 		for _, requirement := range row.Prerequisites {
-			if requirement.ID != 0 &&
-				rt.learnedGroupLevel(character, requirement.ID) < requirement.Level {
+			if requirement.ID == 0 {
+				continue
+			}
+			level := rt.learnedGroupLevel(character, requirement.ID)
+			if level == 0 {
+				refusal = skillLearnPrerequisiteMissing
+				return false
+			}
+			if level < requirement.Level {
+				refusal = skillLearnPrerequisiteLevel
 				return false
 			}
 		}
