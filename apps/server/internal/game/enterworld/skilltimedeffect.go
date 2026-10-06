@@ -314,6 +314,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	if item, ok := compileTimedItemEffect(fields, *row); ok {
 		row.TimedEffect = item
+		if row.MovementModifier.Present {
+			row.MovementModifier.Supported = true
+		}
 		return
 	}
 	if periodic := compileSkillPeriodicEffect(fields, *row); periodic.Pinned {

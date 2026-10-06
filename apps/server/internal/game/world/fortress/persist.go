@@ -50,6 +50,18 @@ func (a *Authority) Restore(divisionID string, store domain.FortressStore) error
 			return fmt.Errorf("fortress: stored fortress %d is not served", row.FortressID)
 		}
 		record.GuildID, record.TempGuildID = row.GuildID, row.TempGuildID
+		record.battles = make(map[int64]domain.FortressBattleRecord, len(row.BattleRecords))
+		record.battleCheckpoints = make(map[int64]domain.FortressBattleRecord, len(row.BattleRecords))
+		for _, battle := range row.BattleRecords {
+			if battle.CharacterID <= 0 || battle.Rank > MaxBattleRank {
+				return fmt.Errorf("fortress: invalid battle record")
+			}
+			if _, duplicate := record.battles[battle.CharacterID]; duplicate {
+				return fmt.Errorf("fortress: duplicate battle record")
+			}
+			record.battles[battle.CharacterID] = battle
+			record.battleCheckpoints[battle.CharacterID] = battle
+		}
 	}
 	for _, row := range requests {
 		record, ok := state.records[row.FortressID]
@@ -79,6 +91,7 @@ func (a *Authority) saveRecordLocked(divisionID string, record *Record) error {
 	}
 	return a.store.SaveFortress(divisionID, domain.FortressRecord{
 		FortressID: record.ID, GuildID: record.GuildID, TempGuildID: record.TempGuildID,
+		BattleRecords: battleRows(record),
 	})
 }
 

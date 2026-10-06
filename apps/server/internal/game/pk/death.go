@@ -27,7 +27,7 @@ type DeathKind uint8
 const (
 	DeathNone         DeathKind = 0
 	DeathJob          DeathKind = 1
-	DeathTeam         DeathKind = 2 // free-battle capes, siege, arena: no penalty
+	DeathTeam         DeathKind = 2 // free-battle capes, arena: no penalty
 	DeathPlayer       DeathKind = 3
 	DeathMonster      DeathKind = 4
 	DeathGuildWar     DeathKind = 5
@@ -165,6 +165,7 @@ the victim's parameter 0x101 (the percent of the EXP loss it keeps).
 type DeathPenalty struct {
 	Rule             LossRule
 	Job              bool
+	SpecialWorld     bool
 	KillerLevel      uint8
 	ReductionPercent float32
 }

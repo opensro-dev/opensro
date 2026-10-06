@@ -24,6 +24,7 @@ import (
 	"opensro.online/server/internal/game/internal/vitals"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -223,6 +224,8 @@ type playerAbnormalOwner struct {
 	detonations  []abnormal.Slot
 	deathEffects []wire.Frame
 	deathTarget  []wire.Frame
+	deathKiller  *enterworld.Character
+	deathKill    playerKill
 	endedEffects []statuseffect.Effect
 	endedPublic  []wire.Frame
 	endedActor   []wire.Frame
@@ -517,6 +520,9 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 	o.hits = append(o.hits, abnormalHit{source: source, credited: credited, damage: damage, reason: reason})
 	if remaining == 0 {
 		o.fatal = true
+		o.deathKiller = o.sources[source].killer.player
+		killer := o.sources[source].killer
+		o.deathKill = playerKill{kind: o.rt.deathKind(o.division, o.c, killer), victimLevel: rewardLevel(o.c)}
 		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.sources[source].killer, o.now)
 	}
 }
@@ -739,6 +745,19 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 		}
 	}
 	if o.fatal {
+		rt.recordFortressDeath(division, c, o.deathKiller, o.now)
+		if o.deathKiller != nil && o.deathKill.kind == pk.DeathSpecialWorld {
+			killer := rt.findCharacterByGid(division, enterworld.ObjectIDForCharacter(o.deathKiller))
+			if killer != nil {
+				var actor, public []wire.Frame
+				rt.deps.Update(killer, "fortress-abnormal-kill", func() bool {
+					actor, public, _ = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
+					return len(actor) != 0 || len(public) != 0
+				})
+				out.sources = append(out.sources, privateFrames{killer.ID, actor})
+				out.public = append(out.public, public...)
+			}
+		}
 		out.public = append(out.public, o.deathEffects...)
 		lifePublication := beginFatalLifePublication(gid)
 		baseline := lifePublication.publishDeathBaseline()
@@ -851,7 +870,7 @@ func (rt *Runtime) advancePlayerAbnormal(division, name string, now int64) []sim
 		return nil
 	}
 	o := rt.newPlayerAbnormalOwner(division, c, now)
-	o.sources = rt.captureAbnormalSources(division, o.block, nil)
+	o.sources = rt.capturePlayerAbnormalSources(division, c, o.block, nil)
 	committed := rt.deps.Update(c, "player-abnormal", func() bool {
 		if c.DeletePending {
 			return false

@@ -66,6 +66,7 @@ type playerStruck struct {
 	// before is the victim's HP ahead of each impact (a drain's cap).
 	before        []uint32
 	fatal, struck bool
+	killer        *enterworld.Character
 	// mpSpent is what dgmp (5A13FE) took from MP; mp is the MP it left.
 	mpSpent, mp      uint32
 	deathEffects     []wire.Frame
@@ -121,7 +122,8 @@ func (rt *Runtime) planPlayerStrike(s *playerStrike,
 		return false
 	}
 	s.owner = rt.newPlayerAbnormalOwner(s.division, s.victim, s.now)
-	s.owner.sources = rt.captureAbnormalSources(s.division, s.owner.block, s.records)
+	s.killer = rt.prepareDeathKiller(s.division, s.victim, s.killer)
+	s.owner.sources = rt.capturePlayerAbnormalSources(s.division, s.victim, s.owner.block, s.records)
 	return true
 }
 
@@ -136,7 +138,7 @@ landed hits wear its armour and its blocks its shield (593C9F/593CB1).
 */
 func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 	c := s.victim
-	out := playerStruck{owner: s.owner}
+	out := playerStruck{owner: s.owner, killer: s.killer.player}
 	hit := abnormal.HitContext{Attack: s.skill.ReplacementPinned && s.skill.Replacement.MatchesExecutionSelector}
 	_, _, remaining, remainingMP := rt.playerKeeperVitals(s.division, c)
 	redirect := rt.effects.DamageToMPPercent(s.division, c.Name)
@@ -240,6 +242,7 @@ func (rt *Runtime) playerStruckFrames(division string, victim *enterworld.Charac
 	private = append(private, struck.wear.actor...)
 	public = append(public, struck.withdrawn...)
 	if struck.fatal {
+		rt.recordFortressDeath(division, victim, struck.killer, now)
 		if rt.PushCharacterFrames != nil && rt.PushDivisionPeerFrames != nil {
 			// Native death retires effects before publishing the life change.
 			// Enqueue under the action lock, before a rebirth/new application

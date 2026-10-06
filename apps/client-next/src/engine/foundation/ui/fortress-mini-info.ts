@@ -9,26 +9,9 @@ with the existing fortress stream owner. These functions only present it.
 
 ===========================================================================
 */
-import { fortressActive, type FortressState } from "@/engine/foundation/gameplay/fortress";
+import { fortressActive, fortressBattleRanks, type FortressState } from "@/engine/foundation/gameplay/fortress";
 import { fortressWarFormat } from "./fortress-war-apply";
 
-// Enabled v1.150 siegefortressbattlerank.txt rows, in unsigned threshold
-// order (7E1C60); names are the 7BB8C0 switch, icons are row column 5.
-/*
-================
-battleRanks
-================
-*/
-function battleRanks() {
-	return [
-		{ kills: 15, name: "SN_SKILL_ASSAULTING_SOILDER", icon: "rank_assault_soilder" },
-		{ kills: 25, name: "SN_SKILL_ELITE_ASSAULTING_SOILDER", icon: "rank_elite_assault_soilder" },
-		{ kills: 45, name: "SN_SKILL_CENTURION", icon: "rank_centurion" },
-		{ kills: 70, name: "SN_SKILL_ASSAULTING_LEADER", icon: "rank_assault_leader" },
-		{ kills: 100, name: "SN_SKILL_ELITE_IMPERIAL_GUARD", icon: "rank_elite_guard" },
-		{ kills: 150, name: "SN_SKILL_COMBAT_COMMANDER", icon: "rank_combat_commander" }
-	] as const;
-}
 const SECONDS_PER_MINUTE = 60;
 
 /*
@@ -58,7 +41,7 @@ export function fortressMiniIndicators(
 	const out: FortressMiniIndicator[] = [];
 	if ( fortressActive( state ) ) {
 		const kills = state.localKills ?? 0, deaths = state.localDeaths ?? 0;
-		const ranks = battleRanks();
+		const ranks = fortressBattleRanks();
 		let rank: typeof ranks[number] | undefined;
 		for ( const row of ranks ) if ( kills >= row.kills ) rank = row;
 		if ( rank ) {

@@ -16,6 +16,24 @@ import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "./system-notices";
 import { fortressServiceReply, FORTRESS_SERVICE_REPLY, type FortressServiceReply } from "./fortress-services";
 
+// Enabled v1.150 siegefortressbattlerank.txt rows, in unsigned threshold
+// order (7E1C60); names are the 7BB8C0 switch, icons are row column 5.
+/*
+================
+fortressBattleRanks
+================
+*/
+export function fortressBattleRanks() {
+	return [
+		{ kills: 15, name: "SN_SKILL_ASSAULTING_SOILDER", icon: "rank_assault_soilder" },
+		{ kills: 25, name: "SN_SKILL_ELITE_ASSAULTING_SOILDER", icon: "rank_elite_assault_soilder" },
+		{ kills: 45, name: "SN_SKILL_CENTURION", icon: "rank_centurion" },
+		{ kills: 70, name: "SN_SKILL_ASSAULTING_LEADER", icon: "rank_assault_leader" },
+		{ kills: 100, name: "SN_SKILL_ELITE_IMPERIAL_GUARD", icon: "rank_elite_guard" },
+		{ kills: 150, name: "SN_SKILL_COMBAT_COMMANDER", icon: "rank_combat_commander" }
+	] as const;
+}
+
 export const OP_FORTRESS_INTERACTION = 0x71e1;
 export const OP_FORTRESS_INTERACTION_RESULT = 0xb1e1;
 export const OP_FORTRESS_WAR_STATE = 0x3887;
@@ -240,6 +258,36 @@ export function fortressRegistrationNotice( state: FortressState, frame: WireFra
 		"UIIT_MSG_FORT_OFFICIAL_UNIONAPPLY_CANCEL";
 	const name = state.fortresses.find( r => r.id === id )?.nameStrId ?? null;
 	return { key, value: 0, localizedArguments: [ name ], banner: true, bannerOnly: true };
+}
+
+/*
+================
+fortressBattleRankNotice
+
+76C870 case 0x0E reads either the local player or an explicit name, then
+7BB8C0's rank name. Both the notice banner and system chat receive it.
+================
+*/
+export function fortressBattleRankNotice( frame: WireFrame, localName: string ): SystemNotice | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_FORTRESS_WAR_STATE || p[0] !== 0x0e ) return null;
+	if ( p.length < 3 ) throw Error( "Truncated fortress battle rank" );
+	let name = localName, rank = p[2]!;
+	if ( p[1] === 0 ) {
+		if ( p.length < 5 ) throw Error( "Truncated fortress battle rank name" );
+		const n = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 2, true );
+		if ( p.length !== n + 5 ) throw Error( "Invalid fortress battle rank length" );
+		name = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( 4, 4 + n ) );
+		rank = p[4 + n]!;
+	} else if ( p.length !== 3 ) throw Error( "Trailing fortress battle rank bytes" );
+	if ( !name ) return null;
+	return {
+		key: "UIIT_MSG_FORT_BATTLERANK_GRANT",
+		value: 0,
+		arguments: [ name, "" ],
+		localizedArguments: [ null, fortressBattleRanks()[rank - 1]?.name ?? null ],
+		banner: true
+	};
 }
 
 export const FORTRESS_CONQUEST = 0x08;

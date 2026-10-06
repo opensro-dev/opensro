@@ -9,6 +9,7 @@ package store
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -26,7 +27,9 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 	dir := t.TempDir()
 	s := openTest(t, dir, newTestClock())
 	door := s.Fortresses()
-	if err := door.SaveFortress(testDivision, domain.FortressRecord{FortressID: 1, GuildID: 7, TempGuildID: 9}); err != nil {
+	saved := domain.FortressRecord{FortressID: 1, GuildID: 7, TempGuildID: 9,
+		BattleRecords: []domain.FortressBattleRecord{{CharacterID: 7, Kills: 151, Deaths: 21, Rank: 6, RankAtMs: 123456}}}
+	if err := door.SaveFortress(testDivision, saved); err != nil {
 		t.Fatal(err)
 	}
 	for _, guild := range []int64{9, 11} {
@@ -47,7 +50,7 @@ func TestFortressStateSurvivesReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 1 || records[0] != (domain.FortressRecord{FortressID: 1, GuildID: 7, TempGuildID: 9}) {
+	if len(records) != 1 || !reflect.DeepEqual(records[0], saved) {
 		t.Fatalf("fortresses %+v", records)
 	}
 	if len(requests) != 1 || requests[0].GuildID != 9 {

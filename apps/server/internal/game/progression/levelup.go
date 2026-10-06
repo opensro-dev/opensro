@@ -297,6 +297,11 @@ func deathPenaltyLoss(levels enterworld.LevelDataSource, level int64, penalty pk
 	}
 	loss := int64(math.Trunc(float64(required) * float64(rule.Percent)))
 	limit := basis * rule.CapFactor
+	if penalty.SpecialWorld {
+		// 4E6E09: signed dword product, multiplied by widened 0.2f, then truncated.
+		const siegeCapScale = float64(float32(0.2))
+		limit = int64(math.Trunc(float64(int32(limit)) * siegeCapScale))
+	}
 	if rule.HalveCap {
 		limit = int64(math.Trunc(float64(limit) * 0.5))
 	}

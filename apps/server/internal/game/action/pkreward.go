@@ -57,8 +57,9 @@ relief lowers the penalty.
 ================
 */
 type playerKill struct {
-	kind     pk.DeathKind
-	murderer bool
+	kind        pk.DeathKind
+	murderer    bool
+	victimLevel int64
 }
 
 /*
@@ -79,9 +80,9 @@ classifyPlayerKill
 ================
 */
 func (rt *Runtime) classifyPlayerKill(division string, killer, victim *enterworld.Character) playerKill {
-	kind := rt.playerKillKind(division, victim, killer)
+	kind := rt.deathKind(division, victim, rt.prepareDeathKiller(division, victim, deathKiller{player: killer}))
 	murderer := victim.PK != nil && victim.PK.Penalty > 0 && kind != pk.DeathGuildWar
-	return playerKill{kind: kind, murderer: murderer}
+	return playerKill{kind: kind, murderer: murderer, victimLevel: rewardLevel(victim)}
 }
 
 /*
@@ -99,9 +100,12 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 	}
 	victimGid := enterworld.ObjectIDForCharacter(victim)
 	party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
-	if kill.kind == pk.DeathPlayer || kill.kind == pk.DeathGuildWar {
-		exp := pvpExperience(rt.deps.LevelData(), killer, victim, party)
-		if kill.murderer {
+	if kill.kind == pk.DeathPlayer || kill.kind == pk.DeathGuildWar || kill.kind == pk.DeathSpecialWorld {
+		// 4E6980/4E6D60 award EXP before the victim can lose a level.
+		victimBefore := *victim
+		victimBefore.Level = &kill.victimLevel
+		exp := pvpExperience(rt.deps.LevelData(), killer, &victimBefore, party)
+		if kill.murderer && kill.kind != pk.DeathSpecialWorld {
 			exp *= 2
 		}
 		frames := rt.grantKillExperience(killer, exp, victimGid)
