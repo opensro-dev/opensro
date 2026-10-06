@@ -15,6 +15,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { GENERATED_ROOT_ENV, resolveGeneratedRoot } from "../../lib/generatedRoot.mjs";
 import { findGeneratedPaths } from "../../checks/check_generated_root.mjs";
+import { resolveServerGameDataRoot, SERVER_GAME_DATA_ROOT_ENV } from "../../build/world/paths.mjs";
 
 const repository = fileURLToPath( new URL( "../../../", import.meta.url ) );
 
@@ -56,4 +57,24 @@ test("the gate finds every hand-built path to the tree and ignores prose and oth
 	for ( const line of ignored ) {
 		assert.deepEqual( findGeneratedPaths( line ), [], line );
 	}
+});
+
+test("the server game-data projection follows SRO_SERVER_GAME_DATA_ROOT, as the Go server does", () => {
+	assert.equal(
+		resolveServerGameDataRoot( {} ),
+		path.join( repository, "apps", "server", ".generated", "game-data", "1.150", "server" )
+	);
+	const shared = path.resolve(
+		repository,
+		"..",
+		"main",
+		"apps",
+		"server",
+		".generated",
+		"game-data",
+		"1.150",
+		"server"
+	);
+	assert.equal( resolveServerGameDataRoot( { [SERVER_GAME_DATA_ROOT_ENV]: shared } ), shared );
+	assert.throws( () => resolveServerGameDataRoot( { [SERVER_GAME_DATA_ROOT_ENV]: "../main/server" } ), /absolute/ );
 });

@@ -81,18 +81,34 @@ export const clientV150ResinfoRoot = path.join( mediaExtractedRoot, "resinfo" );
 // honours SRO_GENERATED_ROOT.
 export const generatedRoot = GENERATED_ROOT;
 
-// The verified server game-data projection lives inside the Go module: its
-// tests then read only module files, and `go test` validates cached results
-// against the data itself (apps/server/AGENTS.md). Git-ignored there.
-export const serverGameDataRoot = path.join(
-	rebuildRoot,
-	"apps",
-	"server",
-	".generated",
-	"game-data",
-	"1.150",
-	"server"
-);
+// gamedata.EnvRoot (apps/server/internal/gamedata/resolve.go): the Go server
+// and its tests read the projection from here when it is set.
+export const SERVER_GAME_DATA_ROOT_ENV = "SRO_SERVER_GAME_DATA_ROOT";
+
+/*
+================
+resolveServerGameDataRoot
+
+The verified server game-data projection lives inside the Go module: its
+tests then read only module files, and `go test` validates cached results
+against the data itself (apps/server/AGENTS.md). Git-ignored there. A
+worktree names the main checkout's projection through the same variable the
+Go server reads; only an absolute path is accepted, as for
+SRO_GENERATED_ROOT, so the answer never depends on the working directory.
+================
+*/
+export function resolveServerGameDataRoot( env = process.env ) {
+	const override = env[SERVER_GAME_DATA_ROOT_ENV]?.trim();
+	if ( override ) {
+		if ( !path.isAbsolute( override ) ) {
+			throw Error( `${SERVER_GAME_DATA_ROOT_ENV} must be an absolute path, not ${JSON.stringify( override )}` );
+		}
+		return path.resolve( override );
+	}
+	return path.join( rebuildRoot, "apps", "server", ".generated", "game-data", "1.150", "server" );
+}
+
+export const serverGameDataRoot = resolveServerGameDataRoot();
 export const publicRoot = path.join( generatedRoot, "client-public" );
 export const publicAssetsRoot = path.join( publicRoot, "assets" );
 export const imageSourceRoot = path.join( generatedRoot, "intermediate", "images" );
