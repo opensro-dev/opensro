@@ -9,6 +9,7 @@ budgets bound memory; the structural limits reject malformed sources.
 
 ===========================================================================
 */
+import { clothData, clothBytes } from "./cloth";
 import type { CharacterModel } from "@/engine/contracts/character";
 import type { NativeTexture } from "@/engine/contracts/texture";
 import { validateNativeTexture } from "@/engine/foundation/assets/native-texture";
@@ -92,11 +93,13 @@ export function characterBatchBytes( model: CharacterModel, count: number ): num
 		const geometry = primitive.geometry,
 			instances = count * (primitive.emission?.capacity ?? primitive.emission?.births.length ?? 1),
 			slots = 2 ** Math.ceil( Math.log2( Math.max( 1, instances ) ) );
-		return bytes + count * 24 + (primitive.ribbon ?
-			count *
-			Math.max( 2, 3 * ((primitive.emission?.capacity ?? primitive.emission?.births.length ?? 1) - 1) + 1 ) * 2 *
-			160 :
-			0) +
+		return bytes + (primitive.cloth ? count * geometry.positions.length / 3 * 92 : 0) + count * 24 +
+			(primitive.ribbon ?
+				count *
+				Math.max( 2, 3 * ((primitive.emission?.capacity ?? primitive.emission?.births.length ?? 1) - 1) + 1 ) *
+				2 *
+				160 :
+				0) +
 			instances * primitive.joints.length * 64 * 2 + slots * 112 + instances * 96 +
 			geometry.positions.length / 3 * 14 * 4 * 2 + geometry.indices.byteLength +
 			(geometry.joints?.length ?? 0) * 8 * 2 + 64 + 96 + 20;
@@ -178,7 +181,10 @@ export function characterBytes(
 			buffers.add( channel.values.buffer );
 		}
 	}
-	const bytes = characterMaterialClockBytes( model ) + graphBytes +
+	const bytes = model.primitives.reduce(
+		( sum, p ) => sum + clothBytes( clothData( p.cloth, p.geometry.positions.length / 3 ) ),
+		0
+	) + characterMaterialClockBytes( model ) + graphBytes +
 		model.primitives.reduce( ( sum, p ) => sum + (p.emission?.births.length ?? 0) * 8, 0 ) +
 		[ ...buffers ].reduce( ( sum, buffer ) => sum + buffer.byteLength, 0 );
 	const pixels = images.reduce(

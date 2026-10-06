@@ -9,6 +9,8 @@ world. Diagnostics observe it only through the frame probe (profile).
 
 ===========================================================================
 */
+import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
+import { waterReflectionMatrix } from "@/engine/foundation/rendering/water-reflection";
 import { blendAdds } from "@/engine/foundation/rendering/blend-state";
 import {
 	characterShadowReceiver,
@@ -207,6 +209,16 @@ export function createWorldRenderer(
 	sound?: ( event: import("@/engine/contracts/audio").SoundEvent ) => void
 ) {
 	const weather = createWeather( random, sound );
+	/*
+ ================
+ clothRandom
+ ================
+ */
+	function clothRandom() {
+		if ( !random ) throw Error( "Missing shared presentation RNG for cloth" );
+		return random.range( 0, 32768 );
+	}
+
 	let interactionScene: WorldScene | null = null, interactionCells = terrainInteractionCells( null );
 	// Ground pick bounds and triangles of resident terrain cells (terrain-interaction.ts).
 	const terrainPicks = createTerrainPickCache();
@@ -439,7 +451,12 @@ export function createWorldRenderer(
 		for ( const group of pending?.groups ?? [] ) {
 			if ( draws.has( group ) ) continue;
 			pendingGroupCount++;
-			const paths = new Set( texturePaths( group ).filter( path => !images.has( path ) ) );
+			const paths = new Set(
+				[
+					...texturePaths( group ),
+					...(group.material.water && pending?.waterBump ? [ pending.waterBump ] : [])
+				].filter( path => !images.has( path ) )
+			);
 			if ( !paths.size ) {
 				readyGroups.add( group );
 				continue;
@@ -619,6 +636,8 @@ export function createWorldRenderer(
 	>();
 	const animationKeys = new Map<WorldGroup, string>(), animationVersions = new Map<WorldGroup, number>();
 	let animated: WorldGroup[] = [], activeAnimated: WorldGroup[] = [];
+	let dynamicAnimation = false;
+	const clothMeshes = new Map<WorldGroup, ReturnType<typeof createClothVertices>>();
 	const dirtyAnimation = new Set<WorldGroup>();
 	let materialTimelines: {
 		group: WorldGroup;
@@ -677,6 +696,15 @@ export function createWorldRenderer(
 						createTextureMotion( velocity! )
 				};
 			} ) ?? [];
+		}
+		for ( const group of clothMeshes.keys() ) if ( !scene?.groups.includes( group ) ) clothMeshes.delete( group );
+		for ( const group of scene?.groups ?? [] ) {
+			if ( group.geometry.cloth && !clothMeshes.has( group ) ) {
+				clothMeshes.set(
+					group,
+					createClothVertices( { geometry: group.geometry, cloth: group.geometry.cloth }, clothRandom )
+				);
+			}
 		}
 		poses.clear();
 		animationKeys.clear();
@@ -743,14 +771,28 @@ export function createWorldRenderer(
 			}
 		}
 		evaluateAnimations( seconds );
+		for ( const [group, cloth] of clothMeshes ) {
+			const draw = draws.get( group );
+			if ( !draw || !draw.instanceCount ) continue;
+			const matrix = group.geometry.instances ?? group.geometry.transform;
+			geometry.writeVertices(
+				draw,
+				0,
+				cloth.update( group.geometry.bones ?? new Float32Array( 0 ), seconds, dynamicAnimation, {
+					direction: [ matrix[8]!, matrix[9]!, matrix[10]! * (group.animation ? -1 : 1) ],
+					speed: 0
+				} )
+			);
+		}
 		for ( const group of activeAnimated ) {
-			if ( force || dirtyAnimation.has( group ) ) {
+			if ( !group.geometry.cloth && (force || dirtyAnimation.has( group )) ) {
 				geometry.updateBones( draws.get( group )!, group.geometry.bones! );
-				dirtyAnimation.delete( group );
 			}
+			dirtyAnimation.delete( group );
 		}
 	}
 	const retired: WorldScene[] = [];
+	let lastReflection = false;
 	let lastView: Float32Array | null = null, lastEye: WorldCamera["eye"] | null = null;
 	const residency = createWorldResidency();
 	let imageBytes = 0, disposed = false;
@@ -786,6 +828,8 @@ export function createWorldRenderer(
 		const flarePaths = [
 			...(current?.flareTextures ?? []),
 			...(pending?.flareTextures ?? []),
+			...(current?.waterBump ? [ current.waterBump ] : []),
+			...(pending?.waterBump ? [ pending.waterBump ] : []),
 			...weather.paths(),
 			...selectionPaths()
 		];
@@ -1258,8 +1302,11 @@ export function createWorldRenderer(
 			seconds = 0,
 			viewportWidth = 1,
 			viewportHeight = 1,
-			backgroundDistance?: number
+			backgroundDistance?: number,
+			reflectWater = false,
+			enableDynamicAnimation = false
 		): PreparedWorld {
+			dynamicAnimation = enableDynamicAnimation;
 			probe?.worldBegin?.();
 			while ( retired.length ) release( retired.pop()!, geometry );
 			let budget = 8, uploadBytes = UPLOAD_BYTES_PER_FRAME;
@@ -1300,6 +1347,14 @@ export function createWorldRenderer(
 						imageDraw = textures.upload( frames[0]!, frames );
 						imageDraws.set( key, imageDraw );
 					}
+					let waterBump: ImageDraw | undefined;
+					if ( group.material.water && pending.waterBump ) {
+						waterBump = imageDraws.get( pending.waterBump );
+						if ( !waterBump ) {
+							waterBump = textures.upload( images.get( pending.waterBump )!.source );
+							imageDraws.set( pending.waterBump, waterBump );
+						}
+					}
 					// Build immutable pick bounds within the bounded upload work, so the first
 					// nameplate hover cannot scan the entire scene's vertex buffers.
 					if ( !group.geometry.bones && !pickBounds.has( group.geometry.positions ) ) {
@@ -1312,7 +1367,20 @@ export function createWorldRenderer(
 						group,
 						layers.eligible( group ) ?
 							layers.admit( geometry, pending, group, imageDraw ) :
-							geometry.upload( group.geometry, imageDraw )
+							geometry.upload(
+								group.geometry.cloth ?
+									{
+										...group.geometry,
+										joints: undefined,
+										weights: undefined,
+										bones: undefined,
+										dynamicVertices: true
+									} :
+									group.geometry,
+								imageDraw,
+								undefined,
+								waterBump
+							)
 					);
 					if ( group.instanceRadius !== undefined ) instanceSelection( group );
 					readyGroups.delete( group );
@@ -1489,9 +1557,23 @@ export function createWorldRenderer(
 				} :
 				undefined;
 			pickSeconds = seconds;
-			const matrix = viewProjection( localCamera, aspect ),
-				viewChanged = !lastView || !matrix.every( ( v, i ) => v === lastView![i] ) || !lastEye ||
-					localCamera.eye.some( ( v, i ) => v !== lastEye![i] );
+			const matrix = viewProjection( localCamera, aspect );
+			const mainFrustum = prepareViewFrustum( matrix );
+			const reflectionWater = reflectWater ?
+				current?.groups.find( group =>
+					group.material.water &&
+					visibleFrustumSphere( mainFrustum, group.center[0], group.center[1], group.center[2], group.radius )
+				) :
+				undefined;
+			const waterHeight = reflectionWater?.center[1];
+			const reflectionMatrix = waterHeight === undefined ?
+				undefined :
+				waterReflectionMatrix( matrix, waterHeight );
+			const reflectionFrustum = reflectionMatrix ? prepareViewFrustum( reflectionMatrix ) : undefined;
+			const viewChanged = reflectWater || lastReflection !== reflectWater || !lastView ||
+				!matrix.every( ( v, i ) => v === lastView![i] ) || !lastEye ||
+				localCamera.eye.some( ( v, i ) => v !== lastEye![i] );
+			lastReflection = reflectWater;
 			lastEye = localCamera.eye;
 			const weatherImages = new Map<string, ImageDraw>();
 			for ( const path of weather.paths() ) {
@@ -1521,6 +1603,8 @@ export function createWorldRenderer(
 				probe?.worldMark?.( "world-finalize" );
 				return {
 					camera: localCamera,
+					waterHeight,
+					reflectionMatrix,
 					terrainEnd,
 					groundDecalDraws,
 					decalDraws,
@@ -1854,7 +1938,21 @@ export function createWorldRenderer(
 					const count = walk.count[walked]!;
 					if (
 						count &&
-						visibleFrustumSphere( frustum, sphere[at]!, sphere[at + 1]!, sphere[at + 2]!, sphere[at + 3]! )
+						(visibleFrustumSphere(
+							frustum,
+							sphere[at]!,
+							sphere[at + 1]!,
+							sphere[at + 2]!,
+							sphere[at + 3]!
+						) ||
+							!!reflectionFrustum &&
+								visibleFrustumSphere(
+									reflectionFrustum,
+									sphere[at]!,
+									sphere[at + 1]!,
+									sphere[at + 2]!,
+									sphere[at + 3]!
+								))
 					) {
 						visible.push( group );
 						visibleMarks[walk.order[walked]!] = 1;
@@ -1865,7 +1963,15 @@ export function createWorldRenderer(
 					continue;
 				}
 				if (
-					visibleFrustumSphere( frustum, group.center[0], group.center[1], group.center[2], group.radius )
+					(visibleFrustumSphere( frustum, group.center[0], group.center[1], group.center[2], group.radius ) ||
+						!!reflectionFrustum &&
+							visibleFrustumSphere(
+								reflectionFrustum,
+								group.center[0],
+								group.center[1],
+								group.center[2],
+								group.radius
+							))
 				) {
 					visible.push( group );
 					visibleMarks[walk.order[walked]!] = 1;
@@ -1949,6 +2055,8 @@ export function createWorldRenderer(
 			probe?.worldMark?.( "world-finalize" );
 			return {
 				camera: localCamera,
+				waterHeight,
+				reflectionMatrix,
 				terrainEnd,
 				groundDecalDraws,
 				decalDraws,
@@ -2018,6 +2126,7 @@ export function createWorldRenderer(
 		dispose( geometry: GeometryCommands | null, textures: ImageCommands | null ) {
 			if ( disposed ) return;
 			disposed = true;
+			clothMeshes.clear();
 			for ( const row of footprintDraws.values() ) geometry?.release( row.draw );
 			footprintDraws.clear();
 			footprints = [];

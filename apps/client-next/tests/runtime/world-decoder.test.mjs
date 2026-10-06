@@ -375,7 +375,12 @@ test("complete mission Constantinople fits unchanged admission with shared cell 
 	);
 	assert.equal( WORLD_SCENE_BYTES, 192 * 1024 * 1024 );
 	assert.ok( worldSceneBytes( scene ) < WORLD_SCENE_BYTES );
-	assert.equal( scene.groups.length, 917, "No geometry or scene coverage removed to fit the budget" );
+	// Authored cloth needs independent simulation per placement: 44 formerly
+	// instanced draws split without removing scenery or raising admission.
+	assert.equal( scene.groups.length, 961, "All scenery and independent cloth draws fit the budget" );
+	const cloth = scene.groups.filter( g => g.geometry.cloth );
+	assert.ok( cloth.length );
+	assert.ok( cloth.every( g => g.geometry.instances.length === 16 ) );
 	const lightmaps = scene.groups.filter( g => g.material.lightmap );
 	assert.ok( lightmaps.length );
 	assert.ok(

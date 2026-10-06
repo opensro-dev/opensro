@@ -10,6 +10,8 @@ once per resource, since a town places the same meshes hundreds of times.
 
 ===========================================================================
 */
+import { passes, heightRange, tileUvScale } from "@/engine/foundation/rendering/terrain-associations";
+import { clothData } from "@/engine/foundation/animation/cloth";
 
 import { decodeSoundTerrain } from "@/engine/foundation/audio/terrain-sounds";
 import { dungeonWaterGroup } from "@/engine/foundation/rendering/dungeon-water";
@@ -36,116 +38,6 @@ import { finiteNumbers } from "@/engine/foundation/rendering/geometry-validation
 
 /*
 ================
-passes
-================
-*/
-// Native association ordering/claim/fringe algorithm (sub_8b3aa0). Unlike a
-// dominant-texture shortcut, every surviving association has a corner mask.
-function passes( words: readonly number[], step: number ) {
-	const n = 16 / step, axis = n + 1, pad = n + 2, keys = new Set<number>();
-	const sampled = [];
-	for ( let z = 0; z <= n; z++ ) {
-		for ( let x = 0; x <= n; x++ ) {
-			const w = words[z * step * 17 + x * step]!;
-			const key = ((w & 1023) << 6) | ((w >>> 13) & 7);
-			sampled.push( w );
-			keys.add( key );
-		}
-	}
-	const claimed = new Uint8Array( n * n ), result: { x: number; z: number; key: number; mask: number; }[] = [];
-	for ( const key of [ ...keys ].sort( ( a, b ) => a - b ).slice( 0, 49 ) ) {
-		const mask = new Uint8Array( axis * axis ), cells = new Uint8Array( pad * pad );
-		for ( let z = 0; z <= n; z++ ) {
-			for ( let x = 0; x <= n; x++ ) {
-				if ( sampled[z * axis + x] === ((key >>> 6) | ((key & 7) << 13)) ) {
-					mask[z * axis + x] = 1;
-					const t = z * pad + x;
-					cells[t] =
-						cells[t + 1] =
-						cells[t + pad] =
-						cells[t + pad + 1] =
-							2;
-				}
-			}
-		}
-		for ( let z = 0; z < n; z++ ) {
-			for ( let x = 0; x < n; x++ ) {
-				const i = z * n + x, t = (z + 1) * pad + x + 1;
-				if ( !(cells[t]! & 254) || claimed[i] ) continue;
-				const v = z * axis + x;
-				mask[v] =
-					mask[v + 1] =
-					mask[v + axis] =
-					mask[v + axis + 1] =
-						1;
-				claimed[i] = 1;
-				for ( let dz = -1; dz <= 1; dz++ ) {
-					for ( let dx = -1; dx <= 1; dx++ ) if ( dx || dz ) cells[t + dz * pad + dx]! |= 1;
-				}
-			}
-		}
-		for ( let z = 0; z < n; z++ ) {
-			for ( let x = 0; x < n; x++ ) {
-				if ( cells[(z + 1) * pad + x + 1] ) {
-					const i = z * axis + x,
-						m = mask[i]! | (mask[i + 1]! << 1) | (mask[i + axis]! << 2) | (mask[i + axis + 1]! << 3);
-					if ( m ) result.push( { x: x * step, z: z * step, key, mask: m } );
-				}
-			}
-		}
-	}
-	const last = new Map<number, number>();
-	for ( let i = 0; i < result.length; i++ ) {
-		const p = result[i]!;
-		if ( p.mask === 15 ) last.set( p.z * 17 + p.x, i );
-	}
-	return result.filter( ( p, i ) => i >= (last.get( p.z * 17 + p.x ) ?? 0) );
-}
-
-/*
-================
-heightRange
-
-Lowest and highest of a terrain block's heights. Folded rather than spread:
-the spread copied 289 values up to six times per block per detail level.
-Math.min/Math.max keep their NaN and signed-zero results.
-================
-*/
-function heightRange( heights: readonly number[] ): { readonly min: number; readonly max: number; } {
-	let min = Infinity, max = -Infinity;
-	for ( let i = 0; i < heights.length; i++ ) {
-		min = Math.min( min, heights[i]! );
-		max = Math.max( max, heights[i]! );
-	}
-	return { min, max };
-}
-
-/*
-================
-tileUvScale
-
-Texture repeat for a tile association's scale code (low three key bits).
-================
-*/
-function tileUvScale( code: number ): number {
-	switch ( code ) {
-		case 0:
-			return 1;
-		case 1:
-			return .5;
-		case 2:
-			return .25;
-		case 3:
-			return 2;
-		case 4:
-			return 4;
-		default:
-			return 0;
-	}
-}
-
-/*
-================
 WorldDecodeOptions
 
 origin is the region whose corner is the scene's coordinate origin. An
@@ -153,6 +45,11 @@ outdoor scene keeps one origin (its anchor) across region crossings, so a
 region's terrain decoded once stays valid while the player moves on.
 part "terrain" decodes only the terrain, lightmap and water of the
 bundle's own sectors; "objects" decodes everything else; "all" both.
+================
+*/
+/*
+================
+WorldDecodePart
 ================
 */
 export type WorldDecodePart = "all" | "objects" | "terrain";
@@ -490,7 +387,10 @@ noteMaterial
 							continue;
 						}
 						noteMaterial( ref, found.material, found.index );
-						const id = `${path}:${refEntry.key}:${p.dungeonBlock ?? "outdoor"}`, radius = check.radius;
+						const id = `${path}:${refEntry.key}:${p.dungeonBlock ?? "outdoor"}${
+								mesh.cloth ? ":cloth:" + key + ":" + branchIndex : ""
+							}`,
+							radius = check.radius;
 						let group = instances.get( id );
 						if ( !group ) {
 							reserve( mesh.positions.length / 3 * 224 + mesh.indices.length * 16 );
@@ -551,6 +451,7 @@ noteMaterial
 					geometry: {
 						world: true,
 						positions: new Float32Array( g.mesh.positions ),
+						cloth: clothData( g.mesh.cloth, g.mesh.positions.length / 3 ),
 						normals: new Float32Array( g.mesh.normals ),
 						uvs: meshCheck( g.mesh ).uvs.slice(),
 						indices: new Uint32Array( g.mesh.indices ),
@@ -620,23 +521,33 @@ noteMaterial
 							indexStart += row.mesh!.indices.length;
 						}
 					}
-					groups.push( {
-						id: `animated:${entry.glbPublicPath}:${i}`,
-						collision,
-						visibility,
-						animation: { model: entry.glbPublicPath, primitive: i, clip: entry.clipName },
-						instanceRadius: radius,
-						center: [ 0, 0, 0 ],
-						radius: 100000,
-						material,
-						geometry: {
-							...p.geometry,
-							world: true,
-							instances: new Float32Array( matrices ),
-							bones,
-							material
-						}
-					} );
+					// Cloth state belongs to a placement; static meshes can still share a draw.
+					for ( let first = 0; first < matrices.length; first += p.cloth ? 16 : matrices.length ) {
+						const instance = first / 16;
+						groups.push( {
+							id: `animated:${entry.glbPublicPath}:${i}${p.cloth ? ":" + instance : ""}`,
+							collision: p.cloth ?
+								collision.filter( row => row.instance === instance ).map( row => ({
+									...row,
+									instance: 0
+								}) ) :
+								collision,
+							visibility: p.cloth ? visibility.slice( instance, instance + 1 ) : visibility,
+							animation: { model: entry.glbPublicPath, primitive: i, clip: entry.clipName },
+							instanceRadius: radius,
+							center: [ 0, 0, 0 ],
+							radius: 100000,
+							material,
+							geometry: {
+								...p.geometry,
+								cloth: p.cloth,
+								world: true,
+								instances: new Float32Array( p.cloth ? matrices.slice( first, first + 16 ) : matrices ),
+								bones,
+								material
+							}
+						} );
+					}
 				}
 			}
 			const sectors = (b.terrain.sectors ?? [ { ...b.source, blocks: b.terrain.blocks } ]).map( sector => ({
@@ -967,6 +878,7 @@ noteMaterial
 				scenery,
 				soundTerrain: objectPart ? decodeSoundTerrain( b ) : undefined,
 				dungeonVisibility: b.dungeonBlocks?.map( block => [ block.index, ...block.visibleBlocks ] ),
+				waterBump: b.water?.reflectionBumpPublicPath,
 				flareTextures: region & 0x8000 || !objectPart ? undefined : b.sky?.flareTexturePublicPaths,
 				starRandomState: objectPart ? b.sky?.starPrimitive?.nativeRand?.stateAfterConstruction : undefined,
 				residency: frontend ? "frontend" : undefined,

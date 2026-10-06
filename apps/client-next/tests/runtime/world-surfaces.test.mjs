@@ -20,6 +20,11 @@ import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../.
 const publicRoot = CLIENT_PUBLIC_ROOT;
 const bytes = asset => readPublishedAssetBytesSync( asset, publicRoot );
 const json = asset => readPublishedAssetJsonSync( asset, publicRoot );
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( path.join( root, "src/engine", file ) ).href );
 }
@@ -84,7 +89,14 @@ test("authored animated meshes replace their static submissions and share one pa
 	const model = decoder.character( decoder.decode( bytes( entry.glbPublicPath ) ) );
 	bundle.animated = [ { ...entry, sourcePath, model: { ...model, images: [] } } ];
 	const scene = createWorldDecoder().decode( bundle ), animated = scene.groups.filter( g => g.animation );
-	assert.equal( animated.length, model.primitives.length );
+	for ( const [index, primitive] of model.primitives.entries() ) {
+		const draws = animated.filter( group => group.animation.primitive === index );
+		assert.ok( draws.length > 0 );
+		if ( primitive.cloth ) {
+			assert.ok( draws.every( group => group.geometry.instances.length === 16 ) );
+			assert.equal( new Set( draws.map( group => group.geometry.bones ) ).size, 1 );
+		} else assert.equal( draws.length, 1 );
+	}
 	for ( const group of animated ) {
 		const primitive = model.primitives[group.animation.primitive];
 		const sources = entry.skinnedMeshPaths.map( path =>

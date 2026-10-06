@@ -8,6 +8,7 @@ terrain seam plans and which groups rewrite their vertices.
 
 ===========================================================================
 */
+import { clothData, clothBytes } from "@/engine/foundation/animation/cloth";
 import { characterBytes, characterPoseBytes } from "@/engine/foundation/animation/character-budget";
 import type { WorldScene } from "@/engine/contracts/scene";
 import { copyMaterial, copyGeometry, validateGeometry } from "@/engine/foundation/rendering/geometry";
@@ -214,6 +215,7 @@ export function worldSceneBytes( scene: WorldScene | null ): number {
 		) {
 			throw new Error( "Invalid world metadata" );
 		}
+		bytes += clothBytes( clothData( g.cloth, n ) ) + (g.cloth ? n * 92 : 0);
 		bytes += g.positions.byteLength + g.indices.byteLength * 2 + g.normals!.byteLength + g.uvs!.byteLength +
 			(g.colors?.byteLength ?? 0) + (g.maskUVs?.byteLength ?? 0) + g.instances!.byteLength * 2 +
 			g.transform.byteLength + n * 56;
@@ -432,6 +434,7 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 		const material = copyMaterial( group.material );
 		const geometry = {
 			world: true,
+			cloth: g.cloth,
 			material,
 			positions: mutable( g.positions ),
 			indices: g.indices,
@@ -474,6 +477,11 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 
 // Stream offsets within the arena keep every view aligned for any element type.
 const STREAM_ALIGNMENT = 8;
+/*
+================
+StreamView
+================
+*/
 type StreamView =
 	| Float32Array
 	| Float64Array

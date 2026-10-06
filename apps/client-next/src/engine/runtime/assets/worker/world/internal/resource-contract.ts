@@ -10,6 +10,11 @@ world decoder admits.
 */
 
 import type { WorldObjectMaterialSource } from "@/engine/foundation/rendering/world-material";
+/*
+================
+ObjectBranch
+================
+*/
 export interface ObjectBranch {
 	modifiers?: import("@/engine/foundation/rendering/scenery-modifiers").SceneryModifiers;
 	sourcePath?: string;
@@ -17,7 +22,13 @@ export interface ObjectBranch {
 	meshPaths: string[];
 	renderMeshSection?: { paths: string[]; };
 }
+/*
+================
+Mesh
+================
+*/
 export interface Mesh {
+	cloth?: unknown;
 	sourcePath: string;
 	headerOffsets?: number[];
 	metadata: { materialName: string; };
@@ -27,9 +38,19 @@ export interface Mesh {
 	indices: number[];
 	bounds: { min: number[]; max: number[]; };
 }
+/*
+================
+Material
+================
+*/
 export interface Material extends WorldObjectMaterialSource {
 	name: string;
 }
+/*
+================
+Block
+================
+*/
 interface Block {
 	blockX: number;
 	blockZ: number;
@@ -37,12 +58,22 @@ interface Block {
 	textureData: number[];
 	water: { type: number; waveType: number; height: number; };
 }
+/*
+================
+Sector
+================
+*/
 interface Sector {
 	lightmapPublicPath?: string;
 	sectorX: number;
 	sectorY: number;
 	blocks: Block[];
 }
+/*
+================
+AnimatedResource
+================
+*/
 export interface AnimatedResource {
 	sourcePath: string;
 	glbPublicPath: string;
@@ -50,6 +81,11 @@ export interface AnimatedResource {
 	skinnedMeshPaths: string[];
 	model?: import("@/engine/contracts/character").CharacterModel;
 }
+/*
+================
+Bundle
+================
+*/
 export interface Bundle {
 	navmesh?: { regions: { dx: number; dz: number; tileTextureIds?: string; }[]; };
 	dungeonBlocks?: {
@@ -77,7 +113,7 @@ export interface Bundle {
 		lightmapPublicPath?: string;
 		tileCatalog: { referencedTiles: { textureId: number; flags?: number; imagePublicPath: string; }[]; };
 	};
-	water?: { specialTexturePublicPath?: string; normalFramePublicPaths: string[]; };
+	water?: { reflectionBumpPublicPath?: string; specialTexturePublicPath?: string; normalFramePublicPaths: string[]; };
 	objects: {
 		placements: {
 			dungeonBlock?: number;

@@ -12,6 +12,11 @@ import type { UiScene } from "@/engine/contracts/ui";
 import type { Geometry } from "@/engine/contracts/geometry";
 import type { Disposable, RuntimePhase, Viewport } from "@/engine/contracts/runtime";
 // Narrow capabilities: device and queue never leave their owner.
+/*
+================
+FrameCommands
+================
+*/
 export interface FrameCommands {
 	prepare?( encoder: GPUCommandEncoder, timing?: GpuTimingFrame ): void;
 	beginTiming?( frameId?: number ): GpuTimingFrame | undefined;
@@ -19,21 +24,46 @@ export interface FrameCommands {
 	createEncoder(): GPUCommandEncoder;
 	submit( buffer: GPUCommandBuffer ): void;
 }
+/*
+================
+DepthTarget
+================
+*/
 export interface DepthTarget extends Disposable {
 	readonly view: GPUTextureView;
 }
+/*
+================
+ColorTarget
+================
+*/
 export interface ColorTarget extends DepthTarget {
 	present( target: GPUTexture ): void;
 }
+/*
+================
+SurfaceCommands
+================
+*/
 export interface SurfaceCommands {
 	createColor( width: number, height: number ): ColorTarget;
 	createDepth( width: number, height: number ): DepthTarget;
 	configure( context: GPUCanvasContext, format: GPUTextureFormat ): void;
 }
+/*
+================
+FlareInput
+================
+*/
 export interface FlareInput {
 	readonly uniforms: Float32Array;
 	readonly textures: readonly ImageDraw[];
 }
+/*
+================
+FlareDraw
+================
+*/
 export interface FlareDraw {
 	readonly compute: GPUComputePipeline;
 	readonly binding: GPUBindGroup;
@@ -44,10 +74,20 @@ export interface FlareDraw {
 		readonly count: number;
 	}[];
 }
+/*
+================
+BloomDraw
+================
+*/
 export interface BloomDraw {
 	readonly view: GPUTextureView;
 	encode( encoder: GPUCommandEncoder, target: GPUTextureView ): void;
 }
+/*
+================
+DeviceOwner
+================
+*/
 export interface DeviceOwner extends Disposable {
 	/** Bracket one frame, from its first preparation to its last submit: a GPU
 	 * resource released in between outlives the command buffers that name it. */
@@ -79,15 +119,30 @@ export interface DeviceOwner extends Disposable {
 	surfaceCommands(): SurfaceCommands | null;
 	format(): GPUTextureFormat;
 }
+/*
+================
+SurfaceOwner
+================
+*/
 export interface SurfaceOwner extends Disposable {
 	depth(): GPUTextureView;
 	acquire( viewport: Viewport, offscreen?: boolean ): GPUTextureView;
 	present(): void;
 }
+/*
+================
+DeferredDraw
+================
+*/
 export interface DeferredDraw {
 	readonly asynchronous: boolean;
 	prepare(): readonly GeometryDraw[] | Promise<readonly GeometryDraw[]>;
 }
+/*
+================
+FrameOwner
+================
+*/
 export interface FrameOwner {
 	draw(
 		view: GPUTextureView,
@@ -116,14 +171,25 @@ export interface FrameOwner {
 		}[],
 		frameId?: number,
 		deferred?: DeferredDraw,
-		bloom?: BloomDraw
+		bloom?: BloomDraw,
+		reflection?: { encode( encoder: GPUCommandEncoder ): void; }
 	): void | Promise<void>;
 }
 
+/*
+================
+ImageDraw
+================
+*/
 export interface ImageDraw {
 	readonly pipeline: GPURenderPipeline;
 	readonly binding: GPUBindGroup;
 }
+/*
+================
+ImageCommands
+================
+*/
 export interface ImageCommands {
 	upload(
 		image: import("@/engine/contracts/texture").WorldTexture,
@@ -133,6 +199,11 @@ export interface ImageCommands {
 	release( draw: ImageDraw ): void;
 }
 
+/*
+================
+GeometryDraw
+================
+*/
 export interface GeometryDraw {
 	readonly deferredParticle?: boolean;
 	readonly blended?: boolean;
@@ -148,6 +219,11 @@ export interface GeometryDraw {
 // Indexed palettes share the exact source storage supplied at upload. Offsets
 // are matrix indices, one per instance; updateBones requires a monotonic revision
 // and returns actual uploaded bytes (zero for an already published revision).
+/*
+================
+CharacterShadowRequest
+================
+*/
 export interface CharacterShadowRequest {
 	readonly matrix: Float32Array;
 	readonly receiver: Geometry;
@@ -196,7 +272,16 @@ export interface DrawRelease {
 	readonly atMs: number;
 	readonly stack: string;
 }
+/*
+================
+GeometryCommands
+================
+*/
 export interface GeometryCommands {
+	waterReflection(
+		input: { matrix?: Float32Array; height: number; above: boolean; seconds: number; },
+		draws: readonly GeometryDraw[]
+	): { encode( encoder: GPUCommandEncoder ): void; } | undefined;
 	// The release record of a draw no owner may draw any more; undefined
 	// while the draw is live.
 	releasedDraw?( draw: GeometryDraw ): DrawRelease | undefined;
@@ -269,7 +354,14 @@ export interface GeometryCommands {
 	): GeometryDraw;
 	release( draw: GeometryDraw ): void;
 }
+/*
+================
+PreparedWorld
+================
+*/
 export interface PreparedWorld {
+	readonly waterHeight?: number;
+	readonly reflectionMatrix?: Float32Array;
 	readonly camera: import("@/engine/contracts/scene").WorldCamera;
 	readonly groundDecalDraws?: readonly GeometryDraw[];
 	readonly terrainEnd?: number;
@@ -286,6 +378,11 @@ export interface PreparedWorld {
 	readonly sky: boolean;
 }
 
+/*
+================
+UiDraw
+================
+*/
 export interface UiDraw {
 	readonly layer?: "background" | "world";
 	readonly pipeline: GPURenderPipeline;
@@ -294,7 +391,17 @@ export interface UiDraw {
 	count: number;
 }
 
+/*
+================
+GpuTimingStats
+================
+*/
 export type GpuTimingStats = import("@/engine/contracts/runtime").GpuTimingStats;
+/*
+================
+GpuTimingFrame
+================
+*/
 export interface GpuTimingFrame {
 	pass( name: string ): GPURenderPassTimestampWrites | undefined;
 	resolve(): { query: GPUQuerySet; count: number; resolve: GPUBuffer; read: GPUBuffer; } | undefined;

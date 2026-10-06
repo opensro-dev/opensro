@@ -37,7 +37,7 @@ test("background range and effect quality survive the persisted two-record optio
 	assert.equal( changeVideo( options, 2, 5 ), options );
 	assert.equal( changeVideo( options, 13, -1 ), options );
 });
-test("native store-only slots 3 and 5 persist while unported slots 4 and 12 stay refused", () => {
+test("native store-only slots and implemented water/cloth settings persist independently", () => {
 	let options = defaultVideoOptions();
 	options = changeVideo( options, 3, 4 );
 	options = changeVideo( options, 5, 0 );
@@ -46,6 +46,6 @@ test("native store-only slots 3 and 5 persist while unported slots 4 and 12 stay
 	assert.equal( saved.records[0][5], 0 );
 	assert.equal( saved.records[0][0], 4 );
 	assert.equal( backgroundDrawDistance( saved ), backgroundDrawDistance( defaultVideoOptions() ) );
-	assert.equal( changeVideo( saved, 4, 1 ), saved );
-	assert.equal( changeVideo( saved, 12, 0 ), saved );
+	assert.equal( videoOptions( changeVideo( saved, 4, 1 ) ).records[0][4], 1 );
+	assert.equal( videoOptions( changeVideo( saved, 12, 0 ) ).records[0][12], 0 );
 });

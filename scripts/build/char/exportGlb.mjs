@@ -373,7 +373,7 @@ export function avatarToGlb( avatar ) {
 		const environmentModifiers = part.environmentModifiers ?? [], bsrModifiers = part.bsrModifiers;
 		const key = `${part.slot ? `${part.slot}|` : ""}${mat}|${rigid ? "rigid" : "skinned"}|${
 			JSON.stringify( environmentModifiers )
-		}|${JSON.stringify( bsrModifiers )}`;
+		}|${JSON.stringify( bsrModifiers )}|${m.cloth ? part.meshPath : ""}`;
 		if ( !groups.has( key ) ) {
 			groups.set( key, {
 				name: part.slot ?? mat,
@@ -381,6 +381,7 @@ export function avatarToGlb( avatar ) {
 				rigid,
 				environmentModifiers,
 				bsrModifiers,
+				cloth: m.cloth,
 				positions: [],
 				normals: [],
 				uvs: [],
@@ -566,6 +567,7 @@ export function avatarToGlb( avatar ) {
 			name: grp.name,
 			rigid: grp.rigid,
 			primitive: {
+				...(grp.cloth ? { extras: { sroCloth: grp.cloth } } : {}),
 				attributes: {
 					POSITION: aPos,
 					NORMAL: aNrm,

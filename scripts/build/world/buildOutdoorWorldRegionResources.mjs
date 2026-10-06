@@ -465,6 +465,7 @@ async function buildOutdoorSharedRenderResources( options = {} ) {
 			},
 			normalFrameDurationMs: WATER_NORMAL_FRAME_DURATION_MS,
 			normalFramePublicPaths: waterTextures.normalFramePublicPaths,
+			reflectionBumpPublicPath: waterTextures.reflectionBumpPublicPath,
 			specialTexturePublicPath: waterTextures.specialTexturePublicPath,
 			waveTexturePublicPaths: waterTextures.waveTexturePublicPaths
 		}

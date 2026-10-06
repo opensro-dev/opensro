@@ -182,7 +182,8 @@
     "src/engine/runtime/bug-report/archive.ts": "src/engine/runtime/bug-report/bug-report.ts",
     "src/engine/runtime/bug-report/transcode.ts": "src/engine/runtime/bug-report/bug-report.ts",
     "src/engine/runtime/bug-report/journal.ts": "src/engine/runtime/bug-report/bug-report.ts",
-    "src/engine/runtime/assets/worker/world/mesh-admission/mesh-admission.ts": "src/engine/runtime/assets/worker/world/world.ts"
+    "src/engine/runtime/assets/worker/world/mesh-admission/mesh-admission.ts": "src/engine/runtime/assets/worker/world/world.ts",
+    "src/engine/runtime/renderer/device/water-reflection.ts": "src/engine/runtime/renderer/device/device.ts"
   },
   "workers": {
     "src/engine/runtime/simulation/worker/entry.ts": "src/engine/runtime/simulation/host.ts",

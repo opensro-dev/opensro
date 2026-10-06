@@ -433,7 +433,6 @@ scripts/build/char/compileBsrVisual.mjs
 scripts/build/char/defaultWearPolicy.mjs
 scripts/build/char/entityMaterialMetadata.mjs
 scripts/build/char/equipmentVisualRecords.mjs
-scripts/build/char/formats.mjs
 scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts
 scripts/build/char/native/scriptObjAnimationRegistry.ts
@@ -494,7 +493,6 @@ scripts/build/world/assets/buildDungeonWorlds.mjs
 scripts/build/world/assets/copyMissionMinimapTileImages.mjs
 scripts/build/world/assets/copyTerrainLightmaps.mjs
 scripts/build/world/assets/copyTerrainTileImages.mjs
-scripts/build/world/assets/copyWaterImages.mjs
 scripts/build/world/assets/dungeonInfo.mjs
 scripts/build/world/assets/dungeonWater.mjs
 scripts/build/world/assets/environment/environmentTracks.mjs
@@ -518,13 +516,10 @@ scripts/build/world/jmx/JMXVMAPT1001.mjs
 scripts/build/world/jmx/JMXVOBJI1000.mjs
 scripts/build/world/jmx/common.mjs
 scripts/build/world/jmx/index.mjs
-scripts/build/world/maploader/buildMapLoaderRegionBundle.mjs
 scripts/build/world/maploader/selectTerrainTileTextureId.mjs
 scripts/build/world/navmesh/buildRegionNavmeshData.mjs
 scripts/build/world/navmesh/parseNavmesh.mjs
-scripts/build/world/objects/buildTitleSectorObjectResources.mjs
 scripts/build/world/objects/compound.mjs
-scripts/build/world/objects/formats.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/build/world/sworld/prepareCellTerrainTexture.mjs
 scripts/checks/lib/methodBlock.mjs

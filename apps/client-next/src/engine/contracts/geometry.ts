@@ -8,7 +8,13 @@ private copy of what it uploads.
 
 ===========================================================================
 */
+/*
+================
+Geometry
+================
+*/
 export interface Geometry {
+	readonly cloth?: import("@/engine/foundation/animation/cloth").ClothData;
 	readonly joints?: Uint32Array;
 	readonly weights?: Float32Array;
 	readonly bones?: Float32Array;

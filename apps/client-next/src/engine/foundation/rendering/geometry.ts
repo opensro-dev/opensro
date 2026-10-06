@@ -8,6 +8,7 @@ the renderer owns, handling every Geometry field explicitly.
 
 ===========================================================================
 */
+import { clothData, clothBytes } from "@/engine/foundation/animation/cloth";
 import { validTextureStage } from "./texture-stage";
 import { validBlend } from "./blend-state";
 import { validateMaterialTimeline } from "./material-timeline";
@@ -134,7 +135,7 @@ export function validateGeometry(
 	) {
 		throw new Error( "Invalid geometry dimensions" );
 	}
-	let bytes = data.indices.byteLength;
+	let bytes = data.indices.byteLength + clothBytes( clothData( data.cloth, vertices ) );
 	for (
 		const [array, length] of [
 			[ data.positions, vertices * 3 ],
@@ -194,6 +195,7 @@ export function copyGeometry( data: Geometry, byteLimit = 64 << 20, instanceLimi
 	// A new Geometry field must be explicitly handled here, even when optional.
 	const owned = {
 		world: data.world,
+		cloth: data.cloth && structuredClone( data.cloth ),
 		material,
 		positions: data.positions.slice(),
 		indices: data.indices.slice(),

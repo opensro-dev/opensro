@@ -18,6 +18,11 @@ import type {
 	FlareDraw
 } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { BLOOM_BLEND_BYTE } from "@/engine/foundation/rendering/blend-state";
+/*
+================
+createFrame
+================
+*/
 export function createFrame( commands: FrameCommands ): FrameOwner {
 	// D3DRS_BLENDFACTOR as the native device holds it: white until the first
 	// bloom composite sets it (SWorld_CompositeBloom 8AA560), which never
@@ -86,7 +91,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			partyPortraits = [],
 			frameId,
 			deferred,
-			bloom
+			bloom,
+			reflection
 		) {
 			const sceneView = bloom?.view ?? view;
 			if ( ui !== recordedUi ) {
@@ -168,6 +174,7 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			}
 			const encoder = commands.createEncoder(), timing = commands.beginTiming?.( frameId );
 			commands.prepare?.( encoder, timing );
+			reflection?.encode( encoder );
 			const portraitPreview = portrait;
 			for ( const portrait of [ portraitPreview, ...partyPortraits, doll ] ) {
 				if ( portrait ) {

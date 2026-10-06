@@ -9,6 +9,8 @@ with dynamicVertices keep a CPU mirror for position updates.
 
 ===========================================================================
 */
+import { createInstancePacking, instanceCapacity } from "@/engine/foundation/rendering/geometry-instances";
+import { createWaterReflection } from "./water-reflection";
 import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { createCharacterShadows } from "./character-shadows";
 import { destroyNow, type Retire } from "./retirement";
@@ -72,6 +74,10 @@ export function createGeometryResources(
 	lightmapSampling?: ( anisotropic: boolean ) => GPUSampler
 ) {
 	let filtered = true, detail = 2, anisotropic = false, mixedCpuUploadBytes = 0;
+	const waterReflection = createWaterReflection( created, format, retire );
+	// 8BA130 fixes water MIN/MAG to linear independently of the video filter.
+	const waterSampler = worldSampler;
+	const reflectedBindings = new WeakMap<GeometryDraw, { source: GPUBindGroup; draw: GeometryDraw; }>();
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
 	// Released draws and their release records (releasedDraw).
 	const releasedDraws = new WeakMap<GeometryDraw, import("../internal/gpu-contract").DrawRelease>();
@@ -87,77 +93,7 @@ export function createGeometryResources(
 		usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
 	} );
 	created.queue.writeTexture( { texture: white }, Uint8Array.of( 255, 255, 255, 255 ), { bytesPerRow: 4 }, [ 1, 1 ] );
-	const instanceCapacity = ( count: number ) => 2 ** Math.ceil( Math.log2( Math.max( 1, count ) ) );
-	// writeBuffer copies its source bytes before returning. One device-owned
-	// scratch stream can serve every synchronous update without per-draw storage.
-	let instanceScratch = new Float32Array( 0 );
-	/*
-	================
-	finiteValues
-	================
-	*/
-	function finiteValues( values: Float32Array ): boolean {
-		for ( let i = 0; i < values.length; i++ ) if ( !Number.isFinite( values[i] ) ) return false;
-		return true;
-	}
-	/*
-	================
-	unitValues
-
-	Every value finite and within 0..1.
-	================
-	*/
-	function unitValues( values: Float32Array ): boolean {
-		for ( let i = 0; i < values.length; i++ ) {
-			const v = values[i]!;
-			if ( !(Number.isFinite( v ) && v >= 0 && v <= 1) ) return false;
-		}
-		return true;
-	}
-	/*
-	================
-	packInstances
-	================
-	*/
-	function packInstances(
-		instances: Float32Array,
-		opacity?: Float32Array,
-		appearance?: Float32Array,
-		pointLights?: Float32Array,
-		paletteOffsets?: Uint32Array
-	) {
-		const count = instances.length / 16;
-		// Plain loops: these run on every instance upload, every frame.
-		if ( !Number.isInteger( count ) || opacity && (opacity.length !== count || !unitValues( opacity )) ) {
-			throw new Error( "Invalid instance opacity" );
-		}
-		if ( pointLights && (pointLights.length !== count * 12 || !finiteValues( pointLights )) ) {
-			throw Error( "Invalid point light stream" );
-		}
-		if ( appearance && (appearance.length !== count * 8 || !finiteValues( appearance )) ) {
-			throw new Error( "Invalid instance appearance" );
-		}
-		if ( paletteOffsets && (paletteOffsets.length !== count || paletteOffsets.some( v => v >= 16777216 )) ) {
-			throw Error( "Invalid palette offsets" );
-		}
-		if ( instanceScratch.length < count * 40 ) instanceScratch = new Float32Array( instanceCapacity( count ) * 40 );
-		const packed = instanceScratch;
-		for ( let i = 0; i < count; i++ ) {
-			const offset = i * 40;
-			for ( let j = 0; j < 16; j++ ) packed[offset + j] = instances[i * 16 + j]!;
-			for ( let j = 0; j < 12; j++ ) packed[offset + 28 + j] = pointLights?.[i * 12 + j] ?? 0;
-			packed[offset + 16] = opacity?.[i] ?? 1;
-			packed[offset + 17] = paletteOffsets?.[i] ?? 0;
-			packed[offset + 18] = paletteOffsets ? 1 : 0;
-			packed[offset + 19] = 0;
-			if ( appearance ) { for ( let j = 0; j < 8; j++ ) packed[offset + 20 + j] = appearance[i * 8 + j]!; }
-			else {
-				packed.fill( 1, offset + 20, offset + 26 );
-				packed[offset + 26] = packed[offset + 27] = 0;
-			}
-		}
-		return packed.subarray( 0, count * 40 );
-	}
+	const packInstances = createInstancePacking();
 	const defaultSkin = created.createBuffer( {
 			label: "geometry-default-skin",
 			size: 32,
@@ -203,10 +139,15 @@ export function createGeometryResources(
 		image?: ImageDraw,
 		skin = defaultSkin,
 		bones = defaultBones,
-		environmentImage?: ImageDraw
+		environmentImage?: ImageDraw,
+		capture = false
 	) => current().createBindGroup( {
 		layout: pipeline.getBindGroupLayout( 0 ),
 		entries: [
+			{ binding: 9, resource: capture ? white.createView() : waterReflection.view() ?? white.createView() },
+			{ binding: 10, resource: { buffer: capture ? waterReflection.capture : waterReflection.main } },
+			{ binding: 11, resource: lightmapSampler },
+			{ binding: 12, resource: waterSampler },
 			{ binding: 0, resource: { buffer: uniform } },
 			{ binding: 1, resource: { buffer: storage } },
 			{ binding: 2, resource: { buffer: material } },
@@ -227,6 +168,8 @@ export function createGeometryResources(
 		]
 	} );
 	const metadata = new Map<GeometryDraw, {
+		water: boolean;
+		state: GeometryPipelineState;
 		uniform: GPUBuffer;
 		material: GPUBuffer;
 		image?: ImageDraw;
@@ -249,6 +192,81 @@ export function createGeometryResources(
 	}>();
 	let shadows: ReturnType<typeof createCharacterShadows> | undefined;
 	const commands: GeometryCommands = Object.freeze( {
+		/*
+        ================
+        waterReflection
+
+        Capture variants share geometry and palettes, but use an independent
+        bind group and reversed winding. Water never appears in its own image.
+        ================
+        */
+		waterReflection(
+			input: { matrix?: Float32Array; height: number; above: boolean; seconds: number; },
+			draws: readonly GeometryDraw[]
+		) {
+			const { matrix, height, above, seconds } = input;
+			if ( waterReflection.update( matrix, height, above, seconds ) ) {
+				for ( const [draw, meta] of metadata ) {
+					DeviceDraw.rebind(
+						meta.selection,
+						geometryBinding(
+							meta.uniform,
+							geometryBuffers.get( draw )![3]!,
+							meta.material,
+							draw.pipeline,
+							meta.clampedSampling,
+							meta.image,
+							meta.skin,
+							meta.bones,
+							meta.environmentImage
+						)
+					);
+				}
+			}
+			if ( !matrix ) return undefined;
+			const reflected: GeometryDraw[] = [];
+			for ( const draw of draws ) {
+				const meta = metadata.get( draw );
+				if ( !meta || meta.water || draw.deferredParticle ) continue;
+				let cached = reflectedBindings.get( draw );
+				if ( !cached || cached.source !== draw.binding ) {
+					const pipeline = pipelines( { ...meta.state, mirror: true } );
+					const binding = geometryBinding(
+						meta.uniform,
+						geometryBuffers.get( draw )![3]!,
+						meta.material,
+						pipeline,
+						meta.clampedSampling,
+						meta.image,
+						meta.skin,
+						meta.bones,
+						meta.environmentImage,
+						true
+					);
+					cached = {
+						source: draw.binding,
+						draw: {
+							...draw,
+							pipeline,
+							binding,
+							vertices: draw.vertices,
+							indices: draw.indices,
+							count: draw.count,
+							indexCount: draw.indexCount,
+							instanceCount: draw.instanceCount,
+							instanceCapacity: draw.instanceCapacity
+						}
+					};
+					reflectedBindings.set( draw, cached );
+				}
+				reflected.push( { ...cached.draw, indexCount: draw.indexCount, instanceCount: draw.instanceCount } );
+			}
+			return {
+				encode( encoder: GPUCommandEncoder ) {
+					waterReflection.encode( encoder, reflected );
+				}
+			};
+		},
 		characterShadows(
 			requests: readonly import("../internal/gpu-contract").CharacterShadowRequest[],
 			blob?: ImageDraw
@@ -770,7 +788,7 @@ export function createGeometryResources(
 						mat?.environmentReflection ? 1 : 0,
 						mat?.alphaCompare ?? 7,
 						mat?.sheenAlpha ? 1 : 0,
-						0,
+						mat?.water && environmentImage ? 1 : 0,
 						0,
 						0,
 						0,
@@ -817,6 +835,8 @@ export function createGeometryResources(
 				);
 				geometryBuffers.set( draw, buffers );
 				metadata.set( draw, {
+					water: !!mat?.water,
+					state: geometryPipelineState( mat ),
 					uniform: data.world ? worldUniform! : uniform,
 					material,
 					image,
@@ -939,6 +959,7 @@ export function createGeometryResources(
 		================
 		*/
 		dispose() {
+			waterReflection.dispose();
 			shadows?.dispose();
 			animation?.dispose();
 			particles?.dispose();

@@ -60,6 +60,7 @@ Geometry and native material bindings for one skinned or effect primitive.
 ================
 */
 export interface CharacterPrimitive {
+	readonly cloth?: import("@/engine/foundation/animation/cloth").ClothData;
 	readonly modifierSource?: {
 		readonly material: import("./scene").WorldMaterial;
 		readonly index: number;

@@ -5,6 +5,7 @@ characters.ts - admitted character models, world batches and separate portrait s
 
 ===========================================================================
 */
+import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
 import type { WorldTexture } from "@/engine/contracts/texture";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
@@ -122,7 +123,16 @@ createCharacters
 Own source resources separately from borrowed assemblies and per-frame draw batches.
 ================
 */
-export function createCharacters() {
+export function createCharacters( random?: import("@/engine/contracts/presentation-random").PresentationRandom ) {
+	/*
+ ================
+ clothRandom
+ ================
+ */
+	function clothRandom() {
+		if ( !random ) throw Error( "Missing shared presentation RNG for cloth" );
+		return random.range( 0, 32768 );
+	}
 	let probe: import("@/engine/contracts/runtime").RenderFrameProbe | undefined;
 	// Per-geometry radius work: an assembled character reuses its parts'.
 	const bounds = createCharacterBoundsCache();
@@ -237,6 +247,7 @@ export function createCharacters() {
 		// Ribbon vertex streams by primitive, kept across frames; used is the
 		// vertex count the last frame wrote.
 		ribbons: (RibbonBuffers | undefined)[];
+		cloth?: Map<number, ReturnType<typeof createClothVertices>>;
 		poseKey?: string;
 	}>();
 	// ownedModels counts the owned entries of models (decoded sources); the
@@ -1236,7 +1247,9 @@ export function createCharacters() {
 			seconds = 0,
 			continuation = false,
 			deferredEnabled = true,
-			night = true
+			night = true,
+			dynamicAnimation = false,
+			reflectedView?: Float32Array
 		) {
 			poseSeconds = seconds;
 			probe?.characterBegin();
@@ -1471,7 +1484,7 @@ export function createCharacters() {
 					!actor.effectEntity || !!parent.effectEntity
 				);
 			};
-			const frustum = view ? prepareViewFrustum( view ) : undefined;
+			const frusta = [ view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map( prepareViewFrustum );
 			const visible = frameActors.filter( actor => {
 				if ( opacity( actor ) <= 0 ) return false;
 				if ( models.get( actor.model )?.plan.emission ) return particleAccepted.has( actor.gid );
@@ -1489,14 +1502,15 @@ export function createCharacters() {
 							) :
 							0);
 				}
-				return !frustum ||
+				return !frusta.length || frusta.some( frustum =>
 					visibleFrustumSphere(
 						frustum,
 						anchor.pose.x + ((anchor.pose.regionId & 255) - (origin & 255)) * 1920,
 						anchor.pose.y,
 						anchor.pose.z + ((anchor.pose.regionId >>> 8) - (origin >>> 8)) * 1920,
 						radius
-					);
+					)
+				);
 			} );
 			if ( hasDeferred && !continuation ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
 			// Plan the complete frame before creating poses, arrays, or GPU resources.
@@ -1518,11 +1532,13 @@ export function createCharacters() {
 			for ( const actor of visible ) {
 				if ( actor.drawGeometry === false ) continue;
 				const plan = models.get( actor.model )!.plan, dependencies = chains.get( actor.gid )!;
-				const key = actor.model + (actor.deferredParticle ? "\0deferred" : "") +
+				const key = actor.model + (models.get( actor.model )!.model.primitives.some( p => p.cloth ) ?
+					"\0cloth:" + actor.gid :
+					"") +
+					(actor.deferredParticle ? "\0deferred" : "") +
 					(opacity( actor ) < 1 ? "\0fade" : "") + (actor.materialTint ? "\0tint" : "") +
-					(actor.pointLight ? "\0light" : "") + (models.get( actor.model )!.model.primitives.some( p =>
-							p.equipmentGlow
-						) ?
+					(actor.pointLight ? "\0light" : "") +
+					(models.get( actor.model )!.model.primitives.some( p => p.equipmentGlow ) ?
 						"\0glow:" + ((actor.animationLod?.fraction ?? 0) <= .5 && opacity( actor ) === 1) :
 						"") +
 					(hasMaterialClocks && materialClocks.get( actor ) ?
@@ -1689,7 +1705,9 @@ export function createCharacters() {
 							geometry.release( draw );
 						}
 					}
-					const streams = plan.sharedPalette ? createPaletteStreams( model, capacity ) : undefined;
+					const streams = plan.sharedPalette && !model.primitives.some( p => p.cloth ) ?
+						createPaletteStreams( model, capacity ) :
+						undefined;
 					batch = {
 						signature,
 						capacity,
@@ -1732,7 +1750,8 @@ export function createCharacters() {
 					);
 				// A changing sampled time already proves the full key differs.
 				// Avoid serializing actor/attachment graphs just to discover it.
-				const poseKey = timeChanged ?
+				// Cloth advances on frame time even when its skeletal pose is unchanged.
+				const poseKey = timeChanged || model.primitives.some( p => p.cloth ) ?
 					undefined :
 					JSON.stringify( [
 						origin,
@@ -1803,7 +1822,9 @@ export function createCharacters() {
 					for ( let p = 0; p < model.primitives.length; p++ ) {
 						const primitive = model.primitives[p]!, offset = i * primitive.joints.length * 16;
 						if ( primitive.emission ) continue;
-						if ( !batch.streams ) state.pose.palette( primitive, batch.palettes[p]!, offset );
+						if ( !batch.streams || primitive.cloth ) {
+							state.pose.palette( primitive, batch.palettes[p]!, offset );
+						}
 						if ( primitive.billboard ) {
 							faceEffectMesh(
 								batch.palettes[p]!,
@@ -1985,6 +2006,9 @@ export function createCharacters() {
 								},
 								instances,
 								bones: batch.palettes[p],
+								...(primitive.cloth ?
+									{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
+									{}),
 								transform: preview ? view! : identity()
 							},
 							resource.textures[primitive.image],
@@ -2075,6 +2099,39 @@ export function createCharacters() {
 								0
 							], i * 12 );
 						}
+					}
+					if ( primitive.cloth ) {
+						batch.cloth ??= new Map();
+						let cloth = batch.cloth.get( p );
+						if ( !cloth ) {
+							cloth = createClothVertices( primitive, clothRandom );
+							batch.cloth.set( p, cloth );
+						}
+						let draw = batch.draws[p];
+						if ( !draw ) draw = uploadPrimitive( batch.instances );
+						draw = geometry.updateInstances(
+							draw,
+							instances,
+							fading ? Float32Array.from( rows, opacity ) : undefined,
+							appearance?.subarray( 0, instances.length / 2 ),
+							pointLights
+						);
+						batch.draws[p] = draw;
+						geometry.writeVertices(
+							draw,
+							0,
+							cloth.update(
+								batch.palettes[p]!,
+								seconds,
+								dynamicAnimation && (rows[0]!.animationLod?.fraction ?? 0) < .25,
+								// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
+								{ direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 }
+							)
+						);
+						if ( preview ) geometry.updateTransform( draw, view! );
+						updateModifiers( draw, p, true );
+						output.push( draw );
+						continue;
 					}
 					const stream = batch.streams?.streams[p],
 						paletteOffsets = stream?.offsets.subarray( 0, rows.length );

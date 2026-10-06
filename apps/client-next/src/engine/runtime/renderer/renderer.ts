@@ -75,7 +75,7 @@ export function createRenderer(
 	let damageRows: readonly import("@/engine/contracts/damage-text").DamageText[] = [];
 	const damageTextures = damageTextAssets();
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
-		characters = createCharacters();
+		characters = createCharacters( random );
 	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
 	let surface: SurfaceOwner | null = null, frame: FrameOwner | null = null;
 	let transformDirty = false, instancesDirty = false;
@@ -469,7 +469,9 @@ export function createRenderer(
 					timeSeconds,
 					viewport.width,
 					viewport.height,
-					backgroundDrawDistance( video )
+					backgroundDrawDistance( video ),
+					!preview && video.records[video.active][4] === 1,
+					video.records[video.active][12] === 1
 				);
 				scene.environment[83] = video.records[video.active][6] === 1 ? 1 : 0;
 				device.worldView( scene.matrix, scene.environment );
@@ -503,7 +505,9 @@ export function createRenderer(
 					timeSeconds,
 					false,
 					video.records[video.active][7] === 1,
-					world.night()
+					world.night(),
+					video.records[video.active][12] === 1,
+					scene.reflectionMatrix
 				);
 				const shadowDraws = world.characterShadows(
 					preview ?
@@ -688,7 +692,13 @@ export function createRenderer(
 					partyDraws,
 					frameId,
 					deferredPass,
-					device.bloom( viewport.width, viewport.height, !preview && video.records[video.active][11] === 1 )
+					device.bloom( viewport.width, viewport.height, !preview && video.records[video.active][11] === 1 ),
+					device.geometry()!.waterReflection( {
+						matrix: scene.reflectionMatrix,
+						height: scene.waterHeight ?? 0,
+						above: scene.camera.eye[1] >= (scene.waterHeight ?? 0),
+						seconds: timeSeconds
+					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] )
 				);
 				probe?.renderMark( "submit" );
 				if ( pending ) {

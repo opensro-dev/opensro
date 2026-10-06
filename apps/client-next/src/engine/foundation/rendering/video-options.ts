@@ -93,7 +93,7 @@ export function defaultVideoOptions(): VideoOptions {
 // (+0x2E50 table) before posting 0x809, a message no dispatcher handles.
 // Slot 4 (property 6) builds the water DuDv texture and a 512x512
 // reflection target, and slot 12 (property 0xE) turns on cloth geometry
-// (A2E6E0 -> manager +0x19C); neither exists in this renderer yet.
+// (A2E6E0 -> manager +0x19C). Both are consumed by the renderer.
 /*
 ================
 videoRows
@@ -125,7 +125,7 @@ export function videoRows(): readonly { slot: number; key: string; entries: read
 			"slot": 4,
 			"key": "UIIT_STT_WATER_REFLECTION",
 			"entries": [ "UIIT_STT_OFF", "UIIT_STT_ON" ],
-			"supported": false
+			"supported": true
 		},
 		{
 			"slot": 5,
@@ -148,7 +148,7 @@ export function videoRows(): readonly { slot: number; key: string; entries: read
 			"slot": 12,
 			"key": "UIIT_STT_DYNAMIC_ANIMATION",
 			"entries": [ "UIIT_STT_OFF", "UIIT_STT_ON" ],
-			"supported": false
+			"supported": true
 		},
 		{
 			"slot": 13,

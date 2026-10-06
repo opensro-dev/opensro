@@ -56,6 +56,7 @@ const bugReport = runtime + "bug-report/bug-report.ts",
 	bugJournal = runtime + "bug-report/journal.ts";
 const thunder = runtime + "renderer/device/thunder.ts";
 const timing = runtime + "renderer/device/timing.ts";
+const waterReflection = runtime + "renderer/device/water-reflection.ts";
 const bloom = runtime + "renderer/device/bloom.ts";
 const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
@@ -63,6 +64,7 @@ const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const deviceInternals = [
+	waterReflection,
 	bloom,
 	finish,
 	device,
@@ -288,6 +290,9 @@ for (
 		"finish"
 	]
 ) rules[name].push( finish );
+for ( const name of [ "createBuffer", "createTexture", "writeBuffer", "beginRenderPass" ] ) {
+	rules[name].push( waterReflection );
+}
 rules.createBuffer.push( timing );
 for (
 	const name of [
@@ -374,7 +379,8 @@ export function verifyCapabilities( base = root ) {
 			}
 			if (
 				ts.isIdentifier( n ) && [ "GPUCommandEncoder", "GPURenderBundleEncoder" ].includes( n.text ) &&
-				!([ animation, particles, geometry, shadows ].includes( file ) && n.text === "GPUCommandEncoder") &&
+				!([ animation, particles, geometry, shadows, waterReflection ].includes( file ) &&
+					n.text === "GPUCommandEncoder") &&
 				![ frame, runtime + "renderer/internal/gpu-contract.ts" ].includes( file )
 			) {
 				issues.push( `${file}: raw command encoder outside frame capability` );

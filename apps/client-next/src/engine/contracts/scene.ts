@@ -10,6 +10,11 @@ and render statistics.
 ===========================================================================
 */
 import type { Geometry } from "./geometry";
+/*
+================
+WorldMaterial
+================
+*/
 export interface WorldMaterial {
 	readonly deferredParticle?: boolean;
 	readonly environmentReflection?: boolean;
@@ -77,6 +82,11 @@ export interface WorldMaterial {
 	/** Native stage-0 colour/alpha ops (effects B153A0, BSR material modifiers sub_aed240). */
 	readonly textureStage?: import("@/engine/foundation/rendering/texture-stage").TextureStage;
 }
+/*
+================
+TerrainRange
+================
+*/
 export interface TerrainRange {
 	/** Admission-owned [vertex index, 17x17 height index] pairs. */ readonly seamVertices?: Uint32Array;
 	readonly bounds?: readonly [number, number, number, number, number, number];
@@ -91,6 +101,11 @@ export interface TerrainRange {
 	readonly radius: number;
 	readonly heights: readonly number[];
 }
+/*
+================
+WorldGroup
+================
+*/
 export interface WorldGroup {
 	readonly dungeonBlock?: number;
 	readonly collision?: readonly {
@@ -125,6 +140,11 @@ export interface WorldGroup {
 	readonly cell?: readonly [number, number];
 	readonly lod?: number;
 }
+/*
+================
+EnvironmentTrack
+================
+*/
 export interface EnvironmentTrack {
 	readonly t: number;
 	readonly r?: number;
@@ -132,15 +152,26 @@ export interface EnvironmentTrack {
 	readonly b?: number;
 	readonly value?: number;
 }
+/*
+================
+WorldEnvironment
+================
+*/
 export interface WorldEnvironment {
 	readonly startTimeOfDay: number;
 	readonly ratePerSecond: number;
 	readonly tracks: Readonly<Record<string, readonly EnvironmentTrack[]>>;
 }
+/*
+================
+WorldScene
+================
+*/
 export interface WorldScene {
 	readonly scenery?: readonly import("./scenery").SceneryEmitter[];
 	readonly soundTerrain?: readonly import("@/engine/foundation/audio/terrain-sounds").SoundTerrain[];
 	readonly dungeonVisibility?: readonly (readonly number[])[];
+	readonly waterBump?: string;
 	readonly flareTextures?: readonly string[];
 	readonly starRandomState?: number;
 	readonly terrainDetail?: "full" | "distance";
@@ -152,6 +183,11 @@ export interface WorldScene {
 	readonly groups: readonly WorldGroup[];
 	readonly warnings: readonly string[];
 }
+/*
+================
+WorldCamera
+================
+*/
 export interface WorldCamera {
 	readonly dungeonBlock?: number;
 	readonly follow?: {
@@ -170,6 +206,11 @@ export interface WorldCamera {
 	readonly near: number;
 	readonly far: number;
 }
+/*
+================
+WorldRenderStats
+================
+*/
 export interface WorldRenderStats {
 	readonly pendingGroups: number;
 	readonly sceneId: string | null;
@@ -180,6 +221,11 @@ export interface WorldRenderStats {
 	readonly bundleRebuilds: number;
 }
 
+/*
+================
+FollowCameraTarget
+================
+*/
 export interface FollowCameraTarget {
 	readonly pose: import("./gameplay").Pose;
 	readonly height: number;

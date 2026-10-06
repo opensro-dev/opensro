@@ -9,6 +9,7 @@ them into ImageBitmaps and hands the page only their sizes.
 
 ===========================================================================
 */
+import { clothData } from "@/engine/foundation/animation/cloth";
 import { textureCoordinate } from "@/engine/foundation/rendering/geometry-validation";
 import { NATIVE_TEXTURE_MIME } from "@/engine/foundation/assets/native-texture";
 import { validateEquipmentGlows } from "@/engine/foundation/rendering/equipment-glow";
@@ -50,6 +51,7 @@ interface Document {
 	meshes: {
 		name?: string;
 		primitives: {
+			extras?: { sroCloth?: unknown; };
 			mode?: number;
 			attributes: Record<string, number>;
 			indices: number;
@@ -340,7 +342,13 @@ channels retain strict finite-value validation before GPU allocation.
 					// computes directional skin lighting before raster interpolation.
 					// A5D450 selects MODULATE2X after that clamp, also used by
 					// A91970 for ordinary CRT materials (not a brightness tweak).
+					const cloth = clothData( p.extras?.sroCloth, positions.length / 3 );
 					primitives.push( {
+						cloth: cloth &&
+							{
+								...cloth,
+								force: cloth.force ? [ -cloth.force[0], cloth.force[1], cloth.force[2] ] : null
+							},
 						name: node.name ?? mesh.name ?? String( primitives.length ),
 						node: n,
 						joints,

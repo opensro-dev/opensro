@@ -91,7 +91,8 @@
 			"consumer": "src/engine/runtime/renderer/world/world.ts",
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"functions": [
-				"characterShadows"
+				"characterShadows",
+				"writeVertices"
 			]
 		},
 		{
@@ -446,7 +447,8 @@
 				"release",
 				"updateTransform",
 				"updateInstances",
-				"releasedDraw"
+				"releasedDraw",
+				"waterReflection"
 			],
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"consumer": "src/engine/runtime/renderer/renderer.ts"
@@ -479,7 +481,8 @@
 				"updateBones",
 				"updateTextureTransform",
 				"updateMaterialColors",
-				"updateTextureFactor"
+				"updateTextureFactor",
+				"writeVertices"
 			],
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"consumer": "src/engine/runtime/renderer/world/world.ts"
@@ -564,7 +567,8 @@
 				"updateTextureTransform",
 				"updateEquipmentGlow",
 				"presentParticles",
-				"updateTextureFactor"
+				"updateTextureFactor",
+				"writeVertices"
 			]
 		},
 		{
@@ -1891,6 +1895,41 @@
 			"functions": [
 				"present",
 				"active"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/device/geometry.ts",
+			"functions": [
+				"encode"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/cloth.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"clothRandom"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/world/world.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/cloth.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"clothRandom"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/characters/characters.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
 			]
 		}
 	],
