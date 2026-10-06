@@ -145,7 +145,11 @@ type SlowHookStats struct {
 	Count uint64  `json:"count"`
 	MaxMs float64 `json:"max_ms"`
 	// When it was first and last slow, by wall clock and by tick_count, so
-	// a boot-time cluster can be told from a recurring stall.
+	// a boot-time cluster can be told from a recurring stall. The tick value
+	// is tick_count at the moment of recording: a step inside a hook is
+	// recorded mid-tick, before that tick's duration sample counts it, and
+	// the hook itself at the tick's end, after it. A step and its hook from
+	// the same tick therefore read N-1 and N.
 	FirstAt   time.Time `json:"first_at"`
 	LastAt    time.Time `json:"last_at"`
 	FirstTick uint64    `json:"first_tick"`
