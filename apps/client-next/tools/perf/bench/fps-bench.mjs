@@ -46,11 +46,11 @@ import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMov
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
-import { keepGoing, drag, walk, approach, fight, cross } from "./scenarios.mjs";
+import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat } from "./scenarios.mjs";
 
 const GOAL_FPS = 500;
 const CROSS_LIMIT_MS = 30000;
-const SCENARIOS = [ "still", "drag", "move", "skill", "cross" ];
+const SCENARIOS = [ "still", "drag", "move", "skill", "cross", "combat" ];
 // A quiet Europe field with a measured region crossing, the water ghost
 // field outside Jangan (a busier scene), and a field with a live monster:
 // the scratch character's skills all need a target.
@@ -76,13 +76,77 @@ const LOCATIONS = [ {
 		startYawRadians: 0
 	},
 	scenarios: [ "skill" ]
+}, {
+	// A repeatable heavy fight: the native GM /LOADMONSTER scene (--combat)
+	// around the character at the hunt field, measured only while every
+	// loaded monster is alive and the server accepts damaging casts.
+	name: "combat",
+	fixture: {
+		id: "fps-bench-combat-field",
+		movementMode: 3,
+		start: { regionId: 0x62a6, x: 863, y: 20, z: 1746 },
+		startYawRadians: 0
+	},
+	scenarios: [ "combat" ]
 } ];
 const USAGE = "fps-bench.mjs [--seconds N] [--at a,b] [--only a,b] [--counts] [--spans] [--cpu] [--heap] [--out DIR] " +
-	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2]";
+	"[--trace] [--json FILE] [--paced] [--cpu-rate N] [--frame-limit 0|60|120|240] [--shadow-detail 0|1|2] " +
+	"[--combat codename:count:CHAMP|GIANT|NORMAL] [--vulnerable]";
 
 // Units the character may stand from where a sample expects it (the boot
 // fixture start, or its place before a revive) before the sample is rejected.
 const REVIVE_TOLERANCE = 50;
+
+// The GameWorld's transport metrics; its tick count dates the server's start
+// (artifacts record minutes since start: a fresh server measures boot state).
+const METRICS_URL = process.env.SRO_BENCH_GAMEWORLD_METRICS ?? "http://127.0.0.1:8788/transport/metrics";
+const TICKS_PER_MINUTE = 600;
+
+/*
+================
+serverUptimeMinutes
+================
+*/
+async function serverUptimeMinutes() {
+	try {
+		const metrics = await (await fetch( METRICS_URL )).json();
+		return Math.round( metrics.tick_count / TICKS_PER_MINUTE * 10 ) / 10;
+	} catch {
+		return null;
+	}
+}
+
+/*
+================
+sceneAlive
+
+How many of the scene's monsters are still alive anywhere in view.
+================
+*/
+function sceneAlive( page, scene ) {
+	return page.evaluate( gids => {
+		const ids = new Set( gids );
+		return globalThis.__benchRuntime.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] !== 2 )
+			.length;
+	}, scene.gids );
+}
+
+/*
+================
+combatScene
+
+--combat codename:count:type (type CHAMP, GIANT or NORMAL); --vulnerable
+keeps the character mortal so incoming damage is part of the load.
+================
+*/
+function combatScene( options ) {
+	const [codename, count, type] = options.combat.split( ":" );
+	if ( !/^MOB_[A-Z0-9_]+$/.test( codename ?? "" ) ) throw Error( `invalid --combat codename ${codename}` );
+	const n = Number( count );
+	if ( !Number.isInteger( n ) || n < 1 || n > 250 ) throw Error( `invalid --combat count ${count}` );
+	if ( ![ "CHAMP", "GIANT", "NORMAL" ].includes( type ) ) throw Error( `invalid --combat type ${type}` );
+	return { codename, count: n, type, vulnerable: options.vulnerable };
+}
 
 /*
 ================
@@ -124,7 +188,8 @@ drive
 The scenario's input, and how long its measured span may last.
 ================
 */
-async function drive( page, name, location, seconds ) {
+async function drive( page, name, location, seconds, scene ) {
+	if ( name === "combat" ) return [ seconds, more => combat( page, more, scene ) ];
 	if ( name === "still" ) return [ seconds, more => keepGoing( page, more ) ];
 	if ( name === "drag" ) return [ seconds, more => drag( page, more ) ];
 	if ( name === "move" ) return [ seconds, more => walk( page, more ) ];
@@ -160,6 +225,9 @@ async function session( options, location, results ) {
 			!booted || booted.regionId !== start.regionId ||
 			Math.hypot( booted.x - start.x, booted.z - start.z ) > REVIVE_TOLERANCE
 		) throw Error( `${location.name}: the character booted outside the scene (${JSON.stringify( booted )})` );
+		// The combat scene loads once per session, on a fresh isolated server;
+		// GM-loaded monsters have no nest and would accumulate across runs.
+		const scene = location.name === "combat" ? await loadCombat( client.page, combatScene( options ) ) : null;
 		const captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
@@ -177,13 +245,23 @@ async function session( options, location, results ) {
 				!before || !after || before.regionId !== after.regionId ||
 				Math.hypot( before.x - after.x, before.z - after.z ) > REVIVE_TOLERANCE
 			) throw Error( `${location.name}/${name}: the character is not where the scene expects after revive` );
-			const [ms, input] = await drive( client.page, name, location, options.seconds * 1000 );
+			const [ms, input] = await drive( client.page, name, location, options.seconds * 1000, scene );
 			await captures.start();
 			const started = Date.now();
 			const result = await measure( client.page, `${location.name}/${name}`, ms, input );
 			result.frameLimit = options.frameLimit;
 			result.cpuRate = options.cpuRate;
 			result.shadowDetail = options.shadowDetail;
+			if ( scene ) {
+				result.serverUptimeMinutes = await serverUptimeMinutes();
+				result.scene = {
+					codename: scene.codename,
+					count: scene.count,
+					type: scene.type,
+					vulnerable: scene.vulnerable,
+					refObjId: scene.refObjId
+				};
+			}
 			const allocated = await captures.stop( `${location.name}-${name}` );
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
 			results.push( result );
@@ -191,6 +269,13 @@ async function session( options, location, results ) {
 			console.log( row( result ) );
 		}
 		await captures.finish();
+		if ( scene ) {
+			const left = await sceneAlive( client.page, scene );
+			console.log(
+				`  combat residue: ${left} of ${scene.count} GM-loaded ${scene.codename} still alive; ` +
+					"restart the GameWorld (announce it first) before other measurements"
+			);
+		}
 	} finally {
 		await closeClient( client );
 	}
@@ -217,7 +302,9 @@ async function run( options ) {
 
 const options = parseOptions( process.argv.slice( 2 ), {
 	seconds: 3,
-	at: LOCATIONS.map( l => l.name ),
+	// combat runs only when named: it needs a GM character and an isolated
+	// server, since its monsters stay until that server stops.
+	at: LOCATIONS.map( l => l.name ).filter( name => name !== "combat" ),
 	only: SCENARIOS,
 	counts: false,
 	paced: false,
@@ -228,6 +315,8 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	cpu: false,
 	heap: false,
 	trace: false,
+	combat: "MOB_CH_TIGER:10:GIANT",
+	vulnerable: false,
 	out: "temp/artifacts/fps-bench",
 	json: ""
 }, USAGE );

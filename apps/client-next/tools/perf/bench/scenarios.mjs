@@ -222,3 +222,136 @@ export async function cross( page, fixture ) {
 		throw Error( `region crossing did not arrive: ${JSON.stringify( pose )}` );
 	};
 }
+
+// Units around the character that hold the loaded combat scene. GM-loaded
+// monsters appear on the GM's point (SR_GameServer 520A40) and fight there.
+const COMBAT_RADIUS = 150;
+const COMBAT_LOAD_TIMEOUT_MS = 15000;
+
+/*
+================
+gmCommand
+================
+*/
+function gmCommand( page, line ) {
+	return page.evaluate(
+		line => globalThis.__benchRuntime.session( { kind: "gameplay", command: { kind: "gm-command", line } } ),
+		line
+	);
+}
+
+/*
+================
+sceneMonsters
+
+Every live monster within COMBAT_RADIUS of the character: gid, reference,
+distance.
+================
+*/
+function sceneMonsters( page ) {
+	return page.evaluate( radius => {
+		const root = globalThis.__benchRuntime, pose = root.gameplay().pose;
+		const world = e => [ (e.regionId & 255) * 1920 + e.x, (e.regionId >>> 8) * 1920 + e.z ];
+		const here = world( pose );
+		return root.entities().filter( e => e.kind === "monster" && e.appearanceState?.[0] !== 2 ).map( e => ({
+			gid: e.gid,
+			refObjId: e.refObjId,
+			d: Math.hypot( world( e )[0] - here[0], world( e )[1] - here[1] )
+		}) ).filter( e => e.d <= radius );
+	}, COMBAT_RADIUS );
+}
+
+/*
+================
+loadCombat
+
+Loads the repeatable combat scene with the native GM commands: /INVINCIBLE
+unless the scene is vulnerable, then /LOADMONSTER codename count type at the
+character's feet. The scene is the new monsters of one reference that
+appear; positions are not repeatable (the monsters roam on AI), the
+codename and count are. Returns the scene with its gids.
+================
+*/
+export async function loadCombat( page, scene ) {
+	const before = new Set( (await sceneMonsters( page )).map( m => m.gid ) );
+	if ( !scene.vulnerable ) await gmCommand( page, "/INVINCIBLE" );
+	await gmCommand( page, `/LOADMONSTER ${scene.codename} ${scene.count} ${scene.type}` );
+	const started = Date.now();
+	while ( Date.now() - started < COMBAT_LOAD_TIMEOUT_MS ) {
+		const groups = new Map();
+		for ( const m of await sceneMonsters( page ) ) {
+			if ( before.has( m.gid ) ) continue;
+			groups.set( m.refObjId, [ ...(groups.get( m.refObjId ) ?? []), m.gid ] );
+		}
+		const loaded = [ ...groups.entries() ].find( ( [, gids] ) => gids.length >= scene.count );
+		if ( loaded ) return { ...scene, refObjId: loaded[0], gids: loaded[1] };
+		await page.waitForTimeout( 250 );
+	}
+	throw Error( `/LOADMONSTER ${scene.codename} ${scene.count} produced no scene within ${COMBAT_RADIUS} units` );
+}
+
+/*
+================
+combat
+
+fight against the loaded scene only. The window counts as combat only if
+the server accepted local casts that dealt damage, and every scene monster
+is still alive within COMBAT_RADIUS at its end; otherwise it throws, so a
+drifted or idle window cannot pass as fast. Returns the window's tally.
+================
+*/
+export async function combat( page, more, scene ) {
+	const started = await page.evaluate( () => performance.now() );
+	const tally = { turns: 0, acceptedCasts: 0, damage: 0, incomingCasts: 0 };
+	const seen = new Set();
+	for ( let turn = 0; more(); turn++ ) {
+		const sample = await page.evaluate( ( { turn, gids, started } ) => {
+			const root = globalThis.__benchRuntime, game = root.gameplay(), local = game.localGid;
+			const scene = new Set( gids );
+			const world = e => [ (e.regionId & 255) * 1920 + e.x, (e.regionId >>> 8) * 1920 + e.z ];
+			const here = world( game.pose );
+			const target = root.entities().filter( e => scene.has( e.gid ) && e.appearanceState?.[0] !== 2 ).map(
+				e => ({ gid: e.gid, d: Math.hypot( world( e )[0] - here[0], world( e )[1] - here[1] ) })
+			).sort( ( a, b ) => a.d - b.d )[0];
+			const skills = (game.skills ?? []).map( s => s.id ?? s ).filter( id => Number.isInteger( id ) );
+			if ( target && skills.length ) {
+				root.session( {
+					kind: "gameplay",
+					command: { kind: "skill", skillId: skills[turn % skills.length], gid: target.gid }
+				} );
+			}
+			if ( target ) root.session( { kind: "gameplay", command: { kind: "attack", gid: target.gid } } );
+			// Server casts carry positive tokens; client predictions do not count.
+			return (game.casts ?? []).filter( c => c.token > 0 && (c.receivedAtMs ?? 0) >= started ).map( c => ({
+				token: c.token,
+				local: c.caster === local,
+				incoming: scene.has( c.caster ),
+				damage: (c.impacts ?? []).reduce( ( sum, i ) => sum + (i.damage ?? 0), 0 )
+			}) );
+		}, { turn, gids: scene.gids, started } );
+		for ( const cast of sample ) {
+			if ( seen.has( cast.token ) ) continue;
+			seen.add( cast.token );
+			if ( cast.local ) {
+				tally.acceptedCasts++;
+				tally.damage += cast.damage;
+			}
+			if ( cast.incoming ) tally.incomingCasts++;
+		}
+		tally.turns++;
+		const turnStart = Date.now();
+		while ( more() && Date.now() - turnStart < 700 ) await page.waitForTimeout( 20 );
+	}
+	const alive = new Set( (await sceneMonsters( page )).map( m => m.gid ) );
+	tally.alive = scene.gids.filter( gid => alive.has( gid ) ).length;
+	console.log(
+		`  combat ${scene.codename} x${scene.count} ${scene.type}${
+			scene.vulnerable ? " vulnerable" : " invincible"
+		}: ` +
+			`turns ${tally.turns}, accepted casts ${tally.acceptedCasts}, damage ${tally.damage}, ` +
+			`incoming casts ${tally.incomingCasts}, alive ${tally.alive}/${scene.count}`
+	);
+	if ( !tally.acceptedCasts || !tally.damage ) throw Error( "the combat window had no accepted, damaging cast" );
+	if ( tally.alive !== scene.count ) throw Error( "the combat scene drifted: a monster died or left the radius" );
+	return tally;
+}

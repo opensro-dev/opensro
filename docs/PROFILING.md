@@ -57,6 +57,16 @@ and runs these scenarios:
 | `field` (quiet Europe field) | `still`, `drag` (camera), `move`, `cross` (a region crossing) |
 | `jangan` (water ghost field outside Jangan, busier) | `still`, `drag`, `move` |
 | `hunt` (a field with a live monster) | `skill` (skills and attacks on it) |
+| `combat` (only with `--at combat`) | `combat`: a repeatable fight against the native GM `/LOADMONSTER` scene |
+
+`combat` loads `--combat codename:count:type` (default `MOB_CH_TIGER:10:GIANT`)
+at the character's feet with the native GM commands, `/INVINCIBLE` first
+unless `--vulnerable` (then incoming damage is part of the load). A window
+counts only if the server accepted damaging casts and every loaded monster
+is alive within 150 units at its end. The scene's codename and count repeat;
+positions do not (the monsters run on their AI). Run it against an isolated
+GameWorld started for the session: GM-loaded monsters have no nest and stay
+until that server stops.
 
 Each row gives frames per second, frame-interval percentiles (p99 and max
 show spikes), and the main thread's frame time and world-preparation time
