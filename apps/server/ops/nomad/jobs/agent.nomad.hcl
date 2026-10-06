@@ -62,7 +62,8 @@ variable "agent_port" {
 }
 
 # Loopback port of the Agent's account provisioning API. A second Agent on the
-# same host (an isolated test stack) needs its own.
+# same host (an isolated test stack) needs its own. sro-nomad always passes it
+# (provisioning.DefaultPort unless overridden); this default is a fallback.
 variable "agent_provisioning_port" {
   type    = number
   default = 8789

@@ -32,7 +32,6 @@ const (
 	envProvisioningAddr       = "SRO_AGENT_PROVISIONING_ADDR"
 	envProvisioningTokenPath  = "SRO_AGENT_PROVISIONING_TOKEN_PATH"
 	defaultAccountsDBPath     = ".state/agent/accounts.db"
-	defaultProvisioningAddr   = "127.0.0.1:8789"
 	maxProvisioningTokenBytes = 4 << 10
 )
 
@@ -127,7 +126,7 @@ func startProvisioning(accounts *auth.Accounts, serveErrors chan<- error) (*http
 	}
 	addr := strings.TrimSpace(os.Getenv(envProvisioningAddr))
 	if addr == "" {
-		addr = defaultProvisioningAddr
+		addr = fmt.Sprintf("127.0.0.1:%d", provisioning.DefaultPort)
 	}
 	if !loopbackAddress(addr) {
 		return nil, "", fmt.Errorf("%s=%s must be a loopback address", envProvisioningAddr, addr)

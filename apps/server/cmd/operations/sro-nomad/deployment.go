@@ -25,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"opensro.online/server/internal/agent/bugreport"
+	"opensro.online/server/internal/agent/provisioning"
 	agentserver "opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
@@ -35,18 +36,14 @@ import (
 )
 
 const (
-	agentJobName = "sro-agent"
-	// defaultAgentProvisioningPort is sro-agent's own loopback default
-	// (cmd/services/sro-agent/accounts.go); the web site's provisioning
-	// client calls it there.
-	defaultAgentProvisioningPort = 8789
-	gameWorldJobPrefix           = "sro-gameworld-"
-	gameWorldShardToken          = "__SHARD_ID__"
-	agentAccountToken            = "__ACCOUNT_VARIABLES__"
-	agentTemplateName            = "agent.nomad.hcl"
-	gameTemplateName             = "gameworld.nomad.hcl"
-	accountChunkBytes            = 48 << 10
-	maxAccountChunks             = int(
+	agentJobName        = "sro-agent"
+	gameWorldJobPrefix  = "sro-gameworld-"
+	gameWorldShardToken = "__SHARD_ID__"
+	agentAccountToken   = "__ACCOUNT_VARIABLES__"
+	agentTemplateName   = "agent.nomad.hcl"
+	gameTemplateName    = "gameworld.nomad.hcl"
+	accountChunkBytes   = 48 << 10
+	maxAccountChunks    = int(
 		(auth.MaxFileBytes + accountChunkBytes - 1) / accountChunkBytes,
 	)
 	developmentAllowedOrigins = "http://127.0.0.1:5180,http://localhost:5180,http://127.0.0.1:4180,http://localhost:4180," +
@@ -229,7 +226,7 @@ func resolveDeployment(
 	}
 	// Unset (options built without flags) is the documented default.
 	if options.AgentProvisioningPort == 0 {
-		options.AgentProvisioningPort = defaultAgentProvisioningPort
+		options.AgentProvisioningPort = provisioning.DefaultPort
 	}
 	if options.AgentProvisioningPort < 1 || options.AgentProvisioningPort > 65535 ||
 		options.AgentProvisioningPort == options.AgentPort {

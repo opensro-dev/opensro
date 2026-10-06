@@ -18,6 +18,8 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"opensro.online/server/internal/agent/provisioning"
 )
 
 /*
@@ -321,7 +323,7 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 	flags.IntVar(
 		&options.AgentProvisioningPort,
 		"agent-provisioning-port",
-		defaultAgentProvisioningPort,
+		provisioning.DefaultPort,
 		"Agent loopback account provisioning port (a second Agent on one host needs its own)",
 	)
 	flags.BoolVar(

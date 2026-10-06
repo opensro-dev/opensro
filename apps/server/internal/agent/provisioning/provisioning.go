@@ -37,6 +37,11 @@ import (
 	"opensro.online/server/internal/security/auth"
 )
 
+// DefaultPort is the provisioning API's loopback port when nothing else is
+// configured. The web site's provisioning client calls it, and the Agent's
+// Nomad job and deployer default to it; this is the one place it is set.
+const DefaultPort = 8789
+
 const (
 	maxRequestBytes = 4 << 10
 	requestTimeout  = 10 * time.Second

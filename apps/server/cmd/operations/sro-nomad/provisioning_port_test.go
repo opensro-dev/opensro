@@ -8,10 +8,14 @@ provisioning_port_test.go - the Agent's provisioning port reaches its job
 
 package main
 
-import "testing"
+import (
+	"testing"
 
-// wantDefaultProvisioningPort is sro-agent's default (accounts.go); the web
-// site's provisioning client depends on it, so it is pinned here by value.
+	"opensro.online/server/internal/agent/provisioning"
+)
+
+// wantDefaultProvisioningPort pins the value the web site's provisioning
+// client calls; provisioning.DefaultPort is its only definition.
 const wantDefaultProvisioningPort = 8789
 
 /*
@@ -39,7 +43,7 @@ func TestAgentProvisioningPortDefaultsAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if variables["agent_provisioning_port"] != wantDefaultProvisioningPort || defaultAgentProvisioningPort != wantDefaultProvisioningPort {
+	if variables["agent_provisioning_port"] != wantDefaultProvisioningPort || provisioning.DefaultPort != wantDefaultProvisioningPort {
 		t.Fatalf("default provisioning port = %v, want 8789", variables["agent_provisioning_port"])
 	}
 	variables, err = render("-agent-port", "8817", "-agent-provisioning-port", "8819")
