@@ -571,7 +571,6 @@ scripts/lib/probeCharacter.mjs
 scripts/lib/probeEndpoints.mjs
 scripts/lib/probeTransportProtocol.mjs
 scripts/lib/publishedAsset.mjs
-scripts/rebuildLock.mjs
 scripts/refresh_asset_delivery.mjs
 scripts/setup_git_hooks.mjs
 scripts/task.mjs
