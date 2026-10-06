@@ -316,7 +316,7 @@ func (application *gameWorldApplication) admit(ctx context.Context) error {
 	started := time.Now()
 	settled := func() bool {
 		population := application.population
-		return population == nil || population.PopulationSettled(application.shardID, population.CurrentTimeMillis())
+		return population == nil || population.PopulationSettled(application.shardID)
 	}
 	open := func() {
 		application.readiness.Open()
@@ -362,8 +362,11 @@ func admitWhenSettled(ctx context.Context, a admission) error {
 	if !awaitBootFill(ctx, a.settled, a.poll, a.limit) && ctx.Err() == nil {
 		log.Warnf("shard: monster population still filling after %s; admitting players anyway", a.limit)
 	}
-	if ctx.Err() != nil {
+	// Cancellation is a normal end of the run here, not an admission error.
+	select {
+	case <-ctx.Done():
 		return nil
+	default:
 	}
 	if err := a.start(); err != nil {
 		return fmt.Errorf("transport: %w", err)

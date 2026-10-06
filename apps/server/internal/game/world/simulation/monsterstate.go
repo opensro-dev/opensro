@@ -402,14 +402,16 @@ func (s *MonsterState) AdvancePopulation(nowMs int64) {
 ================
 MonsterState.PopulationSettled
 
-The division's boot fill is over: every population of it has run a
-population pass, and none placed a nest spawn within the last native nest
-tick (monster.NestHiveTickMs). A nest whose placement keeps failing places
-nothing, so it never holds this open. A division with no population is
-settled.
+The division's boot fill is over: every population of it has COMPLETED a
+population pass at least one native nest tick (monster.NestHiveTickMs)
+after its last nest spawn, so the pass that ran the next due nest ticks
+placed nothing. Judged on completed passes only: a due tick that has not
+run yet cannot read as settled. A nest whose placement keeps failing
+places nothing, so it never holds this open. A division with no
+population is settled.
 ================
 */
-func (s *MonsterState) PopulationSettled(division string, nowMs int64) bool {
+func (s *MonsterState) PopulationSettled(division string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, key := range s.populationKeys() {
@@ -420,7 +422,7 @@ func (s *MonsterState) PopulationSettled(division string, nowMs int64) bool {
 		if state == nil {
 			continue
 		}
-		if state.populationTickMs == 0 || nowMs-state.lastSpawnMs < monster.NestHiveTickMs {
+		if state.populationTickMs == 0 || state.populationTickMs-state.lastSpawnMs < monster.NestHiveTickMs {
 			return false
 		}
 	}

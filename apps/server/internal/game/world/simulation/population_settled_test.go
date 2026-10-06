@@ -19,9 +19,10 @@ import (
 ================
 TestPopulationSettlesOneNestTickAfterTheLastSpawn
 
-Before any population pass the division is not settled; a pass that places
-monsters keeps it unsettled for one native nest tick; a later pass that
-places nothing settles it. A division without population is settled.
+Before any population pass the division is not settled; after a pass that
+places monsters, neither elapsed time nor a pass inside one native nest
+tick settles it; a completed pass a full nest tick later that places
+nothing does. A division without population is settled.
 ================
 */
 func TestPopulationSettlesOneNestTickAfterTheLastSpawn(t *testing.T) {
@@ -32,26 +33,30 @@ func TestPopulationSettlesOneNestTickAfterTheLastSpawn(t *testing.T) {
 	now := time.Unix(100, 0)
 	s.SetTimeSource(func() time.Time { return now })
 	s.StartDivision("a")
-	if s.PopulationSettled("a", s.CurrentTimeMillis()) {
+	if s.PopulationSettled("a") {
 		t.Fatal("settled before any population pass")
 	}
 	s.AdvancePopulation(s.CurrentTimeMillis())
 	if len(s.InstancesInRegions("a", []uint16{257})) != 1 {
 		t.Fatal("the boot pass placed nothing")
 	}
-	if s.PopulationSettled("a", s.CurrentTimeMillis()) {
+	if s.PopulationSettled("a") {
 		t.Fatal("settled in the pass that spawned")
 	}
-	now = now.Add(time.Duration(monster.NestHiveTickMs-1) * time.Millisecond)
-	if s.PopulationSettled("a", s.CurrentTimeMillis()) {
-		t.Fatal("settled inside one nest tick of the last spawn")
+	// Time alone settles nothing: only a completed pass a nest tick later.
+	now = now.Add(time.Duration(monster.NestHiveTickMs) * time.Millisecond)
+	if s.PopulationSettled("a") {
+		t.Fatal("settled on elapsed time before the next pass ran")
 	}
-	now = now.Add(time.Millisecond)
+	s.AdvancePopulation(s.CurrentTimeMillis() - 1)
+	if s.PopulationSettled("a") {
+		t.Fatal("a pass inside one nest tick of the last spawn settled the fill")
+	}
 	s.AdvancePopulation(s.CurrentTimeMillis())
-	if !s.PopulationSettled("a", s.CurrentTimeMillis()) {
+	if !s.PopulationSettled("a") {
 		t.Fatal("a full nest tick without a spawn did not settle the fill")
 	}
-	if !s.PopulationSettled("absent", s.CurrentTimeMillis()) {
+	if !s.PopulationSettled("absent") {
 		t.Fatal("a division without population is not settled")
 	}
 }
