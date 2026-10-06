@@ -189,7 +189,12 @@ The scenario's input, and how long its measured span may last.
 ================
 */
 async function drive( page, name, location, seconds, scene ) {
-	if ( name === "combat" ) return [ seconds, more => combat( page, more, scene ) ];
+	if ( name === "combat" ) {
+		// measure() keeps no return value; the window's evidence rides the scene.
+		return [ seconds, async more => {
+			scene.evidence = await combat( page, more, scene );
+		} ];
+	}
 	if ( name === "still" ) return [ seconds, more => keepGoing( page, more ) ];
 	if ( name === "drag" ) return [ seconds, more => drag( page, more ) ];
 	if ( name === "move" ) return [ seconds, more => walk( page, more ) ];
@@ -209,6 +214,7 @@ One location: open the client there and run its scenarios.
 */
 async function session( options, location, results ) {
 	console.log( `Opening ${location.name}: frame limit ${options.frameLimit || "uncapped"}, CPU ${options.cpuRate}x` );
+	let scene = null;
 	const client = await openClient( location.fixture, {
 		counts: options.counts,
 		spans: options.spans,
@@ -227,7 +233,7 @@ async function session( options, location, results ) {
 		) throw Error( `${location.name}: the character booted outside the scene (${JSON.stringify( booted )})` );
 		// The combat scene loads once per session, on a fresh isolated server;
 		// GM-loaded monsters have no nest and would accumulate across runs.
-		const scene = location.name === "combat" ? await loadCombat( client.page, combatScene( options ) ) : null;
+		scene = location.name === "combat" ? await loadCombat( client.page, combatScene( options ) ) : null;
 		const captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
@@ -259,8 +265,11 @@ async function session( options, location, results ) {
 					count: scene.count,
 					type: scene.type,
 					vulnerable: scene.vulnerable,
-					refObjId: scene.refObjId
+					refObjId: scene.refObjId,
+					gids: scene.gids,
+					ambient: scene.ambient
 				};
+				result.combat = scene.evidence;
 			}
 			const allocated = await captures.stop( `${location.name}-${name}` );
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
@@ -269,14 +278,15 @@ async function session( options, location, results ) {
 			console.log( row( result ) );
 		}
 		await captures.finish();
+	} finally {
+		// Residue is reported for rejected windows too: GM monsters outlive them.
 		if ( scene ) {
-			const left = await sceneAlive( client.page, scene );
+			const left = await sceneAlive( client.page, scene ).catch( () => null );
 			console.log(
-				`  combat residue: ${left} of ${scene.count} GM-loaded ${scene.codename} still alive; ` +
+				`  combat residue: ${left ?? "unknown"} of ${scene.count} GM-loaded ${scene.codename} still alive; ` +
 					"restart the GameWorld (announce it first) before other measurements"
 			);
 		}
-	} finally {
 		await closeClient( client );
 	}
 }

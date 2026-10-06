@@ -263,54 +263,100 @@ function sceneMonsters( page ) {
 
 /*
 ================
+monsterReference
+
+The requested codename's reference id from the client's published monster
+manifest, the same rows the renderer resolves models from.
+================
+*/
+function monsterReference( page, codename ) {
+	return page.evaluate( async codename => {
+		const manifest = await (await fetch( "/assets/npc/manifest.json" )).json();
+		const row = Object.values( manifest.models ).find( m => m.codename === codename && m.kind === "monster" );
+		return row ? row.refObjId : null;
+	}, codename );
+}
+
+/*
+================
 loadCombat
 
 Loads the repeatable combat scene with the native GM commands: /INVINCIBLE
 unless the scene is vulnerable, then /LOADMONSTER codename count type at the
-character's feet. The scene is the new monsters of one reference that
-appear; positions are not repeatable (the monsters roam on AI), the
-codename and count are. Returns the scene with its gids.
+character's feet. The scene is exactly count new monsters of the requested
+reference; the ambient population within the radius is recorded beside it.
+Positions are not repeatable (the monsters run on their AI); codename and
+count are. Returns the scene with its gids.
 ================
 */
 export async function loadCombat( page, scene ) {
-	const before = new Set( (await sceneMonsters( page )).map( m => m.gid ) );
+	const refObjId = await monsterReference( page, scene.codename );
+	if ( refObjId === null ) throw Error( `no monster ${scene.codename} in the published manifest` );
+	const ambient = await sceneMonsters( page ), before = new Set( ambient.map( m => m.gid ) );
 	if ( !scene.vulnerable ) await gmCommand( page, "/INVINCIBLE" );
 	await gmCommand( page, `/LOADMONSTER ${scene.codename} ${scene.count} ${scene.type}` );
 	const started = Date.now();
+	let gids = [];
 	while ( Date.now() - started < COMBAT_LOAD_TIMEOUT_MS ) {
-		const groups = new Map();
-		for ( const m of await sceneMonsters( page ) ) {
-			if ( before.has( m.gid ) ) continue;
-			groups.set( m.refObjId, [ ...(groups.get( m.refObjId ) ?? []), m.gid ] );
-		}
-		const loaded = [ ...groups.entries() ].find( ( [, gids] ) => gids.length >= scene.count );
-		if ( loaded ) return { ...scene, refObjId: loaded[0], gids: loaded[1] };
+		gids = (await sceneMonsters( page )).filter( m => !before.has( m.gid ) && m.refObjId === refObjId ).map(
+			m => m.gid
+		);
+		if ( gids.length >= scene.count ) break;
 		await page.waitForTimeout( 250 );
 	}
-	throw Error( `/LOADMONSTER ${scene.codename} ${scene.count} produced no scene within ${COMBAT_RADIUS} units` );
+	if ( gids.length !== scene.count ) {
+		throw Error(
+			`/LOADMONSTER ${scene.codename} ${scene.count}: ${gids.length} of reference ${refObjId} appeared`
+		);
+	}
+	return { ...scene, refObjId, gids, ambient: ambient.length };
+}
+
+/*
+================
+castEvidence
+
+Every server cast in the gameplay view (positive tokens; predictions do not
+count): its caster, whether it targets the local character, and the damage
+its results carry so far. Later result stages append to the same token.
+================
+*/
+function castEvidence( page ) {
+	return page.evaluate( () => {
+		const game = globalThis.__benchRuntime.gameplay();
+		return (game.casts ?? []).filter( c => c.token > 0 ).map( c => ({
+			token: c.token,
+			caster: c.caster,
+			onLocal: c.target === game.localGid,
+			damage: (c.impacts ?? []).reduce( ( sum, i ) => sum + (i.damage ?? 0), 0 )
+		}) );
+	} );
 }
 
 /*
 ================
 combat
 
-fight against the loaded scene only. The window counts as combat only if
-the server accepted local casts that dealt damage, and every scene monster
-is still alive within COMBAT_RADIUS at its end; otherwise it throws, so a
-drifted or idle window cannot pass as fast. Returns the window's tally.
+fight against the loaded scene only. Evidence is measured against the cast
+tokens already in view when the window starts, never a clock: casts in the
+gameplay view carry simulation time, a different origin from the page's.
+The window counts only if the server accepted local casts that dealt
+damage, a vulnerable scene also hit the character, and every scene monster
+is alive within COMBAT_RADIUS at its end; otherwise it throws. Returns the
+window's evidence, which the bench stores with the result.
 ================
 */
 export async function combat( page, more, scene ) {
-	const started = await page.evaluate( () => performance.now() );
-	const tally = { turns: 0, acceptedCasts: 0, damage: 0, incomingCasts: 0 };
-	const seen = new Set();
+	const baseline = new Map( (await castEvidence( page )).map( c => [ c.token, c.damage ] ) );
+	const local = await page.evaluate( () => globalThis.__benchRuntime.gameplay().localGid );
+	const scenery = new Set( scene.gids ), latest = new Map();
+	let turns = 0;
 	for ( let turn = 0; more(); turn++ ) {
-		const sample = await page.evaluate( ( { turn, gids, started } ) => {
-			const root = globalThis.__benchRuntime, game = root.gameplay(), local = game.localGid;
-			const scene = new Set( gids );
+		await page.evaluate( ( { turn, gids } ) => {
+			const root = globalThis.__benchRuntime, game = root.gameplay(), ids = new Set( gids );
 			const world = e => [ (e.regionId & 255) * 1920 + e.x, (e.regionId >>> 8) * 1920 + e.z ];
 			const here = world( game.pose );
-			const target = root.entities().filter( e => scene.has( e.gid ) && e.appearanceState?.[0] !== 2 ).map(
+			const target = root.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] !== 2 ).map(
 				e => ({ gid: e.gid, d: Math.hypot( world( e )[0] - here[0], world( e )[1] - here[1] ) })
 			).sort( ( a, b ) => a.d - b.d )[0];
 			const skills = (game.skills ?? []).map( s => s.id ?? s ).filter( id => Number.isInteger( id ) );
@@ -321,37 +367,40 @@ export async function combat( page, more, scene ) {
 				} );
 			}
 			if ( target ) root.session( { kind: "gameplay", command: { kind: "attack", gid: target.gid } } );
-			// Server casts carry positive tokens; client predictions do not count.
-			return (game.casts ?? []).filter( c => c.token > 0 && (c.receivedAtMs ?? 0) >= started ).map( c => ({
-				token: c.token,
-				local: c.caster === local,
-				incoming: scene.has( c.caster ),
-				damage: (c.impacts ?? []).reduce( ( sum, i ) => sum + (i.damage ?? 0), 0 )
-			}) );
-		}, { turn, gids: scene.gids, started } );
-		for ( const cast of sample ) {
-			if ( seen.has( cast.token ) ) continue;
-			seen.add( cast.token );
-			if ( cast.local ) {
-				tally.acceptedCasts++;
-				tally.damage += cast.damage;
-			}
-			if ( cast.incoming ) tally.incomingCasts++;
-		}
-		tally.turns++;
+		}, { turn, gids: scene.gids } );
+		for ( const cast of await castEvidence( page ) ) latest.set( cast.token, cast );
+		turns++;
 		const turnStart = Date.now();
 		while ( more() && Date.now() - turnStart < 700 ) await page.waitForTimeout( 20 );
 	}
+	for ( const cast of await castEvidence( page ) ) latest.set( cast.token, cast );
+	const evidence = { turns, acceptedCasts: 0, damage: 0, incomingCasts: 0, incomingDamage: 0 };
+	for ( const cast of latest.values() ) {
+		// A cast already in view at the start counts only its new result stages.
+		const fresh = cast.damage - (baseline.get( cast.token ) ?? 0);
+		if ( !baseline.has( cast.token ) && cast.caster === local ) evidence.acceptedCasts++;
+		if ( cast.caster === local ) evidence.damage += fresh;
+		if ( scenery.has( cast.caster ) ) {
+			if ( !baseline.has( cast.token ) ) evidence.incomingCasts++;
+			if ( cast.onLocal ) evidence.incomingDamage += fresh;
+		}
+	}
 	const alive = new Set( (await sceneMonsters( page )).map( m => m.gid ) );
-	tally.alive = scene.gids.filter( gid => alive.has( gid ) ).length;
+	evidence.alive = scene.gids.filter( gid => alive.has( gid ) ).length;
 	console.log(
 		`  combat ${scene.codename} x${scene.count} ${scene.type}${
 			scene.vulnerable ? " vulnerable" : " invincible"
 		}: ` +
-			`turns ${tally.turns}, accepted casts ${tally.acceptedCasts}, damage ${tally.damage}, ` +
-			`incoming casts ${tally.incomingCasts}, alive ${tally.alive}/${scene.count}`
+			`turns ${evidence.turns}, accepted casts ${evidence.acceptedCasts}, damage ${evidence.damage}, ` +
+			`incoming casts ${evidence.incomingCasts}, incoming damage ${evidence.incomingDamage}, ` +
+			`alive ${evidence.alive}/${scene.count}, ambient ${scene.ambient}`
 	);
-	if ( !tally.acceptedCasts || !tally.damage ) throw Error( "the combat window had no accepted, damaging cast" );
-	if ( tally.alive !== scene.count ) throw Error( "the combat scene drifted: a monster died or left the radius" );
-	return tally;
+	if ( !evidence.acceptedCasts || evidence.damage <= 0 ) {
+		throw Error( "the combat window had no accepted, damaging cast" );
+	}
+	if ( scene.vulnerable && evidence.incomingDamage <= 0 ) {
+		throw Error( "the vulnerable combat window took no incoming damage" );
+	}
+	if ( evidence.alive !== scene.count ) throw Error( "the combat scene drifted: a monster died or left the radius" );
+	return evidence;
 }
