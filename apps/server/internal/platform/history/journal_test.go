@@ -257,3 +257,41 @@ func TestFailedCheckpointRetainsLossCounters(t *testing.T) {
 		t.Fatal("failed flush erased loss counters")
 	}
 }
+
+/*
+================
+TestPlayersListsEachCharacterNewestFirst
+
+The operator's player list: one row per account and character, newest
+first, with session count, play time, online state and badly ended sessions.
+================
+*/
+func TestPlayersListsEachCharacterNewestFirst(t *testing.T) {
+	j := testJournal(t)
+	for _, row := range []struct {
+		id, character, kind, category string
+		at                            int64
+		attached                      bool
+	}{
+		{"w1", "Wizard", "world_entered", "", 1000, true}, {"w1", "Wizard", "ended", "expected", 61000, false},
+		{"w2", "Wizard", "world_entered", "", 100000, true}, {"w2", "Wizard", "ended", "connection", 160000, false},
+		{"a1", "Archer", "world_entered", "", 200000, true},
+	} {
+		put(t, j, Event{Session: row.id, Account: "player", Character: row.character, Kind: row.kind, Category: row.category,
+			At: row.at, Attached: row.attached, InWorld: true, Lifecycle: true})
+	}
+	players, err := j.players()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(players) != 2 || players[0].Character != "Archer" || players[1].Character != "Wizard" {
+		t.Fatalf("players = %+v", players)
+	}
+	archer, wizard := players[0], players[1]
+	if !archer.Online || archer.Sessions != 1 || archer.Problems != 0 {
+		t.Fatalf("archer = %+v", archer)
+	}
+	if wizard.Online || wizard.Sessions != 2 || wizard.Problems != 1 || wizard.ConnectedSeconds != 120 {
+		t.Fatalf("wizard = %+v", wizard)
+	}
+}

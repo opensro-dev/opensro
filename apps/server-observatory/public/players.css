@@ -7,12 +7,12 @@ players.css - guided recovery inside the shared operations dashboard
  display: flex;
  align-items: center;
  justify-content: space-between;
- gap: 24px;
- margin-bottom: 26px;
+ gap: 18px;
+ margin-bottom: 14px;
 }
 .recovery-heading h2 {
-	font-size: 30px;
-	margin: 8px 0 12px;
+	font-size: 22px;
+	margin: 4px 0 6px;
 }
 .recovery-heading p {
 	color: var(--muted);
@@ -32,7 +32,7 @@ players.css - guided recovery inside the shared operations dashboard
 	list-style: none;
 	gap: 32px;
 	padding: 0;
-	margin: 0 0 28px;
+	margin: 0 0 14px;
 	color: var(--muted);
 	font-size: 12px;
 }
@@ -53,8 +53,8 @@ players.css - guided recovery inside the shared operations dashboard
 	display: grid;
 	grid-template-columns: 1fr 2fr auto;
 	align-items: end;
-	gap: 18px;
-	padding: 24px;
+	gap: 12px;
+	padding: 14px 18px;
 }
 #recovery label {
 	display: grid;
@@ -64,39 +64,39 @@ players.css - guided recovery inside the shared operations dashboard
 }
 #recovery input, #recovery select, #recovery textarea {
 	width: 100%;
-	min-height: 43px;
-	padding: 12px 14px;
+	min-height: 36px;
+	padding: 7px 10px;
 	font: inherit;
 	color: var(--text);
-	border: 1px solid #40574f;
+	border: 1px solid var(--bronze);
 	border-radius: 6px;
-	background: #101e1b;
+	background: var(--wood);
 }
 #recovery input:focus, #recovery select:focus, #recovery textarea:focus {
 	outline: 2px solid var(--gold);
 	outline-offset: 2px;
 }
 #recovery input::placeholder, #recovery textarea::placeholder {
-	color: #80918a;
+	color: var(--faint);
 }
 #recovery .button {
-	min-height: 43px;
+	min-height: 36px;
 }
 #recovery .primary {
-	background: #37594a;
-	border-color: #6c967c;
-	color: #eef3e8;
+	background: var(--lacquer);
+	border-color: var(--lacquer-deep);
+	color: #fff4dc;
 	padding-inline: 24px;
 }
 .recovery-notice {
-	padding: 16px 18px;
-	margin: 18px 0 26px;
+	padding: 10px 14px;
+	margin: 10px 0 14px;
 	border-radius: 6px;
-	border-left: 3px solid var(--jade);
-	color: #cbdcd0;
+	border-left: 3px solid var(--gold);
+	color: var(--text);
 	font-size: 13px;
 	line-height: 1.6;
-	background: #213a2d;
+	background: var(--surface-raised);
 }
 .recovery-grid {
 	display: grid;
@@ -111,7 +111,7 @@ players.css - guided recovery inside the shared operations dashboard
 	gap: 0 24px;
 }
 .recovery-facts div {
-	padding: 18px 0;
+	padding: 10px 0;
 	border-bottom: 1px solid var(--line);
 }
 .recovery-facts dt {
@@ -121,7 +121,7 @@ players.css - guided recovery inside the shared operations dashboard
 }
 .recovery-facts dd {
 	margin: 0;
-	font-size: 18px;
+	font-size: 16px;
 	font-variant-numeric: tabular-nums;
 	overflow-wrap: anywhere;
 }
@@ -155,29 +155,29 @@ players.css - guided recovery inside the shared operations dashboard
 	overflow: auto;
 	padding: 18px 24px;
 	font-size: 11px;
-	background: #0c1714;
+	background: #f7f0e1;
 }
 .recovery-form-body {
-	padding: 24px;
+	padding: 16px 18px;
 	display: grid;
-	gap: 22px;
+	gap: 14px;
 }
 .recovery-note {
-	border: 1px solid #74613b;
+	border: 1px solid var(--bronze);
 	border-radius: 6px;
-	background: #59472026;
+	background: #fbecc480;
 	padding: 14px 16px;
-	color: #d6cbae;
+	color: var(--muted);
 	font-size: 12px;
 	line-height: 1.8;
 }
 #recovery .rescue-submit {
-	background: #614331;
-	border-color: #987047;
-	color: #f2dcb8;
+	background: linear-gradient(180deg, #c2412f, #8a1f1a);
+	border-color: var(--lacquer-deep);
+	color: #fff4dc;
 }
 #recovery .rescue-submit:hover {
-	background: #77523a;
+	background: linear-gradient(180deg, #d4513c, #9c2620);
 }
 .recovery-hint {
 	color: var(--muted);

@@ -62,7 +62,7 @@ function render() {
 		}` :
 		"Population exceeds the 50,000-row capture limit. The census is partial; resident total remains authoritative.";
 	$( "connection" ).textContent = state.paused ? "Paused" : s?.connected ? "Live · 2s updates" : "Disconnected";
-	$( "connection" ).style.color = s?.connected ? "var(--jade)" : "var(--red)";
+	$( "connection" ).classList.toggle( "offline", !s?.connected );
 	$( "subtitle" ).textContent = s ?
 		`${s.name} · ${s.test ? "Test realm" : "Global realm"} · Live server observation` :
 		"A live window into the people, creatures and systems of Silkroad.";

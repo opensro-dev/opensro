@@ -1,0 +1,272 @@
+/*
+===========================================================================
+
+theme-fit.css - fitting the console to the screen
+
+The narrow-screen layout (the sidebar becomes a top bar) and the operator
+density that keeps each view within a screen or two at 1080p. Loaded last:
+these rules override theme.css and theme-boards.css on purpose.
+
+===========================================================================
+*/
+
+/* ----- Narrow screens: the sidebar becomes a top bar ----- */
+
+@media (max-width: 1080px) {
+	:root {
+		--rail-width: 200px;
+	}
+	.metrics {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+
+@media (max-width: 860px) {
+	.rail {
+		display: flex;
+		position: static;
+		width: auto;
+		inset: auto;
+		padding: 0;
+		border-right: 0;
+		border-bottom: 3px solid var(--gold-soft);
+		overflow: visible;
+	}
+	.shell {
+		margin-left: 0;
+	}
+	.brand {
+		padding: 14px 16px 12px;
+		margin: 0;
+	}
+	.rail nav {
+		flex-direction: row;
+		overflow-x: auto;
+		padding: 0 10px 10px;
+	}
+	.rail nav button,
+	.rail nav a {
+		width: auto;
+		flex: 0 0 auto;
+		padding: 8px 12px;
+		gap: 8px;
+		font-size: 13px;
+	}
+	.rail nav button::before,
+	.rail nav a::before {
+		width: 18px;
+		height: 18px;
+	}
+	.rail-foot {
+		display: none;
+	}
+	header {
+		position: static;
+		display: flex;
+		justify-content: flex-end;
+		padding: 12px 16px 0;
+	}
+	h1 {
+		font-size: 32px;
+	}
+	main > .page-heading {
+		flex-direction: column;
+	}
+	main > .page-heading::after {
+		display: none;
+	}
+	main > .page-heading > div:first-child {
+		flex: none;
+		padding: 24px 22px 22px 40px;
+		background: linear-gradient(160deg, #f8eed5f0, #e9d4a6e6);
+		-webkit-mask: none;
+		mask: none;
+	}
+	main > .page-heading > div:first-child::before {
+		left: 18px;
+	}
+	main > .page-heading > div:first-child::after {
+		left: 13px;
+	}
+	main > .page-heading .heading-actions {
+		align-self: stretch;
+		margin: 14px;
+		justify-content: flex-start;
+	}
+	.metrics {
+		grid-template-columns: 1fr;
+	}
+	.realm {
+		min-width: 100%;
+	}
+	.hotspot,
+	.journal-entry {
+		padding: 12px 16px;
+	}
+}
+
+/* ----- Density: an operator console fits a screen ----- */
+
+/* styles.css sizes were set for a showcase; these keep every view within a
+   screen or two of scrolling at 1080p. */
+main {
+	padding-left: 24px;
+	padding-right: 24px;
+	padding-bottom: 0;
+}
+
+.metrics {
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.metric-icon {
+	padding-bottom: 10px;
+	font-size: 18px;
+}
+
+.metric-label {
+	font-size: 13px;
+}
+
+.metric-number {
+	margin: 2px 0;
+}
+
+.metric-foot {
+	font-size: 11px;
+}
+
+.realm-strip {
+	gap: 10px;
+	margin-bottom: 10px;
+}
+
+.realm small {
+	font-size: 11px;
+	margin-top: 0;
+}
+
+.realm-state {
+	padding: 2px 12px;
+	font-size: 10px;
+}
+
+#warning,
+.operator-alert {
+	margin-bottom: 10px;
+}
+
+.feature-grid,
+.lower-grid {
+	gap: 14px;
+}
+
+.lower-grid {
+	margin-top: 14px;
+}
+
+.panel-heading {
+	padding: 12px 18px 10px;
+}
+
+.panel-heading h2 {
+	margin-top: 2px;
+}
+
+.panel-heading h2::before {
+	height: 18px;
+}
+
+.atlas {
+	height: 240px;
+}
+
+#uniques {
+	max-height: 260px;
+}
+
+.encounter {
+	padding: 8px 18px;
+	gap: 12px;
+}
+
+.encounter .crest {
+	width: 30px;
+	height: 30px;
+}
+
+.encounter-name {
+	font-size: 14px;
+}
+
+.chart {
+	height: 110px;
+	padding: 6px 18px 0;
+}
+
+.chart-legend,
+.map-footer {
+	padding: 8px 18px;
+}
+
+.health-row {
+	padding: 8px 18px;
+}
+
+#hotspots,
+#journal {
+	max-height: 300px;
+	overflow: auto;
+}
+
+.hotspot,
+.journal-entry {
+	padding: 8px 18px;
+}
+
+.panel-note {
+	padding: 10px 18px;
+}
+
+td,
+th {
+	padding: 8px 16px;
+}
+
+.census-tools {
+	padding: 10px 18px;
+}
+
+.census-summary {
+	padding: 0 18px 10px;
+}
+
+.pagination {
+	padding: 10px 18px;
+}
+
+.runtime-grid {
+	gap: 14px;
+}
+
+.button {
+	padding: 7px 12px;
+}
+
+input,
+select {
+	padding: 7px 10px;
+}
+
+footer {
+	padding: 14px 0;
+}
+
+.rail nav {
+	gap: 0;
+}
+
+.rail-foot {
+	padding-top: 20px;
+}
