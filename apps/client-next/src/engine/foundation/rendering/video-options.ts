@@ -11,8 +11,8 @@ displayScale). It shrinks only when the page is smaller than the mode.
 ===========================================================================
 */
 // User-selected compatibility mode while whole-scene lighting parity is open.
-// true restores sphere reflections, actor ambient .6 and temporary hit lighting.
-// This build switch takes precedence over the saved Metal Detail option.
+// true restores actor ambient .6 and temporary hit lighting.
+// Metal Detail independently controls the existing sphere-reflection pass.
 export const NATIVE_CHARACTER_LIGHTING = false;
 // Zero follows requestAnimationFrame at the current display refresh rate.
 export const DEFAULT_FRAME_LIMIT = 0;

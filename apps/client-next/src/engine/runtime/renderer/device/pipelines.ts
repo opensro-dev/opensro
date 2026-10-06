@@ -276,7 +276,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1)
  // native shader SPEC adds .5 after transforming, without renormalizing.
  o.equipmentUV=uv+material.equipmentUV.xy;
  o.sphereUV=vec2f(0);
- if(nativeCharacterLighting&&material.reflection.x>0.5&&env.reflection.w>0.5){
+ if(material.reflection.x>0.5&&env.reflection.w>0.5){
   let reflectionNormal=(instance*vec4f(lightingNormal,0)).xyz;
   let cameraRight=normalize(vec3f(transform[0].x,transform[1].x,transform[2].x));
   let cameraUp=normalize(vec3f(transform[0].y,transform[1].y,transform[2].y));
@@ -315,7 +315,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f,@location(1)
  var reflected=vec3f(0);var equipment=vec3f(0);
  if(material.equipmentColor.w>0.0){equipment=textureSample(sphereMap,textureSampler,input.equipmentUV,0).rgb;}
  // Keep implicit-derivative sampling behind uniform gates, before varying exits.
- if(nativeCharacterLighting&&material.reflection.x>0.5&&env.reflection.w>0.5){reflected=textureSample(sphereMap,textureSampler,input.sphereUV,0).rgb;}
+ if(material.reflection.x>0.5&&env.reflection.w>0.5){reflected=textureSample(sphereMap,textureSampler,input.sphereUV,0).rgb;}
  let layer=select(u32(env.settings.z),u32(env.lunar.x),material.skin.w==4.0);let tex=textureSample(albedo,textureSampler,input.uv,i32(layer%textureNumLayers(albedo)));
  if(material.skin.w>0){let k=material.skin.w;
   if(k==1||k==2){return input.color;}
@@ -367,7 +367,7 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  var lit=select(clamp(select(tex.rgb*input.color.rgb*surfaceLight,unlitColor,material.options.y>0.5)*material.options.w,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0);
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
- if(nativeCharacterLighting&&material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
+ if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
   // 85A9E0 sets temporary renderer light1 (C39094+64 -> A5A7F0).
   // It does not set the model's +1E4 reflection override (A89560).
   // Neither ordinary hit lights nor SCT_MAT replace this factor.

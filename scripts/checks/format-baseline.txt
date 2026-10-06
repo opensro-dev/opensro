@@ -63,7 +63,6 @@ apps/client-next/src/engine/foundation/audio/environment.ts
 apps/client-next/src/engine/foundation/audio/item-sounds.ts
 apps/client-next/src/engine/foundation/audio/loop.ts
 apps/client-next/src/engine/foundation/audio/music.ts
-apps/client-next/src/engine/foundation/audio/options.ts
 apps/client-next/src/engine/foundation/gameplay/abnormal-snapshot.ts
 apps/client-next/src/engine/foundation/gameplay/academy-notices.ts
 apps/client-next/src/engine/foundation/gameplay/academy.ts
@@ -115,7 +114,6 @@ apps/client-next/src/engine/foundation/navigation/owned-start.ts
 apps/client-next/src/engine/foundation/navigation/region-move.ts
 apps/client-next/src/engine/foundation/navigation/spatial-index.ts
 apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
-apps/client-next/src/engine/foundation/rendering/camera-options.ts
 apps/client-next/src/engine/foundation/rendering/camera-wheel.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
