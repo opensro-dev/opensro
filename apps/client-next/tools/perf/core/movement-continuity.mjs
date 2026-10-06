@@ -90,7 +90,10 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 		original.call( probe, sample );
 		// measure() closes this window before serializing its large frame tail.
 		// That transfer is harness overhead, not another measured game frame.
-		if ( !active || root.__benchLoop === false ) return;
+		if ( !active || root.__benchLoop !== true ) {
+			previous = null;
+			return;
+		}
 		summary.frames++;
 		const game = root.__benchRuntime.gameplay();
 		const entity = root.__benchRuntime.entities().find( row => row.gid === game.localGid );

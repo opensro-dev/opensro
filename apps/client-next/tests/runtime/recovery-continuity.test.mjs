@@ -21,6 +21,7 @@ function fixture() {
 	const entity = { gid: 1, movementMode: 3, runSpeed: 50, walkSpeed: 20 };
 	const game = { localGid: 1, moving: true, pendingMoves: 0 };
 	const target = /** @type {any} */ ({
+		__benchLoop: true,
 		__benchRuntime: { gameplay: () => game, entities: () => [ entity ] },
 		__worldProbeFrameProfiler: {
 			movement: sample => {
@@ -145,6 +146,25 @@ test("closing the measurement window excludes artifact serialization stalls", ()
 	assert.equal( f.read().frames, 2 );
 	assert.equal( f.read().longFrames, 0 );
 	assert.equal( f.read().maxDtMs, 10 );
+});
+
+test("only an open measurement window records frames and gaps cannot join windows", () => {
+	const f = fixture();
+	delete f.target.__benchLoop;
+	f.frame( 0, 0 );
+	f.target.__benchLoop = true;
+	f.frame( 1000, 50 );
+	f.frame( 1010, 50.5 );
+	f.target.__benchLoop = false;
+	f.frame( 2000, 100 );
+	f.target.__benchLoop = true;
+	f.frame( 3000, 150 );
+	f.frame( 3010, 150.5 );
+	const result = f.read();
+	assert.equal( result.frames, 4 );
+	assert.equal( result.channels.body.pairs, 2 );
+	assert.equal( result.channels.body.maxExcessXZ, 0 );
+	assert.equal( result.maxDtMs, 10 );
 });
 
 test("logical publication jumps cannot evict a visible excess witness", () => {
