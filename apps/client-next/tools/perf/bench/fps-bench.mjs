@@ -41,7 +41,7 @@ The goal these measure: 500 frames a second in every scenario.
 
 ===========================================================================
 */
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
@@ -130,6 +130,34 @@ function sceneAlive( page, scene ) {
 		return globalThis.__benchRuntime.entities().filter( e => ids.has( e.gid ) && e.appearanceState?.[0] !== 2 )
 			.map( e => e.gid );
 	}, scene.gids );
+}
+
+/*
+================
+recordResidue
+
+Fights the scene down, then counts what is left. The count and gids go to
+their own artifact (a rejected window has no result row) and onto each of
+the location's results; any residue, or none known, fails the run.
+================
+*/
+async function recordResidue( page, scene, location, results, options ) {
+	await clearCombat( page, scene ).catch( () => null );
+	const left = await sceneAlive( page, scene ).catch( () => null );
+	const residue = { codename: scene.codename, loaded: scene.count, alive: left?.length ?? null, gids: left };
+	if ( residue.alive !== 0 ) process.exitCode = 1;
+	await mkdir( options.out, { recursive: true } );
+	await writeFile( `${options.out}/${location.name}-residue.json`, JSON.stringify( residue, null, 2 ) );
+	for ( const result of results ) {
+		if ( result.name.startsWith( `${location.name}/` ) ) result.residue = residue;
+	}
+	if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
+	console.log(
+		residue.alive === 0 ?
+			`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} were fought down` :
+			`  combat residue: ${residue.alive ?? "unknown"} of ${scene.count} GM-loaded ${scene.codename} ` +
+			"still alive; restart the GameWorld (announce it first) before other measurements"
+	);
 }
 
 /*
@@ -283,20 +311,13 @@ async function session( options, location, results ) {
 		// Residue is reported for rejected windows too: GM monsters outlive them.
 		// A run that leaves any (or cannot tell) fails, and its artifact says so.
 		if ( scene ) {
-			await clearCombat( client.page, scene ).catch( () => null );
-			const left = await sceneAlive( client.page, scene ).catch( () => null );
-			const residue = { codename: scene.codename, loaded: scene.count, alive: left?.length ?? null, gids: left };
-			for ( const result of results ) {
-				if ( result.name.startsWith( `${location.name}/` ) ) result.residue = residue;
+			// Never let the residue report replace the window's own exception.
+			try {
+				await recordResidue( client.page, scene, location, results, options );
+			} catch ( error ) {
+				process.exitCode = 1;
+				console.log( `  combat residue: unknown (${error?.message ?? error})` );
 			}
-			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
-			if ( residue.alive !== 0 ) process.exitCode = 1;
-			console.log(
-				residue.alive === 0 ?
-					`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} were fought down` :
-					`  combat residue: ${residue.alive ?? "unknown"} of ${scene.count} GM-loaded ${scene.codename} ` +
-					"still alive; restart the GameWorld (announce it first) before other measurements"
-			);
 		}
 		await closeClient( client );
 	}
