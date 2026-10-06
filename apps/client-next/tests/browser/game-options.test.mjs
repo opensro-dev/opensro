@@ -180,6 +180,9 @@ test(
 				"false"
 			);
 			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental.png" } );
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			await click( "experimental-developer-diagnostics" );
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false, "draft must not enable diagnostics" );
 			await click( "experimental-chat-timestamps" );
 			await click( "experimental-cancel" );
 			assert.equal(
@@ -193,11 +196,19 @@ test(
 				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
 				"false"
 			);
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			await click( "experimental-developer-diagnostics" );
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false, "draft must not enable diagnostics" );
 			await click( "experimental-chat-timestamps" );
 			await click( "experimental-confirm" );
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), true );
+			assert.equal( await page.locator( "#developer-readout" ).isVisible(), false );
+			await page.locator( "#developer-toggle" ).click();
+			assert.equal( await page.locator( "#developer-toggle" ).getAttribute( "aria-expanded" ), "true" );
+
 			assert.deepEqual(
 				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
-				{ chatTimestamps: true }
+				{ chatTimestamps: true, developerDiagnostics: true }
 			);
 			await page.keyboard.press( "Escape" );
 			await click( "open-window:Experimental" );
@@ -223,8 +234,10 @@ test(
 			await click( "experimental-confirm" );
 			assert.deepEqual(
 				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
-				{ chatTimestamps: false }
+				{ chatTimestamps: false, developerDiagnostics: false }
 			);
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			assert.equal( await page.locator( "#developer-readout" ).isVisible(), false );
 			await page.evaluate( () => {
 				flagFixture.ui.event( { kind: "activate", id: "open-window:Option" } );
 				flagFixture.draw();

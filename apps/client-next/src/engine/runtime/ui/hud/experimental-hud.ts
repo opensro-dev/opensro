@@ -46,6 +46,14 @@ export function createExperimentalHud() {
 		},
 		/*
 		================
+		toggleDeveloperDiagnostics
+		================
+		*/
+		toggleDeveloperDiagnostics() {
+			draft = { ...draft, developerDiagnostics: !draft.developerDiagnostics };
+		},
+		/*
+		================
 		reset
 		================
 		*/

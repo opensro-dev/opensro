@@ -16,6 +16,7 @@ ExperimentalOptions
 */
 export interface ExperimentalOptions {
 	readonly chatTimestamps: boolean;
+	readonly developerDiagnostics: boolean;
 }
 
 /*
@@ -26,6 +27,8 @@ experimentalOptions
 export function experimentalOptions( value: unknown = null ): ExperimentalOptions {
 	return {
 		chatTimestamps: typeof value === "object" && value !== null && !Array.isArray( value ) &&
-			"chatTimestamps" in value && value.chatTimestamps === true
+			"chatTimestamps" in value && value.chatTimestamps === true,
+		developerDiagnostics: typeof value === "object" && value !== null && !Array.isArray( value ) &&
+			"developerDiagnostics" in value && value.developerDiagnostics === true
 	};
 }
