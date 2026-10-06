@@ -108,6 +108,7 @@ export interface FrameTelemetry {
 	readonly gpu?: GpuTimingStats & { readonly enabled: boolean; };
 	/** Frames per second averaged over the sampling window. */
 	readonly fps: number;
+	readonly pingMs?: number | null;
 	/** Wall time between presented frames: window average and 95th percentile. */
 	readonly frameMs: number;
 	readonly p95FrameMs: number;
@@ -148,6 +149,7 @@ export interface Platform extends Disposable {
 	visibilityReturned(): boolean;
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
+	diagnosticsActive(): boolean;
 	/** The canvas CSS size, observed rather than read (no forced layout). */
 	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;

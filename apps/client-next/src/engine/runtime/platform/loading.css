@@ -210,8 +210,8 @@ the boot overlay so start-up frames remain measurable.
 	top: 8px;
 	right: 8px;
 	display: flex;
-	flex-direction: column;
-	align-items: flex-end;
+	flex-direction: row;
+	align-items: flex-start;
 	gap: 4px;
 	color: #d7e8ed;
 	font: 10px/1.35 ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -242,6 +242,9 @@ the boot overlay so start-up frames remain measurable.
 }
 
 .sro-fps-chip__readout {
+	position: absolute;
+	right: 0;
+	top: 22px;
 	min-width: 116px;
 	padding: 5px 7px;
 	border: 1px solid rgba(202, 165, 82, 0.28);
@@ -894,4 +897,16 @@ sent or dismissed. The replay's capture <video> is never visible.
 .sro-bug-request__actions button:first-child:not(:last-child) {
 	background: #6b5320;
 	border-color: #cba85e;
+}
+
+/* Developer diagnostics are a separate, console-enabled neighbor of FPS. */
+#developer-toggle { width: 24px; }
+.sro-developer-readout {
+	width: min(420px, calc(100vw - var(--telemetry-right, 8px) - 8px));
+	max-height: min(480px, calc(100vh - var(--telemetry-top, 8px) - 32px));
+	overflow: auto;
+	box-sizing: border-box;
+	text-align: left;
+	overflow-wrap: anywhere;
+	user-select: text;
 }

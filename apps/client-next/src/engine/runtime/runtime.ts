@@ -910,7 +910,8 @@ export function startRuntime(
 						actors: drawn.actors,
 						draws: drawn.draws,
 						visibleGroups: renderer.worldStats().visibleGroups,
-						build: buildInfo.readout( now )
+						pingMs: sessionState?.phase === "world" ? sessionState.pingMs : null,
+						build: buildInfo.readout( now, platform.diagnosticsActive(), sessionState?.phase )
 					} );
 					for ( const name in stageTotals ) stageTotals[name] = 0;
 					stageFrames = 0;

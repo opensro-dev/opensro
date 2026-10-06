@@ -82,7 +82,14 @@ export const rules = {
 	mapAsync: [ timing ],
 	getMappedRange: [ timing ],
 	Audio: [ runtime + "audio/music/music.ts" ],
-	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer ],
+	createElement: [
+		runtime + "platform/telemetry.ts",
+		uiBridge,
+		runtime + "platform/ui/cursor.ts",
+		bugRecorder,
+		bugDialog,
+		bugTrimmer
+	],
 	// The picking mask readback, shared by the renderer and the asset worker.
 	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
@@ -130,6 +137,7 @@ export const rules = {
 	configure: [ surface, device, bugRecorder, bugTranscode ],
 	unconfigure: [ surface ],
 	addEventListener: [
+		runtime + "platform/telemetry.ts",
 		runtime + "platform/platform.ts",
 		device,
 		uiBridge,

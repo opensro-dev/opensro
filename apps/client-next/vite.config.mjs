@@ -8,34 +8,13 @@ stamp (the commit it is built from). Beta delivery has its own builder.
 
 ===========================================================================
 */
-import { execFileSync } from "node:child_process";
+import { clientBuildDefinitions } from "./tools/build-metadata.mjs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import { publishedAssets } from "./tools/published-assets.mjs";
 import { devUpdates } from "./tools/dev/updates-plugin.mjs";
 import { sameOriginRelay, shardRoutes, tlsCertificate, tunnelHosts } from "./tools/dev/edge.mjs";
-
-/*
-================
-gitHead
-
-One fact about the commit this bundle is built from, for the FPS chip
-(build-info.ts): `git log -1 --format=<format>`. Outside a git checkout it
-is empty and the chip leaves it out.
-================
-*/
-function gitHead( format ) {
-	try {
-		return execFileSync( "git", [ "log", "-1", "--format=" + format ], {
-			cwd: fileURLToPath( new URL( ".", import.meta.url ) ),
-			encoding: "utf8",
-			stdio: [ "ignore", "pipe", "ignore" ]
-		} ).trim();
-	} catch {
-		return "";
-	}
-}
 
 export default defineConfig( ( { mode } ) => {
 	// Beta requires the isolated compiler, private maps and publication gate.
@@ -65,10 +44,7 @@ export default defineConfig( ( { mode } ) => {
 	const https = mode === "https", certificate = https ? tlsCertificate( env ) : null;
 	return {
 		publicDir: false,
-		define: {
-			"import.meta.env.SRO_CLIENT_REVISION": JSON.stringify( gitHead( "%H" ) ),
-			"import.meta.env.SRO_CLIENT_SUBJECT": JSON.stringify( gitHead( "%s" ) )
-		},
+		define: clientBuildDefinitions(),
 		server: {
 			proxy,
 			...hosts,

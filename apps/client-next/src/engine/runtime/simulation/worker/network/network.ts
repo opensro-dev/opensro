@@ -13,6 +13,11 @@ failure names that frame so it can be reported (session.ts).
 import { createCodec } from "./codec/codec";
 import type { NetworkOwner, WireFrame, NetworkFailure } from "@/engine/contracts/network";
 
+const PING_INTERVAL_MS = 5000;
+const PING_STALE_MS = 15000;
+const PING_TOKEN_BYTES = 4;
+const PING_BACKLOG_LIMIT = 65536;
+
 /*
 ================
 createNetwork
@@ -24,6 +29,8 @@ export function createNetwork(
 	const codec = createCodec();
 	let socket: WebSocket | null = null, epoch = 0, disposed = false, welcomed = false;
 	let bytes = 0;
+	let pingToken = 0, pendingPing = false, pingSentAt = -Infinity, pingReceivedAt = -Infinity;
+	let measuredPing: number | null = null;
 	const inbox: WireFrame[] = [];
 	let ended: string | null = null;
 	let endReason: NetworkFailure | undefined;
@@ -35,6 +42,9 @@ export function createNetwork(
 	function disconnect() {
 		epoch++;
 		welcomed = false;
+		pendingPing = false;
+		pingSentAt = pingReceivedAt = -Infinity;
+		measuredPing = null;
 		bytes = 0;
 		inbox.length = 0;
 		ended = null;
@@ -108,6 +118,27 @@ export function createNetwork(
 	}
 	return {
 		disconnect,
+		/*
+  ================
+  pingMs
+
+  Uses the existing transport echo on the gameplay socket (server OpPing).
+  No HTTP estimate or clock synchronization. A sample expires and is never
+  carried across a socket generation. One tiny probe per five seconds.
+  ================
+  */
+		pingMs() {
+			if ( !socket || !welcomed || socket.readyState !== WebSocket.OPEN ) return null;
+			const now = performance.now();
+			if ( now - pingSentAt >= PING_INTERVAL_MS && socket.bufferedAmount < PING_BACKLOG_LIMIT ) {
+				const payload = new Uint8Array( PING_TOKEN_BYTES );
+				new DataView( payload.buffer ).setUint32( 0, ++pingToken, true );
+				pingSentAt = now;
+				pendingPing = true;
+				send( { opcode: 3, payload } );
+			}
+			return now - pingReceivedAt < PING_STALE_MS ? measuredPing : null;
+		},
 		enterWorld( division, character, token ) {
 			if ( !welcomed ) throw new Error( "Transport handshake incomplete" );
 			send( codec.enterWorld( division, character, token ) );
@@ -187,6 +218,21 @@ export function createNetwork(
 							throw new Error( "Oversized transport ping" );
 						}
 						send( { opcode: 4, payload: frame.payload } );
+						return;
+					}
+					if ( frame.opcode === 4 ) {
+						if ( frame.payload.length > 64 ) throw new Error( "Oversized transport pong" );
+						if (
+							pendingPing && frame.payload.length === PING_TOKEN_BYTES &&
+							new DataView( frame.payload.buffer, frame.payload.byteOffset, PING_TOKEN_BYTES ).getUint32(
+									0,
+									true
+								) === (pingToken >>> 0)
+						) {
+							pingReceivedAt = performance.now();
+							measuredPing = Math.max( 0, Math.round( pingReceivedAt - pingSentAt ) );
+							pendingPing = false;
+						}
 						return;
 					}
 					if ( inbox.length >= 4096 || bytes + event.data.byteLength > (16 << 20) ) {

@@ -12,6 +12,7 @@ pack reader. Only the few files the browser loads by URL itself
 
 ===========================================================================
 */
+import { clientBuildDefinitions } from "../build-metadata.mjs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,6 +127,7 @@ export async function buildApplication( { base = root, directory, source, mode =
 	await build( {
 		root: base,
 		configFile: false,
+		define: clientBuildDefinitions( base ),
 		envDir: false,
 		envPrefix: [],
 		mode,

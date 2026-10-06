@@ -69,59 +69,129 @@ test("commit subjects are one line and bounded", () => {
 	for ( const value of [ undefined, null, 7 ] ) assert.equal( commitSubject( value ), "" );
 });
 
-test("both builds show with their uptimes and subjects, and the server keeps counting", async () => {
-	const answer = { ok: true, build: { revision: REVISION, subject: "Server change", uptimeSeconds: 60 } };
+test("refresh replaces a deployed Agent and a same-build restart resets uptime", async () => {
+	let build = { revision: REVISION, subject: "First Agent", uptimeSeconds: 600 };
 	await withFetch(
-		() => Promise.resolve( new Response( JSON.stringify( answer ) ) ),
+		() => Promise.resolve( new Response( JSON.stringify( { build } ) ) ),
 		async ( { requests, advance, now } ) => {
 			const info = createBuildInfo( "/api", "fedcba9876543210", "Client change" );
-			advance( 5000 );
-			assert.deepEqual( info.readout( now() ), {
-				lines: [ "client fedcba9 up 5s" ],
-				detail: "client fedcba9: Client change"
-			} );
+			info.readout( now() );
 			await settle();
-			assert.equal( requests.length, 1 );
-			assert.equal( requests[0].url, "/api/title/build" );
+			assert.match( info.readout( now() ).lines[1], /Agent 0123456 · uptime 10m/ );
 			assert.equal( requests[0].init.credentials, "omit" );
-			advance( 125_000 );
-			assert.deepEqual( info.readout( now() ), {
-				lines: [ "client fedcba9 up 2m 10s", "server 0123456 up 3m 05s" ],
-				detail: "client fedcba9: Client change\nserver 0123456: Server change"
-			} );
-			assert.equal( requests.length, 1, "an answered build is not asked again" );
+			build = { revision: "abcdef0123456789", subject: "New Agent", uptimeSeconds: 2 };
+			advance( 60000 );
+			info.readout( now() );
+			await settle();
+			assert.match( info.readout( now() ).lines[1], /Agent abcdef0 · uptime 2s/ );
+			assert.match( info.readout( now() ).detail, /New Agent/ );
+			build.uptimeSeconds = 1;
+			advance( 60000 );
+			info.readout( now() );
+			await settle();
+			assert.match( info.readout( now() ).lines[1], /uptime 1s/ );
+			assert.equal( requests.length, 3 );
 			info.dispose();
 		}
 	);
 });
 
-test("an unknown build is left out and asked again only after the retry delay", async () => {
-	await withFetch( () => Promise.reject( new TypeError( "offline" ) ), async ( { requests, advance, now } ) => {
-		const info = createBuildInfo( "/api", undefined, undefined );
-		assert.deepEqual( info.readout( now() ), { lines: [], detail: "" } );
-		await settle();
-		advance( 1000 );
-		assert.deepEqual( info.readout( now() ).lines, [] );
-		assert.equal( requests.length, 1 );
-		advance( 30_000 );
-		info.readout( now() );
-		assert.equal( requests.length, 2 );
-		info.dispose();
-	} );
-});
-
-test("an Agent built without a revision stamp shows no server line", async () => {
+test("failure marks retained information stale, throttles retries and recovers", async () => {
+	let failed = false;
 	await withFetch(
 		() =>
-			Promise.resolve(
-				new Response( JSON.stringify( { ok: true, build: { revision: "", uptimeSeconds: 5 } } ) )
-			),
-		async ( { now } ) => {
+			failed ?
+				Promise.reject( new Error( "offline" ) ) :
+				Promise.resolve(
+					new Response( JSON.stringify( { build: { revision: REVISION, uptimeSeconds: 20 } } ) )
+				),
+		async ( { requests, advance, now } ) => {
 			const info = createBuildInfo( "/api", undefined, undefined );
 			info.readout( now() );
 			await settle();
-			assert.deepEqual( info.readout( now() ).lines, [] );
+			failed = true;
+			advance( 60000 );
+			info.readout( now() );
+			await settle();
+			assert.match( info.readout( now() ).lines[1], /stale/ );
+			advance( 29000 );
+			info.readout( now() );
+			assert.equal( requests.length, 2 );
+			failed = false;
+			advance( 1000 );
+			info.readout( now() );
+			await settle();
+			assert.match( info.readout( now() ).lines[1], /uptime 20s/ );
 			info.dispose();
+		}
+	);
+});
+
+test("hanging requests expire and late replies cannot replace the newer sample", async () => {
+	const replies = [];
+	await withFetch( () => new Promise( resolve => replies.push( resolve ) ), async ( { requests, advance, now } ) => {
+		const info = createBuildInfo( "/api", undefined, undefined );
+		info.readout( now() );
+		advance( 10000 );
+		info.readout( now() );
+		assert.equal( requests[0].init.signal.aborted, true );
+		advance( 30000 );
+		info.readout( now() );
+		replies[1]( new Response( JSON.stringify( { build: { revision: REVISION, uptimeSeconds: 1 } } ) ) );
+		await settle();
+		replies[0]( new Response( JSON.stringify( { build: { revision: "abcdef0123456789", uptimeSeconds: 99 } } ) ) );
+		await settle();
+		assert.match( info.readout( now() ).lines[1], /Agent 0123456 · uptime 1s/ );
+		info.dispose();
+		advance( 60000 );
+		info.readout( now() );
+		assert.equal( requests.length, 2 );
+	} );
+});
+
+test("hidden diagnostics do not fetch; reopening and reconnecting refresh without duplicates", async () => {
+	await withFetch(
+		() => Promise.resolve( new Response( JSON.stringify( { build: { revision: "", uptimeSeconds: 5 } } ) ) ),
+		async ( { requests, advance, now } ) => {
+			const info = createBuildInfo( "/api", undefined, undefined );
+			info.readout( now(), false );
+			assert.equal( requests.length, 0 );
+			info.readout( now(), true, "world" );
+			info.readout( now(), true, "world" );
+			await settle();
+			assert.equal( requests.length, 1 );
+			assert.match( info.readout( now() ).lines[0], /Client unknown/ );
+			assert.match( info.readout( now() ).lines[1], /Agent unknown/ );
+			info.readout( now(), false );
+			advance( 6000 );
+			info.readout( now(), true, "world" );
+			await settle();
+			assert.equal( requests.length, 2 );
+			advance( 6000 );
+			info.readout( now(), true, "reconnecting" );
+			await settle();
+			assert.equal( requests.length, 3 );
+			info.dispose();
+		}
+	);
+});
+
+test("closing diagnostics aborts pending work and invalid uptime is not accepted", async () => {
+	await withFetch(
+		() => Promise.resolve( new Response( JSON.stringify( { build: { revision: REVISION, uptimeSeconds: -1 } } ) ) ),
+		async ( { requests, now } ) => {
+			const info = createBuildInfo( "/api", undefined, undefined );
+			info.readout( now() );
+			await settle();
+			assert.equal( info.readout( now() ).lines[1], "Agent unavailable" );
+			info.dispose();
+			const next = createBuildInfo( "/api", undefined, undefined );
+			next.readout( now() );
+			next.readout( now(), false );
+			assert.equal( requests.at( -1 ).init.signal.aborted, true );
+			await settle();
+			assert.equal( next.readout( now(), false ).lines[1], "Agent unavailable" );
+			next.dispose();
 		}
 	);
 });
