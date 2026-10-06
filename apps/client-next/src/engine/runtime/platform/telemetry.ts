@@ -91,18 +91,18 @@ export function createTelemetry( options: TelemetryOptions ) {
  */
 	function present( sample: FrameTelemetry ) {
 		latest = sample;
-		const ping = sample.pingMs == null ? "â€”" : String( Math.round( sample.pingMs ) );
+		const ping = sample.pingMs == null ? "—" : String( Math.round( sample.pingMs ) );
 		if ( fpsReadout && !fpsReadout.hidden ) {
-			fpsReadout.textContent = `${Math.round( sample.fps )} FPS Â· ${ping} ms`;
+			fpsReadout.textContent = `${Math.round( sample.fps )} FPS · ${ping} ms`;
 		}
 		if ( !enabled || readout.hidden ) return;
 		const ms = ( value: number ) => `${value.toFixed( value < 10 ? 1 : 0 )} ms`;
 		readout.textContent = [
 			"Developer diagnostics",
-			`${Math.round( sample.fps )} FPS Â· ${ping} ms ping`,
+			`${Math.round( sample.fps )} FPS · ${ping} ms ping`,
 			`Frame avg / p95: ${ms( sample.frameMs )} / ${ms( sample.p95FrameMs )}`,
 			`CPU avg / p95: ${ms( sample.cpuMs )} / ${ms( sample.p95CpuMs )}`,
-			`Actors: ${sample.actors} Â· Draws: ${sample.draws} Â· Groups: ${sample.visibleGroups}`,
+			`Actors: ${sample.actors} · Draws: ${sample.draws} · Groups: ${sample.visibleGroups}`,
 			...sample.build.lines,
 			sample.build.detail
 		].filter( Boolean ).join( "\n" );
@@ -127,6 +127,11 @@ export function createTelemetry( options: TelemetryOptions ) {
 	toggle.hidden = !enabled;
 	const previous = window.sroDebug;
 	const consoleApi = {
+		/*
+		================
+		setDiagnostics
+		================
+		*/
 		setDiagnostics( value: boolean ) {
 			options.onChange( value === true );
 			return enabled;

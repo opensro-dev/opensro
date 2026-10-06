@@ -211,6 +211,20 @@ test(
 			await click( "experimental-confirm" );
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), true );
 			assert.equal( await page.locator( "#developer-readout" ).isVisible(), false );
+			const restoredContext = await browser.newContext( { storageState: await page.context().storageState() } );
+			const restored = await restoredContext.newPage();
+			try {
+				await restored.goto( CLIENT_NEXT_BASE_URL );
+				await restored.waitForFunction( () => typeof window.sroDebug?.setDiagnostics === "function" );
+				assert.equal(
+					await restored.locator( "#developer-toggle" ).isVisible(),
+					true,
+					"Confirm persists across page loads"
+				);
+				assert.equal( await restored.locator( "#developer-readout" ).isVisible(), false );
+			} finally {
+				await restoredContext.close();
+			}
 			await page.locator( "#developer-toggle" ).click();
 			assert.equal( await page.locator( "#developer-toggle" ).getAttribute( "aria-expanded" ), "true" );
 

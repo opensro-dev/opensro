@@ -657,19 +657,19 @@ export function createPlatform(
 					"Preparing graphics and checking cached files" :
 					"Waiting for the server to accept your connection"
 			);
-			transferText( "bytes", p ? `${(p.bytesReceived / 1e6).toFixed( 1 )} MB` : "â€”" );
+			transferText( "bytes", p ? `${(p.bytesReceived / 1e6).toFixed( 1 )} MB` : "—" );
 			transferText(
 				"speed",
-				p && p.filesActive && p.bytesPerSecond > 0 ? `${(p.bytesPerSecond / 1e6).toFixed( 1 )} MB/s` : "â€”"
+				p && p.filesActive && p.bytesPerSecond > 0 ? `${(p.bytesPerSecond / 1e6).toFixed( 1 )} MB/s` : "—"
 			);
-			transferText( "files", p ? String( p.filesReady ) : "â€”" );
-			transferText( "cache", p ? String( p.cacheHits ) : "â€”" );
+			transferText( "files", p ? String( p.filesReady ) : "—" );
+			transferText( "cache", p ? String( p.cacheHits ) : "—" );
 			transferText(
 				"queue",
 				p ?
 					p.filesActive ?
-						`${p.filesActive} files being prepared Â· more may be discovered` :
-						"Downloads settled Â· preparing the scene" :
+						`${p.filesActive} files being prepared · more may be discovered` :
+						"Downloads settled · preparing the scene" :
 					"Your character stays here until the server is ready"
 			);
 		},
