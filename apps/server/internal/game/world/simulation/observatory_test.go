@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+observatory_test.go - read-only population capture and focused truncation
+
+Verifies that inspection cannot drive simulation lifecycle and that reply
+limits retain the requested focus or explicitly report its incompleteness.
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -6,6 +17,11 @@ import (
 	"time"
 )
 
+/*
+================
+TestObservatoryDoesNotDriveWorldLifecycle
+================
+*/
 func TestObservatoryDoesNotDriveWorldLifecycle(t *testing.T) {
 	s := NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{1: {TidWord: 0x00C6, RefObjID: 1, Name: "Unique", MaxHP: 100, MonsterType: 3}}, []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: 1, RegionID: 257, X: 12, Z: 34}, MaxCount: 1, PolicyPinned: true, Respawn: true, RespawnDelayMinSec: 1, RespawnDelayMaxSec: 1}}))
 	now := time.Unix(100, 0)

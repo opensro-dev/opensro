@@ -1,3 +1,15 @@
+/*
+===========================================================================
+
+observatory.go - local operator snapshot wiring
+
+Copies player, population, transport and storage diagnostics into one cached
+operator view. Online player regions define the population's complete focus;
+the capture never advances gameplay or changes authority state.
+
+===========================================================================
+*/
+
 package main
 
 import (
@@ -13,6 +25,11 @@ import (
 	"time"
 )
 
+/*
+================
+observatoryPlayer
+================
+*/
 type observatoryPlayer struct {
 	ID     int64   `json:"id"`
 	Name   string  `json:"name"`
@@ -26,6 +43,14 @@ type observatoryPlayer struct {
 	Alive  bool    `json:"alive"`
 }
 
+/*
+================
+installObservatory
+
+Installs the full cached capture and the smaller process summary before the
+local operator API begins serving requests.
+================
+*/
 func installObservatory(api *agentapi.API, state *simulation.MonsterState, hub *transport.Hub, authority *store.Store, shard string) {
 	started := time.Now()
 	bridge := worldsession.New(hub)
