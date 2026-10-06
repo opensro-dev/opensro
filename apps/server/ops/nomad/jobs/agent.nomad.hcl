@@ -61,6 +61,13 @@ variable "agent_port" {
   default = 8787
 }
 
+# Loopback port of the Agent's account provisioning API. A second Agent on the
+# same host (an isolated test stack) needs its own.
+variable "agent_provisioning_port" {
+  type    = number
+  default = 8789
+}
+
 variable "release_id" {
   type = string
 }
@@ -195,6 +202,7 @@ job "sro-agent" {
         SRO_AGENT_DIRECTORY_STATE_PATH    = var.directory_state_path
         SRO_AGENT_ACCOUNTS_DB_PATH        = var.accounts_db_path
         SRO_AGENT_PROVISIONING_TOKEN_PATH = "${NOMAD_SECRETS_DIR}/provisioning-token"
+        SRO_AGENT_PROVISIONING_ADDR       = "127.0.0.1:${var.agent_provisioning_port}"
         SRO_AGENT_PRIVATE_NETWORK         = var.private_network
         SRO_AGENT_ALLOWED_ORIGINS         = var.allowed_origins
         SRO_NOMAD_IDENTITY_ISSUER         = var.identity_issuer
