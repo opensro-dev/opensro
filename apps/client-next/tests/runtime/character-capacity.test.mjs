@@ -48,6 +48,11 @@ const model = {
 		}
 	} ]
 };
+/*
+================
+fixture
+================
+*/
 function fixture() {
 	let uploads = 0, releases = 0;
 	const gpu = {
@@ -86,6 +91,39 @@ const visible = d => ({
 	count: d.count,
 	instances: d.instances.slice( 0, d.count * 16 ),
 	bones: d.bones.slice( 0, d.count * 16 )
+});
+
+/*
+================
+Batch variants on retained snapshots
+
+Compare a reused renderer with a fresh owner after optional fields disappear
+and after the same gid switches models. Snapshot identity cannot imply a key hit.
+================
+*/
+test("retained actor batches follow model and material variant changes", () => {
+	const f = fixture(), rows = actors( [ 1, 2 ], .25 );
+	f.owner.model( "other", model, [] );
+	try {
+		for ( let phase = 0; phase < 12; phase++ ) {
+			rows[0].model = phase % 4 === 1 ? "other" : "m";
+			rows[0].opacity = phase % 4 === 2 ? .5 : undefined;
+			rows[0].materialTint = phase % 4 === 3 ? [ .25, .5, 1 ] : undefined;
+			f.owner.actors( rows );
+			const actual = f.owner.prepare( f.gpu, {}, 257 );
+			const oracle = fixture();
+			try {
+				oracle.owner.model( "other", model, [] );
+				oracle.owner.actors( rows );
+				assert.deepEqual( actual.map( visible ), oracle.owner.prepare( oracle.gpu, {}, 257 ).map( visible ) );
+			} finally {
+				oracle.owner.dispose( oracle.gpu, null );
+			}
+			if ( phase === 5 ) f.owner.invalidate();
+		}
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
 });
 
 test("sharing a pose does not discard an actors reusable evaluation storage", () => {

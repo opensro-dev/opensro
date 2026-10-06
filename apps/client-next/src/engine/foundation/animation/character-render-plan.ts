@@ -32,6 +32,8 @@ export function createCharacterRenderPlan( model: CharacterModel ) {
 		base = one * 2 - two,
 		stride = two - one;
 	return {
+		cloth: model.primitives.some( p => p.cloth ),
+		equipmentGlow: model.primitives.some( p => p.equipmentGlow ),
 		animationMaterial: model.primitives.some( p =>
 			p.modifierSource?.modifiers.materialModifiers.some( m => m.kind === 1 ) ||
 			p.modifierSource?.modifiers.textureModifiers.some( m => m.kind === 1 )

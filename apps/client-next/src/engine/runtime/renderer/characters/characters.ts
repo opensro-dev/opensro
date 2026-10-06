@@ -196,6 +196,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// Scratch evaluators for mesh-refined picks, one per admitted model.
 	const pickPoses = new WeakMap<CharacterModel, ReturnType<typeof createCharacterPose>>();
 	const textures = new Map<WorldTexture, ImageDraw>();
+	// Snapshots retain identity while their fields change. Recheck the complete
+	// variant each frame, but retain the long assembly prefix and its string hash.
+	// Weak ownership retires keys with snapshots, including temporary effect rows.
+	const batchKeys = new WeakMap<CharacterActor, { model: string; variant: string; key: string; }>();
 	const poses = new Map<number, {
 		model: string;
 		pose: ReturnType<typeof createCharacterPose>;
@@ -1542,21 +1546,30 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			for ( const actor of visible ) {
 				if ( actor.drawGeometry === false ) continue;
 				const plan = models.get( actor.model )!.plan, dependencies = chains.get( actor.gid )!;
-				const key = actor.model + (models.get( actor.model )!.model.primitives.some( p => p.cloth ) ?
+				const variant = (plan.cloth ?
 					"\0cloth:" + actor.gid :
 					"") +
 					(actor.deferredParticle ? "\0deferred" : "") +
 					(opacity( actor ) < 1 ? "\0fade" : "") + (actor.materialTint ? "\0tint" : "") +
 					(actor.pointLight ? "\0light" : "") +
-					(models.get( actor.model )!.model.primitives.some( p => p.equipmentGlow ) ?
+					(plan.equipmentGlow ?
 						"\0glow:" + ((actor.animationLod?.fraction ?? 0) <= .5 && opacity( actor ) === 1) :
 						"") +
 					(hasMaterialClocks && materialClocks.get( actor ) ?
-						"\0modifier:" + actor.gid + (models.get( actor.model )!.plan.animationMaterial ?
+						"\0modifier:" + actor.gid + (plan.animationMaterial ?
 							":" + (actor.modelAnimation?.revision ?? 0) + ":" +
 							((actor.animationLod?.fraction ?? 0) > .5) :
 							"") :
 						"");
+				let key = actor.model;
+				if ( variant ) {
+					let cachedKey = batchKeys.get( actor );
+					if ( !cachedKey || cachedKey.model !== actor.model || cachedKey.variant !== variant ) {
+						cachedKey = { model: actor.model, variant, key: actor.model + variant };
+						batchKeys.set( actor, cachedKey );
+					}
+					key = cachedKey.key;
+				}
 				const rows = grouped.get( key ) ?? [];
 				const extra = plan.batchBytes( rows.length + 1 ) - plan.batchBytes( rows.length ) +
 					dependencies.reduce(
@@ -1715,7 +1728,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 							geometry.release( draw );
 						}
 					}
-					const streams = plan.sharedPalette && !model.primitives.some( p => p.cloth ) ?
+					const streams = plan.sharedPalette && !plan.cloth ?
 						createPaletteStreams( model, capacity ) :
 						undefined;
 					batch = {
@@ -1761,7 +1774,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				// A changing sampled time already proves the full key differs.
 				// Avoid serializing actor/attachment graphs just to discover it.
 				// Cloth advances on frame time even when its skeletal pose is unchanged.
-				const poseKey = timeChanged || model.primitives.some( p => p.cloth ) ?
+				const poseKey = timeChanged || plan.cloth ?
 					undefined :
 					JSON.stringify( [
 						origin,
