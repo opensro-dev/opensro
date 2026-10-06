@@ -56,8 +56,8 @@ const WATER_WAVE_SLOPE = 1; // wave-frame slope weight in the reflection lookup
 // Garment sheen - opaque DXT3 character parts author gloss in the alpha
 // channel (jmxAssetIO: CPrimMtrl bit 0x200 off means alpha is not
 // coverage). A Blinn-Phong term against the fixed 45-degree sun the
-// diffuse lighting already uses; the view vector is the camera forward,
-// exact at the frame centre.
+// diffuse lighting already uses; the view vector is the reversed camera
+// forward (surface to eye), exact at the frame centre.
 const SHEEN_POWER = 24; // highlight tightness
 const SHEEN_STRENGTH = 0.5; // gloss gain on the lit term
 
@@ -406,7 +406,7 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*material.equipmentColor.rgb*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
  // Authored garment gloss from the opaque DXT3 alpha.
  if(material.reflection.z>0.5&&input.opacity>=1.0){
-  let halfVec=normalize(vec3f(0.70710678,0.70710678,0)+env.forward.xyz);
+  let halfVec=normalize(vec3f(0.70710678,0.70710678,0)-env.forward.xyz);
   let gloss=pow(max(0.0,dot(normalize(input.normal),halfVec)),${SHEEN_POWER});
   lit=clamp(lit+tex.a*gloss*${SHEEN_STRENGTH}*env.diffuse.rgb,vec3f(0),vec3f(1));
  }

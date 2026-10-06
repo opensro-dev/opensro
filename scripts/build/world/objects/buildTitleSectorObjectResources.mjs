@@ -10,6 +10,7 @@ everything else keeps the converted PNG path.
 
 ===========================================================================
 */
+import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -278,10 +279,13 @@ runBlockTextureEncode
 
 One python invocation encodes every admitted DDJ into its NTX1 container
 (native_texture_mips.py: authored levels verbatim, box-filtered mip suffix).
+The job manifest is named per call: the world lanes that publish object
+textures share publicRoot and may run concurrently, and a shared name let
+one lane overwrite or delete another's jobs.
 ================
 */
 async function runBlockTextureEncode(jobs) {
-  const manifestPath = path.join(publicRoot, "..", "object-texture-encode-jobs.json");
+  const manifestPath = path.join(publicRoot, "..", `object-texture-encode-jobs-${randomUUID()}.json`);
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, JSON.stringify(jobs), "utf8");
   try {

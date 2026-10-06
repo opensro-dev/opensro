@@ -1,11 +1,12 @@
 /*
 ===========================================================================
 
-bootstrap.ts - page entry: canvas to live runtime, plus the page bridge
+bootstrap.ts - page entry: canvas to live runtime
 
-Finds the runtime surfaces in the document, starts the engine and exposes
-the one supported page-side control surface. Everything else the client
-does is owned by the modules under engine/.
+Finds the runtime surfaces in the document and starts the engine. The
+runtime is not published on window: page scripts and extensions get no
+handle on it in any build. Everything else the client does is owned by
+the modules under engine/.
 
 ===========================================================================
 */
@@ -40,22 +41,3 @@ if ( !(canvas instanceof HTMLCanvasElement) || !status ) {
 	throw new Error( "Missing runtime surface" );
 }
 export const runtime = startRuntime( canvas, status, undefined, diagnosticsFromQuery() );
-
-/*
-================
-__sroRuntime
-
-The shipped page bridge: the hunt-bot extension (apps/bot-extension)
-drives the game through this surface. The module export above serves
-dev-time imports; bundlers drop an entry export nothing imports, so the
-global is the one path that survives release builds. Not a diagnostic
-global - the release policy's forbidden list (tools/beta/policy.mjs)
-names those separately.
-================
-*/
-declare global {
-	interface Window {
-		__sroRuntime?: typeof runtime;
-	}
-}
-window.__sroRuntime = runtime;

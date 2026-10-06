@@ -16,8 +16,9 @@ offscreen frame and writes the swapchain:
 - a gradient-limited unsharp mask sharpens the soft 2005 texture look
   without ringing halos on hard edges,
 - a vibrance lift and a smoothstep S-curve grade the washed-out LDR
-  palette while keeping black, mid-gray and white fixed, so flat colours
-  and UI panels survive the pass byte-for-byte in practice.
+  palette. Only neutral black, mid-gray and white are fixed points: every
+  coloured pixel, the UI's panels and text included, takes the vibrance
+  lift and the curve.
 
 Anti-alias first, sharpen second: the gradient limiter reads the raw
 neighbourhood, so the unsharp mask stays off exactly the edges FXAA just
