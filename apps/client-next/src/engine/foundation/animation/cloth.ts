@@ -77,6 +77,9 @@ The random function is supplied so tests can exercise the native gust gate.
 export function createCloth( data: ClothData, rest: Float32Array ) {
 	const positions = new Float32Array( rest ), previous = new Float32Array( rest );
 	let elapsed = 0, initialized = false;
+	// A step may move pinned vertices (pin 2 integrates, constraints pull a
+	// mobile pin 1); the next advance re-anchors them, so it changes output.
+	let stepped = false;
 	/*
 	================
 	step
@@ -161,14 +164,29 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 				positions[at + 1] = input.anchors[at + 1]!;
 				positions[at + 2] = input.anchors[at + 2]!;
 			}
+			stepped = false;
 			if ( input.enabled ) {
 				elapsed = Math.min( MAX_ACCUMULATOR_MS, elapsed + Math.max( 0, input.deltaMs ) );
 				while ( elapsed >= STEP_MS ) {
 					step( input.direction, input.speed, input.random );
 					elapsed -= STEP_MS;
+					stepped = true;
 				}
 			}
 			return positions;
+		},
+
+		/*
+		================
+		due
+
+		Whether advancing by deltaMs would change the positions with unchanged
+		anchors: a step falls due, or the last advance stepped and the next one
+		re-anchors pins that step moved.
+		================
+		*/
+		due( deltaMs: number ): boolean {
+			return !initialized || stepped || elapsed + Math.max( 0, deltaMs ) >= STEP_MS;
 		}
 	};
 }

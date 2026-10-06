@@ -639,6 +639,8 @@ export function createWorldRenderer(
 	let animated: WorldGroup[] = [], activeAnimated: WorldGroup[] = [];
 	let dynamicAnimation = false;
 	const clothMeshes = new Map<WorldGroup, ReturnType<typeof createClothVertices>>();
+	// The draw each cloth stream was last written to; a new draw needs it all.
+	const clothDraws = new Map<WorldGroup, unknown>();
 	const dirtyAnimation = new Set<WorldGroup>();
 	let materialTimelines: {
 		group: WorldGroup;
@@ -698,7 +700,11 @@ export function createWorldRenderer(
 				};
 			} ) ?? [];
 		}
-		for ( const group of clothMeshes.keys() ) if ( !scene?.groups.includes( group ) ) clothMeshes.delete( group );
+		for ( const group of clothMeshes.keys() ) {
+			if ( scene?.groups.includes( group ) ) continue;
+			clothMeshes.delete( group );
+			clothDraws.delete( group );
+		}
 		for ( const group of scene?.groups ?? [] ) {
 			if ( group.geometry.cloth && !clothMeshes.has( group ) ) {
 				clothMeshes.set(
@@ -775,6 +781,12 @@ export function createWorldRenderer(
 		for ( const [group, cloth] of clothMeshes ) {
 			const draw = draws.get( group );
 			if ( !draw || !draw.instanceCount ) continue;
+			const fresh = clothDraws.get( group ) !== draw;
+			// Cloth steps at 20 Hz; between steps an unposed stream is unchanged,
+			// so neither the CPU copy nor the GPU upload is repeated. hold runs
+			// last: it records the frame when it allows the skip.
+			if ( !force && !fresh && !dirtyAnimation.has( group ) && cloth.hold( seconds, dynamicAnimation ) ) continue;
+			clothDraws.set( group, draw );
 			const matrix = group.geometry.instances ?? group.geometry.transform;
 			geometry.writeVertices(
 				draw,
@@ -2143,6 +2155,7 @@ export function createWorldRenderer(
 			if ( disposed ) return;
 			disposed = true;
 			clothMeshes.clear();
+			clothDraws.clear();
 			for ( const row of footprintDraws.values() ) geometry?.release( row.draw );
 			footprintDraws.clear();
 			footprints = [];

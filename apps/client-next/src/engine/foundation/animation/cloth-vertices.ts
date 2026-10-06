@@ -23,8 +23,29 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 	const anchors = new Float32Array( mesh.positions.length );
 	const vertices = packGeometryVertices( mesh );
 	const skinned = !!mesh.joints && !!mesh.weights;
-	let lastTime: number | undefined;
+	let lastTime: number | undefined, lastEnabled = false;
 	return {
+		/*
+		================
+		hold
+
+		True when update would return exactly the last vertices, given that
+		the palette has not changed since, so the caller may skip it. Enabled,
+		no step may fall due and the skipped time stays owed: deltaMs is
+		measured from the last real update, so the accumulator sees the same
+		sum. Disabled, an update resets the accumulator, so the frame's time
+		passes here instead.
+		================
+		*/
+		hold( seconds: number, enabled: boolean ): boolean {
+			if ( lastTime === undefined || enabled !== lastEnabled ) return false;
+			if ( !enabled ) {
+				lastTime = seconds;
+				return true;
+			}
+			return !simulation.due( Math.trunc( seconds * 1000 ) - Math.trunc( lastTime * 1000 ) );
+		},
+
 		/*
 		================
 		update
@@ -78,6 +99,7 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 				random
 			} );
 			lastTime = seconds;
+			lastEnabled = enabled;
 			for ( let i = 0; i < positions.length / 3; i++ ) {
 				for ( let axis = 0; axis < 3; axis++ ) vertices[i * 14 + axis] = positions[i * 3 + axis]!;
 			}
