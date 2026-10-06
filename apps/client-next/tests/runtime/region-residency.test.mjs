@@ -381,7 +381,7 @@ function layerMember( n, value ) {
 test("a terrain layer merges member indices at their slots and survives growth", async () => {
 	const { createTerrainLayers } = await import( "../../src/engine/runtime/renderer/world/terrain-layers.ts" );
 	/** @type {any} Only the anchor keys a layer. */
-	const scene = { originRegion: ANCHOR };
+	const scene = { originRegion: ANCHOR, groups: [] };
 	const layers = createTerrainLayers();
 	const draws = [], writes = [], indices = new Map();
 	/** @type {any} */
@@ -445,4 +445,37 @@ test("a terrain layer merges member indices at their slots and survives growth",
 	layers.remove( geometry, b );
 	layers.remove( geometry, c );
 	assert.ok( grown.released, "an empty layer releases its draw" );
+});
+
+test("a complete scene reserves each terrain layer once across incremental admission and GPU recovery", async () => {
+	const { createTerrainLayers } = await import( "../../src/engine/runtime/renderer/world/terrain-layers.ts" );
+	const groups = Array.from( { length: 9 }, ( _, i ) => layerMember( 600, i + 1 ) );
+	/** @type {any} */
+	const scene = { originRegion: ANCHOR, groups };
+	const layers = createTerrainLayers(), uploads = [], writes = [], releases = [];
+	/** @type {any} */
+	const geometry = {
+		upload( data ) {
+			const draw = { capacity: data.vertices.length / 14 };
+			uploads.push( draw );
+			return draw;
+		},
+		writeVertices( draw, base, vertices ) {
+			writes.push( { draw, base, value: vertices[0] } );
+		},
+		release: draw => releases.push( draw )
+	};
+	for ( let recovery = 0; recovery < 2; recovery++ ) {
+		for ( const group of groups ) layers.admit( geometry, scene, group, undefined );
+		assert.equal( uploads.length, recovery + 1 );
+		assert.equal( writes.length, groups.length * (recovery + 1), "no re-upload of admitted members" );
+		assert.deepEqual(
+			writes.slice( recovery * groups.length ).map( row => row.base ),
+			groups.map( ( _, i ) => i * 600 )
+		);
+		assert.ok( uploads[recovery].capacity >= 5400 );
+		if ( recovery === 0 ) layers.clear();
+	}
+	layers.dispose( geometry );
+	assert.deepEqual( releases, [ uploads[1] ], "device loss already owns the first allocation" );
 });

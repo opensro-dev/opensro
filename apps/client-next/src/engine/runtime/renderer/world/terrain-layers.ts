@@ -64,11 +64,22 @@ function capacityFor( need: number ): number {
 
 /*
 ================
+eligible
+================
+*/
+function eligible( group: WorldGroup ): boolean {
+	return group.terrainSector !== undefined && !!group.ranges && !!group.material.terrain &&
+		!!group.geometry.vertices;
+}
+
+/*
+================
 createTerrainLayers
 ================
 */
 export function createTerrainLayers() {
 	const layers = new Map<string, Layer>(), members = new Map<WorldGroup, Member>();
+	const sceneCapacities = new WeakMap<WorldScene, Map<string, { vertices: number; indices: number; }>>();
 	// Bumped whenever a layer's draw is replaced or released. A list built
 	// before the bump may hold a draw whose buffers are destroyed when the
 	// releasing frame closes, so it must not be drawn again.
@@ -82,6 +93,34 @@ export function createTerrainLayers() {
 	function keyOf( scene: WorldScene, group: WorldGroup ): string {
 		const m = group.material;
 		return `${scene.originRegion}|${m.texture}|${m.blend}|${m.order}`;
+	}
+
+	/*
+	================
+	capacityPlan
+
+	The complete immutable scene is known before its first GPU admission.
+	Reserve each new layer once instead of repeatedly uploading its existing
+	members as the remaining groups arrive over subsequent frames.
+	================
+	*/
+	function capacityPlan( scene: WorldScene ) {
+		let plan = sceneCapacities.get( scene );
+		if ( plan ) return plan;
+		plan = new Map();
+		for ( const group of scene.groups ) {
+			if ( !eligible( group ) ) continue;
+			const key = keyOf( scene, group );
+			let capacity = plan.get( key );
+			if ( !capacity ) {
+				capacity = { vertices: 0, indices: 0 };
+				plan.set( key, capacity );
+			}
+			capacity.vertices += group.geometry.positions.length / 3;
+			capacity.indices += group.geometry.indices.length;
+		}
+		sceneCapacities.set( scene, plan );
+		return plan;
 	}
 
 	/*
@@ -146,9 +185,7 @@ export function createTerrainLayers() {
 		water stay single draws (their textures are per region already).
 		================
 		*/
-		eligible: ( group: WorldGroup ) =>
-			group.terrainSector !== undefined && !!group.ranges && !!group.material.terrain &&
-			!!group.geometry.vertices,
+		eligible,
 		/*
 		================
 		admit
@@ -162,12 +199,13 @@ export function createTerrainLayers() {
 				indices = group.geometry.indices.length;
 			let layer = layers.get( key );
 			if ( !layer ) {
+				const planned = capacityPlan( scene ).get( key );
 				const shell = {
 					key,
 					image,
 					material: group.geometry.material ?? group.material,
-					vertexCapacity: capacityFor( vertices ),
-					indexCapacity: capacityFor( indices ),
+					vertexCapacity: capacityFor( planned?.vertices ?? vertices ),
+					indexCapacity: capacityFor( planned?.indices ?? indices ),
 					top: 0,
 					members: new Map<WorldGroup, Member>(),
 					indices: new Uint32Array( 0 ),

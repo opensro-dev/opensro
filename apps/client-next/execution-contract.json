@@ -1890,6 +1890,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/renderer/world/world.ts",
+			"provider": "src/engine/runtime/frame-work.ts",
+			"functions": [
+				"remaining",
+				"spend"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/runtime.ts",
 			"provider": "src/engine/runtime/platform/telemetry.ts",
 			"functions": [

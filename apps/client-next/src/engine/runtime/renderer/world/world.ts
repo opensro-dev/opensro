@@ -426,6 +426,7 @@ export function createWorldRenderer(
 	const missingTextures = new Set<string>(), readyGroups = new Set<WorldGroup>();
 	const textureWaiters = new Map<string, Set<WorldGroup>>(), groupWaits = new Map<WorldGroup, number>();
 	let pendingGroupCount = 0;
+	let frameWork: import("@/engine/contracts/runtime").FrameWork | undefined;
 	let collisionPreparation: ReturnType<typeof prepareCameraCollisionParts> | null = null,
 		preparedCollision: ReturnType<typeof cameraCollisionParts> | null = null;
 	/*
@@ -955,6 +956,17 @@ export function createWorldRenderer(
 		},
 		/*
 		================
+		frameWork
+
+		Admission shares the runtime budget with optional actor work. Keep the
+		resident scene and collision usable until the replacement is complete.
+		================
+		*/
+		frameWork( value: import("@/engine/contracts/runtime").FrameWork ) {
+			frameWork = value;
+		},
+		/*
+		================
 		night
 		================
 		*/
@@ -1315,8 +1327,10 @@ export function createWorldRenderer(
 					collisionPreparation ??= prepareCameraCollisionParts( pending, terrainCollision );
 					// Prepare the exact collision product alongside GPU admission. Keep the
 					// old scene until both are ready; never remove collision for a fast handoff.
-					for ( let work = 0; work < 40; work++ ) {
+					for ( let work = 0; work < 40 && (!frameWork || frameWork.remaining() > 0); work++ ) {
+						const started = frameWork ? performance.now() : 0;
 						const result = collisionPreparation.next();
+						frameWork?.spend( performance.now() - started );
 						if ( result.done ) {
 							preparedCollision = result.value;
 							collisionPreparation = null;
@@ -1325,7 +1339,8 @@ export function createWorldRenderer(
 					}
 				}
 				for ( const group of readyGroups ) {
-					if ( !budget-- || uploadBytes <= 0 ) break;
+					if ( !budget-- || uploadBytes <= 0 || (frameWork && frameWork.remaining() <= 0) ) break;
+					const started = frameWork ? performance.now() : 0;
 					uploadBytes -= group.geometry.positions.length / 3 * 56 + group.geometry.indices.byteLength;
 					const paths = texturePaths( group );
 					// Alpha readback belongs to bounded resource admission, not the first
@@ -1385,6 +1400,7 @@ export function createWorldRenderer(
 					if ( group.instanceRadius !== undefined ) instanceSelection( group );
 					readyGroups.delete( group );
 					pendingGroupCount--;
+					frameWork?.spend( performance.now() - started );
 				}
 				if ( pendingGroupCount === 0 && missingTextures.size === 0 && (!camera.follow || preparedCollision) ) {
 					const previous = current;

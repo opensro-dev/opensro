@@ -89,7 +89,15 @@ export function createRenderer(
 	let disposed = false, failure: string | null = null;
 	let readbackWait = 0;
 	return {
-		setFrameWork: characters.frameWork,
+		/*
+		================
+		setFrameWork
+		================
+		*/
+		setFrameWork( value ) {
+			world.frameWork( value );
+			characters.frameWork( value );
+		},
 		/*
 		================
 		readbackWaitMs

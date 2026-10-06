@@ -23,6 +23,8 @@ const ICON_ROOT = "/assets/images/Media_extracted/icon/";
 const DEFAULT_ICON = ICON_ROOT + "icon_default.png";
 // Remembered absent paths beyond current demand are dropped past this count.
 const MAX_REMEMBERED_ABSENT = 480;
+const MAX_RESIDENT_BYTES = 48 * 1024 * 1024;
+const MAX_RESIDENT_IMAGES = 480;
 
 /*
 ================
@@ -55,6 +57,7 @@ export function createUiAssets(
 	// Counts removals from `loaded`. Between two removals the resident set only
 	// grows, so a list found fully resident stays so until the count moves.
 	let evictions = 0;
+	let residentBytes = 0;
 	const residentLists = new WeakMap<readonly string[], number>();
 
 	/*
@@ -70,18 +73,19 @@ export function createUiAssets(
 	================
 	*/
 	function trim( incomingBytes = 0, incomingCount = 0 ) {
-		let bytes = incomingBytes;
-		for ( const size of loaded.values() ) bytes += size[0] * size[1] * 4;
 		// Keys, not entries: when every resident image is wanted this walks the
 		// whole map each frame, and entry pairs were a million objects a minute.
 		for ( const path of loaded.keys() ) {
-			if ( bytes <= 48 * 1024 * 1024 && loaded.size + incomingCount <= 480 ) break;
+			if (
+				residentBytes + incomingBytes <= MAX_RESIDENT_BYTES &&
+				loaded.size + incomingCount <= MAX_RESIDENT_IMAGES
+			) break;
 			if ( wanted.has( path ) ) continue;
 			const size = loaded.get( path )!;
 			publish( path, null );
 			loaded.delete( path );
 			evictions++;
-			bytes -= size[0] * size[1] * 4;
+			residentBytes -= size[0] * size[1] * 4;
 		}
 	}
 
@@ -141,11 +145,15 @@ export function createUiAssets(
 				}
 			}
 			let changed = false;
-			for ( const path of wanted ) {
-				const size = loaded.get( path );
-				if ( size ) {
-					loaded.delete( path );
-					loaded.set( path, size );
+			if ( demandChanged ) {
+				// All wanted images are protected from eviction. Their relative age
+				// only needs refreshing when demand changes, not on every load poll.
+				for ( const path of wanted ) {
+					const size = loaded.get( path );
+					if ( size ) {
+						loaded.delete( path );
+						loaded.set( path, size );
+					}
 				}
 			}
 			trim();
@@ -169,6 +177,7 @@ export function createUiAssets(
 					trim( size[0] * size[1] * 4, 1 );
 					publish( path, result.image );
 					loaded.set( path, size );
+					residentBytes += size[0] * size[1] * 4;
 					clearFailure( path, "recovered" );
 					changed = true;
 				} else if ( crest( path ) ) {
@@ -284,6 +293,7 @@ export function createUiAssets(
 			}
 			pending.clear();
 			loaded.clear();
+			residentBytes = 0;
 			evictions++;
 			failures.clear();
 			missing.clear();

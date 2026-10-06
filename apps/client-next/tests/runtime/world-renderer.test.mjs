@@ -101,6 +101,46 @@ function scene( id, texture ) {
 	};
 }
 
+test("world admission shares elapsed CPU budget and keeps the resident scene until replacement completes", () => {
+	const world = createWorldRenderer();
+	let remaining = 2, uploads = 0;
+	const work = {
+		remaining: () => remaining,
+		spend: ms => {
+			remaining = Math.max( 0, remaining - ms );
+		},
+		level: () => 0
+	};
+	const geometry = {
+		upload() {
+			uploads++;
+			// Deterministically model an expensive admission unit without sleeping.
+			work.spend( 3 );
+			return {};
+		},
+		release() {},
+		updateInstances: draw => draw
+	};
+	const textures = { upload: () => ({}), release() {} };
+	world.frameWork( work );
+	world.scene( scene( "resident" ) );
+	world.prepare( geometry, textures, 1, 0 );
+	assert.equal( world.stats().sceneId, "resident" );
+	const replacement = scene( "replacement" );
+	replacement.groups.push( scene( "second" ).groups[0], scene( "third" ).groups[0] );
+	world.scene( replacement );
+	world.prepare( geometry, textures, 1, 1 );
+	assert.equal( uploads, 1, "no admission after other work exhausts the shared budget" );
+	for ( let frame = 0; frame < 3; frame++ ) {
+		remaining = 2;
+		world.prepare( geometry, textures, 1, frame + 2 );
+		assert.equal( uploads, frame + 2, "one expensive unit per displayed frame" );
+		assert.equal( world.stats().sceneId, frame === 2 ? "replacement" : "resident" );
+	}
+	assert.equal( world.stats().pendingGroups, 0 );
+	world.dispose( geometry, textures );
+});
+
 test("resident alpha is prepared before hover and retained across device recreation", () => {
 	let reads = 0;
 	const world = createWorldRenderer( undefined, () => {
