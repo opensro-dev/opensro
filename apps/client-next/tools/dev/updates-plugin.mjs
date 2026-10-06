@@ -88,7 +88,12 @@ export function devUpdates() {
 			order: "post",
 			handler( html ) {
 				// No Vite websocket client: even reconnect/config changes cannot reload a tab.
-				const clean = html.replace( /<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*>\s*<\/script>/g, "" );
+				// Repeat until stable so a removal can never splice a new tag together.
+				let clean = html, previous;
+				do {
+					previous = clean;
+					clean = clean.replace( /<script\b[^>]*\bsrc=["']\/@vite\/client["'][^>]*>\s*<\/script>/g, "" );
+				} while ( clean !== previous );
 				return {
 					html: clean,
 					tags: [ {
