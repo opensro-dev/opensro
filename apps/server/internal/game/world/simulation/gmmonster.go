@@ -70,8 +70,13 @@ SpawnGMMonsters
 Returns how many monsters were created; zero refuses the command. Every
 instance shares the GM's point; only its heading is drawn, as rand()/32767
 of a full turn in radians (520B85..520BB3), passed as a float to the world
-factory (5F6EB0) like the nest path's heading. SpawnHeading is the wire
-word, so it takes the same radians -> word conversion as nest spawns.
+factory (5F6EB0) like the nest path's heading.
+
+INFERENCE: SpawnHeading is the wire word, which the client decodes as
+degrees * 65535 / 360 (the inverse of its serializer sub_877cc0). The
+server's own spawn-record writer was not traced, so a native quirk there is
+not ruled out; this takes the nest path's radians -> word conversion so the
+client sees the drawn direction.
 ================
 */
 func (s *MonsterState) SpawnGMMonsters(request GMMonsterSpawn) int {
