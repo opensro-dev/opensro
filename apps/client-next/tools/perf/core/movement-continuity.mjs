@@ -26,7 +26,7 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 	if ( !probe?.movement ) throw Error( "continuity requires the existing movement observer" );
 	if ( root.__recoveryContinuity ) throw Error( "continuity observer already installed" );
 	const original = probe.movement;
-	const REGION_SIZE = 1920, MAX_EVENTS = 32, MAX_CHANNEL_EVENTS = 8, LONG_FRAME_MS = 250;
+	const REGION_SIZE = 1920, MAX_EVENTS = 32, MAX_CHANNEL_EVENTS = 8, MAX_OPENING_FRAMES = 1024, LONG_FRAME_MS = 250;
 	const names = [ "logical", "displayed", "body" ];
 	let summary, previous, active = false;
 
@@ -44,6 +44,7 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 			invalidTime: 0,
 			longFrames: 0,
 			maxDtMs: 0,
+			openingFrames: [],
 			channels: Object.fromEntries( names.map( name => [ name, {
 				pairs: 0,
 				missing: 0,
@@ -96,6 +97,11 @@ export function installMovementContinuity( { target = globalThis, threshold = 0.
 		}
 		summary.frames++;
 		const game = root.__benchRuntime.gameplay();
+		// Keep the first turn's inputs for deterministic presentation replay.
+		// The ordinary frame recorder drops this opening once its tail fills.
+		if ( summary.openingFrames.length < MAX_OPENING_FRAMES ) {
+			summary.openingFrames.push( structuredClone( { ...sample, moving: game.moving } ) );
+		}
 		const entity = root.__benchRuntime.entities().find( row => row.gid === game.localGid );
 		const speed = entity?.movementMode === 2 ? entity.walkSpeed : entity?.runSpeed;
 		if ( !Number.isFinite( speed ) || speed < 0 ) {

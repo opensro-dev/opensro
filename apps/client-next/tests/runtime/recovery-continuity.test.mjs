@@ -67,10 +67,34 @@ test("an early jump remains in totals after more than the recorder tail length",
 	for ( let i = 2; i < 5000; i++ ) f.frame( i * 10, 10 );
 	const result = f.read();
 	assert.equal( result.frames, 5000 );
+	assert.equal( result.openingFrames.length, 1024 );
+	assert.equal( result.openingFrames[0].atMs, 0 );
+	assert.equal( result.openingFrames.at( -1 ).atMs, 10230 );
 	assert.equal( result.channels.displayed.maxExcessXZ, 9.5 );
 	assert.equal( result.channels.body.excessFramesXZ, 1 );
 	assert.equal( result.events.length, 3 );
 	assert.equal( result.events[0].atMs, 10 );
+});
+
+test("opening replay inputs own their snapshots and reset with the measurement", () => {
+	const f = fixture();
+	const pose = { regionId: 25000, x: 12, y: 0, z: 0 };
+	f.target.__worldProbeFrameProfiler.movement( {
+		atMs: 100,
+		workerAtMs: 80,
+		revision: 4,
+		logical: pose,
+		displayed: pose,
+		path: { from: pose, to: { ...pose, x: 100 } }
+	} );
+	pose.x = 80;
+	const frame = f.read().openingFrames[0];
+	assert.equal( frame.logical.x, 12 );
+	assert.equal( frame.path.from.x, 12 );
+	assert.equal( frame.workerAtMs, 80 );
+	assert.equal( frame.moving, true );
+	f.target.__recoveryContinuity.reset();
+	assert.deepEqual( f.read().openingFrames, [] );
 });
 
 test("ground height and long-frame travel stay distinct from horizontal snaps", () => {
