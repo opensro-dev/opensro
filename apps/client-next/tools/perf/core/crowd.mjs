@@ -99,7 +99,7 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 	const url = new URL( provisioningUrl );
 	assert.ok( url.protocol === "http:" && [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ) );
 	const token = (await readFile( tokenPath, "utf8" )).trim();
-	const accounts = [], peers = [];
+	const accounts = [], peers = [], characters = [];
 	const prefix = randomBytes( 3 ).toString( "hex" );
 	/*
 	================
@@ -130,7 +130,11 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 			journalPath,
 			JSON.stringify(
 				{
-					accounts: accounts.map( ( id, index ) => ({ id, disabled: results[index].status === "fulfilled" }) )
+					accounts: accounts.map( ( id, index ) => ({
+						id,
+						character: characters[index],
+						disabled: results[index].status === "fulfilled"
+					}) )
 				},
 				null,
 				2
@@ -152,9 +156,20 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 			const character = assertCharacterAllowed( `P${prefix}${index}`, { context: "live crowd fixture" } );
 			await provision( "/v1/accounts", "POST", { id, password } );
 			accounts.push( id );
+			characters.push( character );
 			await writeFile(
 				journalPath,
-				JSON.stringify( { accounts: accounts.map( id => ({ id, disabled: false }) ) }, null, 2 )
+				JSON.stringify(
+					{
+						accounts: accounts.map( ( id, index ) => ({
+							id,
+							character: characters[index],
+							disabled: false
+						}) )
+					},
+					null,
+					2
+				)
 			);
 			const session = await openProbeAgentSession( { loginId: id, loginPassword: password } );
 			await fetchProbeSessionJson( session, "/character/create", {
@@ -189,7 +204,14 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 		}
 		return { peers: peers.map( peer => peer.evidence ), close };
 	} catch ( error ) {
-		await close();
-		throw error;
+		let failure = error instanceof Error ? error : new Error( String( error ) );
+		try {
+			await close();
+		} catch ( cleanup ) {
+			failure = new AggregateError( [ failure, cleanup ], "crowd setup and cleanup failed" );
+		}
+		// The caller never receives a crowd on partial admission. Retain its
+		// attempted names so it can verify those sessions left the server too.
+		throw Object.assign( failure, { crowdNames: [ ...characters ] } );
 	}
 }

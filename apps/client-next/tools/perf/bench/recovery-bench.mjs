@@ -3,7 +3,9 @@
 
 recovery-bench.mjs - real-session scheduling and transport recovery evidence
 
-Uses the shared authenticated launcher and asd2 fixture. Faults delay real
+Uses the shared authenticated launcher and scratch-character fixture. Optional
+crowd peers use real accounts and sockets, with the existing crowd owner handling
+provisioning, rate limits and cleanup. Faults delay real
 WebSocket bytes and scheduling; they never manufacture gameplay replies or
 rewrite a production source file. The pre-login hook runs in the existing simulation worker before its first
 world connection; the production entry and message delivery stay untouched.
@@ -16,6 +18,7 @@ import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMov
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { walk } from "./scenarios.mjs";
+import { createCrowd } from "../core/crowd.mjs";
 
 import { installFaults, holdStream, stallServer, faultLog } from "../core/transport-faults.mjs";
 
@@ -52,6 +55,9 @@ const OP_PREDICTED_MOVE = 0x0009;
 const METRICS_URL = process.env.SRO_BENCH_TRANSPORT_METRICS ?? "http://127.0.0.1:8788/transport/metrics";
 const SETTLE_TIMEOUT_MS = 15000;
 const SETTLE_MARGIN_MS = 250;
+// The transport's default resume grace is 30 seconds; allow a fresh operator
+// snapshot after it before declaring a closed crowd session left behind.
+const CROWD_CLEANUP_TIMEOUT_MS = 45000;
 // The server's movement answer (movement.ts receipt).
 const OP_PREDICTED_MOVE_RESULT = 0x000a;
 
@@ -88,7 +94,9 @@ function movementState( page ) {
 			pendingMoves: game.pendingMoves,
 			moving: game.moving,
 			movementPath: game.movementPath,
-			movementRevision: game.movementRevision
+			movementRevision: game.movementRevision,
+			worldClock: game.worldClock,
+			hp: game.vitals?.find( row => row.gid === game.localGid )?.hp
 		};
 	} );
 }
@@ -160,20 +168,20 @@ observatory cache has turned over, the client's movement state beside the
 server's pose.
 ================
 */
-async function stallTurns( page, lane, name, record ) {
+async function stallTurns( page, { lane, name, record, crowdNames } ) {
 	const stall = lane === "bidirectional-delay" ? ms => stallServer( page, ms ) : ms => holdStream( page, "rx", ms );
 	const legs = lane === "edge-delay" ? STALL_LEGS.edge : STALL_LEGS.open;
 	const steps = [];
 	const anchor = (await movementState( page )).pose;
 	try {
-		await stallSteps( page, { lane, name, stall, legs, anchor, steps, record } );
+		await stallSteps( page, { lane, name, stall, legs, anchor, steps, record, crowdNames } );
 	} catch ( error ) {
 		// The incident is the evidence: keep what led up to it and the live
 		// state it left, as far as the page still answers.
 		const incident = {
 			error: String( error?.stack ?? error ),
 			client: await movementState( page ).catch( failure => String( failure ) ),
-			server: await serverPose( name ).catch( failure => String( failure ) ),
+			server: await serverPose( name, crowdNames ).catch( failure => String( failure ) ),
 			faults: await faultLog( page ).catch( failure => String( failure ) )
 		};
 		await record( steps, incident );
@@ -189,7 +197,7 @@ stallSteps
 The step loop of stallTurns; each completed step is recorded at once.
 ================
 */
-async function stallSteps( page, { lane, name, stall, legs, anchor, steps, record } ) {
+async function stallSteps( page, { lane, name, stall, legs, anchor, steps, record, crowdNames } ) {
 	for ( const ms of STALL_MS ) {
 		for ( const action of [ "turn", "stop" ] ) {
 			await returnToAnchor( page, anchor );
@@ -206,7 +214,7 @@ async function stallSteps( page, { lane, name, stall, legs, anchor, steps, recor
 			await page.waitForTimeout( OBSERVATORY_CACHE_MS + SETTLE_MARGIN_MS );
 			const held = (await faultLog( page, mark )).held;
 			const client = await movementState( page );
-			const server = await serverPose( name );
+			const server = await serverPose( name, crowdNames );
 			steps.push( {
 				ms,
 				action,
@@ -217,10 +225,12 @@ async function stallSteps( page, { lane, name, stall, legs, anchor, steps, recor
 				held,
 				client,
 				server,
+				crowd: crowdNames.length ? await crowdEvidence( page, crowdNames ) : null,
 				xz: Math.hypot( server.x - client.pose.x, server.z - client.pose.z ),
 				y: server.y - client.pose.y
 			} );
 			await record( steps );
+			if ( crowdNames.length ) assertCrowd( steps.at( -1 ).crowd );
 		}
 	}
 }
@@ -233,7 +243,7 @@ The named character's live pose as the GameWorld itself reports it, read
 after the snapshot cache has turned over so it postdates the settle.
 ================
 */
-async function serverPose( name ) {
+async function serverPose( name, crowdNames = [] ) {
 	const response = await fetch( OBSERVATORY_URL, { headers: { "X-SRO-Local-Diagnostics": "1" } } );
 	assert.ok( response.ok, `observatory ${response.status}` );
 	const body = await response.json();
@@ -242,7 +252,19 @@ async function serverPose( name ) {
 	// capturedAt carries 100 ns digits; Date.parse wants milliseconds.
 	const capturedAtMs = Date.parse( body.capturedAt.replace( /(\.\d{3})\d+/, "$1" ) );
 	assert.ok( Number.isFinite( capturedAtMs ), `observatory capturedAt ${body.capturedAt}` );
-	return { regionId: player.region, x: player.x, y: player.y, z: player.z, capturedAtMs, fetchedAtMs: Date.now() };
+	return {
+		regionId: player.region,
+		x: player.x,
+		y: player.y,
+		z: player.z,
+		hp: player.hp,
+		capturedAtMs,
+		fetchedAtMs: Date.now(),
+		peers: crowdNames.map( name => {
+			const peer = body.players.find( row => row.name.toLowerCase() === name.toLowerCase() );
+			return { name, hp: peer?.hp ?? null, region: peer?.region ?? null };
+		} )
+	};
 }
 
 /*
@@ -258,6 +280,12 @@ function assertStep( lane, step ) {
 	const label = `${lane} ${step.ms} ms ${step.action}`;
 	assert.equal( step.server.regionId, step.client.pose.regionId, `${label}: regions differ` );
 	assert.ok( !step.client.moving && step.client.pendingMoves === 0, `${label}: not settled` );
+	assert.ok( step.client.hp > 0, `${label}: observer must remain alive` );
+	assert.ok( step.server.hp > 0, `${label}: server must report a living observer` );
+	assert.ok(
+		step.server.peers.every( peer => peer.hp > 0 ),
+		`${label}: every crowd peer must remain online and alive`
+	);
 	assert.ok( step.server.capturedAtMs > step.settledAtMs, `${label}: the server snapshot predates the settle` );
 	if ( step.ms === 0 ) return;
 	const held = ( direction, opcode ) =>
@@ -270,10 +298,108 @@ function assertStep( lane, step ) {
 
 /*
 ================
+crowdEvidence
+
+Keep the worker's peer membership separate from presented actors: camera
+culling can change the latter while the real sessions remain nearby.
+================
+*/
+function crowdEvidence( page, names ) {
+	return page.evaluate( names => {
+		const root = globalThis.__benchRuntime;
+		const entities = root.entities(), actors = root.characterActors();
+		return {
+			atMs: Date.now(),
+			worldClock: root.gameplay().worldClock,
+			poseAtMs: root.gameplay().poseAtMs,
+			peers: names.map( name => {
+				const entity = entities.find( row => row.name === name );
+				const actor = entity && actors.find( row => row.gid === entity.gid );
+				return {
+					name,
+					gid: entity?.gid ?? null,
+					model: actor?.model ?? null,
+					clip: actor?.clip ?? null,
+					lifeState: entity?.appearanceState?.[0] ?? null
+				};
+			} ),
+			entityCount: entities.length,
+			actorCount: actors.length
+		};
+	}, names );
+}
+
+/*
+================
+assertCrowd
+================
+*/
+function assertCrowd( evidence ) {
+	assert.ok( evidence.peers.every( peer => peer.gid !== null ), "every crowd peer remains in the observer's world" );
+	assert.ok(
+		evidence.peers.every( peer => peer.lifeState !== 2 && !/death|die/i.test( peer.clip ?? "" ) ),
+		"crowd peers stay alive"
+	);
+}
+
+/*
+================
+verifyCrowdClosed
+
+Socket closure may leave a session in resume grace. Require the authoritative
+player list to release every peer before the next test can reuse the world.
+================
+*/
+async function verifyCrowdClosed( names, out ) {
+	const owned = new Set( names.map( name => name.toLowerCase() ) );
+	const deadline = Date.now() + CROWD_CLEANUP_TIMEOUT_MS;
+	let evidence;
+	try {
+		do {
+			await new Promise( resolve => setTimeout( resolve, OBSERVATORY_CACHE_MS + SETTLE_MARGIN_MS ) );
+			const response = await fetch( OBSERVATORY_URL, {
+				headers: { "X-SRO-Local-Diagnostics": "1" },
+				signal: AbortSignal.timeout( SETTLE_TIMEOUT_MS )
+			} );
+			assert.ok( response.ok, `crowd cleanup observatory ${response.status}` );
+			const snapshot = await response.json();
+			evidence = {
+				atMs: Date.now(),
+				capturedAt: snapshot.capturedAt,
+				expected: names.length,
+				remaining: snapshot.players.filter( row => owned.has( row.name.toLowerCase() ) ).map( row => row.name )
+			};
+			await writeFile( `${out}/crowd-session-cleanup.json`, JSON.stringify( evidence, null, 2 ) );
+			if ( evidence.remaining.length === 0 ) return;
+		} while ( Date.now() < deadline );
+		throw Error( `crowd sessions remain after cleanup: ${JSON.stringify( evidence.remaining )}` );
+	} catch ( error ) {
+		await writeFile(
+			`${out}/crowd-session-cleanup.json`,
+			JSON.stringify(
+				{
+					...evidence,
+					failure: String( error?.stack ?? error )
+				},
+				null,
+				2
+			)
+		);
+		throw error;
+	}
+}
+
+/*
+================
 run
 ================
 */
 async function run( options ) {
+	assert.ok( Number.isInteger( options.peers ) && options.peers >= 0, "peers must be a nonnegative integer" );
+	if ( options.peers ) {
+		assert.ok( options.tokenPath && options.provisioningUrl, "explicit local crowd authority required" );
+	}
+	await mkdir( options.out, { recursive: true } );
 	const client = await openClient( MISSION_MOVEMENT_FIXTURES.region_cross, {
 		spans: true,
 		uncapped: false,
@@ -281,13 +407,42 @@ async function run( options ) {
 		beforeLogin: installFaults
 	} );
 	const { page } = client;
+	let crowd, failure;
+	const crowdNames = [];
 	try {
 		let worker;
 		for ( const candidate of page.workers() ) {
 			if ( await candidate.evaluate( () => !!globalThis.__recoveryLink ) ) worker = candidate;
 		}
 		assert.ok( worker, "instrumented simulation worker must exist" );
-		await mkdir( options.out, { recursive: true } );
+		if ( options.peers ) {
+			crowd = await createCrowd( {
+				count: options.peers,
+				fixture: MISSION_MOVEMENT_FIXTURES.region_cross,
+				provisioningUrl: options.provisioningUrl,
+				tokenPath: options.tokenPath,
+				journalPath: `${options.out}/crowd-cleanup.json`
+			} ).catch( error => {
+				crowdNames.push( ...(error.crowdNames ?? []) );
+				throw error;
+			} );
+			crowdNames.push( ...crowd.peers.map( peer => peer.character ) );
+			await page.waitForFunction(
+				names => {
+					const root = globalThis.__benchRuntime, entities = root.entities(), actors = root.characterActors();
+					return names.every( name => {
+						const entity = entities.find( row => row.name === name );
+						return entity && actors.some( actor => actor.gid === entity.gid );
+					} );
+				},
+				crowdNames,
+				{ timeout: SETTLE_TIMEOUT_MS }
+			);
+			await writeFile(
+				`${options.out}/crowd-admitted.json`,
+				JSON.stringify( await crowdEvidence( page, crowdNames ), null, 2 )
+			);
+		}
 		const results = [];
 		for ( const lane of [ "main", "worker", "transport", ...STALL_LANES ] ) {
 			if ( !options.only.includes( lane ) ) continue;
@@ -310,11 +465,16 @@ async function run( options ) {
 				if ( STALL_LANES.includes( lane ) ) {
 					result.timing = { before: await transportMetrics() };
 					faultMark = (await faultLog( page )).logged;
-					result.stalls = await stallTurns( page, lane, CHARACTER, ( stalls, incident ) =>
-						writeFile(
-							`${options.out}/stall-${lane}.json`,
-							JSON.stringify( { lane, partial: true, incident, stalls }, null, 2 )
-						) );
+					result.stalls = await stallTurns( page, {
+						lane,
+						name: CHARACTER,
+						crowdNames,
+						record: ( stalls, incident ) =>
+							writeFile(
+								`${options.out}/stall-${lane}.json`,
+								JSON.stringify( { lane, partial: true, incident, stalls }, null, 2 )
+							)
+					} );
 					while ( more() ) await page.waitForTimeout( 50 );
 					return;
 				}
@@ -332,10 +492,22 @@ async function run( options ) {
 			};
 			await captures.start();
 			const result = {};
+			if ( crowd ) {
+				result.crowdBefore = await crowdEvidence( page, crowdNames );
+				assertCrowd( result.crowdBefore );
+			}
 			let faultMark = 0;
 			Object.assign( result, await measure( page, lane, STALL_LANES.includes( lane ) ? 90000 : 7000, drive ) );
 			await captures.stop( lane );
 			await captures.finish();
+			if ( crowd ) {
+				result.crowdAfter = await crowdEvidence( page, crowdNames );
+				assertCrowd( result.crowdAfter );
+				assert.ok(
+					crowd.peers.every( peer => peer.ready && !peer.closed ),
+					"all real crowd sessions stay connected"
+				);
+			}
 			if ( options.video && lane === "main" ) {
 				result.visual = await captureVisual( page, `${options.out}/video`, async () => {
 					const start = Date.now();
@@ -353,7 +525,7 @@ async function run( options ) {
 					const body = root.characterActors().find( actor => actor.gid === game.localGid );
 					return { logical: game.pose, drawn: body?.pose ?? null };
 				} );
-				const server = await serverPose( CHARACTER );
+				const server = await serverPose( CHARACTER, crowdNames );
 				result.serverPose = {
 					...local,
 					server,
@@ -397,6 +569,7 @@ async function run( options ) {
 			for ( const sample of result.movement ) {
 				if ( !sample.body || !sample.displayed || sample.body.mountedOn ) continue;
 				assert.ok( sample.body.clip, "local body must have an authored animation" );
+				assert.ok( !/death|die/i.test( sample.body.clip ), "recovery does not measure a dead observer" );
 				const a = sample.body.pose, b = sample.displayed;
 				assert.equal( a.regionId, b.regionId );
 				assert.ok(
@@ -428,8 +601,31 @@ async function run( options ) {
 			);
 			await page.waitForTimeout( 1000 );
 		}
+	} catch ( error ) {
+		failure = error;
+		await writeFile(
+			`${options.out}/failure.json`,
+			JSON.stringify(
+				{
+					error: String( error?.stack ?? error ),
+					client: await movementState( page ).catch( error => String( error ) ),
+					crowd: await crowdEvidence( page, crowdNames ).catch( error => String( error ) ),
+					peers: crowd?.peers ?? []
+				},
+				null,
+				2
+			)
+		);
+		throw error;
 	} finally {
-		await closeClient( client );
+		const cleanup = await Promise.allSettled( [ closeClient( client ), crowd?.close() ] );
+		const errors = cleanup.filter( row => row.status === "rejected" ).map( row => row.reason );
+		if ( crowdNames.length ) {
+			await verifyCrowdClosed( crowdNames, options.out ).catch( error => errors.push( error ) );
+		}
+		if ( errors.length ) {
+			throw new AggregateError( failure ? [ failure, ...errors ] : errors, "recovery cleanup failed" );
+		}
 	}
 }
 
@@ -440,8 +636,11 @@ await run( parseOptions(
 		out: "temp/artifacts/recovery",
 		trace: false,
 		video: false,
+		peers: 0,
+		tokenPath: "",
+		provisioningUrl: "",
 		only: [ "main", "worker", "transport", ...STALL_LANES ]
 	},
 	"recovery-bench.mjs [--cpu-rate 4] [--out DIR] [--only main,worker,transport,network-delay,bidirectional-delay] " +
-		"[--trace] [--video]"
+		"[--trace] [--video] [--peers N --provisioning-url URL --token-path PATH]"
 ) );
