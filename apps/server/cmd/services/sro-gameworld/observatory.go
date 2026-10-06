@@ -16,6 +16,7 @@ import (
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/domain/charactervitals"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 	"opensro.online/server/internal/transport/worldsession"
@@ -41,6 +42,27 @@ type observatoryPlayer struct {
 	Y      float64 `json:"y"`
 	Z      float64 `json:"z"`
 	Alive  bool    `json:"alive"`
+}
+
+/*
+================
+captureObservatoryPlayer
+
+Absent stored gauges mean full for diagnostic readers. Use the shared
+record interpretation without inventing a gameplay stat-graph maximum.
+================
+*/
+func captureObservatoryPlayer(c *domain.Character, session simulation.SessionSnapshot, now int64) observatoryPlayer {
+	p := session.World.LiveSpawnAt(now)
+	row := observatoryPlayer{
+		ID: c.ID, Name: c.Name, Level: 1,
+		HP: charactervitals.CurrentHP(c), MP: charactervitals.CurrentMP(c),
+		Region: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Alive: session.CombatEligible,
+	}
+	if c.Level != nil {
+		row.Level = *c.Level
+	}
+	return row
 }
 
 /*
@@ -72,18 +94,7 @@ func installObservatory(api *agentapi.API, state *simulation.MonsterState, hub *
 				if !ok {
 					continue
 				}
-				p := session.World.LiveSpawnAt(now.UnixMilli())
-				row := observatoryPlayer{ID: c.ID, Name: c.Name, Level: 1, Region: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Alive: session.CombatEligible}
-				if c.Level != nil {
-					row.Level = *c.Level
-				}
-				if c.CurrentHP != nil {
-					row.HP = *c.CurrentHP
-				}
-				if c.CurrentMP != nil {
-					row.MP = *c.CurrentMP
-				}
-				players = append(players, row)
+				players = append(players, captureObservatoryPlayer(c, session, now.UnixMilli()))
 			}
 		})
 		sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
