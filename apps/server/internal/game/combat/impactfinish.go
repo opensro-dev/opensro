@@ -14,7 +14,8 @@ target, area, pulse, trap, pet and monster strikes all finish here.
 
 A blocked impact (record type 2, the section at 58F0EB) and a ck kill
 (0x86) keep their zero: 5905FB drops a block's damage, and a kill has
-none.
+none. Neither does a defender its wall fully covers: 58F05D..58F0A2 makes
+that record type 8 and jumps to 5905FB, past the whole tail.
 
 ===========================================================================
 */
@@ -122,7 +123,9 @@ steal record, whose percent already rode into 40F750 (58F4B5 jumps past
 the percent step). MonsterAttacker and AttackerRarity describe the
 attacker (vtable +0x28, then 5874D0 on its rarity byte). Attack is the
 RefSkill att block (+0x230): only an att impact takes the floor
-([esp+0x50] = 0 at 58FD4B).
+([esp+0x50] = 0 at 58FD4B). Covered marks a defender whose standing wall
+covers every lane of the impact (combat.WallOutcome.Covered): its record
+skips the tail, so the wall's absorption leaves it at zero.
 ================
 */
 type ImpactTail struct {
@@ -131,6 +134,7 @@ type ImpactTail struct {
 	MonsterAttacker bool
 	AttackerRarity  uint8
 	Attack          bool
+	Covered         bool
 }
 
 /*
@@ -145,7 +149,7 @@ keep their pre-scaling values, as the native records do.
 ================
 */
 func FinishImpact(r Result, tail ImpactTail) Result {
-	if r.Blocked || r.Slain {
+	if r.Blocked || r.Slain || tail.Covered {
 		return r
 	}
 	percent := tail.Percent

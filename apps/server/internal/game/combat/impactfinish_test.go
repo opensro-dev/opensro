@@ -104,6 +104,11 @@ func TestFinishImpactAppliesPercentScaleThenFloor(t *testing.T) {
 			t.Errorf("%s: damage %d, want %d", row.name, got, row.want)
 		}
 	}
+	// 58F0A2: a defender its wall fully covers skips the tail, so the
+	// wall's absorption leaves it at zero instead of the att floor's 1.
+	if got := FinishImpact(Result{}, ImpactTail{Attack: true, Covered: true, MonsterAttacker: true, AttackerRarity: 4}); got.Damage != 0 {
+		t.Errorf("covered defender took %d, want 0", got.Damage)
+	}
 	for _, row := range []Result{{Blocked: true}, {Slain: true}} {
 		if got := FinishImpact(row, ImpactTail{Attack: true, MonsterAttacker: true, AttackerRarity: 4}); got.Damage != 0 {
 			t.Errorf("%+v kept damage %d, want 0", row, got.Damage)

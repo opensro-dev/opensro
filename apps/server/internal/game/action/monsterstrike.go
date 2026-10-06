@@ -97,12 +97,13 @@ finishMonsterImpact
 
 The shared impact tail (combat.FinishImpact) for a monster's strike: this
 victim's area share, then the monster attacker's damage scale (5874D0, by
-its rarity byte), then the att floor.
+its rarity byte), then the att floor. A defender its wall fully covers
+(covered) keeps its zero record.
 ================
 */
-func finishMonsterImpact(in monsterStrikeInput, formula combat.Result) combat.Result {
+func finishMonsterImpact(in monsterStrikeInput, formula combat.Result, covered bool) combat.Result {
 	return combat.FinishImpact(formula, combat.ImpactTail{Percent: in.percent, MonsterAttacker: true,
-		AttackerRarity: in.instance.Rarity(), Attack: in.skill.Attack.Present})
+		AttackerRarity: in.instance.Rarity(), Attack: in.skill.Attack.Present, Covered: covered})
 }
 
 /*
@@ -123,7 +124,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	if !rt.planPlayerStrike(&strike,
 		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
 			outcome, err := rt.resolveCombatBehindWall(actor, skill, in.attacker, defender, wall)
-			outcome.Defender = finishMonsterImpact(in, outcome.Defender)
+			outcome.Defender = finishMonsterImpact(in, outcome.Defender, outcome.Covered)
 			outcome.Absorbed = uint32(uint64(outcome.Absorbed) * in.percent / 100)
 			return outcome, err
 		},
@@ -191,7 +192,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	var formulas []combat.Result
 	for range skill.Attack.ImpactCount {
 		formula, resolveErr := rt.resolveCombat(criticalActor{division: divisionID, monster: instance.Gid}, skill, in.attacker, defender)
-		formula = finishMonsterImpact(in, formula)
+		formula = finishMonsterImpact(in, formula, false)
 		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked {
 			return out
 		}

@@ -160,7 +160,8 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 			return combat.WallOutcome{Defender: combat.FinishImpact(steal, combat.ImpactTail{PercentApplied: true, Attack: in.skill.Attack.Present})}, nil
 		}
 		out, err := rt.resolvePlayerImpactBehindWall(in.division, in.snapshot.Name, in.skill, in.attacker, defender, in.now, in.chained, wall)
-		out.Defender = combat.FinishImpact(out.Defender, combat.ImpactTail{Percent: percent, Attack: in.skill.Attack.Present})
+		out.Defender = combat.FinishImpact(out.Defender, combat.ImpactTail{Percent: percent, Attack: in.skill.Attack.Present,
+			Covered: out.Covered})
 		out.Absorbed = uint32(uint64(out.Absorbed) * percent / fullAreaPercent)
 		return out, err
 	}
