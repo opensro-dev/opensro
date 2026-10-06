@@ -17238,6 +17238,9 @@ export function createUi(
 				const path = iconPath( item.icon );
 				if ( path ) paths.push( path );
 			}
+			// Publication: the demand is final for this layout. resources.step skips
+			// re-reading an array it has seen, so the array must never change now.
+			Object.freeze( paths );
 			dirty = resources.step( paths, now );
 			if ( dirty ) layoutResourcesRevision++;
 			if ( windowWarm.active() ) {

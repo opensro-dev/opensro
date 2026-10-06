@@ -88,7 +88,6 @@ test("UI demand is compared by content, whichever array carries it", () => {
 		false,
 		"equal contents in a new array change nothing"
 	);
-	assert.throws( () => settled.push( "/late.png" ), TypeError, "an adopted demand array cannot change" );
 	f.resources.step( [ "/a.png", "/c.png" ], 4 );
 	assert.equal( f.requests.length, 3, "a same-length demand naming a new image requests it" );
 	assert.match( f.requests[2], /c\.png$/ );
