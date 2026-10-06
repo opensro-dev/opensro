@@ -171,9 +171,11 @@ async function recordResidue( page, scene, location, results, options ) {
 	const server = await serverMonsters();
 	const alive = [], unknown = [];
 	for ( const gid of scene.gids ) {
-		if ( dead.has( gid ) ) continue;
 		const row = server.monsters.get( gid );
-		if ( inView.has( gid ) || row && row.hp > 0 ) alive.push( gid );
+		// The server's own hp outranks anything the client shows: a client
+		// death sighting never clears a gid the GameWorld still lists alive.
+		if ( row && row.hp > 0 || inView.has( gid ) ) alive.push( gid );
+		else if ( dead.has( gid ) ) continue;
 		// Absent from a truncated server list and never seen dying: not proven gone.
 		else if ( !row && server.truncated ) unknown.push( gid );
 	}
@@ -317,13 +319,16 @@ async function session( options, location, results ) {
 		) throw Error( `${location.name}: the character booted outside the scene (${JSON.stringify( booted )})` );
 		// The combat scene loads once per session, on a fresh isolated server;
 		// GM-loaded monsters have no nest and would accumulate across runs.
-		scene = location.name === "combat" ?
-			await loadCombat( client.page, combatScene( options ) ).catch( error => {
-				// A partial load still left monsters on the server: record them.
-				scene = error.scene ?? null;
+		if ( location.name === "combat" ) {
+			// From here the GM command may have run: until the load returns its
+			// gids, a failure of any kind leaves the whole request unaccounted.
+			const requested = combatScene( options );
+			scene = { ...requested, refObjId: null, gids: [], ambient: null };
+			scene = await loadCombat( client.page, requested ).catch( error => {
+				if ( error.scene ) scene = error.scene;
 				throw error;
-			} ) :
-			null;
+			} );
+		}
 		const captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
