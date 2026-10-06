@@ -13,11 +13,23 @@ import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+/*
+================
+load
+================
+*/
 async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
-const { advanceAction } = await load( "src/engine/foundation/animation/action-schedule.ts" );
+const { advanceAction, actionLayers } = await load( "src/engine/foundation/animation/action-schedule.ts" );
 const { createCombat } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts" );
+/*
+================
+phase
+================
+*/
 const phase = clip => ({
 	clip,
 	definition: {
@@ -27,18 +39,23 @@ const phase = clip => ({
 		timeWarpCurve: { scale: 0, records: [] }
 	}
 });
+/*
+================
+clock
+================
+*/
 const clock = phases => ({ phases, phase: 0, started: 0, previous: 0, entered: false });
 test("READY callbacks precede WAIT, which holds until the server releases SHOT", () => {
 	const c = clock( [ phase( "ready" ), phase( "wait" ), phase( "shot" ) ] );
 	assert.deepEqual( advanceAction( c, 0 ).events, [ { phase: "READY", event: 0, at: 0 } ] );
-	assert.deepEqual( advanceAction( c, .201 ).events, [ { phase: "READY", event: 1, at: .2 } ] );
-	assert.deepEqual( advanceAction( c, 1 ).events, [ { phase: "WAIT", event: 0, at: 1 } ] );
+	assert.deepEqual( advanceAction( c, .401 ).events, [ { phase: "READY", event: 1, at: .4 } ] );
+	assert.deepEqual( advanceAction( c, 1.2 ).events, [ { phase: "WAIT", event: 0, at: 1.2 } ] );
 	assert.equal( advanceAction( c, 10 ).loop, true );
 	assert.equal( c.phase, 1 );
-	const released = advanceAction( c, 10.3, 10 );
-	assert.deepEqual( released.events, [ { phase: "SHOT", event: 0, at: 10 }, { phase: "SHOT", event: 1, at: 10.2 } ] );
-	assert.deepEqual( advanceAction( c, 10.3, 10 ).events, [] );
-	advanceAction( c, 11 );
+	const released = advanceAction( c, 10.5, 10 );
+	assert.deepEqual( released.events, [ { phase: "SHOT", event: 0, at: 10 }, { phase: "SHOT", event: 1, at: 10.4 } ] );
+	assert.deepEqual( advanceAction( c, 10.5, 10 ).events, [] );
+	advanceAction( c, 11.201 );
 	assert.equal( c.phase, 3 );
 });
 test("empty phases fire once; late frames preserve event times and release can interrupt READY", () => {
@@ -47,7 +64,7 @@ test("empty phases fire once; late frames preserve event times and release can i
 		[ "READY", 0, 0 ],
 		[ "WAIT", 0, 0 ],
 		[ "SHOT", 0, 0 ],
-		[ "SHOT", 1, .2 ]
+		[ "SHOT", 1, .4 ]
 	] );
 	assert.deepEqual( advanceAction( c, 3 ).events, [] );
 	const d = clock( [ phase( "ready" ), phase( "wait" ), phase( "shot" ) ] );
@@ -58,9 +75,9 @@ test("empty phases fire once; late frames preserve event times and release can i
 test("a B505 release cannot hold or restart SHOT when WAIT has no motion (8DF180)", () => {
 	const c = clock( [ null, null, phase( "shot" ) ] );
 	assert.deepEqual( advanceAction( c, 0 ).events.map( e => e.phase ), [ "READY", "WAIT", "SHOT" ] );
-	assert.deepEqual( advanceAction( c, .3, .25 ).events, [ { phase: "SHOT", event: 1, at: .2 } ] );
+	assert.deepEqual( advanceAction( c, .401, .25 ).events, [ { phase: "SHOT", event: 1, at: .4 } ] );
 	assert.equal( c.started, 0, "empty WAIT does not change the authored callback origin" );
-	assert.deepEqual( advanceAction( c, .4, .25 ).events, [] );
+	assert.deepEqual( advanceAction( c, .5, .25 ).events, [] );
 });
 
 test("B505 no-steering release is retained once, finalization removes it, malformed packets do not mutate", () => {
@@ -100,7 +117,7 @@ test("cancellation caps callbacks and preserves an exit cursor without replay", 
 	assert.deepEqual( advanceAction( c, 10, undefined, .1 ).events, [ { phase: "READY", event: 0, at: 0 } ] );
 	assert.equal( c.cancelledAt, .1 );
 	assert.deepEqual( advanceAction( c, 20 ).events, [] );
-	assert.equal( advanceAction( c, 20 ).time, .1 );
+	assert.equal( advanceAction( c, 20 ).time, 0 );
 });
 
 test("action entry, phase change, natural end and early cancellation retain native blend envelopes", async () => {
@@ -109,16 +126,16 @@ test("action entry, phase change, natural end and early cancellation retain nati
 	advanceAction( c, 0 );
 	assert.deepEqual( actionLayers( c, 0 ), [] );
 	assert.ok( Math.abs( actionLayers( c, .1 )[0].weight - .5 ) < 1e-9 );
-	advanceAction( c, 1 );
+	advanceAction( c, 1.2 );
 	assert.equal( c.phase, 3 );
-	assert.equal( actionLayers( c, 1 )[0].clip, "attack" );
-	assert.equal( actionLayers( c, 1 )[0].weight, 1 );
-	assert.ok( Math.abs( actionLayers( c, 1.1 )[0].weight - .5 ) < 1e-9 );
-	assert.deepEqual( actionLayers( c, 1.201 ), [] );
+	assert.equal( actionLayers( c, 1.2 )[0].clip, "attack" );
+	assert.equal( actionLayers( c, 1.2 )[0].weight, 1 );
+	assert.ok( Math.abs( actionLayers( c, 1.3 )[0].weight - .5 ) < 1e-9 );
+	assert.deepEqual( actionLayers( c, 1.401 ), [] );
 	const d = clock( [ phase( "ready" ), phase( "wait" ), phase( "shot" ) ] );
 	advanceAction( d, 0 );
-	advanceAction( d, 1.1 );
-	const transition = actionLayers( d, 1.1 );
+	advanceAction( d, 1.3 );
+	const transition = actionLayers( d, 1.3 );
 	assert.deepEqual( transition.map( x => x.clip ), [ "wait", "ready" ] );
 	assert.ok( transition.every( x => Math.abs( x.weight - .5 ) < 1e-9 ) );
 	const e = clock( [ null, null, phase( "attack" ) ] );
@@ -127,4 +144,88 @@ test("action entry, phase change, natural end and early cancellation retain nati
 	assert.ok( Math.abs( actionLayers( e, .1 )[0].weight - .5 ) < 1e-9 );
 	assert.ok( Math.abs( actionLayers( e, .2 )[0].weight - .25 ) < 1e-9 );
 	assert.deepEqual( actionLayers( e, .301 ), [] );
+});
+
+/*
+================
+entryHold
+================
+*/
+test("one-shot entry holds pose and keyed callbacks until its blend completes", () => {
+	const c = clock( [ null, null, phase( "shot" ) ] );
+	c.phases[2].definition.trackEvents = [
+		{ cursorMs: 0, eventCode: 1, param0: 0, param1: 0 },
+		{ cursorMs: 96, eventCode: 1, param0: 0, param1: 0 }
+	];
+	advanceAction( c, 0 );
+	for ( const at of [ .05, .1, .199, .2 ] ) {
+		assert.deepEqual( advanceAction( c, at ).events, [] );
+		assert.equal( actionLayers( c, at )[0].time, 0 );
+	}
+	assert.deepEqual( advanceAction( c, .25 ).events, [ { phase: "SHOT", event: 1, at: .2 } ] );
+	assert.ok( Math.abs( actionLayers( c, .25 )[0].time - .05 ) < 1e-9 );
+	assert.deepEqual( advanceAction( c, .296 ).events, [] );
+	assert.deepEqual( advanceAction( c, .298 ).events, [ { phase: "SHOT", event: 2, at: .296 } ] );
+	advanceAction( c, 1 );
+	assert.equal( c.phase, 2, "entry time is additional to the authored clip length" );
+	advanceAction( c, 1.2 );
+	assert.equal( c.phase, 3 );
+});
+
+test("all empty and populated phase combinations preserve the entry hold", () => {
+	for ( let mask = 0; mask < 8; mask++ ) {
+		const phases = [ "ready", "wait", "shot" ].map( ( name, i ) => mask & (1 << i) ? phase( name ) : null );
+		const c = clock( phases );
+		advanceAction( c, 0 );
+		const first = actionLayers( c, .1 )[0];
+		if ( first ) assert.equal( first.time, first.loop ? .1 : 0, `mask ${mask}` );
+		advanceAction( c, 2, 1.5 );
+		const callbacks = advanceAction( c, 20, 1.5 ).events;
+		assert.ok( callbacks.every( row => Number.isFinite( row.at ) ) );
+		assert.deepEqual( advanceAction( c, 21, 1.5 ).events, [] );
+	}
+});
+
+/*
+================
+nativeEntryOracle
+
+Frozen original-byte execution covers entry, crossing-frame remainder,
+natural completion and the final-pose clamp. Optional regeneration fails
+on truncated execution and uses the installed licensed client only.
+================
+*/
+test("skill pose clocks match original one-shot execution across entry and natural exit", () => {
+	const fixture = JSON.parse(
+		readFileSync( new URL( "../fixtures/native/action-entry.json", import.meta.url ), "utf8" )
+	);
+	if ( process.env.SRO_NATIVE_ACTION_ORACLE === "1" ) {
+		const result = spawnSync( "python", [ "tools/native-action-entry.py" ], {
+			input: JSON.stringify( fixture.cases.map( ( { frames, ...row } ) => row ) ),
+			encoding: "utf8",
+			timeout: 30000
+		} );
+		assert.equal( result.status, 0, result.stderr );
+		assert.deepEqual( JSON.parse( result.stdout ), fixture );
+	}
+	for ( const row of fixture.cases ) {
+		const p = phase( "shot" );
+		p.definition.durationMs = row.durationMs;
+		p.definition.trackEvents = [];
+		const c = clock( [ null, null, p ] );
+		advanceAction( c, 0 );
+		for ( const frame of row.frames ) {
+			const at = frame.elapsedMs / 1000;
+			advanceAction( c, at );
+			const layer = actionLayers( c, at )[0];
+			if ( frame.weight === 0 ) {
+				assert.equal( layer, undefined );
+				continue;
+			}
+			assert.ok( layer );
+			assert.ok( Math.abs( layer.time * 1000 - frame.sampleMs ) < 1e-6, `cursor at ${frame.elapsedMs}` );
+			assert.ok( Math.abs( layer.weight - frame.weight ) < 1e-6, `weight at ${frame.elapsedMs}` );
+			assert.equal( c.phase === 3, frame.mode === 5, `completion at ${frame.elapsedMs}` );
+		}
+	}
 });

@@ -14,7 +14,6 @@ apps/client-next/src/engine/contracts/presentation-random.ts
 apps/client-next/src/engine/contracts/scenery.ts
 apps/client-next/src/engine/contracts/simulation.ts
 apps/client-next/src/engine/foundation/animation/action-refresh.ts
-apps/client-next/src/engine/foundation/animation/action-schedule.ts
 apps/client-next/src/engine/foundation/animation/action-time.ts
 apps/client-next/src/engine/foundation/animation/animation-activation.ts
 apps/client-next/src/engine/foundation/animation/animation-dispatch.ts
@@ -258,7 +257,6 @@ apps/client-next/tests/browser/absorption-orbs.test.mjs
 apps/client-next/tests/browser/action-refresh.test.mjs
 apps/client-next/tests/browser/asset-delivery.test.mjs
 apps/client-next/tests/browser/attached-effect-wire.test.mjs
-apps/client-next/tests/browser/attack-blend.test.mjs
 apps/client-next/tests/browser/audio-loop.test.mjs
 apps/client-next/tests/browser/background-resume.test.mjs
 apps/client-next/tests/browser/baroi-moving-target.test.mjs
