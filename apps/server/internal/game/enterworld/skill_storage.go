@@ -25,6 +25,7 @@ residentSkill
 ================
 */
 type residentSkill struct {
+	RequiredRace            uint8
 	StructureRepair         SkillStructureRepair
 	PositionEffect          SkillPositionEffect
 	Replacement             unique.Handle[statuseffect.ReplacementDescriptor]
@@ -112,7 +113,8 @@ type residentSkill struct {
 	CoolTimeGroup           uint8
 	TimingPinned            bool
 	ActionRange             float64
-	AIWeight                uint8
+	AIWeight                uint16
+	Category                uint8
 	ActionRangePinned       bool
 	Masteries               unique.Handle[[2]SkillRequirement]
 	ReqStr                  int64
@@ -136,6 +138,7 @@ compactSkill
 */
 func compactSkill(row SkillRow) residentSkill {
 	return residentSkill{
+		RequiredRace:            row.RequiredRace,
 		StructureRepair:         row.StructureRepair,
 		PositionEffect:          row.PositionEffect,
 		Replacement:             unique.Make(row.Replacement),
@@ -226,6 +229,7 @@ func compactSkill(row SkillRow) residentSkill {
 		TimingPinned:            row.TimingPinned,
 		ActionRange:             row.ActionRange,
 		AIWeight:                row.AIWeight,
+		Category:                row.Category,
 		ActionRangePinned:       row.ActionRangePinned,
 		Masteries:               unique.Make(row.Masteries),
 		ReqStr:                  row.ReqStr,
@@ -250,6 +254,7 @@ value
 */
 func (r residentSkill) value() SkillRow {
 	return SkillRow{
+		RequiredRace:            r.RequiredRace,
 		StructureRepair:         r.StructureRepair,
 		PositionEffect:          r.PositionEffect,
 		Replacement:             r.Replacement.Value(),
@@ -340,6 +345,7 @@ func (r residentSkill) value() SkillRow {
 		TimingPinned:            r.TimingPinned,
 		ActionRange:             r.ActionRange,
 		AIWeight:                r.AIWeight,
+		Category:                r.Category,
 		ActionRangePinned:       r.ActionRangePinned,
 		Masteries:               r.Masteries.Value(),
 		ReqStr:                  r.ReqStr,

@@ -5,6 +5,7 @@ entities.ts - The entity journal owns wire admission and ordered lifecycle publi
 
 ===========================================================================
 */
+import { animationRate, decodeAnimationSpeed } from "@/engine/foundation/animation/animation-rate";
 import {
 	refreshNameColor,
 	NAME_COLOR_WHITE,
@@ -765,6 +766,7 @@ export function createEntities(
 						...(local.countryByte9c !== undefined ? { countryByte9c: Number( local.countryByte9c ) } : {}),
 						walkSpeed,
 						runSpeed,
+						animationRate: animationRate( finite( local.actionSpeed ?? 100 ) ),
 						spawnSkills: localSkills,
 						avatars: localAvatars,
 						arenaTeam: Number( local.arenaTeam ?? 255 ),
@@ -1003,6 +1005,16 @@ export function createEntities(
 					} );
 					return;
 				}
+			}
+			if ( frame.opcode === 0x3453 ) {
+				const update = decodeAnimationSpeed( p ), source = entities.get( update.gid );
+				// 775EB0 resolves the riding actor before setting +4DC. Existing
+				// installations keep their captured rate (8DF527, ADF030).
+				const entity = source?.mountedOn ? entities.get( source.mountedOn ) ?? source : source;
+				if ( entity ) {
+					apply( { kind: "state", entity: Object.freeze( { ...entity, animationRate: update.rate } ) } );
+				}
+				return;
 			}
 			if ( frame.opcode === 0x376f ) {
 				const channels = decodeMovementSpeeds( p ), source = entities.get( channels.gid );

@@ -15,7 +15,7 @@ import (
 )
 
 // PARTIAL GetSplitEligibility: ordinary stack arithmetic projection of
-// 0x004B9D40 / 0x00490230. Specialty names, subtype/options and COS restrictions
+// 0x004B9D40 / 0x00490230. Subtype/options and COS restrictions
 // are not represented here; this is not a complete native eligibility gate.
 // Checks whether the target slot can merge an incoming item.
 // Native 0x004B9D40 specifically checks record+20/+24 != 0 (target.RecordID != 0).
@@ -37,7 +37,7 @@ func (inv *Inventory) GetSplitEligibility(slot int32, incoming *Item, stackCap u
 	if target.RecordID == 0 || wire.IsCosSummoner(target.TypeFlags) || wire.IsCosSummoner(incoming.TypeFlags) || target.Summon != nil || incoming.Summon != nil {
 		return 0
 	}
-	if target.RefObjID != incoming.RefObjID {
+	if !stackIdentityMatches(target, *incoming) {
 		return 0
 	}
 	if stackCap == 0 {

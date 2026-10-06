@@ -12,6 +12,7 @@ commands and cannot bypass actor eligibility.
 // CGInterface_ExecuteActionCommand 695420: 1000 + 6 asks the selected
 // player to trade.
 const ACTION_EXCHANGE = 1006;
+import { advanceGuildWarClock } from "@/engine/foundation/gameplay/guild-war";
 import {
 	ACTION_FORTRESS_RETURN,
 	FORTRESS_PORTAL_NOTICE_CATEGORY,
@@ -94,12 +95,15 @@ import {
 import { gmRequest, gmReply, gmItemReferences, type GmReply } from "@/engine/foundation/gameplay/gm-command";
 import {
 	fortressBootstrap,
+	advanceFortressCountdowns,
+	fortressCountdownNotices,
 	fortressPacket,
 	fortressMusicActive,
 	fortressMusicMode,
 	fortressInteraction,
 	fortressManagerReply,
 	fortressRegistrationNotice,
+	fortressBattleRankNotice,
 	fortressCaptureNotice,
 	fortressStructureState,
 	FORTRESS_NOTICE_CATEGORY,
@@ -696,7 +700,11 @@ ring stays under what the player fights and the spent move marker goes.
 		selectionDecal = {
 			kind: "target",
 			gid: entity.gid,
-			slot: entity.kind === "monster" || entity.kind === "cos" ? 3 : entity.kind === "player" ? 2 : 1
+			slot: entity.kind === "monster" || entity.kind === "cos" ?
+				3 :
+				entity.kind === "player" || entity.kind === "local-player" ?
+				2 :
+				1
 		};
 	}
 	/*
@@ -1256,6 +1264,20 @@ state here before a command can claim a native wire conversation.
 						jobAliasRequest( command.gid, command.mode, command.alias )
 				);
 			}
+			if ( command.kind === "fortress-schedule" || command.kind === "fortress-staff" ) {
+				const target = targeting.state();
+				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x400000) ) {
+					throw Error( "Select a fortress manager" );
+				}
+				return sendFrame(
+					fortressInteraction(
+						command.gid,
+						command.kind === "fortress-schedule" ? 5 : command.flag === undefined ? 3 : 4,
+						command.fortress,
+						command.kind === "fortress-staff" ? command.flag : undefined
+					)
+				);
+			}
 			if ( command.kind === "fortress-war-status" || command.kind === "fortress-war-apply" ) {
 				// The official's row exists only on the selected official (0x800000).
 				const target = targeting.state();
@@ -1642,6 +1664,7 @@ state here before a command can claim a native wire conversation.
 				if ( command.kind === "resurrection-consent" && !social.resurrection ) return null;
 				const request = socialRequest( social, command as SocialCommand );
 				send( request );
+				if ( command.kind === "guild-war-declare" ) social = { ...social, warPending: 1 };
 				if ( command.kind === "social-consent" ) social = { ...social, invitation: null };
 				if ( command.kind === "resurrection-consent" ) social = withoutResurrection( social );
 				return request;
@@ -1865,7 +1888,7 @@ state here before a command can claim a native wire conversation.
 			if ( command.kind === "shop-open" ) {
 				if (
 					entity?.kind !== "npc" || targeting.state().target !== command.gid ||
-					!((targeting.state().targetCapabilities ?? 0) & 1)
+					!((targeting.state().targetCapabilities ?? 0) & 0x801)
 				) throw Error( "Select a merchant first" );
 				return inventory.openShop( command.gid, now, targeting.state().targetCapabilities ?? 0 );
 			}
@@ -2034,6 +2057,8 @@ state here before a command can claim a native wire conversation.
 				predictCast( metadata, undefined, local, now );
 				return sendSkillPress( frame, skillId, now, true );
 			}
+			// 6B3E90 selects the portrait locally through 6813E0.
+			if ( entity && entity.gid === localGid && command.kind === "select" ) return selectEntity( entity, now );
 			if ( !entity || (entity.gid === localGid && command.kind !== "skill") ) {
 				throw new Error( "Target is absent or local player" );
 			}
@@ -2401,17 +2426,30 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				const fortressNext = fortressPacket( fortress, frame );
+				const fortressNext = fortressPacket( fortress, frame, now );
 				if ( fortressNext ) {
+					if ( fortressNext.service?.result === 2 && frame.opcode === 0xb1e1 ) {
+						const notice = constantNativeNotice(
+							FORTRESS_NOTICE_CATEGORY,
+							fortressNext.service.error ?? 0
+						);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					if ( frame.opcode === 0x3887 ) {
 						musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );
 					}
 					fortress = fortressNext;
+					if ( social.guild && frame.opcode === 0x3887 && frame.payload[0] === 0 ) {
+						for ( const notice of fortressCountdownNotices( fortress ) ) {
+							notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+						}
+					}
 					dirty = true;
 				}
 				const notice = restrictionNotice( frame.opcode, frame.payload ) ??
 					uniqueNotice( frame.opcode, frame.payload, uniqueRefs ) ??
 					fortressNotice( frame.opcode, frame.payload ) ?? fortressRegistrationNotice( fortress, frame ) ??
+					fortressBattleRankNotice( frame, social.localName ) ??
 					fortressCaptureNotice(
 						fortress,
 						frame,
@@ -2593,7 +2631,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
-				const nextSocial = socialPacket( social, frame, { country: localCountry } );
+				const nextSocial = socialPacket( social, frame, { country: localCountry, now } );
 				if ( nextSocial ) {
 					if ( nextSocial.members.length && !social.members.length ) guide = queueGuide( guide, [ 10 ] );
 					if ( nextSocial.notice ) {
@@ -3144,7 +3182,13 @@ Packet handling must not depend on which HUD panel is currently open.
 						inventoryBefore,
 						inventoryAfter,
 						moves,
-						{ country: localCountry, progression, maxHp: potionFacts.maxHp, maxMp: potionFacts.maxMp },
+						{
+							inventorySlotCount: inventory.state().inventorySlotCount,
+							country: localCountry,
+							progression,
+							maxHp: potionFacts.maxHp,
+							maxMp: potionFacts.maxMp
+						},
 						frame.opcode === 0xb5bd && frame.payload[0] === 1
 					);
 					for ( let i = 0; i < next.length; i++ ) {
@@ -3167,7 +3211,25 @@ before take assembles the presentation snapshot.
 ================
 		*/
 		step( now: number, local?: EntityState ) {
+			const warNext = advanceGuildWarClock( social, now );
+			if ( warNext !== social ) {
+				if ( warNext.notice ) {
+					notices = [ ...notices.slice( -99 ), { ...warNext.notice, sequence: ++noticeSequence } ];
+				}
+				social = { ...warNext, notice: undefined };
+				dirty = true;
+			}
 			flushBindingRepairs();
+			const fortressNext = advanceFortressCountdowns( fortress, now );
+			if ( fortressNext !== fortress ) {
+				fortress = fortressNext;
+				if ( social.guild ) {
+					for ( const notice of fortressCountdownNotices( fortress ) ) {
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
+				}
+				dirty = true;
+			}
 			if ( moveReservation.holding() && (!local || local.appearanceState?.[0] === 2) ) {
 				moveReservation.clear();
 				if ( selectionDecal?.kind === "ground" ) selectionDecal = null;

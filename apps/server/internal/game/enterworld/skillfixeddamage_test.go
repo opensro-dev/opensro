@@ -65,6 +65,66 @@ func TestShippedTuningRowsCompileAsFixedDamage(t *testing.T) {
 
 /*
 ================
+TestShippedOverHealingRowsCompileAsFixedDamage
+
+The 12 Over Healing tiers: pdmg is the amount (623 .. 7925), no dmgt
+drains anything, one impact on an enemy target after the authored
+preparation, and an offensive execution plan.
+================
+*/
+func TestShippedOverHealingRowsCompileAsFixedDamage(t *testing.T) {
+	source := sharedShippedSkills(t)
+	amounts := []uint32{623, 857, 1141, 1482, 1892, 2381, 2964, 3655, 4475, 5442, 6583, 7925}
+	for i, amount := range amounts {
+		code := fmt.Sprintf("SKILL_EU_CLERIC_BATTLEA_OVERHEAL_A_%02d", i+1)
+		row, ok := source.SkillByCodename(code)
+		if !ok {
+			t.Fatalf("missing %s", code)
+		}
+		want := SkillFixedDamage{Present: true, Amount: amount}
+		if row.FixedDamage != want || row.OffenseRefusal != "" || !row.DirectOffensePinned || !row.OffensiveStagePinned {
+			t.Fatalf("%s: fixed=%+v refusal=%q direct=%v", code, row.FixedDamage, row.OffenseRefusal, row.DirectOffensePinned)
+		}
+		if row.Attack.Present || row.Attack.ImpactCount != 1 || !row.TargetRequired || !row.Targets.EnemyM ||
+			row.ActionCastingTimeMs == 0 || row.StatusCast || row.AreaBurst || row.OffensiveArea != (SkillOffensiveArea{}) {
+			t.Fatalf("%s: attack=%+v target=%v cast=%d", code, row.Attack, row.TargetRequired, row.ActionCastingTimeMs)
+		}
+		if plan := source.ExecutionPlan(row.ID); plan.Kind() != SkillExecutionOffense {
+			t.Fatalf("%s: execution plan %v", code, plan.Kind())
+		}
+	}
+}
+
+/*
+================
+TestShippedGlutHealingRowsCompileAsAreaFixedDamage
+
+The 4 Glut Healing tiers: Over Healing's fixed hit (4780 .. 8422) with
+efr(1,2,50,3,35,24), up to three victims around the target, each one
+after the first at 35 percent less.
+================
+*/
+func TestShippedGlutHealingRowsCompileAsAreaFixedDamage(t *testing.T) {
+	source := sharedShippedSkills(t)
+	area := SkillOffensiveArea{Shape: 2, Radius: 50, MaxTargets: 3, ReductionPercent: 35, Select: 24}
+	for i, amount := range []uint32{4780, 5802, 7006, 8422} {
+		code := fmt.Sprintf("SKILL_EU_CLERIC_BATTLEA_OVERHEAL_B_%02d", i+1)
+		row, ok := source.SkillByCodename(code)
+		if !ok {
+			t.Fatalf("missing %s", code)
+		}
+		if row.FixedDamage != (SkillFixedDamage{Present: true, Amount: amount}) || row.OffensiveArea != area ||
+			row.OffenseRefusal != "" || !row.DirectOffensePinned || row.Attack.ImpactCount != 1 || row.ActionCastingTimeMs == 0 {
+			t.Fatalf("%s: fixed=%+v area=%+v refusal=%q", code, row.FixedDamage, row.OffensiveArea, row.OffenseRefusal)
+		}
+		if plan := source.ExecutionPlan(row.ID); plan.Kind() != SkillExecutionOffense {
+			t.Fatalf("%s: execution plan %v", code, plan.Kind())
+		}
+	}
+}
+
+/*
+================
 fixedDamageFields
 
 A synthetic instant enemy-targeted row (Required, Animal, Enemy_M,
@@ -88,18 +148,20 @@ func fixedDamageFields(program ...int64) []string {
 ================
 TestFixedDamageRefusesNearMissShapes
 
-Only the complete pdmg + dmgt program is admitted: a missing pdmg or
-dmgt, a zero amount, an HP share (word 0, no owner), a share above the
-whole damage, an extra instruction, a friendly target or a casting time
-leave the row refused.
+Only a complete pdmg program is admitted: a missing pdmg, a zero amount,
+an HP share (word 0, no owner), a share above the whole damage, a cm with
+more than one result, an extra instruction, a friendly target or an
+unpinned casting time leave the row refused. A prepared row and a row
+without dmgt (Over Healing) are admitted, the latter draining nothing.
 ================
 */
 func TestFixedDamageRefusesNearMissShapes(t *testing.T) {
 	const (
 		ko   = 0x6b6f
 		bdmd = 0x42444d44
+		cm   = skillMultiImpactTag
 	)
-	base := SkillRow{TimingPinned: true, ActionRangePinned: true, ActionRange: 150, ActionDurationMs: 2000,
+	base := SkillRow{TimingPinned: true, ActionCastingTimePinned: true, ActionRangePinned: true, ActionRange: 150, ActionDurationMs: 2000,
 		Consumption: SkillConsumption{MP: 29, Pinned: true}, TargetRequired: true, Targets: SkillTargets{Required: true, Animal: true, EnemyM: true, EnemyP: true}}
 	friendly := fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100)
 	friendly[27], friendly[28] = "1", "1"
@@ -108,16 +170,24 @@ func TestFixedDamageRefusesNearMissShapes(t *testing.T) {
 		fields []string
 		row    SkillRow
 		want   bool
+		drain  uint32
 	}{
-		{"tuning", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100, tagGetv, bdmd), base, true},
-		{"no-transfer", fixedDamageFields(tagFixedDamage, 130, tagGetv, bdmd), base, false},
-		{"no-damage", fixedDamageFields(tagDamageTransfer, 0, 100), base, false},
-		{"zero-amount", fixedDamageFields(tagFixedDamage, 0, tagDamageTransfer, 0, 100), base, false},
-		{"hp-share", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 50, 100), base, false},
-		{"above-whole", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, maxDamageTransferPercent+1), base, false},
-		{"knockdown", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100, ko, 1, 50), base, false},
-		{"friendly", friendly, base, false},
-		{"casting-time", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100), func() SkillRow { r := base; r.ActionCastingTimeMs = 1000; return r }(), false},
+		{"tuning", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100, tagGetv, bdmd), base, true, 100},
+		{"no-transfer", fixedDamageFields(tagFixedDamage, 130, tagGetv, bdmd), base, true, 0},
+		{"one-result", fixedDamageFields(tagFixedDamage, 130, cm, 2, 1), base, true, 0},
+		{"area", fixedDamageFields(tagFixedDamage, 130, cm, 2, 1, tagEfr, 1, 2, 50, 3, 35, 24), base, true, 0},
+		{"area-drain", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100, tagEfr, 1, 2, 50, 3, 35, 24), base, false, 0},
+		{"area-kind", fixedDamageFields(tagFixedDamage, 130, tagEfr, 2, 2, 50, 3, 35, 24), base, false, 0},
+		{"two-results", fixedDamageFields(tagFixedDamage, 130, cm, 2, 2), base, false, 0},
+		{"cm-kind", fixedDamageFields(tagFixedDamage, 130, cm, 1, 1), base, false, 0},
+		{"no-damage", fixedDamageFields(tagDamageTransfer, 0, 100), base, false, 0},
+		{"zero-amount", fixedDamageFields(tagFixedDamage, 0, tagDamageTransfer, 0, 100), base, false, 0},
+		{"hp-share", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 50, 100), base, false, 0},
+		{"above-whole", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, maxDamageTransferPercent+1), base, false, 0},
+		{"knockdown", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100, ko, 1, 50), base, false, 0},
+		{"friendly", friendly, base, false, 0},
+		{"casting-time", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100), func() SkillRow { r := base; r.ActionCastingTimeMs = 1000; return r }(), true, 100},
+		{"casting-unpinned", fixedDamageFields(tagFixedDamage, 130, tagDamageTransfer, 0, 100), func() SkillRow { r := base; r.ActionCastingTimePinned = false; return r }(), false, 0},
 	}
 	for _, tc := range cases {
 		row := tc.row
@@ -125,7 +195,7 @@ func TestFixedDamageRefusesNearMissShapes(t *testing.T) {
 		if row.FixedDamage.Present != tc.want || (row.OffenseRefusal == "") != tc.want || row.DirectOffensePinned != tc.want {
 			t.Fatalf("%s: fixed=%+v refusal=%q direct=%v", tc.name, row.FixedDamage, row.OffenseRefusal, row.DirectOffensePinned)
 		}
-		if tc.want && row.FixedDamage != (SkillFixedDamage{Present: true, Amount: 130, MPPercent: 100}) {
+		if tc.want && row.FixedDamage != (SkillFixedDamage{Present: true, Amount: 130, MPPercent: tc.drain}) {
 			t.Fatalf("%s: fixed=%+v", tc.name, row.FixedDamage)
 		}
 	}

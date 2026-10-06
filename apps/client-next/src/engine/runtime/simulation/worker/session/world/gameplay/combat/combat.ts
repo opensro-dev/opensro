@@ -220,9 +220,12 @@ export function createCombat(
 		// Validate/allocate before HP, motion or presentation side effects.
 		applyPhase( cast.token, cast.caster, phase );
 		if ( phase.travel ) guidedArrivals.set( cast.token, null );
+		// 8DF18C refuses ReleaseStageWait while OnGuidedTrajectoryTick owns
+		// the skill, including a trajectory installed by this same payload.
+		const release = shotAtMs !== undefined && !guidedArrivals.has( cast.token );
 		casts.set(
 			cast.token,
-			shotAtMs === undefined ? continued : { ...continued, shotAtMs: cast.shotAtMs ?? shotAtMs }
+			release ? { ...continued, shotAtMs: cast.shotAtMs ?? shotAtMs } : continued
 		);
 	}
 	/*

@@ -255,3 +255,29 @@ func (l *Lane) WarStart(nowMs int64) time.Time {
 	start, _, _ := l.config.Schedules["SiegeProgressing"].Window(time.UnixMilli(nowMs).In(l.config.Location))
 	return start
 }
+
+/*
+================
+WarDates
+
+The manager shows the previous and current/next war, not a start/end pair
+(v1.150 CIF fortress manager controls 0x208 and 0x209). Derive both from
+the same schedule that drives the war; no second timetable is maintained.
+================
+*/
+func (l *Lane) WarDates(nowMs int64) (previous, next time.Time) {
+	next = l.WarStart(nowMs)
+	schedule := l.config.Schedules["SiegeProgressing"]
+	before := time.UnixMilli(nowMs).In(l.config.Location)
+	if !next.IsZero() {
+		before = next.Add(-time.Nanosecond)
+	}
+	day := time.Date(before.Year(), before.Month(), before.Day(), 0, 0, 0, 0, before.Location())
+	for i := 0; i < windowSearchDays; i++ {
+		candidate := day.AddDate(0, 0, -i).Add(time.Duration(schedule.StartSecond) * time.Second)
+		if !candidate.After(before) && schedule.Active(candidate) {
+			return candidate, next
+		}
+	}
+	return time.Time{}, next
+}

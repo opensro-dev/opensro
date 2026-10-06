@@ -87,7 +87,7 @@ func (rt *Runtime) registerPlayerAttack(division string, caster, target *enterwo
 		}
 		return nil
 	}
-	if rt.hostilePlayerEquipment(caster, target) || target.PVPState() == 2 {
+	if rt.hostilePlayerEquipment(caster, target) || rt.guildsAtWar(division, caster, target) || target.PVPState() == 2 {
 		return nil
 	}
 	return rt.refreshPlayerAggression(division, caster, target, now)

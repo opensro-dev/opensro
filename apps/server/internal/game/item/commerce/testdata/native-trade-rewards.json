@@ -1,0 +1,1029 @@
+{
+	"generator": "scripts/tools/capture_trade_rewards.py",
+	"sourceSHA256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
+	"precision": 53,
+	"weekly": [
+		{
+			"current": -2147483648,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": -2147483648,
+			"delta": -2000000000,
+			"value": 0
+		},
+		{
+			"current": -2147483648,
+			"delta": -101,
+			"value": 0
+		},
+		{
+			"current": -2147483648,
+			"delta": -1,
+			"value": 0
+		},
+		{
+			"current": -2147483648,
+			"delta": 0,
+			"value": 0
+		},
+		{
+			"current": -2147483648,
+			"delta": 1,
+			"value": 0
+		},
+		{
+			"current": -2147483648,
+			"delta": 99,
+			"value": 0
+		},
+		{
+			"current": -2147483648,
+			"delta": 2147483647,
+			"value": 0
+		},
+		{
+			"current": -1,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": -1,
+			"delta": -2000000000,
+			"value": 0
+		},
+		{
+			"current": -1,
+			"delta": -101,
+			"value": 0
+		},
+		{
+			"current": -1,
+			"delta": -1,
+			"value": 0
+		},
+		{
+			"current": -1,
+			"delta": 0,
+			"value": 0
+		},
+		{
+			"current": -1,
+			"delta": 1,
+			"value": 0
+		},
+		{
+			"current": -1,
+			"delta": 99,
+			"value": 98
+		},
+		{
+			"current": -1,
+			"delta": 2147483647,
+			"value": -3
+		},
+		{
+			"current": 0,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": 0,
+			"delta": -2000000000,
+			"value": 0
+		},
+		{
+			"current": 0,
+			"delta": -101,
+			"value": 0
+		},
+		{
+			"current": 0,
+			"delta": -1,
+			"value": 0
+		},
+		{
+			"current": 0,
+			"delta": 0,
+			"value": 0
+		},
+		{
+			"current": 0,
+			"delta": 1,
+			"value": 1
+		},
+		{
+			"current": 0,
+			"delta": 99,
+			"value": 99
+		},
+		{
+			"current": 0,
+			"delta": 2147483647,
+			"value": -2
+		},
+		{
+			"current": 1,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": 1,
+			"delta": -2000000000,
+			"value": 0
+		},
+		{
+			"current": 1,
+			"delta": -101,
+			"value": 0
+		},
+		{
+			"current": 1,
+			"delta": -1,
+			"value": 0
+		},
+		{
+			"current": 1,
+			"delta": 0,
+			"value": 1
+		},
+		{
+			"current": 1,
+			"delta": 1,
+			"value": 2
+		},
+		{
+			"current": 1,
+			"delta": 99,
+			"value": 100
+		},
+		{
+			"current": 1,
+			"delta": 2147483647,
+			"value": -1
+		},
+		{
+			"current": 100,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": 100,
+			"delta": -2000000000,
+			"value": 0
+		},
+		{
+			"current": 100,
+			"delta": -101,
+			"value": 0
+		},
+		{
+			"current": 100,
+			"delta": -1,
+			"value": 100
+		},
+		{
+			"current": 100,
+			"delta": 0,
+			"value": 100
+		},
+		{
+			"current": 100,
+			"delta": 1,
+			"value": 101
+		},
+		{
+			"current": 100,
+			"delta": 99,
+			"value": 199
+		},
+		{
+			"current": 100,
+			"delta": 2147483647,
+			"value": 98
+		},
+		{
+			"current": 1999999999,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": 1999999999,
+			"delta": -2000000000,
+			"value": 0
+		},
+		{
+			"current": 1999999999,
+			"delta": -101,
+			"value": 1999999999
+		},
+		{
+			"current": 1999999999,
+			"delta": -1,
+			"value": 1999999999
+		},
+		{
+			"current": 1999999999,
+			"delta": 0,
+			"value": 1999999999
+		},
+		{
+			"current": 1999999999,
+			"delta": 1,
+			"value": 2000000000
+		},
+		{
+			"current": 1999999999,
+			"delta": 99,
+			"value": 2000000197
+		},
+		{
+			"current": 1999999999,
+			"delta": 2147483647,
+			"value": 1999999997
+		},
+		{
+			"current": 2000000000,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": 2000000000,
+			"delta": -2000000000,
+			"value": 0
+		},
+		{
+			"current": 2000000000,
+			"delta": -101,
+			"value": 2000000000
+		},
+		{
+			"current": 2000000000,
+			"delta": -1,
+			"value": 2000000000
+		},
+		{
+			"current": 2000000000,
+			"delta": 0,
+			"value": 2000000000
+		},
+		{
+			"current": 2000000000,
+			"delta": 1,
+			"value": 2000000002
+		},
+		{
+			"current": 2000000000,
+			"delta": 99,
+			"value": 2000000198
+		},
+		{
+			"current": 2000000000,
+			"delta": 2147483647,
+			"value": 1999999998
+		},
+		{
+			"current": 2000000001,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": 2000000001,
+			"delta": -2000000000,
+			"value": 2000000000
+		},
+		{
+			"current": 2000000001,
+			"delta": -101,
+			"value": 2000000000
+		},
+		{
+			"current": 2000000001,
+			"delta": -1,
+			"value": 2000000000
+		},
+		{
+			"current": 2000000001,
+			"delta": 0,
+			"value": 2000000000
+		},
+		{
+			"current": 2000000001,
+			"delta": 1,
+			"value": 2000000003
+		},
+		{
+			"current": 2000000001,
+			"delta": 99,
+			"value": 2000000199
+		},
+		{
+			"current": 2000000001,
+			"delta": 2147483647,
+			"value": 1999999999
+		},
+		{
+			"current": 2147483647,
+			"delta": -2147483648,
+			"value": 0
+		},
+		{
+			"current": 2147483647,
+			"delta": -2000000000,
+			"value": 2000000000
+		},
+		{
+			"current": 2147483647,
+			"delta": -101,
+			"value": 2000000000
+		},
+		{
+			"current": 2147483647,
+			"delta": -1,
+			"value": 2000000000
+		},
+		{
+			"current": 2147483647,
+			"delta": 0,
+			"value": 2000000000
+		},
+		{
+			"current": 2147483647,
+			"delta": 1,
+			"value": -2147483647
+		},
+		{
+			"current": 2147483647,
+			"delta": 99,
+			"value": -2147483451
+		},
+		{
+			"current": 2147483647,
+			"delta": 2147483647,
+			"value": 2147483645
+		}
+	],
+	"experience": [
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": -1,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 0,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 2,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 3,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 13,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 101,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 303,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 10001,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 16777217,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": true,
+			"profit": 2000000000,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": -1,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 0,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 2,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 3,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 13,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 101,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 303,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 10001,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 16777217,
+			"value": 0
+		},
+		{
+			"job": 0,
+			"oneStar": false,
+			"profit": 2000000000,
+			"value": 0
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": -1,
+			"value": 1
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 0,
+			"value": 1
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 2,
+			"value": 1
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 3,
+			"value": 2
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 13,
+			"value": 10
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 101,
+			"value": 80
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 303,
+			"value": 242
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 10001,
+			"value": 8000
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 16777217,
+			"value": 13421774
+		},
+		{
+			"job": 1,
+			"oneStar": true,
+			"profit": 2000000000,
+			"value": 1600000000
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": -1,
+			"value": 1
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 0,
+			"value": 1
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 2,
+			"value": 1
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 3,
+			"value": 1
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 13,
+			"value": 6
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 101,
+			"value": 50
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 303,
+			"value": 151
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 10001,
+			"value": 5000
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 16777217,
+			"value": 8388608
+		},
+		{
+			"job": 1,
+			"oneStar": false,
+			"profit": 2000000000,
+			"value": 1000000000
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": -1,
+			"value": 1
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 0,
+			"value": 1
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 2,
+			"value": 0
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 3,
+			"value": 1
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 13,
+			"value": 5
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 101,
+			"value": 40
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 303,
+			"value": 121
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 10001,
+			"value": 4000
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 16777217,
+			"value": 6710887
+		},
+		{
+			"job": 2,
+			"oneStar": true,
+			"profit": 2000000000,
+			"value": 800000000
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": -1,
+			"value": 1
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 0,
+			"value": 1
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 2,
+			"value": 0
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 3,
+			"value": 1
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 13,
+			"value": 5
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 101,
+			"value": 40
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 303,
+			"value": 121
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 10001,
+			"value": 4000
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 16777217,
+			"value": 6710887
+		},
+		{
+			"job": 2,
+			"oneStar": false,
+			"profit": 2000000000,
+			"value": 800000000
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": -1,
+			"value": 1
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 0,
+			"value": 1
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 1,
+			"value": 1
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 2,
+			"value": 2
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 3,
+			"value": 3
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 13,
+			"value": 13
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 101,
+			"value": 101
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 303,
+			"value": 303
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 10001,
+			"value": 10001
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 16777217,
+			"value": 16777216
+		},
+		{
+			"job": 3,
+			"oneStar": true,
+			"profit": 2000000000,
+			"value": 2000000000
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": -1,
+			"value": 1
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 0,
+			"value": 1
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 1,
+			"value": 1
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 2,
+			"value": 2
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 3,
+			"value": 3
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 13,
+			"value": 13
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 101,
+			"value": 101
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 303,
+			"value": 303
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 10001,
+			"value": 10001
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 16777217,
+			"value": 16777216
+		},
+		{
+			"job": 3,
+			"oneStar": false,
+			"profit": 2000000000,
+			"value": 2000000000
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": -1,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 0,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 2,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 3,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 13,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 101,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 303,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 10001,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 16777217,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": true,
+			"profit": 2000000000,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": -1,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 0,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 1,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 2,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 3,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 13,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 101,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 303,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 10001,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 16777217,
+			"value": 0
+		},
+		{
+			"job": 4,
+			"oneStar": false,
+			"profit": 2000000000,
+			"value": 0
+		}
+	]
+}

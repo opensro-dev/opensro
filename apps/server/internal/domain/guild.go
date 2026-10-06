@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+guild.go - guild
+
+===========================================================================
+*/
 package domain
 
 // GuildRecord is one persisted guild row: the guild-level half of the
@@ -119,9 +126,15 @@ const (
 	GuildRefusalNoVote
 	GuildRefusalNotCandidate
 	GuildRefusalVoteInProgress
+	GuildRefusalWarActive
 )
 
 // Refused reports whether a command made no change.
+/*
+================
+Refused
+================
+*/
 func (refusal GuildRefusal) Refused() bool {
 	return refusal != GuildRefusalNone
 }

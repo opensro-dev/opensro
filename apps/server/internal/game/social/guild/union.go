@@ -42,6 +42,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/transport"
 )
@@ -78,10 +79,11 @@ UnionRuntime
 ================
 */
 type UnionRuntime struct {
-	deps     Dependencies
-	presence Presence
-	unions   *union.Authority
-	wars     WarStatus
+	deps      Dependencies
+	presence  Presence
+	unions    *union.Authority
+	wars      WarStatus
+	GuildWars *guildwar.Authority
 
 	mu      sync.Mutex
 	pending map[string]pendingUnion
@@ -181,7 +183,7 @@ func (r *UnionRuntime) inWar(divisionID string, guildIDs ...int64) bool {
 inviteRefusal
 
 GuildManager_RequestUnionInvite 5C6550 in its order. The hostile-guild
-refusal (0x4C42) has no guild war to test yet.
+refusal (0x4C42) reads the same enemy owner as combat.
 ================
 */
 func (r *UnionRuntime) inviteRefusal(divisionID string, actor *enterworld.Character, targetGid uint32) (pendingUnion, *enterworld.Character, uint8) {
@@ -217,6 +219,9 @@ func (r *UnionRuntime) inviteRefusal(divisionID string, actor *enterworld.Charac
 	}
 	if member, ok := memberByCharID(targetMembers, target.ID); !ok || member.Grade != 0 {
 		return pendingUnion{}, nil, unionErrTargetNotMaster
+	}
+	if _, hostile := r.GuildWars.Find(divisionID, guild.ID, targetGuild.ID); hostile {
+		return pendingUnion{}, nil, 0x42
 	}
 	// 4EA0D0: a proposal the transaction manager cannot queue answers 3.
 	if r.HasPendingInvite(divisionID, target.Name) || r.PeerPending != nil && r.PeerPending(divisionID, target.Name) {
@@ -347,6 +352,10 @@ func (r *UnionRuntime) ApplyConsent(_ *transport.Session, divisionID string, act
 	}
 	if r.inWar(divisionID, leader.ID, joiner.ID) {
 		_ = inviterSession.Send(OpUnionInviteResult, encodeUnionResult(unionErrInviteDuringWar))
+		return
+	}
+	if _, hostile := r.GuildWars.Find(divisionID, leader.ID, joiner.ID); hostile {
+		_ = inviterSession.Send(OpUnionInviteResult, encodeUnionResult(0x42))
 		return
 	}
 	_, founded := r.unions.Of(divisionID, leader.ID)

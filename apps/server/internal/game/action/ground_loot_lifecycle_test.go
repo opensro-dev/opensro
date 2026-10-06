@@ -101,7 +101,8 @@ func makeLootPublication(t *testing.T, lane string) lootPublication {
 		result := rt.HandleTargetInteract(testDivision, actor, request)
 		published.actorFrames, published.peerFrames = result.Frames, result.Broadcast
 		if lane == "projectile" {
-			batches = rt.advanceProjectileCasts(clock.NowMs() + 301)
+			skill, _ := rt.deps.SkillData().SkillByID(skillID)
+			batches = rt.advanceProjectileCasts(clock.NowMs() + int64(skill.ActionCastingTimeMs) + 1)
 			published.actorFrames, published.peerFrames = nil, nil
 		}
 		if lane == "persistent" {

@@ -185,11 +185,13 @@ func TestPartyRecoveryRowsAreAdmittedByCompleteProgram(t *testing.T) {
 		reverse.Abnormal.ResuMaxLevel != 60 || reverse.Heal.HP != 763 || reverse.Heal.MP != 763 {
 		t.Fatalf("group reverse %+v %+v %+v", area, reverse.Abnormal, reverse.Heal)
 	}
-	for _, name := range []string{"SKILL_EU_CLERIC_HEALA_DIVIDE_A_01", "SKILL_EU_CLERIC_HEALA_TARGET_A_01"} {
-		row, ok := source.SkillByCodename(name)
-		if !ok || row.Recovery != (SkillRecovery{}) {
-			t.Fatalf("%s admitted as recovery %+v", name, row.Recovery)
-		}
+	// Healing Division is a lowest-ratio heal (skillhealingdivision_test.go),
+	// never a party-vector heal.
+	if row, ok := source.SkillByCodename("SKILL_EU_CLERIC_HEALA_DIVIDE_A_01"); !ok || row.Recovery != (SkillRecovery{LowestHealPinned: true}) {
+		t.Fatalf("Healing Division admitted as recovery %+v", row.Recovery)
+	}
+	if row, ok := source.SkillByCodename("SKILL_EU_CLERIC_HEALA_TARGET_A_01"); !ok || row.Recovery != (SkillRecovery{}) {
+		t.Fatalf("SKILL_EU_CLERIC_HEALA_TARGET_A_01 admitted as recovery %+v", row.Recovery)
 	}
 }
 

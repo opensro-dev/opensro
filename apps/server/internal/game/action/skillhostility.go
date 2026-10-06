@@ -49,10 +49,22 @@ Both damaging hits and taunts share link transfer and live target resolution.
 ================
 */
 func (rt *Runtime) commitAggression(division string, target uint32, event simulation.HostilityEvent, now int64) {
-	attacker, damage, aggression := event.Attacker, event.Damage, uint32(event.Aggression)
-	if damage == 0 && aggression == 0 {
+	if event.Damage == 0 && event.Aggression == 0 {
 		return
 	}
+	rt.dispatchAggression(division, target, event, now)
+}
+
+/*
+================
+dispatchAggression
+
+The healing caller dispatches even when halving a nonzero heal yields zero
+threat (5A0752..5A07A6). Keep that event and any linked source in the ledger.
+================
+*/
+func (rt *Runtime) dispatchAggression(division string, target uint32, event simulation.HostilityEvent, now int64) {
+	attacker, damage, aggression := event.Attacker, event.Damage, uint32(event.Aggression)
 	var events []simulation.HostilityEvent
 	if c := rt.findCharacterByGid(division, attacker); c != nil {
 		if link, ok := rt.effects.ThreatLink(division, c.Name, now); ok {

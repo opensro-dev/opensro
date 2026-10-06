@@ -146,6 +146,11 @@ func shippedTextdataDir(t *testing.T) string {
 
 // e2eServer is one live composition: real store, real transport, the
 // server.go deps wiring for the bootstrap + progression lanes.
+/*
+================
+e2eServer
+================
+*/
 type e2eServer struct {
 	srv       *transport.Server
 	authority *store.Store
@@ -230,6 +235,11 @@ func startProgressionServer(t *testing.T, dir string, seed *enterworld.Character
 	return e2eServer{srv: srv, authority: authority}
 }
 
+/*
+================
+shutdownServer
+================
+*/
 func shutdownServer(t *testing.T, srv *transport.Server) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -239,6 +249,11 @@ func shutdownServer(t *testing.T, srv *transport.Server) {
 
 // --- WebSocket client (the production WebSocket protocol) -----------------
 
+/*
+================
+dialProgressionWS
+================
+*/
 func dialProgressionWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	t.Helper()
 	url := fmt.Sprintf("ws://%s%s", srv.WSAddr(), transport.PathWS)
@@ -250,6 +265,11 @@ func dialProgressionWS(t *testing.T, srv *transport.Server) *websocket.Conn {
 	return c
 }
 
+/*
+================
+sendFrame
+================
+*/
 func sendFrame(t *testing.T, c *websocket.Conn, opcode uint16, payload []byte) {
 	t.Helper()
 	f := transport.Frame{Opcode: opcode, Payload: payload}
@@ -308,6 +328,11 @@ func expectFrame(t *testing.T, c *websocket.Conn, opcode uint16, what string) []
 	return f.Payload
 }
 
+/*
+================
+helloProgressionWS
+================
+*/
 func helloProgressionWS(t *testing.T, c *websocket.Conn) {
 	t.Helper()
 	sendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{AdmissionToken: []byte("test-admission")}))
@@ -346,6 +371,11 @@ type charData struct {
 	TrackedQuests   []uint32
 }
 
+/*
+================
+parseCharData
+================
+*/
 func parseCharData(t *testing.T, payload []byte) charData {
 	t.Helper()
 	r := wire.NewReader(payload)
@@ -558,6 +588,11 @@ func enterWorld(t *testing.T, c *websocket.Conn) (charData, blobCharacter) {
 
 // enterWorldAs is enterWorld for an explicit character name (the levelling
 // e2e binds its own level-1 character).
+/*
+================
+enterWorldAs
+================
+*/
 func enterWorldAs(t *testing.T, c *websocket.Conn, charName string) (charData, blobCharacter) {
 	t.Helper()
 	sendFrame(t, c, transport.OpEnterWorld, transport.EncodeEnterWorld(
@@ -656,6 +691,11 @@ func assertSkillPointsRefresh(t *testing.T, payload []byte, wantSP uint32, what 
 	}
 }
 
+/*
+================
+assertBytes
+================
+*/
 func assertBytes(t *testing.T, got []byte, want []byte, what string) {
 	t.Helper()
 	if len(got) != len(want) {
@@ -668,18 +708,38 @@ func assertBytes(t *testing.T, got []byte, want []byte, what string) {
 	}
 }
 
+/*
+================
+masteryRequest
+================
+*/
 func masteryRequest(masteryID uint32, amount uint8) []byte {
 	return wire.NewWriter(5).U32(masteryID).U8(amount).Payload()
 }
 
+/*
+================
+skillRequest
+================
+*/
 func skillRequest(skillID uint32) []byte {
 	return wire.NewWriter(4).U32(skillID).Payload()
 }
 
+/*
+================
+e2eInt64
+================
+*/
 func e2eInt64(v int64) *int64 { return &v }
 
 // --- the test ----------------------------------------------------------------
 
+/*
+================
+TestProgressionPlaneEndToEndOverWire
+================
+*/
 func TestProgressionPlaneEndToEndOverWire(t *testing.T) {
 	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "authority")
@@ -812,13 +872,13 @@ func TestProgressionPlaneEndToEndOverWire(t *testing.T) {
 	// success-ack assert (@0x0075bb71) demands instead of a second [01].
 	sendFrame(t, conn, wire.OpSkillLearnRequest, skillRequest(skillSmashA1ID))
 	assertBytes(t, expectFrame(t, conn, wire.OpSkillLearnResponse, "duplicate learn refusal"),
-		[]byte{wire.ResultError, wire.ErrCodeSkillLearnRefused}, "duplicate learn refusal")
+		[]byte{wire.ResultError, 0x0c}, "duplicate learn refusal")
 
 	// PUNCH is a required China base skill, so learning it again refuses
 	// as a duplicate and cannot move the pool.
 	sendFrame(t, conn, wire.OpSkillLearnRequest, skillRequest(skillPunchID))
 	assertBytes(t, expectFrame(t, conn, wire.OpSkillLearnResponse, "base-skill duplicate refusal"),
-		[]byte{wire.ResultError, wire.ErrCodeSkillLearnRefused}, "base-skill duplicate refusal")
+		[]byte{wire.ResultError, 0x09}, "base-skill duplicate refusal")
 
 	// A non-mutating FIFO barrier surfaces any stray response without
 	// replaying the one-shot world-admission lifecycle.

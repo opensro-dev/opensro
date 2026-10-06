@@ -140,7 +140,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if count == 0 {
 				count = 1
 			}
-			grant, fault := inv.GrantStack(inventory.Item{RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon)}, rt.maxStackFor(item.TypeFlags, item.Codename))
+			grant, fault := inv.GrantStack(inventory.Item{TradeOwner: item.TradeOwner, RecordID: item.RecordID, RefObjID: item.RefObjID, Codename: item.Codename, TypeFlags: item.TypeFlags, Quantity: count, Plus: item.Plus, VarianceBits: item.VarianceBits, Durability: item.Durability, MagicOptions: item.MagicOptions, TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon)}, rt.maxStackFor(item.TypeFlags, item.Codename))
 			if fault != nil {
 				result = failureResult(fault.Code)
 				return false
@@ -159,7 +159,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if !ok {
 				return false
 			}
-			body := wire.ItemBody{TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon)}
+			body := wire.ItemBody{TradeOwner: granted.TradeOwner, TypeFlags: granted.TypeFlags, RefObjID: granted.RefObjID, Quantity: granted.Quantity, Plus: granted.Plus, VarianceBits: granted.VarianceBits, Durability: granted.Durability, MagicOptions: granted.MagicOptions, TransformRefObjID: granted.TransformRefObjID, Summon: domain.CloneCOS(granted.Summon)}
 			plain := wire.EncodePickupItemResult(grant.DestSlot, body)
 			receipt = wire.NewWriter(len(plain) + 4).U8(1).U8(wire.MoveTypeCosPickup).U32(q.CosGID).Bytes(plain[2:]).Payload()
 			remainder = grant.GroundRemainder

@@ -160,10 +160,9 @@ type directionLeg struct {
 ================
 constrainDirectionLeg
 
-The direction twin of ConstrainMovementFrom. A destination click is refused
-when its endpoint is not walkable; a direction leg has no chosen endpoint,
-so the order flips: the clip finds the first blocking contact along the
-full leg (the native move test that stops nav state 2), and the path guard
+The direction twin of ConstrainMovementFrom. The clip finds the first
+blocking contact along the full leg (the native move test that stops nav
+state 2), and the path guard
 then inspects only the chord the walker will really cover. A chord the
 guard still refuses (no walkable coverage ahead) leaves the walker standing
 where it is, blocked.

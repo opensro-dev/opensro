@@ -265,13 +265,27 @@ func TestTemptationTurnsAMonsterOnItsNeighbour(t *testing.T) {
 ================
 TestTemptationLeavesAChampionAlone
 
-Owner's rule: a champion is not a regular monster. Confusion never lands
+58D2F2: a champion has nonzero base grade. The press answers the
+monster-grade refusal (0x3033) and costs nothing, Confusion never lands
 on it and it fights nobody.
 ================
 */
 func TestTemptationLeavesAChampionAlone(t *testing.T) {
 	f := newTemptationFight(t, temptationChampion)
-	f.castTemptation(t)
+	skill := shippedOffense(t, temptationCode)
+	equipStatusCastSkill(f.rt, f.c, skill, confusionTag, bardHarpKind)
+	f.c.Intellect = testInt64(2000)
+	f.c.CurrentMP = testInt64(100000)
+	_, _, _, mp := f.rt.playerKeeperVitals(testDivision, f.c)
+	out := f.rt.HandleTargetInteract(testDivision, f.c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: f.a.Gid}.Encode())
+	refused, ok := findFrame(out.Frames, wire.OpSkillCastResult)
+	if !ok || len(refused.Payload) != 2 || refused.Payload[0] != 2 || refused.Payload[1] != 0x33 {
+		t.Fatalf("Temptation on a champion was not refused for its base grade: %+v", out)
+	}
+	if _, _, _, after := f.rt.playerKeeperVitals(testDivision, f.c); after != mp {
+		t.Fatalf("the refused cast cost MP: %d -> %d", mp, after)
+	}
+	f.rt.advanceMonsterAbnormals(f.clock.NowMs())
 	champion, _ := f.rt.Monsters.Get(testDivision, f.a.Gid)
 	if champion.Rarity() != temptationChampion || champion.Abnormal != nil && champion.Abnormal.Has(abnormal.Confusion) {
 		t.Fatalf("Confusion landed on a champion (rarity %d)", champion.Rarity())
@@ -282,5 +296,28 @@ func TestTemptationLeavesAChampionAlone(t *testing.T) {
 	}
 	if mover, _ := f.rt.Monsters.Mover(testDivision, f.a.Gid); mover.TargetGID() == f.b.Gid {
 		t.Fatal("the champion targets its neighbour")
+	}
+}
+
+/*
+================
+TestTemptationNativeGradeAdmission
+
+58D2F2 does not apply mcap's subsequent TID4 exclusions to ca.
+================
+*/
+func TestTemptationNativeGradeAdmission(t *testing.T) {
+	skill := shippedOffense(t, temptationCode)
+	for _, kind := range []uint8{1, 2, 3, 4} {
+		for _, rarity := range []uint8{0, 1, 3, 4, 0x10, 0x11} {
+			target := monster.Instance{Ref: monster.MonsterRef{TypeID4: kind}, Nest: monster.NestRow{HasRarityOverride: true, RarityOverride: rarity}}
+			want := uint16(0)
+			if rarity&0x0f != 0 {
+				want = 0x3033
+			}
+			if got := temptationTargetRefusal(skill, target); got != want {
+				t.Fatalf("TID4 %d rarity %x: %x want %x", kind, rarity, got, want)
+			}
+		}
 	}
 }

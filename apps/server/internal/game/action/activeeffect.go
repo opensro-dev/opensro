@@ -284,6 +284,10 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
 	}
+	if row.TimedEffect.Pinned && row.TimedEffect.Reat.Mask != 0 {
+		// 595542..59568F: a buff's reat, as a resistance passive's.
+		writes = append(writes, combat.StatusReductionWrites(row.TimedEffect.Reat)...)
+	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Defense {
 		stats, _, err := rt.playerCombatStats(divisionID, character)
 		if err != nil {

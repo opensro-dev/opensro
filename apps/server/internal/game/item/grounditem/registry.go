@@ -55,6 +55,7 @@ Item
 ================
 */
 type Item struct {
+	TradeOwner string
 	Summon     *domain.CharacterCOS
 	RecordID   uint64 // item record identity, separate from ground runtime Gid
 	Population Population

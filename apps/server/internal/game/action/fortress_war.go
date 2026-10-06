@@ -12,7 +12,7 @@ fortress keeps its occupying guild, which is sent its fortress row
 fortress is unoccupied, is teleported to the fortress's town gate
 (CGameWorld_Siege_GetFortressTeleportPos 601690). At the end (mode 2)
 only the guilds the fortress keeps after the war stay: its occupying
-guild, as this server has no guild unions.
+guild and the unions retained by the fortress.
 
 ===========================================================================
 */
@@ -41,6 +41,7 @@ type fortressPhase struct {
 	division string
 	mode     uint8
 	dueMs    int64
+	endKeep  map[uint32]map[int64]bool
 }
 
 /*
@@ -59,6 +60,7 @@ func (rt *Runtime) FortressWarChanged(division string, nowMs int64, active bool)
 		phase.mode, phase.dueMs = fortressPhaseBegin, nowMs+fortressBeginDelayMs
 		rt.beginFortressWar(division)
 	} else {
+		phase.endKeep = rt.fortressEndGuilds(division)
 		out = rt.finishFortressWar(division, nowMs)
 	}
 	rt.fortressPhasesMu.Lock()
@@ -119,13 +121,23 @@ func (rt *Runtime) runFortressPhase(phase fortressPhase) {
 		}
 		world := instance.Pack(definition.ID, portalWorldLayer)
 		for _, c := range rt.fortressResidents(phase.division, world) {
-			if record.GuildID != 0 && c.GuildID != nil && *c.GuildID == record.GuildID {
+			if phase.mode == fortressPhaseEnd {
+				rt.retireFortressBattleRank(phase.division, c, fortressID, phase.dueMs)
+			}
+			keep := record.GuildID != 0 && c.GuildID != nil && *c.GuildID == record.GuildID
+			if phase.mode == fortressPhaseEnd && phase.endKeep != nil {
+				keep = c.GuildID != nil && phase.endKeep[fortressID][*c.GuildID]
+			}
+			if keep {
 				if phase.mode == fortressPhaseBegin && rt.FortressList != nil && rt.PushCharacterFrames != nil {
 					rt.PushCharacterFrames(phase.division, c.Name, []wire.Frame{{Opcode: opFortressWarState, Payload: rt.FortressList(record.GuildID)}})
 				}
 				continue
 			}
 			rt.relocateCharacter(phase.division, c, "fortress-war-expel", func() (travelPoint, bool) { return gate, true })
+		}
+		if phase.mode == fortressPhaseEnd {
+			rt.Fortresses.ReleaseBattleRecords(phase.division, fortressID)
 		}
 	}
 }
@@ -174,4 +186,34 @@ func (rt *Runtime) fortressTownGate(code string) (travelPoint, bool) {
 		}
 	}
 	return travelPoint{}, false
+}
+
+/*
+================
+fortressEndGuilds
+
+61EE70 builds the holder's side from the registered guilds and their
+alliance, plus the holder itself. 601170 mode two keeps this set before
+clearing registrations. An unregistered alliance member is expelled.
+================
+*/
+func (rt *Runtime) fortressEndGuilds(division string) map[uint32]map[int64]bool {
+	out := map[uint32]map[int64]bool{}
+	if rt.Fortresses == nil {
+		return out
+	}
+	for _, record := range rt.Fortresses.Records(division) {
+		holder := record.Holder()
+		kept := map[int64]bool{}
+		if holder != 0 {
+			kept[holder] = true
+			for guild := range record.Applicants {
+				if rt.fortressDefender(division, record, guild) {
+					kept[guild] = true
+				}
+			}
+		}
+		out[record.ID] = kept
+	}
+	return out
 }

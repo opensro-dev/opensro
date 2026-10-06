@@ -1,7 +1,15 @@
+/*
+===========================================================================
+
+persist_test.go - fortress authority persistence and failed-write behavior
+
+===========================================================================
+*/
 package fortress
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -20,6 +28,11 @@ type memoryFortressStore struct {
 	fail     bool
 }
 
+/*
+================
+FortressState
+================
+*/
 func (m *memoryFortressStore) FortressState(string) ([]domain.FortressRecord, []domain.FortressRequestRecord, error) {
 	var records []domain.FortressRecord
 	for _, r := range m.records {
@@ -32,6 +45,11 @@ func (m *memoryFortressStore) FortressState(string) ([]domain.FortressRecord, []
 	return records, requests, nil
 }
 
+/*
+================
+SaveFortress
+================
+*/
 func (m *memoryFortressStore) SaveFortress(_ string, record domain.FortressRecord) error {
 	if m.fail {
 		return errors.New("disk on fire")
@@ -40,6 +58,16 @@ func (m *memoryFortressStore) SaveFortress(_ string, record domain.FortressRecor
 	return nil
 }
 
+/*
+================
+SaveFortress
+================
+*/
+/*
+================
+SaveFortressRequest
+================
+*/
 func (m *memoryFortressStore) SaveFortressRequest(_ string, request domain.FortressRequestRecord, present bool) error {
 	if m.fail {
 		return errors.New("disk on fire")
@@ -52,10 +80,25 @@ func (m *memoryFortressStore) SaveFortressRequest(_ string, request domain.Fortr
 	return nil
 }
 
+/*
+================
+FortressStructures
+================
+*/
 func (m *memoryFortressStore) FortressStructures(string) ([]domain.FortressStructureRecord, error) {
 	return nil, nil
 }
 
+/*
+================
+SaveFortress
+================
+*/
+/*
+================
+SaveFortressStructure
+================
+*/
 func (m *memoryFortressStore) SaveFortressStructure(string, domain.FortressStructureRecord, bool) error {
 	return nil
 }
@@ -98,7 +141,7 @@ func TestFortressRowsSurviveARestart(t *testing.T) {
 		t.Fatalf("capture not saved: %+v", store.records[1])
 	}
 	a.FinishWar("a", 1)
-	if store.records[1] != (domain.FortressRecord{FortressID: 1, GuildID: 9}) || len(store.requests) != 0 {
+	if !reflect.DeepEqual(store.records[1], domain.FortressRecord{FortressID: 1, GuildID: 9}) || len(store.requests) != 0 {
 		t.Fatalf("war end saved %+v with requests %+v", store.records[1], store.requests)
 	}
 	stranger := &memoryFortressStore{records: map[uint32]domain.FortressRecord{4: {FortressID: 4}}}

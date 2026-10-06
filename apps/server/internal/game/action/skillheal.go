@@ -99,6 +99,21 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 }
 
 /*
+================
+skillHealShareAmounts
+
+594397..59441D scales the authored HP/MP flat words before 5A0850 applies
+percent bonuses, recipient recovery amplification and the full weapon term.
+The share does not reduce those later contributions independently.
+================
+*/
+func (rt *Runtime) skillHealShareAmounts(division string, recipient, caster *enterworld.Character, skill enterworld.SkillRow, percent uint32) (hp, mp int64, ok bool) {
+	skill.Heal.HP = uint32(crtFtol(float64(skill.Heal.HP) * (float64(int32(percent)) / 100)))
+	skill.Heal.MP = uint32(crtFtol(float64(skill.Heal.MP) * (float64(int32(percent)) / 100)))
+	return rt.skillHealAmounts(division, recipient, caster, skill, healCast)
+}
+
+/*
 ==================
 castHealBase
 

@@ -8,6 +8,7 @@ rosters, invitations and guild updates remain owned by social.ts.
 
 ===========================================================================
 */
+import { guildWarRequest, type GuildWarCommand } from "./guild-war";
 import type { WireFrame } from "@/engine/contracts/network";
 import { UNION_PROPOSAL, type SocialState } from "./social";
 import { unionRequest, type UnionCommand } from "./guild-union";
@@ -17,63 +18,81 @@ import { unionRequest, type UnionCommand } from "./guild-union";
 SocialCommand
 ================
 */
-export type SocialCommand = {
-	kind: "party-invite";
-	gid: number;
-	options: number;
-} | {
-	kind: "party-kick";
-	id: number;
-} | {
-	kind: "party-leave";
-} | {
-	kind: "social-consent";
-	accept: boolean;
-	automatic?: boolean;
-} | {
-	kind: "resurrection-consent";
-	accept: boolean;
-} | {
-	kind: "guild-create";
-	gid: number;
-	name: string;
-} | {
-	kind: "guild-invite";
-	gid: number;
-} | {
-	kind: "guild-kick";
-	name: string;
-} | {
-	kind: "guild-leave" | "guild-dissolve";
-	gid: number;
-} | {
-	kind: "guild-notice";
-	subject: string;
-	contents: string;
-} | {
-	kind: "guild-donate";
-	amount: number;
-} | {
-	kind: "guild-title";
-	id: number;
-	name: string;
-} | {
-	kind: "guild-role";
-	id: number;
-	role: number;
-} | {
-	kind: "guild-level-up" | "guild-compensation" | "guild-compensation-claim" | "guild-release";
-	gid: number;
-} | {
-	kind: "guild-master-leave";
-	gid: number;
-	id: number;
-} | {
-	kind: "guild-vote";
-	gid: number;
-	vote: number;
-	option: number;
-} | UnionCommand;
+export type SocialCommand =
+	| {
+		kind: "party-invite";
+		gid: number;
+		options: number;
+	}
+	| {
+		kind: "party-kick";
+		id: number;
+	}
+	| {
+		kind: "party-leave";
+	}
+	| {
+		kind: "social-consent";
+		accept: boolean;
+		automatic?: boolean;
+	}
+	| {
+		kind: "resurrection-consent";
+		accept: boolean;
+	}
+	| {
+		kind: "guild-create";
+		gid: number;
+		name: string;
+	}
+	| {
+		kind: "guild-invite";
+		gid: number;
+	}
+	| {
+		kind: "guild-kick";
+		name: string;
+	}
+	| {
+		kind: "guild-leave" | "guild-dissolve";
+		gid: number;
+	}
+	| {
+		kind: "guild-notice";
+		subject: string;
+		contents: string;
+	}
+	| {
+		kind: "guild-donate";
+		amount: number;
+	}
+	| {
+		kind: "guild-title";
+		id: number;
+		name: string;
+	}
+	| {
+		kind: "guild-role";
+		id: number;
+		role: number;
+	}
+	| {
+		kind: "guild-level-up" | "guild-compensation" | "guild-compensation-claim" | "guild-release";
+		gid: number;
+	}
+	| {
+		kind: "guild-master-leave";
+		gid: number;
+		id: number;
+	}
+	| {
+		kind: "guild-vote";
+		gid: number;
+		vote: number;
+		option: number;
+	}
+	| UnionCommand
+	| GuildWarCommand;
 
 /*
 ================
@@ -125,6 +144,9 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 	}
 	let opcode: number;
 	switch ( c.kind ) {
+		case "guild-war-declare":
+		case "guild-war-surrender":
+			return guildWarRequest( state, c );
 		case "party-invite":
 			if ( c.options & ~7 ) {
 				throw Error( "Invalid party options" );

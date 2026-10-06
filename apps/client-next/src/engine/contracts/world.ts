@@ -142,6 +142,7 @@ export interface EntityState {
 	readonly movementMode?: number;
 	readonly walkSpeed?: number;
 	readonly runSpeed?: number;
+	readonly animationRate?: number;
 }
 
 /*

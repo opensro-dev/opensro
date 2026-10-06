@@ -166,6 +166,8 @@ export type GameplayCommand =
 	// The fortress official (fortress.ts): the application window's status,
 	// then an application or withdrawal for one fortress.
 	| { readonly kind: "fortress-war-status"; readonly gid: number; }
+	| { readonly kind: "fortress-staff"; readonly gid: number; readonly fortress: number; readonly flag?: number; }
+	| { readonly kind: "fortress-schedule"; readonly gid: number; readonly fortress: number; }
 	| {
 		readonly kind: "fortress-war-apply";
 		readonly gid: number;

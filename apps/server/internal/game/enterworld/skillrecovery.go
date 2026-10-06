@@ -18,6 +18,8 @@ package enterworld
 const (
 	// Program tags, little-endian as stored in the numeric skilldata cells.
 	recoveryTagHeal = 0x6865616c // heal +0x324
+	// recoveryTagEshp is eshp (+0x298): heal the lowest HP ratio.
+	recoveryTagEshp = 0x65736870
 	recoveryTagMwhh = 0x6d776868 // mwhh +0x328
 	recoveryTagMwmh = 0x6d776d68 // mwmh +0x32C
 	recoveryTagResu = 0x72657375 // resu +0x330
@@ -79,6 +81,7 @@ selection.
 type SkillRecovery struct {
 	SelfFlatPinned       bool
 	PartyHealPinned      bool
+	LowestHealPinned     bool
 	PartyResurrectPinned bool
 	HealOverTimePinned   bool
 	PulseMs              uint32
@@ -127,6 +130,8 @@ func parseSkillRecovery(fields []string, row *SkillRow) {
 	switch {
 	case partyHealProgram(program):
 		row.Recovery = SkillRecovery{PartyHealPinned: true}
+	case lowestHealProgram(program):
+		row.Recovery = SkillRecovery{LowestHealPinned: true}
 	case partyResurrectProgram(program):
 		row.Recovery = SkillRecovery{PartyResurrectPinned: true}
 	}
@@ -214,6 +219,35 @@ func partyHealProgram(program SkillProgram) bool {
 		return false
 	}
 	return healProgramTail(program, 2)
+}
+
+/*
+==================
+lowestHealProgram
+
+Healing Division and Healing Favor (SKILL_EU_CLERIC_HEALA_DIVIDE_A/B):
+efr(1,6,radius,cap,reduction,4|5) eshp heal [mwhh] [mwmh] [getv HLRU]
+[getv HLMD]. "Spreads the healing power widely so that party members with
+low HP can automatically recover. The healing power is transferred to party
+members nearby". eshp picks the lowest HP ratio as the Cleric's eshp aura
+does (584D95), and the shape-6 area hands the reduction word's share to the
+members nearest it, as Mana Wind's does (action/skillrecovery.go).
+==================
+*/
+func lowestHealProgram(program SkillProgram) bool {
+	if program.Len() < 3 {
+		return false
+	}
+	area, eshp := program.Instruction(0), program.Instruction(1)
+	a := area.Arguments
+	if area.Tag != tagEfr || area.Count != 6 || a[0] != recoveryEfrActionArea || a[1] != 6 || a[2] == 0 ||
+		a[3] < 2 || a[4] >= 100 || a[5] != recoveryPartySelect && a[5] != recoveryPartySelectWithCaster {
+		return false
+	}
+	if eshp.Tag != recoveryTagEshp || eshp.Count != 0 || !recoveryHealBlock(program.Instruction(2)) {
+		return false
+	}
+	return healProgramTail(program, 3)
 }
 
 /*

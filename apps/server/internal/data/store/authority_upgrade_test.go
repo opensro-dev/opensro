@@ -19,6 +19,53 @@ import (
 
 /*
 ================
+TestTradeUpgradePreservesExistingFortressTablesAndRecords
+================
+*/
+func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	c := seededCharacter()
+	if err := s.CreateCharacter(testDivision, "trader-account", c); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Fortresses().SaveFortress(testDivision, domain.FortressRecord{FortressID: 1, GuildID: 71}); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preTradeRewardVersion)
+	backup, err := UpgradeAuthority(dir, true)
+	if err != nil || backup == "" {
+		t.Fatalf("upgrade %q: %v", backup, err)
+	}
+	old, err := connectDB(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	if _, err := loadDB(old, preTradeRewardVersion, CurrentLayoutVersion); err != nil {
+		t.Fatal(err)
+	}
+	s = openTest(t, dir, newTestClock())
+	var after string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatal("schema-only upgrade rewrote the character")
+	}
+	fortresses, _, err := s.Fortresses().FortressState(testDivision)
+	if err != nil || len(fortresses) != 1 || fortresses[0].GuildID != 71 {
+		t.Fatalf("fortress records %+v: %v", fortresses, err)
+	}
+}
+
+/*
+================
 dropFortressTables
 
 Removes layout 6's fortress and union tables from a current test
@@ -27,7 +74,7 @@ authority.
 */
 func dropFortressTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances"); err != nil {
+	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances; DROP TABLE guild_wars"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -323,5 +370,53 @@ func TestWorldPointUpgradeKeepsSchema15Records(t *testing.T) {
 	point := again.Characters().CharactersForDivision(testDivision)[0].World.LastDeathPoint
 	if point == nil || point.World != 2 || *point.RegionID != region {
 		t.Fatalf("death point world lost: %+v", point)
+	}
+}
+
+/*
+================
+TestGuildWarUpgradePreservesLayoutSixAuthority
+================
+*/
+func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	c := seededCharacter()
+	if err := s.CreateCharacter(testDivision, "existing-account", c); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Fortresses().SaveFortress(testDivision, domain.FortressRecord{FortressID: 1, GuildID: 71, StaffFlags: 7}); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("DROP TABLE guild_wars"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("UPDATE meta SET value=? WHERE key=?", preGuildWarLayoutVersion, metaKeyLayoutVersion); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	backup, err := UpgradeAuthority(dir, true)
+	if err != nil || backup == "" {
+		t.Fatalf("upgrade %q %v", backup, err)
+	}
+	s = openTest(t, dir, newTestClock())
+	var after string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatal("layout migration rewrote character record")
+	}
+	forts, _, err := s.Fortresses().FortressState(testDivision)
+	if err != nil || len(forts) != 1 || forts[0].GuildID != 71 || forts[0].StaffFlags != 7 {
+		t.Fatalf("fortress lost %+v %v", forts, err)
+	}
+	wars, err := s.GuildWars().GuildWars(testDivision)
+	if err != nil || len(wars) != 0 {
+		t.Fatalf("new war owner %+v %v", wars, err)
 	}
 }

@@ -1,6 +1,16 @@
+/*
+===========================================================================
+
+operations_membership.go - operations membership
+
+===========================================================================
+*/
 package guild
 
-import "opensro.online/server/internal/game/enterworld"
+import (
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
+)
 
 // KickOutcome is one handled 0x74B1 request. EVERY kick refusal stays
 // fully silent - deliberately no ErrorPayload slot: the 0x1F refusal
@@ -24,6 +34,11 @@ type KickOutcome struct {
 	Refusal      string
 }
 
+/*
+================
+refusedKick
+================
+*/
 func refusedKick(reason string) KickOutcome {
 	return KickOutcome{Refusal: reason}
 }
@@ -36,6 +51,11 @@ func refusedKick(reason string) KickOutcome {
 // me-check is exact wide-string equality and retail compares exact);
 // kicking yourself or the grade-0 leader refuses. The pushed jid is the
 // kicked member's STORED JID from their member record.
+/*
+================
+HandleKick
+================
+*/
 func HandleKick(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) KickOutcome {
 	if actor == nil {
 		return refusedKick("characterNotFound")
@@ -106,6 +126,11 @@ type LeaveOutcome struct {
 	Refusal           string
 }
 
+/*
+================
+refusedLeave
+================
+*/
 func refusedLeave(reason string) LeaveOutcome {
 	return LeaveOutcome{Refusal: reason}
 }
@@ -119,6 +144,11 @@ func refusedLeave(reason string) LeaveOutcome {
 // leave - refused SILENTLY: the classic 0x4c36 refuse code is only
 // PROBABLE for Legend - dissolve is the break 0x766E job (HandleBreak,
 // the DissolveGuild door + subOp-1 fan-out), never this handler's.
+/*
+================
+HandleLeave
+================
+*/
 func HandleLeave(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) LeaveOutcome {
 	if actor == nil {
 		return refusedLeave("characterNotFound")
@@ -175,6 +205,11 @@ type BreakOutcome struct {
 	Refusal           string
 }
 
+/*
+================
+refusedBreak
+================
+*/
 func refusedBreak(reason string) BreakOutcome {
 	return BreakOutcome{Refusal: reason}
 }
@@ -189,6 +224,11 @@ func refusedBreak(reason string) BreakOutcome {
 // (register.go HandleLeave), and the client opens the break confirm
 // (msgbox kind 0x13, sub_5da1b0 case 0x14 @0x005daf98's sibling) from
 // leadership arms only - a non-leader break is refused silently.
+/*
+================
+HandleBreak
+================
+*/
 func HandleBreak(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) BreakOutcome {
 	if actor == nil {
 		return refusedBreak("characterNotFound")
@@ -208,6 +248,9 @@ func HandleBreak(deps Dependencies, divisionID string, actor *enterworld.Charact
 		return refusedBreak(err.Error())
 	}
 	dissolved, refusal := deps.GuildAuthority().DissolveGuildAs(divisionID, actor.ID)
+	if refusal == domain.GuildRefusalWarActive {
+		return BreakOutcome{Refusal: "guild war active", AckPayload: []byte{2, 0x46}}
+	}
 	if refusal.Refused() {
 		if refusal == enterworld.GuildRefusalLeaderRequired {
 			return refusedBreak("non-leader cannot dissolve the guild")
