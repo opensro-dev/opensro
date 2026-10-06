@@ -46,7 +46,8 @@ import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMov
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
 import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
-import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat } from "./scenarios.mjs";
+import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
+import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 
 const GOAL_FPS = 500;
 const CROSS_LIMIT_MS = 30000;
@@ -100,6 +101,7 @@ const REVIVE_TOLERANCE = 50;
 const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
 	"http://127.0.0.1:8791/internal/diagnostics/observatory";
 const OBSERVATORY_CACHE_MS = 2000;
+const OBSERVATORY_TIMEOUT_MS = 10000;
 
 // The GameWorld's transport metrics; its tick count dates the server's start
 // (artifacts record minutes since start: a fresh server measures boot state).
@@ -166,22 +168,24 @@ the location's results.
 ================
 */
 async function recordResidue( page, scene, location, results, options ) {
-	const dead = new Set( await sceneDead( page, scene ) );
+	const dead = new Set( [ ...await sceneDead( page, scene ), ...(scene.cleanup?.dead ?? []) ] );
 	const inView = new Set( await sceneAlive( page, scene ) );
 	const server = await serverMonsters();
-	const alive = [], unknown = [];
-	for ( const gid of scene.gids ) {
-		const row = server.monsters.get( gid );
-		// The server's own hp outranks anything the client shows: a client
-		// death sighting never clears a gid the GameWorld still lists alive.
-		if ( row && row.hp > 0 || inView.has( gid ) ) alive.push( gid );
-		else if ( dead.has( gid ) ) continue;
-		// Absent from a truncated server list and never seen dying: not proven gone.
-		else if ( !row && server.truncated ) unknown.push( gid );
-	}
-	// Requested monsters that never showed up are on the server but unknown here.
-	const unaccounted = scene.count - scene.gids.length;
-	const residue = { codename: scene.codename, loaded: scene.count, dead: dead.size, alive, unknown, unaccounted };
+	const classified = combatResidue( scene, server );
+	// Positive server HP outranks all earlier death observations. A live
+	// client observation also prevents a clean report until it reconciles.
+	const alive = [ ...new Set( [ ...classified.alive, ...inView ] ) ];
+	const unknown = classified.unknown.filter( gid => !dead.has( gid ) && !inView.has( gid ) );
+	const unaccounted = classified.unaccounted;
+	const residue = {
+		codename: scene.codename,
+		loaded: scene.count,
+		dead: dead.size,
+		alive,
+		unknown,
+		unaccounted,
+		cleanup: scene.cleanup
+	};
 	if ( alive.length || unknown.length || unaccounted ) process.exitCode = 1;
 	await mkdir( options.out, { recursive: true } );
 	await writeFile( `${options.out}/${location.name}-residue.json`, JSON.stringify( residue, null, 2 ) );
@@ -206,9 +210,15 @@ The GameWorld's own monster list (the local observatory), read after its
 snapshot cache has turned over so it postdates the window.
 ================
 */
-async function serverMonsters() {
-	await new Promise( resolve => setTimeout( resolve, OBSERVATORY_CACHE_MS + 250 ) );
-	const response = await fetch( OBSERVATORY_URL, { headers: { "X-SRO-Local-Diagnostics": "1" } } );
+async function serverMonsters( timeoutMs = OBSERVATORY_TIMEOUT_MS ) {
+	const started = Date.now();
+	await new Promise( resolve => setTimeout( resolve, Math.min( OBSERVATORY_CACHE_MS + 250, timeoutMs ) ) );
+	const remaining = timeoutMs - (Date.now() - started);
+	if ( remaining <= 0 ) throw Error( "observatory deadline exceeded before cache expiry" );
+	const response = await fetch( OBSERVATORY_URL, {
+		headers: { "X-SRO-Local-Diagnostics": "1" },
+		signal: AbortSignal.timeout( Math.max( 1, Math.min( OBSERVATORY_TIMEOUT_MS, Math.floor( remaining ) ) ) )
+	} );
 	if ( !response.ok ) throw Error( `observatory ${response.status}` );
 	const population = (await response.json()).population;
 	return {
@@ -300,7 +310,7 @@ One location: open the client there and run its scenarios.
 */
 async function session( options, location, results ) {
 	console.log( `Opening ${location.name}: frame limit ${options.frameLimit || "uncapped"}, CPU ${options.cpuRate}x` );
-	let scene = null;
+	let scene = null, captures = null, capturing = false;
 	const client = await openClient( location.fixture, {
 		counts: options.counts,
 		spans: options.spans,
@@ -329,7 +339,7 @@ async function session( options, location, results ) {
 				throw error;
 			} );
 		}
-		const captures = await createCaptures( client.page, {
+		captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,
 			heap: options.heap,
@@ -348,6 +358,7 @@ async function session( options, location, results ) {
 			) throw Error( `${location.name}/${name}: the character is not where the scene expects after revive` );
 			const [ms, input] = await drive( client.page, name, location, options.seconds * 1000, scene );
 			await captures.start();
+			capturing = true;
 			const started = Date.now();
 			const result = await measure( client.page, `${location.name}/${name}`, ms, input );
 			result.frameLimit = options.frameLimit;
@@ -367,16 +378,44 @@ async function session( options, location, results ) {
 				result.combat = scene.evidence;
 			}
 			const allocated = await captures.stop( `${location.name}-${name}` );
+			capturing = false;
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 			console.log( row( result ) );
 		}
-		await captures.finish();
 	} finally {
+		// Rejected windows keep their profiles too. Cleanup is outside every
+		// measured window and trace, so its falling monster count cannot score.
+		try {
+			if ( capturing ) await captures.stop( `${location.name}-rejected` );
+			await captures?.finish();
+		} catch ( error ) {
+			process.exitCode = 1;
+			console.log( `  capture finalization failed: ${error?.message ?? error}` );
+		}
 		// Residue is reported for rejected windows too: GM monsters outlive them.
 		// A run that leaves any (or cannot tell) fails, and its artifact says so.
 		if ( scene ) {
+			await mkdir( options.out, { recursive: true } ).catch( () => {} );
+			await writeFile( `${options.out}/${location.name}-combat.json`, JSON.stringify( scene, null, 2 ) )
+				.catch( error => {
+					process.exitCode = 1;
+					console.log( `  combat evidence write failed: ${error?.message ?? error}` );
+				} );
+			try {
+				scene.cleanup = await cleanupCombat( {
+					scene,
+					read: serverMonsters,
+					attack: ( gids, turn ) => strike( client.page, gids, turn ),
+					isAlive: () => localAlive( client.page ),
+					pause: ms => client.page.waitForTimeout( ms )
+				} );
+				if ( scene.cleanup.status !== "clean" ) process.exitCode = 1;
+			} catch ( error ) {
+				process.exitCode = 1;
+				scene.cleanup = { status: "error", error: String( error?.message ?? error ) };
+			}
 			// Never let the residue report replace the window's own exception.
 			try {
 				await recordResidue( client.page, scene, location, results, options );
@@ -391,6 +430,7 @@ async function session( options, location, results ) {
 					alive: [],
 					unknown: scene.gids,
 					unaccounted: scene.count - scene.gids.length,
+					cleanup: scene.cleanup,
 					error: String( error?.message ?? error )
 				};
 				await mkdir( options.out, { recursive: true } ).catch( () => {} );

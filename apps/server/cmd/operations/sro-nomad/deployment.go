@@ -25,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"opensro.online/server/internal/agent/bugreport"
+	"opensro.online/server/internal/agent/provisioning"
 	agentserver "opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
@@ -70,15 +71,16 @@ type deployment struct {
 	GMCharacters   string
 	BetaMastery    string
 	// PartyMasteries comes from the deployer's SRO_PARTY_MASTERIES.
-	PartyMasteries  bool
-	TransportCert   string
-	TransportKey    string
-	TransportTLSID  string
-	IdentityIssuer  string
-	IdentityJWKSURL string
-	AgentURL        string
-	AgentPort       int
-	PrivateNetwork  bool
+	PartyMasteries        bool
+	TransportCert         string
+	TransportKey          string
+	TransportTLSID        string
+	IdentityIssuer        string
+	IdentityJWKSURL       string
+	AgentURL              string
+	AgentPort             int
+	AgentProvisioningPort int
+	PrivateNetwork        bool
 	// Pprof turns on the GameWorld's profiling endpoints (TRANSPORT_PPROF),
 	// which serve only on its loopback control listener.
 	Pprof          bool
@@ -221,6 +223,14 @@ func resolveDeployment(
 	}
 	if options.AgentPort < 1 || options.AgentPort > 65535 {
 		return nil, fmt.Errorf("agent port %d is invalid", options.AgentPort)
+	}
+	// Unset (options built without flags) is the documented default.
+	if options.AgentProvisioningPort == 0 {
+		options.AgentProvisioningPort = provisioning.DefaultPort
+	}
+	if options.AgentProvisioningPort < 1 || options.AgentProvisioningPort > 65535 ||
+		options.AgentProvisioningPort == options.AgentPort {
+		return nil, fmt.Errorf("agent provisioning port %d is invalid", options.AgentProvisioningPort)
 	}
 	hostNetwork, err := normalizeHostNetwork(
 		options.Network,
@@ -368,37 +378,38 @@ func resolveDeployment(
 	}
 
 	return &deployment{
-		ModuleRoot:      moduleRoot,
-		Catalog:         cleanAbsolute(catalogPath),
-		StateDir:        stateDir,
-		ReleaseDir:      releaseDir,
-		JobsDir:         cleanAbsolute(jobsDir),
-		Namespace:       namespace,
-		Network:         hostNetwork,
-		AllowedOrigins:  allowedOrigins,
-		GMCharacters:    gmCharacters,
-		BetaMastery:     betaMastery,
-		PartyMasteries:  party.MasteriesFromEnv(),
-		TransportCert:   transportCert,
-		TransportKey:    transportKey,
-		TransportTLSID:  transportTLSID,
-		IdentityIssuer:  identityIssuer,
-		IdentityJWKSURL: identityJWKSURL,
-		AgentURL:        agentURL,
-		AgentPort:       options.AgentPort,
-		PrivateNetwork:  options.PrivateNet,
-		Pprof:           options.Pprof,
-		TaskUser:        options.TaskUser,
-		TaskUID:         taskUID,
-		TaskGID:         taskGID,
-		AgentCPU:        options.AgentCPU,
-		AgentMemoryMB:   options.AgentMemoryMB,
-		GameCPU:         options.GameCPU,
-		GameMemoryMB:    options.GameMemoryMB,
-		AgentReleaseID:  agentReleaseID,
-		GameReleaseID:   gameReleaseID,
-		AgentSource:     filepath.Join(moduleRoot, binaryName("agent")),
-		GameSource:      filepath.Join(moduleRoot, binaryName("gameworld")),
+		ModuleRoot:            moduleRoot,
+		Catalog:               cleanAbsolute(catalogPath),
+		StateDir:              stateDir,
+		ReleaseDir:            releaseDir,
+		JobsDir:               cleanAbsolute(jobsDir),
+		Namespace:             namespace,
+		Network:               hostNetwork,
+		AllowedOrigins:        allowedOrigins,
+		GMCharacters:          gmCharacters,
+		BetaMastery:           betaMastery,
+		PartyMasteries:        party.MasteriesFromEnv(),
+		TransportCert:         transportCert,
+		TransportKey:          transportKey,
+		TransportTLSID:        transportTLSID,
+		IdentityIssuer:        identityIssuer,
+		IdentityJWKSURL:       identityJWKSURL,
+		AgentURL:              agentURL,
+		AgentPort:             options.AgentPort,
+		AgentProvisioningPort: options.AgentProvisioningPort,
+		PrivateNetwork:        options.PrivateNet,
+		Pprof:                 options.Pprof,
+		TaskUser:              options.TaskUser,
+		TaskUID:               taskUID,
+		TaskGID:               taskGID,
+		AgentCPU:              options.AgentCPU,
+		AgentMemoryMB:         options.AgentMemoryMB,
+		GameCPU:               options.GameCPU,
+		GameMemoryMB:          options.GameMemoryMB,
+		AgentReleaseID:        agentReleaseID,
+		GameReleaseID:         gameReleaseID,
+		AgentSource:           filepath.Join(moduleRoot, binaryName("agent")),
+		GameSource:            filepath.Join(moduleRoot, binaryName("gameworld")),
 		AgentBinary: filepath.Join(
 			releaseDir,
 			"agent",
@@ -629,14 +640,15 @@ func (deployment *deployment) agentVariables() map[string]any {
 			"agent",
 			"accounts.db",
 		)),
-		"host_network":      deployment.Network,
-		"nomad_namespace":   deployment.Namespace,
-		"agent_port":        deployment.AgentPort,
-		"release_id":        deployment.AgentReleaseID,
-		"private_network":   boolEnvValue(deployment.PrivateNetwork),
-		"allowed_origins":   deployment.AllowedOrigins,
-		"identity_issuer":   deployment.IdentityIssuer,
-		"identity_jwks_url": deployment.IdentityJWKSURL,
+		"host_network":            deployment.Network,
+		"nomad_namespace":         deployment.Namespace,
+		"agent_port":              deployment.AgentPort,
+		"agent_provisioning_port": deployment.AgentProvisioningPort,
+		"release_id":              deployment.AgentReleaseID,
+		"private_network":         boolEnvValue(deployment.PrivateNetwork),
+		"allowed_origins":         deployment.AllowedOrigins,
+		"identity_issuer":         deployment.IdentityIssuer,
+		"identity_jwks_url":       deployment.IdentityJWKSURL,
 		"bug_report_replay_default": boolEnvValue(
 			deployment.BugReports.ReplayDefault,
 		),

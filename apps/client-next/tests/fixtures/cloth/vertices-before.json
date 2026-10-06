@@ -1,0 +1,31 @@
+{
+  "baseline": "666e159f090c5793fd66862654ba3af7d8765bf4",
+  "sourceSha256": "67faf9d6f4bbc9e9f34a08f70d05cd3a2f614699725dcf67464c38be3684d809",
+  "framesPerCase": 120,
+  "rows": [
+    {
+      "skinned": false,
+      "normals": false,
+      "sha256": "72282a6d5461127ad946eccdf30e4e8e87e67a4f799039431df57787457020dc",
+      "randomCalls": 4020
+    },
+    {
+      "skinned": false,
+      "normals": true,
+      "sha256": "d5fc12f10ab995318a0f3e5fc67cc422c5c4262635ef4ab4280dcc9840d7c321",
+      "randomCalls": 4020
+    },
+    {
+      "skinned": true,
+      "normals": false,
+      "sha256": "8b39de8f4ac5eee1c726f9499ae3e539d9509526fb76c06d0b5ac4c5674c0c67",
+      "randomCalls": 4020
+    },
+    {
+      "skinned": true,
+      "normals": true,
+      "sha256": "a254c9495a957fee4706d5a5c38f1b5cc0a0b11fa6e1d598cbb9398f5b12d3a7",
+      "randomCalls": 4020
+    }
+  ]
+}

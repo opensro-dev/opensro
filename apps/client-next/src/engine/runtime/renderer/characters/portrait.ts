@@ -18,6 +18,7 @@ const PORTRAIT_DISTANCE = 6.5;
 const PREVIEW_NEAR = 0.01;
 const PREVIEW_FAR = 500000;
 const DOLL_ASPECT = 176 / 318;
+const EMPTY_DRAWS: readonly GeometryDraw[] = Object.freeze( [] );
 
 // Synchronous GPU projection. Model/bitmap lifetime stays with world characters;
 // this owner owns only its pose, preview geometry and texture uploads.
@@ -78,6 +79,7 @@ export function createPortrait(
 ) {
 	let source: CharacterModel | null = null, started = 0, identity: number | undefined;
 	let borrowed: readonly PortraitPart[] = [];
+	let empty = true;
 	preview.retain( [] );
 	return {
 		prepare(
@@ -88,12 +90,19 @@ export function createPortrait(
 		) {
 			const dollYaw = frame.yaw, seconds = frame.seconds ?? 0;
 			if ( !value ) {
+				if ( empty ) return EMPTY_DRAWS;
 				preview.actors( [] );
 				source = null;
 				identity = undefined;
 				borrowed = [];
-				return preview.prepare( geometry, images, 0 );
+				// This preview is exclusive to this owner. Its synchronous full
+				// pass retires the borrowed resources before empty frames can skip.
+				// A failed retirement must be retried on the next frame.
+				const draws = preview.prepare( geometry, images, 0 );
+				empty = true;
+				return draws;
 			}
+			empty = false;
 			const parts = [ value, ...(value.children ?? []) ];
 			const changed = parts.length !== borrowed.length ||
 				parts.some( ( part, index ) =>
@@ -206,6 +215,7 @@ export function createPortrait(
 		================
 		*/
 		invalidate() {
+			empty = false;
 			preview.invalidate();
 		},
 		/*
@@ -217,6 +227,7 @@ export function createPortrait(
 			preview.dispose( geometry, images );
 			source = null;
 			borrowed = [];
+			empty = true;
 		}
 	};
 }

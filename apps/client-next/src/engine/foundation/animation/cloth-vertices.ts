@@ -65,6 +65,9 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 				// Once initialized, free vertices belong to the simulation. Their
 				// skeleton anchors and normals are unused until animation is disabled.
 				if ( enabled && lastTime !== undefined && data.pins[i] === 0 ) continue;
+				const at = i * 3;
+				const x = mesh.positions[at]!, y = mesh.positions[at + 1]!, z = mesh.positions[at + 2]!;
+				const nx = mesh.normals?.[at] ?? 0, ny = mesh.normals?.[at + 1] ?? 1, nz = mesh.normals?.[at + 2] ?? 0;
 				for ( let axis = 0; axis < 3; axis++ ) {
 					let position = 0, normal = 0;
 					if ( mesh.joints && mesh.weights ) {
@@ -73,10 +76,14 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 							if ( !weight ) continue;
 							const base = mesh.joints[i * 4 + joint]! * 16;
 							let p = palette[base + 12 + axis]!, n = 0;
-							for ( let c = 0; c < 3; c++ ) {
-								p += palette[base + c * 4 + axis]! * mesh.positions[i * 3 + c]!;
-								n += palette[base + c * 4 + axis]! * (mesh.normals?.[i * 3 + c] ?? (c === 1 ? 1 : 0));
-							}
+							// Preserve the original double-precision accumulation order,
+							// reusing immutable vertex inputs across axes and influences.
+							p += palette[base + axis]! * x;
+							n += palette[base + axis]! * nx;
+							p += palette[base + 4 + axis]! * y;
+							n += palette[base + 4 + axis]! * ny;
+							p += palette[base + 8 + axis]! * z;
+							n += palette[base + 8 + axis]! * nz;
 							position += p * weight;
 							normal += n * weight;
 						}

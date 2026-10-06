@@ -18,6 +18,8 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"opensro.online/server/internal/agent/provisioning"
 )
 
 /*
@@ -241,14 +243,16 @@ type commandOptions struct {
 	IdentityJWKSURL string
 	AgentURL        string
 	AgentPort       int
-	PrivateNet      bool
-	Build           bool
-	Pprof           bool
-	TaskUser        string
-	AgentCPU        int
-	AgentMemoryMB   int
-	GameCPU         int
-	GameMemoryMB    int
+	// AgentProvisioningPort is the Agent's loopback account provisioning port.
+	AgentProvisioningPort int
+	PrivateNet            bool
+	Build                 bool
+	Pprof                 bool
+	TaskUser              string
+	AgentCPU              int
+	AgentMemoryMB         int
+	GameCPU               int
+	GameMemoryMB          int
 }
 
 /*
@@ -316,6 +320,12 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 		"production WebTransport TLS private key readable on every GameWorld node",
 	)
 	flags.IntVar(&options.AgentPort, "agent-port", 8787, "Agent HTTP port")
+	flags.IntVar(
+		&options.AgentProvisioningPort,
+		"agent-provisioning-port",
+		provisioning.DefaultPort,
+		"Agent loopback account provisioning port (a second Agent on one host needs its own)",
+	)
 	flags.BoolVar(
 		&options.PrivateNet,
 		"private-network",

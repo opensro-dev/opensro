@@ -59,14 +59,32 @@ and runs these scenarios:
 | `hunt` (a field with a live monster) | `skill` (skills and attacks on it) |
 | `combat` (only with `--at combat`) | `combat`: a repeatable fight against the native GM `/LOADMONSTER` scene |
 
-`combat` loads `--combat codename:count:type` (default `MOB_CH_TIGER:10:GIANT`)
-at the character's feet with the native GM commands, `/INVINCIBLE` first
-unless `--vulnerable` (then incoming damage is part of the load). A window
-counts only if the server accepted damaging casts and every loaded monster
-is alive within 150 units at its end. The scene's codename and count repeat;
-positions do not (the monsters run on their AI). Run it against an isolated
-GameWorld started for the session: GM-loaded monsters have no nest and stay
-until that server stops.
+`combat` loads `--combat codename:count:type` at the character's feet with
+the native GM commands, `/INVINCIBLE` first unless `--vulnerable`. The current
+default `MOB_CH_TIGER:10:GIANT` is diagnostic only: it has not been validated
+as a killable fixture for scratch character `asd2`. Select a measured,
+killable scene explicitly before running acceptance.
+
+The loader waits for the requested monsters' presentation actors. A window
+counts only if the server accepted at least two damaging casts, the local
+character stays alive, and every loaded monster remains alive and presented
+within 150 units at each turn and the end. `--vulnerable` also requires
+incoming damage; invincible runs cannot establish realistic combat acceptance.
+The scene's codename and count repeat; positions do not (the monsters run
+on their AI). Compare warmed, matched scenes with the same character stats,
+graphics settings and instrumentation. Keep rejected runs as evidence.
+
+After the measured window and captures end, the harness spends at most three
+minutes attempting ordinary attacks on its recorded monster IDs. It verifies
+cleanup against the server's observatory and writes `combat-residue.json`,
+including on rejected windows. Positive server HP overrides client death;
+missing rows in a truncated snapshot remain unknown unless a server death
+was already observed. Partial loads, character death, timeout and read errors
+fail cleanup. They never trigger an automatic restart or a revive. Use an
+isolated GameWorld, and resolve any remaining residue before another run.
+`combat-combat.json` retains the scene and bounded observations even when no
+accepted FPS row exists. Deaths during post-window cleanup are not measured
+combat frames; a death/drop benchmark needs a separate matched scenario.
 
 Each row gives frames per second, frame-interval percentiles (p99 and max
 show spikes), and the main thread's frame time and world-preparation time
@@ -79,7 +97,7 @@ Useful options:
 | `--at jangan,hunt` / `--only drag` | Run some locations or scenarios |
 | `--seconds N` | Longer spans for steadier numbers (default 3) |
 | `--heap` | Allocation rate per scenario (MB/s, KB/frame) and an allocation profile each |
-| `--spans` | Where a frame goes without a profiler's overhead: ms per frame of each runtime stage (`@stage`, since the previous mark) and of each detail span (`stage`, with `stage n` spans per frame) |
+| `--spans` | Runtime-stage and detail-span timings (`@stage`, `stage`, `stage n`). Dense marks add overhead; use them to explain work, not to claim plain-run FPS |
 | `--cpu` | A CPU profile per scenario |
 | `--counts` | WebGPU commands per frame (draws, bundles, buffer writes, submits); slows the frame, so read only its counts |
 | `--trace` | A Chrome trace per location (main thread, workers, GPU process) |

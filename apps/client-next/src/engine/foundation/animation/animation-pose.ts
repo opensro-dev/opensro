@@ -401,9 +401,11 @@ materialize
         ================
         */
 		socket( name: string, compound = false ) {
-			materialize();
 			const index = sockets.get( name );
 			if ( index === undefined ) return null;
+			// Missing markers fall back to the holder or mount. Their immutable
+			// lookup needs no CPU bones; keep a GPU-owned pose lazy until used.
+			materialize();
 			const current = globals[index]!;
 			if ( !compound ) return current.slice();
 			// AB58C5..AB5924 cancels bind rotation but copies current world position.

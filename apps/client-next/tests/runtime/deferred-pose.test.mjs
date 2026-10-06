@@ -96,6 +96,25 @@ test("deferred poses preserve seeks, long clocks, CPU sockets, layers and failed
 	assert.equal( p.evaluate( "move", .25 ), false );
 	assert.equal( p.cpuEvaluations(), 1 );
 });
+test("missing socket probes preserve deferred CPU work and later real sockets and palettes", () => {
+	const m = model(), actual = createCharacterPose( m ), expected = createCharacterPose( m );
+	const out = new Float32Array( 32 ), reference = new Float32Array( 32 );
+	for ( const time of [ .1, .8, .2, 86400.75 ] ) {
+		actual.evaluate( "move", time, true, undefined, true );
+		expected.evaluate( "move", time );
+		const before = actual.cpuEvaluations();
+		assert.equal( actual.socket( "absent" ), null );
+		assert.equal( actual.socket( "equipment:6:R:absent", true ), null );
+		assert.equal( actual.cpuEvaluations(), before );
+		assert.deepEqual( actual.socket( "socket", true ), expected.socket( "socket", true ) );
+		assert.equal( actual.cpuEvaluations(), before + 1 );
+		actual.palette( m.primitives[0], out );
+		expected.palette( m.primitives[0], reference );
+		assert.deepEqual( out, reference );
+		assert.equal( actual.cpuEvaluations(), before + 1 );
+	}
+});
+
 test("CPU fallback restores every palette after GPU ownership, including unchanged poses", () => {
 	const m = model(),
 		a = createCharacterPose( m ),
