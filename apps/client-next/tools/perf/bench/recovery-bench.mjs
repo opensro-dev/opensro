@@ -40,9 +40,13 @@ const CHARACTER = process.env.SRO_PROBE_CHARACTER ?? "asd2";
 const OBSERVATORY_URL = process.env.SRO_BENCH_OBSERVATORY ??
 	"http://127.0.0.1:8791/internal/diagnostics/observatory";
 const OBSERVATORY_CACHE_MS = 2000;
-const SERVER_POSE_TOLERANCE = 1;
-// Wire Y rounds to integer units; a larger gap is another surface.
-const SERVER_POSE_Y_TOLERANCE = 1;
+// Client and server consume the same truncated command and each samples its
+// own ground, so a settled pair agrees to float precision (0.000 on every
+// step measured so far). Any visible gap is a desync.
+const SETTLED_POSE_TOLERANCE = 0.001;
+// The anchor return is admission, not a comparison: the walk ends on the
+// truncated anchor, at most a unit from the fractional start.
+const ANCHOR_TOLERANCE = 1;
 // The client's movement command (movement.ts OP_PREDICTED_MOVE).
 const OP_PREDICTED_MOVE = 0x0009;
 const METRICS_URL = process.env.SRO_BENCH_TRANSPORT_METRICS ?? "http://127.0.0.1:8788/transport/metrics";
@@ -124,7 +128,7 @@ async function returnToAnchor( page, anchor ) {
 	const { pose } = await settle( page );
 	assert.equal( pose.regionId, anchor.regionId, "the anchor return left the lane's region" );
 	assert.ok(
-		Math.hypot( pose.x - Math.trunc( anchor.x ), pose.z - Math.trunc( anchor.z ) ) <= SERVER_POSE_TOLERANCE,
+		Math.hypot( pose.x - Math.trunc( anchor.x ), pose.z - Math.trunc( anchor.z ) ) <= ANCHOR_TOLERANCE,
 		`the character did not reach the stall anchor: ${JSON.stringify( { pose, anchor } )}`
 	);
 }
@@ -375,7 +379,7 @@ async function run( options ) {
 				for ( const step of result.stalls ) assertStep( lane, step );
 				for ( const step of [ ...result.stalls, result.serverPose ] ) {
 					assert.ok(
-						step.xz <= SERVER_POSE_TOLERANCE && Math.abs( step.y ) <= SERVER_POSE_Y_TOLERANCE,
+						step.xz <= SETTLED_POSE_TOLERANCE && Math.abs( step.y ) <= SETTLED_POSE_TOLERANCE,
 						`settled client and server poses differ: ${JSON.stringify( step )}`
 					);
 				}
