@@ -156,6 +156,7 @@ func BuildItemBody(row WireItem) []byte {
 		quantity = 0xffff
 	}
 	return wire.ItemBody{
+		TradeOwner:        row.TradeOwner,
 		RefObjID:          refObjID,
 		TypeFlags:         row.TypeFlags,
 		Plus:              uint8(plus),

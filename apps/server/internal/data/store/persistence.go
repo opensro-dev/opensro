@@ -63,6 +63,9 @@ func (s *Store) commitOnceLocked() error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := writeTradeRewards(tx, s.meta.TradeRewards); err != nil {
+		return err
+	}
 
 	if err := upsertMetaTx(tx, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err

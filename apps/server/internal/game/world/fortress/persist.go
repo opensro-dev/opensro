@@ -50,6 +50,10 @@ func (a *Authority) Restore(divisionID string, store domain.FortressStore) error
 			return fmt.Errorf("fortress: stored fortress %d is not served", row.FortressID)
 		}
 		record.GuildID, record.TempGuildID = row.GuildID, row.TempGuildID
+		if row.TaxRate < -20 || row.TaxRate > 20 || row.TaxGold < 0 {
+			return fmt.Errorf("fortress: invalid tax state for fortress %d", row.FortressID)
+		}
+		record.TaxRate, record.TaxGold = row.TaxRate, row.TaxGold
 	}
 	for _, row := range requests {
 		record, ok := state.records[row.FortressID]
@@ -79,6 +83,7 @@ func (a *Authority) saveRecordLocked(divisionID string, record *Record) error {
 	}
 	return a.store.SaveFortress(divisionID, domain.FortressRecord{
 		FortressID: record.ID, GuildID: record.GuildID, TempGuildID: record.TempGuildID,
+		TaxRate: record.TaxRate, TaxGold: record.TaxGold,
 	})
 }
 

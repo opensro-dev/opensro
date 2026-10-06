@@ -72,6 +72,10 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 	}
 
 	out.version = current
+	out.meta.TradeRewards, err = loadTradeRewards(db)
+	if err != nil {
+		return nil, err
+	}
 
 	rows, err := db.Query("SELECT division, id, name_lower, record FROM characters ORDER BY division, id")
 	if err != nil {

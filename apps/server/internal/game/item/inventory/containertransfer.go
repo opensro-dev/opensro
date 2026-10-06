@@ -36,7 +36,7 @@ func (inv *Inventory) TransferWholeTo(destination *Inventory, sourceSlot, destin
 	}
 	if j >= 0 {
 		source, target := inv.items[i], destination.items[j]
-		if IsEtcStackableTypeFlags(source.TypeFlags) && source.RefObjID == target.RefObjID {
+		if IsEtcStackableTypeFlags(source.TypeFlags) && stackIdentityMatches(source, target) {
 			if stackCap == 0 || source.Quantity == 0 || target.Quantity == 0 || source.Quantity > stackCap || target.Quantity > stackCap {
 				return newFault(wire.ErrCodeInvalidRequest, "invalidContainerStack")
 			}

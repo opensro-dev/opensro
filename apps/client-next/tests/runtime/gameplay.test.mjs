@@ -241,7 +241,12 @@ test("rebirth remains retryable after silence and still gates local life and lev
 test("inventory icons survive baseline, reference replacement, item movement and reset", () => {
 	const owner = createInventory( () => {} );
 	owner.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
+		refItemSnapshot: [ {
+			refObjId: 1,
+			typeFlags: 0x6c,
+			icon: "item/etc/hp_potion_01.ddj",
+			nativeFields: { maxStack: 50 }
+		} ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.equal( owner.state().inventory[0].icon, "item/etc/hp_potion_01.ddj" );
@@ -252,7 +257,7 @@ test("inventory icons survive baseline, reference replacement, item movement and
 	assert.equal( owner.state().inventory[0].icon, "item/etc/hp_potion_02.ddj" );
 	owner.clear();
 	owner.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 1 ) } ]
 	} );
 	assert.equal( owner.state().inventory[0].icon, undefined );
@@ -506,7 +511,7 @@ function item( ref, quantity ) {
 test("gold pickup grants are decoded without touching bag slots or acknowledging another transaction", () => {
 	const heard = [], inv = createInventory( () => {}, cue => heard.push( cue ) );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	inv.move( 13, 14, 10, 100 );
@@ -523,7 +528,7 @@ test("gold pickup grants are decoded without touching bag slots or acknowledging
 test("unrelated pickup cannot acknowledge a move and timed-out transactions cannot be retried", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	inv.move( 13, 14, 10, 100 );
@@ -555,7 +560,7 @@ test("rejected transport submission leaves movement, inventory and targeting ava
 	m.seed( pose );
 	m.navigation( pose.regionId, bundle() );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.throws( () => m.request( { ...pose, x: 100 }, 0 ), /backpressure/ );
@@ -580,7 +585,7 @@ test("gameplay reset publishes no inventory or pending command from the old worl
 	const { createGameplay } = await load( "gameplay" );
 	const game = createGameplay( () => {} );
 	game.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	game.seed( { ...pose, gid: 7, heading: 0 } );
@@ -596,7 +601,7 @@ test("gameplay reset publishes no inventory or pending command from the old worl
 test("inventory remains authoritative through split, rejected use and absolute consume", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	inv.move( 13, 14, 4 );
@@ -614,7 +619,7 @@ test("inventory remains authoritative through split, rejected use and absolute c
 test("invalid multi-transfer cannot commit the valid prefix", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.throws(
@@ -879,7 +884,7 @@ test("ground drops serialize with all inventory commands and await their own res
 	inv.bootstrap( {
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	assert.throws( () => inv.drop( 7 ) );
@@ -913,7 +918,7 @@ test("ground drops serialize with all inventory commands and await their own res
 test("native sale consumes only its authoritative quantity and never acknowledges a pending move", () => {
 	const inv = createInventory( () => {} );
 	inv.bootstrap( {
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	const sale = Uint8Array.of( 1, 9, 13, 3, 0, 17, 0, 0, 0, 0 );
@@ -938,7 +943,7 @@ test("COS sale reaches the live COS owner and preserves player inventory", async
 	const { createGameplay } = await load( "gameplay" ), game = createGameplay( () => {} );
 	game.bootstrap( {
 		refObjSnapshot: [ { refObjId: 102, kind: "cos", tidWord: (2 << 11) | 0x1c6 } ],
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
 	} );
 	game.seed( { ...pose, gid: 7, heading: 0 } );

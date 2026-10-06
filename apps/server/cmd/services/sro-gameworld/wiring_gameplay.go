@@ -291,6 +291,7 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items.FortressWindows = siegeRuntime.WarStart
+	items.FortressWarDates = siegeRuntime.WarDates
 	items.FortressList = siegeRuntime.FortressList
 
 	return &gameplayPlane{

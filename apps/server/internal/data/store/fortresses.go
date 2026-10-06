@@ -59,6 +59,11 @@ func (s *Store) Fortresses() domain.FortressStore {
 	return storeFortressDoor{s: s}
 }
 
+/*
+================
+storeFortressDoor
+================
+*/
 type storeFortressDoor struct{ s *Store }
 
 /*
@@ -123,7 +128,7 @@ func decodeFortressRecord(id uint32, raw string) (domain.FortressRecord, error) 
 	if err := decodeJSONStrict([]byte(raw), &record); err != nil {
 		return record, fmt.Errorf("fortress %d: %w", id, err)
 	}
-	if record.FortressID != id || record.GuildID < 0 || record.TempGuildID < 0 {
+	if record.FortressID != id || record.GuildID < 0 || record.TempGuildID < 0 || record.TaxRate < -20 || record.TaxRate > 20 || record.TaxGold < 0 {
 		return record, fmt.Errorf("fortress %d: inconsistent record", id)
 	}
 	return record, nil
@@ -189,6 +194,9 @@ func (door storeFortressDoor) SaveFortress(divisionID string, record domain.Fort
 	}
 	raw, err := json.Marshal(record)
 	if err != nil {
+		return err
+	}
+	if _, err := decodeFortressRecord(record.FortressID, string(raw)); err != nil {
 		return err
 	}
 	_, err = s.db.Exec(

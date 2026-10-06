@@ -147,7 +147,7 @@ test("quest grants use absolute stack bodies and do not acknowledge a pending ba
 	owner.bootstrap( {
 		inventorySlotCount: 45,
 		equipmentSlotCount: 13,
-		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x8ec, name: "Herb" } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x8ec, name: "Herb", nativeFields: { maxStack: 50 } } ],
 		equipItems: [ { slot: 20, refObjId: 1, body: stack( 10 ) } ]
 	} );
 	owner.move( 20, 21, 1, 0 );

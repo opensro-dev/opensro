@@ -26,6 +26,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/world/fortress"
 )
 
@@ -77,24 +78,29 @@ func fortressRefusal(subtype, code uint8) OpResult {
 ================
 HandleFortressInteraction
 
-0x71E1. Subtypes other than the war application belong to the fortress
-manager's other functions and answer as an unknown operation.
+0x71E1. Decoding is shared with the manager services; each authority owns
+the corresponding state and admission.
 ================
 */
 func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Character, payload []byte) OpResult {
-	r := wire.NewReader(payload)
-	gid, err := r.U32()
-	if err != nil || c == nil {
+	if c == nil || len(payload) < 5 {
 		return OpResult{}
 	}
-	subtype, err := r.U8()
+	subtype := payload[4]
+	request, err := siege.DecodeInteraction(payload)
 	if err != nil {
+		if subtype == fortressApply || subtype == fortressWithdraw {
+			return fortressRefusal(subtype, fortressErrInvalid)
+		}
 		return OpResult{}
+	}
+	gid := request.Target
+	if subtype == siege.ActionSchedule || subtype == siege.ActionAide || subtype == siege.ActionTaxQuery || subtype == siege.ActionTaxRate {
+		unlock := rt.lockDivision(division)
+		defer unlock()
+		return rt.fortressServiceQuery(division, c, request)
 	}
 	if subtype == fortressWarStatus {
-		if r.Done() != nil {
-			return OpResult{}
-		}
 		unlock := rt.lockDivision(division)
 		defer unlock()
 		return rt.fortressWarStatus(division, c, gid)
@@ -102,12 +108,8 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 	if subtype != fortressApply && subtype != fortressWithdraw {
 		return fortressRefusal(subtype, fortressErrUnknown)
 	}
-	fortressID, err := r.U32()
-	if err != nil {
-		return fortressRefusal(subtype, fortressErrInvalid)
-	}
-	kindByte, err := r.U8()
-	if err != nil || r.Done() != nil || kindByte > uint8(fortress.RequestAlly) {
+	fortressID, kindByte := request.Fortress, request.Value8
+	if kindByte > uint8(fortress.RequestAlly) {
 		return fortressRefusal(subtype, fortressErrInvalid)
 	}
 	kind := fortress.RequestKind(kindByte)
