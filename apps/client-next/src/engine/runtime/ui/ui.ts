@@ -8913,7 +8913,7 @@ export function createUi(
 				}
 				if ( panel === "Experimental" && hudData ) {
 					const admission = beginWindow();
-					const width = 386, height = 222;
+					const width = 386, height = 204;
 					const [px, py] = windowOrigin( "Experimental", [
 						(w - width) / 2,
 						(h - height) / 2,
@@ -8923,47 +8923,52 @@ export function createUi(
 					const layout = hudData.windows.ifoption!, slot = hudData.windows.ifgameoptionslot!;
 					windowBox( "Experimental", px, py, width, height );
 					closeButton( px + width - 26, py + 10 );
-					authoredChrome( { ...layout.GDR_OPTION_BGTILE!, rect: [ 27, 50, 332, 122 ] }, px, py );
+					authoredChrome( { ...layout.GDR_OPTION_BGTILE!, rect: [ 27, 50, 332, 104 ] }, px, py );
 					authoredChrome(
-						{ ...layout.GDR_OPTION_WND_GAME!, type: "CIFFrame", rect: [ 11, 34, 364, 154 ] },
+						{ ...layout.GDR_OPTION_WND_GAME!, type: "CIFFrame", rect: [ 11, 34, 364, 136 ] },
 						px,
 						py
 					);
-					// Browser-only section, composed from the native Set Game header and Video row art.
+					// Browser-only section reuses the native Set Game header and inset frame.
 					const section = hudData.windows.ifoption_game!.GDR_GAME_OPTION_TAB_1!;
 					authoredImage( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py );
 					authoredText( { ...section, rect: [ 25, 43, 196, 28 ] }, px, py, "Chat" );
-					image( [ px + 39, py + 78, 308, 28 ], ROOT + "interface/option/opt_video_control_02.png" );
+					authoredChrome(
+						{
+							...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,
+							rect: [ 25, 70, 336, 78 ]
+						},
+						px,
+						py
+					);
 					const enabled = experimental.state().draft.chatTimestamps;
 					authoredText(
-						{ ...slot.GDR_GAME_OPTION_SLOT_STA1!, rect: [ 51, 84, 250, 16 ], client: [ 0, 2, 0, 0 ] },
+						{ ...slot.GDR_GAME_OPTION_SLOT_STA1!, rect: [ 39, 82, 270, 16 ], client: [ 0, 2, 0, 0 ] },
 						px,
 						py,
 						"Chat timestamps"
 					);
 					image(
-						[ px + 320, py + 84, 16, 16 ],
+						[ px + 331, py + 82, 16, 16 ],
 						ROOT + "interface/ifcommon/com_checkbutton_" + (enabled ? "on" : "off") + ".png"
 					);
 					controls.push( {
 						id: "experimental-chat-timestamps",
 						label: "Chat timestamps",
 						kind: "button",
-						rect: [ px + 39, py + 78, 308, 28 ],
+						rect: [ px + 35, py + 78, 316, 28 ],
 						selected: enabled
 					} );
-					const description = {
-						...slot.GDR_GAME_OPTION_SLOT_STA1!,
-						rect: [ 43, 116, 304, 16 ] as UiRect,
-						client: [ 0, 0, 0, 0 ] as UiRect
-					};
-					authoredText( description, px, py, "Hover over a message to see its arrival time." );
-					authoredText( description, px, py + 18, "Older messages also show their date." );
 					authoredText(
-						{ ...description, color: [ 180 / 255, 180 / 255, 180 / 255, 1 ] },
+						{
+							...slot.GDR_GAME_OPTION_SLOT_STA1!,
+							rect: [ 39, 113, 304, 16 ],
+							client: [ 0, 0, 0, 0 ],
+							color: [ 180 / 255, 180 / 255, 180 / 255, 1 ]
+						},
 						px,
-						py + 44,
-						"Optional feature. Disabled by default."
+						py,
+						"Show message time on hover."
 					);
 					for (
 						const [index, key, id] of [ [ 0, "DEF", "default" ], [ 1, "OK", "confirm" ], [
