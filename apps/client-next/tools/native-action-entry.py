@@ -32,6 +32,7 @@ TRANSITIONS = 0xADF310
 ADVANCE = 0xAE07E0
 GET_CURSOR = 0xADF3A0
 SET_RATE = 0xADF030
+FADE_OUT = 0xADF370
 
 
 # ================
@@ -111,6 +112,8 @@ def capture(pe, case):
     elapsed = 0
     frames = []
     for delta in case["steps"]:
+        if elapsed == case.get("cancelAtMs"):
+            call(FADE_OUT, (case["exitMs"],))
         ranges.clear()
         flags = call(ADVANCE, (delta, output, 0))
         elapsed += delta

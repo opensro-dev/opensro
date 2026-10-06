@@ -30,6 +30,9 @@ ActionSchedule
 ================
 */
 export interface ActionSchedule {
+	caster?: number;
+	wait?: ActionInstallation;
+	initialized?: boolean;
 	readonly phases: readonly (ActionPhase | null)[];
 	phase: number;
 	started: number;
@@ -38,16 +41,76 @@ export interface ActionSchedule {
 	// The actor rate changes independently; an installation captures it once.
 	animationRate?: number;
 	phaseRate?: number;
+	phaseSuperseded?: boolean;
 	cancelledAt?: number;
 	activation?: AnimationActivation;
-	outgoing?: {
-		phase: ActionPhase;
-		started: number;
-		stopped: number;
-		loop: boolean;
-		rate: number;
-		activation: AnimationActivation;
-	}[];
+	outgoing?: ActionInstallation[];
+}
+/*
+================
+ActionInstallation
+
+The animation mixer owns an installed clip independently of the skill's
+command stage. A WAIT is installed before READY (8E06E0).
+================
+*/
+interface ActionInstallation {
+	phase: ActionPhase;
+	started: number;
+	stopped: number;
+	loop: boolean;
+	rate: number;
+	exitRate?: number;
+	activation: AnimationActivation;
+}
+/*
+================
+reconcileActionInstallations
+
+ADECF0 resets an existing installation rather than inserting a duplicate.
+An actor's motion binding owns that identity; cast tokens do not. Retire the
+replaced producer permanently so it cannot return after the new clip ends.
+================
+*/
+export function reconcileActionInstallations( clocks: Iterable<ActionSchedule> ): void {
+	const owners = new Map<number | undefined, Map<string, { started: number; remove: () => void; }>>();
+	for ( const clock of clocks ) {
+		let actor = owners.get( clock.caster );
+		if ( !actor ) owners.set( clock.caster, actor = new Map() );
+		/*
+		================
+		install
+		================
+		*/
+		function install( clip: string, started: number, remove: () => void ) {
+			const previous = actor!.get( clip );
+			if ( previous && previous.started > started ) {
+				remove();
+				return;
+			}
+			previous?.remove();
+			actor!.set( clip, { started, remove } );
+		}
+		const phase = clock.phases[clock.phase];
+		if (
+			phase && clock.phase !== 1 && clock.entered && !clock.phaseSuperseded && clock.cancelledAt === undefined
+		) {
+			install( phase.clip, clock.started, () => {
+				clock.phaseSuperseded = true;
+			} );
+		}
+		const wait = clock.wait;
+		if ( wait ) {
+			install( wait.phase.clip, wait.started, () => {
+				clock.wait = undefined;
+			} );
+		}
+		for ( const row of clock.outgoing ?? [] ) {
+			install( row.phase.clip, row.started, () => {
+				clock.outgoing = clock.outgoing?.filter( candidate => candidate !== row );
+			} );
+		}
+	}
 }
 /*
 ================
@@ -81,32 +144,47 @@ Pose sampling and key dispatch must use the same held clip cursor.
 ================
 */
 export function actionLayers( clock: ActionSchedule, now: number ): CharacterLayer[] {
-	clock.outgoing = clock.outgoing?.filter( row => now * 1000 < row.stopped * 1000 + ACTION_BLEND_MS );
+	clock.outgoing = clock.outgoing?.filter( row =>
+		now * 1000 < row.stopped * 1000 + ACTION_BLEND_MS / (row.exitRate ?? (row.loop ? row.rate : 1))
+	);
 	const layers: CharacterLayer[] = [];
 	const phase = clock.phases[clock.phase];
-	if ( phase && clock.cancelledAt === undefined ) {
+	if ( phase && clock.phase !== 1 && !clock.phaseSuperseded && clock.cancelledAt === undefined ) {
 		const age = Math.max( 0, now - clock.started ), weight = Math.min( 1, age / ACTION_BLEND_SECONDS );
 		if ( weight > 0 ) {
 			layers.push( {
 				clip: phase.clip,
 				time: actionSampleTime( phase, age, clock.phase === 1, clock.phaseRate ),
 				loop: clock.phase === 1,
+				rate: clock.phaseRate ?? 1,
 				weight,
 				lane: "event",
 				activation: clock.activation ??= animationActivation( clock.started )
 			} );
 		}
 	}
-	for ( const row of clock.outgoing ?? [] ) {
-		const weight = Math.min( 1, Math.max( 0, row.stopped - row.started ) / ACTION_BLEND_SECONDS ) *
-			Math.max( 0, 1 - (now * 1000 - row.stopped * 1000) / ACTION_BLEND_MS );
+	for ( const row of [ ...(clock.wait ? [ clock.wait ] : []), ...(clock.outgoing ?? []) ] ) {
+		const weight = Math.min(
+			1,
+			Math.max( 0, Math.min( now, row.stopped ) - row.started ) * (row.loop ? row.rate : 1) /
+				ACTION_BLEND_SECONDS
+		) *
+			Math.min(
+				1,
+				Math.max(
+					0,
+					1 - (now * 1000 - row.stopped * 1000) * (row.exitRate ?? (row.loop ? row.rate : 1)) /
+							ACTION_BLEND_MS
+				)
+			);
 		if ( weight ) {
 			layers.push( {
 				clip: row.phase.clip,
 				time: actionSampleTime( row.phase, now - row.started, row.loop, row.rate ),
 				loop: row.loop,
+				rate: row.rate,
 				weight,
-				lane: "event",
+				lane: row.loop ? "timed" : "event",
 				activation: row.activation
 			} );
 		}
@@ -124,18 +202,47 @@ WAIT or cancel before a natural animation boundary.
 */
 export function advanceAction( clock: ActionSchedule, now: number, shotAt?: number, cancelledAt?: number ) {
 	const events: { phase: string; event: number; at: number; }[] = [];
+	if ( !clock.initialized ) {
+		clock.initialized = true;
+		const wait = clock.phases[1];
+		if ( wait ) {
+			clock.wait = {
+				phase: wait,
+				started: clock.started,
+				stopped: Infinity,
+				loop: true,
+				rate: clock.animationRate ?? 1,
+				activation: animationActivation( clock.started )
+			};
+		}
+	}
 	/*
     ================
     retire
     ================
     */
-	function retire( phase: ActionPhase, stopped: number ) {
+	function retire( phase: ActionPhase, stopped: number, cancelled = false ) {
+		if ( clock.phase === 1 || clock.phaseSuperseded ) return;
+		// 8D97D0 retires WAIT by ID, then installs SHOT. ADECF0 leaves a
+		// different earlier one-shot in the mixer's event list.
+		const rate = clock.phaseRate ?? 1;
+		let exitRate = 1;
+		// AE08E4 changes back to state 4 when the entry countdown expires,
+		// even if ADF370 requested state 9 during that countdown.
+		if ( clock.phase === 0 || cancelled && (stopped - clock.started) * 1000 < ACTION_BLEND_MS ) {
+			stopped = clock.started + (ACTION_BLEND_MS + phase.definition.durationMs / rate) / 1000;
+		} else if ( cancelled ) {
+			// AE0B5F consumes the integer cursor advance, then multiplies by
+			// rate again. Natural exit uses the unscaled wall-clock countdown.
+			exitRate = rate * rate;
+		}
 		(clock.outgoing ??= []).push( {
 			phase,
 			started: clock.started,
 			stopped,
 			loop: clock.phase === 1,
-			rate: clock.phaseRate ?? 1,
+			rate,
+			exitRate,
 			activation: clock.activation ??= animationActivation( clock.started )
 		} );
 	}
@@ -156,12 +263,13 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 			Math.max( clock.started, shotAt ) :
 			undefined;
 		const until = release ?? now;
+		if ( clock.phaseSuperseded && release === undefined ) break;
 		if ( !clock.entered ) {
 			clock.phaseRate = clock.animationRate ?? 1;
 			events.push( { phase: name, event: 0, at: clock.started } );
 			clock.entered = true;
 		}
-		if ( phase && clock.phase !== 1 ) {
+		if ( phase && clock.phase !== 1 && !clock.phaseSuperseded ) {
 			const cursor = actionCursor(
 				actionPhaseTime( until - clock.started, false, clock.phaseRate ) * 1000,
 				phase.definition.durationMs
@@ -192,6 +300,11 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 			);
 		}
 		if ( release !== undefined ) {
+			if ( clock.wait ) {
+				clock.wait.stopped = release;
+				(clock.outgoing ??= []).push( clock.wait );
+				clock.wait = undefined;
+			}
 			clock.phase = 2;
 			clock.started = release;
 		} else {
@@ -202,11 +315,17 @@ export function advanceAction( clock: ActionSchedule, now: number, shotAt?: numb
 		}
 		clock.previous = 0;
 		clock.entered = false;
+		clock.phaseSuperseded = false;
 		clock.activation = undefined;
 	}
 	const phase = clock.phases[clock.phase];
 	if ( cancel !== undefined ) {
-		if ( phase ) retire( phase, cancel );
+		if ( clock.wait ) {
+			clock.wait.stopped = cancel;
+			(clock.outgoing ??= []).push( clock.wait );
+			clock.wait = undefined;
+		}
+		if ( phase ) retire( phase, cancel, true );
 		clock.cancelledAt = cancel;
 	}
 	return {

@@ -223,11 +223,14 @@ test("live presenter holds the authored WAIT clip and consumes the authoritative
 	for ( let i = 0; i < 30; i++ ) step( i / 30 );
 	gameplay.casts = [ { token: 1, caster: 1, target: 1, skill: 1, receivedAtMs: 2000, damage: 0, fatal: false } ];
 	step( 2 );
-	assert.equal( actors[0].layers, undefined );
+	assert.deepEqual( actors[0].layers.map( row => row.clip ), [ "stand" ] );
 	step( 2.1 );
 	assert.equal( actors[0].layers[0].clip, "ready01" );
 	assert.ok( Math.abs( actors[0].layers[0].weight - .5 ) < 1e-9 );
+	assert.ok( Math.abs( actors[0].layers.find( row => row.clip === "wait01" ).time - .1 ) < 1e-9 );
+	assert.ok( Math.abs( actors[0].layers.find( row => row.clip === "stand" ).weight - .5 ) < 1e-9 );
 	step( 3 );
+	assert.ok( !actors[0].layers.some( row => row.clip === "stand" ) );
 	assert.equal( actors[0].layers[0].clip, "ready01" );
 	step( 3.3 );
 	assert.equal( actors[0].layers[0].clip, "wait01" );
@@ -239,7 +242,9 @@ test("live presenter holds the authored WAIT clip and consumes the authoritative
 	assert.equal( actors[0].layers[0].time, .05 );
 	gameplay.casts = [];
 	step( 5.3 );
-	assert.equal( actors[0].layers, undefined );
+	assert.equal( actors[0].layers[0].clip, "attack1" );
+	step( 5.51 );
+	assert.ok( !(actors[0].layers ?? []).some( row => row.clip === "attack1" || row.clip === "wait01" ) );
 	assert.equal( p.error(), null );
 	p.dispose();
 });

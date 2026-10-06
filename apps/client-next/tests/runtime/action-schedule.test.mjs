@@ -23,7 +23,10 @@ load
 async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
-const { advanceAction, actionLayers } = await load( "src/engine/foundation/animation/action-schedule.ts" );
+const { advanceAction, actionLayers, reconcileActionInstallations } = await load(
+	"src/engine/foundation/animation/action-schedule.ts"
+);
+const { createAnimationDispatch } = await load( "src/engine/foundation/animation/animation-dispatch.ts" );
 const { createCombat } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/combat/combat.ts" );
 /*
 ================
@@ -81,13 +84,13 @@ test("a B505 release cannot hold or restart SHOT when WAIT has no motion (8DF180
 });
 
 test("B505 no-steering release is retained once, finalization removes it, malformed packets do not mutate", () => {
-	const combat = createCombat(), p = new Uint8Array( 42 ), v = new DataView( p.buffer );
+	const combat = createCombat(), p = new Uint8Array( 34 ), v = new DataView( p.buffer );
 	p[0] = 1;
 	v.setUint32( 2, 7, true );
 	v.setUint32( 6, 1, true );
 	v.setUint32( 10, 3, true );
 	v.setUint32( 14, 2, true );
-	p[18] = 9;
+	p[18] = 1;
 	p[19] = p[20] = 1;
 	v.setUint32( 21, 2, true );
 	assert.equal( combat.receive( 0xb245, p, 100 ), true );
@@ -137,13 +140,16 @@ test("action entry, phase change, natural end and early cancellation retain nati
 	advanceAction( d, 1.3 );
 	const transition = actionLayers( d, 1.3 );
 	assert.deepEqual( transition.map( x => x.clip ), [ "wait", "ready" ] );
-	assert.ok( transition.every( x => Math.abs( x.weight - .5 ) < 1e-9 ) );
+	assert.equal( transition[0].weight, 1 );
+	assert.equal( transition[0].lane, "timed" );
+	assert.ok( Math.abs( transition[1].weight - .5 ) < 1e-9 );
 	const e = clock( [ null, null, phase( "attack" ) ] );
 	advanceAction( e, 0 );
 	advanceAction( e, .1, undefined, .1 );
 	assert.ok( Math.abs( actionLayers( e, .1 )[0].weight - .5 ) < 1e-9 );
-	assert.ok( Math.abs( actionLayers( e, .2 )[0].weight - .25 ) < 1e-9 );
-	assert.deepEqual( actionLayers( e, .301 ), [] );
+	assert.equal( actionLayers( e, .2 )[0].weight, 1 );
+	assert.equal( actionLayers( e, .301 )[0].weight, 1 );
+	assert.deepEqual( actionLayers( e, 1.401 ), [] );
 });
 
 /*
@@ -216,16 +222,23 @@ test("skill pose clocks match original one-shot execution across entry and natur
 		advanceAction( c, 0 );
 		for ( const frame of row.frames ) {
 			const at = frame.elapsedMs / 1000;
-			advanceAction( c, at );
+			advanceAction(
+				c,
+				at,
+				undefined,
+				row.cancelAtMs !== undefined && at * 1000 > row.cancelAtMs ? row.cancelAtMs / 1000 : undefined
+			);
 			const layer = actionLayers( c, at )[0];
-			if ( frame.weight === 0 ) {
+			if ( frame.weight < 1e-6 && !layer ) {
 				assert.equal( layer, undefined );
 				continue;
 			}
 			assert.ok( layer );
 			assert.ok( Math.abs( layer.time * 1000 - frame.sampleMs ) < 1e-6, `cursor at ${frame.elapsedMs}` );
 			assert.ok( Math.abs( layer.weight - frame.weight ) < 1e-6, `weight at ${frame.elapsedMs}` );
-			assert.equal( c.phase === 3, frame.mode === 5, `completion at ${frame.elapsedMs}` );
+			if ( row.cancelAtMs === undefined ) {
+				assert.equal( c.phase === 3, frame.mode === 5, `completion at ${frame.elapsedMs}` );
+			}
 		}
 	}
 });
@@ -243,4 +256,71 @@ test("new installations capture action speed without scaling the entry blend or 
 	assert.equal( actionLayers( c, 1.1 )[0].time, 0 );
 	assert.deepEqual( advanceAction( c, 1.403, 1 ).events, [ { phase: "SHOT", event: 1, at: 1.4 } ] );
 	assert.ok( Math.abs( actionLayers( c, 1.6 )[0].time - .4 ) < 1e-9 );
+});
+
+test("WAIT starts beside READY and release preserves the previous one-shot's natural lifetime", () => {
+	const c = clock( [ phase( "ready" ), phase( "wait" ), phase( "shot" ) ] );
+	advanceAction( c, 0 );
+	const entering = actionLayers( c, .1 );
+	assert.deepEqual( entering.map( row => [ row.clip, row.lane, row.time, row.weight ] ), [
+		[ "ready", "event", 0, .5 ],
+		[ "wait", "timed", .1, .5 ]
+	] );
+	advanceAction( c, .3, .3 );
+	const release = actionLayers( c, .4 );
+	assert.ok( Math.abs( release.find( row => row.clip === "wait" ).weight - .5 ) < 1e-9 );
+	assert.equal( release.find( row => row.clip === "ready" ).weight, 1 );
+	advanceAction( c, .6, .3 );
+	assert.deepEqual( actionLayers( c, .6 ).map( row => row.clip ), [ "shot", "ready" ] );
+	assert.ok( actionLayers( c, 1.3 ).find( row => row.clip === "ready" ).weight > 0 );
+	assert.ok( !actionLayers( c, 1.401 ).some( row => row.clip === "ready" ) );
+});
+
+test("WAIT carries its captured rate through the renderer's cursor owner", () => {
+	for ( const rate of [ .5, 1, 2 ] ) {
+		const c = { ...clock( [ null, phase( "wait" ), null ] ), animationRate: rate };
+		advanceAction( c, 0 );
+		const dispatch = createAnimationDispatch();
+		for ( let frame = 1; frame <= 10; frame++ ) {
+			const layers = actionLayers( c, frame / 100 );
+			const sampled = dispatch.step( layers, 10, () => 1000 );
+			assert.equal( sampled[0].layer.time, frame * 10 * rate / 1000 );
+		}
+	}
+});
+
+test("replaying a bound motion replaces its old producer without resurrecting it or affecting another actor", () => {
+	for ( const loop of [ true, false ] ) {
+		const phases = loop ? [ null, phase( "same" ), null ] : [ null, null, phase( "same" ) ];
+		const old = { ...clock( phases ), caster: 1 };
+		const peer = { ...clock( phases ), caster: 2 };
+		const next = { ...clock( phases ), caster: 1, started: .3 };
+		advanceAction( old, 0 );
+		advanceAction( peer, 0 );
+		advanceAction( next, .3 );
+		// Zero entry weight still replaces the prior installation.
+		reconcileActionInstallations( [ old, peer, next ] );
+		assert.equal( actionLayers( old, .3 ).length, 0 );
+		assert.equal( actionLayers( peer, .3 ).length, 1 );
+		assert.equal( actionLayers( next, .4 ).length, 1 );
+		assert.deepEqual( advanceAction( old, .6 ).events, [] );
+		advanceAction( next, .6, undefined, .6 );
+		advanceAction( old, .9 );
+		reconcileActionInstallations( [ next, old, peer ] );
+		assert.equal( actionLayers( old, .9 ).length, 0 );
+		assert.equal( actionLayers( next, 2 ).length, 0 );
+		assert.equal( actionLayers( old, 2 ).length, 0 );
+	}
+});
+
+test("reinstalling a motion removes its retained natural-exit layer", () => {
+	const old = { ...clock( [ phase( "same" ), phase( "wait" ), phase( "shot" ) ] ), caster: 1 };
+	advanceAction( old, 0 );
+	advanceAction( old, .3, .3 );
+	const next = { ...clock( [ null, null, phase( "same" ) ] ), caster: 1, started: .5 };
+	advanceAction( next, .5 );
+	// Caller iteration order does not substitute for installation time.
+	for ( const rows of [ [ old, next ], [ next, old ] ] ) reconcileActionInstallations( rows );
+	assert.ok( !actionLayers( old, .6 ).some( row => row.clip === "same" ) );
+	assert.equal( actionLayers( next, .6 )[0].clip, "same" );
 });

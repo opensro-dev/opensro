@@ -72,10 +72,59 @@ The full server gate (including race and lint), all 11 client gates and 13
 source gates passed. This follow-up has not yet been exercised against the
 running local server binary; the Vite client serves the current source.
 
-## Audit still open
+## Phase ownership and replacement
 
-The entry-hold repair is established. Adjacent native branches require
-separate closure: WAIT installation begins alongside READY rather than
-only on READY completion; release/cancellation must preserve the
-native ownership of already-installed animations. Do not claim those
-branches are covered merely because the entry-hold tests pass.
+The adjacent phase branches are now ported and tested:
+
+- `8E06E0` installs WAIT at cast creation, alongside READY, and leaves base
+  action state 3. The presenter now removes the base idle/movement state for
+  WAIT-bearing casts and restores it when the cast exits.
+- `8D97D0` removes WAIT and installs SHOT without removing READY. The model
+  retains that earlier one-shot through its natural completion, including
+  after the skill decoration is removed. A single remaining WAIT/SHOT layer
+  must still reach the renderer; the old single-layer optimization discarded it.
+- Timed WAIT blend time follows its captured rate (`AE05D0`). Its rate also
+  reaches the renderer's independent cursor owner. One-shot entry and natural
+  exit remain wall-time intervals. Explicit cancellation after entry follows
+  the cursor increment multiplied by rate again (`AE0B5F`). Cancellation during
+  entry finishes entry and returns to the playing state (`AE08E4`). The native
+  fixture now includes early/late cancellation at half, normal and double rate.
+- `8DF18C` refuses WAIT release while the guided-trajectory callback owns the
+  skill. Both already active travel and travel installed by that same B505
+  payload preserve WAIT; result application still proceeds normally.
+- `A96E50` first returns a cached geometry prefix/state installation. `ADECF0`
+  resets that same installation when it is replayed. The presenter permanently
+  retires the old motion producer when replaced, preserving distinct clips and
+  other actors. A zero-weight entry also replaces the old installation.
+
+Binary Ninja snapshots 398 and 399 contain the investigated timed-installation,
+binding-cache, command-dispatch and container labels. Saved symbols were read
+back rather than relying on the save return value.
+
+## Coverage and limits
+
+The authored CH/EU player census resolves all 277 distinct referenced phase
+clips: 22 READY, 24 WAIT and 231 SHOT. Every READY/SHOT is a one-shot and every
+WAIT is cyclic. All phases are tested at half, normal and double rate (831
+phase-clock cases), with no unresolved player phase references. This census
+does not cover every monster or system-effect motion.
+
+The focused suite passed 48 tests, including regenerated original-byte
+captures, live-presenter ownership, prediction/adoption, guided movement and
+the authored census. The production GPU blend test passed: 89,105 changed
+pixels across the blended boundary versus 746,257 for the hard-cut negative
+control, with zero settled difference. All 11 client gates and 13 source gates
+passed, including the server gate.
+
+The connected follow-up captured Anti Devil 951 and Cold Wave 1152 on
+CodexProbe without page errors. A failed request for the previously learned
+Cold Wave rank 1150 is excluded: that rank is no longer in the character's
+learned list. Anti Devil showed READY/WAIT entering together and READY/SHOT
+overlapping after release; Cold Wave retained cursor zero during entry.
+
+Evidence establishes the investigated control-flow rules and tested numerical
+cases, not bit-exact equivalence for every arbitrary frame sequence. Tiny
+native float remainders at zero weight are tolerated by the oracle comparison.
+An original-client/original-server visual comparison remains unperformed.
+The localhost Vite client serves these changes; the running local server binary
+has not been restarted with the preceding action-speed publication changes.
