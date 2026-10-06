@@ -6,7 +6,8 @@ experimental-options.ts - explicitly opted-in browser additions
 These settings are deliberately separate from the native SROptionSet.
 Missing or invalid preferences never enable an experimental feature, so
 the defaults are the native client: no presentation pass, no anisotropy,
-linear fog, flat water and no garment sheen.
+linear fog. Water reflection and equipment shine are native Video
+options (Water reflection, Metal detail), not experimental ones.
 
 ===========================================================================
 */
@@ -23,8 +24,6 @@ export interface ExperimentalOptions {
 	readonly postProcessing: boolean;
 	readonly anisotropicFiltering: boolean;
 	readonly heightFog: boolean;
-	readonly waterReflection: boolean;
-	readonly garmentSheen: boolean;
 }
 
 /*
@@ -53,9 +52,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		developerDiagnostics: enabled( "developerDiagnostics" ),
 		postProcessing: enabled( "postProcessing" ),
 		anisotropicFiltering: enabled( "anisotropicFiltering" ),
-		heightFog: enabled( "heightFog" ),
-		waterReflection: enabled( "waterReflection" ),
-		garmentSheen: enabled( "garmentSheen" )
+		heightFog: enabled( "heightFog" )
 	};
 }
 
@@ -71,8 +68,6 @@ export interface ExperimentalVideo {
 	readonly postProcessing: boolean;
 	readonly anisotropicFiltering: boolean;
 	readonly heightFog: boolean;
-	readonly waterReflection: boolean;
-	readonly garmentSheen: boolean;
 }
 
 /*
@@ -84,8 +79,6 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 	return {
 		postProcessing: options.postProcessing,
 		anisotropicFiltering: options.anisotropicFiltering,
-		heightFog: options.heightFog,
-		waterReflection: options.waterReflection,
-		garmentSheen: options.garmentSheen
+		heightFog: options.heightFog
 	};
 }

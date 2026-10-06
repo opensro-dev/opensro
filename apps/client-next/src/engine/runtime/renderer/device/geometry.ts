@@ -788,7 +788,7 @@ export function createGeometryResources(
 						0,
 						mat?.environmentReflection ? 1 : 0,
 						mat?.alphaCompare ?? 7,
-						mat?.sheenAlpha ? 1 : 0,
+						0,
 						mat?.water && environmentImage ? 1 : 0,
 						0,
 						0,

@@ -416,29 +416,6 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						const nativeImages = model.images.map( image =>
 							image.mime === NATIVE_TEXTURE_MIME ? decodeNativeTexture( image.bytes ) : null
 						);
-						// Only the loader sees the authored container format, so it
-						// stamps opaque DXT3 (bc2) garment parts here - their alpha
-						// is sheen, not coverage, and the geometry shader may read
-						// it as gloss.
-						if ( request.decode === "character" ) {
-							model = {
-								...model,
-								primitives: model.primitives.map( ( primitive ) => {
-									const material = primitive.geometry.material;
-									if (
-										!material ||
-										primitive.image < 0 ||
-										nativeImages[primitive.image]?.format !== "bc2-rgba-unorm" ||
-										material.textureAlpha
-									) return primitive;
-									const geometry = {
-										...primitive.geometry,
-										material: { ...material, sheenAlpha: true }
-									};
-									return { ...primitive, geometry } as typeof primitive;
-								} )
-							};
-						}
 						const decoded = model.images.reduce(
 							( sum, image, index ) =>
 								sum + (nativeImages[index] ?

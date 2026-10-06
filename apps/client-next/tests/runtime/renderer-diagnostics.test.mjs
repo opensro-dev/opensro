@@ -36,9 +36,7 @@ const { createRenderer } = await import(
 const VIDEO = Object.freeze( {
 	postProcessing: true,
 	anisotropicFiltering: true,
-	heightFog: false,
-	waterReflection: true,
-	garmentSheen: false
+	heightFog: false
 } );
 
 /*

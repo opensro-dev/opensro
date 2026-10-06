@@ -25,9 +25,7 @@ const OFF = Object.freeze( {
 	developerDiagnostics: false,
 	postProcessing: false,
 	anisotropicFiltering: false,
-	heightFog: false,
-	waterReflection: false,
-	garmentSheen: false
+	heightFog: false
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -98,11 +96,9 @@ test("every video stage defaults off and only an explicit true enables it", () =
 	assert.deepEqual( experimentalVideo( experimentalOptions() ), {
 		postProcessing: false,
 		anisotropicFiltering: false,
-		heightFog: false,
-		waterReflection: false,
-		garmentSheen: false
+		heightFog: false
 	} );
-	for ( const key of [ "postProcessing", "anisotropicFiltering", "heightFog", "waterReflection", "garmentSheen" ] ) {
+	for ( const key of [ "postProcessing", "anisotropicFiltering", "heightFog" ] ) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
 		assert.equal( experimentalOptions( { [key]: "true" } )[key], false );
 		assert.equal( experimentalOptions( { [key]: true } )[key], true );

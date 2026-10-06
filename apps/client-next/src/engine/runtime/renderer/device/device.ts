@@ -458,7 +458,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		*/
 		experimentalVideo( value ) {
 			finishEnabled = value.postProcessing;
-			stages.set( [ value.heightFog ? 1 : 0, value.waterReflection ? 1 : 0, value.garmentSheen ? 1 : 0, 0 ] );
+			stages.set( [ value.heightFog ? 1 : 0, 0, 0, 0 ] );
 			if ( anisotropic === value.anisotropicFiltering ) return;
 			anisotropic = value.anisotropicFiltering;
 			if ( phase === "running" ) geometry?.textureOptions( textureFiltered, textureDetail, anisotropic );

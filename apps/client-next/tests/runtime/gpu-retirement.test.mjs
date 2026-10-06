@@ -318,9 +318,7 @@ test("the experimental presentation pass publishes the offscreen frame and retir
 		renderer.experimentalVideo( {
 			postProcessing: true,
 			anisotropicFiltering: false,
-			heightFog: false,
-			waterReflection: false,
-			garmentSheen: false
+			heightFog: false
 		} );
 		// The frame submits, the presentation pass publishes the retained
 		// offscreen copy, then the resize retires that copy and the old depth.

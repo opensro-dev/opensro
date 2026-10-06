@@ -61,18 +61,6 @@ export const EXPERIMENTAL_TABS: readonly { readonly title: string; readonly rows
 				id: "experimental-height-fog",
 				label: "Height fog",
 				description: "Distance haze that thins with height."
-			},
-			{
-				key: "waterReflection",
-				id: "experimental-water-reflection",
-				label: "Water reflections",
-				description: "Water reflects the sky by viewing angle."
-			},
-			{
-				key: "garmentSheen",
-				id: "experimental-garment-sheen",
-				label: "Clothing sheen",
-				description: "Gloss highlights on clothing."
 			}
 		]
 	},

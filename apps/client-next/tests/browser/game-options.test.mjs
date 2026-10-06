@@ -179,9 +179,7 @@ test(
 				const id of [
 					"experimental-post-processing",
 					"experimental-anisotropic-filtering",
-					"experimental-height-fog",
-					"experimental-water-reflection",
-					"experimental-garment-sheen"
+					"experimental-height-fog"
 				]
 			) {
 				await draw( id );
@@ -259,9 +257,7 @@ test(
 					developerDiagnostics: true,
 					postProcessing: false,
 					anisotropicFiltering: false,
-					heightFog: false,
-					waterReflection: false,
-					garmentSheen: false
+					heightFog: false
 				}
 			);
 			await page.keyboard.press( "Escape" );
@@ -295,9 +291,7 @@ test(
 					developerDiagnostics: false,
 					postProcessing: false,
 					anisotropicFiltering: false,
-					heightFog: false,
-					waterReflection: false,
-					garmentSheen: false
+					heightFog: false
 				}
 			);
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );

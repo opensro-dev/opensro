@@ -67,7 +67,6 @@ export function copyMaterial( material: WorldMaterial ): WorldMaterial {
 				!material.textureFactor.every( v => Number.isFinite( v ) && v >= 0 && v <= 1 )) ||
 		material.unlit !== undefined && typeof material.unlit !== "boolean" ||
 		material.terrain !== undefined && typeof material.terrain !== "boolean" ||
-		material.sheenAlpha !== undefined && typeof material.sheenAlpha !== "boolean" ||
 		material.sharedPose !== undefined && typeof material.sharedPose !== "boolean" ||
 		material.sky !== undefined && (!Number.isInteger( material.sky ) || material.sky < 1 || material.sky > 6) ||
 		material.lightmap !== undefined && typeof material.lightmap !== "boolean" ||

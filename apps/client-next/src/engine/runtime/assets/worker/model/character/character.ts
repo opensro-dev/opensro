@@ -311,7 +311,8 @@ channels retain strict finite-value validation before GPU allocation.
 					const mat = p.material === undefined ? undefined : j.materials?.[p.material],
 						texture = mat?.pbrMetallicRoughness?.baseColorTexture?.index;
 					// The exporter maps BMT texture-alpha bit 0x200 to MASK.
-					// Opaque garment alpha can carry sheen, not coverage: keep
+					// Opaque equipment alpha is the Metal detail reflection mask
+					// (AEE6D0), not coverage: keep
 					// that admission policy when the actor enters a fade batch.
 					const color = mat?.pbrMetallicRoughness?.baseColorFactor ?? [ 1, 1, 1, 1 ];
 					const ambient = mat?.extras?.sroAmbientFactor ?? [ 1, 1, 1, 1 ];

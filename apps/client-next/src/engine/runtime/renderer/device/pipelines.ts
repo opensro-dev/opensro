@@ -37,7 +37,8 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 
 // Experimental video stages (Experimental > Video). Each is off by
 // default, which is the native frame; env.stages carries the switches
-// (x height fog, y water reflection, z garment sheen).
+// (x height fog; y and z unused). Water reflection and equipment shine are
+// native options (Video slots 4 and 6), not experimental stages.
 //
 // Height fog - a deliberate deviation from the retail D3DFOG_LINEAR the
 // native client authored (sub_4dc920 start/end): the same start/end
@@ -47,23 +48,6 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 const FOG_EXP2_REACH = 2.5; // exp2 factor reaches 1 - 1/255 at the fog end
 const FOG_HEIGHT_FALLOFF = 0.004; // fog density e-folds 250 m above the eye
 const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
-
-// Water shading - the 30 authored wave frames (water1XX, x/y slope
-// offsets around 0.5) ship and animate as texture array layers but the
-// flat unlit water path never sampled them. Fresnel against a
-// horizon-tinted sky reflection now uses them: the surface is horizontal,
-// so the eye height over view depth carries the view angle and no camera
-// uniform is needed. The flat authored look is this block.
-const WATER_FRESNEL = 0.02; // F0 base reflectance of a water surface
-const WATER_WAVE_SLOPE = 1; // wave-frame slope weight in the reflection lookup
-
-// Garment sheen - opaque DXT3 character parts author gloss in the alpha
-// channel (jmxAssetIO: CPrimMtrl bit 0x200 off means alpha is not
-// coverage). A Blinn-Phong term against the fixed 45-degree sun the
-// diffuse lighting already uses; the view vector is the reversed camera
-// forward (surface to eye), exact at the frame centre.
-const SHEEN_POWER = 24; // highlight tightness
-const SHEEN_STRENGTH = 0.5; // gloss gain on the lit term
 
 // Anisotropic filtering - the experimental sampler level; retail is 1.
 const ANISOTROPY = 16;
@@ -430,24 +414,8 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  }
  // AEF8E0: option texture * packed TFACTOR (MODULATE/2X), then ADD base.
  if(material.equipmentColor.w>0.0){lit=clamp(tex.rgb+clamp(equipment*material.equipmentColor.rgb*material.equipmentColor.w,vec3f(0),vec3f(1)),vec3f(0),vec3f(1));}
- // Authored garment gloss from the opaque DXT3 alpha (experimental).
- if(material.reflection.z>0.5&&env.stages.z>0.5&&input.opacity>=1.0){
-  let halfVec=normalize(vec3f(0.70710678,0.70710678,0)-env.forward.xyz);
-  let gloss=pow(max(0.0,dot(normalize(input.normal),halfVec)),${SHEEN_POWER});
-  lit=clamp(lit+tex.a*gloss*${SHEEN_STRENGTH}*env.diffuse.rgb,vec3f(0),vec3f(1));
- }
  let animated=material.skin.z>0.5;
- // Fresnel-weighted sky reflection on animated water. The reflected ray
- // sees zenith when the eye looks down, horizon when grazing; the wave
- // frame's slope shimmers the lookup between the two.
- var waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1));
- if(animated&&env.stages.y>0.5){
-  let slope=(tex.rg-vec2f(0.5))*${WATER_WAVE_SLOPE};
-  let cosTheta=clamp((env.settings.w-input.worldY)/max(input.viewZ,1.0),0.05,1.0);
-  let fresnel=${WATER_FRESNEL}+(1.0-${WATER_FRESNEL})*pow(1.0-cosTheta,5.0);
-  let skyColor=mix(env.horizon.rgb,env.zenith.rgb,clamp(cosTheta+slope.y,0.0,1.0));
-  waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1))*(1.0-fresnel)+skyColor*fresnel;
- }
+ let waterShading=clamp(env.water.rgb,vec3f(0),vec3f(1));
  let fogSource=select(env.fog,material.localFog,material.policy.y>0.5);
  let fogEnd=select(env.settings.x,material.localFogSettings.x,material.policy.y>0.5);
  // Native D3DFOG_LINEAR between the authored start and end.
