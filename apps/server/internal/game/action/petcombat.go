@@ -312,7 +312,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 		if err != nil {
 			return petStrikeResult{}, false
 		}
-		formulas = append(formulas, formula)
+		formulas = append(formulas, combat.FinishImpact(formula, combat.ImpactTail{Attack: skill.Attack.Present}))
 	}
 	if len(formulas) == 0 {
 		return petStrikeResult{}, false

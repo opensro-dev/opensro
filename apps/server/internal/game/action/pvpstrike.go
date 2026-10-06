@@ -156,10 +156,11 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 			return combat.WallOutcome{Defender: *in.fixed}, nil
 		case in.skill.LifeSteal.Present:
 			// 58F4B5: the percent rides into 40F750, after its HP cap.
-			return combat.WallOutcome{Defender: lifeStealResult(in.lifeStealBase, in.attacker, defender, uint32(max(hp, 0)), uint32(percent))}, nil
+			steal := lifeStealResult(in.lifeStealBase, in.attacker, defender, uint32(max(hp, 0)), uint32(percent))
+			return combat.WallOutcome{Defender: combat.FinishImpact(steal, combat.ImpactTail{PercentApplied: true, Attack: in.skill.Attack.Present})}, nil
 		}
 		out, err := rt.resolvePlayerImpactBehindWall(in.division, in.snapshot.Name, in.skill, in.attacker, defender, in.now, in.chained, wall)
-		out.Defender.Damage = uint32(uint64(out.Defender.Damage) * percent / fullAreaPercent)
+		out.Defender = combat.FinishImpact(out.Defender, combat.ImpactTail{Percent: percent, Attack: in.skill.Attack.Present})
 		out.Absorbed = uint32(uint64(out.Absorbed) * percent / fullAreaPercent)
 		return out, err
 	}
