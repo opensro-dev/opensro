@@ -55,7 +55,7 @@ test("experimental drafts require Confirm and Default only changes the draft", (
 	assert.equal( hud.state().draft.chatTimestamps, true );
 	hud.reset();
 	assert.deepEqual( hud.confirm(), OFF );
-	hud.restore( { chatTimestamps: true, developerDiagnostics: false } );
+	hud.restore( { ...OFF, chatTimestamps: true } );
 	assert.deepEqual( hud.state(), {
 		saved: { ...OFF, chatTimestamps: true },
 		draft: { ...OFF, chatTimestamps: true },

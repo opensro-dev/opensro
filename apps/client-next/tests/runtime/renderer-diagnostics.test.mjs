@@ -57,7 +57,7 @@ function diagnosticDevices( t ) {
 	} );
 	const devices = [];
 	globalThis.__diagnosticDevice = flag => {
-		const row = { flag, phase: "starting", disposed: false, video: [] };
+		const row = { flag, phase: "starting", disposed: false, video: /** @type {unknown[]} */ ([]) };
 		devices.push( row );
 		return {
 			phase: () => row.phase,
