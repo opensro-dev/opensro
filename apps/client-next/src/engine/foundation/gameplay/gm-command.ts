@@ -1,5 +1,6 @@
 import type {WireFrame} from '@/engine/contracts/network';
 export interface GmReply {readonly text?:string;readonly key?:string;readonly console:boolean;}
+export interface GmMonsterReference {readonly refObjId:number;readonly monsterType:number;}
 export interface GmItemReference {readonly refObjId:number;readonly codename:string;readonly typeFlags:number;readonly maxStack:number;}
 export function gmItemReferences(value:unknown):Map<string,GmItemReference>{
  const rows=(value as {itemCommandReferences?:unknown})?.itemCommandReferences??[];
@@ -26,7 +27,7 @@ export function gmReply(p:Uint8Array):GmReply|null{
 }
 // Verified name and scalar arms of 509CF0. Context-dependent object/waypoint
 // commands require their own reference authority; never send fabricated IDs.
-export function gmRequest(line:string,items:ReadonlyMap<string,GmItemReference>=new Map(),heading=0):WireFrame|null{
+export function gmRequest(line:string,items:ReadonlyMap<string,GmItemReference>=new Map(),heading=0,monster:(codename:string)=>GmMonsterReference|undefined=()=>undefined):WireFrame|null{
  const tokens=line.trim().split(/\s+/),name=tokens[0],arg=tokens[1]??'';
  // Retail 50B303: WP sends u8 16, u16 region, float32 XYZ, u16 heading.
  // Coordinate convenience uses that authority instead of 50BEE0's local warp.
@@ -42,6 +43,16 @@ export function gmRequest(line:string,items:ReadonlyMap<string,GmItemReference>=
   const amount=(Number.parseInt(tokens[2]!,10)||0)&255,stackable=(ref.typeFlags&0x60)===0x60;
   const parameter=stackable?Math.min(ref.maxStack,Math.max(1,amount))&255:Math.min(12,amount);
   const payload=Uint8Array.of(7,0,0,0,0,parameter);new DataView(payload.buffer).setUint32(1,ref.refObjId,true);return {opcode:0x75b6,payload};
+ }
+  // 50A3D3 /LOADMONSTER codename count [CHAMP|GIANT|NORMAL]: subcmd 6, u32 ref,
+  // u8 count (low byte, 1..255), u8 type. Without a type token 50A4A6 sends the
+  // record's +0xA0 byte; an unrecognized token leaves 0 (50A49F).
+ if(name==='/LOADMONSTER'&&(tokens.length===3||tokens.length===4)){
+  const ref=monster(arg);if(!ref)return null;
+  const parsed=(Number.parseInt(tokens[2]!,10)||0)&255,count=parsed<=1?1:parsed;
+  const word=tokens[3]?.toUpperCase();
+  const type=tokens.length===3?ref.monsterType&255:word==='NORMAL'?0:word==='GIANT'?4:word==='CHAMP'?1:0;
+  const payload=Uint8Array.of(6,0,0,0,0,count,type);new DataView(payload.buffer).setUint32(1,ref.refObjId,true);return {opcode:0x75b6,payload};
  }
  const named=({ '/FINDUSER':1,'/TOTOWN':3,'/MOVETOUSER':8,'/BAN':13,'/RECALLUSER':17,'/RECALLGUILD':18,'/LIENAME':25,'/REALNAME':26 } as Record<string,number>)[name??''];
  if(named!==undefined){if(tokens.length!==2)return null;const bytes=new TextEncoder().encode(arg);if(!bytes.length||bytes.length>=128||arg.includes('\0'))throw Error('Invalid GM name');const payload=new Uint8Array(3+bytes.length);payload[0]=named;new DataView(payload.buffer).setUint16(1,bytes.length,true);payload.set(bytes,3);return {opcode:0x75b6,payload};}

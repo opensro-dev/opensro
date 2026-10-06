@@ -56,6 +56,9 @@ export function createEntities(
 	let skillRefs = spawnSkillReferences( [] );
 	const motion = createEntityMotion( surface );
 	const itemRefs = new Map<number, number>(), itemNames = new Map<number, string>();
+	// /LOADMONSTER resolves a typed codename here, as the native client reads
+	// its own character data (GlobalDataManager_GetItemRecordByCodeName).
+	const monsterCodenames = new Map<string, { readonly refObjId: number; readonly monsterType: number; }>();
 	const entities = new Map<number, EntityState>(),
 		refs = new Map<number, {
 			teleport?: EntityState["teleport"];
@@ -290,6 +293,17 @@ export function createEntities(
 		member is in view (5B93A0 reads GetCharCosDataById(member ref)+0x9C).
 		================
 		*/
+		/*
+		================
+		monsterReference
+
+		The monster row a GM typed by codename, with its static type byte
+		(client record +0xA0), or undefined for anything else.
+		================
+		*/
+		monsterReference( codename: string ): { readonly refObjId: number; readonly monsterType: number; } | undefined {
+			return monsterCodenames.get( codename );
+		},
 		characterCountry( refObjId: number ): number | undefined {
 			return refs.get( refObjId )?.countryByte9c;
 		},
@@ -418,6 +432,7 @@ export function createEntities(
 			refs.clear();
 			itemRefs.clear();
 			itemNames.clear();
+			monsterCodenames.clear();
 			for ( const row of b.refObjSnapshot ) {
 				if (
 					!row || typeof row.refObjId !== "number" || !Number.isInteger( row.refObjId ) ||
@@ -442,6 +457,13 @@ export function createEntities(
 				}
 				if ( row.name !== undefined && typeof row.name !== "string" ) {
 					throw Error( "Invalid entity reference name" );
+				}
+				if (
+					row.monsterType !== undefined &&
+					(!Number.isInteger( row.monsterType ) || row.monsterType < 0 || row.monsterType > 255)
+				) throw Error( "Invalid entity reference monsterType" );
+				if ( row.kind === "monster" && typeof row.codename === "string" && row.codename ) {
+					monsterCodenames.set( row.codename, { refObjId: row.refObjId, monsterType: row.monsterType ?? 0 } );
 				}
 				if (
 					row.kind === "teleport" &&

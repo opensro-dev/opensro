@@ -181,3 +181,22 @@ test("GM authority is independent of PC-room eligibility and resets", () => {
 	assert.equal( g.command( { kind: "gm-command", line: "/FINDUSER R" }, 0 ), null );
 	g.dispose();
 });
+
+test("LOADMONSTER sends the native subcmd 6 frame with clamped count and resolved type", () => {
+	const refs = new Map( [ [ "MOB_CH_MANGNYANG", { refObjId: 0x1234, monsterType: 1 } ] ] );
+	const monster = codename => refs.get( codename );
+	const frame = line => [ ...gmRequest( line, new Map(), 0, monster )?.payload ?? [] ];
+	// 50A53E..50A57E: subcmd 6, u32 refObjID LE, u8 count, u8 type.
+	assert.deepEqual( frame( "/LOADMONSTER MOB_CH_MANGNYANG 20 GIANT" ), [ 6, 0x34, 0x12, 0, 0, 20, 4 ] );
+	assert.deepEqual( frame( "/LOADMONSTER MOB_CH_MANGNYANG 20 champ" ), [ 6, 0x34, 0x12, 0, 0, 20, 1 ] );
+	assert.deepEqual( frame( "/LOADMONSTER MOB_CH_MANGNYANG 20 NORMAL" ), [ 6, 0x34, 0x12, 0, 0, 20, 0 ] );
+	assert.deepEqual( frame( "/LOADMONSTER MOB_CH_MANGNYANG 20 OTHER" ), [ 6, 0x34, 0x12, 0, 0, 20, 0 ] );
+	// No type token: the record's own type byte (50A4A6).
+	assert.deepEqual( frame( "/LOADMONSTER MOB_CH_MANGNYANG 3" ), [ 6, 0x34, 0x12, 0, 0, 3, 1 ] );
+	// The parsed integer's low byte, then 0 and 1 become 1 (50A51D..50A532).
+	assert.equal( frame( "/LOADMONSTER MOB_CH_MANGNYANG 0" )[5], 1 );
+	assert.equal( frame( "/LOADMONSTER MOB_CH_MANGNYANG 257" )[5], 1 );
+	assert.equal( frame( "/LOADMONSTER MOB_CH_MANGNYANG 300" )[5], 44 );
+	assert.equal( gmRequest( "/LOADMONSTER MOB_UNKNOWN 5", new Map(), 0, monster ), null );
+	assert.equal( gmRequest( "/LOADMONSTER MOB_CH_MANGNYANG", new Map(), 0, monster ), null );
+});

@@ -218,3 +218,57 @@ func TestAliasRefusalCarriesNativeStringAndReason(t *testing.T) {
 		}
 	}
 }
+
+// monsterOwner records the action-owned /LOADMONSTER call.
+type monsterOwner struct {
+	admit             bool
+	ref               uint32
+	count, monsterTyp uint8
+	calls             int
+}
+
+func (o *monsterOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
+
+func (o *monsterOwner) LoadGMMonsters(_, _ string, ref uint32, count, monsterType uint8) bool {
+	o.calls++
+	o.ref, o.count, o.monsterTyp = ref, count, monsterType
+	return o.admit
+}
+
+/*
+================
+TestLoadMonsterWireAndDispatch
+
+The client composer (50A53E..50A57E) sends subcmd 6, u32 refObjID, u8 count
+and u8 type; the owner's verdict picks the result-1 or result-2 ack.
+================
+*/
+func TestLoadMonsterWireAndDispatch(t *testing.T) {
+	frame := []byte{SubLoadMonster, 0x34, 0x12, 0, 0, 25, 4}
+	request, err := DecodeGmCommand(frame)
+	if err != nil || request.RefObjID != 0x1234 || request.Amount != 25 || request.MonsterType != 4 {
+		t.Fatalf("decode = %+v, %v", request, err)
+	}
+	for _, short := range [][]byte{frame[:6], append(append([]byte{}, frame...), 0)} {
+		if _, err := DecodeGmCommand(short); err == nil {
+			t.Fatalf("a %d-byte LOADMONSTER decoded", len(short))
+		}
+	}
+	gm := gmChar("Gm", true, 0x655e)
+	owner := &monsterOwner{admit: true}
+	out := HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, frame, owner)
+	if !bytes.Equal(out.Ack, []byte{AckResultOK, SubLoadMonster}) || owner.calls != 1 || owner.ref != 0x1234 || owner.count != 25 || owner.monsterTyp != 4 {
+		t.Fatalf("admitted load: ack %x, owner %+v", out.Ack, owner)
+	}
+	owner.admit = false
+	out = HandleGmCommand(testDeps(gm), &stubPresence{}, testDivision, gm, frame, owner)
+	if !bytes.Equal(out.Ack, []byte{AckResultFail, SubLoadMonster}) || out.Refusal == "" {
+		t.Fatalf("refused load: ack %x refusal %q", out.Ack, out.Refusal)
+	}
+	player := gmChar("Player", false, 0x655e)
+	owner.calls = 0
+	out = HandleGmCommand(testDeps(player), &stubPresence{}, testDivision, player, frame, owner)
+	if out.Ack != nil || owner.calls != 0 {
+		t.Fatal("a non-GM reached the monster owner")
+	}
+}

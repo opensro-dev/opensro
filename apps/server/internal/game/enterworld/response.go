@@ -44,6 +44,9 @@ type RefObjRow struct {
 	Name      string                         `json:"name,omitempty"`
 	Level     uint8                          `json:"level,omitempty"`
 	MaxHP     uint32                         `json:"maxHp,omitempty"`
+	// MonsterType is a monster row's static type byte (client record +0xA0):
+	// /LOADMONSTER sends it when no type token is typed (50A4A6).
+	MonsterType uint8 `json:"monsterType,omitempty"`
 	// CCharacterData+0x210, parsed from characterdata column 88. Despite
 	// older host names calling the slot a skill id, sub_692cb0 consumes it
 	// as the nonzero mounted-attack capability gate.

@@ -1815,6 +1815,20 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/gm-command.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"monster"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/gm-command.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+			"functions": [
+				"monster"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/party-loot.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [

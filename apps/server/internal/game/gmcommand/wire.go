@@ -47,7 +47,10 @@ const (
 	SubInvisible  uint8 = 0x0E
 	SubInvincible uint8 = 0x0F
 	SubMakeItem   uint8 = 0x07
-	SubWarp       uint8 = 0x10
+	// SubLoadMonster: /LOADMONSTER (@0x0050a549 subcmd 6) - u32 refObjID,
+	// u8 count, u8 type (CHAMP 1, GIANT 4, NORMAL 0, else the record's +0xA0).
+	SubLoadMonster uint8 = 0x06
+	SubWarp        uint8 = 0x10
 	// SubFindUser: /FINDUSER (@0x00509ee5 var_4bc = 1) - subcmd + ANSI name.
 	SubFindUser uint8 = 0x01
 	// SubLieName: /LIENAME (@0x0050bcf3 var_4bc = 0x19) - subcmd + ANSI name.
@@ -76,6 +79,8 @@ type Request struct {
 	RefObjID    uint32
 	Amount      uint8
 	Destination wire.Position
+	// MonsterType is /LOADMONSTER's requested type byte (server 520A89 &0xF).
+	MonsterType uint8
 	// Name is the decoded ANSI argument for the name-payload subcommands
 	// (FINDUSER/LIENAME/REALNAME/...). Empty for other subcommands.
 	Name string
@@ -130,6 +135,21 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 			return Request{}, err
 		}
 		request.Amount, err = reader.U8()
+		return request, err
+	}
+	if subcmd == SubLoadMonster {
+		// 50A53E..50A57E: subcmd, u32 refObjID, u8 count, u8 type.
+		if len(payload) != 7 {
+			return Request{}, fmt.Errorf("gmcommand: LOADMONSTER requires seven bytes")
+		}
+		request.RefObjID, err = reader.U32()
+		if err != nil {
+			return Request{}, err
+		}
+		if request.Amount, err = reader.U8(); err != nil {
+			return Request{}, err
+		}
+		request.MonsterType, err = reader.U8()
 		return request, err
 	}
 	if !nameSubcommands[subcmd] {

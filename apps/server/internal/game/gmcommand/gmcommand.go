@@ -87,6 +87,15 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 			}
 		}
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "item-creation-refused"}
+	case SubLoadMonster:
+		if len(status) > 0 {
+			if owner, ok := status[0].(interface {
+				LoadGMMonsters(string, string, uint32, uint8, uint8) bool
+			}); ok && owner.LoadGMMonsters(divisionID, sender.Name, request.RefObjID, request.Amount, request.MonsterType) {
+				return Outcome{Ack: []byte{AckResultOK, SubLoadMonster}}
+			}
+		}
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "monster-load-refused"}
 	case SubInvisible, SubInvincible:
 		if len(payload) != 1 || len(status) == 0 || status[0] == nil {
 			return Outcome{Ack: EncodeRequestFailure(request), Refusal: "body-status-unavailable"}

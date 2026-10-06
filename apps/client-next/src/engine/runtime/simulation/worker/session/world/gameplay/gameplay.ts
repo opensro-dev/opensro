@@ -240,6 +240,9 @@ interface WorldReferences {
 	readonly country: ( refObjId: number ) => number | undefined;
 	readonly playerModels: ( country: number ) => readonly PlayerModel[];
 	readonly item: ( refObjId: number ) => { readonly typeFlags: number; readonly name: string; } | undefined;
+	readonly monster: (
+		codename: string
+	) => import("@/engine/foundation/gameplay/gm-command").GmMonsterReference | undefined;
 }
 
 // A dress answer may trail its bar by a server tick and the round trip.
@@ -485,7 +488,12 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
 	// The world catalog's lookups, bound by the composition root (core).
-	let worldReferences: WorldReferences = { country: () => undefined, playerModels: () => [], item: () => undefined };
+	let worldReferences: WorldReferences = {
+		country: () => undefined,
+		playerModels: () => [],
+		item: () => undefined,
+		monster: () => undefined
+	};
 	// The session's catalog is fixed; one list per country keeps the
 	// published state's identity stable.
 	let playerModels: { readonly country: number; readonly models: readonly PlayerModel[]; } | null = null;
@@ -1344,7 +1352,7 @@ state here before a command can claim a native wire conversation.
 
 			if ( command.kind === "gm-command" ) {
 				if ( !eligibility.gm || !localGid ) return null;
-				const frame = gmRequest( command.line, gmItems, local?.heading ?? 0 );
+				const frame = gmRequest( command.line, gmItems, local?.heading ?? 0, worldReferences.monster );
 				return frame ? sendFrame( frame ) : null;
 			}
 			if ( command.kind === "rebirth" ) {

@@ -29,6 +29,35 @@ func bodyStatusFrame(gid uint32, value uint8) wire.Frame {
 	return wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelBody, Value: value}).Encode()}
 }
 
+// Native 51DE90 command 6 -> 520A40: create count monsters of one reference
+// at the GM's position. The monster owner applies the native clamps and the
+// 520D90 rarity resolution; this owner supplies authority, residency and pose.
+/*
+================
+LoadGMMonsters
+================
+*/
+func (rt *Runtime) LoadGMMonsters(division, name string, id uint32, count, monsterType uint8) bool {
+	if rt == nil || rt.deps == nil || rt.Monsters == nil {
+		return false
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	c := rt.findCharacter(division, name)
+	if c == nil || c.DeletePending || !c.GMPrivilege || !enterworld.CharacterAlive(c) {
+		return false
+	}
+	lease, admitted := rt.EntryPopulationLease(division, c.Name)
+	if !admitted {
+		return false
+	}
+	now := rt.Now().UnixMilli()
+	return rt.Monsters.SpawnGMMonsters(simulation.GMMonsterSpawn{
+		Division: division, Population: lease, RefObjID: id, Count: count, Type: monsterType, NowMs: now,
+		Position: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now),
+	}) > 0
+}
+
 // Native 51DE90 command 7 -> CGObjPC vtable+254 (4AA680): create a
 // ground item at the actor. Inventory admission remains the pickup owner's job.
 /*
