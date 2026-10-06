@@ -317,20 +317,34 @@ export async function loadCombat( page, scene ) {
 castEvidence
 
 Every server cast in the gameplay view (positive tokens; predictions do not
-count): its caster, whether it targets the local character, and the damage
-its results carry so far. Later result stages append to the same token.
+count): its caster and, per target, the damage its results carry so far.
+results covers every target of a multi-target skill; later result stages
+append to the same token.
 ================
 */
 function castEvidence( page ) {
 	return page.evaluate( () => {
 		const game = globalThis.__benchRuntime.gameplay();
+		const sum = impacts => (impacts ?? []).reduce( ( total, i ) => total + (i.damage ?? 0), 0 );
 		return (game.casts ?? []).filter( c => c.token > 0 ).map( c => ({
 			token: c.token,
 			caster: c.caster,
-			onLocal: c.target === game.localGid,
-			damage: (c.impacts ?? []).reduce( ( sum, i ) => sum + (i.damage ?? 0), 0 )
+			targets: c.results?.length ?
+				c.results.map( r => ({ target: r.target, damage: sum( r.impacts ) }) ) :
+				[ { target: c.target, damage: sum( c.impacts ) } ]
 		}) );
 	} );
+}
+
+/*
+================
+damageTo
+
+A cast's damage so far to the targets accepted by keep.
+================
+*/
+function damageTo( cast, keep ) {
+	return cast.targets.reduce( ( total, t ) => total + (keep( t.target ) ? t.damage : 0), 0 );
 }
 
 /*
@@ -347,9 +361,11 @@ window's evidence, which the bench stores with the result.
 ================
 */
 export async function combat( page, more, scene ) {
-	const baseline = new Map( (await castEvidence( page )).map( c => [ c.token, c.damage ] ) );
 	const local = await page.evaluate( () => globalThis.__benchRuntime.gameplay().localGid );
 	const scenery = new Set( scene.gids ), latest = new Map();
+	const outgoing = cast => damageTo( cast, target => scenery.has( target ) );
+	const incoming = cast => damageTo( cast, target => target === local );
+	const baseline = new Map( (await castEvidence( page )).map( c => [ c.token, c ] ) );
 	let turns = 0;
 	for ( let turn = 0; more(); turn++ ) {
 		await page.evaluate( ( { turn, gids } ) => {
@@ -368,21 +384,26 @@ export async function combat( page, more, scene ) {
 			}
 			if ( target ) root.session( { kind: "gameplay", command: { kind: "attack", gid: target.gid } } );
 		}, { turn, gids: scene.gids } );
-		for ( const cast of await castEvidence( page ) ) latest.set( cast.token, cast );
 		turns++;
 		const turnStart = Date.now();
-		while ( more() && Date.now() - turnStart < 700 ) await page.waitForTimeout( 20 );
+		// Sample while waiting: a short cast can leave the view between turns.
+		while ( more() && Date.now() - turnStart < 700 ) {
+			for ( const cast of await castEvidence( page ) ) latest.set( cast.token, cast );
+			await page.waitForTimeout( 20 );
+		}
 	}
 	for ( const cast of await castEvidence( page ) ) latest.set( cast.token, cast );
 	const evidence = { turns, acceptedCasts: 0, damage: 0, incomingCasts: 0, incomingDamage: 0 };
 	for ( const cast of latest.values() ) {
 		// A cast already in view at the start counts only its new result stages.
-		const fresh = cast.damage - (baseline.get( cast.token ) ?? 0);
-		if ( !baseline.has( cast.token ) && cast.caster === local ) evidence.acceptedCasts++;
-		if ( cast.caster === local ) evidence.damage += fresh;
+		const before = baseline.get( cast.token );
+		if ( cast.caster === local ) {
+			if ( !before ) evidence.acceptedCasts++;
+			evidence.damage += outgoing( cast ) - (before ? outgoing( before ) : 0);
+		}
 		if ( scenery.has( cast.caster ) ) {
-			if ( !baseline.has( cast.token ) ) evidence.incomingCasts++;
-			if ( cast.onLocal ) evidence.incomingDamage += fresh;
+			if ( !before ) evidence.incomingCasts++;
+			evidence.incomingDamage += incoming( cast ) - (before ? incoming( before ) : 0);
 		}
 	}
 	const alive = new Set( (await sceneMonsters( page )).map( m => m.gid ) );
