@@ -142,6 +142,8 @@ async function stallTurns( page, lane, name ) {
 				ms,
 				action,
 				requested,
+				// movement.ts truncates the 0x7738 destination to integer region units.
+				wire: { x: Math.trunc( requested.x ), y: Math.trunc( requested.y ), z: Math.trunc( requested.z ) },
 				client,
 				server,
 				xz: Math.hypot( server.x - client.pose.x, server.z - client.pose.z ),
