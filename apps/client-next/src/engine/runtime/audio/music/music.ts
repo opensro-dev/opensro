@@ -277,7 +277,11 @@ step
 					if ( next.stop ) {
 						release();
 						current = null;
-					} else if ( element ) element.volume = mode === "audible" ? Math.pow( 10, fadeDb / 2000 ) : 0;
+					} else if ( element ) {
+						element.volume = mode === "audible" && volume > 0 ?
+							Math.pow( 10, fadeDb / 2000 ) :
+							0;
+					}
 				}
 			}
 			play();

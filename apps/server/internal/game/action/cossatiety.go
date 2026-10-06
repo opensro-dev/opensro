@@ -36,7 +36,10 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 		c := state.character
 		pet := c.CompanionByGID(key.gid)
 		ref, valid := rt.cosReference(pet)
-		if valid && ref.TidWord>>11 == 4 && pet.RentalExpiresAtUnix != 0 && pet.RentalExpiresAtUnix <= nowMs/1000 {
+		if valid && (ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) && pet.RentalExpiresAtUnix != 0 && pet.RentalExpiresAtUnix <= nowMs/1000 {
+			if ref.TidWord>>11 == 5 {
+				c.RemoveMercenary(pet.GID)
+			}
 			pet.Summoned = false
 			pet.StateFlags &^= cosStateSummoned
 			pet.RefreshRentalTimes(nowMs / 1000)

@@ -1,6 +1,5 @@
 # Files written before dprint was adopted. This ledger may only shrink:
 # format a file, then delete its line. See scripts/checks/check_formatting.mjs.
-apps/client-next/src/bootstrap.ts
 apps/client-next/src/engine/contracts/camera-script.ts
 apps/client-next/src/engine/contracts/combat-feedback.ts
 apps/client-next/src/engine/contracts/damage-text.ts
@@ -63,7 +62,6 @@ apps/client-next/src/engine/foundation/audio/environment.ts
 apps/client-next/src/engine/foundation/audio/item-sounds.ts
 apps/client-next/src/engine/foundation/audio/loop.ts
 apps/client-next/src/engine/foundation/audio/music.ts
-apps/client-next/src/engine/foundation/audio/options.ts
 apps/client-next/src/engine/foundation/gameplay/abnormal-snapshot.ts
 apps/client-next/src/engine/foundation/gameplay/academy-notices.ts
 apps/client-next/src/engine/foundation/gameplay/academy.ts
@@ -115,7 +113,6 @@ apps/client-next/src/engine/foundation/navigation/owned-start.ts
 apps/client-next/src/engine/foundation/navigation/region-move.ts
 apps/client-next/src/engine/foundation/navigation/spatial-index.ts
 apps/client-next/src/engine/foundation/navigation/vertex-direction.ts
-apps/client-next/src/engine/foundation/rendering/camera-options.ts
 apps/client-next/src/engine/foundation/rendering/camera-wheel.ts
 apps/client-next/src/engine/foundation/rendering/dock-camera.ts
 apps/client-next/src/engine/foundation/rendering/dock-slots.ts
@@ -137,7 +134,6 @@ apps/client-next/src/engine/foundation/rendering/star-flicker.ts
 apps/client-next/src/engine/foundation/rendering/texture-atlas.ts
 apps/client-next/src/engine/foundation/rendering/texture-motion.ts
 apps/client-next/src/engine/foundation/rendering/thunder.ts
-apps/client-next/src/engine/foundation/rendering/world-environment.ts
 apps/client-next/src/engine/foundation/rendering/world-material.ts
 apps/client-next/src/engine/foundation/ui/academy-layout.ts
 apps/client-next/src/engine/foundation/ui/action-layout.ts
@@ -193,7 +189,6 @@ apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-params.ts
 apps/client-next/src/engine/foundation/ui/sound-catalog.ts
 apps/client-next/src/engine/foundation/ui/stretch-ring.ts
-apps/client-next/src/engine/foundation/ui/system-menu.ts
 apps/client-next/src/engine/foundation/ui/system-message-layout.ts
 apps/client-next/src/engine/foundation/ui/target-status.ts
 apps/client-next/src/engine/foundation/ui/text-lines.ts
@@ -251,8 +246,6 @@ apps/client-next/tests/architecture/frame-barriers.test.mjs
 apps/client-next/tests/architecture/ownership-fixtures.test.mjs
 apps/client-next/tests/architecture/panel-navigation.test.mjs
 apps/client-next/tests/browser/absorption-orbs.test.mjs
-apps/client-next/tests/browser/action-refresh.test.mjs
-apps/client-next/tests/browser/asset-delivery.test.mjs
 apps/client-next/tests/browser/attached-effect-wire.test.mjs
 apps/client-next/tests/browser/audio-loop.test.mjs
 apps/client-next/tests/browser/background-resume.test.mjs
@@ -265,7 +258,6 @@ apps/client-next/tests/browser/buff-dismiss.test.mjs
 apps/client-next/tests/browser/champion-material.test.mjs
 apps/client-next/tests/browser/character-capacity.test.mjs
 apps/client-next/tests/browser/character-create.test.mjs
-apps/client-next/tests/browser/character-lighting.test.mjs
 apps/client-next/tests/browser/character-shadows.test.mjs
 apps/client-next/tests/browser/character-texture-live.test.mjs
 apps/client-next/tests/browser/cosmetics.test.mjs
@@ -285,15 +277,11 @@ apps/client-next/tests/browser/effect-material.test.mjs
 apps/client-next/tests/browser/effect-plates.test.mjs
 apps/client-next/tests/browser/entity-material-clock.test.mjs
 apps/client-next/tests/browser/entry-consumers.test.mjs
-apps/client-next/tests/browser/equipment-models.test.mjs
 apps/client-next/tests/browser/equipment-overlays.test.mjs
 apps/client-next/tests/browser/flares.test.mjs
 apps/client-next/tests/browser/follow-camera.test.mjs
 apps/client-next/tests/browser/font-guide-regression.test.mjs
-apps/client-next/tests/browser/fortress-appearance.test.mjs
 apps/client-next/tests/browser/foundation.test.mjs
-apps/client-next/tests/browser/geometry.test.mjs
-apps/client-next/tests/browser/glb-compression.test.mjs
 apps/client-next/tests/browser/gm-item-live.test.mjs
 apps/client-next/tests/browser/ground-item-input.test.mjs
 apps/client-next/tests/browser/ground-item-label.test.mjs
@@ -302,7 +290,6 @@ apps/client-next/tests/browser/hawk.test.mjs
 apps/client-next/tests/browser/helpers/follow-recorder.mjs
 apps/client-next/tests/browser/helpers/hold-runtime.mjs
 apps/client-next/tests/browser/helpers/native-button-oracle.mjs
-apps/client-next/tests/browser/helpers/prepare-critical-arrow.mjs
 apps/client-next/tests/browser/helpers/pursuit-recorder.mjs
 apps/client-next/tests/browser/helpers/ui-admission-reference.mjs
 apps/client-next/tests/browser/hit-light.test.mjs
@@ -317,7 +304,6 @@ apps/client-next/tests/browser/loading-cache.test.mjs
 apps/client-next/tests/browser/loading-feedback.test.mjs
 apps/client-next/tests/browser/loading-presentation.test.mjs
 apps/client-next/tests/browser/loading-resize.test.mjs
-apps/client-next/tests/browser/mangyang-impact-live.test.mjs
 apps/client-next/tests/browser/matching-empty.test.mjs
 apps/client-next/tests/browser/material-alpha-functions.test.mjs
 apps/client-next/tests/browser/minimap-live.test.mjs
@@ -342,8 +328,6 @@ apps/client-next/tests/browser/passive-critical-live.test.mjs
 apps/client-next/tests/browser/picking.test.mjs
 apps/client-next/tests/browser/popup-response.test.mjs
 apps/client-next/tests/browser/portal-live.test.mjs
-apps/client-next/tests/browser/potion-cooldown-live.test.mjs
-apps/client-next/tests/browser/published-assets.test.mjs
 apps/client-next/tests/browser/quest-marker-effects.test.mjs
 apps/client-next/tests/browser/quest-progress.test.mjs
 apps/client-next/tests/browser/quickslot-inventory.test.mjs
@@ -369,7 +353,6 @@ apps/client-next/tests/browser/stretch-raster.mjs
 apps/client-next/tests/browser/target-status.test.mjs
 apps/client-next/tests/browser/terrain-fog.test.mjs
 apps/client-next/tests/browser/terrain-ranges.test.mjs
-apps/client-next/tests/browser/terrain-title-detail.test.mjs
 apps/client-next/tests/browser/title-login.test.mjs
 apps/client-next/tests/browser/title-resize.test.mjs
 apps/client-next/tests/browser/tombstone-projectile.test.mjs
@@ -384,13 +367,11 @@ apps/client-next/tests/browser/world-admission.test.mjs
 apps/client-next/tests/browser/world-character-lighting.test.mjs
 apps/client-next/tests/browser/world-chat.test.mjs
 apps/client-next/tests/browser/world-cursor.test.mjs
-apps/client-next/tests/browser/world-dock-occlusion.test.mjs
 apps/client-next/tests/browser/world-foliage-region.test.mjs
 apps/client-next/tests/browser/world-gestures.test.mjs
 apps/client-next/tests/browser/world-lifecycle.test.mjs
 apps/client-next/tests/browser/world-loading-recovery.test.mjs
 apps/client-next/tests/browser/world-map-interaction.test.mjs
-apps/client-next/tests/browser/world-material-order.test.mjs
 apps/client-next/tests/browser/world-refresh.test.mjs
 apps/client-next/tests/browser/world-surfaces.test.mjs
 apps/client-next/tests/browser/world.test.mjs
@@ -407,33 +388,23 @@ apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshRun
 apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshWireDecode.ts
 apps/client-next/tests/runtime/authored-animation-bindings.test.mjs
 apps/client-next/tests/runtime/character-info.test.mjs
-apps/client-next/tests/runtime/pose-dirty.test.mjs
-apps/client-next/tests/runtime/renderer-diagnostics.test.mjs
 apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
-apps/client-next/tests/runtime/weather-publication.test.mjs
-apps/client-next/tools/audit-bsr-parity.mjs
-apps/client-next/tools/audit-effect-coverage.mjs
 apps/client-next/tools/beta/archive.mjs
 apps/client-next/tools/beta/compression.mjs
 apps/client-next/tools/beta/serve.mjs
 apps/client-next/tools/beta/verify.mjs
 apps/client-next/tools/dev/edge.mjs
 apps/client-next/tools/dev/updates-client.mjs
-apps/client-next/tools/dev/updates-plugin.mjs
-apps/client-next/tools/generate-item-sounds.mjs
 apps/client-next/tools/generate-windows1252.mjs
-apps/client-next/tools/published-assets.mjs
 apps/client-next/tools/published-delivery.mjs
 apps/client-next/tools/published-pack.mjs
 apps/client-next/tools/verify-animation-dispatch.mjs
 apps/client-next/tools/verify-bsr-transforms.mjs
 apps/client-next/tools/verify-deferred-alpha.mjs
-apps/client-next/tools/verify-entity-model-publication.mjs
 apps/client-next/tools/verify-layout.mjs
 apps/client-next/tools/verify-modifier-keys.mjs
 apps/client-next/tools/verify-ownership.mjs
-apps/client-next/vite.config.mjs
 apps/server-observatory/public/item-model.js
 apps/server-observatory/public/items.js
 apps/server-observatory/public/model.js
@@ -454,10 +425,8 @@ scripts/build/char/attachedMotionClips.mjs
 scripts/build/char/authoredAnimationBindings.mjs
 scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildAvatar.mjs
-scripts/build/char/buildCrowdVatAssets.mjs
 scripts/build/char/buildDropModelAssets.mjs
 scripts/build/char/buildLocomotionBanAssets.mjs
-scripts/build/char/buildNpcVatAssets.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
 scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/compileBsrVisual.mjs
@@ -473,7 +442,6 @@ scripts/build/char/publishEntityBsrModifiers.mjs
 scripts/build/char/resourceGlbOutput.mjs
 scripts/build/char/vatPipeline.mjs
 scripts/build/char/weatherEvents.mjs
-scripts/build/cifLayoutCompression.mjs
 scripts/build/data/buildActionWndDataAsset.mjs
 scripts/build/data/buildCharacterDataCountryAsset.mjs
 scripts/build/data/buildGInterfaceSectionsAsset.mjs
@@ -483,7 +451,6 @@ scripts/build/data/buildSiegeFortressDataAsset.mjs
 scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/data/buildTeleportDataAsset.mjs
 scripts/build/effects/parseJmxVisualEffect.mjs
-scripts/build/jsonAssetCompression.mjs
 scripts/build/server/serverGameDataArchive.mjs
 scripts/build/shared/assetPaths.mjs
 scripts/build/shared/asyncUtils.mjs
@@ -522,8 +489,6 @@ scripts/build/shared/textResources.mjs
 scripts/build/shared/titleResources.mjs
 scripts/build/shared/worldMapImageReferences.mjs
 scripts/build/sparseAssetPackGroupRefresh.mjs
-scripts/build/uiImagePreload.mjs
-scripts/build/webManifest.mjs
 scripts/build/world/assets/buildDungeonResources.mjs
 scripts/build/world/assets/buildDungeonWorlds.mjs
 scripts/build/world/assets/copyMissionMinimapTileImages.mjs
@@ -540,7 +505,6 @@ scripts/build/world/buildCharacterCreateWorldRegionResources.mjs
 scripts/build/world/buildCharacterSelectInterfaceModels.mjs
 scripts/build/world/buildCharacterSelectWorldRegionResources.mjs
 scripts/build/world/buildTitleWorldRegionResources.mjs
-scripts/build/world/buildWorldAnimatedObjects.mjs
 scripts/build/world/buildWorldRegionCatalog.mjs
 scripts/build/world/buildWorldRegionIndex.mjs
 scripts/build/world/buildWorldRegionResources.mjs
@@ -563,8 +527,6 @@ scripts/build/world/objects/compound.mjs
 scripts/build/world/objects/formats.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
 scripts/build/world/sworld/prepareCellTerrainTexture.mjs
-scripts/checks/check_asset_pack_integrity.mjs
-scripts/checks/check_precompressed_freshness.mjs
 scripts/checks/lib/methodBlock.mjs
 scripts/clean_release_workspace.mjs
 scripts/lib/clipOracleWalkPlane.mjs
@@ -574,9 +536,6 @@ scripts/lib/probeBrowser.mjs
 scripts/lib/probeCharacter.mjs
 scripts/lib/probeEndpoints.mjs
 scripts/lib/probeTransportProtocol.mjs
-scripts/lib/publishedAsset.mjs
-scripts/rebuildLock.mjs
-scripts/refresh_asset_delivery.mjs
 scripts/setup_git_hooks.mjs
 scripts/task.mjs
 scripts/tasks/define.mjs
@@ -586,14 +545,12 @@ scripts/tasks/registry.mjs
 scripts/tasks/tests.mjs
 scripts/test/assets/assetDeliveryOwnership.test.mjs
 scripts/test/assets/assetPackIntegrity.test.mjs
-scripts/test/assets/banTimeline.test.mjs
 scripts/test/assets/bsrParticleModifiers.test.mjs
 scripts/test/assets/buildSharedUtilities.test.mjs
 scripts/test/assets/cifSpriteCatalog.test.mjs
 scripts/test/assets/jsonAssetCompression.test.mjs
 scripts/test/assets/nativeUiTexture.test.mjs
 scripts/test/assets/npcAnimationContactMarkers.test.mjs
-scripts/test/assets/npcModelPublication.test.mjs
 scripts/test/assets/optionalDataAsset.test.mjs
 scripts/test/assets/publishedAssetBoundary.test.mjs
 scripts/test/assets/pythonRun.test.mjs

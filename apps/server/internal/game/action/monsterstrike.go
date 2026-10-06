@@ -93,15 +93,17 @@ func (in monsterStrikeInput) origin() simulation.Spawn {
 
 /*
 ================
-scaleAreaDamage
+finishMonsterImpact
 
-Every impact of an area victim deals its share of the formula's damage,
-as the player area does (skillarea.go planAreaVictims).
+The shared impact tail (combat.FinishImpact) for a monster's strike: this
+victim's area share, then the monster attacker's damage scale (5874D0, by
+its rarity byte), then the att floor. A defender its wall fully covers
+(covered) keeps its zero record.
 ================
 */
-func scaleAreaDamage(formula combat.Result, percent uint64) combat.Result {
-	formula.Damage = uint32(uint64(formula.Damage) * percent / 100)
-	return formula
+func finishMonsterImpact(in monsterStrikeInput, formula combat.Result, covered bool) combat.Result {
+	return combat.FinishImpact(formula, combat.ImpactTail{Percent: in.percent, MonsterAttacker: true,
+		AttackerRarity: in.instance.Rarity(), Attack: in.skill.Attack.Present, Covered: covered})
 }
 
 /*
@@ -122,7 +124,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	if !rt.planPlayerStrike(&strike,
 		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
 			outcome, err := rt.resolveCombatBehindWall(actor, skill, in.attacker, defender, wall)
-			outcome.Defender = scaleAreaDamage(outcome.Defender, in.percent)
+			outcome.Defender = finishMonsterImpact(in, outcome.Defender, outcome.Covered)
 			outcome.Absorbed = uint32(uint64(outcome.Absorbed) * in.percent / 100)
 			return outcome, err
 		},
@@ -186,17 +188,32 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	if err != nil {
 		return out
 	}
+	var displacement *playerDisplacement
+	displaceAt := -1
+	remainingHP := pet.CurrentHP
 	var records []abnormal.Record
 	var formulas []combat.Result
-	for range skill.Attack.ImpactCount {
-		formula, resolveErr := rt.resolveCombat(criticalActor{division: divisionID, monster: instance.Gid}, skill, in.attacker, defender)
-		formula = scaleAreaDamage(formula, in.percent)
-		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked {
+	for range creatureImpactCount(skill) {
+		formula, resolveErr := rt.resolveCreatureImpact(criticalActor{division: divisionID, monster: instance.Gid}, skill, in.attacker, defender)
+		formula = finishMonsterImpact(in, formula, false)
+		if resolveErr != nil || formula.Damage == 0 && !formula.Blocked && !skill.CreatureStatusCast {
 			return out
 		}
 		formulas = append(formulas, formula)
 		if formula.Blocked {
 			continue // 5905FB: no damage and no status roll
+		}
+		remainingHP -= min(remainingHP, formula.Damage)
+		if remainingHP > 0 && displacement == nil {
+			var err error
+			displacement, err = rt.planActorDisplacement(displacementRoll{division: divisionID, actor: criticalActor{division: divisionID, monster: instance.Gid}, from: in.origin(), skill: skill, at: pose, now: nowMs},
+				displacementTarget{flags: ref.Parameters.Knockdown, recovery: ref.Parameters.KORecoverMs, level: ref.Level, allowed: rt.cosDisplaceable(divisionID, owner, pet, nowMs)})
+			if err != nil {
+				return out
+			}
+			if displacement != nil {
+				displaceAt = len(formulas) - 1
+			}
 		}
 		rolled, rollErr := rt.rollMonsterOnCOS(cosAbnormalRoll{division: divisionID, caster: instance,
 			params: &skill.Abnormal, target: ownerBlock})
@@ -228,6 +245,15 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 				Fatal: strike.fatal, Blocked: formula.Blocked, ResultFlags: formula.ResultFlags})
 			if strike.fatal {
 				break
+			}
+		}
+		if !strike.fatal && displacement != nil && displaceAt < len(strike.impacts) {
+			if point, ok := rt.commitCOSDisplacement(ownerBlock, displacement); ok {
+				if displacement.down {
+					strike.impacts[displaceAt].Knockdown = point
+				} else {
+					strike.impacts[displaceAt].Knockback = point
+				}
 			}
 		}
 		remaining = live.CurrentHP

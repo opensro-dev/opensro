@@ -51,8 +51,6 @@ nearest first), after the primary and up to MaxTargets in all.
 ================
 */
 func (rt *Runtime) monsterAreaVictims(in monsterStrikeInput, from simulation.Spawn, primary monsterStrike) []monsterAreaVictim {
-	area := in.skill.ActionArea
-	casterRadius := float64(in.instance.Ref.BodyRadius)
 	var candidates []monsterAreaVictim
 	for _, victim := range rt.monsterAreaCandidates(in) {
 		if victim.gid == primary.gid || victim.hostility.Gid == primary.gid ||
@@ -62,6 +60,22 @@ func (rt *Runtime) monsterAreaVictims(in monsterStrikeInput, from simulation.Spa
 		}
 		candidates = append(candidates, victim)
 	}
+	return selectCreatureArea(in.skill, from, primary.pose, in.instance.Ref.BodyRadius, candidates)
+}
+
+/*
+================
+selectCreatureArea
+
+58A020 dispatches the same shape geometry for monsters and companions.
+The caller supplies candidates admitted by its own hostility predicate.
+================
+*/
+func selectCreatureArea(skill enterworld.SkillRow, from, primary simulation.Spawn, casterRadius float64, candidates []monsterAreaVictim) []monsterAreaVictim {
+	area := skill.ActionArea
+	if area.MaxTargets <= 1 {
+		return nil
+	}
 	distance := func(center, at simulation.Spawn) float64 {
 		return math.Hypot(simulation.WorldDistance2D(center, at), at.Y-center.Y)
 	}
@@ -70,7 +84,7 @@ func (rt *Runtime) monsterAreaVictims(in monsterStrikeInput, from simulation.Spa
 	case 1, 2:
 		// 58A088 centres shape 1 on the caster, 58A831 shape 2 on the
 		// selected target; the reach adds both body radii (58AB6D).
-		center := primary.pose
+		center := primary
 		if area.Shape == 1 {
 			center = from
 		}
@@ -82,21 +96,21 @@ func (rt *Runtime) monsterAreaVictims(in monsterStrikeInput, from simulation.Spa
 		sort.Slice(admitted, func(i, j int) bool { return admitted[i].gid < admitted[j].gid })
 	case 6:
 		for _, victim := range candidates {
-			if distance(primary.pose, victim.pose) <= float64(area.Radius) {
+			if distance(primary, victim.pose) <= float64(area.Radius) {
 				admitted = append(admitted, victim)
 			}
 		}
 		sort.Slice(admitted, func(i, j int) bool {
-			di, dj := distance(primary.pose, admitted[i].pose), distance(primary.pose, admitted[j].pose)
+			di, dj := distance(primary, admitted[i].pose), distance(primary, admitted[j].pose)
 			if di != dj {
 				return di < dj
 			}
 			return admitted[i].gid < admitted[j].gid
 		})
 	case 3, 4:
-		reach := float32(uint16(in.skill.ActionRange))
-		toPrimary := relative(from, primary.pose)
-		dir, center := toPrimary, primary.pose
+		reach := float32(uint16(skill.ActionRange))
+		toPrimary := relative(from, primary)
+		dir, center := toPrimary, primary
 		if area.Shape == 3 {
 			toPrimary.y = 0
 			unit := toPrimary.normalized()

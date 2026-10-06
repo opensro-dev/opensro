@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -64,7 +65,7 @@ test("skill motion mapping preserves every native action state and authored set 
 });
 
 test("published player skill BANs decode with native set/state identity and valid named tracks", () => {
-	const manifest = JSON.parse( readFileSync( "../../.generated/client-public/assets/anim/manifest.json", "utf8" ) ),
+	const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/anim/manifest.json", "utf8" ) ),
 		paths = new Set();
 	assert.equal( skillMotionRole( 0xccccdc, "ANI_SKILL_1" ), "native:sword:26" );
 	assert.equal( skillMotionRole( 0xcccd84, "ANI_SKILL_1" ), "native:twohand_sword:26" );
@@ -82,7 +83,7 @@ test("published player skill BANs decode with native set/state identity and vali
 			for ( const row of Object.values( states ) ) {
 				if ( paths.has( row.url ) ) continue;
 				paths.add( row.url );
-				const bytes = readFileSync( "../../.generated/client-public" + row.url ),
+				const bytes = readFileSync( CLIENT_PUBLIC_ROOT + row.url ),
 					clip = decodeNativeClip( bytes );
 				assert.equal( clip.duration, row.durationMs / 1000, row.url );
 				assert.ok( clip.channels.length, row.url );

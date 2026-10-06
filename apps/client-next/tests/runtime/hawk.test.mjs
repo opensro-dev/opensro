@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -24,8 +25,8 @@ const { createCombat } = await import(
 const { hawkResult } = await import( "../../src/engine/foundation/gameplay/attached-effects.ts" );
 const { effectScript } = await import( "../../src/engine/foundation/animation/effect-script.ts" );
 const reference = JSON.parse( readFileSync( "tests/fixtures/native/hawk-reference.json", "utf8" ) );
-const manifest = JSON.parse( readFileSync( "../../.generated/client-public/assets/skillfx/manifest.json", "utf8" ) );
-const raw = readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json" );
+const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skillfx/manifest.json", "utf8" ) );
+const raw = readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json" );
 const catalog = createEffectDecoder().decode( raw ), phases = [ "hover", "approach", "attack", "hold", "return" ];
 const point = ( [x, y, z] ) => ({ x, y, z });
 

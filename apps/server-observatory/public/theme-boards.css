@@ -1,0 +1,587 @@
+/*
+===========================================================================
+
+theme-boards.css - the caravan ledger's boards: everything a view puts on the page
+
+Panels, metric plaques, the atlas, lists, realm medallions, alerts and
+dialogs, dressed from the tokens theme.css defines. theme.css owns the
+page chrome (ground, sidebar, header, type, hero, controls); load this
+after it so a board rule can refine a chrome one.
+
+===========================================================================
+*/
+
+/* ----- Panels: parchment boards in a gold frame, a crimson rosette at the corner ----- */
+
+.panel {
+	position: relative;
+	background:
+		radial-gradient(ellipse at 15% 0, #fffaf0aa, transparent 50%),
+		radial-gradient(ellipse at 90% 100%, #d9c08f55, transparent 55%),
+		var(--surface);
+	border: 2px solid var(--gold-soft);
+	border-radius: 6px;
+	box-shadow:
+		0 0 0 1px #000,
+		0 0 0 4px #3a2412,
+		0 0 0 5px #8a6a3288,
+		inset 0 0 0 3px var(--surface),
+		inset 0 0 0 4px #c79a4588,
+		var(--shadow);
+}
+
+.panel::before {
+	content: "";
+	position: absolute;
+	top: -9px;
+	left: -9px;
+	width: 16px;
+	height: 16px;
+	border: 2px solid var(--gold-bright);
+	border-radius: 50%;
+	background: radial-gradient(circle at 35% 30%, #e05a40, var(--lacquer-deep));
+	box-shadow: 0 0 0 2px #3a2412;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.panel::after {
+	content: "";
+	position: absolute;
+	right: 6px;
+	bottom: 6px;
+	width: 16px;
+	height: 16px;
+	border: 2px solid var(--gold-soft);
+	border-left: 0;
+	border-top: 0;
+	pointer-events: none;
+	z-index: 1;
+}
+
+.panel-heading {
+	background: none;
+	border-bottom: 1px solid var(--line);
+	box-shadow: 0 1px 0 #fff8;
+}
+
+.panel-heading h2 {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 19px;
+}
+
+.panel-heading h2::before {
+	content: "";
+	flex: 0 0 auto;
+	width: 4px;
+	height: 24px;
+	border-radius: 1px;
+	background: linear-gradient(180deg, var(--cinnabar), var(--lacquer-deep));
+}
+
+.panel-heading:after {
+	content: none;
+}
+
+.eyebrow::before {
+	content: "◆ ";
+	color: var(--roof);
+}
+
+.panel-note,
+.map-footer,
+.chart-legend {
+	color: var(--faint);
+	border-color: var(--line);
+}
+
+.tag {
+	color: #3a2412;
+	border: 1px solid var(--bronze);
+	border-radius: 999px;
+	padding: 5px 12px;
+	background: linear-gradient(180deg, #fbf3df, #e6d2a2);
+	font-weight: 700;
+	letter-spacing: 1.2px;
+}
+
+/* ----- Metric plaques: parchment with a hanging heraldic pennant ----- */
+
+.metrics {
+	gap: 18px;
+}
+
+.metric {
+	min-height: 0;
+	padding: 12px 16px 12px 74px;
+	color: var(--text);
+	background:
+		radial-gradient(ellipse at 100% 50%, #d9c08f66, transparent 60%),
+		linear-gradient(160deg, #f8eed5, #ead8ae);
+	border: 2px solid var(--gold-soft);
+	border-radius: 6px;
+	box-shadow: 0 0 0 1px #000, 0 0 0 4px #3a2412, 0 0 0 5px #8a6a3288, inset 0 0 0 3px #f8eed5, inset 0 0 0 4px #c79a4588, var(--shadow);
+}
+
+.metric:nth-child(n) {
+	border-top-color: var(--gold-soft);
+}
+
+.metric-icon {
+	position: absolute;
+	left: 16px;
+	top: -2px;
+	right: auto;
+	width: 40px;
+	height: 58px;
+	display: grid;
+	place-items: center;
+	padding-bottom: 12px;
+	color: var(--gold-pale);
+	font-size: 24px;
+	text-shadow: 0 1px 2px #000a;
+	background:
+		linear-gradient(90deg, transparent 4px, #f0d58f99 4px 5px, transparent 5px calc(100% - 5px), #f0d58f99 calc(100% - 5px) calc(100% - 4px), transparent calc(100% - 4px)),
+		linear-gradient(180deg, var(--pennant), var(--pennant-deep));
+	clip-path: polygon(0 0, 100% 0, 100% 78%, 50% 100%, 0 78%);
+	filter: drop-shadow(0 3px 3px #0008);
+}
+
+.metric:nth-child(1) {
+	--pennant: #2f7a4a;
+	--pennant-deep: #164228;
+}
+
+.metric:nth-child(2) {
+	--pennant: #b8321f;
+	--pennant-deep: #6e140b;
+}
+
+.metric:nth-child(3) {
+	--pennant: #c99a2e;
+	--pennant-deep: #7a5410;
+}
+
+.metric:nth-child(4) {
+	--pennant: #2c5a94;
+	--pennant-deep: #15304f;
+}
+
+.metric-label {
+	color: #3a2412;
+	font: 600 14px var(--serif);
+	letter-spacing: 0;
+}
+
+.metric-number {
+	font: 600 28px/1.2 var(--serif);
+	letter-spacing: -.5px;
+	color: var(--lacquer);
+}
+
+.metric-number small {
+	color: var(--muted);
+	font-family: var(--serif);
+}
+
+.metric-foot {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+/* ----- The atlas: an ink map on aged parchment ----- */
+
+.atlas {
+	margin: 0 14px;
+	border: 1px solid var(--bronze);
+	border-radius: 4px;
+	background:
+		radial-gradient(ellipse at 30% 40%, #f6e7c0, transparent 60%),
+		radial-gradient(ellipse at 75% 60%, #e8d29c, transparent 60%),
+		radial-gradient(ellipse at 48% 44%, #efdcae, #d8bd83 70%, #c4a26a);
+	box-shadow: inset 0 0 30px #8a6a3266;
+}
+
+.atlas pattern path,
+.atlas svg > path {
+	stroke: #7a5a2a;
+}
+
+.atlas circle:not(.map-point) {
+	fill: #3f8a4a;
+}
+
+.atlas .map-point {
+	fill: var(--cinnabar);
+	stroke: #fff6dc;
+}
+
+.atlas .map-point[data-entity] {
+	fill: #e6b43c;
+	stroke: #5a3a08;
+}
+
+.atlas text {
+	fill: #5a3a1a;
+}
+
+.atlas .atlas-caption {
+	color: #5a3a1a;
+}
+
+.chart svg path:first-child {
+	stroke: var(--line);
+}
+
+.chart svg path:nth-child(2) {
+	fill: var(--teal-bright);
+	opacity: .14;
+}
+
+.chart svg path:nth-child(3) {
+	stroke: var(--teal);
+}
+
+.chart svg text {
+	fill: var(--muted);
+}
+
+.jade {
+	background: #3f8a4a;
+}
+
+.gold {
+	background: #e6b43c;
+}
+
+.white {
+	background: var(--cinnabar);
+}
+
+.star {
+	color: var(--roof);
+}
+
+/* ----- Lists: uniques, hotspots, journal, health, tables ----- */
+
+.encounter,
+.hotspot,
+.journal-entry,
+.health-row,
+td,
+th {
+	border-color: var(--line);
+}
+
+.encounter:hover,
+.hotspot:hover,
+tbody tr:hover {
+	background: #fff4d6;
+}
+
+.encounter .crest {
+	width: 38px;
+	height: 38px;
+	clip-path: none;
+	border: 2px solid var(--gold-bright);
+	border-radius: 3px;
+	background: radial-gradient(circle at 35% 30%, #d84a34, var(--lacquer-deep));
+	color: var(--gold-pale);
+	box-shadow: 0 2px 4px #0006;
+	transform: rotate(45deg) scale(.8);
+}
+
+.encounter-name {
+	font: 600 15px var(--serif);
+}
+
+.encounter-state {
+	padding: 3px 12px;
+	border: 1px solid #2d7a3a88;
+	border-radius: 999px;
+	background: linear-gradient(180deg, #3f9a52, #23692f);
+	color: #f2ffe9;
+	font-weight: 700;
+}
+
+.encounter-state .hp-track {
+	display: none;
+}
+
+.hotspot span:last-child,
+.health-row span:last-child,
+.health-check {
+	color: var(--jade);
+}
+
+.health-row {
+	color: var(--muted);
+}
+
+.health-row.bad span:last-child {
+	color: var(--red);
+}
+
+.hp-track {
+	background: var(--line);
+}
+
+.hp-track span {
+	background: linear-gradient(90deg, var(--jade), #4fae5f);
+}
+
+th {
+	background: #e8d6a8;
+	color: #5a3a1a;
+}
+
+.badge {
+	background: var(--jade-deep);
+	color: var(--jade);
+}
+
+.badge.unique {
+	background: #f6e2a6;
+	color: #6e4a06;
+}
+
+.badge.dead {
+	background: #f3d2c8;
+	color: var(--red);
+}
+
+.empty strong {
+	color: var(--heading);
+	font-family: var(--serif);
+}
+
+/* ----- Realms: an emerald medallion on a parchment band ----- */
+
+.realm-strip {
+	display: flex;
+	gap: 14px;
+	margin-bottom: 16px;
+	flex-wrap: wrap;
+}
+
+.realm {
+	flex: 1;
+	min-width: 220px;
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	text-align: left;
+	padding: 4px 18px 4px 8px;
+	border: 2px solid var(--gold-soft);
+	border-radius: 6px;
+	background:
+		radial-gradient(ellipse at 20% 50%, #fffaf0aa, transparent 50%),
+		linear-gradient(180deg, #f6ebcf, #e8d6aa);
+	color: var(--text);
+	box-shadow: 0 0 0 1px #000, 0 0 0 4px #3a2412, 0 0 0 5px #8a6a3288, var(--shadow);
+}
+
+.realm.selected {
+	border-color: var(--gold-bright);
+}
+
+.realm strong {
+	font: 600 16px var(--serif);
+	color: var(--text);
+}
+
+.realm small {
+	display: block;
+	font-size: 12px;
+	color: var(--muted);
+	margin-top: 2px;
+}
+
+.realm-state {
+	margin-left: auto;
+	padding: 4px 16px;
+	border: 1px solid #2d7a3a;
+	border-radius: 999px;
+	background: linear-gradient(180deg, #3f9a52, #23692f);
+	color: #f2ffe9;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 1.5px;
+}
+
+.realm-gem {
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
+	margin: 6px 4px;
+	transform: rotate(45deg);
+	border: 3px solid var(--gold-bright);
+	background: radial-gradient(circle at 35% 30%, #8ff0a0, #2f9a4a 45%, #0f4a22);
+	box-shadow: 0 0 0 3px var(--lacquer-deep), 0 0 0 4px var(--gold-soft), 0 3px 8px #0008;
+}
+
+.realm-gem.offline {
+	background: radial-gradient(circle at 35% 30%, #f7a08a, #b8321f 45%, #4a0f09);
+}
+
+.realm:has(.realm-gem.offline) .realm-state {
+	border-color: var(--lacquer);
+	background: linear-gradient(180deg, #c03a26, #8a1d12);
+}
+
+/* ----- Alerts: a rose band with a crimson seal ----- */
+
+#warning,
+.operator-alert {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 6px 14px 6px 10px;
+	margin-bottom: 16px;
+	border: 2px solid var(--gold-soft);
+	border-radius: 6px;
+	background:
+		linear-gradient(90deg, #e9b0a2, #dc9585 60%, #e7aa9b);
+	color: #3e0c06;
+	font: 14px var(--serif);
+	box-shadow: 0 0 0 1px #000, 0 0 0 4px #3a2412, var(--shadow);
+}
+
+#warning::before,
+.operator-alert::before {
+	content: "!";
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
+	display: grid;
+	place-items: center;
+	border: 2px solid #f6d3c6;
+	border-radius: 50%;
+	background: radial-gradient(circle at 35% 30%, #d84a34, var(--lacquer-deep));
+	color: #fff;
+	font: 700 16px var(--serif);
+	box-shadow: 0 0 0 2px var(--lacquer-deep);
+}
+
+.hotspot {
+	width: 100%;
+	display: flex;
+	justify-content: space-between;
+	text-align: left;
+	gap: 12px;
+	padding: 13px 24px;
+	background: none;
+	border: 0;
+	border-top: 1px solid var(--line);
+	font-size: 13px;
+	color: var(--text);
+}
+
+.hotspot span:last-child {
+	text-align: right;
+}
+
+.hotspot small {
+	display: block;
+	color: var(--muted);
+	font-size: 11px;
+	margin-top: 3px;
+}
+
+#journal {
+	max-height: 345px;
+	overflow: auto;
+}
+
+.journal-entry {
+	display: flex;
+	gap: 16px;
+	padding: 13px 24px;
+	font-size: 13px;
+	border-top: 1px solid var(--line);
+}
+
+.journal-entry time {
+	color: var(--gold);
+	white-space: nowrap;
+	font-size: 11px;
+}
+
+.census-tools {
+	display: flex;
+	gap: 16px;
+	align-items: end;
+	flex-wrap: wrap;
+	padding: 18px 24px;
+}
+
+.census-tools label {
+	color: var(--muted);
+	font-size: 11px;
+}
+
+.census-tools input,
+.census-tools select {
+	display: block;
+	width: 160px;
+	margin-top: 5px;
+}
+
+/* ----- Dialogs ----- */
+
+dialog {
+	background: var(--surface);
+	border: 2px solid var(--gold-soft);
+	border-top: 6px solid var(--lacquer);
+	border-radius: 6px;
+	color: var(--text);
+	box-shadow: 0 0 0 1px #000, 0 0 0 4px #3a2412, 0 25px 80px #000c;
+}
+
+dialog::backdrop {
+	background: #120c08cc;
+	backdrop-filter: blur(4px);
+}
+
+/* ----- Text that sits on the dark ground, outside a board ----- */
+
+footer {
+	color: #b9a07a;
+}
+
+.tiny-star {
+	color: var(--gold-bright);
+}
+
+#recovery {
+	padding-top: 5px;
+}
+
+#recovery .recovery-heading h2 {
+	color: var(--gold-pale);
+}
+
+#recovery .recovery-heading p,
+#recovery .recovery-steps {
+	color: #d9c8a4;
+}
+
+#recovery .recovery-heading .eyebrow {
+	color: #8fd1c0;
+}
+
+#recovery .recovery-steps span {
+	color: var(--gold-pale);
+	border-color: var(--gold-soft);
+}
+
+#recovery .operator-badge {
+	border-color: var(--gold-soft);
+	background: var(--surface);
+}
+
+* {
+	scrollbar-color: var(--bronze) transparent;
+}

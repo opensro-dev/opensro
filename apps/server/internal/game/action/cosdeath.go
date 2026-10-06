@@ -48,6 +48,8 @@ func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
 			rt.dropTransportCargo(o)
 		}
 		o.c.ActiveCOS = nil
+	case domain.MercenaryBand:
+		o.c.RemoveMercenary(o.pet.GID)
 	case domain.CapturedCOSBand:
 		if o.c.CapturedCOS != o.pet {
 			return

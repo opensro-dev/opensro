@@ -124,3 +124,22 @@ func TestZeroSatietyRestorationDiesOnTheNextWholeDrain(t *testing.T) {
 		t.Fatal("zero-HGP restoration became immortal")
 	}
 }
+
+/*
+================
+TestMercenaryFollowSpeedCombinesStatusFactors
+================
+*/
+func TestMercenaryFollowSpeedCombinesStatusFactors(t *testing.T) {
+	block := abnormal.Block{}
+	block.Modifiers[0] = abnormal.Modifier{Used: true, Param: 0x18, Channel: 3, Source: 5, Value: 80}
+	before := block
+	value, err := FollowRunParameter(100, 125, true, &block)
+	if err != nil || value != 100 || block != before {
+		t.Fatal("follow overwrote frostbite factor", value, err)
+	}
+	value, err = FollowRunParameter(100, 0, false, &block)
+	if err != nil || value != 80 {
+		t.Fatal("uninstalled follow source changed run", value, err)
+	}
+}

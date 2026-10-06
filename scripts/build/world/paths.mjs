@@ -6,13 +6,16 @@ paths.mjs - the one owner of the pipeline's filesystem roots
 Every asset builder, check and test resolves the repository, the game data
 and the generated output through these exports; none derives them from its
 own location. The repository root is this checkout. Generated output lives
-in this checkout's .generated, so worktrees build in isolation. The game
+in this checkout's .generated unless SRO_GENERATED_ROOT names another tree
+(scripts/lib/generatedRoot.mjs owns that rule), so a worktree can read the
+main checkout's build instead of linking or copying it. The game
 data (extracted/) is shared and lives beside the MAIN checkout, which a
 linked git worktree names in its .git file.
 
 ===========================================================================
 */
 import fs from "node:fs";
+import { GENERATED_ROOT } from "../../lib/generatedRoot.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -74,20 +77,38 @@ export const retailTextdataRoot = path.join( mediaExtractedRoot, "server_dep", "
 // complete server textdata corpus.
 export const clientV150ResinfoRoot = path.join( mediaExtractedRoot, "resinfo" );
 
-export const generatedRoot = path.join( rebuildRoot, ".generated" );
+// The generated tree has one owner (scripts/lib/generatedRoot.mjs), which
+// honours SRO_GENERATED_ROOT.
+export const generatedRoot = GENERATED_ROOT;
 
-// The verified server game-data projection lives inside the Go module: its
-// tests then read only module files, and `go test` validates cached results
-// against the data itself (apps/server/AGENTS.md). Git-ignored there.
-export const serverGameDataRoot = path.join(
-	rebuildRoot,
-	"apps",
-	"server",
-	".generated",
-	"game-data",
-	"1.150",
-	"server"
-);
+// gamedata.EnvRoot (apps/server/internal/gamedata/resolve.go): the Go server
+// and its tests read the projection from here when it is set.
+export const SERVER_GAME_DATA_ROOT_ENV = "SRO_SERVER_GAME_DATA_ROOT";
+
+/*
+================
+resolveServerGameDataRoot
+
+The verified server game-data projection lives inside the Go module: its
+tests then read only module files, and `go test` validates cached results
+against the data itself (apps/server/AGENTS.md). Git-ignored there. A
+worktree names the main checkout's projection through the same variable the
+Go server reads; only an absolute path is accepted, as for
+SRO_GENERATED_ROOT, so the answer never depends on the working directory.
+================
+*/
+export function resolveServerGameDataRoot( env = process.env ) {
+	const override = env[SERVER_GAME_DATA_ROOT_ENV]?.trim();
+	if ( override ) {
+		if ( !path.isAbsolute( override ) ) {
+			throw Error( `${SERVER_GAME_DATA_ROOT_ENV} must be an absolute path, not ${JSON.stringify( override )}` );
+		}
+		return path.resolve( override );
+	}
+	return path.join( rebuildRoot, "apps", "server", ".generated", "game-data", "1.150", "server" );
+}
+
+export const serverGameDataRoot = resolveServerGameDataRoot();
 export const publicRoot = path.join( generatedRoot, "client-public" );
 export const publicAssetsRoot = path.join( publicRoot, "assets" );
 export const imageSourceRoot = path.join( generatedRoot, "intermediate", "images" );

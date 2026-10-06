@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import sro_pk2  # noqa: E402
-from sro_paths import EXTRACTED_ROOT, GAME_ROOT, REPO_ROOT as ROOT  # noqa: E402
+from sro_paths import EXTRACTED_ROOT, GAME_ROOT, PUBLIC_ROOT, REPO_ROOT as ROOT  # noqa: E402
 
 # ================
 # inventory
@@ -54,7 +54,7 @@ def main():
             mismatches.append(name)
     if mismatches:
         raise ValueError('Extraction differs from archive: '+repr(mismatches))
-    programs = json.loads((ROOT/'.generated/client-public/assets/effects/programs.json').read_text())
+    programs = json.loads((PUBLIC_ROOT/'assets/effects/programs.json').read_text())
     referenced = {r['effectPath'] for r in programs['reachability']['entityParticleReferences']}
     absent = sorted(name for name in referenced if name not in files)
     certificate = {'format': 'sro-particle-archive-v1', 'archive': archive.name,

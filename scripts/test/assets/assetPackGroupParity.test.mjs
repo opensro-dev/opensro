@@ -11,6 +11,7 @@ its loose gzip authority byte for byte.
 ===========================================================================
 */
 
+import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -210,7 +211,7 @@ test("a skipped outdoor lane empties the outdoor group without leaking outdoor f
 });
 
 test("the packed mission boot catalog is byte-identical to its current loose gzip authority", async ( t ) => {
-	const publicRoot = path.resolve( testDir, "../../../.generated/client-public" );
+	const publicRoot = CLIENT_PUBLIC_ROOT;
 	const assetPath = "/assets/data/ginterface-sections.json.gz";
 	const index = JSON.parse(
 		await readFile( path.join( publicRoot, "assets/packs/manifest.json" ), "utf8" )

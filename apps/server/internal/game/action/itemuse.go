@@ -125,7 +125,8 @@ func (rt *Runtime) HandleItemUse(
 	// rebinds the resident region, which reads the committed character).
 	var after func()
 	var used *enterworld.ItemRef
-	committed := rt.deps.Update(character, "item-use", func() bool {
+	var mercenaryContext domain.MercenaryContext
+	update := func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil {
 			return false
 		}
@@ -171,6 +172,12 @@ func (rt *Runtime) HandleItemUse(
 			return false
 		}
 		nowMs := rt.Now().UnixMilli()
+		if family == itemUseMercenary {
+			if len(tail) != 0 {
+				return false
+			}
+			return rt.useMercenaryScroll(persistentSummonUse{division: divisionID, character: character, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, mercenaryContext, &result)
+		}
 		if family == itemUseStructureRepair {
 			return rt.useStructureRepair(character, skillItemUse{division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs}, tail, &result)
 		}
@@ -621,7 +628,19 @@ func (rt *Runtime) HandleItemUse(
 		frames = append(frames, rt.updateQuestInventory(character)...)
 		result = OpResult{Frames: frames, Broadcast: public}
 		return true
-	})
+	}
+	committed := false
+	mercenaryRef := enterworld.ItemRef{TypeIDs: [4]int64{3, 3, 12, 1}}
+	if request.TypeWord == mercenaryRef.TypeFlags() {
+		if store, ok := rt.deps.GuildAuthority().(domain.MercenaryStore); ok {
+			committed = store.UpdateMercenaryOwner(divisionID, character, func(context domain.MercenaryContext) bool {
+				mercenaryContext = context
+				return update()
+			})
+		}
+	} else {
+		committed = rt.deps.Update(character, "item-use", update)
+	}
 	if committed && after != nil {
 		after()
 	}

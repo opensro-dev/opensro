@@ -27,6 +27,7 @@ nav button{border:0;background:none;color:var(--muted);padding:0 2px;position:re
 nav button.active{color:var(--text)}
 nav button.active:after{content:"";height:2px;background:var(--gold);position:absolute;bottom:0;left:0;right:0}
 .connection{margin-left:auto;text-transform:uppercase;letter-spacing:1.6px;font-size:9px;color:var(--jade);white-space:nowrap}
+.connection.offline{color:var(--red)}
 .connection:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:9px;box-shadow:0 0 12px #82bea144}
 main{max-width:1680px;margin:auto;padding:36px 40px 0}
 .page-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:30px}

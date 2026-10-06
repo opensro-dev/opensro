@@ -9,15 +9,14 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { defined } from "../helpers/defined.mjs";
-const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
-const fontBytes = readFileSync( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json" ),
-	fontAtlas = JSON.parse( fontBytes );
+import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 /*
 ================
 load
@@ -27,7 +26,6 @@ async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
 const { createUiAssets } = await load( "src/engine/runtime/ui/resources/resources.ts" );
-const { createUi } = await load( "src/engine/runtime/ui/ui.ts" );
 const { topmostControlAt } = await load( "src/engine/foundation/ui/hit-test.ts" );
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
@@ -320,143 +318,6 @@ test("UI image dimensions are captured before ownership is transferred to the re
 	assert.deepEqual( owner.size( "/a.png" ), [ 32, 64 ] );
 	owner.dispose();
 });
-/*
-================
-uiFixture
-================
-*/
-function uiFixture(
-	commands = () => {},
-	hold = () => false,
-	audioPreference = () => {},
-	saveSight = () => {},
-	saveBindings = () => {},
-	saveVideo = () => {},
-	saveOptions = () => {}
-) {
-	const scenes = [], textures = [], sounds = [], requested = [], pending = new Map();
-	let nextId = 0;
-	const ui = createUi(
-		{
-			available: () => 8,
-			take: id => {
-				const bytes = pending.get( id );
-				if ( bytes?.path && hold( bytes.path ) ) return null;
-				pending.delete( id );
-				return bytes?.image ?
-					{ kind: "image", image: bytes.image } :
-					bytes ?
-					{
-						kind: "bytes",
-						buffer: bytes.buffer.slice( bytes.byteOffset, bytes.byteOffset + bytes.byteLength )
-					} :
-					null;
-			},
-			request: url => {
-				const id = ++nextId, path = decodeURIComponent( new URL( url ).pathname );
-				requested.push( path );
-				try {
-					const bytes = readFileSync( "../../.generated/client-public" + path );
-					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) ) pending.set( id, bytes );
-					else if ( path.endsWith( ".png" ) ) {
-						pending.set( id, {
-							path,
-							image: {
-								width: bytes.readUInt32BE( 16 ),
-								height: bytes.readUInt32BE( 20 ),
-								/*
-								================
-								close
-								================
-								*/
-								close() {}
-							}
-						} );
-					}
-				} catch {}
-				return id;
-			},
-			cancel: id => pending.delete( id )
-		},
-		commands,
-		// Scenes are recorded as drawn: text runs expanded into the glyph quads the
-		// GPU packer writes (text-run.ts), so assertions read painted glyphs.
-		s => scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } ),
-		( ...args ) => textures.push( args ),
-		"https://fixture.invalid/",
-		"https://fixture.invalid/",
-		undefined,
-		kind => sounds.push( kind ),
-		undefined,
-		undefined,
-		saveOptions,
-		audioPreference,
-		saveSight,
-		saveBindings,
-		saveVideo
-	);
-	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
-	const state = {
-		session: { phase: "world", revision: 1, character: "Player" },
-		gameplay: { localGid: 1, pose: { ...entity, angle: 0 }, vitals: [], inventory: [], target: 0 },
-		entities: [ entity ],
-		width: 1600,
-		height: 900,
-		worldReady: true
-	};
-	/*
-	================
-	hasText
-	================
-	*/
-	function hasText( value, font = "0", style = 0 ) {
-		const face = style === 2 ? fontAtlas.fonts[font].styles["2"] : fontAtlas.fonts[font];
-		const pattern = Array.from( value, c => {
-			const g = face.glyphs[c.codePointAt( 0 )] ?? face.glyphs["63"];
-			return [
-				g.x / fontAtlas.atlasWidth,
-				g.y / fontAtlas.atlasHeight,
-				g.width / fontAtlas.atlasWidth,
-				g.height / fontAtlas.atlasHeight
-			].join( "," );
-		} );
-		const actual =
-			scenes.at( -1 )?.quads.filter( q => q.texture === fontAtlas.image ).map( q => q.uv.join( "," ) ) ?? [];
-		return actual.some( ( _, start ) => pattern.every( ( uv, i ) => actual[start + i] === uv ) );
-	}
-	return {
-		requested,
-		sounds,
-		rawStep: ui.step,
-		ui: {
-			...ui,
-			/*
-			================
-			step
-			================
-			*/
-			step( state, now ) {
-				let result = ui.step( state, now );
-				for ( let i = 0; i < 8 && pending.size; i++ ) result = ui.step( state, now ) ?? result;
-				// The skill catalogue decodes in bounded steps after its bytes arrive.
-				for ( let i = 0; i < 64 && ui.stats().hudSettling; i++ ) result = ui.step( state, now ) ?? result;
-				return result;
-			}
-		},
-		hasText,
-		scenes,
-		textures,
-		state,
-		/*
-		================
-		dispose
-		================
-		*/
-		dispose() {
-			ui.dispose();
-		}
-	};
-}
 
 test("retail GM prefix colors player names gold without granting permission", () => {
 	const f = uiFixture();
@@ -667,7 +528,7 @@ test("quest objectives repaint native progress, per-node status and color after 
 	const f = uiFixture(), quests = createQuests( () => {} );
 	const captures = [],
 		subLayout = JSON.parse(
-			readFileSync( "../../.generated/client-public/assets/cif/layouts/ifquestslotsub.json", "utf8" )
+			readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifquestslotsub.json", "utf8" )
 		)
 			.controlsByName;
 	const symbol = "SN_CON_QNO_CH_SOLDIER_EA1_1";
@@ -681,7 +542,7 @@ test("quest objectives repaint native progress, per-node status and color after 
 		targetIds: []
 	};
 	const strings =
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 	/*
 	================
 	update
@@ -1128,22 +989,23 @@ test("a new inventory icon keeps the previous popup visible and navigation avail
 	}
 });
 
-test("retail System menu replaces fallback actions with four compact authored controls", () => {
+test("System menu inserts Experimental below Options using the authored buttons", () => {
 	const f = uiFixture();
 	try {
 		for ( let t = 0; t < 1200; t += 100 ) f.ui.step( f.state, t );
 		f.ui.event( { kind: "key", code: "Escape" } );
 		const scene = f.ui.step( f.state, 1300 );
 		const buttons = scene.controls.filter( c =>
-			[ "open-window:Option", "open-window:Game Guide", "system-restart", "system-exit" ].includes( c.id )
+			[
+				"open-window:Option",
+				"open-window:Experimental",
+				"open-window:Game Guide",
+				"system-restart",
+				"system-exit"
+			].includes( c.id )
 		);
-		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Help", "Restart", "Exit" ] );
-		assert.deepEqual( buttons.map( c => c.rect ), [ [ 724, 402, 152, 24 ], [ 724, 436, 152, 24 ], [
-			724,
-			470,
-			152,
-			24
-		], [ 724, 504, 152, 24 ] ] );
+		assert.deepEqual( buttons.map( c => c.label ), [ "Option", "Experimental", "Help", "Restart", "Exit" ] );
+		assert.deepEqual( buttons.map( c => c.rect ), [ 385, 419, 453, 487, 521 ].map( y => [ 724, y, 152, 24 ] ) );
 		assert.ok( !scene.controls.some( c => c.id === "disconnect" || c.id === "logout" ) );
 		f.ui.event( { kind: "activate", id: "system-restart" } );
 		const restarted = f.ui.step( f.state, 1400 );
@@ -1400,6 +1262,55 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		assert.equal( prompt( 16800 ), false );
 		f.ui.event( { kind: "world-select", gid: 1 } );
 		assert.equal( prompt( 16801 ), true, "explicit selection bypasses the automatic death timer" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("portrait selection immediately restores the dead player's prompt without requesting resurrection", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		/** @type {any} */ let latest;
+		const step = now => (latest = f.ui.step( f.state, now ) ?? latest);
+		const prompt = () => latest.controls.find( control => control.id === "rebirth-body" );
+		f.state.gameplay = { ...f.state.gameplay, progression: { level: 11, masteries: [] } };
+		for ( let now = 0; now <= 1100; now += 100 ) step( now );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1200 );
+		assert.equal( prompt(), undefined, "living portrait selection cannot open rebirth" );
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 2, 0, 0 ] } ];
+		f.state.gameplay = { ...f.state.gameplay, vitals: [ { gid: 1, hp: 0, mp: 0 } ] };
+		step( 1300 );
+		assert.equal( prompt(), undefined, "the automatic death timer has not elapsed" );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1301 );
+		assert.ok( prompt(), "dead portrait selection must bypass the automatic timer" );
+		assert.deepEqual( prompt().rect, [ 600, 345, 400, 210 ] );
+		f.ui.event( { kind: "drag", id: "rebirth-drag", dx: 100, dy: 40 } );
+		step( 1310 );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1320 );
+		assert.deepEqual( prompt().rect, [ 700, 385, 400, 210 ], "an existing prompt keeps its position" );
+		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
+		step( 1330 );
+		assert.equal( prompt(), undefined, "the level-11 alternate choice dismisses locally" );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1340 );
+		assert.deepEqual( prompt().rect, [ 600, 345, 400, 210 ], "reopening creates a centered prompt" );
+		f.state.entities = [ { ...f.state.entities[0], appearanceState: [ 1, 0, 0 ] } ];
+		f.state.gameplay = { ...f.state.gameplay, vitals: [ { gid: 1, hp: 100, mp: 0 } ] };
+		step( 1400 );
+		f.ui.event( { kind: "activate", id: "self-target" } );
+		step( 1410 );
+		assert.equal( prompt(), undefined, "revival clears the explicit prompt request" );
+		assert.ok( sent.length > 0 );
+		assert.ok(
+			sent.every( command =>
+				command.kind === "gameplay" && command.command.kind === "select" &&
+				command.command.gid === 1
+			),
+			"portrait activation never requests resurrection"
+		);
 	} finally {
 		f.dispose();
 	}
@@ -2590,6 +2501,26 @@ test("Options resizes all five pages without moving the window origin", () => {
 			);
 			assert.equal( result.controls.some( c => c.id === "option-apply" ), tab === 0 );
 			assert.deepEqual( result.controls.find( c => c.id === "option-tab:0" ).rect.slice( 0, 2 ), [ 647, 283 ] );
+			// Native 5404BB centers the font board inside the nine-pixel tab client height.
+			for ( const control of result.controls.filter( c => c.id.startsWith( "option-tab:" ) ) ) {
+				const face = control.selected ? fontAtlas.fonts["0"].styles["2"] : fontAtlas.fonts["0"];
+				const glyph = face.glyphs[control.label.codePointAt( 0 )];
+				const uv = [
+					glyph.x / fontAtlas.atlasWidth,
+					glyph.y / fontAtlas.atlasHeight,
+					glyph.width / fontAtlas.atlasWidth,
+					glyph.height / fontAtlas.atlasHeight
+				];
+				const ink = f.scenes.at( -1 ).quads.find( q =>
+					q.texture === fontAtlas.image &&
+					q.rect[0] >= control.rect[0] && q.rect[0] < control.rect[0] + control.rect[2] &&
+					q.rect[1] >= control.rect[1] && q.rect[1] < control.rect[1] + control.rect[3] &&
+					q.uv.every( ( value, i ) => value === uv[i] )
+				);
+				assert.ok( ink, control.label + " renders its native glyph" );
+				const baseline = control.rect[1] + 9 + Math.floor( (9 - (face.recordHeight + 5)) / 2 ) + face.ascent;
+				assert.equal( ink.rect[1], baseline - glyph.originY, control.label + " stays vertically centered" );
+			}
 			if ( tab === 0 ) {
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-up" ).rect, [ 945, 415, 16, 16 ] );
 				assert.deepEqual( result.controls.find( c => c.id === "option-video-down" ).rect, [
@@ -3332,7 +3263,7 @@ test("retail extended quickslot layouts, fixed bindings, locks and bottom-bar ac
 		click( "ext-open" );
 		for ( const path of f.requested.filter( path => path.includes( "/quick_slot/" ) ) ) {
 			assert.doesNotThrow(
-				() => readFileSync( "../../.generated/client-public" + path ),
+				() => readFileSync( CLIENT_PUBLIC_ROOT + path ),
 				"Quickslot requests only published authored textures: " + path
 			);
 		}

@@ -9,77 +9,17 @@ is decoded completely before any state is published.
 
 ===========================================================================
 */
-import { GUILD_WAR_PROPOSAL, guildWarProposalReply, type GuildWarTerms } from "./guild-war";
+import { GUILD_WAR_PROPOSAL, guildWarProposalReply } from "./guild-war";
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
-import type { PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
-export type { PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
+import type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
+export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 // The 0x3393 type a resurrection skill proposes to a dead player.
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
 export const MUTATION_PROPOSAL = 8;
 // 7644E0 case 6: a guild master proposes a union (confirm box 0x1D).
 export const UNION_PROPOSAL = 6;
-/*
-================
-SocialState
-================
-*/
-export interface SocialState {
-	readonly wars?: readonly GuildWar[];
-	readonly warPending?: 0 | 1 | 2;
-	readonly warCountdown?: { readonly remaining: number; readonly nextAt: number; };
-	readonly warResult?: {
-		readonly key: string;
-		readonly additionalKey?: string;
-		readonly names: readonly string[];
-		readonly sequence: number;
-	};
-	readonly roleUpdates?: readonly { name: string; role: number; }[];
-	readonly crestUpdates?: readonly {
-		name: string;
-		guildId?: number;
-		crest?: number;
-		allianceId?: number;
-		allianceCrest?: number;
-	}[];
-	readonly localName: string;
-	readonly self: number;
-	readonly leader: number;
-	readonly options: number;
-	readonly members: readonly PartyMember[];
-	readonly guild: Guild | null;
-	readonly alliances?: readonly {
-		id: number;
-		name: string;
-		level: number;
-		master: string;
-		model: number;
-		flags: number;
-	}[];
-	readonly allianceMaster?: number;
-	readonly allianceCrests?: readonly [number, number];
-	readonly invitation: {
-		readonly type: 1 | 2 | 3 | 5 | 6 | 10;
-		readonly war?: GuildWarTerms;
-		readonly options?: number;
-		readonly gid: number;
-	} | null;
-	// The open resurrection question (0x3393 type 4, box kind 4); its gid is
-	// the caster. It has its own slot so it never displaces an invitation
-	// and no invitation displaces it.
-	readonly resurrection?: { readonly gid: number; readonly mutation?: boolean; };
-	// Native war-proposal replies reach the same system-message board as the
-	// fortress announcements. The gameplay owner drains this each frame.
-	readonly notice?: import("./system-notices").SystemNotice;
-	// Diagnostic state, not player-facing invented text. These native bodies
-	// require a formatted message/modal owner beyond the constant dispatcher.
-	readonly unresolvedNotice?: { readonly category: number; readonly code: number; };
-	// The war compensation the guild manager quoted (0xB140 [1][u32]); the
-	// claim box (5D4050) asks before 0x73F7 collects it.
-	readonly compensation?: number;
-	readonly error: string | null;
-}
 export { socialRequest, type SocialCommand } from "./social-request";
 
 /*
@@ -170,6 +110,7 @@ export function socialPacket(
 			0x34f3,
 			0x37d4,
 			0xb3f0,
+			0xb322,
 			0xb7d4,
 			0xb140,
 			0xb3f7,
@@ -770,6 +711,7 @@ export function socialPacket(
 				if ( mask & 64 ) {
 					const flags = u8();
 					guild = { ...guild, flags: flags ? (guild.flags ?? 0) | flags : 0 };
+					next = { ...next, soldierAttributeSequence: (next.soldierAttributeSequence ?? 0) + 1 };
 				}
 			} else if ( type === 0x14 ) {
 				const count = u8(), updates = new Map<number, number>();
@@ -854,6 +796,16 @@ export function socialPacket(
 			}
 		} else if ( result !== 1 ) {
 			throw Error( "Invalid guild result" );
+		} else if ( op === 0xb322 ) {
+			// 766D30: a nonzero attribute adds bits; zero clears the set.
+			const flags = u8();
+			if ( next.guild ) {
+				next = {
+					...next,
+					soldierAttributeSequence: (next.soldierAttributeSequence ?? 0) + 1,
+					guild: { ...next.guild, flags: flags ? (next.guild.flags ?? 0) | flags : 0 }
+				};
+			}
 		} else if ( op === 0xb515 ) {
 			// The warehouse owner (storage-room.ts) carries the open path.
 		} else if ( op === 0xb140 ) {

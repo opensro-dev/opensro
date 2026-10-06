@@ -12,6 +12,7 @@ Needs the full asset build (.generated/client-public).
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -21,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { avatarToGlb } from "../../build/char/exportGlb.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
-const publicRoot = path.join( rebuildRoot, ".generated", "client-public" );
+const publicRoot = CLIENT_PUBLIC_ROOT;
 
 /*
 ================
@@ -224,7 +225,7 @@ test("root-motion role policy rejects malformed ownership declarations", () => {
 
 test("published Baroi locomotion is horizontally in-place", () => {
 	const glb = fs.readFileSync(
-		path.join( rebuildRoot, ".generated", "client-public", "assets", "npc", "mob", "europe", "baroi.glb" )
+		path.join( CLIENT_PUBLIC_ROOT, "assets", "npc", "mob", "europe", "baroi.glb" )
 	);
 	const { json, binary } = readGlb( glb );
 	const rootNode = json.skins[0].skeleton;
@@ -307,16 +308,7 @@ test("every holder-driven actor resource exports in-place locomotion", () => {
 });
 
 test("published Baroi VAT preserves the in-place locomotion contract", () => {
-	const vatDirectory = path.join(
-		rebuildRoot,
-		".generated",
-		"client-public",
-		"assets",
-		"npc",
-		"vat",
-		"mob",
-		"europe"
-	);
+	const vatDirectory = path.join( CLIENT_PUBLIC_ROOT, "assets", "npc", "vat", "mob", "europe" );
 	const manifest = JSON.parse( fs.readFileSync( path.join( vatDirectory, "baroi.vat.json" ), "utf8" ) );
 	const binary = fs.readFileSync( path.join( vatDirectory, "baroi.vat.bin" ) );
 	assert.equal(

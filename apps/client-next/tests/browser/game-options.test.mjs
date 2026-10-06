@@ -26,6 +26,7 @@ test(
 			);
 			await page.evaluate( async () => {
 				localStorage.removeItem( "sro:v1150:game-options:1" );
+				localStorage.removeItem( "sro:v1150:experimental-options:1" );
 				const entry = Array.from( document.scripts ).find( s =>
 					s.src && new URL( s.src ).pathname === "/src/bootstrap.ts"
 				);
@@ -83,7 +84,14 @@ test(
 					() => {},
 					() => 1,
 					() => 0,
-					value => platform.saveGameOptions( value )
+					value => platform.saveGameOptions( value ),
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					{ saveExperimental: value => platform.saveExperimentalOptions( value ) }
 				);
 				platform = createPlatform(
 					document.querySelector( "canvas" ),
@@ -151,6 +159,153 @@ test(
 				await page.locator( '[data-ui-id="' + id + '"]' ).click();
 				await page.evaluate( () => flagFixture.draw() );
 			};
+			await mkdir( "temp/artifacts/experimental-options", { recursive: true } );
+			await draw( "option-video-record:0" );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/video-graphics-1.png" } );
+			await click( "option-video-record:1" );
+			await draw( "option-video-record:1" );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/video-graphics-2.png" } );
+			await click( "option-cancel" );
+			await page.keyboard.press( "Escape" );
+			await draw( "open-window:Experimental" );
+			const menuRows = await page.locator(
+				'[data-ui-id="open-window:Option"], [data-ui-id="open-window:Experimental"]'
+			).evaluateAll( rows => rows.map( row => row.getBoundingClientRect().y ) );
+			assert.equal( menuRows[1] - menuRows[0], 34 );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/escape-menu.png" } );
+			await click( "open-window:Experimental" );
+			// Video is the first tab; every stage is off, which is the native frame.
+			for (
+				const id of [
+					"experimental-post-processing",
+					"experimental-anisotropic-filtering",
+					"experimental-height-fog",
+					"experimental-water-reflection",
+					"experimental-garment-sheen"
+				]
+			) {
+				await draw( id );
+				assert.equal(
+					await page.locator( '[data-ui-id="' + id + '"]' ).getAttribute( "aria-pressed" ),
+					"false"
+				);
+			}
+			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental-video.png" } );
+			await click( "experimental-tab:1" );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"false"
+			);
+			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental.png" } );
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			await click( "experimental-tab:2" );
+			await page.screenshot( { path: "temp/artifacts/experimental-options/experimental-developer.png" } );
+			await click( "experimental-developer-diagnostics" );
+			assert.equal(
+				await page.locator( "#developer-toggle" ).isVisible(),
+				false,
+				"draft must not enable diagnostics"
+			);
+			await click( "experimental-tab:1" );
+			await click( "experimental-chat-timestamps" );
+			await click( "experimental-cancel" );
+			assert.equal(
+				await page.evaluate( () => localStorage.getItem( "sro:v1150:experimental-options:1" ) ),
+				null
+			);
+			await page.keyboard.press( "Escape" );
+			await click( "open-window:Experimental" );
+			await click( "experimental-tab:1" );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"false"
+			);
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			await click( "experimental-tab:2" );
+			await click( "experimental-developer-diagnostics" );
+			assert.equal(
+				await page.locator( "#developer-toggle" ).isVisible(),
+				false,
+				"draft must not enable diagnostics"
+			);
+			await click( "experimental-tab:1" );
+			await click( "experimental-chat-timestamps" );
+			await click( "experimental-confirm" );
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), true );
+			assert.equal( await page.locator( "#developer-readout" ).isVisible(), false );
+			const restoredContext = await browser.newContext( { storageState: await page.context().storageState() } );
+			const restored = await restoredContext.newPage();
+			try {
+				await restored.goto( CLIENT_NEXT_BASE_URL );
+				await restored.waitForFunction( () => typeof window.sroDebug?.setDiagnostics === "function" );
+				assert.equal(
+					await restored.locator( "#developer-toggle" ).isVisible(),
+					true,
+					"Confirm persists across page loads"
+				);
+				assert.equal( await restored.locator( "#developer-readout" ).isVisible(), false );
+			} finally {
+				await restoredContext.close();
+			}
+			await page.locator( "#developer-toggle" ).click();
+			assert.equal( await page.locator( "#developer-toggle" ).getAttribute( "aria-expanded" ), "true" );
+
+			assert.deepEqual(
+				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
+				{
+					chatTimestamps: true,
+					developerDiagnostics: true,
+					postProcessing: false,
+					anisotropicFiltering: false,
+					heightFog: false,
+					waterReflection: false,
+					garmentSheen: false
+				}
+			);
+			await page.keyboard.press( "Escape" );
+			await click( "open-window:Experimental" );
+			await click( "experimental-tab:1" );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"true"
+			);
+			await click( "experimental-default" );
+			await page.keyboard.press( "Escape" );
+			await page.evaluate( () => {
+				flagFixture.draw();
+				flagFixture.ui.event( { kind: "activate", id: "open-window:Experimental" } );
+				flagFixture.draw();
+			} );
+			await click( "experimental-tab:1" );
+			await draw( "experimental-chat-timestamps" );
+			assert.equal(
+				await page.locator( '[data-ui-id="experimental-chat-timestamps"]' ).getAttribute( "aria-pressed" ),
+				"true",
+				"Escape discards the Default draft"
+			);
+			await click( "experimental-default" );
+			await click( "experimental-confirm" );
+			assert.deepEqual(
+				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
+				{
+					chatTimestamps: false,
+					developerDiagnostics: false,
+					postProcessing: false,
+					anisotropicFiltering: false,
+					heightFog: false,
+					waterReflection: false,
+					garmentSheen: false
+				}
+			);
+			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
+			assert.equal( await page.locator( "#developer-readout" ).isVisible(), false );
+			await page.evaluate( () => {
+				flagFixture.ui.event( { kind: "activate", id: "open-window:Option" } );
+				flagFixture.draw();
+			} );
 			await click( "option-tab:4" );
 			await draw( "option-toggle:ownName" );
 			await mkdir( "temp/artifacts/login-flags", { recursive: true } );

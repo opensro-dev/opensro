@@ -76,20 +76,16 @@ original-server comparison, or a connected browser-to-server guild battle. The
 wire test and browser test establish separate boundaries; they do not prove
 whole-program machine equivalence.
 
-### Adjacent gap discovered during this audit
+### Guild soldier dependency
 
-GameServer 5C6900 also refuses master transfer with 4C55 while owner timed job
-(type 2, ID 4) exists. Raw instructions at 411560/411440 prove those helpers test
-for a timed-job type/ID; their former title-destructor labels were wrong.
-4FB086..4FB0FC creates the job for 1,200 seconds after a successful guild-soldier
-summon. The current server has no mercenary summon producer. That full
-mercenary lifecycle, including this cooldown and its dependent refusal, remains
-unported; a fabricated fortress flag or a permanently unreachable boolean would
-not close it. Staff hiring, which buys fortress service flags, is distinct from
-summoning guild soldiers.
+The adjacent master-transfer dependency now has a real producer: guild soldier
+scrolls create their actors and owner timed job `(2, 4)`. Dismissal and death
+retain that job; master transfer refuses while it exists. See
+[guild-soldier-native.md](guild-soldier-native.md) for the implementation,
+native addresses and verification boundaries.
 
 
-Final validation on this branch: all 13 source/server gates and all 11 client
+Validation of the preceding fortress/guild-war change: all 13 source/server gates and all 11 client
 gates passed. The expanded production-UI browser test passed. Focused race tests
 covered guild transport, store and action packages. The first final client gate
 attempt failed because `unzip` was absent from PATH; the corrected rerun passed.

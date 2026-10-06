@@ -320,6 +320,12 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 		NewPacket(OpcodeMyCharacterFlush, nil),
 		NewPacket(OpcodeServerClockGidLatch, BuildServerClockGidLatchPayload(objectID)),
 	}
+	mercenaryGuildName := ""
+	if character.GuildID != nil && deps.Guilds != nil {
+		if guild, _, found := deps.Guilds.Guild(divisionID, *character.GuildID); found {
+			mercenaryGuildName = guild.Name
+		}
+	}
 	var activeCOSRows []Packet
 	var activeCOSRide *Packet
 	for _, cos := range character.Companions() {
@@ -339,7 +345,10 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 		if cos != character.ActiveCOS && ref != nil {
 			expectedGID, gidOK = PersistentCOSObjectID(character, ref.TidWord>>11)
 		}
-		if !found || ref == nil || ref.RefObjID != cos.RefObjID || (ref.TidWord>>11 < 1 || ref.TidWord>>11 > 4) ||
+		if ref != nil && ref.TidWord>>11 == domain.MercenaryBand {
+			expectedGID, gidOK = cos.GID, character.OwnsMercenaryID(cos.GID)
+		}
+		if !found || ref == nil || ref.RefObjID != cos.RefObjID || (ref.TidWord>>11 < 1 || ref.TidWord>>11 > 5) ||
 			!gidOK || cos.GID != expectedGID || character.CompanionByGID(cos.GID) != cos {
 			return nil, fmt.Errorf("active COS failed authoritative media/identity validation")
 		} else {
@@ -365,18 +374,27 @@ func buildBootstrapPackets(deps *Deps, divisionID string, character *Character, 
 			if deps.EntryCompanionActionSpeed != nil {
 				actionSpeed = deps.EntryCompanionActionSpeed(divisionID, character, cos)
 			}
+			ownerName, holdType, pvpState := character.Name, uint8(0), uint8(0)
+			if ref.TidWord>>11 == domain.MercenaryBand {
+				ownerName, holdType, pvpState = mercenaryGuildName, DressedJob(character), character.PVPState()
+			}
+			walk, run := ref.WalkSpeed, ref.RunSpeed
+			if deps.EntryCompanionMovementSpeeds != nil {
+				walk, run = deps.EntryCompanionMovementSpeeds(divisionID, character, cos)
+			}
 			spawnPayload := wire.EncodeCosSpawnBand2(wire.CosSpawnBand2{
 				BodyStatus: cos.NativeBodyStatus,
 				Band:       uint8(ref.TidWord >> 11),
 				RefObjID:   cos.RefObjID,
 				Gid:        cos.GID,
 				Position:   position,
-				Walk:       ref.WalkSpeed,
-				Run:        ref.RunSpeed,
+				Walk:       walk,
+				Run:        run,
 				Scale:      actionSpeed,
 				Name:       name,
-				OwnerName:  character.Name,
-				OwnerGid:   objectID,
+				OwnerName:  ownerName, HoldType: holdType, PvpState: pvpState,
+				OwnerGid:      objectID,
+				OwnerModelRef: CharacterModelRef(character, deps.Roster),
 			})
 			row := NewPacket(OpcodeObjectListChunk, spawnPayload[:len(spawnPayload)-1])
 			activeCOSRows = append(activeCOSRows, row)

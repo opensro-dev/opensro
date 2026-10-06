@@ -10,6 +10,7 @@ import { allowedRequest, allowedMutation } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
 import { createHistory } from "./history.mjs";
+import { clientPublicPath } from "../../../scripts/lib/generatedRoot.mjs";
 const port = Number( process.env.SRO_OBSERVATORY_PORT ?? 5190 );
 if ( !Number.isInteger( port ) || port < 1024 || port > 65535 ) throw Error( "Invalid dashboard port" );
 const config = process.env.SRO_OBSERVATORY_CONFIG ?
@@ -35,6 +36,14 @@ const historySources = [ {
 }, ...shards.map( row => ({ ...row, token }) ) ];
 const history = createHistory( historySources );
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
+// Banner art from the client's published images: the Dunhuang and Jangan loading screens.
+// Fixed paths only; a checkout without built client assets answers 404 and
+// theme.css paints its gradient fallback.
+const LOADING_SCREENS = [ "assets", "images", "Media_extracted", "interface", "loading" ];
+const artwork = new Map( [
+	[ "/art/jangan.png", clientPublicPath( ...LOADING_SCREENS, "loading_zangan.png" ) ],
+	[ "/art/dunhuang.png", clientPublicPath( ...LOADING_SCREENS, "loading_dunwhang.png" ) ]
+] );
 for (
 	const file of [
 		"app.js",
@@ -43,6 +52,8 @@ for (
 		"model.js",
 		"operations.js",
 		"theme.css",
+		"theme-boards.css",
+		"theme-fit.css",
 		"items.js",
 		"item-model.js",
 		"items.css",
@@ -51,6 +62,7 @@ for (
 		"players.css",
 		"history.html",
 		"history.js",
+		"history-view.js",
 		"history.css"
 	]
 ) files.set( "/" + file, file );
@@ -143,6 +155,19 @@ async function handleRequest( req, res ) {
 			if ( !image ) {
 				res.writeHead( 404 );
 				res.end( "Icon unavailable" );
+				return;
+			}
+			res.setHeader( "Content-Type", "image/png" );
+			res.end( image );
+			return;
+		}
+		if ( artwork.has( url.pathname ) ) {
+			let image;
+			try {
+				image = await readFile( artwork.get( url.pathname ) );
+			} catch {
+				res.writeHead( 404 );
+				res.end( "Artwork unavailable" );
 				return;
 			}
 			res.setHeader( "Content-Type", "image/png" );

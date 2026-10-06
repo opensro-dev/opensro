@@ -9,6 +9,7 @@ body clips and has a node past every animated one.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -23,7 +24,7 @@ test( "shipping GPU pose owner matches CPU palettes across clocks, bindings, rel
 }, async () => {
 	const bytes = readPublishedAssetBytesSync(
 		"/assets/npc/mob/china/mangnyang.glb",
-		path.resolve( "../../.generated/client-public" )
+		CLIENT_PUBLIC_ROOT
 	);
 	const { browser, page } = await launchProbeBrowser();
 	try {
@@ -157,7 +158,7 @@ test(
 	async () => {
 		const bytes = readPublishedAssetBytesSync(
 			"/assets/npc/mob/china/mangnyang.glb",
-			path.resolve( "../../.generated/client-public" )
+			CLIENT_PUBLIC_ROOT
 		);
 		const { browser, page } = await launchProbeBrowser();
 		try {

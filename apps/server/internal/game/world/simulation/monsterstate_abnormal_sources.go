@@ -22,9 +22,10 @@ One source's identity and life at the operation's read boundary.
 ================
 */
 type MonsterAbnormalSource struct {
-	Name   string
-	Exists bool
-	Dead   bool
+	CreditGID uint32
+	Name      string
+	Exists    bool
+	Dead      bool
 }
 
 /*
@@ -52,6 +53,7 @@ func (s *MonsterState) PrepareAbnormalSources(division string, records []abnorma
 			source.Exists = ctx.SourceExists(division, record.SourceGID, record.SourceName)
 			if source.Exists {
 				source.Dead = ctx.SourceDead(division, record.SourceGID, record.SourceName)
+				source.CreditGID = ctx.SourceCreditGID(division, record.SourceGID, record.SourceName)
 			}
 		}
 		sources[record.SourceGID] = source

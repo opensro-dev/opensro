@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -92,7 +93,7 @@ test("the 1.5x title scales its text runs: painted glyphs equal scaled glyph qua
 	const { decodeUiFont, titleText } = await load( "src/engine/foundation/rendering/ui-glyphs.ts" );
 	const { expandTextRuns } = await load( "src/engine/foundation/rendering/text-run.ts" );
 	const atlas = decodeUiFont(
-		JSON.parse( await readFile( "../../.generated/client-public/assets/fonts/native-ui-font-atlas.json", "utf8" ) )
+		JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/fonts/native-ui-font-atlas.json", "utf8" ) )
 	);
 	const runs = ( ...args ) => titleText( atlas, ...args ), glyphs = ( ...args ) => expandTextRuns( runs( ...args ) );
 	for ( const width of [ 800, 1366, 1920 ] ) {

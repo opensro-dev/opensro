@@ -243,3 +243,34 @@ for ( const group of [ 0, 242 ] ) {
 		assert.deepEqual( owner.state().itemCooldowns, [] );
 	});
 }
+
+/*
+================
+Timed job (2,4) drives every guild-soldier scroll's category independently.
+================
+*/
+test("mercenary cooldown restores remaining time and replaces its category", () => {
+	const owner = createInventory();
+	owner.bootstrap( fixture() );
+	const state = seconds => {
+		const payload = new Uint8Array( 6 );
+		payload[0] = 2;
+		payload[1] = 4;
+		new DataView( payload.buffer ).setInt32( 2, seconds, true );
+		return payload;
+	};
+	owner.receive( 0x3792, state( 1200 ), 100, context );
+	let rows = owner.state().itemCooldowns;
+	assert.equal( rows.length, 1 );
+	assert.equal( p.itemCooldown( rows, 0xe6c, 101 )?.category, 30 );
+	assert.equal( p.itemCooldown( rows, word( 1 ), 101 ), undefined );
+	owner.receive( 0x3792, state( 30 ), 200, context );
+	rows = owner.state().itemCooldowns;
+	assert.equal( rows.length, 1 );
+	assert.ok( p.itemCooldown( rows, 0xe6c, 30199 ) );
+	assert.equal( p.itemCooldown( rows, 0xe6c, 30200 ), undefined );
+	owner.receive( 0x3792, state( 0 ), 201, context );
+	owner.receive( 0x3792, state( -1 ), 202, context );
+	assert.deepEqual( owner.state().itemCooldowns, rows );
+	assert.throws( () => owner.receive( 0x3792, state( 30 ).slice( 0, 5 ), 203, context ), /guild soldier cooldown/ );
+});

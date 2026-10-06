@@ -1,382 +1,556 @@
 /*
 ===========================================================================
-theme.css - shared observatory surfaces, typography and navigation hierarchy
+
+theme.css - the caravan ledger: every observatory surface, from one palette
+
+Parchment boards in gold frames on a dark caravanserai wood, the way the
+game's own windows and loading screens dress the Silk Road: a navy-teal
+sidebar with a gold-plated active entry, the hero painted from a loading
+screen behind a torn parchment title, heraldic pennants on the plaques,
+crimson for numbers and warnings, emerald for what is alive and well.
+styles.css owns the base layout; this file owns the palette tokens and the
+page chrome (sidebar, header, type, hero, controls). theme-boards.css dresses
+the boards and theme-fit.css the narrow and dense layouts. history.css and the view
+stylesheets use the same tokens, so a palette change is made here.
+
+The hero art is served by the observatory from the client's published
+images (/art/dunhuang.png, /art/jangan.png); without it the hero falls back
+to a painted sunset gradient. Icons are inline SVG masks, so the page loads
+nothing from outside the console.
+
 ===========================================================================
 */
-/* Bronze window fittings, inked parchment and jade: an operator's Silk Road atlas. */
+
 :root {
-	--bg:#171814;
-	--surface:#222820;
-	--line:#514b35;
-	--text:#ede3c9;
-	--muted:#b4ad94;
-	--jade:#a2c4a0;
-	--gold:#dfbb76;
-	--red:#f0a18e
+	color-scheme: light;
+	/* Ground: dark caravanserai wood; the sidebar's navy-teal. */
+	--bg: #1b120c;
+	--frame: #120c08;
+	--navy: #0f2a2f;
+	--navy-deep: #0a1c20;
+	/* Parchment surfaces. */
+	--surface: #f4e8cb;
+	--surface-raised: #ecdcb5;
+	--wood: #fbf4e2;
+	--stone: #e3d0a3;
+	/* Gold leaf and bronze fittings. */
+	--gold: #8c5f12;
+	--gold-soft: #c79a45;
+	--gold-pale: #f0d58f;
+	--gold-bright: #e6bd62;
+	--roof: #c98f2a;
+	--bronze: #b8924f;
+	--line: #d8c193;
+	/* Crimson banners and seals. */
+	--lacquer: #9b2416;
+	--lacquer-deep: #6e140b;
+	--cinnabar: #b8321f;
+	/* Teal and emerald. */
+	--teal: #1d5a52;
+	--teal-bright: #2c7f6e;
+	--teal-pale: #d8e4d2;
+	--jade: #2d7a3a;
+	--jade-deep: #d9ead0;
+	/* Ink on parchment. */
+	--text: #2e1d10;
+	--heading: #5c170d;
+	--muted: #6a5236;
+	--faint: #8f7552;
+	--cream: #f3e6c8;
+	/* States. */
+	--red: #a8261a;
+	--amber: #9a6408;
+	--sky: #2a5f94;
+	--shadow: 0 2px 4px #0006, 0 10px 26px #0007;
+	--serif: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+	--rail-width: 232px;
 }
+
+/* ----- Ground ----- */
+
+html {
+	background: var(--bg);
+}
+
 body {
-	background:radial-gradient(ellipse at 70% 0,#51472955,transparent 55%),linear-gradient(110deg,#111914,#27291f 65%,#1a1b15);
-	background-attachment:fixed
+	color: var(--text);
+	background:
+		radial-gradient(ellipse 80% 50% at 60% 0, #5a2a1244, transparent 70%),
+		repeating-linear-gradient(90deg, #ffffff05 0 2px, transparent 2px 9px),
+		linear-gradient(180deg, #24170f, var(--bg) 600px);
+	background-attachment: fixed;
 }
+
+::selection {
+	background: var(--gold-pale);
+	color: var(--text);
+}
+
+/* ----- The sidebar: brand plate, navigation, motto ----- */
+
 .rail {
-	background:linear-gradient(90deg,#151a14,#26271c);
-	border-right:3px double #716344
-}
-.rail-label {
-	color:#b49a66
-}
-.seal {
-	border:3px double #ad9059;
-	transform:rotate(-3deg);
-	background:#2a2b1c
-}
-.rail-line {
-	background:#806a41
-}
-header {
-	background:#171d16cc;
-	border-bottom:3px double #66583b
-}
-.brand {
-	color:var(--gold)
-}
-.brand span {
-	color:#b7a47c
-}
-h1 {
-	font-variant:small-caps;
-	letter-spacing:.2px;
-	text-shadow:0 2px 5px #0008
-}
-h1 em {
-	font-variant:normal
-}
-h2 {
-	color:#edcf91
-}
-.button,input,select {
-	border:1px solid #7a6944;
-	border-radius:2px;
-	background:linear-gradient(#303327,#20261e);
-	box-shadow:inset 0 0 0 1px #ffffff05
-}
-.button:hover {
-	background:#454532;
-	border-color:var(--gold)
-}
-.panel {
-	border:3px double #80704b;
-	border-radius:3px;
-	box-shadow:0 8px 24px #0003,inset 0 0 24px #0002
-}
-.panel-heading {
-	background:linear-gradient(90deg,#4a432555,#20271c00);
-	border-bottom:1px solid #8e784433;
-	position:relative
-}
-.panel-heading:after {
-	content:'◆';
-	position:absolute;
-	right:8px;
-	top:4px;
-	color:#b49859;
-	font-size:7px
-}
-.metric {
-	background:linear-gradient(125deg,#e2d4ab,#c4b387);
-	color:#302d21;
-	border:3px double #75613c;
-	border-radius:2px;
-	box-shadow:0 5px 16px #0003
-}
-.metric-label,.metric-foot,.metric-number small {
-	color:#5b513a
-}
-.metric-icon {
-	color:#725023
-}
-.metric-number {
-	font-family:Georgia,serif
-}
-.metric:nth-child(n) {
-	border-top-color:#a08856
-}
-.atlas {
-	background:radial-gradient(ellipse at 45% 45%,#525943,#293c2b 60%,#1e2b20)
-}
-.encounter:hover,tbody tr:hover {
-	background:#373d2b
-}
-.encounter .crest {
-	background:#53462a
-}
-.health-row {
-	color:#d0c9b0
-}
-th {
-	background:#1b2119
-}
-dialog {
-	background:#262d21;
-	border:3px double #b99a60;
-	border-radius:3px
-}
-.realm-strip {
-	display:flex;
-	gap:12px;
-	margin-bottom:20px;
-	flex-wrap:wrap
-}
-.realm {
-	flex:1;
-	min-width:220px;
-	display:flex;
-	align-items:center;
-	gap:14px;
-	text-align:left;
-	padding:13px 17px;
-	border:1px solid #66583b;
-	background:#171e17;
-	color:var(--text);
-	border-radius:2px
-}
-.realm.selected {
-	border-color:#c0a268;
-	background:linear-gradient(100deg,#474329,#242c20)
-}
-.realm strong {
-	font:17px Georgia,serif
-}
-.realm small {
-	display:block;
-	font-size:10px;
-	color:var(--muted);
-	margin-top:4px
-}
-.realm-state {
-	margin-left:auto;
-	font-size:8px;
-	letter-spacing:1.5px;
-	color:var(--jade)
-}
-.realm-gem {
-	width:9px;
-	height:9px;
-	transform:rotate(45deg);
-	background:#99bf91;
-	border:1px solid #d3dcad;
-	box-shadow:0 0 12px #9cbd7733
-}
-.realm-gem.offline {
-	background:#b36651;
-	box-shadow:none
-}
-.operator-alert {
-	padding:12px 18px;
-	border-left:3px solid var(--red);
-	background:#4b3228;
-	margin-bottom:15px;
-	color:#f0d1b0
-}
-.hotspot {
-	width:100%;
-	display:flex;
-	justify-content:space-between;
-	text-align:left;
-	gap:12px;
-	padding:13px 24px;
-	background:none;
-	border:0;
-	border-top:1px solid var(--line);
-	font-size:12px
-}
-.hotspot:hover {
-	background:#3e422d
-}
-.hotspot span:last-child {
-	text-align:right;
-	color:var(--jade)
-}
-.hotspot small {
-	display:block;
-	color:var(--muted);
-	font-size:10px;
-	margin-top:3px
-}
-#journal {
-	max-height:345px;
-	overflow:auto
-}
-.journal-entry {
-	display:flex;
-	gap:16px;
-	padding:13px 24px;
-	font-size:12px;
-	border-top:1px solid var(--line)
-}
-.journal-entry time {
-	color:var(--gold);
-	white-space:nowrap;
-	font-size:10px
-}
-.census-tools {
-	display:flex;
-	gap:16px;
-	align-items:end;
-	flex-wrap:wrap;
-	padding:18px 24px
-}
-.census-tools label {
-	color:var(--muted);
-	font-size:11px
-}
-.census-tools input,.census-tools select {
-	display:block;
-	width:160px;
-	margin-top:5px
-}
-@media(max-width:800px) {
-	.realm {
-		min-width:100%;
-	}
-	.hotspot {
-		padding:13px 16px
-	}
-	.realm-strip {
-		gap:8px
-	}
-	h1 {
-		font-size:34px
-	}
-	.journal-entry {
-		padding:12px 16px
-	}
-}
-/* Shared navigation and quieter surfaces keep operational state prominent. */
-:root {
-	--bg: #101a17;
-	--surface: #182721;
-	--line: #35473b;
-	--text: #ece8d9;
-	--muted: #a1b0a1;
-	--jade: #99c6a8;
-	--gold: #dfbd7d;
-}
-body {
-	background: radial-gradient(ellipse at 80% 0, #35483244, transparent 55%), #101a17;
-}
-.rail {
-	background: #101b16;
-	border-right: 1px solid var(--line);
-}
-header {
-	background: #121e18f5;
-	border-bottom: 1px solid var(--line);
-	gap: 34px;
-	min-height: 88px;
-	height: auto;
-}
-nav {
-	gap: 22px;
+	width: var(--rail-width);
 	align-items: stretch;
-	min-height: 88px;
+	padding: 0 0 18px;
+	overflow-x: hidden;
+	overflow-y: auto;
+	background:
+		radial-gradient(ellipse 120% 40% at 50% 100%, #c98f2a22, transparent 70%),
+		linear-gradient(180deg, #12323a, var(--navy) 40%, var(--navy-deep));
+	border-right: 3px solid var(--gold-soft);
+	box-shadow: inset -1px 0 0 #000, 4px 0 18px #000a;
+	z-index: 30;
 }
-nav button {
-	white-space: nowrap;
-	min-height: 44px;
+
+.shell {
+	margin-left: var(--rail-width);
+	position: relative;
 }
-nav button:hover {
-	color: var(--gold);
+
+.brand {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	align-items: center;
+	gap: 0 12px;
+	padding: 22px 16px 18px;
+	margin-bottom: 12px;
+	border-bottom: 1px solid #c79a4566;
+	background:
+		radial-gradient(ellipse 90% 70% at 50% 30%, #c98f2a26, transparent 70%),
+		linear-gradient(180deg, #00000040, transparent);
+	font: inherit;
+	letter-spacing: 0;
+	text-align: left;
 }
-nav button:focus-visible {
-	outline: 2px solid var(--gold);
-	outline-offset: -5px;
+
+/* .brand .seal: styles.css styles every span inside .brand. */
+.brand .seal {
+	width: 44px;
+	height: 44px;
+	margin: 0;
+	display: grid;
+	place-items: center;
+	border: 2px solid var(--gold-bright);
+	border-radius: 4px;
+	background: radial-gradient(circle at 30% 25%, #d24a35, var(--lacquer) 70%);
+	color: #fff1d2;
+	font: 700 24px/1 "SimSun", "Songti SC", var(--serif);
+	letter-spacing: 0;
+	box-shadow: 0 0 0 3px #00000055, 0 4px 10px #000a;
+	transform: rotate(-4deg);
 }
-h1 {
-	font-variant: normal;
-	font-size: 38px;
-	letter-spacing: -.5px;
-	text-shadow: none;
+
+.brand .brand-text {
+	margin: 0;
 }
-.panel {
-	border: 1px solid var(--line);
-	border-radius: 10px;
-	background: var(--surface);
-	box-shadow: 0 5px 20px #0002;
+
+.brand-text strong,
+.brand-text em {
+	display: block;
 }
-.panel-heading {
-	background: transparent;
-	border-bottom: 1px solid var(--line);
+
+.brand-text strong {
+	font: 700 23px/1 var(--serif);
+	letter-spacing: .3px;
+	color: var(--gold-bright);
+	background: linear-gradient(180deg, #fff3c8, #e6bd62 55%, #a8741f);
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	filter: drop-shadow(0 2px 2px #000c);
 }
-.panel-heading:after {
+
+.brand-text em {
+	margin-top: 4px;
+	font: 600 11px var(--serif);
+	letter-spacing: 7px;
+	color: var(--gold-pale);
+}
+
+.brand b,
+.brand small {
+	grid-column: 1 / -1;
+	display: block;
+	text-align: center;
+}
+
+.brand b {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid #c79a4555;
+	font: 600 15px var(--serif);
+	letter-spacing: 5px;
+	color: var(--gold-pale);
+}
+
+.brand small {
+	margin-top: 4px;
+	font-size: 9px;
+	letter-spacing: 2.6px;
+	text-transform: uppercase;
+	color: #8fb3ae;
+}
+
+/* Navigation: one row per view, the active one plated in gold. */
+.rail nav {
+	display: flex;
+	flex-direction: column;
+	align-self: stretch;
+	gap: 2px;
+	padding: 0 10px;
+}
+
+.rail nav button,
+.rail nav a {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid transparent;
+	border-bottom-color: #ffffff10;
+	border-radius: 4px;
+	background: none;
+	color: #e9dcc0;
+	font: 14px var(--serif);
+	text-align: left;
+	transition: background .15s, color .15s;
+}
+
+.rail nav button:hover,
+.rail nav a:hover {
+	background: #ffffff0f;
+	color: #fff4dc;
+}
+
+.rail nav button.active,
+.rail nav a.active {
+	background: linear-gradient(90deg, #f6e5b8, #e2c17a 60%, #c99a45);
+	border-color: var(--gold-bright);
+	color: #3a1408;
+	font-weight: 700;
+	box-shadow: 0 2px 8px #000a, inset 0 1px 0 #fff9;
+}
+
+.rail nav button.active:after {
 	content: none;
 }
-h2 {
-	color: var(--text);
+
+.rail nav button::before,
+.rail nav a::before {
+	content: "";
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+	background: var(--gold-soft);
+	-webkit-mask: var(--icon) center / contain no-repeat;
+	mask: var(--icon) center / contain no-repeat;
 }
-.metric {
-	color: var(--text);
-	background: linear-gradient(120deg, #23382a, #192b23);
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	box-shadow: none;
+
+.rail nav .active::before {
+	background: var(--lacquer-deep);
 }
-.metric-label, .metric-foot, .metric-number small {
-	color: var(--muted);
+
+[data-view="overview"],
+[href="/#overview"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M12 2v2M7 7l5-3 5 3M4 11c3 0 5-2 8-4 3 2 5 4 8 4M6 11v4h12v-4M3 15c3 0 6-1 9-1s6 1 9 1M5 15v6h14v-6M10 21v-4h4v4M2 21h20'/></svg>");
 }
-.metric-icon {
+
+[data-view="players"],
+[href="/#players"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'><circle cx='9' cy='8' r='3.5'/><path d='M2.5 20c0-3.8 2.9-6.5 6.5-6.5s6.5 2.7 6.5 6.5'/><circle cx='17.5' cy='9' r='2.6'/><path d='M16.5 13.6c3 0 5 2.2 5 5.4'/></svg>");
+}
+
+[data-view="world"],
+[href="/#world"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z'/><path d='M9 4v14M15 6v14'/><path d='M5 10l2 1M11 12l2-1M17 9l2 1' stroke-linecap='round'/></svg>");
+}
+
+[data-view="health"],
+[href="/#health"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'><circle cx='12' cy='13' r='8'/><path d='M12 8v5l3 2M9 2h6M12 2v3'/></svg>");
+}
+
+[data-view="items"],
+[href="/#items"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M3 11c0-4 3-6.5 9-6.5s9 2.5 9 6.5v9H3z'/><path d='M3 11h18M10 11v3h4v-3M7 5.5V20M17 5.5V20'/></svg>");
+}
+
+[data-view="recovery"],
+[href="/#recovery"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'><path d='M4 3l11 11M3 4l1-1M13 16l3-3M15.5 15.5l4 4M20 3L9 14M21 4l-1-1M11 16l-3-3M8.5 15.5l-4 4'/></svg>");
+}
+
+[href="/history.html"] {
+	--icon: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'><path d='M3 5c3.5-1.5 6-1.5 9 .5v15c-3-2-5.5-2-9-.5zM21 5c-3.5-1.5-6-1.5-9 .5v15c3-2 5.5-2 9-.5z'/><path d='M6 9h3M6 12h3M15 9h3M15 12h3' stroke-linecap='round'/></svg>");
+}
+
+.rail-foot {
+	margin-top: auto;
+	padding: 34px 18px 0;
+	text-align: center;
+	background:
+		radial-gradient(ellipse 70% 60% at 50% 100%, #c98f2a30, transparent 70%);
+}
+
+.rail-foot::before {
+	content: "";
+	display: block;
+	width: 110px;
+	height: 64px;
+	margin: 0 auto 14px;
+	background: #c79a4555;
+	-webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 64'><path d='M55 2l3 6h-6zM40 14c8 0 12-4 15-6 3 2 7 6 15 6zM44 14h22v8H44zM34 26c10 0 15-3 21-6 6 3 11 6 21 6zM40 26h30v10H40zM26 40c14 0 22-3 29-6 7 3 15 6 29 6zM34 40h42v14H34zM0 64c20-10 34-8 55-8s35-2 55 8z'/></svg>") center / contain no-repeat;
+	mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 110 64'><path d='M55 2l3 6h-6zM40 14c8 0 12-4 15-6 3 2 7 6 15 6zM44 14h22v8H44zM34 26c10 0 15-3 21-6 6 3 11 6 21 6zM40 26h30v10H40zM26 40c14 0 22-3 29-6 7 3 15 6 29 6zM34 40h42v14H34zM0 64c20-10 34-8 55-8s35-2 55 8z'/></svg>") center / contain no-repeat;
+}
+
+.rail-label {
+	display: block;
+	writing-mode: horizontal-tb;
+	font: 10px/1.8 var(--serif);
+	letter-spacing: 3px;
+	color: #c9b48a;
+}
+
+.rail-bottom {
+	display: block;
+	margin-top: 12px;
+	padding: 0;
+	color: #8fa9a6;
+	letter-spacing: 1px;
+}
+
+/* ----- Header: only the live indicator, over the hero's corner ----- */
+
+header {
+	position: absolute;
+	top: 22px;
+	right: 40px;
+	z-index: 5;
+	height: auto;
+	padding: 0;
+	border: 0;
+	background: none;
+	gap: 0;
+}
+
+.connection {
+	margin: 0;
+	padding: 7px 16px;
+	border: 1px solid var(--gold-soft);
+	border-radius: 999px;
+	background: linear-gradient(180deg, #154a3f, #0c2f29);
+	color: #8fe6b2;
+	font-weight: 700;
+	line-height: 1.6;
+	box-shadow: 0 0 0 2px #00000066, 0 4px 12px #0008;
+}
+
+.connection.offline {
+	color: #ffb4a6;
+	background: linear-gradient(180deg, #6e1a10, #4a0f09);
+}
+
+/* ----- Type ----- */
+
+h1 {
+	font-family: var(--serif);
+	font-size: 32px;
+	font-weight: 600;
+	letter-spacing: -.3px;
+	color: var(--heading);
+}
+
+h1 em {
 	color: var(--gold);
 }
-.metric-number {
-	font-family: Georgia, serif;
+
+h2 {
+	font-family: var(--serif);
+	font-weight: 600;
+	color: var(--heading);
 }
-.button, input, select {
+
+.eyebrow {
+	color: var(--teal);
+	font-size: 10px;
+	letter-spacing: 3px;
+	font-weight: 700;
+}
+
+.muted {
+	color: var(--muted);
+}
+
+/* ----- Hero: a torn parchment title over a loading-screen painting ----- */
+
+/* The painting is mirrored: the loading screens put the game logo bottom
+   right, and mirrored it falls under the parchment. */
+main {
+	padding-top: 16px;
+}
+
+main > .page-heading {
+	--torn: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='M0 0 L75.9 0.0 L76.7 1.7 L78.0 3.3 L77.7 5.0 L78.3 6.7 L78.8 8.3 L78.4 10.0 L79.2 11.7 L79.6 13.3 L80.0 15.0 L78.7 16.7 L79.0 18.3 L78.5 20.0 L79.7 21.7 L79.3 23.3 L78.0 25.0 L79.6 26.7 L79.5 28.3 L79.0 30.0 L79.1 31.7 L78.5 33.3 L78.5 35.0 L79.8 36.7 L79.4 38.3 L80.2 40.0 L80.8 41.7 L81.1 43.3 L82.5 45.0 L83.0 46.7 L84.3 48.3 L84.2 50.0 L84.9 51.7 L85.0 53.3 L85.6 55.0 L85.4 56.7 L85.2 58.3 L86.5 60.0 L86.4 61.7 L86.1 63.3 L85.7 65.0 L84.8 66.7 L84.6 68.3 L84.5 70.0 L84.1 71.7 L85.4 73.3 L84.8 75.0 L85.8 76.7 L85.2 78.3 L86.6 80.0 L86.8 81.7 L85.8 83.3 L86.7 85.0 L88.6 86.7 L88.4 88.3 L89.9 90.0 L89.5 91.7 L89.4 93.3 L90.9 95.0 L91.5 96.7 L90.9 98.3 L90.8 100.0 L0 100Z'/></svg>");
+	--art: url("/art/dunhuang.png");
+	position: relative;
+	min-height: 128px;
+	padding: 0;
+	margin-bottom: 12px;
+	align-items: stretch;
+	border: 2px solid var(--gold-soft);
 	border-radius: 6px;
+	overflow: hidden;
+	isolation: isolate;
+	background: linear-gradient(180deg, #f6b25c, #e07a2c 45%, #7a2f14 75%, #2a140a);
+	box-shadow: 0 0 0 1px #000, 0 0 0 4px #3a2412, 0 0 0 5px #8a6a32, var(--shadow);
 }
-.realm {
-	border-radius: 8px;
-	border-color: var(--line);
+
+.art-jangan > .page-heading {
+	--art: url("/art/jangan.png");
+	background: linear-gradient(180deg, #a9d3ee, #dbeaf0 38%, #e8b44c 39%, #c9861f 62%, #a82a1e 63%, #7c1d14);
 }
-.realm.selected {
-	background: #20362a;
-	border-color: #6c8b68;
+
+main > .page-heading::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: -2;
+	background:
+		linear-gradient(180deg, #00000026, transparent 30%, transparent 70%, #1b120c66),
+		var(--art) 50% 33% / cover no-repeat;
+	transform: scaleX(-1);
 }
-.connection {
-	line-height: 1.6;
+
+/* The burnt rim: the torn shape again, a little wider, in scorched brown. */
+main > .page-heading::after {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: min(640px, 62%);
+	z-index: -1;
+	background: linear-gradient(90deg, #6b4220, #3a1e0c);
+	-webkit-mask: var(--torn) 0 0 / calc(100% + 7px) 100% no-repeat;
+	mask: var(--torn) 0 0 / calc(100% + 7px) 100% no-repeat;
 }
-#recovery {
-	padding-top: 5px;
+
+main > .page-heading > div:first-child {
+	position: relative;
+	flex: 0 0 min(640px, 62%);
+	padding: 18px 130px 16px 50px;
+	background:
+		radial-gradient(ellipse at 20% 25%, #fffaf0, transparent 55%),
+		radial-gradient(ellipse at 85% 90%, #c9a86a88, transparent 45%),
+		radial-gradient(ellipse at 70% 10%, #d9bf8a55, transparent 40%),
+		linear-gradient(160deg, #f8eed5, #e9d4a6);
+	-webkit-mask: var(--torn) 0 0 / 100% 100% no-repeat;
+	mask: var(--torn) 0 0 / 100% 100% no-repeat;
 }
-@media (max-width: 1250px) {
-	header {
-		flex-wrap: wrap;
-		padding-top: 22px;
-		gap: 12px 24px;
-	}
-	nav {
-		order: 3;
-		width: 100%;
-		min-height: 58px;
-		gap: 26px;
-		overflow-x: auto;
-	}
-	.connection {
-		margin-left: auto;
-	}
+
+main > .page-heading > div:first-child::before {
+	content: "";
+	position: absolute;
+	left: 26px;
+	top: 14px;
+	bottom: 14px;
+	width: 2px;
+	background: linear-gradient(180deg, transparent, var(--teal) 15%, var(--teal) 85%, transparent);
 }
-@media (max-width: 800px) {
-	header {
-		padding: 18px 20px 0;
-	}
-	nav {
-		justify-content: flex-start;
-		min-height: 54px;
-		gap: 24px;
-	}
-	nav button {
-		flex: 0 0 auto;
-	}
-	h1 {
-		font-size: 32px;
-	}
+
+main > .page-heading > div:first-child::after {
+	content: "◆";
+	position: absolute;
+	left: 21px;
+	top: 50%;
+	transform: translateY(-50%);
+	color: var(--roof);
+	font-size: 12px;
+}
+
+main > .page-heading .eyebrow {
+	color: #5a3a1a;
+}
+
+main > .page-heading .eyebrow::before {
+	content: none;
+}
+
+main > .page-heading h1 {
+	margin: 4px 0 2px;
+}
+
+main > .page-heading p {
+	max-width: 52ch;
+	color: #4b3420;
+	font: 13px/1.45 var(--serif);
+}
+
+main > .page-heading .heading-actions {
+	align-self: flex-end;
+	margin: 0 18px 14px auto;
+	padding: 6px;
+	border: 1px solid var(--gold-soft);
+	border-radius: 6px;
+	background: #1b120ccc;
+	box-shadow: 0 6px 18px #0009;
+	backdrop-filter: blur(3px);
+}
+
+/* ----- Controls: parchment, bronze-bound; crimson when they act ----- */
+
+.button,
+input,
+select,
+textarea {
+	color: var(--text);
+	background: var(--wood);
+	border: 1px solid var(--bronze);
+	border-radius: 4px;
+	box-shadow: inset 0 1px 2px #5a3a1a1a;
+}
+
+.button {
+	background: linear-gradient(180deg, #fbf3df, #ead7ab);
+	box-shadow: inset 0 1px 0 #fff8, 0 1px 2px #5a3a1a40;
+	font-family: var(--serif);
+}
+
+input::placeholder,
+textarea::placeholder {
+	color: var(--faint);
+}
+
+.button:hover,
+select:hover,
+input:hover {
+	border-color: var(--gold);
+}
+
+.button:hover {
+	background: linear-gradient(180deg, #fff6e0, #e6cc8f);
+	color: var(--heading);
+}
+
+.button.primary,
+button.primary {
+	background: linear-gradient(180deg, #c03a26, #8a1d12);
+	border-color: var(--gold-soft);
+	color: #fff2d6;
+	font-weight: 700;
+	box-shadow: inset 0 1px 0 #ffffff40, 0 2px 6px #6e140b55;
+}
+
+.button.primary:hover,
+button.primary:hover {
+	background: linear-gradient(180deg, #d04a34, #9b2416);
+	color: #fff;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+	outline: 2px solid var(--gold-bright);
+	outline-offset: 2px;
 }

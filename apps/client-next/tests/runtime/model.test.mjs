@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -45,7 +46,7 @@ const schema = () => ({
 	accessors: [ { bufferView: 0, componentType: 5126, count: 1, type: "VEC3" } ]
 });
 test("every published customization preview shares its mission material contract", () => {
-	const publicRoot = path.join( root, "../../.generated/client-public" ),
+	const publicRoot = CLIENT_PUBLIC_ROOT,
 		roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot ),
 		decoder = createModelDecoder();
 	let checked = 0;
@@ -65,7 +66,7 @@ test("every published customization preview shares its mission material contract
 test("GLB container preserves installed character skins and animations", () => {
 	const bytes = readPublishedAssetBytesSync(
 		"/assets/char/china/chinaman_adventurer.glb",
-		path.join( root, "../../.generated/client-public" )
+		CLIENT_PUBLIC_ROOT
 	);
 	const decoded = createModelDecoder().decode( bytes );
 	assert.ok( decoded.binary.byteLength > 0 );
@@ -99,7 +100,7 @@ test("character admission preserves opaque sheen alpha and cutout coverage throu
 		document = decoder.decode(
 			readPublishedAssetBytesSync(
 				"/assets/char/china/chinaman_adventurer.glb",
-				path.join( root, "../../.generated/client-public" )
+				CLIENT_PUBLIC_ROOT
 			)
 		);
 	for ( const alphaMode of [ undefined, "OPAQUE", "MASK", "BLEND" ] ) {
@@ -122,7 +123,7 @@ test("native environment coverage retains texture cutouts but fades with instanc
 		document = decoder.decode(
 			readPublishedAssetBytesSync(
 				"/assets/char/china/chinaman_adventurer.glb",
-				path.join( root, "../../.generated/client-public" )
+				CLIENT_PUBLIC_ROOT
 			)
 		);
 	const json = JSON.parse( JSON.stringify( document.json ) );

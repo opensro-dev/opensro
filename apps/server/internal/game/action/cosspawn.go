@@ -47,7 +47,7 @@ The caller holds the division lock, never petMu, across geometry admission.
 */
 func (rt *Runtime) companionAdmissionSpawn(pet *enterworld.CharacterCOS, centre simulation.Spawn) simulation.Spawn {
 	ref, found := rt.cosReference(pet)
-	if !found || ref.TidWord>>11 < 3 || ref.TidWord>>11 > 4 {
+	if !found || ref.TidWord>>11 < 3 || ref.TidWord>>11 > 5 {
 		return centre
 	}
 	roll := rt.CompanionRoll
@@ -88,4 +88,20 @@ Same-session world re-entry retains the companion's abnormal keeper.
 */
 func (rt *Runtime) EntryCompanionActionSpeed(division string, character *enterworld.Character, pet *enterworld.CharacterCOS) float32 {
 	return cosParameter(nil, pet, rt.cosAbnormal(division, character.Name, pet.GID), actionSpeedParameter)
+}
+
+/*
+================
+EntryCompanionMovementSpeeds
+
+Reconnect and teleport publish the same parameter projection as live peers.
+================
+*/
+func (rt *Runtime) EntryCompanionMovementSpeeds(division string, character *enterworld.Character, pet *enterworld.CharacterCOS) (float32, float32) {
+	ref, valid := rt.cosReference(pet)
+	if !valid {
+		return 0, 0
+	}
+	block := rt.cosAbnormal(division, character.Name, pet.GID)
+	return cosParameter(ref, pet, block, movementWalkParameter), cosParameter(ref, pet, block, movementRunParameter)
 }

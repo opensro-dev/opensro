@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -25,7 +26,7 @@ const { createNoticeBanner } = await import( "../../src/engine/runtime/ui/hud/un
 const { npcInteractionMask } = await import( "../../src/engine/foundation/gameplay/npc-dialogue.ts" );
 const { decodeQuestPresentation } = await import( "../../src/engine/foundation/ui/quest-presentation.ts" );
 const copyEntries =
-	JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+	JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 const copy = k => copyEntries[k] ?? "";
 const row = ( p, flags = 4 ) => ({
 	refId: 19,
@@ -82,7 +83,7 @@ test("ordinary world countdown has no second notices and content deltas do not r
 });
 
 test("authored progress-clear metadata changes only the unlimited sentinel and admits through the catalog owner", () => {
-	const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/data/questData.json", "utf8" ) );
+	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) );
 	const at = raw.rows.findIndex( s => s.startsWith( "19\t" ) );
 	for ( const byte of [ 0, 1, 255 ] ) {
 		const metadata = decodeQuestPresentation( {
@@ -162,7 +163,7 @@ test("unlimited replacement preserves native timer retirement differences; zero 
 test("server production timer packets enter gameplay, correct the HUD and publish authored expiry through quest chrome", () => {
 	const fixture = JSON.parse( readFileSync( "../server/internal/game/quest/timed_quest_wire_fixture.json", "utf8" ) );
 	const entries =
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/data/questData.json", "utf8" ) ).textEntries;
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/questData.json", "utf8" ) ).textEntries;
 	const game = createGameplay( () => {} ),
 		timer = createQuestTimers(),
 		banner = createQuestBanner( createNoticeBanner() );

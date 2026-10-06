@@ -23,6 +23,10 @@ unpinned and cannot silently enter the damage formula.
 */
 func CharacterParameters(columns []string) MonsterRef {
 	ref := MonsterRef{ElementResist: elementResist(columns)}
+	if country, valid := columnUint(columns, colCountry); valid && country <= 3 {
+		ref.Country = uint8(country)
+	}
+	ref.DefaultSkillIDs, ref.RewardActionPinned = characterDefaultSkills(columns)
 	ref.BodyRadius, _ = nonNegativeColumnFloat(columns, colBodyRadius)
 	if len(columns) <= colCriticalRate {
 		return ref
@@ -43,4 +47,26 @@ func CharacterParameters(columns []string) MonsterRef {
 		ref.CombatPinned = ref.CombatPinned && valid
 	}
 	return ref
+}
+
+/*
+================
+characterDefaultSkills
+
+RefObjChar+210..234: the ten authored actions used by both monster and
+companion tactics. Zero is an empty slot; malformed rows remain unpinned.
+================
+*/
+func characterDefaultSkills(columns []string) ([10]uint32, bool) {
+	var skills [10]uint32
+	valid := len(columns) > colDefaultSkillN
+	if !valid {
+		return skills, false
+	}
+	for i := range skills {
+		value, ok := columnUint32(columns, colDefaultSkill1+i)
+		skills[i] = value
+		valid = valid && ok
+	}
+	return skills, valid
 }

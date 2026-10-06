@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -56,7 +57,7 @@ test("production fortress packets latch music before end flags and after start f
 });
 test("real profiles retain all city/field tracks and MP3 clocks are readable without resampling", async () => {
 	const profiles = decodeAmbientProfiles(
-		JSON.parse( await readFile( "../../.generated/client-public/assets/audio/effectenvsnd.json", "utf8" ) )
+		JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/audio/effectenvsnd.json", "utf8" ) )
 	);
 	assert.equal( profiles.length, 27 );
 	assert.ok( profiles.every( p => p.music ) );
@@ -66,7 +67,7 @@ test("real profiles retain all city/field tracks and MP3 clocks are readable wit
 			.map( n => "/assets/audio/music/" + n + ".mp3" )
 	] );
 	for ( const path of paths ) {
-		const bytes = await readFile( "../../.generated/client-public" + path );
+		const bytes = await readFile( CLIENT_PUBLIC_ROOT + path );
 		assert.equal( musicSampleRate( bytes ), 44100, path );
 	}
 	assert.equal( musicSampleRate( Uint8Array.of( 255, 251, 148, 0 ) ), 48000 );

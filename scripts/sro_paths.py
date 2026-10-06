@@ -4,8 +4,10 @@
 sro_paths.py - the Python twin of scripts/build/world/paths.mjs
 
 The one owner of the pipeline's filesystem roots for Python tools. The
-repository root is this checkout and generated output lives in its
-.generated, so worktrees build in isolation. The game data (extracted/ and
+repository root is this checkout. Generated output lives in its .generated
+unless SRO_GENERATED_ROOT names another absolute tree (the rule
+scripts/lib/generatedRoot.mjs owns), so a worktree can read the main
+checkout's build without a junction. The game data (extracted/ and
 the client files) is shared and lives beside the MAIN checkout, which a
 linked git worktree names in its .git file. Keep the rule identical to
 paths.mjs.
@@ -44,5 +46,16 @@ def _resolve_game_root() -> Path:
 
 GAME_ROOT = _resolve_game_root()
 EXTRACTED_ROOT = GAME_ROOT / "extracted"
-GENERATED_ROOT = REPO_ROOT / ".generated"
+def _resolve_generated_root() -> Path:
+	"""SRO_GENERATED_ROOT when set (absolute only), else this checkout's."""
+	override = os.environ.get("SRO_GENERATED_ROOT")
+	if override:
+		path = Path(override)
+		if not path.is_absolute():
+			raise RuntimeError(f"SRO_GENERATED_ROOT must be an absolute path, not {override!r}")
+		return path.resolve()
+	return REPO_ROOT / ".generated"
+
+
+GENERATED_ROOT = _resolve_generated_root()
 PUBLIC_ROOT = GENERATED_ROOT / "client-public"

@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -18,8 +19,8 @@ import {
 	readPublishedAssetBytesSync as assetBytes,
 	readPublishedAssetJsonSync as assetJson
 } from "../../../../scripts/lib/publishedAsset.mjs";
-const bytes = p => assetBytes( p, "../../.generated/client-public" ),
-	json = p => assetJson( p, "../../.generated/client-public" );
+const bytes = p => assetBytes( p, CLIENT_PUBLIC_ROOT ),
+	json = p => assetJson( p, CLIENT_PUBLIC_ROOT );
 /*
 ================
 load

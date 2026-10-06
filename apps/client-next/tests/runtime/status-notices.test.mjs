@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -28,8 +29,7 @@ const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
 const { createHudMessages } = await import( "../../src/engine/runtime/ui/hud/messages.ts" );
-const copy =
-	JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries;
+const copy = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries;
 
 test("invitee acknowledgement reports refusals and timeout retires only a party prompt", () => {
 	const g = createGameplay( () => {} );
@@ -479,7 +479,7 @@ test("native textbox keeps spaces, escape grammar and post-wrap continuation ind
 
 test("short status histories align to bottom and resizing preserves last row", () => {
 	const layout = decodeAuthoredLayout(
-		JSON.parse( readFileSync( "../../.generated/client-public/assets/cif/layouts/ifsystemmessage.json", "utf8" ) )
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/cif/layouts/ifsystemmessage.json", "utf8" ) )
 	);
 	const draw = ( groups, lines, offset = 0 ) => {
 		const painted = [];

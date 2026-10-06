@@ -126,6 +126,18 @@ func (p *PetFollower) Approach(owner Spawn, speed float64, nowMs int64, stopDist
 	if p.world.MoveSegment.Valid() && nowMs < p.world.MoveSegment.ArrivesAtMs && samePetGoal(p.world.Spawn, goal) {
 		return nil
 	}
+	return p.moveTo(goal, speed, nowMs, constrain)
+}
+
+/*
+================
+moveTo
+
+Both approach and native formation submit through the same collision owner.
+================
+*/
+func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain func(Spawn, Spawn) (Spawn, *MoveError)) []Frame {
+	from := p.Position(nowMs)
 	goal, fault := constrain(from, goal)
 	if fault != nil || !finitePetSpawn(goal) || !petSamePlane(from.RegionID, goal.RegionID) {
 		return p.Stop(nowMs)
@@ -141,7 +153,7 @@ func (p *PetFollower) Approach(owner Spawn, speed float64, nowMs int64, stopDist
 	if p.world.MoveSegment.Valid() && nowMs < p.world.MoveSegment.ArrivesAtMs && samePetGoal(p.world.Spawn, goal) {
 		return nil
 	}
-	distance = WorldDistance2D(from, goal)
+	distance := WorldDistance2D(from, goal)
 	if !(distance > 0) || math.IsInf(distance, 0) {
 		return p.Stop(nowMs)
 	}
@@ -204,4 +216,19 @@ petSamePlane
 */
 func petSamePlane(a, b uint16) bool {
 	return worldgeom.SamePlane(a, b) && (!worldgeom.IsDungeonRegion(a) || a == b)
+}
+
+/*
+================
+Displace
+
+A committed hit relocates the same mover and retires its previous segment.
+The cast result carries the position to observers.
+================
+*/
+func (p *PetFollower) Displace(pose Spawn, now int64) {
+	p.world.Spawn = pose
+	p.world.MoveSegment = nil
+	p.lastTick, p.clockStarted = now, true
+	p.revision++
 }

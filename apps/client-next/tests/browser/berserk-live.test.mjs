@@ -9,6 +9,7 @@ waits for the server's expiry. Needs the local stack and a scratch actor.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { openProbeAgentSession, readProbeCharacterSpawnFromSession } from "../../../../scripts/lib/probeSession.mjs";
 import path from "node:path";
 import { serverGameDataRoot } from "../../../../scripts/build/world/paths.mjs";
@@ -104,7 +105,7 @@ test( "live complete armor, Berserk potion, Tab, appearance and server expiry", 
 			await move( item.slot, free );
 		}
 		const presentation = JSON.parse(
-			await readFile( "../../.generated/client-public/assets/data/missionPresentation.json", "utf8" )
+			await readFile( CLIENT_PUBLIC_ROOT + "/assets/data/missionPresentation.json", "utf8" )
 		).itemsByRefObjId;
 		console.log( "[equipment] equip complete scratch armor through authoritative moves" );
 		for ( const [destination, part] of [ "CA", "BA", "SA", "AA", "LA", "FA" ].entries() ) {

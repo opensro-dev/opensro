@@ -61,14 +61,17 @@ export function createGeometryResources(
 	worldSampler: GPUSampler,
 	lightmapSampler: GPUSampler,
 	environment: GPUBuffer,
-	sampling?: ( filtered: boolean, detail: number ) => GPUSampler,
+	sampling?: ( filtered: boolean, detail: number, anisotropic: boolean ) => GPUSampler,
 	animation?: ReturnType<typeof createGpuAnimationResources>,
 	format: GPUTextureFormat = "rgba8unorm",
 	particles?: ReturnType<typeof createParticlePresentation>,
 	// A frame may still name a released buffer: the device decides when it dies.
-	retire: Retire = destroyNow
+	retire: Retire = destroyNow,
+	// The clamped sampler for the anisotropy stage; without it the lightmap
+	// sampler stays the one given.
+	lightmapSampling?: ( anisotropic: boolean ) => GPUSampler
 ) {
-	let filtered = true, detail = 2, mixedCpuUploadBytes = 0;
+	let filtered = true, detail = 2, anisotropic = false, mixedCpuUploadBytes = 0;
 	const geometryBuffers = new Map<GeometryDraw, GPUBuffer[]>();
 	// Released draws and their release records (releasedDraw).
 	const releasedDraws = new WeakMap<GeometryDraw, import("../internal/gpu-contract").DrawRelease>();
@@ -766,7 +769,7 @@ export function createGeometryResources(
 						0,
 						mat?.environmentReflection ? 1 : 0,
 						mat?.alphaCompare ?? 7,
-						0,
+						mat?.sheenAlpha ? 1 : 0,
 						0,
 						0,
 						0,
@@ -894,15 +897,17 @@ export function createGeometryResources(
 		textureOptions
 		================
 		*/
-		textureOptions( nextFiltered: boolean, nextDetail: number ) {
-			if ( filtered === nextFiltered && detail === nextDetail ) return;
+		textureOptions( nextFiltered: boolean, nextDetail: number, nextAnisotropic = anisotropic ) {
+			if ( filtered === nextFiltered && detail === nextDetail && anisotropic === nextAnisotropic ) return;
 			if ( !Number.isInteger( nextDetail ) || nextDetail < 0 || nextDetail > 2 ) {
 				throw Error( "Invalid texture detail" );
 			}
 			filtered = nextFiltered;
 			detail = nextDetail;
+			anisotropic = nextAnisotropic;
 			if ( !sampling ) throw Error( "Texture settings capability unavailable" );
-			worldSampler = sampling( filtered, detail );
+			worldSampler = sampling( filtered, detail, anisotropic );
+			if ( lightmapSampling ) lightmapSampler = lightmapSampling( anisotropic );
 			for ( const [draw, meta] of metadata ) {
 				DeviceDraw.rebind(
 					meta.selection,

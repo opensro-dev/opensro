@@ -117,7 +117,7 @@ func TestGuildMasterHandsTheGuildToAMember(t *testing.T) {
 			t.Fatalf("members after the hand-over %+v", members)
 		}
 	}
-	if out := leave(1); !bytes.Equal(out.Frames[0].Payload, []byte{2, guild.GuildErrPermissionDenied}) {
+	if out := leave(1); !bytes.Equal(out.Frames[0].Payload, []byte{2, guildNpcRefused}) {
 		t.Fatalf("a former master answered %x", out.Frames[0].Payload)
 	}
 }

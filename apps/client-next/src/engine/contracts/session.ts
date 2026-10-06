@@ -66,6 +66,7 @@ export type SessionCommand =
 		readonly kind: "roster";
 	};
 export type SessionState = Readonly<{
+	pingMs?: number | null;
 	disconnectMessage?: string;
 	incidentID?: string;
 	incidentDelivery?: "pending" | "sent" | "failed";

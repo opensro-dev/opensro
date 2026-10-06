@@ -101,12 +101,12 @@ func (rt *Runtime) planPlayerStrike(s *playerStrike,
 	}
 	count := s.impacts
 	if count == 0 {
-		count = int(s.skill.Attack.ImpactCount)
+		count = creatureImpactCount(s.skill)
 	}
 	for range count {
 		split, err := resolve(wallRule)
 		formula := split.Defender
-		if err != nil || formula.Damage == 0 && !s.walled && !formula.Blocked && !formula.Slain && !s.skill.StatusCast {
+		if err != nil || formula.Damage == 0 && !s.walled && !formula.Blocked && !formula.Slain && !s.skill.StatusCast && !s.skill.CreatureStatusCast {
 			return false
 		}
 		s.splits = append(s.splits, wallSplit{absorbed: split.Absorbed, flags: formula.ResultFlags, covered: split.Covered})

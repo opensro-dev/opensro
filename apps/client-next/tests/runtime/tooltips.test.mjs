@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -40,11 +41,11 @@ const { decodeTooltipSkills } = await load( "src/engine/foundation/ui/skill-tool
 const { skillTooltip } = await load( "src/engine/foundation/ui/skill-tooltip.ts" );
 const { itemTooltipStats } = await load( "src/engine/foundation/ui/item-tooltip-stats.ts" );
 const { tooltipBubble } = await load( "src/engine/foundation/ui/helper-bubble.ts" );
-const source = JSON.parse( readFileSync( "../../.generated/client-public/assets/data/skillData.json", "utf8" ) );
+const source = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/data/skillData.json", "utf8" ) );
 const catalog = decodeTooltipSkills( source );
 const strings = {
-	...JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textuisystem.en.json", "utf8" ) ).entries,
-	...JSON.parse( readFileSync( "../../.generated/client-public/assets/text/textdataname.en.json", "utf8" ) ).entries
+	...JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) ).entries,
+	...JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textdataname.en.json", "utf8" ) ).entries
 };
 const text = s => strings[s] ?? "";
 test("published native catalogue admits every skill and rejects shifted columns", () => {
@@ -507,12 +508,12 @@ test("item localization is shared by published descriptions and server inventory
 	const rawName = Object.fromEntries( after.map( r => r.split( "\t" ) ).map( r => [ r[1], r[8] ] ) );
 	const published = readPublishedAssetJsonSync(
 		"/assets/text/textdataname.en.json",
-		path.resolve( "../../.generated/client-public" )
+		CLIENT_PUBLIC_ROOT
 	).entries;
 	const packed = JSON.parse(
 		readPackedAssetBytesSync(
 			"/assets/text/textdataname.en.json",
-			path.resolve( "../../.generated/client-public" )
+			CLIENT_PUBLIC_ROOT
 		).toString( "utf8" )
 	).entries;
 	for ( const [key, value] of Object.entries( ITEM_TEXT_COMPLETIONS ) ) {

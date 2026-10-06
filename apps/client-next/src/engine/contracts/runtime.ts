@@ -108,6 +108,7 @@ export interface FrameTelemetry {
 	readonly gpu?: GpuTimingStats & { readonly enabled: boolean; };
 	/** Frames per second averaged over the sampling window. */
 	readonly fps: number;
+	readonly pingMs?: number | null;
 	/** Wall time between presented frames: window average and 95th percentile. */
 	readonly frameMs: number;
 	readonly p95FrameMs: number;
@@ -117,6 +118,8 @@ export interface FrameTelemetry {
 	readonly actors: number;
 	readonly draws: number;
 	readonly visibleGroups: number;
+	/** The client and server builds, one line each when known, and their commit subjects (build-info.ts). */
+	readonly build: { readonly lines: readonly string[]; readonly detail: string; };
 }
 /*
 ================
@@ -132,6 +135,7 @@ export interface Platform extends Disposable {
 	saveSightMode( value: import("@/engine/foundation/rendering/camera-options").SightMode ): void;
 	saveAudioOptions( value: import("@/engine/foundation/audio/options").AudioOptions ): void;
 	saveChatBlocks( value: readonly string[] ): void;
+	saveExperimentalOptions( value: import("@/engine/foundation/ui/experimental-options").ExperimentalOptions ): void;
 	saveGameOptions( value: import("@/engine/foundation/gameplay/game-options").GameOptions ): void;
 	presentWorldCursor( cursor: import("@/engine/foundation/ui/world-cursor").WorldCursor ): void;
 	readonly canvas: HTMLCanvasElement;
@@ -146,6 +150,7 @@ export interface Platform extends Disposable {
 	visibilityReturned(): boolean;
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
+	diagnosticsActive(): boolean;
 	/** The canvas CSS size, observed rather than read (no forced layout). */
 	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;
@@ -166,6 +171,7 @@ export interface Renderer extends Disposable {
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
+	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null
 	): void;

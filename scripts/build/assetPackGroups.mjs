@@ -22,6 +22,7 @@ no outdoor region group; the standalone rebuild packs what is on disk).
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { STALL_NETWORK_FILES } from "./data/buildStallNetworkAssets.mjs";
 import path from "node:path";
 import { listPublicAssetFiles } from "./assetPacks.mjs";
@@ -209,7 +210,7 @@ export async function collectAssetPackGroups( {
 	// (assetPackOwnership.mjs). They must never also land in game-models or
 	// mission-npc-vat.
 	const dedicated = await collectDedicatedModelGroups(
-		path.resolve( publicRoot ?? path.join( rebuildRoot, ".generated", "client-public" ) ),
+		path.resolve( publicRoot ?? CLIENT_PUBLIC_ROOT ),
 		new Set( [ ...allModels, ...missionNpcVatAll ].map( ( publicPath ) => publicPath.toLowerCase() ) )
 	);
 	const gameModels = allModels.filter( ( publicPath ) => !dedicated.claimed.has( publicPath.toLowerCase() ) );

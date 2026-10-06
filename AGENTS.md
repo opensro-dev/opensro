@@ -144,6 +144,26 @@ is mechanical (reverse it and reproduce the old hash) before re-freezing.
   the single size ledger for every language (`check:source-size` owns it).
 - Generated output belongs in `.generated/` or `.state/`, not in the source
   tree.
+- One owner says where `.generated/` is: `scripts/lib/generatedRoot.mjs`
+  (Python: `scripts/sro_paths.py`; Go tests: `licensed.ClientPublicRoot`).
+  Never build a `.generated/...` path yourself; `check:generated-root`
+  refuses it.
+
+## Worktrees
+
+Agents work in git worktrees. A worktree shares the built tree and the
+package store, never through a link:
+
+- Built assets: set `SRO_GENERATED_ROOT` to the main checkout's `.generated`
+  (an absolute path) and, for the Go tests, `SRO_SERVER_GAME_DATA_ROOT` to its
+  `apps/server/.generated/game-data/1.150/server`. Reading needs nothing else.
+  A build run with the variable set writes into that shared tree.
+- Packages: run `pnpm install --frozen-lockfile --offline` in the worktree.
+  It hard-links from the shared store in a few seconds. Never link
+  `node_modules`: pnpm writes through the link into the other checkout, and
+  every `pnpm task` refuses a linked one.
+- Never junction or symlink `.generated` or `node_modules`. Before removing a
+  worktree, list its reparse points and unlink any that leave it.
 
 ## Tests
 

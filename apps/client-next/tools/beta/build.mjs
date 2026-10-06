@@ -12,6 +12,8 @@ pack reader. Only the few files the browser loads by URL itself
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
+import { clientBuildDefinitions } from "../build-metadata.mjs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -126,6 +128,7 @@ export async function buildApplication( { base = root, directory, source, mode =
 	await build( {
 		root: base,
 		configFile: false,
+		define: clientBuildDefinitions( base ),
 		envDir: false,
 		envPrefix: [],
 		mode,
@@ -198,7 +201,7 @@ buildBeta
 export async function buildBeta(
 	{
 		destination = path.join( root, "temp/artifacts", "beta", new Date().toISOString().replace( /[:.]/g, "-" ) ),
-		assetRoot = path.resolve( root, "../../.generated/client-public" ),
+		assetRoot = CLIENT_PUBLIC_ROOT,
 		makeArchive = true,
 		sourceSnapshot
 	} = {}

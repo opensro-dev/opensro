@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -627,7 +628,10 @@ bounds the per-move overhead the guard adds.
 ================
 */
 func BenchmarkValidateMovementPathWarm(b *testing.B) {
-	root := filepath.Join("..", "..", "..", "..", "..", "..", ".generated", "client-public")
+	root, err := licensed.ClientPublicRoot()
+	if err != nil {
+		b.Fatal(err)
+	}
 	if _, err := os.Stat(filepath.Join(root, "assets", "world", "world-region-catalog.json")); err != nil {
 		b.Skipf("real client assets not present (%v)", err)
 	}

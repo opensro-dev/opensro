@@ -1,16 +1,120 @@
 <!doctype html>
-<!-- history.html - durable operator timeline, incident groups and service logs. -->
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Session history · Silkroad Observatory</title><link rel="stylesheet" href="/history.css"><script type="module" src="/history.js"></script></head>
-<body><main><header><a href="/">← Observatory</a><h1>Sessions &amp; incidents</h1><p>Trace a disconnect from the first failure through reconnect attempts and final teardown.</p></header>
-<form id="filters"><label>Service<select name="source" id="source"></select></label><label>Account<input name="account" maxlength="256"></label><label>Character<input name="character" maxlength="256"></label>
-<label>Session<input name="session" maxlength="256"></label><label>Incident reference<input name="incident" maxlength="256"></label>
-<label>Category<select name="category"><option value="">All outcomes</option value="expected">Expected</option><option value="connection">Connectivity</option><option value="software">Software error</option><option value="unknown">Unknown</option></select></label>
-<label>Kind<select name="kind"><option value="">All events</option><option>client_incident</option><option>log</option><option>login_succeeded</option><option>login_refused</option><option>connected</option><option>resumed</option><option>detached</option><option>ended</option></select></label>
-<label>Message contains<input name="q" maxlength="256"></label><label>Build<input name="build" maxlength="256"></label><label>Opcode<input name="opcode" maxlength="256" placeholder="0xB021"></label>
-<label>From (local time)<input name="from" type="datetime-local"></label><label>To (local time)<input name="to" type="datetime-local"></label>
-<div class="actions"><button>Search / refresh</button><button type="reset">Clear filters</button><button type="button" id="export">Export current evidence</button><label><input type="checkbox" id="auto"> Refresh every 15 seconds</label></div></form>
-<p id="status" role="status" aria-live="polite">Loading sources…</p><p id="health"></p><section id="summary" aria-label="Account activity"></section>
-<section><h2>Sessions</h2><p>Connected world time excludes login screens and disconnected grace periods. Totals merge overlapping sessions within this service. Day and week use UTC. Crash endings are estimates.</p><div id="sessions"></div></section>
-<section><h2>Failure groups</h2><p>Groups use service, error code and opcode; generic log errors also use their message. Build counts support release comparison. A client report is evidence, not a verified diagnosis.</p><div id="groups"></div></section>
-<section><h2>Timeline &amp; logs</h2><p>Newest first. Open an event for details or follow its session across services. The initiating failure and the eventual close remain separate events.</p><div id="events"></div><button id="older" hidden>Load older events</button></section></main></body></html>
+<!-- history.html - durable operator timeline: pick a player, read their sessions, follow a failure. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3d0d09">
+<title>Session history · Silkroad Observatory</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/theme-boards.css">
+<link rel="stylesheet" href="/theme-fit.css">
+<link rel="stylesheet" href="/history.css">
+<script type="module" src="/history.js"></script>
+</head>
+<body>
+<aside class="rail">
+<a class="brand" href="/" aria-label="Silkroad Observatory home"><span class="seal" aria-hidden="true">長</span><span class="brand-text"><strong>SILKROAD</strong><em>ONLINE</em></span><b>OBSERVATORY</b><small>World operations</small></a>
+<nav aria-label="Dashboard views">
+<a href="/#overview">Overview</a>
+<a href="/#players">Players</a>
+<a href="/#world">World census</a>
+<a href="/#health">Runtime</a>
+<a href="/#items">Items</a>
+<a href="/#recovery">Player recovery</a>
+<a href="/history.html" class="active" aria-current="page">Session history</a>
+</nav>
+<div class="rail-foot"><span class="rail-label">SILKROAD CONNECTS THE WORLD</span><span class="rail-bottom">v 1.150</span></div>
+</aside>
+<div class="shell">
+<main class="history art-jangan">
+<div class="page-heading">
+<div>
+<div class="eyebrow">SESSION LEDGER</div>
+<h1>Session history</h1>
+<p>Who played, how long, and why they left. Pick a player from the roster; failures are traced from the first error to the final teardown.</p>
+</div>
+</div>
+
+<div class="ledger-layout">
+<aside class="panel roster" aria-label="Players">
+<div class="roster-heading">
+<h2>Players</h2>
+<span id="roster-count" class="tag">—</span>
+</div>
+<label class="roster-filter"><span class="sr-only">Filter players</span><input id="roster-filter" type="search" placeholder="Filter by name…" autocomplete="off"></label>
+<div id="roster" class="roster-list"></div>
+<p class="roster-note">Newest first. A green mark is playing now; a red count is sessions that ended badly.</p>
+</aside>
+
+<div class="ledger-main">
+<form id="filters" class="panel ledger-filters" aria-label="Search the ledger">
+<div class="finder">
+<label>Service<select name="source" id="source"></select></label>
+<label>Outcome<select name="category"><option value="">All outcomes</option><option value="expected">Normal</option><option value="connection">Connection</option><option value="software">Error</option><option value="unknown">Unclear</option></select></label>
+<label>Event<select name="kind"><option value="">All events</option><option value="login_succeeded">Signed in</option><option value="login_refused">Sign-in refused</option><option value="connected">Entered the world</option><option value="resumed">Reconnected</option><option value="detached">Connection lost</option><option value="ended">Session ended</option><option value="client_incident">Client reported a problem</option><option value="log">Server log</option></select></label>
+<button class="button primary finder-search">Show records</button>
+</div>
+<details class="more-filters">
+<summary>More filters <span>account, character, session, incident, message, build, opcode, time range</span></summary>
+<div class="filter-groups">
+<fieldset>
+<legend>Who</legend>
+<label>Account<input name="account" maxlength="256" autocomplete="off"></label>
+<label>Character<input name="character" maxlength="256" autocomplete="off"></label>
+</fieldset>
+<fieldset>
+<legend>Trace</legend>
+<label>Session<input name="session" maxlength="256" placeholder="boot:session"></label>
+<label>Incident reference<input name="incident" maxlength="256" placeholder="BR-… or incident id"></label>
+<label>Message contains<input name="q" maxlength="256"></label>
+<label>Build<input name="build" maxlength="256"></label>
+<label>Opcode<input name="opcode" maxlength="256" placeholder="0xB021"></label>
+</fieldset>
+<fieldset>
+<legend>When</legend>
+<label>From (local time)<input name="from" type="datetime-local"></label>
+<label>To (local time)<input name="to" type="datetime-local"></label>
+</fieldset>
+</div>
+</details>
+<div class="actions">
+<button class="button" type="reset">Clear filters</button>
+<button class="button" type="button" id="export">Export evidence</button>
+<label class="toggle"><input type="checkbox" id="auto"> Refresh every 15 seconds</label>
+</div>
+</form>
+
+<div class="ledger-status">
+<p id="status" role="status" aria-live="polite">Loading sources…</p>
+<p id="health"></p>
+</div>
+
+<section id="summary" class="ledger-summary" aria-label="Player activity"></section>
+
+<section class="panel ledger-section">
+<div class="panel-heading"><div><div class="eyebrow">TIME IN THE WORLD</div><h2>Sessions</h2></div></div>
+<p class="ledger-note">Play time counts only time in the world: not the login screens and not the grace period after a dropped connection. Today and this week use UTC.</p>
+<div id="sessions" class="ledger-table"></div>
+</section>
+
+<section class="panel ledger-section">
+<div class="panel-heading"><div><div class="eyebrow">WHAT WENT WRONG</div><h2>Failure groups</h2></div></div>
+<p class="ledger-note">Grouped by service, error code and opcode; generic log errors also by their message. A client report is evidence, not a verified diagnosis.</p>
+<div id="groups" class="ledger-table"></div>
+</section>
+
+<section class="panel ledger-section">
+<div class="panel-heading"><div><div class="eyebrow">NEWEST FIRST</div><h2>Timeline &amp; logs</h2></div></div>
+<p class="ledger-note">Open an event for its record, or follow its session across services. The first failure and the eventual close stay separate events.</p>
+<div id="events" class="ledger-timeline"></div>
+<button id="older" class="button" hidden>Load older events</button>
+</section>
+</div>
+</div>
+<footer><span><span class="tiny-star">◆</span>SILKROAD OBSERVATORY / SESSION LEDGER</span></footer>
+</main>
+</div>
+</body>
+</html>

@@ -16,6 +16,7 @@ import { nativeHeadingYaw } from "@/engine/foundation/math/angles";
 import { createRuntimeErrors } from "./runtime-errors";
 import { createPresentationRandom } from "./random/random";
 import { worldCursor } from "@/engine/foundation/ui/world-cursor";
+import { experimentalVideo } from "@/engine/foundation/ui/experimental-options";
 import { sampleWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createWorldDoubleClick } from "@/engine/foundation/gameplay/world-double-click";
 import type { WorldClickInput } from "@/engine/contracts/input";
@@ -31,6 +32,7 @@ import { createAssets } from "./assets/assets";
 import { createReleaseWatch } from "./release/release-watch";
 import { createInput } from "./input/input";
 import { createPlatform } from "./platform/platform";
+import { createBuildInfo } from "./build-info/build-info";
 import { createBugReport } from "./bug-report/bug-report";
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { frameProbe } from "./frame-probes";
@@ -171,6 +173,9 @@ export function startRuntime(
 				input.blindBinding( event.value.keys[30]! );
 			}
 			if ( event.kind === "camera-preferences" ) input.sight( event.value );
+			if ( event.kind === "experimental-preferences" ) {
+				renderer.experimentalVideo( experimentalVideo( event.value ) );
+			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );
 			if ( event.kind === "chat-blocks" ) simulation.session( { kind: "chat-blocks", value: event.value } );
 			if ( event.kind === "preferences" ) {
@@ -248,6 +253,9 @@ export function startRuntime(
 				import.meta.env.VITE_AGENT_API_BASE || "/api",
 			location.origin
 		).href.replace( /\/$/, "" );
+		const buildInfo = own(
+			createBuildInfo( apiBase, import.meta.env.SRO_CLIENT_REVISION, import.meta.env.SRO_CLIENT_SUBJECT )
+		);
 		const bugReport = own(
 			createBugReport( {
 				canvas,
@@ -310,7 +318,7 @@ export function startRuntime(
 				value => platform.saveVideoOptions( value ),
 				value => platform.saveChatBlocks( value ),
 				value => platform.saveQuickslotOptions( value ),
-				bugReport
+				{ bugReport, saveExperimental: value => platform.saveExperimentalOptions( value ) }
 			)
 		);
 		let lastDockPick = "none";
@@ -905,7 +913,9 @@ export function startRuntime(
 						p95CpuMs: percentile( cpuHistory, 0.95 ),
 						actors: drawn.actors,
 						draws: drawn.draws,
-						visibleGroups: renderer.worldStats().visibleGroups
+						visibleGroups: renderer.worldStats().visibleGroups,
+						pingMs: sessionState?.phase === "world" ? sessionState.pingMs : null,
+						build: buildInfo.readout( now, platform.diagnosticsActive(), sessionState?.phase )
 					} );
 					for ( const name in stageTotals ) stageTotals[name] = 0;
 					stageFrames = 0;

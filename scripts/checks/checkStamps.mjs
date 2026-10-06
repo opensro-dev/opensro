@@ -25,10 +25,15 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { serverGameDataRoot } from "../build/world/paths.mjs";
+import { generatedPath } from "../lib/generatedRoot.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", ".." );
 const stampDirectory = path.join( rebuildRoot, ".state", "check-stamps" );
 const RECENT_PASSES = 8;
+// Checkout-relative names of the trees a worktree may read from elsewhere.
+const GENERATED_PREFIX = ".generated/";
+const SERVER_GAME_DATA_PREFIX = "apps/server/.generated/game-data/1.150/server/";
 
 /*
 ================
@@ -143,6 +148,24 @@ export async function snapshotAsync( paths ) {
 
 /*
 ================
+extraInputPath
+
+Where an `!path` input lives. Gates name generated files by their checkout
+path; a worktree reads the shared build through SRO_GENERATED_ROOT and the
+server projection through SRO_SERVER_GAME_DATA_ROOT, so the stamp must hash
+the file the gate actually reads, not a missing checkout-local copy.
+================
+*/
+function extraInputPath( relative ) {
+	if ( relative.startsWith( GENERATED_PREFIX ) ) return generatedPath( relative.slice( GENERATED_PREFIX.length ) );
+	if ( relative.startsWith( SERVER_GAME_DATA_PREFIX ) ) {
+		return path.join( serverGameDataRoot, relative.slice( SERVER_GAME_DATA_PREFIX.length ) );
+	}
+	return path.join( rebuildRoot, relative );
+}
+
+/*
+================
 keyOf
 
 The digest of one non-path input: `@command,arg,...` output, an `!path`
@@ -161,7 +184,7 @@ function keyOf( input ) {
 		return `command ${input}\n${result.stdout ?? ""}${result.stderr ?? ""}`;
 	}
 	if ( input.startsWith( "!" ) ) {
-		const absolute = path.join( rebuildRoot, input.slice( 1 ) );
+		const absolute = extraInputPath( input.slice( 1 ) );
 		const bytes = existsSync( absolute ) ? readFileSync( absolute ) : "<missing>";
 		return `extra ${input}\n` + createHash( "sha256" ).update( bytes ).digest( "hex" );
 	}

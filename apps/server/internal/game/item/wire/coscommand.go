@@ -315,19 +315,22 @@ CosSpawnBand2 is sub_8554e0's plain internal/transport/pet create row.
 */
 type CosSpawnBand2 struct {
 	// Zero preserves band-2 callers; band 1 omits ownership, 3/4 add pet names.
-	Band       uint8
-	RefObjID   uint32
-	Gid        uint32
-	Position   Position
-	Walk       float32
-	Run        float32
-	Scale      float32
-	Name       string
-	OwnerName  string
-	OwnerGid   uint32
-	PvpState   uint8
-	BodyStatus uint8
-	State      uint8
+	Band      uint8
+	RefObjID  uint32
+	Gid       uint32
+	Position  Position
+	Walk      float32
+	Run       float32
+	Scale     float32
+	Name      string
+	OwnerName string
+	// Guild soldiers copy equipment from this player model (8554E0).
+	OwnerModelRef uint32
+	OwnerGid      uint32
+	HoldType      uint8
+	PvpState      uint8
+	BodyStatus    uint8
+	State         uint8
 }
 
 /*
@@ -382,10 +385,13 @@ func EncodeCosSpawnBand2(row CosSpawnBand2) []byte {
 	// 854FA0: a captured quest monster (band 6) carries neither the hold
 	// nor the PvP byte; a pickup pet (4) only the hold byte.
 	if row.Band != CosBandCapturedMonster {
-		w.U8(0)
+		w.U8(row.HoldType)
 		if row.Band != 4 {
 			w.U8(row.PvpState)
 		}
+	}
+	if row.Band == 5 {
+		w.U32(row.OwnerModelRef)
 	}
 	return w.U32(row.OwnerGid).U8(row.State).Payload()
 }

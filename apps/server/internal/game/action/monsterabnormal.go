@@ -75,9 +75,8 @@ func (c monsterAbnormalContext) SourceExists(division string, gid uint32, name s
 	if character := c.caster(division, gid, name); character != nil {
 		return true
 	}
-	if name == "" && gid != 0 && c.rt.Monsters != nil {
-		_, ok := c.rt.Monsters.Get(division, gid)
-		return ok
+	if name == "" && gid != 0 {
+		return c.rt.captureAbnormalSource(division, gid).exists
 	}
 	return false
 }
@@ -94,9 +93,8 @@ func (c monsterAbnormalContext) SourceDead(division string, gid uint32, name str
 		snapshot := c.rt.characterSnapshot(division, character)
 		return snapshot == nil || !enterworld.CharacterAlive(snapshot)
 	}
-	if name == "" && gid != 0 && c.rt.Monsters != nil {
-		instance, ok := c.rt.Monsters.Get(division, gid)
-		return ok && instance.CurrentHP == 0
+	if name == "" && gid != 0 {
+		return c.rt.captureAbnormalSource(division, gid).dead
 	}
 	return false
 }
@@ -345,7 +343,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 	var character *enterworld.Character
 	for _, hit := range plan.Effects.Hits {
 		if hit.Credited {
-			if character = ctx.caster(division, hit.SourceGID, hit.SourceName); character != nil {
+			if character = ctx.rewardOwner(division, hit.SourceGID, hit.SourceName); character != nil {
 				break
 			}
 		}
@@ -392,7 +390,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 		// 52A33D emits 3058 privately to the credited source; v1.150's
 		// handler is 3128 -> 74FE80 (gid, raw damage). The detonation has its
 		// own public presentation below.
-		if source := ctx.caster(division, hit.SourceGID, hit.SourceName); source != nil && hit.Credited && hit.Reason == abnormalDamageOverTimeReason {
+		if source := ctx.rewardOwner(division, hit.SourceGID, hit.SourceName); source != nil && hit.Credited && hit.Reason == abnormalDamageOverTimeReason {
 			send(source.ID, abnormalDamageFrame(gid, hit.Damage))
 		}
 	}
@@ -492,4 +490,64 @@ func (rt *Runtime) monsterImpactAbnormalFrames(division string, gid uint32, impa
 		frames = append(frames, wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: append(payload, abnormalPayload[7:]...)})
 	}
 	return frames
+}
+
+/*
+================
+rollMonsterImpactStatus
+
+590680 uses a creature's level without the player's learned setv modifiers.
+The source is the companion, independently of the owner's reward credit.
+================
+*/
+func (rt *Runtime) rollMonsterImpactStatus(caster monsterImpactCaster, params *abnormal.SkillParams, target monster.Instance) ([]abnormal.Record, error) {
+	if caster.character != nil {
+		return rt.rollPlayerOnMonster(caster.division, caster.character, params, target)
+	}
+	if params == nil || !params.Present() {
+		return nil, nil
+	}
+	ctx := monsterAbnormalContext{rt}
+	in := abnormal.RollInput{Params: params, TargetLevel: target.Ref.Level,
+		TargetBonus: ctx.Param(target, 0xa9), CasterLevel: caster.level,
+		SourceGID: caster.actor.monster, TargetGID: target.Gid}
+	for i := range in.TargetResist {
+		in.TargetResist[i] = float32(target.Ref.ElementResist[i])
+	}
+	random := &abnormalRandom{rt: rt, actor: caster.actor}
+	records := abnormal.Roll(in, random)
+	return records, random.err
+}
+
+/*
+================
+rewardOwner
+
+A companion's periodic damage retains the companion as source while the
+owner receives experience and loot, as for a direct COS kill (4E6590).
+================
+*/
+func (c monsterAbnormalContext) rewardOwner(division string, gid uint32, name string) *enterworld.Character {
+	if player := c.caster(division, gid, name); player != nil {
+		return player
+	}
+	if name == "" {
+		return c.rt.characterByCosGID(division, gid)
+	}
+	return nil
+}
+
+/*
+================
+SourceCreditGID
+
+Capture COS owner credit before entering the population damage transaction.
+The status record and hostility ledger continue to name the actual source.
+================
+*/
+func (c monsterAbnormalContext) SourceCreditGID(division string, gid uint32, name string) uint32 {
+	if owner := c.rewardOwner(division, gid, name); owner != nil {
+		return enterworld.ObjectIDForCharacter(owner)
+	}
+	return gid
 }

@@ -127,6 +127,7 @@ export interface NpcTalkInput {
 	// 5D8FF0 0x800000: the fortress official's application row.
 	readonly canFortressOfficial?: boolean;
 	readonly canFortressManager?: boolean;
+	readonly guildSoldierRows?: readonly { id: string; label: string; }[] | null;
 	readonly fortressStaffRows?: readonly { id: string; label: string; disabled?: boolean; }[] | null;
 	readonly canFortressHire?: boolean;
 	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
@@ -168,7 +169,7 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 	const options: { id: string; label: string; disabled?: boolean; }[] = dialogue ?
 		dialogue.options.map( r => ({ id: "npc-choice:" + r.choice, label: npcDialogueCaption( r.symbol, copy ) }) ) :
 		[
-			...(input.fortressStaffRows ?? portalRows ??
+			...(input.guildSoldierRows ?? input.fortressStaffRows ?? portalRows ??
 				[
 					...((input.canTalk ?? true) ?
 						[ { id: "npc-talk", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKSTART" ) } ] :

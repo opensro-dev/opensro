@@ -9,6 +9,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { GENERATED_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -104,7 +105,7 @@ test("interior weather gate prevents emission and region rebasing keeps particle
 test("native texture decoder preserves every BGRA/BC2 mip and rejects malformed resources", async () => {
 	for ( let i = 1; i <= 8; i++ ) {
 		const bytes = new Uint8Array(
-				await readFile( "../../.generated/intermediate/images/Map_extracted/sun/lens" + i + ".texture" )
+				await readFile( GENERATED_ROOT + "/intermediate/images/Map_extracted/sun/lens" + i + ".texture" )
 			),
 			texture = decodeNativeTexture( bytes );
 		assert.equal( texture.format, i < 5 ? "bgra8unorm" : "bc2-rgba-unorm" );

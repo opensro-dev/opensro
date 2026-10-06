@@ -67,16 +67,47 @@ door. The division action lock keeps this admission stable through commit.
 ================
 */
 func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, skill enterworld.SkillRow, target monster.Instance, formulas []combat.Result, now int64) ([]simulation.MonsterDamagePlan, bool) {
+	return rt.planCreatureMonsterImpacts(monsterImpactCaster{
+		division: division, character: c, actor: criticalActor{division: division, character: c.Name},
+		credit: enterworld.ObjectIDForCharacter(c), from: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now),
+	}, skill, target, formulas, now)
+}
+
+/*
+================
+monsterImpactCaster
+
+A player supplies learned status modifiers; a creature supplies its own level
+and GID. Reward credit is independent of the actor that rolled the hit.
+================
+*/
+type monsterImpactCaster struct {
+	division  string
+	character *enterworld.Character
+	actor     criticalActor
+	credit    uint32
+	level     uint8
+	from      simulation.Spawn
+}
+
+/*
+================
+planCreatureMonsterImpacts
+
+Player and companion attacks share displacement, status and HP admission.
+================
+*/
+func (rt *Runtime) planCreatureMonsterImpacts(caster monsterImpactCaster, skill enterworld.SkillRow, target monster.Instance, formulas []combat.Result, now int64) ([]simulation.MonsterDamagePlan, bool) {
+	division, from := caster.division, caster.from
 	mover, ok := rt.Monsters.Mover(division, target.Gid)
 	if !ok {
 		return nil, false
 	}
 	pose := mover.LivePoseAt(now, nil)
-	from := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 	remaining := target.CurrentHP
 	plans := make([]simulation.MonsterDamagePlan, 0, len(formulas))
 	for _, formula := range formulas {
-		plan := simulation.MonsterDamagePlan{GID: target.Gid, ExpectedHP: remaining, Damage: formula.Damage, CreditGID: enterworld.ObjectIDForCharacter(c)}
+		plan := simulation.MonsterDamagePlan{GID: target.Gid, ExpectedHP: remaining, Damage: formula.Damage, CreditGID: caster.credit}
 		plan.StatusHit = abnormal.HitContext{Magical: formula.MagicalDamage != 0,
 			Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
 		if formula.Blocked {
@@ -88,7 +119,7 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 		remaining -= min(remaining, formula.Damage)
 		if remaining > 0 && skill.Knockdown.Present && target.Ref.Knockdown&1 != 0 && target.Motion.StateAt(now) != 8 {
 			chance := combat.KnockdownChance(skill.Knockdown.Rank, skill.Knockdown.Chance, target.Ref.Level)
-			proc, err := rt.effectOutcome(criticalActor{division: division, character: c.Name}, 0x44000000|(skill.ID&0xffffff), uint32(chance))
+			proc, err := rt.effectOutcome(caster.actor, 0x44000000|(skill.ID&0xffffff), uint32(chance))
 			if err != nil {
 				return nil, false
 			}
@@ -102,7 +133,7 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 			}
 		}
 		if remaining > 0 && plan.Knockdown == nil && skill.Knockback.Present && int32(skill.Knockback.Chance) > 0 && target.Ref.Knockdown&2 != 0 {
-			proc, err := rt.effectOutcome(criticalActor{division: division, character: c.Name}, 0x45000000|(skill.ID&0xffffff), skill.Knockback.Chance)
+			proc, err := rt.effectOutcome(caster.actor, 0x45000000|(skill.ID&0xffffff), skill.Knockback.Chance)
 			if err != nil {
 				return nil, false
 			}
@@ -117,11 +148,11 @@ func (rt *Runtime) planMonsterImpacts(division string, c *enterworld.Character, 
 		}
 		// 590680 rolls on every hit; 593F0C applies the records only to a
 		// surviving victim (MonsterState.applyDamageLocked).
-		records, err := rt.rollPlayerOnMonster(division, c, &skill.Abnormal, target)
+		records, err := rt.rollMonsterImpactStatus(caster, &skill.Abnormal, target)
 		if err != nil {
 			return nil, false
 		}
-		imbueRecords, err := rt.rollPlayerOnMonster(division, c, &formula.Imbue, target)
+		imbueRecords, err := rt.rollMonsterImpactStatus(caster, &formula.Imbue, target)
 		if err != nil {
 			return nil, false
 		}

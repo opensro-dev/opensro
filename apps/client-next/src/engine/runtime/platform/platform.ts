@@ -23,8 +23,10 @@ import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-
 import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
 import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
 import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/rendering/touch-camera";
+import { experimentalOptions, type ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
 import { createUiBridge } from "./ui/ui";
+import { createTelemetry } from "./telemetry";
 import { createCursor } from "./ui/cursor";
 import type { UiEvent } from "@/engine/contracts/ui";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
@@ -92,6 +94,24 @@ export function createPlatform(
 		status.value = "Chatting blocks could not be restored: " + String( error );
 	}
 	onUi( { kind: "chat-blocks", value: localBlocks } );
+	const experimentalKey = "sro:v1150:experimental-options:1";
+	let experimental = experimentalOptions();
+	try {
+		const stored = localStorage.getItem( experimentalKey );
+		const value = stored === null ? null : JSON.parse( stored );
+		experimental = experimentalOptions( value );
+		// Preserve a prior explicit console opt-in until the unified preference is saved.
+		if (
+			(value === null ||
+				(typeof value === "object" && !Array.isArray( value ) && !("developerDiagnostics" in value))) &&
+			localStorage.getItem( "sro.developerDiagnostics" ) === "true"
+		) {
+			experimental = { ...experimental, developerDiagnostics: true };
+		}
+	} catch ( error ) {
+		status.value = "Experimental options could not be restored: " + String( error );
+	}
+	onUi( { kind: "experimental-preferences", value: experimental } );
 	const preferenceKey = "sro:v1150:game-options:1";
 	let preferences = initialGameOptions();
 	try {
@@ -288,24 +308,30 @@ export function createPlatform(
 		if ( node && node.textContent !== text ) node.textContent = text;
 	}
 	status.hidden = import.meta.env.MODE === "beta" || !new URLSearchParams( location.search ).has( "diagnostics" );
-	// The FPS chip: a collapsed toggle that reveals the frame owner's published
-	// sample. Collapsed it publishes nothing, so an unopened chip costs no work.
-	const fpsChip = document.getElementById( "fps-chip" ),
-		fpsToggle = document.getElementById( "fps-toggle" ),
-		fpsReadout = document.getElementById( "fps-readout" );
-	const fpsMs = ( value: number ) => `${value.toFixed( value < 10 ? 1 : 0 )}ms`;
-	fpsToggle?.addEventListener( "click", () => {
-		if ( !fpsReadout ) return;
-		const expanded = fpsReadout.hidden;
-		fpsReadout.hidden = !expanded;
-		if ( !expanded ) fpsReadout.textContent = "";
-		const label = expanded ? "Hide FPS telemetry" : "Show FPS telemetry";
-		fpsChip?.setAttribute( "data-expanded", String( expanded ) );
-		fpsToggle.setAttribute( "aria-expanded", String( expanded ) );
-		fpsToggle.setAttribute( "aria-label", label );
-		fpsToggle.title = label;
-		fpsToggle.textContent = expanded ? "x" : "F";
-	}, { signal: lifetime.signal } );
+	const fpsChip = document.getElementById( "fps-chip" );
+	const telemetry = createTelemetry( {
+		enabled: experimental.developerDiagnostics,
+		onChange: enabled => saveExperimentalOptions( { ...experimental, developerDiagnostics: enabled } )
+	} );
+	/*
+	================
+	saveExperimentalOptions
+
+	One owner for settings and console changes. Storage denial must not leave
+	the current tab's saved preference and diagnostics icon disagreeing.
+	================
+	*/
+	function saveExperimentalOptions( value: ExperimentalOptions ) {
+		experimental = experimentalOptions( value );
+		try {
+			localStorage.setItem( experimentalKey, JSON.stringify( experimental ) );
+			localStorage.removeItem( "sro.developerDiagnostics" );
+		} catch ( error ) {
+			status.value = "Experimental options could not be saved: " + String( error );
+		}
+		telemetry.setDiagnostics( experimental.developerDiagnostics );
+		onUi( { kind: "experimental-preferences", value: experimental } );
+	}
 	window.addEventListener( "pointerdown", onGesture, { signal: lifetime.signal, capture: true } );
 	window.addEventListener( "pagehide", onClose, { signal: lifetime.signal } );
 	const bridge = createUiBridge(
@@ -448,6 +474,7 @@ export function createPlatform(
 	const viewport = { width: 1, height: 1 };
 	return {
 		displayScale,
+		saveExperimentalOptions,
 		/*
 		================
 		saveVideoOptions
@@ -548,15 +575,8 @@ export function createPlatform(
 		presentTelemetry
 		================
 		*/
-		presentTelemetry( sample ) {
-			if ( !fpsReadout || fpsReadout.hidden ) return;
-			const text = `${Math.round( sample.fps )} FPS
-frame ${fpsMs( sample.frameMs )}/${fpsMs( sample.p95FrameMs )}
-cpu ${fpsMs( sample.cpuMs )}/${fpsMs( sample.p95CpuMs )}
-actors ${sample.actors}; draws ${sample.draws}
-groups ${sample.visibleGroups}`;
-			if ( fpsReadout.textContent !== text ) fpsReadout.textContent = text;
-		},
+		presentTelemetry: telemetry.present,
+		diagnosticsActive: telemetry.active,
 		/*
 		================
 		presentUi
@@ -569,8 +589,14 @@ groups ${sample.visibleGroups}`;
 					right = state.hudCorner ? Math.max( 4, canvasSize().width - state.hudCorner[0] * scale + 6 ) : 8,
 					top = state.hudCorner ? Math.max( 4, state.hudCorner[1] * scale ) : 8;
 				// Write only changes: a style write invalidates layout every publication.
-				if ( fpsChip.style.right !== right + "px" ) fpsChip.style.right = right + "px";
-				if ( fpsChip.style.top !== top + "px" ) fpsChip.style.top = top + "px";
+				if ( fpsChip.style.right !== right + "px" ) {
+					fpsChip.style.right = right + "px";
+					fpsChip.style.setProperty( "--telemetry-right", right + "px" );
+				}
+				if ( fpsChip.style.top !== top + "px" ) {
+					fpsChip.style.top = top + "px";
+					fpsChip.style.setProperty( "--telemetry-top", top + "px" );
+				}
 			}
 			if ( loading ) {
 				const active = String( !!(state.loading || state.loadingVisible) ),
@@ -723,6 +749,7 @@ groups ${sample.visibleGroups}`;
 			lifetime.abort();
 			bridge.dispose();
 			cursor.dispose();
+			telemetry.dispose();
 		}
 	};
 }

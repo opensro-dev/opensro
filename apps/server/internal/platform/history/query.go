@@ -184,7 +184,83 @@ func (j *Journal) Query(f Filter) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"events": events, "next": next, "sessions": sessions, "groups": groups, "summary": summary, "health": j.Health()}, nil
+	players, err := j.players()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"events": events, "next": next, "sessions": sessions, "groups": groups, "summary": summary, "players": players, "health": j.Health()}, nil
+}
+
+/*
+================
+PlayerRow
+
+One known player for the operator's player list: who, where, when last
+seen, and how their sessions went. A GameWorld journal knows characters; the
+Agent's knows only accounts that signed in.
+================
+*/
+type PlayerRow struct {
+	Account          string  `json:"account"`
+	Character        string  `json:"character,omitempty"`
+	Shard            string  `json:"shard,omitempty"`
+	LastSeen         int64   `json:"lastSeen"`
+	Sessions         int     `json:"sessions"`
+	ConnectedSeconds float64 `json:"connectedSeconds"`
+	Online           bool    `json:"online"`
+	Problems         int     `json:"problems"`
+}
+
+// maxPlayers bounds the player list; the newest are kept.
+const maxPlayers = 500
+
+/*
+================
+players
+
+Every account and character with a session, newest first. Problems counts
+sessions that ended without a normal close (any category but expected).
+A journal without sessions (the Agent's) lists its signed-in accounts.
+================
+*/
+func (j *Journal) players() ([]PlayerRow, error) {
+	rows, err := j.db.Query(`SELECT s.account, s.character, MAX(s.shard), MAX(s.seen), COUNT(*),
+ COALESCE((SELECT SUM(i.finish-i.start)/1000.0 FROM intervals i
+  WHERE i.account=s.account COLLATE NOCASE AND i.character=s.character COLLATE NOCASE), 0),
+ MAX(CASE WHEN s.ended=0 AND s.attached=1 THEN 1 ELSE 0 END),
+ SUM(CASE WHEN s.ended>0 AND s.category<>'expected' THEN 1 ELSE 0 END)
+ FROM sessions s GROUP BY s.account COLLATE NOCASE, s.character COLLATE NOCASE
+ ORDER BY MAX(s.seen) DESC LIMIT ?`, maxPlayers)
+	if err != nil {
+		return nil, err
+	}
+	result := []PlayerRow{}
+	for rows.Next() {
+		var row PlayerRow
+		var online int
+		if err := rows.Scan(&row.Account, &row.Character, &row.Shard, &row.LastSeen, &row.Sessions, &row.ConnectedSeconds, &online, &row.Problems); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		row.Online = online == 1
+		result = append(result, row)
+	}
+	if err := firstError(rows.Err(), rows.Close()); err != nil || len(result) > 0 {
+		return result, err
+	}
+	logins, err := j.db.Query(`SELECT account, at FROM logins ORDER BY at DESC LIMIT ?`, maxPlayers)
+	if err != nil {
+		return nil, err
+	}
+	defer logins.Close()
+	for logins.Next() {
+		var row PlayerRow
+		if err := logins.Scan(&row.Account, &row.LastSeen); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, logins.Err()
 }
 
 /*

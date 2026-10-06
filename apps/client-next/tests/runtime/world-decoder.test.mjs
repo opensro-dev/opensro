@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
@@ -183,7 +184,7 @@ test("terrain association masks match the reference at each sampled grid resolut
 test("installed city bundle fits the decoded scene admission budget", () => {
 	const bytes = readPublishedAssetBytesSync(
 		"/assets/world/china/region-62a8.json",
-		path.join( root, "../../.generated/client-public" )
+		CLIENT_PUBLIC_ROOT
 	);
 	const scene = createWorldDecoder().decode( bytes );
 	assert.ok( scene.groups.length > 0 );
@@ -197,7 +198,7 @@ test("installed city bundle fits the decoded scene admission budget", () => {
 test("published Constantinople sidewalk placements preserve native rotation and visible bounds", async () => {
 	const bytes = readPublishedAssetBytesSync(
 		"/assets/world/constantinople/region-694e.json",
-		path.join( root, "../../.generated/client-public" )
+		CLIENT_PUBLIC_ROOT
 	);
 	const bundle = JSON.parse( new TextDecoder().decode( bytes ) );
 	const resources = bundle.objects.resources;
@@ -280,7 +281,7 @@ test("published Constantinople sidewalk placements preserve native rotation and 
 
 test("streamed outdoor region resolves its neighborhood and only referenced meshes", async () => {
 	const decoder = createWorldDecoder(),
-		read = path => readPublishedAssetBytesSync( path, root + "/../../.generated/client-public" );
+		read = path => readPublishedAssetBytesSync( path, CLIENT_PUBLIC_ROOT );
 	const resolved = await decoder.resolve(
 		read( "/assets/world/outdoor/regions/region-62a9.json" ),
 		async path => read( path )
@@ -361,7 +362,7 @@ test("normal water follows native block admission, depth mask and authored UVs",
 
 test("complete mission Constantinople fits unchanged admission with shared cell heights and lean lightmaps", async () => {
 	const decoder = createWorldDecoder(),
-		read = p => readPublishedAssetBytesSync( p, path.join( root, "../../.generated/client-public" ) );
+		read = p => readPublishedAssetBytesSync( p, CLIENT_PUBLIC_ROOT );
 	const bundle = await decoder.resolve(
 		read( "/assets/world/outdoor/regions/region-694f.json" ),
 		async p => read( p )

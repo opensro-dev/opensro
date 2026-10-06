@@ -129,3 +129,12 @@ func TestUnpreparedAbnormalSourceRefusesWholeDamageTransaction(t *testing.T) {
 }
 
 var _ MonsterAbnormalContext = (*populationCheckedAbnormalContext)(nil)
+
+/*
+================
+SourceCreditGID
+================
+*/
+func (c *populationCheckedAbnormalContext) SourceCreditGID(_ string, gid uint32, _ string) uint32 {
+	return gid
+}

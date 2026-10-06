@@ -121,7 +121,8 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 		if err != nil {
 			return simulation.MonsterAttackResult{}
 		}
-		formulas = append(formulas, formula)
+		formulas = append(formulas, combat.FinishImpact(formula, combat.ImpactTail{MonsterAttacker: true,
+			AttackerRarity: instance.Rarity(), Attack: skill.Attack.Present}))
 	}
 	if len(formulas) == 0 {
 		return simulation.MonsterAttackResult{}

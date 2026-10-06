@@ -48,6 +48,7 @@ const pipelines = runtime + "renderer/device/pipelines.ts",
 const ui = runtime + "renderer/device/ui.ts", uiBridge = runtime + "platform/ui/ui.ts";
 const flares = runtime + "renderer/device/flares.ts";
 const bugReport = runtime + "bug-report/bug-report.ts",
+	buildInfo = runtime + "build-info/build-info.ts",
 	bugRecorder = runtime + "bug-report/recorder.ts",
 	bugDialog = runtime + "bug-report/dialog.ts",
 	bugTrimmer = runtime + "bug-report/trimmer.ts",
@@ -56,12 +57,14 @@ const bugReport = runtime + "bug-report/bug-report.ts",
 const thunder = runtime + "renderer/device/thunder.ts";
 const timing = runtime + "renderer/device/timing.ts";
 const bloom = runtime + "renderer/device/bloom.ts";
+const finish = runtime + "renderer/device/finish.ts";
 const shadows = runtime + "renderer/device/character-shadows.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const deviceInternals = [
 	bloom,
+	finish,
 	device,
 	pipelines,
 	images,
@@ -81,7 +84,14 @@ export const rules = {
 	mapAsync: [ timing ],
 	getMappedRange: [ timing ],
 	Audio: [ runtime + "audio/music/music.ts" ],
-	createElement: [ uiBridge, runtime + "platform/ui/cursor.ts", bugRecorder, bugDialog, bugTrimmer ],
+	createElement: [
+		runtime + "platform/telemetry.ts",
+		uiBridge,
+		runtime + "platform/ui/cursor.ts",
+		bugRecorder,
+		bugDialog,
+		bugTrimmer
+	],
 	// The picking mask readback, shared by the renderer and the asset worker.
 	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
@@ -129,6 +139,7 @@ export const rules = {
 	configure: [ surface, device, bugRecorder, bugTranscode ],
 	unconfigure: [ surface ],
 	addEventListener: [
+		runtime + "platform/telemetry.ts",
 		runtime + "platform/platform.ts",
 		device,
 		uiBridge,
@@ -139,7 +150,13 @@ export const rules = {
 		bugTranscode,
 		bugJournal
 	],
-	fetch: [ runtime + "simulation/worker/session/http/http.ts", runtime + "assets/worker/loader.ts", bugReport ],
+	fetch: [
+		runtime + "simulation/worker/session/http/http.ts",
+		runtime + "assets/worker/loader.ts",
+		bugReport,
+		// The Agent's one GET /title/build for the FPS chip.
+		buildInfo
+	],
 	WebSocket: [ runtime + "simulation/worker/network/network.ts" ],
 	WebTransport: [],
 	Worker: [ runtime + "simulation/host.ts", runtime + "assets/assets.ts" ]
@@ -255,6 +272,22 @@ for (
 		"beginRenderPass"
 	]
 ) rules[name].push( bloom );
+// The presentation pass owns its encoder and submission, like the particle
+// query: it runs after the frame submit, from ColorTarget.present.
+for (
+	const name of [
+		"createShaderModule",
+		"createRenderPipeline",
+		"createSampler",
+		"createBindGroup",
+		"createBindGroupLayout",
+		"createPipelineLayout",
+		"createCommandEncoder",
+		"beginRenderPass",
+		"submit",
+		"finish"
+	]
+) rules[name].push( finish );
 rules.createBuffer.push( timing );
 for (
 	const name of [

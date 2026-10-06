@@ -13,6 +13,7 @@ and the kill is the owner's. The follow order leaves BATTLE.
 package action
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 	"time"
@@ -43,6 +44,7 @@ func newPetCombatRuntime(t *testing.T, monsterHP uint32, band uint16) (*Runtime,
 	skills[2] = skill
 	rt.Now = clock.Now
 	rt.CombatRoll = func() (uint32, error) { return 0, nil }
+	rt.CompanionSurfaceHeight = func(_ uint16, _ float64, y float64, _ float64) (float64, bool) { return y, true }
 	rt.ConstrainMovement = func(_ string, _, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
 	rt.BindPetSession(testDivision, c, 1)
 	rt.TickHook()(clock.NowMs())
@@ -175,5 +177,110 @@ func TestUnsummonedPetLeavesBattle(t *testing.T) {
 	rt.TickHook()(clock.NowMs())
 	if state := rt.petSessionFor(testDivision, c.Name, petGID); state != nil && state.combat != nil {
 		t.Fatal("an unsummoned pet kept its BATTLE target")
+	}
+}
+
+/*
+================
+TestCompanionPreparedAttackRetainsTokenAndDefersDamage
+================
+*/
+func TestCompanionPreparedAttackRetainsTokenAndDefersDamage(t *testing.T) {
+	rt, clock, c, m := newPetCombatRuntime(t, 1000000, attackPetBand)
+	skills := rt.deps.SkillData().(staticSkillSource)
+	skill := skills[2]
+	skill.ActionCastingTimeMs, skill.ActionCastingTimePinned = 500, true
+	skill.ActionRange = 1000
+	skills[2] = skill
+	gid := c.ActiveCOS.GID
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(gid, m.Gid))
+	state := rt.petSessionFor(testDivision, c.Name, gid)
+	frames := tickPetCombat(t, rt, clock, 30, func() bool { return state.combat != nil && state.combat.castToken != 0 })
+	token := state.combat.castToken
+	nextAttack := state.combat.nextAttackMs
+	if nextAttack != clock.NowMs()+int64(state.combat.intervalMs) {
+		t.Fatal("strategy timer not armed at preparation")
+	}
+	opened := 0
+	for _, f := range frames {
+		if f.Opcode == wire.OpSkillCastResult && len(f.Payload) >= 18 && binary.LittleEndian.Uint32(f.Payload[6:]) == gid {
+			opened++
+			if binary.LittleEndian.Uint32(f.Payload[10:]) != token {
+				t.Fatal("preparation token mismatch")
+			}
+		}
+	}
+	if opened != 1 {
+		t.Fatalf("preparation count %d", opened)
+	}
+	before, _ := rt.Monsters.Get(testDivision, m.Gid)
+	for range 5 {
+		clock.now = clock.now.Add(100 * time.Millisecond)
+		rt.TickHook()(clock.NowMs())
+		live, _ := rt.Monsters.Get(testDivision, m.Gid)
+		if live.CurrentHP != before.CurrentHP {
+			t.Fatal("damage before casting time elapsed")
+		}
+	}
+	frames = tickPetCombat(t, rt, clock, 2, func() bool {
+		live, _ := rt.Monsters.Get(testDivision, m.Gid)
+		return live.CurrentHP < before.CurrentHP
+	})
+	released := 0
+	for _, f := range frames {
+		if f.Opcode == wire.OpSkillEffectControl && len(f.Payload) > 10 && f.Payload[0] == 1 {
+			if binary.LittleEndian.Uint32(f.Payload[1:]) != token {
+				t.Fatal("release changed token")
+			}
+			released++
+		}
+	}
+	if released != 1 {
+		t.Fatalf("release count %d", released)
+	}
+	if state.combat == nil || state.combat.nextAttackMs != nextAttack {
+		t.Fatal("release restarted the strategy timer")
+	}
+}
+
+/*
+================
+TestFollowCancelsPreparedCompanionAttack
+================
+*/
+func TestFollowCancelsPreparedCompanionAttack(t *testing.T) {
+	rt, clock, c, m := newPetCombatRuntime(t, 1000000, attackPetBand)
+	skills := rt.deps.SkillData().(staticSkillSource)
+	skill := skills[2]
+	skill.ActionCastingTimeMs, skill.ActionCastingTimePinned = 500, true
+	skill.ActionRange = 1000
+	skills[2] = skill
+	gid := c.ActiveCOS.GID
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(gid, m.Gid))
+	state := rt.petSessionFor(testDivision, c.Name, gid)
+	tickPetCombat(t, rt, clock, 30, func() bool { return state.combat != nil && state.combat.castToken != 0 })
+	token := state.combat.castToken
+	before, _ := rt.Monsters.Get(testDivision, m.Gid)
+	rt.HandleCosCommand(testDivision, c, wire.NewWriter(5).U32(gid).U8(wire.CosCommandFollowTag).Payload())
+	closed := 0
+	for range 15 {
+		clock.now = clock.now.Add(100 * time.Millisecond)
+		for _, batch := range rt.TickHook()(clock.NowMs()) {
+			for _, f := range batch.Frames {
+				if f.Opcode != wire.OpSkillEffectControl {
+					continue
+				}
+				if len(f.Payload) >= 5 && f.Payload[0] == 1 && binary.LittleEndian.Uint32(f.Payload[1:]) == token {
+					t.Fatal("cancelled cast released")
+				}
+				if bytes.Equal(f.Payload, wire.SkillCastFinalizeFrame(token).Payload) {
+					closed++
+				}
+			}
+		}
+	}
+	after, _ := rt.Monsters.Get(testDivision, m.Gid)
+	if closed != 1 || after.CurrentHP != before.CurrentHP {
+		t.Fatalf("cancel closes=%d hp=%d/%d", closed, before.CurrentHP, after.CurrentHP)
 	}
 }

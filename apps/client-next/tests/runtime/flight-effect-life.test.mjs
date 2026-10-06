@@ -10,6 +10,7 @@ a second before the impact effect appeared at the target.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,8 +18,8 @@ import { readFileSync } from "node:fs";
 const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
-const manifest = JSON.parse( readFileSync( "../../.generated/client-public/assets/skillfx/manifest.json", "utf8" ) );
-const raw = JSON.parse( readFileSync( "../../.generated/client-public/assets/skill/effectRecords.json", "utf8" ) );
+const manifest = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skillfx/manifest.json", "utf8" ) );
+const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json", "utf8" ) );
 const COLD_WAVE_ARREST = 96;
 const SHOT = "cold_gigongjang_shot_a.efp", HIT = "cold_gigongjang_hit_a.efp";
 

@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 
 ===========================================================================
 */
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -130,7 +131,7 @@ test("published basic melee lights both participants; incoming Mobia and Mangyan
 	const catalog = createEffectDecoder().decode(
 		readPublishedAssetBytesSync(
 			"/assets/skill/effectRecords.json",
-			path.resolve( "../../.generated/client-public" )
+			CLIENT_PUBLIC_ROOT
 		)
 	);
 	let serial = 0;

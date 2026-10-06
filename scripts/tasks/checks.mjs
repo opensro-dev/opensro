@@ -102,6 +102,16 @@ export const CHECK_TASKS = [
 		args: [ "scripts/checks/check_source_file_size.mjs" ]
 	} ),
 	commandTask( {
+		name: "check:generated-root",
+		description: "Refuse generated-tree paths built outside scripts/lib/generatedRoot.mjs and its twins",
+		kind: "check",
+		ci: true,
+		requires: [],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/checks/check_generated_root.mjs" ]
+	} ),
+	commandTask( {
 		name: "check:source-encoding",
 		description: "Enforce UTF-8 without BOM and LF line endings on maintained source",
 		kind: "check",
@@ -235,6 +245,7 @@ const sourceTasks = [
 	"check:pipeline-contracts",
 	"check:source-size",
 	"check:source-encoding",
+	"check:generated-root",
 	"check:shared-fixtures",
 	"check:format",
 	"check:scripts",
@@ -278,6 +289,7 @@ export const CHECK_PIPELINES = Object.freeze( {
 		{ id: "pipeline-contracts", task: "check:pipeline-contracts", after: [] },
 		{ id: "source-size", task: "check:source-size", after: [] },
 		{ id: "source-encoding", task: "check:source-encoding", after: [] },
+		{ id: "generated-root", task: "check:generated-root", after: [] },
 		{ id: "shared-fixtures", task: "check:shared-fixtures", after: [] },
 		{ id: "format", task: "check:format", after: [] },
 		{ id: "typecheck-scripts", task: "check:scripts", after: [] },

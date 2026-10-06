@@ -261,3 +261,10 @@ func burnTick(t *testing.T, s *MonsterState, division string, gid, source uint32
 	}
 	return s.CommitAbnormalUpdate(plan, now)
 }
+
+/*
+================
+SourceCreditGID
+================
+*/
+func (c testAbnormalContext) SourceCreditGID(_ string, gid uint32, _ string) uint32 { return gid }
