@@ -177,8 +177,10 @@ async function recordResidue( page, scene, location, results, options ) {
 		// Absent from a truncated server list and never seen dying: not proven gone.
 		else if ( !row && server.truncated ) unknown.push( gid );
 	}
-	const residue = { codename: scene.codename, loaded: scene.count, dead: dead.size, alive, unknown };
-	if ( alive.length || unknown.length ) process.exitCode = 1;
+	// Requested monsters that never showed up are on the server but unknown here.
+	const unaccounted = scene.count - scene.gids.length;
+	const residue = { codename: scene.codename, loaded: scene.count, dead: dead.size, alive, unknown, unaccounted };
+	if ( alive.length || unknown.length || unaccounted ) process.exitCode = 1;
 	await mkdir( options.out, { recursive: true } );
 	await writeFile( `${options.out}/${location.name}-residue.json`, JSON.stringify( residue, null, 2 ) );
 	for ( const result of results ) {
@@ -186,9 +188,10 @@ async function recordResidue( page, scene, location, results, options ) {
 	}
 	if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
 	console.log(
-		!alive.length && !unknown.length ?
+		!alive.length && !unknown.length && !unaccounted ?
 			`  combat residue: none; all ${scene.count} GM-loaded ${scene.codename} are dead or gone from the server` :
-			`  combat residue: ${alive.length} alive, ${unknown.length} unknown of ${scene.count} GM-loaded ` +
+			`  combat residue: ${alive.length} alive, ${unknown.length} unknown, ${unaccounted} unaccounted of ` +
+			`${scene.count} GM-loaded ` +
 			`${scene.codename}; restart the GameWorld (announce it first) before other measurements`
 	);
 }
@@ -314,7 +317,13 @@ async function session( options, location, results ) {
 		) throw Error( `${location.name}: the character booted outside the scene (${JSON.stringify( booted )})` );
 		// The combat scene loads once per session, on a fresh isolated server;
 		// GM-loaded monsters have no nest and would accumulate across runs.
-		scene = location.name === "combat" ? await loadCombat( client.page, combatScene( options ) ) : null;
+		scene = location.name === "combat" ?
+			await loadCombat( client.page, combatScene( options ) ).catch( error => {
+				// A partial load still left monsters on the server: record them.
+				scene = error.scene ?? null;
+				throw error;
+			} ) :
+			null;
 		const captures = await createCaptures( client.page, {
 			dir: options.out,
 			cpu: options.cpu,

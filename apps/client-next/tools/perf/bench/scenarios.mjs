@@ -306,12 +306,16 @@ export async function loadCombat( page, scene ) {
 		if ( gids.length >= scene.count ) break;
 		await page.waitForTimeout( 250 );
 	}
+	const loaded = { ...scene, refObjId, gids, ambient: ambient.length };
 	if ( gids.length !== scene.count ) {
-		throw Error(
-			`/LOADMONSTER ${scene.codename} ${scene.count}: ${gids.length} of reference ${refObjId} appeared`
+		// The command already ran: hand the partial scene to the caller's residue
+		// record, which counts the ones that never appeared as unaccounted.
+		throw Object.assign(
+			Error( `/LOADMONSTER ${scene.codename} ${scene.count}: ${gids.length} of reference ${refObjId} appeared` ),
+			{ scene: loaded }
 		);
 	}
-	return { ...scene, refObjId, gids, ambient: ambient.length };
+	return loaded;
 }
 
 /*
@@ -421,13 +425,15 @@ export async function combat( page, more, scene ) {
 		}
 	}
 	for ( const cast of await castEvidence( page ) ) latest.set( cast.token, cast );
-	const evidence = { turns, acceptedCasts: 0, damage: 0, incomingCasts: 0, incomingDamage: 0 };
+	const evidence = { turns, acceptedCasts: 0, damagingCasts: 0, damage: 0, incomingCasts: 0, incomingDamage: 0 };
 	for ( const cast of latest.values() ) {
 		// A cast already in view at the start counts only its new result stages.
 		const before = baseline.get( cast.token );
 		if ( cast.caster === local ) {
+			const dealt = outgoing( cast ) - (before ? outgoing( before ) : 0);
 			if ( !before ) evidence.acceptedCasts++;
-			evidence.damage += outgoing( cast ) - (before ? outgoing( before ) : 0);
+			if ( !before && dealt > 0 ) evidence.damagingCasts++;
+			evidence.damage += dealt;
 		}
 		if ( scenery.has( cast.caster ) ) {
 			if ( !before ) evidence.incomingCasts++;
@@ -440,13 +446,14 @@ export async function combat( page, more, scene ) {
 		`  combat ${scene.codename} x${scene.count} ${scene.type}${
 			scene.vulnerable ? " vulnerable" : " invincible"
 		}: ` +
-			`turns ${evidence.turns}, accepted casts ${evidence.acceptedCasts}, damage ${evidence.damage}, ` +
+			`turns ${evidence.turns}, accepted casts ${evidence.acceptedCasts} (${evidence.damagingCasts} damaging), ` +
+			`damage ${evidence.damage}, ` +
 			`incoming casts ${evidence.incomingCasts}, incoming damage ${evidence.incomingDamage}, ` +
 			`alive ${evidence.alive}/${scene.count}, ambient ${scene.ambient}`
 	);
-	if ( evidence.acceptedCasts < MIN_COMBAT_CASTS || evidence.damage <= 0 ) {
+	if ( evidence.damagingCasts < MIN_COMBAT_CASTS ) {
 		throw Error(
-			`the combat window had ${evidence.acceptedCasts} accepted casts (want ${MIN_COMBAT_CASTS}) and ${evidence.damage} damage`
+			`the combat window had ${evidence.damagingCasts} damaging casts (want ${MIN_COMBAT_CASTS})`
 		);
 	}
 	if ( scene.vulnerable && evidence.incomingDamage <= 0 ) {
