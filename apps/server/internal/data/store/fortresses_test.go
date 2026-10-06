@@ -87,7 +87,7 @@ func TestFortressTaxStateSurvivesReopen(t *testing.T) {
 	s.Close()
 	s = openTest(t, dir, newTestClock())
 	rows, _, err := s.Fortresses().FortressState(testDivision)
-	if err != nil || len(rows) != 1 || rows[0] != want {
+	if err != nil || len(rows) != 1 || !reflect.DeepEqual(rows[0], want) {
 		t.Fatalf("tax state after reopen: %+v, %v", rows, err)
 	}
 }

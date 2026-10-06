@@ -41,6 +41,9 @@ func (rt *Runtime) fortressServiceQuery(division string, c *enterworld.Character
 	if !ok || !npc.Services.Has(siege.InteractionService(request.Action)) || !rt.npcWithinHitRange(division, c, npc) {
 		return fortressRefusal(request.Action, fortressErrInvalid)
 	}
+	if request.Action == siege.ActionStaffQuery || request.Action == siege.ActionStaffHire {
+		return rt.fortressStaffService(division, c, request)
+	}
 	if request.Action == siege.ActionAide {
 		return OpResult{}
 	}

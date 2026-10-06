@@ -426,6 +426,6 @@ test("fortress owner and registration deltas preserve independent state", () => 
 	assert.equal( apply( [ 12, ...u32( 1 ), 0 ] ).listId, 1 );
 	assert.equal( apply( [ 13, ...u32( 1 ), 1 ] ).listId, 0 );
 	assert.equal( apply( [ 17, ...u32( 1 ), ...u32( 12 ), ...u32( 3 ) ] ).localKills, 12 );
-	assert.equal( apply( [ 18, ...u32( 1 ), 6 ] ).role, 6 );
+	assert.equal( apply( [ 18, ...u32( 1 ), 6 ] ).staffFlags, 6 );
 	assert.deepEqual( s.registered, [ 10 ] );
 });

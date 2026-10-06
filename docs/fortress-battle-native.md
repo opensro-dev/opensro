@@ -37,3 +37,28 @@ Focused tests exercise actual fatal attacks, duplicate attacks against a corpse,
 Nineteen newly encountered server helpers were named and their symbols verified in saved Binary Ninja snapshot 444. The native review parent has separate client/server snapshot evidence and original-x86 resistance execution evidence.
 
 This is a bounded subsystem port. It is not a live original-client/original-server comparison or whole-program machine-equivalence proof. Fortress staff hiring/holder flags and the existing guild-war owner gap remain separate full-game work; they are not silently counted as complete here. No renderer, onboarding, password-manager or other non-native feature is included.
+
+
+## Staff and holder flags follow-up
+
+Staff hiring uses the existing fortress authority and persistence record. Server
+632100 admits requests in this order: war inactive, fortress exists, exact holder
+guild, master, no overlapping requested flags, 30,000 personal gold, 3,000 guild
+points. Query 632020 has no guild gate after manager admission. Request byte zero
+and combined flags retain the native behavior; the normal client offers bits
+1, 2 and 4. The store commits flags, personal gold and guild points atomically.
+
+Client 5D7AD0, 5D8930 and 5D26F0 supply the three native staff rows, fee labels and
+confirmation. The port uses the existing NPC conversation and modal lifecycle.
+Client 754A40 applies query/hire receipts; 76C870 applies subtype 0x12 holder flags.
+The real world-entry hook sends the current fortress's flags to its exact holder
+regardless of war activity (4DF9E0, 620090). Capture and temporary-holder settlement
+clear staff flags (6232C0, 625DB8, 625F29).
+
+Focused tests cover refusal order, duplicate/combined/zero requests, transaction
+failure with no debit, durable reopen, selected-manager wire admission, capture,
+private holder delivery, target retirement and confirmation invalidation. The
+13 source gates and 11 client gates passed during this follow-up; the transaction
+abort test and manager wire test were additionally run after that full pass.
+Guild-war ownership is being implemented separately and is not covered by these
+staff checks.

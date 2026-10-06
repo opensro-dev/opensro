@@ -83,7 +83,8 @@ FortressState
 export interface FortressState {
 	readonly localKills?: number;
 	readonly localDeaths?: number;
-	readonly role?: number;
+	readonly staffFlags?: number;
+	readonly staffFortress?: number;
 	readonly worldId: number;
 	readonly worlds: readonly { id: number; code: string; }[];
 	readonly fortresses: readonly FortressRow[];
@@ -160,7 +161,16 @@ state; null for frames it does not own.
 export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 ): FortressState | null {
 	if ( frame.opcode === FORTRESS_SERVICE_REPLY ) {
 		const service = fortressServiceReply( frame );
-		return service ? { ...state, service, serviceSequence: (state.serviceSequence ?? 0) + 1 } : null;
+		return service ?
+			{
+				...state,
+				service,
+				serviceSequence: (state.serviceSequence ?? 0) + 1,
+				...(service.result === 1 && (service.action === 3 || service.action === 4) ?
+					{ staffFlags: service.flags } :
+					{})
+			} :
+			null;
 	}
 	if ( frame.opcode !== OP_FORTRESS_WAR_STATE ) return null;
 	const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -217,8 +227,8 @@ export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 
 		const localKills = u32(), localDeaths = u32();
 		next = { ...state, localKills, localDeaths };
 	} else if ( subtype === 0x12 ) {
-		u32();
-		next = { ...state, role: u8() };
+		const staffFortress = u32();
+		next = { ...state, staffFortress, staffFlags: u8() };
 	} else if ( subtype === 0x10 ) {
 		u32();
 		const count = u8(), registered: number[] = [];

@@ -33,8 +33,10 @@ One fortress row: the CRefSiegeFortress identity joined to its live state.
 ================
 */
 type Record struct {
-	ID       uint32
-	CodeName string
+	// _SiegeFortress +0x30: hired staff, independent of the war period.
+	StaffFlags uint8
+	ID         uint32
+	CodeName   string
 	// GuildID is the occupying guild (_SiegeFortress.GuildID); zero when
 	// nobody holds the fortress.
 	GuildID int64

@@ -122,6 +122,7 @@ func (a *Authority) Capture(divisionID string, fortressID uint32, guildID int64,
 		return false
 	}
 	record.TempGuildID = guildID
+	record.StaffFlags = 0 // 625DB8: the successful temporary capture clears employment.
 	record.EntryOpen = false
 	record.EntryClosedUntilMs = nowMs + CaptureWaitMs
 	_ = a.saveRecordLocked(divisionID, record)
@@ -188,6 +189,7 @@ func (a *Authority) FinishWar(divisionID string, fortressID uint32) (int64, bool
 	}
 	changed := record.TempGuildID != 0 && record.TempGuildID != record.GuildID
 	if record.TempGuildID != 0 {
+		record.StaffFlags = 0 // 625F29 clears flags even if the former holder recaptures.
 		record.GuildID = record.TempGuildID
 	}
 	record.TempGuildID = 0

@@ -127,6 +127,8 @@ export interface NpcTalkInput {
 	// 5D8FF0 0x800000: the fortress official's application row.
 	readonly canFortressOfficial?: boolean;
 	readonly canFortressManager?: boolean;
+	readonly fortressStaffRows?: readonly { id: string; label: string; disabled?: boolean; }[] | null;
+	readonly canFortressHire?: boolean;
 	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
 	readonly jobRows?: readonly { readonly id: string; readonly label: string; }[];
 }
@@ -150,7 +152,7 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 	const choiceColor = input.choiceColor ?? (() => [ 239 / 255, 218 / 255, 164 / 255, 1 ] as UiQuad["color"]);
 	const box = layout.GDR_NT_TALKBOX!, scroll = layout.GDR_NPCTALK_SCROLL!;
 	const bounds: UiRect = [ origin[0] + box.rect[0], origin[1] + box.rect[1], box.rect[2], box.rect[3] ];
-	const rows: { text: string; id?: string; color: UiQuad["color"]; }[] = [],
+	const rows: { text: string; id?: string; disabled?: boolean; color: UiQuad["color"]; }[] = [],
 		normal: UiQuad["color"] = [ 239 / 255, 218 / 255, 164 / 255, 1 ];
 	const dialogue = state.phase === "menu" ? null : state.dialogue;
 	const wrap = ( value: string ) =>
@@ -163,10 +165,10 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 		for ( const text of wrap( copy( dialogue.prompt ) ) ) rows.push( { text, color: [ 1, 1, 1, 1 ] } );
 		rows.push( { text: "", color: normal } );
 	}
-	const options = dialogue ?
+	const options: { id: string; label: string; disabled?: boolean; }[] = dialogue ?
 		dialogue.options.map( r => ({ id: "npc-choice:" + r.choice, label: npcDialogueCaption( r.symbol, copy ) }) ) :
 		[
-			...(portalRows ??
+			...(input.fortressStaffRows ?? portalRows ??
 				[
 					...((input.canTalk ?? true) ?
 						[ { id: "npc-talk", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKSTART" ) } ] :
@@ -207,6 +209,9 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						} ] :
 						[]),
 					...(input.jobRows ?? []),
+					...(input.canFortressHire ?
+						[ { id: "npc-fortress-staff", label: copy( "SN_FORTRESS_MANAGER_NPC" ) } ] :
+						[]),
 					...(input.canFortressManager ?
 						[ { id: "npc-fortress-schedule", label: copy( "SN_FORTRESS_MANAGER_SERVICE" ) } ] :
 						[]),
@@ -218,8 +223,14 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }
 		];
 	options.forEach( ( option, i ) => {
-		const color = dialogue ? choiceColor( dialogue.options[i]!.symbol ) : normal;
-		for ( const text of wrap( `${i + 1}. ${option.label}` ) ) rows.push( { text, id: option.id, color } );
+		const color = option.disabled ?
+			[ 180 / 255, 180 / 255, 180 / 255, 1 ] as const :
+			dialogue ?
+			choiceColor( dialogue.options[i]!.symbol ) :
+			normal;
+		for ( const text of wrap( `${i + 1}. ${option.label}` ) ) {
+			rows.push( { text, id: option.id, disabled: option.disabled, color } );
+		}
 	} );
 	if ( rows.length > 1024 ) throw Error( "NPC text row capacity" );
 	const range = Math.max( 0, rows.length - 19 ),
@@ -229,7 +240,7 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 	const busy = state.phase === "waiting" || state.phase === "uncertain";
 	rows.slice( offset, offset + 19 ).forEach( ( row, i ) => {
 		const rect: UiRect = [ bounds[0], bounds[1] + i * 18, bounds[2], 18 ],
-			disabled = busy && row.id !== "npc-talkend";
+			disabled = !!row.disabled || busy && row.id !== "npc-talkend";
 		const color = row.id && (hover === row.id || pressed === row.id) && !disabled ?
 			[ 1, 138 / 255, 0, 1 ] as const :
 			row.color;

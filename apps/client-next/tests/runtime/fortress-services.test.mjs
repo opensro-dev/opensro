@@ -16,7 +16,9 @@ const { fortressServiceRequest, fortressServiceReply } = await import(
 	"../../src/engine/foundation/gameplay/fortress-services.ts"
 );
 const { fortressBootstrap, fortressPacket } = await import( "../../src/engine/foundation/gameplay/fortress.ts" );
-const { createFortressScheduleHud } = await import( "../../src/engine/runtime/ui/hud/fortress-war-hud.ts" );
+const { createFortressStaffHud, createFortressScheduleHud } = await import(
+	"../../src/engine/runtime/ui/hud/fortress-war-hud.ts"
+);
 
 test("schedule window admits only fresh successful replies for its selected manager", () => {
 	const hud = createFortressScheduleHud(), state = fortressBootstrap( {} );
@@ -206,4 +208,43 @@ test("every refusal uses one byte and malformed replies leave the state unchange
 	assert.throws( () => fortressServiceReply( reply( "0000" ) ) );
 	assert.throws( () => fortressServiceReply( reply( "1901" ) ) );
 	assert.equal( fortressServiceReply( { opcode: 1, payload: new Uint8Array() } ), null );
+});
+
+test("holder flags and successful queries refresh employment without changing it on refusal", () => {
+	const empty = fortressBootstrap( {} );
+	const pushed = fortressPacket( empty, { opcode: 0x3887, payload: Uint8Array.from( [ 0x12, 1, 0, 0, 0, 5 ] ) } );
+	assert.ok( pushed );
+	assert.equal( pushed.staffFortress, 1 );
+	assert.equal( pushed.staffFlags, 5 );
+	const hired = fortressPacket( pushed, reply( "040107" ) );
+	assert.ok( hired );
+	assert.equal( hired.staffFlags, 7 );
+	const refused = fortressPacket( hired, reply( "040209" ) );
+	assert.ok( refused );
+	assert.equal( refused.staffFlags, 7 );
+	const query = fortressPacket( refused, reply( "030100" ) );
+	assert.ok( query );
+	assert.equal( query.staffFlags, 0 );
+});
+
+test("hire confirmations are master-only, exclude hired bits, and end with the conversation", () => {
+	const hud = createFortressStaffHud();
+	hud.open( 17, 1 );
+	hud.ask( 1, 0, false );
+	assert.equal( hud.question(), null );
+	hud.ask( 1, 1, true );
+	assert.equal( hud.question(), null );
+	hud.ask( 3, 0, true );
+	assert.equal( hud.question(), null );
+	hud.ask( 2, 1, true );
+	assert.deepEqual( hud.takeQuestion(), { gid: 17, fortress: 1, flag: 2 } );
+	assert.equal( hud.takeQuestion(), null );
+	hud.ask( 4, 1, true );
+	hud.observe( 18 );
+	assert.equal( hud.question(), null );
+	assert.equal( hud.target(), null );
+	hud.open( 17, 1 );
+	hud.ask( 1, 0, true );
+	hud.observe( undefined );
+	assert.equal( hud.question(), null );
 });

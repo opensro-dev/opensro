@@ -24,12 +24,13 @@ One _SiegeFortress row.
 ================
 */
 type FortressRecord struct {
+	StaffFlags    uint8                  `json:"staffFlags,omitempty"`
 	FortressID    uint32                 `json:"fortressId"`
 	GuildID       int64                  `json:"guildId,omitempty"`
 	TempGuildID   int64                  `json:"tempGuildId,omitempty"`
 	BattleRecords []FortressBattleRecord `json:"battleRecords,omitempty"`
-	TaxRate int16 `json:"taxRate,omitempty"`
-	TaxGold int64 `json:"taxGold,omitempty"`
+	TaxRate       int16                  `json:"taxRate,omitempty"`
+	TaxGold       int64                  `json:"taxGold,omitempty"`
 }
 
 /*
@@ -101,3 +102,20 @@ type FortressBattleRecord struct {
 	Rank        uint8  `json:"rank"`
 	RankAtMs    int64  `json:"rankAtMs"`
 }
+
+/*
+================
+FortressStaffStore
+
+The hire commit owns the fortress flags, guild points and master's gold in
+one transaction. Refusals are the v1.150 fortress notice's low byte.
+================
+*/
+type FortressStaffStore interface {
+	HireFortressStaff(divisionID string, record FortressRecord, actorID int64, requested uint8) (uint8, error)
+}
+
+const (
+	FortressStaffGold int64  = 30000
+	FortressStaffGP   uint32 = 3000
+)

@@ -137,7 +137,12 @@ import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
-import { createFortressWarHud, createFortressScheduleHud, FORTRESS_SCHEDULE_ROWS } from "./hud/fortress-war-hud";
+import {
+	createFortressStaffHud,
+	createFortressWarHud,
+	createFortressScheduleHud,
+	FORTRESS_SCHEDULE_ROWS
+} from "./hud/fortress-war-hud";
 import { createUnionHud } from "./hud/union-hud";
 import { createExchangeHud } from "./hud/exchange-hud";
 import {
@@ -675,6 +680,7 @@ export function createUi(
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
 	const fortressScheduleHud = createFortressScheduleHud();
+	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
 	const exchangeHud = createExchangeHud();
 	const stallHud = createStallHud();
@@ -1070,6 +1076,29 @@ export function createUi(
 			);
 		return { npc, application, slots };
 	}
+
+	/*
+ ================
+ fortressStaffView
+
+ 5D7AD0: only the occupying guild opens employment. All three staff types
+ exist in the shipped v1.150 forge group; the master may hire unused bits.
+ ================
+ */
+	function fortressStaffView() {
+		const game = view?.gameplay, state = game?.fortress, social = game?.social;
+		const world = state?.worlds.find( row => row.id === (state.worldId & 0xffff) );
+		const row = state?.fortresses.find( row => row.code === world?.code );
+		const owner = state?.wars.find( war => war.id === row?.id )?.name;
+		const member = social?.guild?.members.find( member => member.id === social.self );
+		return {
+			fortress: row?.id,
+			holder: !!owner && owner === social?.guild?.name,
+			master: member?.grade === 0,
+			flags: state?.staffFlags ?? 0
+		};
+	}
+
 	function setPanel( next: string, intent: "open" | "toggle" | "select" | "warm" = "open" ) {
 		// An unseen warm build (window-warm.ts) switches the drawn window only:
 		// no enter/leave hooks, sounds or transient resets.
@@ -2938,6 +2967,18 @@ export function createUi(
 					cosSlot = -1;
 				}
 			}
+		} else if ( id === "npc-fortress-staff" || id.startsWith( "npc-fortress-hire:" ) ) {
+			const conversation = view?.gameplay?.npcConversation, staff = fortressStaffView();
+			if ( conversation?.phase === "menu" && staff.holder && staff.fortress !== undefined ) {
+				if ( id === "npc-fortress-staff" ) {
+					fortressStaffHud.open( conversation.gid, staff.fortress );
+					sendGameplay( { kind: "fortress-staff", gid: conversation.gid, fortress: staff.fortress } );
+				} else {fortressStaffHud.ask(
+						Number( id.slice( "npc-fortress-hire:".length ) ),
+						staff.flags,
+						staff.master
+					);}
+			}
 		} else if ( id === "npc-fortress-schedule" ) {
 			const game = view?.gameplay, conversation = game?.npcConversation, state = game?.fortress;
 			const world = state?.worlds.find( row => row.id === (state.worldId & 0xffff) );
@@ -3493,6 +3534,30 @@ export function createUi(
 						view?.session?.phase === "world" && g?.npcConversation?.phase === "menu" &&
 						g.npcConversation.gid === gid && g.target === gid && ((g.targetCapabilities ?? 0) & 0x40)
 					) sendGameplay( { kind: "recall-appoint", gid } );
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
+			}
+			if ( fortressStaffHud.question() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "fortress-staff-no"
+				) {
+					fortressStaffHud.takeQuestion();
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "fortress-staff-yes"
+				) {
+					const asked = fortressStaffHud.takeQuestion(), staff = fortressStaffView();
+					dirty = true;
+					if (
+						asked && staff.holder && staff.master && !(staff.flags & asked.flag) &&
+						view?.session?.phase === "world" && view.gameplay?.npcConversation?.phase === "menu" &&
+						view.gameplay.npcConversation.gid === asked.gid && view.gameplay.target === asked.gid
+					) sendGameplay( { kind: "fortress-staff", ...asked } );
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
@@ -5257,6 +5322,12 @@ export function createUi(
 			}
 			// The official's answer opens or refreshes the application window.
 			fortressScheduleHud.observe( next.gameplay?.fortress, next.gameplay?.target ?? undefined );
+			fortressStaffHud.observe(
+				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" &&
+					next.gameplay.target === next.gameplay.npcConversation.gid ?
+					next.gameplay.npcConversation.gid :
+					undefined
+			);
 			if ( fortressScheduleHud.isOpen() && panel !== FORTRESS_SCHEDULE_PANEL && canLeavePanel() ) {
 				setPanel( FORTRESS_SCHEDULE_PANEL );
 				dirty = true;
@@ -10986,12 +11057,25 @@ export function createUi(
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: target?.kind === "teleport" ? target.name : "",
+						prompt: fortressStaffHud.target() ?
+							copy( "UIIT_STT_FORT_MANAGER_HIRE" ) :
+							target?.kind === "teleport" ?
+							target.name :
+							"",
 						canRecall: !!(capabilities & 0x40),
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
 						canFortressOfficial: !!(capabilities & 0x800000),
 						canFortressManager: !!(capabilities & 0x400000),
+						canFortressHire: !!(capabilities & 0x400000) && fortressStaffView().holder,
+						fortressStaffRows: fortressStaffHud.target() ?
+							[ [ 1, "BATTLEAIDE" ], [ 2, "SMITH" ], [ 4, "TRAINER" ] ].map( ( [flag, name] ) => ({
+								id: "npc-fortress-hire:" + flag,
+								label: copy( "SN_FORTRESS_MANAGER_EMPLOY_" + name ) + " " +
+									copy( "SN_FORTRESS_MANAGER_EMPLOY_FEE" ),
+								disabled: !fortressStaffView().master || !!(fortressStaffView().flags & Number( flag ))
+							}) ) :
+							null,
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
 						// 5D9100 lists the guild set ahead of the job menu.
 						jobRows: [
@@ -14238,11 +14322,11 @@ export function createUi(
 				);
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
-			const fortressAsk = fortressWarHud.question();
-			if ( worldVisible && fortressAsk ) {
+			const fortressAsk = fortressWarHud.question(), staffAsk = fortressStaffHud.question();
+			if ( worldVisible && (fortressAsk || staffAsk) ) {
 				// 6649C0's question boxes 0x64-0x67.
 				const layout = guildProposalLayout( w, h ),
-					row = view?.gameplay?.fortress?.fortresses.find( r => r.id === fortressAsk.fortress ),
+					row = view?.gameplay?.fortress?.fortresses.find( r => r.id === fortressAsk?.fortress ),
 					name = row?.nameStrId ? hudCopy( row.nameStrId ) : "";
 				controls = [];
 				blocks = [ full ];
@@ -14261,8 +14345,25 @@ export function createUi(
 					} ),
 					...text.quads(
 						fortressWarFormat(
-							hudCopy( fortressWarQuestionKey( fortressAsk.question ) ),
-							[ name, row?.requestFee ?? 0 ]
+							hudCopy(
+								staffAsk ?
+									"UIIT_MSG_FORT_MANAGER_EMPLOY_WINDOW" :
+									fortressWarQuestionKey( fortressAsk!.question )
+							),
+							staffAsk ?
+								[
+									hudCopy(
+										"SN_FORTRESS_MANAGER_NPC_NAME_" +
+											(staffAsk.flag === 1 ?
+												"BATTLEAID" :
+												staffAsk.flag === 2 ?
+												"SMITH" :
+												"TRAINER")
+									),
+									30000,
+									3000
+								] :
+								[ name, row?.requestFee ?? 0 ]
 						),
 						layout.name,
 						full,
@@ -14271,12 +14372,12 @@ export function createUi(
 					)
 				);
 				button(
-					"fortress-war-yes",
+					staffAsk ? "fortress-staff-yes" : "fortress-war-yes",
 					hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
-					"fortress-war-no",
+					staffAsk ? "fortress-staff-no" : "fortress-war-no",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);

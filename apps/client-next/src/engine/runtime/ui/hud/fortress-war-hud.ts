@@ -191,3 +191,72 @@ export function createFortressWarHud() {
 		}
 	};
 }
+
+/*
+================
+createFortressStaffHud
+
+5D7AD0 opens the hire submenu; 5D8930 asks before sending each hire.
+A reply cannot revive a menu after its NPC conversation has ended.
+================
+*/
+export function createFortressStaffHud() {
+	let target: { gid: number; fortress: number; } | null = null;
+	let question: { gid: number; fortress: number; flag: number; } | null = null;
+	return {
+		/*
+  ================
+  open
+  ================
+  */
+		open( gid: number, fortress: number ) {
+			target = { gid, fortress };
+			question = null;
+		},
+		/*
+  ================
+  observe
+  ================
+  */
+		observe( gid: number | undefined ) {
+			if ( gid !== target?.gid ) {
+				target = null;
+				question = null;
+			}
+		},
+		/*
+  ================
+  target
+  ================
+  */
+		target() {
+			return target;
+		},
+		/*
+  ================
+  ask
+  ================
+  */
+		ask( flag: number, flags: number, master: boolean ) {
+			if ( target && master && [ 1, 2, 4 ].includes( flag ) && !(flags & flag) ) question = { ...target, flag };
+		},
+		/*
+  ================
+  question
+  ================
+  */
+		question() {
+			return question;
+		},
+		/*
+  ================
+  takeQuestion
+  ================
+  */
+		takeQuestion() {
+			const asked = question;
+			question = null;
+			return asked;
+		}
+	};
+}

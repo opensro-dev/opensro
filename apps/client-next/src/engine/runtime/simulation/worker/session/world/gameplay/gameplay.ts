@@ -1263,12 +1263,19 @@ state here before a command can claim a native wire conversation.
 						jobAliasRequest( command.gid, command.mode, command.alias )
 				);
 			}
-			if ( command.kind === "fortress-schedule" ) {
+			if ( command.kind === "fortress-schedule" || command.kind === "fortress-staff" ) {
 				const target = targeting.state();
 				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x400000) ) {
 					throw Error( "Select a fortress manager" );
 				}
-				return sendFrame( fortressInteraction( command.gid, 5, command.fortress ) );
+				return sendFrame(
+					fortressInteraction(
+						command.gid,
+						command.kind === "fortress-schedule" ? 5 : command.flag === undefined ? 3 : 4,
+						command.fortress,
+						command.kind === "fortress-staff" ? command.flag : undefined
+					)
+				);
 			}
 			if ( command.kind === "fortress-war-status" || command.kind === "fortress-war-apply" ) {
 				// The official's row exists only on the selected official (0x800000).
