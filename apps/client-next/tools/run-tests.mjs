@@ -66,9 +66,11 @@ cacheKey
 */
 function cacheKey() {
 	const env = Object.fromEntries(
-		// The runner's own switches (SRO_CHECK_FORCE, SRO_TEST_*) are not test inputs.
+		// Runner switches and inherited lock ownership are not test inputs.
+		// A fresh lock token must not discard every unchanged test pass.
 		Object.keys( process.env ).filter( key =>
-			key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) ||
+			key.startsWith( "SRO_" ) && key !== "SRO_CHECK_FORCE" && !key.startsWith( "SRO_TEST_" ) &&
+				!key.startsWith( "SRO_REBUILD_LOCK_" ) ||
 			ENV_KEYS.includes( key )
 		)
 			.sort().map( key => [ key, process.env[key] ] )

@@ -21,6 +21,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { withGeneratedAssetsLock } from "../../../scripts/rebuildLock.mjs";
+
 const clientRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), ".." );
 const node = process.execPath;
 const SOURCE_FLAG = "--source";
@@ -133,9 +135,14 @@ async function main() {
 	const seconds = ((performance.now() - started) / 1000).toFixed( 1 );
 	if ( failed.length > 0 ) {
 		process.stderr.write( `client check: ${failed.length} gate(s) failed in ${seconds}s\n` );
-		process.exit( 1 );
+		process.exitCode = 1;
+		return;
 	}
 	process.stdout.write( `client check: PASS (${gates.length} gates, ${seconds}s)\n` );
 }
 
-await main();
+if ( process.argv.includes( SOURCE_FLAG ) ) {
+	await main();
+} else {
+	await withGeneratedAssetsLock( "client verification", main );
+}

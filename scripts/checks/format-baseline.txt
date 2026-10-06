@@ -536,7 +536,6 @@ scripts/lib/probeBrowser.mjs
 scripts/lib/probeCharacter.mjs
 scripts/lib/probeEndpoints.mjs
 scripts/lib/probeTransportProtocol.mjs
-scripts/rebuildLock.mjs
 scripts/setup_git_hooks.mjs
 scripts/task.mjs
 scripts/tasks/define.mjs

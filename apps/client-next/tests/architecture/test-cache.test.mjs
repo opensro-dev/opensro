@@ -26,14 +26,14 @@ runSuite
 Runs the fixture suite; returns its exit code and summary line.
 ================
 */
-function runSuite( suite ) {
+function runSuite( suite, environment = {} ) {
 	// A top-level run: without node --test's child context, which would turn
 	// the runner's own reporting into the parent's protocol.
 	const { NODE_TEST_CONTEXT, ...env } = process.env;
 	const result = spawnSync( process.execPath, [ runner, suite ], {
 		cwd: root,
 		encoding: "utf8",
-		env: { ...env, SRO_TEST_CACHE_DIR: path.join( suite, ".cache" ), SRO_CHECK_FORCE: "" }
+		env: { ...env, ...environment, SRO_TEST_CACHE_DIR: path.join( suite, ".cache" ), SRO_CHECK_FORCE: "" }
 	} );
 	const summary = result.stdout.split( "\n" ).find( line => line.startsWith( "tests:" ) ) ?? "";
 	const counts = /(\d+) reused unchanged, (\d+) run, (\d+) failed/.exec( summary );
@@ -71,6 +71,16 @@ test("a pass is reused until an input it read changes; a failure is never reused
 			runSuite( suite ),
 			{ status: 0, reused: 2, ran: 0, failed: 0 },
 			"unchanged inputs reuse both"
+		);
+
+		assert.deepEqual(
+			runSuite( suite, {
+				SRO_REBUILD_LOCK_NAME: "generated-assets",
+				SRO_REBUILD_LOCK_TOKEN: "next-verification-owner",
+				SRO_REBUILD_LOCK_DIR: path.join( suite, "owner.lock" )
+			} ),
+			{ status: 0, reused: 2, ran: 0, failed: 0 },
+			"a different verification lock owner preserves unchanged test passes"
 		);
 
 		fs.appendFileSync( dependency, "// edited\n" );
