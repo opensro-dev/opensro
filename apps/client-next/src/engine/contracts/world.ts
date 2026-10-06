@@ -136,6 +136,7 @@ export interface EntityState {
 	readonly mountedOn?: number;
 	readonly movementPath?: { readonly from: Pose; readonly to: Pose; };
 	readonly movementRevision?: number;
+	readonly movementTransition?: import("./gameplay").MovementTransition;
 	readonly moving?: boolean;
 	/** Simulation time (ms) of the last stepped path sample; ClockSample.originMs maps it to wall time. */
 	readonly poseAtMs?: number;

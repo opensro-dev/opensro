@@ -52,6 +52,12 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 			if !enterworld.CharacterAlive(c) || !enterworld.SkillLearned(c, skill.ID) {
 				return false
 			}
+			// 58E2F4 validates replacement before the cast becomes current.
+			// Its stop request survives a later cancellation of this cast.
+			if !rt.requestSelfEffectReplacement(division, c, skill) {
+				refusal = 0x300c
+				return false
+			}
 			_, refusal = rt.offensiveCost(division, c, skill, now)
 			if refusal != 0 {
 				return false
@@ -112,6 +118,9 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 			}
 		}
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, pending != nil)
+		// Native 4E6330 clamps stored HP before serializing changed vitals.
+		// Keeping only a projected clamp would restore the lost HP on expiry.
+		rt.clampStoredGaugeToKeeper(division, c)
 		return true
 	}) {
 		if refusal != 0 {

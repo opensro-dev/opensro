@@ -312,6 +312,8 @@ import {
 import { matchingSlots } from "@/engine/foundation/ui/matching-slots";
 import {
 	defaultVideoOptions,
+	DEFAULT_FRAME_LIMIT,
+	frameLimits,
 	videoOptions,
 	videoRows,
 	displaySizes,
@@ -469,6 +471,9 @@ import type { EntityState } from "@/engine/contracts/world";
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // No video option combo is open (slot -1 is the screen-size combo).
 const VIDEO_COMBO_CLOSED = -99;
+const VIDEO_FRAME_LIMIT_SLOT = -3;
+const VIDEO_VISIBLE_ROWS = 6;
+const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
 const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcommon/com_button.png";
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
@@ -2066,14 +2071,17 @@ export function createUi(
 			}
 		} else if ( id.startsWith( "option-video-combo:" ) ) {
 			const n = Number( id.slice( 19 ) );
-			if ( n === -1 || videoRows().some( r => r.slot === n ) ) {
+			if ( n === -1 || n === VIDEO_FRAME_LIMIT_SLOT || videoRows().some( r => r.slot === n ) ) {
 				videoCombo = videoCombo === n ?
 					VIDEO_COMBO_CLOSED :
 					n;
 			}
 		} else if ( id.startsWith( "option-video-choice:" ) ) {
 			const [, slot, value] = id.split( ":" );
-			if ( Number( slot ) === -1 ) {
+			if ( Number( slot ) === VIDEO_FRAME_LIMIT_SLOT ) {
+				const frameLimit = frameLimits()[Number( value )];
+				if ( frameLimit !== undefined ) videoDraft = { ...videoDraft, frameLimit };
+			} else if ( Number( slot ) === -1 ) {
 				const size = displaySizes()[Number( value )];
 				if ( size ) {
 					const { displaySize: _previous, ...rest } = videoDraft;
@@ -2082,7 +2090,7 @@ export function createUi(
 			} else videoDraft = changeVideo( videoDraft, Number( slot ), Number( value ) );
 			videoCombo = VIDEO_COMBO_CLOSED;
 		} else if ( id === "option-video-up" || id === "option-video-down" ) {
-			videoScroll = Math.max( 0, Math.min( 9, videoScroll + (id.endsWith( "up" ) ? -1 : 1) ) );
+			videoScroll = Math.max( 0, Math.min( VIDEO_SCROLL_MAX, videoScroll + (id.endsWith( "up" ) ? -1 : 1) ) );
 			videoCombo = VIDEO_COMBO_CLOSED;
 		} else if ( id.startsWith( "option-bind:" ) ) {
 			const n = Number( id.slice( 12 ) );
@@ -4637,7 +4645,10 @@ export function createUi(
 				return;
 			}
 			if ( event.kind === "drag" && event.id === "option-video-thumb" && panel === "Option" && optionTab === 0 ) {
-				videoScroll = Math.max( 0, Math.min( 9, videoScroll + event.dy * 9 / 129 ) );
+				videoScroll = Math.max(
+					0,
+					Math.min( VIDEO_SCROLL_MAX, videoScroll + event.dy * VIDEO_SCROLL_MAX / 129 )
+				);
 				videoCombo = VIDEO_COMBO_CLOSED;
 				dirty = true;
 				return;
@@ -4908,7 +4919,10 @@ export function createUi(
 					const x = optionOrigin()[0] + 11 + node.rect[0], y = optionOrigin()[1] + 62 + node.rect[1];
 					if ( event.x >= x && event.x < x + node.rect[2] && event.y >= y && event.y < y + node.rect[3] ) {
 						if ( optionTab === 0 ) {
-							videoScroll = Math.max( 0, Math.min( 9, videoScroll + Math.sign( event.delta ) ) );
+							videoScroll = Math.max(
+								0,
+								Math.min( VIDEO_SCROLL_MAX, videoScroll + Math.sign( event.delta ) )
+							);
 							videoCombo = VIDEO_COMBO_CLOSED;
 						} else bindingScroll = Math.max( 0, Math.min( 12, bindingScroll + Math.sign( event.delta ) ) );
 						dirty = true;
@@ -8879,7 +8893,12 @@ export function createUi(
 						const manager = page.GDR_OPT_VIDEO_DETAIL_OPT!,
 							bounds = authoredRect( manager, ox, oy ),
 							slot = hudData.windows.ifvideooptionslot!,
-							rows = videoRows(),
+							rows = [ ...videoRows(), {
+								slot: VIDEO_FRAME_LIMIT_SLOT,
+								key: "Frame rate",
+								entries: frameLimits().map( fps => fps ? `${fps} FPS` : "Uncapped" ),
+								supported: true
+							} ],
 							combos: {
 								slot: number;
 								r: UiRect;
@@ -8939,17 +8958,19 @@ export function createUi(
 								slot: row.slot,
 								r: authoredRect( slot.GDR_OPT_VOS_CB!, x, y ),
 								entries: row.entries,
-								selected: videoDraft.records[videoDraft.active][row.slot]!,
-								label: hudCopy( row.key ),
+								selected: row.slot === VIDEO_FRAME_LIMIT_SLOT ?
+									frameLimits().indexOf( videoDraft.frameLimit ?? DEFAULT_FRAME_LIMIT ) :
+									videoDraft.records[videoDraft.active][row.slot]!,
+								label: row.slot === VIDEO_FRAME_LIMIT_SLOT ? row.key : hudCopy( row.key ),
 								disabled: !row.supported
 							} );
 						}
 						const scroll = chatScrollbar(
 							"option-video",
 							optionListTrack( bounds, 7, 7 ),
-							15,
-							6,
-							9 - videoScroll,
+							rows.length,
+							VIDEO_VISIBLE_ROWS,
+							VIDEO_SCROLL_MAX - videoScroll,
 							resources.size,
 							full,
 							hover,
@@ -8982,10 +9003,12 @@ export function createUi(
 								slot.GDR_OPT_VOS_ST!,
 								bounds[0] + 7,
 								bounds[1] + 7 + i * 30,
-								hudCopy( row.key )
+								row.slot === VIDEO_FRAME_LIMIT_SLOT ? row.key : hudCopy( row.key )
 							);
 						}
-						const open = combos.find( c => c.slot === videoCombo && c.slot >= -1 );
+						const open = combos.find( c =>
+							c.slot === videoCombo && (c.slot >= -1 || c.slot === VIDEO_FRAME_LIMIT_SLOT)
+						);
 						if ( open ) {
 							const r = open.r, list: UiRect = [ r[0], r[1] + 20, r[2], open.entries.length * 18 ];
 							rect( list, [ 0, 0, 0, 1 ] );

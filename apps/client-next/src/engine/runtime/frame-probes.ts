@@ -26,6 +26,17 @@ export interface FrameProbe extends Omit<RenderFrameProbe, "detailBegin" | "deta
 	begin( frameId: number ): void;
 	mark( stage: string ): void;
 	end(): void;
+	movement?( sample: {
+		atMs: number;
+		workerAtMs: number;
+		workerDebtMs: number;
+		revision: number;
+		transition?: import("@/engine/contracts/gameplay").MovementTransition;
+		logical: import("@/engine/contracts/gameplay").Pose;
+		displayed: import("@/engine/contracts/gameplay").Pose | null;
+		pending: number;
+		acknowledged: number;
+	} ): void;
 }
 
 /*
