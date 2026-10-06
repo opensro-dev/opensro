@@ -6451,6 +6451,34 @@ export function createUi(
 			}
 			/*
 			================
+			itemEffects
+
+			Item-slot painters share the same overlays and animation clock.
+			================
+			*/
+			function itemEffects( id: string, owned: import("@/engine/contracts/gameplay").InventoryItem, r: UiRect ) {
+				// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
+				// companion wash, then the animated sheets. 0x3645 flashes target
+				// the inventory and equipment slots.
+				const wash = itemSlotWash( owned );
+				if ( wash ) rect( r, wash );
+				const flashes = id.startsWith( "slot:" ) ?
+					(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
+					[];
+				const overlays = itemSlotOverlays(
+					owned,
+					r,
+					slotSeed( id + ":" + owned.refObjId ),
+					next.simulationTimeMs ?? 0,
+					flashes
+				);
+				for ( const overlay of overlays ) {
+					image( overlay.rect, overlay.path, white, overlay.uv );
+					slotEffects.mark();
+				}
+			}
+			/*
+			================
 			nativeItem
 			================
 			*/
@@ -6467,25 +6495,7 @@ export function createUi(
 					if ( item && "typeFlags" in item ) {
 						const owned = item as import("@/engine/contracts/gameplay").InventoryItem;
 						equipmentOverlay( owned, r );
-						// CIFSlotWithHelp's item effects (item-slot-effects.ts): the dead
-						// companion wash, then the animated sheets. 0x3645 flashes target
-						// the inventory and equipment slots.
-						const wash = itemSlotWash( owned );
-						if ( wash ) rect( r, wash );
-						const flashes = id.startsWith( "slot:" ) ?
-							(game?.itemFlashes ?? []).filter( f => f.slot === owned.slot ) :
-							[];
-						const overlays = itemSlotOverlays(
-							owned,
-							r,
-							slotSeed( id + ":" + owned.refObjId ),
-							next.simulationTimeMs ?? 0,
-							flashes
-						);
-						for ( const overlay of overlays ) {
-							image( overlay.rect, overlay.path, white, overlay.uv );
-							slotEffects.mark();
-						}
+						itemEffects( id, owned, r );
 					}
 				}
 				controls.push( {
@@ -7756,6 +7766,7 @@ export function createUi(
 						if ( feedback ) quads.push( ...feedback.quads );
 					}
 					if ( item ) {
+						itemEffects( "hotbar:" + slot, item, r );
 						paths.push( ...quickslotTimerPaths() );
 						quads.push(
 							...quickslotItemCooldownQuads(
@@ -9520,6 +9531,7 @@ export function createUi(
 						if ( path ) {
 							image( r, path );
 							equipmentOverlay( item, r );
+							if ( enabled && item ) itemEffects( "slot:" + slot, item, r );
 						}
 						controls.push( {
 							id: "slot:" + slot,
@@ -9622,6 +9634,7 @@ export function createUi(
 								paths.push( icon );
 								if ( resources.has( icon ) ) rect( r, white, icon );
 								equipmentOverlay( item, r );
+								if ( item ) itemEffects( "avatar:" + type, item, r );
 							}
 							controls.push( {
 								id: "avatar:" + type,
@@ -10968,6 +10981,10 @@ export function createUi(
 							authoredRect( node, px, py ),
 							!valid || busy || !e
 						);
+						const offered = e?.item.items?.find( item => item.refObjId === e.item.refObjId );
+						if ( e && offered ) {
+							itemEffects( "shop-offer:" + e.index, offered, authoredRect( node, px, py ) );
+						}
 					}
 					for ( let i = 0; i < 5; i++ ) {
 						const entry = restoreSlotEntry( shop?.buyback ?? [], i ),
@@ -10979,6 +10996,9 @@ export function createUi(
 							authoredRect( node, px, py ),
 							!valid || busy || !entry
 						);
+						if ( entry?.item ) {
+							itemEffects( "shop-buyback:" + index, entry.item, authoredRect( node, px, py ) );
+						}
 					}
 					nativeSpin( page.GDR_STORE_SPIN_PAGE!, px, py, "shop-prev", "shop-next", shopPage, pages );
 					// Repair remains a typed gameplay operation; never route its button to buy/sell.
@@ -11681,6 +11701,7 @@ export function createUi(
 							const icon = row ? iconPath( row.item.icon ) : null;
 							if ( row && icon ) {
 								image( r, icon );
+								itemEffects( (mine ? "exchange-my:" : "exchange-their:") + slot, row.item, r );
 								itemCount( row.item, r );
 							}
 							controls.push( {
@@ -11819,6 +11840,7 @@ export function createUi(
 						const icon = offer ? iconPath( offer.item.icon ) : null;
 						if ( offer && icon ) {
 							image( r, icon );
+							itemEffects( "stall-slot:" + slot, offer.item, r );
 							itemCount( offer.item, r );
 						}
 						if ( offer ) {
@@ -11969,6 +11991,7 @@ export function createUi(
 						const r = authoredRect( part( 12 ), ox, oy ), icon = iconPath( row.item.icon );
 						if ( icon ) {
 							image( r, icon );
+							itemEffects( "stall-net-row:" + index, row.item, r );
 							itemCount( row.item, r );
 						}
 						authoredText( part( 11 ), ox, oy, String( network.page * 15 + index + 1 ) );
@@ -15286,6 +15309,7 @@ export function createUi(
 					if ( path ) image( cell.rect, path );
 					if ( cell.enabled && item ) {
 						equipmentOverlay( item, cell.rect );
+						itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
 						itemCount( item, cell.rect );
 						controls.push( {
 							id: "item-mall-slot:" + cell.slot,
