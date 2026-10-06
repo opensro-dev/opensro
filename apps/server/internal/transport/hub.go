@@ -909,7 +909,9 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 			h.closeSession(s, fmt.Errorf("%w on 0x%04X: %v", errHandlerPanic, f.Opcode, r))
 		}
 	}()
+	started := time.Now()
 	fn(s, f.Opcode, f.Payload)
+	h.metrics.timing.recordHandler(f.Opcode, time.Since(started))
 }
 
 const enterWorldUnauthorizedCode uint32 = 0x00A1

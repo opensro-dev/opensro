@@ -99,6 +99,7 @@ func NewTicker(
 	ticker.Roster = append([]simulation.NpcDef(nil), roster...)
 	ticker.Hooks = append(ticker.Hooks, hooks...)
 	ticker.Hooks = append(ticker.Hooks, tickDurationHook(hub, ticker))
+	ticker.PhaseObserver = tickPhaseObserver(hub)
 	return ticker
 }
 
@@ -120,6 +121,26 @@ func tickDurationHook(hub *transport.Hub, ticker *simulation.Ticker) simulation.
 		}
 		hub.RecordTickDuration(time.Since(time.UnixMilli(nowMs)), interval)
 		return nil
+	}
+}
+
+/*
+==================
+tickPhaseObserver
+
+Hands each tick's phase durations and slow hooks to the hub's histograms
+(transport/timing.go), converting between the two packages' plain types.
+==================
+*/
+func tickPhaseObserver(hub *transport.Hub) func(simulation.TickTiming) {
+	return func(timing simulation.TickTiming) {
+		phases := transport.TickPhases{
+			BeforeHooks: timing.BeforeHooks, Divisions: timing.Divisions, Hooks: timing.Hooks, Total: timing.Total,
+		}
+		for _, hook := range timing.SlowHooks {
+			phases.SlowHooks = append(phases.SlowHooks, transport.SlowHook{Name: hook.Name, Elapsed: hook.Elapsed})
+		}
+		hub.RecordTickPhases(phases)
 	}
 }
 

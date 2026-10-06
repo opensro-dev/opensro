@@ -254,6 +254,10 @@ type Ticker struct {
 	// is doing (tick_watchdog.go). Values <= 0 use DefaultTickStallReport.
 	StallReport time.Duration
 	watch       tickWatch
+	// PhaseObserver receives each tick's phase durations and slow hooks
+	// (tick_timing.go); nil records nothing.
+	PhaseObserver func(TickTiming)
+	clock         tickClock
 
 	// tickIndex is the coordinator-owned server-clock tick counter fed to
 	// the patrol function.
@@ -435,14 +439,18 @@ func (t *Ticker) RunTick(nowMs int64) {
 	defer recoverTickPanic("tick")
 	t.watch.begin(time.Now())
 	defer t.watch.end()
+	t.clock.begin(time.Now())
+	defer t.observePhases()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)
 	t.watch.phase.Store(tickPhaseDivisions)
+	t.clock.beforeHooksEnd = time.Now()
 	for _, division := range work {
 		t.runDivision(division, tick, nowMs)
 	}
 	t.watch.phase.Store(tickPhaseHooks)
+	t.clock.divisionsEnd = time.Now()
 	t.runHooks(nowMs, work)
 }
 
@@ -455,10 +463,13 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	defer recoverTickPanic("scheduled tick")
 	t.watch.begin(time.Now())
 	defer t.watch.end()
+	t.clock.begin(time.Now())
+	defer t.observePhases()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)
 	t.watch.phase.Store(tickPhaseDivisions)
+	t.clock.beforeHooksEnd = time.Now()
 	batches := make([]shardTickBatch, len(inboxes))
 	for i := range batches {
 		batches[i] = shardTickBatch{tick: tick, nowMs: nowMs, done: make(chan struct{})}
@@ -488,6 +499,7 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	}
 	if ctx.Err() == nil {
 		t.watch.phase.Store(tickPhaseHooks)
+		t.clock.divisionsEnd = time.Now()
 		t.runHooks(nowMs, work)
 	}
 }
@@ -647,7 +659,9 @@ func (t *Ticker) runHookList(hooks []TickHook, nowMs int64, work []divisionTickW
 			defer recoverTickPanic("hook")
 			t.watch.enterHook(hook)
 			defer t.watch.leaveHook()
-			for _, routed := range hook(nowMs) {
+			var produced []DivisionFrames
+			t.clock.timeHook(hook, func() { produced = hook(nowMs) })
+			for _, routed := range produced {
 				if len(routed.Frames) == 0 {
 					continue
 				}

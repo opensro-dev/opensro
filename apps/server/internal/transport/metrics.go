@@ -53,6 +53,7 @@ type hubMetrics struct {
 
 	handshakes durationStats
 	ticks      tickStats
+	timing     timingStats // timing.go
 }
 
 // Metrics is a point-in-time snapshot of the hub's transport counters.
@@ -126,6 +127,10 @@ type Metrics struct {
 	TickMeanMs   float64 `json:"tick_mean_ms"`
 	TickMaxMs    float64 `json:"tick_max_ms"`
 	TickOverruns uint64  `json:"tick_overruns"`
+	// Request handler and tick phase histograms (timing.go).
+	HandlerMs   map[string]Histogram     `json:"handler_ms"`
+	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
+	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
 }
 
 // Metrics snapshots the counters and the current live-session count.
@@ -203,6 +208,7 @@ func (h *Hub) Metrics() Metrics {
 	}
 	h.metrics.handshakes.snapshotHandshakeInto(&metrics)
 	h.metrics.ticks.snapshotInto(&metrics)
+	h.metrics.timing.snapshotInto(&metrics)
 	return metrics
 }
 
