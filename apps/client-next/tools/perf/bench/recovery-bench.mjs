@@ -159,16 +159,36 @@ async function run( options ) {
 			result.transport = await worker.evaluate( () => ({ ...globalThis.__recoveryLink, log: undefined }) );
 			if ( STALL_LANES.includes( lane ) ) {
 				result.faults = await faultLog( page );
-				assert.equal( result.faults.transport, "websocket", "the stall ran on the client's real WebSocket" );
-				assert.ok( result.faults.held.length > 0, "the stall held real frames" );
 				// Settle past the snapshot cache, then compare the server's own pose.
 				await page.waitForTimeout( OBSERVATORY_CACHE_MS + 1000 );
-				const client = await page.evaluate( () => globalThis.__benchRuntime.gameplay().pose );
+				const local = await page.evaluate( () => {
+					const root = globalThis.__benchRuntime, game = root.gameplay();
+					const body = root.characterActors().find( actor => actor.gid === game.localGid );
+					return { logical: game.pose, drawn: body?.pose ?? null };
+				} );
 				const server = await serverPose( process.env.SRO_PROBE_CHARACTER ?? "asd2" );
-				result.serverPose = { client, server };
-				assert.equal( server.regionId, client.regionId, JSON.stringify( result.serverPose ) );
+				result.serverPose = {
+					...local,
+					server,
+					xz: Math.hypot( server.x - local.logical.x, server.z - local.logical.z ),
+					y: server.y - local.logical.y
+				};
+				// Evidence first: a failed comparison must still leave its record.
+				await writeFile(
+					`${options.out}/stall-${lane}.json`,
+					JSON.stringify(
+						{ lane, stalls: result.stalls, faults: result.faults, serverPose: result.serverPose },
+						null,
+						2
+					)
+				);
+				assert.equal( result.faults.transport, "websocket", "the stall ran on the client's real WebSocket" );
+				assert.ok( result.faults.held.length > 0, "the stall held real frames" );
+				assert.equal( server.regionId, local.logical.regionId, JSON.stringify( result.serverPose ) );
+				// y is recorded, not asserted: whether the server's y is the wire Y
+				// or a surface height is still open.
 				assert.ok(
-					Math.hypot( server.x - client.x, server.z - client.z ) <= SERVER_POSE_TOLERANCE,
+					result.serverPose.xz <= SERVER_POSE_TOLERANCE,
 					`settled client and server poses differ: ${JSON.stringify( result.serverPose )}`
 				);
 			}
