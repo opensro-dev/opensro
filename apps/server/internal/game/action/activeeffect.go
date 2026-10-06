@@ -328,8 +328,21 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 				}
 			}
 		}
-		if !rt.effects.Apply(effect) {
+		ended, installed := rt.effects.ApplyAfterRetirement(effect)
+		if !installed {
 			return false
+		}
+		retired, _ := rt.finishCharacterEffectRetirement(divisionID, character, ended, nowMs)
+		statusFrames = append(statusFrames, retired...)
+		if len(ended) != 0 {
+			tokens := make([]uint32, len(ended))
+			for i, old := range ended {
+				tokens[i] = old.InstanceToken
+			}
+			payload, err := (wire.EndedEffectInstances{InstanceTokens: tokens}).Encode()
+			if err == nil {
+				statusFrames = append(statusFrames, wire.Frame{Opcode: wire.OpEndedEffectInstances, Payload: payload})
+			}
 		}
 		if bodyOwner == 0 {
 			for _, old := range previous {
@@ -362,6 +375,32 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 }
 
 /*
+================
+finishCharacterEffectRetirement
+
+Finish registry retirement under the existing character transaction. Both
+the regular tick and replacement installation use the same cleanup; callers
+own private stat publication and the counted ended-instance packet.
+================
+*/
+func (rt *Runtime) finishCharacterEffectRetirement(division string, c *enterworld.Character, ended []statuseffect.Effect, nowMs int64) ([]wire.Frame, bool) {
+	if len(ended) == 0 {
+		return nil, false
+	}
+	changed := rt.retireSkillJobs(c, ended)
+	var frames []wire.Frame
+	for _, effect := range ended {
+		if effect.BodyStatusOwner != 0 && c.TransitionBodyStatus(domain.BodyStatusTransition{RetireOwner: effect.BodyStatusOwner}) {
+			frames = append(frames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), 0))
+			changed = true
+		}
+	}
+	changed = clearTransform(c, ended) || changed
+	frames = append(frames, rt.refreshMovementEffects(division, c, nowMs)...)
+	return frames, changed || len(frames) != 0
+}
+
+/*
 ==================
 drainStoppedCharacterEffects
 
@@ -383,16 +422,9 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 		var statusFrames []wire.Frame
 		if c := rt.findCharacter(batch.DivisionID, batch.CharacterName); c != nil {
 			rt.deps.Update(c, "retire-character-effect", func() bool {
-				changed := rt.retireSkillJobs(c, batch.Effects)
-				for _, effect := range batch.Effects {
-					if effect.BodyStatusOwner != 0 && c.TransitionBodyStatus(domain.BodyStatusTransition{RetireOwner: effect.BodyStatusOwner}) {
-						statusFrames = append(statusFrames, bodyStatusFrame(enterworld.ObjectIDForCharacter(c), 0))
-						changed = true
-					}
-				}
-				changed = clearTransform(c, batch.Effects) || changed
-				statusFrames = append(statusFrames, rt.refreshMovementEffects(batch.DivisionID, c, rt.Now().UnixMilli())...)
-				return changed || len(statusFrames) != 0
+				var changed bool
+				statusFrames, changed = rt.finishCharacterEffectRetirement(batch.DivisionID, c, batch.Effects, rt.Now().UnixMilli())
+				return changed
 			})
 			// 4B3660 removes instance-owned contributions before calling the
 			// player's private 303D stat publisher. Never broadcast these stats.

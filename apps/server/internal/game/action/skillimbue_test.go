@@ -22,6 +22,11 @@ import (
 )
 
 // burnSlot is the target's burn slot (4A46F0); the zero slot when none.
+/*
+================
+burnSlot
+================
+*/
 func burnSlot(m monster.Instance) abnormal.Slot {
 	if m.Abnormal == nil {
 		return abnormal.Slot{}
@@ -302,8 +307,11 @@ func TestImbueAdmissionRechecksAuthorityAndCategory(t *testing.T) {
 	}
 	replaced := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: row.ID}.Encode())
 	rows := rt.effects.Snapshot(testDivision, c.Name)
-	if len(rows) != 2 || !rows[0].StopRequested || rows[1].StopRequested || rows[1].InstanceToken == effect.InstanceToken || *c.CurrentMP >= mp || len(replaced.Frames) == 0 {
+	if len(rows) != 1 || rows[0].StopRequested || rows[0].InstanceToken == effect.InstanceToken || *c.CurrentMP >= mp || len(replaced.Frames) == 0 {
 		t.Fatal("equal-rank native replacement missing", replaced, rows)
+	}
+	if _, ok := findFrame(replaced.Frames, wire.OpEndedEffectInstances); !ok {
+		t.Fatal("replacement did not publish the old imbue retirement")
 	}
 	rt.drainStoppedCharacterEffects()
 	rows = rt.effects.Snapshot(testDivision, c.Name)
