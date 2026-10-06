@@ -66,19 +66,15 @@ type ObservatoryPopulation struct {
 ================
 focusNeighbourhood
 
-The focus regions and their eight neighbours (region id = z<<8 | x).
+The regions a focus covers: each focus region's RegionScopeRing (the 3x3
+sector ring outdoors, the dungeon region alone underground).
 ================
 */
 func focusNeighbourhood(focus []uint16) map[uint16]bool {
 	near := make(map[uint16]bool, len(focus)*9)
 	for _, region := range focus {
-		x, z := int(region&0xff), int(region>>8)
-		for dz := -1; dz <= 1; dz++ {
-			for dx := -1; dx <= 1; dx++ {
-				if nx, nz := x+dx, z+dz; nx >= 0 && nx <= 0xff && nz >= 0 && nz <= 0xff {
-					near[uint16(nz<<8|nx)] = true
-				}
-			}
+		for _, ring := range RegionScopeRing(region) {
+			near[ring] = true
 		}
 	}
 	return near
@@ -88,8 +84,9 @@ func focusNeighbourhood(focus []uint16) map[uint16]bool {
 ================
 capObservatory
 
-Fits the focus rows, then the others, into limit rows. dropped says the
-copy already left rows out. The focus is complete only if all of it fits.
+Fits the focus rows, then the others (lowest gids first), into limit
+rows. dropped says the copy already left rows out. The focus is complete
+only if all of it fits.
 ================
 */
 func capObservatory(focus, others []ObservatoryMonster, dropped bool, limit int) ([]ObservatoryMonster, bool, bool) {
@@ -98,6 +95,8 @@ func capObservatory(focus, others []ObservatoryMonster, dropped bool, limit int)
 		focus, complete, dropped = focus[:limit], false, true
 	}
 	if room := limit - len(focus); len(others) > room {
+		// Keep the lowest gids, so two captures of one server list the same rows.
+		sort.Slice(others, func(i, j int) bool { return others[i].GID < others[j].GID })
 		others, dropped = others[:room], true
 	}
 	return append(focus, others...), dropped, complete
@@ -113,6 +112,15 @@ unlocking. Monsters near a focus region are kept ahead of the cap.
 ================
 */
 func (s *MonsterState) Observatory(division string, focus []uint16) ObservatoryPopulation {
+	return s.observatory(division, focus, observatoryMonsterCap)
+}
+
+/*
+================
+MonsterState.observatory
+================
+*/
+func (s *MonsterState) observatory(division string, focus []uint16, limit int) ObservatoryPopulation {
 	out := ObservatoryPopulation{Monsters: []ObservatoryMonster{}, Nests: len(s.template.Nests)}
 	near := focusNeighbourhood(focus)
 	var others []ObservatoryMonster
@@ -138,15 +146,13 @@ func (s *MonsterState) Observatory(division string, focus []uint16) ObservatoryP
 			row := ObservatoryMonster{GID: gid, Ref: ref.RefObjID, Name: ref.Name, Level: ref.Level, Rarity: rarity, HP: hp, MaxHP: maxHP, Region: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z, Mode: mode, Target: target}
 			if near[pose.RegionID] {
 				out.Monsters = append(out.Monsters, row)
-			} else if len(others) < observatoryMonsterCap {
-				others = append(others, row)
 			} else {
-				out.Truncated = true
+				others = append(others, row)
 			}
 		}
 	}
 	s.mu.Unlock()
-	out.Monsters, out.Truncated, out.FocusComplete = capObservatory(out.Monsters, others, out.Truncated, observatoryMonsterCap)
+	out.Monsters, out.Truncated, out.FocusComplete = capObservatory(out.Monsters, others, false, limit)
 	sort.Slice(out.Monsters, func(i, j int) bool { return out.Monsters[i].GID < out.Monsters[j].GID })
 	return out
 }

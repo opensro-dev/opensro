@@ -59,8 +59,8 @@ func TestObservatoryKeepsTheFocusAheadOfTheCap(t *testing.T) {
 	if len(near) != 9 || !near[0x6d4a] || !near[0x6f4c] || near[0x6e4d] {
 		t.Fatalf("neighbourhood = %v", near)
 	}
-	if edge := focusNeighbourhood([]uint16{0x0000}); len(edge) != 4 {
-		t.Fatalf("a corner region has %d in-range neighbours, want 4", len(edge))
+	if dungeon := focusNeighbourhood([]uint16{0x8001}); len(dungeon) != 1 || !dungeon[0x8001] {
+		t.Fatalf("a dungeon focus covers %v, want only itself", dungeon)
 	}
 
 	s := NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{1: {TidWord: 0x00C6, RefObjID: 1, Name: "Near", MaxHP: 100}},
@@ -73,5 +73,14 @@ func TestObservatoryKeepsTheFocusAheadOfTheCap(t *testing.T) {
 	snap := s.Observatory("a", []uint16{257})
 	if len(snap.Monsters) != 2 || snap.Truncated || !snap.FocusComplete {
 		t.Fatalf("focused capture = %+v", snap)
+	}
+	// Overflow through the real capture: with room for one row, the monster
+	// near the focus is the one kept, whichever the map yields first.
+	for _, focus := range [][]uint16{{257}, {0x2020}} {
+		capped := s.observatory("a", focus, 1)
+		if len(capped.Monsters) != 1 || !capped.Truncated || !capped.FocusComplete ||
+			capped.Monsters[0].Region != focus[0] {
+			t.Fatalf("focus %#x capture = %+v", focus[0], capped)
+		}
 	}
 }
