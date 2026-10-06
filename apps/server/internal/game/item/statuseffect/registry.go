@@ -44,7 +44,8 @@ Effect
 ================
 */
 type Effect struct {
-	DamageToMP        bool // dgmp instance contribution; retirement removes it with its owner.
+	SourceTargetGID   uint32 // source-only B5ED relationship to a population-owned recipient.
+	DamageToMP        bool   // dgmp instance contribution; retirement removes it with its owner.
 	DamageToMPPercent uint32
 	ForcedTargetGID   uint32 // hitm context+28; zero means no target constraint.
 	jobClock          relativeJobClock
@@ -184,9 +185,32 @@ Apply
 ================
 */
 func (r *Registry) Apply(effect Effect) bool {
+	_, ok := r.apply(effect, false)
+	return ok
+}
+
+/*
+================
+ApplyAfterRetirement
+
+59BB80 walks old active instances before later installations. Retire stopped
+rows before the incoming instance contributes parameters or casting states.
+Validation failure leaves the old retirement queue intact.
+================
+*/
+func (r *Registry) ApplyAfterRetirement(effect Effect) ([]Effect, bool) {
+	return r.apply(effect, true)
+}
+
+/*
+================
+apply
+================
+*/
+func (r *Registry) apply(effect Effect, retire bool) ([]Effect, bool) {
 	if r == nil || effect.LinkToken != 0 || effect.SkillID == 0 || effect.SkillGroup == 0 ||
 		effect.DivisionID == "" || effect.CharacterName == "" || effect.MovementKind > MovementIndependent {
-		return false
+		return nil, false
 	}
 	if effect.State != StatePending && effect.State != StateActive {
 		effect.State = StateActive
@@ -206,7 +230,7 @@ func (r *Registry) Apply(effect Effect) bool {
 		for existingKey, existing := range r.byOwner {
 			for _, row := range existing {
 				if strings.EqualFold(row.DivisionID, effect.DivisionID) && row.InstanceToken == effect.InstanceToken && (existingKey != key || row.SkillGroup != effect.SkillGroup) {
-					return false
+					return nil, false
 				}
 			}
 		}
@@ -215,7 +239,7 @@ func (r *Registry) Apply(effect Effect) bool {
 	if effect.Imbue {
 		for _, old := range rows {
 			if old.Imbue && !old.StopRequested && !(old.SkillGroup == effect.SkillGroup && old.InstanceToken == effect.InstanceToken) {
-				return false
+				return nil, false
 			}
 		}
 	}
@@ -223,10 +247,10 @@ func (r *Registry) Apply(effect Effect) bool {
 		if rows[index].SkillGroup == effect.SkillGroup &&
 			rows[index].InstanceToken == effect.InstanceToken {
 			if rows[index].LinkToken != 0 {
-				return false
+				return nil, false
 			}
 			if !r.bindModifiersLocked(&effect) {
-				return false
+				return nil, false
 			}
 			prepareMovement(rows, index, &effect)
 			r.replaceForcedTargetLocked(key, effect)
@@ -234,20 +258,33 @@ func (r *Registry) Apply(effect Effect) bool {
 			rows[index] = effect
 			r.changeEffectStatesLocked(key, effect, false)
 			r.byOwner[key] = rows
-			return true
+			return nil, true
 		}
 	}
-	if len(rows) >= MaxAttachedEffectsPerCharacter {
-		return false
+	count := len(rows)
+	if retire {
+		for _, old := range rows {
+			if old.StopRequested {
+				count--
+			}
+		}
+	}
+	if count >= MaxAttachedEffectsPerCharacter {
+		return nil, false
 	}
 	if !r.bindModifiersLocked(&effect) {
-		return false
+		return nil, false
+	}
+	var ended []Effect
+	if retire {
+		ended = r.drainStoppedOwnerLocked(key)
+		rows = r.byOwner[key]
 	}
 	prepareMovement(rows, -1, &effect)
 	r.replaceForcedTargetLocked(key, effect)
 	r.byOwner[key] = append(rows, effect)
 	r.changeEffectStatesLocked(key, effect, false)
-	return true
+	return ended, true
 }
 
 // RequestVoluntaryStop implements the exact cancel-active-effect lookup:
@@ -316,39 +353,9 @@ func (r *Registry) DrainStopRequested() []EndedBatch {
 	// a range loop would drop them when the queue is reset below.
 	for cursor := 0; cursor < len(r.pendingOwners); cursor++ {
 		key := r.pendingOwners[cursor]
-		rows := r.byOwner[key]
-		for i := range rows {
-			if rows[i].StopRequested {
-				retireMovement(rows, i)
-			}
-		}
-		var kept []Effect
-		var ended []Effect
-		for _, effect := range rows {
-			if effect.StopRequested {
-				r.changeEffectStatesLocked(key, effect, true)
-				if effect.LinkToken != 0 {
-					r.retireLinkHalfLocked(effect)
-				}
-				if effect.jobClockPresent {
-					// 582F93 -> embedded trigger -> 651480(reason=1).
-					// This callback belongs to teardown, not the stop request.
-					effect.jobClock.retire(1)
-					effect.jobCheckpointDue = false
-				}
-				ended = append(ended, effect)
-			} else {
-				kept = append(kept, effect)
-			}
-		}
-		delete(r.pendingSet, key)
+		ended := r.drainStoppedOwnerLocked(key)
 		if len(ended) == 0 {
 			continue
-		}
-		if len(kept) == 0 {
-			delete(r.byOwner, key)
-		} else {
-			r.byOwner[key] = kept
 		}
 		batches = append(batches, EndedBatch{
 			DivisionID:    ended[0].DivisionID,
@@ -358,6 +365,52 @@ func (r *Registry) DrainStopRequested() []EndedBatch {
 	}
 	r.pendingOwners = r.pendingOwners[:0]
 	return batches
+}
+
+/*
+================
+drainStoppedOwnerLocked
+
+The pending-owner queue may retain an empty marker after an installation
+drains its owner. The regular tick safely skips it; linked peers stay queued.
+================
+*/
+func (r *Registry) drainStoppedOwnerLocked(key string) []Effect {
+	rows := r.byOwner[key]
+	for i := range rows {
+		if rows[i].StopRequested {
+			retireMovement(rows, i)
+		}
+	}
+	var kept []Effect
+	var ended []Effect
+	for _, effect := range rows {
+		if effect.StopRequested {
+			r.changeEffectStatesLocked(key, effect, true)
+			if effect.LinkToken != 0 {
+				r.retireLinkHalfLocked(effect)
+			}
+			if effect.jobClockPresent {
+				// 582F93 -> embedded trigger -> 651480(reason=1).
+				// This callback belongs to teardown, not the stop request.
+				effect.jobClock.retire(1)
+				effect.jobCheckpointDue = false
+			}
+			ended = append(ended, effect)
+		} else {
+			kept = append(kept, effect)
+		}
+	}
+	delete(r.pendingSet, key)
+	if len(ended) == 0 {
+		return nil
+	}
+	if len(kept) == 0 {
+		delete(r.byOwner, key)
+	} else {
+		r.byOwner[key] = kept
+	}
+	return ended
 }
 
 // Snapshot returns an owner-isolated copy for diagnostics and tests.

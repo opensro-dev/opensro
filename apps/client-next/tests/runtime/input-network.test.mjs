@@ -174,7 +174,11 @@ test("network rejects oversized ingress and send backpressure instead of silentl
 
 test("server goodbye preserves its reason and drains accepted packets before ending", t => {
 	const sockets = socketHarness( t ), failures = [], seen = [];
-	const network = createNetwork( e => failures.push( e ) );
+	const reasons = [];
+	const network = createNetwork( ( e, _frame, reason ) => {
+		failures.push( e );
+		reasons.push( reason );
+	} );
 	network.connect( "ws://localhost/transport", "ticket" );
 	const socket = sockets[0];
 	socket.onopen();
@@ -193,6 +197,8 @@ test("server goodbye preserves its reason and drains accepted packets before end
 	} );
 	assert.deepEqual( seen, [ 2, 256 ] );
 	assert.deepEqual( failures, [ "Server ended transport session: shutdown (5)" ] );
+	assert.equal( reasons[0].category, "expected" );
+	assert.equal( reasons[0].code, "server_bye_5" );
 	network.dispose();
 });
 
@@ -319,7 +325,7 @@ test("native V blind action is held, rebindable, and released on focus loss", ()
 });
 test("a frame the consumer cannot apply ends the session and names that frame for the incident report", t => {
 	const sockets = socketHarness( t ), failures = [];
-	const network = createNetwork( ( error, frame ) => failures.push( { error, frame } ) );
+	const network = createNetwork( ( error, frame, reason ) => failures.push( { error, frame, reason } ) );
 	network.connect( "ws://localhost/transport", "abc" );
 	const socket = sockets[0];
 	socket.onopen();
@@ -332,6 +338,9 @@ test("a frame the consumer cannot apply ends the session and names that frame fo
 	assert.equal( failures.length, 1 );
 	assert.match( failures[0].error, /^Packet application failed: Error: Invalid movement speed channels$/ );
 	assert.equal( failures[0].frame.opcode, 0x376f );
+	assert.equal( failures[0].reason.category, "software" );
+	assert.equal( failures[0].reason.code, "packet_application_failed" );
+	assert.match( failures[0].reason.stack, /Invalid movement speed channels/ );
 	assert.deepEqual( [ ...failures[0].frame.payload ], [ 1, 2, 3 ] );
 	assert.ok( socket.closed );
 });

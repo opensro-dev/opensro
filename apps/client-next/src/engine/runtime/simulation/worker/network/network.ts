@@ -11,19 +11,22 @@ failure names that frame so it can be reported (session.ts).
 ===========================================================================
 */
 import { createCodec } from "./codec/codec";
-import type { NetworkOwner, WireFrame } from "@/engine/contracts/network";
+import type { NetworkOwner, WireFrame, NetworkFailure } from "@/engine/contracts/network";
 
 /*
 ================
 createNetwork
 ================
 */
-export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) => void ): NetworkOwner {
+export function createNetwork(
+	onFailure: ( error: string, frame?: WireFrame, reason?: NetworkFailure ) => void
+): NetworkOwner {
 	const codec = createCodec();
 	let socket: WebSocket | null = null, epoch = 0, disposed = false, welcomed = false;
 	let bytes = 0;
 	const inbox: WireFrame[] = [];
 	let ended: string | null = null;
+	let endReason: NetworkFailure | undefined;
 	/*
 	================
 	disconnect
@@ -35,6 +38,7 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 		bytes = 0;
 		inbox.length = 0;
 		ended = null;
+		endReason = undefined;
 		const previous = socket;
 		socket = null;
 		if ( previous ) {
@@ -53,19 +57,29 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 	frame is the frame being applied when the failure happened, if any.
 	================
 	*/
-	function fail( message: string, frame?: WireFrame ) {
+	function fail( message: string, frame?: WireFrame, reason?: NetworkFailure ) {
 		disconnect();
-		onFailure( message, frame );
+		onFailure(
+			message,
+			frame,
+			reason ??
+				{
+					category: "software",
+					code: frame ? "packet_application_failed" : "transport_protocol_failed",
+					message: "A game error interrupted your session."
+				}
+		);
 	}
 	/*
 	================
 	end
 	================
 	*/
-	function end( message: string ) {
+	function end( message: string, reason: NetworkFailure ) {
 		// A completion packet and socket close can arrive before the same tick.
 		// Preserve admitted FIFO entries until their consumer has seen them.
 		ended = message;
+		endReason = reason;
 		const previous = socket;
 		socket = null;
 		if ( previous ) {
@@ -145,7 +159,18 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 								"server busy",
 								"unauthorized"
 							];
-						end( `Server ended transport session: ${names[reason] ?? "unknown"} (${reason})` );
+						const expected = [ 0, 5, 6, 8 ].includes( reason );
+						const messages: Record<number, string> = {
+							0: "Your session ended.",
+							5: "The server is restarting.",
+							6: "This session was replaced by another login.",
+							8: "Your session authorization ended."
+						};
+						end( `Server ended transport session: ${names[reason] ?? "unknown"} (${reason})`, {
+							category: expected ? "expected" : "unknown",
+							code: `server_bye_${reason}`,
+							message: messages[reason] ?? "The server ended your connection."
+						} );
 						return;
 					}
 					if ( !welcomed ) {
@@ -175,12 +200,20 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 			};
 			current.onerror = () => {
 				if ( active() ) {
-					fail( "Transport connection failed" );
+					fail( "Transport connection failed", undefined, {
+						category: "connection",
+						code: "connection_failed",
+						message: "Connection lost. Please reconnect."
+					} );
 				}
 			};
 			current.onclose = () => {
 				if ( active() ) {
-					end( "Transport connection closed" );
+					end( "Transport connection closed", {
+						category: "unknown",
+						code: "connection_closed",
+						message: "Connection lost. The cause is unknown."
+					} );
 				}
 			};
 		},
@@ -205,9 +238,17 @@ export function createNetwork( onFailure: ( error: string, frame?: WireFrame ) =
 				}
 				inbox.splice( 0, consumed );
 				bytes = inbox.reduce( ( total, frame ) => total + frame.payload.byteLength + 2, 0 );
-				if ( !inbox.length && ended ) fail( ended );
+				if ( !inbox.length && ended ) fail( ended, undefined, endReason );
 			} catch ( error ) {
-				fail( `Packet application failed: ${String( error )}`, current );
+				const unsupported = error instanceof Error && error.cause === "unsupported_feature";
+				fail( `Packet application failed: ${String( error )}`, current, {
+					category: "software",
+					code: unsupported ? "unsupported_feature" : "packet_application_failed",
+					message: unsupported ?
+						"An unsupported game operation interrupted your session." :
+						"A game error interrupted your session.",
+					stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
+				} );
 			}
 		},
 		dispose() {

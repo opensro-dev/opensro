@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+skillmovement_test.go - movement skill activation, replacement and retirement
+
+Exercise the complete action lifecycle and bind qualification receipts to
+the tested inputs when the evidence runner requests one.
+
+===========================================================================
+*/
 package action
 
 import (
@@ -13,6 +23,11 @@ import (
 	"time"
 )
 
+/*
+================
+TestDirectMovementSkillCompleteLifecycle
+================
+*/
 func TestDirectMovementSkillCompleteLifecycle(t *testing.T) {
 	// Receipt is emitted only after every lifecycle subtest passes. It binds
 	// the production inventory (including source hashes), not a mutable label.
@@ -132,35 +147,36 @@ func TestDirectMovementSkillCompleteLifecycle(t *testing.T) {
 				clock.Advance(time.Duration(row.CoolTimeMs) * time.Millisecond)
 				refreshed := rt.HandleTargetInteract(testDivision, c, request.Encode())
 				pending := rt.effects.Snapshot(testDivision, c.Name)
-				if len(pending) != 2 || !pending[0].StopRequested || pending[1].StopRequested ||
-					pending[0].InstanceToken == pending[1].InstanceToken || pending[1].MovementPercent != row.MovementModifier.Percent {
+				if len(pending) != 1 || pending[0].StopRequested ||
+					pending[0].InstanceToken == effects[0].InstanceToken || pending[0].MovementPercent != row.MovementModifier.Percent {
 					t.Fatal("recast replacement ownership", pending, refreshed)
 				}
-				newToken := pending[1].InstanceToken
+				newToken := pending[0].InstanceToken
 				_, run = rt.EntryMovementSpeeds(testDivision, c.Name)
 				if run != want {
 					t.Fatal("recast changed effective run speed before retirement", run, want)
 				}
-				attached := false
+				attached, retiredOldToken := false, false
 				for _, frame := range refreshed.Broadcast {
 					attached = attached || frame.Opcode == wire.OpAttachedEffect
+					if frame.Opcode == wire.OpEndedEffectInstances {
+						ended, err := wire.DecodeEndedEffectInstances(frame.Payload)
+						if err != nil || len(ended.InstanceTokens) != 1 {
+							t.Fatal("decode recast retirement", ended, err)
+						}
+						retiredOldToken = ended.InstanceTokens[0] == effects[0].InstanceToken
+					}
 				}
 				if !attached {
 					t.Fatal("recast did not publish replacement buff", refreshed)
 				}
 				retirement := rt.TickHook()(clock.NowMs() + 1)
-				retiredOldToken, emittedSpeed := false, false
+				emittedSpeed := false
 				for _, batch := range retirement {
 					for _, frame := range batch.Frames {
 						emittedSpeed = emittedSpeed || frame.Opcode == 0x376f
 						if frame.Opcode == wire.OpEndedEffectInstances {
-							ended, err := wire.DecodeEndedEffectInstances(frame.Payload)
-							if err != nil {
-								t.Fatal("decode recast retirement", err)
-							}
-							for _, token := range ended.InstanceTokens {
-								retiredOldToken = retiredOldToken || token == pending[0].InstanceToken
-							}
+							t.Fatal("replacement retired twice")
 						}
 					}
 				}

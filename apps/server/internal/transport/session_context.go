@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+session_context.go - authenticated character binding and world readiness
+
+===========================================================================
+*/
 package transport
 
 import "sync"
@@ -5,6 +12,11 @@ import "sync"
 // sessionPlayerContext owns the game identity and world-snapshot attachment
 // whose lifetime is exactly one bound session. The snapshot is intentionally
 // opaque to transport; only worldsession interprets its package-owned port.
+/*
+================
+sessionPlayerContext
+================
+*/
 type sessionPlayerContext struct {
 	mu            sync.RWMutex
 	accountID     string
@@ -19,6 +31,11 @@ type sessionPlayerContext struct {
 // BindAdmissionIdentity installs the HELLO account/shard identity or
 // confirms that a resumed session presented the same identity. A mismatch is
 // refused without modifying the existing session.
+/*
+================
+BindAdmissionIdentity
+================
+*/
 func (s *Session) BindAdmissionIdentity(accountID, shardID string) bool {
 	s.player.mu.Lock()
 	defer s.player.mu.Unlock()
@@ -31,6 +48,11 @@ func (s *Session) BindAdmissionIdentity(accountID, shardID string) bool {
 }
 
 // AdmissionIdentity returns the authenticated HELLO identity.
+/*
+================
+AdmissionIdentity
+================
+*/
 func (s *Session) AdmissionIdentity() (accountID, shardID string, ok bool) {
 	s.player.mu.RLock()
 	defer s.player.mu.RUnlock()
@@ -45,7 +67,13 @@ func (s *Session) AdmissionIdentity() (accountID, shardID string, ok bool) {
 // objectID is the character's world object id: delivery resolves a
 // character's sessions and visibility from the binding alone, so it never
 // reads the character store and is safe inside a character door.
+/*
+================
+BindCharacter
+================
+*/
 func (s *Session) BindCharacter(divisionID, characterName string, objectID uint32) {
+	s.mu.Lock()
 	s.player.mu.Lock()
 	s.player.divisionID = divisionID
 	s.player.characterName = characterName
@@ -53,10 +81,19 @@ func (s *Session) BindCharacter(divisionID, characterName string, objectID uint3
 	s.player.worldReady = false
 	s.player.worldSnapshot = nil
 	s.player.mu.Unlock()
+	if !s.closed {
+		s.recordHistoryLocked("character_selected", nil)
+	}
+	s.mu.Unlock()
 	s.hub.reindexDivision(s)
 }
 
 // CharacterBinding returns a coherent copy of the bound identity.
+/*
+================
+CharacterBinding
+================
+*/
 func (s *Session) CharacterBinding() (divisionID, characterName string, ok bool) {
 	s.player.mu.RLock()
 	defer s.player.mu.RUnlock()
@@ -67,6 +104,11 @@ func (s *Session) CharacterBinding() (divisionID, characterName string, ok bool)
 }
 
 // CharacterObjectID returns the bound character's world object id.
+/*
+================
+CharacterObjectID
+================
+*/
 func (s *Session) CharacterObjectID() (uint32, bool) {
 	s.player.mu.RLock()
 	defer s.player.mu.RUnlock()
@@ -80,17 +122,33 @@ func (s *Session) CharacterObjectID() (uint32, bool) {
 // It returns true exactly once for each BindCharacter lifecycle. Duplicate
 // client 0x3012 frames are ignored so they cannot replay bootstrap output or
 // re-run world-owned bind hooks such as pending-invite invalidation.
+/*
+================
+TryMarkWorldReady
+================
+*/
 func (s *Session) TryMarkWorldReady() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.player.mu.Lock()
-	defer s.player.mu.Unlock()
 	if s.player.divisionID == "" || s.player.characterName == "" || s.player.worldReady {
+		s.player.mu.Unlock()
 		return false
 	}
 	s.player.worldReady = true
+	s.player.mu.Unlock()
+	if !s.closed {
+		s.recordHistoryLocked("world_entered", nil)
+	}
 	return true
 }
 
 // WorldReady reports whether this bound character completed scene admission.
+/*
+================
+WorldReady
+================
+*/
 func (s *Session) WorldReady() bool {
 	s.player.mu.RLock()
 	defer s.player.mu.RUnlock()
@@ -98,6 +156,11 @@ func (s *Session) WorldReady() bool {
 }
 
 // DivisionID returns the session's current division membership.
+/*
+================
+DivisionID
+================
+*/
 func (s *Session) DivisionID() (string, bool) {
 	s.player.mu.RLock()
 	defer s.player.mu.RUnlock()
@@ -106,6 +169,11 @@ func (s *Session) DivisionID() (string, bool) {
 
 // SetWorldSnapshot publishes the mission-owned snapshot provider and keeps the
 // division index coherent with the provider's world.
+/*
+================
+SetWorldSnapshot
+================
+*/
 func (s *Session) SetWorldSnapshot(divisionID string, snapshot any) {
 	s.player.mu.Lock()
 	s.player.divisionID = divisionID
@@ -115,6 +183,11 @@ func (s *Session) SetWorldSnapshot(divisionID string, snapshot any) {
 }
 
 // WorldSnapshot returns the opaque mission attachment.
+/*
+================
+WorldSnapshot
+================
+*/
 func (s *Session) WorldSnapshot() (any, bool) {
 	s.player.mu.RLock()
 	defer s.player.mu.RUnlock()
@@ -123,7 +196,16 @@ func (s *Session) WorldSnapshot() (any, bool) {
 
 // ClearGameplayContext removes identity and world visibility together. It is
 // used when an exclusive bind loses ownership and during close cleanup.
+/*
+================
+ClearGameplayContext
+================
+*/
 func (s *Session) ClearGameplayContext() {
+	s.mu.Lock()
+	if !s.closed {
+		s.recordHistoryLocked("world_left", nil)
+	}
 	s.player.mu.Lock()
 	s.player.divisionID = ""
 	s.player.characterName = ""
@@ -131,9 +213,15 @@ func (s *Session) ClearGameplayContext() {
 	s.player.worldReady = false
 	s.player.worldSnapshot = nil
 	s.player.mu.Unlock()
+	s.mu.Unlock()
 	s.hub.reindexDivision(s)
 }
 
+/*
+================
+effectiveDivision
+================
+*/
 func (s *Session) effectiveDivision() string {
 	divisionID, _ := s.DivisionID()
 	return divisionID

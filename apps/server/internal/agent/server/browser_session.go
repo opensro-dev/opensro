@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/cluster/shard"
+	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/security/auth"
 )
 
@@ -214,6 +215,9 @@ func (server *Server) handleBrowserLogout(w http.ResponseWriter, r *http.Request
 		return
 	}
 	server.setBrowserSession(w, r, "", true)
+	if identity, _, ok := server.resolveBrowserIdentity(r); ok {
+		server.history.Record(history.Event{Kind: "logout", Category: "expected", Code: "browser_logout", Account: identity.accountID, Character: identity.character, Shard: identity.definition.ID})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

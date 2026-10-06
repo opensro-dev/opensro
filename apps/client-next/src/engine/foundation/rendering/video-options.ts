@@ -14,6 +14,23 @@ displayScale). It shrinks only when the page is smaller than the mode.
 // true restores sphere reflections, actor ambient .6 and temporary hit lighting.
 // This build switch takes precedence over the saved Metal Detail option.
 export const NATIVE_CHARACTER_LIGHTING = false;
+// Zero follows requestAnimationFrame at the current display refresh rate.
+export const DEFAULT_FRAME_LIMIT = 0;
+/*
+================
+frameLimits
+
+Browser presentation preference; never encoded into the native detail banks.
+================
+*/
+export function frameLimits(): readonly number[] {
+	return [ 60, 120, 240, 0 ];
+}
+/*
+================
+VideoRecords
+================
+*/
 type VideoRecords = readonly [readonly number[], readonly number[]];
 // Screen size (Option window GDR_OPT_VIDEO_CB_SS). The first entry is the
 // whole page; the others are fixed modes drawn 1:1, centred and letterboxed.
@@ -48,7 +65,13 @@ The listed mode equal to `size`, 0 (the whole page) when none is.
 export function displaySizeIndex( size: readonly [number, number] | undefined ): number {
 	return size ? Math.max( 0, displaySizes().findIndex( m => m[0] === size[0] && m[1] === size[1] ) ) : 0;
 }
+/*
+================
+VideoOptions
+================
+*/
 export interface VideoOptions {
+	readonly frameLimit?: number;
 	readonly custom?: VideoRecords;
 	readonly active: 0 | 1;
 	readonly records: readonly [readonly number[], readonly number[]];
@@ -63,7 +86,7 @@ defaultVideoOptions
 */
 export function defaultVideoOptions(): VideoOptions {
 	const row = [ 1, 0, 2, 2, 0, 1, 1, 1, 1, 2, 1, 0, 1, 2, 0, 0 ];
-	return { active: 0, records: [ [ ...row ], [ ...row ] ] };
+	return { active: 0, records: [ [ ...row ], [ ...row ] ], frameLimit: DEFAULT_FRAME_LIMIT };
 }
 // Slots 3 and 5 are selectable but change nothing, as in the native client:
 // 713EC0 maps them to SWorld properties 9 and 7, which 8A54C0 only stores
@@ -166,7 +189,11 @@ export function videoOptions( value: unknown ): VideoOptions {
 	if ( v.displaySize !== undefined && displaySizeIndex( v.displaySize ) === 0 ) {
 		throw Error( "Invalid display size" );
 	}
+	if ( v.frameLimit !== undefined && !frameLimits().includes( v.frameLimit ) ) {
+		throw Error( "Invalid frame limit" );
+	}
 	return {
+		frameLimit: v.frameLimit ?? DEFAULT_FRAME_LIMIT,
 		active: v.active,
 		records: [ [ ...v.records[0] ], [ ...v.records[1] ] ],
 		...(v.custom ? { custom: [ [ ...v.custom[0] ], [ ...v.custom[1] ] ] as VideoRecords } : {}),
@@ -236,5 +263,5 @@ export function resetVideoRecord( options: VideoOptions ): VideoOptions {
 		custom = (options.custom ?? options.records).map( r => [ ...r ] ) as [number[], number[]];
 	records[options.active] = [ ...defaults.records[options.active] ];
 	custom[options.active] = [ ...defaults.records[options.active] ];
-	return { ...options, records, custom };
+	return { ...options, records, custom, frameLimit: DEFAULT_FRAME_LIMIT };
 }

@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/simulation"
@@ -145,7 +146,9 @@ type Runtime struct {
 	Fortresses *fortress.Authority
 	// Unions is the guild union authority the fortress war asks for the
 	// holder's allies (fortress_allies.go).
-	Unions *union.Authority
+	Unions       *union.Authority
+	GuildWars    *guildwar.Authority
+	GuildWarKill func(division string, combat domain.GuildWarCombat, nowMs int64)
 	// Guilds is the persisted guild topology the fortress official reads
 	// (level, members, master).
 	Guilds enterworld.GuildStore
@@ -153,6 +156,8 @@ type Runtime struct {
 	// which the fortress official shows; the fortress-war lane owns the
 	// schedule.
 	FortressWindows func(nowMs int64) time.Time
+	// FortressWarDates reads the previous and current/next war from that lane.
+	FortressWarDates func(nowMs int64) (previous, next time.Time)
 	// FortressList is the lane's subtype-0 fortress list for a guild,
 	// re-sent to the owning guild when its war begins (4E0680).
 	FortressList func(guildID int64) []byte
@@ -576,6 +581,7 @@ func invItemsFromRowsWithin(rows []enterworld.InventoryRow, slotEnd int64) []inv
 
 		out = append(out, inventory.Item{
 			RecordID:          row.RecordID,
+			TradeOwner:        row.TradeOwner,
 			Slot:              uint8(row.Slot),
 			RefObjID:          row.RefObjID,
 			Codename:          row.Codename,
@@ -606,6 +612,7 @@ func rowsFromInvItems(items []inventory.Item) []enterworld.InventoryRow {
 	for _, item := range items {
 		out = append(out, enterworld.InventoryRow{
 			RecordID:          item.RecordID,
+			TradeOwner:        item.TradeOwner,
 			Slot:              int64(item.Slot),
 			RefObjID:          item.RefObjID,
 			Codename:          item.Codename,

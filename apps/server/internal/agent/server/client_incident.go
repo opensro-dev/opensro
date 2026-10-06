@@ -22,7 +22,9 @@ package agentserver
 
 import (
 	"encoding/hex"
+	"fmt"
 	"net/http"
+	"opensro.online/server/internal/platform/history"
 	"regexp"
 	"strings"
 
@@ -40,7 +42,7 @@ const (
 )
 
 // incidentKind names the failures a client may report.
-var incidentKinds = map[string]bool{"packet": true, "transport": true}
+var incidentKinds = map[string]bool{"packet": true, "transport": true, "runtime": true, "asset": true, "unsupported": true}
 
 var incidentNamePattern = regexp.MustCompile(`^[\p{L}\p{N}_\[\] .-]*$`)
 
@@ -54,6 +56,11 @@ application.
 ================
 */
 type clientIncident struct {
+	Category    string `json:"category,omitempty"`
+	ID          string `json:"id,omitempty"`
+	Session     string `json:"session,omitempty"`
+	Code        string `json:"code,omitempty"`
+	Stack       string `json:"stack,omitempty"`
 	Kind        string `json:"kind"`
 	Message     string `json:"message"`
 	Opcode      *int   `json:"opcode,omitempty"`
@@ -73,6 +80,18 @@ Rejects a report whose fields the log line could not carry faithfully.
 ================
 */
 func (incident clientIncident) valid() bool {
+	if incident.Category != "" && incident.Category != "expected" && incident.Category != "connection" && incident.Category != "software" && incident.Category != "unknown" {
+		return false
+	}
+	if incident.ID != "" && !incidentIdentifier.MatchString(incident.ID) {
+		return false
+	}
+	if incident.Session != "" && !incidentSessionIdentifier.MatchString(incident.Session) {
+		return false
+	}
+	if len(incident.Code) > 64 || (incident.Code != "" && !incidentNamePattern.MatchString(incident.Code)) || len(incident.Stack) > 8192 {
+		return false
+	}
 	if !incidentKinds[incident.Kind] || incident.Message == "" || len(incident.Message) > maxIncidentMessage {
 		return false
 	}
@@ -139,6 +158,43 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		fields["payload"] = incident.Payload
 		fields["payloadSize"] = incident.PayloadSize
 	}
+	id := incident.ID
+	if id == "" {
+		var err error
+		id, err = history.NewID()
+		if err != nil {
+			http.Error(w, "incident reference unavailable", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	category := "software"
+	if incident.Kind == "transport" {
+		category = "unknown"
+	}
+	if incident.Category != "" {
+		category = incident.Category
+	}
+	code := incident.Code
+	if code == "" {
+		code = incident.Kind + "_failure"
+	}
+	event := history.Event{ID: id, Kind: "client_incident", Account: claims.AccountID, Shard: definition.ID,
+		Character: incident.Character, Session: incident.Session, Category: category, Code: code, Message: incident.Message,
+		Build: incident.Build, Evidence: "client_reported", Stack: incident.Stack, Fields: map[string]string{"phase": incident.Phase, "region": fmt.Sprint(incident.Region)}}
+	if incident.Opcode != nil {
+		event.Opcode = fmt.Sprintf("0x%04X", *incident.Opcode)
+	}
+	if server.history != nil {
+		if err := server.history.RecordConfirmed(r.Context(), event); err != nil {
+			http.Error(w, "incident storage unavailable; retry with the same id", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	fields["incident"] = id
+	fields["diagnosticSession"] = incident.Session
 	log.WithFields(fields).Warn("agent: client incident")
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
+
+var incidentIdentifier = regexp.MustCompile(`^[a-f0-9]{32}$`)
+var incidentSessionIdentifier = regexp.MustCompile(`^[a-f0-9]{32}:[0-9]{1,20}$`)

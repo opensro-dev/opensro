@@ -10,6 +10,11 @@ id lookup UI code uses.
 ===========================================================================
 */
 import type { Progression } from "./progression";
+/*
+================
+SkillMetadata
+================
+*/
 export interface SkillMetadata {
 	readonly id: number;
 	readonly group: number;
@@ -39,7 +44,7 @@ export interface SkillMetadata {
 	readonly targetSelf?: boolean;
 	readonly groundTarget?: boolean;
 	readonly cooldownMs: number;
-	// Action_CastingTime + Action_ActionDuration (columns 12 + 13): the action
+	// Preparation + casting + recovery (columns 11 + 12 + 13): the action
 	// actor's lifetime, which holds the caster's action state 2 (cast-motion-lock).
 	readonly actionMs?: number;
 	// An ordinary cast (activity 2): it stops the caster's walk where it stands
@@ -65,6 +70,11 @@ export interface SkillMetadata {
 	readonly masteries: readonly Requirement[];
 	readonly prerequisites: readonly Requirement[];
 }
+/*
+================
+StatusLevel
+================
+*/
 export interface StatusLevel {
 	readonly mask: number;
 	readonly level: number;

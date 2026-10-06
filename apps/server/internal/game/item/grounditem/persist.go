@@ -30,6 +30,7 @@ persistedFromItem
 func persistedFromItem(item Item) domain.GroundItemRecord {
 	row := domain.GroundItemRecord{
 		RecordID:          item.RecordID,
+		TradeOwner:        item.TradeOwner,
 		PopulationWorld:   item.Population.World,
 		MagicOptions:      append([]uint64(nil), item.MagicOptions...),
 		TransformRefObjID: item.TransformRefObjID, Summon: domain.CloneCOS(item.Summon),
@@ -72,6 +73,7 @@ func itemFromPersisted(row domain.GroundItemRecord) Item {
 	}
 	item := Item{
 		RecordID:          row.RecordID,
+		TradeOwner:        row.TradeOwner,
 		MagicOptions:      append([]uint64(nil), row.MagicOptions...),
 		TransformRefObjID: row.TransformRefObjID, Summon: domain.CloneCOS(row.Summon),
 		Gid:          row.Gid,

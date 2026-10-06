@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+session.go - connection attachment, queues and transport IO
+
+===========================================================================
+*/
 package transport
 
 import (
@@ -36,6 +43,11 @@ var (
 // handlers receive it in dispatch and use Send / SendUnreliable to push
 // frames. Its player context is explicit: arbitrary game state cannot be
 // attached to the transport lifecycle.
+/*
+================
+Session
+================
+*/
 type Session struct {
 	ID uint64
 
@@ -51,9 +63,10 @@ type Session struct {
 	sceneLoading    bool
 	observedObjects map[uint32]struct{}
 
-	queue      []Frame
-	queueBytes int
-	drainClose bool // close the session once the queue flushes
+	queue       []Frame
+	queueBytes  int
+	drainClose  bool         // close the session once the queue flushes
+	closeReason *CloseReason // retained even when teardown is triggered by a drain timeout
 
 	// The lossy lane: loss-tolerant frames coalesced per (opcode, key) so a
 	// WebSocket client under backlog gets the LATEST position instead of a
@@ -90,11 +103,21 @@ type Session struct {
 }
 
 // lossySlot identifies one coalesce slot on the lossy lane.
+/*
+================
+lossySlot
+================
+*/
 type lossySlot struct {
 	Opcode uint16
 	Key    uint64
 }
 
+/*
+================
+newSession
+================
+*/
 func newSession(hub *Hub, id uint64, token [ResumeTokenLen]byte) *Session {
 	s := &Session{
 		ID:          id,
@@ -114,6 +137,11 @@ func newSession(hub *Hub, id uint64, token [ResumeTokenLen]byte) *Session {
 
 // Kind reports the current transport ("webtransport", "websocket") or
 // "detached".
+/*
+================
+Kind
+================
+*/
 func (s *Session) Kind() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -124,6 +152,11 @@ func (s *Session) Kind() string {
 }
 
 // RemoteAddr is the peer of the current connection, or "" while detached.
+/*
+================
+RemoteAddr
+================
+*/
 func (s *Session) RemoteAddr() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,6 +168,11 @@ func (s *Session) RemoteAddr() string {
 
 // metricsSnapshot returns the two session-local gauges used by Hub.Metrics.
 // It deliberately exposes no mutable queue storage.
+/*
+================
+metricsSnapshot
+================
+*/
 func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,22 +180,42 @@ func (s *Session) metricsSnapshot() (attached bool, queueDepth, queueBytes int) 
 }
 
 // Done is closed when the session is torn down for good.
+/*
+================
+Done
+================
+*/
 func (s *Session) Done() <-chan struct{} { return s.done }
 
 // markEvicted flips the session into lame-duck mode. One-way; called by
 // Hub.BindExclusive when another session takes this session's bind key.
+/*
+================
+markEvicted
+================
+*/
 func (s *Session) markEvicted() { s.evicted.Store(true) }
 
 // Evicted reports whether the session lost its bind key to a replacement
 // (single-session bind, BYE Replaced) and is now a lame duck: inbound game
 // frames are dropped, outbound game frames are refused, and the mission
 // tick no longer sees it. Control frames still flow so the BYE drain works.
+/*
+================
+Evicted
+================
+*/
 func (s *Session) Evicted() bool { return s.evicted.Load() }
 
 // Send queues a frame on the reliable, ordered channel. It never blocks on
 // the network; a queue overflow closes the session (slow consumer) and
 // subsequent Sends fail with ErrSessionClosed. The payload is copied, so
 // callers may reuse their buffer immediately.
+/*
+================
+Send
+================
+*/
 func (s *Session) Send(opcode uint16, payload []byte) error {
 	if opcode > maxReservedOpcode && s.evicted.Load() {
 		// Lame duck: the drain may flush only what the
@@ -193,12 +251,27 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 //
 // The batch remains bounded by both configured frame and byte limits. Payloads
 // are copied before publication, exactly as in Send.
+/*
+================
+SendBatch
+================
+*/
 func (s *Session) SendBatch(frames []Frame) error { return s.sendSceneBatch(frames, nil, false) }
 
+/*
+================
+sendSceneBatch
+================
+*/
 func (s *Session) sendSceneBatch(frames []Frame, revision *uint64, reset bool) error {
 	return s.sendSceneObjectBatch(frames, revision, reset, 0, nil)
 }
 
+/*
+================
+sendSceneObjectBatch
+================
+*/
 func (s *Session) sendSceneObjectBatch(frames []Frame, revision *uint64, reset bool, observedGID uint32, changes []ObjectScopeChange) error {
 	// Copy before appending: callers retain ownership of their metadata.
 	changes = append([]ObjectScopeChange(nil), changes...)
@@ -306,6 +379,11 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, revision *uint64, reset b
 //
 // Only IsLossTolerantOpcode frames may travel unreliably (freeze rule);
 // any other opcode is transparently routed onto the reliable lane.
+/*
+================
+SendUnreliable
+================
+*/
 func (s *Session) SendUnreliable(opcode uint16, payload []byte) error {
 	if opcode > maxReservedOpcode && s.evicted.Load() {
 		return ErrSessionEvicted // lame duck: no ticks on any lane
@@ -343,10 +421,20 @@ func (s *Session) SendUnreliable(opcode uint16, payload []byte) error {
 // Only IsLossTolerantOpcode frames may travel unreliably or coalesce
 // (coalescing DROPS superseded frames, which must never happen to
 // must-deliver traffic); anything else routes onto the reliable lane.
+/*
+================
+SendUnreliableKeyed
+================
+*/
 func (s *Session) SendUnreliableKeyed(opcode uint16, key uint64, payload []byte) error {
 	return s.sendSceneUnreliableKeyed(opcode, key, payload, nil)
 }
 
+/*
+================
+sendSceneUnreliableKeyed
+================
+*/
 func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []byte, revision *uint64) error {
 	if opcode > maxReservedOpcode && s.evicted.Load() {
 		return ErrSessionEvicted // lame duck: no ticks on any lane
@@ -417,6 +505,11 @@ func (s *Session) sendSceneUnreliableKeyed(opcode uint16, key uint64, payload []
 
 // pushFront queues a frame ahead of everything pending; only the WELCOME
 // uses it so a resuming client always hears WELCOME first.
+/*
+================
+pushFront
+================
+*/
 func (s *Session) pushFront(f Frame) {
 	s.queue = append([]Frame{f}, s.queue...)
 	s.queueBytes += f.EncodedLen()
@@ -426,6 +519,11 @@ func (s *Session) pushFront(f Frame) {
 
 // attach binds a new connection to the session and starts its read loop.
 // Caller must NOT hold s.mu.
+/*
+================
+attach
+================
+*/
 func (s *Session) attach(conn Conn, resumed bool) error {
 	s.mu.Lock()
 	if s.closed {
@@ -468,6 +566,11 @@ func (s *Session) attach(conn Conn, resumed bool) error {
 		SessionID:   s.ID,
 		ResumeToken: s.resumeToken[:],
 	})})
+	kind := "connected"
+	if resumed {
+		kind = "resumed"
+	}
+	s.recordHistoryLocked(kind, nil)
 	s.mu.Unlock()
 
 	go s.readLoop(conn, gen, ctx)
@@ -480,6 +583,11 @@ func (s *Session) attach(conn Conn, resumed bool) error {
 // detachGen moves the session into the detached (resumable) state if gen is
 // still the current attachment. Stale loops calling in after a resume are
 // no-ops. Caller must NOT hold s.mu.
+/*
+================
+detachGen
+================
+*/
 func (s *Session) detachGen(gen int, cause error) {
 	s.mu.Lock()
 	if s.closed || gen != s.gen || !s.attached {
@@ -495,6 +603,7 @@ func (s *Session) detachGen(gen int, cause error) {
 	}
 	grace := s.hub.cfg.GracePeriod
 	s.expireTimer = time.AfterFunc(grace, func() { s.expireIfDetached() })
+	s.recordHistoryLocked("detached", cause)
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	s.hub.metrics.detaches.Add(1)
@@ -511,6 +620,11 @@ func (s *Session) detachGen(gen int, cause error) {
 		Info("transport: session detached, awaiting resume")
 }
 
+/*
+================
+expireIfDetached
+================
+*/
 func (s *Session) expireIfDetached() {
 	s.mu.Lock()
 	if s.closed || s.attached {
@@ -523,13 +637,22 @@ func (s *Session) expireIfDetached() {
 
 // closeNow is the final teardown. Returns false if already closed. Caller
 // must NOT hold s.mu. Hooks and map removal are the hub's job.
-func (s *Session) closeNow() bool {
+/*
+================
+closeNow
+================
+*/
+func (s *Session) closeNow(cause error) (bool, error) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
-		return false
+		return false, cause
 	}
 	s.closed = true
+	if cause == nil && s.closeReason != nil {
+		cause = *s.closeReason
+	}
+	s.recordHistoryLocked("ended", cause)
 	conn := s.conn
 	s.conn = nil
 	s.attached = false
@@ -560,7 +683,7 @@ func (s *Session) closeNow() bool {
 		conn.Close("session closed")
 	}
 	close(s.done)
-	return true
+	return true, cause
 }
 
 // CloseWhenDrained queues a BYE and tears the session down once the queue
@@ -574,11 +697,19 @@ func (s *Session) closeNow() bool {
 // attach does win the race between the unlock below and closeSession, both
 // interleavings stay safe: attach refuses a closed session, and
 // closeSession is idempotent (closeNow returns false once closed).
+/*
+================
+CloseWhenDrained
+================
+*/
 func (s *Session) CloseWhenDrained(reason uint8) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return
+	}
+	if s.closeReason == nil {
+		s.closeReason = &CloseReason{Reason: reason}
 	}
 	if !s.attached {
 		// closeSession takes s.mu via closeNow; never call it locked.
@@ -608,6 +739,11 @@ func (s *Session) CloseWhenDrained(reason uint8) {
 // connection is attached; re-queues an ordered frame at the front when a
 // write fails against the same attachment (lossy frames are simply lost);
 // and exits at final close.
+/*
+================
+writeLoop
+================
+*/
 func (s *Session) writeLoop() {
 	for {
 		s.mu.Lock()
@@ -671,6 +807,11 @@ func (s *Session) writeLoop() {
 // readLoop pulls frames off one attachment. Transport-control frames are
 // handled here; game frames go to the hub dispatcher, serially, so one
 // session's handlers never race each other.
+/*
+================
+readLoop
+================
+*/
 func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 	for {
 		f, err := conn.ReadFrame(ctx)
@@ -714,7 +855,7 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 				}
 				// lastRecv already refreshed; nothing else to do.
 			case OpBye:
-				s.hub.closeSession(s, nil)
+				s.hub.closeSession(s, CloseReason{Reason: ByeReasonNormal})
 				return
 			case OpHello:
 				// A second HELLO mid-session is a protocol violation.
@@ -734,6 +875,11 @@ func (s *Session) readLoop(conn Conn, gen int, ctx context.Context) {
 
 // keepaliveLoop pings an attached-but-quiet client and detaches one that
 // has gone silent past the idle timeout, giving it the resume grace window.
+/*
+================
+keepaliveLoop
+================
+*/
 func (s *Session) keepaliveLoop() {
 	interval := s.hub.cfg.KeepaliveInterval
 	ticker := time.NewTicker(interval)

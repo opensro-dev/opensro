@@ -207,6 +207,7 @@ func (rt *Runtime) grantPickup(
 		var fault *inventory.Fault
 		grant, fault = inv.GrantStack(inventory.Item{
 			RecordID:          groundItem.RecordID,
+			TradeOwner:        groundItem.TradeOwner,
 			RefObjID:          groundItem.RefObjID,
 			Codename:          groundItem.Codename,
 			TypeFlags:         groundItem.TypeFlags,
@@ -246,6 +247,7 @@ func (rt *Runtime) grantPickup(
 	}
 
 	body := wire.ItemBody{
+		TradeOwner:        grantedItem.TradeOwner,
 		TypeFlags:         grantedItem.TypeFlags,
 		Quantity:          grantedItem.Quantity,
 		RefObjID:          grantedItem.RefObjID,

@@ -491,6 +491,7 @@ func (rt *Runtime) cosAbnormalPublication(gid uint32, o *cosAbnormalOwner) []wir
 	}
 	if o.speedChanged {
 		frames = append(frames, rt.refreshCosAbnormalSpeed(o)...)
+		frames = append(frames, wire.ActionSpeedFrame(gid, o.Param(actionSpeedParameter)))
 	}
 	if o.died {
 		life := beginFatalLifePublication(gid)

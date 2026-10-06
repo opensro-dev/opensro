@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
+	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/logging"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
@@ -109,7 +111,18 @@ func main() {
 		log.Fatalf("agent: bug reports: %v", err)
 	}
 	ready := readiness.NewGate()
+	journal, err := history.Open(filepath.Join(filepath.Dir(directoryPath), "history.sqlite"), "agent", "", history.Build())
+	if err != nil {
+		log.Fatalf("agent: operator history: %v", err)
+	}
+	defer journal.Close()
+	log.AddHook(journal)
+	historyHandler, err := history.OperatorHandler(journal, filepath.Join(filepath.Dir(directoryPath), "operator-token"))
+	if err != nil {
+		log.Fatalf("agent: history reader: %v", err)
+	}
 	server, err := agentserver.New(agentserver.Config{
+		History: journal, HistoryHandler: historyHandler,
 		Accounts:                accounts,
 		Catalog:                 catalog,
 		Directory:               directory,

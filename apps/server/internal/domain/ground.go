@@ -36,8 +36,9 @@ GroundItemRecord
 ================
 */
 type GroundItemRecord struct {
-	Summon   *CharacterCOS `json:"summon,omitempty"`
-	RecordID uint64        `json:"recordId,omitempty,string"`
+	TradeOwner string        `json:"tradeOwner,omitempty"`
+	Summon     *CharacterCOS `json:"summon,omitempty"`
+	RecordID   uint64        `json:"recordId,omitempty,string"`
 	// PopulationWorld identifies the owning world. Process-local population
 	// generations are deliberately excluded from persistence.
 	PopulationWorld uint32   `json:"populationWorld,omitempty"`

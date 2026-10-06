@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+wiring_authority.go - wiring authority
+
+===========================================================================
+*/
 package main
 
 import (
@@ -39,6 +46,11 @@ type authorityPlane struct {
 	textdata   *enterworld.TextdataCatalogs
 }
 
+/*
+================
+characterPresentationProjector
+================
+*/
 func characterPresentationProjector(
 	roster *enterworld.Roster,
 	levels enterworld.LevelDataSource,
@@ -70,6 +82,11 @@ func characterPresentationProjector(
 	}
 }
 
+/*
+================
+characterItems
+================
+*/
 func characterItems(items []enterworld.VisualItem) []agentapi.CharacterItem {
 	out := make([]agentapi.CharacterItem, 0, len(items))
 	for _, item := range items {
@@ -78,6 +95,11 @@ func characterItems(items []enterworld.VisualItem) []agentapi.CharacterItem {
 	return out
 }
 
+/*
+================
+openAuthorityPlane
+================
+*/
 func openAuthorityPlane(
 	ts *transport.Server,
 	ownedShard shard.Definition,
@@ -182,6 +204,11 @@ func openAuthorityPlane(
 	}, nil
 }
 
+/*
+================
+newBootstrapDependencies
+================
+*/
 func newBootstrapDependencies(
 	authorityStore *store.Store,
 	paths enterworld.DevPaths,
@@ -216,6 +243,7 @@ func newBootstrapDependencies(
 		return authorityStore.UpdateCharacter(character, label, update)
 	}
 	deps.UpdateCharacters = authorityStore.UpdateCharacters
+	deps.UpdateTrade = authorityStore.UpdateTrade
 	deps.ReadCharacter = func(divisionID string, read func()) {
 		authorityStore.ReadState(read)
 	}
@@ -224,12 +252,18 @@ func newBootstrapDependencies(
 	}
 	deps.Letters = authorityStore.Letters()
 	deps.Guilds = authorityStore.Guilds()
+	deps.GuildWars = authorityStore.GuildWars()
 	deps.TrainingCamps = authorityStore.TrainingCamps()
 	deps.Fortresses = authorityStore.Fortresses()
 	deps.Alliances = authorityStore.Alliances()
 	return deps, nil
 }
 
+/*
+================
+configureStoreReadiness
+================
+*/
 func configureStoreReadiness(
 	ts *transport.Server,
 	authorityStore *store.Store,
@@ -252,6 +286,11 @@ func configureStoreReadiness(
 	})
 }
 
+/*
+================
+logAuthorityReady
+================
+*/
 func logAuthorityReady(authorityStore *store.Store, deps *enterworld.Deps) {
 	characterCount := 0
 	divisionIDs := authorityStore.DivisionIDs()

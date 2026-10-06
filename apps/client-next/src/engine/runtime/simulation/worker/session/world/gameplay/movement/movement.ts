@@ -100,8 +100,9 @@ interface DirectionReference {
 const REANCHOR_REPORT_UNITS = 1;
 // The first reports in full, then every REANCHOR_REPORT_EVERY-th with the
 // running count, so a recurring snap never goes silent.
-const MAX_REANCHOR_REPORTS = 32;
+const MAX_REANCHOR_REPORTS = 1;
 const REANCHOR_REPORT_EVERY = 50;
+const RECENT_REANCHOR_LIMIT = 16;
 
 /*
 ================
@@ -167,6 +168,7 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 				owners?: readonly NavOwnerSpan[];
 				castToken?: number;
 				fixedTiming?: boolean;
+				admitted?: boolean;
 				// A leg of a direction walk; blocked legs end the walk.
 				direction?: { heading: number; blocked: boolean; };
 			})
@@ -181,6 +183,12 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 	let surfaceCursor: import("@/engine/contracts/navigation").SurfaceCursor = {};
 	let speed = 50, walkSpeed = 20, runSpeed = 50, mode = 3;
 	let movementRevision = 0;
+	let transitionOwner: NavOwner | undefined;
+	let transition: import("@/engine/contracts/gameplay").MovementTransition = {
+		relocation: 0,
+		reason: "spawn",
+		eligible: false
+	};
 	// Simulation time of the last stepped pose; presentation extrapolates from it.
 	let poseAtMs = 0;
 	let nextId = 0, acknowledged = 0, error: string | null = null;
@@ -197,11 +205,47 @@ export function createMovement( send: ( frame: import("@/engine/contracts/networ
 		resume: Parameters<typeof bindOwners>[0] | null;
 	} | null = null;
 	let reanchorReports = 0;
+	const recentReanchors: { revision: number; source: string; distance: number; before: Pose; after: Pose; }[] = [];
 	const pending = new Map<number, {
 		to: Pose;
 		sent: number;
 		direction?: number;
 	}>();
+	/*
+================
+beginTransition
+
+Publish presentation intent separately from authoritative motion. Generation
+changes survive multiple worker steps being delivered in one publication.
+================
+	*/
+	function beginTransition( reason: typeof transition.reason, reset = false ) {
+		movementRevision++;
+		transitionOwner = owner;
+		transition = { relocation: transition.relocation + Number( reset ), reason, eligible: !reset };
+	}
+	/*
+================
+admitCorrection
+
+Only complete, non-sliding navigation coverage permits a cosmetic glide.
+This query does not change the authoritative pose or its surface owner.
+================
+	*/
+	function admitCorrection( before: Pose, after: Pose ) {
+		const resolved = sameNavigationSpace( before, after ) ?
+			navigation.clip( before, after, { slide: false, sourceOwner: transitionOwner } ) :
+			null;
+		const eligible = !!resolved && poseDistance( resolved, after ) < ENDPOINT_EPSILON;
+		// A newer input can replace the reason before publication, but cannot
+		// erase a discontinuity through disconnected navigation.
+		transition = {
+			...transition,
+			relocation: transition.relocation + Number( !eligible ),
+			eligible,
+			corridor: eligible ? { from: before, to: after } : undefined
+		};
+	}
 	/*
 ================
 samePredictedGoal
@@ -249,13 +293,23 @@ reported snap is never a guess. Called with the final committed pose.
 ================
 	*/
 	function noteReanchor( source: string, before: Pose, after: Pose, details: object ) {
+		admitCorrection( before, after );
 		const jump = sameNavigationSpace( before, after ) ? poseDistance( before, after ) : Infinity;
+		transition = { ...transition, logicalDistance: jump };
 		if ( jump < REANCHOR_REPORT_UNITS ) return;
 		reanchorReports++;
+		recentReanchors.push( {
+			revision: movementRevision,
+			source,
+			distance: jump,
+			before: { ...before },
+			after: { ...after }
+		} );
+		if ( recentReanchors.length > RECENT_REANCHOR_LIMIT ) recentReanchors.shift();
 		if ( reanchorReports > MAX_REANCHOR_REPORTS && reanchorReports % REANCHOR_REPORT_EVERY !== 0 ) return;
 		console.warn(
-			`[SRO movement] ${source} moved the player ${jump.toFixed( 1 )} units (report ${reanchorReports})`,
-			{ before, after, ...details }
+			`[SRO movement] logical ${source}: ${jump.toFixed( 1 )} units (${reanchorReports} corrections)`,
+			{ before, after, revision: movementRevision, transition, ...details }
 		);
 	}
 	/*
@@ -348,7 +402,7 @@ CATCHUP_SPEED_FACTOR, so it reads as walking and not as a slide or a jump.
 		if ( !castHold ) return;
 		const held = castHold.pose, resume = castHold.resume;
 		castHold = null;
-		movementRevision++;
+		beginTransition( "cast" );
 		if ( !resume ) return;
 		const remaining = poseDistance( held, resume.to ),
 			arrival = resume.start + resume.duration,
@@ -377,7 +431,8 @@ bindOwners
 			sourceOwner: owner
 		};
 		const resolved = navigation.clip( value.from, value.to, query );
-		return { ...value, owners: resolved && poseDistance( resolved, value.to ) < .01 ? query.owners : undefined };
+		const admitted = !!resolved && poseDistance( resolved, value.to ) < ENDPOINT_EPSILON;
+		return { ...value, admitted, owners: admitted ? query.owners : undefined };
 	}
 	/*
 ================
@@ -415,6 +470,7 @@ server did.
 			lead,
 			duration: travelled / (speed * factor) * 1000,
 			owners: clipped ? query.owners : undefined,
+			admitted: !!clipped,
 			direction: { heading, blocked: !!clipped && directionLegBlocked( travelled ) }
 		};
 	}
@@ -507,6 +563,7 @@ life
 			pending.clear();
 			error = null;
 			life = "dead";
+			beginTransition( "death", true );
 		},
 		/*
 ================
@@ -515,6 +572,7 @@ displace
 		*/
 		displace( command: import("@/engine/contracts/gameplay").CastDisplacement, now: number ) {
 			if ( !pose ) return;
+			beginTransition( "displacement", true );
 			owner = liveOwner( now );
 			const from = segment ? sampleMovement( segment, now ) : pose,
 				next = displacementSegment( from, command, now );
@@ -570,7 +628,7 @@ and reaching range pulled the player 28 to 120 units forward at once
 			castHold = { pose, since: now, until: now + CAST_HOLD_MS, resume: segment };
 			segment = null;
 			walk = null;
-			movementRevision++;
+			beginTransition( "cast" );
 		},
 		/*
 ================
@@ -714,7 +772,7 @@ native
 			advanceTo( now );
 			const current = pose;
 			castHold = null;
-			movementRevision++;
+			beginTransition( "native" );
 			const adopt = predicted !== null && decoded.kind !== "direction" &&
 				samePredictedGoal( predicted.to, decoded.to );
 			predicted = null;
@@ -780,7 +838,7 @@ navigation
 			navigationRegion = region;
 			surfaceCursor = {};
 			owner = navigation.relocate( kept );
-			if ( segment ) segment = { ...segment, owners: undefined };
+			if ( segment ) segment = { ...segment, owners: undefined, admitted: false };
 			// Spawn may precede collision admission. Stationary actors never enter
 			// the movement-step surface resolver, so finish grounding here.
 			else if ( pose ) pose = authoritative = navigation.surface( pose, pose, owner );
@@ -800,7 +858,7 @@ seed
 ================
 		*/
 		seed( value: Pose ) {
-			movementRevision++;
+			beginTransition( "spawn", true );
 			life = "alive";
 			surfaceCursor = {};
 			owner = undefined;
@@ -817,7 +875,7 @@ correct
 ================
 		*/
 		correct( value: Pose, now?: number ) {
-			movementRevision++;
+			beginTransition( "correction" );
 			// What the walk was doing when the correction came, for the report:
 			// a large one names its cause (a hold the server never settled, a
 			// walk of the wrong lead) instead of only its size.
@@ -866,7 +924,8 @@ correct
 						timing: "speed",
 						lead: "client",
 						duration: movementDuration( poseDistance( pose, clipped ), speed ),
-						owners: query.owners
+						owners: query.owners,
+						admitted: true
 					};
 				}
 			}
@@ -913,7 +972,7 @@ request
 			const frame = { opcode: OP_PREDICTED_MOVE, payload };
 			send( frame );
 			nextId = id;
-			movementRevision++;
+			beginTransition( "input" );
 			pending.set( id, { to, sent: now } );
 			error = null;
 			walk = null;
@@ -926,7 +985,8 @@ request
 					timing: "speed",
 					lead: "client",
 					duration: movementDuration( poseDistance( pose, clipped ), speed ),
-					owners: query.owners
+					owners: query.owners,
+					admitted: true
 				};
 			}
 			return frame;
@@ -952,7 +1012,7 @@ walk (native); a refusal ends it (endPrediction).
 				};
 			const clipped = navigation.clip( current, to, query );
 			if ( !clipped || poseDistance( clipped, to ) >= ENDPOINT_EPSILON ) return false;
-			movementRevision++;
+			beginTransition( "input" );
 			predicted = { from: current, to };
 			pose = current;
 			segment = {
@@ -962,7 +1022,8 @@ walk (native); a refusal ends it (endPrediction).
 				timing: "speed",
 				lead: "client",
 				duration: movementDuration( poseDistance( current, clipped ), speed ),
-				owners: query.owners
+				owners: query.owners,
+				admitted: true
 			};
 			return true;
 		},
@@ -978,7 +1039,7 @@ start, so walk back there.
 			if ( !predicted || !pose ) return;
 			const from = predicted.from, current = segment ? sampleMovement( segment, now ) : pose;
 			predicted = null;
-			movementRevision++;
+			beginTransition( "cast" );
 			pose = current;
 			segment = bindOwners( {
 				from: current,
@@ -1032,7 +1093,7 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			const frame = { opcode: OP_PREDICTED_MOVE, payload };
 			send( frame );
 			nextId = id;
-			movementRevision++;
+			beginTransition( "input" );
 			const leg = directionSegment( pose, heading, now, "client", 1, true );
 			pending.set( id, {
 				to: leg?.to ?? directionLegEnd( pose, heading ),
@@ -1086,6 +1147,8 @@ receive
 			}
 			advanceTo( now );
 			if ( command.direction !== undefined && r.accepted && walk ) {
+				beginTransition( "receipt" );
+				const before = pose;
 				// The server walks from its live point; its first leg is the
 				// reference the local walk reconciles toward. A leg shorter than
 				// a full one ended on a contact and stops the reference there.
@@ -1111,14 +1174,15 @@ receive
 						walk = null;
 					}
 				}
-				movementRevision++;
 				acknowledged = r.id;
 				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
 				error = null;
 				keepCastHold();
+				if ( before && pose ) noteReanchor( "direction receipt", before, pose, { id: r.id } );
 				return;
 			}
 			if ( command.direction !== undefined ) walk = null;
+			beginTransition( "receipt" );
 			const predictedOwner = owner;
 			authoritative = reconcile( replacement?.from ?? to );
 			// A receipt confirms an endpoint, not the client's old frame. The
@@ -1147,7 +1211,6 @@ receive
 				pose = authoritative = reconcile( to );
 				replacement = null;
 			} else pose = authoritative;
-			movementRevision++;
 			segment = replacement ? bindOwners( { ...replacement, from: pose } ) : null;
 			acknowledged = r.id;
 			for ( const id of pending.keys() ) {
@@ -1221,6 +1284,8 @@ state
 				navigationFailure,
 				movementPath: segment ? { from: segment.from, to: segment.to } : undefined,
 				movementRevision,
+				movementTransition: { ...transition, pathEligible: segment?.admitted === true },
+				movementDiagnostics: { total: reanchorReports, recent: recentReanchors.slice() },
 				navigationFloor: navigation.floor( pose, owner ),
 				minimapFloors: Object.fromEntries(
 					minimapQueries.map( p => [ [ p.regionId, p.x, p.y, p.z ].join( ":" ), navigation.floor( p ) ] )
@@ -1245,6 +1310,7 @@ clear
 ================
 		*/
 		clear() {
+			beginTransition( "clear", true );
 			life = "alive";
 			acknowledged = nextId;
 			minimapQueries = [];

@@ -17,7 +17,7 @@ const { createInventory } = await import(
 const { npcInteractionMask } = await import( "../../src/engine/foundation/gameplay/npc-dialogue.ts" );
 
 test("shop requests preserve the native special-trade capability", () => {
-	for ( const capabilities of [ 1, 0x801, 0x1801 ] ) {
+	for ( const capabilities of [ 1, 0x800, 0x801, 0x1801 ] ) {
 		const sent = [], owner = createInventory( frame => sent.push( frame ) );
 		owner.bootstrap( { inventorySlotCount: 109, equipmentSlotCount: 13 } );
 		const request = owner.openShop( 17, 0, capabilities );

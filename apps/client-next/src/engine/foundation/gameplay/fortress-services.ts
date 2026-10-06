@@ -65,7 +65,8 @@ export interface FortressServiceReply {
 	readonly ready?: number;
 	readonly productionTime?: string;
 	readonly gate?: number;
-	readonly structures?: readonly { readonly reference: number; readonly hp: number; }[];
+	// 61E000 subtracts elapsed minutes (975470 divides by 60) from the duration, clamped at zero.
+	readonly structures?: readonly { readonly reference: number; readonly remainingMinutes: number; }[];
 }
 
 /*
@@ -275,8 +276,10 @@ export function fortressServiceReply( frame: WireFrame ): FortressServiceReply |
 				reply = { ...reply, reference: u32() };
 				break;
 			case 0x18: {
-				const fortress = u32(), count = u8(), structures: { reference: number; hp: number; }[] = [];
-				for ( let i = 0; i < count; i++ ) structures.push( { reference: u32(), hp: u32() } );
+				const fortress = u32(),
+					count = u8(),
+					structures: { reference: number; remainingMinutes: number; }[] = [];
+				for ( let i = 0; i < count; i++ ) structures.push( { reference: u32(), remainingMinutes: u32() } );
 				reply = { ...reply, fortress, structures };
 				break;
 			}

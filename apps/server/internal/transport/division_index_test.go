@@ -1,3 +1,8 @@
+/*
+===========================================================================
+division_index_test.go - division routing and lifecycle metrics contracts
+===========================================================================
+*/
 package transport
 
 // The division->sessions index (hub.divisions) exists so a division push
@@ -16,6 +21,11 @@ import (
 )
 
 // indexedIDs flattens SessionsInDivision to a set of session IDs.
+/*
+================
+indexedIDs
+================
+*/
 func indexedIDs(hub *Hub, division string) map[uint64]bool {
 	out := make(map[uint64]bool)
 	for _, s := range hub.SessionsInDivision(division) {
@@ -24,6 +34,11 @@ func indexedIDs(hub *Hub, division string) map[uint64]bool {
 	return out
 }
 
+/*
+================
+expectDivision
+================
+*/
 func expectDivision(t *testing.T, hub *Hub, division string, want ...*Session) {
 	t.Helper()
 	got := indexedIDs(hub, division)
@@ -37,6 +52,11 @@ func expectDivision(t *testing.T, hub *Hub, division string, want ...*Session) {
 	}
 }
 
+/*
+================
+newAttachedSession
+================
+*/
 func newAttachedSession(t *testing.T, hub *Hub, gated bool) (*Session, *fakeConn) {
 	t.Helper()
 	s, err := hub.createSession()
@@ -53,6 +73,11 @@ func newAttachedSession(t *testing.T, hub *Hub, gated bool) (*Session, *fakeConn
 
 // TestDivisionIndexFollowsPlayerContextAndClose covers every explicit
 // player-context path that can change division membership.
+/*
+================
+TestDivisionIndexFollowsPlayerContextAndClose
+================
+*/
 func TestDivisionIndexFollowsPlayerContextAndClose(t *testing.T) {
 	hub := newHub(testCfg())
 	s1, _ := newAttachedSession(t, hub, false)
@@ -89,6 +114,11 @@ func TestDivisionIndexFollowsPlayerContextAndClose(t *testing.T) {
 // STILL indexed (matching the pre-index scan, which also enumerated it)
 // but delivery to it is refused at the Session level, and
 // its final teardown drops it from the index.
+/*
+================
+TestDivisionIndexAcrossEviction
+================
+*/
 func TestDivisionIndexAcrossEviction(t *testing.T) {
 	hub := newHub(testCfg())
 	victim, victimConn := newAttachedSession(t, hub, true) // gated: drain stays open
@@ -123,6 +153,11 @@ func TestDivisionIndexAcrossEviction(t *testing.T) {
 
 // TestSessionLifecycleCounters pins the opened/closed metrics and the
 // close-reason classification derived from the cause error.
+/*
+================
+TestSessionLifecycleCounters
+================
+*/
 func TestSessionLifecycleCounters(t *testing.T) {
 	hub := newHub(testCfg())
 	var sessions []*Session
@@ -142,10 +177,10 @@ func TestSessionLifecycleCounters(t *testing.T) {
 	if m.SessionsOpened != 4 || m.SessionsClosed != 4 {
 		t.Fatalf("opened/closed = %d/%d, want 4/4", m.SessionsOpened, m.SessionsClosed)
 	}
-	if m.SessionsClosedClean != 1 || m.SessionsClosedGraceExpired != 1 ||
-		m.SessionsClosedHandlerPanic != 1 || m.SessionsClosedOther != 1 ||
+	if m.SessionsClosedClean != 0 || m.SessionsClosedGraceExpired != 1 ||
+		m.SessionsClosedHandlerPanic != 1 || m.SessionsClosedOther != 2 ||
 		m.SessionsClosedSlowConsumer != 0 {
-		t.Fatalf("close breakdown = clean %d grace %d panic %d other %d slow %d, want 1/1/1/1/0",
+		t.Fatalf("close breakdown = clean %d grace %d panic %d other %d slow %d, want 0/1/1/2/0",
 			m.SessionsClosedClean, m.SessionsClosedGraceExpired,
 			m.SessionsClosedHandlerPanic, m.SessionsClosedOther, m.SessionsClosedSlowConsumer)
 	}
@@ -156,6 +191,11 @@ func TestSessionLifecycleCounters(t *testing.T) {
 
 // TestFrameCounters pins frames_in (every accepted inbound frame) and
 // unhandled_opcode_frames (dispatched frames with no handler anywhere).
+/*
+================
+TestFrameCounters
+================
+*/
 func TestFrameCounters(t *testing.T) {
 	hub := newHub(testCfg())
 	s, fc := newAttachedSession(t, hub, false)
@@ -176,6 +216,11 @@ func TestFrameCounters(t *testing.T) {
 
 // TestRecordTickDuration pins the tick seam's aggregation: last, mean,
 // max, count, and the interval-relative overrun rule.
+/*
+================
+TestRecordTickDuration
+================
+*/
 func TestRecordTickDuration(t *testing.T) {
 	hub := newHub(testCfg())
 	if m := hub.Metrics(); m.TickCount != 0 || m.TickLastMs != 0 || m.TickMeanMs != 0 {
@@ -205,6 +250,11 @@ func TestRecordTickDuration(t *testing.T) {
 
 // TestHandleErr pins the error-returning registration variant: reserved
 // opcodes come back as an error (no panic), everything else registers.
+/*
+================
+TestHandleErr
+================
+*/
 func TestHandleErr(t *testing.T) {
 	hub := newHub(testCfg())
 	for _, op := range []uint16{OpHello, OpWelcome, OpPing, OpPong, OpBye} {

@@ -130,6 +130,9 @@ SkillRow is one skilldata record's learn-plane fields.
 ================
 */
 type SkillRow struct {
+	// Column 47, native server +C4: 0 China, 1 Europe, 3 unrestricted.
+	RequiredRace    uint8
+	StructureRepair SkillStructureRepair
 	// Validated replacement inputs, independent from executable admission.
 	// A refusal is retained instead of treating a malformed program as neutral.
 	Replacement        statuseffect.ReplacementDescriptor
@@ -265,12 +268,10 @@ type SkillRow struct {
 	// lowest id in all 401 shipped chain sets). Computed after load, not
 	// a column.
 	ChainSub bool
-	// ActionCastingTimeMs is column 12 / CSkillData info+0x70. Retail
-	// authors monster attacks as two adjacent phases: time from action start
-	// to the contact boundary, followed by ActionDurationMs recovery. The
-	// action actor owns both phases; dropping this first column closes B505
-	// before the BSR contact event for rows such as Movia's 1077+923 ms and
-	// 1394+606 ms attacks.
+	// ActionCastingTimeMs is the server's normalized release interval, columns
+	// 11 + 12. SkillGlobal_LoadReferenceData (5894E3/5894E6) folds preparation
+	// into casting once before any execution handler reads refSkill+74. The
+	// following ActionDurationMs is recovery, not the complete action lifetime.
 	// ActionCastingTimePinned distinguishes a legitimate zero from a malformed
 	// or missing cell.
 	ActionCastingTimeMs     uint32
@@ -298,10 +299,12 @@ type SkillRow struct {
 	// distinction from a malformed cell.
 	ActionRange       float64
 	ActionRangePinned bool
-	// AIWeight is column 66 (RefSkill +0x164, a byte): a monster's chance
+	// AIWeight is column 66 (RefSkill +0x164, a word): a monster's chance
 	// weight for this default skill in 561B00's weighted choice, and a
 	// summon's health band in 562060. Zero never takes part in the choice.
-	AIWeight uint8
+	AIWeight uint16
+	// Column 67, RefSkill +166: AI registration and healing-threat category.
+	Category uint8
 	// Masteries are the two required-mastery slots (cols 34/36, 35/37).
 	Masteries [2]SkillRequirement
 	// ReqStr/ReqInt gate on the character's STR/INT words (cols 38/39;
@@ -405,41 +408,48 @@ type SkillDataSource interface {
 // Column indices (0-based over the full 118-column row; see the header
 // comment for the parser-offset derivation and use-site pins).
 const (
-	skilldataColID             = 1
-	skilldataColGroup          = 2
-	skilldataColCodename       = 3
-	skilldataColLevel          = 7
-	skilldataColChainNext      = 9
-	skilldataColActionCasting  = 12
-	skilldataColActionDuration = 13
-	skilldataColCoolTimeMs     = 14
-	skilldataColActionRange    = 21
-	skilldataColReqMastery1    = 34
-	skilldataColReqMastery2    = 35
-	skilldataColReqMasteryLv1  = 36
-	skilldataColReqMasteryLv2  = 37
-	skilldataColReqStr         = 38
-	skilldataColReqInt         = 39
-	skilldataColReqGroup1      = 40
-	skilldataColReqGroup2      = 41
-	skilldataColReqGroup3      = 42
-	skilldataColReqGroupLv1    = 43
-	skilldataColReqGroupLv2    = 44
-	skilldataColReqGroupLv3    = 45
-	skilldataColReqSP          = 46
-	skilldataColTargetRequired = 22
-	skilldataColWeaponKind1    = 50
-	skilldataColWeaponKind2    = 51
-	skilldataColAIWeight       = 66
-	skilldataColActionHandler  = 68
-	skilldataColPrimaryTag     = 69
-	skilldataColAttackFlags    = 70
-	skilldataColAttackPercent  = 71
-	skilldataColAttackMin      = 72
-	skilldataColAttackMax      = 73
-	skilldataColAttackValue5   = 74
-	skilldataColEncodedTail    = 69
-	skilldataMinColumns        = 47
+	SkillRaceAny = 3
+	// Columns 10 and 15 are retained metadata in the traced native owners:
+	// infer no extra action timer. Column 14 owns reuse delay; 5894E3 folds
+	// preparation into casting. The column audit records this inference's scope.
+	skilldataColID              = 1
+	skilldataColGroup           = 2
+	skilldataColCodename        = 3
+	skilldataColLevel           = 7
+	skilldataColChainNext       = 9
+	skilldataColActionPreparing = 11
+	skilldataColActionCasting   = 12
+	skilldataColActionDuration  = 13
+	skilldataColCoolTimeMs      = 14
+	skilldataColActionRange     = 21
+	skilldataColReqMastery1     = 34
+	skilldataColReqMastery2     = 35
+	skilldataColReqMasteryLv1   = 36
+	skilldataColReqMasteryLv2   = 37
+	skilldataColReqStr          = 38
+	skilldataColReqInt          = 39
+	skilldataColReqGroup1       = 40
+	skilldataColReqGroup2       = 41
+	skilldataColReqGroup3       = 42
+	skilldataColReqGroupLv1     = 43
+	skilldataColReqGroupLv2     = 44
+	skilldataColReqGroupLv3     = 45
+	skilldataColReqSP           = 46
+	skilldataColReqRace         = 47
+	skilldataColTargetRequired  = 22
+	skilldataColWeaponKind1     = 50
+	skilldataColWeaponKind2     = 51
+	skilldataColAIWeight        = 66
+	skilldataColCategory        = 67
+	skilldataColActionHandler   = 68
+	skilldataColPrimaryTag      = 69
+	skilldataColAttackFlags     = 70
+	skilldataColAttackPercent   = 71
+	skilldataColAttackMin       = 72
+	skilldataColAttackMax       = 73
+	skilldataColAttackValue5    = 74
+	skilldataColEncodedTail     = 69
+	skilldataMinColumns         = 47
 )
 
 // little-endian "att\0", as stored in the numeric skilldata parameter cell.
@@ -622,6 +632,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				continue
 			}
 			row := SkillRow{
+				RequiredRace:           SkillRaceAny,
 				ContinueBasicAttack:    textdataU32(fields[continueBasicAttackColumn]) == resumesBasicAttack,
 				CancellationDeferred:   nativeSkillDefersCancellation(fields, spawnParamArity),
 				NameAttackContent:      nativeNameAttackContent(fields),
@@ -663,14 +674,22 @@ func (t *TextdataSkills) parse(shards []string) {
 				Sight:                  encodedStatusLevel(fields, 0x647474),
 				DetectRange:            encodedDetectRange(fields),
 			}
+			// Historical learn-only fixtures stop before the country column.
+			if len(fields) > skilldataColReqRace {
+				row.RequiredRace = uint8(textdataU32(fields[skilldataColReqRace]))
+			}
 			// Presentation columns are absent from historical learn-only fixtures.
 			if len(fields) > 62 {
 				row.NameSymbol, row.Icon = fields[62], fields[61]
 			}
 			if actionCasting, ok := textdataInt(fields[skilldataColActionCasting]); ok &&
 				actionCasting >= 0 && actionCasting <= 0xffffffff {
-				row.ActionCastingTimeMs = uint32(actionCasting)
-				row.ActionCastingTimePinned = true
+				if preparing, valid := textdataInt(fields[skilldataColActionPreparing]); valid &&
+					preparing >= 0 && preparing <= 0xffffffff {
+					// Native ADD is a dword operation, including its wrap semantics.
+					row.ActionCastingTimeMs = uint32(preparing) + uint32(actionCasting)
+					row.ActionCastingTimePinned = true
+				}
 			}
 			// Flight metadata is shared by player and monster cast owners. Never
 			// hide it behind parseSkillOffense's player-only eligibility gates:
@@ -699,9 +718,10 @@ func (t *TextdataSkills) parse(shards []string) {
 				row.ActionRange = float64(actionRange)
 				row.ActionRangePinned = true
 			}
-			if weight, ok := textdataByte(fields[skilldataColAIWeight]); ok {
-				row.AIWeight = weight
+			if weight, ok := textdataInt(fields[skilldataColAIWeight]); ok && weight >= 0 && weight <= 0xffff {
+				row.AIWeight = uint16(weight)
 			}
+			row.Category = uint8(textdataU32(fields[skilldataColCategory]))
 			if len(fields) > skilldataColAttackValue5 {
 				targetRequired, targetOK := textdataInt(fields[skilldataColTargetRequired])
 				weapon1, weapon1OK := textdataByte(fields[skilldataColWeaponKind1])
@@ -775,6 +795,7 @@ func (t *TextdataSkills) parse(shards []string) {
 				row.ReplacementRefusal = err.Error()
 			}
 			row.InstantSelfEffectPinned = row.Imbue.Pinned || instantMovementSkill(fields, row)
+			row.StructureRepair = compileStructureRepair(fields, row)
 			parseSkillTimedEffect(fields, &row)
 			parseSkillConcealment(fields, &row)
 			if row.Concealment.Pinned && row.Concealment.Hide {

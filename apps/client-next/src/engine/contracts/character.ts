@@ -185,7 +185,7 @@ export interface CharacterActor {
 	readonly shadowAttachment?: boolean;
 	readonly modifierId?: number;
 	readonly modelAnimation?: import("@/engine/foundation/animation/model-animation").ModelAnimationFrame;
-	readonly animationLod?: { readonly fraction: number; readonly crowded: boolean; };
+	readonly animationLod?: { readonly fraction: number; readonly crowded: boolean; readonly optional?: boolean; };
 	readonly deferredParticle?: {
 		readonly offset: number;
 		readonly nightOnly?: boolean;

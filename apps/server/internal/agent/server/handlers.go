@@ -19,9 +19,15 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"opensro.online/server/internal/cluster/shard"
+	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/security/auth"
 )
 
+/*
+================
+serverInfo
+================
+*/
 type serverInfo struct {
 	ID             string `json:"id"`
 	NativeServerID uint16 `json:"nativeServerId"`
@@ -109,12 +115,14 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		ChannelID  string `json:"channelId"`
 	}
 	refuse := func(nativeStatus int, code, message string) {
+		server.history.Record(history.Event{Kind: "login_refused", Code: code, Category: "expected", Message: message, Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": false, "nativeTitleStatus": nativeStatus,
 			"code": code, "message": message,
 		})
 	}
 	passwordRefusal := func(failed bool) {
+		server.history.Record(history.Event{Kind: "login_refused", Code: "invalid_credentials", Category: "expected", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
 		argument, admitted := server.passwordFailures.update(clientIP(r), request.ID, server.now(), failed, false)
 		if !admitted {
 			refuse(5, "RATE_LIMITED", "Credential failure tracking is at capacity.")
@@ -127,6 +135,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !server.loginAttempts.Allow(clientIP(r)) {
+		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "rate_limited", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
 		w.Header().Set("Retry-After", "6")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"ok": false, "nativeTitleStatus": 5,
@@ -173,6 +182,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	case server.passwordSlots <- struct{}{}:
 		defer func() { <-server.passwordSlots }()
 	default:
+		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "authentication_busy", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
 		w.Header().Set("Retry-After", "6")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"ok": false, "nativeTitleStatus": 5,
@@ -202,6 +212,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.setBrowserSession(w, r, token, false)
+	server.history.Record(history.Event{Kind: "login_succeeded", Code: "authenticated", Category: "expected", Account: accountID, Shard: definition.ID})
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                true,

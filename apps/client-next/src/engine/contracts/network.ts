@@ -38,7 +38,12 @@ the frame being applied; payloadSize is its full length.
 ================
 */
 export interface ClientIncident {
-	readonly kind: "packet" | "transport";
+	readonly id?: string;
+	readonly session?: string;
+	readonly code?: string;
+	readonly category?: NetworkFailure["category"];
+	readonly stack?: string;
+	readonly kind: "packet" | "transport" | "runtime" | "asset" | "unsupported";
 	readonly message: string;
 	readonly opcode?: number;
 	readonly payload?: string;
@@ -47,6 +52,18 @@ export interface ClientIncident {
 	readonly character?: string;
 	readonly region?: number;
 	readonly build?: string;
+}
+
+/*
+================
+NetworkFailure
+================
+*/
+export interface NetworkFailure {
+	stack?: string;
+	readonly category: "expected" | "connection" | "software" | "unknown";
+	readonly code: string;
+	readonly message: string;
 }
 // The Agent's bound on the dumped frame bytes (client_incident.go).
 export const INCIDENT_DUMP_BYTES = 512;

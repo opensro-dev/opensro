@@ -17,7 +17,40 @@ package simulation
 
 import (
 	"opensro.online/server/internal/game/world/monster"
+	"sort"
 )
+
+/*
+================
+TargetSquad
+
+5A06B4 snapshots the healed target's CSquad before publishing healing threat.
+Use the existing mover target owner, across live populations in this division.
+================
+*/
+func (s *MonsterState) TargetSquad(division string, target uint32) []uint32 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []uint32
+	collect := func(state *divisionMonsterState) {
+		if state == nil {
+			return
+		}
+		for gid, record := range state.movers {
+			if record.live != nil && record.live.TargetGID() == target && state.instances.get(gid).CurrentHP != 0 {
+				out = append(out, gid)
+			}
+		}
+	}
+	collect(s.divs[division])
+	for key, state := range s.worldPopulations {
+		if key.division == division {
+			collect(state)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
 
 /*
 ==================

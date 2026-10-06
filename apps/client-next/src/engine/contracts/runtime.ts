@@ -98,6 +98,11 @@ export interface Viewport {
 }
 /** One published sample of the frame owner's own timing, for the FPS chip. */
 export interface FrameTelemetry {
+	readonly overload?: {
+		readonly level: number;
+		readonly longFrames: number;
+		readonly recent: readonly { readonly atMs: number; readonly cpuMs: number; readonly level: number; }[];
+	};
 	readonly frameId?: number;
 	readonly stages?: Readonly<Record<string, number>>;
 	readonly gpu?: GpuTimingStats & { readonly enabled: boolean; };
@@ -158,6 +163,8 @@ The runtime grants scene and resource commands without exposing device ownership
 ================
 */
 export interface Renderer extends Disposable {
+	setFrameWork?( work: FrameWork ): void;
+	readbackWaitMs?(): number;
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
@@ -236,6 +243,19 @@ export interface Renderer extends Disposable {
 	frame( viewport: Viewport, timeSeconds?: number, frameId?: number, probe?: RenderFrameProbe ): void | Promise<void>;
 	phase(): RuntimePhase;
 	error(): string | null;
+}
+
+/*
+================
+FrameWork
+
+One runtime-owned optional budget is shared by all presentation consumers.
+================
+*/
+export interface FrameWork {
+	level(): number;
+	remaining(): number;
+	spend( ms: number ): void;
 }
 /*
 ================

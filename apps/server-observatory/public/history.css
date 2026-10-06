@@ -1,0 +1,13 @@
+/* history.css - accessible operator history layout. */
+:root { color-scheme: dark; font: 15px/1.5 system-ui, sans-serif; background: #101c20; color: #e3ebe7; }
+body { margin: 0; } main { max-width: 1500px; margin: auto; padding: 32px; } a { color: #acd8c1; }
+h1 { font-size: 32px; margin-bottom: 4px; } h2 { margin-top: 32px; } p { color: #b6c6c5; }
+form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; padding: 20px; background: #192b30; border-radius: 8px; }
+label { display: flex; flex-direction: column; gap: 5px; } input, select, button { font: inherit; color: inherit; background: #142227; border: 1px solid #526b6f; border-radius: 4px; padding: 8px; }
+button { cursor: pointer; } button:hover { background: #31524a; } :focus-visible { outline: 2px solid #d9bb79; outline-offset: 2px; }
+.actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; } .actions label { flex-direction: row; }
+section { overflow-x: auto; } table { border-collapse: collapse; width: 100%; } th, td { text-align: left; padding: 10px; border-bottom: 1px solid #30464b; vertical-align: top; } th { color: #b6c6c5; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 1000px; } details { margin: 8px 0; padding: 12px; background: #192b30; } summary { cursor: pointer; overflow-wrap: anywhere; }
+.software, .error { color: #ffb49e; } .expected { color: #a5d7bc; } .unknown { color: #e1c995; } .connection { color: #a6cafa; }
+#summary { display: flex; flex-wrap: wrap; gap: 20px; } #summary p { padding: 12px; background: #192b30; } #summary strong { display: block; font-size: 22px; color: #e3ebe7; }
+@media (max-width: 600px) { main { padding: 14px; } }

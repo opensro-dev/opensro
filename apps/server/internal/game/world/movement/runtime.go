@@ -104,6 +104,7 @@ type Runtime struct {
 	CompanionPresentations func(divisionID, characterName string) []*simulation.PeerCOS
 	// SpawnSkills is the character's active effect projection (the same one
 	// the local entry snapshot carries); peer spawn rows publish it.
+	ActionSpeed func(divisionID, characterName string) float32
 	SpawnSkills func(divisionID, characterName string) []enterworld.EntrySkill
 	// Now abstracts the clock for deterministic tests.
 	Now func() time.Time
@@ -531,8 +532,8 @@ ConstrainMovement
 
 ConstrainMovement is the single server-authoritative geometry seam used by
 player clicks and system-generated movement such as pickup approaches.
-It first refuses destinations the stock client cannot compose, then clips
-otherwise valid chords to the first blocking contact.
+It clips the requested chord to the first blocking contact, then validates
+the reachable approach before committing it.
 ==================
 */
 func (rt *Runtime) ConstrainMovement(characterName string, from, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
@@ -592,13 +593,16 @@ func (rt *Runtime) ConstrainMovementFrom(characterName string, from simulation.S
 			Reason:          "ground movement cannot cross the outdoor/dungeon authority boundary",
 		}
 	}
+	// Client CRTNavMeshTerrain_Move (404970..40499C) keeps the reached
+	// contact point on a blocked step. Validate that clipped approach,
+	// not the unreachable requested endpoint, just as direction legs do.
+	if rt.ClientClip != nil {
+		to = rt.ClientClip.ProcessMoveFrom(characterName, from, fromOwner, to)
+	}
 	if rt.PathGuard != nil {
 		if refusal := rt.PathGuard.InspectMoveFrom(characterName, from, fromOwner, to); refusal != nil {
 			return from, simulation.NavWalk{}, refusal
 		}
-	}
-	if rt.ClientClip != nil {
-		to = rt.ClientClip.ProcessMoveFrom(characterName, from, fromOwner, to)
 	}
 	to, walk := rt.walkOwners(from, fromOwner, to)
 	return to, walk, nil
