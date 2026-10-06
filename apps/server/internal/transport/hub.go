@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+hub.go - transport admission, routing and lifecycle ownership
+
+===========================================================================
+*/
 package transport
 
 import (
@@ -6,6 +13,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,8 +31,15 @@ type HandlerFunc func(s *Session, opcode uint16, payload []byte)
 // Hub owns every live session and the opcode dispatch table the game lanes
 // register into. One Hub serves both the WebTransport and the
 // WebSocket listeners.
+/*
+================
+Hub
+================
+*/
 type Hub struct {
-	cfg Config
+	// History is installed before admission opens; its queue never calls gameplay.
+	History HistoryObserver
+	cfg     Config
 
 	mu       sync.RWMutex
 	sessions map[uint64]*Session
@@ -75,6 +90,11 @@ type Hub struct {
 // AdmissionIdentity is the authenticated account/shard identity carried by a
 // HELLO admission ticket. It is intentionally smaller than gameplay identity: the
 // character still requires a separate one-use EnterWorld authorization.
+/*
+================
+AdmissionIdentity
+================
+*/
 type AdmissionIdentity struct {
 	AccountID string
 	ShardID   string
@@ -84,14 +104,29 @@ type AdmissionIdentity struct {
 type HelloAuthFunc func(token []byte) (AdmissionIdentity, error)
 
 // SetHelloAuth installs the required HELLO admission verifier.
+/*
+================
+SetHelloAuth
+================
+*/
 func (h *Hub) SetHelloAuth(fn HelloAuthFunc) {
 	h.admission.set(fn)
 }
 
+/*
+================
+helloAuthFn
+================
+*/
 func (h *Hub) helloAuthFn() HelloAuthFunc {
 	return h.admission.current()
 }
 
+/*
+================
+newHub
+================
+*/
 func newHub(cfg Config) *Hub {
 	return &Hub{
 		cfg:             cfg,
@@ -117,10 +152,20 @@ func newHub(cfg Config) *Hub {
 type EnterWorldAuthFunc func(s *Session, ew EnterWorld) (ok bool, denyCode uint32)
 
 // SetEnterWorldAuth installs the required post-WELCOME identity gate.
+/*
+================
+SetEnterWorldAuth
+================
+*/
 func (h *Hub) SetEnterWorldAuth(fn EnterWorldAuthFunc) {
 	h.auth.set(fn)
 }
 
+/*
+================
+enterWorldAuthFn
+================
+*/
 func (h *Hub) enterWorldAuthFn() EnterWorldAuthFunc {
 	return h.auth.current()
 }
@@ -138,6 +183,11 @@ func (h *Hub) enterWorldAuthFn() EnterWorldAuthFunc {
 // EnterWorld handler of the loser must not steal the key back from the
 // winner. Callers detect that refusal via s.Evicted() (the latch is one-way
 // and set before the winning BindExclusive returns, so the check is exact).
+/*
+================
+BindExclusive
+================
+*/
 func (h *Hub) BindExclusive(key string, s *Session) (*Session, bool) {
 	var evict *Session
 	h.mu.Lock()
@@ -188,6 +238,11 @@ func (h *Hub) BindExclusive(key string, s *Session) (*Session, bool) {
 // BindingControlLease serializes one host-side character mutation against
 // gameplay binding. Its generation prevents a stale Release from deleting a
 // newer lease for the same key.
+/*
+================
+BindingControlLease
+================
+*/
 type BindingControlLease struct {
 	hub        *Hub
 	key        string
@@ -199,6 +254,11 @@ type BindingControlLease struct {
 // currently bound session is evicted and reported busy; the caller retries
 // only after final teardown removes that exact session. While a lease is held,
 // BindExclusive refuses new world admission for the key.
+/*
+================
+AcquireBindingControl
+================
+*/
 func (h *Hub) AcquireBindingControl(key string) (*BindingControlLease, bool) {
 	h.mu.Lock()
 	if _, controlled := h.controls[key]; controlled {
@@ -222,6 +282,11 @@ func (h *Hub) AcquireBindingControl(key string) (*BindingControlLease, bool) {
 }
 
 // Release relinquishes only this lease generation and is idempotent.
+/*
+================
+Release
+================
+*/
 func (lease *BindingControlLease) Release() {
 	if lease == nil || lease.hub == nil {
 		return
@@ -236,6 +301,11 @@ func (lease *BindingControlLease) Release() {
 }
 
 // BoundSession returns the live session holding a bind key.
+/*
+================
+BoundSession
+================
+*/
 func (h *Hub) BoundSession(key string) (*Session, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -250,6 +320,11 @@ func (h *Hub) BoundSession(key string) (*Session, bool) {
 // safe; last write wins. Callers MUST NOT drop the error: an unregistered
 // opcode is a silent gameplay outage, so refuse to boot (or at minimum
 // log at Error) when it is non-nil.
+/*
+================
+HandleErr
+================
+*/
 func (h *Hub) HandleErr(opcode uint16, fn HandlerFunc) error {
 	if opcode <= maxReservedOpcode {
 		return fmt.Errorf("transport: opcode 0x%04X is session-internal, not registrable", opcode)
@@ -263,6 +338,11 @@ func (h *Hub) HandleErr(opcode uint16, fn HandlerFunc) error {
 // a mis-registered lane must not come up half-wired — but it is the wrong
 // tool anywhere a panic would take live players down; register from
 // runtime code through HandleErr instead.
+/*
+================
+Handle
+================
+*/
 func (h *Hub) Handle(opcode uint16, fn HandlerFunc) {
 	if err := h.HandleErr(opcode, fn); err != nil {
 		panic(err.Error())
@@ -271,28 +351,53 @@ func (h *Hub) Handle(opcode uint16, fn HandlerFunc) {
 
 // HandleDefault registers the catch-all for opcodes with no specific
 // handler; without it unhandled frames are logged and dropped.
+/*
+================
+HandleDefault
+================
+*/
 func (h *Hub) HandleDefault(fn HandlerFunc) {
 	h.handlers.setDefault(fn)
 }
 
 // OnSessionOpen runs after a brand-new session completes its handshake.
+/*
+================
+OnSessionOpen
+================
+*/
 func (h *Hub) OnSessionOpen(fn func(*Session)) {
 	h.hooks.addOpen(fn)
 }
 
 // OnSessionResumed runs after a client reattaches to a detached session.
 // Game lanes re-push authoritative state here.
+/*
+================
+OnSessionResumed
+================
+*/
 func (h *Hub) OnSessionResumed(fn func(*Session)) {
 	h.hooks.addResumed(fn)
 }
 
 // OnSessionClose runs exactly once per session at final teardown. err is
 // nil on a clean close (client BYE, drained shutdown).
+/*
+================
+OnSessionClose
+================
+*/
 func (h *Hub) OnSessionClose(fn func(*Session, error)) {
 	h.hooks.addClose(fn)
 }
 
 // Session returns a live session by ID.
+/*
+================
+Session
+================
+*/
 func (h *Hub) Session(id uint64) (*Session, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -301,6 +406,11 @@ func (h *Hub) Session(id uint64) (*Session, bool) {
 }
 
 // Sessions snapshots the live sessions.
+/*
+================
+Sessions
+================
+*/
 func (h *Hub) Sessions() []*Session {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -312,6 +422,11 @@ func (h *Hub) Sessions() []*Session {
 }
 
 // Broadcast queues a frame to every live session.
+/*
+================
+Broadcast
+================
+*/
 func (h *Hub) Broadcast(opcode uint16, payload []byte) {
 	for _, s := range h.Sessions() {
 		_ = s.Send(opcode, payload)
@@ -325,6 +440,11 @@ func (h *Hub) Broadcast(opcode uint16, payload []byte) {
 //	    div, _ := s.DivisionID()
 //	    return div == wantedDiv && s.ID != exceptID
 //	}, opcode, payload)
+/*
+================
+BroadcastFunc
+================
+*/
 func (h *Hub) BroadcastFunc(accept func(*Session) bool, opcode uint16, payload []byte) {
 	for _, s := range h.Sessions() {
 		if accept(s) {
@@ -336,6 +456,11 @@ func (h *Hub) BroadcastFunc(accept func(*Session) bool, opcode uint16, payload [
 // AcceptConn performs the HELLO/WELCOME handshake on a fresh transport
 // connection, then hands the connection to a new or resumed session. Run it
 // on its own goroutine per connection.
+/*
+================
+AcceptConn
+================
+*/
 func (h *Hub) AcceptConn(conn Conn) {
 	startedAt := time.Now()
 	select {
@@ -478,6 +603,11 @@ func (h *Hub) AcceptConn(conn Conn) {
 // whole, never compared byte-by-byte against an attacker-controlled
 // prefix oracle — so learning "some token exists" faster than "none does"
 // yields nothing guessable; this is the standard shape for token tables.
+/*
+================
+lookupByToken
+================
+*/
 func (h *Hub) lookupByToken(token [ResumeTokenLen]byte) *Session {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -495,6 +625,11 @@ func (h *Hub) lookupByToken(token [ResumeTokenLen]byte) *Session {
 // Callers may retry after another session reaches final teardown.
 var ErrSessionCapacity = errors.New("transport: live session capacity reached")
 
+/*
+================
+createSession
+================
+*/
 func (h *Hub) createSession() (*Session, error) {
 	var token [ResumeTokenLen]byte
 	if _, err := rand.Read(token[:]); err != nil {
@@ -521,6 +656,11 @@ func (h *Hub) createSession() (*Session, error) {
 // SessionsInDivision snapshots the live sessions whose effective division
 // (Session.Set under "mission.divisionId", falling back to "divisionId")
 // equals division. Division pushes iterate this instead of every session.
+/*
+================
+SessionsInDivision
+================
+*/
 func (h *Hub) SessionsInDivision(division string) []*Session {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -536,6 +676,11 @@ func (h *Hub) SessionsInDivision(division string) []*Session {
 // (ASCII case-insensitive, as character names compare). It reads only the hub
 // index and each session's binding, never game state, so a producer may call
 // it while holding any game lock.
+/*
+================
+CharacterSessions
+================
+*/
 func (h *Hub) CharacterSessions(division, characterName string) []*Session {
 	var out []*Session
 	for _, s := range h.SessionsInDivision(division) {
@@ -549,6 +694,11 @@ func (h *Hub) CharacterSessions(division, characterName string) []*Session {
 // Population returns the number of live sessions indexed into one shard.
 // It does not allocate a session snapshot, so heartbeat reporting stays
 // constant-work apart from the map lookup.
+/*
+================
+Population
+================
+*/
 func (h *Hub) Population(division string) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -559,6 +709,11 @@ func (h *Hub) Population(division string) int {
 // between division sets. Called by Session.Set whenever a division key
 // changes; a session no longer in the registry (racing its own close) is
 // left out so the index can never resurrect a closed session.
+/*
+================
+reindexDivision
+================
+*/
 func (h *Hub) reindexDivision(s *Session) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -588,6 +743,11 @@ func (h *Hub) reindexDivision(s *Session) {
 
 // dropFromDivisionLocked removes one member from a division set. Caller
 // holds h.mu.
+/*
+================
+dropFromDivisionLocked
+================
+*/
 func (h *Hub) dropFromDivisionLocked(division string, id uint64) {
 	set := h.divisions[division]
 	if set == nil {
@@ -596,58 +756,6 @@ func (h *Hub) dropFromDivisionLocked(division string, id uint64) {
 	delete(set, id)
 	if len(set) == 0 {
 		delete(h.divisions, division)
-	}
-}
-
-// closeSession finishes a session exactly once: final teardown, registry
-// removal, close hooks.
-func (h *Hub) closeSession(s *Session, cause error) {
-	if !s.closeNow() {
-		return
-	}
-	h.mu.Lock()
-	delete(h.sessions, s.ID)
-	delete(h.byToken, s.resumeToken)
-	if key, ok := h.bindingKeys[s.ID]; ok {
-		delete(h.bindingKeys, s.ID)
-		if h.bindings[key] == s {
-			delete(h.bindings, key)
-		}
-	}
-	if div, ok := h.sessionDiv[s.ID]; ok {
-		delete(h.sessionDiv, s.ID)
-		h.dropFromDivisionLocked(div, s.ID)
-	}
-	if account, ok := h.sessionAccount[s.ID]; ok {
-		delete(h.sessionAccount, s.ID)
-		delete(h.accountSessions[account], s.ID)
-		if len(h.accountSessions[account]) == 0 {
-			delete(h.accountSessions, account)
-		}
-	}
-	h.mu.Unlock()
-
-	h.metrics.sessClosed.Add(1)
-	switch {
-	case cause == nil:
-		h.metrics.closedClean.Add(1)
-	case errors.Is(cause, errGraceExpired):
-		h.metrics.closedGrace.Add(1)
-	case errors.Is(cause, errSlowConsumer):
-		h.metrics.closedSlow.Add(1)
-	case errors.Is(cause, errHandlerPanic):
-		h.metrics.closedPanic.Add(1)
-	default:
-		h.metrics.closedOther.Add(1)
-	}
-
-	log.WithFields(log.Fields{"session": s.ID, "cause": fmt.Sprint(cause)}).
-		Info("transport: session closed")
-	for _, fn := range h.hooks.closeSnapshot() {
-		func() {
-			defer recoverHookPanic(s, "OnSessionClose")
-			fn(s, cause)
-		}()
 	}
 }
 
@@ -704,6 +812,11 @@ func (h *Hub) admitAccountSession(account string, s *Session) {
 	}
 }
 
+/*
+================
+fireOpen
+================
+*/
 func (h *Hub) fireOpen(s *Session) {
 	for _, fn := range h.hooks.openSnapshot() {
 		func() {
@@ -713,6 +826,11 @@ func (h *Hub) fireOpen(s *Session) {
 	}
 }
 
+/*
+================
+fireResumed
+================
+*/
 func (h *Hub) fireResumed(s *Session) {
 	for _, fn := range h.hooks.resumedSnapshot() {
 		func() {
@@ -722,6 +840,11 @@ func (h *Hub) fireResumed(s *Session) {
 	}
 }
 
+/*
+================
+recoverHookPanic
+================
+*/
 func recoverHookPanic(s *Session, hook string) {
 	if r := recover(); r != nil {
 		log.WithFields(log.Fields{"session": s.ID, "hook": hook, "panic": r}).
@@ -731,6 +854,11 @@ func recoverHookPanic(s *Session, hook string) {
 
 // dispatch routes one game frame. A handler panic closes the session rather
 // than the server.
+/*
+================
+dispatch
+================
+*/
 func (h *Hub) dispatch(s *Session, f Frame) {
 	// Per-session inbound budget (ratelimit.go): every dispatched frame
 	// costs one token, so a flooding client is shed HERE — before the
@@ -776,7 +904,7 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			log.WithFields(log.Fields{"session": s.ID, "opcode": fmt.Sprintf("0x%04X", f.Opcode), "panic": r}).
+			log.WithFields(log.Fields{"session": s.ID, "opcode": fmt.Sprintf("0x%04X", f.Opcode), "panic": r, "stack": string(debug.Stack())}).
 				Error("transport: handler panicked, closing session")
 			h.closeSession(s, fmt.Errorf("%w on 0x%04X: %v", errHandlerPanic, f.Opcode, r))
 		}
@@ -786,6 +914,11 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 
 const enterWorldUnauthorizedCode uint32 = 0x00A1
 
+/*
+================
+refuseEnterWorldAuth
+================
+*/
 func (h *Hub) refuseEnterWorldAuth(s *Session, denyCode uint32, decodeErr error) {
 	h.metrics.enterWorldAuthRefused.Add(1)
 	fields := log.Fields{"session": s.ID, "denyCode": denyCode}
@@ -800,6 +933,11 @@ func (h *Hub) refuseEnterWorldAuth(s *Session, denyCode uint32, decodeErr error)
 
 // shutdown says BYE to every session and waits for them to drain, capped by
 // ctx.
+/*
+================
+shutdown
+================
+*/
 func (h *Hub) shutdown(ctx context.Context) {
 	h.mu.Lock()
 	h.closed = true

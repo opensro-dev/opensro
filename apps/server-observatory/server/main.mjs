@@ -9,6 +9,7 @@ import { loadShards, createSource } from "./source.mjs";
 import { allowedRequest, allowedMutation } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
+import { createHistory } from "./history.mjs";
 const port = Number( process.env.SRO_OBSERVATORY_PORT ?? 5190 );
 if ( !Number.isInteger( port ) || port < 1024 || port > 65535 ) throw Error( "Invalid dashboard port" );
 const config = process.env.SRO_OBSERVATORY_CONFIG ?
@@ -23,6 +24,16 @@ if (
 const token = config.operatorTokenFile ? (await readFile( config.operatorTokenFile, "utf8" )).trim() : "";
 const shards = await loadShards( config.shards ?? new URL( "../../server/config/shards.json", import.meta.url ) );
 const source = createSource( shards ), operations = createPlayerOperations( shards, token ), items = createItems();
+const agentToken = config.agentOperatorTokenFile ?
+	(await readFile( config.agentOperatorTokenFile, "utf8" )).trim() :
+	token;
+const historySources = [ {
+	id: "agent",
+	name: "Agent · logins and client reports",
+	url: config.agentURL ?? "http://127.0.0.1:8787",
+	token: agentToken
+}, ...shards.map( row => ({ ...row, token }) ) ];
+const history = createHistory( historySources );
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
 for (
 	const file of [
@@ -37,7 +48,10 @@ for (
 		"items.css",
 		"players.html",
 		"players.js",
-		"players.css"
+		"players.css",
+		"history.html",
+		"history.js",
+		"history.css"
 	]
 ) files.set( "/" + file, file );
 /*
@@ -106,8 +120,14 @@ async function handleRequest( req, res ) {
 			respondJSON( res, 200, {
 				operator: edge?.operator ?? "local-operator",
 				enabled: Boolean( token ),
+				historySources: historySources.map( ( { id, name } ) => ({ id, name }) ),
 				shards: shards.map( ( { id, name } ) => ({ id, name }) )
 			} );
+			return;
+		}
+		if ( url.pathname === "/api/history" ) {
+			const result = await history.request( url.searchParams );
+			respondJSON( res, result.status, result.body );
 			return;
 		}
 		if ( url.pathname === "/api/snapshot" ) {

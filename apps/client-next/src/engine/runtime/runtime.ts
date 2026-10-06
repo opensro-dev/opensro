@@ -252,6 +252,12 @@ export function startRuntime(
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
 					return [
 						{ name: "Phase", value: sessionState?.phase ?? "starting" },
+						...(sessionState?.incidentID ?
+							[ { name: "Incident", value: sessionState.incidentID }, {
+								name: "Incident delivery",
+								value: sessionState.incidentDelivery ?? "not sent"
+							} ] :
+							[]),
 						...(sessionState?.nativeServerName ?
 							[ { name: "Shard", value: sessionState.nativeServerName } ] :
 							[]),

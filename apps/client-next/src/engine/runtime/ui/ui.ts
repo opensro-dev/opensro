@@ -15156,9 +15156,11 @@ export function createUi(
 					} )
 				);
 				quads.push(
-					...text.quads(
-						copy( "UIIT_MSG_MSGBOX_NETOFF", "Disconnected from the server." ),
-						layout.message,
+					...text.box(
+						(next.session?.disconnectMessage ||
+							copy( "UIIT_MSG_MSGBOX_NETOFF", "Disconnected from the server." )) +
+							(next.session?.incidentID ? `\nRef: ${next.session.incidentID}` : ""),
+						[ layout.message[0] + 8, layout.message[1] - 14, layout.message[2] - 16, 54 ],
 						full,
 						white,
 						{ hAlign: 1, vAlign: 0 }
@@ -16107,7 +16109,13 @@ export function createUi(
 						"Reload the client to try again." :
 						"Interface resources unavailable; retrying.") :
 					phase === "disconnected" ?
-					(title.catalog( "UIIT_MSG_MSGBOX_NETOFF" ) || "Disconnected from the server.") :
+					((next.session?.disconnectMessage || title.catalog( "UIIT_MSG_MSGBOX_NETOFF" ) ||
+						"Disconnected from the server.") +
+						(next.session?.incidentID ?
+							` Incident ${next.session.incidentID}. Report ${
+								next.session.incidentDelivery ?? "not sent"
+							}.` :
+							"")) :
 					title.message( error ) ||
 					(phase === "world" ?
 						`Health ${local?.hp ?? "unknown"}; mana ${local?.mp ?? "unknown"}; target ${

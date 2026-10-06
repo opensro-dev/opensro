@@ -28,6 +28,7 @@ import (
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/cluster/shard"
+	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/security/workload"
@@ -62,6 +63,8 @@ Config
 ================
 */
 type Config struct {
+	History                 *history.Journal
+	HistoryHandler          http.Handler
 	Accounts                AccountAuthority
 	Catalog                 *shard.Catalog
 	Directory               *shard.Directory
@@ -82,6 +85,8 @@ Server
 ================
 */
 type Server struct {
+	history                 *history.Journal
+	historyHandler          http.Handler
 	accounts                AccountAuthority
 	catalog                 *shard.Catalog
 	directory               *shard.Directory
@@ -150,6 +155,8 @@ func New(config Config) (*Server, error) {
 		origins[origin] = true
 	}
 	return &Server{
+		history:                 config.History,
+		historyHandler:          config.HistoryHandler,
 		accounts:                config.Accounts,
 		catalog:                 config.Catalog,
 		directory:               config.Directory,
@@ -175,6 +182,9 @@ Handler
 */
 func (server *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if server.historyHandler != nil {
+		mux.Handle(history.Path, server.historyHandler)
+	}
 	mux.HandleFunc(readiness.PathHealth, readiness.HealthHandler)
 	mux.HandleFunc(readiness.PathReady, server.handleReady)
 	// Browser routes answer only the release protocol this build speaks
