@@ -16,7 +16,10 @@ import (
 	"strings"
 )
 
-const summonLevelEnd = uint8(255)
+const (
+	summonLevelEnd      = uint8(255)
+	summonLevelByteMask = 0xff
+)
 
 /*
 ================
@@ -42,7 +45,7 @@ func summonLevelByte(value string) uint8 {
 	// A valid numeric prefix can only return ErrRange. ParseInt supplies
 	// the same saturated signed result as native strtol in that case.
 	result, _ := strconv.ParseInt(value[:end], 10, 32)
-	return uint8(result)
+	return uint8(result & summonLevelByteMask)
 }
 
 /*
