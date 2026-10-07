@@ -44,11 +44,12 @@ export interface FrameProbe extends Omit<RenderFrameProbe, "detailBegin" | "deta
 frameProbe
 
 The benchmark's frame probe, installed on globalThis by benchmark runs of
-the development client only; otherwise undefined. The frame calls it
-explicitly instead of letting a profiler patch this source.
+the development client or of a bench bundle (vite build --mode bench);
+otherwise undefined, and a release build compiles the lookup away. The
+frame calls it explicitly instead of letting a profiler patch this source.
 ================
 */
 export function frameProbe(): FrameProbe | undefined {
-	if ( !import.meta.env.DEV ) return undefined;
+	if ( !import.meta.env.DEV && import.meta.env.MODE !== "bench" ) return undefined;
 	return (globalThis as { __worldProbeFrameProfiler?: FrameProbe; }).__worldProbeFrameProfiler;
 }

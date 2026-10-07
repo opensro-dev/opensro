@@ -26,11 +26,12 @@ has neither, on purpose, so binding to one fails with the reason.
 */
 export async function bindPlayableRuntime( page ) {
 	await page.evaluate( async () => {
+		// The exact href the page loaded, query included: another URL for the
+		// same file would be a second module instance with a second runtime.
 		const dev = [ ...document.querySelectorAll( 'script[type="module"][src]' ) ]
-			.some( script =>
-				new URL( script.getAttribute( "src" ) ?? "", location.href ).pathname === "/src/bootstrap.ts"
-			);
-		const url = dev ? "/src/bootstrap.ts" : "/assets/bench-runtime.js";
+			.map( script => new URL( script.getAttribute( "src" ) ?? "", location.href ) )
+			.find( url => url.origin === location.origin && url.pathname === "/src/bootstrap.ts" );
+		const url = dev ? dev.href : new URL( "/assets/bench-runtime.js", location.href ).href;
 		let runtime;
 		try {
 			runtime = (await import( url )).runtime;
