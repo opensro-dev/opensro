@@ -3,12 +3,15 @@
 
 submission.go - reading one bug report from the browser
 
-A report arrives as multipart/form-data with up to three parts:
+A report arrives as multipart/form-data with up to four parts:
 
 	description  the player's text (required)
 	meta         JSON {"context":[{"name","value"}],"errors":[...]}
 	clip         video/mp4 replay, or
 	screenshot   image/jpeg or image/png when there is no replay
+	diagnostics  application/zip of the client's journals (movement,
+	             timeline, state, environment), so staff and agents can
+	             replay an issue exactly from the report alone
 
 Everything here is player input that ends up in a Discord channel, so each
 part has a hard size bound and the attachment must carry the magic bytes of
@@ -42,6 +45,9 @@ const (
 	maxErrorLines       = 50
 	maxErrorRunes       = 500
 	maxScreenshotBytes  = 4 << 20
+	// maxDiagnosticsBytes bounds the journal archive. It shares the
+	// attachment budget (maxBytes) with the clip; this is its own ceiling.
+	maxDiagnosticsBytes = 2 << 20
 
 	// multipartOverhead bounds the boundaries and part headers on top of the
 	// attachment and text parts, so the whole body can be capped up front.
@@ -90,6 +96,9 @@ type Submission struct {
 	Context     []Field
 	Errors      []string
 	Attachment  *Attachment
+	// Diagnostics is the optional journal archive, forwarded beside the
+	// clip or screenshot as its own file.
+	Diagnostics *Attachment
 }
 
 /*
@@ -142,6 +151,8 @@ func ReadSubmission(r *http.Request, maxBytes int64) (Submission, error) {
 				return Submission{}, fmt.Errorf("%w: more than one attachment", ErrInvalid)
 			}
 			submission.Attachment, err = readAttachment(part, name, maxBytes)
+		case "diagnostics":
+			submission.Diagnostics, err = readDiagnostics(part, maxBytes)
 		default:
 			err = fmt.Errorf("%w: unknown part %q", ErrInvalid, name)
 		}
@@ -151,6 +162,12 @@ func ReadSubmission(r *http.Request, maxBytes int64) (Submission, error) {
 	}
 	if !seen["description"] {
 		return Submission{}, fmt.Errorf("%w: description is required", ErrInvalid)
+	}
+	// One Discord message carries every file, so the clip and the journals
+	// share the configured attachment budget.
+	if submission.Attachment != nil && submission.Diagnostics != nil &&
+		int64(len(submission.Attachment.Data)+len(submission.Diagnostics.Data)) > maxBytes {
+		return Submission{}, fmt.Errorf("%w: attachments exceed %d bytes together", ErrTooLarge, maxBytes)
 	}
 	return submission, nil
 }
@@ -245,6 +262,25 @@ func readAttachment(part *multipart.Part, name string, maxBytes int64) (*Attachm
 		return nil, fmt.Errorf("%w: %s is not a valid %s", ErrInvalid, name, contentType)
 	}
 	return &Attachment{FileName: fileName, ContentType: contentType, Data: data}, nil
+}
+
+/*
+================
+readDiagnostics
+
+The journal archive must be a zip (local file header magic "PK")
+declared as application/zip; anything else is refused, not forwarded.
+================
+*/
+func readDiagnostics(part *multipart.Part, maxBytes int64) (*Attachment, error) {
+	data, err := readBounded(part, min(maxBytes, maxDiagnosticsBytes))
+	if err != nil {
+		return nil, err
+	}
+	if part.Header.Get("Content-Type") != "application/zip" || !bytes.HasPrefix(data, []byte("PK")) {
+		return nil, fmt.Errorf("%w: diagnostics is not a valid application/zip", ErrInvalid)
+	}
+	return &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: data}, nil
 }
 
 /*

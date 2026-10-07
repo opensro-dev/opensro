@@ -146,8 +146,14 @@ func encodeMessage(report Report, forum bool) (io.Reader, string, error) {
 	if forum {
 		payload.ThreadName = threadName(report)
 	}
-	if report.Attachment != nil {
-		payload.Attachments = []discordFileInfo{{ID: 0, FileName: report.Attachment.FileName}}
+	// Files go out in a fixed order: the clip or screenshot, then the
+	// journal archive. Each is files[id] with its id in attachments.
+	var files []*Attachment
+	for _, file := range []*Attachment{report.Attachment, report.Diagnostics} {
+		if file != nil {
+			payload.Attachments = append(payload.Attachments, discordFileInfo{ID: len(files), FileName: file.FileName})
+			files = append(files, file)
+		}
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -162,13 +168,16 @@ func encodeMessage(report Report, forum bool) (io.Reader, string, error) {
 	if err == nil {
 		_, err = part.Write(encoded)
 	}
-	if err == nil && report.Attachment != nil {
+	for id, file := range files {
+		if err != nil {
+			break
+		}
 		header = textproto.MIMEHeader{}
-		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="files[0]"; filename=%q`, report.Attachment.FileName))
-		header.Set("Content-Type", report.Attachment.ContentType)
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="files[%d]"; filename=%q`, id, file.FileName))
+		header.Set("Content-Type", file.ContentType)
 		part, err = writer.CreatePart(header)
 		if err == nil {
-			_, err = part.Write(report.Attachment.Data)
+			_, err = part.Write(file.Data)
 		}
 	}
 	if err == nil {

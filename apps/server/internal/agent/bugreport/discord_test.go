@@ -257,3 +257,49 @@ func TestEmbedStaysWithinDiscordLimits(t *testing.T) {
 		t.Fatalf("embed has %d characters in %d fields", total, len(embed.Fields))
 	}
 }
+
+/*
+================
+TestDeliverPostsDiagnosticsAsSecondFile
+
+The journal archive follows the clip as files[1], and the payload's
+attachment ids name both files in the same order.
+================
+*/
+func TestDeliverPostsDiagnosticsAsSecondFile(t *testing.T) {
+	fake := &fakeDiscord{}
+	report := testReport()
+	report.Diagnostics = &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: []byte("PK")}
+	if _, err := newTestService(t, fake).Deliver(context.Background(), report); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.files) != 2 || fake.files[0] != "files[0]=replay.mp4:video/mp4" ||
+		fake.files[1] != "files[1]=diagnostics.zip:application/zip" {
+		t.Fatalf("files %v", fake.files)
+	}
+	got := fake.payloads[0].Attachments
+	if len(got) != 2 || got[0] != (discordFileInfo{ID: 0, FileName: "replay.mp4"}) ||
+		got[1] != (discordFileInfo{ID: 1, FileName: "diagnostics.zip"}) {
+		t.Fatalf("attachments %+v", got)
+	}
+}
+
+/*
+================
+TestDeliverPostsDiagnosticsAlone
+
+A report without a clip or screenshot still carries its journals as files[0].
+================
+*/
+func TestDeliverPostsDiagnosticsAlone(t *testing.T) {
+	fake := &fakeDiscord{}
+	report := testReport()
+	report.Attachment = nil
+	report.Diagnostics = &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: []byte("PK")}
+	if _, err := newTestService(t, fake).Deliver(context.Background(), report); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.files) != 1 || fake.files[0] != "files[0]=diagnostics.zip:application/zip" {
+		t.Fatalf("files %v", fake.files)
+	}
+}
