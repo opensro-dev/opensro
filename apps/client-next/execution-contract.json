@@ -2001,6 +2001,20 @@
 				"callback:step:7"
 			],
 			"reason": "Existing synchronous presentation callbacks moved from characters.ts into its finalization phase; frame ordering is unchanged."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/presentation-actions.ts",
+			"provider": "src/engine/runtime/random/random.ts",
+			"functions": [
+				"range"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/presentation-actions.ts",
+			"provider": "src/engine/runtime/presentation/effective-hp.ts",
+			"functions": [
+				"dead"
+			]
 		}
 	],
 	"boundaries": [
@@ -2535,6 +2549,125 @@
 			"function": "step",
 			"kind": "callback",
 			"reason": "The finalization phase forwards synchronous readiness from the parent character resource owner."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "feedback.pendingDeaths",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Damage feedback owner reads pending fatal results; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "resourceFor",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Parent reference-appearance helper selects the current body resource; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "effects.loaded",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effect owner reports catalog readiness; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "health?.dead",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effective health owner reads current death state; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "structureVisuals.step",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Structure owner advances stage timers; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "effects.structureShake",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effect owner queues the existing structure camera event; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "appearanceRef",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Parent reference-appearance helper resolves the model id; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "logicalPose",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Current presentation-sample helper supplies the logical pose; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "sounds.emit",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character sound owner emits the authored stage sound; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "effects.phases",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effect owner provides ready/wait/shot motion tables; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "wornEquipment",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Parent appearance helper supplies current equipment; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "random.range",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Shared presentation RNG supplies the native action choice; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "wornEquipment",
+			"function": "soundContext",
+			"kind": "callback",
+			"reason": "Parent appearance helper supplies current equipment; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "effects.phases",
+			"function": "callback:flatMap:0",
+			"kind": "callback",
+			"reason": "Effect owner provides ready/wait/shot motion tables; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "appearanceRef",
+			"function": "callback:flatMap:0",
+			"kind": "callback",
+			"reason": "Parent reference-appearance helper resolves the model id; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "resources.animation",
+			"function": "callback:filter:0",
+			"kind": "callback",
+			"reason": "Character resource owner admits the requested authored motion; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-actions.ts",
+			"expression": "resources.animation",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "Character resource owner admits the requested authored motion; synchronously borrowed from characters.ts at the original action-phase position."
 		}
 	],
 	"sequences": [
