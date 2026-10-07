@@ -130,6 +130,8 @@ func (service *Service) Settings() Settings {
 		ReplayDefault: service.config.ReplayDefault,
 		MaxBytes:      service.config.MaxBytes,
 		ReplaySeconds: ReplaySeconds,
+		// The part shares the request bound with the clip (submission.go).
+		MaxDiagnosticsBytes: min(service.config.MaxBytes, maxDiagnosticsBytes),
 	}
 }
 

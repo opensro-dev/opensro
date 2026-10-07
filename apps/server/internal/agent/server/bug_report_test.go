@@ -166,7 +166,7 @@ TestBugReportsDisabledWithoutService
 */
 func TestBugReportsDisabledWithoutService(t *testing.T) {
 	fixture, _ := newBugReportFixture(t, false)
-	if settings := getBugReportSettings(t, fixture); settings.Enabled {
+	if settings := getBugReportSettings(t, fixture); settings.Enabled || settings.MaxDiagnosticsBytes != 0 {
 		t.Fatal("bug reports enabled without a webhook")
 	}
 	response := postBugReport(t, fixture, loginCookie(t, fixture), "The bridge eats my character")
@@ -183,7 +183,8 @@ TestBugReportDeliversWithSessionIdentity
 func TestBugReportDeliversWithSessionIdentity(t *testing.T) {
 	fixture, recorder := newBugReportFixture(t, true)
 	settings := getBugReportSettings(t, fixture)
-	if !settings.Enabled || settings.ReplayDefault || settings.MaxBytes != 1<<20 || settings.ReplaySeconds != bugreport.ReplaySeconds {
+	if !settings.Enabled || settings.ReplayDefault || settings.MaxBytes != 1<<20 || settings.ReplaySeconds != bugreport.ReplaySeconds ||
+		settings.MaxDiagnosticsBytes != 1<<20 {
 		t.Fatalf("settings %+v", settings)
 	}
 

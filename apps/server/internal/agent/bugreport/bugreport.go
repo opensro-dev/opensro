@@ -77,6 +77,11 @@ type Settings struct {
 	ReplayDefault bool  `json:"replayDefault"`
 	MaxBytes      int64 `json:"maxBytes"`
 	ReplaySeconds int   `json:"replaySeconds"`
+	// MaxDiagnosticsBytes advertises that this Agent accepts the optional
+	// diagnostics part, and its bound. An older Agent omits it (zero), and
+	// refuses the part as unknown, so a client attaches the archive only when
+	// this is positive.
+	MaxDiagnosticsBytes int64 `json:"maxDiagnosticsBytes"`
 }
 
 /*
