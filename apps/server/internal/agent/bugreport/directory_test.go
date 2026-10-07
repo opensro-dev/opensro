@@ -14,6 +14,7 @@ package bugreport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -209,5 +210,31 @@ func TestLoadConfigDirectory(t *testing.T) {
 	})
 	if config.Directory != "" || config.Enabled() || len(warnings) != 1 {
 		t.Fatalf("relative: %+v %v", config, warnings)
+	}
+}
+
+/*
+================
+TestDirectoryWriteFailureLeavesNothing
+
+A write that fails part way (a full disk, here an attachment that cannot be
+created) returns ErrDelivery, which the Agent answers as DELIVERY_FAILED,
+and removes its staging directory at once instead of leaving it for the
+stale sweep.
+================
+*/
+func TestDirectoryWriteFailureLeavesNothing(t *testing.T) {
+	root := t.TempDir()
+	report := directoryTestReport("BR-261007-0240-ABCD")
+	report.Diagnostics = &Attachment{FileName: filepath.Join("missing", "diagnostics.zip"), Data: testZip}
+	if _, err := writeDirectory(root, report, directoryTestNow); !errors.Is(err, ErrDelivery) {
+		t.Fatalf("want ErrDelivery, got %v", err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("a failed write left %d entries, first %q", len(entries), entries[0].Name())
 	}
 }
