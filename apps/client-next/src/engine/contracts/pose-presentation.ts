@@ -34,5 +34,7 @@ export interface SampleInput {
 	readonly durationMs?: number;
 	readonly startedAtMs?: number;
 	readonly displacement?: boolean;
+	/** Navigation-certified connected ground samples; never a skill trajectory. */
+	readonly walkingPath?: readonly Pose[];
 	readonly transition?: import("@/engine/contracts/gameplay").MovementTransition;
 }

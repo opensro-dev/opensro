@@ -116,6 +116,7 @@ Older untimed publishers retain sample-based presentation.
 export interface MovementPath {
 	readonly from: Pose;
 	readonly to: Pose;
+	readonly walkingPath?: readonly Pose[];
 	readonly durationMs?: number;
 	/** Simulation clock origin of a fixed-timing displacement leg. */
 	readonly startedAtMs?: number;
@@ -147,6 +148,9 @@ export interface MovementTransition {
 	readonly eligible: boolean;
 	readonly pathEligible?: boolean;
 	readonly corridor?: { readonly from: Pose; readonly to: Pose; };
+	// Ordered connected ground samples, including terrain-following heights.
+	// This proves recovery behind the current pose, not future velocity.
+	readonly walkingPath?: readonly Pose[];
 	// An accepted receipt can replace the first publication of its click.
 	// Retain the admitted walk behind its rebased anchor for presentation.
 	readonly previousPath?: { readonly from: Pose; readonly to: Pose; };

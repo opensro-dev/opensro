@@ -32,6 +32,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
 import { directionLegEnd, modelYaw } from "@/engine/foundation/gameplay/direction-movement";
+import { extendWalkingHistory } from "@/engine/foundation/gameplay/walking-history";
 const ENDPOINT_EPSILON = 0.001;
 const PRESENTATION_LOOKAHEAD_MS = 100;
 /*
@@ -51,6 +52,8 @@ RemoteSegment
 ================
 */
 type RemoteSegment = MovementSegment & {
+	walkingPath?: readonly Pose[];
+	presentationHistory?: { from: Pose; to: Pose; points?: readonly Pose[]; result: readonly Pose[]; };
 	previous?: Pose;
 	at?: number;
 	vector?: readonly [number, number];
@@ -164,6 +167,13 @@ advance
 			return previous;
 		}
 		if ( !accepted ) return previous;
+		segment.walkingPath = extendWalkingHistory( {
+			points: segment.walkingPath,
+			from: previous,
+			to: accepted,
+			sourceOwner: query.sourceOwner,
+			clip
+		} );
 		segment.blocked = !!(query.status & 1);
 		segment.previous = accepted;
 		segment.arrived = next.arrived;
@@ -199,11 +209,32 @@ does not move the actor or replace its actual-time collision result.
 		const checked = segment.blocked || segment.arrived ?
 			null :
 			clip( pose, desired, query );
+		const admitted = checked && !(query.status & 0x10000001) &&
+			poseDistance( checked, desired ) < ENDPOINT_EPSILON;
+		const to = admitted ? checked : pose;
+		let walkingPath = segment.walkingPath;
+		if ( admitted ) {
+			const cache = segment.presentationHistory;
+			if (
+				cache && cache.from === pose && cache.points === segment.walkingPath &&
+				cache.to.regionId === to.regionId && cache.to.x === to.x && cache.to.y === to.y && cache.to.z === to.z
+			) {
+				walkingPath = cache.result;
+			} else {
+				walkingPath = extendWalkingHistory( {
+					points: segment.walkingPath,
+					from: pose,
+					to,
+					sourceOwner: query.sourceOwner,
+					clip
+				} );
+				segment.presentationHistory = { from: pose, to, points: segment.walkingPath, result: walkingPath };
+			}
+		}
 		return {
 			from: pose,
-			to: checked && !(query.status & 0x10000001) && poseDistance( checked, desired ) < ENDPOINT_EPSILON ?
-				desired :
-				pose,
+			to,
+			walkingPath,
 			durationMs: PRESENTATION_LOOKAHEAD_MS
 		};
 	}
@@ -263,7 +294,8 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 					duration: durationMs,
 					at: now,
 					arrived: false,
-					blocked: false
+					blocked: false,
+					walkingPath: undefined
 				} );
 				path = { from: resolved, to: segment.to, durationMs };
 			}
@@ -357,6 +389,8 @@ surfaceReference
 					z: entity.z,
 					angle: entity.heading
 				};
+				segment.walkingPath = undefined;
+				segment.presentationHistory = undefined;
 			}
 			cursors.delete( entity.gid );
 		},
@@ -427,11 +461,12 @@ idle mover turns where it stands. A destination walk keeps its own facing.
 			if ( segment?.direction !== undefined ) {
 				const pose = advance( entity.gid, segment, now );
 				const leg = directionLeg( entity, pose, heading, now );
-				active.set( entity.gid, leg );
+				const continued = { ...leg, walkingPath: segment.walkingPath };
+				active.set( entity.gid, continued );
 				return {
 					...update( entity.gid, pose, true ),
 					heading,
-					movementPath: presentationPath( entity.gid, leg, pose )
+					movementPath: presentationPath( entity.gid, continued, pose )
 				};
 			}
 			if ( segment ) return null;
@@ -517,6 +552,7 @@ mode
 					previous: pose,
 					direction: segment.direction,
 					vector: segment.vector,
+					walkingPath: segment.walkingPath,
 					speed
 				} );
 			} else active.delete( entity.gid );

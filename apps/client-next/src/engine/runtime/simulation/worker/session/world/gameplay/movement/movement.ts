@@ -17,6 +17,7 @@ server's walk every 500 ms (directionDrift).
 import { MOVEMENT_RECEIPT_TIMEOUT } from "@/engine/contracts/network";
 
 import { positionSkillGoal } from "@/engine/foundation/gameplay/position-skill";
+import { extendWalkingHistory, rewindWalkingHistory } from "@/engine/foundation/gameplay/walking-history";
 import type { NavOwner, NavOwnerSpan } from "@/engine/foundation/navigation/dungeon-ownership";
 import {
 	type MovementSegment,
@@ -185,6 +186,8 @@ export function createMovement(
 				admitted?: boolean;
 				admittedFrom?: Pose;
 				admittedTo?: Pose;
+				history?: readonly Pose[];
+				presentationHistory?: readonly Pose[];
 				walking?: { direction: readonly [number, number]; speed: number; };
 				// A leg of a direction walk; blocked legs end the walk.
 				direction?: { heading: number; blocked: boolean; };
@@ -470,6 +473,7 @@ bindOwners
 			...value,
 			admittedFrom: value.from,
 			walking: undefined,
+			presentationHistory: undefined,
 			admitted,
 			owners: admitted ? query.owners : undefined
 		};
@@ -623,7 +627,21 @@ every high-latency acknowledgement and skill press.
 					};
 				} else {
 					segment.admittedFrom ??= pose;
+					segment.history = extendWalkingHistory( {
+						points: segment.history,
+						from: pose,
+						to: resolved,
+						sourceOwner: owner,
+						clip: navigation.clip
+					} );
+					segment.presentationHistory = undefined;
 					pose = resolved;
+					const walkingPath = { from: segment.admittedFrom, to: pose };
+					transition = {
+						...transition,
+						walkingPath: segment.history,
+						turn: transition.turn ? { ...transition.turn, outgoing: walkingPath } : undefined
+					};
 					owner = query.owner;
 					surfaceCursor = {};
 					const blocked = !!(query.status & NAVIGATION_STOP);
@@ -671,17 +689,32 @@ every high-latency acknowledgement and skill press.
 			poseDistance( resolved, desired ) < ENDPOINT_EPSILON;
 		segment.admitted = admitted;
 		if ( admitted ) {
-			segment.admittedTo = desired;
-			if ( transition.previousPath && segment.admittedFrom ) {
-				// A kept receipt may follow an unpublished worker advance. Its
-				// proven straight history joins the newly checked lookahead;
-				// retaining only the old lookahead would discard recovery mid-glide.
-				transition = { ...transition, corridor: { from: segment.admittedFrom, to: desired } };
-			}
+			segment.admittedTo = resolved!;
+		}
+		segment.admittedFrom ??= pose;
+		// Keep the accepted past even when the next lookahead hits a wall.
+		// Main-thread stalls and worker catch-up can omit every intermediate
+		// publication; the displayed pose still belongs to this admitted walk.
+		if ( segment.admittedFrom ) {
+			const walkingPath = { from: segment.admittedFrom, to: admitted ? resolved! : pose };
+			segment.presentationHistory ??= admitted ?
+				extendWalkingHistory( {
+					points: segment.history,
+					from: pose,
+					to: resolved!,
+					sourceOwner: owner,
+					clip: navigation.clip
+				} ) :
+				segment.history;
+			transition = {
+				...transition,
+				walkingPath: segment.presentationHistory,
+				turn: transition.turn ? { ...transition.turn, outgoing: walkingPath } : undefined
+			};
 		}
 		return {
 			from: pose,
-			to: admitted ? desired : pose,
+			to: admitted ? resolved! : pose,
 			durationMs: Math.min( PRESENTATION_LOOKAHEAD_MS, segment.duration )
 		};
 	}
@@ -732,8 +765,8 @@ displace
 		*/
 		displace( command: import("@/engine/contracts/gameplay").CastDisplacement, now: number ) {
 			if ( !pose ) return;
-			beginTransition( "displacement", true );
 			advanceTo( now );
+			beginTransition( "displacement", true );
 			const from = pose,
 				next = displacementSegment( from, command, now );
 			// Acceptance replaces the held walk. Its timeout must never restore
@@ -1002,6 +1035,7 @@ navigation
 				return;
 			}
 			navigationRegion = region;
+			transition = { ...transition, walkingPath: undefined };
 			surfaceCursor = {};
 			owner = navigation.relocate( kept );
 			if ( segment ) {
@@ -1010,7 +1044,9 @@ navigation
 					owners: undefined,
 					admitted: false,
 					admittedFrom: undefined,
-					admittedTo: undefined
+					admittedTo: undefined,
+					history: undefined,
+					presentationHistory: undefined
 				};
 			} // Spawn may precede collision admission. Stationary actors never enter
 			// the movement-step surface resolver, so finish grounding here.
@@ -1051,7 +1087,6 @@ correct
 ================
 		*/
 		correct( value: Pose, now?: number ) {
-			beginTransition( "correction" );
 			// What the walk was doing when the correction came, for the report:
 			// a large one names its cause (a hold the server never settled, a
 			// walk of the wrong lead) instead of only its size.
@@ -1062,6 +1097,7 @@ correct
 			};
 			castHold = null;
 			if ( now !== undefined ) advanceTo( now );
+			beginTransition( "correction" );
 			const before = pose;
 			// A live source correction ends motion, but is not a new spawn.
 			// Resolve its surface through the existing navigation owner before
@@ -1118,6 +1154,7 @@ request
 			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
 				throw new Error( "Movement command capacity exceeded or player absent" );
 			}
+			const publishedHistory = segment?.presentationHistory;
 			const incoming = segment?.admittedTo ?
 				{
 					from: segment.admittedFrom ?? segment.from,
@@ -1125,6 +1162,7 @@ request
 				} :
 				undefined;
 			advanceTo( now );
+			const incomingHistory = rewindWalkingHistory( publishedHistory, pose ) ?? segment?.history;
 			const p = admitPose( value ),
 				to = { ...p, x: Math.trunc( p.x ), y: Math.trunc( p.y ), z: Math.trunc( p.z ) },
 				id = nextId + 1;
@@ -1170,12 +1208,13 @@ request
 					lead: "client",
 					duration: movementDuration( poseDistance( pose, clipped ), speed ),
 					owners: query.owners,
-					admitted: true
+					admitted: true,
+					history: incomingHistory
 				};
 				if ( incoming ) {
 					transition = {
 						...transition,
-						turn: { incoming, outgoing: { from: segment.from, to: segment.to } }
+						turn: { incoming, outgoing: { from: segment.from, to: segment.from } }
 					};
 				}
 			}
@@ -1360,14 +1399,18 @@ receive
 				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
 				return;
 			}
+			const previousGoal = segment?.to;
+			const previousTurn = transition.turn;
+			advanceTo( now );
+			const previousHistory = segment?.history ?? transition.walkingPath;
 			const previousPath = segment?.admittedFrom && pose ?
 				{
 					from: segment.admittedFrom,
 					to: segment.admittedTo ?? pose
 				} :
+				previousHistory?.length ?
+				{ from: previousHistory[0]!, to: previousHistory.at( -1 )! } :
 				undefined;
-			const previousTurn = transition.turn;
-			advanceTo( now );
 			if ( command.direction !== undefined && r.accepted && walk ) {
 				beginTransition( "receipt" );
 				const before = pose;
@@ -1434,9 +1477,13 @@ receive
 				replacement = null;
 			} else pose = authoritative;
 			segment = replacement ? bindOwners( { ...replacement, from: pose } ) : null;
-			if ( segment && reconciled.kind === "keep" && previousPath ) {
+			const sameGoal = previousGoal && previousGoal.regionId === to.regionId &&
+				previousGoal.x === to.x && previousGoal.z === to.z;
+			if ( segment && reconciled.kind === "keep" && previousPath && sameGoal ) {
 				segment.admittedFrom = previousPath.from;
 			}
+			if ( segment && reconciled.kind === "keep" ) segment.history = previousHistory;
+			if ( !segment && reconciled.kind === "keep" ) transition = { ...transition, walkingPath: previousHistory };
 			acknowledged = r.id;
 			for ( const id of pending.keys() ) {
 				if ( id <= r.id ) {
@@ -1462,7 +1509,13 @@ receive
 			// admitted path then never reached presentation; the rebased path
 			// alone cannot prove that the last drawn pose is still safe.
 			if ( reconciled.kind === "keep" && transition.eligible && previousPath ) {
-				transition = { ...transition, previousPath, turn: previousTurn };
+				transition = {
+					...transition,
+					previousPath,
+					turn: sameGoal ? previousTurn : segment ?
+						{ incoming: previousPath, outgoing: { from: segment.from, to: segment.from } } :
+						undefined
+				};
 			}
 		},
 		/*

@@ -132,3 +132,59 @@ test("native rejected navigation clears peer travel without accepting the candid
 	assert.equal( stopped.moving, false );
 	assert.deepEqual( motion.step( 40 ), [] );
 });
+
+test("remote recovery publishes the accepted hill and resolved lookahead height", () => {
+	const hill = x => Math.max( 0, 5 - Math.abs( x - 105 ) );
+	const motion = createEntityMotion( undefined, ( _from, to ) => ({ ...to, y: hill( to.x ) }) );
+	motion.spawn( ENTITY, 0 );
+	const advanced = motion.step( 200 )[0];
+	const path = defined( advanced.movementPath );
+	const history = defined( path.walkingPath );
+	assert.equal( advanced.x, 110 );
+	assert.equal( advanced.y, 0 );
+	assert.ok( history.some( point => point.x > 100 && point.x < 110 && point.y > 3 ) );
+	assert.ok( history.every( point => point.y === hill( point.x ) ) );
+	const uphill = createEntityMotion( undefined, ( _from, to ) => ({ ...to, y: to.x - 100 }) );
+	uphill.spawn( ENTITY, 0 );
+	const rising = defined( uphill.step( 20 )[0].movementPath );
+	assert.equal( rising.to.y, rising.to.x - 100 );
+	assert.ok( rising.to.y > rising.from.y );
+});
+
+test("remote history is bounded, preserved on retiming and cleared on source reseed", () => {
+	const motion = createEntityMotion( undefined, ( _from, to ) => to );
+	motion.spawn( { ...ENTITY, spawnDestination: { ...START, x: 1800 } }, 0 );
+	let latest = motion.step( 20 )[0];
+	for ( let at = 40; at <= 8000; at += 20 ) latest = motion.step( at )[0];
+	const history = defined( defined( latest.movementPath ).walkingPath );
+	assert.ok( history.length <= 256 );
+	assert.ok( history[0].x > START.x );
+	const retimed = defined( motion.speeds( ENTITY, { ...ENTITY, runSpeed: 80 }, 8000 ) );
+	assert.ok( defined( defined( retimed.movementPath ).walkingPath ).some( point => point.x < latest.x - 100 ) );
+	const reseeded = motion.source( ENTITY, { ...START, x: 900 }, 8000 );
+	assert.ok( defined( defined( reseeded.movementPath ).walkingPath ).every( point => point.x >= 900 ) );
+	assert.equal( motion.correct( ENTITY, START ).movementPath, undefined );
+});
+
+test("remote angular turn retains its admitted corner through a mount gait change", () => {
+	const motion = createEntityMotion( undefined, ( _from, to ) => to );
+	const packet = Buffer.alloc( 19 );
+	packet.writeUInt32LE( ENTITY.gid );
+	packet[5] = 1;
+	packet.writeUInt16LE( 0, 6 );
+	packet[8] = 1;
+	packet.writeUInt16LE( START.regionId, 9 );
+	packet.writeInt16LE( START.x * 10, 11 );
+	packet.writeFloatLE( START.y, 13 );
+	packet.writeInt16LE( START.z * 10, 17 );
+	motion.receive( packet, ENTITY, 0 );
+	const first = motion.step( 200 )[0];
+	const turn = defined( motion.steer( ENTITY, 16384, 200 ) );
+	const second = motion.step( 400 )[0];
+	const path = defined( defined( second.movementPath ).walkingPath );
+	assert.ok( path.some( point => Math.abs( point.x - first.x ) < .001 && Math.abs( point.z - first.z ) < .001 ) );
+	assert.ok( path.some( point => point.x < first.x - 2 ) );
+	assert.ok( path.some( point => point.z > first.z + 2 ) );
+	const walking = defined( motion.mode( { ...ENTITY, mountedOn: 2, movementMode: 2 }, 400 ) );
+	assert.ok( defined( defined( walking.movementPath ).walkingPath ).some( point => point.x < turn.x - 2 ) );
+});

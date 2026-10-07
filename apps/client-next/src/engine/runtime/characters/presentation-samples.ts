@@ -70,6 +70,7 @@ export function createPresentationSamples( entities: readonly EntityState[], gam
 			revision: source.movementRevision ?? 0,
 			moving: !!source.moving && source.movementTransition?.pathEligible !== false,
 			transition: source.movementTransition,
+			walkingPath: source.movementTransition?.walkingPath ?? source.movementPath?.walkingPath,
 			...(source.movementPath ?
 				{
 					from: source.movementTransition?.pathEligible === false ?
