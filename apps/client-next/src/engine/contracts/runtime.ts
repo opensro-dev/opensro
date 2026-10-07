@@ -221,7 +221,7 @@ export interface Platform extends Disposable {
 	/** The canvas CSS size, observed rather than read (no forced layout). */
 	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;
-	/** CSS pixels per UI pixel: 1 when native, else the page height over the chosen screen height. */
+	/** CSS pixels per native UI pixel; reciprocal of the current device pixel ratio. */
 	displayScale(): number;
 	report( text: string, error?: unknown ): void;
 }

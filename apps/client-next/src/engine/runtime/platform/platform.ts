@@ -28,7 +28,7 @@ import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foun
 import { createUiBridge } from "./ui/ui";
 import { createTelemetry } from "./telemetry";
 import { createCursor } from "./ui/cursor";
-import type { UiEvent } from "@/engine/contracts/ui";
+import type { UiEvent, UiSemantics } from "@/engine/contracts/ui";
 import type { RawInput, WorldClickInput } from "@/engine/contracts/input";
 import type { Platform } from "@/engine/contracts/runtime";
 import type { AssetProgress } from "@/engine/contracts/assets";
@@ -57,6 +57,7 @@ export function createPlatform(
 	onWorldHover: ( point: readonly [number, number] | null ) => void = () => {}
 ): Platform {
 	const lifetime = new AbortController();
+	let lastUi: UiSemantics | null = null;
 	// The canvas CSS box, kept current by a ResizeObserver. Reading
 	// clientWidth every frame forces a synchronous layout whenever the UI
 	// touched the DOM that frame (a trace showed it among the top costs).
@@ -71,8 +72,9 @@ export function createPlatform(
 	================
 	*/
 	function refreshCanvasBox(): void {
-		canvasBox.width = canvas.clientWidth;
-		canvasBox.height = canvas.clientHeight;
+		const box = canvas.getBoundingClientRect();
+		canvasBox.width = box.width;
+		canvasBox.height = box.height;
 	}
 	/*
 	================
@@ -170,13 +172,13 @@ export function createPlatform(
 	================
 	displayScale
 
-	CSS pixels per UI pixel. One, as in native window mode, unless a chosen
-	screen size is larger than the page: then the game area shrinks to fit.
+	CSS pixels per native UI pixel. The bitmap UI is laid out in physical
+	pixels, matching the canvas backing store. Browser zoom changes CSS units,
+	not the number of pixels in a glyph, its control, or its pointer hit box.
 	================
 	*/
 	function displayScale(): number {
-		const size = video.displaySize, css = canvasSize().width;
-		return size && css > 0 ? css / size[0] : 1;
+		return 1 / devicePixelRatio;
 	}
 	/*
 	================
@@ -201,12 +203,13 @@ export function createPlatform(
 			refreshCanvasBox();
 			return;
 		}
-		const scale = Math.min( 1, innerWidth / size[0], innerHeight / size[1] ),
-			width = size[0] * scale,
-			height = size[1] * scale;
+		const ratio = devicePixelRatio,
+			scale = Math.min( 1, innerWidth * ratio / size[0], innerHeight * ratio / size[1] ),
+			width = Math.round( size[0] * scale ) / ratio,
+			height = Math.round( size[1] * scale ) / ratio;
 		style.position = "absolute";
-		style.left = (innerWidth - width) / 2 + "px";
-		style.top = (innerHeight - height) / 2 + "px";
+		style.left = Math.floor( (innerWidth - width) * ratio / 2 ) / ratio + "px";
+		style.top = Math.floor( (innerHeight - height) * ratio / 2 ) / ratio + "px";
 		style.width = width + "px";
 		style.height = height + "px";
 		document.body.style.background = "#000";
@@ -214,7 +217,19 @@ export function createPlatform(
 		refreshCanvasBox();
 	}
 	layoutCanvas();
-	addEventListener( "resize", layoutCanvas, { signal: lifetime.signal } );
+	/*
+	================
+	resizeCanvas
+
+	Browser zoom can leave the physical UI size unchanged. Reposition its DOM
+	controls even when the retained UI therefore has no new publication.
+	================
+	*/
+	function resizeCanvas() {
+		layoutCanvas();
+		if ( lastUi ) bridge.present( lastUi );
+	}
+	addEventListener( "resize", resizeCanvas, { signal: lifetime.signal } );
 	/*
 	================
 	uiPoint
@@ -588,6 +603,7 @@ export function createPlatform(
 		================
 		*/
 		presentUi( state ) {
+			lastUi = state;
 			bridge.present( state );
 			if ( fpsChip ) {
 				const scale = displayScale(),
@@ -760,6 +776,7 @@ export function createPlatform(
 		================
 		*/
 		dispose() {
+			lastUi = null;
 			canvasObserver?.disconnect();
 			lifetime.abort();
 			bridge.dispose();

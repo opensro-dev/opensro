@@ -21,6 +21,7 @@ const LOGIN_AUTOCOMPLETE: Readonly<Record<string, string>> = {
 	account: "username",
 	password: "current-password"
 };
+const INPUT_FONT_PIXELS = 12;
 /*
 ================
 configureCredentialHints
@@ -668,7 +669,10 @@ export function createUiBridge(
 				} else if ( el instanceof HTMLInputElement && el.value !== control.value && !composing ) {
 					el.value = control.value ?? "";
 				}
-				// UI pixels to CSS pixels (platform displayScale: the chosen screen size).
+				// The transparent editor's glyph metrics and hit box use the same
+				// physical-to-CSS conversion as the visible bitmap UI.
+				const fontSize = INPUT_FONT_PIXELS * scale + "px";
+				if ( el.style.fontSize !== fontSize ) el.style.fontSize = fontSize;
 				const [x, y, w, h] = control.rect,
 					left = box.left + x * scale,
 					top = box.top + y * scale,
