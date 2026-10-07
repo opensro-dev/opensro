@@ -23,6 +23,7 @@ from the body: the Agent adds it from the authenticated session.
 package bugreport
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,9 @@ const (
 	// maxDiagnosticsBytes bounds the journal archive. It shares the
 	// attachment budget (maxBytes) with the clip; this is its own ceiling.
 	maxDiagnosticsBytes = 2 << 20
+	// maxDiagnosticsUnpacked bounds what the archive may expand to, so a
+	// small upload cannot stand for a huge one (a zip bomb).
+	maxDiagnosticsUnpacked = 8 << 20
 
 	// multipartOverhead bounds the boundaries and part headers on top of the
 	// attachment and text parts, so the whole body can be capped up front.
@@ -268,7 +272,7 @@ func readAttachment(part *multipart.Part, name string, maxBytes int64) (*Attachm
 ================
 readDiagnostics
 
-The journal archive must be a zip (local file header magic "PK")
+The journal archive must be a zip (local file header magic "PK\x03\x04")
 declared as application/zip; anything else is refused, not forwarded.
 ================
 */
@@ -277,10 +281,63 @@ func readDiagnostics(part *multipart.Part, maxBytes int64) (*Attachment, error) 
 	if err != nil {
 		return nil, err
 	}
-	if part.Header.Get("Content-Type") != "application/zip" || !bytes.HasPrefix(data, []byte("PK")) {
+	if part.Header.Get("Content-Type") != "application/zip" || !bytes.HasPrefix(data, []byte("PK\x03\x04")) {
 		return nil, fmt.Errorf("%w: diagnostics is not a valid application/zip", ErrInvalid)
 	}
+	if err := checkDiagnosticsMembers(data); err != nil {
+		return nil, err
+	}
 	return &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: data}, nil
+}
+
+// diagnosticsMembers are the journals a client may send, and nothing else.
+var diagnosticsMembers = map[string]bool{
+	"manifest.json": true, "movement.json": true, "timeline.json": true,
+	"state.json": true, "environment.json": true,
+}
+
+/*
+================
+checkDiagnosticsMembers
+
+The archive holds only the known journals, each once, flat, as valid JSON,
+within the unpacked bound. Field-level scrubbing of other players' data is
+the client's job; this keeps the archive to its declared shape so it can
+carry nothing else into a Discord channel.
+================
+*/
+func checkDiagnosticsMembers(data []byte) error {
+	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return fmt.Errorf("%w: diagnostics zip: %v", ErrInvalid, err)
+	}
+	seen := make(map[string]bool, len(archive.File))
+	var unpacked int64
+	for _, member := range archive.File {
+		if !diagnosticsMembers[member.Name] || seen[member.Name] {
+			return fmt.Errorf("%w: diagnostics member %q is not an expected journal", ErrInvalid, member.Name)
+		}
+		seen[member.Name] = true
+		reader, err := member.Open()
+		if err != nil {
+			return fmt.Errorf("%w: diagnostics member %q: %v", ErrInvalid, member.Name, err)
+		}
+		// Read at most what is left of the bound plus one byte, so the
+		// declared size is never trusted.
+		content, err := io.ReadAll(io.LimitReader(reader, maxDiagnosticsUnpacked-unpacked+1))
+		_ = reader.Close()
+		if err != nil {
+			return fmt.Errorf("%w: diagnostics member %q: %v", ErrInvalid, member.Name, err)
+		}
+		unpacked += int64(len(content))
+		if unpacked > maxDiagnosticsUnpacked {
+			return fmt.Errorf("%w: diagnostics unpacks past %d bytes", ErrTooLarge, maxDiagnosticsUnpacked)
+		}
+		if !json.Valid(content) {
+			return fmt.Errorf("%w: diagnostics member %q is not JSON", ErrInvalid, member.Name)
+		}
+	}
+	return nil
 }
 
 /*

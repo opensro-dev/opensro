@@ -269,7 +269,7 @@ attachment ids name both files in the same order.
 func TestDeliverPostsDiagnosticsAsSecondFile(t *testing.T) {
 	fake := &fakeDiscord{}
 	report := testReport()
-	report.Diagnostics = &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: []byte("PK")}
+	report.Diagnostics = &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: []byte("PK\x03\x04")}
 	if _, err := newTestService(t, fake).Deliver(context.Background(), report); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestDeliverPostsDiagnosticsAlone(t *testing.T) {
 	fake := &fakeDiscord{}
 	report := testReport()
 	report.Attachment = nil
-	report.Diagnostics = &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: []byte("PK")}
+	report.Diagnostics = &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: []byte("PK\x03\x04")}
 	if _, err := newTestService(t, fake).Deliver(context.Background(), report); err != nil {
 		t.Fatal(err)
 	}

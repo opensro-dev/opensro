@@ -8,6 +8,7 @@ submission_test.go - reading reports from the browser
 package bugreport
 
 import (
+	"archive/zip"
 	"bytes"
 	"errors"
 	"mime/multipart"
@@ -160,7 +161,7 @@ func TestReadSubmissionReportsBodyLimitAsTooLarge(t *testing.T) {
 }
 
 // testZip is a zip's local file header magic followed by filler.
-var testZip = append([]byte("PK"), make([]byte, 64)...)
+var testZip = mustZip(map[string]string{"movement.json": "{}"})
 
 /*
 ================
@@ -221,7 +222,7 @@ the clip because both leave in one Discord message.
 */
 func TestReadSubmissionBoundsDiagnosticsSize(t *testing.T) {
 	description := testPart{name: "description", data: []byte("Ghost Walk stops before sliding")}
-	huge := append([]byte("PK"), make([]byte, maxDiagnosticsBytes)...)
+	huge := append([]byte("PK\x03\x04"), make([]byte, maxDiagnosticsBytes)...)
 	if _, err := ReadSubmission(multipartRequest(t, description,
 		testPart{name: "diagnostics", contentType: "application/zip", data: huge}), 4*maxDiagnosticsBytes); !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("archive over its ceiling: want ErrTooLarge, got %v", err)
@@ -238,4 +239,94 @@ func TestReadSubmissionBoundsDiagnosticsSize(t *testing.T) {
 		testPart{name: "diagnostics", contentType: "application/zip", data: testZip}), testMaxBytes); err != nil {
 		t.Fatalf("exactly the shared budget must pass: %v", err)
 	}
+}
+
+/*
+================
+zipOf
+
+A real zip of the given members, for the diagnostics checks.
+================
+*/
+func zipOf(t *testing.T, members map[string]string) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	for name, content := range members {
+		w, err := writer.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
+/*
+================
+TestReadSubmissionChecksDiagnosticsShape
+
+Only the five known journals, flat, each valid JSON, within the unpacked
+bound; anything else (an extra file, a path, non-JSON, a zip bomb) is
+refused before it can reach Discord.
+================
+*/
+func TestReadSubmissionChecksDiagnosticsShape(t *testing.T) {
+	description := testPart{name: "description", data: []byte("Ghost Walk stops before sliding")}
+	read := func(data []byte) error {
+		_, err := ReadSubmission(multipartRequest(t, description,
+			testPart{name: "diagnostics", contentType: "application/zip", data: data}), testMaxBytes)
+		return err
+	}
+	if err := read(zipOf(t, map[string]string{"manifest.json": "{}", "movement.json": `{"events":[]}`, "timeline.json": "[]",
+		"state.json": "{}", "environment.json": "{}"})); err != nil {
+		t.Fatalf("the five journals: %v", err)
+	}
+	for name, members := range map[string]map[string]string{
+		"extra file":   {"movement.json": "{}", "chat.txt": "hello"},
+		"nested path":  {"logs/movement.json": "{}"},
+		"parent path":  {"../movement.json": "{}"},
+		"not json":     {"movement.json": "not json"},
+		"empty member": {"state.json": ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := read(zipOf(t, members)); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("want ErrInvalid, got %v", err)
+			}
+		})
+	}
+	bomb := zipOf(t, map[string]string{"movement.json": "[" + strings.Repeat("0,", maxDiagnosticsUnpacked/2) + "0]"})
+	if err := read(bomb); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("a member past the unpacked bound: want ErrTooLarge, got %v (archive %d bytes)", err, len(bomb))
+	}
+}
+
+/*
+================
+mustZip
+
+A package-level stand-in archive for tests that only need a valid journal.
+================
+*/
+func mustZip(members map[string]string) []byte {
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	for name, content := range members {
+		w, err := writer.Create(name)
+		if err != nil {
+			panic(err)
+		}
+		if _, err := w.Write([]byte(content)); err != nil {
+			panic(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		panic(err)
+	}
+	return buffer.Bytes()
 }
