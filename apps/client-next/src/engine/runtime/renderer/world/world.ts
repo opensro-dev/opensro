@@ -756,9 +756,16 @@ export function createWorldRenderer(
 				state.seconds = seconds;
 			}
 			if ( animationVersions.get( group ) !== state.revision ) {
-				state.pose.palette( current!.models![a.model]!.primitives[a.primitive]!, group.geometry.bones! );
+				// A new group/draw must publish once, even when its initial bones match.
+				// Cloth retains revision-based updates and their clock/RNG ordering.
+				const changed = state.pose.palette(
+					current!.models![a.model]!.primitives[a.primitive]!,
+					group.geometry.bones!,
+					0,
+					!group.geometry.cloth && animationVersions.has( group )
+				);
 				animationVersions.set( group, state.revision );
-				dirtyAnimation.add( group );
+				if ( changed ) dirtyAnimation.add( group );
 				palettes.add( group.geometry.bones! );
 			}
 		}

@@ -396,9 +396,12 @@ quaternion scratch is charged and allocated only when playback needs it.
 		/*
         ================
         palette
+
+        Returns whether the destination was copied. Optional equality gating
+        affects publication only; materialization and pose revisions still run.
         ================
         */
-		palette( primitive: CharacterPrimitive, out: Float32Array, offset = 0 ) {
+		palette( primitive: CharacterPrimitive, out: Float32Array, offset = 0, changedOnly = false ) {
 			materialize();
 			primitive = bindings.get( primitive ) ?? primitive;
 			let views = inverseViews.get( primitive );
@@ -429,7 +432,24 @@ quaternion scratch is charged and allocated only when playback needs it.
 				}
 				cached.version = poseVersion;
 			}
+			// Object.is distinguishes signed zero. NaNs keep the old copy path:
+			// their payload bits cannot be proved equal through a Number read.
+			if (
+				changedOnly && Number.isInteger( offset ) && offset >= 0 &&
+				offset + cached.data.length <= out.length
+			) {
+				let identical = true;
+				for ( let i = 0; i < cached.data.length; i++ ) {
+					const value = cached.data[i]!;
+					if ( !Object.is( value, out[offset + i] ) || Number.isNaN( value ) ) {
+						identical = false;
+						break;
+					}
+				}
+				if ( identical ) return false;
+			}
 			out.set( cached.data, offset );
+			return true;
 		},
 		/*
         ================
