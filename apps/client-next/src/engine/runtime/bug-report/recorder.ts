@@ -5,10 +5,11 @@ recorder.ts - the bug reporter's recording of the game, with sound
 
 Records the canvas as H.264, and the game's sound as AAC, in memory, from
 the player's Record press to their Stop, so a report can show the bug
-happening. Nothing is captured until Record: an always-on rolling replay
-cost about 10 ms of main thread per second for every player (measured
-2026-10-07), so it runs only on request. Nothing leaves the page unless
-the player sends a report.
+happening. Nothing is captured until Record: the always-on rolling replay
+it replaced ran for every player, and one sampled CPU profile of a still
+scene (2026-10-07) put it at 9.65 ms of main thread per second, so it now
+runs only on request. Nothing leaves the page unless the player sends a
+report.
 
 Video path (measured on a windowed Chrome, issue #90):
 

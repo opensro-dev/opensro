@@ -17,9 +17,9 @@ whole session.
 
 Recording runs only between the player's Record and Stop (or the server's
 replaySeconds cap); Stop opens the report window with the clip. An
-always-on rolling replay used to run for every player and cost about
-10 ms of main thread per second (measured 2026-10-07). The replayDefault
-field older Agents still send is ignored.
+always-on rolling replay used to run for every player; one sampled CPU
+profile of a still scene (2026-10-07) put it at 9.65 ms of main thread
+per second. The replayDefault field older Agents still send is ignored.
 
 ===========================================================================
 */
