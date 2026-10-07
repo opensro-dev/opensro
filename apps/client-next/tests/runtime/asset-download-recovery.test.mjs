@@ -579,3 +579,52 @@ test("a byte-limit failure whose body cancel never settles still answers", async
 	assert.match( messages[0].error, /exceeds byte limit/ );
 	assert.equal( messages[0].transient, undefined, "a budget failure stays permanent" );
 });
+
+test(
+	"a stalled shared transport is abandoned once and serves the subscriber that stayed",
+	{ timeout: 10000 },
+	async t => {
+		t.mock.timers.enable( { apis: [ "setTimeout" ] } );
+		const asset = packedAsset(), messages = [], transports = [];
+		let deliver = () => {};
+		/** @type {Promise<void>} */
+		const delivered = new Promise( resolve => {
+			deliver = resolve;
+		} );
+		t.mock.method( globalThis, "fetch", ( url, options ) => {
+			if ( url.endsWith( "/manifest.json" ) ) return Promise.resolve( Response.json( asset.manifest ) );
+			transports.push( options.signal );
+			// The first transport request never answers; the retry does.
+			if ( transports.length === 1 ) {
+				return new Promise( ( resolve, reject ) => {
+					options.signal.addEventListener( "abort", () => reject( options.signal.reason ), { once: true } );
+				} );
+			}
+			return Promise.resolve( new Response( asset.compressed ) );
+		} );
+		const loader = createLoader( message => {
+			if ( message.kind !== "progress" ) messages.push( message );
+			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
+		} );
+		t.after( () => loader.dispose() );
+		for ( const id of [ 1, 2 ] ) {
+			loader.receive( { kind: "load", id, url: `https://example.test${asset.path}`, limit: 3 } );
+		}
+		await settle();
+		assert.equal( transports.length, 1, "both subscribers share one transport request" );
+		loader.receive( { kind: "cancel", id: 1 } );
+		await settle();
+		assert.equal( transports[0].aborted, false, "one subscriber leaving does not end the shared request" );
+		t.mock.timers.tick( NO_PROGRESS_MS );
+		await settle();
+		assert.equal( transports[0].aborted, true, "the stall abandons the shared request" );
+		t.mock.timers.tick( 250 );
+		await delivered;
+		assert.equal( transports.length, 2, "exactly one retry for both subscribers" );
+		const bytes = messages.filter( row => row.kind === "bytes" );
+		assert.equal( bytes.length, 1 );
+		assert.equal( bytes[0].id, 2 );
+		assert.deepEqual( new Uint8Array( bytes[0].buffer ), asset.bytes );
+		assert.ok( !messages.some( row => row.kind === "error" ) );
+	}
+);

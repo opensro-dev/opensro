@@ -222,8 +222,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		try {
 			return await downloadBytes( url, limit, attempt.signal, progressed, range );
 		} catch ( error ) {
-			// download() rethrows unchanged once the caller's signal is aborted,
-			// so a cancellation racing the stall still reads as a cancellation.
+			// The caller's cancellation wins whatever else ended the attempt: a
+			// cancel racing the stall must surface its own reason, not the stall.
+			signal.throwIfAborted();
 			throw attempt.signal.reason === stalled ? stalled : error;
 		} finally {
 			clearTimeout( timer );
