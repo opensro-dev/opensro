@@ -402,7 +402,6 @@ export function createPresentationActions() {
 					...adopted.map( event => ({ ...event, adopted: true }) ),
 					...advanceAction( clock, seconds, shotAt, cancelledAt ).events
 				];
-				if ( clock.phases[1] && clock.cancelledAt === undefined ) waitingActors.add( entity.gid );
 				const attackKind = clock.phases[2]?.clip.startsWith( "native:" ) ?
 					Number( clock.phases[2].clip.split( ":" )[2] ) :
 					({ attack1: 2, attack2: 5, attack3: 16, attack4: 17 } as Record<string, number>)[
@@ -424,6 +423,14 @@ export function createPresentationActions() {
 			reconcileActionInstallations( actionClocks.values() );
 			for ( const clock of actionClocks.values() ) {
 				if ( clock.caster === undefined ) continue;
+				// 8E60C0 leaves action state 2 at the last motion callback and
+				// rejects callbacks from a replaced installation. A retained skill
+				// decoration does not own that state after its motion ends. Check
+				// after reconciliation so a replaced WAIT cannot suppress idle.
+				if (
+					clock.phases[1] && clock.cancelledAt === undefined &&
+					(clock.wait || clock.phase < 3 && clock.phase !== 1 && !clock.phaseSuperseded)
+				) waitingActors.add( clock.caster );
 				actionLayersByActor.set( clock.caster, [
 					...actionLayers( clock, seconds ),
 					...(actionLayersByActor.get( clock.caster ) ?? [])

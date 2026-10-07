@@ -721,6 +721,53 @@ function fixture(
 		}
 	};
 }
+test("a released buff never leaves an empty pose after a stall or equipment change", () => {
+	const f = fixture(
+		{ 7: { clips: [ "walk", "run" ], phaseClips: [ [], [ "walk" ], [ "run" ] ], stages: [] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		true,
+		false,
+		false,
+		false,
+		undefined,
+		{
+			states: {
+				walk: { durationMs: 1000, loop: true, trackEvents: [] },
+				run: { durationMs: 1000, loop: false, trackEvents: [] }
+			},
+			rules: []
+		}
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const player = entity( 1, { kind: "local-player" } );
+	const game = {
+		localGid: 1,
+		inventory: [],
+		vitals: [],
+		casts: [ { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false, receivedAtMs: 1000 } ]
+	};
+	f.step( [ player ], 1, game );
+	f.step( [ player ], 1.5, game );
+	game.casts[0].shotAtMs = 1500;
+	f.step( [ player ], 1.6, game );
+	game.inventory = [ { slot: 6, refObjId: 100, typeFlags: 6 << 11, plus: 0 } ];
+	for ( const now of [ 5, 5.016, 5.1, 6 ] ) {
+		f.step( [ player ], now, game );
+		const actor = f.actors.find( actor => actor.gid === 1 );
+		assert.ok( actor );
+		assert.ok(
+			actor.layers === undefined || actor.layers.some( layer => layer.weight > 0 ),
+			`empty pose at ${now}`
+		);
+	}
+	f.dispose();
+});
+
 for ( const local of [ false, true ] ) {
 	for ( const displacement of local ? [ false, true, "after-WAIT" ] : [ false, true, "after-WAIT", "at-arrival" ] ) {
 		test(`cast WAIT preserves displacement translation ${displacement}, local ${local}`, () => {
