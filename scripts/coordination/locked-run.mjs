@@ -15,8 +15,10 @@ still holds this run's token, on every exit path.
 
 The coordination directory comes from SRO_COORDINATION_DIR and holds
 benchmark.lock, benchmark.queue and the journal (append_only.txt, or
-SRO_COORDINATION_JOURNAL). There is no default: a private lock nobody else
-reads would look like coordination and protect nothing.
+SRO_COORDINATION_JOURNAL). It must be an absolute path and has no default:
+a private lock nobody else reads (a default, or a relative path that each
+worktree resolves on its own) would look like coordination and protect
+nothing.
 
 Exit codes: the child's code; 75 when the lock is held or the wait timed
 out (nothing ran); 78 when the preflight failed (nothing ran); 64 for bad
@@ -45,7 +47,7 @@ and its pid gone) is moved aside only with --break-stale.
 import { spawn, execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 const EXIT_USAGE = 64, EXIT_HELD = 75, EXIT_PREFLIGHT = 78;
 const MAX_MINUTES = 120;
@@ -59,7 +61,10 @@ const PREFLIGHT_TIMEOUT_MS = 30000;
 // The journal's time zone label; lines read "HH:MM:SS ZONE [OWNER] ...".
 const ZONE = process.env.SRO_COORDINATION_ZONE ?? "LOCAL";
 
-const DIRECTORY = process.env.SRO_COORDINATION_DIR?.trim() ?? "";
+// A relative path resolves per working directory, so two worktrees would
+// each get a private lock: only an absolute shared directory coordinates.
+const CONFIGURED = process.env.SRO_COORDINATION_DIR?.trim() ?? "";
+const DIRECTORY = isAbsolute( CONFIGURED ) ? CONFIGURED : "";
 const LOCK = DIRECTORY ? join( DIRECTORY, "benchmark.lock" ) : "";
 const QUEUE = DIRECTORY ? join( DIRECTORY, "benchmark.queue" ) : "";
 const JOURNAL = process.env.SRO_COORDINATION_JOURNAL?.trim() || (DIRECTORY ? join( DIRECTORY, "append_only.txt" ) : "");
@@ -347,7 +352,7 @@ async function main() {
 	const options = parseArgs( process.argv.slice( 2 ) );
 	if ( !options || !DIRECTORY ) {
 		console.error(
-			"usage: SRO_COORDINATION_DIR=<shared dir> node locked-run.mjs --owner NAME --purpose TEXT --minutes N " +
+			"usage: SRO_COORDINATION_DIR=<absolute shared dir> node locked-run.mjs --owner NAME --purpose TEXT --minutes N " +
 				"[--shell] [--break-stale] [--wait --estimate S] [--preflight CMD] -- command [args...]"
 		);
 		process.exit( EXIT_USAGE );

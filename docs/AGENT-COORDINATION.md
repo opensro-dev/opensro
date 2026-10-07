@@ -45,8 +45,9 @@ Benchmarks, full checks and anything else that loads the machine run through
 [`scripts/coordination/locked-run.mjs`](../scripts/coordination/locked-run.mjs),
 which writes its own `START` and `END` lines to the log. Its lock, queue and
 journal live in one directory every worktree shares, named by
-`SRO_COORDINATION_DIR`; the wrapper refuses to run without it, because a
-private per-worktree lock would let benchmarks overlap silently. It is a
+`SRO_COORDINATION_DIR` as an absolute path; the wrapper refuses to run
+without it, or with a relative one, because a private per-worktree lock
+would let benchmarks overlap silently. It is a
 different scope from the generated-assets lock (`scripts/rebuildLock.mjs`),
 which only serialises writers of `.generated`. Rules:
 

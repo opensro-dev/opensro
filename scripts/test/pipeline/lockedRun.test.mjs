@@ -105,6 +105,18 @@ async function waitFor( condition, ms = 10000 ) {
 	}
 }
 
+test("a relative coordination directory is refused, since each worktree would resolve its own", t => {
+	const c = coordination( t );
+	const marker = path.join( c.first, "ran" );
+	const result = spawnSync(
+		process.execPath,
+		wrapperArgs( "A", [], `require("fs").writeFileSync(${JSON.stringify( marker )}, "ran")` ),
+		{ cwd: c.first, env: { ...process.env, SRO_COORDINATION_DIR: "coordination" }, encoding: "utf8" }
+	);
+	assert.equal( result.status, EXIT_USAGE );
+	assert.equal( existsSync( marker ), false, "the child must not start" );
+});
+
 test("without a coordination directory nothing runs", () => {
 	const marker = path.join( os.tmpdir(), `locked-run-no-dir-${process.pid}` );
 	const env = { ...process.env };
