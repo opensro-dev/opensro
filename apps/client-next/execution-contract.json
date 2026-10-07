@@ -2108,6 +2108,62 @@
 			"reason": "Optional runtime-owned frame observer replaces profiling source rewriting; production supplies no observer."
 		},
 		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "resources.plan",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Characters owner lends its synchronous resource planner to preserve the committed creation preview during admission."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "resources.ready",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Characters owner lends bounded resource admission to the dock phase; roster and creation readiness retain their original barriers."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "resources.ready",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "The synchronous wardrobe map visits every required part through the parent's bounded resource admission before testing readiness."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "resources.duration",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Characters owner lends synchronous resident animation duration lookup for deletion transitions and the dock gecko."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "resources.retainWanted",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Characters owner lends the resource retention operation; the dock publishes wanted models at the original end of its frame."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "renderer.setCharacterAssembly",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The parent character owner lends renderer assembly publication to its synchronous dock phase."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "renderer.scenery",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The dock borrows the parent's renderer scenery snapshot before the existing scenery emission step."
+		},
+		{
+			"file": "src/engine/runtime/characters/dock-preview.ts",
+			"expression": "renderer.setCharacterActors",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The parent lends synchronous actor publication to the dock phase before returning from character presentation."
+		},
+		{
 			"file": "src/engine/runtime/characters/presentation-catalog.ts",
 			"expression": "sounds.catalog",
 			"function": "admit",

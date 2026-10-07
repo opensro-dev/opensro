@@ -79,7 +79,10 @@ DockPreviewOutput
 The fields this phase borrows from the shared presentation output owner.
 ================
 */
-type DockPreviewOutput = Pick<PresentationOutput, "previewReady" | "dockReady" | "displayed" | "failure" | "cameraTarget">;
+type DockPreviewOutput = Pick<
+	PresentationOutput,
+	"previewReady" | "dockReady" | "displayed" | "failure" | "cameraTarget"
+>;
 
 /*
 ================
