@@ -1,16 +1,26 @@
+/*
+===========================================================================
+
+sounds.ts - character sound cues: authored rules, impact gating, clip cursors
+
+Owns the effectsound rule table (keyed object:handle:skill:event1:2:3) and
+plays at most one rule per cue. Impact sounds wait out the native 100 ms
+gate before they play; animation sound events are cursored per clip so a
+stalled frame never replays a burst of old sounds.
+
+===========================================================================
+*/
 import type { SoundEvent } from "@/engine/contracts/audio";
 import { characterSoundKeys, type CharacterSoundContext } from "@/engine/foundation/animation/sound-selectors";
 import type { AnimationActivation } from "@/engine/foundation/animation/animation-activation";
-export interface SoundRule {
-	readonly object: string;
-	readonly handle: string;
-	readonly event1: string;
-	readonly skillId?: string;
-	readonly event2?: string;
-	readonly event3?: string;
-	readonly publicPath?: string;
-	readonly volume?: number;
-}
+import type { SoundRule } from "../internal/presentation-contract";
+/*
+================
+AnimationSounds
+
+A clip's authored sound events, by cursor time within one cycle.
+================
+*/
 export interface AnimationSounds {
 	readonly durationMs: number;
 	readonly soundEvents: readonly {
@@ -18,6 +28,11 @@ export interface AnimationSounds {
 		readonly cue: string;
 	}[];
 }
+/*
+================
+createCharacterSounds
+================
+*/
 export function createCharacterSounds(
 	play: ( event: SoundEvent ) => void,
 	choose: ( min: number, max: number ) => number = () => 0
@@ -37,6 +52,14 @@ export function createCharacterSounds(
 		string,
 		{ gid: number; profile: string; cues: readonly string[]; context: CharacterSoundContext; at: number; }
 	>();
+	/*
+	================
+	emit
+
+	Play the first cue that has a matching rule; several matches pick one at
+	random. A matching rule without a published sound plays nothing.
+	================
+	*/
 	function emit(
 		id: string,
 		profile: string,
@@ -74,6 +97,13 @@ export function createCharacterSounds(
 	}
 	return {
 		emit,
+		/*
+		================
+		impact
+
+		Queue an impact sound; flush plays it once the native gate has passed.
+		================
+		*/
 		impact(
 			id: string,
 			gid: number,
@@ -85,6 +115,11 @@ export function createCharacterSounds(
 			if ( impacts.size >= 2048 ) throw Error( "Impact sound capacity exceeded" );
 			impacts.set( id, { gid, profile, cues, context, at } );
 		},
+		/*
+		================
+		flush
+		================
+		*/
 		flush( now: number, position: ( gid: number ) => readonly [number, number, number] | undefined ) {
 			for ( const [id, row] of impacts ) {
 				// 8D59C0 uses a strict >100 ms gate. Never replay expired
@@ -96,6 +131,13 @@ export function createCharacterSounds(
 				if ( point && age <= 350 ) emit( id, row.profile, row.cues, row.context, point, now );
 			}
 		},
+		/*
+		================
+		catalog
+
+		Replace the whole rule table at once; an invalid row rejects the manifest.
+		================
+		*/
 		catalog( value: readonly SoundRule[] ) {
 			const replacement = new Map<string, SoundRule[]>();
 			if ( !Array.isArray( value ) ) throw new Error( "Invalid sound catalog" );
@@ -131,6 +173,13 @@ export function createCharacterSounds(
 			}
 			rules = replacement;
 		},
+		/*
+		================
+		advance
+
+		Play the sound events a clip crossed since this lane's last cursor.
+		================
+		*/
 		advance(
 			gid: number,
 			clip: string,
@@ -194,11 +243,25 @@ export function createCharacterSounds(
 				}
 			}
 		},
+		/*
+		================
+		retainActivations
+
+		Drop the cursors of an actor's activations that are no longer playing.
+		================
+		*/
 		retainActivations( gid: number, active: ReadonlySet<AnimationActivation> ) {
 			const lanes = cursors.get( gid );
 			if ( !lanes ) return;
 			for ( const key of lanes.keys() ) if ( typeof key !== "string" && !active.has( key ) ) lanes.delete( key );
 		},
+		/*
+		================
+		retain
+
+		Forget cursors and queued impacts of actors no longer presented.
+		================
+		*/
 		retain( gids: ReadonlySet<number> ) {
 			for ( const gid of cursors.keys() ) {
 				if ( !gids.has( gid ) ) {
@@ -207,6 +270,13 @@ export function createCharacterSounds(
 			}
 			for ( const [key, row] of impacts ) if ( !gids.has( row.gid ) ) impacts.delete( key );
 		},
+		/*
+		================
+		reset
+
+		The rule table survives: it belongs to the admitted manifest, not the world.
+		================
+		*/
 		reset() {
 			cursors.clear();
 			impacts.clear();

@@ -29,7 +29,7 @@ import type { createReferenceAppearances } from "@/engine/foundation/animation/r
 import { skillSoundRoots } from "@/engine/foundation/animation/sound-selectors";
 import { animationMetadata, type AnimationMetadata } from "@/engine/foundation/animation/animation-metadata";
 import type { CharacterActor } from "@/engine/contracts/character";
-import type { DropModel, ItemPresentation, LinkedRide, Resource } from "./internal/presentation-contract";
+import type { DropModel, ItemPresentation, LinkedRide, Resource, SoundRule } from "./internal/presentation-contract";
 
 /*
 ================
@@ -46,7 +46,7 @@ export interface CatalogOwners {
 		rejected( path: string, error: unknown ): void;
 	};
 	// The sound owner validates its own rule rows; this catalogue only forwards them.
-	readonly sounds: { catalog( rules: readonly object[] ): void; };
+	readonly sounds: { catalog( rules: readonly SoundRule[] ): void; };
 	readonly referenceAppearances: Pick<ReturnType<typeof createReferenceAppearances>, "setReferences">;
 }
 
@@ -61,9 +61,6 @@ export interface PublishedResult {
 	readonly path: string;
 	readonly buffer: ArrayBuffer;
 }
-
-// One sound rule row: opaque here, validated by the sound owner it is forwarded to.
-type SoundRule = object;
 
 /*
 ================

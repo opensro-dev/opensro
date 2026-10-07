@@ -79,6 +79,24 @@ export interface ItemPresentation {
 
 /*
 ================
+SoundRule
+
+One effectsound row: the object/handle/skill/event key and the sound it plays.
+================
+*/
+export interface SoundRule {
+	readonly object: string;
+	readonly handle: string;
+	readonly event1: string;
+	readonly skillId?: string;
+	readonly event2?: string;
+	readonly event3?: string;
+	readonly publicPath?: string;
+	readonly volume?: number;
+}
+
+/*
+================
 DropModel
 
 One ground-drop model from the item-drop manifest.
