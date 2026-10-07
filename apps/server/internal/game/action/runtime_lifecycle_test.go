@@ -31,7 +31,7 @@ func TestTickHookTimesEveryStepByName(t *testing.T) {
 	}
 	rt.Steps.Slow = func(name string, _ time.Duration) { names = append(names, name) }
 	rt.TickHook()(1_000_000)
-	if len(names) < 40 || names[0] != "advanceResidentRegions" || names[len(names)-1] != "retireActionSessions" {
+	if len(names) < 41 || names[0] != "retireGroundApproaches" || names[1] != "advanceResidentRegions" || names[len(names)-1] != "retireActionSessions" {
 		t.Fatalf("timed steps = %v", names)
 	}
 	seen := map[string]bool{}
