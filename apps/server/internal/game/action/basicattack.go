@@ -152,9 +152,10 @@ type basicAttackIntent struct {
 	// boundary. HasApproach records that a goal was issued even after the
 	// player reaches it, so a slowly moving target cannot restart one tiny leg
 	// per simulation tick.
-	ApproachTargetSample simulation.Spawn
-	ApproachIssuedAtMs   int64
-	HasApproach          bool
+	ApproachTargetSample     simulation.Spawn
+	ApproachIssuedAtMs       int64
+	HasApproach              bool
+	ApproachMovementRevision uint64
 }
 
 // chainLatencyBudgetMs is the per-command allowance native chain steps take
@@ -600,7 +601,7 @@ func (rt *Runtime) pursuitSteerDue(intent basicAttackIntent, worldKey string, sn
 		return true
 	}
 	world := rt.Worlds.Snapshot(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
-	approachInFlight := world.MoveSegment.Valid() && nowMs < world.MoveSegment.ArrivesAtMs
+	approachInFlight := world.MovingAt(nowMs)
 	targetMoved := simulation.WorldDistance2D(intent.ApproachTargetSample, target) > 0.01
 	young := nowMs-intent.ApproachIssuedAtMs < attackPursuitResteerMinMs
 	return !young && (!approachInFlight || targetMoved)
@@ -654,7 +655,7 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	intent, from, target, goal, nowMs := move.intent, move.from, move.target, move.goal, move.nowMs
 	worldKey := simulation.WorldKey(intent.DivisionID, character.Name)
 	_, fromOwner := rt.liveNav(worldKey, snapshot, nowMs)
-	goal, walk, refusal := rt.constrainWalk(snapshot.Name, from, fromOwner, goal)
+	goal, walk, refusal := rt.admitGroundWalk(snapshot.Name, from, fromOwner, goal)
 	if refusal != nil || simulation.WorldDistance2D(from, goal) < attackPursuitPositionEpsilon {
 		// Collision/path ownership can be transient (the target may move
 		// back into reach or open a route). It is not a terminal command
@@ -663,6 +664,8 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	}
 	var ack []byte
 	var runChanged bool
+	var movementRevision uint64
+	var movementState simulation.WorldState
 	rt.bindResidentRegion(worldKey, nowMs)
 	if !rt.deps.Update(character, "basic-attack-approach", func() bool {
 		if character.DeletePending {
@@ -685,6 +688,8 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 				ack = result.AckPayload
 			})
 		writeBackWorld(character, state)
+		movementRevision = state.GroundRevision()
+		movementState = state
 		return true
 	}) || len(ack) == 0 {
 		rt.ClearCombatIntent(intent.DivisionID, intent.CharacterName)
@@ -693,8 +698,10 @@ func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Characte
 	intent.ApproachTargetSample = target
 	intent.ApproachIssuedAtMs = nowMs
 	intent.HasApproach = true
+	intent.ApproachMovementRevision = movementRevision
 	rt.setCombatIntent(intent)
-	frames := []wire.Frame{{Opcode: simulation.OpMovementAck, Payload: ack}}
+	frames := []wire.Frame{{Opcode: simulation.OpMovementAck, Payload: ack,
+		Current: func() bool { return rt.Worlds.GroundPathCurrent(worldKey, movementState) }}}
 	if runChanged {
 		// 4B0800 switches a pursuing walker to run after issuing its goal.
 		frames = append(frames, wire.Frame{Opcode: wire.OpObjectStateRefresh, Payload: wire.ObjectStateRefresh{

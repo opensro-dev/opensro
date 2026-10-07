@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+worldstate.go - shared accepted movement state and lifecycle
+
+===========================================================================
+*/
 package simulation
 
 import (
@@ -7,14 +14,20 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
-// Spawn is one settled placement on the sector grid: region + region-local
-// position + full-circle u16 facing. It doubles as the move GOAL inside
-// WorldState (the ack contract needs the destination) - use LiveSpawnAt for
-// where the character actually IS.
-//
-// JSON tags mirror the Node character store's `world.spawn` shape so a
-// persisted record round-trips between the Node fixture and the Go server
-// (mid-move reconnect keeps its segment).
+/*
+================
+Spawn
+
+Spawn is one settled placement on the sector grid: region + region-local
+position + full-circle u16 facing. It doubles as the move GOAL inside
+WorldState (the ack contract needs the destination) - use LiveSpawnAt for
+where the character actually IS.
+
+JSON tags mirror the Node character store's `world.spawn` shape so a
+persisted record round-trips between the Node fixture and the Go server
+(mid-move reconnect keeps its segment).
+================
+*/
 type Spawn struct {
 	RegionID uint16  `json:"regionId"`
 	X        float64 `json:"x"`
@@ -23,16 +36,27 @@ type Spawn struct {
 	Angle    uint16  `json:"angle"`
 }
 
-// MoveSegment is one in-flight, constant-speed travel: the departure point
-// plus absolute start/arrival stamps at the wire speed. It is IMMUTABLE once
-// created - a resteer replaces the pointer, never mutates the fields - which
-// is what makes lock-free snapshot reads from the tick loop safe.
-//
-// JSON tags mirror the Node `world.moveSegment` record.
+/*
+================
+MoveSegment
+
+MoveSegment is one in-flight, constant-speed travel: the departure point
+plus absolute start/arrival stamps at the wire speed. It is IMMUTABLE once
+created - a resteer replaces the pointer, never mutates the fields - which
+is what makes lock-free snapshot reads from the tick loop safe.
+
+JSON tags mirror the Node `world.moveSegment` record.
+================
+*/
 type MoveSegment struct {
-	From        Spawn `json:"from"`
-	StartedAtMs int64 `json:"startedAtMs"`
-	ArrivesAtMs int64 `json:"arrivesAtMs"`
+	// Ground marks player ground travel; explicit skill/pet trajectories do
+	// not enter the world store's finite ground movement owner.
+	Ground             bool  `json:"-"`
+	GroundAngular      bool  `json:"-"`
+	GroundContinuation bool  `json:"-"`
+	From               Spawn `json:"from"`
+	StartedAtMs        int64 `json:"startedAtMs"`
+	ArrivesAtMs        int64 `json:"arrivesAtMs"`
 	// Owners is the surface ownership the movement walk resolved along this
 	// segment (navowner.go). Immutable and shared by pointer so segments stay
 	// comparable. Runtime-only: native persists a float position and
@@ -40,17 +64,31 @@ type MoveSegment struct {
 	Owners *NavOwnerTrack `json:"-"`
 }
 
-// Valid mirrors the reference normalization gate (missionWorldStateForCharacter):
-// a segment interpolates only when the stamps are ordered. A malformed or
-// exhausted record degrades to "settled at spawn", never to a fault.
+/*
+================
+Valid
+
+Valid mirrors the reference normalization gate (missionWorldStateForCharacter):
+a segment interpolates only when the stamps are ordered. A malformed or
+exhausted record degrades to "settled at spawn", never to a fault.
+================
+*/
 func (s *MoveSegment) Valid() bool {
 	return s != nil && s.ArrivesAtMs > s.StartedAtMs
 }
 
-// WorldState is the character's movement world-state, the Go mirror of the
-// `character.world` record server.mjs round-trips (JSON tags match the
-// persisted shape; run Normalize after decoding foreign data).
+/*
+================
+WorldState
+
+WorldState is the character's movement world-state, the Go mirror of the
+`character.world` record server.mjs round-trips (JSON tags match the
+persisted shape; run Normalize after decoding foreign data).
+================
+*/
 type WorldState struct {
+	Ground         *GroundWalkState `json:"ground,omitempty"`
+	groundRevision uint64
 	// unbound marks a seed made without a character record: the race start
 	// stands in for a position nobody owns, so the store never keeps it.
 	unbound bool
@@ -114,9 +152,15 @@ type WorldState struct {
 // named constant so a future v1.150-authoritative figure is a one-line change.
 const PostureTransitionMs int64 = 1500
 
-// StandUp is the stand arm of the sit toggle for a server-initiated stand:
-// a seated, settled character stands and the transition lockout starts.
-// It reports whether the posture changed.
+/*
+================
+StandUp
+
+StandUp is the stand arm of the sit toggle for a server-initiated stand:
+a seated, settled character stands and the transition lockout starts.
+It reports whether the posture changed.
+================
+*/
 func (w *WorldState) StandUp(nowMs int64) bool {
 	if !w.Sitting || nowMs < w.PostureTransitionUntilMs {
 		return false
@@ -134,11 +178,17 @@ const (
 	MotionPostureNow uint8 = 0x12
 )
 
-// MotionStateAt is the player's native motion byte (GetMotionState 4AA590
-// reads state+0x2) as the world plane knows it. Writers in native: 4A9D00
-// for the abnormal hold, 4B15A4/4B15B8 for the 0x12 posture change and
-// seated 4, and 4AA3F5 for walk 2 / run 3, which it sets only while the
-// character is moving. The standing-wall 0x11 lives with the skill owner.
+/*
+================
+MotionStateAt
+
+MotionStateAt is the player's native motion byte (GetMotionState 4AA590
+reads state+0x2) as the world plane knows it. Writers in native: 4A9D00
+for the abnormal hold, 4B15A4/4B15B8 for the 0x12 posture change and
+seated 4, and 4AA3F5 for walk 2 / run 3, which it sets only while the
+character is moving. The standing-wall 0x11 lives with the skill owner.
+================
+*/
 func (w WorldState) MotionStateAt(nowMs int64) uint8 {
 	if state := w.AbnormalMotion.StateAt(nowMs); state != MotionNone {
 		return state
@@ -149,7 +199,7 @@ func (w WorldState) MotionStateAt(nowMs int64) uint8 {
 	if w.Sitting {
 		return MotionSitting
 	}
-	if w.MoveSegment.Valid() && nowMs < w.MoveSegment.ArrivesAtMs {
+	if w.groundActive() || w.MoveSegment.Valid() && nowMs < w.MoveSegment.ArrivesAtMs {
 		if w.MovementMode == WalkMode {
 			return WalkMode
 		}
@@ -158,9 +208,15 @@ func (w WorldState) MotionStateAt(nowMs int64) uint8 {
 	return MotionNone
 }
 
-// SettleDeath must run inside the same character commit door as fatal HP.
-// The settled world is the corpse position, including region, height and facing;
-// callers persist it before publishing death. Never resample travel at rebirth.
+/*
+================
+SettleDeath
+
+SettleDeath must run inside the same character commit door as fatal HP.
+The settled world is the corpse position, including region, height and facing;
+callers persist it before publishing death. Never resample travel at rebirth.
+================
+*/
 func (w *WorldState) SettleDeath(nowMs int64) {
 	w.SettleLive(nowMs)
 	w.Sitting = false
@@ -168,9 +224,15 @@ func (w *WorldState) SettleDeath(nowMs int64) {
 	w.LifeRevision++
 }
 
-// Normalize applies the reference world-state hygiene: an invalid segment is
-// dropped (settled at spawn), an unknown movement mode falls back to run, and
-// spawnSet implies movementSourceSeeded exactly as server.mjs computes it.
+/*
+================
+Normalize
+
+Normalize applies the reference world-state hygiene: an invalid segment is
+dropped (settled at spawn), an unknown movement mode falls back to run, and
+spawnSet implies movementSourceSeeded exactly as server.mjs computes it.
+================
+*/
 func (w *WorldState) Normalize() {
 	if !w.MoveSegment.Valid() {
 		w.MoveSegment = nil
@@ -181,8 +243,14 @@ func (w *WorldState) Normalize() {
 	}
 }
 
-// CoerceRunWalkMode mirrors coerceMissionRunWalkMode: only the two native
-// run/walk modes pass; anything else takes the fallback.
+/*
+================
+CoerceRunWalkMode
+
+CoerceRunWalkMode mirrors coerceMissionRunWalkMode: only the two native
+run/walk modes pass; anything else takes the fallback.
+================
+*/
 func CoerceRunWalkMode(mode, fallback uint8) uint8 {
 	if mode == WalkMode || mode == RunMode {
 		return mode
@@ -195,18 +263,36 @@ var (
 	chinaStartProfile  = Spawn{RegionID: 0x62A8, X: 960.418884, Y: 20, Z: 458.259766, Angle: 0}
 )
 
-// EuropeStartProfile returns the European race start placement.
+/*
+================
+EuropeStartProfile
+
+EuropeStartProfile returns the European race start placement.
+================
+*/
 func EuropeStartProfile() Spawn {
 	return europeStartProfile
 }
 
-// ChinaStartProfile returns the Chinese race start placement.
+/*
+================
+ChinaStartProfile
+
+ChinaStartProfile returns the Chinese race start placement.
+================
+*/
 func ChinaStartProfile() Spawn {
 	return chinaStartProfile
 }
 
-// DefaultWorldState is a fresh character's world-state for a race start
-// profile (server.mjs defaultMissionWorldStateForRace).
+/*
+================
+DefaultWorldState
+
+DefaultWorldState is a fresh character's world-state for a race start
+profile (server.mjs defaultMissionWorldStateForRace).
+================
+*/
 func DefaultWorldState(startProfile Spawn) WorldState {
 	return WorldState{
 		Spawn:        startProfile,
@@ -214,17 +300,26 @@ func DefaultWorldState(startProfile Spawn) WorldState {
 	}
 }
 
-// LiveSpawnAt is the character's LIVE position: the in-flight move segment
-// interpolated at nowMs, or the settled goal spawn when nothing is in flight.
-// This is the bug-D fix plane (server.mjs missionLiveSpawnForWorld): any
-// position-dependent op that reads WorldState.Spawn mid-move is reading the
-// pathing TARGET - the wave-9 signature was gold dropped mid-run landing at
-// the destination.
-//
-// The interpolation runs in the segment start's local frame (the shared
-// sector-grid helpers keep cross-region deltas and the dungeon bit
-// consistent), then re-expresses the point as region + region-local.
+/*
+================
+LiveSpawnAt
+
+LiveSpawnAt is the character's LIVE position: the in-flight move segment
+interpolated at nowMs, or the settled goal spawn when nothing is in flight.
+This is the bug-D fix plane (server.mjs missionLiveSpawnForWorld): any
+position-dependent op that reads WorldState.Spawn mid-move is reading the
+pathing TARGET - the wave-9 signature was gold dropped mid-run landing at
+the destination.
+
+The interpolation runs in the segment start's local frame (the shared
+sector-grid helpers keep cross-region deltas and the dungeon bit
+consistent), then re-expresses the point as region + region-local.
+================
+*/
 func (w WorldState) LiveSpawnAt(nowMs int64) Spawn {
+	if w.groundActive() {
+		return w.Ground.Pose
+	}
 	spawn := w.Spawn
 	segment := w.MoveSegment
 	if !segment.Valid() {
@@ -254,12 +349,18 @@ func (w WorldState) LiveSpawnAt(nowMs int64) Spawn {
 	}
 }
 
-// MoveSegmentForTravel builds the segment LiveSpawnAt interpolates: departure
-// point + absolute stamps at the wire speed for movementMode (server.mjs
-// missionMoveSegmentForTravel). It returns nil for a zero-length hop, which
-// also CLEARS any stale segment on the world-state write - every Spawn write
-// must pair with a segment write or the live plane would interpolate against
-// a goal it never had.
+/*
+================
+MoveSegmentForTravel
+
+MoveSegmentForTravel builds the segment LiveSpawnAt interpolates: departure
+point + absolute stamps at the wire speed for movementMode (server.mjs
+missionMoveSegmentForTravel). It returns nil for a zero-length hop, which
+also CLEARS any stale segment on the world-state write - every Spawn write
+must pair with a segment write or the live plane would interpolate against
+a goal it never had.
+================
+*/
 func MoveSegmentForTravel(liveFrom, nextSpawn Spawn, movementMode uint8, startedAtMs int64) *MoveSegment {
 	speed := RunSpeed
 	if movementMode == WalkMode {
@@ -268,15 +369,29 @@ func MoveSegmentForTravel(liveFrom, nextSpawn Spawn, movementMode uint8, started
 	return moveSegmentAtSpeed(liveFrom, nextSpawn, speed, startedAtMs)
 }
 
+/*
+================
+TravelSegment
+================
+*/
 func (w *WorldState) TravelSegment(from, to Spawn, mode uint8, now int64) *MoveSegment {
 	walk, run := w.MovementSpeeds()
 	speed := run
 	if mode == WalkMode {
 		speed = walk
 	}
-	return moveSegmentAtSpeed(from, to, float64(speed), now)
+	segment := moveSegmentAtSpeed(from, to, float64(speed), now)
+	if segment != nil {
+		segment.Ground = true
+	}
+	return segment
 }
 
+/*
+================
+MovementSpeeds
+================
+*/
 func (w *WorldState) MovementSpeeds() (float32, float32) {
 	walk, run := w.Walk, w.Run
 	if walk <= 0 {
@@ -288,8 +403,14 @@ func (w *WorldState) MovementSpeeds() (float32, float32) {
 	return walk, run
 }
 
-// UpdateMovementSpeeds preserves current position and remaining destination.
-// No instantaneous teleport or stale-duration travel is introduced by expiry.
+/*
+================
+UpdateMovementSpeeds
+
+UpdateMovementSpeeds preserves current position and remaining destination.
+No instantaneous teleport or stale-duration travel is introduced by expiry.
+================
+*/
 func (w *WorldState) UpdateMovementSpeeds(walk, run float32, now int64) bool {
 	if walk <= 0 || run <= 0 || math.IsNaN(float64(walk)) || math.IsNaN(float64(run)) || math.IsInf(float64(walk), 0) || math.IsInf(float64(run), 0) {
 		return false
@@ -299,14 +420,24 @@ func (w *WorldState) UpdateMovementSpeeds(walk, run float32, now int64) bool {
 		return false
 	}
 	live := w.LiveSpawnAt(now)
-	moving := w.MoveSegment.Valid() && now < w.MoveSegment.ArrivesAtMs
+	moving := w.groundActive() || w.MoveSegment.Valid() && now < w.MoveSegment.ArrivesAtMs
 	w.Walk, w.Run = walk, run
 	if moving {
+		angular := w.MoveSegment.GroundAngular
 		w.MoveSegment = w.TravelSegment(live, w.Spawn, w.MovementMode, now)
+		if w.MoveSegment != nil {
+			w.MoveSegment.GroundAngular = angular
+			w.MoveSegment.GroundContinuation = true
+		}
 	}
 	return true
 }
 
+/*
+================
+moveSegmentAtSpeed
+================
+*/
 func moveSegmentAtSpeed(liveFrom, nextSpawn Spawn, speed float64, startedAtMs int64) *MoveSegment {
 	distance := WorldDistance2D(liveFrom, nextSpawn)
 	travelMs := math.Ceil(distance / speed * 1000)
@@ -320,12 +451,18 @@ func moveSegmentAtSpeed(liveFrom, nextSpawn Spawn, speed float64, startedAtMs in
 	}
 }
 
-// SpawnFromMovement converts an accepted movement destination into the next
-// goal spawn, facing the travel direction (server.mjs missionSpawnFromMovement).
-//
-// The goal is committed in its CANONICAL frame (NormalizeSpawnFrame): the wire
-// echo in the 0xB738 ack still carries the request's own frame, but the plane
-// that persists and re-enters the world must never store sector overflow.
+/*
+================
+SpawnFromMovement
+
+SpawnFromMovement converts an accepted movement destination into the next
+goal spawn, facing the travel direction (server.mjs missionSpawnFromMovement).
+
+The goal is committed in its CANONICAL frame (NormalizeSpawnFrame): the wire
+echo in the 0xB738 ack still carries the request's own frame, but the plane
+that persists and re-enters the world must never store sector overflow.
+================
+*/
 func SpawnFromMovement(movement MovementRequest, previousSpawn Spawn) Spawn {
 	next := NormalizeSpawnFrame(Spawn{
 		RegionID: movement.RegionID,
@@ -340,24 +477,30 @@ func SpawnFromMovement(movement MovementRequest, previousSpawn Spawn) Spawn {
 	return next
 }
 
-// NormalizeSpawnFrame folds a spawn whose region-local coordinates overflowed
-// the outdoor sector grid back into the canonical frame: RegionID names the
-// sector the position actually lands in and x/z sit inside [0, NativeRegionSize).
-// Y and Angle pass through untouched.
-//
-// WHY THIS EXISTS: the goal plane historically stored the move destination in
-// the frame of whatever region the REQUEST referenced, clamped to the wire
-// range only. A character that traveled sectors away from its enter-world
-// region persisted e.g. region 0x5E9E with x=5682 - the same world point as
-// region 0x60A0 local 1842, but every regionId-keyed consumer (enter-world
-// terrain residency, zone/BGM/dungeon lookups, settled drops, the settle
-// correction) misread it by whole sectors, leaving the player floating in an
-// unloaded void on re-enter. Mid-flight interpolation (LiveSpawnAt) already
-// folded; this extends the same math to the settled plane.
-//
-// Dungeon regions (bit15) are exempt: the dungeon plane is a single region
-// word whose locals are not bounded by the 1920-unit outdoor grid, so folding
-// them would corrupt legal positions.
+/*
+================
+NormalizeSpawnFrame
+
+NormalizeSpawnFrame folds a spawn whose region-local coordinates overflowed
+the outdoor sector grid back into the canonical frame: RegionID names the
+sector the position actually lands in and x/z sit inside [0, NativeRegionSize).
+Y and Angle pass through untouched.
+
+WHY THIS EXISTS: the goal plane historically stored the move destination in
+the frame of whatever region the REQUEST referenced, clamped to the wire
+range only. A character that traveled sectors away from its enter-world
+region persisted e.g. region 0x5E9E with x=5682 - the same world point as
+region 0x60A0 local 1842, but every regionId-keyed consumer (enter-world
+terrain residency, zone/BGM/dungeon lookups, settled drops, the settle
+correction) misread it by whole sectors, leaving the player floating in an
+unloaded void on re-enter. Mid-flight interpolation (LiveSpawnAt) already
+folded; this extends the same math to the settled plane.
+
+Dungeon regions (bit15) are exempt: the dungeon plane is a single region
+word whose locals are not bounded by the 1920-unit outdoor grid, so folding
+them would corrupt legal positions.
+================
+*/
 func NormalizeSpawnFrame(spawn Spawn) Spawn {
 	position := worldgeom.NormalizeOutdoor(worldgeom.RegionXZ{
 		RegionID: spawn.RegionID,

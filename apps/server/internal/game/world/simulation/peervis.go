@@ -200,7 +200,7 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 			if peer.NativeBodyStatus != 0 {
 				frames = append(frames, Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelBody, Value: peer.NativeBodyStatus}).Encode()})
 			}
-			if segment := peer.World.MoveSegment; segment.Valid() && nowMs < segment.ArrivesAtMs {
+			if peer.World.MovingAt(nowMs) {
 				source := MovementSourceFromSpawn(pose)
 				goal := peer.World.Spawn
 				frames = append(frames,

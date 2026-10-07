@@ -250,7 +250,7 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 			return false
 		}
 		world := rt.Worlds.Snapshot(simulation.WorldKey(key.division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
-		if nowMs < world.PostureTransitionUntilMs || (world.MoveSegment.Valid() && nowMs < world.MoveSegment.ArrivesAtMs) {
+		if nowMs < world.PostureTransitionUntilMs || world.MovingAt(nowMs) {
 			return false
 		}
 		rate := standingRecoveryRate

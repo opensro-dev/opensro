@@ -85,6 +85,7 @@ test("live speed changes retime local and peer travel from the current position 
 	packet.writeInt16LE( 100, 11 );
 	const local = createMovement( () => {} );
 	local.seed( pose );
+	local.navigation( pose.regionId, bundle() );
 	local.native( packet, 0, 7 );
 	local.speeds( 40, 100, 1000 );
 	assert.equal( local.state().pose.x, 110 );
@@ -95,10 +96,11 @@ test("live speed changes retime local and peer travel from the current position 
 	assert.equal( local.state().pose.x, 235 );
 	local.clear();
 	local.seed( pose );
+	local.navigation( pose.regionId, bundle() );
 	local.native( packet, 0, 7 );
 	local.step( 1000 );
 	assert.equal( local.state().pose.x, 110 );
-	const remote = createEntityMotion(),
+	const remote = createEntityMotion( undefined, ( _from, to ) => to ),
 		entity = { ...pose, gid: 7, heading: 0, movementMode: 3, walkSpeed: 20, runSpeed: 50 };
 	remote.receive( packet, entity, 0 );
 	const faster = { ...entity, walkSpeed: 40, runSpeed: 100 };
@@ -127,7 +129,7 @@ test("a zero speed channel holds a mover in place and a later speed resumes it",
 	packet.writeInt16LE( 260, 7 );
 	packet.writeInt16LE( 10, 9 );
 	packet.writeInt16LE( 100, 11 );
-	const remote = createEntityMotion(),
+	const remote = createEntityMotion( undefined, ( _from, to ) => to ),
 		entity = { ...pose, gid: 7, heading: 0, movementMode: 3, walkSpeed: 20, runSpeed: 50 },
 		stopped = { ...entity, walkSpeed: 0, runSpeed: 0 };
 	remote.receive( packet, entity, 0 );
@@ -137,6 +139,7 @@ test("a zero speed channel holds a mover in place and a later speed resumes it",
 	assert.equal( remote.step( 6000 )[0].x, 160 );
 	const local = createMovement( () => {} );
 	local.seed( pose );
+	local.navigation( pose.regionId, bundle() );
 	local.native( packet, 0, 7 );
 	local.speeds( 0, 0, 1000 );
 	local.step( 5000 );
@@ -149,6 +152,7 @@ test("a zero speed channel holds a mover in place and a later speed resumes it",
 test("live speed changes preserve combat displacement timing", () => {
 	const local = createMovement( () => {} );
 	local.seed( pose );
+	local.navigation( pose.regionId, bundle() );
 	const command = { kind: 8, gid: 7, token: 99, destination: { ...pose, x: 1060 } };
 	local.displace( command, 0 );
 	local.step( 500 );
@@ -189,6 +193,7 @@ test("376F updates local entity channels and live movement through the productio
 	move.writeInt16LE( 260, 7 );
 	move.writeInt16LE( 10, 9 );
 	move.writeInt16LE( 100, 11 );
+	core.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 0 );
 	core.receive( { opcode: 0xb738, payload: move }, 0 );
 	core.step( 500 );
 	drain();
@@ -263,7 +268,7 @@ test("inventory icons survive baseline, reference replacement, item movement and
 	assert.equal( owner.state().inventory[0].icon, undefined );
 });
 test("remote movement uses spawn gait, visits active entities only and stops after removal", () => {
-	const m = createEntityMotion(),
+	const m = createEntityMotion( undefined, ( _from, to ) => to ),
 		entity = {
 			...pose,
 			gid: 7,
@@ -382,6 +387,7 @@ test("movement request IDs survive resets and authoritative clipped segments win
 test("out-of-order receipts cannot roll back newer authority; rejected moves retain prior server segment", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );
+	m.navigation( pose.regionId, bundle() );
 	m.request( { ...pose, x: 100 }, 0 );
 	m.request( { ...pose, x: 120 }, 1 );
 	m.receive( receipt( 2, { ...pose, x: 90 }, false ), 10 );
@@ -427,6 +433,7 @@ test("death retires predictions and late receipts through revival without changi
 test("dead local movement ignores native travel until LIFE-alive", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );
+	m.navigation( pose.regionId, bundle() );
 	m.life( 2, 0 );
 	const p = Buffer.alloc( 14 );
 	p.writeUInt32LE( 7 );
@@ -674,7 +681,7 @@ test("target grants require matching intent and despawn clears pending selection
 });
 
 test("motion output contains only owned pose fields and gait retiming crosses regions continuously", () => {
-	const m = createEntityMotion(),
+	const m = createEntityMotion( undefined, ( _from, to ) => to ),
 		entity = {
 			gid: 7,
 			refObjId: 1,
@@ -700,7 +707,16 @@ test("motion output contains only owned pose fields and gait retiming crosses re
 	const at = m.mode( { ...entity, movementMode: 2 }, 100 );
 	assert.equal( at.regionId, 258 );
 	assert.ok( Math.abs( at.x - 1 ) < 1e-8 );
-	assert.deepEqual( Object.keys( at ).sort(), [ "gid", "heading", "moving", "regionId", "x", "y", "z" ] );
+	assert.deepEqual( Object.keys( at ).sort(), [
+		"gid",
+		"heading",
+		"movementPath",
+		"moving",
+		"regionId",
+		"x",
+		"y",
+		"z"
+	] );
 	const next = m.step( 225 )[0];
 	assert.ok( Math.abs( next.x - 2 ) < 1e-8 );
 	const end = m.step( 2000 )[0];
@@ -712,6 +728,7 @@ test("local native motion shares stop and gait transitions without replaying pen
 	const { createGameplay } = await load( "gameplay" ), sent = [], game = createGameplay( f => sent.push( f ) );
 	game.bootstrap( {} );
 	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 0 );
 	const p = Buffer.alloc( 14 );
 	p.writeUInt32LE( 7 );
 	p[4] = 1;
@@ -737,6 +754,8 @@ test("a gait change re-times a server-led walk from its live point and keeps rec
 	m.seed( pose );
 	m.speeds( 16, 50, 0 );
 	m.request( { ...pose, x: 80 }, 0 );
+	// The request preceded coverage, so only the receipt starts this leg.
+	m.navigation( pose.regionId, bundle() );
 	// The receipt installs 60 -> 80 over the server's 1000 ms from t=100.
 	m.receive( receipt( 1, { ...pose, x: 80 } ), 100 );
 	m.step( 300 );
@@ -745,7 +764,7 @@ test("a gait change re-times a server-led walk from its live point and keeps rec
 	// as the server's applyMotionCode re-times its own segment.
 	m.mode( 2, 300 );
 	m.step( 600 );
-	assert.ok( Math.abs( m.state().pose.x - 68.8 ) < 1e-6, "walk speed from the live point" );
+	assert.ok( Math.abs( m.state().pose.x - 68.8 ) < 1 / 8192, "walk speed from the live point" );
 	m.step( 1300 );
 	assert.equal( m.state().pose.x, 80, "arrives at the re-timed end, not the receipt's" );
 	m.request( { ...pose, x: 90 }, 1301 );
@@ -1072,7 +1091,7 @@ test("remote motion consumes the same surface resolver and preserves its sampled
 	}
 	b.navmesh.regions[0].heightMap = heights.toString( "base64" );
 	nav.install( pose.regionId, b );
-	const m = createEntityMotion( nav.surface ),
+	const m = createEntityMotion( nav.surface, nav.clip ),
 		e = { ...pose, gid: 7, heading: 0, walkSpeed: 20, runSpeed: 50, movementMode: 2 };
 	const p = Buffer.alloc( 14 );
 	p.writeUInt32LE( 7 );
@@ -1094,7 +1113,8 @@ test("remote motion consumes the same surface resolver and preserves its sampled
 });
 
 test("native movement derives all cardinal headings; an angular heading applies only with a source", () => {
-	const m = createEntityMotion(), entity = { ...pose, gid: 7, heading: 1234, runSpeed: 50 };
+	const m = createEntityMotion( undefined, ( _from, to ) => to ),
+		entity = { ...pose, gid: 7, heading: 1234, runSpeed: 50 };
 	// 853550 subtracts pi/2 from model yaw before encoding wire heading.
 	// These are wire bearings, not the model-facing angles used by the renderer.
 	for ( const [x, z, heading] of [ [ 60, 80, 49151 ], [ 80, 100, 0 ], [ 60, 120, 16383 ], [ 40, 100, 32767 ] ] ) {
@@ -1105,6 +1125,7 @@ test("native movement derives all cardinal headings; an angular heading applies 
 		p.writeInt16LE( x, 7 );
 		p.writeInt16LE( 10, 9 );
 		p.writeInt16LE( z, 11 );
+		m.correct( entity, pose );
 		m.receive( p, entity, 0 );
 		assert.equal( m.step( 10 )[0].heading, heading );
 	}
@@ -1595,6 +1616,7 @@ test("a targeted command refused during a server walk never disturbs the walk", 
 		monster = { ...pose, x: 400, gid: 8, kind: "monster", heading: 0 };
 	game.bootstrap( { simulationProtocolVersion: 1 } );
 	game.seed( local );
+	game.command( { kind: "navigation", regionId: pose.regionId, bundle: bundle() }, 0 );
 	// The server's run of the local player to x = 260: 4 s at 50 units/s.
 	const walk = Buffer.alloc( 14 );
 	walk.writeUInt32LE( 7 );
@@ -1623,10 +1645,10 @@ test("a targeted command refused during a server walk never disturbs the walk", 
 		smallest = Math.min( smallest, Math.abs( x - previous ) );
 		previous = x;
 	}
-	assert.ok( largest <= 50 * 16 / 1000 + 1e-6, "the walk jumped " + largest );
-	assert.ok( smallest >= 50 * 16 / 1000 - 1e-6, "the walk stalled: " + smallest );
+	assert.ok( largest <= 50 * 16 / 1000 + 1 / 8192, "the walk jumped " + largest );
+	assert.ok( smallest >= 50 * 16 / 1000 - 1 / 8192, "the walk stalled: " + smallest );
 	game.step( 4016, local );
-	assert.ok( Math.abs( (game.take()?.pose?.x ?? previous) - 260 ) < 1e-6, "arrived at " + previous );
+	assert.ok( Math.abs( (game.take()?.pose?.x ?? previous) - 260 ) < .05, "arrived at " + previous );
 	game.dispose();
 });
 

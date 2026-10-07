@@ -2210,6 +2210,7 @@ references
 			}
 		},
 		surface: movement.surface,
+		clipMovement: movement.clipMovement,
 		/*
 ================
 heading

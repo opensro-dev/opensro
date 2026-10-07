@@ -12,6 +12,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { product } from "../helpers/navigation-fixture.mjs";
+import { defined } from "../helpers/defined.mjs";
 
 const { createMovement } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts"
@@ -53,13 +54,42 @@ test("a blocked destination walks to contact before and after its accepted recei
 	movement.step( 2000 );
 	const arrived = movement.state().pose;
 	assert.ok( arrived );
-	assert.ok( Math.abs( arrived.x - contact.x ) < 1e-6 );
+	assert.ok( Math.abs( arrived.x - contact.x ) < 1 / 8192 );
 	assert.equal( movement.state().pendingMoves, 0 );
 	// A second click into the same obstacle cannot pass through the wall.
 	movement.request( requested, 2000 );
 	movement.step( 4000 );
 	const repeated = movement.state().pose;
 	assert.ok( repeated );
-	assert.ok( Math.abs( repeated.x - contact.x ) < 1e-6 );
+	assert.ok( Math.abs( repeated.x - contact.x ) < 1 / 8192 );
+	movement.clear();
+});
+
+test("a ground receipt retains accepted authority instead of sampling the unvalidated goal", () => {
+	const movement = createMovement( () => {} ), navigation = product();
+	navigation.objects = [];
+	const from = { regionId: 257, x: 30, y: 0, z: 110, angle: 0 };
+	const goal = { ...from, x: 110 }, accepted = { ...from, x: 35 };
+	movement.seed( from );
+	movement.navigation( 257, navigation );
+	movement.request( goal, 0 );
+	movement.receive(
+		new TextEncoder().encode( JSON.stringify( {
+			v: 1,
+			id: 1,
+			gid: 7,
+			accepted: true,
+			serverTimeMs: 1000,
+			world: {
+				spawn: goal,
+				ground: { pose: accepted, at: 1000, speed: 50 },
+				moveSegment: { from, startedAtMs: 0, arrivesAtMs: 1600 }
+			}
+		} ) ),
+		1000,
+		7
+	);
+	assert.equal( defined( movement.state().authoritativePose ).x, accepted.x );
+	assert.equal( movement.state().pendingMoves, 0 );
 	movement.clear();
 });

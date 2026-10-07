@@ -211,7 +211,7 @@ test("local and remote forced movement cancel only cast-owned travel and keep in
 	m.cancelCast( 9, 200 );
 	m.step( 1000 );
 	assert.equal( defined( m.state().pose ).x, 200 );
-	const remote = createEntityMotion(), entity = { ...pose, gid: 1, heading: 0 };
+	const remote = createEntityMotion( undefined, ( _from, to ) => to ), entity = { ...pose, gid: 1, heading: 0 };
 	remote.displace( entity, { ...command, kind: 5 }, 0 );
 	assert.deepEqual( remote.cancelCast( 9, 100 ), [] );
 	assert.equal( remote.step( 400 )[0].x, 200 );

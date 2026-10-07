@@ -48,13 +48,14 @@ createEntities
 export function createEntities(
 	surface?: import("@/engine/contracts/navigation").SurfaceResolver,
 	lifecycle?: ( event: Extract<WorldEvent, { kind: "spawn" | "despawn"; }> ) => void,
-	nameContext?: ( entity?: EntityState ) => NameColorContext | undefined
+	nameContext?: ( entity?: EntityState ) => NameColorContext | undefined,
+	clip?: import("./motion/motion").MotionClip
 ) {
 	// A 16 MiB admitted server bootstrap can require twice that in UTF-16
 	// accounting. Static catalogues publish once; event count stays bounded.
 	const journalByteLimit = 32 << 20, objectListByteLimit = 8 << 20;
 	let skillRefs = spawnSkillReferences( [] );
-	const motion = createEntityMotion( surface );
+	const motion = createEntityMotion( surface, clip );
 	const itemRefs = new Map<number, number>(), itemNames = new Map<number, string>();
 	// /LOADMONSTER resolves a typed codename here, as the native client reads
 	// its own character data (GlobalDataManager_GetItemRecordByCodeName).

@@ -35,7 +35,7 @@ function flush( e ) {
 	return b;
 }
 function owner( nav, kind = "npc" ) {
-	const e = createEntities( ( p, r, c ) => nav.surface( p, r, undefined, c ) );
+	const e = createEntities( ( p, r, c ) => nav.surface( p, r, undefined, c ), undefined, undefined, nav.clip );
 	e.bootstrap( {
 		protocolVersion: 2,
 		nativeResult: 1,
@@ -45,7 +45,7 @@ function owner( nav, kind = "npc" ) {
 	flush( e );
 	return e;
 }
-function spawn( x, z, { moving = false, kind = "npc", y = 11 } = {} ) {
+function spawn( x, z, { moving = false, kind = "npc", y = 11, distance = 100 } = {} ) {
 	const p = Buffer.alloc( 49 + (moving ? 5 : 0) + (kind === "monster" ? 1 : kind === "cos" ? 8 : 0) );
 	p.writeUInt32LE( 2029 );
 	p.writeUInt32LE( 7, 4 );
@@ -58,7 +58,7 @@ function spawn( x, z, { moving = false, kind = "npc", y = 11 } = {} ) {
 	let o = 29;
 	if ( moving ) {
 		p.writeUInt16LE( 25000, 26 );
-		p.writeInt16LE( Math.round( x ) + 100, 28 );
+		p.writeInt16LE( Math.round( x ) + distance, 28 );
 		p.writeInt16LE( y, 30 );
 		p.writeInt16LE( Math.round( z ), 32 );
 		o = 34;
@@ -98,7 +98,7 @@ for ( const kind of [ "npc", "monster", "cos" ] ) {
 			const nav = createNavigation();
 			if ( navFirst ) nav.install( 25000, product );
 			const e = owner( nav, kind );
-			e.receive( spawn( 1671, 261, { kind, moving: true } ), 0 );
+			e.receive( spawn( 1671, 261, { kind, moving: true, distance: 40 } ), 0 );
 			flush( e );
 			if ( navFirst ) assert.ok( Math.abs( defined( e.read( 7 ) ).y ) < .001 );
 			e.step( 1000 );
@@ -112,12 +112,12 @@ for ( const kind of [ "npc", "monster", "cos" ] ) {
 			}
 			e.step( 2000 );
 			flush( e );
-			assert.ok( Math.abs( defined( e.read( 7 ) ).x - 1711 ) < .001 );
+			assert.ok( Math.abs( defined( e.read( 7 ) ).x - (navFirst ? 1711 : 1691) ) < .001 );
 			assert.ok( Number.isFinite( defined( e.read( 7 ) ).y ) );
 			assert.notEqual( defined( e.read( 7 ) ).y, 11 );
 			e.step( 5000 );
 			flush( e );
-			assert.equal( defined( e.read( 7 ) ).x, 1771 );
+			assert.equal( defined( e.read( 7 ) ).x, 1711 );
 			assert.equal( defined( e.read( 7 ) ).moving, false );
 			e.dispose();
 		}
@@ -167,7 +167,7 @@ test("spawn initialization selects a raised nav floor and excludes teleport prop
 	}
 	const nav = createNavigation();
 	nav.install( 25000, p );
-	const e = createEntities( ( p, r, c ) => nav.surface( p, r, undefined, c ) );
+	const e = createEntities( ( p, r, c ) => nav.surface( p, r, undefined, c ), undefined, undefined, nav.clip );
 	e.bootstrap( {
 		protocolVersion: 2,
 		nativeResult: 1,

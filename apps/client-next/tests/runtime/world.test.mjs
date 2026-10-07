@@ -751,7 +751,7 @@ test("a caught capture result marks the selected character", () => {
 });
 
 test("a rider's walk/run switches the vehicle that carries the path", () => {
-	const owner = createEntities();
+	const owner = createEntities( undefined, undefined, undefined, ( _from, to ) => to );
 	owner.bootstrap( {
 		...bootstrap,
 		refObjSnapshot: [ { refObjId: 2023, kind: "npc" }, { refObjId: 2183, kind: "cos", tidWord: 0x11c6 } ]
@@ -794,7 +794,7 @@ test("a rider's walk/run switches the vehicle that carries the path", () => {
 });
 
 test("motion preserves authoritative gait and mount metadata across ticks and stops", () => {
-	const owner = createEntities();
+	const owner = createEntities( undefined, undefined, undefined, ( _from, to ) => to );
 	owner.bootstrap( {
 		...bootstrap,
 		refObjSnapshot: [ { refObjId: 1, kind: "npc" }, { refObjId: 2, kind: "cos", tidWord: 0x11c6 } ]
@@ -840,7 +840,8 @@ spawn
 	assert.equal( owner.read( 7 ).mountedOn, 8 );
 	owner.receive( { opcode: 0x3122, payload: Uint8Array.of( 7, 0, 0, 0, 1, 0 ) }, 300 );
 	const stopped = owner.read( 7 );
-	assert.ok( Math.abs( stopped.x - 3.8 ) < 1e-8 );
+	const halfTick = Math.fround( 8 * Math.fround( .05 ) );
+	assert.equal( stopped.x, Math.fround( Math.fround( 3 + halfTick ) + halfTick ) );
 	owner.step( 5000 );
 	assert.deepEqual( owner.read( 7 ), stopped );
 	const despawn = Buffer.alloc( 4 );

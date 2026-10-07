@@ -49,6 +49,7 @@ func (game *gameplayPlane) newMissionTicker() *simulation.Ticker {
 	ticker = worldsession.NewTicker(
 		game.hub,
 		game.items.NpcRoster,
+		game.movement.GroundTickHook(),
 		game.items.TickHook(),
 		// Direction walks continue leg by leg on the mission clock.
 		game.movement.DirectionTickHook(),

@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+prediction.go - ordered movement command receipts for explicit prediction IDs
+
+The actor movement lock spans admission and response enqueue, so the terminal
+correction cannot overtake the ID-bearing receipt that admits its path.
+
+===========================================================================
+*/
 package movement
 
 import (
@@ -14,6 +24,11 @@ import (
 // The replacement client's explicit extension. The native movement payload is
 // unchanged. IDs are strictly increasing per logical transport session; resume
 // retains the high-water mark. A command is never executed twice.
+/*
+================
+registerPredictedMovement
+================
+*/
 func (rt *Runtime) registerPredictedMovement(hub *transport.Hub) {
 	var mu sync.Mutex
 	last := make(map[uint64]uint32)
@@ -36,21 +51,32 @@ func (rt *Runtime) registerPredictedMovement(hub *transport.Hub) {
 		if id <= previous {
 			return
 		} // Reliable transport does not need client retransmit.
+		if p[0] == 1 && rt.AdvanceResidentRegion != nil {
+			rt.AdvanceResidentRegion(division, character.Name, rt.Now().UnixMilli())
+		}
+		unlock := rt.lockCharacter(division, character.Name)
 		var result MoveOutcome
+		retireEffects := false
+		defer func() {
+			unlock()
+			if retireEffects {
+				rt.RetireMoveEffects(division, character.Name, result.ServerTimeMs)
+			}
+		}()
 		if p[0] == 2 {
 			command, err := wire.DecodeCosCommand(p[5:])
 			if err != nil || command.Tag != wire.CosCommandMovementTag || command.CosGid == 0 {
-				result = rt.HandleMove(division, character, []byte{99})
+				result = rt.handleMoveLocked(division, character, []byte{99}, 0)
 			} else {
-				result = rt.handleMove(division, character, command.Movement, command.CosGid)
+				result = rt.handleMoveLocked(division, character, command.Movement, command.CosGid)
 			}
 		} else {
-			result = rt.HandleMove(division, character, p[5:])
+			result = rt.handleMoveLocked(division, character, p[5:], 0)
 			// 4B0EA0: the accepted move's event retires the mover's
 			// move-cancelled effects (the rider's own move only; a mount
 			// move moves the vehicle).
 			if result.Refusal == nil && result.Result != nil && rt.RetireMoveEffects != nil {
-				rt.RetireMoveEffects(division, character.Name, result.ServerTimeMs)
+				retireEffects = true
 			}
 		}
 		for _, frame := range predictionFeedback(result) {
@@ -76,6 +102,11 @@ func (rt *Runtime) registerPredictedMovement(hub *transport.Hub) {
 // Prediction has one movement authority: the ID-bearing receipt below. Sending
 // B738 as well installs an untagged path before that receipt and can rewind a
 // newer click. Native callers retain their ordinary B738 response unchanged.
+/*
+================
+predictionFeedback
+================
+*/
 func predictionFeedback(result MoveOutcome) []wire.Frame {
 	frames := make([]wire.Frame, 0, len(result.Frames))
 	for _, frame := range result.Frames {
@@ -86,6 +117,11 @@ func predictionFeedback(result MoveOutcome) []wire.Frame {
 	return frames
 }
 
+/*
+================
+predictionError
+================
+*/
 func predictionError(outcome MoveOutcome) string {
 	if outcome.Refusal != nil {
 		return outcome.Refusal.Reason

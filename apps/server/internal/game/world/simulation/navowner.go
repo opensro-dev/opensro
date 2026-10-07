@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+navowner.go - shared accepted movement state and lifecycle
+
+===========================================================================
+*/
 package simulation
 
 import worldgeom "opensro.online/server/internal/game/world"
@@ -42,34 +49,64 @@ const (
 	NavOwnerObject     = worldgeom.NavOwnerObject
 )
 
-// TerrainOwner is the terrain surface owner.
+/*
+================
+TerrainOwner
+
+TerrainOwner is the terrain surface owner.
+================
+*/
 func TerrainOwner() NavOwner { return worldgeom.TerrainOwner() }
 
-// NavWalk is what the movement authority reports for one constrained move:
-// the owner spans along the committed chord and the owner at its end.
+/*
+================
+NavWalk
+
+NavWalk is what the movement authority reports for one constrained move:
+the owner spans along the committed chord and the owner at its end.
+================
+*/
 type NavWalk struct {
 	Spans []NavOwnerSpan
 	Rest  NavOwner
 }
 
-// NavOwnerTrack is the walked ownership of one segment chord toward To (the
-// goal it was resolved for). Treat as immutable once attached.
+/*
+================
+NavOwnerTrack
+
+NavOwnerTrack is the walked ownership of one segment chord toward To (the
+goal it was resolved for). Treat as immutable once attached.
+================
+*/
 type NavOwnerTrack struct {
 	Spans []NavOwnerSpan
 	To    Spawn
 }
 
-// samePosition compares the placement a retained owner was resolved for.
-// Facing is not part of a nav position.
+/*
+================
+samePosition
+
+samePosition compares the placement a retained owner was resolved for.
+Facing is not part of a nav position.
+================
+*/
 func samePosition(a, b Spawn) bool {
 	return a.RegionID == b.RegionID && a.X == b.X && a.Y == b.Y && a.Z == b.Z
 }
 
-// GoalOwner is the retained owner of the settled/goal position. It is valid
-// only while Spawn is exactly the position it was resolved for: every writer
-// that relocates a character without walking (warp, portal, return, rebirth,
-// pet follow) therefore falls back to the native teleport rule automatically,
-// instead of carrying a stale cell.
+/*
+================
+GoalOwner
+
+GoalOwner is the retained owner of the settled/goal position. It is valid
+only while Spawn is exactly the position it was resolved for: every writer
+that relocates a character without walking (warp, portal, return, rebirth,
+pet follow) therefore falls back to the native teleport rule automatically,
+instead of carrying a stale cell.
+================
+*/
 func (w WorldState) GoalOwner() NavOwner {
 	if w.Nav.Resolved() && samePosition(w.NavAt, w.Spawn) {
 		return w.Nav
@@ -77,15 +114,30 @@ func (w WorldState) GoalOwner() NavOwner {
 	return NavOwner{}
 }
 
-// SetGoalOwner retains owner as the surface of the current Spawn.
+/*
+================
+SetGoalOwner
+
+SetGoalOwner retains owner as the surface of the current Spawn.
+================
+*/
 func (w *WorldState) SetGoalOwner(owner NavOwner) {
 	w.Nav = owner
 	w.NavAt = w.Spawn
 }
 
-// LiveOwnerAt is the owner of LiveSpawnAt(nowMs): the walked span covering the
-// in-flight segment's fraction, or the goal owner once settled.
+/*
+================
+LiveOwnerAt
+
+LiveOwnerAt is the owner of LiveSpawnAt(nowMs): the walked span covering the
+in-flight segment's fraction, or the goal owner once settled.
+================
+*/
 func (w WorldState) LiveOwnerAt(nowMs int64) NavOwner {
+	if w.groundActive() {
+		return w.Ground.owner
+	}
 	segment := w.MoveSegment
 	if !segment.Valid() || nowMs >= segment.ArrivesAtMs {
 		return w.GoalOwner()
@@ -101,8 +153,14 @@ func (w WorldState) LiveOwnerAt(nowMs int64) NavOwner {
 	return worldgeom.OwnerAtFraction(track.Spans, t)
 }
 
-// WithOwners returns a copy of the (immutable) segment carrying the walked
-// owner spans of its chord toward goal. Nil stays nil.
+/*
+================
+WithOwners
+
+WithOwners returns a copy of the (immutable) segment carrying the walked
+owner spans of its chord toward goal. Nil stays nil.
+================
+*/
 func (s *MoveSegment) WithOwners(spans []NavOwnerSpan, goal Spawn) *MoveSegment {
 	if s == nil {
 		return nil
@@ -112,20 +170,33 @@ func (s *MoveSegment) WithOwners(spans []NavOwnerSpan, goal Spawn) *MoveSegment 
 	return &next
 }
 
-// SettleLive stops any in-flight travel at the live point and keeps the
-// surface owner the walk had there. Every "stop where you stand" transition
-// (death, turn in place, sit, stop, entering attack range) must settle through
-// this so the stopped position keeps its native cell.
+/*
+================
+SettleLive
+
+SettleLive stops any in-flight travel at the live point and keeps the
+surface owner the walk had there. Every "stop where you stand" transition
+(death, turn in place, sit, stop, entering attack range) must settle through
+this so the stopped position keeps its native cell.
+================
+*/
 func (w *WorldState) SettleLive(nowMs int64) {
 	owner := w.LiveOwnerAt(nowMs)
 	w.Spawn = w.LiveSpawnAt(nowMs)
 	w.MoveSegment = nil
+	w.Ground = nil
 	w.SetGoalOwner(owner)
 }
 
-// CommitWalk records the surface a walked move reached: the goal owner and
-// the owner spans of the in-flight segment. Call it right after the Spawn and
-// MoveSegment writes of an ordinary (QueryMovement-equivalent) move.
+/*
+================
+CommitWalk
+
+CommitWalk records the surface a walked move reached: the goal owner and
+the owner spans of the in-flight segment. Call it right after the Spawn and
+MoveSegment writes of an ordinary (QueryMovement-equivalent) move.
+================
+*/
 func (w *WorldState) CommitWalk(spans []NavOwnerSpan, goal NavOwner) {
 	w.MoveSegment = w.MoveSegment.WithOwners(spans, w.Spawn)
 	w.SetGoalOwner(goal)

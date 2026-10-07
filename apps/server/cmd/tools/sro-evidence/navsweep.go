@@ -218,7 +218,7 @@ func runNavSweep(args []string) error {
 			length := *move / math.Hypot(dir[0], dir[1])
 			goal, goalStands := navSweepStanding(validator, region,
 				*centerX+float64(key.i)**step+dir[0]*length, *centerZ+float64(key.j)**step+dir[1]*length)
-			report := validator.ClipWalkFrom(from, simulation.NavOwner{}, goal)
+			report := validator.ClipMovementPath(from, goal)
 			moves = append(moves, navSweepMove{
 				From: navSweepWorldPoint(from), Goal: navSweepWorldPoint(goal),
 				Outcome: string(report.Outcome), Rest: navSweepWorldPoint(report.Rest),
@@ -233,7 +233,7 @@ func runNavSweep(args []string) error {
 				// move's rest and the surface owner it retained, never a
 				// re-guessed owner (players keep their nav cell).
 				if goalStands {
-					if back := validator.ClipWalkFrom(report.Rest, report.RestOwner, from); back.Outcome != movement.ClipArrived {
+					if back := validator.ClipMovementPathFrom(report.Rest, report.RestOwner, from); back.Outcome != movement.ClipArrived {
 						result.OneWay++
 						result.Findings = append(result.Findings, navSweepFinding{
 							Kind: "one-way", At: navSweepWorldPoint(from), Exits: -1, Direction: names[d],

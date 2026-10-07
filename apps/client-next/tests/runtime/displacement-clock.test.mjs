@@ -50,7 +50,7 @@ function publish( presentation, update, frameMs ) {
 
 for ( const publicationDelayMs of [ 0, 16, 32 ] ) {
 	test(`a walk-to-dash switch retains its start across ${publicationDelayMs} ms of coalescing`, () => {
-		const motion = createEntityMotion(), p = createPosePresentation();
+		const motion = createEntityMotion( undefined, ( _from, to ) => to ), p = createPosePresentation();
 		motion.spawn( ENTITY, 0 );
 		p.origin( 0 );
 		publish( p, motion.step( 0 )[0], 0 );
@@ -64,17 +64,25 @@ for ( const publicationDelayMs of [ 0, 16, 32 ] ) {
 			gid: ENTITY.gid
 		}, DASH_START_MS );
 		assert.equal( accepted.movementPath?.startedAtMs, DASH_START_MS );
-		const fromX = START.x + DASH_START_MS * WALK_SPEED / 1000;
+		const fromX = Math.fround(
+			Math.fround( START.x + Math.fround( WALK_SPEED * Math.fround( .096 ) ) ) +
+				Math.fround( WALK_SPEED * Math.fround( (DASH_START_MS - 96) / 1000 ) )
+		);
+		assert.equal( accepted.movementPath.from.x, fromX );
 		let sampledAt = DASH_START_MS + publicationDelayMs;
 		let update = motion.step( sampledAt )[0];
 		for ( let frameMs = sampledAt + 4; frameMs <= 460; frameMs += 4 ) {
 			while ( sampledAt + 16 <= frameMs ) update = motion.step( sampledAt += 16 )[0];
 			assert.equal( update.movementPath?.startedAtMs, DASH_START_MS );
 			const shown = publish( p, update, frameMs );
+			// Native walking stores float32; the presentation anchor can retain less than one local-coordinate ULP.
 			const expectedX = fromX + (frameMs - DASH_START_MS) * DASH_SPEED / 1000;
-			assert.ok( Math.abs( shown.x - expectedX ) < 1e-8, `dash clock at ${frameMs}: ${shown.x} != ${expectedX}` );
+			assert.ok(
+				Math.abs( shown.x - expectedX ) < 2 ** -16,
+				`dash clock at ${frameMs}: ${shown.x} != ${expectedX}`
+			);
 			const budget = (frameMs - previousAt) * DASH_SPEED / 1000;
-			assert.ok( shown.x - previous.x <= budget + 1e-8, "no artificial speed debt after the switch" );
+			assert.ok( shown.x - previous.x <= budget + 2 ** -16, "no artificial speed debt after the switch" );
 			assert.deepEqual( publish( p, update, frameMs ), shown, "body and camera share the result" );
 			previous = shown;
 			previousAt = frameMs;
@@ -83,7 +91,7 @@ for ( const publicationDelayMs of [ 0, 16, 32 ] ) {
 }
 
 test("the first timed dash publication preserves the preceding untimed display frame", () => {
-	const motion = createEntityMotion(), p = createPosePresentation();
+	const motion = createEntityMotion( undefined, ( _from, to ) => to ), p = createPosePresentation();
 	p.origin( 0 );
 	for ( const atMs of [ 0, 96, 100, 104 ] ) p.pose( ENTITY.gid, START, atMs / 1000 );
 	const accepted = motion.displace( ENTITY, {
@@ -139,7 +147,7 @@ test("returning to an untimed idle replaces the earlier dash bridge", () => {
 		p.samples( new Map() );
 		p.pose( ENTITY.gid, from, now / 1000 );
 		p.pose( ENTITY.gid, from, (now + 4) / 1000 );
-		const motion = createEntityMotion();
+		const motion = createEntityMotion( undefined, ( _from, to ) => to );
 		const accepted = motion.displace( entity, {
 			destination: { ...from, x: fromX + 200 },
 			kind: 8,
@@ -152,7 +160,7 @@ test("returning to an untimed idle replaces the earlier dash bridge", () => {
 });
 
 test("a replacement displacement keeps its own start across a coalesced publication", () => {
-	const motion = createEntityMotion(), p = createPosePresentation();
+	const motion = createEntityMotion( undefined, ( _from, to ) => to ), p = createPosePresentation();
 	p.origin( 0 );
 	const first = motion.displace( ENTITY, {
 		destination: { ...START, x: 300 },
@@ -178,7 +186,7 @@ test("a replacement displacement keeps its own start across a coalesced publicat
 });
 
 test("an idle dash carries publication lag without repaying it above skill speed", () => {
-	const motion = createEntityMotion(), p = createPosePresentation();
+	const motion = createEntityMotion( undefined, ( _from, to ) => to ), p = createPosePresentation();
 	p.origin( 0 );
 	p.pose( ENTITY.gid, START, .104 );
 	const accepted = motion.displace( ENTITY, {

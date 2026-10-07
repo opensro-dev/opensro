@@ -42,6 +42,10 @@ const SHARED_FIXTURES = [
 	{
 		canonical: `${CLIENT_NATIVE}/native-vertex-direction-reference.json`,
 		copy: `${SERVER_MOVEMENT}/native-vertex-direction-reference.json`
+	},
+	{
+		canonical: `${CLIENT_NATIVE}/native-mover-step-reference.json`,
+		copy: "apps/server/internal/game/world/simulation/testdata/native-mover-step-reference.json"
 	}
 ];
 

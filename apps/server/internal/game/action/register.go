@@ -86,7 +86,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(wire.OpStallNetworkBuy, rt.hubHandler(hub, rt.HandleStallNetworkBuy))
 	hub.Handle(wire.OpTargetInteract, rt.hubHandler(hub, rt.HandleTargetInteract))
 	hub.Handle(wire.OpItemUseRequest, rt.hubHandler(hub, rt.HandleItemUse))
-	hub.Handle(wire.OpCosCommandRequest, rt.hubHandler(hub, rt.HandleCosCommand))
+	hub.Handle(wire.OpCosCommandRequest, rt.cosCommandHubHandler(hub))
 	hub.Handle(wire.OpCosRideRequest, rt.hubHandler(hub, rt.HandleCosRide))
 	hub.Handle(opCosCancelRequest, rt.hubHandler(hub, rt.HandleCosCancel))
 	hub.Handle(opCosTerminateRequest, rt.hubHandler(hub, rt.HandleCosTerminate))

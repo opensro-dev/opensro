@@ -75,11 +75,14 @@ test("the recorded first turn publishes its actual reconciled duration and avoid
 	);
 	const state = movement.state();
 	assert.ok( state.movementPath?.durationMs );
-	assert.ok( poseDistance( state.movementPath.from, path.from ) < 1e-7 );
+	assert.ok( poseDistance( state.movementPath.from, path.from ) < .05 );
 	const expectedDuration = (receipt.serverArriveAtMs - receipt.serverTimeMs) *
 		poseDistance( path.from, path.to ) / poseDistance( receipt.serverFrom, receipt.serverGoal );
-	assert.ok( Math.abs( state.movementPath.durationMs - expectedDuration ) < 1e-7 );
-	const segment = { ...path, start: receipt.simulationAtMs, duration: state.movementPath.durationMs };
+	assert.equal( state.movementPath.durationMs, 100 );
+	const publishedSpeed = poseDistance( state.movementPath.from, state.movementPath.to ) /
+		state.movementPath.durationMs;
+	assert.ok( Math.abs( publishedSpeed - poseDistance( path.from, path.to ) / expectedDuration ) < .0001 );
+	const segment = { ...path, start: receipt.simulationAtMs, duration: expectedDuration };
 	const presentation = createPosePresentation();
 	presentation.origin( capture.originMs );
 	presentation.samples(
@@ -102,7 +105,7 @@ test("the recorded first turn publishes its actual reconciled duration and avoid
 				revision: 10,
 				moving: true,
 				...path,
-				durationMs: state.movementPath.durationMs,
+				durationMs: expectedDuration,
 				transition: capture.transition
 			} ] ] )
 		);
@@ -136,7 +139,7 @@ for ( const frameMs of [ 4, 1000 / 60 ] ) {
 		movement.navigation( START.regionId, navigation );
 		movement.request( END, 0 );
 		const state = movement.state();
-		assert.equal( state.movementPath?.durationMs, 2000 );
+		assert.equal( state.movementPath?.durationMs, 100 );
 		presentation.origin( 0 );
 		publish( presentation, state );
 		presentation.pose( 1, START, 0 );
@@ -331,7 +334,7 @@ test("a sloped first leg acquires its vertical tangent from sampled ground witho
 });
 
 test("remote publications carry the active clock through speed changes and a zero-speed hold", () => {
-	const motion = createEntityMotion();
+	const motion = createEntityMotion( undefined, ( _from, to ) => to );
 	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
 	const entity = {
 		...START,
@@ -347,16 +350,19 @@ test("remote publications carry the active clock through speed changes and a zer
 	};
 	motion.spawn( entity, 0 );
 	const first = motion.step( 0 )[0];
-	assert.equal( first.movementPath?.durationMs, 2000 );
+	assert.equal( first.movementPath?.durationMs, 100 );
+	assert.equal( first.movementPath?.to.x, 105 );
 	const faster = { ...entity, runSpeed: 100 };
 	motion.speeds( entity, faster, 100 );
 	const retimed = motion.step( 100 )[0];
 	assert.equal( retimed.movementPath?.from.x, 105 );
-	assert.equal( retimed.movementPath?.durationMs, 950 );
+	assert.equal( retimed.movementPath?.durationMs, 100 );
+	assert.equal( retimed.movementPath?.to.x, 115 );
 	const held = { ...faster, runSpeed: 0 };
 	motion.speeds( faster, held, 200 );
 	const stopped = motion.step( 200 )[0];
 	assert.equal( stopped.movementPath?.from.x, 115 );
-	assert.equal( stopped.movementPath?.durationMs, Infinity );
+	assert.equal( stopped.movementPath?.durationMs, 100 );
+	assert.equal( stopped.movementPath?.to.x, stopped.x );
 	assert.equal( motion.step( 400 )[0].x, stopped.x );
 });

@@ -55,13 +55,14 @@ gait or speed change retimes the segment toward the same goal
 ================
 */
 type directionWalk struct {
-	divisionID string
-	character  *enterworld.Character
-	cosGID     uint32
-	request    simulation.MovementRequest
-	goal       simulation.Spawn
-	moving     bool
-	blocked    bool
+	divisionID     string
+	character      *enterworld.Character
+	cosGID         uint32
+	request        simulation.MovementRequest
+	goal           simulation.Spawn
+	moving         bool
+	blocked        bool
+	groundRevision uint64
 }
 
 /*
@@ -70,7 +71,8 @@ directionWalk.current
 ================
 */
 func (walk directionWalk) current(world simulation.WorldState) bool {
-	return world.Spawn == walk.goal && (world.MoveSegment != nil) == walk.moving
+	return world.Spawn == walk.goal && (world.MoveSegment != nil) == walk.moving ||
+		walk.groundRevision != 0 && world.GroundRevision() == walk.groundRevision && world.MoveSegment == nil
 }
 
 /*
@@ -171,12 +173,12 @@ where it is, blocked.
 func (rt *Runtime) constrainDirectionLeg(character *enterworld.Character, from simulation.Spawn, fromOwner simulation.NavOwner, heading uint16) directionLeg {
 	full := simulation.DirectionLegGoal(from, heading, simulation.DirectionLegUnits)
 	end := full
-	if rt.ClientClip != nil {
+	if !rt.groundEnabled && rt.ClientClip != nil {
 		end = rt.ClientClip.ProcessMoveFrom(character.Name, from, fromOwner, full)
 	}
 	blocked := end.RegionID != full.RegionID || end.X != full.X || end.Z != full.Z
 
-	if rt.PathGuard != nil && rt.PathGuard.InspectMoveFrom(character.Name, from, fromOwner, end) != nil {
+	if !rt.groundEnabled && rt.PathGuard != nil && rt.PathGuard.InspectMoveFrom(character.Name, from, fromOwner, end) != nil {
 		return standingLeg(from, fromOwner)
 	}
 	if rt.CanEnterRegion != nil && !rt.CanEnterRegion(character, end.RegionID) {
@@ -187,6 +189,9 @@ func (rt *Runtime) constrainDirectionLeg(character *enterworld.Character, from s
 		return standingLeg(from, fromOwner)
 	}
 
+	if rt.groundEnabled {
+		return directionLeg{goal: end, blocked: blocked}
+	}
 	end, walk := rt.walkOwners(from, fromOwner, end)
 	return directionLeg{goal: end, walk: walk, blocked: blocked}
 }
@@ -263,6 +268,7 @@ func (rt *Runtime) commitDirectionLeg(walk directionWalk, admission moveAdmissio
 	}
 
 	walk.goal = committed.Spawn
+	walk.groundRevision = committed.GroundRevision()
 	walk.moving = committed.MoveSegment != nil
 	walk.blocked = leg.blocked
 	rt.directions.set(admission.worldKey, walk)
@@ -286,7 +292,7 @@ func (rt *Runtime) startDirectionWalk(divisionID string, character *enterworld.C
 	key := admission.worldKey
 	return MoveOutcome{
 		Frames: []wire.Frame{
-			{Opcode: simulation.OpMovementAck, Payload: result.AckPayload, Current: func() bool { return rt.Worlds.MovementCurrent(key, committed) }},
+			{Opcode: simulation.OpMovementAck, Payload: result.AckPayload, Current: func() bool { return rt.Worlds.AdmissionCurrent(key, committed) }},
 		},
 		Result: &result,
 	}
@@ -351,6 +357,25 @@ func (rt *Runtime) continueDirectionWalk(key string, nowMs int64) (simulation.Di
 	arrivesAtMs := nowMs
 	if segment := admission.world.MoveSegment; segment.Valid() {
 		arrivesAtMs = segment.ArrivesAtMs
+	}
+	if admission.world.GroundActive() {
+		walking, running := admission.world.MovementSpeeds()
+		speed := running
+		if admission.world.MovementMode == simulation.WalkMode {
+			speed = walking
+		}
+		live := admission.world.LiveSpawnAt(nowMs)
+		remaining := simulation.WorldDistance2D(live, admission.world.Spawn)
+		arrivesAtMs = nowMs + int64(remaining/float64(speed)*1000)
+		segment := admission.world.MoveSegment
+		from := worldgeom.RegionXZ{RegionID: live.RegionID, X: live.X, Z: live.Z}
+		goal := worldgeom.RegionXZ{RegionID: admission.world.Spawn.RegionID, X: admission.world.Spawn.X, Z: admission.world.Spawn.Z}
+		origin := worldgeom.RegionXZ{RegionID: segment.From.RegionID, X: segment.From.X, Z: segment.From.Z}
+		dx, dz := worldgeom.Delta(from, goal)
+		ox, oz := worldgeom.Delta(from, origin)
+		if dx*ox+dz*oz > 0 {
+			arrivesAtMs = nowMs
+		}
 	}
 	if walk.blocked {
 		if nowMs < arrivesAtMs {

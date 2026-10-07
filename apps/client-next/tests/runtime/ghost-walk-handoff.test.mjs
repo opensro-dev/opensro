@@ -153,7 +153,7 @@ for ( const [skillId, haltsWalk] of /** @type {const} */ ([ [ 114, true ], [ 196
 }
 
 test("remote displacement publishes its ownership and clock through arrival and source receipts", () => {
-	const motion = createEntityMotion();
+	const motion = createEntityMotion( undefined, ( _from, to ) => to );
 	const destination = { ...START, x: 330 };
 	const initial = motion.displace( LOCAL, { gid: 1, token: 9, kind: 8, destination }, 200 );
 	assert.equal( initial.movementPath?.displacement, true );

@@ -65,7 +65,7 @@ test("an untimed coalesced click and accepted receipt retain the admitted path b
 	const state = movement.state();
 	assert.ok( state.pose && state.movementPath );
 	assert.deepEqual( state.pose, predicted, "the receipt preserves the logical pose" );
-	assert.ok( Math.abs( state.movementPath.from.x - 100.8 ) < 1e-9, "the logical walk remains rebased" );
+	assert.equal( state.movementPath.from.x, Math.fround( 100.8 ), "the logical walk remains rebased" );
 	publish( presentation, state, false );
 	assert.equal(
 		presentation.pose( 7, state.pose, .02 ).x,
@@ -104,6 +104,46 @@ test("retained path evidence does not authorize a diagonal across a turn", () =>
 	assert.equal( shown.z, target.z );
 });
 
+test("a delayed receipt preserves the displayed origin across an unpublished worker advance", () => {
+	const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();
+	navigation.objects = [];
+	movement.seed( FROM );
+	movement.navigation( 257, navigation );
+	presentation.origin( 0 );
+	publish( presentation, movement.state() );
+	presentation.pose( 7, FROM, 0 );
+	movement.request( TO, 0 );
+	movement.step( 16 );
+	movement.state();
+	movement.receive(
+		new TextEncoder().encode( JSON.stringify( {
+			v: 1,
+			id: 1,
+			gid: 7,
+			accepted: true,
+			serverTimeMs: 300,
+			world: { spawn: TO, moveSegment: { from: FROM, startedAtMs: 0, arrivesAtMs: 2000 } }
+		} ) ),
+		300,
+		7
+	);
+	const state = movement.state();
+	assert.ok( state.pose );
+	publish( presentation, state );
+	assert.equal( presentation.pose( 7, state.pose, .3 ).x, FROM.x );
+	let previous = FROM.x;
+	for ( let now = 316; now <= 800; now += 16 ) {
+		movement.step( now );
+		const next = movement.state();
+		assert.ok( next.pose );
+		publish( presentation, next );
+		const shown = presentation.pose( 7, next.pose, now / 1000 );
+		assert.ok( shown.x >= previous && shown.x - previous < 3.5, `recovery jumped ${shown.x - previous}` );
+		previous = shown.x;
+	}
+	movement.clear();
+});
+
 for ( const destination of [ { x: 102, z: 200 }, { x: 20, z: 260 }, { x: 260, z: 230 } ] ) {
 	for ( const coalescedReceipt of [ false, true ] ) {
 		test(`a proven turn to ${destination.x},${destination.z}, receipt=${coalescedReceipt}, follows its corner`, () => {
@@ -128,7 +168,9 @@ for ( const destination of [ { x: 102, z: 200 }, { x: 20, z: 260 }, { x: 260, z:
 			movement.request( { ...FROM, ...destination }, 40 );
 			const turn = movement.state().movementTransition.turn;
 			assert.ok( turn, "the movement owner supplies the connection, not a geometric guess" );
-			assert.equal( turn.outgoing.from.x, 102 );
+			// Native stores each accepted source as float32: two 16 ms steps
+			// followed by the 8 ms command-time step round independently.
+			assert.equal( turn.outgoing.from.x, Math.fround( Math.fround( Math.fround( 100 + .8 ) + .8 ) + .4 ) );
 			let sampled = 40;
 			if ( coalescedReceipt ) {
 				movement.step( sampled = 56 );

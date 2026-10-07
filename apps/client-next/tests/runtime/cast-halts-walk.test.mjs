@@ -87,10 +87,10 @@ function pressWhileRunning( skill, lead, answer ) {
 		refSkillSnapshot: [ skillRef( GUARD_SKILL, true ), skillRef( IMBUE_SKILL, false ) ]
 	} );
 	game.seed( local );
+	const bundle = product( REGION );
+	bundle.objects = [];
+	game.command( { kind: "navigation", regionId: REGION, bundle }, 0, undefined, local );
 	if ( lead === "client" ) {
-		const bundle = product( REGION );
-		bundle.objects = [];
-		game.command( { kind: "navigation", regionId: REGION, bundle }, 0, undefined, local );
 		game.command( { kind: "move", destination: { ...local, x: 260, angle: 0 } }, 0, undefined, local );
 	} else {
 		const walk = Buffer.alloc( 14 );

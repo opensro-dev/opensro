@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+clip.go - native collision queries, accepted rest poses and clip telemetry
+
+===========================================================================
+*/
 package movement
 
 // Authoritative full-chord movement clipping over published terrain and BMS
@@ -26,10 +33,16 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
-// SpawnMoveTest is the move test population creation (5F6EB0) runs for a
-// candidate generated around a nest centre: the result bits it acts on and
-// the walked resting point, whose height names the surface the walk reached.
-// Both outdoor and dungeon blocking contacts retain their result bits.
+/*
+================
+SpawnMoveTest
+
+SpawnMoveTest is the move test population creation (5F6EB0) runs for a
+candidate generated around a nest centre: the result bits it acts on and
+the walked resting point, whose height names the surface the walk reached.
+Both outdoor and dungeon blocking contacts retain their result bits.
+================
+*/
 func (v *WaterValidator) SpawnMoveTest(from, to simulation.Spawn) simulation.MonsterSpawnMove {
 	report := v.ClipMovementPath(simulation.NormalizeSpawnFrame(from), simulation.NormalizeSpawnFrame(to))
 	if report.Outcome != ClipBlocked {
@@ -57,7 +70,13 @@ const (
 	ClipApply   ClipMode = "apply"
 )
 
-// ClipModeFromEnv defaults to applying the server-authoritative clip.
+/*
+================
+ClipModeFromEnv
+
+ClipModeFromEnv defaults to applying the server-authoritative clip.
+================
+*/
 func ClipModeFromEnv() ClipMode {
 	switch value := os.Getenv(EnvMoveClientClip); value {
 	case "", string(ClipApply):
@@ -114,7 +133,13 @@ const (
 	ClipClassObject  ClipClass = "object"
 )
 
-// ClipReport is one clipped chord.
+/*
+================
+ClipReport
+
+ClipReport is one clipped chord.
+================
+*/
 type ClipReport struct {
 	continuation bool
 	Outcome      ClipOutcome
@@ -153,60 +178,44 @@ type ClipReport struct {
 	RestOwner simulation.NavOwner
 }
 
-// ClipMovementPath walks the straight chord from -> to over the same world
-// tile grid ValidateMovementPath addresses (identical tile convention,
-// identical corner supercover rule) and stops at the FIRST blocked tile,
-// including the endpoint tile. Both spawns must be canonical
-// (NormalizeSpawnFrame / LiveSpawnAt frames).
-//
-// Failure policy is the package standard: missing coverage degrades per
-// tile to "not blocked" and whole-chord to ClipNoCoverage - never a clip.
-// 412230 continuation: each segment retains the original destination.
-//
-// ClipMovementPath has no retained source owner, so it resolves one with the
-// native teleport rule (FindNavCell). Movers that retain a position owner -
-// players - must call ClipMovementPathFrom with it instead.
+/*
+================
+ClipMovementPath
+
+ClipMovementPath walks the straight chord from -> to over the same world
+tile grid ValidateMovementPath addresses (identical tile convention,
+identical corner supercover rule) and stops at the FIRST blocked tile,
+including the endpoint tile. Both spawns must be canonical
+(NormalizeSpawnFrame / LiveSpawnAt frames).
+
+Failure policy is the package standard: missing coverage degrades per
+tile to "not blocked" and whole-chord to ClipNoCoverage - never a clip.
+412230 continuation: each segment retains the original destination.
+
+ClipMovementPath has no retained source owner, so it resolves one with the
+native teleport rule (FindNavCell). Movers that retain a position owner -
+players - must call ClipMovementPathFrom with it instead.
+================
+*/
 func (v *WaterValidator) ClipMovementPath(from, to simulation.Spawn) ClipReport {
 	return v.ClipMovementPathFrom(from, simulation.NavOwner{}, to)
 }
 
-// ClipMovementPathFrom walks from the retained source owner (the native
-// source pNavCell, QueryMovement 0x98B300). Every continuation leg inherits
-// the owner the previous leg reached; ownership is never re-guessed from Y.
-// It is one native move call over the whole chord: the move test of
-// population creation (5F6EB0), not a walk. Walks use ClipWalkFrom.
+/*
+================
+ClipMovementPathFrom
+
+ClipMovementPathFrom walks from the retained source owner (the native
+source pNavCell, QueryMovement 0x98B300). Every continuation leg inherits
+the owner the previous leg reached; ownership is never re-guessed from Y.
+================
+*/
 func (v *WaterValidator) ClipMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport {
-	return v.clipMovementPathFrom(from, fromOwner, to, false)
-}
-
-/*
-================
-ClipWalkFrom
-
-Where a walk toward to stops. The native server never moves a walker
-along the whole chord in one call: CGObjMoverByDest_Update (48C4E0) steps
-it each tick by CGObjMover_ComputeStep (48BFF0: speed*dt, at most 160
-units, never past the goal) and CGObjChar_MoveByStep (48B920) runs the
-move query on that step alone. The first crossing on the chord stops the
-walker, and the blocked-outline nudge of 428300 applies at the obstacle,
-not at the click origin (objectChordFirstContact).
-================
-*/
-func (v *WaterValidator) ClipWalkFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport {
-	return v.clipMovementPathFrom(from, fromOwner, to, true)
-}
-
-/*
-================
-clipMovementPathFrom
-================
-*/
-func (v *WaterValidator) clipMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn, stepped bool) ClipReport {
 	start := from
 	startOwner := fromOwner
 	checked, uncovered, overrides := 0, 0, 0
 	for calls := 1; calls <= 6; calls++ {
-		report := v.clipMovementSegment(start, startOwner, to, stepped)
+		report := v.clipMovementSegment(start, startOwner, to)
 		checked += report.TilesChecked
 		uncovered += report.TilesUncovered
 		overrides += report.ObjectDeckOverrides
@@ -230,9 +239,15 @@ func (v *WaterValidator) clipMovementPathFrom(from simulation.Spawn, fromOwner s
 	return ClipReport{Outcome: ClipBlocked, Class: ClipClassObject, Rest: from, RestOwner: fromOwner, TilesChecked: checked, TilesUncovered: uncovered, ObjectDeckOverrides: overrides, NativeResult: monster.NavResultBlocked}
 }
 
-// settleRest puts the rest on the surface the walk reached at chord fraction
-// t: the walk owner there, retained through ResolveNavOwner so Rest.Y becomes
-// that surface's height (object cell plane or terrain heightfield).
+/*
+================
+settleRest
+
+settleRest puts the rest on the surface the walk reached at chord fraction
+t: the walk owner there, retained through ResolveNavOwner so Rest.Y becomes
+that surface's height (object cell plane or terrain heightfield).
+================
+*/
 func (v *WaterValidator) settleRest(report *ClipReport, walk *navWalk, t float64) {
 	if walk == nil {
 		return
@@ -245,7 +260,12 @@ func (v *WaterValidator) settleRest(report *ClipReport, walk *navWalk, t float64
 	report.Rest.Y = y
 }
 
-func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn, stepped bool) ClipReport {
+/*
+================
+clipMovementSegment
+================
+*/
+func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport {
 	from = v.ownedStart(from, fromOwner)
 	report := ClipReport{Outcome: ClipArrived, Rest: to}
 
@@ -308,7 +328,7 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 	// move can still cross a deck rail). Composition below is
 	// nearest-wins: the native walk stops at its first clip on either
 	// plane and never continues past it (sub_428930 bit0 semantics).
-	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk, stepped)
+	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk)
 
 	if startTile == endTile {
 		if covered == 0 {
@@ -380,8 +400,14 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 	return report
 }
 
-// clipObjectRest carries the resolved cell-directed point into the authoritative
-// destination. Only contacts without a resolved native cell use chord pullback.
+/*
+================
+clipObjectRest
+
+clipObjectRest carries the resolved cell-directed point into the authoritative
+destination. Only contacts without a resolved native cell use chord pullback.
+================
+*/
 func (v *WaterValidator) clipObjectRest(report ClipReport, walk *navWalk, from, to simulation.Spawn, fromWX, fromWZ, toWX, toWZ, contactT float64, point objectContactPoint) ClipReport {
 	report.Outcome = ClipBlocked
 	report.Class = ClipClassObject
@@ -436,7 +462,13 @@ func (v *WaterValidator) clipObjectRest(report ClipReport, walk *navWalk, from, 
 	return report
 }
 
-// clipContact is the first blocking contact of a chord walk.
+/*
+================
+clipContact
+
+clipContact is the first blocking contact of a chord walk.
+================
+*/
 type clipContact struct {
 	tile     globalTile
 	t        float64
@@ -444,14 +476,20 @@ type clipContact struct {
 	steppedZ bool
 }
 
-// clipChord is the supercover DDA of walkChord with two deliberate
-// differences: it TESTS THE ENDPOINT TILE (the clip stops inside a blocked
-// destination too - the client does), and it reports the crossing
-// parameter and axis of the blocking entry so the caller can place the
-// rest point. blockedAt receives the (clamped) entry parameter for the
-// object-deck override. Corner rule is the same dual-probe walkChord
-// uses: a chord through an exact tile corner must not slip between two
-// diagonally blocked tiles.
+/*
+================
+clipChord
+
+clipChord is the supercover DDA of walkChord with two deliberate
+differences: it TESTS THE ENDPOINT TILE (the clip stops inside a blocked
+destination too - the client does), and it reports the crossing
+parameter and axis of the blocking entry so the caller can place the
+rest point. blockedAt receives the (clamped) entry parameter for the
+object-deck override. Corner rule is the same dual-probe walkChord
+uses: a chord through an exact tile corner must not slip between two
+diagonally blocked tiles.
+================
+*/
 func (v *WaterValidator) clipChord(x0, z0, x1, z1, tileSize float64, startTile, endTile globalTile, blockedAt func(globalTile, float64) bool) (clipContact, bool, bool) {
 	fx0, fz0 := x0/tileSize, z0/tileSize
 	fx1, fz1 := x1/tileSize, z1/tileSize
@@ -538,13 +576,25 @@ func (v *WaterValidator) clipChord(x0, z0, x1, z1, tileSize float64, startTile, 
 
 // ---- the clip runtime (mode + telemetry) ----
 
-// ClipPathValidator is the seam ClientClip runs on (WaterValidator
-// implements it; tests fake it).
+/*
+================
+ClipPathValidator
+
+ClipPathValidator is the seam ClientClip runs on (WaterValidator
+implements it; tests fake it).
+================
+*/
 type ClipPathValidator interface {
 	ClipMovementPath(from, to simulation.Spawn) ClipReport
 }
 
-// ClientClipStats snapshots the clip's counters since boot.
+/*
+================
+ClientClipStats
+
+ClientClipStats snapshots the clip's counters since boot.
+================
+*/
 type ClientClipStats struct {
 	Inspected     uint64
 	Arrived       uint64
@@ -562,10 +612,16 @@ type ClientClipStats struct {
 	ObjectDeckOverrides uint64
 }
 
-// ClientClip computes the client-replicated hard-stop for every accepted
-// ground move. In observe mode it logs the would-clip and returns
-// the goal UNCHANGED - it must never move a player. In apply mode
-// (human-gated, Q6) it returns the clipped rest as the goal to commit.
+/*
+================
+ClientClip
+
+ClientClip computes the client-replicated hard-stop for every accepted
+ground move. In observe mode it logs the would-clip and returns
+the goal UNCHANGED - it must never move a player. In apply mode
+(human-gated, Q6) it returns the clipped rest as the goal to commit.
+================
+*/
 type ClientClip struct {
 	Mode      ClipMode
 	Validator ClipPathValidator
@@ -582,9 +638,15 @@ type ClientClip struct {
 	deckOverrides   atomic.Uint64
 }
 
-// NewClientClipFromEnv builds the clip over the shared walkability plane.
-// Returns nil when configured off; logs the boot posture loudly so a
-// deployment is auditable from its first log lines.
+/*
+================
+NewClientClipFromEnv
+
+NewClientClipFromEnv builds the clip over the shared walkability plane.
+Returns nil when configured off; logs the boot posture loudly so a
+deployment is auditable from its first log lines.
+================
+*/
 func NewClientClipFromEnv(validator ClipPathValidator) *ClientClip {
 	mode := ClipModeFromEnv()
 	if mode == ClipOff {
@@ -599,30 +661,52 @@ func NewClientClipFromEnv(validator ClipPathValidator) *ClientClip {
 	return &ClientClip{Mode: mode, Validator: validator}
 }
 
-// ProcessMove computes the clip for one mode-1 ground move (from = live
-// departure, to = the normalized goal ApplyMove would commit) and returns
-// the goal to actually commit.
-//
-// OBSERVE INVARIANT (Q6 amendment 3, witnessed by test): in every mode
-// except apply, the returned spawn is the input `to`, bit-for-bit - the
-// observe path computes, logs, and discards.
+/*
+================
+ProcessMove
+
+ProcessMove computes the clip for one mode-1 ground move (from = live
+departure, to = the normalized goal ApplyMove would commit) and returns
+the goal to actually commit.
+
+OBSERVE INVARIANT (Q6 amendment 3, witnessed by test): in every mode
+except apply, the returned spawn is the input `to`, bit-for-bit - the
+observe path computes, logs, and discards.
+================
+*/
 func (c *ClientClip) ProcessMove(characterName string, from, to simulation.Spawn) simulation.Spawn {
 	return c.ProcessMoveFrom(characterName, from, simulation.NavOwner{}, to)
 }
 
-// ProcessMoveFrom clips the chord walked from the mover's retained source
-// owner (navowner.go). The observe invariant is unchanged: only apply mode
-// returns anything but `to`.
+/*
+================
+ProcessMoveFrom
+
+ProcessMoveFrom clips the chord walked from the mover's retained source
+owner (navowner.go). The observe invariant is unchanged: only apply mode
+returns anything but `to`.
+================
+*/
 func (c *ClientClip) ProcessMoveFrom(characterName string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) simulation.Spawn {
+	pose, _ := c.ProcessStepFrom(characterName, from, fromOwner, to)
+	return pose
+}
+
+/*
+================
+ProcessStepFrom
+
+The applied collision outcome is independent of coordinate displacement:
+retail can accept the requested point and still return the native stop bit.
+================
+*/
+func (c *ClientClip) ProcessStepFrom(characterName string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, bool) {
 	if c == nil || c.Validator == nil || c.Mode == ClipOff {
-		return to
+		return to, false
 	}
 
-	// Every ground move is a stepped walk (ClipWalkFrom).
 	var report ClipReport
-	if walker, ok := c.Validator.(walkClipValidator); ok {
-		report = walker.ClipWalkFrom(from, fromOwner, to)
-	} else if owned, ok := c.Validator.(ownerClipValidator); ok {
+	if owned, ok := c.Validator.(ownerClipValidator); ok {
 		report = owned.ClipMovementPathFrom(from, fromOwner, to)
 	} else {
 		report = c.Validator.ClipMovementPath(from, to)
@@ -682,12 +766,18 @@ func (c *ClientClip) ProcessMoveFrom(characterName string, from simulation.Spawn
 
 	if applying {
 		c.applied.Add(1)
-		return report.Rest
+		return report.Rest, true
 	}
-	return to
+	return to, false
 }
 
-// Stats snapshots the counters (test + telemetry surface).
+/*
+================
+Stats
+
+Stats snapshots the counters (test + telemetry surface).
+================
+*/
 func (c *ClientClip) Stats() ClientClipStats {
 	return ClientClipStats{
 		Inspected:           c.inspected.Load(),
@@ -703,6 +793,11 @@ func (c *ClientClip) Stats() ClientClipStats {
 	}
 }
 
+/*
+================
+logSummary
+================
+*/
 func (c *ClientClip) logSummary(total uint64) {
 	stats := c.Stats()
 	log.WithFields(log.Fields{

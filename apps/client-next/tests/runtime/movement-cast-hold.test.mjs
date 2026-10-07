@@ -38,6 +38,12 @@ const CATCHUP_SPEED_FACTOR = 1.3;
 const STEP_MS = 16;
 const LATENCY_MS = 150;
 const STEP_UNITS = RUN_SPEED * STEP_MS / 1000;
+// These latency assertions compare an analytic server clock with a sequence
+// of native float32 position additions. Half a native source-wire unit is
+// the positional bound; native-walking-step tests pin arithmetic bit-exactly.
+const POSITION_EPSILON = 1 / 20;
+// One float32 ULP across the region's 0..1920 coordinate domain.
+const STEP_EPSILON = 1 / 8192;
 
 /*
 ================
@@ -147,8 +153,10 @@ while the server stands at serverOfChase.
 ================
 */
 function chase( to = 1500 ) {
-	const m = createMovement( () => {} );
+	const m = createMovement( () => {} ), navigation = product();
+	navigation.objects = [];
 	m.seed( start );
+	m.navigation( 257, navigation );
 	m.native( walkTo( to ), 0, GID );
 	stepsUntil( m, STEP_MS, 1000 );
 	m.step( 1000 );
@@ -165,9 +173,9 @@ test("a press on a click run holds it where the server will stop it", () => {
 	const m = clickRun();
 	m.holdForCast( 1000 );
 	const held = x( m );
-	assert.ok( Math.abs( held - 150 ) < 1e-6, "held at " + held );
+	assert.ok( Math.abs( held - 150 ) < POSITION_EPSILON, "held at " + held );
 	// The command reaches the server at 1000 + LATENCY_MS: it stands at 150.
-	assert.ok( Math.abs( serverOfClickRun( 1000 + LATENCY_MS ) - held ) < 1e-6 );
+	assert.ok( Math.abs( serverOfClickRun( 1000 + LATENCY_MS ) - held ) < POSITION_EPSILON );
 	const waiting = stepsUntil( m, 1016, 1000 + 2 * LATENCY_MS );
 	assert.equal( waiting.largest, 0, "the held walk kept moving" );
 	// The settle arrives one round trip after the press and moves nothing.
@@ -181,8 +189,8 @@ test("a hold no answer ever ends rejoins the walk without a jump", () => {
 	m.holdForCast( 1000 );
 	// The hold lapses at 2.5 s; the click run ends at x = 1500 after 28 s.
 	const { largest } = stepsUntil( m, 1016, 28016 );
-	assert.ok( largest <= STEP_UNITS * CATCHUP_SPEED_FACTOR + 1e-6, "jumped " + largest );
-	assert.ok( Math.abs( x( m ) - 1500 ) < 1e-6, "arrived at " + x( m ) );
+	assert.ok( largest <= STEP_UNITS * CATCHUP_SPEED_FACTOR + STEP_EPSILON, "jumped " + largest );
+	assert.ok( Math.abs( x( m ) - 1500 ) < POSITION_EPSILON, "arrived at " + x( m ) );
 });
 
 test("a refused hold resumes at walking speed, one delivery behind the server", () => {
@@ -196,11 +204,11 @@ test("a refused hold resumes at walking speed, one delivery behind the server", 
 	let from = refusedAt + STEP_MS;
 	for ( const now of [ refusedAt + 32, 2004, 5012, 20004 ] ) {
 		const { largest } = stepsUntil( m, from, now );
-		assert.ok( largest <= STEP_UNITS + 1e-6, `walked ${largest} in one step before ${now}` );
+		assert.ok( largest <= STEP_UNITS + STEP_EPSILON, `walked ${largest} in one step before ${now}` );
 		m.step( now );
 		// Server-led from here: the server's position one delivery ago.
 		const replica = serverOfClickRun( now - LATENCY_MS );
-		assert.ok( Math.abs( x( m ) - replica ) < 1e-6, `at ${now}: ${x( m )} vs the replica ${replica}` );
+		assert.ok( Math.abs( x( m ) - replica ) < POSITION_EPSILON, `at ${now}: ${x( m )} vs the replica ${replica}` );
 		from = now + STEP_MS;
 	}
 });
@@ -218,21 +226,22 @@ test("after a refusal the walk follows the server: a later press keeps walking a
 	const walking = stepsUntil( m, 2016, settledAt );
 	assert.ok( walking.smallest > 0, "the walk stopped at the press" );
 	m.step( settledAt );
-	assert.ok( Math.abs( x( m ) - settle ) < 1e-6, `stood at ${x( m )}, settled at ${settle}` );
+	assert.ok( Math.abs( x( m ) - settle ) < POSITION_EPSILON, `stood at ${x( m )}, settled at ${settle}` );
 	m.correct( { ...start, x: settle }, settledAt );
-	assert.ok( Math.abs( x( m ) - settle ) < 1e-6 );
+	assert.ok( Math.abs( x( m ) - settle ) < POSITION_EPSILON );
 });
 
 test("a refusal after the server arrived walks the rest of the way", () => {
 	// A 2 s click run to x = 200; held at x = 150 after 1 s.
 	const m = clickRun( 200 );
 	m.holdForCast( 1000 );
+	const held = x( m );
 	m.castRefused( 3000 );
 	m.step( 3000 );
-	assert.equal( x( m ), 150, "the refusal teleported the player" );
+	assert.equal( x( m ), held, "the refusal teleported the player" );
 	const { largest } = stepsUntil( m, 3016, 5000 );
-	assert.ok( largest <= STEP_UNITS + 1e-6, "jumped " + largest );
-	assert.ok( Math.abs( x( m ) - 200 ) < 1e-6, "stopped at " + x( m ) );
+	assert.ok( largest <= STEP_UNITS + STEP_EPSILON, "jumped " + largest );
+	assert.ok( Math.abs( x( m ) - 200 ) < POSITION_EPSILON, "stopped at " + x( m ) );
 });
 
 // ============================================================================
@@ -247,9 +256,9 @@ test("a press during a chase keeps walking and the settle lands under the player
 	const walking = stepsUntil( m, 1016, settledAt );
 	assert.ok( walking.smallest > 0, "the chase stopped at the press" );
 	m.step( settledAt );
-	assert.ok( Math.abs( x( m ) - settle ) < 1e-6, `stood at ${x( m )}, settled at ${settle}` );
+	assert.ok( Math.abs( x( m ) - settle ) < POSITION_EPSILON, `stood at ${x( m )}, settled at ${settle}` );
 	m.correct( { ...start, x: settle }, settledAt );
-	assert.ok( Math.abs( x( m ) - settle ) < 1e-6, "the settle moved the player" );
+	assert.ok( Math.abs( x( m ) - settle ) < POSITION_EPSILON, "the settle moved the player" );
 });
 
 test("skill spam during a chase never stops the walk", () => {
@@ -260,12 +269,12 @@ test("skill spam during a chase never stops the walk", () => {
 		if ( now % 96 === 8 ) m.holdForCast( now );
 		m.step( now );
 		const moved = x( m ) - previous;
-		assert.ok( Math.abs( moved - STEP_UNITS ) < 1e-6, `moved ${moved} at ${now}` );
+		assert.ok( Math.abs( moved - STEP_UNITS ) < STEP_EPSILON, `moved ${moved} at ${now}` );
 		previous = x( m );
 	}
 	m.step( 4000 );
 	// Still the server's position one delivery ago: no walking time was lost.
-	assert.ok( Math.abs( x( m ) - serverOfChase( 4000 - LATENCY_MS ) ) < 1e-6, "lagged to " + x( m ) );
+	assert.ok( Math.abs( x( m ) - serverOfChase( 4000 - LATENCY_MS ) ) < POSITION_EPSILON, "lagged to " + x( m ) );
 });
 
 test("a re-planned chase leg continues from under the player", () => {
@@ -277,11 +286,11 @@ test("a re-planned chase leg continues from under the player", () => {
 	stepsUntil( m, 1016, answeredAt );
 	m.step( answeredAt );
 	const before = x( m );
-	assert.ok( Math.abs( before - serverOfChase( 1000 + LATENCY_MS ) ) < 1e-6 );
+	assert.ok( Math.abs( before - serverOfChase( 1000 + LATENCY_MS ) ) < POSITION_EPSILON );
 	m.native( walkTo( 1400 ), answeredAt, GID );
-	assert.ok( Math.abs( x( m ) - before ) < 1e-6, "the new leg moved the player" );
+	assert.ok( Math.abs( x( m ) - before ) < POSITION_EPSILON, "the new leg moved the player" );
 	const { smallest, largest } = stepsUntil( m, answeredAt + STEP_MS, 3000 );
-	assert.ok( smallest > 0 && largest <= STEP_UNITS + 1e-6, `steps ${smallest}..${largest}` );
+	assert.ok( smallest > 0 && largest <= STEP_UNITS + STEP_EPSILON, `steps ${smallest}..${largest}` );
 });
 
 test("a refusal during a chase changes nothing", () => {
@@ -289,7 +298,7 @@ test("a refusal during a chase changes nothing", () => {
 	m.holdForCast( 1000 );
 	m.castRefused( 1000 + 2 * LATENCY_MS );
 	const { smallest, largest } = stepsUntil( m, 1016, 1500 );
-	assert.ok( Math.abs( smallest - STEP_UNITS ) < 1e-6 && Math.abs( largest - STEP_UNITS ) < 1e-6 );
+	assert.ok( Math.abs( smallest - STEP_UNITS ) < STEP_EPSILON && Math.abs( largest - STEP_UNITS ) < STEP_EPSILON );
 });
 
 // ============================================================================
@@ -336,7 +345,7 @@ test("a refusal without a hold changes nothing", () => {
 	const m = clickRun();
 	m.castRefused( 1000 );
 	const { smallest, largest } = stepsUntil( m, 1016, 1500 );
-	assert.ok( Math.abs( smallest - STEP_UNITS ) < 1e-6 && Math.abs( largest - STEP_UNITS ) < 1e-6 );
+	assert.ok( Math.abs( smallest - STEP_UNITS ) < STEP_EPSILON && Math.abs( largest - STEP_UNITS ) < STEP_EPSILON );
 });
 
 test("a hold without a walk does nothing", () => {

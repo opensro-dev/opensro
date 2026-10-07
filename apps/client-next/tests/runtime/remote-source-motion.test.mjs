@@ -36,7 +36,7 @@ createPeer
 ================
 */
 function createPeer() {
-	const owner = createEntities();
+	const owner = createEntities( undefined, undefined, undefined, ( _from, to ) => to );
 	owner.bootstrap( {
 		protocolVersion: 2,
 		nativeResult: 1,

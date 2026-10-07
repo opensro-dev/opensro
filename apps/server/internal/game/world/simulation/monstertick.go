@@ -238,7 +238,7 @@ capturePlayerMovementIntent
 func capturePlayerMovementIntent(world WorldState, nowMs int64) playerMovementIntent {
 	return playerMovementIntent{
 		destination: world.Spawn,
-		inFlight:    world.MoveSegment.Valid() && nowMs < world.MoveSegment.ArrivesAtMs,
+		inFlight:    world.MovingAt(nowMs),
 		present:     true,
 	}
 }

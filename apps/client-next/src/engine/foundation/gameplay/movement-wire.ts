@@ -37,6 +37,7 @@ Where the server put the player and, while it walks, the leg it walks.
 */
 export interface ReceiptWorld {
 	readonly spawn: Pose;
+	readonly ground?: { readonly pose: Pose; readonly at: number; readonly speed: number; };
 	readonly segment?: { readonly from: Pose; readonly startedAtMs: number; readonly arrivesAtMs: number; };
 }
 
@@ -91,13 +92,23 @@ receiptWorld
 export function receiptWorld( receipt: MovementReceipt ): ReceiptWorld {
 	const world = receipt.world as {
 		spawn?: unknown;
+		ground?: { pose: unknown; at: number; speed: number; };
 		moveSegment?: { from: unknown; startedAtMs: number; arrivesAtMs: number; };
 	} | undefined;
 	const spawn = admitPose( world?.spawn ), s = world?.moveSegment;
+	const ground = world?.ground;
+	if (
+		ground &&
+		(!Number.isFinite( ground.at ) || ground.at > receipt.serverTimeMs || !Number.isFinite( ground.speed ) ||
+			ground.speed < 0)
+	) {
+		throw new Error( "Invalid authoritative ground clock" );
+	}
+	const acceptedGround = ground ? { pose: admitPose( ground.pose ), at: ground.at, speed: ground.speed } : undefined;
 	if ( !s ) return { spawn };
 	const from = admitPose( s.from );
 	if ( !Number.isFinite( s.startedAtMs ) || !Number.isFinite( s.arrivesAtMs ) || s.arrivesAtMs <= s.startedAtMs ) {
 		throw new Error( "Invalid authoritative movement clock" );
 	}
-	return { spawn, segment: { from, startedAtMs: s.startedAtMs, arrivesAtMs: s.arrivesAtMs } };
+	return { spawn, ground: acceptedGround, segment: { from, startedAtMs: s.startedAtMs, arrivesAtMs: s.arrivesAtMs } };
 }

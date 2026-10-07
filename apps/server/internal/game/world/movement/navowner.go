@@ -483,9 +483,3 @@ type ownerPathValidator interface {
 type ownerClipValidator interface {
 	ClipMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport
 }
-
-// walkClipValidator is the stepped-walker variant (ClipWalkFrom) of the
-// ClientClip seam.
-type walkClipValidator interface {
-	ClipWalkFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport
-}

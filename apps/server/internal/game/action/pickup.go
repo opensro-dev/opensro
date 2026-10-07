@@ -36,6 +36,8 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 	// table).
 	var ackPayload []byte
 	var constrained bool
+	var movementRevision uint64
+	var movementState simulation.WorldState
 	// The walk's own arrival: the character's live speed (scrolls, buffs,
 	// walk mode) along the committed path. A fixed run-speed estimate made a
 	// faster character stand on the drop until the estimate ran out.
@@ -56,7 +58,7 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 				}
 				live := world.LiveSpawnAt(now.UnixMilli())
 				goal := simulation.SpawnFromMovement(request, live)
-				committed, walk, refusal := rt.constrainWalk(character.Name, live, world.LiveOwnerAt(now.UnixMilli()), goal)
+				committed, walk, refusal := rt.admitGroundWalk(character.Name, live, world.LiveOwnerAt(now.UnixMilli()), goal)
 				if refusal != nil || !samePlacement(committed, goal) {
 					constrained = true
 					return
@@ -73,6 +75,8 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 			return false
 		}
 		writeBackWorld(character, state)
+		movementRevision = state.GroundRevision()
+		movementState = state
 		return true
 	}) {
 		rt.Pending.Clear(pendingKey)
@@ -83,19 +87,19 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 	}
 
 	arrivesAt := time.UnixMilli(arrivesAtMs)
-	rt.Pending.ArmOwned(
-		pendingKey,
-		divisionID,
-		character.Name,
-		groundItem.Gid,
-		arrivesAt,
-	)
+	rt.Pending.ArmGround(grounditem.Pending{
+		Key: pendingKey, DivisionID: divisionID, CharacterName: character.Name,
+		ItemGid: groundItem.Gid, ArrivesAt: arrivesAt, MovementRevision: movementRevision,
+	})
 
+	current := func() bool { return rt.Worlds.GroundPathCurrent(worldKey, movementState) }
+	arm := wire.PickupApproachArmFrame()
+	arm.Current = current
 	return OpResult{
 		Pending: &PendingPickup{ItemGid: groundItem.Gid, Eta: arrivesAt.Sub(now)},
 		Frames: []wire.Frame{
-			wire.PickupApproachArmFrame(),
-			{Opcode: simulation.OpMovementAck, Payload: ackPayload},
+			arm,
+			{Opcode: simulation.OpMovementAck, Payload: ackPayload, Current: current},
 		},
 	}
 }

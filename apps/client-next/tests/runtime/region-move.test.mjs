@@ -22,6 +22,11 @@ const { createNavigation } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts"
 );
 const pose = ( x, z = 10, regionId = 257 ) => ({ x, y: 0, z, regionId, angle: 0 });
+/*
+================
+continueRegionMove
+================
+*/
 function continueRegionMove( from, to, step ) {
 	if ( from.regionId === to.regionId && from.x === to.x && from.y === to.y && from.z === to.z ) {
 		return { point: { ...from }, status: 0 };
@@ -109,6 +114,11 @@ test("region continuation re-expresses the destination after a sector exit", () 
 		0x10000000
 	);
 });
+/*
+================
+navigation
+================
+*/
 function navigation( flags = 0 ) {
 	const nav = createNavigation();
 	const b = values => Buffer.from( values.buffer ).toString( "base64" );
@@ -144,6 +154,17 @@ function navigation( flags = 0 ) {
 	} );
 	return nav;
 }
+
+test("live navigation distinguishes a hard region rejection from missing coverage", () => {
+	const nav = navigation();
+	const rejected = { slide: false, status: 0 };
+	assert.equal( nav.clip( pose( 0 ), pose( 1921 ), rejected ), null );
+	assert.equal( rejected.status, 0x10000000 );
+	const unavailable = { slide: false, status: 0 };
+	assert.equal( nav.clip( pose( 10, 10, 258 ), pose( 20, 10, 258 ), unavailable ), null );
+	assert.equal( unavailable.status, 0 );
+	nav.clear();
+});
 test("live outdoor open and marker outlines exit to terrain, rails still stop", () => {
 	for ( const flag of [ 0, 0x80 ] ) {
 		const nav = navigation( flag );
