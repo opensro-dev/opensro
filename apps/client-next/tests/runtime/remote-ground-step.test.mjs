@@ -15,6 +15,8 @@ import test from "node:test";
 const { createEntityMotion } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts"
 );
+const { createPosePresentation } = await import( "../../src/engine/runtime/characters/pose-presentation.ts" );
+const { createPresentationSamples } = await import( "../../src/engine/runtime/characters/presentation-samples.ts" );
 const START = { regionId: 0x0101, x: 100, y: 0, z: 100, angle: 0 };
 const ENTITY = {
 	...START,
@@ -28,6 +30,61 @@ const ENTITY = {
 	runSpeed: 50,
 	spawnDestination: { ...START, x: 1000 }
 };
+
+for ( const speed of [ 150, 240 ] ) {
+	test(`certified remote ${speed}-speed movement recovers a 1000 ms stall without a legacy distance reset`, () => {
+		const motion = createEntityMotion( undefined, ( _from, to ) => to );
+		const presentation = createPosePresentation();
+		motion.spawn( { ...ENTITY, runSpeed: speed }, 0 );
+		presentation.origin( 0 );
+		/*
+		================
+		draw
+		================
+		*/
+		function draw( state, at ) {
+			const entity = { ...ENTITY, ...state, kind: "player" };
+			const { samples, logicalPose } = createPresentationSamples( [ entity ], null );
+			assert.equal(
+				samples.get( ENTITY.gid )?.transition,
+				undefined,
+				"native peers have no local transition envelope"
+			);
+			presentation.samples( samples );
+			return presentation.pose( ENTITY.gid, logicalPose( entity ), at / 1000 );
+		}
+		let state = defined( motion.step( 0 )[0] );
+		draw( state, 0 );
+		for ( let now = 16; now <= 320; now += 16 ) {
+			state = defined( motion.step( now )[0] );
+			draw( state, now );
+		}
+		draw( state, 1320 );
+		const before = draw( state, 1332.5 );
+		state = defined( motion.step( 1320 )[0] );
+		assert.ok( defined( defined( state.movementPath ).walkingPath ).length > 75 );
+		const resumed = draw( state, 1332.5 );
+		assert.ok( Math.hypot( resumed.x - before.x, resumed.y - before.y, resumed.z - before.z ) < .01 );
+		let previous = resumed;
+		for ( let now = 1344; now <= 2000; now += 16 ) {
+			state = defined( motion.step( now )[0] );
+			const shown = draw( state, now );
+			assert.ok( shown.x >= previous.x && shown.x <= defined( state.movementPath ).to.x );
+			previous = shown;
+		}
+		assert.ok( Math.abs( previous.x - defined( state.x ) ) < speed * .02 );
+	});
+}
+
+test("an uncertified remote displacement retains the legacy distance reset", () => {
+	const presentation = createPosePresentation();
+	presentation.origin( 0 );
+	presentation.samples( new Map( [ [ ENTITY.gid, { atMs: 0, revision: 1, moving: false } ] ] ) );
+	presentation.pose( ENTITY.gid, START, 0 );
+	const target = { ...START, x: START.x + 150 };
+	presentation.samples( new Map( [ [ ENTITY.gid, { atMs: 1000, revision: 2, moving: false } ] ] ) );
+	assert.deepEqual( presentation.pose( ENTITY.gid, target, 1 ), target );
+});
 
 test("a peer collides from its last accepted pose and cannot extrapolate through a future wall", () => {
 	const visits = [];

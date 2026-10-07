@@ -455,6 +455,7 @@ export function createPosePresentation() {
 	================
 	*/
 	function sampledPose( gid: number, input: SampleInput, target: Pose, now: number ): Pose {
+		const walkingPath = input.displacement ? undefined : input.walkingPath ?? input.transition?.walkingPath;
 		const at = (originMs! + input.atMs) / 1000;
 		let row = tracks.get( gid );
 		const previousTrack = row;
@@ -468,7 +469,9 @@ export function createPosePresentation() {
 		if (
 			!row || now < row.last || row.relocation !== relocation ||
 			(revisionChanged && input.transition?.eligible === false) ||
-			(input.transition ? !worldVector( row.latest.pose, target ) : discontinuity( row.latest.pose, target ))
+			(input.transition || walkingPath ?
+				!worldVector( row.latest.pose, target ) :
+				discontinuity( row.latest.pose, target ))
 		) {
 			row = {
 				paths: [],
@@ -583,7 +586,7 @@ export function createPosePresentation() {
 				}
 			}
 			if ( jump ) row.offset = jump;
-			if ( !jump || !input.transition && hypot3( ...row.offset ) > MAX_CORRECTION_DISTANCE ) {
+			if ( !jump || !input.transition && !walkingPath && hypot3( ...row.offset ) > MAX_CORRECTION_DISTANCE ) {
 				row.offset = [ 0, 0, 0 ];
 				row.velocity = [ 0, 0, 0 ];
 			}
@@ -608,7 +611,6 @@ export function createPosePresentation() {
 		if ( row.paths.length > MAX_RECOVERY_PATHS ) row.paths.splice( 0, row.paths.length - MAX_RECOVERY_PATHS );
 		let drawn = displace( model, row.offset );
 		const corridor = input.transition?.corridor;
-		const walkingPath = input.displacement ? undefined : input.walkingPath ?? input.transition?.walkingPath;
 		const walked = walkingPath && hypot3( ...row.offset ) > 0 ?
 			recoverWalking( row.displayed, model, drawn, walkingPath ) :
 			null;
