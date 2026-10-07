@@ -1,0 +1,1524 @@
+{
+  "format": "sro-native-mover-step-v1",
+  "binarySha256": "bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290",
+  "generatorSha256": "b697489fbacb14a245b12f92756c4ee1e777e30536f3b9c76087c316623ea1e3",
+  "floatingControlWord": "0x37f",
+  "intervals": [
+    "0x48c1b0..0x48c1d6",
+    "0x48bff0..0x48c0a7",
+    "0x48c5ae..0x48c63f"
+  ],
+  "scope": "Original command-mover state gate and step arithmetic; separate bounded destination-clamp suffix with original square-root calls. No instruction/call substitution. No proof of turning, elapsed-time sourcing, destination resolution or collision traversal.",
+  "cases": [
+    {
+      "name": "speed-20-time-0-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0.001-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.0010000000474974513,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.020000001415610313,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1017370379,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0.001-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.0010000000474974513,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.012000001035630703,
+        0.0,
+        -0.01600000075995922
+      ],
+      "stepBits": [
+        1011129255,
+        0,
+        3162706543
+      ]
+    },
+    {
+      "name": "speed-20-time-0.016-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.01600000075995922,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.320000022649765,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1050924811,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0.016-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.01600000075995922,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.19200001657009125,
+        0.0,
+        -0.25600001215934753
+      ],
+      "stepBits": [
+        1044683687,
+        0,
+        3196260975
+      ]
+    },
+    {
+      "name": "speed-20-time-0.033-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.6599999666213989,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1059648962,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0.033-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.3959999978542328,
+        0.0,
+        -0.527999997138977
+      ],
+      "stepBits": [
+        1053474947,
+        0,
+        3204918018
+      ]
+    },
+    {
+      "name": "speed-20-time-0.1-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        2.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1073741824,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0.1-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        1.2000000476837158,
+        0.0,
+        -1.600000023841858
+      ],
+      "stepBits": [
+        1067030938,
+        0,
+        3217870029
+      ]
+    },
+    {
+      "name": "speed-20-time-0.15-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.15000000596046448,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        3.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1077936128,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0.15-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.15000000596046448,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        1.8000000715255737,
+        0.0,
+        -2.4000000953674316
+      ],
+      "stepBits": [
+        1072064103,
+        0,
+        3222903194
+      ]
+    },
+    {
+      "name": "speed-20-time-0.3-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.30000001192092896,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1086324736,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-0.3-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 0.30000001192092896,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        3.6000001430511475,
+        0.0,
+        -4.800000190734863
+      ],
+      "stepBits": [
+        1080452711,
+        0,
+        3231291802
+      ]
+    },
+    {
+      "name": "speed-20-time-1-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 1.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        20.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1101004800,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-1-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 1.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        12.0,
+        0.0,
+        -16.0
+      ],
+      "stepBits": [
+        1094713344,
+        0,
+        3246391296
+      ]
+    },
+    {
+      "name": "speed-20-time-4-direction-(1, 0)",
+      "speed": 20.0,
+      "elapsedSeconds": 4.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        80.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1117782016,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-20-time-4-direction-(0.6, -0.8)",
+      "speed": 20.0,
+      "elapsedSeconds": 4.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        48.0,
+        0.0,
+        -64.0
+      ],
+      "stepBits": [
+        1111490560,
+        0,
+        3263168512
+      ]
+    },
+    {
+      "name": "speed-50-time-0-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0.001-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.0010000000474974513,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.05000000074505806,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1028443341,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0.001-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.0010000000474974513,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.030000001192092896,
+        0.0,
+        -0.04000000283122063
+      ],
+      "stepBits": [
+        1022739088,
+        0,
+        3173242635
+      ]
+    },
+    {
+      "name": "speed-50-time-0.016-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.01600000075995922,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.800000011920929,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1061997773,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0.016-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.01600000075995922,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.48000001907348633,
+        0.0,
+        -0.64000004529953
+      ],
+      "stepBits": [
+        1056293520,
+        0,
+        3206797067
+      ]
+    },
+    {
+      "name": "speed-50-time-0.033-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        1.649999976158142,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1070805811,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0.033-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.9900000095367432,
+        0.0,
+        -1.3200000524520874
+      ],
+      "stepBits": [
+        1065185444,
+        0,
+        3215521219
+      ]
+    },
+    {
+      "name": "speed-50-time-0.1-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        5.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1084227584,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0.1-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        3.0,
+        0.0,
+        -4.0
+      ],
+      "stepBits": [
+        1077936128,
+        0,
+        3229614080
+      ]
+    },
+    {
+      "name": "speed-50-time-0.15-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.15000000596046448,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        7.500000476837158,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1089470465,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0.15-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.15000000596046448,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        4.500000476837158,
+        0.0,
+        -6.000000476837158
+      ],
+      "stepBits": [
+        1083179009,
+        0,
+        3233808385
+      ]
+    },
+    {
+      "name": "speed-50-time-0.3-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.30000001192092896,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        15.000000953674316,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1097859073,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-0.3-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 0.30000001192092896,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        9.000000953674316,
+        0.0,
+        -12.000000953674316
+      ],
+      "stepBits": [
+        1091567617,
+        0,
+        3242196993
+      ]
+    },
+    {
+      "name": "speed-50-time-1-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 1.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        50.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1112014848,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-1-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 1.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        30.000001907348633,
+        0.0,
+        -40.0
+      ],
+      "stepBits": [
+        1106247681,
+        0,
+        3256877056
+      ]
+    },
+    {
+      "name": "speed-50-time-4-direction-(1, 0)",
+      "speed": 50.0,
+      "elapsedSeconds": 4.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        160.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1126170624,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-50-time-4-direction-(0.6, -0.8)",
+      "speed": 50.0,
+      "elapsedSeconds": 4.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        96.0,
+        0.0,
+        -128.0
+      ],
+      "stepBits": [
+        1119879168,
+        0,
+        3271557120
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.001-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.0010000000474974513,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.09575000405311584,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1036261524,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.001-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.0010000000474974513,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.057450003921985626,
+        0.0,
+        -0.07660000771284103
+      ],
+      "stepBits": [
+        1030443186,
+        0,
+        3181174903
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.016-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.01600000075995922,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        1.5320000648498535,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1069815956,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.016-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.01600000075995922,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.91920006275177,
+        0.0,
+        -1.2256001234054565
+      ],
+      "stepBits": [
+        1063997618,
+        0,
+        3214729335
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.033-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.032999999821186066,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        3.159749984741211,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1078606168,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.033-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.032999999821186066,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        1.8958500623703003,
+        0.0,
+        -2.5278000831604004
+      ],
+      "stepBits": [
+        1072868151,
+        0,
+        3223439226
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.1-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.10000000149011612,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        9.574999809265137,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1092170547,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.1-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.10000000149011612,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        5.744999885559082,
+        0.0,
+        -7.659999847412109
+      ],
+      "stepBits": [
+        1085789962,
+        0,
+        3237289656
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.15-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.15000000596046448,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        14.362500190734863,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1097190605,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.15-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.15000000596046448,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        8.617500305175781,
+        0.0,
+        -11.49000072479248
+      ],
+      "stepBits": [
+        1091166536,
+        0,
+        3241662219
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.3-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.30000001192092896,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        28.725000381469727,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1105579213,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-0.3-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 0.30000001192092896,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        17.235000610351562,
+        0.0,
+        -22.98000144958496
+      ],
+      "stepBits": [
+        1099555144,
+        0,
+        3250050827
+      ]
+    },
+    {
+      "name": "speed-95.75-time-1-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 1.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        95.75,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1119846400,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-1-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 1.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        57.45000076293945,
+        0.0,
+        -76.5999984741211
+      ],
+      "stepBits": [
+        1113967821,
+        0,
+        3264820019
+      ]
+    },
+    {
+      "name": "speed-95.75-time-4-direction-(1, 0)",
+      "speed": 95.75,
+      "elapsedSeconds": 4.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        160.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1126170624,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "speed-95.75-time-4-direction-(0.6, -0.8)",
+      "speed": 95.75,
+      "elapsedSeconds": 4.0,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        96.0,
+        0.0,
+        -128.0
+      ],
+      "stepBits": [
+        1119879168,
+        0,
+        3271557120
+      ]
+    },
+    {
+      "name": "component-below",
+      "speed": 1.0,
+      "elapsedSeconds": 0.009999997913837433,
+      "direction": [
+        1.0,
+        -1.0
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "component-equal",
+      "speed": 1.0,
+      "elapsedSeconds": 0.009999999776482582,
+      "direction": [
+        1.0,
+        -1.0
+      ],
+      "accepted": true,
+      "step": [
+        0.009999999776482582,
+        0.0,
+        -0.009999999776482582
+      ],
+      "stepBits": [
+        1008981770,
+        0,
+        3156465418
+      ]
+    },
+    {
+      "name": "component-above",
+      "speed": 1.0,
+      "elapsedSeconds": 0.010000000707805157,
+      "direction": [
+        1.0,
+        -1.0
+      ],
+      "accepted": true,
+      "step": [
+        0.010000000707805157,
+        0.0,
+        -0.010000000707805157
+      ],
+      "stepBits": [
+        1008981771,
+        0,
+        3156465419
+      ]
+    },
+    {
+      "name": "one-component-suppressed",
+      "speed": 1.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "direction": [
+        0.09000000357627869,
+        1.0
+      ],
+      "accepted": true,
+      "step": [
+        0.0,
+        0.0,
+        0.10000000149011612
+      ],
+      "stepBits": [
+        0,
+        0,
+        1036831949
+      ]
+    },
+    {
+      "name": "negative-speed",
+      "speed": -50.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "direction": [
+        -0.6000000238418579,
+        0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        -0.9900000095367432,
+        0.0,
+        1.3200000524520874
+      ],
+      "stepBits": [
+        3212669092,
+        0,
+        1068037571
+      ]
+    },
+    {
+      "name": "negative-time",
+      "speed": 50.0,
+      "elapsedSeconds": -0.032999999821186066,
+      "direction": [
+        0.6000000238418579,
+        -0.800000011920929
+      ],
+      "accepted": true,
+      "step": [
+        0.9900000095367432,
+        0.0,
+        -1.3200000524520874
+      ],
+      "stepBits": [
+        1065185444,
+        0,
+        3215521219
+      ]
+    },
+    {
+      "name": "cap-below",
+      "speed": 160.0,
+      "elapsedSeconds": 0.9999999403953552,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        159.99998474121094,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1126170623,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "cap-equal",
+      "speed": 160.0,
+      "elapsedSeconds": 1.0,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        160.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1126170624,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "cap-above",
+      "speed": 160.0,
+      "elapsedSeconds": 1.0000001192092896,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        160.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1126170624,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "rounded-product",
+      "speed": 0.3333333432674408,
+      "elapsedSeconds": 0.030000001192092896,
+      "direction": [
+        1.0,
+        0.0
+      ],
+      "accepted": true,
+      "step": [
+        0.010000000707805157,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1008981771,
+        0,
+        0
+      ]
+    }
+  ],
+  "inactiveCases": [
+    {
+      "state": 0,
+      "accepted": false,
+      "step": [
+        17.0,
+        19.0,
+        23.0
+      ],
+      "stepBits": [
+        1099431936,
+        1100480512,
+        1102577664
+      ]
+    },
+    {
+      "state": 2,
+      "accepted": false,
+      "step": [
+        17.0,
+        19.0,
+        23.0
+      ],
+      "stepBits": [
+        1099431936,
+        1100480512,
+        1102577664
+      ]
+    }
+  ],
+  "clampCases": [
+    {
+      "requestedStep": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "step": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1065353216,
+        0,
+        0
+      ]
+    },
+    {
+      "requestedStep": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        0.9999999403953552,
+        0.0,
+        0.0
+      ],
+      "step": [
+        0.9999999403953552,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1065353215,
+        0,
+        0
+      ]
+    },
+    {
+      "requestedStep": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        1.0000001192092896,
+        0.0,
+        0.0
+      ],
+      "step": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1065353216,
+        0,
+        0
+      ]
+    },
+    {
+      "requestedStep": [
+        0.6000000238418579,
+        0.0,
+        0.800000011920929
+      ],
+      "remaining": [
+        0.30000001192092896,
+        0.0,
+        0.4000000059604645
+      ],
+      "step": [
+        0.30000001192092896,
+        0.0,
+        0.4000000059604645
+      ],
+      "stepBits": [
+        1050253722,
+        0,
+        1053609165
+      ]
+    },
+    {
+      "requestedStep": [
+        -10.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        -3.0,
+        4.0,
+        0.0
+      ],
+      "step": [
+        -3.0,
+        4.0,
+        0.0
+      ],
+      "stepBits": [
+        3225419776,
+        1082130432,
+        0
+      ]
+    },
+    {
+      "requestedStep": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "step": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1065353216,
+        0,
+        0
+      ]
+    },
+    {
+      "requestedStep": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "requestedStep": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "step": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "requestedStep": [
+        160.0,
+        0.0,
+        0.0
+      ],
+      "remaining": [
+        159.0,
+        0.0,
+        0.0
+      ],
+      "step": [
+        159.0,
+        0.0,
+        0.0
+      ],
+      "stepBits": [
+        1126105088,
+        0,
+        0
+      ]
+    }
+  ]
+}

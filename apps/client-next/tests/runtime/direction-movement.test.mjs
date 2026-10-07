@@ -13,6 +13,7 @@ the native source loader.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { product } from "../helpers/navigation-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
 const direction = await import( "../../src/engine/foundation/gameplay/direction-movement.ts" );
 const { decodeNativeMovement } = await import( "../../src/engine/foundation/gameplay/native-movement.ts" );
@@ -184,6 +185,10 @@ test("the local walk sends the angular envelope and keeps walking past its first
 	const frames = [];
 	const m = createMovement( frame => frames.push( frame ) );
 	m.seed( pose );
+	const navigation = product( pose.regionId );
+	navigation.objects = [];
+	navigation.navmesh.regions.push( { ...navigation.navmesh.regions[0], dx: 1 } );
+	m.navigation( pose.regionId, navigation );
 	const frame = m.direct( EAST, 0 );
 	assert.deepEqual( [ ...frame.payload ], [ 1, 1, 0, 0, 0, 0, 1, 0, 0 ] );
 	assert.equal( frames.length, 1 );
@@ -206,6 +211,10 @@ test("the local walk sends the angular envelope and keeps walking past its first
 test("a blocked server leg ends the local walk at the contact", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );
+	const navigation = product( pose.regionId );
+	navigation.objects = [];
+	navigation.navmesh.regions.push( { ...navigation.navmesh.regions[0], dx: 1 } );
+	m.navigation( pose.regionId, navigation );
 	m.direct( EAST, 0 );
 	const wall = { ...pose, x: 400 };
 	m.receive( receipt( 1, wall, { from: pose, startedAtMs: 0, arrivesAtMs: 6000 } ), 0, GID );
@@ -218,6 +227,10 @@ test("a blocked server leg ends the local walk at the contact", () => {
 test("a local mode-0 acknowledgement with a source starts the walk; without one it keeps the path", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );
+	const navigation = product( pose.regionId );
+	navigation.objects = [];
+	navigation.navmesh.regions.push( { ...navigation.navmesh.regions[0], dx: 1 } );
+	m.navigation( pose.regionId, navigation );
 	m.native( ack( { x: 300 } ), 0, GID );
 	m.native( ack( { heading: SOUTH } ), 1000, GID );
 	m.step( 2000 );
@@ -229,7 +242,7 @@ test("a local mode-0 acknowledgement with a source starts the walk; without one 
 });
 
 test("a remote direction walk renews its legs and turns on 0xB2CF", () => {
-	const motion = createEntityMotion();
+	const motion = createEntityMotion( undefined, ( _from, to ) => to );
 	let entity = remote();
 	/** @param {number} now */
 	const step = now => {
@@ -237,14 +250,15 @@ test("a remote direction walk renews its legs and turns on 0xB2CF", () => {
 		return entity;
 	};
 	motion.receive( ack( { heading: EAST, source: pose } ), entity, 0 );
-	step( 20000 );
-	assert.ok( Math.abs( step( 30000 ).x - 1600 ) < 1e-6 );
+	for ( let now = 100; now <= 30000; now += 100 ) step( now );
+	assert.ok( Math.abs( entity.x - 1600 ) < 1e-6 );
 	const turned = motion.steer( entity, SOUTH, 30000 );
 	assert.equal( turned?.heading, SOUTH );
+	for ( let now = 30100; now < 31000; now += 100 ) step( now );
 	const after = step( 31000 );
 	assert.ok( Math.abs( after.x - 1600 ) < .1 && Math.abs( after.z - 150 ) < 1e-3, JSON.stringify( after ) );
 
-	const idle = createEntityMotion(), still = { ...remote(), x: 5 };
+	const idle = createEntityMotion( undefined, ( _from, to ) => to ), still = { ...remote(), x: 5 };
 	assert.equal( idle.receive( ack( { heading: SOUTH } ), still, 0 ).to.x, 5 );
 	assert.deepEqual( idle.step( 1000 ), [], "a keep starts nothing" );
 	assert.equal( idle.steer( still, SOUTH, 0 )?.heading, SOUTH, "an idle mover turns in place" );
@@ -263,6 +277,10 @@ locally while the server walked it on.
 test("a correction keeps the click it overtook", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );
+	const navigation = product( pose.regionId );
+	navigation.objects = [];
+	navigation.navmesh.regions.push( { ...navigation.navmesh.regions[0], dx: 1 } );
+	m.navigation( pose.regionId, navigation );
 	const target = { ...pose, x: 500 };
 	m.request( target, 0 );
 	const stopped = { ...pose, x: 120 };
@@ -283,6 +301,10 @@ a correction with nothing in flight still ends motion
 test("a correction with nothing in flight still ends motion", () => {
 	const m = createMovement( () => {} );
 	m.seed( pose );
+	const navigation = product( pose.regionId );
+	navigation.objects = [];
+	navigation.navmesh.regions.push( { ...navigation.navmesh.regions[0], dx: 1 } );
+	m.navigation( pose.regionId, navigation );
 	m.request( { ...pose, x: 500 }, 0 );
 	m.receive( receipt( 1, { ...pose, x: 500 }, { from: pose, startedAtMs: 0, arrivesAtMs: 8000 } ), 0, GID );
 	m.step( 2000 );

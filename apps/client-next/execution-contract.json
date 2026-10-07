@@ -1252,14 +1252,16 @@
 			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
 			"functions": [
-				"surface"
+				"surface",
+				"clip"
 			]
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
-				"callback:createEntities:0"
+				"callback:createEntities:0",
+				"callback:createEntities:3"
 			]
 		},
 		{

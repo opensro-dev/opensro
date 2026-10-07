@@ -90,7 +90,7 @@ func (p *PetFollower) FollowFormation(in PetFormationStep) []Frame {
 	decision := monster.NativeOwnerFollowMotion(monster.OwnerFollowInput{Live: live, Owner: leader, SlotGoal: goal,
 		OldGoal: spawnToPose(p.world.Spawn), OwnerGoal: spawnToPose(in.Owner.Spawn),
 		Moving:      p.world.MoveSegment.Valid() && in.Now < p.world.MoveSegment.ArrivesAtMs,
-		OwnerMoving: in.Owner.MoveSegment.Valid() && in.Now < in.Owner.MoveSegment.ArrivesAtMs})
+		OwnerMoving: in.Owner.MovingAt(in.Now)})
 	if !decision.Move || decision.Motion.Distance <= float64(float32(0.01)) {
 		return nil
 	}

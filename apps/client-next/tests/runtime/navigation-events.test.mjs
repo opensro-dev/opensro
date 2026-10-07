@@ -169,6 +169,12 @@ test("BMS decoding preserves cell words, both event columns and registry strings
 });
 test("preferred owner survives coincident triangles and rejects invalid indices", () => {
 	const objects = [ room(), room() ];
+	const nav = createNavigation(), regionId = 0x8001;
+	nav.install( regionId, { regionId, complete: true, objects } );
+	const pose = { regionId, x: 75, y: 0, z: 25, angle: 0 };
+	const query = { slide: false, sourceOwner: { placement: 1, cell: 0 }, owner: undefined };
+	assert.deepEqual( nav.clip( pose, pose, query ), pose );
+	assert.deepEqual( query.owner, query.sourceOwner, "zero-speed steps retain their admitted floor" );
 	assert.equal(
 		dungeonOwnerPath( objects, [ 75, 0, 25 ], [ 25, 0, 75 ], { placement: 1, cell: 0 } ).owner.placement,
 		1
@@ -262,8 +268,9 @@ test("remote movement retains the stair layer across updates, gait changes and n
 	const { createEntityMotion } = await load( "runtime/simulation/worker/session/world/entities/motion/motion.ts" );
 	const nav = createNavigation(), regionId = 0x8001, objects = [ stairs(), room( 3 ) ];
 	nav.install( regionId, { regionId, complete: true, objects } );
-	const motion = createEntityMotion( ( pose, reference, cursor ) =>
-		nav.surface( pose, reference, undefined, cursor )
+	const motion = createEntityMotion(
+		( pose, reference, cursor ) => nav.surface( pose, reference, undefined, cursor ),
+		nav.clip
 	);
 	const entity = {
 		gid: 9,
@@ -286,6 +293,7 @@ test("remote movement retains the stair layer across updates, gait changes and n
 	assert.ok( Math.abs( update.y - 16 ) < .001 );
 	// Admission replaces placement indices; a stale cursor must not bind the other floor.
 	nav.install( regionId, { regionId, complete: true, objects: [ room( 3 ), stairs() ] } );
+	motion.surfaceReference( { ...entity, ...update } );
 	update = motion.step( 2500 )[0];
 	assert.ok( Math.abs( update.y - 18 ) < .001 );
 	motion.remove( 9 );

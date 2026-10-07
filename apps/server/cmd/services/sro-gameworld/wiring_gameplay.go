@@ -184,18 +184,22 @@ func newGameplayPlane(
 	movementRuntime.CanEnterRegion = func(character *enterworld.Character, regionID uint16) bool {
 		return authoredAreas.CanEnterRegion(regionID, character.GMPrivilege)
 	}
+	movementRuntime.EnableGroundWalk()
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
 	items.SpawnRegionAvailable = water.SpawnRegionAvailable
 	items.ConstrainCompanionSpawn = water.ConstrainCompanionSpawn
 	items.CompanionSurfaceHeight = water.WalkableSpawnHeightAt
 	items.ConstrainWalk = movementRuntime.ConstrainMovementFrom
+	items.AdmitGroundWalk = movementRuntime.AdmitGroundWalk
 	items.LineOfSight = movementRuntime.LineOfSight
 	items.ResolveNavOwner = water.ResolveNavOwner
 	items.MoveCOS = movementRuntime.HandleCOSMove
+	items.MoveCOSPublished = movementRuntime.HandleCOSMovePublished
 	items.SteerCOS = movementRuntime.HandleCOSSteer
 	items.StopCOS = movementRuntime.HandleCOSStop
 	movementRuntime.UsePendingTracker(items.Pending)
 	movementRuntime.ClearCombatIntent = items.ClearCombatIntent
+	movementRuntime.GroundBlocked = items.RetireGroundApproach
 	movementRuntime.MovementBlocked = items.PlayerMovementBlocked
 	movementRuntime.RetireMoveEffects = items.RetireMoveEffects
 	movementRuntime.AttackLocked = items.PlayerAttackLocked

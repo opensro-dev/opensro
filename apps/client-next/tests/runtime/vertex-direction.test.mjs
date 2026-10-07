@@ -61,7 +61,7 @@ test("outside contact uses decoded endpoint directions without acquiring a cell"
 	assert.deepEqual( response.point, [ oracle.rows[2].result[0], 7, oracle.rows[2].result[1] ] );
 });
 
-test("a stepped walker meets a blocked outline at the crossing, not from its click origin", async () => {
+test("a finite walker meets an outline from its actual final-step source", async () => {
 	const { navContactDetail } = await import(
 		sourceFileUrl( "src/engine/foundation/navigation/object-navigation.ts" ).href
 	);
@@ -73,18 +73,18 @@ test("a stepped walker meets a blocked outline at the crossing, not from its cli
 		bounds: [ 0, 7, 0, 100, 7, 100 ],
 		passThrough: false
 	};
-	const p = { x: 0, y: 0, z: 0, yaw: 0, mesh }, from = [ -90, 7, 50 ], to = [ 10, 7, 50 ];
-	const single = navContactDetail( p, from, to, [], [], false, true );
-	const stepped = navContactDetail( p, from, to, [], [], false, true, undefined, true );
-	assert.equal( stepped.fraction, single.fraction );
-	const f = Math.fround, hit = [ f( 0 ), f( 50 ) ];
-	// One native call nudges the chord start; the per-step walk's last step
-	// starts 0.01 short of the crossing (server steppedWalkerAt).
-	const near = [ f( -90 + 100 * (single.fraction - .01 / 100) ), f( 50 ) ];
-	const expect = ( source ) => outsideEdgeStart( source, hit, [ 0, 0 ], [ 0, 100 ], 0, 64 );
-	assert.deepEqual( [ single.point[0], single.point[2] ], expect( [ f( -90 ), f( 50 ) ] ) );
-	assert.deepEqual( [ stepped.point[0], stepped.point[2] ], expect( near ) );
-	assert.ok( Math.abs( stepped.point[0] ) < .05, `stepped rest ${stepped.point}` );
+	const p = { x: 0, y: 0, z: 0, yaw: 0, mesh };
+	let current = -90;
+	// These are accepted 20ms movement steps at 50 units per second.
+	for ( let frame = 0; frame < 89; frame++ ) {
+		assert.equal( navContactDetail( p, [ current, 7, 50 ], [ current + 1, 7, 50 ], [], [], false, true ), null );
+		current += 1;
+	}
+	const contact = navContactDetail( p, [ current, 7, 50 ], [ current + 2, 7, 50 ], [], [], false, true );
+	assert.ok( contact );
+	const expected = outsideEdgeStart( [ -1, 50 ], [ 0, 50 ], [ 0, 0 ], [ 0, 100 ], 0, 64 );
+	assert.deepEqual( [ contact.point[0], contact.point[2] ], expected );
+	assert.notDeepEqual( expected, outsideEdgeStart( [ -.01, 50 ], [ 0, 50 ], [ 0, 0 ], [ 0, 100 ], 0, 64 ) );
 });
 
 test("legacy WIP bridge uses the same native cosine/negative-sine table", async () => {

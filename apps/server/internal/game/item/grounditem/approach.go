@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+approach.go - ground-item reach and the authoritative pickup approach latch
+
+Keeps one pending approach per character. Completion rechecks live range;
+an estimated travel time alone never grants an item.
+
+===========================================================================
+*/
 package grounditem
 
 import (
@@ -43,6 +53,11 @@ const (
 
 // Point is a position on the region grid. Y is omitted because every distance
 // rule in the item plane is horizontal.
+/*
+================
+Point
+================
+*/
 type Point struct {
 	RegionID uint16
 	X        float32
@@ -52,12 +67,22 @@ type Point struct {
 // SameWorld reports whether two positions are in the same world, meaning they
 // agree on the dungeon bit. Sector arithmetic across the boundary is
 // meaningless.
+/*
+================
+SameWorld
+================
+*/
 func SameWorld(a, b Point) bool {
 	return worldgeom.SamePlane(a.RegionID, b.RegionID)
 }
 
 // Distance2D returns the horizontal distance between two positions in native
 // units, accounting for the sector each one sits in.
+/*
+================
+Distance2D
+================
+*/
 func Distance2D(a, b Point) float64 {
 	return worldgeom.Distance(
 		worldgeom.RegionXZ{RegionID: a.RegionID, X: float64(a.X), Z: float64(a.Z)},
@@ -67,6 +92,11 @@ func Distance2D(a, b Point) float64 {
 
 // SpeedForMovementMode returns the per-second travel speed for a movement
 // mode.
+/*
+================
+SpeedForMovementMode
+================
+*/
 func SpeedForMovementMode(movementMode uint8) float64 {
 	if movementMode == MovementModeWalk {
 		return WalkSpeed
@@ -75,6 +105,11 @@ func SpeedForMovementMode(movementMode uint8) float64 {
 }
 
 // Approach is the verdict on whether a pickup may execute now.
+/*
+================
+Approach
+================
+*/
 type Approach struct {
 	// InRange is true when the pickup should execute immediately.
 	InRange bool
@@ -91,6 +126,11 @@ type Approach struct {
 // one-byte 0x72CD lane is a throttled CANCEL/recovery command, not a pickup
 // heartbeat; completion therefore remains server-owned. A cross-world pair
 // can never be in range.
+/*
+================
+PlanApproach
+================
+*/
 func PlanApproach(from, to Point, movementMode uint8) Approach {
 	if !SameWorld(from, to) {
 		return Approach{InRange: false, Distance: math.Inf(1)}
@@ -108,12 +148,18 @@ func PlanApproach(from, to Point, movementMode uint8) Approach {
 }
 
 // Pending is a pickup approach in flight.
+/*
+================
+Pending
+================
+*/
 type Pending struct {
-	Key           string
-	DivisionID    string
-	CharacterName string
-	ItemGid       uint32
-	ArrivesAt     time.Time
+	Key              string
+	DivisionID       string
+	CharacterName    string
+	ItemGid          uint32
+	ArrivesAt        time.Time
+	MovementRevision uint64
 }
 
 // PendingTracker holds the one approach each character may have in flight.
@@ -121,17 +167,32 @@ type Pending struct {
 // The native target-move latch is a single slot: issuing any new command
 // replaces it (sub_67b0e0), which is why arming an approach overwrites rather
 // than queues.
+/*
+================
+PendingTracker
+================
+*/
 type PendingTracker struct {
 	mu      sync.Mutex
 	pending map[string]Pending
 }
 
 // NewPendingTracker returns an empty PendingTracker.
+/*
+================
+NewPendingTracker
+================
+*/
 func NewPendingTracker() *PendingTracker {
 	return &PendingTracker{pending: make(map[string]Pending)}
 }
 
 // Arm records an approach, replacing any previous one for the same key.
+/*
+================
+Arm
+================
+*/
 func (t *PendingTracker) Arm(key string, itemGid uint32, arrivesAt time.Time) {
 	t.ArmOwned(key, "", "", itemGid, arrivesAt)
 }
@@ -141,20 +202,27 @@ func (t *PendingTracker) Arm(key string, itemGid uint32, arrivesAt time.Time) {
 // object-action request; its one-byte 0x72CD form is a cancel/recovery command,
 // not a pickup heartbeat. Keeping division/name beside the timer also avoids
 // parsing the opaque PendingKey when the completion owner is resolved.
+/*
+================
+ArmOwned
+================
+*/
 func (t *PendingTracker) ArmOwned(key, divisionID, characterName string, itemGid uint32, arrivesAt time.Time) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.pending[key] = Pending{
+	t.ArmGround(Pending{
 		Key:           key,
 		DivisionID:    divisionID,
 		CharacterName: characterName,
 		ItemGid:       itemGid,
 		ArrivesAt:     arrivesAt,
-	}
+	})
 }
 
 // Peek returns the approach in flight without consuming it.
+/*
+================
+Peek
+================
+*/
 func (t *PendingTracker) Peek(key string) (Pending, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -165,6 +233,11 @@ func (t *PendingTracker) Peek(key string) (Pending, bool) {
 
 // Clear removes any approach in flight. It is safe to call when none is armed,
 // which is what every superseding command does.
+/*
+================
+Clear
+================
+*/
 func (t *PendingTracker) Clear(key string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -176,6 +249,11 @@ func (t *PendingTracker) Clear(key string) {
 // timer matured. Entries remain in the tracker until TakeMatured consumes
 // them under the division operation lock; this makes a concurrent cancel or
 // replacement win cleanly instead of granting from a stale snapshot.
+/*
+================
+Due
+================
+*/
 func (t *PendingTracker) Due(now time.Time) []Pending {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -204,6 +282,11 @@ func (t *PendingTracker) Due(now time.Time) []Pending {
 //
 // The second result is the time still to wait, so a duplicate execute request
 // can observe the same in-flight approach without consuming or extending it.
+/*
+================
+TakeMatured
+================
+*/
 func (t *PendingTracker) TakeMatured(key string, itemGid uint32, now time.Time) (bool, time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

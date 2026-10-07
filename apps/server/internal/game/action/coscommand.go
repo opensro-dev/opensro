@@ -30,6 +30,18 @@ func (rt *Runtime) HandleCosCommand(
 	character *enterworld.Character,
 	payload []byte,
 ) OpResult {
+	return rt.handleCosCommand(divisionID, character, payload, nil)
+}
+
+/*
+================
+handleCosCommand
+
+Transport supplies a publication sink so mounted movement and its receipt
+share the movement owner's ordering boundary. Direct callers retain frames.
+================
+*/
+func (rt *Runtime) handleCosCommand(divisionID string, character *enterworld.Character, payload []byte, publish func([]wire.Frame)) OpResult {
 	command, err := wire.DecodeCosCommand(payload)
 	if err != nil || character == nil {
 		return OpResult{}
@@ -63,6 +75,10 @@ func (rt *Runtime) HandleCosCommand(
 			return OpResult{}
 		}
 		rt.bindResidentRegion(simulation.WorldKey(divisionID, character.Name), rt.Now().UnixMilli())
+		if publish != nil && rt.MoveCOSPublished != nil {
+			rt.MoveCOSPublished(divisionID, character, command, publish)
+			return OpResult{}
+		}
 		return OpResult{Frames: rt.MoveCOS(divisionID, character, command.CosGid, command.Movement)}
 	case wire.CosCommandSteerTag, wire.CosCommandStopTag:
 		// The vehicle's steer/stop pair belongs to the same movement owner

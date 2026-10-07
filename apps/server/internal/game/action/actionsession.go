@@ -364,44 +364,52 @@ func (rt *Runtime) retireActionSessions() []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	for _, session := range rt.actionSessionSnapshot() {
 		unlock := rt.lockDivision(session.division)
-		key := simulation.WorldKey(session.division, session.name)
-		_, intent := rt.combatIntentFor(session.division, session.name)
-		if value, exists := rt.actionSessions.Load(key); exists && !rt.hasOpenSkillCast(session.division, session.name) {
-			current := value.(actionSessionPublication)
-			// A grace-queued press stays queued until its skill is ready;
-			// advanceQueuedActionSessions promotes it then.
-			if current.queued && current.pending != nil && rt.Now().UnixMilli() < current.readyAtMs {
-				unlock()
-				continue
-			}
-			state := wire.ReleaseActionState()
-			if current.queued && current.pending != nil {
-				// 4AD390: the executing front finished (or was cancelled) in
-				// this tick; the pending back entry becomes the new front.
-				// Dropping it here lost an attack clicked during a swing.
-				rt.setCombatIntent(*current.pending)
-				current.queued, current.pending, current.readyAtMs = false, nil, 0
-				rt.actionSessions.Store(key, current)
-				state.State = singleActionCount
-			} else if intent {
-				if !current.queued {
-					unlock()
-					continue
-				}
-				current.queued, current.pending, current.readyAtMs = false, nil, 0
-				rt.actionSessions.Store(key, current)
-				state.State = singleActionCount
-			} else {
-				rt.actionSessions.Delete(key)
-			}
-			out = append(out, simulation.DivisionFrames{
-				DivisionID: session.division, OnlyCharacterID: session.characterID,
-				Frames: []simulation.Frame{{Opcode: wire.OpActionState, Payload: state.Encode()}},
-			})
-		}
+		frame := rt.retireActionSession(session)
 		unlock()
+		if frame != nil {
+			out = append(out, simulation.DivisionFrames{DivisionID: session.division, OnlyCharacterID: session.characterID,
+				Frames: []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}}})
+		}
 	}
 	return out
+}
+
+/*
+================
+retireActionSession
+
+The caller owns the division action door. Ground collision uses this same
+queue transition and enqueues its release before opening that door again.
+================
+*/
+func (rt *Runtime) retireActionSession(session actionSessionPublication) *wire.Frame {
+	key := simulation.WorldKey(session.division, session.name)
+	_, intent := rt.combatIntentFor(session.division, session.name)
+	value, exists := rt.actionSessions.Load(key)
+	if !exists || rt.hasOpenSkillCast(session.division, session.name) {
+		return nil
+	}
+	current := value.(actionSessionPublication)
+	if current.queued && current.pending != nil && rt.Now().UnixMilli() < current.readyAtMs {
+		return nil
+	}
+	state := wire.ReleaseActionState()
+	if current.queued && current.pending != nil {
+		rt.setCombatIntent(*current.pending)
+		current.queued, current.pending, current.readyAtMs = false, nil, 0
+		rt.actionSessions.Store(key, current)
+		state.State = singleActionCount
+	} else if intent {
+		if !current.queued {
+			return nil
+		}
+		current.queued, current.pending, current.readyAtMs = false, nil, 0
+		rt.actionSessions.Store(key, current)
+		state.State = singleActionCount
+	} else {
+		rt.actionSessions.Delete(key)
+	}
+	return &wire.Frame{Opcode: wire.OpActionState, Payload: state.Encode()}
 }
 
 /*

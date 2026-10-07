@@ -114,6 +114,10 @@ replacement) cannot race the tick's read.
 ==================
 */
 func CloneWorldState(w WorldState) WorldState {
+	if w.Ground != nil {
+		ground := *w.Ground
+		w.Ground = &ground
+	}
 	if w.MoveSegment != nil {
 		segment := *w.MoveSegment
 		w.MoveSegment = &segment
@@ -766,7 +770,7 @@ func (t *Ticker) runSessionLegs(state *divisionTickState, session SessionSnapsho
 		return
 	}
 	gid := PlayerObjectID(session.CharacterID)
-	if nowMs >= segment.ArrivesAtMs {
+	if !session.World.GroundActive() && nowMs >= segment.ArrivesAtMs {
 		// Segment matured: one settle correction at the goal, then quiet.
 		if state.settled[session.SessionID] == segment.ArrivesAtMs {
 			return

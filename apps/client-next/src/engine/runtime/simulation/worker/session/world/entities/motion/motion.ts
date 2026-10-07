@@ -10,8 +10,10 @@ its path is renewed leg by leg along the heading until a correction
 ===========================================================================
 */
 import type { SurfaceCursor, SurfaceResolver } from "@/engine/contracts/navigation";
+import type { NavOwner } from "@/engine/foundation/navigation/dungeon-ownership";
 import {
 	type MovementSegment,
+	REGION_SIZE,
 	movementHeading,
 	decodeNativeMovement,
 	poseDistance,
@@ -19,12 +21,46 @@ import {
 	sampleMovement as sample,
 	movementModeTransition,
 	movementSpeedTransition,
-	movementDuration
+	movementDuration,
+	clientWalkingStep,
+	clientWalkingDirection,
+	clientWalkingVector,
+	clientPlanarDistance,
+	interpolateMovement
 } from "@/engine/foundation/gameplay/native-movement";
 import type { EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
-import { directionLegEnd } from "@/engine/foundation/gameplay/direction-movement";
+import { directionLegEnd, modelYaw } from "@/engine/foundation/gameplay/direction-movement";
+const ENDPOINT_EPSILON = 0.001;
+const PRESENTATION_LOOKAHEAD_MS = 100;
+/*
+================
+MotionClip
+================
+*/
+export type MotionClip = ( from: Pose, to: Pose, query: {
+	slide: boolean;
+	sourceOwner?: NavOwner;
+	owner?: NavOwner;
+	status?: number;
+} ) => Pose | null;
+/*
+================
+RemoteSegment
+================
+*/
+type RemoteSegment = MovementSegment & {
+	previous?: Pose;
+	at?: number;
+	vector?: readonly [number, number];
+	speed?: number;
+	blocked?: boolean;
+	arrived?: boolean;
+	castToken?: number;
+	fixedTiming?: boolean;
+	direction?: number;
+};
 // Motion owns sampled pose and path activity. Entity metadata remains owned by
 // createEntities; presentation must not infer path completion from packet gaps.
 /*
@@ -58,7 +94,7 @@ function update( gid: number, pose: Pose, moving = false ): MotionUpdate {
 createEntityMotion
 ================
 */
-export function createEntityMotion( surface: SurfaceResolver = pose => pose ) {
+export function createEntityMotion( surface: SurfaceResolver = pose => pose, clip: MotionClip = () => null ) {
 	const cursors = new Map<number, SurfaceCursor>();
 	/*
 ================
@@ -73,16 +109,109 @@ resolve
 		}
 		return surface( pose, reference, cursor );
 	}
-	const active = new Map<
-		number,
-		(MovementSegment & { previous?: Pose; castToken?: number; fixedTiming?: boolean; direction?: number; })
-	>();
+	const active = new Map<number, RemoteSegment>();
+	/*
+================
+candidate
+
+The server's goal is intent. Compute only this elapsed step before querying
+geometry; one elapsed candidate enters geometry, never the full destination chord.
+================
+	*/
+	function candidate( segment: RemoteSegment, pose: Pose, elapsed: number ) {
+		const destination = segment.to;
+		const dx = destination.x - pose.x + ((destination.regionId & 255) - (pose.regionId & 255)) * REGION_SIZE;
+		const dz = destination.z - pose.z + ((destination.regionId >>> 8) - (pose.regionId >>> 8)) * REGION_SIZE;
+		const remaining = poseDistance( pose, segment.to );
+		segment.vector ??= remaining ? clientWalkingDirection( [ dx, dz ] ) : [ 0, 0 ];
+		const step = clientWalkingStep(
+			segment.speed ?? 0,
+			elapsed / 1000,
+			segment.vector,
+			segment.direction === undefined ? clientPlanarDistance( [ dx, dz ] ) : Infinity
+		);
+		const next = interpolateMovement( pose, {
+			...pose,
+			x: Math.fround( Math.fround( pose.x ) + step.step[0] ),
+			y: pose.y,
+			z: Math.fround( Math.fround( pose.z ) + step.step[1] ),
+			angle: segment.to.angle
+		}, 1 );
+		return { pose: next, arrived: step.arrived };
+	}
+	/*
+================
+advance
+================
+	*/
+	function advance( gid: number, segment: RemoteSegment, now: number ) {
+		const previous = segment.previous ?? segment.from;
+		if ( segment.fixedTiming ) return resolve( gid, sample( segment, now ), previous );
+		const elapsed = Math.max( 0, now - (segment.at ?? segment.start) );
+		if ( !elapsed || segment.blocked || segment.arrived ) return previous;
+		const next = candidate( segment, previous, elapsed );
+		const desired = next.pose;
+		const query = {
+			slide: false,
+			sourceOwner: cursors.get( gid )?.owner,
+			owner: undefined as NavOwner | undefined,
+			status: 0
+		};
+		const accepted = clip( previous, desired, query );
+		segment.at = now;
+		if ( query.status & 0x10000000 ) {
+			segment.blocked = true;
+			return previous;
+		}
+		if ( !accepted ) return previous;
+		segment.blocked = !!(query.status & 1);
+		segment.previous = accepted;
+		segment.arrived = next.arrived;
+		const cursor = cursors.get( gid ) ?? {};
+		cursor.owner = query.owner;
+		cursors.set( gid, cursor );
+		return accepted;
+	}
+	/*
+================
+presentationPath
+
+Only a fully admitted short corridor permits extrapolation. Failed lookahead
+does not move the actor or replace its actual-time collision result.
+================
+	*/
+	function presentationPath(
+		gid: number,
+		segment: RemoteSegment,
+		pose: Pose
+	): NonNullable<EntityState["movementPath"]> {
+		if ( segment.fixedTiming ) {
+			return {
+				from: segment.from,
+				to: segment.to,
+				durationMs: segment.duration,
+				displacement: true,
+				startedAtMs: segment.start
+			};
+		}
+		const desired = candidate( segment, pose, PRESENTATION_LOOKAHEAD_MS ).pose;
+		const query = { slide: false, sourceOwner: cursors.get( gid )?.owner, status: 0 };
+		const checked = segment.blocked || segment.arrived ?
+			null :
+			clip( pose, desired, query );
+		return {
+			from: pose,
+			to: checked && !(query.status & 0x10000001) && poseDistance( checked, desired ) < ENDPOINT_EPSILON ?
+				desired :
+				pose,
+			durationMs: PRESENTATION_LOOKAHEAD_MS
+		};
+	}
 	/*
 ================
 directionLeg
 
-The next leg of a direction walk from pose. Remote walks are not clipped
-locally; the owner's correction stops them where the server did.
+The next direction leg retains intent; advance checks each elapsed step.
 ================
 	*/
 	function directionLeg( entity: EntityState, pose: Pose, heading: number, now: number ) {
@@ -92,7 +221,9 @@ locally; the owner's correction stops them where the server did.
 			to,
 			start: now,
 			duration: duration( pose, to, entity ),
+			speed: (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0,
 			direction: heading,
+			vector: clientWalkingVector( modelYaw( heading ) ),
 			previous: pose
 		};
 	}
@@ -129,13 +260,16 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 					from: resolved,
 					previous: resolved,
 					start: now,
-					duration: durationMs
+					duration: durationMs,
+					at: now,
+					arrived: false,
+					blocked: false
 				} );
 				path = { from: resolved, to: segment.to, durationMs };
 			}
 			return {
 				...update( entity.gid, resolved, !!segment || !!entity.moving ),
-				movementPath: path
+				movementPath: segment ? presentationPath( entity.gid, active.get( entity.gid )!, resolved ) : path
 			};
 		},
 		/*
@@ -158,7 +292,7 @@ displace
 		displace( entity: EntityState, command: import("@/engine/contracts/gameplay").CastDisplacement, now: number ) {
 			const previous = active.get( entity.gid ),
 				from = previous ?
-					sample( previous, now ) :
+					advance( entity.gid, previous, now ) :
 					{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			const segment = displacementSegment( from, command, now );
 			active.set( entity.gid, {
@@ -239,7 +373,8 @@ spawn
 				from,
 				to: { ...to, angle: movementHeading( from, to ) },
 				start: now,
-				duration: duration( from, to, entity )
+				duration: duration( from, to, entity ),
+				speed: (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0
 			} );
 		},
 		/*
@@ -253,28 +388,29 @@ receive
 			// Reception precedes this tick's motion step. Re-aim from the path
 			// at reception time, not the previous journal sample: otherwise
 			// every source-less chase refresh discards one tick of travel.
-			const current = previous ? sample( previous, now ) : published;
+			const current = previous ? advance( entity.gid, previous, now ) : published;
 			const decoded = decodeNativeMovement( p, current );
 			// A source-less angular acknowledgement changes nothing in motion.
 			if ( decoded.kind === "keep" ) {
 				return previous ?
-					{
-						from: previous.from,
-						to: previous.to,
-						durationMs: previous.duration,
-						...(previous.fixedTiming ? { displacement: true, startedAtMs: previous.start } : {})
-					} :
+					presentationPath( entity.gid, previous, current ) :
 					{ from: published, to: published };
 			}
 			const from = resolve( entity.gid, decoded.from, previous?.previous ?? published );
 			if ( decoded.kind === "direction" ) {
 				const leg = directionLeg( entity, from, decoded.heading!, now );
 				active.set( entity.gid, leg );
-				return { from, to: leg.to, durationMs: leg.duration };
+				return presentationPath( entity.gid, leg, from );
 			}
 			const to = decoded.to, durationMs = duration( from, to, entity );
-			active.set( entity.gid, { from, to, start: now, duration: durationMs } );
-			return { from, to, durationMs };
+			active.set( entity.gid, {
+				from,
+				to,
+				start: now,
+				duration: durationMs,
+				speed: (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0
+			} );
+			return presentationPath( entity.gid, active.get( entity.gid )!, from );
 		},
 		/*
 ================
@@ -289,13 +425,13 @@ idle mover turns where it stands. A destination walk keeps its own facing.
 		steer( entity: EntityState, heading: number, now: number ): MotionUpdate | null {
 			const segment = active.get( entity.gid );
 			if ( segment?.direction !== undefined ) {
-				const pose = resolve( entity.gid, sample( segment, now ), segment.previous ?? segment.from );
+				const pose = advance( entity.gid, segment, now );
 				const leg = directionLeg( entity, pose, heading, now );
 				active.set( entity.gid, leg );
 				return {
 					...update( entity.gid, pose, true ),
 					heading,
-					movementPath: { from: pose, to: leg.to, durationMs: leg.duration }
+					movementPath: presentationPath( entity.gid, leg, pose )
 				};
 			}
 			if ( segment ) return null;
@@ -321,11 +457,24 @@ speeds
 				before = (walk ? previous.walkSpeed : previous.runSpeed) ?? 0,
 				after = (walk ? next.walkSpeed : next.runSpeed) ?? 0;
 			if ( before === after ) return null;
-			const retimed = movementSpeedTransition( segment, before, after, now ),
-				pose = resolve( next.gid, retimed.from, segment.previous ?? segment.from );
-			if ( retimed.duration ) active.set( next.gid, { ...segment, ...retimed, from: pose, previous: pose } );
-			else active.delete( next.gid );
-			return update( next.gid, pose, retimed.duration > 0 );
+			const pose = advance( next.gid, segment, now );
+			const retimed = movementSpeedTransition( { ...segment, from: pose, start: now }, before, after, now );
+			if ( retimed.duration && !segment.blocked ) {
+				active.set( next.gid, {
+					...segment,
+					...retimed,
+					from: pose,
+					previous: pose,
+					at: now,
+					speed: after
+				} );
+			} else active.delete( next.gid );
+			return {
+				...update( next.gid, pose, active.has( next.gid ) ),
+				movementPath: active.has( next.gid ) ?
+					presentationPath( next.gid, active.get( next.gid )!, pose ) :
+					undefined
+			};
 		},
 		/*
 ================
@@ -336,7 +485,7 @@ stopForDeath
 			const segment = active.get( entity.gid ),
 				reference = { regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			const pose = segment ?
-				resolve( entity.gid, sample( segment, now ), segment.previous ?? segment.from ) :
+				advance( entity.gid, segment, now ) :
 				reference;
 			// 8D57E2..8D57F1: death keeps action bits 4/5 (forced impact
 			// displacement), but stops ordinary navigation and cast-owned rush.
@@ -359,12 +508,24 @@ mode
 			// Displacement keeps its authored timing (action state 4/5, not 858450's channel).
 			if ( segment.fixedTiming && mode !== 0 && mode !== 4 ) return null;
 			const speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
-			const next = movementModeTransition( segment, mode, speed, now );
-			const pose = resolve( entity.gid, next.pose, segment.previous ?? segment.from );
-			if ( next.segment ) {
-				active.set( entity.gid, { ...next.segment, from: pose, previous: pose, direction: segment.direction } );
+			const pose = advance( entity.gid, segment, now );
+			const next = movementModeTransition( { ...segment, from: pose, start: now }, mode, speed, now );
+			if ( next.segment && !segment.blocked ) {
+				active.set( entity.gid, {
+					...next.segment,
+					from: pose,
+					previous: pose,
+					direction: segment.direction,
+					vector: segment.vector,
+					speed
+				} );
 			} else active.delete( entity.gid );
-			return update( entity.gid, pose, !!next.segment );
+			return {
+				...update( entity.gid, pose, active.has( entity.gid ) ),
+				movementPath: active.has( entity.gid ) ?
+					presentationPath( entity.gid, active.get( entity.gid )!, pose ) :
+					undefined
+			};
 		},
 		/*
 ================
@@ -374,26 +535,22 @@ step
 		step( now: number ): MotionUpdate[] {
 			const changed: MotionUpdate[] = [];
 			for ( const [gid, segment] of active ) {
-				const pose = resolve( gid, sample( segment, now ), segment.previous ?? segment.from );
+				const pose = advance( gid, segment, now );
 				segment.previous = pose;
+				const done = segment.fixedTiming ?
+					now >= segment.start + segment.duration :
+					segment.blocked || segment.arrived;
 				changed.push( {
-					...update( gid, pose, now < segment.start + segment.duration ),
-					movementPath: {
-						from: segment.from,
-						to: segment.to,
-						durationMs: segment.duration,
-						...(segment.fixedTiming ? { displacement: true, startedAtMs: segment.start } : {})
-					},
+					...update( gid, pose, !done ),
+					movementPath: presentationPath( gid, segment, pose ),
 					// Presentation draws the path on the frame clock from sample times.
 					poseAtMs: now
 				} );
-				if ( now < segment.start + segment.duration ) continue;
+				if ( !done ) continue;
 				// A direction walk has no arrival; its next leg starts here at
 				// the speed the finished leg was timed with.
-				if ( segment.direction !== undefined ) {
-					const speed = segment.duration ?
-						poseDistance( segment.from, segment.to ) / segment.duration * 1000 :
-						0;
+				if ( segment.direction !== undefined && !segment.blocked ) {
+					const speed = segment.speed ?? 0;
 					const to = directionLegEnd( pose, segment.direction );
 					active.set( gid, {
 						from: pose,
@@ -401,6 +558,7 @@ step
 						start: now,
 						duration: speed > 0 ? poseDistance( pose, to ) / speed * 1000 : 0,
 						direction: segment.direction,
+						speed,
 						previous: pose
 					} );
 					continue;

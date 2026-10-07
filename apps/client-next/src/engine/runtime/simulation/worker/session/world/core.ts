@@ -43,7 +43,8 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 	const entities = createEntities(
 			( pose, reference, cursor ) => gameplay.surface( pose, reference, undefined, cursor ),
 			event => gameplay.entityLifecycle( event ),
-			nameContext
+			nameContext,
+			( from, to, query ) => gameplay.clipMovement( from, to, query )
 		),
 		gameplay = createGameplay(
 			send,
