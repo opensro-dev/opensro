@@ -2,6 +2,8 @@ package enterworld
 
 import (
 	"math"
+
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
@@ -133,14 +135,19 @@ func WorldStateForCharacter(c *Character, raceKey string) WorldState {
 	if world != nil {
 		spawnSet = world.SpawnSet
 		movementMode = coerceRunWalkMode(world.MovementMode, MovementModeRun)
-		if world.Spawn != nil {
+		// The saved spawn is taken whole or not at all, as SeedWorldState
+		// takes it: the start region with saved coordinates is a place the
+		// character never stood.
+		if simulation.CompleteWorldSpawn(world.Spawn) {
 			spawn = StartProfile{
-				RegionID: coerceInt(world.Spawn.RegionID, 0, 0xffff, fallback.RegionID),
-				X:        coerceFloat(world.Spawn.X, fallback.X),
-				Y:        coerceFloat(world.Spawn.Y, fallback.Y),
-				Z:        coerceFloat(world.Spawn.Z, fallback.Z),
+				RegionID: *world.Spawn.RegionID,
+				X:        *world.Spawn.X,
+				Y:        *world.Spawn.Y,
+				Z:        *world.Spawn.Z,
 				Angle:    coerceInt(world.Spawn.Angle, 0, 0xffff, fallback.Angle),
 			}
+		} else if world.Spawn != nil {
+			log.WithField("character", c.Name).Warn("enterworld: saved spawn is incomplete; entering at the race start")
 		}
 	}
 	// The enter-world plane must ship the CANONICAL frame: a record persisted
@@ -323,10 +330,12 @@ func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint1
 // (the frame-bug incident's mountain plateau - movement worked but every
 // path out clipped at the island edge), strands the player. When the
 // relocator reports the point stranded, the entry takes the nearest
-// mainland rescue point, or falls back to the race start profile when no
-// rescue exists within the search radius. Dungeon regions are exempt (no
+// mainland rescue point. With no rescue in the search radius it takes the
+// character's appointed town (town, when it is a complete outdoor stand),
+// and only then the race start profile. Port-only, not native: the
+// original enters at the saved position. Dungeon regions are exempt (no
 // outdoor walkability plane). Returns whether the spawn was changed.
-func RescueStrandedSpawn(entry *LocalPlayerEntry, relocate func(simulation.Spawn) (simulation.Spawn, bool, bool)) bool {
+func RescueStrandedSpawn(entry *LocalPlayerEntry, town *WorldSpawn, relocate func(simulation.Spawn) (simulation.Spawn, bool, bool)) bool {
 	if entry == nil || relocate == nil {
 		return false
 	}
@@ -346,8 +355,13 @@ func RescueStrandedSpawn(entry *LocalPlayerEntry, relocate func(simulation.Spawn
 		return false
 	}
 	if !rescueFound {
-		// Nothing walkable nearby: the race start profile is the one
-		// placement guaranteed legal for every character.
+		if townStandsOpen(town, relocate) {
+			profile.RegionID = *town.RegionID
+			profile.X, profile.Y, profile.Z = *town.X, *town.Y, *town.Z
+			return true
+		}
+		// Nothing walkable nearby and no usable town: the race start profile
+		// is the one placement guaranteed legal for every character.
 		start := StartProfileForRace(entry.RaceKey)
 		profile.RegionID = start.RegionID
 		profile.X = start.X
@@ -361,6 +375,21 @@ func RescueStrandedSpawn(entry *LocalPlayerEntry, relocate func(simulation.Spawn
 	profile.Y = rescued.Y
 	profile.Z = rescued.Z
 	return true
+}
+
+/*
+================
+townStandsOpen
+
+Whether the appointed town is a stand the relocator accepts as it is.
+================
+*/
+func townStandsOpen(town *WorldSpawn, relocate func(simulation.Spawn) (simulation.Spawn, bool, bool)) bool {
+	if !simulation.CompleteWorldSpawn(town) || simulation.IsDungeonRegion(uint16(*town.RegionID)) {
+		return false
+	}
+	_, stranded, _ := relocate(simulation.Spawn{RegionID: uint16(*town.RegionID), X: *town.X, Y: *town.Y, Z: *town.Z})
+	return !stranded
 }
 
 // CharacterModelRef resolves a character's model refObjId exactly like

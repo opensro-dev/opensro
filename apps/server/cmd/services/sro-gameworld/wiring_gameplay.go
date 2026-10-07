@@ -207,6 +207,7 @@ func newGameplayPlane(
 	deps.SpawnTerrainHeight = water.TerrainHeightAt
 	deps.SpawnSurfaceHeight = water.WalkableSpawnHeightAt
 	deps.RelocateStrandedSpawn = water.RelocateStrandedSpawn
+	deps.AdoptEntrySpawn = items.AdoptEntrySpawn
 
 	presence := livepresence.NewDirectory(ts.Hub)
 	unionAuthority := union.New()

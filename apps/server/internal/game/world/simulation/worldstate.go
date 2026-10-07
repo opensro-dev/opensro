@@ -51,6 +51,9 @@ func (s *MoveSegment) Valid() bool {
 // `character.world` record server.mjs round-trips (JSON tags match the
 // persisted shape; run Normalize after decoding foreign data).
 type WorldState struct {
+	// unbound marks a seed made without a character record: the race start
+	// stands in for a position nobody owns, so the store never keeps it.
+	unbound bool
 	// LifeRevision fences movement admitted before a death/rebirth transition.
 	// Runtime-only: pending operations cannot survive a server restart.
 	LifeRevision uint64 `json:"-"`

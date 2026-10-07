@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // Stable bootstrap and wire-policy values live with the assembly they govern.
@@ -190,8 +191,16 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		!deps.CanEnterWorldRegion(character, uint16(entry.StartProfile.RegionID)) {
 		return Failure(nativeErrorInvalidRequest, "areaAccessDenied")
 	}
-	LiftSpawnAboveTerrain(&entry, deps.SpawnTerrainHeight, deps.SpawnSurfaceHeight)
-	RescueStrandedSpawn(&entry, deps.RelocateStrandedSpawn)
+	saved := entry.StartProfile
+	lifted := LiftSpawnAboveTerrain(&entry, deps.SpawnTerrainHeight, deps.SpawnSurfaceHeight)
+	var town *WorldSpawn
+	if character.World != nil {
+		town = character.World.RebirthPoint
+	}
+	rescued := RescueStrandedSpawn(&entry, town, deps.RelocateStrandedSpawn)
+	if lifted || rescued {
+		adoptEntryPlacement(deps, divisionID, character.Name, saved, &entry, rescued)
+	}
 	eventGuideStateMask := ResolveEventGuideStateMask(character)
 
 	// Inventory, appearance, and wire rows derive from one detached snapshot.
@@ -656,4 +665,33 @@ func (c *refItemCollector) finish() []RefItemRow {
 		}
 	}
 	return c.rows
+}
+
+/*
+================
+adoptEntryPlacement
+
+The entry moved the spawn (terrain lift or stranded rescue). The client is
+placed where the entry says, so the authority must hold the same position:
+otherwise the next move starts from a spot the client never saw and the
+record keeps the stand that was refused. Re-entry projections (revive,
+return scroll) run inside their caller's transaction and leave the hook
+unset; the caller placed the character itself.
+================
+*/
+func adoptEntryPlacement(deps *Deps, divisionID, name string, saved StartProfile, entry *LocalPlayerEntry, rescued bool) {
+	placed := entry.StartProfile
+	fields := log.Fields{"character": name,
+		"from": fmt.Sprintf("0x%04X (%.1f, %.1f, %.1f)", uint16(saved.RegionID), saved.X, saved.Y, saved.Z),
+		"to":   fmt.Sprintf("0x%04X (%.1f, %.1f, %.1f)", uint16(placed.RegionID), placed.X, placed.Y, placed.Z)}
+	if rescued {
+		log.WithFields(fields).Warn("enterworld: stranded saved spawn; entry placed the character elsewhere")
+	} else {
+		log.WithFields(fields).Info("enterworld: saved spawn below terrain; entry lifted it")
+	}
+	if deps.AdoptEntrySpawn == nil {
+		return
+	}
+	deps.AdoptEntrySpawn(divisionID, name, simulation.Spawn{RegionID: uint16(placed.RegionID), X: placed.X, Y: placed.Y,
+		Z: placed.Z, Angle: uint16(placed.Angle)})
 }

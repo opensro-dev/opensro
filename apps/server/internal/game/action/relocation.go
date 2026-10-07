@@ -114,3 +114,37 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	}
 	return true
 }
+
+/*
+================
+AdoptEntrySpawn
+
+Enter-world moved the saved spawn before publishing it (a terrain lift or a
+stranded rescue, enterworld.adoptEntryPlacement). Commit that stand to the
+live world and the record in one update, so the next move starts where the
+client was placed and a later login does not repeat the rescue.
+================
+*/
+func (rt *Runtime) AdoptEntrySpawn(division, name string, spawn simulation.Spawn) {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	c := rt.findCharacter(division, name)
+	if c == nil {
+		return
+	}
+	key := simulation.WorldKey(division, c.Name)
+	rt.deps.Update(c, "entry-placement", func() bool {
+		if c.DeletePending {
+			return false
+		}
+		state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) {
+			w.Spawn = spawn
+			w.MoveSegment = nil
+			w.SpawnSet = true
+			w.MovementSourceSeeded = true
+		})
+		writeBackWorld(c, state)
+		c.World.MoveSegment = nil
+		return true
+	})
+}

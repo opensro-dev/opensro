@@ -1,9 +1,11 @@
 package simulation
 
 import (
+	"math"
 	"strings"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 )
 
@@ -31,13 +33,19 @@ func WorldKey(divisionID, characterName string) string {
 }
 
 // state returns the character's state, seeding it on first touch. Callers
-// hold the lock.
+// hold the lock. A seed made without a character record answers this call
+// only: keeping it would pin the race start as that name's live position
+// until the next Forget, while its record says otherwise.
 func (st *WorldStore) state(key string, seed func() WorldState) *WorldState {
 	if state, ok := st.states[key]; ok {
 		return state
 	}
 	seeded := seed()
 	seeded.Normalize()
+	if seeded.unbound {
+		log.WithField("key", key).Warn("simulation: world state seeded without a character record; not kept")
+		return &seeded
+	}
 	st.states[key] = &seeded
 	return &seeded
 }
@@ -93,9 +101,11 @@ func (st *WorldStore) Forget(key string) {
 }
 
 // SeedWorldState builds the first-touch world state for a character: the
-// persisted world record when it carries a spawn, else the race start
-// profile - the same fallback the fixture's missionWorldStateForCharacter
-// applies. The persisted record has no segment plane (nothing is in flight
+// persisted world record when it carries a complete spawn, else the race
+// start profile - the same fallback the fixture's missionWorldStateForCharacter
+// applies. The spawn is taken whole or not at all: mixing the start region
+// with saved coordinates places the character in a region it never stood
+// in. The persisted record has no segment plane (nothing is in flight
 // across a login).
 func SeedWorldState(character *domain.Character) WorldState {
 	profile := ChinaStartProfile()
@@ -104,7 +114,11 @@ func SeedWorldState(character *domain.Character) WorldState {
 	}
 	state := DefaultWorldState(profile)
 
-	if character == nil || character.World == nil {
+	if character == nil {
+		state.unbound = true
+		return state
+	}
+	if character.World == nil {
 		return state
 	}
 	world := character.World
@@ -119,18 +133,12 @@ func SeedWorldState(character *domain.Character) WorldState {
 		return state
 	}
 	spawn := world.Spawn
-	if spawn.RegionID != nil {
-		state.Spawn.RegionID = uint16(*spawn.RegionID)
+	if !CompleteWorldSpawn(spawn) {
+		log.WithField("character", character.Name).Warn("simulation: saved spawn is incomplete; seeding the race start")
+		return state
 	}
-	if spawn.X != nil {
-		state.Spawn.X = *spawn.X
-	}
-	if spawn.Y != nil {
-		state.Spawn.Y = *spawn.Y
-	}
-	if spawn.Z != nil {
-		state.Spawn.Z = *spawn.Z
-	}
+	state.Spawn.RegionID = uint16(*spawn.RegionID)
+	state.Spawn.X, state.Spawn.Y, state.Spawn.Z = *spawn.X, *spawn.Y, *spawn.Z
 	if spawn.Angle != nil {
 		state.Spawn.Angle = uint16(*spawn.Angle & 0xFFFF)
 	}
@@ -140,4 +148,24 @@ func SeedWorldState(character *domain.Character) WorldState {
 	// source block) stop shipping the stale region word.
 	state.Spawn = NormalizeSpawnFrame(state.Spawn)
 	return state
+}
+
+/*
+================
+CompleteWorldSpawn
+
+Whether a saved spawn names a position by itself: a region inside the
+16-bit region space and three finite coordinates. The angle may be absent.
+================
+*/
+func CompleteWorldSpawn(spawn *domain.WorldSpawn) bool {
+	if spawn == nil || spawn.RegionID == nil || *spawn.RegionID <= 0 || *spawn.RegionID > 0xffff {
+		return false
+	}
+	for _, value := range []*float64{spawn.X, spawn.Y, spawn.Z} {
+		if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) {
+			return false
+		}
+	}
+	return true
 }
