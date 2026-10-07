@@ -130,7 +130,10 @@ test("a retraced lookahead consumes its returning edge without oscillation", () 
 	assert.deepEqual( previous, beyond );
 	for ( let frame = 1; frame <= 120; frame++ ) {
 		const shown = presentation.pose( 7, corner, 1 + frame / 120 );
-		assert.ok( shown.x <= previous.x && shown.x >= corner.x, "return edge never reprojects onto the outbound edge" );
+		assert.ok(
+			shown.x <= previous.x && shown.x >= corner.x,
+			"return edge never reprojects onto the outbound edge"
+		);
 		previous = shown;
 	}
 	assert.ok( Math.abs( previous.x - corner.x ) < .01 );
