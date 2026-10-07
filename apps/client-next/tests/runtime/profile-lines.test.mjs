@@ -28,11 +28,12 @@ test("a source map reports how many source lines a generated line covers", () =>
 test("line ticks on a multi-line generated line are unattributable", () => {
 	const map = createSourceMap( { version: 3, sources: [ "src/a.ts" ], names: [], mappings: MAPPINGS } );
 	// A symbolizer over the one map, as createSymbolizer exposes it.
+	/** @type {any} */
 	const symbolizer = {
 		frame: () => ({ name: "hot", file: "a.ts", line: 1 }),
 		position( url, line, column ) {
 			const found = map.lookup( line - 1, column - 1 );
-			return { file: "a.ts", line: found.line, span: map.span( line - 1 ) };
+			return { file: "a.ts", line: found?.line, span: map.span( line - 1 ) };
 		}
 	};
 	const node = {
@@ -40,6 +41,7 @@ test("line ticks on a multi-line generated line are unattributable", () => {
 		callFrame: { functionName: "hot", url: "bundle.js", lineNumber: 0, columnNumber: 0 },
 		positionTicks: [ { line: 1, ticks: 3 }, { line: 2, ticks: 1 } ]
 	};
+	/** @type {any} */
 	const profile = { nodes: new Map( [ [ 1, node ] ] ), weights: new Map( [ [ 1, 8 ] ] ) };
 	const lines = new Map();
 	forEachLine( profile, symbolizer, "hot", ( key, weight ) => lines.set( key, (lines.get( key ) ?? 0) + weight ) );
@@ -59,11 +61,12 @@ test("unmapped generated code on a mapped line makes it unattributable", () => {
 
 test("a line that maps into another file is refused, not charged to it", () => {
 	const map = createSourceMap( { version: 3, sources: [ "src/b.ts" ], names: [], mappings: "AAAA" } );
+	/** @type {any} */
 	const symbolizer = {
 		frame: () => ({ name: "hot", file: "a.ts", line: 1 }),
 		position( url, line, column ) {
 			const found = map.lookup( line - 1, column - 1 );
-			return { file: "b.ts", line: found.line, span: map.span( line - 1 ) };
+			return { file: "b.ts", line: found?.line, span: map.span( line - 1 ) };
 		}
 	};
 	const node = {
@@ -73,7 +76,7 @@ test("a line that maps into another file is refused, not charged to it", () => {
 	};
 	const lines = new Map();
 	forEachLine(
-		{ nodes: new Map( [ [ 1, node ] ] ), weights: new Map( [ [ 1, 4 ] ] ) },
+		/** @type {any} */ ({ nodes: new Map( [ [ 1, node ] ] ), weights: new Map( [ [ 1, 4 ] ] ) }),
 		symbolizer,
 		"hot",
 		( key, weight ) => lines.set( key, weight )
