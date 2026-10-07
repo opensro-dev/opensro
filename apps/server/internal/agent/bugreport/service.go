@@ -5,7 +5,7 @@ service.go - the bug report service owned by the Agent
 
 One Service exists per Agent when the feature is enabled (nil otherwise).
 It owns the pacing state, the bound on concurrent uploads (each holds a
-whole attachment in memory) and the Discord delivery.
+whole attachment in memory) and the delivery to Discord and/or a directory.
 
 Request order, driven by the Agent's HTTP handler:
 
@@ -33,7 +33,8 @@ const (
 var (
 	// ErrBusy means the Agent or Discord cannot take a report right now.
 	ErrBusy = errors.New("bug reports are busy")
-	// ErrDelivery means Discord refused or never answered.
+	// ErrDelivery means Discord refused or never answered, or the directory
+	// could not be written.
 	ErrDelivery = errors.New("bug report delivery failed")
 )
 
@@ -83,6 +84,7 @@ Service
 type Service struct {
 	config  Config
 	client  *http.Client
+	now     func() time.Time
 	limiter *limiter
 	uploads chan struct{}
 	// forum is learned from Discord's first refusal: webhooks on forum
@@ -94,13 +96,13 @@ type Service struct {
 ================
 New
 
-The config must come from LoadConfig with a webhook set. Tests may pass a
+The config must come from LoadConfig with a sink set. Tests may pass a
 loopback webhook; the Discord-host check lives in LoadConfig on purpose.
 ================
 */
 func New(config Config, client *http.Client, now func() time.Time) (*Service, error) {
-	if config.WebhookURL == "" {
-		return nil, fmt.Errorf("bugreport: webhook URL is required")
+	if !config.Enabled() {
+		return nil, fmt.Errorf("bugreport: a webhook URL or a directory is required")
 	}
 	if config.MaxBytes <= 0 {
 		return nil, fmt.Errorf("bugreport: max bytes must be positive")
@@ -114,6 +116,7 @@ func New(config Config, client *http.Client, now func() time.Time) (*Service, er
 	return &Service{
 		config:  config,
 		client:  client,
+		now:     now,
 		limiter: newLimiter(now),
 		uploads: make(chan struct{}, maxConcurrentUploads),
 	}, nil
@@ -180,10 +183,24 @@ func (ticket *Ticket) Done(delivered bool) {
 ================
 Deliver
 
-Posts the report and returns the Discord message id.
+Writes the report to the directory, then posts it, and returns the Discord
+message id, or the directory entry when there is no webhook. The directory
+goes first: it is local and cannot be slow, and a report that reached disk
+is not lost if Discord then fails.
 ================
 */
 func (service *Service) Deliver(ctx context.Context, report Report) (string, error) {
+	var entry string
+	if service.config.Directory != "" {
+		written, err := writeDirectory(service.config.Directory, report, service.now())
+		if err != nil {
+			return "", err
+		}
+		entry = written
+	}
+	if service.config.WebhookURL == "" {
+		return entry, nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, deliveryTimeout)
 	defer cancel()
 	id, err := service.post(ctx, report, service.forum.Load())

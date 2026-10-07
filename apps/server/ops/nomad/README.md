@@ -98,14 +98,15 @@ by default; deploying with `SRO_PARTY_MASTERIES=off` in the environment
 (`off`, `0` or `false`) sends the native roster rows without them.
 
 In-game bug reports (the bug button and `/bug` in chat) are off unless the
-deployer sets a Discord webhook. `sro-nomad deploy` reads these variables from
+deployer sets a Discord webhook or a report directory. `sro-nomad deploy` reads these variables from
 its own environment:
 
 | Variable | Controls | When unset |
 | --- | --- | --- |
-| `SRO_BUG_REPORT_DISCORD_WEBHOOK` | Enables bug reports and names the Discord channel that receives them (`https://discord.com/api/webhooks/<id>/<token>`) | Disabled: no button, no replay recording, `/bug` says reports are off |
+| `SRO_BUG_REPORT_DISCORD_WEBHOOK` | Enables bug reports and names the Discord channel that receives them (`https://discord.com/api/webhooks/<id>/<token>`) | No Discord delivery; with no directory either, reports are disabled: no button, no replay recording, `/bug` says reports are off |
 | `SRO_BUG_REPORT_REPLAY_DEFAULT` | Whether the last-minute replay records by default (`on` or `off`) for players who have not changed it in the Option window | `on` |
 | `SRO_BUG_REPORT_MAX_BYTES` | Upload cap per report in bytes; larger clips are re-encoded to fit. Discord accepts 10 MiB per file without boosts | `10485760` |
+| `SRO_BUG_REPORT_DIRECTORY` | Enables bug reports and keeps each one in this absolute directory on the Agent's host (see below) | Reports are not written to disk |
 
 ```sh
 export SRO_BUG_REPORT_DISCORD_WEBHOOK='https://discord.com/api/webhooks/<id>/<token>'
@@ -118,8 +119,18 @@ variable and reaches the task through an env template; it is never logged
 or sent to browsers. Keep it out of shell history and source control (for
 example in a `0600` file you source before deploying). An invalid value
 logs a warning and leaves reports off; it never stops the Agent. The other
-two variables become the Agent job's `bug_report_replay_default` and
-`bug_report_max_bytes` variables.
+variables become the Agent job's `bug_report_replay_default`,
+`bug_report_max_bytes` and `bug_report_directory` variables.
+
+Without a Discord channel (a developer's localhost, a self-hosted server),
+`SRO_BUG_REPORT_DIRECTORY` names an absolute directory that receives every
+report instead: one `<UTC stamp>-<report id>/` folder per report holding
+`report.json` (identity, description, context, errors) and the files the
+player sent (`replay.mp4` or a screenshot, `diagnostics.zip`). Each report
+is written under a temporary name and renamed into place, and the oldest are
+pruned so at most 100 remain. With both set, a report is written and posted.
+These are players' reports held on the host and in its backups, so keep the
+directory unset on a production host unless staff want that copy.
 
 The webhook is set once. A later deploy that names none (every release
 runs with a clean environment) keeps the stored one;

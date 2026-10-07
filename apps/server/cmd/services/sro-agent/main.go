@@ -220,7 +220,7 @@ func main() {
 ================
 openBugReports
 
-The three SRO_BUG_REPORT_* variables. Anything missing or invalid leaves
+The four SRO_BUG_REPORT_* variables. Anything missing or invalid leaves
 bug reports off with a warning; it never stops the Agent.
 ================
 */
@@ -229,8 +229,12 @@ func openBugReports() (*bugreport.Service, error) {
 	for _, warning := range warnings {
 		log.Warnf("agent: %s", warning)
 	}
-	if config.WebhookURL == "" {
-		log.Infof("agent: bug reports disabled (no valid %s)", bugreport.EnvDiscordWebhook)
+	if !config.Enabled() {
+		log.Infof(
+			"agent: bug reports disabled (no valid %s or %s)",
+			bugreport.EnvDiscordWebhook,
+			bugreport.EnvDirectory,
+		)
 		return nil, nil
 	}
 	service, err := bugreport.New(config, nil, nil)
@@ -238,7 +242,9 @@ func openBugReports() (*bugreport.Service, error) {
 		return nil, err
 	}
 	log.Infof(
-		"agent: bug reports enabled (replay default %t, max %d bytes)",
+		"agent: bug reports enabled (discord %t, directory %q, replay default %t, max %d bytes)",
+		config.WebhookURL != "",
+		config.Directory,
 		config.ReplayDefault,
 		config.MaxBytes,
 	)

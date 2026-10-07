@@ -102,6 +102,13 @@ variable "bug_report_max_bytes" {
   default = "10485760"
 }
 
+# An absolute directory that keeps every report on this host (the sink for
+# a deployment without a Discord channel). Empty keeps reports off disk.
+variable "bug_report_directory" {
+  type    = string
+  default = ""
+}
+
 variable "cpu" {
   type    = number
   default = 500
@@ -213,6 +220,7 @@ job "sro-agent" {
         SRO_RELEASE_ID                    = var.release_id
         SRO_BUG_REPORT_REPLAY_DEFAULT     = var.bug_report_replay_default
         SRO_BUG_REPORT_MAX_BYTES          = var.bug_report_max_bytes
+        SRO_BUG_REPORT_DIRECTORY          = var.bug_report_directory
       }
 
       template {

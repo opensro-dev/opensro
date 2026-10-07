@@ -656,6 +656,7 @@ func (deployment *deployment) agentVariables() map[string]any {
 			deployment.BugReports.MaxBytes,
 			10,
 		),
+		"bug_report_directory": deployment.BugReports.Directory,
 	})
 }
 
