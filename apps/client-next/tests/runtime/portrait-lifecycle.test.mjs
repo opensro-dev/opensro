@@ -252,3 +252,35 @@ test("device invalidation forces an empty pass and restores a visible borrowed p
 	f.preview.dispose( f.geometry, f.images );
 	assert.equal( f.closes(), 0 );
 });
+
+test("an unchanged HUD portrait reuses its draws until a drawing input changes, even in place", () => {
+	const f = fixture();
+	const tint = /** @type {[number, number, number]} */ ([ 1, 1, 1 ]);
+	/** @type {import("../../src/engine/contracts/portrait.ts").PortraitSource & { actor: any }} */
+	const source = { ...f.source, actor: { ...f.source.actor, materialTint: tint } };
+	const first = f.preview.prepare( source, f.geometry, f.images );
+	const prepared = f.calls();
+	for ( let frame = 0; frame < 10; frame++ ) assert.equal( f.preview.prepare( source, f.geometry, f.images ), first );
+	assert.equal( f.calls(), prepared, "a frozen HUD pose must not prepare again" );
+	// Fields the HUD preview replaces cannot change its draws.
+	source.actor.pose = { regionId: 9, x: 5, y: 6, z: 7, yaw: radians( 1 ) };
+	source.actor.time = 42;
+	f.preview.prepare( source, f.geometry, f.images );
+	assert.equal( f.calls(), prepared );
+	// An in-place edit of a drawing input is seen: the snapshot is an owned copy.
+	tint[0] = 0.5;
+	f.preview.prepare( source, f.geometry, f.images );
+	assert.equal( f.calls(), prepared + 1 );
+	f.preview.prepare( source, f.geometry, f.images );
+	assert.equal( f.calls(), prepared + 1 );
+	// Device invalidation and the animated doll path always prepare.
+	f.preview.invalidate();
+	f.preview.prepare( source, f.geometry, f.images );
+	assert.equal( f.calls(), prepared + 2 );
+	f.preview.prepare( source, f.geometry, f.images, { yaw: 0, seconds: 1 } );
+	f.preview.prepare( source, f.geometry, f.images, { yaw: 0, seconds: 1 } );
+	assert.equal( f.calls(), prepared + 4, "the inventory doll is never retained" );
+	// invalidate() models a lost device, whose old handles are dropped rather
+	// than released, so resource retirement is covered by the tests above.
+	f.preview.dispose( f.geometry, f.images );
+});

@@ -3,6 +3,12 @@
 
 portrait.ts - borrowed character resources for synchronous portraits
 
+A HUD portrait shows a frozen pose (time 0), so an unchanged source returns
+its retained draws instead of rebuilding actors, resolving the head and
+preparing again. Native renders these portraits only when dirty (player
+mini-info 6B748F tests +0x38C; quick-party 5BAE03 tests +0x3DC). The
+inventory doll animates every frame (5929D0) and is never retained.
+
 ===========================================================================
 */
 import type { WorldTexture } from "@/engine/contracts/texture";
@@ -20,6 +26,51 @@ const PREVIEW_NEAR = 0.01;
 const PREVIEW_FAR = 500000;
 const DOLL_ASPECT = 176 / 318;
 const EMPTY_DRAWS: readonly GeometryDraw[] = Object.freeze( [] );
+// Actor fields the HUD preview replaces; the rest decide what is drawn.
+const OVERRIDDEN_ROOT = new Set( [
+	"animationLod",
+	"modelAnimation",
+	"pose",
+	"mountedOn",
+	"attachment",
+	"opacity",
+	"layers",
+	"time",
+	"loop",
+	"scale"
+] );
+const OVERRIDDEN_CHILD = new Set( [ "pose", "time", "opacity", "layers", "animationLod", "modelAnimation" ] );
+
+/*
+================
+sameValue
+
+Structural equality of plain actor data (numbers, strings, arrays, typed
+arrays, plain objects). Snapshots are owned deep copies, so an in-place
+edit of a source snapshot can never hide behind shared identity.
+================
+*/
+function sameValue( a: unknown, b: unknown, skip?: ReadonlySet<string> ): boolean {
+	if ( Object.is( a, b ) ) return true;
+	if ( typeof a !== "object" || typeof b !== "object" || a === null || b === null ) return false;
+	if ( ArrayBuffer.isView( a ) || ArrayBuffer.isView( b ) ) {
+		if ( !ArrayBuffer.isView( a ) || !ArrayBuffer.isView( b ) || a.constructor !== b.constructor ) return false;
+		const x = a as unknown as ArrayLike<number>, y = b as unknown as ArrayLike<number>;
+		if ( x.length !== y.length ) return false;
+		for ( let i = 0; i < x.length; i++ ) if ( !Object.is( x[i], y[i] ) ) return false;
+		return true;
+	}
+	if ( Array.isArray( a ) !== Array.isArray( b ) ) return false;
+	const x = a as Record<string, unknown>, y = b as Record<string, unknown>;
+	let count = 0;
+	for ( const key in x ) {
+		if ( skip?.has( key ) || x[key] === undefined ) continue;
+		count++;
+		if ( !sameValue( x[key], y[key] ) ) return false;
+	}
+	for ( const key in y ) if ( !skip?.has( key ) && y[key] !== undefined ) count--;
+	return count === 0;
+}
 
 // Synchronous GPU projection. Model/bitmap lifetime stays with world characters;
 // this owner owns only its pose, preview geometry and texture uploads.
@@ -82,6 +133,64 @@ export function createPortrait(
 	let source: CharacterModel | null = null, started = 0, identity: number | undefined;
 	let borrowed: readonly PortraitPart[] = [];
 	let empty = true;
+	// The retained HUD result: owned copies of every input that decides the
+	// draws, and the draws themselves. Cleared by anything that changes them
+	// from outside the source (empty, doll use, invalidate, dispose).
+	let retained: {
+		parts: { model: CharacterModel; images: readonly WorldTexture[]; }[];
+		actors: unknown[];
+		geometry: GeometryCommands;
+		images: ImageCommands;
+		draws: readonly GeometryDraw[];
+	} | null = null;
+	/*
+	================
+	retainedFor
+
+	The retained draws when every drawing input equals the retained copy.
+	================
+	*/
+	function retainedFor( value: PortraitSource, geometry: GeometryCommands, images: ImageCommands ) {
+		if ( !retained || retained.geometry !== geometry || retained.images !== images ) return null;
+		const children = value.children ?? [];
+		if ( retained.parts.length !== children.length + 1 ) return null;
+		for ( let index = 0; index < retained.parts.length; index++ ) {
+			const part = index === 0 ? value : children[index - 1]!, kept = retained.parts[index]!;
+			if ( part.model !== kept.model || part.images.length !== kept.images.length ) return null;
+			for ( let i = 0; i < part.images.length; i++ ) if ( part.images[i] !== kept.images[i] ) return null;
+			if ( !sameValue( part.actor, retained.actors[index], index === 0 ? OVERRIDDEN_ROOT : OVERRIDDEN_CHILD ) ) {
+				return null;
+			}
+		}
+		return retained.draws;
+	}
+	/*
+	================
+	retain
+
+	Keep owned copies; actor snapshots are updated in place by their owner.
+	Data that cannot be cloned is simply not retained (the next frame prepares).
+	================
+	*/
+	function retain(
+		value: PortraitSource,
+		geometry: GeometryCommands,
+		images: ImageCommands,
+		draws: readonly GeometryDraw[]
+	) {
+		const parts = [ value, ...(value.children ?? []) ];
+		try {
+			retained = {
+				parts: parts.map( part => ({ model: part.model, images: [ ...part.images ] }) ),
+				actors: parts.map( part => structuredClone( part.actor ) ),
+				geometry,
+				images,
+				draws
+			};
+		} catch {
+			retained = null;
+		}
+	}
 	preview.retain( [] );
 	return {
 		prepare(
@@ -92,6 +201,7 @@ export function createPortrait(
 		) {
 			const dollYaw = frame.yaw, seconds = frame.seconds ?? 0;
 			if ( !value ) {
+				retained = null;
 				if ( empty ) return EMPTY_DRAWS;
 				preview.actors( [] );
 				source = null;
@@ -104,6 +214,10 @@ export function createPortrait(
 				empty = true;
 				return draws;
 			}
+			if ( dollYaw === undefined ) {
+				const kept = retainedFor( value, geometry, images );
+				if ( kept ) return kept;
+			} else retained = null;
 			empty = false;
 			const parts = [ value, ...(value.children ?? []) ];
 			const changed = parts.length !== borrowed.length ||
@@ -203,13 +317,15 @@ export function createPortrait(
 					head.z - Math.cos( PORTRAIT_PITCH ) * PORTRAIT_DISTANCE
 				] as const;
 			preview.actors( actors );
-			return preview.prepare(
+			const draws = preview.prepare(
 				geometry,
 				images,
 				0,
 				viewProjection( { eye, target, fov: Math.PI / 6, near: PREVIEW_NEAR, far: PREVIEW_FAR }, 1 ),
 				true
 			);
+			retain( value, geometry, images, draws );
+			return draws;
 		},
 		/*
 		================
@@ -230,6 +346,7 @@ export function createPortrait(
 		================
 		*/
 		invalidate() {
+			retained = null;
 			empty = false;
 			preview.invalidate();
 		},
@@ -240,6 +357,7 @@ export function createPortrait(
 		*/
 		dispose( geometry: GeometryCommands | null, images: ImageCommands | null ) {
 			preview.dispose( geometry, images );
+			retained = null;
 			source = null;
 			borrowed = [];
 			empty = true;
