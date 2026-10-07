@@ -58,7 +58,25 @@ export default defineConfig( ( { mode } ) => {
 		},
 		preview: { proxy, ...hosts, ...(certificate ? { https: certificate } : {}) },
 		build: bench ?
-			{ outDir: "temp/artifacts/dist-bench", rolldownOptions: { preserveEntrySignatures: "exports-only" } } :
+			{
+				outDir: "temp/artifacts/dist-bench",
+				// The page entry is index.html, so bootstrap.ts is only a module it
+				// imports and its exports are tree-shaken. Naming it an entry too
+				// keeps its signature; the page still loads it exactly once.
+				rolldownOptions: {
+					input: {
+						index: fileURLToPath( new URL( "./index.html", import.meta.url ) ),
+						bootstrap: fileURLToPath( new URL( "./src/bootstrap.ts", import.meta.url ) )
+					},
+					preserveEntrySignatures: "exports-only",
+					// The benchmark imports the runtime from one fixed URL; release
+					// bundles have no such file.
+					output: {
+						entryFileNames: chunk =>
+							chunk.name === "bootstrap" ? "assets/bench-runtime.js" : "assets/[name]-[hash].js"
+					}
+				}
+			} :
 			{ outDir: "temp/artifacts/dist" },
 		plugins: [ devUpdates(), publishedAssets(), ...(https && !certificate ? [ basicSsl() ] : []) ],
 		resolve: {

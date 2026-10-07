@@ -17,24 +17,29 @@ import { assertCharacterAllowed } from "../../../../../scripts/lib/probeCharacte
 ================
 bindPlayableRuntime
 
-The page's own entry module owns the runtime. On the dev server that is
-/src/bootstrap.ts; a bench bundle (pnpm build:bench) serves it as its
-hashed entry chunk and keeps the export. Importing the URL the page already
-loaded returns that same module instance, never a second runtime. A release
-bundle drops the export on purpose, so binding to one fails loudly.
+The runtime belongs to the page's own entry module. On the dev server that
+is /src/bootstrap.ts. A bench bundle (pnpm build:bench) re-exports it from
+/assets/bench-runtime.js, a facade over the chunk the page already ran, so
+importing it returns that same runtime, never a second one. A release bundle
+has neither, on purpose, so binding to one fails with the reason.
 ================
 */
 export async function bindPlayableRuntime( page ) {
 	await page.evaluate( async () => {
-		const scripts = [ ...document.querySelectorAll( 'script[type="module"][src]' ) ]
-			.map( script => new URL( script.getAttribute( "src" ) ?? "", location.href ) );
-		const entry = scripts.find( url => url.pathname === "/src/bootstrap.ts" ) ??
-			scripts.find( url => /^\/assets\/index-[^/]+\.js$/.test( url.pathname ) );
-		if ( !entry ) throw Error( "No client entry module on the page" );
-		const runtime = (await import( entry.href )).runtime;
-		if ( !runtime ) {
-			throw Error( `${entry.pathname} exports no runtime: benchmark a bench bundle (pnpm build:bench)` );
+		const dev = [ ...document.querySelectorAll( 'script[type="module"][src]' ) ]
+			.some( script =>
+				new URL( script.getAttribute( "src" ) ?? "", location.href ).pathname === "/src/bootstrap.ts"
+			);
+		const url = dev ? "/src/bootstrap.ts" : "/assets/bench-runtime.js";
+		let runtime;
+		try {
+			runtime = (await import( url )).runtime;
+		} catch ( error ) {
+			throw Error(
+				`${url} did not load (${error}): benchmark the dev server or a bench bundle (pnpm build:bench)`
+			);
 		}
+		if ( !runtime ) throw Error( `${url} exports no runtime` );
 		globalThis.__playableRuntime = runtime;
 	} );
 }
