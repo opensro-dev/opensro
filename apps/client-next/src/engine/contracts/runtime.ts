@@ -16,6 +16,32 @@ import type { SessionCommand, SessionState } from "./session";
 import type { InputBatch } from "./input";
 /*
 ================
+CharacterStatistics
+
+Copied renderer counters. Retained poses include socket-only consumers and
+shared evaluators, so eligibility is not a visible-body count or GPU admission.
+================
+*/
+export interface CharacterStatistics {
+	readonly actors: number;
+	readonly draws: number;
+	readonly visibleActors?: number;
+	readonly poseEvaluations?: number;
+	readonly liveOwnedCpuEvaluations?: number;
+	readonly gpuAnimation?: {
+		readonly poses: number;
+		readonly dispatches: number;
+		readonly cpuUploadBytes?: number;
+	};
+	readonly poseEligibility?: {
+		readonly actors: number;
+		readonly unique: number;
+		readonly gpuSamples: number;
+		readonly linearSamples: number;
+	};
+}
+/*
+================
 RuntimePhase
 
 Every runtime owner exposes its explicit startup, running and retirement phase.
@@ -216,7 +242,7 @@ export interface Renderer extends Disposable {
 	setUiTexture( id: string, image: ImageBitmap | ImageData | null ): void;
 	retainCharacterModels( ids: readonly string[] ): void;
 	setCharacterAssembly( id: string, base: string, parts: readonly import("./character").CharacterAttachment[] ): void;
-	characterStats(): { actors: number; draws: number; };
+	characterStats( details?: boolean ): CharacterStatistics;
 	setCharacterModel( id: string, model: import("./character").CharacterModel, images: WorldTexture[] ): void;
 	setCharacterAnimation(
 		id: string,
@@ -349,6 +375,8 @@ export interface RuntimeControl extends Disposable {
 	berserkGauge(): import("./orb").BerserkGauge | undefined;
 	/** The actors the renderer draws this frame. */
 	characterActors(): readonly import("./character").CharacterActor[];
+	/** Copied counters and retained-pose eligibility; does not advance animation. */
+	characterStats(): CharacterStatistics;
 	/** Read-only orbit camera the input owner holds (yaw/pitch/distance). */
 	camera(): import("./input").CameraInput;
 	takeNative(): import("./world").WorldEvent[];

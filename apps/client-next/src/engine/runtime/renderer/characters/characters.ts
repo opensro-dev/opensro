@@ -981,8 +981,23 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		Report owned sources, assemblies and retained byte charges independently.
 		================
 		*/
-		stats() {
+		stats( details = false ) {
+			let poseEligibility;
+			if ( details ) {
+				const unique = new Set( [ ...poses.values() ].map( state => state.pose ) );
+				let gpuSamples = 0, linearSamples = 0;
+				for ( const pose of unique ) {
+					const sample = pose.gpuSample();
+					if ( !sample ) continue;
+					gpuSamples++;
+					if ( sample.clip.channels.every( channel => channel.interpolation === "LINEAR" ) ) linearSamples++;
+				}
+				// Sampling eligibility alone does not prove an affine playback clock.
+				// Count retained evaluators without materializing CPU palettes or sockets.
+				poseEligibility = { actors: poses.size, unique: unique.size, gpuSamples, linearSamples };
+			}
 			return {
+				poseEligibility,
 				actors: actors.length,
 				draws: [ ...batches.values() ].reduce( ( n, batch ) => n + batch.draws.length, 0 ),
 				renderBytes,

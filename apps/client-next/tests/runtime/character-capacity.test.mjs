@@ -100,6 +100,27 @@ const visible = d => ({
 	bones: d.bones.slice( 0, d.count * 16 )
 });
 
+test("pose eligibility diagnostics are copied, deduplicate sharing and never evaluate poses", () => {
+	const f = fixture();
+	try {
+		const rows = actors( [ 1, 2, 3 ], .25 );
+		rows[1].time = rows[0].time;
+		rows[2].bodyVolume = { index: 3, female: false };
+		f.owner.actors( rows );
+		f.owner.prepare( f.gpu, {}, 257 );
+		const before = f.owner.stats();
+		assert.equal( before.poseEligibility, undefined );
+		const snapshot = f.owner.stats( true );
+		assert.deepEqual( snapshot.poseEligibility, { actors: 3, unique: 2, gpuSamples: 1, linearSamples: 1 } );
+		snapshot.poseEligibility.gpuSamples = 999;
+		assert.equal( f.owner.stats( true ).poseEligibility.gpuSamples, 1 );
+		assert.equal( f.owner.stats().liveOwnedCpuEvaluations, before.liveOwnedCpuEvaluations );
+		assert.equal( f.owner.stats().poseEvaluations, before.poseEvaluations );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+
 test("batch census follows actual emitted groups on fresh and retained frames", () => {
 	const f = fixture(), samples = [], counters = {}, rows = actors( [ 1, 2, 3 ], .25 );
 	rows[0].opacity = .5;
