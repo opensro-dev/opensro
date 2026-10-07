@@ -103,7 +103,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { CharacterActor } from "@/engine/contracts/character";
 import { createPresentationCatalog } from "./presentation-catalog";
-import type { Resource } from "./internal/presentation-contract";
+import type { PresentationOutput, Resource } from "./internal/presentation-contract";
 /*
 ================
 CharacterFrameProbe
@@ -272,7 +272,16 @@ export function createCharacterPresentation(
 			}
 		>();
 	const allocateActor = createPresentationIds(), lizardGid = allocateActor();
-	let previewReady = false, dockReady = false;
+	// The frame's published results; several phases write them (presentation-contract.ts).
+	const output: PresentationOutput = {
+		displayed: new Map<number, CharacterActor>(),
+		failure: null,
+		cameraTarget: null,
+		cameraFade: null,
+		previewReady: false,
+		dockReady: false,
+		commonReady: false
+	};
 	let rainEventActive = false;
 	const rainEventEntities = new Map<number, number>();
 	const rainEvents:
@@ -322,7 +331,6 @@ export function createCharacterPresentation(
 		defaultWear?: { resource: Resource; keys: readonly string[]; };
 		fortressIndex?: number;
 	}>();
-	let commonReady = false;
 	const animationEmission = createAnimationEmission( allocateActor );
 	const stageAnimations = new Map<
 		number,
@@ -358,8 +366,6 @@ export function createCharacterPresentation(
 	const posePresentation = createPosePresentation();
 	const selection = createCharacterSelection( CHARACTER_ACTORS );
 	const stateIndex = createCharacterStateIndex();
-	let cameraFade: ({ gid: number; time: number; } & CharacterFade) | null = null;
-	let cameraTarget: import("@/engine/contracts/scene").FollowCameraTarget | null = null;
 	const actionClocks = new Map<number, ActionSchedule>();
 	// Action events of a predicted cast (cast-prediction.ts), held until the
 	// server's cast adopts its clock: effects and sounds belong to that cast.
@@ -571,7 +577,6 @@ export function createCharacterPresentation(
 			dependencies: readonly string[];
 		}
 	>();
-	let failure: string | null = null, displayed = new Map<number, CharacterActor>();
 	let hideSilkCos = false;
 	return {
 		/*
@@ -738,7 +743,7 @@ export function createCharacterPresentation(
 			const animationDeltaMs = animationDelta( seconds );
 			skillObjects.retain( entities );
 			resources.begin( seconds );
-			failure = null;
+			output.failure = null;
 			const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
 			posePresentation.samples( samples );
 			const result = resources.poll();
@@ -767,8 +772,8 @@ export function createCharacterPresentation(
 				const path = skillObjects.nextManifest( entities );
 				if ( path ) resources.manifest( path );
 			}
-			previewReady = false;
-			dockReady = false;
+			output.previewReady = false;
+			output.dockReady = false;
 			if ( !preview ) {
 				previewDisplay = null;
 				previewShape = null;
@@ -844,7 +849,7 @@ export function createCharacterPresentation(
 									deleted: row.deletePending,
 									started: seconds,
 									transition: row.deletePending ? "charselect-state13" : "charselect-state15",
-									previous: displayed.get( row.id )
+									previous: output.displayed.get( row.id )
 								};
 								dockStates.set( row.id, state );
 							}
@@ -910,7 +915,7 @@ export function createCharacterPresentation(
 						} );
 						if ( preview ) previewDisplay = { actor: actors.at( -1 )!, paths };
 					} catch ( error ) {
-						failure = String( error );
+						output.failure = String( error );
 					}
 				}
 				for ( const id of previewWear.keys() ) {
@@ -920,7 +925,7 @@ export function createCharacterPresentation(
 					if ( preview || !rows.some( row => row.id === id ) ) dockStates.delete( id );
 				}
 				// Count only complete roster assemblies before auxiliary actors enter.
-				dockReady = catalogResident && !preview && actors.length === rows.length;
+				output.dockReady = catalogResident && !preview && actors.length === rows.length;
 				if ( lizard && !preview ) {
 					const path = "/assets/character-select/interface_lizard.glb";
 					if ( resources.ready( path ) ) {
@@ -978,11 +983,11 @@ export function createCharacterPresentation(
 							if ( key.startsWith( prefix ) ) paths.add( entry.glb );
 						}
 					}
-					previewReady = actors.length === 1;
+					output.previewReady = actors.length === 1;
 					for ( const path of paths ) {
 						// Do not short-circuit: ready owns bounded incremental admission.
 						const ready = resources.ready( path );
-						previewReady = ready && previewReady;
+						output.previewReady = ready && output.previewReady;
 					}
 				}
 				if ( preview && !actors.length && previewDisplay ) {
@@ -992,7 +997,7 @@ export function createCharacterPresentation(
 						time: seconds
 					} );
 				}
-				displayed = new Map( actors.map( actor => [ actor.gid, actor ] ) );
+				output.displayed = new Map( actors.map( actor => [ actor.gid, actor ] ) );
 				actors.push(
 					...scenery.step(
 						renderer.scenery?.() ?? null,
@@ -1001,13 +1006,13 @@ export function createCharacterPresentation(
 						CHARACTER_ACTORS - actors.length
 					)
 				);
-				cameraTarget = null;
+				output.cameraTarget = null;
 				renderer.setCharacterActors( actors );
 				resources.retainWanted( actors.map( actor => actor.model ) );
 				return;
 			}
 			for ( const gid of retiring ) {
-				const actor = displayed.get( gid );
+				const actor = output.displayed.get( gid );
 				if ( actor ) {
 					const id = allocateActor(), state = states.get( gid );
 					const animation = state?.modifierResource && state.dispatch && state.modelAnimation ?
@@ -1030,7 +1035,7 @@ export function createCharacterPresentation(
 						particles: modelEmission.transfer( gid, id ),
 						animation,
 						children: [ ...(auxiliaryActors.get( gid )?.values() ?? []) ].flatMap( child => {
-							const actor = displayed.get( child.gid );
+							const actor = output.displayed.get( child.gid );
 							return actor ? [ actor ] : [];
 						} ).map( child => ({ ...child, attachment: { ...child.attachment!, gid: id } }) )
 					} );
@@ -1064,11 +1069,12 @@ export function createCharacterPresentation(
 				}
 			}
 			// Baseline drops own residency before one-shot combat effects compete.
-			commonReady = published.manifest === published.manifests.length && !!local && displayed.has( local.gid );
-			if ( gameplay?.localGid && commonReady ) {
+			output.commonReady = published.manifest === published.manifests.length && !!local &&
+				output.displayed.has( local.gid );
+			if ( gameplay?.localGid && output.commonReady ) {
 				for ( const key of GOLD_DROP_MODELS ) {
 					const model = published.dropModels[key];
-					if ( model && !resources.ready( model.glb ) ) commonReady = false;
+					if ( model && !resources.ready( model.glb ) ) output.commonReady = false;
 				}
 			}
 			probe?.detailEnd( "presentation-selection" );
@@ -1259,7 +1265,7 @@ export function createCharacterPresentation(
 						} )
 					);
 					if ( alternatives.some( table => table.some( phase => phase === undefined ) ) ) {
-						failure = `Missing action phase timeline ${resource.codename}`;
+						output.failure = `Missing action phase timeline ${resource.codename}`;
 						continue;
 					}
 					if ( loading ) continue;
@@ -1403,7 +1409,7 @@ export function createCharacterPresentation(
 					const cursor = trigger.event === 0 ?
 						0 :
 						phase?.definition.trackEvents.filter( row => row.eventCode === 1 )[trigger.event - 1]?.cursorMs;
-					const rows = [ ...displayed.values() ].map( actor => {
+					const rows = [ ...output.displayed.values() ].map( actor => {
 						const entity = entitiesByGid.get( actor.gid ),
 							native = entity ? logicalPose( entity ) : undefined;
 						const sampled = native ? posePresentation.pose( actor.gid, native, seconds ) : undefined;
@@ -1441,7 +1447,7 @@ export function createCharacterPresentation(
 					} );
 					return renderer.characterSocket( rows, gid, { name: bone, fallback: "mount-root" }, offset );
 				},
-				[ ...displayed.values() ],
+				[ ...output.displayed.values() ],
 				effectDetail,
 				bloodEnabled
 			);
@@ -1587,7 +1593,7 @@ export function createCharacterPresentation(
 					effects.impactSource( caster?.gid, target.gid, gameplay?.attachedEffects ?? [], cast ) :
 					{ gid: cast.caster, skill: hit.soundSkill ?? 0, defensive: false };
 				if ( effectDetail && caster && hit.source !== "hawk" ) {
-					const shown = [ ...displayed.values() ].map( actor => {
+					const shown = [ ...output.displayed.values() ].map( actor => {
 							const entity = entitiesByGid.get( actor.gid );
 							if ( !entity ) return actor;
 							const pose = posePresentation.pose( actor.gid, logicalPose( entity ), seconds );
@@ -1730,7 +1736,7 @@ export function createCharacterPresentation(
 					if ( hit?.downAt !== undefined ) {
 						const recoveryMs = published.recoveryByCodename.get( resource.codename );
 						if ( recoveryMs === undefined ) {
-							failure = `Missing native recovery duration ${resource.codename}`;
+							output.failure = `Missing native recovery duration ${resource.codename}`;
 						} else {entry.posture = transitionPosture( entry.posture, {
 								kind: "down",
 								at: hit.downAt,
@@ -1904,7 +1910,8 @@ export function createCharacterPresentation(
 					const resource = resourceFor( entity );
 					if ( !resource ) continue;
 					if ( !resources.ready( resource.glb ) ) {
-						const previous = displayed.get( entity.gid ), paths = displayedDependencies.get( entity.gid );
+						const previous = output.displayed.get( entity.gid ),
+							paths = displayedDependencies.get( entity.gid );
 						if ( previous && paths && resources.plan( paths ) ) {
 							next.set( entity.gid, previous );
 							displayedDependencies.set( entity.gid, paths );
@@ -1925,7 +1932,8 @@ export function createCharacterPresentation(
 					let overrideCommit: readonly number[] | undefined = [];
 					let defaultWearCommit: readonly string[] | undefined = [];
 					const fallback = () => {
-						const previous = displayed.get( entity.gid ), paths = displayedDependencies.get( entity.gid );
+						const previous = output.displayed.get( entity.gid ),
+							paths = displayedDependencies.get( entity.gid );
 						if ( previous && paths && resources.plan( paths ) ) {
 							auxiliaryCommit = undefined;
 							overrideCommit = undefined;
@@ -2069,7 +2077,7 @@ export function createCharacterPresentation(
 							}
 						}
 					} catch ( error ) {
-						failure = String( error );
+						output.failure = String( error );
 						model = fallback();
 					}
 					if ( sampleActorDetails ) probe?.detailBegin( "actor-motion" );
@@ -2347,12 +2355,12 @@ export function createCharacterPresentation(
 							}
 							if ( effect.kind === "navigation" ) continue;
 							if ( effect.kind === "feet" ) {
-								const actor = displayed.get( entity.gid );
+								const actor = output.displayed.get( entity.gid );
 								if ( actor ) {
 									for ( const right of [ false, true ] ) {
 										footContact(
 											entity,
-											[ ...displayed.values() ],
+											[ ...output.displayed.values() ],
 											actor,
 											nativePose,
 											right,
@@ -2757,7 +2765,7 @@ export function createCharacterPresentation(
 						particleHolders.push( { actor: next.get( entity.gid )!, particles: state.equipmentParticles } );
 					}
 				} catch ( error ) {
-					failure = String( error );
+					output.failure = String( error );
 				}
 			}
 			probe?.detailEnd( "presentation-actors" );
@@ -2987,7 +2995,7 @@ export function createCharacterPresentation(
 			for ( const gid of avatarOverrides.keys() ) if ( !active.has( gid ) ) avatarOverrides.delete( gid );
 			sounds.retain( active );
 			posePresentation.retain( active );
-			cameraTarget = null;
+			output.cameraTarget = null;
 			if ( local && gameplay?.pose ) {
 				const height = published.heights.get( published.catalog.get( local.refObjId )?.codename ?? "" );
 				const mount = local.mountedOn ? entitiesByGid.get( local.mountedOn ) : undefined;
@@ -2998,7 +3006,7 @@ export function createCharacterPresentation(
 				const riding = mount && mountHeight !== undefined && next.has( mount.gid ) ? mount : undefined;
 				const rendered = next.get( riding?.gid ?? local.gid )?.pose;
 				if ( rendered && height !== undefined ) {
-					cameraTarget = {
+					output.cameraTarget = {
 						height,
 						mounted: !!riding,
 						// Actor yaw is pi minus the native yaw (characterHeadingYaw).
@@ -3057,20 +3065,31 @@ export function createCharacterPresentation(
 				}
 			}
 			if ( local ) {
-				if ( cameraFade?.gid !== local.gid ) {
-					cameraFade = { gid: local.gid, time: seconds, mode: false, current: 255, start: 255, progress: 1 };
+				if ( output.cameraFade?.gid !== local.gid ) {
+					output.cameraFade = {
+						gid: local.gid,
+						time: seconds,
+						mode: false,
+						current: 255,
+						start: 255,
+						progress: 1
+					};
 				}
 				const hidden = cameraPitch < -0.8999999761581421,
-					transition = cameraFade.mode !== hidden || cameraFade.progress < 1;
-				const alpha = advanceCharacterFade( cameraFade, hidden, Math.max( 0, seconds - cameraFade.time ) );
-				cameraFade.time = seconds;
+					transition = output.cameraFade.mode !== hidden || output.cameraFade.progress < 1;
+				const alpha = advanceCharacterFade(
+					output.cameraFade,
+					hidden,
+					Math.max( 0, seconds - output.cameraFade.time )
+				);
+				output.cameraFade.time = seconds;
 				// 866B90 applies camera interpolation first while it is live;
 				// after it finishes, the body-4 branch restores alpha 0x50.
 				const actor = next.get( local.gid );
 				if ( actor && (transition || local.appearanceState?.[2] !== 4) ) {
 					next.set( local.gid, { ...actor, opacity: alpha } );
 				}
-			} else cameraFade = null;
+			} else output.cameraFade = null;
 			for ( const row of disappearing.values() ) {
 				let actor = disappearActor( row, seconds );
 				if ( actor && next.size < CHARACTER_ACTORS ) {
@@ -3187,7 +3206,7 @@ export function createCharacterPresentation(
 					scale: 1
 				} );
 			}
-			displayed = next;
+			output.displayed = next;
 			// One pass builds both the published actors and the wanted models, in the
 			// same order the spread-and-map version produced, without temporaries.
 			const presentedActors: CharacterActor[] = [], wanted: string[] = [];
@@ -3202,7 +3221,7 @@ export function createCharacterPresentation(
 			resources.retainWanted( wanted );
 			probe?.detailEnd( "presentation-finalize" );
 		},
-		ready: ( gid: number ) => displayed.has( gid ),
+		ready: ( gid: number ) => output.displayed.has( gid ),
 		/*
 		================
 		entryReady
@@ -3210,9 +3229,9 @@ export function createCharacterPresentation(
 		Keep first-use baseline work behind world entry without spawning fake drops.
 		================
 		*/
-		entryReady: () => commonReady && warmMotions.length === 0 && effects.loaded(),
-		previewReady: () => previewReady,
-		dockReady: () => dockReady,
+		entryReady: () => output.commonReady && warmMotions.length === 0 && effects.loaded(),
+		previewReady: () => output.previewReady,
+		dockReady: () => output.dockReady,
 		/*
 		================
 		profile
@@ -3221,11 +3240,11 @@ export function createCharacterPresentation(
 		profile( value: CharacterFrameProbe | undefined ) {
 			probe = value;
 		},
-		cameraTarget: () => cameraTarget,
+		cameraTarget: () => output.cameraTarget,
 		takeCameraScripts: () => effects.takeCameraScripts(),
 		orbGauge: () => orbs.gauge(),
 		damageText: () => damageTexts as readonly import("@/engine/contracts/damage-text").DamageText[],
-		error: () => failure ?? resources.error() ?? effects.error(),
+		error: () => output.failure ?? resources.error() ?? effects.error(),
 		/*
 		================
 		simulationOrigin
@@ -3250,7 +3269,7 @@ export function createCharacterPresentation(
 			warmSkills = undefined;
 			warmBody = undefined;
 			warmMotions = [];
-			commonReady = false;
+			output.commonReady = false;
 			scenery.reset();
 			entityLod.reset();
 			modelEmission.reset();
@@ -3280,15 +3299,15 @@ export function createCharacterPresentation(
 			rainEventEntities.clear();
 			rainEvents.length = 0;
 			orbs.reset();
-			previewReady = false;
-			dockReady = false;
+			output.previewReady = false;
+			output.dockReady = false;
 			previewDisplay = null;
 			previewShape = null;
 			previewWear.clear();
 			dockStates.clear();
 			lizardStarted = null;
-			cameraTarget = null;
-			cameraFade = null;
+			output.cameraTarget = null;
+			output.cameraFade = null;
 			effects.reset();
 			referenceAppearances.reset();
 			sounds.reset();
@@ -3297,9 +3316,9 @@ export function createCharacterPresentation(
 			actionClocks.clear();
 			predictedEvents.clear();
 			deathFinalizes.clear();
-			displayed.clear();
+			output.displayed.clear();
 			displayedDependencies.clear();
-			failure = null;
+			output.failure = null;
 			renderer.setCharacterActors( [] );
 		},
 		/*
@@ -3343,15 +3362,15 @@ export function createCharacterPresentation(
 			rainEventEntities.clear();
 			rainEvents.length = 0;
 			orbs.reset();
-			previewReady = false;
-			dockReady = false;
+			output.previewReady = false;
+			output.dockReady = false;
 			previewDisplay = null;
 			previewShape = null;
 			previewWear.clear();
 			dockStates.clear();
 			lizardStarted = null;
-			cameraTarget = null;
-			cameraFade = null;
+			output.cameraTarget = null;
+			output.cameraFade = null;
 			effects.dispose();
 			referenceAppearances.reset();
 			sounds.reset();
@@ -3360,7 +3379,7 @@ export function createCharacterPresentation(
 			actionClocks.clear();
 			predictedEvents.clear();
 			deathFinalizes.clear();
-			displayed.clear();
+			output.displayed.clear();
 			displayedDependencies.clear();
 			published.dispose();
 		}

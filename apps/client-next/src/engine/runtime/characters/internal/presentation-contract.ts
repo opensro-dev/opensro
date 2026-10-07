@@ -16,6 +16,29 @@ import type { ModifierSelector, ModelAnimationBinding } from "@/engine/foundatio
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
 import type { StructureVisuals } from "@/engine/foundation/rendering/structure-stage";
 import type { AnimationMetadata } from "@/engine/foundation/animation/animation-metadata";
+import type { CharacterFade } from "@/engine/foundation/animation/character-fade";
+import type { CharacterActor } from "@/engine/contracts/character";
+import type { FollowCameraTarget } from "@/engine/contracts/scene";
+
+/*
+================
+PresentationOutput
+
+What one presentation frame publishes and several phases write: the drawn
+actors, the dock, preview and catalogue readiness, the follow-camera target
+and its fade, and the frame's failure. characters.ts owns the one instance
+and passes it to each phase that writes it.
+================
+*/
+export interface PresentationOutput {
+	displayed: Map<number, CharacterActor>;
+	failure: string | null;
+	cameraTarget: FollowCameraTarget | null;
+	cameraFade: ({ gid: number; time: number; } & CharacterFade) | null;
+	previewReady: boolean;
+	dockReady: boolean;
+	commonReady: boolean;
+}
 
 /*
 ================
