@@ -284,3 +284,17 @@ test("an unchanged HUD portrait reuses its draws until a drawing input changes, 
 	// than released, so resource retirement is covered by the tests above.
 	f.preview.dispose( f.geometry, f.images );
 });
+
+test("a retained HUD portrait keeps drawing from its own uploads after the world closes the borrowed image", () => {
+	const f = fixture();
+	const first = f.preview.prepare( f.source, f.geometry, f.images );
+	const owned = f.handles.size;
+	assert.ok( owned > 0, "the preview uploaded its own GPU copies" );
+	// The world retires its bitmap; the source still lists the same object.
+	f.source.images[0].close();
+	assert.equal( f.closes(), 1 );
+	assert.equal( f.preview.prepare( f.source, f.geometry, f.images ), first );
+	assert.equal( f.handles.size, owned, "retained draws still name the preview's live handles" );
+	f.preview.dispose( f.geometry, f.images );
+	assert.equal( f.handles.size, 0 );
+});
