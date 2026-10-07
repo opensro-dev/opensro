@@ -214,7 +214,7 @@ import {
 import { isSkinChangeScroll, skinDraftRange, type SkinDraftKey } from "@/engine/foundation/gameplay/skin-change";
 import { repairAllCost } from "@/engine/foundation/gameplay/repair";
 import { createSlotEffectClock } from "./hud/slot-effects";
-import { itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
+import { itemIsRare, itemSlotOverlays, itemSlotWash, slotSeed } from "@/engine/foundation/ui/item-slot-effects";
 import {
 	COS_CLASS_ATTACK,
 	COS_CLASS_GUILD,
@@ -5076,6 +5076,10 @@ export function createUi(
 			}
 			if ( event.kind === "activate" ) {
 				// 570120 / 567290: CTRL shop transaction takes priority over SHIFT/ALT.
+				// A CTRL buy asks for one package when it holds several items, else
+				// for the item's MaxStack (ItemData +0x1A8, the first ItemData column),
+				// so equipment buys one. The quantity editor's purchaseLimit (6C0540)
+				// is not a CTRL input.
 				if (
 					event.ctrl && panel === "Shop" && view?.gameplay?.shop &&
 					(event.id.startsWith( "shop-offer:" ) ||
@@ -5096,7 +5100,7 @@ export function createUi(
 								sendGameplay(
 									merchantCommand(
 										choice,
-										(offer.contents?.length ?? 1) > 1 ? 1 : offer.purchaseLimit ?? offer.maxStack
+										(offer.contents?.length ?? 1) > 1 ? 1 : offer.maxStack
 									)
 								);
 							}
@@ -5106,7 +5110,9 @@ export function createUi(
 							row.slot === Number( event.id.slice( event.id.indexOf( ":" ) + 1 ) )
 						);
 						if ( item ) {
-							if ( (item.typeFlags & 0x1f) === 0xd || item.summon?.state === 2 ) {
+							// 567290: mall (ItemTid_IsMallItem) and rare (CSOItemData_IsRare)
+							// items refuse a quick sell.
+							if ( (item.typeFlags & 0x1f) === 0xd || itemIsRare( item ) || item.summon?.state === 2 ) {
 								message = hud.data()?.strings["UIIT_MSG_STRGERR_CANT_QUICKSELL_CASHITEM"] ?? "";
 								dirty = true;
 								return;

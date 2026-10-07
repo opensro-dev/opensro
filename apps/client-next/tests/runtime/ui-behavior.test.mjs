@@ -2145,6 +2145,82 @@ test("GPU shop gates merchant capability, affordability and exact sale confirmat
 
 /*
 ================
+ctrlShopTransaction
+
+570120 / 567290: a CTRL buy takes one package of several items, else the
+item's MaxStack (one staff, never the editor's purchase limit of five). A
+CTRL sell sells at once but refuses rare items.
+================
+*/
+test("CTRL shop click buys MaxStack and refuses a rare quick sell", () => {
+	const sent = [], f = uiFixture( command => sent.push( command.command ) );
+	try {
+		const game = f.state.gameplay;
+		game.target = 17;
+		game.targetCapabilities = 1;
+		game.inventorySlotCount = 45;
+		game.equipmentSlotCount = 13;
+		game.progression = { gold: "100000", masteries: [] };
+		game.inventory = [
+			{ slot: 13, refObjId: 900, name: "Staff", quantity: 1, typeFlags: 0x0c },
+			{
+				slot: 14,
+				refObjId: 901,
+				name: "Rare Staff",
+				quantity: 1,
+				typeFlags: 0x0c,
+				tooltip: { fields: { rarity: 2 } }
+			}
+		];
+		f.state.entities.push( { ...f.state.entities[0], gid: 17, kind: "npc", name: "Merchant" } );
+		let now = 0;
+		const draw = () => f.ui.step( f.state, now += 100 );
+		draw();
+		f.ui.event( { kind: "activate", id: "shop-open" } );
+		draw();
+		sent.length = 0;
+		game.shop = {
+			npc: 17,
+			name: "Merchant",
+			offers: [
+				{ tab: 0, slot: 0, refObjId: 900, name: "Staff", price: "100", maxStack: 1, purchaseLimit: 5 },
+				{ tab: 0, slot: 1, refObjId: 3630, name: "Potion", price: "60", maxStack: 50, purchaseLimit: 50 },
+				{
+					tab: 0,
+					slot: 2,
+					refObjId: 100,
+					name: "Set",
+					price: "100",
+					maxStack: 1,
+					purchaseLimit: 5,
+					contents: [ { refObjId: 900, quantity: 1 }, { refObjId: 3630, quantity: 1 } ]
+				}
+			],
+			saleQuotes: [
+				{ slot: 13, refObjId: 900, quantity: 1, price: "20" },
+				{ slot: 14, refObjId: 901, quantity: 1, price: "20" }
+			]
+		};
+		game.shopCompletionRevision = 1;
+		draw();
+		for ( const [index, quantity] of [ [ 0, 1 ], [ 1, 50 ], [ 2, 1 ] ] ) {
+			f.ui.event( { kind: "activate", id: "shop-offer:" + index, ctrl: true } );
+			draw();
+			assert.deepEqual( sent.pop(), { kind: "shop-buy", tab: 0, slot: index, quantity } );
+		}
+		f.ui.event( { kind: "activate", id: "slot:14", ctrl: true } );
+		draw();
+		assert.equal( sent.length, 0, "rare items refuse a quick sell" );
+		f.ui.event( { kind: "activate", id: "slot:13", ctrl: true } );
+		draw();
+		assert.deepEqual( sent.pop(), { kind: "shop-sell", slot: 13, quantity: 1 } );
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
 merchantQuantityLimit
 
 Exercise the real editor and confirmation path. An oversized draft must be

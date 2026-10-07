@@ -91,6 +91,18 @@ function loopFrame( nowMs: number, stepMs: number, frames: number, phase: number
 itemSlotOverlays
 
 Everything 565850 draws over one slot this frame, in its draw order:
+/*
+================
+itemIsRare
+
+CSOItemData_IsRare (789340). Retail also refuses a CTRL quick sell of a rare
+item (567290), so the shop reads the same test.
+================
+*/
+export function itemIsRare( item: { readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; }; } ) {
+	return item.tooltip?.fields.rarity === RARITY_RARE;
+}
+
 summoned glow, rare shine, then the one-shot flashes.
 ================
 */
@@ -114,7 +126,7 @@ export function itemSlotOverlays(
 			rect
 		} );
 	}
-	if ( item.tooltip?.fields.rarity === RARITY_RARE ) {
+	if ( itemIsRare( item ) ) {
 		const frame = loopFrame( nowMs, RARE_STEP_MS, RARE_FRAMES, seed & (RARE_FRAMES - 1) );
 		out.push( {
 			path: SHEET + "icon/item/etc/icon_edge_rare.png",
