@@ -102,6 +102,16 @@ export interface CharacterFrameProbe {
 	sampleDetails(): boolean;
 }
 
+/*
+================
+TeardownMode
+
+reset clears the presenter for the next world and keeps it usable; dispose
+retires it for good. Both run the one ordered teardown.
+================
+*/
+type TeardownMode = "reset" | "dispose";
+
 const GOLD_DROP_MODELS = [
 	"item/etc/drop_ch_money_ing.bsr",
 	"item/etc/drop_ch_money_small.bsr",
@@ -304,6 +314,70 @@ export function createCharacterPresentation(
 		wornEquipment,
 		presentationState
 	} );
+	/*
+	================
+	teardown
+
+	The one ordered teardown that reset and dispose share. A reset keeps the
+	presenter usable for the next world; a dispose retires it. The order is
+	the original one, statement for statement: the owners are independent,
+	but nothing here is reordered without its own proof. Only skill objects,
+	effects and resources dispose instead of resetting, and only a reset
+	renews the modifier delta and drops common readiness.
+
+	The partial resets on a world reset event (receiveLifecycle) and its
+	replay (eventRain) are a different trigger and stay where they are.
+	================
+	*/
+	function teardown( mode: TeardownMode ) {
+		mallPreview.reset();
+		if ( mode === "reset" ) skillObjects.reset();
+		else skillObjects.dispose();
+		footprints.clearFootprints();
+		if ( mode === "reset" ) animationDelta = createModifierDelta();
+		presentationActions.resetWarm();
+		if ( mode === "reset" ) output.commonReady = false;
+		scenery.reset();
+		entityLod.reset();
+		modelEmission.reset();
+		structureVisuals.reset();
+		animationEmission.reset();
+		auxiliary.resetStages();
+		groundClocks.clear();
+		selection.reset();
+		stateIndex.reset();
+		feedback.reset();
+		presentationEvents.resetSequence();
+		appearances.clear();
+		auxiliary.resetHair();
+		committedAuxiliary.clear();
+		avatarOverrides.clear();
+		auxiliary.resetChildren();
+		posePresentation.reset();
+		presentationState.idleStates.clear();
+		presentationState.combatStanceEnds.clear();
+		retiring.clear();
+		disappearing.clear();
+		spawnFades.reset();
+		presentationEvents.resetDamageTexts();
+		weather.reset();
+		orbs.reset();
+		output.previewReady = false;
+		output.dockReady = false;
+		dockPreview.reset();
+		output.cameraTarget = null;
+		output.cameraFade = null;
+		if ( mode === "reset" ) effects.reset();
+		else effects.dispose();
+		referenceAppearances.reset();
+		sounds.reset();
+		if ( mode === "reset" ) resources.reset();
+		else resources.dispose();
+		states.clear();
+		presentationActions.resetClocks();
+		output.displayed.clear();
+		displayedDependencies.clear();
+	}
 	return {
 		/*
 		================
@@ -391,7 +465,7 @@ export function createCharacterPresentation(
 				groundClocks.clear();
 				retiring.clear();
 				disappearing.clear();
-				presentationEvents.state.damageTexts = [];
+				presentationEvents.resetDamageTexts();
 			} );
 		},
 		/*
@@ -739,7 +813,7 @@ export function createCharacterPresentation(
 		Keep first-use baseline work behind world entry without spawning fake drops.
 		================
 		*/
-		entryReady: () => output.commonReady && presentationActions.warm.warmMotions.length === 0 && effects.loaded(),
+		entryReady: () => output.commonReady && presentationActions.warmed() && effects.loaded(),
 		previewReady: () => output.previewReady,
 		dockReady: () => output.dockReady,
 		/*
@@ -773,54 +847,7 @@ export function createCharacterPresentation(
 		================
 		*/
 		reset() {
-			mallPreview.reset();
-			skillObjects.reset();
-			footprints.clearFootprints();
-			animationDelta = createModifierDelta();
-			presentationActions.warm.warmSkills = undefined;
-			presentationActions.warm.warmBody = undefined;
-			presentationActions.warm.warmMotions = [];
-			output.commonReady = false;
-			scenery.reset();
-			entityLod.reset();
-			modelEmission.reset();
-			structureVisuals.reset();
-			animationEmission.reset();
-			auxiliary.resetStages();
-			groundClocks.clear();
-			selection.reset();
-			stateIndex.reset();
-			feedback.reset();
-			presentationEvents.state.environmentalSequence = 0;
-			appearances.clear();
-			auxiliary.resetHair();
-			committedAuxiliary.clear();
-			avatarOverrides.clear();
-			auxiliaryActors.clear();
-			posePresentation.reset();
-			presentationState.idleStates.clear();
-			presentationState.combatStanceEnds.clear();
-			retiring.clear();
-			disappearing.clear();
-			spawnFades.reset();
-			presentationEvents.state.damageTexts = [];
-			weather.reset();
-			orbs.reset();
-			output.previewReady = false;
-			output.dockReady = false;
-			dockPreview.reset();
-			output.cameraTarget = null;
-			output.cameraFade = null;
-			effects.reset();
-			referenceAppearances.reset();
-			sounds.reset();
-			resources.reset();
-			states.clear();
-			presentationActions.actionClocks.clear();
-			presentationActions.predictedEvents.clear();
-			presentationActions.deathFinalizes.clear();
-			output.displayed.clear();
-			displayedDependencies.clear();
+			teardown( "reset" );
 			output.failure = null;
 			renderer.setCharacterActors( [] );
 		},
@@ -830,52 +857,7 @@ export function createCharacterPresentation(
 		================
 		*/
 		dispose() {
-			mallPreview.reset();
-			skillObjects.dispose();
-			footprints.clearFootprints();
-			presentationActions.warm.warmSkills = undefined;
-			presentationActions.warm.warmBody = undefined;
-			presentationActions.warm.warmMotions = [];
-			scenery.reset();
-			entityLod.reset();
-			modelEmission.reset();
-			structureVisuals.reset();
-			animationEmission.reset();
-			auxiliary.resetStages();
-			groundClocks.clear();
-			selection.reset();
-			stateIndex.reset();
-			feedback.reset();
-			presentationEvents.state.environmentalSequence = 0;
-			appearances.clear();
-			auxiliary.resetHair();
-			committedAuxiliary.clear();
-			avatarOverrides.clear();
-			auxiliaryActors.clear();
-			posePresentation.reset();
-			presentationState.idleStates.clear();
-			presentationState.combatStanceEnds.clear();
-			retiring.clear();
-			disappearing.clear();
-			spawnFades.reset();
-			presentationEvents.state.damageTexts = [];
-			weather.reset();
-			orbs.reset();
-			output.previewReady = false;
-			output.dockReady = false;
-			dockPreview.reset();
-			output.cameraTarget = null;
-			output.cameraFade = null;
-			effects.dispose();
-			referenceAppearances.reset();
-			sounds.reset();
-			resources.dispose();
-			states.clear();
-			presentationActions.actionClocks.clear();
-			presentationActions.predictedEvents.clear();
-			presentationActions.deathFinalizes.clear();
-			output.displayed.clear();
-			displayedDependencies.clear();
+			teardown( "dispose" );
 			published.dispose();
 		}
 	};

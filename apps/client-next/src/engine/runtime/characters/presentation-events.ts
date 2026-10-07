@@ -574,6 +574,28 @@ export function createPresentationEvents() {
 					undefined;
 			} );
 			return { hitByActor, effectActors, pendingDeaths };
+		},
+		/*
+		================
+		resetSequence
+
+		Forget the last environmental damage sequence. The teardown resets it
+		right after damage feedback, apart from the damage texts.
+		================
+		*/
+		resetSequence() {
+			state.environmentalSequence = 0;
+		},
+		/*
+		================
+		resetDamageTexts
+
+		Drop the live damage texts. A replayed world reset (eventRain) clears
+		only these, never the environmental sequence.
+		================
+		*/
+		resetDamageTexts() {
+			state.damageTexts = [];
 		}
 	};
 }

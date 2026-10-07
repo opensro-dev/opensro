@@ -344,6 +344,17 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		*/
 		resetHair() {
 			hwanHairActors.clear();
+		},
+		/*
+		================
+		resetChildren
+
+		Drop every character's auxiliary children. linkedRides is not cleared
+		here: no teardown ever cleared it.
+		================
+		*/
+		resetChildren() {
+			auxiliaryActors.clear();
 		}
 	};
 }

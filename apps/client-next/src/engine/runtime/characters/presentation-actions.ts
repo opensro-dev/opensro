@@ -424,6 +424,39 @@ export function createPresentationActions() {
 				] );
 			}
 			return { gameplay, actionLayersByActor, waitingActors, triggers, soundContext };
+		},
+		/*
+		================
+		warmed
+
+		True once every learned motion the warm-up planned has been fetched.
+		================
+		*/
+		warmed() {
+			return warm.warmMotions.length === 0;
+		},
+		/*
+		================
+		resetWarm
+
+		The presentation teardown clears the warm-up early and the action
+		clocks near its end (resetClocks); the two keep those positions.
+		================
+		*/
+		resetWarm() {
+			warm.warmSkills = undefined;
+			warm.warmBody = undefined;
+			warm.warmMotions = [];
+		},
+		/*
+		================
+		resetClocks
+		================
+		*/
+		resetClocks() {
+			actionClocks.clear();
+			predictedEvents.clear();
+			deathFinalizes.clear();
 		}
 	};
 }
