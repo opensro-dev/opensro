@@ -129,7 +129,13 @@ export function createPresentationActions() {
 		================
 		step
 
-		Return the replaced gameplay snapshot without rebuilding its earlier indices.
+		Death cancellation may copy gameplay.casts, changing only each cast's
+		cancellationRequestedAtMs and cancelledAtMs. Pose and movement fields,
+		vitals, cast order, token, caster, skill, target and resultOnly stay intact.
+		Earlier movement samples and state indices therefore remain valid: later
+		castByActor consumers read membership or skill, while cancellation timing
+		is read from the returned gameplay and the action clocks advanced here.
+		Keep that field contract if this phase gains another snapshot adjustment.
 		================
 		*/
 		step(
