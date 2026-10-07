@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/progression"
 )
 
 // SkillGroupResolver names a skill's group (all ranks of one skill share
@@ -32,10 +33,10 @@ type SkillGroupResolver func(id uint32) (group uint32, ok bool)
 const BenchmarkFixtureResetPath = "/development/benchmark-fixture/reset"
 
 const (
-	// benchmarkFixtureMaxLevel and benchmarkFixtureMaxIntellect bound a
-	// loadout to values a real character can reach; benchmarkFixtureMaxSkills
-	// bounds the list one request may teach.
-	benchmarkFixtureMaxLevel     = 140
+	// benchmarkFixtureMaxLevel is the game's own level cap;
+	// benchmarkFixtureMaxIntellect bounds intellect to what a character can
+	// reach; benchmarkFixtureMaxSkills bounds the list one request may teach.
+	benchmarkFixtureMaxLevel     = progression.LevelCap
 	benchmarkFixtureMaxIntellect = 2000
 	benchmarkFixtureMaxSkills    = 64
 )
