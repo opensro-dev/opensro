@@ -53,7 +53,6 @@ import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
 import { changeLocomotion, stopLocomotion, locomotionLayers } from "@/engine/foundation/animation/locomotion-blend";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
-import { spawnFadeAlpha, spawnFadeKind } from "@/engine/foundation/animation/spawn-fade";
 import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
 import { createCharacterSelection } from "@/engine/foundation/animation/character-selection";
@@ -74,6 +73,7 @@ import { createPresentationCatalog } from "./presentation-catalog";
 import { createActorPresentation } from "./actor-presentation";
 import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
+import { createSpawnFades } from "./spawn-fades";
 import { createAuxiliaryPresentation } from "./presentation-auxiliary";
 import {
 	selectCameraTarget,
@@ -248,65 +248,6 @@ export function createCharacterPresentation(
 	}
 	/*
 	================
-	applySpawnFades
-
-	CIDecoAppear for every spawned player, monster and COS (spawn-fade.ts),
-	scaling whatever opacity the other owners already chose. The ramp starts
-	on the actor's first drawable frame: natively the model exists at spawn,
-	here it may still be loading, and a ramp spent on an unloaded model would
-	pop in. A monster's linked ride carries its own equal ramp (861EE2).
-	================
-	*/
-	function applySpawnFades( entities: readonly EntityState[], next: Map<number, CharacterActor>, seconds: number ) {
-		fadePresent.clear();
-		for ( const entity of entities ) {
-			fadePresent.add( entity.gid );
-			if ( !spawnFadeKind( entity.kind ) ) continue;
-			if ( !fadeSeen.has( entity.gid ) ) {
-				fadeSeen.add( entity.gid );
-				spawnFades.set( entity.gid, null );
-				rideFades.set( entity.gid, null );
-			}
-			fadeActor( spawnFades, entity.gid, entity.gid, next, seconds );
-			// 861EE2 gives the linked ride its own CIDecoAppear: its ramp starts
-			// when the ride itself can draw, which may be after the rider's ends.
-			const rideGid = linkedRides.get( entity.gid );
-			if ( rideGid !== undefined ) fadeActor( rideFades, entity.gid, rideGid, next, seconds );
-		}
-		for ( const gid of fadeSeen ) {
-			if ( fadePresent.has( gid ) ) continue;
-			fadeSeen.delete( gid );
-			spawnFades.delete( gid );
-			rideFades.delete( gid );
-		}
-	}
-	/*
-	================
-	fadeActor
-
-	Advances one armed ramp, keyed by its spawned entity, onto one drawn actor:
-	the clock starts on the actor's first drawable frame and retires at 1.
-	================
-	*/
-	function fadeActor(
-		ramps: Map<number, number | null>,
-		key: number,
-		gid: number,
-		next: Map<number, CharacterActor>,
-		seconds: number
-	) {
-		const start = ramps.get( key ), actor = next.get( gid );
-		if ( start === undefined || !actor ) return;
-		if ( start === null ) ramps.set( key, seconds );
-		const alpha = spawnFadeAlpha( seconds - (start ?? seconds) );
-		if ( alpha >= 1 ) {
-			ramps.delete( key );
-			return;
-		}
-		next.set( gid, { ...actor, opacity: (actor.opacity ?? 1) * alpha } );
-	}
-	/*
-	================
 	resourceFor
 	================
 	*/
@@ -328,12 +269,7 @@ export function createCharacterPresentation(
 	// characterInfo rides: each live rider's presentation-owned ride actor
 	// (CICMonster_DeserializeSpawnPacket); the ride models are published.ridesByRider.
 	const linkedRides = auxiliary.linkedRides;
-	// CIDecoAppear (spawn-fade.ts): each spawned character's ramp start, null
-	// while armed and waiting for its first drawable frame. fadeSeen holds the
-	// gids already armed, so one present the whole time fades only once.
-	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>(), fadePresent = new Set<number>();
-	// The linked ride's own ramp, keyed by its rider's entity gid.
-	const rideFades = new Map<number, number | null>();
+	const spawnFades = createSpawnFades( linkedRides );
 	const avatarOverrides = new Map<number, AvatarOverrideSelection>();
 	const committedAuxiliary = new Map<number, readonly Auxiliary[]>();
 	const auxiliaryActors = auxiliary.auxiliaryActors;
@@ -421,16 +357,14 @@ export function createCharacterPresentation(
 					groundClocks.clear();
 					retiring.clear();
 					disappearing.clear();
-					spawnFades.clear();
-					rideFades.clear();
-					fadeSeen.clear();
+					spawnFades.reset();
 					next.length = 0;
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
 					if ( event.kind === "spawn" ) {
 						presentationState.combatStanceEnds.delete( event.entity.gid );
 						// A respawn under a live gid is a new CICharactor: fade it again.
-						fadeSeen.delete( event.entity.gid );
+						spawnFades.respawn( event.entity.gid );
 					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
@@ -779,7 +713,15 @@ export function createCharacterPresentation(
 			);
 			presentEmission(
 				{ entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
-				{ resources, renderer, modelEmission, animationEmission, scenery, entityLod, applySpawnFades }
+				{
+					resources,
+					renderer,
+					modelEmission,
+					animationEmission,
+					scenery,
+					entityLod,
+					applySpawnFades: spawnFades.apply
+				}
 			);
 			publishCharacters(
 				{ local, gameplay, next, seconds, blindHeld },
@@ -860,9 +802,7 @@ export function createCharacterPresentation(
 			presentationState.combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
-			spawnFades.clear();
-			rideFades.clear();
-			fadeSeen.clear();
+			spawnFades.reset();
 			presentationEvents.state.damageTexts = [];
 			weather.reset();
 			orbs.reset();
@@ -917,9 +857,7 @@ export function createCharacterPresentation(
 			presentationState.combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
-			spawnFades.clear();
-			rideFades.clear();
-			fadeSeen.clear();
+			spawnFades.reset();
 			presentationEvents.state.damageTexts = [];
 			weather.reset();
 			orbs.reset();
