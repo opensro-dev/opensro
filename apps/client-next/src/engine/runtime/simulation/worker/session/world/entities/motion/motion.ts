@@ -114,7 +114,13 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 			const resolved = resolve( entity.gid, pose, reference );
 			let path: EntityState["movementPath"] = segment ? { from: resolved, to: segment.to } : entity.movementPath;
 			if ( segment?.fixedTiming ) {
-				path = { from: segment.from, to: segment.to, durationMs: segment.duration, displacement: true };
+				path = {
+					from: segment.from,
+					to: segment.to,
+					durationMs: segment.duration,
+					displacement: true,
+					startedAtMs: segment.start
+				};
 			}
 			if ( segment && !segment.fixedTiming ) {
 				const durationMs = duration( resolved, segment.to, entity );
@@ -162,7 +168,13 @@ displace
 			} );
 			return {
 				...update( entity.gid, resolve( entity.gid, sample( segment, now ), from ), segment.duration > 0 ),
-				movementPath: { from: segment.from, to: segment.to, durationMs: segment.duration, displacement: true },
+				movementPath: {
+					from: segment.from,
+					to: segment.to,
+					durationMs: segment.duration,
+					displacement: true,
+					startedAtMs: segment.start
+				},
 				poseAtMs: now
 			};
 		},
@@ -250,7 +262,7 @@ receive
 						from: previous.from,
 						to: previous.to,
 						durationMs: previous.duration,
-						...(previous.fixedTiming ? { displacement: true } : {})
+						...(previous.fixedTiming ? { displacement: true, startedAtMs: previous.start } : {})
 					} :
 					{ from: published, to: published };
 			}
@@ -370,7 +382,7 @@ step
 						from: segment.from,
 						to: segment.to,
 						durationMs: segment.duration,
-						...(segment.fixedTiming ? { displacement: true } : {})
+						...(segment.fixedTiming ? { displacement: true, startedAtMs: segment.start } : {})
 					},
 					// Presentation draws the path on the frame clock from sample times.
 					poseAtMs: now

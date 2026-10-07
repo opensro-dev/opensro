@@ -1356,7 +1356,7 @@ state
 						from: segment.from,
 						to: segment.to,
 						durationMs: segment.duration,
-						...(segment.fixedTiming ? { displacement: true } : {})
+						...(segment.fixedTiming ? { displacement: true, startedAtMs: segment.start } : {})
 					} :
 					undefined,
 				movementRevision,

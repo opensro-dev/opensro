@@ -847,7 +847,10 @@ export function createCharacterPresentation(
 								undefined :
 								source.movementPath.from,
 							to: source.movementPath.to,
-							durationMs: source.movementPath.durationMs
+							durationMs: source.movementPath.durationMs,
+							...(source.movementPath.displacement ?
+								{ startedAtMs: source.movementPath.startedAtMs, displacement: true } :
+								{})
 						} :
 						{})
 				} );

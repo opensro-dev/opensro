@@ -117,6 +117,8 @@ export interface MovementPath {
 	readonly from: Pose;
 	readonly to: Pose;
 	readonly durationMs?: number;
+	/** Simulation clock origin of a fixed-timing displacement leg. */
+	readonly startedAtMs?: number;
 	/** Skill-owned travel continues when an animation exits ordinary navigation. */
 	readonly displacement?: boolean;
 }
