@@ -21,7 +21,8 @@ import { refreshPrecompressedSidecars } from "./build/generatedManifestSidecars.
 import { publicRoot } from "./build/world/paths.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
 
-const SPRITE_CATALOG = path.join( publicRoot, "assets", "cif", "cif-sprite-catalog.json" );
+const SPRITE_CATALOG_PUBLIC_PATH = "/assets/cif/cif-sprite-catalog.json";
+const SPRITE_CATALOG = path.join( publicRoot, SPRITE_CATALOG_PUBLIC_PATH.slice( 1 ) );
 
 await withGeneratedAssetsLock( "Item-slot effect sheet publication", async () => {
 	const files = [];
@@ -34,6 +35,19 @@ await withGeneratedAssetsLock( "Item-slot effect sheet publication", async () =>
 	const catalog = JSON.parse( await readFile( SPRITE_CATALOG, "utf8" ) );
 	for ( const reference of slotEffectRuntimeImageReferences ) await registerSpriteResource( catalog, reference );
 	if ( await writeJsonIfChanged( SPRITE_CATALOG, catalog ) ) await refreshPrecompressedSidecars( [ SPRITE_CATALOG ] );
-	await publishLooseFamily( { name: "slot-effects", files, defaultGroup: "game-images" } );
+	// A loose catalog cannot replace an older packed representation. Preserve
+	// whichever identity/gzip members the existing index owns, including both
+	// when present, and let the publication owner keep their original groups.
+	const previous = JSON.parse(
+		await readFile( path.join( publicRoot, "assets", "packs", "manifest.json" ), "utf8" )
+	);
+	const catalogFiles = previous.assets.filter( row =>
+		row.path === SPRITE_CATALOG_PUBLIC_PATH || row.path === SPRITE_CATALOG_PUBLIC_PATH + ".gz"
+	).map( row => row.path );
+	await publishLooseFamily( {
+		name: "slot-effects",
+		files: [ ...files, ...(catalogFiles.length ? catalogFiles : [ SPRITE_CATALOG_PUBLIC_PATH ]) ],
+		defaultGroup: file => file === SPRITE_CATALOG_PUBLIC_PATH ? "game-data" : "game-images"
+	} );
 	console.log( `Published ${files.length} item-slot effect sheets.` );
 } );
