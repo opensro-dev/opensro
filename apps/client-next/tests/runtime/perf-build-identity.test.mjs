@@ -75,6 +75,21 @@ test("Vite is development and an unrecognized page is unknown", async () => {
 	assert.throws( () => verifyMeasuredIdentity( identity, identity ), /unknown/ );
 });
 
+test("the native dev-update page remains identifiable after removing Vite's websocket client", async () => {
+	const f = fixture( [ "/src/bootstrap.ts" ] ), before = await f.read();
+	assert.equal( before.build, "dev-server" );
+	assert.equal( before.entry, "http://other-checkout.test/src/bootstrap.ts" );
+	verifyMeasuredIdentity( before, await f.read() );
+	f.state.scripts = [ "/src/bootstrap.ts?revision=2" ];
+	const changed = await f.read();
+	assert.throws( () => verifyMeasuredIdentity( before, changed ), /entry/ );
+});
+
+test("a foreign source entry cannot identify the served application", async () => {
+	const identity = await fixture( [ "https://foreign.test/src/bootstrap.ts" ] ).read();
+	assert.equal( identity.build, "unknown" );
+});
+
 for (
 	const extra of [ { paused: true }, { ended: true }, { readyState: 1 }, { srcObject: null }, {
 		srcObject: { getVideoTracks: () => [ { readyState: "ended" } ] }

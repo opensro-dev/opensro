@@ -40,8 +40,15 @@ export async function buildIdentity( page, harnessCommit = harnessRevision() ) {
 	const observed = await page.evaluate( () => {
 		const scripts = [ ...document.querySelectorAll( 'script[type="module"][src]' ) ]
 			.map( script => new URL( script.getAttribute( "src" ) ?? "", location.href ).href );
-		const dev = scripts.some( src => new URL( src ).pathname === "/@vite/client" );
-		const entry = scripts.find( src => /\/assets\/index-[^/]+\.js$/.test( new URL( src ).pathname ) ) ?? null;
+		// The dev-update owner removes Vite's websocket client. Its source entry
+		// still identifies the served module graph; never infer a bundle from it.
+		const source = scripts.find( src => {
+			const url = new URL( src );
+			return url.origin === location.origin && url.pathname === "/src/bootstrap.ts";
+		} );
+		const dev = !!source || scripts.some( src => new URL( src ).pathname === "/@vite/client" );
+		const entry = source ?? scripts.find( src => /\/assets\/index-[^/]+\.js$/.test( new URL( src ).pathname ) ) ??
+			null;
 		const video = /** @type {HTMLVideoElement | null} */ (document.querySelector( "video.sro-replay-source" ));
 		const stream = /** @type {MediaStream | null} */ (video?.srcObject ?? null);
 		const tracks = stream?.getVideoTracks?.() ?? [];
