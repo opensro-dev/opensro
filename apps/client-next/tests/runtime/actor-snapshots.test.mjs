@@ -19,6 +19,7 @@ import { defined } from "../helpers/defined.mjs";
 const { createActorSnapshots } = await import(
 	sourceFileUrl( "src/engine/runtime/renderer/characters/actor-snapshots.ts" ).href
 );
+const { animationActivation } = await import( "../../src/engine/foundation/animation/animation-activation.ts" );
 const json = value => JSON.parse( JSON.stringify( value ) );
 const actor = ( gid, n ) => ({
 	gid,
@@ -38,6 +39,70 @@ const actor = ( gid, n ) => ({
 		} :
 		{})
 });
+
+test("retained snapshots update and clear pick ownership and optional layer rates", () => {
+	const owner = createActorSnapshots();
+	/** @type {import("../../src/engine/contracts/character.ts").CharacterActor} */
+	const first = {
+		...actor( 1, 0 ),
+		pickOwner: 42,
+		layers: [ {
+			clip: "walk",
+			time: 1,
+			loop: true,
+			weight: 1,
+			lane: "timed",
+			rate: 2,
+			activation: animationActivation( 0 )
+		} ]
+	};
+	const row = owner.update( [ first ] )[0], layer = row.layers[0];
+	const next = {
+		...first,
+		pickOwner: 43,
+		layers: [ { clip: "walk", time: 2, loop: true, weight: 1, lane: "timed" } ]
+	};
+	assert.equal( owner.update( [ next ] )[0], row );
+	assert.equal( row.pickOwner, 43 );
+	assert.equal( row.layers[0], layer );
+	assert.equal( layer.rate, undefined, "an absent rate cannot inherit the preceding installation's rate" );
+	assert.equal( layer.activation, undefined );
+	const { pickOwner, ...unowned } = next;
+	owner.update( [ unowned ] );
+	assert.equal( row.pickOwner, undefined, "removed pick ownership cannot survive admission" );
+	next.layers[0].time = 99;
+	next.pose.x = 99;
+	assert.equal( layer.time, 2 );
+	assert.equal( row.pose.x, 0 );
+});
+
+test("retained attachment copies update required values and clear every omitted option", () => {
+	const owner = createActorSnapshots();
+	const source = {
+		...actor( 1, 0 ),
+		attachment: {
+			gid: 10,
+			bone: "hand",
+			offset: [ 1, 2, 3 ],
+			basis: "native",
+			modelScale: 2,
+			root: true,
+			rootIfMissing: true,
+			keepRotation: false,
+			ground: true,
+			facing: .5,
+			rotation: new Float32Array( 16 )
+		}
+	};
+	const row = owner.update( [ source ] )[0], attachment = row.attachment;
+	const next = { ...source, attachment: { gid: 20, bone: "saddle", offset: [ 4, 5, 6 ] } };
+	owner.update( [ next ] );
+	assert.equal( row.attachment, attachment );
+	assert.deepEqual( json( attachment ), next.attachment );
+	next.attachment.offset[0] = 99;
+	assert.equal( attachment.offset[0], 4 );
+});
+
 test("actor snapshots preserve values, isolation, identity and bounded retirement across publications", () => {
 	fc.assert(
 		fc.property(

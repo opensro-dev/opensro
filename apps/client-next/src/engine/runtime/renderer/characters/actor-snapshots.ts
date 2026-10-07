@@ -101,18 +101,32 @@ export function createActorSnapshots() {
 		target.drawGeometry = source.drawGeometry;
 		target.height = source.height;
 		target.pickable = source.pickable;
+		target.pickOwner = source.pickOwner;
 		target.bodyVolume = source.bodyVolume ? { ...source.bodyVolume } : undefined;
 		target.opacity = source.opacity;
 		target.effectEntity = source.effectEntity;
 		target.mountedOn = source.mountedOn;
 		target.emissionEnd = source.emissionEnd;
-		Object.assign( target.pose, source.pose );
+		const pose = target.pose as Mutable<CharacterActor["pose"]>;
+		pose.regionId = source.pose.regionId;
+		pose.x = source.pose.x;
+		pose.y = source.pose.y;
+		pose.z = source.pose.z;
+		pose.yaw = source.pose.yaw;
 		if ( source.layers ) {
 			const layers = (target.layers ?? []) as Mutable<CharacterLayer>[];
 			for ( let i = 0; i < source.layers.length; i++ ) {
 				const layer = source.layers[i]!;
-				if ( layers[i] ) Object.assign( layers[i]!, layer, { activation: layer.activation } );
-				else layers[i] = { ...layer };
+				const owned = layers[i];
+				if ( owned ) {
+					owned.clip = layer.clip;
+					owned.time = layer.time;
+					owned.loop = layer.loop;
+					owned.weight = layer.weight;
+					owned.lane = layer.lane;
+					owned.activation = layer.activation;
+					owned.rate = layer.rate;
+				} else layers[i] = { ...layer };
 			}
 			layers.length = source.layers.length;
 			target.layers = layers;
@@ -124,18 +138,17 @@ export function createActorSnapshots() {
 			if ( rotation ) rotation.set( source.attachment.rotation! );
 			if ( old && offset ) {
 				for ( let i = 0; i < 3; i++ ) offset[i] = source.attachment.offset[i]!;
-				Object.assign( old, {
-					...source.attachment,
-					basis: source.attachment.basis,
-					modelScale: source.attachment.modelScale,
-					root: source.attachment.root,
-					rootIfMissing: source.attachment.rootIfMissing,
-					keepRotation: source.attachment.keepRotation,
-					ground: source.attachment.ground,
-					facing: source.attachment.facing,
-					rotation,
-					offset
-				} );
+				const owned = old as Mutable<NonNullable<CharacterActor["attachment"]>>;
+				owned.gid = source.attachment.gid;
+				owned.bone = source.attachment.bone;
+				owned.basis = source.attachment.basis;
+				owned.modelScale = source.attachment.modelScale;
+				owned.root = source.attachment.root;
+				owned.rootIfMissing = source.attachment.rootIfMissing;
+				owned.keepRotation = source.attachment.keepRotation;
+				owned.ground = source.attachment.ground;
+				owned.facing = source.attachment.facing;
+				owned.rotation = rotation;
 			} else target.attachment = { ...source.attachment, rotation, offset: [ ...source.attachment.offset ] };
 		} else target.attachment = undefined;
 		if ( source.effectBasis ) {
