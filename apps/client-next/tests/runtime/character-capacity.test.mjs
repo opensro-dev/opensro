@@ -172,6 +172,25 @@ test("the culling census measures how far admitted spheres sit outside the view"
 	}
 });
 
+test("the culling census averages the active radius over lone bodies, not mounted riders", () => {
+	const f = fixture();
+	try {
+		f.owner.actors( actors( [ 1 ], .25 ) );
+		f.owner.prepare( f.gpu, {}, 257, new Float32Array( [ .01, 0, 0, 0, 0, .01, 0, 0, 0, 0, .01, 0, 0, 0, 0, 1 ] ) );
+		const alone = f.owner.stats( true ).cullSlack;
+		// A rider mounted on gid 1: a body (no attachment) whose chain is not lone.
+		const rows = actors( [ 1, 2 ], .25 );
+		rows[1] = { ...rows[1], mountedOn: 1 };
+		f.owner.actors( rows );
+		f.owner.prepare( f.gpu, {}, 257, new Float32Array( [ .01, 0, 0, 0, 0, .01, 0, 0, 0, 0, .01, 0, 0, 0, 0, 1 ] ) );
+		const mounted = f.owner.stats( true ).cullSlack;
+		assert.equal( mounted.bodies, 2 );
+		assert.equal( mounted.meanActiveRadius, alone.meanActiveRadius, "the rider does not dilute the lone average" );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+
 test("pose eligibility diagnostics are copied, deduplicate sharing and never evaluate poses", () => {
 	const f = fixture();
 	try {

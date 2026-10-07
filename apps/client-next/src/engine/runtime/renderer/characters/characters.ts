@@ -420,7 +420,13 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		let posedHidden = 0, posedUnknown = 0, posedCloth = 0;
 		const transforms = new Map<number, Float32Array>();
 		const outside = [ 0, 0, 0, 0 ];
-		let bodies = 0, attachments = 0, centreInside = 0, radiusSum = 0, activeRejected = 0, activeRadiusSum = 0;
+		let bodies = 0,
+			attachments = 0,
+			centreInside = 0,
+			radiusSum = 0,
+			loneBodies = 0,
+			activeRejected = 0,
+			activeRadiusSum = 0;
 		// Candidate only: the same conservative envelope restricted to the clips
 		// a lone body plays now (its clip and every blend layer). Not yet a
 		// safe bound: cloth displacement is not part of either radius here.
@@ -432,6 +438,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			radiusSum += sphere[3]!;
 			const resource = models.get( actor.model )!, chain = chains.get( actor.gid )!;
 			if ( chain.length === 1 ) {
+				loneBodies++;
 				const names = new Set( [ actor.clip, ...(actor.layers ?? []).map( layer => layer.clip ) ] );
 				const key = actor.model + "|" + [ ...names ].sort().join( "|" );
 				let radius = activeRadius.get( key );
@@ -480,7 +487,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			outsideShares: outside,
 			meanRadius: admitted ? radiusSum / admitted : 0,
 			activeRejected,
-			meanActiveRadius: bodies ? activeRadiusSum / bodies : 0,
+			// Mounted riders are bodies but not lone: average over the lone samples only.
+			meanActiveRadius: loneBodies ? activeRadiusSum / loneBodies : 0,
 			posedHidden,
 			posedUnknown,
 			posedCloth
