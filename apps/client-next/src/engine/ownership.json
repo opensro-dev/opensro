@@ -155,7 +155,8 @@
     "src/engine/runtime/characters/presentation-catalog.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/dock-preview.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/presentation-weather.ts": "src/engine/runtime/characters/characters.ts",
-    "src/engine/runtime/characters/presentation-finalize.ts": "src/engine/runtime/characters/characters.ts"
+    "src/engine/runtime/characters/presentation-finalize.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/presentation-auxiliary.ts": "src/engine/runtime/characters/characters.ts"
   },
   "internals": {
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",

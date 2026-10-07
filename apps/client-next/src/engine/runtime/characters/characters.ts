@@ -75,6 +75,7 @@ import type { CharacterActor } from "@/engine/contracts/character";
 import { createPresentationCatalog } from "./presentation-catalog";
 import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
+import { createAuxiliaryPresentation } from "./presentation-auxiliary";
 import {
 	selectCameraTarget,
 	applyCharacterVisibility,
@@ -102,11 +103,7 @@ export interface CharacterFrameProbe {
 	sampleDetails(): boolean;
 }
 
-// The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
-// table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
-const RIDER_ON_SADDLE = 0;
 const PROTECTED_ANIMATION_DISTANCE = 300;
-const RIDE_COPIES_RIDER = 2;
 
 const GOLD_DROP_MODELS = [
 	"item/etc/drop_ch_money_ing.bsr",
@@ -226,17 +223,7 @@ export function createCharacterPresentation(
 	const weather = createPresentationWeather();
 	const states = new Map<number, CharacterPresentationState>();
 	const animationEmission = createAnimationEmission( allocateActor );
-	const stageAnimations = new Map<
-		number,
-		{
-			model: string;
-			clip: string;
-			activation: AnimationActivation;
-			delta: ReturnType<typeof createModifierDelta>;
-			dispatch: ReturnType<typeof createAnimationDispatch>;
-			selection: ReturnType<typeof createModelAnimation>;
-		}
-	>();
+	const auxiliary = createAuxiliaryPresentation( allocateActor );
 	const modelEmission = createModelEmission( allocateActor );
 	const structureVisuals = createStructureVisuals();
 	const orbs = createOrbs( play, random, allocateActor ), scenery = createSceneryEmission( allocateActor );
@@ -420,10 +407,9 @@ export function createCharacterPresentation(
 	const displayedDependencies = new Map<number, readonly string[]>();
 	// Appearance topology is independent of pose time. Revalidate resource
 	// readiness each frame, but derive garment/cosmetic parts only on change.
-	const hwanHairActors = new Map<number, { gid: number; started: number; }>();
 	// characterInfo rides: each live rider's presentation-owned ride actor
 	// (CICMonster_DeserializeSpawnPacket); the ride models are published.ridesByRider.
-	const linkedRides = new Map<number, number>();
+	const linkedRides = auxiliary.linkedRides;
 	// CIDecoAppear (spawn-fade.ts): each spawned character's ramp start, null
 	// while armed and waiting for its first drawable frame. fadeSeen holds the
 	// gids already armed, so one present the whole time fades only once.
@@ -432,10 +418,7 @@ export function createCharacterPresentation(
 	const rideFades = new Map<number, number | null>();
 	const avatarOverrides = new Map<number, AvatarOverrideSelection>();
 	const committedAuxiliary = new Map<number, readonly Auxiliary[]>();
-	const auxiliaryActors = new Map<
-		number,
-		Map<number, { gid: number; model: string; motion: ReturnType<typeof changeLocomotion>; }>
-	>();
+	const auxiliaryActors = auxiliary.auxiliaryActors;
 	const appearances = new Map<number, PresentationAppearance>();
 	let hideSilkCos = false;
 	return {
@@ -487,7 +470,7 @@ export function createCharacterPresentation(
 					modelEmission.reset();
 					structureVisuals.reset();
 					animationEmission.reset();
-					stageAnimations.clear();
+					auxiliary.resetStages();
 					groundClocks.clear();
 					retiring.clear();
 					disappearing.clear();
@@ -523,7 +506,7 @@ export function createCharacterPresentation(
 				modelEmission.reset();
 				structureVisuals.reset();
 				animationEmission.reset();
-				stageAnimations.clear();
+				auxiliary.resetStages();
 				groundClocks.clear();
 				retiring.clear();
 				disappearing.clear();
@@ -2082,195 +2065,21 @@ export function createCharacterPresentation(
 				3,
 				resources.failed
 			);
-			const stageAlive = new Set<number>();
-			for ( const actor of [ ...orbActors, ...effectActors ] ) {
-				if ( next.size >= CHARACTER_ACTORS ) continue;
-				const model = `effect:${actor.gid}:${actor.model}`;
-				renderer.setCharacterAssembly( model, actor.model, [] );
-				const metadata = effects.animationModel( actor.model );
-				let modelAnimation: CharacterActor["modelAnimation"];
-				if ( metadata?.bindings.length ) {
-					stageAlive.add( actor.gid );
-					let holder = stageAnimations.get( actor.gid );
-					if ( !holder || holder.model !== actor.model ) {
-						holder = {
-							model: actor.model,
-							clip: actor.clip,
-							activation: animationActivation( seconds ),
-							delta: createModifierDelta(),
-							dispatch: createAnimationDispatch(),
-							selection: createModelAnimation()
-						};
-						stageAnimations.set( actor.gid, holder );
-					}
-					if ( holder.clip !== actor.clip ) {
-						holder.clip = actor.clip;
-						holder.activation = animationActivation( seconds );
-					}
-					const layers = actor.layers ??
-						[ {
-							clip: actor.clip,
-							time: actor.time,
-							weight: 1,
-							loop: actor.loop,
-							lane: actor.loop ? "timed" as const : "event" as const,
-							activation: holder.activation
-						} ];
-					const dispatch = holder.dispatch.step(
-						layers,
-						holder.delta( seconds ),
-						clip => Math.trunc( resources.duration( actor.model, clip ) * 1000 )
-					);
-					modelAnimation = holder.selection.step( dispatch, metadata.bindings, metadata.selectors );
+			auxiliary.presentStages(
+				{ orbActors, effectActors, next, seconds, animationHolders },
+				{ renderer, resources, effects }
+			);
+			auxiliary.step(
+				{ entities, seconds, next, gameplay, localMover, castByActor },
+				{
+					resourceFor,
+					dress: published.dress,
+					resources,
+					ridesByRider: published.ridesByRider,
+					riderModes: published.riderModes,
+					committedAuxiliary
 				}
-				next.set( actor.gid, { ...actor, model, modelAnimation, effectEntity: true } );
-				if ( metadata?.particles.length ) {
-					animationHolders.push( { actor: next.get( actor.gid )!, sets: metadata.particles } );
-				}
-			}
-			for ( const gid of stageAnimations.keys() ) if ( !stageAlive.has( gid ) ) stageAnimations.delete( gid );
-			const hairOwners = new Set<number>();
-			for ( const entity of entities ) {
-				if ( entity.appearanceState?.[2] !== 1 ) continue;
-				const resource = resourceFor( entity ), owner = next.get( entity.gid );
-				if ( !resource?.codename.startsWith( "CHAR_CH_" ) || !owner ) continue;
-				const hair = published.dress.hwan?.[resource.codename.includes( "_MAN_" ) ? "CH_M" : "CH_W"];
-				if ( !hair || !resources.ready( hair.glb ) ) continue;
-				hairOwners.add( entity.gid );
-				let state = hwanHairActors.get( entity.gid );
-				if ( !state ) {
-					state = { gid: allocateActor(), started: seconds };
-					hwanHairActors.set( entity.gid, state );
-				}
-				// AB5870 cancels the parent bind rotation and keeps its sampled position.
-				// A missing hair marker retains the renderer's existing parent fallback.
-				next.set( state.gid, {
-					shadowAttachment: true,
-					gid: state.gid,
-					model: hair.glb,
-					pose: owner.pose,
-					clip: hair.clip,
-					time: seconds - state.started,
-					loop: true,
-					scale: 1,
-					pickable: false,
-					attachment: { gid: entity.gid, bone: hair.bone, offset: [ 0, 0, 0 ], basis: "compound" }
-				} );
-			}
-			for ( const gid of hwanHairActors.keys() ) if ( !hairOwners.has( gid ) ) hwanHairActors.delete( gid );
-			// CICMonster_DeserializeSpawnPacket (861B00): a characterInfo ride BSR
-			// becomes a second entity linked as the rider's ride (+0x2A0), its
-			// transform mode (+0x29D) copied from the rider's Ride Type. Every motion
-			// the rider plays is forwarded to it (CICharactor_PlayAnimationByMotionId
-			// 85ED80; CCObjCharacter_PlayAnimationWithFallback keeps a missing clip on
-			// "stand"), and it leaves with the rider (CICharactor_DespawnWithFade
-			// 855B00). CICUser_SubmitBodyRideAndAttachments (8602C0) composes them:
-			// mode 0 seats the rider on the ride's animated "saddle", mode 2 copies the
-			// rider's world matrix onto the ride, mode 1 (RT_FIXED) links neither. The
-			// ride carries no scale of its own (861B00 never calls SetModelScale on it).
-			const rideOwners = new Set<number>();
-			for ( const entity of entities ) {
-				const resource = resourceFor( entity ), owner = next.get( entity.gid );
-				const ride = resource ? published.ridesByRider.get( resource.codename ) : undefined;
-				if ( !owner || !ride || !resources.ready( ride.glb ) || next.size >= CHARACTER_ACTORS ) continue;
-				rideOwners.add( entity.gid );
-				let gid = linkedRides.get( entity.gid );
-				if ( gid === undefined ) {
-					gid = allocateActor();
-					linkedRides.set( entity.gid, gid );
-				}
-				const mode = published.riderModes.get( resource!.codename ) ?? 0;
-				const motion = ( clip: string ) => ride.clips.includes( clip ) ? clip : "stand";
-				next.set( gid, {
-					gid,
-					model: ride.glb,
-					pose: owner.pose,
-					clip: motion( owner.clip ),
-					layers: owner.layers?.map( layer => ({ ...layer, clip: motion( layer.clip ) }) ),
-					time: owner.time,
-					loop: owner.loop,
-					scale: 1,
-					opacity: owner.opacity,
-					height: owner.height,
-					// World_PickEntityAtScreenPoint (692680): a ride answers with its rider.
-					pickable: owner.pickable,
-					pickOwner: entity.gid,
-					...(mode === RIDE_COPIES_RIDER ?
-						{ attachment: { gid: entity.gid, bone: "", root: true, offset: [ 0, 0, 0 ] as const } } :
-						{})
-				} );
-				if ( mode === RIDER_ON_SADDLE ) next.set( entity.gid, { ...owner, mountedOn: gid } );
-			}
-			for ( const gid of linkedRides.keys() ) if ( !rideOwners.has( gid ) ) linkedRides.delete( gid );
-			// 8E9DD0 / 8EA7A0: auxiliary resource is the item's second animated
-			// handle. Its lifetime follows the COMMITTED body selection, including
-			// cold replacement fallback, not the newest unready inventory plan.
-			for ( const entity of entities ) {
-				const owner = next.get( entity.gid );
-				if ( !owner ) continue;
-				const entries = committedAuxiliary.get( entity.gid ) ?? [];
-				if ( !entries.length ) {
-					auxiliaryActors.delete( entity.gid );
-					continue;
-				}
-				let children = auxiliaryActors.get( entity.gid );
-				if ( !children ) {
-					children = new Map();
-					auxiliaryActors.set( entity.gid, children );
-				}
-				const alive = new Set<number>();
-				let moving = (localMover( entity.gid ) ? gameplay!.moving : entity.moving) ?? false;
-				const requested = entity.mountedOn !== undefined || entity.appearanceState?.[0] === 2 ||
-						castByActor.has( entity.gid ) ?
-					"stand" :
-					moving ?
-					movementGait( entity.movementMode ) :
-					"stand";
-				for ( const { id, entry } of entries ) {
-					alive.add( id );
-					let child = children.get( id );
-					if ( !child || child.model !== entry.glb ) {
-						child = {
-							gid: allocateActor(),
-							model: entry.glb,
-							motion: { ...changeLocomotion( undefined, "stand", true, seconds, "stand" ), enter: 0 }
-						};
-						children.set( id, child );
-					}
-					// 8E8340 retains the existing track on a missing lookup. Wing
-					// BSRs have state 0 and 7, but no fabricated walk animation.
-					if ( entry.clips.includes( requested ) && child.motion.clip !== requested ) {
-						child.motion = {
-							...changeLocomotion( child.motion, requested, true, seconds, requested ),
-							enter: 0
-						};
-					}
-					const layers = locomotionLayers( child.motion, seconds );
-					if ( next.size >= CHARACTER_ACTORS ) continue;
-					// Auxiliary BSR skeletons use the same AB5870 attach-root frame as Hwan hair.
-					next.set( child.gid, {
-						shadowAttachment: true,
-						gid: child.gid,
-						model: entry.glb,
-						pose: owner.pose,
-						clip: child.motion.clip,
-						time: seconds - child.motion.started,
-						loop: true,
-						layers,
-						scale: 1,
-						pickable: false,
-						attachment: { gid: entity.gid, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
-					} );
-				}
-				for ( const id of children.keys() ) if ( !alive.has( id ) ) children.delete( id );
-			}
-			for ( const gid of committedAuxiliary.keys() ) {
-				if ( !next.has( gid ) ) {
-					committedAuxiliary.delete( gid );
-					auxiliaryActors.delete( gid );
-				}
-			}
-			for ( const gid of auxiliaryActors.keys() ) if ( !next.has( gid ) ) auxiliaryActors.delete( gid );
+			);
 			for ( const gid of avatarOverrides.keys() ) if ( !active.has( gid ) ) avatarOverrides.delete( gid );
 			sounds.retain( active );
 			posePresentation.retain( active );
@@ -2348,14 +2157,14 @@ export function createCharacterPresentation(
 			modelEmission.reset();
 			structureVisuals.reset();
 			animationEmission.reset();
-			stageAnimations.clear();
+			auxiliary.resetStages();
 			groundClocks.clear();
 			selection.reset();
 			stateIndex.reset();
 			feedback.reset();
 			environmentalSequence = 0;
 			appearances.clear();
-			hwanHairActors.clear();
+			auxiliary.resetHair();
 			committedAuxiliary.clear();
 			avatarOverrides.clear();
 			auxiliaryActors.clear();
@@ -2405,14 +2214,14 @@ export function createCharacterPresentation(
 			modelEmission.reset();
 			structureVisuals.reset();
 			animationEmission.reset();
-			stageAnimations.clear();
+			auxiliary.resetStages();
 			groundClocks.clear();
 			selection.reset();
 			stateIndex.reset();
 			feedback.reset();
 			environmentalSequence = 0;
 			appearances.clear();
-			hwanHairActors.clear();
+			auxiliary.resetHair();
 			committedAuxiliary.clear();
 			avatarOverrides.clear();
 			auxiliaryActors.clear();

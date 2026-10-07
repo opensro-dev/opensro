@@ -2015,6 +2015,14 @@
 			"functions": [
 				"dead"
 			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/animation-dispatch.ts",
+			"provider": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"functions": [
+				"callback:step:2"
+			],
+			"reason": "The stage animation duration callback moves intact to the auxiliary presentation owner."
 		}
 	],
 	"boundaries": [
@@ -2668,6 +2676,48 @@
 			"function": "callback:map:0",
 			"kind": "callback",
 			"reason": "Character resource owner admits the requested authored motion; synchronously borrowed from characters.ts at the original action-phase position."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "renderer.setCharacterAssembly",
+			"function": "presentStages",
+			"kind": "callback",
+			"reason": "Stage actor assemblies are published through the parent renderer."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "effects.animationModel",
+			"function": "presentStages",
+			"kind": "callback",
+			"reason": "The parent effect owner supplies admitted stage animation metadata."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "resources.duration",
+			"function": "callback:step:2",
+			"kind": "callback",
+			"reason": "Stage dispatch synchronously borrows resident clip duration."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "resourceFor",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The parent resolves current catalog and staged appearance for auxiliary children."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "resources.ready",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Hair and linked rides borrow the parent resource admission barrier."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "localMover",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The current movement sample identifies the local mover without retaining a frame snapshot."
 		}
 	],
 	"sequences": [
