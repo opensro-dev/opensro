@@ -10,7 +10,6 @@ scenery and auxiliary actors cannot satisfy a player readiness barrier.
 ===========================================================================
 */
 
-import { partyMembers, partyPortraitGid } from "@/engine/foundation/ui/party-overlay";
 import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
 import { movementEntryRate, transitionActionStates } from "@/engine/foundation/animation/action-refresh";
 import { createStatusOwner } from "@/engine/foundation/animation/status-presentation";
@@ -46,8 +45,7 @@ import {
 } from "@/engine/foundation/animation/reference-appearance";
 import { hawkResult } from "@/engine/foundation/gameplay/attached-effects";
 import { createDamageFeedback } from "./damage-feedback";
-import { hiddenSilkCos, blindableCharacter } from "@/engine/foundation/ui/name-visibility";
-import { concealmentState, concealmentAlpha, seenAlpha } from "@/engine/foundation/gameplay/concealment";
+import { blindableCharacter } from "@/engine/foundation/ui/name-visibility";
 import { skillLookup, type SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import { createPosePresentation } from "./pose-presentation";
 import { createPresentationSamples } from "./presentation-samples";
@@ -57,13 +55,11 @@ import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
 import { monsterScale, monsterMaterialSlot } from "@/engine/foundation/rendering/monster-scale";
 import { weaponSoundLabel } from "@/engine/foundation/animation/sound-selectors";
 import { postureLayers } from "@/engine/foundation/animation/posture";
-import { disappearActor, type Disappear } from "@/engine/foundation/animation/disappear";
 import { appendDamageText, damageText } from "@/engine/foundation/ui/damage-text";
 import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
 import { changeLocomotion, stopLocomotion, locomotionLayers } from "@/engine/foundation/animation/locomotion-blend";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
-import { advanceCharacterFade, type CharacterFade } from "@/engine/foundation/animation/character-fade";
 import { spawnFadeAlpha, spawnFadeKind } from "@/engine/foundation/animation/spawn-fade";
 import {
 	advanceAction,
@@ -80,7 +76,6 @@ import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
 import { createMallPreview } from "./mall-preview";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
-import { radians } from "@/engine/foundation/math/angles";
 import type { CharacterRecord } from "@/engine/contracts/session";
 import { movementGait } from "@/engine/foundation/gameplay/native-movement";
 import type { AssetOwner } from "@/engine/contracts/assets";
@@ -91,10 +86,18 @@ import type { CharacterActor } from "@/engine/contracts/character";
 import { createPresentationCatalog } from "./presentation-catalog";
 import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
+import {
+	selectCameraTarget,
+	applyCharacterVisibility,
+	presentDisappearing,
+	presentEmission,
+	publishCharacters
+} from "./presentation-finalize";
 import type {
 	Auxiliary,
 	CharacterPresentationState,
 	PresentationAppearance,
+	PresentationDisappear,
 	PresentationOutput,
 	Resource
 } from "./internal/presentation-contract";
@@ -219,18 +222,7 @@ export function createCharacterPresentation(
 	let environmentalSequence = 0;
 	const feedback = createDamageFeedback( ( key, at ) => health?.release( key, at ) );
 	const retiring = new Set<number>(),
-		disappearing = new Map<
-			number,
-			Disappear & {
-				children?: readonly CharacterActor[];
-				particles: readonly ModelParticle[];
-				animation?: {
-					resource: Resource;
-					dispatch: ReturnType<typeof createAnimationDispatch>;
-					selection: ReturnType<typeof createModelAnimation>;
-				};
-			}
-		>();
+		disappearing = new Map<number, PresentationDisappear>();
 	const allocateActor = createPresentationIds(), lizardGid = allocateActor();
 	// The frame's published results; several phases write them (presentation-contract.ts).
 	const output: PresentationOutput = {
@@ -2531,230 +2523,20 @@ export function createCharacterPresentation(
 			for ( const gid of avatarOverrides.keys() ) if ( !active.has( gid ) ) avatarOverrides.delete( gid );
 			sounds.retain( active );
 			posePresentation.retain( active );
-			output.cameraTarget = null;
-			if ( local && gameplay?.pose ) {
-				const height = published.heights.get( published.catalog.get( local.refObjId )?.codename ?? "" );
-				const mount = local.mountedOn ? entitiesByGid.get( local.mountedOn ) : undefined;
-				const mountHeight = mount ?
-					published.heights.get( published.catalog.get( mount.refObjId )?.codename ?? "" ) :
-					undefined;
-				// A rider whose mount has not spawned (yet) is drawn alone; follow it.
-				const riding = mount && mountHeight !== undefined && next.has( mount.gid ) ? mount : undefined;
-				const rendered = next.get( riding?.gid ?? local.gid )?.pose;
-				if ( rendered && height !== undefined ) {
-					output.cameraTarget = {
-						height,
-						mounted: !!riding,
-						// Actor yaw is pi minus the native yaw (characterHeadingYaw).
-						yaw: Math.PI - rendered.yaw,
-						pose: {
-							regionId: rendered.regionId,
-							x: rendered.x,
-							y: riding ? Math.fround( Math.fround( rendered.y + mountHeight! ) - 13 ) : rendered.y,
-							z: rendered.z,
-							// The local mover drives the mount, so its heading is the mount's.
-							angle: gameplay.pose.angle
-						}
-					};
-				}
-			}
-			// 85EC00 sets body state 4's alpha 0x50 on the model and its mount,
-			// but 85D890 runs on every update of every character except the
-			// local player (CICUser/CICCos_OnUpdate) and restores 0xFF unless
-			// the concealment rule hides it. Body 4 therefore stays only on the
-			// local player's own model, and 6/7 follow concealment.ts.
-			for ( const entity of entities ) {
-				const actor = next.get( entity.gid );
-				if ( actor?.opacity !== undefined ) next.set( entity.gid, { ...actor, opacity: undefined } );
-			}
-			if ( local?.appearanceState?.[2] === 4 ) {
-				const actor = next.get( local.gid );
-				if ( actor ) next.set( local.gid, { ...actor, opacity: seenAlpha() } );
-			}
-			if (
-				entities.some( e =>
-					e.gid !== local?.gid && (e.appearanceState?.[2] === 6 || e.appearanceState?.[2] === 7)
-				)
-			) {
-				const lookup = concealmentSkills( gameplay?.skillCatalog ),
-					byGid = new Map<number, import("@/engine/foundation/gameplay/attached-effects").AttachedEffect[]>();
-				for ( const effect of gameplay?.attachedEffects ?? [] ) {
-					let list = byGid.get( effect.gid );
-					if ( !list ) byGid.set( effect.gid, list = [] );
-					list.push( effect );
-				}
-				const viewer = local ? byGid.get( local.gid ) ?? [] : [],
-					party = new Set( gameplay?.social?.members.map( m => m.name ) ?? [] );
-				for ( const entity of entities ) {
-					const body = entity.appearanceState?.[2] ?? 0;
-					if ( entity.gid === local?.gid || body !== 6 && body !== 7 ) continue;
-					const state = concealmentState(
-						body,
-						byGid.get( entity.gid ) ?? [],
-						viewer,
-						entityLod.distance( entity.gid ),
-						lookup
-					);
-					const alpha = concealmentAlpha( state, party.has( entity.name ) );
-					const actor = next.get( entity.gid );
-					if ( actor && alpha !== undefined ) next.set( entity.gid, { ...actor, opacity: alpha } );
-				}
-			}
-			if ( local ) {
-				if ( output.cameraFade?.gid !== local.gid ) {
-					output.cameraFade = {
-						gid: local.gid,
-						time: seconds,
-						mode: false,
-						current: 255,
-						start: 255,
-						progress: 1
-					};
-				}
-				const hidden = cameraPitch < -0.8999999761581421,
-					transition = output.cameraFade.mode !== hidden || output.cameraFade.progress < 1;
-				const alpha = advanceCharacterFade(
-					output.cameraFade,
-					hidden,
-					Math.max( 0, seconds - output.cameraFade.time )
-				);
-				output.cameraFade.time = seconds;
-				// 866B90 applies camera interpolation first while it is live;
-				// after it finishes, the body-4 branch restores alpha 0x50.
-				const actor = next.get( local.gid );
-				if ( actor && (transition || local.appearanceState?.[2] !== 4) ) {
-					next.set( local.gid, { ...actor, opacity: alpha } );
-				}
-			} else output.cameraFade = null;
-			for ( const row of disappearing.values() ) {
-				let actor = disappearActor( row, seconds );
-				if ( actor && next.size < CHARACTER_ACTORS ) {
-					if ( row.animation && actor.layers ) {
-						const { resource, dispatch, selection } = row.animation;
-						const ranges = dispatch.step(
-							actor.layers,
-							animationDeltaMs,
-							name =>
-								resource.animationStates?.[name]?.durationMs ??
-									Math.round( resources.duration( resource.glb, name ) * 1000 )
-						);
-						actor = {
-							...actor,
-							modelAnimation: selection.step(
-								ranges,
-								resource.modifierBindings ?? [],
-								resource.modifierSelectors ?? []
-							)
-						};
-						if ( resource.animationParticles?.length ) {
-							animationHolders.push( { actor, sets: resource.animationParticles } );
-						}
-					}
-					next.set( actor.gid, actor );
-					for ( const child of row.children ?? [] ) {
-						if ( next.size >= CHARACTER_ACTORS ) break;
-						const age = seconds - row.started;
-						next.set( child.gid, {
-							...child,
-							time: child.time + age,
-							layers: child.layers?.map( layer => ({ ...layer, time: layer.time + age }) )
-						} );
-					}
-					if ( row.particles.length ) particleHolders.push( { actor, particles: row.particles } );
-				}
-			}
-			for ( const entity of entities ) {
-				if ( hiddenSilkCos( entity, hideSilkCos ) ) {
-					const actor = next.get( entity.gid );
-					if ( actor ) next.set( entity.gid, { ...actor, opacity: 0 } );
-				}
-			}
-			applySpawnFades( entities, next, seconds );
-			for ( const holder of particleHolders ) holder.actor = next.get( holder.actor.gid )!;
-			for (
-				const actor of modelEmission.step(
-					particleHolders,
-					seconds,
-					resources.ready,
-					CHARACTER_ACTORS - next.size,
-					gid => frameWork?.level() && next.get( gid )?.animationLod?.optional ? 1 : entityLod.fraction( gid )
-				)
-			) next.set( actor.gid, actor );
-			for ( const holder of animationHolders ) holder.actor = next.get( holder.actor.gid )!;
-			for (
-				const actor of animationEmission.step(
-					animationHolders,
-					seconds,
-					resources.ready,
-					CHARACTER_ACTORS - next.size,
-					renderer.presentationNight?.() ?? true,
-					( gid, actor ) => {
-						if ( !actor ) return renderer.characterParticleSnapshot( gid );
-						const matrix = renderer.characterMatrix( [ ...next.values(), actor ], gid );
-						return matrix ? { matrix, regionId: actor.pose.regionId } : null;
-					},
-					gid => renderer.characterParticleTime?.( gid ),
-					path => resources.duration( path, "effect" )
-				)
-			) next.set( actor.gid, actor );
-			for (
-				const actor of scenery.step(
-					renderer.scenery?.() ?? null,
-					seconds,
-					resources.ready,
-					CHARACTER_ACTORS - next.size
-				)
-			) next.set( actor.gid, actor );
-			// 5BAF70 -> 5B9DF0 builds a slot-owned preview from the roster model.
-			// It remains admitted even when no world entity exists for that member.
-			const portraits: CharacterActor[] = [];
-			const skin = mallPreview.skin(), localResource = local && published.catalog.get( local.refObjId );
-			const mallResource = local && published.catalog.get( skin?.model ?? local.refObjId );
-			if ( mallResource && localResource && local && gameplay && published.manifest >= 3 ) {
-				// A body of the other sex cannot wear the worn set; 4EFE50 refuses
-				// that change until the armour and avatars are off anyway.
-				const worn = mallResource.codename.includes( "_WOMAN_" ) ===
-					localResource.codename.includes( "_WOMAN_" );
-				portraits.push( ...mallPreview.step(
-					{
-						resource: mallResource,
-						dress: published.dress,
-						equipment: worn ? gameplay.inventory : [],
-						avatars: worn ? local.avatars ?? [] : [],
-						seconds,
-						source: next.get( local.gid ),
-						shape: skin?.shape
-					},
-					resources,
-					renderer
-				) );
-			}
-			for ( const member of gameplay ? partyMembers( gameplay ) : [] ) {
-				const resource = published.catalog.get( member.model );
-				if ( !resource || !resources.ready( resource.glb ) ) continue;
-				portraits.push( {
-					gid: partyPortraitGid( member.id ),
-					model: resource.glb,
-					pose: { regionId: 0, x: 0, y: 0, z: 0, yaw: radians( 0 ) },
-					clip: "stand",
-					time: 0,
-					loop: true,
-					scale: 1
-				} );
-			}
-			output.displayed = next;
-			// One pass builds both the published actors and the wanted models, in the
-			// same order the spread-and-map version produced, without temporaries.
-			const presentedActors: CharacterActor[] = [], wanted: string[] = [];
-			for ( const actor of next.values() ) {
-				presentedActors.push(
-					blindHeld && actor.blindable ? { ...actor, opacity: 0, pickable: false } : actor
-				);
-				wanted.push( actor.model );
-			}
-			for ( const actor of portraits ) wanted.push( actor.model );
-			renderer.setCharacterActors( presentedActors, portraits );
-			resources.retainWanted( wanted );
+			selectCameraTarget( { local, gameplay, next, entitiesByGid }, output, published );
+			applyCharacterVisibility(
+				{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod }, output
+			);
+			presentDisappearing(
+				{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
+			);
+			presentEmission(
+				{ entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
+				{ resources, renderer, modelEmission, animationEmission, scenery, entityLod, applySpawnFades }
+			);
+			publishCharacters(
+				{ local, gameplay, next, seconds, blindHeld }, output, published, { renderer, resources, mallPreview }
+			);
 			probe?.detailEnd( "presentation-finalize" );
 		},
 		ready: ( gid: number ) => output.displayed.has( gid ),

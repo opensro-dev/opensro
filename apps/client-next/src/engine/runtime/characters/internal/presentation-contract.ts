@@ -13,6 +13,7 @@ assembly, animation and sound phase reads.
 
 import type { RandomIdle } from "@/engine/foundation/animation/random-idle";
 import type { Posture } from "@/engine/foundation/animation/posture";
+import type { Disappear } from "@/engine/foundation/animation/disappear";
 import type { AnimationParticleSet } from "@/engine/foundation/animation/animation-emission";
 import type {
 	createModelAnimation,
@@ -262,3 +263,20 @@ export interface PresentationIdleState {
 	downDeath?: boolean;
 	attachmentsHidden?: boolean;
 }
+
+/*
+================
+PresentationDisappear
+
+Retired body and attachment presentation retained until its fade completes.
+================
+*/
+export type PresentationDisappear = Disappear & {
+	children?: readonly CharacterActor[];
+	particles: readonly ModelParticle[];
+	animation?: {
+		resource: Resource;
+		dispatch: ReturnType<typeof createAnimationDispatch>;
+		selection: ReturnType<typeof createModelAnimation>;
+	};
+};
