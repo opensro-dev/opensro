@@ -591,8 +591,12 @@ export function advanceParticleGraph(
 		}
 	}
 	const root = history.root;
-	root.state.position[0]! += shiftX;
-	root.state.position[2]! += shiftZ;
+	// The same region-crossing-only shift for the root: adding zero was 34%
+	// of this function's self time with 32 peers (line profile v3).
+	if ( shiftX !== 0 || shiftZ !== 0 ) {
+		root.state.position[0]! += shiftX;
+		root.state.position[2]! += shiftZ;
+	}
 	// The holder basis advances only with a tick: linked elements take the
 	// holder's turn from root.delta on the next tick, so a call that runs no
 	// tick (render frames outnumber 20 Hz ticks) must not consume it, or the
