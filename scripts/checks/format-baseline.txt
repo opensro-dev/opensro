@@ -399,7 +399,6 @@ apps/server-observatory/tests/security.test.mjs
 apps/server-observatory/tools/browser-probe.mjs
 apps/server-observatory/tools/items-browser-probe.mjs
 apps/server/internal/game/world/simulation/testdata/gen_parity_vectors.mjs
-scripts/build/artifacts/generatedArtifactArchive.mjs
 scripts/build/assetPackIndexValidation.mjs
 scripts/build/char/animationUtils.mjs
 scripts/build/char/attachedMotionClips.mjs
