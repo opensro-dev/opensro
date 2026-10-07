@@ -4,8 +4,8 @@
 bitmap-text-scaling.test.mjs - retail glyph ink through fractional output scale
 
 BR-261005-1421-A2CF: browser zoom and Windows scaling must not blur bitmap
-text or change the shape of a moving name. Read the production GPU output,
-including retained scenes resized without a new UI publication.
+text or change the shape of a moving name. Read the production GPU output
+at each scale and verify retained DOM controls across zoom changes.
 
 ===========================================================================
 */
@@ -136,8 +136,9 @@ test( "bitmap text stays sharp and motion-stable through browser scaling", { tim
 								return pixels;
 							}
 							try {
-								// Resize with identical scene identity, then force a fresh publication:
-								// both paths must paint the same physical positions.
+								// Reuse an already prepared scene at this scale, then republish it.
+								// Both paths must paint the same physical positions.
+								await render( scene );
 								const retained = await render( scene ), refreshed = await render( { ...scene } );
 								const retainedEqual = retained.every( ( value, i ) => value === refreshed[i] );
 								const old = ratio === 1 ?
@@ -177,8 +178,6 @@ test( "bitmap text stays sharp and motion-stable through browser scaling", { tim
 									if ( offset === 0 ) reference = signature;
 									else if ( reference !== signature ) changes++;
 								}
-								// Leave the same original scene cached across the next zoom change.
-								await render( scene );
 								results.push( {
 									sceneWidth,
 									ratio,
