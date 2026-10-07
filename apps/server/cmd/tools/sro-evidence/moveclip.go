@@ -1,5 +1,5 @@
 // The moveclip-oracle subcommand runs shared movement chords through the same
-// ClipMovementPath implementation used by the server and writes comparable
+// ground-move clip the server applies (ClipWalkFrom) and writes comparable
 // JSON results.
 //
 // This is an offline measurement tool: it does not start a server or mutate
@@ -111,7 +111,7 @@ func runMoveclipOracle(args []string) error {
 		to := simulation.NormalizeSpawnFrame(spawnOf(c.To))
 		normalized := from != spawnOf(c.From) || to != spawnOf(c.To)
 
-		report := validator.ClipMovementPath(from, to)
+		report := validator.ClipWalkFrom(from, simulation.NavOwner{}, to)
 		r := result{
 			ID:      c.ID,
 			Outcome: string(report.Outcome),

@@ -184,6 +184,9 @@ export function navHeight( mesh: NavMesh, x: number, z: number, hint: number, ce
 	}
 	return best;
 }
+// How far short of an outline crossing a stepped walker's last step starts
+// (server clipRestPullback).
+const STEPPED_PULLBACK = 0.01;
 // Same side-bit/contact contract as server objectnav_collision.go. Only resolved
 // explicit passages bypass a linked edge; missing topology retains collision.
 /*
@@ -191,6 +194,9 @@ export function navHeight( mesh: NavMesh, x: number, z: number, hint: number, ce
 navContactDetail
 The first blocking edge crossing of the chord on this placement, with the
 native response point. An unowned walker meets the object from its visit.
+A stepped walker (the client's per-frame walk, the server's per-tick
+48BFF0 step) meets it from just short of the crossing instead: the call
+that hits the outline starts on the last step (server steppedWalkerAt).
 ================
 */
 export function navContactDetail(
@@ -201,7 +207,8 @@ export function navContactDetail(
 	passages: readonly NavPassage[] = [],
 	slide = false,
 	exits = false,
-	ownership?: readonly { cell: number; from: number; to: number; }[]
+	ownership?: readonly { cell: number; from: number; to: number; }[],
+	stepped = false
 ) {
 	const a = navLocal( p, from[0]!, from[1]!, from[2]! ),
 		b = navLocal( p, to[0]!, to[1]!, to[2]! ),
@@ -280,8 +287,10 @@ export function navContactDetail(
 			return { fraction: best, point: null, normal: null, cell: owner, edge: edge / 6, visit, status: 1 };
 		}
 		// 428300 nudges the walker where it stood when it stepped this object (its visit), not the leg start.
-		const origin: [number, number] = visit > 0 ?
-			[ f( a[0] + (b[0] - a[0]) * visit ), f( a[2] + (b[2] - a[2]) * visit ) ] :
+		const length = Math.hypot( b[0] - a[0], b[2] - a[2] ),
+			stood = stepped ? (length > 0 ? Math.max( best - STEPPED_PULLBACK / length, 0 ) : 0) : visit;
+		const origin: [number, number] = stood > 0 ?
+			[ f( a[0] + (b[0] - a[0]) * stood ), f( a[2] + (b[2] - a[2]) * stood ) ] :
 			[ x0, z0 ];
 		const q = outsideEdgeStart(
 			origin,

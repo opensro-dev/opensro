@@ -646,6 +646,10 @@ export function createNavigation() {
 				// part of the chord to CRTNavMeshObj_EnterFromOutside (428300): the first
 				// outline crossing blocks when its edge is blocked, whichever side the
 				// mover comes from. Owned spans follow their own mesh below.
+				// One 404510 call orders objects by visit, but this walk is stepped
+				// every frame (server ClipWalkFrom, 48BFF0): each step re-steps the
+				// objects, so the nearest crossing stops it, and the step that meets
+				// an outline starts just short of it (navContactDetail stepped).
 				const terrainParts = dungeon ? [] : terrainIntervals( ownerPath?.spans ?? [] );
 				for ( const p of objects ) {
 					const objectSpans = ownerPath?.spans.filter( span => objects[span.placement] === p );
@@ -657,9 +661,11 @@ export function createNavigation() {
 							objects,
 							passages,
 							output?.slide === true,
+							true,
+							undefined,
 							true
 						);
-						// Visited while the walker stands on terrain; ordered by (visit, crossing).
+						// Visited while the walker stands on terrain; ordered by crossing.
 						if (
 							terrain &&
 							terrainParts.some( ( [lo, hi] ) =>
@@ -669,10 +675,10 @@ export function createNavigation() {
 							terrainParts.some( ( [lo, hi] ) =>
 								terrain.fraction >= lo - 1e-8 && terrain.fraction <= hi + 1e-8
 							) &&
-							(terrain.visit < contactKey || terrain.visit === contactKey && terrain.fraction < contact)
+							terrain.fraction < contactKey
 						) {
 							contact = terrain.fraction;
-							contactKey = terrain.visit;
+							contactKey = terrain.fraction;
 							response = terrain;
 						}
 					}

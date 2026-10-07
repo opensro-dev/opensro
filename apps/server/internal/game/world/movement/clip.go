@@ -173,12 +173,40 @@ func (v *WaterValidator) ClipMovementPath(from, to simulation.Spawn) ClipReport 
 // ClipMovementPathFrom walks from the retained source owner (the native
 // source pNavCell, QueryMovement 0x98B300). Every continuation leg inherits
 // the owner the previous leg reached; ownership is never re-guessed from Y.
+// It is one native move call over the whole chord: the move test of
+// population creation (5F6EB0), not a walk. Walks use ClipWalkFrom.
 func (v *WaterValidator) ClipMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport {
+	return v.clipMovementPathFrom(from, fromOwner, to, false)
+}
+
+/*
+================
+ClipWalkFrom
+
+Where a walk toward to stops. The native server never moves a walker
+along the whole chord in one call: CGObjMoverByDest_Update (48C4E0) steps
+it each tick by CGObjMover_ComputeStep (48BFF0: speed*dt, at most 160
+units, never past the goal) and CGObjChar_MoveByStep (48B920) runs the
+move query on that step alone. The first crossing on the chord stops the
+walker, and the blocked-outline nudge of 428300 applies at the obstacle,
+not at the click origin (objectChordFirstContact).
+================
+*/
+func (v *WaterValidator) ClipWalkFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport {
+	return v.clipMovementPathFrom(from, fromOwner, to, true)
+}
+
+/*
+================
+clipMovementPathFrom
+================
+*/
+func (v *WaterValidator) clipMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn, stepped bool) ClipReport {
 	start := from
 	startOwner := fromOwner
 	checked, uncovered, overrides := 0, 0, 0
 	for calls := 1; calls <= 6; calls++ {
-		report := v.clipMovementSegment(start, startOwner, to)
+		report := v.clipMovementSegment(start, startOwner, to, stepped)
 		checked += report.TilesChecked
 		uncovered += report.TilesUncovered
 		overrides += report.ObjectDeckOverrides
@@ -217,7 +245,7 @@ func (v *WaterValidator) settleRest(report *ClipReport, walk *navWalk, t float64
 	report.Rest.Y = y
 }
 
-func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport {
+func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn, stepped bool) ClipReport {
 	from = v.ownedStart(from, fromOwner)
 	report := ClipReport{Outcome: ClipArrived, Rest: to}
 
@@ -280,7 +308,7 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 	// move can still cross a deck rail). Composition below is
 	// nearest-wins: the native walk stops at its first clip on either
 	// plane and never continues past it (sub_428930 bit0 semantics).
-	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk)
+	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk, stepped)
 
 	if startTile == endTile {
 		if covered == 0 {
@@ -590,8 +618,11 @@ func (c *ClientClip) ProcessMoveFrom(characterName string, from simulation.Spawn
 		return to
 	}
 
+	// Every ground move is a stepped walk (ClipWalkFrom).
 	var report ClipReport
-	if owned, ok := c.Validator.(ownerClipValidator); ok {
+	if walker, ok := c.Validator.(walkClipValidator); ok {
+		report = walker.ClipWalkFrom(from, fromOwner, to)
+	} else if owned, ok := c.Validator.(ownerClipValidator); ok {
 		report = owned.ClipMovementPathFrom(from, fromOwner, to)
 	} else {
 		report = c.Validator.ClipMovementPath(from, to)
