@@ -23,7 +23,6 @@ apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
 apps/client-next/src/engine/foundation/animation/character-selection.ts
 apps/client-next/src/engine/foundation/animation/combat-stance.ts
 apps/client-next/src/engine/foundation/animation/damage-anchor.ts
-apps/client-next/src/engine/foundation/animation/default-wear-policy.ts
 apps/client-next/src/engine/foundation/animation/disappear.ts
 apps/client-next/src/engine/foundation/animation/effect-material.ts
 apps/client-next/src/engine/foundation/animation/effect-script.ts

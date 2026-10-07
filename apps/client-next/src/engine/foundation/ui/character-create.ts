@@ -14,6 +14,10 @@ by weapon class): sword, two-hand sword and axe take heavy or light armor;
 darkstaff, two-hand staff and harp take the robe only; crossbow and dagger
 take light armor only; the one-hand staff takes light armor or the robe.
 
+The protector choice starts at 0 (no protector) only while GameConfig +0x129
+is set (CPSCharacterCreateChina/Europe_RefreshChoiceRanges 72C780/7302B0);
+every other shard starts it at 1, so a new character always wears armor.
+
 ===========================================================================
 */
 import type { CharacterItem, CharacterRecord } from "@/engine/contracts/session";
@@ -26,6 +30,9 @@ const LAST_FIGURE = 13;
 const LAST_SCALE_INDEX = 4;
 const SCALE_BASE = .94;
 const SCALE_STEP = .03;
+
+// The lowest protector choice: 0 offers "no protector" (72C780/7302B0).
+export type ProtectorFloor = 0 | 1;
 
 // Figure names by choice index, as the native creation window lists them.
 const EUROPE_MALE_FIGURES =
@@ -132,8 +139,20 @@ function weaponAnimationSet( kind: string ): string {
 initialCreation
 ================
 */
-export function initialCreation( race: 0 | 1 ): CreationSelection {
-	return { race, gender: 0, figure: 1, height: 2, volume: 2, weapon: 0, protector: 0, name: "" };
+export function initialCreation( race: 0 | 1, protectorFloor: ProtectorFloor ): CreationSelection {
+	return { race, gender: 0, figure: 1, height: 2, volume: 2, weapon: 0, protector: protectorFloor, name: "" };
+}
+
+/*
+================
+creationProtectorFloor
+
+The first protector choice for the login shard: 0 (none) on an uncensored
+shard (GameConfig +0x129, uncensoredShard), otherwise 1.
+================
+*/
+export function creationProtectorFloor( uncensored: boolean ): ProtectorFloor {
+	return uncensored ? 0 : 1;
 }
 
 /*
@@ -156,11 +175,12 @@ creationRange
 */
 export function creationRange(
 	s: CreationSelection,
-	key: "figure" | "height" | "volume" | "weapon" | "protector"
+	key: "figure" | "height" | "volume" | "weapon" | "protector",
+	protectorFloor: ProtectorFloor
 ): readonly [number, number] {
 	if ( key === "figure" ) return [ FIRST_FIGURE, LAST_FIGURE ];
 	if ( key === "weapon" ) return [ 0, weaponKinds( s ).length - 1 ];
-	if ( key === "protector" ) return [ 0, creationProtectors( s ).length ];
+	if ( key === "protector" ) return [ protectorFloor, creationProtectors( s ).length ];
 	return [ 0, LAST_SCALE_INDEX ];
 }
 

@@ -295,17 +295,21 @@ export function createDockPreview( owners: DockPreviewOwners ) {
 					const paths = new Set<string>();
 					for ( const gender of [ 0, 1 ] as const ) {
 						const selection = { ...preview.selection, gender };
-						const [firstFigure, lastFigure] = creationRange( selection, "figure" );
+						const [firstFigure, lastFigure] = creationRange( selection, "figure", preview.protectorFloor );
 						for ( let figure = firstFigure; figure <= lastFigure; figure++ ) {
 							const codename =
 								creationLoadout( { ...selection, figure }, published.itemIds ).modelCodename;
 							const model = [ ...published.catalog.values() ].find( row => row.codename === codename );
 							if ( model?.previewGlb ) paths.add( model.previewGlb );
 						}
-						const [firstWeapon, lastWeapon] = creationRange( selection, "weapon" );
+						const [firstWeapon, lastWeapon] = creationRange( selection, "weapon", preview.protectorFloor );
 						for ( let weapon = firstWeapon; weapon <= lastWeapon; weapon++ ) {
 							const equipped = { ...selection, weapon };
-							const [firstProtector, lastProtector] = creationRange( equipped, "protector" );
+							const [firstProtector, lastProtector] = creationRange(
+								equipped,
+								"protector",
+								preview.protectorFloor
+							);
 							for ( let protector = firstProtector; protector <= lastProtector; protector++ ) {
 								const loadout = creationLoadout( { ...equipped, protector }, published.itemIds );
 								const body = (selection.race === 0 ? "EU" : "CH") + "_" + (gender === 0 ? "M" : "W");

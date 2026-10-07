@@ -108,10 +108,10 @@ export function createFrontend(
 		race
 		================
 		*/
-		race( value: 0 | 1 ) {
+		race( value: 0 | 1, protectorFloor: 0 | 1 ) {
 			if ( flow.snapshot().phase !== "create" ) return;
 			race = value;
-			creation.open( value );
+			creation.open( value, protectorFloor );
 			flow.race();
 		},
 		/*

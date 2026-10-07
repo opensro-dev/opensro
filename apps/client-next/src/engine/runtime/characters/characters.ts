@@ -51,6 +51,8 @@ import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
 import { createSpawnFades } from "./spawn-fades";
 import { createAppearanceLookup } from "./appearance-lookup";
+import { uncensoredShard } from "@/engine/foundation/animation/default-wear-policy";
+import { initialCameraPitch } from "@/engine/foundation/rendering/camera-options";
 import { createAuxiliaryPresentation } from "./presentation-auxiliary";
 import {
 	selectCameraTarget,
@@ -190,7 +192,12 @@ export function createCharacterPresentation(
 	const stateIndex = createCharacterStateIndex();
 	const presentationActions = createPresentationActions();
 	const { appearanceRef, activeSkin, wornEquipment, resourceFor } = createAppearanceLookup(
-		{ referenceAppearances, published, structureVisuals }
+		{
+			referenceAppearances,
+			published,
+			structureVisuals,
+			deathShown: gid => presentationState.idleStates.get( gid )?.deathModel === true
+		}
 	);
 	const dockPreview = createDockPreview( { renderer, resources, scenery, lizardGid } );
 	const displayedDependencies = new Map<number, readonly string[]>();
@@ -581,12 +588,13 @@ export function createCharacterPresentation(
 			simulationMs: number | undefined;
 			nativeServerName: string | undefined;
 			normalFortressClothes: boolean;
+			uncensored: boolean;
 		},
 		begun: ReturnType<typeof beginFrame>,
 		presented: ReturnType<typeof selectPresented>,
 		events: ReturnType<typeof prepareEvents>
 	) {
-		const { entities, seconds, simulationMs, nativeServerName, normalFortressClothes } = input;
+		const { entities, seconds, simulationMs, nativeServerName, normalFortressClothes, uncensored } = input;
 		const { animationDeltaMs, localMover, logicalPose } = begun;
 		const { sampleActorDetails, selected } = presented;
 		const {
@@ -617,7 +625,9 @@ export function createCharacterPresentation(
 				castByActor,
 				resources,
 				random,
-				active
+				active,
+				pendingDeaths,
+				uncensored
 			},
 			output,
 			published
@@ -869,12 +879,11 @@ export function createCharacterPresentation(
 			gameplay: GameplayState | null,
 			seconds: number,
 			simulationMs?: number,
-			cameraPitch = Math.PI / 18,
+			cameraPitch = initialCameraPitch(),
 			dock?: readonly CharacterRecord[],
 			preview?: import("@/engine/contracts/frontend").CreationSnapshot | null,
 			lizard = false,
 			effectDetail = 2,
-			bloodEnabled = true,
 			blindHeld = false,
 			nativeServerName?: string,
 			normalFortressClothes = false
@@ -883,18 +892,36 @@ export function createCharacterPresentation(
 			if ( dockPreview.step( { seconds, dock, preview, lizard, nativeServerName }, output, published ) ) return;
 			retireDespawned( seconds );
 			const presented = selectPresented( entities, gameplay );
+			// GameConfig +0x12E (745D10) forces the death model (8E655D) on an
+			// uncensored Korean shard. It also picks the authored blood over the
+			// green one (8D5631); deliberate deviation (owner, 2026-10-08): every
+			// shard shows the authored blood.
+			const uncensored = uncensoredShard( published.dress.defaultWearLanguage ?? 4, nativeServerName );
 			const events = prepareEvents(
-				{ entities, gameplay, seconds, simulationMs, effectDetail, bloodEnabled },
+				{ entities, gameplay, seconds, simulationMs, effectDetail, bloodEnabled: true },
 				begun,
 				presented
 			);
 			const actors = presentActors(
-				{ entities, seconds, simulationMs, nativeServerName, normalFortressClothes },
+				{ entities, seconds, simulationMs, nativeServerName, normalFortressClothes, uncensored },
 				begun,
 				presented,
 				events
 			);
 			finishFrame( { entities, seconds, cameraPitch, blindHeld }, begun, presented, events, actors );
+		},
+		/*
+		================
+		uncensored
+
+		GameConfig +0x129/+0x12D/+0x12E for the login shard (745D10): the
+		client language with the shard name's #$T marker. Before a shard is
+		chosen there is none, and nothing reads the flags.
+		================
+		*/
+		uncensored( nativeServerName: string | undefined ) {
+			return nativeServerName !== undefined &&
+				uncensoredShard( published.dress.defaultWearLanguage ?? 4, nativeServerName );
 		},
 		ready: ( gid: number ) => output.displayed.has( gid ),
 		/*

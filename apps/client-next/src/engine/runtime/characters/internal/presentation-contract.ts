@@ -112,6 +112,28 @@ export interface LinkedRide {
 
 /*
 ================
+DeathModel
+
+A characterInfo death model (skilleffect.txt section characterInfo, column 5,
+record +0x28), published as an npc manifest row of kind "death". The mesh
+fields replace the body's while it is dead (CICharactor_Action_KnockdownDie
+8E64F0); identity, sound profile and scale stay the character's, because the
+action keeps the same characterInfo record (+0x710).
+================
+*/
+export interface DeathModel {
+	readonly glb: string;
+	readonly clips: readonly string[];
+	readonly animationStates?: Record<string, AnimationMetadata>;
+	readonly ambientParticles?: readonly ModelParticle[];
+	readonly animationParticles?: readonly AnimationParticleSet[];
+	readonly animationParticlePaths?: readonly string[];
+	readonly modifierBindings?: readonly ModelAnimationBinding[];
+	readonly modifierSelectors?: readonly ModifierSelector[];
+}
+
+/*
+================
 ItemPresentation
 
 One item's presentation row, keyed by its RefObjID (itemsByRefObjId).
@@ -272,6 +294,11 @@ export interface PresentationIdleState {
 	posture?: Posture;
 	emoteRevision?: number;
 	downDeath?: boolean;
+	// 8E64F0, decided once on entering death: the body shows its death model,
+	// and the death one-shot (motion 4) plays over deathLoop (0x24).
+	deathEntered?: boolean;
+	deathModel?: boolean;
+	deathAction?: boolean;
 	attachmentsHidden?: boolean;
 }
 

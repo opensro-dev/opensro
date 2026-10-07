@@ -25,6 +25,7 @@ import { createFrontend } from "./frontend/frontend";
 import { createUi } from "./ui/ui";
 import { createAudio } from "./audio/audio";
 import { createCharacterPresentation } from "./characters/characters";
+import { creationProtectorFloor } from "@/engine/foundation/ui/character-create";
 import { createWorldStream } from "./world/world";
 import { createPresentation } from "./presentation/presentation";
 import type { SessionState } from "@/engine/contracts/session";
@@ -211,7 +212,7 @@ export function startRuntime(
 				}
 				if ( event.id === "frontend:race-europe" || event.id === "frontend:race-china" ) {
 					audio.uiClick();
-					frontend.race( event.id.endsWith( "europe" ) ? 0 : 1 );
+					chooseRace( event.id.endsWith( "europe" ) ? 0 : 1 );
 					return;
 				}
 				if ( event.id.startsWith( "create:" ) ) {
@@ -334,6 +335,17 @@ export function startRuntime(
 		const worldDoubleClick = createWorldDoubleClick();
 		/*
 		================
+		chooseRace
+
+		Opens creation for a race with the login shard's protector floor
+		(GameConfig +0x129, 72C780/7302B0).
+		================
+		*/
+		function chooseRace( race: 0 | 1 ) {
+			frontend.race( race, creationProtectorFloor( characters.uncensored( sessionState?.nativeServerName ) ) );
+		}
+		/*
+		================
 		worldClick
 		================
 		*/
@@ -342,7 +354,7 @@ export function startRuntime(
 			if ( doubleClick && frontend.snapshot().phase !== "world" ) return;
 			if ( frontend.isRace() ) {
 				const race = renderer.pickFrontendRace( x, y );
-				if ( race !== null ) frontend.race( race );
+				if ( race !== null ) chooseRace( race );
 				return;
 			}
 			if ( frontend.isDock() ) {
@@ -725,7 +737,6 @@ export function startRuntime(
 						null,
 					[ "create", "create-return", "race-zoom" ].includes( frontendState.phase ),
 					effectDetail,
-					true,
 					worldPresented && input.blindHeld(),
 					sessionState?.nativeServerName,
 					normalFortressClothes

@@ -673,10 +673,11 @@ export interface GameplayState {
 	readonly avatarInventory?: readonly InventoryItem[];
 	readonly inventory: readonly InventoryItem[];
 	readonly inventoryPending: boolean;
-	// Slot flashes raised by the 0x3645 item-state update (item-slot-effects.ts).
+	// Slot flashes raised by the 0x3645 item-state and 0x31E8 durability updates
+	// (item-slot-effects.ts).
 	readonly itemFlashes?: readonly {
 		readonly slot: number;
-		readonly kind: "changed" | "life";
+		readonly kind: "changed" | "life" | "repair";
 		readonly atMs: number;
 	}[];
 	readonly vitals: readonly VitalState[];

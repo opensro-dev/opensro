@@ -11,7 +11,13 @@ thread boundary.
 
 ===========================================================================
 */
-import { sightMode, thirdPersonYaw, type SightMode } from "@/engine/foundation/rendering/camera-options";
+import {
+	initialCameraPitch,
+	initialCameraYaw,
+	sightMode,
+	thirdPersonYaw,
+	type SightMode
+} from "@/engine/foundation/rendering/camera-options";
 import type { InputOwner, InputCommand, RawInput } from "@/engine/contracts/input";
 import { zoomCamera } from "@/engine/foundation/rendering/camera-wheel";
 import { virtualKey } from "@/engine/foundation/ui/input-options";
@@ -34,7 +40,11 @@ export function createInput(): InputOwner {
 	// Either Alt key, as GetKeyState(VK_MENU) reads it (6FCD50).
 	let altLeft = false, altRight = false;
 	let sight: SightMode = 0, mouseMode: 0 | 1 = 0;
-	let pointer: { x: number; y: number; } | null = null, buttons = 0, yaw = 0, pitch = Math.PI / 18, distance = 80;
+	let pointer: { x: number; y: number; } | null = null,
+		buttons = 0,
+		yaw = initialCameraYaw(),
+		pitch = initialCameraPitch(),
+		distance = 80;
 	return {
 		/*
 		================

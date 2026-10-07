@@ -1622,8 +1622,8 @@ test("customization prepares both genders and swaps every figure without a new r
 			event => played.push( event ),
 			createPresentationRandom( 1 )
 		),
-		selection = initialCreation( 0 );
-	const step = () => owner.step( [], null, 1, undefined, 0, undefined, { selection, yaw: 0 } );
+		selection = initialCreation( 0, 0 );
+	const step = () => owner.step( [], null, 1, undefined, 0, undefined, { selection, yaw: 0, protectorFloor: 0 } );
 	step();
 	assert.equal( owner.previewReady(), false );
 	allow = true;
@@ -1649,10 +1649,10 @@ test("customization prepares both genders and swaps every figure without a new r
 	}
 	for ( const gender of [ 0, 1 ] ) {
 		selection.gender = gender;
-		const maxWeapon = creationRange( selection, "weapon" )[1];
+		const maxWeapon = creationRange( selection, "weapon", 0 )[1];
 		for ( let weapon = 0; weapon <= maxWeapon; weapon++ ) {
 			selection.weapon = weapon;
-			const maxProtector = creationRange( selection, "protector" )[1];
+			const maxProtector = creationRange( selection, "protector", 0 )[1];
 			for ( let protector = 0; protector <= maxProtector; protector++ ) {
 				selection.protector = protector;
 				step();
@@ -1673,11 +1673,11 @@ test("customization prepares both genders and swaps every figure without a new r
 	step();
 	assert.equal( actors[0].scale, 1 );
 	assert.equal( actors[0].bodyVolume.index, 2 );
-	owner.step( [], null, 1.5, undefined, 0, undefined, { selection, yaw: 0 } );
+	owner.step( [], null, 1.5, undefined, 0, undefined, { selection, yaw: 0, protectorFloor: 0 } );
 	assert.ok( Math.abs( actors[0].scale - 1.03 ) < 1e-6 );
 	assert.equal( actors[0].bodyVolume.index, 3 );
 	assert.equal( actors[0].model, stableModel );
-	owner.step( [], null, 2, undefined, 0, undefined, { selection, yaw: 0 } );
+	owner.step( [], null, 2, undefined, 0, undefined, { selection, yaw: 0, protectorFloor: 0 } );
 	assert.ok( Math.abs( actors[0].scale - 1.06 ) < 1e-6 );
 	assert.equal( actors[0].bodyVolume.index, 4 );
 	assert.equal( requests.length, warmed );
@@ -2128,7 +2128,6 @@ test("held native blind masks players and monsters without retiring presentation
 		undefined,
 		false,
 		2,
-		true,
 		true
 	);
 	assert.ok(
@@ -2137,7 +2136,7 @@ test("held native blind masks players and monsters without retiring presentation
 	);
 	for ( const kind of [ "monster", "player", "local-player", "npc", "cos", "ground-item" ] ) {
 		const body = entity( 1, { kind } );
-		f.presentation.step( [ body ], null, 4, undefined, undefined, undefined, undefined, false, 2, true, true );
+		f.presentation.step( [ body ], null, 4, undefined, undefined, undefined, undefined, false, 2, true );
 		const actor = f.actors.find( a => a.gid === 1 );
 		assert.ok( actor, kind + " remains resident" );
 		const hidden = [ "monster", "player" ].includes( kind );
@@ -3008,7 +3007,6 @@ test("native Korean wear freeze preserves committed default handles while equipm
 					undefined,
 					false,
 					2,
-					true,
 					false,
 					name
 				);

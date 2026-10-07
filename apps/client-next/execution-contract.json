@@ -2271,6 +2271,13 @@
 			"reason": "The parent structure-visual owner supplies the staged model synchronously, as before the lookups moved out of characters.ts."
 		},
 		{
+			"file": "src/engine/runtime/characters/appearance-lookup.ts",
+			"expression": "deathShown",
+			"function": "resourceFor",
+			"kind": "callback",
+			"reason": "Presentation state owns the death-entry decision (8E64F0); the lookup reads it synchronously so the death model and the death action start on the same frame."
+		},
+		{
 			"file": "src/engine/runtime/characters/dock-preview.ts",
 			"expression": "resources.plan",
 			"function": "step",
@@ -3489,7 +3496,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "0410934c9a24acbd47d2e8cc80d73b917bfb3372cbfbc7f4d8c81aaee34270eb",
+			"sourceSha256": "66a394a744d06715b202bd51705642bbe183d8068cede8c017516c6a4ed61c4b",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

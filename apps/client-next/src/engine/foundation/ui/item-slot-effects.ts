@@ -11,6 +11,7 @@ four sprite-sheet animations over an item icon:
 	summoned glow  pt_edge_effect.ddj        9x1 cells, loops, 50 ms   (54FAA0)
 	revival flash  pt_life_effect.ddj        8x1 cells, once,  80 ms   (54FAF0)
 	changed flash  icon_mall_transgender.ddj 4x4 cells, once,  50 ms   (54FA40)
+	repair flash   icon_mall_repair.ddj      8x4 cells, 20 once, 50 ms (54FA20)
 
 and a dead companion's summoner item is washed with 0x80004B7E
 (CIFWnd_DrawColorOverlay 53F590). The looping counters start at a random
@@ -62,6 +63,10 @@ const LIFE_FRAMES = 8, LIFE_STEP_MS = 80;
 const CHANGED_FRAMES = 16, CHANGED_COLUMNS = 4, CHANGED_STEP_MS = 50;
 // 566B94: the changed flash covers 48 px from 8 px above and left of the slot.
 const CHANGED_INSET = 8, CHANGED_SIZE = 48;
+// 54FA20 counts 20 frames on state timer 1; 5669B3 draws cell (20 - counter)
+// of the 8x4 sheet over 72 px from 20 px above and left of the slot.
+const REPAIR_FRAMES = 20, REPAIR_COLUMNS = 8, REPAIR_ROWS = 4, REPAIR_STEP_MS = 50;
+const REPAIR_INSET = 20, REPAIR_SIZE = 72;
 
 /*
 ================
@@ -84,7 +89,7 @@ A one-shot flash the item-state update raised for a slot.
 ================
 */
 export interface ItemSlotFlash {
-	readonly kind: "changed" | "life";
+	readonly kind: "changed" | "life" | "repair";
 	readonly atMs: number;
 }
 
@@ -117,11 +122,6 @@ function loopFrame( nowMs: number, stepMs: number, frames: number, phase: number
 
 /*
 ================
-itemSlotOverlays
-
-Everything 565850 draws over one slot this frame, in its draw order:
-/*
-================
 itemIsRare
 
 CSOItemData_IsRare (789340). Retail also refuses a CTRL quick sell of a rare
@@ -136,7 +136,8 @@ export function itemIsRare( item: { readonly tooltip?: { readonly fields: Readon
 ================
 itemSlotOverlays
 
-Summoned glow, rare shine, then the one-shot flashes.
+Everything 565850 draws over one slot this frame, in its draw order:
+summoned glow, rare shine, the repair flash, then the other one-shot flashes.
 ================
 */
 export function itemSlotOverlays(
@@ -173,7 +174,22 @@ export function itemSlotOverlays(
 		} );
 	}
 	for ( const flash of flashes ) {
+		const elapsed = nowMs - flash.atMs, frame = Math.floor( elapsed / REPAIR_STEP_MS );
+		if ( flash.kind !== "repair" || elapsed < 0 || frame >= REPAIR_FRAMES ) continue;
+		out.push( {
+			path: SHEET + "icon/icon_mall_repair.png",
+			uv: [
+				(frame % REPAIR_COLUMNS) / REPAIR_COLUMNS,
+				Math.floor( frame / REPAIR_COLUMNS ) / REPAIR_ROWS,
+				1 / REPAIR_COLUMNS,
+				1 / REPAIR_ROWS
+			],
+			rect: [ rect[0] - REPAIR_INSET, rect[1] - REPAIR_INSET, REPAIR_SIZE, REPAIR_SIZE ]
+		} );
+	}
+	for ( const flash of flashes ) {
 		const elapsed = nowMs - flash.atMs;
+		if ( flash.kind === "repair" ) continue;
 		if ( flash.kind === "life" ) {
 			const frame = Math.floor( elapsed / LIFE_STEP_MS );
 			if ( elapsed >= 0 && frame < LIFE_FRAMES ) {
