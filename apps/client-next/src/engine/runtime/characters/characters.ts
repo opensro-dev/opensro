@@ -378,6 +378,451 @@ export function createCharacterPresentation(
 		output.displayed.clear();
 		displayedDependencies.clear();
 	}
+	// ============================================================================
+	// The frame phases step runs, in order. Each body is the original step code.
+	/*
+	================
+	beginFrame
+
+	Opens the frame: entity LOD from where the local player is drawn, the
+	animation delta, the resource budget and the pose samples, then one
+	admitted catalogue result and the next catalogue request.
+	================
+	*/
+	function beginFrame(
+		entities: readonly EntityState[],
+		gameplay: GameplayState | null,
+		seconds: number,
+		dock: readonly CharacterRecord[] | undefined,
+		preview: import("@/engine/contracts/frontend").CreationSnapshot | null | undefined
+	) {
+		// The local player (and the mount it rides) is where its movement owner
+		// put it; its entity row can still hold the spawn point, and a LOD
+		// measured from that drifts while running (equipment glow, effects).
+		entityLod.step(
+			entities,
+			gameplay?.localGid,
+			renderer.presentationCamera?.() ?? null,
+			Math.trunc( seconds * 1000 ),
+			gameplay?.pose ?? undefined,
+			entities.find( e => e.gid === gameplay?.localGid )?.mountedOn
+		);
+		const animationDeltaMs = animationDelta( seconds );
+		skillObjects.retain( entities );
+		resources.begin( seconds );
+		output.failure = null;
+		const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
+		posePresentation.samples( samples );
+		const result = resources.poll();
+		const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
+		if ( result && skillObjectResult ) {
+			try {
+				skillObjects.catalog(
+					result.path,
+					JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) )
+				);
+				resources.accepted( result.path );
+			} catch ( error ) {
+				resources.rejected( result.path, error );
+			}
+		}
+		if ( result && !skillObjectResult ) published.admit( result );
+		// An empty roster is an active dock: it must admit the catalog before
+		// dockReady can reveal the button that opens character creation.
+		if (
+			(entities.length || dock || preview) &&
+			published.manifest < (dock || preview ? 1 : published.manifests.length)
+		) {
+			resources.manifest( published.manifests[published.manifest]! );
+		}
+		if ( published.manifest === published.manifests.length ) {
+			const path = skillObjects.nextManifest( entities );
+			if ( path ) resources.manifest( path );
+		}
+		return { animationDeltaMs, localMover, logicalPose, samples };
+	}
+	/*
+	================
+	retireDespawned
+
+	Turns each despawned character into a fading copy (with its particles,
+	animation and children) under a fresh actor id, forgets the despawned
+	gids, and drops fading copies older than 1.5 seconds.
+	================
+	*/
+	function retireDespawned( seconds: number ) {
+		for ( const gid of retiring ) {
+			const actor = output.displayed.get( gid );
+			if ( actor ) {
+				const id = allocateActor(), state = states.get( gid );
+				const animation = state?.modifierResource && state.dispatch && state.modelAnimation ?
+					{
+						resource: state.modifierResource,
+						dispatch: state.dispatch,
+						selection: state.modelAnimation
+					} :
+					undefined;
+				disappearing.set( id, {
+					actor: {
+						...actor,
+						layers: state?.modifierLayers ?? actor.layers,
+						gid: id,
+						mountedOn: undefined,
+						attachment: undefined,
+						pickable: false
+					},
+					started: seconds,
+					particles: modelEmission.transfer( gid, id ),
+					animation,
+					children: [ ...(auxiliaryActors.get( gid )?.values() ?? []) ].flatMap( child => {
+						const actor = output.displayed.get( child.gid );
+						return actor ? [ actor ] : [];
+					} ).map( child => ({ ...child, attachment: { ...child.attachment!, gid: id } }) )
+				} );
+			}
+		}
+		for ( const gid of retiring ) {
+			avatarOverrides.delete( gid );
+			committedAuxiliary.delete( gid );
+			auxiliaryActors.delete( gid );
+		}
+		retiring.clear();
+		for ( const [id, row] of disappearing ) if ( seconds - row.started >= 1.5 ) disappearing.delete( id );
+	}
+	/*
+	================
+	selectPresented
+
+	Chooses the frame's presented entities and plans their resident models
+	before any transient effect asks for the budget, then decides whether
+	the common baseline (catalogues, local player, gold drops) is ready.
+	================
+	*/
+	function selectPresented( entities: readonly EntityState[], gameplay: GameplayState | null ) {
+		// Choose presentation work before requesting assets. Keep the local player
+		// and its mount, then nearest entities with a stable identity tie-break.
+		const sampleActorDetails = probe?.sampleDetails();
+		probe?.detailBegin( "presentation-selection" );
+		const anchor = gameplay?.pose;
+		const local = entities.find( entity => entity.gid === gameplay?.localGid );
+		const priority = ( entity: EntityState ) =>
+			entity.gid === local?.gid ? 0 : entity.gid === local?.mountedOn ? 1 : 2;
+		const selected = selection.select( entities, anchor ?? undefined, local?.gid, local?.mountedOn );
+		// Resident actor assemblies own their dependencies before transient
+		// effects compete for the frame's resource budget. A cold hit effect
+		// must never evict the fighter or strip its already admitted clothing.
+		for ( const entity of selected ) {
+			const paths = displayedDependencies.get( entity.gid );
+			if ( paths ) resources.plan( paths );
+			else if ( priority( entity ) < 2 ) {
+				const resource = published.catalog.get( appearanceRef( entity ) );
+				if ( resource ) resources.plan( [ resource.glb ] );
+			}
+		}
+		// Baseline drops own residency before one-shot combat effects compete.
+		output.commonReady = published.manifest === published.manifests.length && !!local &&
+			output.displayed.has( local.gid );
+		if ( gameplay?.localGid && output.commonReady ) {
+			for ( const key of GOLD_DROP_MODELS ) {
+				const model = published.dropModels[key];
+				if ( model && !resources.ready( model.glb ) ) output.commonReady = false;
+			}
+		}
+		probe?.detailEnd( "presentation-selection" );
+		return { sampleActorDetails, local, selected };
+	}
+	/*
+	================
+	prepareEvents
+
+	Indexes the delivered state, advances the action clocks and adopts their
+	gameplay, then turns the frame's casts, hits and deaths into effects.
+
+	The action phase returns a replaced gameplay snapshot: the same state with
+	cast cancellation times adopted ({ ...gameplay, casts }), list length,
+	order and identities unchanged. The pose samples and indexes built from
+	the delivered snapshot stay valid for it, so every later phase reads the
+	returned one, as the original single step did.
+	================
+	*/
+	function prepareEvents(
+		input: {
+			entities: readonly EntityState[];
+			gameplay: GameplayState | null;
+			seconds: number;
+			simulationMs: number | undefined;
+			effectDetail: number;
+			bloodEnabled: boolean;
+		},
+		begun: ReturnType<typeof beginFrame>,
+		presented: ReturnType<typeof selectPresented>
+	) {
+		const { entities, seconds, simulationMs, effectDetail, bloodEnabled } = input;
+		let { gameplay } = input;
+		const { localMover, logicalPose, samples } = begun;
+		const { local } = presented;
+		probe?.detailBegin( "presentation-events" );
+		const { castByActor, castTokens, vitalsByGid, entitiesByGid } = stateIndex.update( entities, gameplay );
+		const actionFrame = presentationActions.step(
+			{
+				entities,
+				gameplay,
+				seconds,
+				simulationMs,
+				local,
+				entitiesByGid,
+				castTokens,
+				vitalsByGid,
+				groundClocks,
+				combatStanceEnds: presentationState.combatStanceEnds,
+				resourceFor,
+				appearanceRef,
+				logicalPose,
+				wornEquipment,
+				referenceAppearances,
+				random,
+				resources,
+				effects,
+				feedback,
+				health,
+				structureVisuals,
+				sounds
+			},
+			output,
+			published
+		);
+		gameplay = actionFrame.gameplay;
+		const { actionLayersByActor, waitingActors, triggers, soundContext } = actionFrame;
+		const { hitByActor, effectActors, pendingDeaths } = presentationEvents.step(
+			{
+				entities,
+				gameplay,
+				seconds,
+				simulationMs,
+				entitiesByGid,
+				actionClocks: presentationActions.actionClocks,
+				combatStanceEnds: presentationState.combatStanceEnds,
+				triggers,
+				samples,
+				localMover,
+				logicalPose,
+				appearanceRef,
+				soundContext,
+				posePresentation,
+				referenceAppearances,
+				effects,
+				effectDetail,
+				bloodEnabled,
+				resources,
+				renderer,
+				feedback,
+				health,
+				sounds
+			},
+			output,
+			published
+		);
+		const active = new Set( entities.map( entity => entity.gid ) ), next = new Map<number, CharacterActor>();
+		// Admission order owns idle RNG, before distance/camera presentation selection.
+		const deadGids = new Set( gameplay?.vitals.filter( v => v.hp === 0 ).map( v => v.gid ) ?? [] );
+		probe?.detailEnd( "presentation-events" );
+		return {
+			gameplay,
+			castByActor,
+			vitalsByGid,
+			entitiesByGid,
+			actionLayersByActor,
+			waitingActors,
+			soundContext,
+			hitByActor,
+			effectActors,
+			pendingDeaths,
+			active,
+			next,
+			deadGids
+		};
+	}
+	/*
+	================
+	presentActors
+
+	The posture and idle state of every entity, then every selected entity's
+	actor: appearance, animation layers and sounds, written into next.
+	================
+	*/
+	function presentActors(
+		input: {
+			entities: readonly EntityState[];
+			seconds: number;
+			simulationMs: number | undefined;
+			nativeServerName: string | undefined;
+			normalFortressClothes: boolean;
+		},
+		begun: ReturnType<typeof beginFrame>,
+		presented: ReturnType<typeof selectPresented>,
+		events: ReturnType<typeof prepareEvents>
+	) {
+		const { entities, seconds, simulationMs, nativeServerName, normalFortressClothes } = input;
+		const { animationDeltaMs, localMover, logicalPose } = begun;
+		const { sampleActorDetails, selected } = presented;
+		const {
+			gameplay,
+			castByActor,
+			vitalsByGid,
+			actionLayersByActor,
+			waitingActors,
+			soundContext,
+			hitByActor,
+			pendingDeaths,
+			active,
+			next,
+			deadGids
+		} = events;
+		probe?.detailBegin( "presentation-state" );
+		presentationState.step(
+			{
+				entities,
+				seconds,
+				simulationMs,
+				logicalPose,
+				appearanceRef,
+				states,
+				health,
+				deadGids,
+				hitByActor,
+				castByActor,
+				resources,
+				random,
+				active
+			},
+			output,
+			published
+		);
+		probe?.detailEnd( "presentation-state" );
+		probe?.detailBegin( "presentation-actors" );
+		const { animationHolders, particleHolders } = actorPresentation.present( {
+			actionLayersByActor,
+			active,
+			animationDeltaMs,
+			castByActor,
+			entities,
+			gameplay,
+			hitByActor,
+			localMover,
+			logicalPose,
+			nativeServerName,
+			next,
+			normalFortressClothes,
+			pendingDeaths,
+			probe,
+			sampleActorDetails,
+			seconds,
+			selected,
+			soundContext,
+			vitalsByGid,
+			waitingActors
+		} );
+		probe?.detailEnd( "presentation-actors" );
+		return { animationHolders, particleHolders };
+	}
+	/*
+	================
+	finishFrame
+
+	Retires the state of characters that left, settles finished deaths, adds
+	orbs, stage effects and auxiliary actors, then the original finalization
+	order: camera target, visibility, fading copies, emission, publication.
+	================
+	*/
+	function finishFrame(
+		input: { entities: readonly EntityState[]; seconds: number; cameraPitch: number; blindHeld: boolean; },
+		begun: ReturnType<typeof beginFrame>,
+		presented: ReturnType<typeof selectPresented>,
+		events: ReturnType<typeof prepareEvents>,
+		actors: ReturnType<typeof presentActors>
+	) {
+		const { entities, seconds, cameraPitch, blindHeld } = input;
+		const { animationDeltaMs, localMover } = begun;
+		const { local } = presented;
+		const { gameplay, active, next, castByActor, entitiesByGid, effectActors } = events;
+		const { animationHolders, particleHolders } = actors;
+		probe?.detailBegin( "presentation-finalize" );
+		for ( const gid of states.keys() ) {
+			if ( !active.has( gid ) ) {
+				states.delete( gid );
+				displayedDependencies.delete( gid );
+			}
+		}
+		footprints.step( seconds );
+		const settled = new Set<number>();
+		for ( const entity of entities ) {
+			const state = states.get( entity.gid ), resource = published.catalog.get( appearanceRef( entity ) );
+			if ( state?.dead && resource ) {
+				const clip = state.postureClip ??
+						(state.clip === "deathquick" || state.clip === "downdie" ? state.clip : "death"),
+					start = state.postureStarted ?? state.started;
+				if ( seconds - start >= resources.duration( resource.glb, clip ) ) {
+					state.feedbackSettled = true;
+					settled.add( entity.gid );
+				}
+			}
+		}
+		const orbActors = orbs.step(
+			entities,
+			seconds,
+			settled,
+			( gid, bone ) => renderer.characterSocket( [ ...next.values() ], gid, bone, [ 0, 0, 0 ] ),
+			resources.ready,
+			resources.duration,
+			3,
+			resources.failed
+		);
+		auxiliary.presentStages(
+			{ orbActors, effectActors, next, seconds, animationHolders },
+			{ renderer, resources, effects }
+		);
+		auxiliary.step(
+			{ entities, seconds, next, gameplay, localMover, castByActor },
+			{
+				resourceFor,
+				dress: published.dress,
+				resources,
+				ridesByRider: published.ridesByRider,
+				riderModes: published.riderModes,
+				committedAuxiliary
+			}
+		);
+		for ( const gid of avatarOverrides.keys() ) if ( !active.has( gid ) ) avatarOverrides.delete( gid );
+		sounds.retain( active );
+		posePresentation.retain( active );
+		selectCameraTarget( { local, gameplay, next, entitiesByGid }, output, published );
+		applyCharacterVisibility(
+			{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod },
+			output
+		);
+		presentDisappearing(
+			{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
+		);
+		presentEmission(
+			{ entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
+			{
+				resources,
+				renderer,
+				modelEmission,
+				animationEmission,
+				scenery,
+				entityLod,
+				applySpawnFades: spawnFades.apply
+			}
+		);
+		publishCharacters(
+			{ local, gameplay, next, seconds, blindHeld },
+			output,
+			published,
+			{ renderer, resources, mallPreview }
+		);
+		probe?.detailEnd( "presentation-finalize" );
+	}
 	return {
 		/*
 		================
@@ -507,303 +952,22 @@ export function createCharacterPresentation(
 			nativeServerName?: string,
 			normalFortressClothes = false
 		) {
-			// The local player (and the mount it rides) is where its movement owner
-			// put it; its entity row can still hold the spawn point, and a LOD
-			// measured from that drifts while running (equipment glow, effects).
-			entityLod.step(
-				entities,
-				gameplay?.localGid,
-				renderer.presentationCamera?.() ?? null,
-				Math.trunc( seconds * 1000 ),
-				gameplay?.pose ?? undefined,
-				entities.find( e => e.gid === gameplay?.localGid )?.mountedOn
-			);
-			const animationDeltaMs = animationDelta( seconds );
-			skillObjects.retain( entities );
-			resources.begin( seconds );
-			output.failure = null;
-			const { localMover, logicalPose, samples } = createPresentationSamples( entities, gameplay );
-			posePresentation.samples( samples );
-			const result = resources.poll();
-			const skillObjectResult = result && SKILL_OBJECT_MANIFESTS.some( path => path === result.path );
-			if ( result && skillObjectResult ) {
-				try {
-					skillObjects.catalog(
-						result.path,
-						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( result.buffer ) )
-					);
-					resources.accepted( result.path );
-				} catch ( error ) {
-					resources.rejected( result.path, error );
-				}
-			}
-			if ( result && !skillObjectResult ) published.admit( result );
-			// An empty roster is an active dock: it must admit the catalog before
-			// dockReady can reveal the button that opens character creation.
-			if (
-				(entities.length || dock || preview) &&
-				published.manifest < (dock || preview ? 1 : published.manifests.length)
-			) {
-				resources.manifest( published.manifests[published.manifest]! );
-			}
-			if ( published.manifest === published.manifests.length ) {
-				const path = skillObjects.nextManifest( entities );
-				if ( path ) resources.manifest( path );
-			}
+			const begun = beginFrame( entities, gameplay, seconds, dock, preview );
 			if ( dockPreview.step( { seconds, dock, preview, lizard, nativeServerName }, output, published ) ) return;
-			for ( const gid of retiring ) {
-				const actor = output.displayed.get( gid );
-				if ( actor ) {
-					const id = allocateActor(), state = states.get( gid );
-					const animation = state?.modifierResource && state.dispatch && state.modelAnimation ?
-						{
-							resource: state.modifierResource,
-							dispatch: state.dispatch,
-							selection: state.modelAnimation
-						} :
-						undefined;
-					disappearing.set( id, {
-						actor: {
-							...actor,
-							layers: state?.modifierLayers ?? actor.layers,
-							gid: id,
-							mountedOn: undefined,
-							attachment: undefined,
-							pickable: false
-						},
-						started: seconds,
-						particles: modelEmission.transfer( gid, id ),
-						animation,
-						children: [ ...(auxiliaryActors.get( gid )?.values() ?? []) ].flatMap( child => {
-							const actor = output.displayed.get( child.gid );
-							return actor ? [ actor ] : [];
-						} ).map( child => ({ ...child, attachment: { ...child.attachment!, gid: id } }) )
-					} );
-				}
-			}
-			for ( const gid of retiring ) {
-				avatarOverrides.delete( gid );
-				committedAuxiliary.delete( gid );
-				auxiliaryActors.delete( gid );
-			}
-			retiring.clear();
-			for ( const [id, row] of disappearing ) if ( seconds - row.started >= 1.5 ) disappearing.delete( id );
-			// Choose presentation work before requesting assets. Keep the local player
-			// and its mount, then nearest entities with a stable identity tie-break.
-			const sampleActorDetails = probe?.sampleDetails();
-			probe?.detailBegin( "presentation-selection" );
-			const anchor = gameplay?.pose;
-			const local = entities.find( entity => entity.gid === gameplay?.localGid );
-			const priority = ( entity: EntityState ) =>
-				entity.gid === local?.gid ? 0 : entity.gid === local?.mountedOn ? 1 : 2;
-			const selected = selection.select( entities, anchor ?? undefined, local?.gid, local?.mountedOn );
-			// Resident actor assemblies own their dependencies before transient
-			// effects compete for the frame's resource budget. A cold hit effect
-			// must never evict the fighter or strip its already admitted clothing.
-			for ( const entity of selected ) {
-				const paths = displayedDependencies.get( entity.gid );
-				if ( paths ) resources.plan( paths );
-				else if ( priority( entity ) < 2 ) {
-					const resource = published.catalog.get( appearanceRef( entity ) );
-					if ( resource ) resources.plan( [ resource.glb ] );
-				}
-			}
-			// Baseline drops own residency before one-shot combat effects compete.
-			output.commonReady = published.manifest === published.manifests.length && !!local &&
-				output.displayed.has( local.gid );
-			if ( gameplay?.localGid && output.commonReady ) {
-				for ( const key of GOLD_DROP_MODELS ) {
-					const model = published.dropModels[key];
-					if ( model && !resources.ready( model.glb ) ) output.commonReady = false;
-				}
-			}
-			probe?.detailEnd( "presentation-selection" );
-			probe?.detailBegin( "presentation-events" );
-			const { castByActor, castTokens, vitalsByGid, entitiesByGid } = stateIndex.update( entities, gameplay );
-			const actionFrame = presentationActions.step(
-				{
-					entities,
-					gameplay,
-					seconds,
-					simulationMs,
-					local,
-					entitiesByGid,
-					castTokens,
-					vitalsByGid,
-					groundClocks,
-					combatStanceEnds: presentationState.combatStanceEnds,
-					resourceFor,
-					appearanceRef,
-					logicalPose,
-					wornEquipment,
-					referenceAppearances,
-					random,
-					resources,
-					effects,
-					feedback,
-					health,
-					structureVisuals,
-					sounds
-				},
-				output,
-				published
+			retireDespawned( seconds );
+			const presented = selectPresented( entities, gameplay );
+			const events = prepareEvents(
+				{ entities, gameplay, seconds, simulationMs, effectDetail, bloodEnabled },
+				begun,
+				presented
 			);
-			gameplay = actionFrame.gameplay;
-			const { actionLayersByActor, waitingActors, triggers, soundContext } = actionFrame;
-			const { hitByActor, effectActors, pendingDeaths } = presentationEvents.step(
-				{
-					entities,
-					gameplay,
-					seconds,
-					simulationMs,
-					entitiesByGid,
-					actionClocks: presentationActions.actionClocks,
-					combatStanceEnds: presentationState.combatStanceEnds,
-					triggers,
-					samples,
-					localMover,
-					logicalPose,
-					appearanceRef,
-					soundContext,
-					posePresentation,
-					referenceAppearances,
-					effects,
-					effectDetail,
-					bloodEnabled,
-					resources,
-					renderer,
-					feedback,
-					health,
-					sounds
-				},
-				output,
-				published
+			const actors = presentActors(
+				{ entities, seconds, simulationMs, nativeServerName, normalFortressClothes },
+				begun,
+				presented,
+				events
 			);
-			const active = new Set( entities.map( entity => entity.gid ) ), next = new Map<number, CharacterActor>();
-			// Admission order owns idle RNG, before distance/camera presentation selection.
-			const deadGids = new Set( gameplay?.vitals.filter( v => v.hp === 0 ).map( v => v.gid ) ?? [] );
-			probe?.detailEnd( "presentation-events" );
-			probe?.detailBegin( "presentation-state" );
-			presentationState.step(
-				{
-					entities,
-					seconds,
-					simulationMs,
-					logicalPose,
-					appearanceRef,
-					states,
-					health,
-					deadGids,
-					hitByActor,
-					castByActor,
-					resources,
-					random,
-					active
-				},
-				output,
-				published
-			);
-			probe?.detailEnd( "presentation-state" );
-			probe?.detailBegin( "presentation-actors" );
-			const { animationHolders, particleHolders } = actorPresentation.present( {
-				actionLayersByActor,
-				active,
-				animationDeltaMs,
-				castByActor,
-				entities,
-				gameplay,
-				hitByActor,
-				localMover,
-				logicalPose,
-				nativeServerName,
-				next,
-				normalFortressClothes,
-				pendingDeaths,
-				probe,
-				sampleActorDetails,
-				seconds,
-				selected,
-				soundContext,
-				vitalsByGid,
-				waitingActors
-			} );
-			probe?.detailEnd( "presentation-actors" );
-			probe?.detailBegin( "presentation-finalize" );
-			for ( const gid of states.keys() ) {
-				if ( !active.has( gid ) ) {
-					states.delete( gid );
-					displayedDependencies.delete( gid );
-				}
-			}
-			footprints.step( seconds );
-			const settled = new Set<number>();
-			for ( const entity of entities ) {
-				const state = states.get( entity.gid ), resource = published.catalog.get( appearanceRef( entity ) );
-				if ( state?.dead && resource ) {
-					const clip = state.postureClip ??
-							(state.clip === "deathquick" || state.clip === "downdie" ? state.clip : "death"),
-						start = state.postureStarted ?? state.started;
-					if ( seconds - start >= resources.duration( resource.glb, clip ) ) {
-						state.feedbackSettled = true;
-						settled.add( entity.gid );
-					}
-				}
-			}
-			const orbActors = orbs.step(
-				entities,
-				seconds,
-				settled,
-				( gid, bone ) => renderer.characterSocket( [ ...next.values() ], gid, bone, [ 0, 0, 0 ] ),
-				resources.ready,
-				resources.duration,
-				3,
-				resources.failed
-			);
-			auxiliary.presentStages(
-				{ orbActors, effectActors, next, seconds, animationHolders },
-				{ renderer, resources, effects }
-			);
-			auxiliary.step(
-				{ entities, seconds, next, gameplay, localMover, castByActor },
-				{
-					resourceFor,
-					dress: published.dress,
-					resources,
-					ridesByRider: published.ridesByRider,
-					riderModes: published.riderModes,
-					committedAuxiliary
-				}
-			);
-			for ( const gid of avatarOverrides.keys() ) if ( !active.has( gid ) ) avatarOverrides.delete( gid );
-			sounds.retain( active );
-			posePresentation.retain( active );
-			selectCameraTarget( { local, gameplay, next, entitiesByGid }, output, published );
-			applyCharacterVisibility(
-				{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod },
-				output
-			);
-			presentDisappearing(
-				{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
-			);
-			presentEmission(
-				{ entities, next, seconds, hideSilkCos, particleHolders, animationHolders, frameWork },
-				{
-					resources,
-					renderer,
-					modelEmission,
-					animationEmission,
-					scenery,
-					entityLod,
-					applySpawnFades: spawnFades.apply
-				}
-			);
-			publishCharacters(
-				{ local, gameplay, next, seconds, blindHeld },
-				output,
-				published,
-				{ renderer, resources, mallPreview }
-			);
-			probe?.detailEnd( "presentation-finalize" );
+			finishFrame( { entities, seconds, cameraPitch, blindHeld }, begun, presented, events, actors );
 		},
 		ready: ( gid: number ) => output.displayed.has( gid ),
 		/*
