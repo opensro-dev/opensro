@@ -2525,7 +2525,8 @@ export function createCharacterPresentation(
 			posePresentation.retain( active );
 			selectCameraTarget( { local, gameplay, next, entitiesByGid }, output, published );
 			applyCharacterVisibility(
-				{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod }, output
+				{ entities, next, local, gameplay, seconds, cameraPitch, concealmentSkills, entityLod },
+				output
 			);
 			presentDisappearing(
 				{ disappearing, seconds, next, animationDeltaMs, resources, animationHolders, particleHolders }
@@ -2535,7 +2536,10 @@ export function createCharacterPresentation(
 				{ resources, renderer, modelEmission, animationEmission, scenery, entityLod, applySpawnFades }
 			);
 			publishCharacters(
-				{ local, gameplay, next, seconds, blindHeld }, output, published, { renderer, resources, mallPreview }
+				{ local, gameplay, next, seconds, blindHeld },
+				output,
+				published,
+				{ renderer, resources, mallPreview }
 			);
 			probe?.detailEnd( "presentation-finalize" );
 		},

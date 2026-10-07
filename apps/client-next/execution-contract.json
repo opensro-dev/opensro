@@ -1720,23 +1720,6 @@
 			]
 		},
 		{
-			"consumer": "src/engine/foundation/animation/model-emission.ts",
-			"provider": "src/engine/runtime/characters/characters.ts",
-			"functions": [
-				"callback:step:4"
-			]
-		},
-		{
-			"consumer": "src/engine/foundation/animation/animation-emission.ts",
-			"provider": "src/engine/runtime/characters/characters.ts",
-			"functions": [
-				"callback:step:5",
-				"callback:step:6",
-				"callback:step:7"
-			],
-			"reason": "Synchronous animation modifier admission and last-rendered particle snapshot; no new scheduler or asset owner."
-		},
-		{
 			"consumer": "src/engine/foundation/animation/animation-emission.ts",
 			"provider": "src/engine/runtime/characters/resources/resources.ts",
 			"functions": [
@@ -1992,6 +1975,32 @@
 			"functions": [
 				"dead"
 			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/animation-dispatch.ts",
+			"provider": "src/engine/runtime/characters/presentation-finalize.ts",
+			"functions": [
+				"callback:step:2"
+			],
+			"reason": "Existing synchronous presentation callbacks moved from characters.ts into its finalization phase; frame ordering is unchanged."
+		},
+		{
+			"consumer": "src/engine/foundation/animation/model-emission.ts",
+			"provider": "src/engine/runtime/characters/presentation-finalize.ts",
+			"functions": [
+				"callback:step:4"
+			],
+			"reason": "Existing synchronous presentation callbacks moved from characters.ts into its finalization phase; frame ordering is unchanged."
+		},
+		{
+			"consumer": "src/engine/foundation/animation/animation-emission.ts",
+			"provider": "src/engine/runtime/characters/presentation-finalize.ts",
+			"functions": [
+				"callback:step:5",
+				"callback:step:6",
+				"callback:step:7"
+			],
+			"reason": "Existing synchronous presentation callbacks moved from characters.ts into its finalization phase; frame ordering is unchanged."
 		}
 	],
 	"boundaries": [
@@ -2358,6 +2367,174 @@
 			"function": "callback:advanceRandomIdle:5",
 			"kind": "callback",
 			"reason": "Idle clip duration callback borrows the same character resource owner as the surrounding posture step."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "concealmentSkills",
+			"function": "applyCharacterVisibility",
+			"kind": "callback",
+			"reason": "Parent-owned skill lookup is borrowed for the current visibility pass."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "entityLod.distance",
+			"function": "applyCharacterVisibility",
+			"kind": "callback",
+			"reason": "The current entity LOD owner supplies the existing concealment distance."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "resources.duration",
+			"function": "callback:step:2",
+			"kind": "callback",
+			"reason": "Retired animation dispatch borrows resident clip duration from the character resource owner."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "applySpawnFades",
+			"function": "presentEmission",
+			"kind": "callback",
+			"reason": "The parent fade owner runs at the original position before particle emission."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "frameWork?.level",
+			"function": "callback:step:4",
+			"kind": "callback",
+			"reason": "The runtime overload controller is read through the current frame work owner."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "entityLod.fraction",
+			"function": "callback:step:4",
+			"kind": "callback",
+			"reason": "The existing model-emission LOD callback borrows the parent entity LOD owner."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.presentationNight",
+			"function": "presentEmission",
+			"kind": "callback",
+			"reason": "The parent renderer supplies its synchronous night-state snapshot."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.characterParticleSnapshot",
+			"function": "callback:step:5",
+			"kind": "callback",
+			"reason": "Animation emission borrows the last rendered particle snapshot from the parent renderer."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.characterMatrix",
+			"function": "callback:step:5",
+			"kind": "callback",
+			"reason": "Animation emission borrows the same renderer matrix query for its current actor set."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.characterParticleTime",
+			"function": "callback:step:6",
+			"kind": "callback",
+			"reason": "Animation emission borrows the parent renderer particle clock."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "resources.duration",
+			"function": "callback:step:7",
+			"kind": "callback",
+			"reason": "Animation emission borrows resident effect duration from the character resource owner."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.scenery",
+			"function": "presentEmission",
+			"kind": "callback",
+			"reason": "The existing scenery phase reads the parent renderer snapshot."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "mallPreview.skin",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent mall preview owner supplies the current mannequin selection."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "mallPreview.step",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent mall preview owner builds portraits at their original publication point."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "resources.ready",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "Portrait admission borrows the parent character resource owner."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.setCharacterActors",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The finalization phase publishes the same ordered actor and portrait arrays through the parent renderer."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "resources.retainWanted",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The resource owner receives wanted models after actor publication in the original order."
+		},
+		{
+			"file": "src/engine/foundation/gameplay/concealment.ts",
+			"expression": "skill",
+			"function": "hideLevels",
+			"kind": "callback",
+			"reason": "The visibility phase forwards the parent skill lookup synchronously."
+		},
+		{
+			"file": "src/engine/runtime/characters/mall-preview.ts",
+			"expression": "resources.plan",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The finalization phase forwards the existing character resource planner to its mall preview sibling through the parent."
+		},
+		{
+			"file": "src/engine/runtime/characters/mall-preview.ts",
+			"expression": "resources.ready",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "The mall preview checks every planned resource through the forwarded parent admission owner."
+		},
+		{
+			"file": "src/engine/runtime/characters/mall-preview.ts",
+			"expression": "renderer.setCharacterAssembly",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The mall preview receives the existing parent renderer assembly capability through finalization."
+		},
+		{
+			"file": "src/engine/foundation/animation/animation-emission.ts",
+			"expression": "ready",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The finalization phase forwards synchronous readiness from the parent character resource owner."
+		},
+		{
+			"file": "src/engine/foundation/animation/model-emission.ts",
+			"expression": "ready",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The finalization phase forwards synchronous readiness from the parent character resource owner."
+		},
+		{
+			"file": "src/engine/foundation/animation/scenery-emission.ts",
+			"expression": "ready",
+			"function": "step",
+			"kind": "callback",
+			"reason": "The finalization phase forwards synchronous readiness from the parent character resource owner."
 		}
 	],
 	"sequences": [

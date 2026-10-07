@@ -130,9 +130,7 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 		if ( actor ) next.set( local.gid, { ...actor, opacity: seenAlpha() } );
 	}
 	if (
-		entities.some( e =>
-			e.gid !== local?.gid && (e.appearanceState?.[2] === 6 || e.appearanceState?.[2] === 7)
-		)
+		entities.some( e => e.gid !== local?.gid && (e.appearanceState?.[2] === 6 || e.appearanceState?.[2] === 7) )
 	) {
 		const lookup = concealmentSkills( gameplay?.skillCatalog ),
 			byGid = new Map<number, import("@/engine/foundation/gameplay/attached-effects").AttachedEffect[]>();
@@ -164,7 +162,11 @@ export function applyCharacterVisibility( frame: VisibilityFrame, output: Camera
 		}
 		const hidden = cameraPitch < -0.8999999761581421,
 			transition = output.cameraFade.mode !== hidden || output.cameraFade.progress < 1;
-		const alpha = advanceCharacterFade( output.cameraFade, hidden, Math.max( 0, seconds - output.cameraFade.time ) );
+		const alpha = advanceCharacterFade(
+			output.cameraFade,
+			hidden,
+			Math.max( 0, seconds - output.cameraFade.time )
+		);
 		output.cameraFade.time = seconds;
 		// 866B90 applies camera interpolation first while it is live;
 		// after it finishes, the body-4 branch restores alpha 0x50.
@@ -264,7 +266,9 @@ interface EmissionBindings {
 	readonly scenery: ReturnType<typeof createSceneryEmission>;
 	readonly entityLod: { fraction( gid: number ): number; };
 	readonly applySpawnFades: (
-		entities: readonly EntityState[], next: Map<number, CharacterActor>, seconds: number
+		entities: readonly EntityState[],
+		next: Map<number, CharacterActor>,
+		seconds: number
 	) => void;
 }
 

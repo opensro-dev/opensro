@@ -229,7 +229,7 @@ test("scenery admission, warnings, material updates and frontend logout require 
 			}
 			if (
 				grant.consumer === "src/engine/foundation/animation/model-emission.ts" &&
-				grant.provider === "src/engine/runtime/characters/characters.ts"
+				grant.provider === "src/engine/runtime/characters/presentation-finalize.ts"
 			) grant.functions = grant.functions.filter( n => n !== "callback:step:4" );
 			if (
 				grant.consumer === "src/engine/runtime/characters/characters.ts" &&
@@ -250,21 +250,38 @@ test("scenery admission, warnings, material updates and frontend logout require 
 				grant.functions = grant.functions.filter( n => n !== "callback:createFrontend:3" );
 			}
 		}
+		contract.boundaries = contract.boundaries.filter( boundary =>
+			!(boundary.file === "src/engine/foundation/animation/scenery-emission.ts" &&
+				boundary.expression === "ready" && boundary.function === "step") &&
+			!(boundary.file === "src/engine/runtime/characters/presentation-finalize.ts" &&
+				boundary.expression === "renderer.scenery" && boundary.function === "presentEmission")
+		);
 		fs.writeFileSync( p, JSON.stringify( contract ) );
 	}, dir => {
 		const issues = verifyExecution( dir, realGraph() );
 		for (
 			const target of [
-				"resources/resources.ts#ready",
 				"characters/characters.ts#callback:step:2",
-				"characters/characters.ts#callback:step:4",
+				"characters/presentation-finalize.ts#callback:step:4",
 				"renderer/renderer.ts#presentationCamera",
 				"world/world.ts#callback:sceneryParticles:5",
-				"world/world.ts#scenery",
 				"device/geometry.ts#updateMaterialColors",
 				"runtime.ts#callback:createFrontend:3"
 			]
 		) assert.ok( issues.some( s => s.includes( "undeclared capability" ) && s.endsWith( target ) ), target );
+		for (
+			const [file, expression] of [
+				[ "foundation/animation/scenery-emission.ts", "ready" ],
+				[ "runtime/characters/presentation-finalize.ts", "renderer.scenery" ]
+			]
+		) {
+			assert.ok(
+				issues.some( issue =>
+					issue.includes( file ) && issue.endsWith( `unresolved execution ${expression}` )
+				),
+				`${file}: ${expression}`
+			);
+		}
 	}, true ));
 test("rejects a renamed external capability through a computed key", () =>
 	fixture(
