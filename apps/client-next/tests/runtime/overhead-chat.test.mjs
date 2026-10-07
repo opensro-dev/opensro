@@ -71,11 +71,12 @@ const { decodeChatHistory } = await import(
 ================
 historyFrame
 
-The server's OpChatHistory payload for global (6) lines {sender, text}.
+The server's OpChatHistory payload for global (6) lines {sender, text, sentAt}.
 ================
 */
+const HISTORY_SENT_AT = 1_790_000_000_000;
 function historyFrame( lines ) {
-	const parts = lines.map( ( [sender, text] ) => {
+	const parts = lines.map( ( [sender, text, sentAt = HISTORY_SENT_AT] ) => {
 		const name = new TextEncoder().encode( sender ),
 			line = new Uint8Array( 1 + 2 + name.length + 2 + text.length * 2 );
 		const v = new DataView( line.buffer );
@@ -84,16 +85,18 @@ function historyFrame( lines ) {
 		line.set( name, 3 );
 		v.setUint16( 3 + name.length, text.length, true );
 		for ( let i = 0; i < text.length; i++ ) v.setUint16( 5 + name.length + i * 2, text.charCodeAt( i ), true );
-		return line;
+		return { line, sentAt };
 	} );
-	const out = new Uint8Array( 2 + parts.reduce( ( n, p ) => n + 2 + p.length, 0 ) ), v = new DataView( out.buffer );
-	out[0] = 1;
+	const out = new Uint8Array( 2 + parts.reduce( ( n, p ) => n + 10 + p.line.length, 0 ) ),
+		v = new DataView( out.buffer );
+	out[0] = 2;
 	out[1] = parts.length;
 	let o = 2;
 	for ( const p of parts ) {
-		v.setUint16( o, p.length, true );
-		out.set( p, o + 2 );
-		o += 2 + p.length;
+		v.setBigUint64( o, BigInt( p.sentAt ), true );
+		v.setUint16( o + 8, p.line.length, true );
+		out.set( p.line, o + 10 );
+		o += 10 + p.line.length;
 	}
 	return out;
 }
@@ -104,7 +107,10 @@ test("the replayed public transcript is history, never speech over a head on ent
 	chat.bootstrap( { character: { name: "Me" } } );
 	assert.equal( speech.step( chat.state().lines, players, 0 ).size, 0 );
 	assert.equal(
-		chat.receive( { opcode: 16, payload: historyFrame( [ [ "Me", "my old line" ], [ "Peer", "older" ] ] ) }, 1 ),
+		chat.receive( {
+			opcode: 16,
+			payload: historyFrame( [ [ "Me", "my old line" ], [ "Peer", "older", HISTORY_SENT_AT + 60_000 ] ] )
+		}, 1 ),
 		true
 	);
 	const lines = chat.state().lines;
@@ -113,8 +119,17 @@ test("the replayed public transcript is history, never speech over a head on ent
 		"older",
 		true
 	] ] );
+	// BUG-067: replayed lines keep the server's send time, not this login's.
+	assert.deepEqual( lines.map( l => l.sentAt ), [ HISTORY_SENT_AT, HISTORY_SENT_AT + 60_000 ] );
 	assert.equal( speech.step( lines, players, 100 ).size, 0 );
-	assert.throws( () => decodeChatHistory( Uint8Array.of( 2, 0 ) ), /Invalid chat history/ );
-	assert.throws( () => decodeChatHistory( Uint8Array.of( 1, 1, 9, 0 ) ), /Truncated chat history/ );
+	assert.throws( () => decodeChatHistory( Uint8Array.of( 1, 0 ) ), /Invalid chat history/ );
+	assert.throws(
+		() => decodeChatHistory( Uint8Array.of( 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 9 ) ),
+		/Truncated chat history/
+	);
+	assert.throws(
+		() => decodeChatHistory( Uint8Array.of( 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0 ) ),
+		/Truncated chat history/
+	);
 	assert.throws( () => decodeChatHistory( Uint8Array.of( ...historyFrame( [ [ "Me", "x" ] ] ), 0 ) ), /trailing/ );
 });

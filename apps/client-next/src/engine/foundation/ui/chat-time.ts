@@ -3,9 +3,10 @@
 
 chat-time.ts - the local clock time shown when the mouse rests on a chat line
 
-The wire carries no send time, so a line is stamped when this client receives
-it (ChatLine.sentAt). Showing that stamp in the viewer's own time zone is the
-closest honest answer to "when was this sent". A line from an earlier day
+A live line carries no send time on the wire, so it is stamped when this
+client receives it; a line replayed from the server's public history keeps
+the server's send time (ChatLine.sentAt). Showing that stamp in the viewer's
+own time zone is the closest honest answer to "when was this sent". A line from an earlier day
 than today (in that same zone) also names its date.
 
 ===========================================================================

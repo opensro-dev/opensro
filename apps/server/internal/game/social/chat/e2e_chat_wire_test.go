@@ -90,6 +90,7 @@ chatServer
 type chatServer struct {
 	srv       *transport.Server
 	authority *store.Store
+	chat      *chat.Runtime
 }
 
 // startChatServer opens the authority store, creates the three division
@@ -169,7 +170,7 @@ func startChatServer(t *testing.T, dir, divisionID string) chatServer {
 		defer cancel()
 		srv.Shutdown(ctx)
 	})
-	return chatServer{srv: srv, authority: authority}
+	return chatServer{srv: srv, authority: authority, chat: chatRuntime}
 }
 
 // mutateCharacter runs fn on the named live store record through the

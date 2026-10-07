@@ -166,8 +166,9 @@ Outgoing intent and received chat share display data, not delivery status.
 */
 export interface ChatLine {
 	readonly sequence?: number;
-	// Epoch milliseconds on this client's clock when the line arrived. The wire
-	// carries no send time, so arrival is the closest available answer.
+	// Epoch milliseconds when the line was said. Live 0x3667 lines carry no send
+	// time, so they take this client's clock at arrival; replayed history takes
+	// the server's clock from OpChatHistory.
 	readonly sentAt?: number;
 	readonly channel: number;
 	readonly name: string;

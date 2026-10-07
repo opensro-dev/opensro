@@ -11,6 +11,8 @@ runtime orders public history with live messages; presence owns private peers.
 package chat
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/restriction"
@@ -35,7 +37,7 @@ Register
 ================
 */
 func Register(hub *transport.Hub, deps Dependencies, presence DeliveryPresence, parties PartyView) *Runtime {
-	rt := &Runtime{history: make(map[string][][]byte), members: make(map[uint64]publicMember)}
+	rt := &Runtime{history: make(map[string][]publicLine), members: make(map[uint64]publicMember), now: time.Now}
 	hub.Handle(OpChatRequest, rt.chatHubHandler(hub, deps, presence, parties))
 	hub.OnSessionClose(rt.sessionClosed)
 	return rt

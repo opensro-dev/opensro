@@ -4,7 +4,9 @@
 history_wire_test.go - public history bounds and ordered live delivery
 
 Real transport admission must replay only the last ten public messages, in
-one OpChatHistory frame rather than as live lines.
+one OpChatHistory frame rather than as live lines, each line carrying the
+server time it was said (BUG-067: a late joiner must not see its own login
+time on older lines).
 Whispers never enter the transcript, and repeated game-ready cannot replay it.
 
 ===========================================================================
@@ -12,9 +14,11 @@ Whispers never enter the transcript, and repeated game-ready cannot replay it.
 package chat_test
 
 import (
+	"encoding/binary"
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/social/chat"
@@ -28,6 +32,14 @@ TestPublicHistoryAdmissionAndLiveDelivery
 func TestPublicHistoryAdmissionAndLiveDelivery(t *testing.T) {
 	const division = "global-official"
 	server := startChatServer(t, filepath.Join(t.TempDir(), "authority"), division)
+	// Line i is said at base + i seconds; the clock is read once per publish.
+	base := time.UnixMilli(1_790_000_000_000)
+	said := 0
+	server.chat.SetClock(func() time.Time {
+		at := base.Add(time.Duration(said) * time.Second)
+		said++
+		return at
+	})
 	a := dialWS(t, server.srv)
 	helloWS(t, a)
 	enterChatWorld(t, a, division, e2eChatNameA)
@@ -42,9 +54,10 @@ func TestPublicHistoryAdmissionAndLiveDelivery(t *testing.T) {
 	b := dialWS(t, server.srv)
 	helloWS(t, b)
 	enterChatWorld(t, b, division, e2eChatNameB)
-	history := []byte{1, 10}
+	history := []byte{2, 10}
 	for i := 2; i < 12; i++ {
 		line := namedBroadcast(chat.ChatTypeGlobal, e2eChatNameA, fmt.Sprintf("public %d", i))
+		history = binary.LittleEndian.AppendUint64(history, uint64(base.Add(time.Duration(i)*time.Second).UnixMilli()))
 		history = append(history, byte(len(line)), byte(len(line)>>8))
 		history = append(history, line...)
 	}

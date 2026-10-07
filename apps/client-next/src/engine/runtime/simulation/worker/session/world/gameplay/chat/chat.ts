@@ -24,8 +24,8 @@ const CHAT_ACK_TIMEOUT_MS = 10000;
 const CHAT_RECEIPT_KEY = 255;
 const CHAT_GLOBAL_CHANNEL = 6;
 // The server's public transcript frame layout version and line bound
-// (history.go OpChatHistory).
-const CHAT_HISTORY_VERSION = 1;
+// (history.go OpChatHistory). Version 2 carries each line's send time.
+const CHAT_HISTORY_VERSION = 2;
 const CHAT_HISTORY_LIMIT = 10;
 
 /*
@@ -92,25 +92,29 @@ function decodeChatBroadcast(
 decodeChatHistory
 
 The server's public transcript (history.go OpChatHistory, a browser
-extension): {u8 version, u8 count, count x (u16 length, 0x3667 payload)}.
+extension): {u8 version=2, u8 count, count x (u64 sentAt, u16 length, 0x3667
+payload)}. sentAt is the server's Unix milliseconds when the line was said,
+so a replayed line shows its real time, not this client's login (BUG-067).
 Only named public lines are admitted; anything else is a malformed frame.
 ================
 */
-export function decodeChatHistory( p: Uint8Array ): { channel: number; sender: string; text: string; }[] {
+export function decodeChatHistory(
+	p: Uint8Array
+): { channel: number; sender: string; text: string; sentAt: number; }[] {
 	if ( p.length < 2 || p[0] !== CHAT_HISTORY_VERSION || p[1]! > CHAT_HISTORY_LIMIT ) {
 		throw new Error( "Invalid chat history" );
 	}
 	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ), lines = [];
 	let o = 2;
 	for ( let i = 0; i < p[1]!; i++ ) {
-		if ( o + 2 > p.length ) throw new Error( "Truncated chat history" );
-		const n = v.getUint16( o, true );
-		o += 2;
+		if ( o + 10 > p.length ) throw new Error( "Truncated chat history" );
+		const sentAt = Number( v.getBigUint64( o, true ) ), n = v.getUint16( o + 8, true );
+		o += 10;
 		if ( o + n > p.length ) throw new Error( "Truncated chat history" );
 		const line = decodeChatBroadcast( p.subarray( o, o + n ) );
 		o += n;
 		if ( !line || !line.sender ) throw new Error( "Chat history line has no sender" );
-		lines.push( { channel: line.channel, sender: line.sender, text: line.text } );
+		lines.push( { channel: line.channel, sender: line.sender, text: line.text, sentAt } );
 	}
 	if ( o !== p.length ) throw new Error( "Chat history trailing bytes" );
 	return lines;
@@ -136,10 +140,16 @@ export function createChat( send: ( frame: WireFrame ) => void ) {
 	/*
 ================
 append
+
+Live lines are stamped on arrival; replayed history keeps the server's time.
 ================
 	*/
 	function append( line: ChatLine ) {
-		lines = [ ...lines.slice( 1 - CHAT_LINE_LIMIT ), { ...line, sequence: ++sequence, sentAt: Date.now() } ];
+		lines = [ ...lines.slice( 1 - CHAT_LINE_LIMIT ), {
+			...line,
+			sequence: ++sequence,
+			sentAt: line.sentAt ?? Date.now()
+		} ];
 	}
 	return {
 		/*
@@ -294,7 +304,8 @@ receive
 							name: line.sender,
 							text: line.text,
 							outgoing: false,
-							history: true
+							history: true,
+							sentAt: line.sentAt
 						} );
 					}
 				}

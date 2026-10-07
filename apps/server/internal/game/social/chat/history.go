@@ -7,20 +7,37 @@ One runtime owns the public transcript and its recipients. Admission replays
 the last ten public messages before subscribing to live delivery under the
 same lock, preventing a message from being missed or replayed twice. The
 replay is one OpChatHistory frame, never live 0x3667 lines, so the client
-can tell a transcript from speech. Private channels never enter this owner.
-History is ephemeral and ends with the shard.
+can tell a transcript from speech. Each retained line keeps the server time
+it was said, so a player who logs in later sees when it was really sent
+(BUG-067). Private channels never enter this owner. History is ephemeral and
+ends with the shard.
 
 ===========================================================================
 */
 package chat
 
 import (
+	"encoding/binary"
 	"sync"
+	"time"
 
 	"opensro.online/server/internal/transport"
 )
 
 const publicHistoryLimit = 10
+
+/*
+================
+publicLine
+
+One retained public line: its 0x3667 payload and the server wall-clock
+time it was published, in Unix milliseconds.
+================
+*/
+type publicLine struct {
+	payload  []byte
+	sentAtMs int64
+}
 
 /*
 ================
@@ -42,8 +59,10 @@ messages. Registration creates one instance for the lifetime of the hub.
 */
 type Runtime struct {
 	mu      sync.Mutex
-	history map[string][][]byte
+	history map[string][]publicLine
 	members map[uint64]publicMember
+	// now stamps published lines; Register sets time.Now, tests may pin it.
+	now func() time.Time
 
 	// Unions answers union chat; set by wiring before the hub serves.
 	Unions UnionView
@@ -107,7 +126,7 @@ func (rt *Runtime) publish(division string, payload []byte) {
 		copy(rows, rows[1:])
 		rows = rows[:publicHistoryLimit-1]
 	}
-	rows = append(rows, append([]byte(nil), payload...))
+	rows = append(rows, publicLine{payload: append([]byte(nil), payload...), sentAtMs: rt.now().UnixMilli()})
 	rt.history[division] = rows
 	for _, member := range rt.members {
 		if member.division == division && member.session.WorldReady() && !member.session.Evicted() {
@@ -120,16 +139,18 @@ func (rt *Runtime) publish(division string, payload []byte) {
 ================
 encodeChatHistory
 
-The OpChatHistory payload: version, count, then each retained 0x3667
-payload with its u16 length. The transcript holds at most ten lines, each
-bounded by the chat text limit, so the frame stays small.
+The OpChatHistory payload (version 2): version, count, then for each
+retained line its send time as u64 little-endian Unix milliseconds, its u16
+payload length and the 0x3667 payload. The transcript holds at most ten
+lines, each bounded by the chat text limit, so the frame stays small.
 ================
 */
-func encodeChatHistory(rows [][]byte) []byte {
+func encodeChatHistory(rows []publicLine) []byte {
 	out := []byte{chatHistoryVersion, byte(len(rows))}
 	for _, row := range rows {
-		out = append(out, byte(len(row)), byte(len(row)>>8))
-		out = append(out, row...)
+		out = binary.LittleEndian.AppendUint64(out, uint64(row.sentAtMs))
+		out = append(out, byte(len(row.payload)), byte(len(row.payload)>>8))
+		out = append(out, row.payload...)
 	}
 	return out
 }
