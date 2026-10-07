@@ -37,7 +37,16 @@ main thread's frame and world-preparation time per frame. Options add:
 
 Read the captures with tools/perf/analyze (profile.mjs, trace.mjs).
 
-The goal these measure: 500 frames a second in every scenario.
+The goal these measure: 500 frames a second in every scenario, on the
+built bundle. The dev server serves unbundled modules and is slower to
+start, so its numbers are development readings. To measure the bundle:
+
+  pnpm --filter @sro/client-next build
+  pnpm --filter @sro/client-next preview
+  SRO_PROBE_CLIENT_NEXT_BASE_URL=http://127.0.0.1:4180 node tools/perf/bench/fps-bench.mjs
+
+Every row records what it ran against (identity: dev server or bundle,
+origin, commit, replay recorder state), and the verdict names it.
 
 ===========================================================================
 */
@@ -45,7 +54,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
-import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
+import { openClient, closeClient, createCaptures, measure, revive, buildIdentity } from "../core/client.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 
@@ -320,6 +329,10 @@ async function session( options, location, results ) {
 		shadowDetail: options.shadowDetail
 	} );
 	try {
+		const identity = await buildIdentity( client.page );
+		console.log(
+			`  measuring ${identity.build} ${identity.origin} at ${identity.commit}, replay ${identity.replay}`
+		);
 		// A stale or replaced session can boot outside the scene; every
 		// scenario of this location would then measure the wrong place.
 		const booted = await localPose( client.page ), start = location.fixture.start;
@@ -364,6 +377,7 @@ async function session( options, location, results ) {
 			result.frameLimit = options.frameLimit;
 			result.cpuRate = options.cpuRate;
 			result.shadowDetail = options.shadowDetail;
+			result.identity = identity;
 			if ( scene ) {
 				result.serverUptimeMinutes = await serverUptimeMinutes();
 				result.scene = {
@@ -464,10 +478,17 @@ async function run( options ) {
 		throw Error( "no valid frame-rate verdict: missing or invalid measurements" );
 	}
 	const worst = Math.min( ...results.map( r => r.fps ) );
+	// Only a built bundle with the replay recorder in its player default
+	// answers the goal; a dev-server number is a development reading.
+	const builds = new Set( results.map( r => `${r.identity.build}, replay ${r.identity.replay}` ) );
+	const verdict = worst >= GOAL_FPS ? "MET" : "not met";
 	console.log(
 		options.paced || options.frameLimit ?
 			`slowest paced scenario ${worst.toFixed( 0 )} fps; see frame-interval percentiles` :
-			`slowest scenario ${worst.toFixed( 0 )} fps; goal ${GOAL_FPS} ${worst >= GOAL_FPS ? "MET" : "not met"}`
+			`slowest scenario ${worst.toFixed( 0 )} fps; goal ${GOAL_FPS} ${verdict} on ${
+				[ ...builds ].join( " / " )
+			}` +
+			(results.some( r => r.identity.build === "dev-server" ) ? " (dev server: not a release verdict)" : "")
 	);
 }
 
