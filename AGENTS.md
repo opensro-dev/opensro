@@ -8,6 +8,10 @@ Area rules live next to the code:
 - [`apps/client-next/AGENTS.md`](apps/client-next/AGENTS.md) - browser client
 - [`scripts/AGENTS.md`](scripts/AGENTS.md) - asset pipeline, checks, task runner
 
+Several agents working at once also follow
+[`docs/AGENT-COORDINATION.md`](docs/AGENT-COORDINATION.md): the shared log,
+the run lock, reviews, merges and evidence for performance claims.
+
 When a rule here conflicts with habit or with a gate's letter, the rule wins.
 Machine-specific notes belong in an untracked `CLAUDE.local.md`, not here.
 
