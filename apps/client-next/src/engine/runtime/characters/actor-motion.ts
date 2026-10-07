@@ -13,7 +13,7 @@ per-actor loop.
 import { movementEntryRate, transitionActionStates } from "@/engine/foundation/animation/action-refresh";
 import { selectAvatarOverride } from "@/engine/foundation/animation/avatar-override";
 import { createModelAnimation } from "@/engine/foundation/animation/model-animation";
-import { createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
+import { type AnimationDispatch, createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { blindableCharacter } from "@/engine/foundation/ui/name-visibility";
 import { monsterScale } from "@/engine/foundation/rendering/monster-scale";
@@ -642,19 +642,29 @@ export function createActorMotion( owner: ActorOwner ) {
 					motionMetadata( name )?.durationMs ??
 						Math.round( resources.duration( resource.glb, name ) * 1000 )
 			);
-			const elapsed = new Map( dispatch.map( row => [ row.activation, row.elapsedMs ] ) );
-			const sampled = new Map( dispatch.map( row => [ row.activation, row.layer ] ) );
+			// Most actors have one installation. Keep that row directly; blends
+			// share one index for both pose and sound instead of copying two maps.
+			// Dispatch omits zero-duration rows, so even the single row must match
+			// by installation identity rather than by its position in the list.
+			const single = dispatch.length === 1 ? dispatch[0] : undefined;
+			const sampled = dispatch.length > 1 ? new Map<AnimationActivation, AnimationDispatch>() : undefined;
+			if ( sampled ) {
+				for ( const row of dispatch ) sampled.set( row.activation, row );
+			}
 			for ( let i = 0; i < layers.length; i++ ) {
-				layers[i] = sampled.get( layers[i]!.activation! ) ?? layers[i]!;
+				const layer = layers[i]!;
+				const row = single?.activation === layer.activation ? single : sampled?.get( layer.activation! );
+				layers[i] = row?.layer ?? layer;
 			}
 			for ( const layer of layers ) {
 				if ( !layer.activation ) throw Error( "Missing animation installation" );
 				retainedActivations.add( layer.activation );
+				const row = single?.activation === layer.activation ? single : sampled?.get( layer.activation );
 				sounds.advance(
 					entity.gid,
 					layer.clip,
 					layer.activation.started,
-					(elapsed.get( layer.activation ) ?? 0) / 1000,
+					(row?.elapsedMs ?? 0) / 1000,
 					layer.loop,
 					motionMetadata( layer.clip ),
 					seconds,

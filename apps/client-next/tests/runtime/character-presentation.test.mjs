@@ -2140,6 +2140,43 @@ test("production blends retain separate outgoing and incoming sound installation
 	f.dispose();
 });
 
+for ( const zeroClip of [ "stand", "run" ] ) {
+	test(`production blend keeps ${zeroClip} when its zero duration omits a dispatch row`, () => {
+		const audio = {
+			states: Object.fromEntries( [ "stand", "run" ].map( clip => [ clip, {
+				durationMs: clip === zeroClip ? 0 : 1000,
+				trackEvents: [],
+				soundEvents: [ { cursorMs: 45, cue: "snd_" + clip } ]
+			} ] ) ),
+			rules: [ "STAND", "RUN" ].map( handle => ({
+				object: "NPC_1",
+				handle: "SND_" + handle,
+				event1: "-",
+				publicPath: "/assets/audio/" + handle + ".wav"
+			}) )
+		};
+		const f = fixture( {}, 2, false, false, false, false, false, false, false, false, undefined, audio );
+		try {
+			f.warm();
+			f.step( [ entity( 1, { kind: "monster" } ) ], .3 );
+			f.played.length = 0;
+			f.step( [ entity( 1, { kind: "monster", moving: true, movementMode: 3 } ) ], .4 );
+			f.step( [ entity( 1, { kind: "monster", moving: true, movementMode: 3 } ) ], .46 );
+			assert.equal( f.presentation.error(), null );
+			const layers = f.actors[0].layers;
+			assert.deepEqual( layers.map( layer => layer.clip ).sort(), [ "run", "stand" ] );
+			assert.notEqual( layers[0].activation, layers[1].activation );
+			assert.deepEqual(
+				f.played.map( event => event.path ),
+				zeroClip === "stand" ? [ "/assets/audio/RUN.wav" ] : [],
+				"only the installation with a dispatch cursor can emit its due sound"
+			);
+		} finally {
+			f.dispose();
+		}
+	});
+}
+
 test("cold production animation particles dispatch both blend installations and retain inactive wrappers", () => {
 	const entry = ( path, key ) => ({
 		field00: 1,
