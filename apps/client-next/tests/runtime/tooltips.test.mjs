@@ -661,3 +661,19 @@ test("native tooltip parameter cursor consumes complete setv saps and stns block
 		} else assert.deepEqual( row.directTooltipParams.setValues, [ { code: 0x45325341, value: 20 } ] );
 	}
 });
+test("Ghost Walk shows its travel distance, the second tele argument, like the original", () => {
+	// Client 7FC6CE..7FC731 prints [edi+4] / 10 under the tele row; the first
+	// argument (500 on every rank) only gates it. Phantom 1 travels 100, Shadow 4 travels 230.
+	const label = text( "PARAM_TELE" );
+	for ( const [id, metres] of [ [ 114, "10.0" ], [ 1297, "21.0" ], [ 19636, "21.5" ], [ 19639, "23.0" ] ] ) {
+		const rows = skillTooltip(
+			{ id, catalog, learned: [ id ], progression: { level: 90, skillPoints: 0, masteries: [] } },
+			text,
+			String
+		);
+		const tele = rows.filter( row => typeof row.value === "string" && row.value.startsWith( label + " " ) ).map(
+			row => row.value
+		);
+		assert.deepEqual( tele, [ `${label} ${metres}m` ], `skill ${id}` );
+	}
+});
