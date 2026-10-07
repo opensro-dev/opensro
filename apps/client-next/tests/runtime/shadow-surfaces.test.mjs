@@ -71,3 +71,22 @@ test("a change stamps only its own cells; reset stamps every cell", () => {
 	assert.equal( owner.changedSince( settled, 0, 0, 0, 0 ), true );
 	assert.equal( owner.surfaces().size, 0 );
 });
+
+/*
+================
+In-place seam changes
+================
+*/
+test("changed seam heights invalidate their cell even when selected ranges stay identical", () => {
+	const owner = createShadowSurfaces(), g = group( [ [ 0, 0 ], [ 5, 5 ] ] );
+	owner.replace( g, 0, undefined, g.ranges );
+	owner.commit();
+	const stamp = owner.revision();
+	g.geometry.positions[1] = 17;
+	owner.replace( g, 0, g.ranges, g.ranges );
+	owner.changedPositions( 0, 0 );
+	owner.commit();
+	assert.equal( owner.changedSince( stamp, 0, 0, 0, 0 ), true );
+	assert.equal( owner.changedSince( stamp, 5, 5, 5, 5 ), false );
+	assert.equal( owner.surfaces().get( terrainCellKey( 0, 0 ) )[0].positions[1], 17 );
+});

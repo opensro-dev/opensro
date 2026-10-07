@@ -154,12 +154,149 @@ export function characterShadowReceiver(
 	blobSize?: number,
 	surfaces?: ReadonlyMap<number, readonly ShadowTerrainSurface[]>
 ): Geometry | null {
+	return projectShadowReceiver(
+		characterShadowTopology(
+			cells,
+			shadowReceiverBounds( projection.point, blobSize ),
+			blobSize !== undefined,
+			surfaces
+		),
+		projection,
+		blobSize
+	);
+}
+
+/*
+================
+ShadowReceiverTopology
+
+Ordered clipped polygons before point-dependent rejection, UV and fade.
+Keep double precision until the final receiver arrays are written.
+================
+*/
+export type ShadowReceiverTopology = readonly {
+	readonly vertices: readonly (readonly number[])[];
+	readonly minimumSourceX: number;
+}[];
+
+/*
+================
+characterShadowTopology
+
+Build the superset for one native grid rectangle. The projection step still
+rejects polygons ahead of the current point, including within the same cell.
+================
+*/
+export function characterShadowTopology(
+	cells: TerrainCells,
+	bounds: ShadowReceiverBounds,
+	blob: boolean,
+	surfaces?: ReadonlyMap<number, readonly ShadowTerrainSurface[]>
+): ShadowReceiverTopology {
+	const { tx, tz, extent, loX, hiX, loZ, hiZ } = bounds;
+	const polygons: { vertices: number[][]; minimumSourceX: number; }[] = [];
+	if ( surfaces ) {
+		// Follow the triangles actually submitted for this frame, including LOD
+		// interpolation and stitched edges. Raw heightfield receivers can lie below
+		// those triangles even though every source sample is individually correct.
+		const seen = new Set<string>();
+		for ( let cz = Math.floor( loZ / 320 ); cz <= Math.floor( hiZ / 320 ); cz++ ) {
+			for ( let cx = Math.floor( loX / 320 ); cx <= Math.floor( hiX / 320 ); cx++ ) {
+				for ( const surface of surfaces.get( terrainCellKey( cx, cz ) ) ?? [] ) {
+					for ( let i = surface.start; i < surface.start + surface.count; i += 3 ) {
+						const vertices = surface.positions,
+							a = surface.indices[i]! * 3,
+							b = surface.indices[i + 1]! * 3,
+							c = surface.indices[i + 2]! * 3;
+						const ax = vertices[a]!,
+							az = vertices[a + 2]!,
+							bx = vertices[b]!,
+							bz = vertices[b + 2]!,
+							cx = vertices[c]!,
+							cz = vertices[c + 2]!;
+						const minX = Math.min( ax, bx, cx ),
+							maxX = Math.max( ax, bx, cx ),
+							minZ = Math.min( az, bz, cz ),
+							maxZ = Math.max( az, bz, cz );
+						// Most submitted triangles are outside this receiver. Reject them before
+						// allocating vertices, closures or duplicate keys; moving actors repeat this.
+						if (
+							maxX < loX || minX > hiX || maxZ < loZ || minZ > hiZ
+						) continue;
+						const q = [ [ ax, vertices[a + 1]!, az ], [ bx, vertices[b + 1]!, bz ], [
+							cx,
+							vertices[c + 1]!,
+							cz
+						] ];
+						const key = q.map( p => p.join( "," ) ).sort().join( ";" );
+						if ( seen.has( key ) ) continue;
+						seen.add( key );
+						if ( blob ) {
+							polygons.push( { vertices: q, minimumSourceX: minX } );
+							continue;
+						}
+						// 87EF50 evaluates depth attenuation on 20-unit cells. Evaluating it only
+						// at coarse LOD vertices loses the entire narrow fade band (or stretches
+						// it across a terrain triangle). Split on the native grid while retaining
+						// the submitted triangle's plane, so receivers cannot sink below terrain.
+						const x0 = Math.max( tx - extent, Math.floor( minX / 20 ) ),
+							x1 = Math.min( tx + extent, Math.ceil( maxX / 20 ) - 1 );
+						const z0 = Math.max( tz - extent, Math.floor( minZ / 20 ) ),
+							z1 = Math.min( tz + extent, Math.ceil( maxZ / 20 ) - 1 );
+						for ( let z = z0; z <= z1; z++ ) {
+							for ( let x = x0; x <= x1; x++ ) {
+								let polygon = clipShadowPolygon( q, 0, x * 20, true );
+								polygon = clipShadowPolygon( polygon, 0, (x + 1) * 20, false );
+								polygon = clipShadowPolygon( polygon, 2, z * 20, true );
+								polygon = clipShadowPolygon( polygon, 2, (z + 1) * 20, false );
+								if ( polygon.length >= 3 ) polygons.push( { vertices: polygon, minimumSourceX: minX } );
+							}
+						}
+					}
+				}
+			}
+		}
+	} else {
+		for ( let z = tz - extent; z <= tz + extent; z++ ) {
+			for ( let x = tx - extent; x <= tx + extent; x++ ) {
+				const cx = Math.floor( x / 16 ),
+					cz = Math.floor( z / 16 ),
+					cell = cells.get( terrainCellKey( cx, cz ) );
+				if ( !cell ) continue;
+				const ix = x - cx * 16,
+					iz = z - cz * 16,
+					h = ( dx: number, dz: number ) => cell.heights[(iz + dz) * 17 + ix + dx]!;
+				const q = [ [ x * 20, h( 0, 0 ), z * 20 ], [ x * 20, h( 0, 1 ), (z + 1) * 20 ], [
+					(x + 1) * 20,
+					h( 1, 1 ),
+					(z + 1) * 20
+				], [ (x + 1) * 20, h( 1, 0 ), z * 20 ] ];
+				if ( (x & 1) !== (z & 1) ) q.unshift( q.pop()! );
+				polygons.push( { vertices: q, minimumSourceX: x * 20 } );
+			}
+		}
+	}
+	return polygons;
+}
+
+/*
+================
+projectShadowReceiver
+
+Apply the original rejection, projection and attenuation arithmetic to a
+retained topology. Both vertex and index order match the uncached receiver.
+================
+*/
+export function projectShadowReceiver(
+	polygons: ShadowReceiverTopology,
+	projection: ShadowProjection,
+	blobSize?: number
+): Geometry | null {
 	const { point, matrix: m } = projection,
 		positions: number[] = [],
 		uvs: number[] = [],
 		colors: number[] = [],
 		indices: number[] = [];
-	const { tx, tz, extent, loX, hiX, loZ, hiZ } = shadowReceiverBounds( point, blobSize );
 	/*
 	================
 	append
@@ -189,87 +326,9 @@ export function characterShadowReceiver(
 		}
 		for ( let i = 1; i + 1 < q.length; i++ ) indices.push( n, n + i, n + i + 1 );
 	};
-	if ( surfaces ) {
-		// Follow the triangles actually submitted for this frame, including LOD
-		// interpolation and stitched edges. Raw heightfield receivers can lie below
-		// those triangles even though every source sample is individually correct.
-		const seen = new Set<string>();
-		for ( let cz = Math.floor( loZ / 320 ); cz <= Math.floor( hiZ / 320 ); cz++ ) {
-			for ( let cx = Math.floor( loX / 320 ); cx <= Math.floor( hiX / 320 ); cx++ ) {
-				for ( const surface of surfaces.get( terrainCellKey( cx, cz ) ) ?? [] ) {
-					for ( let i = surface.start; i < surface.start + surface.count; i += 3 ) {
-						const vertices = surface.positions,
-							a = surface.indices[i]! * 3,
-							b = surface.indices[i + 1]! * 3,
-							c = surface.indices[i + 2]! * 3;
-						const ax = vertices[a]!,
-							az = vertices[a + 2]!,
-							bx = vertices[b]!,
-							bz = vertices[b + 2]!,
-							cx = vertices[c]!,
-							cz = vertices[c + 2]!;
-						const minX = Math.min( ax, bx, cx ),
-							maxX = Math.max( ax, bx, cx ),
-							minZ = Math.min( az, bz, cz ),
-							maxZ = Math.max( az, bz, cz );
-						// Most submitted triangles are outside this receiver. Reject them before
-						// allocating vertices, closures or duplicate keys; moving actors repeat this.
-						if (
-							maxX < loX || minX > hiX || maxZ < loZ || minZ > hiZ ||
-							blobSize === undefined && minX > point[0]
-						) continue;
-						const q = [ [ ax, vertices[a + 1]!, az ], [ bx, vertices[b + 1]!, bz ], [
-							cx,
-							vertices[c + 1]!,
-							cz
-						] ];
-						const key = q.map( p => p.join( "," ) ).sort().join( ";" );
-						if ( seen.has( key ) ) continue;
-						seen.add( key );
-						if ( blobSize !== undefined ) {
-							append( q );
-							continue;
-						}
-						// 87EF50 evaluates depth attenuation on 20-unit cells. Evaluating it only
-						// at coarse LOD vertices loses the entire narrow fade band (or stretches
-						// it across a terrain triangle). Split on the native grid while retaining
-						// the submitted triangle's plane, so receivers cannot sink below terrain.
-						const x0 = Math.max( tx - extent, Math.floor( minX / 20 ) ),
-							x1 = Math.min( tx + extent, Math.ceil( maxX / 20 ) - 1 );
-						const z0 = Math.max( tz - extent, Math.floor( minZ / 20 ) ),
-							z1 = Math.min( tz + extent, Math.ceil( maxZ / 20 ) - 1 );
-						for ( let z = z0; z <= z1; z++ ) {
-							for ( let x = x0; x <= x1; x++ ) {
-								let polygon = clipShadowPolygon( q, 0, x * 20, true );
-								polygon = clipShadowPolygon( polygon, 0, (x + 1) * 20, false );
-								polygon = clipShadowPolygon( polygon, 2, z * 20, true );
-								polygon = clipShadowPolygon( polygon, 2, (z + 1) * 20, false );
-								if ( polygon.length >= 3 ) append( polygon );
-							}
-						}
-					}
-				}
-			}
-		}
-	} else {
-		for ( let z = tz - extent; z <= tz + extent; z++ ) {
-			for ( let x = tx - extent; x <= tx + extent; x++ ) {
-				const cx = Math.floor( x / 16 ),
-					cz = Math.floor( z / 16 ),
-					cell = cells.get( terrainCellKey( cx, cz ) );
-				if ( !cell ) continue;
-				const ix = x - cx * 16,
-					iz = z - cz * 16,
-					h = ( dx: number, dz: number ) => cell.heights[(iz + dz) * 17 + ix + dx]!;
-				const q = [ [ x * 20, h( 0, 0 ), z * 20 ], [ x * 20, h( 0, 1 ), (z + 1) * 20 ], [
-					(x + 1) * 20,
-					h( 1, 1 ),
-					(z + 1) * 20
-				], [ (x + 1) * 20, h( 1, 0 ), z * 20 ] ];
-				if ( (x & 1) !== (z & 1) ) q.unshift( q.pop()! );
-				append( q );
-			}
-		}
+	for ( const polygon of polygons ) {
+		if ( blobSize === undefined && polygon.minimumSourceX > point[0] ) continue;
+		append( polygon.vertices );
 	}
 	return indices.length ?
 		{

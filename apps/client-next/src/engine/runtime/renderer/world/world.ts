@@ -13,7 +13,8 @@ import { createClothVertices } from "@/engine/foundation/animation/cloth-vertice
 import { waterReflectionMatrix } from "@/engine/foundation/rendering/water-reflection";
 import { blendAdds } from "@/engine/foundation/rendering/blend-state";
 import {
-	characterShadowReceiver,
+	characterShadowTopology,
+	projectShadowReceiver,
 	shadowReceiverBounds,
 	BLOB_SHADOW_TEXTURE
 } from "@/engine/foundation/rendering/character-shadow";
@@ -539,7 +540,15 @@ export function createWorldRenderer(
 	const shadowReceivers = new Map<string, {
 		readonly cells: ReturnType<typeof terrainInteractionCells>;
 		readonly stamp: number;
-		readonly receiver: ReturnType<typeof characterShadowReceiver>;
+		readonly topologyKey: string;
+		readonly receiver: ReturnType<typeof projectShadowReceiver>;
+	}>();
+	// The clipped polygon superset depends on grid bounds and terrain only.
+	// Entries live for one frame of use, just like complete receivers above.
+	const shadowTopologies = new Map<string, {
+		readonly cells: ReturnType<typeof terrainInteractionCells>;
+		readonly stamp: number;
+		readonly topology: ReturnType<typeof characterShadowTopology>;
 	}>();
 	/*
 	================
@@ -596,6 +605,8 @@ export function createWorldRenderer(
 		walkCaches = new Array( sceneGroups.length );
 		for ( let i = 0; i < sceneGroups.length; i++ ) walk.order[i] = groupOrder.get( sceneGroups[i]! )!;
 		shadowSurfaces.reset();
+		shadowReceivers.clear();
+		shadowTopologies.clear();
 		for ( let index = 0; index < groups.length; index++ ) {
 			const group = groups[index]!, chosen = selections.get( group )?.chosen;
 			if ( group.material.terrain && chosen ) shadowSurfaces.replace( group, index, undefined, chosen );
@@ -994,6 +1005,14 @@ export function createWorldRenderer(
 			);
 			return time < .25 || time > .75;
 		},
+		/*
+		================
+		characterShadows
+
+		Retain terrain clipping by grid bounds; each changed point still gets
+		its exact triangle rejection, UV projection and native attenuation.
+		================
+		*/
 		characterShadows(
 			candidates: readonly {
 				projection: import("@/engine/foundation/rendering/character-shadow").ShadowProjection;
@@ -1018,7 +1037,7 @@ export function createWorldRenderer(
 			const surfaces = shadowSurfaces.surfaces();
 			// A receiver depends only on the shadow's point and size, the blob
 			// size and the terrain. A still character reuses last frame's mesh.
-			const used = new Set<string>();
+			const used = new Set<string>(), usedTopologies = new Set<string>();
 			const requests = candidates.flatMap( c => {
 				if ( c.blobSize !== undefined && !image ) return [];
 				const point = c.projection.point,
@@ -1028,19 +1047,44 @@ export function createWorldRenderer(
 				if (
 					!cached || cached.cells !== interactionCells || receiverChanged( cached.stamp, point, c.blobSize )
 				) {
+					const bounds = shadowReceiverBounds( point, c.blobSize );
+					const topologyKey = cached?.topologyKey ??
+						[ c.blobSize ?? "projected", bounds.tx, bounds.tz, bounds.extent ].join( ":" );
+					let retained = shadowTopologies.get( topologyKey );
+					if (
+						!retained || retained.cells !== interactionCells ||
+						receiverChanged( retained.stamp, point, c.blobSize )
+					) {
+						retained = {
+							cells: interactionCells,
+							stamp: shadowSurfaces.revision(),
+							topology: characterShadowTopology(
+								interactionCells,
+								bounds,
+								c.blobSize !== undefined,
+								surfaces
+							)
+						};
+						shadowTopologies.set( topologyKey, retained );
+					}
 					cached = {
 						cells: interactionCells,
 						stamp: shadowSurfaces.revision(),
-						receiver: characterShadowReceiver( interactionCells, c.projection, c.blobSize, surfaces )
+						topologyKey,
+						receiver: projectShadowReceiver( retained.topology, c.projection, c.blobSize )
 					};
 					shadowReceivers.set( key, cached );
 				}
+				usedTopologies.add( cached.topologyKey );
 				const receiver = cached.receiver;
 				return receiver ?
 					[ { matrix: c.projection.matrix, receiver, parts: c.parts, blob: c.blobSize !== undefined } ] :
 					[];
 			} );
 			for ( const key of shadowReceivers.keys() ) if ( !used.has( key ) ) shadowReceivers.delete( key );
+			for ( const key of shadowTopologies.keys() ) {
+				if ( !usedTopologies.has( key ) ) shadowTopologies.delete( key );
+			}
 			return geometry.characterShadows?.( requests, image ) ?? [];
 		},
 		/*
@@ -1825,6 +1869,7 @@ export function createWorldRenderer(
 						}
 						if ( lastChanged >= 0 ) {
 							(positionRanges ??= []).push( [ firstChanged, lastChanged - firstChanged + 1 ] );
+							if ( group.material.terrain ) shadowSurfaces.changedPositions( cx, cz );
 						}
 					}
 					if ( sampleDetails ) probe?.detailEnd?.( "terrain-seams" );

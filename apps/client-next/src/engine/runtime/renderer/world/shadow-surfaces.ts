@@ -19,6 +19,11 @@ import type { TerrainRange, WorldGroup } from "@/engine/contracts/scene";
 import type { ShadowTerrainSurface } from "@/engine/foundation/rendering/character-shadow";
 import { terrainCellKey } from "@/engine/foundation/rendering/terrain-interaction";
 
+/*
+================
+SurfaceRow
+================
+*/
 interface SurfaceRow {
 	readonly group: WorldGroup;
 	readonly order: number;
@@ -26,6 +31,11 @@ interface SurfaceRow {
 	readonly surface: ShadowTerrainSurface;
 }
 
+/*
+================
+ShadowSurfaces
+================
+*/
 export type ShadowSurfaces = ReturnType<typeof createShadowSurfaces>;
 
 /*
@@ -136,6 +146,17 @@ export function createShadowSurfaces() {
 					j++;
 				}
 			}
+		},
+		/*
+		================
+		changedPositions
+
+		Stitching can alter the same selected range in place. Its receiver
+		must retire even when range identity and draw order remain unchanged.
+		================
+		*/
+		changedPositions( cellX: number, cellZ: number ) {
+			dirty.add( terrainCellKey( cellX, cellZ ) );
 		},
 		/*
 		================
