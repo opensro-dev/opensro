@@ -12,7 +12,6 @@ counters, and measures frames while a scenario drives input. Captures
 ===========================================================================
 */
 import { mkdir, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
 import { launchProbeBrowser } from "../../../../../scripts/lib/probeBrowser.mjs";
 import { assertCharacterAllowed } from "../../../../../scripts/lib/probeCharacter.mjs";
 import {
@@ -471,40 +470,6 @@ export async function openClient(
 		throw error;
 	}
 	return { browser, page };
-}
-
-/*
-================
-buildIdentity
-
-What a measurement ran against, so a number cannot be read as the wrong
-build: the client origin, whether it is the Vite dev server (which serves
-unbundled modules with its client script) or a built bundle, the source
-commit of this checkout (dirty when it has local changes), and the bug
-report replay recorder, which costs frames while it runs.
-================
-*/
-export async function buildIdentity( page ) {
-	const client = await page.evaluate( () => ({
-		origin: location.origin,
-		dev: !!document.querySelector( 'script[src*="/@vite/client"]' ),
-		replayPreference: localStorage.getItem( "sro:bug-report:replay:1" ),
-		replayRecording: [ ...document.querySelectorAll( "video" ) ].some( video => !!video.srcObject )
-	}) );
-	let commit = "unknown";
-	try {
-		const git = ( ...args ) => execFileSync( "git", args, { encoding: "utf8" } ).trim();
-		commit = git( "rev-parse", "--short", "HEAD" ) + (git( "status", "--porcelain" ) ? "+dirty" : "");
-	} catch {
-		// Not a checkout: the commit stays unknown rather than guessed.
-	}
-	return {
-		origin: client.origin,
-		build: client.dev ? "dev-server" : "bundle",
-		commit,
-		replay: client.replayRecording ? "recording" : "off",
-		replayPreference: client.replayPreference
-	};
 }
 
 /*

@@ -46,7 +46,8 @@ start, so its numbers are development readings. To measure the bundle:
   SRO_PROBE_CLIENT_NEXT_BASE_URL=http://127.0.0.1:4180 node tools/perf/bench/fps-bench.mjs
 
 Every row records what it ran against (identity: dev server or bundle,
-origin, commit, replay recorder state), and the verdict names it.
+origin, served entry URL, separate harness revision, replay capture state).
+Both boundaries are recorded; changed or unknown state invalidates the row.
 
 ===========================================================================
 */
@@ -54,7 +55,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { frameLimits } from "../../../src/engine/foundation/rendering/video-options.ts";
-import { openClient, closeClient, createCaptures, measure, revive, buildIdentity } from "../core/client.mjs";
+import { openClient, closeClient, createCaptures, measure, revive } from "../core/client.mjs";
+import { buildIdentity, verifyMeasuredIdentity } from "../core/build-identity.mjs";
 import { keepGoing, drag, walk, approach, fight, cross, loadCombat, combat, strike, localAlive } from "./scenarios.mjs";
 import { cleanupCombat, combatResidue } from "../core/combat-cleanup.mjs";
 
@@ -329,10 +331,6 @@ async function session( options, location, results ) {
 		shadowDetail: options.shadowDetail
 	} );
 	try {
-		const identity = await buildIdentity( client.page );
-		console.log(
-			`  measuring ${identity.build} ${identity.origin} at ${identity.commit}, replay ${identity.replay}`
-		);
 		// A stale or replaced session can boot outside the scene; every
 		// scenario of this location would then measure the wrong place.
 		const booted = await localPose( client.page ), start = location.fixture.start;
@@ -370,6 +368,11 @@ async function session( options, location, results ) {
 				Math.hypot( before.x - after.x, before.z - after.z ) > REVIVE_TOLERANCE
 			) throw Error( `${location.name}/${name}: the character is not where the scene expects after revive` );
 			const [ms, input] = await drive( client.page, name, location, options.seconds * 1000, scene );
+			const identity = await buildIdentity( client.page );
+			console.log(
+				`  measuring ${identity.build} ${identity.entry ?? identity.origin}, replay ${identity.replay}; ` +
+					`harness ${identity.harnessCommit}, served commit ${identity.servedCommit}`
+			);
 			await captures.start();
 			capturing = true;
 			const started = Date.now();
@@ -393,6 +396,8 @@ async function session( options, location, results ) {
 			}
 			const allocated = await captures.stop( `${location.name}-${name}` );
 			capturing = false;
+			result.identityAfter = await buildIdentity( client.page, identity.harnessCommit );
+			verifyMeasuredIdentity( identity, result.identityAfter );
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
@@ -478,8 +483,7 @@ async function run( options ) {
 		throw Error( "no valid frame-rate verdict: missing or invalid measurements" );
 	}
 	const worst = Math.min( ...results.map( r => r.fps ) );
-	// Only a built bundle with the replay recorder in its player default
-	// answers the goal; a dev-server number is a development reading.
+	// Report the measured capture configuration without assuming player defaults.
 	const builds = new Set( results.map( r => `${r.identity.build}, replay ${r.identity.replay}` ) );
 	const verdict = worst >= GOAL_FPS ? "MET" : "not met";
 	console.log(
