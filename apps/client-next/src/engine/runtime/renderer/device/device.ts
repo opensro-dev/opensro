@@ -177,7 +177,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				Submit the completed command buffer through the current device generation.
 				================
 				*/
-				submit: ( buffer: GPUCommandBuffer ) => current().queue.submit( [ buffer ] )
+				submit( buffer: GPUCommandBuffer ) {
+					current();
+					geometry!.submit( buffer );
+				}
 			} );
 			surface = Object.freeze( {
 				/*
@@ -411,7 +414,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		================
 		*/
 		endFrame() {
-			retirement.close();
+			try {
+				geometry?.endFrame();
+			} finally {
+				retirement.close();
+			}
 		},
 		/*
 		================

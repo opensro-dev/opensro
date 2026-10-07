@@ -172,6 +172,7 @@
     "src/engine/runtime/renderer/device/pipelines.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/images.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/geometry.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/geometry-uploads.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/ui.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/ui/title/creation.ts": "src/engine/runtime/ui/title/title.ts",
     "src/engine/runtime/renderer/device/bloom.ts": "src/engine/runtime/renderer/device/device.ts",

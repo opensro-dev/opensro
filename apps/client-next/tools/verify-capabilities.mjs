@@ -63,6 +63,7 @@ const shadows = runtime + "renderer/device/character-shadows.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
 const particles = runtime + "renderer/device/particles.ts";
+const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
 const deviceInternals = [
 	waterReflection,
 	bloom,
@@ -71,6 +72,7 @@ const deviceInternals = [
 	pipelines,
 	images,
 	geometry,
+	geometryUploads,
 	ui,
 	flares,
 	thunder,
@@ -192,6 +194,9 @@ for (
 		"popErrorScope"
 	]
 ) rules[name].push( geometry );
+for ( const name of [ "createBuffer", "writeBuffer", "createCommandEncoder", "finish", "submit" ] ) {
+	rules[name].push( geometryUploads );
+}
 for (
 	const name of [
 		"createShaderModule",

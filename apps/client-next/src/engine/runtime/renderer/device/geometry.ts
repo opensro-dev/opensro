@@ -15,6 +15,7 @@ import { packTextureStage } from "@/engine/foundation/rendering/texture-stage";
 import { createCharacterShadows } from "./character-shadows";
 import { destroyNow, type Retire } from "./retirement";
 import { DeviceDraw } from "./device-draw";
+import { createGeometryUploads } from "./geometry-uploads";
 import type { createParticlePresentation } from "./particles";
 import type { createGpuAnimationResources } from "./animation";
 import { DEFAULT_BLEND, type GeometryPipelineState } from "./pipelines";
@@ -93,6 +94,7 @@ export function createGeometryResources(
 		usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
 	} );
 	created.queue.writeTexture( { texture: white }, Uint8Array.of( 255, 255, 255, 255 ), { bytesPerRow: 4 }, [ 1, 1 ] );
+	const uploads = createGeometryUploads( created, retire );
 	const packInstances = createInstancePacking();
 	const defaultSkin = created.createBuffer( {
 			label: "geometry-default-skin",
@@ -104,6 +106,11 @@ export function createGeometryResources(
 			size: 64,
 			usage: GPUBufferUsage.STORAGE
 		} );
+	/*
+	================
+	SharedPalette
+	================
+	*/
 	type SharedPalette = { source: Float32Array; buffer: GPUBuffer; refs: number; revision: number; };
 	const sharedPalettes = new Map<Float32Array, SharedPalette>();
 	/*
@@ -130,6 +137,23 @@ export function createGeometryResources(
 			if ( offsets[i]! + jointMaximum >= joints ) throw Error( "Palette offset outside bone storage" );
 		}
 	}
+	/*
+	================
+	writeStream
+
+	GPU-written palettes and particle streams retain their immediate path.
+	================
+	*/
+	function writeStream( buffer: GPUBuffer, offset: number, data: Float32Array, cpu = true ) {
+		const gpu = current();
+		if ( cpu ) uploads.write( buffer, offset, data );
+		else gpu.queue.writeBuffer( buffer, offset, data.buffer as ArrayBuffer, data.byteOffset, data.byteLength );
+	}
+	/*
+	================
+	geometryBinding
+	================
+	*/
 	const geometryBinding = (
 		uniform: GPUBuffer,
 		storage: GPUBuffer,
@@ -180,6 +204,8 @@ export function createGeometryResources(
 		// The bone and index buffers' sizes, read once: a GPUBuffer's size
 		// crosses into the browser on every read, and updates run every frame.
 		boneBytes: number;
+		// Particle-capable owned palettes and instances may be written by compute.
+		cpuUploads: boolean;
 		indexBytes: number;
 		palette?: SharedPalette;
 		jointMaximum: number;
@@ -268,6 +294,11 @@ export function createGeometryResources(
 				}
 			};
 		},
+		/*
+		================
+		characterShadows
+		================
+		*/
 		characterShadows(
 			requests: readonly import("../internal/gpu-contract").CharacterShadowRequest[],
 			blob?: ImageDraw
@@ -368,13 +399,7 @@ export function createGeometryResources(
 				if ( meta.palette.revision === revision ) return 0;
 			}
 			if ( meta.palette ) animation?.cancel( meta.palette.source );
-			current().queue.writeBuffer(
-				meta.bones,
-				0,
-				bones.buffer as ArrayBuffer,
-				bones.byteOffset,
-				bones.byteLength
-			);
+			writeStream( meta.bones, 0, bones, meta.cpuUploads && (!animation || !meta.palette) );
 			if ( meta.palette ) meta.palette.revision = revision!;
 			return bones.byteLength;
 		},
@@ -399,6 +424,11 @@ export function createGeometryResources(
 			}
 			DeviceDraw.select( meta.selection, indices.length, 1 );
 		},
+		/*
+		================
+		updatePositions
+		================
+		*/
 		updatePositions(
 			draw: GeometryDraw,
 			positions: Float32Array,
@@ -407,7 +437,8 @@ export function createGeometryResources(
 			ranges?: readonly (readonly [number, number])[],
 			slot?: number
 		) {
-			const gpu = current(), meta = metadata.get( draw ), count = positions.length / 3;
+			const meta = metadata.get( draw ), count = positions.length / 3;
+			current();
 			if ( !meta ) throw Error( "Invalid position update" );
 			const mirror = meta.vertices;
 			if ( !mirror ) throw Error( "Geometry was uploaded without dynamicVertices" );
@@ -462,13 +493,7 @@ export function createGeometryResources(
 					if ( uvs ) { for ( let c = 0; c < 2; c++ ) vertices[i * 14 + 6 + c] = uvs[i * 2 + c]!; }
 				}
 				const offset = start * 56;
-				gpu.queue.writeBuffer(
-					draw.vertices,
-					base * 56 + offset,
-					vertices.buffer as ArrayBuffer,
-					vertices.byteOffset + offset,
-					(end - start) * 56
-				);
+				writeStream( draw.vertices, base * 56 + offset, vertices.subarray( start * 14, end * 14 ) );
 			}
 		},
 		/*
@@ -484,14 +509,13 @@ export function createGeometryResources(
 				base * 14 + vertices.length > mirror.length
 			) throw Error( "Invalid vertex write" );
 			mirror.set( vertices, base * 14 );
-			current().queue.writeBuffer(
-				draw.vertices,
-				base * 56,
-				mirror.buffer as ArrayBuffer,
-				mirror.byteOffset + base * 56,
-				vertices.byteLength
-			);
+			writeStream( draw.vertices, base * 56, mirror.subarray( base * 14, base * 14 + vertices.length ) );
 		},
+		/*
+		================
+		updateInstances
+		================
+		*/
 		updateInstances(
 			draw: GeometryDraw,
 			instances: Float32Array,
@@ -513,13 +537,7 @@ export function createGeometryResources(
 				// As with position/index/bone writes, the device's uncaptured
 				// error listener owns write failures. Scopes are for allocation.
 				if ( packed.byteLength ) {
-					gpu.queue.writeBuffer(
-						buffers[3]!,
-						0,
-						packed.buffer as ArrayBuffer,
-						packed.byteOffset,
-						packed.byteLength
-					);
+					writeStream( buffers[3]!, 0, packed, meta.cpuUploads );
 				}
 				DeviceDraw.select( meta.selection, draw.count, count );
 				return draw;
@@ -534,13 +552,7 @@ export function createGeometryResources(
 							usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
 						} );
 					try {
-						gpu.queue.writeBuffer(
-							storage,
-							0,
-							packed.buffer as ArrayBuffer,
-							packed.byteOffset,
-							packed.byteLength
-						);
+						writeStream( storage, 0, packed, meta.cpuUploads );
 						DeviceDraw.rebind(
 							meta.selection,
 							geometryBinding(
@@ -561,7 +573,7 @@ export function createGeometryResources(
 						retire( buffers[3]! );
 						buffers[3] = storage;
 					} catch ( error ) {
-						storage.destroy();
+						retire( storage );
 						throw error;
 					}
 				}
@@ -661,6 +673,11 @@ export function createGeometryResources(
 			const gpu = current(), buffers: GPUBuffer[] = [];
 			let palette: SharedPalette | undefined;
 			gpu.pushErrorScope( "validation" );
+			/*
+			================
+			buffer
+			================
+			*/
 			const buffer = ( label: string, data: Float32Array | Uint32Array, usage: number ) => {
 				const result = gpu.createBuffer( {
 					label,
@@ -850,6 +867,7 @@ export function createGeometryResources(
 					skin: skinBuffer,
 					bones: boneBuffer,
 					boneBytes: boneBuffer.size,
+					cpuUploads: !particles || boneBuffer === defaultBones || !!palette,
 					indexBytes: indices.size,
 					palette,
 					jointMaximum,
@@ -914,8 +932,23 @@ export function createGeometryResources(
 		================
 		*/
 		beginFrame() {
+			uploads.beginFrame();
 			particles?.beginFrame();
 		},
+		/*
+		================
+		submit
+
+		Upload CPU streams before the completed frame's compute and render work.
+		================
+		*/
+		submit: uploads.submit,
+		/*
+		================
+		endFrame
+		================
+		*/
+		endFrame: uploads.endFrame,
 		commands,
 		ready: Promise.all( [ animation?.ready, particles?.ready ] ),
 		/*
@@ -975,6 +1008,7 @@ export function createGeometryResources(
 		================
 		*/
 		dispose() {
+			uploads.dispose();
 			waterReflection.dispose();
 			shadows?.dispose();
 			animation?.dispose();
