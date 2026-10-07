@@ -220,7 +220,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
 		};
 		try {
-			return await downloadBytes( { url, limit, signal: attempt.signal, progressed, range } );
+			return await downloadBytes( { url, limit, signal: attempt.signal, range }, progressed );
 		} catch ( error ) {
 			// The caller's cancellation wins whatever else ended the attempt: a
 			// cancel racing the stall must surface its own reason, not the stall.
@@ -239,8 +239,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	and on every body chunk.
 	================
 	*/
-	async function downloadBytes( read: DownloadRead ) {
-		const { url, limit, signal, progressed, range } = read;
+	async function downloadBytes( read: DownloadRead, progressed: () => void ) {
+		const { url, limit, signal, range } = read;
 		const started = performance.now();
 		// Cache Storage owns verified members. Keep partial HTTP responses out
 		// of the browser cache: different ranges share the container URL.
@@ -726,15 +726,14 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 ================
 DownloadRead
 
-One HTTP read: the attempt's signal, and progressed, which restarts its
-no-progress window.
+One HTTP read under the attempt's signal. The progress callback that
+restarts its no-progress window is passed beside it.
 ================
 */
 interface DownloadRead {
 	readonly url: string;
 	readonly limit: number;
 	readonly signal: AbortSignal;
-	readonly progressed: () => void;
 	readonly range?: import("./packs/packs").PackRange;
 }
 
