@@ -2238,6 +2238,13 @@
 			"reason": "Optional runtime-owned frame observer replaces profiling source rewriting; production supplies no observer."
 		},
 		{
+			"file": "src/engine/runtime/characters/appearance-lookup.ts",
+			"expression": "structureVisuals.appearance",
+			"function": "resourceFor",
+			"kind": "callback",
+			"reason": "The parent structure-visual owner supplies the staged model synchronously, as before the lookups moved out of characters.ts."
+		},
+		{
 			"file": "src/engine/runtime/characters/dock-preview.ts",
 			"expression": "resources.plan",
 			"function": "step",

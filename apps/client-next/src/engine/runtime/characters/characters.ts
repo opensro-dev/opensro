@@ -10,34 +10,18 @@ scenery and auxiliary actors cannot satisfy a player readiness barrier.
 ===========================================================================
 */
 
-import { fortressAppearance } from "@/engine/foundation/animation/fortress-appearance";
-import { movementEntryRate, transitionActionStates } from "@/engine/foundation/animation/action-refresh";
 import { createStatusOwner } from "@/engine/foundation/animation/status-presentation";
-import { defaultWearFrozen, refreshDefaultWear } from "@/engine/foundation/animation/default-wear-policy";
-import { selectAvatarOverride, type AvatarOverrideSelection } from "@/engine/foundation/animation/avatar-override";
-import { assembleEquipmentAppearance, wornItemsFromList } from "@/engine/foundation/animation/equipment-appearance";
-import { createAnimationEmission, type AnimationParticleSet } from "@/engine/foundation/animation/animation-emission";
-import { createModelAnimation } from "@/engine/foundation/animation/model-animation";
+import type { AvatarOverrideSelection } from "@/engine/foundation/animation/avatar-override";
+import { createAnimationEmission } from "@/engine/foundation/animation/animation-emission";
 import { createEntityLod } from "@/engine/foundation/animation/entity-lod";
-import { createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
 import { createModifierDelta } from "@/engine/foundation/rendering/modifier-delta";
-import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { createPresentationIds } from "@/engine/foundation/animation/presentation-ids";
 import { createModelEmission } from "@/engine/foundation/animation/model-emission";
 import { createStructureVisuals } from "./structure-visuals";
-import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
-import {
-	groundVisualClock,
-	advanceGroundVisual,
-	type GroundVisualClock
-} from "@/engine/foundation/animation/ground-visual";
+import type { GroundVisualClock } from "@/engine/foundation/animation/ground-visual";
 import { createSceneryEmission } from "@/engine/foundation/animation/scenery-emission";
-import {
-	createReferenceAppearances,
-	referenceAppearanceItems
-} from "@/engine/foundation/animation/reference-appearance";
+import { createReferenceAppearances } from "@/engine/foundation/animation/reference-appearance";
 import { createDamageFeedback } from "./damage-feedback";
-import { blindableCharacter } from "@/engine/foundation/ui/name-visibility";
 import { skillLookup, type SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import { createPosePresentation } from "./pose-presentation";
 import { createPresentationSamples } from "./presentation-samples";
@@ -47,23 +31,15 @@ import { createPresentationEvents } from "./presentation-events";
 import { createFootprints } from "./footprints";
 import { createCharacterStateIndex } from "./state-index";
 import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
-import { monsterScale, monsterMaterialSlot } from "@/engine/foundation/rendering/monster-scale";
-import { postureLayers } from "@/engine/foundation/animation/posture";
-import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
-import { changeLocomotion, stopLocomotion, locomotionLayers } from "@/engine/foundation/animation/locomotion-blend";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
-import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
 import { createCharacterSelection } from "@/engine/foundation/animation/character-selection";
-import { weaponAnimationSet } from "@/engine/foundation/animation/animation-metadata";
 import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
 import { createMallPreview } from "./mall-preview";
-import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import type { CharacterRecord } from "@/engine/contracts/session";
-import { movementGait } from "@/engine/foundation/gameplay/native-movement";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { EntityState } from "@/engine/contracts/world";
@@ -74,6 +50,7 @@ import { createActorPresentation } from "./actor-presentation";
 import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
 import { createSpawnFades } from "./spawn-fades";
+import { createAppearanceLookup } from "./appearance-lookup";
 import { createAuxiliaryPresentation } from "./presentation-auxiliary";
 import {
 	selectCameraTarget,
@@ -87,8 +64,7 @@ import type {
 	CharacterPresentationState,
 	PresentationAppearance,
 	PresentationDisappear,
-	PresentationOutput,
-	Resource
+	PresentationOutput
 } from "./internal/presentation-contract";
 /*
 ================
@@ -210,68 +186,9 @@ export function createCharacterPresentation(
 	const selection = createCharacterSelection( CHARACTER_ACTORS );
 	const stateIndex = createCharacterStateIndex();
 	const presentationActions = createPresentationActions();
-	// A mask's skin (msch 1) replaces the model outright; an msch 3 disguise
-	// keeps the body and redresses it.
-	/*
-	================
-	transformSkinRef
-	================
-	*/
-	function transformSkinRef( entity: EntityState ) {
-		return referenceAppearances.skin( entity.gid, entity.transformSkin );
-	}
-	/*
-	================
-	appearanceRef
-	================
-	*/
-	function appearanceRef( entity: EntityState ) {
-		return transformSkinRef( entity ) ?? referenceAppearances.get( entity.gid )?.model ?? entity.refObjId;
-	}
-	// The skin in force: a Duplicate (player skin) wears the copied player's
-	// items; a mask wears nothing of the player's (85C060).
-	/*
-	================
-	activeSkin
-	================
-	*/
-	function activeSkin( entity: EntityState ) {
-		return transformSkinRef( entity ) !== undefined ? entity.transformSkin : undefined;
-	}
-	/*
-	================
-	wornEquipment
-	================
-	*/
-	function wornEquipment(
-		entity: EntityState,
-		gameplay: GameplayState | null
-	): readonly {
-		readonly slot: number;
-		readonly refObjId: number;
-		readonly typeFlags: number;
-		readonly plus: number;
-	}[] {
-		const skin = activeSkin( entity );
-		if ( skin ) return skin.equipment;
-		return entity.gid === gameplay?.localGid ? gameplay.inventory : entity.equipment ?? [];
-	}
-	/*
-	================
-	resourceFor
-	================
-	*/
-	function resourceFor( entity: EntityState ): Resource | undefined {
-		const resource = published.catalog.get( appearanceRef( entity ) );
-		const staged = resource?.structureVisuals &&
-			structureVisuals.appearance( entity.gid, resource.glb, resource.ambientParticles ?? [] );
-		if ( resource && staged ) return { ...resource, glb: staged.glb, ambientParticles: staged.particles };
-		const variant = resource && entity.kind === "monster" ?
-			resource.materialVariants
-				?.[String( monsterMaterialSlot( entity.rarity ?? 0, entity.tidWord ?? 0, resource.materialKind ) )] :
-			undefined;
-		return resource && variant ? { ...resource, glb: variant } : resource;
-	}
+	const { appearanceRef, activeSkin, wornEquipment, resourceFor } = createAppearanceLookup(
+		{ referenceAppearances, published, structureVisuals }
+	);
 	const dockPreview = createDockPreview( { renderer, resources, scenery, lizardGid } );
 	const displayedDependencies = new Map<number, readonly string[]>();
 	// Appearance topology is independent of pose time. Revalidate resource
@@ -539,8 +456,8 @@ export function createCharacterPresentation(
 	gameplay, then turns the frame's casts, hits and deaths into effects.
 
 	The action phase returns a replaced gameplay snapshot: the same state with
-	cast cancellation times adopted ({ ...gameplay, casts }), list length,
-	order and identities unchanged. The pose samples and indexes built from
+	cast cancellation times adopted ({ ...gameplay, casts }): the cast objects
+	are replaced, but their length, order, tokens and casters are unchanged. The pose samples and indexes built from
 	the delivered snapshot stay valid for it, so every later phase reads the
 	returned one, as the original single step did.
 	================
