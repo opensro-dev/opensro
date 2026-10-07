@@ -179,7 +179,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				*/
 				submit( buffer: GPUCommandBuffer ) {
 					current();
-					geometry!.submit( buffer );
+					geometry!.uploads.submit( buffer );
 				}
 			} );
 			surface = Object.freeze( {

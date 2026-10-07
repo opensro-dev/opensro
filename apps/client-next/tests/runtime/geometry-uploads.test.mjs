@@ -217,8 +217,8 @@ test("32 actors use one upload per frame with identical bytes and draw order", (
 		frame( old.resources, expected, tick );
 		frame( arena.resources, actual, tick );
 		const observed = [];
-		old.resources.submit( [] );
-		arena.resources.submit( actual.map( ( draw, index ) => () => {
+		old.resources.uploads.submit( [] );
+		arena.resources.uploads.submit( actual.map( ( draw, index ) => () => {
 			compare( [ expected[index] ], [ draw ] );
 			observed.push( index );
 		} ) );
@@ -251,7 +251,7 @@ test("partial overlapping writes, growth and two deferred submissions retain byt
 		reference.resources.commands.writeVertices( draw, 1, new Float32Array( VERTEX_FLOATS ).fill( 9 ) );
 		reference.resources.commands.updateBones( draw, Float32Array.of( -0, Infinity, -Infinity, NaN ) );
 	}
-	arena.resources.submit( [ () => compare( [ expected ], [ actual ] ) ] );
+	arena.resources.uploads.submit( [ () => compare( [ expected ], [ actual ] ) ] );
 	const first = arena.buffers.find( buffer => buffer.label === "geometry-upload-arena" );
 	for ( const [reference, draw] of [ [ old, expected ], [ arena, actual ] ] ) {
 		const instances = new Float32Array( 256 * INSTANCE_FLOATS ).fill( 3 );
@@ -261,7 +261,7 @@ test("partial overlapping writes, growth and two deferred submissions retain byt
 			[ 2, 1 ]
 		] );
 	}
-	arena.resources.submit( [ () => compare( [ expected ], [ actual ] ) ] );
+	arena.resources.uploads.submit( [ () => compare( [ expected ], [ actual ] ) ] );
 	assert.equal( first.destroyed, false );
 	arena.resources.endFrame();
 	arena.retirement.close();
@@ -316,7 +316,7 @@ test("GPU-written palettes and particle destinations bypass staging", () => {
 			shared ? Uint32Array.of( 0 ) : undefined
 		);
 		arena.resources.commands.writeVertices( draw, 0, new Float32Array( VERTEX_FLOATS ).fill( 4 ) );
-		arena.resources.submit( [] );
+		arena.resources.uploads.submit( [] );
 		assert.ok( !arena.targets.includes( bound( draw, 7 ) ) );
 		if ( !shared ) assert.ok( !arena.targets.includes( bound( draw, 1 ) ) );
 		arena.resources.endFrame();
@@ -340,7 +340,7 @@ test("device-sized pages spill without exceeding maxBufferSize or losing byte or
 		frame( old.resources, [ expected ], tick );
 		frame( arena.resources, [ actual ], tick );
 	}
-	arena.resources.submit( [ () => compare( [ expected ], [ actual ] ) ] );
+	arena.resources.uploads.submit( [ () => compare( [ expected ], [ actual ] ) ] );
 	assert.ok(
 		arena.buffers.filter( buffer => buffer.label === "geometry-upload-arena" ).every( buffer => buffer.size <= 512 )
 	);

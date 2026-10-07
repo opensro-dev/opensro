@@ -937,12 +937,13 @@ export function createGeometryResources(
 		},
 		/*
 		================
-		submit
+		uploads
 
-		Upload CPU streams before the completed frame's compute and render work.
+		The submission arena; the device submits each frame through it so CPU
+		streams upload before the completed frame's compute and render work.
 		================
 		*/
-		submit: uploads.submit,
+		uploads,
 		/*
 		================
 		endFrame
