@@ -84,8 +84,9 @@ func TestDeliverWritesDirectoryWithoutWebhook(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !service.Settings().Enabled {
-		t.Fatal("a directory alone must enable reports")
+	if settings := service.Settings(); !settings.Enabled ||
+		!reflect.DeepEqual(settings.Destinations, []string{DestinationDirectory}) {
+		t.Fatalf("a directory alone must enable reports: %+v", settings)
 	}
 	report := directoryTestReport("BR-261007-0240-ABCD")
 	entry, err := service.Deliver(context.Background(), report)

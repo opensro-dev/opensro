@@ -128,6 +128,13 @@ Settings
 ================
 */
 func (service *Service) Settings() Settings {
+	destinations := []string{}
+	if service.config.WebhookURL != "" {
+		destinations = append(destinations, DestinationDiscord)
+	}
+	if service.config.Directory != "" {
+		destinations = append(destinations, DestinationDirectory)
+	}
 	return Settings{
 		Enabled:       true,
 		ReplayDefault: service.config.ReplayDefault,
@@ -135,6 +142,7 @@ func (service *Service) Settings() Settings {
 		ReplaySeconds: ReplaySeconds,
 		// The part shares the request bound with the clip (submission.go).
 		MaxDiagnosticsBytes: min(service.config.MaxBytes, maxDiagnosticsBytes),
+		Destinations:        destinations,
 	}
 }
 

@@ -27,6 +27,11 @@ import (
 )
 
 const (
+	// DestinationDiscord and DestinationDirectory are the Settings
+	// destination names.
+	DestinationDiscord   = "discord"
+	DestinationDirectory = "directory"
+
 	// EnvDiscordWebhook turns the feature on and names the receiving channel.
 	EnvDiscordWebhook = "SRO_BUG_REPORT_DISCORD_WEBHOOK"
 	// EnvReplayDefault is the replay recording state ("on" or "off") for
@@ -88,6 +93,10 @@ type Settings struct {
 	// refuses the part as unknown, so a client attaches the archive only when
 	// this is positive.
 	MaxDiagnosticsBytes int64 `json:"maxDiagnosticsBytes"`
+	// Destinations names where an accepted report goes ("discord",
+	// "directory"), so the dialog tells the player the truth about it.
+	// Empty when reports are disabled.
+	Destinations []string `json:"destinations"`
 }
 
 /*
@@ -105,7 +114,13 @@ DisabledSettings
 ================
 */
 func DisabledSettings() Settings {
-	return Settings{Enabled: false, ReplayDefault: false, MaxBytes: 0, ReplaySeconds: ReplaySeconds}
+	return Settings{
+		Enabled:       false,
+		ReplayDefault: false,
+		MaxBytes:      0,
+		ReplaySeconds: ReplaySeconds,
+		Destinations:  []string{},
+	}
 }
 
 /*
