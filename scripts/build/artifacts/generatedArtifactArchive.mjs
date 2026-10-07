@@ -54,8 +54,8 @@ function sameFile( before, after ) {
 archiveGeneratedArtifact
 
 Exclusive links avoid rename's overwrite behavior. Across devices, verify
-an exclusive staged copy first. Publish provenance before deleting the source;
-any failed operation leaves the live source available for a later retry.
+an exclusive staged copy first. Publish provenance before deleting the source.
+Any failure before source removal leaves the live file available for retry.
 ================
 */
 export async function archiveGeneratedArtifact( sourcePath, options = {} ) {

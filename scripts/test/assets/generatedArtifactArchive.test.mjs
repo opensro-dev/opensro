@@ -108,3 +108,15 @@ test("a provenance collision reserves its name without losing either artifact", 
 	assert.equal( await files.readFile( existing, "utf8" ), "existing record" );
 	assert.deepEqual( await files.readFile( archived.destination ), f.payload );
 });
+
+test("a source replaced after staging survives the final identity check", async t => {
+	const f = await fixture( t );
+	const replacement = Buffer.from( "new live publication" );
+	f.options.files.writeFile = async ( filename, data, options ) => {
+		await files.writeFile( filename, data, options );
+		// Provenance publication occurs after the staged copy was verified.
+		await files.writeFile( f.source, replacement );
+	};
+	await assert.rejects( archiveGeneratedArtifact( f.source, f.options ), /source changed/ );
+	assert.deepEqual( await files.readFile( f.source ), replacement );
+});
