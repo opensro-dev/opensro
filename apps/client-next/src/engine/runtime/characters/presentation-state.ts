@@ -12,7 +12,7 @@ import { emoteRoute, emoteAttachments } from "@/engine/foundation/animation/emot
 import { transitionPosture } from "@/engine/foundation/animation/posture";
 import { advanceRandomIdle } from "@/engine/foundation/animation/random-idle";
 import type { AnimationMetadata } from "@/engine/foundation/animation/animation-metadata";
-import type { EntityState } from "@/engine/contracts/world";
+import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { Resource, PresentationIdleState, PresentationOutput } from "./internal/presentation-contract";
@@ -118,7 +118,7 @@ export function createPresentationState() {
 				const previousEmote = entry.posture?.kind === "emote" ? entry.posture.clip : undefined;
 				if ( dead && entry.posture?.kind === "down" ) entry.downDeath = true;
 				else if ( !dead ) entry.downDeath = false;
-				if ( dead || entity.mountedOn || entity.movementMode === 4 ) {
+				if ( dead || entity.mountedOn || entity.movementMode === MOVEMENT_MODE_SEATED ) {
 					entry.posture = transitionPosture( entry.posture, { kind: "cancel" } );
 				} else {
 					if ( hit?.downAt !== undefined ) {
@@ -180,7 +180,8 @@ export function createPresentationState() {
 				// 85DE06 precedes countdown subtraction. The expiry frame also
 				// resets the fidget timer to 15s; it does not consume that frame.
 				const suppressIdle = (combatStanceEnds.get( entity.gid ) ?? -Infinity) > entry.idle.previous;
-				const eligible = !suppressIdle && !dead && !moving && !entity.mountedOn && entity.movementMode !== 4 &&
+				const eligible = !suppressIdle && !dead && !moving && !entity.mountedOn &&
+					entity.movementMode !== MOVEMENT_MODE_SEATED &&
 					!entry.posture && !castByActor.has( entity.gid ) && !hit && !state?.postureClip &&
 					!(state?.pickupStarted !== undefined &&
 						seconds - state.pickupStarted < resources.duration( resource.glb, "pick" ));

@@ -10,7 +10,7 @@ list at its existing post-actor position, and clears it during teardown.
 ===========================================================================
 */
 import type { CharacterActor } from "@/engine/contracts/character";
-import type { EntityState } from "@/engine/contracts/world";
+import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { Footprint } from "@/engine/contracts/footprint";
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { Renderer } from "@/engine/contracts/runtime";
@@ -38,7 +38,9 @@ export function createFootprints(
 		right: boolean,
 		seconds: number
 	) {
-		if ( (entity.kind !== "player" && entity.kind !== "local-player") || entity.movementMode === 4 ) return;
+		if (
+			(entity.kind !== "player" && entity.kind !== "local-player") || entity.movementMode === MOVEMENT_MODE_SEATED
+		) return;
 		const surface = soundSurface( pose );
 		if ( surface !== "SAND" && surface !== "SNOW" ) return;
 		const socket = renderer.characterSocket( actors, entity.gid, right ? "Bip01 R Toe0" : "Bip01 L Toe0", [

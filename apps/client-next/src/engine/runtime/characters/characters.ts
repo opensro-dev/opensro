@@ -94,6 +94,9 @@ const GOLD_DROP_MODELS = [
 	"item/etc/drop_ch_money_normal.bsr",
 	"item/etc/drop_ch_money_large.bsr"
 ] as const;
+// orbs.step's full detail: every orb flies. At 1 or below orbs are consumed
+// without visuals.
+const ORB_DETAIL_FULL = 3;
 
 /*
 ================
@@ -168,20 +171,20 @@ export function createCharacterPresentation(
 	const statusOwner = createStatusOwner();
 	const skillObjects = createSkillObjects( allocateActor );
 	const resources = createCharacterResources( assets, renderer, origin ),
-		sounds = createCharacterSounds( play, random.range ),
-		effects = createCharacterEffects(
-			assets,
-			origin,
-			play,
-			random,
-			id => {
-				const item = published.items[String( id )];
-				return item ? { ...item, model: published.dropModels[item.dropModelPath ?? ""] } : undefined;
-			},
-			allocateActor,
-			statusOwner
-		);
+		sounds = createCharacterSounds( play, random.range );
 	const published = createPresentationCatalog( { resources, sounds, referenceAppearances } );
+	const effects = createCharacterEffects(
+		assets,
+		origin,
+		play,
+		random,
+		id => {
+			const item = published.items[String( id )];
+			return item ? { ...item, model: published.dropModels[item.dropModelPath ?? ""] } : undefined;
+		},
+		allocateActor,
+		statusOwner
+	);
 	const posePresentation = createPosePresentation();
 	const selection = createCharacterSelection( CHARACTER_ACTORS );
 	const stateIndex = createCharacterStateIndex();
@@ -688,14 +691,17 @@ export function createCharacterPresentation(
 				}
 			}
 		}
+		// The socket callback runs only inside orbs.step, while next is fixed:
+		// build its actor list once, on the first orb that needs a socket.
+		let socketActors: CharacterActor[] | null = null;
 		const orbActors = orbs.step(
 			entities,
 			seconds,
 			settled,
-			( gid, bone ) => renderer.characterSocket( [ ...next.values() ], gid, bone, [ 0, 0, 0 ] ),
+			( gid, bone ) => renderer.characterSocket( socketActors ??= [ ...next.values() ], gid, bone, [ 0, 0, 0 ] ),
 			resources.ready,
 			resources.duration,
-			3,
+			ORB_DETAIL_FULL,
 			resources.failed
 		);
 		auxiliary.presentStages(

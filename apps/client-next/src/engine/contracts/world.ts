@@ -16,6 +16,12 @@ import type { MerchantBranch } from "@/engine/foundation/gameplay/merchant-branc
 import type { SpawnSkill } from "@/engine/foundation/gameplay/spawn-skills";
 import type { UiSoundHandle } from "@/engine/foundation/ui/sound-catalog";
 
+// EntityState.movementMode of a seated character: the 0x7017 posture request
+// carries 4 to sit (gameplay.ts, native 6933A6 ground click and 692D19
+// entity click). Presentation treats a seated character as neither idling
+// nor walking.
+export const MOVEMENT_MODE_SEATED = 4;
+
 /*
 ================
 WorldTravel

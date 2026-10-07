@@ -25,7 +25,7 @@ import { weaponAnimationSet } from "@/engine/foundation/animation/animation-meta
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import { movementGait } from "@/engine/foundation/gameplay/native-movement";
 import type { CharacterLayer } from "@/engine/contracts/character";
-import type { EntityState } from "@/engine/contracts/world";
+import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
 
 const PROTECTED_ANIMATION_DISTANCE = 300;
@@ -80,7 +80,6 @@ export function createActorMotion( owner: ActorOwner ) {
 				probe,
 				sampleActorDetails,
 				seconds,
-				selected,
 				soundContext,
 				vitalsByGid,
 				waitingActors
@@ -141,7 +140,7 @@ export function createActorMotion( owner: ActorOwner ) {
 					resource.clips.includes( "downdie" ) ?
 					"downdie" :
 					"death";
-			const sitting = entity.movementMode === 4 && !entity.mountedOn;
+			const sitting = entity.movementMode === MOVEMENT_MODE_SEATED && !entity.mountedOn;
 			const sittingClip = resource.clips.includes( "sit" ) ? "sit" : "charselect-state14";
 			if ( state.dead !== undefined && state.dead !== dead ) {
 				state.postureClip = dead ? (downDeath ? quickDeath : "death") : undefined;
@@ -474,7 +473,7 @@ export function createActorMotion( owner: ActorOwner ) {
 					state.locomotion = { ...state.locomotion, enter: 0, outgoing: [] };
 				}
 			}
-			const layers: import("@/engine/contracts/character").CharacterLayer[] = locomotionLayers(
+			const layers: CharacterLayer[] = locomotionLayers(
 				state.locomotion,
 				seconds
 			);
@@ -491,7 +490,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				return value;
 			};
 			const bindLayers = (
-				rows: readonly import("@/engine/contracts/character").CharacterLayer[],
+				rows: readonly CharacterLayer[],
 				producer: string,
 				started: number
 			) => rows.map( layer => ({
