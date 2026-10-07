@@ -477,6 +477,7 @@ function fixture(
 			}
 			if ( job.decode === "character" || job.decode === "effect" ) {
 				const value = model( options.sourceFloats );
+				for ( const clip of value.clips ) clip.duration = options.clipDurations?.[clip.name] ?? clip.duration;
 				if ( metadataAdmission.appearance?.overrideTest ) {
 					value.clips.push( { name: "native:avatar_wing:7", duration: 1, channels: [] } );
 				}
@@ -2143,11 +2144,13 @@ test("production blends retain separate outgoing and incoming sound installation
 for ( const zeroClip of [ "stand", "run" ] ) {
 	test(`production blend keeps ${zeroClip} when its zero duration omits a dispatch row`, () => {
 		const audio = {
-			states: Object.fromEntries( [ "stand", "run" ].map( clip => [ clip, {
-				durationMs: clip === zeroClip ? 0 : 1000,
-				trackEvents: [],
-				soundEvents: [ { cursorMs: 45, cue: "snd_" + clip } ]
-			} ] ) ),
+			states: Object.fromEntries(
+				[ "stand", "run" ].filter( clip => clip !== zeroClip ).map( clip => [ clip, {
+					durationMs: 1000,
+					trackEvents: [],
+					soundEvents: [ { cursorMs: 45, cue: "snd_" + clip } ]
+				} ] )
+			),
 			rules: [ "STAND", "RUN" ].map( handle => ({
 				object: "NPC_1",
 				handle: "SND_" + handle,
@@ -2155,7 +2158,26 @@ for ( const zeroClip of [ "stand", "run" ] ) {
 				publicPath: "/assets/audio/" + handle + ".wav"
 			}) )
 		};
-		const f = fixture( {}, 2, false, false, false, false, false, false, false, false, undefined, audio );
+		// Zero-duration fallback comes from a decoded clip without BAN metadata;
+		// published BAN duration zero is correctly rejected during admission.
+		const f = fixture(
+			{},
+			2,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			undefined,
+			audio,
+			undefined,
+			{},
+			{},
+			{ clipDurations: { [zeroClip]: 0 } }
+		);
 		try {
 			f.warm();
 			f.step( [ entity( 1, { kind: "monster" } ) ], .3 );
