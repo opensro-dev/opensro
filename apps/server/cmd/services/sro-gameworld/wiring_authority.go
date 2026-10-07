@@ -173,6 +173,10 @@ func openAuthorityPlane(
 		MarksDir:                os.Getenv(agentapi.EnvMarksDir),
 		AuthoredAreas:           devPaths.AuthoredAreas,
 		BenchmarkFixtureControl: os.Getenv(agentapi.EnvBenchmarkFixtureControl) == "1",
+		SkillGroup: func(id uint32) (uint32, bool) {
+			row, ok := textdata.Skills.SkillByID(id)
+			return row.Group, ok
+		},
 	}
 	config.CharacterInPlay = func(divisionID, characterName string) bool {
 		key := divisionID + ":" + strings.ToLower(characterName)

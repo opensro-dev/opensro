@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+benchmark_fixture_test.go - the development scenario reset, end to end
+
+Requests go through the authenticated handler into a test authority store:
+the reset's exactness and idempotence, and the optional loadout.
+
+===========================================================================
+*/
 package agentapi
 
 import (
@@ -149,6 +159,7 @@ no-op; an out-of-range loadout is refused.
 func TestBenchmarkFixtureLoadoutTeachesSkillsAndDerivesVitals(t *testing.T) {
 	api, authority := newTestAPI(t)
 	api.benchmarkFixtureControl = true
+	api.skillGroup = testSkillGroups
 	handler := authenticatedHandler(t, api, testAccount)
 	postJSON(t, handler, "/character/create", createBody("FixtureHero"))
 	character := authority.Characters().CharactersForDivision(testDivision)[0]
@@ -189,5 +200,61 @@ func TestBenchmarkFixtureLoadoutTeachesSkillsAndDerivesVitals(t *testing.T) {
 		if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusBadRequest {
 			t.Fatalf("loadout %v = %d, want 400", loadout, recorder.Code)
 		}
+	}
+}
+
+/*
+================
+testSkillGroups
+
+The real groups of the skills these tests teach: Ghost Walk Phantom ranks
+share 261 and Shadow ranks share 768.
+================
+*/
+func testSkillGroups(id uint32) (uint32, bool) {
+	group, ok := map[uint32]uint32{1: 1, 2: 2, 40: 40, 70: 70, 114: 261, 1287: 261, 19636: 768, 19639: 768}[id]
+	return group, ok
+}
+
+/*
+================
+TestBenchmarkFixtureLoadoutReplacesRankAndRefusesUnknownSkills
+
+A higher rank of a known skill replaces the old rank in place, so the
+character keeps one current id per group; an id the skill data does not
+know, or any skill without a resolver, is refused before anything changes.
+================
+*/
+func TestBenchmarkFixtureLoadoutReplacesRankAndRefusesUnknownSkills(t *testing.T) {
+	api, authority := newTestAPI(t)
+	api.benchmarkFixtureControl = true
+	api.skillGroup = testSkillGroups
+	handler := authenticatedHandler(t, api, testAccount)
+	postJSON(t, handler, "/character/create", createBody("FixtureHero"))
+	character := authority.Characters().CharactersForDivision(testDivision)[0]
+	authority.MutateCharacter(character, "seed ranks", func() { character.Skills = []uint32{1, 19636, 70} })
+
+	body := benchmarkFixtureRequest("FixtureHero")
+	body["loadout"] = map[string]any{"level": 90, "intellect": 109, "skills": []uint32{19639, 1287}}
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK || response["outcome"] != "reset" {
+		t.Fatalf("rank replacement = %d %#v", recorder.Code, response)
+	}
+	authority.ReadCharacters(testDivision, func([]*domain.Character) {
+		if got := character.Skills; len(got) != 4 || got[0] != 1 || got[1] != 19639 || got[2] != 70 || got[3] != 1287 {
+			t.Fatalf("skills = %v, want [1 19639 70 1287]: Shadow rank replaced in place, Phantom appended", got)
+		}
+	})
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK || response["outcome"] != "already-reset" {
+		t.Fatalf("repeat = %d %#v, want already-reset", recorder.Code, response)
+	}
+
+	body["loadout"] = map[string]any{"level": 90, "intellect": 109, "skills": []uint32{999999}}
+	if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unknown skill = %d, want 400", recorder.Code)
+	}
+	api.skillGroup = nil
+	body["loadout"] = map[string]any{"level": 90, "intellect": 109, "skills": []uint32{19639}}
+	if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("skills without a resolver = %d, want 400", recorder.Code)
 	}
 }

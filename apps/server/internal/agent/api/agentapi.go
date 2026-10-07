@@ -152,6 +152,9 @@ type Config struct {
 	// BenchmarkFixtureControl registers the development-only deterministic
 	// fixture reset authority. Production deployments must leave it false.
 	BenchmarkFixtureControl bool
+	// SkillGroup resolves a skill id to its group for the fixture loadout;
+	// nil refuses any loadout that names skills.
+	SkillGroup SkillGroupResolver
 	// CharacterInPlay reports whether the character is bound to a live
 	// game session (the Hub's exclusive-bind view). nil = no live-session
 	// view (tests). A retail client cannot compose a delete for a
@@ -196,6 +199,7 @@ type API struct {
 	authoredAreas           *worldarea.Catalog
 	marksDir                string // "" = no crest art hosted
 	benchmarkFixtureControl bool
+	skillGroup              SkillGroupResolver
 	characterInPlay         func(divisionID, characterName string) bool
 	acquireCharacterControl func(divisionID, characterName string) (release func(), acquired bool)
 	enterWorldAuthSecret    []byte
@@ -254,6 +258,7 @@ func New(config Config) (*API, error) {
 		authoredAreas:           config.AuthoredAreas,
 		marksDir:                config.MarksDir,
 		benchmarkFixtureControl: config.BenchmarkFixtureControl,
+		skillGroup:              config.SkillGroup,
 		characterInPlay:         config.CharacterInPlay,
 		acquireCharacterControl: config.AcquireCharacterControl,
 		enterWorldAuthSecret:    append([]byte(nil), config.EnterWorldAuthSecret...),
