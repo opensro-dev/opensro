@@ -111,6 +111,7 @@ test("persistent transport failure exhausts exactly three attempts", async t => 
 	assert.equal( messages.length, 1 );
 	assert.equal( messages[0].kind, "error" );
 	assert.match( messages[0].error, /Load failed/ );
+	assert.equal( messages[0].transient, true );
 	t.mock.timers.tick( 60000 );
 	await settle();
 	assert.equal( attempts, 3 );
@@ -147,6 +148,7 @@ for ( const status of [ 400, 401, 403, 404, 410 ] ) {
 		assert.equal( attempts, 1 );
 		assert.equal( messages[0].kind, "error" );
 		assert.match( messages[0].error, new RegExp( `Asset HTTP ${status}` ) );
+		assert.equal( messages[0].transient, undefined );
 	});
 }
 
@@ -162,6 +164,7 @@ test("oversized response remains a permanent byte-budget failure", async t => {
 	assert.equal( attempts, 1 );
 	assert.equal( messages[0].kind, "error" );
 	assert.match( messages[0].error, /byte limit/ );
+	assert.equal( messages[0].transient, undefined );
 });
 
 /*
@@ -241,9 +244,16 @@ function packedAsset( ranged = false ) {
 }
 
 for ( const dispose of [ false, true ] ) {
-	test(`shared transport backoff respects ${dispose ? "owner disposal" : "subscriber cancellation"}`, async t => {
+	test( `shared transport backoff respects ${dispose ? "owner disposal" : "subscriber cancellation"}`, {
+		timeout: 10000
+	}, async t => {
 		t.mock.timers.enable( { apis: [ "setTimeout" ] } );
 		const asset = packedAsset(), messages = [];
+		let deliver = () => {};
+		/** @type {Promise<void>} */
+		const deliveredResult = new Promise( resolve => {
+			deliver = resolve;
+		} );
 		let attempts = 0;
 		/** @type {{ signal?: AbortSignal }} */
 		const transport = {};
@@ -256,6 +266,7 @@ for ( const dispose of [ false, true ] ) {
 		} );
 		const loader = createLoader( message => {
 			if ( message.kind !== "progress" ) messages.push( message );
+			if ( message.kind === "bytes" || message.kind === "error" ) deliver();
 		} );
 		t.after( () => loader.dispose() );
 		for ( const id of [ 1, 2 ] ) {
@@ -268,7 +279,10 @@ for ( const dispose of [ false, true ] ) {
 		assert.ok( transport.signal );
 		assert.equal( transport.signal.aborted, dispose );
 		t.mock.timers.tick( 250 );
-		for ( let i = 0; i < 20 && !messages.some( row => row.kind === "bytes" ); i++ ) await settle();
+		// Decompression completes on a worker thread. Counted event-loop turns
+		// can finish first under the full test load; wait for the actual result.
+		if ( !dispose ) await deliveredResult;
+		else await settle();
 		if ( dispose ) {
 			assert.equal( attempts, 1 );
 			assert.deepEqual( messages, [] );
@@ -280,7 +294,7 @@ for ( const dispose of [ false, true ] ) {
 			assert.deepEqual( new Uint8Array( delivered[0].buffer ), asset.bytes );
 			assert.ok( !messages.some( row => row.kind === "error" ) );
 		}
-	});
+	} );
 }
 
 test("invalid range stays permanent even when response cleanup rejects", async t => {

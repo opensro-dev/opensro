@@ -121,6 +121,8 @@ export type AssetResult =
 		// The published manifest lacks the path (packs AssetAbsentError): no
 		// retry will find it in this release.
 		absent?: true;
+		// Exhausted bounded transport retries; validation failures never set this.
+		transient?: true;
 	};
 /*
 ================

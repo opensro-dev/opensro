@@ -114,6 +114,7 @@ setMovementDump
 		*/
 		setMovementDump() {},
 		visibilityReturned: () => false,
+		connectionReturned: () => false,
 		/*
 ================
 presentUpdate

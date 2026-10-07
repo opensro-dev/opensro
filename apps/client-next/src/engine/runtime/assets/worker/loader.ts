@@ -31,6 +31,7 @@ import { AssetAbsentError, createPacks } from "./packs/packs";
 import { createBackgroundInstaller } from "./install";
 import { pageEntryBundle } from "@/engine/foundation/assets/page-entry";
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
+import { assetFailure, transientAssetFailure } from "@/engine/foundation/assets/asset-recovery";
 import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets";
 import { rgbaPickAlpha, bitmapPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
 // Loading-screen progress publications are coalesced to this interval.
@@ -149,7 +150,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					(error instanceof Error && "status" in error &&
 						TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
 				const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
-				if ( signal.aborted || !transient || delay === undefined ) throw error;
+				if ( signal.aborted || !transient ) throw error;
+				if ( delay === undefined ) throw assetFailure( String( error ), true );
 				await retryDownloadAfter( delay, signal );
 			}
 		}
@@ -601,6 +603,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					kind: "error",
 					id: request.id,
 					error: String( error ),
+					...(transientAssetFailure( error ) ? { transient: true as const } : {}),
 					...(error instanceof AssetAbsentError ? { absent: true as const } : {})
 				}, [] );
 			}

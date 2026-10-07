@@ -181,6 +181,8 @@ export interface Platform extends Disposable {
 	// trigger, and the refresh offer once a newer release is live.
 	runningEntry(): string | null;
 	visibilityReturned(): boolean;
+	/** Consumes a browser online event independently of tab visibility. */
+	connectionReturned(): boolean;
 	presentUpdate( newer: boolean ): void;
 	presentTelemetry( sample: FrameTelemetry ): void;
 	diagnosticsActive(): boolean;

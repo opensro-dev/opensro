@@ -5804,6 +5804,7 @@ export function createUi(
 				now < hudMessages.deadline() &&
 				now < speech.deadline() &&
 				view.resourceError === next.resourceError && view.worldError === next.worldError &&
+				view.worldRetrying === next.worldRetrying &&
 				view.worldReady === next.worldReady && view.travel === next.travel &&
 				view.worldTransitionRegion === next.worldTransitionRegion &&
 				view.frontend.error === next.frontend.error && view.frontend.status === next.frontend.status &&
@@ -5816,7 +5817,8 @@ export function createUi(
 			if ( stableWorld && !dirty ) return null;
 			if (
 				!loading && !next.frontend && !dirty && now < nextPoll && view?.resourceError === next.resourceError &&
-				view?.worldError === next.worldError && view?.worldReady === next.worldReady &&
+				view?.worldError === next.worldError && view?.worldRetrying === next.worldRetrying &&
+				view?.worldReady === next.worldReady &&
 				view?.travel === next.travel && view?.worldTransitionRegion === next.worldTransitionRegion &&
 				view?.session === next.session &&
 				view?.berserkGauge?.displayed === next.berserkGauge?.displayed && view?.gameplay === next.gameplay &&
@@ -16111,11 +16113,17 @@ export function createUi(
 						)
 					);
 					quads.push(
-						...text.quads( "Unable to finish loading", layout.title, full, white, { hAlign: 1, vAlign: 0 } )
+						...text.quads(
+							next.worldRetrying ? "Connection interrupted" : "Unable to finish loading",
+							layout.title,
+							full,
+							white,
+							{ hAlign: 1, vAlign: 0 }
+						)
 					);
 					quads.push(
 						...text.quads(
-							next.worldError ?
+							next.worldRetrying ? "Connection lost. Retrying automatically..." : next.worldError ?
 								"World resources could not be loaded." :
 								fatalAssetFailure ?
 								"Unable to load resources. Reload to try again." :
@@ -17188,7 +17196,7 @@ export function createUi(
 					loading?.startup === true || next.frontend?.phase === "failed",
 				title: phase === "world" ? "Silkroad game interface" : "Silkroad " + phase,
 				message: assetFailure ?
-					"Unable to finish loading. " +
+					(next.worldRetrying ? "Connection lost. Retrying automatically. " : "Unable to finish loading. ") +
 					(next.worldError ?
 						"Retry world loading." :
 						fatalAssetFailure ?

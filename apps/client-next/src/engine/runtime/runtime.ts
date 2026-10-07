@@ -815,6 +815,7 @@ export function startRuntime(
 				const semantics = ui.step(
 					{
 						worldError: world.error() ?? navigation.error(),
+						worldRetrying: world.error() ? world.reconnecting() : navigation.reconnecting(),
 						resourceError: (!localReady || !baselineReady ? characters.error() : null) ??
 							(!audio.ready() ? audio.error() : null),
 						simulationTimeMs,
@@ -864,7 +865,12 @@ export function startRuntime(
 				const phase = sessionState?.phase ?? "signed-out";
 				const phaseTrigger = phase !== releasePhase && (phase === "signed-out" || phase === "disconnected");
 				releasePhase = phase;
-				releaseWatch.step( now, phaseTrigger || platform.visibilityReturned() );
+				const visibleAgain = platform.visibilityReturned(), onlineAgain = platform.connectionReturned();
+				if ( visibleAgain || onlineAgain ) {
+					world.retryTransient();
+					navigation.retryTransient();
+				}
+				releaseWatch.step( now, phaseTrigger || visibleAgain );
 				// A server's 426 is the same news, learned from a refused request.
 				platform.presentUpdate( releaseWatch.newerAvailable() || sessionState?.releaseOutdated === true );
 				markStage( "ui" );
@@ -956,9 +962,8 @@ export function startRuntime(
 				if ( now - lastReport >= 250 ) {
 					lastReport = now;
 					runtimeErrors.update( "Characters", characters.error() );
-					runtimeErrors.update( "Navigation", navigation.error() );
-					runtimeErrors.update( "World", world.error() );
-					runtimeErrors.update( "Navigation", navigation.error() );
+					runtimeErrors.update( "Navigation", navigation.reconnecting() ? null : navigation.error() );
+					runtimeErrors.update( "World", world.reconnecting() ? null : world.error() );
 					runtimeErrors.update( "Audio", audio.error() );
 					runtimeErrors.update( "Interface", ui.resourceError() );
 					const assetHealth = assets.health();

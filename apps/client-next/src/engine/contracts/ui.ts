@@ -228,6 +228,7 @@ UiView
 */
 export interface UiView {
 	readonly worldError?: string | null;
+	readonly worldRetrying?: boolean;
 	readonly resourceError?: string | null;
 	readonly dropNamesHeld?: boolean;
 	readonly blindHeld?: boolean;

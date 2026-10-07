@@ -18,6 +18,7 @@ asset jobs that fetch them.
 */
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { WorldTerrainPart } from "@/engine/contracts/world-admission";
+import { assetFailure } from "@/engine/foundation/assets/asset-recovery";
 
 // Regions an anchor serves on either axis. At 8 regions (15360 units) a
 // float32 coordinate still resolves 0.002 units, far below a pixel.
@@ -165,8 +166,9 @@ export function createTerrainParts(
 				jobs.delete( region );
 				if ( result.kind !== "world" ) {
 					if ( result.kind === "image" ) result.image.close();
-					throw new Error(
-						`Region ${region} terrain: ${result.kind === "error" ? result.error : "not a world"}`
+					throw assetFailure(
+						`Region ${region} terrain: ${result.kind === "error" ? result.error : "not a world"}`,
+						result.kind === "error" && result.transient === true
 					);
 				}
 				for ( const row of result.images ?? [] ) row.image.close();

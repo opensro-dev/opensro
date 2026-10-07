@@ -259,6 +259,10 @@ export function createPlatform(
 	// Release skew: a one-shot "visible again" trigger, and the refresh offer
 	// the page shell carries hidden (index.html #update-notice).
 	let visibleAgain = false;
+	let onlineAgain = false;
+	window.addEventListener( "online", () => {
+		onlineAgain = true;
+	}, { signal: lifetime.signal } );
 	const updateNotice = document.getElementById( "update-notice" );
 	updateNotice?.querySelector( "button" )?.addEventListener( "click", () => location.reload(), {
 		signal: lifetime.signal
@@ -726,6 +730,16 @@ export function createPlatform(
 		visibilityReturned() {
 			const returned = visibleAgain;
 			visibleAgain = false;
+			return returned;
+		},
+		/*
+		================
+		connectionReturned
+		================
+		*/
+		connectionReturned() {
+			const returned = onlineAgain;
+			onlineAgain = false;
 			return returned;
 		},
 		/*

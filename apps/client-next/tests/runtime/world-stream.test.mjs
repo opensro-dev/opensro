@@ -280,6 +280,59 @@ test("failed scene transaction preserves current scene and camera, then retries 
 	assert.equal( f.requests.length, retried, "a disposed stream requests nothing" );
 });
 
+for ( const failedPart of [ "catalog", "objects", "terrain", "texture" ] ) {
+	test(`world ${failedPart} recovers a transient outage without manual retry`, () => {
+		const f = fixture(), pose = { regionId: 1, x: 0, y: 0, z: 0, angle: 0 };
+		f.step( 1 );
+		if ( failedPart !== "catalog" ) f.step( 1 );
+		if ( failedPart === "texture" ) f.step( 1 );
+		const job = f.requests.find( r =>
+			f.ready.has( r.key ) && (
+				failedPart === "catalog" ?
+					r.decode === undefined :
+					failedPart === "texture" ?
+					r.decode === "png" :
+					new URLSearchParams( new URL( r.url ).hash.slice( 1 ) ).get( "part" ) === failedPart
+			)
+		);
+		assert.ok( job, `pending ${failedPart}` );
+		f.ready.set( job.key, { kind: "error", id: job.key, error: "Load failed", transient: true } );
+		f.stream.step( pose, undefined, undefined, undefined, 100 );
+		assert.match( f.stream.error(), /Load failed/ );
+		assert.equal( f.stream.reconnecting(), true );
+		const requests = f.requests.length;
+		f.stream.step( pose, undefined, undefined, undefined, 2099 );
+		assert.equal( f.requests.length, requests );
+		f.stream.step( pose, undefined, undefined, undefined, 2100 );
+		assert.ok( f.requests.length > requests );
+		for ( let i = 0; i < 8; i++ ) f.step( 1 );
+		assert.equal( f.stream.error(), null );
+		assert.equal( f.stream.reconnecting(), false );
+		assert.equal( f.world.stats().sceneId, "1:objects" );
+		f.stream.dispose();
+		f.stream.retryTransient();
+		const completed = f.requests.length;
+		f.stream.step( pose, undefined, undefined, undefined, 100000 );
+		assert.equal( f.requests.length, completed );
+	});
+}
+
+test("world permanent errors wait for manual retry even after an online event", () => {
+	const f = fixture(), pose = { regionId: 1, x: 0, y: 0, z: 0, angle: 0 };
+	f.step( 1 );
+	const job = f.requests[0];
+	f.ready.set( job.key, { kind: "error", id: job.key, error: "Asset HTTP 404" } );
+	f.stream.step( pose );
+	f.stream.retryTransient();
+	f.stream.step( pose, undefined, undefined, undefined, 1000000 );
+	assert.match( f.stream.error(), /404/ );
+	assert.equal( f.stream.reconnecting(), false );
+	assert.equal( f.requests.length, 1 );
+	f.stream.retry();
+	for ( let i = 0; i < 8; i++ ) f.step( 1 );
+	assert.equal( f.stream.error(), null );
+});
+
 test("one neighbouring preload transfers across the boundary and reversal cancels it", () => {
 	for ( const completed of [ false, true ] ) {
 		const f = fixture();
