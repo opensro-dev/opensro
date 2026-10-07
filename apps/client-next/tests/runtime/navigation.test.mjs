@@ -380,6 +380,38 @@ for ( const resume of [ "clock", "online", "region" ] ) {
 	});
 }
 
+test("an unanswered navigation load retries, an unanswered admission does not", () => {
+	let id = 0;
+	const sent = [], answers = new Map();
+	const assets = {
+		available: () => 4,
+		request: () => ++id,
+		cancel() {},
+		take: key => answers.get( key ) ?? null
+	};
+	const stream = createNavigationStream( assets, command => sent.push( command ), "https://fixture.test" );
+	const dungeon = { ...pose, regionId: 0x8001 },
+		step = now => stream.step( dungeon, undefined, undefined, undefined, now );
+	step( 0 );
+	// No answer for the 60 s load deadline: a transport symptom, retried.
+	step( 60000 );
+	assert.match( stream.error(), /loading timed out/ );
+	assert.equal( stream.reconnecting(), true );
+	step( 62000 );
+	assert.equal( id, 2, "the load is requested again" );
+	answers.set( 2, { kind: "navigation", id: 2, product: product( dungeon.regionId ) } );
+	step( 62100 );
+	assert.equal( stream.phase(), "admitting" );
+	// No admission within 15 s is the simulation's answer, not the network's.
+	step( 77100 );
+	assert.match( stream.error(), /admitting timed out/ );
+	assert.equal( stream.reconnecting(), false );
+	stream.retryTransient();
+	step( 1000000 );
+	assert.equal( id, 2, "an admission timeout never retries by itself" );
+	stream.dispose();
+});
+
 test("navigation permanent failures ignore automatic recovery", () => {
 	let id = 0;
 	const assets = {

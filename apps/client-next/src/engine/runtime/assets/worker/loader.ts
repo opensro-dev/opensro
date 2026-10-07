@@ -37,6 +37,16 @@ import { rgbaPickAlpha, bitmapPickAlpha } from "@/engine/foundation/rendering/pi
 // Loading-screen progress publications are coalesced to this interval.
 const PROGRESS_INTERVAL_MS = 150;
 const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
+// A download that receives nothing for this long, waiting for headers or in
+// a stalled body, is abandoned as a transport failure and retried. Headers
+// and each non-empty chunk restart the window. A request silent from the
+// start settles in 46.25 s (three windows plus backoff); one whose headers
+// arrive just before the window and whose body then stalls, in about 91 s.
+// Both come before the 120 s worker watchdog, so callers see a typed
+// transient failure, not a dead worker. Bytes that keep trickling in extend
+// a download until navigation's 60 s load deadline (also transient) or the
+// watchdog.
+const DOWNLOAD_NO_PROGRESS_MS = 15000;
 const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
 /*
 ================
@@ -146,7 +156,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			try {
 				return await downloadAttempt( url, limit, signal, range );
 			} catch ( error ) {
-				const transient = error instanceof TypeError ||
+				const transient = error instanceof TypeError || error instanceof NoProgressError ||
 					(error instanceof Error && "status" in error &&
 						TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
 				const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
@@ -198,6 +208,43 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		signal: AbortSignal,
 		range?: import("./packs/packs").PackRange
 	) {
+		// The attempt aborts on the caller's cancellation or on its own stall
+		// timer; only the stall becomes NoProgressError (transient). Every
+		// received chunk restarts the timer.
+		const attempt = new AbortController(), stalled = new NoProgressError( url, DOWNLOAD_NO_PROGRESS_MS );
+		const forward = () => attempt.abort( signal.reason );
+		signal.addEventListener( "abort", forward, { once: true } );
+		let timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
+		const progressed = () => {
+			clearTimeout( timer );
+			timer = setTimeout( () => attempt.abort( stalled ), DOWNLOAD_NO_PROGRESS_MS );
+		};
+		try {
+			return await downloadBytes( url, limit, attempt.signal, progressed, range );
+		} catch ( error ) {
+			// download() rethrows unchanged once the caller's signal is aborted,
+			// so a cancellation racing the stall still reads as a cancellation.
+			throw attempt.signal.reason === stalled ? stalled : error;
+		} finally {
+			clearTimeout( timer );
+			signal.removeEventListener( "abort", forward );
+		}
+	}
+	/*
+	================
+	downloadBytes
+
+	One HTTP read under the attempt's signal; progressed runs on the headers
+	and on every body chunk.
+	================
+	*/
+	async function downloadBytes(
+		url: string,
+		limit: number,
+		signal: AbortSignal,
+		progressed: () => void,
+		range?: import("./packs/packs").PackRange
+	) {
 		const started = performance.now();
 		// Cache Storage owns verified members. Keep partial HTTP responses out
 		// of the browser cache: different ranges share the container URL.
@@ -214,8 +261,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				"no-cache",
 			headers: range ? { Range: `bytes=${range.start}-${range.end}` } : undefined
 		} );
+		progressed();
 		if ( !response.ok || !response.body ) {
-			await response.body?.cancel().catch( () => {} );
+			// Cleanup is not awaited: a cancel that never settles must not hold the slot.
+			void response.body?.cancel().catch( () => {} );
 			throw Object.assign( new Error( `Asset HTTP ${response.status}` ), { status: response.status } );
 		}
 		if (
@@ -223,14 +272,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			(response.status !== 206 ||
 				response.headers.get( "content-range" ) !== `bytes ${range.start}-${range.end}/${range.total}`)
 		) {
-			await response.body.cancel().catch( () => {} );
+			void response.body.cancel().catch( () => {} );
 			throw Error( "Invalid asset range response" );
 		}
 		const bytes = await readBytes( response.body, limit, size => {
+			// An empty chunk is not progress.
+			if ( size > 0 ) progressed();
 			bytesRead += size;
 			if ( range ) received += size;
 			progress();
-		} );
+		}, signal );
 		// Ranges are identity bytes with no HTTP cache. For other responses,
 		// Resource Timing distinguishes compressed transfers from HTTP cache
 		// reads; counting decoded stream chunks would invent warm downloads.
@@ -673,4 +724,18 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			pending.clear();
 		}
 	};
+}
+
+/*
+================
+NoProgressError
+
+A download that received nothing for its no-progress window: a transport
+failure, retried like a network error and never a validation failure.
+================
+*/
+class NoProgressError extends Error {
+	constructor( url: string, ms: number ) {
+		super( `No download progress for ${ms} ms: ${url}` );
+	}
 }

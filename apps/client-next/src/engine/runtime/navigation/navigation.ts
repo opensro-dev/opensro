@@ -84,7 +84,11 @@ export function createNavigationStream(
 				if ( state.phase === "loading" ) {
 					const result = assets.take( state.id );
 					if ( !result ) {
-						if ( now >= deadline ) throw Error( "Navigation loading timed out for region " + state.region );
+						// No answer within the load deadline is a transport symptom (the
+						// loader's own no-progress retries settle earlier), so it retries.
+						if ( now >= deadline ) {
+							throw assetFailure( "Navigation loading timed out for region " + state.region, true );
+						}
 						return;
 					}
 					if ( result.kind === "error" ) throw assetFailure( result.error, result.transient === true );

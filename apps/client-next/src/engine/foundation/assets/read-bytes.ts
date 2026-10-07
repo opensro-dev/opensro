@@ -15,19 +15,26 @@ readBytes
 
 Reads a stream into one buffer, failing once it exceeds limit bytes. A
 single-chunk stream returns that chunk's own buffer instead of a copy.
+An aborted signal cancels the reader and throws its reason: a cancelled
+read must never return the bytes received so far as a whole response.
 ================
 */
 export async function readBytes(
 	stream: ReadableStream<Uint8Array>,
 	limit: number,
-	received?: ( bytes: number ) => void
+	received?: ( bytes: number ) => void,
+	signal?: AbortSignal
 ): Promise<Uint8Array<ArrayBuffer>> {
 	if ( !Number.isSafeInteger( limit ) || limit < 1 ) throw new Error( "Invalid byte limit" );
+	signal?.throwIfAborted();
 	const reader = stream.getReader(), chunks: Uint8Array[] = [];
+	const abort = () => void reader.cancel( signal?.reason ).catch( () => {} );
+	signal?.addEventListener( "abort", abort, { once: true } );
 	let size = 0;
 	try {
 		while ( true ) {
 			const part = await reader.read();
+			signal?.throwIfAborted();
 			if ( part.done ) break;
 			size += part.value.byteLength;
 			if ( size > limit ) throw new Error( "Response exceeds byte limit" );
@@ -35,9 +42,11 @@ export async function readBytes(
 			received?.( part.value.byteLength );
 		}
 	} catch ( error ) {
-		await reader.cancel().catch( () => {} );
+		// Not awaited: a source whose cancel never settles must not hold the read.
+		void reader.cancel().catch( () => {} );
 		throw error;
 	} finally {
+		signal?.removeEventListener( "abort", abort );
 		reader.releaseLock();
 	}
 	const only = chunks.length === 1 ? chunks[0]! : null;
