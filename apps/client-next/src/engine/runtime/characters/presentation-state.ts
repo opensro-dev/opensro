@@ -203,6 +203,36 @@ export function createPresentationState() {
 			for ( const [gid, end] of combatStanceEnds ) {
 				if ( !active.has( gid ) || end <= seconds ) combatStanceEnds.delete( gid );
 			}
+		},
+		/*
+		================
+		forgetStance
+
+		A spawn or despawn ends the gid's combat stance.
+		================
+		*/
+		forgetStance( gid: number ) {
+			combatStanceEnds.delete( gid );
+		},
+		/*
+		================
+		clearStances
+
+		A world reset (and its replay) ends every combat stance but keeps the
+		idle states; the presentation teardown clears both (reset).
+		================
+		*/
+		clearStances() {
+			combatStanceEnds.clear();
+		},
+		/*
+		================
+		reset
+		================
+		*/
+		reset() {
+			idleStates.clear();
+			combatStanceEnds.clear();
 		}
 	};
 }

@@ -271,8 +271,7 @@ export function createCharacterPresentation(
 		avatarOverrides.clear();
 		auxiliary.resetChildren();
 		posePresentation.reset();
-		presentationState.idleStates.clear();
-		presentationState.combatStanceEnds.clear();
+		presentationState.reset();
 		retiring.clear();
 		disappearing.clear();
 		spawnFades.reset();
@@ -785,7 +784,7 @@ export function createCharacterPresentation(
 			const next: WeatherLifecycleEvent[] = [];
 			for ( const event of events ) {
 				if ( event.kind === "reset" ) {
-					presentationState.combatStanceEnds.clear();
+					presentationState.clearStances();
 					modelEmission.reset();
 					structureVisuals.reset();
 					animationEmission.reset();
@@ -798,13 +797,13 @@ export function createCharacterPresentation(
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
 					if ( event.kind === "spawn" ) {
-						presentationState.combatStanceEnds.delete( event.entity.gid );
+						presentationState.forgetStance( event.entity.gid );
 						// A respawn under a live gid is a new CICharactor: fade it again.
 						spawnFades.respawn( event.entity.gid );
 					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
-					presentationState.combatStanceEnds.delete( event.gid );
+					presentationState.forgetStance( event.gid );
 					retiring.add( event.gid );
 					next.push( { kind: "despawn", gid: event.gid } );
 				}
@@ -819,7 +818,7 @@ export function createCharacterPresentation(
 		eventRain() {
 			// A replayed world reset first resets the owners a reset retires.
 			return weather.eventRain( published, () => {
-				presentationState.combatStanceEnds.clear();
+				presentationState.clearStances();
 				modelEmission.reset();
 				structureVisuals.reset();
 				animationEmission.reset();
