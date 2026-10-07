@@ -5,8 +5,9 @@ video-options.ts - the Option window's video records and screen size
 
 Two native detail records (5CDC20 defaults) plus the screen size: like the
 native client's window mode, the game area is the chosen width x height,
-centred on a full-screen page at one UI pixel per CSS pixel (platform
-displayScale). It shrinks only when the page is smaller than the mode.
+centred on a full-screen page in physical pixels (platform displayScale).
+It shrinks only when the physical page is smaller than the mode; the UI
+lays out at the resulting pixel size rather than resampling its bitmap font.
 
 ===========================================================================
 */

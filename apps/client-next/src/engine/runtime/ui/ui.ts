@@ -9159,7 +9159,7 @@ export function createUi(
 							} );
 						}
 						// Screen size: the game area is the chosen mode, centred on the page
-						// at one UI pixel per CSS pixel (platform displayScale). Hardware
+						// in physical pixels (platform displayScale). Hardware
 						// gamma is not a browser display mode.
 						combos.push( {
 							slot: -1,
