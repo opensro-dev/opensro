@@ -98,7 +98,6 @@ async function run( options ) {
 		} );
 		const captures = await createCaptures( page, {
 			dir: options.out,
-			cpu: true,
 			trace: `${options.out}/trace.json`
 		} );
 		await captures.start();
