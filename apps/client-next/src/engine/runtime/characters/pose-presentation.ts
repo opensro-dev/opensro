@@ -384,6 +384,8 @@ export function createPosePresentation() {
 	function sampledPose( gid: number, input: SampleInput, target: Pose, now: number ): Pose {
 		const at = (originMs! + input.atMs) / 1000;
 		let row = tracks.get( gid );
+		const previousTrack = row;
+		const untimed = !row ? rows.get( gid ) : undefined;
 		const relocation = input.transition?.relocation ?? 0;
 		const revisionChanged = row && input.revision !== row.latest.revision;
 		const stalled = row && now - row.last > MAX_SAMPLE_GAP_SECONDS;
@@ -410,7 +412,28 @@ export function createPosePresentation() {
 				last: now,
 				angle: target.angle
 			};
+			if (
+				untimed && input.moving && input.transition?.eligible !== false &&
+				!discontinuity( untimed.target, target )
+			) {
+				// An actor can be idle without a simulation timestamp. Its first
+				// dash must still respect the last frame already shown, rather
+				// than spending unseen worker time as an instantaneous step.
+				const switchAt = Math.max(
+					untimed.last,
+					Math.min( now, (originMs! + (input.startedAtMs ?? input.atMs)) / 1000 )
+				);
+				const anchor = displacementAnchor( input, switchAt * 1000 - originMs! );
+				if ( anchor ) {
+					const before = position( untimed, switchAt );
+					const offset = worldVector( before, anchor );
+					if ( offset && hypot3( ...offset ) <= MAX_CORRECTION_DISTANCE ) {
+						row.offset = [ offset[0], before.y - target.y, offset[2] ];
+					}
+				}
+			}
 			tracks.set( gid, row );
+			rows.delete( gid );
 		} else if ( now !== row.last ) {
 			if ( !revisionChanged ) recover( row, now - row.last );
 			if ( stalled ) row.previous = undefined;
@@ -470,7 +493,9 @@ export function createPosePresentation() {
 			}
 			row.moving = input.moving;
 			row.to = input.to;
-			if ( timingChanged ) row.previous = undefined;
+			// Samples from distinct skill legs cannot define one velocity, even
+			// when their duration and entity revision happen to match.
+			if ( timingChanged || displacementChanged ) row.previous = undefined;
 			row.durationMs = input.durationMs;
 			row.displacementAtMs = displacementAtMs;
 			row.pathVelocity = pathVelocity( input );
@@ -529,6 +554,24 @@ export function createPosePresentation() {
 				drawn = model;
 			}
 		}
+		if (
+			input.displacement && row === previousTrack && !displacementChanged && !revisionChanged && !stalled &&
+			previousFrameAt !== undefined && now > previousFrameAt && row.pathVelocity && input.from && input.to &&
+			onCorridor( row.displayed, input.from, input.to, true ) && onCorridor( model, input.from, input.to, true )
+		) {
+			// 8DD550 spends skill speed times frame delta. A late first sample
+			// cannot repay its phase lag on top of that speed. Carry the lag
+			// along this admitted leg, then finish at the same speed at arrival.
+			const delta = worldVector( model, row.displayed )!;
+			const distance = hypot2( delta[0], delta[2] );
+			if ( distance <= MAX_CORRECTION_DISTANCE ) {
+				const budget = hypot2( ...row.pathVelocity ) * (now - previousFrameAt);
+				const fraction = distance ? Math.min( 1, budget / distance ) : 0;
+				const advanced = displace( row.displayed, [ delta[0] * fraction, 0, delta[2] * fraction ] );
+				drawn = { ...drawn, regionId: advanced.regionId, x: advanced.x, z: advanced.z };
+				row.offset = worldVector( drawn, model )!;
+			}
+		}
 		// Retain the path behind a rebased receipt only while it still carries
 		// visible recovery. This cannot grow with a long session or cut a turn.
 		if ( hypot3( ...row.offset ) === 0 && row.paths.length > 1 ) row.paths.splice( 0, row.paths.length - 1 );
@@ -567,7 +610,6 @@ export function createPosePresentation() {
 		pose( gid: number, target: Pose, now: number, settledTranslation = false ): Pose {
 			const input = inputs.get( gid );
 			if ( input && originMs !== null && !settledTranslation ) {
-				rows.delete( gid );
 				return sampledPose( gid, input, target, now );
 			}
 			tracks.delete( gid );
