@@ -3,6 +3,13 @@
 	"capabilities": [
 		{
 			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
 			"functions": [
 				"clip"
