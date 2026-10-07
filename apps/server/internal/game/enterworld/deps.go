@@ -324,7 +324,11 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 			return PreparedReentry{}, false
 		}
 	}
-	result := buildCharacterProjection(d, divisionID, snapshot)
+	projection := *d
+	// The caller holds the division lock and commits the returned stand only
+	// after preparation succeeds. Login adoption would re-enter that lock.
+	projection.AdoptEntrySpawn = nil
+	result := buildCharacterProjection(&projection, divisionID, snapshot)
 	packets, ok := d.encodeReentry(result)
 	if !ok {
 		return PreparedReentry{}, false

@@ -149,7 +149,7 @@ func TestRescueStrandedSpawn(t *testing.T) {
 	relocateNoRescue := func(s simulation.Spawn) (simulation.Spawn, bool, bool) { return s, true, false }
 
 	stranded := entryAt(0x60A0, 1842.79, 843.6, 1279.23)
-	if !RescueStrandedSpawn(&stranded, nil, relocateToPoint) {
+	if !RescueStrandedSpawn(&stranded, relocateToPoint) {
 		t.Fatal("stranded spawn must rescue")
 	}
 	if stranded.StartProfile.X != 1500 || stranded.StartProfile.Y != 700 || stranded.StartProfile.Z != 1100 {
@@ -157,12 +157,12 @@ func TestRescueStrandedSpawn(t *testing.T) {
 	}
 
 	fine := entryAt(0x60A0, 1500, 700, 1100)
-	if RescueStrandedSpawn(&fine, nil, relocateMainland) {
+	if RescueStrandedSpawn(&fine, relocateMainland) {
 		t.Fatal("mainland spawn must pass through untouched")
 	}
 
 	desperate := entryAt(0x60A0, 1842.79, 843.6, 1279.23)
-	if !RescueStrandedSpawn(&desperate, nil, relocateNoRescue) {
+	if !RescueStrandedSpawn(&desperate, relocateNoRescue) {
 		t.Fatal("no-rescue case must still relocate (start profile fallback)")
 	}
 	start := StartProfileForRace(RaceKeyChina)
@@ -171,10 +171,10 @@ func TestRescueStrandedSpawn(t *testing.T) {
 	}
 
 	dungeon := entryAt(0x8001, 5000, -30, 7000)
-	if RescueStrandedSpawn(&dungeon, nil, relocateToPoint) {
+	if RescueStrandedSpawn(&dungeon, relocateToPoint) {
 		t.Fatal("dungeon spawn must be exempt")
 	}
-	if RescueStrandedSpawn(&stranded, nil, nil) {
+	if RescueStrandedSpawn(&stranded, nil) {
 		t.Fatal("nil relocator must mean no rescue")
 	}
 }

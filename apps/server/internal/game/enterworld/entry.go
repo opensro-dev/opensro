@@ -323,12 +323,10 @@ func LiftSpawnAboveTerrain(entry *LocalPlayerEntry, heightAt func(regionID uint1
 // (the frame-bug incident's mountain plateau - movement worked but every
 // path out clipped at the island edge), strands the player. When the
 // relocator reports the point stranded, the entry takes the nearest
-// mainland rescue point. With no rescue in the search radius it takes the
-// character's appointed town (town, when it is a complete outdoor stand),
-// and only then the race start profile. Port-only, not native: the
-// original enters at the saved position. Dungeon regions are exempt (no
+// mainland rescue point, or falls back to the race start profile when no
+// rescue exists within the search radius. Dungeon regions are exempt (no
 // outdoor walkability plane). Returns whether the spawn was changed.
-func RescueStrandedSpawn(entry *LocalPlayerEntry, town *WorldSpawn, relocate func(simulation.Spawn) (simulation.Spawn, bool, bool)) bool {
+func RescueStrandedSpawn(entry *LocalPlayerEntry, relocate func(simulation.Spawn) (simulation.Spawn, bool, bool)) bool {
 	if entry == nil || relocate == nil {
 		return false
 	}
@@ -348,13 +346,8 @@ func RescueStrandedSpawn(entry *LocalPlayerEntry, town *WorldSpawn, relocate fun
 		return false
 	}
 	if !rescueFound {
-		if townStandsOpen(town, relocate) {
-			profile.RegionID = *town.RegionID
-			profile.X, profile.Y, profile.Z = *town.X, *town.Y, *town.Z
-			return true
-		}
-		// Nothing walkable nearby and no usable town: the race start profile
-		// is the one placement guaranteed legal for every character.
+		// Nothing walkable nearby: the race start profile is the one
+		// placement guaranteed legal for every character.
 		start := StartProfileForRace(entry.RaceKey)
 		profile.RegionID = start.RegionID
 		profile.X = start.X
@@ -368,21 +361,6 @@ func RescueStrandedSpawn(entry *LocalPlayerEntry, town *WorldSpawn, relocate fun
 	profile.Y = rescued.Y
 	profile.Z = rescued.Z
 	return true
-}
-
-/*
-================
-townStandsOpen
-
-Whether the appointed town is a stand the relocator accepts as it is.
-================
-*/
-func townStandsOpen(town *WorldSpawn, relocate func(simulation.Spawn) (simulation.Spawn, bool, bool)) bool {
-	if !simulation.CompleteWorldSpawn(town) || simulation.IsDungeonRegion(uint16(*town.RegionID)) {
-		return false
-	}
-	_, stranded, _ := relocate(simulation.Spawn{RegionID: uint16(*town.RegionID), X: *town.X, Y: *town.Y, Z: *town.Z})
-	return !stranded
 }
 
 // CharacterModelRef resolves a character's model refObjId exactly like

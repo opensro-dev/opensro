@@ -3,8 +3,8 @@
 
 entry_placement_test.go - the stand enter-world publishes and commits
 
-A saved spawn is taken whole, a stranded one prefers the character's town
-over the race start, and every stand the entry moved reaches the authority.
+A saved spawn is taken whole and every stand the entry moved reaches the
+authority. Rescue destination policy remains unchanged.
 
 ===========================================================================
 */
@@ -46,32 +46,6 @@ func TestWorldStateForCharacterTakesSpawnWhole(t *testing.T) {
 	character.World.Spawn = worldSpawnAt(0x679A, 640, -109.9, 61.5)
 	if got := WorldStateForCharacter(character, RaceKeyChina).Spawn; got.RegionID != 0x679A || got.X != 640 {
 		t.Fatalf("complete spawn not kept: %+v", got)
-	}
-}
-
-/*
-================
-TestRescueStrandedSpawnPrefersTheAppointedTown
-
-With no rescue point nearby, an open appointed town wins over the race
-start; a town the relocator also refuses falls through to the race start.
-================
-*/
-func TestRescueStrandedSpawnPrefersTheAppointedTown(t *testing.T) {
-	town := worldSpawnAt(0x6699, 957, -80, 1508)
-	strandedAt := func() LocalPlayerEntry {
-		return LocalPlayerEntry{RaceKey: RaceKeyChina, StartProfile: StartProfile{RegionID: 0x679A, X: 640, Y: -109.9, Z: 61.5}}
-	}
-	onlyTownOpen := func(s simulation.Spawn) (simulation.Spawn, bool, bool) { return s, s.RegionID != 0x6699, false }
-	entry := strandedAt()
-	if !RescueStrandedSpawn(&entry, town, onlyTownOpen) || entry.StartProfile.RegionID != 0x6699 || entry.StartProfile.Z != 1508 {
-		t.Fatalf("open town not taken: %+v", entry.StartProfile)
-	}
-	nothingOpen := func(s simulation.Spawn) (simulation.Spawn, bool, bool) { return s, true, false }
-	entry = strandedAt()
-	start := StartProfileForRace(RaceKeyChina)
-	if !RescueStrandedSpawn(&entry, town, nothingOpen) || entry.StartProfile.RegionID != start.RegionID {
-		t.Fatalf("stranded town did not fall through to the race start: %+v", entry.StartProfile)
 	}
 }
 

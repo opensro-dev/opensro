@@ -193,11 +193,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	}
 	saved := entry.StartProfile
 	lifted := LiftSpawnAboveTerrain(&entry, deps.SpawnTerrainHeight, deps.SpawnSurfaceHeight)
-	var town *WorldSpawn
-	if character.World != nil {
-		town = character.World.RebirthPoint
-	}
-	rescued := RescueStrandedSpawn(&entry, town, deps.RelocateStrandedSpawn)
+	rescued := RescueStrandedSpawn(&entry, deps.RelocateStrandedSpawn)
 	if lifted || rescued {
 		adoptEntryPlacement(deps, divisionID, character.Name, saved, &entry, rescued)
 	}
