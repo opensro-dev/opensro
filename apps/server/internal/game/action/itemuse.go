@@ -386,8 +386,8 @@ func (rt *Runtime) HandleItemUse(
 				result = itemUseFailure(wire.ErrCodeMultipleCOS)
 				return false
 			}
-			cosRef, found := characters.CharacterRefByCodename(ref.AssociatedCharacterCodename)
-			if !found || cosRef == nil || cosRef.RefObjID == 0 || cosRef.Codename != ref.AssociatedCharacterCodename ||
+			cosRef, found := enterworld.SummonCharacterReference(characters, ref, (&characterEquipRequirements{character: character}).characterLevel())
+			if !found ||
 				(cosRef.TidWord>>11 != 1 && cosRef.TidWord>>11 != 2) || !cosRef.CanRide || cosRef.MaxHP == 0 {
 				return false
 			}
