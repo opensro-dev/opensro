@@ -26,7 +26,9 @@ main thread's frame and world-preparation time per frame. Options add:
   --spans   the runtime's stage marks ("@stage" ms per frame) and detail
             spans ("stage" ms and "stage n" per frame, such as ui-assembly:
             how often the HUD rebuilds and what a rebuild costs);
-  --cpu     a CPU profile per scenario, OUT/<location>-<scenario>.cpuprofile;
+  --cpu     a CPU profile per scenario, OUT/<location>-<scenario>.cpuprofile
+            (V8 detailed line info on, so profile.mjs --lines can name lines;
+            line attribution also needs an unminified build);
   --heap    a sampled allocation profile per scenario (.heapprofile) and
             the allocation rate in the row;
   --trace   a Chrome trace per location, OUT/<location>.json.
@@ -330,7 +332,9 @@ async function session( options, location, results ) {
 		uncapped: !options.paced,
 		cpuRate: options.cpuRate,
 		frameLimit: options.frameLimit,
-		shadowDetail: options.shadowDetail
+		shadowDetail: options.shadowDetail,
+		// A profile is attribution: line positions matter, its timing is perturbed anyway.
+		lineInfo: options.cpu
 	} );
 	try {
 		// A stale or replaced session can boot outside the scene; every

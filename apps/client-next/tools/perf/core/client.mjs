@@ -30,6 +30,10 @@ const SETTLE_MS = 8000;
 // Allocation sampling: one sample per 16 KiB allocated on average, keeping
 // objects the collectors already freed, so the profile shows churn.
 const HEAP_SAMPLING_BYTES = 16384;
+// V8 keeps per-line source positions for optimized code only with this flag;
+// without it a CPU profile charges an optimized function's ticks to its first
+// line. It changes code generation, so it is for profiling runs, not timing.
+export const DETAILED_LINE_INFO = "--js-flags=--detailed-line-info";
 
 /*
 ================
@@ -414,7 +418,8 @@ openClient
 Resets the scratch character to fixture, boots the client at 1600x900,
 revives the character if it died and lets the world settle. Returns the
 browser and page; close the browser when done. counts and spans are
-instrument's options.
+instrument's options. lineInfo launches V8 with detailed line positions,
+for CPU profiles that attribute time to source lines.
 ================
 */
 export async function openClient(
@@ -429,12 +434,17 @@ export async function openClient(
 		videoOptions = undefined,
 		headed = false,
 		backgroundThrottling = false,
-		beforeLogin = undefined
+		beforeLogin = undefined,
+		lineInfo = false
 	} = {}
 ) {
 	process.env.SRO_PROBE_UNLOCK_FPS = uncapped ? "1" : "0";
 	await resetMissionMovementFixture( { characterName: CHARACTER, fixture, timeoutMs: 60000 } );
-	const { browser, page } = await launchProbeBrowser( { headed, backgroundThrottling } );
+	const { browser, page } = await launchProbeBrowser( {
+		headed,
+		backgroundThrottling,
+		extraBrowserArgs: lineInfo ? [ DETAILED_LINE_INFO ] : []
+	} );
 	try {
 		await page.addInitScript(
 			options => {

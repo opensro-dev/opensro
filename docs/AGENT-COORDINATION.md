@@ -164,6 +164,12 @@ it can be compared.
   finished is not a run that passed: if the fixture was wrong, the number is
   void.
 - A number that does not reproduce gets a retraction line.
+- Hot-path claims name source lines, not only functions. A CPU profile can
+  attribute time to lines only on an unminified build (`vite build --minify
+  false` with its maps) and with V8's detailed line info (`openClient`'s
+  `lineInfo`, on for `fps-bench --cpu`); otherwise an optimized function's
+  ticks all land on its first line. `profile.mjs --lines` reports lines it
+  cannot attribute instead of guessing.
 - Read-only helper agents can map code, but their numbers are guesses until
   an agent that can measure checks them. Any tests, profiles or other heavy
   work they run goes through the lock from their own worktree; reading and
