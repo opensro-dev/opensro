@@ -202,7 +202,6 @@ apps/client-next/src/engine/runtime/assets/worker/packs/internal/pack-contract.t
 apps/client-next/src/engine/runtime/assets/world-lease.ts
 apps/client-next/src/engine/runtime/characters/damage-feedback.ts
 apps/client-next/src/engine/runtime/characters/orbs/orbs.ts
-apps/client-next/src/engine/runtime/characters/sounds/sounds.ts
 apps/client-next/src/engine/runtime/characters/state-index.ts
 apps/client-next/src/engine/runtime/frontend/camera/camera.ts
 apps/client-next/src/engine/runtime/frontend/dialog/dialog.ts
