@@ -28,6 +28,8 @@ export interface CharacterStatistics {
 	readonly visibleActors?: number;
 	readonly poseEvaluations?: number;
 	readonly liveOwnedCpuEvaluations?: number;
+	/** CPU pose evaluations since the renderer began, retired evaluators included: never decreases. */
+	readonly cpuEvaluations?: number;
 	readonly gpuAnimation?: {
 		readonly poses: number;
 		readonly dispatches: number;

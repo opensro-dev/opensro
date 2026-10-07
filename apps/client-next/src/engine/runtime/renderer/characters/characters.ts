@@ -288,6 +288,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		boneUploadBytes = 0,
 		visibleActors = 0,
 		frameGroups = 0;
+	// CPU pose evaluations of owned evaluators that have since retired. The
+	// stats add the live ones, so cpuEvaluations only grows: a measurement
+	// window may subtract two readings even when peers leave or change model.
+	let retiredCpuEvaluations = 0;
 	/*
 	================
 	poseFor
@@ -318,6 +322,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		}
 		let state = ownedPoses.get( actor.gid );
 		if ( !state || state.model !== actor.model ) {
+			if ( state ) retiredCpuEvaluations += state.pose.cpuEvaluations();
 			state = {
 				model: actor.model,
 				pose: createCharacterPose( model ),
@@ -996,6 +1001,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				// Count retained evaluators without materializing CPU palettes or sockets.
 				poseEligibility = { actors: poses.size, unique: unique.size, gpuSamples, linearSamples };
 			}
+			let liveOwnedCpuEvaluations = 0;
+			for ( const state of ownedPoses.values() ) liveOwnedCpuEvaluations += state.pose.cpuEvaluations();
 			return {
 				poseEligibility,
 				actors: actors.length,
@@ -1013,10 +1020,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				actorRecordsCreated: snapshots.stats().created,
 				residencyPasses,
 				gpuAnimation: gpuAnimation?.(),
-				liveOwnedCpuEvaluations: [ ...ownedPoses.values() ].reduce(
-					( sum, state ) => sum + state.pose.cpuEvaluations(),
-					0
-				)
+				liveOwnedCpuEvaluations,
+				cpuEvaluations: retiredCpuEvaluations + liveOwnedCpuEvaluations
 			};
 		},
 		/*
@@ -1645,8 +1650,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					poses.delete( gid );
 				}
 			}
-			for ( const gid of ownedPoses.keys() ) {
+			for ( const [gid, state] of ownedPoses ) {
 				if ( !needed.has( gid ) ) {
+					retiredCpuEvaluations += state.pose.cpuEvaluations();
 					ownedPoses.delete( gid );
 					probe?.characterCount( "pose-retired" );
 				}
@@ -2324,6 +2330,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			batches.clear();
 			models.clear();
 			poses.clear();
+			for ( const state of ownedPoses.values() ) retiredCpuEvaluations += state.pose.cpuEvaluations();
 			ownedPoses.clear();
 			particleBirths.clear();
 			materialClocks.reset();

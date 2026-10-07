@@ -100,6 +100,37 @@ const visible = d => ({
 	bones: d.bones.slice( 0, d.count * 16 )
 });
 
+test("the CPU evaluation total keeps the work of evaluators that retired", () => {
+	const f = fixture();
+	try {
+		f.owner.actors( actors( [ 1, 2, 3 ], .25 ) );
+		f.owner.prepare( f.gpu, {}, 257 );
+		const crowd = f.owner.stats();
+		assert.ok( crowd.liveOwnedCpuEvaluations > 0, "the fixture evaluates on the CPU" );
+		assert.equal( crowd.cpuEvaluations, crowd.liveOwnedCpuEvaluations );
+		// Two peers leave: their evaluators retire, the live sum falls, the total does not.
+		f.owner.actors( actors( [ 1 ], .5 ) );
+		f.owner.prepare( f.gpu, {}, 257 );
+		const alone = f.owner.stats();
+		assert.ok( alone.liveOwnedCpuEvaluations < crowd.liveOwnedCpuEvaluations );
+		assert.ok( alone.cpuEvaluations > crowd.cpuEvaluations, "the remaining peer's new evaluation adds on top" );
+		// The peer changes model: its old evaluator is replaced, its work kept.
+		f.owner.model( "m2", model, [] );
+		f.owner.actors( actors( [ 1 ], .75 ).map( actor => ({ ...actor, model: "m2" }) ) );
+		f.owner.prepare( f.gpu, {}, 257 );
+		const replaced = f.owner.stats();
+		assert.ok( replaced.cpuEvaluations > alone.cpuEvaluations );
+		assert.ok( replaced.liveOwnedCpuEvaluations < replaced.cpuEvaluations, "the replaced evaluator's work is retired" );
+		// Disposal clears every evaluator; the total still holds all of it.
+		f.owner.dispose( f.gpu, null );
+		const disposed = f.owner.stats();
+		assert.equal( disposed.liveOwnedCpuEvaluations, 0 );
+		assert.equal( disposed.cpuEvaluations, replaced.cpuEvaluations );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+
 test("pose eligibility diagnostics are copied, deduplicate sharing and never evaluate poses", () => {
 	const f = fixture();
 	try {
