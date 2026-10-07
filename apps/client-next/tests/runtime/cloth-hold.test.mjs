@@ -85,8 +85,9 @@ const PIN_CASES = [
 for ( const skinned of [ false, true ] ) {
 	for ( const { name, pins, mobility } of PIN_CASES ) {
 		test(`held cloth frames can be skipped without changing any frame (${skinned ? "skinned" : "unskinned"}, ${name})`, () => {
-			const every = createClothVertices( clothPrimitive( skinned, pins, mobility ), counter() );
-			const skipping = createClothVertices( clothPrimitive( skinned, pins, mobility ), counter() );
+			const calls = [ 0, 0 ];
+			const every = createClothVertices( clothPrimitive( skinned, pins, mobility ), () => calls[0]++ );
+			const skipping = createClothVertices( clothPrimitive( skinned, pins, mobility ), () => calls[1]++ );
 			const palette = identity(), motion = { direction: [ .3, 0, 1 ], speed: 0 };
 			palette[13] = 2;
 			let seconds = 0, shown = null, skipped = 0;
@@ -99,7 +100,12 @@ for ( const skinned of [ false, true ] ) {
 				} else {
 					shown = skipping.update( palette, seconds, enabled, motion ).slice();
 				}
-				assert.deepEqual( shown, expected, `frame ${frame} at ${seconds.toFixed( 4 )} s` );
+				assert.deepEqual(
+					new Uint8Array( shown.buffer ),
+					new Uint8Array( expected.buffer ),
+					`frame ${frame} at ${seconds.toFixed( 4 )} s`
+				);
+				assert.equal( calls[1], calls[0], "shared RNG consumption must match on every frame" );
 			}
 			assert.ok( skipped > 200, `only ${skipped} of 600 frames were held` );
 		});
@@ -114,6 +120,26 @@ test("a cloth stream is never held before its first update or across an option c
 	assert.equal( cloth.hold( .01, true ), true );
 	assert.equal( cloth.hold( .01, false ), false );
 	assert.equal( cloth.hold( .05, true ), false );
+});
+
+test("unchanged pins hold immediately after a solver step; moved pins publish their re-anchoring", () => {
+	for ( const { name, pins, mobility } of PIN_CASES ) {
+		const every = createClothVertices( clothPrimitive( false, pins, mobility ), counter() );
+		const skipping = createClothVertices( clothPrimitive( false, pins, mobility ), counter() );
+		const palette = identity(), motion = { direction: [ .3, 0, 1 ], speed: 0 };
+		let shown;
+		for ( const seconds of [ 0, .05 ] ) {
+			every.update( palette, seconds, true, motion );
+			shown = skipping.update( palette, seconds, true, motion ).slice();
+		}
+		const held = skipping.hold( .052, true );
+		assert.equal( held, name === "fixed pin", name );
+		if ( !held ) shown = skipping.update( palette, .052, true, motion ).slice();
+		const expected = every.update( palette, .052, true, motion );
+		assert.deepEqual( new Uint8Array( shown.buffer ), new Uint8Array( expected.buffer ), name );
+		assert.equal( skipping.hold( .099, true ), true, name );
+		assert.equal( skipping.hold( .1, true ), false, "the next simulation step stays due" );
+	}
 });
 
 test("moving skeletal pins publish on every substep while free vertices retain their solver positions", () => {

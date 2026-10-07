@@ -43,7 +43,7 @@ export function createClothVertices( primitive: { geometry: Geometry; cloth?: Cl
 				lastTime = seconds;
 				return true;
 			}
-			return !simulation.due( Math.trunc( seconds * 1000 ) - Math.trunc( lastTime * 1000 ) );
+			return !simulation.due( Math.trunc( seconds * 1000 ) - Math.trunc( lastTime * 1000 ), anchors );
 		},
 
 		/*

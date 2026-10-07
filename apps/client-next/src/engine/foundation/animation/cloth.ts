@@ -78,7 +78,7 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 	const positions = new Float32Array( rest ), previous = new Float32Array( rest );
 	let elapsed = 0, initialized = false;
 	// A step may move pinned vertices (pin 2 integrates, constraints pull a
-	// mobile pin 1); the next advance re-anchors them, so it changes output.
+	// mobile pin 1). due checks whether re-anchoring would actually change them.
 	let stepped = false;
 	/*
 	================
@@ -185,12 +185,23 @@ export function createCloth( data: ClothData, rest: Float32Array ) {
 		due
 
 		Whether advancing by deltaMs would change the positions with unchanged
-		anchors: a step falls due, or the last advance stepped and the next one
-		re-anchors pins that step moved.
+		anchors: a step falls due, or re-anchoring changes a pin. Check pins only
+		once after each step. Holding never changes the solver clock or RNG.
 		================
 		*/
-		due( deltaMs: number ): boolean {
-			return !initialized || stepped || elapsed + Math.max( 0, deltaMs ) >= STEP_MS;
+		due( deltaMs: number, anchors: Float32Array ): boolean {
+			if ( !initialized || elapsed + Math.max( 0, deltaMs ) >= STEP_MS ) return true;
+			if ( !stepped ) return false;
+			for ( let i = 0; i < data.pins.length; i++ ) {
+				if ( data.pins[i] === 0 ) continue;
+				for ( let axis = 0; axis < 3; axis++ ) {
+					const at = i * 3 + axis, position = positions[at]!;
+					// Preserve signed zero; a NaN payload is not proven equal by Object.is.
+					if ( !Object.is( position, anchors[at] ) || Number.isNaN( position ) ) return true;
+				}
+			}
+			stepped = false;
+			return false;
 		}
 	};
 }
