@@ -172,6 +172,47 @@ test("the culling census measures how far admitted spheres sit outside the view"
 	}
 });
 
+test("the ordinary census never evaluates poses; only the posed census reads palettes", () => {
+	const f = fixture();
+	// The shared fixture is unskinned, which the posed census counts as unknown
+	// (visible). A skinned copy, every vertex fully on joint 0, exercises palettes.
+	const skinned = {
+		...model,
+		primitives: model.primitives.map( primitive => ({
+			...primitive,
+			geometry: {
+				...primitive.geometry,
+				joints: Uint16Array.of( 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ),
+				weights: Float32Array.of( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+			}
+		}) )
+	};
+	f.owner.model( "s", skinned, [] );
+	const view = ( sx, cx ) => new Float32Array( [ sx, 0, 0, 0, 0, .01, 0, 0, 0, 0, .01, 0, -sx * cx, 0, 0, 1 ] );
+	// GPU bone preparation takes every palette, so prepare leaves poses deferred.
+	f.gpu.prepareGpuBones = () => true;
+	try {
+		f.owner.actors( [ ...actors( [ 1 ], .25 ), { ...actors( [ 2 ], .25 )[0], model: "s" } ] );
+		f.owner.prepare( f.gpu, {}, 257, view( .01, 0 ) );
+		const deferred = f.owner.stats().cpuEvaluations;
+		const ordinary = f.owner.stats( true ).cullSlack;
+		assert.equal( ordinary.posedHidden, undefined, "posed fields only on the posed census" );
+		assert.equal( f.owner.stats().cpuEvaluations, deferred, "stats(true) stays non-evaluating" );
+		const inside = f.owner.stats( true, true ).cullSlack;
+		assert.ok( f.owner.stats().cpuEvaluations > deferred, "only the posed census materializes poses" );
+		assert.equal( inside.posedUnknown, 1, "the unskinned body is unknown, counted visible" );
+		assert.equal( inside.posedHidden, 0, "the skinned body is in view" );
+		// Right plane at x = 1: the skinned body's feet sphere at x = 2 still
+		// reaches it, but its posed triangle (x 1.27..3.27) lies wholly beyond.
+		f.owner.prepare( f.gpu, {}, 257, view( 1, 0 ) );
+		const beyond = f.owner.stats( true, true ).cullSlack;
+		assert.equal( beyond.posedHidden, 1, "admitted by the sphere, hidden once posed" );
+		assert.equal( beyond.posedUnknown, 1 );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+
 test("the culling census averages the active radius over lone bodies, not mounted riders", () => {
 	const f = fixture();
 	try {

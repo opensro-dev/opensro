@@ -65,11 +65,11 @@ export interface CharacterStatistics {
 		 * frustum: a diagnostic ceiling for tighter culling, not a safety proof. It
 		 * excludes live cloth deformation, emissions and independent shadow casters.
 		 */
-		readonly posedHidden: number;
+		readonly posedHidden?: number;
 		/** Lone bodies the ceiling could not judge (no resident pose or unskinned parts): counted visible. */
-		readonly posedUnknown: number;
+		readonly posedUnknown?: number;
 		/** Of posedHidden, bodies with cloth, judged on its skinned rest shape. */
-		readonly posedCloth: number;
+		readonly posedCloth?: number;
 	};
 }
 /*
@@ -276,7 +276,7 @@ export interface Renderer extends Disposable {
 	setUiTexture( id: string, image: ImageBitmap | ImageData | null ): void;
 	retainCharacterModels( ids: readonly string[] ): void;
 	setCharacterAssembly( id: string, base: string, parts: readonly import("./character").CharacterAttachment[] ): void;
-	characterStats( details?: boolean ): CharacterStatistics;
+	characterStats( details?: boolean, posed?: boolean ): CharacterStatistics;
 	setCharacterModel( id: string, model: import("./character").CharacterModel, images: WorldTexture[] ): void;
 	setCharacterAnimation(
 		id: string,
@@ -428,6 +428,12 @@ export interface RuntimeControl extends Disposable {
 	characterActors(): readonly import("./character").CharacterActor[];
 	/** Copied counters and retained-pose eligibility; does not advance animation. */
 	characterStats(): CharacterStatistics;
+	/**
+	 * characterStats plus the posed culling ceiling. Reads displayed-pose
+	 * palettes, which can force CPU pose evaluation: diagnostics only, never
+	 * inside a measured frame window.
+	 */
+	characterCullCensus(): CharacterStatistics;
 	/** Read-only orbit camera the input owner holds (yaw/pitch/distance). */
 	camera(): import("./input").CameraInput;
 	/** Copied last prepared world view; null before preparation or after failure/disposal. */

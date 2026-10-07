@@ -340,7 +340,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	================
 	posedHiddenBody
 
-	Census only (stats(true)): whether every skinned vertex of the body's
+	Posed census only (stats(true, true)): whether every skinned vertex of the body's
 	displayed pose, in world space, lies outside the frustum(s). null when the
 	answer is unknown (no resident pose, or an unskinned primitive).
 	================
@@ -410,7 +410,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	bound might reject it; this census proves no bound safe by itself.
 	================
 	*/
-	function cullCensus() {
+	function cullCensus( posed: boolean ) {
 		if ( !cullFrame.valid ) return undefined;
 		const { frusta, visible, chains, byGid, origin } = cullFrame;
 		// The ceiling: the displayed pose's own skinned vertices, placed with the
@@ -452,7 +452,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				const admitted = !frusta.length ||
 					frusta.some( planes => visibleFrustumSphere( planes, sphere[0]!, sphere[1]!, sphere[2]!, scaled ) );
 				if ( !admitted ) activeRejected++;
-				const hidden = posedHiddenBody( actor, resource, byGid, origin, transforms, frusta );
+				// Only the explicit posed census reads palettes (forcing CPU poses);
+				// the ordinary details call stays non-evaluating.
+				const hidden = posed ? posedHiddenBody( actor, resource, byGid, origin, transforms, frusta ) : false;
 				if ( hidden === null ) posedUnknown++;
 				else if ( hidden ) {
 					posedHidden++;
@@ -489,9 +491,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			activeRejected,
 			// Mounted riders are bodies but not lone: average over the lone samples only.
 			meanActiveRadius: loneBodies ? activeRadiusSum / loneBodies : 0,
-			posedHidden,
-			posedUnknown,
-			posedCloth
+			...(posed ? { posedHidden, posedUnknown, posedCloth } : {})
 		};
 	}
 	/*
@@ -1188,8 +1188,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		Report owned sources, assemblies and retained byte charges independently.
 		================
 		*/
-		stats( details = false ) {
-			const cullSlack = details ? cullCensus() : undefined;
+		stats( details = false, posed = false ) {
+			const cullSlack = details ? cullCensus( posed ) : undefined;
 			let poseEligibility;
 			if ( details ) {
 				const unique = new Set<ReturnType<typeof createCharacterPose>>();

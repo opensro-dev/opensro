@@ -1036,6 +1036,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 			berserkGauge: () => characters.orbGauge(),
 			characterActors: () => renderer.characterActors(),
 			characterStats: () => renderer.characterStats( true ),
+			characterCullCensus: () => renderer.characterStats( true, true ),
 			camera: () => input.camera(),
 			worldView: () => renderer.worldView(),
 			takeNative: () => presentation.takeNative()
