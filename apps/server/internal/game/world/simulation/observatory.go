@@ -5,9 +5,9 @@ observatory.go - a read-only copy of the monster population for operators
 
 The operations dashboard and the benchmark harnesses read the population
 from here. The reply is capped (observatoryMonsterCap rows) to bound its
-size, and the cap must never drop what a check near a player needs: the
-monsters in the 3x3 regions around each focus region (the online players)
-are always copied, and the rest of the population fills what remains.
+size. Living uniques take priority, then monsters in the 3x3 regions around
+online players. FocusComplete reports whether all nearby monsters fit.
+The living unique count covers the full population, including omitted rows.
 
 ===========================================================================
 */
@@ -55,6 +55,7 @@ neighbourhood is listed, so absence there proves absence.
 type ObservatoryPopulation struct {
 	Monsters      []ObservatoryMonster `json:"monsters"`
 	Resident      int                  `json:"resident"`
+	UniqueAlive   int                  `json:"uniqueAlive"`
 	Regions       int                  `json:"regions"`
 	Nests         int                  `json:"nests"`
 	Respawns      int                  `json:"respawns"`
@@ -84,22 +85,40 @@ func focusNeighbourhood(focus []uint16) map[uint16]bool {
 ================
 capObservatory
 
-Fits the focus rows, then the others (lowest gids first), into limit
-rows. dropped says the copy already left rows out. The focus is complete
-only if all of it fits.
+Fits living uniques first, then focus rows, then other monsters. Within
+each priority, lowest gids win so captures are stable. Uniques can respawn
+with higher gids than the ordinary population; age must not hide them.
+The focus is complete only if every focus row fits.
 ================
 */
 func capObservatory(focus, others []ObservatoryMonster, dropped bool, limit int) ([]ObservatoryMonster, bool, bool) {
-	complete := true
-	if len(focus) > limit {
-		focus, complete, dropped = focus[:limit], false, true
+	focusCount := len(focus)
+	rows := append(focus, others...)
+	if len(rows) <= limit {
+		return rows, dropped, true
 	}
-	if room := limit - len(focus); len(others) > room {
-		// Keep the lowest gids, so two captures of one server list the same rows.
-		sort.Slice(others, func(i, j int) bool { return others[i].GID < others[j].GID })
-		others, dropped = others[:room], true
+	focusGIDs := make(map[uint32]bool, focusCount)
+	for _, row := range focus {
+		focusGIDs[row.GID] = true
 	}
-	return append(focus, others...), dropped, complete
+	sort.Slice(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		aUnique, bUnique := a.HP > 0 && a.Rarity&15 == 3, b.HP > 0 && b.Rarity&15 == 3
+		if aUnique != bUnique {
+			return aUnique
+		}
+		if focusGIDs[a.GID] != focusGIDs[b.GID] {
+			return focusGIDs[a.GID]
+		}
+		return a.GID < b.GID
+	})
+	rows = rows[:limit]
+	for _, row := range rows {
+		if focusGIDs[row.GID] {
+			focusCount--
+		}
+	}
+	return rows, true, focusCount == 0
 }
 
 /*
@@ -108,7 +127,7 @@ MonsterState.Observatory
 
 Copies only existing state under its owner lock. Never calls division(),
 materialization, timers, RNG or notice drains. Sorting occurs after
-unlocking. Monsters near a focus region are kept ahead of the cap.
+unlocking. Living uniques and then nearby monsters are kept ahead of the cap.
 ================
 */
 func (s *MonsterState) Observatory(division string, focus []uint16) ObservatoryPopulation {
@@ -132,6 +151,9 @@ func (s *MonsterState) observatory(division string, focus []uint16, limit int) O
 		now := s.nowMillis()
 		for gid := range state.instances.ids() {
 			ref, rarity, hp, maxHP := state.instances.projection(gid)
+			if hp > 0 && rarity&15 == 3 {
+				out.UniqueAlive++
+			}
 			pose := monster.Pose{}
 			mode := "idle"
 			var target uint32

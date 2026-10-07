@@ -398,8 +398,6 @@ apps/client-next/tools/verify-ownership.mjs
 apps/server-observatory/public/item-model.js
 apps/server-observatory/public/items.js
 apps/server-observatory/public/model.js
-apps/server-observatory/public/operations.js
-apps/server-observatory/public/view.js
 apps/server-observatory/server/source.mjs
 apps/server-observatory/tests/items.test.mjs
 apps/server-observatory/tests/model.test.mjs
