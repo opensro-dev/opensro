@@ -2063,7 +2063,9 @@ state here before a command can claim a native wire conversation.
 					const to = movement.groundSkillGoal( command.query, now );
 					if ( !to ) return null;
 					const frame = positionSkillRequest( skillId, to );
-					if ( metadata.haltsWalk ) movement.holdForCast( now );
+					// 6FD536 -> 8786E0 -> 878100 sends the ground skill request
+					// without stopping the current walk. Travel begins on B245;
+					// the ordinary cast's press hold would freeze this entire RTT.
 					return sendSkillPress( frame, skillId, now, true );
 				}
 				if ( metadata && !metadata.targetRequired ) command = { kind: "skill", skillId: command.skillId };

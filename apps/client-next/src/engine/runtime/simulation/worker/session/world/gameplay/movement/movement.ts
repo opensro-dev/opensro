@@ -600,6 +600,9 @@ displace
 			owner = liveOwner( now );
 			const from = segment ? sampleMovement( segment, now ) : pose,
 				next = displacementSegment( from, command, now );
+			// Acceptance replaces the held walk. Its timeout must never restore
+			// the pre-displacement position after the dash or teleport arrives.
+			castHold = null;
 			// Displacement walks from the cell under the actor (native 8797C0
 			// steps through navigation; the server's QueryMovement walks from the
 			// stored source cell). Keep the owner: clearing it here re-guessed the
