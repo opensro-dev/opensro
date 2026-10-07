@@ -23,7 +23,7 @@ func (v *WaterValidator) PlanMonsterPathFrom(from monster.Pose, fromOwner simula
 	spawn := func(p monster.Pose) simulation.Spawn {
 		return simulation.Spawn{RegionID: p.RegionID, X: p.X, Y: p.Y, Z: p.Z, Angle: p.Heading}
 	}
-	report := v.ClipMovementPathFrom(spawn(from), fromOwner, spawn(goal))
+	report := v.ClipWalkFrom(spawn(from), fromOwner, spawn(goal))
 	if report.Truncated || report.TilesUncovered != 0 || report.Outcome == ClipNoCoverage || report.Outcome == ClipDungeonExempt || report.Outcome == ClipStartBlocked {
 		return nil
 	}

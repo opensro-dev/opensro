@@ -61,6 +61,32 @@ test("outside contact uses decoded endpoint directions without acquiring a cell"
 	assert.deepEqual( response.point, [ oracle.rows[2].result[0], 7, oracle.rows[2].result[1] ] );
 });
 
+test("a stepped walker meets a blocked outline at the crossing, not from its click origin", async () => {
+	const { navContactDetail } = await import(
+		sourceFileUrl( "src/engine/foundation/navigation/object-navigation.ts" ).href
+	);
+	const mesh = {
+		vertices: Float32Array.of( 0, 7, 0, 0, 7, 100, 100, 7, 0 ),
+		vertexDirections: Uint8Array.of( 0, 64, 0 ),
+		cells: Uint16Array.of( 0, 1, 2 ),
+		edges: Uint32Array.of( 0, 1, 0, 65535, 1, 0 ),
+		bounds: [ 0, 7, 0, 100, 7, 100 ],
+		passThrough: false
+	};
+	const p = { x: 0, y: 0, z: 0, yaw: 0, mesh }, from = [ -90, 7, 50 ], to = [ 10, 7, 50 ];
+	const single = navContactDetail( p, from, to, [], [], false, true );
+	const stepped = navContactDetail( p, from, to, [], [], false, true, undefined, true );
+	assert.equal( stepped.fraction, single.fraction );
+	const f = Math.fround, hit = [ f( 0 ), f( 50 ) ];
+	// One native call nudges the chord start; the per-step walk's last step
+	// starts 0.01 short of the crossing (server steppedWalkerAt).
+	const near = [ f( -90 + 100 * (single.fraction - .01 / 100) ), f( 50 ) ];
+	const expect = ( source ) => outsideEdgeStart( source, hit, [ 0, 0 ], [ 0, 100 ], 0, 64 );
+	assert.deepEqual( [ single.point[0], single.point[2] ], expect( [ f( -90 ), f( 50 ) ] ) );
+	assert.deepEqual( [ stepped.point[0], stepped.point[2] ], expect( near ) );
+	assert.ok( Math.abs( stepped.point[0] ) < .05, `stepped rest ${stepped.point}` );
+});
+
 test("legacy WIP bridge uses the same native cosine/negative-sine table", async () => {
 	const { normalizeNavVertRegionLinkTable20c0 } = await import(
 		sourceFileUrl( "tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshWireDecode.ts" ).href

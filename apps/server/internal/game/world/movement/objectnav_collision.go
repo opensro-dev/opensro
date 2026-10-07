@@ -352,9 +352,18 @@ const objectAnchorSearchRadiusSectors = 1
 /*
 ================
 objectChordFirstContact
+
+stepped selects the walker the chord stands for. False is one native
+CRTNavMeshTerrain_Move call over the whole chord (the 5F6EB0 move test):
+objects are visited in registered-cell order and a blocked outline nudges
+the walker from its visit. True is a mover the server steps every tick
+(CGObjMover_ComputeStep 48BFF0, at most speed*dt and 160 units, then
+CGObjMobile_MoveTo 48B660 on that step): every tick re-steps the objects,
+so the nearest crossing stops it, and the call that meets the outline
+starts just short of it.
 ================
 */
-func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, toWZ, toY float64, walk *navWalk) (float64, float64, bool, objectContactPoint) {
+func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, toWZ, toY float64, walk *navWalk, stepped bool) (float64, float64, bool, objectContactPoint) {
 	start := globalTile{
 		x: int(math.Floor(fromWX / simulation.NativeRegionSize)),
 		z: int(math.Floor(fromWZ / simulation.NativeRegionSize)),
@@ -430,10 +439,13 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 					continue
 				}
 				walkerAt := func(t float64) float64 { return math.Max(visit, walk.lastExitBefore(t)) }
+				if stepped {
+					walkerAt = func(t float64) float64 { return steppedWalkerAt(t, ox0, oz0, ox1, oz1) }
+				}
 				if t, ok := objectMeshChordContactDetail(mesh, ox0, oz0, oy0, ox1, oz1, oy1, math.Inf(1), func(edge int, _ bool, _ float64) bool { return passages.permits(i, edge) }, &local, objectContactOptions{exits: true, path: path, ownedMesh: path != nil, terrainEntry: terrainEntry, walk: walk, walkerAt: walkerAt}); ok {
 					key := visit
-					if path != nil {
-						key = t // an owned mesh is walked cell by cell: its own contact order
+					if path != nil || stepped {
+						key = t // an owned mesh is walked cell by cell, a stepped walker tick by tick: contact order
 					}
 					if key > bestKey || key == bestKey && t >= bestT {
 						continue
@@ -472,6 +484,25 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 		}
 	}
 	return bestT, bestKey, found, rest
+}
+
+/*
+================
+steppedWalkerAt
+
+The chord fraction a stepped walker stands at on the tick its step meets the
+crossing at t: clipRestPullback short of it. Its last step's native call
+starts there, so 428300's blocked-outline nudge lands at the obstacle. The
+residual of real tick quantization (up to one step) is not reproducible and
+is not modeled.
+================
+*/
+func steppedWalkerAt(t, x0, z0, x1, z1 float64) float64 {
+	length := math.Hypot(x1-x0, z1-z0)
+	if length <= 0 {
+		return 0
+	}
+	return math.Max(t-clipRestPullback/length, 0)
 }
 
 // spawnObjectDeckVerdict is the verdict RelocateStrandedSpawn consults:
