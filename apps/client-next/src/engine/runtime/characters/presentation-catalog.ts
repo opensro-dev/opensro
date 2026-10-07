@@ -5,8 +5,10 @@ presentation-catalog.ts - the published catalogues character presentation reads
 
 Owns the character, NPC, mission, sound, animation, item-drop and skill-data
 manifests once admitted: validated rows projected into the lookups that
-assembly, animation and sound selection read every frame. Admission is all
-or nothing per manifest: no live lookup changes until every row validates.
+assembly, animation and sound selection read every frame. Most lookups are
+built aside and swapped in only after every row validates. Three are not:
+shadowSizes, bloodEffects and riderModes are written while their rows are
+validated, so a manifest rejected later keeps those rows (kept as found).
 
 Requesting the next manifest stays with the presentation owner, which knows
 whether a dock, a creation preview or a world roster needs one.
