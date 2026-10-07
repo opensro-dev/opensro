@@ -7,7 +7,8 @@ Some characters bring rain with them (a catalogue row's eventRain). World
 lifecycle events arrive before the character catalogues may be admitted, so
 they are journalled in delivery order and replayed once the NPC catalogue is
 resident: rain starts when such a character spawns or changes into one, and
-stops when it despawns or changes away.
+stops only when that character despawns or the world resets (changing away
+from a rain model leaves the rain on, as the original journal does).
 
 A replayed world reset also resets the presentation owners that a reset
 retires; the presentation owner passes that work in, and it runs before this
