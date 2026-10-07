@@ -463,9 +463,8 @@ export function createPosePresentation() {
 		const relocation = input.transition?.relocation ?? 0;
 		const revisionChanged = row && input.revision !== row.latest.revision;
 		const stalled = row && now - row.last > MAX_SAMPLE_GAP_SECONDS;
-		const recoverySeconds = row ? Math.max( 0, now - row.last ) : 0;
 		const previousFrameAt = row?.last;
-		const recovering = row && hypot3( ...row.offset ) > 0;
+		let carriedDisplay: Pose | undefined;
 		if (
 			!row || now < row.last || row.relocation !== relocation ||
 			(revisionChanged && input.transition?.eligible === false) ||
@@ -513,6 +512,14 @@ export function createPosePresentation() {
 			rows.delete( gid );
 		} else if ( now !== row.last ) {
 			if ( !revisionChanged ) recover( row, now - row.last );
+			else if ( !stalled ) {
+				// Elapsed display time belongs to the old correction. Advancing
+				// after retargeting would apply the new receipt's force before
+				// it arrived, especially after a small correction and a long lag.
+				const [x, y, z] = row.offset;
+				recover( row, now - row.last );
+				carriedDisplay = displace( row.displayed, [ row.offset[0] - x, row.offset[1] - y, row.offset[2] - z ] );
+			}
 			if ( stalled ) row.previous = undefined;
 			row.angle = turn( row.angle, target.angle, now - row.last );
 			row.last = now;
@@ -541,7 +548,7 @@ export function createPosePresentation() {
 			const continuing = !stalled && !revisionChanged && at > row.latest.at &&
 				previousFrameAt !== undefined && previousFrameAt - row.latest.at <= MAX_EXTRAPOLATION_SECONDS;
 			const before = preserveDisplay ?
-				row.displayed :
+				carriedDisplay ?? row.displayed :
 				displace( sampledModel( row, now, continuing ? at : undefined ), row.offset );
 			// Native 8DD550 advances at skill speed from the skill's own start.
 			// Retiming the old walk at render time invents lag and a later burst.
@@ -591,10 +598,6 @@ export function createPosePresentation() {
 				row.velocity = [ 0, 0, 0 ];
 			}
 		}
-		// Retarget the existing trajectory rather than parking it on every
-		// receipt. A first correction starts at the displayed pose; subsequent
-		// receipts still spend this frame's bounded recovery step and velocity.
-		if ( revisionChanged && recovering && !stalled ) recover( row, recoverySeconds );
 		const model = sampledModel( row, now );
 		if ( revisionChanged && input.transition?.previousPath ) {
 			row.paths.push( input.transition.previousPath );

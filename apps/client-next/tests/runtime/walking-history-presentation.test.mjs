@@ -185,3 +185,74 @@ test("authored displacement ignores a stale ground history", () => {
 	} );
 	assert.deepEqual( outputs[0], outputs[1] );
 });
+
+test("a delayed large receipt spends only the correction that existed before its arrival", () => {
+	const start = pose( 100, 0 ), small = pose( 102, 0 ), large = pose( 228, 0 );
+	const path = [ start, small, large ];
+	const owners = [ createPosePresentation(), createPosePresentation() ];
+	for ( const owner of owners ) {
+		owner.origin( 0 );
+		publish( owner, { atMs: 0, revision: 1, moving: false } );
+		owner.pose( 7, start, 0 );
+		publish( owner, {
+			atMs: 16,
+			revision: 2,
+			moving: false,
+			walkingPath: path,
+			transition: { relocation: 0, reason: "receipt", eligible: true }
+		} );
+		assert.deepEqual( owner.pose( 7, small, .016 ), start );
+		assert.deepEqual( owner.pose( 7, small, 1.016 ), start, "stall recovery preserves the shown pose" );
+	}
+	const control = defined( owners[0] ), changed = defined( owners[1] );
+	const priorTrajectory = control.pose( 7, small, 1.049 );
+	publish( changed, {
+		atMs: 1049,
+		revision: 3,
+		moving: false,
+		walkingPath: path,
+		transition: { relocation: 0, reason: "receipt", eligible: true }
+	} );
+	const received = changed.pose( 7, large, 1.049 );
+	assert.ok( Math.abs( received.x - priorTrajectory.x ) < 1e-9, "new error cannot consume earlier frame time" );
+	assert.ok( received.x - start.x < 2, "the 126-unit receipt cannot create its own immediate displacement" );
+	let previous = received;
+	for ( let frame = 1; frame <= 60; frame++ ) {
+		const shown = changed.pose( 7, large, 1.049 + frame / 120 );
+		assert.ok( shown.x >= previous.x && shown.x <= large.x );
+		assert.ok( onSegment( shown, start, large ) );
+		previous = shown;
+	}
+	assert.ok( Math.abs( previous.x - large.x ) < .01 );
+});
+
+test("repeated receipts preserve the progress and velocity of the existing correction", () => {
+	const start = pose( 100, 0 ), end = pose( 110, 0 ), path = [ start, end ];
+	const owners = [ createPosePresentation(), createPosePresentation() ];
+	for ( const owner of owners ) {
+		owner.origin( 0 );
+		publish( owner, { atMs: 0, revision: 1, moving: false } );
+		owner.pose( 7, start, 0 );
+		publish( owner, {
+			atMs: 16,
+			revision: 2,
+			moving: false,
+			walkingPath: path,
+			transition: { relocation: 0, reason: "receipt", eligible: true }
+		} );
+		owner.pose( 7, end, .016 );
+	}
+	const control = defined( owners[0] ), repeated = defined( owners[1] );
+	for ( let frame = 1; frame <= 60; frame++ ) {
+		const now = .016 + frame / 120;
+		publish( repeated, {
+			atMs: now * 1000,
+			revision: frame + 2,
+			moving: false,
+			walkingPath: path,
+			transition: { relocation: 0, reason: "receipt", eligible: true }
+		} );
+		const expected = control.pose( 7, end, now ), shown = repeated.pose( 7, end, now );
+		assert.ok( Math.abs( shown.x - expected.x ) < 1e-9, "revisions must not restart or accelerate recovery" );
+	}
+});
