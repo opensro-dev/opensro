@@ -35,6 +35,8 @@ import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets
 import { rgbaPickAlpha, bitmapPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
 // Loading-screen progress publications are coalesced to this interval.
 const PROGRESS_INTERVAL_MS = 150;
+const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
+const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
 /*
 ================
 createLoader
@@ -138,6 +140,62 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		signal: AbortSignal,
 		range?: import("./packs/packs").PackRange
 	) {
+		for ( let attempt = 0;; attempt++ ) {
+			signal.throwIfAborted();
+			try {
+				return await downloadAttempt( url, limit, signal, range );
+			} catch ( error ) {
+				const transient = error instanceof TypeError ||
+					(error instanceof Error && "status" in error &&
+						TRANSIENT_HTTP_STATUS.has( Number( error.status ) ));
+				const delay = DOWNLOAD_RETRY_DELAYS_MS[attempt];
+				if ( signal.aborted || !transient || delay === undefined ) throw error;
+				await retryDownloadAfter( delay, signal );
+			}
+		}
+	}
+	/*
+	================
+	retryDownloadAfter
+
+	Keep the existing request slot during backoff. Cancellation releases the
+	timer immediately; a disposed worker must never start another download.
+	================
+	*/
+	function retryDownloadAfter( delay: number, signal: AbortSignal ): Promise<void> {
+		return new Promise( ( resolve, reject ) => {
+			/*
+			================
+			cancel
+			================
+			*/
+			function cancel() {
+				clearTimeout( timer );
+				signal.removeEventListener( "abort", cancel );
+				reject( signal.reason );
+			}
+			const timer = setTimeout( () => {
+				signal.removeEventListener( "abort", cancel );
+				resolve();
+			}, delay );
+			signal.addEventListener( "abort", cancel, { once: true } );
+			if ( signal.aborted ) cancel();
+		} );
+	}
+	/*
+	================
+	downloadAttempt
+
+	Only transport failures are retried. Range validation and byte limits fail
+	immediately; manifest, hash and decoder validation stay with their owners.
+	================
+	*/
+	async function downloadAttempt(
+		url: string,
+		limit: number,
+		signal: AbortSignal,
+		range?: import("./packs/packs").PackRange
+	) {
 		const started = performance.now();
 		// Cache Storage owns verified members. Keep partial HTTP responses out
 		// of the browser cache: different ranges share the container URL.
@@ -155,6 +213,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			headers: range ? { Range: `bytes=${range.start}-${range.end}` } : undefined
 		} );
 		if ( !response.ok || !response.body ) {
+			await response.body?.cancel().catch( () => {} );
 			throw Object.assign( new Error( `Asset HTTP ${response.status}` ), { status: response.status } );
 		}
 		if (
@@ -162,7 +221,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			(response.status !== 206 ||
 				response.headers.get( "content-range" ) !== `bytes ${range.start}-${range.end}/${range.total}`)
 		) {
-			await response.body.cancel();
+			await response.body.cancel().catch( () => {} );
 			throw Error( "Invalid asset range response" );
 		}
 		const bytes = await readBytes( response.body, limit, size => {

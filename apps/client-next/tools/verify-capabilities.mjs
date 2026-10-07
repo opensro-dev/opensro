@@ -141,6 +141,7 @@ export const rules = {
 	configure: [ surface, device, bugRecorder, bugTranscode ],
 	unconfigure: [ surface ],
 	addEventListener: [
+		runtime + "assets/worker/loader.ts", // AbortSignal releases a pending download backoff.
 		runtime + "platform/telemetry.ts",
 		runtime + "platform/platform.ts",
 		device,
