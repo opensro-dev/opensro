@@ -11,11 +11,12 @@ Pickup retirement releases its command under the action door before retry.
 package action
 
 import (
+	"testing"
+	"time"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
-	"testing"
-	"time"
 )
 
 /*
