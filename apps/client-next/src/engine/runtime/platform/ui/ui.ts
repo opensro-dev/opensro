@@ -632,7 +632,7 @@ export function createUiBridge(
 							insets[2]
 						], [ "paddingBottom", insets[3] ] ] as const
 					) {
-						const value = n + "px";
+						const value = n * scale + "px";
 						if ( el.style[key] !== value ) el.style[key] = value;
 					}
 				}

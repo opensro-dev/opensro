@@ -273,6 +273,7 @@ test(
 						id: "scaling-editor",
 						label: "Native editor",
 						kind: "text",
+						textInsets: [ 3, 1, 5, 2 ],
 						rect: [ 100, 130, 160, 20 ]
 					} ]
 				};
@@ -308,11 +309,17 @@ test(
 						activated: f.events.some( e => e.kind === "activate" && e.id === "scaling-button" ),
 						hit: f.hits.at( -1 ),
 						viewport: f.platform.readViewport(),
-						fontSize: parseFloat( getComputedStyle( editor ).fontSize )
+						fontSize: parseFloat( getComputedStyle( editor ).fontSize ),
+						padding: [ "paddingLeft", "paddingTop", "paddingRight", "paddingBottom" ].map(
+							key => parseFloat( getComputedStyle( editor )[key] )
+						)
 					};
 				} );
 				assert.ok( result.activated );
 				assert.ok( Math.abs( result.fontSize * ratio - 12 ) < .001 );
+				for ( const [index, inset] of [ 3, 1, 5, 2 ].entries() ) {
+					assert.ok( Math.abs( result.padding[index] * ratio - inset ) < .001 );
+				}
 				assert.ok( Math.abs( result.hit[0] - 500 ) <= 1, JSON.stringify( result ) );
 				assert.ok( Math.abs( result.hit[1] - 300 ) <= 1, JSON.stringify( result ) );
 			}
