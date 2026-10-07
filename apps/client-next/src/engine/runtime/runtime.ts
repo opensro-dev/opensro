@@ -319,7 +319,11 @@ export function startRuntime(
 				value => platform.saveVideoOptions( value ),
 				value => platform.saveChatBlocks( value ),
 				value => platform.saveQuickslotOptions( value ),
-				{ bugReport, saveExperimental: value => platform.saveExperimentalOptions( value ) }
+				{
+					bugReport,
+					saveExperimental: value => platform.saveExperimentalOptions( value ),
+					saveWindowPositions: value => platform.saveWindowPositions( value )
+				}
 			)
 		);
 		let lastDockPick = "none";

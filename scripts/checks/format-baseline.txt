@@ -230,7 +230,6 @@ apps/client-next/src/engine/runtime/ui/hud/region-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/scroll.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
 apps/client-next/src/engine/runtime/ui/hud/unique-banner.ts
-apps/client-next/src/engine/runtime/ui/hud/window-placement.ts
 apps/client-next/src/engine/runtime/ui/title/resources.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts
 apps/client-next/tests/architecture/frame-barriers.test.mjs

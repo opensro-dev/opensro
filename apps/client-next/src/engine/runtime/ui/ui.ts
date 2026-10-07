@@ -135,6 +135,7 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
+import type { WindowPositions } from "@/engine/foundation/ui/window-positions";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
@@ -527,11 +528,14 @@ export interface UiFrameProbe {
 UiExtensions
 
 Browser-only integrations are grouped separately from native preferences.
+Sinks added after the positional list (window positions) live here too,
+rather than as another createUi parameter.
 ================
 */
 export interface UiExtensions {
 	bugReport?: BugReportControl | null;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
+	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
 
 // Sole owner of UI navigation, focus projection and pending UI intent. Gameplay is read-only.
@@ -3273,10 +3277,15 @@ export function createUi(
 			shopPage = Math.max( 0, shopPage - 1 );
 			shopChoice = null;
 		} else if ( id.startsWith( "shop-tab:" ) ) {
-			shopTab = Number( id.slice( 9 ) );
-			shopPage = 0;
-			shopChoice = null;
-			shopDialog = false;
+			// 5B28F0: only a different tab resets the page; the open tab's
+			// button just refills the page already shown.
+			const tab = Number( id.slice( 9 ) );
+			if ( tab !== shopTab ) {
+				shopTab = tab;
+				shopPage = 0;
+				shopChoice = null;
+				shopDialog = false;
+			}
 		} else if ( id.startsWith( "shop-offer:" ) || id.startsWith( "shop-buyback:" ) ) {
 			if ( view.gameplay?.shop ) {
 				beginShopDialog(
@@ -4201,6 +4210,10 @@ export function createUi(
 				video = videoOptions( event.value );
 				if ( panel !== "Option" ) videoDraft = videoOptions( video );
 				dirty = true;
+				return;
+			}
+			if ( event.kind === "window-positions" ) {
+				windowPlacement.load( event.value );
 				return;
 			}
 			if ( event.kind === "quickslot-preferences" ) {
@@ -6016,7 +6029,22 @@ export function createUi(
 					rosterRequested = false;
 					roster = [];
 				}
+				if ( phase === "world" ) {
+					// 6A06B0: the interface opens its windows where the last session
+					// left them at this screen size.
+					const remembered = windowPlacement.enter( next.width, next.height );
+					if ( remembered?.mainPopup ) popupPosition = remembered.mainPopup;
+					if ( remembered?.worldMap ) [mapX, mapY] = remembered.worldMap;
+					if ( remembered?.gameGuide ) [guideX, guideY] = remembered.gameGuide;
+				}
 				if ( phase !== "world" && !retainedWorld ) {
+					// 6A01B0: logout writes them back before the session's windows go.
+					const remembered = windowPlacement.leave( next.width, next.height, {
+						...(popupPosition ? { mainPopup: popupPosition } : {}),
+						worldMap: [ mapX, mapY ],
+						...(guideX !== null && guideY !== null ? { gameGuide: [ guideX, guideY ] as const } : {})
+					} );
+					if ( remembered ) extensions.saveWindowPositions?.( remembered );
 					guildWarHud.reset( true );
 					windowPlacement.reset();
 					itemMall.reset();

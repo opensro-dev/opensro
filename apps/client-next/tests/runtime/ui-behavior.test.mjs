@@ -3658,6 +3658,13 @@ test("GPU merchant menu branches retain all tabs, sparse pages and native purcha
 		assert.ok( !defined( semantics ).controls.some( c => c.id === "shop-offer:5" ) );
 		click( "shop-next" );
 		assert.ok( defined( semantics ).controls.some( c => c.id === "shop-offer:5" ) );
+		// 5B28F0: the open tab's button keeps the page; another tab resets it.
+		click( "shop-tab:5" );
+		assert.ok( defined( semantics ).controls.some( c => c.id === "shop-offer:5" ) );
+		click( "shop-tab:4" );
+		click( "shop-tab:5" );
+		assert.ok( !defined( semantics ).controls.some( c => c.id === "shop-offer:5" ) );
+		click( "shop-next" );
 		click( "shop-offer:5" );
 		click( "shop-trade" );
 		assert.deepEqual( sent.at( -1 ), { kind: "shop-buy", tab: 5, slot: 31, quantity: 1 } );
