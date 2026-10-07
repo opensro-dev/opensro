@@ -3674,13 +3674,16 @@ export function createCharacterPresentation(
 				} );
 			}
 			displayed = next;
-			renderer.setCharacterActors(
-				[ ...next.values() ].map( actor =>
-					blindHeld && actor.blindable ? { ...actor, opacity: 0, pickable: false } : actor
-				),
-				portraits
-			);
-			resources.retainWanted( [ ...next.values(), ...portraits ].map( actor => actor.model ) );
+			// One pass builds both the published actors and the wanted models, in the
+			// same order the spread-and-map version produced, without temporaries.
+			const published: CharacterActor[] = [], wanted: string[] = [];
+			for ( const actor of next.values() ) {
+				published.push( blindHeld && actor.blindable ? { ...actor, opacity: 0, pickable: false } : actor );
+				wanted.push( actor.model );
+			}
+			for ( const actor of portraits ) wanted.push( actor.model );
+			renderer.setCharacterActors( published, portraits );
+			resources.retainWanted( wanted );
 			probe?.detailEnd( "presentation-finalize" );
 		},
 		ready: ( gid: number ) => displayed.has( gid ),

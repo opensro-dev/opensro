@@ -185,6 +185,23 @@ export function createActorSnapshots() {
 			} else target.effectAnchor = { ...source.effectAnchor, offset: [ ...source.effectAnchor.offset ] };
 		} else target.effectAnchor = undefined;
 	}
+	/*
+	================
+	finitePointLight
+
+	The same finiteness test as spreading every value into one array, without
+	building that array for each lit actor on every publication.
+	================
+	*/
+	function finitePointLight( light: NonNullable<CharacterActor["pointLight"]> ) {
+		if ( !Number.isFinite( light.attenuation ) || !Number.isFinite( light.range ) ) return false;
+		for ( const value of light.ambient ) if ( !Number.isFinite( value ) ) return false;
+		for ( const value of light.diffuse ) if ( !Number.isFinite( value ) ) return false;
+		for ( const key in light.pose ) {
+			if ( !Number.isFinite( light.pose[key as keyof typeof light.pose] ) ) return false;
+		}
+		return true;
+	}
 	return {
 		index,
 		/*
@@ -223,16 +240,9 @@ export function createActorSnapshots() {
 					(!(rotation instanceof Float32Array) || rotation.length !== 16 ||
 						!rotation.every( Number.isFinite ))
 				) throw Error( "Invalid particle attachment rotation" );
-				if (
-					actor.pointLight &&
-					![
-						actor.pointLight.attenuation,
-						actor.pointLight.range,
-						...actor.pointLight.ambient,
-						...actor.pointLight.diffuse,
-						...Object.values( actor.pointLight.pose )
-					].every( Number.isFinite )
-				) throw Error( "Invalid character point light" );
+				if ( actor.pointLight && !finitePointLight( actor.pointLight ) ) {
+					throw Error( "Invalid character point light" );
+				}
 				if (
 					actor.materialTint &&
 					(actor.materialTint.length !== 3 ||
