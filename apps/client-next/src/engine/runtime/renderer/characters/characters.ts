@@ -1085,6 +1085,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				if ( key === id || row.dependencies?.[0] === id ) {
 					row.model = { ...row.model, clips: model.clips };
 					row.plan = createCharacterRenderPlan( row.model );
+					// Admission precedes visibility; include new root motion before
+					// any actor or outgoing layer can sample the appended catalog.
+					row.radius = Math.max( row.radius, characterRadius( row.model, bounds ) );
 					framePoses?.delete( key );
 				}
 			}
@@ -1106,6 +1109,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				throw Error( "Invalid borrowed animation extension" );
 			}
 			if ( resource.model === model ) return;
+			// Borrowed catalogs follow the same envelope lifetime as owned ones.
+			resource.radius = Math.max( resource.radius, characterRadius( model, bounds ) );
 			resource.model = model;
 			resource.plan = createCharacterRenderPlan( model );
 			framePoses?.delete( id );
