@@ -2610,9 +2610,14 @@ export function createCharacterPresentation(
 					const requestedMoving = moving;
 					const movementRevision =
 						(localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0;
+					const displaced =
+						(localMover( entity.gid ) ? gameplay!.movementPath : entity.movementPath)?.displacement ===
+							true;
+					// 8DD550 drives skill travel through 8797C0 and 86D5C0 even
+					// after state 9 exits. Its position owner is not the walk hold.
 					if (
 						state.navigationHold &&
-						(state.navigationHold.revision !== movementRevision || dead || entity.mountedOn)
+						(state.navigationHold.revision !== movementRevision || displaced || dead || entity.mountedOn)
 					) state.navigationHold = undefined;
 					if ( state.navigationHold ) {
 						renderPose = state.navigationHold.pose;
@@ -2682,7 +2687,7 @@ export function createCharacterPresentation(
 						requestedMoving && refresh.effects.some( e => e.kind === "leave" && e.state === 9 ) &&
 						!refresh.navigation
 					) {
-						state.navigationHold = {
+						state.navigationHold = displaced ? undefined : {
 							revision: movementRevision,
 							pose: renderPose,
 							mode: entity.movementMode

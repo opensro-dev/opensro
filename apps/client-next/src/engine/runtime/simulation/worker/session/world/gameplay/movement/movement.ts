@@ -1352,7 +1352,12 @@ state
 				navigationRequestId,
 				navigationFailure,
 				movementPath: segment ?
-					{ from: segment.from, to: segment.to, durationMs: segment.duration } :
+					{
+						from: segment.from,
+						to: segment.to,
+						durationMs: segment.duration,
+						...(segment.fixedTiming ? { displacement: true } : {})
+					} :
 					undefined,
 				movementRevision,
 				movementTransition: { ...transition, pathEligible: segment?.admitted === true },

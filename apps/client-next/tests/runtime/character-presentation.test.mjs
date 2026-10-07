@@ -715,6 +715,75 @@ function fixture(
 		}
 	};
 }
+for ( const local of [ false, true ] ) {
+	for ( const displacement of [ false, true, "after-WAIT" ] ) {
+		test(`cast WAIT preserves displacement translation ${displacement}, local ${local}`, () => {
+			const f = fixture(
+				{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
+				2,
+				false,
+				false,
+				false,
+				false,
+				false,
+				false,
+				false,
+				false,
+				undefined,
+				{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+			);
+			f.warm();
+			f.presentation.simulationOrigin( 0 );
+			const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
+			const to = { ...from, x: 110 };
+			const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+			const frame = ( x, seconds, casting, moving ) => {
+				const path = {
+					from,
+					to,
+					durationMs: 200,
+					displacement: displacement === true || displacement === "after-WAIT" && seconds >= 1.1
+				};
+				const player = entity( 1, {
+					kind: local ? "local-player" : "player",
+					x,
+					moving,
+					movementMode: 3,
+					movementRevision: 1,
+					movementPath: local && !moving ? undefined : path,
+					poseAtMs: seconds * 1000
+				} );
+				f.step( [ player ], seconds, {
+					localGid: local ? 1 : 2,
+					pose: { ...from, x },
+					moving,
+					movementRevision: 1,
+					movementPath: local && !moving ? undefined : path,
+					poseAtMs: seconds * 1000,
+					inventory: [],
+					vitals: [],
+					casts: casting ? [ cast ] : []
+				} );
+				assert.equal( f.presentation.error(), null );
+				return { ...f.actors.find( actor => actor.gid === 1 ).pose };
+			};
+			frame( 10, 1, false, true );
+			const entered = frame( 20, 1.02, true, true );
+			frame( 60, 1.1, true, true );
+			const settled = frame( 110, 1.3, false, false );
+			const later = frame( 110, 3, false, false );
+			if ( displacement ) {
+				assert.equal( settled.x, 110, "skill travel must reach its displayed endpoint" );
+				assert.equal( later.x, 110, "cast retirement must not restore a navigation pin" );
+			} else {
+				assert.equal( settled.x, entered.x, "ordinary navigation still stops on the WAIT transition" );
+				assert.equal( later.x, entered.x );
+			}
+			f.dispose();
+		});
+	}
+}
+
 test("gecko starts the walk immediately, fades out over 200ms at its end and resets behind the dock gate", () => {
 	const f = fixture();
 	f.warm();

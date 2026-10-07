@@ -18,6 +18,9 @@ const { createGameplay } = await import(
 const { createMovement } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts"
 );
+const { createEntityMotion } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts"
+);
 const { createPosePresentation } = await import( "../../src/engine/runtime/characters/pose-presentation.ts" );
 const START = { regionId: 257, x: 100, y: 0, z: 100, angle: 0 };
 const WALK_END = { ...START, x: 900 };
@@ -135,6 +138,7 @@ for ( const [skillId, haltsWalk] of /** @type {const} */ ([ [ 114, true ], [ 196
 		const arrival = game.displace( travel, 400 );
 		assert.equal( arrival, 820, "dash timing starts at the live x120, never the older press pose" );
 		const accepted = game.take();
+		assert.equal( accepted?.movementPath?.displacement, true );
 		assert.equal(
 			draw( presentation, accepted, 400 ).x,
 			atAcceptance.x,
@@ -147,6 +151,28 @@ for ( const [skillId, haltsWalk] of /** @type {const} */ ([ [ 114, true ], [ 196
 		game.dispose();
 	});
 }
+
+test("remote displacement publishes its ownership and clock through arrival and source receipts", () => {
+	const motion = createEntityMotion();
+	const destination = { ...START, x: 330 };
+	const initial = motion.displace( LOCAL, { gid: 1, token: 9, kind: 8, destination }, 200 );
+	assert.equal( initial.movementPath?.displacement, true );
+	assert.equal( initial.movementPath?.durationMs, 460 );
+	assert.equal( initial.poseAtMs, 200 );
+	for ( const now of [ 216, 400, 660 ] ) {
+		const step = motion.step( now )[0];
+		assert.ok( step );
+		assert.equal( step.movementPath?.displacement, true );
+		assert.equal( step.movementPath?.durationMs, 460 );
+		if ( now < 660 ) {
+			const source = motion.source( { ...LOCAL, ...step }, { ...START, x: step.x }, now );
+			assert.deepEqual( source.movementPath, step.movementPath );
+		} else {
+			assert.equal( step.x, 330 );
+			assert.equal( step.moving, false );
+		}
+	}
+});
 
 for ( const kind of /** @type {const} */ ([ 2, 8 ]) ) {
 	for ( const refused of [ false, true ] ) {

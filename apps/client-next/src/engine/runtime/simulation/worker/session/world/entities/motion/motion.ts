@@ -113,6 +113,9 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 				{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
 			const resolved = resolve( entity.gid, pose, reference );
 			let path: EntityState["movementPath"] = segment ? { from: resolved, to: segment.to } : entity.movementPath;
+			if ( segment?.fixedTiming ) {
+				path = { from: segment.from, to: segment.to, durationMs: segment.duration, displacement: true };
+			}
 			if ( segment && !segment.fixedTiming ) {
 				const durationMs = duration( resolved, segment.to, entity );
 				active.set( entity.gid, {
@@ -157,7 +160,11 @@ displace
 				fixedTiming: true,
 				castToken: command.kind === 8 ? command.token : undefined
 			} );
-			return update( entity.gid, resolve( entity.gid, sample( segment, now ), from ), segment.duration > 0 );
+			return {
+				...update( entity.gid, resolve( entity.gid, sample( segment, now ), from ), segment.duration > 0 ),
+				movementPath: { from: segment.from, to: segment.to, durationMs: segment.duration, displacement: true },
+				poseAtMs: now
+			};
 		},
 		/*
 ================
@@ -239,7 +246,12 @@ receive
 			// A source-less angular acknowledgement changes nothing in motion.
 			if ( decoded.kind === "keep" ) {
 				return previous ?
-					{ from: previous.from, to: previous.to, durationMs: previous.duration } :
+					{
+						from: previous.from,
+						to: previous.to,
+						durationMs: previous.duration,
+						...(previous.fixedTiming ? { displacement: true } : {})
+					} :
 					{ from: published, to: published };
 			}
 			const from = resolve( entity.gid, decoded.from, previous?.previous ?? published );
@@ -354,7 +366,12 @@ step
 				segment.previous = pose;
 				changed.push( {
 					...update( gid, pose, now < segment.start + segment.duration ),
-					movementPath: { from: segment.from, to: segment.to, durationMs: segment.duration },
+					movementPath: {
+						from: segment.from,
+						to: segment.to,
+						durationMs: segment.duration,
+						...(segment.fixedTiming ? { displacement: true } : {})
+					},
 					// Presentation draws the path on the frame clock from sample times.
 					poseAtMs: now
 				} );
