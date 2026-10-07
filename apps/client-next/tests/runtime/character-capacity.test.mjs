@@ -145,11 +145,51 @@ test("pose eligibility diagnostics are copied, deduplicate sharing and never eva
 		const before = f.owner.stats();
 		assert.equal( before.poseEligibility, undefined );
 		const snapshot = f.owner.stats( true );
-		assert.deepEqual( snapshot.poseEligibility, { actors: 3, unique: 2, gpuSamples: 1, linearSamples: 1 } );
+		assert.deepEqual( snapshot.poseEligibility, {
+			actors: 3,
+			unique: 2,
+			gpuSamples: 1,
+			linearSamples: 1,
+			sharedPaletteSamples: 0,
+			clothSamples: 0,
+			gpuPaletteSamples: 0
+		} );
 		snapshot.poseEligibility.gpuSamples = 999;
 		assert.equal( f.owner.stats( true ).poseEligibility.gpuSamples, 1 );
 		assert.equal( f.owner.stats().liveOwnedCpuEvaluations, before.liveOwnedCpuEvaluations );
 		assert.equal( f.owner.stats().poseEvaluations, before.poseEvaluations );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+
+test("GPU palette census distinguishes model eligibility from device availability", () => {
+	const f = fixture();
+	try {
+		f.owner.model( "skinned", {
+			...model,
+			primitives: model.primitives.map( primitive => ({
+				...primitive,
+				geometry: {
+					...primitive.geometry,
+					joints: new Uint32Array( 12 ),
+					weights: Float32Array.of( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0 )
+				}
+			}) )
+		}, [] );
+		const rows = actors( [ 1, 2 ], .25 );
+		rows[1].model = "skinned";
+		f.owner.actors( rows );
+		f.owner.prepare( f.gpu, {}, 257 );
+		assert.deepEqual( f.owner.stats( true ).poseEligibility, {
+			actors: 2,
+			unique: 2,
+			gpuSamples: 2,
+			linearSamples: 2,
+			sharedPaletteSamples: 1,
+			clothSamples: 0,
+			gpuPaletteSamples: 1
+		} );
 	} finally {
 		f.owner.dispose( f.gpu, null );
 	}

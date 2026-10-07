@@ -40,6 +40,9 @@ export interface CharacterStatistics {
 		readonly unique: number;
 		readonly gpuSamples: number;
 		readonly linearSamples: number;
+		readonly sharedPaletteSamples: number;
+		readonly clothSamples: number;
+		readonly gpuPaletteSamples: number;
 	};
 }
 /*

@@ -426,6 +426,7 @@ export function captureClothPalettes( gpuAvailable = false, admitUnusedClip = fa
 			const trace = random.takeTrace();
 			boneWriteBytes += geometry.verify( draws );
 			frames.push( {
+				poseEligibility: owner.stats( true ).poseEligibility,
 				digest: drawDigest( draws, trace ),
 				draws: draws.length,
 				randomCalls: trace.length,

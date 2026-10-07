@@ -989,17 +989,37 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		stats( details = false ) {
 			let poseEligibility;
 			if ( details ) {
-				const unique = new Set( [ ...poses.values() ].map( state => state.pose ) );
-				let gpuSamples = 0, linearSamples = 0;
-				for ( const pose of unique ) {
-					const sample = pose.gpuSample();
+				const unique = new Set<ReturnType<typeof createCharacterPose>>();
+				let gpuSamples = 0,
+					linearSamples = 0,
+					sharedPaletteSamples = 0,
+					clothSamples = 0,
+					gpuPaletteSamples = 0;
+				for ( const state of poses.values() ) {
+					if ( unique.has( state.pose ) ) continue;
+					unique.add( state.pose );
+					const sample = state.pose.gpuSample();
 					if ( !sample ) continue;
 					gpuSamples++;
 					if ( sample.clip.channels.every( channel => channel.interpolation === "LINEAR" ) ) linearSamples++;
+					const plan = models.get( state.model )?.plan;
+					if ( plan?.sharedPalette ) sharedPaletteSamples++;
+					if ( plan?.cloth ) clothSamples++;
+					if ( plan?.sharedPalette && !plan.cloth ) gpuPaletteSamples++;
 				}
 				// Sampling eligibility alone does not prove an affine playback clock.
 				// Count retained evaluators without materializing CPU palettes or sockets.
-				poseEligibility = { actors: poses.size, unique: unique.size, gpuSamples, linearSamples };
+				// Model restrictions overlap: cloth can use shared palettes, but its
+				// CPU consumer excludes GPU-only storage. Device admission is separate.
+				poseEligibility = {
+					actors: poses.size,
+					unique: unique.size,
+					gpuSamples,
+					linearSamples,
+					sharedPaletteSamples,
+					clothSamples,
+					gpuPaletteSamples
+				};
 			}
 			let liveOwnedCpuEvaluations = 0;
 			for ( const state of ownedPoses.values() ) liveOwnedCpuEvaluations += state.pose.cpuEvaluations();
