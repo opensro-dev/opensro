@@ -326,6 +326,9 @@ export async function attachCrowd( { count, fixture, hostUrl = CROWD_HOST_URL } 
 	console.log( `[crowd] attached to the held crowd of ${count} at ${hostUrl}` );
 	return {
 		peers,
+		// The host owns these sessions: a bench must not wait for them to
+		// leave the server or disable their accounts.
+		held: true,
 		close: async () => {
 			polling = false;
 		}
@@ -337,7 +340,7 @@ export async function attachCrowd( { count, fixture, hostUrl = CROWD_HOST_URL } 
 obtainCrowd
 
 A held crowd when one matches, else a newly admitted one. Either result
-has the same { peers, close } shape.
+has the same { peers, close } shape; a held one also says held: true.
 ================
 */
 export async function obtainCrowd( options ) {
