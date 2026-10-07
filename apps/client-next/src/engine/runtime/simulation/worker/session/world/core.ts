@@ -20,7 +20,12 @@ import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import type { EntityState } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
-import { petPlayerAttack, playerInteraction, skillTargetAdmission } from "@/engine/foundation/gameplay/player-attack";
+import {
+	hoverAttack,
+	petPlayerAttack,
+	playerInteraction,
+	skillTargetAdmission
+} from "@/engine/foundation/gameplay/player-attack";
 import { resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import { createEntities } from "./entities/entities";
 import { createGameplay } from "./gameplay/gameplay";
@@ -397,6 +402,14 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 				}
 				entities.step( now );
 				gameplay.step( now, entities.read( gameplay.localIdentity() ) );
+				// 6875F0 judges the hovered player or pet every tick; the verdicts
+				// follow party, PvP state and the attacked-name window as they change.
+				const hoverContext = nameContext();
+				if ( hoverContext ) {
+					entities.refreshHoverAttack( e =>
+						hoverAttack( e, hoverContext, { entity: entities.read, rider: entities.rider } )
+					);
+				}
 				for ( const token of gameplay.takeCancellations() ) {
 					entities.cancelCast( token, now );
 					gameplay.cancelCast( token, now );

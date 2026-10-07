@@ -907,7 +907,9 @@ export function startRuntime(
 				platform.presentWorldCursor(
 					ui.cursor() ?? worldCursor(
 						hoverGid === null ? undefined : presentation.read( hoverGid ),
-						hoverLocal ? presentation.read( hoverLocal ) : undefined
+						hoverLocal ? presentation.read( hoverLocal ) : undefined,
+						false,
+						input.altHeld()
 					)
 				);
 				markStage( "hover" );

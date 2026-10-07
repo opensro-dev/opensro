@@ -218,6 +218,34 @@ export function skillTargetAdmission(
 	return canAttackCos( target, c, false, r ) ? { kind: "cast" } : { kind: "none" };
 }
 
+// HOVER_ATTACK_PLAIN and HOVER_ATTACK_ALT are EntityState.hoverAttack's
+// bits: the hover target passes vtable +0xA4 with Alt up, or with Alt down.
+export const HOVER_ATTACK_PLAIN = 1, HOVER_ATTACK_ALT = 2;
+
+/*
+================
+hoverAttack
+
+CGInterface_OnTimerEvent (6875F0) case 0, the hover cursor: it reads
+GetKeyState(VK_MENU) every tick and asks the hovered player or pet's
+vtable +0xA4 (CICUser_CanAttack / CICCos_CanAttack) with it. A party
+member is never an attack target, nor is one of the local player's own
+pets (CICPlayer_GetCosDataManager +0x18D4 holds it). Both Alt states are
+judged here so the display thread can follow the key without a round
+trip; anything else answers 0.
+================
+*/
+export function hoverAttack( target: EntityState, c: NameColorContext, r: CosRelations ): number {
+	if ( target.kind === "player" ) {
+		if ( partyName( c.social, target.name ) ) return 0;
+		return (canAttackPlayer( target, c, false ) ? HOVER_ATTACK_PLAIN : 0) |
+			(canAttackPlayer( target, c, true ) ? HOVER_ATTACK_ALT : 0);
+	}
+	if ( target.kind !== "cos" || target.ownerGid === c.local.gid ) return 0;
+	return (canAttackCos( target, c, false, r ) ? HOVER_ATTACK_PLAIN : 0) |
+		(canAttackCos( target, c, true, r ) ? HOVER_ATTACK_ALT : 0);
+}
+
 /*
 ================
 petPlayerAttack

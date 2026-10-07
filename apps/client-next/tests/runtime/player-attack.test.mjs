@@ -10,9 +10,8 @@ admits, it is no party member and the attacker meets the level rule
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { canAttackCos, canAttackPlayer, petPlayerAttack, playerInteraction, skillTargetAdmission } = await import(
-	"../../src/engine/foundation/gameplay/player-attack.ts"
-);
+const { canAttackCos, canAttackPlayer, hoverAttack, petPlayerAttack, playerInteraction, skillTargetAdmission } =
+	await import( "../../src/engine/foundation/gameplay/player-attack.ts" );
 
 /** @param {object} [fields] */
 const player = ( fields = {} ) => ({
@@ -149,4 +148,15 @@ test("CICCos_CanAttack: pets answer for their owner, horses for their rider, pic
 	assert.equal( canAttackCos( pet( { tidWord: cosWord( 4 ) } ), context(), true, lookup( [ owner ] ) ), false );
 	assert.deepEqual( skillTargetAdmission( pet(), context(), false, true, lookup( [ player() ] ) ), { kind: "none" } );
 	assert.deepEqual( skillTargetAdmission( pet(), context(), true, true, lookup( [ player() ] ) ), { kind: "cast" } );
+});
+
+test("6875F0: the hover verdict judges both Alt states; party members and own pets are never targets", () => {
+	assert.equal( hoverAttack( player(), context(), none ), 2, "a neutral player only with Alt" );
+	assert.equal( hoverAttack( player( { pvpState: 1 } ), context(), none ), 3 );
+	const social = { leader: 1, members: [ { name: "other" } ] };
+	assert.equal( hoverAttack( player( { pvpState: 1 } ), context( { social } ), none ), 0 );
+	assert.equal( hoverAttack( pet(), context(), lookup( [ player() ] ) ), 2 );
+	assert.equal( hoverAttack( pet( { ownerGid: 1 } ), context(), none ), 0, "the local player's own pet" );
+	assert.equal( hoverAttack( pet( { tidWord: cosWord( 4 ) } ), context(), lookup( [ player() ] ) ), 0 );
+	assert.equal( hoverAttack( { ...player(), kind: "monster" }, context(), none ), 0 );
 });

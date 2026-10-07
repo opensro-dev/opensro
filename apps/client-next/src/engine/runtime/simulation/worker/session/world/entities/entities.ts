@@ -282,8 +282,24 @@ export function createEntities(
 			}
 		}
 	}
+	/*
+	================
+	refreshHoverAttack
+
+	Republishes each player's and pet's hover attack verdict (6875F0) when
+	it changes; verdict judges one entity.
+	================
+	*/
+	function refreshHoverAttack( verdict: ( e: EntityState ) => number ) {
+		for ( const e of entities.values() ) {
+			if ( e.kind !== "player" && e.kind !== "cos" ) continue;
+			const hoverAttack = verdict( e );
+			if ( hoverAttack !== (e.hoverAttack ?? 0) ) apply( { kind: "state", entity: { ...e, hoverAttack } } );
+		}
+	}
 	return {
 		recolor,
+		refreshHoverAttack,
 		/*
 		================
 		characterCountry

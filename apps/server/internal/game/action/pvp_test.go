@@ -312,13 +312,13 @@ func TestPlayerAttackPKLimitsApplyOnlyToNeutrals(t *testing.T) {
 
 /*
 ================
-TestJobAttackWaitsForTheSuitToActivate
+TestJobAttackIgnoresTheSuitActivation
 
-529557: opposing jobs fight, but not while the attacker's suit is still
-activating (0x3019 WAITFOR_JOB_ACTIVATE).
+529521 admits opposing jobs before 529557 reads +0x2178, so a suit still
+activating fights at once; no 0x3019 WAITFOR_JOB_ACTIVATE is sent.
 ================
 */
-func TestJobAttackWaitsForTheSuitToActivate(t *testing.T) {
+func TestJobAttackIgnoresTheSuitActivation(t *testing.T) {
 	rt, clock, a, v := newPvpPair(t)
 	items := rt.deps.ItemReferences().(staticItemSource)
 	for i, c := range []*enterworld.Character{a, v} {
@@ -329,11 +329,7 @@ func TestJobAttackWaitsForTheSuitToActivate(t *testing.T) {
 			RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), StackCount: 1})
 	}
 	rt.startJobActivation(testDivision, a, clock.NowMs())
-	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0x3019 {
-		t.Fatalf("job attack while activating = %#x, want 0x3019", code)
-	}
-	rt.endJobActivation(testDivision, a)
 	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0 {
-		t.Fatalf("job attack once active = %#x, want admitted", code)
+		t.Fatalf("job attack while activating = %#x, want admitted", code)
 	}
 }

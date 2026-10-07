@@ -187,12 +187,12 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 	if rt.guildsAtWar(division, caster, target) {
 		return 0
 	}
-	// 529557: opposing jobs fight once the attacker's suit is active
-	// (+0x2178, jobdress.go); until then 0x3019 WAITFOR_JOB_ACTIVATE.
+	// 529521 admits opposing jobs at once: the suit's job byte is written when
+	// it is worn (CGObjPC_SetJobStateChannel 4E0B20), before its +0x2178
+	// activation runs out. The 0x3019 refusal at 529557 sits behind a second
+	// CGObjPC_IsHostileJobType call that sees the same answer, so it is never
+	// sent; the activation only holds the suit on (jobStripRefusal, 0x47).
 	if rt.hostilePlayerJobs(caster, target) {
-		if rt.jobActivationPending(division, caster, now) {
-			return 0x3019
-		}
 		return 0
 	}
 	if caster.Aggressions[enterworld.ObjectIDForCharacter(target)] != 0 {

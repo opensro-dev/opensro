@@ -275,8 +275,8 @@ func (rt *Runtime) summonedVehicle(c *enterworld.Character) bool {
 startJobActivation
 
 A worn suit is not active at once: +0x2178 = 10 (4E9EA9, when the suit's
-equip result 0x3038 goes out) holds job attacks (0x3019) and the
-suit's removal (0x47) for ten state ticks.
+equip result 0x3038 goes out) holds the suit's removal (0x47) for ten
+state ticks. Job attacks do not wait for it (skillrelations.go).
 ================
 */
 func (rt *Runtime) startJobActivation(division string, c *enterworld.Character, now int64) {
