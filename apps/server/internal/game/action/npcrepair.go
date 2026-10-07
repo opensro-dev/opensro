@@ -40,10 +40,15 @@ const (
 	repairAllSlots uint8 = 2
 
 	// The category-13 notices 0xB46F raises (v1.188 0x1Cxx low bytes).
+	// 4C7AF0 answers an empty slot with 3 and 496E60 a whole item with
+	// 0x1C09; the v1.150 client shows neither (689420 leaves them silent).
+	repairErrEmptySlot   uint8 = 0x03
 	repairErrTooFar      uint8 = 0x04
 	repairErrNotService  uint8 = 0x05
 	repairErrNoGold      uint8 = 0x07
+	repairErrNothingLost uint8 = 0x09
 	repairErrNotRepaired uint8 = 0x11
+	repairErrNotRevived  uint8 = 0x12
 
 	// errCodeNothingToRepair is the low byte of 49C4DB's 0x1888 (v1.150
 	// notice 392, UIIT_MSG_STRGERR_THERE_IS_NO_ITEM_TO_REPAIR).
@@ -98,10 +103,15 @@ func (rt *Runtime) HandleNpcRepair(division string, c *enterworld.Character, pay
 			return false
 		}
 		var repaired wearFrames
-		refusal := uint8(0)
 		if mode == repairOneSlot {
-			repaired, refusal = rt.repairInventorySlot(division, c, slot)
+			var refusal uint8
+			if repaired, refusal = rt.repairInventorySlot(division, c, slot); refusal != 0 {
+				result = repairRefusal(refusal)
+				return false
+			}
 		} else {
+			// 4C7A10 walks every slot, stops only when the gold runs out and
+			// answers 1 whatever the slots said.
 			for _, row := range append([]enterworld.InventoryRow(nil), c.MissionInventory...) {
 				if row.Slot < 0 || row.Slot > 0xff {
 					continue
@@ -114,14 +124,12 @@ func (rt *Runtime) HandleNpcRepair(division string, c *enterworld.Character, pay
 				}
 			}
 		}
-		if refusal != 0 {
-			result = repairRefusal(refusal)
-			return false
-		}
+		frames := []wire.Frame{{Opcode: opNpcRepairResponse, Payload: []byte{1}}}
 		if len(repaired.actor) == 0 {
+			result = OpResult{Frames: frames}
 			return false
 		}
-		frames := append([]wire.Frame{{Opcode: opNpcRepairResponse, Payload: []byte{1}}}, repaired.actor...)
+		frames = append(frames, repaired.actor...)
 		result = OpResult{Frames: append(frames, goldFrame(c)), Broadcast: repaired.public}
 		return true
 	})
@@ -133,10 +141,15 @@ func (rt *Runtime) HandleNpcRepair(division string, c *enterworld.Character, pay
 repairInventorySlot
 
 CGObjNPC_RepairInventorySlot (4C7AF0) inside the character's Update: the
-item must be repairable equipment, the quote must find the gold, then
-CGObjPC_RepairItemForGold (4E7210) restores the points, charges the gold
-and spends a MATTR_REPAIR charge. Returns the frames and a refusal byte
-(0 when repaired or nothing to repair).
+item must be repairable equipment, a broken one must also be revivable,
+the quote must find the gold, then CGObjPC_RepairItemForGold (4E7210)
+restores the points, charges the gold and spends a MATTR_REPAIR charge.
+Returns the frames and 0, or a refusal byte.
+
+A whole item answers 0x09, never "no gold": the client prices its maximum
+rounded (CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5) and
+the server truncated (495D60), so a fresh drop can read one point short
+on the client while it is whole here, as in retail.
 ================
 */
 func (rt *Runtime) repairInventorySlot(division string, c *enterworld.Character, slot uint8) (wearFrames, uint8) {
@@ -149,26 +162,30 @@ func (rt *Runtime) repairInventorySlot(division string, c *enterworld.Character,
 	}
 	refs := rt.deps.ItemReferences()
 	if index < 0 || refs == nil {
-		return wearFrames{}, 0
+		return wearFrames{}, repairErrEmptySlot
 	}
 	row := c.MissionInventory[index]
 	ref, ok := refs.ItemRefByCodename(row.Codename)
 	if !ok || ref == nil || !rt.itemRepairable(ref, row) {
 		return wearFrames{}, repairErrNotRepaired
 	}
+	// 4C7BB2: a broken item needs itemdata CanRevive (CGObj_CanRevive 483EB0).
+	if canRevive, _ := ref.NativeFields.Lookup("canRevive"); row.Durability == 0 && canRevive == 0 {
+		return wearFrames{}, repairErrNotRevived
+	}
 	maximum := rt.equipmentMaxDurability(&row)
+	if row.Durability != 0 && row.Durability >= int64(maximum) {
+		return wearFrames{}, repairErrNothingLost
+	}
 	costRepair, _ := ref.NativeFields.Lookup("repairCostB4")
 	costRevive, _ := ref.NativeFields.Lookup("reviveCostB8")
 	restored, cost, ok := combat.RepairQuote(uint32(max(row.Durability, 0)), maximum, int64(costRepair), int64(costRevive), int64(min(goldOf(c), math.MaxInt64)))
 	if !ok {
-		if row.Durability >= int64(maximum) {
-			return wearFrames{}, 0
-		}
 		return wearFrames{}, repairErrNoGold
 	}
 	frames := rt.offsetItemDurability(division, c, slot, int32(int64(restored)-row.Durability))
 	if len(frames.actor) == 0 {
-		return wearFrames{}, 0
+		return wearFrames{}, repairErrNothingLost
 	}
 	gold := int64(min(goldOf(c), math.MaxInt64)) - cost
 	c.Gold = &gold

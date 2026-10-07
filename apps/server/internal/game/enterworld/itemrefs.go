@@ -417,6 +417,9 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
 	// CanRepair, read by CGObj_CanRepair 483E80 for NPC and hammer repair.
 	{22, "canRepair", "int"},
+	// Token 23 (server ref +0x8C bit 7): itemdata CanRevive, read by
+	// CGObj_CanRevive 483EB0 before a smith repairs a broken item.
+	{23, "canRevive", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
 	{24, "canUse", "int"},
