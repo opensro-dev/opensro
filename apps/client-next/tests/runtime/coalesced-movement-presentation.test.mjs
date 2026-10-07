@@ -105,55 +105,81 @@ test("retained path evidence does not authorize a diagonal across a turn", () =>
 });
 
 for ( const destination of [ { x: 102, z: 200 }, { x: 20, z: 260 }, { x: 260, z: 230 } ] ) {
-	test(`a proven turn to ${destination.x},${destination.z} follows its corner without snapping`, () => {
-		const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();
-		navigation.objects = [];
-		movement.seed( FROM );
-		movement.navigation( 257, navigation );
-		movement.request( TO, 0 );
-		presentation.origin( 0 );
-		for ( const time of [ 16, 32 ] ) {
-			movement.step( time );
-			const state = movement.state();
-			assert.ok( state.pose );
-			publish( presentation, state );
-			presentation.pose( 7, state.pose, time / 1000 );
-		}
-		const last = movement.state();
-		assert.ok( last.pose );
-		let previous = presentation.pose( 7, last.pose, .048 );
-		movement.request( { ...FROM, ...destination }, 40 );
-		const turn = movement.state().movementTransition.turn;
-		assert.ok( turn, "the movement owner supplies the connection, not a geometric guess" );
-		assert.equal( turn.outgoing.from.x, 102 );
-		let sampled = 40;
-		for ( let time = 60; time <= 400; time += 4 ) {
-			while ( sampled + 16 <= time ) movement.step( sampled += 16 );
-			const state = movement.state();
-			assert.ok( state.pose );
-			publish( presentation, state );
-			const shown = presentation.pose( 7, state.pose, time / 1000 );
-			const corner = turn.outgoing.from, end = turn.outgoing.to;
-			const cross = (shown.x - corner.x) * (end.z - corner.z) - (shown.z - corner.z) * (end.x - corner.x);
+	for ( const coalescedReceipt of [ false, true ] ) {
+		test(`a proven turn to ${destination.x},${destination.z}, receipt=${coalescedReceipt}, follows its corner`, () => {
+			const movement = createMovement( () => {} ),
+				navigation = product(),
+				presentation = createPosePresentation();
+			navigation.objects = [];
+			movement.seed( FROM );
+			movement.navigation( 257, navigation );
+			movement.request( TO, 0 );
+			presentation.origin( 0 );
+			for ( const time of [ 16, 32 ] ) {
+				movement.step( time );
+				const state = movement.state();
+				assert.ok( state.pose );
+				publish( presentation, state );
+				presentation.pose( 7, state.pose, time / 1000 );
+			}
+			const last = movement.state();
+			assert.ok( last.pose );
+			let previous = presentation.pose( 7, last.pose, .048 );
+			movement.request( { ...FROM, ...destination }, 40 );
+			const turn = movement.state().movementTransition.turn;
+			assert.ok( turn, "the movement owner supplies the connection, not a geometric guess" );
+			assert.equal( turn.outgoing.from.x, 102 );
+			let sampled = 40;
+			if ( coalescedReceipt ) {
+				movement.step( sampled = 56 );
+				const { from, to } = turn.outgoing;
+				const duration = Math.hypot( to.x - from.x, to.z - from.z ) / 50 * 1000;
+				movement.receive(
+					new TextEncoder().encode( JSON.stringify( {
+						v: 1,
+						id: 2,
+						gid: 7,
+						accepted: true,
+						serverTimeMs: sampled,
+						world: { spawn: to, moveSegment: { from, startedAtMs: 40, arrivesAtMs: 40 + duration } }
+					} ) ),
+					sampled,
+					7
+				);
+				const transition = movement.state().movementTransition;
+				assert.equal( transition.reason, "receipt" );
+				assert.equal( transition.logicalDistance, 0 );
+				assert.equal( transition.pathEligible, true );
+				assert.deepEqual( transition.turn, turn, "receipt retains the coalesced turn proof" );
+			}
+			for ( let time = 60; time <= 400; time += 4 ) {
+				while ( sampled + 16 <= time ) movement.step( sampled += 16 );
+				const state = movement.state();
+				assert.ok( state.pose );
+				publish( presentation, state );
+				const shown = presentation.pose( 7, state.pose, time / 1000 );
+				const corner = turn.outgoing.from, end = turn.outgoing.to;
+				const cross = (shown.x - corner.x) * (end.z - corner.z) - (shown.z - corner.z) * (end.x - corner.x);
+				assert.ok(
+					Math.abs( shown.z - FROM.z ) <= .01 ||
+						Math.abs( cross ) / Math.hypot( end.x - corner.x, end.z - corner.z ) <= .01,
+					"every drawn point stays on one of the admitted legs"
+				);
+				assert.ok(
+					Math.hypot( shown.x - previous.x, shown.z - previous.z ) < .65,
+					`turn snapped by ${Math.hypot( shown.x - previous.x, shown.z - previous.z )}`
+				);
+				previous = shown;
+			}
 			assert.ok(
-				Math.abs( shown.z - FROM.z ) <= .01 ||
-					Math.abs( cross ) / Math.hypot( end.x - corner.x, end.z - corner.z ) <= .01,
-				"every drawn point stays on one of the admitted legs"
+				Math.hypot( previous.x - 102, previous.z - 100 ) > 12,
+				"recovery cannot park the body at the corner"
 			);
-			assert.ok(
-				Math.hypot( shown.x - previous.x, shown.z - previous.z ) < .65,
-				`turn snapped by ${Math.hypot( shown.x - previous.x, shown.z - previous.z )}`
+			assert.equal(
+				previous.angle,
+				movement.state().pose?.angle,
+				"position recovery cannot leave the body facing back"
 			);
-			previous = shown;
-		}
-		assert.ok(
-			Math.hypot( previous.x - 102, previous.z - 100 ) > 12,
-			"recovery cannot park the body at the corner"
-		);
-		assert.equal(
-			previous.angle,
-			movement.state().pose?.angle,
-			"position recovery cannot leave the body facing back"
-		);
-	});
+		});
+	}
 }
