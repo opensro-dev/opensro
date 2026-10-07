@@ -2327,7 +2327,7 @@
 		{
 			"file": "src/engine/runtime/renderer/characters/characters.ts",
 			"expression": "probe?.characterBatch",
-			"function": "prepare",
+			"function": "prepareGroup",
 			"kind": "callback",
 			"reason": "Optional synchronous frame-owner census of admitted batch variants and submitted geometry. Absent in ordinary timing and production; never changes grouping or draw order."
 		},
@@ -2349,6 +2349,48 @@
 			"file": "src/engine/runtime/renderer/characters/characters.ts",
 			"expression": "probe?.characterCount",
 			"function": "prepare",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "retireUnplanned",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterMark",
+			"function": "countPlan",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "countPlan",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterMark",
+			"function": "evaluateNeededPoses",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "drawRibbon",
+			"kind": "callback",
+			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
+		},
+		{
+			"file": "src/engine/runtime/renderer/characters/characters.ts",
+			"expression": "probe?.characterCount",
+			"function": "drawParticles",
 			"kind": "callback",
 			"reason": "Optional synchronous frame-owner observer; records render stages and pose counts without changing the frame. Replaces source rewriting."
 		},

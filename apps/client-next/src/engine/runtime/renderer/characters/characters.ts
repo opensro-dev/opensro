@@ -620,6 +620,189 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	}
 	/*
 	================
+	holderSocket
+
+	The actor an attached actor or rider follows, and that holder's socket
+	(null when the bone is missing). Socket lookups evaluate the holder's pose.
+	================
+	*/
+	function holderSocket(
+		actor: CharacterActor,
+		owner: CharacterActor,
+		rows: ReadonlyMap<number, CharacterActor>
+	): { holder: CharacterActor; socket: Float32Array | null; } {
+		// 8D6880: a missing bone retries on the mount, otherwise the root
+		// orientation is kept and the actor is still drawn. 8D4020 does
+		// the same keep-the-owner-matrix step. CRTSocket_UpdateOrdinaryMatrices
+		// (AB68C0) copies the parent matrix; it does not drop the child.
+		let holder = owner;
+		// A ground effect of a rider stands at the ride's root, not the
+		// saddle; it follows the character again once dismounted.
+		if ( actor.attachment?.ground && owner.mountedOn !== undefined ) {
+			holder = rows.get( owner.mountedOn ) ?? owner;
+		}
+		let socket = actor.attachment?.root ?
+			identity() :
+			poseFor( holder )?.socket(
+				actor.attachment?.bone ?? "saddle",
+				actor.attachment?.basis === "compound"
+			) ?? null;
+		if ( !socket && actor.attachment && !actor.attachment.root && holder.mountedOn !== undefined ) {
+			const mount = rows.get( holder.mountedOn );
+			const mountSocket = mount ?
+				poseFor( mount )?.socket( actor.attachment.bone, actor.attachment.basis === "compound" ) ?? null :
+				null;
+			if ( mount && mountSocket ) {
+				holder = mount;
+				socket = mountSocket;
+			}
+		}
+		return { holder, socket };
+	}
+	/*
+	================
+	nativeAttachmentOffset
+
+	Turn matrix (parent x socket) into the 8D6880 holder matrix in native
+	space, then add the attachment offset rotated by the holder matrix.
+	================
+	*/
+	function nativeAttachmentOffset(
+		matrix: Float32Array,
+		parent: Float32Array,
+		attachment: NonNullable<CharacterActor["attachment"]>,
+		ownerScale: number
+	) {
+		const [x, y, z] = attachment.offset;
+		// The 8D6880 holder matrix in native space. An imported model's
+		// space is Ry(PI) of native (exportGlb convPos mirrors Z, the
+		// loader's __gltf_left_handed__ root adds Sx), so its root is
+		// placement x Ry(PI) and a named socket is Ry(PI) x bone x
+		// Sz: undo the Ry(PI) for a root, the trailing Sz for a bone.
+		// An .efp program draws native coordinates through this
+		// matrix as is; an imported mesh takes Ry(PI) once more after
+		// the authored rotation (below).
+		const columns = attachment.root ? [ 0, 2 ] : [ 2 ];
+		for ( const c of columns ) {
+			for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = -matrix[c * 4 + n]!;
+		}
+		// 8D6AFF: binding +0x08 == 0 (an '@Bone' token) writes an
+		// identity rotation over bone x root and keeps the position.
+		if ( attachment.keepRotation === false && !attachment.root ) {
+			for ( let c = 0; c < 3; c++ ) {
+				for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = c === n ? 1 : 0;
+			}
+		}
+		// 8D6880 rotates the offset by the holder matrix, separately
+		// from bone orientation, using character height scale C0.
+		const axes = new Float32Array( 12 );
+		for ( let c = 0; c < 3; c++ ) {
+			const size = hypot3( parent[c * 4]!, parent[c * 4 + 1]!, parent[c * 4 + 2]! );
+			if ( size ) {
+				for ( let n = 0; n < 3; n++ ) axes[c * 4 + n] = parent[c * 4 + n]! / size * ownerScale;
+			}
+		}
+		const delta = nativeModelOffset( axes, [ x, y, z ] );
+		for ( let n = 0; n < 3; n++ ) matrix[12 + n]! += delta[n]!;
+	}
+	/*
+	================
+	attachedTransform
+
+	The matrix of an actor that follows an owner: the owner's own transform,
+	its socket, and the attachment's basis and offset. Null when the holder
+	has no transform this frame.
+	================
+	*/
+	function attachedTransform(
+		actor: CharacterActor,
+		owner: CharacterActor,
+		rows: ReadonlyMap<number, CharacterActor>,
+		origin: number,
+		cache: Map<number, Float32Array>,
+		chain: Set<number>
+	): Float32Array | null {
+		const { holder, socket: found } = holderSocket( actor, owner, rows );
+		// A bare rider sits on the mount's saddle in the mount's resource
+		// space, which carries the import adapter Sx(-1) (character.ts
+		// __gltf_left_handed__); the rider's own body applies it again.
+		// Cancel it once, as the native basis below does for named sockets,
+		// or the rider is mirrored and culled inside out. A missing saddle
+		// keeps the plain root (identity), which has no adapter to cancel.
+		// Only an improper socket carries the adapter; a proper one (a model
+		// built without the import root) has nothing to cancel.
+		const saddled = !actor.attachment && !!found && determinant3( found ) < 0;
+		const socket = found ?? identity();
+		const owned = transformFor( holder, rows, origin, cache, chain );
+		if ( !owned ) return null;
+		// A root attachment with a fixed facing keeps its owner's position and
+		// scale, not its rotation: 8D5440 copies the caster's matrix at spawn.
+		const facing = actor.attachment?.root ? actor.attachment.facing : undefined;
+		const parent = facing === undefined ? owned : facedMatrix( owned, facing );
+		let matrix = new Float32Array( 16 );
+		multiply( parent, socket, matrix );
+		if ( saddled ) {
+			for ( let n = 0; n < 3; n++ ) matrix[n] = -matrix[n]!;
+		}
+		if ( actor.attachment ) {
+			const [x, y, z] = actor.attachment.offset;
+			if ( actor.attachment.basis === "bsr" ) {
+				matrix = bsrParticleAttachment(
+					parent,
+					socket,
+					!!actor.attachment.root,
+					actor.attachment.offset,
+					owner.scale,
+					actor.attachment.modelScale ?? owner.scale,
+					actor.attachment.rotation
+				);
+			} else if ( actor.attachment.basis === "native" || actor.attachment.basis === "native-bsr" ) {
+				nativeAttachmentOffset( matrix, parent, actor.attachment, owner.scale );
+			} else {
+				for ( let n = 0; n < 3; n++ ) {
+					matrix[12 + n]! += matrix[n]! * x + matrix[4 + n]! * y + matrix[8 + n]! * z;
+				}
+			}
+		}
+		return matrix;
+	}
+	/*
+	================
+	rotatedEffect
+
+	matrix x the producer's single-axis effect rotation, as a new matrix.
+	================
+	*/
+	function rotatedEffect(
+		matrix: Float32Array,
+		rotation: NonNullable<CharacterActor["effectRotation"]>
+	): Float32Array {
+		const { axis, angle } = rotation,
+			c = Math.fround( Math.cos( angle ) ),
+			s = Math.fround( Math.sin( angle ) ),
+			local = identity();
+		if ( axis === "z" ) {
+			local[0] = c;
+			local[1] = s;
+			local[4] = -s;
+			local[5] = c;
+		} else if ( axis === "y" ) {
+			local[0] = c;
+			local[2] = s;
+			local[8] = -s;
+			local[10] = c;
+		} else {
+			local[5] = c;
+			local[6] = s;
+			local[9] = -s;
+			local[10] = c;
+		}
+		const out = new Float32Array( 16 );
+		multiply( matrix, local, out );
+		return out;
+	}
+	/*
+	================
 	transformFor
 
 	Compose mount and attachment transforms before applying the actor placement.
@@ -653,100 +836,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			// cycle tracking only when this query actually follows an owner.
 			chain ??= new Set<number>();
 			chain.add( actor.gid );
-			// 8D6880: a missing bone retries on the mount, otherwise the root
-			// orientation is kept and the actor is still drawn. 8D4020 does
-			// the same keep-the-owner-matrix step. CRTSocket_UpdateOrdinaryMatrices
-			// (AB68C0) copies the parent matrix; it does not drop the child.
-			let holder = owner;
-			// A ground effect of a rider stands at the ride's root, not the
-			// saddle; it follows the character again once dismounted.
-			if ( actor.attachment?.ground && owner.mountedOn !== undefined ) {
-				holder = rows.get( owner.mountedOn ) ?? owner;
-			}
-			let socket = actor.attachment?.root ?
-				identity() :
-				poseFor( holder )?.socket(
-					actor.attachment?.bone ?? "saddle",
-					actor.attachment?.basis === "compound"
-				) ?? null;
-			if ( !socket && actor.attachment && !actor.attachment.root && holder.mountedOn !== undefined ) {
-				const mount = rows.get( holder.mountedOn );
-				const mountSocket = mount ?
-					poseFor( mount )?.socket( actor.attachment.bone, actor.attachment.basis === "compound" ) ?? null :
-					null;
-				if ( mount && mountSocket ) {
-					holder = mount;
-					socket = mountSocket;
-				}
-			}
-			// A bare rider sits on the mount's saddle in the mount's resource
-			// space, which carries the import adapter Sx(-1) (character.ts
-			// __gltf_left_handed__); the rider's own body applies it again.
-			// Cancel it once, as the native basis below does for named sockets,
-			// or the rider is mirrored and culled inside out. A missing saddle
-			// keeps the plain root (identity), which has no adapter to cancel.
-			// Only an improper socket carries the adapter; a proper one (a model
-			// built without the import root) has nothing to cancel.
-			const saddled = !actor.attachment && !!socket && determinant3( socket ) < 0;
-			if ( !socket ) socket = identity();
-			const owned = transformFor( holder, rows, origin, cache, chain );
-			if ( !owned ) return null;
-			// A root attachment with a fixed facing keeps its owner's position and
-			// scale, not its rotation: 8D5440 copies the caster's matrix at spawn.
-			const facing = actor.attachment?.root ? actor.attachment.facing : undefined;
-			const parent = facing === undefined ? owned : facedMatrix( owned, facing );
-			matrix = new Float32Array( 16 );
-			multiply( parent, socket, matrix );
-			if ( saddled ) {
-				for ( let n = 0; n < 3; n++ ) matrix[n] = -matrix[n]!;
-			}
-			if ( actor.attachment ) {
-				const [x, y, z] = actor.attachment.offset;
-				if ( actor.attachment.basis === "bsr" ) {
-					matrix = bsrParticleAttachment(
-						parent,
-						socket,
-						!!actor.attachment.root,
-						actor.attachment.offset,
-						owner.scale,
-						actor.attachment.modelScale ?? owner.scale,
-						actor.attachment.rotation
-					);
-				} else if ( actor.attachment.basis === "native" || actor.attachment.basis === "native-bsr" ) {
-					// The 8D6880 holder matrix in native space. An imported model's
-					// space is Ry(PI) of native (exportGlb convPos mirrors Z, the
-					// loader's __gltf_left_handed__ root adds Sx), so its root is
-					// placement x Ry(PI) and a named socket is Ry(PI) x bone x
-					// Sz: undo the Ry(PI) for a root, the trailing Sz for a bone.
-					// An .efp program draws native coordinates through this
-					// matrix as is; an imported mesh takes Ry(PI) once more after
-					// the authored rotation (below).
-					const columns = actor.attachment.root ? [ 0, 2 ] : [ 2 ];
-					for ( const c of columns ) {
-						for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = -matrix[c * 4 + n]!;
-					}
-					// 8D6AFF: binding +0x08 == 0 (an '@Bone' token) writes an
-					// identity rotation over bone x root and keeps the position.
-					if ( actor.attachment.keepRotation === false && !actor.attachment.root ) {
-						for ( let c = 0; c < 3; c++ ) {
-							for ( let n = 0; n < 3; n++ ) matrix[c * 4 + n] = c === n ? 1 : 0;
-						}
-					}
-					// 8D6880 rotates the offset by the holder matrix, separately
-					// from bone orientation, using character height scale C0.
-					const axes = new Float32Array( 12 );
-					for ( let c = 0; c < 3; c++ ) {
-						const size = hypot3( parent[c * 4]!, parent[c * 4 + 1]!, parent[c * 4 + 2]! );
-						if ( size ) {
-							for ( let n = 0; n < 3; n++ ) axes[c * 4 + n] = parent[c * 4 + n]! / size * owner.scale;
-						}
-					}
-					const delta = nativeModelOffset( axes, [ x, y, z ] );
-					for ( let n = 0; n < 3; n++ ) matrix[12 + n]! += delta[n]!;
-				} else {for ( let n = 0; n < 3; n++ ) {
-						matrix[12 + n]! += matrix[n]! * x + matrix[4 + n]! * y + matrix[8 + n]! * z;
-					}}
-			}
+			const attached = attachedTransform( actor, owner, rows, origin, cache, chain );
+			if ( !attached ) return null;
+			matrix = attached;
 		} else {
 			// An attached actor takes its owner's matrix; its own placement
 			// would only be allocated, calculated and immediately discarded.
@@ -765,31 +857,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				for ( let r = 0; r < 3; r++ ) matrix[c * 4 + r] = actor.effectBasis[c * 3 + r]!;
 			}
 		}
-		if ( actor.effectRotation ) {
-			const { axis, angle } = actor.effectRotation,
-				c = Math.fround( Math.cos( angle ) ),
-				s = Math.fround( Math.sin( angle ) ),
-				local = identity();
-			if ( axis === "z" ) {
-				local[0] = c;
-				local[1] = s;
-				local[4] = -s;
-				local[5] = c;
-			} else if ( axis === "y" ) {
-				local[0] = c;
-				local[2] = s;
-				local[8] = -s;
-				local[10] = c;
-			} else {
-				local[5] = c;
-				local[6] = s;
-				local[9] = -s;
-				local[10] = c;
-			}
-			const out = new Float32Array( 16 );
-			multiply( matrix, local, out );
-			matrix = out;
-		}
+		if ( actor.effectRotation ) matrix = rotatedEffect( matrix, actor.effectRotation );
 		// 8D9EC0 rotates a stage object in its native space (Rotation x
 		// Attach). An imported mesh then leaves native space for its own
 		// Ry(PI) model space: M = holder x rotation x Ry(PI).
@@ -801,6 +869,1393 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		for ( let n = 0; n < 12; n++ ) matrix[n]! *= actor.scale;
 		cache.set( actor.gid, matrix );
 		return matrix;
+	}
+	// ============================================================================
+	//
+	// Frame preparation. prepare() runs these phases in order: sample the
+	// frame's actors, retire residency, advance particle emitters, select the
+	// visible actors, plan batches within the render budget, evaluate the
+	// needed poses, then build each planned batch's draws.
+	//
+	// ============================================================================
+	type ModelResource = NonNullable<ReturnType<typeof models.get>>;
+	type CharacterBatch = NonNullable<ReturnType<typeof batches.get>>;
+	type CharacterChains = ReturnType<typeof hierarchy.update>["chains"];
+	/*
+	================
+	PrepareFrame
+
+	One prepare() call's inputs and the frame-local state its phases share.
+	================
+	*/
+	interface PrepareFrame {
+		readonly geometry: GeometryCommands;
+		readonly images: ImageCommands;
+		readonly origin: number;
+		readonly view: Float32Array | undefined;
+		readonly preview: boolean;
+		readonly seconds: number;
+		readonly continuation: boolean;
+		readonly dynamicAnimation: boolean;
+		readonly frameActors: readonly CharacterActor[];
+		// The emission cycle of each clocked actor (sampleFrameActors).
+		readonly cycles: ReadonlyMap<number, number>;
+		readonly byGid: ReadonlyMap<number, CharacterActor>;
+		readonly chains: CharacterChains;
+		// Frame-local actor matrices (transformFor's cache).
+		readonly transforms: Map<number, Float32Array>;
+		readonly opacity: ( actor: CharacterActor ) => number;
+		readonly output: GeometryDraw[];
+	}
+	/*
+	================
+	GroupFrame
+
+	One planned batch while its draws are built: its rows, model and storage.
+	================
+	*/
+	interface GroupFrame {
+		readonly id: string;
+		readonly rows: CharacterActor[];
+		readonly resource: ModelResource;
+		readonly model: CharacterModel;
+		readonly plan: ModelResource["plan"];
+		readonly fading: boolean;
+		readonly modifierClocks: ReturnType<typeof materialClocks.get> | undefined;
+		readonly batch: CharacterBatch;
+		readonly capacity: number;
+		instancesChanged: boolean;
+	}
+	/*
+	================
+	PrimitiveRows
+
+	Per-row instance streams one primitive's draw consumes.
+	================
+	*/
+	interface PrimitiveRows {
+		readonly instances: Float32Array;
+		readonly appearance: Float32Array | undefined;
+		readonly pointLights: Float32Array | undefined;
+	}
+	/*
+	================
+	sampleFrameActors
+
+	The actors this pass draws: deferred-particle samples applied, and clocked
+	loops reduced to their cycle-local time.
+	================
+	*/
+	function sampleFrameActors( continuation: boolean ) {
+		// A stopped emitter receives its final cycle-local age. Preserve that
+		// cycle's birth transforms while particles drain; changing loop=false
+		// must not reseed the trail at the projectile's arrival point.
+		// Ordinary skinned actors have no emitter/material cycle ownership.
+		// Their unmodified animation time already drives pose evaluation.
+		const cycles = new Map<number, number>();
+		const sampledActors = hasDeferred ?
+			actors.map( source => {
+				const sample = source.deferredParticle ? deferred.sample( source.gid ) : undefined;
+				return sample ?
+					{
+						...source,
+						deferredParticle: !sample.deferred && sample.draw ? undefined : source.deferredParticle,
+						time: sample.draw ? sample.time + deferred.pendingSeconds() : sample.time,
+						opacity: (!sample.deferred || continuation) && sample.draw ?
+							(source.opacity ?? 1) * sample.instanceAlpha / 255 :
+							0
+					} :
+					source;
+			} ) :
+			actors;
+		const frameActors = sampledActors.map( actor => {
+			const plan = models.get( actor.model )?.plan;
+			if ( plan?.sharedPalette && !plan.clocked ) return actor;
+			const duration = plan?.continuousGraph ? undefined : plan?.clips.get( actor.clip )?.duration;
+			if ( duration ) {
+				cycles.set(
+					actor.gid,
+					actor.loop ? Math.floor( actor.time / duration ) : particleBirths.get( actor.gid )?.cycle ?? 0
+				);
+			}
+			return actor.loop && duration && plan?.clocked ? { ...actor, time: actor.time % duration } : actor;
+		} );
+		return { frameActors, cycles };
+	}
+	/*
+	================
+	retireResidency
+
+	Release models, batches and textures no retained or framed actor uses.
+	================
+	*/
+	function retireResidency(
+		geometry: GeometryCommands,
+		images: ImageCommands,
+		frameActors: readonly CharacterActor[]
+	) {
+		residencyPasses++;
+		if ( retained ) {
+			const keep = new Set( [
+				...retained,
+				...frameActors.map( actor => actor.model ),
+				...portraits.map( actor => actor.model )
+			] );
+			for ( const id of keep ) {
+				for ( const dependency of models.get( id )?.dependencies ?? [] ) {
+					keep.add( dependency );
+				}
+			}
+			for ( const [id, resource] of models ) {
+				if ( !keep.has( id ) ) {
+					const batch = batches.get( id );
+					if ( batch ) {
+						for ( const draw of batch.draws ) {
+							geometry.release( draw );
+						}
+					}
+					batches.delete( id );
+					if ( resource.owned ) {
+						for ( const image of resource.images ) {
+							if ( !("kind" in image) ) image.close();
+						}
+						ownedModels--;
+					}
+					models.delete( id );
+					residentBytes -= resource.bytes;
+				}
+			}
+		}
+		const liveImages = new Set( [ ...models.values() ].flatMap( resource => resource.images ) );
+		for ( const [bitmap, draw] of textures ) {
+			if ( !liveImages.has( bitmap ) ) {
+				images.release( draw );
+				textures.delete( bitmap );
+			}
+		}
+		hasMaterialClocks = frameActors.some( actor => models.get( actor.model )?.plan.materialClocked );
+		if ( !hasMaterialClocks ) materialClocks.reset();
+		residencyDirty = false;
+	}
+	/*
+	================
+	actorOpacity
+
+	The frame's opacity rule. A fade reaches the owner's model parts, not
+	its effects (character-fade.ts).
+	================
+	*/
+	function actorOpacity( byGid: ReadonlyMap<number, CharacterActor> ) {
+		const opacity = ( actor: CharacterActor ): number => {
+			const parent = actor.attachment ? byGid.get( actor.attachment.gid ) : undefined;
+			if ( !parent ) return actor.opacity ?? 1;
+			return attachedOpacity(
+				actor.opacity ?? 1,
+				opacity( parent ),
+				// An effect's own emitters share its alpha; a model fade stops at the effect.
+				!actor.effectEntity || !!parent.effectEntity
+			);
+		};
+		return opacity;
+	}
+	/*
+	================
+	particleHistory
+
+	The actor's retained emission history, restarted when its model, time or
+	emission cycle moves backwards or changes.
+	================
+	*/
+	function particleHistory( frame: PrepareFrame, actor: CharacterActor, model: CharacterModel, storage: number ) {
+		let history = particleBirths.get( actor.gid );
+		if (
+			!history || history.model !== actor.model || actor.time < history.time ||
+			history.cycle !== (frame.cycles.get( actor.gid ) ?? 0)
+		) {
+			history = {
+				model: actor.model,
+				time: actor.time,
+				cycle: frame.cycles.get( actor.gid ) ?? 0,
+				origin: frame.origin,
+				bytes: storage,
+				graph: model.particleGraph ?
+					createParticleGraph( model.particleGraph, particleRandom.index ) :
+					undefined,
+				programs: model.primitives.map( () => [] ),
+				matrices: model.primitives.map( p =>
+					p.emission ?
+						new Float32Array( (p.emission.capacity ?? p.emission.births.length) * 16 ).fill( NaN ) :
+						undefined
+				)
+			};
+			particleBirths.set( actor.gid, history );
+		}
+		return history;
+	}
+	/*
+	================
+	advanceGraphEmitter
+
+	Advance a particle-graph emitter to the actor's time and rebuild its
+	ribbon primitives' element frames.
+	================
+	*/
+	function advanceGraphEmitter(
+		actor: CharacterActor,
+		model: CharacterModel,
+		history: ParticleHistory & { graph?: ParticleGraphState; },
+		transform: Float32Array,
+		shift: readonly [number, number]
+	) {
+		const graph = history.graph!;
+		advanceParticleGraph(
+			graph,
+			model.particleGraph!,
+			actor.time,
+			transform,
+			particleRandom.table,
+			actor.emissionEnd,
+			shift[0],
+			shift[1],
+			actor.loop
+		);
+		particleRandom.index = graph.index;
+		// Graph ribbons are strips through their elements' drawn
+		// frames; other graph primitives are drawn from their tick
+		// records by the GPU pass (particle-streams.ts).
+		for ( let p = 0; p < model.primitives.length; p++ ) {
+			const emitter = model.primitives[p]!.particleEmitter, matrices = history.matrices[p];
+			if ( emitter === undefined || !matrices || !model.primitives[p]!.ribbon ) continue;
+			const elements = graph.elements[emitter]!;
+			matrices.fill( NaN );
+			for ( let b = 0; b < elements.length; b++ ) {
+				const element = elements[b];
+				if ( !element?.alive ) continue;
+				particleElementMatrix(
+					element,
+					matrices,
+					b * 16,
+					actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame,
+					rotationWork
+				);
+			}
+		}
+	}
+	/*
+	================
+	advanceBirthEmitter
+
+	Shift live birth transforms with the origin and record new births at the
+	actor's transform, initializing their particle programs.
+	================
+	*/
+	function advanceBirthEmitter(
+		actor: CharacterActor,
+		model: CharacterModel,
+		history: ParticleHistory,
+		transform: Float32Array,
+		shift: readonly [number, number]
+	) {
+		const [dx, dz] = shift;
+		for ( let p = 0; p < model.primitives.length; p++ ) {
+			const emission = model.primitives[p]!.emission, matrices = history.matrices[p];
+			if ( !emission || !matrices ) continue;
+			for ( let b = 0; b < emission.births.length; b++ ) {
+				if ( actor.emissionEnd !== undefined && emission.births[b]! >= actor.emissionEnd ) continue;
+				const offset = b * 16;
+				if ( Number.isFinite( matrices[offset + 15] ) ) {
+					matrices[offset + 12]! += dx;
+					matrices[offset + 14]! += dz;
+				} else if (
+					actor.time >= emission.births[b]! &&
+					actor.time - emission.births[b]! < emission.lifetime
+				) {
+					matrices.set( transform, offset );
+					const program = model.primitives[p]!.particleProgram;
+					if ( program ) {
+						const sample = initializeParticle(
+							program,
+							particleRandom.table,
+							particleRandom.index,
+							transform
+						);
+						particleRandom.index = sample.index;
+						history.programs[p]![b] = sample.state;
+					}
+				}
+				if ( emission.follow ) matrices.set( transform, offset );
+			}
+		}
+	}
+	/*
+	================
+	advanceParticles
+
+	Admit emitters within the render budget and advance their histories.
+	Returns the admitted emitters, the poses they need and their bytes.
+	================
+	*/
+	function advanceParticles( frame: PrepareFrame ) {
+		const { byGid, chains, origin, continuation } = frame;
+		const particleNeeded = new Set<number>(), particleAccepted = new Set<number>();
+		for ( const [gid, history] of particleBirths ) {
+			if ( byGid.get( gid )?.model !== history.model || !models.has( history.model ) ) {
+				particleBirths.delete( gid );
+			}
+		}
+		let particleBytes = [ ...particleBirths.values() ].reduce( ( sum, h ) => sum + h.bytes, 0 );
+		for ( const actor of frame.frameActors ) {
+			if ( actor.deferredParticle && (!continuation || !deferred.sample( actor.gid )?.draw) ) continue;
+			const resource = models.get( actor.model ), model = resource?.model, chain = chains.get( actor.gid )!;
+			if (
+				!model || !resource!.plan.emission || !chain.length || chain.some( a => !models.has( a.model ) )
+			) continue;
+			const storage = resource!.plan.particleBytes;
+			const bytes = Math.max( 0, storage - (particleBirths.get( actor.gid )?.bytes ?? 0) ) +
+				chain.reduce(
+					( sum, a ) => sum + (particleNeeded.has( a.gid ) ? 0 : models.get( a.model )!.plan.poseBytes),
+					0
+				);
+			if ( particleBytes + bytes > CHARACTER_RENDER_BYTES ) continue;
+			particleBytes += bytes;
+			particleAccepted.add( actor.gid );
+			for ( const a of chain ) particleNeeded.add( a.gid );
+			const history = particleHistory( frame, actor, model, storage );
+			const transform = transformFor( actor, byGid, origin, frame.transforms );
+			if ( !transform ) continue;
+			const shift = [
+				((history.origin & 255) - (origin & 255)) * 1920,
+				((history.origin >>> 8) - (origin >>> 8)) * 1920
+			] as const;
+			if ( history.graph && model.particleGraph ) {
+				advanceGraphEmitter( actor, model, history, transform, shift );
+			} else {
+				advanceBirthEmitter( actor, model, history, transform, shift );
+			}
+			history.origin = origin;
+			history.time = actor.time;
+		}
+		// Deferred draws retain bounded simulation history; only actor retirement releases it.
+		return { accepted: particleAccepted, needed: particleNeeded, bytes: particleBytes };
+	}
+	/*
+	================
+	selectVisible
+
+	The actors with any opacity whose culling sphere meets a view, plus the
+	admitted emitters. Records the census frame and the deferred set.
+	================
+	*/
+	function selectVisible(
+		frame: PrepareFrame,
+		accepted: ReadonlySet<number>,
+		reflectedView: Float32Array | undefined
+	) {
+		const { chains, origin, continuation } = frame, opacity = frame.opacity;
+		const frusta = [ frame.view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map(
+			prepareViewFrustum
+		);
+		const visible = frame.frameActors.filter( actor => {
+			if ( opacity( actor ) <= 0 ) return false;
+			if ( models.get( actor.model )?.plan.emission ) return accepted.has( actor.gid );
+			if ( !cullSphere( actor, chains, origin, sphere ) ) return false;
+			return !frusta.length ||
+				frusta.some( frustum =>
+					visibleFrustumSphere( frustum, sphere[0]!, sphere[1]!, sphere[2]!, sphere[3]! )
+				);
+		} );
+		// The census (stats(true)) reads the last main frame's admission.
+		if ( !continuation && !frame.preview ) {
+			cullFrame.valid = true;
+			cullFrame.frusta = frusta;
+			cullFrame.visible = visible;
+			cullFrame.chains = chains;
+			cullFrame.byGid = frame.byGid;
+			cullFrame.origin = origin;
+		}
+		if ( hasDeferred && !continuation ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
+		return visible;
+	}
+	/*
+	================
+	retainedDeferred
+
+	Whether the first pass keeps this batch for the deferred continuation.
+	================
+	*/
+	function retainedDeferred( frame: PrepareFrame, batch: { gids: readonly number[]; } ) {
+		return !frame.continuation && hasDeferred &&
+			batch.gids.some( gid => !!frame.byGid.get( gid )?.deferredParticle );
+	}
+	/*
+	================
+	batchKey
+
+	The batch an actor joins: its model, plus a variant for every state that
+	needs its own draws (cloth, deferral, fade, tint, light, glow, modifiers).
+	================
+	*/
+	function batchKey( frame: PrepareFrame, actor: CharacterActor, plan: ModelResource["plan"] ) {
+		const opacity = frame.opacity;
+		const variant = (plan.cloth ?
+			"\0cloth:" + actor.gid :
+			"") +
+			(actor.deferredParticle ? "\0deferred" : "") +
+			(opacity( actor ) < 1 ? "\0fade" : "") + (actor.materialTint ? "\0tint" : "") +
+			(actor.pointLight ? "\0light" : "") +
+			(plan.equipmentGlow ?
+				"\0glow:" + ((actor.animationLod?.fraction ?? 0) <= .5 && opacity( actor ) === 1) :
+				"") +
+			(hasMaterialClocks && materialClocks.get( actor ) ?
+				"\0modifier:" + actor.gid + (plan.animationMaterial ?
+					":" + (actor.modelAnimation?.revision ?? 0) + ":" +
+					((actor.animationLod?.fraction ?? 0) > .5) :
+					"") :
+				"");
+		if ( !variant ) return actor.model;
+		let cachedKey = batchKeys.get( actor );
+		if ( !cachedKey || cachedKey.model !== actor.model || cachedKey.variant !== variant ) {
+			cachedKey = { model: actor.model, variant, key: actor.model + variant };
+			batchKeys.set( actor, cachedKey );
+		}
+		return cachedKey.key;
+	}
+	/*
+	================
+	planBatches
+
+	Plan the complete frame before creating poses, arrays, or GPU resources:
+	group the visible actors by batch until the render budget is spent.
+	================
+	*/
+	function planBatches(
+		frame: PrepareFrame,
+		visible: readonly CharacterActor[],
+		particles: { needed: ReadonlySet<number>; bytes: number; }
+	) {
+		visibleActors = visible.length;
+		// A rejected actor leaves capacity available for cheaper frameActors that follow it.
+		const grouped = new Map<string, CharacterActor[]>(), needed = new Set<number>( particles.needed );
+		renderBytes = particles.bytes + materialClocks.bytes();
+		if ( !frame.continuation && hasDeferred ) {
+			for ( const batch of batches.values() ) {
+				if ( retainedDeferred( frame, batch ) ) {
+					const actor = frame.byGid.get( batch.gids[0]! );
+					if ( actor ) renderBytes += models.get( actor.model )!.plan.batchBytes( batch.gids.length );
+				}
+			}
+		}
+		deferredActors = 0;
+		for ( const actor of visible ) {
+			if ( actor.drawGeometry === false ) continue;
+			const plan = models.get( actor.model )!.plan, dependencies = frame.chains.get( actor.gid )!;
+			const key = batchKey( frame, actor, plan );
+			const rows = grouped.get( key ) ?? [];
+			const extra = plan.batchBytes( rows.length + 1 ) - plan.batchBytes( rows.length ) +
+				dependencies.reduce(
+					( bytes, value ) =>
+						bytes + (needed.has( value.gid ) ? 0 : models.get( value.model )!.plan.poseBytes),
+					0
+				);
+			if ( !Number.isSafeInteger( extra ) || extra < 0 || renderBytes + extra > CHARACTER_RENDER_BYTES ) {
+				deferredActors++;
+				continue;
+			}
+			renderBytes += extra;
+			rows.push( actor );
+			grouped.set( key, rows );
+			for ( const value of dependencies ) {
+				needed.add( value.gid );
+			}
+		}
+		return { grouped, needed };
+	}
+	/*
+	================
+	retireUnplanned
+
+	Retire all obsolete storage before allocating the replacement frame:
+	batches the plan resized or dropped, and poses no planned row needs.
+	================
+	*/
+	function retireUnplanned(
+		frame: PrepareFrame,
+		grouped: ReadonlyMap<string, CharacterActor[]>,
+		needed: ReadonlySet<number>
+	) {
+		for ( const [id, batch] of batches ) {
+			if ( retainedDeferred( frame, batch ) || frame.continuation && submitted.has( id ) ) continue;
+			const rows = grouped.get( id );
+			const capacity = rows ? models.get( rows[0]!.model )!.plan.capacity( rows.length ) : 0;
+			if (
+				!rows || batch.capacity !== capacity || !batch.signature.startsWith( String( frame.preview ) + ":" )
+			) {
+				for ( const draw of batch.draws ) {
+					frame.geometry.release( draw );
+				}
+				batches.delete( id );
+			}
+		}
+		for ( const gid of poses.keys() ) {
+			if ( !needed.has( gid ) ) {
+				poses.delete( gid );
+			}
+		}
+		for ( const [gid, state] of ownedPoses ) {
+			if ( !needed.has( gid ) ) {
+				retiredCpuEvaluations += state.pose.cpuEvaluations();
+				ownedPoses.delete( gid );
+				probe?.characterCount( "pose-retired" );
+			}
+		}
+	}
+	/*
+	================
+	countPlan
+
+	The plan's frame-probe counts.
+	================
+	*/
+	function countPlan(
+		frame: PrepareFrame,
+		visible: readonly CharacterActor[],
+		needed: ReadonlySet<number>,
+		particleNeeded: ReadonlySet<number>
+	) {
+		probe?.characterMark( "character-plan" );
+		// Visibility includes admitted emitters, whose particles can outlive an
+		// off-screen source. Keep this distinct from requested pose storage.
+		probe?.characterCount( "character-candidates", frame.frameActors.length );
+		probe?.characterCount( "character-visible-candidates", visible.length );
+		probe?.characterCount( "character-needed-poses", needed.size );
+		probe?.characterCount( "character-particle-needed-poses", particleNeeded.size );
+		if ( probe ) {
+			let bodies = 0;
+			for ( const actor of visible ) {
+				if ( !models.get( actor.model )?.plan.emission ) bodies++;
+			}
+			probe?.characterCount( "character-visible-bodies", bodies );
+		}
+	}
+	/*
+	================
+	evaluateNeededPoses
+
+	Evaluate every needed actor's pose. Oldest cosmetic samples get the next
+	budget slice. Admission and draw order remain unchanged; a busy crowd
+	cannot starve its tail.
+	================
+	*/
+	function evaluateNeededPoses( frameActors: readonly CharacterActor[], needed: ReadonlySet<number> ) {
+		poseOrder.length = 0;
+		poseOrder.push( ...frameActors );
+		if ( frameWork ) {
+			poseOrder.sort( ( a, b ) =>
+				Number( !!a.animationLod?.optional ) - Number( !!b.animationLod?.optional ) ||
+				(ownedPoses.get( a.gid )?.sampled ?? -1) - (ownedPoses.get( b.gid )?.sampled ?? -1)
+			);
+		}
+		for ( const actor of poseOrder ) {
+			if ( !needed.has( actor.gid ) ) {
+				continue;
+			}
+			const model = models.get( actor.model )?.model;
+			if ( !model ) {
+				continue;
+			}
+			poseFor( actor );
+		}
+		probe?.characterMark( "character-poses" );
+	}
+	/*
+	================
+	actorTransform
+
+	Resolve the frame-local actor matrix after hierarchy evaluation.
+	================
+	*/
+	function actorTransform( frame: PrepareFrame, actor: CharacterActor ): Float32Array | null {
+		// Null only when the owner actor is gone. A missing bone is
+		// the root matrix, so it must not zero this instance.
+		const matrix = transformFor( actor, frame.byGid, frame.origin, frame.transforms );
+		if ( !matrix ) return null;
+		if ( snapshots.index.get( actor.gid )?.deferredParticle ) {
+			let row = particleSnapshots.get( actor.gid );
+			if ( !row ) {
+				row = { matrix: matrix.slice(), regionId: frame.origin };
+				particleSnapshots.set( actor.gid, row );
+			} else {
+				row.matrix.set( matrix );
+				row.regionId = frame.origin;
+			}
+		}
+		return matrix;
+	}
+	/*
+	================
+	releaseUngrouped
+
+	Release batches the plan left without rows, except the ones this frame
+	still needs (retained deferred batches, and the first pass's submits).
+	================
+	*/
+	function releaseUngrouped( frame: PrepareFrame, grouped: ReadonlyMap<string, CharacterActor[]> ) {
+		for ( const [id, batch] of batches ) {
+			if (
+				!grouped.has( id ) && !retainedDeferred( frame, batch ) && !(frame.continuation && submitted.has( id ))
+			) {
+				for ( const draw of batch.draws ) {
+					frame.geometry.release( draw );
+				}
+				batches.delete( id );
+			}
+		}
+	}
+	// ============================================================================
+	//
+	// Batch draws. prepareGroup builds one planned batch: its storage, its pose
+	// key (an unchanged key reuses last frame's draws), its rows' instances and
+	// palettes, then one draw per primitive.
+	//
+	// ============================================================================
+	/*
+	================
+	updateModifiers
+
+	Apply the batch's material clocks (glow, colors, texture motion, pulse)
+	to one primitive's draw. initial forces every clocked value.
+	================
+	*/
+	function updateModifiers(
+		geometry: GeometryCommands,
+		group: GroupFrame,
+		draw: GeometryDraw,
+		index: number,
+		initial = false
+	) {
+		const clock = group.modifierClocks?.[index];
+		if ( !clock ) return;
+		const glow = group.model.primitives[index]!.equipmentGlow;
+		if ( glow && clock.glow ) {
+			geometry.updateEquipmentGlow(
+				draw,
+				clock.glow.color,
+				clock.glow.uv,
+				glow.gain,
+				glow.alphaTest,
+				!group.fading && (group.rows[0]!.animationLod?.fraction ?? 0) <= .5
+			);
+		}
+		if ( clock.colors ) {
+			for ( const color of clock.colors ) {
+				geometry.updateMaterialColors( draw, color.rgb, color.flags );
+			}
+		}
+		if ( clock.color && (initial || clock.colorChanged) ) {
+			geometry.updateMaterialColors( draw, clock.color.rgb, clock.flags );
+		}
+		if ( clock.texture && (initial || clock.textureChanged) ) {
+			geometry.updateTextureTransform( draw, clock.texture.matrix );
+		}
+		if ( clock.pulse && (initial || clock.pulseChanged) ) {
+			geometry.updateTextureFactor( draw, clock.pulse.factor );
+		}
+	}
+	/*
+	================
+	residentTextures
+
+	Upload a model's images once; later batches share the draws.
+	================
+	*/
+	function residentTextures( resource: ModelResource, images: ImageCommands ) {
+		if ( resource.textures.length ) return;
+		resource.textures = resource.images.map( image => {
+			let draw = textures.get( image );
+			if ( !draw ) {
+				draw = images.upload( image );
+				textures.set( image, draw );
+			}
+			return draw;
+		} );
+	}
+	/*
+	================
+	admitBatch
+
+	The batch's storage for these rows. Visibility changes active rows, not
+	immutable mesh identity: geometry stays within a capacity band, the budget
+	charges the padded storage, and GPU submission uses only live rows.
+	================
+	*/
+	function admitBatch(
+		frame: PrepareFrame,
+		id: string,
+		rows: readonly CharacterActor[],
+		resource: ModelResource
+	) {
+		const { model, plan } = resource;
+		const signature = String( frame.preview ) + ":" + rows.map( row => row.gid ).join( "," );
+		const capacity = plan.capacity( rows.length );
+		let batch = batches.get( id );
+		const membershipChanged = batch?.signature !== signature;
+		if (
+			!batch || batch.capacity !== capacity || !batch.signature.startsWith( String( frame.preview ) + ":" )
+		) {
+			if ( batch ) {
+				for ( const draw of batch.draws ) {
+					frame.geometry.release( draw );
+				}
+			}
+			const streams = plan.sharedPalette ?
+				createPaletteStreams( model, capacity ) :
+				undefined;
+			batch = {
+				signature,
+				capacity,
+				gids: rows.map( row => row.gid ),
+				draws: [],
+				instances: new Float32Array( capacity * 16 ),
+				times: new Float64Array( capacity ).fill( NaN ),
+				streams,
+				palettes: streams ?
+					streams.streams.map( s => s.data ) :
+					model.primitives.map( p =>
+						new Float32Array(
+							capacity * (p.emission?.capacity ?? p.emission?.births.length ?? 1) *
+								p.joints.length * 16
+						)
+					),
+				particles: model.primitives.map( ( p, index ) =>
+					p.emission && !p.ribbon ? createParticleStream( model, index, capacity ) : undefined
+				),
+				appearances: model.primitives.map( p =>
+					!p.emission && (p.materialFrames || rows[0]!.materialTint) ?
+						new Float32Array( capacity * 8 ) :
+						undefined
+				),
+				ribbons: []
+			};
+			batches.set( id, batch );
+		}
+		if ( membershipChanged ) {
+			batch.signature = signature;
+			batch.gids = rows.map( row => row.gid );
+			batch.poseKey = undefined;
+		}
+		return { batch, capacity, membershipChanged };
+	}
+	/*
+	================
+	batchPoseKey
+
+	Everything the batch's draws depend on, serialized; undefined when it
+	must rebuild anyway. A changing sampled time already proves the full key
+	differs, so the actor and attachment graphs are not serialized to find it.
+	Cloth advances on frame time even when its skeletal pose is unchanged.
+	================
+	*/
+	function batchPoseKey( frame: PrepareFrame, group: GroupFrame ): string | undefined {
+		const { rows, plan, batch } = group, { origin, preview, view } = frame, opacity = frame.opacity;
+		const billboard = plan.billboard;
+		if ( billboard && !view ) throw new Error( "Missing effect camera basis" );
+		const clocked = plan.clocked;
+		const timeChanged = batch.draws.length > 0 &&
+			rows.some( ( actor, i ) =>
+				actor.time !== batch.times[i] && (clocked || plan.clips.get( actor.clip )?.channels.length)
+			);
+		if ( timeChanged || plan.cloth ) return undefined;
+		return JSON.stringify( [
+			origin,
+			preview,
+			(billboard || preview) ? Array.from( view! ) : null,
+			...rows.map(
+				actor => [
+					frame.cycles.get( actor.gid ),
+					actor.pose,
+					actor.drawGeometry,
+					actor.effectBasis,
+					actor.effectRotation,
+					actor.scale,
+					actor.bodyVolume,
+					actor.absoluteEffectScale,
+					actor.materialTint,
+					actor.pointLight,
+					opacity( actor ),
+					actor.emissionEnd,
+					actor.clip,
+					clocked || plan.clips.get( actor.clip )?.channels.length ? actor.time : 0,
+					actor.loop,
+					actor.layers,
+					actor.attachment,
+					frame.chains.get( actor.gid )!.slice( 1 )
+				]
+			)
+		] );
+	}
+	/*
+	================
+	writeBatchRows
+
+	Publish the rows' poses: shared palette streams, then each row's instance
+	matrix and its own palettes. Sets group.instancesChanged when a row moved.
+	================
+	*/
+	function writeBatchRows( frame: PrepareFrame, group: GroupFrame ) {
+		const { rows, model, plan, batch } = group, geometry = frame.geometry, view = frame.view;
+		batch.streams?.update(
+			rows.map( actor => {
+				const state = poses.get( actor.gid );
+				if ( !state || state.model !== actor.model ) throw Error( "Missing prepared character pose" );
+				return state.pose;
+			} ),
+			// Cloth reads the palette on the CPU. Keep canonical bindings shared
+			// with the body, but never hand this storage to GPU-only sampling.
+			plan.cloth ? undefined : geometry.prepareGpuBones,
+			model
+		);
+		for ( let i = 0; i < rows.length; i++ ) {
+			const actor = rows[i]!;
+			// The needed-pose phase evaluates every admitted actor.
+			// Upload consumes that result; it must not sample/validate
+			// the same animation request a second time per actor.
+			const state = poses.get( actor.gid );
+			if ( !state || state.model !== actor.model ) throw Error( "Missing prepared character pose" );
+			const transform = actorTransform( frame, actor );
+			if ( !transform ) {
+				batch.instances.fill( 0, i * 16, i * 16 + 16 );
+				continue;
+			}
+			let moved = false;
+			for ( let n = 0; n < 16; n++ ) {
+				if ( !Object.is( batch.instances[i * 16 + n], transform[n] ) ) {
+					moved = true;
+					break;
+				}
+			}
+			if ( moved ) {
+				batch.instances.set( transform, i * 16 );
+				group.instancesChanged = true;
+			}
+			for ( let p = 0; p < model.primitives.length; p++ ) {
+				const primitive = model.primitives[p]!, offset = i * primitive.joints.length * 16;
+				if ( primitive.emission ) continue;
+				if ( !batch.streams ) {
+					state.pose.palette( primitive, batch.palettes[p]!, offset );
+				}
+				if ( primitive.billboard ) {
+					faceEffectMesh(
+						batch.palettes[p]!,
+						offset,
+						transform,
+						view!,
+						primitive.billboard,
+						undefined,
+						billboardAxes
+					);
+				}
+			}
+		}
+	}
+	/*
+	================
+	orderRibbonElements
+
+	Newest first into ribbonOrder: live graph elements by birth (ties keep
+	slot order), or the emission's births in reverse. Returns the count.
+	================
+	*/
+	function orderRibbonElements(
+		elements: readonly ({ alive: boolean; born: number; } | undefined)[] | undefined,
+		births: number
+	) {
+		let count = 0;
+		const total = elements ? elements.length : births;
+		if ( ribbonOrder.length < total ) ribbonOrder = new Int32Array( total * 2 );
+		for ( let i = 0; i < total; i++ ) {
+			const b = elements ? i : total - 1 - i;
+			if ( elements && !elements[b]?.alive ) continue;
+			let at = count++;
+			while (
+				elements && at > 0 && elements[ribbonOrder[at - 1]!]!.born < elements[b]!.born
+			) {
+				ribbonOrder[at] = ribbonOrder[at - 1]!;
+				at--;
+			}
+			ribbonOrder[at] = b;
+		}
+		return count;
+	}
+	/*
+	================
+	collectRibbonGroups
+
+	One actor's ribbon points into ribbonGroups, a chain per element group.
+	================
+	*/
+	function collectRibbonGroups(
+		frame: PrepareFrame,
+		group: GroupFrame,
+		p: number,
+		actor: CharacterActor
+	) {
+		const primitive = group.model.primitives[p]!, ribbon = primitive.ribbon!;
+		const emission = primitive.emission!,
+			history = particleBirths.get( actor.gid )!,
+			matrices = history.matrices[p]!,
+			material = primitive.materialFrames!,
+			alpha = frame.opacity( actor );
+		const elements = primitive.particleEmitter === undefined ?
+			undefined :
+			history.graph?.elements[primitive.particleEmitter];
+		const count = orderRibbonElements( elements, emission.births.length );
+		groupChains.clear();
+		ribbonGroups.length = 0;
+		for ( let k = 0; k < count; k++ ) {
+			const b = ribbonOrder[k]!,
+				element = elements?.[b],
+				birth = element ? element.clockBirth / 20 : emission.births[b]!;
+			if ( !elements && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
+				continue;
+			}
+			// A group opens at its first element, drawn or not: the
+			// groups keep the order the elements first name them.
+			const key = element?.parent ?? 0;
+			let points = groupChains.get( key );
+			if ( !points ) {
+				points = ribbonChains[ribbonGroups.length] ??= createRibbonChain();
+				points.count = 0;
+				groupChains.set( key, points );
+				ribbonGroups.push( points );
+			}
+			const elapsed = actor.time - birth,
+				age = emission.loop && elapsed >= 0 ? elapsed % emission.lifetime : elapsed;
+			if (
+				age < 0 || age >= emission.lifetime || !Number.isFinite( matrices[b * 16 + 15] )
+			) continue;
+			const frameIndex = Math.min(
+					ribbon.widths.length - 1,
+					Math.floor( age * ribbon.fps )
+				),
+				at = Math.min( material.colors.length / 4 - 1, Math.floor( age * material.fps ) );
+			const scale = hypot3( matrices[b * 16]!, matrices[b * 16 + 1]!, matrices[b * 16 + 2]! ) *
+				group.model.nodes[0]!.scale[0]!;
+			pushRibbonPoint(
+				points,
+				matrices,
+				b * 16 + 12,
+				material.colors,
+				at * 4,
+				alpha,
+				(ribbon.widths[frameIndex] ?? 1) * scale
+			);
+		}
+	}
+	/*
+	================
+	drawRibbon
+
+	A ribbon primitive's strips for every row, written into the batch's reused
+	vertex streams and uploaded as one dynamic draw.
+	================
+	*/
+	function drawRibbon( frame: PrepareFrame, group: GroupFrame, p: number ): GeometryDraw {
+		const geometry = frame.geometry, { preview, view } = frame, { rows, batch } = group;
+		const primitive = group.model.primitives[p]!;
+		const capacity = rows.length *
+			Math.max(
+				2,
+				3 * ((primitive.emission?.capacity ?? primitive.emission?.births.length ?? 1) - 1) + 1
+			) * 2;
+		let ribbon = batch.ribbons[p];
+		if ( ribbon?.capacity !== capacity ) {
+			ribbon = {
+				capacity,
+				used: 0,
+				positions: new Float32Array( capacity * 3 ),
+				colors: new Float32Array( capacity * 4 ),
+				uvs: new Float32Array( capacity * 2 ),
+				indices: new Uint32Array( capacity * 3 )
+			};
+			batch.ribbons[p] = ribbon;
+		}
+		const { positions, colors, uvs, indices } = ribbon;
+		let vertex = 0, index = 0;
+		for ( const actor of rows ) {
+			collectRibbonGroups( frame, group, p, actor );
+			for ( const points of ribbonGroups ) {
+				if ( primitive.ribbon!.spline ) ribbonSpline( points, ribbonDrawn, ribbonWork );
+				else ribbonPolyline( points, ribbonDrawn );
+				if ( !ribbonDrawn.count ) continue;
+				ribbonStrip( ribbonDrawn, view!, ribbon, vertex, index, ribbonWork );
+				vertex += ribbonDrawn.count * 2;
+				index += (ribbonDrawn.count - 1) * 6;
+			}
+		}
+		// The stream is reused: clear what the last frame wrote past this one.
+		// Only vertices either frame wrote can differ from the uploaded stream.
+		const touched = Math.max( vertex, ribbon.used );
+		if ( vertex < ribbon.used ) {
+			positions.fill( 0, vertex * 3, ribbon.used * 3 );
+			colors.fill( 0, vertex * 4, ribbon.used * 4 );
+			uvs.fill( 0, vertex * 2, ribbon.used * 2 );
+		}
+		ribbon.used = vertex;
+		let draw = batch.draws[p];
+		if ( !draw ) {
+			draw = geometry.upload( {
+				dynamicVertices: true,
+				positions,
+				colors,
+				uvs,
+				indices,
+				transform: preview ? view! : identity(),
+				world: !preview,
+				instances: identity(),
+				material: {
+					...(group.modifierClocks?.[p]?.material ?? primitive.geometry.material!),
+					...(rows[0]!.deferredParticle ? { deferredParticle: true } : {}),
+					...(preview ? { fogDisabled: true } : {})
+				}
+			}, group.resource.textures[primitive.image] );
+			batch.draws[p] = draw;
+		} else {
+			ribbonRange[0]![1] = touched;
+			geometry.updatePositions( draw, positions, colors, uvs, touched ? ribbonRange : [] );
+			if ( preview ) geometry.updateTransform( draw, view! );
+		}
+		geometry.updateIndices( draw, indices.subarray( 0, index ) );
+		probe?.characterCount( "ribbon-vertices", vertex );
+		return draw;
+	}
+	/*
+	================
+	uploadPrimitive
+
+	The primitive's draw for this batch, with its material
+	policy (blend, fade, tint, deferral) and textures.
+	================
+	*/
+	function uploadPrimitive(
+		frame: PrepareFrame,
+		group: GroupFrame,
+		p: number,
+		instances: Float32Array,
+		paletteOffsets?: Uint32Array
+	) {
+		const { preview, view } = frame, { rows, fading, resource } = group;
+		const primitive = group.model.primitives[p]!;
+		const authored = group.modifierClocks?.[p]?.material ?? primitive.geometry.material,
+			base = authored!;
+		return frame.geometry.upload(
+			{
+				...primitive.geometry,
+				world: !preview,
+				material: {
+					...base,
+					...(rows[0]!.deferredParticle ? { deferredParticle: true } : {}),
+					instanceMaterialTint: !!rows[0]!.materialTint,
+					// A fading opaque body becomes alpha blended but keeps writing
+					// depth. An already blended material (every effect program) keeps
+					// its own blend and never writes depth: a fading effect must not
+					// hide what is behind it, such as a name board.
+					...(fading ?
+						authored?.blend ?
+							{ instanceFade: true, depthWrite: false } :
+							{ blend: true, instanceFade: true } :
+						{}),
+					...(preview ? { fogDisabled: true } : {})
+				},
+				instances,
+				bones: group.batch.palettes[p],
+				...(primitive.cloth ?
+					{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
+					{}),
+				transform: preview ? view! : identity()
+			},
+			resource.textures[primitive.image],
+			paletteOffsets,
+			primitive.equipmentGlow && !fading && (rows[0]!.animationLod?.fraction ?? 0) <= .5 ?
+				resource.textures[primitive.equipmentGlow.image] :
+				primitive.environmentImage === undefined ?
+				undefined :
+				resource.textures[primitive.environmentImage]
+		);
+	}
+	/*
+	================
+	drawParticles
+
+	An emitted primitive's particle stream for every row. Ticks stay native
+	(20 Hz) and the GPU pass draws them at the display rate (particle-streams.ts).
+	================
+	*/
+	function drawParticles( frame: PrepareFrame, group: GroupFrame, p: number ): GeometryDraw {
+		const { rows, batch } = group, particles = batch.particles[p]!;
+		beginParticleFrame( particles, frame.view, rows.length );
+		for ( let i = 0; i < rows.length; i++ ) {
+			const actor = rows[i]!;
+			particleRow.actor = actor;
+			particleRow.history = particleBirths.get( actor.gid )!;
+			particleRow.pose = poses.get( actor.gid )!.pose;
+			particleRow.opacity = group.fading ? frame.opacity( actor ) : 1;
+			particleRow.origin = frame.origin;
+			writeParticleRow( particles, i, particleRow, particleRandom );
+		}
+		let draw = batch.draws[p];
+		if ( !draw ) {
+			draw = uploadPrimitive( frame, group, p, new Float32Array( particles.rows * particles.slots * 16 ) );
+			batch.draws[p] = draw;
+		} else if ( frame.preview ) frame.geometry.updateTransform( draw, frame.view! );
+		frame.geometry.presentParticles( draw, particles );
+		endParticleFrame( particles );
+		probe?.characterCount( "particles", particles.live );
+		updateModifiers( frame.geometry, group, draw, p, true );
+		return draw;
+	}
+	/*
+	================
+	writeAppearance
+
+	The rows' material-frame colors and windows, tinted; undefined when the
+	primitive has no appearance stream.
+	================
+	*/
+	function writeAppearance( group: GroupFrame, p: number ) {
+		const { rows } = group, primitive = group.model.primitives[p]!, appearance = group.batch.appearances[p];
+		if ( primitive.materialFrames && appearance ) {
+			const frames = primitive.materialFrames, count = frames.colors.length / 4;
+			for ( let i = 0; i < rows.length; i++ ) {
+				const at = Math.max( 0, Math.min( count - 1, rows[i]!.time * frames.fps ) ),
+					index = Math.floor( at ),
+					next = Math.min( count - 1, index + 1 ),
+					fraction = frames.sampling === "step" ? 0 : at - index;
+				for ( let c = 0; c < 4; c++ ) {
+					appearance[i * 8 + c] = frames.colors[index * 4 + c]! * (1 - fraction) +
+						frames.colors[next * 4 + c]! * fraction;
+				}
+				appearance.set( frames.windows.subarray( index * 4, index * 4 + 4 ), i * 8 + 4 );
+			}
+		}
+		if ( appearance ) {
+			for ( let i = 0; i < rows.length; i++ ) {
+				if ( !primitive.materialFrames ) {
+					// Neutral appearance: white, opaque window, no offset.
+					appearance.fill( 1, i * 8, i * 8 + 6 );
+					appearance[i * 8 + 6] = appearance[i * 8 + 7] = 0;
+				}
+				const tint = rows[i]!.materialTint;
+				if ( tint ) { for ( let c = 0; c < 3; c++ ) appearance[i * 8 + c]! *= tint[c]!; }
+			}
+		}
+		return appearance;
+	}
+	/*
+	================
+	pointLightRows
+
+	Each row's point light (position, attenuation, ambient, diffuse), or
+	undefined when no row carries one or this is a preview.
+	================
+	*/
+	function pointLightRows( frame: PrepareFrame, rows: readonly CharacterActor[] ) {
+		const pointLights = !frame.preview && rows.some( row => row.pointLight ) ?
+			new Float32Array( rows.length * 12 ) :
+			undefined;
+		if ( !pointLights ) return undefined;
+		for ( let i = 0; i < rows.length; i++ ) {
+			const light = rows[i]!.pointLight;
+			if ( !light ) continue;
+			const pos = placement(
+				light.pose.regionId,
+				frame.origin,
+				light.pose.x,
+				light.pose.y,
+				light.pose.z,
+				rows[i]!.pose.yaw
+			);
+			pointLights.set( [
+				pos[12]!,
+				pos[13]!,
+				pos[14]!,
+				light.attenuation,
+				...light.ambient,
+				0,
+				...light.diffuse,
+				0
+			], i * 12 );
+		}
+		return pointLights;
+	}
+	/*
+	================
+	drawCloth
+
+	A cloth primitive: its instance streams, then CPU cloth vertices from the
+	batch palette.
+	================
+	*/
+	function drawCloth( frame: PrepareFrame, group: GroupFrame, p: number, streams: PrimitiveRows ): GeometryDraw {
+		const geometry = frame.geometry, opacity = frame.opacity;
+		const { preview, view } = frame, { rows, batch, fading } = group;
+		const { instances, appearance, pointLights } = streams, primitive = group.model.primitives[p]!;
+		batch.cloth ??= new Map();
+		let cloth = batch.cloth.get( p );
+		if ( !cloth ) {
+			cloth = createClothVertices( primitive, clothRandom );
+			batch.cloth.set( p, cloth );
+		}
+		let draw = batch.draws[p];
+		if ( !draw ) draw = uploadPrimitive( frame, group, p, batch.instances );
+		draw = geometry.updateInstances(
+			draw,
+			instances,
+			fading ? Float32Array.from( rows, opacity ) : undefined,
+			appearance?.subarray( 0, instances.length / 2 ),
+			pointLights
+		);
+		batch.draws[p] = draw;
+		geometry.writeVertices(
+			draw,
+			0,
+			cloth.update(
+				batch.palettes[p]!,
+				frame.seconds,
+				frame.dynamicAnimation && (rows[0]!.animationLod?.fraction ?? 0) < .25,
+				// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
+				{ direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 }
+			)
+		);
+		if ( preview ) geometry.updateTransform( draw, view! );
+		updateModifiers( geometry, group, draw, p, true );
+		return draw;
+	}
+	/*
+	================
+	drawSkinned
+
+	An ordinary primitive: upload once, then refresh instances when anything
+	per-row changed, and the bones from the batch palette or its stream.
+	================
+	*/
+	function drawSkinned( frame: PrepareFrame, group: GroupFrame, p: number, streams: PrimitiveRows ): GeometryDraw {
+		const geometry = frame.geometry, opacity = frame.opacity;
+		const { preview, view } = frame, { rows, batch, fading, capacity } = group;
+		const { instances, appearance, pointLights } = streams, primitive = group.model.primitives[p]!;
+		const stream = batch.streams?.streams[p],
+			paletteOffsets = stream?.offsets.subarray( 0, rows.length );
+		let draw = batch.draws[p];
+		if ( !draw ) {
+			draw = uploadPrimitive( frame, group, p, batch.instances, stream?.offsets );
+			batch.draws[p] = draw;
+			if ( capacity !== rows.length || fading || appearance || pointLights ) {
+				draw = geometry.updateInstances(
+					draw,
+					instances,
+					fading ? Float32Array.from( rows, opacity ) : undefined,
+					appearance?.subarray( 0, instances.length / 2 ),
+					pointLights,
+					paletteOffsets
+				);
+				batch.draws[p] = draw;
+			}
+		} else {
+			if (
+				group.instancesChanged || fading || appearance || pointLights || stream?.mappingChanged
+			) {
+				draw = geometry.updateInstances(
+					draw,
+					instances,
+					fading ? Float32Array.from( rows, opacity ) : undefined,
+					appearance?.subarray( 0, instances.length / 2 ),
+					pointLights,
+					paletteOffsets
+				);
+			}
+			batch.draws[p] = draw;
+			if ( !stream ) {
+				const upload = batch.palettes[p]!.subarray( 0, rows.length * primitive.joints.length * 16 );
+				boneUploadBytes += upload.byteLength;
+				geometry.updateBones( draw, upload );
+			}
+			if ( preview ) geometry.updateTransform( draw, view! );
+		}
+		if ( stream ) {
+			boneUploadBytes +=
+				geometry.updateBones( draw, stream.data.subarray( 0, stream.length ), stream.revision ) ??
+					0;
+		}
+		updateModifiers( geometry, group, draw, p, true );
+		return draw;
+	}
+	/*
+	================
+	drawPrimitive
+
+	One primitive's draw for the batch, by kind: ribbon, particles, cloth, or
+	an ordinary skinned or static mesh.
+	================
+	*/
+	function drawPrimitive( frame: PrepareFrame, group: GroupFrame, p: number ): GeometryDraw {
+		const primitive = group.model.primitives[p]!;
+		if ( primitive.ribbon ) return drawRibbon( frame, group, p );
+		if ( group.batch.particles[p] ) return drawParticles( frame, group, p );
+		const streams: PrimitiveRows = {
+			appearance: writeAppearance( group, p ),
+			instances: group.batch.instances.subarray( 0, group.rows.length * 16 ),
+			pointLights: pointLightRows( frame, group.rows )
+		};
+		if ( primitive.cloth ) return drawCloth( frame, group, p, streams );
+		return drawSkinned( frame, group, p, streams );
+	}
+	/*
+	================
+	prepareGroup
+
+	Build one planned batch's draws into frame.output.
+	================
+	*/
+	function prepareGroup( frame: PrepareFrame, id: string, rows: CharacterActor[] ) {
+		const { output } = frame;
+		const outputStart = output.length;
+		rows.sort( ( a, b ) => a.gid - b.gid );
+		const resource = models.get( rows[0]!.model )!;
+		residentTextures( resource, frame.images );
+		const { batch, capacity, membershipChanged } = admitBatch( frame, id, rows, resource );
+		const group: GroupFrame = {
+			id,
+			rows,
+			resource,
+			model: resource.model,
+			plan: resource.plan,
+			fading: frame.opacity( rows[0]! ) < 1,
+			modifierClocks: hasMaterialClocks ? materialClocks.get( rows[0]! ) : undefined,
+			batch,
+			capacity,
+			instancesChanged: membershipChanged
+		};
+		const poseKey = batchPoseKey( frame, group );
+		for ( let i = 0; i < rows.length; i++ ) batch.times[i] = rows[i]!.time;
+		if ( poseKey !== undefined && batch.poseKey === poseKey ) {
+			batch.draws.forEach( ( draw, index ) => updateModifiers( frame.geometry, group, draw, index ) );
+			output.push( ...batch.draws );
+			probe?.characterBatch?.(
+				id.slice( rows[0]!.model.length ),
+				rows.length,
+				batch.draws.filter( draw => draw.indexCount > 0 && draw.instanceCount > 0 ).length
+			);
+			return;
+		}
+		batch.poseKey = poseKey;
+		writeBatchRows( frame, group );
+		for ( let p = 0; p < group.model.primitives.length; p++ ) {
+			output.push( drawPrimitive( frame, group, p ) );
+		}
+		probe?.characterBatch?.(
+			id.slice( rows[0]!.model.length ),
+			rows.length,
+			output.slice( outputStart ).filter( draw => draw.indexCount > 0 && draw.instanceCount > 0 ).length
+		);
 	}
 	return {
 		/*
@@ -1557,950 +3012,52 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				frameGroups =
 					0;
 			framePoses = new Map();
-			// A stopped emitter receives its final cycle-local age. Preserve that
-			// cycle's birth transforms while particles drain; changing loop=false
-			// must not reseed the trail at the projectile's arrival point.
-			// Ordinary skinned actors have no emitter/material cycle ownership.
-			// Their unmodified animation time already drives pose evaluation.
-			const cycles = new Map<number, number>();
-			const sampledActors = hasDeferred ?
-				actors.map( source => {
-					const sample = source.deferredParticle ? deferred.sample( source.gid ) : undefined;
-					return sample ?
-						{
-							...source,
-							deferredParticle: !sample.deferred && sample.draw ? undefined : source.deferredParticle,
-							time: sample.draw ? sample.time + deferred.pendingSeconds() : sample.time,
-							opacity: (!sample.deferred || continuation) && sample.draw ?
-								(source.opacity ?? 1) * sample.instanceAlpha / 255 :
-								0
-						} :
-						source;
-				} ) :
-				actors;
-			const frameActors = sampledActors.map( actor => {
-				const plan = models.get( actor.model )?.plan;
-				if ( plan?.sharedPalette && !plan.clocked ) return actor;
-				const duration = plan?.continuousGraph ? undefined : plan?.clips.get( actor.clip )?.duration;
-				if ( duration ) {
-					cycles.set(
-						actor.gid,
-						actor.loop ? Math.floor( actor.time / duration ) : particleBirths.get( actor.gid )?.cycle ?? 0
-					);
-				}
-				return actor.loop && duration && plan?.clocked ? { ...actor, time: actor.time % duration } : actor;
-			} );
+			const { frameActors, cycles } = sampleFrameActors( continuation );
 			// Residency retires draws and textures; the first pass's recorded
 			// commands still use them, so the continuation leaves it for the next
 			// full pass.
-			if ( residencyDirty && !continuation ) {
-				residencyPasses++;
-				if ( retained ) {
-					const keep = new Set( [
-						...retained,
-						...frameActors.map( actor => actor.model ),
-						...portraits.map( actor => actor.model )
-					] );
-					for ( const id of keep ) {
-						for ( const dependency of models.get( id )?.dependencies ?? [] ) {
-							keep.add( dependency );
-						}
-					}
-					for ( const [id, resource] of models ) {
-						if ( !keep.has( id ) ) {
-							const batch = batches.get( id );
-							if ( batch ) {
-								for ( const draw of batch.draws ) {
-									geometry.release( draw );
-								}
-							}
-							batches.delete( id );
-							if ( resource.owned ) {
-								for ( const image of resource.images ) {
-									if ( !("kind" in image) ) image.close();
-								}
-								ownedModels--;
-							}
-							models.delete( id );
-							residentBytes -= resource.bytes;
-						}
-					}
-				}
-				const liveImages = new Set( [ ...models.values() ].flatMap( resource => resource.images ) );
-				for ( const [bitmap, draw] of textures ) {
-					if ( !liveImages.has( bitmap ) ) {
-						images.release( draw );
-						textures.delete( bitmap );
-					}
-				}
-				hasMaterialClocks = frameActors.some( actor => models.get( actor.model )?.plan.materialClocked );
-				if ( !hasMaterialClocks ) materialClocks.reset();
-				residencyDirty = false;
-			}
+			if ( residencyDirty && !continuation ) retireResidency( geometry, images, frameActors );
 			if ( hasMaterialClocks && !continuation ) {
 				materialClocks.step( actors, seconds, path => models.get( path )?.model );
 			}
 			const { byGid, chains } = hierarchy.update( frameActors );
-			const transforms = new Map<number, Float32Array>(),
-				particleNeeded = new Set<number>(),
-				particleAccepted = new Set<number>();
-			for ( const [gid, history] of particleBirths ) {
-				if ( byGid.get( gid )?.model !== history.model || !models.has( history.model ) ) {
-					particleBirths.delete( gid );
-				}
-			}
-			let particleBytes = [ ...particleBirths.values() ].reduce( ( sum, h ) => sum + h.bytes, 0 );
-			for ( const actor of frameActors ) {
-				if ( actor.deferredParticle && (!continuation || !deferred.sample( actor.gid )?.draw) ) continue;
-				const resource = models.get( actor.model ), model = resource?.model, chain = chains.get( actor.gid )!;
-				if (
-					!model || !resource!.plan.emission || !chain.length || chain.some( a => !models.has( a.model ) )
-				) continue;
-				const storage = resource!.plan.particleBytes;
-				const bytes = Math.max( 0, storage - (particleBirths.get( actor.gid )?.bytes ?? 0) ) +
-					chain.reduce(
-						( sum, a ) => sum + (particleNeeded.has( a.gid ) ? 0 : models.get( a.model )!.plan.poseBytes),
-						0
-					);
-				if ( particleBytes + bytes > CHARACTER_RENDER_BYTES ) continue;
-				particleBytes += bytes;
-				particleAccepted.add( actor.gid );
-				for ( const a of chain ) particleNeeded.add( a.gid );
-				let history = particleBirths.get( actor.gid );
-				if (
-					!history || history.model !== actor.model || actor.time < history.time ||
-					history.cycle !== (cycles.get( actor.gid ) ?? 0)
-				) {
-					history = {
-						model: actor.model,
-						time: actor.time,
-						cycle: cycles.get( actor.gid ) ?? 0,
-						origin,
-						bytes: storage,
-						graph: model.particleGraph ?
-							createParticleGraph( model.particleGraph, particleRandom.index ) :
-							undefined,
-						programs: model.primitives.map( () => [] ),
-						matrices: model.primitives.map( p =>
-							p.emission ?
-								new Float32Array( (p.emission.capacity ?? p.emission.births.length) * 16 ).fill( NaN ) :
-								undefined
-						)
-					};
-					particleBirths.set( actor.gid, history );
-				}
-				const transform = transformFor( actor, byGid, origin, transforms );
-				if ( !transform ) continue;
-				const dx = ((history.origin & 255) - (origin & 255)) * 1920,
-					dz = ((history.origin >>> 8) - (origin >>> 8)) * 1920;
-				if ( history.graph && model.particleGraph ) {
-					advanceParticleGraph(
-						history.graph,
-						model.particleGraph,
-						actor.time,
-						transform,
-						particleRandom.table,
-						actor.emissionEnd,
-						dx,
-						dz,
-						actor.loop
-					);
-					particleRandom.index = history.graph.index;
-					// Graph ribbons are strips through their elements' drawn
-					// frames; other graph primitives are drawn from their tick
-					// records by the GPU pass (particle-streams.ts).
-					for ( let p = 0; p < model.primitives.length; p++ ) {
-						const emitter = model.primitives[p]!.particleEmitter, matrices = history.matrices[p];
-						if ( emitter === undefined || !matrices || !model.primitives[p]!.ribbon ) continue;
-						const elements = history.graph.elements[emitter]!;
-						matrices.fill( NaN );
-						for ( let b = 0; b < elements.length; b++ ) {
-							const element = elements[b];
-							if ( !element?.alive ) continue;
-							particleElementMatrix(
-								element,
-								matrices,
-								b * 16,
-								actor.time * PARTICLE_TICKS_PER_SECOND - history.graph.frame,
-								rotationWork
-							);
-						}
-					}
-				} else {
-					for ( let p = 0; p < model.primitives.length; p++ ) {
-						const emission = model.primitives[p]!.emission, matrices = history.matrices[p];
-						if ( !emission || !matrices ) continue;
-						for ( let b = 0; b < emission.births.length; b++ ) {
-							if ( actor.emissionEnd !== undefined && emission.births[b]! >= actor.emissionEnd ) continue;
-							const offset = b * 16;
-							if ( Number.isFinite( matrices[offset + 15] ) ) {
-								matrices[offset + 12]! += dx;
-								matrices[offset + 14]! += dz;
-							} else if (
-								actor.time >= emission.births[b]! &&
-								actor.time - emission.births[b]! < emission.lifetime
-							) {
-								matrices.set( transform, offset );
-								const program = model.primitives[p]!.particleProgram;
-								if ( program ) {
-									const sample = initializeParticle(
-										program,
-										particleRandom.table,
-										particleRandom.index,
-										transform
-									);
-									particleRandom.index = sample.index;
-									history.programs[p]![b] = sample.state;
-								}
-							}
-							if ( emission.follow ) matrices.set( transform, offset );
-						}
-					}
-				}
-				history.origin = origin;
-				history.time = actor.time;
-			}
-			// Deferred draws retain bounded simulation history; only actor retirement releases it.
-			// A fade reaches the owner's model parts, not its effects (character-fade.ts).
-			const opacity = ( actor: CharacterActor ): number => {
-				const parent = actor.attachment ? byGid.get( actor.attachment.gid ) : undefined;
-				if ( !parent ) return actor.opacity ?? 1;
-				return attachedOpacity(
-					actor.opacity ?? 1,
-					opacity( parent ),
-					// An effect's own emitters share its alpha; a model fade stops at the effect.
-					!actor.effectEntity || !!parent.effectEntity
-				);
+			const frame: PrepareFrame = {
+				geometry,
+				images,
+				origin,
+				view,
+				preview,
+				seconds,
+				continuation,
+				dynamicAnimation,
+				frameActors,
+				cycles,
+				byGid,
+				chains,
+				transforms: new Map(),
+				opacity: actorOpacity( byGid ),
+				output: []
 			};
-			const frusta = [ view, reflectedView ].filter( ( v ): v is Float32Array => !!v ).map( prepareViewFrustum );
-			const visible = frameActors.filter( actor => {
-				if ( opacity( actor ) <= 0 ) return false;
-				if ( models.get( actor.model )?.plan.emission ) return particleAccepted.has( actor.gid );
-				if ( !cullSphere( actor, chains, origin, sphere ) ) return false;
-				return !frusta.length ||
-					frusta.some( frustum =>
-						visibleFrustumSphere( frustum, sphere[0]!, sphere[1]!, sphere[2]!, sphere[3]! )
-					);
-			} );
-			// The census (stats(true)) reads the last main frame's admission.
-			if ( !continuation && !preview ) {
-				cullFrame.valid = true;
-				cullFrame.frusta = frusta;
-				cullFrame.visible = visible;
-				cullFrame.chains = chains;
-				cullFrame.byGid = byGid;
-				cullFrame.origin = origin;
-			}
-			if ( hasDeferred && !continuation ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
-			// Plan the complete frame before creating poses, arrays, or GPU resources.
-			visibleActors = visible.length;
-			// A rejected actor leaves capacity available for cheaper frameActors that follow it.
-			const grouped = new Map<string, CharacterActor[]>(), needed = new Set<number>( particleNeeded );
-			renderBytes = particleBytes + materialClocks.bytes();
-			const retainedDeferred = ( batch: { gids: readonly number[]; } ) =>
-				!continuation && hasDeferred && batch.gids.some( gid => !!byGid.get( gid )?.deferredParticle );
-			if ( !continuation && hasDeferred ) {
-				for ( const batch of batches.values() ) {
-					if ( retainedDeferred( batch ) ) {
-						const actor = byGid.get( batch.gids[0]! );
-						if ( actor ) renderBytes += models.get( actor.model )!.plan.batchBytes( batch.gids.length );
-					}
-				}
-			}
-			deferredActors = 0;
-			for ( const actor of visible ) {
-				if ( actor.drawGeometry === false ) continue;
-				const plan = models.get( actor.model )!.plan, dependencies = chains.get( actor.gid )!;
-				const variant = (plan.cloth ?
-					"\0cloth:" + actor.gid :
-					"") +
-					(actor.deferredParticle ? "\0deferred" : "") +
-					(opacity( actor ) < 1 ? "\0fade" : "") + (actor.materialTint ? "\0tint" : "") +
-					(actor.pointLight ? "\0light" : "") +
-					(plan.equipmentGlow ?
-						"\0glow:" + ((actor.animationLod?.fraction ?? 0) <= .5 && opacity( actor ) === 1) :
-						"") +
-					(hasMaterialClocks && materialClocks.get( actor ) ?
-						"\0modifier:" + actor.gid + (plan.animationMaterial ?
-							":" + (actor.modelAnimation?.revision ?? 0) + ":" +
-							((actor.animationLod?.fraction ?? 0) > .5) :
-							"") :
-						"");
-				let key = actor.model;
-				if ( variant ) {
-					let cachedKey = batchKeys.get( actor );
-					if ( !cachedKey || cachedKey.model !== actor.model || cachedKey.variant !== variant ) {
-						cachedKey = { model: actor.model, variant, key: actor.model + variant };
-						batchKeys.set( actor, cachedKey );
-					}
-					key = cachedKey.key;
-				}
-				const rows = grouped.get( key ) ?? [];
-				const extra = plan.batchBytes( rows.length + 1 ) - plan.batchBytes( rows.length ) +
-					dependencies.reduce(
-						( bytes, value ) =>
-							bytes + (needed.has( value.gid ) ? 0 : models.get( value.model )!.plan.poseBytes),
-						0
-					);
-				if ( !Number.isSafeInteger( extra ) || extra < 0 || renderBytes + extra > CHARACTER_RENDER_BYTES ) {
-					deferredActors++;
-					continue;
-				}
-				renderBytes += extra;
-				rows.push( actor );
-				grouped.set( key, rows );
-				for ( const value of dependencies ) {
-					needed.add( value.gid );
-				}
-			}
-			// Retire all obsolete storage before allocating the replacement frame.
-			for ( const [id, batch] of batches ) {
-				if ( retainedDeferred( batch ) || continuation && submitted.has( id ) ) continue;
-				const rows = grouped.get( id );
-				const capacity = rows ? models.get( rows[0]!.model )!.plan.capacity( rows.length ) : 0;
-				if ( !rows || batch.capacity !== capacity || !batch.signature.startsWith( String( preview ) + ":" ) ) {
-					for ( const draw of batch.draws ) {
-						geometry.release( draw );
-					}
-					batches.delete( id );
-				}
-			}
-			for ( const gid of poses.keys() ) {
-				if ( !needed.has( gid ) ) {
-					poses.delete( gid );
-				}
-			}
-			for ( const [gid, state] of ownedPoses ) {
-				if ( !needed.has( gid ) ) {
-					retiredCpuEvaluations += state.pose.cpuEvaluations();
-					ownedPoses.delete( gid );
-					probe?.characterCount( "pose-retired" );
-				}
-			}
-			probe?.characterMark( "character-plan" );
-			// Visibility includes admitted emitters, whose particles can outlive an
-			// off-screen source. Keep this distinct from requested pose storage.
-			probe?.characterCount( "character-candidates", frameActors.length );
-			probe?.characterCount( "character-visible-candidates", visible.length );
-			probe?.characterCount( "character-needed-poses", needed.size );
-			probe?.characterCount( "character-particle-needed-poses", particleNeeded.size );
-			if ( probe ) {
-				let bodies = 0;
-				for ( const actor of visible ) {
-					if ( !models.get( actor.model )?.plan.emission ) bodies++;
-				}
-				probe?.characterCount( "character-visible-bodies", bodies );
-			}
-			// Oldest cosmetic samples get the next budget slice. Admission and
-			// draw order remain unchanged; a busy crowd cannot starve its tail.
-			poseOrder.length = 0;
-			poseOrder.push( ...frameActors );
-			if ( frameWork ) {
-				poseOrder.sort( ( a, b ) =>
-					Number( !!a.animationLod?.optional ) - Number( !!b.animationLod?.optional ) ||
-					(ownedPoses.get( a.gid )?.sampled ?? -1) - (ownedPoses.get( b.gid )?.sampled ?? -1)
-				);
-			}
-			for ( const actor of poseOrder ) {
-				if ( !needed.has( actor.gid ) ) {
-					continue;
-				}
-				const model = models.get( actor.model )?.model;
-				if ( !model ) {
-					continue;
-				}
-				poseFor( actor );
-			}
-			probe?.characterMark( "character-poses" );
-			/*
-			================
-			actorTransform
-
-			Resolve the frame-local actor matrix after hierarchy evaluation.
-			================
-			*/
-			function actorTransform( actor: CharacterActor ): Float32Array | null {
-				// Null only when the owner actor is gone. A missing bone is
-				// the root matrix, so it must not zero this instance.
-				const matrix = transformFor( actor, byGid, origin, transforms );
-				if ( !matrix ) return null;
-				if ( snapshots.index.get( actor.gid )?.deferredParticle ) {
-					let row = particleSnapshots.get( actor.gid );
-					if ( !row ) {
-						row = { matrix: matrix.slice(), regionId: origin };
-						particleSnapshots.set( actor.gid, row );
-					} else {
-						row.matrix.set( matrix );
-						row.regionId = origin;
-					}
-				}
-				return matrix;
-			}
-			const output: GeometryDraw[] = [];
-			for ( const [id, batch] of batches ) {
-				if ( !grouped.has( id ) && !retainedDeferred( batch ) && !(continuation && submitted.has( id )) ) {
-					for ( const draw of batch.draws ) {
-						geometry.release( draw );
-					}
-					batches.delete( id );
-				}
-			}
+			const particles = advanceParticles( frame );
+			const visible = selectVisible( frame, particles.accepted, reflectedView );
+			const { grouped, needed } = planBatches( frame, visible, particles );
+			retireUnplanned( frame, grouped, needed );
+			countPlan( frame, visible, needed, particles.needed );
+			evaluateNeededPoses( frameActors, needed );
+			releaseUngrouped( frame, grouped );
 			for ( const [id, rows] of grouped ) {
 				if ( !continuation ) submitted.add( id );
 				// The first pass already submitted ordinary geometry. Keep its
 				// admission/budget accounting, but do not rebuild or upload it
 				// again when visibility completes the deferred pass.
 				if ( continuation && !rows[0]!.deferredParticle ) continue;
-				const outputStart = output.length;
-				rows.sort( ( a, b ) => a.gid - b.gid );
-				const resource = models.get( rows[0]!.model )!, model = resource.model, plan = resource.plan;
-				const fading = opacity( rows[0]! ) < 1;
-				const modifierClocks = hasMaterialClocks ? materialClocks.get( rows[0]! ) : undefined;
-				const updateModifiers = ( draw: GeometryDraw, index: number, initial = false ) => {
-					const clock = modifierClocks?.[index];
-					if ( !clock ) return;
-					const glow = model.primitives[index]!.equipmentGlow;
-					if ( glow && clock.glow ) {
-						geometry.updateEquipmentGlow(
-							draw,
-							clock.glow.color,
-							clock.glow.uv,
-							glow.gain,
-							glow.alphaTest,
-							!fading && (rows[0]!.animationLod?.fraction ?? 0) <= .5
-						);
-					}
-					if ( clock.colors ) {
-						for ( const color of clock.colors ) {
-							geometry.updateMaterialColors( draw, color.rgb, color.flags );
-						}
-					}
-					if ( clock.color && (initial || clock.colorChanged) ) {
-						geometry.updateMaterialColors( draw, clock.color.rgb, clock.flags );
-					}
-					if ( clock.texture && (initial || clock.textureChanged) ) {
-						geometry.updateTextureTransform( draw, clock.texture.matrix );
-					}
-					if ( clock.pulse && (initial || clock.pulseChanged) ) {
-						geometry.updateTextureFactor( draw, clock.pulse.factor );
-					}
-				};
-				if ( !resource.textures.length ) {
-					resource.textures = resource.images.map( image => {
-						let draw = textures.get( image );
-						if ( !draw ) {
-							draw = images.upload( image );
-							textures.set( image, draw );
-						}
-						return draw;
-					} );
-				}
-				const signature = String( preview ) + ":" + rows.map( row => row.gid ).join( "," );
-				// Visibility changes active rows, not immutable mesh identity.
-				// Keep geometry within a capacity band; the budget charges the
-				// padded storage and GPU submission below uses only live rows.
-				const capacity = plan.capacity( rows.length );
-				let batch = batches.get( id );
-				const membershipChanged = batch?.signature !== signature;
-				if ( !batch || batch.capacity !== capacity || !batch.signature.startsWith( String( preview ) + ":" ) ) {
-					if ( batch ) {
-						for ( const draw of batch.draws ) {
-							geometry.release( draw );
-						}
-					}
-					const streams = plan.sharedPalette ?
-						createPaletteStreams( model, capacity ) :
-						undefined;
-					batch = {
-						signature,
-						capacity,
-						gids: rows.map( row => row.gid ),
-						draws: [],
-						instances: new Float32Array( capacity * 16 ),
-						times: new Float64Array( capacity ).fill( NaN ),
-						streams,
-						palettes: streams ?
-							streams.streams.map( s => s.data ) :
-							model.primitives.map( p =>
-								new Float32Array(
-									capacity * (p.emission?.capacity ?? p.emission?.births.length ?? 1) *
-										p.joints.length * 16
-								)
-							),
-						particles: model.primitives.map( ( p, index ) =>
-							p.emission && !p.ribbon ? createParticleStream( model, index, capacity ) : undefined
-						),
-						appearances: model.primitives.map( p =>
-							!p.emission && (p.materialFrames || rows[0]!.materialTint) ?
-								new Float32Array( capacity * 8 ) :
-								undefined
-						),
-						ribbons: []
-					};
-					batches.set( id, batch );
-				}
-				if ( membershipChanged ) {
-					batch.signature = signature;
-					batch.gids = rows.map( row => row.gid );
-					batch.poseKey = undefined;
-				}
-				const billboard = plan.billboard;
-				if ( billboard && !view ) throw new Error( "Missing effect camera basis" );
-				const clocked = plan.clocked;
-				const timeChanged = batch.draws.length > 0 &&
-					rows.some( ( actor, i ) =>
-						actor.time !== batch!.times[i] && (clocked || plan.clips.get( actor.clip )?.channels.length)
-					);
-				// A changing sampled time already proves the full key differs.
-				// Avoid serializing actor/attachment graphs just to discover it.
-				// Cloth advances on frame time even when its skeletal pose is unchanged.
-				const poseKey = timeChanged || plan.cloth ?
-					undefined :
-					JSON.stringify( [
-						origin,
-						preview,
-						(billboard || preview) ? Array.from( view! ) : null,
-						...rows.map(
-							actor => [
-								cycles.get( actor.gid ),
-								actor.pose,
-								actor.drawGeometry,
-								actor.effectBasis,
-								actor.effectRotation,
-								actor.scale,
-								actor.bodyVolume,
-								actor.absoluteEffectScale,
-								actor.materialTint,
-								actor.pointLight,
-								opacity( actor ),
-								actor.emissionEnd,
-								actor.clip,
-								clocked || plan.clips.get( actor.clip )?.channels.length ? actor.time : 0,
-								actor.loop,
-								actor.layers,
-								actor.attachment,
-								chains.get( actor.gid )!.slice( 1 )
-							]
-						)
-					] );
-				for ( let i = 0; i < rows.length; i++ ) batch.times[i] = rows[i]!.time;
-				if ( poseKey !== undefined && batch.poseKey === poseKey ) {
-					batch.draws.forEach( ( draw, index ) => updateModifiers( draw, index ) );
-					output.push( ...batch.draws );
-					probe?.characterBatch?.(
-						id.slice( rows[0]!.model.length ),
-						rows.length,
-						batch.draws.filter( draw => draw.indexCount > 0 && draw.instanceCount > 0 ).length
-					);
-					continue;
-				}
-				batch.poseKey = poseKey;
-				batch.streams?.update(
-					rows.map( actor => {
-						const state = poses.get( actor.gid );
-						if ( !state || state.model !== actor.model ) throw Error( "Missing prepared character pose" );
-						return state.pose;
-					} ),
-					// Cloth reads the palette on the CPU. Keep canonical bindings shared
-					// with the body, but never hand this storage to GPU-only sampling.
-					plan.cloth ? undefined : geometry.prepareGpuBones,
-					model
-				);
-				let instancesChanged = membershipChanged;
-				for ( let i = 0; i < rows.length; i++ ) {
-					const actor = rows[i]!;
-					// The needed-pose phase evaluates every admitted actor.
-					// Upload consumes that result; it must not sample/validate
-					// the same animation request a second time per actor.
-					const state = poses.get( actor.gid );
-					if ( !state || state.model !== actor.model ) throw Error( "Missing prepared character pose" );
-					const transform = actorTransform( actor );
-					if ( !transform ) {
-						batch.instances.fill( 0, i * 16, i * 16 + 16 );
-						continue;
-					}
-					let moved = false;
-					for ( let n = 0; n < 16; n++ ) {
-						if ( !Object.is( batch.instances[i * 16 + n], transform[n] ) ) {
-							moved = true;
-							break;
-						}
-					}
-					if ( moved ) {
-						batch.instances.set( transform, i * 16 );
-						instancesChanged = true;
-					}
-					for ( let p = 0; p < model.primitives.length; p++ ) {
-						const primitive = model.primitives[p]!, offset = i * primitive.joints.length * 16;
-						if ( primitive.emission ) continue;
-						if ( !batch.streams ) {
-							state.pose.palette( primitive, batch.palettes[p]!, offset );
-						}
-						if ( primitive.billboard ) {
-							faceEffectMesh(
-								batch.palettes[p]!,
-								offset,
-								transform,
-								view!,
-								primitive.billboard,
-								undefined,
-								billboardAxes
-							);
-						}
-					}
-				}
-				for ( let p = 0; p < model.primitives.length; p++ ) {
-					const primitive = model.primitives[p]!;
-					if ( primitive.ribbon ) {
-						const capacity = rows.length *
-							Math.max(
-								2,
-								3 * ((primitive.emission?.capacity ?? primitive.emission?.births.length ?? 1) - 1) + 1
-							) * 2;
-						let ribbon = batch.ribbons[p];
-						if ( ribbon?.capacity !== capacity ) {
-							ribbon = {
-								capacity,
-								used: 0,
-								positions: new Float32Array( capacity * 3 ),
-								colors: new Float32Array( capacity * 4 ),
-								uvs: new Float32Array( capacity * 2 ),
-								indices: new Uint32Array( capacity * 3 )
-							};
-							batch.ribbons[p] = ribbon;
-						}
-						const { positions, colors, uvs, indices } = ribbon;
-						let vertex = 0, index = 0;
-						for ( const actor of rows ) {
-							const emission = primitive.emission!,
-								history = particleBirths.get( actor.gid )!,
-								matrices = history.matrices[p]!,
-								material = primitive.materialFrames!,
-								alpha = opacity( actor );
-							const elements = primitive.particleEmitter === undefined ?
-								undefined :
-								history.graph?.elements[primitive.particleEmitter];
-							// Newest first: live graph elements by birth (ties keep slot
-							// order), or the emission's births in reverse.
-							let count = 0;
-							const total = elements ? elements.length : emission.births.length;
-							if ( ribbonOrder.length < total ) ribbonOrder = new Int32Array( total * 2 );
-							for ( let i = 0; i < total; i++ ) {
-								const b = elements ? i : total - 1 - i;
-								if ( elements && !elements[b]?.alive ) continue;
-								let at = count++;
-								while (
-									elements && at > 0 && elements[ribbonOrder[at - 1]!]!.born < elements[b]!.born
-								) {
-									ribbonOrder[at] = ribbonOrder[at - 1]!;
-									at--;
-								}
-								ribbonOrder[at] = b;
-							}
-							groupChains.clear();
-							ribbonGroups.length = 0;
-							for ( let k = 0; k < count; k++ ) {
-								const b = ribbonOrder[k]!,
-									element = elements?.[b],
-									birth = element ? element.clockBirth / 20 : emission.births[b]!;
-								if ( !elements && actor.emissionEnd !== undefined && birth >= actor.emissionEnd ) {
-									continue;
-								}
-								// A group opens at its first element, drawn or not: the
-								// groups keep the order the elements first name them.
-								const key = element?.parent ?? 0;
-								let points = groupChains.get( key );
-								if ( !points ) {
-									points = ribbonChains[ribbonGroups.length] ??= createRibbonChain();
-									points.count = 0;
-									groupChains.set( key, points );
-									ribbonGroups.push( points );
-								}
-								const elapsed = actor.time - birth,
-									age = emission.loop && elapsed >= 0 ? elapsed % emission.lifetime : elapsed;
-								if (
-									age < 0 || age >= emission.lifetime || !Number.isFinite( matrices[b * 16 + 15] )
-								) continue;
-								const frame = Math.min(
-										primitive.ribbon.widths.length - 1,
-										Math.floor( age * primitive.ribbon.fps )
-									),
-									at = Math.min( material.colors.length / 4 - 1, Math.floor( age * material.fps ) );
-								const scale =
-									hypot3( matrices[b * 16]!, matrices[b * 16 + 1]!, matrices[b * 16 + 2]! ) *
-									model.nodes[0]!.scale[0]!;
-								pushRibbonPoint(
-									points,
-									matrices,
-									b * 16 + 12,
-									material.colors,
-									at * 4,
-									alpha,
-									(primitive.ribbon.widths[frame] ?? 1) * scale
-								);
-							}
-							for ( const points of ribbonGroups ) {
-								if ( primitive.ribbon.spline ) ribbonSpline( points, ribbonDrawn, ribbonWork );
-								else ribbonPolyline( points, ribbonDrawn );
-								if ( !ribbonDrawn.count ) continue;
-								ribbonStrip( ribbonDrawn, view!, ribbon, vertex, index, ribbonWork );
-								vertex += ribbonDrawn.count * 2;
-								index += (ribbonDrawn.count - 1) * 6;
-							}
-						}
-						// The stream is reused: clear what the last frame wrote past this one.
-						// Only vertices either frame wrote can differ from the uploaded stream.
-						const touched = Math.max( vertex, ribbon.used );
-						if ( vertex < ribbon.used ) {
-							positions.fill( 0, vertex * 3, ribbon.used * 3 );
-							colors.fill( 0, vertex * 4, ribbon.used * 4 );
-							uvs.fill( 0, vertex * 2, ribbon.used * 2 );
-						}
-						ribbon.used = vertex;
-						let draw = batch.draws[p];
-						if ( !draw ) {
-							draw = geometry.upload( {
-								dynamicVertices: true,
-								positions,
-								colors,
-								uvs,
-								indices,
-								transform: preview ? view! : identity(),
-								world: !preview,
-								instances: identity(),
-								material: {
-									...(modifierClocks?.[p]?.material ?? primitive.geometry.material!),
-									...(rows[0]!.deferredParticle ? { deferredParticle: true } : {}),
-									...(preview ? { fogDisabled: true } : {})
-								}
-							}, resource.textures[primitive.image] );
-							batch.draws[p] = draw;
-						} else {
-							ribbonRange[0]![1] = touched;
-							geometry.updatePositions( draw, positions, colors, uvs, touched ? ribbonRange : [] );
-							if ( preview ) geometry.updateTransform( draw, view! );
-						}
-						geometry.updateIndices( draw, indices.subarray( 0, index ) );
-						probe?.characterCount( "ribbon-vertices", vertex );
-						output.push( draw );
-						continue;
-					}
-					/*
-					================
-					uploadPrimitive
-
-					The primitive's draw for this batch, with its material
-					policy (blend, fade, tint, deferral) and textures.
-					================
-					*/
-					const uploadPrimitive = ( instances: Float32Array, paletteOffsets?: Uint32Array ) => {
-						const authored = modifierClocks?.[p]?.material ?? primitive.geometry.material,
-							base = authored!;
-						return geometry.upload(
-							{
-								...primitive.geometry,
-								world: !preview,
-								material: {
-									...base,
-									...(rows[0]!.deferredParticle ? { deferredParticle: true } : {}),
-									instanceMaterialTint: !!rows[0]!.materialTint,
-									// A fading opaque body becomes alpha blended but keeps writing
-									// depth. An already blended material (every effect program) keeps
-									// its own blend and never writes depth: a fading effect must not
-									// hide what is behind it, such as a name board.
-									...(fading ?
-										authored?.blend ?
-											{ instanceFade: true, depthWrite: false } :
-											{ blend: true, instanceFade: true } :
-										{}),
-									...(preview ? { fogDisabled: true } : {})
-								},
-								instances,
-								bones: batch.palettes[p],
-								...(primitive.cloth ?
-									{ joints: undefined, weights: undefined, bones: undefined, dynamicVertices: true } :
-									{}),
-								transform: preview ? view! : identity()
-							},
-							resource.textures[primitive.image],
-							paletteOffsets,
-							primitive.equipmentGlow && !fading && (rows[0]!.animationLod?.fraction ?? 0) <= .5 ?
-								resource.textures[primitive.equipmentGlow.image] :
-								primitive.environmentImage === undefined ?
-								undefined :
-								resource.textures[primitive.environmentImage]
-						);
-					};
-					const particles = batch.particles[p];
-					if ( particles ) {
-						// Ticks stay native (20 Hz) and the GPU pass draws them at
-						// the display rate (particle-streams.ts).
-						beginParticleFrame( particles, view, rows.length );
-						for ( let i = 0; i < rows.length; i++ ) {
-							const actor = rows[i]!;
-							particleRow.actor = actor;
-							particleRow.history = particleBirths.get( actor.gid )!;
-							particleRow.pose = poses.get( actor.gid )!.pose;
-							particleRow.opacity = fading ? opacity( actor ) : 1;
-							particleRow.origin = origin;
-							writeParticleRow( particles, i, particleRow, particleRandom );
-						}
-						let draw = batch.draws[p];
-						if ( !draw ) {
-							draw = uploadPrimitive( new Float32Array( particles.rows * particles.slots * 16 ) );
-							batch.draws[p] = draw;
-						} else if ( preview ) geometry.updateTransform( draw, view! );
-						geometry.presentParticles( draw, particles );
-						endParticleFrame( particles );
-						probe?.characterCount( "particles", particles.live );
-						updateModifiers( draw, p, true );
-						output.push( draw );
-						continue;
-					}
-					const appearance = batch.appearances[p];
-					const instances = batch.instances.subarray( 0, rows.length * 16 );
-					if ( primitive.materialFrames && appearance ) {
-						const frames = primitive.materialFrames, count = frames.colors.length / 4;
-						for ( let i = 0; i < rows.length; i++ ) {
-							const at = Math.max( 0, Math.min( count - 1, rows[i]!.time * frames.fps ) ),
-								index = Math.floor( at ),
-								next = Math.min( count - 1, index + 1 ),
-								fraction = frames.sampling === "step" ? 0 : at - index;
-							for ( let c = 0; c < 4; c++ ) {
-								appearance[i * 8 + c] = frames.colors[index * 4 + c]! * (1 - fraction) +
-									frames.colors[next * 4 + c]! * fraction;
-							}
-							appearance.set( frames.windows.subarray( index * 4, index * 4 + 4 ), i * 8 + 4 );
-						}
-					}
-					if ( appearance ) {
-						for ( let i = 0; i < rows.length; i++ ) {
-							if ( !primitive.materialFrames ) {
-								// Neutral appearance: white, opaque window, no offset.
-								appearance.fill( 1, i * 8, i * 8 + 6 );
-								appearance[i * 8 + 6] = appearance[i * 8 + 7] = 0;
-							}
-							const tint = rows[i]!.materialTint;
-							if ( tint ) { for ( let c = 0; c < 3; c++ ) appearance[i * 8 + c]! *= tint[c]!; }
-						}
-					}
-					const pointLights = !preview && rows.some( row => row.pointLight ) ?
-						new Float32Array( rows.length * 12 ) :
-						undefined;
-					if ( pointLights ) {
-						for ( let i = 0; i < rows.length; i++ ) {
-							const light = rows[i]!.pointLight;
-							if ( !light ) continue;
-							const pos = placement(
-								light.pose.regionId,
-								origin,
-								light.pose.x,
-								light.pose.y,
-								light.pose.z,
-								rows[i]!.pose.yaw
-							);
-							pointLights.set( [
-								pos[12]!,
-								pos[13]!,
-								pos[14]!,
-								light.attenuation,
-								...light.ambient,
-								0,
-								...light.diffuse,
-								0
-							], i * 12 );
-						}
-					}
-					if ( primitive.cloth ) {
-						batch.cloth ??= new Map();
-						let cloth = batch.cloth.get( p );
-						if ( !cloth ) {
-							cloth = createClothVertices( primitive, clothRandom );
-							batch.cloth.set( p, cloth );
-						}
-						let draw = batch.draws[p];
-						if ( !draw ) draw = uploadPrimitive( batch.instances );
-						draw = geometry.updateInstances(
-							draw,
-							instances,
-							fading ? Float32Array.from( rows, opacity ) : undefined,
-							appearance?.subarray( 0, instances.length / 2 ),
-							pointLights
-						);
-						batch.draws[p] = draw;
-						geometry.writeVertices(
-							draw,
-							0,
-							cloth.update(
-								batch.palettes[p]!,
-								seconds,
-								dynamicAnimation && (rows[0]!.animationLod?.fraction ?? 0) < .25,
-								// CIObject 853C40 initializes +C4 to zero; 85DEBB clears it each tick.
-								{ direction: [ instances[8]!, instances[9]!, -instances[10]! ], speed: 0 }
-							)
-						);
-						if ( preview ) geometry.updateTransform( draw, view! );
-						updateModifiers( draw, p, true );
-						output.push( draw );
-						continue;
-					}
-					const stream = batch.streams?.streams[p],
-						paletteOffsets = stream?.offsets.subarray( 0, rows.length );
-					let draw = batch.draws[p];
-					if ( !draw ) {
-						draw = uploadPrimitive( batch.instances, stream?.offsets );
-						batch.draws[p] = draw;
-						if ( capacity !== rows.length || fading || appearance || pointLights ) {
-							draw = geometry.updateInstances(
-								draw,
-								instances,
-								fading ? Float32Array.from( rows, opacity ) : undefined,
-								appearance?.subarray( 0, instances.length / 2 ),
-								pointLights,
-								paletteOffsets
-							);
-							batch.draws[p] = draw;
-						}
-					} else {
-						if (
-							instancesChanged || fading || appearance || pointLights || stream?.mappingChanged
-						) {
-							draw = geometry.updateInstances(
-								draw,
-								instances,
-								fading ? Float32Array.from( rows, opacity ) : undefined,
-								appearance?.subarray( 0, instances.length / 2 ),
-								pointLights,
-								paletteOffsets
-							);
-						}
-						batch.draws[p] = draw;
-						if ( !stream ) {
-							const upload = batch.palettes[p]!.subarray( 0, rows.length * primitive.joints.length * 16 );
-							boneUploadBytes += upload.byteLength;
-							geometry.updateBones( draw, upload );
-						}
-						if ( preview ) geometry.updateTransform( draw, view! );
-					}
-					if ( stream ) {
-						boneUploadBytes +=
-							geometry.updateBones( draw, stream.data.subarray( 0, stream.length ), stream.revision ) ??
-								0;
-					}
-					updateModifiers( draw, p, true );
-					output.push( draw );
-				}
-				probe?.characterBatch?.(
-					id.slice( rows[0]!.model.length ),
-					rows.length,
-					output.slice( outputStart ).filter( draw => draw.indexCount > 0 && draw.instanceCount > 0 ).length
-				);
+				prepareGroup( frame, id, rows );
 			}
 			probe?.characterMark( "character-upload" );
 			probe?.characterCount( "pose-evaluations", poseEvaluations );
 			frameGroups = grouped.size;
 			framePoses = null;
-			return output;
+			return frame.output;
 		},
 		/*
 		================
