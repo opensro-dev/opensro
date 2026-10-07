@@ -152,7 +152,7 @@ async function fetchJson( url, init ) {
 	const response = await fetch( url, { ...init, headers: declared( init?.headers ) } );
 	const body = await response.json().catch( () => null );
 	if ( !response.ok ) {
-		throw new Error( `${url} -> HTTP ${response.status}: ${JSON.stringify( body )}` );
+		throw new ProbeSessionHttpError( String( url ), response.status, body, response.headers.get( "retry-after" ) );
 	}
 	return body;
 }
@@ -205,12 +205,14 @@ export function probeSessionAuthorizationHeaders( session ) {
 }
 
 export class ProbeSessionHttpError extends Error {
-	constructor( pathname, status, body ) {
+	constructor( pathname, status, body, retryAfter = null ) {
 		super( `${pathname} -> HTTP ${status}: ${JSON.stringify( body )}` );
 		this.name = "ProbeSessionHttpError";
 		this.pathname = pathname;
 		this.status = status;
 		this.body = body;
+		// Seconds the server asked the caller to wait (429), or null.
+		this.retryAfter = retryAfter === null ? null : Number( retryAfter );
 	}
 }
 

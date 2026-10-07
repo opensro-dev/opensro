@@ -25,7 +25,9 @@ import { assertCharacterAllowed } from "../../../../../scripts/lib/probeCharacte
 
 const MAX_PEERS = 32;
 const ADMISSION_TIMEOUT_MS = 30000;
-const LOGIN_SPACING_MS = 6500;
+// A full 32-peer refill is (32 - 10) x 6 s; retries beyond that are a fault.
+const MAX_LOGIN_RETRIES = 40;
+const DEFAULT_RETRY_AFTER_S = 6;
 
 /*
 ================
@@ -88,6 +90,35 @@ async function connectPeer( session, character ) {
 
 /*
 ================
+createLoginGate
+
+The Agent refuses password logins past its per-address budget (burst 10,
+one token per 6 s) with 429 and Retry-After. Logins run one at a time and
+wait exactly as long as the server asks, so crowd setup spends the real
+budget instead of a fixed sleep per peer, and never bypasses the limit.
+================
+*/
+function createLoginGate() {
+	let tail = Promise.resolve();
+	return ( loginId, loginPassword ) => {
+		const attempt = async () => {
+			for ( let tries = 0;; tries++ ) {
+				try {
+					return await openProbeAgentSession( { loginId, loginPassword } );
+				} catch ( error ) {
+					if ( error?.status !== 429 || tries >= MAX_LOGIN_RETRIES ) throw error;
+					await delay( 1000 * (error.retryAfter || DEFAULT_RETRY_AFTER_S) );
+				}
+			}
+		};
+		const result = tail.then( attempt );
+		tail = result.catch( () => {} );
+		return result;
+	};
+}
+
+/*
+================
 createCrowd
 
 Provisioning is explicitly loopback-only and requires the existing local
@@ -101,6 +132,7 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 	const token = (await readFile( tokenPath, "utf8" )).trim();
 	const accounts = [], peers = [], characters = [];
 	const prefix = randomBytes( 3 ).toString( "hex" );
+	const login = createLoginGate();
 	/*
 	================
 	provision
@@ -147,61 +179,76 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 			);
 		}
 	}
-	try {
-		for ( let index = 0; index < count; index++ ) {
-			// Respect the Agent's six-second login refill on the shared loopback
-			// address. Crowd setup must not bypass or disable rate limiting.
-			await delay( LOGIN_SPACING_MS );
-			const id = `perf${prefix}${index}`, password = randomBytes( 24 ).toString( "hex" );
-			const character = assertCharacterAllowed( `P${prefix}${index}`, { context: "live crowd fixture" } );
-			await provision( "/v1/accounts", "POST", { id, password } );
-			accounts.push( id );
-			characters.push( character );
-			await writeFile(
-				journalPath,
-				JSON.stringify(
-					{
-						accounts: accounts.map( ( id, index ) => ({
-							id,
-							character: characters[index],
-							disabled: false
-						}) )
-					},
-					null,
-					2
-				)
-			);
-			const session = await openProbeAgentSession( { loginId: id, loginPassword: password } );
-			await fetchProbeSessionJson( session, "/character/create", {
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: JSON.stringify( {
-					characterName: character,
-					modelCodename: "CHAR_CH_MAN_ADVENTURER",
-					heightIndex: 0,
-					volumeIndex: 0,
-					weaponIndex: 1,
-					protectorIndex: 0,
-					armorSelected: false,
-					weaponSelected: true
-				} )
-			} );
-			await resetMissionMovementFixture( {
-				session,
+	/*
+	================
+	journal
+
+	Rewrites the cleanup journal; writes are chained so concurrent
+	admissions never interleave two writes of the same file.
+	================
+	*/
+	let journaled = Promise.resolve();
+	const journal = () => {
+		const snapshot = JSON.stringify(
+			{ accounts: accounts.map( ( id, index ) => ({ id, character: characters[index], disabled: false }) ) },
+			null,
+			2
+		);
+		journaled = journaled.then( () => writeFile( journalPath, snapshot ) );
+		return journaled;
+	};
+	/*
+	================
+	admit
+
+	One peer end to end. Everything but the password login runs
+	concurrently with the other peers; the login goes through the gate.
+	================
+	*/
+	const admit = async index => {
+		const id = `perf${prefix}${index}`, password = randomBytes( 24 ).toString( "hex" );
+		const character = assertCharacterAllowed( `P${prefix}${index}`, { context: "live crowd fixture" } );
+		await provision( "/v1/accounts", "POST", { id, password } );
+		accounts.push( id );
+		characters.push( character );
+		await journal();
+		const session = await login( id, password );
+		await fetchProbeSessionJson( session, "/character/create", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify( {
 				characterName: character,
-				timeoutMs: ADMISSION_TIMEOUT_MS,
-				fixture: {
-					...fixture,
-					start: {
-						...fixture.start,
-						x: fixture.start.x + index % 4 * 15,
-						z: fixture.start.z + 35 + Math.floor( index / 4 ) * 15
-					}
+				modelCodename: "CHAR_CH_MAN_ADVENTURER",
+				heightIndex: 0,
+				volumeIndex: 0,
+				weaponIndex: 1,
+				protectorIndex: 0,
+				armorSelected: false,
+				weaponSelected: true
+			} )
+		} );
+		await resetMissionMovementFixture( {
+			session,
+			characterName: character,
+			timeoutMs: ADMISSION_TIMEOUT_MS,
+			fixture: {
+				...fixture,
+				start: {
+					...fixture.start,
+					x: fixture.start.x + index % 4 * 15,
+					z: fixture.start.z + 35 + Math.floor( index / 4 ) * 15
 				}
-			} );
-			peers.push( await connectPeer( session, character ) );
-			console.log( `[crowd] admitted ${peers.length}/${count}` );
-		}
+			}
+		} );
+		peers.push( await connectPeer( session, character ) );
+		console.log( `[crowd] admitted ${peers.length}/${count}` );
+	};
+	try {
+		// Settle every admission before judging: a rejected one must not
+		// leave others still creating accounts behind close().
+		const settled = await Promise.allSettled( Array.from( { length: count }, ( _, index ) => admit( index ) ) );
+		const failed = settled.filter( result => result.status === "rejected" );
+		if ( failed.length ) throw failed[0].reason;
 		return { peers: peers.map( peer => peer.evidence ), close };
 	} catch ( error ) {
 		let failure = error instanceof Error ? error : new Error( String( error ) );
@@ -214,4 +261,85 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 		// attempted names so it can verify those sessions left the server too.
 		throw Object.assign( failure, { crowdNames: [ ...characters ] } );
 	}
+}
+
+// ============================================================================
+
+// The loopback crowd host (bench/crowd-host.mjs) listens here by default.
+export const CROWD_HOST_URL = "http://127.0.0.1:8796";
+const CROWD_POLL_MS = 250;
+
+/*
+================
+crowdKey
+
+What a held crowd must match for a bench to use it: peer count, fixture
+and its start, since the grid is laid out from the start position.
+================
+*/
+export function crowdKey( count, fixture ) {
+	return JSON.stringify( { count, id: fixture.id, start: fixture.start } );
+}
+
+/*
+================
+attachCrowd
+
+Uses a crowd the host already holds instead of admitting a new one. Returns
+null when no host answers or it holds another crowd. peers is refreshed
+from the host while attached, so a peer that drops during a window shows
+closed by the next check; close() detaches and leaves the crowd to the host.
+================
+*/
+export async function attachCrowd( { count, fixture, hostUrl = CROWD_HOST_URL } ) {
+	const url = new URL( "/crowd", hostUrl );
+	assert.ok( [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ), "Crowd host must be loopback" );
+	let held;
+	try {
+		const response = await fetch( url, { signal: AbortSignal.timeout( 2000 ) } );
+		if ( !response.ok ) return null;
+		held = await response.json();
+	} catch {
+		return null;
+	}
+	if ( held.key !== crowdKey( count, fixture ) ) {
+		console.log( `[crowd] host holds ${held.key}, not this fixture; admitting a new crowd` );
+		return null;
+	}
+	const peers = held.peers;
+	assert.ok( peers.length === count && peers.every( peer => peer.ready && !peer.closed ), "Held crowd is not whole" );
+	let polling = true;
+	const poll = async () => {
+		while ( polling ) {
+			await delay( CROWD_POLL_MS );
+			try {
+				const response = await fetch( url, { signal: AbortSignal.timeout( 2000 ) } );
+				const fresh = (await response.json()).peers;
+				for ( let i = 0; i < peers.length; i++ ) Object.assign( peers[i], fresh[i] ?? { closed: true } );
+			} catch {
+				// A host that stopped answering holds nothing a bench can trust.
+				for ( const peer of peers ) peer.closed = true;
+			}
+		}
+	};
+	poll();
+	console.log( `[crowd] attached to the held crowd of ${count} at ${hostUrl}` );
+	return {
+		peers,
+		close: async () => {
+			polling = false;
+		}
+	};
+}
+
+/*
+================
+obtainCrowd
+
+A held crowd when one matches, else a newly admitted one. Either result
+has the same { peers, close } shape.
+================
+*/
+export async function obtainCrowd( options ) {
+	return (await attachCrowd( options )) ?? createCrowd( options );
 }

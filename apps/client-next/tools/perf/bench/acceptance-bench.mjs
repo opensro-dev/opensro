@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMovementFixture.mjs";
 import { openClient, closeClient, createCaptures, measure } from "../core/client.mjs";
-import { createCrowd } from "../core/crowd.mjs";
+import { obtainCrowd } from "../core/crowd.mjs";
 import { installFaults } from "../core/transport-faults.mjs";
 import { parseOptions } from "../core/report.mjs";
 import { walk, keepGoing, cross } from "./scenarios.mjs";
@@ -54,7 +54,7 @@ async function run( options ) {
 			return { inventory: game.inventory, progression: game.progression, companions: game.cosRecords };
 		} );
 		console.log( "[acceptance] provision authenticated crowd" );
-		crowd = await createCrowd( {
+		crowd = await obtainCrowd( {
 			count: options.peers,
 			fixture,
 			tokenPath: options.tokenPath,
