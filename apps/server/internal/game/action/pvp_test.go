@@ -285,3 +285,56 @@ func TestThiefMonsterKillPaysHunterJobExp(t *testing.T) {
 		t.Fatalf("job EXP %d, want 100", paid)
 	}
 }
+
+/*
+================
+TestPlayerAttackOnAnAggressorKeepsThePKLimits
+
+5293A0 skips the level floor and the PK limits only for the attacker's
+own retained target; an aggressor the attacker holds nothing against is
+refused at the daily limit like a neutral one (0x3014).
+================
+*/
+func TestPlayerAttackOnAnAggressorKeepsThePKLimits(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	level := int64(30)
+	a.Level, v.Level = &level, &level
+	a.Aggressions = nil
+	v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): playerAggressionTicks}
+	a.PK = &domain.PKRecord{DailyCount: playerCombatMaxDailyPK}
+	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0x3014 {
+		t.Fatalf("attack on an aggressor at the daily limit = %#x, want 0x3014", code)
+	}
+	a.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(v): playerAggressionTicks}
+	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0 {
+		t.Fatalf("the attacker's own retained target = %#x, want admitted", code)
+	}
+}
+
+/*
+================
+TestJobAttackWaitsForTheSuitToActivate
+
+529557: opposing jobs fight, but not while the attacker's suit is still
+activating (0x3019 WAITFOR_JOB_ACTIVATE).
+================
+*/
+func TestJobAttackWaitsForTheSuitToActivate(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	items := rt.deps.ItemReferences().(staticItemSource)
+	for i, c := range []*enterworld.Character{a, v} {
+		suit := &enterworld.ItemRef{RefObjID: uint32(9201 + i), Codename: []string{"ITEM_CH_M_TRADE_TRADER_04", "ITEM_CH_M_TRADE_THIEF_04"}[i],
+			Country: 3, TypeIDs: [4]int64{3, 1, 7, int64(1 + i)}, ReqQuadTypes: [4]int64{-1, -1, -1, -1}, Combat: &enterworld.ItemCombatRef{}}
+		items[suit.Codename] = suit
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(jobSuitSlot),
+			RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), StackCount: 1})
+	}
+	rt.startJobActivation(testDivision, a, clock.NowMs())
+	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0x3019 {
+		t.Fatalf("job attack while activating = %#x, want 0x3019", code)
+	}
+	rt.endJobActivation(testDivision, a)
+	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0 {
+		t.Fatalf("job attack once active = %#x, want admitted", code)
+	}
+}

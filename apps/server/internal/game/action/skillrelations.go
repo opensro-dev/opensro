@@ -55,15 +55,40 @@ func (rt *Runtime) playerRelationEquipment(c *enterworld.Character) (job, cape u
 ================
 hostilePlayerEquipment
 
-4EB320: different capes fight, while cape five also fights itself.
-4EB620: thieves oppose traders and hunters; traders and hunters are allies.
+Either equipment relation: opposing capes or opposing jobs.
 ================
 */
 func (rt *Runtime) hostilePlayerEquipment(caster, target *enterworld.Character) bool {
+	return rt.hostilePlayerCapes(caster, target) || rt.hostilePlayerJobs(caster, target)
+}
+
+/*
+================
+hostilePlayerCapes
+
+4EB320 (CGObjPC_IsHostileTeamOrParty): different capes fight, while cape
+five also fights itself.
+================
+*/
+func (rt *Runtime) hostilePlayerCapes(caster, target *enterworld.Character) bool {
+	_, aCape := rt.playerRelationEquipment(caster)
+	_, bCape := rt.playerRelationEquipment(target)
+	return aCape != 0 && bCape != 0 && (aCape != bCape || aCape == freeBattleAllOpponents)
+}
+
+/*
+================
+hostilePlayerJobs
+
+4EB620 (CGObjPC_IsHostileJobType): thieves oppose traders and hunters;
+traders and hunters are allies. Capes take precedence when both wear one.
+================
+*/
+func (rt *Runtime) hostilePlayerJobs(caster, target *enterworld.Character) bool {
 	aJob, aCape := rt.playerRelationEquipment(caster)
 	bJob, bCape := rt.playerRelationEquipment(target)
 	if aCape != 0 && bCape != 0 {
-		return aCape != bCape || aCape == freeBattleAllOpponents
+		return false
 	}
 	return aJob != 0 && bJob != 0 && aJob != bJob && (aJob == 2 || bJob == 2)
 }
@@ -151,9 +176,20 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 	if aggressionWeight == 1 {
 		return 0x3009
 	}
-	if rt.hostilePlayerEquipment(caster, target) || rt.guildsAtWar(division, caster, target) {
+	if rt.hostilePlayerCapes(caster, target) || rt.guildsAtWar(division, caster, target) {
 		return 0
 	}
+	// 529557: opposing jobs fight once the attacker's suit is active
+	// (+0x2178, jobdress.go); until then 0x3019 WAITFOR_JOB_ACTIVATE.
+	if rt.hostilePlayerJobs(caster, target) {
+		if rt.jobActivationPending(division, caster, now) {
+			return 0x3019
+		}
+		return 0
+	}
+	// Only the attacker's own retained target skips the open-field rules:
+	// an aggressor or murderer target still meets the level floor and the
+	// attacker's PK limits (5294xx), as a neutral one does.
 	if caster.Aggressions[enterworld.ObjectIDForCharacter(target)] != 0 {
 		return 0
 	}
@@ -162,9 +198,6 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 	}
 	if target.Level == nil || *target.Level < playerCombatMinimumLevel {
 		return 0x3017
-	}
-	if target.PVPState() != 0 {
-		return 0
 	}
 	if caster.PK != nil {
 		if caster.PK.Penalty >= playerCombatMaxPenalty {

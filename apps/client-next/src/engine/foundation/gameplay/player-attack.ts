@@ -118,6 +118,106 @@ export function playerInteraction(
 	return { kind: "attack" };
 }
 
+// COS_TYPE_WORD is TID 1/2/3 of a COS type word (CICCos +0x648, the entity's
+// tidWord); TID4 sits
+// in bits 11..15: horse 1, transport 2, attack pet 3, pickup pet 4 and guild
+// soldier 5 (RefObjTypeFlags_IsCos* 5500B0 / 5500F0 / 582160).
+const COS_TYPE_MASK = 0x7fe, COS_TYPE_WORD = 0x1c6;
+const COS_HORSE = 1, COS_TRANSPORT = 2, COS_ATTACK_PET = 3, COS_GUILD_SOLDIER = 5;
+// Category-4 notices 6FCD50 raises for an offensive skill at a party member
+// or a party member's pet.
+export const SKILL_AT_PARTY_MEMBER_NOTICE = 0x22;
+export const SKILL_AT_PARTY_PET_NOTICE = 0x23;
+
+/*
+================
+CosRelations
+
+Looks up the entities a pet's admission defers to: its owner (CICCos
++0x774) and, for a horse, its rider.
+================
+*/
+export interface CosRelations {
+	readonly entity: ( gid: number ) => EntityState | undefined;
+	readonly rider: ( gid: number ) => EntityState | undefined;
+}
+
+/*
+================
+canAttackCos
+
+CICCos_CanAttack (854860), vtable +0xA4 of a pet. A horse answers for its
+rider and a transport for itself; an attack pet or guild soldier answers
+for its owning player, or for itself when the owner is out of sight; a
+pickup pet is never attacked.
+================
+*/
+export function canAttackCos( target: EntityState, c: NameColorContext, alt: boolean, r: CosRelations ): boolean {
+	const word = target.tidWord ?? 0;
+	if ( (word & COS_TYPE_MASK) !== COS_TYPE_WORD ) return false;
+	const tid4 = word >>> 11 & 31;
+	if ( tid4 === COS_HORSE ) {
+		const rider = r.rider( target.gid );
+		return rider?.kind === "player" ? canAttackPlayer( rider, c, alt ) : false;
+	}
+	if ( tid4 !== COS_TRANSPORT && tid4 !== COS_ATTACK_PET && tid4 !== COS_GUILD_SOLDIER ) return false;
+	if ( tid4 !== COS_TRANSPORT ) {
+		const owner = target.ownerGid === undefined ? undefined : r.entity( target.ownerGid );
+		if ( owner?.kind === "player" ) return canAttackPlayer( owner, c, alt );
+	}
+	return alt || hostileToLocalPlayer( target, c );
+}
+
+/*
+================
+SkillTargetAdmission
+================
+*/
+export type SkillTargetAdmission =
+	| { readonly kind: "cast"; }
+	| { readonly kind: "none"; }
+	| { readonly kind: "notice"; readonly code: number; };
+
+/*
+================
+skillTargetAdmission
+
+CGInterface_ExecuteSelectedActionAtTarget (6FCD50) before it sends an
+offensive skill (CSkillData_IsOffensiveSkill 7F85A0) at the selection:
+
+- a player must pass CICUser_CanAttack with the Alt state
+  (GetKeyState(VK_MENU)); a party member then raises 4:0x22;
+- a pet with Alt held is cast at unless its owner is in the party
+  (4:0x23); without Alt it must pass CICCos_CanAttack.
+
+Anything else, and every non-offensive skill, is cast. Without this a
+hotbar skill attacked a white player with no Alt held.
+================
+*/
+export function skillTargetAdmission(
+	target: EntityState,
+	c: NameColorContext,
+	alt: boolean,
+	offensive: boolean,
+	r: CosRelations
+): SkillTargetAdmission {
+	if ( !offensive ) return { kind: "cast" };
+	if ( target.kind === "player" ) {
+		if ( !canAttackPlayer( target, c, alt ) ) return { kind: "none" };
+		return partyName( c.social, target.name ) ?
+			{ kind: "notice", code: SKILL_AT_PARTY_MEMBER_NOTICE } :
+			{ kind: "cast" };
+	}
+	if ( target.kind !== "cos" ) return { kind: "cast" };
+	if ( alt ) {
+		const owner = target.ownerGid === undefined ? undefined : r.entity( target.ownerGid );
+		return owner?.kind === "player" && partyName( c.social, owner.name ) ?
+			{ kind: "notice", code: SKILL_AT_PARTY_PET_NOTICE } :
+			{ kind: "cast" };
+	}
+	return canAttackCos( target, c, false, r ) ? { kind: "cast" } : { kind: "none" };
+}
+
 /*
 ================
 petPlayerAttack

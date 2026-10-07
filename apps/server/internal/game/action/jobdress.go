@@ -41,6 +41,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	worldgeom "opensro.online/server/internal/game/world"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -51,6 +52,9 @@ const (
 	jobSuitSlot uint8 = enterworld.JobSuitSlot
 	// jobDressSeconds is SetStateFlag13's 10.0 s state changer.
 	jobDressSeconds = 10
+	// jobActivationMs is +0x2178 = 10 (4E9EA9), counted down once a second
+	// by CGObjPC_TickStateTimers (52AC33).
+	jobActivationMs = 10 * 1000
 	// jobDressKind and jobDressStep are 0x3434's two lead bytes.
 	jobDressKind uint8 = 2
 	jobDressStep uint8 = 2
@@ -60,6 +64,8 @@ const (
 	jobWearErrSwap       uint8 = 0x46
 	jobWearErrPending    uint8 = 0x47
 	jobWearErrBattle     uint8 = 0x48
+	jobWearErrCart       uint8 = 0x5A
+	jobWearErrNoPosition uint8 = 0xA2
 	jobWearErrNoJob      uint8 = 0x9E
 	jobWearErrNoAlias    uint8 = 0x9F
 	jobWearErrParty      uint8 = 0xA0
@@ -217,17 +223,87 @@ func (rt *Runtime) jobWearRefusal(division string, c *enterworld.Character, sour
 ================
 jobStripRefusal
 
-The refusal for taking the worn suit off, or 0.
+The refusal for taking the worn suit off, or 0, in CGItemEquip_CanUnequip's
+order (497340 region 4975xx): riding (0xCA), battle (0x48), a summoned
+cart (0x5A, CGObjPC_FirstCOSIsVehicle), the job activation wait (0x47),
+a party (0xA0), standing where players may fight (0xA2); then the bag.
+Native's first test (state +6 == 7, 0x18CD) names a v1.188 state the
+v1.150 tables give no text for, so it is not ported.
 ================
 */
-func (rt *Runtime) jobStripRefusal(c *enterworld.Character, dest uint8, now int64) uint8 {
-	if c.BattleUntilMs > now {
+func (rt *Runtime) jobStripRefusal(division string, c *enterworld.Character, dest uint8, now int64) uint8 {
+	switch {
+	case mountedOnCOS(c):
+		return jobWearErrRide
+	case c.BattleUntilMs > now:
 		return jobWearErrBattle
+	case rt.summonedVehicle(c):
+		return jobWearErrCart
+	case rt.jobActivationPending(division, c, now):
+		return jobWearErrPending
+	case len(rt.auraParty(division, c)) != 0:
+		return jobWearErrParty
+	}
+	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
+	if battlefield, known := worldgeom.RegionPlayerCombat(at.RegionID); !known || battlefield {
+		return jobWearErrNoPosition
 	}
 	if _, taken := inventoryRowAt(c, dest); taken || !inventory.IsBagSlot(dest) {
 		return jobWearErrBagFull
 	}
 	return 0
+}
+
+/*
+================
+summonedVehicle
+
+CGObjPC_FirstCOSIsVehicle (vtable +0x2EC): a summoned cart or trade animal.
+================
+*/
+func (rt *Runtime) summonedVehicle(c *enterworld.Character) bool {
+	pet := c.ActiveCOS
+	if pet == nil || !pet.Summoned {
+		return false
+	}
+	ref, ok := rt.cosReference(pet)
+	return ok && isVehicleCOS(ref.TidWord)
+}
+
+/*
+================
+startJobActivation
+
+A worn suit is not active at once: +0x2178 = 10 (4E9EA9, when the suit's
+equip result 0x3038 goes out) holds job attacks (0x3019) and the
+suit's removal (0x47) for ten state ticks.
+================
+*/
+func (rt *Runtime) startJobActivation(division string, c *enterworld.Character, now int64) {
+	rt.jobActivations.Store(simulation.WorldKey(division, c.Name), now+jobActivationMs)
+}
+
+/*
+================
+jobActivationPending
+================
+*/
+func (rt *Runtime) jobActivationPending(division string, c *enterworld.Character, now int64) bool {
+	end, ok := rt.jobActivations.Load(simulation.WorldKey(division, c.Name))
+	return ok && end.(int64) > now
+}
+
+/*
+================
+endJobActivation
+
+CGObjPC_ClearJobFlagAndBroadcast30CF (4E1EF4): a hit taken ends the wait
+(CGObjPC_EnterBattleOnAttacked). Its 0x30CF broadcast has no v1.150
+handler, so nothing is sent.
+================
+*/
+func (rt *Runtime) endJobActivation(division string, c *enterworld.Character) {
+	rt.jobActivations.Delete(simulation.WorldKey(division, c.Name))
 }
 
 /*
@@ -258,7 +334,7 @@ func (rt *Runtime) beginJobDress(division string, c *enterworld.Character, reque
 	if request.DestSlot == jobSuitSlot {
 		code = rt.jobWearRefusal(division, c, request.SourceSlot)
 	} else {
-		code = rt.jobStripRefusal(c, request.DestSlot, now)
+		code = rt.jobStripRefusal(division, c, request.DestSlot, now)
 	}
 	if code != 0 {
 		return failureResult(code)
@@ -299,11 +375,14 @@ func (rt *Runtime) advanceJobDresses(now int64) {
 		case dress.request.DestSlot == jobSuitSlot:
 			code = rt.jobWearRefusal(dress.division, c, dress.request.SourceSlot)
 		default:
-			code = rt.jobStripRefusal(c, dress.request.DestSlot, now)
+			code = rt.jobStripRefusal(dress.division, c, dress.request.DestSlot, now)
 		}
 		result := failureResult(code)
 		if code == 0 {
 			result = rt.applyInventoryMove(dress.division, c, dress.request)
+			if dress.request.DestSlot == jobSuitSlot && rt.jobDressed(c) {
+				rt.startJobActivation(dress.division, c, now)
+			}
 		}
 		unlock()
 		if rt.PushCharacterFrames != nil {

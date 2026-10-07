@@ -281,6 +281,17 @@ export function createCombat(
 		},
 		/*
 		================
+		offensiveSkill
+
+		CSkillData_IsOffensiveSkill (7F85A0), projected as the reference
+		row's nameHit.
+		================
+		*/
+		offensiveSkill( skill: number ) {
+			return effectRefs.get( skill )?.nameHit === true;
+		},
+		/*
+		================
 		cooldownReferences
 		Changing the local actor rebuilds its board from retained effects.
 		================

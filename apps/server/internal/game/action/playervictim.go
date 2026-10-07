@@ -215,6 +215,7 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 		out.owner = rt.clearPlayerAbnormalInDoor(s.division, c, s.now)
 	} else {
 		out.battle = rt.enterBattleState(s.division, c, s.now)
+		rt.endJobActivation(s.division, c)
 		out.owner.applyHit(hit, s.records)
 		// 58F72F: a landed hit tests the victim's skc damage masks.
 		rt.cancelEffectsOnDamage(s.division, c, s.skill.Attack.Flags, s.now)

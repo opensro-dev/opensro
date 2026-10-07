@@ -53,6 +53,7 @@ export interface InputOwner {
 	dropNamesHeld(): boolean;
 	blindBinding( value: number ): void;
 	blindHeld(): boolean;
+	altHeld(): boolean;
 	mouseMode( value: 0 | 1 ): void;
 	sight( value: import("@/engine/foundation/rendering/camera-options").SightMode ): void;
 	camera( playerYaw?: number ): CameraInput;

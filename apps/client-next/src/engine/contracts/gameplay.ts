@@ -327,6 +327,9 @@ export type GameplayCommand =
 		readonly query?: import("./navigation").GroundPickQuery;
 		readonly skillId: number;
 		readonly gid?: number;
+		// GetKeyState(VK_MENU) when the press executes (6FCD50): Alt admits an
+		// offensive skill at a player who is not otherwise hostile.
+		readonly alt?: boolean;
 	}
 	| {
 		readonly kind: "inventory-move";

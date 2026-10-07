@@ -1179,6 +1179,17 @@ export function createEntities(
 		read: ( gid: number ) => entities.get( gid ),
 		/*
 		================
+		rider
+
+		The entity riding the horse `gid` (CICharactor_GetMountedHorseOrVehicle).
+		================
+		*/
+		rider( gid: number ) {
+			for ( const entity of entities.values() ) if ( entity.mountedOn === gid ) return entity;
+			return undefined;
+		},
+		/*
+		================
 		groundItems
 
 		The ground items in the table now, every despawn already applied.

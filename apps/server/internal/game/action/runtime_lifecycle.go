@@ -349,6 +349,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.playerDisplacements.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.jobActivations.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))

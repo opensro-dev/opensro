@@ -71,6 +71,7 @@ type Runtime struct {
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
+	jobActivations      sync.Map // simulation.WorldKey -> int64 end ms (jobdress.go)
 	// caravans are the registered trade caravans (caravan.go); caravanMu
 	// serializes the registry and caravanTickMs is its last advance.
 	caravanMu     sync.Mutex

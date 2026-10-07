@@ -31,6 +31,8 @@ createInput
 export function createInput(): InputOwner {
 	let queue: InputCommand[] = [], sequence = 0, failure: string | null = null;
 	let dropKey = DEFAULT_DROP_KEY, dropHeld = false, blindKey = DEFAULT_BLIND_KEY, blindHeld = false;
+	// Either Alt key, as GetKeyState(VK_MENU) reads it (6FCD50).
+	let altLeft = false, altRight = false;
 	let sight: SightMode = 0, mouseMode: 0 | 1 = 0;
 	let pointer: { x: number; y: number; } | null = null, buttons = 0, yaw = 0, pitch = Math.PI / 18, distance = 80;
 	return {
@@ -54,6 +56,7 @@ export function createInput(): InputOwner {
 			blindHeld = false;
 		},
 		blindHeld: () => blindHeld,
+		altHeld: () => altLeft || altRight,
 		/*
 		================
 		mouseMode
@@ -132,7 +135,10 @@ export function createInput(): InputOwner {
 				buttons = 0;
 				dropHeld = false;
 				blindHeld = false;
-			} else if ( dropKey && virtualKey( event.code ) === dropKey ) dropHeld = event.down;
+				altLeft = altRight = false;
+			} else if ( event.code === "AltLeft" ) altLeft = event.down;
+			else if ( event.code === "AltRight" ) altRight = event.down;
+			else if ( dropKey && virtualKey( event.code ) === dropKey ) dropHeld = event.down;
 			else if ( blindKey && virtualKey( event.code ) === blindKey ) blindHeld = event.down;
 			queue.push( { ...event, sequence: ++sequence } );
 		},

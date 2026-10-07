@@ -1152,6 +1152,14 @@ itemUseType
 			return inventory.useType( slot );
 		},
 		/*
+		================
+		offensiveSkill
+		================
+		*/
+		offensiveSkill( skill: number ) {
+			return combat.offensiveSkill( skill );
+		},
+		/*
 ================
 skillTarget
 
