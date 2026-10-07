@@ -6,6 +6,7 @@ build-identity.mjs - observed page identity at measurement boundaries
 The harness checkout is not the served build. Keep its revision separate
 from the loaded entry URL, and reject changed or unproven capture state.
 These observations do not identify a server commit or prove encoder output.
+Bundle detection expects the release entry naming: /assets/index-<hash>.js.
 
 ===========================================================================
 */

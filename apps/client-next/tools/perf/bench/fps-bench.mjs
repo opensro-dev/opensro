@@ -397,7 +397,24 @@ async function session( options, location, results ) {
 			const allocated = await captures.stop( `${location.name}-${name}` );
 			capturing = false;
 			result.identityAfter = await buildIdentity( client.page, identity.harnessCommit );
-			verifyMeasuredIdentity( identity, result.identityAfter );
+			try {
+				verifyMeasuredIdentity( identity, result.identityAfter );
+			} catch ( error ) {
+				// Keep refused evidence separate from valid FPS rows.
+				const evidence = {
+					valid: false,
+					error: String( error ),
+					before: identity,
+					after: result.identityAfter
+				};
+				console.error( "Rejected measurement identity:", JSON.stringify( evidence ) );
+				await mkdir( options.out, { recursive: true } );
+				await writeFile(
+					`${options.out}/${location.name}-${name}-identity-rejected.json`,
+					JSON.stringify( evidence, null, 2 )
+				);
+				throw error;
+			}
 			result.allocatedMBs = allocated === null ? null : allocated / 1048576 / ((Date.now() - started) / 1000);
 			results.push( result );
 			if ( options.json ) await writeFile( options.json, JSON.stringify( results, null, 2 ) );
