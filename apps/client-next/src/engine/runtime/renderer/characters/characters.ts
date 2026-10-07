@@ -1724,6 +1724,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			const transform = actorTransform( frame, actor );
 			if ( !transform ) {
 				batch.instances.fill( 0, i * 16, i * 16 + 16 );
+				group.instancesChanged = true;
 				continue;
 			}
 			let moved = false;
@@ -2106,14 +2107,19 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			batch.cloth.set( p, cloth );
 		}
 		let draw = batch.draws[p];
+		const placementChanged = !draw || group.instancesChanged || fading || appearance || pointLights;
 		if ( !draw ) draw = uploadPrimitive( frame, group, p, batch.instances );
-		draw = geometry.updateInstances(
-			draw,
-			instances,
-			fading ? Float32Array.from( rows, opacity ) : undefined,
-			appearance?.subarray( 0, instances.length / 2 ),
-			pointLights
-		);
+		// Cloth vertices change independently of the actor placement. These
+		// unskinned draws never enter the particle compute writer.
+		if ( placementChanged ) {
+			draw = geometry.updateInstances(
+				draw,
+				instances,
+				fading ? Float32Array.from( rows, opacity ) : undefined,
+				appearance?.subarray( 0, instances.length / 2 ),
+				pointLights
+			);
+		}
 		batch.draws[p] = draw;
 		geometry.writeVertices(
 			draw,

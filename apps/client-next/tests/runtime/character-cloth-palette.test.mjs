@@ -17,6 +17,11 @@ const baseline = JSON.parse(
 	readFileSync( new URL( "../fixtures/cloth/palette-owner-before.json", import.meta.url ), "utf8" )
 );
 
+test("moving cloth uploads current placements through membership, fade, lights, preview and device changes", () => {
+	const actual = captureClothPalettes( false, false, { moving: true, variants: true } );
+	assert.ok( actual.frames.every( frame => frame.draws === 0 || frame.clothPlacementWrites > 0 ) );
+});
+
 test("an unrelated lazy clip cannot reset standing peers' cloth state or random sequence", () => {
 	const actual = captureClothPalettes( true, true );
 	assert.deepEqual( actual.frames.map( frame => frame.digest ), baseline.frames );
@@ -32,6 +37,10 @@ for ( const gpuAvailable of [ false, true ] ) {
 			"cloth consumers require CPU-valid palette data even when GPU evaluation is available"
 		);
 		assert.equal( actual.frames.length, baseline.frames.length );
+		assert.ok(
+			actual.frames.some( frame => frame.draws > 0 && frame.clothPlacementWrites === 0 ),
+			"retained cloth with unchanged placement must keep simulating without placement uploads"
+		);
 		assert.ok( actual.frames.some( frame => frame.poseEligibility.gpuSamples > 0 ) );
 		for ( const frame of actual.frames ) {
 			assert.equal( frame.poseEligibility.sharedPaletteSamples, frame.poseEligibility.gpuSamples );

@@ -267,6 +267,19 @@ function captureGeometry( tags, gpuAvailable ) {
 		},
 		/*
 		================
+		clothPlacementWrites
+		================
+		*/
+		clothPlacementWrites( draws ) {
+			const buffers = new Set(
+				draws.filter( draw => draw.tag.startsWith( "cloth" ) ).map( draw =>
+					draw.deviceDraw.binding.entries.find( entry => entry.binding === 1 ).resource.buffer
+				)
+			);
+			return device.writes.filter( write => buffers.has( write.buffer ) ).length;
+		},
+		/*
+		================
 		verify
 
 		Expand the shader's actual palette offsets and compare GPU buffer bytes
@@ -276,11 +289,18 @@ function captureGeometry( tags, gpuAvailable ) {
 		verify( draws ) {
 			const buffers = new Set();
 			for ( const draw of draws ) {
-				if ( !draw.bones ) continue;
 				const entries = draw.deviceDraw.binding.entries;
 				const storage = entries.find( entry => entry.binding === 1 ).resource.buffer;
-				const palette = entries.find( entry => entry.binding === 7 ).resource.buffer;
 				const packed = new Float32Array( device.bytes.get( storage ).buffer );
+				assert.equal( draw.deviceDraw.instanceCount, draw.instances.length / 16 );
+				for ( let row = 0; row < draw.deviceDraw.instanceCount; row++ ) {
+					assert.deepEqual(
+						packed.slice( row * INSTANCE_FLOATS, row * INSTANCE_FLOATS + 16 ),
+						draw.instances.slice( row * 16, row * 16 + 16 )
+					);
+				}
+				if ( !draw.bones ) continue;
+				const palette = entries.find( entry => entry.binding === 7 ).resource.buffer;
 				const uploaded = new Float32Array( device.bytes.get( palette ).buffer );
 				buffers.add( palette );
 				for ( let row = 0; row < draw.deviceDraw.instanceCount; row++ ) {
@@ -357,7 +377,11 @@ function drawDigest( draws, randomTrace ) {
 captureClothPalettes
 ================
 */
-export function captureClothPalettes( gpuAvailable = false, admitUnusedClip = false ) {
+export function captureClothPalettes(
+	gpuAvailable = false,
+	admitUnusedClip = false,
+	{ moving = false, variants = false } = {}
+) {
 	const random = createPresentationRandom( RANDOM_SEED, 1, 100000 );
 	const owner = createCharacters( random ), tags = new Map();
 	owner.model( "body-first", model( false, tags ), [] );
@@ -385,6 +409,9 @@ export function captureClothPalettes( gpuAvailable = false, admitUnusedClip = fa
 			}
 			geometry.begin();
 			const input = clock.input( frame );
+			const preview = variants && frame % 17 < 5;
+			const view = variants ? identity() : undefined;
+			if ( view ) view[0] = view[5] = view[10] = .001;
 			const gids = frame % 19 === 0 ? [] : frame % 3 === 0 ? [ 2, 3 ] : [ 1, 2, 3 ];
 			/** @type {import("../../src/engine/contracts/character.ts").CharacterActor[]} */
 			const actors = gids.map( gid => ({
@@ -394,9 +421,24 @@ export function captureClothPalettes( gpuAvailable = false, admitUnusedClip = fa
 				time: frame % 5 === 0 ? 0 : (frame * .031 + gid * .13) % 1,
 				loop: true,
 				scale: 1,
-				pose: { regionId: 257, x: gid * 10, y: 0, z: 100, yaw: radians( gid / 10 ) },
+				pose: {
+					regionId: 257,
+					x: gid * 10 + (moving ? frame / 8 : 0),
+					y: 0,
+					z: 100,
+					yaw: radians( gid / 10 + (moving ? frame / 200 : 0) )
+				},
 				opacity: frame % 11 < 3 && gid === 1 ? .5 : undefined,
 				materialTint: frame % 7 === 0 ? [ .25, .5, .75 ] : undefined,
+				pointLight: variants && frame % 9 < 4 ?
+					{
+						pose: { regionId: 257, x: frame, y: 5, z: 100 },
+						ambient: [ .1, .2, .3 ],
+						diffuse: [ .4, .5, .6 ],
+						attenuation: .5,
+						range: 100
+					} :
+					undefined,
 				layers: frame % 7 === 0 ?
 					[
 						{ clip: "move", time: .2, loop: false, weight: .4, lane: "event" },
@@ -414,8 +456,8 @@ export function captureClothPalettes( gpuAvailable = false, admitUnusedClip = fa
 					release() {}
 				},
 				257,
-				undefined,
-				false,
+				view,
+				preview,
 				input.seconds,
 				false,
 				true,
@@ -423,9 +465,36 @@ export function captureClothPalettes( gpuAvailable = false, admitUnusedClip = fa
 				input.enabled
 			));
 			assert.equal( draws.length, gids.length * PRIMITIVE_NAMES.length );
+			if ( variants ) {
+				for ( const draw of draws ) {
+					assert.equal(
+						!!draw.lights,
+						!preview && frame % 9 < 4,
+						"light presence follows current render mode"
+					);
+					assert.deepEqual(
+						draw.transform,
+						preview ? view : identity(),
+						"preview transforms cannot leak into world draws"
+					);
+				}
+			}
+			if ( moving ) {
+				const expected = actors.map( actor => Math.fround( actor.pose.x ) ).sort( ( a, b ) => a - b );
+				for ( const name of PRIMITIVE_NAMES ) {
+					const actual = draws.filter( draw => draw.tag === name ).flatMap( draw =>
+						Array.from(
+							{ length: draw.instances.length / 16 },
+							( _, row ) => draw.instances[row * 16 + 12]
+						)
+					).sort( ( a, b ) => a - b );
+					assert.deepEqual( actual, expected, `frame ${frame}: ${name} uses current actor placements` );
+				}
+			}
 			const trace = random.takeTrace();
 			boneWriteBytes += geometry.verify( draws );
 			frames.push( {
+				clothPlacementWrites: geometry.clothPlacementWrites( draws ),
 				poseEligibility: owner.stats( true ).poseEligibility,
 				digest: drawDigest( draws, trace ),
 				draws: draws.length,
