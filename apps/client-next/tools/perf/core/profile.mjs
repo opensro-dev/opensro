@@ -116,6 +116,13 @@ forEachLine
 CPU profiles only: calls visit( "file:line", weight ) for the source lines
 of nodes whose key starts with prefix, sharing each node's weight by its
 line ticks.
+
+Ticks carry a script line but no column. A generated line that covers
+several source lines (a minified bundle holds many functions per line)
+cannot name the hot one, and its first column may even map into another
+file. Such ticks are reported as unattributable instead of being charged
+to whatever source starts the line. Line attribution needs an unminified
+build (vite build --minify false) and its source maps.
 ================
 */
 export function forEachLine( profile, symbolizer, prefix, visit ) {
@@ -124,10 +131,16 @@ export function forEachLine( profile, symbolizer, prefix, visit ) {
 		if ( !weight || !node.positionTicks?.length || !keyOf( symbolizer, node.callFrame ).startsWith( prefix ) ) {
 			continue;
 		}
+		const own = symbolizer.frame( node.callFrame ).file;
 		const ticks = node.positionTicks.reduce( ( sum, tick ) => sum + tick.ticks, 0 );
 		for ( const tick of node.positionTicks ) {
 			const at = symbolizer.position( node.callFrame.url, tick.line, 1 );
-			visit( at ? `${at.file}:${at.line}` : `${node.callFrame.url}:${tick.line}`, weight * tick.ticks / ticks );
+			const key = !at ?
+				`${node.callFrame.url}:${tick.line}` :
+				at.file === own && at.span <= 1 ?
+				`${at.file}:${at.line}` :
+				`${own}:? (unattributable: generated line ${tick.line} covers ${at.span} source lines; profile an unminified build)`;
+			visit( key, weight * tick.ticks / ticks );
 		}
 	}
 }

@@ -119,6 +119,20 @@ export function createSourceMap( map ) {
 				line: segment[2] + 1,
 				name: segment[4] >= 0 ? map.names[segment[4]] : undefined
 			};
+		},
+		/*
+		================
+		span
+
+		How many distinct source lines one generated (zero-based) line maps to.
+		A line tick on a line spanning several (a minified bundle) cannot name
+		its source line.
+		================
+		*/
+		span( line ) {
+			const segments = lines[line];
+			if ( !segments?.length ) return 0;
+			return new Set( segments.map( segment => segment[1] + ":" + segment[2] ) ).size;
 		}
 	};
 }
@@ -215,15 +229,16 @@ export async function createSymbolizer( { maps, root } = {} ) {
 		================
 		position
 
-		The source { file, line } of a sampled position inside url (one-based
-		line and column, as profile chunks record them).
+		The source { file, line, span } of a sampled position inside url
+		(one-based line and column, as profile chunks record them); span is the
+		number of source lines the generated line covers.
 		================
 		*/
 		position( url, line, column ) {
 			const map = url ? loaded.get( url ) : null;
 			if ( !map ) return null;
 			const found = map.lookup( line - 1, Math.max( 0, column - 1 ) );
-			return found ? { file: shortSource( found.source ), line: found.line } : null;
+			return found ? { file: shortSource( found.source ), line: found.line, span: map.span( line - 1 ) } : null;
 		}
 	};
 }
