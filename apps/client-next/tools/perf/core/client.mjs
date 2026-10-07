@@ -349,11 +349,6 @@ export async function measure( page, name, ms, drive ) {
 			performance.timeOrigin
 		];
 	} );
-	// The page's frame probe fills the intervals. None means the client never
-	// called it: a release bundle, which compiles the probe away.
-	if ( intervals.length < 2 ) {
-		throw Error( `${name}: no frame samples; benchmark the dev server or a bench bundle (pnpm build:bench)` );
-	}
 	const sorted = [ ...intervals ].sort( ( a, b ) => a - b ), at = q => sorted[Math.floor( (sorted.length - 1) * q )];
 	const mean = list => list.reduce( ( a, b ) => a + b, 0 ) / Math.max( 1, list.length );
 	const tally = {};

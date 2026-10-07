@@ -377,6 +377,13 @@ async function session( options, location, results ) {
 			capturing = true;
 			const started = Date.now();
 			const result = await measure( client.page, `${location.name}/${name}`, ms, input );
+			// The page's frame probe fills the intervals; none means the client
+			// never called it, as in a release bundle, which compiles it away.
+			if ( result.frames < 2 ) {
+				throw Error(
+					`${location.name}/${name}: no frame samples; benchmark the dev server or a bench bundle (pnpm build:bench)`
+				);
+			}
 			result.frameLimit = options.frameLimit;
 			result.cpuRate = options.cpuRate;
 			result.shadowDetail = options.shadowDetail;

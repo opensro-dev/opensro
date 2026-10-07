@@ -37,6 +37,8 @@ const compiled = await build( {
 	write: false,
 	define: {
 		"import.meta.env.DEV": "false",
+		// A real build always defines MODE (frame-probes.ts reads it).
+		"import.meta.env.MODE": JSON.stringify( "production" ),
 		"import.meta.env.SRO_CLIENT_REVISION": "undefined",
 		"import.meta.env.SRO_CLIENT_SUBJECT": "undefined",
 		"import.meta.env.VITE_AGENT_API_BASE": "undefined",
