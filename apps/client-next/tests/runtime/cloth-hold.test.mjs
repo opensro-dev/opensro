@@ -136,6 +136,7 @@ test("unchanged pins hold immediately after a solver step; moved pins publish th
 		assert.equal( held, name === "fixed pin", name );
 		if ( !held ) shown = skipping.update( palette, .052, true, motion ).slice();
 		const expected = every.update( palette, .052, true, motion );
+		assert.ok( shown );
 		assert.deepEqual( new Uint8Array( shown.buffer ), new Uint8Array( expected.buffer ), name );
 		assert.equal( skipping.hold( .099, true ), true, name );
 		assert.equal( skipping.hold( .1, true ), false, "the next simulation step stays due" );
