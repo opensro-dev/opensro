@@ -26,6 +26,14 @@ v1.150 feature set. When neither binary shows a rule, infer how the original
 would have implemented it, record the inference in a code comment, and ship
 it. Do not leave "no evidence" open questions.
 
+Non-native rule: behaviour the original does not have never changes the
+native default. It ships off behind a flag and needs the owner's approval:
+client features as a row in the Experimental window
+(`apps/client-next/src/engine/foundation/ui/experimental-options.ts`), server
+rules behind an `SRO_<FEATURE>` environment flag whose off value is native
+(as `SRO_BETA_GROWTH`), with the code marked "port-only, not native". Test
+both settings. [CONTRIBUTING.md](CONTRIBUTING.md) has the contributor version.
+
 ## Search before you edit
 
 Use ripgrep (`rg`) for all code search. In Git Bash on Windows pass
