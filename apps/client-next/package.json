@@ -26,6 +26,8 @@
     "test:browser": "node --test tests/browser/*.test.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4180 --strictPort",
+    "build:bench": "vite build --mode bench",
+    "preview:bench": "vite preview --mode bench --host 127.0.0.1 --port 4181 --strictPort",
     "build:beta": "pnpm check && node tools/beta/build.mjs",
     "verify:beta": "node tools/beta/verify.mjs",
     "serve:beta": "node tools/beta/serve.mjs",

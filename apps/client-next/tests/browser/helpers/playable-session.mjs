@@ -16,11 +16,26 @@ import { assertCharacterAllowed } from "../../../../../scripts/lib/probeCharacte
 /*
 ================
 bindPlayableRuntime
+
+The page's own entry module owns the runtime. On the dev server that is
+/src/bootstrap.ts; a bench bundle (pnpm build:bench) serves it as its
+hashed entry chunk and keeps the export. Importing the URL the page already
+loaded returns that same module instance, never a second runtime. A release
+bundle drops the export on purpose, so binding to one fails loudly.
 ================
 */
 export async function bindPlayableRuntime( page ) {
 	await page.evaluate( async () => {
-		globalThis.__playableRuntime = (await import( "/src/bootstrap.ts" )).runtime;
+		const scripts = [ ...document.querySelectorAll( 'script[type="module"][src]' ) ]
+			.map( script => new URL( script.getAttribute( "src" ) ?? "", location.href ) );
+		const entry = scripts.find( url => url.pathname === "/src/bootstrap.ts" ) ??
+			scripts.find( url => /^\/assets\/index-[^/]+\.js$/.test( url.pathname ) );
+		if ( !entry ) throw Error( "No client entry module on the page" );
+		const runtime = (await import( entry.href )).runtime;
+		if ( !runtime ) {
+			throw Error( `${entry.pathname} exports no runtime: benchmark a bench bundle (pnpm build:bench)` );
+		}
+		globalThis.__playableRuntime = runtime;
 	} );
 }
 /*
