@@ -169,13 +169,6 @@ func WorldStateForCharacter(c *Character, raceKey string) WorldState {
 	return WorldState{Spawn: spawn, MovementMode: movementMode, SpawnSet: spawnSet}
 }
 
-func coerceFloat(value *float64, fallback float64) float64 {
-	if value == nil || *value != *value {
-		return fallback
-	}
-	return *value
-}
-
 // CharacterAppearanceIdentity is the one resolved body identity shared by
 // gameplay, account-roster presentation, and model-ref consumers. Persisted
 // creation fields are provenance; a verified roster row is the render/runtime
