@@ -58,6 +58,13 @@ No material simplification is performed. `timedemo.json` records per-frame
 renderer call duration and draw statistics, asset SHA-256 digests, camera and
 metadata. Model admission and capture decoding are outside timed spans.
 
+Capture metadata identifies the recording, not the replay source. The result
+also records the capture file's SHA-256 and a separate `replayIdentity`: the
+local harness revision (including dirty state), page origin, and the renderer
+module URL actually imported. This is source-module replay; the JSON host page
+has no application entry, so its page build and served commit remain `unknown`.
+A harness checkout revision does not identify another checkout served at the URL.
+
 Image fixtures can reuse `loadCrowdModels(renderer, actors)` from
 `core/crowd-models.mjs`. Its result contains asset hashes and a `close()` method
 for retained bitmaps; dispose the renderer before calling `close()`.

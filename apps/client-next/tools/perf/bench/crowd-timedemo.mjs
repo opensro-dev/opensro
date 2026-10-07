@@ -13,8 +13,10 @@ network correctness. Run under the benchmark lock. Assets stay native.
 import assert from "node:assert/strict";
 import { readFile, stat, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { launchProbeBrowser } from "../../../../../scripts/lib/probeBrowser.mjs";
 import { CROWD_CAPTURE_VERSION, decodeCrowdValue } from "../core/crowd-capture.mjs";
+import { buildIdentity } from "../core/build-identity.mjs";
 
 const MAX_CAPTURE_BYTES = 65 * 1024 * 1024;
 const DEFAULT_WARMUP_FRAMES = 200;
@@ -29,7 +31,8 @@ loop-boundary teleports. Warmup frames advance the same cloth/particle owners.
 */
 async function replayCharacters( { capture, camera, warmup } ) {
 	const { decodeCrowdValue } = await import( "/tools/perf/core/crowd-capture.mjs" );
-	const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
+	const rendererModule = new URL( "/src/engine/runtime/renderer/renderer.ts", location.origin ).href;
+	const { createRenderer } = await import( rendererModule );
 	const { createPresentationRandom } = await import( "/src/engine/runtime/random/random.ts" );
 	const { loadCrowdModels } = await import( "/tools/perf/core/crowd-models.mjs" );
 	const metadata = decodeCrowdValue( capture.metadata );
@@ -70,6 +73,7 @@ async function replayCharacters( { capture, camera, warmup } ) {
 		}
 		return {
 			scope: "isolated-character-renderer",
+			rendererModule,
 			cameraMode: "explicit-fixed",
 			camera,
 			metadata,
@@ -95,7 +99,8 @@ async function main() {
 	const [url, capturePath, cameraPath, output] = process.argv.slice( 2 );
 	assert.ok( url && capturePath && cameraPath && output, "Expected URL CAPTURE CAMERA OUTPUT" );
 	assert.ok( (await stat( capturePath )).size <= MAX_CAPTURE_BYTES, "Capture exceeds byte limit" );
-	const capture = JSON.parse( await readFile( capturePath, "utf8" ) );
+	const captureBytes = await readFile( capturePath );
+	const capture = JSON.parse( captureBytes.toString( "utf8" ) );
 	const camera = JSON.parse( await readFile( cameraPath, "utf8" ) );
 	assert.equal( capture.version, CROWD_CAPTURE_VERSION );
 	assert.equal( capture.scope, "character-renderer" );
@@ -122,7 +127,11 @@ async function main() {
 	const { browser, page } = await launchProbeBrowser( { deviceScaleFactor: 1 } );
 	try {
 		await page.goto( new URL( "/assets/skillfx/manifest.json", url ).href );
+		const identity = await buildIdentity( page );
 		const result = await page.evaluate( replayCharacters, { capture, camera, warmup: DEFAULT_WARMUP_FRAMES } );
+		result.replayIdentity = { ...identity, mode: "source-module-replay", rendererModule: result.rendererModule };
+		result.captureSha256 = createHash( "sha256" ).update( captureBytes ).digest( "hex" );
+		delete result.rendererModule;
 		const directory = path.resolve( output );
 		await mkdir( directory, { recursive: true } );
 		await writeFile(
