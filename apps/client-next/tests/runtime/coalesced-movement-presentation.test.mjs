@@ -73,7 +73,8 @@ test("a native 150-speed mount retains its terrain proof through a 1000 ms worke
 	state = movement.state();
 	assert.ok( state.pose );
 	assert.ok( Math.abs( state.pose.x - before.x - 150 ) < .001, "the native step is not subdivided or capped" );
-	assert.ok( state.movementTransition.walkingPath?.length > 75, "all accepted mounted progress has sampled proof" );
+	assert.ok( state.movementTransition.walkingPath );
+	assert.ok( state.movementTransition.walkingPath.length > 75, "all accepted mounted progress has sampled proof" );
 	assert.ok(
 		state.movementTransition.walkingPath?.some( point => point.y > 7.5 ),
 		"the skipped frame retains the intervening hill"
