@@ -4,8 +4,10 @@
 animation-pose.ts - retained character pose sampling, skin palettes and sockets
 
 Owns clip sampling, native event-before-timed blending, and lazy CPU palette
-materialization. Layer lifetimes belong to the presentation producers; this
-consumer evaluates every live fade without truncating sparse bone tracks.
+materialization. Direct samples retain exact local inputs in blend scratch;
+palette revisions advance only with matrices or radial body shape. Layer
+lifetimes belong to the presentation producers; this consumer evaluates every
+live fade without truncating sparse bone tracks.
 Equipment branches join the socket table without changing explicit private
 bone names (A981A0 searches compound branches in order for a marker).
 
@@ -53,7 +55,7 @@ export function createCharacterPose( model: CharacterModel ) {
 		scales = model.nodes.map( ( _, i ) => scaleData.subarray( i * 3, i * 3 + 3 ) );
 	const inverseViews = new WeakMap<CharacterPrimitive, Float32Array[]>();
 	const palettes = new WeakMap<CharacterPrimitive, { version: number; data: Float32Array; }>();
-	let poseVersion = 0;
+	let poseVersion = 0, paletteVersion = 0;
 	const order: number[] = [], visited = new Set<number>();
 	/*
 ================
@@ -74,8 +76,8 @@ visit
 	for ( let n = 0; n < model.nodes.length; n++ ) {
 		visit( n );
 	}
-	const animatedLocal = new Uint8Array( model.nodes.length ), animatedGlobal = new Uint8Array( model.nodes.length );
-	let matricesInitialized = false;
+	const animatedLocal = new Uint8Array( model.nodes.length ), changedGlobal = new Uint8Array( model.nodes.length );
+	let matricesInitialized = false, directMatrices = false;
 	const clips = new Map<string, CharacterClip>();
 	const timelines = new Map<CharacterClip, ReturnType<typeof createAnimationTimelines>>();
 	// One reusable clip's quaternion brackets, not a cache for every admitted
@@ -109,22 +111,7 @@ without changing skeleton storage, the selected layers or their revision.
 			clip.channels.every( channel => channel.interpolation !== "CUBICSPLINE" && channel.times.length > 0 )
 		) gpuClips.add( clip );
 	}
-	/*
-================
-refreshAnimatedBranches
-
-A newly animated parent also makes its previously static descendants dynamic.
-Existing matrices remain valid until a changed sample actually uses the clip.
-================
-	*/
-	function refreshAnimatedBranches() {
-		for ( const n of order ) {
-			const parent = model.nodes[n]!.parent;
-			animatedGlobal[n] = animatedLocal[n]! || (parent >= 0 ? animatedGlobal[parent]! : 0);
-		}
-	}
 	for ( const clip of model.clips ) registerClip( clip );
-	refreshAnimatedBranches();
 	const pass = model.nodes.map( () => [ new Float32Array( 3 ), new Float32Array( 4 ), new Float32Array( 3 ) ] );
 	const weights = new Float32Array( model.nodes.length * 3 ),
 		committed = new Float32Array( model.nodes.length * 3 ),
@@ -157,6 +144,25 @@ gpuSample
 	}
 	/*
 ================
+sameLocalSample
+
+The direct sampler does not use blend scratch. Compare its retained TRS
+words numerically with signed-zero preservation; NaNs always recompute.
+================
+	*/
+	function sameLocalSample( n: number ) {
+		for ( let path = 0; path < 3; path++ ) {
+			const current = path === 0 ? translations[n]! : path === 1 ? rotations[n]! : scales[n]!;
+			const previous = pass[n]![path]!;
+			for ( let c = 0; c < current.length; c++ ) {
+				const value = current[c]!;
+				if ( !Object.is( value, previous[c] ) || Number.isNaN( value ) ) return false;
+			}
+		}
+		return true;
+	}
+	/*
+================
 materialize
 ================
 	*/
@@ -168,6 +174,10 @@ materialize
 		// native event-before-timed accumulation below.
 		const direct = resolved.length === 1 && resolved[0]!.weight === 1 &&
 			(!resolved[0]!.clip || singleTrackClips.has( resolved[0]!.clip ));
+		const reuseMatrices = direct && directMatrices;
+		// A blended pass overwrites scratch. A failed sample must also leave
+		// reuse disabled until a complete materialization publishes new matrices.
+		directMatrices = false;
 		// Reset contiguous float32 rest poses in three copies instead of
 		// three small typed-array calls per node. Channel views stay stable.
 		translationData.set( restTranslations );
@@ -283,24 +293,41 @@ materialize
 				}
 			}
 		}
+		let matricesChanged = !matricesInitialized;
 		for ( const n of order ) {
 			const node = model.nodes[n]!;
+			let localChanged = !matricesInitialized;
 			if ( !matricesInitialized || animatedLocal[n] ) {
-				if ( node.matrix ) {
-					locals[n]!.set( node.matrix );
-				} else {
-					compose( translations[n]!, rotations[n]!, scales[n]!, locals[n]! );
+				localChanged = !reuseMatrices || !sameLocalSample( n );
+				if ( localChanged ) {
+					if ( node.matrix ) {
+						locals[n]!.set( node.matrix );
+					} else {
+						compose( translations[n]!, rotations[n]!, scales[n]!, locals[n]! );
+					}
+					if ( direct ) {
+						pass[n]![0]!.set( translations[n]! );
+						pass[n]![1]!.set( rotations[n]! );
+						pass[n]![2]!.set( scales[n]! );
+					}
 				}
 			}
-			if ( !matricesInitialized || animatedGlobal[n] ) {
+			// Parent-first traversal propagates a changed ancestor through static
+			// descendants. Unchanged local and parent bytes imply identical globals.
+			const globalChanged = localChanged || (node.parent >= 0 && changedGlobal[node.parent] !== 0);
+			changedGlobal[n] = globalChanged ? 1 : 0;
+			if ( globalChanged ) {
 				if ( node.parent < 0 ) {
 					globals[n]!.set( locals[n]! );
 				} else {
 					multiply( globals[node.parent]!, locals[n]!, globals[n]! );
 				}
+				matricesChanged = true;
 			}
 		}
+		if ( matricesChanged ) paletteVersion++;
 		matricesInitialized = true;
+		directMatrices = direct;
 		cpuPending = false;
 		cpuEvaluations++;
 	}
@@ -317,7 +344,9 @@ quaternion scratch is charged and allocated only when playback needs it.
 		admitClip( clip: CharacterClip ) {
 			if ( clips.has( clip.name ) ) return false;
 			registerClip( clip );
-			refreshAnimatedBranches();
+			// A newly animated node has no retained direct sample in blend
+			// scratch; the next materialization must not compare against it.
+			directMatrices = false;
 			return true;
 		},
 		/*
@@ -330,6 +359,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 			volume = index;
 			female = isFemale;
 			poseVersion++;
+			paletteVersion++;
 			for ( let i = 0; i < model.nodes.length; i++ ) {
 				thickness[i] = bodyBoneScale( model.nodes[i]!.name, index, isFemale );
 			}
@@ -414,7 +444,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 				cached = { version: -1, data: new Float32Array( primitive.joints.length * 16 ) };
 				palettes.set( primitive, cached );
 			}
-			if ( cached.version !== poseVersion ) {
+			if ( cached.version !== paletteVersion ) {
 				for ( let i = 0; i < primitive.joints.length; i++ ) {
 					const joint = primitive.joints[i]!, factor = thickness[joint]!;
 					let matrix = globals[joint]!;
@@ -427,7 +457,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 					}
 					multiply( matrix, views[i]!, cached.data, i * 16 );
 				}
-				cached.version = poseVersion;
+				cached.version = paletteVersion;
 			}
 			out.set( cached.data, offset );
 		},
