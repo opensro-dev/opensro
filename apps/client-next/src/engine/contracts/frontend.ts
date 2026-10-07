@@ -1,7 +1,7 @@
 import type {CatalogMessage} from './message';
 import type {WorldCamera} from "./scene";
 export interface CreationSelection {readonly race:0|1;readonly gender:0|1;readonly figure:number;readonly height:number;readonly volume:number;readonly weapon:number;readonly protector:number;readonly name:string;}
-export interface CreationSnapshot {readonly selection:CreationSelection;readonly explain:'figure'|'height'|'volume'|'weapon'|'protector';readonly phase:'editing'|'checking'|'confirming'|'dismissing'|'submitting'|'accepted';readonly alpha:number;readonly status?:CatalogMessage;readonly ready:boolean;readonly yaw:number;readonly zoom:boolean;readonly camera:WorldCamera;}
+export interface CreationSnapshot {readonly selection:CreationSelection;readonly protectorFloor:0|1;readonly explain:'figure'|'height'|'volume'|'weapon'|'protector';readonly phase:'editing'|'checking'|'confirming'|'dismissing'|'submitting'|'accepted';readonly alpha:number;readonly status?:CatalogMessage;readonly ready:boolean;readonly yaw:number;readonly zoom:boolean;readonly camera:WorldCamera;}
 export interface FrontendDialog {readonly kind:'delete-character'|'restore-character';readonly character:string;readonly id:number;readonly phase:'opening'|'open'|'pending'|'closing';readonly alpha:number;readonly operationId?:number;}
 export interface FrontendCameraKey {
  readonly timeSeconds:number; readonly sectorX:number; readonly sectorY:number;

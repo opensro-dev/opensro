@@ -136,7 +136,7 @@ export async function buildGuideImageResources( { copiedImages = new Set(), spri
 	return { references, copiedImages };
 }
 
-async function registerSpriteResource( catalog, ddjPath ) {
+export async function registerSpriteResource( catalog, ddjPath ) {
 	const resource = await describeSpriteResource( ddjPath );
 	if ( resource ) {
 		catalog.resourcesByDdjPath[normalizeAssetPath( ddjPath )] = resource;

@@ -22,7 +22,7 @@ async function load( file ) {
 	return import( sourceFileUrl( "src/engine/foundation/" + file + ".ts" ).href );
 }
 const { movementEntryRate, refreshActionStates, transitionActionStates } = await load( "animation/action-refresh" );
-const { defaultWearFrozen, refreshDefaultWear } = await load( "animation/default-wear-policy" );
+const { defaultWearFrozen, refreshDefaultWear, uncensoredShard } = await load( "animation/default-wear-policy" );
 const { footprintGeometry } = await load( "rendering/footprints" );
 const { terrainCellKey } = await load( "rendering/terrain-interaction" );
 const trace = row =>
@@ -111,6 +111,13 @@ test("native language gate uses original case-sensitive shard marker and preserv
 	for ( const name of [ "#$T", "Server#$Tprivate", "A#$T#$T" ] ) assert.equal( defaultWearFrozen( 0, name ), false );
 	assert.throws( () => defaultWearFrozen( 0, undefined ) );
 	assert.throws( () => defaultWearFrozen( 6, "Server" ) );
+	// 745D10 writes +0x129 (wear) and +0x12E (blood, death model) from one value.
+	for ( const language of [ 0, 1, 4 ] ) {
+		for ( const name of [ "Normal", "#$T", "A#$T" ] ) {
+			assert.equal( uncensoredShard( language, name ), defaultWearFrozen( language, name ) );
+		}
+	}
+	assert.equal( uncensoredShard( 4, undefined ), false );
 	const previous = [ "clothes_BA", "clothes_LA" ], desired = [ "light_BA", "light_LA" ];
 	assert.equal( refreshDefaultWear( previous, desired, true ), previous );
 	assert.equal( refreshDefaultWear( previous, desired, false ), desired );

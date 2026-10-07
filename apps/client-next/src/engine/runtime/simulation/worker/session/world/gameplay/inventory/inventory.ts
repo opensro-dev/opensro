@@ -163,10 +163,14 @@ presentShop
 		return shopPresentation;
 	}
 	let published: readonly InventoryItem[] | null = null;
-	// One-shot slot flashes the 0x3645 item-state update raised (7654B0); each
-	// lasts under 1.3 s, so older entries are dropped on the next update.
-	let itemFlashes: readonly { readonly slot: number; readonly kind: "changed" | "life"; readonly atMs: number; }[] =
-		[];
+	// One-shot slot flashes the 0x3645 item-state (7654B0) and 0x31E8 durability
+	// (77C300) updates raised; each lasts under 1.3 s, so older entries are
+	// dropped on the next update.
+	let itemFlashes: readonly {
+		readonly slot: number;
+		readonly kind: "changed" | "life" | "repair";
+		readonly atMs: number;
+	}[] = [];
 	const FLASH_RETENTION_MS = 2000;
 	const objRefs = new Map<number, number>();
 	const useCooldowns = new Map<number, number>();
@@ -1401,6 +1405,14 @@ receive
 					(value === 0 ? "SND_EQBREAK" : value === 6 ? "SND_EQDANGER" : null) :
 					null;
 				slots.set( n, { ...item, durability: value } );
+				// 77C300: a repaired or revived item also flashes its slot (54FA20
+				// through 592BD0 / 59C3A0).
+				if ( value > old ) {
+					itemFlashes = [
+						...itemFlashes.filter( f => now - f.atMs < FLASH_RETENTION_MS ),
+						{ slot: n, kind: "repair", atMs: now }
+					];
+				}
 				published = null;
 				if ( cue ) play( cue );
 				return true;

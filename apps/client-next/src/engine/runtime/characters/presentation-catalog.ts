@@ -33,7 +33,14 @@ import type { createReferenceAppearances } from "@/engine/foundation/animation/r
 import { skillSoundRoots } from "@/engine/foundation/animation/sound-selectors";
 import { animationMetadata, type AnimationMetadata } from "@/engine/foundation/animation/animation-metadata";
 import type { CharacterActor } from "@/engine/contracts/character";
-import type { DropModel, ItemPresentation, LinkedRide, Resource, SoundRule } from "./internal/presentation-contract";
+import type {
+	DeathModel,
+	DropModel,
+	ItemPresentation,
+	LinkedRide,
+	Resource,
+	SoundRule
+} from "./internal/presentation-contract";
 
 /*
 ================
@@ -64,6 +71,41 @@ One fetched manifest, as the resource owner's poll returns it.
 export interface PublishedResult {
 	readonly path: string;
 	readonly buffer: ArrayBuffer;
+}
+
+/*
+================
+admitDeathModel
+
+One "death" manifest row: the characterInfo death BSR every requiredBy
+codename loads on death (CICharactor_Action_KnockdownDie 8E64F0). Its mesh
+projections are the same ones a body row receives.
+================
+*/
+function admitDeathModel( row: Resource & { requiredBy?: unknown; }, deaths: Map<string, DeathModel> ) {
+	if (
+		typeof row.glb !== "string" || !row.glb.startsWith( "/assets/npc/" ) || row.glb.includes( ".." ) ||
+		!Array.isArray( row.clips ) || row.clips.some( clip => typeof clip !== "string" ) ||
+		!Array.isArray( row.requiredBy ) || row.requiredBy.some( owner => typeof owner !== "string" )
+	) throw new Error( "Invalid death model" );
+	const particles = modelAnimationParticles( row.particleModifiers );
+	const model: DeathModel = {
+		glb: row.glb,
+		clips: row.clips,
+		animationStates: row.animationStates ? animationMetadata( row.animationStates ) : undefined,
+		ambientParticles: modelAmbientParticles( row.particleModifiers ),
+		animationParticles: particles,
+		animationParticlePaths: [
+			...new Set(
+				particles.flatMap( set =>
+					set.particles.map( p => "/assets/effects/programs.json#" + encodeURIComponent( p.effectPath ) )
+				)
+			)
+		],
+		modifierBindings: modelAnimationBindings( row.animationBindings ),
+		modifierSelectors: modelModifierSets( row.modifierSets )
+	};
+	for ( const owner of row.requiredBy as string[] ) deaths.set( owner, model );
 }
 
 /*
@@ -103,6 +145,8 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 	// characterInfo rides: the rider's codename -> its packetless ride model
 	// (CICMonster_DeserializeSpawnPacket).
 	const ridesByRider = new Map<string, LinkedRide>();
+	// characterInfo death models: the dying codename -> the mesh 8E64F0 loads.
+	const deathModels = new Map<string, DeathModel>();
 	let manifest = 0;
 	return {
 		recoveryByCodename,
@@ -118,6 +162,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 		effectAnchors,
 		nativeMotionUrls,
 		ridesByRider,
+		deathModels,
 		get dress() {
 			return dress;
 		},
@@ -193,13 +238,17 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 					nextProfiles = new Map( soundProfiles ),
 					nextMotionUrls = new Map( nativeMotionUrls );
 				const rows = Object.values( value.models ?? {} ).filter( row => row.refObjId !== undefined );
-				const nextRides = new Map( ridesByRider );
+				const nextRides = new Map( ridesByRider ), nextDeaths = new Map( deathModels );
 				for (
 					const row of Object.values( value.models ?? {} ) as (Resource & {
 						kind?: string;
 						requiredBy?: unknown;
 					})[]
 				) {
+					if ( row.kind === "death" ) {
+						admitDeathModel( row, nextDeaths );
+						continue;
+					}
 					if ( row.kind !== "ride" ) continue;
 					if (
 						typeof row.glb !== "string" || !row.glb.startsWith( "/assets/npc/" ) ||
@@ -494,6 +543,8 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 				for ( const [key, row] of nextCatalog ) catalog.set( key, row );
 				ridesByRider.clear();
 				for ( const [key, row] of nextRides ) ridesByRider.set( key, row );
+				deathModels.clear();
+				for ( const [key, row] of nextDeaths ) deathModels.set( key, row );
 				animationStates.clear();
 				for ( const [key, row] of nextAnimations ) animationStates.set( key, row );
 				nativeMotionUrls.clear();

@@ -251,18 +251,29 @@ export const itemMallRuntimeImageReferences = [
 
 /*
 ================
-runtimeCifImageReferences
+slotEffectRuntimeImageReferences
+
+CIFSlotWithHelp item-slot effect sheets (CIFSlotWithHelp_LoadOverlayTextures
+5548C0, drawn by CIFControl_RenderIconOverlays 565850): the rare (SOX)
+shine, the summoned-companion glow, the revival flash, the item-changed
+flash and the repair flash. Code-selected; no resinfo file names them.
 ================
 */
-export const runtimeCifImageReferences = [
-	// CIFSlotWithHelp item-slot effect sheets (CIFSlotWithHelp_LoadOverlayTextures
-	// 5548C0, drawn by CIFControl_RenderIconOverlays 565850): the rare (SOX)
-	// shine, the summoned-companion glow, the revival flash and the
-	// item-changed flash. Code-selected; no resinfo file names them.
+export const slotEffectRuntimeImageReferences = [
 	"icon/item/etc/icon_edge_rare.ddj",
 	"interface/pet/pt_edge_effect.ddj",
 	"interface/pet/pt_life_effect.ddj",
 	"icon/icon_mall_transgender.ddj",
+	"icon/icon_mall_repair.ddj"
+];
+
+/*
+================
+runtimeCifImageReferences
+================
+*/
+export const runtimeCifImageReferences = [
+	...slotEffectRuntimeImageReferences,
 	...itemMallRuntimeImageReferences,
 	// CIFDelayInfo 6B14E0 / 6B1B30 assigns these outside resinfo.
 	...returnScrollRuntimeImageReferences,

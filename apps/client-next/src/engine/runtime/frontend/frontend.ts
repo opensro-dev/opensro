@@ -21,7 +21,7 @@ export function createFrontend(assets:AssetOwner,renderer:Renderer,base:string,s
  return {
   reveal(){flow.reveal();},create(){if(flow.snapshot().phase!=='dock'||selectedCharacter||cameraMoving||dialog.snapshot())return;if(roster.length<4)flow.create();else{status={key:'UIO_MSG_ERROR_CHARACTER_OVER_3',suffix:'',args:[4]};statusUntil=last+15000;messageSound();}},back(){if(creation.snapshot()&&!['editing','checking'].includes(creation.snapshot()!.phase))return;creation.reset();flow.back();},start(){if(entryPending||flow.snapshot().phase!=="dock"||cameraMoving||dialog.snapshot()||!roster.some(row=>row.name===selectedCharacter&&!row.deletePending))return false;entryRevision=sessionRevision;entryPending=true;return true;},
   leave(){if(!selectedCharacter&&!cameraMoving&&!dialog.snapshot())flow.leave();},
-  race(value:0|1){if(flow.snapshot().phase!=='create')return;race=value;creation.open(value);flow.race();},
+  race(value:0|1,protectorFloor:0|1){if(flow.snapshot().phase!=='create')return;race=value;creation.open(value,protectorFloor);flow.race();},
   creationAction(id:string,value?:string){if(flow.snapshot().phase==='customize')creation.action(id,value);},
   dialogAction(action:string){if(action==='dock:warning-cancel'){dialog.cancel();return;}if(action==='dock:warning-accept'){dialog.accept();return;}if(flow.snapshot().phase!=='dock'||cameraMoving)return;const row=roster.find(row=>row.name===selectedCharacter);if(row){const warning=dialog.open(row);if(warning){status={key:warning,suffix:''};statusUntil=last+15000;messageSound();}}},
   pointer(value:readonly [number,number]|null){pointer=value;},

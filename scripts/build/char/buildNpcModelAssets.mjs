@@ -282,10 +282,13 @@ function loadCharacterInfo() {
 		if ( !codename ) continue;
 		const rideTypeName = String( cols[3] ?? "none" ).trim().toUpperCase();
 		const rideModelPath = normalizeBsrPath( cols[4] );
+		// 91B830 stores column 5 at record +0x28: the mesh 8E64F0 loads on death.
+		const deathModelPath = normalizeBsrPath( cols[5] );
 		const riderTransformMode = rideTypeName === "RT_FIXED" ? 1 : rideTypeName === "RT_DUMMY" ? 2 : 0;
 		const record = {
 			soundProfileName: soundProfileName && soundProfileName.toLowerCase() !== "none" ? soundProfileName : null,
 			rideModelPath,
+			deathModelPath,
 			riderTransformMode
 		};
 		for ( const expandedCodename of expandCharacterInfoCodenames( codename ) ) {
@@ -395,16 +398,23 @@ async function convertTextures() {
 	if ( py.status !== 0 ) console.warn( "[npc] texture conversion returned nonzero; continuing (pngs may exist)" );
 }
 
+// The default-set motions bakeCharacterResource requires of a monster resource.
+const BODY_REQUIRED_STATES = [ 0 ];
+const DEATH_REQUIRED_STATES = [ 4, 36 ];
+
 /*
 ================
 bakeCharacterResource
 
 Bake one character BSR resource. Primary RefObj models and secondary
 CICRide models use the same native resource loader, so they must share one
-compiler path as well; only the manifest identity differs.
+compiler path as well; only the manifest identity differs. requiredStates
+are the default-set motions a monster resource cannot lack: stand (0) for a
+body, death and deathLoop (4, 36) for a characterInfo death model, which
+8E64F0 only ever plays those two motions on.
 ================
 */
-export async function bakeCharacterResource( bsrPath, output, isMob ) {
+export async function bakeCharacterResource( bsrPath, output, isMob, requiredStates = BODY_REQUIRED_STATES ) {
 	const { publicPath, diskPath } = output;
 	const source = await loadDataAsset( bsrPath );
 	const bsr = parseCharacterBsr( source, bsrPath );
@@ -452,8 +462,8 @@ export async function bakeCharacterResource( bsrPath, output, isMob ) {
 	) {
 		const state = findDefaultAnimationState( bsr, stateId );
 		if ( !state?.animationPath ) {
-			if ( stateId === 0 && isMob ) {
-				throw new Error( `${bsrPath} has no authored default animation state 0 (stand)` );
+			if ( isMob && requiredStates.includes( stateId ) ) {
+				throw new Error( `${bsrPath} has no authored default animation state ${stateId} (${role})` );
 			}
 			continue;
 		}
@@ -689,6 +699,8 @@ export async function buildNpcModelAssets( options = {} ) {
 	const retailAnimationModels = new Map();
 	/** Secondary BSR -> the characterInfo records that require it. */
 	const rideResources = new Map();
+	/** characterInfo death BSR -> the codenames whose record names it. */
+	const deathResources = new Map();
 	for ( const rosterRef of roster ) {
 		const { codename } = rosterRef;
 		const model = resolveNpcModel( codename, rows );
@@ -747,6 +759,12 @@ export async function buildNpcModelAssets( options = {} ) {
 			priorRide.transformModes.add( serverTransformMode );
 			rideResources.set( serverRideModelPath, priorRide );
 		}
+		const deathModelPath = info?.deathModelPath ?? null;
+		if ( deathModelPath ) {
+			const priorDeath = deathResources.get( deathModelPath ) ?? { bsrPath: deathModelPath, requiredBy: [] };
+			priorDeath.requiredBy.push( codename );
+			deathResources.set( deathModelPath, priorDeath );
+		}
 		const kind = isCos ? "cos" : isMob ? "monster" : structureNames.has( codename ) ? "structure" : "npc";
 		const entry = {
 			codename,
@@ -755,7 +773,8 @@ export async function buildNpcModelAssets( options = {} ) {
 			kind,
 			bsr: model.bsrPath,
 			glb: publicPath,
-			...(soundProfileName ? { soundProfileName } : {})
+			...(soundProfileName ? { soundProfileName } : {}),
+			...(deathModelPath ? { deathModel: deathModelPath } : {})
 		};
 		if ( model.refObjId !== rosterRef.refObjId ) {
 			throw new Error(
@@ -815,36 +834,22 @@ export async function buildNpcModelAssets( options = {} ) {
 	// Secondary models are first-class resource entries keyed by normalized
 	// BSR path. This mirrors ResourceManager lookup at action-effect +0x24 and
 	// avoids inventing a second RefObj/codename identity for packetless rides.
-	for ( const ride of rideResources.values() ) {
-		const key = ride.bsrPath;
-		const output = resourceGlbOutput( key, {
-			namespace: "npc",
-			publicAssetsRoot: publicAssets
-		} );
+	// CICharactor_Action_KnockdownDie (8E64F0) reloads a dying body from its
+	// characterInfo death BSR the same way; death models bake with the monster
+	// clip policy but require death 4 and deathLoop 36 instead of stand.
+	const bakeSecondaryResource = async ( key, kind, fields, requiredStates ) => {
+		const output = resourceGlbOutput( key, { namespace: "npc", publicAssetsRoot: publicAssets } );
 		claimResourceOutput( outputOwners, key, output.publicPath );
-		const entry = {
-			codename: key,
-			kind: "ride",
-			bsr: key,
-			requiredBy: ride.requiredBy,
-			riderTransformModes: [ ...ride.transformModes ].sort( ( a, b ) => a - b )
-		};
-		retailAnimationModels.set( key, {
-			codename: key,
-			refObjId: null,
-			kind: "ride",
-			bsr: key
-		} );
+		const entry = { codename: key, kind, bsr: key, ...fields };
+		retailAnimationModels.set( key, { codename: key, refObjId: null, kind, bsr: key } );
 		try {
 			const prior = bakedByBsr.get( key );
 			if ( prior ) {
-				if ( !prior.isMob ) {
-					throw new Error( `${key}: ride resource collides with an NPC-only stand bake` );
-				}
+				if ( !prior.isMob ) throw new Error( `${key}: ${kind} resource collides with an NPC-only stand bake` );
 				Object.assign( entry, prior.baked );
 				reusedModels += 1;
 			} else {
-				const baked = await bakeCharacterResource( key, output, true );
+				const baked = await bakeCharacterResource( key, output, true, requiredStates );
 				const { retailAnimationCatalog, ...missionBaked } = baked;
 				Object.assign( entry, missionBaked );
 				bakedByBsr.set( key, { isMob: true, baked: missionBaked } );
@@ -862,6 +867,15 @@ export async function buildNpcModelAssets( options = {} ) {
 			console.warn( `[npc] FAIL ${key} ${entry.error}` );
 		}
 		models.push( entry );
+	};
+	for ( const ride of rideResources.values() ) {
+		await bakeSecondaryResource( ride.bsrPath, "ride", {
+			requiredBy: ride.requiredBy,
+			riderTransformModes: [ ...ride.transformModes ].sort( ( a, b ) => a - b )
+		}, BODY_REQUIRED_STATES );
+	}
+	for ( const death of deathResources.values() ) {
+		await bakeSecondaryResource( death.bsrPath, "death", { requiredBy: death.requiredBy }, DEATH_REQUIRED_STATES );
 	}
 
 	// CICATStruct_SetVisualStage (4F78A0) reloads the model from the stage's
@@ -904,7 +918,8 @@ export async function buildNpcModelAssets( options = {} ) {
 	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest, { publicAssetsRoot: publicAssets } );
 	const manifest = {
 		format: "sro-mission-npc-models",
-		version: 7,
+		// v8: characterInfo death models (kind "death", 8E64F0).
+		version: 8,
 		source:
 			"server NPC spawn roster + server-exported spawnable monster roster; PathCtl-owned in-place horizontal locomotion, complete native default CResAnimationStateTable event-map/time-warp payloads, BSR ModDataSound cursor tracks, and the unified skilleffect characterInfo sound + CICRide resource contract",
 		count: models.length,

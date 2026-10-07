@@ -15,7 +15,8 @@ import {
 	creationRange,
 	creationProtectors,
 	creationNameRules,
-	creationNameError
+	creationNameError,
+	type ProtectorFloor
 } from "@/engine/foundation/ui/character-create";
 import { characterStatus } from "@/engine/foundation/ui/character-status";
 import { frontendCameraView } from "@/engine/foundation/rendering/frontend-camera";
@@ -66,6 +67,8 @@ export function createCreation(
 	let retry = 0;
 	let job: number | null = null, rules: ReturnType<typeof creationNameRules> | null = null;
 	let yaw = 0, velocity = 0, zoom = false, zoomTime = ZOOM_SECONDS, pose = CAMERA_INITIAL, from = pose, to = pose;
+	// The login shard's first protector choice (creationProtectorFloor).
+	let protectorFloor: ProtectorFloor = 1;
 	/*
 ================
 reset
@@ -110,9 +113,10 @@ validate
 open
 ================
 		*/
-		open( race: 0 | 1 ) {
+		open( race: 0 | 1, floor: ProtectorFloor ) {
 			reset();
-			selection = initialCreation( race );
+			protectorFloor = floor;
+			selection = initialCreation( race, protectorFloor );
 			explain = "weapon";
 			yaw = velocity = 0;
 			zoom = false;
@@ -177,7 +181,7 @@ action
 			}
 			if ( id === "create:male" || id === "create:female" ) {
 				selection = {
-					...initialCreation( selection.race ),
+					...initialCreation( selection.race, protectorFloor ),
 					name: selection.name,
 					gender: id === "create:male" ? 0 : 1
 				};
@@ -204,7 +208,7 @@ action
 			const match = /^create:(figure|height|volume|weapon|protector):(prev|next|\d+)$/.exec( id );
 			if ( !match ) return;
 			const key = match[1] as "figure" | "height" | "volume" | "weapon" | "protector",
-				[min, max] = creationRange( selection, key ),
+				[min, max] = creationRange( selection, key, protectorFloor ),
 				n = match[2] === "prev" ?
 					selection[key] - 1 :
 					match[2] === "next" ?
@@ -214,10 +218,14 @@ action
 			selection = { ...selection, [key]: Math.max( min, Math.min( max, n ) ) };
 			if ( key === "weapon" ) {
 				// Protector indices are weapon-relative. Preserve the player's
-				// chosen type when admitted by the new weapon, not its old index.
+				// chosen type when admitted by the new weapon, not its old index;
+				// otherwise the range's first choice (72C780/7302B0).
 				selection = {
 					...selection,
-					protector: armor ? creationProtectors( selection ).indexOf( armor ) + 1 : 0
+					protector: Math.max(
+						protectorFloor,
+						armor ? creationProtectors( selection ).indexOf( armor ) + 1 : 0
+					)
 				};
 			}
 		},
@@ -314,6 +322,7 @@ snapshot
 			return selection ?
 				{
 					selection,
+					protectorFloor,
 					explain,
 					phase,
 					alpha,

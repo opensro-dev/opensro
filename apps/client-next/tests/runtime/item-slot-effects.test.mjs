@@ -59,3 +59,20 @@ test("0x3645 raises the changed flash for a new type and the revival flash for 4
 	assert.deepEqual( fx.itemSlotFlashKinds( 0x41, 4, 3 ), [ "changed", "life" ] );
 	assert.deepEqual( fx.itemSlotFlashKinds( 0x08, 4, 3 ), [] );
 });
+
+test("a repair flash runs 20 frames of the 8x4 sheet over 72 px, before the changed flash", () => {
+	const repair = ms => fx.itemSlotOverlays( {}, RECT, 0, ms, [ { kind: "repair", atMs: 1000 } ] );
+	assert.ok( repair( 1000 )[0].path.endsWith( "icon/icon_mall_repair.png" ) );
+	assert.deepEqual( repair( 1000 )[0].uv, [ 0, 0, 1 / 8, 1 / 4 ] );
+	assert.deepEqual( repair( 1000 + 9 * 50 )[0].uv, [ 1 / 8, 1 / 4, 1 / 8, 1 / 4 ] );
+	assert.deepEqual( repair( 1000 + 19 * 50 )[0].uv, [ 3 / 8, 2 / 4, 1 / 8, 1 / 4 ] );
+	assert.deepEqual( repair( 1000 + 20 * 50 ), [] );
+	assert.deepEqual( repair( 999 ), [] );
+	// 5669B3: 72 px from 20 px above and left of the slot.
+	assert.deepEqual( repair( 1000 )[0].rect, [ 80, 180, 72, 72 ] );
+	const both = fx.itemSlotOverlays( {}, RECT, 0, 0, [ { kind: "changed", atMs: 0 }, { kind: "repair", atMs: 0 } ] );
+	assert.deepEqual( both.map( o => o.path.split( "/" ).at( -1 ) ), [
+		"icon_mall_repair.png",
+		"icon_mall_transgender.png"
+	] );
+});

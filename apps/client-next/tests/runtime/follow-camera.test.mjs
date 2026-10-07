@@ -296,7 +296,8 @@ test("native pitch rails, signed wheel step, defaults and zero wheel", () => {
 		input.drain();
 	};
 	assert.equal( input.camera().distance, 80 );
-	assert.equal( input.camera().pitch, Math.PI / 18 );
+	// CApp_ResetCameraDefaults (818790): +0x370 = 0.19f.
+	assert.equal( input.camera().pitch, Math.fround( 0.19 ) );
 	commit( [ { kind: "wheel", delta: 0 } ] );
 	assert.equal( input.camera().distance, 80 );
 	commit( [ { kind: "wheel", delta: -120 } ] );
@@ -618,12 +619,12 @@ test("camera tree preserves ordered brute-force results across sparse scenes and
 });
 
 test("camera responds before worker acknowledgement, drains once and release prevents a stale drag delta", () => {
-	const input = createInput();
+	const input = createInput(), start = input.camera().yaw;
 	input.accept( { kind: "pointer", x: 10, y: 20, buttons: 2, timeMs: 0 } );
 	input.accept( { kind: "pointer", x: 30, y: 30, buttons: 2, timeMs: 1 } );
 	input.accept( { kind: "wheel", delta: -120, timeMs: 2 } );
 	const immediate = input.camera();
-	assert.equal( immediate.yaw, .1 );
+	assert.equal( immediate.yaw, start + .1 );
 	assert.equal( immediate.distance, 74 );
 	// Camera input moves the camera here and sends the worker nothing.
 	assert.equal( input.drain(), null );
@@ -633,7 +634,7 @@ test("camera responds before worker acknowledgement, drains once and release pre
 	input.accept( { kind: "pointer", x: 999, y: 999, buttons: 2, timeMs: 4 } );
 	assert.deepEqual( input.camera(), immediate );
 	input.accept( { kind: "pointer", x: 1001, y: 999, buttons: 2, timeMs: 5 } );
-	assert.equal( input.camera().yaw, .11 );
+	assert.equal( input.camera().yaw, start + .1 + .01 );
 	input.accept( { kind: "wheel", delta: NaN, timeMs: 6 } );
 	assert.match( input.error(), /Invalid/ );
 	assert.equal( input.camera().distance, 74 );

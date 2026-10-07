@@ -15,7 +15,7 @@ import type { AnimationMetadata } from "@/engine/foundation/animation/animation-
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
-import type { Resource, PresentationIdleState, PresentationOutput } from "./internal/presentation-contract";
+import type { DeathModel, Resource, PresentationIdleState, PresentationOutput } from "./internal/presentation-contract";
 
 /*
 ================
@@ -30,7 +30,10 @@ export interface PresentationStateFrame {
 	readonly simulationMs: number | undefined;
 	readonly logicalPose: ( entity: EntityState ) => Pose;
 	readonly appearanceRef: ( entity: EntityState ) => number;
-	readonly states: ReadonlyMap<number, { readonly postureClip?: string; readonly pickupStarted?: number; }>;
+	readonly states: ReadonlyMap<
+		number,
+		{ readonly postureClip?: string; readonly pickupStarted?: number; readonly actionMask?: number; }
+	>;
 	readonly health: { dead( gid: number ): boolean; } | undefined;
 	readonly deadGids: ReadonlySet<number>;
 	readonly hitByActor: ReadonlyMap<number, { readonly downAt?: number; }>;
@@ -38,6 +41,11 @@ export interface PresentationStateFrame {
 	readonly resources: { duration( path: string, role: string ): number; };
 	readonly random: Pick<PresentationRandom, "range">;
 	readonly active: ReadonlySet<number>;
+	// Deaths whose killing hit has not landed yet: presentation has not
+	// entered action state 1 for them (actor-motion's death criterion).
+	readonly pendingDeaths: ReadonlySet<number>;
+	// GameConfig +0x12E for the login shard (uncensoredShard).
+	readonly uncensored: boolean;
 }
 
 /*
@@ -49,6 +57,42 @@ export interface PresentationStateCatalog {
 	readonly catalog: ReadonlyMap<number, Resource>;
 	readonly recoveryByCodename: ReadonlyMap<string, number>;
 	readonly animationStates: ReadonlyMap<string, Record<string, AnimationMetadata>>;
+	readonly deathModels: ReadonlyMap<string, DeathModel>;
+}
+
+// Action-state mask bits CICharactor_EnterActionState (857830) hands an
+// entry callback: the states active before it (bit = 1 << state).
+const MASK_CAST = 1 << 2;
+const MASK_BASE = 1 << 3;
+
+/*
+================
+enterDeath
+
+CICharactor_Action_KnockdownDie (8E64F0), the entry of action state 1, run
+once when presentation enters death. From state 4 (down, bit 0x10) it plays
+downdie and keeps the body. Otherwise a characterInfo death model (+0x28)
+replaces the mesh when GameConfig +0x12E is set or the body has no deathLoop
+track (0x24, CCObjCharacter_HasMotionTrack); deathLoop then installs and the
+death one-shot (motion 4) plays over it only when state 2 or 3 was active.
+================
+*/
+function enterDeath(
+	entry: PresentationIdleState,
+	dead: boolean,
+	input: { previousMask: number; deathModel: boolean; deathLoop: boolean; uncensored: boolean; }
+) {
+	if ( !dead ) {
+		entry.deathEntered = false;
+		entry.deathModel = false;
+		entry.deathAction = false;
+		return;
+	}
+	if ( entry.deathEntered ) return;
+	entry.deathEntered = true;
+	const down = entry.downDeath === true;
+	entry.deathModel = !down && input.deathModel && (input.uncensored || !input.deathLoop);
+	entry.deathAction = !down && (input.previousMask & (MASK_CAST | MASK_BASE)) !== 0;
 }
 
 /*
@@ -88,9 +132,11 @@ export function createPresentationState() {
 				castByActor,
 				resources,
 				random,
-				active
+				active,
+				pendingDeaths,
+				uncensored
 			} = frame;
-			const { catalog, recoveryByCodename, animationStates } = published;
+			const { catalog, recoveryByCodename, animationStates, deathModels } = published;
 			for ( const entity of entities ) {
 				if ( entity.groundItem ) continue;
 				const resource = catalog.get( appearanceRef( entity ) );
@@ -118,6 +164,12 @@ export function createPresentationState() {
 				const previousEmote = entry.posture?.kind === "emote" ? entry.posture.clip : undefined;
 				if ( dead && entry.posture?.kind === "down" ) entry.downDeath = true;
 				else if ( !dead ) entry.downDeath = false;
+				enterDeath( entry, dead && !pendingDeaths.has( entity.gid ), {
+					previousMask: state?.actionMask ?? 0,
+					deathModel: deathModels.has( resource.codename ),
+					deathLoop: resource.clips.includes( "deathLoop" ) || resource.clips.includes( "deathloop" ),
+					uncensored
+				} );
 				if ( dead || entity.mountedOn || entity.movementMode === MOVEMENT_MODE_SEATED ) {
 					entry.posture = transitionPosture( entry.posture, { kind: "cancel" } );
 				} else {
