@@ -4,7 +4,8 @@
 text.ts - the UI's bitmap font: measurement and glyph layout
 
 Owns font admission and two bounded memos, run widths and glyph layouts,
-so labels that repeat frame to frame are not laid out again.
+so labels that repeat frame to frame are not laid out again. Each local
+layout retains one immutable absolute placement; callers own their lists.
 
 ===========================================================================
 */
@@ -13,6 +14,27 @@ import type { UiRect, UiQuad } from "@/engine/contracts/ui";
 import { decodeUiFont, titleText, titleTextBox, drawableGlyph } from "@/engine/foundation/rendering/ui-glyphs";
 import type { FontAtlas, GlyphStyle } from "@/engine/foundation/rendering/ui-glyphs";
 import { guideContent, type GuideToken } from "@/engine/foundation/ui/guide-content";
+
+const FONT_BYTE_LIMIT = 4 << 20;
+const BOARD_EXTRA_HEIGHT = 5;
+const MAX_WIDTHS = 2048;
+const MAX_LAYOUTS = 4096;
+
+/*
+================
+UiTextPlacement
+
+One placement per local layout. Input vectors are owned snapshots, so edits
+to a caller's arrays cannot turn an old placement into a cache hit.
+================
+*/
+interface UiTextPlacement {
+	x: number;
+	y: number;
+	box: UiRect;
+	clip: UiRect;
+	quad: UiQuad;
+}
 
 /*
 ================
@@ -25,6 +47,7 @@ raster atlas can diverge from selection/caret geometry.
 export function createUiText( assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">, base: string ) {
 	// Owned by this font admission; finite FIFO storage survives idle HUD frames.
 	const widths = new Map<string, number>(), layouts = new Map<string, UiQuad | null>();
+	const placements = new WeakMap<UiQuad, UiTextPlacement>();
 	let state: { kind: "idle"; } | { kind: "loading"; id: number; } | { kind: "ready"; font: FontAtlas; } | {
 		kind: "failed";
 		message: string;
@@ -57,19 +80,47 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 			if ( state.kind === "idle" && assets.available() > 0 ) {
 				state = {
 					kind: "loading",
-					id: assets.request( new URL( "/assets/fonts/native-ui-font-atlas.json", base ).href, 4 << 20 )
+					id: assets.request(
+						new URL( "/assets/fonts/native-ui-font-atlas.json", base ).href,
+						FONT_BYTE_LIMIT
+					)
 				};
 			}
 			return false;
 		},
+		/*
+		================
+		height
+		================
+		*/
 		height: () => state.kind === "ready" ? state.font.fonts["0"]!.recordHeight : 0,
-		boardHeight: () => state.kind === "ready" ? state.font.fonts["0"]!.recordHeight + 5 : 0,
+		/*
+		================
+		boardHeight
+		================
+		*/
+		boardHeight: () => state.kind === "ready" ? state.font.fonts["0"]!.recordHeight + BOARD_EXTRA_HEIGHT : 0,
+		/*
+		================
+		extentHeight
+		================
+		*/
 		extentHeight: ( index = 0, style = 0 ) => {
 			if ( state.kind !== "ready" ) return 0;
 			const font = state.font.fonts[String( index ) + (style === 2 ? ":2" : "")]!;
 			return font.ascent + font.descent;
 		},
+		/*
+		================
+		path
+		================
+		*/
 		path: () => state.kind === "ready" ? state.font.image : null,
+		/*
+		================
+		guide
+		================
+		*/
 		guide(
 			tokens: readonly GuideToken[],
 			rect: UiRect,
@@ -81,6 +132,11 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 				guideContent( state.font, tokens, rect, clip, color, size ) :
 				{ quads: [], paths: [], height: 0 };
 		},
+		/*
+		================
+		error
+		================
+		*/
 		error: () => state.kind === "failed" ? state.message : null,
 		/*
 		================
@@ -94,7 +150,7 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 			const font = state.font.fonts[String( fontIndex ) + (fontStyle === 2 ? ":2" : "")]!;
 			let width = 0;
 			for ( const c of text ) width += drawableGlyph( font.glyphs, c )?.advanceX ?? 0;
-			if ( widths.size >= 2048 ) widths.delete( widths.keys().next().value! );
+			if ( widths.size >= MAX_WIDTHS ) widths.delete( widths.keys().next().value! );
 			widths.set( key, width );
 			return { width };
 		},
@@ -107,7 +163,7 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 		translation-invariant for an integer shift (Math.round( n + f ) is
 		n + Math.round( f ); widths, offsets and clip sizes are unchanged), so a
 		label that moves with the minimap or a character is laid out once and
-		shifted after. Cached quads are frozen; every caller gets its own copies.
+		shifted after. Placed quads own frozen vectors; every caller gets its own list.
 		================
 		*/
 		quads( value: string, rect: UiRect, clip: UiRect, color: UiQuad["color"], style: GlyphStyle = {} ) {
@@ -132,10 +188,25 @@ export function createUiText( assets: Pick<AssetOwner, "available" | "request" |
 				layouts.set( key, cached );
 			} else {
 				cached = titleText( state.font, value, localRect, localClip, color, style )[0] ?? null;
-				if ( layouts.size >= 4096 ) layouts.delete( layouts.keys().next().value! );
+				if ( layouts.size >= MAX_LAYOUTS ) layouts.delete( layouts.keys().next().value! );
 				layouts.set( key, cached );
 			}
-			return cached ? [ shiftRun( cached, nx, ny, rect, clip, style.overflow ?? "avoid-overlap" ) ] : [];
+			if ( !cached ) return [];
+			const placed = placements.get( cached );
+			if (
+				placed && Object.is( placed.x, nx ) && Object.is( placed.y, ny ) &&
+				sameRect( placed.box, rect ) && sameRect( placed.clip, clip ) &&
+				sameRect( placed.quad.color, cached.color )
+			) return emitPlacement( placed.quad );
+			const quad = freezePlacement( shiftRun( cached, nx, ny, rect, clip, style.overflow ?? "avoid-overlap" ) );
+			placements.set( cached, {
+				x: nx,
+				y: ny,
+				box: Object.freeze( [ ...rect ] ) as UiRect,
+				clip: Object.freeze( [ ...clip ] ) as UiRect,
+				quad
+			} );
+			return emitPlacement( quad );
 		},
 		/*
 		================
@@ -184,6 +255,11 @@ function shiftRun(
 		left = Math.max( clip[0], box[0] ),
 		right = Math.min( clip[0] + clip[2], box[0] + available );
 	const bounded: UiRect = [ left, clip[1], Math.max( 0, right - left ), clip[3] ];
+	/*
+	================
+	moved
+	================
+	*/
 	const moved = ( quad: UiQuad, glyphClip: UiRect ): UiQuad => ({
 		...quad,
 		rect: [ quad.rect[0] + dx, quad.rect[1] + dy, quad.rect[2], quad.rect[3] ],
@@ -199,4 +275,61 @@ function shiftRun(
 			fitted: fitted ? Object.freeze( moved( fitted, bounded ) ) : fitted
 		}
 	} );
+}
+
+/*
+================
+sameRect
+
+Object.is preserves signed zero and compares scalar snapshots rather than
+caller vector identity.
+================
+*/
+function sameRect( a: UiRect, b: UiRect ): boolean {
+	return Object.is( a[0], b[0] ) && Object.is( a[1], b[1] ) &&
+		Object.is( a[2], b[2] ) && Object.is( a[3], b[3] );
+}
+
+/*
+================
+freezePlacement
+
+A shared placement owns every mutable vector it exposes. The glyph run is
+already deeply frozen by textRunQuad; no caller storage is frozen here.
+================
+*/
+function freezePlacement( quad: UiQuad ): UiQuad {
+	const paint = {
+		...quad,
+		rect: Object.freeze( [ ...quad.rect ] ) as UiRect,
+		clip: Object.freeze( [ ...quad.clip ] ) as UiRect,
+		color: Object.freeze( [ ...quad.color ] ) as UiRect,
+		uv: Object.freeze( [ ...quad.uv ] ) as UiRect
+	};
+	if ( !quad.textLayout ) return Object.freeze( paint );
+	const layout = quad.textLayout;
+	return Object.freeze( {
+		...paint,
+		textLayout: Object.freeze( {
+			...layout,
+			box: Object.freeze( [ ...layout.box ] ) as UiRect,
+			fitted: layout.fitted ? freezePlacement( layout.fitted ) : layout.fitted
+		} )
+	} );
+}
+
+/*
+================
+emitPlacement
+
+Overlap resolution groups by sidecar identity. Two identical labels are
+still two independent emissions, even when their placement geometry is shared.
+================
+*/
+function emitPlacement( quad: UiQuad ): UiQuad[] {
+	if ( !quad.textLayout ) return [ quad ];
+	return [ Object.freeze( {
+		...quad,
+		textLayout: Object.freeze( { ...quad.textLayout } )
+	} ) ];
 }

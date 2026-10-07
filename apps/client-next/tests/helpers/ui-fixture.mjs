@@ -31,7 +31,7 @@ export function uiFixture(
 	saveVideo = () => {},
 	saveOptions = () => {}
 ) {
-	const scenes = [], textures = [], sounds = [], requested = [], pending = new Map();
+	const scenes = [], products = [], textures = [], sounds = [], requested = [], pending = new Map();
 	let nextId = 0;
 	const ui = createUi(
 		{
@@ -79,7 +79,15 @@ export function uiFixture(
 		commands,
 		// Scenes are recorded as drawn: text runs expanded into the glyph quads the
 		// GPU packer writes (text-run.ts), so assertions read painted glyphs.
-		s => scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } ),
+		/*
+		================
+		recordProduct
+		================
+		*/
+		s => {
+			products.push( s );
+			scenes.push( s && { ...s, quads: expandTextRuns( s.quads ) } );
+		},
 		( ...args ) => textures.push( args ),
 		"https://fixture.invalid/",
 		"https://fixture.invalid/",
@@ -162,6 +170,7 @@ export function uiFixture(
 		},
 		hasText,
 		scenes,
+		products,
 		textures,
 		state,
 		/*
