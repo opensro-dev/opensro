@@ -44,6 +44,7 @@ import { createPresentationSamples } from "./presentation-samples";
 import { createPresentationState } from "./presentation-state";
 import { createPresentationActions } from "./presentation-actions";
 import { createPresentationEvents } from "./presentation-events";
+import { createFootprints } from "./footprints";
 import { createCharacterStateIndex } from "./state-index";
 import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
 import { monsterScale, monsterMaterialSlot } from "@/engine/foundation/rendering/monster-scale";
@@ -152,51 +153,7 @@ export function createCharacterPresentation(
 	const entityLod = createEntityLod();
 	const mallPreview = createMallPreview();
 	let animationDelta = createModifierDelta();
-	let footprints: import("@/engine/contracts/footprint").Footprint[] = [], footprintSequence = 0;
-	/*
-	================
-	footContact
-	================
-	*/
-	function footContact(
-		entity: EntityState,
-		actors: readonly CharacterActor[],
-		actor: CharacterActor,
-		pose: import("@/engine/contracts/gameplay").Pose,
-		right: boolean,
-		seconds: number
-	) {
-		if ( (entity.kind !== "player" && entity.kind !== "local-player") || entity.movementMode === 4 ) return;
-		const surface = soundSurface( pose );
-		if ( surface !== "SAND" && surface !== "SNOW" ) return;
-		const socket = renderer.characterSocket( actors, entity.gid, right ? "Bip01 R Toe0" : "Bip01 L Toe0", [
-			0,
-			0,
-			0
-		] );
-		if ( socket ) {
-			footprints.push( {
-				id: ++footprintSequence,
-				pose: socket,
-				yaw: Math.fround( Math.PI - actor.pose.yaw + (right ? -.07853981852531433 : .07853981852531433) ),
-				right,
-				surface,
-				started: seconds
-			} );
-		}
-	}
-	/*
-	================
-	clearFootprints
-	================
-	*/
-	function clearFootprints() {
-		if ( footprints.length ) {
-			footprints = [];
-			renderer.setFootprints( footprints );
-		}
-		footprintSequence = 0;
-	}
+	const footprints = createFootprints( renderer, soundSurface );
 	const groundClocks = new Map<number, GroundVisualClock & { duration: number; modifierId: number; }>();
 	const referenceAppearances = createReferenceAppearances( () => random.range( 0, 32768 ) );
 	const presentationState = createPresentationState();
@@ -393,7 +350,7 @@ export function createCharacterPresentation(
 		displayedDependencies,
 		effects,
 		entityLod,
-		footContact,
+		footContact: footprints.footContact,
 		groundClocks,
 		health,
 		output,
@@ -770,10 +727,7 @@ export function createCharacterPresentation(
 					displayedDependencies.delete( gid );
 				}
 			}
-			if ( footprints.length ) {
-				footprints = footprints.filter( row => seconds < row.started + 20 );
-				renderer.setFootprints( footprints );
-			}
+			footprints.step( seconds );
 			const settled = new Set<number>();
 			for ( const entity of entities ) {
 				const state = states.get( entity.gid ), resource = published.catalog.get( appearanceRef( entity ) );
@@ -879,7 +833,7 @@ export function createCharacterPresentation(
 		reset() {
 			mallPreview.reset();
 			skillObjects.reset();
-			clearFootprints();
+			footprints.clearFootprints();
 			animationDelta = createModifierDelta();
 			presentationActions.warm.warmSkills = undefined;
 			presentationActions.warm.warmBody = undefined;
@@ -938,7 +892,7 @@ export function createCharacterPresentation(
 		dispose() {
 			mallPreview.reset();
 			skillObjects.dispose();
-			clearFootprints();
+			footprints.clearFootprints();
 			presentationActions.warm.warmSkills = undefined;
 			presentationActions.warm.warmBody = undefined;
 			presentationActions.warm.warmMotions = [];

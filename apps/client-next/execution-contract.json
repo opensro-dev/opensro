@@ -284,7 +284,7 @@
 			]
 		},
 		{
-			"consumer": "src/engine/runtime/characters/characters.ts",
+			"consumer": "src/engine/runtime/characters/footprints.ts",
 			"provider": "src/engine/runtime/world/world.ts",
 			"functions": [
 				"soundSurface"
@@ -1544,8 +1544,7 @@
 			"consumer": "src/engine/runtime/characters/characters.ts",
 			"provider": "src/engine/runtime/renderer/world/world.ts",
 			"functions": [
-				"scenery",
-				"footprints"
+				"scenery"
 			]
 		},
 		{
@@ -2029,6 +2028,30 @@
 			"functions": [
 				"callback:flush:1"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/footprints.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback"
+			],
+			"reason": "The parent lends its existing default soundSurface callback when no terrain surface lookup is supplied."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/footprints.ts",
+			"provider": "src/engine/runtime/renderer/characters/characters.ts",
+			"functions": [
+				"socket"
+			],
+			"reason": "The footprint owner samples the same real toe socket through the borrowed renderer."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/footprints.ts",
+			"provider": "src/engine/runtime/renderer/world/world.ts",
+			"functions": [
+				"footprints"
+			],
+			"reason": "The footprint owner publishes or clears its retained decals at the original frame and teardown positions."
 		}
 	],
 	"boundaries": [
@@ -2912,7 +2935,7 @@
 			"expression": "footContact",
 			"function": "present",
 			"kind": "callback",
-			"reason": "Characters owner lends this synchronous helper (footContact) to the per-actor phase; the original loop called it directly."
+			"reason": "Footprint owner lends its synchronous footContact callback through characters.ts to the per-actor phase; admission order is unchanged."
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",

@@ -92,6 +92,7 @@
     "src/engine/runtime/renderer/characters/particle-streams.ts": "src/engine/runtime/renderer/characters/characters.ts",
     "src/engine/runtime/characters/state-index.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/presentation-events.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/footprints.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/presentation-actions.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/presentation-state.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/actor-motion.ts": "src/engine/runtime/characters/actor-presentation.ts",
