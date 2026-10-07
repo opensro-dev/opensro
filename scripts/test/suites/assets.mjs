@@ -30,6 +30,7 @@ export default {
 		"scripts/test/assets/generatedAssetMembership.test.mjs",
 		"scripts/test/assets/npcModelPublication.test.mjs",
 		"scripts/test/assets/cifSpriteCatalog.test.mjs",
+		"scripts/test/assets/slotEffectPublication.test.mjs",
 		"scripts/test/assets/skillPaneImageReferences.test.mjs",
 		"scripts/test/world/worldMapImageReferences.test.mjs",
 		"scripts/test/mission/effectProgramClosure.test.mjs",
