@@ -23,6 +23,7 @@ import { D3DBLEND_SRCCOLOR, D3DBLEND_ZERO, type BlendPair } from "@/engine/found
 import type { Geometry } from "@/engine/contracts/geometry";
 import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
+import type { ImageLeases } from "./images";
 /*
 ================
 geometryPipelineState
@@ -60,7 +61,8 @@ export function createGeometryResources(
 	current: () => GPUDevice,
 	fail: ( error: unknown ) => void,
 	pipelines: ( state: GeometryPipelineState ) => GPURenderPipeline,
-	texture: ( image: ImageDraw ) => GPUTexture,
+	// Each draw holds a lease on its images for as long as it binds them.
+	images: ImageLeases,
 	worldSampler: GPUSampler,
 	lightmapSampler: GPUSampler,
 	environment: GPUBuffer,
@@ -179,13 +181,13 @@ export function createGeometryResources(
 				binding: 3,
 				resource: clampedSampling ? lightmapSampler : worldSampler
 			},
-			{ binding: 4, resource: (image ? texture( image ) : white).createView( { dimension: "2d-array" } ) },
+			{ binding: 4, resource: (image ? images.texture( image ) : white).createView( { dimension: "2d-array" } ) },
 			{ binding: 5, resource: { buffer: environment } },
 			{ binding: 6, resource: { buffer: skin } },
 			{ binding: 7, resource: { buffer: bones } },
 			{
 				binding: 8,
-				resource: (environmentImage ? texture( environmentImage ) : white).createView( {
+				resource: (environmentImage ? images.texture( environmentImage ) : white).createView( {
 					dimension: "2d-array"
 				} )
 			}
@@ -307,7 +309,7 @@ export function createGeometryResources(
 			shadows ??= createCharacterShadows(
 				current(),
 				worldUniform,
-				texture,
+				images.texture,
 				draw => {
 					const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
 					return meta && buffers ?
@@ -855,6 +857,17 @@ export function createGeometryResources(
 					capacity,
 					count
 				);
+				// The draw binds its images until release; a released image is
+				// refused here, before the draw is recorded.
+				if ( image ) images.acquire( image );
+				if ( environmentImage ) {
+					try {
+						images.acquire( environmentImage );
+					} catch ( error ) {
+						if ( image ) images.drop( image );
+						throw error;
+					}
+				}
 				geometryBuffers.set( draw, buffers );
 				metadata.set( draw, {
 					water: !!mat?.water,
@@ -919,7 +932,10 @@ export function createGeometryResources(
 			for ( const buffer of geometryBuffers.get( draw ) ?? [] ) {
 				retire( buffer );
 			}
-			releasePalette( metadata.get( draw )?.palette );
+			const meta = metadata.get( draw );
+			releasePalette( meta?.palette );
+			if ( meta?.image ) images.drop( meta.image );
+			if ( meta?.environmentImage ) images.drop( meta.environmentImage );
 			particles?.release( draw );
 			geometryBuffers.delete( draw );
 			metadata.delete( draw );

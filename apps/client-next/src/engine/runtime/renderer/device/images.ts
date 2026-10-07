@@ -7,6 +7,12 @@ All world and character images pass through this owner. Compressed adapters
 receive the original blocks; other adapters receive temporary decoded mips.
 Retained CPU sources belong to the caller and survive device loss.
 
+An image has one owner, which releases it, and any number of device draws
+that bind it (ImageLeases). The texture is retired when the owner has
+released it and no draw binds it any more, so an owner may drop an image
+while a resident draw still names it: a draw's bind group can be rebuilt
+at any time (texture settings, water reflection) and must find its texture.
+
 ===========================================================================
 */
 import type { ImageCommands, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
@@ -20,6 +26,33 @@ import { destroyNow, type Retire } from "./retirement";
 
 const BLOCK_SIDE = 4;
 const CHANNELS = 4;
+
+/*
+================
+ImageLeases
+
+What device draws need from this owner: the texture of a live image, and a
+counted claim held for as long as a draw binds it.
+================
+*/
+export interface ImageLeases {
+	readonly texture: ( image: ImageDraw ) => GPUTexture;
+	readonly acquire: ( image: ImageDraw ) => void;
+	readonly drop: ( image: ImageDraw ) => void;
+}
+
+/*
+================
+ImageEntry
+
+released is the owner's release; uses counts the draws binding the image.
+================
+*/
+interface ImageEntry {
+	readonly texture: GPUTexture;
+	uses: number;
+	released: boolean;
+}
 
 /*
 ================
@@ -48,7 +81,58 @@ the partially initialized allocation before propagating to the caller.
 ================
 */
 export function createImages( device: ImageDevice ) {
-	const textures = new Map<ImageDraw, GPUTexture>(), retire = device.retire ?? destroyNow;
+	const textures = new Map<ImageDraw, ImageEntry>(), retire = device.retire ?? destroyNow;
+	/*
+	================
+	retireUnused
+
+	The last of the owner's release and the binding draws' drops retires.
+	================
+	*/
+	function retireUnused( draw: ImageDraw, entry: ImageEntry ) {
+		if ( !entry.released || entry.uses > 0 ) return;
+		retire( entry.texture );
+		textures.delete( draw );
+	}
+	/*
+	================
+	texture
+
+	Only live handles can supply textures to other device-owned passes. A
+	released image a draw still binds is live.
+	================
+	*/
+	function texture( image: ImageDraw ) {
+		const entry = textures.get( image );
+		if ( !entry ) throw Error( "Stale image handle" );
+		return entry.texture;
+	}
+	const leases: ImageLeases = Object.freeze( {
+		texture,
+		/*
+		================
+		acquire
+
+		A draw may bind only an image its owner still holds.
+		================
+		*/
+		acquire( image: ImageDraw ) {
+			const entry = textures.get( image );
+			if ( !entry || entry.released ) throw Error( "Stale image handle" );
+			entry.uses++;
+		},
+		/*
+		================
+		drop
+		================
+		*/
+		drop( image: ImageDraw ) {
+			const entry = textures.get( image );
+			if ( !entry || entry.uses === 0 ) throw Error( "Unbalanced image lease" );
+			entry.uses--;
+			retireUnused( image, entry );
+		}
+	} );
 	const commands: ImageCommands = Object.freeze( {
 		/*
 		================
@@ -136,7 +220,7 @@ export function createImages( device: ImageDevice ) {
 						]
 					} );
 					const draw = Object.freeze( { pipeline: device.pipeline(), binding } );
-					textures.set( draw, texture );
+					textures.set( draw, { texture, uses: 0, released: false } );
 					return draw;
 				} catch ( error ) {
 					texture.destroy();
@@ -152,29 +236,21 @@ export function createImages( device: ImageDevice ) {
 		================
 		release
 
-		Retiring a stale handle is harmless; the allocation is destroyed once.
+		The owner's release. Releasing a stale or already released handle is
+		harmless; the allocation is destroyed once, after its last binding draw.
 		================
 		*/
 		release( draw: ImageDraw ) {
-			const texture = textures.get( draw );
-			if ( texture ) retire( texture );
-			textures.delete( draw );
+			const entry = textures.get( draw );
+			if ( !entry || entry.released ) return;
+			entry.released = true;
+			retireUnused( draw, entry );
 		}
 	} );
 	return {
 		commands,
-		/*
-		================
-		texture
-
-		Only live handles can supply textures to other device-owned passes.
-		================
-		*/
-		texture( image: ImageDraw ) {
-			const texture = textures.get( image );
-			if ( !texture ) throw Error( "Stale image handle" );
-			return texture;
-		},
+		texture,
+		leases,
 		/*
 		================
 		dispose
@@ -184,7 +260,7 @@ export function createImages( device: ImageDevice ) {
 		================
 		*/
 		dispose() {
-			for ( const texture of textures.values() ) texture.destroy();
+			for ( const entry of textures.values() ) entry.texture.destroy();
 			textures.clear();
 		}
 	};

@@ -101,7 +101,7 @@ function fixture( options = {} ) {
 			throw error;
 		},
 		() => ({ getBindGroupLayout: () => ({}) }),
-		() => ({}),
+		{ texture: () => ({}), acquire() {}, drop() {} },
 		{},
 		{},
 		{},

@@ -347,7 +347,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				current,
 				fail,
 				pipelines.geometry,
-				images.texture,
+				images.leases,
 				pipelines.worldSampler,
 				pipelines.lightmapSampler,
 				environmentBuffer,

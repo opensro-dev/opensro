@@ -305,8 +305,12 @@ function geometryOwner( gpu, retire ) {
 				return {};
 			}
 		}),
-		() => {
-			throw Error( "No image is uploaded" );
+		{
+			texture: () => {
+				throw Error( "No image is uploaded" );
+			},
+			acquire() {},
+			drop() {}
 		},
 		{},
 		{},
@@ -480,4 +484,94 @@ test("the experimental presentation pass publishes the offscreen frame and retir
 		renderer.dispose();
 	}
 	assert.equal( gpu.live(), 0, "disposal destroys everything, the retired included" );
+});
+
+const { createImages } = await load( "src/engine/runtime/renderer/device/images.ts" );
+
+/*
+================
+imageLeaseOwners
+
+An image owner and a geometry owner over one strict device. Released
+textures are retired immediately, so a texture a draw still binds would be
+"used in submit while destroyed".
+================
+*/
+function imageLeaseOwners( gpu ) {
+	gpu.device.queue.copyExternalImageToTexture = () => {};
+	const retire = resource => resource.destroy();
+	const layout = { getBindGroupLayout: () => ({}) };
+	const images = createImages( {
+		current: () => gpu.device,
+		fail: error => {
+			throw error;
+		},
+		pipeline: () => layout,
+		sampler: {},
+		generateMips() {},
+		retire
+	} );
+	const resources = createGeometryResources(
+		gpu.device,
+		() => gpu.device,
+		error => {
+			throw error;
+		},
+		() => layout,
+		images.leases,
+		{},
+		{},
+		gpu.device.createBuffer( { label: "environment", size: 336 } ),
+		() => ({}),
+		undefined,
+		"bgra8unorm",
+		undefined,
+		retire
+	);
+	return { images, geometry: resources.commands, resources };
+}
+
+/*
+================
+imageLeaseGeometry
+================
+*/
+function imageLeaseGeometry() {
+	return {
+		positions: Float32Array.of( -1, -1, 0, 1, -1, 0, 0, 1, 0 ),
+		uvs: Float32Array.of( 0, 0, 1, 0, 0, 1 ),
+		indices: Uint32Array.of( 0, 1, 2 ),
+		transform: identity()
+	};
+}
+
+test("a released image stays bound until the last geometry draw naming it is released", () => {
+	const gpu = createStrictGpu(), { images, geometry, resources } = imageLeaseOwners( gpu );
+	const image = images.commands.upload( { width: 4, height: 4 }, undefined, false );
+	const texture = images.texture( image );
+	const first = geometry.upload( imageLeaseGeometry(), image ),
+		second = geometry.upload( imageLeaseGeometry(), image );
+	// The world drops its claim (a scene change prunes the selection ring)
+	// while the ring's draw is still resident.
+	images.commands.release( image );
+	assert.equal( texture.destroyed, false, "a bound image was destroyed by its owner's release" );
+	// A texture setting rebinds every resident draw.
+	assert.doesNotThrow( () => resources.textureOptions( true, 1 ) );
+	geometry.release( first );
+	assert.equal( texture.destroyed, false, "the image died while a second draw still binds it" );
+	geometry.release( second );
+	assert.equal( texture.destroyed, true, "the last draw's release did not retire the released image" );
+	assert.throws( () => images.texture( image ), /Stale image handle/ );
+	assert.throws( () => geometry.upload( imageLeaseGeometry(), image ), /Stale image handle/ );
+});
+
+test("an image its owner keeps survives every draw that bound it", () => {
+	const gpu = createStrictGpu(), { images, geometry } = imageLeaseOwners( gpu );
+	const image = images.commands.upload( { width: 4, height: 4 }, undefined, false );
+	const texture = images.texture( image );
+	geometry.release( geometry.upload( imageLeaseGeometry(), image ) );
+	assert.equal( texture.destroyed, false, "a draw's release retired an image its owner still holds" );
+	images.commands.release( image );
+	assert.equal( texture.destroyed, true );
+	images.commands.release( image );
 });

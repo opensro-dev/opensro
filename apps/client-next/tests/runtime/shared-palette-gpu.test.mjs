@@ -75,7 +75,7 @@ function fixture() {
 				return {};
 			}
 		}),
-		() => {},
+		{ texture() {}, acquire() {}, drop() {} },
 		{},
 		{},
 		{},

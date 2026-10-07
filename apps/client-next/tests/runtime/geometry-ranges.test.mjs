@@ -61,7 +61,7 @@ function fixture( dynamicVertices = true ) {
 				return {};
 			}
 		}),
-		() => {},
+		{ texture() {}, acquire() {}, drop() {} },
 		{},
 		{},
 		{},
