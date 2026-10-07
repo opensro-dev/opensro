@@ -70,6 +70,7 @@ test("admitted death resources replace body appearance and revival restores its 
 	assert.deepEqual( accepted, [ MANIFEST ] );
 	const entity = {
 		gid: 7,
+		name: "Fixture",
 		refObjId: 1,
 		kind: /** @type {const} */ ("monster"),
 		regionId: 257,
