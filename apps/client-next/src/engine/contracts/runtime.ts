@@ -264,6 +264,8 @@ export interface Renderer extends Disposable {
 	/** The actor snapshots the last setCharacterActors retained (read-only). */
 	characterActors(): readonly import("./character").CharacterActor[];
 
+	/** Copies the actual post-collision projection; no GPU readback or camera approximation. */
+	worldView(): WorldViewSnapshot | null;
 	setWorld( scene: import("./scene").WorldScene | null ): void;
 	/** terrain: the outdoor region parts this scene composes with (world-admission.ts). */
 	adoptWorld(
@@ -362,6 +364,21 @@ export interface Clock extends Disposable {
 
 /*
 ================
+WorldViewSnapshot
+
+Copied world projection used by picking, after camera collision and aspect
+resolution. Coordinates are relative to originRegion; the matrix is column-major.
+================
+*/
+export interface WorldViewSnapshot {
+	readonly matrix: Float32Array;
+	readonly originRegion: number;
+	readonly width: number;
+	readonly height: number;
+}
+
+/*
+================
 RuntimeControl
 
 External controls enter through the runtime owner rather than mutating subsystems.
@@ -386,5 +403,7 @@ export interface RuntimeControl extends Disposable {
 	characterStats(): CharacterStatistics;
 	/** Read-only orbit camera the input owner holds (yaw/pitch/distance). */
 	camera(): import("./input").CameraInput;
+	/** Copied last prepared world view; null before preparation or after failure/disposal. */
+	worldView(): WorldViewSnapshot | null;
 	takeNative(): import("./world").WorldEvent[];
 }

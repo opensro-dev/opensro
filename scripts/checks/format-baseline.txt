@@ -270,7 +270,6 @@ apps/client-next/tests/browser/entity-material-clock.test.mjs
 apps/client-next/tests/browser/entry-consumers.test.mjs
 apps/client-next/tests/browser/equipment-overlays.test.mjs
 apps/client-next/tests/browser/flares.test.mjs
-apps/client-next/tests/browser/follow-camera.test.mjs
 apps/client-next/tests/browser/font-guide-regression.test.mjs
 apps/client-next/tests/browser/foundation.test.mjs
 apps/client-next/tests/browser/gm-item-live.test.mjs

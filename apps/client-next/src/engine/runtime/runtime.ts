@@ -1037,6 +1037,7 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 			characterActors: () => renderer.characterActors(),
 			characterStats: () => renderer.characterStats( true ),
 			camera: () => input.camera(),
+			worldView: () => renderer.worldView(),
 			takeNative: () => presentation.takeNative()
 		};
 	} catch ( error ) {

@@ -91,6 +91,18 @@ export function createRenderer(
 	return {
 		/*
 		================
+		worldView
+
+		Diagnostics borrow no mutable renderer storage and perform no GPU work.
+		The picking view already contains camera collision and viewport aspect.
+		================
+		*/
+		worldView() {
+			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
+			return { matrix: pickView.slice(), originRegion: pickOrigin, width: pickWidth, height: pickHeight };
+		},
+		/*
+		================
 		setFrameWork
 		================
 		*/
