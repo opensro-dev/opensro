@@ -44,6 +44,33 @@ export interface CharacterStatistics {
 		readonly clothSamples: number;
 		readonly gpuPaletteSamples: number;
 	};
+	/**
+	 * The last main frame's admitted actors against their culling spheres:
+	 * how many have their sphere centre inside the frustum, and for the rest
+	 * how far outside it sits, in quarters of the radius (outsideShares[0]
+	 * under 1/4 ... [3] 3/4 or more). Diagnostics only; no bound is implied safe.
+	 */
+	readonly cullSlack?: {
+		readonly admitted: number;
+		readonly bodies: number;
+		readonly attachments: number;
+		readonly centreInside: number;
+		readonly outsideShares: readonly number[];
+		readonly meanRadius: number;
+		/** Lone bodies the active-clip candidate radius would reject (cloth not yet included). */
+		readonly activeRejected: number;
+		readonly meanActiveRadius: number;
+		/**
+		 * Lone bodies whose displayed skinned-pose AABB lies wholly outside every
+		 * frustum: a diagnostic ceiling for tighter culling, not a safety proof. It
+		 * excludes live cloth deformation, emissions and independent shadow casters.
+		 */
+		readonly posedHidden: number;
+		/** Lone bodies the ceiling could not judge (no resident pose or unskinned parts): counted visible. */
+		readonly posedUnknown: number;
+		/** Of posedHidden, bodies with cloth, judged on its skinned rest shape. */
+		readonly posedCloth: number;
+	};
 }
 /*
 ================

@@ -134,6 +134,44 @@ test("the CPU evaluation total keeps the work of evaluators that retired", () =>
 	}
 });
 
+test("the culling census measures how far admitted spheres sit outside the view", () => {
+	const f = fixture();
+	// Column-major orthographic view: clip x = sx * (x - cx), y = y / 100,
+	// z = z / 100, so the frustum is cx - 1/sx <= x <= cx + 1/sx.
+	const ortho = ( sx, cx ) => {
+		const m = new Float32Array( 16 );
+		m[0] = sx;
+		m[5] = .01;
+		m[10] = .01;
+		m[12] = -sx * cx;
+		m[15] = 1;
+		return m;
+	};
+	try {
+		assert.equal( f.owner.stats( true ).cullSlack, undefined, "no census before a main frame" );
+		f.owner.actors( actors( [ 1 ], .25 ) );
+		f.owner.prepare( f.gpu, {}, 257, ortho( .01, 0 ) );
+		const inside = f.owner.stats( true ).cullSlack;
+		assert.equal( inside.admitted, 1 );
+		assert.equal( inside.bodies, 1 );
+		assert.equal( inside.centreInside, 1 );
+		assert.deepEqual( inside.outsideShares, [ 0, 0, 0, 0 ] );
+		const radius = inside.meanRadius;
+		assert.ok( radius > 0 );
+		// The right plane at x = 1 - 0.6 radius: the centre (x = 1) is 0.6 of a
+		// radius outside it, so the sphere is still admitted.
+		const sx = .01, cx = 1 - radius * .6 - 1 / sx;
+		f.owner.prepare( f.gpu, {}, 257, ortho( sx, cx ) );
+		const straddling = f.owner.stats( true ).cullSlack;
+		assert.equal( straddling.admitted, 1 );
+		assert.equal( straddling.centreInside, 0 );
+		assert.deepEqual( straddling.outsideShares, [ 0, 0, 1, 0 ] );
+		assert.equal( f.owner.stats().cullSlack, undefined, "ordinary stats skip the census" );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+});
+
 test("pose eligibility diagnostics are copied, deduplicate sharing and never evaluate poses", () => {
 	const f = fixture();
 	try {

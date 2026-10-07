@@ -292,6 +292,200 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// stats add the live ones, so cpuEvaluations only grows: a measurement
 	// window may subtract two readings even when peers leave or change model.
 	let retiredCpuEvaluations = 0;
+	// The culling sphere of the actor being tested, [x, y, z, radius]; reused.
+	const sphere = new Float64Array( 4 );
+	// The last main (non-preview, non-continuation) frame's culling inputs and
+	// admitted actors, for the opt-in culling census only. One record, its
+	// fields overwritten each main frame; disposal clears it.
+	const cullFrame: {
+		valid: boolean;
+		frusta: Float64Array[];
+		visible: CharacterActor[];
+		chains: ReadonlyMap<number, readonly CharacterActor[]>;
+		byGid: ReadonlyMap<number, CharacterActor>;
+		origin: number;
+	} = { valid: false, frusta: [], visible: [], chains: new Map(), byGid: new Map(), origin: 0 };
+	/*
+	================
+	cullSphere
+
+	The conservative sphere culling tests: the chain anchor's feet, with each
+	model's all-clip radius scaled down the chain plus every attachment offset.
+	Writes [x, y, z, radius] into out; false when the chain is not resident.
+	================
+	*/
+	function cullSphere(
+		actor: CharacterActor,
+		chains: ReadonlyMap<number, readonly CharacterActor[]>,
+		origin: number,
+		out: Float64Array
+	): boolean {
+		const chain = chains.get( actor.gid );
+		if ( !chain?.length || chain.some( value => !models.has( value.model ) ) ) return false;
+		const anchor = chain[chain.length - 1]!;
+		let radius = 0;
+		for ( const value of chain ) {
+			radius = (radius + models.get( value.model )!.radius) * value.scale * (value.bodyVolume ? 1.2 : 1) +
+				(value.attachment ?
+					hypot3( value.attachment.offset[0]!, value.attachment.offset[1]!, value.attachment.offset[2]! ) :
+					0);
+		}
+		out[0] = anchor.pose.x + ((anchor.pose.regionId & 255) - (origin & 255)) * 1920;
+		out[1] = anchor.pose.y;
+		out[2] = anchor.pose.z + ((anchor.pose.regionId >>> 8) - (origin >>> 8)) * 1920;
+		out[3] = radius;
+		return true;
+	}
+	/*
+	================
+	posedHiddenBody
+
+	Census only (stats(true)): whether every skinned vertex of the body's
+	displayed pose, in world space, lies outside the frustum(s). null when the
+	answer is unknown (no resident pose, or an unskinned primitive).
+	================
+	*/
+	function posedHiddenBody(
+		actor: CharacterActor,
+		resource: { model: CharacterModel; },
+		byGid: ReadonlyMap<number, CharacterActor>,
+		origin: number,
+		transforms: Map<number, Float32Array>,
+		frusta: readonly Float64Array[]
+	): boolean | null {
+		// A pose retained from a replaced model cannot palette this model's primitives.
+		const state = poses.get( actor.gid );
+		const pose = state && state.model === actor.model ? state.pose : undefined;
+		const world = transformFor( actor, byGid, origin, transforms );
+		if ( !pose || !world || !frusta.length ) return null;
+		const low = [ Infinity, Infinity, Infinity ], high = [ -Infinity, -Infinity, -Infinity ];
+		for ( const primitive of resource.model.primitives ) {
+			if ( primitive.emission ) continue;
+			const geometry = primitive.geometry;
+			if ( !geometry.joints || !geometry.weights ) return null;
+			const palette = new Float32Array( primitive.joints.length * 16 );
+			pose.palette( primitive, palette, 0 );
+			const positions = geometry.positions;
+			for ( let v = 0; v < positions.length / 3; v++ ) {
+				const x = positions[v * 3]!, y = positions[v * 3 + 1]!, z = positions[v * 3 + 2]!;
+				let sx = 0, sy = 0, sz = 0;
+				for ( let k = 0; k < 4; k++ ) {
+					const w = geometry.weights[v * 4 + k]!;
+					if ( !w ) continue;
+					const m = geometry.joints[v * 4 + k]! * 16;
+					sx += w * (palette[m]! * x + palette[m + 4]! * y + palette[m + 8]! * z + palette[m + 12]!);
+					sy += w * (palette[m + 1]! * x + palette[m + 5]! * y + palette[m + 9]! * z + palette[m + 13]!);
+					sz += w * (palette[m + 2]! * x + palette[m + 6]! * y + palette[m + 10]! * z + palette[m + 14]!);
+				}
+				const wx = world[0]! * sx + world[4]! * sy + world[8]! * sz + world[12]!,
+					wy = world[1]! * sx + world[5]! * sy + world[9]! * sz + world[13]!,
+					wz = world[2]! * sx + world[6]! * sy + world[10]! * sz + world[14]!;
+				low[0] = Math.min( low[0]!, wx );
+				low[1] = Math.min( low[1]!, wy );
+				low[2] = Math.min( low[2]!, wz );
+				high[0] = Math.max( high[0]!, wx );
+				high[1] = Math.max( high[1]!, wy );
+				high[2] = Math.max( high[2]!, wz );
+			}
+		}
+		if ( !Number.isFinite( low[0]! ) ) return null;
+		// Visible when any frustum admits the box: each plane's farthest corner inside.
+		return !frusta.some( planes => {
+			for ( let i = 0; i < 30; i += 5 ) {
+				const px = planes[i]! >= 0 ? high[0]! : low[0]!,
+					py = planes[i + 1]! >= 0 ? high[1]! : low[1]!,
+					pz = planes[i + 2]! >= 0 ? high[2]! : low[2]!;
+				if ( planes[i]! * px + planes[i + 1]! * py + planes[i + 2]! * pz + planes[i + 3]! < 0 ) return false;
+			}
+			return true;
+		} );
+	}
+	/*
+	================
+	cullCensus
+
+	How much of each admitted actor's sphere lies outside the frustum: the
+	distance its centre is outside the nearest violated plane, as a share of
+	its radius (0 when the centre is inside). A large share means a tighter
+	bound might reject it; this census proves no bound safe by itself.
+	================
+	*/
+	function cullCensus() {
+		if ( !cullFrame.valid ) return undefined;
+		const { frusta, visible, chains, byGid, origin } = cullFrame;
+		// The ceiling: the displayed pose's own skinned vertices, placed with the
+		// renderer's transform. A body none of whose posed geometry box meets a
+		// frustum is invisible in this frame. Unskinned parts or a missing pose
+		// count the body as visible; cloth uses its skinned rest shape (flagged).
+		let posedHidden = 0, posedUnknown = 0, posedCloth = 0;
+		const transforms = new Map<number, Float32Array>();
+		const outside = [ 0, 0, 0, 0 ];
+		let bodies = 0, attachments = 0, centreInside = 0, radiusSum = 0, activeRejected = 0, activeRadiusSum = 0;
+		// Candidate only: the same conservative envelope restricted to the clips
+		// a lone body plays now (its clip and every blend layer). Not yet a
+		// safe bound: cloth displacement is not part of either radius here.
+		const activeRadius = new Map<string, number>();
+		for ( const actor of visible ) {
+			if ( models.get( actor.model )?.plan.emission || !cullSphere( actor, chains, origin, sphere ) ) continue;
+			if ( actor.attachment ) attachments++;
+			else bodies++;
+			radiusSum += sphere[3]!;
+			const resource = models.get( actor.model )!, chain = chains.get( actor.gid )!;
+			if ( chain.length === 1 ) {
+				const names = new Set( [ actor.clip, ...(actor.layers ?? []).map( layer => layer.clip ) ] );
+				const key = actor.model + "|" + [ ...names ].sort().join( "|" );
+				let radius = activeRadius.get( key );
+				if ( radius === undefined ) {
+					const clips = resource.model.clips.filter( clip => names.has( clip.name ) );
+					radius = characterRadius( { ...resource.model, clips }, bounds );
+					activeRadius.set( key, radius );
+				}
+				const scaled = radius * actor.scale * (actor.bodyVolume ? 1.2 : 1);
+				activeRadiusSum += scaled;
+				const admitted = !frusta.length ||
+					frusta.some( planes => visibleFrustumSphere( planes, sphere[0]!, sphere[1]!, sphere[2]!, scaled ) );
+				if ( !admitted ) activeRejected++;
+				const hidden = posedHiddenBody( actor, resource, byGid, origin, transforms, frusta );
+				if ( hidden === null ) posedUnknown++;
+				else if ( hidden ) {
+					posedHidden++;
+					if ( resource.plan.cloth ) posedCloth++;
+				}
+			}
+			// Visible when any frustum admits it: the smallest violation across frusta.
+			let violation = frusta.length ? Infinity : 0;
+			for ( const planes of frusta ) {
+				let worst = 0;
+				for ( let i = 0; i < 30; i += 5 ) {
+					const distance =
+						-(planes[i]! * sphere[0]! + planes[i + 1]! * sphere[1]! + planes[i + 2]! * sphere[2]! +
+							planes[i + 3]!) /
+						planes[i + 4]!;
+					worst = Math.max( worst, distance );
+				}
+				violation = Math.min( violation, worst );
+			}
+			if ( violation <= 0 ) {
+				centreInside++;
+				continue;
+			}
+			outside[Math.min( 3, Math.floor( violation / sphere[3]! * 4 ) )]!++;
+		}
+		const admitted = bodies + attachments;
+		return {
+			admitted,
+			bodies,
+			attachments,
+			centreInside,
+			outsideShares: outside,
+			meanRadius: admitted ? radiusSum / admitted : 0,
+			activeRejected,
+			meanActiveRadius: bodies ? activeRadiusSum / bodies : 0,
+			posedHidden,
+			posedUnknown,
+			posedCloth
+		};
+	}
 	/*
 	================
 	poseFor
@@ -987,6 +1181,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		================
 		*/
 		stats( details = false ) {
+			const cullSlack = details ? cullCensus() : undefined;
 			let poseEligibility;
 			if ( details ) {
 				const unique = new Set<ReturnType<typeof createCharacterPose>>();
@@ -1025,6 +1220,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			for ( const state of ownedPoses.values() ) liveOwnedCpuEvaluations += state.pose.cpuEvaluations();
 			return {
 				poseEligibility,
+				cullSlack,
 				actors: actors.length,
 				draws: [ ...batches.values() ].reduce( ( n, batch ) => n + batch.draws.length, 0 ),
 				renderBytes,
@@ -1572,30 +1768,21 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			const visible = frameActors.filter( actor => {
 				if ( opacity( actor ) <= 0 ) return false;
 				if ( models.get( actor.model )?.plan.emission ) return particleAccepted.has( actor.gid );
-				const chain = chains.get( actor.gid )!;
-				if ( !chain.length || chain.some( value => !models.has( value.model ) ) ) return false;
-				const anchor = chain[chain.length - 1]!;
-				let radius = 0;
-				for ( const value of chain ) {
-					radius = (radius + models.get( value.model )!.radius) * value.scale * (value.bodyVolume ? 1.2 : 1) +
-						(value.attachment ?
-							hypot3(
-								value.attachment.offset[0]!,
-								value.attachment.offset[1]!,
-								value.attachment.offset[2]!
-							) :
-							0);
-				}
-				return !frusta.length || frusta.some( frustum =>
-					visibleFrustumSphere(
-						frustum,
-						anchor.pose.x + ((anchor.pose.regionId & 255) - (origin & 255)) * 1920,
-						anchor.pose.y,
-						anchor.pose.z + ((anchor.pose.regionId >>> 8) - (origin >>> 8)) * 1920,
-						radius
-					)
-				);
+				if ( !cullSphere( actor, chains, origin, sphere ) ) return false;
+				return !frusta.length ||
+					frusta.some( frustum =>
+						visibleFrustumSphere( frustum, sphere[0]!, sphere[1]!, sphere[2]!, sphere[3]! )
+					);
 			} );
+			// The census (stats(true)) reads the last main frame's admission.
+			if ( !continuation && !preview ) {
+				cullFrame.valid = true;
+				cullFrame.frusta = frusta;
+				cullFrame.visible = visible;
+				cullFrame.chains = chains;
+				cullFrame.byGid = byGid;
+				cullFrame.origin = origin;
+			}
 			if ( hasDeferred && !continuation ) deferredVisible = new Set( visible.map( actor => actor.gid ) );
 			// Plan the complete frame before creating poses, arrays, or GPU resources.
 			visibleActors = visible.length;
@@ -2357,6 +2544,11 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			poses.clear();
 			for ( const state of ownedPoses.values() ) retiredCpuEvaluations += state.pose.cpuEvaluations();
 			ownedPoses.clear();
+			cullFrame.valid = false;
+			cullFrame.frusta = [];
+			cullFrame.visible = [];
+			cullFrame.chains = new Map();
+			cullFrame.byGid = new Map();
 			particleBirths.clear();
 			materialClocks.reset();
 			deferred.reset();
