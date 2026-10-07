@@ -49,3 +49,35 @@ test("line ticks on a multi-line generated line are unattributable", () => {
 	assert.equal( lines.get( refused ), 6 );
 	assert.ok( ![ ...lines.keys() ].includes( "a.ts:1" ), "never charged to the line that starts it" );
 });
+
+test("unmapped generated code on a mapped line makes it unattributable", () => {
+	// Generated line 0: column 0 maps source line 1, then a one-field segment
+	// at column 4 is generated code with no source. VLQ: [0,0,0,0], [4].
+	const map = createSourceMap( { version: 3, sources: [ "src/a.ts" ], names: [], mappings: "AAAA,I" } );
+	assert.equal( map.span( 0 ), 2 );
+});
+
+test("a line that maps into another file is refused, not charged to it", () => {
+	const map = createSourceMap( { version: 3, sources: [ "src/b.ts" ], names: [], mappings: "AAAA" } );
+	const symbolizer = {
+		frame: () => ({ name: "hot", file: "a.ts", line: 1 }),
+		position( url, line, column ) {
+			const found = map.lookup( line - 1, column - 1 );
+			return { file: "b.ts", line: found.line, span: map.span( line - 1 ) };
+		}
+	};
+	const node = {
+		id: 1,
+		callFrame: { functionName: "hot", url: "bundle.js", lineNumber: 0, columnNumber: 0 },
+		positionTicks: [ { line: 1, ticks: 1 } ]
+	};
+	const lines = new Map();
+	forEachLine(
+		{ nodes: new Map( [ [ 1, node ] ] ), weights: new Map( [ [ 1, 4 ] ] ) },
+		symbolizer,
+		"hot",
+		( key, weight ) => lines.set( key, weight )
+	);
+	assert.deepEqual( [ ...lines.keys() ].map( key => key.startsWith( "a.ts:? (unattributable" ) ), [ true ] );
+	assert.ok( ![ ...lines.keys() ].some( key => key.startsWith( "b.ts" ) ) );
+});
