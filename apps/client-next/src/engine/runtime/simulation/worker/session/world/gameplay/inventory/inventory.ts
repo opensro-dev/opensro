@@ -1408,8 +1408,11 @@ receive
 				// 77C300: a repaired or revived item also flashes its slot (54FA20
 				// through 592BD0 / 59C3A0).
 				if ( value > old ) {
+					// 54FA20 resets one counter at +0x5C4; repeated repairs restart it.
 					itemFlashes = [
-						...itemFlashes.filter( f => now - f.atMs < FLASH_RETENTION_MS ),
+						...itemFlashes.filter( f =>
+							now - f.atMs < FLASH_RETENTION_MS && !(f.slot === n && f.kind === "repair")
+						),
 						{ slot: n, kind: "repair", atMs: now }
 					];
 				}
