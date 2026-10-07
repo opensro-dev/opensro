@@ -402,7 +402,12 @@ export function createPosePresentation() {
 			latest.z !== target.z;
 		const timingChanged = row.durationMs !== input.durationMs;
 		if ( changed || stalled || timingChanged || row.moving !== input.moving || row.to !== input.to ) {
-			const preserveDisplay = stalled || revisionChanged && input.transition?.reason !== "input";
+			// A receipt which kept the logical walk did not move its anchor.
+			// Advance the old model to this frame before replacing it; parking at
+			// the preceding display creates a correction that never happened.
+			const retainedWalk = row.moving && input.moving && input.transition?.reason === "receipt" &&
+				input.transition.logicalDistance === 0 && input.transition.pathEligible === true;
+			const preserveDisplay = stalled || revisionChanged && input.transition?.reason !== "input" && !retainedWalk;
 			// A fresh publication after a main-frame gap confirms the intervening
 			// leg. Do not manufacture a parked interval inside that unseen gap.
 			// If an earlier displayed frame already reached the prediction bound,

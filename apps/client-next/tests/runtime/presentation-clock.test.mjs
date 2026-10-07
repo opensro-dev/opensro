@@ -219,6 +219,81 @@ for ( const durationMs of [ 1000, 4000, Infinity ] ) {
 	});
 }
 
+for ( const frameMs of [ 4, 1000 / 60, 37.6 ] ) {
+	test(`a receipt that keeps the logical walk cannot park a ${frameMs} ms display interval`, () => {
+		const p = createPosePresentation();
+		p.origin( 0 );
+		sample( p, 0, 0 );
+		sample( p, 16, 20 );
+		const receiptAt = 20 + frameMs;
+		const from = { ...START, x: START.x + receiptAt * SPEED / 1000 };
+		const durationMs = (END.x - from.x) / SPEED * 1000;
+		for ( const elapsed of [ 0, 4, 16, 32, 64, 128 ] ) {
+			const atMs = receiptAt + elapsed;
+			const target = { ...START, x: START.x + atMs * SPEED / 1000 };
+			p.samples(
+				new Map( [ [ 1, {
+					atMs,
+					revision: 2,
+					moving: true,
+					from,
+					to: END,
+					durationMs,
+					transition: {
+						relocation: 0,
+						reason: "receipt",
+						eligible: true,
+						pathEligible: true,
+						logicalDistance: 0,
+						previousPath: { from: START, to: END },
+						corridor: { from, to: from }
+					}
+				} ] ] )
+			);
+			const shown = p.pose( 1, target, atMs / 1000 );
+			assert.ok( Math.abs( shown.x - target.x ) < 1e-9, "a zero-distance receipt adds no visual debt" );
+			assert.deepEqual( p.pose( 1, target, atMs / 1000 ), shown, "body and camera share the same frame" );
+		}
+	});
+}
+
+test("the recorded retained-walk receipt does not create a half-unit catch-up step", () => {
+	const recorded = JSON.parse(
+		readFileSync( new URL( "../fixtures/retained-walk-receipt.json", import.meta.url ), "utf8" )
+	);
+	const p = createPosePresentation();
+	p.origin( recorded.originMs );
+	let previous, recordedPrevious, previousAt;
+	let maximumExcess = 0, recordedExcess = 0;
+	for ( const [atMs, workerAtMs, revision, x, y, z, angle, shownX, shownY, shownZ] of recorded.frames ) {
+		const state = recorded.states[revision];
+		const logical = { regionId: recorded.regionId, x, y, z, angle };
+		p.samples(
+			new Map( [ [ 1, {
+				atMs: workerAtMs,
+				revision,
+				moving: state.moving,
+				transition: state.transition,
+				...state.path
+			} ] ] )
+		);
+		const drawn = p.pose( 1, logical, atMs / 1000 );
+		const oldDrawn = { ...logical, x: shownX, y: shownY, z: shownZ };
+		if ( previous && recordedPrevious && previousAt !== undefined ) {
+			const budget = (atMs - previousAt) * SPEED / 1000;
+			maximumExcess = Math.max( maximumExcess, poseDistance( previous, drawn ) - budget );
+			recordedExcess = Math.max( recordedExcess, poseDistance( recordedPrevious, oldDrawn ) - budget );
+		}
+		assert.deepEqual( p.pose( 1, logical, atMs / 1000 ), drawn );
+		assert.equal( drawn.y, logical.y );
+		previous = drawn;
+		recordedPrevious = oldDrawn;
+		previousAt = atMs;
+	}
+	assert.ok( recordedExcess > .5, "the capture retains the live continuity failure" );
+	assert.ok( maximumExcess < .5, `retained-walk catch-up ${maximumExcess}` );
+});
+
 test("first-sample timing caps the endpoint and never interpolates a distant terrain height", () => {
 	const p = createPosePresentation();
 	p.origin( 0 );
