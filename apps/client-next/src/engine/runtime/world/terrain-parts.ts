@@ -85,9 +85,22 @@ export function createTerrainParts(
 		for ( const region of [ ...new Set( [ ...jobs.keys(), ...parts.keys() ] ) ] ) drop( region );
 		anchor = null;
 	}
+	/*
+	================
+	cancelPending
+
+	A failed scene retires its outstanding requests, not its resident terrain.
+	Sibling failures must not each consume another automatic retry attempt.
+	================
+	*/
+	function cancelPending(): void {
+		for ( const job of jobs.values() ) assets.cancel( job );
+		jobs.clear();
+	}
 
 	return {
 		anchorFor,
+		cancelPending,
 		/*
 		================
 		neighbourhood

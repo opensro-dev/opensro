@@ -121,8 +121,17 @@ function fixture( options = {} ) {
 					buffer: new TextEncoder().encode(
 						JSON.stringify( {
 							regionsById: {
-								"0x0001": [ { bundlePublicPath: "/assets/a.json" } ],
-								"0x0002": [ { bundlePublicPath: "/assets/b.json" } ]
+								"0x0001": [ {
+									bundlePublicPath: "/assets/a.json",
+									...(options.neighborTerrain ? { area: "outdoor" } : {})
+								} ],
+								"0x0002": [ {
+									bundlePublicPath: "/assets/b.json",
+									...(options.neighborTerrain ? { area: "outdoor" } : {})
+								} ],
+								...(options.neighborTerrain ?
+									{ "0x0003": [ { bundlePublicPath: "/assets/c.json", area: "outdoor" } ] } :
+									{})
 							}
 						} )
 					).buffer
@@ -316,6 +325,105 @@ for ( const failedPart of [ "catalog", "objects", "terrain", "texture" ] ) {
 		assert.equal( f.requests.length, completed );
 	});
 }
+
+for ( const transient of [ false, true ] ) {
+	test(`one ${transient ? "transient" : "permanent"} terrain failure retires siblings and keeps completed parts`, () => {
+		const f = fixture( { neighborTerrain: true } ), pose = { regionId: 2, x: 0, y: 0, z: 0, angle: 0 };
+		f.step( 2 );
+		f.step( 2 );
+		const terrain = f.requests.filter( row =>
+			new URLSearchParams( new URL( row.url ).hash.slice( 1 ) ).get( "part" ) === "terrain"
+		);
+		assert.equal( terrain.length, 3 );
+		for ( const row of terrain.slice( 1 ) ) {
+			f.ready.set( row.key, {
+				kind: "error",
+				id: row.key,
+				error: "batch failure",
+				...(row.key !== terrain[1].key || transient ? { transient: true } : {})
+			} );
+		}
+		f.stream.step( pose, undefined, undefined, undefined, 100 );
+		assert.equal( f.stream.reconnecting(), transient );
+		assert.ok( f.cancelled.includes( terrain[2].key ), "retire the unconsumed sibling failure" );
+		assert.equal( f.ready.size, 0 );
+		const count = f.requests.length;
+		for ( const now of [ 101, 200, 1000, 2099 ] ) f.stream.step( pose, undefined, undefined, undefined, now );
+		assert.equal( f.requests.length, count );
+		assert.equal( f.stream.reconnecting(), transient, "a transient sibling cannot replace a permanent failure" );
+		if ( !transient ) {
+			f.stream.retryTransient();
+			f.stream.step( pose, undefined, undefined, undefined, 1000000 );
+			assert.equal( f.requests.length, count, "permanent failures still require explicit Retry" );
+			f.stream.retry();
+		}
+		f.stream.step( pose, undefined, undefined, undefined, 2100 );
+		assert.ok( f.requests.length > count, "the first retry remains due at two seconds" );
+		assert.equal(
+			f.requests.filter( row => row.url === terrain[0].url ).length,
+			1,
+			"reuse the already admitted terrain part"
+		);
+		for ( let i = 0; i < 8; i++ ) f.step( 2 );
+		assert.equal( f.world.stats().sceneId, "2:objects" );
+		assert.equal( f.stream.error(), null );
+	});
+}
+
+test("a displayed scene cannot reset the budget for newly demanded weather textures", () => {
+	const f = fixture(), pose = { regionId: 1, x: 0, y: 0, z: 0, angle: 0 };
+	for ( let i = 0; i < 5; i++ ) f.step( 1 );
+	assert.equal( f.world.stats().sceneId, "1:objects" );
+	f.world.weather( { mode: 2, amount: 100 } );
+	assert.ok( f.world.neededTextures().length > 0 );
+	// Weather demand is intentionally not part of pendingTextures; the stream
+	// must inspect actual demand as well as pending scene upload statistics.
+	assert.equal( f.world.stats().pendingTextures, 0 );
+	let now = 100;
+	const step = () => f.stream.step( pose, undefined, undefined, undefined, now );
+	/*
+	================
+	failWeather
+	================
+	*/
+	function failWeather() {
+		const job = f.requests.find( row => row.url.includes( "/weather/" ) && f.ready.has( row.key ) );
+		assert.ok( job, "a newly demanded texture is pending" );
+		f.ready.set( job.key, { kind: "error", id: job.key, error: "network", transient: true } );
+		now++;
+		step();
+		assert.match( f.stream.error(), /network/ );
+		assert.equal( f.world.stats().sceneId, "1:objects", "keep the displayed scene during recovery" );
+	}
+	step();
+	failWeather();
+	for ( const delay of [ 2000, 5000, 10000, 30000, 30000, 30000, 30000, 30000 ] ) {
+		assert.equal( f.stream.reconnecting(), true );
+		const count = f.requests.length;
+		now += delay - 1;
+		step();
+		assert.equal( f.requests.length, count, "no early retry" );
+		now++;
+		step();
+		for ( const key of [ -1, -2, -3, -4 ] ) f.ready.set( key, {} );
+		step();
+		assert.equal( f.requests.length, count, "unavailable capacity cannot mark a pending texture ready" );
+		for ( const key of [ -1, -2, -3, -4 ] ) f.ready.delete( key );
+		step();
+		assert.ok( f.requests.length > count, "retry became due" );
+		failWeather();
+	}
+	assert.equal( f.stream.reconnecting(), false, "eight retries exhaust the shared failure budget" );
+	const count = f.requests.length;
+	now += 1000000;
+	step();
+	assert.equal( f.requests.length, count );
+	f.stream.retryTransient();
+	for ( let i = 0; i < 8; i++ ) step();
+	assert.equal( f.stream.error(), null );
+	assert.equal( f.world.neededTextures().length, 0 );
+	assert.equal( f.world.stats().sceneId, "1:objects" );
+});
 
 test("world permanent errors wait for manual retry even after an online event", () => {
 	const f = fixture(), pose = { regionId: 1, x: 0, y: 0, z: 0, angle: 0 };

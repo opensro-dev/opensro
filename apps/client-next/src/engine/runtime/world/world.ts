@@ -231,6 +231,7 @@ export function createWorldStream(
 		// Teleports and rapid crossings must not wait for obsolete transactions.
 		if ( pose && transaction.phase === "loading" && transaction.region !== pose.regionId ) {
 			cancelTransaction();
+			recovery.reset();
 			transaction = { phase: "idle" };
 		}
 		if ( future && !future.result ) {
@@ -284,12 +285,16 @@ export function createWorldStream(
 			terrain.request( future.outdoor.regions, 1 );
 		}
 		if ( transaction.phase === "loading" || transaction.phase === "ready" ) {
-			for ( const path of renderer.neededWorldTextures() ) {
+			const neededTextures = renderer.neededWorldTextures();
+			for ( const path of neededTextures ) {
 				if ( jobs.size >= 3 || assets.available() === 0 ) break;
 				if ( ![ ...jobs.values() ].some( job => job.path === path ) ) load( path, "texture" );
 			}
 			const stats = renderer.worldStats();
-			if ( !jobs.size && !waiting && stats.pendingTextures === 0 && stats.pendingGroups === 0 ) {
+			if (
+				!jobs.size && !waiting && !neededTextures.length && stats.pendingTextures === 0 &&
+				stats.pendingGroups === 0
+			) {
 				displayedRegion = transaction.region;
 				transaction = { phase: "ready", region: transaction.region };
 			}
@@ -344,7 +349,15 @@ export function createWorldStream(
 		// A failed neighbor transaction leaves the displayed scene intact.
 		// Returning to that region does not require a duplicate scene admission.
 		if ( displayedRegion === pose.regionId ) {
-			transaction = { phase: "ready", region: pose.regionId };
+			// Weather or selection textures can be demanded after scene admission.
+			// Reusing the scene must not renew a failed texture's recovery budget.
+			const stats = renderer.worldStats();
+			transaction = {
+				phase: stats.pendingTextures || stats.pendingGroups || renderer.neededWorldTextures().length ?
+					"loading" :
+					"ready",
+				region: pose.regionId
+			};
 			return;
 		}
 		if ( future && future.region === pose.regionId && future.anchor === terrain.anchorFor( pose.regionId ) ) {
@@ -408,6 +421,7 @@ export function createWorldStream(
 				const region = transaction.phase === "idle" ? pose?.regionId ?? 0 : transaction.region;
 				cancelTransaction();
 				clearFuture();
+				terrain.cancelPending();
 				transaction = { phase: "failed", region, error: String( error ) };
 				recovery.failed( error, nowMs );
 			}
