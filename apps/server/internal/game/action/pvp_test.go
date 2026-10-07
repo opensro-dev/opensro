@@ -288,26 +288,25 @@ func TestThiefMonsterKillPaysHunterJobExp(t *testing.T) {
 
 /*
 ================
-TestPlayerAttackOnAnAggressorKeepsThePKLimits
+TestPlayerAttackPKLimitsApplyOnlyToNeutrals
 
-5293A0 skips the level floor and the PK limits only for the attacker's
-own retained target; an aggressor the attacker holds nothing against is
-refused at the daily limit like a neutral one (0x3014).
+5293A0: a neutral target is refused at the attacker's daily limit
+(0x3014); an aggressor target is a legal enemy (52B6D0) whose attack
+never reads the limits.
 ================
 */
-func TestPlayerAttackOnAnAggressorKeepsThePKLimits(t *testing.T) {
+func TestPlayerAttackPKLimitsApplyOnlyToNeutrals(t *testing.T) {
 	rt, clock, a, v := newPvpPair(t)
 	level := int64(30)
 	a.Level, v.Level = &level, &level
 	a.Aggressions = nil
-	v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): playerAggressionTicks}
 	a.PK = &domain.PKRecord{DailyCount: playerCombatMaxDailyPK}
 	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0x3014 {
-		t.Fatalf("attack on an aggressor at the daily limit = %#x, want 0x3014", code)
+		t.Fatalf("attack on a neutral at the daily limit = %#x, want 0x3014", code)
 	}
-	a.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(v): playerAggressionTicks}
+	v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): playerAggressionTicks}
 	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0 {
-		t.Fatalf("the attacker's own retained target = %#x, want admitted", code)
+		t.Fatalf("attack on an aggressor at the daily limit = %#x, want admitted", code)
 	}
 }
 

@@ -12,6 +12,8 @@ equipment, party and criminal-state authorities with the other action owners.
 package action
 
 import (
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -176,7 +178,13 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 	if aggressionWeight == 1 {
 		return 0x3009
 	}
-	if rt.hostilePlayerCapes(caster, target) || rt.guildsAtWar(division, caster, target) {
+	if rt.hostilePlayerCapes(caster, target) {
+		return 0
+	}
+	if code := rt.protectedCaravanRefusal(caster, target); code != 0 {
+		return code
+	}
+	if rt.guildsAtWar(division, caster, target) {
 		return 0
 	}
 	// 529557: opposing jobs fight once the attacker's suit is active
@@ -187,9 +195,6 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 		}
 		return 0
 	}
-	// Only the attacker's own retained target skips the open-field rules:
-	// an aggressor or murderer target still meets the level floor and the
-	// attacker's PK limits (5294xx), as a neutral one does.
 	if caster.Aggressions[enterworld.ObjectIDForCharacter(target)] != 0 {
 		return 0
 	}
@@ -198,6 +203,12 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 	}
 	if target.Level == nil || *target.Level < playerCombatMinimumLevel {
 		return 0x3017
+	}
+	// 5294A6 CGObjPC_IsEnemyInWorldContext -> CGObjPC_IsNormalCombatEnemy
+	// (52B6D0): with both players at level 20, an aggressor or murderer
+	// target is a legal enemy, so the attacker's PK limits are not read.
+	if target.PVPState() != 0 {
+		return 0
 	}
 	if caster.PK != nil {
 		if caster.PK.Penalty >= playerCombatMaxPenalty {
@@ -208,4 +219,46 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 		}
 	}
 	return 0
+}
+
+/*
+================
+protectedCaravanRefusal
+
+CGObjPC_ValidateProtectedTradeAttack (52B760), between the cape and the
+guild-war relations of 5293A0: a dressed thief may not attack a dressed
+trader whose transport carries a level-1 caravan (0x3024
+CANT_ATTACK_CARAVAN_LEVEL1), and that trader may not attack a thief
+(0x3006).
+
+INFERENCE: v1.188 also requires the trader's opt-in trade-safety state
+(CJobInfo_GetTradeSafetyState 60E4D0, published on 0x34D5 from
+TRADE_SAFETY_NUM). The v1.150 client has no 0x34D5 handler, so that
+mode did not exist; it keeps the 0x3024 text, so the level-1 caravan
+protection itself is read as always on.
+================
+*/
+func (rt *Runtime) protectedCaravanRefusal(caster, target *enterworld.Character) uint16 {
+	casterJob, _ := rt.playerRelationEquipment(caster)
+	targetJob, _ := rt.playerRelationEquipment(target)
+	switch {
+	case casterJob == domain.JobThief && targetJob == domain.JobTrader && rt.levelOneCaravan(target):
+		return 0x3024
+	case casterJob == domain.JobTrader && targetJob == domain.JobThief && rt.levelOneCaravan(caster):
+		return 0x3006
+	}
+	return 0
+}
+
+/*
+================
+levelOneCaravan
+
+A summoned transport carrying trade goods (CGObjPC_AnyCOSCarriesTradeGoods,
+vtable +0x2E8) whose cargo is difficulty tier 1 or below
+(Caravan_GetTradeDifficultyTier 60C330).
+================
+*/
+func (rt *Runtime) levelOneCaravan(c *enterworld.Character) bool {
+	return vehicleCarriesGoods(rt, c) && caravan.DifficultyTier(rt.caravanCargoValue(c)) <= 1
 }
