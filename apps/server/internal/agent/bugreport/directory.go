@@ -139,9 +139,10 @@ func fillDirectory(directory string, report Report, now time.Time) error {
 		Server:      report.Division,
 		Character:   report.Character,
 		Description: report.Description,
-		Context:     report.Context,
-		Errors:      report.Errors,
-		Files:       []string{},
+		// Empty lists stay lists: a reader of report.json never meets null.
+		Context: append([]Field{}, report.Context...),
+		Errors:  append([]string{}, report.Errors...),
+		Files:   []string{},
 	}
 	for _, attachment := range []*Attachment{report.Attachment, report.Diagnostics} {
 		if attachment == nil {
