@@ -261,7 +261,7 @@ test("scenery admission, warnings, material updates and frontend logout require 
 		const issues = verifyExecution( dir, realGraph() );
 		for (
 			const target of [
-				"characters/actor-presentation.ts#callback:step:2",
+				"characters/actor-motion.ts#callback:step:2",
 				"characters/presentation-finalize.ts#callback:step:4",
 				"renderer/renderer.ts#presentationCamera",
 				"world/world.ts#callback:sceneryParticles:5",

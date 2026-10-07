@@ -3,7 +3,6 @@
 # split a file (or let it fall under the limit), then delete its line. See scripts/checks/check_source_file_size.mjs.
 apps/client-next/src/engine/foundation/ui/skill-tooltip-params.ts # not yet analysed; split on its responsibility boundaries when formatted
 apps/client-next/src/engine/runtime/characters/characters.ts # presentation owner with inline families (appearance, footprints, weather events, dock preview)
-apps/client-next/src/engine/runtime/characters/actor-presentation.ts # verbatim move; split at its actor-motion boundary in the next commit of this PR
 apps/client-next/src/engine/runtime/characters/effects/effects.ts # formatted 2026-10-01; step() still owns cast stages, attached buffs, status, item and system effects and flights: split along those owners
 apps/client-next/src/engine/runtime/renderer/characters/characters.ts # synchronous model, pose and draw-batch lifetime owner; shared admission and retirement must stay ordered
 apps/client-next/src/engine/runtime/renderer/world/world.ts # not yet analysed; split on its responsibility boundaries when formatted

@@ -93,6 +93,8 @@
     "src/engine/runtime/characters/state-index.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/presentation-actions.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/presentation-state.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/actor-motion.ts": "src/engine/runtime/characters/actor-presentation.ts",
+    "src/engine/runtime/characters/actor-appearance.ts": "src/engine/runtime/characters/actor-presentation.ts",
     "src/engine/runtime/characters/actor-presentation.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/presentation-samples.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/structure-visuals.ts": "src/engine/runtime/characters/characters.ts",
