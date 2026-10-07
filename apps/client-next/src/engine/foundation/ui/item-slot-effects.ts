@@ -103,7 +103,11 @@ export function itemIsRare( item: { readonly tooltip?: { readonly fields: Readon
 	return item.tooltip?.fields.rarity === RARITY_RARE;
 }
 
-summoned glow, rare shine, then the one-shot flashes.
+/*
+================
+itemSlotOverlays
+
+Summoned glow, rare shine, then the one-shot flashes.
 ================
 */
 export function itemSlotOverlays(
