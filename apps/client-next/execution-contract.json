@@ -38,6 +38,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/characters/presentation-weather.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"callback:eventRain:1"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/world/terrain-parts.ts",
 			"provider": "src/engine/runtime/assets/world-lease.ts",
 			"functions": [

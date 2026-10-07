@@ -152,7 +152,8 @@
     "src/engine/runtime/frame-work.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/frame-pacing.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/characters/presentation-catalog.ts": "src/engine/runtime/characters/characters.ts",
-    "src/engine/runtime/characters/dock-preview.ts": "src/engine/runtime/characters/characters.ts"
+    "src/engine/runtime/characters/dock-preview.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/presentation-weather.ts": "src/engine/runtime/characters/characters.ts"
   },
   "internals": {
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",

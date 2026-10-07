@@ -90,6 +90,7 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { CharacterActor } from "@/engine/contracts/character";
 import { createPresentationCatalog } from "./presentation-catalog";
 import { createDockPreview } from "./dock-preview";
+import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
 import type {
 	Auxiliary,
 	CharacterPresentationState,
@@ -241,12 +242,7 @@ export function createCharacterPresentation(
 		dockReady: false,
 		commonReady: false
 	};
-	let rainEventActive = false;
-	const rainEventEntities = new Map<number, number>();
-	const rainEvents:
-		({ kind: "spawn" | "state"; gid: number; refObjId: number; } | { kind: "despawn"; gid: number; } | {
-			kind: "reset";
-		})[] = [];
+	const weather = createPresentationWeather();
 	const states = new Map<number, CharacterPresentationState>();
 	const animationEmission = createAnimationEmission( allocateActor );
 	const stageAnimations = new Map<
@@ -509,7 +505,7 @@ export function createCharacterPresentation(
 		*/
 		receiveLifecycle( events: readonly import("@/engine/contracts/world").WorldEvent[] ) {
 			entityLod.receive( events );
-			const next: typeof rainEvents = [];
+			const next: WeatherLifecycleEvent[] = [];
 			for ( const event of events ) {
 				if ( event.kind === "reset" ) {
 					presentationState.combatStanceEnds.clear();
@@ -538,9 +534,7 @@ export function createCharacterPresentation(
 					next.push( { kind: "despawn", gid: event.gid } );
 				}
 			}
-			if ( next[0]?.kind === "reset" ) rainEvents.length = 0;
-			if ( rainEvents.length + next.length > 65536 ) throw Error( "Weather lifecycle journal overflow" );
-			for ( const event of next ) rainEvents.push( event );
+			weather.receive( next );
 		},
 		/*
 		================
@@ -548,36 +542,18 @@ export function createCharacterPresentation(
 		================
 		*/
 		eventRain() {
-			// Preserve delivery order while the character catalogs load.
-			if ( published.manifest < 2 ) return rainEventActive;
-			for ( const event of rainEvents ) {
-				if ( event.kind === "reset" ) {
-					presentationState.combatStanceEnds.clear();
-					modelEmission.reset();
-					structureVisuals.reset();
-					animationEmission.reset();
-					stageAnimations.clear();
-					groundClocks.clear();
-					retiring.clear();
-					disappearing.clear();
-					damageTexts = [];
-					rainEventActive = false;
-					rainEventEntities.clear();
-				} else if ( event.kind === "despawn" ) {
-					if ( published.catalog.get( rainEventEntities.get( event.gid ) ?? 0 )?.eventRain ) {
-						rainEventActive = false;
-					}
-					rainEventEntities.delete( event.gid );
-				} else {
-					if (
-						rainEventEntities.get( event.gid ) !== event.refObjId &&
-						published.catalog.get( event.refObjId )?.eventRain
-					) rainEventActive = true;
-					rainEventEntities.set( event.gid, event.refObjId );
-				}
-			}
-			rainEvents.length = 0;
-			return rainEventActive;
+			// A replayed world reset first resets the owners a reset retires.
+			return weather.eventRain( published, () => {
+				presentationState.combatStanceEnds.clear();
+				modelEmission.reset();
+				structureVisuals.reset();
+				animationEmission.reset();
+				stageAnimations.clear();
+				groundClocks.clear();
+				retiring.clear();
+				disappearing.clear();
+				damageTexts = [];
+			} );
 		},
 		/*
 		================
@@ -2855,9 +2831,7 @@ export function createCharacterPresentation(
 			rideFades.clear();
 			fadeSeen.clear();
 			damageTexts = [];
-			rainEventActive = false;
-			rainEventEntities.clear();
-			rainEvents.length = 0;
+			weather.reset();
 			orbs.reset();
 			output.previewReady = false;
 			output.dockReady = false;
@@ -2914,9 +2888,7 @@ export function createCharacterPresentation(
 			rideFades.clear();
 			fadeSeen.clear();
 			damageTexts = [];
-			rainEventActive = false;
-			rainEventEntities.clear();
-			rainEvents.length = 0;
+			weather.reset();
 			orbs.reset();
 			output.previewReady = false;
 			output.dockReady = false;
