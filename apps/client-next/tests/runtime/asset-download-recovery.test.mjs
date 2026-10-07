@@ -630,7 +630,7 @@ test(
 );
 
 test("headers just inside the window restart it: the stalled body is abandoned a full window later", async t => {
-	let attempts = 0, answer;
+	let attempts = 0, answer = () => {};
 	const { messages } = fixture( t, ( url, options ) => {
 		if ( ++attempts > 1 ) return Promise.resolve( new Response( Uint8Array.of( 4, 5, 6 ) ) );
 		return new Promise( ( resolve, reject ) => {
