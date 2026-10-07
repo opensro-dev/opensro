@@ -197,7 +197,9 @@ export function createActorSnapshots() {
 		if ( !Number.isFinite( light.attenuation ) || !Number.isFinite( light.range ) ) return false;
 		for ( const value of light.ambient ) if ( !Number.isFinite( value ) ) return false;
 		for ( const value of light.diffuse ) if ( !Number.isFinite( value ) ) return false;
+		// Own properties only, as Object.values read them.
 		for ( const key in light.pose ) {
+			if ( !Object.hasOwn( light.pose, key ) ) continue;
 			if ( !Number.isFinite( light.pose[key as keyof typeof light.pose] ) ) return false;
 		}
 		return true;

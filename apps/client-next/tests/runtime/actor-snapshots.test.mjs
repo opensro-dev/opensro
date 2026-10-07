@@ -151,3 +151,15 @@ test("model reference revision ignores pose/order changes and rejected publicati
 	owner.update( [ a ] );
 	assert.ok( owner.modelRevision() > reset );
 });
+
+test("point light admission tests own pose values only, as Object.values did", () => {
+	const owner = createActorSnapshots();
+	const light = pose => ({ pose, ambient: [ .1, .2, .3 ], diffuse: [ .4, .5, .6 ], range: 50, attenuation: 1 });
+	// An inherited enumerable value is not one of the pose's own values.
+	const inherited = Object.assign( Object.create( { stray: NaN } ), { regionId: 1, x: 1, y: 2, z: 3 } );
+	assert.equal( owner.update( [ { ...actor( 1, 0 ), pointLight: light( inherited ) } ] ).length, 1 );
+	assert.throws(
+		() => owner.update( [ { ...actor( 1, 0 ), pointLight: light( { regionId: 1, x: NaN, y: 2, z: 3 } ) } ] ),
+		/Invalid character point light/
+	);
+});

@@ -497,11 +497,6 @@ export function createCharacterPresentation(
 	}
 	/*
 	================
-	wornEquipment
-	================
-	*/
-	/*
-	================
 	wornSignature
 
 	The slot, item and plus of every worn visual slot (0..8), as the appearance
@@ -513,7 +508,8 @@ export function createCharacterPresentation(
 	function wornSignature( equipment: readonly { slot: number; refObjId: number; plus: number; }[] ) {
 		let text = "";
 		for ( const item of equipment ) {
-			if ( item.slot < 0 || item.slot >= 9 ) continue;
+			// The original positive test: a NaN slot is not a visual slot.
+			if ( !(item.slot >= 0 && item.slot < 9) ) continue;
 			if ( text ) text += ";";
 			text += item.slot + "," + item.refObjId + "," + item.plus;
 		}
@@ -533,6 +529,11 @@ export function createCharacterPresentation(
 		}
 		return text;
 	}
+	/*
+	================
+	wornEquipment
+	================
+	*/
 	function wornEquipment(
 		entity: EntityState,
 		gameplay: GameplayState | null
@@ -3676,13 +3677,15 @@ export function createCharacterPresentation(
 			displayed = next;
 			// One pass builds both the published actors and the wanted models, in the
 			// same order the spread-and-map version produced, without temporaries.
-			const published: CharacterActor[] = [], wanted: string[] = [];
+			const presentedActors: CharacterActor[] = [], wanted: string[] = [];
 			for ( const actor of next.values() ) {
-				published.push( blindHeld && actor.blindable ? { ...actor, opacity: 0, pickable: false } : actor );
+				presentedActors.push(
+					blindHeld && actor.blindable ? { ...actor, opacity: 0, pickable: false } : actor
+				);
 				wanted.push( actor.model );
 			}
 			for ( const actor of portraits ) wanted.push( actor.model );
-			renderer.setCharacterActors( published, portraits );
+			renderer.setCharacterActors( presentedActors, portraits );
 			resources.retainWanted( wanted );
 			probe?.detailEnd( "presentation-finalize" );
 		},
