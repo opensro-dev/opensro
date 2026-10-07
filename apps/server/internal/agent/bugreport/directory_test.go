@@ -259,7 +259,17 @@ func TestDirectoryReportListsAreNeverNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), "null") {
-		t.Fatalf("report.json holds null: %s", encoded)
+	var lists struct {
+		Context []json.RawMessage `json:"context"`
+		Errors  []json.RawMessage `json:"errors"`
+		Files   []json.RawMessage `json:"files"`
+	}
+	if err := json.Unmarshal(encoded, &lists); err != nil {
+		t.Fatal(err)
+	}
+	// A JSON null decodes to a nil slice; an empty array to a non-nil one.
+	if lists.Context == nil || lists.Errors == nil || lists.Files == nil ||
+		len(lists.Context)+len(lists.Errors)+len(lists.Files) != 0 {
+		t.Fatalf("want three empty arrays: %s", encoded)
 	}
 }
