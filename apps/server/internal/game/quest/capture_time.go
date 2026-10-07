@@ -100,8 +100,8 @@ func (rt *Runtime) advanceCaptureMinute(c *enterworld.Character, at int, rule ca
 	if record.RemainingMinutes == 0 {
 		return nil, false
 	}
-	if rule.quest == "QNO_EU_IVY_1" && rt.SpawnCaptureGuardian != nil {
-		rt.SpawnCaptureGuardian(c)
+	if rule.quest == "QNO_EU_IVY_1" && rt.SpawnQuestMonster != nil {
+		rt.SpawnQuestMonster(c, ivyGuardian, 0, ivyGuardianRadius)
 	}
 	if record.RemainingMinutes == 1 {
 		frames, released := rt.releaseCapture(c, at, rule, rule.expired)
@@ -113,7 +113,7 @@ func (rt *Runtime) advanceCaptureMinute(c *enterworld.Character, at int, rule ca
 		return []wire.Frame{clearCaptureClock(c, at)}, true
 	}
 	record.RemainingMinutes--
-	record.Progress = packQuestMinutes(record.RemainingMinutes)
+	record.Progress = packQuestMinutes(uint16(record.RemainingMinutes))
 	record.Flags |= 4
 	c.ActiveQuests[at] = record
 	var frames []wire.Frame

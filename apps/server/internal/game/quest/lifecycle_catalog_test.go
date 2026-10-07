@@ -136,7 +136,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					return true
 				})
 				before := snapshot()
-				if _, err := rt.StartQuest(character, def.Codename); err == nil {
+				if _, err := rt.StartQuest(character, acceptToken(def)); err == nil {
 					t.Fatalf("accepted without predecessor %d", missing)
 				}
 				if !bytes.Equal(before, snapshot()) {
@@ -155,7 +155,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 			assertIneligible := func(reason string) {
 				t.Helper()
 				before := snapshot()
-				if _, err := rt.StartQuest(character, def.Codename); err == nil {
+				if _, err := rt.StartQuest(character, acceptToken(def)); err == nil {
 					t.Fatalf("accepted despite %s", reason)
 				}
 				if !bytes.Equal(before, snapshot()) {
@@ -202,18 +202,27 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					character.ActiveQuests = append(character.ActiveQuests, BuildActiveQuestRecord(def, 0))
 					return true
 				})
-			} else if _, err := rt.StartQuest(character, def.Codename); err != nil {
+			} else if _, err := rt.StartQuest(character, acceptToken(def)); err != nil {
 				t.Fatal(err)
 			}
 			restart()
 			before := snapshot()
-			if _, err := rt.StartQuest(character, def.Codename); err == nil {
+			if _, err := rt.StartQuest(character, acceptToken(def)); err == nil {
 				t.Fatal("duplicate acceptance")
 			}
 			if !bytes.Equal(before, snapshot()) {
 				t.Fatal("duplicate changed state")
 			}
 			complete := func() (OpResult, error) {
+				if def.EndNpcCodename != "" && len(def.RewardChoices) > 0 {
+					// A selection quest completes through one of the rows its
+					// end NPC offers this character, as a player picks one.
+					rows := rewardChoiceOptions(def, enterworld.NativeCountryByte9C(character))
+					if len(rows) == 0 {
+						t.Fatal("selection quest offers this character no reward row")
+					}
+					return rt.AdvanceNpcQuest(character, rows[0].Codename, def.EndNpcCodename)
+				}
 				if def.EndNpcCodename != "" {
 					return rt.AdvanceNpcQuest(character, def.Codename, def.EndNpcCodename)
 				}
@@ -377,7 +386,7 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 			if !bytes.Equal(before, snapshot()) {
 				t.Fatal("duplicate reward mutated authority")
 			}
-			_, err = rt.StartQuest(character, def.Codename)
+			_, err = rt.StartQuest(character, acceptToken(def))
 			canRepeat := def.AcceptanceUnavailable == "" && (def.Repeatable || def.MaxCompletions > 1)
 			if (err == nil) != canRepeat {
 				t.Fatalf("repeatability=%v error=%v", def.Repeatable, err)
@@ -546,4 +555,19 @@ func fixtureKillRank(def *Definition) uint8 {
 		return def.KillRanks[0]
 	}
 	return 0
+}
+
+/*
+================
+acceptToken
+
+What the offer dialogue accepts def with: a branching offer (Rahid 2)
+needs one of its replies, so the catalog walk takes the first.
+================
+*/
+func acceptToken(def *Definition) string {
+	if len(def.OfferBranches) > 0 {
+		return branchToken(def.Codename, 0)
+	}
+	return def.Codename
 }

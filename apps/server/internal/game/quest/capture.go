@@ -215,7 +215,7 @@ func (rt *Runtime) CaptureQuestTrap(c *enterworld.Character, skill, monster stri
 		frames = append(frames, updates...)
 		record := c.ActiveQuests[at]
 		record.RemainingMinutes = rule.minutes
-		record.Progress = packQuestMinutes(rule.minutes)
+		record.Progress = packQuestMinutes(uint16(rule.minutes))
 		record.Flags |= 4
 		c.ActiveQuests[at] = record
 		record.Flags = 4

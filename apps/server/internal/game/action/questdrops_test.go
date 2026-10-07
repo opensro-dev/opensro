@@ -30,7 +30,7 @@ func TestFatalQuestDropPublishesReferenceBeforeSpawnAndSurvivesPickup(t *testing
 	// Ordinary equipment admission fails; quest loot is independent.
 	rt.DropRoll = func() (uint32, error) { return 32767, nil }
 	called := 0
-	rt.QuestMonsterDrops = func(character *enterworld.Character, code string, roll func() (uint32, error)) []inventory.ItemAmount {
+	rt.QuestMonsterDrops = func(character *enterworld.Character, code string, _ uint8, roll func() (uint32, error)) []inventory.ItemAmount {
 		called++
 		if character.ID != c.ID || code != target.Ref.Codename || roll == nil {
 			t.Fatal("wrong quest drop context")
@@ -75,7 +75,7 @@ TestLivingMonsterDoesNotRollQuestLoot
 */
 func TestLivingMonsterDoesNotRollQuestLoot(t *testing.T) {
 	rt, _, c, target := newCombatTestRuntime(t, 1000000)
-	rt.QuestMonsterDrops = func(*enterworld.Character, string, func() (uint32, error)) []inventory.ItemAmount {
+	rt.QuestMonsterDrops = func(*enterworld.Character, string, uint8, func() (uint32, error)) []inventory.ItemAmount {
 		t.Fatal("nonfatal quest drop")
 		return nil
 	}

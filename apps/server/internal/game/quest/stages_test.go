@@ -22,6 +22,10 @@ func verifyStagedQuestLifecycle(t *testing.T, defs *Definitions, items enterworl
 	for _, model := range models {
 		c := questCharacter()
 		c.ModelCodename = model
+		// A chain stage (Rahid 3) needs its predecessors and level, as the
+		// unstaged lifecycle seeds them.
+		c.CompletedQuestIds = append([]uint32(nil), root.RequiredQuestIDs...)
+		*c.Level = max(*c.Level, int64(root.Level))
 		deps := &enterworld.Deps{Items: items}
 		rt, err := NewRuntime(deps, defs, func(*enterworld.Character, int64, int64, uint32) ([]wire.Frame, bool) { return nil, true })
 		if err != nil {
@@ -133,7 +137,16 @@ func verifyStagedQuestLifecycle(t *testing.T, defs *Definitions, items enterworl
 		if len(c.ActiveQuests) != 0 || !questCompleted(c, root.RefID) {
 			t.Fatal("final stage did not complete")
 		}
-		if c.Gold == nil || *c.Gold != 200 {
+		// Each stage's gold (the tutorials' 200-gold errand) is paid once.
+		gold := int64(0)
+		for _, stage := range root.Stages {
+			gold += stage.RewardGold
+		}
+		paid := int64(0)
+		if c.Gold != nil {
+			paid = *c.Gold
+		}
+		if paid != gold {
 			t.Fatal("errand money not granted exactly once")
 		}
 		if _, err := rt.StartQuest(c, root.Codename); err == nil {

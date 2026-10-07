@@ -36,8 +36,16 @@ type MonsterDropRule struct {
 	// Optional rates aligned with MonsterCodenames; exclusive with the shared
 	// rate. Lua stores each species' probability as float32 (86c077..86c081).
 	SpeciesChancePercent []float32
-	MinPlayerLevel       uint8
-	MaxHeld              uint32
+	// MonsterGrades, when set, is aligned with MonsterCodenames: a kill counts
+	// only when the monster's grade (rarity & 15, CGObjMob_GetBaseGrade
+	// 4C1C60) matches. Gather missions set it with +0x10D and list the
+	// grades at +0x111 (91C4D0).
+	MonsterGrades  []uint8
+	MinPlayerLevel uint8
+	MaxHeld        uint32
+	// DropCount is the stack one successful drop leaves (mission +0x245,
+	// read by 91C660); zero means one.
+	DropCount uint16
 }
 
 /*
@@ -72,6 +80,9 @@ func validateMonsterDrop(spec QuestSpec) error {
 			}
 		}
 	}
+	if len(rule.MonsterGrades) > 0 && (rule.AnyMonster || len(rule.MonsterGrades) != len(rule.MonsterCodenames)) {
+		return fmt.Errorf("quest %s invalid monster grades", spec.Codename)
+	}
 	seen := make(map[string]bool)
 	for _, code := range rule.MonsterCodenames {
 		if !strings.HasPrefix(code, "MOB_") || seen[code] {
@@ -87,10 +98,11 @@ func validateMonsterDrop(spec QuestSpec) error {
 MonsterDrops
 
 The accepted fatal-hit owner commits these personal drops with ordinary loot.
-Random draws never mutate quest state or award inventory directly.
+Random draws never mutate quest state or award inventory directly. rarity is
+the killed monster's rarity byte.
 ================
 */
-func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, roll func() (uint32, error)) []inventory.ItemAmount {
+func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, rarity uint8, roll func() (uint32, error)) []inventory.ItemAmount {
 	if c == nil || c.DeletePending || roll == nil {
 		return nil
 	}
@@ -100,12 +112,12 @@ func (rt *Runtime) MonsterDrops(c *enterworld.Character, monster string, roll fu
 		if ok {
 			def, ok = definitionAtStage(def, record.Stage)
 		}
-		if !ok || def.TimeLimitMinutes > 0 && record.RemainingMinutes == 0 {
+		if !ok || def.TimeLimitMinutes > 0 && record.RemainingMinutes == 0 || waitingBranch(def, record) {
 			continue
 		}
 		for i := 0; i < missionCount(def); i++ {
 			m := missionDefinition(def, i)
-			out = append(out, missionMonsterDrops(c, m, monster, roll)...)
+			out = append(out, missionMonsterDrops(c, m, monster, rarity, roll)...)
 		}
 	}
 	return out
@@ -119,7 +131,7 @@ Held-item admission and drop identity share the same codename. A knife drop
 must not stop because a different stack of collected vines reached its cap.
 ================
 */
-func missionMonsterDrops(c *enterworld.Character, def *Definition, monster string, roll func() (uint32, error)) []inventory.ItemAmount {
+func missionMonsterDrops(c *enterworld.Character, def *Definition, monster string, rarity uint8, roll func() (uint32, error)) []inventory.ItemAmount {
 	if def.Objective != ObjectiveCollect || def.MonsterDrop == nil {
 		return nil
 	}
@@ -129,6 +141,9 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 		code = def.CollectItemCodename
 	}
 	if !rule.AnyMonster && !slices.Contains(rule.MonsterCodenames, monster) {
+		return nil
+	}
+	if len(rule.MonsterGrades) > 0 && rule.MonsterGrades[slices.Index(rule.MonsterCodenames, monster)] != rarity&15 {
 		return nil
 	}
 	if c.Level == nil || *c.Level < int64(rule.MinPlayerLevel) {
@@ -163,7 +178,8 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 	if err != nil || !nativeQuestDropChance(chance, first, second) {
 		return nil
 	}
-	return []inventory.ItemAmount{{Codename: code, Count: 1}}
+	count := uint32(max(1, rule.DropCount))
+	return []inventory.ItemAmount{{Codename: code, Count: count}}
 }
 
 /*

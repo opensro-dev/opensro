@@ -484,8 +484,8 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	quests.PlanInventory = game.items.PlanQuestInventory
-	quests.SpawnCaptureGuardian = func(character *enterworld.Character) bool {
-		return game.items.SpawnQuestGuardian(game.divisionID, character)
+	quests.SpawnQuestMonster = func(character *enterworld.Character, codename string, radiusMin, radiusSpan float64) bool {
+		return game.items.SpawnQuestMonster(game.divisionID, character, codename, radiusMin, radiusSpan)
 	}
 	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
 	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
@@ -510,11 +510,20 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 			})
 			out := make([]action.NpcQuestOption, 0, len(rows))
 			for _, row := range rows {
+				pages := make([]action.NpcDialogPage, 0, len(row.Pages))
+				for _, page := range row.Pages {
+					pages = append(pages, action.NpcDialogPage{PromptSymbol: page.PromptSymbol, ReplySymbol: page.ReplySymbol})
+				}
+				branches := make([]action.NpcDialogBranch, 0, len(row.Branches))
+				for _, branch := range row.Branches {
+					branches = append(branches, action.NpcDialogBranch{Codename: branch.Codename, ReplySymbol: branch.ReplySymbol,
+						AcceptResponseSymbol: branch.AcceptResponseSymbol})
+				}
 				out = append(out, action.NpcQuestOption{
 					Codename: row.Codename, TitleSymbol: row.TitleSymbol,
 					PromptSymbol: row.PromptSymbol, Complete: row.Complete,
 					AcceptResponseSymbol: row.AcceptResponseSymbol, DenyResponseSymbol: row.DenyResponseSymbol,
-					Informational: row.Informational,
+					Pages: pages, Branches: branches, Informational: row.Informational, SideTalk: row.SideTalk,
 				})
 			}
 			if resuscitation {

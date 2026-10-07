@@ -28,6 +28,8 @@ NpcQuestOption
 
 Symbols are client-localized. Immediate services run through Finish when the
 row is selected; ordinary quests first ask for acceptance or completion.
+Pages, when present, are shown one by one before that question. A SideTalk
+row speaks its line and records it as heard through Finish.
 ================
 */
 type NpcQuestOption struct {
@@ -36,9 +38,41 @@ type NpcQuestOption struct {
 	PromptSymbol         string
 	AcceptResponseSymbol string
 	DenyResponseSymbol   string
+	Pages                []NpcDialogPage
+	Branches             []NpcDialogBranch
 	Informational        bool
+	SideTalk             bool
 	Complete             bool
 	Immediate            bool
+}
+
+/*
+================
+NpcDialogBranch
+
+One reply of a branching offer: the token Accept receives and the line the
+NPC answers with (Rahid 2's _02 feathers / _06 waiting).
+================
+*/
+type NpcDialogBranch struct {
+	Codename             string
+	ReplySymbol          string
+	AcceptResponseSymbol string
+}
+
+// npcDialogRefuseRow is the refusal row a branching offer ends with.
+const npcDialogRefuseRow = "SN_TALK_COMMON_DENY"
+
+/*
+================
+NpcDialogPage
+One page of an NPC's story before a quest offer: a prompt and the single
+reply row that turns the page (Rahid 5's 8A03F0 pages _01.._08).
+================
+*/
+type NpcDialogPage struct {
+	PromptSymbol string
+	ReplySymbol  string
 }
 
 /*
@@ -65,7 +99,12 @@ type npcDialogStage uint8
 const (
 	npcDialogOptions npcDialogStage = iota + 1
 	npcDialogConfirm
+	npcDialogPages
+	npcDialogBranches
 )
+
+// npcDialogFirstRow is the client's choice byte for a kind-4 dialog's first row.
+const npcDialogFirstRow = 5
 
 /*
 ================
@@ -79,6 +118,8 @@ type npcDialogSession struct {
 	Stage         npcDialogStage
 	Options       []NpcQuestOption
 	Pending       NpcQuestOption
+	// Page is the story page on screen while Stage is npcDialogPages.
+	Page int
 }
 
 /*
@@ -217,30 +258,68 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			}
 			return frames, ""
 		}
+		if conversation.Pending.SideTalk {
+			// 89FDA0 speaks the pending line and clears its bit on the next
+			// step; closing the line is that step, so it is recorded here.
+			rt.NpcDialogs.Clear(divisionID, character.Name)
+			if rt.NpcQuests.Finish == nil {
+				return nil, "NPC quest owner is unavailable"
+			}
+			frames, heardError := rt.NpcQuests.Finish(character, conversation.Pending.Codename, conversation.NpcCode)
+			if heardError != nil {
+				log.Debugf("npcdialog: side talk %s refused: %v", conversation.Pending.Codename, heardError)
+				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}, ""
+			}
+			return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.Pending.PromptSymbol)}), ""
+		}
 		if conversation.Pending.Informational {
 			rt.NpcDialogs.Clear(divisionID, character.Name)
 			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.Pending.PromptSymbol)}}, ""
 		}
-		conversation.Stage = npcDialogConfirm
-		if rt.NpcQuests.Prepare != nil {
-			prepared, err := rt.NpcQuests.Prepare(character, conversation.Pending.Codename, conversation.NpcCode)
-			if err != nil {
-				rt.NpcDialogs.Clear(divisionID, character.Name)
-				symbol := conversation.DefaultSymbol
-				var localized interface {
-					error
-					DialogueSymbol() string
-				}
-				if errors.As(err, &localized) && localized.DialogueSymbol() != "" {
-					symbol = localized.DialogueSymbol()
-				}
-				return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
-			}
-			conversation.Pending.Codename = prepared
-		}
 		conversation.Options = nil
-		rt.NpcDialogs.Put(divisionID, character.Name, conversation)
-		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogConfirm(conversation.Pending.PromptSymbol)}}, ""
+		if len(conversation.Pending.Pages) > 0 {
+			conversation.Stage, conversation.Page = npcDialogPages, 0
+			rt.NpcDialogs.Put(divisionID, character.Name, conversation)
+			return []wire.Frame{npcDialogPageFrame(conversation.Pending.Pages[0])}, ""
+		}
+		return rt.openNpcDialogConfirm(divisionID, character, conversation)
+	case npcDialogPages:
+		if choice != npcDialogFirstRow {
+			return nil, fmt.Sprintf("page choice %d is not the page's reply row", choice)
+		}
+		conversation.Page++
+		if conversation.Page < len(conversation.Pending.Pages) {
+			rt.NpcDialogs.Put(divisionID, character.Name, conversation)
+			return []wire.Frame{npcDialogPageFrame(conversation.Pending.Pages[conversation.Page])}, ""
+		}
+		return rt.openNpcDialogConfirm(divisionID, character, conversation)
+	case npcDialogBranches:
+		row := int(choice) - npcDialogFirstRow
+		if row < 0 || row > len(conversation.Pending.Branches) {
+			return nil, fmt.Sprintf("branch choice %d is outside %d reply row(s)", choice, len(conversation.Pending.Branches)+1)
+		}
+		rt.NpcDialogs.Clear(divisionID, character.Name)
+		if row == len(conversation.Pending.Branches) {
+			symbol := conversation.Pending.DenyResponseSymbol
+			if symbol == "" {
+				symbol = conversation.DefaultSymbol
+			}
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
+		}
+		if rt.NpcQuests.Accept == nil {
+			return nil, "quest acceptance owner is unavailable"
+		}
+		branch := conversation.Pending.Branches[row]
+		frames, acceptError := rt.NpcQuests.Accept(character, branch.Codename)
+		if acceptError != nil {
+			log.Debugf("npcdialog: quest branch %s refused: %v", branch.Codename, acceptError)
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}, ""
+		}
+		symbol := branch.AcceptResponseSymbol
+		if symbol == "" {
+			symbol = conversation.DefaultSymbol
+		}
+		return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}), ""
 	case npcDialogConfirm:
 		if choice == 3 {
 			rt.NpcDialogs.Clear(divisionID, character.Name)
@@ -290,4 +369,53 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 	default:
 		return nil, "unknown NPC dialog stage"
 	}
+}
+
+/*
+================
+openNpcDialogConfirm
+
+Prepares the pending quest row and asks its acceptance or completion
+question. The caller has already left the options or pages stage.
+================
+*/
+func (rt *Runtime) openNpcDialogConfirm(divisionID string, character *enterworld.Character, conversation npcDialogSession) ([]wire.Frame, string) {
+	conversation.Stage = npcDialogConfirm
+	if rt.NpcQuests.Prepare != nil {
+		prepared, err := rt.NpcQuests.Prepare(character, conversation.Pending.Codename, conversation.NpcCode)
+		if err != nil {
+			rt.NpcDialogs.Clear(divisionID, character.Name)
+			symbol := conversation.DefaultSymbol
+			var localized interface {
+				error
+				DialogueSymbol() string
+			}
+			if errors.As(err, &localized) && localized.DialogueSymbol() != "" {
+				symbol = localized.DialogueSymbol()
+			}
+			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
+		}
+		conversation.Pending.Codename = prepared
+	}
+	if len(conversation.Pending.Branches) > 0 && !conversation.Pending.Complete {
+		conversation.Stage = npcDialogBranches
+		rows := make([]string, 0, len(conversation.Pending.Branches)+1)
+		for _, branch := range conversation.Pending.Branches {
+			rows = append(rows, branch.ReplySymbol)
+		}
+		rows = append(rows, npcDialogRefuseRow)
+		rt.NpcDialogs.Put(divisionID, character.Name, conversation)
+		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(conversation.Pending.PromptSymbol, rows)}}, ""
+	}
+	rt.NpcDialogs.Put(divisionID, character.Name, conversation)
+	return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogConfirm(conversation.Pending.PromptSymbol)}}, ""
+}
+
+/*
+================
+npcDialogPageFrame
+================
+*/
+func npcDialogPageFrame(page NpcDialogPage) wire.Frame {
+	return wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(page.PromptSymbol, []string{page.ReplySymbol})}
 }

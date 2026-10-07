@@ -163,7 +163,7 @@ func TestIvyToolDropCompletionAndDailyResupply(t *testing.T) {
 	rt, c, def := gatherFixture(t)
 	day := uint16(7)
 	rt.CalendarNow = func() calendar.Value { return calendar.Value{Day: day} }
-	drops := rt.MonsterDrops(c, "MOB_AM_SOLDIER", func() (uint32, error) { return 1, nil })
+	drops := rt.MonsterDrops(c, "MOB_AM_SOLDIER", 0, func() (uint32, error) { return 1, nil })
 	if len(drops) != 1 || drops[0].Codename != ivyKnife {
 		t.Fatal("material quest did not drop its native tool", drops)
 	}

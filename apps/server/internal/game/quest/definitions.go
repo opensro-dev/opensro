@@ -71,12 +71,48 @@ RewardChoice
 
 One alternative item reward of a selection quest (_RefQuestReward
 SelectionCnt). The v1.150 client has no reward-selection window, so the
-NPC offers one completion row per choice, titled by TitleSymbol.
+NPC offers one completion row per choice, titled by TitleSymbol. A
+choice with one item and no authored title is titled by that item's name
+(the SQL selection lists name items, never rows).
 ================
 */
 type RewardChoice struct {
 	TitleSymbol string
 	Items       []RewardItemLead
+	// country is the single item's itemdata Country, resolved at load:
+	// 0 China, 1 Europe, 3 every character.
+	country int64
+}
+
+/*
+================
+OfferPage
+
+One story page an NPC shows before a quest offer: its prompt and the single
+reply row that turns the page (Rahid 5's 8A03F0 dialogue states 0xA..0x28).
+================
+*/
+type OfferPage struct {
+	PromptSymbol string
+	ReplySymbol  string
+}
+
+/*
+================
+SideTalk
+
+A line another NPC speaks while the quest is active, from a dialogue mission
+that never completes (CMissionDialog 91D770 without +0x6B): Rahid 4's
+slaves who never met Rahid. 89FDA0 speaks the mission's prompt (+0x1E)
+while its pending bit is set and clears the bit on the next step; once
+heard, the NPC answers its repeat line (+0x22). Without a repeat line the
+prompt is spoken every time (Bukhra's not-achieved line).
+================
+*/
+type SideTalk struct {
+	NpcCodename  string
+	PromptSymbol string
+	RepeatSymbol string
 }
 
 /*
@@ -139,11 +175,26 @@ type QuestSpec struct {
 	// RewardChoices are granted on top of RewardItems: exactly one, picked
 	// from the completing NPC's rows (RewardChoice).
 	RewardChoices []RewardChoice
+	// RewardChoiceCheckCountry is _RefQuestReward IsCheckCountry: a choice
+	// whose item belongs to the other country is not offered.
+	RewardChoiceCheckCountry bool
 	// NPC/session fields are codename/symbol keyed because their numeric IDs
 	// are version-local. They are curated only where shipped dialogue text
 	// and the v1.188 mechanism establish a complete interaction segment.
-	StartNpcCodename        string
-	EndNpcCodename          string
+	StartNpcCodename string
+	EndNpcCodename   string
+	// OfferPages precede OfferPromptSymbol when the quest is offered;
+	// TalkPages precede CompletePromptSymbol at the talk objective's NPC
+	// (CMissionDialog +0x1E/+0x46 rows).
+	OfferPages []OfferPage
+	TalkPages  []OfferPage
+	SideTalks  []SideTalk
+	// OfferBranches replace the offer's yes/no with these replies (and a
+	// refusal); the reply picks the record's branch.
+	OfferBranches []OfferBranch
+	// AcceptNoticeSymbol is BASIC_MENUSTRING 13 (word 0x13D), the notice
+	// sent when the quest is accepted ("Ask Ahmok about Rahid.").
+	AcceptNoticeSymbol      string
 	OfferPromptSymbol       string
 	RepeatOfferPromptSymbol string
 	AcceptResponseSymbol    string
@@ -389,11 +440,15 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 			return nil, fmt.Errorf("quest %s incomplete delivery contract", spec.Codename)
 		}
 		rewards := append([]RewardItemLead(nil), spec.RewardItems...)
-		for _, choice := range spec.RewardChoices {
-			// A kind-2 reward window or a stage completion cannot carry a choice.
-			if choice.TitleSymbol == "" || len(choice.Items) == 0 || spec.KindByte == 2 || len(spec.Stages) > 0 || spec.EndNpcCodename == "" {
-				return nil, fmt.Errorf("quest %s invalid reward choice contract", spec.Codename)
-			}
+		if err := validateOfferBranches(spec); err != nil {
+			return nil, err
+		}
+		choices, err := resolveRewardChoices(spec, items)
+		if err != nil {
+			return nil, err
+		}
+		def.RewardChoices = choices
+		for _, choice := range choices {
 			rewards = append(rewards, choice.Items...)
 		}
 		for _, reward := range rewards {

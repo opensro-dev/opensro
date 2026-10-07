@@ -10,6 +10,8 @@ package quest
 import (
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/game/enterworld"
 )
 
 /*
@@ -39,7 +41,7 @@ the grant is the fixed items plus the picked choice's.
 */
 func TestRewardChoiceRowsNameTheirItems(t *testing.T) {
 	def := choiceDefinition()
-	rows := rewardChoiceOptions(def)
+	rows := rewardChoiceOptions(def, 1)
 	if len(rows) != 2 || rows[1].TitleSymbol != "SN_TALK_QNO_EU_EASTEU_5_10" || !rows[1].Complete || rows[1].PromptSymbol != def.CompletePromptSymbol {
 		t.Fatalf("rows %+v", rows)
 	}
@@ -80,5 +82,51 @@ func TestRewardChoiceRequiredForSelectionQuests(t *testing.T) {
 	plain := &Definition{QuestSpec: QuestSpec{Codename: "QNO_PLAIN"}}
 	if _, err := rt.completeRewardChoice(nil, plain, nil, "", 0); err == nil || !strings.Contains(err.Error(), "offers no reward choice") {
 		t.Fatalf("a plain quest took a choice: %v", err)
+	}
+}
+
+/*
+================
+TestSelectionRewardsOfferTheCharactersCountry
+
+QNO_CH_SHAMAN_1 (Exorcist Miaoryeong) lists five Chinese and nine European
+weapons with SelectionCnt 1 and IsCheckCountry set. Each row is titled by
+its weapon's name, a character sees only its own country's weapons, and a
+pick of the other country's weapon is refused before any grant.
+================
+*/
+func TestSelectionRewardsOfferTheCharactersCountry(t *testing.T) {
+	defs, items := loadShippedDefinitions(t)
+	def, ok := defs.ByCodename("QNO_CH_SHAMAN_1")
+	if !ok {
+		t.Fatal("QNO_CH_SHAMAN_1 is not loaded")
+	}
+	if len(def.RewardChoices) != 14 || !def.RewardChoiceCheckCountry || len(def.RewardItems) != 0 {
+		t.Fatalf("selection contract = %d choices, country check %v, %d fixed items", len(def.RewardChoices), def.RewardChoiceCheckCountry, len(def.RewardItems))
+	}
+	for country, want := range map[int]int{0: 5, 1: 9} {
+		rows := rewardChoiceOptions(def, country)
+		if len(rows) != want {
+			t.Fatalf("country %d offered %d rows, want %d", country, len(rows), want)
+		}
+		for _, row := range rows {
+			_, choice, picked := parseRewardChoiceToken(row.Codename)
+			item := def.RewardChoices[choice].Items[0].ItemCodename
+			ref, _ := items.ItemRefByCodename(item)
+			if !picked || row.TitleSymbol != ref.NameStrID || ref.Country != int64(country) {
+				t.Fatalf("country %d row %+v names %s (country %d)", country, row, item, ref.Country)
+			}
+		}
+	}
+	european := &enterworld.Character{ModelCodename: "CHAR_EU_MAN_NOBLE"}
+	chinese := 0
+	for i, choice := range def.RewardChoices {
+		if strings.HasPrefix(choice.Items[0].ItemCodename, "ITEM_CH_") {
+			chinese = i
+			break
+		}
+	}
+	if _, err := (&Runtime{}).completeRewardChoice(european, def, nil, def.EndNpcCodename, chinese); err == nil || !strings.Contains(err.Error(), "reward choices") {
+		t.Fatalf("a European completed with a Chinese weapon: %v", err)
 	}
 }

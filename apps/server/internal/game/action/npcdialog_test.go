@@ -31,6 +31,48 @@ func TestUnfinishedQuestDialogueCannotMutateQuest(t *testing.T) {
 	}
 }
 
+/*
+================
+TestSideTalkRecordsItsLineThroughFinish
+
+A side-talk row speaks its line once and records it as heard through the
+quest owner (89FDA0's pending bit); a refusal answers the NPC's base line.
+================
+*/
+func TestSideTalkRecordsItsLineThroughFinish(t *testing.T) {
+	for _, refused := range []bool{false, true} {
+		c := testCharacter()
+		rt := selectTestRuntime(c)
+		rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
+		npc := rt.NpcRoster[0]
+		rt.Selected.Set(testDivision, c.Name, npc.ObjectID)
+		rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+			Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "side-talk:QUEST~1", PromptSymbol: "SLAVE", SideTalk: true}}})
+		var heard []string
+		rt.NpcQuests.Finish = func(_ *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error) {
+			heard = append(heard, codename+"@"+npcCodename)
+			if refused {
+				return nil, errors.New("already heard")
+			}
+			return nil, nil
+		}
+		frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{5})
+		want := "SLAVE"
+		if refused {
+			want = "BASE"
+		}
+		if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogSymbol(want)) {
+			t.Fatalf("refused=%v: %v %q", refused, frames, refusal)
+		}
+		if len(heard) != 1 || heard[0] != "side-talk:QUEST~1@"+npc.Codename {
+			t.Fatalf("side talk recorded %v", heard)
+		}
+		if _, ok := rt.NpcDialogs.Get(testDivision, c.Name); ok {
+			t.Fatal("side talk kept the conversation open")
+		}
+	}
+}
+
 func TestQuestAcceptanceAndDenialUseAuthoredResponses(t *testing.T) {
 	for _, choice := range []byte{2, 3} {
 		c := testCharacter()
@@ -193,5 +235,45 @@ func TestNpcDialogQuestSessionIsSelectionBound(t *testing.T) {
 	accepted = ""
 	if _, refusal = rt.HandleNpcDialogResponse(testDivision, character, []byte{5}); refusal == "" || accepted != "" {
 		t.Fatalf("stale response refusal=%q accepted=%q", refusal, accepted)
+	}
+}
+
+/*
+================
+TestQuestOfferPagesTurnBeforeTheQuestion
+
+Rahid 5's offer pages through four story prompts, each with one reply row,
+before the authored offer asks for acceptance. Only the reply row turns a
+page; acceptance is reachable only after the last page.
+================
+*/
+func TestQuestOfferPagesTurnBeforeTheQuestion(t *testing.T) {
+	c := testCharacter()
+	rt := selectTestRuntime(c)
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
+	npc := rt.NpcRoster[0]
+	rt.Selected.Set(testDivision, c.Name, npc.ObjectID)
+	pages := []NpcDialogPage{{PromptSymbol: "P1", ReplySymbol: "R1"}, {PromptSymbol: "P2", ReplySymbol: "R2"}}
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "QUEST", PromptSymbol: "OFFER", AcceptResponseSymbol: "ACCEPT", Pages: pages}}})
+	accepted := 0
+	rt.NpcQuests.Accept = func(*enterworld.Character, string) ([]wire.Frame, error) { accepted++; return nil, nil }
+	for _, page := range pages {
+		frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{npcDialogFirstRow})
+		want := wire.EncodeNpcDialogOptions(page.PromptSymbol, []string{page.ReplySymbol})
+		if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(want) {
+			t.Fatalf("page %s: %v %q", page.PromptSymbol, frames, refusal)
+		}
+		if _, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{2}); refusal == "" || accepted != 0 {
+			t.Fatal("a page accepted the quest")
+		}
+	}
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{npcDialogFirstRow})
+	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogConfirm("OFFER")) {
+		t.Fatalf("last page did not open the offer: %v %q", frames, refusal)
+	}
+	frames, refusal = rt.HandleNpcDialogResponse(testDivision, c, []byte{2})
+	if refusal != "" || accepted != 1 || string(frames[len(frames)-1].Payload) != string(wire.EncodeNpcDialogSymbol("ACCEPT")) {
+		t.Fatalf("offer after pages did not accept: %v %q %d", frames, refusal, accepted)
 	}
 }

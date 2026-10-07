@@ -54,6 +54,7 @@ func catalogSpecs(catalog *Catalog) ([]QuestSpec, error) {
 	}
 	additional := append([]QuestSpec(nil), europeanTutorialSpecs...)
 	additional = append(additional, captureQuestSpecs...)
+	additional = append(additional, rahidChainSpecs...)
 	additional = append(additional, generated...)
 	authored := map[string]bool{}
 	for _, spec := range append(specs, additional...) {

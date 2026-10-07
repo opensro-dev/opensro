@@ -35,13 +35,13 @@ func TestQuestGuardianUsesExactPopulationAndDoesNotRespawn(t *testing.T) {
 		t.Fatal("ordinary population absent")
 	}
 	request := QuestMonsterSpawn{Division: "quest", Population: lease, Codename: code,
-		Position: Spawn{RegionID: 0x655e, X: 253, Y: 85, Z: 449}, NowMs: 1000}
+		Position: Spawn{RegionID: 0x655e, X: 253, Y: 85, Z: 449}, NowMs: 1000, RadiusSpan: 20}
 	stale := request
 	stale.Population.Generation++
-	if state.SpawnQuestGuardian(stale) {
+	if state.SpawnQuestMonster(stale) {
 		t.Fatal("stale generation spawned a guardian")
 	}
-	if !state.SpawnQuestGuardian(request) {
+	if !state.SpawnQuestMonster(request) {
 		t.Fatal("valid guardian admission failed")
 	}
 	actors := state.MaterializedInstances("quest")
@@ -56,7 +56,7 @@ func TestQuestGuardianUsesExactPopulationAndDoesNotRespawn(t *testing.T) {
 		t.Fatal("script guardian acquired a respawning nest")
 	}
 	request.Position.RegionID |= 0x8000
-	if state.SpawnQuestGuardian(request) {
+	if state.SpawnQuestMonster(request) {
 		t.Fatal("indoor guardian admitted")
 	}
 }

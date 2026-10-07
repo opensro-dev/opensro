@@ -33,18 +33,20 @@ shares their presentation branch, but persistence preserves the distinction.
 ================
 */
 type Runtime struct {
-	gatherMu             sync.Mutex
-	gatherJobs           map[int64]gatherJob
-	SpawnCaptureGuardian func(*enterworld.Character) bool
-	CaptureRoll          func() (uint32, error)
-	CalendarNow          func() calendar.Value
-	calendarMu           sync.Mutex
-	periodStarts         map[uint32]uint32
-	calendarHour         uint8
-	calendarNextMs       int64
-	PlanInventory        func(*enterworld.Character, []inventory.ItemAmount, []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error)
-	deps                 Dependencies
-	Defs                 *Definitions
+	gatherMu   sync.Mutex
+	gatherJobs map[int64]gatherJob
+	// SpawnQuestMonster places a script monster radiusMin + fraction *
+	// radiusSpan from the character, inside the caller's character door.
+	SpawnQuestMonster func(c *enterworld.Character, codename string, radiusMin, radiusSpan float64) bool
+	CaptureRoll       func() (uint32, error)
+	CalendarNow       func() calendar.Value
+	calendarMu        sync.Mutex
+	periodStarts      map[uint32]uint32
+	calendarHour      uint8
+	calendarNextMs    int64
+	PlanInventory     func(*enterworld.Character, []inventory.ItemAmount, []inventory.ItemAmount) ([]enterworld.InventoryRow, []wire.Frame, error)
+	deps              Dependencies
+	Defs              *Definitions
 	// ApplyExperience is the progression updater used inside the
 	// quest-reward authority transaction. It opens no door itself, allowing
 	// quest completion, gold, and experience to commit atomically.
@@ -187,6 +189,9 @@ be stale after a catalog correction or an item transaction.
 ================
 */
 func objectiveMet(c *enterworld.Character, def *Definition, record enterworld.ActiveQuestRecord) bool {
+	if waitingBranch(def, record) {
+		return record.WaitAchieved
+	}
 	if _, capture := captureRuleForQuest(def.Codename); capture && record.RemainingMinutes == 0 {
 		return false
 	}
@@ -274,11 +279,15 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 	if character == nil {
 		return OpResult{}, fmt.Errorf("quest start: nil character")
 	}
+	codename, branch, branched := parseBranchToken(codename)
 	def, ok := rt.Defs.ByCodename(codename)
 	if !ok {
 		return OpResult{}, fmt.Errorf("quest start: codename %s has no loaded definition", codename)
 	}
-
+	// A branching offer is accepted only with one of its replies.
+	if branched != (len(def.OfferBranches) > 0) || branch >= max(1, len(def.OfferBranches)) {
+		return OpResult{}, fmt.Errorf("quest start: %s needs one of its %d offer replies", codename, len(def.OfferBranches))
+	}
 	var refusal error
 	var record enterworld.ActiveQuestRecord
 	var inventoryFrames []wire.Frame
@@ -326,7 +335,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		supply, suppliesTraps := captureSupplyForQuest(def.Codename)
 		suppliesTraps = suppliesTraps && !supply.afterCompletion
 		if suppliesTraps {
-			acceptanceItems = append(acceptanceItems, inventory.ItemAmount{Codename: supply.item, Count: captureSupplyCount})
+			acceptanceItems = append(acceptanceItems, inventory.ItemAmount{Codename: supply.item, Count: uint32(supply.count)})
 		}
 		if len(acceptanceItems) > 0 {
 			if rt.PlanInventory == nil {
@@ -341,7 +350,9 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 			character.MissionInventory = rows
 			inventoryFrames = frames
 		}
-		if suppliesTraps {
+		// 8B2420 grants Cerberus's first scissors without stamping the day:
+		// only a refill spends it.
+		if suppliesTraps && !supply.spendAtGrant {
 			setCaptureSupply(character, def.RefID, rt.CalendarNow().Day, false)
 		}
 		progress := uint32(0)
@@ -352,9 +363,17 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 			progress = heldCollectCount(character, def)
 		}
 		record = BuildActiveQuestRecord(def, progress)
+		if branched {
+			record.Branch = uint8(branch)
+			if wait := def.OfferBranches[branch].WaitMinutes; wait > 0 {
+				record.WaitMinutes = wait
+				record.Progress = packQuestMinutes(wait)
+				record.Flags |= 4
+			}
+		}
 		if def.TimeLimitMinutes > 0 {
 			record.RemainingMinutes = def.TimeLimitMinutes
-			record.Progress = packQuestMinutes(record.RemainingMinutes)
+			record.Progress = packQuestMinutes(uint16(record.RemainingMinutes))
 			record.Flags |= 4
 		}
 		record, _ = refreshMissions(character, def, record, "", 0)
@@ -378,7 +397,11 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 	if !changed {
 		return OpResult{}, fmt.Errorf("quest start: character is no longer authoritative")
 	}
-	return OpResult{Frames: append(inventoryFrames, wire.Frame{Opcode: OpQuestUpdate, Payload: EncodeQuestUpdateInsert(record)})}, nil
+	frames := append(inventoryFrames, wire.Frame{Opcode: OpQuestUpdate, Payload: EncodeQuestUpdateInsert(record)})
+	if def.AcceptNoticeSymbol != "" {
+		frames = append(frames, questNotification(def.AcceptNoticeSymbol))
+	}
+	return OpResult{Frames: frames}, nil
 }
 
 /*
@@ -391,8 +414,13 @@ Semantic dialog row. Authored symbols remain localized by the client.
 type NpcOption struct {
 	Codename, TitleSymbol, PromptSymbol      string
 	AcceptResponseSymbol, DenyResponseSymbol string
+	Pages                                    []OfferPage
+	Branches                                 []NpcBranch
 	Informational                            bool
-	Complete                                 bool
+	// SideTalk rows speak PromptSymbol and record it as heard through
+	// AdvanceNpcQuest (89FDA0's pending bit).
+	SideTalk bool
+	Complete bool
 }
 
 /*
@@ -417,6 +445,15 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			continue
 		}
 		active := activeQuestIndex(character, def.RefID) >= 0
+		if active {
+			def = branchDefinition(def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])
+		}
+		if active && currentEndNpc(character, def) != npcCodename {
+			if row, spoken := sideTalkOption(def, character.ActiveQuests[activeQuestIndex(character, def.RefID)], npcCodename); spoken {
+				completes = append(completes, row)
+				continue
+			}
+		}
 		if active && len(def.Stages) > 0 {
 			record := character.ActiveQuests[activeQuestIndex(character, def.RefID)]
 			current, ok := definitionAtStage(def, record.Stage)
@@ -424,7 +461,7 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 				continue
 			}
 			if stageObjectiveMet(character, current, record) {
-				completes = append(completes, NpcOption{Codename: stageToken(def.Codename, record.Stage), TitleSymbol: def.TitleSymbol, PromptSymbol: current.CompletePromptSymbol, Complete: true})
+				completes = append(completes, NpcOption{Codename: stageToken(def.Codename, record.Stage), TitleSymbol: def.TitleSymbol, PromptSymbol: current.CompletePromptSymbol, Pages: current.TalkPages, Complete: true})
 			} else if current.NotAchievedSymbol != "" {
 				// The stage's own BASIC_MENUSTRING_NOT_ACHIEVED line, as an
 				// unstaged quest shows its own below.
@@ -439,12 +476,12 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 
 		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && (def.Objective == ObjectiveTalk || objectiveMet(character, def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])) {
 			if len(def.RewardChoices) > 0 {
-				completes = append(completes, rewardChoiceOptions(def)...)
+				completes = append(completes, rewardChoiceOptions(def, country)...)
 				continue
 			}
 			completes = append(completes, NpcOption{
 				Codename: def.Codename, TitleSymbol: def.TitleSymbol,
-				PromptSymbol: def.CompletePromptSymbol, Complete: true,
+				PromptSymbol: def.CompletePromptSymbol, Pages: def.TalkPages, Complete: true,
 			})
 			continue
 		}
@@ -461,6 +498,7 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 				Codename: def.Codename, TitleSymbol: def.TitleSymbol,
 				PromptSymbol:         prompt,
 				AcceptResponseSymbol: def.AcceptResponseSymbol, DenyResponseSymbol: def.DenyResponseSymbol,
+				Pages: def.OfferPages, Branches: offerBranchRows(def),
 			})
 		}
 		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && def.NotAchievedSymbol != "" {
@@ -477,6 +515,25 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		}
 	}
 	return append(completes, offers...)
+}
+
+/*
+================
+currentEndNpc
+
+The end NPC of the active quest's current stage.
+================
+*/
+func currentEndNpc(c *enterworld.Character, def *Definition) string {
+	at := activeQuestIndex(c, def.RefID)
+	if at < 0 {
+		return ""
+	}
+	current, ok := definitionAtStage(def, c.ActiveQuests[at].Stage)
+	if !ok {
+		return ""
+	}
+	return current.EndNpcCodename
 }
 
 /*
@@ -626,7 +683,7 @@ without choices). A selection quest refuses any completion without one.
 */
 func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *Definition, expectedStage *uint16, npc string, choice int) (OpResult, error) {
 	refID := def.RefID
-	if len(def.RewardChoices) > 0 && (choice < 0 || choice >= len(def.RewardChoices)) {
+	if len(def.RewardChoices) > 0 && !rewardChoiceOffered(def, enterworld.NativeCountryByte9C(character), choice) {
 		return OpResult{}, fmt.Errorf("quest reward: %s needs one of its %d reward choices", def.Codename, len(def.RewardChoices))
 	}
 	if len(def.RewardChoices) == 0 && choice != noRewardChoice {
@@ -656,6 +713,7 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			refusal = fmt.Errorf("unexpected stage on an unstaged quest")
 			return false
 		}
+		def = branchDefinition(def, character.ActiveQuests[at])
 		if len(root.Stages) > 0 {
 			if expectedStage == nil || character.ActiveQuests[at].Stage != *expectedStage {
 				refusal = fmt.Errorf("quest stage confirmation is stale or absent")
@@ -690,6 +748,16 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			consume := collectionConsumption(def)
 			for index := range consume {
 				consume[index].Count *= count
+			}
+			if waitingBranch(def, character.ActiveQuests[at]) {
+				// 89E670's waiting branch never needed the objective items:
+				// whatever was gathered leaves with the quest instead.
+				consume = consume[:0]
+				for _, item := range collectionConsumption(def) {
+					if held := captureItemCount(character, item.Codename); held > 0 {
+						consume = append(consume, inventory.ItemAmount{Codename: item.Codename, Count: held})
+					}
+				}
 			}
 			consume = append(consume, captureSupplyCleanup(character, def)...)
 			consume = append(consume, questToolCleanup(character, def)...)
@@ -764,6 +832,11 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 	}
 	if advanced != nil {
 		frames[0].Payload = EncodeQuestUpdateUpdate(*advanced)
+		// A finished stage's own achieved-now line (Rahid 3's _13 once Ahmok
+		// has talked: "Go speak with Town Chief Bukhra").
+		if def.AchievedNowSymbol != "" {
+			frames = append(frames, questNotification(def.AchievedNowSymbol))
+		}
 	}
 	if goldFrame != nil {
 		frames = append(frames, *goldFrame)

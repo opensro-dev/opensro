@@ -24,13 +24,14 @@ import (
 
 /*
 ================
-SpawnQuestGuardian
+SpawnQuestMonster
 
-The quest minute already holds division and character authority. Resolve only
-the live population and pose here; do not open a nested character read door.
+The quest minute and quest item use already hold division and character
+authority. Resolve only the live population and pose here; do not open a
+nested character read door.
 ================
 */
-func (rt *Runtime) SpawnQuestGuardian(division string, c *enterworld.Character) bool {
+func (rt *Runtime) SpawnQuestMonster(division string, c *enterworld.Character, codename string, radiusMin, radiusSpan float64) bool {
 	if rt.Monsters == nil || c == nil || !enterworld.CharacterAlive(c) || c.NativeTeleportMode != 0 {
 		return false
 	}
@@ -39,9 +40,10 @@ func (rt *Runtime) SpawnQuestGuardian(division string, c *enterworld.Character) 
 		return false
 	}
 	now := rt.Now().UnixMilli()
-	return rt.Monsters.SpawnQuestGuardian(simulation.QuestMonsterSpawn{
-		Division: division, Population: lease, Codename: "MOB_QT_02_PUNISHER_CLON", NowMs: now,
-		Position: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now),
+	return rt.Monsters.SpawnQuestMonster(simulation.QuestMonsterSpawn{
+		Division: division, Population: lease, Codename: codename, NowMs: now,
+		Position:  rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now),
+		RadiusMin: radiusMin, RadiusSpan: radiusSpan,
 	})
 }
 

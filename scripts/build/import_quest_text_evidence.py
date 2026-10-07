@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "scripts/data/quest"
 TEXT_FORMAT = "sro-quest-v150-text-v1"
-SQL_FORMAT = "sro-quest-sql-rewards-v1"
+SQL_FORMAT = "sro-quest-sql-rewards-v2"
 
 # The reward paragraph of a v1.150 popup opens with this heading.
 REWARD_HEADING = "보상"
@@ -127,12 +127,16 @@ def main():
 		if code not in quests:
 			continue
 		# refqusetreward columns: 0 QuestID, 1 CodeName, 2 IsView, 3
-		# IsBasicReward, 4 IsItemReward, 5-8 the condition/country/class/
-		# gender checks, 10 Gold, 11 Exp, 12 SPExp, 13 SP, 14 AP, 16 Hwan,
-		# 17 Inventory (slots added), 18 ItemRewardType.
+		# IsBasicReward, 4 IsItemReward, 5 IsCheckCondition, 6
+		# IsCheckCountry, 7 IsCheckClass, 8 IsCheckGender, 10 Gold, 11 Exp,
+		# 12 SPExp, 13 SP, 14 AP, 16 Hwan, 17 Inventory (slots added), 18
+		# SelectionCnt: how many of the listed items the player picks. The
+		# v1.188 server checks the client's pick count against it (51B370,
+		# record +5, read by 6AD880); QNO_CH_SHAMAN_1 lists fourteen weapons
+		# with 1 here.
 		rewards["quests"][code] = {"gold": int(row[10]), "exp": int(row[11]), "skillExp": int(row[12]),
 			"skillPoints": int(row[13]), "ap": int(row[14]), "hwan": int(row[16]), "inventorySlots": int(row[17]),
-			"itemRewardType": int(row[18]), "items": []}
+			"selectionCount": int(row[18]), "checkCountry": int(row[6]) != 0, "items": []}
 	for row in item_rows:
 		code = row[1]
 		if code in rewards["quests"]:

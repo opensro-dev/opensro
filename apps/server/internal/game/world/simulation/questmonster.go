@@ -19,7 +19,6 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
-const questGuardianRadius = 20
 const nativeRandomMaximum = 32767
 const nativeCircleRadians = 6.2831854820251465
 
@@ -28,6 +27,7 @@ const nativeCircleRadians = 6.2831854820251465
 QuestMonsterSpawn
 
 The action owner supplies residency and its live pose under division authority.
+The monster lands RadiusMin + fraction * RadiusSpan from Position.
 ================
 */
 type QuestMonsterSpawn struct {
@@ -36,17 +36,20 @@ type QuestMonsterSpawn struct {
 	Codename   string
 	Position   Spawn
 	NowMs      int64
+	RadiusMin  float64
+	RadiusSpan float64
 }
 
 /*
 ================
-SpawnQuestGuardian
+SpawnQuestMonster
 
-8B9B60 draws a float32 angle and radius before entering the world factory.
+8B9B60 (Ivy guardian, 0 + 20) and 8B2AB0 (Cerberus lure, 20 + 80) draw a
+float32 angle, then a float32 radius, before entering the world factory.
 Its heading is the truncated angle word, not a normalized movement heading.
 ================
 */
-func (s *MonsterState) SpawnQuestGuardian(request QuestMonsterSpawn) bool {
+func (s *MonsterState) SpawnQuestMonster(request QuestMonsterSpawn) bool {
 	if IsDungeonRegion(request.Position.RegionID) {
 		return false
 	}
@@ -63,7 +66,7 @@ func (s *MonsterState) SpawnQuestGuardian(request QuestMonsterSpawn) bool {
 	angleFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
 	angle := float64(float32(float64(angleFraction) * nativeCircleRadians))
 	radiusFraction := float32(float64(s.randomWord()) / nativeRandomMaximum)
-	radius := float64(float32(float64(radiusFraction) * questGuardianRadius))
+	radius := float64(float32(float64(radiusFraction)*request.RadiusSpan + request.RadiusMin))
 	center := request.Position
 	spawn := normalizeGeneratedMonsterSpawn(monster.SpawnPoint{
 		RefObjID: ref.RefObjID, RegionID: center.RegionID,

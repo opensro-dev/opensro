@@ -194,6 +194,10 @@ func collectionConsumption(def *Definition) []inventory.ItemAmount {
 // Rebuild contents while retaining the envelope (run number, timers, targets,
 // stage). Inventory changes must never erase a simultaneous kill counter.
 func refreshMissions(c *enterworld.Character, def *Definition, record enterworld.ActiveQuestRecord, killed string, rarity uint8) (enterworld.ActiveQuestRecord, bool) {
+	// A waiting branch's progress is its timer (89E050), never item counts.
+	if waitingBranch(def, record) {
+		return record, false
+	}
 	updated := record
 	updated.Contents = nil
 	changed := false

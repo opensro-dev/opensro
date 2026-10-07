@@ -14,7 +14,7 @@ func (rt *Runtime) planQuestKillDrops(c *enterworld.Character, target monster.In
 		return nil
 	}
 	var drops []grounditem.Item
-	for _, amount := range rt.QuestMonsterDrops(c, target.Ref.Codename, rt.DropRoll) {
+	for _, amount := range rt.QuestMonsterDrops(c, target.Ref.Codename, target.Rarity(), rt.DropRoll) {
 		ref, ok := rt.deps.ItemReferences().ItemRefByCodename(amount.Codename)
 		if !ok || ref == nil || amount.Count == 0 || amount.Count > 65535 {
 			continue

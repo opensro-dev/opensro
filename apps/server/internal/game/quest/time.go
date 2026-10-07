@@ -22,12 +22,14 @@ import (
 ================
 packQuestMinutes
 
-570650 packs hours/minutes, not milliseconds. v1.150 5C2A30 consumes days
-at bit 10, hours at bit 15 and minutes at bit 20.
+570650 packs hours/minutes, not milliseconds: the hours split into days
+(hours / 24) and the hour of the day. v1.150 5C2A30 consumes days at bit
+10, hours at bit 15 and minutes at bit 20.
 ================
 */
-func packQuestMinutes(minutes uint8) uint32 {
-	return uint32(minutes/60)<<15 | uint32(minutes%60)<<20
+func packQuestMinutes(minutes uint16) uint32 {
+	hours := uint32(minutes / 60)
+	return (hours/24)&0x1f<<10 | (hours%24)<<15 | uint32(minutes%60)&0x3f<<20
 }
 
 /*
@@ -63,6 +65,13 @@ func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 					at++
 					continue
 				}
+			}
+			if ok && waitingBranch(def, record) {
+				frames, advanced := advanceWaitMinute(c, def, at)
+				out = append(out, frames...)
+				changed = changed || advanced
+				at++
+				continue
 			}
 			if !ok || def.TimeLimitMinutes == 0 {
 				at++
@@ -104,7 +113,7 @@ func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 				changed = true
 				continue
 			}
-			record.Progress = packQuestMinutes(record.RemainingMinutes)
+			record.Progress = packQuestMinutes(uint16(record.RemainingMinutes))
 			record.Flags |= 4
 			c.ActiveQuests[at] = record
 			if record.RemainingMinutes%10 == 0 {
@@ -167,4 +176,42 @@ func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([
 		return nil, nil, fmt.Errorf("quest cleanup inventory owner unavailable")
 	}
 	return rt.PlanInventory(c, consume, nil)
+}
+
+/*
+================
+advanceWaitMinute
+
+89E050, once per online minute while the branch is not yet achieved
+(+0xA): a positive count (+0xC) drops by one, and the journal timer is
+sent (570650, 0x30D5) unless the new count is a multiple of ten. A count
+already at zero sets the achieved word, announces the branch's achieved-now
+line and republishes the record (slot 0x114), so the branch stands
+achieved on the minute after the last one is spent.
+================
+*/
+func advanceWaitMinute(c *enterworld.Character, def *Definition, at int) ([]wire.Frame, bool) {
+	record := c.ActiveQuests[at]
+	if record.WaitAchieved {
+		return nil, false
+	}
+	if record.WaitMinutes == 0 {
+		record.WaitAchieved = true
+		c.ActiveQuests[at] = record
+		branch, _ := recordBranch(def, record)
+		delta := record
+		delta.Flags = 4
+		update := wire.Frame{Opcode: OpQuestUpdate, Payload: EncodeQuestUpdateUpdate(delta)}
+		return []wire.Frame{update, questNotification(branch.AchievedNowSymbol)}, true
+	}
+	record.WaitMinutes--
+	record.Progress = packQuestMinutes(record.WaitMinutes)
+	record.Flags |= 4
+	c.ActiveQuests[at] = record
+	if record.WaitMinutes%10 == 0 {
+		return nil, true
+	}
+	delta := record
+	delta.Flags = 4
+	return []wire.Frame{{Opcode: OpQuestUpdate, Payload: EncodeQuestUpdateUpdate(delta)}}, true
 }

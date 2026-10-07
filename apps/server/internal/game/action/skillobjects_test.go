@@ -76,7 +76,7 @@ func TestQuestTrapConsumesOnlyAfterAdmissionAndCapturesOnce(t *testing.T) {
 	}
 	object := objects[0]
 	rt.Monsters.SetRandomSource(func() float64 { return 0 })
-	if !rt.Monsters.SpawnQuestGuardian(simulation.QuestMonsterSpawn{
+	if !rt.Monsters.SpawnQuestMonster(simulation.QuestMonsterSpawn{
 		Division: testDivision, Population: object.Population, Codename: targetCode, NowMs: clock.NowMs(),
 		Position: simulation.Spawn{RegionID: object.Spawn.Region, X: float64(object.Spawn.X),
 			Y: float64(object.Spawn.Y), Z: float64(object.Spawn.Z)},

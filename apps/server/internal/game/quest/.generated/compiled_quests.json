@@ -14,6 +14,7 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_CA_HORSE_3_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_CA_HORSE_3_05",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_CA_HORSE_3_07",
 		"RewardExp": 0,
 		"RewardGold": 0,
 		"RewardSkillExp": 0,
@@ -41,6 +42,7 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_CA_THIEF_4_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_CA_THIEF_4_05",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_CA_THIEF_4_13",
 		"RewardExp": 1400,
 		"RewardGold": 300,
 		"RewardSkillExp": 150,
@@ -66,6 +68,7 @@
 		"RequiredQuests": [],
 		"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_2_06",
 		"InventoryFullSymbol": "SN_TALK_QNO_CH_POTION_2_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_CH_POTION_2_11",
 		"RewardExp": 14400,
 		"RewardGold": 3800,
 		"RewardSkillExp": 3600,
@@ -91,6 +94,7 @@
 		"RequiredQuests": [],
 		"NotAchievedSymbol": "SN_TALK_QNO_CH_PRIEST_1_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_CH_PRIEST_1_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_CH_PRIEST_1_08",
 		"RewardExp": 12450,
 		"RewardGold": 3800,
 		"RewardSkillExp": 0,
@@ -209,6 +213,192 @@
 		]
 	},
 	{
+		"Codename": "QNO_CH_SHAMAN_1",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CH_SHAMAN",
+		"EndNpcCodename": "NPC_CH_SHAMAN",
+		"OfferPromptSymbol": "SN_TALK_QNO_CH_SHAMAN_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CH_SHAMAN_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_CH_SHAMAN_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_CH_SHAMAN_1_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_CH_SHAMAN_1_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_CH_POTION_3_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_CH_SHAMAN_1_06",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"RewardChoices": [
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_SWORD_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_BLADE_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_SPEAR_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_TBLADE_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_BOW_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_SWORD_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_TSWORD_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_AXE_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_DARKSTAFF_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_TSTAFF_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_CROSSBOW_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_DAGGER_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_HARP_02_B",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_STAFF_02_B",
+						"Count": 1
+					}
+				]
+			}
+		],
+		"RewardChoiceCheckCountry": true,
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_CH_SHAMAN_1",
+		"CollectCount": 30,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_CH_YEOHA",
+				"MOB_CH_YEOHA_CLON"
+			],
+			"ChancePercent": 70.0
+		}
+	},
+	{
+		"Codename": "QNO_CH_SHAMAN_2",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CH_SHAMAN",
+		"EndNpcCodename": "NPC_CH_INDIA",
+		"OfferPromptSymbol": "SN_TALK_QNO_CH_SHAMAN_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CH_SHAMAN_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_CH_SHAMAN_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_CH_SHAMAN_2_07",
+		"RequiredQuests": [
+			"QNO_CH_SHAMAN_1"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_CH_SHAMAN_2_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_CH_SHAMAN_2_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_CH_SHAMAN_2_11",
+		"RewardExp": 12700,
+		"RewardGold": 4000,
+		"RewardSkillExp": 4500,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_CH_SHAMAN_1",
+				"Count": 1
+			}
+		]
+	},
+	{
 		"Codename": "QNO_EU_ADVENTURER_1",
 		"MaxCompletions": 3,
 		"KindByte": 1,
@@ -221,6 +411,7 @@
 		"RequiredQuests": [],
 		"NotAchievedSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_05",
 		"RepeatOfferPromptSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_02",
+		"AchievedNowSymbol": "SN_TALK_QNO_EU_ADVENTURER_1_07",
 		"RewardExp": 33000,
 		"RewardGold": 8000,
 		"RewardSkillExp": 0,
@@ -254,6 +445,152 @@
 		]
 	},
 	{
+		"Codename": "QNO_EU_CONS_11",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_UNION1",
+		"EndNpcCodename": "NPC_EU_SPECIAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_CONS_11_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_CONS_11_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_CONS_11_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_CONS_11_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_CONS_11_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_CONS_11_07",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_CONS_11_06",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"RewardChoices": [
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_DAGGER_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_SWORD_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_TSWORD_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_AXE_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_CROSSBOW_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_STAFF_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_TSTAFF_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_EU_HARP_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_SWORD_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_BLADE_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_SPEAR_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_TBLADE_02_C",
+						"Count": 1
+					}
+				]
+			},
+			{
+				"TitleSymbol": "",
+				"Items": [
+					{
+						"ItemCodename": "ITEM_CH_BOW_02_C",
+						"Count": 1
+					}
+				]
+			}
+		],
+		"RewardChoiceCheckCountry": true,
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_CONS_11_01",
+				"Count": 1
+			}
+		]
+	},
+	{
 		"Codename": "QNO_EU_CONS_2",
 		"MaxCompletions": 1,
 		"KindByte": 1,
@@ -266,6 +603,7 @@
 		"RequiredQuests": [],
 		"NotAchievedSymbol": "SN_TALK_QNO_EU_CONS_2_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_EU_CONS_2_07",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_CONS_2_06",
 		"RewardExp": 0,
 		"RewardGold": 0,
 		"RewardSkillExp": 300,
@@ -293,6 +631,7 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_EU_CONS_3_1_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_EU_CONS_3_1_05",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_CONS_3_1_09",
 		"RewardExp": 750,
 		"RewardGold": 500,
 		"RewardSkillExp": 1000,
@@ -320,6 +659,7 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_11_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_11_05",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_EASTEU_11_07",
 		"RewardExp": 0,
 		"RewardGold": 0,
 		"RewardSkillExp": 750,
@@ -347,6 +687,7 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_14_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_14_05",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_EASTEU_14_07",
 		"RewardExp": 0,
 		"RewardGold": 0,
 		"RewardSkillExp": 750,
@@ -374,6 +715,8 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_8_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_8_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_EU_EASTEU_8_12",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_EASTEU_8_11",
 		"RewardExp": 0,
 		"RewardGold": 0,
 		"RewardSkillExp": 0,
@@ -406,6 +749,7 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_10",
 		"RewardExp": 132000,
 		"RewardGold": 0,
 		"RewardSkillExp": 0,
@@ -438,6 +782,8 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_09",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_08",
 		"RewardExp": 120000,
 		"RewardGold": 0,
 		"RewardSkillExp": 3000,
@@ -467,6 +813,7 @@
 		"CompletePromptSymbol": "SN_TALK_QNO_WC_ARMOR_1_05",
 		"RequiredQuests": [],
 		"NotAchievedSymbol": "SN_TALK_QNO_WC_ARMOR_1_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_WC_ARMOR_1_06",
 		"RewardExp": 75000,
 		"RewardGold": 13500,
 		"RewardSkillExp": 0,
@@ -494,6 +841,7 @@
 		"CompletePromptSymbol": "SN_TALK_QNO_WC_PRIEST1_6",
 		"RequiredQuests": [],
 		"NotAchievedSymbol": "SN_TALK_QNO_WC_PRIEST1_5",
+		"AchievedNowSymbol": "SN_TALK_QNO_WC_PRIEST1_7",
 		"RewardExp": 12000,
 		"RewardGold": 3000,
 		"RewardSkillExp": 0,
@@ -520,6 +868,8 @@
 		],
 		"NotAchievedSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_04",
 		"InventoryFullSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_09",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_08",
 		"RewardExp": 107000,
 		"RewardGold": 0,
 		"RewardSkillExp": 3000,

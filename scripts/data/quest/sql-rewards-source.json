@@ -1,5 +1,5 @@
 {
-	"format": "sro-quest-sql-rewards-v1",
+	"format": "sro-quest-sql-rewards-v2",
 	"refqusetrewardSHA256": "de88c9b6aa6ff1e65acbb1100d2b310dfd16711ff62f9ca150f97a951f85d5eb",
 	"refquestrewarditemsSHA256": "570406e9e94c12bba30d0f0bb35478e9a9cd2ade606c8bcdfbc15e3415d09d61",
 	"quests": {
@@ -11,7 +11,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -28,7 +29,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 1,
+			"selectionCount": 1,
+			"checkCountry": true,
 			"items": [
 				{
 					"choice": 0,
@@ -110,7 +112,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_WC_PRIEST1_1": {
@@ -121,7 +124,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_KT_SMITH_2": {
@@ -132,7 +136,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_KT_ACCESSORY_2": {
@@ -143,7 +148,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_KT_SMITH_3": {
@@ -154,7 +160,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_KT_ACCESSORY_3": {
@@ -165,7 +172,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_KT_HORSE_1": {
@@ -176,7 +184,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CH_POTION_2": {
@@ -187,7 +196,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CH_SHAMAN_2": {
@@ -198,7 +208,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CH_POTION_4": {
@@ -209,7 +220,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -236,7 +248,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CH_POTION_5": {
@@ -247,7 +260,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -274,7 +288,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -301,7 +316,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -318,7 +334,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -335,7 +352,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -372,7 +390,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -389,7 +408,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_WC_POTION_3": {
@@ -400,7 +420,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_WC_SMITH_3": {
@@ -411,7 +432,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -428,7 +450,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -445,7 +468,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -462,7 +486,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -484,7 +509,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -501,7 +527,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -518,7 +545,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_RM_OLDWOMAN_2": {
@@ -529,7 +557,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -546,7 +575,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_RM_OLDWOMAN_4": {
@@ -557,7 +587,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_RM_OLDWOMAN_5": {
@@ -568,7 +599,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_RM_OLDWOMAN_6": {
@@ -579,7 +611,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_RM_OLDWOMAN_7": {
@@ -590,7 +623,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -607,7 +641,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_CONS_4": {
@@ -618,7 +653,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_CONS_6": {
@@ -629,7 +665,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_CONS_7": {
@@ -640,7 +677,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -657,7 +695,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 1,
+			"selectionCount": 1,
+			"checkCountry": true,
 			"items": [
 				{
 					"choice": 0,
@@ -734,7 +773,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -751,7 +791,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -768,7 +809,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_3": {
@@ -779,7 +821,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -796,7 +839,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_5": {
@@ -807,7 +851,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 1,
+			"selectionCount": 1,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -829,7 +874,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -846,7 +892,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_11": {
@@ -857,7 +904,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_12": {
@@ -868,7 +916,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_14": {
@@ -879,7 +928,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_15": {
@@ -890,7 +940,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_17": {
@@ -901,7 +952,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_19": {
@@ -912,7 +964,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_21": {
@@ -923,7 +976,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -940,7 +994,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -962,7 +1017,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -979,7 +1035,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -996,7 +1053,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_ADVENTURER_1": {
@@ -1007,7 +1065,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_HORSE_3": {
@@ -1018,7 +1077,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_WAREHOUSE_1": {
@@ -1029,7 +1089,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_WAREHOUSE_2": {
@@ -1040,7 +1101,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_IVY_1": {
@@ -1051,7 +1113,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1068,7 +1131,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1085,7 +1149,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1102,7 +1167,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_TRADE_CH_SPECIAL2_1": {
@@ -1113,7 +1179,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1130,7 +1197,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1147,7 +1215,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1164,7 +1233,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1181,7 +1251,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_EU_EASTEU_14_1": {
@@ -1192,7 +1263,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1209,7 +1281,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1226,7 +1299,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1243,7 +1317,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 10,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QSP_WC_EXINVENTORY_2": {
@@ -1254,7 +1329,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 4,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QSP_KT_EXINVENTORY_3": {
@@ -1265,7 +1341,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 4,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QSP_RM_EXINVENTORY_4": {
@@ -1276,7 +1353,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 4,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_THIEF_2": {
@@ -1287,7 +1365,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_THIEF_4": {
@@ -1298,7 +1377,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_THIEF_5": {
@@ -1309,7 +1389,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1326,7 +1407,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_TREASURE_5": {
@@ -1337,7 +1419,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1354,7 +1437,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_WAREHOUSE_4": {
@@ -1365,7 +1449,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_GORIA_2": {
@@ -1376,7 +1461,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_GORIA_3": {
@@ -1387,7 +1473,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QNO_CA_GORIA_6": {
@@ -1398,7 +1485,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1415,7 +1503,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 0,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": [
 				{
 					"choice": 0,
@@ -1432,7 +1521,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 10,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		},
 		"QSP_CA_EXINVENTORY_2": {
@@ -1443,7 +1533,8 @@
 			"ap": 0,
 			"hwan": 0,
 			"inventorySlots": 4,
-			"itemRewardType": 0,
+			"selectionCount": 0,
+			"checkCountry": false,
 			"items": []
 		}
 	}

@@ -75,12 +75,15 @@ func TestCaptureSupplyAcceptanceRefillAndCleanup(t *testing.T) {
 			if _, err := rt.StartQuest(c, supply.quest); err != nil {
 				t.Fatal(err)
 			}
-			if captureItemCount(c, supply.item) != captureSupplyCount {
-				t.Fatal("acceptance omitted the native five traps")
+			if captureItemCount(c, supply.item) != uint32(supply.count) {
+				t.Fatal("acceptance omitted the native supply")
 			}
 			c.MissionInventory = nil
 			option, offered := rt.captureSupplyOption(c, def, def.StartNpcCodename)
-			if !offered || !option.Informational || option.PromptSymbol != supply.exhausted {
+			if !offered || option.Informational == supply.spendAtGrant {
+				t.Fatal("initial grant spent the wrong day", option)
+			}
+			if !supply.spendAtGrant && option.PromptSymbol != supply.exhausted {
 				t.Fatal("initial grant did not spend day zero")
 			}
 			day++
@@ -99,13 +102,15 @@ func TestCaptureSupplyAcceptanceRefillAndCleanup(t *testing.T) {
 			if err := json.Unmarshal(saved, c); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := rt.PrepareNpcQuest(c, code, def.StartNpcCodename); err == nil {
+			// A spend-at-grant supply may reopen its prompt; the grant's own
+			// recheck of held items keeps it to one supply.
+			if _, err := rt.PrepareNpcQuest(c, code, def.StartNpcCodename); (err == nil) != supply.spendAtGrant {
 				t.Fatal("reopening the prompt bypassed the daily allowance")
 			}
 			if _, err := rt.AdvanceNpcQuest(c, token, def.StartNpcCodename); err != nil {
 				t.Fatal(err)
 			}
-			if captureItemCount(c, supply.item) != captureSupplyCount {
+			if captureItemCount(c, supply.item) != uint32(supply.count) {
 				t.Fatal("refill grant missing")
 			}
 			c.MissionInventory = nil

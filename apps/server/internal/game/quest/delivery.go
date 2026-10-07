@@ -85,6 +85,9 @@ func (rt *Runtime) AdvanceNpcQuest(c *enterworld.Character, code, npc string) (O
 	if strings.HasPrefix(code, captureSupplyPrefix) {
 		return rt.finishCaptureSupply(c, code, npc)
 	}
+	if strings.HasPrefix(code, sideTalkPrefix) {
+		return rt.hearSideTalk(c, code, npc)
+	}
 	if base, choice, picked := parseRewardChoiceToken(code); picked {
 		def, ok := rt.Defs.ByCodename(base)
 		if !ok || !questNpcMatches(def, def.EndNpcCodename, npc) {

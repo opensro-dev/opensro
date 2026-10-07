@@ -115,7 +115,7 @@ func TestTimedQuestProductionStoreAndCharacterPulse(t *testing.T) {
 			}
 			authority.Close()
 			open()
-			if c.ActiveQuests[0].RemainingMinutes != 110 || c.ActiveQuests[0].Progress != packQuestMinutes(110) {
+			if c.ActiveQuests[0].RemainingMinutes != 110 || c.ActiveQuests[0].Progress != packQuestMinutes(uint16(110)) {
 				t.Fatal("restart renewed timer")
 			}
 			actions.BindRecoverySession("global-official", c, 2)
@@ -209,9 +209,30 @@ func TestTimedCollectionCleanupAndStaleReward(t *testing.T) {
 
 func TestQuestPackedMinuteByte(t *testing.T) {
 	for i := 0; i <= 255; i++ {
-		p := packQuestMinutes(uint8(i))
+		p := packQuestMinutes(uint16(uint8(i)))
 		if int((p>>15)&31)*60+int((p>>20)&63) != i || p&0xfc007fff != 0 {
 			t.Fatalf("minute %d -> %x", i, p)
 		}
+	}
+}
+
+/*
+================
+TestQuestPackedMinutesSplitDays
+
+570650 splits hours past a day into days at bit 10: Rahid 2's 1800-minute
+wait is one day and six hours.
+================
+*/
+func TestQuestPackedMinutesSplitDays(t *testing.T) {
+	for _, minutes := range []uint16{0, 59, 1439, 1440, 1800, 31*1440 - 1} {
+		p := packQuestMinutes(minutes)
+		days, hours, mins := int(p>>10&31), int(p>>15&31), int(p>>20&63)
+		if hours >= 24 || (days*24+hours)*60+mins != int(minutes) || p&0xfc0003ff != 0 {
+			t.Fatalf("%d minutes -> %x", minutes, p)
+		}
+	}
+	if packQuestMinutes(1800) != 1<<10|6<<15 {
+		t.Fatalf("1800 minutes -> %x", packQuestMinutes(1800))
 	}
 }

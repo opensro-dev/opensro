@@ -275,7 +275,7 @@ type Runtime struct {
 	CapturedFollowerDied        func(*enterworld.Character) []wire.Frame
 	AdvanceQuestCalendar        func(nowMs int64)
 	ReleaseQuestCapturesOnDeath func(*enterworld.Character) ([]wire.Frame, bool)
-	QuestMonsterDrops           func(*enterworld.Character, string, func() (uint32, error)) []inventory.ItemAmount
+	QuestMonsterDrops           func(*enterworld.Character, string, uint8, func() (uint32, error)) []inventory.ItemAmount
 	QuestTravelBlocks           func(*enterworld.Character) uint32
 	UpdateQuestKill             func(
 		character *enterworld.Character,

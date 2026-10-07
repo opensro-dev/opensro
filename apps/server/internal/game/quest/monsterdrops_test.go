@@ -24,18 +24,18 @@ func TestQuestMonsterDropsRequireAcceptedQuestTargetAndPickup(t *testing.T) {
 		}
 		return 0, nil
 	}
-	if got := rt.MonsterDrops(c, "MOB_CH_BIGEYEGHOST", roll); len(got) != 0 || calls != 0 {
+	if got := rt.MonsterDrops(c, "MOB_CH_BIGEYEGHOST", 0, roll); len(got) != 0 || calls != 0 {
 		t.Fatal("unaccepted quest rolled loot")
 	}
 	if _, err := rt.StartQuest(c, "QNO_CH_CHEF_1"); err != nil {
 		t.Fatal(err)
 	}
 	before := c.ActiveQuests[0].Contents[0].ObjectiveValues[0]
-	if got := rt.MonsterDrops(c, "MOB_CH_GYO", roll); len(got) != 0 || calls != 0 {
+	if got := rt.MonsterDrops(c, "MOB_CH_GYO", 0, roll); len(got) != 0 || calls != 0 {
 		t.Fatal("unrelated monster rolled loot")
 	}
 	for _, code := range []string{"MOB_CH_BIGEYEGHOST", "MOB_CH_BIGEYEGHOST_CLON"} {
-		got := rt.MonsterDrops(c, code, roll)
+		got := rt.MonsterDrops(c, code, 0, roll)
 		if len(got) != 1 || got[0].Codename != "ITEM_QNO_CH_CHEF_1" || got[0].Count != 1 {
 			t.Fatalf("drop: %+v", got)
 		}
@@ -55,7 +55,7 @@ func TestQuestMonsterDropsRequireAcceptedQuestTargetAndPickup(t *testing.T) {
 		t.Fatalf("pickup update: %v", frames)
 	}
 	calls = 0
-	if got := rt.MonsterDrops(c, "MOB_CH_BIGEYEGHOST", roll); len(got) != 0 || calls != 0 {
+	if got := rt.MonsterDrops(c, "MOB_CH_BIGEYEGHOST", 0, roll); len(got) != 0 || calls != 0 {
 		t.Fatal("held objective still rolled loot")
 	}
 	if _, err := rt.CompleteNpcQuest(c, def.Codename); err != nil {
@@ -83,24 +83,24 @@ func TestCursedHeartDropsContinuePastExchangeCountButStopAtNativeCap(t *testing.
 	}
 	for _, count := range []int64{0, 10, 299} {
 		c.MissionInventory = potionInventory(count)
-		if got := rt.MonsterDrops(c, "MOB_CH_GYO", roll); len(got) != 1 {
+		if got := rt.MonsterDrops(c, "MOB_CH_GYO", 0, roll); len(got) != 1 {
 			t.Fatalf("held %d: %+v", count, got)
 		}
 	}
 	c.MissionInventory = potionInventory(300)
-	if got := rt.MonsterDrops(c, "MOB_CH_GYO", roll); len(got) != 0 {
+	if got := rt.MonsterDrops(c, "MOB_CH_GYO", 0, roll); len(got) != 0 {
 		t.Fatal("300-heart cap exceeded")
 	}
 	c.MissionInventory = nil
 	*c.Level = 19
-	if got := rt.MonsterDrops(c, "MOB_CH_GYO", roll); len(got) != 0 {
+	if got := rt.MonsterDrops(c, "MOB_CH_GYO", 0, roll); len(got) != 0 {
 		t.Fatal("under-level heart drop")
 	}
 	*c.Level = 20
-	if got := rt.MonsterDrops(c, "MOB_CH_GYO", func() (uint32, error) { return 5, nil }); len(got) != 0 {
+	if got := rt.MonsterDrops(c, "MOB_CH_GYO", 0, func() (uint32, error) { return 5, nil }); len(got) != 0 {
 		t.Fatal("failed chance produced loot")
 	}
-	if got := rt.MonsterDrops(c, "MOB_CH_GYO", func() (uint32, error) { return 0, errors.New("rng unavailable") }); len(got) != 0 {
+	if got := rt.MonsterDrops(c, "MOB_CH_GYO", 0, func() (uint32, error) { return 0, errors.New("rng unavailable") }); len(got) != 0 {
 		t.Fatal("RNG failure produced loot")
 	}
 }
@@ -190,7 +190,7 @@ func TestQuestDropSpeciesRatesAndSecondRngFailure(t *testing.T) {
 		want    int
 	}{{"MOB_A", 0}, {"MOB_B", 1}} {
 		calls := 0
-		got := missionMonsterDrops(c, &def, tc.monster, func() (uint32, error) {
+		got := missionMonsterDrops(c, &def, tc.monster, 0, func() (uint32, error) {
 			calls++
 			if calls == 1 {
 				return 10000, nil
@@ -202,7 +202,7 @@ func TestQuestDropSpeciesRatesAndSecondRngFailure(t *testing.T) {
 		}
 	}
 	calls := 0
-	got := missionMonsterDrops(c, &def, "MOB_B", func() (uint32, error) {
+	got := missionMonsterDrops(c, &def, "MOB_B", 0, func() (uint32, error) {
 		calls++
 		if calls == 1 {
 			return 1, nil

@@ -52,6 +52,7 @@ OBJECTIVE_DELIVERY = 4
 MENU_OFFER, MENU_ACCEPT, MENU_DENY, MENU_NOT_ACHIEVED = 0x130, 0x131, 0x132, 0x133
 MENU_ACHIEVED, MENU_INVENTORY_FULL, MENU_ACHIEVED_NOW = 0x134, 0x136, 0x139
 MENU_ACCEPT_AFTER_CLEAR = 0x13e
+MENU_MIDDLE = 0x13d
 
 # Quest lists (dword index of the object).
 LIST_COMPLETION_NPCS, LIST_QUEST_NPCS = "0xf3", "0xf7"
@@ -153,12 +154,23 @@ def rewards(code, text, sql):
 	else:
 		raise Unsupported("reward unavailable")
 	items = row["items"] if row else []
-	if row and row["itemRewardType"] != 0:
-		raise Unsupported("choice reward")
 	for column in ("skillPoints", "ap", "hwan", "inventorySlots"):
 		if row and row[column]:
 			raise Unsupported("reward " + column)
-	spec["RewardItems"] = [{"ItemCodename": i["item"], "Count": i["count"]} for i in items]
+	leads = [{"ItemCodename": i["item"], "Count": i["count"]} for i in items]
+	if not row or row["selectionCount"] == 0:
+		spec["RewardItems"] = leads
+		return spec
+	# A selection reward: the player picks SelectionCnt of the listed items.
+	# The v1.150 rows pick one; the server offers each as an NPC row titled
+	# by the item's name (rewardchoice.go). Reward kinds 1-5 index dialogue
+	# rewards and never appear with a selection.
+	if row["selectionCount"] != 1 or any(i["choice"] != 0 for i in items) or len(items) < 2:
+		raise Unsupported("selection of %d" % row["selectionCount"])
+	spec["RewardItems"] = []
+	spec["RewardChoices"] = [{"TitleSymbol": "", "Items": [lead]} for lead in leads]
+	if row["checkCountry"]:
+		spec["RewardChoiceCheckCountry"] = True
 	return spec
 
 
@@ -194,7 +206,8 @@ def project(code, quest, text, sql):
 	if lists.get(LIST_REQUIRED_ACTIVE):
 		spec["RequiredActiveQuests"] = lists[LIST_REQUIRED_ACTIVE]
 	for key, slot in (("NotAchievedSymbol", MENU_NOT_ACHIEVED), ("InventoryFullSymbol", MENU_INVENTORY_FULL),
-			("RepeatOfferPromptSymbol", MENU_ACCEPT_AFTER_CLEAR)):
+			("RepeatOfferPromptSymbol", MENU_ACCEPT_AFTER_CLEAR), ("AchievedNowSymbol", MENU_ACHIEVED_NOW),
+			("AcceptNoticeSymbol", MENU_MIDDLE)):
 		if word(quest, slot):
 			spec[key] = word(quest, slot)
 	spec.update(rewards(code, text, sql))

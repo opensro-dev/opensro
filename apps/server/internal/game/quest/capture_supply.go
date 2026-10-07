@@ -30,38 +30,50 @@ const captureSupplyPrefix = "capture-supply:"
 captureSupply
 
 The Ivy trap is awarded by its material quest and has a different refill
-handler. These three handlers grant their traps at capture-quest acceptance.
+handler. The other handlers grant their items at quest acceptance. count is
+the grant size; spendAtGrant spends the day only when the grant lands, as
+Cerberus 1's 8B2420 stamps the day after its scissors are given.
 ================
 */
 type captureSupply struct {
 	quest, item, title, prompt, success, exhausted, full string
-	afterCompletion                                      bool
+	count                                                int
+	afterCompletion, spendAtGrant                        bool
 }
 
 var captureSupplies = []captureSupply{
 	{
-		quest: ivyMaterialQuest, item: "ITEM_QNO_EU_IVY_2_01", afterCompletion: true,
+		quest: ivyMaterialQuest, item: "ITEM_QNO_EU_IVY_2_01", count: captureSupplyCount, afterCompletion: true,
 		title: "SN_TALK_QNO_EU_IVY_2_11", prompt: "SN_TALK_QNO_EU_IVY_2_05",
 		success: "SN_TALK_QNO_EU_IVY_2_12", exhausted: "SN_TALK_QNO_EU_IVY_2_16",
 		full: "SN_TALK_QNO_EU_IVY_2_14",
 	},
 	{
-		quest: "QNO_EU_EASTEU_14_1", item: "ITEM_QNO_EU_EASTEU_14_02",
+		quest: "QNO_EU_EASTEU_14_1", item: "ITEM_QNO_EU_EASTEU_14_02", count: captureSupplyCount,
 		title: "SN_TALK_QNO_EU_EASTEU_14_1_12", prompt: "SN_TALK_QNO_EU_EASTEU_14_1_05",
 		success: "SN_TALK_QNO_EU_EASTEU_14_1_13", exhausted: "SN_TALK_QNO_EU_EASTEU_14_1_14",
 		full: "SN_TALK_QNO_EU_EASTEU_14_1_06",
 	},
 	{
-		quest: "QNO_EU_GENERAL_1", item: "ITEM_QNO_EU_GENERAL_1_01",
+		quest: "QNO_EU_GENERAL_1", item: "ITEM_QNO_EU_GENERAL_1_01", count: captureSupplyCount,
 		title: "SN_TALK_QNO_EU_GENERAL_1_06", prompt: "SN_TALK_QNO_EU_GENERAL_1_05",
 		success: "SN_TALK_QNO_EU_GENERAL_1_07", exhausted: "SN_TALK_QNO_EU_GENERAL_1_08",
 		full: "SN_TALK_QNO_EU_GENERAL_1_09",
 	},
 	{
-		quest: "QNO_CA_GORIA_6", item: "ITEM_QNO_CA_GORIA_6_01",
+		quest: "QNO_CA_GORIA_6", item: "ITEM_QNO_CA_GORIA_6_01", count: captureSupplyCount,
 		title: "SN_TALK_QNO_CA_GORIA_6_06", prompt: "SN_TALK_QNO_CA_GORIA_6_05",
 		success: "SN_TALK_QNO_CA_GORIA_6_07", exhausted: "SN_TALK_QNO_CA_GORIA_6_08",
 		full: "SN_TALK_QNO_CA_GORIA_6_09",
+	},
+	{
+		// 8B2420 grants thirty Long Scissors (mission +0x1D) at acceptance
+		// and again once a day: _07 with the _08 row, _09 on the grant, _10
+		// when today's scissors are spent, _14 when the bag is full.
+		quest: cerberusQuest, item: cerberusScissors, count: 30, spendAtGrant: true,
+		title: "SN_TALK_QNO_EU_EASTEU_19_08", prompt: "SN_TALK_QNO_EU_EASTEU_19_07",
+		success: "SN_TALK_QNO_EU_EASTEU_19_09", exhausted: "SN_TALK_QNO_EU_EASTEU_19_10",
+		full: "SN_TALK_QNO_EU_EASTEU_19_14",
 	},
 }
 
@@ -117,6 +129,10 @@ func (rt *Runtime) captureSupplyOption(c *enterworld.Character, def *Definition,
 			return NpcOption{}, false
 		}
 	} else if activeQuestIndex(c, def.RefID) < 0 {
+		return NpcOption{}, false
+	}
+	// 8B2420 offers no refill once the objective stands complete.
+	if def.Objective == ObjectiveCollect && !supply.afterCompletion && heldCollectCount(c, def) >= def.CollectCount {
 		return NpcOption{}, false
 	}
 	rule, capture := captureRuleForQuest(def.Codename)
@@ -178,9 +194,10 @@ func (rt *Runtime) PrepareNpcQuest(c *enterworld.Character, code, npc string) (s
 		}
 		day = rt.CalendarNow().Day
 		supply, _ := captureSupplyForQuest(def.Codename)
-		if supply.afterCompletion {
-			// 8BAF60 spends Ivy's allowance at the grant, unlike the three
-			// direct capture quests that spend it when opening the prompt.
+		if supply.afterCompletion || supply.spendAtGrant {
+			// 8BAF60 (Ivy) and 8B2420 (Cerberus) spend the allowance at the
+			// grant, unlike the direct capture quests that spend it when
+			// opening the prompt.
 			state, exists := c.QuestSupplies[def.RefID]
 			if !exists {
 				state.Day = day - 1
@@ -241,7 +258,7 @@ func (rt *Runtime) finishCaptureSupply(c *enterworld.Character, token, npc strin
 			captureItemCount(c, supply.item) > 0 || captureItemCount(c, rule.item) > 0 {
 			return false
 		}
-		rows, updates, err := rt.PlanInventory(c, nil, []inventory.ItemAmount{{Codename: supply.item, Count: captureSupplyCount}})
+		rows, updates, err := rt.PlanInventory(c, nil, []inventory.ItemAmount{{Codename: supply.item, Count: uint32(supply.count)}})
 		if err != nil {
 			state.Pending = false
 			c.QuestSupplies[def.RefID] = state
