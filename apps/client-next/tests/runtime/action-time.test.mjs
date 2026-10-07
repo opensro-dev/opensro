@@ -11,6 +11,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { goldDropModels } from "../helpers/gold-drop-models.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const { actionCursor, animationWarp, actionMotionWeight, actionStageEvents } = await import(
@@ -197,7 +198,7 @@ test("live presenter holds the authored WAIT clip and consumes the authoritative
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
 				value = {
 					format: "sro-mission-itemdrop-models",
-					models: {}
+					models: goldDropModels()
 				};
 			}
 			return { kind: "bytes", buffer: encode( value ) };
@@ -319,7 +320,7 @@ test("live presenter uses admitted BAN callbacks for multi-hit effects and reset
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
 				value = {
 					format: "sro-mission-itemdrop-models",
-					models: {}
+					models: goldDropModels()
 				};
 			}
 			return { kind: "bytes", buffer: encode( value ) };

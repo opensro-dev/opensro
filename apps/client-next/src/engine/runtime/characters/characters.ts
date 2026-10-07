@@ -441,7 +441,12 @@ export function createCharacterPresentation(
 		if ( gameplay?.localGid && output.commonReady ) {
 			for ( const key of GOLD_DROP_MODELS ) {
 				const model = published.dropModels[key];
-				if ( model && !resources.ready( model.glb ) ) output.commonReady = false;
+				if ( !model ) {
+					output.commonReady = false;
+					output.failure ??= `Missing world-entry drop model: ${key}`;
+					continue;
+				}
+				if ( !resources.ready( model.glb ) ) output.commonReady = false;
 			}
 		}
 		probe?.detailEnd( "presentation-selection" );

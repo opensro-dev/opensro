@@ -8,6 +8,7 @@ animation starts at the press and never restarts when the server answers
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { goldDropModels } from "../helpers/gold-drop-models.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -145,7 +146,7 @@ function presenter( stages = [], sounds = [] ) {
 				value = { format: "sro-skill-stage-models", models: {} };
 			}
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
-				value = { format: "sro-mission-itemdrop-models", models: {} };
+				value = { format: "sro-mission-itemdrop-models", models: goldDropModels() };
 			}
 			return { kind: "bytes", buffer: encode( value ) };
 		}

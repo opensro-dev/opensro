@@ -10,6 +10,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { goldDropModels } from "../helpers/gold-drop-models.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -90,7 +91,7 @@ test("camera anchor rides the locally driven mount, falls back to the rider, and
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
 				value = {
 					format: "sro-mission-itemdrop-models",
-					models: {}
+					models: goldDropModels()
 				};
 			}
 			return { kind: "bytes", buffer: encode( value ) };

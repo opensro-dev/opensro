@@ -11,6 +11,7 @@ modules the client ships, not a per-test bundle.
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import "../helpers/native-source-loader.mjs";
+import { goldDropModels } from "../helpers/gold-drop-models.mjs";
 import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -210,8 +211,14 @@ test("a stealthed character is hidden from strangers, translucent to its party a
 	const hide = { gid: 2, skill: 7929, token: 9, phase: 2 };
 	let clock = 1;
 	// Let CIDecoAppear (spawn-fade.ts) finish before measuring concealment.
-	for ( let i = 0; i < 5; i++ ) f.presentation.step( [ local, stealthed ], base, clock += 0.1 );
-	clock += 2;
+	for ( let i = 0; i < 80; i++ ) {
+		f.presentation.step( [ local, stealthed ], base, clock += 0.1 );
+		const actor = f.actors.find( value => value.gid === 2 );
+		if ( actor && (actor.opacity ?? 1) === 1 ) break;
+	}
+	const admitted = f.actors.find( actor => actor.gid === 2 );
+	assert.ok( admitted, "the peer finished resource admission" );
+	assert.equal( admitted.opacity ?? 1, 1, "spawn fade has finished" );
 	const opacity = gameplay => {
 		for ( let i = 0; i < 5; i++ ) f.presentation.step( [ local, stealthed ], gameplay, clock += 0.1 );
 		const actor = f.actors.find( a => a.gid === 2 );
@@ -433,21 +440,19 @@ function fixture(
 					kind: "bytes",
 					buffer: new TextEncoder().encode( JSON.stringify( {
 						format: "sro-mission-itemdrop-models",
-						models: drops ?
-							{
-								"item/drop.bsr": {
-									glb: "/assets/itemdrop/drop.glb",
-									clips: [ "stand" ],
-									clipLoop: false,
-									particleModifiers: modifiers
-								},
-								"item/etc/drop_ch_money_ing.bsr": {
-									glb: "/assets/itemdrop/fanfare.glb",
-									clips: [ "stand" ],
-									clipLoop: false
-								}
-							} :
-							{}
+						models: metadataAdmission.dropModels ?? {
+							...goldDropModels(),
+							...(drops ?
+								{
+									"item/drop.bsr": {
+										glb: "/assets/itemdrop/drop.glb",
+										clips: [ "stand" ],
+										clipLoop: false,
+										particleModifiers: modifiers
+									}
+								} :
+								{})
+						}
 					} ) ).buffer
 				};
 			}
@@ -3135,9 +3140,16 @@ test("dock admission waits for equipment even when its gecko is already rendered
 	}
 });
 
-test("world entry waits for cold gold fanfare without presenting a ground entity", () => {
-	const blockedPaths = new Set( [ "http://localhost/assets/itemdrop/fanfare.glb" ] );
-	const f = fixture(
+/*
+================
+worldEntryFixture
+
+Keep world-entry catalog faults on the same real presentation fixture as
+resource admission; only the asset response and its availability change.
+================
+*/
+function worldEntryFixture( metadataAdmission ) {
+	return fixture(
 		{},
 		2,
 		true,
@@ -3152,8 +3164,40 @@ test("world entry waits for cold gold fanfare without presenting a ground entity
 		undefined,
 		undefined,
 		{},
-		{ blockedPaths }
+		metadataAdmission
 	);
+}
+
+for ( const missing of [ "ing", "small", "normal", "large" ] ) {
+	test(`world entry rejects missing gold catalog model ${missing}`, () => {
+		const dropModels = goldDropModels();
+		delete dropModels[`item/etc/drop_ch_money_${missing}.bsr`];
+		const f = worldEntryFixture( { dropModels } );
+		const player = entity( 1, { kind: "player" } );
+		const state = {
+			localGid: 1,
+			inventory: [],
+			casts: [],
+			attachedEffects: [],
+			skills: [],
+			vitals: [],
+			pose: { ...player, angle: player.heading }
+		};
+		try {
+			for ( let i = 0; i < 80; i++ ) f.presentation.step( [ player ], state, i / 60 );
+			assert.equal( f.presentation.ready( 1 ), true );
+			assert.equal( f.presentation.entryReady(), false );
+			assert.match( f.presentation.error() ?? "", new RegExp( `drop_ch_money_${missing}\\.bsr` ) );
+			assert.ok( f.actors.every( actor => !actor.groundItem ) );
+		} finally {
+			f.dispose();
+		}
+	});
+}
+
+test("world entry waits for cold gold fanfare without presenting a ground entity", () => {
+	const blockedPaths = new Set( [ "http://localhost/assets/itemdrop/fanfare.glb" ] );
+	const f = worldEntryFixture( { blockedPaths } );
 	const player = entity( 1, { kind: "player" } );
 	const state = {
 		localGid: 1,

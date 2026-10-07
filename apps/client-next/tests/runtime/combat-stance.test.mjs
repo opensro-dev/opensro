@@ -10,6 +10,7 @@ enters and keeps.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { goldDropModels } from "../helpers/gold-drop-models.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
@@ -218,7 +219,7 @@ function fixture(
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
 				return json( {
 					format: "sro-mission-itemdrop-models",
-					models: {}
+					models: goldDropModels()
 				} );
 			}
 			if ( job.url.endsWith( "/audio/effectsound.json" ) ) return json( { rules: [] } );

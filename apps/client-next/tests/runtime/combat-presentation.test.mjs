@@ -11,6 +11,7 @@ modules the client ships, not a per-test bundle.
 ===========================================================================
 */
 import "../helpers/native-source-loader.mjs";
+import { goldDropModels } from "../helpers/gold-drop-models.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
@@ -209,7 +210,7 @@ test("authored impact events produce damage text and sparse head reactions while
 			if ( job.url.endsWith( "/itemdrop/manifest.json" ) ) {
 				return bytes( {
 					format: "sro-mission-itemdrop-models",
-					models: {}
+					models: goldDropModels()
 				} );
 			}
 			if ( job.decode === "character" ) {
