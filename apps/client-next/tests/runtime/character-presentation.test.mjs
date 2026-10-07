@@ -716,7 +716,7 @@ function fixture(
 	};
 }
 for ( const local of [ false, true ] ) {
-	for ( const displacement of [ false, true, "after-WAIT" ] ) {
+	for ( const displacement of local ? [ false, true, "after-WAIT" ] : [ false, true, "after-WAIT", "at-arrival" ] ) {
 		test(`cast WAIT preserves displacement translation ${displacement}, local ${local}`, () => {
 			const f = fixture(
 				{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
@@ -737,19 +737,22 @@ for ( const local of [ false, true ] ) {
 			const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
 			const to = { ...from, x: 110 };
 			const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+			let travelling = true;
 			const frame = ( x, seconds, casting, moving ) => {
 				const path = {
-					from,
-					to,
-					durationMs: 200,
-					displacement: displacement === true || displacement === "after-WAIT" && seconds >= 1.1
+					from: travelling ? from : to,
+					to: travelling ? to : { ...to, x: 210 },
+					durationMs: travelling ? 200 : 2000,
+					displacement: travelling && (displacement === true ||
+						displacement === "after-WAIT" && seconds >= 1.1 ||
+						displacement === "at-arrival" && seconds >= 1.3)
 				};
 				const player = entity( 1, {
 					kind: local ? "local-player" : "player",
 					x,
 					moving,
 					movementMode: 3,
-					movementRevision: 1,
+					movementRevision: travelling ? 1 : 2,
 					movementPath: local && !moving ? undefined : path,
 					poseAtMs: seconds * 1000
 				} );
@@ -757,12 +760,12 @@ for ( const local of [ false, true ] ) {
 					localGid: local ? 1 : 2,
 					pose: { ...from, x },
 					moving,
-					movementRevision: 1,
+					movementRevision: travelling ? 1 : 2,
 					movementPath: local && !moving ? undefined : path,
 					poseAtMs: seconds * 1000,
 					inventory: [],
 					vitals: [],
-					casts: casting ? [ cast ] : []
+					casts: casting ? [ { ...cast, token: travelling ? 1 : 2 } ] : []
 				} );
 				assert.equal( f.presentation.error(), null );
 				return { ...f.actors.find( actor => actor.gid === 1 ).pose };
@@ -779,6 +782,14 @@ for ( const local of [ false, true ] ) {
 				assert.equal( settled.x, entered.x, "ordinary navigation still stops on the WAIT transition" );
 				assert.equal( later.x, entered.x );
 			}
+			travelling = false;
+			frame( 110, 3.02, false, true );
+			const nextHold = frame( 111, 3.04, true, true );
+			assert.equal(
+				frame( 113, 3.08, true, true ).x,
+				nextHold.x,
+				"a new ordinary walk must hold during WAIT after the displacement has settled"
+			);
 			f.dispose();
 		});
 	}

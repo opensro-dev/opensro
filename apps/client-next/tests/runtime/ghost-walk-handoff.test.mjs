@@ -172,6 +172,19 @@ test("remote displacement publishes its ownership and clock through arrival and 
 			assert.equal( step.moving, false );
 		}
 	}
+	const settled = { ...LOCAL, ...initial, ...destination, heading: 0, moving: false, runSpeed: 50, movementMode: 3 };
+	const idleSource = motion.source( settled, destination, 700 );
+	assert.equal( idleSource.moving, false );
+	const packet = Buffer.alloc( 14 );
+	packet.writeUInt32LE( 1 );
+	packet[4] = 1;
+	packet.writeUInt16LE( 257, 5 );
+	packet.writeInt16LE( 900, 7 );
+	packet.writeInt16LE( 100, 11 );
+	/** @type {import("../../src/engine/contracts/gameplay.ts").MovementPath} */
+	const walk = motion.receive( packet, { ...settled, ...idleSource }, 800 );
+	assert.equal( walk.displacement, undefined, "a new ordinary path replaces the completed displacement owner" );
+	assert.equal( motion.step( 816 )[0]?.movementPath?.displacement, undefined );
 });
 
 for ( const kind of /** @type {const} */ ([ 2, 8 ]) ) {
