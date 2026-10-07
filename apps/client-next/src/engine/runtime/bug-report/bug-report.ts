@@ -34,7 +34,8 @@ import {
 	reportIdIn
 } from "@/engine/foundation/media/replay-window";
 import { createReplayRecorder } from "./recorder";
-import { createBugReportDialog, type OutgoingReport, type RecordingPhase, type SendOutcome } from "./dialog";
+import { createBugReportDialog, type OutgoingReport, type SendOutcome } from "./dialog";
+import { createRecording } from "./recording";
 import { createReportArchive, createDiagnosticUpload, diagnosticUploadBudget } from "./archive";
 import { fitTrack } from "./transcode";
 import { createJournal, JOURNAL_WINDOW_MS } from "./journal";
@@ -66,7 +67,7 @@ ServerSettings
 The GET answer (bugreport.Settings on the server).
 ================
 */
-interface ServerSettings {
+export interface ServerSettings {
 	readonly enabled: boolean;
 	readonly maxBytes: number;
 	readonly maxDiagnosticsBytes: number;
@@ -163,21 +164,6 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	// It lapses after PENDING_OPEN_MS: a window popping up minutes later, in
 	// the middle of a fight, would be worse than typing /bug again.
 	let pendingOpen: string | null = null, pendingOpenAtMs = 0;
-	// The Record/Stop cycle. "finishing" drains the encoders after Stop.
-	let phase: RecordingPhase = "idle";
-	// The last finished recording, kept until the next Record or a sent
-	// report: closing the window by accident must not lose it.
-	let recorded: Mp4Track | null = null;
-	// When the recording phase began: the timer and the cap are wall time,
-	// what the player sees, not encoded video (which trails it).
-	let recordingSinceMs = 0;
-	// Bumped by every Record, Stop and dispose: a start or drain that
-	// resolves after the player moved on is not this attempt's (Record, Stop,
-	// Record again must not let the first start's answer stop the second).
-	let attempt = 0;
-	// The /bug text typed while a recording was running: Stop's window
-	// opens with it.
-	let finishText = "";
 	const errors: string[] = [];
 	// The newest chat sequence examined for a report request; lines at or
 	// below it are history. null until the first frame primes it.
@@ -191,8 +177,22 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		exportZip: id => archive.exportZip( id ),
 		forget: id => archive.remove( id ),
 		launch: () => void open( "" ),
-		record,
-		stopRecording: () => complete( "" )
+		record: () => recording.record(),
+		stopRecording: () => recording.stop( "" )
+	} );
+	const recording = createRecording( {
+		recorder,
+		now: () => performance.now(),
+		maxSeconds: () => settings?.enabled ? settings.replaySeconds : 0,
+		show: ( phase, seconds, maxSeconds ) => dialog.showRecording( phase, seconds, maxSeconds ),
+		failed: reason => {
+			note( reason );
+			dialog.notice( recorder.unsupported() ? "This browser cannot record the game." : reason );
+		},
+		finished: ( track, text ) => {
+			if ( !track ) note( recorder.lastError() ?? "The recording was empty" );
+			open( text );
+		}
 	} );
 
 	/*
@@ -213,119 +213,6 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	window.addEventListener( "unhandledrejection", event => note( "Unhandled rejection: " + String( event.reason ) ), {
 		signal: lifetime.signal
 	} );
-
-	/*
-	================
-	record
-
-	The player's Record press. A previous recording is dropped: a new one
-	is what the next report should show.
-	================
-	*/
-	function record() {
-		if ( !settings?.enabled || phase !== "idle" ) return;
-		enter( "starting" );
-		recorded = null;
-		const owner = ++attempt;
-		recorder.start( { windowSeconds: settings.replaySeconds } ).then( started => {
-			if ( owner !== attempt ) return;
-			if ( !started ) {
-				failed( recorder.lastError() ?? "Recording did not start" );
-				return;
-			}
-			recordingSinceMs = performance.now();
-			enter( "recording" );
-		}, failure => {
-			if ( owner === attempt ) failed( "Recording did not start: " + String( failure ) );
-		} );
-	}
-
-	/*
-	================
-	enter
-
-	A phase change shows at once: the control must not read "Saving…" over
-	the window that Stop just opened.
-	================
-	*/
-	function enter( next: RecordingPhase ) {
-		phase = next;
-		dialog.showRecording( next, 0, settings?.replaySeconds ?? 0 );
-	}
-
-	/*
-	================
-	failed
-	================
-	*/
-	function failed( reason: string ) {
-		enter( "idle" );
-		recorder.stop();
-		note( reason );
-		dialog.notice( recorder.unsupported() ? "This browser cannot record the game." : reason );
-	}
-
-	/*
-	================
-	complete
-
-	Stop: the encoders drain, then the window opens with the recording. A
-	Stop while the start is still pending abandons the start.
-	================
-	*/
-	function complete( text: string ) {
-		if ( phase === "starting" ) {
-			attempt++;
-			enter( "idle" );
-			recorder.stop();
-			return;
-		}
-		if ( phase !== "recording" ) return;
-		enter( "finishing" );
-		finishText = text;
-		const owner = ++attempt;
-		recorder.complete().then( track => {
-			if ( owner !== attempt ) return;
-			enter( "idle" );
-			recorded = track;
-			if ( !track ) note( recorder.lastError() ?? "The recording was empty" );
-			open( finishText );
-		}, failure => {
-			if ( owner === attempt ) failed( "Finishing the recording failed: " + String( failure ) );
-		} );
-	}
-
-	/*
-	================
-	recordingFrame
-
-	Called every frame. While recording, the control shows the seconds so
-	far (dialog.ts touches the DOM only when the whole second changes).
-	================
-	*/
-	function recordingFrame() {
-		if ( phase !== "recording" ) return;
-		const seconds = (performance.now() - recordingSinceMs) / 1000;
-		watchRecording( seconds );
-		if ( phase === "recording" ) dialog.showRecording( phase, seconds, settings?.replaySeconds ?? 0 );
-	}
-
-	/*
-	================
-	watchRecording
-
-	Keeps the capture alive, ends it at the server's cap, and notices a
-	recorder that stopped on its own.
-	================
-	*/
-	function watchRecording( seconds: number ) {
-		if ( !recorder.running() ) {
-			failed( recorder.lastError() ?? "The recording stopped" );
-			return;
-		}
-		recorder.watch();
-		if ( seconds >= (settings?.replaySeconds ?? 0) ) complete( "" );
-	}
 
 	/*
 	================
@@ -381,18 +268,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			pendingOpen = null;
 			return;
 		}
-		settings = {
-			enabled: true,
-			maxBytes: Number( value.maxBytes ) || 10 * 1024 * 1024,
-			maxDiagnosticsBytes: diagnosticUploadBudget(
-				Number( value.maxBytes ) || 10 * 1024 * 1024,
-				value.maxDiagnosticsBytes
-			),
-			replaySeconds: Number( value.replaySeconds ) || 60,
-			destinations: Array.isArray( value.destinations ) ?
-				value.destinations.filter( destination => destination === "discord" || destination === "directory" ) :
-				[]
-		};
+		settings = readSettings( value );
 		availability = "on";
 		dialog.showLauncher( true );
 		if ( pendingOpen !== null ) {
@@ -419,13 +295,14 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		}
 		if ( dialog.isOpen() ) return "opened";
 		// /bug during a recording ends it: the report is what it was for.
+		const phase = recording.phase();
 		if ( phase === "recording" || phase === "finishing" ) {
-			if ( phase === "recording" ) complete( text );
+			recording.stop( text );
 			return "opened";
 		}
 		dialog.open( {
 			text,
-			replay: recorded,
+			replay: recording.recorded(),
 			maxBytes: settings.maxBytes,
 			destinations: settings.destinations,
 			replayState: replayState(),
@@ -536,7 +413,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			} );
 			const body = await response.json().catch( () => ({}) ) as { code?: string; retryAfter?: number; };
 			// A sent recording is not offered again with the next report.
-			if ( response.ok && report.replay === recorded ) recorded = null;
+			if ( response.ok ) recording.sent( report.replay );
 			outcome = response.ok ?
 				{ ok: true, message: `Report ${id} sent. Thank you!` } :
 				{ ok: false, message: refusalMessage( body.code, body.retryAfter ) };
@@ -629,10 +506,14 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	*/
 	function diagnostics( report: OutgoingReport ): Record<string, string> {
 		const zeroMs = report.replay ? report.replay.samples[0]!.timestampUs / 1000 : performance.now() - 60000;
+		// The whole journal window, not just the recording: the player presses
+		// Record after noticing a bug, so what led up to it comes before t = 0.
+		const fromMs = Math.min( zeroMs - 2000, performance.now() - JOURNAL_WINDOW_MS );
 		const timeline = {
-			note: "t is seconds from the first frame of replay.mp4; clip is the part sent with the report.",
+			note: "t is seconds from the first frame of replay.mp4 (negative: before the recording); " +
+				"clip is the part sent with the report.",
 			clip: report.range,
-			events: journal.since( zeroMs - 2000 ).map( ( { atMs, ...event } ) => ({
+			events: journal.since( fromMs ).map( ( { atMs, ...event } ) => ({
 				t: +((atMs - zeroMs) / 1000).toFixed( 3 ),
 				...event
 			}) )
@@ -705,7 +586,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			network: connection ?
 				{ type: connection.effectiveType, rttMs: connection.rtt, downlinkMbps: connection.downlink } :
 				null,
-			replay: { phase, droppedFrames: recorder.dropped(), lastError: recorder.lastError() },
+			replay: { phase: recording.phase(), droppedFrames: recorder.dropped(), lastError: recorder.lastError() },
 			preferences,
 			resources
 		};
@@ -716,7 +597,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 	chat
 
 	Called with the whole chat whenever the UI assembles the HUD, which is
-	not every frame (the recording ticks from recordingFrame()). Lines
+	not every frame (the recording ticks from recordingFrame). Lines
 	present at the first call are history and never trigger a request;
 	after that each new incoming
 	whisper is examined once, by its sequence (chat.ts numbers every line).
@@ -806,7 +687,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		},
 		dumpMovement,
 		reportsEnabled: () => availability === "on",
-		recordingFrame,
+		recordingFrame: () => recording.frame(),
 		chat,
 		open,
 		note,
@@ -819,11 +700,31 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			disposed = true;
 			lifetime.abort();
 			journal.dispose();
-			phase = "idle";
-			attempt++;
-			recorder.stop();
+			recording.dispose();
 			dialog.dispose();
 		}
+	};
+}
+
+/*
+================
+readSettings
+
+An enabled GET answer with defaults for what an older Agent leaves out.
+Older Agents also send replayDefault (the retired always-on replay); it is
+not read: recording starts only at the player's Record.
+================
+*/
+export function readSettings( value: Partial<ServerSettings> ): ServerSettings {
+	const maxBytes = Number( value.maxBytes ) || 10 * 1024 * 1024;
+	return {
+		enabled: true,
+		maxBytes,
+		maxDiagnosticsBytes: diagnosticUploadBudget( maxBytes, value.maxDiagnosticsBytes ),
+		replaySeconds: Number( value.replaySeconds ) || 60,
+		destinations: Array.isArray( value.destinations ) ?
+			value.destinations.filter( destination => destination === "discord" || destination === "directory" ) :
+			[]
 	};
 }
 

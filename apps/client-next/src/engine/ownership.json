@@ -193,6 +193,7 @@
     "src/engine/runtime/assets/worker/install.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/bug-report/recorder.ts": "src/engine/runtime/bug-report/bug-report.ts",
     "src/engine/runtime/bug-report/dialog.ts": "src/engine/runtime/bug-report/bug-report.ts",
+    "src/engine/runtime/bug-report/recording.ts": "src/engine/runtime/bug-report/bug-report.ts",
     "src/engine/runtime/bug-report/trimmer.ts": "src/engine/runtime/bug-report/bug-report.ts",
     "src/engine/runtime/bug-report/archive.ts": "src/engine/runtime/bug-report/bug-report.ts",
     "src/engine/runtime/bug-report/transcode.ts": "src/engine/runtime/bug-report/bug-report.ts",

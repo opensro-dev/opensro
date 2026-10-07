@@ -23,6 +23,7 @@ typing a description must not walk the character around.
 ===========================================================================
 */
 import type { ReplayState } from "@/engine/contracts/bug-report";
+import type { RecordingPhase } from "./recording";
 import type { Mp4Track } from "@/engine/foundation/media/mp4";
 import type { ArchivedSummary } from "./archive";
 import { createClipTrimmer, element, type ClipTrimmer } from "./trimmer";
@@ -31,22 +32,12 @@ const MIN_DESCRIPTION = 10;
 const MAX_DESCRIPTION = 2000;
 const MEGABYTE = 1024 * 1024;
 // What the Record control says in each phase (title and accessible name).
-const RECORD_LABELS = {
-	idle: "Record a clip for a bug report",
+const RECORD_LABELS: Record<RecordingPhase, string> = {
+	idle: "Record a clip for a bug report (the report's diagnostics already cover the last two minutes of game events)",
 	starting: "Starting the recording (click to cancel)",
 	recording: "Stop recording and report the bug",
 	finishing: "Saving the recording"
-} as const;
-
-/*
-================
-RecordingPhase
-
-The reporter's Record/Stop cycle: "finishing" drains the encoders after
-Stop, before the window opens.
-================
-*/
-export type RecordingPhase = keyof typeof RECORD_LABELS;
+};
 
 // The pill's text outside "recording", which shows the time instead.
 const RECORD_STATUS: Record<RecordingPhase, string> = {
