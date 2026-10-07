@@ -16,11 +16,7 @@ import { movementEntryRate, transitionActionStates } from "@/engine/foundation/a
 import { createStatusOwner } from "@/engine/foundation/animation/status-presentation";
 import { defaultWearFrozen, refreshDefaultWear } from "@/engine/foundation/animation/default-wear-policy";
 import { selectAvatarOverride, type AvatarOverrideSelection } from "@/engine/foundation/animation/avatar-override";
-import {
-	assembleEquipmentAppearance,
-	type SetEntry,
-	wornItemsFromList
-} from "@/engine/foundation/animation/equipment-appearance";
+import { assembleEquipmentAppearance, wornItemsFromList } from "@/engine/foundation/animation/equipment-appearance";
 import { requestCastCancellation } from "@/engine/foundation/gameplay/cast-results";
 import { createAnimationEmission, type AnimationParticleSet } from "@/engine/foundation/animation/animation-emission";
 import {
@@ -66,12 +62,7 @@ import { disappearActor, type Disappear } from "@/engine/foundation/animation/di
 import { appendDamageText, damageText } from "@/engine/foundation/ui/damage-text";
 import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
 import { advanceRandomIdle, type RandomIdle } from "@/engine/foundation/animation/random-idle";
-import {
-	changeLocomotion,
-	stopLocomotion,
-	locomotionLayers,
-	type LocomotionBlend
-} from "@/engine/foundation/animation/locomotion-blend";
+import { changeLocomotion, stopLocomotion, locomotionLayers } from "@/engine/foundation/animation/locomotion-blend";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
 import { advanceCharacterFade, type CharacterFade } from "@/engine/foundation/animation/character-fade";
@@ -85,7 +76,7 @@ import {
 import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
 import { createCharacterSelection } from "@/engine/foundation/animation/character-selection";
-import { weaponAnimationSet, type AnimationMetadata } from "@/engine/foundation/animation/animation-metadata";
+import { weaponAnimationSet } from "@/engine/foundation/animation/animation-metadata";
 import { createCharacterEffects } from "./effects/effects";
 import { createCharacterSounds } from "./sounds/sounds";
 import { createCharacterResources } from "./resources/resources";
@@ -103,7 +94,13 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { CharacterActor } from "@/engine/contracts/character";
 import { createPresentationCatalog } from "./presentation-catalog";
-import type { PresentationOutput, Resource } from "./internal/presentation-contract";
+import type {
+	Auxiliary,
+	CharacterPresentationState,
+	PresentationAppearance,
+	PresentationOutput,
+	Resource
+} from "./internal/presentation-contract";
 /*
 ================
 CharacterFrameProbe
@@ -128,26 +125,6 @@ const GOLD_DROP_MODELS = [
 	"item/etc/drop_ch_money_normal.bsr",
 	"item/etc/drop_ch_money_large.bsr"
 ] as const;
-
-/*
-================
-ActionInput
-
-Only changes to these values request an action transition. Retain the values
-instead of allocating and serializing the same key for every rendered actor.
-================
-*/
-interface ActionInput {
-	readonly dead: boolean;
-	readonly sitting: boolean;
-	readonly mountedOn: number;
-	readonly movementMode: number | undefined;
-	readonly requestedMoving: boolean;
-	readonly movementRevision: number;
-	readonly posture: string;
-	readonly waiting: boolean;
-	readonly casting: boolean;
-}
 
 /*
 ================
@@ -288,49 +265,7 @@ export function createCharacterPresentation(
 		({ kind: "spawn" | "state"; gid: number; refObjId: number; } | { kind: "despawn"; gid: number; } | {
 			kind: "reset";
 		})[] = [];
-	const states = new Map<number, {
-		modifierId: number;
-		feedbackSettled?: boolean;
-		modifierResource?: Resource;
-		modifierLayers?: readonly import("@/engine/contracts/character").CharacterLayer[];
-		activations?: Map<string, AnimationActivation>;
-		dispatch?: ReturnType<typeof createAnimationDispatch>;
-		modelAnimation?: ReturnType<typeof createModelAnimation>;
-		navigationHold?: {
-			revision: number;
-			pose: import("@/engine/contracts/gameplay").Pose;
-			mode: number | undefined;
-		};
-		actionRevision?: number;
-		actionMode?: number;
-		actionMask?: number;
-		actionInput?: ActionInput;
-		actionHeight?: { from: number; to: number; at: number; };
-		dead?: boolean;
-		sitting?: boolean;
-		postureClip?: string;
-		postureStarted?: number;
-		combatIdle?: {
-			body: Resource;
-			metadata: Record<string, AnimationMetadata> | undefined;
-			set: string;
-			motion: ReturnType<typeof skillMotionResolveAnimation>;
-		};
-		clip: string;
-		started: number;
-		frozenSample?: number;
-		rateSample?: number;
-		rateClock?: number;
-		locomotion?: LocomotionBlend;
-		hitToken?: string;
-		hitStarted?: number;
-		hitCritical?: boolean;
-		pickupRevision?: number;
-		pickupStarted?: number;
-		equipmentParticles?: readonly ModelParticle[];
-		defaultWear?: { resource: Resource; keys: readonly string[]; };
-		fortressIndex?: number;
-	}>();
+	const states = new Map<number, CharacterPresentationState>();
 	const animationEmission = createAnimationEmission( allocateActor );
 	const stageAnimations = new Map<
 		number,
@@ -549,34 +484,13 @@ export function createCharacterPresentation(
 	const spawnFades = new Map<number, number | null>(), fadeSeen = new Set<number>(), fadePresent = new Set<number>();
 	// The linked ride's own ramp, keyed by its rider's entity gid.
 	const rideFades = new Map<number, number | null>();
-	/*
-	================
-	Auxiliary
-	================
-	*/
-	type Auxiliary = { id: number; entry: SetEntry & { bone: string; clips: readonly string[]; }; };
 	const avatarOverrides = new Map<number, AvatarOverrideSelection>();
 	const committedAuxiliary = new Map<number, readonly Auxiliary[]>();
 	const auxiliaryActors = new Map<
 		number,
 		Map<number, { gid: number; model: string; motion: ReturnType<typeof changeLocomotion>; }>
 	>();
-	const appearances = new Map<
-		number,
-		{
-			resource: Resource;
-			dress: typeof published.dress;
-			items: typeof published.items;
-			signature: string;
-			defaultWear: readonly string[];
-			particles: readonly ModelParticle[];
-			parts: import("@/engine/contracts/character").CharacterAttachment[];
-			auxiliary: readonly Auxiliary[];
-			avatarIds: readonly number[];
-			model: string;
-			dependencies: readonly string[];
-		}
-	>();
+	const appearances = new Map<number, PresentationAppearance>();
 	let hideSilkCos = false;
 	return {
 		/*
