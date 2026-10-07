@@ -52,16 +52,15 @@ import { concealmentState, concealmentAlpha, seenAlpha } from "@/engine/foundati
 import { skillLookup, type SkillLookup } from "@/engine/foundation/ui/buff-viewer";
 import { createPosePresentation } from "./pose-presentation";
 import { createPresentationSamples } from "./presentation-samples";
+import { createPresentationState } from "./presentation-state";
 import { createCharacterStateIndex } from "./state-index";
 import { createSkillObjects, SKILL_OBJECT_MANIFESTS } from "./skill-objects";
 import { monsterScale, monsterMaterialSlot } from "@/engine/foundation/rendering/monster-scale";
 import { weaponSoundLabel } from "@/engine/foundation/animation/sound-selectors";
-import { emoteRoute, emoteAttachments } from "@/engine/foundation/animation/emote";
-import { transitionPosture, postureLayers, type Posture } from "@/engine/foundation/animation/posture";
+import { postureLayers } from "@/engine/foundation/animation/posture";
 import { disappearActor, type Disappear } from "@/engine/foundation/animation/disappear";
 import { appendDamageText, damageText } from "@/engine/foundation/ui/damage-text";
 import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
-import { advanceRandomIdle, type RandomIdle } from "@/engine/foundation/animation/random-idle";
 import { changeLocomotion, stopLocomotion, locomotionLayers } from "@/engine/foundation/animation/locomotion-blend";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import { createOrbs } from "./orbs/orbs";
@@ -217,21 +216,7 @@ export function createCharacterPresentation(
 	}
 	const groundClocks = new Map<number, GroundVisualClock & { duration: number; modifierId: number; }>();
 	const referenceAppearances = createReferenceAppearances( () => random.range( 0, 32768 ) );
-	const idleStates = new Map<
-		number,
-		{
-			x: number;
-			z: number;
-			region: number;
-			idle: RandomIdle;
-			posture?: Posture;
-			emoteRevision?: number;
-			downDeath?: boolean;
-			attachmentsHidden?: boolean;
-		}
-	>();
-	// Presentation-time deadlines survive cast retirement and visibility selection.
-	const combatStanceEnds = new Map<number, number>();
+	const presentationState = createPresentationState();
 	let damageTexts: import("@/engine/contracts/damage-text").DamageText[] = [];
 	let environmentalSequence = 0;
 	const feedback = createDamageFeedback( ( key, at ) => health?.release( key, at ) );
@@ -537,7 +522,7 @@ export function createCharacterPresentation(
 			const next: typeof rainEvents = [];
 			for ( const event of events ) {
 				if ( event.kind === "reset" ) {
-					combatStanceEnds.clear();
+					presentationState.combatStanceEnds.clear();
 					modelEmission.reset();
 					structureVisuals.reset();
 					animationEmission.reset();
@@ -552,13 +537,13 @@ export function createCharacterPresentation(
 					next.push( { kind: "reset" } );
 				} else if ( event.kind === "spawn" || event.kind === "state" ) {
 					if ( event.kind === "spawn" ) {
-						combatStanceEnds.delete( event.entity.gid );
+						presentationState.combatStanceEnds.delete( event.entity.gid );
 						// A respawn under a live gid is a new CICharactor: fade it again.
 						fadeSeen.delete( event.entity.gid );
 					}
 					next.push( { kind: event.kind, gid: event.entity.gid, refObjId: event.entity.refObjId } );
 				} else if ( event.kind === "despawn" ) {
-					combatStanceEnds.delete( event.gid );
+					presentationState.combatStanceEnds.delete( event.gid );
 					retiring.add( event.gid );
 					next.push( { kind: "despawn", gid: event.gid } );
 				}
@@ -577,7 +562,7 @@ export function createCharacterPresentation(
 			if ( published.manifest < 2 ) return rainEventActive;
 			for ( const event of rainEvents ) {
 				if ( event.kind === "reset" ) {
-					combatStanceEnds.clear();
+					presentationState.combatStanceEnds.clear();
 					modelEmission.reset();
 					structureVisuals.reset();
 					animationEmission.reset();
@@ -1203,10 +1188,10 @@ export function createCharacterPresentation(
 						entity.appearanceState?.[0] !== 2 && !health?.dead( entity.gid ) &&
 						combatStanceOnCast( entity, phases.some( phase => phase !== null ), !!phases[1] )
 					) {
-						combatStanceEnds.set(
+						presentationState.combatStanceEnds.set(
 							entity.gid,
 							Math.max(
-								combatStanceEnds.get( entity.gid ) ?? -Infinity,
+								presentationState.combatStanceEnds.get( entity.gid ) ?? -Infinity,
 								clock.started + COMBAT_STANCE_SECONDS
 							)
 						);
@@ -1432,9 +1417,12 @@ export function createCharacterPresentation(
 				// Refresh at damage application, not receipt or distance admission.
 				const alive = health ? !health.dead( target.gid ) : target.appearanceState?.[0] !== 2;
 				if ( combatStanceOnHit( target, alive, impact ) ) {
-					combatStanceEnds.set(
+					presentationState.combatStanceEnds.set(
 						target.gid,
-						Math.max( combatStanceEnds.get( target.gid ) ?? -Infinity, at + COMBAT_STANCE_SECONDS )
+						Math.max(
+							presentationState.combatStanceEnds.get( target.gid ) ?? -Infinity,
+							at + COMBAT_STANCE_SECONDS
+						)
 					);
 				}
 				effects.hitFlash(
@@ -1617,120 +1605,25 @@ export function createCharacterPresentation(
 			const deadGids = new Set( gameplay?.vitals.filter( v => v.hp === 0 ).map( v => v.gid ) ?? [] );
 			probe?.detailEnd( "presentation-events" );
 			probe?.detailBegin( "presentation-state" );
-			for ( const entity of entities ) {
-				if ( entity.groundItem ) continue;
-				const resource = published.catalog.get( appearanceRef( entity ) );
-				if ( !resource ) continue;
-				const pose = logicalPose( entity );
-				let entry = idleStates.get( entity.gid );
-				if ( !entry ) {
-					entry = {
-						x: pose.x,
-						z: pose.z,
-						region: pose.regionId,
-						idle: { remaining: 15, previous: seconds, started: seconds }
-					};
-					idleStates.set( entity.gid, entry );
-				}
-				const state = states.get( entity.gid ),
-					moving = entry.x !== pose.x || entry.z !== pose.z || entry.region !== pose.regionId;
-				const dead = health?.dead( entity.gid ) ||
-					(entity.appearanceState?.[0] !== undefined ?
-						entity.appearanceState[0] === 2 :
-						deadGids.has( entity.gid ));
-				const hit = hitByActor.get( entity.gid );
-				const isPlayer = entity.kind === "local-player" || entity.kind === "player" ||
-					/^CHAR_/.test( resource.codename );
-				const previousEmote = entry.posture?.kind === "emote" ? entry.posture.clip : undefined;
-				if ( dead && entry.posture?.kind === "down" ) entry.downDeath = true;
-				else if ( !dead ) entry.downDeath = false;
-				if ( dead || entity.mountedOn || entity.movementMode === 4 ) {
-					entry.posture = transitionPosture( entry.posture, { kind: "cancel" } );
-				} else {
-					if ( hit?.downAt !== undefined ) {
-						const recoveryMs = published.recoveryByCodename.get( resource.codename );
-						if ( recoveryMs === undefined ) {
-							output.failure = `Missing native recovery duration ${resource.codename}`;
-						} else {entry.posture = transitionPosture( entry.posture, {
-								kind: "down",
-								at: hit.downAt,
-								recoveryMs
-							} );}
-					} else if ( entry.posture?.kind === "emote" && (moving || castByActor.has( entity.gid ) || hit) ) {
-						entry.posture = transitionPosture( entry.posture, { kind: "cancel" } );
-					}
-					if ( entity.emote && entry.emoteRevision !== entity.emote.revision ) {
-						const action = emoteRoute(
-							isPlayer,
-							entity.kind === "cos",
-							entity.tidWord ?? 0,
-							entity.emote.action
-						);
-						if (
-							action !== null && !moving && !castByActor.has( entity.gid ) &&
-							resource.clips.includes( `emote${action}` )
-						) {
-							entry.posture = transitionPosture( entry.posture, {
-								kind: "emote",
-								action,
-								at: simulationMs === undefined ?
-									seconds :
-									seconds + (entity.emote.atMs - simulationMs) / 1000
-							} );
-						} else if ( action === null && !moving ) entry.idle.remaining = 0;
-					}
-					if ( entry.posture ) {
-						const role = entry.posture.kind === "emote" ?
-							entry.posture.clip :
-							entry.posture.kind === "recover" ?
-							"wakeup" :
-							"down";
-						entry.posture = transitionPosture( entry.posture, {
-							kind: "tick",
-							at: seconds,
-							duration: resources.duration( resource.glb, role ) ||
-								((resource.animationStates ?? published.animationStates.get( resource.codename ))
-										?.[role]
-										?.durationMs ?? 0) / 1000
-						} );
-					}
-				}
-				entry.attachmentsHidden = emoteAttachments(
-					entry.attachmentsHidden ?? false,
-					previousEmote,
-					entry.posture?.kind === "emote" ? entry.posture.clip : undefined,
-					isPlayer,
-					!!entity.mountedOn
-				);
-				entry.emoteRevision = entity.emote?.revision;
-				if ( dead ) combatStanceEnds.delete( entity.gid );
-				// 85DE06 precedes countdown subtraction. The expiry frame also
-				// resets the fidget timer to 15s; it does not consume that frame.
-				const suppressIdle = (combatStanceEnds.get( entity.gid ) ?? -Infinity) > entry.idle.previous;
-				const eligible = !suppressIdle && !dead && !moving && !entity.mountedOn && entity.movementMode !== 4 &&
-					!entry.posture && !castByActor.has( entity.gid ) && !hit && !state?.postureClip &&
-					!(state?.pickupStarted !== undefined &&
-						seconds - state.pickupStarted < resources.duration( resource.glb, "pick" ));
-				advanceRandomIdle(
-					entry.idle,
+			presentationState.step(
+				{
+					entities,
 					seconds,
-					eligible,
-					resource.clips,
-					random.range,
-					role =>
-						resources.duration( resource.glb, role ) ||
-						((resource.animationStates ?? published.animationStates.get( resource.codename ))?.[role]
-								?.durationMs ??
-								0) / 1000
-				);
-				entry.x = pose.x;
-				entry.z = pose.z;
-				entry.region = pose.regionId;
-			}
-			for ( const gid of idleStates.keys() ) if ( !active.has( gid ) ) idleStates.delete( gid );
-			for ( const [gid, end] of combatStanceEnds ) {
-				if ( !active.has( gid ) || end <= seconds ) combatStanceEnds.delete( gid );
-			}
+					simulationMs,
+					logicalPose,
+					appearanceRef,
+					states,
+					health,
+					deadGids,
+					hitByActor,
+					castByActor,
+					resources,
+					random,
+					active
+				},
+				output,
+				published
+			);
 			probe?.detailEnd( "presentation-state" );
 			probe?.detailBegin( "presentation-actors" );
 			const appearanceActive = new Set( selected.map( entity => entity.gid ) );
@@ -1925,7 +1818,7 @@ export function createCharacterPresentation(
 							const signature = fortressIndex + ":" + Number( freezeWear ) + ":" +
 								Number( entity.mountedOn !== undefined ) + ":" + Number( hwanHair ) + ":" +
 								Number( weaponHidden ) + ":" +
-								Number( !!idleStates.get( entity.gid )?.attachmentsHidden ) + ":" +
+								Number( !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden ) + ":" +
 								wornSignature( equipment ) + "|" + avatarSignature( avatars );
 							let appearance = appearances.get( entity.gid );
 							if (
@@ -1942,7 +1835,8 @@ export function createCharacterPresentation(
 									hwanHair,
 									mounted: entity.mountedOn !== undefined,
 									weaponHidden,
-									attachmentsHidden: !!idleStates.get( entity.gid )?.attachmentsHidden,
+									attachmentsHidden: !!presentationState.idleStates.get( entity.gid )
+										?.attachmentsHidden,
 									fortressIndex,
 									player,
 									ownerless: false,
@@ -2034,7 +1928,7 @@ export function createCharacterPresentation(
 						state.hitStarted = hit.at;
 						state.hitCritical = hit.critical;
 					}
-					const downDeath = idleStates.get( entity.gid )?.downDeath,
+					const downDeath = presentationState.idleStates.get( entity.gid )?.downDeath,
 						quickDeath = resource.clips.includes( "deathquick" ) ?
 							"deathquick" :
 							resource.clips.includes( "downdie" ) ?
@@ -2089,7 +1983,7 @@ export function createCharacterPresentation(
 						renderPose = state.navigationHold.pose;
 						moving = false;
 					}
-					const activePosture = idleStates.get( entity.gid )?.posture;
+					const activePosture = presentationState.idleStates.get( entity.gid )?.posture;
 					const waiting = !dead && waitingActors.has( entity.gid );
 					const derivedMask = dead ?
 						2 :
@@ -2174,7 +2068,7 @@ export function createCharacterPresentation(
 							undefined,
 						motionSet = override?.animation || weaponSet?.replaceAll( "-", "_" );
 					let combatIdle: ReturnType<typeof skillMotionResolveAnimation>;
-					if ( (combatStanceEnds.get( entity.gid ) ?? -Infinity) > seconds ) {
+					if ( (presentationState.combatStanceEnds.get( entity.gid ) ?? -Infinity) > seconds ) {
 						const metadata = published.animationStates.get( resource.codename ),
 							stanceSet = !entity.mountedOn && motionSet || "default";
 						if (
@@ -2289,7 +2183,7 @@ export function createCharacterPresentation(
 									state.locomotion = stopLocomotion( state.locomotion, seconds );
 								}
 								if ( effect.state === 8 || effect.state === 7 ) {
-									const idle = idleStates.get( entity.gid )?.idle;
+									const idle = presentationState.idleStates.get( entity.gid )?.idle;
 									if ( idle ) idle.clip = undefined;
 								}
 							} else {
@@ -2311,7 +2205,7 @@ export function createCharacterPresentation(
 								}
 								if ( effect.state === 8 || effect.state === 6 || effect.state === 9 ) {
 									if ( effect.state === 8 ) {
-										const idle = idleStates.get( entity.gid )?.idle;
+										const idle = presentationState.idleStates.get( entity.gid )?.idle;
 										if ( idle ) idle.clip = undefined;
 									}
 									const role = effect.state === 6 ?
@@ -2449,7 +2343,7 @@ export function createCharacterPresentation(
 						resource.clips.includes( "hit" ) ?
 						"hit" :
 						"";
-					const posture = idleStates.get( entity.gid )?.posture;
+					const posture = presentationState.idleStates.get( entity.gid )?.posture;
 					if ( !dead && posture ) {
 						const role = posture.kind === "emote" ?
 							posture.clip :
@@ -2483,7 +2377,7 @@ export function createCharacterPresentation(
 						state.pickupRevision = entity.pickupRevision;
 						state.pickupStarted = seconds;
 					}
-					const idle = idleStates.get( entity.gid )?.idle;
+					const idle = presentationState.idleStates.get( entity.gid )?.idle;
 					if ( idle?.clip ) {
 						const idleClip = idle.clip, age = seconds - idle.started;
 						const idleLayers = bindLayers(
@@ -3201,8 +3095,8 @@ export function createCharacterPresentation(
 			avatarOverrides.clear();
 			auxiliaryActors.clear();
 			posePresentation.reset();
-			idleStates.clear();
-			combatStanceEnds.clear();
+			presentationState.idleStates.clear();
+			presentationState.combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
 			spawnFades.clear();
@@ -3264,8 +3158,8 @@ export function createCharacterPresentation(
 			avatarOverrides.clear();
 			auxiliaryActors.clear();
 			posePresentation.reset();
-			idleStates.clear();
-			combatStanceEnds.clear();
+			presentationState.idleStates.clear();
+			presentationState.combatStanceEnds.clear();
 			retiring.clear();
 			disappearing.clear();
 			spawnFades.clear();

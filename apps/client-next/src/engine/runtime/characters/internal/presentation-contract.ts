@@ -11,6 +11,8 @@ assembly, animation and sound phase reads.
 ===========================================================================
 */
 
+import type { RandomIdle } from "@/engine/foundation/animation/random-idle";
+import type { Posture } from "@/engine/foundation/animation/posture";
 import type { AnimationParticleSet } from "@/engine/foundation/animation/animation-emission";
 import type {
 	createModelAnimation,
@@ -241,4 +243,22 @@ export interface PresentationAppearance {
 	avatarIds: readonly number[];
 	model: string;
 	dependencies: readonly string[];
+}
+
+/*
+================
+PresentationIdleState
+
+Persistent posture and idle timing shared by the state and actor phases.
+================
+*/
+export interface PresentationIdleState {
+	x: number;
+	z: number;
+	region: number;
+	idle: RandomIdle;
+	posture?: Posture;
+	emoteRevision?: number;
+	downDeath?: boolean;
+	attachmentsHidden?: boolean;
 }

@@ -237,7 +237,7 @@
 		},
 		{
 			"consumer": "src/engine/foundation/animation/random-idle.ts",
-			"provider": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/characters/presentation-state.ts",
 			"functions": [
 				"callback:advanceRandomIdle:5"
 			]
@@ -1978,6 +1978,13 @@
 			"functions": [
 				"callback"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/presentation-state.ts",
+			"provider": "src/engine/runtime/presentation/effective-hp.ts",
+			"functions": [
+				"dead"
+			]
 		}
 	],
 	"boundaries": [
@@ -2246,6 +2253,48 @@
 			"function": "frame",
 			"kind": "callback",
 			"reason": "Optional read-only frame profiler correlation; no state mutation or scheduling."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-state.ts",
+			"expression": "appearanceRef",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Parent-owned reference appearance lookup, passed synchronously with the current frame."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-state.ts",
+			"expression": "logicalPose",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Current frame pose lookup from presentation-samples, passed by the parent without retaining it."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-state.ts",
+			"expression": "health?.dead",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effective health owner supplied by the parent; same synchronous death check as before extraction."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-state.ts",
+			"expression": "resources.duration",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character resource owner supplied by the parent; reads the admitted clip duration."
+		},
+		{
+			"file": "src/engine/foundation/animation/random-idle.ts",
+			"expression": "range",
+			"function": "advanceRandomIdle",
+			"kind": "callback",
+			"reason": "Shared presentation RNG passed through the posture frame and consumed in original entity admission order."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-state.ts",
+			"expression": "resources.duration",
+			"function": "callback:advanceRandomIdle:5",
+			"kind": "callback",
+			"reason": "Idle clip duration callback borrows the same character resource owner as the surrounding posture step."
 		}
 	],
 	"sequences": [
