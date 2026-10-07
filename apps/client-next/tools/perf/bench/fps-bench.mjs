@@ -39,11 +39,13 @@ Read the captures with tools/perf/analyze (profile.mjs, trace.mjs).
 
 The goal these measure: 500 frames a second in every scenario, on the
 built bundle. The dev server serves unbundled modules and is slower to
-start, so its numbers are development readings. To measure the bundle:
+start, so its numbers are development readings. A release bundle cannot be
+measured (it keeps neither the runtime export nor the frame probe); the
+bench bundle is the release build with exactly those two kept:
 
-  pnpm --filter @sro/client-next build
-  pnpm --filter @sro/client-next preview
-  SRO_PROBE_CLIENT_NEXT_BASE_URL=http://127.0.0.1:4180 node tools/perf/bench/fps-bench.mjs
+  pnpm --filter @sro/client-next build:bench
+  pnpm --filter @sro/client-next preview:bench
+  SRO_PROBE_CLIENT_NEXT_BASE_URL=http://127.0.0.1:4181 node tools/perf/bench/fps-bench.mjs
 
 Every row records what it ran against (identity: dev server or bundle,
 origin, served entry URL, separate harness revision, replay capture state).
