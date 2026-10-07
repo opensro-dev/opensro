@@ -36,7 +36,7 @@ const MEGABYTE = 1024 * 1024;
 const PRESETS: readonly (readonly [string, number])[] = [
 	[ "Last 10 s", 10 ],
 	[ "Last 30 s", 30 ],
-	[ "Whole replay", Infinity ]
+	[ "Whole recording", Infinity ]
 ];
 
 /*

@@ -1,13 +1,15 @@
 /*
 ===========================================================================
 
-bug-report-recorder.test.mjs - the replay loop on machines that differ
+bug-report-recorder.test.mjs - the Record/Stop recorder on machines that differ
 
 The recorder runs against fake WebCodecs and DOM globals: a PC whose only
 H.264 encoder is software, and an encoder the browser fails mid-session
 (Chrome reclaims idle codecs in background tabs), a source video the
 browser paused and a capture track that ended. Each used to leave the
-player with a screenshot-only report for the rest of the session.
+player with a screenshot-only report for the rest of the session. Stop
+drains the encoders, so the frames they still hold (the end of the
+recording, where the bug is) reach the report.
 
 ===========================================================================
 */
@@ -39,16 +41,28 @@ function installFakes( hardware ) {
 			this.init = init;
 			this.state = "unconfigured";
 			this.encodeQueueSize = 0;
+			// A real encoder holds the newest frames until flush().
+			this.held = [];
 			encoders.push( this );
 		}
 		configure() {
 			this.state = "configured";
 		}
 		encode( frame, options ) {
-			this.init.output(
-				{ byteLength: 4, copyTo() {}, timestamp: frame.timestamp, type: options.keyFrame ? "key" : "delta" },
-				{ decoderConfig: { description: Uint8Array.of( 1 ) } }
-			);
+			const chunk = {
+				byteLength: 4,
+				copyTo() {},
+				timestamp: frame.timestamp,
+				type: options.keyFrame ? "key" : "delta"
+			};
+			if ( FakeEncoder.holding ) this.held.push( chunk );
+			else this.init.output( chunk, { decoderConfig: { description: Uint8Array.of( 1 ) } } );
+		}
+		async flush() {
+			await Promise.resolve();
+			for ( const chunk of this.held.splice( 0 ) ) {
+				this.init.output( chunk, { decoderConfig: { description: Uint8Array.of( 1 ) } } );
+			}
 		}
 		close() {
 			this.state = "closed";
@@ -75,6 +89,7 @@ function installFakes( hardware ) {
 	};
 	// Partial fakes of the browser globals the recorder reads.
 	const page = /** @type {any} */ (globalThis);
+	FakeEncoder.holding = false;
 	page.VideoEncoder = FakeEncoder;
 	page.VideoFrame = class {
 		constructor( source, init ) {
@@ -101,6 +116,9 @@ function installFakes( hardware ) {
 	return {
 		canvas,
 		encoders,
+		hold( on ) {
+			FakeEncoder.holding = on;
+		},
 		video,
 		track,
 		captures: () => captures,
@@ -141,13 +159,48 @@ test("a failed encoder is reopened after a pause instead of ending the replay", 
 });
 
 test("a report without a clip says why", () => {
-	assert.equal( replayReportState( false, false, null ), "off" );
-	assert.equal( replayReportState( true, true, null ), "recording, not attached" );
+	assert.equal( replayReportState( false, null ), "not recorded" );
+	assert.equal( replayReportState( true, null ), "recorded, not attached" );
 	assert.equal(
-		replayReportState( true, false, "Replay: H.264 encoding is not supported" ),
-		"not recording: Replay: H.264 encoding is not supported"
+		replayReportState( false, "Replay: H.264 encoding is not supported" ),
+		"not recorded: Replay: H.264 encoding is not supported"
 	);
-	assert.equal( replayReportState( true, false, null ), "recording, nothing buffered yet" );
+});
+
+test("Stop drains the encoder, so the last frames reach the recording", async () => {
+	const fake = installFakes( true );
+	const recorder = createReplayRecorder( fake.canvas, () => null );
+	await recorder.start( { windowSeconds: 60 } );
+	fake.present( 0 );
+	fake.hold( true );
+	fake.present( 40 );
+	fake.present( 80 );
+	assert.equal( recorder.snapshot()?.samples.length, 1, "two frames still inside the encoder" );
+	const track = await recorder.complete();
+	assert.equal( track?.samples.length, 3 );
+	assert.equal( recorder.running(), false, "finishing stops the capture" );
+	assert.equal( recorder.snapshot(), null, "nothing stays buffered after Stop" );
+});
+
+test("a stop during the drain wins: no recording comes back", async () => {
+	const fake = installFakes( true );
+	const recorder = createReplayRecorder( fake.canvas, () => null );
+	await recorder.start( { windowSeconds: 60 } );
+	fake.present( 0 );
+	const finishing = recorder.complete();
+	recorder.stop();
+	assert.equal( await finishing, null );
+	assert.equal( recorder.running(), false );
+});
+
+test("a stop while the start is pending leaves nothing running", async () => {
+	const fake = installFakes( true );
+	const recorder = createReplayRecorder( fake.canvas, () => null );
+	const starting = recorder.start( { windowSeconds: 60 } );
+	recorder.stop();
+	assert.equal( await starting, false );
+	assert.equal( recorder.running(), false );
+	assert.equal( fake.captures(), 0, "the capture never opened" );
 });
 
 test("a source video the browser paused is resumed, once per retry pause", async () => {
@@ -192,14 +245,9 @@ test("a browser without WebCodecs is unsupported, not retried", async () => {
 });
 
 test("the report window says why there is no clip and what to do", () => {
-	assert.match( replayNote( "off", null ), /turn on "Record bug replay" in the Option window/ );
-	assert.match( replayNote( "starting", null ), /still starting/ );
-	assert.match(
-		replayNote( "restarting", "Replay: capture did not start" ),
-		/stopped \(Replay: capture did not start\) and is restarting/
-	);
+	assert.match( replayNote( "idle", null ), /press the red Record button .* then press Stop/ );
 	assert.match( replayNote( "unsupported", "Replay: H.264 encoding is not supported" ), /cannot record/ );
-	for ( const state of [ "off", "starting", "restarting", "unsupported" ] ) {
+	for ( const state of [ "idle", "unsupported" ] ) {
 		assert.match( replayNote( state, null ), /screenshot will be attached/ );
 	}
 });

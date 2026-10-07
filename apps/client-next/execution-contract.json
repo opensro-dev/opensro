@@ -1840,11 +1840,7 @@
 			"functions": [
 				"reportsEnabled",
 				"open",
-				"replayDraft",
-				"toggleReplayDraft",
-				"resetReplayDraft",
-				"defaultReplayDraft",
-				"applyReplayDraft",
+				"recordingFrame",
 				"chat"
 			]
 		},

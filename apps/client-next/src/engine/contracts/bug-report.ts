@@ -3,27 +3,22 @@
 
 bug-report.ts - the in-game bug reporter's contract with the game UI
 
-The game UI opens the reporter (the /bug chat command) and edits one
-preference in its Option window: whether the last-minute replay records.
-The reporter owns that preference and its pending draft; the UI only
-forwards the window's open, toggle, Default and OK/Apply moments.
+The game UI opens the reporter (the /bug chat command) and hands it the
+chat. Recording a clip is the reporter's own Record/Stop control beside
+its launcher; the game's Option window has no reporter setting.
 
 ===========================================================================
 */
-
-// The Option window's replay switch: ui.ts draws it, and the report window
-// names it when the replay is off.
-export const BUG_REPLAY_LABEL = "Record bug replay";
 
 /*
 ================
 ReplayState
 
-What the report window says about the replay: switched off, starting,
-restarting after the recorder stopped, or impossible in this browser.
+What the report window says when no recording is attached: the player
+did not record, or this browser cannot.
 ================
 */
-export type ReplayState = "off" | "starting" | "restarting" | "unsupported";
+export type ReplayState = "idle" | "unsupported";
 
 /*
 ================
@@ -51,15 +46,11 @@ export interface BugReportControl {
 	 * yet (the Agent was restarting); the reporter is asking again.
 	 */
 	open( text: string ): "opened" | "off" | "unavailable";
-	/** The Option window's pending replay checkbox. */
-	replayDraft(): boolean;
-	toggleReplayDraft(): void;
-	/** The Option window opened: the draft restarts from the saved value. */
-	resetReplayDraft(): void;
-	/** The Option window's Default: the draft becomes the server default. */
-	defaultReplayDraft(): void;
-	/** OK or Apply: the draft is saved and recording follows it. */
-	applyReplayDraft(): void;
+	/**
+	 * Every UI frame: a running recording's timer and its cap. chat() runs
+	 * only when the HUD is assembled, which is not every frame.
+	 */
+	recordingFrame(): void;
 	/**
 	 * The chat as the UI presents it, every frame. A whisper naming a report
 	 * saved on this device (BR-…) offers the player its full .zip.

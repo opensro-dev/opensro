@@ -1,11 +1,14 @@
 /*
 ===========================================================================
 
-recorder.ts - the bug reporter's rolling replay of the game, with sound
+recorder.ts - the bug reporter's recording of the game, with sound
 
-Keeps the last minute of the canvas as H.264, and of the game's sound as
-AAC, in memory, so a player who just saw a bug can attach what happened.
-Nothing leaves the page unless the player sends a report.
+Records the canvas as H.264, and the game's sound as AAC, in memory, from
+the player's Record press to their Stop, so a report can show the bug
+happening. Nothing is captured until Record: an always-on rolling replay
+cost about 10 ms of main thread per second for every player (measured
+2026-10-07), so it runs only on request. Nothing leaves the page unless
+the player sends a report.
 
 Video path (measured on a windowed Chrome, issue #90):
 
@@ -22,9 +25,10 @@ player hears them) -> MediaStreamTrackProcessor -> AudioEncoder (AAC-LC).
 Browsers without the processor record video only. Audio timestamps come
 from the audio clock; the first frame maps them onto the video's clock.
 
-The video ring always starts on a key frame (one every two seconds),
-which is what lets a clip be cut out of it without re-encoding; audio
-older than the oldest kept video frame is dropped with it.
+The video always starts on a key frame (one every two seconds), which is
+what lets a clip be cut out of it without re-encoding. windowSeconds
+bounds memory if nobody stops the recording: older frames are dropped
+from the front, with the audio older than the oldest kept video frame.
 
 ===========================================================================
 */
@@ -83,8 +87,13 @@ export interface ReplayRecorder {
 	start( settings: RecorderSettings ): Promise<boolean>;
 	/** Stops recording and forgets every buffered frame. */
 	stop(): void;
+	/**
+	 * Drains both encoders, stops, and resolves the recording (null when
+	 * nothing was encoded, or when a stop() overtook the drain).
+	 */
+	complete(): Promise<Mp4Track | null>;
 	running(): boolean;
-	/** A frozen copy of the buffered replay, or null when there is none. */
+	/** A frozen copy of the buffered recording, or null when there is none. */
 	snapshot(): Mp4Track | null;
 	/** A JPEG of the current canvas, for reports without a replay. */
 	still(): Promise<Blob | null>;
@@ -134,6 +143,8 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	let audioOffsetUs: number | null = null;
 	// Bumped by every start/stop so callbacks of a torn-down loop do nothing.
 	let generation = 0;
+	// Set by complete(): no new frame or sound joins while the encoders drain.
+	let finishing = false;
 
 	/*
 	================
@@ -203,7 +214,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	================
 	*/
 	function frame( owner: number, now: number ) {
-		if ( owner !== generation || !video ) return;
+		if ( owner !== generation || !video || finishing ) return;
 		video.requestVideoFrameCallback( next => frame( owner, next ) );
 		if ( now - lastFrameMs < MIN_FRAME_MS ) return;
 		lastFrameMs = now;
@@ -253,7 +264,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	async function pumpAudio( owner: number, reader: ReadableStreamDefaultReader<AudioData> ) {
 		for ( ;; ) {
 			const { value, done } = await reader.read();
-			if ( done || owner !== generation ) {
+			if ( done || owner !== generation || finishing ) {
 				value?.close();
 				await reader.cancel().catch( () => {} );
 				return;
@@ -329,9 +340,8 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	================
 	start
 
-	Synchronous on purpose: the Option window starts it from inside the
-	frame, which may not run async functions. The work continues in the
-	promise callbacks.
+	Synchronous on purpose: the Record button and the frame start it, and
+	neither may wait. The work continues in the promise callbacks.
 	================
 	*/
 	function start( next: RecorderSettings ): Promise<boolean> {
@@ -395,6 +405,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	*/
 	function stop() {
 		generation++;
+		finishing = false;
 		if ( encoder && encoder.state !== "closed" ) encoder.close();
 		encoder = null;
 		closeAudio();
@@ -411,6 +422,32 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 		lastFrameMs = -Infinity;
 		failedAtMs = -Infinity;
 		dropped = 0;
+	}
+
+	/*
+	================
+	complete
+
+	Encoders hold the last few frames until flushed; a snapshot without the
+	drain would cut the end of the recording, which is where the bug is.
+	================
+	*/
+	function complete(): Promise<Mp4Track | null> {
+		const owner = generation;
+		finishing = true;
+		const drains = [ encoder, audioEncoder ].filter( codec => codec && codec.state === "configured" ).map( codec =>
+			codec!.flush().catch( failure => {
+				if ( owner === generation ) error = "Recording: finishing the encoder failed: " + String( failure );
+			} )
+		);
+		// A promise chain, not an async function: the frame ends a recording
+		// at the server's cap.
+		return Promise.all( drains ).then( () => {
+			if ( owner !== generation ) return null;
+			const track = snapshot();
+			stop();
+			return track;
+		} );
 	}
 
 	/*
@@ -488,6 +525,7 @@ export function createReplayRecorder( canvas: HTMLCanvasElement, sound: () => Me
 	return {
 		start,
 		stop,
+		complete,
 		running: () => video !== null,
 		snapshot,
 		still,

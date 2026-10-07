@@ -1,14 +1,18 @@
 /*
 ===========================================================================
 
-dialog.ts - the bug report window and its launcher button
+dialog.ts - the bug report window, its launcher and the Record control
 
 Plain DOM over the canvas, like the FPS chip: the reporter is a tool around
 the game, not part of the native interface, and must keep working when
 the game's own UI is what broke.
 
-The window freezes the replay it was opened with (recording continues
-behind it) and hands it to the clip trimmer (trimmer.ts). Sending, any
+The Record control beside the launcher starts a recording, shows its
+time against the server's cap while it runs, and stops it; the reporter
+then opens the window with that recording, which the clip trimmer
+(trimmer.ts) cuts. The control never keeps keyboard focus: the game
+listens on `window`, and a focused button would turn the next Space
+into another press. Sending, any
 compression and keeping the original are the reporter's; the window shows
 their progress and lists the reports saved on this device, each one
 exportable as a .zip for the team.
@@ -18,7 +22,7 @@ typing a description must not walk the character around.
 
 ===========================================================================
 */
-import { BUG_REPLAY_LABEL, type ReplayState } from "@/engine/contracts/bug-report";
+import type { ReplayState } from "@/engine/contracts/bug-report";
 import type { Mp4Track } from "@/engine/foundation/media/mp4";
 import type { ArchivedSummary } from "./archive";
 import { createClipTrimmer, element, type ClipTrimmer } from "./trimmer";
@@ -26,6 +30,31 @@ import { createClipTrimmer, element, type ClipTrimmer } from "./trimmer";
 const MIN_DESCRIPTION = 10;
 const MAX_DESCRIPTION = 2000;
 const MEGABYTE = 1024 * 1024;
+// What the Record control says in each phase (title and accessible name).
+const RECORD_LABELS = {
+	idle: "Record a clip for a bug report",
+	starting: "Starting the recording (click to cancel)",
+	recording: "Stop recording and report the bug",
+	finishing: "Saving the recording"
+} as const;
+
+/*
+================
+RecordingPhase
+
+The reporter's Record/Stop cycle: "finishing" drains the encoders after
+Stop, before the window opens.
+================
+*/
+export type RecordingPhase = keyof typeof RECORD_LABELS;
+
+// The pill's text outside "recording", which shows the time instead.
+const RECORD_STATUS: Record<RecordingPhase, string> = {
+	idle: "",
+	starting: "Starting…",
+	recording: "",
+	finishing: "Saving…"
+};
 
 /*
 ================
@@ -67,6 +96,10 @@ export interface DialogHost {
 	exportZip( id: string ): Promise<Blob | null>;
 	forget( id: string ): Promise<void>;
 	launch(): void;
+	/** Record pressed while idle. */
+	record(): void;
+	/** Stop pressed while starting or recording. */
+	stopRecording(): void;
 }
 
 /*
@@ -110,17 +143,11 @@ can act on: "(Options)" alone read as a setting nobody could find.
 */
 export function replayNote( state: ReplayState, error: string | null ): string {
 	const fallback = "A screenshot will be attached instead.";
-	switch ( state ) {
-		case "off":
-			return `Replay recording is off: turn on "${BUG_REPLAY_LABEL}" in the Option window to attach a video. ` +
-				fallback;
-		case "starting":
-			return "The replay is still starting. " + fallback;
-		case "unsupported":
-			return `This browser cannot record the replay${error ? ` (${error})` : ""}. ` + fallback;
-		case "restarting":
-			return `The replay stopped${error ? ` (${error})` : ""} and is restarting. ` + fallback;
+	if ( state === "unsupported" ) {
+		return `This browser cannot record the game${error ? ` (${error})` : ""}. ` + fallback;
 	}
+	return "No recording is attached. To attach a video, press the red Record button beside the ! button, " +
+		"reproduce the bug, then press Stop. " + fallback;
 }
 
 /*
@@ -130,6 +157,8 @@ BugReportDialog
 */
 export interface BugReportDialog {
 	showLauncher( visible: boolean ): void;
+	/** The Record control's phase and, while recording, its seconds against the cap. */
+	showRecording( phase: RecordingPhase, seconds: number, maxSeconds: number ): void;
 	/** Asks the player whether to download a saved report someone requested. */
 	offer( report: ArchivedSummary, from: string ): void;
 	/** A one-line message in the same place, for requests that cannot be met. */
@@ -159,6 +188,8 @@ export function createBugReportDialog( host: DialogHost ): BugReportDialog {
 	const chip = document.getElementById( "fps-chip" );
 	if ( chip ) chip.insertBefore( launcher, document.getElementById( "fps-readout" ) );
 	else document.body.append( launcher );
+	const recordControl = createRecordControl( host, signal );
+	launcher.before( recordControl.element );
 
 	let root: HTMLElement | null = null;
 	let toast: HTMLElement | null = null;
@@ -412,7 +443,9 @@ export function createBugReportDialog( host: DialogHost ): BugReportDialog {
 	return {
 		showLauncher( visible ) {
 			launcher.hidden = !visible;
+			recordControl.element.hidden = !visible;
 		},
+		showRecording: recordControl.show,
 		open,
 		offer,
 		notice( text ) {
@@ -426,6 +459,81 @@ export function createBugReportDialog( host: DialogHost ): BugReportDialog {
 			toast = null;
 			lifetime.abort();
 			launcher.remove();
+			recordControl.element.remove();
 		}
 	};
+}
+
+/*
+================
+RecordControl
+================
+*/
+interface RecordControl {
+	readonly element: HTMLElement;
+	show( phase: RecordingPhase, seconds: number, maxSeconds: number ): void;
+}
+
+/*
+================
+createRecordControl
+
+A round red Record button; while recording it becomes a pill with a
+pulsing dot, the elapsed time against the cap, and a square Stop button.
+show() runs every frame and writes the DOM only when the phase or the
+whole second changes.
+================
+*/
+function createRecordControl( host: DialogHost, signal: AbortSignal ): RecordControl {
+	const root = element( "div", "sro-bug-record" );
+	root.hidden = true;
+	const time = element( "span", "sro-bug-record__time" );
+	time.setAttribute( "role", "timer" );
+	time.hidden = true;
+	const button = element( "button", "sro-bug-record__button" );
+	button.type = "button";
+	button.append( element( "span", "sro-bug-record__icon" ) );
+	root.append( time, button );
+	let phase: RecordingPhase = "idle", shown = "";
+	button.addEventListener( "click", () => {
+		button.blur();
+		if ( phase === "idle" ) host.record();
+		else if ( phase !== "finishing" ) host.stopRecording();
+	}, { signal } );
+	show( "idle", 0, 0 );
+
+	/*
+	================
+	show
+	================
+	*/
+	function show( next: RecordingPhase, seconds: number, maxSeconds: number ) {
+		const whole = Math.floor( seconds );
+		const key = `${next} ${whole} ${maxSeconds}`;
+		if ( key === shown ) return;
+		shown = key;
+		phase = next;
+		root.dataset.phase = next;
+		button.title = RECORD_LABELS[next];
+		button.setAttribute( "aria-label", RECORD_LABELS[next] );
+		button.disabled = next === "finishing";
+		time.hidden = next === "idle";
+		time.textContent = next === "recording" ?
+			`${minutes( whole )} / ${minutes( maxSeconds )}` :
+			RECORD_STATUS[next];
+	}
+
+	return { element: root, show };
+}
+
+/*
+================
+minutes
+
+Whole seconds as m:ss, the recording timer's format.
+================
+*/
+function minutes( seconds: number ): string {
+	const value = Math.max( 0, Math.floor( seconds ) );
+	return `${Math.floor( value / 60 )}:${String( value % 60 ).padStart( 2, "0" )}`;
 }

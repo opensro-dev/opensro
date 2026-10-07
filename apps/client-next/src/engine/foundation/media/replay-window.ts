@@ -1,11 +1,12 @@
 /*
 ===========================================================================
 
-replay-window.ts - the arithmetic of the bug reporter's rolling replay
+replay-window.ts - the arithmetic of the bug reporter's recordings
 
-The recorder keeps encoded frames for the last minute. A decodable piece
-of H.264 must start on a key frame, so every cut here moves its start back
-to the nearest key frame instead of dropping frames the clip depends on.
+The recorder keeps at most the server's replaySeconds of encoded frames.
+A decodable piece of H.264 must start on a key frame, so every cut here
+moves its start back to the nearest key frame instead of dropping frames
+the clip depends on.
 The bitrate is derived from the server's upload cap so a full window
 always fits one report.
 
@@ -189,13 +190,13 @@ replayReportState
 
 The report's Replay line when no clip went with it. A player who sees only
 a screenshot is told nothing, so the line carries the recorder's own reason
-for staff to read.
+for staff to read. Recording is the player's Record press, so "not
+recorded" alone is the ordinary case.
 ================
 */
-export function replayReportState( enabled: boolean, buffered: boolean, lastError: string | null ): string {
-	if ( !enabled ) return "off";
-	if ( buffered ) return "recording, not attached";
-	return lastError ? "not recording: " + lastError : "recording, nothing buffered yet";
+export function replayReportState( recorded: boolean, lastError: string | null ): string {
+	if ( recorded ) return "recorded, not attached";
+	return lastError ? "not recorded: " + lastError : "not recorded";
 }
 
 /*
