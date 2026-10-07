@@ -11,6 +11,27 @@ triggers that start stage effects.
 ===========================================================================
 */
 import type { CharacterActor } from "./character";
+import type { CastState, CastImpact } from "./gameplay";
+
+/*
+================
+ImpactFeedback
+
+One consumed cast result handed from damage feedback to character presentation.
+================
+*/
+export interface ImpactFeedback {
+	readonly cast: CastState;
+	readonly target: number;
+	readonly impact: CastImpact;
+	readonly key: string;
+	readonly at: number;
+	readonly source: "cast" | "flush" | "hawk";
+	readonly soundSkill?: number;
+	readonly position?: import("@/engine/contracts/character").CharacterActor["pose"];
+	readonly secondary?: boolean;
+}
+
 /*
 ================
 HawkAnimation

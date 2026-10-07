@@ -203,7 +203,6 @@
 			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
 			"provider": "src/engine/runtime/characters/characters.ts",
 			"functions": [
-				"callback:flush:1",
 				"soundSource"
 			]
 		},
@@ -941,7 +940,7 @@
 		},
 		{
 			"consumer": "src/engine/runtime/characters/effects/effects.ts",
-			"provider": "src/engine/runtime/characters/characters.ts",
+			"provider": "src/engine/runtime/characters/presentation-events.ts",
 			"functions": [
 				"callback:step:6"
 			]
@@ -2023,6 +2022,13 @@
 				"callback:step:2"
 			],
 			"reason": "The stage animation duration callback moves intact to the auxiliary presentation owner."
+		},
+		{
+			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
+			"provider": "src/engine/runtime/characters/presentation-events.ts",
+			"functions": [
+				"callback:flush:1"
+			]
 		}
 	],
 	"boundaries": [
@@ -3019,6 +3025,265 @@
 			"function": "advance",
 			"kind": "callback",
 			"reason": "The per-actor phase passes its synchronous soundSource closure to advance, unchanged by the move."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "logicalPose",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "posePresentation.pose",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.step",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.attachedInstances",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.takeActivations",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "appearanceRef",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Parent reference-appearance lookup lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "sounds.emit",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character sound owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "soundContext",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Current action preparation sound-context closure lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.takeHawkImpacts",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "feedback.take",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Damage feedback owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.takeImpacts",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "health.impact",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effective health and result-presentation owners lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "health.dead",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effective health and result-presentation owners lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.hitFlash",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.damage",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "effects.impactSource",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character effect owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "renderer.characterMatrix",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Renderer character sampling owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "renderer.characterLocalMatrix",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Renderer character sampling owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "sounds.impact",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character sound owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "health?.finishedCasts",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Effective health and result-presentation owners lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "feedback.pendingDeaths",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Damage feedback owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "sounds.flush",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character sound owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "localMover",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "logicalPose",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "Current frame presentation-sample owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "posePresentation.pose",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "Character pose presentation owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-events.ts",
+			"expression": "renderer.characterSocket",
+			"function": "callback:step:6",
+			"kind": "callback",
+			"reason": "Renderer character sampling owner lends this synchronous operation through characters.ts; effect and hit order remain unchanged."
+		},
+		{
+			"file": "src/engine/runtime/characters/damage-feedback.ts",
+			"expression": "index",
+			"function": "take",
+			"kind": "callback",
+			"reason": "Effect owner impactIndex forwarded through the presentation-events phase; maps the authored action callback to its result index."
+		},
+		{
+			"file": "src/engine/runtime/characters/damage-feedback.ts",
+			"expression": "currentResult",
+			"function": "pendingDeaths",
+			"kind": "callback",
+			"reason": "Effective health currentResult forwarded by the action and event phases; suppresses retired fatal results."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "resourceReady",
+			"function": "ready",
+			"kind": "callback",
+			"reason": "Character resource admission callback forwarded by presentation-events before effects consume their bounded residency budget."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "socket",
+			"function": "moverSourceCold",
+			"kind": "callback",
+			"reason": "Presentation-events supplies the existing sampled character socket callback for cold flight source placement."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "socket",
+			"function": "stageAnchor",
+			"kind": "callback",
+			"reason": "Presentation-events supplies the existing sampled character socket callback for authored stage attachment."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "socket",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Presentation-events supplies the existing sampled character socket callback; no renderer or flight clock is replaced."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "duration",
+			"function": "step",
+			"kind": "callback",
+			"reason": "Character resource duration lookup forwarded through presentation-events for authored effect animation lifetimes."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "duration",
+			"function": "callback:filter:0",
+			"kind": "callback",
+			"reason": "Character resource duration lookup forwarded through presentation-events for effect retention filters."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "duration",
+			"function": "callback:every:0",
+			"kind": "callback",
+			"reason": "Character resource duration lookup forwarded through presentation-events for completed effect animations."
+		},
+		{
+			"file": "src/engine/runtime/characters/effects/effects.ts",
+			"expression": "ready",
+			"function": "spawn",
+			"kind": "callback",
+			"reason": "Character resource admission callback forwarded through presentation-events to the existing damage effect constructor."
+		},
+		{
+			"file": "src/engine/runtime/characters/sounds/sounds.ts",
+			"expression": "position",
+			"function": "flush",
+			"kind": "callback",
+			"reason": "Presentation-events supplies the current gameplay/entity position closure for delayed impact sound emission."
 		}
 	],
 	"sequences": [
