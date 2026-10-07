@@ -120,7 +120,10 @@ test("the CPU evaluation total keeps the work of evaluators that retired", () =>
 		f.owner.prepare( f.gpu, {}, 257 );
 		const replaced = f.owner.stats();
 		assert.ok( replaced.cpuEvaluations > alone.cpuEvaluations );
-		assert.ok( replaced.liveOwnedCpuEvaluations < replaced.cpuEvaluations, "the replaced evaluator's work is retired" );
+		assert.ok(
+			replaced.liveOwnedCpuEvaluations < replaced.cpuEvaluations,
+			"the replaced evaluator's work is retired"
+		);
 		// Disposal clears every evaluator; the total still holds all of it.
 		f.owner.dispose( f.gpu, null );
 		const disposed = f.owner.stats();
