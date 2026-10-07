@@ -31,6 +31,8 @@ One append-only text file is the team's channel. Never rewrite or delete
 earlier lines; corrections are new lines that name what they correct.
 
 - Prefix every entry with a timestamp and your name, `[NAME]`.
+- Write by appending only (a shell `>>` or an append call). An editor or a
+  read-modify-write rewrite races with other writers and can drop their lines.
 - Claim before working (`CLAIM <item>`), so two agents do not build the same
   thing. If someone already claimed it, review instead.
 - Post one entry per result, with its numbers and the exact commit.
@@ -66,8 +68,17 @@ which only serialises writers of `.generated`. Rules:
   a command that fails to start.
 - **Expiry is a promise, not a kill.** The wrapper does not stop a child at
   expiry or reap its descendants. Clean up your own processes; on Windows,
-  stopping a task can leave orphaned children, so list processes and ports
-  after a server or browser run.
+  stopping a task can leave orphaned children. Stop a server you spawned as a
+  process tree (`taskkill /PID <pid> /T /F`): with a shell in between,
+  killing the child ends only the shell and leaves the server listening.
+  Then assert that nothing listens on its port.
+- **A server started for a run stops in the same run.** A preview or dev
+  server left listening after a measurement is served to the next agent's
+  harness, which then measures your build instead of its own.
+- **Name the tree the run tests.** The `START` line records the directory and
+  git head the child runs in. When you launch from one checkout to test
+  another, pass `--cwd <absolute worktree>`, so the line names the tree that
+  actually ran.
 - **Do not edit a tree while its gate runs.** The gate reads the working
   tree, so a mid-run edit makes the result describe neither version. Rerun on
   the final commit.
@@ -134,7 +145,9 @@ it can be compared.
 
 - Measure on the built bundle, not the dev server, and record what was
   measured: build (dev server or bundle), origin, commit, and whether the
-  bug-report replay recorder was capturing. The recorder may cost frames,
+  bug-report replay recorder was capturing. The harness proves which build it
+  was served (for example, the hash of the served entry), because a stale
+  server on the same port serves someone else's build. The recorder may cost frames,
   so verify its state on every run until its cost is measured.
 - Compare A and B back to back on the same scenario, in an A-B-B-A order,
   through the lock. Machine noise is large; a single pair proves nothing.

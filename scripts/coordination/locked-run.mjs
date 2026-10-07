@@ -32,6 +32,12 @@ and each class runs in arrival order. A ticket whose waiter died is dropped
 on read. Without --wait a run fails at once, and also when anyone is
 queued, so it cannot jump the queue.
 
+--cwd DIR (absolute, an existing directory) runs the preflight and the
+child there, and START records that directory and its git head. Without
+it the child inherits the launcher's directory. A run started from one
+checkout to test another passes --cwd, so the journal names the tree the
+child actually ran in, not the launcher's.
+
 --preflight "<command>" runs a cheap readiness check through the shell
 before the run queues; a failure costs no lock time. Keep it cheap
 (directories, files, free ports), never a module-graph warm-up or a game
@@ -45,7 +51,7 @@ and its pid gone) is moved aside only with --break-stale.
 */
 
 import { spawn, execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { isAbsolute, join } from "node:path";
 
@@ -96,7 +102,8 @@ function parseArgs( argv ) {
 		breakStale: false,
 		wait: false,
 		estimate: 0,
-		preflight: ""
+		preflight: "",
+		cwd: process.cwd()
 	};
 	const flags = argv.slice( 0, split );
 	for ( let i = 0; i < flags.length; i++ ) {
@@ -109,12 +116,14 @@ function parseArgs( argv ) {
 		else if ( flag === "--wait" ) options.wait = true;
 		else if ( flag === "--estimate" ) options.estimate = Number( flags[++i] );
 		else if ( flag === "--preflight" ) options.preflight = flags[++i] ?? "";
+		else if ( flag === "--cwd" ) options.cwd = flags[++i] ?? "";
 		else return null;
 	}
 	const valid = /^[A-Za-z0-9_-]{1,32}$/.test( options.owner ) && options.purpose.trim() &&
 		!/[\r\n]/.test( options.purpose ) && Number.isFinite( options.minutes ) &&
 		options.minutes > 0 && options.minutes <= MAX_MINUTES;
 	if ( !valid || !Number.isFinite( options.estimate ) || options.estimate < 0 ) return null;
+	if ( !isAbsolute( options.cwd ) || !isDirectory( options.cwd ) ) return null;
 	if ( !options.estimate ) options.estimate = options.minutes * 60;
 	return { ...options, command: argv[split + 1], args: argv.slice( split + 2 ) };
 }
@@ -181,15 +190,31 @@ function describeHolder() {
 
 /*
 ================
+isDirectory
+================
+*/
+function isDirectory( path ) {
+	try {
+		return statSync( path ).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+/*
+================
 gitIdentity
 
 Best-effort HEAD and dirty flag of the working directory, for the START line.
 ================
 */
-function gitIdentity() {
+function gitIdentity( cwd ) {
 	try {
-		const head = execFileSync( "git", [ "rev-parse", "--short", "HEAD" ], { encoding: "utf8" } ).trim();
-		const dirty = execFileSync( "git", [ "status", "--porcelain", "--untracked-files=no" ], { encoding: "utf8" } )
+		const head = execFileSync( "git", [ "rev-parse", "--short", "HEAD" ], { cwd, encoding: "utf8" } ).trim();
+		const dirty = execFileSync( "git", [ "status", "--porcelain", "--untracked-files=no" ], {
+			cwd,
+			encoding: "utf8"
+		} )
 			.trim();
 		return `${head}${dirty ? "+dirty" : ""}`;
 	} catch {
@@ -353,7 +378,7 @@ async function main() {
 	if ( !options || !DIRECTORY ) {
 		console.error(
 			"usage: SRO_COORDINATION_DIR=<absolute shared dir> node locked-run.mjs --owner NAME --purpose TEXT --minutes N " +
-				"[--shell] [--break-stale] [--wait --estimate S] [--preflight CMD] -- command [args...]"
+				"[--shell] [--break-stale] [--wait --estimate S] [--preflight CMD] [--cwd DIR] -- command [args...]"
 		);
 		process.exit( EXIT_USAGE );
 	}
@@ -361,7 +386,12 @@ async function main() {
 	// lock time.
 	if ( options.preflight ) {
 		try {
-			execFileSync( options.preflight, { stdio: "inherit", shell: true, timeout: PREFLIGHT_TIMEOUT_MS } );
+			execFileSync( options.preflight, {
+				cwd: options.cwd,
+				stdio: "inherit",
+				shell: true,
+				timeout: PREFLIGHT_TIMEOUT_MS
+			} );
 		} catch {
 			console.error( "[locked-run] preflight failed, not queued: " + options.preflight );
 			process.exit( EXIT_PREFLIGHT );
@@ -397,7 +427,9 @@ async function main() {
 	try {
 		journal(
 			options.owner,
-			`START ${options.purpose} (locked-run token ${token}, lock until ${expires}, cwd ${process.cwd()} @ ${gitIdentity()})`
+			`START ${options.purpose} (locked-run token ${token}, lock until ${expires}, cwd ${options.cwd} @ ${
+				gitIdentity( options.cwd )
+			})`
 		);
 	} catch ( error ) {
 		release( options.owner, line );
@@ -421,7 +453,7 @@ async function main() {
 	// lock is taken; release it through the same END path, never leave it.
 	let child;
 	try {
-		child = spawn( options.command, options.args, { stdio: "inherit", shell: options.shell } );
+		child = spawn( options.command, options.args, { cwd: options.cwd, stdio: "inherit", shell: options.shell } );
 	} catch ( error ) {
 		finish( 1, `failed to start: ${error.message}` );
 		return;

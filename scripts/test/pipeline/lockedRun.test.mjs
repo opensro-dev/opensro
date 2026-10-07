@@ -238,3 +238,37 @@ test("a failed preflight costs no lock time", t => {
 	assert.equal( existsSync( marker ), false );
 	assert.equal( existsSync( c.journal ), false, "nothing was journalled or locked" );
 });
+
+test("--cwd runs the child in the named tree and START records that tree", t => {
+	const c = coordination( t );
+	const marker = path.join( c.dir, "child-cwd" );
+	const status = run(
+		c.dir,
+		c.first,
+		"A",
+		[ "--cwd", c.second ],
+		`require("fs").writeFileSync(${JSON.stringify( marker )}, process.cwd())`
+	);
+	assert.equal( status, 0 );
+	assert.equal( path.resolve( readFileSync( marker, "utf8" ) ), path.resolve( c.second ) );
+	const journal = readFileSync( c.journal, "utf8" );
+	assert.ok( journal.includes( `cwd ${c.second} @` ), "START names the child's directory" );
+	assert.ok( !journal.includes( `cwd ${c.first} @` ), "not the launcher's" );
+});
+
+test("a relative or missing --cwd is refused before anything runs", t => {
+	const c = coordination( t );
+	const marker = path.join( c.dir, "ran" );
+	for ( const cwd of [ "tree-b", path.join( c.dir, "missing" ) ] ) {
+		const status = run(
+			c.dir,
+			c.first,
+			"A",
+			[ "--cwd", cwd ],
+			`require("fs").writeFileSync(${JSON.stringify( marker )}, "ran")`
+		);
+		assert.equal( status, EXIT_USAGE, cwd );
+	}
+	assert.equal( existsSync( marker ), false );
+	assert.equal( existsSync( c.journal ), false );
+});
