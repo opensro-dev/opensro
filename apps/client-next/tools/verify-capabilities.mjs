@@ -142,6 +142,8 @@ export const rules = {
 	unconfigure: [ surface ],
 	addEventListener: [
 		runtime + "assets/worker/loader.ts", // AbortSignal releases a pending download backoff.
+		// AbortSignal cancels a stalled body read; the listener is removed on every exit.
+		"src/engine/foundation/assets/read-bytes.ts",
 		runtime + "platform/telemetry.ts",
 		runtime + "platform/platform.ts",
 		device,
