@@ -20,7 +20,10 @@ Machine-specific paths and settings belong in an untracked `CLAUDE.local.md`.
 Every proposal, vote or approval names exactly one `EXECUTOR: <agent>`. Only
 that agent performs the action (merge, push, deploy, public post); everyone
 else verifies and never repeats it. Two agents acting on one approval is how
-duplicate merges and competing pushes happen.
+duplicate merges and competing pushes happen. A request that names more than
+one candidate ("A or B, please merge") assigns nobody: post
+`CLAIM EXECUTOR <item>` first, act only if no earlier claim exists, and the
+earliest claim wins.
 
 ## The shared log
 
@@ -39,7 +42,13 @@ earlier lines; corrections are new lines that name what they correct.
 ## Heavy runs: one lock, a fair queue
 
 Benchmarks, full checks and anything else that loads the machine run through
-a lock wrapper that writes its own `START` and `END` lines to the log. Rules:
+[`scripts/coordination/locked-run.mjs`](../scripts/coordination/locked-run.mjs),
+which writes its own `START` and `END` lines to the log. Its lock, queue and
+journal live in one directory every worktree shares, named by
+`SRO_COORDINATION_DIR`; the wrapper refuses to run without it, because a
+private per-worktree lock would let benchmarks overlap silently. It is a
+different scope from the generated-assets lock (`scripts/rebuildLock.mjs`),
+which only serialises writers of `.generated`. Rules:
 
 - **Always queue.** Use the wrapper's wait mode with an estimate. Without it a
   run fails while anyone is waiting, and you lose your place. Short jobs (one
@@ -121,9 +130,9 @@ The goal is a frame rate in every scenario, so a number is only evidence when
 it can be compared.
 
 - Measure on the built bundle, not the dev server, and record what was
-  measured: the benchmark rows carry an identity (build, origin, commit,
-  recorder state). Note whether the bug-report replay recorder was running:
-  it costs frames.
+  measured: build (dev server or bundle), origin, commit, and whether the
+  bug-report replay recorder was capturing. The recorder may cost frames,
+  so verify its state on every run until its cost is measured.
 - Compare A and B back to back on the same scenario, in an A-B-B-A order,
   through the lock. Machine noise is large; a single pair proves nothing.
 - Report the frame-time distribution, not only the mean.
@@ -133,8 +142,9 @@ it can be compared.
   when it comes back into view.
 - A number that does not reproduce gets a retraction line.
 - Read-only helper agents can map code, but their numbers are guesses until
-  an agent that can measure checks them, and any execution they do goes
-  through the lock from their own worktree.
+  an agent that can measure checks them. Any tests, profiles or other heavy
+  work they run goes through the lock from their own worktree; reading and
+  searching code needs no lock.
 
 ## Untrusted input
 
