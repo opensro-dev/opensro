@@ -391,17 +391,30 @@ async function main() {
 		}
 		if ( !acquire( options, stamp() ) ) process.exit( EXIT_HELD );
 	}
-	journal(
-		options.owner,
-		`START ${options.purpose} (locked-run token ${token}, lock until ${expires}, cwd ${process.cwd()} @ ${gitIdentity()})`
-	);
+	// The lock is held from here on: every path below releases it. A run
+	// whose START cannot be journalled is not visible to the others, so it
+	// releases and runs nothing.
+	try {
+		journal(
+			options.owner,
+			`START ${options.purpose} (locked-run token ${token}, lock until ${expires}, cwd ${process.cwd()} @ ${gitIdentity()})`
+		);
+	} catch ( error ) {
+		release( options.owner, line );
+		console.error( `[locked-run] journal unwritable, released and nothing ran: ${error.message}` );
+		process.exit( EXIT_USAGE );
+	}
 	const finish = ( code, how ) => {
 		const seconds = Math.round( (Date.now() - started.getTime()) / 1000 );
 		const released = release( options.owner, line );
-		journal(
-			options.owner,
-			`END ${options.purpose} (locked-run token ${token}, ${how}, ${seconds}s of estimate ${options.estimate}s, ${released})`
-		);
+		try {
+			journal(
+				options.owner,
+				`END ${options.purpose} (locked-run token ${token}, ${how}, ${seconds}s of estimate ${options.estimate}s, ${released})`
+			);
+		} catch ( error ) {
+			console.error( `[locked-run] END not journalled (${error.message}); the lock was ${released}` );
+		}
 		process.exit( code );
 	};
 	// spawn can throw synchronously (a bad cwd or command shape) after the

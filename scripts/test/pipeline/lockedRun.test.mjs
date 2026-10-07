@@ -202,6 +202,28 @@ test("a command that cannot start still releases the lock and records END", t =>
 	assert.match( readFileSync( c.journal, "utf8" ), /\[A\] END bad command \(.*failed to start/ );
 });
 
+test("an unwritable journal releases the lock and runs nothing", t => {
+	const c = coordination( t );
+	const marker = path.join( c.first, "ran" );
+	const result = spawnSync(
+		process.execPath,
+		wrapperArgs( "A", [], `require("fs").writeFileSync(${JSON.stringify( marker )}, "ran")` ),
+		{
+			cwd: c.first,
+			// A journal inside a missing directory cannot be appended to.
+			env: {
+				...process.env,
+				SRO_COORDINATION_DIR: c.dir,
+				SRO_COORDINATION_JOURNAL: path.join( c.dir, "missing", "log.txt" )
+			},
+			encoding: "utf8"
+		}
+	);
+	assert.equal( result.status, EXIT_USAGE );
+	assert.equal( existsSync( marker ), false, "the child must not start" );
+	assert.equal( existsSync( path.join( c.dir, "benchmark.lock" ) ), false, "no lock may be left behind" );
+});
+
 test("a failed preflight costs no lock time", t => {
 	const c = coordination( t );
 	const marker = path.join( c.first, "ran" );

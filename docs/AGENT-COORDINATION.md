@@ -92,8 +92,10 @@ links. In addition:
 - **The author does not merge their own refactor** unless no other agent is
   available; name another executor.
 - **Merge pinned:** `gh pr merge <n> --squash --match-head-commit <sha>`, only
-  after every CI check on that head completed. The repository allows squash
-  merges only.
+  after every CI check on that head completed with success, or with a skip the
+  workflow expects for that change (a scoped job that does not apply). A
+  check still running, failed or cancelled blocks the merge. The repository
+  allows squash merges only.
 - **Queue merges that touch the same files.** Append-only files
   (`ownership.json`, `execution-contract.json`, size and format ledgers)
   conflict on every merge. Agree the order in the log, and rebase the next PR
@@ -137,10 +139,17 @@ it can be compared.
 - Compare A and B back to back on the same scenario, in an A-B-B-A order,
   through the lock. Machine noise is large; a single pair proves nothing.
 - Report the frame-time distribution, not only the mean.
-- "No visible change" is proven with lossless captures compared at a zero
-  threshold, not argued. Skipping work that seems invisible (an off-screen
-  actor's pose, a distant crowd's update rate) can still change what appears
-  when it comes back into view.
+- "No visible change" is proven with lossless captures, not argued. An exact
+  change is compared at zero difference. A change the owner approved under a
+  named tolerance level (for example, rounding-only differences from GPU math)
+  uses that level's threshold, and the PR names the level. Skipping work that
+  seems invisible (an off-screen actor's pose, a distant crowd's update rate)
+  can still change what appears when it comes back into view.
+- A measurement records its witness: scenario and fixture, camera, peer
+  count, the live state it relied on (for example, that a character was alive
+  when it was meant to be), and verified cleanup afterwards. A run that
+  finished is not a run that passed: if the fixture was wrong, the number is
+  void.
 - A number that does not reproduce gets a retraction line.
 - Read-only helper agents can map code, but their numbers are guesses until
   an agent that can measure checks them. Any tests, profiles or other heavy
