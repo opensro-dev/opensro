@@ -5,10 +5,12 @@ presentation-catalog.ts - the published catalogues character presentation reads
 
 Owns the character, NPC, mission, sound, animation, item-drop and skill-data
 manifests once admitted: validated rows projected into the lookups that
-assembly, animation and sound selection read every frame. Most lookups are
-built aside and swapped in only after every row validates. Three are not:
-shadowSizes, bloodEffects and riderModes are written while their rows are
-validated, so a manifest rejected later keeps those rows (kept as found).
+assembly, animation and sound selection read every frame. Admission keeps
+the original order. A manifest rejected partway can keep its earlier
+writes: shadowSizes, bloodEffects and riderModes are written while their
+rows validate, and recoveryByCodename and the sound rules are replaced
+before the appearance stores are validated. The other lookups are built
+aside and swapped in at the end.
 
 Requesting the next manifest stays with the presentation owner, which knows
 whether a dock, a creation preview or a world roster needs one.
@@ -145,8 +147,8 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 		================
 		admit
 
-		Validate one presentation manifest, then project it into the live
-		lookups. A rejected manifest leaves every lookup unchanged.
+		Validate one presentation manifest and project it into the live
+		lookups, in the order the file banner describes.
 		================
 		*/
 		admit( result: PublishedResult ) {
