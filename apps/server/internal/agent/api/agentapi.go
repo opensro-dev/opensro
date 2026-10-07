@@ -155,6 +155,9 @@ type Config struct {
 	// SkillGroup resolves a skill id to its group for the fixture loadout;
 	// nil refuses any loadout that names skills.
 	SkillGroup SkillGroupResolver
+	// LevelCap is the game's level cap (progression.LevelCap), the bound of a
+	// fixture loadout's level; 0 refuses every loadout.
+	LevelCap int64
 	// CharacterInPlay reports whether the character is bound to a live
 	// game session (the Hub's exclusive-bind view). nil = no live-session
 	// view (tests). A retail client cannot compose a delete for a
@@ -200,6 +203,7 @@ type API struct {
 	marksDir                string // "" = no crest art hosted
 	benchmarkFixtureControl bool
 	skillGroup              SkillGroupResolver
+	levelCap                int64
 	characterInPlay         func(divisionID, characterName string) bool
 	acquireCharacterControl func(divisionID, characterName string) (release func(), acquired bool)
 	enterWorldAuthSecret    []byte
@@ -259,6 +263,7 @@ func New(config Config) (*API, error) {
 		marksDir:                config.MarksDir,
 		benchmarkFixtureControl: config.BenchmarkFixtureControl,
 		skillGroup:              config.SkillGroup,
+		levelCap:                config.LevelCap,
 		characterInPlay:         config.CharacterInPlay,
 		acquireCharacterControl: config.AcquireCharacterControl,
 		enterWorldAuthSecret:    append([]byte(nil), config.EnterWorldAuthSecret...),

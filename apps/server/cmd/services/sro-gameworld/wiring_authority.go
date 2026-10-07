@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
@@ -173,6 +174,7 @@ func openAuthorityPlane(
 		MarksDir:                os.Getenv(agentapi.EnvMarksDir),
 		AuthoredAreas:           devPaths.AuthoredAreas,
 		BenchmarkFixtureControl: os.Getenv(agentapi.EnvBenchmarkFixtureControl) == "1",
+		LevelCap:                progression.LevelCap,
 		SkillGroup: func(id uint32) (uint32, bool) {
 			row, ok := textdata.Skills.SkillByID(id)
 			return row.Group, ok

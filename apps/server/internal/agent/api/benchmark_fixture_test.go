@@ -160,6 +160,7 @@ func TestBenchmarkFixtureLoadoutTeachesSkillsAndDerivesVitals(t *testing.T) {
 	api, authority := newTestAPI(t)
 	api.benchmarkFixtureControl = true
 	api.skillGroup = testSkillGroups
+	api.levelCap = testLevelCap
 	handler := authenticatedHandler(t, api, testAccount)
 	postJSON(t, handler, "/character/create", createBody("FixtureHero"))
 	character := authority.Characters().CharactersForDivision(testDivision)[0]
@@ -193,7 +194,7 @@ func TestBenchmarkFixtureLoadoutTeachesSkillsAndDerivesVitals(t *testing.T) {
 	for _, loadout := range []map[string]any{
 		{"level": 0, "intellect": 109, "skills": []uint32{114}},
 		{"level": 90, "intellect": 0, "skills": []uint32{114}},
-		{"level": benchmarkFixtureMaxLevel + 1, "intellect": 109, "skills": []uint32{114}},
+		{"level": testLevelCap + 1, "intellect": 109, "skills": []uint32{114}},
 		{"level": 90, "intellect": 109, "skills": []uint32{0}},
 	} {
 		body["loadout"] = loadout
@@ -229,6 +230,7 @@ func TestBenchmarkFixtureLoadoutReplacesRankAndRefusesUnknownSkills(t *testing.T
 	api, authority := newTestAPI(t)
 	api.benchmarkFixtureControl = true
 	api.skillGroup = testSkillGroups
+	api.levelCap = testLevelCap
 	handler := authenticatedHandler(t, api, testAccount)
 	postJSON(t, handler, "/character/create", createBody("FixtureHero"))
 	character := authority.Characters().CharactersForDivision(testDivision)[0]
@@ -258,3 +260,7 @@ func TestBenchmarkFixtureLoadoutReplacesRankAndRefusesUnknownSkills(t *testing.T
 		t.Fatalf("skills without a resolver = %d, want 400", recorder.Code)
 	}
 }
+
+// testLevelCap stands in for progression.LevelCap, which the API receives
+// through its Config rather than importing.
+const testLevelCap = 90

@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/game/progression"
 )
 
 // SkillGroupResolver names a skill's group (all ranks of one skill share
@@ -33,10 +32,9 @@ type SkillGroupResolver func(id uint32) (group uint32, ok bool)
 const BenchmarkFixtureResetPath = "/development/benchmark-fixture/reset"
 
 const (
-	// benchmarkFixtureMaxLevel is the game's own level cap;
 	// benchmarkFixtureMaxIntellect bounds intellect to what a character can
 	// reach; benchmarkFixtureMaxSkills bounds the list one request may teach.
-	benchmarkFixtureMaxLevel     = progression.LevelCap
+	// The level bound is the game's own cap, injected as Config.LevelCap.
 	benchmarkFixtureMaxIntellect = 2000
 	benchmarkFixtureMaxSkills    = 64
 )
@@ -96,7 +94,7 @@ func (api *API) handleBenchmarkFixtureReset(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var request benchmarkFixtureResetRequest
-	if err := decodeJSONRequest(r.Body, &request); err != nil || !validBenchmarkFixtureReset(request) ||
+	if err := decodeJSONRequest(r.Body, &request); err != nil || !validBenchmarkFixtureReset(request, api.levelCap) ||
 		!api.knownBenchmarkFixtureSkills(request.Loadout) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "code": "BAD_REQUEST"})
 		return
@@ -162,7 +160,7 @@ func (api *API) handleBenchmarkFixtureReset(w http.ResponseWriter, r *http.Reque
 validBenchmarkFixtureReset
 ================
 */
-func validBenchmarkFixtureReset(request benchmarkFixtureResetRequest) bool {
+func validBenchmarkFixtureReset(request benchmarkFixtureResetRequest, levelCap int64) bool {
 	return strings.TrimSpace(request.CharacterName) != "" &&
 		strings.TrimSpace(request.FixtureID) != "" && len(strings.TrimSpace(request.FixtureID)) <= 128 &&
 		request.Spawn.RegionID > 0 && request.Spawn.RegionID <= 0xffff &&
@@ -171,7 +169,7 @@ func validBenchmarkFixtureReset(request benchmarkFixtureResetRequest) bool {
 		finite(request.Spawn.Y) && request.Spawn.Y >= -32768 && request.Spawn.Y <= 32767 &&
 		request.Spawn.Angle >= 0 && request.Spawn.Angle <= 0xffff &&
 		(request.MovementMode == 1 || request.MovementMode == 3) &&
-		validBenchmarkFixtureLoadout(request.Loadout)
+		validBenchmarkFixtureLoadout(request.Loadout, levelCap)
 }
 
 /*
@@ -179,11 +177,11 @@ func validBenchmarkFixtureReset(request benchmarkFixtureResetRequest) bool {
 validBenchmarkFixtureLoadout
 ================
 */
-func validBenchmarkFixtureLoadout(loadout *benchmarkFixtureLoadout) bool {
+func validBenchmarkFixtureLoadout(loadout *benchmarkFixtureLoadout, levelCap int64) bool {
 	if loadout == nil {
 		return true
 	}
-	if loadout.Level < 1 || loadout.Level > benchmarkFixtureMaxLevel ||
+	if loadout.Level < 1 || loadout.Level > levelCap ||
 		loadout.Intellect < 1 || loadout.Intellect > benchmarkFixtureMaxIntellect ||
 		len(loadout.Skills) > benchmarkFixtureMaxSkills {
 		return false
