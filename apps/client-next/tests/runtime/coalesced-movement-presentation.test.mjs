@@ -43,6 +43,66 @@ test("a same-time speed change replaces the cached validated lookahead", () => {
 	movement.clear();
 });
 
+test("a native 150-speed mount retains its terrain proof through a 1000 ms worker step", () => {
+	const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();
+	navigation.objects = [];
+	const heights = Buffer.alloc( 97 * 97 * 4 );
+	for ( let z = 0; z < 97; z++ ) heights.writeFloatLE( 8, (z * 97 + 10) * 4 );
+	navigation.navmesh.regions[0].heightMap = heights.toString( "base64" );
+	movement.seed( FROM );
+	movement.navigation( 257, navigation );
+	movement.speeds( 45, 150, 0 );
+	movement.request( { ...TO, x: 700 }, 0 );
+	presentation.origin( 0 );
+	let state = movement.state();
+	assert.ok( state.pose );
+	publish( presentation, state );
+	presentation.pose( 7, state.pose, 0 );
+	for ( let now = 16; now <= 320; now += 16 ) {
+		movement.step( now );
+		state = movement.state();
+		assert.ok( state.pose );
+		publish( presentation, state );
+		presentation.pose( 7, state.pose, now / 1000 );
+	}
+	const before = state.pose;
+	assert.ok( before );
+	presentation.pose( 7, before, 1.32 );
+	const continued = presentation.pose( 7, before, 1.3325 );
+	movement.step( 1320 );
+	state = movement.state();
+	assert.ok( state.pose );
+	assert.ok( Math.abs( state.pose.x - before.x - 150 ) < .001, "the native step is not subdivided or capped" );
+	assert.ok( state.movementTransition.walkingPath?.length > 75, "all accepted mounted progress has sampled proof" );
+	assert.ok(
+		state.movementTransition.walkingPath?.some( point => point.y > 7.5 ),
+		"the skipped frame retains the intervening hill"
+	);
+	publish( presentation, state );
+	let previous = presentation.pose( 7, state.pose, 1.3325 );
+	assert.ok(
+		Math.abs( previous.x - continued.x ) < .01,
+		"the mounted publication introduces no instantaneous displacement"
+	);
+	for ( let now = 1344; now <= 2000; now += 16 ) {
+		movement.step( now );
+		state = movement.state();
+		assert.ok( state.pose );
+		publish( presentation, state );
+		const shown = presentation.pose( 7, state.pose, now / 1000 );
+		assert.ok(
+			shown.x >= previous.x && shown.x - previous.x < 35,
+			"mounted recovery remains a controlled trajectory"
+		);
+		assert.ok( state.movementPath );
+		assert.ok( shown.x <= state.movementPath.to.x, "mounted recovery stays on the certified path" );
+		previous = shown;
+	}
+	assert.ok( state.pose );
+	assert.ok( Math.abs( previous.x - state.pose.x ) < 3 );
+	movement.clear();
+});
+
 for ( const stalledOwner of [ "main", "worker" ] ) {
 	test(`accepted walking history recovers after a ${stalledOwner} stall without a new receipt`, () => {
 		const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();

@@ -12,6 +12,7 @@ chain with a straight endpoint chord.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
 const { createPosePresentation } = await import( "../../src/engine/runtime/characters/pose-presentation.ts" );
 
 /*
@@ -43,19 +44,19 @@ function onSegment( value, from, to ) {
 	const length2 = span.reduce( ( sum, component ) => sum + component ** 2, 0 );
 	const fraction = Math.max(
 		0,
-		Math.min( 1, point.reduce( ( sum, component, i ) => sum + component * span[i], 0 ) / length2 )
+		Math.min( 1, point.reduce( ( sum, component, i ) => sum + component * defined( span[i] ), 0 ) / length2 )
 	);
-	return Math.hypot( ...point.map( ( component, i ) => component - span[i] * fraction ) ) < 1e-7;
+	return Math.hypot( ...point.map( ( component, i ) => component - defined( span[i] ) * fraction ) ) < 1e-7;
 }
 
 for (
-	const [name, path] of [
-		[ "hill", [ pose( 100, 0 ), pose( 105, 10 ), pose( 110, 0 ) ] ],
-		[ "obstacle corner", [ pose( 100, 0 ), pose( 110, 0 ), pose( 110, 0, 110 ) ] ]
+	const { name, path } of [
+		{ name: "hill", path: [ pose( 100, 0 ), pose( 105, 10 ), pose( 110, 0 ) ] },
+		{ name: "obstacle corner", path: [ pose( 100, 0 ), pose( 110, 0 ), pose( 110, 0, 110 ) ] }
 	]
 ) {
 	test(`delayed ${name} recovery retains the displayed pose and follows accepted sample edges`, () => {
-		const presentation = createPosePresentation(), start = path[0], end = path.at( -1 );
+		const presentation = createPosePresentation(), start = defined( path[0] ), end = defined( path.at( -1 ) );
 		presentation.origin( 0 );
 		publish( presentation, { atMs: 0, revision: 1, moving: false } );
 		assert.deepEqual( presentation.pose( 7, start, 0 ), start );
@@ -74,7 +75,10 @@ for (
 		let shown = start, reachedInterior = false;
 		for ( let frame = 1; frame <= 120; frame++ ) {
 			shown = presentation.pose( 7, end, 1 + frame / 120 );
-			assert.ok( path.slice( 1 ).some( ( to, i ) => onSegment( shown, path[i], to ) ), JSON.stringify( shown ) );
+			assert.ok(
+				path.slice( 1 ).some( ( to, i ) => onSegment( shown, defined( path[i] ), to ) ),
+				JSON.stringify( shown )
+			);
 			reachedInterior ||= name === "hill" ? shown.y > 5 : shown.x >= 110 && shown.z > 100;
 		}
 		assert.ok( reachedInterior, "recovery traverses the hill or corner instead of its endpoint chord" );

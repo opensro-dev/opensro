@@ -83,3 +83,28 @@ test("history stays bounded and excludes actor metadata", () => {
 	assert.deepEqual( Object.keys( defined( points[0] ) ), [ "regionId", "x", "y", "z", "angle" ] );
 	assert.equal( defined( points.at( -1 ) ).x, 400 );
 });
+
+test("query work fits the history capacity and cannot overflow it", () => {
+	let queries = 0;
+	const full = extendWalkingHistory( {
+		from: START,
+		to: { ...START, x: 510 },
+		clip( _from, to ) {
+			queries++;
+			return to;
+		}
+	} );
+	assert.equal( queries, 255 );
+	assert.equal( full.length, 256 );
+	const outside = { ...START, x: 512 };
+	assert.deepEqual(
+		extendWalkingHistory( {
+			from: START,
+			to: outside,
+			clip() {
+				assert.fail( "an unrepresentable path must not start unbounded work" );
+			}
+		} ),
+		[ outside ]
+	);
+});

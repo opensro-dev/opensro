@@ -14,7 +14,6 @@ import type { NavOwner } from "@/engine/foundation/navigation/dungeon-ownership"
 import { interpolateMovement, poseDistance, REGION_SIZE } from "./native-movement";
 
 const MAX_HISTORY_POINTS = 256;
-const MAX_QUERY_SAMPLES = 64;
 const SAMPLE_DISTANCE = 2;
 const ENDPOINT_EPSILON = .01;
 const NAVIGATION_STOP = 1;
@@ -131,7 +130,10 @@ export function extendWalkingHistory( input: WalkingHistoryInput ): readonly Pos
 	const { from, to } = input;
 	const distance = planarDistance( from, to );
 	const count = Math.max( 1, Math.ceil( distance / SAMPLE_DISTANCE ) );
-	if ( !sameSpace( from, to ) || count > MAX_QUERY_SAMPLES ) {
+	// The history needs one initial point and one point per sampled edge.
+	// Its representation budget also bounds queries; a second smaller cap
+	// would discard ordinary 150-unit mounted steps despite fitting in it.
+	if ( !sameSpace( from, to ) || count >= MAX_HISTORY_POINTS ) {
 		return [ historyPose( to ) ];
 	}
 	const last = input.points?.at( -1 );
