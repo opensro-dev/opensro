@@ -42,7 +42,6 @@ const actor = ( gid, n ) => ({
 
 test("retained snapshots update and clear pick ownership and optional layer rates", () => {
 	const owner = createActorSnapshots();
-	/** @type {import("../../src/engine/contracts/character.ts").CharacterActor} */
 	const first = {
 		...actor( 1, 0 ),
 		pickOwner: 42,
