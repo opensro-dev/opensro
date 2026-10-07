@@ -94,8 +94,9 @@ export function createAssets(): AssetOwner {
 
 	Enforce one deadline for both active loads and cancellation acknowledgements.
 	A stalled network read never reaches it: the loader abandons a download
-	after its no-progress window and retries (46.25 s at most), then answers
-	with a transient error. What remains for this watchdog is a worker that
+	after its no-progress window and retries (about 91 s for headers that
+	arrive late and a body that then stalls), then answers with a transient
+	error. What remains for this watchdog is a worker that
 	stopped answering, and a request whose bytes keep arriving for more than
 	the whole deadline, which the worker cannot tell apart from a hung decode.
 	================

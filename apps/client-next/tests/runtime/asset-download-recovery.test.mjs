@@ -628,3 +628,31 @@ test(
 		assert.ok( !messages.some( row => row.kind === "error" ) );
 	}
 );
+
+test("headers just inside the window restart it: the stalled body is abandoned a full window later", async t => {
+	let attempts = 0, answer;
+	const { messages } = fixture( t, ( url, options ) => {
+		if ( ++attempts > 1 ) return Promise.resolve( new Response( Uint8Array.of( 4, 5, 6 ) ) );
+		return new Promise( ( resolve, reject ) => {
+			answer = () => resolve( stallingBody( [] ) );
+			options.signal.addEventListener( "abort", () => reject( options.signal.reason ), { once: true } );
+		} );
+	} );
+	await settle();
+	t.mock.timers.tick( NO_PROGRESS_MS - 100 );
+	answer();
+	await settle();
+	// 15 s after the start, but only 100 ms after the headers: still waiting.
+	t.mock.timers.tick( 100 );
+	await settle();
+	t.mock.timers.tick( 250 );
+	await settle();
+	assert.equal( attempts, 1, "the headers restarted the window" );
+	// A full window after the headers, the stalled body is abandoned.
+	t.mock.timers.tick( NO_PROGRESS_MS - 350 );
+	await settle();
+	t.mock.timers.tick( 250 );
+	await settle();
+	assert.equal( attempts, 2 );
+	assert.deepEqual( [ ...new Uint8Array( messages[0].buffer ) ], [ 4, 5, 6 ] );
+});
