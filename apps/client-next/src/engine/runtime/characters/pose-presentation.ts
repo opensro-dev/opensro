@@ -27,6 +27,8 @@ which snaps; logical poses stay authoritative.
 ===========================================================================
 */
 import type { Pose, MovementTransition } from "@/engine/contracts/gameplay";
+import type { SampleInput } from "@/engine/contracts/pose-presentation";
+export type { SampleInput } from "@/engine/contracts/pose-presentation";
 import { SIMULATION_STEP_MS } from "@/engine/contracts/simulation";
 import { REGION_SIZE, interpolateMovement, poseDistance } from "@/engine/foundation/gameplay/native-movement";
 import { hypot2, hypot3 } from "@/engine/foundation/math/hypot";
@@ -102,33 +104,6 @@ interface SampleTrack {
 	relocation: number;
 	last: number;
 	angle: number;
-}
-
-/*
-================
-SampleInput
-
-What characters publishes each frame for a character with timed samples:
-the simulation time of its latest pose, the movement revision it belongs to,
-whether it is walking, and the end of the leg being walked.
-
-The movement owner bumps the revision whenever it re-anchors a walk (a new
-click, a receipt, a correction, a native move). Two samples define a
-velocity only within one revision: across a re-anchor their difference is
-a jump, not motion, and extrapolating it turned a 19-unit receipt
-correction 8 ms after the previous sample into -2,275 units/s.
-================
-*/
-export interface SampleInput {
-	readonly atMs: number;
-	readonly revision: number;
-	readonly moving: boolean;
-	readonly from?: Pose;
-	readonly to?: Pose;
-	readonly durationMs?: number;
-	readonly startedAtMs?: number;
-	readonly displacement?: boolean;
-	readonly transition?: import("@/engine/contracts/gameplay").MovementTransition;
 }
 
 /*
