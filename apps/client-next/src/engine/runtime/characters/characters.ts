@@ -500,6 +500,39 @@ export function createCharacterPresentation(
 	wornEquipment
 	================
 	*/
+	/*
+	================
+	wornSignature
+
+	The slot, item and plus of every worn visual slot (0..8), as the appearance
+	signature compares them. Built every frame, because an in-place edit of
+	the list must still change the signature, but with one string and no
+	intermediate arrays.
+	================
+	*/
+	function wornSignature( equipment: readonly { slot: number; refObjId: number; plus: number; }[] ) {
+		let text = "";
+		for ( const item of equipment ) {
+			if ( item.slot < 0 || item.slot >= 9 ) continue;
+			if ( text ) text += ";";
+			text += item.slot + "," + item.refObjId + "," + item.plus;
+		}
+		return text;
+	}
+	/*
+	================
+	avatarSignature
+
+	The avatar item ids, built like wornSignature.
+	================
+	*/
+	function avatarSignature( avatars: readonly { refObjId: number; }[] ) {
+		let text = "";
+		for ( let index = 0; index < avatars.length; index++ ) {
+			text += (index ? ";" : "") + avatars[index]!.refObjId;
+		}
+		return text;
+	}
 	function wornEquipment(
 		entity: EntityState,
 		gameplay: GameplayState | null
@@ -2283,6 +2316,9 @@ export function createCharacterPresentation(
 			for ( const gid of appearances.keys() ) if ( !appearanceActive.has( gid ) ) appearances.delete( gid );
 			const animationHolders: { actor: CharacterActor; sets: readonly AnimationParticleSet[]; }[] = [];
 			const particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[] = [];
+			// Fortress clothing compares every player with the local one; find it
+			// once per frame, not once per actor (a linear scan each, so O(n^2).
+			const localEntity = entities.find( e => e.gid === gameplay?.localGid );
 			for ( const entity of selected ) {
 				active.add( entity.gid );
 				try {
@@ -2442,7 +2478,7 @@ export function createCharacterPresentation(
 								resource.codename.startsWith( "CHAR_CH_" );
 							const freezeWear = defaultWearFrozen( dress.defaultWearLanguage ?? 4, nativeServerName );
 							const player = entity.kind === "player" || entity.kind === "local-player",
-								local = entities.find( e => e.gid === gameplay?.localGid );
+								local = localEntity;
 							const fortressIndex = player && local ?
 								fortressAppearance(
 									states.get( entity.gid )?.fortressIndex ?? -1,
@@ -2463,9 +2499,7 @@ export function createCharacterPresentation(
 								Number( entity.mountedOn !== undefined ) + ":" + Number( hwanHair ) + ":" +
 								Number( weaponHidden ) + ":" +
 								Number( !!idleStates.get( entity.gid )?.attachmentsHidden ) + ":" +
-								equipment.filter( item => item.slot >= 0 && item.slot < 9 ).map( item =>
-									item.slot + "," + item.refObjId + "," + item.plus
-								).join( ";" ) + "|" + avatars.map( item => item.refObjId ).join( ";" );
+								wornSignature( equipment ) + "|" + avatarSignature( avatars );
 							let appearance = appearances.get( entity.gid );
 							if (
 								!appearance || appearance.resource !== resource || appearance.dress !== dress ||
