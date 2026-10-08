@@ -24,29 +24,17 @@ pass.
 */
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-	compressBrotliSync,
-	compressGzipSync,
-	compressZstdSync,
-	PRECOMPRESSED_ASSET_SUFFIXES
-} from "./shared/compressionUtils.mjs";
+import { compressGzipSync, PUBLISHED_SIDECAR_SUFFIXES } from "./shared/compressionUtils.mjs";
 import { publicRoot } from "./world/paths.mjs";
 
-// Shared compression helpers keep these byte-comparable with the bulk optimizer.
+// Shared compression helpers keep these byte-comparable with the bulk optimizer;
+// only the published sidecars are written (PUBLISHED_SIDECAR_SUFFIXES).
 const ENCODINGS = [
 	{
-		suffix: PRECOMPRESSED_ASSET_SUFFIXES[0],
-		compress: ( bytes, options ) => compressBrotliSync( bytes, { quality: options.brotliQuality } )
-	},
-	{
-		suffix: PRECOMPRESSED_ASSET_SUFFIXES[1],
+		suffix: ".gz",
 		compress: ( bytes, options ) => compressGzipSync( bytes, { level: options.gzipLevel } )
-	},
-	{
-		suffix: PRECOMPRESSED_ASSET_SUFFIXES[2],
-		compress: ( bytes, options ) => compressZstdSync( bytes, { level: options.zstdLevel } )
 	}
-];
+].filter( ( { suffix } ) => PUBLISHED_SIDECAR_SUFFIXES.includes( suffix ) );
 
 // The loose manifests every publication regenerates, relative to the public root.
 const GENERATED_MANIFESTS = [

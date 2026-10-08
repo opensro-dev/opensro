@@ -441,11 +441,9 @@ export async function buildLocomotionBanAssets() {
 	const manifestPath = path.join( animPublicRoot, "manifest.json" );
 	writeJsonIfChangedSync( manifestPath, manifest );
 
-	// The dev/preview middleware serves <asset>.br to every browser without
-	// comparing mtimes, so leaving the sidecars behind here does not just skip an
-	// optimisation - it keeps serving the PREVIOUS manifest to every real client
-	// while the fresh bytes sit on disk. That is exactly how the motion-0x26 pick
-	// entries stayed invisible to the browser for sixteen days.
+	// The packs hold the manifest's .json.gz, so a sidecar left behind here would
+	// pack the PREVIOUS manifest while the fresh bytes sit on disk. That is how
+	// the motion-0x26 pick entries once stayed invisible for sixteen days.
 	await refreshPrecompressedSidecars( [ manifestPath ] );
 
 	console.log(

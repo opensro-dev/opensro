@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { brotliDecompressSync, gunzipSync } from "node:zlib";
+import { gunzipSync } from "node:zlib";
 import { verifyOutdoorPayloadContracts } from "../helpers/outdoorRegionPayloadCheck.mjs";
 import { dataExtractedRoot } from "../../build/world/paths.mjs";
 import {
@@ -79,13 +79,12 @@ test("routing publication keeps loose, Brotli, and gzip schema generations ident
 			updateCatalog: false,
 			jobs: 1
 		} );
-		const [loose, brotli, gzip] = await Promise.all( [
+		const [loose, gzip] = await Promise.all( [
 			readFile( indexPath ),
-			readFile( `${indexPath}.br` ).then( brotliDecompressSync ),
 			readFile( `${indexPath}.gz` ).then( gunzipSync )
 		] );
 
-		assert.deepEqual( brotli, loose );
+		// The packed .json.gz is the only published sidecar (PUBLISHED_SIDECAR_SUFFIXES).
 		assert.deepEqual( gzip, loose );
 		assert.equal( JSON.parse( gzip.toString( "utf8" ) ).version, 2 );
 		assert.equal( JSON.parse( gzip.toString( "utf8" ) ).bundleLayout, "one-region-per-bundle" );

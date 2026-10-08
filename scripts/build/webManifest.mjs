@@ -39,8 +39,8 @@ export const publicAssetRoot = publicRoot;
 
 // The one definition of "the web asset manifest registers this file". Two files in the
 // tree are deliberately not entries: the manifest itself (it cannot carry its own hash)
-// and precompressed .br/.gz/.zst sidecars (derived bytes that vite serves by content
-// negotiation in place of the asset sitting beside them). Exported so the membership
+// and precompressed sidecars (derived bytes: the .json.gz the packs hold, and older
+// .br/.zst copies the full build retires). Exported so the membership
 // guard in scripts/test/assets/generatedAssetMembership.test.mjs tests the tree against this
 // rule rather than a second copy of it that can drift.
 export function isRegisterableAssetFile( filePath ) {

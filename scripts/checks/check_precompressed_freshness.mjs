@@ -1,12 +1,10 @@
 // Fail when a precompressed sidecar is OLDER than the asset it shadows.
 //
-// WHY THIS IS A GATE AND NOT A LINT. client-next's asset middleware
-// (apps/client-next/tools/published-assets.mjs) answers a request for /assets/<x> with
-// <x>.br whenever the client accepts brotli, and it does NOT compare mtimes.
-// Every browser accepts brotli; curl, Node's fetch-with-identity and every
-// `fs.readFile` in our own tests do not. So a stale sidecar serves OLD CONTENT
-// to real users while every tool we would reach for to check it reports the new
-// content. The failure is invisible from the inside.
+// WHY THIS IS A GATE AND NOT A LINT. The packs hold the .json.gz sidecar of a
+// JSON asset, not the JSON itself, and nothing compares their mtimes on the
+// way in. So a stale sidecar ships OLD CONTENT to real users while every tool
+// we would reach for to check the loose file reports the new content. The
+// failure is invisible from the inside.
 //
 // It has already cost a wave: assets/anim/manifest.json gained its motion-0x26
 // pickup clip entries on 2026-07-24 and its sidecars were left at 2026-07-08,
@@ -23,7 +21,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { refreshPrecompressedSidecars } from "../build/generatedManifestSidecars.mjs";
-import { PRECOMPRESSED_ASSET_SUFFIXES } from "../build/jsonAssetCompression.mjs";
+// Only the published sidecars ship; older .br/.zst copies are retired by the build.
+import { PUBLISHED_SIDECAR_SUFFIXES } from "../build/shared/compressionUtils.mjs";
 import { listFilesUnder, statFilesByPath } from "../build/webManifest.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
@@ -44,7 +43,7 @@ export function evaluatePrecompressedFreshness( filePaths, statsByPath, sidecarO
 	let scanned = 0;
 
 	for ( const filePath of filePaths ) {
-		const suffix = PRECOMPRESSED_ASSET_SUFFIXES.find( ( candidate ) => filePath.endsWith( candidate ) );
+		const suffix = PUBLISHED_SIDECAR_SUFFIXES.find( ( candidate ) => filePath.endsWith( candidate ) );
 		if ( !suffix ) continue;
 		scanned += 1;
 
@@ -84,7 +83,7 @@ export function evaluatePrecompressedFreshness( filePaths, statsByPath, sidecarO
 export function precompressedStatTargets( filePaths ) {
 	const targets = new Set();
 	for ( const filePath of filePaths ) {
-		const suffix = PRECOMPRESSED_ASSET_SUFFIXES.find( ( candidate ) => filePath.endsWith( candidate ) );
+		const suffix = PUBLISHED_SIDECAR_SUFFIXES.find( ( candidate ) => filePath.endsWith( candidate ) );
 		if ( !suffix ) continue;
 		targets.add( filePath );
 		targets.add( filePath.slice( 0, -suffix.length ) );

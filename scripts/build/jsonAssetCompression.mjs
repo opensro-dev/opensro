@@ -41,7 +41,8 @@ export { PRECOMPRESSED_ASSET_SUFFIXES } from "./shared/compressionUtils.mjs";
  * @typedef {{ encoding: string, filePath: string, sidecarPath: string, fileRecord: JsonCompressionFileRecord }} JsonCompressionJob
  */
 
-const DEFAULT_ENCODINGS = [ "br", "gzip", "zstd" ];
+// Only the .json.gz the packs hold has a reader (PUBLISHED_SIDECAR_SUFFIXES).
+const DEFAULT_ENCODINGS = [ "gzip" ];
 const DEFAULT_COMPRESS_MIN_BYTES = 1024;
 
 const ENCODING_DESCRIPTORS = {

@@ -16,26 +16,11 @@ may be retired.
 ===========================================================================
 */
 
+import { containedPublicFile } from "./shared/assetPaths.mjs";
 import path from "node:path";
 
-const INDEX_SIDECARS = [ "", ".br", ".gz", ".zst" ];
-
-/*
-================
-resolvePublicAssetFile
-
-Maps a public asset path to its file under publicRoot, refusing any path
-that would escape it.
-================
-*/
-function resolvePublicAssetFile( publicRoot, publicPath ) {
-	const absolute = path.resolve( publicRoot, publicPath.replace( /^\/+/, "" ) );
-	const relative = path.relative( publicRoot, absolute );
-	if ( relative.startsWith( ".." ) || path.isAbsolute( relative ) ) {
-		throw new Error( `asset path escapes ${publicRoot}: ${publicPath}` );
-	}
-	return absolute;
-}
+// The index and its published sidecar (PUBLISHED_SIDECAR_SUFFIXES).
+const INDEX_SIDECARS = [ "", ".gz" ];
 
 /*
 ================
@@ -57,14 +42,14 @@ export function livePackFiles( publicRoot, indexPath, index ) {
 	}
 	for ( const entry of index.assets ?? [] ) {
 		if ( entry.transport ) {
-			add( resolvePublicAssetFile( publicRoot, entry.transport.path ) );
+			add( containedPublicFile( publicRoot, entry.transport.path ) );
 		}
 	}
 	for ( const group of index.groups ?? [] ) {
 		for ( const pack of group.packs ?? [] ) {
-			add( resolvePublicAssetFile( publicRoot, pack.path ) );
+			add( containedPublicFile( publicRoot, pack.path ) );
 			if ( pack.zstdPath ) {
-				add( resolvePublicAssetFile( publicRoot, pack.zstdPath ) );
+				add( containedPublicFile( publicRoot, pack.zstdPath ) );
 			}
 		}
 	}

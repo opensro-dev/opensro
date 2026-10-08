@@ -22,7 +22,7 @@ import path from "node:path";
 
 import { archiveGeneratedArtifact } from "./artifacts/generatedArtifactArchive.mjs";
 import { listFiles } from "./shared/fsUtils.mjs";
-import { PRECOMPRESSED_ASSET_SUFFIXES } from "./shared/compressionUtils.mjs";
+import { PRECOMPRESSED_ASSET_SUFFIXES, PUBLISHED_SIDECAR_SUFFIXES } from "./shared/compressionUtils.mjs";
 
 /*
 ================
@@ -55,7 +55,8 @@ export async function retireUnownedSidecars( { publicRoot, apply = false } ) {
 		if ( file.startsWith( packsRoot ) ) continue;
 		const base = sidecarBase( file );
 		if ( !base ) continue;
-		if ( base.toLowerCase().endsWith( ".json" ) && existsSync( base ) ) continue;
+		const published = PUBLISHED_SIDECAR_SUFFIXES.some( ( suffix ) => file.endsWith( suffix ) );
+		if ( published && base.toLowerCase().endsWith( ".json" ) && existsSync( base ) ) continue;
 		retired.push( { file, bytes: (await stat( file )).size } );
 	}
 	if ( apply ) {
