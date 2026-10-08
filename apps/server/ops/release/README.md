@@ -130,6 +130,14 @@ neither can be published alone. After approval:
    restores the retained client and redeploys the retained server without a
    notice.
 
+A new protocol is any change the live counterpart cannot decode, including
+new bytes in an existing packet: a field added, a length changed, a layout
+version raised. Those need a protocol bump and a coordinated release. A new
+opcode or a new JSON key is not one; the browser client ignores both. Before
+publishing one component alone, diff the other component's decoders between
+its live commit and the candidate, and pair every changed decoder with the
+encoder that forced it.
+
 Open tabs of the old client are refused with HTTP 426 and told to reload. A
 pair is admitted only when the old server can read what the new one writes, so
 a revert never needs a database restore. A store upgrade therefore ships as a

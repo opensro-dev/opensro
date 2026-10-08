@@ -448,12 +448,15 @@ at the commit being released:
 1. Fetch the live manifest:
    `curl -o live-manifest.json https://<origin>/assets/packs/manifest.json`.
 2. Build against it:
-   `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
+   `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`. On a tree
+   that was compacted, build `full` and run
+   `pnpm task build server-game-data`: compact removed loose files that a
+   plain build does not restore.
 3. Run `pnpm assets ledger`. It must report no unclaimed asset and no
    missing owner; the packager refuses otherwise. If the build summary says
    it archived files, check they are leftovers (see the audit section).
-   `pnpm assets compact` runs after this, never before: it drops loose files
-   on purpose.
+   `pnpm assets compact` runs only after step 5 (staging), never before
+   packaging: it drops the loose files the packager's client check reads.
 4. Package: `node apps/client-next/tools/beta/build.mjs` (from
    `apps/client-next`). It writes
    `temp/artifacts/beta/<stamp>/package/` and verifies every pack and
