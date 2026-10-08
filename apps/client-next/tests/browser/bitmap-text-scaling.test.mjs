@@ -278,6 +278,17 @@ test(
 			await page.evaluate( async () => {
 				const path = "/src/engine/runtime/platform/platform.ts";
 				const { createPlatform } = await import( path );
+				// CDP changes density without delivering MediaQueryList change events.
+				// Retain the real query objects so the fixture can deliver that event;
+				// matching, platform code, DOM layout and pointer input stay real.
+				/** @type {MediaQueryList[]} */
+				const densityQueries = [];
+				const match = window.matchMedia.bind( window );
+				window.matchMedia = query => {
+					const media = match( query );
+					if ( query.startsWith( "(resolution:" ) ) densityQueries.push( media );
+					return media;
+				};
 				/** @type {any[]} */
 				const events = [], hits = [];
 				const canvas = document.querySelector( "canvas" );
@@ -310,9 +321,40 @@ test(
 					} ]
 				};
 				platform.presentUi( semantics );
-				/** @type {any} */ (globalThis).scalingFixture = { platform, canvas, semantics, events, hits };
+				/** @type {any} */ (globalThis).scalingFixture = {
+					platform,
+					canvas,
+					semantics,
+					events,
+					hits,
+					densityQueries
+				};
 			} );
 			const session = await page.context().newCDPSession( page );
+			/*
+			================
+			notifyDensity
+
+			Deliver only the density notification omitted by CDP. The new query
+			must match the actual browser density after the production rearm.
+			================
+			*/
+			async function notifyDensity() {
+				const rearmed = await page.evaluate( () => {
+					const queries = /** @type {any} */ (globalThis).scalingFixture.densityQueries;
+					const query = queries.at( -1 );
+					if ( !query.matches ) {
+						query.dispatchEvent(
+							new MediaQueryListEvent( "change", {
+								matches: false,
+								media: query.media
+							} )
+						);
+					}
+					return queries.at( -1 ).matches;
+				} );
+				assert.equal( rearmed, true, "Density watcher must rearm at the new density" );
+			}
 			for (
 				const [ratio, factor] of [
 					[ 1, 1 ],
@@ -336,6 +378,7 @@ test(
 					deviceScaleFactor: ratio,
 					mobile: false
 				} );
+				await notifyDensity();
 				await page.waitForFunction( ( { ratio, factor } ) => {
 					const button = document.querySelector( '[data-ui-id="scaling-button"]' );
 					return button && Math.abs( button.getBoundingClientRect().width * ratio - 120 * factor ) < .1;
@@ -407,6 +450,7 @@ test(
 					deviceScaleFactor: ratio,
 					mobile: false
 				} );
+				await notifyDensity();
 				await page.waitForFunction( ratio => {
 					const f = /** @type {any} */ (globalThis).scalingFixture;
 					const button = document.querySelector( '[data-ui-id="scaling-button"]' );
@@ -445,6 +489,7 @@ test(
 				deviceScaleFactor: 2,
 				mobile: false
 			} );
+			await notifyDensity();
 			await page.evaluate( async () => {
 				const path = "/src/engine/foundation/rendering/video-options.ts";
 				const { defaultVideoOptions } = await import( path );
