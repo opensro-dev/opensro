@@ -68,13 +68,16 @@ test( "gzip-stored pack members survive cold decode, warm worker replacement and
 		} );
 		requests.length = 0;
 		// Real decode fixtures supplement the generated/randomized format tests.
+		// Equipment models are content-named, so take the first stored one.
+		const equipment = index.assets.find( e => e.stored && e.path.startsWith( "/assets/char/equipment/" ) );
+		assert.ok( equipment, "the build must publish a gzip-stored equipment model" );
 		const paths = [
 			"/assets/char/china/chinaman_monk.glb",
-			"/assets/char/dress/ch_m_clothes_01.glb",
+			equipment.path,
 			"/assets/npc/mob/china/mangnyang.glb"
 		];
 		const entries = paths.map( path => index.assets.find( e => e.path === path ) );
-		assert.ok( entries.every( Boolean ) );
+		assert.ok( entries.every( Boolean ), "a decode fixture is no longer published" );
 		const sample = index.assets.filter( e => e.stored ).filter( ( _, i ) => i % 137 === 0 ).slice( 0, 32 ).map(
 			e => ({ path: e.path, sha256: e.sha256, length: e.length })
 		);
@@ -102,7 +105,8 @@ test( "gzip-stored pack members survive cold decode, warm worker replacement and
 							clips: row.model.clips.length,
 							images: row.images.length
 						} );
-						for ( const image of row.images ) image.close();
+						// Native (block-compressed) textures own no bitmap; close bitmaps only.
+						for ( const image of row.images ) if ( !("kind" in image) ) image.close();
 					}
 					const cache = await caches.open( "sro-next-verified-v1" ), deadline = performance.now() + 10000;
 					for ( const entry of entries ) {
@@ -159,7 +163,10 @@ test( "gzip-stored pack members survive cold decode, warm worker replacement and
 		assert.ok( result.stats.storedBytes < result.stats.decodedBytes );
 		assert.ok( requests.every( r => r.status === 200 || r.status === 206 || r.status === 304 ) );
 		// Packs are read by range, so the server must never encode them.
-		assert.ok( requests.filter( r => r.path.includes( "/assets/packs/" ) ).every( r => !r.encoding ) );
+		// Packs stay raw on the wire so ranges address stored bytes; only the
+		// manifest (a JSON sidecar) may be served gzip-encoded.
+		const packReads = requests.filter( r => /^\/assets\/packs\/.+\.bin$/.test( r.path ) );
+		assert.ok( packReads.length > 0 && packReads.every( r => !r.encoding ) );
 		await mkdir( "temp/artifacts/asset-delivery", { recursive: true } );
 		await writeFile(
 			"temp/artifacts/asset-delivery/browser.json",

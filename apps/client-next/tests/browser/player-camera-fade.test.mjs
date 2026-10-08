@@ -21,13 +21,20 @@ test( "WebGPU player camera fade restores pixels and preserves a peer", { timeou
 		const result = await page.evaluate( async () => {
 			const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 			const { createModelDecoder } = await import( "/src/engine/runtime/assets/worker/model/model.ts" );
-			const decoder = createModelDecoder(),
-				documentModel = decoder.decode(
-					new Uint8Array( await (await fetch( "/assets/char/dress/ch_m_heavy_01.glb" )).arrayBuffer() )
-				);
-			const opaqueMaterial = decoder.character( documentModel ).primitives.find( p =>
-				p.geometry.material.fadeAlphaOnly
-			).geometry.material;
+			// Equipment models are content-named: take the first published one that
+			// authors an opaque, fade-only material without environment reflection
+			// (this scene owns no environment texture).
+			const decoder = createModelDecoder();
+			const index = await (await fetch( "/assets/packs/manifest.json" )).json();
+			let opaqueMaterial;
+			for ( const { path } of index.assets.filter( e => e.path.startsWith( "/assets/char/equipment/" ) ) ) {
+				const bytes = new Uint8Array( await (await fetch( path )).arrayBuffer() );
+				opaqueMaterial = decoder.character( decoder.decode( bytes ) ).primitives.find( p =>
+					p.geometry.material.fadeAlphaOnly && !p.geometry.material.environmentReflection
+				)?.geometry.material;
+				if ( opaqueMaterial ) break;
+			}
+			if ( !opaqueMaterial ) throw Error( "no published equipment model authors a fade-only material" );
 			const { advanceCharacterFade } = await import( "/src/engine/foundation/animation/character-fade.ts" );
 			const canvas = document.createElement( "canvas" );
 			document.body.append( canvas );

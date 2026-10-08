@@ -44,7 +44,6 @@ export const publicAssetRoot = publicRoot;
 // guard in scripts/test/assets/generatedAssetMembership.test.mjs tests the tree against this
 // rule rather than a second copy of it that can drift.
 export function isRegisterableAssetFile( filePath ) {
-	if ( /[\\/]assets[\\/]packs[\\/]transport[\\/][a-f0-9]{64}\.gz$/.test( filePath ) ) return true;
 	if ( path.resolve( filePath ) === path.resolve( webManifestPath ) ) {
 		return false;
 	}
