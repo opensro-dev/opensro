@@ -241,6 +241,10 @@ test( "repair hammer consumes pickup, modifier clicks and right-button equipment
 			inventoryFixture.ui.event( { kind: "activate", id: "open-window:Inventory" } );
 			inventoryFixture.draw();
 		} );
+		await page.waitForFunction( () => {
+			inventoryFixture.draw();
+			return inventoryFixture.semantics?.controls.some( control => control.id === "slot:13" );
+		} );
 		for ( const slot of [ 6, 14 ] ) {
 			await page.evaluate( () => inventoryFixture.commands.length = 0 );
 			await page.locator( '[data-ui-id="slot:13"]' ).click( { button: "right" } );
