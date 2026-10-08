@@ -1268,9 +1268,9 @@ export function createUi(
 		if ( shopDialog || shopWarning ) closeShopDialog();
 		guildDialog = "";
 		practice = null;
-		questDetails = false;
+		// 69CDF0 owns QuestInfo independently. 589660 hides main-popup pages,
+		// including Quests, without closing that details window or its prompt.
 		confirmDrop = "";
-		confirmAbandon = false;
 		confirmSocial = "";
 		unionHud.reset();
 		guildWarHud.reset();
@@ -1287,7 +1287,12 @@ export function createUi(
 		if ( panel === "Magic Pop" ) sendGameplay( { kind: "gacha-close" } );
 		if ( panel === GRANT_PANEL ) sendGameplay( { kind: "magic-option-close" } );
 		if ( panel && !next ) sound( "close" );
-		if ( !next ) admittedWindows.clear();
+		if ( !next ) {
+			for ( const owner of admittedWindows.keys() ) {
+				if ( questDetails && (owner === "quest-details" || owner === "quest-abandon") ) continue;
+				admittedWindows.delete( owner );
+			}
+		}
 		const wasOpen = !!panel;
 		panel = next;
 		if ( isMainPopupPage( next ) ) rememberedMainPopup = next;
@@ -1421,6 +1426,7 @@ export function createUi(
 		admittedWindows.clear();
 		practice = null;
 		questDetails = false;
+		confirmAbandon = false;
 		skillTab = 0;
 		selectedMastery = 0;
 		skillScroll = 0;
@@ -10916,6 +10922,75 @@ export function createUi(
 					controls.push( ...scroll.controls );
 					endWindow( admission );
 				}
+				if ( questDetails && hudData ) {
+					const q = game?.quests?.find( q => q.refId === selectedQuest ),
+						page = hudData.windows.ifquestreward!,
+						px = questPosition[0],
+						py = questPosition[1],
+						admission = beginWindow();
+					blocks.push( [ px, py, 376, 384 ] );
+					controls.push( {
+						id: "quest-detail-drag",
+						label: "Move quest details",
+						kind: "button",
+						draggable: true,
+						rect: [ px, py, 376, 384 ]
+					} );
+					for ( const node of authoredPaintOrder( page ) ) {
+						if ( node.type !== "CIFButton" && node.type !== "CIFCloseButton" ) {
+							authoredChrome( node, px, py );
+						}
+					}
+					const meta = guideResources.data()?.questPresentation.records[selectedQuest];
+					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
+					if ( q ) {
+						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
+						const result = text.guide(
+							guideTokens( meta?.rewardBody ?? "" ),
+							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
+							r,
+							gold,
+							resources.size
+						);
+						questDetailMax = Math.max( 0, result.height - r[3] );
+						questDetailScroll = Math.min( questDetailScroll, questDetailMax );
+						quads.push( ...result.quads );
+						paths.push( ...result.paths );
+					}
+					const give = page.GDR_QUESTREWARD_GIVEUP!,
+						caption = hudCopy( q?.u10 === 2 ? "UIIT_STT_QUEST_REWARD" : "UIIT_STT_QUEST_GIVEUP" );
+					authoredLabeledButton( give, px, py, q?.u10 === 2 ? "quest-reward" : "quest-abandon", caption );
+					const close = page.GDR_QUESTREWARD_CLOSE!;
+					closeButton( px + close.rect[0], py + close.rect[1], "quest-details-close" );
+					const track = authoredRect( page.GDR_QUESTREWARD_SCROLL!, px, py );
+					for (
+						const [id, skin, yy] of [ [ "quest-detail-up", "up", track[1] - 16 ], [
+							"quest-detail-down",
+							"down",
+							track[1] + 222
+						], [
+							"quest-detail-thumb",
+							"button",
+							track[1] + Math.trunc( questDetailMax ? questDetailScroll * 206 / questDetailMax : 0 )
+						] ] as const
+					) {
+						const path = ROOT + "interface/guide/gd_scroll_" + skin + ".png",
+							r: UiRect = [ track[0], yy, 16, 16 ];
+						image( r, path );
+						controls.push( {
+							id,
+							label: id === "quest-detail-thumb" ?
+								"Scroll quest details" :
+								skin === "up" ?
+								"Scroll up" :
+								"Scroll down",
+							rect: r,
+							kind: "button",
+							draggable: skin === "button"
+						} );
+					}
+					endWindow( admission, "quest-details" );
+				}
 				if ( practice && panel === "Skills" && hudData ) {
 					const mastery = practice.mode === PRACTICE_MASTERY,
 						row = mastery ? undefined : training.skill( practice.id ),
@@ -11051,76 +11126,7 @@ export function createUi(
 					) authoredLabeledButton( node, px, py, id, hudCopy( node.text ) );
 					endWindow( admission, "skill-confirm" );
 				}
-				if ( questDetails && panel === "Quests" && hudData ) {
-					const q = game?.quests?.find( q => q.refId === selectedQuest ),
-						page = hudData.windows.ifquestreward!,
-						px = questPosition[0],
-						py = questPosition[1],
-						admission = beginWindow();
-					blocks.push( [ px, py, 376, 384 ] );
-					controls.push( {
-						id: "quest-detail-drag",
-						label: "Move quest details",
-						kind: "button",
-						draggable: true,
-						rect: [ px, py, 376, 384 ]
-					} );
-					for ( const node of authoredPaintOrder( page ) ) {
-						if ( node.type !== "CIFButton" && node.type !== "CIFCloseButton" ) {
-							authoredChrome( node, px, py );
-						}
-					}
-					const meta = guideResources.data()?.questPresentation.records[selectedQuest];
-					authoredText( page.GDR_QUESTREWARD_TITLE!, px, py, meta?.rewardTitle ?? "" );
-					if ( q ) {
-						const r = authoredRect( page.GDR_QUESTREWARD_CONTENTS!, px, py );
-						const result = text.guide(
-							guideTokens( meta?.rewardBody ?? "" ),
-							[ r[0], r[1] - questDetailScroll, r[2], r[3] ],
-							r,
-							gold,
-							resources.size
-						);
-						questDetailMax = Math.max( 0, result.height - r[3] );
-						questDetailScroll = Math.min( questDetailScroll, questDetailMax );
-						quads.push( ...result.quads );
-						paths.push( ...result.paths );
-					}
-					const give = page.GDR_QUESTREWARD_GIVEUP!,
-						caption = hudCopy( q?.u10 === 2 ? "UIIT_STT_QUEST_REWARD" : "UIIT_STT_QUEST_GIVEUP" );
-					authoredLabeledButton( give, px, py, q?.u10 === 2 ? "quest-reward" : "quest-abandon", caption );
-					const close = page.GDR_QUESTREWARD_CLOSE!;
-					closeButton( px + close.rect[0], py + close.rect[1], "quest-details-close" );
-					const track = authoredRect( page.GDR_QUESTREWARD_SCROLL!, px, py );
-					for (
-						const [id, skin, yy] of [ [ "quest-detail-up", "up", track[1] - 16 ], [
-							"quest-detail-down",
-							"down",
-							track[1] + 222
-						], [
-							"quest-detail-thumb",
-							"button",
-							track[1] + Math.trunc( questDetailMax ? questDetailScroll * 206 / questDetailMax : 0 )
-						] ] as const
-					) {
-						const path = ROOT + "interface/guide/gd_scroll_" + skin + ".png",
-							r: UiRect = [ track[0], yy, 16, 16 ];
-						image( r, path );
-						controls.push( {
-							id,
-							label: id === "quest-detail-thumb" ?
-								"Scroll quest details" :
-								skin === "up" ?
-								"Scroll up" :
-								"Scroll down",
-							rect: r,
-							kind: "button",
-							draggable: skin === "button"
-						} );
-					}
-					endWindow( admission, "quest-details" );
-				}
-				if ( confirmAbandon && questDetails && panel === "Quests" ) {
+				if ( confirmAbandon && questDetails ) {
 					controls = [];
 					const admission = beginWindow(),
 						box = guildProposalLayout( w, h ),
