@@ -14,6 +14,10 @@ Before tagging a release:
    keep the bytes and URLs players have cached (assetPackLayout.mjs):
    `curl -o live-manifest.json https://opensro.online/assets/packs/manifest.json`,
    then `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
+   Then `pnpm assets ledger` must report no unclaimed assets and no missing
+   owner (run `pnpm assets publish` and build again if it does); the beta
+   packager refuses otherwise. [docs/ASSET_DELIVERY.md](docs/ASSET_DELIVERY.md)
+   explains the ledger.
 4. `git status --ignored` must list `.generated/`, `temp/` and `.state/` as
    ignored, and nothing generated as tracked.
 5. `pnpm assets compact` and `pnpm assets check compact`. Publish the compact

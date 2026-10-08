@@ -74,6 +74,7 @@ client together as a data release.
 | `pnpm assets compact` | Release profile: keep compressed packs, drop loose duplicates |
 | `pnpm assets check integrity` | Verify pack manifests and artifacts |
 | `pnpm assets check compact` | Verify the compact release set is lossless |
+| `pnpm assets ledger` | Read-only: packed assets no build owner claims (the publication ledger); exits 1 unless empty |
 | `pnpm assets lock` | Show which process holds the generated-asset lock |
 
 The publishers live in `apps/client-next/tools/publish-*.mjs`; folding them

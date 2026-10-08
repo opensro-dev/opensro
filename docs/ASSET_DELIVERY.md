@@ -180,8 +180,10 @@ and shipped in a data release next to their replacements.
   that writes through these needs no ledger code.
 - A builder that skips work because its output is current, without calling
   a shared writer, must claim that output itself with `claimPublicFile` or
-  `claimPublicPaths`. Forgetting this is the one way to get a live file
-  archived; see "Reading the report" below.
+  `claimPublicPaths`. Copies into the public tree go through
+  `copyIntoPublicTree` (`shared/convertedImages.mjs`), which claims them.
+  Forgetting to claim is the one way to get a live file archived; see
+  "Reading the report" below.
 - A claimed JSON output also claims every `/assets/...` file its text names,
   transitively (`closeReferences`): the client loads exactly what its
   manifests and catalogs reference, so a file a live manifest names is live
@@ -230,6 +232,17 @@ Publication ledger: <n> file(s), <MiB> MiB, claimed by no build owner; soft-arch
 The release packager (`apps/client-next/tools/beta/build.mjs`) is the hard
 gate: it refuses to package unless every expected owner has a record and
 every asset in the pack index is claimed (`verifyIndexClaims`).
+
+`pnpm assets ledger` (`scripts/report_publication_ledger.mjs`) prints the
+same check read-only for the installed pack index (`-- --json` for the full
+list) and exits 1 unless it is empty. Run it before packaging, and after a
+pull to see what the next build will archive.
+
+The first enforcing build on the shared tree (2026-10-08) archived 1,572
+files, 260.7 MiB: 1,430 PNGs and 47 DDS lightmaps whose `.texture`
+replacements are claimed (all 426 tile2d tiles; the title-scene, dungeon and
+character-select object textures; the title lightmaps), and 95 outdoor mesh
+files the object index no longer names.
 
 Reading the report: a folder full of files you know are live means its
 builder has a skip path that does not claim them; fix the builder and
@@ -354,8 +367,11 @@ at the commit being released:
 2. Build against it:
    `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`
    (and `pnpm assets publish` if a family or publisher changed).
-3. Read the publication ledger line in the build summary. Investigate any
-   unclaimed files before going further.
+3. Run `pnpm assets ledger`. It must report no unclaimed asset and no
+   missing owner; the packager refuses otherwise. If the build summary says
+   it archived files, check they are leftovers (see the audit section).
+   `pnpm assets compact` runs after this, never before: it drops loose files
+   on purpose.
 4. Package: `node apps/client-next/tools/beta/build.mjs` (from
    `apps/client-next`). It writes
    `temp/artifacts/beta/<stamp>/package/` and verifies every pack and
@@ -382,8 +398,9 @@ together.
   of them with no family.
 - A new `ASSET_SCHEMA`: run `pnpm assets build full` followed by
   `pnpm assets publish`.
-- Then read the ledger line. Unclaimed files after a pull usually mean a
-  builder changed its output format; they are not yours to keep.
+- Then run `pnpm assets ledger`. The full build has already archived what
+  no current builder produces; files it still lists usually mean a family
+  you have not published yet (`pnpm assets publish`).
 
 ## Troubleshooting
 
@@ -393,7 +410,8 @@ together.
 | `Asset absent from published manifest` in the client | The file was never packed: run the family or publisher that owns it (`pnpm task list --kind assets`). |
 | `Pack header disagrees with manifest` | A pack was rewritten outside the pack owner. Rebuild with `pnpm assets build`. |
 | An upload far larger than the change | The build was not planned against the live manifest (step 2 above), or a builder rewrote many files with new bytes. Compare the per-group totals of the two manifests before staging. |
-| The ledger reports a folder you know is live | Its builder skips work without claiming. Add `claimPublicFile` to the skip path. |
+| The ledger reports a folder you know is live | Its builder writes or skips without claiming. Write through a shared writer or `copyIntoPublicTree`, or add `claimPublicFile` to the skip path; restore the archived files from `temp/archives/generated-artifacts/<day>/unclaimed-public-asset/`. |
+| The packager says "files the current pipeline did not produce" | Run `pnpm assets publish`, then `pnpm assets build`, then `pnpm assets ledger`. |
 | Another build "holds the generated-assets lock" | `pnpm assets lock` shows the holder. Builds refuse rather than corrupt the shared tree. |
 
 ## Planned work
