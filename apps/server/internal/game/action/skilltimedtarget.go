@@ -63,7 +63,7 @@ func (rt *Runtime) acceptTimedTargetEffect(division string, c, snapshot *enterwo
 	if code := rt.skillAdmission(division, snapshot, skill, now, &admitTarget{at: to, player: view}, nil, admitExecution); code != 0 {
 		return offensiveRefusal(code)
 	}
-	if !rt.auraReplacementAllowed(division, target, skill) {
+	if !rt.auraReplacementAllowed(division, target, skill, c.ID == target.ID) {
 		return offensiveRefusal(0x300c)
 	}
 	if skill.TimedEffect.ForcedTarget {

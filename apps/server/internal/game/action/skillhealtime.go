@@ -120,7 +120,7 @@ Mana Orbit, whose command is never current.
 */
 func (rt *Runtime) healOverTimeReplacementAllowed(division string, caster, who *enterworld.Character, skill enterworld.SkillRow) bool {
 	if who.ID != caster.ID {
-		return rt.auraReplacementAllowed(division, who, skill)
+		return rt.auraReplacementAllowed(division, who, skill, false)
 	}
 	if !skill.ReplacementPinned || skill.Replacement.Lnks {
 		return true

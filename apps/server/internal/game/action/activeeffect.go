@@ -113,6 +113,10 @@ type EffectPresentation struct {
 	// AuraParent is the caster instance token a party aura's child joins
 	// under (skillparty.go joinAura); zero for any other application.
 	AuraParent uint32
+	// Native context +0x6C links both area instances to their source
+	// caster (584115, 5850CE), including the caster's own instance.
+	AreaSourceGID  uint32
+	AreaSourceName string
 }
 
 /*
@@ -246,6 +250,8 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		Phase:             presentation.Phase, Rider: presentation.Rider, ExpiresAtMs: expires,
 		ClientCancelable: !row.VoluntaryCancelBlocked || canStop,
 		AuraParentToken:  presentation.AuraParent,
+		AreaSourceGID:    presentation.AreaSourceGID,
+		AreaSourceName:   presentation.AreaSourceName,
 	}
 	if row.ReplacementPinned && row.Replacement.Activity != 0 && presentation.Phase == 1 {
 		effect.EventCancelMask = row.Replacement.EventCancelMask

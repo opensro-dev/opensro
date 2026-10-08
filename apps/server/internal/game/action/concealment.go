@@ -136,7 +136,7 @@ and its observers.
 */
 func (rt *Runtime) installRecipientEffects(division string, recipients []*enterworld.Character, skill enterworld.SkillRow, rider uint32, now int64) {
 	for _, c := range recipients {
-		if !rt.auraReplacementAllowed(division, c, skill) {
+		if !rt.auraReplacementAllowed(division, c, skill, false) {
 			continue
 		}
 		token := atomic.AddUint32(&rt.castTokenCounter, 1)

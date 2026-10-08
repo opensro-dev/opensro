@@ -126,7 +126,7 @@ func (rt *Runtime) acceptForcedTarget(c tauntPlayerCast) OpResult {
 	frames := []wire.Frame{open}
 	var private []RecipientFrames
 	for _, recipient := range recipients {
-		if !rt.auraReplacementAllowed(c.division, recipient, c.skill) {
+		if !rt.auraReplacementAllowed(c.division, recipient, c.skill, c.caster.ID == recipient.ID) {
 			continue
 		}
 		var installed []wire.Frame

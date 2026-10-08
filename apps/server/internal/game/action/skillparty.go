@@ -26,6 +26,10 @@ before an old one ended left the client a stale 0x343C, and an aura settled
 away after its children joined ended tokens whose installation reached the
 client afterwards.
 
+Joining may also replace another source through its area link. A stopped
+source cannot heal or join later in the pass; its remaining children retire
+before the final stat publication.
+
 The Bard's auras follow the owner's rules on top of that update (rules 1
 and 4 of the Bard specification): a Bard keeps one instrument aura and one
 dance at a time, the new cast replacing the old; an aura ends when its
@@ -128,7 +132,7 @@ CAST START
 ==================
 acceptPartyBuff
 
-583657: charge the cast, install the caster's persistent instance and open
+584115: charge the cast, install the caster's persistent instance and open
 the area. Members are chosen by the update, never here. The caster's new
 stats ride its own burst only; observers see the cast and the instance.
 ==================
@@ -149,6 +153,11 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 	if code := rt.skillAdmission(division, snapshot, skill, now, nil, nil, admitExecution); code != 0 {
 		return offensiveRefusal(code)
 	}
+	// 58E2F4 validates untargeted source instances too. The area link lets
+	// 59D9CE retire the previous source instead of opening another healer.
+	if !rt.auraReplacementAllowed(division, snapshot, skill, true) {
+		return offensiveRefusal(0x300c)
+	}
 	radius, ok := rt.auraRadius(division, snapshot, skill)
 	if !ok {
 		return offensiveRefusal(0x3003)
@@ -166,7 +175,10 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 			return false
 		}
 		rt.startSkillCast(division, c, skill, now)
-		installed, ok := rt.commitCharacterEffect(division, c, skill, token, statuseffect.StateActive, true, EffectPresentation{Phase: 1}, now)
+		presentation := EffectPresentation{
+			Phase: 1, AreaSourceGID: enterworld.ObjectIDForCharacter(c), AreaSourceName: c.Name,
+		}
+		installed, ok := rt.commitCharacterEffect(division, c, skill, token, statuseffect.StateActive, true, presentation, now)
 		if !ok {
 			return false
 		}
@@ -260,6 +272,18 @@ func (rt *Runtime) advancePartyAuras(now int64) []simulation.DivisionFrames {
 	for i := range rt.partyAuras {
 		rt.installAuraStep(&u, &rt.partyAuras[i], now)
 	}
+	// A recipient replacement can retire another source during the join
+	// walk (59DAA9/59DAB0). Finish its remaining children before stats are
+	// published; installAuraStep prevents that source from running again.
+	kept = rt.partyAuras[:0]
+	for _, aura := range rt.partyAuras {
+		if rt.auraInstanceLive(aura) {
+			kept = append(kept, aura)
+		} else {
+			rt.retireAura(&u, aura)
+		}
+	}
+	rt.partyAuras = kept
 	for _, owner := range u.stats {
 		stats, err := rt.PlayerBaseStats(owner.division, owner.c)
 		if err != nil {
@@ -320,7 +344,7 @@ walks run.
 ==================
 */
 func (rt *Runtime) installAuraStep(u *auraUpdate, aura *partyAura, now int64) {
-	if !aura.scanDue {
+	if !aura.scanDue || !rt.auraInstanceLive(*aura) {
 		return
 	}
 	caster := rt.findCharacter(aura.division, aura.casterName)
@@ -573,7 +597,7 @@ func (rt *Runtime) joinAura(u *auraUpdate, aura *partyAura, caster *enterworld.C
 			continue
 		}
 		to := rt.liveSpawn(simulation.WorldKey(aura.division, member.Name), member, now)
-		if !partyAreaReach(from, to, aura.radius) || !rt.auraReplacementAllowed(aura.division, member, skill) {
+		if !partyAreaReach(from, to, aura.radius) || !rt.auraReplacementAllowed(aura.division, member, skill, false) {
 			continue
 		}
 
@@ -581,7 +605,12 @@ func (rt *Runtime) joinAura(u *auraUpdate, aura *partyAura, caster *enterworld.C
 		var installed []wire.Frame
 		joined := rt.deps.Update(member, "aura-join", func() bool {
 			var ok bool
-			installed, ok = rt.commitCharacterEffect(aura.division, member, skill, child, statuseffect.StateActive, true, EffectPresentation{Phase: 1, AuraParent: aura.token}, now)
+			// 5850C3/5850CE: recipient mode 2 retains the same source link.
+			presentation := EffectPresentation{
+				Phase: 2, AuraParent: aura.token,
+				AreaSourceGID: enterworld.ObjectIDForCharacter(caster), AreaSourceName: aura.casterName,
+			}
+			installed, ok = rt.commitCharacterEffect(aura.division, member, skill, child, statuseffect.StateActive, true, presentation, now)
 			return ok
 		})
 		if !joined {
@@ -668,11 +697,11 @@ func (rt *Runtime) auraParty(division string, caster *enterworld.Character) map[
 auraReplacementAllowed
 ================
 */
-func (rt *Runtime) auraReplacementAllowed(division string, member *enterworld.Character, skill enterworld.SkillRow) bool {
+func (rt *Runtime) auraReplacementAllowed(division string, member *enterworld.Character, skill enterworld.SkillRow, casterIsRecipient bool) bool {
 	if !skill.ReplacementPinned || skill.Replacement.Lnks {
 		return true
 	}
-	return rt.requestSelfEffectReplacement(division, member, skill)
+	return rt.requestEffectReplacement(division, member, skill, effectReplacementContext{casterIsRecipient: casterIsRecipient})
 }
 
 /*

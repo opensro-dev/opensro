@@ -26,7 +26,7 @@ The caller holds the character authority and division operation doors.
 ==================
 */
 func (rt *Runtime) requestSelfEffectReplacement(division string, c *enterworld.Character, skill enterworld.SkillRow) bool {
-	return rt.requestEffectReplacement(division, c, skill, false)
+	return rt.requestEffectReplacement(division, c, skill, effectReplacementContext{casterIsRecipient: true})
 }
 
 /*
@@ -43,18 +43,31 @@ its own states as a conflict. Live, a heal over time with a cast time
 ==================
 */
 func (rt *Runtime) requestReleasedEffectReplacement(division string, c *enterworld.Character, skill enterworld.SkillRow) bool {
-	return rt.requestEffectReplacement(division, c, skill, true)
+	return rt.requestEffectReplacement(division, c, skill, effectReplacementContext{casterIsRecipient: true, released: true})
+}
+
+/*
+================
+effectReplacementContext
+
+Incoming caster identity is independent of the existing effect's area source.
+Only a self release may ignore its own current command's casting states.
+================
+*/
+type effectReplacementContext struct {
+	casterIsRecipient bool
+	released          bool
 }
 
 /*
 ==================
 requestEffectReplacement
 
-The shared validation. released skips a current command of skill itself
+The shared validation. A self release skips a current command of skill itself
 (requestReleasedEffectReplacement).
 ==================
 */
-func (rt *Runtime) requestEffectReplacement(division string, c *enterworld.Character, skill enterworld.SkillRow, released bool) bool {
+func (rt *Runtime) requestEffectReplacement(division string, c *enterworld.Character, skill enterworld.SkillRow, context effectReplacementContext) bool {
 	if !skill.ReplacementPinned || skill.Replacement.Lnks {
 		return false
 	}
@@ -68,9 +81,9 @@ func (rt *Runtime) requestEffectReplacement(division string, c *enterworld.Chara
 	}
 	application := statuseffect.ReplacementApplication{
 		Effect:      statuseffect.Effect{DivisionID: division, CharacterName: c.Name, SkillID: skill.ID, SkillGroup: skill.Group},
-		Descriptors: descriptors, CasterIsRecipient: true,
+		Descriptors: descriptors, CasterIsRecipient: context.casterIsRecipient,
 	}
-	if current, exists := rt.currentSkillCommandFor(division, c); exists && !(released && current.skillID == skill.ID) {
+	if current, exists := rt.currentSkillCommandFor(division, c); exists && !(context.released && context.casterIsRecipient && current.skillID == skill.ID) {
 		if !current.pinned {
 			return false
 		}
