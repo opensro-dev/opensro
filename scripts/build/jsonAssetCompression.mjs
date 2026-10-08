@@ -10,13 +10,8 @@ import { withGeneratedAssetsLock } from "../rebuildLock.mjs";
 import { mapWithConcurrency } from "./shared/asyncUtils.mjs";
 import {
 	compressionAvailable,
-	compressBrotliSync,
 	compressGzipSync,
-	compressZstdSync,
-	DEFAULT_BROTLI_QUALITY,
 	DEFAULT_GZIP_LEVEL,
-	DEFAULT_ZSTD_LEVEL,
-	DEFAULT_ZSTD_WINDOW_LOG,
 	PRECOMPRESSED_ASSET_SUFFIXES
 } from "./shared/compressionUtils.mjs";
 import { fileHashCacheDisabled } from "./shared/fileHashCache.mjs";
@@ -45,35 +40,14 @@ export { PRECOMPRESSED_ASSET_SUFFIXES } from "./shared/compressionUtils.mjs";
 const DEFAULT_ENCODINGS = [ "gzip" ];
 const DEFAULT_COMPRESS_MIN_BYTES = 1024;
 
+// The one sidecar the packs hold; any other encoding would be archived by the
+// same build's sidecar retirement (precompressedSidecars.mjs), so none is offered.
 const ENCODING_DESCRIPTORS = {
-	br: {
-		suffix: ".br",
-		label: "Brotli 11",
-		available: () => compressionAvailable( "br" ),
-		compressSync: ( bytes ) =>
-			compressBrotliSync( bytes, {
-				quality: numberFromEnv( "SRO_BROTLI_QUALITY", DEFAULT_BROTLI_QUALITY )
-			} )
-	},
 	gzip: {
 		suffix: ".gz",
 		label: "gzip 9",
 		available: () => compressionAvailable( "gzip" ),
-		compressSync: ( bytes ) =>
-			compressGzipSync( bytes, { level: numberFromEnv( "SRO_GZIP_LEVEL", DEFAULT_GZIP_LEVEL ) } )
-	},
-	zstd: {
-		suffix: ".zst",
-		label: "Zstandard 19",
-		available: () => compressionAvailable( "zstd" ),
-		compressSync: ( bytes ) =>
-			compressZstdSync( bytes, {
-				level: numberFromEnv( "SRO_ZSTD_LEVEL", DEFAULT_ZSTD_LEVEL ),
-				windowLog: Math.min(
-					numberFromEnv( "SRO_ZSTD_WINDOW_LOG", DEFAULT_ZSTD_WINDOW_LOG ),
-					DEFAULT_ZSTD_WINDOW_LOG
-				)
-			} )
+		compressSync: ( bytes ) => compressGzipSync( bytes, { level: DEFAULT_GZIP_LEVEL } )
 	}
 };
 
@@ -89,9 +63,8 @@ export async function optimizePublicJsonAssets( options = {} ) {
 export async function optimizeJsonAssets( options ) {
 	const root = path.resolve( options.root );
 	const rootPublic = path.resolve( options.publicRoot ?? root );
-	const encodings = normalizeEncodings( options.encodings ?? encodingsFromEnv() );
-	const compressMinBytes = options.compressMinBytes ??
-		numberFromEnv( "SRO_ASSET_COMPRESS_MIN_BYTES", DEFAULT_COMPRESS_MIN_BYTES );
+	const encodings = normalizeEncodings( options.encodings ?? DEFAULT_ENCODINGS );
+	const compressMinBytes = options.compressMinBytes ?? DEFAULT_COMPRESS_MIN_BYTES;
 	const compressionJobs = [];
 	const compressionConcurrency = normalizeConcurrency( options.compressionConcurrency );
 	const force = Boolean( options.force );
@@ -374,29 +347,17 @@ function normalizeEncodings( encodings ) {
 	const normalized = [];
 	for ( const encoding of encodings ) {
 		const lower = String( encoding ).trim().toLowerCase();
-		if ( lower && ENCODING_DESCRIPTORS[lower] && !normalized.includes( lower ) ) {
-			normalized.push( lower );
-		}
+		if ( !ENCODING_DESCRIPTORS[lower] ) throw new Error( `No published sidecar encoding ${encoding}` );
+		if ( !normalized.includes( lower ) ) normalized.push( lower );
 	}
 
 	return normalized;
-}
-
-function encodingsFromEnv() {
-	const raw = process.env.SRO_ASSET_ENCODINGS;
-	if ( !raw ) return DEFAULT_ENCODINGS;
-	return raw.split( "," );
 }
 
 function normalizeConcurrency( value ) {
 	const parsed = Number( value );
 	const concurrency = value !== undefined && Number.isFinite( parsed ) ? parsed : buildJobs();
 	return Math.max( 1, Math.min( Math.floor( concurrency ), availableParallelism() ) );
-}
-
-function numberFromEnv( name, fallback ) {
-	const value = Number( process.env[name] );
-	return Number.isFinite( value ) ? value : fallback;
 }
 
 async function runCompressionJobs( jobs, concurrency, onResult ) {

@@ -29,7 +29,7 @@ export const PACK_INDEX_PATH = path.join( PACKS_ROOT, "manifest.json" );
 
 // Iteration sidecars for the regenerated manifests are lossless but fast;
 // the compact release step recompresses the retained manifests at maximum.
-const FAST_MANIFEST_SIDECARS = { brotliQuality: 4, gzipLevel: 3, zstdLevel: 3 };
+const FAST_MANIFEST_SIDECARS = { gzipLevel: 3 };
 
 /**
  * @typedef {{

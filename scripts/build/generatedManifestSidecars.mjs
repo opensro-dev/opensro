@@ -3,15 +3,14 @@
 
 generatedManifestSidecars.mjs - precompressed sidecars for generated manifests
 
-Writes the .br/.gz/.zst copies of a generated manifest from its current
-bytes.
+Writes the .gz copy of a generated manifest from its current bytes (the one
+published sidecar, PUBLISHED_SIDECAR_SUFFIXES).
 
-Freshness is not cosmetic. The client-next dev/preview asset middleware
-(apps/client-next/tools/published-assets.mjs) serves `<asset>.br` to any
-client that accepts brotli - every browser - without comparing mtimes. A
-sidecar older than its asset silently replaces the asset for every real user
-while curl and Node's fs still see the fresh bytes, which makes the bug look
-impossible. It happened: assets/anim/manifest.json gained its motion-0x26
+Freshness is not cosmetic. A precompressed sidecar is served in place of
+its asset without comparing mtimes, so one older than its asset silently
+replaces it for every real user while curl and Node's fs still see the
+fresh bytes, which makes the bug look impossible. It happened (when the dev
+middleware still served .br): assets/anim/manifest.json gained its motion-0x26
 pickup entries on 2026-07-24, its sidecars stayed at 2026-07-08, and every
 browser fetched a manifest with no pick clip for sixteen days; the placeholder
 length also drove the 0x2476 busy-motion gate, so it surfaced as a
@@ -24,17 +23,16 @@ pass.
 */
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { compressGzipSync, PUBLISHED_SIDECAR_SUFFIXES } from "./shared/compressionUtils.mjs";
+import { compressGzipSync } from "./shared/compressionUtils.mjs";
 import { publicRoot } from "./world/paths.mjs";
 
-// Shared compression helpers keep these byte-comparable with the bulk optimizer;
-// only the published sidecars are written (PUBLISHED_SIDECAR_SUFFIXES).
+// Shared compression helpers keep these byte-comparable with the bulk optimizer.
 const ENCODINGS = [
 	{
 		suffix: ".gz",
 		compress: ( bytes, options ) => compressGzipSync( bytes, { level: options.gzipLevel } )
 	}
-].filter( ( { suffix } ) => PUBLISHED_SIDECAR_SUFFIXES.includes( suffix ) );
+];
 
 // The loose manifests every publication regenerates, relative to the public root.
 const GENERATED_MANIFESTS = [
@@ -63,15 +61,15 @@ async function mtimeMs( filePath ) {
 ================
 refreshPrecompressedSidecars
 
-Rewrites the .br/.gz/.zst sidecars of each asset from its current bytes and
+Rewrites the .gz sidecar of each asset from its current bytes and
 returns one record per asset. `onlyWhenStale` skips assets whose sidecars
 are all at least as new as the asset, which makes this cheap enough to call
 unconditionally at the end of a build step. Options: onlyWhenStale,
-brotliQuality, gzipLevel, zstdLevel.
+gzipLevel.
 ================
 */
 export async function refreshPrecompressedSidecars( assetPaths, options = {} ) {
-	const { onlyWhenStale = false, brotliQuality, gzipLevel, zstdLevel } = options;
+	const { onlyWhenStale = false, gzipLevel } = options;
 	const results = [];
 	for ( const assetPath of assetPaths ) {
 		const assetMs = await mtimeMs( assetPath );
@@ -91,7 +89,7 @@ export async function refreshPrecompressedSidecars( assetPaths, options = {} ) {
 		const bytes = await readFile( assetPath );
 		const written = [];
 		for ( const { suffix, compress } of ENCODINGS ) {
-			const compressed = compress( bytes, { brotliQuality, gzipLevel, zstdLevel } );
+			const compressed = compress( bytes, { gzipLevel } );
 			await writeFile( `${assetPath}${suffix}`, compressed );
 			written.push( { suffix, bytes: compressed.byteLength } );
 		}
