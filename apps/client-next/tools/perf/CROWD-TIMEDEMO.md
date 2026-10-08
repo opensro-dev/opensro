@@ -7,10 +7,9 @@ The renderer starts fresh, so live cloth, particles, and presentation RNG state
 are not restored. Use the same replay seed, camera, capture and asset hashes for
 paired experiments. A live server/client settlement check remains necessary.
 
-Run captures, image checks and timedemos through the repository's
-`scripts/coordination/locked-run.mjs`, with `SRO_COORDINATION_DIR` pointing at
-the shared coordination directory. Capturing perturbs the running client;
-keep its window separate from FPS measurements.
+Announce a capture, image check or timedemo in the coordination log before
+it starts and when it ends (docs/AGENT-COORDINATION.md). Capturing perturbs
+the running client; keep its window separate from FPS measurements.
 
 After the existing benchmark `instrument()` and authenticated `openClient()`:
 

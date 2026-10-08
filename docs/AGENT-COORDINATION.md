@@ -41,44 +41,27 @@ earlier lines; corrections are new lines that name what they correct.
 - Steps only the owner can do go to the log as `@coordinator <command>`, not
   only into an agent's chat.
 
-## Heavy runs: one lock, a fair queue
+## Heavy runs
 
-Benchmarks, full checks and anything else that loads the machine run through
-[`scripts/coordination/locked-run.mjs`](../scripts/coordination/locked-run.mjs),
-which writes its own `START` and `END` lines to the log. Its lock, queue and
-journal live in one directory every worktree shares, named by
-`SRO_COORDINATION_DIR` as an absolute path; the wrapper refuses to run
-without it, or with a relative one, because a private per-worktree lock
-would let benchmarks overlap silently. It is a
-different scope from the generated-assets lock (`scripts/rebuildLock.mjs`),
-which only serialises writers of `.generated`. Rules:
+There is no shared run lock. The owner retired it on 2026-10-09: it existed
+to keep CPU benchmarks from overlapping, and queueing every gate and test run
+behind it cost more than it protected. Run gates and tests directly. When a
+measurement must not share the machine (an FPS benchmark, a profile, a
+timedemo), say so in the log before you start and again when you finish.
 
-- **Always queue.** Use the wrapper's wait mode with an estimate. Without it a
-  run fails while anyone is waiting, and you lose your place. Short jobs (one
-  minute or less) go ahead of long jobs that have not started; a long job that
-  waits long enough is promoted, so it cannot starve.
-- **One sequence, one run.** Steps that must not interleave (fix, rerun the
-  gate, then measure) run as one wrapped script. Every gap between two runs is
-  an open lock that the next waiter takes.
-- **Preflight is cheap.** A readiness check (directories, files, free ports)
-  runs before queueing. Never warm a module graph or launch the game as a
-  preflight: it loads the machine while someone else measures.
-- **The wrapper starts nothing it does not own.** A failed acquisition means
-  the child never starts, and the lock is released on every exit path, including
-  a command that fails to start.
-- **Expiry is a promise, not a kill.** The wrapper does not stop a child at
-  expiry or reap its descendants. Clean up your own processes; on Windows,
-  stopping a task can leave orphaned children. Stop a server you spawned as a
-  process tree (`taskkill /PID <pid> /T /F`): with a shell in between,
-  killing the child ends only the shell and leaves the server listening.
-  Then assert that nothing listens on its port.
+The generated-assets lock (`scripts/rebuildLock.mjs`) stays: it serialises
+writers of `.generated`, which is about correctness, not CPU.
+
+- **Clean up your own processes.** On Windows, stopping a task can leave
+  orphaned children. Stop a server you spawned as a process tree
+  (`taskkill /PID <pid> /T /F`): with a shell in between, killing the child
+  ends only the shell and leaves the server listening. Then assert that
+  nothing listens on its port.
 - **A server started for a run stops in the same run.** A preview or dev
   server left listening after a measurement is served to the next agent's
   harness, which then measures your build instead of its own.
-- **Name the tree the run tests.** The `START` line records the directory and
-  git head the child runs in. When you launch from one checkout to test
-  another, pass `--cwd <absolute worktree>`, so the line names the tree that
-  actually ran.
+- **Name the tree a run tests.** When you report a result, name the directory
+  and git head it ran in, so a reader can tell which tree the evidence covers.
 - **Do not edit a tree while its gate runs.** The gate reads the working
   tree, so a mid-run edit makes the result describe neither version. Rerun on
   the final commit.
@@ -150,7 +133,8 @@ it can be compared.
   server on the same port serves someone else's build. The recorder may cost frames,
   so verify its state on every run until its cost is measured.
 - Compare A and B back to back on the same scenario, in an A-B-B-A order,
-  through the lock. Machine noise is large; a single pair proves nothing.
+  announced in the log so nobody loads the machine meanwhile. Machine noise
+  is large; a single pair proves nothing.
 - Report the frame-time distribution, not only the mean.
 - "No visible change" is proven with lossless captures, not argued. An exact
   change is compared at zero difference. A change the owner approved under a
@@ -171,9 +155,8 @@ it can be compared.
   ticks all land on its first line. `profile.mjs --lines` reports lines it
   cannot attribute instead of guessing.
 - Read-only helper agents can map code, but their numbers are guesses until
-  an agent that can measure checks them. Any tests, profiles or other heavy
-  work they run goes through the lock from their own worktree; reading and
-  searching code needs no lock.
+  an agent that can measure checks them. Tests, profiles and other heavy work
+  they run use their own worktree.
 
 ## Untrusted input
 
