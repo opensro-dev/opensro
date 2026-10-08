@@ -47,6 +47,8 @@ MAX_BATCH_BYTES = 256 << 20
 MAX_PAYLOAD_FILE_BYTES = 128 << 20
 MAX_BATCH_FILES = 4096
 STORE_RETENTION_SECONDS = 14 * 24 * 3600
+# Digests one payload-inventory request may ask about (well under the 1 MiB request limit).
+MAX_INVENTORY_FILES = 8000
 COPY_CHUNK_BYTES = 1 << 20
 
 
@@ -371,7 +373,49 @@ def add_bytes(archive, name, data):
 # with kind "data") against the production state it read with the base.
 # Returns the batch paths.
 # ================
-def bundle(package, base, plan, output, max_batch_bytes=MAX_BATCH_BYTES):
+def needed_payloads(package, base):
+	manifest = json.loads((Path(package) / "release.json").read_bytes())
+	rows = data_rows(manifest)
+	reusable = set(content_sources(base).values())
+	needed = sorted({source[0] for source in content_sources(manifest).values() if source not in reusable})
+	length_of = {row["sha256"]: row["length"] for row in rows.values()}
+	return [{"sha256": sha, "length": length_of[sha]} for sha in needed]
+
+
+# ================
+# payload_inventory
+#
+# Which of the named payloads the store already holds at their declared
+# length, so an operator rerun skips them. A hit's mtime is refreshed, so the
+# 14-day prune cannot remove it before the candidate that needs it is staged;
+# staging re-hashes every stored payload it uses (verify_stored), so a
+# length match is only a hint, never trusted bytes.
+# ================
+def payload_inventory(config, value):
+	files = value.get("files")
+	if not isinstance(files, list) or len(files) > MAX_INVENTORY_FILES:
+		raise ValueError("invalid payload inventory request")
+	store = Path(config["payload_store"])
+	present = []
+	for row in files:
+		sha, length = row.get("sha256") if isinstance(row, dict) else None, row.get("length") if isinstance(row, dict) else None
+		if not isinstance(sha, str) or not HASH_PATTERN.fullmatch(sha) or not isinstance(length, int) or length < 0:
+			raise ValueError("invalid payload inventory row")
+		target = store / sha
+		try:
+			if target.stat().st_size != length:
+				continue
+		except FileNotFoundError:
+			continue
+		os.utime(target)
+		present.append(sha)
+	return {"present": present}
+
+
+# ================
+# bundle
+# ================
+def bundle(package, base, plan, output, max_batch_bytes=MAX_BATCH_BYTES, present=frozenset()):
 	package, output = Path(package), Path(output)
 	raw = (package / "release.json").read_bytes()
 	if len(raw) > MAX_MANIFEST_BYTES:
@@ -398,7 +442,8 @@ def bundle(package, base, plan, output, max_batch_bytes=MAX_BATCH_BYTES):
 				raise ValueError("application bytes differ from verified manifest")
 			add_bytes(archive, name, data)
 	reusable = set(content_sources(base).values())
-	needed = sorted({source[0] for source in content_sources(manifest).values() if source not in reusable})
+	# Payloads the host already stores (payload_inventory) are not sent again.
+	needed = sorted({source[0] for source in content_sources(manifest).values() if source not in reusable} - set(present))
 	path_of = {row["sha256"]: name for name, row in rows.items()}
 	# The host refuses an archive over MAX_BATCH_BYTES; a slow link asks for
 	# smaller batches so each upload finishes and a rerun resumes after it.

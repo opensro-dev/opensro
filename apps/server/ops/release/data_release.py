@@ -29,6 +29,7 @@ import json
 from pathlib import Path
 import subprocess
 import tarfile
+import tempfile
 import time
 import urllib.request
 
@@ -122,6 +123,24 @@ def server_data_upload(archive, directory):
 
 
 # ================
+# stored_payloads
+#
+# Asks the host which needed payloads it already stores (receiver
+# payload-inventory), in requests under its limit, so a rerun after an
+# interrupted or superseded staging sends only what is missing.
+# ================
+def stored_payloads(needed, target, identity, send=send):
+	present = set()
+	with tempfile.TemporaryDirectory(prefix="sro-inventory-") as directory:
+		request = Path(directory) / "inventory-request.json"
+		for start in range(0, len(needed), client_data.MAX_INVENTORY_FILES):
+			chunk = needed[start:start + client_data.MAX_INVENTORY_FILES]
+			request.write_text(json.dumps({"operation": "payload-inventory", "files": chunk}), encoding="utf-8")
+			present.update(send(request, target, identity)["present"])
+	return present
+
+
+# ================
 # main
 # ================
 def main():
@@ -155,7 +174,11 @@ def main():
 	plan = build_plan("client", release, state, {"kind": "data", "coordinated": arguments.coordinated})
 	if arguments.max_batch_mib < 1:
 		parser.error("--max-batch-mib must be at least 1")
-	batches = client_data.bundle(arguments.package, base, plan, arguments.output, arguments.max_batch_mib << 20)
+	present = stored_payloads(client_data.needed_payloads(arguments.package, base), arguments.ssh_target,
+		arguments.identity)
+	print(f"{len(present)} payloads already stored on the host", flush=True)
+	batches = client_data.bundle(arguments.package, base, plan, arguments.output, arguments.max_batch_mib << 20,
+		present)
 	total = sum(path.stat().st_size for path in batches)
 	print(f"{len(batches)} payload batches, {total / 1048576:.1f} MiB to send", flush=True)
 	for batch in batches:

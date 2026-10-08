@@ -155,6 +155,8 @@ def request(config, role, value, scratch):
 	if role == "stage" and operation == "prepare-rollback":
 		archive = prepare_rollback(config, value, scratch)
 		return stage(config, archive) if value["component"] == "client" else stage_server(config, archive, scratch)
+	if role == "stage" and operation == "payload-inventory":
+		return client_data.payload_inventory(config, value)
 	if role == "stage" and operation == "client-smoke":
 		record_smoke(config, value["report"])
 		return {"recorded": True}

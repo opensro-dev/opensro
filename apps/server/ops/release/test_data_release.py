@@ -50,5 +50,28 @@ class UploadTests(unittest.TestCase):
 		self.assertEqual(calls, [data_release.UPLOAD_TIMEOUT_SECONDS] * 2)
 
 
+# ================
+# InventoryTests
+# ================
+class InventoryTests(unittest.TestCase):
+	# ================
+	# test_the_inventory_is_asked_in_bounded_requests
+	# ================
+	def test_the_inventory_is_asked_in_bounded_requests(self):
+		limit = data_release.client_data.MAX_INVENTORY_FILES
+		needed = [{"sha256": f"{index:064x}", "length": 1} for index in range(limit + 3)]
+		requests = []
+
+		def send(request, target, identity):
+			body = __import__("json").loads(Path(request).read_text(encoding="utf-8"))
+			requests.append(len(body["files"]))
+			self.assertEqual(body["operation"], "payload-inventory")
+			return {"present": [row["sha256"] for row in body["files"][:2]]}
+
+		present = data_release.stored_payloads(needed, "stage@host", Path("key"), send)
+		self.assertEqual(requests, [limit, 3])
+		self.assertEqual(len(present), 4)
+
+
 if __name__ == "__main__":
 	unittest.main()
