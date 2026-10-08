@@ -74,6 +74,8 @@ corepack pnpm assets prepare            # extract the archives, convert the musi
 corepack pnpm assets doctor             # every input and tool, with the fix for each problem
 corepack pnpm assets build full         # outdoor world, then everything else; roughly 40 minutes
 corepack pnpm assets publish            # families the full build does not produce yet
+corepack pnpm assets build              # archives anything no current step produced
+corepack pnpm assets ledger             # must report nothing unclaimed
 corepack pnpm task build server-game-data
 corepack pnpm assets check integrity
 ```
@@ -85,6 +87,12 @@ correct ones alone. `assets doctor` only reads; run it whenever a build
 refuses to start. The first build must be `assets build full`: plain
 `assets build` reuses the outdoor world of an earlier full build and has
 none on a fresh machine.
+
+The second `assets build` and `assets ledger` check the tree against the
+publication ledger: every packed file must come from a current build step,
+so nothing that only exists on your machine reaches a release.
+[ASSET_DELIVERY.md](ASSET_DELIVERY.md) explains the ledger, and how to
+size the build with `SRO_BUILD_JOBS` (default: every core but one).
 
 The results land in the ignored `.generated/` folder: browser assets in
 `.generated/client-public/assets/`, the server projection in
