@@ -49,7 +49,7 @@ test("resource fingerprint reports every ownership root independently", async ()
 
 	assert.equal( new Set( labels ).size, labels.length, "fingerprint root labels must be unique" );
 	assert.deepEqual(
-		labels,
+		labels.filter( ( label ) => !label.startsWith( "code:" ) ),
 		[
 			"extracted",
 			"client-executable",
@@ -74,4 +74,26 @@ test("resource fingerprint reports every ownership root independently", async ()
 		assert.match( root.hash, /^[a-f0-9]{64}$/ );
 		assert.ok( root.fileCount >= 1, `${root.label} should record a file or an explicit absence` );
 	}
+});
+
+test("resource fingerprint covers the code the build runs outside scripts/build", async () => {
+	const labels = (await computeResourceBuildFingerprint()).roots.map( ( root ) => root.label );
+	// A converter change once matched the old fingerprint and skipped the build.
+	for ( const file of [ "scripts/convert_images.py", "scripts/sro_paths.py", "scripts/lib/generatedRoot.mjs" ] ) {
+		assert.ok( labels.includes( `code:${file}` ), file );
+	}
+});
+
+test("a pack-layout baseline changes the resource fingerprint", async ( t ) => {
+	const before = await computeResourceBuildFingerprint();
+	const saved = process.env.SRO_ASSET_PACK_BASELINE;
+	t.after( () => {
+		if ( saved === undefined ) delete process.env.SRO_ASSET_PACK_BASELINE;
+		else process.env.SRO_ASSET_PACK_BASELINE = saved;
+	} );
+	// The release builds against the live manifest; an up-to-date tree must not skip that.
+	process.env.SRO_ASSET_PACK_BASELINE = path.join( rebuildRoot, "package.json" );
+	const after = await computeResourceBuildFingerprint();
+	assert.notEqual( after.hash, before.hash );
+	assert.ok( after.roots.some( ( root ) => root.label === "pack-baseline" ) );
 });

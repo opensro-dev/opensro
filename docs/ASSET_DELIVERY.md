@@ -317,7 +317,7 @@ cache is keyed by code, never by a file merely existing:
 
 | Cache | Key |
 | --- | --- |
-| The whole build | the resource-build fingerprint (inputs, outputs and `scripts/build/`) |
+| The whole build | the resource-build fingerprint: inputs, outputs, `scripts/build/`, every file the entries can run outside it (the converter, `sro_paths.py`, `scripts/lib/`), and the `SRO_ASSET_PACK_BASELINE` file |
 | Outdoor region bundles and shared indexes | the `outdoor-world` code stamp |
 | Converted PNGs (`convert_images.py`) | the `image-conversion` code stamp, then the PNG's mtime against its source |
 | Block textures (`.texture`) | the encoder's sha256 plus the source's |

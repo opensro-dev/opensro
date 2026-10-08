@@ -10,7 +10,10 @@ writes, so a no-op rebuild can be skipped outright instead of re-verifying
 The fingerprint is (path, size, mtimeMs) over:
 - <game root>/extracted            every Media_extracted input the build parses
 - <rebuild>/.generated/intermediate converted images + manifests feeding the copy steps
-- <rebuild>/scripts/build (+entry) the pipeline code itself
+- <rebuild>/scripts/build (+entry) the pipeline code itself, plus every file
+  outside it the entries can run (codeStamp.mjs codeClosure: the converter,
+  sro_paths.py, scripts/lib), which a change there once skipped past
+- SRO_ASSET_PACK_BASELINE's file  the layout baseline a release builds against
 - <rebuild>/.generated/client-public       the published browser projection
 - external source/codegen files read or written by character asset builders
 plus the env knobs that change what the build produces. It is recorded only
@@ -27,6 +30,7 @@ the old mtime, which no build tool here does.
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { codeClosure } from "./codeStamp.mjs";
 import { readJsonOrUndefined } from "./jsonOut.mjs";
 import { extractedRoot, gameRoot, generatedRoot, publicRoot, rebuildRoot } from "../world/paths.mjs";
 
@@ -36,7 +40,8 @@ const serverSourceRoot = path.resolve(
 );
 const statePath = path.join( rebuildRoot, ".state", "resource-build-fingerprint.json" );
 
-const FINGERPRINT_VERSION = 6;
+// v7: the code closure and the pack-layout baseline joined the roots.
+const FINGERPRINT_VERSION = 7;
 const DIRECTORY_CONCURRENCY = 32;
 
 /** Env vars that alter the build's outputs; a change must invalidate the skip. */
@@ -45,7 +50,17 @@ const ENV_KNOBS = [
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
 	"SRO_ASSET_PACKS_NO_CACHE",
-	"SRO_BUILD_HASH_CACHE"
+	"SRO_BUILD_HASH_CACHE",
+	// The release builds against the live layout (RELEASE.md); an up-to-date
+	// local tree must not skip that and keep its own layout.
+	"SRO_ASSET_PACK_BASELINE"
+];
+
+// The entries whose source closure the fingerprint covers beyond scripts/build.
+const CODE_ENTRIES = [
+	path.join( rebuildRoot, "scripts", "build_sro_resources.mjs" ),
+	path.join( rebuildRoot, "scripts", "build_outdoor_world_resources.mjs" ),
+	path.join( rebuildRoot, "scripts", "convert_images.py" )
 ];
 
 const FINGERPRINT_ROOTS = [
@@ -81,7 +96,7 @@ export async function computeResourceBuildFingerprint() {
 	const lines = [];
 	const roots = [];
 
-	for ( const root of FINGERPRINT_ROOTS ) {
+	for ( const root of [ ...FINGERPRINT_ROOTS, ...(await dynamicRoots()) ] ) {
 		const rootLines = [];
 		await collectRoot( root, rootLines );
 		rootLines.sort();
@@ -111,6 +126,28 @@ export async function computeResourceBuildFingerprint() {
 		roots,
 		elapsedMs: Math.round( performance.now() - startedAt )
 	};
+}
+
+/*
+================
+dynamicRoots
+
+The code closure of the build entries (each file its own root, so a miss
+names it) and the pack-layout baseline when one is set.
+================
+*/
+async function dynamicRoots() {
+	const files = new Set();
+	for ( const entry of CODE_ENTRIES ) {
+		for ( const file of await codeClosure( entry ) ) files.add( file );
+	}
+	const roots = [ ...files ].sort().map( ( absolutePath ) => ({
+		label: `code:${path.relative( rebuildRoot, absolutePath ).split( path.sep ).join( "/" )}`,
+		absolutePath
+	}) );
+	const baseline = process.env.SRO_ASSET_PACK_BASELINE?.trim();
+	if ( baseline ) roots.push( { label: "pack-baseline", absolutePath: path.resolve( baseline ) } );
+	return roots;
 }
 
 /*
