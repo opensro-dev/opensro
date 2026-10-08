@@ -32,7 +32,7 @@ import {
 	toPublicPath as toPublicAssetPath
 } from "./shared/assetPaths.mjs";
 import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
-import { mapWithConcurrency } from "./shared/asyncUtils.mjs";
+import { createLimiter, mapWithConcurrency } from "./shared/asyncUtils.mjs";
 import { compressZstd, DEFAULT_ZSTD_LEVEL, DEFAULT_ZSTD_WINDOW_LOG } from "./shared/compressionUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
 import { listFiles } from "./shared/fsUtils.mjs";
@@ -144,8 +144,12 @@ export async function buildAssetPacks( options = {} ) {
 		assets: []
 	};
 
-	for ( const group of groups ) {
-		const groupResult = await buildAssetPackGroup( {
+	// Every group builds at once under one pack budget: a group of three packs
+	// must not leave the other cores idle while it compresses. Results keep the
+	// caller's group order, so the index is the same whatever finishes first.
+	const packSlots = createLimiter( buildJobs() );
+	const groupResults = await Promise.all( groups.map( group =>
+		buildAssetPackGroup( {
 			publicRoot: root,
 			outputRoot,
 			group,
@@ -153,8 +157,11 @@ export async function buildAssetPacks( options = {} ) {
 			reusablePacks,
 			hashCache,
 			counters,
-			baselineIndex
-		} );
+			baselineIndex,
+			packSlots
+		} )
+	) );
+	for ( const groupResult of groupResults ) {
 		index.groups.push( groupResult.groupIndex );
 		index.assets.push( ...groupResult.assets );
 	}
@@ -248,7 +255,7 @@ buildAssetPackGroup
 ================
 */
 async function buildAssetPackGroup(
-	{ publicRoot, outputRoot, group, targetBytes, reusablePacks, hashCache, counters, baselineIndex }
+	{ publicRoot, outputRoot, group, targetBytes, reusablePacks, hashCache, counters, baselineIndex, packSlots }
 ) {
 	const name = normalizeGroupName( group.name );
 	const publicPaths = uniquePublicPaths( group.files ?? [] );
@@ -290,11 +297,10 @@ async function buildAssetPackGroup(
 	/** @type {AssetPackAssetRow[]} */
 	const assets = [];
 
-	const results = await mapWithConcurrency(
-		chunks,
-		// Each pack in flight holds its buffer and zstd output (about 2 x 50 MiB).
-		buildJobs(),
-		( plan ) =>
+	// Each pack in flight holds its buffer and zstd output (about 2 x 50 MiB);
+	// packSlots bounds them across every group.
+	const results = await Promise.all( chunks.map( plan =>
+		packSlots( () =>
 			buildOrReusePack( {
 				name,
 				plan,
@@ -304,7 +310,8 @@ async function buildAssetPackGroup(
 				hashCache,
 				counters
 			} )
-	);
+		)
+	) );
 
 	for ( const result of results ) {
 		groupIndex.packs.push( result.packEntry );

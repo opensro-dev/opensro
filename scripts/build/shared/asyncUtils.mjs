@@ -18,6 +18,34 @@ export async function mapWithConcurrency(items, limit, worker) {
   return results;
 }
 
+/**
+ * A shared bound for work started from several places at once: run(task)
+ * starts task when fewer than `limit` tasks are running, else queues it.
+ * Callers spread over many groups share one budget instead of one each.
+ */
+export function createLimiter(limit) {
+  const capacity = normalizeConcurrency(limit);
+  const waiting = [];
+  let running = 0;
+  const next = () => {
+    if (running >= capacity || waiting.length === 0) return;
+    running += 1;
+    const { task, resolve, reject } = waiting.shift();
+    Promise.resolve()
+      .then(task)
+      .then(resolve, reject)
+      .finally(() => {
+        running -= 1;
+        next();
+      });
+  };
+  return (task) =>
+    new Promise((resolve, reject) => {
+      waiting.push({ task, resolve, reject });
+      next();
+    });
+}
+
 function normalizeConcurrency(value) {
   return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1;
 }
