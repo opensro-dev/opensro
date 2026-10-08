@@ -57,10 +57,16 @@ test( "bitmap text stays sharp and motion-stable through browser scaling", { tim
 				bitmap.close();
 				const results = [];
 				try {
-					const sizes = [ [ 640, 80 ], [ 641, 80 ] ];
+					// Large enough that every tested ratio keeps its rounded enlargement:
+					// below the original's smallest mode (800x600) the platform steps
+					// down to one physical pixel per native pixel.
+					const sizes = [ [ 1100, 820 ], [ 1101, 821 ] ];
 					// Both axes deliberately remain fractional in logical UI coordinates.
 					if ( devicePixelRatio === 2 || devicePixelRatio === 3 ) {
-						sizes.push( [ 1283 / devicePixelRatio, 161 / devicePixelRatio ] );
+						sizes.push( [
+							(800 * devicePixelRatio + 1) / devicePixelRatio,
+							(600 * devicePixelRatio + 1) / devicePixelRatio
+						] );
 					}
 					for ( const [sceneWidth, sceneHeight] of sizes ) {
 						const canvas = document.createElement( "canvas" ), status = document.createElement( "output" );
@@ -235,11 +241,12 @@ test( "bitmap text stays sharp and motion-stable through browser scaling", { tim
 		await writeFile( "temp/artifacts/bitmap-text-scaling/gpu.json", JSON.stringify( result, null, 2 ) );
 		assert.deepEqual( result.errors, [] );
 		for ( const factor of [ 2, 3 ] ) {
-			const odd = result.results.find( row => row.ratio === factor && row.physical.width === 1283 );
+			const oddWidth = 800 * factor + 1, oddHeight = 600 * factor + 1;
+			const odd = result.results.find( row => row.ratio === factor && row.physical.width === oddWidth );
 			assert.ok( odd, "Missing odd physical extent at enlargement " + factor );
-			assert.equal( odd.logical.width, 1283 / factor );
-			assert.equal( odd.physical.height, 161 );
-			assert.equal( odd.logical.height, 161 / factor );
+			assert.equal( odd.logical.width, oddWidth / factor );
+			assert.equal( odd.physical.height, oddHeight );
+			assert.equal( odd.logical.height, oddHeight / factor );
 			assert.ok( !Number.isInteger( odd.logical.width ) );
 			assert.ok( !Number.isInteger( odd.logical.height ) );
 		}
