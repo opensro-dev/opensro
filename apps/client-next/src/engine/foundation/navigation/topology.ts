@@ -12,6 +12,84 @@ chord crosses from one placed object to another.
 import { navHeight, navLocal } from "./object-navigation";
 import type { NavPlacement, NavLink } from "@/engine/contracts/navigation";
 import { base64Bytes } from "@/engine/foundation/assets/base64";
+import { ownedCellStart } from "./owned-start";
+import { edgeResponse } from "./contact-response";
+import type { NavOwner, NavOwnerSpan } from "./dungeon-ownership";
+
+/*
+================
+linkedEntry
+
+403FB0 resolves the authored link, then 428CB0 repairs the reached point
+inside the receiving edge's triangle. A second edge crossing on the same
+finite chord is not required; the two authored edges can have a gap.
+================
+*/
+export function linkedEntry(
+	objects: readonly NavPlacement[],
+	from: readonly number[],
+	to: readonly number[],
+	spans: readonly NavOwnerSpan[]
+): { fraction: number; point: readonly number[]; owner: NavOwner; status: number; } | null {
+	let best: ReturnType<typeof linkedEntry> = null;
+	for ( const span of spans ) {
+		const p = objects[span.placement]!, m = p.mesh;
+		if ( !p.links?.length ) continue;
+		const a = navLocal( p, from[0]!, from[1]!, from[2]! ), b = navLocal( p, to[0]!, to[1]!, to[2]! );
+		const dx = b[0] - a[0], dz = b[2] - a[2];
+		for ( const link of p.links ) {
+			const e = link.edge * 6, flags = m.edges[e + 4]!;
+			if ( !(flags & 8) || m.edges[e + 2] !== span.cell ) continue;
+			const va = m.edges[e]! * 3, vb = m.edges[e + 1]! * 3;
+			const ax = m.vertices[va]!,
+				az = m.vertices[va + 2]!,
+				sx = m.vertices[vb]! - ax,
+				sz = m.vertices[vb + 2]! - az;
+			const den = dx * sz - dz * sx;
+			if ( Math.abs( den ) < 1e-12 ) continue;
+			const t = ((ax - a[0]) * sz - (az - a[2]) * sx) / den;
+			const u = ((ax - a[0]) * dz - (az - a[2]) * dx) / den;
+			if (
+				t <= 0 || t > 1 || t < span.from - 1e-9 || t > span.to + 1e-9 || u < 0 || u > 1 ||
+				best && t >= best.fraction
+			) continue;
+			let cx = 0, cz = 0;
+			for ( let i = 0; i < 3; i++ ) {
+				const at = m.cells[span.cell * 3 + i]! * 3;
+				cx += m.vertices[at]! / 3;
+				cz += m.vertices[at + 2]! / 3;
+			}
+			if ( (sx * (cz - az) - sz * (cx - ax)) * (sx * (a[2] - az) - sz * (a[0] - ax)) <= 0 ) continue;
+			const response = edgeResponse(
+				[ cx, cz ],
+				[ a[0] + dx * t, a[2] + dz * t ],
+				[ b[0], b[2] ],
+				flags,
+				true,
+				1
+			);
+			if ( response.status & 1 ) continue;
+			const x = response.point[0], z = response.point[1], c = Math.cos( p.yaw ), s = Math.sin( p.yaw );
+			const target = objects[link.target]!, cell = target.mesh.edges[link.targetEdge * 6 + 2]!;
+			const q = navLocal( target, c * x - s * z + p.x, from[1]!, s * x + c * z + p.z );
+			const entry = ownedCellStart( target.mesh, cell, q[0], q[2] );
+			const y = navHeight( target.mesh, entry[0], entry[1], q[1], cell );
+			if ( y === null ) continue;
+			const tc = Math.cos( target.yaw ), ts = Math.sin( target.yaw );
+			best = {
+				fraction: t,
+				owner: { placement: link.target, cell },
+				status: response.status,
+				point: [
+					tc * entry[0] - ts * entry[1] + target.x,
+					y + target.y,
+					ts * entry[0] + tc * entry[1] + target.z
+				]
+			};
+		}
+	}
+	return best;
+}
 /*
 ================
 objectLinks

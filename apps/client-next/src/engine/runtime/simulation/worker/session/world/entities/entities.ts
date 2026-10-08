@@ -1160,12 +1160,24 @@ export function createEntities(
 				if ( frame.opcode === 0x30e3 && entity?.appearanceState?.[0] === 2 ) return;
 				if ( entity ) {
 					const corrected = position( v, frame.opcode === 0x30e3 ? 0 : 4 );
+					// The local mover has one navigation owner in gameplay. Its
+					// entity row does not follow B738 or prediction; projecting a
+					// correction from that stale row can replace the arena floor
+					// with terrain before core passes it to the actual mover.
+					// Native 775B50/775CB0 pass wire XYZ to that mover's controller.
+					const localMover = source?.kind === "local-player" || entity.kind === "local-player";
+					if ( localMover && frame.opcode === 0xb2f5 ) motion.remove( entity.gid );
 					apply( {
 						kind: "state",
 						entity: Object.freeze( {
 							...entity,
 							movementRevision: (entity.movementRevision ?? 0) + 1,
-							...(frame.opcode === 0x30e3 ?
+							...(localMover ?
+								{
+									...corrected,
+									...(frame.opcode === 0xb2f5 ? { moving: false, movementPath: undefined } : {})
+								} :
+								frame.opcode === 0x30e3 ?
 								motion.source( entity, { ...corrected, angle: corrected.heading }, now ) :
 								motion.correct( entity, { ...corrected, angle: corrected.heading } ))
 						} )

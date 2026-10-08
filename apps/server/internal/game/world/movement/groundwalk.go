@@ -63,11 +63,15 @@ world store already owns its lock and may be called inside a read door.
 func (rt *Runtime) groundStep(from simulation.Spawn, owner simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, simulation.NavOwner, bool) {
 	requested := to
 	blocked := false
+	var acceptedOwner simulation.NavOwner
 	if rt.ClientClip != nil {
-		to, blocked = rt.ClientClip.ProcessStepFrom("ground-step", from, owner, to)
+		to, acceptedOwner, blocked = rt.ClientClip.processOwnedStep("ground-step", from, owner, to)
 	}
 	if rt.PathGuard != nil && rt.PathGuard.InspectMoveFrom("ground-step", from, owner, to) != nil {
 		return from, owner, true
+	}
+	if acceptedOwner.Resolved() {
+		return to, acceptedOwner, blocked
 	}
 	to, walk := rt.walkOwners(from, owner, to)
 	blocked = blocked || to.RegionID != requested.RegionID || to.X != requested.X || to.Z != requested.Z

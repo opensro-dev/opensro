@@ -26,7 +26,7 @@ import {
 	regionMoveDestination,
 	regionMoveContinuation
 } from "@/engine/foundation/navigation/region-move";
-import { linkPassages } from "@/engine/foundation/navigation/topology";
+import { linkedEntry, linkPassages } from "@/engine/foundation/navigation/topology";
 import { admitObjectProduct } from "./admission";
 import {
 	navHeight,
@@ -654,6 +654,9 @@ export function createNavigation() {
 				) return null;
 				if ( dungeon && !ownerPath ) return null;
 				const passages = linkPassages( objects, fromPoint, toPoint, !!ownerPath );
+				let transfer = !dungeon && ownerPath ?
+					linkedEntry( objects, fromPoint, toPoint, ownerPath.spans ) :
+					null;
 				let contact = Infinity, contactKey = Infinity, retainedFraction = 1;
 				let response: ReturnType<typeof navContactDetail> = null;
 				if ( (globalThis as any).NAVDBG ) console.log( "CLIPSTART", { from, to, owner: ownerPath?.spans } );
@@ -751,7 +754,17 @@ export function createNavigation() {
 						} );
 					}
 				}
-				if ( response?.point ) {
+				if ( transfer && contact < transfer.fraction - 1e-9 ) transfer = null;
+				if ( transfer ) {
+					status = transfer.status;
+					retainedFraction = contactKey = transfer.fraction;
+					to = { ...to, x: transfer.point[0]! - ox, y: transfer.point[1]!, z: transfer.point[2]! - oz };
+					reachedOwner = transfer.owner;
+					if ( output ) {
+						output.owner = transfer.owner;
+						output.owners = ownerPath!.spans.filter( s => s.from < transfer!.fraction );
+					}
+				} else if ( response?.point ) {
 					status = response.status;
 					if ( output && status === 1 ) {
 						output.cell = response.cell;
@@ -774,7 +787,7 @@ export function createNavigation() {
 						z: from.z + (to.z - from.z) * t
 					};
 				}
-				if ( !dungeon ) {
+				if ( !dungeon && !transfer ) {
 					const resolved = ownerPath ?
 						terrainOwnerPath(
 							objects,

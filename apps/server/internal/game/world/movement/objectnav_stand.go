@@ -90,6 +90,14 @@ func (v *WaterValidator) spawnObjectDeckStand(surface *groundSurface, baseX, bas
 		}
 	}
 
+	// FindNavCell queries the point's region first. Neighboring NVMs can
+	// repeat this same mesh with unresolved link placeholders; letting a
+	// rounded copy win loses the current region's authored portal table.
+	probe(surface, pointSectorX, pointSectorZ)
+	probe(v.surfaceForRegion(point.RegionID), pointSectorX, pointSectorZ)
+	if best != nil {
+		return best
+	}
 	for dz := -objectAnchorSearchRadiusSectors; dz <= objectAnchorSearchRadiusSectors; dz++ {
 		for dx := -objectAnchorSearchRadiusSectors; dx <= objectAnchorSearchRadiusSectors; dx++ {
 			anchorX, anchorZ := pointSectorX+dx, pointSectorZ+dz

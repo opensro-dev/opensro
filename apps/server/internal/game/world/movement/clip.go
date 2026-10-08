@@ -293,6 +293,7 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 	// owner (navowner.go). A blocked terrain tile is not a block where an
 	// object cell owns the walker: it stands on the deck, not the ground.
 	walk := v.ownerWalk(from, fromOwner, to)
+	transfer := walk.linkedTransfer(to)
 	v.settleRest(&report, walk, 1)
 	covered := 0
 	querier := &tileQuerier{v: v, tilesPerAxis: tilesPerAxis, grids: make(map[int64]*blockedGrid, 4)}
@@ -304,6 +305,9 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 			return false
 		}
 		covered++
+		if transfer != nil && t >= transfer.at {
+			return false
+		}
 		if walkable {
 			return false
 		}
@@ -329,6 +333,13 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 	// nearest-wins: the native walk stops at its first clip on either
 	// plane and never continues past it (sub_428930 bit0 semantics).
 	objectT, objectKey, objectFound, objectPoint := v.objectChordFirstContact(fromWX, fromWZ, from.Y, toWX, toWZ, to.Y, walk)
+	if transfer != nil && (!objectFound || objectT >= transfer.at-1e-9) {
+		// The next QueryMovement leg starts at the linked cell's repaired
+		// point. Contacts beyond this exit belong to that next leg.
+		objectFound = false
+		report.Rest, report.RestOwner = transfer.rest, transfer.owner
+		report.NativeResult, report.continuation = nativeLinkedResult|nativeContinueResult, true
+	}
 
 	if startTile == endTile {
 		if covered == 0 {
@@ -364,6 +375,7 @@ func (v *WaterValidator) clipMovementSegment(from simulation.Spawn, fromOwner si
 
 	report.Outcome = ClipBlocked
 	report.Class = ClipClassTerrain
+	report.continuation = false
 	report.NativeResult = monster.NavResultClipped
 	report.BlockedTileX, report.BlockedTileZ = contact.tile.x, contact.tile.z
 
@@ -701,8 +713,22 @@ retail can accept the requested point and still return the native stop bit.
 ================
 */
 func (c *ClientClip) ProcessStepFrom(characterName string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, bool) {
+	pose, _, blocked := c.processOwnedStep(characterName, from, fromOwner, to)
+	return pose, blocked
+}
+
+/*
+================
+processOwnedStep
+
+A linked-cell placement is an accepted step, although native repair can
+change XZ. Return its receiving owner instead of inferring a new owner from
+the repaired point or treating every displacement as a stop.
+================
+*/
+func (c *ClientClip) processOwnedStep(characterName string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, simulation.NavOwner, bool) {
 	if c == nil || c.Validator == nil || c.Mode == ClipOff {
-		return to, false
+		return to, simulation.NavOwner{}, false
 	}
 
 	var report ClipReport
@@ -766,9 +792,12 @@ func (c *ClientClip) ProcessStepFrom(characterName string, from simulation.Spawn
 
 	if applying {
 		c.applied.Add(1)
-		return report.Rest, true
+		return report.Rest, report.RestOwner, true
 	}
-	return to, false
+	if c.Mode == ClipApply && report.Outcome == ClipArrived && report.NativeResult&nativeLinkedResult != 0 {
+		return report.Rest, report.RestOwner, false
+	}
+	return to, simulation.NavOwner{}, false
 }
 
 /*

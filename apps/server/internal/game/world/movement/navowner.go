@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+navowner.go - retained surface identity and the cell ownership of a walked chord
+
+===========================================================================
+*/
 package movement
 
 import (
@@ -26,6 +33,11 @@ import (
 
 // navOwner converts a resolved stand (at cell) into the value identity kept
 // in world state. A stand built without its set address has no identity.
+/*
+================
+navOwner
+================
+*/
 func (s *objectDeckStand) navOwner(cell int) simulation.NavOwner {
 	if s == nil || s.surface == nil {
 		return simulation.NavOwner{}
@@ -41,6 +53,11 @@ func (s *objectDeckStand) navOwner(cell int) simulation.NavOwner {
 }
 
 // withCell is the same placement/mesh standing on another cell.
+/*
+================
+withCell
+================
+*/
 func (s *objectDeckStand) withCell(cell int) *objectDeckStand {
 	next := *s
 	next.cellIndex = cell
@@ -49,6 +66,11 @@ func (s *objectDeckStand) withCell(cell int) *objectDeckStand {
 
 // local maps a world-grid point into the placement's object frame (inverse
 // yaw+translate; Y is untouched by the placement transform).
+/*
+================
+local
+================
+*/
 func (s *objectDeckStand) local(gx, gz float64) (float64, float64) {
 	p := s.placement
 	c, sn := math.Cos(p.yaw), math.Sin(p.yaw)
@@ -58,6 +80,11 @@ func (s *objectDeckStand) local(gx, gz float64) (float64, float64) {
 }
 
 // heightAt is the owned cell plane's world Y at a world-grid point.
+/*
+================
+heightAt
+================
+*/
 func (s *objectDeckStand) heightAt(gx, gz float64) (float64, bool) {
 	lx, lz := s.local(gx, gz)
 	y, ok := objectCellPlaneYAt(s.mesh, s.cellIndex, lx, lz)
@@ -67,6 +94,11 @@ func (s *objectDeckStand) heightAt(gx, gz float64) (float64, bool) {
 // standForOwner rebuilds the stand an owner names. It returns nil when the
 // identity no longer resolves (for example a different bundle now serves the
 // region); callers then fall back to the native teleport rule.
+/*
+================
+standForOwner
+================
+*/
 func (v *WaterValidator) standForOwner(owner simulation.NavOwner) *objectDeckStand {
 	if owner.Kind != simulation.NavOwnerObject {
 		return nil
@@ -100,6 +132,11 @@ func (v *WaterValidator) standForOwner(owner simulation.NavOwner) *objectDeckSta
 }
 
 // objectCellNeighbors lists the cells sharing an internal edge with cell.
+/*
+================
+objectCellNeighbors
+================
+*/
 func objectCellNeighbors(mesh *objectNavMesh, cell int) []int {
 	var out []int
 	for i := range mesh.internal.flags {
@@ -117,6 +154,11 @@ func objectCellNeighbors(mesh *objectNavMesh, cell int) []int {
 }
 
 // seedFrame converts a canonical spawn into the surface bundle's seed frame.
+/*
+================
+seedFrame
+================
+*/
 func seedFrame(surface *groundSurface, p simulation.Spawn) (float64, float64) {
 	bx := p.X + float64(simulation.SectorX(p.RegionID)-simulation.SectorX(surface.seedRegionID))*surface.regionSize
 	bz := p.Z + float64(simulation.SectorY(p.RegionID)-simulation.SectorY(surface.seedRegionID))*surface.regionSize
@@ -129,6 +171,11 @@ func seedFrame(surface *groundSurface, p simulation.Spawn) (float64, float64) {
 // hint takes the native FindNavCell rule: nearest |deltaY|, terrain wins ties.
 // ok is false only when no surface data covers p; dungeons keep their own
 // navigation plane and return the input unchanged with ok=false.
+/*
+================
+ResolveNavOwner
+================
+*/
 func (v *WaterValidator) ResolveNavOwner(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool) {
 	if simulation.IsDungeonRegion(p.RegionID) {
 		return simulation.NavOwner{}, p.Y, false
@@ -180,6 +227,11 @@ func (v *WaterValidator) ResolveNavOwner(p simulation.Spawn, hint simulation.Nav
 // fraction spans (each traced cell by cell from the cell that entered it) and
 // terrain everywhere else. A nil walk means ownership is unknown (dungeon or
 // no data) and callers keep their legacy behaviour for that plane.
+/*
+================
+navWalk
+================
+*/
 type navWalk struct {
 	paths []*objectOwnedPath // ascending, non-overlapping global-t spans
 	// bridges are the [visit, crossing] fractions an outline entry skips
@@ -189,6 +241,11 @@ type navWalk struct {
 
 // lastExitBefore is the chord fraction at which the walker last left an
 // object back onto terrain at or before t (0 when it never did).
+/*
+================
+lastExitBefore
+================
+*/
 func (w *navWalk) lastExitBefore(t float64) float64 {
 	last := 0.0
 	if w == nil {
@@ -203,6 +260,11 @@ func (w *navWalk) lastExitBefore(t float64) float64 {
 }
 
 // bridged reports whether chord fraction t lies on terrain an entry skipped.
+/*
+================
+bridged
+================
+*/
 func (w *navWalk) bridged(t float64) bool {
 	if w == nil {
 		return false
@@ -215,6 +277,11 @@ func (w *navWalk) bridged(t float64) bool {
 	return false
 }
 
+/*
+================
+objectAt
+================
+*/
 func (w *navWalk) objectAt(t float64) (*objectOwnedPath, int, bool) {
 	if w == nil {
 		return nil, 0, false
@@ -228,6 +295,11 @@ func (w *navWalk) objectAt(t float64) (*objectOwnedPath, int, bool) {
 }
 
 // ownerAt is the owner at chord fraction t.
+/*
+================
+ownerAt
+================
+*/
 func (w *navWalk) ownerAt(t float64) simulation.NavOwner {
 	if w == nil {
 		return simulation.NavOwner{}
@@ -240,6 +312,11 @@ func (w *navWalk) ownerAt(t float64) simulation.NavOwner {
 
 // heightAt is the owned object plane height at t (terrain callers sample the
 // heightfield themselves).
+/*
+================
+heightAt
+================
+*/
 func (w *navWalk) heightAt(t float64) (float64, bool) {
 	path, _, ok := w.objectAt(t)
 	if !ok {
@@ -249,6 +326,11 @@ func (w *navWalk) heightAt(t float64) (float64, bool) {
 }
 
 // pathForMesh returns the walk span owning this placement mesh, if any.
+/*
+================
+pathForMesh
+================
+*/
 func (w *navWalk) pathForMesh(mesh *objectNavMesh, anchorX, anchorZ float64, ordinal int) *objectOwnedPath {
 	if w == nil {
 		return nil
@@ -263,6 +345,11 @@ func (w *navWalk) pathForMesh(mesh *objectNavMesh, anchorX, anchorZ float64, ord
 }
 
 // spans flattens the walk into full [0,1] coverage for world state.
+/*
+================
+spans
+================
+*/
 func (w *navWalk) spans() []simulation.NavOwnerSpan {
 	if w == nil {
 		return nil
@@ -295,6 +382,11 @@ const navWalkLegLimit = 7
 
 // ownerWalk resolves surface ownership along from -> to starting from
 // fromOwner (resolved with the teleport rule when unknown).
+/*
+================
+ownerWalk
+================
+*/
 func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) *navWalk {
 	from = v.ownedStart(from, fromOwner)
 	if simulation.IsDungeonRegion(from.RegionID) || simulation.IsDungeonRegion(to.RegionID) {
@@ -332,6 +424,14 @@ func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.N
 				stand = nil
 				continue
 			}
+			next, leave, enter := path.linkedContinuation(t)
+			if next != nil {
+				path.truncateAt(leave)
+				walk.paths = append(walk.paths, path)
+				walk.bridges = append(walk.bridges, [2]float64{leave, enter})
+				stand, t = next, enter
+				continue
+			}
 			walk.paths = append(walk.paths, path)
 			t = path.spans[len(path.spans)-1].to
 			stand = nil
@@ -354,6 +454,11 @@ func (v *WaterValidator) ownerWalk(from simulation.Spawn, fromOwner simulation.N
 // carry neither side-block bit 0x01 nor 0x10 (the same admission client-next
 // ports as terrainOwnerPath, 404510 -> 403FB0 -> 428300). The entered cell is
 // the edge's source cell; the object's own walk then owns the chord.
+/*
+================
+terrainOutlineEntry
+================
+*/
 func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*objectDeckStand, float64, float64) {
 	const eps = 1e-9
 	start := globalTile{x: int(math.Floor(ax / simulation.NativeRegionSize)), z: int(math.Floor(az / simulation.NativeRegionSize))}
@@ -458,6 +563,11 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 }
 
 // NavAuthority is the surface-ownership seam the movement runtime consumes.
+/*
+================
+NavAuthority
+================
+*/
 type NavAuthority interface {
 	ResolveNavOwner(p simulation.Spawn, hint simulation.NavOwner) (simulation.NavOwner, float64, bool)
 	WalkOwners(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) simulation.NavWalk
@@ -465,6 +575,11 @@ type NavAuthority interface {
 
 // WalkOwners is the ownership record of one committed chord: owner spans for
 // the live-position plane and the owner reached at its end.
+/*
+================
+WalkOwners
+================
+*/
 func (v *WaterValidator) WalkOwners(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) simulation.NavWalk {
 	walk := v.ownerWalk(from, fromOwner, to)
 	if walk == nil {
@@ -476,10 +591,20 @@ func (v *WaterValidator) WalkOwners(from simulation.Spawn, fromOwner simulation.
 // ownerPathValidator / ownerClipValidator are the owner-aware variants of the
 // PathGuard and ClientClip seams. Test fakes that only implement the
 // owner-less methods keep the teleport-rule behaviour.
+/*
+================
+ownerPathValidator
+================
+*/
 type ownerPathValidator interface {
 	ValidateMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) PathReport
 }
 
+/*
+================
+ownerClipValidator
+================
+*/
 type ownerClipValidator interface {
 	ClipMovementPathFrom(from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) ClipReport
 }
