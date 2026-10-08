@@ -3,8 +3,9 @@
 
 codeStamp.test.mjs - a reuse stamp follows the code that fills the cache
 
-The stamp must change when any module in the entry's import closure (or a
-Python helper it names) changes bytes, ignore prose in comments, and round
+The stamp must change when any module in the entry's import closure (a
+Python helper it names, or a module beside that helper it imports) changes
+bytes, ignore prose in comments, and round
 trip through the generated tree.
 
 ===========================================================================
@@ -48,7 +49,8 @@ async function writeModules( directory ) {
 		'export const helper = new URL( "encode.py", import.meta.url ) && 1;\n'
 	);
 	await writeFile( path.join( directory, "lib", "late.mjs" ), "export const value = 2;\n" );
-	await writeFile( path.join( directory, "lib", "encode.py" ), "print(1)\n" );
+	await writeFile( path.join( directory, "lib", "encode.py" ), "from paths import ROOT\nimport os\nprint(1)\n" );
+	await writeFile( path.join( directory, "lib", "paths.py" ), "ROOT = 1\n" );
 }
 
 test("the closure follows relative imports and named Python helpers, not comments", async () => {
@@ -57,7 +59,7 @@ test("the closure follows relative imports and named Python helpers, not comment
 	const closure = await codeClosure( path.join( directory, "entry.mjs" ) );
 	assert.deepEqual(
 		closure.map( ( file ) => path.relative( directory, file ).split( path.sep ).join( "/" ) ).sort(),
-		[ "entry.mjs", "lib/encode.py", "lib/helper.mjs", "lib/late.mjs" ]
+		[ "entry.mjs", "lib/encode.py", "lib/helper.mjs", "lib/late.mjs", "lib/paths.py" ]
 	);
 });
 
@@ -67,7 +69,7 @@ test("a byte change anywhere in the closure changes the hash", async () => {
 	const entryUrl = pathToFileURL( path.join( directory, "entry.mjs" ) ).href;
 	const before = await codeHash( entryUrl );
 	assert.equal( await codeHash( entryUrl ), before );
-	await writeFile( path.join( directory, "lib", "encode.py" ), "print(2)\n" );
+	await writeFile( path.join( directory, "lib", "paths.py" ), "ROOT = 2\n" );
 	assert.notEqual( await codeHash( entryUrl ), before );
 });
 
