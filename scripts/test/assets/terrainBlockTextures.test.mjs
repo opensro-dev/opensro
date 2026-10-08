@@ -201,7 +201,8 @@ test("terrain containers ship the authored levels only, verbatim", async () => {
 test("a persisted tile ledger without recorded references is discarded, not trusted", async () => {
 	// The ledger-hit path the review named: a ledger whose tiles do not
 	// record the bundle's reference cannot be checked against the probe.
-	// Version 4 records it; older ledgers are refused and re-read.
+	// Version 4 records it, version 5 adds each region's named paths; older
+	// ledgers are refused and re-read.
 	const { readTerrainTileLedger } = await import( "../../build/world/buildOutdoorWorldRegionResources.mjs" );
 	const ledgerDir = path.join( generatedRoot, "intermediate" );
 	await mkdir( ledgerDir, { recursive: true } );
@@ -218,8 +219,17 @@ test("a persisted tile ledger without recorded references is discarded, not trus
 			regions: { "27024": [ { ddjFileName: "x.ddj", sourcePath: "y", imagePublicPath: "/z.png" } ] }
 		} )
 	);
+	assert.equal( (await readTerrainTileLedger()).size, 0, "a v4 ledger without named paths is ignored" );
+	await writeFile(
+		path.join( ledgerDir, "outdoor-terrain-tiles.json" ),
+		JSON.stringify( {
+			version: 5,
+			regions: { "27024": [ { ddjFileName: "x.ddj", sourcePath: "y", imagePublicPath: "/z.png" } ] },
+			references: { "27024": [ "/z.png" ] }
+		} )
+	);
 	const fresh = await readTerrainTileLedger();
-	assert.equal( fresh.size, 1, "a v4 ledger is read" );
+	assert.equal( fresh.size, 1, "a v5 ledger is read" );
 });
 
 test("the lightmap publisher retains the raw sibling for existing bundles", async () => {

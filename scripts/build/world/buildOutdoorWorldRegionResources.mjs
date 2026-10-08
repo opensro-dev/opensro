@@ -19,7 +19,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildJobs } from "../shared/buildParallelism.mjs";
 import { codeHash, invalidateStamp, stampIsCurrent, writeStamp } from "../shared/codeStamp.mjs";
-import { claimKeptOutput, claimPublicFile } from "../shared/publicationLedger.mjs";
+import { claimKeptOutput, claimPublicFile, namedPublicPaths } from "../shared/publicationLedger.mjs";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
 
@@ -59,7 +59,9 @@ const TERRAIN_TILE_LEDGER_PATH = path.join( generatedRoot, "intermediate", "outd
 // v4: each ledger tile records the reference its bundle names
 // (imagePublicPath), so a hit is trusted only while every reference still
 // matches the probe; an older ledger cannot tell and is discarded.
-const TERRAIN_TILE_LEDGER_VERSION = 4;
+// v5: each region also records the public paths its bundle names, so a
+// reused region claims them without re-reading the bundle (2.4 GB in all).
+const TERRAIN_TILE_LEDGER_VERSION = 5;
 // Names the code stamp of every outdoor reuse cache (regions, shared indexes).
 const OUTDOOR_CODE_STAMP = "outdoor-world";
 
@@ -69,15 +71,30 @@ readTerrainTileLedger
 ================
 */
 export async function readTerrainTileLedger() {
+	return (await readRegionLedger()).tiles;
+}
+
+/*
+================
+readRegionLedger
+
+The ledger's two maps by region id: the terrain tiles each bundle names and
+every public path it names (claimKeptOutput's input on reuse).
+================
+*/
+async function readRegionLedger() {
 	try {
 		const ledger = JSON.parse( await readFile( TERRAIN_TILE_LEDGER_PATH, "utf8" ) );
-		if ( ledger.version === TERRAIN_TILE_LEDGER_VERSION && ledger.regions ) {
-			return new Map( Object.entries( ledger.regions ) );
+		if ( ledger.version === TERRAIN_TILE_LEDGER_VERSION && ledger.regions && ledger.references ) {
+			return {
+				tiles: new Map( Object.entries( ledger.regions ) ),
+				references: new Map( Object.entries( ledger.references ) )
+			};
 		}
 	} catch ( error ) {
 		if ( error.code !== "ENOENT" ) throw error;
 	}
-	return new Map();
+	return { tiles: new Map(), references: new Map() };
 }
 
 /*
@@ -85,10 +102,17 @@ export async function readTerrainTileLedger() {
 writeTerrainTileLedger
 ================
 */
-async function writeTerrainTileLedger( tilesByRegion ) {
+async function writeTerrainTileLedger( tilesByRegion, referencesByRegion ) {
 	await mkdir( path.dirname( TERRAIN_TILE_LEDGER_PATH ), { recursive: true } );
-	const regions = Object.fromEntries( [ ...tilesByRegion ].sort( ( [a], [b] ) => a.localeCompare( b ) ) );
-	await writeFile( TERRAIN_TILE_LEDGER_PATH, JSON.stringify( { version: TERRAIN_TILE_LEDGER_VERSION, regions } ) );
+	const sorted = ( map ) => Object.fromEntries( [ ...map ].sort( ( [a], [b] ) => a.localeCompare( b ) ) );
+	await writeFile(
+		TERRAIN_TILE_LEDGER_PATH,
+		JSON.stringify( {
+			version: TERRAIN_TILE_LEDGER_VERSION,
+			regions: sorted( tilesByRegion ),
+			references: sorted( referencesByRegion )
+		} )
+	);
 }
 
 /*
@@ -394,7 +418,7 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 
 	let built = 0;
 	let reused = 0;
-	const tilesByRegion = await readTerrainTileLedger();
+	const { tiles: tilesByRegion, references: referencesByRegion } = await readRegionLedger();
 	await mapWithConcurrency( selectedSectors, jobs, async ( sector, index ) => {
 		const publicPath = outdoorRegionBundlePublicPath( sector.id );
 		const outputPath = publicPathToFile( publicPath, publicRoot );
@@ -407,14 +431,21 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 			if ( tiles && !(await terrainTileReferencesCurrent( tiles, sourceExtractedRoot )) ) {
 				tiles = undefined;
 			}
+			let references = referencesByRegion.get( String( sector.id ) );
 			if ( !tiles ) {
 				tiles = await refreshCachedTerrainTileBundle( outputPath, sourceExtractedRoot );
 				tilesByRegion.set( String( sector.id ), tiles );
+				// A migration may have rewritten the bundle: re-read what it names.
+				references = undefined;
 			} else {
 				await copyReferencedTerrainTileImages( tiles, sourceExtractedRoot );
 			}
+			if ( !references ) {
+				references = namedPublicPaths( await readFile( outputPath, "utf8" ) );
+				referencesByRegion.set( String( sector.id ), references );
+			}
 			// A kept bundle claims itself and what it names (its lightmaps).
-			await claimKeptOutput( outputPath );
+			await claimKeptOutput( outputPath, references );
 			reused += 1;
 			reportProgress( options, {
 				phase: "regions",
@@ -443,8 +474,9 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 			waterResources: sharedRender.water
 		} );
 		assertIndependentOutdoorBundle( bundle, sector );
-		await writeCompactJson( outputPath, bundle );
+		const text = await writeCompactJson( outputPath, bundle );
 		tilesByRegion.set( String( sector.id ), bundleTerrainTiles( bundle ) );
+		referencesByRegion.set( String( sector.id ), namedPublicPaths( text ) );
 		built += 1;
 		reportProgress( options, {
 			phase: "regions",
@@ -455,7 +487,7 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		} );
 	} );
 
-	await writeTerrainTileLedger( tilesByRegion );
+	await writeTerrainTileLedger( tilesByRegion, referencesByRegion );
 	const missingBundlePaths = await findMissingBundlePaths( descriptor.regions, jobs );
 	let published = false;
 	let catalog;
@@ -828,9 +860,11 @@ writeCompactJson
 ================
 */
 async function writeCompactJson( outputPath, value ) {
+	const text = `${JSON.stringify( value )}\n`;
 	await mkdir( path.dirname( outputPath ), { recursive: true } );
-	await writeFile( outputPath, `${JSON.stringify( value )}\n`, "utf8" );
+	await writeFile( outputPath, text, "utf8" );
 	claimPublicFile( outputPath );
+	return text;
 }
 
 /*

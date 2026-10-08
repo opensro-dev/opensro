@@ -89,7 +89,8 @@ export function beginPublication( owner, { complete = true } = {} ) {
 	if ( !/^[a-z0-9][a-z0-9.-]*$/.test( owner ) ) throw new Error( `Invalid publication owner: ${owner}` );
 	if ( current ) throw new Error( `Publication ${current.owner} is still open` );
 	// files maps a lower-cased public path to its spelling on disk.
-	current = { owner, complete, files: new Map() };
+	// walked: files claimKeptOutput has already followed in this run.
+	current = { owner, complete, files: new Map(), walked: new Set() };
 }
 
 /*
@@ -139,16 +140,53 @@ A builder that keeps an earlier output because it is current claims it and
 everything it names, transitively (a kept region bundle names its lightmaps,
 a kept object index its meshes and textures): a complete run replaces the
 owner's record, so a kept output that claimed only itself would leave its
-references to the audit as files no step produced.
+references to the audit as files no step produced. A builder that recorded
+the output's references when it wrote it passes them (namedPublicPaths) and
+the output is not read again.
+
+One walk serves the whole run: every region bundle names the shared object
+index, which names every mesh, so a fresh walk per region re-read the same
+5,844 files (277 MiB) 2,123 times (835 s). A file already walked in this
+publication was claimed with everything it names, and claims only grow until
+the run commits, so a later walk stops there.
 ================
 */
-export async function claimKeptOutput( absolutePath ) {
+/** @param {string} absolutePath @param {Iterable<string>} [named] */
+export async function claimKeptOutput( absolutePath, named ) {
 	if ( !current ) return;
 	claimPublicFile( absolutePath );
 	const publicPath = toPublicPath( absolutePath );
-	if ( !publicPath ) return;
-	const references = await referencedFiles( new Map( [ [ publicPath.toLowerCase(), publicPath ] ] ) );
-	claimPublicPaths( references.values() );
+	if ( !publicPath || current.walked.has( publicPath.toLowerCase() ) ) return;
+	current.walked.add( publicPath.toLowerCase() );
+	if ( named === undefined ) {
+		const references = await referencedFiles(
+			new Map( [ [ publicPath.toLowerCase(), publicPath ] ] ),
+			current.walked
+		);
+		claimPublicPaths( references.values() );
+		return;
+	}
+	const start = new Map();
+	for ( const reference of named ) {
+		const key = reference.toLowerCase();
+		if ( current.walked.has( key ) ) continue;
+		current.walked.add( key );
+		start.set( key, reference );
+	}
+	claimPublicPaths( start.values() );
+	claimPublicPaths( (await referencedFiles( start, current.walked )).values() );
+}
+
+/*
+================
+namedPublicPaths
+
+The /assets/... paths a JSON text names, in the spelling it wrote: what
+claimKeptOutput follows, recorded by a builder when it writes the text.
+================
+*/
+export function namedPublicPaths( text ) {
+	return [ ...new Set( Array.from( text.matchAll( REFERENCED_PUBLIC_PATH ), ( [, reference] ) => reference ) ) ];
 }
 
 // A JSON string value that is a public path; paths never contain a quote or backslash.
@@ -303,11 +341,12 @@ Every /assets/... file the claimed JSON outputs name, transitively: the
 client loads exactly what its manifests and catalogs reference. spellings
 maps each claimed lower-cased path to its spelling on disk; returns the
 referenced paths that are not themselves claimed, lower-cased path to the
-spelling the manifest wrote.
+spelling the manifest wrote. seen (default: the claimed paths) holds what is
+already walked; a caller sharing it across calls walks each file once.
 ================
 */
-async function referencedFiles( spellings ) {
-	const seen = new Set( spellings.keys() ), referenced = new Map();
+async function referencedFiles( spellings, seen = new Set( spellings.keys() ) ) {
+	const referenced = new Map();
 	const pending = [ ...spellings.values() ];
 	while ( pending.length > 0 ) {
 		const publicPath = pending.pop();
@@ -319,7 +358,7 @@ async function referencedFiles( spellings ) {
 			if ( error.code === "ENOENT" ) continue;
 			throw error;
 		}
-		for ( const [, reference] of text.matchAll( REFERENCED_PUBLIC_PATH ) ) {
+		for ( const reference of namedPublicPaths( text ) ) {
 			const key = reference.toLowerCase();
 			if ( seen.has( key ) ) continue;
 			seen.add( key );

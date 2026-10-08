@@ -213,6 +213,44 @@ test("inside a build the UI preload sweep lists only images a current step produ
 	assert.equal( standalone.images.length, 2 );
 });
 
+test("kept outputs sharing a catalog are walked once and still claim everything", async () => {
+	const regions = [ "a", "b" ].map( name => `/assets/world/shared/region-${name}.json` );
+	for ( const [index, region] of regions.entries() ) {
+		await publicFile(
+			region,
+			JSON.stringify( {
+				catalog: "/assets/world/shared/catalog.json",
+				lightmap: `/assets/world/shared/lm-${index}.texture`
+			} )
+		);
+		await publicFile( `/assets/world/shared/lm-${index}.texture` );
+	}
+	await publicFile(
+		"/assets/world/shared/catalog.json",
+		JSON.stringify( { mesh: "/assets/world/shared/mesh.json" } )
+	);
+	await publicFile( "/assets/world/shared/mesh.json", "{}" );
+	for ( const owner of ledger.expectedOwners() ) {
+		ledger.beginPublication( owner );
+		if ( owner === "outdoor-world" ) {
+			// Concurrent lanes, as the outdoor builder runs them.
+			await Promise.all(
+				regions.map( region => ledger.claimKeptOutput( path.join( root, "client-public", region.slice( 1 ) ) ) )
+			);
+		}
+		await ledger.commitPublication();
+	}
+	const named = [
+		...regions,
+		"/assets/world/shared/lm-0.texture",
+		"/assets/world/shared/lm-1.texture",
+		"/assets/world/shared/catalog.json",
+		"/assets/world/shared/mesh.json"
+	];
+	const report = await ledger.indexClaimReport( { assets: named.map( path => ({ path, length: 1 }) ) } );
+	assert.deepEqual( [ ...report.localOnly, ...report.unclaimed ], [] );
+});
+
 test("a second open publication is refused", () => {
 	ledger.beginPublication( "family-a" );
 	assert.throws( () => ledger.beginPublication( "family-b" ), /still open/ );
