@@ -432,8 +432,10 @@ test(
 				for ( const [index, inset] of [ 3, 1, 5, 2 ].entries() ) {
 					assert.ok( Math.abs( result.padding[index] * ratio - inset * factor ) < .001 );
 				}
-				assert.ok( Math.abs( result.hit[0] - 500 ) <= 1, JSON.stringify( result ) );
-				assert.ok( Math.abs( result.hit[1] - 300 ) <= 1, JSON.stringify( result ) );
+				// Browser mousedown coordinates truncate to CSS pixels. Measure its
+				// one-pixel quantization in CSS units, not enlarged logical UI units.
+				assert.ok( Math.abs( result.hit[0] - 500 ) * result.scale <= 1, JSON.stringify( result ) );
+				assert.ok( Math.abs( result.hit[1] - 300 ) * result.scale <= 1, JSON.stringify( result ) );
 			}
 			const fixed = await page.evaluate( async () => {
 				const f = /** @type {any} */ (globalThis).scalingFixture;
@@ -480,8 +482,8 @@ test(
 				assert.deepEqual( scaled.uiViewport, fixed );
 				assert.equal( scaled.scale, 1 / ratio );
 				assert.ok( scaled.activated );
-				assert.ok( Math.abs( scaled.hit[0] - 500 ) <= 1 );
-				assert.ok( Math.abs( scaled.hit[1] - 300 ) <= 1 );
+				assert.ok( Math.abs( scaled.hit[0] - 500 ) * scaled.scale <= 1 );
+				assert.ok( Math.abs( scaled.hit[1] - 300 ) * scaled.scale <= 1 );
 			}
 			await session.send( "Emulation.setDeviceMetricsOverride", {
 				width: 1280,
@@ -493,7 +495,10 @@ test(
 			await page.evaluate( async () => {
 				const path = "/src/engine/foundation/rendering/video-options.ts";
 				const { defaultVideoOptions } = await import( path );
-				/** @type {any} */ (globalThis).scalingFixture.platform.saveVideoOptions( defaultVideoOptions() );
+				const f = /** @type {any} */ (globalThis).scalingFixture;
+				f.platform.saveVideoOptions( defaultVideoOptions() );
+				// The runtime publishes its newly laid-out UI after a video preference.
+				f.platform.presentUi( f.semantics );
 			} );
 			await page.waitForFunction( () => {
 				const editor = document.querySelector( '[data-ui-id="scaling-editor"]' );
