@@ -55,6 +55,7 @@ gather from NPC, 6 dialog, 8 capture, 9 other quest cleared, 10 change item,
 +0x1D monsters (stride 4), +0x14D drop percent (float, one per monster), +0x23D
 count, +0x241 item, +0x249 losing the item regresses the quest
 (QuestBase_RefreshMissionProgressAndCompletion 9259C0). Kill: +0x15 monster
-count, +0x19 monsters, +0x149 count. Deliver: +0x19 (byte) the number of items, +0x42 their codenames and
-+0x1A their quantities (stride 4, the pairs 9208D0 grants), +0xC0 the
-hand-over line, +0xC4 the not-yet-delivered line. Dialog: +0x1E the line.
+count, +0x19 monsters, +0x149 count. Deliver: +0x19 (byte) the number of
+items, +0x42 their codenames and +0x1A their quantities (stride 4, the pairs
+9208D0 grants), +0xC0 the hand-over line, +0xC4 the not-yet-delivered line.
+Dialog: +0x1E the line.
