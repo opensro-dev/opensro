@@ -400,21 +400,37 @@ async function indexReusablePacks( indexPath ) {
 ================
 packOutputsIntact
 
-The identity pack is on disk at its recorded size, or - in a compacted
-tree, which keeps only the zstd copy `pnpm assets compact` made - that copy
-is. Either way the unchanged pack is reused without rebuilding it.
+Which representation of an unchanged pack is on disk: "identity" when the
+pack is at its recorded size, "zstd" in a compacted tree, which keeps only
+the copy `pnpm assets compact` made, or null when neither is intact.
 ================
 */
 async function packOutputsIntact( publicRoot, pack ) {
 	try {
 		const binStat = await stat( containedPublicFile( publicRoot, pack.path ) ).catch( () => undefined );
-		if ( binStat ) return binStat.isFile() && binStat.size === pack.bytes;
-		if ( typeof pack.zstdPath !== "string" ) return false;
+		if ( binStat ) return binStat.isFile() && binStat.size === pack.bytes ? "identity" : null;
+		if ( typeof pack.zstdPath !== "string" ) return null;
 		const zstdStat = await stat( containedPublicFile( publicRoot, pack.zstdPath ) ).catch( () => undefined );
-		return Boolean( zstdStat?.isFile() && zstdStat.size === pack.zstdBytes );
+		return zstdStat?.isFile() && zstdStat.size === pack.zstdBytes ? "zstd" : null;
 	} catch {
-		return false;
+		return null;
 	}
+}
+
+/*
+================
+reusedPackEntry
+
+An unchanged pack's index entry. Beside its identity pack the compact copy
+is dropped from the entry, so archiveStaleOutputs retires the .bin.zst: a
+copy carried forward stayed live forever in an uncompacted tree (1.46 GiB
+of them on 2026-10-08). `pnpm assets compact` makes it again when needed.
+================
+*/
+function reusedPackEntry( pack, representation ) {
+	if ( representation !== "identity" ) return { ...pack };
+	const { zstdPath, zstdBytes, zstdLevel, zstdWindowLog, ...identity } = pack;
+	return identity;
 }
 
 /*
@@ -438,14 +454,15 @@ async function buildOrReusePack(
 	const reusable = reusablePacks.get( plannedKey );
 	// Folder and slot are part of the pack's URL: reuse only a pack built for both.
 	const packDir = toPublicAssetPath( outputRoot, publicRoot );
-	if (
-		reusable && reusable.groupName === name && packSlotOf( reusable.pack.path ) === slot &&
-		reusable.pack.path.slice( 0, reusable.pack.path.lastIndexOf( "/" ) ) === packDir &&
-		(await packOutputsIntact( publicRoot, reusable.pack ))
-	) {
+	const representation = reusable && reusable.groupName === name &&
+			packSlotOf( reusable.pack.path ) === slot &&
+			reusable.pack.path.slice( 0, reusable.pack.path.lastIndexOf( "/" ) ) === packDir ?
+		await packOutputsIntact( publicRoot, reusable.pack ) :
+		null;
+	if ( reusable && representation ) {
 		counters.reused += 1;
 		return {
-			packEntry: { ...reusable.pack },
+			packEntry: reusedPackEntry( reusable.pack, representation ),
 			assetRows: reusable.members.map( ( member ) => ({ ...member }) )
 		};
 	}
@@ -548,7 +565,7 @@ Soft-archive files under the packs root that the freshly published manifest does
 */
 async function archiveStaleOutputs( publicRoot, outputRoot, index, indexPath ) {
 	// The live set includes the index's precompressed sidecars; deleting them
-	// forced a pointless brotli/gzip/zstd recompression of the manifest every build.
+	// forced a pointless recompression of the manifest every build.
 	const keep = livePackFiles( publicRoot, indexPath, index );
 
 	for ( const filename of await listFiles( outputRoot ) ) {
