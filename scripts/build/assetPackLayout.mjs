@@ -126,6 +126,7 @@ files are the group's current files sorted by path; baseline is
 baselinePacksOf()'s answer or null. Returns the packs in slot order.
 ================
 */
+/** @returns {PlannedPack[]} */
 export function planPackLayout( { files, baseline, targetBytes } ) {
 	if ( !baseline || baseline.targetBytes !== targetBytes ) return fullLayout( files, targetBytes );
 	const current = new Map( files.map( ( file ) => [ file.publicPath, file ] ) );

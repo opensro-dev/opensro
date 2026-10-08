@@ -62,8 +62,7 @@ not followed.
 export async function codeClosure( entryFile ) {
 	const seen = new Set();
 	const pending = [ path.resolve( entryFile ) ];
-	while ( pending.length > 0 ) {
-		const file = pending.pop();
+	for ( let file = pending.pop(); file !== undefined; file = pending.pop() ) {
 		if ( seen.has( file ) ) continue;
 		seen.add( file );
 		const directory = path.dirname( file );

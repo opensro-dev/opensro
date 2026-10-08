@@ -373,7 +373,9 @@ generatedPath( "unclaimed-assets.json" ) and returns it with the groups to
 pack. options.archiveRoot overrides the archive location (tests).
 ================
 */
-export async function auditClaims( groups, { publicRoot = CLIENT_PUBLIC_ROOT, archiveRoot } = {} ) {
+/** @param {{ publicRoot?: string, archiveRoot?: string }} [options] */
+export async function auditClaims( groups, options = {} ) {
+	const { publicRoot = CLIENT_PUBLIC_ROOT, archiveRoot } = options;
 	const status = await ledgerStatus();
 	const rows = [];
 	for ( const group of groups ) {
