@@ -1089,7 +1089,17 @@ nameInputs
 ================
 		*/
 		nameInputs( now = soundClock ) {
-			return { social, fortress, attackedName: combat.nameAttack( now ), localItem: inventory.nameItem() };
+			// localLevel: the level the experience stream maintains (CICUser
+			// +0x820). The local entity keeps its spawn row's level until it
+			// respawns, so a level-up would otherwise stay invisible to the PK
+			// gates (BR-261006-1818).
+			return {
+				social,
+				fortress,
+				attackedName: combat.nameAttack( now ),
+				localItem: inventory.nameItem(),
+				localLevel: progression.level
+			};
 		},
 		/*
 ================

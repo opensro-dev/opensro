@@ -1673,3 +1673,22 @@ test("portrait selection stays local while the previous target grant retains its
 	target.clear();
 	assert.equal( target.selectionIntent(), 0 );
 });
+
+test("a level-up reaches the PK gates' local level without a respawn (BR-261006-1818)", async () => {
+	const { createGameplay } = await load( "gameplay" );
+	const { feedbackLevels } = await import( "../../src/engine/foundation/gameplay/feedback-levels.ts" );
+	const toTwenty = feedbackLevels().get( 19 )[0];
+	const game = createGameplay( () => {} );
+	game.bootstrap( { character: { level: 19, experience: toTwenty - 1 } } );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	assert.equal( game.nameInputs().localLevel, 19 );
+	// 0x30D2: one experience point crosses into level 20 (stat points ride along).
+	const update = Buffer.alloc( 15 );
+	update.writeUInt32LE( 1 );
+	update.writeInt32LE( 1, 4 );
+	update.writeUInt16LE( 3, 13 );
+	game.receive( { opcode: 0x30d2, payload: update }, 100 );
+	// 693EF9 reads CICUser +0x820, which this update changed; the click gate must too.
+	assert.equal( game.nameInputs().localLevel, 20 );
+	game.dispose();
+});

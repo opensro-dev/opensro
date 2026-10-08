@@ -133,10 +133,16 @@ publishes its category-4 notice (player-attack.ts).
 	function nameContext( spawning?: EntityState ): NameColorContext | undefined {
 		const local = spawning?.kind === "local-player" ? spawning : entities.read( gameplay.localIdentity() );
 		if ( !local ) return;
-		const inputs = gameplay.nameInputs( nameClock );
+		const { localLevel, ...inputs } = gameplay.nameInputs( nameClock );
 		return {
 			...inputs,
-			local: { ...local, holdType: local.holdType ?? equipmentHoldType( inputs.localItem?.typeFlags ) },
+			local: {
+				...local,
+				// 693EF9 and 6A2350 read CICUser +0x820, which every level-up
+				// updates; the entity's own level is its last spawn row's.
+				level: localLevel ?? local.level,
+				holdType: local.holdType ?? equipmentHoldType( inputs.localItem?.typeFlags )
+			},
 			capeTeam: id => capeTeams.get( id )
 		};
 	}
