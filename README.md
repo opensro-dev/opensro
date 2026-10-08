@@ -28,7 +28,7 @@ The full walkthrough, with the exact tool versions, is [docs/GETTING_STARTED.md]
    ```sh
    corepack pnpm install --frozen-lockfile
    corepack pnpm assets prepare
-   corepack pnpm assets build full     # about 40 minutes, once
+   corepack pnpm assets build full     # about 6 minutes on 16 cores, once
    corepack pnpm task build server-game-data
    ```
 3. **Start the server cluster** (two terminals):

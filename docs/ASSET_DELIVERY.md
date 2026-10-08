@@ -21,9 +21,13 @@ pack format, the asset worker or the release tools.
    have, and pack layout is planned against the live manifest so unchanged
    packs keep their URLs and players' caches stay valid.
 4. Every build process records which public files it produced (the
-   publication ledger). The full build reports packed files no current
+   publication ledger). The full build archives packed files no current
    builder produced; those are leftovers of older pipelines and must not
    ship.
+5. One `pnpm assets build full` makes a complete tree, every focused family
+   included, in about 6 minutes on 16 cores. Two fresh builds of the same commit are
+   byte-identical, and an already built tree converges to the same bytes
+   (see "Reuse is keyed by code").
 
 ## Where the bytes come from
 
@@ -96,17 +100,19 @@ Every file under `client-public/assets/` is produced by exactly one owner:
 | Outdoor world (every region) | `pnpm assets build world-outdoor` (`scripts/build_outdoor_world_resources.mjs`) | `outdoor-world` |
 | Resource build (everything else the full build makes) | `pnpm assets build` (`scripts/build_sro_resources.mjs`) | `resource-build` |
 | Focused families (code-selected images, rebuilt catalogs) | `pnpm assets refresh <family>` (`scripts/refresh_asset_family.mjs`) | `family-<family>` |
-| Standalone publishers (skill UI, dungeon worlds, flares, ...) | `pnpm assets publish <family>` (`apps/client-next/tools/publish-<family>.mjs`) | `family-<family>` |
+| Publishing families (skill UI, dungeon worlds, flares, ...) | `pnpm assets publish <family>` (`scripts/refresh_asset_family.mjs`) | `family-<family>` |
 | World-map refresh (optional; files the resource build also writes) | `pnpm assets refresh world-map` | `world-map` |
 
 A family's record is named after its task (`assets:refresh:<family>` or
 `assets:publish:<family>`), not its pack folder, so the ledger can check the
 task table for families that never ran.
 
-`pnpm assets build full` runs the outdoor build, then the resource build.
-`pnpm assets publish` with no family runs every publisher and every focused
-family; a fresh tree needs it after the full build, because the full build
-does not produce what those families publish.
+`pnpm assets build full` runs the outdoor build, then the resource build,
+which runs every family of `scripts/build/families/looseFamilies.mjs` after
+its builders and before the image sweep and the pack tail. Each family still
+records its own owner. `pnpm assets refresh <family>` and
+`pnpm assets publish <family>` rerun one family into an existing tree while
+you iterate on it; nothing needs them after a build.
 
 ### Focused families
 
@@ -227,8 +233,8 @@ The two outcomes need every expected owner to have a record:
   `<checkout>/temp/archives/generated-artifacts/<day>/unclaimed-public-asset/`
   and never deletes. Records of owners that no longer exist (a renamed or
   removed family) claim nothing and are archived too.
-- **An expected owner has no record** (a fresh tree before
-  `pnpm assets publish`, or a family added since the last publish). Nothing
+- **An expected owner has no record** (a tree whose outdoor world has not
+  had a full build yet, or a build that stopped before its families). Nothing
   moves and nothing fails: the files of a family that never ran cannot be
   told from garbage. The summary names the missing owners.
 
@@ -274,8 +280,8 @@ One setting sizes every parallel stage of the asset build:
 
 | Stage | Before | Now |
 | --- | --- | --- |
-| Packs built at once (each holds its buffer and zstd output, about 100 MiB) | 3 | `SRO_BUILD_JOBS` |
-| libuv thread pool (runs the zlib and zstd compression the packer awaits) | 4 | `SRO_BUILD_JOBS` (at least 4) |
+| Packs built at once (each holds its buffer, about 100 MiB) | 3 | `SRO_BUILD_JOBS` |
+| libuv thread pool (runs the gzip compression the packer awaits) | 4 | `SRO_BUILD_JOBS` (at least 4) |
 | JSON sidecar compression workers | `min(cores - 2, 4)` | `SRO_BUILD_JOBS` (at most the core count) |
 | Outdoor region builders (`--jobs=N` still overrides) | 2 | `SRO_BUILD_JOBS` |
 | Resource-build lanes running side by side | 2 | `SRO_BUILD_JOBS` |
@@ -287,6 +293,51 @@ pool), so it is not part of the build fingerprint. Lower it when the machine
 must stay responsive, for example `SRO_BUILD_JOBS=4 pnpm assets build`.
 Entry points import `buildParallelism.mjs` first, because libuv reads
 `UV_THREADPOOL_SIZE` once, when the pool first starts.
+
+Measured on 16 cores (`SRO_BUILD_JOBS` 15), 2026-10-08: a fresh full build
+of an empty generated tree takes 352 s in one command; a rebuild with
+nothing changed takes 3 s (the fingerprint). Image conversion went from
+202 s to 42 s and uncached packs from 507 s to 163 s when the stages went
+parallel.
+
+### Compression the build does and does not do
+
+The build writes identity packs, gzip transports for large members and a
+`.gz` sidecar for each published JSON manifest
+(`PUBLISHED_SIDECAR_SUFFIXES` in `shared/compressionUtils.mjs`). It writes
+no Brotli or zstd sidecars: no host serves them. `pnpm assets compact` alone
+makes the zstd copies of the packs it keeps (`ensurePackZstdCopies`),
+because only the compact release profile drops the identity copies.
+
+### Reuse is keyed by code
+
+The build reuses output already on disk wherever it can. Reuse is safe only
+when the code that wrote the output is the code running now, so every reuse
+cache is keyed by code, never by a file merely existing:
+
+| Cache | Key |
+| --- | --- |
+| The whole build | the resource-build fingerprint (inputs, outputs and `scripts/build/`) |
+| Outdoor region bundles and shared indexes | the `outdoor-world` code stamp |
+| Converted PNGs (`convert_images.py`) | the `image-conversion` code stamp, then the PNG's mtime against its source |
+| Block textures (`.texture`) | the encoder's sha256 plus the source's |
+| Crowd VAT bakes | `CROWD_VAT_COMPILER_VERSION` |
+
+A code stamp (`scripts/build/shared/codeStamp.mjs`) is the sha256 of a
+builder's source closure: the entry module, every module it imports through
+relative paths, the Python helpers they name, and the modules beside those
+helpers that they import. It lives in `.generated/build-stamps/`. When it
+does not match, the cache is rebuilt in full, and only a complete run writes
+the new stamp. Before stamps, a builder fix never reached a tree that was
+already built: the main tree kept 2,126 outdoor regions an older builder had
+written, while two fresh clones agreed with each other.
+
+Packed outputs carry no build time. A packed manifest stamped with
+`generatedAt` changes bytes on every run, which changes its pack's hash and
+URL and makes players download it again for nothing; add a version field
+when a reader needs to tell formats apart. The top-level indexes
+(`packs/manifest.json`, the web manifest) are not packed and keep their
+previous `generatedAt` unless their content changed.
 
 ## Packs
 
@@ -391,8 +442,7 @@ at the commit being released:
 1. Fetch the live manifest:
    `curl -o live-manifest.json https://<origin>/assets/packs/manifest.json`.
 2. Build against it:
-   `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`
-   (and `pnpm assets publish` if a family or publisher changed).
+   `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
 3. Run `pnpm assets ledger`. It must report no unclaimed asset and no
    missing owner; the packager refuses otherwise. If the build summary says
    it archived files, check they are leftovers (see the audit section).
@@ -420,13 +470,11 @@ together.
 - Builder code changed: run `pnpm assets build`. The fingerprint notices
   changed pipeline code and rebuilds; with no change it prints "up to date"
   in seconds.
-- A family or publisher changed: run `pnpm assets publish <family>`, or all
-  of them with no family.
-- A new `ASSET_SCHEMA`: run `pnpm assets build full` followed by
-  `pnpm assets publish`.
+- A family or publisher changed: the same `pnpm assets build` reruns it.
+- A new `ASSET_SCHEMA`: run `pnpm assets build full`.
 - Then run `pnpm assets ledger`. The full build has already archived what
-  no current builder produces; files it still lists usually mean a family
-  you have not published yet (`pnpm assets publish`).
+  no current builder produces; files it still lists mean the build did not
+  complete, so run `pnpm assets build full`.
 
 ## Troubleshooting
 
@@ -438,7 +486,7 @@ together.
 | An upload far larger than the change | The build was not planned against the live manifest (step 2 above), or a builder rewrote many files with new bytes. Compare the per-group totals of the two manifests before staging. |
 | The build fails with "a fresh clone would not have them" | A manifest names files no current step wrote. Route that builder's write through `shared/publicWrite.mjs`, or claim the output its skip path keeps. |
 | A live folder was archived | Its builder writes or skips without claiming and nothing names the files. Fix the builder as above and restore the files from `temp/archives/generated-artifacts/<day>/unclaimed-public-asset/`. |
-| The packager says "files the current pipeline did not produce" | Run `pnpm assets publish`, then `pnpm assets build`, then `pnpm assets ledger`. |
+| The packager says "files the current pipeline did not produce" | Run `pnpm assets build full`, then `pnpm assets ledger`. |
 | Another build "holds the generated-assets lock" | `pnpm assets lock` shows the holder. Builds refuse rather than corrupt the shared tree. |
 
 ## Planned work

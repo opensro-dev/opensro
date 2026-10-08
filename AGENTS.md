@@ -212,7 +212,7 @@ Run the checks for what you touched, and report what actually ran:
 | Encoding only | `pnpm task check:source-encoding` |
 | Go server | see `apps/server/AGENTS.md` |
 | Client | `pnpm --filter @sro/client-next check` |
-| Everything, including assets | `pnpm check` (the full asset build takes about 42 minutes) |
+| Everything, including assets | `pnpm check` (the full asset build takes about 6 minutes on 16 cores; `SRO_BUILD_JOBS` sets the parallelism) |
 
 Speed: the gates run concurrently, and the two heavy ones (the Go server
 gate and the client check) are skipped when nothing they read changed since

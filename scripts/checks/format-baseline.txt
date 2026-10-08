@@ -405,8 +405,6 @@ scripts/build/char/attachedMotionClips.mjs
 scripts/build/char/authoredAnimationBindings.mjs
 scripts/build/char/avatarVisualOverrides.mjs
 scripts/build/char/buildAvatar.mjs
-scripts/build/char/buildDropModelAssets.mjs
-scripts/build/char/buildLocomotionBanAssets.mjs
 scripts/build/char/buildSkillEffectRecords.mjs
 scripts/build/char/compileBanTimeline.mjs
 scripts/build/char/compileBsrVisual.mjs
@@ -417,9 +415,7 @@ scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts
 scripts/build/char/native/scriptObjAnimationRegistry.ts
 scripts/build/char/native/skillEffectAnimationRegistry.ts
-scripts/build/char/publishEntityBsrModifiers.mjs
 scripts/build/char/resourceGlbOutput.mjs
-scripts/build/char/vatPipeline.mjs
 scripts/build/char/weatherEvents.mjs
 scripts/build/data/buildActionWndDataAsset.mjs
 scripts/build/data/buildCharacterDataCountryAsset.mjs
@@ -431,10 +427,8 @@ scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/data/buildTeleportDataAsset.mjs
 scripts/build/effects/parseJmxVisualEffect.mjs
 scripts/build/server/serverGameDataArchive.mjs
-scripts/build/shared/assetPaths.mjs
 scripts/build/shared/asyncUtils.mjs
 scripts/build/shared/atomicPublish.mjs
-scripts/build/shared/audioResources.mjs
 scripts/build/shared/binaryUtils.mjs
 scripts/build/shared/bsrModifiers.mjs
 scripts/build/shared/characterInfo.mjs
@@ -442,8 +436,6 @@ scripts/build/shared/characterMaterialState.mjs
 scripts/build/shared/cifLayoutCatalog.mjs
 scripts/build/shared/cifPreprocessor.mjs
 scripts/build/shared/collections.mjs
-scripts/build/shared/compressionUtils.mjs
-scripts/build/shared/configResources.mjs
 scripts/build/shared/dataAssetExport.mjs
 scripts/build/shared/fileHashCache.mjs
 scripts/build/shared/fontResources.mjs
@@ -453,8 +445,6 @@ scripts/build/shared/itemNameCoverage.mjs
 scripts/build/shared/itemTextCompletions.mjs
 scripts/build/shared/jmxAssetIO.mjs
 scripts/build/shared/jmxBinaryReader.mjs
-scripts/build/shared/jsonOut.mjs
-scripts/build/shared/launcherResources.mjs
 scripts/build/shared/math3d.mjs
 scripts/build/shared/optionalDataAsset.mjs
 scripts/build/shared/pythonRun.mjs
@@ -467,10 +457,8 @@ scripts/build/shared/textDataIo.mjs
 scripts/build/shared/textResources.mjs
 scripts/build/shared/titleResources.mjs
 scripts/build/shared/worldMapImageReferences.mjs
-scripts/build/sparseAssetPackGroupRefresh.mjs
 scripts/build/world/assets/buildDungeonResources.mjs
 scripts/build/world/assets/buildDungeonWorlds.mjs
-scripts/build/world/assets/copyMissionMinimapTileImages.mjs
 scripts/build/world/assets/dungeonInfo.mjs
 scripts/build/world/assets/dungeonWater.mjs
 scripts/build/world/assets/environment/environmentTracks.mjs
@@ -486,7 +474,6 @@ scripts/build/world/buildWorldRegionIndex.mjs
 scripts/build/world/buildWorldRegionResources.mjs
 scripts/build/world/constants.mjs
 scripts/build/world/index.mjs
-scripts/build/world/io.mjs
 scripts/build/world/jmx/JMXV2DTI1001.mjs
 scripts/build/world/jmx/JMXVMAPM1000.mjs
 scripts/build/world/jmx/JMXVMAPO1001.mjs
@@ -515,11 +502,9 @@ scripts/tasks/processCommand.mjs
 scripts/tasks/registry.mjs
 scripts/tasks/tests.mjs
 scripts/test/assets/assetDeliveryOwnership.test.mjs
-scripts/test/assets/assetPackIntegrity.test.mjs
 scripts/test/assets/bsrParticleModifiers.test.mjs
 scripts/test/assets/buildSharedUtilities.test.mjs
 scripts/test/assets/cifSpriteCatalog.test.mjs
-scripts/test/assets/jsonAssetCompression.test.mjs
 scripts/test/assets/nativeUiTexture.test.mjs
 scripts/test/assets/npcAnimationContactMarkers.test.mjs
 scripts/test/assets/optionalDataAsset.test.mjs

@@ -12,9 +12,8 @@ in [tasks/](tasks/README.md). The pipeline itself is described in
 | --- | --- |
 | `build_sro_resources.mjs` | `pnpm assets build` |
 | `build_outdoor_world_resources.mjs` | `pnpm assets build world-outdoor` |
-| `refresh_asset_family.mjs <family>` | `pnpm assets refresh <family>` for the focused families in `build/families/looseFamilies.mjs` |
+| `refresh_asset_family.mjs <family>` | `pnpm assets refresh <family>` and `pnpm assets publish <family>`: one row of `build/families/looseFamilies.mjs` (the build runs them all) |
 | `refresh_{native_font,title_crowd,outdoor,world_map}_asset_packs.mjs` | `pnpm assets refresh fonts`, `title-crowd`, `outdoor`, `world-map` |
-| `../apps/client-next/tools/publish-<family>.mjs` | `pnpm assets publish [<family>]` |
 | `refresh_asset_delivery.mjs` | `pnpm assets refresh delivery` |
 | `rebuild_asset_packs_from_public.mjs` | `pnpm assets repack` |
 | `compact_sro_assets.mjs` | `pnpm assets compact` |

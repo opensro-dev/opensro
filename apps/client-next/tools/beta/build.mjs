@@ -280,7 +280,7 @@ export async function buildBeta(
 	if ( ledger.length > 0 ) {
 		throw Error(
 			`The generated tree holds files the current pipeline did not produce: ${ledger.join( "; " )}. ` +
-				"Run `pnpm assets publish`, then `pnpm assets build`, and package again."
+				"Run `pnpm assets build full`, then package again."
 		);
 	}
 	manifest.excludedGroups = original.groups.filter( g => !index.groups.includes( g ) ).map( g => g.name );

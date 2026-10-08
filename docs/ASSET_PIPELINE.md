@@ -62,9 +62,9 @@ client together as a data release.
 | --- | --- |
 | `pnpm assets prepare` | Extract the client archives into `extracted/` and convert the music; reruns repair |
 | `pnpm assets doctor` | Read-only report of every input and tool, with the fix for each problem |
-| `pnpm assets build full` | Full build: every outdoor region, then the browser projection (roughly 40 minutes) |
+| `pnpm assets build full` | Full build: every outdoor region, then the browser projection and every focused family (about 6 minutes on 16 cores; `SRO_BUILD_JOBS` sets the parallelism) |
 | `pnpm assets build` | The browser projection, reusing the outdoor world of the last full build |
-| `pnpm assets publish [<family>]` | Standalone publishers and focused families the full build does not run yet (skill UI data, dungeon worlds, flares, party status icons, native window art, and others); run after `assets build` |
+| `pnpm assets publish <family>` | Rerun one publishing family (skill UI data, dungeon worlds, flares, ...) into an existing tree; the build already runs them all |
 | `pnpm task build server-game-data` | Server game-data projection and `server.srogz` |
 | `pnpm assets build world-outdoor -- --region=0x6a48 --force --jobs=1` | Rebuild one outdoor region |
 | `pnpm assets refresh <family>` | Re-publish one family into an existing tree (`pnpm task list --kind assets` lists them) |
@@ -77,9 +77,9 @@ client together as a data release.
 | `pnpm assets ledger` | Read-only: packed assets no build owner claims (the publication ledger); exits 1 unless empty |
 | `pnpm assets lock` | Show which process holds the generated-asset lock |
 
-The publishers live in `apps/client-next/tools/publish-*.mjs`; folding them
-into `assets build` is outstanding work. Client source changes never need an
-asset build. Builds take an exclusive lock
+Every publisher and focused family is a row of
+`scripts/build/families/looseFamilies.mjs`, and `assets build` runs them all.
+Client source changes never need an asset build. Builds take an exclusive lock
 (`scripts/rebuildLock.mjs`), so concurrent builds refuse rather than corrupt
 output.
 

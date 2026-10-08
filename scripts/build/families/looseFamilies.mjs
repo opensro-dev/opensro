@@ -746,8 +746,8 @@ produceAllFamilies
 The full build's family pass: every row's produce() in table order, each
 recorded as its own ledger owner (family-<name>), after the builders whose
 outputs the families extend and before the pack tail, which packs their
-files with everything else. A fresh tree therefore needs no separate
-`pnpm assets publish` and no second build.
+files with everything else. One full build therefore makes a complete
+tree; `pnpm assets publish <family>` reruns one family for iteration.
 ================
 */
 export async function produceAllFamilies( log = console.log ) {

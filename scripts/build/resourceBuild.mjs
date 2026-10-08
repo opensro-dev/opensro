@@ -401,8 +401,8 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 
 	// The focused families extend the builders' outputs (code-selected art,
 	// catalog patches, world sky state): they run here, each as its own ledger
-	// owner, so the image sweep below and the pack tail see their files and a
-	// fresh tree needs no separate `pnpm assets publish` (families/looseFamilies.mjs).
+	// owner, so the image sweep below and the pack tail see their files and one
+	// full build makes a complete tree (families/looseFamilies.mjs).
 	const families = await timed( "families", () => steps.produceAllFamilies() );
 	// Every lane above has finished publishing before this sweep over
 	// assets/images/** runs (native-interface preload membership must see the
@@ -734,7 +734,7 @@ export function formatResourceBuildSummary( results ) {
 		const verdict = audit.archived ?
 			"soft-archived to temp/archives and left out of the packs" :
 			`kept: no publication record for ${audit.missingOwners.join( ", " )} ` +
-			"(run `pnpm assets publish`, then `pnpm assets build` again)";
+			"(run `pnpm assets build full`)";
 		out.push(
 			`Publication ledger: ${audit.files} file(s), ${mib( audit.bytes )} MiB, claimed by no build owner; ` +
 				`${verdict}. Report: .generated/unclaimed-assets.json` +
