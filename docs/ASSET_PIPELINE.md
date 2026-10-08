@@ -46,7 +46,7 @@ first run `node scripts/build/shared/nativeCharacterTextures.mjs`. Both this
 prerequisite and the full build acquire the generated-asset lock. The cache
 lives in `.generated/intermediate/images/native-character/`. A missing or
 mismatched entry fails publication rather than silently switching formats.
-An older client cannot consume schema 3; ship rebuilt data and the matching
+An older client cannot consume schema 4 (SROPACK2 packs); ship rebuilt data and the matching
 client together as a data release.
 
 | Output | Contents |

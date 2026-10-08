@@ -12,6 +12,7 @@ could load.
 ===========================================================================
 */
 import { ASSET_SCHEMA } from "../../build/assetSchema.mjs";
+import { ASSET_PACK_VERSION } from "../../build/shared/packFormat.mjs";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -53,7 +54,13 @@ A minimal pack index naming each group's paths.
 */
 function index( groups ) {
 	const rows = [];
-	const out = { format: "sro-asset-pack-index", version: 1, assetSchema: ASSET_SCHEMA, groups: [], assets: rows };
+	const out = {
+		format: "sro-asset-pack-index",
+		version: ASSET_PACK_VERSION,
+		assetSchema: ASSET_SCHEMA,
+		groups: [],
+		assets: rows
+	};
 	for ( const [name, paths] of Object.entries( groups ) ) {
 		const packPath = `/assets/packs/${name}.bin`;
 		out.groups.push( {

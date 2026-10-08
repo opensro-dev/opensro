@@ -14,6 +14,7 @@ import {
 	listPublicAssetFiles
 } from "../../build/assetPacks.mjs";
 import { minifyJsonBytes, optimizeJsonAssets } from "../../build/jsonAssetCompression.mjs";
+import { decodeStoredMember, parsePackHeader, storedMemberBytes } from "../../build/shared/packFormat.mjs";
 import { buildUiImagePreloadManifest } from "../../build/uiImagePreload.mjs";
 
 const gunzipAsync = promisify( zlib.gunzip );
@@ -203,13 +204,11 @@ test("buildAssetPacks writes reusable 50 MiB-style binary packs with path offset
 	assert.equal( index.groups[0].packs[0].zstdPath, undefined );
 	await assert.rejects( stat( zstdPath ), { code: "ENOENT" } );
 
-	const headerLength = packBuffer.readUInt32LE( 8 );
-	const header = JSON.parse( packBuffer.subarray( 12, 12 + headerLength ).toString( "utf8" ) );
+	const { header, dataStart } = parsePackHeader( packBuffer, packPublicPath );
 	const focusEntry = header.files.find( ( file ) => file.path.endsWith( "button_focus.png" ) );
-	const dataStart = 12 + headerLength;
-	const focusBytes = packBuffer.subarray(
-		dataStart + focusEntry.offset,
-		dataStart + focusEntry.offset + focusEntry.length
+	const focusBytes = decodeStoredMember(
+		storedMemberBytes( packBuffer, dataStart, focusEntry, packPublicPath ),
+		focusEntry
 	);
 	const focusManifestEntry = index.assets.find( ( asset ) => asset.path.endsWith( "button_focus.png" ) );
 

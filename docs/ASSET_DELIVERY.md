@@ -524,7 +524,7 @@ data release.
 
 | Change | Measured effect |
 | --- | --- |
-| Members stored gzip-compressed inside packs, retiring the gzip transports (asset schema 4) | done: 2.506 → about 1.68 GiB on the 2026-10-09 sample |
+| Members stored gzip-compressed inside packs, retiring the gzip transports (asset schema 4) | done: packs 2.506 → 1.664 GiB served (full build, 2026-10-09) |
 | Original DXT blocks (`.texture`) instead of PNG for minimap, outdoor object textures and tile2d | minimap about 269 → 70 MiB; outdoor textures about 213 → 85 MiB; 4-8× less GPU memory |
 | Size gate (`check_compact_assets.mjs`) measures the bytes actually served | today it measures offline zstd copies nobody downloads |
 
