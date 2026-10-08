@@ -9,11 +9,16 @@ and catalog once every bundle exists. A region whose bundle already exists
 is reused, and its terrain tiles are re-published from the terrain tile
 ledger, so reuse never leaves a bundle naming images that are gone.
 
+Reuse trusts only bundles this builder's current code wrote: the code stamp
+(shared/codeStamp.mjs) covers this module and everything it imports, and a
+stamp that does not match forces every region and shared index to rebuild.
+
 ===========================================================================
 */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildJobs } from "../shared/buildParallelism.mjs";
+import { codeHash, stampIsCurrent, writeStamp } from "../shared/codeStamp.mjs";
 import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
@@ -55,6 +60,8 @@ const TERRAIN_TILE_LEDGER_PATH = path.join( generatedRoot, "intermediate", "outd
 // (imagePublicPath), so a hit is trusted only while every reference still
 // matches the probe; an older ledger cannot tell and is discarded.
 const TERRAIN_TILE_LEDGER_VERSION = 4;
+// Names the code stamp of every outdoor reuse cache (regions, shared indexes).
+const OUTDOOR_CODE_STAMP = "outdoor-world";
 
 /*
 ================
@@ -362,17 +369,24 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		};
 	}
 
+	// Output from older builder code is never reused; a partial run (regionIds)
+	// rebuilds what it selects and leaves the stamp stale for the next full run.
+	const builderHash = await codeHash( import.meta.url );
+	const codeCurrent = await stampIsCurrent( OUTDOOR_CODE_STAMP, builderHash );
+	const force = Boolean( options.force ) || !codeCurrent;
+	const forceShared = force || Boolean( options.forceShared );
+
 	const mapRoot = path.join( sourceExtractedRoot, "Map_extracted" );
 	const [objectInfo, tileCatalog, sharedRender, sharedObjects] = await Promise.all( [
 		readJmxMapObjectInfo( path.join( mapRoot, "object.ifo" ) ),
 		readJmxMapTileCatalog( path.join( mapRoot, "tile2d.ifo" ) ),
-		buildOutdoorSharedRenderResources( { force: Boolean( options.forceShared || options.force ) } ),
+		buildOutdoorSharedRenderResources( { force: forceShared } ),
 		buildOutdoorSharedObjectResources( {
 			sectors,
 			extractedRoot: sourceExtractedRoot,
 			gameRoot: sourceGameRoot,
 			jobs,
-			force: Boolean( options.forceShared || options.force )
+			force: forceShared
 		} )
 	] );
 
@@ -382,7 +396,7 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 	await mapWithConcurrency( selectedSectors, jobs, async ( sector, index ) => {
 		const publicPath = outdoorRegionBundlePublicPath( sector.id );
 		const outputPath = publicPathToFile( publicPath, publicRoot );
-		if ( !options.force && (await exists( outputPath )) ) {
+		if ( !force && (await exists( outputPath )) ) {
 			// Reuse keeps the bundle, not a promise that its images still exist.
 			let tiles = tilesByRegion.get( String( sector.id ) );
 			// A ledger hit names the references the bundle held when it was
@@ -452,6 +466,9 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		} );
 		catalog = routing.catalog;
 		published = true;
+	}
+	if ( !codeCurrent && published && selectedSectors.length === sectors.length ) {
+		await writeStamp( OUTDOOR_CODE_STAMP, builderHash );
 	}
 
 	return {

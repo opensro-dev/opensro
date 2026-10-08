@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toPublicPath as toPublicAssetPath } from "./shared/assetPaths.mjs";
 import { listFiles, pathExists as exists } from "./shared/fsUtils.mjs";
-import { readJsonOrUndefined, writeJsonIfChanged } from "./shared/jsonOut.mjs";
+import { writeJsonIfChanged } from "./shared/jsonOut.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -27,19 +27,13 @@ export async function buildUiImagePreloadManifest( options = {} ) {
 	const rootPublic = options.publicRoot ?? derivePublicRootFromImageRoot( root );
 	const images = await collectUiPreloadImages( root, rootPublic );
 
-	// Keep the previous timestamp when the manifest is otherwise unchanged so the written
-	// bytes (and the downstream sidecar/pack caches keyed on this file's mtime) stay stable.
-	const existing = await readJsonOrUndefined( targetPath );
-	const stampNeutral = ( value ) => JSON.stringify( { ...value, generatedAt: 0 } );
+	// No timestamp: the same images give the same bytes on every machine, so a
+	// fresh clone packs exactly what this one does (and nothing re-downloads).
 	const manifest = {
 		format: "sro-image-preload-manifest",
 		version: 1,
-		generatedAt: new Date().toISOString(),
 		images
 	};
-	if ( existing && stampNeutral( existing ) === stampNeutral( manifest ) ) {
-		manifest.generatedAt = existing.generatedAt;
-	}
 
 	await writeJsonIfChanged( targetPath, manifest );
 

@@ -29,7 +29,8 @@ const rosterPath = path.join( publicRoot, "assets", "char", "roster.json" );
 
 export const CROWD_VAT_FORMAT = "sro-avatar-vat";
 export const CROWD_VAT_VERSION = 1;
-export const CROWD_VAT_COMPILER_VERSION = "babylon-nullengine-v5-bone-coverage-f16";
+// v6: the manifest carries no generatedAt, so the same GLB bakes to the same bytes everywhere.
+export const CROWD_VAT_COMPILER_VERSION = "babylon-nullengine-v6-bone-coverage-f16-reproducible";
 export const CROWD_VAT_STAND_FRAME_CAP = 2;
 export const CROWD_VAT_CLIP_ROLES = [ "walk", "stand", "ride" ];
 const CROWD_VAT_MOUNT_CLIP_ROLES = [ "walk", "stand" ];
@@ -380,7 +381,6 @@ export async function bakeVatFromGlb( { glbBytes, glbPublicPath, glbSha256 }, se
 				format: settings.format,
 				version: settings.version,
 				compilerVersion: settings.compilerVersion,
-				generatedAt: new Date().toISOString(),
 				source: {
 					glb: glbPublicPath,
 					sha256: glbSha256,
