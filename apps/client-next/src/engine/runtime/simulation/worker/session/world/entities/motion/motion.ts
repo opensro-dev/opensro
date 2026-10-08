@@ -32,7 +32,11 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
 import { directionLegEnd, modelYaw } from "@/engine/foundation/gameplay/direction-movement";
-import { correctWalkingHistory, extendWalkingHistory } from "@/engine/foundation/gameplay/walking-history";
+import {
+	correctWalkingHistory,
+	extendWalkingHistory,
+	rewindWalkingHistory
+} from "@/engine/foundation/gameplay/walking-history";
 const ENDPOINT_EPSILON = 0.001;
 const PRESENTATION_LOOKAHEAD_MS = 100;
 /*
@@ -181,6 +185,24 @@ advance
 		cursor.owner = query.owner;
 		cursors.set( gid, cursor );
 		return accepted;
+	}
+	/*
+================
+advanceCommand
+
+A native command advances before replacing its leg. Preserve the checked
+lookahead already displayed only when it contains the newly accepted pose.
+A changed terrain interpolation cannot authorize a new connection.
+================
+	*/
+	function advanceCommand( gid: number, segment: RemoteSegment, now: number ) {
+		const published = segment.presentationHistory?.result;
+		const pose = advance( gid, segment, now );
+		if ( !segment.fixedTiming ) {
+			segment.walkingPath = rewindWalkingHistory( published, pose ) ?? segment.walkingPath;
+			segment.presentationHistory = undefined;
+		}
+		return pose;
 	}
 	/*
 ================
@@ -450,7 +472,7 @@ receive
 			// Reception precedes this tick's motion step. Re-aim from the path
 			// at reception time, not the previous journal sample: otherwise
 			// every source-less chase refresh discards one tick of travel.
-			const current = previous ? advance( entity.gid, previous, now ) : published;
+			const current = previous ? advanceCommand( entity.gid, previous, now ) : published;
 			const decoded = decodeNativeMovement( p, current );
 			// A source-less angular acknowledgement changes nothing in motion.
 			if ( decoded.kind === "keep" ) {
@@ -458,11 +480,22 @@ receive
 					presentationPath( entity.gid, previous, current ) :
 					{ from: published, to: published };
 			}
+			const sourceOwner = cursors.get( entity.gid )?.owner;
 			const from = resolve( entity.gid, decoded.from, previous?.previous ?? published );
+			const walkingPath = previous?.fixedTiming || entity.movementPath?.displacement ?
+				undefined :
+				correctWalkingHistory( {
+					points: previous?.walkingPath ?? entity.movementPath?.walkingPath,
+					from: current,
+					to: from,
+					sourceOwner,
+					clip
+				} );
 			if ( decoded.kind === "direction" ) {
 				const leg = directionLeg( entity, from, decoded.heading!, now );
-				active.set( entity.gid, leg );
-				return presentationPath( entity.gid, leg, from );
+				const next = { ...leg, walkingPath };
+				active.set( entity.gid, next );
+				return presentationPath( entity.gid, next, from );
 			}
 			const to = decoded.to, durationMs = duration( from, to, entity );
 			active.set( entity.gid, {
@@ -470,6 +503,7 @@ receive
 				to,
 				start: now,
 				duration: durationMs,
+				walkingPath,
 				speed: (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0
 			} );
 			return presentationPath( entity.gid, active.get( entity.gid )!, from );
@@ -487,7 +521,7 @@ idle mover turns where it stands. A destination walk keeps its own facing.
 		steer( entity: EntityState, heading: number, now: number ): MotionUpdate | null {
 			const segment = active.get( entity.gid );
 			if ( segment?.direction !== undefined ) {
-				const pose = advance( entity.gid, segment, now );
+				const pose = advanceCommand( entity.gid, segment, now );
 				const leg = directionLeg( entity, pose, heading, now );
 				const continued = { ...leg, walkingPath: segment.walkingPath };
 				active.set( entity.gid, continued );
@@ -520,7 +554,7 @@ speeds
 				before = (walk ? previous.walkSpeed : previous.runSpeed) ?? 0,
 				after = (walk ? next.walkSpeed : next.runSpeed) ?? 0;
 			if ( before === after ) return null;
-			const pose = advance( next.gid, segment, now );
+			const pose = advanceCommand( next.gid, segment, now );
 			const retimed = movementSpeedTransition( { ...segment, from: pose, start: now }, before, after, now );
 			if ( retimed.duration && !segment.blocked ) {
 				active.set( next.gid, {
@@ -536,6 +570,8 @@ speeds
 				...update( next.gid, pose, active.has( next.gid ) ),
 				movementPath: active.has( next.gid ) ?
 					presentationPath( next.gid, active.get( next.gid )!, pose ) :
+					segment.walkingPath ?
+					{ from: pose, to: pose, walkingPath: segment.walkingPath } :
 					undefined
 			};
 		},
@@ -571,7 +607,7 @@ mode
 			// Displacement keeps its authored timing (action state 4/5, not 858450's channel).
 			if ( segment.fixedTiming && mode !== 0 && mode !== 4 ) return null;
 			const speed = (movementGait( entity.movementMode ) === "walk" ? entity.walkSpeed : entity.runSpeed) ?? 0;
-			const pose = advance( entity.gid, segment, now );
+			const pose = advanceCommand( entity.gid, segment, now );
 			const next = movementModeTransition( { ...segment, from: pose, start: now }, mode, speed, now );
 			if ( next.segment && !segment.blocked ) {
 				active.set( entity.gid, {
@@ -588,7 +624,9 @@ mode
 				...update( entity.gid, pose, active.has( entity.gid ) ),
 				movementPath: active.has( entity.gid ) ?
 					presentationPath( entity.gid, active.get( entity.gid )!, pose ) :
-					undefined
+					segment.fixedTiming || !segment.walkingPath ?
+					undefined :
+					{ from: pose, to: pose, walkingPath: segment.walkingPath }
 			};
 		},
 		/*

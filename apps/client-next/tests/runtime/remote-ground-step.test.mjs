@@ -308,3 +308,95 @@ test("peer fixed displacement history is never reused by a ground correction", (
 	const entity = { ...ENTITY, ...displacement };
 	assert.equal( motion.correct( entity, START ).movementPath, undefined );
 });
+
+for ( const method of [ "receive", "steer", "mode", "speed", "sit", "stop-speed" ] ) {
+	test(`peer ${method} retains already displayed flat lookahead beyond its native command timestamp`, () => {
+		const motion = createEntityMotion( undefined, ( _from, to ) => to );
+		const presentation = createPosePresentation();
+		presentation.origin( 0 );
+		/** @type {import("../../src/engine/contracts/world").EntityState} */
+		let entity = { ...ENTITY, kind: "player", runSpeed: 150, movementRevision: 1 };
+		if ( method === "steer" ) {
+			const packet = Buffer.alloc( 19 );
+			packet.writeUInt32LE( ENTITY.gid );
+			packet[5] = 1;
+			packet[8] = 1;
+			packet.writeUInt16LE( START.regionId, 9 );
+			packet.writeInt16LE( START.x * 10, 11 );
+			packet.writeInt16LE( START.z * 10, 17 );
+			motion.receive( packet, entity, 0 );
+		} else motion.spawn( entity, 0 );
+		/*
+		================
+		draw
+		================
+		*/
+		function draw( at ) {
+			const source = createPresentationSamples( [ entity ], null );
+			presentation.samples( source.samples );
+			return presentation.pose( entity.gid, source.logicalPose( entity ), at );
+		}
+		entity = { ...entity, ...defined( motion.step( 0 )[0] ) };
+		draw( 0 );
+		entity = { ...entity, ...defined( motion.step( 16 )[0] ) };
+		draw( .016 );
+		const shown = draw( .064 );
+		assert.ok( shown.x > 109, "display occupies checked lookahead before an older worker command arrives" );
+		if ( method === "receive" ) {
+			const packet = Buffer.alloc( 14 );
+			packet.writeUInt32LE( ENTITY.gid );
+			packet[4] = 1;
+			packet.writeUInt16LE( START.regionId, 5 );
+			packet.writeInt16LE( 90, 7 );
+			packet.writeInt16LE( 100, 11 );
+			entity = { ...entity, movementPath: motion.receive( packet, entity, 32 ) };
+			entity = { ...entity, ...defined( motion.step( 32 )[0] ) };
+		} else if ( method === "steer" ) entity = { ...entity, ...defined( motion.steer( entity, 16384, 32 ) ) };
+		else if ( method === "mode" || method === "sit" ) {
+			entity = {
+				...entity,
+				...defined( motion.mode( { ...entity, movementMode: method === "sit" ? 0 : 2 }, 32 ) )
+			};
+		} else {entity = {
+				...entity,
+				...defined( motion.speeds( entity, { ...entity, runSpeed: method === "stop-speed" ? 0 : 30 }, 32 ) )
+			};}
+		entity = { ...entity, movementRevision: 2 };
+		assert.ok( defined( entity.movementPath ).walkingPath, "command retirement must retain certified geometry" );
+		const received = draw( .064 );
+		assert.ok(
+			Math.hypot( received.x - shown.x, received.y - shown.y, received.z - shown.z ) < .0001,
+			"native command replacement preserves the pose already displayed at this timestamp"
+		);
+		for ( let frame = 1; frame <= 32; frame++ ) {
+			const now = 64 + frame * 16;
+			const step = motion.step( now )[0];
+			if ( step ) entity = { ...entity, ...step };
+			const shown = draw( now / 1000 );
+			const proof = defined( defined( entity.movementPath ).walkingPath );
+			assert.ok(
+				proof.some( ( to, index ) => {
+					const from = proof[index - 1];
+					if ( !from ) return false;
+					const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+					const length2 = dx * dx + dy * dy + dz * dz;
+					const fraction = length2 ?
+						Math.max(
+							0,
+							Math.min(
+								1,
+								((shown.x - from.x) * dx + (shown.y - from.y) * dy + (shown.z - from.z) * dz) / length2
+							)
+						) :
+						0;
+					return Math.hypot(
+						shown.x - from.x - fraction * dx,
+						shown.y - from.y - fraction * dy,
+						shown.z - from.z - fraction * dz
+					) < .01;
+				} ),
+				"subsequent recovery remains on the admitted terrain chain"
+			);
+		}
+	});
+}
