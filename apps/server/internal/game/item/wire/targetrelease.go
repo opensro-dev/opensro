@@ -11,7 +11,9 @@ import "fmt"
 //     0xB4B3 [mode:u8] ([extra:u8] only when mode == 2)
 //
 // Mode 1 is the minimal close acknowledgement: the client unconditionally
-// runs sub_69fff0's interaction-window sweep and needs no extra byte.
+// runs sub_69fff0's interaction-window sweep and needs no extra byte. Mode 2
+// is the refusal: 761820 reads its one extra byte and discards it, then
+// closes the interaction as for mode 1.
 const (
 	OpTargetReleaseRequest uint16 = 0x74B3
 	OpTalkCloseResult      uint16 = 0xB4B3
@@ -41,4 +43,16 @@ func DecodeTargetReleaseRequest(payload []byte) (uint32, error) {
 // success byte: sub_761820 interprets this first byte as a mode selector.
 func EncodeTalkCloseResult() []byte {
 	return []byte{1}
+}
+
+// TalkCloseRefusedCode is the byte mode 2 carries. INFERENCE: the v1.150
+// client reads and discards it (761820) and the v1.188 server renumbers its
+// opcodes, so no evidence names a value; any byte is equivalent to the
+// client, and 1 is used.
+const TalkCloseRefusedCode = 1
+
+// EncodeTalkCloseRefusal composes 0xB4B3 mode 2, the answer to a release the
+// server refuses: the client's release waits on this untagged reply.
+func EncodeTalkCloseRefusal() []byte {
+	return []byte{2, TalkCloseRefusedCode}
 }

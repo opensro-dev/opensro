@@ -22,10 +22,27 @@ func refusedTargetRelease(reason string) TargetReleaseOutcome {
 	return TargetReleaseOutcome{Refusal: reason}
 }
 
+/*
+================
+answeredTargetRelease
+
+A well-formed release the server refuses (no selection, or another gid)
+still gets its 0xB4B3 answer, mode 2: the client's release is an untagged
+barrier, and a silent refusal left it waiting until it dropped the session
+("Target release timed out", BR-261007-0624). 761820 parses mode 2's extra
+byte, so the reply exists in v1.150; the selection itself is kept.
+================
+*/
+func answeredTargetRelease(reason string) TargetReleaseOutcome {
+	return TargetReleaseOutcome{Refusal: reason, Frames: []wire.Frame{{
+		Opcode:  wire.OpTalkCloseResult,
+		Payload: wire.EncodeTalkCloseRefusal(),
+	}}}
+}
+
 // registerTargetRelease wires the selected-target release conversation.
-// Refusals are deliberately silent: v1.150 exposes no typed failure reply
-// for this request, and borrowing the item-operation error channel would
-// invent a protocol leg.
+// A malformed body is dropped silently (no client sends one); every other
+// refusal is answered with 0xB4B3 mode 2 (answeredTargetRelease).
 func (rt *Runtime) registerTargetRelease(hub *transport.Hub) {
 	hub.Handle(wire.OpTargetReleaseRequest, func(
 		session *transport.Session,
@@ -44,6 +61,7 @@ func (rt *Runtime) registerTargetRelease(hub *transport.Hub) {
 				character.Name,
 				outcome.Refusal,
 			)
+			sendFrames(session, outcome.Frames)
 			return
 		}
 		sendFrames(session, outcome.Frames)
@@ -78,10 +96,10 @@ func (rt *Runtime) HandleTargetRelease(
 
 	selected, ok := rt.Selected.Get(divisionID, character.Name)
 	if !ok {
-		return refusedTargetRelease("no selected object")
+		return answeredTargetRelease("no selected object")
 	}
 	if selected != gid {
-		return refusedTargetRelease(
+		return answeredTargetRelease(
 			fmt.Sprintf("gid %d is not current selection %d", gid, selected),
 		)
 	}

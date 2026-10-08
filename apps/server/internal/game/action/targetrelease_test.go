@@ -40,11 +40,14 @@ func TestTargetReleaseRefusalsPreserveSelection(t *testing.T) {
 	runtime.Selected.Set(testDivision, character.Name, selected)
 
 	for _, testCase := range []struct {
-		name    string
-		payload []byte
+		name     string
+		payload  []byte
+		answered bool
 	}{
+		// No client sends a malformed body; it is dropped.
 		{name: "malformed", payload: []byte{0x41, 0x0d, 0x03}},
-		{name: "different gid", payload: selectBody(selected + 1)},
+		// A well-formed release of another gid is refused, and answered.
+		{name: "different gid", payload: selectBody(selected + 1), answered: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			outcome := runtime.HandleTargetRelease(
@@ -55,9 +58,7 @@ func TestTargetReleaseRefusalsPreserveSelection(t *testing.T) {
 			if outcome.Refusal == "" {
 				t.Fatal("invalid release was accepted")
 			}
-			if len(outcome.Frames) != 0 {
-				t.Fatalf("refusal emitted frames: %#v", outcome.Frames)
-			}
+			assertTalkCloseRefusal(t, outcome.Frames, testCase.answered)
 			if gid, ok := runtime.Selected.Get(testDivision, character.Name); !ok || gid != selected {
 				t.Fatalf(
 					"selection after refusal = %d/%v, want %d preserved",
@@ -70,7 +71,16 @@ func TestTargetReleaseRefusalsPreserveSelection(t *testing.T) {
 	}
 }
 
-func TestTargetReleaseWithoutSelectionIsSilentRefusal(t *testing.T) {
+/*
+================
+TestTargetReleaseWithoutSelectionIsAnswered
+
+BR-261007-0624: the client's release is an untagged barrier that waits
+for 0xB4B3. A silent refusal left it waiting until it dropped the session
+("Target release timed out"); the refusal is answered with mode 2.
+================
+*/
+func TestTargetReleaseWithoutSelectionIsAnswered(t *testing.T) {
 	character := testCharacter()
 	runtime, _ := newTestRuntime(character, testItems())
 
@@ -82,7 +92,27 @@ func TestTargetReleaseWithoutSelectionIsSilentRefusal(t *testing.T) {
 	if outcome.Refusal == "" {
 		t.Fatal("release without a current selection was accepted")
 	}
-	if len(outcome.Frames) != 0 {
-		t.Fatalf("release refusal emitted frames: %#v", outcome.Frames)
+	assertTalkCloseRefusal(t, outcome.Frames, true)
+}
+
+/*
+================
+assertTalkCloseRefusal
+
+A refused release answers exactly 0xB4B3 [2, code] when answered, else
+nothing.
+================
+*/
+func assertTalkCloseRefusal(t *testing.T, frames []wire.Frame, answered bool) {
+	t.Helper()
+	if !answered {
+		if len(frames) != 0 {
+			t.Fatalf("dropped release emitted frames: %#v", frames)
+		}
+		return
+	}
+	assertOpcodes(t, frames, wire.OpTalkCloseResult)
+	if got := frames[0].Payload; !bytes.Equal(got, []byte{2, wire.TalkCloseRefusedCode}) {
+		t.Fatalf("0xB4B3 refusal body = % X, want mode 2 with its code", got)
 	}
 }
