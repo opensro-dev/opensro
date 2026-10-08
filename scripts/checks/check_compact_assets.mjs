@@ -9,6 +9,7 @@ counts, required outdoor regions and referenced world-map images.
 
 ===========================================================================
 */
+import { compactStatePath } from "../build/compactRemovals.mjs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -16,11 +17,11 @@ import { listFiles } from "../build/shared/fsUtils.mjs";
 import { toPublicImagePath } from "../build/shared/assetPaths.mjs";
 import { collectWorldMapImageReferences } from "../build/shared/worldMapImageReferences.mjs";
 import { validateServerGameDataArchive } from "../build/server/serverGameDataArchive.mjs";
-import { generatedRoot, publicAssetsRoot, rebuildRoot, serverGameDataRoot } from "../build/world/paths.mjs";
+import { generatedRoot, publicAssetsRoot, serverGameDataRoot } from "../build/world/paths.mjs";
 
 const generatedAssetsRoot = path.join( generatedRoot, "intermediate" );
 const serverGameDataArchivePath = `${serverGameDataRoot}.srogz`;
-const statePath = path.join( rebuildRoot, ".state", "compact-assets.json" );
+const statePath = compactStatePath( generatedRoot );
 const manifestPath = path.join( publicAssetsRoot, "packs", "manifest.json" );
 const originalPk2Bytes = 2_356_998_144;
 const maximumCompactBytes = Math.floor( originalPk2Bytes * 0.8 );
