@@ -25,6 +25,7 @@ import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
 import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/rendering/touch-camera";
 import { experimentalOptions, type ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
+import { windowPositions, type WindowPositions } from "@/engine/foundation/ui/window-positions";
 import { createUiBridge } from "./ui/ui";
 import { createTelemetry } from "./telemetry";
 import { createCursor } from "./ui/cursor";
@@ -150,6 +151,23 @@ export function createPlatform(
 		status.value = "Quickslot options could not be restored: " + String( error );
 	}
 	onUi( { kind: "quickslot-preferences", value: quickslots } );
+	// 6A06B0 reads Settingwndpos.dat when the interface is created.
+	const windowPositionsKey = "sro:v1150:window-positions:1";
+	try {
+		const stored = localStorage.getItem( windowPositionsKey );
+		if ( stored !== null ) {
+			let value: WindowPositions | null;
+			try {
+				value = windowPositions( JSON.parse( stored ) );
+			} catch ( error ) {
+				status.value = "Window positions could not be restored: " + String( error );
+				value = null;
+			}
+			onUi( { kind: "window-positions", value } );
+		}
+	} catch ( error ) {
+		status.value = "Window positions could not be restored: " + String( error );
+	}
 	const inputKey = "sro:v1150:input-options:1";
 	let bindings = defaultInputOptions();
 	try {
@@ -508,6 +526,21 @@ export function createPlatform(
 			video = next;
 			layoutCanvas();
 			onUi( { kind: "video-preferences", value: next } );
+		},
+		/*
+		================
+		saveWindowPositions
+
+		6A01B0 writes Settingwndpos.dat at logout and restart.
+		================
+		*/
+		saveWindowPositions( value: WindowPositions ) {
+			const saved = windowPositions( value );
+			try {
+				localStorage.setItem( windowPositionsKey, JSON.stringify( saved ) );
+			} catch ( error ) {
+				status.value = "Window positions could not be saved: " + String( error );
+			}
 		},
 		/*
 		================

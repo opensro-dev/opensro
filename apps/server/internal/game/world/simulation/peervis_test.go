@@ -85,6 +85,54 @@ func TestTickerSpawnsPeerOncePerViewer(t *testing.T) {
 	}
 }
 
+/*
+================
+TestPeerSpawnCarriesItsItemReferencesFirst
+
+A viewer may not hold the references for items a peer acquired after the
+viewer's bootstrap (#340): the spawn push leads with the references for
+the worn set and a player skin's copied equipment, then the row.
+================
+*/
+func TestPeerSpawnCarriesItsItemReferencesFirst(t *testing.T) {
+	const startMs = int64(1_784_000_000_000)
+	const referenceOpcode = 14
+	peer := peerSession("s2", "DIV_A", 2, "PeerB")
+	peer.Appearance.Equipment = []wire.PlayerEquipItem{{RefObjID: 11459, TypeFlags: wire.PackTypeFlags(3, 1, 6, 2)}}
+	peer.Appearance.Skin = wire.TransformSkin{RefObjID: 1907, Player: true, Equipment: [9]uint32{0, 3700}}
+	source := &fakeSource{sessions: []SessionSnapshot{peerSession("s1", "DIV_A", 1, "PeerA"), peer}}
+	push := &fakePusher{}
+	ticker := newTestTicker(source, push)
+	var asked [][]uint32
+	ticker.ItemReferences = func(ids []uint32) []Frame {
+		asked = append(asked, append([]uint32(nil), ids...))
+		return []Frame{{Opcode: referenceOpcode, Payload: []byte("refs")}}
+	}
+
+	ticker.RunTick(startMs)
+
+	for _, pushed := range push.toSession {
+		if pushed.sessionID != "s1" {
+			continue
+		}
+		if len(pushed.frames) < 2 || pushed.frames[0].Opcode != referenceOpcode || pushed.frames[1].Opcode != wire.OpSingleObjectSpawn {
+			t.Fatalf("s1 push = %+v, want the references, then the spawn row", pushed.frames)
+		}
+		if pushed.frames[0].ScopeGID != 0 || pushed.frames[1].ScopeGID != PlayerObjectID(2) {
+			t.Fatal("the scope change must stay on the spawn row")
+		}
+	}
+	found := false
+	for _, ids := range asked {
+		if len(ids) == 10 && ids[0] == 11459 && ids[2] == 3700 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("reference requests = %v, want PeerB's worn 11459 and skin 3700", asked)
+	}
+}
+
 // TestTickerDespawnsDepartedPeerAndRespawns: when a peer's session leaves the
 // snapshot the viewer gets one 0x36AB for its gid; when it returns, a fresh
 // 0x30D7 rides again.

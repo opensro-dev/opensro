@@ -135,6 +135,11 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
+import {
+	rememberedWindows,
+	type RememberedWindow,
+	type WindowPositions
+} from "@/engine/foundation/ui/window-positions";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
@@ -482,6 +487,8 @@ import type { EntityState } from "@/engine/contracts/world";
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // No video option combo is open (slot -1 is the screen-size combo).
 const VIDEO_COMBO_CLOSED = -99;
+const WORLD_MAP_WIDTH = 652;
+const WORLD_MAP_HEIGHT = 424;
 const VIDEO_FRAME_LIMIT_SLOT = -3;
 const VIDEO_VISIBLE_ROWS = 6;
 const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
@@ -528,11 +535,14 @@ export interface UiFrameProbe {
 UiExtensions
 
 Browser-only integrations are grouped separately from native preferences.
+Sinks added after the positional list (window positions) live here too,
+rather than as another createUi parameter.
 ================
 */
 export interface UiExtensions {
 	bugReport?: BugReportControl | null;
 	saveExperimental?: ( value: ExperimentalOptions ) => void;
+	saveWindowPositions?: ( value: WindowPositions ) => void;
 }
 
 // Sole owner of UI navigation, focus projection and pending UI intent. Gameplay is read-only.
@@ -1000,6 +1010,61 @@ export function createUi(
 			position: extPosition
 		} );
 	}
+	/*
+	================
+	persistWindowPositions
+
+	Retire the placement session before UI teardown, including pagehide.
+	leave() makes a later disposal after logout a no-op.
+	================
+	*/
+	function persistWindowPositions( retire = true ) {
+		if ( !view ) return;
+		const root = hud.data()?.root;
+		if ( !retire ) {
+			// Native rejection saves before layout and before lazy children
+			// exist. Asset admission must precede that authored-origin snapshot.
+			if ( !root ) return;
+			const own: Partial<
+				Record<RememberedWindow, readonly [number, number]>
+			> = {};
+			for ( const window of rememberedWindows().slice( 0, 5 ) ) {
+				const node = Object.values( root ).find( node => node.id === window.nativeId );
+				if ( !node ) throw Error( "Missing eager window: " + window.key );
+				own[window.key] = [ node.rect[0], node.rect[1] ];
+			}
+			const remembered = windowPlacement.snapshot( view.width, view.height, own );
+			if ( remembered ) extensions.saveWindowPositions?.( remembered );
+			return;
+		}
+		const popup = mainPopupFrame( view.width, view.height, popupPosition );
+		const own: Partial<
+			Record<RememberedWindow, readonly [number, number]>
+		> = {
+			mainPopup: [ popup[0], popup[1] ],
+			worldMap: [ mapX, mapY ],
+			...(guideX !== null && guideY !== null ? { gameGuide: [ guideX, guideY ] as const } : {}),
+			...(extPosition ? { extendedQuickslot: extPosition } : {})
+		};
+		for (
+			const [key, name, id] of [
+				[ "store", "GDR_STORE", "Shop" ],
+				[ "storageRoom", "GDR_STORAGEROOM", "Storage" ],
+				[ "exchange", "GDR_EXCHANGE", "Exchange" ]
+			] as const
+		) {
+			const frame = windowPlacement.read( "window-drag:" + id ), node = root?.[name];
+			if ( frame && frame[2] > 0 ) own[key] = [ frame[0], frame[1] ];
+			else if ( node ) {
+				own[key] = [
+					Math.trunc( view.width / 2 ) - Math.trunc( node.rect[2] / 2 ),
+					Math.trunc( view.height / 2 ) - Math.trunc( node.rect[3] / 2 )
+				];
+			}
+		}
+		const remembered = windowPlacement.leave( view.width, view.height, own );
+		if ( remembered ) extensions.saveWindowPositions?.( remembered );
+	}
 	const expandedQuests = new Set<number>();
 	let selectedQuest = 0, trackedQuest = 0, confirmAbandon = false, questPage = 0, chatPage = 0;
 	let chatText = "", chatTarget = "", chatChannel = 1, chatFeedbackObserved = 0;
@@ -1153,6 +1218,17 @@ export function createUi(
 
 	/*
 	================
+	closeGuide
+	================
+	*/
+	function closeGuide() {
+		// 69CAB2 remembers the origin before 69CB0F destroys the guide section.
+		if ( panel !== "Game Guide" ) return;
+		if ( guideX !== null && guideY !== null ) windowPlacement.remember( "gameGuide", [ guideX, guideY ] );
+		guideX = guideY = null;
+	}
+	/*
+	================
 	setPanel
 	================
 	*/
@@ -1171,6 +1247,7 @@ export function createUi(
 		if ( next === "COS inventory" && !view?.gameplay?.cosRecords?.some( r => !r.dead && r.hp > 0 ) ) {
 			return false;
 		}
+		closeGuide();
 		shopOpenRequest = null;
 		if ( next !== "Shop" ) repairHud.reset();
 		if ( next !== SKIN_PANEL ) skinHud.close();
@@ -1327,6 +1404,7 @@ export function createUi(
 	================
 	*/
 	function resetPanel() {
+		closeGuide();
 		withdrawal.close();
 		blockDialog = null;
 		blockSelected = "";
@@ -3288,8 +3366,13 @@ export function createUi(
 			shopPage = Math.max( 0, shopPage - 1 );
 			shopChoice = null;
 		} else if ( id.startsWith( "shop-tab:" ) ) {
-			shopTab = Number( id.slice( 9 ) );
-			shopPage = 0;
+			// 5B28F0: only a different tab resets the page; the open tab's
+			// button just refills the page already shown.
+			const tab = Number( id.slice( 9 ) );
+			if ( tab !== shopTab ) {
+				shopTab = tab;
+				shopPage = 0;
+			}
 			shopChoice = null;
 			shopDialog = false;
 		} else if ( id.startsWith( "shop-offer:" ) || id.startsWith( "shop-buyback:" ) ) {
@@ -4218,6 +4301,10 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			if ( event.kind === "window-positions" ) {
+				windowPlacement.load( event.value );
+				return;
+			}
 			if ( event.kind === "quickslot-preferences" ) {
 				const row = extendedQuickslotOptions( event.value );
 				extOpen = row.open;
@@ -4226,7 +4313,6 @@ export function createUi(
 				extTransparent = row.transparent;
 				extSlotLock = row.slotLock;
 				extPositionLock = row.positionLock;
-				extPosition = row.position;
 				dirty = true;
 				return;
 			}
@@ -5846,6 +5932,10 @@ export function createUi(
 				view?.berserkGauge?.displayed === next.berserkGauge?.displayed && view?.gameplay === next.gameplay &&
 				view?.entities === next.entities && view?.width === next.width && view?.height === next.height
 			) return null;
+			const resizedWorld = !!view && (view.width !== next.width || view.height !== next.height) &&
+				(view.session?.phase === "world" ||
+					((view.session?.phase === "disconnected" || view.session?.phase === "reconnecting") &&
+						!!view.gameplay?.localGid));
 			nextPoll = now + 100;
 			view = next;
 			probe?.detailBegin( "ui-assembly" );
@@ -6031,7 +6121,24 @@ export function createUi(
 					rosterRequested = false;
 					roster = [];
 				}
+				if ( phase === "world" ) {
+					// 6A06B0: the interface opens its windows where the last session
+					// left them at this screen size.
+					const remembered = windowPlacement.enter( next.width, next.height );
+					if ( remembered ) {
+						popupPosition = remembered.mainPopup ?? null;
+						[mapX, mapY] = remembered.worldMap ??
+							[
+								Math.trunc( next.width / 2 ) - WORLD_MAP_WIDTH / 2,
+								Math.trunc( next.height / 2 ) - WORLD_MAP_HEIGHT / 2
+							];
+						guideX = guideY = null;
+						extPosition = null;
+					}
+				}
 				if ( phase !== "world" && !retainedWorld ) {
+					// 6A01B0: logout writes them back before the session's windows go.
+					persistWindowPositions();
 					guildWarHud.reset( true );
 					windowPlacement.reset();
 					itemMall.reset();
@@ -6107,6 +6214,23 @@ export function createUi(
 					cosGid = 0;
 				}
 			}
+			if ( resizedWorld && (phase === "world" || retainedWorld) ) {
+				// GraphicApply relays layout to live children; a closed guide is absent.
+				if ( panel === "Game Guide" && guideX !== null && guideY !== null ) {
+					guideX = Math.trunc( next.width / 2 ) - 210;
+					guideY = Math.trunc( next.height / 2 ) - 226;
+				}
+				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )];
+				if ( extPosition && extended ) {
+					// 548490 sizes the widget root from header ID10, not the protruding slots.
+					const header = Object.values( extended ).find( node => node.id === 10 )!;
+					extPosition = [
+						Math.min( extPosition[0], next.width - header.rect[2] ),
+						Math.min( extPosition[1], next.height - header.rect[3] )
+					];
+				}
+			}
+			if ( phase === "world" && windowPlacement.needsInitialSave() ) persistWindowPositions( false );
 			if ( next.session?.servers ) {
 				servers = next.session.servers;
 				if ( !servers.some( s => s.id === selectedServer && s.operating ) ) {
@@ -6179,8 +6303,14 @@ export function createUi(
 			windowOrigin
 			================
 			*/
-			function windowOrigin( name: string, initial: UiRect, id = "window-drag:" + name, drag?: UiRect ) {
-				const r = windowPlacement.frame( id, initial, w, h );
+			function windowOrigin(
+				name: string,
+				initial: UiRect,
+				id = "window-drag:" + name,
+				options: { drag?: UiRect; nativeExtent?: readonly [number, number]; } = {}
+			) {
+				const r = windowPlacement.frame( id, initial, [ w, h ], options.nativeExtent );
+				const drag = options.drag;
 				controls.push( {
 					id,
 					label: name,
@@ -8226,15 +8356,18 @@ export function createUi(
 					}
 				}
 				if ( hudData ) {
-					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!,
-						width = extVertical ? (extDouble ? 80 : 44) : (extDouble ? 213 : 405),
-						height = extVertical ? (extDouble ? 212 : 405) : (extDouble ? 76 : 40);
-					const headerWidth = Object.values( layout ).find( n => n.id === 10 )!.rect[2];
-					if ( !extPosition ) extPosition = [ Math.max( 0, w - headerWidth - 26 ), 181 ];
-					const ex = Math.max( 0, Math.min( w - width, extPosition[0] ) ),
-						ey = Math.max( 0, Math.min( h - height, extPosition[1] ) ),
-						alpha = extTransparent ? 110 / 255 : 1;
+					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
 					const header = Object.values( layout ).find( n => n.id === 10 )!;
+					if ( !extPosition ) {
+						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [
+							header.rect[2],
+							header.rect[3]
+						] ) ??
+							[ w - header.rect[2] - 26, 181 ];
+					}
+					const ex = extPosition[0],
+						ey = extPosition[1],
+						alpha = extTransparent ? 110 / 255 : 1;
 					controls.push( {
 						id: "ext-drag",
 						label: "Move extended quickslot bar",
@@ -8339,9 +8472,11 @@ export function createUi(
 					mapPan = [ 0, 0 ];
 					mapCenter = null;
 				}
-				const mapWidth = mapSmall ? 268 : 652, mapHeight = mapSmall ? 296 : 424;
+				const mapWidth = mapSmall ? 268 : WORLD_MAP_WIDTH, mapHeight = mapSmall ? 296 : WORLD_MAP_HEIGHT;
 				const mapLeft = Math.min( mapX, Math.max( 0, w - mapWidth ) ),
 					mapTop = Math.min( mapY, Math.max( 0, h - mapHeight ) );
+				mapX = mapLeft;
+				mapY = mapTop;
 				const mapHits: UiControl[] = [];
 				// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
 				// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
@@ -11588,11 +11723,16 @@ export function createUi(
 				if ( panel === "Alchemy" && hudData ) {
 					const admission = beginWindow(),
 						frame = hudData.windows.ifnewalchemybox!,
+						root = Object.values( hudData.root ).find( node => node.id === 0x2c )!,
 						[px, py] = windowOrigin(
 							"Alchemy",
 							[ Math.max( 0, w - 388 - 392 ), Math.max( 0, h - 478 ), 376, 378 ],
 							"window-drag:Alchemy",
-							frame.GDR_ALCHEMYBOX_DRAG!.rect
+							{
+								drag: frame.GDR_ALCHEMYBOX_DRAG!.rect,
+								// 61FFD3 leaves the root at its authored extent; the tall pane is a child.
+								nativeExtent: [ root.rect[2], root.rect[3] ]
+							}
 						),
 						processing = [ "compound", "advanced", "dissolve" ].includes( alchemyMode ),
 						page = hudData.windows[processing ? "ifalchemyprocess" : "ifnewalchemyreinforce"]!,
@@ -13855,8 +13995,12 @@ export function createUi(
 						game?.completedQuests ?? []
 					) :
 					[];
-				const gx = Math.max( 0, Math.min( guideX ?? Math.floor( (w - 420) / 2 ), w - 420 ) ),
-					gy = Math.max( 0, Math.min( guideY ?? Math.floor( (h - 452) / 2 ), h - 452 ) ),
+				if ( guideX === null || guideY === null ) {
+					[guideX, guideY] = windowPlacement.takeRemembered( "gameGuide", w, h, [ 420, 452 ] ) ??
+						[ Math.trunc( w / 2 ) - 210, Math.trunc( h / 2 ) - 226 ];
+				}
+				const gx = guideX,
+					gy = guideY,
 					nodes = guideData.layout;
 				controls.push( {
 					id: "guide-drag",
@@ -17293,6 +17437,7 @@ export function createUi(
 		================
 		*/
 		dispose() {
+			if ( !disposed ) persistWindowPositions();
 			itemMall.reset();
 			skillTraining.reset();
 			gauges.reset();

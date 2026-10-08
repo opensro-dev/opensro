@@ -78,6 +78,8 @@ export function createEntities(
 	// Only locally sampled coordinates are replaceable. Wire state/lifecycle
 	// events remain reliable barriers; never mutate an already offered batch.
 	const pendingPoses = new Map<number, { index: number; size: number; }>();
+	// The queued gameplay snapshot a newer one merges into (supersedeGameplay).
+	let pendingGameplay: { index: number; size: number; } | undefined;
 	let stagedMode = 1, removalTail = new Uint8Array( 0 );
 	let synchronized = false, localName = "";
 	let localSkills: readonly import("@/engine/foundation/gameplay/spawn-skills").SpawnSkill[] = [];
@@ -118,6 +120,44 @@ export function createEntities(
 		if ( event.kind === "state" || event.kind === "spawn" ) pendingPoses.delete( event.entity.gid );
 		else if ( event.kind === "despawn" ) pendingPoses.delete( event.gid );
 		else if ( event.kind === "reset" || event.kind === "native" ) pendingPoses.clear();
+		// Presentation drops the gameplay state at a reset; never merge across one.
+		if ( event.kind === "reset" ) pendingGameplay = undefined;
+	}
+	/*
+	================
+	supersedeGameplay
+
+	Presentation keeps only the last gameplay snapshot of a batch, carrying
+	the skill catalogue, social state and shop forward from earlier ones
+	(presentation.ts apply). A snapshot published while the previous one is
+	still queued therefore merges into it the same way: the batch publishes
+	the same state, with one copy to clone instead of one per worker tick of
+	a slow presentation frame (#339).
+	================
+	*/
+	function supersedeGameplay( event: Extract<WorldEvent, { kind: "gameplay"; }> ) {
+		const queued = pendingGameplay && events[pendingGameplay.index];
+		if ( !pendingGameplay || queued?.kind !== "gameplay" ) {
+			const size = cost( event );
+			append( event, size );
+			pendingGameplay = { index: events.length - 1, size };
+			return;
+		}
+		const older = queued.state, newer = event.state;
+		const state: import("@/engine/contracts/gameplay").GameplayState = {
+			...newer,
+			skillCatalog: newer.skillCatalog ?? older.skillCatalog,
+			social: newer.social ?? older.social,
+			...(!("shop" in newer) && "shop" in older ? { shop: older.shop } : {})
+		};
+		const merged: WorldEvent = { kind: "gameplay", state }, size = cost( merged );
+		const nextBytes = bytes - pendingGameplay.size + size;
+		if ( nextBytes + stagedBytes > journalByteLimit ) {
+			throw Error( "Reliable world journal gameplay byte capacity exceeded" );
+		}
+		events[pendingGameplay.index] = merged;
+		bytes = nextBytes;
+		pendingGameplay.size = size;
 	}
 	/*
 	================
@@ -424,6 +464,7 @@ export function createEntities(
 			staged = null;
 			stagedBytes = 0;
 			events = [];
+			pendingGameplay = undefined;
 			inflight = null;
 			bytes = 0;
 		},
@@ -1151,6 +1192,7 @@ export function createEntities(
 			inflight = { sequence: ++sequence, events };
 			events = [];
 			pendingPoses.clear();
+			pendingGameplay = undefined;
 			bytes = 0;
 			return inflight;
 		},
@@ -1267,7 +1309,8 @@ export function createEntities(
 		================
 		*/
 		publish( event: WorldEvent ) {
-			append( event );
+			if ( event.kind === "gameplay" ) supersedeGameplay( event );
+			else append( event );
 		},
 		count: () => entities.size
 	};

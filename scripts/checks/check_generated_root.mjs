@@ -5,9 +5,9 @@ check_generated_root.mjs - one owner for where the built asset tree lives
 
 The repository-root generated tree (client-public, intermediate,
 observatory) is resolved by scripts/lib/generatedRoot.mjs, its Python twin
-scripts/sro_paths.py and its Go test twin testsupport/licensed. They honour
-SRO_GENERATED_ROOT, so a worktree reads the main checkout's build without a
-junction. A path built anywhere else ("../../.generated/client-public",
+scripts/sro_paths.py and its Go test twin testsupport/licensed. They resolve
+the main checkout's tree (or SRO_GENERATED_ROOT), so a worktree reads the
+shared build without a junction. A path built anywhere else ("../../.generated/client-public",
 path.join( root, ".generated", "client-public" )) would ignore that and
 bring the junctions back, so this gate refuses it.
 
