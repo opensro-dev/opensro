@@ -95,8 +95,13 @@ Every file under `client-public/assets/` is produced by exactly one owner:
 | --- | --- | --- |
 | Outdoor world (every region) | `pnpm assets build world-outdoor` (`scripts/build_outdoor_world_resources.mjs`) | `outdoor-world` |
 | Resource build (everything else the full build makes) | `pnpm assets build` (`scripts/build_sro_resources.mjs`) | `resource-build` |
-| Focused families (code-selected images, rebuilt catalogs) | `pnpm assets refresh <family>` (`scripts/refresh_asset_family.mjs`) | `family-<pack folder>` |
-| Standalone publishers (skill UI, dungeon worlds, flares, ...) | `pnpm assets publish [<family>]` (`apps/client-next/tools/publish-*.mjs`) | `family-<name>` |
+| Focused families (code-selected images, rebuilt catalogs) | `pnpm assets refresh <family>` (`scripts/refresh_asset_family.mjs`) | `family-<family>` |
+| Standalone publishers (skill UI, dungeon worlds, flares, ...) | `pnpm assets publish <family>` (`apps/client-next/tools/publish-<family>.mjs`) | `family-<family>` |
+| World-map refresh (optional; files the resource build also writes) | `pnpm assets refresh world-map` | `world-map` |
+
+A family's record is named after its task (`assets:refresh:<family>` or
+`assets:publish:<family>`), not its pack folder, so the ledger can check the
+task table for families that never ran.
 
 `pnpm assets build full` runs the outdoor build, then the resource build.
 `pnpm assets publish` with no family runs every publisher and every focused
@@ -123,9 +128,15 @@ row of `scripts/build/families/looseFamilies.mjs`:
 
 `scripts/refresh_asset_family.mjs <family>` takes the generated-assets lock,
 runs `produce`, and hands the files to `publishLooseFamily`
-(`scripts/build/shared/looseFamilyPublication.mjs`), which patches only the
-pack groups that hold them, merges the manifest and refreshes the web
-manifest. Unrelated pack members are never touched.
+(`scripts/build/shared/looseFamilyPublication.mjs`). That picks the group
+of each file and republishes only those groups through
+`scripts/build/shared/packGroupRefresh.mjs`, the one refresh sequence every
+focused publisher shares: rebuild the touched groups from their loose files,
+merge them into the index (refused across asset schemas), check every file
+landed in its group, publish the index, soft-archive the packs those groups
+no longer use, and refresh the web manifest and its sidecars. Unrelated pack
+members are never touched. The native-font, title-crowd, outdoor and
+world-map refreshes use the same sequence.
 
 To add a family: add a row, add its name to `REFRESH_FAMILIES` in
 `scripts/tasks/assets.mjs` (`assetFamilyTasks.test.mjs` keeps the two equal),
@@ -168,9 +179,13 @@ and shipped in a data release next to their replacements.
   `publishBlockTextureFile` (`world/assets/blockTextures.mjs`). A builder
   that writes through these needs no ledger code.
 - A builder that skips work because its output is current, without calling
-  a shared writer, must claim that output itself with `claimPublicFile` or
-  `claimPublicPaths`. Forgetting this is the one way to get a live file
-  reported as unclaimed.
+  a shared writer, must claim that output itself: `claimPublicFile` or
+  `claimPublicPaths` for the files, or `claimKeptOutput( file, text )` for a
+  kept output that names other public files. A kept output claims itself and
+  every `/assets/...` path its text references, because the client loads
+  exactly those (a reused outdoor region bundle keeps its lightmaps alive
+  this way). Forgetting to claim is the one way to get a live file archived;
+  see "Reading the report" below.
 - A complete run replaces its owner's record. A partial run (one outdoor
   region with `--region=`) merges into it.
 - `publishLooseFamily` records its family's files itself, so every focused
@@ -185,29 +200,63 @@ Records are plain JSON, one per owner, in `.generated/publication-ledger/`.
 They describe the shared tree, which is why they live beside it rather than
 in a worktree's `.state/`.
 
-### The audit
+### The audit and what it moves
 
 The full build's pack tail compares every file it is about to pack with the
-union of all records and writes `.generated/unclaimed-assets.json`: each
-unclaimed file with its group and size, totals per folder, and the owners
-it read. The build summary prints the totals:
+records (`auditClaims`). Only the records of known owners count: both
+builds, every family and publisher of the task table, and the optional
+world-map refresh. Then:
+
+- **Every expected owner has a record.** Each swept file no owner claimed
+  is soft-archived (moved through `archiveGeneratedArtifact` to
+  `<checkout>/temp/archives/generated-artifacts/<day>/unclaimed-public-asset/`,
+  never deleted) and left out of the packs. Records of owners that no longer
+  exist (a renamed or removed family) claim nothing and are archived too.
+- **An expected owner has no record** (a fresh tree before
+  `pnpm assets publish`, or a family added since the last publish). Nothing
+  moves: the files of a family that never ran cannot be told from garbage.
+  The summary names the missing owners.
+
+The build summary prints the result, and `.generated/unclaimed-assets.json`
+lists every unclaimed file with its group and size, totals per folder, the
+missing owners and the retired ones:
 
 ```
-Publication ledger: <files> packed file(s), <MiB> MiB, claimed by no build owner (report only; ...)
-  /assets/images/Map_extracted/tile2d: <files> file(s), <MiB> MiB
-  ...
+Publication ledger: <n> file(s), <MiB> MiB, claimed by no build owner; soft-archived to temp/archives and left out of the packs. Report: .generated/unclaimed-assets.json
+  /assets/images/Map_extracted/tile2d: <n> file(s), <MiB> MiB
 ```
 
-**Today the audit only reports.** Nothing is moved until the report lists
-nothing but genuine leftovers. The next step turns an unclaimed file into a
-soft-archived one (moved through `archiveGeneratedArtifact` to
-`temp/archives/generated-artifacts/`, never deleted) and makes the release
-packager refuse a tree whose report is not empty.
+The release packager (`apps/client-next/tools/beta/build.mjs`) is the hard
+gate: it refuses to package unless every expected owner has a record and
+every asset in the pack index is claimed (`verifyIndexClaims`).
 
-Reading a report: a folder full of files you know are live means its
-builder has a skip path that does not claim; fix the builder. A folder of
-files whose format moved (PNG next to `.texture`, `.json` next to a newer
-name) is real garbage.
+Reading the report: a folder full of files you know are live means its
+builder has a skip path that does not claim them; fix the builder and
+restore the files from the archive folder (the path under the reason folder
+mirrors `client-public/`). A folder of files whose format moved (PNG next to
+`.texture`) is real garbage, and archiving it is the point.
+
+## Build parallelism
+
+One setting sizes every parallel stage of the asset build:
+`SRO_BUILD_JOBS`, a positive integer, defaulting to every core but one
+(`scripts/build/shared/buildParallelism.mjs`). It sets:
+
+| Stage | Before | Now |
+| --- | --- | --- |
+| Packs built at once (each holds its buffer and zstd output, about 100 MiB) | 3 | `SRO_BUILD_JOBS` |
+| libuv thread pool (runs the zlib and zstd compression the packer awaits) | 4 | `SRO_BUILD_JOBS` (at least 4) |
+| JSON sidecar compression workers | `min(cores - 2, 4)` | `SRO_BUILD_JOBS` (at most the core count) |
+| Outdoor region builders (`--jobs=N` still overrides) | 2 | `SRO_BUILD_JOBS` |
+| Resource-build lanes running side by side | 2 | `SRO_BUILD_JOBS` |
+| Image conversion (`convert_images.py`) | 1 process | a pool of `SRO_BUILD_JOBS` processes |
+
+Outputs never depend on the setting: every stage writes the same bytes
+whatever its concurrency (`test_image_conversion_jobs.py` checks the image
+pool), so it is not part of the build fingerprint. Lower it when the machine
+must stay responsive, for example `SRO_BUILD_JOBS=4 pnpm assets build`.
+Entry points import `buildParallelism.mjs` first, because libuv reads
+`UV_THREADPOOL_SIZE` once, when the pool first starts.
 
 ## Packs
 
@@ -355,7 +404,6 @@ data release.
 | --- | --- |
 | Members stored zstd-compressed inside packs (per member; 1 MiB blocks measured no better), retiring the gzip transports | region JSON 18.1% → 9.6% of raw; models about 50% → 23-38% |
 | Original DXT blocks (`.texture`) instead of PNG for minimap, outdoor object textures and tile2d | minimap about 269 → 70 MiB; outdoor textures about 213 → 85 MiB; 4-8× less GPU memory |
-| Unclaimed files soft-archived; packaging refuses a tree with unclaimed files | removes leftovers such as the tile2d PNG twins |
 | Size gate (`check_compact_assets.mjs`) measures the bytes actually served | today it measures offline zstd copies nobody downloads |
 | Cache budget `clamp(quota × 0.5, 512 MiB, 4 GiB)`, startup groups never evicted, eviction by region group, `persist()` after world entry (Firefox: from a setting) | explorers stop re-downloading visited areas |
 
