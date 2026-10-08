@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // FindModuleRoot locates this Go module from the working directory or the
@@ -30,4 +31,38 @@ func FindModuleRoot() (string, error) {
 		}
 	}
 	return "", fmt.Errorf("could not locate the server module root")
+}
+
+/*
+==================
+MainCheckoutRoot
+
+The main checkout for a checkout root: the checkout itself, or the one a
+linked git worktree's .git file names ("gitdir: <main>/.git/worktrees/<name>";
+a main checkout's .git is a directory). The built trees live there, so a
+worktree reads them with no environment. scripts/lib/generatedRoot.mjs and
+scripts/sro_paths.py hold the same rule.
+==================
+*/
+func MainCheckoutRoot(checkout string) (string, error) {
+	dotGit := filepath.Join(checkout, ".git")
+	info, err := os.Stat(dotGit)
+	if err != nil || info.IsDir() {
+		return filepath.Clean(checkout), nil
+	}
+	link, err := os.ReadFile(dotGit)
+	if err != nil {
+		return "", err
+	}
+	for line := range strings.SplitSeq(string(link), "\n") {
+		if target, ok := strings.CutPrefix(strings.TrimSpace(line), "gitdir:"); ok {
+			worktreeGitDir := strings.TrimSpace(target)
+			if !filepath.IsAbs(worktreeGitDir) {
+				worktreeGitDir = filepath.Join(checkout, worktreeGitDir)
+			}
+			// <main>/.git/worktrees/<name> -> <main>
+			return filepath.Join(worktreeGitDir, "..", "..", ".."), nil
+		}
+	}
+	return "", fmt.Errorf("unreadable worktree link %s", dotGit)
 }

@@ -166,10 +166,11 @@ is mechanical (reverse it and reproduce the old hash) before re-freezing.
 Agents work in git worktrees. A worktree shares the built tree and the
 package store, never through a link:
 
-- Built assets: set `SRO_GENERATED_ROOT` to the main checkout's `.generated`
-  (an absolute path) and, for the Go tests, `SRO_SERVER_GAME_DATA_ROOT` to its
-  `apps/server/.generated/game-data/1.150/server`. Reading needs nothing else.
-  A build run with the variable set writes into that shared tree.
+- Built assets: nothing to set. Every resolver (scripts, client, Python, Go
+  tests and server) follows the worktree's `.git` file to the main checkout
+  and reads its `.generated` and `apps/server/.generated/game-data`. A build
+  run from a worktree writes into that shared tree. `SRO_GENERATED_ROOT` and
+  `SRO_SERVER_GAME_DATA_ROOT` (absolute paths) override it.
 - Packages: run `pnpm install --frozen-lockfile --offline` in the worktree.
   It hard-links from the shared store in a few seconds. Never link
   `node_modules`: pnpm writes through the link into the other checkout, and

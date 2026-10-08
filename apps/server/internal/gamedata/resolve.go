@@ -52,7 +52,7 @@ type Paths struct {
 func Resolve() (Paths, error) {
 	root := strings.TrimSpace(os.Getenv(EnvRoot))
 	if root == "" {
-		moduleRoot, err := config.FindModuleRoot()
+		moduleRoot, err := mainModuleRoot()
 		if err != nil {
 			return Paths{}, fmt.Errorf("%s is required outside the source checkout: %w", EnvRoot, err)
 		}
@@ -71,6 +71,32 @@ func Resolve() (Paths, error) {
 		return Paths{}, fmt.Errorf("identify server game-data artifact: %w", err)
 	}
 	return resolveCached(cacheKey, runtimeRoot, expectedManifestDigest)
+}
+
+/*
+==================
+mainModuleRoot
+
+The server module of the main checkout: a linked git worktree reads the
+projection the main checkout built (config.MainCheckoutRoot), as the
+scripts and the tests do. Outside a git checkout it is the module itself.
+==================
+*/
+func mainModuleRoot() (string, error) {
+	moduleRoot, err := config.FindModuleRoot()
+	if err != nil {
+		return "", err
+	}
+	checkout := filepath.Join(moduleRoot, "..", "..")
+	main, err := config.MainCheckoutRoot(checkout)
+	if err != nil {
+		return "", err
+	}
+	inCheckout, err := filepath.Rel(filepath.Clean(checkout), moduleRoot)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(main, inCheckout), nil
 }
 
 // resolveCached verifies one immutable deployment artifact exactly once per

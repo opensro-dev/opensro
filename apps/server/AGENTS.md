@@ -44,8 +44,8 @@ this way (see `internal/game/world/movement/runtime.go`); match it.
   package initialization: reads before the test log starts are invisible to
   Go's test cache, which the gate keeps on.
 - Tests that read the published client tree get it from
-  `licensed.ClientPublicRoot`, which honours `SRO_GENERATED_ROOT` the way
-  `scripts/lib/generatedRoot.mjs` does. Never join a relative
+  `licensed.ClientPublicRoot`, which resolves the main checkout's tree (or
+  `SRO_GENERATED_ROOT`) the way `scripts/lib/generatedRoot.mjs` does. Never join a relative
   `.generated/client-public`.
 - Test fixtures in `internal/game/action` use the level-1 leveldata row;
   raising a fixture character's level silently breaks `playerCombatStats`.

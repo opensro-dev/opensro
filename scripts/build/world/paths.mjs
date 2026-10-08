@@ -14,8 +14,7 @@ linked git worktree names in its .git file.
 
 ===========================================================================
 */
-import fs from "node:fs";
-import { GENERATED_ROOT } from "../../lib/generatedRoot.mjs";
+import { GENERATED_ROOT, MAIN_CHECKOUT_ROOT } from "../../lib/generatedRoot.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,25 +39,8 @@ function resolveGameRoot() {
 	return path.resolve( mainCheckoutRoot, ".." );
 }
 
-/*
-================
-resolveMainCheckout
-
-The main checkout: this one, or the one a linked worktree's .git file names.
-================
-*/
-function resolveMainCheckout() {
-	const dotGit = path.join( rebuildRoot, ".git" );
-	if ( fs.existsSync( dotGit ) && fs.statSync( dotGit ).isFile() ) {
-		const match = /^gitdir:\s*(.+)$/m.exec( fs.readFileSync( dotGit, "utf8" ) );
-		if ( !match ) throw new Error( `Unreadable worktree link ${dotGit}` );
-		const worktreeGitDir = path.resolve( rebuildRoot, match[1].trim() );
-		return path.resolve( worktreeGitDir, "..", "..", ".." );
-	}
-	return rebuildRoot;
-}
-
-export const mainCheckoutRoot = resolveMainCheckout();
+// The main checkout (scripts/lib/generatedRoot.mjs owns the rule).
+export const mainCheckoutRoot = MAIN_CHECKOUT_ROOT;
 
 export const gameRoot = resolveGameRoot();
 export const extractedRoot = path.join( gameRoot, "extracted" );
@@ -91,13 +73,14 @@ resolveServerGameDataRoot
 
 The verified server game-data projection lives inside the Go module: its
 tests then read only module files, and `go test` validates cached results
-against the data itself (apps/server/AGENTS.md). Git-ignored there. A
-worktree names the main checkout's projection through the same variable the
-Go server reads; only an absolute path is accepted, as for
+against the data itself (apps/server/AGENTS.md). Git-ignored there. It is
+the main checkout's projection, so a linked worktree reads the shared one
+with no environment; SRO_SERVER_GAME_DATA_ROOT, the variable the Go server
+reads, overrides it. Only an absolute override is accepted, as for
 SRO_GENERATED_ROOT, so the answer never depends on the working directory.
 ================
 */
-export function resolveServerGameDataRoot( env = process.env ) {
+export function resolveServerGameDataRoot( env = process.env, mainCheckout = MAIN_CHECKOUT_ROOT ) {
 	const override = env[SERVER_GAME_DATA_ROOT_ENV]?.trim();
 	if ( override ) {
 		if ( !path.isAbsolute( override ) ) {
@@ -105,7 +88,7 @@ export function resolveServerGameDataRoot( env = process.env ) {
 		}
 		return path.resolve( override );
 	}
-	return path.join( rebuildRoot, "apps", "server", ".generated", "game-data", "1.150", "server" );
+	return path.join( mainCheckout, "apps", "server", ".generated", "game-data", "1.150", "server" );
 }
 
 export const serverGameDataRoot = resolveServerGameDataRoot();

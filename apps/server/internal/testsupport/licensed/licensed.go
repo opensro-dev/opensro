@@ -36,6 +36,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"opensro.online/server/internal/config"
 )
 
 // RequireEnv makes missing game data a test failure instead of a skip.
@@ -107,9 +109,9 @@ const GeneratedRootEnv = "SRO_GENERATED_ROOT"
 ClientPublicRoot
 
 The published client tree: client-public under SRO_GENERATED_ROOT when it is
-set (it must be absolute, as for the scripts), else this checkout's own
-.generated/client-public. A worktree then reads the main checkout's build
-with no junction.
+set (it must be absolute, as for the scripts), else the main checkout's
+.generated/client-public. A worktree then reads the shared build with no
+junction and no environment.
 ==================
 */
 func ClientPublicRoot() (string, error) {
@@ -119,11 +121,11 @@ func ClientPublicRoot() (string, error) {
 		}
 		return filepath.Join(root, "client-public"), nil
 	}
-	repository, err := repositoryRoot()
+	main, err := mainRepositoryRoot()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(repository, ".generated", "client-public"), nil
+	return filepath.Join(main, ".generated", "client-public"), nil
 }
 
 /*
@@ -145,7 +147,11 @@ func missingGameData() ([]string, error) {
 	}
 	projection := os.Getenv("SRO_SERVER_GAME_DATA_ROOT")
 	if projection == "" {
-		projection = filepath.Join(repository, "apps", "server", ".generated", "game-data", "1.150", "server", "manifest.json")
+		main, mainErr := config.MainCheckoutRoot(repository)
+		if mainErr != nil {
+			return nil, mainErr
+		}
+		projection = filepath.Join(main, "apps", "server", ".generated", "game-data", "1.150", "server", "manifest.json")
 	}
 	publicRoot, err := ClientPublicRoot()
 	if err != nil {
@@ -196,34 +202,18 @@ resolveGameRoot
 
 The directory holding extracted/, by the rule of scripts/build/world/paths.mjs
 and scripts/sro_paths.py: SRO_GAME_ROOT when set, else the parent of the main
-checkout. A linked worktree's .git is a file naming
-<main>/.git/worktrees/<name>.
+checkout (config.MainCheckoutRoot).
 ==================
 */
 func resolveGameRoot(repository string) (string, error) {
 	if configured := strings.TrimSpace(os.Getenv("SRO_GAME_ROOT")); configured != "" {
 		return filepath.Abs(configured)
 	}
-	dotGit := filepath.Join(repository, ".git")
-	info, err := os.Stat(dotGit)
-	if err != nil || info.IsDir() {
-		return filepath.Join(repository, ".."), nil
-	}
-	link, err := os.ReadFile(dotGit)
+	main, err := config.MainCheckoutRoot(repository)
 	if err != nil {
 		return "", err
 	}
-	for line := range strings.SplitSeq(string(link), "\n") {
-		if target, ok := strings.CutPrefix(strings.TrimSpace(line), "gitdir:"); ok {
-			worktreeGitDir := strings.TrimSpace(target)
-			if !filepath.IsAbs(worktreeGitDir) {
-				worktreeGitDir = filepath.Join(repository, worktreeGitDir)
-			}
-			// <main>/.git/worktrees/<name> -> <main>/.. is the game root.
-			return filepath.Join(worktreeGitDir, "..", "..", "..", ".."), nil
-		}
-	}
-	return "", fmt.Errorf("unreadable worktree link %s", dotGit)
+	return filepath.Join(main, ".."), nil
 }
 
 /*
@@ -248,4 +238,20 @@ func repositoryRoot() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+/*
+==================
+mainRepositoryRoot
+
+The main checkout of the rebuild checkout this test runs in, where the
+built trees live (config.MainCheckoutRoot).
+==================
+*/
+func mainRepositoryRoot() (string, error) {
+	repository, err := repositoryRoot()
+	if err != nil {
+		return "", err
+	}
+	return config.MainCheckoutRoot(repository)
 }
