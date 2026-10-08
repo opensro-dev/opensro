@@ -85,6 +85,7 @@ function pageFixture( t, game ) {
 test("missing HP still fails after the bounded retries with admission evidence", async t => {
 	const { page, commands } = pageFixture( t, { localGid: 7, vitals: [], progression: { level: 20 } } );
 	await assert.rejects( revive( page ), error => {
+		assert.ok( error instanceof Error );
 		assert.match( error.message, /could not be revived; admission:/ );
 		const admission = JSON.parse( error.message.split( "; admission: " )[1] );
 		assert.equal( admission.state, "missing-local-vital" );
