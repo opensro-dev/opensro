@@ -10,7 +10,12 @@ build/world/paths.mjs.
 
 ===========================================================================
 */
+// First: it sizes libuv's thread pool, which runs the zstd compression below.
+import { buildJobs } from "./build/shared/buildParallelism.mjs";
 import { assertInsideRoot, containedPublicFile, normalizePublicAssetPath } from "./build/shared/assetPaths.mjs";
+import { createLimiter } from "./build/shared/asyncUtils.mjs";
+import { ASSET_PACK_ZSTD_LEVEL, ASSET_PACK_ZSTD_WINDOW_LOG, compressAssetPackZstd } from "./build/assetPacks.mjs";
+import { publishAssetPackManifest } from "./build/assetPackPublication.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -72,6 +77,10 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 	if ( typeof zlib.zstdDecompressSync !== "function" ) {
 		throw new Error( "Compact asset validation requires Node.js zstd decompression support." );
 	}
+
+	// The build writes identity packs only; the zstd-19 copies this release
+	// keeps instead are made here, once, for every pack that lacks one.
+	await ensurePackZstdCopies( manifest, packs );
 
 	// Iteration uses fast lossless encodings. Shipping is the deliberate cold
 	// path: regenerate the retained pack index at maximum compression before
@@ -350,4 +359,40 @@ function assertGeneratedPath( target, label ) {
 	if ( marker === -1 || marker === parts.length - 1 ) {
 		throw new Error( `${label} must stay below a .generated folder, got ${target}` );
 	}
+}
+
+/*
+================
+ensurePackZstdCopies
+
+Writes the zstd-19 copy of every pack that has none (or a wrong-size one),
+records it in the pack index and publishes the index. Packs compress in
+parallel under the build's SRO_BUILD_JOBS budget.
+================
+*/
+async function ensurePackZstdCopies( manifest, packs ) {
+	const slots = createLimiter( buildJobs() );
+	let written = 0;
+	await Promise.all( packs.map( pack =>
+		slots( async () => {
+			const zstdPublicPath = `${pack.path}.zst`;
+			const zstdPath = containedPublicFile( publicRoot, zstdPublicPath );
+			const existing = await stat( zstdPath ).catch( () => undefined );
+			if ( pack.zstdPath === zstdPublicPath && existing?.isFile() && existing.size === pack.zstdBytes ) return;
+			const compressed = await compressAssetPackZstd(
+				await readFile( containedPublicFile( publicRoot, pack.path ) )
+			);
+			await writeFile( zstdPath, compressed );
+			Object.assign( pack, {
+				zstdPath: zstdPublicPath,
+				zstdBytes: compressed.length,
+				zstdLevel: ASSET_PACK_ZSTD_LEVEL,
+				zstdWindowLog: ASSET_PACK_ZSTD_WINDOW_LOG
+			} );
+			written++;
+		} )
+	) );
+	if ( written === 0 ) return;
+	await publishAssetPackManifest( publicRoot, packManifestPath, Buffer.from( JSON.stringify( manifest ) ) );
+	console.log( `[compact] wrote ${written} zstd pack copies` );
 }

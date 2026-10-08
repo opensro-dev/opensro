@@ -17,7 +17,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import test from "node:test";
 
 import { reconcileAssetPackGroupFromLooseAuthority } from "../../build/assetPackGroupAuthority.mjs";
-import { buildAssetPacks } from "../../build/assetPacks.mjs";
+import { buildAssetPacks, compressAssetPackZstd } from "../../build/assetPacks.mjs";
 import { patchAssetPackGroupFromLooseFiles } from "../../build/sparseAssetPackGroupRefresh.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -127,9 +127,17 @@ test("pack builder reuses unchanged zstd-only compact outputs", async (t) => {
   const cold = await buildAssetPacks(options);
   assert.equal(cold.builtPackCount, 1);
   const pack = cold.groups[0].packs[0];
+  assert.equal(pack.zstdPath, undefined, "the build writes identity packs only");
   const identityPath = path.join(publicRoot, pack.path.replace(/^\/+/, ""));
-  assert.ok(pack.zstdPath, "fixture pack must have a zstd representation");
-  const zstdPath = path.join(publicRoot, pack.zstdPath.replace(/^\/+/, ""));
+  // Compact the tree as `pnpm assets compact` does: the zstd copy recorded in
+  // the index, the identity pack removed.
+  const zstdPath = `${identityPath}.zst`;
+  const compressed = await compressAssetPackZstd(await readFile(identityPath));
+  await writeFile(zstdPath, compressed);
+  const indexPath = cold.outputPath;
+  const index = JSON.parse(await readFile(indexPath, "utf8"));
+  Object.assign(index.groups[0].packs[0], { zstdPath: `${pack.path}.zst`, zstdBytes: compressed.length });
+  await writeFile(indexPath, JSON.stringify(index));
   await rm(identityPath, { force: true });
 
   const warm = await buildAssetPacks(options);
@@ -139,7 +147,7 @@ test("pack builder reuses unchanged zstd-only compact outputs", async (t) => {
     stat(identityPath),
     (error) => error instanceof Error && "code" in error && error.code === "ENOENT"
   );
-  assert.equal((await stat(zstdPath)).size, pack.zstdBytes);
+  assert.equal((await stat(zstdPath)).size, compressed.length);
 });
 
 test("sparse group refresh patches one compacted pack without dropping absent assets", async (t) => {
@@ -170,9 +178,16 @@ test("sparse group refresh patches one compacted pack without dropping absent as
   for (const publicPath of publicPaths) {
     await rm(path.join(publicRoot, publicPath.replace(/^\/+/, "")), { force: true });
   }
+  // Compact the tree as `pnpm assets compact` does: zstd copies recorded in the
+  // index, the identity packs removed.
   for (const pack of previous.groups[0].packs) {
-    await rm(path.join(publicRoot, pack.path.replace(/^\/+/, "")), { force: true });
+    const identityPath = path.join(publicRoot, pack.path.replace(/^\/+/, ""));
+    const compressed = await compressAssetPackZstd(await readFile(identityPath));
+    await writeFile(`${identityPath}.zst`, compressed);
+    Object.assign(pack, { zstdPath: `${pack.path}.zst`, zstdBytes: compressed.length });
+    await rm(identityPath, { force: true });
   }
+  await writeFile(cold.outputPath, JSON.stringify(previous));
   const changedPath = publicPaths[1];
   const changedAbsolutePath = path.join(publicRoot, changedPath.replace(/^\/+/, ""));
   await mkdir(path.dirname(changedAbsolutePath), { recursive: true });

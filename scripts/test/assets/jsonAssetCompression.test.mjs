@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import * as zlib from "node:zlib";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 
-import { ASSET_PACK_MAGIC, buildAssetPacks, listPublicAssetFiles } from "../../build/assetPacks.mjs";
+import { ASSET_PACK_MAGIC, buildAssetPacks, compressAssetPackZstd, listPublicAssetFiles } from "../../build/assetPacks.mjs";
 import { minifyJsonBytes, optimizeJsonAssets } from "../../build/jsonAssetCompression.mjs";
 import { buildUiImagePreloadManifest } from "../../build/uiImagePreload.mjs";
 
@@ -177,9 +177,9 @@ test("buildAssetPacks writes reusable 50 MiB-style binary packs with path offset
   assert.equal(index.groups[0].targetBytes, 50 * 1024 * 1024);
   assert.equal(index.assets.length, 3);
   assert.match(packPublicPath, /^\/assets\/packs\/native-ui-001-[a-f0-9]{12}\.bin$/);
-  assert.equal(index.groups[0].packs[0].zstdPath, `${packPublicPath}.zst`);
-  assert.equal(index.groups[0].packs[0].zstdLevel, 19);
-  assert.equal(index.groups[0].packs[0].zstdWindowLog, 23);
+  // The build writes the identity pack only; `pnpm assets compact` makes the zstd copy.
+  assert.equal(index.groups[0].packs[0].zstdPath, undefined);
+  await assert.rejects(stat(zstdPath), { code: "ENOENT" });
 
   const headerLength = packBuffer.readUInt32LE(8);
   const header = JSON.parse(packBuffer.subarray(12, 12 + headerLength).toString("utf8"));
@@ -198,11 +198,7 @@ test("buildAssetPacks writes reusable 50 MiB-style binary packs with path offset
   assert.equal(focusManifestEntry.length, focusEntry.length);
 
   if (typeof zlib.zstdDecompressSync === "function") {
-    const zstdBytes = await readFile(zstdPath);
-    const decompressed = zlib.zstdDecompressSync(zstdBytes);
-
-    assert.equal(zstdBytes.byteLength, index.groups[0].packs[0].zstdBytes);
-    assert.deepEqual(decompressed, packBuffer);
+    assert.deepEqual(zlib.zstdDecompressSync(await compressAssetPackZstd(packBuffer)), packBuffer);
   }
 });
 

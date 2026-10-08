@@ -55,7 +55,10 @@ export function assertInsideRoot( root, target, label ) {
 
 /** Resolve a public /assets path to its file below publicRoot, refusing escapes. */
 export function containedPublicFile( publicRoot, publicPath ) {
-	const file = path.resolve( publicRoot, normalizePublicAssetPath( publicPath ).slice( 1 ) );
+	// /assets itself is a valid root to list; anything else must sit below it.
+	const normalized = normalizePublicPath( publicPath );
+	if ( normalized !== "/assets" ) normalizePublicAssetPath( normalized );
+	const file = path.resolve( publicRoot, normalized.slice( 1 ) );
 	assertInsideRoot( publicRoot, file, `public path ${publicPath}` );
 	return file;
 }

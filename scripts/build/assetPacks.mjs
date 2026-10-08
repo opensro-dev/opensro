@@ -4,7 +4,7 @@
 assetPacks.mjs - build the asset packs and publish their index
 
 Groups the public assets into packs of about the target size, reuses any
-pack whose members are unchanged, compresses each with zstd, and publishes
+pack whose members are unchanged, and publishes
 the pack index (assets/packs/manifest.json) atomically. The same builder
 writes the incremental slot packs, each with its own local index.
 
@@ -335,7 +335,6 @@ function packContentKey( groupName, members ) {
 		JSON.stringify( {
 			format: ASSET_PACK_MAGIC,
 			version: 1,
-			zstd: [ ASSET_PACK_ZSTD_LEVEL, ASSET_PACK_ZSTD_WINDOW_LOG ],
 			group: groupName,
 			files: members.map( ( member ) => [ member.publicPath, member.sha256, member.length, member.mime ] )
 		} )
@@ -365,7 +364,7 @@ async function indexReusablePacks( indexPath ) {
 	const packsByPath = new Map();
 	for ( const group of previous.groups ) {
 		for ( const pack of group.packs ?? [] ) {
-			if ( typeof pack?.path === "string" && typeof pack.zstdBytes === "number" ) {
+			if ( typeof pack?.path === "string" ) {
 				packsByPath.set( pack.path, { groupName: group.name, pack } );
 			}
 		}
@@ -400,22 +399,19 @@ async function indexReusablePacks( indexPath ) {
 /*
 ================
 packOutputsIntact
+
+The identity pack is on disk at its recorded size, or - in a compacted
+tree, which keeps only the zstd copy `pnpm assets compact` made - that copy
+is. Either way the unchanged pack is reused without rebuilding it.
 ================
 */
 async function packOutputsIntact( publicRoot, pack ) {
 	try {
-		const binPath = containedPublicFile( publicRoot, pack.path );
-		const zstdPath = containedPublicFile( publicRoot, pack.zstdPath ?? `${pack.path}.zst` );
-		const [binStat, zstdStat] = await Promise.all( [
-			stat( binPath ).catch( () => undefined ),
-			stat( zstdPath ).catch( () => undefined )
-		] );
-		const identityIntact = binStat?.isFile() && binStat.size === pack.bytes;
-		const zstdIntact = zstdStat?.isFile() && zstdStat.size === pack.zstdBytes;
-
-		// Compact releases intentionally retain only the zstd sidecar. Reuse an
-		// unchanged pack without inflating and recompressing its deleted identity.
-		return Boolean( zstdIntact && (identityIntact || !binStat) );
+		const binStat = await stat( containedPublicFile( publicRoot, pack.path ) ).catch( () => undefined );
+		if ( binStat ) return binStat.isFile() && binStat.size === pack.bytes;
+		if ( typeof pack.zstdPath !== "string" ) return false;
+		const zstdStat = await stat( containedPublicFile( publicRoot, pack.zstdPath ) ).catch( () => undefined );
+		return Boolean( zstdStat?.isFile() && zstdStat.size === pack.zstdBytes );
 	} catch {
 		return false;
 	}
@@ -497,21 +493,18 @@ async function buildOrReusePack(
 	}
 	await mkdir( outputRoot, { recursive: true } );
 
-	// zstd runs on the libuv threadpool; overlapping it with the pack write keeps the
-	// (rare, changed-pack-only) compression off the critical path as much as possible.
-	const [zstdSidecar] = await Promise.all( [ compressAssetPackZstd( buffer ), writeFile( packPath, buffer ) ] );
-	await writeFile( `${packPath}.zst`, zstdSidecar );
+	// The identity pack is what every reader serves. Its zstd-19 copy exists only
+	// for the compact release footprint, so `pnpm assets compact` makes it
+	// (compressAssetPackZstd); compressing every changed pack here cost most of a
+	// clean build's pack step.
+	await writeFile( packPath, buffer );
 	counters.built += 1;
 
 	const packEntry = {
 		path: packPublicPath,
 		bytes: buffer.length,
 		sha256: packHash,
-		assetCount: entries.length,
-		zstdPath: `${packPublicPath}.zst`,
-		zstdBytes: zstdSidecar.length,
-		zstdLevel: ASSET_PACK_ZSTD_LEVEL,
-		zstdWindowLog: ASSET_PACK_ZSTD_WINDOW_LOG
+		assetCount: entries.length
 	};
 	const assetRows = entries.map( ( entry ) => ({
 		path: entry.path,
@@ -574,9 +567,11 @@ async function archiveStaleOutputs( publicRoot, outputRoot, index, indexPath ) {
 /*
 ================
 compressAssetPackZstd
+
+The compact release's at-rest copy of one pack (pnpm assets compact).
 ================
 */
-function compressAssetPackZstd( bytes ) {
+export function compressAssetPackZstd( bytes ) {
 	return compressZstd( bytes, {
 		level: ASSET_PACK_ZSTD_LEVEL,
 		windowLog: ASSET_PACK_ZSTD_WINDOW_LOG
