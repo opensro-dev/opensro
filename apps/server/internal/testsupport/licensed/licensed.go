@@ -147,7 +147,7 @@ func missingGameData() ([]string, error) {
 	}
 	projection := os.Getenv("SRO_SERVER_GAME_DATA_ROOT")
 	if projection == "" {
-		main, mainErr := config.MainCheckoutRoot(repository)
+		main, mainErr := mainRepositoryRoot()
 		if mainErr != nil {
 			return nil, mainErr
 		}
@@ -213,6 +213,9 @@ func resolveGameRoot(repository string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := config.RequireNoWorktreeCopies(repository, main); err != nil {
+		return "", err
+	}
 	return filepath.Join(main, ".."), nil
 }
 
@@ -253,5 +256,9 @@ func mainRepositoryRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return config.MainCheckoutRoot(repository)
+	main, err := config.MainCheckoutRoot(repository)
+	if err != nil {
+		return "", err
+	}
+	return main, config.RequireNoWorktreeCopies(repository, main)
 }

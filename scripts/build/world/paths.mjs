@@ -43,6 +43,8 @@ function resolveGameRoot() {
 export const mainCheckoutRoot = MAIN_CHECKOUT_ROOT;
 
 export const gameRoot = resolveGameRoot();
+// Where gameRoot came from, for reports: the variable or the checkout layout.
+export const gameRootSource = process.env.SRO_GAME_ROOT?.trim() ? "SRO_GAME_ROOT" : "beside the main checkout";
 export const extractedRoot = path.join( gameRoot, "extracted" );
 export const dataExtractedRoot = path.join( extractedRoot, "Data_extracted" );
 export const mapExtractedRoot = path.join( extractedRoot, "Map_extracted" );

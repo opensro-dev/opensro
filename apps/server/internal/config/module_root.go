@@ -66,3 +66,56 @@ func MainCheckoutRoot(checkout string) (string, error) {
 	}
 	return "", fmt.Errorf("unreadable worktree link %s", dotGit)
 }
+
+// worktreeTrees are the generated trees a linked worktree must never hold
+// itself, each with the override that names another tree explicitly.
+var worktreeTrees = []struct{ tree, override string }{
+	{".generated", "SRO_GENERATED_ROOT"},
+	{filepath.Join("apps", "server", ".generated"), "SRO_SERVER_GAME_DATA_ROOT"},
+}
+
+/*
+==================
+WorktreeCopies
+
+The generated trees a linked worktree holds of its own - a copy, a symlink
+or a junction, broken or not - unless that tree's override is set (lookup
+reads the environment). The main checkout's trees are the only ones any
+tool reads and builds, so a second one is a stale tree waiting to be used.
+Empty for the main checkout. scripts/lib/generatedRoot.mjs and
+scripts/sro_paths.py hold the same rule.
+==================
+*/
+func WorktreeCopies(checkout, main string, lookup func(string) string) []string {
+	if filepath.Clean(checkout) == filepath.Clean(main) {
+		return nil
+	}
+	var copies []string
+	for _, tree := range worktreeTrees {
+		if lookup(tree.override) != "" {
+			continue
+		}
+		path := filepath.Join(checkout, tree.tree)
+		if _, err := os.Lstat(path); err == nil {
+			copies = append(copies, path)
+		}
+	}
+	return copies
+}
+
+/*
+==================
+RequireNoWorktreeCopies
+
+The error a resolver returns when a worktree holds its own generated tree.
+==================
+*/
+func RequireNoWorktreeCopies(checkout, main string) error {
+	copies := WorktreeCopies(checkout, main, os.Getenv)
+	if len(copies) == 0 {
+		return nil
+	}
+	return fmt.Errorf("this worktree holds its own generated tree: %s; every tool reads and builds the main "+
+		"checkout's (%s); move these aside into temp/ (unlink a symlink or junction, never delete through it) "+
+		"and rerun", strings.Join(copies, ", "), main)
+}

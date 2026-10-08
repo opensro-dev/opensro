@@ -43,6 +43,39 @@ def _resolve_main_checkout(checkout: Path) -> Path:
 
 MAIN_CHECKOUT_ROOT = _resolve_main_checkout(REPO_ROOT)
 
+# The trees a worktree must never hold itself, each exempt only while its
+# own override names another tree (scripts/lib/generatedRoot.mjs).
+_MAIN_CHECKOUT_TREES = (
+	(Path(".generated"), "SRO_GENERATED_ROOT"),
+	(Path("apps") / "server" / ".generated", "SRO_SERVER_GAME_DATA_ROOT"),
+)
+
+
+# ================
+# worktree_copies
+#
+# The generated trees a linked worktree holds of its own - a copy, a
+# symlink or a junction, broken or not. The main checkout's are the only
+# ones any tool reads; a second one is a stale tree waiting to be used.
+# ================
+def worktree_copies(checkout: Path = REPO_ROOT, main_checkout: Path = MAIN_CHECKOUT_ROOT, env=os.environ) -> list[Path]:
+	if checkout.resolve() == main_checkout.resolve():
+		return []
+	return [
+		checkout / tree
+		for tree, override in _MAIN_CHECKOUT_TREES
+		if not env.get(override) and (os.path.lexists(checkout / tree) or os.path.isjunction(checkout / tree))
+	]
+
+
+_COPIES = worktree_copies()
+if _COPIES:
+	raise RuntimeError(
+		f"This worktree holds its own generated tree: {', '.join(map(str, _COPIES))}. Every tool reads and builds "
+		f"the main checkout's ({MAIN_CHECKOUT_ROOT}); move these aside into temp/ (or delete them; unlink a symlink "
+		"or junction, never delete through it) and rerun."
+	)
+
 
 # ================
 # _resolve_game_root

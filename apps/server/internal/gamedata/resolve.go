@@ -92,6 +92,9 @@ func mainModuleRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := config.RequireNoWorktreeCopies(checkout, main); err != nil {
+		return "", err
+	}
 	inCheckout, err := filepath.Rel(filepath.Clean(checkout), moduleRoot)
 	if err != nil {
 		return "", err

@@ -187,8 +187,20 @@ package store, never through a link:
   It hard-links from the shared store in a few seconds. Never link
   `node_modules`: pnpm writes through the link into the other checkout, and
   every `pnpm task` refuses a linked one.
-- Never junction or symlink `.generated` or `node_modules`. Before removing a
-  worktree, list its reparse points and unlink any that leave it.
+- A worktree never holds its own `.generated` or `apps/server/.generated`:
+  not a copy, not a symlink, not a junction. The resolvers refuse to run
+  while one exists (unless that tree's override variable is set) and name
+  it; move it aside into `temp/`, unlinking a link rather than deleting
+  through it. Never junction or symlink `node_modules` either. Before
+  removing a worktree, list its reparse points and unlink any that leave it.
+- Only the resolvers read `SRO_GENERATED_ROOT`, `SRO_SERVER_GAME_DATA_ROOT`
+  and `SRO_GAME_ROOT` (`scripts/lib/generatedRoot.mjs`,
+  `scripts/build/world/paths.mjs`, `scripts/sro_paths.py`,
+  `internal/testsupport/licensed`, `internal/gamedata`); every other tool asks
+  them. `check:generated-root` refuses a direct read, as it refuses a
+  hand-built `.generated` path, and code that assumes the tree sits inside
+  the checkout (a relative path or containment check against the checkout)
+  breaks the moment a worktree shares it.
 
 ## Untrusted inputs
 

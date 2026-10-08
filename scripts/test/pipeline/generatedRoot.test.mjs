@@ -20,9 +20,10 @@ import {
 	GENERATED_ROOT_ENV,
 	MAIN_CHECKOUT_ROOT,
 	resolveGeneratedRoot,
-	resolveMainCheckout
+	resolveMainCheckout,
+	worktreeCopies
 } from "../../lib/generatedRoot.mjs";
-import { findGeneratedPaths } from "../../checks/check_generated_root.mjs";
+import { findGeneratedPaths, findRootVariableReads } from "../../checks/check_generated_root.mjs";
 import { resolveServerGameDataRoot, SERVER_GAME_DATA_ROOT_ENV } from "../../build/world/paths.mjs";
 
 const repository = fileURLToPath( new URL( "../../../", import.meta.url ) );
@@ -107,4 +108,44 @@ test("the server game-data projection follows SRO_SERVER_GAME_DATA_ROOT, as the 
 	);
 	assert.equal( resolveServerGameDataRoot( { [SERVER_GAME_DATA_ROOT_ENV]: shared } ), shared );
 	assert.throws( () => resolveServerGameDataRoot( { [SERVER_GAME_DATA_ROOT_ENV]: "../main/server" } ), /absolute/ );
+});
+
+test("a worktree's own generated trees are found, copies and links alike, unless overridden", () => {
+	const scratch = fs.mkdtempSync( path.join( os.tmpdir(), "sro-worktree-copies-" ) );
+	try {
+		const main = path.join( scratch, "main" ), worktree = path.join( scratch, "wt" );
+		fs.mkdirSync( path.join( main, ".git", "worktrees", "wt" ), { recursive: true } );
+		fs.mkdirSync( path.join( worktree, "apps", "server" ), { recursive: true } );
+		fs.writeFileSync( path.join( worktree, ".git" ), `gitdir: ${path.join( main, ".git", "worktrees", "wt" )}\n` );
+		assert.deepEqual( worktreeCopies( worktree, main, {} ), [] );
+		fs.mkdirSync( path.join( worktree, ".generated" ) );
+		// A dangling link counts too: it still makes the tree look present.
+		fs.symlinkSync(
+			path.join( scratch, "gone" ),
+			path.join( worktree, "apps", "server", ".generated" ),
+			"junction"
+		);
+		assert.deepEqual( worktreeCopies( worktree, main, {} ), [
+			path.join( worktree, ".generated" ),
+			path.join( worktree, "apps", "server", ".generated" )
+		] );
+		assert.deepEqual( worktreeCopies( worktree, main, { SRO_GENERATED_ROOT: path.join( scratch, "elsewhere" ) } ), [
+			path.join( worktree, "apps", "server", ".generated" )
+		] );
+		assert.deepEqual( worktreeCopies( main, main, {} ), [], "the main checkout owns its trees" );
+	} finally {
+		fs.rmSync( scratch, { recursive: true, force: true } );
+	}
+});
+
+test("only the owners read the root variables", () => {
+	for (
+		const line of [
+			"const root = process.env.SRO_GENERATED_ROOT;",
+			'root = os.environ.get("SRO_GAME_ROOT")',
+			'projection := os.Getenv("SRO_SERVER_GAME_DATA_ROOT")'
+		]
+	) assert.equal( findRootVariableReads( line ).length, 1, line );
+	assert.equal( findRootVariableReads( "// process.env.SRO_GENERATED_ROOT" ).length, 0 );
+	assert.equal( findRootVariableReads( 'const name = "SRO_GENERATED_ROOT";' ).length, 0 );
 });

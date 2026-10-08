@@ -16,7 +16,7 @@ any required one is missing:
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { extractedRoot, gameRoot, rebuildRoot } from "./build/world/paths.mjs";
+import { extractedRoot, gameRoot, gameRootSource, rebuildRoot } from "./build/world/paths.mjs";
 import {
 	BUILD_CLIENT_FILES,
 	CLIENT_ARCHIVES,
@@ -129,7 +129,7 @@ main
 async function main() {
 	const report = createReport();
 	report.pass( "repository", rebuildRoot );
-	report.pass( "game root", `${gameRoot}${process.env.SRO_GAME_ROOT ? " (SRO_GAME_ROOT)" : " (checkout parent)"}` );
+	report.pass( "game root", `${gameRoot} (${gameRootSource})` );
 	for ( const archive of CLIENT_ARCHIVES.filter( name => !BUILD_CLIENT_FILES.includes( name ) ) ) {
 		if ( !existsSync( path.join( gameRoot, archive ) ) ) {
 			report.warn(
