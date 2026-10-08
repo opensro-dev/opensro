@@ -18,6 +18,11 @@ import { createHash } from "node:crypto";
 import { zstdDecompressSync } from "node:zlib";
 import { build } from "esbuild";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../../../scripts/lib/publishedAsset.mjs";
+import {
+	decodeStoredMember,
+	parsePackHeader,
+	storedMemberBytes
+} from "../../../../scripts/build/shared/packFormat.mjs";
 import { equipmentModelFiles, hwanModelFiles } from "../../../../scripts/build/assetPackOwnership.mjs";
 
 const entry = "src/engine/runtime/assets/worker/model/model.ts";
@@ -88,10 +93,10 @@ test("packed NPC models match their published authority and pass the production 
 			readFileSync( identity ) :
 			zstdDecompressSync( readFileSync( path.join( publicRoot, pack.zstdPath ?? `${packPath}.zst` ) ) );
 		assert.equal( sha256( bytes ), pack.sha256 );
-		const start = 12 + bytes.readUInt32LE( 8 );
+		const { dataStart } = parsePackHeader( bytes, packPath );
 		for ( const member of members ) {
-			const model = bytes.subarray( start + member.offset, start + member.offset + member.length );
-			assert.equal( sha256( model ), member.sha256, member.path );
+			// decodeStoredMember checks the decoded length and SHA-256 itself.
+			const model = decodeStoredMember( storedMemberBytes( bytes, dataStart, member, packPath ), member );
 			assert.deepEqual(
 				model,
 				readPublishedAssetBytesSync( member.path, publicRoot ),

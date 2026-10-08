@@ -19,6 +19,7 @@ import test from "node:test";
 import { reconcileAssetPackGroupFromLooseAuthority } from "../../build/assetPackGroupAuthority.mjs";
 import { buildAssetPacks, compressAssetPackZstd } from "../../build/assetPacks.mjs";
 import { patchAssetPackGroupFromLooseFiles } from "../../build/sparseAssetPackGroupRefresh.mjs";
+import { decodeStoredMember, parsePackHeader, storedMemberBytes } from "../../build/shared/packFormat.mjs";
 
 const execFileAsync = promisify( execFile );
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
@@ -304,8 +305,8 @@ test("authoritative group reconciliation replaces stale packed JSON sidecars", a
 async function readPackedJsonVersion( publicRoot, index, publicPath ) {
 	const asset = index.assets.find( ( candidate ) => candidate.path === publicPath );
 	const packBytes = await readFile( path.join( publicRoot, asset.packPath.replace( /^\/+/, "" ) ) );
-	const dataStart = 12 + packBytes.readUInt32LE( 8 );
-	const member = packBytes.subarray( dataStart + asset.offset, dataStart + asset.offset + asset.length );
+	const { dataStart } = parsePackHeader( packBytes, asset.packPath );
+	const member = decodeStoredMember( storedMemberBytes( packBytes, dataStart, asset, asset.packPath ), asset );
 	return JSON.parse( gunzipSync( member ).toString( "utf8" ) ).version;
 }
 
