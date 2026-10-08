@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { toPublicPath as toPublicAssetPath } from "./shared/assetPaths.mjs";
 import { listFiles, pathExists as exists } from "./shared/fsUtils.mjs";
 import { writeJsonIfChanged } from "./shared/jsonOut.mjs";
-import { isClaimed, isPublicationOpen, readClaims } from "./shared/publicationLedger.mjs";
+import { currentClaims, isClaimed, isPublicationOpen } from "./shared/publicationLedger.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -26,10 +26,11 @@ export async function buildUiImagePreloadManifest( options = {} ) {
 	const root = options.imageRoot ?? imageRoot;
 	const targetPath = options.targetPath ?? preloadManifestPath;
 	const rootPublic = options.publicRoot ?? derivePublicRootFromImageRoot( root );
-	// Inside a build, only images a current step produced: a stale PNG an older
-	// pipeline left behind would otherwise become a manifest dependency, and
-	// the ledger audit would refuse the build instead of archiving the file.
-	const claimed = options.claimed ?? (isPublicationOpen() ? (await readClaims()).claimed : null);
+	// Inside a build, only images a current owner produced (currentClaims, the
+	// set the audit uses): a stale PNG an older pipeline or a retired family
+	// left behind would otherwise become a manifest dependency, and the audit
+	// would refuse the build instead of archiving the file.
+	const claimed = options.claimed ?? (isPublicationOpen() ? await currentClaims() : null);
 	const images = await collectUiPreloadImages( root, rootPublic, claimed );
 
 	// No timestamp: the same images give the same bytes on every machine, so a

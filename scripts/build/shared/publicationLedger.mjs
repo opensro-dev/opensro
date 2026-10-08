@@ -272,14 +272,15 @@ async function readOwner( file ) {
 ================
 readClaims
 
-Every owner's record: { owners: Map<owner, Map<lower-cased path, spelling>>,
-claimed: Set<lower-cased path> }. The open publication of this process
+Every owner's record, retired ones included: { owners: Map<owner,
+Map<lower-cased path, spelling>> }. The open publication of this process
 counts with what it has claimed so far, replacing its committed record: the
-full build audits its own claims before it commits them.
+full build audits its own claims before it commits them. What counts as
+current output is currentClaims(), never the union of these records.
 ================
 */
 export async function readClaims() {
-	const owners = new Map(), claimed = new Set();
+	const owners = new Map();
 	let names = [];
 	try {
 		names = await readdir( ledgerRoot() );
@@ -294,8 +295,40 @@ export async function readClaims() {
 		const previous = current.complete ? [] : owners.get( current.owner ) ?? [];
 		owners.set( current.owner, new Map( [ ...previous, ...current.files ] ) );
 	}
-	for ( const files of owners.values() ) for ( const file of files.keys() ) claimed.add( file );
-	return { owners, claimed };
+	return { owners };
+}
+
+/*
+================
+currentOwnerClaims
+
+The claims of the owners this pipeline has (expected and optional), lower-
+cased path to spelling. A retired owner's record (a renamed or removed
+family) claims nothing: the audit archives what only it names, so nothing
+else may treat its files as current either.
+================
+*/
+async function currentOwnerClaims() {
+	const { owners } = await readClaims();
+	const known = new Set( [ ...expectedOwners(), ...OPTIONAL_OWNERS ] );
+	const spellings = new Map();
+	for ( const [owner, files] of owners ) {
+		if ( known.has( owner ) ) { for ( const [key, spelling] of files ) spellings.set( key, spelling ); }
+	}
+	return { owners, known, spellings };
+}
+
+/*
+================
+currentClaims
+
+The lower-cased public paths a current owner claims: the one answer the
+audit and every build step that selects files by ownership (the UI preload
+sweep) share.
+================
+*/
+export async function currentClaims() {
+	return new Set( (await currentOwnerClaims()).spellings.keys() );
 }
 
 const PRECOMPRESSED = /\.(?:gz|br|zst)$/;
@@ -380,13 +413,8 @@ which claim nothing.
 ================
 */
 async function ledgerStatus() {
-	const { owners } = await readClaims();
+	const { owners, known, spellings } = await currentOwnerClaims();
 	const expected = expectedOwners();
-	const known = new Set( [ ...expected, ...OPTIONAL_OWNERS ] );
-	const spellings = new Map();
-	for ( const [owner, files] of owners ) {
-		if ( known.has( owner ) ) { for ( const [key, spelling] of files ) spellings.set( key, spelling ); }
-	}
 	return {
 		owners,
 		claimed: new Set( spellings.keys() ),

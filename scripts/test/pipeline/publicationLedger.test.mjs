@@ -44,7 +44,7 @@ test("only files under client-public/assets outside the pack tail are public", (
 
 test("claims outside an open publication are ignored", async () => {
 	ledger.claimPublicFile( path.join( assets, "stray.png" ) );
-	assert.equal( (await ledger.readClaims()).claimed.has( "/assets/stray.png" ), false );
+	assert.equal( (await ledger.currentClaims()).has( "/assets/stray.png" ), false );
 });
 
 test("a complete run replaces its record and a partial run merges", async () => {
@@ -249,6 +249,38 @@ test("kept outputs sharing a catalog are walked once and still claim everything"
 	];
 	const report = await ledger.indexClaimReport( { assets: named.map( path => ({ path, length: 1 }) ) } );
 	assert.deepEqual( [ ...report.localOnly, ...report.unclaimed ], [] );
+});
+
+test("an interface image only a retired family claims stays out of the preload and is archived", async () => {
+	const { buildUiImagePreloadManifest } = await import( "../../build/uiImagePreload.mjs" );
+	const interfaceRoot = "/assets/images/Media_extracted/interface/retired/";
+	const live = `${interfaceRoot}live.png`, stale = `${interfaceRoot}stale.png`;
+	await publicFile( live );
+	await publicFile( stale );
+	// A family that no longer exists left its record claiming the stale image.
+	ledger.beginPublication( "family-retired-art" );
+	ledger.claimPublicPaths( [ stale ] );
+	await ledger.commitPublication();
+	for ( const owner of ledger.expectedOwners() ) {
+		ledger.beginPublication( owner );
+		if ( owner === "resource-build" ) {
+			ledger.claimPublicPaths( [ live ] );
+			const manifest = await buildUiImagePreloadManifest();
+			const listed = manifest.images.map( image => image.path ).filter( path =>
+				path.startsWith( interfaceRoot )
+			);
+			assert.deepEqual( listed, [ live ], "the retired claim does not make the stale image current" );
+		}
+		await ledger.commitPublication();
+	}
+	// The same audit that ignores retired owners now archives instead of refusing.
+	await ledger.auditClaims( [ { name: "native-ui", files: [ live, stale ] } ], { archiveRoot } );
+	await assert.rejects(
+		stat( path.join( assets, "images", "Media_extracted", "interface", "retired", "stale.png" ) ),
+		{ code: "ENOENT" }
+	);
+	assert.equal( (await ledger.readClaims()).owners.has( "family-retired-art" ), false );
+	await stat( path.join( assets, "images", "Media_extracted", "interface", "retired", "live.png" ) );
 });
 
 test("a second open publication is refused", () => {
