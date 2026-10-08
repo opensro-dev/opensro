@@ -52,6 +52,38 @@ export async function readProbeInputs( tool ) {
 
 /*
 ================
+candidateAssetUrl
+
+The candidate's own copy of a same-origin /assets/ request, or null for any
+other request. A staged candidate is a complete served tree under
+/releases/candidates/<sha>/ (client_deploy.stage, client_data), but the page
+asks for /assets/ at the origin root, which is the live release: a data
+candidate would otherwise boot against the data it replaces. After the
+switch the live client is that same directory, so the mapping holds there too.
+================
+*/
+export function candidateAssetUrl( requestUrl, entryUrl ) {
+	const request = new URL( requestUrl ), entry = new URL( entryUrl );
+	if ( request.origin !== entry.origin || !request.pathname.startsWith( "/assets/" ) ) return null;
+	return new URL( "." + request.pathname + request.search, entry ).href;
+}
+
+/*
+================
+routeCandidateAssets
+
+Serves every /assets/ request of the page and its workers from the candidate.
+================
+*/
+export async function routeCandidateAssets( context, entryUrl ) {
+	await context.route( "**/assets/**", route => {
+		const target = candidateAssetUrl( route.request().url(), entryUrl );
+		return target ? route.continue( { url: target } ) : route.continue();
+	} );
+}
+
+/*
+================
 assertCandidateEntry
 
 The entry served over HTTPS must be the approved bytes.

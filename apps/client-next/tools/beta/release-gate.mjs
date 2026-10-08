@@ -31,6 +31,7 @@ import {
 	PROBE_VIEWPORT,
 	readProbeInputs,
 	recordPhase,
+	routeCandidateAssets,
 	watchRuntimeErrors
 } from "./release-probe.mjs";
 import { bootstrapSource, simulationWorkerPath, startHeadlessSimulation } from "./headless-simulation.mjs";
@@ -82,6 +83,7 @@ async function bootInBrowser( url, result ) {
 	} );
 	const errors = [];
 	watchRuntimeErrors( page, errors );
+	await routeCandidateAssets( page.context(), url );
 	result.boot = { launchMs: Date.now() - started };
 	try {
 		const response = await page.goto( url, { waitUntil: "commit", timeout: BOOT_BUDGET_MS } );

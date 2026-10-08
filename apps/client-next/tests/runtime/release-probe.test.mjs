@@ -15,6 +15,7 @@ import path from "node:path";
 import test from "node:test";
 import {
 	assertCandidateEntry,
+	candidateAssetUrl,
 	createProbeResult,
 	readProbeInputs,
 	recordPhase
@@ -95,4 +96,24 @@ test("phases record their time since the start and since the previous phase", t 
 	const [login, roster] = result.phaseTimings;
 	assert.ok( login.elapsedMs >= 100 && login.durationMs === login.elapsedMs );
 	assert.equal( roster.durationMs, roster.elapsedMs - login.elapsedMs );
+});
+
+test("a candidate's asset requests are served from its own staged tree, never the live one", () => {
+	const entry = "https://game.example/releases/candidates/" + "c".repeat( 64 ) + "/index.html";
+	const base = "https://game.example/releases/candidates/" + "c".repeat( 64 );
+	// A data candidate's manifest and its ranged pack reads come from the candidate.
+	assert.equal(
+		candidateAssetUrl( "https://game.example/assets/packs/manifest.json", entry ),
+		base + "/assets/packs/manifest.json"
+	);
+	assert.equal(
+		candidateAssetUrl( "https://game.example/assets/packs/game-data-001-0123456789ab.bin?v=1", entry ),
+		base + "/assets/packs/game-data-001-0123456789ab.bin?v=1"
+	);
+	// The API, the transport and other origins are left alone.
+	assert.equal( candidateAssetUrl( "https://game.example/api/title/servers", entry ), null );
+	assert.equal( candidateAssetUrl( "https://game.example/releases/client.json", entry ), null );
+	assert.equal( candidateAssetUrl( "https://cdn.other.example/assets/x.png", entry ), null );
+	// A path that merely contains "assets" is not an asset route.
+	assert.equal( candidateAssetUrl( "https://game.example/api/assets/x", entry ), null );
 });

@@ -21,6 +21,7 @@ import {
 	PROBE_VIEWPORT,
 	readProbeInputs,
 	recordPhase,
+	routeCandidateAssets,
 	watchRuntimeErrors
 } from "./release-probe.mjs";
 
@@ -279,6 +280,7 @@ async function main() {
 	const tracer = createPhaseTracer( browser, page, process.env.RELEASE_TRACE_DIR );
 	const result = createProbeResult( candidate, { network: [] } );
 	watchRuntimeErrors( page, result.errors );
+	await routeCandidateAssets( page.context(), url );
 	page.on( "requestfinished", request => {
 		if ( result.network.length >= MAX_NETWORK_ROWS ) return;
 		const endpoint = new URL( request.url() );
