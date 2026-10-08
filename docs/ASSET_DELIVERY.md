@@ -352,9 +352,9 @@ Cache Storage, keyed by content digest, is the durable cache.
 
 ### Cache Storage budget
 
-The verified-file cache is limited to `min(512 MiB, quota / 4)` and evicts
-least recently used files beyond that. That is far less than browsers allow
-an origin:
+The verified-file store (`packs/persistent.ts`) may hold half the origin's
+quota, at least 512 MiB and at most 4 GiB (`budgetFromQuota`). Browsers give
+an origin far more than the game needs:
 
 | Browser | Per-origin limit |
 | --- | --- |
@@ -363,14 +363,24 @@ an origin:
 | Firefox, persistent | 50% of the disk |
 | Safari (browser app) | about 60% of the disk |
 
-When the device runs low, browsers evict whole origins, least recently used
-first, and never evict an origin marked persistent
+So on most machines the whole game stays local and a player who explores
+never downloads an area twice. Beyond the budget, files leave least
+recently used first, except the files of the startup groups (`native-ui`,
+`game-images`, `game-data`, whose packs the manifest marks `load: startup`):
+those are pinned with a response header and never evicted, so the next
+start never waits for them. The budget used and the pinned count are in the
+store's `stats()`.
+
+When the device runs low on disk, browsers evict whole origins, least
+recently used first, and never evict an origin marked persistent
 ([MDN: storage quotas and eviction](https://developer.mozilla.org/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)).
-`navigator.storage.persist()` is granted silently by Chrome and Safari based
-on engagement, and shows a prompt in Firefox. The Chrome storage team
-recommends the Cache API for large binary resources
-([Chrome: cache models](https://developer.chrome.com/docs/ai/cache-models)).
-Raising the budget and asking for persistence is [planned](#planned-work).
+At world entry the client calls `navigator.storage.persist()`
+(`foundation/assets/persistent-storage.ts`): Chrome, Edge and Safari decide
+silently from engagement. Firefox would answer with a permission prompt in
+the middle of play, so it is not asked; its best-effort quota already holds
+the game. The Chrome storage team recommends the Cache API for large binary
+resources ([Chrome: cache models](https://developer.chrome.com/docs/ai/cache-models)),
+which is what the store uses.
 
 ## Releasing data
 
@@ -441,7 +451,6 @@ data release.
 | Members stored zstd-compressed inside packs (per member; 1 MiB blocks measured no better), retiring the gzip transports | region JSON 18.1% → 9.6% of raw; models about 50% → 23-38% |
 | Original DXT blocks (`.texture`) instead of PNG for minimap, outdoor object textures and tile2d | minimap about 269 → 70 MiB; outdoor textures about 213 → 85 MiB; 4-8× less GPU memory |
 | Size gate (`check_compact_assets.mjs`) measures the bytes actually served | today it measures offline zstd copies nobody downloads |
-| Cache budget `clamp(quota × 0.5, 512 MiB, 4 GiB)`, startup groups never evicted, eviction by region group, `persist()` after world entry (Firefox: from a setting) | explorers stop re-downloading visited areas |
 
 Target: a full download of about 1.1 GiB instead of 2.04 GiB, with no
 visual change.
