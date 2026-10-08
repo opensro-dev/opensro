@@ -5,6 +5,7 @@ copyWaterImages.mjs - native asset compilation
 
 ===========================================================================
 */
+import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
 import { runPython } from "../../shared/pythonRun.mjs";
 import { rebuildRoot } from "../paths.mjs";
 import { copyFile, mkdir } from "node:fs/promises";
@@ -59,8 +60,7 @@ export async function copyReferencedWaterImages( waterTextures ) {
 			throw new Error( `Missing converted water texture ${source}; run the DDJ image conversion first.` );
 		}
 
-		await mkdir( path.dirname( target ), { recursive: true } );
-		await copyFile( source, target );
+		await copyIntoPublicTree( source, target );
 	}
 }
 

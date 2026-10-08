@@ -16,6 +16,7 @@ tile catalog. Coalesce concurrent publishes and never republish the same
 tile during one build process.
 ===========================================================================
 */
+import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -201,8 +202,7 @@ async function publishTerrainTile( ddjPath, target, sourcePath, block ) {
 			`Missing converted terrain texture ${source} for ${sourcePath}; run the DDJ image conversion first.`
 		);
 	}
-	await mkdir( path.dirname( target ), { recursive: true } );
-	await copyFile( source, target );
+	await copyIntoPublicTree( source, target );
 }
 
 /*

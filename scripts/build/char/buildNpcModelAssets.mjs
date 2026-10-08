@@ -41,6 +41,7 @@ Textures: .ddj under prim/mtrl are converted by scripts/convert_images.py
 ===========================================================================
 */
 
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { authoredAnimationBindings } from "./authoredAnimationBindings.mjs";
 import { pickAttachedMotionClips } from "./attachedMotionClips.mjs";
 
@@ -597,8 +598,7 @@ export async function bakeCharacterResource( bsrPath, output, isMob, requiredSta
 		clips,
 		inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
 	} );
-	fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
-	fs.writeFileSync( diskPath, glb );
+	writeIntoPublicTreeSync( diskPath, glb );
 	const materialVariants = {};
 	if ( isMob ) {
 		for ( const [slot, materialPath] of materialSets ) {
@@ -615,7 +615,7 @@ export async function bakeCharacterResource( bsrPath, output, isMob, requiredSta
 				inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
 			} );
 			const suffix = `.material-${slot}.glb`;
-			fs.writeFileSync( diskPath.replace( /\.glb$/, suffix ), variant );
+			writeIntoPublicTreeSync( diskPath.replace( /\.glb$/, suffix ), variant );
 			materialVariants[slot] = publicPath.replace( /\.glb$/, suffix );
 		}
 	}

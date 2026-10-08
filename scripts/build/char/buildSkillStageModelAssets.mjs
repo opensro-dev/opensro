@@ -10,6 +10,7 @@ resource identity survive the same publication contract.
 ===========================================================================
 */
 
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import { listTextDataShardNamesSync, readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
 import path from "node:path";
@@ -158,8 +159,7 @@ export async function buildSkillStageModelAssets() {
 				stateIds: movers.has( resourcePath ) ? [ 0, 2, 7 ] : [],
 				allStates: true
 			} );
-			fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
-			fs.writeFileSync( diskPath, glb );
+			writeIntoPublicTreeSync( diskPath, glb );
 			entry.bytes = glb.length;
 			entry.clips = clips.map( ( clip ) => clip.role );
 			entry.clipLoop = clipLoop;

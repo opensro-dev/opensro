@@ -19,6 +19,7 @@ plus assets/char/roster.json.
 
 ===========================================================================
 */
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -193,8 +194,7 @@ export async function buildHwanHairSets() {
 		if ( !avatar.clips.some( c => c.role === "stand" ) ) throw new Error( `Missing Hwan animation ${gender}` );
 		const publicPath = `/assets/char/hwan/${key.toLowerCase()}.glb`,
 			diskPath = path.join( publicAssets, publicPath.slice( "/assets/".length ) );
-		fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
-		fs.writeFileSync( diskPath, avatarToGlb( avatar ) );
+		writeIntoPublicTreeSync( diskPath, avatarToGlb( avatar ) );
 		entries[key] = {
 			glb: publicPath,
 			parts: [ "HWAN_HAIR" ],
@@ -316,8 +316,7 @@ export async function buildRoster( { skipTextures = false } = {} ) {
 				inPlaceHorizontalRootMotionRoles: [ "walk", "run" ]
 			};
 			const glb = avatarToGlb( runtimeAvatar );
-			fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
-			fs.writeFileSync( diskPath, glb );
+			writeIntoPublicTreeSync( diskPath, glb );
 			entry.bytes = glb.length;
 			entry.bones = avatar.skeleton.boneCount;
 			entry.hasClip = runtimeAvatar.clips.length > 0;
@@ -340,8 +339,7 @@ export async function buildRoster( { skipTextures = false } = {} ) {
 				if ( previewClips.length === 0 ) throw new Error( `${model.codename} has no required preview clips` );
 				const previewAvatar = { ...avatar, clips: previewClips };
 				const previewGlb = avatarToGlb( previewAvatar );
-				fs.mkdirSync( path.dirname( previewOut.diskPath ), { recursive: true } );
-				fs.writeFileSync( previewOut.diskPath, previewGlb );
+				writeIntoPublicTreeSync( previewOut.diskPath, previewGlb );
 				entry.previewGlb = previewOut.publicPath;
 				entry.previewBytes = previewGlb.length;
 				entry.previewClips = (previewAvatar.clips ?? []).map( ( c ) => c.role );

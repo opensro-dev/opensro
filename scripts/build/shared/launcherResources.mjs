@@ -1,6 +1,6 @@
 // Split verbatim from resourcePipeline.mjs (2026-07-28): launcher cluster -
 // refresources/reflinkurl manifest, skin definitions and the PNG copy pass.
-import { copyIntoPublicTree } from "./convertedImages.mjs";
+import { copyIntoPublicTree } from "./publicWrite.mjs";
 import path from "node:path";
 
 import {

@@ -18,7 +18,7 @@ idle/dash-out/walk-back wander. Output:
 ===========================================================================
 */
 
-import { claimPublicFile } from "../shared/publicationLedger.mjs";
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { assembleAvatar } from "../char/buildAvatar.mjs";
@@ -91,9 +91,7 @@ export async function buildCharacterSelectLizard( { skipTextures = false } = {} 
 	avatar.clip = clips.find( ( c ) => c.role === "move" )?.clip ?? clips[0]?.clip ?? null;
 
 	const glb = avatarToGlb( avatar );
-	fs.mkdirSync( path.dirname( outPath ), { recursive: true } );
-	fs.writeFileSync( outPath, glb );
-	claimPublicFile( outPath );
+	writeIntoPublicTreeSync( outPath, glb );
 
 	if ( isCli ) {
 		console.log(

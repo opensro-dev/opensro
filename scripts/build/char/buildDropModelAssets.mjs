@@ -31,6 +31,7 @@ reuse --skip-textures when they're in.
 ===========================================================================
 */
 
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { compileBsrVisualToGlb } from "./compileBsrVisual.mjs";
@@ -131,8 +132,7 @@ export async function buildDropModelAssets( { skipTextures = false } = {} ) {
 			// and holds, 1=Cyclic loops) - resource-driven, not a caller flag.
 			const { glb, clips, clipLoop, modifierSets, particleModifiers, materialModifiers, textureModifiers } =
 				await compileBsrVisualToGlb( bsrPath );
-			fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
-			fs.writeFileSync( diskPath, glb );
+			writeIntoPublicTreeSync( diskPath, glb );
 			entry.bytes = glb.length;
 			entry.clips = clips.map( ( c ) => c.role );
 			// The runtime starts the clip with this loop mode (BAN loopType).
@@ -165,7 +165,8 @@ export async function buildDropModelAssets( { skipTextures = false } = {} ) {
 	const manifest = {
 		format: "sro-mission-itemdrop-models",
 		version: 3,
-		source: "itemdata AssocFileDrop (last .bsr column; native RefItemData+0x138, the CIItem_LoadModel 0x86DC10 ground visual)",
+		source:
+			"itemdata AssocFileDrop (last .bsr column; native RefItemData+0x138, the CIItem_LoadModel 0x86DC10 ground visual)",
 		count: dropModels.length,
 		builtCount: built,
 		absentCount: absent,

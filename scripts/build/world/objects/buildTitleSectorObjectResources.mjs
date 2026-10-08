@@ -10,6 +10,7 @@ everything else keeps the converted PNG path.
 
 ===========================================================================
 */
+import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { CPD_SIGNATURE, parseCompound } from "./compound.mjs";
@@ -254,8 +255,7 @@ async function copyObjectMaterialTextures( texturePaths, area, missing, blockFor
 			continue;
 		}
 
-		await mkdir( path.dirname( target ), { recursive: true } );
-		await copyFile( pngSource, target );
+		await copyIntoPublicTree( pngSource, target );
 
 		copied.push( {
 			sourcePath: textureSourcePath,

@@ -12,10 +12,10 @@ requests.
 
 ===========================================================================
 */
-import { copyFile, mkdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { imagePublicRoot, imageSourceRoot } from "../world/paths.mjs";
-import { claimPublicFile } from "./publicationLedger.mjs";
+import { copyIntoPublicTree } from "./publicWrite.mjs";
 
 const IMAGE_PUBLIC_PREFIX = "/assets/images/";
 
@@ -51,21 +51,6 @@ export async function publishConvertedImage( publicPath ) {
 	}
 	await copyIntoPublicTree( source, path.join( imagePublicRoot, relative ) );
 	return publicPath;
-}
-
-/*
-================
-copyIntoPublicTree
-
-Copies a prepared file (a converted image, a launcher bitmap) to its place
-in the public tree and claims it for the open publication. Every copy into
-client-public goes through here, so no copied file is left without an owner.
-================
-*/
-export async function copyIntoPublicTree( source, target ) {
-	await mkdir( path.dirname( target ), { recursive: true } );
-	await copyFile( source, target );
-	claimPublicFile( target );
 }
 
 /*

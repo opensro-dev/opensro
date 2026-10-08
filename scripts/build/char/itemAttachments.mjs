@@ -16,6 +16,7 @@ roster imports the equipment catalog, which imports this module.
 
 ===========================================================================
 */
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { assembleAvatar } from "./buildAvatar.mjs";
@@ -250,8 +251,7 @@ export async function buildItemSetGlb( { tag, key, donor, donorSkel, pieces, out
 	// body's box would only mislead.
 	avatar.aggregateBox = null;
 	const glb = avatarToGlb( avatar );
-	fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
-	fs.writeFileSync( diskPath, glb );
+	writeIntoPublicTreeSync( diskPath, glb );
 
 	// Keep cover keys only for parts that survived the export.
 	const partCovers = {};
@@ -294,8 +294,7 @@ export async function buildAuxiliaryAvatarSets( overrides ) {
 		if ( !clips.includes( "stand" ) ) throw Error( `Missing auxiliary initial track ${id}` );
 		const glb = `/assets/char/equipment/avatar_aux_${id}.glb`,
 			diskPath = path.join( publicAssets, glb.slice( "/assets/".length ) );
-		fs.mkdirSync( path.dirname( diskPath ), { recursive: true } );
-		fs.writeFileSync( diskPath, avatarToGlb( avatar ) );
+		writeIntoPublicTreeSync( diskPath, avatarToGlb( avatar ) );
 		entries[id] = {
 			glb,
 			parts: [ "AVATAR_AUX" ],

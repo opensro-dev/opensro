@@ -1,7 +1,7 @@
 // Split verbatim from resourcePipeline.mjs (2026-07-28): CIF/UI cluster -
 // resinfo layout bundles, runtime image allowlists and the image copy pass.
 import { mkdir, readFile } from "node:fs/promises";
-import { copyIntoPublicTree } from "./convertedImages.mjs";
+import { copyIntoPublicTree } from "./publicWrite.mjs";
 import path from "node:path";
 import { toPublicImagePath } from "./assetPaths.mjs";
 

@@ -118,14 +118,16 @@ test("a complete ledger soft-archives unclaimed files and retired owners' record
 	assert.deepEqual( await ledger.verifyIndexClaims( { assets: [ { path: "/assets/images/live.png" } ] } ), [] );
 });
 
-test("a claimed manifest keeps the files it names, transitively", async () => {
+test("a file a claimed manifest names but no step produced is local-only, not garbage", async () => {
 	await publicFile( "/assets/npc/Manifest.json", JSON.stringify( { models: { a: "/assets/npc/catalog.json" } } ) );
 	await publicFile( "/assets/npc/catalog.json", JSON.stringify( { glb: "/assets/npc/Model.glb" } ) );
 	await publicFile( "/assets/npc/Model.glb" );
 	await publicFile( "/assets/npc/orphan.glb" );
 	for ( const owner of ledger.expectedOwners() ) {
 		ledger.beginPublication( owner );
-		if ( owner === "resource-build" ) ledger.claimPublicPaths( [ "/assets/npc/Manifest.json" ] );
+		if ( owner === "resource-build" ) {
+			ledger.claimPublicPaths( [ "/assets/npc/Manifest.json", "/assets/npc/catalog.json" ] );
+		}
 		await ledger.commitPublication();
 	}
 	const index = {
@@ -135,7 +137,12 @@ test("a claimed manifest keeps the files it names, transitively", async () => {
 		}) )
 	};
 	const report = await ledger.indexClaimReport( index );
+	assert.deepEqual( report.localOnly.map( row => row.path ), [ "/assets/npc/Model.glb" ] );
 	assert.deepEqual( report.unclaimed.map( row => row.path ), [ "/assets/npc/orphan.glb" ] );
+	assert.match( (await ledger.verifyIndexClaims( index )).join( "; " ), /produced by no current build step/ );
+	const groups = [ { name: "game-models", files: [ "/assets/npc/Model.glb", "/assets/npc/orphan.glb" ] } ];
+	await assert.rejects( ledger.auditClaims( groups, { archiveRoot } ), /a fresh clone would not have them/ );
+	await stat( path.join( assets, "npc", "orphan.glb" ) );
 });
 
 test("a second open publication is refused", () => {

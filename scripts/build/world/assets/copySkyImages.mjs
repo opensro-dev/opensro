@@ -6,6 +6,7 @@ Every world producer shares the lens prerequisite, including standalone
 region builds that do not pass through the full resource build entry point.
 ===========================================================================
 */
+import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
 import { buildNativeSkyStarPrimitive } from "../../../../apps/client-next/src/engine/foundation/rendering/star-construction.ts";
 export { buildNativeSkyStarPrimitive };
 import { copyFile, mkdir } from "node:fs/promises";
@@ -93,12 +94,11 @@ export async function copyReferencedSkyImages( skyTextures ) {
 			throw new Error( `Missing converted sky texture ${source}; run the DDJ image conversion first.` );
 		}
 
-		await mkdir( path.dirname( target ), { recursive: true } );
-		await copyFile( source, target );
+		await copyIntoPublicTree( source, target );
 		if ( FLARE_TEXTURE_SOURCES.includes( texture.sourcePath ) ) {
 			const resource = source.replace( /\.png$/, ".texture" );
 			if ( !(await exists( resource )) ) throw Error( `Native lens generation did not publish ${resource}` );
-			await copyFile( resource, target.replace( /\.png$/, ".texture" ) );
+			await copyIntoPublicTree( resource, target.replace( /\.png$/, ".texture" ) );
 		}
 	}
 }

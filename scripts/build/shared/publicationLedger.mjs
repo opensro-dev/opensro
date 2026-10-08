@@ -22,9 +22,11 @@ Claims are recorded by the shared publication helpers (atomic publish, JSON
 writers, converted images, block textures), so a builder that goes through
 them needs no ledger code; a builder that skips work because its output is
 current claims that output explicitly with claimPublicFile or
-claimPublicPaths. A claimed JSON output also claims every /assets/... file
-it names, transitively (closeOverReferences): the client loads exactly
-those.
+claimPublicPaths (shared/publicWrite.mjs writes and claims in one call).
+Claims are checked against what the claimed manifests name
+(referencedFiles): a named file no step claimed exists only because of an
+earlier run on this machine, so a fresh clone would not have it, and the
+build, the ledger report and the packager refuse it.
 
 ===========================================================================
 */
@@ -251,17 +253,16 @@ export function expectedOwners() {
 
 /*
 ================
-closeOverReferences
+referencedFiles
 
-A claimed JSON output keeps every /assets/... file its text names alive,
-transitively: the client loads exactly what its manifests and catalogs
-reference, so a file a live manifest names is live whichever step wrote
-it. spellings maps each claimed lower-cased path to its spelling on disk;
-returns the closed set of lower-cased paths.
+Every /assets/... file the claimed JSON outputs name, transitively: the
+client loads exactly what its manifests and catalogs reference. spellings
+maps each claimed lower-cased path to its spelling on disk; returns the
+lower-cased referenced paths that are not themselves claimed.
 ================
 */
-async function closeOverReferences( spellings ) {
-	const claimed = new Set( spellings.keys() );
+async function referencedFiles( spellings ) {
+	const seen = new Set( spellings.keys() ), referenced = new Set();
 	const pending = [ ...spellings.values() ];
 	while ( pending.length > 0 ) {
 		const publicPath = pending.pop();
@@ -275,21 +276,23 @@ async function closeOverReferences( spellings ) {
 		}
 		for ( const [, reference] of text.matchAll( REFERENCED_PUBLIC_PATH ) ) {
 			const key = reference.toLowerCase();
-			if ( claimed.has( key ) ) continue;
-			claimed.add( key );
+			if ( seen.has( key ) ) continue;
+			seen.add( key );
+			referenced.add( key );
 			pending.push( reference );
 		}
 	}
-	return claimed;
+	return referenced;
 }
 
 /*
 ================
 ledgerStatus
 
-Splits the records into the claims of known owners, the expected owners
-with no record, and records of owners that no longer exist (a renamed or
-removed family), which claim nothing.
+Splits the records into the claims of known owners, the files their
+manifests name that no owner claimed, the expected owners with no record,
+and records of owners that no longer exist (a renamed or removed family),
+which claim nothing.
 ================
 */
 async function ledgerStatus() {
@@ -300,10 +303,10 @@ async function ledgerStatus() {
 	for ( const [owner, files] of owners ) {
 		if ( known.has( owner ) ) { for ( const [key, spelling] of files ) spellings.set( key, spelling ); }
 	}
-	const claimed = await closeOverReferences( spellings );
 	return {
 		owners,
-		claimed,
+		claimed: new Set( spellings.keys() ),
+		referenced: await referencedFiles( spellings ),
 		missingOwners: expected.filter( owner => !owners.has( owner ) ),
 		retiredOwners: [ ...owners.keys() ].filter( owner => !known.has( owner ) )
 	};
@@ -311,30 +314,75 @@ async function ledgerStatus() {
 
 /*
 ================
+classify
+
+Sorts public files against the ledger: claimed files are this pipeline's
+output; local-only files are named by a claimed manifest yet produced by
+no current step (they exist only because of an earlier run on this
+machine); everything else is unclaimed garbage.
+================
+*/
+function classify( rows, status ) {
+	const localOnly = [], unclaimed = [];
+	for ( const row of rows ) {
+		if ( isClaimed( row.path, status.claimed ) ) continue;
+		(isClaimed( row.path, status.referenced ) ? localOnly : unclaimed).push( row );
+	}
+	return { localOnly, unclaimed };
+}
+
+/*
+================
 auditClaims
 
 Compares the pack groups' files with the ledger. With every expected owner
-recorded, each file no owner claimed is soft-archived (moved through
-archiveGeneratedArtifact, never deleted) and dropped from its group, and
-records of retired owners are archived too. With an owner missing nothing
-moves: the files of a family that never ran cannot be told from garbage.
-Writes the report to generatedPath( "unclaimed-assets.json" ) and returns
-it with the groups to pack. options.archiveRoot overrides the archive
-location (tests).
+recorded:
+- a file a claimed manifest names but no current step produced fails the
+  build: a fresh clone would not have it, so the release would break for
+  everyone but this machine;
+- every other file no owner claimed is soft-archived (moved through
+  archiveGeneratedArtifact, never deleted) and dropped from its group, and
+  records of retired owners are archived too.
+With an owner missing nothing moves and nothing fails: the files of a
+family that never ran cannot be told from garbage. Writes the report to
+generatedPath( "unclaimed-assets.json" ) and returns it with the groups to
+pack. options.archiveRoot overrides the archive location (tests).
 ================
 */
 export async function auditClaims( groups, { publicRoot = CLIENT_PUBLIC_ROOT, archiveRoot } = {} ) {
 	const status = await ledgerStatus();
-	const unclaimed = [];
+	const rows = [];
 	for ( const group of groups ) {
 		for ( const publicPath of group.files ) {
 			if ( isClaimed( publicPath, status.claimed ) ) continue;
 			const bytes = (await stat( publicFilePath( publicRoot, publicPath ) )).size;
-			unclaimed.push( { path: publicPath, group: group.name, bytes } );
+			rows.push( { path: publicPath, group: group.name, bytes } );
 		}
 	}
+	const { localOnly, unclaimed } = classify( rows, status );
 	const complete = status.missingOwners.length === 0;
-	if ( complete ) {
+	const report = {
+		complete,
+		archived: complete && localOnly.length === 0,
+		missingOwners: status.missingOwners,
+		retiredOwners: status.retiredOwners,
+		owners: [ ...status.owners ].map( ( [owner, files] ) => ({ owner, files: files.size }) ),
+		localOnly,
+		files: unclaimed.length,
+		bytes: unclaimed.reduce( ( sum, row ) => sum + row.bytes, 0 ),
+		folders: folderTotals( unclaimed ),
+		unclaimed
+	};
+	await writeFile( generatedPath( "unclaimed-assets.json" ), JSON.stringify( report, null, "\t" ) );
+	if ( complete && localOnly.length > 0 ) {
+		throw new Error(
+			`${localOnly.length} file(s) are named by a manifest but no current build step produced them, ` +
+				"so a fresh clone would not have them (write them through shared/publicWrite.mjs or claim the " +
+				`step's kept output; .generated/unclaimed-assets.json lists them): ` +
+				localOnly.slice( 0, 8 ).map( row => row.path ).join( ", " )
+		);
+	}
+	if ( report.archived ) {
 		for ( const row of unclaimed ) {
 			await archiveGeneratedArtifact( publicFilePath( publicRoot, row.path ), {
 				scopeRoot: publicRoot,
@@ -350,19 +398,7 @@ export async function auditClaims( groups, { publicRoot = CLIENT_PUBLIC_ROOT, ar
 			} );
 		}
 	}
-	const archived = new Set( complete ? unclaimed.map( row => row.path ) : [] );
-	const report = {
-		complete,
-		archived: complete,
-		missingOwners: status.missingOwners,
-		retiredOwners: status.retiredOwners,
-		owners: [ ...status.owners ].map( ( [owner, files] ) => ({ owner, files: files.size }) ),
-		files: unclaimed.length,
-		bytes: unclaimed.reduce( ( sum, row ) => sum + row.bytes, 0 ),
-		folders: folderTotals( unclaimed ),
-		unclaimed
-	};
-	await writeFile( generatedPath( "unclaimed-assets.json" ), JSON.stringify( report, null, "\t" ) );
+	const archived = new Set( report.archived ? unclaimed.map( row => row.path ) : [] );
 	return {
 		...report,
 		groups: groups.map( group => ({ ...group, files: group.files.filter( file => !archived.has( file ) ) }) )
@@ -373,21 +409,24 @@ export async function auditClaims( groups, { publicRoot = CLIENT_PUBLIC_ROOT, ar
 ================
 indexClaimReport
 
-Read-only: the published pack index's assets no build owner claims, with
-totals per folder, and the expected owners that have no record. Nothing
-moves; `pnpm assets ledger` prints it and the release packager refuses on
+Read-only: the published pack index's assets no build owner claims (split
+into local-only files a manifest names and unclaimed garbage), with totals
+per folder, and the expected owners that have no record. Nothing moves;
+`pnpm assets ledger` prints it and the release packager refuses on
 anything but an empty report (verifyIndexClaims).
 ================
 */
 export async function indexClaimReport( index ) {
 	const status = await ledgerStatus();
-	const unclaimed = index.assets
-		.filter( asset => !isClaimed( asset.path, status.claimed ) )
-		.map( asset => ({ path: asset.path, group: asset.group, bytes: asset.length }) );
+	const { localOnly, unclaimed } = classify(
+		index.assets.map( asset => ({ path: asset.path, group: asset.group, bytes: asset.length }) ),
+		status
+	);
 	return {
 		missingOwners: status.missingOwners,
 		retiredOwners: status.retiredOwners,
 		owners: [ ...status.owners ].map( ( [owner, files] ) => ({ owner, files: files.size }) ),
+		localOnly,
 		files: unclaimed.length,
 		bytes: unclaimed.reduce( ( sum, row ) => sum + row.bytes, 0 ),
 		folders: folderTotals( unclaimed ),
@@ -407,6 +446,12 @@ tree holds only what the current pipeline produces.
 export async function verifyIndexClaims( index ) {
 	const report = await indexClaimReport( index );
 	const problems = report.missingOwners.map( owner => `no publication record for ${owner}` );
+	if ( report.localOnly.length > 0 ) {
+		problems.push(
+			`${report.localOnly.length} packed asset(s) named by a manifest but produced by no current build step, e.g. ` +
+				report.localOnly.slice( 0, 5 ).map( row => row.path ).join( ", " )
+		);
+	}
 	if ( report.files > 0 ) {
 		problems.push(
 			`${report.files} packed asset(s) claimed by no build owner, e.g. ` +

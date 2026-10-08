@@ -13,6 +13,7 @@
 //   .generated/client-public/assets/world/animated-objects/<slug>.glb   (shared)
 //   .generated/client-public/assets/world/<area>/animated-objects.json  (per area)
 
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -203,7 +204,7 @@ export async function buildWorldAnimatedObjects( { skipTextures = false } = {} )
 			avatar.clips = [ { role: "default", path: clipPath, clip } ];
 			avatar.clip = clip;
 			const glb = avatarToGlb( avatar );
-			fs.writeFileSync( glbPath, glb );
+			writeIntoPublicTreeSync( glbPath, glb );
 			glbBytes += glb.length;
 			manifestEntryByBsrPath.set( bsrPath, {
 				glbPublicPath: `${GLB_PUBLIC_PREFIX}/${slug}.glb`,
