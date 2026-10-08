@@ -121,3 +121,29 @@ test("a zstd-only pack (the compact profile) counts as present", () => {
 		"/assets/packs/game-data-001-abcdefabcdef.bin"
 	] );
 });
+
+/*
+================
+TestClaimAuditFeedsThePacker
+================
+*/
+test("the claim audit runs after collection and the packer receives the audited groups", async () => {
+	const { calls, steps } = recordingSteps();
+	const audited = [ { name: "game-data", files: [] } ];
+	steps.auditClaims = async ( groups ) => {
+		calls.push( [ "auditClaims", groups ] );
+		return { archived: true, groups: audited };
+	};
+	const result = await packPublicTree(
+		{ publicRoot: PUBLIC_ROOT, retireSidecars: true, auditClaims: true, groupInputs: {} },
+		steps
+	);
+	assert.deepEqual( calls.slice( 1, 4 ).map( ( call ) => call[0] ), [
+		"collectGroups",
+		"auditClaims",
+		"buildPacks"
+	] );
+	assert.equal( calls[2][1], GROUPS, "the audit sees every collected group" );
+	assert.equal( calls[3][1].groups, audited, "unclaimed files never reach the packer" );
+	assert.equal( result.claimAudit.archived, true );
+});

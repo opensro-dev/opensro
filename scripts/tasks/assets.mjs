@@ -57,7 +57,7 @@ export const REFRESH_FAMILIES = [
 
 // Standalone publishers: `assets build` does not run them, so run `assets publish` after it.
 // Monster material variants are published by the full build (group game-models).
-const PUBLISH_FAMILIES = [
+export const PUBLISH_FAMILIES = [
 	"dungeon-worlds",
 	"flares",
 	"minimap-coverage",

@@ -10,7 +10,7 @@ base, and the audit reports exactly the swept files nobody claimed.
 ===========================================================================
 */
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -19,6 +19,7 @@ const root = await mkdtemp( path.join( os.tmpdir(), "sro-ledger-" ) );
 process.env.SRO_GENERATED_ROOT = root;
 const ledger = await import( "../../build/shared/publicationLedger.mjs" );
 const assets = path.join( root, "client-public", "assets" );
+const archiveRoot = path.join( root, "archives" );
 
 /*
 ================
@@ -74,19 +75,47 @@ test("a precompressed sidecar follows its base, and a base its packed .gz member
 	assert.ok( !ledger.isClaimed( "/assets/data/c.png", claimed ) );
 });
 
-test("the audit reports the swept files no owner claimed, with bytes", async () => {
+test("an incomplete ledger reports unclaimed files and moves nothing", async () => {
+	const stale = await publicFile( "/assets/images/stale.png", "1234" );
 	await publicFile( "/assets/images/live.png" );
-	await publicFile( "/assets/images/stale.png", "1234" );
 	ledger.beginPublication( "resource-build" );
 	ledger.claimPublicPaths( [ "/assets/images/live.png" ] );
 	await ledger.commitPublication();
-	const report = await ledger.auditClaims( [
-		{ name: "game-images", files: [ "/assets/images/live.png", "/assets/images/stale.png" ] }
-	] );
+	const groups = [ { name: "game-images", files: [ "/assets/images/live.png", "/assets/images/stale.png" ] } ];
+	const report = await ledger.auditClaims( groups, { archiveRoot } );
 	assert.deepEqual( report.unclaimed, [ { path: "/assets/images/stale.png", group: "game-images", bytes: 4 } ] );
-	assert.equal( report.bytes, 4 );
+	assert.equal( report.archived, false );
+	assert.ok( report.missingOwners.includes( "family-quickslot" ) );
+	assert.deepEqual( report.groups, groups );
+	await stat( stale );
 	const written = JSON.parse( await readFile( path.join( root, "unclaimed-assets.json" ), "utf8" ) );
 	assert.equal( written.files, 1 );
+});
+
+test("a complete ledger soft-archives unclaimed files and retired owners' records", async () => {
+	const stale = await publicFile( "/assets/images/stale.png", "1234" );
+	await publicFile( "/assets/images/live.png" );
+	for ( const owner of ledger.expectedOwners() ) {
+		ledger.beginPublication( owner );
+		if ( owner === "resource-build" ) ledger.claimPublicPaths( [ "/assets/images/live.png" ] );
+		await ledger.commitPublication();
+	}
+	ledger.beginPublication( "family-renamed-away" );
+	ledger.claimPublicPaths( [ "/assets/images/stale.png" ] );
+	await ledger.commitPublication();
+	const groups = [ { name: "game-images", files: [ "/assets/images/live.png", "/assets/images/stale.png" ] } ];
+	const report = await ledger.auditClaims( groups, { archiveRoot } );
+	assert.equal( report.archived, true );
+	assert.deepEqual( report.retiredOwners, [ "family-renamed-away" ] );
+	assert.deepEqual( report.groups, [ { name: "game-images", files: [ "/assets/images/live.png" ] } ] );
+	await assert.rejects( stat( stale ), { code: "ENOENT" } );
+	assert.equal( (await ledger.readClaims()).owners.has( "family-renamed-away" ), false );
+	const index = { assets: [ { path: "/assets/images/live.png" }, { path: "/assets/images/gone.png" } ] };
+	assert.match(
+		(await ledger.verifyIndexClaims( index )).join( "" ),
+		/1 packed asset\(s\) claimed by no build owner/
+	);
+	assert.deepEqual( await ledger.verifyIndexClaims( { assets: [ { path: "/assets/images/live.png" } ] } ), [] );
 });
 
 test("a second open publication is refused", () => {

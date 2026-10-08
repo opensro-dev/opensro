@@ -13,6 +13,7 @@ pack reader. Only the few files the browser loads by URL itself
 ===========================================================================
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
+import { verifyIndexClaims } from "../../../../scripts/build/shared/publicationLedger.mjs";
 import { clientBuildDefinitions } from "../build-metadata.mjs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -272,6 +273,15 @@ export async function buildBeta(
 	// release whose code and data disagree.
 	if ( original.assetSchema !== ASSET_SCHEMA ) {
 		throw Error( `Asset data is schema ${original.assetSchema}; this client reads ${ASSET_SCHEMA}` );
+	}
+	// A release ships only what the current pipeline produced: every packed
+	// asset must have a build owner (scripts/build/shared/publicationLedger.mjs).
+	const ledger = await verifyIndexClaims( original );
+	if ( ledger.length > 0 ) {
+		throw Error(
+			`The generated tree holds files the current pipeline did not produce: ${ledger.join( "; " )}. ` +
+				"Run `pnpm assets publish`, then `pnpm assets build`, and package again."
+		);
 	}
 	manifest.excludedGroups = original.groups.filter( g => !index.groups.includes( g ) ).map( g => g.name );
 	const native = new Set( nativeAssetUrls() );

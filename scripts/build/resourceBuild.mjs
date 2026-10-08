@@ -713,11 +713,15 @@ export function formatResourceBuildSummary( results ) {
 	);
 	if ( results.claimAudit ) {
 		const audit = results.claimAudit, mib = bytes => (bytes / 1048576).toFixed( 1 );
+		const verdict = audit.archived ?
+			"soft-archived to temp/archives and left out of the packs" :
+			`kept: no publication record for ${audit.missingOwners.join( ", " )} ` +
+			"(run `pnpm assets publish`, then `pnpm assets build` again)";
 		out.push(
-			`Publication ledger: ${audit.files} packed file(s), ${mib( audit.bytes )} MiB, claimed by no build owner ` +
-				`(report only; see .generated/unclaimed-assets.json)` +
-				audit.folders.slice( 0, 8 ).map( f => `
-  ${f.folder}: ${f.files} file(s), ${mib( f.bytes )} MiB` ).join( "" )
+			`Publication ledger: ${audit.files} file(s), ${mib( audit.bytes )} MiB, claimed by no build owner; ` +
+				`${verdict}. Report: .generated/unclaimed-assets.json` +
+				audit.folders.slice( 0, 8 ).map( f => `\n  ${f.folder}: ${f.files} file(s), ${mib( f.bytes )} MiB` )
+					.join( "" )
 		);
 	}
 	out.push( formatOptimizationSummary( jsonOptimization ) );

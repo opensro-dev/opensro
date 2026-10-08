@@ -8,7 +8,9 @@ pipeline wrote (a PNG a newer builder now ships as .texture, a family that
 moved) stays in the public tree and the pack sweep would ship it forever.
 The ledger closes that gap: every process that publishes into
 client-public/assets claims the files it wrote OR kept this run, and the
-pack tail compares the swept tree against the union of all claims.
+pack tail soft-archives every swept file no owner claimed before packing
+(auditClaims), and the release packager refuses an index with unclaimed
+assets (verifyIndexClaims).
 
 One ledger file per owner (the outdoor build, the resource build, each
 focused family and publisher) lives beside the generated tree it describes
@@ -19,13 +21,16 @@ partial run (one region, one family flag) merges into it.
 Claims are recorded by the shared publication helpers (atomic publish, JSON
 writers, converted images, block textures), so a builder that goes through
 them needs no ledger code; a builder that skips work because its output is
-current claims that output explicitly with claimPublicFiles.
+current claims that output explicitly with claimPublicFile, claimPublicPaths
+or claimKeptOutput.
 
 ===========================================================================
 */
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CLIENT_PUBLIC_ROOT, generatedPath } from "../../lib/generatedRoot.mjs";
+import { PUBLISH_FAMILIES, REFRESH_FAMILIES } from "../../tasks/assets.mjs";
+import { archiveGeneratedArtifact } from "../artifacts/generatedArtifactArchive.mjs";
 
 const LEDGER_FORMAT = "sro-publication-ledger";
 const LEDGER_VERSION = 1;
@@ -33,6 +38,10 @@ const ASSETS_ROOT = path.join( CLIENT_PUBLIC_ROOT, "assets" );
 // The pack tail owns everything under packs/ and the web manifests itself.
 const PACK_TAIL_PREFIXES = [ "/assets/packs/" ];
 const PACK_TAIL_FILES = new Set( [ "/assets/manifest.json" ] );
+// The two builds always own records; a focused refresh of files the
+// resource build also writes may add its own.
+const CORE_OWNERS = [ "resource-build", "outdoor-world" ];
+const OPTIONAL_OWNERS = [ "world-map" ];
 
 let current = null;
 
@@ -235,23 +244,88 @@ export function isClaimed( publicPath, claimed ) {
 
 /*
 ================
-auditClaims
+expectedOwners
 
-Compares the pack groups' files with the ledger and writes the report
-(generatedPath( "unclaimed-assets.json" )): every unclaimed file with its
-bytes, and totals per top folders. Report only; nothing is moved.
+The owners a complete tree has records for: the two builds, and every
+focused family and standalone publisher of the task table. The world-map
+refresh republishes files the resource build also writes, so its record is
+optional.
 ================
 */
-export async function auditClaims( groups, publicRoot = CLIENT_PUBLIC_ROOT ) {
-	const { owners, claimed } = await readClaims();
+export function expectedOwners() {
+	return [
+		...CORE_OWNERS,
+		...[ ...REFRESH_FAMILIES, ...PUBLISH_FAMILIES ].map( family => `family-${family}` )
+	];
+}
+
+/*
+================
+ledgerStatus
+
+Splits the records into the claims of known owners, the expected owners
+with no record, and records of owners that no longer exist (a renamed or
+removed family), which claim nothing.
+================
+*/
+async function ledgerStatus() {
+	const { owners } = await readClaims();
+	const expected = expectedOwners();
+	const known = new Set( [ ...expected, ...OPTIONAL_OWNERS ] );
+	const claimed = new Set();
+	for ( const [owner, files] of owners ) {
+		if ( known.has( owner ) ) { for ( const file of files ) claimed.add( file ); }
+	}
+	return {
+		owners,
+		claimed,
+		missingOwners: expected.filter( owner => !owners.has( owner ) ),
+		retiredOwners: [ ...owners.keys() ].filter( owner => !known.has( owner ) )
+	};
+}
+
+/*
+================
+auditClaims
+
+Compares the pack groups' files with the ledger. With every expected owner
+recorded, each file no owner claimed is soft-archived (moved through
+archiveGeneratedArtifact, never deleted) and dropped from its group, and
+records of retired owners are archived too. With an owner missing nothing
+moves: the files of a family that never ran cannot be told from garbage.
+Writes the report to generatedPath( "unclaimed-assets.json" ) and returns
+it with the groups to pack. options.archiveRoot overrides the archive
+location (tests).
+================
+*/
+export async function auditClaims( groups, { publicRoot = CLIENT_PUBLIC_ROOT, archiveRoot } = {} ) {
+	const status = await ledgerStatus();
 	const unclaimed = [];
 	for ( const group of groups ) {
 		for ( const publicPath of group.files ) {
-			if ( isClaimed( publicPath, claimed ) ) continue;
-			const bytes = (await stat( path.join( publicRoot, publicPath.replace( /^\/+/, "" ) ) )).size;
+			if ( isClaimed( publicPath, status.claimed ) ) continue;
+			const bytes = (await stat( publicFilePath( publicRoot, publicPath ) )).size;
 			unclaimed.push( { path: publicPath, group: group.name, bytes } );
 		}
 	}
+	const complete = status.missingOwners.length === 0;
+	if ( complete ) {
+		for ( const row of unclaimed ) {
+			await archiveGeneratedArtifact( publicFilePath( publicRoot, row.path ), {
+				scopeRoot: publicRoot,
+				archiveRoot,
+				reason: "unclaimed-public-asset"
+			} );
+		}
+		for ( const owner of status.retiredOwners ) {
+			await archiveGeneratedArtifact( path.join( ledgerRoot(), `${owner}.json` ), {
+				scopeRoot: ledgerRoot(),
+				archiveRoot,
+				reason: "retired-publication-owner"
+			} );
+		}
+	}
+	const archived = new Set( complete ? unclaimed.map( row => row.path ) : [] );
 	const folders = new Map();
 	for ( const row of unclaimed ) {
 		const folder = row.path.split( "/" ).slice( 0, 5 ).join( "/" );
@@ -261,12 +335,50 @@ export async function auditClaims( groups, publicRoot = CLIENT_PUBLIC_ROOT ) {
 		folders.set( folder, total );
 	}
 	const report = {
-		owners: [ ...owners ].map( ( [owner, files] ) => ({ owner, files: files.size }) ),
+		complete,
+		archived: complete,
+		missingOwners: status.missingOwners,
+		retiredOwners: status.retiredOwners,
+		owners: [ ...status.owners ].map( ( [owner, files] ) => ({ owner, files: files.size }) ),
 		files: unclaimed.length,
 		bytes: unclaimed.reduce( ( sum, row ) => sum + row.bytes, 0 ),
 		folders: [ ...folders.values() ].sort( ( a, b ) => b.bytes - a.bytes ),
 		unclaimed
 	};
-	await writeFile( generatedPath( "unclaimed-assets.json" ), JSON.stringify( report, null, "	" ) );
-	return report;
+	await writeFile( generatedPath( "unclaimed-assets.json" ), JSON.stringify( report, null, "\t" ) );
+	return {
+		...report,
+		groups: groups.map( group => ({ ...group, files: group.files.filter( file => !archived.has( file ) ) }) )
+	};
+}
+
+/*
+================
+verifyIndexClaims
+
+The release gate: every expected owner has a record and every asset of a
+published pack index is claimed. Returns the problems; empty means the
+tree holds only what the current pipeline produces.
+================
+*/
+export async function verifyIndexClaims( index ) {
+	const status = await ledgerStatus();
+	const problems = status.missingOwners.map( owner => `no publication record for ${owner}` );
+	const unclaimed = index.assets.filter( asset => !isClaimed( asset.path, status.claimed ) );
+	if ( unclaimed.length > 0 ) {
+		problems.push(
+			`${unclaimed.length} packed asset(s) claimed by no build owner, e.g. ` +
+				unclaimed.slice( 0, 5 ).map( asset => asset.path ).join( ", " )
+		);
+	}
+	return problems;
+}
+
+/*
+================
+publicFilePath
+================
+*/
+function publicFilePath( publicRoot, publicPath ) {
+	return path.join( publicRoot, publicPath.replace( /^\/+/, "" ) );
 }

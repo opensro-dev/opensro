@@ -89,13 +89,15 @@ export async function packPublicTree( request, steps = PACK_TREE_STEPS ) {
 	const publicRoot = request.publicRoot ?? defaultPublicRoot;
 	const jsonOptimization = await timed( "jsonOptimization", () => steps.optimizeJson() );
 	const packGroups = await timed( "packListings", () => steps.collectGroups( request.groupInputs ) );
-	// Report-only for now: which swept files no build owner claimed (publicationLedger.mjs).
+	// Swept files no build owner claimed are leftovers of older pipelines:
+	// soft-archived and left out of the packs (publicationLedger.mjs).
 	const claimAudit = request.auditClaims ?
 		await timed( "claimAudit", () => steps.auditClaims( packGroups.groups ) ) :
 		null;
+	const groups = claimAudit?.groups ?? packGroups.groups;
 	const assetPacks = await timed(
 		"assetPacks",
-		() => steps.buildPacks( { targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES, groups: packGroups.groups } )
+		() => steps.buildPacks( { targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES, groups } )
 	);
 	const missing = missingPackFiles( assetPacks, publicRoot, steps.packFileExists );
 	if ( missing.length > 0 ) {
