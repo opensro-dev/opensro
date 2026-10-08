@@ -384,3 +384,28 @@ test("the windup sound plays at the press, not when the server answers", () => {
 	assert.equal( p.error(), null );
 	p.dispose();
 });
+
+test("a stunned caster's press predicts neither its cast nor its cooldown (BUG-066)", () => {
+	const stun = Buffer.alloc( 12 );
+	stun.writeUInt32LE( LOCAL_GID );
+	stun[6] = 4; // the abnormal word follows
+	stun.writeUInt32LE( 0x4000, 7 ); // stun; 58DAEF refuses the cast (0x3009)
+	stun[11] = 1; // stun carries a level byte
+	for ( const stunned of [ false, true ] ) {
+		/** @type {ReturnType<ReturnType<typeof createGameplay>["take"]>[]} */
+		const taken = [];
+		pressAt( 50, { cooldownMs: 5000 }, game => {
+			if ( stunned ) game.receive( { opcode: 0x33a6, payload: stun }, 900 );
+		}, game => {
+			taken.push( game.take() );
+		} );
+		const state = taken[0];
+		const predicted = state?.castPrediction?.skill === 30;
+		const standIn = (state?.skillCooldowns ?? []).some( row =>
+			row.skill === 30 && row.provisionalUntilMs !== undefined
+		);
+		// The free caster proves the press would predict both; the stunned one must not.
+		assert.equal( predicted, !stunned, `cast prediction when ${stunned ? "stunned" : "free"}` );
+		assert.equal( standIn, !stunned, `cooldown stand-in when ${stunned ? "stunned" : "free"}` );
+	}
+});
