@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+slots_test.go - equipment sockets and per-character bag boundaries
+
+Equipment admission remains independent of inventory expansion. Bag indices
+round-trip through the wire's equipment offset and respect active capacity.
+
+===========================================================================
+*/
 package inventory
 
 import (
@@ -6,6 +16,11 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
+/*
+================
+TestSlotBands
+================
+*/
 func TestSlotBands(t *testing.T) {
 	cases := []struct {
 		wireSlot  uint8
@@ -35,6 +50,11 @@ func TestSlotBands(t *testing.T) {
 }
 
 // The composer biases bag slots by 13, so bag index 0 travels as wire slot 13.
+/*
+================
+TestBagSlotBiasRoundTrips
+================
+*/
 func TestBagSlotBiasRoundTrips(t *testing.T) {
 	if got := WireSlotFromBagIndex(0); got != 13 {
 		t.Fatalf("bag index 0 = wire slot %d, want 13", got)
@@ -55,6 +75,11 @@ func TestBagSlotBiasRoundTrips(t *testing.T) {
 	}
 }
 
+/*
+================
+TestBagIndexRejectsEquipmentSlots
+================
+*/
 func TestBagIndexRejectsEquipmentSlots(t *testing.T) {
 	if _, ok := BagIndexFromWireSlot(12, domain.DefaultInventorySize); ok {
 		t.Fatal("equipment wire slot 12 was accepted as a bag slot")
@@ -64,8 +89,14 @@ func TestBagIndexRejectsEquipmentSlots(t *testing.T) {
 	}
 }
 
-// A character's bag ends at its capacity byte: 45 at creation, more once an
-// expansion quest's slots were presented at a world entry.
+/*
+================
+TestBagEndFollowsTheCharacter
+
+A character's bag ends at its capacity byte: 45 at creation, more once an
+expansion quest's slots were presented at a world entry.
+================
+*/
 func TestBagEndFollowsTheCharacter(t *testing.T) {
 	fresh := &domain.Character{}
 	if got := BagEnd(fresh); got != 45 {
@@ -77,5 +108,25 @@ func TestBagEndFollowsTheCharacter(t *testing.T) {
 	}
 	if !InBag(expanded, 54) || InBag(expanded, 55) || InBag(expanded, 12) {
 		t.Fatal("InBag must cover wire slots 13..54 of a 55-slot inventory")
+	}
+}
+
+/*
+================
+TestSocketAcceptsRingInEitherHand
+================
+*/
+func TestSocketAcceptsRingInEitherHand(t *testing.T) {
+	if !SocketAccepts(SocketRing, SocketRing) {
+		t.Fatal("a ring was refused by its own socket")
+	}
+	if !SocketAccepts(SocketRing, SocketRingSecond) {
+		t.Fatal("a ring was refused by the second ring hand")
+	}
+	if SocketAccepts(SocketWeapon, SocketShield) {
+		t.Fatal("a weapon was accepted by the shield socket")
+	}
+	if SocketAccepts(SocketNecklace, SocketRingSecond) {
+		t.Fatal("a necklace was accepted by the second ring hand")
 	}
 }

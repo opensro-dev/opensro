@@ -11,10 +11,11 @@ Native v1.188 pays the slots from the quest reward row (CBasicQuest_PayRewardRow
 924CF0, byte +0x3db) through CGObjPC_ExpandInventoryByQuest (4E19D0), which
 refuses silently past 112, and then announces the new size with 0x3092. The
 v1.150 client has no such message: CICPlayer+0x1848, the bag size, is
-written only by the entry parser (8675F0), and CIFInventory (59DF10) holds
-at most two 32-slot tabs. So the port stops at 77, the capacity two tabs
-show, and a paid expansion takes effect at the next world entry (login,
-teleport or resurrection), the first point at which the client can learn it.
+written by the entry parser (8675F0), the sole direct caller of the inventory
+rebuild (59DF10), which holds at most two 32-slot tabs. The port therefore
+stops at 77. Inference for the v1.150 wire contract: a paid expansion waits
+for the next world entry (login, teleport or resurrection), where the client
+learns it; the v1.188 immediate-capacity message is not added to this client.
 
 ===========================================================================
 */

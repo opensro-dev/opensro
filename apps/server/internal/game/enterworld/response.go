@@ -199,6 +199,9 @@ BootstrapResult is the /mission/bootstrap response.
 ================
 */
 type BootstrapResult struct {
+	// inventoryOwner stays private to entry preparation: its live capacity
+	// adopts Character's presented size only after browser encoding succeeds.
+	inventoryOwner      *Character
 	DiagnosticSessionID string
 	NativeResult        int
 	NativeErrorCode     int

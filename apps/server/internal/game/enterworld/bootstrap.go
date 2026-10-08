@@ -153,9 +153,9 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 	presented := character.PresentInventoryExpansion()
 	result := buildCharacterProjection(deps, divisionID, character)
 	if presented && result.NativeResult == nativeResultSuccess {
-		deps.Mutate(liveCharacter, "inventory-expansion", func() {
-			liveCharacter.AdoptInventorySize(character.InventorySize)
-		})
+		// Browser admission still has to encode this projection. Retain the
+		// authority handle so only a successfully encoded entry adopts it.
+		result.inventoryOwner = liveCharacter
 	}
 	return result
 }

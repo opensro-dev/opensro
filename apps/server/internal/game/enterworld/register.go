@@ -160,6 +160,7 @@ func handleEnterWorldWithDiagnostics(deps *Deps, payload []byte, session string)
 		failure := Failure(nativeErrorInvalidRequest, "blobEncodeFailed")
 		return enterWorldFailureOutcome(failure)
 	}
+	deps.adoptEncodedInventory(result)
 	characterName := ""
 	if result.Character != nil {
 		characterName = result.Character.Name

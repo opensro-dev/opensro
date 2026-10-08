@@ -13,10 +13,13 @@ package enterworld
 
 import (
 	"encoding/json"
+	"math"
 	"reflect"
 	"testing"
 
 	"opensro.online/server/internal/game/world/instance"
+	"opensro.online/server/internal/testsupport/entryauth"
+	"opensro.online/server/internal/transport"
 )
 
 // inventoryCapacityOffset is the capacity byte of the local-player entry
@@ -54,11 +57,13 @@ func TestWorldEntryPresentsWaitingInventorySlots(t *testing.T) {
 	character := chinaSpearman()
 	character.InventoryExpansion = 12
 	deps := testDeps(character)
+	payload := transport.EncodeEnterWorld(entryauth.NewAuthenticatedEntryFixture(t, DefaultDivisionID, character.Name))
 
-	result := Build(deps, BootstrapRequest{CharacterName: character.Name})
-	if result.NativeResult != nativeResultSuccess {
-		t.Fatalf("entry refused: %+v", result)
+	outcome := HandleEnterWorld(deps, payload)
+	if !outcome.OK {
+		t.Fatalf("entry refused: %+v", outcome.Result)
 	}
+	result := outcome.Result
 	if got := result.Packets[2].Payload[inventoryCapacityOffset]; got != 57 {
 		t.Fatalf("entry capacity byte = %d, want 57", got)
 	}
@@ -70,9 +75,57 @@ func TestWorldEntryPresentsWaitingInventorySlots(t *testing.T) {
 	}
 
 	// A second entry presents the same capacity and changes nothing.
-	again := Build(deps, BootstrapRequest{CharacterName: character.Name})
+	again := HandleEnterWorld(deps, payload).Result
 	if got := again.Packets[2].Payload[inventoryCapacityOffset]; got != 57 || character.InventorySize != 57 {
 		t.Fatalf("repeat entry capacity = %d, record %d, want 57", got, character.InventorySize)
+	}
+}
+
+/*
+================
+TestInventoryExpansionWaitsForBrowserEncoding
+
+The native projection can succeed before the browser envelope fails. Both
+login and live teleport reentry must preserve the old usable capacity then.
+================
+*/
+func TestInventoryExpansionWaitsForBrowserEncoding(t *testing.T) {
+	for _, reentry := range []bool{false, true} {
+		t.Run(map[bool]string{false: "login", true: "reentry"}[reentry], func(t *testing.T) {
+			character := chinaSpearman()
+			character.InventoryExpansion = 10
+			deps := testDeps(character)
+			deps.SystemMessages = func(*Character) interface{} { return math.NaN() }
+			projection := Build(deps, BootstrapRequest{CharacterName: character.Name})
+			if projection.NativeResult != nativeResultSuccess {
+				t.Fatalf("fixture did not reach browser encoding: %+v", projection)
+			}
+			payload := transport.EncodeEnterWorld(entryauth.NewAuthenticatedEntryFixture(t, DefaultDivisionID, character.Name))
+			if reentry {
+				if packets, ok := deps.ReentryPackets(DefaultDivisionID, character.Name); ok || len(packets) != 0 {
+					t.Fatal("unencodable reentry was accepted")
+				}
+			} else {
+				outcome := HandleEnterWorld(deps, payload)
+				if outcome.OK || outcome.Result.Reason != "blobEncodeFailed" {
+					t.Fatalf("unencodable login was accepted: %+v", outcome.Result)
+				}
+			}
+			if character.InventoryCapacity() != 45 || character.InventoryExpansion != 10 {
+				t.Fatalf("failed encoding adopted capacity %d (+%d)", character.InventoryCapacity(), character.InventoryExpansion)
+			}
+			deps.SystemMessages = nil
+			if reentry {
+				if _, ok := deps.ReentryPackets(DefaultDivisionID, character.Name); !ok {
+					t.Fatal("valid reentry refused")
+				}
+			} else if !HandleEnterWorld(deps, payload).OK {
+				t.Fatal("valid login refused")
+			}
+			if character.InventoryCapacity() != 55 || character.InventoryExpansion != 0 {
+				t.Fatalf("successful encoding did not adopt: %d (+%d)", character.InventoryCapacity(), character.InventoryExpansion)
+			}
+		})
 	}
 }
 
