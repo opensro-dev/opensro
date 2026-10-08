@@ -162,3 +162,19 @@ test("a second open publication is refused", () => {
 	assert.throws( () => ledger.beginPublication( "family-b" ), /still open/ );
 	ledger.abandonPublication();
 });
+
+test("a family run inside the build records its own owner and the build's claims resume", async () => {
+	ledger.beginPublication( "resource-build" );
+	ledger.claimPublicPaths( [ "/assets/data/build.json" ] );
+	await ledger.withPublication( "family-guide", async () => {
+		ledger.claimPublicPaths( [ "/assets/data/guide.json" ] );
+	} );
+	ledger.claimPublicPaths( [ "/assets/data/after.json" ] );
+	await ledger.commitPublication();
+	const { owners } = await ledger.readClaims();
+	assert.deepEqual( [ ...owners.get( "family-guide" ).keys() ], [ "/assets/data/guide.json" ] );
+	assert.deepEqual( [ ...owners.get( "resource-build" ).keys() ].sort(), [
+		"/assets/data/after.json",
+		"/assets/data/build.json"
+	] );
+});

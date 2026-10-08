@@ -15,6 +15,7 @@ summary it prints from formatResourceBuildSummary.
 ===========================================================================
 */
 
+import { produceAllFamilies } from "./families/looseFamilies.mjs";
 import { buildAudioResources } from "./audio.mjs";
 import { buildCifResources } from "./cif.mjs";
 import { buildConfigResources } from "./config.mjs";
@@ -147,6 +148,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	buildWorldRegionCatalog,
 	loadOutdoorWorldRegionResourceGroup,
 	extractRetailCursors,
+	produceAllFamilies,
 	packTree: packPublicTree
 } );
 
@@ -464,6 +466,11 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// EnterWorld v2 sends semantic ids only. This client projection is generated
 	// after NPC/item builders settle and owns every presentation resource path.
 	const missionPresentation = steps.buildMissionPresentationAsset();
+	// The focused families extend the builders' outputs (code-selected art,
+	// catalog patches, world sky state): they run here, each as its own ledger
+	// owner, so the pack tail packs their files and a fresh tree needs no
+	// separate `pnpm assets publish` (families/looseFamilies.mjs).
+	const families = await timed( "families", () => steps.produceAllFamilies() );
 	// Every producing lane has finished: list what the client installs in the
 	// background after world entry, so it is packed with the other game data.
 	const backgroundInstall = await timed( "backgroundInstall", () => steps.buildBackgroundInstallAsset() );
@@ -531,6 +538,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		missionPresentation,
 		skillStageModels,
 		backgroundInstall,
+		families,
 		packGroups,
 		claimAudit,
 		jsonOptimization,
@@ -714,6 +722,13 @@ export function formatResourceBuildSummary( results ) {
 			`and packed ${assetPacks.assetCount} assets into ${assetPacks.packCount} browser asset pack(s) ` +
 			`with ${assetPacks.zstdSidecarCount} zstd19/w23 sidecar(s).`
 	);
+	if ( results.families ) {
+		out.push(
+			`Ran ${results.families.length} focused families (${
+				results.families.reduce( ( sum, row ) => sum + row.files, 0 )
+			} files) inside the build.`
+		);
+	}
 	if ( results.claimAudit ) {
 		const audit = results.claimAudit, mib = bytes => (bytes / 1048576).toFixed( 1 );
 		const verdict = audit.archived ?

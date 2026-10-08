@@ -60,6 +60,7 @@ import {
 	resolveSkyTextures
 } from "../world/assets/copySkyImages.mjs";
 import { publicRoot, retailTextdataRoot } from "../world/paths.mjs";
+import { claimPublicPaths, withPublication } from "../shared/publicationLedger.mjs";
 
 // The CIFButton state family (sub_5419c0) for the quickslot and return-scroll
 // buttons; none of these ships a _disable.
@@ -737,3 +738,30 @@ export const LOOSE_FAMILIES = {
 		}
 	}
 };
+
+/*
+================
+produceAllFamilies
+
+The full build's family pass: every row's produce() in table order, each
+recorded as its own ledger owner (family-<name>), after the builders whose
+outputs the families extend and before the pack tail, which packs their
+files with everything else. A fresh tree therefore needs no separate
+`pnpm assets publish` and no second build.
+================
+*/
+export async function produceAllFamilies( log = console.log ) {
+	const results = [];
+	for ( const [name, family] of Object.entries( LOOSE_FAMILIES ) ) {
+		const startedAt = performance.now();
+		const output = await withPublication( `family-${name}`, async () => {
+			const produced = await family.produce( new Set() );
+			claimPublicPaths( produced.files );
+			return produced;
+		} );
+		const seconds = ((performance.now() - startedAt) / 1000).toFixed( 1 );
+		log( `[families] ${name}: ${output.files.length} file(s) in ${seconds}s` );
+		results.push( { name, files: output.files.length } );
+	}
+	return results;
+}

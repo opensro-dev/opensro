@@ -159,6 +159,29 @@ export async function commitPublication() {
 
 /*
 ================
+withPublication
+
+Runs task as its own owner inside another open publication (the full build
+running a focused family): the open owner is set aside, task's claims are
+committed as owner's complete record, and the outer owner resumes. A failed
+task records nothing.
+================
+*/
+export async function withPublication( owner, task ) {
+	const outer = current;
+	current = null;
+	beginPublication( owner );
+	try {
+		const result = await task();
+		await commitPublication();
+		return result;
+	} finally {
+		current = outer;
+	}
+}
+
+/*
+================
 abandonPublication
 
 Drops the open owner's claims without writing: a failed run must not
