@@ -242,3 +242,20 @@ test("a missing remembered origin leaves tiny-viewport default placement to its 
 	assert.equal( placement.takeRemembered( "gameGuide", 300, 200, [ 420, 452 ] ), null );
 	assert.equal( placement.takeRemembered( "gameGuide", 300, 200, [ 420, 452 ] ), null );
 });
+
+test("closing a manual lazy control remembers its latest origin and rearms restoration on recreation", () => {
+	const placement = createWindowPlacement();
+	placement.load( { width: 1280, height: 720, windows: { gameGuide: [ 100, 110 ] } } );
+	placement.enter( 1280, 720 );
+	assert.deepEqual( placement.takeRemembered( "gameGuide", 1280, 720, [ 420, 452 ] ), [ 100, 110 ] );
+	placement.remember( "gameGuide", [ 800, 250 ] );
+	assert.deepEqual( placement.snapshot( 1280, 720, {} )?.windows.gameGuide, [ 800, 250 ] );
+	assert.deepEqual( placement.takeRemembered( "gameGuide", 800, 600, [ 420, 452 ] ), [ 380, 148 ] );
+	assert.equal( placement.takeRemembered( "gameGuide", 800, 600, [ 420, 452 ] ), null );
+	placement.remember( "gameGuide", [ 380, 148 ] );
+	assert.deepEqual( placement.leave( 800, 600, {} )?.windows.gameGuide, [ 380, 148 ] );
+	placement.remember( "gameGuide", [ 0, 0 ] );
+	placement.reset();
+	placement.enter( 800, 600 );
+	assert.deepEqual( placement.takeRemembered( "gameGuide", 800, 600, [ 420, 452 ] ), [ 380, 148 ] );
+});

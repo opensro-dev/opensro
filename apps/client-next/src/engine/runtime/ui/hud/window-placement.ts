@@ -109,6 +109,19 @@ export function createWindowPlacement() {
 		},
 		/*
 		================
+		remember
+
+		69CB0F remembers the guide's origin as its control closes. Recreating
+		that manual control consults the map again at the current screen size.
+		================
+		*/
+		remember( key: RememberedWindow, position: readonly [number, number] ) {
+			if ( !session ) return;
+			session = { ...session, windows: { ...session.windows, [key]: [ position[0], position[1] ] } };
+			consumedOrigins.delete( key );
+		},
+		/*
+		================
 		takeRemembered
 
 		69C290 restores a lazy control once its real extent is known. Manual

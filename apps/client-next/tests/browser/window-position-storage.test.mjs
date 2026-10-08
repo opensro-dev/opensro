@@ -71,3 +71,78 @@ test( "malformed placement and denied writes do not abort Platform teardown", { 
 		await browser.close();
 	}
 } );
+
+test(
+	"Platform restores saved placement and distinguishes denied reads from rejected records",
+	{ timeout: 60000 },
+	async () => {
+		const { browser, page } = await launchProbeBrowser();
+		try {
+			await page.route( CLIENT_NEXT_BASE_URL + "/", route =>
+				route.fulfill( {
+					contentType: "text/html",
+					body: "<!doctype html><canvas></canvas><output></output>"
+				} ) );
+			await page.goto( CLIENT_NEXT_BASE_URL );
+			const result = await page.evaluate( async () => {
+				const path = "/src/engine/runtime/platform/platform.ts";
+				const { createPlatform } = await import( path );
+				const key = "sro:v1150:window-positions:1";
+				const status = document.querySelector( "output" );
+				if ( !status ) throw Error( "Missing fixture status" );
+				const events = [];
+				/*
+			================
+			create
+			================
+			*/
+				const create = () =>
+					createPlatform(
+						document.querySelector( "canvas" ),
+						status,
+						() => {},
+						() => {},
+						() => {},
+						event => events.push( event )
+					);
+				const original = Storage.prototype.getItem;
+				let platform = create();
+				try {
+					platform.saveWindowPositions( { width: 1280, height: 720, windows: { gameGuide: [ -10, 40 ] } } );
+					platform.dispose();
+					events.length = 0;
+					platform = create();
+					const restored = events.find( event => event.kind === "window-positions" )?.value;
+					platform.dispose();
+					events.length = 0;
+					/*
+				================
+				denyPlacementRead
+				================
+				*/
+					Storage.prototype.getItem = function denyPlacementRead( name ) {
+						if ( name === key ) {
+							throw new DOMException( "Fixture denied read", "SecurityError" );
+						}
+						return original.call( this, name );
+					};
+					platform = create();
+					return {
+						restored,
+						status: status.value,
+						rejected: events.some( event => event.kind === "window-positions" )
+					};
+				} finally {
+					Storage.prototype.getItem = original;
+					platform.dispose();
+					localStorage.removeItem( key );
+				}
+			} );
+			assert.deepEqual( result.restored, { width: 1280, height: 720, windows: { gameGuide: [ -10, 40 ] } } );
+			assert.equal( result.rejected, false, "an unreadable record must not request replacement" );
+			assert.match( result.status, /Window positions could not be restored.*SecurityError/ );
+		} finally {
+			await browser.close();
+		}
+	}
+);

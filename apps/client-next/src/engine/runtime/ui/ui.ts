@@ -996,6 +996,14 @@ export function createUi(
 	let extDraft = [ true, false, false, true ];
 	/*
 	================
+	extendedExtent
+	================
+	*/
+	function extendedExtent(): readonly [number, number] {
+		return extVertical ? (extDouble ? [ 80, 212 ] : [ 44, 405 ]) : (extDouble ? [ 213, 76 ] : [ 405, 40 ]);
+	}
+	/*
+	================
 	persistQuickslots
 	================
 	*/
@@ -1218,6 +1226,17 @@ export function createUi(
 
 	/*
 	================
+	closeGuide
+	================
+	*/
+	function closeGuide() {
+		// 69CAB2 remembers the origin before 69CB0F destroys the guide section.
+		if ( panel !== "Game Guide" ) return;
+		if ( guideX !== null && guideY !== null ) windowPlacement.remember( "gameGuide", [ guideX, guideY ] );
+		guideX = guideY = null;
+	}
+	/*
+	================
 	setPanel
 	================
 	*/
@@ -1236,6 +1255,7 @@ export function createUi(
 		if ( next === "COS inventory" && !view?.gameplay?.cosRecords?.some( r => !r.dead && r.hp > 0 ) ) {
 			return false;
 		}
+		closeGuide();
 		shopOpenRequest = null;
 		if ( next !== "Shop" ) repairHud.reset();
 		if ( next !== SKIN_PANEL ) skinHud.close();
@@ -1392,6 +1412,7 @@ export function createUi(
 	================
 	*/
 	function resetPanel() {
+		closeGuide();
 		withdrawal.close();
 		blockDialog = null;
 		blockSelected = "";
@@ -5919,6 +5940,10 @@ export function createUi(
 				view?.berserkGauge?.displayed === next.berserkGauge?.displayed && view?.gameplay === next.gameplay &&
 				view?.entities === next.entities && view?.width === next.width && view?.height === next.height
 			) return null;
+			const resizedWorld = !!view && (view.width !== next.width || view.height !== next.height) &&
+				(view.session?.phase === "world" ||
+					((view.session?.phase === "disconnected" || view.session?.phase === "reconnecting") &&
+						!!view.gameplay?.localGid));
 			nextPoll = now + 100;
 			view = next;
 			probe?.detailBegin( "ui-assembly" );
@@ -6195,6 +6220,20 @@ export function createUi(
 					cosPage = 0;
 					cosPlayerPage = 0;
 					cosGid = 0;
+				}
+			}
+			if ( resizedWorld && (phase === "world" || retainedWorld) ) {
+				// GraphicApply relays layout to live children; a closed guide is absent.
+				if ( panel === "Game Guide" && guideX !== null && guideY !== null ) {
+					guideX = Math.trunc( next.width / 2 ) - 210;
+					guideY = Math.trunc( next.height / 2 ) - 226;
+				}
+				if ( extPosition ) {
+					const [width, height] = extendedExtent();
+					extPosition = [
+						Math.min( extPosition[0], next.width - width ),
+						Math.min( extPosition[1], next.height - height )
+					];
 				}
 			}
 			if ( phase === "world" && windowPlacement.needsInitialSave() ) persistWindowPositions( false );
@@ -8317,9 +8356,8 @@ export function createUi(
 					}
 				}
 				if ( hudData ) {
-					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!,
-						width = extVertical ? (extDouble ? 80 : 44) : (extDouble ? 213 : 405),
-						height = extVertical ? (extDouble ? 212 : 405) : (extDouble ? 76 : 40);
+					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
+					const [width, height] = extendedExtent();
 					const headerWidth = Object.values( layout ).find( n => n.id === 10 )!.rect[2];
 					if ( !extPosition ) {
 						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [ width, height ] ) ??

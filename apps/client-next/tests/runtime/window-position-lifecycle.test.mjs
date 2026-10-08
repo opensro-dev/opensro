@@ -15,6 +15,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
 const { defaultExtendedQuickslot } = await import( "../../src/engine/foundation/ui/extended-quickslot.ts" );
 
 /*
@@ -108,7 +111,10 @@ test("retained disconnect and reconnect keep the placement session until shutdow
 	const { ui, view, saved } = fixture();
 	ui.event( { kind: "window-positions", value: RECORD } );
 	ui.step( view, 0 );
-	const gameplay = /** @type {import("../../src/engine/contracts/ui.ts").UiView["gameplay"]} */ ({ localGid: 7 });
+	const game = createGameplay( () => {} );
+	game.seed( { gid: 7, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+	const gameplay = game.take();
+	assert.ok( gameplay );
 	ui.step( { ...view, gameplay, session: { phase: "disconnected", revision: 2 } }, 1 );
 	ui.step( { ...view, gameplay, session: { phase: "reconnecting", revision: 3 } }, 2 );
 	ui.step( { ...view, gameplay, session: { phase: "world", revision: 4 } }, 3 );
@@ -222,6 +228,55 @@ for ( const restored of [ false, true ] ) {
 			f.dispose();
 			assert.deepEqual( saved.at( -1 ).windows.gameGuide, origin );
 			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, restored ? [ 0, -12 ] : [ 194, 181 ] );
+		} finally {
+			f.dispose();
+		}
+	});
+}
+
+for ( const guideState of [ "open", "closed", "reopened" ] ) {
+	test(`viewport resize relays layout to live quickslots and ${guideState} guide lifecycle`, () => {
+		const saved = [];
+		const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+			saveWindowPositions: value => saved.push( value )
+		} );
+		try {
+			f.ui.event( {
+				kind: "window-positions",
+				value: {
+					width: 1600,
+					height: 900,
+					windows: { gameGuide: [ 1000, 400 ], extendedQuickslot: [ 1450, 650 ] }
+				}
+			} );
+			f.ui.step( f.state, 0 );
+			f.ui.event( { kind: "activate", id: "open-window:Game Guide" } );
+			f.ui.step( f.state, 1 );
+			if ( guideState !== "open" ) {
+				f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+				f.ui.step( f.state, 2 );
+			}
+			const resized = { ...f.state, width: 800, height: 600 };
+			let semantics = f.ui.step( resized, 3 );
+			if ( guideState === "reopened" ) {
+				f.ui.event( { kind: "activate", id: "open-window:Game Guide" } );
+				semantics = f.ui.step( resized, 4 );
+			}
+			const expected = guideState === "open" ?
+				[ 190, 74 ] :
+				guideState === "closed" ?
+				[ 1000, 400 ] :
+				[ 380, 148 ];
+			const guide = semantics?.controls.find( control => control.id === "guide-drag" );
+			if ( guideState === "closed" ) assert.equal( guide, undefined );
+			else {
+				assert.ok( guide );
+				assert.deepEqual( [ guide.rect[0] - 10, guide.rect[1] - 5 ], expected );
+			}
+			f.ui.step( { ...resized }, 200 );
+			f.dispose();
+			assert.deepEqual( saved.at( -1 ).windows.gameGuide, expected );
+			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, [ 720, 388 ] );
 		} finally {
 			f.dispose();
 		}
