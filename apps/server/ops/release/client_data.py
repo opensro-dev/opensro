@@ -365,31 +365,37 @@ def add_bytes(archive, name, data):
 
 
 # ================
-# bundle
+# unsupplied_digests
 #
-# Operator side: write the data candidate archive for a built release package
-# against the live base, and the payload batches holding exactly the data
-# files the base cannot supply. The caller builds the plan (plan.build_plan
-# with kind "data") against the production state it read with the base.
-# Returns the batch paths.
+# The payload digests a release needs that the live base cannot supply.
+# ================
+def unsupplied_digests(manifest, base):
+	reusable = set(content_sources(base).values())
+	return {source[0] for source in content_sources(manifest).values() if source not in reusable}
+
+
+# ================
+# needed_payloads
+#
+# Operator side: the payloads a built release package needs beyond the live
+# base, as the rows a payload-inventory request names.
 # ================
 def needed_payloads(package, base):
 	manifest = json.loads((Path(package) / "release.json").read_bytes())
-	rows = data_rows(manifest)
-	reusable = set(content_sources(base).values())
-	needed = sorted({source[0] for source in content_sources(manifest).values() if source not in reusable})
-	length_of = {row["sha256"]: row["length"] for row in rows.values()}
-	return [{"sha256": sha, "length": length_of[sha]} for sha in needed]
+	length_of = {row["sha256"]: row["length"] for row in data_rows(manifest).values()}
+	return [{"sha256": sha, "length": length_of[sha]} for sha in sorted(unsupplied_digests(manifest, base))]
 
 
 # ================
 # payload_inventory
 #
-# Which of the named payloads the store already holds at their declared
-# length, so an operator rerun skips them. A hit's mtime is refreshed, so the
-# 14-day prune cannot remove it before the candidate that needs it is staged;
-# staging re-hashes every stored payload it uses (verify_stored), so a
-# length match is only a hint, never trusted bytes.
+# Which of the named payloads the store already holds intact, so an operator
+# rerun skips them. A stored file is reported only when its length and digest
+# match, as store_payload decides "present": a damaged one is reported
+# missing, so the rerun sends it again and store_payload replaces it, rather
+# than every rerun skipping it and every staging refusing it. A hit's mtime is
+# refreshed, so the 14-day prune cannot remove it before the candidate that
+# needs it is staged.
 # ================
 def payload_inventory(config, value):
 	files = value.get("files")
@@ -398,12 +404,14 @@ def payload_inventory(config, value):
 	store = Path(config["payload_store"])
 	present = []
 	for row in files:
-		sha, length = row.get("sha256") if isinstance(row, dict) else None, row.get("length") if isinstance(row, dict) else None
+		if not isinstance(row, dict):
+			raise ValueError("invalid payload inventory row")
+		sha, length = row.get("sha256"), row.get("length")
 		if not isinstance(sha, str) or not HASH_PATTERN.fullmatch(sha) or not isinstance(length, int) or length < 0:
 			raise ValueError("invalid payload inventory row")
 		target = store / sha
 		try:
-			if target.stat().st_size != length:
+			if target.stat().st_size != length or digest(target) != sha:
 				continue
 		except FileNotFoundError:
 			continue
@@ -414,6 +422,13 @@ def payload_inventory(config, value):
 
 # ================
 # bundle
+#
+# Operator side: write the data candidate archive for a built release package
+# against the live base, and the payload batches holding exactly the data
+# files the base cannot supply and the host does not already store (present,
+# from payload_inventory). The caller builds the plan (plan.build_plan with
+# kind "data") against the production state it read with the base.
+# Returns the batch paths.
 # ================
 def bundle(package, base, plan, output, max_batch_bytes=MAX_BATCH_BYTES, present=frozenset()):
 	package, output = Path(package), Path(output)
@@ -441,9 +456,7 @@ def bundle(package, base, plan, output, max_batch_bytes=MAX_BATCH_BYTES, present
 			if len(data) != row["length"] or hashlib.sha256(data).hexdigest() != row["sha256"]:
 				raise ValueError("application bytes differ from verified manifest")
 			add_bytes(archive, name, data)
-	reusable = set(content_sources(base).values())
-	# Payloads the host already stores (payload_inventory) are not sent again.
-	needed = sorted({source[0] for source in content_sources(manifest).values() if source not in reusable} - set(present))
+	needed = sorted(unsupplied_digests(manifest, base) - set(present))
 	path_of = {row["sha256"]: name for name, row in rows.items()}
 	# The host refuses an archive over MAX_BATCH_BYTES; a slow link asks for
 	# smaller batches so each upload finishes and a rerun resumes after it.

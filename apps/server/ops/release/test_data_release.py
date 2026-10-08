@@ -8,6 +8,7 @@ transport failure that is retried, never a crash that loses the run.
 
 ===========================================================================
 """
+import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -63,7 +64,7 @@ class InventoryTests(unittest.TestCase):
 		requests = []
 
 		def send(request, target, identity):
-			body = __import__("json").loads(Path(request).read_text(encoding="utf-8"))
+			body = json.loads(Path(request).read_text(encoding="utf-8"))
 			requests.append(len(body["files"]))
 			self.assertEqual(body["operation"], "payload-inventory")
 			return {"present": [row["sha256"] for row in body["files"][:2]]}

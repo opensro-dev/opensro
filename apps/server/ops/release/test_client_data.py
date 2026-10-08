@@ -180,16 +180,22 @@ class DataStoreTests(DataFixture, unittest.TestCase):
 		client_data.store_payload(self.config, self.bundle()[0])
 		stored = Path(self.config["payload_store"]) / needed[0]["sha256"]
 		old = stored.stat().st_mtime - 10 * 24 * 3600
-		__import__("os").utime(stored, (old, old))
+		os.utime(stored, (old, old))
 		self.assertEqual(client_data.payload_inventory(self.config, {"files": needed}), {"present": [needed[0]["sha256"]]})
 		self.assertGreater(stored.stat().st_mtime, old + 24 * 3600)
 		# A stored file of another length is not offered as present.
 		wrong = [{"sha256": needed[0]["sha256"], "length": needed[0]["length"] + 1}]
 		self.assertEqual(client_data.payload_inventory(self.config, {"files": wrong}), {"present": []})
+		# Nor is a damaged one of the right length: the rerun must resend it.
+		intact = stored.read_bytes()
+		stored.write_bytes(bytes(len(intact)))
+		self.assertEqual(client_data.payload_inventory(self.config, {"files": needed}), {"present": []})
+		stored.write_bytes(intact)
 		again = client_data.bundle(self.root / "next", self.base, self.plan, self.root / "again",
 			present={needed[0]["sha256"]})
 		self.assertEqual(again, [])
 		for bad in ({"files": [{"sha256": "../x", "length": 1}]}, {"files": [{"sha256": "a" * 64, "length": -1}]},
+				{"files": ["a" * 64]},
 				{"files": [{"sha256": "a" * 64, "length": 1}] * (client_data.MAX_INVENTORY_FILES + 1)}, {}):
 			with self.assertRaises(ValueError):
 				client_data.payload_inventory(self.config, bad)
