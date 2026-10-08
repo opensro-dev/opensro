@@ -75,6 +75,30 @@ function isOutdoorWorldAsset( publicPath ) {
 
 /*
 ================
+collectOutdoorWorldFiles
+
+The outdoor-world group's members: each .json.gz, a raw .json only when no
+.json.gz stands for it, and every image under /assets/world/outdoor. The
+full build and the outdoor pack refresh both list the group through this.
+================
+*/
+export async function collectOutdoorWorldFiles( publicRoot ) {
+	const files = await listPublicAssetFiles( {
+		publicRoot,
+		roots: [ "/assets/world/outdoor" ],
+		extensions: [ ".json", ".gz", ...IMAGE_ASSET_EXTENSIONS ]
+	} );
+	const compressedJson = files.filter( ( publicPath ) => publicPath.endsWith( ".json.gz" ) );
+	const compressedSources = new Set( compressedJson.map( ( publicPath ) => publicPath.slice( 0, -".gz".length ) ) );
+	const rawJson = files.filter( ( publicPath ) =>
+		publicPath.endsWith( ".json" ) && !compressedSources.has( publicPath )
+	);
+	const images = files.filter( isImageAsset );
+	return { compressedJson, rawJson, images };
+}
+
+/*
+================
 collectAssetPackGroups
 
 Lists the public asset tree and assembles the canonical pack-group array for
@@ -113,21 +137,12 @@ export async function collectAssetPackGroups( {
 
 	// Outdoor streaming world assets pack into their own manual-load group; sweeping
 	// them into game-data/game-images breaks the generated-asset membership contract.
-	const outdoorWorldAssets = includeOutdoorWorld ?
-		await listPublicAssetFiles( {
-			publicRoot,
-			roots: [ "/assets/world/outdoor" ],
-			extensions: [ ".json", ".gz", ...IMAGE_ASSET_EXTENSIONS ]
-		} ) :
-		[];
-	const outdoorCompressedJson = outdoorWorldAssets.filter( ( publicPath ) => publicPath.endsWith( ".json.gz" ) );
-	const outdoorCompressedJsonSourcePaths = new Set(
-		outdoorCompressedJson.map( ( publicPath ) => publicPath.slice( 0, -".gz".length ) )
-	);
-	const outdoorRawJson = outdoorWorldAssets.filter(
-		( publicPath ) => publicPath.endsWith( ".json" ) && !outdoorCompressedJsonSourcePaths.has( publicPath )
-	);
-	const outdoorImages = outdoorWorldAssets.filter( isImageAsset );
+	const outdoor = includeOutdoorWorld ?
+		await collectOutdoorWorldFiles( publicRoot ) :
+		{ compressedJson: [], rawJson: [], images: [] };
+	const outdoorCompressedJson = outdoor.compressedJson;
+	const outdoorRawJson = outdoor.rawJson;
+	const outdoorImages = outdoor.images;
 
 	const gameImages = (
 		await listPublicAssetFiles( {

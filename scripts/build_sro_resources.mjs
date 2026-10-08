@@ -12,6 +12,8 @@ summary, then records the new fingerprint.
 ===========================================================================
 */
 
+// First: it sizes libuv's thread pool before anything starts it.
+import "./build/shared/buildParallelism.mjs";
 import { assertClientInputs, PYTHON_BUILD_MODULES, PYTHON_INSTALL_HINT } from "./build/shared/clientInputs.mjs";
 import { runPython } from "./build/shared/pythonRun.mjs";
 import {

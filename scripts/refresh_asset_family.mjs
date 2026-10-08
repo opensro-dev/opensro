@@ -13,6 +13,8 @@ families as assets:refresh:<family>.
 
 ===========================================================================
 */
+// First: it sizes libuv's thread pool before anything starts it.
+import "./build/shared/buildParallelism.mjs";
 import { LOOSE_FAMILIES } from "./build/families/looseFamilies.mjs";
 import { publishLooseFamily } from "./build/shared/looseFamilyPublication.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";

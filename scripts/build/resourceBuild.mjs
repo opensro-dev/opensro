@@ -69,29 +69,9 @@ import { rebuildRoot } from "./world/paths.mjs";
 
 import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
+import { buildJobs } from "./shared/buildParallelism.mjs";
 
 const RETAIL_CURSOR_IDS = [ "0x95", "0x96", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3" ];
-const DEFAULT_RESOURCE_BUILD_LANES = 2;
-
-/*
-================
-resourceBuildLaneCount
-
-Bound parallel build lanes using the explicit resource-build setting.
-================
-*/
-function resourceBuildLaneCount() {
-	const configured = Number( process.env.SRO_RESOURCE_BUILD_LANES ?? DEFAULT_RESOURCE_BUILD_LANES );
-	if ( !Number.isInteger( configured ) || configured < 1 || configured > 8 ) {
-		throw new Error(
-			`SRO_RESOURCE_BUILD_LANES must be an integer from 1 through 8; got ${
-				JSON.stringify( process.env.SRO_RESOURCE_BUILD_LANES )
-			}`
-		);
-	}
-	return configured;
-}
-
 /*
 ================
 extractRetailCursors
@@ -172,7 +152,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 buildSroResources
 
 Runs every producer in dependency order and returns their results.
-options.laneCount overrides SRO_RESOURCE_BUILD_LANES; options.log receives
+options.laneCount overrides SRO_BUILD_JOBS (shared/buildParallelism.mjs); options.log receives
 progress lines (console.log by default).
 ================
 */
@@ -194,7 +174,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 			throw error;
 		}
 	};
-	const resourceLaneCount = options.laneCount ?? resourceBuildLaneCount();
+	const resourceLaneCount = options.laneCount ?? buildJobs();
 	const runResourceTasks = ( tasks ) => mapWithConcurrency( tasks, resourceLaneCount, ( task ) => task() );
 	log( `[resource-build] worker lanes: ${resourceLaneCount}` );
 

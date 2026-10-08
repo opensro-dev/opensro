@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -38,6 +39,9 @@ SOURCE_ROOTS = [
 OUTPUT_ROOT = GENERATED_ROOT / "intermediate" / "images"
 MANIFEST_PATH = GENERATED_ROOT / "intermediate" / "image-manifest.csv"
 SUPPORTED_EXTENSIONS = {".ddj", ".tga", ".dat"}
+# Assets handed to a worker per round trip: small enough to balance, large
+# enough that pickling stays negligible next to a decode.
+CONVERT_CHUNK = 32
 
 
 # ================
@@ -74,34 +78,39 @@ def main() -> int:
     # Incremental by default: a target PNG that is newer than its source is not re-decoded.
     # SRO_FORCE_IMAGE_CONVERT=1 restores the old always-convert behavior.
     force_convert = os.environ.get("SRO_FORCE_IMAGE_CONVERT") == "1"
+    jobs = build_jobs()
+    print(f"Conversion processes: {jobs} (SRO_BUILD_JOBS)")
 
     with MANIFEST_PATH.open("w", newline="", encoding="utf-8") as manifest_file:
         writer = csv.writer(manifest_file)
         writer.writerow(["source", "output", "kind", "bytes"])
 
-        for index, asset in enumerate(assets, start=1):
-            try:
-                if not force_convert and output_is_fresh(asset):
-                    skipped += 1
+        # Results come back in input order, so the manifest is identical
+        # whatever the process count.
+        with ProcessPoolExecutor(max_workers=jobs) as pool:
+            results = pool.map(convert_one, assets, [force_convert] * len(assets), chunksize=CONVERT_CHUNK)
+            for index, (asset, (status, detail)) in enumerate(zip(assets, results), start=1):
+                if status == "failed":
+                    failed.append((asset, detail))
                 else:
-                    convert_asset(asset)
-                    ok += 1
-                writer.writerow(
-                    [
-                        asset.relative.as_posix(),
-                        asset.output.relative_to(OUTPUT_ROOT).as_posix(),
-                        asset.kind,
-                        asset.source.stat().st_size,
-                    ]
-                )
-            except Exception as exc:  # noqa: BLE001 - report all conversion failures.
-                failed.append((asset, str(exc)))
+                    if status == "skipped":
+                        skipped += 1
+                    else:
+                        ok += 1
+                    writer.writerow(
+                        [
+                            asset.relative.as_posix(),
+                            asset.output.relative_to(OUTPUT_ROOT).as_posix(),
+                            asset.kind,
+                            detail,
+                        ]
+                    )
 
-            if index == 1 or index % 500 == 0 or index == len(assets):
-                elapsed = time.monotonic() - start
-                print(
-                    f"[{index}/{len(assets)}] converted={ok} skipped={skipped} failed={len(failed)} elapsed={elapsed:.1f}s"
-                )
+                if index == 1 or index % 500 == 0 or index == len(assets):
+                    elapsed = time.monotonic() - start
+                    print(
+                        f"[{index}/{len(assets)}] converted={ok} skipped={skipped} failed={len(failed)} elapsed={elapsed:.1f}s"
+                    )
 
     if failed:
         failure_path = GENERATED_ROOT / "intermediate" / "image-conversion-failures.txt"
@@ -115,6 +124,37 @@ def main() -> int:
     print(f"Converted {ok} image assets ({skipped} already fresh) in {elapsed:.1f}s.")
     print(f"Manifest: {MANIFEST_PATH}")
     return 0
+
+
+# ================
+# build_jobs
+#
+# SRO_BUILD_JOBS (scripts/build/shared/buildParallelism.mjs owns the rule):
+# a positive integer, else every core but one.
+# ================
+def build_jobs() -> int:
+    raw = os.environ.get("SRO_BUILD_JOBS", "")
+    if not raw:
+        return max(1, (os.cpu_count() or 2) - 1)
+    if not raw.isdigit() or int(raw) < 1:
+        raise SystemExit(f"SRO_BUILD_JOBS must be a positive integer; got {raw!r}")
+    return int(raw)
+
+
+# ================
+# convert_one
+#
+# One asset in a worker process: ("skipped" | "converted", source bytes) or
+# ("failed", the error). Every conversion failure is reported, none raised.
+# ================
+def convert_one(asset: ImageAsset, force_convert: bool) -> tuple[str, int | str]:
+    try:
+        if not force_convert and output_is_fresh(asset):
+            return "skipped", asset.source.stat().st_size
+        convert_asset(asset)
+        return "converted", asset.source.stat().st_size
+    except Exception as exc:  # noqa: BLE001 - report all conversion failures.
+        return "failed", str(exc)
 
 
 # ================

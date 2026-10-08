@@ -9,6 +9,8 @@ compacted tree, so it never retires sidecars whose loose base is gone.
 
 ===========================================================================
 */
+// First: it sizes libuv's thread pool before anything starts it.
+import "./build/shared/buildParallelism.mjs";
 import { packPublicTree } from "./build/packPublicTree.mjs";
 import { buildUiImagePreloadManifest } from "./build/uiImagePreload.mjs";
 import { copyMissionMinimapTileImages } from "./build/world/assets/copyMissionMinimapTileImages.mjs";

@@ -13,6 +13,7 @@ ledger, so reuse never leaves a bundle naming images that are gone.
 */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { buildJobs } from "../shared/buildParallelism.mjs";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
 
@@ -831,9 +832,10 @@ normalizeJobs
 ================
 */
 function normalizeJobs( value ) {
-	const parsed = Number( value ?? 2 );
-	if ( !Number.isInteger( parsed ) || parsed < 1 || parsed > 16 ) {
-		throw new Error( `Outdoor region build jobs must be an integer from 1 through 16; got ${value}` );
+	if ( value === undefined ) return buildJobs();
+	const parsed = Number( value );
+	if ( !Number.isInteger( parsed ) || parsed < 1 ) {
+		throw new Error( `Outdoor region build jobs must be a positive integer; got ${value}` );
 	}
 	return parsed;
 }

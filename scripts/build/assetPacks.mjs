@@ -16,6 +16,7 @@ up between full builds.
 ===========================================================================
 */
 
+import { buildJobs } from "./shared/buildParallelism.mjs";
 import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { ASSET_SCHEMA } from "./assetSchema.mjs";
 import { prepareAssetDelivery } from "./assetDelivery.mjs";
@@ -55,8 +56,6 @@ export const ASSET_PACK_ZSTD_WINDOW_LOG = DEFAULT_ZSTD_WINDOW_LOG;
 const FILE_HASH_CONCURRENCY = 8;
 /** stat() sweeps are cheap syscalls; high fan-out matters on Windows where each is slow. */
 const FILE_STAT_CONCURRENCY = 64;
-/** Packs building in parallel; each holds one pack buffer (+ zstd output) in memory. */
-const PACK_BUILD_CONCURRENCY = 3;
 
 /**
  * zstd fields are optional: reused packs come from a previous manifest, and older
@@ -293,7 +292,8 @@ async function buildAssetPackGroup(
 
 	const results = await mapWithConcurrency(
 		chunks,
-		PACK_BUILD_CONCURRENCY,
+		// Each pack in flight holds its buffer and zstd output (about 2 x 50 MiB).
+		buildJobs(),
 		( plan ) =>
 			buildOrReusePack( {
 				name,
