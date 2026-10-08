@@ -281,9 +281,17 @@ def rebuild_lock_directory(name: str) -> Path:
 
 # ================
 # relative_lock_path
+#
+# The lock directory for log lines, relative to the checkout when it can be.
+# A worktree on another drive than the shared lock has no relative path
+# (os.path.relpath raises across Windows drives); print it absolute, as the
+# JavaScript twin's path.relative does.
 # ================
 def relative_lock_path(lock_dir: Path) -> str:
-	return Path(os.path.relpath(lock_dir, REBUILD_ROOT)).as_posix()
+	try:
+		return Path(os.path.relpath(lock_dir, REBUILD_ROOT)).as_posix()
+	except ValueError:
+		return Path(lock_dir).as_posix()
 
 
 # ================
