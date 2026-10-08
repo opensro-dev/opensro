@@ -17,6 +17,7 @@ tree untouched.
 
 ===========================================================================
 */
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /*
@@ -88,4 +89,18 @@ and check_compact_assets reads the marker from any checkout.
 */
 export function compactStatePath( generatedRoot ) {
 	return path.join( generatedRoot, "compact-assets.json" );
+}
+
+/*
+================
+writeCompactState
+
+Persist the completed compaction record at the same shared-tree location
+the release checker reads, including when invoked from another worktree.
+================
+*/
+export async function writeCompactState( generatedRoot, state ) {
+	const statePath = compactStatePath( generatedRoot );
+	await mkdir( path.dirname( statePath ), { recursive: true } );
+	await writeFile( statePath, `${JSON.stringify( state, null, 2 )}\n`, "utf8" );
 }

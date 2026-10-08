@@ -12,9 +12,11 @@ it before its first mutation).
 ===========================================================================
 */
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { compactRemovals, compactStatePath } from "../../build/compactRemovals.mjs";
+import { compactRemovals, compactStatePath, writeCompactState } from "../../build/compactRemovals.mjs";
 
 const MAIN = path.resolve( "/checkouts/main" );
 const SHARED = {
@@ -49,4 +51,22 @@ test("a server projection outside any .generated folder is refused", () => {
 
 test("the compact marker lives beside the tree it describes", () => {
 	assert.equal( compactStatePath( SHARED.generatedRoot ), path.join( MAIN, ".generated", "compact-assets.json" ) );
+});
+
+test("compaction writes and replaces the marker consumed by the release checker", async t => {
+	const scratch = await mkdtemp( path.join( os.tmpdir(), "sro-compact-state-" ) );
+	t.after( () => rm( scratch, { recursive: true, force: true } ) );
+	const generatedRoot = path.join( scratch, "shared-build" );
+	const state = {
+		format: "sro-compact-assets",
+		version: 2,
+		packCount: 2,
+		publicFiles: [ "/assets/packs/region.pack.zst" ]
+	};
+	await writeCompactState( generatedRoot, state );
+	assert.deepEqual( JSON.parse( await readFile( compactStatePath( generatedRoot ), "utf8" ) ), state );
+	const updated = { ...state, packCount: 1, publicFiles: [] };
+	await writeCompactState( generatedRoot, updated );
+	assert.deepEqual( JSON.parse( await readFile( compactStatePath( generatedRoot ), "utf8" ) ), updated );
+	assert.deepEqual( await readdir( generatedRoot ), [ "compact-assets.json" ] );
 });

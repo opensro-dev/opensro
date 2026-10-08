@@ -11,11 +11,11 @@ build/world/paths.mjs.
 ===========================================================================
 */
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as zlib from "node:zlib";
 
-import { compactRemovals, compactStatePath } from "./build/compactRemovals.mjs";
+import { compactRemovals, writeCompactState } from "./build/compactRemovals.mjs";
 import { buildWebAssetManifest } from "./build/webManifest.mjs";
 import { refreshPrecompressedSidecars } from "./build/generatedManifestSidecars.mjs";
 import { compressBrotliSync } from "./build/shared/compressionUtils.mjs";
@@ -37,7 +37,6 @@ const generatedAssetsRoot = path.join( generatedRoot, "intermediate" );
 const serverGameDataArchivePath = `${serverGameDataRoot}.srogz`;
 const serverGameDataCacheRoot = path.join( path.dirname( serverGameDataRoot ), ".game-data-cache" );
 const packManifestPath = path.join( publicAssetsRoot, "packs", "manifest.json" );
-const statePath = compactStatePath( generatedRoot );
 const dropGeneratedCache = process.argv.includes( "--drop-generated-cache" );
 
 const BOOTSTRAP_PUBLIC_PATHS = new Set(
@@ -211,8 +210,7 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 		webManifestFiles: webManifest.files.length,
 		publicFiles
 	};
-	await mkdir( path.dirname( statePath ), { recursive: true } );
-	await writeFile( `${JSON.stringify( state, null, 2 )}\n`, "utf8" );
+	await writeCompactState( generatedRoot, state );
 
 	console.log(
 		`Compact assets OK: ${packs.length} zstd-only packs preserve ${formatBytes( identityPackBytes )} ` +
