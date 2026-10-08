@@ -320,7 +320,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(bootstrapSuccessView{
 		DiagnosticSessionID:       r.DiagnosticSessionID,
-		InventorySlotCount:        inventory.BagSlotEnd,
+		InventorySlotCount:        inventory.BagEnd(r.Character),
 		EquipmentSlotCount:        inventory.EquipmentSlotEnd,
 		SimulationProtocolVersion: 1,
 		NativeResult:              r.NativeResult,

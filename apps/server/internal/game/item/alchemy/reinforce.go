@@ -201,7 +201,9 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	target, elixir, powder := -1, -1, -1
 	seen := map[uint8]bool{}
 	for _, slot := range slots {
-		if slot < inventory.EquipmentSlotEnd || slot >= inventory.BagSlotEnd || seen[slot] {
+		// items holds the character's bag only: a slot past its capacity
+		// has no row and is refused below.
+		if slot < inventory.EquipmentSlotEnd || slot >= inventory.MaxBagEnd || seen[slot] {
 			return zero, Refusal(0x12)
 		}
 		seen[slot] = true

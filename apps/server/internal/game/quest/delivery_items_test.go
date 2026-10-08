@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
 	"os"
@@ -68,7 +69,7 @@ func TestSourceDeliveryInventoryLifecycle(t *testing.T) {
 				t.Fatal("failed acceptance partially committed")
 			}
 			rt.PlanInventory = planner
-			for slot := inventory.EquipmentSlotEnd; slot < inventory.BagSlotEnd; slot++ {
+			for slot := inventory.EquipmentSlotEnd; slot < domain.DefaultInventorySize; slot++ {
 				c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(slot), RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01", StackCount: 50})
 			}
 			before = snapshot()

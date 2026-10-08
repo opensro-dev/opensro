@@ -141,7 +141,7 @@ func (rt *Runtime) applyInventoryMove(
 			return false
 		}
 
-		inv := inventory.New(invItemsFromRows(character.MissionInventory))
+		inv := bagOf(character)
 
 		// The character-vs-itemdata equip gates (level/stats/gender/country):
 		// consulted by both Transfer equip legs around the exclusivity scan.
@@ -279,7 +279,7 @@ func (rt *Runtime) applyGroundDrop(
 			return false
 		}
 
-		inv := inventory.New(invItemsFromRows(character.MissionInventory))
+		inv := bagOf(character)
 
 		// The native type-7 wire has no quantity field: the whole row goes.
 		dropped, fault := inv.Drop(sourceSlot)

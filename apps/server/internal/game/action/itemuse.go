@@ -113,7 +113,9 @@ func (rt *Runtime) HandleItemUse(
 	payload []byte,
 ) OpResult {
 	request, tail, err := wire.ReadItemUseRequest(payload)
-	if err != nil || character == nil || !inventory.IsBagSlot(request.Slot) {
+	// The shape bound, read before the division lock: a slot past the
+	// character's own capacity holds no row and the use fails on lookup.
+	if err != nil || character == nil || !inventory.IsBagSlot(request.Slot, inventory.MaxBagEnd) {
 		return itemUseFailure(wire.ErrCodeInvalidRequest)
 	}
 

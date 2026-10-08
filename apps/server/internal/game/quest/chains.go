@@ -12,6 +12,8 @@ package quest
 
 import (
 	"fmt"
+	"slices"
+
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -20,6 +22,7 @@ import (
 prerequisitesMet
 
 An active requirement cannot be satisfied by an already completed quest.
+Every required quest must be completed; of the any-of list, one.
 ================
 */
 func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
@@ -36,7 +39,9 @@ func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 			return false
 		}
 	}
-	return true
+	return len(def.RequiredAnyQuestIDs) == 0 || slices.ContainsFunc(def.RequiredAnyQuestIDs, func(id uint32) bool {
+		return questCompleted(c, id)
+	})
 }
 
 /*
@@ -59,6 +64,7 @@ func validateQuestChains(defs *Definitions) error {
 		visited[def.RefID] = 1
 		parents := append([]uint32(nil), def.RequiredQuestIDs...)
 		parents = append(parents, def.RequiredActiveQuestIDs...)
+		parents = append(parents, def.RequiredAnyQuestIDs...)
 		for _, id := range parents {
 			parent, ok := defs.ByRefID(id)
 			if !ok {

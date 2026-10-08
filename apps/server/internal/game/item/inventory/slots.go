@@ -14,17 +14,31 @@
 // browser client was developed against.
 package inventory
 
-// Wire slot bands. The 0x32B3 local-player entry block ships an inventory
-// capacity byte of 45, split into a raw equipment band and a biased bag band.
+import "opensro.online/server/internal/domain"
+
+// Wire slot bands. The 0x32B3 local-player entry block ships the character's
+// inventory capacity byte (45 at creation, domain.InventoryCapacity), split
+// into a raw equipment band and a biased bag band.
 const (
 	// EquipmentSlotEnd is one past the last equipment socket: wire slots
 	// 0..12 address equipment directly, with no bias.
 	EquipmentSlotEnd uint8 = 13
-	// BagSlotEnd is one past the last bag slot. Wire slots 13..44 are the bag.
-	BagSlotEnd uint8 = 45
-	// BagCapacity is the number of bag slots.
-	BagCapacity = uint8(BagSlotEnd - EquipmentSlotEnd)
+	// MaxBagEnd is the largest capacity byte any character holds. Request
+	// decoders bound wire slots by it; the character's own BagEnd decides.
+	MaxBagEnd = domain.MaxInventorySize
 )
+
+/*
+================
+BagEnd
+
+One past the character's last bag slot: its capacity byte. Wire slots
+13..BagEnd-1 are the bag.
+================
+*/
+func BagEnd(character *domain.Character) uint8 {
+	return character.InventoryCapacity()
+}
 
 // Equipment sockets, as the native CIFEquipment TID->socket map assigns them
 // (sub_550490 / sub_5932c0 family).
@@ -139,14 +153,21 @@ func IsEquipmentSlot(wireSlot uint8) bool {
 	return wireSlot < EquipmentSlotEnd
 }
 
-// IsBagSlot reports whether a wire slot addresses a bag slot.
-func IsBagSlot(wireSlot uint8) bool {
-	return wireSlot >= EquipmentSlotEnd && wireSlot < BagSlotEnd
+/*
+================
+InBag
+
+Whether a persisted row's slot lies in the character's bag.
+================
+*/
+func InBag(character *domain.Character, slot int64) bool {
+	return slot >= int64(EquipmentSlotEnd) && slot < int64(BagEnd(character))
 }
 
-// IsValidSlot reports whether a wire slot is addressable at all.
-func IsValidSlot(wireSlot uint8) bool {
-	return wireSlot < BagSlotEnd
+// IsBagSlot reports whether a wire slot addresses a bag slot of a bag that
+// ends at bagEnd (BagEnd).
+func IsBagSlot(wireSlot, bagEnd uint8) bool {
+	return wireSlot >= EquipmentSlotEnd && wireSlot < bagEnd
 }
 
 // WireSlotFromBagIndex converts a zero-based bag index into the wire slot the
@@ -157,8 +178,8 @@ func WireSlotFromBagIndex(bagIndex uint8) uint8 {
 
 // BagIndexFromWireSlot converts a bag wire slot back to its zero-based index.
 // The second result is false when the slot is not in the bag band.
-func BagIndexFromWireSlot(wireSlot uint8) (uint8, bool) {
-	if !IsBagSlot(wireSlot) {
+func BagIndexFromWireSlot(wireSlot, bagEnd uint8) (uint8, bool) {
+	if !IsBagSlot(wireSlot, bagEnd) {
 		return 0, false
 	}
 	return wireSlot - EquipmentSlotEnd, true

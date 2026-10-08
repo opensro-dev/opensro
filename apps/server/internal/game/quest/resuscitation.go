@@ -94,7 +94,7 @@ func resuscitationExchangeCount(c *enterworld.Character, def *Definition) (uint3
 	}
 	var hearts, potions uint64
 	for _, row := range c.MissionInventory {
-		if row.Slot < int64(inventory.EquipmentSlotEnd) || row.Slot >= int64(inventory.BagSlotEnd) || row.StackCount <= 0 {
+		if !inventory.InBag(c, row.Slot) || row.StackCount <= 0 {
 			continue
 		}
 		if row.RefObjID == def.CollectItemRefID {
@@ -133,7 +133,7 @@ func (rt *Runtime) OpenResuscitation(c *enterworld.Character, npc string) (OpRes
 			return false
 		}
 		for _, row := range c.MissionInventory {
-			if row.Slot >= int64(inventory.EquipmentSlotEnd) && row.Slot < int64(inventory.BagSlotEnd) &&
+			if inventory.InBag(c, row.Slot) &&
 				row.StackCount > 0 && strings.EqualFold(row.Codename, resuscitationPotion) {
 				result.Frames = []wire.Frame{{Opcode: resuscitationOpenOpcode}}
 				return false

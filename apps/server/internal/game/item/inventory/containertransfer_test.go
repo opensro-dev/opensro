@@ -1,6 +1,10 @@
 package inventory
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/domain"
+)
 
 func TestCrossContainerOccupiedDestinations(t *testing.T) {
 	for _, reverse := range []bool{false, true} {
@@ -13,7 +17,7 @@ func TestCrossContainerOccupiedDestinations(t *testing.T) {
 			{"merge", 10, false, 0, 40}, {"remainder", 40, false, 20, 50}, {"full", 50, false, 50, 30}, {"swap", 7, true, 7, 30},
 		} {
 			t.Run(tc.name+map[bool]string{true: "-reverse", false: "-forward"}[reverse], func(t *testing.T) {
-				player := New(nil)
+				player := New(nil, domain.DefaultInventorySize)
 				cos, fault := NewContainer(nil, 4)
 				if fault != nil {
 					t.Fatal(fault)

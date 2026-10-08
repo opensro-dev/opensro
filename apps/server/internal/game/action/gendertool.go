@@ -41,8 +41,6 @@ const (
 	genderErrSlot   uint8 = 0x82
 	genderErrDegree uint8 = 0x83
 	genderErrTarget uint8 = 0x84
-	// genderLastBagSlot is 49C4F3's 13 + 0x62.
-	genderLastBagSlot = 0x6f
 	// itemStateRefFlag is 0x3645's reference field (7654B0 flag 1).
 	itemStateRefFlag uint8 = 1
 )
@@ -89,7 +87,9 @@ Runs inside the item use's character Update.
 func (rt *Runtime) useGenderTool(use skillItemUse, c *enterworld.Character, tail []byte, result *OpResult) bool {
 	r := wire.NewReader(tail)
 	target, e := r.U8()
-	if e != nil || r.Done() != nil || target < inventory.EquipmentSlotEnd || target > genderLastBagSlot {
+	// 49C4F3 bounds the slot by v1.188's largest bag (13 + 0x62); every
+	// v1.150 bag is smaller, so the character's own capacity bounds it here.
+	if e != nil || r.Done() != nil || !inventory.IsBagSlot(target, inventory.BagEnd(c)) {
 		*result = itemUseFailure(genderErrSlot)
 		return false
 	}
@@ -125,7 +125,7 @@ func (rt *Runtime) useGenderTool(use skillItemUse, c *enterworld.Character, tail
 	state := wire.NewWriter(6).U8(target).U8(itemStateRefFlag).U32(twin.RefObjID).Payload()
 	*result = OpResult{Frames: []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)},
-		rt.commerceReferences(invItemsFromRows([]enterworld.InventoryRow{*moved}), nil),
+		rt.commerceReferences(invItemsFromRowsWithin([]enterworld.InventoryRow{*moved}, int64(inventory.MaxBagEnd)), nil),
 		{Opcode: cosItemStateOpcode, Payload: state},
 	}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)

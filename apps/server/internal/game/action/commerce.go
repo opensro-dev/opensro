@@ -237,8 +237,8 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		if c.DeletePending {
 			return false
 		}
-		before := invItemsFromRows(c.MissionInventory)
-		inv := inventory.New(before)
+		before := invItemsFromBag(c)
+		inv := inventory.New(before, inventory.BagEnd(c))
 		var container *domain.COSContainer
 		if isCOS {
 			var valid bool
@@ -304,7 +304,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 					}
 				}
 			}
-			capacity := uint16(inventory.BagSlotEnd - inventory.EquipmentSlotEnd)
+			capacity := uint16(inventory.BagEnd(c) - inventory.EquipmentSlotEnd)
 			if container != nil {
 				capacity = uint16(container.Capacity)
 			}

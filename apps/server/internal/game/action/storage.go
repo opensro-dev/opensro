@@ -303,7 +303,7 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 		if fault != nil {
 			return fault
 		}
-		bag := inventory.New(invItemsFromRows(next.MissionInventory))
+		bag := bagOf(next)
 		gold := int64(0)
 		if next.Gold != nil {
 			gold = *next.Gold
@@ -319,7 +319,7 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			}
 		case wire.MoveTypeStorageDeposit:
 			item, present := bag.At(q.SourceSlot)
-			if !present || !inventory.IsBagSlot(q.SourceSlot) {
+			if !present || !inventory.IsBagSlot(q.SourceSlot, inventory.BagEnd(next)) {
 				return storageRefusal(wire.ErrCodeInvalidRequest)
 			}
 			if !rt.storableItem(item) {
@@ -338,7 +338,7 @@ func (rt *Runtime) storageMutation(movement uint8, q wire.ItemMoveRequest) func(
 			gold -= fee
 		case wire.MoveTypeStorageWithdraw:
 			item, present := room.At(q.SourceSlot)
-			if !present || !inventory.IsBagSlot(q.DestSlot) {
+			if !present || !inventory.IsBagSlot(q.DestSlot, inventory.BagEnd(next)) {
 				return storageRefusal(wire.ErrCodeInvalidRequest)
 			}
 			if fault := room.TransferWholeTo(bag, q.SourceSlot, q.DestSlot, rt.maxStackFor(item.TypeFlags, item.Codename)); fault != nil {

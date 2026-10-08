@@ -81,3 +81,27 @@ func TestQuestInventoryMissingConsumptionAndMissingRewardRefuse(t *testing.T) {
 		}
 	}
 }
+
+// A presented expansion is usable: with the first 32 bag slots full, a
+// 55-slot inventory takes the grant into wire slot 45; a 45-slot one refuses.
+func TestQuestInventoryUsesTheCharactersCapacity(t *testing.T) {
+	c := testCharacter()
+	rt, _ := newTestRuntime(c, testItems())
+	c.MissionInventory = nil
+	for n := 13; n < 45; n++ {
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(n), RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01", TypeFlags: testItems()["ITEM_ETC_HP_POTION_01"].TypeFlags(), StackCount: 50})
+	}
+	grant := []inventory.ItemAmount{{Codename: "ITEM_CH_SWORD_01_A_RARE", Count: 1}}
+	c.InventoryExpansion = 10
+	if _, _, err := rt.PlanQuestInventory(c, nil, grant); err == nil {
+		t.Fatal("waiting slots took an item before the client knew them")
+	}
+	c.InventorySize, c.InventoryExpansion = 55, 0
+	rows, _, err := rt.PlanQuestInventory(c, nil, grant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := rows[len(rows)-1]; last.Slot != 45 || last.Codename != "ITEM_CH_SWORD_01_A_RARE" {
+		t.Fatalf("grant landed at %+v, want wire slot 45", last)
+	}
+}

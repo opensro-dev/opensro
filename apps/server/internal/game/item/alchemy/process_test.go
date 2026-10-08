@@ -2,6 +2,7 @@ package alchemy
 
 import (
 	"errors"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
 	"reflect"
 	"testing"
@@ -32,7 +33,7 @@ func processFixture() (*Catalog, []inventory.Item) {
 func TestCompoundManufactureUsesAuthoredGradesAndConsumesOneTablet(t *testing.T) {
 	c, items := processFixture()
 	before := append([]inventory.Item(nil), items...)
-	out, err := c.Compound(items, ProcessRequest{Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}, sequence(t, 0))
+	out, err := c.Compound(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}, sequence(t, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +54,7 @@ func TestCompoundRefusalsAndEntropyAreAtomic(t *testing.T) {
 	for _, kind := range []string{"wrong-grade", "insufficient", "full", "entropy", "duplicate"} {
 		t.Run(kind, func(t *testing.T) {
 			c, items := processFixture()
-			request := ProcessRequest{Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}
+			request := ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}
 			roll := Roll(func() (uint32, error) { return 0, nil })
 			switch kind {
 			case "wrong-grade":
@@ -65,7 +66,7 @@ func TestCompoundRefusalsAndEntropyAreAtomic(t *testing.T) {
 			case "duplicate":
 				request.Slots[2] = request.Slots[1]
 			case "full":
-				for s := uint8(18); s < inventory.BagSlotEnd; s++ {
+				for s := uint8(18); s < domain.DefaultInventorySize; s++ {
 					items = append(items, inventory.Item{Slot: s, RefObjID: 999, Quantity: 1})
 				}
 			case "entropy":
@@ -86,11 +87,11 @@ func TestCompoundRefusalsAndEntropyAreAtomic(t *testing.T) {
 
 func TestCompoundElementSelectionOrderDoesNotChangeRecipe(t *testing.T) {
 	c, items := processFixture()
-	a, e := c.Compound(items, ProcessRequest{Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}, sequence(t, 0))
+	a, e := c.Compound(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}, sequence(t, 0))
 	if e != nil {
 		t.Fatal(e)
 	}
-	b, e := c.Compound(items, ProcessRequest{Mode: 2, Quantity: 1, Slots: []uint8{13, 17, 15, 14, 16}}, sequence(t, 0))
+	b, e := c.Compound(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 2, Quantity: 1, Slots: []uint8{13, 17, 15, 14, 16}}, sequence(t, 0))
 	if e != nil || !reflect.DeepEqual(a, b) {
 		t.Fatal("recipe depends on element selection order", e)
 	}
@@ -100,7 +101,7 @@ func TestCompoundMaterialRondoAndStackSplitting(t *testing.T) {
 	c, _ := processFixture()
 	m, r := c.Items["material"], c.Items["ITEM_ETC_ARCHEMY_RONDO_01"]
 	items := []inventory.Item{{Slot: 13, RefObjID: m.ID, Codename: m.Name, TypeFlags: m.Flags, Quantity: 3}, {Slot: 14, RefObjID: r.ID, Codename: r.Name, TypeFlags: r.Flags, Quantity: 7}}
-	out, err := c.Compound(items, ProcessRequest{Mode: 1, Quantity: 3, Slots: []uint8{13}}, nil)
+	out, err := c.Compound(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 1, Quantity: 3, Slots: []uint8{13}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,13 +113,13 @@ func TestCompoundMaterialRondoAndStackSplitting(t *testing.T) {
 		t.Fatal(counts)
 	}
 	items[1].Quantity = 5
-	if _, err = c.Compound(items, ProcessRequest{Mode: 1, Quantity: 3, Slots: []uint8{13}}, nil); err == nil {
+	if _, err = c.Compound(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 1, Quantity: 3, Slots: []uint8{13}}, nil); err == nil {
 		t.Fatal("accepted insufficient Rondo")
 	}
 	items[1].Quantity = 7
 	items[1].RefObjID++
 	before := append([]inventory.Item(nil), items...)
-	if _, err = c.Compound(items, ProcessRequest{Mode: 1, Quantity: 3, Slots: []uint8{13}}, nil); err == nil || !reflect.DeepEqual(before, items) {
+	if _, err = c.Compound(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 1, Quantity: 3, Slots: []uint8{13}}, nil); err == nil || !reflect.DeepEqual(before, items) {
 		t.Fatal("auto-selected Rondo bypassed reference admission", err)
 	}
 }
@@ -126,7 +127,7 @@ func TestCompoundMaterialRondoAndStackSplitting(t *testing.T) {
 func TestDissolveMissingAssignmentsCannotConsumeEquipment(t *testing.T) {
 	c, items := fixture()
 	before := append([]inventory.Item(nil), items...)
-	_, err := c.Dissolve(items, ProcessRequest{Mode: 3, Quantity: 1, Slots: []uint8{13}}, func() (uint32, error) { t.Fatal("missing data drew randomness"); return 0, nil })
+	_, err := c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{13}}, func() (uint32, error) { t.Fatal("missing data drew randomness"); return 0, nil })
 	if err == nil || !reflect.DeepEqual(items, before) {
 		t.Fatal("missing assignment data was not atomic")
 	}
@@ -138,7 +139,7 @@ func TestDissolveRepairRestrictionsRefuseBeforeDrawingOrConsuming(t *testing.T) 
 		c.Magic[99] = Magic{ID: 99, Tag: tag}
 		items[0].MagicOptions = []uint64{99}
 		before := append([]inventory.Item(nil), items...)
-		_, err := c.Dissolve(items, ProcessRequest{Mode: 3, Quantity: 1, Slots: []uint8{13}}, func() (uint32, error) { t.Fatal("restricted item drew randomness"); return 0, nil })
+		_, err := c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{13}}, func() (uint32, error) { t.Fatal("restricted item drew randomness"); return 0, nil })
 		if !errors.Is(err, refusal) || !reflect.DeepEqual(items, before) {
 			t.Fatal(err, items)
 		}
@@ -159,7 +160,7 @@ func TestDissolveCandidateElementMathAndRondoConsumption(t *testing.T) {
 	c.Items["attr"] = Reference{ID: 50, Name: "attr", Flags: 0x15ec, Class: 1, Stack: 1, Params: [5]uint32{1, 0x0a141e00}}
 	c.Items["blue"] = Reference{ID: 51, Name: "blue", Flags: 0x0dec, Class: 1, Stack: 1, Params: [5]uint32{1, 0x0a141e00}}
 	c.DissolveDrops = map[int]DissolvePool{1: {Attribute: []WeightedStone{{"attr", 1}}, Magic: []WeightedStone{{"blue", 1}}}}
-	out, err := c.Dissolve(items, ProcessRequest{Mode: 3, Quantity: 1, Slots: []uint8{13}}, func() (uint32, error) { return 0, nil })
+	out, err := c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{13}}, func() (uint32, error) { return 0, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +175,7 @@ func TestDissolveCandidateElementMathAndRondoConsumption(t *testing.T) {
 	if items[0].Quantity != 1 || items[1].Quantity != 4 {
 		t.Fatal("planner changed source bag")
 	}
-	withRondo, err := c.Dissolve(items, ProcessRequest{Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}, func() (uint32, error) { return 0, nil })
+	withRondo, err := c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}, func() (uint32, error) { return 0, nil })
 	if err != nil || !reflect.DeepEqual(withRondo, out) {
 		t.Fatal("v1.150 Rondo/equipment form diverged", err)
 	}

@@ -323,6 +323,10 @@ func (rt *Runtime) HandleLocalRebirth(
 		setCharacterWorld(character, arrivalWorld)
 		character.CurrentHP, character.CurrentMP = &restoredHP, &restoredMP
 		character.LastExpLoss = 0 // CGObjPC_TeleportToTown 4DF2E8
+		// The re-entry presents any waiting inventory expansion; the record
+		// adopts the capacity those packets carry (zero for a present-point
+		// rebirth, which builds no entry).
+		character.AdoptInventorySize(prepared.InventorySize)
 		untouchable = rt.grantReviveUntouchable(divisionID, character, rt.Now().UnixMilli())
 		return true
 	})

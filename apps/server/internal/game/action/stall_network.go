@@ -161,7 +161,7 @@ func (rt *Runtime) HandleStallNetworkSearch(division string, c *enterworld.Chara
 			continue
 		}
 		snapshot := rt.characterSnapshot(division, owner)
-		item, ok := inventory.New(invItemsFromRows(snapshot.MissionInventory)).At(listing.Slot.BagSlot)
+		item, ok := bagOf(snapshot).At(listing.Slot.BagSlot)
 		if !ok || degree != 0 && rt.stallDegree(item) != degree {
 			continue
 		}

@@ -2,6 +2,8 @@ package inventory
 
 import (
 	"testing"
+
+	"opensro.online/server/internal/domain"
 )
 
 // ----------------------------------------------------------------------------
@@ -15,7 +17,7 @@ func TestGetSplitEligibilityZeroRecordIDRejection(t *testing.T) {
 			Quantity: 10,
 			RecordID: 0, // Unpersisted / zero DB serial
 		},
-	})
+	}, domain.DefaultInventorySize)
 
 	incoming := &Item{
 		RefObjID: 2005,
@@ -47,7 +49,7 @@ func TestSplitItemIdentityAndRollback(t *testing.T) {
 			Quantity: 20,
 			RecordID: 10001,
 		},
-	})
+	}, domain.DefaultInventorySize)
 
 	// 1. Split into empty slot 14 without allocator -> new item starts with RecordID == 0 (unpersisted)
 	splitItem, fault := inv.SplitItem(13, 14, 5, nil)
@@ -103,7 +105,7 @@ func TestReconcileCosParamEntriesNativeSemantics(t *testing.T) {
 		{Slot: 14, RefObjID: 1400},
 		// Slot 15: predicate = 1 -> producer CALLED
 		{Slot: 15, RefObjID: 1500},
-	})
+	}, domain.DefaultInventorySize)
 
 	// 1. Invalid storageKind (must be 0, 3, or 4)
 	table := &CosParamTable{}
@@ -183,7 +185,7 @@ func TestTransferSplitAndMergeIntegration(t *testing.T) {
 			Quantity: 20,
 			RecordID: 8888,
 		},
-	})
+	}, domain.DefaultInventorySize)
 
 	// Split 5 units into empty slot 14
 	out, fault := inv.Transfer(13, 14, 5, 50)

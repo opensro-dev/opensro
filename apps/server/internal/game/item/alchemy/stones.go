@@ -232,7 +232,8 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 	out := clone(items)
 	target, material := -1, -1
 	for _, slot := range slots {
-		if slot < 13 || slot >= inventory.BagSlotEnd {
+		// items holds the character's bag only (see Reinforce).
+		if slot < inventory.EquipmentSlotEnd || slot >= inventory.MaxBagEnd {
 			return zero, Refusal(0x10)
 		}
 		found := false

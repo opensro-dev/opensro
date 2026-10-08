@@ -30,7 +30,7 @@ Cleanup uses all bag stacks, independently of the saturated quest counter.
 func captureItemCount(c *enterworld.Character, code string) uint32 {
 	var count uint32
 	for _, row := range c.MissionInventory {
-		if row.Codename == code && row.Slot >= int64(inventory.EquipmentSlotEnd) && row.Slot < int64(inventory.BagSlotEnd) {
+		if row.Codename == code && inventory.InBag(c, row.Slot) {
 			count += uint32(max(row.StackCount, 1))
 		}
 	}

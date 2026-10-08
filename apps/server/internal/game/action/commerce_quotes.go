@@ -55,7 +55,7 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 		gid   uint32
 		items []inventory.Item
 	}
-	sources := []source{{items: invItemsFromRows(c.MissionInventory)}}
+	sources := []source{{items: invItemsFromBag(c)}}
 	if c.ActiveCOS != nil && c.ActiveCOS.Summoned && c.ActiveCOS.Container != nil {
 		sources = append(sources, source{c.ActiveCOS.GID, invItemsFromRowsWithin(c.ActiveCOS.Container.Rows, int64(c.ActiveCOS.Container.Capacity))})
 	}

@@ -234,7 +234,7 @@ Callers hold the character door while reading mutable inventory rows.
 func heldCollectCount(character *enterworld.Character, def *Definition) uint32 {
 	var held int64
 	for _, row := range character.MissionInventory {
-		if row.Slot >= int64(inventory.EquipmentSlotEnd) && row.Slot < int64(inventory.BagSlotEnd) && row.RefObjID == def.CollectItemRefID {
+		if inventory.InBag(character, row.Slot) && row.RefObjID == def.CollectItemRefID {
 			count := row.StackCount
 			if count < 1 {
 				// A present row with no stack word is one item (the
@@ -734,6 +734,15 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			refusal = fmt.Errorf("quest reward: %s (id %d) objective incomplete (%d/%d)", def.Codename, refID, recordProgress(character.ActiveQuests[at]), objectiveRequired(def))
 			return false
 		}
+		// 8CF8F0 asks for the fee once the objective is met, before any
+		// reward is paid: a character short of it keeps the quest.
+		if def.TurnInGold > 0 && creditGold(character.Gold, 0) < def.TurnInGold {
+			refusal = &dialogueRefusal{
+				fmt.Errorf("quest reward: %s needs %d gold", def.Codename, def.TurnInGold),
+				def.TurnInGoldShortSymbol,
+			}
+			return false
+		}
 		if (len(root.Stages) == 0 || int(def.stageIndex)+1 == len(root.Stages)) && !questCompleted(character, refID) && len(character.CompletedQuestIds) >= maxQuestWireRecords {
 			refusal = fmt.Errorf("quest reward: completed quest wire capacity reached")
 			return false
@@ -810,14 +819,19 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			creditPredecessorCompletions(character, rt.Defs)
 		}
 		objectiveFrames, _ = rt.applyInventoryChange(character)
-		if def.RewardGold > 0 {
-			balance := creditGold(character.Gold, def.RewardGold)
+		if def.RewardGold > 0 || def.TurnInGold > 0 {
+			// The fee leaves after the reward is paid (8CF8F0), checked above.
+			balance := creditGold(character.Gold, def.RewardGold) - def.TurnInGold
 			character.Gold = &balance
 			goldFrame = &wire.Frame{
 				Opcode:  wire.OpPointsUpdate,
 				Payload: wire.GoldRefresh{Balance: uint64(balance), Notify: true}.Encode(),
 			}
 		}
+		// Slots follow the items and gold, as 924CF0 pays them. A grant past
+		// the capacity limit is refused and the quest still completes: 4E19D0's
+		// refusal is ignored by its caller.
+		character.GrantInventoryExpansion(def.RewardInventorySlots)
 		return true
 	})
 	if refusal != nil {

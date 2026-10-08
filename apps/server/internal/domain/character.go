@@ -297,6 +297,16 @@ type Character struct {
 	// creates; zero when none runs.
 	FortressReturnUntilMs int64 `json:"fortressReturnUntilMs,omitempty"`
 
+	// InventorySize is the inventory capacity byte the client was given at
+	// its last world entry (13 equipment sockets plus the bag); zero is the
+	// creation capacity DefaultInventorySize. Every inventory rule bounds
+	// the bag by it (InventoryCapacity). InventoryExpansion holds slots a
+	// quest has paid since then: the v1.150 client reads capacity only at
+	// world entry (inventory_capacity.go), so they join InventorySize when
+	// the next entry presents them.
+	InventorySize      uint8 `json:"inventorySize,omitempty"`
+	InventoryExpansion uint8 `json:"inventoryExpansion,omitempty"`
+
 	// AvatarInventory is the persisted costume inventory. Rows reuse the
 	// equipment item body and occupy native avatar slots 0..3. Every row's
 	// reference object must be present in the enter-world item snapshot.

@@ -310,6 +310,9 @@ PreparedReentry
 type PreparedReentry struct {
 	Packets []Packet
 	Spawn   simulation.Spawn
+	// InventorySize is the capacity the packets present; the committing
+	// owner adopts it on the live record (domain.AdoptInventorySize).
+	InventorySize uint8
 }
 
 /*
@@ -331,6 +334,7 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	// The caller holds the division lock and commits the returned stand only
 	// after preparation succeeds. Login adoption would re-enter that lock.
 	projection.AdoptEntrySpawn = nil
+	snapshot.PresentInventoryExpansion()
 	result := buildCharacterProjection(&projection, divisionID, snapshot)
 	packets, ok := d.encodeReentry(result)
 	if !ok {
@@ -339,7 +343,7 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	spawn := result.LocalPlayerEntry.StartProfile
 	return PreparedReentry{Packets: packets, Spawn: simulation.Spawn{
 		RegionID: uint16(spawn.RegionID), X: spawn.X, Y: spawn.Y, Z: spawn.Z, Angle: uint16(spawn.Angle),
-	}}, true
+	}, InventorySize: snapshot.InventoryCapacity()}, true
 }
 
 /*

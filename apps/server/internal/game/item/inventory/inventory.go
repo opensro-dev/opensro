@@ -135,18 +135,19 @@ type Inventory struct {
 	Requirements EquipRequirements
 }
 
-// New returns an Inventory holding a copy of items.
+// New returns a player Inventory holding a copy of items, its bag ending
+// at bagEnd (the character's capacity byte, BagEnd).
 /*
 ================
 New
 ================
 */
-func New(items []Item) *Inventory {
+func New(items []Item, bagEnd uint8) *Inventory {
 	owned := make([]Item, len(items))
 	for n := range items {
 		owned[n] = cloneInventoryRow(items[n])
 	}
-	return &Inventory{items: owned, bagStart: EquipmentSlotEnd, slotEnd: BagSlotEnd}
+	return &Inventory{items: owned, bagStart: EquipmentSlotEnd, slotEnd: bagEnd}
 }
 
 // NewContainer shares transfer arithmetic with player bags while declaring
@@ -191,8 +192,8 @@ func newBoundedContainer(items []Item, capacity uint8, maxSlots int) (*Inventory
 		}
 		seen[row.Slot] = true
 	}
-	inv := New(items)
-	inv.bagStart, inv.slotEnd = 0, capacity
+	inv := New(items, capacity)
+	inv.bagStart = 0
 	return inv, nil
 }
 
@@ -201,7 +202,17 @@ func newBoundedContainer(items []Item, capacity uint8, maxSlots int) (*Inventory
 validSlot
 ================
 */
-func (inv *Inventory) validSlot(n uint8) bool     { return n < inv.slotEnd }
+func (inv *Inventory) validSlot(n uint8) bool { return n < inv.slotEnd }
+
+/*
+================
+BagEnd
+
+One past the last slot this inventory holds.
+================
+*/
+func (inv *Inventory) BagEnd() uint8 { return inv.slotEnd }
+
 func (inv *Inventory) equipmentSlot(n uint8) bool { return n < inv.bagStart }
 func (inv *Inventory) bagSlot(n uint8) bool       { return n >= inv.bagStart && n < inv.slotEnd }
 

@@ -119,7 +119,7 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 			}
 		}
 	}
-	out.Items, err = allocateProducts(items, consume, products)
+	out.Items, err = allocateProducts(items, consume, products, r.BagEnd)
 	out.Completed = 1
 	return out, err
 }

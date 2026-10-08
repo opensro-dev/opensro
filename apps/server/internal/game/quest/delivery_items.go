@@ -36,7 +36,7 @@ func loadDelivery(def *Definition, items enterworld.ItemRefSource) error {
 func deliveryHeld(c *enterworld.Character, ref uint32) uint32 {
 	var total uint64
 	for _, row := range c.MissionInventory {
-		if row.RefObjID == ref && row.Slot >= int64(inventory.EquipmentSlotEnd) && row.Slot < int64(inventory.BagSlotEnd) {
+		if row.RefObjID == ref && inventory.InBag(c, row.Slot) {
 			count := row.StackCount
 			if count < 1 {
 				count = 1

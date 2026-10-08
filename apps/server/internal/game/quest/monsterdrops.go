@@ -155,7 +155,7 @@ func missionMonsterDrops(c *enterworld.Character, def *Definition, monster strin
 		if rule.ItemCodename != "" {
 			matches = item.Codename == code
 		}
-		if matches && item.Slot >= int64(inventory.EquipmentSlotEnd) && item.Slot < int64(inventory.BagSlotEnd) {
+		if matches && inventory.InBag(c, item.Slot) {
 			held += uint64(max(1, item.StackCount))
 		}
 	}

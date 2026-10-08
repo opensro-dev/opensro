@@ -3,6 +3,7 @@ package action
 import (
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -36,7 +37,7 @@ func TestNativeBagToEquipmentZeroQuantity(t *testing.T) {
 		wire.OpEquipVisual,
 		wire.OpBaseStats,
 	)
-	if _, ok := inventory.New(invItemsFromRows(character.MissionInventory)).At(6); !ok {
+	if _, ok := inventory.New(invItemsFromBag(character), domain.DefaultInventorySize).At(6); !ok {
 		t.Fatal("native zero-quantity equipment request did not seat the weapon in slot 6")
 	}
 	move, err := wire.DecodeItemMoveResult(result.Frames[0].Payload, 0)

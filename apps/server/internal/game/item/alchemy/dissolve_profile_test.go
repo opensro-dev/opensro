@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
 )
 
@@ -138,7 +139,7 @@ func TestDissolveInferredRewardsAndLateFailuresAreAtomic(t *testing.T) {
 				items[1].Quantity = 50
 			}
 			if failure == "capacity" {
-				for s := uint8(15); s < inventory.BagSlotEnd; s++ {
+				for s := uint8(15); s < domain.DefaultInventorySize; s++ {
 					items = append(items, inventory.Item{Slot: s, RefObjID: 9999, Quantity: 1})
 				}
 			}
@@ -153,7 +154,7 @@ func TestDissolveInferredRewardsAndLateFailuresAreAtomic(t *testing.T) {
 				}
 			}
 			before := append([]inventory.Item(nil), items...)
-			out, err := c.Dissolve(items, ProcessRequest{Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}, roll)
+			out, err := c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}, roll)
 			if !reflect.DeepEqual(before, items) {
 				t.Fatal("planner mutated inventory")
 			}

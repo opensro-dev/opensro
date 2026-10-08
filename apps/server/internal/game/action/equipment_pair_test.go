@@ -1,6 +1,7 @@
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -17,7 +18,7 @@ func TestEquipmentAmmunitionPairBranches(t *testing.T) {
 			if kind != 0 {
 				rows = append(rows, inventory.Item{Slot: 6, TypeFlags: wire.PackTypeFlags(3, 1, 6, kind), Quantity: 1})
 			}
-			inv := inventory.New(rows)
+			inv := inventory.New(rows, domain.DefaultInventorySize)
 			_, fault := rt.completeEquipmentPair(inv, 13, 7)
 			allowed := kind == 6 && ammo == 1 || kind == 12 && ammo == 2
 			if (fault == nil) != allowed {
@@ -31,7 +32,7 @@ func TestWeaponChangeCompanionMoves(t *testing.T) {
 	rt, _ := newTestRuntime(c, testItems())
 	sword := inventory.Item{Slot: 6, TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Quantity: 1}
 	arrow := inventory.Item{Slot: 7, TypeFlags: wire.PackTypeFlags(3, 3, 4, 1), Quantity: 50}
-	inv := inventory.New([]inventory.Item{sword, arrow})
+	inv := inventory.New([]inventory.Item{sword, arrow}, domain.DefaultInventorySize)
 	moves, fault := rt.completeEquipmentPair(inv, 13, 6)
 	if fault != nil || len(moves) != 1 || moves[0].SourceSlot != 7 || moves[0].DestSlot != 13 {
 		t.Fatalf("stash: %v %v", moves, fault)
@@ -39,7 +40,7 @@ func TestWeaponChangeCompanionMoves(t *testing.T) {
 	// Bow admission automatically takes the first matching bag stack.
 	sword.TypeFlags = wire.PackTypeFlags(3, 1, 6, 6)
 	arrow.Slot = 18
-	inv = inventory.New([]inventory.Item{sword, arrow})
+	inv = inventory.New([]inventory.Item{sword, arrow}, domain.DefaultInventorySize)
 	moves, fault = rt.completeEquipmentPair(inv, 13, 6)
 	if fault != nil || len(moves) != 1 || moves[0].SourceSlot != 18 || moves[0].DestSlot != 7 {
 		t.Fatalf("auto ammo: %v %v", moves, fault)
@@ -99,7 +100,7 @@ func TestShieldUnseatsTwoHandedWeapon(t *testing.T) {
 	items := testItems()
 	items["ITEM_CH_SWORD_01_A_RARE"].NativeFields = enterworld.NewNativeFields(map[string]float64{"twoHanded": 1})
 	rt, _ := newTestRuntime(c, items)
-	inv := inventory.New([]inventory.Item{{Slot: 6, Codename: "ITEM_CH_SWORD_01_A_RARE", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Quantity: 1}, {Slot: 7, TypeFlags: wire.PackTypeFlags(3, 1, 4, 1), Quantity: 1}})
+	inv := inventory.New([]inventory.Item{{Slot: 6, Codename: "ITEM_CH_SWORD_01_A_RARE", TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Quantity: 1}, {Slot: 7, TypeFlags: wire.PackTypeFlags(3, 1, 4, 1), Quantity: 1}}, domain.DefaultInventorySize)
 	moves, fault := rt.completeEquipmentPair(inv, 13, 7)
 	if fault != nil || len(moves) != 1 || moves[0].SourceSlot != 6 {
 		t.Fatalf("%v %v", moves, fault)

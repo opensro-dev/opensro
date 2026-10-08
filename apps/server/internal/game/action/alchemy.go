@@ -130,7 +130,7 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 		if character.DeletePending || !enterworld.CharacterAlive(character) {
 			return false
 		}
-		before := invItemsFromRows(character.MissionInventory)
+		before := invItemsFromBag(character)
 		reinforceBonus, stoneBonus := rt.alchemyBonuses(division, character)
 		var result alchemy.Outcome
 		if op == alchemy.OpReinforceResult {

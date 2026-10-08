@@ -19,8 +19,9 @@ What each source decides:
 	  scalars of a quest whose popup advertises none.
 
 A class that overrides a vtable slot beyond its destructor and initializer
-has custom behaviour; it is projected only once that behaviour has a
-server owner (HANDLED_OVERRIDES), never silently reduced to its missions.
+has custom behaviour; it is projected only once CLASS_BEHAVIOUR states
+what that override does in QuestSpec terms, never silently reduced to its
+missions.
 
 ===========================================================================
 """
@@ -57,10 +58,20 @@ MENU_MIDDLE = 0x13d
 # Quest lists (dword index of the object).
 LIST_COMPLETION_NPCS, LIST_QUEST_NPCS = "0xf3", "0xf7"
 LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE = "0x102", "0x10c"
-KNOWN_LISTS = {LIST_COMPLETION_NPCS, LIST_QUEST_NPCS, LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE}
+# One of these completed suffices (CBasicQuest_MeetsPrerequisites 9262A0).
+LIST_REQUIRED_ANY = "0x114"
+KNOWN_LISTS = {LIST_COMPLETION_NPCS, LIST_QUEST_NPCS, LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE, LIST_REQUIRED_ANY}
 
-# Overrides with a server owner; empty until a family is ported.
-HANDLED_OVERRIDES = set()
+# What a class's own override does, as the QuestSpec fields that port it,
+# keyed by (quest, vtable slot). Each row cites the override it reads.
+CLASS_BEHAVIOUR = {
+	# CQSP_KT_EXINVENTORY_3_OnNpcTalk (8CF8F0): the base talk, plus a
+	# 10,000 gold fee checked before the reward and taken after it.
+	("QSP_KT_EXINVENTORY_3", "0x58"): {
+		"TurnInGold": 10000,
+		"TurnInGoldShortSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_05",
+	},
+}
 
 
 class Unsupported(Exception):
@@ -154,9 +165,13 @@ def rewards(code, text, sql):
 	else:
 		raise Unsupported("reward unavailable")
 	items = row["items"] if row else []
-	for column in ("skillPoints", "ap", "hwan", "inventorySlots"):
+	for column in ("skillPoints", "ap", "hwan"):
 		if row and row[column]:
 			raise Unsupported("reward " + column)
+	# Slots follow the same precedence: the popup's count, else the row's.
+	slots = (advertised or {}).get("inventorySlots") or (row["inventorySlots"] if row else 0)
+	if slots:
+		spec["RewardInventorySlots"] = slots
 	leads = [{"ItemCodename": i["item"], "Count": i["count"]} for i in items]
 	if not row or row["selectionCount"] == 0:
 		spec["RewardItems"] = leads
@@ -178,7 +193,7 @@ def rewards(code, text, sql):
 # project
 # ================
 def project(code, quest, text, sql):
-	unhandled = [slot for slot in quest["overrides"] if slot not in HANDLED_OVERRIDES]
+	unhandled = [slot for slot in quest["overrides"] if (code, slot) not in CLASS_BEHAVIOUR]
 	if unhandled:
 		raise Unsupported("custom behaviour " + ",".join(unhandled))
 	unknown = sorted(set(quest["lists"]) - KNOWN_LISTS)
@@ -205,6 +220,10 @@ def project(code, quest, text, sql):
 	}
 	if lists.get(LIST_REQUIRED_ACTIVE):
 		spec["RequiredActiveQuests"] = lists[LIST_REQUIRED_ACTIVE]
+	if lists.get(LIST_REQUIRED_ANY):
+		spec["RequiredAnyQuests"] = lists[LIST_REQUIRED_ANY]
+	for slot in quest["overrides"]:
+		spec.update(CLASS_BEHAVIOUR[(code, slot)])
 	for key, slot in (("NotAchievedSymbol", MENU_NOT_ACHIEVED), ("InventoryFullSymbol", MENU_INVENTORY_FULL),
 			("RepeatOfferPromptSymbol", MENU_ACCEPT_AFTER_CLEAR), ("AchievedNowSymbol", MENU_ACHIEVED_NOW),
 			("AcceptNoticeSymbol", MENU_MIDDLE)):
@@ -281,6 +300,9 @@ def build():
 		for code in sorted(specs):
 			spec = specs[code]
 			missing = [q for q in spec["RequiredQuests"] + spec.get("RequiredActiveQuests", []) if q not in specs and q not in elsewhere]
+			anyof = spec.get("RequiredAnyQuests", [])
+			if anyof and not any(q in specs or q in elsewhere for q in anyof):
+				missing += anyof
 			if missing:
 				audit[code] = "prerequisite " + ",".join(missing) + " pending"
 				del specs[code]

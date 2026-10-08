@@ -152,7 +152,7 @@ func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([
 	var order []string
 	for _, row := range c.MissionInventory {
 		code := codes[uint32(row.RefObjID)]
-		if code == "" || row.Slot < int64(inventory.EquipmentSlotEnd) || row.Slot >= int64(inventory.BagSlotEnd) {
+		if code == "" || !inventory.InBag(c, row.Slot) {
 			continue
 		}
 		if counts[code] == 0 {

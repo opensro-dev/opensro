@@ -251,7 +251,7 @@ func firstFreeBagSlot(character *Character) (int64, bool) {
 	for _, row := range character.MissionInventory {
 		used[row.Slot] = true
 	}
-	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.BagSlotEnd); slot++ {
+	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.BagEnd(character)); slot++ {
 		if !used[slot] {
 			return slot, true
 		}

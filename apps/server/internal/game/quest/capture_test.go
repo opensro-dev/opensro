@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
@@ -89,7 +90,7 @@ func TestTrapAdmissionRequiresRunnableQuestAndInventory(t *testing.T) {
 			}
 			def, _ := rt.Defs.ByCodename(rule.quest)
 			c.ActiveQuests = []enterworld.ActiveQuestRecord{BuildActiveQuestRecord(def, 0)}
-			for slot := inventory.EquipmentSlotEnd; slot < inventory.BagSlotEnd; slot++ {
+			for slot := inventory.EquipmentSlotEnd; slot < domain.DefaultInventorySize; slot++ {
 				c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
 					Slot: int64(slot), Codename: "FILLER", RefObjID: 99, StackCount: 1,
 				})
@@ -196,7 +197,7 @@ func TestCaptureRefusalsLeaveInventoryAndJournalUntouched(t *testing.T) {
 				return 0, nil
 			}
 			if failure == "full" {
-				for slot := inventory.EquipmentSlotEnd; slot < inventory.BagSlotEnd; slot++ {
+				for slot := inventory.EquipmentSlotEnd; slot < domain.DefaultInventorySize; slot++ {
 					c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
 						Slot: int64(slot), RefObjID: 99, Codename: "FILLER", StackCount: 1})
 				}

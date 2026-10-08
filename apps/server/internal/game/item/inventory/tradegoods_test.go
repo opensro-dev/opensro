@@ -7,7 +7,11 @@ tradegoods_test.go - original cargo ownership survives stack operations
 */
 package inventory
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/domain"
+)
 
 /*
 ================
@@ -25,7 +29,7 @@ TestCargoMergeRequiresOriginalOwner
 */
 func TestCargoMergeRequiresOriginalOwner(t *testing.T) {
 	for _, owner := range []string{"Trader", "Thief", "trader", ""} {
-		inv := New([]Item{tradeGoods(13, "Trader", 10), tradeGoods(14, owner, 5)})
+		inv := New([]Item{tradeGoods(13, "Trader", 10), tradeGoods(14, owner, 5)}, domain.DefaultInventorySize)
 		result, fault := inv.Transfer(14, 13, 5, 20)
 		if fault != nil {
 			t.Fatal(fault)
@@ -47,7 +51,7 @@ TestCargoPickupSkipsForeignStacksAndSplitsPreserveOwner
 ================
 */
 func TestCargoPickupSkipsForeignStacksAndSplitsPreserveOwner(t *testing.T) {
-	inv := New([]Item{tradeGoods(13, "Foreign", 10), tradeGoods(15, "Trader", 5)})
+	inv := New([]Item{tradeGoods(13, "Foreign", 10), tradeGoods(15, "Trader", 5)}, domain.DefaultInventorySize)
 	result, fault := inv.GrantStack(tradeGoods(0, "Trader", 8), 20)
 	if fault != nil || result.DestSlot != 15 || result.PostMergeCount != 13 {
 		t.Fatalf("pickup merged into the wrong cargo: %+v %v", result, fault)
@@ -71,7 +75,7 @@ TestCargoContainerTransferKeepsBothOwners
 ================
 */
 func TestCargoContainerTransferKeepsBothOwners(t *testing.T) {
-	bag := New([]Item{tradeGoods(13, "Trader", 10)})
+	bag := New([]Item{tradeGoods(13, "Trader", 10)}, domain.DefaultInventorySize)
 	vehicle, fault := NewContainer([]Item{tradeGoods(0, "Foreign", 5)}, 10)
 	if fault != nil {
 		t.Fatal(fault)

@@ -48,7 +48,7 @@ restores the alive bit without creating a world actor.
 */
 func (rt *Runtime) extendCompanionLease(use companionLeaseUse, result *OpResult) bool {
 	*result = itemUseFailure(companionLeaseWrongTarget)
-	if len(use.tail) != 1 || !inventory.IsBagSlot(use.tail[0]) {
+	if len(use.tail) != 1 || !inventory.IsBagSlot(use.tail[0], inventory.BagEnd(use.character)) {
 		return false
 	}
 	var selected *enterworld.InventoryRow

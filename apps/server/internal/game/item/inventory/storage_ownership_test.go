@@ -1,10 +1,14 @@
 package inventory
 
-import "testing"
+import (
+	"testing"
+
+	"opensro.online/server/internal/domain"
+)
 
 func TestInventoryRecordOwnershipBoundaries(t *testing.T) {
 	input := Item{Slot: 13, RefObjID: 3630, Quantity: 20, RecordID: 91, MagicOptions: []uint64{123}}
-	inv := New([]Item{input})
+	inv := New([]Item{input}, domain.DefaultInventorySize)
 	input.MagicOptions[0] = 999
 	assertOption := func() {
 		t.Helper()
@@ -38,7 +42,7 @@ func TestInventoryRecordOwnershipBoundaries(t *testing.T) {
 func TestPickupPartialCloneAndFullTransferIdentity(t *testing.T) {
 	for _, quantity := range []uint16{5, 20} {
 		ground := Item{RefObjID: 3630, Quantity: quantity, RecordID: 77, MagicOptions: []uint64{123}}
-		inv := New(nil)
+		inv := New(nil, domain.DefaultInventorySize)
 		result, fault := inv.GrantStack(ground, 10)
 		if fault != nil {
 			t.Fatal(fault)

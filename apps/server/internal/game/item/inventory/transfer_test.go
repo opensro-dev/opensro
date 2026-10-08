@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -56,7 +57,7 @@ func TestIsEtcStackableTypeFlags(t *testing.T) {
 }
 
 func TestTransferMergePoursTheWholeStack(t *testing.T) {
-	inv := New([]Item{potionWithCount(13, 5), potionWithCount(20, 10)})
+	inv := New([]Item{potionWithCount(13, 5), potionWithCount(20, 10)}, domain.DefaultInventorySize)
 
 	applied, fault := inv.Transfer(13, 20, 1, potionCap)
 	if fault != nil {
@@ -79,7 +80,7 @@ func TestTransferMergePoursTheWholeStack(t *testing.T) {
 }
 
 func TestTransferMergeCappedSpillsBack(t *testing.T) {
-	inv := New([]Item{potionWithCount(13, 30), potionWithCount(20, 40)})
+	inv := New([]Item{potionWithCount(13, 30), potionWithCount(20, 40)}, domain.DefaultInventorySize)
 
 	applied, fault := inv.Transfer(13, 20, 0, potionCap)
 	if fault != nil {
@@ -97,7 +98,7 @@ func TestTransferMergeCappedSpillsBack(t *testing.T) {
 }
 
 func TestTransferMergeAtCapSwapsCounts(t *testing.T) {
-	inv := New([]Item{potionWithCount(13, 20), potionWithCount(20, 50)})
+	inv := New([]Item{potionWithCount(13, 20), potionWithCount(20, 50)}, domain.DefaultInventorySize)
 
 	applied, fault := inv.Transfer(13, 20, 0, potionCap)
 	if fault != nil {
@@ -115,7 +116,7 @@ func TestTransferMergeAtCapSwapsCounts(t *testing.T) {
 }
 
 func TestTransferSplitIntoEmptySlot(t *testing.T) {
-	inv := New([]Item{potionWithCount(13, 20)})
+	inv := New([]Item{potionWithCount(13, 20)}, domain.DefaultInventorySize)
 
 	applied, fault := inv.Transfer(13, 21, 5, potionCap)
 	if fault != nil {
@@ -150,7 +151,7 @@ func TestTransferSplitQuantityValidation(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			inv := New([]Item{potionWithCount(13, 20)})
+			inv := New([]Item{potionWithCount(13, 20)}, domain.DefaultInventorySize)
 			before := inv.Items()
 
 			_, fault := inv.Transfer(13, 21, testCase.quantity, potionCap)
@@ -168,7 +169,7 @@ func TestTransferSplitQuantityValidation(t *testing.T) {
 func TestTransferWholeStackQuantityIsAPlainMove(t *testing.T) {
 	// quantity == stackCount is NOT a split: the composer auto-resolves the
 	// plain two-click move of a whole stackable to the full count.
-	inv := New([]Item{potionWithCount(13, 20)})
+	inv := New([]Item{potionWithCount(13, 20)}, domain.DefaultInventorySize)
 
 	applied, fault := inv.Transfer(13, 21, 20, potionCap)
 	if fault != nil {
@@ -191,7 +192,7 @@ func TestTransferEquipmentDestinationKeepsTheSwapLeg(t *testing.T) {
 	// different native record, so no merge or split leg can run.
 	arrows := Item{Slot: 13, RefObjID: 3900, Codename: "ITEM_ETC_AMMO_ARROW_01_DEF",
 		TypeFlags: wire.PackTypeFlags(3, 3, 4, 1), Quantity: 40}
-	inv := New([]Item{arrows})
+	inv := New([]Item{arrows}, domain.DefaultInventorySize)
 
 	applied, fault := inv.Transfer(13, SocketShield, 40, potionCap)
 	if fault != nil {
@@ -208,7 +209,7 @@ func TestTransferEquipmentDestinationKeepsTheSwapLeg(t *testing.T) {
 func TestTransferRefusesSourceEqualsDest(t *testing.T) {
 	// DEVIATION, documented on Transfer: the native client cannot compose a
 	// self-move, and the reference fixture's merge leg would eat the row.
-	inv := New([]Item{potionWithCount(13, 20)})
+	inv := New([]Item{potionWithCount(13, 20)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Transfer(13, 13, 0, potionCap); fault == nil || fault.Reason != "slotOutOfRange" {
 		t.Fatalf("a self-move = %v, want slotOutOfRange", fault)
@@ -216,7 +217,7 @@ func TestTransferRefusesSourceEqualsDest(t *testing.T) {
 }
 
 func TestDropQuantityPartialLeavesTheRemainder(t *testing.T) {
-	inv := New([]Item{potionWithCount(13, 20)})
+	inv := New([]Item{potionWithCount(13, 20)}, domain.DefaultInventorySize)
 
 	dropped, fault := inv.DropQuantity(13, 5)
 	if fault != nil {
@@ -231,7 +232,7 @@ func TestDropQuantityPartialLeavesTheRemainder(t *testing.T) {
 }
 
 func TestDropQuantityWholeStackRemovesTheRow(t *testing.T) {
-	inv := New([]Item{potionWithCount(13, 20)})
+	inv := New([]Item{potionWithCount(13, 20)}, domain.DefaultInventorySize)
 
 	dropped, fault := inv.DropQuantity(13, 20)
 	if fault != nil {
@@ -246,7 +247,7 @@ func TestDropQuantityWholeStackRemovesTheRow(t *testing.T) {
 }
 
 func TestDropQuantityBounds(t *testing.T) {
-	inv := New([]Item{potionWithCount(13, 20)})
+	inv := New([]Item{potionWithCount(13, 20)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.DropQuantity(13, 0); fault == nil || fault.Reason != "dropQuantityNotPositive" || fault.Code != wire.ErrCodePositiveNumberOnly {
 		t.Fatalf("dropQuantity 0 = %v, want [29 dropQuantityNotPositive] (a zero must refuse, not clamp)", fault)
@@ -257,7 +258,7 @@ func TestDropQuantityBounds(t *testing.T) {
 }
 
 func TestGrantStackMergesOntoTheLowestSlot(t *testing.T) {
-	inv := New([]Item{potionWithCount(20, 10), potionWithCount(14, 10)})
+	inv := New([]Item{potionWithCount(20, 10), potionWithCount(14, 10)}, domain.DefaultInventorySize)
 
 	grant, fault := inv.GrantStack(potionWithCount(0, 5), potionCap)
 	if fault != nil {
@@ -278,7 +279,7 @@ func TestGrantStackMergesOntoTheLowestSlot(t *testing.T) {
 }
 
 func TestGrantStackSkipsRowsAtTheCap(t *testing.T) {
-	inv := New([]Item{potionWithCount(14, 50), potionWithCount(20, 10)})
+	inv := New([]Item{potionWithCount(14, 50), potionWithCount(20, 10)}, domain.DefaultInventorySize)
 
 	grant, fault := inv.GrantStack(potionWithCount(0, 5), potionCap)
 	if fault != nil {
@@ -290,7 +291,7 @@ func TestGrantStackSkipsRowsAtTheCap(t *testing.T) {
 }
 
 func TestGrantStackOverCapMergeLeavesTheGroundRemainder(t *testing.T) {
-	inv := New([]Item{potionWithCount(14, 45)})
+	inv := New([]Item{potionWithCount(14, 45)}, domain.DefaultInventorySize)
 
 	grant, fault := inv.GrantStack(potionWithCount(0, 10), potionCap)
 	if fault != nil {
@@ -302,7 +303,7 @@ func TestGrantStackOverCapMergeLeavesTheGroundRemainder(t *testing.T) {
 }
 
 func TestGrantStackFreshSlotClampsAtTheCap(t *testing.T) {
-	inv := New(nil)
+	inv := New(nil, domain.DefaultInventorySize)
 
 	grant, fault := inv.GrantStack(potionWithCount(0, 60), potionCap)
 	if fault != nil {
@@ -322,12 +323,12 @@ func TestGrantStackFreshSlotClampsAtTheCap(t *testing.T) {
 func TestGrantStackFullBagStillMerges(t *testing.T) {
 	// Every bag slot taken; one row is a same-ref stack below cap. The
 	// merge gate runs before the free-slot check, so the pickup fits.
-	items := make([]Item, 0, int(BagCapacity))
+	items := make([]Item, 0, int((domain.DefaultInventorySize - EquipmentSlotEnd)))
 	items = append(items, potionWithCount(13, 10))
-	for wireSlot := uint8(14); wireSlot < BagSlotEnd; wireSlot++ {
+	for wireSlot := uint8(14); wireSlot < domain.DefaultInventorySize; wireSlot++ {
 		items = append(items, sword(wireSlot))
 	}
-	inv := New(items)
+	inv := New(items, domain.DefaultInventorySize)
 
 	grant, fault := inv.GrantStack(potionWithCount(0, 5), potionCap)
 	if fault != nil {
@@ -346,7 +347,7 @@ func TestGrantStackFullBagStillMerges(t *testing.T) {
 // The M1 chain's occupancy source: what each touched socket ended up holding.
 func TestEquipVisualChanges(t *testing.T) {
 	t.Run("equip reports the worn occupant", func(t *testing.T) {
-		inv := New([]Item{sword(13)})
+		inv := New([]Item{sword(13)}, domain.DefaultInventorySize)
 		if _, fault := inv.Transfer(13, SocketWeapon, 1, 1); fault != nil {
 			t.Fatalf("equip refused: %v", fault)
 		}
@@ -357,7 +358,7 @@ func TestEquipVisualChanges(t *testing.T) {
 	})
 
 	t.Run("unequip reports the vacated socket", func(t *testing.T) {
-		inv := New([]Item{sword(SocketWeapon)})
+		inv := New([]Item{sword(SocketWeapon)}, domain.DefaultInventorySize)
 		if _, fault := inv.Transfer(SocketWeapon, 20, 1, 1); fault != nil {
 			t.Fatalf("unequip refused: %v", fault)
 		}
@@ -370,7 +371,7 @@ func TestEquipVisualChanges(t *testing.T) {
 	t.Run("a ring hand swap reports both sockets post-move", func(t *testing.T) {
 		left := Item{Slot: SocketRing, RefObjID: 2000, TypeFlags: wire.PackTypeFlags(3, 1, 5, 3), Quantity: 1}
 		right := Item{Slot: SocketRingSecond, RefObjID: 2001, TypeFlags: wire.PackTypeFlags(3, 1, 5, 3), Quantity: 1}
-		inv := New([]Item{left, right})
+		inv := New([]Item{left, right}, domain.DefaultInventorySize)
 		if _, fault := inv.Transfer(SocketRing, SocketRingSecond, 1, 1); fault != nil {
 			t.Fatalf("ring swap refused: %v", fault)
 		}
@@ -387,7 +388,7 @@ func TestEquipVisualChanges(t *testing.T) {
 	})
 
 	t.Run("a bag-only move reports nothing", func(t *testing.T) {
-		inv := New([]Item{sword(13)})
+		inv := New([]Item{sword(13)}, domain.DefaultInventorySize)
 		if changes := inv.EquipVisualChanges(13, 20); len(changes) != 0 {
 			t.Fatalf("changes = %+v, want none for a bag-only move", changes)
 		}
@@ -395,7 +396,7 @@ func TestEquipVisualChanges(t *testing.T) {
 }
 
 func TestMergeTargetSlot(t *testing.T) {
-	inv := New([]Item{potionWithCount(20, 10), potionWithCount(14, 50), sword(SocketWeapon)})
+	inv := New([]Item{potionWithCount(20, 10), potionWithCount(14, 50), sword(SocketWeapon)}, domain.DefaultInventorySize)
 
 	if slot, ok := inv.MergeTargetSlot(3630, potionCap); !ok || slot != 20 {
 		t.Fatalf("merge target = (%d, %v), want slot 20 (14 is at cap)", slot, ok)

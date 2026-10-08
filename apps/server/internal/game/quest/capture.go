@@ -188,7 +188,7 @@ func (rt *Runtime) CaptureQuestTrap(c *enterworld.Character, skill, monster stri
 			return []wire.Frame{questNotification(rule.already)}, false
 		}
 		for _, row := range c.MissionInventory {
-			if row.Slot >= int64(inventory.EquipmentSlotEnd) && row.Slot < int64(inventory.BagSlotEnd) && row.Codename == rule.item {
+			if inventory.InBag(c, row.Slot) && row.Codename == rule.item {
 				return []wire.Frame{questNotification(rule.already)}, false
 			}
 		}

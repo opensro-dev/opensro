@@ -79,7 +79,7 @@ func (rt *Runtime) reverseReturnScrollRow(c *enterworld.Character) (int, *enterw
 	found, slot := -1, int64(0)
 	var held *enterworld.ItemRef
 	for index, row := range c.MissionInventory {
-		if !inventory.IsBagSlot(uint8(row.Slot)) || row.StackCount < 1 || found >= 0 && row.Slot >= slot {
+		if !inventory.InBag(c, row.Slot) || row.StackCount < 1 || found >= 0 && row.Slot >= slot {
 			continue
 		}
 		ref, ok := refs.ItemRefByCodename(row.Codename)

@@ -163,7 +163,7 @@ TID, not the exact item) into socket 7, or returns nil when none exists.
 func reloadMagazine(character *enterworld.Character, typeFlags uint16) *ammunitionReload {
 	best := -1
 	for index, row := range character.MissionInventory {
-		if row.Slot < int64(inventory.EquipmentSlotEnd) || row.Slot >= int64(inventory.BagSlotEnd) ||
+		if !inventory.InBag(character, row.Slot) ||
 			row.TypeFlags != typeFlags || row.StackCount < 1 || row.StackCount > 0xffff {
 			continue
 		}

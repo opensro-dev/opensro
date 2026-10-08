@@ -22,6 +22,7 @@ Ninety-one v1.150 quests are hand-written C++ classes in the v1.188
 ```text
 python -B scripts/build/import_compiled_quest_evidence.py --hlil <dump> --methods <dump>
 python -B scripts/build/import_quest_text_evidence.py --textdata <v1.150-textdata> --sql <SR_GameRefData>
+python -B scripts/build/import_quest_text_evidence.py --textdata <v1.150-textdata>   # the text snapshot alone
 python -B scripts/build/generate_compiled_quests.py
 python -B scripts/build/generate_compiled_quests.py --check
 ```
@@ -31,14 +32,21 @@ python -B scripts/build/generate_compiled_quests.py --check
 The class supplies the structure: NPCs, dialogue symbols, prerequisites, the
 completion limit, and each mission's kind, NPC, item, monsters and drop chance.
 v1.188 rebalanced counts and rewards, so the v1.150 text wins wherever it names
-them: an objective line's count, and the popup's advertised EXP, skill EXP and
-gold. The SQL rows supply the reward items, and the scalars of a quest whose
-popup advertises none, as they did for the script-backed `QNO_RM_OLDWOMAN_1`.
+them: an objective line's count, and the popup's advertised EXP, skill EXP,
+gold and inventory slots. The SQL rows supply the reward items, and the scalars
+of a quest whose popup advertises none, as they did for the script-backed
+`QNO_RM_OLDWOMAN_1`. A popup body can span several lines of `textquest.txt`;
+the importer joins them into one record.
+
+Lists: 0xF3 completion NPCs, 0xF7 quest NPCs, 0x102 every quest completed,
+0x10C quests active, 0x114 any one quest completed
+(`CBasicQuest_MeetsPrerequisites` 9262A0). 0x108 and 0x110 are not yet read.
 
 A class that overrides vtable slots has custom behaviour (NPC talk at +0x58,
 dialogue at +0x90, the capture escort's +0x80/+0x9C/+0xA8 timers and events).
-The generator projects it only once that behaviour has a server owner, and a
-quest waits while a prerequisite is unprojected. `compiled_quests_audit.json`
+The generator projects it only once `CLASS_BEHAVIOUR` states that override in
+QuestSpec fields (`QSP_KT_EXINVENTORY_3`'s +0x58 is a 10,000 gold turn-in fee),
+and a quest waits while a prerequisite is unprojected. `compiled_quests_audit.json`
 names every class still pending and why.
 
 Mission field notes: +9 kind (1 gather from monster, 2 kill, 3 deliver, 4

@@ -10,6 +10,7 @@ package enterworld
 import (
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
 )
 
@@ -50,7 +51,7 @@ TestGrantStarterKitFullBagGrantsNothing
 */
 func TestGrantStarterKitFullBagGrantsNothing(t *testing.T) {
 	character := &Character{Name: "Full"}
-	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.BagSlotEnd); slot++ {
+	for slot := int64(inventory.EquipmentSlotEnd); slot < int64(domain.DefaultInventorySize); slot++ {
 		character.MissionInventory = append(character.MissionInventory, InventoryRow{Slot: slot, RefObjID: 1000, StackCount: 1})
 	}
 	kit := []WireItem{{RefObjID: 61, Codename: "ITEM_ETC_SCROLL_RETURN_01", StackCount: 1}}

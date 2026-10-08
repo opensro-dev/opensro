@@ -23,7 +23,7 @@ func (rt *Runtime) applyAvatarTransfer(c *enterworld.Character, q wire.ItemMoveR
 		if fault != nil {
 			return false
 		}
-		player := inventory.New(invItemsFromRows(c.MissionInventory))
+		player := bagOf(c)
 		source, dest := player, avatars
 		equip := q.MovementType == wire.MoveTypePlayerToAvatar
 		if !equip {
@@ -40,7 +40,7 @@ func (rt *Runtime) applyAvatarTransfer(c *enterworld.Character, q wire.ItemMoveR
 		} else {
 			// Retail 525AC0/525B42 owns destination selection, ignoring the
 			// requested bag cell. Reserve it before finding an attachment cell.
-			if q.DestSlot < inventory.EquipmentSlotEnd || q.DestSlot >= inventory.BagSlotEnd {
+			if q.DestSlot < inventory.EquipmentSlotEnd || q.DestSlot >= inventory.BagEnd(c) {
 				return false
 			}
 			var free bool

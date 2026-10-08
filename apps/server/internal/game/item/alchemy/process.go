@@ -18,6 +18,9 @@ type ProcessRequest struct {
 	Quantity uint32
 	Slots    []uint8
 	Cancel   bool
+	// BagEnd is the requesting character's capacity byte (inventory.BagEnd),
+	// set by the action owner: products land inside that bag.
+	BagEnd uint8
 }
 
 func DecodeProcess(op uint16, p []byte) (ProcessRequest, error) {
@@ -61,7 +64,7 @@ func DecodeProcess(op uint16, p []byte) (ProcessRequest, error) {
 	}
 	seen := map[uint8]bool{}
 	for _, slot := range r.Slots {
-		if slot < inventory.EquipmentSlotEnd || slot >= inventory.BagSlotEnd || seen[slot] {
+		if slot < inventory.EquipmentSlotEnd || slot >= inventory.MaxBagEnd || seen[slot] {
 			return ProcessRequest{}, Refusal(0x10)
 		}
 		seen[slot] = true
@@ -89,7 +92,9 @@ func (c *Catalog) processInputs(items []inventory.Item, r ProcessRequest) (map[u
 	}
 	seen := map[uint8]bool{}
 	for _, slot := range r.Slots {
-		if slot < inventory.EquipmentSlotEnd || slot >= inventory.BagSlotEnd || seen[slot] {
+		// items holds the character's bag only: a slot past its capacity
+		// has no row and is refused below.
+		if slot < inventory.EquipmentSlotEnd || slot >= inventory.MaxBagEnd || seen[slot] {
 			return nil, Refusal(0x10)
 		}
 		seen[slot] = true
@@ -193,7 +198,7 @@ func (c *Catalog) Compound(items []inventory.Item, r ProcessRequest, roll Roll) 
 		products = append(products, Product{Reference: product, Quantity: 1, Plus: plus})
 		out.Completed = 1
 	}
-	out.Items, err = allocateProducts(items, consume, products)
+	out.Items, err = allocateProducts(items, consume, products, r.BagEnd)
 	return out, err
 }
 
@@ -223,7 +228,7 @@ func assimilationValues(params ...uint32) []uint8 {
 }
 
 func (c *Catalog) consumeRondo(rows map[uint8]inventory.Item, consume map[uint8]uint32, name string, amount uint64) error {
-	for slot := inventory.EquipmentSlotEnd; slot < inventory.BagSlotEnd && amount > 0; slot++ {
+	for slot := inventory.EquipmentSlotEnd; slot < inventory.MaxBagEnd && amount > 0; slot++ {
 		i, ok := rows[slot]
 		if !ok || i.Codename != name {
 			continue
@@ -242,7 +247,10 @@ func (c *Catalog) consumeRondo(rows map[uint8]inventory.Item, consume map[uint8]
 	return nil
 }
 
-func allocateProducts(items []inventory.Item, consume map[uint8]uint32, products []Product) ([]inventory.Item, error) {
+func allocateProducts(items []inventory.Item, consume map[uint8]uint32, products []Product, bagEnd uint8) ([]inventory.Item, error) {
+	if bagEnd <= inventory.EquipmentSlotEnd {
+		return nil, fmt.Errorf("alchemy: the request names no bag (BagEnd %d)", bagEnd)
+	}
 	remaining := make([]inventory.Item, 0, len(items))
 	for _, i := range items {
 		n := consume[i.Slot]
@@ -254,7 +262,7 @@ func allocateProducts(items []inventory.Item, consume map[uint8]uint32, products
 			remaining = append(remaining, i)
 		}
 	}
-	inv := inventory.New(remaining)
+	inv := inventory.New(remaining, bagEnd)
 	for _, p := range products {
 		if p.Reference.Stack == 0 || p.Quantity == 0 {
 			return nil, Refusal(8)

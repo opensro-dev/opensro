@@ -75,7 +75,7 @@ func (rt *Runtime) completeEquipmentPair(inv *inventory.Inventory, source, desti
 			return moves, nil
 		}
 		// Native searches bag slots in order for the matching ammunition family.
-		for slot := uint8(13); slot < inventory.BagSlotEnd; slot++ {
+		for slot := inventory.EquipmentSlotEnd; slot < inv.BagEnd(); slot++ {
 			item, ok := inv.At(slot)
 			if !ok || ammoFamily(item) != wanted {
 				continue

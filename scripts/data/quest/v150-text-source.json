@@ -12,7 +12,8 @@
 				"choices": false,
 				"exp": 65000,
 				"skillExp": 5000,
-				"gold": 12400
+				"gold": 12400,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_GORIA_2",
@@ -41,7 +42,8 @@
 				"choices": false,
 				"exp": 4100,
 				"skillExp": 300,
-				"gold": 750
+				"gold": 750,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_GORIA_3",
@@ -67,7 +69,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_GORIA_6",
@@ -100,7 +103,13 @@
 		},
 		"QNO_CA_GORIA_7": {
 			"objectives": {},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 55000,
+				"skillExp": 4000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CA_GORIA_7",
 				"SN_NC_QNO_CA_GORIA_7",
@@ -146,7 +155,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_HORSE_3",
@@ -186,7 +196,8 @@
 				"choices": false,
 				"exp": 6600,
 				"skillExp": 750,
-				"gold": 1500
+				"gold": 1500,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_THIEF_2_01",
@@ -230,7 +241,8 @@
 				"choices": false,
 				"exp": 1400,
 				"skillExp": 150,
-				"gold": 300
+				"gold": 300,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_THIEF_4",
@@ -265,7 +277,8 @@
 				"choices": false,
 				"exp": 30000,
 				"skillExp": 3500,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_THIEF_5",
@@ -302,7 +315,8 @@
 				"choices": false,
 				"exp": 11000,
 				"skillExp": 1100,
-				"gold": 2300
+				"gold": 2300,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_TREASURE_4_01",
@@ -334,7 +348,8 @@
 				"choices": false,
 				"exp": 4100,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_TREASURE_5",
@@ -372,7 +387,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_WAREHOUSE_1",
@@ -406,7 +422,8 @@
 				"choices": false,
 				"exp": 34000,
 				"skillExp": 4300,
-				"gold": 9000
+				"gold": 9000,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_WAREHOUSE_2",
@@ -445,7 +462,8 @@
 				"choices": false,
 				"exp": 110000,
 				"skillExp": 0,
-				"gold": 22000
+				"gold": 22000,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_WAREHOUSE_3",
@@ -477,7 +495,8 @@
 				"choices": false,
 				"exp": 113000,
 				"skillExp": 0,
-				"gold": 23000
+				"gold": 23000,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_CA_WAREHOUSE_4",
@@ -497,7 +516,13 @@
 		},
 		"QNO_CH_BIGMAN_1": {
 			"objectives": {},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_BIGMAN_1",
 				"SN_NC_QNO_CH_BIGMAN_1",
@@ -561,7 +586,13 @@
 					"count": 100
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 40000,
+				"skillExp": 18700,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_EUROPE_3_01",
 				"SN_CON_QNO_CH_EUROPE_3_02",
@@ -584,7 +615,13 @@
 		},
 		"QNO_CH_LOTTERY_1": {
 			"objectives": {},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_LOTTERY_1",
 				"SN_NC_QNO_CH_LOTTERY_1",
@@ -608,7 +645,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 320400,
+				"skillExp": 187500,
+				"gold": 340000,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_LOTTERY_2",
 				"SN_NC_QNO_CH_LOTTERY_2",
@@ -630,7 +673,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 14400,
+				"skillExp": 3600,
+				"gold": 3800,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_POTION_2",
 				"SN_NC_QNO_CH_POTION_2",
@@ -658,7 +707,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 18000,
+				"skillExp": 4500,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_POTION_4_01",
 				"SN_CON_QNO_CH_POTION_4_02",
@@ -694,7 +749,13 @@
 					"count": 100
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 40000,
+				"skillExp": 18700,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_POTION_5_01",
 				"SN_CON_QNO_CH_POTION_5_02",
@@ -744,7 +805,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 10500,
+				"skillExp": 0,
+				"gold": 3800,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_PRIEST_1",
 				"SN_CON_QNO_CH_PRIEST_1_01",
@@ -776,7 +843,13 @@
 					"count": 30
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_SHAMAN_1",
 				"SN_NC_QNO_CH_SHAMAN_1",
@@ -799,7 +872,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 12700,
+				"skillExp": 4500,
+				"gold": 4000,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_CH_SHAMAN_2",
 				"SN_CON_QNO_CH_SHAMAN_2_01",
@@ -832,7 +911,8 @@
 				"choices": false,
 				"exp": 33000,
 				"skillExp": 0,
-				"gold": 8000
+				"gold": 8000,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_ADVENTURER_1",
@@ -862,7 +942,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_CONS_11",
@@ -890,7 +971,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 300,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_CONS_2",
@@ -918,7 +1000,8 @@
 				"choices": false,
 				"exp": 750,
 				"skillExp": 1000,
-				"gold": 500
+				"gold": 500,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_CONS_3_1",
@@ -948,7 +1031,8 @@
 				"choices": false,
 				"exp": 350,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_CONS_4",
@@ -976,7 +1060,8 @@
 				"choices": false,
 				"exp": 350,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_CONS_6",
@@ -1003,7 +1088,8 @@
 				"choices": false,
 				"exp": 1050,
 				"skillExp": 750,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_CONS_7",
@@ -1043,7 +1129,8 @@
 				"choices": false,
 				"exp": 1300,
 				"skillExp": 500,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_10",
@@ -1287,7 +1374,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_11",
@@ -1341,7 +1429,8 @@
 				"choices": false,
 				"exp": 5100,
 				"skillExp": 1400,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_11_1",
@@ -1382,7 +1471,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_12",
@@ -1409,7 +1499,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_14",
@@ -1459,7 +1550,8 @@
 				"choices": false,
 				"exp": 8500,
 				"skillExp": 2100,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_14_1",
@@ -1500,7 +1592,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_15",
@@ -1527,7 +1620,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_17",
@@ -1582,7 +1676,8 @@
 				"choices": false,
 				"exp": 9500,
 				"skillExp": 2300,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_17_1",
@@ -1624,7 +1719,8 @@
 				"choices": false,
 				"exp": 11400,
 				"skillExp": 2500,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_19",
@@ -1659,7 +1755,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 250,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_2",
@@ -1719,7 +1816,13 @@
 		},
 		"QNO_EU_EASTEU_21": {
 			"objectives": {},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 28300,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_21",
 				"SN_NC_QNO_EU_EASTEU_21",
@@ -1761,7 +1864,8 @@
 				"choices": false,
 				"exp": 19500,
 				"skillExp": 7500,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_3",
@@ -1795,7 +1899,8 @@
 				"choices": false,
 				"exp": 28000,
 				"skillExp": 10000,
-				"gold": 10000
+				"gold": 10000,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_4",
@@ -1824,7 +1929,8 @@
 				"choices": true,
 				"exp": 5100,
 				"skillExp": 1800,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_5",
@@ -1868,7 +1974,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_8",
@@ -1901,7 +2008,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 750,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_EASTEU_9",
@@ -1928,7 +2036,8 @@
 				"choices": true,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_FERRY2_1",
@@ -1956,7 +2065,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_GENERAL_1",
@@ -1996,7 +2106,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_GENERAL_2",
@@ -2024,7 +2135,8 @@
 				"choices": false,
 				"exp": 24000,
 				"skillExp": 2800,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_IVY_1_01",
@@ -2063,7 +2175,8 @@
 				"choices": false,
 				"exp": 60000,
 				"skillExp": 8000,
-				"gold": 15000
+				"gold": 15000,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_IVY_2",
@@ -2092,7 +2205,13 @@
 		},
 		"QNO_EU_IVY_3": {
 			"objectives": {},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 40000,
+				"skillExp": 4000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_EU_IVY_3",
 				"SN_NC_QNO_EU_IVY_3",
@@ -2139,7 +2258,8 @@
 				"choices": false,
 				"exp": 126000,
 				"skillExp": 20000,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_WITCH_1",
@@ -2184,7 +2304,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_EU_WITCH_1_1",
@@ -2210,7 +2331,13 @@
 					"count": 300
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 90000,
+				"gold": 925000,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_KT_ACCESSORY_2",
 				"SN_NC_QNO_KT_ACCESSORY_2",
@@ -2232,7 +2359,13 @@
 					"count": 200
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 96000,
+				"gold": 1000000,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_KT_ACCESSORY_3",
 				"SN_NC_QNO_KT_ACCESSORY_3",
@@ -2254,7 +2387,13 @@
 					"count": 400
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 4775000,
+				"skillExp": 0,
+				"gold": 375000,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_KT_HORSE_1",
 				"SN_NC_QNO_KT_HORSE_1",
@@ -2278,7 +2417,13 @@
 					"count": 300
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 3400000,
+				"skillExp": 90000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_KT_SMITH_2",
 				"SN_NC_QNO_KT_SMITH_2",
@@ -2304,7 +2449,13 @@
 					"count": 200
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 4000000,
+				"skillExp": 96000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_KT_SMITH_3",
 				"SN_NC_QNO_KT_SMITH_3",
@@ -2330,7 +2481,8 @@
 				"choices": false,
 				"exp": 132000,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_FLYSHIP1_2",
@@ -2361,7 +2513,8 @@
 				"choices": false,
 				"exp": 290000,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_FLYSHIP1_3",
@@ -2401,7 +2554,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 20000,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_FLYSHIP2_2",
@@ -2433,7 +2587,8 @@
 				"choices": true,
 				"exp": 4400000,
 				"skillExp": 67000,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_OLDWOMAN_2_01",
@@ -2470,7 +2625,8 @@
 				"choices": false,
 				"exp": 253000,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_OLDWOMAN_3_01",
@@ -2504,7 +2660,8 @@
 				"choices": false,
 				"exp": 111000,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_OLDWOMAN_4",
@@ -2535,7 +2692,8 @@
 				"choices": false,
 				"exp": 2200000,
 				"skillExp": 320000,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_OLDWOMAN_5_01",
@@ -2577,7 +2735,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_OLDWOMAN_6",
@@ -2634,7 +2793,8 @@
 				"choices": false,
 				"exp": 940000,
 				"skillExp": 12000,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_OLDWOMAN_7",
@@ -2668,7 +2828,8 @@
 				"choices": false,
 				"exp": 120000,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_SLAVE1_3_01",
@@ -2710,7 +2871,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_RM_SLAVE2_2",
@@ -2743,7 +2905,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_TRADE_CH_SPECIAL2_1_01",
@@ -2781,7 +2944,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_TRADE_RM_SPECIAL_1_01",
@@ -2819,7 +2983,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_TRADE_TK_SPECIAL_1_01",
@@ -2857,7 +3022,8 @@
 				"choices": false,
 				"exp": 0,
 				"skillExp": 0,
-				"gold": 0
+				"gold": 0,
+				"inventorySlots": 0
 			},
 			"symbols": [
 				"SN_CON_QNO_TRADE_WC_SPECIAL2_1_01",
@@ -2888,7 +3054,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 120000,
+				"skillExp": 3000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_ACCESSORY_3",
 				"SN_CON_QNO_WC_ACCESSORY_3_01",
@@ -2916,7 +3088,13 @@
 					"count": 20
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 75000,
+				"skillExp": 0,
+				"gold": 13500,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_ARMOR_1",
 				"SN_NC_QNO_WC_ARMOR_1",
@@ -2938,7 +3116,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_POTION_3",
 				"SN_CON_QNO_WC_POTION_3_01",
@@ -2972,7 +3156,13 @@
 					"count": null
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 167000,
+				"skillExp": 3000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_POTION_4",
 				"SN_NC_QNO_WC_POTION_4",
@@ -2995,7 +3185,13 @@
 					"count": 30
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 12000,
+				"skillExp": 0,
+				"gold": 3000,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_PRIEST1_1",
 				"SN_NC_QNO_WC_PRIEST1_1",
@@ -3011,7 +3207,13 @@
 					"count": 50
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 221500,
+				"skillExp": 50000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_SMITH_3",
 				"SN_NC_QNO_WC_SMITH_3",
@@ -3034,7 +3236,13 @@
 					"count": 2
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 107000,
+				"skillExp": 3000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_SOLDIER_EA2_3",
 				"SN_NC_QNO_WC_SOLDIER_EA2_3",
@@ -3060,7 +3268,13 @@
 					"count": 100
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 169000,
+				"skillExp": 20000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_WAREHOUSE_W_2",
 				"SN_CON_QNO_WC_WAREHOUSE_W_2_01",
@@ -3089,7 +3303,13 @@
 					"count": 200
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 337000,
+				"skillExp": 40000,
+				"gold": 0,
+				"inventorySlots": 0
+			},
 			"symbols": [
 				"SN_CON_QNO_WC_WAREHOUSE_W_3",
 				"SN_NC_QNO_WC_WAREHOUSE_W_3",
@@ -3112,7 +3332,13 @@
 					"count": 20
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 2
+			},
 			"symbols": [
 				"SN_CON_QSP_CA_EXINVENTORY_2",
 				"SN_NC_QSP_CA_EXINVENTORY_2",
@@ -3134,7 +3360,13 @@
 					"count": 10
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 10
+			},
 			"symbols": [
 				"SN_CON_QSP_CH_EXINVENTORY_1",
 				"SN_NC_QSP_CH_EXINVENTORY_1",
@@ -3156,7 +3388,13 @@
 					"count": 10
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 10
+			},
 			"symbols": [
 				"SN_CON_QSP_EU_EXINVENTORY_1",
 				"SN_NC_QSP_EU_EXINVENTORY_1",
@@ -3178,7 +3416,13 @@
 					"count": 30
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 2
+			},
 			"symbols": [
 				"SN_CON_QSP_KT_EXINVENTORY_3",
 				"SN_NC_QSP_KT_EXINVENTORY_3",
@@ -3201,7 +3445,13 @@
 					"count": 50
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 2
+			},
 			"symbols": [
 				"SN_CON_QSP_RM_EXINVENTORY_4",
 				"SN_NC_QSP_RM_EXINVENTORY_4",
@@ -3223,7 +3473,13 @@
 					"count": 20
 				}
 			},
-			"reward": null,
+			"reward": {
+				"choices": false,
+				"exp": 0,
+				"skillExp": 0,
+				"gold": 0,
+				"inventorySlots": 2
+			},
 			"symbols": [
 				"SN_CON_QSP_WC_EXINVENTORY_2",
 				"SN_NC_QSP_WC_EXINVENTORY_2",

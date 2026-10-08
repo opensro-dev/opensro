@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -117,7 +118,7 @@ func TestClothesHardExclusivityConflictScan(t *testing.T) {
 
 // The forward equip gate: bug C through the move path.
 func TestTransferRefusesClothesOntoWornHardArmor(t *testing.T) {
-	inv := New([]Item{heavyLegs(4), clothesChest(20)})
+	inv := New([]Item{heavyLegs(4), clothesChest(20)}, domain.DefaultInventorySize)
 	before := inv.Items()
 
 	_, fault := inv.Transfer(20, SocketBody, 1, 1)
@@ -137,7 +138,7 @@ func TestTransferRefusesClothesOntoWornHardArmor(t *testing.T) {
 }
 
 func TestTransferRefusesHardArmorOntoWornClothes(t *testing.T) {
-	inv := New([]Item{clothesChest(1), heavyLegs(20)})
+	inv := New([]Item{clothesChest(1), heavyLegs(20)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Transfer(20, SocketLeg, 1, 1); fault == nil || fault.Reason != "clothesHardArmorExclusivity" {
 		t.Fatalf("hard legs over worn clothes = %v, want clothesHardArmorExclusivity", fault)
@@ -145,7 +146,7 @@ func TestTransferRefusesHardArmorOntoWornClothes(t *testing.T) {
 }
 
 func TestTransferAllowsLightPlusHeavy(t *testing.T) {
-	inv := New([]Item{lightChest(1), heavyLegs(20)})
+	inv := New([]Item{lightChest(1), heavyLegs(20)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Transfer(20, SocketLeg, 1, 1); fault != nil {
 		t.Fatalf("a legal light+heavy mix was refused: %v", fault)
@@ -156,7 +157,7 @@ func TestTransferAllowsLightPlusHeavy(t *testing.T) {
 }
 
 func TestTransferAllowsNonArmorWhileClothesWorn(t *testing.T) {
-	inv := New([]Item{clothesChest(1), sword(20)})
+	inv := New([]Item{clothesChest(1), sword(20)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Transfer(20, SocketWeapon, 1, 1); fault != nil {
 		t.Fatalf("equipping a weapon while wearing clothes was refused: %v", fault)
@@ -171,7 +172,7 @@ func TestTransferSwapBackFacesTheExclusivityGate(t *testing.T) {
 	// piece still counts as worn - native walks all six sockets with no
 	// departing-socket exclusion, so this refuses: switching families
 	// requires unequipping first.
-	inv := New([]Item{heavyLegs(4), clothesLegs(20)})
+	inv := New([]Item{heavyLegs(4), clothesLegs(20)}, domain.DefaultInventorySize)
 	before := inv.Items()
 
 	_, fault := inv.Transfer(4, 20, 1, 1)
@@ -189,13 +190,13 @@ func TestTransferSwapBackFacesTheExclusivityGate(t *testing.T) {
 func TestTransferSwapBackValidatesTheSocketClass(t *testing.T) {
 	// The measured back door: unequipping the weapon onto a bagged chest
 	// piece must not put the chest piece in the weapon socket.
-	inv := New([]Item{sword(SocketWeapon), clothesChest(20)})
+	inv := New([]Item{sword(SocketWeapon), clothesChest(20)}, domain.DefaultInventorySize)
 	if _, fault := inv.Transfer(SocketWeapon, 20, 1, 1); fault == nil || fault.Reason != "wrongSocket" {
 		t.Fatalf("unequip onto a chest piece = %v, want wrongSocket", fault)
 	}
 
 	// And a non-equipable occupant refuses outright.
-	inv = New([]Item{sword(SocketWeapon), potion(21)})
+	inv = New([]Item{sword(SocketWeapon), potion(21)}, domain.DefaultInventorySize)
 	if _, fault := inv.Transfer(SocketWeapon, 21, 1, 1); fault == nil || fault.Reason != "notEquipable" {
 		t.Fatalf("unequip onto a potion = %v, want notEquipable", fault)
 	}
@@ -203,7 +204,7 @@ func TestTransferSwapBackValidatesTheSocketClass(t *testing.T) {
 
 func TestTransferUnequipToEmptyBagSlotIsFree(t *testing.T) {
 	// Moving out of a socket into an EMPTY slot seats nothing: no gates.
-	inv := New([]Item{heavyLegs(4), clothesChest(1)})
+	inv := New([]Item{heavyLegs(4), clothesChest(1)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Transfer(4, 20, 1, 1); fault != nil {
 		t.Fatalf("unequipping into an empty slot was refused: %v", fault)
@@ -217,7 +218,7 @@ func TestTransferSwapBackAllowsALegalOccupant(t *testing.T) {
 	// Weapon-for-weapon swap through the bag: both directions legal.
 	spare := Item{Slot: 20, RefObjID: 11460, Codename: "ITEM_CH_SWORD_02_A_RARE",
 		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Quantity: 1}
-	inv := New([]Item{sword(SocketWeapon), spare})
+	inv := New([]Item{sword(SocketWeapon), spare}, domain.DefaultInventorySize)
 
 	applied, fault := inv.Transfer(SocketWeapon, 20, 1, 1)
 	if fault != nil {

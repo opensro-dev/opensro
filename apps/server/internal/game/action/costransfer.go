@@ -10,7 +10,6 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -28,7 +27,7 @@ func (rt *Runtime) applyCosTransfer(c *enterworld.Character, q wire.ItemMoveRequ
 		if !ok {
 			return false
 		}
-		player := inventory.New(invItemsFromRows(c.MissionInventory))
+		player := bagOf(c)
 		source, dest := player, cos
 		if q.MovementType == wire.MoveTypeCosToPlayer {
 			source, dest = cos, player

@@ -157,8 +157,9 @@ func (rt *Runtime) HandleGachaRoll(
 	if err != nil {
 		return nil, err.Error()
 	}
+	// The shape bound; the character's own bag ends where its rows do.
 	if request.InventorySlot < inventory.EquipmentSlotEnd ||
-		request.InventorySlot >= inventory.BagSlotEnd {
+		request.InventorySlot >= inventory.MaxBagEnd {
 		return nil, fmt.Sprintf("inventory slot %d is outside the bag", request.InventorySlot)
 	}
 

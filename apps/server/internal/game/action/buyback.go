@@ -39,7 +39,7 @@ func (rt *Runtime) buybackOffers(c *enterworld.Character, merchant uint32) []buy
 		if ref, ok := rt.deps.ItemReferences().ItemRefByCodename(name); ok && ref != nil {
 			name = ref.Name
 		}
-		previews, err := rt.shopInventoryRows(invItemsFromRows([]enterworld.InventoryRow{e.Item}), nil)
+		previews, err := rt.shopInventoryRows(invItemsFromRowsWithin([]enterworld.InventoryRow{e.Item}, int64(inventory.MaxBagEnd)), nil)
 		if err != nil || len(previews) != 1 {
 			continue
 		}
@@ -153,9 +153,9 @@ func (rt *Runtime) handleBuyback(division string, c *enterworld.Character, npcID
 		if e.Price > balance {
 			return false
 		}
-		before := invItemsFromRows(c.MissionInventory)
-		inv := inventory.New(before)
-		item := invItemsFromRows([]enterworld.InventoryRow{e.Item})[0]
+		before := invItemsFromBag(c)
+		inv := inventory.New(before, inventory.BagEnd(c))
+		item := invItemsFromRowsWithin([]enterworld.InventoryRow{e.Item}, int64(inventory.MaxBagEnd))[0]
 		// Retain the sold stack as one complete object; no metadata-losing merge.
 		if _, err := inv.Grant(item); err != nil {
 			return false

@@ -567,15 +567,27 @@ func failureResult(errorCode uint8) OpResult {
 
 /*
 ==================
-invItemsFromRows
+invItemsFromBag
 
-invItemsFromRows arms the persisted rows for the inventory engine: the
-decimal-string variance becomes a real u64 and a zero stack reads as one
-unit, both exactly like the fixture's wire re-arming.
+invItemsFromBag arms a character's persisted rows, sockets and bag up to
+its capacity byte, for the inventory engine: the decimal-string variance
+becomes a real u64 and a zero stack reads as one unit, both exactly like
+the fixture's wire re-arming.
 ==================
 */
-func invItemsFromRows(rows []enterworld.InventoryRow) []inventory.Item {
-	return invItemsFromRowsWithin(rows, int64(inventory.BagSlotEnd))
+func invItemsFromBag(c *enterworld.Character) []inventory.Item {
+	return invItemsFromRowsWithin(c.MissionInventory, int64(inventory.BagEnd(c)))
+}
+
+/*
+==================
+bagOf
+
+The character's inventory: its rows inside a bag of its own capacity.
+==================
+*/
+func bagOf(c *enterworld.Character) *inventory.Inventory {
+	return inventory.New(invItemsFromBag(c), inventory.BagEnd(c))
 }
 
 /*

@@ -2,6 +2,7 @@ package alchemy
 
 import (
 	"fmt"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"os"
@@ -47,7 +48,7 @@ func TestPublishedCatalog(t *testing.T) {
 				{Slot: 13, RefObjID: ref.ID, Codename: ref.Name, TypeFlags: ref.Flags, Quantity: 1},
 				{Slot: 14, RefObjID: rondo.ID, Codename: rondo.Name, TypeFlags: rondo.Flags, Quantity: 65535},
 			}
-			out, err := c.Dissolve(items, ProcessRequest{Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}, func() (uint32, error) { return rollValue, nil })
+			out, err := c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}, func() (uint32, error) { return rollValue, nil })
 			if err != nil {
 				t.Fatalf("%s %s: %v", key, ref.Name, err)
 			}

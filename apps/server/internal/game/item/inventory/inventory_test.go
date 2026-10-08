@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -23,7 +24,7 @@ func potion(slot uint8) Item {
 }
 
 func TestMoveIntoEmptyBagSlot(t *testing.T) {
-	inv := New([]Item{sword(13)})
+	inv := New([]Item{sword(13)}, domain.DefaultInventorySize)
 
 	got, fault := inv.Move(13, 20)
 	if fault != nil {
@@ -45,7 +46,7 @@ func TestMoveIntoEmptyBagSlot(t *testing.T) {
 }
 
 func TestMoveSwapsWhenDestinationOccupied(t *testing.T) {
-	inv := New([]Item{sword(13), potion(20)})
+	inv := New([]Item{sword(13), potion(20)}, domain.DefaultInventorySize)
 
 	got, fault := inv.Move(13, 20)
 	if fault != nil {
@@ -121,7 +122,7 @@ func TestMoveRefusals(t *testing.T) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			inv := New(testCase.items)
+			inv := New(testCase.items, domain.DefaultInventorySize)
 			before := inv.Items()
 
 			_, fault := inv.Move(testCase.sourceSlot, testCase.destSlot)
@@ -142,7 +143,7 @@ func TestMoveRefusals(t *testing.T) {
 }
 
 func TestMoveAllowsWeaponIntoWeaponSocket(t *testing.T) {
-	inv := New([]Item{sword(13)})
+	inv := New([]Item{sword(13)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Move(13, SocketWeapon); fault != nil {
 		t.Fatalf("equipping a sword into the weapon socket was refused: %v", fault)
@@ -156,7 +157,7 @@ func TestMoveAllowsRingIntoSecondHand(t *testing.T) {
 	// TID 3.1.5.3: CH ring -> SocketRing, accepted in either hand.
 	ring := Item{Slot: 13, RefObjID: 2000, Codename: "ITEM_CH_RING_01_A_RARE",
 		TypeFlags: wire.PackTypeFlags(3, 1, 5, 3), Quantity: 1}
-	inv := New([]Item{ring})
+	inv := New([]Item{ring}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Move(13, SocketRingSecond); fault != nil {
 		t.Fatalf("a ring was refused by the second hand: %v", fault)
@@ -164,7 +165,7 @@ func TestMoveAllowsRingIntoSecondHand(t *testing.T) {
 }
 
 func TestDropRemovesTheRow(t *testing.T) {
-	inv := New([]Item{sword(13), potion(20)})
+	inv := New([]Item{sword(13), potion(20)}, domain.DefaultInventorySize)
 
 	dropped, fault := inv.Drop(13)
 	if fault != nil {
@@ -186,7 +187,7 @@ func TestDropRemovesTheRow(t *testing.T) {
 }
 
 func TestDropRefusals(t *testing.T) {
-	inv := New([]Item{sword(13)})
+	inv := New([]Item{sword(13)}, domain.DefaultInventorySize)
 
 	if _, fault := inv.Drop(45); fault == nil || fault.Reason != "slotOutOfRange" {
 		t.Fatalf("dropping an out-of-range slot = %v, want slotOutOfRange", fault)
@@ -203,7 +204,7 @@ func TestDropRefusals(t *testing.T) {
 // plane can never masquerade as a working gate.
 func TestDropRefusesEquippedItemButBagDropStillWorks(t *testing.T) {
 	// A sword worn in the weapon socket (equipment band) plus a bag row.
-	inv := New([]Item{sword(6), potion(20)})
+	inv := New([]Item{sword(6), potion(20)}, domain.DefaultInventorySize)
 
 	dropped, fault := inv.Drop(6)
 	if fault == nil {
@@ -232,7 +233,7 @@ func TestDropRefusesEquippedItemButBagDropStillWorks(t *testing.T) {
 	}
 
 	// DropQuantity guards the same band on the fixture partial-drop path.
-	inv2 := New([]Item{sword(6)})
+	inv2 := New([]Item{sword(6)}, domain.DefaultInventorySize)
 	if _, fault := inv2.DropQuantity(6, 1); fault == nil || fault.Code != wire.ErrCodeCannotDropEquipped {
 		t.Fatalf("DropQuantity from an equipment socket = %v, want 01:6d refusal", fault)
 	}
@@ -240,7 +241,7 @@ func TestDropRefusesEquippedItemButBagDropStillWorks(t *testing.T) {
 
 // A grant lands in the lowest free bag slot, never in an equipment socket.
 func TestGrantTakesTheFirstFreeBagSlot(t *testing.T) {
-	inv := New([]Item{sword(13), sword(14), sword(16)})
+	inv := New([]Item{sword(13), sword(14), sword(16)}, domain.DefaultInventorySize)
 
 	slot, fault := inv.Grant(potion(0))
 	if fault != nil {
@@ -260,11 +261,11 @@ func TestGrantTakesTheFirstFreeBagSlot(t *testing.T) {
 
 func TestGrantIgnoresFreeEquipmentSockets(t *testing.T) {
 	// Every bag slot taken, all equipment sockets free.
-	items := make([]Item, 0, int(BagCapacity))
-	for wireSlot := EquipmentSlotEnd; wireSlot < BagSlotEnd; wireSlot++ {
+	items := make([]Item, 0, int((domain.DefaultInventorySize - EquipmentSlotEnd)))
+	for wireSlot := EquipmentSlotEnd; wireSlot < domain.DefaultInventorySize; wireSlot++ {
 		items = append(items, sword(wireSlot))
 	}
-	inv := New(items)
+	inv := New(items, domain.DefaultInventorySize)
 
 	if _, ok := inv.FirstFreeBagSlot(); ok {
 		t.Fatal("a full bag reported a free slot")
@@ -283,7 +284,7 @@ func TestGrantIgnoresFreeEquipmentSockets(t *testing.T) {
 }
 
 func TestGrantDefaultsQuantityToOne(t *testing.T) {
-	inv := New(nil)
+	inv := New(nil, domain.DefaultInventorySize)
 
 	slot, fault := inv.Grant(Item{RefObjID: 11459, Codename: "ITEM_CH_SWORD_01_A_RARE"})
 	if fault != nil {
@@ -309,7 +310,7 @@ func TestItemBodyMirrorsTheRow(t *testing.T) {
 // New must copy, so a caller's slice cannot be mutated behind its back.
 func TestNewCopiesTheRows(t *testing.T) {
 	original := []Item{sword(13)}
-	inv := New(original)
+	inv := New(original, domain.DefaultInventorySize)
 
 	if _, fault := inv.Move(13, 20); fault != nil {
 		t.Fatalf("Move refused: %v", fault)

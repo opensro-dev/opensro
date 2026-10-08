@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/inventory"
 )
 
@@ -89,7 +90,7 @@ func TestWireFixture(t *testing.T) {
 		corpus = append(corpus, s)
 	}
 	c, inputs := processFixture()
-	request := ProcessRequest{Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}
+	request := ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 2, Quantity: 1, Slots: []uint8{13, 14, 15, 16, 17}}
 	result, err := c.Compound(inputs, request, sequence(t, 0))
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +101,7 @@ func TestWireFixture(t *testing.T) {
 	}
 	corpus = append(corpus, s)
 	c, inputs = dissolveProfileFixture(t)
-	request = ProcessRequest{Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}
+	request = ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{14, 13}}
 	result, err = c.Dissolve(inputs, request, func() (uint32, error) { return 0, nil })
 	if err != nil {
 		t.Fatal(err)

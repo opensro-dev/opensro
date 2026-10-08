@@ -24,6 +24,7 @@ package quest
 import (
 	"fmt"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -144,7 +145,10 @@ type QuestSpec struct {
 	Codename             string
 	RequiredQuests       []string
 	RequiredActiveQuests []string
-	Repeatable           bool
+	// RequiredAnyQuests is quest list 0x114 (+0x450): one of these completed
+	// suffices (CBasicQuest_MeetsPrerequisites 9262A0).
+	RequiredAnyQuests []string
+	Repeatable        bool
 	// KindByte is the wire u10 the CIFQuestReward content button
 	// switches on (sub_5c26e0): 1/7/8 open the give-up window, 2 opens
 	// the REWARD window (its action button composes 0x729A - the
@@ -178,6 +182,15 @@ type QuestSpec struct {
 	// RewardChoiceCheckCountry is _RefQuestReward IsCheckCountry: a choice
 	// whose item belongs to the other country is not offered.
 	RewardChoiceCheckCountry bool
+	// RewardInventorySlots is the reward row's inventory slots (byte +0x3db,
+	// paid after the items and gold by CBasicQuest_PayRewardRow 924CF0). They
+	// wait for the next world entry (domain.GrantInventoryExpansion).
+	RewardInventorySlots uint8
+	// TurnInGold is a fee the completing NPC takes once the reward is paid
+	// (QSP_KT_EXINVENTORY_3, 8CF8F0). A character who cannot pay it is
+	// answered with TurnInGoldShortSymbol and keeps the quest.
+	TurnInGold            int64
+	TurnInGoldShortSymbol string
 	// NPC/session fields are codename/symbol keyed because their numeric IDs
 	// are version-local. They are curated only where shipped dialogue text
 	// and the v1.188 mechanism establish a complete interaction segment.
@@ -349,6 +362,7 @@ type Definition struct {
 	RequiredQuestIDs       []uint32
 	CompletedByIDs         []uint32
 	RequiredActiveQuestIDs []uint32
+	RequiredAnyQuestIDs    []uint32
 }
 
 /*
@@ -515,6 +529,12 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		defs.ordered = append(defs.ordered, def)
 	}
 	for _, def := range defs.byCodename {
+		if def.TurnInGold < 0 || def.TurnInGold > 0 && def.TurnInGoldShortSymbol == "" {
+			return nil, fmt.Errorf("quest %s: a turn-in fee needs a positive amount and its shortage line", def.Codename)
+		}
+		if int(def.RewardInventorySlots) > int(domain.MaxInventorySize-domain.DefaultInventorySize) {
+			return nil, fmt.Errorf("quest %s: %d inventory slots exceed any bag", def.Codename, def.RewardInventorySlots)
+		}
 		for _, code := range def.RequiredActiveQuests {
 			parent, ok := defs.byCodename[code]
 			if !ok {
@@ -535,6 +555,16 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 				return nil, fmt.Errorf("quest %s requires unavailable predecessor %s", def.Codename, code)
 			}
 			def.RequiredQuestIDs = append(def.RequiredQuestIDs, parent.ID)
+			if _, loaded := defs.byCodename[code]; !loaded {
+				defs.externalPrerequisites[parent.ID] = true
+			}
+		}
+		for _, code := range def.RequiredAnyQuests {
+			parent, ok := catalog.QuestByCodename(code)
+			if !ok {
+				return nil, fmt.Errorf("quest %s requires unavailable predecessor %s", def.Codename, code)
+			}
+			def.RequiredAnyQuestIDs = append(def.RequiredAnyQuestIDs, parent.ID)
 			if _, loaded := defs.byCodename[code]; !loaded {
 				defs.externalPrerequisites[parent.ID] = true
 			}

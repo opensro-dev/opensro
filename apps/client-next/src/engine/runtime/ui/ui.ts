@@ -3495,10 +3495,15 @@ export function createUi(
 			requestRebirthPrompt( view.gameplay.localGid );
 		} else if ( id === "clear-target" ) sendGameplay( { kind: "release-target" } );
 		else if ( id === "inventory-next" ) {
-			inventoryPage = Math.min(
-				Math.max( 0, Math.ceil( (view.gameplay?.inventorySlotCount ?? 0) / 32 ) - 1 ),
-				inventoryPage + 1
+			// 59DF10 pages the bag alone: the 13 sockets hold no page.
+			const bag = inventorySlots(
+				0,
+				0,
+				view.gameplay?.inventorySlotCount ?? 0,
+				view.gameplay?.equipmentSlotCount ?? 13,
+				0
 			);
+			inventoryPage = Math.min( bag.pages - 1, inventoryPage + 1 );
 		} else if ( id === "inventory-prev" ) inventoryPage = Math.max( 0, inventoryPage - 1 );
 		else if ( id.startsWith( "inventory-page:" ) ) inventoryPage = Number( id.slice( 15 ) );
 		else if ( id === "equipment-view" ) {

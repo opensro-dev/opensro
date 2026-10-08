@@ -278,7 +278,7 @@ func (rt *Runtime) stallOffers(division string, owner *enterworld.Character, s s
 	if snapshot == nil {
 		return nil
 	}
-	bag := inventory.New(invItemsFromRows(snapshot.MissionInventory))
+	bag := bagOf(snapshot)
 	var out []wire.StallOffer
 	for i, slot := range s.Slots {
 		if slot == nil {
@@ -578,7 +578,7 @@ func (rt *Runtime) stallCountRefusal(division string, c *enterworld.Character, b
 	if snapshot == nil {
 		return wire.StallErrBadBagSlot
 	}
-	item, ok := inventory.New(invItemsFromRows(snapshot.MissionInventory)).At(bagSlot)
+	item, ok := bagOf(snapshot).At(bagSlot)
 	if !ok {
 		return wire.StallErrBadBagSlot
 	}
@@ -655,8 +655,8 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 			code = wire.StallErrNotEnoughGold
 			return false
 		}
-		ownerBag := inventory.New(invItemsFromRows(owner.MissionInventory))
-		buyerBag := inventory.New(invItemsFromRows(buyer.MissionInventory))
+		ownerBag := bagOf(owner)
+		buyerBag := bagOf(buyer)
 		if _, free := buyerBag.FirstFreeBagSlot(); !free {
 			code = wire.StallErrInventoryFull
 			return false

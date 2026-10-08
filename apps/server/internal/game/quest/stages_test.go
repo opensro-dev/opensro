@@ -3,6 +3,7 @@ package quest
 import (
 	"bytes"
 	"encoding/json"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/testsupport/licensed"
 	"testing"
 
@@ -165,7 +166,7 @@ func TestStageRewardInventoryFailureIsAtomic(t *testing.T) {
 	if _, err := rt.AdvanceNpcQuest(c, "QTUTORIAL_CH@0", "NPC_CH_GENARAL"); err != nil {
 		t.Fatal(err)
 	}
-	for slot := inventory.EquipmentSlotEnd; slot < inventory.BagSlotEnd; slot++ {
+	for slot := inventory.EquipmentSlotEnd; slot < domain.DefaultInventorySize; slot++ {
 		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(slot), RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01", StackCount: 50})
 	}
 	before, _ := json.Marshal(c)

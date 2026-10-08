@@ -135,9 +135,10 @@ func (rt *Runtime) HandleMallPurchase(division string, character *enterworld.Cha
 	var response []byte
 	var reference wire.Frame
 	balance, err := rt.mallAuthority.PurchaseMall(character, quote.Cost, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) {
-		before := invItemsFromRows(rows)
-		inv := inventory.New(before)
-		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(inventory.BagSlotEnd-inventory.EquipmentSlotEnd))
+		bagEnd := inventory.BagEnd(character)
+		before := invItemsFromRowsWithin(rows, int64(bagEnd))
+		inv := inventory.New(before, bagEnd)
+		destinations, err := commerce.GrantPackage(inv, quote.Offer.Contents, quote.Quantity, uint16(bagEnd-inventory.EquipmentSlotEnd))
 		if err != nil {
 			return nil, err
 		}

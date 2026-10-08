@@ -33,9 +33,15 @@ SQL_FORMAT = "sro-quest-sql-rewards-v2"
 # The reward paragraph of a v1.150 popup opens with this heading.
 REWARD_HEADING = "보상"
 
+# A table record opens with its service flag (or a numeric id) and a tab.
+RECORD_START = re.compile(r"^\d+\t")
+
 
 # ================
 # read_table
+#
+# A popup body may hold line breaks, so a line that does not open a record
+# continues the one above it.
 # ================
 def read_table(path):
 	raw = path.read_bytes()
@@ -43,7 +49,13 @@ def read_table(path):
 		text = raw.decode("utf-16")
 	else:
 		text = raw.decode("cp949")
-	return raw, [line.split("\t") for line in text.splitlines() if line.strip()]
+	records = []
+	for line in text.splitlines():
+		if records and not RECORD_START.match(line):
+			records[-1] += "\n" + line
+		elif line.strip():
+			records.append(line)
+	return raw, [record.split("\t") for record in records]
 
 
 # ================
@@ -57,8 +69,9 @@ def plain(markup):
 # advertised_rewards
 #
 # The numbers the popup's reward paragraph names: EXP (경험치), skill EXP
-# (스킬 경험치) and gold (GOLD / 골드). A choice reward lists its scalars
-# once per choice; they agree, so the first stands.
+# (스킬 경험치), gold (GOLD / 골드) and inventory slots (인벤토리 N칸).
+# A choice reward lists its scalars once per choice; they agree, so the
+# first stands.
 # ================
 def advertised_rewards(body):
 	start = body.find(REWARD_HEADING)
@@ -73,6 +86,7 @@ def advertised_rewards(body):
 		"exp": number(r"(?<!스킬)(?<!스킬 )경험치\s*([\d,]+)"),
 		"skillExp": number(r"스킬\s*경험치\s*([\d,]+)"),
 		"gold": number(r"(?i)(?:GOLD|골드)\s*([\d,]+)"),
+		"inventorySlots": number(r"인벤토리\s*([\d,]+)\s*칸"),
 	}
 
 
@@ -92,12 +106,22 @@ def objective_count(line):
 # ================
 def main():
 	parser = argparse.ArgumentParser(description=__doc__.splitlines()[3])
-	parser.add_argument("--textdata", required=True, help="v1.150 media textdata directory")
-	parser.add_argument("--sql", required=True, help="server SR_GameRefData directory with refqusetreward.txt")
+	parser.add_argument("--textdata", help="v1.150 media textdata directory")
+	parser.add_argument("--sql", help="server SR_GameRefData directory with refqusetreward.txt")
 	args = parser.parse_args()
+	if not args.textdata and not args.sql:
+		parser.error("name --textdata, --sql or both")
 	quests = json.loads((DATA / "compiled-quests-source.json").read_text(encoding="utf-8"))["quests"]
-	textdata, sql = Path(args.textdata), Path(args.sql)
+	if args.textdata:
+		snapshot_text(quests, Path(args.textdata))
+	if args.sql:
+		snapshot_sql(quests, Path(args.sql))
 
+
+# ================
+# snapshot_text
+# ================
+def snapshot_text(quests, textdata):
 	raw, rows = read_table(textdata / "textquest.txt")
 	text = {row[1]: plain(row[2]) for row in rows if len(row) > 2 and row[0] == "1"}
 	snapshot = {"format": TEXT_FORMAT, "textquestSHA256": hashlib.sha256(raw).hexdigest(), "quests": {}}
@@ -116,6 +140,11 @@ def main():
 		}
 	(DATA / "v150-text-source.json").write_text(json.dumps(snapshot, indent="\t", ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
+
+# ================
+# snapshot_sql
+# ================
+def snapshot_sql(quests, sql):
 	reward_raw, reward_rows = read_table(sql / "refqusetreward.txt")
 	item_raw, item_rows = read_table(sql / "refquestrewarditems.txt")
 	rewards = {"format": SQL_FORMAT, "refqusetrewardSHA256": hashlib.sha256(reward_raw).hexdigest(),

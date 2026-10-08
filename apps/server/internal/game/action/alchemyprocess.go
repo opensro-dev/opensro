@@ -36,7 +36,7 @@ func (rt *Runtime) HandleAlchemyProcess(division string, character *enterworld.C
 		return frames
 	}
 	snapshot := character.Snapshot()
-	before := invItemsFromRows(snapshot.MissionInventory)
+	before := invItemsFromBag(snapshot)
 	steps, err := rt.Alchemy.CompoundSteps(before, r)
 	if err != nil {
 		return alchemyFailure(op, err)
@@ -56,7 +56,9 @@ func (rt *Runtime) commitAlchemyProcess(character *enterworld.Character, op uint
 		if character.DeletePending || enterworld.CurrentHP(character) <= 0 {
 			return false
 		}
-		before := invItemsFromRows(character.MissionInventory)
+		before := invItemsFromBag(character)
+		// Products land in the bag the character holds at commit.
+		r.BagEnd = inventory.BagEnd(character)
 		if !compoundInputsUnchanged(before, r.Slots, expected) {
 			err = alchemy.Refusal(6)
 			return false

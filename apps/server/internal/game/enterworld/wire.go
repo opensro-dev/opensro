@@ -312,15 +312,16 @@ func BuildLocalPlayerEntryPayload(character *Character, entry *LocalPlayerEntry,
 	writer.U32(penalty)
 
 	// Inventory block (sub_8675f0 step 2): u8 size, u8 count, then per item
-	// u8 slot + the CSOItem body bytes. The count is a u8; the clamp is
-	// unreachable through the equip-roster deriver (capacity is 45) and
-	// only guards a hand-edited store record from emitting a count that
-	// disagrees with the bodies.
+	// u8 slot + the CSOItem body bytes. The size is the character's capacity
+	// byte, the only place the v1.150 client learns it (CICPlayer+0x1848).
+	// The count is a u8; the clamp is unreachable through the equip-roster
+	// deriver (capacity is at most 77) and only guards a hand-edited store
+	// record from emitting a count that disagrees with the bodies.
 	if len(equipRoster) > 0xff {
 		log.Warnf("bootstrap: char-data equip roster for %s clamped from %d to 255 rows (u8 count)", name, len(equipRoster))
 		equipRoster = equipRoster[:0xff]
 	}
-	writer.U8(inventory.BagSlotEnd)
+	writer.U8(inventory.BagEnd(character))
 	writer.U8(uint8(len(equipRoster)))
 	for _, item := range equipRoster {
 		slot := item.Slot

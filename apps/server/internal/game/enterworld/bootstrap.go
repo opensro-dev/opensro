@@ -148,7 +148,16 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())
 		}
 	}
-	return buildCharacterProjection(deps, divisionID, character)
+	// World entry is where the v1.150 client learns its capacity, so slots
+	// an expansion quest paid become usable here (inventory_capacity.go).
+	presented := character.PresentInventoryExpansion()
+	result := buildCharacterProjection(deps, divisionID, character)
+	if presented && result.NativeResult == nativeResultSuccess {
+		deps.Mutate(liveCharacter, "inventory-expansion", func() {
+			liveCharacter.AdoptInventorySize(character.InventorySize)
+		})
+	}
+	return result
 }
 
 /*

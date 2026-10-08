@@ -159,7 +159,7 @@ func RefillStarterPotions(character *Character, refills []StarterRefill) int {
 		rows := append([]InventoryRow(nil), character.MissionInventory...)
 		raised := false
 		for i, row := range rows {
-			if row.RefObjID == item.RefObjID && row.StackCount > 0 && row.StackCount < full && isBagSlot(row.Slot) {
+			if row.RefObjID == item.RefObjID && row.StackCount > 0 && row.StackCount < full && isBagSlot(character, row.Slot) {
 				rows[i].StackCount = full
 				raised = true
 				break
@@ -192,7 +192,7 @@ The total of one item across the bag.
 func heldCount(character *Character, refObjID uint32) int64 {
 	var total int64
 	for _, row := range character.MissionInventory {
-		if row.RefObjID == refObjID && row.StackCount > 0 && isBagSlot(row.Slot) {
+		if row.RefObjID == refObjID && row.StackCount > 0 && isBagSlot(character, row.Slot) {
 			total += row.StackCount
 		}
 	}
@@ -204,6 +204,6 @@ func heldCount(character *Character, refObjID uint32) int64 {
 isBagSlot
 ================
 */
-func isBagSlot(slot int64) bool {
-	return slot >= int64(inventory.EquipmentSlotEnd) && slot < int64(inventory.BagSlotEnd)
+func isBagSlot(character *Character, slot int64) bool {
+	return slot >= int64(inventory.EquipmentSlotEnd) && slot < int64(inventory.BagEnd(character))
 }

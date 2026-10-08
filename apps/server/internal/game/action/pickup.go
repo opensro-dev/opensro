@@ -207,7 +207,7 @@ func (rt *Runtime) grantPickup(
 		if character.DeletePending {
 			return false
 		}
-		inv := inventory.New(invItemsFromRows(character.MissionInventory))
+		inv := bagOf(character)
 		var fault *inventory.Fault
 		grant, fault = inv.GrantStack(inventory.Item{
 			RecordID:          groundItem.RecordID,

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -832,7 +833,7 @@ func TestInventoryRowRoundTrip(t *testing.T) {
 			TypeFlags: 0x132C, Plus: 3, VarianceBits: "9223372036854775808",
 			Durability: 69, StackCount: 1},
 	}
-	items := invItemsFromRows(rows)
+	items := invItemsFromRowsWithin(rows, int64(domain.DefaultInventorySize))
 	if len(items) != 1 || items[0].VarianceBits != 0x8000000000000000 {
 		t.Fatalf("armed rows = %+v, want the top-bit variance", items)
 	}

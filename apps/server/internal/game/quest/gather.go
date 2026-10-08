@@ -194,13 +194,13 @@ even when its resulting material could stack onto an existing inventory row.
 ================
 */
 func emptyQuestBagSlot(c *enterworld.Character) bool {
-	var occupied [inventory.BagSlotEnd]bool
+	var occupied [inventory.MaxBagEnd]bool
 	for _, row := range c.MissionInventory {
-		if row.Slot >= int64(inventory.EquipmentSlotEnd) && row.Slot < int64(inventory.BagSlotEnd) {
+		if inventory.InBag(c, row.Slot) {
 			occupied[row.Slot] = true
 		}
 	}
-	for slot := inventory.EquipmentSlotEnd; slot < inventory.BagSlotEnd; slot++ {
+	for slot := inventory.EquipmentSlotEnd; slot < inventory.BagEnd(c); slot++ {
 		if !occupied[slot] {
 			return true
 		}

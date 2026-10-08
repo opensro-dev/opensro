@@ -197,7 +197,7 @@ func (rt *Runtime) dropOnDeathInDoor(division string, c *enterworld.Character, k
 	if !ok {
 		return cost
 	}
-	inv := inventory.New(invItemsFromRows(c.MissionInventory))
+	inv := bagOf(c)
 	dropped, fault := inv.DeathDrop(uint8(slot))
 	if fault != nil {
 		return cost
@@ -234,7 +234,7 @@ latch (+0x15C) never overlaps a death: item use here is synchronous.
 ================
 */
 func (rt *Runtime) deathDropSlots(c *enterworld.Character) []pk.DropSlot {
-	slots := make([]pk.DropSlot, inventory.BagSlotEnd)
+	slots := make([]pk.DropSlot, inventory.BagEnd(c))
 	refs := rt.deps.ItemReferences()
 	for _, row := range c.MissionInventory {
 		if row.Slot < 0 || row.Slot >= int64(len(slots)) {

@@ -110,7 +110,7 @@ func TestMallNativePurchaseDispatch(t *testing.T) {
 	if projection.MallBalance != want || len(projection.Items) != 1 || projection.Items[0].Slot != 13 {
 		t.Fatalf("wrong committed projection: %+v", projection)
 	}
-	item, ok := inventory.New(invItemsFromRows(c.MissionInventory)).At(13)
+	item, ok := inventory.New(invItemsFromBag(c), domain.DefaultInventorySize).At(13)
 	if !ok || item.Quantity != 20 {
 		t.Fatalf("lost authored package quantity: %+v", item)
 	}
@@ -155,7 +155,7 @@ func TestMallForgedPurchasesCannotMutate(t *testing.T) {
 			case "commit":
 				authority.fail = true
 			case "full":
-				for slot := int64(inventory.EquipmentSlotEnd); slot < int64(inventory.BagSlotEnd); slot++ {
+				for slot := int64(inventory.EquipmentSlotEnd); slot < int64(domain.DefaultInventorySize); slot++ {
 					if slot == 20 {
 						continue
 					}

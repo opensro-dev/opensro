@@ -13,7 +13,7 @@ import (
 
 func TestStorageIdentityReconnectAndGroundSnapshot(t *testing.T) {
 	const id = uint64(0xfedcba9876543210)
-	inv := inventory.New([]inventory.Item{{Slot: 13, RefObjID: 3630, Quantity: 20, RecordID: id, MagicOptions: []uint64{123}}})
+	inv := inventory.New([]inventory.Item{{Slot: 13, RefObjID: 3630, Quantity: 20, RecordID: id, MagicOptions: []uint64{123}}}, domain.DefaultInventorySize)
 	rows := rowsFromInvItems(inv.Items())
 	encoded, err := json.Marshal(rows)
 	if err != nil {
@@ -23,7 +23,7 @@ func TestStorageIdentityReconnectAndGroundSnapshot(t *testing.T) {
 	if err := json.Unmarshal(encoded, &restored); err != nil {
 		t.Fatal(err)
 	}
-	inv = inventory.New(invItemsFromRows(restored))
+	inv = inventory.New(invItemsFromRowsWithin(restored, int64(domain.DefaultInventorySize)), domain.DefaultInventorySize)
 	dropped, fault := inv.DropQuantity(13, 20)
 	if fault != nil || dropped.RecordID != id {
 		t.Fatalf("full drop lost identity: %+v %v", dropped, fault)

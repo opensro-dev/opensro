@@ -39,6 +39,11 @@ func validateCharacterIdentity(character *domain.Character) error {
 	if !domain.AccountIDValid(character.AccountID) {
 		return fmt.Errorf("character %q has an invalid account id", character.Name)
 	}
+	if !character.InventoryCapacityValid() {
+		return fmt.Errorf("character %q inventory capacity %d (+%d waiting) is outside %d..%d",
+			character.Name, character.InventorySize, character.InventoryExpansion,
+			domain.DefaultInventorySize, domain.MaxInventorySize)
+	}
 	return nil
 }
 

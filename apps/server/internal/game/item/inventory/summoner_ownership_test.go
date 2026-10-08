@@ -21,7 +21,7 @@ TestSummonerTransferPreservesDetachedRecordAndRejectsDuplication
 func TestSummonerTransferPreservesDetachedRecordAndRejectsDuplication(t *testing.T) {
 	pet := &domain.CharacterCOS{RefObjID: 77, Name: "Saved", CurrentHP: 42, Experience: 900, StateFlags: 1, Container: &domain.COSContainer{Capacity: 28, Rows: []domain.InventoryRow{{Slot: 0, StackCount: 3}}}}
 	item := Item{Slot: 13, RefObjID: 9, TypeFlags: 0x8cc, Quantity: 1, Summon: pet}
-	bag := New([]Item{item})
+	bag := New([]Item{item}, domain.DefaultInventorySize)
 	room, fault := NewStorageRoom(nil, 150)
 	if fault != nil {
 		t.Fatal(fault)
@@ -49,7 +49,7 @@ func TestSummonerTransferPreservesDetachedRecordAndRejectsDuplication(t *testing
 		if summoned {
 			corrupt.Quantity = 1
 		}
-		inv := New([]Item{corrupt})
+		inv := New([]Item{corrupt}, domain.DefaultInventorySize)
 		if _, fault = inv.Drop(13); fault == nil {
 			t.Fatal("dropped invalid/live companion")
 		}

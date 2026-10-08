@@ -211,7 +211,7 @@ func (rt *Runtime) jobWearRefusal(division string, c *enterworld.Character, sour
 		return jobWearErrGradeLimit
 	}
 	// The ordinary equip gates (level, sex, country) on a trial move.
-	inv := inventory.New(invItemsFromRows(c.MissionInventory))
+	inv := bagOf(c)
 	inv.Requirements = equipRequirements(rt.deps.ItemReferences(), c, rt.FortressGuildRole)
 	if _, fault := inv.Transfer(source, jobSuitSlot, 1, 1); fault != nil {
 		return fault.Code
@@ -248,7 +248,7 @@ func (rt *Runtime) jobStripRefusal(division string, c *enterworld.Character, des
 	if battlefield, known := worldgeom.RegionPlayerCombat(at.RegionID); !known || battlefield {
 		return jobWearErrNoPosition
 	}
-	if _, taken := inventoryRowAt(c, dest); taken || !inventory.IsBagSlot(dest) {
+	if _, taken := inventoryRowAt(c, dest); taken || !inventory.IsBagSlot(dest, inventory.BagEnd(c)) {
 		return jobWearErrBagFull
 	}
 	return 0

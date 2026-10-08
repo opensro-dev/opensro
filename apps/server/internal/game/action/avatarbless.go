@@ -146,7 +146,7 @@ func (rt *Runtime) HandleAvatarBless(division string, character *enterworld.Char
 		if character.DeletePending || !enterworld.CharacterAlive(character) {
 			return false
 		}
-		before := invItemsFromRows(character.MissionInventory)
+		before := invItemsFromBag(character)
 		var result alchemy.Outcome
 		result, err = rt.Alchemy.BlessAvatar(before, slot, codename, rt.AlchemyRoll)
 		if err != nil {

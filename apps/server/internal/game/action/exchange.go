@@ -249,10 +249,10 @@ A bag item that may go on the table.
 ================
 */
 func (rt *Runtime) exchangeOfferable(c *enterworld.Character, slot uint8) (inventory.Item, uint8) {
-	if slot < inventory.EquipmentSlotEnd || slot >= inventory.BagSlotEnd {
+	if slot < inventory.EquipmentSlotEnd || slot >= inventory.BagEnd(c) {
 		return inventory.Item{}, wire.ExchangeErrCannotTrade
 	}
-	item, ok := inventory.New(invItemsFromRows(c.MissionInventory)).At(slot)
+	item, ok := bagOf(c).At(slot)
 	if !ok {
 		return inventory.Item{}, wire.ErrCodeInvalidRequest
 	}
@@ -296,7 +296,7 @@ func (rt *Runtime) publishExchangeOffer(division string, owner *enterworld.Chara
 	if !ok {
 		return
 	}
-	bag := inventory.New(invItemsFromRows(owner.MissionInventory))
+	bag := bagOf(owner)
 	var rows []wire.ExchangeOfferRow
 	for slot, offer := range own.Offers {
 		if offer == nil {
@@ -441,7 +441,7 @@ func (rt *Runtime) commitExchange(division string, c *enterworld.Character) {
 			codeOwn, codePartner = wire.ExchangeErrCancelled, wire.ExchangeErrCancelled
 			return false
 		}
-		mine, theirs := inventory.New(invItemsFromRows(c.MissionInventory)), inventory.New(invItemsFromRows(partner.MissionInventory))
+		mine, theirs := bagOf(c), bagOf(partner)
 		outMine, okMine := takeOffered(mine, own)
 		outTheirs, okTheirs := takeOffered(theirs, partnerSide)
 		if !okMine || !okTheirs || own.Gold > goldOf(c) || partnerSide.Gold > goldOf(partner) {

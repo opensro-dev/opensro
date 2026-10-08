@@ -15,8 +15,8 @@ func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []
 	if c == nil || c.DeletePending {
 		return nil, nil, fmt.Errorf("quest inventory: unavailable character")
 	}
-	before := invItemsFromRows(c.MissionInventory)
-	inv := inventory.New(before)
+	before := invItemsFromBag(c)
+	inv := inventory.New(before, inventory.BagEnd(c))
 	for _, request := range consume {
 		if request.Count == 0 {
 			return nil, nil, fmt.Errorf("zero quest consumption")
@@ -81,7 +81,7 @@ func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []
 		next[row.Slot] = row
 	}
 	// Stable slot order; replacement is delete then grant when identity changes.
-	for slot := inventory.EquipmentSlotEnd; slot < inventory.BagSlotEnd; slot++ {
+	for slot := inventory.EquipmentSlotEnd; slot < inventory.BagEnd(c); slot++ {
 		old, had := previous[slot]
 		row, has := next[slot]
 		if had && (!has || old.RefObjID != row.RefObjID || (!inventory.IsEtcStackableTypeFlags(row.TypeFlags) && !reflect.DeepEqual(old, row))) {
