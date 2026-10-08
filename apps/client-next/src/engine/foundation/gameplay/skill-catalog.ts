@@ -9,7 +9,7 @@ id lookup UI code uses.
 
 ===========================================================================
 */
-import { parsePressAdmit, type PressAdmit } from "./press-admission";
+import { parsePressAdmit, percentOf, type PressAdmit } from "./press-admission";
 import type { Progression } from "./progression";
 /*
 ================
@@ -124,7 +124,7 @@ resourceCostAt). A caster whose rate lowers the cost may pay less.
 ================
 */
 export function skillMpCost( skill: SkillMetadata, maxMp: number ): number {
-	return (skill.mp ?? 0) + Math.trunc( maxMp * (skill.mpPercent ?? 0) / 100 );
+	return ((skill.mp ?? 0) + percentOf( maxMp, skill.mpPercent ?? 0 )) | 0;
 }
 export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 	const source = (value as {

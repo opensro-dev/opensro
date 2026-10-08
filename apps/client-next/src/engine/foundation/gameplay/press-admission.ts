@@ -236,7 +236,7 @@ vitalPercent: signed input times percent / 100, converted by crtFtol.
 The server returns INT32_MIN for a product outside the signed result domain.
 ================
 */
-function percentOf( vital: number, percent: number ): number {
+export function percentOf( vital: number, percent: number ): number {
 	if ( !percent ) return 0;
 	const value = (vital | 0) * (percent / 100);
 	if ( Number.isNaN( value ) || value >= INT32_LIMIT || value < INT32_MIN ) return INT32_MIN;

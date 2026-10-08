@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 const { pressAdmission, parsePressAdmit, equipmentBroken } = await import(
 	"../../src/engine/foundation/gameplay/press-admission.ts"
 );
-const { skillCatalog } = await import( "../../src/engine/foundation/gameplay/skill-catalog.ts" );
+const { skillCatalog, skillMpCost } = await import( "../../src/engine/foundation/gameplay/skill-catalog.ts" );
 
 const ANY = [ 255, 255 ];
 // Item TIDs as typeFlags: TID1 bits 2..4, TID2 5..6, TID3 7..10, TID4 11..15.
@@ -228,6 +228,18 @@ test("HP percentages match the server's signed crtFtol conversion", () => {
 		pressAdmission( press( { hp: 0xffffffff, hpPercent: 200 } ), caster( { maxHp: 0x80000001, hp: 1 } ) ),
 		{ kind: "refuse", code: 0x3013 },
 		"a signed-input product below INT32_MIN also converts to INT32_MIN before flat cost is added"
+	);
+});
+
+test("MP admission shares the server's percentage order and signed sum", () => {
+	const cost = ( mp, mpPercent, maxMp ) => skillMpCost( /** @type {any} */ ({ mp, mpPercent }), maxMp );
+	assert.equal( cost( 0, 29, 100 ), 28, "division precedes multiplication before truncation" );
+	assert.equal( cost( 1, 7, 1015 ), 72 );
+	assert.equal( cost( 0, 200, 0x40000000 ), -0x80000000 );
+	assert.equal( cost( 0x7fffffff, 100, 1 ), -0x80000000, "the combined MP cost is signed int32" );
+	assert.equal(
+		pressAdmission( press( {}, { mpCost: cost( 0, 29, 100 ) } ), caster( { maxMp: 100, mp: 28 } ) ).kind,
+		"admit"
 	);
 });
 
