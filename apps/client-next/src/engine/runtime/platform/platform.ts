@@ -156,7 +156,14 @@ export function createPlatform(
 	try {
 		const stored = localStorage.getItem( windowPositionsKey );
 		if ( stored !== null ) {
-			onUi( { kind: "window-positions", value: windowPositions( JSON.parse( stored ) ) } );
+			let value: WindowPositions | null;
+			try {
+				value = windowPositions( JSON.parse( stored ) );
+			} catch ( error ) {
+				status.value = "Window positions could not be restored: " + String( error );
+				value = null;
+			}
+			onUi( { kind: "window-positions", value } );
 		}
 	} catch ( error ) {
 		status.value = "Window positions could not be restored: " + String( error );
@@ -528,7 +535,12 @@ export function createPlatform(
 		================
 		*/
 		saveWindowPositions( value: WindowPositions ) {
-			localStorage.setItem( windowPositionsKey, JSON.stringify( windowPositions( value ) ) );
+			const saved = windowPositions( value );
+			try {
+				localStorage.setItem( windowPositionsKey, JSON.stringify( saved ) );
+			} catch ( error ) {
+				status.value = "Window positions could not be saved: " + String( error );
+			}
 		},
 		/*
 		================

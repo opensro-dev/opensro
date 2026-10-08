@@ -29,7 +29,8 @@ export function uiFixture(
 	saveSight = () => {},
 	saveBindings = () => {},
 	saveVideo = () => {},
-	saveOptions = () => {}
+	saveOptions = () => {},
+	extensions = {}
 ) {
 	const scenes = [], products = [], textures = [], sounds = [], requested = [], pending = new Map();
 	let nextId = 0;
@@ -99,7 +100,10 @@ export function uiFixture(
 		audioPreference,
 		saveSight,
 		saveBindings,
-		saveVideo
+		saveVideo,
+		undefined,
+		undefined,
+		extensions
 	);
 	const entity = { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0, kind: "player", name: "Player", mountedOn: 0 };
 	const state = {

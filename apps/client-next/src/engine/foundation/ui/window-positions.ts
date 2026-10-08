@@ -10,9 +10,12 @@ file is written at logout and restart, and read when the interface is
 created (CGInterface_LoadWindowPositions 6A06B0), which applies it only
 when the saved width and height equal the active video mode.
 
-The extended quickslot (0x85) is the tenth window; the port keeps its
-position with the rest of its options (extended-quickslot.ts), so it is
-not repeated here. Browser storage belongs to Platform.
+Initial layout follows loading and overwrites the eagerly created windows.
+Only the lazy windows and extended quickslot keep their loaded origins.
+
+The extended quickslot (0x85) is the tenth window and shares this screen
+size gate; its other options belong to extended-quickslot.ts. Browser
+storage belongs to Platform.
 
 ===========================================================================
 */
@@ -26,7 +29,8 @@ export type RememberedWindow =
 	| "cosWindow"
 	| "gameGuide"
 	| "alchemyBox"
-	| "autoPotion";
+	| "autoPotion"
+	| "extendedQuickslot";
 
 /*
 ================
@@ -45,10 +49,16 @@ export function rememberedWindows(): readonly { readonly key: RememberedWindow; 
 		{ key: "cosWindow", nativeId: 0x78 },
 		{ key: "gameGuide", nativeId: 0x20 },
 		{ key: "alchemyBox", nativeId: 0x2c },
-		{ key: "autoPotion", nativeId: 0x87 }
+		{ key: "autoPotion", nativeId: 0x87 },
+		{ key: "extendedQuickslot", nativeId: 0x85 }
 	];
 }
 
+/*
+================
+WindowPositions
+================
+*/
 export interface WindowPositions {
 	readonly width: number;
 	readonly height: number;
@@ -99,6 +109,31 @@ export function positionsForViewport(
 ): WindowPositions["windows"] {
 	if ( !saved || saved.width !== width || saved.height !== height ) return {};
 	return saved.windows;
+}
+
+/*
+================
+positionsAfterLayout
+
+68E626 loads before 68EB28 runs 6A0BC0 layout. That layout repositions
+main popup, store, storage, exchange and world map, so their serialized
+origins must not override the existing layout defaults on world entry.
+================
+*/
+export function positionsAfterLayout( windows: WindowPositions["windows"] ): WindowPositions["windows"] {
+	const restored: Partial<Record<RememberedWindow, readonly [number, number]>> = {};
+	const keys: readonly RememberedWindow[] = [
+		"cosWindow",
+		"gameGuide",
+		"alchemyBox",
+		"autoPotion",
+		"extendedQuickslot"
+	];
+	for ( const key of keys ) {
+		const position = windows[key];
+		if ( position ) restored[key] = position;
+	}
+	return restored;
 }
 
 /*

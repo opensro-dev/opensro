@@ -186,7 +186,7 @@ export type UiEvent =
 		value: import("@/engine/foundation/ui/extended-quickslot").ExtendedQuickslotOptions;
 	}
 	| { kind: "chat-blocks"; value: readonly string[]; }
-	| { kind: "window-positions"; value: import("@/engine/foundation/ui/window-positions").WindowPositions; }
+	| { kind: "window-positions"; value: import("@/engine/foundation/ui/window-positions").WindowPositions | null; }
 	| { kind: "video-preferences"; value: import("@/engine/foundation/rendering/video-options").VideoOptions; }
 	| { kind: "input-preferences"; value: import("@/engine/foundation/ui/input-options").InputOptions; }
 	| { kind: "camera-preferences"; value: import("@/engine/foundation/rendering/camera-options").SightMode; }

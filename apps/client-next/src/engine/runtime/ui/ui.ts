@@ -135,7 +135,11 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
-import type { WindowPositions } from "@/engine/foundation/ui/window-positions";
+import {
+	rememberedWindows,
+	type RememberedWindow,
+	type WindowPositions
+} from "@/engine/foundation/ui/window-positions";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createJobHud } from "./hud/job-hud";
@@ -483,6 +487,8 @@ import type { EntityState } from "@/engine/contracts/world";
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // No video option combo is open (slot -1 is the screen-size combo).
 const VIDEO_COMBO_CLOSED = -99;
+const WORLD_MAP_WIDTH = 652;
+const WORLD_MAP_HEIGHT = 424;
 const VIDEO_FRAME_LIMIT_SLOT = -3;
 const VIDEO_VISIBLE_ROWS = 6;
 const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
@@ -1003,6 +1009,61 @@ export function createUi(
 			positionLock: extPositionLock,
 			position: extPosition
 		} );
+	}
+	/*
+	================
+	persistWindowPositions
+
+	Retire the placement session before UI teardown, including pagehide.
+	leave() makes a later disposal after logout a no-op.
+	================
+	*/
+	function persistWindowPositions( retire = true ) {
+		if ( !view ) return;
+		const root = hud.data()?.root;
+		if ( !retire ) {
+			// Native rejection saves before layout and before lazy children
+			// exist. Asset admission must precede that authored-origin snapshot.
+			if ( !root ) return;
+			const own: Partial<
+				Record<RememberedWindow, readonly [number, number]>
+			> = {};
+			for ( const window of rememberedWindows().slice( 0, 5 ) ) {
+				const node = Object.values( root ).find( node => node.id === window.nativeId );
+				if ( !node ) throw Error( "Missing eager window: " + window.key );
+				own[window.key] = [ node.rect[0], node.rect[1] ];
+			}
+			const remembered = windowPlacement.snapshot( view.width, view.height, own );
+			if ( remembered ) extensions.saveWindowPositions?.( remembered );
+			return;
+		}
+		const popup = mainPopupFrame( view.width, view.height, popupPosition );
+		const own: Partial<
+			Record<RememberedWindow, readonly [number, number]>
+		> = {
+			mainPopup: [ popup[0], popup[1] ],
+			worldMap: [ mapX, mapY ],
+			...(guideX !== null && guideY !== null ? { gameGuide: [ guideX, guideY ] as const } : {}),
+			...(extPosition ? { extendedQuickslot: extPosition } : {})
+		};
+		for (
+			const [key, name, id] of [
+				[ "store", "GDR_STORE", "Shop" ],
+				[ "storageRoom", "GDR_STORAGEROOM", "Storage" ],
+				[ "exchange", "GDR_EXCHANGE", "Exchange" ]
+			] as const
+		) {
+			const frame = windowPlacement.read( "window-drag:" + id ), node = root?.[name];
+			if ( frame && frame[2] > 0 ) own[key] = [ frame[0], frame[1] ];
+			else if ( node ) {
+				own[key] = [
+					Math.trunc( view.width / 2 ) - Math.trunc( node.rect[2] / 2 ),
+					Math.trunc( view.height / 2 ) - Math.trunc( node.rect[3] / 2 )
+				];
+			}
+		}
+		const remembered = windowPlacement.leave( view.width, view.height, own );
+		if ( remembered ) extensions.saveWindowPositions?.( remembered );
 	}
 	const expandedQuests = new Set<number>();
 	let selectedQuest = 0, trackedQuest = 0, confirmAbandon = false, questPage = 0, chatPage = 0;
@@ -3298,9 +3359,9 @@ export function createUi(
 			if ( tab !== shopTab ) {
 				shopTab = tab;
 				shopPage = 0;
-				shopChoice = null;
-				shopDialog = false;
 			}
+			shopChoice = null;
+			shopDialog = false;
 		} else if ( id.startsWith( "shop-offer:" ) || id.startsWith( "shop-buyback:" ) ) {
 			if ( view.gameplay?.shop ) {
 				beginShopDialog(
@@ -4239,7 +4300,6 @@ export function createUi(
 				extTransparent = row.transparent;
 				extSlotLock = row.slotLock;
 				extPositionLock = row.positionLock;
-				extPosition = row.position;
 				dirty = true;
 				return;
 			}
@@ -6048,18 +6108,20 @@ export function createUi(
 					// 6A06B0: the interface opens its windows where the last session
 					// left them at this screen size.
 					const remembered = windowPlacement.enter( next.width, next.height );
-					if ( remembered?.mainPopup ) popupPosition = remembered.mainPopup;
-					if ( remembered?.worldMap ) [mapX, mapY] = remembered.worldMap;
-					if ( remembered?.gameGuide ) [guideX, guideY] = remembered.gameGuide;
+					if ( remembered ) {
+						popupPosition = remembered.mainPopup ?? null;
+						[mapX, mapY] = remembered.worldMap ??
+							[
+								Math.trunc( next.width / 2 ) - WORLD_MAP_WIDTH / 2,
+								Math.trunc( next.height / 2 ) - WORLD_MAP_HEIGHT / 2
+							];
+						guideX = guideY = null;
+						extPosition = null;
+					}
 				}
 				if ( phase !== "world" && !retainedWorld ) {
 					// 6A01B0: logout writes them back before the session's windows go.
-					const remembered = windowPlacement.leave( next.width, next.height, {
-						...(popupPosition ? { mainPopup: popupPosition } : {}),
-						worldMap: [ mapX, mapY ],
-						...(guideX !== null && guideY !== null ? { gameGuide: [ guideX, guideY ] as const } : {})
-					} );
-					if ( remembered ) extensions.saveWindowPositions?.( remembered );
+					persistWindowPositions();
 					guildWarHud.reset( true );
 					windowPlacement.reset();
 					itemMall.reset();
@@ -6135,6 +6197,7 @@ export function createUi(
 					cosGid = 0;
 				}
 			}
+			if ( phase === "world" && windowPlacement.needsInitialSave() ) persistWindowPositions( false );
 			if ( next.session?.servers ) {
 				servers = next.session.servers;
 				if ( !servers.some( s => s.id === selectedServer && s.operating ) ) {
@@ -8258,9 +8321,12 @@ export function createUi(
 						width = extVertical ? (extDouble ? 80 : 44) : (extDouble ? 213 : 405),
 						height = extVertical ? (extDouble ? 212 : 405) : (extDouble ? 76 : 40);
 					const headerWidth = Object.values( layout ).find( n => n.id === 10 )!.rect[2];
-					if ( !extPosition ) extPosition = [ Math.max( 0, w - headerWidth - 26 ), 181 ];
-					const ex = Math.max( 0, Math.min( w - width, extPosition[0] ) ),
-						ey = Math.max( 0, Math.min( h - height, extPosition[1] ) ),
+					if ( !extPosition ) {
+						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [ width, height ] ) ??
+							[ w - headerWidth - 26, 181 ];
+					}
+					const ex = extPosition[0],
+						ey = extPosition[1],
 						alpha = extTransparent ? 110 / 255 : 1;
 					const header = Object.values( layout ).find( n => n.id === 10 )!;
 					controls.push( {
@@ -8367,9 +8433,11 @@ export function createUi(
 					mapPan = [ 0, 0 ];
 					mapCenter = null;
 				}
-				const mapWidth = mapSmall ? 268 : 652, mapHeight = mapSmall ? 296 : 424;
+				const mapWidth = mapSmall ? 268 : WORLD_MAP_WIDTH, mapHeight = mapSmall ? 296 : WORLD_MAP_HEIGHT;
 				const mapLeft = Math.min( mapX, Math.max( 0, w - mapWidth ) ),
 					mapTop = Math.min( mapY, Math.max( 0, h - mapHeight ) );
+				mapX = mapLeft;
+				mapY = mapTop;
 				const mapHits: UiControl[] = [];
 				// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
 				// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
@@ -13883,8 +13951,12 @@ export function createUi(
 						game?.completedQuests ?? []
 					) :
 					[];
-				const gx = Math.max( 0, Math.min( guideX ?? Math.floor( (w - 420) / 2 ), w - 420 ) ),
-					gy = Math.max( 0, Math.min( guideY ?? Math.floor( (h - 452) / 2 ), h - 452 ) ),
+				if ( guideX === null || guideY === null ) {
+					[guideX, guideY] = windowPlacement.takeRemembered( "gameGuide", w, h, [ 420, 452 ] ) ??
+						[ Math.trunc( w / 2 ) - 210, Math.trunc( h / 2 ) - 226 ];
+				}
+				const gx = guideX,
+					gy = guideY,
 					nodes = guideData.layout;
 				controls.push( {
 					id: "guide-drag",
@@ -17321,6 +17393,7 @@ export function createUi(
 		================
 		*/
 		dispose() {
+			if ( !disposed ) persistWindowPositions();
 			itemMall.reset();
 			skillTraining.reset();
 			gauges.reset();
