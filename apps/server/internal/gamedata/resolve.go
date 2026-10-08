@@ -1,6 +1,18 @@
+/*
+===========================================================================
+
+resolve.go - locate and verify the server game-data projection
+
+Source worktrees share generated data and reject unowned local copies.
+Explicit deployment roots also work outside a source checkout. Successful
+verification is cached by artifact identity, never by a guessed path.
+
+===========================================================================
+*/
 package gamedata
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +38,11 @@ const (
 // against it (apps/server/AGENTS.md).
 var defaultRoot = filepath.Join(".generated", "game-data", SupportedGameVersion, SupportedProjection)
 
+/*
+================
+resolveResult
+================
+*/
 type resolveResult struct {
 	ready chan struct{}
 	paths Paths
@@ -37,8 +54,13 @@ var (
 	resolveCache = make(map[string]*resolveResult)
 )
 
-// Paths is the verified process-level game-data identity shared by every
-// authority and gameplay loader.
+/*
+================
+Paths
+
+The verified identity shared by authority and gameplay loaders.
+================
+*/
 type Paths struct {
 	RuntimeRoot           string
 	BundleRoot            string
@@ -48,8 +70,17 @@ type Paths struct {
 	WorldAuthorityDir     string
 }
 
-// Resolve opens and cryptographically verifies the server projection.
+/*
+================
+Resolve
+
+Open and cryptographically verify the server projection.
+================
+*/
 func Resolve() (Paths, error) {
+	if err := config.RequireSourceWorktreeClean(); err != nil {
+		return Paths{}, err
+	}
 	root := strings.TrimSpace(os.Getenv(EnvRoot))
 	if root == "" {
 		moduleRoot, err := mainModuleRoot()
@@ -57,8 +88,10 @@ func Resolve() (Paths, error) {
 			return Paths{}, fmt.Errorf("%s is required outside the source checkout: %w", EnvRoot, err)
 		}
 		root = filepath.Join(moduleRoot, defaultRoot)
-		if _, err := os.Stat(root); err != nil {
+		if _, err := os.Stat(root); errors.Is(err, os.ErrNotExist) {
 			root += ".srogz"
+		} else if err != nil {
+			return Paths{}, fmt.Errorf("inspect server game-data projection %s: %w", root, err)
 		}
 	}
 	runtimeRoot, err := filepath.Abs(root)
@@ -102,11 +135,17 @@ func mainModuleRoot() (string, error) {
 	return filepath.Join(main, inCheckout), nil
 }
 
-// resolveCached verifies one immutable deployment artifact exactly once per
-// process. Concurrent callers share the same first-open work; only successful
-// verifications are retained. The key includes the artifact and manifest file
-// identities plus every deployment pin/path knob, so replacing an artifact or
-// changing configuration forces a fresh cryptographic verification.
+/*
+================
+resolveCached
+
+Verifies one immutable deployment artifact exactly once per process.
+Concurrent callers share the same first-open work; only successful
+verifications are retained. The key includes the artifact and manifest file
+identities plus every deployment pin/path knob, so replacing an artifact or
+changing configuration forces a fresh cryptographic verification.
+================
+*/
 func resolveCached(cacheKey, runtimeRoot, expectedManifestDigest string) (Paths, error) {
 	resolveMu.Lock()
 	if cached := resolveCache[cacheKey]; cached != nil {
@@ -130,6 +169,11 @@ func resolveCached(cacheKey, runtimeRoot, expectedManifestDigest string) (Paths,
 	return paths, resolveErr
 }
 
+/*
+================
+resolveUncached
+================
+*/
 func resolveUncached(runtimeRoot, expectedManifestDigest string) (Paths, error) {
 	root, err := materializeArchive(runtimeRoot)
 	if err != nil {
@@ -149,6 +193,11 @@ func resolveUncached(runtimeRoot, expectedManifestDigest string) (Paths, error) 
 	}, nil
 }
 
+/*
+================
+resolveIdentity
+================
+*/
 func resolveIdentity(runtimeRoot, expectedManifestDigest string) (string, error) {
 	realRoot, err := filepath.EvalSymlinks(runtimeRoot)
 	if err != nil {
@@ -180,8 +229,13 @@ func resolveIdentity(runtimeRoot, expectedManifestDigest string) (string, error)
 	return strings.Join(parts, "\x00"), nil
 }
 
-// ResolveTextdataDir is the narrow accessor used by offline evidence and
-// migration tools. It still resolves through the verified projection.
+/*
+================
+ResolveTextdataDir
+
+Offline evidence and migration tools use the verified projection too.
+================
+*/
 func ResolveTextdataDir() (string, error) {
 	paths, err := Resolve()
 	if err != nil {

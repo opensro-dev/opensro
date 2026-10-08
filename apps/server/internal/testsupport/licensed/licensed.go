@@ -21,8 +21,8 @@ inside it; the extraction and the published assets are not, so the gate
 names their identity in SRO_LICENSED_DATA_IDENTITY and RequireGameData reads
 it: a cached result is then reused only for the data it was produced from.
 
-This package imports nothing from the module, so any package's tests can
-use it, including internal/gamedata's own.
+This package depends only on config within the module, so game-data tests
+can use it without a dependency cycle.
 
 ===========================================================================
 */
@@ -145,6 +145,9 @@ junction and no environment.
 ==================
 */
 func ClientPublicRoot() (string, error) {
+	if err := config.RequireSourceWorktreeClean(); err != nil {
+		return "", err
+	}
 	if root := os.Getenv(GeneratedRootEnv); root != "" {
 		if !filepath.IsAbs(root) {
 			return "", fmt.Errorf("%s must be an absolute path, not %q", GeneratedRootEnv, root)
@@ -192,10 +195,24 @@ func missingGameData() ([]string, error) {
 		filepath.Join(gameRoot, "extracted", "Media_extracted"),
 		filepath.Join(publicRoot, "assets", "packs", "manifest.json"),
 	}
+	return missingPaths(required, os.Stat)
+}
+
+/*
+================
+missingPaths
+
+Only absence may skip licensed tests. Preserve inspection errors so the
+gate inherited from PR349 fails them regardless of RequireEnv.
+================
+*/
+func missingPaths(required []string, stat func(string) (os.FileInfo, error)) ([]string, error) {
 	var missing []string
 	for _, path := range required {
-		if _, statErr := os.Stat(path); statErr != nil {
+		if _, statErr := stat(path); errors.Is(statErr, os.ErrNotExist) {
 			missing = append(missing, filepath.Clean(path))
+		} else if statErr != nil {
+			return nil, fmt.Errorf("inspect licensed data %s: %w", path, statErr)
 		}
 	}
 	return missing, nil
@@ -236,15 +253,15 @@ checkout (config.MainCheckoutRoot).
 ==================
 */
 func resolveGameRoot(repository string) (string, error) {
-	if configured := strings.TrimSpace(os.Getenv("SRO_GAME_ROOT")); configured != "" {
-		return filepath.Abs(configured)
-	}
 	main, err := config.MainCheckoutRoot(repository)
 	if err != nil {
 		return "", err
 	}
 	if err := config.RequireNoWorktreeCopies(repository, main); err != nil {
 		return "", err
+	}
+	if configured := strings.TrimSpace(os.Getenv("SRO_GAME_ROOT")); configured != "" {
+		return filepath.Abs(configured)
 	}
 	return filepath.Join(main, ".."), nil
 }
@@ -262,8 +279,11 @@ func repositoryRoot() (string, error) {
 		return "", err
 	}
 	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
+		filename := filepath.Join(dir, "go.mod")
+		if _, statErr := os.Stat(filename); statErr == nil {
 			return filepath.Join(dir, "..", ".."), nil
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return "", fmt.Errorf("inspect module marker %s: %w", filename, statErr)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

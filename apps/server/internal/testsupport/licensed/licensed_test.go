@@ -118,3 +118,88 @@ func TestGameDataVerdict(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestMissingPathsInspection
+
+The real discovery helper must propagate failures to the PR349 verdict;
+testing the verdict alone cannot catch an error swallowed during stat.
+================
+*/
+func TestMissingPathsInspection(t *testing.T) {
+	root := t.TempDir()
+	present := filepath.Join(root, "present")
+	if err := os.WriteFile(present, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	absent := filepath.Join(root, "absent")
+	missing, err := missingPaths([]string{present, absent}, os.Stat)
+	if err != nil || len(missing) != 1 || missing[0] != absent {
+		t.Fatalf("missing paths = %v, %v", missing, err)
+	}
+	for _, cause := range []error{os.ErrPermission, errors.New("device read failure")} {
+		stat := func(name string) (os.FileInfo, error) {
+			if name == present {
+				return nil, &os.PathError{Op: "stat", Path: name, Err: cause}
+			}
+			return os.Stat(name)
+		}
+		missing, err := missingPaths([]string{absent, present}, stat)
+		if !errors.Is(err, cause) || !strings.Contains(err.Error(), present) {
+			t.Fatalf("inspection error = %v; want cause and path", err)
+		}
+		if verdict, _ := gameDataVerdict(missing, err, false); verdict != gameDataFail {
+			t.Fatalf("inspection failure became verdict %d", verdict)
+		}
+	}
+}
+
+/*
+================
+TestExplicitClientRootStillGuardsServerTree
+================
+*/
+func TestExplicitClientRootStillGuardsServerTree(t *testing.T) {
+	workspace := t.TempDir()
+	main := filepath.Join(workspace, "main")
+	worktree := filepath.Join(workspace, "wt")
+	module := filepath.Join(worktree, "apps", "server")
+	for _, dir := range []string{filepath.Join(main, ".git", "worktrees", "wt"), filepath.Join(module, ".generated")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "wt")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(module)
+	t.Setenv(GeneratedRootEnv, filepath.Join(workspace, "shared"))
+	t.Setenv("SRO_SERVER_GAME_DATA_ROOT", "")
+	t.Setenv("SRO_GAME_ROOT", filepath.Join(workspace, "retail"))
+	if _, err := ClientPublicRoot(); err == nil || !strings.Contains(err.Error(), filepath.Join(module, ".generated")) {
+		t.Fatalf("explicit client root bypassed server guard: %v", err)
+	}
+	if _, err := resolveGameRoot(worktree); err == nil || !strings.Contains(err.Error(), "own generated tree") {
+		t.Fatalf("explicit retail root bypassed guard: %v", err)
+	}
+	t.Setenv("SRO_SERVER_GAME_DATA_ROOT", filepath.Join(workspace, "projection"))
+	if got, err := ClientPublicRoot(); err != nil || got != filepath.Join(workspace, "shared", "client-public") {
+		t.Fatalf("both trees overridden: %q, %v", got, err)
+	}
+}
+
+/*
+================
+TestExplicitClientRootOutsideCheckout
+================
+*/
+func TestExplicitClientRootOutsideCheckout(t *testing.T) {
+	workspace := t.TempDir()
+	t.Chdir(workspace)
+	t.Setenv(GeneratedRootEnv, filepath.Join(workspace, "shared"))
+	t.Setenv("SRO_SERVER_GAME_DATA_ROOT", "")
+	if got, err := ClientPublicRoot(); err != nil || got != filepath.Join(workspace, "shared", "client-public") {
+		t.Fatalf("external client root = %q, %v", got, err)
+	}
+}

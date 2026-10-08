@@ -8,8 +8,10 @@ module_root_test.go - tests for module_root.go
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -77,9 +79,9 @@ func TestWorktreeCopiesFindsCopiesUnlessOverridden(t *testing.T) {
 		}
 	}
 	none := func(string) string { return "" }
-	got := WorktreeCopies(worktree, main, none)
+	got, err := WorktreeCopies(worktree, main, none)
 	want := []string{filepath.Join(worktree, ".generated"), filepath.Join(worktree, "apps", "server", ".generated")}
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+	if err != nil || len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("WorktreeCopies = %v, want %v", got, want)
 	}
 	shared := func(name string) string {
@@ -88,10 +90,56 @@ func TestWorktreeCopiesFindsCopiesUnlessOverridden(t *testing.T) {
 		}
 		return ""
 	}
-	if got := WorktreeCopies(worktree, main, shared); len(got) != 1 || got[0] != want[1] {
+	if got, err := WorktreeCopies(worktree, main, shared); err != nil || len(got) != 1 || got[0] != want[1] {
 		t.Fatalf("an override exempts only its own tree: %v", got)
 	}
-	if got := WorktreeCopies(main, main, none); len(got) != 0 {
+	if got, err := WorktreeCopies(main, main, none); err != nil || len(got) != 0 {
 		t.Fatalf("the main checkout owns its trees: %v", got)
+	}
+}
+
+/*
+================
+TestRootInspectionErrors
+
+Injected errors keep permission and I/O coverage portable, without chmod
+or machine-specific ACLs. Absence remains a valid non-checkout result.
+================
+*/
+func TestRootInspectionErrors(t *testing.T) {
+	root := filepath.Clean(t.TempDir())
+	for _, cause := range []error{os.ErrPermission, errors.New("device read failure")} {
+		stat := func(name string) (os.FileInfo, error) {
+			return nil, &os.PathError{Op: "stat", Path: name, Err: cause}
+		}
+		checks := []struct {
+			name string
+			run  func() error
+		}{
+			{"module", func() error { _, err := findModuleRoot([]string{root}, stat); return err }},
+			{"checkout", func() error { _, err := mainCheckoutRoot(root, stat); return err }},
+			{"source guard", func() error { return requireSourceWorktreeClean(root, stat) }},
+			{"tree", func() error {
+				_, err := worktreeCopies(root, filepath.Join(root, "main"), func(string) string { return "" }, stat)
+				return err
+			}},
+		}
+		for _, check := range checks {
+			t.Run(check.name+"/"+cause.Error(), func(t *testing.T) {
+				err := check.run()
+				if !errors.Is(err, cause) || !strings.Contains(err.Error(), root) {
+					t.Fatalf("inspection error = %v; want cause and path", err)
+				}
+			})
+		}
+	}
+	absent := func(name string) (os.FileInfo, error) {
+		return nil, &os.PathError{Op: "stat", Path: name, Err: os.ErrNotExist}
+	}
+	if got, err := mainCheckoutRoot(root, absent); err != nil || got != filepath.Clean(root) {
+		t.Fatalf("absent checkout = %q, %v", got, err)
+	}
+	if err := requireSourceWorktreeClean(root, absent); err != nil {
+		t.Fatalf("external deployment: %v", err)
 	}
 }

@@ -1,15 +1,31 @@
+/*
+===========================================================================
+
+module_root.go - locate source roots and reject unowned worktree outputs
+
+Explicit deployment roots do not require a source checkout. Inside one,
+each override exempts only its own generated tree. Filesystem failures are
+errors, never evidence that a checkout or generated tree is absent.
+
+===========================================================================
+*/
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// FindModuleRoot locates this Go module from the working directory or the
-// running executable. Source-checkout tools use it to anchor safe defaults;
-// deployed processes should use explicit environment configuration.
+/*
+================
+FindModuleRoot
+
+Locate the module from the working directory or running executable.
+================
+*/
 func FindModuleRoot() (string, error) {
 	starts := make([]string, 0, 2)
 	if cwd, err := os.Getwd(); err == nil {
@@ -18,10 +34,23 @@ func FindModuleRoot() (string, error) {
 	if executable, err := os.Executable(); err == nil {
 		starts = append(starts, filepath.Dir(executable))
 	}
+	return findModuleRoot(starts, os.Stat)
+}
+
+/*
+================
+findModuleRoot
+================
+*/
+func findModuleRoot(starts []string, stat func(string) (os.FileInfo, error)) (string, error) {
 	for _, start := range starts {
 		for dir := filepath.Clean(start); ; dir = filepath.Dir(dir) {
-			if info, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil &&
-				!info.IsDir() {
+			filename := filepath.Join(dir, "go.mod")
+			info, err := stat(filename)
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				return "", fmt.Errorf("inspect module marker %s: %w", filename, err)
+			}
+			if err == nil && !info.IsDir() {
 				return dir, nil
 			}
 			parent := filepath.Dir(dir)
@@ -45,9 +74,24 @@ scripts/sro_paths.py hold the same rule.
 ==================
 */
 func MainCheckoutRoot(checkout string) (string, error) {
+	return mainCheckoutRoot(checkout, os.Stat)
+}
+
+/*
+================
+mainCheckoutRoot
+================
+*/
+func mainCheckoutRoot(checkout string, stat func(string) (os.FileInfo, error)) (string, error) {
 	dotGit := filepath.Join(checkout, ".git")
-	info, err := os.Stat(dotGit)
-	if err != nil || info.IsDir() {
+	info, err := stat(dotGit)
+	if errors.Is(err, os.ErrNotExist) {
+		return filepath.Clean(checkout), nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("inspect checkout marker %s: %w", dotGit, err)
+	}
+	if info.IsDir() {
 		return filepath.Clean(checkout), nil
 	}
 	link, err := os.ReadFile(dotGit)
@@ -86,9 +130,18 @@ Empty for the main checkout. scripts/lib/generatedRoot.mjs and
 scripts/sro_paths.py hold the same rule.
 ==================
 */
-func WorktreeCopies(checkout, main string, lookup func(string) string) []string {
+func WorktreeCopies(checkout, main string, lookup func(string) string) ([]string, error) {
+	return worktreeCopies(checkout, main, lookup, os.Lstat)
+}
+
+/*
+================
+worktreeCopies
+================
+*/
+func worktreeCopies(checkout, main string, lookup func(string) string, lstat func(string) (os.FileInfo, error)) ([]string, error) {
 	if filepath.Clean(checkout) == filepath.Clean(main) {
-		return nil
+		return nil, nil
 	}
 	var copies []string
 	for _, tree := range worktreeTrees {
@@ -96,11 +149,13 @@ func WorktreeCopies(checkout, main string, lookup func(string) string) []string 
 			continue
 		}
 		path := filepath.Join(checkout, tree.tree)
-		if _, err := os.Lstat(path); err == nil {
+		if _, err := lstat(path); err == nil {
 			copies = append(copies, path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("inspect worktree tree %s: %w", path, err)
 		}
 	}
-	return copies
+	return copies, nil
 }
 
 /*
@@ -111,11 +166,55 @@ The error a resolver returns when a worktree holds its own generated tree.
 ==================
 */
 func RequireNoWorktreeCopies(checkout, main string) error {
-	copies := WorktreeCopies(checkout, main, os.Getenv)
+	copies, err := WorktreeCopies(checkout, main, os.Getenv)
+	if err != nil {
+		return err
+	}
 	if len(copies) == 0 {
 		return nil
 	}
 	return fmt.Errorf("this worktree holds its own generated tree: %s; every tool reads and builds the main "+
 		"checkout's (%s); move these aside into temp/ (unlink a symlink or junction, never delete through it) "+
 		"and rerun", strings.Join(copies, ", "), main)
+}
+
+/*
+================
+RequireSourceWorktreeClean
+
+Check the working directory's checkout even when a resolver has an explicit
+root. No .git ancestor means a deployed process, which needs no checkout.
+Do not search beside the executable: an external deployment can use a
+binary built in a worktree without depending on that source tree.
+================
+*/
+func RequireSourceWorktreeClean() error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("locate working directory: %w", err)
+	}
+	return requireSourceWorktreeClean(cwd, os.Lstat)
+}
+
+/*
+================
+requireSourceWorktreeClean
+================
+*/
+func requireSourceWorktreeClean(start string, lstat func(string) (os.FileInfo, error)) error {
+	for dir := filepath.Clean(start); ; dir = filepath.Dir(dir) {
+		marker := filepath.Join(dir, ".git")
+		if _, err := lstat(marker); err == nil {
+			main, err := MainCheckoutRoot(dir)
+			if err != nil {
+				return err
+			}
+			return RequireNoWorktreeCopies(dir, main)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect checkout marker %s: %w", marker, err)
+		}
+		if filepath.Dir(dir) == dir {
+			return nil
+		}
+	}
 }
