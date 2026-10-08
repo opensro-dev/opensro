@@ -72,7 +72,7 @@ import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimation
 import { loadDataAsset, loadMaterialTextures } from "../shared/jmxAssetIO.mjs";
 import { normalizeAssetPath } from "../shared/assetPaths.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
-import { runConvertImages } from "../shared/convertImagesRunner.mjs";
+import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { sha256Hex } from "../shared/hash.mjs";
 import { readJsonOrNullSync, writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { loadOptionalDataAsset } from "../shared/optionalDataAsset.mjs";
@@ -389,16 +389,6 @@ function resolveNpcModel( codename, rows ) {
 	};
 }
 
-/*
-================
-convertTextures
-================
-*/
-async function convertTextures() {
-	const py = await runConvertImages( [ "prim/mtrl" ] );
-	if ( py.status !== 0 ) console.warn( "[npc] texture conversion returned nonzero; continuing (pngs may exist)" );
-}
-
 // The default-set motions bakeCharacterResource requires of a monster resource.
 const BODY_REQUIRED_STATES = [ 0 ];
 const DEATH_REQUIRED_STATES = [ 4, 36 ];
@@ -650,7 +640,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	const publicAssets = options.publicAssetsRoot ?? publicAssetsRoot;
 	const eventRain = parseWeatherEvents( fs.readFileSync( path.join( textdataDir, "skilleffect.txt" ), "utf16le" ) );
 	const skipTextures = options.skipTextures ?? false;
-	if ( !skipTextures ) await convertTextures();
+	if ( !skipTextures ) await convertTextureTrees( "npc", [ "prim/mtrl" ] );
 
 	// Runtime rosters, not codename prefixes, decide what is built. Load the
 	// complete RefObjChar identity table so native NPC-band structure rows and

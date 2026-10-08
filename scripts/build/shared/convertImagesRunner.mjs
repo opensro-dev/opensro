@@ -85,3 +85,39 @@ Resolves { status }.
 ================
 */
 export const runConvertImages = createConvertImagesRunner( spawnConvertImages );
+
+/*
+================
+textureConversionSkipped
+
+SRO_SKIP_TEXTURE_CONVERT=1 reuses the converted images already on disk (a
+fingerprinted build knob for iterating on a model builder).
+================
+*/
+export function textureConversionSkipped() {
+	return process.env.SRO_SKIP_TEXTURE_CONVERT === "1";
+}
+
+/*
+================
+convertTextureTrees
+
+Converts every source texture under the given extracted subtrees before a
+model builder reads them. A failed conversion fails the builder: carrying
+on would publish models textured from whatever an earlier run left on this
+machine, and untextured ones on a fresh clone.
+================
+*/
+export async function convertTextureTrees( label, trees ) {
+	if ( textureConversionSkipped() ) {
+		console.log( `[${label}] skipping texture conversion (SRO_SKIP_TEXTURE_CONVERT=1)` );
+		return;
+	}
+	const result = await runConvertImages( trees );
+	if ( result.status !== 0 ) {
+		throw new Error(
+			`[${label}] texture conversion of ${trees.join( ", " )} exited ${result.status}; ` +
+				"intermediate/image-conversion-failures.txt lists the files"
+		);
+	}
+}

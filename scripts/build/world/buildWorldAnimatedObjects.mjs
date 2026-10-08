@@ -17,7 +17,7 @@ import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { CLIENT_PUBLIC_ROOT } from "../../lib/generatedRoot.mjs";
 import fs from "node:fs";
 import path from "node:path";
-import { runConvertImages } from "../shared/convertImagesRunner.mjs";
+import { runConvertImages, textureConversionSkipped } from "../shared/convertImagesRunner.mjs";
 import { writeJsonIfChangedSync } from "../shared/jsonOut.mjs";
 import { fileURLToPath } from "node:url";
 import { assembleAvatar } from "../char/buildAvatar.mjs";
@@ -174,7 +174,7 @@ export async function buildWorldAnimatedObjects( { skipTextures = false } = {} )
 	}
 
 	// Texture pre-pass: convert only PNGs that are missing on disk.
-	const textureSkip = skipTextures || process.env.SRO_SKIP_TEXTURE_CONVERT === "1";
+	const textureSkip = skipTextures || textureConversionSkipped();
 	if ( !textureSkip ) {
 		const missing = new Set();
 		for ( const { resource } of animatedByBsrPath.values() ) {

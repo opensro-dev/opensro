@@ -24,7 +24,7 @@ import path from "node:path";
 import { assembleAvatar } from "../char/buildAvatar.mjs";
 import { avatarToGlb } from "../char/exportGlb.mjs";
 import { parseBan } from "../char/formats.mjs";
-import { runConvertImages } from "../shared/convertImagesRunner.mjs";
+import { convertTextureTrees } from "../shared/convertImagesRunner.mjs";
 import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { gameRoot, publicAssetsRoot } from "./paths.mjs";
@@ -48,26 +48,11 @@ const outPath = path.join(
 
 /*
 ================
-convertTextures
-================
-*/
-async function convertTextures() {
-	console.log( "[lizard] converting textures (prim/mtrl/interface, prim/mtrl/nature) ..." );
-	for ( const tree of [ "prim/mtrl/interface", "prim/mtrl/nature" ] ) {
-		const res = await runConvertImages( [ tree ] );
-		if ( res.status !== 0 ) {
-			console.warn( `[lizard] texture conversion (${tree}) exited ${res.status}; model may be untextured` );
-		}
-	}
-}
-
-/*
-================
 buildCharacterSelectLizard
 ================
 */
 export async function buildCharacterSelectLizard( { skipTextures = false } = {} ) {
-	if ( !skipTextures ) await convertTextures();
+	if ( !skipTextures ) await convertTextureTrees( "lizard", [ "prim/mtrl/interface", "prim/mtrl/nature" ] );
 
 	const avatar = await assembleAvatar( LIZARD_BSR );
 
