@@ -1127,8 +1127,14 @@ correct
 				moving: !!segment
 			};
 			castHold = null;
+			const wasDisplacing = segment?.fixedTiming;
+			const publishedHistory = segment?.presentationHistory ?? transition.walkingPath;
 			if ( now !== undefined ) advanceTo( now );
-			const previousHistory = segment?.fixedTiming ? undefined : segment?.history ?? transition.walkingPath;
+			// The display can already occupy the checked lookahead. Advance
+			// retires that cache, so retain its proven return edges beforehand.
+			const previousHistory = wasDisplacing || segment?.fixedTiming ?
+				undefined :
+				(pose && rewindWalkingHistory( publishedHistory, pose )) ?? segment?.history ?? transition.walkingPath;
 			beginTransition( "correction" );
 			const before = pose;
 			// A live source correction ends motion, but is not a new spawn.
@@ -1435,8 +1441,12 @@ receive
 			}
 			const previousGoal = segment?.to;
 			const previousTurn = transition.turn;
+			const wasDisplacing = segment?.fixedTiming;
+			const publishedHistory = segment?.presentationHistory ?? transition.walkingPath;
 			advanceTo( now );
-			const previousHistory = segment?.fixedTiming ? undefined : segment?.history ?? transition.walkingPath;
+			const previousHistory = wasDisplacing || segment?.fixedTiming ?
+				undefined :
+				(pose && rewindWalkingHistory( publishedHistory, pose )) ?? segment?.history ?? transition.walkingPath;
 			const previousPath = segment?.admittedFrom && pose ?
 				{
 					from: segment.admittedFrom,

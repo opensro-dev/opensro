@@ -244,6 +244,73 @@ function publish( presentation, state, timed = true ) {
 	);
 }
 
+for ( const kind of [ "correction", "server receipt" ] ) {
+	test(`a ${kind} retains already displayed navigation lookahead before advancing the worker`, () => {
+		const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();
+		navigation.objects = [];
+		movement.seed( FROM );
+		movement.navigation( 257, navigation );
+		movement.request( TO, 0 );
+		if ( kind === "correction" ) {
+			movement.receive(
+				new TextEncoder().encode( JSON.stringify( {
+					v: 1,
+					id: 1,
+					gid: 7,
+					accepted: true,
+					serverTimeMs: 0,
+					world: { spawn: TO, moveSegment: { from: FROM, startedAtMs: 0, arrivesAtMs: 2000 } }
+				} ) ),
+				0,
+				7
+			);
+		}
+		presentation.origin( 0 );
+		publish( presentation, movement.state() );
+		presentation.pose( 7, FROM, 0 );
+		movement.step( 16 );
+		const published = movement.state();
+		assert.ok( published.pose );
+		publish( presentation, published );
+		presentation.pose( 7, published.pose, .016 );
+		const shown = presentation.pose( 7, published.pose, .05 );
+		assert.ok( shown.x > FROM.x + 2.4, "display extrapolates within the admitted 100 ms future" );
+		const corrected = { ...FROM, x: FROM.x + 1.6 - .01512 };
+		if ( kind === "correction" ) movement.correct( corrected, 32 );
+		else {movement.receive(
+				new TextEncoder().encode( JSON.stringify( {
+					v: 1,
+					id: 1,
+					gid: 7,
+					accepted: true,
+					serverTimeMs: 32,
+					world: { spawn: corrected }
+				} ) ),
+				32,
+				7
+			);}
+		const state = movement.state();
+		assert.ok( state.pose );
+		assert.equal( state.moving, false );
+		assert.equal( state.movementTransition.eligible, true );
+		publish( presentation, state );
+		const received = presentation.pose( 7, state.pose, .05 );
+		assert.ok(
+			Math.abs( received.x - shown.x ) < .0001,
+			"a delayed correction cannot discard displayed future proof"
+		);
+		let previous = received;
+		for ( let frame = 1; frame <= 60; frame++ ) {
+			const next = presentation.pose( 7, state.pose, .05 + frame / 120 );
+			assert.ok( next.x <= previous.x && next.x >= state.pose.x );
+			assert.ok( Math.abs( next.z - FROM.z ) < .01 && Math.abs( next.y - FROM.y ) < .01 );
+			previous = next;
+		}
+		assert.ok( Math.abs( previous.x - state.pose.x ) < .01 );
+		movement.clear();
+	});
+}
+
 for ( const kind of [ "correction", "server receipt", "settled receipt" ] ) {
 	test(`a terminal ${kind} retains navigation proof behind its corrected endpoint`, () => {
 		const movement = createMovement( () => {} ), navigation = product();
