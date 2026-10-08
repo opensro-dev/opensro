@@ -9,7 +9,9 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const { createItemMall } = await import( "../../src/engine/runtime/ui/hud/item-mall.ts" );
-const { mallCurrencyRows, mallPageLayout } = await import( "../../src/engine/foundation/ui/item-mall-layout.ts" );
+const { mallCurrencyRows, mallPageLayout, compactMallBagLayout } = await import(
+	"../../src/engine/foundation/ui/item-mall-layout.ts"
+);
 
 /*
 ================
@@ -57,6 +59,125 @@ test("mall category order preserves the independent wire shop address and six-ro
 	assert.equal( mall.read( state ).page, 0 );
 	mall.close();
 	assert.equal( mall.read().visible, false );
+});
+
+test("compact pages keep action indices and purchase identity aligned through rotation", () => {
+	const mall = createItemMall(), state = catalogue();
+	mall.open();
+	mall.browse( 1 );
+	mall.setPageSize( 2 );
+	mall.paginate( 2, state.offers.length );
+	assert.deepEqual( mall.read( state ).offers.map( row => row.slot ), [ 4, 5 ] );
+	mall.choose( mall.read( state ).offers[1] );
+	const purchase = mall.purchase( state );
+	mall.setPageSize( 3 );
+	assert.deepEqual( mall.read( state ).offers.map( row => row.slot ), [ 3, 4, 5 ] );
+	assert.deepEqual( mall.purchase( state ), purchase );
+	mall.setPageSize( 6 );
+	assert.deepEqual( mall.read( state ).offers.map( row => row.slot ), [ 0, 1, 2, 3, 4, 5 ] );
+	mall.paginate( 999, state.offers.length );
+	assert.deepEqual( mall.read( state ).offers.map( row => row.slot ), [ 6, 7 ] );
+	mall.setPageSize( 0 );
+	assert.equal( mall.read( state ).pageSize, 6 );
+	mall.setPageSize( 2 );
+	mall.reset();
+	assert.equal( mall.read( state ).pageSize, 6 );
+});
+
+test("compact populated pages select Buy, Wear and Basket by displayed index without early dispatch", () => {
+	for ( const pageSize of [ 1, 2, 3, 4, 6 ] ) {
+		const mall = createItemMall(), initial = catalogue();
+		const state = {
+			...initial,
+			tabs: [ { shop: 2, tab: 1, category: "MALL_AVATAR", label: "Dress" } ],
+			offers: initial.offers.map( offer => ({ ...offer, tab: 1 }) )
+		};
+		mall.open();
+		mall.browse( 2 );
+		mall.setPageSize( pageSize );
+		mall.previewState( { gid: 99, wearable: state.offers.flatMap( offer => offer.itemIds ) } );
+		const seen = [];
+		for ( let page = 0; page < Math.ceil( state.offers.length / pageSize ); page++ ) {
+			mall.paginate( page, state.offers.length );
+			const displayed = mall.read( state ).offers;
+			for ( let index = 0; index < displayed.length; index++ ) {
+				const offer = mall.read( state ).offers[index];
+				seen.push( offer.packageId );
+				mall.choose( offer );
+				assert.equal( mall.read( state ).selected?.packageId, displayed[index].packageId );
+				assert.equal( mall.purchase( state )?.slot, displayed[index].slot );
+				assert.equal( mall.takeNextPurchase( state ), null, "opening a quote must not queue a purchase" );
+				mall.cancel();
+				assert.equal( mall.purchase( state ), null );
+				assert.equal( mall.takeNextPurchase( state ), null, "cancel must not dispatch" );
+				mall.wear( offer, state );
+				assert.deepEqual( mall.previewRequest(), displayed[index].itemIds );
+				assert.equal( mall.read( state ).worn[0].packageId, displayed[index].packageId );
+				mall.askReserve( offer );
+				assert.equal( mall.read( state ).question?.offers[0].packageId, displayed[index].packageId );
+				assert.equal( mall.takeNextPurchase( state ), null );
+				mall.confirmQuestion( state );
+				assert.equal( mall.takeNextPurchase( state ), null, "basket confirmation is not a purchase" );
+			}
+		}
+		assert.deepEqual( seen, state.offers.map( offer => offer.packageId ) );
+		mall.browse( 7 );
+		assert.equal( mall.read( state ).count, state.offers.length );
+		mall.askBatch( "worn", state );
+		assert.equal( mall.takeNextPurchase( state ), null );
+		mall.cancelQuestion();
+		assert.equal( mall.takeNextPurchase( state ), null );
+		mall.askBatch( "worn", state );
+		mall.confirmQuestion( state );
+		assert.equal(
+			mall.takeNextPurchase( state )?.slot,
+			7,
+			"only explicit confirmation admits the selected worn offer"
+		);
+		assert.equal( mall.takeNextPurchase( state ), null, "confirmation dispatches once" );
+	}
+});
+
+test("compact bag pages keep native cells inside small windows and expose every inventory slot", () => {
+	for ( const [width, height] of [ [ 375, 375 ], [ 320, 568 ], [ 667, 375 ], [ 280, 375 ] ] ) {
+		const seen = [];
+		const options = { width, height, total: 109, equipment: 13, requestedPage: 0 };
+		const first = compactMallBagLayout( options );
+		for ( let page = 0; page < first.pages; page++ ) {
+			const bag = compactMallBagLayout( { ...options, requestedPage: page } );
+			for ( const cell of bag.slots ) {
+				const [x, y, w, h] = cell.rect;
+				assert.deepEqual( [ w, h ], [ 32, 32 ] );
+				assert.ok( x >= 0 && x + w <= width );
+				assert.ok( y >= 124 && y + h <= height - 56, `${width}x${height} ${cell.rect}` );
+				if ( cell.enabled ) seen.push( cell.slot );
+			}
+		}
+		assert.deepEqual( seen, Array.from( { length: 96 }, ( _, i ) => 13 + i ) );
+		assert.equal( compactMallBagLayout( { ...options, requestedPage: 999 } ).page, first.pages - 1 );
+	}
+});
+
+test("secondary compact views preserve catalogue and purchase state and reset on close", () => {
+	const mall = createItemMall(), state = catalogue();
+	mall.open();
+	mall.browse( 1 );
+	mall.setPageSize( 2 );
+	mall.paginate( 2, state.offers.length );
+	const offers = mall.read( state ).offers;
+	assert.equal( mall.compactAction( "item-mall-view:bag" ), true );
+	assert.equal( mall.read( state ).compactView, "bag" );
+	mall.compactAction( "item-mall-bag-slice:2" );
+	assert.equal( mall.read( state ).compactBagPage, 2 );
+	mall.compactAction( "item-mall-view:preview" );
+	assert.equal( mall.read( state ).compactView, "preview" );
+	assert.deepEqual( mall.read( state ).offers, offers );
+	assert.equal( mall.takeNextPurchase( state ), null );
+	assert.equal( mall.compactAction( "item-mall-purchase" ), false );
+	mall.close();
+	assert.equal( mall.read( state ).compactView, "shop" );
+	mall.reset();
+	assert.equal( mall.read( state ).compactBagPage, 0 );
 });
 
 test("confirmation caps packages and points without changing authoritative balances", () => {

@@ -14,6 +14,58 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 const { createTouchCamera } = await import( "../../src/engine/foundation/rendering/touch-camera.ts" );
 
+test("only an unmoved single touch can become a world tap", () => {
+	const touch = createTouchCamera();
+	touch.down( 1, 100, 100, 2 );
+	assert.equal( touch.tap( 1, 100, 100 ), true );
+	touch.move( 1, 130, 100, 2 );
+	touch.move( 1, 100, 100, 2 );
+	assert.equal( touch.tap( 1, 100, 100 ), false, "returning to the start does not restore a tap" );
+	touch.up( 1 );
+	touch.down( 1, 100, 100, 2 );
+	touch.down( 2, 150, 100, 2 );
+	touch.up( 2 );
+	assert.equal( touch.tap( 1, 100, 100 ), false );
+	touch.reset();
+	assert.equal( touch.owns( 1 ), false );
+	assert.equal( touch.tap( 1, 100, 100 ), false );
+	assert.deepEqual( touch.move( 1, 130, 100, 2 ), [] );
+	touch.down( 3, 100, 100, 2 );
+	assert.equal( touch.tap( 3, 100, 100 ), true, "fresh input works after blur" );
+	assert.equal( touch.tap( 3, 150, 100 ), false, "release displacement also cancels" );
+});
+
+test("a UI interruption latches through a pinch until every canvas finger lifts", () => {
+	const touch = createTouchCamera();
+	touch.down( 1, 100, 100, 2 );
+	touch.down( 2, 200, 100, 2 );
+	assert.deepEqual( touch.move( 2, 210, 100, 2 ), [ { kind: "wheel", delta: -50 } ] );
+	assert.deepEqual( touch.interrupt(), [ { kind: "release" } ] );
+	assert.deepEqual( touch.move( 2, 250, 100, 2 ), [], "interrupted two-finger movement cannot zoom" );
+	touch.up( 2 );
+	assert.deepEqual( touch.move( 1, 120, 100, 2 ), [], "remaining finger cannot orbit" );
+	assert.equal( touch.tap( 1, 100, 100 ), false );
+	assert.deepEqual( touch.down( 3, 200, 100, 2 ), [] );
+	assert.deepEqual( touch.move( 3, 250, 100, 2 ), [], "a replacement finger cannot restart zoom" );
+	touch.up( 3 );
+	touch.up( 1 );
+	touch.down( 4, 100, 100, 2 );
+	assert.equal( touch.tap( 4, 100, 100 ), true );
+	touch.down( 5, 200, 100, 2 );
+	assert.deepEqual( touch.move( 5, 210, 100, 2 ), [ { kind: "wheel", delta: -50 } ], "a fresh pinch works" );
+});
+
+test("removing a third finger rebases the surviving pinch without a jump", () => {
+	const touch = createTouchCamera();
+	touch.down( 1, 100, 100, 2 );
+	touch.down( 2, 200, 100, 2 );
+	touch.down( 3, 400, 100, 2 );
+	assert.deepEqual( touch.move( 2, 250, 100, 2 ), [] );
+	touch.up( 1 );
+	assert.deepEqual( touch.move( 2, 250, 100, 2 ), [] );
+	assert.deepEqual( touch.move( 3, 410, 100, 2 ), [ { kind: "wheel", delta: -50 } ] );
+});
+
 test("one finger drags with the camera button and lifts with a release", () => {
 	const touch = createTouchCamera();
 	assert.deepEqual( touch.down( 1, 100, 100, 2 ), [ { kind: "pointer", x: 100, y: 100, buttons: 2 } ] );

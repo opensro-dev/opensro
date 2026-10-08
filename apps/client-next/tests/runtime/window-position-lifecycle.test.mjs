@@ -222,12 +222,29 @@ for ( const restored of [ false, true ] ) {
 			const semantics = f.ui.step( view, 1 );
 			const drag = semantics?.controls.find( control => control.id === "guide-drag" );
 			assert.ok( drag, "guide has been instantiated" );
-			const origin = [ drag.rect[0] - 10, drag.rect[1] - 5 ];
-			assert.deepEqual( origin, restored ? [ -120, -252 ] : [ -60, -126 ] );
-			f.ui.step( { ...view }, 200 );
+			const nativeOrigin = restored ? [ -120, -252 ] : [ -60, -126 ];
+			assert.equal(
+				drag.draggable,
+				false,
+				"compact fitting preserves native positions by disabling window drags"
+			);
+			const [x, y, width, height] = drag.rect;
+			assert.ok( drag.rect.every( Number.isFinite ) );
+			assert.ok( x >= 0 && y >= 0 && width > 0 && height > 0 );
+			assert.ok( x + width <= view.width && y + height <= view.height );
+			assert.ok(
+				!semantics.controls.some( control => control.id === "ext-drag" ),
+				"extra slots start collapsed"
+			);
+			const next = f.ui.step( { ...view }, 200 ) ?? semantics;
+			const nextDrag = next?.controls.find( control => control.id === "guide-drag" );
+			assert.ok( nextDrag );
+			assert.deepEqual( nextDrag.rect, drag.rect, "the fitted title does not drift between frames" );
+			assert.equal( nextDrag.draggable, false );
 			f.dispose();
-			assert.deepEqual( saved.at( -1 ).windows.gameGuide, origin );
-			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, restored ? [ 0, 0 ] : [ 194, 181 ] );
+			assert.deepEqual( saved.at( -1 ).windows.gameGuide, nativeOrigin );
+			// An uncreated bar keeps its remembered entry, or the native serializer's previous pair.
+			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, restored ? [ 0, 0 ] : nativeOrigin );
 		} finally {
 			f.dispose();
 		}

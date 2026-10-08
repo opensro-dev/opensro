@@ -2,6 +2,11 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/foundation/ui/layout.ts",
+			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
+			"functions": [ "compactWindowDrag" ]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
 			"functions": [

@@ -130,6 +130,7 @@ export function createHudResources(
 		"ifguildpointup",
 		"ifguildpositiongrant",
 		"ifguildgrantpower",
+		"ifguildgrantpowerslot",
 		"ifallianceguild",
 		"ifguildrelations",
 		"ifhostileguild",

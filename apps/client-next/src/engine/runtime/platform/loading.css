@@ -463,6 +463,36 @@ The same uniform scale as loadingScreenQuads keeps both owners aligned.
 	font-variant-numeric: tabular-nums;
 }
 
+/*
+Port-only, owner-approved compact loading footer. mission-loading.ts reserves
+120 UI pixels and places Now Loading 64 pixels above the bottom. The status
+occupies its own full-width row below it instead of shrinking beside it.
+*/
+@media (width < 800px), (height < 600px) {
+	.sro-boot-loading[data-native="true"] {
+		left: 16px;
+		top: auto;
+		bottom: 12px;
+		width: calc(100% - 32px);
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.sro-boot-loading[data-native="true"] .sro-boot-loading__inner,
+	.sro-boot-loading[data-native="true"] .sro-boot-loading__copy {
+		min-width: 0;
+		text-align: center;
+	}
+
+	.sro-boot-loading[data-native="true"] .sro-boot-loading__label {
+		font-size: 13px;
+	}
+
+	.sro-boot-loading[data-native="true"] .sro-boot-loading__detail {
+		font-size: 12px;
+		margin-top: 3px;
+	}
+}
+
 /* Developer diagnostics are a separate, console-enabled neighbor of FPS. */
 #developer-toggle { width: 24px; }
 .sro-developer-readout {

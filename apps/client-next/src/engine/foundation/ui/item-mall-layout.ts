@@ -13,6 +13,44 @@ import type { AuthoredControl, AuthoredLayout } from "./authored-layout";
 
 export const MALL_MENU_COUNT = 8;
 export const MALL_ROWS_PER_PAGE = 6;
+/*
+================
+compactMallBagLayout
+
+Port-only secondary bag: retain native 32px cells and paginate the available
+rows instead of shrinking the glyphs or placing slots below a short viewport.
+================
+*/
+export function compactMallBagLayout( options: {
+	width: number;
+	height: number;
+	total: number;
+	equipment: number;
+	requestedPage: number;
+} ) {
+	const { width, height, total, equipment, requestedPage } = options;
+	const margin = 16, pitch = 36, top = 128, footer = 56;
+	const columns = Math.max( 1, Math.min( 8, Math.floor( (width - margin * 2) / pitch ) ) );
+	const rows = Math.max( 1, Math.floor( (height - top - footer) / pitch ) );
+	const pageSize = Math.min( 32, columns * rows );
+	const capacity = Math.max( 0, total - equipment );
+	const pages = Math.max( 1, Math.ceil( capacity / pageSize ) );
+	const page = Math.max( 0, Math.min( pages - 1, requestedPage ) );
+	const left = (width - columns * pitch) / 2;
+	return {
+		page,
+		pages,
+		columns,
+		rows: Math.ceil( pageSize / columns ),
+		left,
+		top,
+		slots: Array.from( { length: pageSize }, ( _, index ) => ({
+			slot: equipment + page * pageSize + index,
+			enabled: page * pageSize + index < capacity,
+			rect: [ left + index % columns * pitch, top + Math.floor( index / columns ) * pitch, 32, 32 ] as const
+		}) )
+	};
+}
 const MENU_X = 12;
 const MENU_Y = 84;
 const MENU_STEP = 30;

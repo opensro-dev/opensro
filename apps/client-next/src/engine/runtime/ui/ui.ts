@@ -83,6 +83,7 @@ import { createWindowPlacement } from "./hud/window-placement";
 import { createItemMall } from "./hud/item-mall";
 import {
 	mallControl,
+	compactMallBagLayout,
 	mallCategories,
 	mallDescription,
 	mallMenuControl,
@@ -133,6 +134,8 @@ import { createQuestBanner, questBannerPaths } from "./hud/quest-banner";
 import { createQuestTimers } from "./hud/quest-timers";
 import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
+import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
+import { fitUiGroup } from "@/engine/foundation/ui/layout";
 import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import type { ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import {
@@ -390,12 +393,12 @@ import {
 	type AutoPotionDraft
 } from "@/engine/foundation/gameplay/auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
-import { textBoardLines } from "@/engine/foundation/ui/text-lines";
+import { textBoardLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
 import { damageTextAssets } from "@/engine/foundation/ui/damage-text";
-import { targetStatus } from "@/engine/foundation/ui/target-status";
+import { targetStatus, compactTargetStatus } from "@/engine/foundation/ui/target-status";
 import {
 	loadingPresentation,
 	type LoadingPresentation,
@@ -767,6 +770,7 @@ export function createUi(
 	let guideEvent = 0, guideObserved = 0, guideRequested = 0, guidePending = 0, guideScroll = 0;
 	let guideOrigin: { regionId: number; x: number; z: number; } | null = null;
 	let rememberedMainPopup: MainPopupPage = "Character";
+	const compactHud = createCompactHud();
 	const chatScroll = createMessageScroll( "chat-scroll" ), statusScroll = createMessageScroll( "status-scroll" );
 	const chatLayoutCache = createRetainedLayout<ReturnType<typeof chatLayout>>(),
 		statusLayoutCache = createRetainedLayout<ReturnType<typeof systemMessageLayout>>();
@@ -1416,6 +1420,7 @@ export function createUi(
 	================
 	*/
 	function resetPanel() {
+		compactHud.reset();
 		closeGuide();
 		withdrawal.close();
 		blockDialog = null;
@@ -1653,6 +1658,7 @@ export function createUi(
 	================
 	*/
 	function focusAtEnd( id: string, value: string ) {
+		if ( id === "chat-text" ) compactHud.open( "chat" );
 		focus = id;
 		selection = [ value.length, value.length ];
 		focusRequest = { id, revision: ++focusRevision, caret: value.length };
@@ -1844,6 +1850,10 @@ export function createUi(
 		}
 		if ( id.startsWith( "cos-command:" ) ) {
 			executeCosCommand( Number( id.slice( 12 ) ) );
+			return;
+		}
+		if ( id.startsWith( "item-mall-" ) && itemMall.compactAction( id ) ) {
+			dirty = true;
 			return;
 		}
 		if ( id === "item-mall" ) {
@@ -2192,7 +2202,9 @@ export function createUi(
 		// World map town icons are CIFWorldMap hit areas (57F43D button-up), not
 		// CIFButtons; retail plays no click for them.
 		if ( control?.kind === "button" && !id.startsWith( "server:" ) && !id.startsWith( "map-town:" ) ) clickSound();
-		if ( chatScroll.event( { kind: "activate", id } ) || statusScroll.event( { kind: "activate", id } ) ) {
+		if (
+			control && (chatScroll.event( { kind: "activate", id } ) || statusScroll.event( { kind: "activate", id } ))
+		) {
 			dirty = true;
 			return;
 		}
@@ -2880,7 +2892,10 @@ export function createUi(
 		} else if ( id === "guide-down" ) guideScroll += 100;
 		else if ( id === "guide-up" ) guideScroll = Math.max( 0, guideScroll - 100 );
 		else if ( id === "hud-menu" ) setPanel( isMainPopupPage( panel ) ? "" : rememberedMainPopup );
-		else if ( id === "chat-hide" ) chatHidden = !chatHidden;
+		else if ( id.startsWith( "compact-" ) ) {
+			compactHud.toggle( id.slice( 8 ) );
+			focus = null;
+		} else if ( id === "chat-hide" ) chatHidden = !chatHidden;
 		else if ( id === "chat-whispers" ) whispersOpen = !whispersOpen;
 		else if ( id.startsWith( "whisper-name:" ) ) {
 			beginWhisper( id.slice( 13 ) );
@@ -3464,6 +3479,8 @@ export function createUi(
 		} else if ( id.startsWith( "guild-grant:" ) ) {
 			const [member, right] = id.slice( 12 ).split( ":" ).map( Number );
 			grantPowerHud.toggle( member!, right! );
+		} else if ( id === "guild-grant-prev" || id === "guild-grant-next" ) {
+			grantPowerHud.scroll( id === "guild-grant-next" ? 1 : -1 );
 		} else if ( id === "guild-grant-ok" ) {
 			const grants = grantPowerHud.grants();
 			if ( grants.length ) sendGameplay( { kind: "guild-permissions", grants } );
@@ -4227,8 +4244,12 @@ export function createUi(
 				return;
 			}
 			if ( event.kind === "scroll" && panel === "Shop" && view && !view.gameplay?.inventoryPending ) {
-				const frame = windowPlacement.read( "window-drag:Shop" );
-				if ( frame && containsPoint( [ frame[0] + 18, frame[1] + 60, 227, 219 ], event.x, event.y ) ) {
+				const frame = windowPlacement.read( "window-drag:Shop" ),
+					zone = controls.find( c => c.id === "shop-scroll-area" );
+				const inside = zone ?
+					containsPoint( zone.rect, event.x, event.y ) :
+					!!frame && containsPoint( [ frame[0] + 18, frame[1] + 60, 227, 219 ], event.x, event.y );
+				if ( inside ) {
 					const page = merchantPage(
 						view.gameplay?.shop,
 						shopTab,
@@ -4440,8 +4461,8 @@ export function createUi(
 				return;
 			}
 			if (
-				questDetails && event.kind === "scroll" && event.x >= questPosition[0] &&
-				event.x < questPosition[0] + 376 && event.y >= questPosition[1] && event.y < questPosition[1] + 384
+				questDetails && event.kind === "scroll" &&
+				controls.some( c => c.id === "quest-detail-drag" && containsPoint( c.rect, event.x, event.y ) )
 			) {
 				questDetailScroll = Math.max(
 					0,
@@ -5073,7 +5094,8 @@ export function createUi(
 			}
 			if (
 				view?.session?.phase === "world" && (event.kind === "drag" || event.kind === "scroll" && !panel) &&
-				(chatScroll.event( event ) || statusScroll.event( event ))
+				((controls.some( c => c.id === "chat-text" ) && chatScroll.event( event )) ||
+					(controls.some( c => c.id === "status-panel" ) && statusScroll.event( event )))
 			) {
 				dirty = true;
 				return;
@@ -6298,7 +6320,7 @@ export function createUi(
 					guideY = Math.trunc( next.height / 2 ) - 226;
 				}
 				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )];
-				if ( extPosition && extended ) {
+				if ( extPosition && extended && !compactHudLayout( next.width, next.height ) ) {
 					// 548490 sizes the widget root from header ID10, not the protruding slots.
 					const header = Object.values( extended ).find( node => node.id === 10 )!;
 					extPosition = [
@@ -6363,6 +6385,8 @@ export function createUi(
 			const fontPath = text.path();
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
+			const compact = compactHud.layout( w, h );
+			let targetBottom = 0, compactTelemetryTop = 4;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
 				if ( alpha > 0 ) {
@@ -6521,6 +6545,16 @@ export function createUi(
 				} else {
 					// Fit within this window before caching/publication; text behind a modal
 					// must not become a neighboring column of that modal.
+					if ( compact ) {
+						fitUiGroup( quads, controls, mark[0], mark[1], full, full, {
+							blocks,
+							firstBlock: mark[2],
+							disableDrag: compactWindowDrag
+						} );
+						for ( let i = mark[1]; i < controls.length; i++ ) {
+							controls[i] = compactCloseControl( controls[i]!, full );
+						}
+					}
 					const painted = resolveTextOverlaps( quads.slice( mark[0] ) );
 					quads.length = mark[0];
 					quads.push( ...painted );
@@ -6795,6 +6829,79 @@ export function createUi(
 						vAlign: node.vAlign
 					} )
 				);
+			}
+			/*
+			================
+			drawTransientBanners
+
+			Desktop retains the native draw order and fixed origins. Compact mode
+			wraps native-size text below the occupied combat header, warning first.
+			================
+			*/
+			function drawTransientBanners( top?: number ) {
+				const rows = [
+					{
+						value: uniqueBanner.value( hudCopy ),
+						alpha: uniqueBanner.alpha(),
+						paths: uniqueBannerPaths,
+						y: 130,
+						color: [ 0, 52, 92 ] as const
+					},
+					{
+						value: notificationBanner.value( hudCopy ),
+						alpha: notificationBanner.alpha(),
+						paths: notificationBannerPaths,
+						y: 100,
+						color: [ 128, 45, 67 ] as const
+					},
+					{
+						value: questBanner.value(),
+						alpha: questBanner.alpha(),
+						paths: questBannerPaths,
+						y: 160,
+						color: [ 0, 91, 66 ] as const
+					}
+				];
+				if ( top !== undefined ) rows.sort( ( a, b ) => a.y - b.y );
+				let bottom = top ?? 0;
+				for ( const row of rows ) {
+					paths.push( ...row.paths );
+					if ( row.alpha <= 0 ) continue;
+					const lines = top === undefined ?
+						[ row.value ] :
+						textLines( row.value, Math.max( 1, w - 80 ), value => text.run( value, 2 ).width );
+					const lineHeight = text.extentHeight( 0, 2 ),
+						width = Math.ceil( Math.max( 0, ...lines.map( value => text.run( value, 2 ).width ) ) ),
+						height = lineHeight * lines.length,
+						y = top === undefined ? row.y : bottom,
+						x = (w >> 1) - (width >> 1);
+					quads.push(
+						...uniqueBannerQuads(
+							row.value,
+							row.alpha,
+							w,
+							h,
+							width,
+							height,
+							row.paths,
+							resources.size,
+							y,
+							row.color
+						)
+					);
+					lines.forEach( ( value, index ) =>
+						quads.push(
+							...text.quads( value, [ x, y + index * lineHeight, width, lineHeight ], full, [
+								1,
+								1,
+								1,
+								row.alpha
+							], { fontIndex: 0, fontStyle: 2, hAlign: 1, vAlign: 0 } )
+						)
+					);
+					bottom = y + height + 12;
+				}
+				return bottom;
 			}
 			/*
 			================
@@ -7402,6 +7509,10 @@ export function createUi(
 			} else {
 				const gauge = next.berserkGauge;
 				const character = roster.find( c => c.name === next.session?.character ), hudData = hud.data();
+				if ( compact && hudData ) {
+					const player = hudData.root.GDR_PLAYER_MINI_INFO!.rect;
+					targetBottom = player[1] + player[3] + 4;
+				}
 				if ( hudData ) {
 					const hpMax = game?.progression?.stats?.maxHp ?? local?.maxHp ?? character?.maxHp,
 						mpMax = game?.progression?.stats?.maxMp ?? local?.maxMp ?? character?.maxMp;
@@ -7671,6 +7782,11 @@ export function createUi(
 				const pet = hudData && game ? petMiniInfo( game.cosRecords, hudData.cosReferences ) : null;
 				const petPanel = hudData?.player.GDR_PMI_PET_MINI_INFO, petLayout = hudData?.windows.ifpetminiinfo;
 				if ( hudData && pet && petPanel && petLayout ) {
+					if ( compact ) {
+						const player = hudData.root.GDR_PLAYER_MINI_INFO!.rect;
+						const petBounds = authoredRect( petPanel, player[0], player[1] );
+						targetBottom = Math.max( targetBottom, petBounds[1] + petBounds[3] + 4 );
+					}
 					const [px, py] = hudData.root.GDR_PLAYER_MINI_INFO!.rect,
 						hpPath = ROOT + "interface/playerminiinfo/pmi_pet_hp.png",
 						hgpPath = ROOT + "interface/playerminiinfo/pmi_pet_hgp.png",
@@ -7926,7 +8042,7 @@ export function createUi(
 						}
 					}
 				}
-				if ( hudData && panel !== "Chat" ) {
+				if ( hudData && panel !== "Chat" && (!compact || compact.overlay === "chat") ) {
 					const lines = game?.chat?.lines ?? [],
 						key: unknown[] = [
 							hudData,
@@ -7934,6 +8050,7 @@ export function createUi(
 							w,
 							h,
 							chatRows,
+							compact?.bottom,
 							chatTab,
 							chatText,
 							hover,
@@ -7952,6 +8069,12 @@ export function createUi(
 						() =>
 							chatLayout( {
 								chatTimestamps: experimental.state().saved.chatTimestamps,
+								compact: compact ?
+									{
+										bottom: compact.bottom,
+										maxRows: Math.max( 1, Math.floor( (h - compact.bottom - 100) / 56 ) )
+									} :
+									undefined,
 								layout: hudData.chat,
 								width: w,
 								height: h,
@@ -7985,84 +8108,7 @@ export function createUi(
 					blocks.push( ...output.blocks );
 				}
 				if ( hudData ) {
-					// CIFNotify::OnCreate (6B32B0) applies CTextBoard style 2 after the layout.
-					const uniqueText = uniqueBanner.value( hudCopy ), uniqueAlpha = uniqueBanner.alpha();
-					paths.push( ...uniqueBannerPaths );
-					if ( uniqueAlpha > 0 ) {
-						const tw = text.run( uniqueText, 2 ).width, th = text.extentHeight( 0, 2 );
-						quads.push(
-							...uniqueBannerQuads(
-								uniqueText,
-								uniqueAlpha,
-								w,
-								h,
-								tw,
-								th,
-								uniqueBannerPaths,
-								resources.size
-							),
-							...text.quads(
-								uniqueText,
-								[ (w >> 1) - (Math.ceil( tw ) >> 1), 130, Math.ceil( tw ), th ],
-								[ 0, 0, w, h ],
-								[ 1, 1, 1, uniqueAlpha ],
-								{ fontIndex: 0, fontStyle: 2, hAlign: 1, vAlign: 0 }
-							)
-						);
-					}
-					const notificationText = notificationBanner.value( hudCopy ),
-						notificationAlpha = notificationBanner.alpha();
-					paths.push( ...notificationBannerPaths );
-					if ( notificationAlpha > 0 ) {
-						const tw = text.run( notificationText, 2 ).width, th = text.extentHeight( 0, 2 );
-						quads.push(
-							...uniqueBannerQuads(
-								notificationText,
-								notificationAlpha,
-								w,
-								h,
-								tw,
-								th,
-								notificationBannerPaths,
-								resources.size,
-								100,
-								[ 128, 45, 67 ]
-							),
-							...text.quads(
-								notificationText,
-								[ (w >> 1) - (Math.ceil( tw ) >> 1), 100, Math.ceil( tw ), th ],
-								[ 0, 0, w, h ],
-								[ 1, 1, 1, notificationAlpha ],
-								{ fontIndex: 0, fontStyle: 2, hAlign: 1, vAlign: 0 }
-							)
-						);
-					}
-					const questText = questBanner.value(), questAlpha = questBanner.alpha();
-					paths.push( ...questBannerPaths );
-					if ( questAlpha > 0 ) {
-						const tw = text.run( questText, 2 ).width, th = text.extentHeight( 0, 2 );
-						quads.push(
-							...uniqueBannerQuads(
-								questText,
-								questAlpha,
-								w,
-								h,
-								tw,
-								th,
-								questBannerPaths,
-								resources.size,
-								160,
-								[ 0, 91, 66 ]
-							),
-							...text.quads(
-								questText,
-								[ (w >> 1) - (Math.ceil( tw ) >> 1), 160, Math.ceil( tw ), th ],
-								[ 0, 0, w, h ],
-								[ 1, 1, 1, questAlpha ],
-								{ fontIndex: 0, fontStyle: 2, hAlign: 1, vAlign: 0 }
-							)
-						);
-					}
+					if ( !compact ) drawTransientBanners();
 					const regionArt = hudData.root.GDR_REGION_INFO_VIEW;
 					if ( regionArt?.texture ) paths.push( regionArt.texture );
 					const banner = regionBanner.value();
@@ -8089,46 +8135,50 @@ export function createUi(
 						options.guide,
 						statusFilters
 					);
-					const output = statusLayoutCache.read(
-						[
-							hudData,
-							layoutResourcesRevision,
-							w,
-							h,
-							statusRows,
-							hover,
-							pressed,
-							statusScroll.offset(),
-							statusFilterOpen || !options.hideSystemMessages,
-							...lines.flatMap( row => [ row.value, row.colorArgb ] )
-						],
-						() =>
-							systemMessageLayout(
-								hudData.status,
+					if ( !compact || compact.overlay === "status" ) {
+						const output = statusLayoutCache.read(
+							[
+								hudData,
+								layoutResourcesRevision,
 								w,
 								h,
+								compact?.top,
 								statusRows,
-								lines,
-								resources.size,
-								( value, r, c, color ) =>
-									text.quads( value, r, c, color, {
-										fontIndex: 0,
-										fontStyle: 0,
-										hAlign: 0,
-										vAlign: 0
-									} ),
 								hover,
 								pressed,
 								statusScroll.offset(),
-								value => text.run( value ).width,
-								statusFilterOpen || !options.hideSystemMessages
-							)
-					);
-					statusScroll.geometry( output.scrolling );
-					quads.push( ...output.quads );
-					paths.push( ...output.paths );
-					controls.push( ...output.controls );
-					blocks.push( ...output.blocks );
+								!!compact || statusFilterOpen || !options.hideSystemMessages,
+								...lines.flatMap( row => [ row.value, row.colorArgb ] )
+							],
+							() =>
+								systemMessageLayout(
+									hudData.status,
+									w,
+									compact ? compact.top + 90 : h,
+									compact ? Math.min( statusRows, 1 ) : statusRows,
+									lines,
+									resources.size,
+									( value, r, c, color ) =>
+										text.quads( value, r, c, color, {
+											fontIndex: 0,
+											fontStyle: 0,
+											hAlign: 0,
+											vAlign: 0
+										} ),
+									hover,
+									pressed,
+									statusScroll.offset(),
+									value => text.run( value ).width,
+									!!compact || statusFilterOpen || !options.hideSystemMessages,
+									compact ? { width: Math.min( 353, w - 8 ) } : {}
+								)
+						);
+						statusScroll.geometry( output.scrolling );
+						quads.push( ...output.quads );
+						paths.push( ...output.paths );
+						controls.push( ...output.controls );
+						blocks.push( ...output.blocks );
+					}
 				}
 				if ( target && hudData ) {
 					// A companion's spawn carries no max HP: native reads its
@@ -8144,7 +8194,7 @@ export function createUi(
 					// CIFTargetNPC_SetTargetAndLayout (5823B0) shows the 168x4 gauge for
 					// every non-combat COS, grab pets included.
 					const hp = game?.vitals.find( v => v.gid === target.gid )?.hp ?? record?.hp,
-						output = targetStatus(
+						nativeOutput = targetStatus(
 							hudData.targets,
 							maxHp === target.maxHp ? shown : { ...shown, maxHp },
 							game?.progression?.level ?? character?.level ?? 1,
@@ -8153,24 +8203,69 @@ export function createUi(
 							value => text.run( value ).width,
 							targetGradeIcon
 						);
+					const playerRect = hudData.root.GDR_PLAYER_MINI_INFO!.rect;
+					const compactOutput = compact && nativeOutput ?
+						compactTargetStatus( nativeOutput, shown.kind, w - playerRect[0] - playerRect[2] - 8 ) :
+						null;
+					const output = compactOutput ?? nativeOutput;
 					if ( output ) {
 						targetGradeIcon = output.gradeIcon;
-						const tx = Math.trunc( (w - output.width) / 2 ), ty = 7;
+						// A narrow target shares the player's row; neither bitmap font is shrunk.
+						const tx = compactOutput ? w - output.width - 4 : Math.trunc( (w - output.width) / 2 );
+						let ty = compact && !compactOutput && tx < playerRect[0] + playerRect[2] + 4 ?
+							playerRect[1] + playerRect[3] + 4 :
+							7;
+						if ( compact && pet && petPanel && petLayout ) {
+							const petRect = authoredRect( petPanel, playerRect[0], playerRect[1] );
+							if (
+								tx < petRect[0] + petRect[2] + 4 && tx + output.width + 4 > petRect[0] &&
+								ty < petRect[1] + petRect[3] + 4 && ty + output.height + 4 > petRect[1]
+							) ty = petRect[1] + petRect[3] + 4;
+						}
+						compactTelemetryTop = ty + output.height + 4;
+						targetBottom = Math.max( targetBottom, compactTelemetryTop );
 						blocks.push( [ tx, ty, output.width, output.height ] );
+						if ( compactOutput ) {
+							controls.push( {
+								id: "target-info",
+								kind: "region",
+								label: compactOutput.helpText,
+								helpText: compactOutput.helpText,
+								rect: [ tx, ty, output.width, output.height ]
+							} );
+						}
 						for ( const image of output.images ) {
 							if (
 								image.fraction !== undefined && (target.kind === "monster" || target.kind === "cos")
 							) authoredGauge( "target-hp", target.gid, image.node, tx, ty, image.fraction );
 							else authoredImage( image.node, tx, ty, undefined, image.fraction );
 						}
-						for ( const row of output.texts ) authoredText( row.node, tx, ty, row.value );
+						for ( const row of output.texts ) {
+							if ( !compactOutput ) authoredText( row.node, tx, ty, row.value );
+							else {
+								const box = authoredClientRect( row.node, tx, ty );
+								quads.push( ...text.quads( row.value, box, box, row.node.color, {
+									fontIndex: row.node.fontIndex,
+									hAlign: row.node.hAlign,
+									vAlign: row.node.vAlign,
+									overflow: "ellipsis"
+								} ) );
+							}
+						}
 						authoredButton( output.close, tx, ty, "clear-target", "Clear target" );
 						// 5814D0 moves GDR_TW_BUFF to (window x, frame bottom + 1).
 						if ( game && [ "monster", "cos", "player" ].includes( target.kind ) ) {
+							const buffStart = controls.length, nativeBuffLayout = targetBuffViewer();
+							const buffLayout = compactOutput ?
+								{
+									...nativeBuffLayout,
+									columns: Math.max( 1, Math.floor( output.width / nativeBuffLayout.pitch ) )
+								} :
+								nativeBuffLayout;
 							buffViewer(
 								"target-buff:",
 								buffViewerIcons(
-									targetBuffViewer(),
+									buffLayout,
 									targetBuffState,
 									target.gid,
 									skillsOf( game.skillCatalog )
@@ -8178,8 +8273,19 @@ export function createUi(
 								tx,
 								ty + output.height + 1
 							);
+							for ( let i = buffStart; i < controls.length; i++ ) {
+								compactTelemetryTop = Math.max(
+									compactTelemetryTop,
+									controls[i]!.rect[1] + controls[i]!.rect[3] + 8
+								);
+							}
+							targetBottom = Math.max( targetBottom, compactTelemetryTop );
 						}
 					}
+				}
+				if ( compact && hudData ) {
+					// Banners own a separate strip below player, pet, target buffs and telemetry.
+					targetBottom = drawTransientBanners( Math.max( targetBottom, compactTelemetryTop + 20 ) + 12 );
 				}
 				if ( target?.kind === "npc" && target.refObjId === 9251 ) {
 					button(
@@ -8191,8 +8297,8 @@ export function createUi(
 						game?.inventoryPending || !!game?.targetPending
 					);
 				}
-				const barX = Math.trunc( (w - 800) / 2 ), barY = h - 52;
-				if ( hudData ) {
+				const barX = compact ? 0 : Math.trunc( (w - 800) / 2 ), barY = compact ? compact.top : h - 52;
+				if ( hudData && !compact ) {
 					retainedHud( barLayoutCache, [
 						hudData,
 						layoutResourcesRevision,
@@ -8264,11 +8370,21 @@ export function createUi(
 					const shown = (game.cosStatusRecords ?? game.cosRecords).map( record =>
 						game.cosRecords?.find( current => current.gid === record.gid ) ?? record
 					);
+					const mark = beginWindow();
 					drawCosHud( hudData, shown, barX, barY );
+					if ( compact ) {
+						fitUiGroup( quads, controls, mark[0], mark[1], compact.bounds, full, {
+							blocks,
+							firstBlock: mark[2],
+							disableDrag: compactWindowDrag
+						} );
+					}
 				}
-				if ( hudData && whispersOpen ) {
+				if ( hudData && whispersOpen && (!compact || compact.overlay === "chat") ) {
 					const wx = 0,
-						wy = h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
+						wy = compact ?
+							Math.max( 80, compact.top - 200 ) :
+							h - 52 - (chatRows ? 62 + chatRows * 56 : 20),
 						node = hudData.chat.GDR_WHISPERLIST!;
 					authoredImage( node, wx, wy );
 					const r = authoredRect( node, wx, wy );
@@ -8291,9 +8407,9 @@ export function createUi(
 						controls.push( { id: "whisper-name:" + name, label: name, rect: row, kind: "button" } );
 					} );
 				}
-				if ( hudData && statusFilterOpen ) {
+				if ( hudData && statusFilterOpen && (!compact || compact.overlay === "status") ) {
 					const sx = w - 357,
-						sy = h - 90 - (statusRows * 42 + 33),
+						sy = compact ? Math.max( 80, compact.top - 200 ) : h - 90 - (statusRows * 42 + 33),
 						node = hudData.status.GDR_SYETEM_MESSAGE_OPTBOARD!,
 						r = authoredRect( node, sx, sy );
 					authoredImage( node, sx, sy );
@@ -8412,21 +8528,64 @@ export function createUi(
 					}
 					itemCount( item, r );
 				}
+				if ( compact ) {
+					const tools = [
+						[ "hud-menu", "Menu" ],
+						[ "toggle-window:System", "Opts" ],
+						[ "toggle-window:Guild", "Guild" ],
+						[ "item-mall", "Mall" ],
+						[ "compact-chat", "Chat" ],
+						[ "compact-status", "Log" ],
+						[ "compact-extra", "Extra" ],
+						[ "compact-map", "Map" ],
+						[ "hotbar-prev", "<" ],
+						[ "hotbar-next", ">" ]
+					];
+					tools.forEach( ( [id, caption], index ) => {
+						const r = compact.tools[index]!;
+						button( id!, caption!, r[0], r[1] + 8, r[2], false, id === "compact-" + compact.overlay );
+						controls[controls.length - 1] = { ...controls[controls.length - 1]!, rect: r };
+						blocks.push( r );
+					} );
+				}
 				for ( let n = 0; n <= 10; n++ ) {
 					const node = hudData?.bar["GDR_TMPQS_" + n];
 					if ( !node ) continue;
+					if ( compact ) {
+						const r = compact.slots[n]!;
+						const backing = hudData!.root.GDR_UNDERBAR!;
+						image( [ r[0] + 2, r[1] + 2, 40, 40 ], backing.texture, white, [
+							(node.rect[0] - 4) / backing.rect[2],
+							(node.rect[1] - 4) / backing.rect[3],
+							40 / backing.rect[2],
+							40 / backing.rect[3]
+						] );
+						blocks.push( r );
+					}
 					quickSlotCell(
 						hotbarSlot( hotbarPage, n ),
-						authoredRect( node, barX, barY ),
+						compact ?
+							[ compact.slots[n]![0] + 6, compact.slots[n]![1] + 6, 32, 32 ] :
+							authoredRect( node, barX, barY ),
 						n === 0 ? "M" : String( n % 10 )
 					);
 					const number = hudData!.bar["GDR_QS_NUMBER_" + (n === 0 ? "M" : n % 10)];
-					if ( number ) authoredImage( number, barX, barY );
+					if ( number ) {
+						const r = compact?.slots[n];
+						authoredImage( number, r ? r[0] + 6 - node.rect[0] : barX, r ? r[1] + 6 - node.rect[1] : barY );
+					}
 				}
 				// The skill that casts next, over shortcut slot 1 (skill-press-feedback.ts).
 				const slotOne = hudData?.bar.GDR_TMPQS_1;
 				if ( slotOne ) {
-					const chip = skillQueueChip( game, authoredRect( slotOne, barX, barY ), full, quickslotTime );
+					const chip = skillQueueChip(
+						game,
+						compact ?
+							[ compact.slots[1]![0] + 6, compact.slots[1]![1] + 6, 32, 32 ] :
+							authoredRect( slotOne, barX, barY ),
+						full,
+						quickslotTime
+					);
 					const icon = chip ? iconPath( training.skill( game!.skillQueue!.skill )?.icon ) : undefined;
 					if ( chip && icon ) {
 						paths.push( icon );
@@ -8435,18 +8594,19 @@ export function createUi(
 						quads.push( ...chip.over );
 					}
 				}
-				if ( hudData ) {
+				if ( hudData && (!compact || compact.overlay === "extra") ) {
+					const compactMark = beginWindow();
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
 					const header = Object.values( layout ).find( n => n.id === 10 )!;
-					if ( !extPosition ) {
+					if ( !extPosition && !compact ) {
 						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [
 							header.rect[2],
 							header.rect[3]
 						] ) ??
 							[ w - header.rect[2] - 26, 181 ];
 					}
-					const ex = extPosition[0],
-						ey = extPosition[1],
+					const ex = compact ? Math.max( 0, (w - header.rect[2]) / 2 ) : extPosition![0],
+						ey = compact ? 80 : extPosition![1],
 						alpha = extTransparent ? 110 / 255 : 1;
 					controls.push( {
 						id: "ext-drag",
@@ -8533,12 +8693,23 @@ export function createUi(
 							} else authoredChrome( node, ox, oy );
 						}
 					}
+					if ( compact ) {
+						fitUiGroup(
+							quads,
+							controls,
+							compactMark[0],
+							compactMark[1],
+							[ 0, 80, w, Math.max( 1, compact.top - 80 ) ],
+							full,
+							{ blocks, firstBlock: compactMark[2], disableDrag: compactWindowDrag }
+						);
+					}
 				}
 				if ( clearHotbar ) {
 					button(
 						"hotbar-clear",
 						clearHotbar ? "Done" : "Clear slot",
-						barX + 652,
+						compact ? w - 84 : barX + 652,
 						barY - 40,
 						80,
 						false,
@@ -8748,11 +8919,12 @@ export function createUi(
 					closeButton( mx + mw - 25, my + 10 );
 					endWindow( admission );
 				}
-				if ( hudData ) {
+				if ( hudData && (!compact || compact.overlay === "map") ) {
+					const mapMark = [ quads.length, controls.length, blocks.length ] as const;
 					const root = hudData.root.GDR_MINIMAP!,
 						nodes = hudData.minimap,
 						mx = Math.max( 0, w - 129 ),
-						my = 0;
+						my = compact ? Math.max( hudData.root.GDR_PLAYER_MINI_INFO!.rect[3] + 4, targetBottom ) : 0;
 					hudCorner = [ mx, my, root.rect[2], root.rect[3] ];
 					authoredImage( root, mx - root.rect[0], my - root.rect[1] );
 					blocks.push( hudCorner );
@@ -8839,6 +9011,17 @@ export function createUi(
 					authoredButton( nodes.GDR_MINIMAP_ZOOMIN!, mx, my, "minimap-in", "Zoom in" );
 					authoredButton( nodes.GDR_MINIMAP_ZOOMOUT!, mx, my, "minimap-out", "Zoom out" );
 					authoredButton( nodes.GDR_MINIMAP_BTN_TOG_MAP!, mx, my, "toggle-window:Map", "Map" );
+					if ( compact ) {
+						fitUiGroup(
+							quads,
+							controls,
+							mapMark[0],
+							mapMark[1],
+							[ 0, my, w, Math.max( 1, compact.top - my ) ],
+							full,
+							{ blocks, firstBlock: mapMark[2], sourceBounds: hudCorner }
+						);
+					}
 				}
 				if ( panel === "System" && hudData ) {
 					const admission = beginWindow();
@@ -11740,6 +11923,14 @@ export function createUi(
 						busy = !!game?.inventoryPending;
 					nativeFrame( root, px, py, shop?.name ?? "" );
 					nativePage( page, px, py );
+					if ( compact ) {
+						controls.push( {
+							id: "shop-scroll-area",
+							kind: "region",
+							label: "Shop items",
+							rect: [ px + 18, py + 60, 227, 219 ]
+						} );
+					}
 					const projection = merchantPage(
 							shop,
 							shopTab,
@@ -13190,131 +13381,218 @@ export function createUi(
 					controls.push( ...memberScroll.controls );
 				}
 				if ( (panel === "Guild" || panel === "Guild tools") && hudData ) {
-					const admission = beginWindow(),
-						root = hudData.root.GDR_COMMUNITY!,
-						[px, py] = windowOrigin( "Guild", [
-							Math.max( 0, (w - 477) / 2 ),
-							Math.max( 0, (h - 393) / 2 ),
-							root.rect[2],
-							root.rect[3]
-						] ),
-						page = hudData.windows.ifguild!,
-						gx = px + 13,
-						gy = py + 61,
-						guild = game?.social?.guild;
-					nativeFrame( root, px, py, hudCopy( root.text ) );
-					[
-						"UIIT_STT_GUILD_INFO",
-						"UIIT_CTL_GUILD_RESPECT",
-						"UIIT_CTL_WARSIT_WARSITUATION",
-						"UIIT_CTL_FRIEND",
-						"UIIT_STT_BLOCKMAN_BLOCK",
-						"UIIT_STT_LETTER"
-					].forEach( ( key, i ) =>
-						nativeTab(
-							"guild-tab:" + i,
-							hudCopy( key ),
-							[ px + 15 + i * 75, py + 39, 72, 24 ],
-							guildTab === i,
-							// 5DFCF0: community tab content starts five pixels down.
-							{ family: "com_long_tab", client: [ 6, 5, 6, 0 ], disabled: ![ 0, 1, 2, 4 ].includes( i ) }
-						)
-					);
-					authoredChrome(
-						{ ...hudData.windows.ifcommunity!.GDR_COMMUNITY_GUILD!, type: "CIFFrame" },
-						px,
-						py
-					);
-					if ( guildTab === 1 && hudData.windows.ifallianceguild && hudData.windows.ifallianceguildslot ) {
-						const relations = hudData.windows.ifguildrelations!;
-						nativePage( relations, gx, gy, [ 9, 10 ] );
-						for (
-							const [i, symbol] of [ "UIIT_STT_GUILD_RESPECT_ALLY", "UIIT_STT_GUILD_RESPECT_WAR" ]
-								.entries()
-						) {
-							const selected = guildWarHud.state().relation === i;
-							const r: UiRect = [ gx + 12 + i * 76, gy + 5, 76, 28 ];
-							image( r, ROOT + "interface/guild/gil_subj_tab_" + (selected ? "on" : "off") + ".png" );
+					/*
+					================
+					appendCompactGuild
+
+					The compact community page reflows controls before text layout. Glyph
+					metrics stay native; the desktop resource layouts below are untouched.
+					Existing action IDs retain the social, grant and war state owners.
+					================
+					*/
+					function appendCompactGuild() {
+						if ( !hudData ) return;
+						const NATIVE_WIDTH = 477, ROW_HEIGHT = 23, LINE_HEIGHT = 18, TAB_HEIGHT = 24;
+						const width = Math.min( w, NATIVE_WIDTH ),
+							columns = width < NATIVE_WIDTH ? 3 : 6,
+							height = Math.min( h, columns === 3 ? 443 : 375 ),
+							x = Math.floor( (w - width) / 2 ),
+							y = Math.floor( (h - height) / 2 ),
+							left = x + 12,
+							inner = width - 24,
+							top = y + 39 + (6 / columns) * TAB_HEIGHT + 4,
+							bottom = y + height - 10,
+							root = hudData.root.GDR_COMMUNITY!,
+							page = hudData.windows.ifguild!,
+							social = game?.social,
+							guild = social?.guild,
+							self = guild?.members.find( member => member.id === social?.self );
+						image( [ x + 6, y + 28, width - 12, height - 34 ], at( page, 1 ).texture );
+						nativeFrame( { ...root, rect: [ 0, 0, width, height ] }, x, y, hudCopy( root.text ) );
+						/*
+						================
+						put
+
+						Clip/ellipsize within the new cell before glyph quads are generated.
+						================
+						*/
+						function put( value: string, r: UiRect ) {
+							const cell: UiRect = [
+								Math.floor( r[0] ),
+								Math.floor( r[1] ),
+								Math.floor( r[2] ),
+								Math.floor( r[3] )
+							];
 							quads.push(
-								...text.quads( hudCopy( symbol ), [ r[0], r[1] + 8, r[2], 14 ], full, white, {
-									hAlign: 1
-								} )
+								...text.quads( value, cell, cell, white, { overflow: "ellipsis", vAlign: 1 } )
 							);
-							controls.push( {
-								id: "war-relation:" + i,
-								label: hudCopy( symbol ),
-								rect: r,
-								kind: "button",
-								selected
-							} );
 						}
-						if ( guildWarHud.state().relation === 0 ) {
-							unionPage(
-								hudData.windows.ifallianceguild,
-								hudData.windows.ifallianceguildslot,
-								gx + 6,
-								gy + 29
-							);
-						} else guildWarPage( false, gx + 6, gy + 29 );
-					} else if ( guildTab === 2 ) {
-						nativePage( hudData.windows.ifwarstate!, gx, gy );
-						guildWarPage( true, gx + 6, gy + 29 );
-					} else {
-						// 5EA9D0 creates Create before the subsequent resource sections. Their
-						// insertion lists reverse within a section, not across constructor calls.
-						for ( const id of [ 1, 2, 3 ] ) {
-							authoredChrome( Object.values( page ).find( n => n.id === id )!, gx, gy );
-						}
-						nativePage( page, gx, gy, [ 1, 2, 3, 104 ] );
 						/*
 						================
 						at
 						================
 						*/
-						const at = ( id: number ) => Object.values( page ).find( n => n.id === id )!;
-						const notice = at( 61 ), noticePath = ROOT + "interface/guild/gil_windo02_off.png";
-						authoredImage( notice, gx, gy, noticePath );
-						authoredText( at( 63 ), gx, gy, hudCopy( at( 63 ).text ) );
-						for ( const id of [ 121, 122, 123, 124, 126 ] ) {
-							const node = at( id ),
-								caption = hudCopy(
-									id === 121 ?
-										[
-											"UIIT_STT_GUILDSMAN",
-											"UIIT_STT_TITLE",
-											"UIIT_STT_GUILD_POSITION"
-										][guildNameMode]! :
-										node.text
+						function at( layout: AuthoredLayout, id: number ) {
+							return Object.values( layout ).find( node => node.id === id )!;
+						}
+						/*
+						================
+						command
+						================
+						*/
+						function command( node: AuthoredControl, r: UiRect, action: string, disabled = false ) {
+							const caption = hudCopy( node.text );
+							authoredButton( { ...node, rect: r }, 0, 0, action, caption, disabled );
+							put( caption, [ r[0] + 4, r[1], r[2] - 8, r[3] ] );
+						}
+						/*
+						================
+						field
+						================
+						*/
+						function field( layout: AuthoredLayout, id: number, value: string, r: UiRect ) {
+							put( hudCopy( at( layout, id ).text ) + " " + value, r );
+						}
+						/*
+						================
+						memberRow
+						================
+						*/
+						function memberRow( id: string, label: string, r: UiRect, selected: boolean ) {
+							image( r, ROOT + "interface/guild/gil_bar02_deselect.png" );
+							if ( selected ) rect( r, [ .25, .3, .35, .6 ] );
+							controls.push( { id, label, rect: r, kind: "button", selected } );
+						}
+						[
+							"UIIT_STT_GUILD_INFO",
+							"UIIT_CTL_GUILD_RESPECT",
+							"UIIT_CTL_WARSIT_WARSITUATION",
+							"UIIT_CTL_FRIEND",
+							"UIIT_STT_BLOCKMAN_BLOCK",
+							"UIIT_STT_LETTER"
+						].forEach( ( key, i ) =>
+							nativeTab(
+								"guild-tab:" + i,
+								hudCopy( key ),
+								[
+									left + (i % columns) * (inner / columns),
+									y + 39 + Math.floor( i / columns ) * TAB_HEIGHT,
+									inner / columns - 2,
+									TAB_HEIGHT
+								],
+								guildTab === i,
+								{
+									family: "com_long_tab",
+									client: [ 6, 5, 6, 0 ],
+									disabled: ![ 0, 1, 2, 4 ].includes( i )
+								}
+							)
+						);
+						if ( guildTab === 0 ) {
+							const half = Math.floor( inner / 2 ),
+								leader = guild?.members.find( member => member.grade === 0 );
+							put( guild?.name ?? hudCopy( "UIIT_STT_NO_GUILD" ), [ left, top, half, LINE_HEIGHT ] );
+							if ( !guild ) return;
+							field( page, 33, String( guild.level ), [ left + half, top, half, LINE_HEIGHT ] );
+							field( page, 34, leader?.name ?? "", [ left, top + LINE_HEIGHT, inner, LINE_HEIGHT ] );
+							field( page, 35, String( guild.members.length ), [
+								left,
+								top + LINE_HEIGHT * 2,
+								half,
+								LINE_HEIGHT
+							] );
+							field( page, 36, String( guild.gp ), [
+								left + half,
+								top + LINE_HEIGHT * 2,
+								half,
+								LINE_HEIGHT
+							] );
+							const noticeY = top + LINE_HEIGHT * 3;
+							image( [ left, noticeY, inner, 24 ], ROOT + "interface/guild/gil_windo02_off.png" );
+							put( guild.subject || hudCopy( "UIIT_MSG_GUILD_COMMON_NOTEXIST" ), [
+								left + 4,
+								noticeY,
+								inner - 8,
+								24
+							] );
+							const listTop = noticeY + 28;
+							if (
+								grantPowerHud.isOpen() && hudData.windows.ifguildgrantpower &&
+								hudData.windows.ifguildgrantpowerslot
+							) {
+								const grants = hudData.windows.ifguildgrantpower,
+									slot = hudData.windows.ifguildgrantpowerslot,
+									nameWidth = Math.floor( inner * .35 ),
+									cell = (inner - nameWidth) / GRANT_RIGHTS.length,
+									footerY = bottom - 24,
+									pagerY = footerY - 28,
+									rowsY = listTop + 24,
+									capacity = Math.max( 1, Math.floor( (pagerY - rowsY - 4) / ROW_HEIGHT ) ),
+									visible = grantPowerHud.visible( capacity );
+								GRANT_RIGHTS.forEach( ( right, column ) =>
+									put( hudCopy( at( grants, 12 + column ).text ), [
+										left + nameWidth + column * cell,
+										listTop,
+										cell - 2,
+										24
+									] )
 								);
-							authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
-						}
-						// 5E8850 creates empty 312x24 rows until six exist. Those native row
-						// textures are the backing; a bare scroll-manager rectangle is transparent.
-						for ( let i = 0; i < 6; i++ ) {
-							const path = ROOT + "interface/guild/gil_bar02_deselect.png";
-							paths.push( path );
-							if ( resources.has( path ) ) rect( [ gx + 17, gy + 163 + i * 23, 312, 24 ], white, path );
-						}
-						if ( !guild ) authoredText( at( 38 ), gx, gy, hudCopy( "UIIT_STT_NO_GUILD" ) );
-						if ( guild ) {
-							const leader = guild.members.find( m => m.grade === 0 ),
-								self = guild.members.find( m => m.id === game?.social?.self );
-							for (
-								const [id, value] of [
-									[ 38, guild.name ],
-									[ 39, String( guild.level ) ],
-									[ 41, leader?.name ?? "" ],
-									[ 42, String( guild.members.length ) ],
-									[ 44, String( guild.gp ) ]
-								] as const
-							) authoredText( { ...at( id ), ...(id === 39 ? { color: gold } : {}) }, gx, gy, value );
-							authoredText(
-								{ ...notice, client: [ 70, 7, 0, 0 ] },
-								gx,
-								gy,
-								guild.subject || hudCopy( "UIIT_MSG_GUILD_COMMON_NOTEXIST" )
-							);
-							const rows = [ ...guild.members ].sort( ( a, b ) =>
+								visible.forEach( ( { row, mask }, i ) => {
+									const ry = rowsY + i * ROW_HEIGHT;
+									put( row.name, [ left, ry, nameWidth - 4, ROW_HEIGHT ] );
+									GRANT_RIGHTS.forEach( ( right, column ) => {
+										const node = at( slot, 11 + column ),
+											r: UiRect = [ left + nameWidth + column * cell, ry, cell - 2, ROW_HEIGHT ],
+											box: UiRect = [ Math.floor( r[0] + (cell - 16) / 2 ), ry + 3, 0, 0 ];
+										// The selected mark is an ifcheckbox child, not a sibling of
+										// com_checkbutton02_off. Keep both authored texture dimensions.
+										authoredImage( { ...node, rect: box }, 0, 0 );
+										if ( mask & right ) {
+											image(
+												[ box[0], box[1], 16, 16 ],
+												ROOT + "interface/ifcommon/com_checkbutton_on.png"
+											);
+										}
+										controls.push( {
+											id: "guild-grant:" + row.id + ":" + right,
+											label: hudCopy( at( grants, 12 + column ).text ),
+											rect: r,
+											kind: "button",
+											selected: !!(mask & right),
+											disabled: self?.grade !== 0
+										} );
+									} );
+								} );
+								button( "guild-grant-prev", "<", left, pagerY, 40, !grantPowerHud.canScroll( -1 ) );
+								button(
+									"guild-grant-next",
+									">",
+									left + inner - 40,
+									pagerY,
+									40,
+									!grantPowerHud.canScroll( 1 )
+								);
+								command(
+									at( grants, 4 ),
+									[ left, footerY, half - 2, 24 ],
+									"guild-grant-ok",
+									self?.grade !== 0
+								);
+								command(
+									at( grants, 5 ),
+									[ left + half, footerY, half - 2, 24 ],
+									"guild-grant-cancel"
+								);
+								return;
+							}
+							const actionColumns = columns === 3 ? 3 : 4,
+								actionRows = Math.ceil( 7 / actionColumns ),
+								actionTop = bottom - actionRows * 26,
+								count = Math.max(
+									1,
+									Math.min( 6, Math.floor( (actionTop - listTop - 50) / ROW_HEIGHT ) )
+								),
+								rows = [ ...guild.members ].sort( ( a, b ) =>
 									(guildSort === 122 ?
 										a.level - b.level :
 										guildSort === 123 ?
@@ -13323,109 +13601,580 @@ export function createUi(
 										a.donated - b.donated :
 										a.name.localeCompare( b.name )) * (guildDescending ? -1 : 1)
 								),
-								s = at( 82 ),
-								slot = hudData.windows.ifguildmemberslot!;
-							socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / 6 ) - 1 ) );
-							if (
-								grantPowerHud.isOpen() && hudData.windows.ifguildgrantpower &&
-								hudData.windows.ifguildgrantpowerslot
-							) {
-								grantPanel(
-									hudData.windows.ifguildgrantpower,
-									hudData.windows.ifguildgrantpowerslot,
-									gx + at( 150 ).rect[0],
-									gy + at( 150 ).rect[1],
-									self?.grade === 0
+								cellWidths = [ inner * .39, inner * .13, inner * .22, inner * .26 ],
+								cellLeft = [
+									0,
+									cellWidths[0]!,
+									cellWidths[0]! + cellWidths[1]!,
+									inner - cellWidths[3]!
+								];
+							[ 121, 122, 123, 124 ].forEach( ( id, i ) =>
+								command(
+									at( page, id ),
+									[ left + cellLeft[i]!, listTop, cellWidths[i]! - 2, 24 ],
+									"guild-sort:" + id
+								)
+							);
+							socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / count ) - 1 ) );
+							// The list blocks the world behind its empty area; member buttons
+							// must follow it in hit order so a touch selects the painted row.
+							controls.push( {
+								id: "guild-list",
+								label: hudCopy( "UIIT_STT_GUILD_INFO" ),
+								rect: [ left, listTop + 26, inner, count * ROW_HEIGHT ],
+								kind: "region"
+							} );
+							rows.slice( socialPage * count, socialPage * count + count ).forEach( ( row, i ) => {
+								const ry = listTop + 26 + i * ROW_HEIGHT;
+								memberRow(
+									"social-member:" + row.id,
+									row.name,
+									[ left, ry, inner, ROW_HEIGHT ],
+									row.id === socialMember
 								);
-							} else {rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
-									const ox = gx + s.rect[0], oy = gy + s.rect[1] + i * 23;
-									nativePage( slot, ox, oy, [ 9, 10 ] );
-									const roleSymbol = ({
+								const role = ({
 										1: "COMMANDER",
 										2: "SUBCOMMANDER",
 										4: "BATTLEMANAGER",
 										8: "PRODUCTMANAGER",
 										16: "TRAINERMANAGER",
 										32: "ENGINEER"
-									} as Record<number, string>)[row.role];
-									const memberCaption = guildNameMode === 0 ?
+									} as Record<number, string>)[row.role],
+									caption = guildNameMode === 0 ?
 										row.name :
 										guildNameMode === 1 ?
 										row.grant :
-										roleSymbol ?
-										hudCopy( "UIIT_STT_FORT_GUILD_" + roleSymbol ) :
+										role ?
+										hudCopy( "UIIT_STT_FORT_GUILD_" + role ) :
 										"";
-									for (
-										const [id, value] of [ [ 11, memberCaption ], [ 12, String( row.level ) ], [
-											13,
-											row.grant
-										], [ 14, String( row.donated ) ] ] as const
-									) authoredText( Object.values( slot ).find( n => n.id === id )!, ox, oy, value );
-									const online = Object.values( slot ).find( n => n.id === 9 )!;
+								[ caption, String( row.level ), row.grant, String( row.donated ) ].forEach( (
+									value,
+									column
+								) => put( value, [
+									left + cellLeft[column]! + (column === 0 ? 31 : 3),
+									ry,
+									cellWidths[column]! - (column === 0 ? 34 : 6),
+									ROW_HEIGHT
+								] ) );
+								const slot = hudData!.windows.ifguildmemberslot!;
+								[ 9, 10 ].forEach( ( id, icon ) => {
+									const node = at( slot, id );
 									authoredImage(
-										online,
-										ox,
-										oy,
-										online.texture.replace( "_off", row.offline ? "_off" : "_on" )
+										{ ...node, rect: [ left + 2 + icon * 14, ry + 4, 14, 14 ] },
+										0,
+										0,
+										id === 9 ?
+											node.texture.replace( "_off", row.offline ? "_off" : "_on" ) :
+											node.texture.replace(
+												"china",
+												hudData!.countries[row.model] === 1 ? "europe" : "china"
+											)
 									);
-									const race = Object.values( slot ).find( n => n.id === 10 )!;
-									authoredImage(
-										race,
-										ox,
-										oy,
-										race.texture.replace(
-											"china",
-											hudData.countries[row.model] === 1 ? "europe" : "china"
-										)
-									);
-									controls.push( {
-										id: "social-member:" + row.id,
-										label: row.name,
-										rect: [ ox, oy, 312, 23 ],
-										kind: "button",
-										selected: row.id === socialMember
-									} );
-								} );}
-							// 5E3090 mode 3 hides the command section beneath the panel.
-							if ( !grantPowerHud.isOpen() ) {
-								for (
-									const [id, action] of [
-										[ 101, "guild-invite" ],
-										[ 102, "guild-dialog:authority" ],
-										[ 103, "guild-kick" ],
-										[ 105, "guild-dialog:title" ],
-										[ 106, "guild-dialog:role" ],
-										[ 45, "guild-dialog:donate" ],
-										[ 62, "guild-dialog:notice" ]
-									] as const
-								) {
-									const node = id === 105 ?
-										{ ...at( id ), rect: [ 353, 223, 0, 0 ] as UiRect } :
-										at( id );
-									const allowed = id === 45 ?
-										!!self :
-										id === 101 ?
+								} );
+							} );
+							button( "social-prev", "<", left, actionTop - 24, 28, socialPage === 0 );
+							command( at( page, 126 ), [ left + 32, actionTop - 24, 24, 24 ], "guild-sort:126" );
+							put(
+								hudCopy(
+									[
+										"UIIT_STT_GUILDSMAN",
+										"UIIT_STT_TITLE",
+										"UIIT_STT_GUILD_POSITION"
+									][guildNameMode]!
+								),
+								[ left + 60, actionTop - 24, inner - 92, 24 ]
+							);
+							button(
+								"social-next",
+								">",
+								left + inner - 28,
+								actionTop - 24,
+								28,
+								(socialPage + 1) * count >= rows.length
+							);
+							[
+								[ 101, "guild-invite" ],
+								[ 102, "guild-dialog:authority" ],
+								[ 103, "guild-kick" ],
+								[ 105, "guild-dialog:title" ],
+								[ 106, "guild-dialog:role" ],
+								[ 45, "guild-dialog:donate" ],
+								[ 62, "guild-dialog:notice" ]
+							].forEach( ( [id, action], i ) => {
+								const number = Number( id ),
+									allowed = number === 45 ? !!self : number === 101 ?
 										!!(self?.permissions! & 1) :
-										id === 103 ?
+										number === 103 ?
 										!!(self?.permissions! & 2) :
-										id === 62 ?
+										number === 62 ?
 										!!(self?.permissions! & 16) :
-										id === 102 ?
+										number === 102 ?
 										true :
-										self?.grade === 0 && (id !== 105 || guild.level >= 4);
-									authoredButton( node, gx, gy, action, hudCopy( node.text ), !allowed );
-									if ( node.text ) authoredText( node, gx, gy, hudCopy( node.text ) );
+										self?.grade === 0 && (number !== 105 || guild.level >= 4);
+								command(
+									at( page, number ),
+									[
+										left + (i % actionColumns) * (inner / actionColumns),
+										actionTop + Math.floor( i / actionColumns ) * 26,
+										inner / actionColumns - 2,
+										24
+									],
+									String( action ),
+									!allowed
+								);
+							} );
+							return;
+						}
+						const contentTop = top + 30;
+						if ( guildTab === 1 ) {
+							[ "UIIT_STT_GUILD_RESPECT_ALLY", "UIIT_STT_GUILD_RESPECT_WAR" ].forEach( ( key, i ) =>
+								button(
+									"war-relation:" + i,
+									hudCopy( key ),
+									left + i * (inner / 2),
+									top,
+									inner / 2 - 2,
+									false,
+									guildWarHud.state().relation === i
+								)
+							);
+						}
+						if ( guildTab === 1 && guildWarHud.state().relation === 0 ) {
+							const alliance = hudData.windows.ifallianceguild;
+							if ( !alliance ) return;
+							const leader = allianceLeader( social ),
+								selected = social?.alliances?.find( row => row.id === socialMember ),
+								armed = allianceButtons( social ),
+								rows = unionHud.order( social?.alliances ?? [] ),
+								half = Math.floor( inner / 2 ),
+								listX = left + half,
+								count = Math.max( 1, Math.floor( (bottom - contentTop - 54) / ROW_HEIGHT ) );
+							[
+								[ 22, leader?.name ?? "" ],
+								[ 23, leader?.master ?? "" ],
+								[ 24, String( rows.length ) ],
+								[ 43, selected?.name ?? "" ],
+								[ 64, selected ? String( selected.level ) : "" ],
+								[ 44, selected?.master ?? "" ],
+								[ 45, selected ? String( selected.flags ) : "" ]
+							].forEach( ( [id, value], i ) =>
+								field( alliance, Number( id ), String( value ), [
+									left,
+									contentTop + i * 28,
+									half - 6,
+									24
+								] )
+							);
+							command( at( alliance, 63 ), [ listX, contentTop, half * .7 - 2, 24 ], "union-sort:name" );
+							command(
+								at( alliance, 64 ),
+								[ listX + half * .7, contentTop, half * .3 - 2, 24 ],
+								"union-sort:level"
+							);
+							rows.slice( 0, count ).forEach( ( row, i ) => {
+								const ry = contentTop + 26 + i * ROW_HEIGHT;
+								memberRow(
+									"social-member:" + row.id,
+									row.name,
+									[ listX, ry, half, ROW_HEIGHT ],
+									row.id === socialMember
+								);
+								put( row.name, [ listX + 3, ry, half * .7 - 6, ROW_HEIGHT ] );
+								put( String( row.level ), [ listX + half * .7, ry, half * .3, ROW_HEIGHT ] );
+							} );
+							[ [ 81, "guild-union-invite", armed.invite ], [ 82, "guild-union-exit", armed.exit ], [
+								83,
+								"guild-union-expel",
+								armed.expel
+							] ].forEach( ( [id, action, allowed], i ) =>
+								command(
+									at( alliance, Number( id ) ),
+									[ left + i * (inner / 3), bottom - 24, inner / 3 - 2, 24 ],
+									String( action ),
+									!allowed
+								)
+							);
+							return;
+						}
+						const scores = guildTab === 2, war = hudData.windows[scores ? "ifguildwar" : "ifhostileguild"];
+						if ( !war ) return;
+						guildWarHud.reconcile( social );
+						const state = guildWarHud.state(),
+							rows = guildWarHud.order( social?.wars ?? [] ),
+							selected = rows.find( row => row.id === state.selected ),
+							count = scores ? 6 : 9,
+							first = Math.min( state.offset, Math.max( 0, rows.length - count ) ),
+							half = Math.floor( inner / 2 ),
+							listWidth = half - 20,
+							listY = scores ? top + 26 : contentTop + 26,
+							pitch = Math.min( ROW_HEIGHT, Math.floor( (bottom - listY - (scores ? 98 : 28)) / count ) );
+						command(
+							at( war, scores ? 30 : 33 ),
+							[ left, listY - 26, listWidth, 24 ],
+							scores ? "war-sort" : "war-sort:33"
+						);
+						if ( !scores ) command( at( war, 34 ), [ left + half, listY - 26, half, 24 ], "war-sort:34" );
+						rows.slice( first, first + count ).forEach( ( row, i ) => {
+							const r: UiRect = [ left, listY + i * pitch, listWidth, pitch ];
+							memberRow( "war-select:" + row.id, row.name, r, row.id === state.selected );
+							put( row.name, [ r[0] + 3, r[1], r[2] - 6, r[3] ] );
+						} );
+						// Thumb travel is shared with the existing event owner (93 / 159 / 24).
+						const scroll = chatScrollbar(
+							"war-scroll",
+							[ left + listWidth, listY + 16, 16, scores ? 93 : 159 ],
+							rows.length,
+							count,
+							Math.max( 0, rows.length - count - first ),
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+						paths.push( ...scroll.paths );
+						quads.push( ...scroll.quads );
+						controls.push( ...scroll.controls );
+						if ( !scores ) {
+							put( selected?.name ?? hudCopy( at( war, 22 ).text ), [ left + half, listY, half, 24 ] );
+							if ( selected ) {
+								for ( const [i, id] of [ 20, 21 ].entries() ) {
+									put( hudCopy( "UIIT_CTL_GUILD_DONOTKNOW" ), [
+										left + half,
+										listY + 26 + i * 24,
+										half,
+										24
+									] );
 								}
 							}
-							controls.push( {
-								id: "guild-list",
-								label: hudCopy( "UIIT_STT_GUILD_INFO" ),
-								rect: authoredRect( s, gx, gy ),
-								kind: "region"
-							} );
+							command(
+								at( war, 51 ),
+								[ left, bottom - 24, half - 2, 24 ],
+								"war-declare",
+								self?.grade !== 0
+							);
+							command(
+								at( war, 52 ),
+								[ left + half, bottom - 24, half - 2, 24 ],
+								"war-surrender",
+								self?.grade !== 0 || !selected || !!selected.ending
+							);
+							return;
 						}
+						const values = selected ?
+							[
+								selected.name,
+								String( selected.localScore ),
+								String( selected.enemyScore ),
+								selected.type === 0 ?
+									hudCopy( "UIIT_CTL_GUILDWAR_UNLIMITED" ) :
+									String( warScoreLimits()[selected.type] ?? 0 ),
+								selected.word38.toLocaleString( "en-US" ) + " " + hudCopy( "UIIT_STT_GOLD" ),
+								selected.word3c === WAR_UNLIMITED ?
+									hudCopy( "UIIT_CTL_GUILDWAR_UNLIMITED" ) :
+									[
+										Math.trunc( (selected.word3c | 0) / 3600 ),
+										Math.trunc( ((selected.word3c | 0) % 3600) / 60 ),
+										(selected.word3c | 0) % 60
+									].map( n => String( n ).padStart( 2, "0" ) ).join( " : " )
+							] :
+							[];
+						[ 91, 92, 93, 100, 101, 102 ].forEach( ( id, i ) =>
+							field( war, id, values[i] ?? "", [ left + half, top + i * 24, half, 24 ] )
+						);
+						const memberY = bottom - 3 * ROW_HEIGHT,
+							memberWidths = [ inner * .45, inner * .2, inner * .35 ],
+							memberLeft = [ 0, inner * .45, inner * .65 ],
+							members = guildWarHud.members( guild?.members ?? [] );
+						[ 60, 61, 62 ].forEach( ( id, i ) =>
+							command( at( war, id ), [
+								left + memberLeft[i]!,
+								memberY - 24,
+								memberWidths[i]! - (i === 2 ? 18 : 2),
+								24
+							], "war-contribution-sort:" + id )
+						);
+						members.slice( state.contributionOffset, state.contributionOffset + 3 ).forEach( ( row, i ) =>
+							[ row.name, String( row.rank ), String( row.warScore ?? 0 ) ].forEach( ( value, column ) =>
+								put( value, [
+									left + memberLeft[column]!,
+									memberY + i * ROW_HEIGHT,
+									memberWidths[column]! - (column === 2 ? 18 : 2),
+									ROW_HEIGHT
+								] )
+							)
+						);
+						const memberScroll = chatScrollbar(
+							"war-members",
+							[ left + inner - 16, memberY + 16, 16, 24 ],
+							members.length,
+							3,
+							Math.max( 0, members.length - 3 - state.contributionOffset ),
+							resources.size,
+							full,
+							hover,
+							pressed
+						);
+						paths.push( ...memberScroll.paths );
+						quads.push( ...memberScroll.quads );
+						controls.push( ...memberScroll.controls );
 					}
-					endWindow( admission );
+					if ( compact && (w < 477 || h < 393) ) {
+						const admission = beginWindow();
+						appendCompactGuild();
+						endWindow( admission );
+					} else {
+						const admission = beginWindow(),
+							root = hudData.root.GDR_COMMUNITY!,
+							[px, py] = windowOrigin( "Guild", [
+								Math.max( 0, (w - 477) / 2 ),
+								Math.max( 0, (h - 393) / 2 ),
+								root.rect[2],
+								root.rect[3]
+							] ),
+							page = hudData.windows.ifguild!,
+							gx = px + 13,
+							gy = py + 61,
+							guild = game?.social?.guild;
+						nativeFrame( root, px, py, hudCopy( root.text ) );
+						[
+							"UIIT_STT_GUILD_INFO",
+							"UIIT_CTL_GUILD_RESPECT",
+							"UIIT_CTL_WARSIT_WARSITUATION",
+							"UIIT_CTL_FRIEND",
+							"UIIT_STT_BLOCKMAN_BLOCK",
+							"UIIT_STT_LETTER"
+						].forEach( ( key, i ) =>
+							nativeTab(
+								"guild-tab:" + i,
+								hudCopy( key ),
+								[ px + 15 + i * 75, py + 39, 72, 24 ],
+								guildTab === i,
+								// 5DFCF0: community tab content starts five pixels down.
+								{
+									family: "com_long_tab",
+									client: [ 6, 5, 6, 0 ],
+									disabled: ![ 0, 1, 2, 4 ].includes( i )
+								}
+							)
+						);
+						authoredChrome(
+							{ ...hudData.windows.ifcommunity!.GDR_COMMUNITY_GUILD!, type: "CIFFrame" },
+							px,
+							py
+						);
+						if (
+							guildTab === 1 && hudData.windows.ifallianceguild && hudData.windows.ifallianceguildslot
+						) {
+							const relations = hudData.windows.ifguildrelations!;
+							nativePage( relations, gx, gy, [ 9, 10 ] );
+							for (
+								const [i, symbol] of [ "UIIT_STT_GUILD_RESPECT_ALLY", "UIIT_STT_GUILD_RESPECT_WAR" ]
+									.entries()
+							) {
+								const selected = guildWarHud.state().relation === i;
+								const r: UiRect = [ gx + 12 + i * 76, gy + 5, 76, 28 ];
+								image( r, ROOT + "interface/guild/gil_subj_tab_" + (selected ? "on" : "off") + ".png" );
+								quads.push(
+									...text.quads( hudCopy( symbol ), [ r[0], r[1] + 8, r[2], 14 ], full, white, {
+										hAlign: 1
+									} )
+								);
+								controls.push( {
+									id: "war-relation:" + i,
+									label: hudCopy( symbol ),
+									rect: r,
+									kind: "button",
+									selected
+								} );
+							}
+							if ( guildWarHud.state().relation === 0 ) {
+								unionPage(
+									hudData.windows.ifallianceguild,
+									hudData.windows.ifallianceguildslot,
+									gx + 6,
+									gy + 29
+								);
+							} else guildWarPage( false, gx + 6, gy + 29 );
+						} else if ( guildTab === 2 ) {
+							nativePage( hudData.windows.ifwarstate!, gx, gy );
+							guildWarPage( true, gx + 6, gy + 29 );
+						} else {
+							// 5EA9D0 creates Create before the subsequent resource sections. Their
+							// insertion lists reverse within a section, not across constructor calls.
+							for ( const id of [ 1, 2, 3 ] ) {
+								authoredChrome( Object.values( page ).find( n => n.id === id )!, gx, gy );
+							}
+							nativePage( page, gx, gy, [ 1, 2, 3, 104 ] );
+							/*
+						================
+						at
+						================
+						*/
+							const at = ( id: number ) => Object.values( page ).find( n => n.id === id )!;
+							const notice = at( 61 ), noticePath = ROOT + "interface/guild/gil_windo02_off.png";
+							authoredImage( notice, gx, gy, noticePath );
+							authoredText( at( 63 ), gx, gy, hudCopy( at( 63 ).text ) );
+							for ( const id of [ 121, 122, 123, 124, 126 ] ) {
+								const node = at( id ),
+									caption = hudCopy(
+										id === 121 ?
+											[
+												"UIIT_STT_GUILDSMAN",
+												"UIIT_STT_TITLE",
+												"UIIT_STT_GUILD_POSITION"
+											][guildNameMode]! :
+											node.text
+									);
+								authoredLabeledButton( node, gx, gy, "guild-sort:" + id, caption );
+							}
+							// 5E8850 creates empty 312x24 rows until six exist. Those native row
+							// textures are the backing; a bare scroll-manager rectangle is transparent.
+							for ( let i = 0; i < 6; i++ ) {
+								const path = ROOT + "interface/guild/gil_bar02_deselect.png";
+								paths.push( path );
+								if ( resources.has( path ) ) {
+									rect( [ gx + 17, gy + 163 + i * 23, 312, 24 ], white, path );
+								}
+							}
+							if ( !guild ) authoredText( at( 38 ), gx, gy, hudCopy( "UIIT_STT_NO_GUILD" ) );
+							if ( guild ) {
+								const leader = guild.members.find( m => m.grade === 0 ),
+									self = guild.members.find( m => m.id === game?.social?.self );
+								for (
+									const [id, value] of [
+										[ 38, guild.name ],
+										[ 39, String( guild.level ) ],
+										[ 41, leader?.name ?? "" ],
+										[ 42, String( guild.members.length ) ],
+										[ 44, String( guild.gp ) ]
+									] as const
+								) authoredText( { ...at( id ), ...(id === 39 ? { color: gold } : {}) }, gx, gy, value );
+								authoredText(
+									{ ...notice, client: [ 70, 7, 0, 0 ] },
+									gx,
+									gy,
+									guild.subject || hudCopy( "UIIT_MSG_GUILD_COMMON_NOTEXIST" )
+								);
+								const rows = [ ...guild.members ].sort( ( a, b ) =>
+										(guildSort === 122 ?
+											a.level - b.level :
+											guildSort === 123 ?
+											a.grade - b.grade :
+											guildSort === 124 ?
+											a.donated - b.donated :
+											a.name.localeCompare( b.name )) * (guildDescending ? -1 : 1)
+									),
+									s = at( 82 ),
+									slot = hudData.windows.ifguildmemberslot!;
+								socialPage = Math.min( socialPage, Math.max( 0, Math.ceil( rows.length / 6 ) - 1 ) );
+								if (
+									grantPowerHud.isOpen() && hudData.windows.ifguildgrantpower &&
+									hudData.windows.ifguildgrantpowerslot
+								) {
+									grantPanel(
+										hudData.windows.ifguildgrantpower,
+										hudData.windows.ifguildgrantpowerslot,
+										gx + at( 150 ).rect[0],
+										gy + at( 150 ).rect[1],
+										self?.grade === 0
+									);
+								} else {rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
+										const ox = gx + s.rect[0], oy = gy + s.rect[1] + i * 23;
+										nativePage( slot, ox, oy, [ 9, 10 ] );
+										const roleSymbol = ({
+											1: "COMMANDER",
+											2: "SUBCOMMANDER",
+											4: "BATTLEMANAGER",
+											8: "PRODUCTMANAGER",
+											16: "TRAINERMANAGER",
+											32: "ENGINEER"
+										} as Record<number, string>)[row.role];
+										const memberCaption = guildNameMode === 0 ?
+											row.name :
+											guildNameMode === 1 ?
+											row.grant :
+											roleSymbol ?
+											hudCopy( "UIIT_STT_FORT_GUILD_" + roleSymbol ) :
+											"";
+										for (
+											const [id, value] of [ [ 11, memberCaption ], [ 12, String( row.level ) ], [
+												13,
+												row.grant
+											], [ 14, String( row.donated ) ] ] as const
+										) {
+											authoredText(
+												Object.values( slot ).find( n => n.id === id )!,
+												ox,
+												oy,
+												value
+											);
+										}
+										const online = Object.values( slot ).find( n => n.id === 9 )!;
+										authoredImage(
+											online,
+											ox,
+											oy,
+											online.texture.replace( "_off", row.offline ? "_off" : "_on" )
+										);
+										const race = Object.values( slot ).find( n => n.id === 10 )!;
+										authoredImage(
+											race,
+											ox,
+											oy,
+											race.texture.replace(
+												"china",
+												hudData.countries[row.model] === 1 ? "europe" : "china"
+											)
+										);
+										controls.push( {
+											id: "social-member:" + row.id,
+											label: row.name,
+											rect: [ ox, oy, 312, 23 ],
+											kind: "button",
+											selected: row.id === socialMember
+										} );
+									} );}
+								// 5E3090 mode 3 hides the command section beneath the panel.
+								if ( !grantPowerHud.isOpen() ) {
+									for (
+										const [id, action] of [
+											[ 101, "guild-invite" ],
+											[ 102, "guild-dialog:authority" ],
+											[ 103, "guild-kick" ],
+											[ 105, "guild-dialog:title" ],
+											[ 106, "guild-dialog:role" ],
+											[ 45, "guild-dialog:donate" ],
+											[ 62, "guild-dialog:notice" ]
+										] as const
+									) {
+										const node = id === 105 ?
+											{ ...at( id ), rect: [ 353, 223, 0, 0 ] as UiRect } :
+											at( id );
+										const allowed = id === 45 ?
+											!!self :
+											id === 101 ?
+											!!(self?.permissions! & 1) :
+											id === 103 ?
+											!!(self?.permissions! & 2) :
+											id === 62 ?
+											!!(self?.permissions! & 16) :
+											id === 102 ?
+											true :
+											self?.grade === 0 && (id !== 105 || guild.level >= 4);
+										authoredButton( node, gx, gy, action, hudCopy( node.text ), !allowed );
+										if ( node.text ) authoredText( node, gx, gy, hudCopy( node.text ) );
+									}
+								}
+								controls.push( {
+									id: "guild-list",
+									label: hudCopy( "UIIT_STT_GUILD_INFO" ),
+									rect: authoredRect( s, gx, gy ),
+									kind: "region"
+								} );
+							}
+						}
+						endWindow( admission );
+					}
 				}
 				if ( [ "Magic Pop", "Chat" ].includes( panel ) ) {
 					const admission = beginWindow();
@@ -16543,7 +17292,7 @@ export function createUi(
 			}
 			if ( worldVisible && game && itemMall.read().visible && hud.data() ) {
 				const data = hud.data()!;
-				const state = itemMall.read( game.itemMall );
+				let state = itemMall.read( game.itemMall );
 				const root = data.windows.ifitemmall!;
 				const frame = data.root.GDR_ITEM_MALL!;
 				const ox = Math.floor( (w - frame.rect[2]) / 2 );
@@ -16552,572 +17301,1004 @@ export function createUi(
 				// cannot receive input through its scene or child controls.
 				controls = [];
 				blocks = [ full ];
+				const mallAdmission = beginWindow();
 				paths.push( ...mallMenuArtwork() );
-				nativeFrame( frame, ox, oy, hudCopy( frame.text ), "item-mall-close" );
-				nativePage( root, ox, oy );
-				// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
-				// through CIFButton_SetEnabled(false), even in the retail client.
-				for ( const node of Object.values( root ) ) {
-					if ( node.type !== "CIFButton" ) continue;
-					// Control ids are unique: the frame X already owns "item-mall-close".
-					const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
-						"item-mall-home" :
-						"item-mall-root:" + node.id;
-					authoredLabeledButton(
-						node,
-						ox,
-						oy,
-						id,
-						hudCopy( node.text ),
-						node.id === 4 || node.id === 5 ?
-							state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
-							node.id !== 8 && node.id !== 3
-					);
-				}
-				for ( let index = 0; index < 8; index++ ) {
-					const category = mallCategories()[index]!;
-					const disabled = category.key !== "basket" &&
-						!game.itemMall?.tabs.some( row => row.category === category.key );
-					const node = mallMenuControl( mallControl( root, 8 ), index, state.category === index, disabled );
-					authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
-					authoredImage( mallCategoryIcon( node, index, disabled ), ox, oy );
-				}
-				const infoOrigin = mallControl( root, 90 ).rect;
-				const info = data.windows.ifitemmallmyinfo!;
-				nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [ 10, 11, 12, 14, 18 ] );
-				for ( const id of [ 7, 9 ] ) {
-					const node = mallControl( info, id );
-					authoredLabeledButton(
-						node,
-						ox + infoOrigin[0],
-						oy + infoOrigin[1],
-						"item-mall-funding:" + id,
-						hudCopy( node.text ),
-						true
-					);
-				}
-				if ( game.localGid ) {
-					quads.push( {
-						portraitGid: game.localGid,
-						texture: "__portrait",
-						rect: authoredRect( mallControl( info, 4 ), ox + infoOrigin[0], oy + infoOrigin[1] ),
-						uv: [ 0, 0, 1, 1 ],
-						color: white,
-						clip: full
-					}, {
-						doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
-						texture: "__doll",
-						rect: (() => {
-							const [x, y, width, height] = authoredRect( mallControl( root, 9 ), ox, oy );
-							// 6BB5BA applies the native viewport insets before its 30-degree camera.
-							return [ x + 2, y + 15, width - 2, height - 37 ];
-						})(),
-						uv: [ 0, 0, 1, 1 ],
-						color: white,
-						clip: full
-					} );
-				}
-				for (
-					const [id, value] of [
-						[ 10, next.session?.character ],
-						[ 11, game.progression?.level ],
-						[ 12, game.itemMall?.silk ],
-						[ 14, game.itemMall?.giftSilk ],
-						[ 18, game.itemMall?.points ]
-					] as const
-				) {
-					authoredText(
-						mallControl( info, id ),
-						ox + infoOrigin[0],
-						oy + infoOrigin[1],
-						String( value ?? "" )
-					);
-				}
-				const trunkOrigin = mallControl( root, 102 ).rect;
-				const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
-				nativePage( data.windows.ifitemmalltrunk!, tx, ty );
-				nativePage( data.windows.ifitemmallinventory!, tx, ty );
-				// 6CD535 creates 32x32 cells at (17,19), using the inventory's
-				// ordinary 32-slot pages and 36-pixel pitch. Share slot admission.
-				const mallBag = inventorySlots(
-					tx - 1,
-					ty + 6,
-					game.inventorySlotCount ?? 0,
-					game.equipmentSlotCount ?? 13,
-					state.bagPage
-				);
-				for ( const cell of mallBag.slots ) {
-					const item = game.inventory.find( row => row.slot === cell.slot );
-					const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
-					if ( path ) image( cell.rect, path );
-					if ( cell.enabled && item ) {
-						equipmentOverlay( item, cell.rect );
-						itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
-						itemCount( item, cell.rect );
+				if ( compact ) {
+					// Port-only, owner-approved reflow. Never scale the Mall's text or
+					// combine its background with a purchase dialog's fitting bounds.
+					const margin = 8, touch = 40, gap = 4, cardHeight = 112, tabPitch = 28;
+					const contentWidth = w - margin * 2;
+					const columns = Math.max( 1, Math.min( 2, Math.floor( contentWidth / 240 ) ) );
+					const tabColumns = Math.max( 1, Math.floor( contentWidth / 140 ) );
+					const tabRows = Math.ceil( state.tabs.length / tabColumns );
+					const productTop = 124 + tabRows * tabPitch;
+					const visibleRows = Math.max( 1, Math.floor( (h - touch - margin - productTop) / cardHeight ) );
+					itemMall.setPageSize( Math.min( 6, columns * visibleRows ) );
+					state = itemMall.read( game.itemMall );
+					const busy = !!game.inventoryPending || state.batchPending;
+					/*
+					================
+					mallText
+					================
+					*/
+					function mallText( value: string, r: UiRect ) {
+						quads.push( ...text.box( value, r, r, white, { fontIndex: 0, hAlign: 0, vAlign: 0 } ) );
+					}
+					/*
+					================
+					mallButton
+					================
+					*/
+					function mallButton( id: string, caption: string, r: UiRect, disabled = false ) {
+						button( id, caption, r[0], r[1] + (r[3] - 24) / 2, r[2], disabled );
+						controls[controls.length - 1] = { ...controls[controls.length - 1]!, rect: r };
+					}
+					/*
+					================
+					mallEdit
+					================
+					*/
+					function mallEdit( id: string, value: number, r: UiRect, maxLength: number ) {
+						rect( r, [ .02, .025, .03, 1 ] );
+						mallText( String( value ), [ r[0] + 4, r[1] + 12, r[2] - 8, 16 ] );
 						controls.push( {
-							id: "item-mall-slot:" + cell.slot,
-							label: item.name ?? "",
-							rect: cell.rect,
-							kind: "button"
+							id,
+							label: id === "item-mall-quantity" ? "Quantity" : "Points",
+							kind: "text",
+							rect: r,
+							value: String( value ),
+							maxLength,
+							disabled: busy
 						} );
 					}
-				}
-				const selector = mallControl( data.windows.ifitemmallinventory!, 12 );
-				const expansion = data.windows.ifitemmalltrunkexpbar!;
-				for ( let index = 0; index < 3; index++ ) {
-					const position = mallControl( data.windows.ifitemmallinventory!, 51 + index ).rect;
-					const count = Math.max(
-						0,
-						Math.min(
-							32,
-							(game.inventorySlotCount ?? 0) -
-								(game.equipmentSlotCount ?? 13) - 32 * index
-						)
+					authoredChrome( { ...mallControl( root, 21 ), rect: [ 12, 40, w - 24, h - 52 ], text: "" }, 0, 0 );
+					authoredChrome( { ...frame, type: "CIFFrame", rect: full, text: "" }, 0, 0 );
+					mallText( hudCopy( frame.text ), [ margin, 12, contentWidth - 72, 22 ] );
+					mallText(
+						`Silk ${game.itemMall?.silk ?? 0}   Gift ${game.itemMall?.giftSilk ?? 0}   Points ${
+							game.itemMall?.points ?? 0
+						}`,
+						[ margin, 52, Math.max( 1, contentWidth - 64 ), 28 ]
 					);
-					const ex = tx + position[0], ey = ty + position[1];
-					nativePage( expansion, ex, ey );
-					authoredImage(
-						{
-							...mallControl( expansion, 2 ),
-							texture: ROOT + "interface/mall/mall_inven_icon" + (count > 0 ? "" : "_disable") + ".png"
-						},
-						ex,
-						ey
-					);
-					authoredText(
-						mallControl( expansion, 3 ),
-						ex,
-						ey,
-						count > 0 ?
-							hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
-							hudCopy( "UIIT_STT_NONE" )
-					);
-				}
-				const spin = data.windows.ifspincontrol!;
-				const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
-				authoredText( mallControl( spin, 0 ), spinX, spinY, String( mallBag.page + 1 ) );
-				for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
-					const page = mallBag.page + delta;
-					authoredButton(
-						mallControl( spin, id ),
-						spinX,
-						spinY,
-						"item-mall-bag-page:" + page,
-						"",
-						page < 0 || page >= mallBag.pages
-					);
-				}
-				const shopOrigin = mallControl( root, 50 ).rect;
-				const shop = data.windows.ifitemmallshop!;
-				for ( const node of authoredPaintOrder( shop ) ) {
-					if ( node.creationSection === 0 || state.category === -1 && node.creationSection === 2 ) {
-						authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
-					}
-				}
-
-				const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
-				const currentTab = state.tabs[state.tab];
-				const description = state.category === -1 ?
-					"UIIT_STT_SILKMALL_MAIN_INTRO" :
-					state.category === 7 ?
-					"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
-					currentTab ?
-					mallDescription( currentTab.category, currentTab.tab ) :
-					"";
-				authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
-				if ( state.category === -1 ) {
-					authoredChrome( { ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" }, sx, sy );
-				}
-				if ( state.category === 7 ) {
-					const tab = mallTabControl( mallControl( root, 8 ), 0, true );
-					authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
-					const buyAll = mallControl( shop, 42 );
-					authoredLabeledButton(
-						buyAll,
-						sx,
-						sy,
-						"item-mall-buy-all",
-						hudCopy( buyAll.text ),
-						state.count === 0 || state.batchPending || !!game.inventoryPending
-					);
-				}
-				if ( state.category >= 0 ) {
-					for ( let index = 0; index < state.tabs.length; index++ ) {
-						const tab = state.tabs[index]!;
-						const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
-						authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
-					}
-					const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
-					if ( manager.count > 0 ) {
-						const template = {
-							...mallControl( data.windows.ifpagemanager!, 10 ),
-							client: [ 0, 0, 0, 0 ] as UiRect,
-							hAlign: 1,
-							vAlign: 1
-						};
-						authoredText(
-							{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
-							sx,
-							sy,
-							"["
+					if ( state.pointDialog || state.selected || state.question ) {
+						paths.push( ...partyProposalAssets() );
+						quads.push(
+							...normalTile(
+								[ margin, 80, contentWidth, h - 80 - margin ],
+								MESSAGE_TILE,
+								resources.size( MESSAGE_TILE ),
+								full
+							)
 						);
-						authoredText(
-							{
-								...template,
-								rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ]
-							},
-							sx,
-							sy,
-							"]"
+						quads.push(
+							...frameRing(
+								[ margin, 80, contentWidth, h - 80 - margin ],
+								MESSAGE_FRAME,
+								PARTS.map( part => resources.size( MESSAGE_FRAME + part + ".png" ) ),
+								full
+							)
 						);
-						for ( let index = 0; index < manager.count; index++ ) {
-							const page = manager.first + index;
-							const control = {
-								...template,
-								rect: [
-									manager.x + index * manager.width,
-									manager.y,
-									manager.width,
-									manager.height
-								] as UiRect
-							};
-							authoredText( control, sx, sy, String( page + 1 ) );
+						const dx = margin, dy = 88, dw = contentWidth;
+						if ( state.pointDialog ) {
+							mallText( hudCopy( "UIIT_STT_SILKMALL_USE_POINT" ), [ dx, dy, dw, 32 ] );
+							mallText( `Available ${game.itemMall?.points ?? 0} / Maximum ${state.pointLimit}`, [
+								dx,
+								dy + 36,
+								dw,
+								32
+							] );
+							mallEdit( "item-mall-point-value", state.pointDraft, [ dx, dy + 76, dw, touch ], 10 );
+							mallButton( "item-mall-points-apply", hudCopy( "UIIT_CTL_CONFIRM" ), [
+								dx,
+								dy + 124,
+								(dw - gap) / 2,
+								touch
+							], busy );
+							mallButton( "item-mall-points-close", hudCopy( "UIIT_CTL_CANCEL" ), [
+								dx + (dw + gap) / 2,
+								dy + 124,
+								(dw - gap) / 2,
+								touch
+							] );
+						} else if ( state.selected && game.itemMall ) {
+							const offer = state.selected;
+							mallText( hudCopy( offer.name ), [ dx, dy, dw, 32 ] );
+							const price = mallCurrencyRows( offer, state.quantity, state.points ).rows.map( row =>
+								`${hudCopy( row.label )}: ${row.amount}`
+							).join( "   " );
+							mallText( price, [ dx, dy + 36, dw, 40 ] );
+							mallButton(
+								"item-mall-quantity-down",
+								"−",
+								[ dx, dy + 80, touch, touch ],
+								busy || state.quantity <= 1
+							);
+							mallEdit( "item-mall-quantity", state.quantity, [
+								dx + touch + gap,
+								dy + 80,
+								dw - 2 * (touch + gap),
+								touch
+							], 5 );
+							mallButton(
+								"item-mall-quantity-up",
+								"+",
+								[ dx + dw - touch, dy + 80, touch, touch ],
+								busy || state.quantity >= offer.purchaseLimit
+							);
+							if ( offer.allowsPoints ) {
+								mallButton(
+									"item-mall-points",
+									`${hudCopy( "UIIT_STT_SILKMALL_USE_POINT" )}: ${state.points}`,
+									[ dx, dy + 124, dw, touch ],
+									busy
+								);
+							}
+							mallButton( "item-mall-purchase", hudCopy( "UIIT_STT_BUY" ), [
+								dx,
+								h - touch - margin,
+								(dw - gap) / 2,
+								touch
+							], busy || !itemMall.purchase( game.itemMall ) );
+							mallButton( "item-mall-cancel", hudCopy( "UIIT_CTL_CANCEL" ), [
+								dx + (dw + gap) / 2,
+								h - touch - margin,
+								(dw - gap) / 2,
+								touch
+							], busy );
+						} else if ( state.question ) {
+							const question = state.question;
+							const quote = mallQuestionLayout( question.kind, question.offers.length );
+							mallText( hudCopy( quote.caption ), [ dx, dy, dw, 32 ] );
+							mallText(
+								question.offers.length === 1 ?
+									hudCopy( question.offers[0]!.name ) :
+									`${question.offers.length} items`,
+								[ dx, dy + 36, dw, 32 ]
+							);
+							if ( question.kind === "basket" || question.kind === "worn" ) {
+								const silk = question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ) -
+									state.points;
+								const gift = question.offers.reduce( ( sum, offer ) => sum + offer.giftSilk, 0 );
+								mallText( `Silk ${silk}   Gift ${gift}`, [ dx, dy + 72, dw, 32 ] );
+								if ( state.pointLimit > 0 ) {
+									mallButton(
+										"item-mall-points",
+										`${hudCopy( "UIIT_STT_SILKMALL_USE_POINT" )}: ${state.points}`,
+										[ dx, dy + 108, dw, touch ],
+										busy
+									);
+								}
+							}
+							mallButton( "item-mall-question-confirm", hudCopy( quote.confirm ), [
+								dx,
+								h - touch - margin,
+								(dw - gap) / 2,
+								touch
+							], busy || !state.questionReady );
+							mallButton( "item-mall-question-cancel", hudCopy( "UIIT_CTL_CANCEL" ), [
+								dx + (dw + gap) / 2,
+								h - touch - margin,
+								(dw - gap) / 2,
+								touch
+							] );
+						}
+					} else {
+						const actionWidth = (contentWidth - gap * 2) / 3;
+						mallButton( "item-mall-home", "Categories", [ margin, 80, actionWidth, touch ] );
+						mallButton( "item-mall-view:bag", "Bag", [
+							margin + actionWidth + gap,
+							80,
+							actionWidth,
+							touch
+						] );
+						mallButton( "item-mall-view:preview", "Preview", [
+							margin + 2 * (actionWidth + gap),
+							80,
+							actionWidth,
+							touch
+						] );
+						if ( state.compactView === "shop" && state.category === -1 ) {
+							const menuWidth = contentWidth;
+							const categoryWidth = (menuWidth - gap) / 2;
+							mallCategories().forEach( ( category, index ) => {
+								const disabled = category.key !== "basket" &&
+									!game.itemMall?.tabs.some( tab => tab.category === category.key );
+								const node = mallMenuControl( mallControl( root, 8 ), index, false, disabled );
+								const r: UiRect = [
+									margin + index % 2 * (categoryWidth + gap),
+									124 + Math.floor( index / 2 ) * (touch + gap),
+									categoryWidth,
+									touch
+								];
+								image( r, node.texture );
+								const icon = mallCategoryIcon( node, index, disabled );
+								image( [ r[0] + 6, r[1] + 10, 20, 20 ], icon.texture );
+								mallText( hudCopy( node.text ), [ r[0] + 30, r[1] + 4, r[2] - 34, 32 ] );
+								controls.push( {
+									id: node.name,
+									label: hudCopy( node.text ),
+									kind: "button",
+									rect: r,
+									disabled
+								} );
+							} );
+						} else if ( state.compactView === "bag" ) {
+							const bag = compactMallBagLayout( {
+								width: w,
+								height: h,
+								total: game.inventorySlotCount ?? 0,
+								equipment: game.equipmentSlotCount ?? 13,
+								requestedPage: state.compactBagPage
+							} );
+							const lattice: UiRect = [ bag.left, bag.top, bag.columns * 36, bag.rows * 36 ];
+							authoredChrome(
+								{
+									...mallControl( data.windows.ifitemmallinventory!, 2 ),
+									rect: [ lattice[0] - 3, lattice[1] - 3, lattice[2] + 6, lattice[3] + 6 ],
+									text: ""
+								},
+								0,
+								0
+							);
+							authoredChrome(
+								{ ...mallControl( data.windows.ifitemmallinventory!, 1 ), rect: lattice, text: "" },
+								0,
+								0
+							);
+							for ( const cell of bag.slots ) {
+								const item = game.inventory.find( item => item.slot === cell.slot );
+								const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
+								if ( path ) image( cell.rect, path );
+								if ( cell.enabled && item ) {
+									equipmentOverlay( item, cell.rect );
+									itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
+									itemCount( item, cell.rect );
+									controls.push( {
+										id: "item-mall-slot:" + cell.slot,
+										label: item.name ?? "",
+										kind: "button",
+										rect: cell.rect
+									} );
+								}
+							}
+							mallButton( "item-mall-bag-slice:" + (bag.page - 1), "< Bag", [
+								margin,
+								h - touch - margin,
+								90,
+								touch
+							], bag.page <= 0 );
+							mallButton( "item-mall-bag-slice:" + (bag.page + 1), "Bag >", [
+								w - margin - 90,
+								h - touch - margin,
+								90,
+								touch
+							], bag.page + 1 >= bag.pages );
+						} else if ( state.compactView === "preview" ) {
+							const previewRect: UiRect = [
+								margin + 8,
+								128,
+								contentWidth - 16,
+								Math.max( 1, h - 128 - touch - margin - gap )
+							];
+							authoredChrome(
+								{
+									...mallControl( root, 2 ),
+									rect: [ margin, 124, contentWidth, h - 124 - touch - margin ],
+									text: ""
+								},
+								0,
+								0
+							);
+							if ( game.localGid && previewRect[2] > 0 && previewRect[3] > 0 ) {
+								quads.push( {
+									doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
+									texture: "__doll",
+									rect: previewRect,
+									uv: [ 0, 0, 1, 1 ],
+									color: white,
+									clip: full
+								} );
+							}
+							mallButton( "item-mall-root:4", "Buy worn", [
+								margin,
+								h - touch - margin,
+								(contentWidth - gap) / 2,
+								touch
+							], !state.worn.length || busy );
+							mallButton( "item-mall-root:5", "Take off", [
+								margin + (contentWidth + gap) / 2,
+								h - touch - margin,
+								(contentWidth - gap) / 2,
+								touch
+							], !state.worn.length || busy );
+						} else {
+							const tabWidth = (contentWidth - gap * (tabColumns - 1)) / tabColumns;
+							state.tabs.forEach( ( tab, index ) => {
+								const node = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
+								const r: UiRect = [
+									margin + index % tabColumns * (tabWidth + gap),
+									124 + Math.floor( index / tabColumns ) * tabPitch,
+									tabWidth,
+									tabPitch
+								];
+								image( r, node.texture );
+								mallText( hudCopy( tab.label ), [ r[0] + 4, r[1] + 6, r[2] - 8, 18 ] );
+								controls.push( {
+									id: node.name,
+									label: hudCopy( tab.label ),
+									kind: "button",
+									rect: r,
+									selected: index === state.tab
+								} );
+							} );
+							const cardWidth = (contentWidth - gap * (columns - 1)) / columns;
+							state.offers.forEach( ( offer, index ) => {
+								const x = margin + index % columns * (cardWidth + gap),
+									y = productTop + Math.floor( index / columns ) * cardHeight;
+								const rowArt = data.windows.ifitemmallshopslot!;
+								image( [ x, y, cardWidth, cardHeight - gap ], mallControl( rowArt, 50 ).texture );
+								image( [ x + 40, y + 4, cardWidth - 44, 36 ], mallControl( rowArt, 2 ).texture );
+								const icon = iconPath( offer.icon );
+								if ( icon ) image( [ x + 4, y + 4, 32, 32 ], icon );
+								controls.push( {
+									id: "item-mall-offer:" + offer.packageId,
+									label: hudCopy( offer.name ),
+									kind: "button",
+									rect: [ x + 4, y + 4, 32, 32 ]
+								} );
+								mallText( hudCopy( offer.name ), [ x + 40, y + 4, cardWidth - 44, 36 ] );
+								mallText( `Silk ${offer.silk}   Gift ${offer.giftSilk}`, [
+									x + 4,
+									y + 40,
+									cardWidth - 8,
+									24
+								] );
+								const bw = (cardWidth - 16) / 3;
+								mallButton( "item-mall-buy:" + index, hudCopy( "UIIT_STT_BUY" ), [
+									x + 4,
+									y + 64,
+									bw,
+									touch
+								], busy );
+								mallButton(
+									"item-mall-wear:" + index,
+									"Wear",
+									[ x + 8 + bw, y + 64, bw, touch ],
+									busy || !game.itemMall || !itemMall.wearEnabled( offer, game.itemMall )
+								);
+								mallButton( "item-mall-reserve:" + index, state.category === 7 ? "Remove" : "Basket", [
+									x + 12 + bw * 2,
+									y + 64,
+									bw,
+									touch
+								], busy );
+							} );
+							const pages = Math.ceil( state.count / state.pageSize ), footerY = h - touch - margin;
+							mallButton(
+								"item-mall-page:" + (state.page - 1),
+								"<",
+								[ margin, footerY, touch, touch ],
+								state.page <= 0
+							);
+							mallButton( "item-mall-page:" + (state.page + 1), ">", [
+								w - margin - touch,
+								footerY,
+								touch,
+								touch
+							], state.page + 1 >= pages );
+							if ( state.category === 7 ) {
+								mallButton( "item-mall-buy-all", "Buy basket", [
+									margin + touch + gap,
+									footerY,
+									contentWidth - 2 * (touch + gap),
+									touch
+								], !state.count || busy );
+							} else {mallText( `${state.page + 1} / ${Math.max( 1, pages )}`, [
+									margin + touch + gap,
+									footerY + 12,
+									contentWidth - 2 * (touch + gap),
+									20
+								] );}
+						}
+					}
+					const missing = paths.slice( mallAdmission[3] ).filter( path => !resources.has( path ) );
+					windowMissing.push( ...missing );
+					if ( !fontPath || !resources.has( fontPath ) || missing.length ) {
+						quads.length = mallAdmission[0];
+						controls = [];
+					} else {
+						const painted = resolveTextOverlaps( quads.slice( mallAdmission[0] ) );
+						quads.length = mallAdmission[0];
+						quads.push( ...painted );
+					}
+					mallButton( "item-mall-close", "Close", [ w - margin - 64, margin, 64, touch ] );
+				} else {
+					itemMall.setPageSize( 6 );
+					state = itemMall.read( game.itemMall );
+					nativeFrame( frame, ox, oy, hudCopy( frame.text ), "item-mall-close" );
+					nativePage( root, ox, oy );
+					// 6BC17E..6BC197 explicitly disable Buying List and Obtained List
+					// through CIFButton_SetEnabled(false), even in the retail client.
+					for ( const node of Object.values( root ) ) {
+						if ( node.type !== "CIFButton" ) continue;
+						// Control ids are unique: the frame X already owns "item-mall-close".
+						const id = node.id === 8 ? "item-mall-close-button" : node.id === 3 ?
+							"item-mall-home" :
+							"item-mall-root:" + node.id;
+						authoredLabeledButton(
+							node,
+							ox,
+							oy,
+							id,
+							hudCopy( node.text ),
+							node.id === 4 || node.id === 5 ?
+								state.worn.length === 0 || state.batchPending || !!game.inventoryPending :
+								node.id !== 8 && node.id !== 3
+						);
+					}
+					for ( let index = 0; index < 8; index++ ) {
+						const category = mallCategories()[index]!;
+						const disabled = category.key !== "basket" &&
+							!game.itemMall?.tabs.some( row => row.category === category.key );
+						const node = mallMenuControl(
+							mallControl( root, 8 ),
+							index,
+							state.category === index,
+							disabled
+						);
+						authoredLabeledButton( node, ox, oy, node.name, hudCopy( node.text ), disabled );
+						authoredImage( mallCategoryIcon( node, index, disabled ), ox, oy );
+					}
+					const infoOrigin = mallControl( root, 90 ).rect;
+					const info = data.windows.ifitemmallmyinfo!;
+					nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [ 10, 11, 12, 14, 18 ] );
+					for ( const id of [ 7, 9 ] ) {
+						const node = mallControl( info, id );
+						authoredLabeledButton(
+							node,
+							ox + infoOrigin[0],
+							oy + infoOrigin[1],
+							"item-mall-funding:" + id,
+							hudCopy( node.text ),
+							true
+						);
+					}
+					if ( game.localGid ) {
+						quads.push( {
+							portraitGid: game.localGid,
+							texture: "__portrait",
+							rect: authoredRect( mallControl( info, 4 ), ox + infoOrigin[0], oy + infoOrigin[1] ),
+							uv: [ 0, 0, 1, 1 ],
+							color: white,
+							clip: full
+						}, {
+							doll: { gid: state.previewGid ?? game.localGid, yaw: 0 },
+							texture: "__doll",
+							rect: (() => {
+								const [x, y, width, height] = authoredRect( mallControl( root, 9 ), ox, oy );
+								// 6BB5BA applies the native viewport insets before its 30-degree camera.
+								return [ x + 2, y + 15, width - 2, height - 37 ];
+							})(),
+							uv: [ 0, 0, 1, 1 ],
+							color: white,
+							clip: full
+						} );
+					}
+					for (
+						const [id, value] of [
+							[ 10, next.session?.character ],
+							[ 11, game.progression?.level ],
+							[ 12, game.itemMall?.silk ],
+							[ 14, game.itemMall?.giftSilk ],
+							[ 18, game.itemMall?.points ]
+						] as const
+					) {
+						authoredText(
+							mallControl( info, id ),
+							ox + infoOrigin[0],
+							oy + infoOrigin[1],
+							String( value ?? "" )
+						);
+					}
+					const trunkOrigin = mallControl( root, 102 ).rect;
+					const tx = ox + trunkOrigin[0], ty = oy + trunkOrigin[1];
+					nativePage( data.windows.ifitemmalltrunk!, tx, ty );
+					nativePage( data.windows.ifitemmallinventory!, tx, ty );
+					// 6CD535 creates 32x32 cells at (17,19), using the inventory's
+					// ordinary 32-slot pages and 36-pixel pitch. Share slot admission.
+					const mallBag = inventorySlots(
+						tx - 1,
+						ty + 6,
+						game.inventorySlotCount ?? 0,
+						game.equipmentSlotCount ?? 13,
+						state.bagPage
+					);
+					for ( const cell of mallBag.slots ) {
+						const item = game.inventory.find( row => row.slot === cell.slot );
+						const path = cell.enabled ? item && iconPath( item.icon ) : data.popupArt.blocked;
+						if ( path ) image( cell.rect, path );
+						if ( cell.enabled && item ) {
+							equipmentOverlay( item, cell.rect );
+							itemEffects( "item-mall-slot:" + cell.slot, item, cell.rect );
+							itemCount( item, cell.rect );
 							controls.push( {
-								id: "item-mall-page:" + page,
-								label: String( page + 1 ),
-								rect: authoredRect( control, sx, sy ),
+								id: "item-mall-slot:" + cell.slot,
+								label: item.name ?? "",
+								rect: cell.rect,
 								kind: "button"
 							} );
 						}
-						if ( manager.previous >= 0 ) {
-							const node = mallControl( data.windows.ifpagemanager!, 1 );
-							authoredButton(
-								{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
-								sx,
-								sy,
-								"item-mall-page:" + manager.previous,
-								""
-							);
-						}
-						if ( manager.next < manager.pages ) {
-							const node = mallControl( data.windows.ifpagemanager!, 2 );
-							authoredButton(
-								{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
-								sx,
-								sy,
-								"item-mall-page:" + manager.next,
-								""
-							);
+					}
+					const selector = mallControl( data.windows.ifitemmallinventory!, 12 );
+					const expansion = data.windows.ifitemmalltrunkexpbar!;
+					for ( let index = 0; index < 3; index++ ) {
+						const position = mallControl( data.windows.ifitemmallinventory!, 51 + index ).rect;
+						const count = Math.max(
+							0,
+							Math.min(
+								32,
+								(game.inventorySlotCount ?? 0) -
+									(game.equipmentSlotCount ?? 13) - 32 * index
+							)
+						);
+						const ex = tx + position[0], ey = ty + position[1];
+						nativePage( expansion, ex, ey );
+						authoredImage(
+							{
+								...mallControl( expansion, 2 ),
+								texture: ROOT + "interface/mall/mall_inven_icon" + (count > 0 ? "" : "_disable") +
+									".png"
+							},
+							ex,
+							ey
+						);
+						authoredText(
+							mallControl( expansion, 3 ),
+							ex,
+							ey,
+							count > 0 ?
+								hudCopy( "UIIT_STT_SILKMALL_REMAIN_INVENTORY" ).replace( "%d", String( count ) ) :
+								hudCopy( "UIIT_STT_NONE" )
+						);
+					}
+					const spin = data.windows.ifspincontrol!;
+					const spinX = tx + selector.rect[0], spinY = ty + selector.rect[1];
+					authoredText( mallControl( spin, 0 ), spinX, spinY, String( mallBag.page + 1 ) );
+					for ( const [id, delta] of [ [ 1, -1 ], [ 2, 1 ] ] as const ) {
+						const page = mallBag.page + delta;
+						authoredButton(
+							mallControl( spin, id ),
+							spinX,
+							spinY,
+							"item-mall-bag-page:" + page,
+							"",
+							page < 0 || page >= mallBag.pages
+						);
+					}
+					const shopOrigin = mallControl( root, 50 ).rect;
+					const shop = data.windows.ifitemmallshop!;
+					for ( const node of authoredPaintOrder( shop ) ) {
+						if ( node.creationSection === 0 || state.category === -1 && node.creationSection === 2 ) {
+							authoredChrome( node, ox + shopOrigin[0], oy + shopOrigin[1] );
 						}
 					}
 
-					const row = data.windows.ifitemmallshopslot!;
-					for ( let index = 0; index < state.offers.length; index++ ) {
-						const offer = state.offers[index]!;
-						const origin = mallControl( shop, 61 + index ).rect;
-						const rx = sx + origin[0], ry = sy + origin[1];
-						nativePage( row, rx, ry, [ 8, 10, 11 ] );
-						authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
-						authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
-						authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
-						const icon = iconPath( offer.icon );
-						if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
-						controls.push( {
-							id: "item-mall-offer:" + offer.packageId,
-							label: hudCopy( offer.name ),
-							rect: authoredRect( mallControl( row, 1 ), rx, ry ),
-							kind: "button"
-						} );
-						for ( const node of Object.values( row ) ) {
-							if ( node.type !== "CIFButton" ) continue;
-							const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
-								"item-mall-buy:" + index :
-								node.id === 6 ?
-								"item-mall-reserve:" + index :
-								"item-mall-row:" + index + ":" + node.id;
-							authoredLabeledButton(
-								node,
-								rx,
-								ry,
-								action,
-								hudCopy( node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text ),
-								(node.id === 3 ?
-									!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
-									node.id !== 4 && node.id !== 6) || !!game.inventoryPending || state.batchPending
+					const sx = ox + shopOrigin[0], sy = oy + shopOrigin[1];
+					const currentTab = state.tabs[state.tab];
+					const description = state.category === -1 ?
+						"UIIT_STT_SILKMALL_MAIN_INTRO" :
+						state.category === 7 ?
+						"UIIT_STT_SILKMALL_MAIN_ZZIM_SUB_TITLE_ZZIM" :
+						currentTab ?
+						mallDescription( currentTab.category, currentTab.tab ) :
+						"";
+					authoredChrome( { ...mallControl( shop, 41 ), text: description }, sx, sy );
+					if ( state.category === -1 ) {
+						authoredChrome(
+							{ ...mallControl( shop, 53 ), text: "UIIT_STT_SILKMALL_MAIN_EXPLAIN" },
+							sx,
+							sy
+						);
+					}
+					if ( state.category === 7 ) {
+						const tab = mallTabControl( mallControl( root, 8 ), 0, true );
+						authoredLabeledButton( tab, sx, sy, tab.name, hudCopy( "UIIT_STT_SILKMALL_ZZIM" ) );
+						const buyAll = mallControl( shop, 42 );
+						authoredLabeledButton(
+							buyAll,
+							sx,
+							sy,
+							"item-mall-buy-all",
+							hudCopy( buyAll.text ),
+							state.count === 0 || state.batchPending || !!game.inventoryPending
+						);
+					}
+					if ( state.category >= 0 ) {
+						for ( let index = 0; index < state.tabs.length; index++ ) {
+							const tab = state.tabs[index]!;
+							const control = mallTabControl( mallControl( root, 8 ), index, index === state.tab );
+							authoredLabeledButton( control, sx, sy, control.name, hudCopy( tab.label ) );
+						}
+						const manager = mallPageLayout( mallControl( shop, 74 ).rect, state.page, state.count );
+						if ( manager.count > 0 ) {
+							const template = {
+								...mallControl( data.windows.ifpagemanager!, 10 ),
+								client: [ 0, 0, 0, 0 ] as UiRect,
+								hAlign: 1,
+								vAlign: 1
+							};
+							authoredText(
+								{ ...template, rect: [ manager.x - 4, manager.y, 4, manager.height ] },
+								sx,
+								sy,
+								"["
 							);
+							authoredText(
+								{
+									...template,
+									rect: [ manager.x + manager.count * manager.width, manager.y, 4, manager.height ]
+								},
+								sx,
+								sy,
+								"]"
+							);
+							for ( let index = 0; index < manager.count; index++ ) {
+								const page = manager.first + index;
+								const control = {
+									...template,
+									rect: [
+										manager.x + index * manager.width,
+										manager.y,
+										manager.width,
+										manager.height
+									] as UiRect
+								};
+								authoredText( control, sx, sy, String( page + 1 ) );
+								controls.push( {
+									id: "item-mall-page:" + page,
+									label: String( page + 1 ),
+									rect: authoredRect( control, sx, sy ),
+									kind: "button"
+								} );
+							}
+							if ( manager.previous >= 0 ) {
+								const node = mallControl( data.windows.ifpagemanager!, 1 );
+								authoredButton(
+									{ ...node, rect: [ manager.left - node.size[0], manager.y, 0, 0 ] },
+									sx,
+									sy,
+									"item-mall-page:" + manager.previous,
+									""
+								);
+							}
+							if ( manager.next < manager.pages ) {
+								const node = mallControl( data.windows.ifpagemanager!, 2 );
+								authoredButton(
+									{ ...node, rect: [ manager.right, manager.y, 0, 0 ] },
+									sx,
+									sy,
+									"item-mall-page:" + manager.next,
+									""
+								);
+							}
+						}
+
+						const row = data.windows.ifitemmallshopslot!;
+						for ( let index = 0; index < state.offers.length; index++ ) {
+							const offer = state.offers[index]!;
+							const origin = mallControl( shop, 61 + index ).rect;
+							const rx = sx + origin[0], ry = sy + origin[1];
+							nativePage( row, rx, ry, [ 8, 10, 11 ] );
+							authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
+							authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
+							authoredText( mallControl( row, 8 ), rx, ry, hudCopy( "UIIT_STT_SILKMALL_SILK" ) );
+							const icon = iconPath( offer.icon );
+							if ( icon ) authoredImage( { ...mallControl( row, 1 ), texture: icon }, rx, ry );
+							controls.push( {
+								id: "item-mall-offer:" + offer.packageId,
+								label: hudCopy( offer.name ),
+								rect: authoredRect( mallControl( row, 1 ), rx, ry ),
+								kind: "button"
+							} );
+							for ( const node of Object.values( row ) ) {
+								if ( node.type !== "CIFButton" ) continue;
+								const action = node.id === 3 ? "item-mall-wear:" + index : node.id === 4 ?
+									"item-mall-buy:" + index :
+									node.id === 6 ?
+									"item-mall-reserve:" + index :
+									"item-mall-row:" + index + ":" + node.id;
+								authoredLabeledButton(
+									node,
+									rx,
+									ry,
+									action,
+									hudCopy(
+										node.id === 6 && state.category === 7 ? "UIIT_STT_SILKMALL_DEL" : node.text
+									),
+									(node.id === 3 ?
+										!game.itemMall || !itemMall.wearEnabled( offer, game.itemMall ) :
+										node.id !== 4 && node.id !== 6) || !!game.inventoryPending || state.batchPending
+								);
+							}
 						}
 					}
-				}
-				if ( state.selected && game.itemMall ) {
-					const page = data.windows.ifitemmallconfirmbuy!;
-					const row = data.windows.ifitemmallconfirmslot!;
-					const currencyLayout = mallCurrencyRows( state.selected, state.quantity, state.points );
-					const currencies = currencyLayout.rows;
-					const dialogWidth = 327, height = currencyLayout.height;
-					const mx = Math.floor( (w - dialogWidth) / 2 ), my = Math.floor( (h - height) / 2 );
-					controls = [];
-					const prefix = ROOT + "interface/messagebox/msgbox2_window_";
-					paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
-					quads.push(
-						...frameRing(
-							[ mx, my, dialogWidth, height ],
-							prefix,
-							PARTS.map( part => resources.size( prefix + part + ".png" ) ),
-							full
-						)
-					);
-					const background = mallControl( page, 4 );
-					authoredChrome(
-						{
-							...background,
-							rect: [
-								background.rect[0],
-								background.rect[1],
-								background.rect[2],
-								background.rect[3] + currencyLayout.growth
-							]
-						},
-						mx,
-						my
-					);
-					// The fill belongs behind the authored controls.
-					for ( const node of authoredPaintOrder( page ) ) {
-						if ( [ 4, 11, 40, 42, 50, 51, 61, 62 ].includes( node.id ) ) continue;
-						authoredChrome( node, mx, my );
-						if ( node.text ) authoredText( node, mx, my, hudCopy( node.text ) );
-					}
-					authoredText( mallControl( page, 40 ), mx, my, hudCopy( state.selected.name ) );
-					authoredText( mallControl( page, 42 ), mx, my, String( state.quantity ) );
-					const icon = iconPath( state.selected.icon );
-					if ( icon ) authoredImage( { ...mallControl( page, 11 ), texture: icon }, mx, my );
-					for ( let index = 0; index < currencies.length; index++ ) {
-						const currency = currencies[index]!, cy = my + currency.y;
-						nativePage( row, mx, cy, [ 3, 4, 5, 10 ] );
-						authoredText( mallControl( row, 3 ), mx, cy, String( currency.amount ) );
-						authoredText( mallControl( row, 4 ), mx, cy, hudCopy( currency.label ) );
-					}
-					controls.push( {
-						id: "item-mall-quantity",
-						label: hudCopy( "UIIT_STT_AMOUNT" ),
-						rect: authoredRect( mallControl( page, 42 ), mx, my ),
-						kind: "text",
-						value: String( state.quantity ),
-						maxLength: 5,
-						disabled: game.inventoryPending
-					} );
-					if ( state.selected.allowsPoints ) {
-						authoredLabeledButton(
-							mallControl( row, 10 ),
+					if ( state.selected && game.itemMall ) {
+						const page = data.windows.ifitemmallconfirmbuy!;
+						const row = data.windows.ifitemmallconfirmslot!;
+						const currencyLayout = mallCurrencyRows( state.selected, state.quantity, state.points );
+						const currencies = currencyLayout.rows;
+						const dialogWidth = 327, height = currencyLayout.height;
+						const mx = Math.floor( (w - dialogWidth) / 2 ), my = Math.floor( (h - height) / 2 );
+						controls = [];
+						const prefix = ROOT + "interface/messagebox/msgbox2_window_";
+						paths.push( ...PARTS.map( part => prefix + part + ".png" ) );
+						quads.push(
+							...frameRing(
+								[ mx, my, dialogWidth, height ],
+								prefix,
+								PARTS.map( part => resources.size( prefix + part + ".png" ) ),
+								full
+							)
+						);
+						const background = mallControl( page, 4 );
+						authoredChrome(
+							{
+								...background,
+								rect: [
+									background.rect[0],
+									background.rect[1],
+									background.rect[2],
+									background.rect[3] + currencyLayout.growth
+								]
+							},
 							mx,
-							my + currencies.find( row => row.points )!.y,
-							"item-mall-points",
-							hudCopy( "UIIT_STT_SILKMALL_USE_POINT" ),
+							my
+						);
+						// The fill belongs behind the authored controls.
+						for ( const node of authoredPaintOrder( page ) ) {
+							if ( [ 4, 11, 40, 42, 50, 51, 61, 62 ].includes( node.id ) ) continue;
+							authoredChrome( node, mx, my );
+							if ( node.text ) authoredText( node, mx, my, hudCopy( node.text ) );
+						}
+						authoredText( mallControl( page, 40 ), mx, my, hudCopy( state.selected.name ) );
+						authoredText( mallControl( page, 42 ), mx, my, String( state.quantity ) );
+						const icon = iconPath( state.selected.icon );
+						if ( icon ) authoredImage( { ...mallControl( page, 11 ), texture: icon }, mx, my );
+						for ( let index = 0; index < currencies.length; index++ ) {
+							const currency = currencies[index]!, cy = my + currency.y;
+							nativePage( row, mx, cy, [ 3, 4, 5, 10 ] );
+							authoredText( mallControl( row, 3 ), mx, cy, String( currency.amount ) );
+							authoredText( mallControl( row, 4 ), mx, cy, hudCopy( currency.label ) );
+						}
+						controls.push( {
+							id: "item-mall-quantity",
+							label: hudCopy( "UIIT_STT_AMOUNT" ),
+							rect: authoredRect( mallControl( page, 42 ), mx, my ),
+							kind: "text",
+							value: String( state.quantity ),
+							maxLength: 5,
+							disabled: game.inventoryPending
+						} );
+						if ( state.selected.allowsPoints ) {
+							authoredLabeledButton(
+								mallControl( row, 10 ),
+								mx,
+								my + currencies.find( row => row.points )!.y,
+								"item-mall-points",
+								hudCopy( "UIIT_STT_SILKMALL_USE_POINT" ),
+								game.inventoryPending
+							);
+						}
+
+						for (
+							const [id, name, delta] of [ [ 50, "item-mall-quantity-up", 1 ], [
+								51,
+								"item-mall-quantity-down",
+								-1
+							] ] as const
+						) {
+							authoredButton(
+								mallControl( page, id ),
+								mx,
+								my,
+								name,
+								"",
+								game.inventoryPending || state.quantity + delta < 1 ||
+									state.quantity + delta > state.selected.purchaseLimit
+							);
+						}
+						authoredLabeledButton(
+							{ ...mallControl( page, 61 ), rect: [ 82, height - 40, 0, 0 ] },
+							mx,
+							my,
+							"item-mall-purchase",
+							hudCopy( "UIIT_STT_BUY" ),
+							game.inventoryPending || !itemMall.purchase( game.itemMall )
+						);
+						authoredLabeledButton(
+							{ ...mallControl( page, 62 ), rect: [ 170, height - 40, 0, 0 ] },
+							mx,
+							my,
+							"item-mall-cancel",
+							hudCopy( "UIIT_CTL_CANCEL" ),
 							game.inventoryPending
 						);
 					}
-
-					for (
-						const [id, name, delta] of [ [ 50, "item-mall-quantity-up", 1 ], [
-							51,
-							"item-mall-quantity-down",
-							-1
-						] ] as const
-					) {
-						authoredButton(
-							mallControl( page, id ),
+					if ( state.question && game.itemMall ) {
+						const question = state.question;
+						const layout = mallQuestionLayout( question.kind, question.offers.length );
+						const mx = Math.floor( (w - layout.width) / 2 ), my = Math.floor( (h - layout.height) / 2 );
+						const page = data.windows.ifmessagebox!;
+						const store = Object.fromEntries(
+							Object.entries( page ).filter( ( [, node] ) => node.creationSection === 1 )
+						);
+						const template = mallControl( data.windows.ifitemmallconfirmbuy!, 5 );
+						controls = [];
+						paths.push( ...partyProposalAssets() );
+						quads.push(
+							...normalTile(
+								[ mx + 16, my + 40, layout.width - 32, layout.height - 56 ],
+								MESSAGE_TILE,
+								resources.size( MESSAGE_TILE ),
+								full
+							),
+							...frameRing(
+								[ mx, my, layout.width, layout.height ],
+								MESSAGE_FRAME,
+								PARTS.map( part => resources.size( MESSAGE_FRAME + part + ".png" ) ),
+								full
+							)
+						);
+						authoredText(
+							{ ...template, rect: [ 16, 12, layout.width - 32, 14 ] },
 							mx,
 							my,
-							name,
-							"",
-							game.inventoryPending || state.quantity + delta < 1 ||
-								state.quantity + delta > state.selected.purchaseLimit
+							hudCopy( layout.caption )
 						);
-					}
-					authoredLabeledButton(
-						{ ...mallControl( page, 61 ), rect: [ 82, height - 40, 0, 0 ] },
-						mx,
-						my,
-						"item-mall-purchase",
-						hudCopy( "UIIT_STT_BUY" ),
-						game.inventoryPending || !itemMall.purchase( game.itemMall )
-					);
-					authoredLabeledButton(
-						{ ...mallControl( page, 62 ), rect: [ 170, height - 40, 0, 0 ] },
-						mx,
-						my,
-						"item-mall-cancel",
-						hudCopy( "UIIT_CTL_CANCEL" ),
-						game.inventoryPending
-					);
-				}
-				if ( state.question && game.itemMall ) {
-					const question = state.question;
-					const layout = mallQuestionLayout( question.kind, question.offers.length );
-					const mx = Math.floor( (w - layout.width) / 2 ), my = Math.floor( (h - layout.height) / 2 );
-					const page = data.windows.ifmessagebox!;
-					const store = Object.fromEntries(
-						Object.entries( page ).filter( ( [, node] ) => node.creationSection === 1 )
-					);
-					const template = mallControl( data.windows.ifitemmallconfirmbuy!, 5 );
-					controls = [];
-					paths.push( ...partyProposalAssets() );
-					quads.push(
-						...normalTile(
-							[ mx + 16, my + 40, layout.width - 32, layout.height - 56 ],
-							MESSAGE_TILE,
-							resources.size( MESSAGE_TILE ),
-							full
-						),
-						...frameRing(
-							[ mx, my, layout.width, layout.height ],
-							MESSAGE_FRAME,
-							PARTS.map( part => resources.size( MESSAGE_FRAME + part + ".png" ) ),
-							full
-						)
-					);
-					authoredText(
-						{ ...template, rect: [ 16, 12, layout.width - 32, 14 ] },
-						mx,
-						my,
-						hudCopy( layout.caption )
-					);
-					authoredChrome(
-						{ ...template, type: "CIFPML", rect: [ ...layout.messageRect ], text: layout.message },
-						mx,
-						my
-					);
-					if ( question.kind === "reserve" || question.kind === "remove" ) {
-						const offer = question.offers[0]!;
-						authoredImage( mallControl( store, 10 ), mx, my );
-						authoredImage( mallControl( store, 1 ), mx, my );
-						authoredText( mallControl( store, 1 ), mx, my, hudCopy( offer.name ) );
-						const icon = iconPath( offer.icon );
-						if ( icon ) authoredImage( { ...mallControl( store, 12 ), texture: icon }, mx, my );
-					} else {
-						const total = question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ) - state.points;
-						if ( question.kind === "worn" ) {
-							for ( let index = 0; index < question.offers.length; index++ ) {
-								const offer = question.offers[index]!, y = layout.rowStart + layout.rowPitch * index;
-								authoredText(
-									{ ...template, rect: [ 70, y, 100, 16 ], hAlign: 2 },
-									mx,
-									my,
-									hudCopy( offer.name )
-								);
-								authoredText(
-									{ ...template, rect: [ 165, y, 40, 16 ], hAlign: 2 },
-									mx,
-									my,
-									`${offer.silk} ${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}`
-								);
+						authoredChrome(
+							{ ...template, type: "CIFPML", rect: [ ...layout.messageRect ], text: layout.message },
+							mx,
+							my
+						);
+						if ( question.kind === "reserve" || question.kind === "remove" ) {
+							const offer = question.offers[0]!;
+							authoredImage( mallControl( store, 10 ), mx, my );
+							authoredImage( mallControl( store, 1 ), mx, my );
+							authoredText( mallControl( store, 1 ), mx, my, hudCopy( offer.name ) );
+							const icon = iconPath( offer.icon );
+							if ( icon ) authoredImage( { ...mallControl( store, 12 ), texture: icon }, mx, my );
+						} else {
+							const total = question.offers.reduce( ( sum, offer ) => sum + offer.silk, 0 ) -
+								state.points;
+							if ( question.kind === "worn" ) {
+								for ( let index = 0; index < question.offers.length; index++ ) {
+									const offer = question.offers[index]!,
+										y = layout.rowStart + layout.rowPitch * index;
+									authoredText(
+										{ ...template, rect: [ 70, y, 100, 16 ], hAlign: 2 },
+										mx,
+										my,
+										hudCopy( offer.name )
+									);
+									authoredText(
+										{ ...template, rect: [ 165, y, 40, 16 ], hAlign: 2 },
+										mx,
+										my,
+										`${offer.silk} ${hudCopy( "UIIT_STT_ROLL_OF_CLOTH" )}`
+									);
+								}
 							}
-						}
-						authoredText(
-							{
-								...mallControl( store, 8 ),
-								rect: [ question.kind === "basket" ? 91 : 121, layout.totalY, 50, 14 ],
-								hAlign: 2
-							},
-							mx,
-							my,
-							hudCopy( "UIIT_STT_PRICE" )
-						);
-						authoredText(
-							{
-								...mallControl( store, 2 ),
-								color: tooltipColor( 0xffffcc26 ),
-								rect: [
-									question.kind === "basket" ? 143 : 166,
-									layout.totalY,
-									question.kind === "basket" ? 40 : 28,
-									14
-								],
-								hAlign: 2
-							},
-							mx,
-							my,
-							String( total )
-						);
-						authoredText(
-							{
-								...mallControl( store, 7 ),
-								rect: [ question.kind === "basket" ? 183 : 188, layout.totalY, 26, 14 ]
-							},
-							mx,
-							my,
-							hudCopy( "UIIT_STT_SILKMALL_SILK" )
-						);
-						if ( state.pointLimit > 0 ) {
-							for ( const id of [ 50, 51 ] ) {
-								const node = mallControl( store, id );
-								authoredText(
-									{ ...node, rect: [ node.rect[0], layout.pointY, node.rect[2], node.rect[3] ] },
-									mx,
-									my,
-									id === 51 ? String( state.points ) : hudCopy( node.text )
-								);
-							}
-							const button = mallControl( store, 52 );
-							authoredLabeledButton(
-								{ ...button, rect: [ button.rect[0], layout.pointY, button.rect[2], button.rect[3] ] },
+							authoredText(
+								{
+									...mallControl( store, 8 ),
+									rect: [ question.kind === "basket" ? 91 : 121, layout.totalY, 50, 14 ],
+									hAlign: 2
+								},
 								mx,
 								my,
-								"item-mall-points",
-								hudCopy( button.text ),
-								!!game.inventoryPending
+								hudCopy( "UIIT_STT_PRICE" )
 							);
+							authoredText(
+								{
+									...mallControl( store, 2 ),
+									color: tooltipColor( 0xffffcc26 ),
+									rect: [
+										question.kind === "basket" ? 143 : 166,
+										layout.totalY,
+										question.kind === "basket" ? 40 : 28,
+										14
+									],
+									hAlign: 2
+								},
+								mx,
+								my,
+								String( total )
+							);
+							authoredText(
+								{
+									...mallControl( store, 7 ),
+									rect: [ question.kind === "basket" ? 183 : 188, layout.totalY, 26, 14 ]
+								},
+								mx,
+								my,
+								hudCopy( "UIIT_STT_SILKMALL_SILK" )
+							);
+							if ( state.pointLimit > 0 ) {
+								for ( const id of [ 50, 51 ] ) {
+									const node = mallControl( store, id );
+									authoredText(
+										{ ...node, rect: [ node.rect[0], layout.pointY, node.rect[2], node.rect[3] ] },
+										mx,
+										my,
+										id === 51 ? String( state.points ) : hudCopy( node.text )
+									);
+								}
+								const button = mallControl( store, 52 );
+								authoredLabeledButton(
+									{
+										...button,
+										rect: [ button.rect[0], layout.pointY, button.rect[2], button.rect[3] ]
+									},
+									mx,
+									my,
+									"item-mall-points",
+									hudCopy( button.text ),
+									!!game.inventoryPending
+								);
+							}
 						}
+						authoredLabeledButton(
+							{ ...mallControl( store, 215 ), rect: [ layout.buttonX, layout.buttonY, 76, 22 ] },
+							mx,
+							my,
+							"item-mall-question-confirm",
+							hudCopy( layout.confirm ),
+							!!game.inventoryPending || !state.questionReady
+						);
+						authoredLabeledButton(
+							{ ...mallControl( store, 216 ), rect: [ layout.buttonX + 80, layout.buttonY, 76, 22 ] },
+							mx,
+							my,
+							"item-mall-question-cancel",
+							hudCopy( "UIIT_CTL_CANCEL" )
+						);
 					}
-					authoredLabeledButton(
-						{ ...mallControl( store, 215 ), rect: [ layout.buttonX, layout.buttonY, 76, 22 ] },
-						mx,
-						my,
-						"item-mall-question-confirm",
-						hudCopy( layout.confirm ),
-						!!game.inventoryPending || !state.questionReady
-					);
-					authoredLabeledButton(
-						{ ...mallControl( store, 216 ), rect: [ layout.buttonX + 80, layout.buttonY, 76, 22 ] },
-						mx,
-						my,
-						"item-mall-question-cancel",
-						hudCopy( "UIIT_CTL_CANCEL" )
-					);
-				}
-				if ( state.pointDialog && game.itemMall ) {
-					const prefix = ROOT + "interface/messagebox/msgbox2_window_";
-					const pointPage = data.windows.ifitemmallusepoint!;
-					const pointWidth = 233, pointHeight = 177;
-					const px = Math.floor( (w - pointWidth) / 2 ), py = Math.floor( (h - pointHeight) / 2 );
-					controls = [];
-					quads.push(
-						...frameRing(
-							[ px, py, pointWidth, pointHeight ],
-							prefix,
-							PARTS.map( part => resources.size( prefix + part + ".png" ) ),
-							full
-						)
-					);
-					nativePage( pointPage, px, py, [ 40, 41 ] );
-					authoredText( mallControl( pointPage, 40 ), px, py, String( game.itemMall.points ) );
-					authoredText( mallControl( pointPage, 41 ), px, py, String( state.pointDraft ) );
-					controls.push( {
-						id: "item-mall-point-value",
-						label: hudCopy( "UIIT_STT_SILKMALL_P_POINT" ),
-						rect: authoredRect( mallControl( pointPage, 41 ), px, py ),
-						kind: "text",
-						value: String( state.pointDraft ),
-						maxLength: 10,
-						disabled: game.inventoryPending
-					} );
-					authoredLabeledButton(
-						mallControl( pointPage, 50 ),
-						px,
-						py,
-						"item-mall-points-apply",
-						hudCopy( mallControl( pointPage, 50 ).text ),
-						game.inventoryPending
-					);
+					if ( state.pointDialog && game.itemMall ) {
+						const prefix = ROOT + "interface/messagebox/msgbox2_window_";
+						const pointPage = data.windows.ifitemmallusepoint!;
+						const pointWidth = 233, pointHeight = 177;
+						const px = Math.floor( (w - pointWidth) / 2 ), py = Math.floor( (h - pointHeight) / 2 );
+						controls = [];
+						quads.push(
+							...frameRing(
+								[ px, py, pointWidth, pointHeight ],
+								prefix,
+								PARTS.map( part => resources.size( prefix + part + ".png" ) ),
+								full
+							)
+						);
+						nativePage( pointPage, px, py, [ 40, 41 ] );
+						authoredText( mallControl( pointPage, 40 ), px, py, String( game.itemMall.points ) );
+						authoredText( mallControl( pointPage, 41 ), px, py, String( state.pointDraft ) );
+						controls.push( {
+							id: "item-mall-point-value",
+							label: hudCopy( "UIIT_STT_SILKMALL_P_POINT" ),
+							rect: authoredRect( mallControl( pointPage, 41 ), px, py ),
+							kind: "text",
+							value: String( state.pointDraft ),
+							maxLength: 10,
+							disabled: game.inventoryPending
+						} );
+						authoredLabeledButton(
+							mallControl( pointPage, 50 ),
+							px,
+							py,
+							"item-mall-points-apply",
+							hudCopy( mallControl( pointPage, 50 ).text ),
+							game.inventoryPending
+						);
+					}
+					endWindow( mallAdmission, "item-mall" );
 				}
 			}
 			if ( worldVisible && game && withdrawal.confirming() && hud.data() ) {
@@ -17457,7 +18638,11 @@ export function createUi(
 			probe?.detailBegin( "ui-finalize" );
 			const semantics = {
 				loadingVisible: !!loading && !assetFailure,
-				hudCorner,
+				// The diagnostic chip gets a separate row below the compact Map
+				// button, whether the minimap is expanded or collapsed.
+				hudCorner: compact ?
+					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
+					hudCorner,
 				focusRequest: worldVisible && phase === "world" ? focusRequest : undefined,
 				loadingProgress: loading?.progress,
 				loadingStatus: loading?.status,

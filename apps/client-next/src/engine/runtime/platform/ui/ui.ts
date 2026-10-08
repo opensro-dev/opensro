@@ -22,6 +22,9 @@ const LOGIN_AUTOCOMPLETE: Readonly<Record<string, string>> = {
 	password: "current-password"
 };
 const INPUT_FONT_PIXELS = 12;
+const TOUCH_HOLD_MS = 500;
+const TOUCH_HOLD_SLOP_PIXELS = 8;
+const TOUCH_CLICK_HISTORY = 32;
 /*
 ================
 configureCredentialHints
@@ -110,8 +113,61 @@ export function createUiBridge(
 		return [ (event.clientX - box.left) / scale, (event.clientY - box.top) / scale ];
 	}
 	let rightPressed: { element: Element; pointer: number; } | null = null;
+	// Owner-authorized port-only mobile input. This state owns only admission;
+	// published rightActivate metadata and the native secondary path own use.
+	const touchHold: {
+		pointers: Set<number>;
+		press: { element: Element; event: PointerEvent; secondary: boolean; } | null;
+		clicks: Map<number, Element>;
+		timer: number | null;
+	} = { pointers: new Set(), press: null, clicks: new Map(), timer: null };
+	/*
+	================
+	cancelTouchHold
+	================
+	*/
+	function cancelTouchHold() {
+		if ( touchHold.timer !== null ) window.clearTimeout( touchHold.timer );
+		touchHold.timer = null;
+		touchHold.press = null;
+	}
+	window.addEventListener( "pointerdown", event => {
+		if ( event.pointerType !== "touch" ) return;
+		touchHold.clicks.delete( event.pointerId );
+		const slot = current( event.target );
+		if ( slot?.value.kind === "button" ) {
+			touchHold.clicks.set( event.pointerId, slot.element );
+			while ( touchHold.clicks.size > TOUCH_CLICK_HISTORY ) {
+				touchHold.clicks.delete( touchHold.clicks.keys().next().value! );
+			}
+		}
+		touchHold.pointers.add( event.pointerId );
+		if ( touchHold.pointers.size > 1 ) cancelTouchHold();
+	}, { capture: true, signal: lifetime.signal } );
+	window.addEventListener( "pointermove", event => {
+		const press = touchHold.press;
+		if (
+			press && press.event.pointerId === event.pointerId &&
+			(Math.hypot( event.clientX - press.event.clientX, event.clientY - press.event.clientY ) >
+					TOUCH_HOLD_SLOP_PIXELS ||
+				current( document.elementFromPoint( event.clientX, event.clientY ) )?.element !== press.element)
+		) cancelTouchHold();
+	}, { capture: true, signal: lifetime.signal } );
+	for ( const name of [ "pointerup", "pointercancel" ] as const ) {
+		window.addEventListener( name, event => {
+			touchHold.pointers.delete( event.pointerId );
+			if ( name === "pointercancel" && touchHold.press?.event.pointerId === event.pointerId ) cancelTouchHold();
+		}, { capture: true, signal: lifetime.signal } );
+	}
+	window.addEventListener( "blur", () => {
+		cancelTouchHold();
+		touchHold.pointers.clear();
+	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointermove", event => {
 		if ( !drag || event.pointerId !== drag.pointer ) return;
+		// Touch jitter belongs to the pending hold. Once its CSS-pixel slop is
+		// crossed, the capture listener cancels it before this drag can publish.
+		if ( touchHold.press?.event.pointerId === event.pointerId ) return;
 		const current = controls.get( drag.id )?.value;
 		if ( !current?.draggable || current.disabled ) {
 			emit( { kind: "drag-cancel", id: drag.id } );
@@ -297,9 +353,19 @@ export function createUiBridge(
 		if ( event instanceof PointerEvent && event.pointerId !== rightPressed.pointer ) return;
 		const armed = rightPressed;
 		rightPressed = null;
+		activateSecondary( armed.element, event );
+	}
+	/*
+	================
+	activateSecondary
+
+	Mouse release and an admitted touch hold use the same live control contract.
+	================
+	*/
+	function activateSecondary( element: Element, event: MouseEvent ) {
 		const slot = current( document.elementFromPoint( event.clientX, event.clientY ) );
 		// 5650A0 uses the pressed control and admits release only inside it.
-		if ( slot?.element === armed.element && slot.value.rightActivate && !slot.value.disabled ) {
+		if ( slot?.element === element && slot.value.rightActivate && !slot.value.disabled ) {
 			emit( {
 				kind: "right-activate",
 				id: slot.value.id,
@@ -336,8 +402,15 @@ export function createUiBridge(
 	window.addEventListener( "blur", () => {
 		rightPressed = null;
 	}, { signal: lifetime.signal } );
-	root.addEventListener( "click", event => {
-		const slot = current( event.target ), suppressed = suppressClick, putBack = suppressCarry;
+	/*
+	================
+	activatePrimary
+
+	Mouse/keyboard clicks and admitted touch taps share activation and carry.
+	================
+	*/
+	function activatePrimary( target: EventTarget | null, event: MouseEvent, pointerActivation: boolean ) {
+		const slot = current( target ), suppressed = suppressClick, putBack = suppressCarry;
 		suppressClick = null;
 		suppressCarry = null;
 		if ( slot?.value.kind === "button" && !slot.value.disabled && slot.value.id !== suppressed ) {
@@ -355,7 +428,7 @@ export function createUiBridge(
 			// threw the icon onto the cursor until the sale disabled its slot.
 			const modified = event.ctrlKey || event.shiftKey || event.altKey;
 			if (
-				slot.value.carry && slot.value.draggable && !carry && event.detail > 0 && !modified &&
+				slot.value.carry && slot.value.draggable && !carry && pointerActivation && !modified &&
 				putBack !== slot.value.id
 			) {
 				const [x, y] = uiPoint( event ), rect = slot.value.rect;
@@ -369,6 +442,35 @@ export function createUiBridge(
 				} );
 			}
 		}
+	}
+	root.addEventListener( "click", event => activatePrimary( event.target, event, event.detail > 0 ), {
+		signal: lifetime.signal
+	} );
+	// Owner-authorized port-only mobile taps do not depend on Chrome emitting
+	// a compatibility click after a camera gesture. Consume that click if it
+	// does arrive, including after cancellation, retirement or a fired hold.
+	window.addEventListener( "click", event => {
+		const pointer = event instanceof PointerEvent ? event.pointerId : undefined;
+		const touch = (event as MouseEvent & { sourceCapabilities?: { firesTouchEvents: boolean; }; })
+			.sourceCapabilities?.firesTouchEvents;
+		if (
+			!(pointer !== undefined && touchHold.clicks.has( pointer )) &&
+			!(touch && [ ...touchHold.clicks.values() ].includes( current( event.target )?.element! ))
+		) return;
+		event.preventDefault();
+		event.stopPropagation();
+	}, { capture: true, signal: lifetime.signal } );
+	window.addEventListener( "pointerup", event => {
+		const press = touchHold.press;
+		if ( !press || press.event.pointerId !== event.pointerId ) return;
+		cancelTouchHold();
+		if (
+			event.button !== 0 || swallowClick ||
+			Math.hypot( event.clientX - press.event.clientX, event.clientY - press.event.clientY ) >
+				TOUCH_HOLD_SLOP_PIXELS ||
+			current( document.elementFromPoint( event.clientX, event.clientY ) )?.element !== press.element
+		) return;
+		activatePrimary( press.element, event, true );
 	}, { signal: lifetime.signal } );
 	/*
 	================
@@ -519,6 +621,22 @@ export function createUiBridge(
 			const [x, y] = uiPoint( event );
 			drag = { id: slot.value.id, pointer: event.pointerId, x, y };
 		}
+		if ( event.pointerType === "touch" && touchHold.pointers.size === 1 && slot.value.kind === "button" ) {
+			cancelTouchHold();
+			touchHold.press = { element: slot.element, event, secondary: !!slot.value.rightActivate };
+			if ( !slot.value.rightActivate ) return;
+			touchHold.timer = window.setTimeout( () => {
+				const press = touchHold.press;
+				cancelTouchHold();
+				if ( !press ) return;
+				// A committed secondary action consumes the gesture, including later
+				// movement before release. It cannot also become an inventory drag.
+				if ( drag?.pointer === press.event.pointerId ) drag = null;
+				// Consume the eventual primary click even on a non-draggable icon.
+				suppressClick = slot.value.id;
+				activateSecondary( press.element, press.event );
+			}, TOUCH_HOLD_MS );
+		}
 	}, { signal: lifetime.signal } );
 	/*
 	================
@@ -531,6 +649,7 @@ export function createUiBridge(
 		const slot = controls.get( id );
 		if ( !slot ) return;
 		if ( rightPressed?.element === slot.element ) rightPressed = null;
+		if ( touchHold.press?.element === slot.element ) cancelTouchHold();
 		if ( carry?.id === id ) cancelCarry();
 		if ( drag?.id === id ) {
 			if ( slot.element.hasPointerCapture( drag.pointer ) ) slot.element.releasePointerCapture( drag.pointer );
@@ -613,6 +732,16 @@ export function createUiBridge(
 					controls.set( control.id, slot );
 				}
 				const el = slot.element;
+				// Published drags own their touch stream even without secondary use
+				// (skill/action bindings and window handles must not become page pans).
+				const touchAction = control.rightActivate || control.draggable ? "none" : "";
+				if ( el.style.touchAction !== touchAction ) el.style.touchAction = touchAction;
+				if (
+					touchHold.press?.element === el &&
+					(control.disabled || touchHold.press.secondary && !control.rightActivate)
+				) {
+					cancelTouchHold();
+				}
 				if ( slot.order !== order ) {
 					slot.order = order;
 					el.style.zIndex = String( order );
@@ -726,6 +855,9 @@ export function createUiBridge(
 		*/
 		dispose() {
 			if ( lifetime.signal.aborted ) return;
+			cancelTouchHold();
+			touchHold.pointers.clear();
+			touchHold.clicks.clear();
 			drag = null;
 			carry = null;
 			rightPressed = null;

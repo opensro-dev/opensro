@@ -108,8 +108,8 @@ export const rules = {
 	requestAnimationFrame: [ runtime + "runtime.ts" ],
 	cancelAnimationFrame: [ runtime + "runtime.ts" ],
 	// The asset loader owns one trailing progress timer, cleared on dispose.
-	setTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts" ],
-	clearTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts" ],
+	setTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts", uiBridge ],
+	clearTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts", uiBridge ],
 	setInterval: [],
 	createRenderBundleEncoder: [ device ],
 	createBundleEncoder: [ device, frame ],

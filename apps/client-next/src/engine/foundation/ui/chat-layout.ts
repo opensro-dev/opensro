@@ -29,6 +29,9 @@ export interface ChatLayoutInput {
 	layout: AuthoredLayout;
 	width: number;
 	height: number;
+	// Port-only adaptive layout; omitted retains the native desktop geometry.
+	// bottom reserves pixels below chat; maxRows caps the native 56px row groups.
+	compact?: { bottom: number; maxRows: number; };
 	rows: number;
 	tab: number;
 	input: string;
@@ -65,7 +68,7 @@ export function chatLayout( state: ChatLayoutInput ) {
 		layout,
 		width,
 		height,
-		rows,
+		rows: requestedRows,
 		tab,
 		input,
 		lines,
@@ -84,7 +87,24 @@ export function chatLayout( state: ChatLayoutInput ) {
 		white = [ 1, 1, 1, 1 ] as const,
 		gold = [ 219 / 255, 201 / 255, 155 / 255, 1 ] as const,
 		full: UiRect = [ 0, 0, width, height ];
-	const total = rows ? 62 + rows * 56 : 20, y = height - 52 - total;
+	// Only the displayed rows change: resizing must not overwrite the saved size.
+	const chatWidth = state.compact ? Math.max( 0, Math.min( 399, width ) ) : 399,
+		bottom = state.compact ? Math.max( 0, Math.min( height - 20, state.compact.bottom ) ) : 52,
+		rows = state.compact ?
+			Math.max(
+				0,
+				Math.min(
+					Math.floor( requestedRows ),
+					Math.floor( state.compact.maxRows ),
+					Math.floor( (height - bottom - 62) / 56 )
+				)
+			) :
+			requestedRows,
+		backgroundWidth = Math.max( 0, chatWidth - 18 ),
+		textWidth = Math.max( 1, chatWidth - 34 ),
+		tabPitch = state.compact ? Math.max( 0, Math.min( 51, (chatWidth - 46) / 4 ) ) : 51,
+		total = rows ? 62 + rows * 56 : 20,
+		y = height - bottom - total;
 	let scrolling = { range: 0, travel: 0, bounds: [ 0, 0, 0, 0 ] as UiRect };
 	/*
 ================
@@ -109,17 +129,17 @@ button
 	}
 	if ( rows ) {
 		const bg = layout.GDR_CHAT_BG_MID!.texture;
-		image( bg, [ 18, y + 21, 381, 4 ], layout.GDR_CHAT_BG_UP!.uv );
-		image( bg, [ 18, y + 25, 381, rows * 56 + 12 ], layout.GDR_CHAT_BG_MID!.uv );
-		image( bg, [ 18, y + 37 + rows * 56, 381, 4 ], layout.GDR_CHAT_BG_DOWN!.uv );
+		image( bg, [ 18, y + 21, backgroundWidth, 4 ], layout.GDR_CHAT_BG_UP!.uv );
+		image( bg, [ 18, y + 25, backgroundWidth, rows * 56 + 12 ], layout.GDR_CHAT_BG_MID!.uv );
+		image( bg, [ 18, y + 37 + rows * 56, backgroundWidth, 4 ], layout.GDR_CHAT_BG_DOWN!.uv );
 		button( "chat-whispers", "Whisper list", layout.GDR_BUTTON_WHISPERLIST!.texture, [ 15, y, 16, 20 ] );
 		button( "chat-hide", "See/hide chatting", layout.GDR_BUTTON_CHATTABHIDE!.texture, [ 30, y, 16, 20 ] );
 		const keys = [ "UIIT_CTL_CHAT_ALL", "UIIT_CTL_PARTY", "UIIT_CTL_GUILD", "UIIT_STT_GUILD_RESPECT_ALLY" ];
 		if ( !hidden ) {
 			keys.forEach( ( key, i ) => {
-				const r: UiRect = [ 45 + i * 51, y, 52, 20 ];
+				const r: UiRect = [ 45 + i * tabPitch, y, tabPitch + 1, 20 ];
 				image( "/assets/images/Media_extracted/interface/chattingwnd/chat_tab.png", r );
-				const caption: UiRect = [ r[0] + 5, r[1] + 4, 47, 14 ];
+				const caption: UiRect = [ r[0] + 5, r[1] + 4, Math.max( 0, r[2] - 5 ), 14 ];
 				quads.push(
 					...text(
 						copy( key ),
@@ -146,14 +166,19 @@ button
 							"GDR_STATIC_ALLYLAMP"
 						][i]!
 					]!;
-					image( lamp.texture, [ lamp.rect[0], y + lamp.rect[1], lamp.rect[2], lamp.rect[3] ] );
+					image( lamp.texture, [
+						lamp.rect[0] + i * (tabPitch - 51),
+						y + lamp.rect[1],
+						lamp.rect[2],
+						lamp.rect[3]
+					] );
 				}
 			} );
 		}
-		const clip: UiRect = [ 27, y + 28, 365, rows * 56 + 7 ], channel = [ 1, 4, 5, 11 ][tab];
+		const clip: UiRect = [ 27, y + 28, textWidth, rows * 56 + 7 ], channel = [ 1, 4, 5, 11 ][tab];
 		const all = [
 			...(tab === 0 && lines.length < 128 ?
-				textLines( welcome, 365, measure, true ).map( value => ({
+				textLines( welcome, textWidth, measure, true ).map( value => ({
 					value,
 					color: gold,
 					recipient: undefined as string | undefined,
@@ -162,7 +187,7 @@ button
 				[]),
 			// Stall lines belong to the stall window's own chat box.
 			...lines.filter( l => l.channel !== STALL_CHAT_CHANNEL && (tab === 0 || l.channel === channel) ).flatMap(
-				l => textLines( chatLineText( l, copy ), 365, measure, true ).map( value => ({
+				l => textLines( chatLineText( l, copy ), textWidth, measure, true ).map( value => ({
 					value,
 					color: chatLineColor( l.channel ),
 					recipient: l.channel !== 7 ? l.name : undefined,
@@ -183,7 +208,7 @@ button
 			hover,
 			pressed
 		);
-		scrolling = { range: scroll.range, travel: scroll.travel, bounds: [ 0, y, 399, total - 20 ] };
+		scrolling = { range: scroll.range, travel: scroll.travel, bounds: [ 0, y, chatWidth, total - 20 ] };
 		quads.push( ...scroll.quads );
 		paths.push( ...scroll.paths );
 		controls.push( ...scroll.controls );
@@ -212,12 +237,12 @@ button
 			}
 			quads.push( ...text( line.value, r, clip, line.color ) );
 		}
-		blocks.push( [ 18, y + 21, 381, rows * 56 + 20 ] );
+		blocks.push( [ 18, y + 21, backgroundWidth, rows * 56 + 20 ] );
 	}
-	const inputY = height - 72;
+	const inputY = height - bottom - 20;
 	button( "chat-size", "Change chat size", layout.GDR_BTN_CHAT_SIZE!.texture, [ 0, inputY, 16, 20 ] );
-	image( layout.GDR_CHAT_INPUTBOX!.texture, [ 18, inputY, 381, 20 ], layout.GDR_CHAT_INPUTBOX!.uv );
-	const edit: UiRect = [ 22, inputY + 3, 373, 14 ],
+	image( layout.GDR_CHAT_INPUTBOX!.texture, [ 18, inputY, backgroundWidth, 20 ], layout.GDR_CHAT_INPUTBOX!.uv );
+	const edit: UiRect = [ 22, inputY + 3, Math.max( 0, chatWidth - 26 ), 14 ],
 		start = Math.max( 0, Math.min( input.length, editState?.start ?? 0 ) ),
 		end = Math.max( start, Math.min( input.length, editState?.end ?? start ) );
 	const before = measure( input.slice( 0, start ) ),
@@ -240,6 +265,6 @@ button
 		}
 	}
 	controls.push( { id: "chat-text", label: "Chat", kind: "text", rect: edit, value: input, maxLength: 100 } );
-	blocks.push( [ 18, inputY, 381, 20 ] );
+	blocks.push( [ 18, inputY, backgroundWidth, 20 ] );
 	return { quads, controls, paths, blocks, scrolling };
 }

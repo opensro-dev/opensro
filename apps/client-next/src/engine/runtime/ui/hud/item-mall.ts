@@ -23,6 +23,7 @@ export function createItemMall() {
 	let category = -1;
 	let tab = 0;
 	let page = 0;
+	let pageSize = MALL_ROWS_PER_PAGE;
 	let selected: MallOffer | null = null;
 	let quantity = 1;
 	let points = 0;
@@ -30,6 +31,8 @@ export function createItemMall() {
 	let pointDialog = false;
 	let pointDraft = 0;
 	let bagPage = 0;
+	let compactView: "shop" | "bag" | "preview" = "shop";
+	let compactBagPage = 0;
 	const basket = new Set<number>();
 	const worn = new Map<number, MallOffer>();
 	let preview: MallPreviewState = { wearable: [] };
@@ -89,12 +92,15 @@ export function createItemMall() {
 		category = -1;
 		tab = 0;
 		page = 0;
+		pageSize = MALL_ROWS_PER_PAGE;
 		selected = null;
 		pointDialog = false;
 		quantity = 1;
 		points = 0;
 		pointDraft = 0;
 		bagPage = 0;
+		compactView = "shop";
+		compactBagPage = 0;
 		revision = 0;
 		basket.clear();
 		worn.clear();
@@ -120,6 +126,7 @@ export function createItemMall() {
 		*/
 		close() {
 			visible = false;
+			compactView = "shop";
 			selected = null;
 			pointDialog = false;
 			worn.clear();
@@ -155,6 +162,7 @@ export function createItemMall() {
 			if ( !Number.isInteger( index ) || index < -1 || index >= mallCategories().length ) return;
 			if ( !Number.isInteger( nextTab ) || nextTab < 0 ) return;
 			category = index;
+			compactView = "shop";
 			tab = nextTab;
 			page = 0;
 			selected = null;
@@ -167,7 +175,40 @@ export function createItemMall() {
 		*/
 		paginate( next: number, count: number ) {
 			if ( !Number.isInteger( next ) || !Number.isInteger( count ) || count < 0 ) return;
-			page = Math.max( 0, Math.min( Math.ceil( count / MALL_ROWS_PER_PAGE ) - 1, next ) );
+			page = Math.max( 0, Math.min( Math.ceil( count / pageSize ) - 1, next ) );
+		},
+		/*
+		================
+		setPageSize
+
+		Presentation only: keep the first visible offer on rotation. Action indices
+		continue to address read().offers, including purchases and basket changes.
+		================
+		*/
+		setPageSize( count: number ) {
+			if ( !Number.isInteger( count ) || count < 1 || count > MALL_ROWS_PER_PAGE ) return;
+			page = Math.floor( page * pageSize / count );
+			pageSize = count;
+		},
+		/*
+		================
+		compactAction
+
+		Port-only secondary-view navigation. Never touches purchase state or
+		server commands; the ordinary catalogue action IDs retain their meaning.
+		================
+		*/
+		compactAction( id: string ) {
+			if ( id === "item-mall-view:bag" || id === "item-mall-view:preview" ) {
+				compactView = id === "item-mall-view:bag" ? "bag" : "preview";
+				return true;
+			}
+			if ( id.startsWith( "item-mall-bag-slice:" ) ) {
+				const next = Number( id.slice( "item-mall-bag-slice:".length ) );
+				if ( Number.isSafeInteger( next ) && next >= 0 ) compactBagPage = next;
+				return true;
+			}
+			return false;
 		},
 		/*
 		================
@@ -253,7 +294,7 @@ export function createItemMall() {
 					basket.has( offer.packageId ) :
 					current && offer.shop === current.shop && offer.tab === current.tab
 			) ?? [];
-			const currentPage = Math.min( page, Math.max( 0, Math.ceil( offers.length / MALL_ROWS_PER_PAGE ) - 1 ) );
+			const currentPage = Math.min( page, Math.max( 0, Math.ceil( offers.length / pageSize ) - 1 ) );
 			return {
 				question,
 				batchPending: queue.length > 0 || awaiting !== null,
@@ -262,18 +303,21 @@ export function createItemMall() {
 				previewGid: preview.gid,
 				worn: [ ...worn.values() ],
 				bagPage,
+				compactView,
+				compactBagPage,
 				pointDialog,
 				pointDraft,
 				visible,
 				category,
 				tab,
 				page: currentPage,
+				pageSize,
 				selected,
 				quantity,
 				points,
 				tabs,
 				count: offers.length,
-				offers: offers.slice( currentPage * MALL_ROWS_PER_PAGE, (currentPage + 1) * MALL_ROWS_PER_PAGE )
+				offers: offers.slice( currentPage * pageSize, (currentPage + 1) * pageSize )
 			};
 		},
 		/*

@@ -62,7 +62,13 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 		if (
 			rect[2] < 0 || rect[3] < 0 || clip[2] < 0 || clip[3] < 0 || color.some( v => v < 0 || v > 1 ) ||
 			rightColor?.some( v => v < 0 || v > 1 )
-		) throw new Error( "Invalid UI extent or color" );
+		) {
+			throw new Error(
+				"Invalid UI extent or color at quad " + index + " (" + quad.texture + "): rect=" +
+					JSON.stringify( rect ) + ", clip=" + JSON.stringify( clip ) + ", color=" + JSON.stringify( color ) +
+					", rightColor=" + JSON.stringify( rightColor )
+			);
+		}
 		if ( quad.layer !== undefined && quad.layer !== "background" ) throw Error( "Invalid UI layer" );
 		if ( quad.portraitGid !== undefined && (!Number.isSafeInteger( quad.portraitGid ) || quad.portraitGid <= 0) ) {
 			throw Error( "Invalid portrait identity" );

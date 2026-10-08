@@ -13,7 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 const { pickDestination } = await import( "../../src/engine/foundation/rendering/pick-destination.ts" );
-const { missionLoadingQuads, regionLoadingBackground } = await import(
+const { missionLoadingQuads, regionLoadingBackground, loadingScreenQuads, travelLoadingQuads } = await import(
 	"../../src/engine/foundation/ui/mission-loading.ts"
 );
 test("ground picks normalize outdoor sector crossings and retain dungeon coordinates", () => {
@@ -46,7 +46,7 @@ test("entry artwork and loading control group preserve their aspect ratios on re
 			label = quads[4].rect;
 		assert.ok( Math.abs( label[2] / label[3] - 144 / 20 ) < 1e-10 );
 		assert.ok( Math.abs( frame[2] / frame[3] - 1121 / 64 ) < 1e-10 );
-		assert.equal( label[0], gauge[0] );
+		if ( w >= 800 && h >= 600 ) assert.equal( label[0], gauge[0] );
 		assert.ok( gauge[0] >= frame[0] && gauge[0] + gauge[2] <= frame[0] + frame[2] );
 		assert.ok( label[1] >= gauge[1] + gauge[3] );
 		for ( const rect of [ frame, gauge, label ] ) {
@@ -54,6 +54,29 @@ test("entry artwork and loading control group preserve their aspect ratios on re
 		}
 	}
 	assert.equal( missionLoadingQuads( 1024, 768, 1, 2 )[3].uv[2], 1 );
+});
+
+test("compact loading contains the full illustration and reserves readable progress below it", () => {
+	for ( const [w, h] of [ [ 360, 858 ], [ 375, 667 ], [ 667, 375 ], [ 320, 568 ], [ 200, 200 ] ] ) {
+		for ( const progress of [ -1, 0, .5, 1, 2 ] ) {
+			const quads = loadingScreenQuads( w, h, "scene.png", progress );
+			const [, art, frame, gauge, label] = quads;
+			for ( const { rect: [x, y, width, height] } of quads ) {
+				assert.ok( x >= 0 && y >= 0 && x + width <= w + 1e-9 && y + height <= h + 1e-9 );
+			}
+			assert.deepEqual( art.uv, [ 0, 0, 1, 1 ] );
+			assert.ok( Math.abs( art.rect[2] / art.rect[3] - 4 / 3 ) < 1e-10 );
+			assert.equal( art.rect[0] + art.rect[2] / 2, w / 2 );
+			assert.ok( art.rect[1] + art.rect[3] <= frame.rect[1] );
+			assert.ok( frame.rect[1] + frame.rect[3] <= label.rect[1] );
+			assert.deepEqual( label.rect, [ (w - 108) / 2, h - 64, 108, 15 ] );
+			assert.equal( gauge.uv[2], Math.max( 0, Math.min( 1, progress ) ) );
+			assert.deepEqual(
+				travelLoadingQuads( w, h, { mode: 6, region: 0x61a8, revision: 1 }, 1, progress ),
+				quads.filter( ( _, i ) => i !== 1 )
+			);
+		}
+	}
 });
 
 test("destination artwork follows the retail city, river, port and dungeon branches", () => {

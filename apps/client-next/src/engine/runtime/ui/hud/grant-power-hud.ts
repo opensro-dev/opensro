@@ -40,6 +40,7 @@ export function createGrantPowerHud() {
 	let rows: GrantMember[] | null = null;
 	const draft = new Map<number, number>();
 	let first = 0;
+	let visibleRows = GRANT_VISIBLE_ROWS;
 	/*
 	================
 	unionChatHolders
@@ -88,9 +89,11 @@ export function createGrantPowerHud() {
 		The rows the scroll window shows, with their drafted rights.
 		================
 		*/
-		visible(): { readonly row: GrantMember; readonly mask: number; }[] {
+		visible( count = GRANT_VISIBLE_ROWS ): { readonly row: GrantMember; readonly mask: number; }[] {
+			visibleRows = Math.max( 1, Math.min( GRANT_VISIBLE_ROWS, Math.trunc( count ) ) );
 			if ( !rows ) return [];
-			return rows.slice( first, first + GRANT_VISIBLE_ROWS ).map( row => ({
+			first = Math.min( first, Math.max( 0, rows.length - visibleRows ) );
+			return rows.slice( first, first + visibleRows ).map( row => ({
 				row,
 				mask: draft.get( row.id ) ?? 0
 			}) );
@@ -102,7 +105,16 @@ export function createGrantPowerHud() {
 		*/
 		scroll( delta: number ) {
 			if ( !rows ) return;
-			first = Math.max( 0, Math.min( Math.max( 0, rows.length - GRANT_VISIBLE_ROWS ), first + delta ) );
+			first = Math.max( 0, Math.min( Math.max( 0, rows.length - visibleRows ), first + delta ) );
+		},
+		/*
+		================
+		canScroll
+		================
+		*/
+		canScroll( delta: number ): boolean {
+			if ( !rows ) return false;
+			return Math.max( 0, Math.min( Math.max( 0, rows.length - visibleRows ), first + delta ) ) !== first;
 		},
 		/*
 		================

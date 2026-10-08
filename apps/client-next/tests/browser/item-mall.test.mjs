@@ -92,12 +92,22 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 						points: 10,
 						pending: false,
 						revision: 1,
-						tabs: [ { shop: 2, tab: 0, category: "MALL_CONSUME", label: "UIIT_STT_SILKMALL_POTION" }, {
-							shop: 1,
-							tab: 1,
-							category: "MALL_AVATAR",
-							label: "UIIT_STT_SILKMALL_DRESS"
-						} ],
+						// refshoptab/refmappingshopwithtab: Consumables and Pets have
+						// the shipped maximum of five tabs. Cover the full Consumables row.
+						tabs: [
+							...[ "SPECIAL", "SCROLL", "POTION", "COMMUNITY", "ETC" ].map( ( label, tab ) => ({
+								shop: 2,
+								tab,
+								category: "MALL_CONSUME",
+								label: "UIIT_STT_SILKMALL_" + label
+							}) ),
+							{
+								shop: 1,
+								tab: 1,
+								category: "MALL_AVATAR",
+								label: "UIIT_STT_SILKMALL_DRESS"
+							}
+						],
 						offers: Array.from(
 							{ length: 8 },
 							( _, slot ) => ({
@@ -141,6 +151,8 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
     ================
     */
 				draw() {
+					state.width = innerWidth;
+					state.height = innerHeight;
 					const seconds = performance.now() / 1000;
 					characterResources.begin( seconds );
 					characterResources.poll();
@@ -167,11 +179,17 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 					renderer.frame( { width: innerWidth, height: innerHeight } );
 					return {
 						pending: ui.stats().pending,
+						uiError: ui.stats().error,
+						invalidQuads: scene?.quads.filter( q =>
+							!q.rect.every( Number.isFinite ) || q.rect[2] < 0 || q.rect[3] < 0
+						).length ?? 0,
 						mannequin: mannequinActors[0]?.model,
 						garment: garment[1].bodies.CH_M.glb,
 						renderer: renderer.phase(),
 						error: renderer.error(),
-						textures: scene?.quads.map( q => q.texture ),
+						textures: scene?.quads.map( q =>
+							q.texture
+						),
 						controls: semantics?.controls.map( c => ({
 							id: c.id,
 							rect: c.rect,
@@ -203,6 +221,135 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 			};
 		} );
 		try {
+			/*
+			================
+			compactFrame
+			Wait for real assets and published controls before inspecting the GPU frame.
+			================
+			*/
+			async function compactFrame( requiredId, enabled = false ) {
+				const deadline = Date.now() + 25000;
+				let row;
+				do {
+					row = await fixture.evaluate( f => f.draw() );
+					assert.ok( !row.error, row.error ?? "Renderer error" );
+					assert.ok( !row.uiError, row.uiError ?? "UI error" );
+					assert.equal( row.invalidQuads, 0 );
+					if (
+						!row.pending && row.renderer === "running" &&
+						row.controls?.some( c => c.id === requiredId && (!enabled || !c.disabled) )
+					) {
+						return row;
+					}
+					await page.waitForTimeout( 50 );
+				} while ( Date.now() < deadline );
+				assert.fail( `Compact Mall did not admit ${requiredId}: ${JSON.stringify( row )}` );
+			}
+			for (
+				const [width, height, visibleProducts] of [ [ 320, 568, 2 ], [ 375, 375, 1 ], [ 375, 667, 3 ], [
+					667,
+					375,
+					2
+				] ]
+			) {
+				await page.setViewportSize( { width, height } );
+				await fixture.evaluate( f => f.draw() );
+				await fixture.evaluate( f => f.activate( "item-mall" ) );
+				await compactFrame( "item-mall-category:1" );
+				await fixture.evaluate( f => f.activate( "item-mall-category:1" ) );
+				const catalogue = await compactFrame( "item-mall-buy:0" );
+				assert.equal( catalogue.controls.filter( c => c.id.startsWith( "item-mall-tab:" ) ).length, 5 );
+				assert.equal(
+					catalogue.controls.filter( c => c.id.startsWith( "item-mall-buy:" ) ).length,
+					visibleProducts
+				);
+				await page.screenshot( { path: `${directory}/compact-${width}x${height}-catalogue.png` } );
+				assert.ok( catalogue.controls.some( c => c.id === "item-mall-page:1" && !c.disabled ) );
+				await fixture.evaluate( f => f.activate( "item-mall-page:1" ) );
+				const second = await compactFrame( "item-mall-page:0" );
+				for ( const row of [ catalogue, second ] ) {
+					for ( const control of row.controls ) {
+						const [x, y, w, h] = control.rect;
+						assert.ok(
+							w > 0 && h > 0 && x >= 0 && y >= 0 && x + w <= width && y + h <= height,
+							`${control.id} fits ${width}x${height}`
+						);
+						if ( /^item-mall-(buy|wear|reserve):/.test( control.id ) ) {
+							assert.ok( y + h <= height - 48, `${control.id} must not overlap pagination` );
+						}
+					}
+				}
+				assert.deepEqual(
+					second.controls.filter( c => c.id.startsWith( "item-mall-offer:" ) ).map( c => c.id ),
+					Array.from(
+						{ length: visibleProducts },
+						( _, index ) => `item-mall-offer:${visibleProducts + index + 1}`
+					)
+				);
+				assert.equal(
+					second.controls.filter( c => c.id.startsWith( "item-mall-buy:" ) ).length,
+					visibleProducts
+				);
+				await fixture.evaluate( ( f, id ) => f.activate( id ), `item-mall-buy:${visibleProducts - 1}` );
+				const confirmation = await compactFrame( "item-mall-purchase" );
+				assert.equal( confirmation.controls.find( c => c.id === "item-mall-purchase" )?.disabled, false );
+				for ( const id of [ "item-mall-purchase", "item-mall-cancel", "item-mall-close" ] ) {
+					const control = confirmation.controls.find( c => c.id === id );
+					assert.ok( control, id );
+					const [x, y, w, h] = control.rect;
+					assert.ok( x >= 0 && y >= 0 && x + w <= width && y + h <= height, `${id} fits ${width}x${height}` );
+				}
+				assert.ok( confirmation.controls.find( c => c.id === "item-mall-close" ).rect[3] >= 40 );
+				await page.screenshot( { path: `${directory}/compact-${width}x${height}-confirmation.png` } );
+				await fixture.evaluate( f => f.activate( "item-mall-points" ) );
+				const compactPoints = await compactFrame( "item-mall-point-value" );
+				assert.ok( compactPoints.controls.some( c => c.id === "item-mall-points-close" ) );
+				await fixture.evaluate( f => f.activate( "item-mall-points-close" ) );
+				await compactFrame( "item-mall-purchase" );
+				await fixture.evaluate( f => f.activate( "item-mall-cancel" ) );
+				const cancelled = await compactFrame( "item-mall-buy:0" );
+				assert.ok( !cancelled.controls.some( c => c.id === "item-mall-purchase" ) );
+				await fixture.evaluate( f => f.activate( "item-mall-reserve:0" ) );
+				const compactReservation = await compactFrame( "item-mall-question-confirm" );
+				await fixture.evaluate( f => f.activate( "item-mall-question-cancel" ) );
+				const reservationCancelled = await compactFrame( "item-mall-buy:0" );
+				for (
+					const row of [
+						catalogue,
+						second,
+						confirmation,
+						compactPoints,
+						cancelled,
+						compactReservation,
+						reservationCancelled
+					]
+				) {
+					assert.equal(
+						row.commands.filter( c => c.kind === "gameplay" && c.command?.kind === "mall-buy" ).length,
+						0
+					);
+				}
+				reports.push( { name: `compact-${width}x${height}`, catalogue, second, confirmation, cancelled } );
+				await fixture.evaluate( f => f.activate( "item-mall-home" ) );
+				await fixture.evaluate( f => f.draw() );
+				await fixture.evaluate( f => f.activate( "item-mall-close" ) );
+				await fixture.evaluate( f => f.draw() );
+			}
+			// A transient short viewport need not expose the whole Mall, but must
+			// never submit negative geometry or retain a failed UI frame.
+			await page.setViewportSize( { width: 667, height: 200 } );
+			await fixture.evaluate( f => f.draw() );
+			await fixture.evaluate( f => f.activate( "item-mall" ) );
+			await compactFrame( "item-mall-category:1" );
+			await fixture.evaluate( f => f.activate( "item-mall-category:1" ) );
+			await compactFrame( "item-mall-buy:0" );
+			await fixture.evaluate( f => f.activate( "item-mall-view:preview" ) );
+			await compactFrame( "item-mall-root:4" );
+			await fixture.evaluate( f => f.activate( "item-mall-home" ) );
+			await fixture.evaluate( f => f.draw() );
+			await fixture.evaluate( f => f.activate( "item-mall-close" ) );
+			await fixture.evaluate( f => f.draw() );
+			await page.setViewportSize( { width: 1024, height: 768 } );
 			for (
 				const [name, action] of [ [ "home", "item-mall" ], [ "catalogue", "item-mall-category:1" ], [
 					"confirmation",
@@ -250,7 +397,7 @@ test( "Item Mall uses native category and merchandise controls", { timeout: 1800
 			await fixture.evaluate( f => f.activate( "item-mall-cancel" ) );
 			await fixture.evaluate( f => f.draw() );
 			await fixture.evaluate( f => f.activate( "item-mall-category:2" ) );
-			const unworn = await fixture.evaluate( f => f.draw() );
+			const unworn = await compactFrame( "item-mall-wear:0", true );
 			assert.equal( unworn.controls.find( c => c.id === "item-mall-wear:0" )?.disabled, false );
 			await fixture.evaluate( f => f.activate( "item-mall-wear:0" ) );
 			let worn;

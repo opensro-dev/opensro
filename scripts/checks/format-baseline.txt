@@ -168,7 +168,6 @@ apps/client-next/src/engine/foundation/ui/minimap-floor.ts
 apps/client-next/src/engine/foundation/ui/minimap-markers.ts
 apps/client-next/src/engine/foundation/ui/minimap-tiles.ts
 apps/client-next/src/engine/foundation/ui/minimap-zoom.ts
-apps/client-next/src/engine/foundation/ui/mission-loading.ts
 apps/client-next/src/engine/foundation/ui/money-presentation.ts
 apps/client-next/src/engine/foundation/ui/normal-tile.ts
 apps/client-next/src/engine/foundation/ui/notice-dialog.ts
@@ -185,8 +184,6 @@ apps/client-next/src/engine/foundation/ui/skill-layout.ts
 apps/client-next/src/engine/foundation/ui/skill-tooltip-data.ts
 apps/client-next/src/engine/foundation/ui/sound-catalog.ts
 apps/client-next/src/engine/foundation/ui/stretch-ring.ts
-apps/client-next/src/engine/foundation/ui/system-message-layout.ts
-apps/client-next/src/engine/foundation/ui/target-status.ts
 apps/client-next/src/engine/foundation/ui/text-lines.ts
 apps/client-next/src/engine/foundation/ui/tooltip-rows.ts
 apps/client-next/src/engine/foundation/ui/unique-banner.ts
@@ -282,7 +279,6 @@ apps/client-next/tests/browser/live-weather.test.mjs
 apps/client-next/tests/browser/loading-cache.test.mjs
 apps/client-next/tests/browser/loading-feedback.test.mjs
 apps/client-next/tests/browser/loading-presentation.test.mjs
-apps/client-next/tests/browser/loading-resize.test.mjs
 apps/client-next/tests/browser/matching-empty.test.mjs
 apps/client-next/tests/browser/material-alpha-functions.test.mjs
 apps/client-next/tests/browser/minimap-live.test.mjs

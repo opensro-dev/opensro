@@ -12,8 +12,8 @@ produces, so the camera owner stays unchanged:
 	one finger dragging   -> a drag with the camera button held (orbit)
 	two fingers pinching  -> wheel deltas (spreading the fingers zooms in)
 
-A tap still reaches the world as a click: browsers synthesize mouse events
-for a tap but not for a drag, and this adapter never emits a click itself.
+Owner-authorized port-only mobile input: the platform admits canvas touches
+and dispatches a tap only after this owner rules out a drag or pinch.
 
 ===========================================================================
 */
@@ -24,6 +24,7 @@ import type { CameraWheelDelta } from "@/engine/contracts/input";
 // so 5 units per pixel moves the camera a quarter unit per pixel: a 280 px
 // pinch spans most of the 10..150 rail.
 const PINCH_WHEEL_PER_PIXEL = 5;
+const TAP_SLOP_PIXELS = 8;
 
 /*
 ================
@@ -51,6 +52,8 @@ export function createTouchCamera() {
 	// A pinch ends the gesture for good: lifting one finger must not turn the
 	// remaining one into an orbit until every finger has been lifted.
 	let pinched = false, pinchDistance = 0;
+	let interrupted = false;
+	let tapOrigin: { x: number; y: number; } | null = null;
 
 	/*
 	================
@@ -65,12 +68,62 @@ export function createTouchCamera() {
 	return {
 		/*
 		================
+		interrupt
+
+		A touch owned by UI ends both orbit and zoom until all canvas fingers lift.
+		================
+		*/
+		interrupt(): readonly TouchCameraOutput[] {
+			if ( touches.size === 0 ) return [];
+			interrupted = true;
+			pinched = true;
+			tapOrigin = null;
+			return [ { kind: "release" } ];
+		},
+		/*
+		================
+		owns
+		================
+		*/
+		owns( id: number ): boolean {
+			return touches.has( id );
+		},
+		/*
+		================
+		tap
+
+		Read before up; a gesture that ever pinched or moved cannot become a tap.
+		================
+		*/
+		tap( id: number, x: number, y: number ): boolean {
+			return touches.has( id ) && touches.size === 1 && !pinched && tapOrigin !== null &&
+				Math.hypot( x - tapOrigin.x, y - tapOrigin.y ) <= TAP_SLOP_PIXELS;
+		},
+		/*
+		================
+		reset
+		================
+		*/
+		reset(): void {
+			touches.clear();
+			interrupted = false;
+			pinched = false;
+			pinchDistance = 0;
+			tapOrigin = null;
+		},
+		/*
+		================
 		down
 		================
 		*/
 		down( id: number, x: number, y: number, cameraButtons: number ): readonly TouchCameraOutput[] {
 			touches.set( id, { x, y } );
-			if ( touches.size === 1 && !pinched ) return [ { kind: "pointer", x, y, buttons: cameraButtons } ];
+			if ( interrupted ) return [];
+			if ( touches.size === 1 && !pinched ) {
+				tapOrigin = { x, y };
+				return [ { kind: "pointer", x, y, buttons: cameraButtons } ];
+			}
+			tapOrigin = null;
 			if ( touches.size === 2 ) {
 				pinched = true;
 				pinchDistance = spread();
@@ -84,7 +137,8 @@ export function createTouchCamera() {
 		================
 		*/
 		move( id: number, x: number, y: number, cameraButtons: number ): readonly TouchCameraOutput[] {
-			if ( !touches.has( id ) ) return [];
+			if ( !touches.has( id ) || interrupted ) return [];
+			if ( tapOrigin && Math.hypot( x - tapOrigin.x, y - tapOrigin.y ) > TAP_SLOP_PIXELS ) tapOrigin = null;
 			touches.set( id, { x, y } );
 			if ( touches.size === 2 ) {
 				const distance = spread(), delta = (pinchDistance - distance) * PINCH_WHEEL_PER_PIXEL;
@@ -103,9 +157,12 @@ export function createTouchCamera() {
 		*/
 		up( id: number ): readonly TouchCameraOutput[] {
 			if ( !touches.delete( id ) ) return [];
+			if ( touches.size === 2 ) pinchDistance = spread();
 			if ( touches.size > 0 ) return [];
 			const orbiting = !pinched;
+			interrupted = false;
 			pinched = false;
+			tapOrigin = null;
 			return orbiting ? [ { kind: "release" } ] : [];
 		}
 	};
