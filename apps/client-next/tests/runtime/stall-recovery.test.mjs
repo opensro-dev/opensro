@@ -102,26 +102,96 @@ for ( const size of [ 1.1, 1.6 ] ) {
 	}
 }
 
-test("opposite corrections preserve displayed position and cannot overshoot either endpoint", () => {
-	const p = createPosePresentation();
-	p.origin( 0 );
-	sample( p, 1, 0 );
-	let drawn = p.pose( 1, START, 0 ), now = 0;
+test("opposite receipts preserve the old trajectory at receipt time, then approach their new endpoint", () => {
+	const p = createPosePresentation(), control = createPosePresentation();
+	for ( const owner of [ p, control ] ) {
+		owner.origin( 0 );
+		sample( owner, 1, 0 );
+		owner.pose( 1, START, 0 );
+	}
+	let oldTarget = START, now = 0;
 	for ( let revision = 2; revision < 15; revision++ ) {
 		const target = { ...START, x: START.x + (revision % 2 ? 1.6 : -1.1) };
 		now += FRAME;
+		const priorTrajectory = control.pose( 1, oldTarget, now );
 		sample( p, revision, now * 1000 );
 		const retargeted = p.pose( 1, target, now );
-		assert.ok( retargeted.x >= Math.min( drawn.x, target.x ) && retargeted.x <= Math.max( drawn.x, target.x ) );
-		drawn = retargeted;
-		const start = drawn.x;
+		assert.deepEqual( retargeted, priorTrajectory, "new receipt cannot rewrite the old elapsed interval" );
+		sample( control, revision, now * 1000 );
+		assert.deepEqual( control.pose( 1, target, now ), retargeted );
+		const start = retargeted.x;
 		for ( let frame = 0; frame < 5; frame++ ) {
 			now += FRAME;
-			drawn = p.pose( 1, target, now );
+			const drawn = p.pose( 1, target, now );
+			assert.deepEqual( control.pose( 1, target, now ), drawn );
 			assert.ok( drawn.x >= Math.min( start, target.x ) && drawn.x <= Math.max( start, target.x ) );
 		}
+		oldTarget = target;
 	}
 });
+
+test("a new 3D corridor withholds inadmissible old carry instead of snapping to its endpoint", () => {
+	const p = createPosePresentation();
+	p.origin( 0 );
+	sample( p, 1, 0 );
+	p.pose( 1, START, 0 );
+	sample( p, 2, 16 );
+	const oldTarget = { ...START, x: START.x + 1.6 };
+	p.pose( 1, oldTarget, .016 );
+	const before = p.pose( 1, oldTarget, .032 );
+	const target = { ...before, x: before.x + 10, y: before.y + 5, z: before.z + 10 };
+	sample( p, 3, 65, {
+		relocation: 1,
+		reason: "correction",
+		eligible: true,
+		corridor: { from: before, to: target }
+	} );
+	assert.deepEqual( p.pose( 1, target, .065 ), before );
+	let previous = before;
+	for ( let frame = 1; frame <= 60; frame++ ) {
+		const shown = p.pose( 1, target, .065 + frame * FRAME );
+		if ( frame === 1 ) assert.ok( shown.x > before.x && shown.x < (before.x + target.x) / 2 );
+		assert.ok( shown.x >= previous.x && shown.x <= target.x );
+		assert.ok( Math.abs( (shown.x - before.x) - (shown.z - before.z) ) < 1e-9 );
+		assert.ok( Math.abs( (shown.x - before.x) / 2 - (shown.y - before.y) ) < 1e-9 );
+		previous = shown;
+	}
+	assert.deepEqual( previous, target );
+});
+
+for ( const elapsed of [ 0, .00001 ] ) {
+	test(`a corridor adopted after ${elapsed} seconds constrains velocity before the next recovery frame`, () => {
+		const p = createPosePresentation();
+		p.origin( 0 );
+		sample( p, 1, 0 );
+		p.pose( 1, START, 0 );
+		sample( p, 2, 16 );
+		const oldTarget = { ...START, x: START.x + 1.6 };
+		p.pose( 1, oldTarget, .016 );
+		const before = p.pose( 1, oldTarget, .032 );
+		const target = { ...before, x: before.x + 10, y: before.y + 5, z: before.z + 10 };
+		const now = .032 + elapsed;
+		sample( p, 3, now * 1000, {
+			relocation: 1,
+			reason: "correction",
+			eligible: true,
+			corridor: { from: before, to: target }
+		} );
+		const received = p.pose( 1, target, now );
+		if ( elapsed === 0 ) assert.deepEqual( received, before );
+		else assert.ok( Math.abs( received.x - before.x ) < .01 );
+		let previous = received;
+		for ( let frame = 1; frame <= 60; frame++ ) {
+			const shown = p.pose( 1, target, now + frame * FRAME );
+			if ( frame === 1 ) assert.ok( shown.x > before.x && shown.x < (before.x + target.x) / 2 );
+			assert.ok( shown.x >= previous.x && shown.x <= target.x );
+			assert.ok( Math.abs( (shown.x - before.x) - (shown.z - before.z) ) < .01 );
+			assert.ok( Math.abs( (shown.x - before.x) / 2 - (shown.y - before.y) ) < .01 );
+			previous = shown;
+		}
+		assert.deepEqual( previous, target );
+	});
+}
 
 test("a stall during recovery spends at most 33 ms and retains the unfinished glide", () => {
 	const make = () => {

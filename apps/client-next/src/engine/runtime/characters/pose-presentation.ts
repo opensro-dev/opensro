@@ -518,7 +518,19 @@ export function createPosePresentation() {
 				// it arrived, especially after a small correction and a long lag.
 				const [x, y, z] = row.offset;
 				recover( row, now - row.last );
-				carriedDisplay = displace( row.displayed, [ row.offset[0] - x, row.offset[1] - y, row.offset[2] - z ] );
+				carriedDisplay = row.moving ?
+					displace( row.displayed, [ row.offset[0] - x, row.offset[1] - y, row.offset[2] - z ] ) :
+					displace( sampledModel( row, now ), row.offset );
+				const corridor = input.transition?.corridor;
+				// A new corridor can exclude the old trajectory. Keep its valid
+				// displayed origin rather than turn rejected carry into a snap.
+				if (
+					!input.displacement && !walkingPath && corridor &&
+					onCorridor( row.displayed, corridor.from, corridor.to ) &&
+					!onCorridor( carriedDisplay, corridor.from, corridor.to )
+				) {
+					carriedDisplay = row.displayed;
+				}
 			}
 			if ( stalled ) row.previous = undefined;
 			row.angle = turn( row.angle, target.angle, now - row.last );
@@ -614,6 +626,20 @@ export function createPosePresentation() {
 		if ( row.paths.length > MAX_RECOVERY_PATHS ) row.paths.splice( 0, row.paths.length - MAX_RECOVERY_PATHS );
 		let drawn = displace( model, row.offset );
 		const corridor = input.transition?.corridor;
+		// Receipt adoption also happens twice at one display timestamp. The
+		// old velocity must fit the new corridor even when no carry was spent.
+		if (
+			revisionChanged && !input.displacement && !walkingPath && corridor &&
+			onCorridor( row.displayed, corridor.from, corridor.to ) &&
+			onCorridor( model, corridor.from, corridor.to )
+		) {
+			const span = worldVector( corridor.to, corridor.from )!;
+			const length2 = span[0] ** 2 + span[1] ** 2 + span[2] ** 2;
+			const along = length2 ?
+				(row.velocity[0] * span[0] + row.velocity[1] * span[1] + row.velocity[2] * span[2]) / length2 :
+				0;
+			row.velocity = [ span[0] * along, span[1] * along, span[2] * along ];
+		}
 		const walked = walkingPath && hypot3( ...row.offset ) > 0 ?
 			recoverWalking( row.displayed, model, drawn, walkingPath ) :
 			null;
