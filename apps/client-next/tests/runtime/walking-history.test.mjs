@@ -12,10 +12,53 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
-const { extendWalkingHistory, rewindWalkingHistory } = await import(
+const { correctWalkingHistory, extendWalkingHistory, rewindWalkingHistory } = await import(
 	"../../src/engine/foundation/gameplay/walking-history.ts"
 );
 const START = { regionId: 257, x: 0, y: 0, z: 100, angle: 0 };
+
+test("a correction appends its navigation-certified connector to the accepted terrain history", () => {
+	const hill = { ...START, x: 5, y: 10 }, end = { ...START, x: 10 }, to = { ...end, z: end.z + .01512 };
+	const points = [ START, hill, end ];
+	let queries = 0;
+	const corrected = correctWalkingHistory( {
+		points,
+		from: end,
+		to,
+		clip( from, candidate, query ) {
+			queries++;
+			assert.deepEqual( from, end );
+			assert.deepEqual( candidate, to );
+			assert.equal( query.slide, false );
+			return candidate;
+		}
+	} );
+	assert.equal( queries, 1, "a sub-two-unit adjustment still needs explicit navigation admission" );
+	assert.deepEqual( corrected, [ ...points, to ] );
+	assert.deepEqual( points, [ START, hill, end ], "the prior immutable publication stays unchanged" );
+});
+
+test("a correction cannot reuse terrain proof through rejection, a wall, another floor or missing coverage", () => {
+	const end = { ...START, x: 10 }, to = { ...end, z: end.z + .01512 };
+	for ( const failure of [ "unknown", "rejected", "blocked", "other floor", "disconnected" ] ) {
+		let queries = 0;
+		const corrected = correctWalkingHistory( {
+			points: [ START, end ],
+			from: end,
+			to: failure === "disconnected" ? { ...to, regionId: 0x8001 } : to,
+			clip( from, candidate, query ) {
+				queries++;
+				if ( failure === "unknown" ) return null;
+				if ( failure === "rejected" ) query.status = 0x10000000;
+				if ( failure === "blocked" ) return from;
+				if ( failure === "other floor" ) return { ...candidate, y: candidate.y + 10 };
+				return candidate;
+			}
+		} );
+		assert.equal( corrected, undefined, failure );
+		assert.equal( queries, failure === "disconnected" ? 0 : 1 );
+	}
+});
 
 test("a long accepted step samples the connected terrain without changing the accepted destination", () => {
 	const to = { ...START, x: 12 }, queries = [];

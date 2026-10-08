@@ -17,7 +17,11 @@ server's walk every 500 ms (directionDrift).
 import { MOVEMENT_RECEIPT_TIMEOUT } from "@/engine/contracts/network";
 
 import { positionSkillGoal } from "@/engine/foundation/gameplay/position-skill";
-import { extendWalkingHistory, rewindWalkingHistory } from "@/engine/foundation/gameplay/walking-history";
+import {
+	correctWalkingHistory,
+	extendWalkingHistory,
+	rewindWalkingHistory
+} from "@/engine/foundation/gameplay/walking-history";
 import type { NavOwner, NavOwnerSpan } from "@/engine/foundation/navigation/dungeon-ownership";
 import {
 	type MovementSegment,
@@ -253,10 +257,12 @@ This query does not change the authoritative pose or its surface owner.
 ================
 	*/
 	function admitCorrection( before: Pose, after: Pose ) {
+		const query = { slide: false, sourceOwner: transitionOwner, status: 0 };
 		const resolved = sameNavigationSpace( before, after ) ?
-			navigation.clip( before, after, { slide: false, sourceOwner: transitionOwner } ) :
+			navigation.clip( before, after, query ) :
 			null;
-		const eligible = !!resolved && poseDistance( resolved, after ) < ENDPOINT_EPSILON;
+		const eligible = !!resolved && !(query.status & NAVIGATION_REJECT) &&
+			Math.hypot( poseDistance( resolved, after ), resolved.y - after.y ) < ENDPOINT_EPSILON;
 		// A newer input can replace the reason before publication, but cannot
 		// erase a discontinuity through disconnected navigation.
 		transition = {
@@ -265,6 +271,31 @@ This query does not change the authoritative pose or its surface owner.
 			eligible,
 			corridor: eligible ? { from: before, to: after } : undefined
 		};
+	}
+	/*
+================
+retainCorrectionHistory
+
+A terminal receipt can adjust its endpoint while presentation still follows
+the accepted walk behind it. Join that walk to the newly certified connector;
+the tiny connector alone cannot prove the last actually displayed position.
+================
+	*/
+	function retainCorrectionHistory( points: readonly Pose[] | undefined, before: Pose, after: Pose ) {
+		if ( !transition.eligible || !points?.length || segment?.fixedTiming ) return;
+		const walkingPath = correctWalkingHistory( {
+			points,
+			from: before,
+			to: after,
+			sourceOwner: transitionOwner,
+			clip: navigation.clip
+		} );
+		if ( !walkingPath ) return;
+		transition = { ...transition, walkingPath };
+		if ( segment ) {
+			segment.history = walkingPath;
+			segment.presentationHistory = undefined;
+		}
 	}
 	/*
 ================
@@ -1097,6 +1128,7 @@ correct
 			};
 			castHold = null;
 			if ( now !== undefined ) advanceTo( now );
+			const previousHistory = segment?.fixedTiming ? undefined : segment?.history ?? transition.walkingPath;
 			beginTransition( "correction" );
 			const before = pose;
 			// A live source correction ends motion, but is not a new spawn.
@@ -1110,6 +1142,7 @@ correct
 					latest: nextId,
 					...context
 				} );
+				retainCorrectionHistory( previousHistory, before, pose );
 			}
 			predicted = null;
 			surfaceCursor = {};
@@ -1138,7 +1171,8 @@ correct
 						lead: "client",
 						duration: movementDuration( poseDistance( pose, clipped ), speed ),
 						owners: query.owners,
-						admitted: true
+						admitted: true,
+						history: transition.walkingPath
 					};
 				}
 			}
@@ -1402,7 +1436,7 @@ receive
 			const previousGoal = segment?.to;
 			const previousTurn = transition.turn;
 			advanceTo( now );
-			const previousHistory = segment?.history ?? transition.walkingPath;
+			const previousHistory = segment?.fixedTiming ? undefined : segment?.history ?? transition.walkingPath;
 			const previousPath = segment?.admittedFrom && pose ?
 				{
 					from: segment.admittedFrom,
@@ -1443,7 +1477,10 @@ receive
 				for ( const id of pending.keys() ) if ( id <= r.id ) pending.delete( id );
 				error = null;
 				keepCastHold();
-				if ( before && pose ) noteReanchor( "direction receipt", before, pose, { atMs: now, id: r.id } );
+				if ( before && pose ) {
+					noteReanchor( "direction receipt", before, pose, { atMs: now, id: r.id } );
+					retainCorrectionHistory( previousHistory, before, pose );
+				}
 				return;
 			}
 			if ( command.direction !== undefined ) walk = null;
@@ -1504,6 +1541,7 @@ receive
 					remaining: reconciled.remaining,
 					to
 				} );
+				retainCorrectionHistory( previousHistory, predicted, pose! );
 			}
 			// The journal may coalesce the click and this receipt. Its original
 			// admitted path then never reached presentation; the rebased path

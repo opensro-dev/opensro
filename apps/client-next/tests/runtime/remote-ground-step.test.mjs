@@ -208,7 +208,7 @@ test("remote recovery publishes the accepted hill and resolved lookahead height"
 	assert.ok( rising.to.y > rising.from.y );
 });
 
-test("remote history is bounded, preserved on retiming and cleared on source reseed", () => {
+test("remote history is bounded and retained through certified retiming and source reseed", () => {
 	const motion = createEntityMotion( undefined, ( _from, to ) => to );
 	motion.spawn( { ...ENTITY, spawnDestination: { ...START, x: 1800 } }, 0 );
 	let latest = motion.step( 20 )[0];
@@ -219,7 +219,7 @@ test("remote history is bounded, preserved on retiming and cleared on source res
 	const retimed = defined( motion.speeds( ENTITY, { ...ENTITY, runSpeed: 80 }, 8000 ) );
 	assert.ok( defined( defined( retimed.movementPath ).walkingPath ).some( point => point.x < latest.x - 100 ) );
 	const reseeded = motion.source( ENTITY, { ...START, x: 900 }, 8000 );
-	assert.ok( defined( defined( reseeded.movementPath ).walkingPath ).every( point => point.x >= 900 ) );
+	assert.ok( defined( defined( reseeded.movementPath ).walkingPath ).some( point => point.x < 900 ) );
 	assert.equal( motion.correct( ENTITY, START ).movementPath, undefined );
 });
 
@@ -244,4 +244,67 @@ test("remote angular turn retains its admitted corner through a mount gait chang
 	assert.ok( path.some( point => point.z > first.z + 2 ) );
 	const walking = defined( motion.mode( { ...ENTITY, mountedOn: 2, movementMode: 2 }, 400 ) );
 	assert.ok( defined( defined( walking.movementPath ).walkingPath ).some( point => point.x < turn.x - 2 ) );
+});
+
+for ( const method of [ "source", "correct" ] ) {
+	for ( const lateral of [ 0, .015 ] ) {
+		test(`peer ${method} preserves delayed terminal history with ${lateral} lateral correction`, () => {
+			const hill = x => Math.max( 0, 4 - Math.abs( x - 104 ) );
+			const motion = createEntityMotion( undefined, ( _from, to ) => ({ ...to, y: hill( to.x ) }) );
+			const presentation = createPosePresentation();
+			presentation.origin( 0 );
+			motion.spawn( { ...ENTITY, spawnDestination: { ...START, x: 110 } }, 0 );
+			let entity = { ...ENTITY, ...defined( motion.step( 0 )[0] ), movementRevision: 1 };
+			/*
+			================
+			draw
+			================
+			*/
+			function draw( at ) {
+				const source = createPresentationSamples( [ entity ], null );
+				presentation.samples( source.samples );
+				return presentation.pose( entity.gid, source.logicalPose( entity ), at );
+			}
+			draw( 0 );
+			draw( 1 );
+			entity = { ...entity, ...defined( motion.step( 1000 )[0] ) };
+			const before = draw( 1 );
+			assert.ok( before.x < 105, "display still trails the accepted arrival" );
+			const target = { ...START, x: 110, z: START.z + lateral };
+			const update = method === "source" ?
+				motion.source( entity, target, 1000 ) :
+				motion.correct( entity, target );
+			entity = { ...entity, ...update, movementRevision: 2 };
+			const history = defined( defined( entity.movementPath ).walkingPath );
+			assert.ok( history.some( point => point.y >= 4 ) );
+			assert.deepEqual( draw( 1 ), before, "terminal receipt cannot retire unfinished display recovery" );
+			let shown = before, crossedHill = false;
+			for ( let frame = 1; frame <= 90; frame++ ) {
+				shown = draw( 1 + frame / 120 );
+				assert.ok( shown.x >= before.x && shown.x <= target.x );
+				assert.ok( Math.abs( shown.y - hill( shown.x ) ) < .01 );
+				if ( shown.y > 3 ) crossedHill = true;
+			}
+			assert.ok( crossedHill );
+			assert.ok( Math.hypot( shown.x - target.x, shown.z - target.z ) < .01 );
+		});
+	}
+}
+
+test("peer corrections explicitly discard history when their connector is not admitted", () => {
+	let allow = true;
+	const motion = createEntityMotion( undefined, ( _from, to ) => allow ? to : null );
+	motion.spawn( ENTITY, 0 );
+	const entity = { ...ENTITY, ...defined( motion.step( 200 )[0] ) };
+	allow = false;
+	const corrected = motion.correct( entity, { ...START, x: 110, z: 101 } );
+	assert.equal( ({ ...entity, ...corrected }).movementPath, undefined );
+	assert.equal( corrected.moving, false );
+});
+
+test("peer fixed displacement history is never reused by a ground correction", () => {
+	const motion = createEntityMotion( undefined, ( _from, to ) => to );
+	const displacement = motion.displace( ENTITY, { kind: 8, gid: 1, token: 9, destination: { ...START, x: 500 } }, 0 );
+	const entity = { ...ENTITY, ...displacement };
+	assert.equal( motion.correct( entity, START ).movementPath, undefined );
 });

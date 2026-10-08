@@ -118,6 +118,29 @@ export function rewindWalkingHistory( points: readonly Pose[] | undefined, corne
 
 /*
 ================
+correctWalkingHistory
+
+An authoritative endpoint adjustment does not revoke the accepted walk
+behind it. Retain that proof only after navigation certifies its connector,
+including height and rejection status. Unrelated spaces never get joined.
+================
+*/
+export function correctWalkingHistory( input: WalkingHistoryInput ): readonly Pose[] | undefined {
+	if ( !sameSpace( input.from, input.to ) ) return undefined;
+	const points = rewindWalkingHistory( input.points, input.from );
+	if ( !points ) return undefined;
+	const query: WalkingHistoryQuery = { slide: false, sourceOwner: input.sourceOwner, status: 0 };
+	const checked = input.clip( input.from, input.to, query );
+	if (
+		!checked || (query.status! & NAVIGATION_REJECT) || !sameSpace( checked, input.to ) ||
+		surfaceDistance( checked, input.to ) >= ENDPOINT_EPSILON
+	) return undefined;
+	const joined = extendWalkingHistory( { ...input, points } );
+	return joined.length > 1 ? joined : undefined;
+}
+
+/*
+================
 extendWalkingHistory
 
 Small accepted steps already carry their endpoint surface. A long native

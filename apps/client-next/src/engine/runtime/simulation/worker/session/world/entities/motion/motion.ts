@@ -32,7 +32,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { Pose } from "@/engine/contracts/gameplay";
 import { displacementSegment } from "@/engine/foundation/gameplay/cast-displacement";
 import { directionLegEnd, modelYaw } from "@/engine/foundation/gameplay/direction-movement";
-import { extendWalkingHistory } from "@/engine/foundation/gameplay/walking-history";
+import { correctWalkingHistory, extendWalkingHistory } from "@/engine/foundation/gameplay/walking-history";
 const ENDPOINT_EPSILON = 0.001;
 const PRESENTATION_LOOKAHEAD_MS = 100;
 /*
@@ -240,6 +240,33 @@ does not move the actor or replace its actual-time collision result.
 	}
 	/*
 ================
+groundCorrection
+
+A source receipt may retire native travel while its accepted history still
+carries visible recovery. Certify its connector before replacing that proof;
+authored displacements and disconnected navigation never inherit it.
+================
+	*/
+	function groundCorrection( entity: EntityState, pose: Pose ) {
+		const segment = active.get( entity.gid );
+		const reference = segment?.previous ??
+			{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
+		const sourceOwner = cursors.get( entity.gid )?.owner;
+		const resolved = resolve( entity.gid, pose, reference );
+		const walkingPath = segment?.fixedTiming || entity.movementPath?.displacement ?
+			undefined :
+			correctWalkingHistory( {
+				points: segment?.presentationHistory?.result ?? segment?.walkingPath ??
+					entity.movementPath?.walkingPath,
+				from: reference,
+				to: resolved,
+				sourceOwner,
+				clip
+			} );
+		return { segment, resolved, walkingPath };
+	}
+	/*
+================
 directionLeg
 
 The next direction leg retains intent; advance checks each elapsed step.
@@ -270,11 +297,10 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 ================
 		*/
 		source( entity: EntityState, pose: Pose, now: number ): MotionUpdate {
-			const segment = active.get( entity.gid );
-			const reference = segment?.previous ??
-				{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
-			const resolved = resolve( entity.gid, pose, reference );
-			let path: EntityState["movementPath"] = segment ? { from: resolved, to: segment.to } : entity.movementPath;
+			const { segment, resolved, walkingPath } = groundCorrection( entity, pose );
+			let path: EntityState["movementPath"] = walkingPath ?
+				{ from: resolved, to: resolved, walkingPath } :
+				undefined;
 			if ( segment?.fixedTiming ) {
 				path = {
 					from: segment.from,
@@ -295,7 +321,8 @@ Retail 0x775CB0 calls source reseed (0x86D9D0), without the halt
 					at: now,
 					arrived: false,
 					blocked: false,
-					walkingPath: undefined
+					walkingPath,
+					presentationHistory: undefined
 				} );
 				path = { from: resolved, to: segment.to, durationMs };
 			}
@@ -310,11 +337,12 @@ correct
 ================
 		*/
 		correct( entity: EntityState, pose: Pose ): MotionUpdate {
-			const reference = active.get( entity.gid )?.previous ??
-				{ regionId: entity.regionId, x: entity.x, y: entity.y, z: entity.z, angle: entity.heading };
-			const resolved = resolve( entity.gid, pose, reference );
+			const { resolved, walkingPath } = groundCorrection( entity, pose );
 			active.delete( entity.gid );
-			return update( entity.gid, resolved );
+			return {
+				...update( entity.gid, resolved ),
+				movementPath: walkingPath ? { from: resolved, to: resolved, walkingPath } : undefined
+			};
 		},
 		/*
 ================

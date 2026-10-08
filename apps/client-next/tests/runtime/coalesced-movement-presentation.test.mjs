@@ -244,6 +244,96 @@ function publish( presentation, state, timed = true ) {
 	);
 }
 
+for ( const kind of [ "correction", "server receipt", "settled receipt" ] ) {
+	test(`a terminal ${kind} retains navigation proof behind its corrected endpoint`, () => {
+		const movement = createMovement( () => {} ), navigation = product();
+		const presentation = createPosePresentation(), control = createPosePresentation();
+		navigation.objects = [];
+		movement.seed( FROM );
+		movement.navigation( 257, navigation );
+		movement.request( TO, 0 );
+		if ( kind === "correction" ) {
+			movement.receive(
+				new TextEncoder().encode( JSON.stringify( {
+					v: 1,
+					id: 1,
+					gid: 7,
+					accepted: true,
+					serverTimeMs: 0,
+					world: { spawn: TO, moveSegment: { from: FROM, startedAtMs: 0, arrivesAtMs: 2000 } }
+				} ) ),
+				0,
+				7
+			);
+		}
+		for ( const owner of [ presentation, control ] ) {
+			owner.origin( 0 );
+			publish( owner, movement.state() );
+			owner.pose( 7, FROM, 0 );
+		}
+		movement.step( 2000 );
+		const terminal = movement.state();
+		assert.ok( terminal.pose );
+		assert.equal( terminal.moving, false );
+		assert.ok( terminal.movementTransition.walkingPath );
+		let now = 2, shown = FROM;
+		for ( const owner of [ presentation, control ] ) {
+			publish( owner, terminal );
+			owner.pose( 7, terminal.pose, now );
+		}
+		for ( let frame = 0; frame < 120; frame++ ) {
+			now += .008;
+			shown = presentation.pose( 7, terminal.pose, now );
+			control.pose( 7, terminal.pose, now );
+			if ( terminal.pose.x - shown.x < 1.8 ) break;
+		}
+		assert.ok( terminal.pose.x - shown.x > 1.2, "the drawn body still trails the terminal logical pose" );
+		const corrected = { ...terminal.pose, x: terminal.pose.x - .01512 };
+		now += .0175;
+		const expected = control.pose( 7, terminal.pose, now );
+		if ( kind === "correction" ) movement.correct( corrected, now * 1000 );
+		else {
+			movement.receive(
+				new TextEncoder().encode( JSON.stringify( {
+					v: 1,
+					id: 1,
+					gid: 7,
+					accepted: true,
+					serverTimeMs: now * 1000,
+					world: {
+						spawn: corrected,
+						...(kind === "settled receipt" ?
+							{ moveSegment: { from: FROM, startedAtMs: 0, arrivesAtMs: 2000 } } :
+							{})
+					}
+				} ) ),
+				now * 1000,
+				7
+			);
+		}
+		const state = movement.state();
+		assert.ok( state.pose );
+		assert.equal( state.moving, false );
+		assert.equal( state.movementTransition.eligible, true );
+		assert.ok( state.movementTransition.walkingPath );
+		assert.equal( state.movementTransition.walkingPath[0]?.x, FROM.x );
+		assert.deepEqual( state.movementTransition.walkingPath.at( -1 ), state.pose );
+		publish( presentation, state );
+		const received = presentation.pose( 7, state.pose, now );
+		assert.ok( Math.abs( received.x - expected.x ) < .001, "new terminal correction cannot spend its own force" );
+		assert.ok( state.pose.x - received.x > .5, "the remaining glide is retained rather than snapped" );
+		let previous = received;
+		for ( let frame = 1; frame <= 60; frame++ ) {
+			const next = presentation.pose( 7, state.pose, now + frame / 120 );
+			assert.ok( next.x >= previous.x && next.x <= state.pose.x );
+			assert.ok( Math.abs( next.y - FROM.y ) < .01 && Math.abs( next.z - FROM.z ) < .01 );
+			previous = next;
+		}
+		assert.ok( Math.abs( previous.x - state.pose.x ) < .01 );
+		movement.clear();
+	});
+}
+
 test("an untimed coalesced click and accepted receipt retain the admitted path behind the new anchor", () => {
 	const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();
 	navigation.objects = [];
