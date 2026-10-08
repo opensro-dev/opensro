@@ -23,7 +23,7 @@ import { slotEffectRuntimeImageReferences } from "../../build/shared/cifRuntimeI
 import { readPackedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 
 const run = promisify( execFile );
-const PUBLISHER = fileURLToPath( new URL( "../../refresh_slot_effect_asset_packs.mjs", import.meta.url ) );
+const PUBLISHER = fileURLToPath( new URL( "../../refresh_asset_family.mjs", import.meta.url ) );
 const CATALOG = "/assets/cif/cif-sprite-catalog.json";
 const SENTINEL = "/assets/unchanged.json";
 const UNRELATED_IMAGE = "/assets/images/unchanged.png";
@@ -82,7 +82,7 @@ for ( const encoding of [ "identity", "gzip", "both" ] ) {
 				PNG
 			);
 		}
-		await run( process.execPath, [ PUBLISHER ], {
+		await run( process.execPath, [ PUBLISHER, "slot-effect" ], {
 			env: { ...process.env, SRO_GENERATED_ROOT: temporary },
 			timeout: 120000,
 			windowsHide: true

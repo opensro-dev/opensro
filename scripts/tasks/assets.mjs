@@ -20,9 +20,9 @@ Re-publish one pack family into an existing generated tree.
 ================
 */
 /**
- * @param {"refresh"|"publish"} kind @param {string} family @param {string} script @param {string} description
+ * @param {"refresh"|"publish"} kind @param {string} family @param {string[]} args @param {string} description
  */
-function familyTask( kind, family, script, description ) {
+function familyTask( kind, family, args, description ) {
 	return commandTask( {
 		name: `assets:${kind}:${family}`,
 		description,
@@ -31,23 +31,28 @@ function familyTask( kind, family, script, description ) {
 		requires: [ "licensed-client-extraction", "generated-assets" ],
 		timeoutClass: "long",
 		command: "node",
-		args: [ script ]
+		args
 	} );
 }
 
-const REFRESH_FAMILIES = [
+// The rows of scripts/build/families/looseFamilies.mjs, run by
+// scripts/refresh_asset_family.mjs (assetFamilyTasks.test.mjs keeps the lists equal).
+export const REFRESH_FAMILIES = [
 	"character-info",
 	"effect",
 	"entity-bsr",
 	"footprint",
 	"guide",
+	"item-mall",
 	"native-audio",
 	"native-window",
 	"overlay",
 	"quick-status",
 	"quickslot",
 	"restriction-text",
-	"return-scroll"
+	"return-scroll",
+	"slot-effect",
+	"world-map-markers"
 ];
 
 // Standalone publishers: `assets build` does not run them, so run `assets publish` after it.
@@ -66,8 +71,7 @@ const PUBLISH_FAMILIES = [
 // RGB16 window art, restriction text and the rest), and each is idempotent.
 const PUBLISH_TASK_NAMES = [
 	...PUBLISH_FAMILIES.map( ( family ) => `assets:publish:${family}` ),
-	...REFRESH_FAMILIES.map( ( family ) => `assets:refresh:${family}` ),
-	"assets:refresh:world-map-markers"
+	...REFRESH_FAMILIES.map( ( family ) => `assets:refresh:${family}` )
 ];
 
 export const ASSET_TASKS = [
@@ -75,7 +79,7 @@ export const ASSET_TASKS = [
 		familyTask(
 			"refresh",
 			family,
-			`scripts/refresh_${family.replaceAll( "-", "_" )}_asset_packs.mjs`,
+			[ "scripts/refresh_asset_family.mjs", family ],
 			`Refresh ${family} asset packs`
 		)
 	),
@@ -83,7 +87,7 @@ export const ASSET_TASKS = [
 		familyTask(
 			"publish",
 			family,
-			`apps/client-next/tools/publish-${family}.mjs`,
+			[ `apps/client-next/tools/publish-${family}.mjs` ],
 			`Publish ${family} assets outside the full build`
 		)
 	),
@@ -214,16 +218,6 @@ export const ASSET_TASKS = [
 		timeoutClass: "long",
 		command: "node",
 		args: [ "scripts/refresh_world_map_asset_packs.mjs" ]
-	} ),
-	commandTask( {
-		name: "assets:refresh:world-map-markers",
-		description: "Refresh code-selected world-map marker textures",
-		kind: "assets",
-		ci: false,
-		requires: [ "generated-assets" ],
-		timeoutClass: "medium",
-		command: "node",
-		args: [ "scripts/refresh_world_map_marker_asset_packs.mjs" ]
 	} ),
 	commandTask( {
 		name: "assets:gc",
