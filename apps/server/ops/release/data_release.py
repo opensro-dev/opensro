@@ -46,6 +46,8 @@ UPLOAD_TIMEOUT_SECONDS = 900
 MIN_UPLOAD_BYTES_PER_SECOND = 32 << 10
 FETCH_TIMEOUT_SECONDS = 60
 SSH_TRANSPORT_FAILURE = 255
+# receiver.request's answer to an operation its role or its controls lack.
+OPERATION_REFUSED = "operation is not allowed for this release key"
 
 
 # ================
@@ -127,7 +129,8 @@ def server_data_upload(archive, directory):
 #
 # Asks the host which needed payloads it already stores (receiver
 # payload-inventory), in requests under its limit, so a rerun after an
-# interrupted or superseded staging sends only what is missing.
+# interrupted or superseded staging sends only what is missing. A host that
+# refuses the operation stops the release: there is no full-upload path.
 # ================
 def stored_payloads(needed, target, identity, send=send):
 	present = set()
@@ -136,7 +139,17 @@ def stored_payloads(needed, target, identity, send=send):
 		for start in range(0, len(needed), client_data.MAX_INVENTORY_FILES):
 			chunk = needed[start:start + client_data.MAX_INVENTORY_FILES]
 			request.write_text(json.dumps({"operation": "payload-inventory", "files": chunk}), encoding="utf-8")
-			present.update(send(request, target, identity)["present"])
+			try:
+				answer = send(request, target, identity)
+			except RuntimeError as error:
+				if OPERATION_REFUSED not in str(error):
+					raise
+				raise RuntimeError(
+					"the host refused payload-inventory: its release controls predate it, or "
+					f"{identity} is not a staging key. Reinstall the controls from this commit "
+					"(README, Host installation: install.py --source-commit) before staging"
+				) from error
+			present.update(answer["present"])
 	return present
 
 

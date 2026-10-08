@@ -73,6 +73,27 @@ class InventoryTests(unittest.TestCase):
 		self.assertEqual(requests, [limit, 3])
 		self.assertEqual(len(present), 4)
 
+	# ================
+	# test_a_host_without_the_inventory_stops_the_release
+	#
+	# Older controls refuse the operation; the run stops naming the reinstall
+	# rather than uploading everything. Any other failure passes through.
+	# ================
+	def test_a_host_without_the_inventory_stops_the_release(self):
+		needed = [{"sha256": "a" * 64, "length": 1}]
+
+		def refused(request, target, identity):
+			raise RuntimeError(f"host refused inventory-request.json: ValueError: {data_release.OPERATION_REFUSED}")
+
+		with self.assertRaisesRegex(RuntimeError, "predate it.*Reinstall the controls"):
+			data_release.stored_payloads(needed, "stage@host", Path("key"), refused)
+
+		def lost(request, target, identity):
+			raise RuntimeError("inventory-request.json was not delivered after 5 attempts")
+
+		with self.assertRaisesRegex(RuntimeError, "not delivered"):
+			data_release.stored_payloads(needed, "stage@host", Path("key"), lost)
+
 
 if __name__ == "__main__":
 	unittest.main()
