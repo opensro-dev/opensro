@@ -1674,10 +1674,11 @@ cancel
 	audio.step( 0, [ 0, 0, 0 ] );
 	assert.equal( starts, 1 );
 	assert.ok( outputs.includes( panners[0] ) );
+	// Web Audio is right-handed: the left-handed world reaches it with Z mirrored (space.ts).
 	assert.deepEqual( [ panners[0].positionX.value, panners[0].positionY.value, panners[0].positionZ.value ], [
 		120,
 		5,
-		7
+		-7
 	] );
 	assert.equal( panners[0].distanceModel, "linear" );
 	assert.equal( gains[0].gain.value, Math.pow( 10, -.5 ) );

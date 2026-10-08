@@ -35,13 +35,15 @@ import { createMusic } from "./music/music";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SoundEvent } from "@/engine/contracts/audio";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import { audioSpace } from "@/engine/foundation/audio/space";
 const MAX_DECODES = 2, SOUND_INPUT_BYTES = 4 << 20, SOUND_RESIDENT_BYTES = 32 << 20;
 const RESIDENCY_RETRY_SECONDS = 2;
 /*
 ================
 placeListener
 
-Moves and turns the context's listener. Firefox's AudioListener has no
+Moves and turns the context's listener, given in world space (audioSpace
+mirrors it into Web Audio's). Firefox's AudioListener has no
 position/forward/up AudioParams, only the older setPosition and
 setOrientation methods; reading positionX.value there failed the whole
 runtime at load.
@@ -49,9 +51,12 @@ runtime at load.
 */
 function placeListener(
 	target: AudioListener,
-	position: readonly [number, number, number],
-	orientation?: Pick<import("@/engine/contracts/audio").SoundListener, "forward" | "up">
+	world: readonly [number, number, number],
+	worldOrientation?: Pick<import("@/engine/contracts/audio").SoundListener, "forward" | "up">
 ) {
+	const position = audioSpace( world );
+	const orientation = worldOrientation &&
+		{ forward: audioSpace( worldOrientation.forward ), up: audioSpace( worldOrientation.up ) };
 	if ( target.positionX ) {
 		target.positionX.value = position[0];
 		target.positionY.value = position[1];
@@ -675,9 +680,10 @@ step
 					panner.refDistance = 100;
 					panner.maxDistance = 300;
 					panner.rolloffFactor = 1;
-					panner.positionX.value = event.x;
-					panner.positionY.value = event.y;
-					panner.positionZ.value = event.z;
+					const [x, y, z] = audioSpace( [ event.x, event.y, event.z ] );
+					panner.positionX.value = x;
+					panner.positionY.value = y;
+					panner.positionZ.value = z;
 				}
 				source.connect( gain );
 				if ( panner ) {

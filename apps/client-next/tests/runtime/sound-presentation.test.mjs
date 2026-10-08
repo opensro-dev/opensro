@@ -169,10 +169,11 @@ test("buff retirement uses the published positional cue without a variant RNG dr
 	audio.step( .02, [ 100, 20, 200 ] );
 	assert.equal( started.length, 1 );
 	assert.ok( paths[0].endsWith( "/sfx/prim/snd/ui/buf_disappear.wav" ) );
+	// Web Audio is right-handed: the left-handed world reaches it with Z mirrored (space.ts).
 	assert.deepEqual( [ panners[0].positionX.value, panners[0].positionY.value, panners[0].positionZ.value ], [
 		100,
 		20,
-		200
+		-200
 	] );
 	assert.equal(
 		gains[0].gain.value,
@@ -371,7 +372,8 @@ test("a listener without position parameters (Firefox) is placed through setPosi
 	);
 	audio.unlock();
 	audio.step( 0, [ 1, 2, 3 ], { forward: [ 0, 0, -1 ], up: [ 0, 1, 0 ] } );
-	assert.deepEqual( placed.at( -1 ), [ 1, 2, 3 ] );
-	assert.deepEqual( turned.at( -1 ), [ 0, 0, -1, 0, 1, 0 ] );
+	// World space reaches Web Audio with Z mirrored (space.ts).
+	assert.deepEqual( placed.at( -1 ), [ 1, 2, -3 ] );
+	assert.deepEqual( turned.at( -1 ), [ 0, 0, 1, 0, 1, 0 ] );
 	audio.dispose();
 });
