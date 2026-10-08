@@ -10,12 +10,13 @@ shared generated assets may reside on different volumes.
 */
 import * as filesystem from "node:fs/promises";
 import { constants } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import { rebuildRoot } from "../world/paths.mjs";
 
 const DEFAULT_ARCHIVE_ROOT = path.join( rebuildRoot, "temp", "archives", "generated-artifacts" );
 const VERIFY_CHUNK_BYTES = 1024 * 1024;
+const STAGING_NAME_BYTES = 6;
 
 /*
 ================
@@ -51,6 +52,27 @@ function sameFile( before, after ) {
 
 /*
 ================
+makeStagingDirectory
+
+An exclusive mkdir under a random name. Not mkdtemp: on Windows it fails
+with ENOENT past 260 characters even with long paths enabled, and a
+superseded pack slot nested under the dated archive root passes that.
+================
+*/
+async function makeStagingDirectory( parent, files ) {
+	for ( ;; ) {
+		const staging = path.join( parent, `.archive-${randomBytes( STAGING_NAME_BYTES ).toString( "hex" )}` );
+		try {
+			await files.mkdir( staging );
+			return staging;
+		} catch ( error ) {
+			if ( error.code !== "EEXIST" ) throw error;
+		}
+	}
+}
+
+/*
+================
 archiveGeneratedArtifact
 
 Exclusive links avoid rename's overwrite behavior. Across devices, verify
@@ -82,7 +104,7 @@ export async function archiveGeneratedArtifact( sourcePath, options = {} ) {
 	const reason = normalizeReason( options.reason ?? "superseded" );
 	const baseDestination = path.join( archiveRoot, day, reason, relative );
 	await files.mkdir( path.dirname( baseDestination ), { recursive: true } );
-	const staging = await files.mkdtemp( path.join( path.dirname( baseDestination ), ".archive-" ) );
+	const staging = await makeStagingDirectory( path.dirname( baseDestination ), files );
 	const staged = path.join( staging, "payload" );
 	try {
 		try {

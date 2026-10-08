@@ -120,3 +120,33 @@ test("a source replaced after staging survives the final identity check", async 
 	await assert.rejects( archiveGeneratedArtifact( f.source, f.options ), /source changed/ );
 	assert.deepEqual( await files.readFile( f.source ), replacement );
 });
+
+test("an archive path past 260 characters is staged and recorded", async t => {
+	const f = await fixture( t );
+	// The superseded pack slots nest deep enough to pass MAX_PATH once the
+	// dated archive root prefixes them (mkdtemp failed there on Windows).
+	const deep = path.join( path.dirname( f.source ), "a".repeat( 120 ), "b".repeat( 120 ), "slot.pack" );
+	await files.mkdir( path.dirname( deep ), { recursive: true } );
+	await files.writeFile( deep, f.payload );
+	const result = await archiveGeneratedArtifact( deep, { ...f.options, files: {} } );
+	assert.ok( result.destination.length > 260, String( result.destination.length ) );
+	assert.deepEqual( await files.readFile( result.destination ), f.payload );
+	await assert.rejects( files.stat( deep ), { code: "ENOENT" } );
+});
+
+test("a staging name already taken is retried, never shared", async t => {
+	const f = await fixture( t );
+	const taken = [];
+	f.options.files.mkdir = async ( directory, options ) => {
+		if ( !options && path.basename( directory ).startsWith( ".archive-" ) && !taken.length ) {
+			taken.push( directory );
+			await files.mkdir( directory );
+			throw Object.assign( new Error( "exists" ), { code: "EEXIST" } );
+		}
+		return files.mkdir( directory, options );
+	};
+	const result = await archiveGeneratedArtifact( f.source, f.options );
+	assert.deepEqual( await files.readFile( result.destination ), f.payload );
+	// The foreign directory is left alone; only the archive's own staging is removed.
+	assert.equal( (await files.stat( taken[0] )).isDirectory(), true );
+});
