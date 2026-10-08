@@ -6,10 +6,21 @@
 
 game.example.com {
 	encode zstd gzip
+	# Response headers. The browser client needs 'unsafe-inline' in style-src
+	# (index.html carries an inline style block) and blob: in media-src (music
+	# and the bug-report replay play from blob: URLs). script-src stays 'self':
+	# the bundles are same-origin and the page has no inline script.
+	# frame-ancestors and X-Frame-Options stay in step. HSTS is one year; add
+	# includeSubDomains only when every subdomain serves HTTPS.
 	header {
-		Strict-Transport-Security "max-age=86400"
+		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		-Server
 	}
 
