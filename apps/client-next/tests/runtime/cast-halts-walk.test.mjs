@@ -60,6 +60,8 @@ function skillRef( id, halts ) {
 			trainable: true,
 			spCost: 1,
 			targetRequired: false,
+			// This fixture represents an admitted press, so it can predict a stop.
+			admit: { weaponKinds: [ 255, 255 ] },
 			...(halts ? { haltsWalk: true } : {}),
 			cooldownMs: 0,
 			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
