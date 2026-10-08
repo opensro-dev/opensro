@@ -20,6 +20,46 @@ const { createPosePresentation } = await import( "../../src/engine/runtime/chara
 const FROM = { regionId: 257, x: 100, y: 0, z: 100, angle: 0 };
 const TO = { ...FROM, x: 200 };
 
+test("a new walk after logical arrival retains the path still being displayed", () => {
+	const movement = createMovement( () => {} ), navigation = product(), presentation = createPosePresentation();
+	navigation.objects = [];
+	movement.seed( FROM );
+	movement.navigation( 257, navigation );
+	movement.request( TO, 0 );
+	presentation.origin( 0 );
+	let state = movement.state();
+	assert.ok( state.pose );
+	publish( presentation, state );
+	presentation.pose( 7, FROM, 0 );
+	for ( let now = 20; now <= 200; now += 20 ) {
+		movement.step( now );
+		state = movement.state();
+		assert.ok( state.pose );
+		publish( presentation, state );
+		presentation.pose( 7, state.pose, now / 1000 );
+	}
+	for ( let now = 220; now <= 2000; now += 20 ) presentation.pose( 7, state.pose, now / 1000 );
+	movement.step( 2000 );
+	state = movement.state();
+	assert.ok( state.pose );
+	assert.equal( state.moving, false );
+	publish( presentation, state );
+	let previous = presentation.pose( 7, state.pose, 2 );
+	assert.ok( previous.x < 120, "the worker arrived while presentation was parked" );
+	movement.request( FROM, 2020 );
+	for ( let now = 2020; now <= 6000; now += 20 ) {
+		movement.step( now );
+		state = movement.state();
+		assert.ok( state.pose );
+		publish( presentation, state );
+		const shown = presentation.pose( 7, state.pose, now / 1000 );
+		assert.ok( Math.abs( shown.x - previous.x ) <= 1.5 + .001, `new walk at ${now}: ${shown.x - previous.x}` );
+		previous = shown;
+	}
+	assert.ok( Math.abs( previous.x - FROM.x ) < .01 );
+	movement.clear();
+});
+
 test("a same-time speed change replaces the cached validated lookahead", () => {
 	const movement = createMovement( () => {} ), navigation = product();
 	navigation.objects = [];
@@ -85,18 +125,20 @@ test("a native 150-speed mount retains its terrain proof through a 1000 ms worke
 		Math.abs( previous.x - continued.x ) < .01,
 		"the mounted publication introduces no instantaneous displacement"
 	);
-	for ( let now = 1344; now <= 2000; now += 16 ) {
+	// A second of missing travel cannot disappear in a few display frames.
+	// Allow the bounded catch-up to close the gap while the mount keeps moving.
+	for ( let now = 1344; now <= 4000; now += 16 ) {
 		movement.step( now );
 		state = movement.state();
 		assert.ok( state.pose );
 		publish( presentation, state );
 		const shown = presentation.pose( 7, state.pose, now / 1000 );
 		assert.ok(
-			shown.x >= previous.x && shown.x - previous.x < 35,
+			shown.x >= previous.x && shown.x - previous.x <= 150 * 1.5 * .016 + .01,
 			"mounted recovery remains a controlled trajectory"
 		);
-		assert.ok( state.movementPath );
-		assert.ok( shown.x <= state.movementPath.to.x, "mounted recovery stays on the certified path" );
+		const endpoint = state.movementPath?.to ?? state.pose;
+		assert.ok( shown.x <= endpoint.x, "mounted recovery stays on the certified path through arrival" );
 		previous = shown;
 	}
 	assert.ok( state.pose );
@@ -145,14 +187,14 @@ for ( const stalledOwner of [ "main", "worker" ] ) {
 			Math.abs( previous.x - continued.x ) < .01,
 			"the delayed publication adds no instantaneous displacement"
 		);
-		for ( let now = 1344; now <= 2000; now += 16 ) {
+		for ( let now = 1344; now <= 4000; now += 16 ) {
 			movement.step( now );
 			state = movement.state();
 			assert.ok( state.pose );
 			publish( presentation, state );
 			const shown = presentation.pose( 7, state.pose, now / 1000 );
 			assert.ok(
-				shown.x >= previous.x && shown.x - previous.x < 11,
+				shown.x >= previous.x && shown.x - previous.x <= 50 * 1.5 * .016 + .01,
 				"recovery cannot reset to the logical pose"
 			);
 			previous = shown;
@@ -203,7 +245,7 @@ test("terrain walking stays continuous through repeated worker catch-up publicat
 	movement.request( { ...TO, x: 500 }, 0 );
 	presentation.origin( 0 );
 	let sampled = 0, previous = FROM, previousStep = 0;
-	for ( let now = 0; now <= 2208; now += 16 ) {
+	for ( let now = 0; now <= 4000; now += 16 ) {
 		if ( now <= 320 ) sampled = now;
 		else if ( now >= 1328 ) sampled = Math.min( now, sampled + 96 );
 		movement.step( sampled );
@@ -213,7 +255,7 @@ test("terrain walking stays continuous through repeated worker catch-up publicat
 		const shown = presentation.pose( 7, state.pose, now / 1000 );
 		const step = shown.x - previous.x;
 		if ( now >= 1328 ) {
-			assert.ok( step >= -.01 && step < 5.8, `catch-up publication reset recovery: ${step}` );
+			assert.ok( step >= -.01 && step <= 50 * 1.5 * .016 + .01, `catch-up publication reset recovery: ${step}` );
 			assert.ok( Math.abs( step - previousStep ) < 1.5, "catch-up cannot alternate parked and jumping frames" );
 		}
 		previousStep = step;
@@ -390,9 +432,10 @@ for ( const kind of [ "correction", "server receipt", "settled receipt" ] ) {
 		assert.ok( Math.abs( received.x - expected.x ) < .001, "new terminal correction cannot spend its own force" );
 		assert.ok( state.pose.x - received.x > .5, "the remaining glide is retained rather than snapped" );
 		let previous = received;
-		for ( let frame = 1; frame <= 60; frame++ ) {
+		for ( let frame = 1; frame <= 240; frame++ ) {
 			const next = presentation.pose( 7, state.pose, now + frame / 120 );
 			assert.ok( next.x >= previous.x && next.x <= state.pose.x );
+			assert.ok( next.x - previous.x <= 50 * 1.5 / 120 + .01, "terminal recovery keeps its walking budget" );
 			assert.ok( Math.abs( next.y - FROM.y ) < .01 && Math.abs( next.z - FROM.z ) < .01 );
 			previous = next;
 		}

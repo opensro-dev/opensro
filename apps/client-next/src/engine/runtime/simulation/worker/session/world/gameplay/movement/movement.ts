@@ -1194,7 +1194,8 @@ request
 			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
 				throw new Error( "Movement command capacity exceeded or player absent" );
 			}
-			const publishedHistory = segment?.presentationHistory;
+			const wasDisplacing = segment?.fixedTiming;
+			const publishedHistory = segment?.presentationHistory ?? transition.walkingPath;
 			const incoming = segment?.admittedTo ?
 				{
 					from: segment.admittedFrom ?? segment.from,
@@ -1202,7 +1203,12 @@ request
 				} :
 				undefined;
 			advanceTo( now );
-			const incomingHistory = rewindWalkingHistory( publishedHistory, pose ) ?? segment?.history;
+			// Arrival retires the logical segment before a delayed display has
+			// necessarily reached it. Carry its accepted history into the next
+			// walk, as receipts do; never invent a connector across displacement.
+			const incomingHistory = wasDisplacing ?
+				undefined :
+				rewindWalkingHistory( publishedHistory, pose ) ?? segment?.history ?? transition.walkingPath;
 			const p = admitPose( value ),
 				to = { ...p, x: Math.trunc( p.x ), y: Math.trunc( p.y ), z: Math.trunc( p.z ) },
 				id = nextId + 1;

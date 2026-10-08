@@ -66,10 +66,11 @@ for ( const speed of [ 150, 240 ] ) {
 		const resumed = draw( state, 1332.5 );
 		assert.ok( Math.hypot( resumed.x - before.x, resumed.y - before.y, resumed.z - before.z ) < .01 );
 		let previous = resumed;
-		for ( let now = 1344; now <= 2000; now += 16 ) {
+		for ( let now = 1344; now <= 3504; now += 16 ) {
 			state = defined( motion.step( now )[0] );
 			const shown = draw( state, now );
 			assert.ok( shown.x >= previous.x && shown.x <= defined( state.movementPath ).to.x );
+			assert.ok( shown.x - previous.x <= speed * 1.5 * .016 + .01, "peer recovery obeys its gait budget" );
 			previous = shown;
 		}
 		assert.ok( Math.abs( previous.x - defined( state.x ) ) < speed * .02 );

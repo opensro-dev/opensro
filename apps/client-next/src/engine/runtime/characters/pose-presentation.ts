@@ -48,6 +48,9 @@ const MIN_CORRECTION_DISTANCE = 0.01;
 // Legacy publishers cannot validate large cosmetic offsets against navigation.
 const MAX_CORRECTION_DISTANCE = 96;
 const MAX_RECOVERY_PATHS = 4;
+// Presentation may catch up, but accumulated worker debt cannot become an
+// arbitrarily fast spring. Logical movement and skill displacement are unchanged.
+const MAX_WALK_RECOVERY_SPEED_FACTOR = 1.5;
 
 /*
 ================
@@ -97,6 +100,7 @@ interface SampleTrack {
 	moving: boolean;
 	to?: Pose;
 	pathVelocity?: readonly [number, number];
+	recoverySpeed: number;
 	durationMs?: number;
 	displacementAtMs?: number;
 	offset: [number, number, number];
@@ -171,7 +175,7 @@ height, so a retained ramp cannot switch to its other floor.
 */
 function walkingLocation( pose: Pose, path: readonly Pose[], latest = false ) {
 	let distance = 0;
-	let best: { distance: number; error: number; pose: Pose; } | null = null;
+	let best: { distance: number; error: number; pose: Pose; edge: number; fraction: number; } | null = null;
 	for ( let i = 1; i < path.length; i++ ) {
 		const from = path[i - 1]!, to = path[i]!;
 		const span = worldVector( to, from ), point = worldVector( pose, from );
@@ -192,6 +196,8 @@ function walkingLocation( pose: Pose, path: readonly Pose[], latest = false ) {
 				error < best.error
 			) {
 				best = {
+					edge: i,
+					fraction,
 					distance: distance + length * fraction,
 					error,
 					pose: interpolateMovement( from, to, fraction )
@@ -230,15 +236,36 @@ sample chain owns where it may go. A newly delivered sample cannot consume
 an instantaneous step; zero travel preserves the last actually shown pose.
 ================
 */
-function recoverWalking( before: Pose, model: Pose, candidate: Pose, path: readonly Pose[] ) {
+function recoverWalking(
+	before: Pose,
+	model: Pose,
+	candidate: Pose,
+	walk: { path: readonly Pose[]; budget: number; }
+) {
+	const { path } = walk;
 	const start = walkingLocation( before, path, true ), end = walkingLocation( model, path, true );
 	if ( !start || !end || start.error > MIN_CORRECTION_DISTANCE || end.error > MIN_CORRECTION_DISTANCE ) return null;
 	const delta = worldVector( candidate, before );
 	if ( !delta ) return null;
-	const budget = hypot3( ...delta );
-	if ( budget === 0 ) return before;
 	const remaining = end.distance - start.distance;
-	const distance = start.distance + Math.sign( remaining ) * Math.min( Math.abs( remaining ), budget );
+	const direction = Math.sign( remaining );
+	let travel = Math.min( Math.abs( remaining ), hypot3( ...delta ) );
+	let distance = start.distance, budget = walk.budget, fraction = start.fraction;
+	if ( travel === 0 ) return before;
+	// The spring spends surface distance, but walking speed is horizontal.
+	// Bound horizontal travel on each accepted edge, retaining vertical-only
+	// recovery and never converting height debt into extra forward distance.
+	for ( let edge = start.edge; edge > 0 && edge < path.length && travel > 0; edge += direction ) {
+		const span = worldVector( path[edge]!, path[edge - 1]! )!;
+		const length = hypot3( ...span ), planar = hypot2( span[0], span[2] );
+		const available = length * (direction > 0 ? 1 - fraction : fraction);
+		const step = Math.min( available, travel, planar ? budget * length / planar : Infinity );
+		distance += direction * step;
+		travel -= step;
+		if ( length ) budget = Math.max( 0, budget - step * planar / length );
+		if ( step < available ) break;
+		fraction = direction > 0 ? 0 : 1;
+	}
 	return walkingPose( path, distance );
 }
 
@@ -479,6 +506,7 @@ export function createPosePresentation() {
 				moving: input.moving,
 				to: input.to,
 				pathVelocity: pathVelocity( input ),
+				recoverySpeed: 0,
 				durationMs: input.durationMs,
 				displacementAtMs: input.displacement ? input.startedAtMs : undefined,
 				offset: [ 0, 0, 0 ],
@@ -488,6 +516,7 @@ export function createPosePresentation() {
 				last: now,
 				angle: target.angle
 			};
+			row.recoverySpeed = !input.displacement && row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0;
 			if (
 				untimed && input.moving && input.transition?.eligible !== false &&
 				!discontinuity( untimed.target, target )
@@ -596,6 +625,11 @@ export function createPosePresentation() {
 			row.durationMs = input.durationMs;
 			row.displacementAtMs = displacementAtMs;
 			row.pathVelocity = pathVelocity( input );
+			// A stop may omit its leg, but outstanding display recovery still
+			// belongs to the speed of the admitted walk that reached it.
+			const walkSpeed = !input.displacement && row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0;
+			if ( input.displacement ) row.recoverySpeed = 0;
+			else if ( walkSpeed > 0 ) row.recoverySpeed = walkSpeed;
 			const jump = worldVector( before, sampledModel( row, now ) );
 			if ( jump && beforeSwitch && anchor ) {
 				const clockJump = worldVector( beforeSwitch, anchor );
@@ -625,6 +659,10 @@ export function createPosePresentation() {
 		}
 		if ( row.paths.length > MAX_RECOVERY_PATHS ) row.paths.splice( 0, row.paths.length - MAX_RECOVERY_PATHS );
 		let drawn = displace( model, row.offset );
+		const recoveryBudget = row === previousTrack && !input.displacement && walkingPath && row.recoverySpeed > 0 &&
+				previousFrameAt !== undefined ?
+			MAX_WALK_RECOVERY_SPEED_FACTOR * row.recoverySpeed * Math.max( 0, now - previousFrameAt ) :
+			Infinity;
 		const corridor = input.transition?.corridor;
 		// Receipt adoption also happens twice at one display timestamp. The
 		// old velocity must fit the new corridor even when no carry was spent.
@@ -641,7 +679,7 @@ export function createPosePresentation() {
 			row.velocity = [ span[0] * along, span[1] * along, span[2] * along ];
 		}
 		const walked = walkingPath && hypot3( ...row.offset ) > 0 ?
-			recoverWalking( row.displayed, model, drawn, walkingPath ) :
+			recoverWalking( row.displayed, model, drawn, { path: walkingPath, budget: recoveryBudget } ) :
 			null;
 		if ( walked ) {
 			drawn = walked;

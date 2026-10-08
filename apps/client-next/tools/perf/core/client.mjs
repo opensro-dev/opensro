@@ -387,6 +387,43 @@ export async function measure( page, name, ms, drive ) {
 
 /*
 ================
+readReviveAdmission
+
+Failure-only allowlist. Missing vitals are admission evidence, not proof of
+death. Do not serialize session objects, character names, errors or tokens.
+This function is self-contained for page.evaluate.
+================
+*/
+/** @param {any} [target] */
+export function readReviveAdmission( target = globalThis ) {
+	const root = target.__benchRuntime;
+	const game = root?.gameplay();
+	const gid = Number.isFinite( game?.localGid ) ? game.localGid : null;
+	const vital = gid ? game?.vitals?.find( row => row.gid === gid ) : undefined;
+	const entity = gid ? root?.entities()?.find( row => row.gid === gid ) : undefined;
+	const hp = Number.isFinite( vital?.hp ) ? vital.hp : null;
+	let state = "nonpositive-hp";
+	if ( !root ) state = "missing-runtime";
+	else if ( !game ) state = "missing-gameplay";
+	else if ( !gid ) state = "missing-local-identity";
+	else if ( !vital ) state = "missing-local-vital";
+	else if ( hp === null ) state = "missing-hp";
+	else if ( hp > 0 ) state = "positive-hp";
+	return {
+		state,
+		localGid: gid,
+		localEntityPresent: !!entity,
+		localVitalPresent: !!vital,
+		hp,
+		maxHp: Number.isFinite( vital?.maxHp ) ? vital.maxHp : null,
+		deathState: typeof vital?.deathState === "boolean" ? vital.deathState : null,
+		lifeState: Number.isFinite( entity?.appearanceState?.[0] ) ? entity.appearanceState[0] : null,
+		level: Number.isFinite( game?.progression?.level ) ? game.progression.level : null
+	};
+}
+
+/*
+================
 revive
 
 The scratch character may have died in an earlier run; a benchmark of a
@@ -395,20 +432,28 @@ for health.
 ================
 */
 export async function revive( page ) {
+	/*
+	================
+	alive
+	================
+	*/
 	const alive = () =>
 		page.evaluate( () => {
 			const game = globalThis.__benchRuntime.gameplay();
 			return (game.vitals?.find( v => v.gid === game.localGid )?.hp ?? 0) > 0;
 		} );
 	if ( await alive() ) return;
-	console.log( "  reviving the scratch character" );
+	console.log( "  waiting for positive local HP; attempting eligible scratch-character rebirth" );
 	for ( let attempt = 0; attempt < 20 && !await alive(); attempt++ ) {
 		await page.evaluate( () =>
 			globalThis.__benchRuntime.session( { kind: "gameplay", command: { kind: "rebirth", choice: 2 } } )
 		);
 		await page.waitForTimeout( 1000 );
 	}
-	if ( !await alive() ) throw Error( "the scratch character could not be revived" );
+	if ( !await alive() ) {
+		const admission = await page.evaluate( readReviveAdmission ).catch( () => ({ state: "unavailable" }) );
+		throw Error( `the scratch character could not be revived; admission: ${JSON.stringify( admission )}` );
+	}
 }
 
 /*
