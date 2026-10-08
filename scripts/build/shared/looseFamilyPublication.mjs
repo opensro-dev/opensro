@@ -33,6 +33,9 @@ patched group updates so a caller can report what was rebuilt.
 ================
 */
 export async function publishLooseFamily( family ) {
+	// The ledger owner is the family's task name (assets:refresh|publish:<owner>),
+	// so the build can tell a family that never ran from one that ran.
+	if ( !family.owner ) throw new Error( `${family.name}: publishLooseFamily needs the family's task name as owner` );
 	const previous = JSON.parse( await readFile( PACK_INDEX_PATH, "utf8" ) );
 	const groupOf = typeof family.defaultGroup === "function" ? family.defaultGroup : () => family.defaultGroup;
 	const owners = new Map( previous.assets.map( row => [ row.path, row.group ] ) );
@@ -54,7 +57,7 @@ export async function publishLooseFamily( family ) {
 	// larger open publication they join that owner instead.
 	if ( isPublicationOpen() ) claimPublicPaths( family.files );
 	else {
-		beginPublication( `family-${family.name}` );
+		beginPublication( `family-${family.owner}` );
 		claimPublicPaths( family.files );
 		await commitPublication();
 	}

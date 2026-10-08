@@ -50,6 +50,7 @@ await withGeneratedAssetsLock( "dungeon rendering publication", async () => {
 	} );
 	const updates = await publishLooseFamily( {
 		name: "dungeon-world",
+		owner: "dungeon-worlds",
 		files: [ ...logical, ...result.textures ],
 		defaultGroup: providerGroup
 	} );

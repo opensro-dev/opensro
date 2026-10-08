@@ -30,6 +30,7 @@ await withGeneratedAssetsLock( `Asset family ${name}`, async () => {
 	const output = await family.produce( new Set( rest ) );
 	const updates = await publishLooseFamily( {
 		name: family.packFolder,
+		owner: name,
 		files: output.files,
 		defaultGroup: output.defaultGroup ?? family.defaultGroup
 	} );

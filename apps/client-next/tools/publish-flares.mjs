@@ -58,6 +58,7 @@ await withGeneratedAssetsLock( "live flare texture publication", async () => {
 	];
 	const updates = await publishLooseFamily( {
 		name: "live-flares",
+		owner: "flares",
 		files: [ ...packedWorldFiles( index, published ), ...textures ],
 		defaultGroup: sunGroup
 	} );

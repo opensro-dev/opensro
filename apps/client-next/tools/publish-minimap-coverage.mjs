@@ -30,6 +30,7 @@ await withGeneratedAssetsLock( "retail minimap coverage publication", async () =
 	}
 	await publishLooseFamily( {
 		name: "minimap-coverage",
+		owner: "minimap-coverage",
 		files: [ "/assets/data/mission-dungeon-minimap.json" ],
 		defaultGroup: "game-data"
 	} );
