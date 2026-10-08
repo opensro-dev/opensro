@@ -35,10 +35,11 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 	destination: D3DBLEND_INVSRCALPHA
 } );
 
-// Experimental video stages (Experimental > Video). Each is off by
+// Experimental video stages (Experimental > Image / World). Each is off by
 // default, which is the native frame; env.stages carries the switches
-// (x height fog; y and z unused). Water reflection and equipment shine are
-// native options (Video slots 4 and 6), not experimental stages.
+// (x height fog; y sun direction; z terrain relief; w textured horizon).
+// Water reflection and equipment shine are native options (Video slots 4
+// and 6), not experimental stages.
 //
 // Height fog - a deliberate deviation from the retail D3DFOG_LINEAR the
 // native client authored (sub_4dc920 start/end): the same start/end
@@ -48,6 +49,26 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 const FOG_EXP2_REACH = 2.5; // exp2 factor reaches 1 - 1/255 at the fog end
 const FOG_HEIGHT_FALLOFF = 0.004; // fog density e-folds 250 m above the eye
 const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
+
+// Port-only, not native: Sun direction replaces the pinned diagonal light
+// (0.707, 0.707, 0) for every surface and every hour; only its colour
+// animates. The deviation rides the sky's sun arc (env.sunDirection,
+// world-environment.ts packs it) so dawn and dusk rake across geometry.
+//
+// Port-only, not native: Terrain relief shades retail NOLIGHT ground.
+// The deviation shades terrain slopes against the light
+// direction using the heightfield normals the worker now computes,
+// normalized against the flat-ground term so level ground keeps its
+// retail brightness and only slopes move. The strength is the whole
+// tuning surface.
+const TERRAIN_RELIEF = 0.45;
+const TERRAIN_RELIEF_MIN_LIGHT = 0.0001;
+
+// Port-only, not native: Textured horizon changes the flat fog applied to
+// terrain past the detail band (8ABFD0): 2005 minification aliased there.
+// Authored mip levels remain unchanged. Single-level terrain textures can
+// alias at grazing angles when the textured band is exposed. Off, the
+// native flat fog return stands.
 
 // Anisotropic filtering - the experimental sampler level; retail is 1.
 const ANISOTROPY = 16;
@@ -212,7 +233,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 		primitive: { topology: "triangle-list" }
 	} );
 	const environmentStruct =
-		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,stages:vec4f}`;
+		`struct Environment {zenith:vec4f,horizon:vec4f,diffuse:vec4f,ambient:vec4f,forward:vec4f,right:vec4f,up:vec4f,fog:vec4f,settings:vec4f,water:vec4f,shadow:vec4f,scatter:vec4f,skyTime:vec4f,sun:vec4f,lunar:vec4f,stars:array<vec4f,3>,terrainFog:vec4f,terrainBand:vec4f,reflection:vec4f,sunDirection:vec4f,stages:vec4f}`;
 	const skyShader = created.createShaderModule( {
 		code: environmentStruct + `
 @group(0) @binding(0) var<uniform> env:Environment;
@@ -276,6 +297,14 @@ fn stageColor(stage:vec4f,i:StageInputs)->vec4f {
 @group(0) @binding(3) var textureSampler:sampler;
 @group(0) @binding(4) var albedo:texture_2d_array<f32>;
 @group(0) @binding(5) var<uniform> env:Environment;
+// The retail light is the pinned 45-degree diagonal; the sun-direction
+// stage replaces it with the arc direction env carries (see the stage
+// comment above the constants).
+fn lightDirection()->vec3f{
+ // world-environment.ts packs a unit direction that stays continuous through
+ // the horizon crossing (it blends toward the zenith there).
+ return select(vec3f(0.70710678,0.70710678,0),env.sunDirection.xyz,env.stages.y>0.5);
+}
 struct SkinVertex {joints:vec4u,weights:vec4f}
 @group(0) @binding(6) var<storage,read> skinVertices:array<SkinVertex>;
 @group(0) @binding(7) var<storage,read> bones:array<mat4x4f>;
@@ -317,7 +346,7 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  // A91970 replaces BMT diffuse and actor ambient during SCT_MAT.
  let diffuseFactor=select(material.color.rgb,o.materialTint,material.policy.w>0.5);
  let ambientFactor=select(material.ambient.rgb,o.materialTint,material.policy.w>0.5);
- var illumination=diffuseFactor*env.diffuse.rgb*max(0.0,dot(lightingNormal,vec3f(0.70710678,0.70710678,0)))+env.ambient.rgb*ambientFactor*material.lighting.x;
+	var illumination=diffuseFactor*env.diffuse.rgb*max(0.0,dot(lightingNormal,lightDirection()))+env.ambient.rgb*ambientFactor*material.lighting.x;
  let light=instances[i];
  if(nativeCharacterLighting&&(any(light.pointAmbient.rgb!=vec3f(0))||any(light.pointDiffuse.rgb!=vec3f(0)))){
   let localLight=transpose(cofactors)*(light.pointPosition.xyz-instance[3].xyz)/select(1.0,determinant,determinant!=0.0);
@@ -362,12 +391,14 @@ struct Out {@location(11) worldY:f32,@location(12) mirrorPosition:vec4f,@builtin
  }
 var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textureSampler,input.uv,0,-0.5);}
  // Retail 8ABFD0: cells outside the detailed band use untextured linear fog.
+ // The textured-horizon stage keeps the textured fog blend instead;
+ // authored single-level textures can alias at grazing angles.
  let cellDelta=floor(input.worldXZ/320.0)-env.terrainBand.xy;
- let distant=env.terrainBand.w>0.5&&dot(cellDelta,cellDelta)>env.terrainBand.z;
+ let distant=env.terrainBand.w>0.5&&dot(cellDelta,cellDelta)>env.terrainBand.z&&env.stages.w<0.5;
  if(distant&&material.skin.y>0.5){discard;}
  if(distant&&material.options.z>0.5){return vec4f(env.fog.rgb,1);}
 let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
- let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),vec3f(0.70710678,0.70710678,0)))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
+	let illumination=clamp(select(material.color.rgb,input.materialTint,material.policy.w>0.5)*env.diffuse.rgb*max(0.0,dot(normalize(input.normal),lightDirection()))+env.ambient.rgb*select(material.ambient.rgb,input.materialTint,material.policy.w>0.5)*material.lighting.x,vec3f(0),vec3f(1));
  let surfaceLight=select(illumination,input.objectLighting,material.lighting.y>0.5);
  // B153A0 (effects) and sub_aed240 (BSR material modifiers) set stage 0 from
  // the resource. Its DIFFUSE is the vertex colour as lit, or unlit the
@@ -401,6 +432,21 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  let unlitColor=select(color.rgb,tex.rgb*input.color.rgb,material.lighting.y>0.5);
  // A native stage is the whole colour: its op already carries any 2X/4X.
  var lit=select(clamp(select(tex.rgb*input.color.rgb*surfaceLight,unlitColor,material.options.y>0.5)*material.options.w,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0);
+ // Terrain relief (experimental): retail ground is NOLIGHT - flat albedo the
+ // lightmap then multiplies. The stage shades slopes against the light
+ // direction through the heightfield normals the worker computes, levelled
+ // against the flat-ground term so level terrain keeps its retail brightness.
+ if(env.stages.z>0.5&&material.options.z>0.5){
+  // The flat-ground term follows the SAME light as the slope term: level
+  // ground's response is dot((0,1,0), L), which is 0.707 under the retail
+  // diagonal and the sun's height under the arc - level terrain keeps its
+  // brightness at every hour.
+  let reliefBase=env.ambient.rgb+env.diffuse.rgb*max(0.0,lightDirection().y);
+  let reliefSlope=env.ambient.rgb+env.diffuse.rgb*max(0.0,dot(normalize(input.normal),lightDirection()));
+  // With no light in a channel there is no slope contrast to apply.
+  let reliefRatio=select(vec3f(1),reliefSlope/max(reliefBase,vec3f(${TERRAIN_RELIEF_MIN_LIGHT})),reliefBase>vec3f(${TERRAIN_RELIEF_MIN_LIGHT}));
+  lit*=mix(vec3f(1),clamp(reliefRatio,vec3f(0),vec3f(2)),${TERRAIN_RELIEF});
+ }
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
  if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
@@ -491,7 +537,7 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
 		)
 	);
 	// Retail 87cbc0 sets MIN/MAG/MIP to LINEAR (2) with no anisotropic filter;
-	// these defaults are that. Experimental > Video > Anisotropic filtering
+	// these defaults are that. Experimental > Image / World > Anisotropic filtering
 	// swaps in the ANISOTROPY samplers below (geometry textureOptions).
 	const worldSampler = created.createSampler( {
 		minFilter: "linear",

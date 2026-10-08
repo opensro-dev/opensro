@@ -168,7 +168,9 @@ test("checkpoint preserves queued input, delivery before acknowledgement, and un
 	) a.apply( event );
 	const b = await createWorldReplay( a.checkpoint() );
 	assert.equal( b.witness().input.accepted, 0 );
-	assert.equal( b.witness().input.camera.yaw, 0.5 ); // Display input precedes worker acknowledgement.
+	// Display input precedes worker acknowledgement; the drag starts from the
+	// native reset yaw (CApp_ResetCameraDefaults).
+	assert.equal( b.witness().input.camera.yaw, Math.fround( 3.14 ) - Math.PI + 0.5 );
 	const tail = [
 		{ kind: "commit-input", atMs: 1 },
 		{ kind: "ack", atMs: 1, sequence: 1 },
@@ -183,7 +185,7 @@ test("checkpoint preserves queued input, delivery before acknowledgement, and un
 	}
 	assert.deepEqual( b.witness(), a.witness() );
 	assert.equal( b.witness().input.accepted, 1 );
-	assert.equal( b.witness().input.camera.yaw, 0.5 );
+	assert.equal( b.witness().input.camera.yaw, Math.fround( 3.14 ) - Math.PI + 0.5 );
 	const c = await createWorldReplay( b.checkpoint() );
 	b.apply( { kind: "drain-native", atMs: 3 } );
 	c.apply( { kind: "drain-native", atMs: 3 } );

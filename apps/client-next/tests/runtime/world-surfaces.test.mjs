@@ -29,6 +29,7 @@ async function load( file ) {
 	return import( sourceFileUrl( path.join( root, "src/engine", file ) ).href );
 }
 const { decodeDxt1 } = await load( "foundation/assets/dds.ts" ),
+	{ decodeNativeTexture, validateNativeTexture } = await load( "foundation/assets/native-texture.ts" ),
 	{ skyGroups } = await load( "foundation/rendering/sky-geometry.ts" ),
 	{ createWorldDecoder } = await load( "runtime/assets/worker/world/world.ts" );
 test("DDS decoder handles BC1 transparent mode, nonzero offsets, edges and rejected surfaces", () => {
@@ -51,15 +52,29 @@ test("DDS decoder handles BC1 transparent mode, nonzero offsets, edges and rejec
 	v.setUint32( 112, 0x200, true );
 	assert.throws( () => decodeDxt1( d ), /surface/ );
 });
-test("installed MAPT lightmaps reach every sector and retain all four selected surfaces", () => {
+test("installed MAPT lightmaps resolve across scoped container migrations", () => {
 	const bundle = json( "/assets/world/china/region-62a8.json" ),
 		scene = createWorldDecoder().decode( new TextEncoder().encode( JSON.stringify( bundle ) ) );
 	const lights = scene.groups.filter( g => g.material.lightmap );
 	assert.equal( lights.length, bundle.terrain.sectors.length );
 	for ( const group of lights ) {
-		const decoded = decodeDxt1( bytes( group.material.texture ) );
-		assert.equal( decoded.width, 512 );
-		assert.equal( decoded.height, 512 );
+		// Scoped builds deliberately retain legacy DDS references in untouched
+		// bundles. Both supported routes must resolve while regions migrate.
+		const texturePath = group.material.texture;
+		const payload = bytes( texturePath );
+		if ( texturePath.endsWith( ".texture" ) ) {
+			const decoded = decodeNativeTexture( payload );
+			assert.equal( decoded.width, 512 );
+			assert.equal( decoded.height, 512 );
+			assert.equal( decoded.format, "bc1-rgba-unorm" );
+			assert.equal( decoded.levels.length, 1 );
+			assert.ok( validateNativeTexture( decoded ) > 0 );
+		} else {
+			assert.ok( texturePath.endsWith( ".dds" ), texturePath );
+			const decoded = decodeDxt1( payload );
+			assert.equal( decoded.width, 512 );
+			assert.equal( decoded.height, 512 );
+		}
 		assert.deepEqual( [ ...new Set( group.ranges.map( r => r.lod ) ) ].sort(), [ 0, 1, 2, 3 ] );
 		assert.ok( group.geometry.uvs.every( v => v >= 0 && v <= 1 ) );
 		assert.equal( group.material.terrain, undefined );

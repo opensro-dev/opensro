@@ -97,7 +97,8 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 			frameId,
 			deferred,
 			bloom,
-			reflection
+			reflection,
+			presentation
 		) {
 			const sceneView = bloom?.view ?? view;
 			if ( ui !== recordedUi ) {
@@ -391,6 +392,9 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					if ( uiBundle ) overlay.executeBundles( [ uiBundle ] );
 					overlay.end();
 				}
+				// Preserve every pass and depth operation above. Only append the
+				// final presentation here instead of submitting it separately.
+				presentation?.encodePresent( encoder );
 				const query = timing?.resolve();
 				if ( query ) {
 					encoder.resolveQuerySet( query.query, 0, query.count, query.resolve, 0 );

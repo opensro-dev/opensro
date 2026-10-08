@@ -38,7 +38,7 @@ ColorTarget
 ================
 */
 export interface ColorTarget extends DepthTarget {
-	present( target: GPUTexture ): void;
+	encodePresent( encoder: GPUCommandEncoder, target: GPUTexture ): void;
 }
 /*
 ================
@@ -127,7 +127,9 @@ SurfaceOwner
 export interface SurfaceOwner extends Disposable {
 	depth(): GPUTextureView;
 	acquire( viewport: Viewport, offscreen?: boolean ): GPUTextureView;
-	present(): void;
+	/** Acquire the current swapchain texture only when encoding the final
+	 * presentation; a deferred query may have crossed browser frames. */
+	encodePresent( encoder: GPUCommandEncoder ): void;
 }
 /*
 ================
@@ -172,7 +174,8 @@ export interface FrameOwner {
 		frameId?: number,
 		deferred?: DeferredDraw,
 		bloom?: BloomDraw,
-		reflection?: { encode( encoder: GPUCommandEncoder ): void; }
+		reflection?: { encode( encoder: GPUCommandEncoder ): void; },
+		presentation?: SurfaceOwner
 	): void | Promise<void>;
 }
 

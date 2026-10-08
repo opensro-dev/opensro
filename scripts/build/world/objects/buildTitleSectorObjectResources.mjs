@@ -10,14 +10,12 @@ everything else keeps the converted PNG path.
 
 ===========================================================================
 */
-import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { CPD_SIGNATURE, parseCompound } from "./compound.mjs";
+import { probeBlockTextureFile, publishBlockTextureFile } from "../assets/blockTextures.mjs";
 import { exists } from "../io.mjs";
 import { imageSourceRoot, normalizeAssetPath, publicRoot, toGameRelative } from "../paths.mjs";
-import { runPython } from "../../shared/pythonRun.mjs";
 import {
 	BSR_SIGNATURE,
 	parseJmxBmsStaticMesh,
@@ -26,19 +24,11 @@ import {
 	resolveBmtTexturePath
 } from "./formats.mjs";
 
-const DDJ_HEADER_SIZE = 20;
-const DDS_HEADER_BYTES = 148;
-const DDS_HEIGHT_OFFSET = 32;
-const DDS_WIDTH_OFFSET = 36;
-const DDS_PIXEL_FORMAT_OFFSET = 100;
-const DDPF_FOURCC = 0x4;
-const BLOCK_FOURCCS = new Map( [
-	[ 0x31545844, "dxt1" ],
-	[ 0x33545844, "dxt3" ],
-	[ 0x35545844, "dxt5" ]
-] );
-const ENCODER_PATH = fileURLToPath( new URL( "../../native_texture_mips.py", import.meta.url ) );
-
+/*
+================
+buildTitleSectorObjectResources
+================
+*/
 export async function buildTitleSectorObjectResources( options ) {
 	const sourceExtractedRoot = options.extractedRoot;
 	const sourceGameRoot = options.gameRoot;
@@ -52,6 +42,11 @@ export async function buildTitleSectorObjectResources( options ) {
 	const materialPathSet = new Set();
 	const meshPathSet = new Set();
 
+	/*
+	================
+	loadBranch
+	================
+	*/
 	async function loadBranch( sourcePath, definition ) {
 		const absolutePath = dataAssetPath( sourceExtractedRoot, sourcePath );
 		if ( !(await exists( absolutePath )) ) {
@@ -120,7 +115,7 @@ export async function buildTitleSectorObjectResources( options ) {
 		if ( !blockFormats.has( textureSourcePath ) ) {
 			blockFormats.set(
 				textureSourcePath,
-				await probeBlockTexture( dataAssetPath( sourceExtractedRoot, textureSourcePath ) )
+				await probeBlockTextureFile( dataAssetPath( sourceExtractedRoot, textureSourcePath ) )
 			);
 		}
 		return blockFormats.get( textureSourcePath );
@@ -224,25 +219,23 @@ export async function buildTitleSectorObjectResources( options ) {
 ================
 copyObjectMaterialTextures
 
-Publish each material texture: block sources (probeBlockTexture admitted)
-as one batched NTX1 encode of the authored DDJ, the rest as converted PNG
-copies. The PNG of a block source is NOT published - the .texture is the
-only shipped artifact for it.
+Publish each material texture: block sources (probeBlockTextureFile
+admitted) as one content-addressed NTX1 encode of the authored DDJ, the
+rest as converted PNG copies. The PNG of a block source is NOT published -
+the .texture is the only shipped artifact for it.
 ================
 */
 async function copyObjectMaterialTextures( texturePaths, area, missing, blockFormats, sourceExtractedRoot ) {
 	const copied = [];
-	const encodeJobs = [];
+	const published = [];
 
 	for ( const textureSourcePath of texturePaths ) {
 		const blockFormat = blockFormats.get( textureSourcePath ) ?? null;
 		if ( blockFormat ) {
 			const publicPath = objectTexturePublicPath( area, textureSourcePath, ".texture" );
 			const source = dataAssetPath( sourceExtractedRoot, textureSourcePath );
-			encodeJobs.push( {
-				source,
-				target: path.join( publicRoot, publicPath.replace( /^\/+/, "" ) )
-			} );
+			const target = path.join( publicRoot, publicPath.replace( /^\/+/, "" ) );
+			published.push( publishBlockTextureFile( source, target ) );
 			copied.push( {
 				sourcePath: textureSourcePath,
 				imageSourcePath: toGameRelative( source ),
@@ -271,8 +264,8 @@ async function copyObjectMaterialTextures( texturePaths, area, missing, blockFor
 		} );
 	}
 
-	if ( encodeJobs.length ) {
-		await runBlockTextureEncode( encodeJobs );
+	if ( published.length ) {
+		await Promise.all( published );
 	}
 
 	return copied;
@@ -280,72 +273,36 @@ async function copyObjectMaterialTextures( texturePaths, area, missing, blockFor
 
 /*
 ================
-runBlockTextureEncode
-
-One python invocation encodes every admitted DDJ into its NTX1 container
-(native_texture_mips.py: authored levels verbatim, box-filtered mip suffix).
-The job manifest is named per call: the world lanes that publish object
-textures share publicRoot and may run concurrently, and a shared name let
-one lane overwrite or delete another's jobs.
+objectTexturePublicPath
 ================
 */
-async function runBlockTextureEncode( jobs ) {
-	const manifestPath = path.join( publicRoot, "..", `object-texture-encode-jobs-${randomUUID()}.json` );
-	await mkdir( path.dirname( manifestPath ), { recursive: true } );
-	await writeFile( manifestPath, JSON.stringify( jobs ), "utf8" );
-	try {
-		await runPython( [ ENCODER_PATH, "-Manifest", manifestPath ], {
-			task: "Encode world object textures to NTX1 block containers",
-			context: [ "Sources are authored DXT power-of-two DDJ files; targets sit in the published asset tree." ]
-		} );
-	} finally {
-		await rm( manifestPath, { force: true } );
-	}
-}
-
-/*
-================
-probeBlockTexture
-
-Read the DDJ wrapper's DDS header and report the block format when the
-source is a power-of-two DXT texture the client's NTX1 route admits
-(native-texture.ts rejects non-PoT dimensions). Everything else returns
-null and stays on the converted PNG path.
-================
-*/
-async function probeBlockTexture( absolutePath ) {
-	if ( !(await exists( absolutePath )) ) return null;
-	const handle = await open( absolutePath, "r" );
-	try {
-		const header = Buffer.alloc( DDS_HEADER_BYTES );
-		const { bytesRead } = await handle.read( header, 0, DDS_HEADER_BYTES, 0 );
-		if ( bytesRead < DDS_HEADER_BYTES ) return null;
-		if ( header.toString( "latin1", 0, 8 ) !== "JMXVDDJ " ) return null;
-		if ( header.toString( "latin1", DDJ_HEADER_SIZE, DDJ_HEADER_SIZE + 4 ) !== "DDS " ) return null;
-		const height = header.readUInt32LE( DDS_HEIGHT_OFFSET );
-		const width = header.readUInt32LE( DDS_WIDTH_OFFSET );
-		if ( width < 1 || height < 1 || width & (width - 1) || height & (height - 1) ) return null;
-		// dwMipMapCount 0 means one authored level; the encoder clamps the same way.
-		const flags = header.readUInt32LE( DDS_PIXEL_FORMAT_OFFSET );
-		if ( (flags & DDPF_FOURCC) === 0 ) return null;
-		return BLOCK_FOURCCS.get( header.readUInt32LE( DDS_PIXEL_FORMAT_OFFSET + 4 ) ) ?? null;
-	} finally {
-		await handle.close();
-	}
-}
-
 function objectTexturePublicPath( area, textureSourcePath, extension ) {
 	return `/assets/world/${area}/object-textures/${objectTextureImageRelativePath( textureSourcePath, extension )}`;
 }
 
+/*
+================
+objectTextureImageRelativePath
+================
+*/
 function objectTextureImageRelativePath( textureSourcePath, extension ) {
 	return normalizeAssetPath( textureSourcePath ).replace( /\.[^.]+$/, "" ) + extension;
 }
 
+/*
+================
+dataAssetPath
+================
+*/
 function dataAssetPath( sourceExtractedRoot, sourcePath ) {
 	return path.join( sourceExtractedRoot, "Data_extracted", ...normalizeAssetPath( sourcePath ).split( "/" ) );
 }
 
+/*
+================
+countPlacementsByObjectId
+================
+*/
 function countPlacementsByObjectId( placements ) {
 	const counts = new Map();
 	for ( const placement of placements ) {

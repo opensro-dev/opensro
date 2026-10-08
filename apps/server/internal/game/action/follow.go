@@ -191,7 +191,7 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 		return OpResult{}
 	}
 	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
-	if world.MoveSegment.Valid() && nowMs < world.MoveSegment.ArrivesAtMs {
+	if world.MovingAt(nowMs) {
 		heading, valid := simulation.HeadingFromMovement(from, goal)
 		turn := float64(int16(heading-from.Angle)) * 2 * math.Pi / 65536
 		if valid && math.Abs(turn) <= followTurnThreshold {

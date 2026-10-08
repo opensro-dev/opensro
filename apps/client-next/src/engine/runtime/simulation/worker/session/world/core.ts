@@ -20,7 +20,12 @@ import { fortressActive } from "@/engine/foundation/gameplay/fortress";
 import type { EntityState } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
-import { petPlayerAttack, playerInteraction } from "@/engine/foundation/gameplay/player-attack";
+import {
+	hoverAttack,
+	petPlayerAttack,
+	playerInteraction,
+	skillTargetAdmission
+} from "@/engine/foundation/gameplay/player-attack";
 import { resolveNativeNotice } from "@/engine/foundation/gameplay/native-notice";
 import { createEntities } from "./entities/entities";
 import { createGameplay } from "./gameplay/gameplay";
@@ -38,7 +43,8 @@ export function createWorldCore( send: ( frame: WireFrame ) => void ) {
 	const entities = createEntities(
 			( pose, reference, cursor ) => gameplay.surface( pose, reference, undefined, cursor ),
 			event => gameplay.entityLifecycle( event ),
-			nameContext
+			nameContext,
+			( from, to, query ) => gameplay.clipMovement( from, to, query )
 		),
 		gameplay = createGameplay(
 			send,
@@ -102,6 +108,27 @@ petAttackAdmitted
 			if ( notice.kind === "notice" ) gameplay.notice( notice.notice );
 		}
 		return decision.kind === "attack";
+	}
+	/*
+================
+skillAtTargetAdmitted
+
+6FCD50 for an offensive skill aimed at a player or a pet; a refusal
+publishes its category-4 notice (player-attack.ts).
+================
+	*/
+	function skillAtTargetAdmitted( gid: number, skill: number, alt: boolean ): boolean {
+		const target = entities.read( gid ), context = nameContext();
+		if ( !target || !context ) return true;
+		const decision = skillTargetAdmission( target, context, alt, gameplay.offensiveSkill( skill ), {
+			entity: entities.read,
+			rider: entities.rider
+		} );
+		if ( decision.kind === "notice" ) {
+			const notice = resolveNativeNotice( 4, decision.code, { pkProhibited: false } );
+			if ( notice.kind === "notice" ) gameplay.notice( notice.notice );
+		}
+		return decision.kind === "cast";
 	}
 	function nameContext( spawning?: EntityState ): NameColorContext | undefined {
 		const local = spawning?.kind === "local-player" ? spawning : entities.read( gameplay.localIdentity() );
@@ -350,6 +377,7 @@ UI and quickslot commands. A skill aims at the newest selection intent
 			if ( command.kind === "skill" ) {
 				const { gid: _snapshot, ...press } = command, gid = gameplay.skillTarget();
 				command = gid ? { ...press, gid } : press;
+				if ( gid && !skillAtTargetAdmitted( gid, command.skillId, command.alt ?? false ) ) return;
 			}
 			const target = "gid" in command && command.gid ? entities.read( command.gid ) : undefined;
 			gameplay.command( command, now, target, entities.read( gameplay.localIdentity() ) );
@@ -375,6 +403,14 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 				}
 				entities.step( now );
 				gameplay.step( now, entities.read( gameplay.localIdentity() ) );
+				// 6875F0 judges the hovered player or pet every tick; the verdicts
+				// follow party, PvP state and the attacked-name window as they change.
+				const hoverContext = nameContext();
+				if ( hoverContext ) {
+					entities.refreshHoverAttack( e =>
+						hoverAttack( e, hoverContext, { entity: entities.read, rider: entities.rider } )
+					);
+				}
 				for ( const token of gameplay.takeCancellations() ) {
 					entities.cancelCast( token, now );
 					gameplay.cancelCast( token, now );

@@ -67,7 +67,7 @@ func (rt *Runtime) haltCasterWalk(division string, c *enterworld.Character, skil
 		func() simulation.WorldState { return simulation.SeedWorldState(c) },
 		func(world *simulation.WorldState) {
 			// CGObjChar IsMoving (vtable +0x4C0): a segment still in flight.
-			if !world.MoveSegment.Valid() || now >= world.MoveSegment.ArrivesAtMs {
+			if !world.MovingAt(now) {
 				return
 			}
 			world.SettleLive(now)

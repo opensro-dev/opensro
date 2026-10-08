@@ -1,0 +1,2051 @@
+{
+  "format": "sro-native-client-ground-v1",
+  "binarySha256": "375e868234437e815af8ce9289ddea7ec9144430f4ea24e32988a6d6c9dd108a",
+  "floatingControlWord": "0x027f",
+  "intervals": [
+    "86C960 complete (8788C0 yaw vector)",
+    "86D6D0 complete (86D480 steering, 86CA70 no-turn branch, 878CE0 remaining distance)"
+  ],
+  "dependencies": "World singleton, sector offsets and collision result only; native CRT executes. No steering input flags. No world traversal equivalence claim.",
+  "cases": [
+    {
+      "name": "elapsed-0-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.0,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.0,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.0,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.0001-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 9.999999747378752e-05,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        99.99500274658203
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120402801
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          99.99500274658203
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.0001-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 9.999999747378752e-05,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.00499725341797,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120404111,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.00499725341797,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.0001-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 9.999999747378752e-05,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.00357818603516,
+        3.0,
+        100.00349426269531
+      ],
+      "positionBits": [
+        1120403925,
+        1077936128,
+        1120403914
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.00357818603516,
+          3.0,
+          100.00349426269531
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.016-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.01600000075995922,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        99.19999694824219
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120298598
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          99.19999694824219
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.016-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.01600000075995922,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.80000305175781,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120508314,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.80000305175781,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.016-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.01600000075995922,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.57198333740234,
+        3.0,
+        100.55931854248047
+      ],
+      "positionBits": [
+        1120478427,
+        1077936128,
+        1120476767
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.57198333740234,
+          3.0,
+          100.55931854248047
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.033-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        98.3499984741211
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120187187
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          98.3499984741211
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.033-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        101.6500015258789,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120619725,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          101.6500015258789,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.033-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        101.1797103881836,
+        3.0,
+        101.15359497070312
+      ],
+      "positionBits": [
+        1120558083,
+        1077936128,
+        1120554660
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          101.1797103881836,
+          3.0,
+          101.15359497070312
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.15-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.15000000596046448,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        92.5
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1119420416
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          92.5
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.15-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.15000000596046448,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        107.5,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1121386496,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          107.5,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.15-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.15000000596046448,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        105.36233520507812,
+        3.0,
+        105.24360656738281
+      ],
+      "positionBits": [
+        1121106308,
+        1077936128,
+        1121090746
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          105.36233520507812,
+          3.0,
+          105.24360656738281
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.3-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.30000001192092896,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        85.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1118437376
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          85.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.3-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.30000001192092896,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        115.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1122369536,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          115.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-0.3-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.30000001192092896,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        110.72467041015625,
+        3.0,
+        110.4872055053711
+      ],
+      "positionBits": [
+        1121809160,
+        1077936128,
+        1121778035
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          110.72467041015625,
+          3.0,
+          110.4872055053711
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-1-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 1.0,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        50.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1112014848
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          50.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-1-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 1.0,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        150.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1125515264,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          150.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-1-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 1.0,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        135.7489013671875,
+        3.0,
+        134.9573516845703
+      ],
+      "positionBits": [
+        1124581304,
+        1077936128,
+        1124529429
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          135.7489013671875,
+          3.0,
+          134.9573516845703
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-4-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 4.0,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        -100.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        3267887104
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          -100.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-4-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 4.0,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        300.0,
+        3.0,
+        100.00000762939453
+      ],
+      "positionBits": [
+        1133903872,
+        1077936128,
+        1120403457
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          300.0,
+          3.0,
+          100.00000762939453
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-4-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 4.0,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        242.99559020996094,
+        3.0,
+        239.8293914794922
+      ],
+      "positionBits": [
+        1131609823,
+        1077936128,
+        1131402323
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          242.99559020996094,
+          3.0,
+          239.8293914794922
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-20-yaw-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 20.0,
+      "yaw": 0.0,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        -900.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        3294691328
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          -900.0
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-20-yaw-1.5707963267948966",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 20.0,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        1100.0,
+        3.0,
+        100.00004577636719
+      ],
+      "positionBits": [
+        1149861888,
+        1077936128,
+        1120403462
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          1100.0,
+          3.0,
+          100.00004577636719
+        ]
+      ]
+    },
+    {
+      "name": "elapsed-20-yaw-2.345",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 20.0,
+      "yaw": 2.3450000286102295,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        0.7149779796600342,
+        0.0,
+        0.6991469860076904
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        814.9779663085938,
+        3.0,
+        799.14697265625
+      ],
+      "positionBits": [
+        1145814679,
+        1077936128,
+        1145555304
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          814.9779663085938,
+          3.0,
+          799.14697265625
+        ]
+      ]
+    },
+    {
+      "name": "arrival-0",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        100.0,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": true,
+      "candidates": [
+        [
+          100.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "arrival-0.5",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        100.5,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.5,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120468992,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": true,
+      "candidates": [
+        [
+          100.5,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "arrival-1",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        101.0,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        101.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120534528,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": true,
+      "candidates": [
+        [
+          101.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "arrival-4.9999995",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        105.0,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        105.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1121058816,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": true,
+      "candidates": [
+        [
+          105.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "arrival-5",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        105.0,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        105.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1121058816,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": true,
+      "candidates": [
+        [
+          105.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "arrival-5.0000005",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        105.0,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        105.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1121058816,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": true,
+      "candidates": [
+        [
+          105.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "arrival-160",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        260.0,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        105.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1121058816,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          105.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "arrival-200",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        300.0,
+        99.0,
+        100.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        105.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1121058816,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          105.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "collision-1",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 1,
+      "position": [
+        105.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1121058816,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": true,
+      "candidates": [
+        [
+          105.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "collision-268435456",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.10000000149011612,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 268435456,
+      "position": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": false,
+      "candidates": [
+        [
+          105.0,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "direction-stall",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 20.0,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": false,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        1100.0,
+        3.0,
+        100.00004577636719
+      ],
+      "positionBits": [
+        1149861888,
+        1077936128,
+        1120403462
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          1100.0,
+          3.0,
+          100.00004577636719
+        ]
+      ]
+    },
+    {
+      "name": "scaled-channel",
+      "speed": 50.0,
+      "scale": 0.3333333432674408,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        100.55000305175781,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120475546,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          100.55000305175781,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "override-channel",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 77.25,
+      "elapsedSeconds": 0.032999999821186066,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        102.54924774169922,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120737591,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          102.54924774169922,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "negative-speed",
+      "speed": -50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 0.032999999821186066,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": true,
+      "status": 0,
+      "position": [
+        98.3499984741211,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120187187,
+        1077936128,
+        1120403456
+      ],
+      "active": true,
+      "accepted": true,
+      "candidates": [
+        [
+          98.3499984741211,
+          3.0,
+          100.0
+        ]
+      ]
+    },
+    {
+      "name": "inactive",
+      "speed": 50.0,
+      "scale": 1.0,
+      "overrideSpeed": 0.0,
+      "elapsedSeconds": 1.0,
+      "yaw": 1.5707963705062866,
+      "start": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "goal": [
+        1000.0,
+        99.0,
+        1000.0
+      ],
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "waypoint": true,
+      "initiallyActive": false,
+      "status": 0,
+      "position": [
+        100.0,
+        3.0,
+        100.0
+      ],
+      "positionBits": [
+        1120403456,
+        1077936128,
+        1120403456
+      ],
+      "active": false,
+      "accepted": false,
+      "candidates": []
+    }
+  ],
+  "directions": [
+    {
+      "delta": [
+        1.0,
+        0.0
+      ],
+      "yaw": 1.5707963705062866,
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "directionBits": [
+        1065353216,
+        0,
+        859553070
+      ]
+    },
+    {
+      "delta": [
+        0.0,
+        1.0
+      ],
+      "yaw": 3.1415927410125732,
+      "direction": [
+        -8.742277657347586e-08,
+        0.0,
+        1.0
+      ],
+      "directionBits": [
+        3015425326,
+        0,
+        1065353216
+      ]
+    },
+    {
+      "delta": [
+        -1.0,
+        0.0
+      ],
+      "yaw": 4.71238899230957,
+      "direction": [
+        -1.0,
+        0.0,
+        -1.1924880638503055e-08
+      ],
+      "directionBits": [
+        3212836864,
+        0,
+        2991382062
+      ]
+    },
+    {
+      "delta": [
+        0.0,
+        -1.0
+      ],
+      "yaw": 0.0,
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "directionBits": [
+        0,
+        0,
+        3212836864
+      ]
+    },
+    {
+      "delta": [
+        3.0,
+        4.0
+      ],
+      "yaw": 2.498091459274292,
+      "direction": [
+        0.6000000834465027,
+        0.0,
+        0.7999999523162842
+      ],
+      "directionBits": [
+        1058642331,
+        0,
+        1061997772
+      ]
+    },
+    {
+      "delta": [
+        -3.0,
+        4.0
+      ],
+      "yaw": 3.7850940227508545,
+      "direction": [
+        -0.6000002026557922,
+        0.0,
+        0.7999998331069946
+      ],
+      "directionBits": [
+        3206125981,
+        0,
+        1061997770
+      ]
+    },
+    {
+      "delta": [
+        1.0000000116860974e-07,
+        0.0
+      ],
+      "yaw": 1.5707963705062866,
+      "direction": [
+        1.0,
+        0.0,
+        4.371138828673793e-08
+      ],
+      "directionBits": [
+        1065353216,
+        0,
+        859553070
+      ]
+    },
+    {
+      "delta": [
+        123.45600128173828,
+        -789.1229858398438
+      ],
+      "yaw": 0.15518902242183685,
+      "direction": [
+        0.15456685423851013,
+        0.0,
+        -0.9879823327064514
+      ],
+      "directionBits": [
+        1042171590,
+        0,
+        3212635241
+      ]
+    },
+    {
+      "delta": [
+        0.0,
+        0.0
+      ],
+      "yaw": 0.0,
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "directionBits": [
+        0,
+        0,
+        3212836864
+      ]
+    }
+  ]
+}

@@ -387,7 +387,16 @@ export function verifyCapabilities( base = root ) {
 			}
 			if (
 				ts.isIdentifier( n ) && [ "GPUCommandEncoder", "GPURenderBundleEncoder" ].includes( n.text ) &&
-				!([ animation, particles, geometry, shadows, waterReflection ].includes( file ) &&
+				!([
+					animation,
+					particles,
+					geometry,
+					shadows,
+					waterReflection,
+					finish,
+					device,
+					runtime + "renderer/surface/surface.ts"
+				].includes( file ) &&
 					n.text === "GPUCommandEncoder") &&
 				![ frame, runtime + "renderer/internal/gpu-contract.ts" ].includes( file )
 			) {

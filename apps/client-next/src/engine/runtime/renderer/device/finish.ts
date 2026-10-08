@@ -25,8 +25,8 @@ neighbourhood, so the unsharp mask stays off exactly the edges FXAA just
 smoothed and the two stages do not fight.
 
 The constants below are the whole tuning surface; nothing else in the
-frame changes. device.ts owns this module and calls present() from
-ColorTarget.present(), replacing the plain copy.
+frame changes. device.ts owns this module and calls encode() from
+ColorTarget.encodePresent(), replacing the plain copy in the final encoder.
 
 ===========================================================================
 */
@@ -59,9 +59,14 @@ const CONTRAST = 0.22; // smoothstep S-curve blend weight, endpoints preserved
 const DITHER_STEP = 1 / 255; // one half-step of triangular-PDF noise
 const DITHER_GATE = 8; // grade delta (1/8 = 0.125) that fully opens the gate
 
+/*
+================
+FinishPresent
+================
+*/
 export interface FinishPresent {
 	readonly ready: Promise<void>;
-	present( source: GPUTexture, target: GPUTexture ): void;
+	encode( encoder: GPUCommandEncoder, source: GPUTexture, target: GPUTexture ): void;
 	dispose(): void;
 }
 
@@ -226,13 +231,21 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 		} );
 	} );
 	// The offscreen frame texture is stable for one surface size; rebuilding
-	// the binding only when that texture changes keeps present() allocation-free.
+	// the binding only when that texture changes keeps encode() allocation-free.
 	let bound: GPUTexture | null = null,
 		binding: GPUBindGroup | null = null,
 		disposed = false;
 	return {
 		ready,
-		present( source, target ) {
+		/*
+		================
+		encode
+
+		The frame owner submits this pass after its unchanged world and UI
+		passes. This owner only records; it never submits a separate buffer.
+		================
+		*/
+		encode( encoder, source, target ) {
 			if ( disposed || !pipeline ) throw Error( "Presentation finish is not ready" );
 			if ( source !== bound ) {
 				bound = source;
@@ -242,7 +255,6 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 					entries: [ { binding: 0, resource: view }, { binding: 1, resource: sampler } ]
 				} );
 			}
-			const encoder = created.createCommandEncoder( { label: "presentation-finish" } );
 			const pass = encoder.beginRenderPass( {
 				label: "presentation-finish",
 				colorAttachments: [ { view: target.createView(), loadOp: "clear", storeOp: "store" } ]
@@ -251,8 +263,12 @@ fn fxaa(uv:vec2f,offset:vec2f)->vec3f{
 			pass.setBindGroup( 0, binding! );
 			pass.draw( 3 );
 			pass.end();
-			created.queue.submit( [ encoder.finish() ] );
 		},
+		/*
+		================
+		dispose
+		================
+		*/
 		dispose() {
 			disposed = true;
 			bound = null;

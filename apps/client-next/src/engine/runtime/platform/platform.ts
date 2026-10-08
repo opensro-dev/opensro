@@ -369,7 +369,10 @@ export function createPlatform(
 		onUi,
 		() => onInput( { kind: "release", timeMs: performance.timeOrigin + performance.now() } ),
 		( code, down ) => {
-			if ( virtualKey( code ) === bindings.keys[10] || virtualKey( code ) === bindings.keys[30] ) {
+			if (
+				virtualKey( code ) === bindings.keys[10] || virtualKey( code ) === bindings.keys[30] ||
+				code === "AltLeft" || code === "AltRight"
+			) {
 				onInput( {
 					kind: "key",
 					code,

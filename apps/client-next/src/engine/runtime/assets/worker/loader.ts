@@ -397,7 +397,13 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					if ( part === "terrain" ) {
 						const terrain = await worlds.resolveTerrain( bytes, readWorldResource, url.pathname );
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
-						const prepared = prepareWorldScene( worlds.decode( terrain, false, { origin, part } ) );
+						const prepared = prepareWorldScene(
+							worlds.decode( terrain, false, {
+								origin,
+								part,
+								terrainNormals: request.terrainNormals === true
+							} )
+						);
 						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
 						pending.delete( request.id );
 						return;
@@ -447,7 +453,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					}
 					resolved.animated = [ ...animated.values() ];
-					let scene = worlds.decode( resolved, request.decode === "frontend-world", { origin, part } );
+					let scene = worlds.decode( resolved, request.decode === "frontend-world", {
+						origin,
+						part,
+						terrainNormals: request.terrainNormals === true
+					} );
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
 					if ( propsPath && request.decode === "frontend-world" ) {
 						const manifest = JSON.parse(

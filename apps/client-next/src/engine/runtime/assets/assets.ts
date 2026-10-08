@@ -198,7 +198,15 @@ export function createAssets(): AssetOwner {
 			jobs.set( id, { deadline: performance.now() + 120000, url, limit, decode, result: null } );
 
 			try {
-				send( { kind: "load", id, url, limit, decode, ...(options?.pickAlpha ? { pickAlpha: true } : {}) } );
+				send( {
+					kind: "load",
+					id,
+					url,
+					limit,
+					decode,
+					...(options?.pickAlpha ? { pickAlpha: true } : {}),
+					...(options?.terrainNormals ? { terrainNormals: true } : {})
+				} );
 			} catch ( error ) {
 				jobs.delete( id );
 				throw error;

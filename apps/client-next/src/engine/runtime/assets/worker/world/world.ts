@@ -10,10 +10,20 @@ once per resource, since a town places the same meshes hundreds of times.
 
 ===========================================================================
 */
-import { passes, heightRange, tileUvScale } from "@/engine/foundation/rendering/terrain-associations";
+import {
+	passes,
+	heightRange,
+	terrainBlockNormals,
+	tileUvScale
+} from "@/engine/foundation/rendering/terrain-associations";
 import { clothData } from "@/engine/foundation/animation/cloth";
 
 import { decodeSoundTerrain } from "@/engine/foundation/audio/terrain-sounds";
+
+// The retail terrain normal table: every sample (0,1,0). Shared by all
+// blocks when the relief stage is off.
+const FLAT_BLOCK_NORMALS = new Float32Array( 17 * 17 * 3 );
+for ( let i = 1; i < FLAT_BLOCK_NORMALS.length; i += 3 ) FLAT_BLOCK_NORMALS[i] = 1;
 import { dungeonWaterGroup } from "@/engine/foundation/rendering/dungeon-water";
 import { createCharacterPose } from "@/engine/foundation/animation/animation-pose";
 import { characterRadius } from "@/engine/foundation/animation/character-bounds";
@@ -56,6 +66,10 @@ export type WorldDecodePart = "all" | "objects" | "terrain";
 export interface WorldDecodeOptions {
 	readonly origin?: number;
 	readonly part?: WorldDecodePart;
+	/** Compute heightfield normals for the terrain-relief stage; off, the
+	 * terrain emits the retail flat (0,1,0) normals and the load skips the
+	 * per-block differencing entirely. */
+	readonly terrainNormals?: boolean;
 }
 
 /*
@@ -103,6 +117,7 @@ reserve
 			const region = b.source.sectorX | (b.source.sectorY << 8),
 				origin = options.origin ?? region,
 				part = options.part ?? "all",
+				terrainNormals = options.terrainNormals === true,
 				groups: WorldGroup[] = [],
 				warnings: string[] = [];
 			// A dungeon is its own coordinate space; only outdoor scenes share an anchor.
@@ -595,6 +610,14 @@ noteMaterial
 								}
 							>(),
 							step = 1 << lod;
+						// Heightfield normals (shared by every LOD and pass of the
+						// block): central differences on the 17x17 grid with the
+						// 20-unit cell spacing, one-sided at the borders. The
+						// terrain-relief stage reads them; off, terrain stays
+						// flat-lit and the values are unused.
+						const blockNormals = terrainNormals ?
+							terrainBlockNormals( block.heights ) :
+							FLAT_BLOCK_NORMALS;
 						for ( const p of passes( block.textureData, step ) ) {
 							reserve( 4 * 224 + 6 * 16 );
 							const id = p.key * 2 + (p.mask === 15 ? 0 : 1);
@@ -611,7 +634,8 @@ noteMaterial
 								const dx = (corner & 1) * step, dz = (corner >>> 1) * step;
 								const x = p.x + dx, z = p.z + dz, h = block.heights[z * 17 + x]!;
 								g.positions.push( cx * 320 + x * 20, h, cz * 320 + z * 20 );
-								g.normals.push( 0, 1, 0 );
+								const at = (z * 17 + x) * 3;
+								g.normals.push( blockNormals[at]!, blockNormals[at + 1]!, blockNormals[at + 2]! );
 								g.uvs.push( (block.blockX * 16 + x) * uv, (block.blockZ * 16 + z) * uv );
 								g.colors.push( p.mask & 1, (p.mask >>> 1) & 1, (p.mask >>> 2) & 1, (p.mask >>> 3) & 1 );
 								g.maskUVs.push( dx / step, dz / step );

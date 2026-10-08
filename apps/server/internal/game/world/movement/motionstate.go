@@ -1,3 +1,10 @@
+/*
+===========================================================================
+
+motionstate.go - movement command admission and state transitions
+
+===========================================================================
+*/
 // The 0x7017 motion-state lane: the Action toolbar's run/walk and
 // sit/stand requests.
 //
@@ -30,16 +37,27 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
-// MotionOutcome is one handled 0x7017: the frames for the acting session
-// (the 0xB017 ack + the 0x3122 state push), the same 0x3122 fanned to
-// division peers, and the refusal reason when the frame was discarded
-// (empty on success; a refusal ships NO packets, the silent-wire posture).
+/*
+================
+MotionOutcome
+
+MotionOutcome is one handled 0x7017: the frames for the acting session
+(the 0xB017 ack + the 0x3122 state push), the same 0x3122 fanned to
+division peers, and the refusal reason when the frame was discarded
+(empty on success; a refusal ships NO packets, the silent-wire posture).
+================
+*/
 type MotionOutcome struct {
 	Frames    []wire.Frame
 	Broadcast []wire.Frame
 	Refusal   string
 }
 
+/*
+================
+refusedMotion
+================
+*/
 func refusedMotion(reason string) MotionOutcome {
 	return MotionOutcome{Refusal: reason}
 }
@@ -48,19 +66,25 @@ func refusedMotion(reason string) MotionOutcome {
 // posture state it times.
 const PostureTransitionMs = simulation.PostureTransitionMs
 
-// HandleMotionState applies one 0x7017 motion-state request to the
-// authoritative world plane and answers with the client-contract frames.
-//
-// Codes 2/3 set WorldState.MovementMode (persisted through the same
-// write-back the move lane owns) and, when a move is in flight and the
-// gait actually changed, re-time the live segment from the interpolated
-// point at the new wire speed - the server mirror of sub_858450 restarting
-// an active path-follow state on the new speed channel. Code 4 toggles the
-// runtime-only sitting posture; the answered 0x3122 value is 4 (sit) or
-// 0 (stand), the two SetRunWalkMode motion-state arms.
-//
-// Transport-free so tests drive it without a Hub; registerMotionState is
-// the only glue.
+/*
+================
+HandleMotionState
+
+HandleMotionState applies one 0x7017 motion-state request to the
+authoritative world plane and answers with the client-contract frames.
+
+Codes 2/3 set WorldState.MovementMode (persisted through the same
+write-back the move lane owns) and, when a move is in flight and the
+gait actually changed, re-time the live segment from the interpolated
+point at the new wire speed - the server mirror of sub_858450 restarting
+an active path-follow state on the new speed channel. Code 4 toggles the
+runtime-only sitting posture; the answered 0x3122 value is 4 (sit) or
+0 (stand), the two SetRunWalkMode motion-state arms.
+
+Transport-free so tests drive it without a Hub; registerMotionState is
+the only glue.
+================
+*/
 func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Character, payload []byte) MotionOutcome {
 	if character == nil {
 		return refusedMotion("characterNotFound")
@@ -190,27 +214,33 @@ func (rt *Runtime) HandleMotionState(divisionID string, character *enterworld.Ch
 	return MotionOutcome{Frames: frames, Broadcast: broadcast}
 }
 
-// applyMotionCode mutates the world plane for one validated 0x7017 code and
-// returns the 0x3122 stateType-1 value that describes the resulting state and
-// whether it truncated an in-flight move (the caller emits the position
-// correction and clears the pickup latch for a truncation).
-//
-// SIT CANCELS MOVEMENT (Ruling 44/48): when the player sits DOWN while
-// travelling, the walk stops at the LIVE interpolated point. It is
-// unconditional - there is no flag; a sit either cancels the walk or it does
-// not, no partial-coverage failure mode, so the human's answer was "just fix
-// it" (Ruling 48, flag removed as cargo-cult inherited from the clip shape).
-// The v1.150 client CANNOT do this itself - the posture state (char+0x644)
-// and the mover (char+0x650) are disjoint sub-objects, and the ONLY writer of
-// the move-goal flags +0x84/+0x80 is the integrator's own arrival/blocked
-// path (binary+dump two-source, clipreplicate-wave seq431/483/514) - so a
-// server that keeps interpolating leaves a seated character sliding to the
-// goal, which is the reported defect. The later retail build performed this
-// stop server-side (v1.188 LEAD, survived independent re-derive, seq686/698);
-// we CANNOT prove v1.150's retail server sent such a stop - only that our
-// client can RECEIVE a server position correction (0xB2F5 -> mover goal clear,
-// binary-certified) and cannot self-cancel. So this is server position
-// authority replicating the client's own stop, honest-limit included.
+/*
+================
+applyMotionCode
+
+applyMotionCode mutates the world plane for one validated 0x7017 code and
+returns the 0x3122 stateType-1 value that describes the resulting state and
+whether it truncated an in-flight move (the caller emits the position
+correction and clears the pickup latch for a truncation).
+
+SIT CANCELS MOVEMENT (Ruling 44/48): when the player sits DOWN while
+travelling, the walk stops at the LIVE interpolated point. It is
+unconditional - there is no flag; a sit either cancels the walk or it does
+not, no partial-coverage failure mode, so the human's answer was "just fix
+it" (Ruling 48, flag removed as cargo-cult inherited from the clip shape).
+The v1.150 client CANNOT do this itself - the posture state (char+0x644)
+and the mover (char+0x650) are disjoint sub-objects, and the ONLY writer of
+the move-goal flags +0x84/+0x80 is the integrator's own arrival/blocked
+path (binary+dump two-source, clipreplicate-wave seq431/483/514) - so a
+server that keeps interpolating leaves a seated character sliding to the
+goal, which is the reported defect. The later retail build performed this
+stop server-side (v1.188 LEAD, survived independent re-derive, seq686/698);
+we CANNOT prove v1.150's retail server sent such a stop - only that our
+client can RECEIVE a server position correction (0xB2F5 -> mover goal clear,
+binary-certified) and cannot self-cancel. So this is server position
+authority replicating the client's own stop, honest-limit included.
+================
+*/
 func applyMotionCode(world *simulation.WorldState, code uint8, nowMs int64) (value uint8, truncated bool) {
 	if code == simulation.MotionToggleSitStand {
 		world.Sitting = !world.Sitting
@@ -229,7 +259,7 @@ func applyMotionCode(world *simulation.WorldState, code uint8, nowMs int64) (val
 		// nil, so a stale goal Spawn would snap the character to the
 		// destination the instant the segment clears (the gait-retime path
 		// keeps the old goal Spawn on purpose; this MUST NOT).
-		if world.Sitting && world.MoveSegment.Valid() && nowMs < world.MoveSegment.ArrivesAtMs {
+		if world.Sitting && world.MovingAt(nowMs) {
 			world.SettleLive(nowMs)
 			truncated = true
 		}
@@ -245,17 +275,28 @@ func applyMotionCode(world *simulation.WorldState, code uint8, nowMs int64) (val
 	// the live interpolated point (never the goal - the bug-D plane).
 	// MoveSegmentForTravel returning nil (zero-length remainder) clears the
 	// segment, the same pairing rule every Spawn write keeps.
-	if changed && world.MoveSegment.Valid() && nowMs < world.MoveSegment.ArrivesAtMs {
+	if changed && world.MovingAt(nowMs) {
 		live := world.LiveSpawnAt(nowMs)
+		angular := world.MoveSegment.GroundAngular
 		world.MoveSegment = world.TravelSegment(live, world.Spawn, code, nowMs)
+		if world.MoveSegment != nil {
+			world.MoveSegment.GroundAngular = angular
+			world.MoveSegment.GroundContinuation = true
+		}
 	}
 	return code, false
 }
 
-// registerMotionState wires the 0x7017 handler onto the hub: resolve the
-// bound character (never client-supplied identity), run the op, answer the
-// acting session, fan the 0x3122 to division peers - the origin excluded,
-// it already holds its own copy (the action broadcast convention).
+/*
+================
+registerMotionState
+
+registerMotionState wires the 0x7017 handler onto the hub: resolve the
+bound character (never client-supplied identity), run the op, answer the
+acting session, fan the 0x3122 to division peers - the origin excluded,
+it already holds its own copy (the action broadcast convention).
+================
+*/
 func (rt *Runtime) registerMotionState(hub *transport.Hub) {
 	hub.Handle(simulation.OpMotionStateRequest, func(s *transport.Session, _ uint16, payload []byte) {
 		character, divisionID, bound := enterworld.SessionCharacter(rt.deps, s)

@@ -28,6 +28,7 @@ import {
 } from "../../build/char/buildNpcModelAssets.mjs";
 import {
 	enabledCosReferences,
+	loadFortressStructureRoster,
 	loadSpawnableMobRoster,
 	loadSpawnableNpcRoster
 } from "../../build/char/npcModelRoster.mjs";
@@ -394,6 +395,35 @@ test("characterdata identity duplicates fail instead of taking shard order", ( t
 	);
 });
 
+test("every characterInfo death model is published with native motions 4 and 36", () => {
+	const manifest = readJson( path.join( publicAssets, "npc", "manifest.json" ) );
+	const catalog = readJson( path.join( publicAssets, "npc", "animation-catalog.json" ) );
+	const entries = Object.values( manifest.models );
+	const owners = entries.filter( ( entry ) => entry.deathModel );
+	const deaths = entries.filter( ( entry ) => entry.kind === "death" );
+	assert.ok( owners.length > 0, "no model carries a characterInfo death model" );
+	for ( const owner of owners ) {
+		const death = manifest.models[owner.deathModel];
+		assert.ok( death, `${owner.codename}: death model ${owner.deathModel} is not published` );
+		assert.equal( death.kind, "death", `${owner.deathModel} is not a death resource` );
+		assert.ok( death.requiredBy.includes( owner.codename ), `${owner.deathModel} does not list ${owner.codename}` );
+	}
+	for ( const death of deaths ) {
+		assert.ok( !death.error && death.glb, `${death.codename}: ${death.error}` );
+		// 8E64F0 plays only motion 0x24 (deathLoop) and 4 (death) on the swapped mesh.
+		assert.ok( death.clips.includes( "death" ), `${death.codename} lacks death (4)` );
+		assert.ok( death.clips.includes( "deathLoop" ), `${death.codename} lacks deathLoop (36)` );
+		const states = catalog.resources[death.bsr]?.animations.flatMap( ( row ) => row.stateIds ) ?? [];
+		assert.ok( states.includes( 4 ) && states.includes( 36 ), `${death.codename} catalog states ${states}` );
+		for ( const codename of death.requiredBy ) {
+			assert.equal( manifest.models[codename]?.deathModel, death.codename, `${codename} -> ${death.codename}` );
+		}
+	}
+	assert.equal( deaths.length, 10, "the ten v1.150 characterInfo death BSRs" );
+	assert.equal( manifest.models.MOB_KK_PENON_F.deathModel, "res/mob/common/penon_f_die.bsr" );
+	assert.equal( manifest.models.MOB_KK_PENON_W.deathModel, "res/mob/common/penon_w_die.bsr" );
+});
+
 test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	const manifest = readJson( path.join( publicAssets, "npc", "manifest.json" ) );
 	const npcRoster = loadSpawnableNpcRoster();
@@ -402,8 +432,16 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
 
 	assert.equal( manifest.format, "sro-mission-npc-models" );
-	assert.equal( manifest.version, 7 );
-	assert.equal( manifest.count, roster.length + 4, "the rosters plus four packetless CICRide resources" );
+	assert.equal( manifest.version, 8 );
+	// Fortress structures whose v1.150 BSR ships (the small guard towers do not).
+	const structureNames = new Set( loadFortressStructureRoster().map( ( ref ) => ref.codename ) );
+	const structureRows = Object.values( manifest.models ).filter( ( entry ) => entry.kind === "structure" );
+	for ( const entry of structureRows ) assert.ok( structureNames.has( entry.codename ), entry.codename );
+	assert.equal(
+		manifest.count,
+		roster.length + structureRows.length + 4 + 10,
+		"the rosters and structures plus four packetless CICRide resources and ten characterInfo death models"
+	);
 	assert.equal(
 		Object.values( manifest.models ).filter( ( entry ) => entry.kind === "cos" ).length,
 		cosRoster.length,
@@ -428,8 +466,19 @@ test("NPC model outputs, animation policy, and byte metadata are internally cons
 	const { entryByResource } = assertManifestOutputsAreResourceUnique( manifest );
 
 	assert.equal( manifest.coveredCount, successful.length );
-	assert.equal( manifest.builtCount, entryByResource.size );
-	assert.equal( manifest.reusedCount, successful.length - entryByResource.size );
+	// Structure stage models (atstructeffect, 4F78A0) are baked once each but
+	// live inside their structure's entry, not as rows of their own.
+	const rowOutputs = new Set( successful.map( ( entry ) => entry.glb.toLowerCase() ) );
+	const stageOnly = new Set(
+		entries.flatMap( ( entry ) =>
+			Object.values( entry.structureStages ?? {} ).map( ( stage ) => stage.glb.toLowerCase() )
+		)
+			.filter( ( glb ) => !rowOutputs.has( glb ) )
+	);
+	assert.equal( manifest.builtCount, entryByResource.size + stageOnly.size );
+	// A stage that is not baked first is a reuse of an existing bake.
+	const stageSlots = entries.reduce( ( sum, entry ) => sum + Object.keys( entry.structureStages ?? {} ).length, 0 );
+	assert.equal( manifest.reusedCount, successful.length - entryByResource.size + stageSlots - stageOnly.size );
 	assert.equal(
 		(fs.existsSync( path.join( publicAssets, "npc" ) ) ? fs.readdirSync( path.join( publicAssets, "npc" ) ) : [])
 			.filter( ( name ) => name.toLowerCase().endsWith( ".glb" ) ).length,

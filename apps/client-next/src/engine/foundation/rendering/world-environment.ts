@@ -1,8 +1,27 @@
+/*
+===========================================================================
+
+world-environment.ts - native environment interpolation and GPU packing
+
+Preserve the native palette and fog fields. Append the optional, port-only
+sun direction without changing their offsets or values.
+
+===========================================================================
+*/
 import { cameraBasis } from "@/engine/foundation/rendering/world-math";
 import type { EnvironmentTrack, WorldEnvironment, WorldCamera } from "@/engine/contracts/scene";
 
+// Port-only, not native: Sun direction stage: the sun height (sine of its arc angle) below which
+// the light blends toward the zenith so the night flip stays continuous.
+const SUN_TWILIGHT_HEIGHT = 0.2;
+
 // Retail sub_4dc920/sub_4dcab0: clamped endpoints, linear interpolation,
 // and a lower-key step for spans below the native epsilon.
+/*
+================
+sampleEnvironment
+================
+*/
 export function sampleEnvironment(
 	track: readonly EnvironmentTrack[] | undefined,
 	time: number,
@@ -22,6 +41,11 @@ export function sampleEnvironment(
 }
 
 // SWorld 8A7D10 event option 25 palette (8A8150 onward), before smoothing.
+/*
+================
+eventColor
+================
+*/
 function eventColor( id: string ): readonly number[] | undefined {
 	switch ( id ) {
 		case "zenith":
@@ -50,6 +74,11 @@ function eventColor( id: string ): readonly number[] | undefined {
 }
 // The first 30 entries are vectors (including fog); the last six are
 // already transformed native scalar channels. Never smooth packed GPU colors.
+/*
+================
+environmentTarget
+================
+*/
 export function environmentTarget(
 	environment: WorldEnvironment | undefined,
 	time: number,
@@ -113,6 +142,11 @@ export function environmentTarget(
 	}
 	return target;
 }
+/*
+================
+advanceEnvironment
+================
+*/
 export function advanceEnvironment(
 	previous: Float32Array | null,
 	target: Float32Array,
@@ -134,6 +168,11 @@ export function advanceEnvironment(
 	}
 	return next;
 }
+/*
+================
+environmentTime
+================
+*/
 export function environmentTime(
 	environment: WorldEnvironment | undefined,
 	seconds: number,
@@ -141,6 +180,11 @@ export function environmentTime(
 ) {
 	return clock?.timeOfDay ?? ((environment?.startTimeOfDay ?? .5) + seconds * (environment?.ratePerSecond ?? 0)) % 1;
 }
+/*
+================
+worldEnvironment
+================
+*/
 export function worldEnvironment(
 	environment: WorldEnvironment | undefined,
 	camera: WorldCamera,
@@ -158,6 +202,21 @@ export function worldEnvironment(
 	const fog = [ ...color( 27 ) ].map( v => Math.fround( Math.max( 0, Math.min( 1, v ) ) ) );
 	const packed = ( v: number ) => Math.trunc( v * 255 ) / 255;
 	const terrainRadius = Math.trunc( (Math.fround( far ) + 1280) / 320 );
+	// The lighting direction (Experimental > Video > Sun direction): the same
+	// X-Y arc the sky's sun quad rides (skyTime.x). Below the horizon the
+	// anti-solar point takes over. This artistic night light does not follow
+	// the native moon's separately scaled arc. The flip alone would jump a wall's light from one side to the
+	// other at the crossing, so within SUN_TWILIGHT_HEIGHT of the horizon the
+	// light blends toward the zenith: both sides of the crossing meet straight
+	// up and every surface's diffuse stays continuous. Off (stages.y), the
+	// shader keeps the retail 45-degree sun.
+	const sunAngle = (time - .25) * Math.PI * 2,
+		sunHeight = Math.sin( sunAngle ),
+		sunFlip = sunHeight < 0 ? -1 : 1,
+		twilight = Math.min( 1, Math.abs( sunHeight ) / SUN_TWILIGHT_HEIGHT ),
+		sunX = Math.cos( sunAngle ) * sunFlip * twilight,
+		sunY = sunHeight * sunFlip * twilight + (1 - twilight),
+		sunLength = Math.hypot( sunX, sunY );
 	return new Float32Array( [
 		...color( 3 ),
 		values[31]! * 2,
@@ -216,6 +275,10 @@ export function worldEnvironment(
 		terrainRadius * terrainRadius,
 		environment ? 1 : 0,
 		...[ ...color( 6 ) ].map( v => (Math.min( 255, Math.trunc( v * 255 ) ) & 255) / 255 ),
-		1
+		1,
+		Math.fround( sunX / sunLength ),
+		Math.fround( sunY / sunLength ),
+		0,
+		0
 	] );
 }

@@ -144,6 +144,25 @@ test("monster hover honors server attack flags and native sibling pickup/talk/ga
 	assert.equal( worldCursor( { kind: "npc" }, local ), 0x98 );
 	assert.equal( worldCursor( { kind: "teleport" }, local ), 0xa1 );
 });
+test("6875F0: a player or pet shows the PvP cursor only when attackable under the live Alt state", () => {
+	const local = { kind: "local-player" };
+	const neutral = { kind: "player", hoverAttack: 2 }, hostile = { kind: "player", hoverAttack: 3 };
+	assert.equal( worldCursor( neutral, local ), 0x95 );
+	assert.equal( worldCursor( neutral, local, false, true ), 0xa0, "Alt admits a neutral player" );
+	assert.equal( worldCursor( hostile, local ), 0xa0 );
+	assert.equal( worldCursor( { kind: "player" }, local, false, true ), 0x95, "a party member" );
+	assert.equal(
+		worldCursor( { kind: "player", appearanceState: [ 1, 0, 0, 0, 0, 0, 4 ] }, local ),
+		0xa3,
+		"a stall keeper who cannot be attacked"
+	);
+	assert.equal( worldCursor( { kind: "cos", hoverAttack: 2 }, local ), 0x95 );
+	assert.equal( worldCursor( { kind: "cos", hoverAttack: 2 }, local, false, true ), 0xa0 );
+	// An event match decides by team alone.
+	const arena = { kind: "local-player", arenaTeam: 1 };
+	assert.equal( worldCursor( { kind: "player", arenaTeam: 2 }, arena ), 0x97 );
+	assert.equal( worldCursor( { kind: "player", arenaTeam: 1, hoverAttack: 3 }, arena, false, true ), 0x95 );
+});
 test("despawn keeps only an unpickable fading model, advances its final animation and retires at 1.5 seconds", () => {
 	const row = {
 		started: 2,

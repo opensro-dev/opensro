@@ -15,7 +15,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
-import { copyReferencedTerrainTileImages } from "./assets/copyTerrainTileImages.mjs";
+
+import {
+	copyReferencedTerrainTileImages,
+	migrateCachedTerrainTileReferences,
+	terrainTileReferencesCurrent
+} from "./assets/copyTerrainTileImages.mjs";
 import { copyReferencedWaterImages, resolveWaterTextures } from "./assets/copyWaterImages.mjs";
 import { OUTDOOR_WORLD_REGION_CATALOG_PUBLIC_PATH, overlayWorldRegionCatalog } from "./buildWorldRegionCatalog.mjs";
 import { publicPathToFile } from "../shared/assetPaths.mjs";
@@ -44,14 +49,17 @@ const OUTDOOR_WORLD_SHARED_RENDER_PATH = publicPathToFile( OUTDOOR_WORLD_SHARED_
 // can never be "current" while the images it names are missing; a region
 // this ledger does not know yet is read from its bundle once.
 const TERRAIN_TILE_LEDGER_PATH = path.join( generatedRoot, "intermediate", "outdoor-terrain-tiles.json" );
-const TERRAIN_TILE_LEDGER_VERSION = 2;
+// v4: each ledger tile records the reference its bundle names
+// (imagePublicPath), so a hit is trusted only while every reference still
+// matches the probe; an older ledger cannot tell and is discarded.
+const TERRAIN_TILE_LEDGER_VERSION = 4;
 
 /*
 ================
 readTerrainTileLedger
 ================
 */
-async function readTerrainTileLedger() {
+export async function readTerrainTileLedger() {
 	try {
 		const ledger = JSON.parse( await readFile( TERRAIN_TILE_LEDGER_PATH, "utf8" ) );
 		if ( ledger.version === TERRAIN_TILE_LEDGER_VERSION && ledger.regions ) {
@@ -85,8 +93,26 @@ copyReferencedTerrainTileImages reads: the ledger stays small.
 function bundleTerrainTiles( bundle ) {
 	return (bundle.terrainTextures?.tileCatalog?.referencedTiles ?? []).map( ( tile ) => ({
 		ddjFileName: tile.ddjFileName,
-		sourcePath: tile.sourcePath
+		sourcePath: tile.sourcePath,
+		imagePublicPath: tile.imagePublicPath
 	}) );
+}
+
+/*
+================
+refreshCachedTerrainTileBundle
+
+Publish and validate migrated dependencies before changing the persisted
+bundle. A failed texture publish leaves its previous references usable.
+================
+*/
+export async function refreshCachedTerrainTileBundle( outputPath, sourceExtractedRoot ) {
+	const bundle = JSON.parse( await readFile( outputPath, "utf8" ) );
+	const migrated = await migrateCachedTerrainTileReferences( bundle, sourceExtractedRoot );
+	const tiles = bundleTerrainTiles( bundle );
+	await copyReferencedTerrainTileImages( tiles, sourceExtractedRoot );
+	if ( migrated ) await writeCompactJson( outputPath, bundle );
+	return tiles;
 }
 
 /*
@@ -357,11 +383,18 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 		if ( !options.force && (await exists( outputPath )) ) {
 			// Reuse keeps the bundle, not a promise that its images still exist.
 			let tiles = tilesByRegion.get( String( sector.id ) );
-			if ( !tiles ) {
-				tiles = bundleTerrainTiles( JSON.parse( await readFile( outputPath, "utf8" ) ) );
-				tilesByRegion.set( String( sector.id ), tiles );
+			// A ledger hit names the references the bundle held when it was
+			// recorded; when the probe's answer moved since, re-read and migrate
+			// the bundle rather than publish under a reference it does not hold.
+			if ( tiles && !(await terrainTileReferencesCurrent( tiles, sourceExtractedRoot )) ) {
+				tiles = undefined;
 			}
-			await copyReferencedTerrainTileImages( tiles );
+			if ( !tiles ) {
+				tiles = await refreshCachedTerrainTileBundle( outputPath, sourceExtractedRoot );
+				tilesByRegion.set( String( sector.id ), tiles );
+			} else {
+				await copyReferencedTerrainTileImages( tiles, sourceExtractedRoot );
+			}
 			reused += 1;
 			reportProgress( options, {
 				phase: "regions",

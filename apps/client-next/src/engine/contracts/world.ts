@@ -119,6 +119,10 @@ export interface EntityState {
 	readonly guildCrests?: readonly [number, number, number];
 	readonly guildWarTeam?: number;
 	readonly arenaTeam?: number;
+	// The hover cursor's attack verdict for a player or a pet (6875F0), kept
+	// by the worker: HOVER_ATTACK_PLAIN without Alt, HOVER_ATTACK_ALT with it
+	// (foundation/gameplay/player-attack.ts).
+	readonly hoverAttack?: number;
 	readonly appearanceState?: readonly number[];
 	readonly groundItem?: {
 		readonly typeFlags: number;

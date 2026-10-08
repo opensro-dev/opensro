@@ -256,6 +256,7 @@ import {
 	isMainPopupPage,
 	type MainPopupPage
 } from "@/engine/foundation/ui/main-popup";
+import { isUiPanel, type UiPanel } from "@/engine/foundation/ui/panels";
 import { moneyPresentation } from "@/engine/foundation/ui/money-presentation";
 import { groundItemName, groundItemNameVisible } from "@/engine/foundation/ui/ground-item-label";
 import {
@@ -1011,7 +1012,7 @@ export function createUi(
 	let focusRequest: UiSemantics["focusRequest"];
 	let windowMissing: string[] = [];
 	const admittedWindows = new Map<string, HudSection & { key: string; }>();
-	let panel = "",
+	let panel: UiPanel | "" = "",
 		inventorySlot = -1,
 		inventoryPage = 0,
 		cosSlot = -1,
@@ -1159,7 +1160,7 @@ export function createUi(
 	setPanel
 	================
 	*/
-	function setPanel( next: string, intent: "open" | "toggle" | "select" | "warm" = "open" ) {
+	function setPanel( next: UiPanel | "", intent: "open" | "toggle" | "select" | "warm" = "open" ) {
 		// An unseen warm build (window-warm.ts) switches the drawn window only:
 		// no enter/leave hooks, sounds or transient resets.
 		if ( intent === "warm" ) {
@@ -1258,6 +1259,19 @@ export function createUi(
 		if ( panel && (!wasOpen || intent !== "select") ) sound( "open" );
 		return true;
 	}
+	/*
+	================
+	panelNamed
+
+	A panel named by a control id. An unregistered name is a defect in the
+	control that carries it, so it is refused loudly instead of opening a
+	window no sweep has checked.
+	================
+	*/
+	function panelNamed( name: string ): UiPanel {
+		if ( !isUiPanel( name ) ) throw Error( "Unregistered UI panel: " + name );
+		return name;
+	}
 	// Session teardown clears presentation only; it must not send gameplay commands.
 	/*
 	================
@@ -1267,7 +1281,7 @@ export function createUi(
 	function executeAction( id: number ) {
 		const game = view?.gameplay;
 		if ( !game ) return;
-		const windows: Record<number, string> = { 1010: "Alchemy", 1012: "Auto Potion", 1014: "Academy Matching" };
+		const windows: Record<number, UiPanel> = { 1010: "Alchemy", 1012: "Auto Potion", 1014: "Academy Matching" };
 		if ( windows[id] ) {
 			setPanel( windows[id]! );
 			dirty = true;
@@ -3021,9 +3035,10 @@ export function createUi(
 			setPanel( "" );
 			inventorySlot = -1;
 		} else if ( id === "select-window:Character-stats" ) setPanel( "Character", "select" );
-		else if ( id.startsWith( "select-window:" ) ) setPanel( id.slice( 14 ), "select" );
-		else if ( id.startsWith( "open-window:" ) ) setPanel( id.slice( 12 ) );
-		else if ( id.startsWith( "toggle-window:" ) ) setPanel( id.slice( 14 ), "toggle" );
+		// Window ids carry the panel name as text; only registered panels open.
+		else if ( id.startsWith( "select-window:" ) ) setPanel( panelNamed( id.slice( 14 ) ), "select" );
+		else if ( id.startsWith( "open-window:" ) ) setPanel( panelNamed( id.slice( 12 ) ) );
+		else if ( id.startsWith( "toggle-window:" ) ) setPanel( panelNamed( id.slice( 14 ) ), "toggle" );
 		else if ( id === "cos-bag" ) setPanel( "COS inventory" );
 		else if ( id === "cos-cycle" ) {
 			const records = view.gameplay?.cosRecords?.filter( r => r.inventory && !r.dead && r.hp > 0 ) ?? [];
@@ -5465,7 +5480,7 @@ export function createUi(
 						activate( "hotbar:" + hotbarSlot( hotbarPage, Number( event.code.slice( 5 ) ) || 10 ) );
 						return;
 					}
-					const names: Record<number, string> = {
+					const names: Record<number, UiPanel> = {
 						0: "Character",
 						1: "Inventory",
 						2: "Skills",
@@ -8992,12 +9007,12 @@ export function createUi(
 					const layout = hudData.windows.ifoption!, slot = hudData.windows.ifgameoptionslot!;
 					windowBox( "Experimental", px, py, width, height );
 					closeButton( px + width - 26, py + 10 );
-					const tabWidth = 62, tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
+					const tabWidth = 78, tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
 					for ( let i = 0; i < EXPERIMENTAL_TABS.length; i++ ) {
 						nativeTab(
 							"experimental-tab:" + i,
 							EXPERIMENTAL_TABS[i]!.title,
-							[ px + tabStart + i * tabWidth, py + 40, 60, 24 ],
+							[ px + tabStart + i * tabWidth, py + 40, tabWidth - 2, 24 ],
 							tab === i,
 							{ family: "com_tab", client: [ 0, 9, 0, 6 ] }
 						);
@@ -9011,7 +9026,7 @@ export function createUi(
 					// Browser-only section reuses the native Set Game header and inset frame.
 					const section = hudData.windows.ifoption_game!.GDR_GAME_OPTION_TAB_1!;
 					authoredImage( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py );
-					authoredText( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py, page.title );
+					authoredText( { ...section, rect: [ 25, 70, 196, 28 ] }, px, py, page.section );
 					authoredChrome(
 						{
 							...hudData.windows.ifoption_game!.GDR_GAME_OPTION_SCROLLMANAGER_1!,

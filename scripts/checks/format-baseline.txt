@@ -23,7 +23,6 @@ apps/client-next/src/engine/foundation/animation/bsr-particle-transform.ts
 apps/client-next/src/engine/foundation/animation/character-selection.ts
 apps/client-next/src/engine/foundation/animation/combat-stance.ts
 apps/client-next/src/engine/foundation/animation/damage-anchor.ts
-apps/client-next/src/engine/foundation/animation/default-wear-policy.ts
 apps/client-next/src/engine/foundation/animation/disappear.ts
 apps/client-next/src/engine/foundation/animation/effect-material.ts
 apps/client-next/src/engine/foundation/animation/effect-script.ts
@@ -205,15 +204,11 @@ apps/client-next/src/engine/runtime/characters/state-index.ts
 apps/client-next/src/engine/runtime/frontend/camera/camera.ts
 apps/client-next/src/engine/runtime/frontend/dialog/dialog.ts
 apps/client-next/src/engine/runtime/frontend/flow/flow.ts
-apps/client-next/src/engine/runtime/frontend/frontend.ts
-apps/client-next/src/engine/runtime/frontend/stage/preload.ts
-apps/client-next/src/engine/runtime/frontend/stage/stage.ts
 apps/client-next/src/engine/runtime/presentation/effective-hp.ts
 apps/client-next/src/engine/runtime/random/random.ts
 apps/client-next/src/engine/runtime/renderer/device/flares.ts
 apps/client-next/src/engine/runtime/renderer/device/particle-query.ts
 apps/client-next/src/engine/runtime/renderer/device/thunder.ts
-apps/client-next/src/engine/runtime/renderer/surface/surface.ts
 apps/client-next/src/engine/runtime/runtime-errors.ts
 apps/client-next/src/engine/runtime/simulation/worker/entry.ts
 apps/client-next/src/engine/runtime/simulation/worker/network/codec/codec.ts
@@ -243,7 +238,6 @@ apps/client-next/tests/browser/baroi-moving-target.test.mjs
 apps/client-next/tests/browser/beta-performance.test.mjs
 apps/client-next/tests/browser/beta-release-live.test.mjs
 apps/client-next/tests/browser/blocking.test.mjs
-apps/client-next/tests/browser/bloom.test.mjs
 apps/client-next/tests/browser/buff-dismiss.test.mjs
 apps/client-next/tests/browser/champion-material.test.mjs
 apps/client-next/tests/browser/character-capacity.test.mjs
@@ -311,7 +305,6 @@ apps/client-next/tests/browser/notice-input-live.test.mjs
 apps/client-next/tests/browser/npc-travel-live.test.mjs
 apps/client-next/tests/browser/npc-window-live.test.mjs
 apps/client-next/tests/browser/overlays.test.mjs
-apps/client-next/tests/browser/particle-query.test.mjs
 apps/client-next/tests/browser/particle-rotation.test.mjs
 apps/client-next/tests/browser/passive-critical-live.test.mjs
 apps/client-next/tests/browser/picking.test.mjs
@@ -405,7 +398,6 @@ apps/server-observatory/tests/security.test.mjs
 apps/server-observatory/tools/browser-probe.mjs
 apps/server-observatory/tools/items-browser-probe.mjs
 apps/server/internal/game/world/simulation/testdata/gen_parity_vectors.mjs
-scripts/build/artifacts/generatedArtifactArchive.mjs
 scripts/build/assetPackIndexValidation.mjs
 scripts/build/char/animationUtils.mjs
 scripts/build/char/attachedMotionClips.mjs
@@ -478,8 +470,6 @@ scripts/build/sparseAssetPackGroupRefresh.mjs
 scripts/build/world/assets/buildDungeonResources.mjs
 scripts/build/world/assets/buildDungeonWorlds.mjs
 scripts/build/world/assets/copyMissionMinimapTileImages.mjs
-scripts/build/world/assets/copyTerrainLightmaps.mjs
-scripts/build/world/assets/copyTerrainTileImages.mjs
 scripts/build/world/assets/dungeonInfo.mjs
 scripts/build/world/assets/dungeonWater.mjs
 scripts/build/world/assets/environment/environmentTracks.mjs
@@ -508,7 +498,6 @@ scripts/build/world/navmesh/buildRegionNavmeshData.mjs
 scripts/build/world/navmesh/parseNavmesh.mjs
 scripts/build/world/objects/compound.mjs
 scripts/build/world/sworld/deriveTitleTerrainSectorCoverage.mjs
-scripts/build/world/sworld/prepareCellTerrainTexture.mjs
 scripts/checks/lib/methodBlock.mjs
 scripts/clean_release_workspace.mjs
 scripts/lib/clipOracleWalkPlane.mjs

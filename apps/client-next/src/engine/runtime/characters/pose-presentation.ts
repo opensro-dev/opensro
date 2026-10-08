@@ -91,6 +91,7 @@ A character drawn on the frame clock from its timed samples.
 */
 interface SampleTrack {
 	paths: { from: Pose; to: Pose; }[];
+	walkingPath?: readonly Pose[];
 	previous?: Sample;
 	latest: Sample;
 	moving: boolean;
@@ -156,6 +157,89 @@ function onCorridor( pose: Pose, from: Pose, to: Pose, walking = false ) {
 		Math.max( 0, Math.min( 1, (point[0] * span[0] + point[1] * span[1] + point[2] * span[2]) / length2 ) ) :
 		0;
 	return hypot3( point[0] - span[0] * t, point[1] - span[1] * t, point[2] - span[2] * t ) <= MIN_CORRECTION_DISTANCE;
+}
+
+/*
+================
+walkingLocation
+
+Locate a pose on the navigation owner's connected sample chain. Planar
+membership selects the ground point; accepted samples, not an endpoint
+height chord, supply its height. Overlapping projections prefer the same
+height, so a retained ramp cannot switch to its other floor.
+================
+*/
+function walkingLocation( pose: Pose, path: readonly Pose[], latest = false ) {
+	let distance = 0;
+	let best: { distance: number; error: number; pose: Pose; } | null = null;
+	for ( let i = 1; i < path.length; i++ ) {
+		const from = path[i - 1]!, to = path[i]!;
+		const span = worldVector( to, from ), point = worldVector( pose, from );
+		if ( !span || !point ) return null;
+		const planar2 = span[0] ** 2 + span[2] ** 2;
+		const fraction = planar2 ?
+			Math.max( 0, Math.min( 1, (point[0] * span[0] + point[2] * span[2]) / planar2 ) ) :
+			span[1] ?
+			Math.max( 0, Math.min( 1, point[1] / span[1] ) ) :
+			0;
+		const length = hypot3( ...span );
+		const miss = hypot2( point[0] - span[0] * fraction, point[2] - span[2] * fraction );
+		if ( miss <= MIN_CORRECTION_DISTANCE ) {
+			const height = Math.abs( point[1] - span[1] * fraction );
+			const error = miss + height;
+			if (
+				!best || (latest && error <= MIN_CORRECTION_DISTANCE && best.error <= MIN_CORRECTION_DISTANCE) ||
+				error < best.error
+			) {
+				best = {
+					distance: distance + length * fraction,
+					error,
+					pose: interpolateMovement( from, to, fraction )
+				};
+			}
+		}
+		distance += length;
+	}
+	return best;
+}
+
+/*
+================
+walkingPose
+
+Spend distance along certified edges. Crossing a corner visits that corner;
+crossing a hill keeps the sampled surface height instead of cutting below it.
+================
+*/
+function walkingPose( path: readonly Pose[], distance: number ): Pose {
+	for ( let i = 1; i < path.length; i++ ) {
+		const from = path[i - 1]!, to = path[i]!;
+		const length = hypot3( ...worldVector( to, from )! );
+		if ( distance <= length ) return interpolateMovement( from, to, length ? distance / length : 0 );
+		distance -= length;
+	}
+	return path[path.length - 1]!;
+}
+
+/*
+================
+recoverWalking
+
+The damped trajectory sets how much recovery to spend, while the worker's
+sample chain owns where it may go. A newly delivered sample cannot consume
+an instantaneous step; zero travel preserves the last actually shown pose.
+================
+*/
+function recoverWalking( before: Pose, model: Pose, candidate: Pose, path: readonly Pose[] ) {
+	const start = walkingLocation( before, path, true ), end = walkingLocation( model, path, true );
+	if ( !start || !end || start.error > MIN_CORRECTION_DISTANCE || end.error > MIN_CORRECTION_DISTANCE ) return null;
+	const delta = worldVector( candidate, before );
+	if ( !delta ) return null;
+	const budget = hypot3( ...delta );
+	if ( budget === 0 ) return before;
+	const remaining = end.distance - start.distance;
+	const distance = start.distance + Math.sign( remaining ) * Math.min( Math.abs( remaining ), budget );
+	return walkingPose( path, distance );
 }
 
 /*
@@ -268,6 +352,20 @@ within a leg this is exact; the leg end bounds it.
 ================
 */
 function sampledModel( row: SampleTrack, now: number, confirmedAt = row.latest.at ): Pose {
+	const candidate = sampledLinearModel( row, now, confirmedAt );
+	if ( !row.walkingPath || candidate === row.latest.pose ) return candidate;
+	return walkingLocation( candidate, row.walkingPath, true )?.pose ?? row.latest.pose;
+}
+
+/*
+================
+sampledLinearModel
+
+Native time and the checked endpoint bound horizontal extrapolation. The
+wrapper resolves its height on certified walking samples when available.
+================
+*/
+function sampledLinearModel( row: SampleTrack, now: number, confirmedAt: number ): Pose {
 	const latest = row.latest, previous = row.previous;
 	const maximumAhead = MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
 	if ( !row.moving ) return latest.pose;
@@ -357,6 +455,7 @@ export function createPosePresentation() {
 	================
 	*/
 	function sampledPose( gid: number, input: SampleInput, target: Pose, now: number ): Pose {
+		const walkingPath = input.displacement ? undefined : input.walkingPath ?? input.transition?.walkingPath;
 		const at = (originMs! + input.atMs) / 1000;
 		let row = tracks.get( gid );
 		const previousTrack = row;
@@ -364,16 +463,18 @@ export function createPosePresentation() {
 		const relocation = input.transition?.relocation ?? 0;
 		const revisionChanged = row && input.revision !== row.latest.revision;
 		const stalled = row && now - row.last > MAX_SAMPLE_GAP_SECONDS;
-		const recoverySeconds = row ? Math.max( 0, now - row.last ) : 0;
 		const previousFrameAt = row?.last;
-		const recovering = row && hypot3( ...row.offset ) > 0;
+		let carriedDisplay: Pose | undefined;
 		if (
 			!row || now < row.last || row.relocation !== relocation ||
 			(revisionChanged && input.transition?.eligible === false) ||
-			(input.transition ? !worldVector( row.latest.pose, target ) : discontinuity( row.latest.pose, target ))
+			(input.transition || walkingPath ?
+				!worldVector( row.latest.pose, target ) :
+				discontinuity( row.latest.pose, target ))
 		) {
 			row = {
 				paths: [],
+				walkingPath: input.displacement ? undefined : input.walkingPath ?? input.transition?.walkingPath,
 				latest: { pose: { ...target }, at, revision: input.revision },
 				moving: input.moving,
 				to: input.to,
@@ -411,6 +512,26 @@ export function createPosePresentation() {
 			rows.delete( gid );
 		} else if ( now !== row.last ) {
 			if ( !revisionChanged ) recover( row, now - row.last );
+			else if ( !stalled ) {
+				// Elapsed display time belongs to the old correction. Advancing
+				// after retargeting would apply the new receipt's force before
+				// it arrived, especially after a small correction and a long lag.
+				const [x, y, z] = row.offset;
+				recover( row, now - row.last );
+				carriedDisplay = row.moving ?
+					displace( row.displayed, [ row.offset[0] - x, row.offset[1] - y, row.offset[2] - z ] ) :
+					displace( sampledModel( row, now ), row.offset );
+				const corridor = input.transition?.corridor;
+				// A new corridor can exclude the old trajectory. Keep its valid
+				// displayed origin rather than turn rejected carry into a snap.
+				if (
+					!input.displacement && !walkingPath && corridor &&
+					onCorridor( row.displayed, corridor.from, corridor.to ) &&
+					!onCorridor( carriedDisplay, corridor.from, corridor.to )
+				) {
+					carriedDisplay = row.displayed;
+				}
+			}
 			if ( stalled ) row.previous = undefined;
 			row.angle = turn( row.angle, target.angle, now - row.last );
 			row.last = now;
@@ -439,7 +560,7 @@ export function createPosePresentation() {
 			const continuing = !stalled && !revisionChanged && at > row.latest.at &&
 				previousFrameAt !== undefined && previousFrameAt - row.latest.at <= MAX_EXTRAPOLATION_SECONDS;
 			const before = preserveDisplay ?
-				row.displayed :
+				carriedDisplay ?? row.displayed :
 				displace( sampledModel( row, now, continuing ? at : undefined ), row.offset );
 			// Native 8DD550 advances at skill speed from the skill's own start.
 			// Retiming the old walk at render time invents lag and a later burst.
@@ -468,6 +589,7 @@ export function createPosePresentation() {
 			}
 			row.moving = input.moving;
 			row.to = input.to;
+			row.walkingPath = input.displacement ? undefined : input.walkingPath ?? input.transition?.walkingPath;
 			// Samples from distinct skill legs cannot define one velocity, even
 			// when their duration and entity revision happen to match.
 			if ( timingChanged || displacementChanged ) row.previous = undefined;
@@ -483,15 +605,11 @@ export function createPosePresentation() {
 				}
 			}
 			if ( jump ) row.offset = jump;
-			if ( !jump || !input.transition && hypot3( ...row.offset ) > MAX_CORRECTION_DISTANCE ) {
+			if ( !jump || !input.transition && !walkingPath && hypot3( ...row.offset ) > MAX_CORRECTION_DISTANCE ) {
 				row.offset = [ 0, 0, 0 ];
 				row.velocity = [ 0, 0, 0 ];
 			}
 		}
-		// Retarget the existing trajectory rather than parking it on every
-		// receipt. A first correction starts at the displayed pose; subsequent
-		// receipts still spend this frame's bounded recovery step and velocity.
-		if ( revisionChanged && recovering && !stalled ) recover( row, recoverySeconds );
 		const model = sampledModel( row, now );
 		if ( revisionChanged && input.transition?.previousPath ) {
 			row.paths.push( input.transition.previousPath );
@@ -508,16 +626,37 @@ export function createPosePresentation() {
 		if ( row.paths.length > MAX_RECOVERY_PATHS ) row.paths.splice( 0, row.paths.length - MAX_RECOVERY_PATHS );
 		let drawn = displace( model, row.offset );
 		const corridor = input.transition?.corridor;
+		// Receipt adoption also happens twice at one display timestamp. The
+		// old velocity must fit the new corridor even when no carry was spent.
 		if (
-			input.transition && hypot3( ...row.offset ) > 0 &&
+			revisionChanged && !input.displacement && !walkingPath && corridor &&
+			onCorridor( row.displayed, corridor.from, corridor.to ) &&
+			onCorridor( model, corridor.from, corridor.to )
+		) {
+			const span = worldVector( corridor.to, corridor.from )!;
+			const length2 = span[0] ** 2 + span[1] ** 2 + span[2] ** 2;
+			const along = length2 ?
+				(row.velocity[0] * span[0] + row.velocity[1] * span[1] + row.velocity[2] * span[2]) / length2 :
+				0;
+			row.velocity = [ span[0] * along, span[1] * along, span[2] * along ];
+		}
+		const walked = walkingPath && hypot3( ...row.offset ) > 0 ?
+			recoverWalking( row.displayed, model, drawn, walkingPath ) :
+			null;
+		if ( walked ) {
+			drawn = walked;
+			row.offset = worldVector( drawn, model )!;
+		}
+		if (
+			(input.transition || walkingPath) && !walked && hypot3( ...row.offset ) > 0 &&
 			!(corridor && onCorridor( drawn, corridor.from, corridor.to ) &&
 				onCorridor( model, corridor.from, corridor.to )) &&
-			!row.paths.some( path =>
+			!(!walkingPath && row.paths.some( path =>
 				onCorridor( drawn, path.from, path.to, true ) &&
 				onCorridor( model, path.from, path.to, true )
-			)
+			))
 		) {
-			const recovered = input.transition.turn ?
+			const recovered = !walkingPath && input.transition?.turn ?
 				recoverTurn( row.displayed, model, drawn, input.transition.turn ) :
 				null;
 			if ( recovered ) {

@@ -35,7 +35,7 @@ func repairFixture(t *testing.T, codename string) (*Runtime, *enterworld.Charact
 	sword := *items["ITEM_CH_SWORD_01_A_RARE"]
 	low := int64(40)
 	sword.MaxDurability, sword.VarianceIntMin1c0 = 71, &low
-	sword.NativeFields = enterworld.NewNativeFields(map[string]float64{"canRepair": 1, "repairCostB4": 142, "reviveCostB8": 0})
+	sword.NativeFields = enterworld.NewNativeFields(map[string]float64{"canRepair": 1, "canRevive": 1, "repairCostB4": 142, "reviveCostB8": 0})
 	items[sword.Codename] = &sword
 	rt, _ := newTestRuntime(c, items)
 	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 3001, RefObjID: 3011, Codename: codename, TalkFlags: 1,
@@ -61,8 +61,62 @@ func TestSmithRepairsEverythingForItsPrice(t *testing.T) {
 		t.Fatalf("durability %d gold %d; want 71 and %d", durabilityAt(c, wearWeaponSlot), *c.Gold, 5000-82)
 	}
 	again := rt.HandleNpcRepair(testDivision, c, wire.NewWriter(6).U32(3001).U8(repairOneSlot).U8(wearWeaponSlot).Payload())
-	if *c.Gold != 5000-82 || len(again.Frames) != 1 || again.Frames[0].Payload[0] != 2 {
+	if *c.Gold != 5000-82 || len(again.Frames) != 1 || !bytes.Equal(again.Frames[0].Payload, []byte{2, repairErrNothingLost}) {
 		t.Fatalf("a full item was charged again: %+v", again.Frames)
+	}
+}
+
+/*
+================
+TestRepairOfAWholeItemIsNotAPurseRefusal
+
+A whole item, such as a fresh drop the client prices one point short
+(78BD00 rounds where 495D60 truncates), answers 496E60's 0x1C09, which the
+client keeps silent; Repair All with nothing damaged still answers 1. Only
+a quote the gold cannot pay says 0x1C07.
+================
+*/
+func TestRepairOfAWholeItemIsNotAPurseRefusal(t *testing.T) {
+	rt, c := repairFixture(t, "NPC_CH_SMITH")
+	c.MissionInventory[0].Slot = 13
+	c.MissionInventory[0].Durability = 71
+	one := rt.HandleNpcRepair(testDivision, c, wire.NewWriter(6).U32(3001).U8(repairOneSlot).U8(13).Payload())
+	if len(one.Frames) != 1 || !bytes.Equal(one.Frames[0].Payload, []byte{2, repairErrNothingLost}) || *c.Gold != 5000 {
+		t.Fatalf("whole item answered %+v gold %d", one.Frames, *c.Gold)
+	}
+	all := rt.HandleNpcRepair(testDivision, c, wire.NewWriter(5).U32(3001).U8(repairAllSlots).Payload())
+	if len(all.Frames) != 1 || !bytes.Equal(all.Frames[0].Payload, []byte{1}) || *c.Gold != 5000 {
+		t.Fatalf("repair all of whole items answered %+v gold %d", all.Frames, *c.Gold)
+	}
+	empty := rt.HandleNpcRepair(testDivision, c, wire.NewWriter(6).U32(3001).U8(repairOneSlot).U8(40).Payload())
+	if !bytes.Equal(empty.Frames[0].Payload, []byte{2, repairErrEmptySlot}) {
+		t.Fatalf("empty slot answered %+v", empty.Frames)
+	}
+	c.MissionInventory[0].Durability = 30
+	poor := int64(1)
+	c.Gold = &poor
+	short := rt.HandleNpcRepair(testDivision, c, wire.NewWriter(6).U32(3001).U8(repairOneSlot).U8(13).Payload())
+	if !bytes.Equal(short.Frames[0].Payload, []byte{2, repairErrNoGold}) || durabilityAt(c, 13) != 30 {
+		t.Fatalf("a purse below one point answered %+v", short.Frames)
+	}
+}
+
+/*
+================
+TestBrokenItemNeedsCanRevive
+
+4C7BB2: a broken item without itemdata CanRevive answers 0x1C12.
+================
+*/
+func TestBrokenItemNeedsCanRevive(t *testing.T) {
+	rt, c := repairFixture(t, "NPC_CH_SMITH")
+	c.MissionInventory[0].Durability = 0
+	sword := *rt.deps.ItemReferences().(staticItemSource)["ITEM_CH_SWORD_01_A_RARE"]
+	sword.NativeFields = enterworld.NewNativeFields(map[string]float64{"canRepair": 1, "canRevive": 0, "repairCostB4": 142})
+	rt.deps.ItemReferences().(staticItemSource)[sword.Codename] = &sword
+	out := rt.HandleNpcRepair(testDivision, c, wire.NewWriter(6).U32(3001).U8(repairOneSlot).U8(wearWeaponSlot).Payload())
+	if !bytes.Equal(out.Frames[0].Payload, []byte{2, repairErrNotRevived}) || durabilityAt(c, wearWeaponSlot) != 0 {
+		t.Fatalf("broken item without CanRevive answered %+v", out.Frames)
 	}
 }
 

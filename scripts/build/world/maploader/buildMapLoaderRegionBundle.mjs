@@ -140,7 +140,7 @@ export async function buildJmxWorldRegionBundle( options ) {
 			sourcePath: definition.sourcePath
 		};
 	} );
-	const referencedTerrainTiles = resolveReferencedTerrainTiles(
+	const referencedTerrainTiles = await resolveReferencedTerrainTiles(
 		collectTerrainTextureIds( terrainSectors ),
 		tileCatalog,
 		sourceExtractedRoot,
@@ -148,7 +148,7 @@ export async function buildJmxWorldRegionBundle( options ) {
 	);
 	const skyTextures = options.skyResources ?? resolveSkyTextures();
 	const waterTextures = options.waterResources ?? resolveWaterTextures();
-	await copyReferencedTerrainTileImages( referencedTerrainTiles );
+	await copyReferencedTerrainTileImages( referencedTerrainTiles, sourceExtractedRoot );
 	if ( !options.sharedRenderResourcesPublicPath ) {
 		await copyReferencedSkyImages( skyTextures );
 		await copyReferencedWaterImages( waterTextures );

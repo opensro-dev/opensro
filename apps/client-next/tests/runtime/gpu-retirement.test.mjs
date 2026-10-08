@@ -472,11 +472,11 @@ test("the experimental presentation pass publishes the offscreen frame and retir
 			anisotropicFiltering: false,
 			heightFog: false
 		} );
-		// The frame submits, the presentation pass publishes the retained
-		// offscreen copy, then the resize retires that copy and the old depth.
+		// The presentation pass is encoded inside the frame's own command
+		// buffer after the unchanged HUD composition, so the frame is one submit; the
+		// resize then retires the retained offscreen and the old depth.
 		assert.deepEqual( await resizeLog( gpu, renderer ), [
 			"submit sro-frame",
-			"submit presentation-finish",
 			"destroy deferred-frame-color",
 			"destroy surface-depth"
 		] );

@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+terrain-title-detail.test.mjs - native terrain coverage through the GPU
+
+Compare production terrain selection with authored LOD0 using the same
+renderer-owned texture demand and native texture upload path.
+
+===========================================================================
+*/
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -8,9 +18,10 @@ import {
 } from "../../../../scripts/lib/publishedAsset.mjs";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
+const CAPTURE_SECONDS = 0.16;
 test(
 	"retail title full-detail terrain prevents ocean showing through the dock surface",
-	{ timeout: 60000 },
+	{ timeout: 120000 },
 	async () => {
 		const publicRoot = CLIENT_PUBLIC_ROOT + "/";
 		const bundle = read( "/assets/world/constantinople/region-694e.json", publicRoot );
@@ -42,8 +53,11 @@ test(
 				}
 			} );
 			await page.goto( CLIENT_NEXT_BASE_URL );
-			const result = await page.evaluate( async ( { bundle, camera } ) => {
+			const result = await page.evaluate( async ( { bundle, camera, captureSeconds } ) => {
 				const { decodeDxt1 } = await import( "/src/engine/foundation/assets/dds.ts" );
+				const { decodeNativeTexture } = await import(
+					"/src/engine/foundation/assets/native-texture.ts"
+				);
 				const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
 				const { createWorldDecoder } = await import( "/src/engine/runtime/assets/worker/world/world.ts" );
 				const { sampleFrontendCamera, frontendCameraView } = await import(
@@ -65,14 +79,8 @@ test(
 				const scene = { ...createWorldDecoder().decode( bundle, true ), terrainDetail: "full" }, images = [];
 				const textures = new Map();
 				try {
-					for (
-						const path of new Set( [
-							...(scene.flareTextures ?? []),
-							...scene.groups.flatMap( g =>
-								g.material.frames ?? (g.material.texture ? [ g.material.texture ] : [])
-							)
-						] )
-					) {
+					r.setWorld( scene );
+					for ( const path of r.neededWorldTextures() ) {
 						try {
 							const blob = await (await fetch( path )).blob();
 							if ( path.endsWith( ".dds" ) ) {
@@ -81,6 +89,9 @@ test(
 									path,
 									await createImageBitmap( new ImageData( d.pixels, d.width, d.height ) )
 								);
+							} else if ( path.endsWith( ".texture" ) ) {
+								// Keep authored levels through the production native upload path.
+								textures.set( path, decodeNativeTexture( new Uint8Array( await blob.arrayBuffer() ) ) );
 							} else textures.set( path, await createImageBitmap( blob ) );
 						} catch ( e ) {
 							throw Error( path + ":" + e.message );
@@ -133,12 +144,26 @@ test(
 								);
 							} else r.setWorld( input );
 							r.setWorldCamera( frontendCameraView( sampleFrontendCamera( camera, t ) ) );
-							for ( const [p, b] of textures ) r.setWorldTexture( p, await createImageBitmap( b ) );
+							for ( const [p, b] of textures ) {
+								r.setWorldTexture(
+									p,
+									"kind" in b ? structuredClone( b ) : await createImageBitmap( b )
+								);
+							}
 							let k = 0;
 							do {
-								r.frame( { width: 1823, height: 845 }, k++ * .016 );
+								// Residency work can take a different number of frames per mode.
+								// Keep water and environment time identical throughout preparation.
+								await r.frame( { width: 1823, height: 845 }, captureSeconds );
+								k++;
 								await new Promise( requestAnimationFrame );
-								if ( k > 1000 ) throw Error( JSON.stringify( r.worldStats?.() ) );
+								if ( r.phase() === "failed" || k > 1000 ) {
+									throw Error( JSON.stringify( {
+										error: r.error(),
+										stats: r.worldStats(),
+										missing: r.neededWorldTextures()
+									} ) );
+								}
 							} while ( k < 10 || r.worldStats().pendingGroups || r.worldStats().pendingTextures );
 							const bitmap = await createImageBitmap( canvas );
 							ctx.drawImage( bitmap, 0, 0 );
@@ -153,9 +178,9 @@ test(
 					return images;
 				} finally {
 					r.dispose();
-					for ( const b of textures.values() ) b.close();
+					for ( const b of textures.values() ) if ( !("kind" in b) ) b.close();
 				}
-			}, { bundle, camera } );
+			}, { bundle, camera, captureSeconds: CAPTURE_SECONDS } );
 			for ( const t of [ .7, .9 ] ) {
 				const rows = result.filter( r => r.t === t ),
 					normal = rows.find( r => r.mode === "normal" ).pixels,

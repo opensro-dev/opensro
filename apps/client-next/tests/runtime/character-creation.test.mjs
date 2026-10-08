@@ -20,9 +20,10 @@ import { root } from "../../tools/project.mjs";
 import { defined } from "../helpers/defined.mjs";
 const { createCharacterDialog } = await import( "../../src/engine/runtime/frontend/dialog/dialog.ts" );
 const { createCreation } = await import( "../../src/engine/runtime/frontend/creation/creation.ts" );
-const { creationLoadout, creationStarterCodenames, initialCreation, creationRange } = await import(
-	"../../src/engine/foundation/ui/character-create.ts"
-);
+const { creationLoadout, creationStarterCodenames, initialCreation, creationRange, creationProtectorFloor } =
+	await import(
+		"../../src/engine/foundation/ui/character-create.ts"
+	);
 const { createItemCodenameIndex } = await import( "../../src/engine/foundation/animation/equipment-appearance.ts" );
 const { readPublishedAssetJsonSync } = await import( "../../../../scripts/lib/publishedAsset.mjs" );
 test("creation status sounds follow native operations, including repeated validation and silent frame holds", () => {
@@ -86,7 +87,7 @@ function creation() {
 		cancel() {}
 	};
 	const owner = createCreation( assets, "http://localhost", c => commands.push( c ), () => sounds.push( "message" ) );
-	owner.open( 0 );
+	owner.open( 0, 0 );
 	owner.step( 0 );
 	owner.step( 0 );
 	return { owner, commands, sounds };
@@ -135,11 +136,11 @@ test("leaving creation releases a pending name-filter reservation and reentry re
 		"http://localhost",
 		() => {}
 	);
-	owner.open( 0 );
+	owner.open( 0, 0 );
 	owner.step( 0 );
 	owner.reset();
 	assert.deepEqual( cancelled, [ 1 ] );
-	owner.open( 1 );
+	owner.open( 1, 0 );
 	owner.step( 0 );
 	assert.equal( serial, 2 );
 	owner.dispose();
@@ -201,7 +202,7 @@ test("cancelled checks cannot affect a new creation session", () => {
 	const old = commands.at( -1 );
 	owner.reset();
 	assert.equal( commands.at( -1 ).kind, "cancel-character-operation" );
-	owner.open( 1 );
+	owner.open( 1, 0 );
 	owner.action( "create:name", "NewProbe" );
 	owner.action( "create:check" );
 	owner.step( 0, { ...old, status: "failed", nativeErrorCode: 17 } );
@@ -217,20 +218,20 @@ grants no garments.
 ================
 */
 test("creation starter items follow the native weapon and protector rules", () => {
-	const europe = { ...initialCreation( 0 ), gender: 1, figure: 1 };
+	const europe = { ...initialCreation( 0, 0 ), gender: 1, figure: 1 };
 	assert.deepEqual( creationStarterCodenames( { ...europe, weapon: 6, protector: 1 } ), [
 		"ITEM_EU_W_CLOTHES_01_BA_A_DEF",
 		"ITEM_EU_W_CLOTHES_01_LA_A_DEF",
 		"ITEM_EU_W_CLOTHES_01_FA_A_DEF",
 		"ITEM_EU_DARKSTAFF_01_A_DEF"
 	] );
-	assert.equal( creationRange( { ...europe, weapon: 6 }, "protector" )[1], 1, "darkstaff takes the robe only" );
-	assert.equal( creationRange( { ...europe, weapon: 9 }, "protector" )[1], 2, "one-hand staff: light or robe" );
+	assert.equal( creationRange( { ...europe, weapon: 6 }, "protector", 0 )[1], 1, "darkstaff takes the robe only" );
+	assert.equal( creationRange( { ...europe, weapon: 9 }, "protector", 0 )[1], 2, "one-hand staff: light or robe" );
 	assert.deepEqual( creationStarterCodenames( { ...europe, weapon: 9, protector: 2 } ).slice( -2 ), [
 		"ITEM_EU_STAFF_01_A_DEF",
 		"ITEM_EU_SHIELD_01_A_DEF"
 	] );
-	const china = { ...initialCreation( 1 ), gender: 0, figure: 1 };
+	const china = { ...initialCreation( 1, 0 ), gender: 0, figure: 1 };
 	assert.deepEqual( creationStarterCodenames( { ...china, weapon: 2, protector: 0 } ), [
 		"ITEM_CH_BLADE_01_A_DEF",
 		"ITEM_CH_SHIELD_01_A_DEF"
@@ -248,8 +249,8 @@ test("all creation figures and equipment resolve to published native preview res
 			const body = (race === 0 ? "EU" : "CH") + "_" + (gender === 0 ? "M" : "W");
 			for ( let figure = 1; figure <= 13; figure++ ) {
 				for ( let weapon = 0; weapon <= (race === 0 ? 9 : 5); weapon++ ) {
-					const base = { ...initialCreation( race ), gender, figure, weapon };
-					for ( let protector = 0; protector <= creationRange( base, "protector" )[1]; protector++ ) {
+					const base = { ...initialCreation( race, 0 ), gender, figure, weapon };
+					for ( let protector = 0; protector <= creationRange( base, "protector", 0 )[1]; protector++ ) {
 						const s = { ...base, protector },
 							loadout = creationLoadout( s, itemIds ),
 							model = models.find( m => m.codename === loadout.modelCodename );
@@ -265,4 +266,15 @@ test("all creation figures and equipment resolve to published native preview res
 			}
 		}
 	}
+});
+
+test("a censored shard starts the protector choice at 1 and never offers none (72C780/7302B0)", () => {
+	for ( const race of [ 0, 1 ] ) {
+		const draft = initialCreation( race, 1 );
+		assert.equal( draft.protector, 1 );
+		assert.equal( creationRange( { ...draft, weapon: 1 }, "protector", 1 )[0], 1 );
+		assert.equal( creationRange( { ...draft, weapon: 1 }, "protector", 0 )[0], 0 );
+	}
+	assert.equal( creationProtectorFloor( true ), 0 );
+	assert.equal( creationProtectorFloor( false ), 1 );
 });

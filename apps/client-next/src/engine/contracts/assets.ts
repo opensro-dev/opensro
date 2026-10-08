@@ -61,6 +61,7 @@ export type AssetRequest = {
 	limit: number;
 	// Also return the decoded texture's alpha as a picking mask (world DDS).
 	pickAlpha?: boolean;
+	terrainNormals?: boolean;
 	decode?:
 		| "navigation"
 		| "frontend-world"
@@ -150,7 +151,7 @@ export interface AssetOwner {
 			| "effects"
 			| "effect"
 			| "release",
-		options?: { readonly pickAlpha?: boolean; }
+		options?: { readonly pickAlpha?: boolean; readonly terrainNormals?: boolean; }
 	): number;
 	take( id: number ): AssetResult | null;
 	cancel( id: number ): void;

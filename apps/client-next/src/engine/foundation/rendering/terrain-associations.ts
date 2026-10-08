@@ -114,3 +114,42 @@ export function tileUvScale( code: number ): number {
 			return 0;
 	}
 }
+
+// Terrain block grid: 17x17 height samples, 20 units between them.
+const BLOCK_GRID_SAMPLES = 17;
+const BLOCK_CELL_SIZE = 20;
+
+/*
+================
+terrainBlockNormals
+
+One normal per height sample of a 17x17 block, from central differences
+over the 20-unit cells (one-sided at the borders). Every terrain pass and
+detail level shares the table. Retail terrain carries no normals (its
+shading is the lightmap's); the terrain-relief stage is their only reader,
+so the values are data, not a look change.
+================
+*/
+export function terrainBlockNormals( heights: readonly number[] ): Float32Array {
+	const normals = new Float32Array( BLOCK_GRID_SAMPLES * BLOCK_GRID_SAMPLES * 3 );
+	for ( let z = 0; z < BLOCK_GRID_SAMPLES; z++ ) {
+		for ( let x = 0; x < BLOCK_GRID_SAMPLES; x++ ) {
+			const westX = Math.max( 0, x - 1 ),
+				eastX = Math.min( BLOCK_GRID_SAMPLES - 1, x + 1 ),
+				northZ = Math.max( 0, z - 1 ),
+				southZ = Math.min( BLOCK_GRID_SAMPLES - 1, z + 1 );
+			// Slope per unit across the samples' actual span: borders keep one
+			// neighbour, so their difference covers one cell, not two.
+			const gradientX = (heights[z * BLOCK_GRID_SAMPLES + eastX]! - heights[z * BLOCK_GRID_SAMPLES + westX]!) /
+					((eastX - westX) * BLOCK_CELL_SIZE),
+				gradientZ = (heights[southZ * BLOCK_GRID_SAMPLES + x]! - heights[northZ * BLOCK_GRID_SAMPLES + x]!) /
+					((southZ - northZ) * BLOCK_CELL_SIZE);
+			const inverse = 1 / Math.hypot( gradientX, 1, gradientZ ),
+				at = (z * BLOCK_GRID_SAMPLES + x) * 3;
+			normals[at] = -gradientX * inverse;
+			normals[at + 1] = inverse;
+			normals[at + 2] = -gradientZ * inverse;
+		}
+	}
+	return normals;
+}

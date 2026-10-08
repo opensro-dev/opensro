@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
@@ -258,5 +259,41 @@ func TestCaravanReferenceDrawFailureDoesNotSpawn(t *testing.T) {
 	}
 	if draws != 6 || len(caravanBandits(rt, field.RegionID)) != 0 {
 		t.Fatalf("failed reference draw continued: draws=%d", draws)
+	}
+}
+
+/*
+================
+TestThiefCannotRobALevelOneCaravan
+
+52B760: a dressed thief is refused against a dressed trader carrying a
+level-1 caravan (0x3024), and that trader against the thief (0x3006);
+an empty transport protects nobody.
+================
+*/
+func TestThiefCannotRobALevelOneCaravan(t *testing.T) {
+	rt, _, trader := caravanFixture(t)
+	if tier := caravan.DifficultyTier(rt.caravanCargoValue(trader)); tier > 1 {
+		t.Fatalf("fixture cargo is tier %d, want a level-1 caravan", tier)
+	}
+	thief := *trader
+	thief.ID, thief.Name, thief.ActiveCOS = trader.ID+1, "thief", nil
+	items := rt.deps.ItemReferences().(cosTestItemSource).staticItemSource
+	for i, c := range []*enterworld.Character{trader, &thief} {
+		suit := &enterworld.ItemRef{RefObjID: uint32(9301 + i), Codename: []string{"ITEM_CH_M_TRADE_TRADER_05", "ITEM_CH_M_TRADE_THIEF_05"}[i],
+			Country: 3, TypeIDs: [4]int64{3, 1, 7, int64(1 + i)}, ReqQuadTypes: [4]int64{-1, -1, -1, -1}, Combat: &enterworld.ItemCombatRef{}}
+		items[suit.Codename] = suit
+		c.MissionInventory = append(append([]enterworld.InventoryRow(nil), c.MissionInventory...), enterworld.InventoryRow{
+			Slot: int64(jobSuitSlot), RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), StackCount: 1})
+	}
+	if code := rt.protectedCaravanRefusal(&thief, trader); code != 0x3024 {
+		t.Fatalf("thief on a level-1 caravan = %#x, want 0x3024", code)
+	}
+	if code := rt.protectedCaravanRefusal(trader, &thief); code != 0x3006 {
+		t.Fatalf("protected trader on a thief = %#x, want 0x3006", code)
+	}
+	trader.ActiveCOS.Container.Rows = nil
+	if code := rt.protectedCaravanRefusal(&thief, trader); code != 0 {
+		t.Fatalf("thief on an empty transport = %#x, want admitted", code)
 	}
 }

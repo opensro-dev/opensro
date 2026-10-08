@@ -61,6 +61,32 @@ test("outside contact uses decoded endpoint directions without acquiring a cell"
 	assert.deepEqual( response.point, [ oracle.rows[2].result[0], 7, oracle.rows[2].result[1] ] );
 });
 
+test("a finite walker meets an outline from its actual final-step source", async () => {
+	const { navContactDetail } = await import(
+		sourceFileUrl( "src/engine/foundation/navigation/object-navigation.ts" ).href
+	);
+	const mesh = {
+		vertices: Float32Array.of( 0, 7, 0, 0, 7, 100, 100, 7, 0 ),
+		vertexDirections: Uint8Array.of( 0, 64, 0 ),
+		cells: Uint16Array.of( 0, 1, 2 ),
+		edges: Uint32Array.of( 0, 1, 0, 65535, 1, 0 ),
+		bounds: [ 0, 7, 0, 100, 7, 100 ],
+		passThrough: false
+	};
+	const p = { x: 0, y: 0, z: 0, yaw: 0, mesh };
+	let current = -90;
+	// These are accepted 20ms movement steps at 50 units per second.
+	for ( let frame = 0; frame < 89; frame++ ) {
+		assert.equal( navContactDetail( p, [ current, 7, 50 ], [ current + 1, 7, 50 ], [], [], false, true ), null );
+		current += 1;
+	}
+	const contact = navContactDetail( p, [ current, 7, 50 ], [ current + 2, 7, 50 ], [], [], false, true );
+	assert.ok( contact );
+	const expected = outsideEdgeStart( [ -1, 50 ], [ 0, 50 ], [ 0, 0 ], [ 0, 100 ], 0, 64 );
+	assert.deepEqual( [ contact.point[0], contact.point[2] ], expected );
+	assert.notDeepEqual( expected, outsideEdgeStart( [ -.01, 50 ], [ 0, 50 ], [ 0, 0 ], [ 0, 100 ], 0, 64 ) );
+});
+
 test("legacy WIP bridge uses the same native cosine/negative-sine table", async () => {
 	const { normalizeNavVertRegionLinkTable20c0 } = await import(
 		sourceFileUrl( "tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshWireDecode.ts" ).href

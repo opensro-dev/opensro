@@ -718,7 +718,8 @@ export function createRenderer(
 						height: scene.waterHeight ?? 0,
 						above: scene.camera.eye[1] >= (scene.waterHeight ?? 0),
 						seconds: timeSeconds
-					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] )
+					}, [ ...scene.draws, ...(preview ? [] : liveCharacters) ] ),
+					targetSurface
 				);
 				probe?.renderMark( "submit" );
 				if ( pending ) {
@@ -726,13 +727,10 @@ export function createRenderer(
 					// visibility query: the frame stays open until that one is submitted.
 					const frameDevice = open;
 					open = null;
-					return pending.then( () => {
-						if ( !disposed ) targetSurface.present();
-					} ).catch( error => {
+					return pending.catch( error => {
 						if ( !disposed ) failure = String( error );
 					} ).finally( () => frameDevice.endFrame() );
 				}
-				targetSurface.present();
 			} catch ( error ) {
 				failure = String( error );
 			} finally {

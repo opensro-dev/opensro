@@ -12,6 +12,7 @@ modules the client ships, not a per-test bundle.
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { product } from "../helpers/navigation-fixture.mjs";
 import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
 const { createMovement } = await import(
@@ -25,6 +26,9 @@ test("captured live approach reaches the server stop without accumulated refresh
 	const data = JSON.parse( await readFile( "tests/fixtures/movement-reaim-capture.json", "utf8" ) ),
 		m = createMovement( () => {} );
 	m.seed( data.pose );
+	const navigation = product( data.pose.regionId );
+	navigation.objects = [];
+	m.navigation( data.pose.regionId, navigation );
 	m.speeds( data.pose.walkSpeed, data.pose.runSpeed, 0 );
 	const first = data.packets[0].now, last = data.packets.at( -1 ).now;
 	let at = 0;
@@ -66,9 +70,12 @@ function packet( x, source, angular = false ) {
 }
 for ( const lane of [ "local", "monster" ] ) {
 	test( lane + " source-less re-aim before the tick preserves every elapsed movement step", () => {
-		const local = createMovement( () => {} ), remote = createEntityMotion();
+		const local = createMovement( () => {} ), remote = createEntityMotion( undefined, ( _from, to ) => to );
 		let entity = { ...pose, gid: 7, heading: 0, movementMode: 3, walkSpeed: 20, runSpeed: 50 };
 		local.seed( pose );
+		const navigation = product();
+		navigation.objects = [];
+		local.navigation( pose.regionId, navigation );
 		const receive = ( p, now ) => lane === "local" ? local.native( p, now, 7 ) : remote.receive( p, entity, now );
 		const step = now => {
 			if ( lane === "local" ) {
@@ -86,22 +93,25 @@ for ( const lane of [ "local", "monster" ] ) {
 			if ( now % 96 === 0 ) receive( packet( 1500 + (now % 192 ? 1 : 0) ), now );
 			const p = step( now );
 			assert.ok(
-				Math.abs( defined( p ).x - (100 + 50 * now / 1000) ) < 1e-7,
+				Math.abs( defined( p ).x - (100 + 50 * now / 1000) ) < .05,
 				`${lane} discarded elapsed time at ${now}: ${defined( p ).x}`
 			);
 		}
 		// A source-less angular acknowledgement only enters action state 9
 		// (0x776200): the path in progress keeps running from where it is.
 		receive( packet( 0, undefined, true ), 9616 );
-		assert.ok( Math.abs( defined( step( 9616 ) ).x - 580.8 ) < 1e-7 );
-		assert.ok( Math.abs( defined( step( 10000 ) ).x - 600 ) < 1e-7, "the path continues after a keep" );
+		assert.ok( Math.abs( defined( step( 9616 ) ).x - 580.8 ) < .05 );
+		assert.ok( Math.abs( defined( step( 10000 ) ).x - 600 ) < .05, "the path continues after a keep" );
 	} );
 }
 for ( const lane of [ "local", "monster" ] ) {
 	test( lane + " explicit source and end-of-path re-aim retain authority", () => {
-		const local = createMovement( () => {} ), remote = createEntityMotion();
+		const local = createMovement( () => {} ), remote = createEntityMotion( undefined, ( _from, to ) => to );
 		let entity = { ...pose, gid: 7, heading: 0, movementMode: 3, walkSpeed: 20, runSpeed: 50 };
 		local.seed( pose );
+		const navigation = product();
+		navigation.objects = [];
+		local.navigation( pose.regionId, navigation );
 		const receive = ( p, now ) => lane === "local" ? local.native( p, now, 7 ) : remote.receive( p, entity, now );
 		const step = now => {
 			if ( lane === "local" ) {

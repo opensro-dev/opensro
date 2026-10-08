@@ -25,6 +25,7 @@ import { createFrontend } from "./frontend/frontend";
 import { createUi } from "./ui/ui";
 import { createAudio } from "./audio/audio";
 import { createCharacterPresentation } from "./characters/characters";
+import { creationProtectorFloor } from "@/engine/foundation/ui/character-create";
 import { createWorldStream } from "./world/world";
 import { createPresentation } from "./presentation/presentation";
 import type { SessionState } from "@/engine/contracts/session";
@@ -154,6 +155,10 @@ export function startRuntime(
 				const query = renderer.pickGround( worldPointer[0], worldPointer[1] );
 				if ( query ) command = { ...command, command: { ...command.command, query } };
 			}
+			// 6FCD50 reads the Alt state when the press executes.
+			if ( command.kind === "gameplay" && command.command.kind === "skill" && input.altHeld() ) {
+				command = { ...command, command: { ...command.command, alt: true } };
+			}
 			simulation.session( command );
 		}
 		/*
@@ -176,6 +181,8 @@ export function startRuntime(
 			if ( event.kind === "camera-preferences" ) input.sight( event.value );
 			if ( event.kind === "experimental-preferences" ) {
 				renderer.experimentalVideo( experimentalVideo( event.value ) );
+				world.setTerrainNormals( experimentalVideo( event.value ).terrainRelief );
+				frontend.setTerrainNormals( experimentalVideo( event.value ).terrainRelief );
 			}
 			if ( event.kind === "audio-preferences" ) audio.options( event.value );
 			if ( event.kind === "chat-blocks" ) simulation.session( { kind: "chat-blocks", value: event.value } );
@@ -205,7 +212,7 @@ export function startRuntime(
 				}
 				if ( event.id === "frontend:race-europe" || event.id === "frontend:race-china" ) {
 					audio.uiClick();
-					frontend.race( event.id.endsWith( "europe" ) ? 0 : 1 );
+					chooseRace( event.id.endsWith( "europe" ) ? 0 : 1 );
 					return;
 				}
 				if ( event.id.startsWith( "create:" ) ) {
@@ -332,6 +339,17 @@ export function startRuntime(
 		const worldDoubleClick = createWorldDoubleClick();
 		/*
 		================
+		chooseRace
+
+		Opens creation for a race with the login shard's protector floor
+		(GameConfig +0x129, 72C780/7302B0).
+		================
+		*/
+		function chooseRace( race: 0 | 1 ) {
+			frontend.race( race, creationProtectorFloor( characters.uncensored( sessionState?.nativeServerName ) ) );
+		}
+		/*
+		================
 		worldClick
 		================
 		*/
@@ -340,7 +358,7 @@ export function startRuntime(
 			if ( doubleClick && frontend.snapshot().phase !== "world" ) return;
 			if ( frontend.isRace() ) {
 				const race = renderer.pickFrontendRace( x, y );
-				if ( race !== null ) frontend.race( race );
+				if ( race !== null ) chooseRace( race );
 				return;
 			}
 			if ( frontend.isDock() ) {
@@ -723,7 +741,6 @@ export function startRuntime(
 						null,
 					[ "create", "create-return", "race-zoom" ].includes( frontendState.phase ),
 					effectDetail,
-					true,
 					worldPresented && input.blindHeld(),
 					sessionState?.nativeServerName,
 					normalFortressClothes
@@ -905,7 +922,9 @@ export function startRuntime(
 				platform.presentWorldCursor(
 					ui.cursor() ?? worldCursor(
 						hoverGid === null ? undefined : presentation.read( hoverGid ),
-						hoverLocal ? presentation.read( hoverLocal ) : undefined
+						hoverLocal ? presentation.read( hoverLocal ) : undefined,
+						false,
+						input.altHeld()
 					)
 				);
 				markStage( "hover" );

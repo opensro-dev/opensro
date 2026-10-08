@@ -165,7 +165,15 @@ fs
 	} );
 	const sampler = device.createSampler( { magFilter: "linear", minFilter: "linear" } );
 	const nearestSampler = device.createSampler( { magFilter: "nearest", minFilter: "nearest" } );
-	const textures = new Map<string, { texture: GPUTexture; width: number; height: number; }>();
+	const textures = new Map<string, {
+		texture: GPUTexture;
+		width: number;
+		height: number;
+		// Created once per slot and returned by identity: the same view object
+		// every call, instead of a fresh one per frame. (No other owner
+		// compares this identity; the frame only uses it as a pass view.)
+		view?: GPUTextureView;
+	}>();
 	// texture -> mask -> one bind group per sampler. Nested maps, not a joined
 	// key: the per-quad lookup builds no string.
 	const bindings = new Map<string, Map<string, { linear?: GPUBindGroup; nearest?: GPUBindGroup; }>>();
@@ -260,7 +268,8 @@ fs
 				textures.set( id, slot );
 				resourceRevision++;
 			}
-			return slot.texture.createView();
+			slot.view ??= slot.texture.createView();
+			return slot.view;
 		},
 		/*
 		================

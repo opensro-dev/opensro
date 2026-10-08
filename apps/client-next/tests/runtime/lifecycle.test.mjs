@@ -165,6 +165,87 @@ test("surface configures on resize and forbids use after disposal", () => {
 	assert.equal( disposed, 1 );
 	assert.throws( () => surface.acquire( { width: 1, height: 1 } ) );
 });
+
+test("deferred frames acquire the swapchain only after readback and present in the final submit", async () => {
+	const log = [];
+	const target = {};
+	let turn = 0;
+	const canvas = {
+		getContext: () => ({
+			getCurrentTexture() {
+				log.push( `acquire ${turn}` );
+				return target;
+			},
+			unconfigure() {}
+		})
+	};
+	const surface = createSurface( canvas, {
+		configure() {},
+		createDepth: () => ({ view: {}, dispose() {} }),
+		createColor: () => ({
+			view: {},
+			encodePresent( encoder, actual ) {
+				assert.equal( actual, target );
+				log.push( `present ${encoder.id}` );
+			},
+			dispose() {}
+		})
+	}, "bgra8unorm" );
+	let nextEncoder = 0;
+	const frame = createFrame( {
+		createEncoder() {
+			const id = ++nextEncoder;
+			return {
+				id,
+				beginRenderPass( descriptor ) {
+					log.push( descriptor.label );
+					return { setBlendConstant() {}, end() {} };
+				},
+				finish: () => id
+			};
+		},
+		submit: id => log.push( `submit ${id}` )
+	} );
+	let resolveReadback;
+	const ready = new Promise( resolve => resolveReadback = resolve );
+	try {
+		const view = surface.acquire( { width: 32, height: 32 }, true );
+		assert.deepEqual( log, [], "retention must not acquire a canvas texture" );
+		const pending = frame.draw(
+			view,
+			undefined,
+			undefined,
+			surface.depth(),
+			[],
+			[],
+			[],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			[],
+			undefined,
+			{ asynchronous: true, prepare: () => ready },
+			undefined,
+			undefined,
+			surface
+		);
+		assert.deepEqual( log, [ "main-pass", "submit 1" ] );
+		turn = 1;
+		defined( resolveReadback )( [] );
+		await pending;
+		assert.deepEqual( log, [
+			"main-pass",
+			"submit 1",
+			"deferred-particles",
+			"acquire 1",
+			"present 2",
+			"submit 2"
+		] );
+	} finally {
+		surface.dispose();
+	}
+});
 test("snapshot contract rejects wrong version and size", () => {
 	const b = new ArrayBuffer( SNAPSHOT_BYTES );
 	writeSnapshot( b, 12, 192, 200 );

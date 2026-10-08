@@ -59,6 +59,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		frames := func(name string, advance func(int64) []simulation.DivisionFrames) {
 			step(name, func() { out = append(out, advance(nowMs)...) })
 		}
+		step("retireGroundApproaches", rt.retireGroundApproaches)
 		step("advanceResidentRegions", func() { rt.advanceResidentRegions(nowMs) })
 		if rt.AdvanceQuestCalendar != nil {
 			step("AdvanceQuestCalendar", func() { rt.AdvanceQuestCalendar(nowMs) })
@@ -349,6 +350,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.returnCasts.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.playerDisplacements.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.jobDresses.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.jobActivations.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))
@@ -370,6 +372,16 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	if c := rt.findCharacter(divisionID, characterName); c != nil {
 		rt.deps.Update(c, "forget-body-status", func() bool {
 			changed := c.NativeTeleportMode != 0
+			// Retire the actor at its last collision-accepted pose. Its requested
+			// destination must never become the next login's starting point.
+			stored := simulation.SeedWorldState(c)
+			world := rt.Worlds.Snapshot(simulation.WorldKey(divisionID, characterName), func() simulation.WorldState {
+				return stored
+			})
+			if stored.Spawn != world.PersistedSpawn() || stored.MovementMode != world.MovementMode || stored.SpawnSet != world.SpawnSet {
+				writeBackWorld(c, world)
+				changed = true
+			}
 			c.NativeTeleportMode = 0
 			c.BerserkUntilMs = 0
 			changed = len(c.Aggressions) != 0 || changed
@@ -392,6 +404,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.forgetPetSession(divisionID, characterName)
 	rt.forgetRecoverySession(divisionID, characterName)
 	rt.Worlds.Forget(simulation.WorldKey(divisionID, characterName))
+	rt.groundApproachStops.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.Pending.Clear(grounditem.PendingKey(divisionID, characterName))
 	rt.Selected.Clear(divisionID, characterName)
 	rt.NpcDialogs.Clear(divisionID, characterName)

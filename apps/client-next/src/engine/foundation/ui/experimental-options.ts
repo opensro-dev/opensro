@@ -24,6 +24,10 @@ export interface ExperimentalOptions {
 	readonly postProcessing: boolean;
 	readonly anisotropicFiltering: boolean;
 	readonly heightFog: boolean;
+	readonly dynamicSun: boolean;
+	readonly terrainRelief: boolean;
+	readonly texturedHorizon: boolean;
+	readonly floatBloom: boolean;
 }
 
 /*
@@ -52,7 +56,11 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		developerDiagnostics: enabled( "developerDiagnostics" ),
 		postProcessing: enabled( "postProcessing" ),
 		anisotropicFiltering: enabled( "anisotropicFiltering" ),
-		heightFog: enabled( "heightFog" )
+		heightFog: enabled( "heightFog" ),
+		dynamicSun: enabled( "dynamicSun" ),
+		terrainRelief: enabled( "terrainRelief" ),
+		texturedHorizon: enabled( "texturedHorizon" ),
+		floatBloom: enabled( "floatBloom" )
 	};
 }
 
@@ -68,6 +76,10 @@ export interface ExperimentalVideo {
 	readonly postProcessing: boolean;
 	readonly anisotropicFiltering: boolean;
 	readonly heightFog: boolean;
+	readonly dynamicSun: boolean;
+	readonly terrainRelief: boolean;
+	readonly texturedHorizon: boolean;
+	readonly floatBloom: boolean;
 }
 
 /*
@@ -79,6 +91,10 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 	return {
 		postProcessing: options.postProcessing,
 		anisotropicFiltering: options.anisotropicFiltering,
-		heightFog: options.heightFog
+		heightFog: options.heightFog,
+		dynamicSun: options.dynamicSun,
+		terrainRelief: options.terrainRelief,
+		texturedHorizon: options.texturedHorizon,
+		floatBloom: options.floatBloom
 	};
 }

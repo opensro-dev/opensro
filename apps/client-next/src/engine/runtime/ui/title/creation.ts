@@ -224,7 +224,7 @@ export function drawCreation(
 		}
 		if ( n.name.startsWith( "GDR_SLI_" ) ) {
 			const key = n.name.slice( 8 ).toLowerCase() as "figure" | "height" | "volume" | "weapon" | "protector",
-				[min, max] = creationRange( selection, key ),
+				[min, max] = creationRange( selection, key, state.protectorFloor ),
 				slider = Object.fromEntries(
 					layout.sections.find( s => s.name === "Slider" )!.nodes.map( n => [ n.name, n ] )
 				);

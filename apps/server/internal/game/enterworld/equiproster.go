@@ -43,6 +43,9 @@ type ItemRef struct {
 	// must instantiate. It is a natural-key join, never a client-supplied
 	// RefObj id.
 	AssociatedCharacterCodename string
+	// RefItem+0x530 byte set from Desc2, including native 1/255 sentinels.
+	// Nil preserves the exact associated reference without a level suffix.
+	SummonLevelThresholds []uint8
 	// Skill consumables resolve the same authored Param1 reference as a skill.
 	AssociatedSkillCodename string
 	// Return-scroll Param3 text (column 123), consumed by v1.188 4A0380.

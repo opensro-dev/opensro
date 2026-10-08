@@ -39,11 +39,13 @@ test( "native BC textures and fallback sample every mip without validation error
 			Independent fixture encoder: opaque red in each authored mip block.
 			================
 			*/
-			function textureBytes( code ) {
+			function textureBytes( code, count ) {
 				const blockBytes = code === codes[0] ? 8 : 16;
-				const bytes = new Uint8Array( HEADER_BYTES + 3 * blockBytes ), view = new DataView( bytes.buffer );
-				[ 0x3158544e, 4, 4, code, 3 ].forEach( ( value, index ) => view.setUint32( index * 4, value, true ) );
-				for ( let level = 0; level < 3; level++ ) {
+				const bytes = new Uint8Array( HEADER_BYTES + count * blockBytes ), view = new DataView( bytes.buffer );
+				[ 0x3158544e, 4, 4, code, count ].forEach( ( value, index ) =>
+					view.setUint32( index * 4, value, true )
+				);
+				for ( let level = 0; level < count; level++ ) {
 					const offset = HEADER_BYTES + level * blockBytes;
 					if ( code === codes[1] ) bytes.fill( 255, offset, offset + 8 );
 					if ( code === codes[2] ) bytes[offset] = 255;
@@ -79,11 +81,16 @@ test( "native BC textures and fallback sample every mip without validation error
 					}
 				} );
 				try {
-					for ( const code of codes ) {
-						const source = decodeNativeTexture( textureBytes( code ) );
+					for (
+						const { code, count } of codes.flatMap( code => [ 1, 2, 3 ].map( count => ({ code, count }) ) )
+					) {
+						const source = decodeNativeTexture( textureBytes( code, count ) );
 						const draw = images.commands.upload( source );
 						const texture = images.texture( draw );
 						if ( !texture ) throw Error( "Native upload has no allocation" );
+						if ( texture.mipLevelCount !== count ) {
+							throw Error( "Authored mip count changed during upload" );
+						}
 						for ( let level = 0; level < source.levels.length; level++ ) {
 							const target = device.createTexture( {
 								size: [ TARGET_SIDE, TARGET_SIDE ],
@@ -136,6 +143,7 @@ test( "native BC textures and fallback sample every mip without validation error
 								await readback.mapAsync( GPUMapMode.READ );
 								rows.push( {
 									compressed,
+									count,
 									format: source.format,
 									level,
 									pixel: [ ...new Uint8Array( readback.getMappedRange() ).slice( 0, 4 ) ]
@@ -160,7 +168,7 @@ test( "native BC textures and fallback sample every mip without validation error
 		await mkdir( "../../temp/artifacts/native-textures", { recursive: true } );
 		await writeFile( "../../temp/artifacts/native-textures/gpu.json", JSON.stringify( result, null, 2 ) );
 		assert.deepEqual( result.errors, [] );
-		assert.equal( result.rows.length, result.bcSupported ? 18 : 9 );
+		assert.equal( result.rows.length, result.bcSupported ? 36 : 18 );
 		for ( const row of result.rows ) assert.deepEqual( row.pixel, [ 255, 0, 0, 255 ], JSON.stringify( row ) );
 	} finally {
 		await browser.close();

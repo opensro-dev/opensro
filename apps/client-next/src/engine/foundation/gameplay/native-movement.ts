@@ -175,6 +175,83 @@ export function poseDistance( a: Pose, b: Pose ) {
 
 /*
 ================
+clientWalkingStep
+
+CNavigationController::OnTick 86D6D0 uses the selected float speed and frame
+elapsed time without the server mover's distance cap or component cutoff.
+Waypoint arrival clamps the scalar distance before the stored direction is
+multiplied; collision owns whether the candidate is accepted.
+================
+*/
+export function clientWalkingStep(
+	speed: number,
+	elapsedSeconds: number,
+	vector: readonly [number, number],
+	remainingDistance = Infinity
+) {
+	let distance = Math.fround( Math.fround( speed ) * Math.fround( elapsedSeconds ) );
+	const arrived = distance >= remainingDistance;
+	if ( arrived ) distance = remainingDistance;
+	const step: [number, number] = [
+		Math.fround( Math.fround( vector[0] ) * distance ),
+		Math.fround( Math.fround( vector[1] ) * distance )
+	];
+	return { step, arrived };
+}
+
+/*
+================
+clientPlanarDistance
+
+878CE0 stores the horizontal squared length and square root as float32.
+================
+*/
+export function clientPlanarDistance( delta: readonly [number, number] ) {
+	const x = Math.fround( delta[0] ), z = Math.fround( delta[1] );
+	return Math.fround( Math.sqrt( Math.fround( x * x + z * z ) ) );
+}
+
+/*
+================
+clientWalkingDirection
+
+86CD60 normalizes the waypoint delta through 410890. 8791A0 converts that
+stored vector to a float yaw; 86C960/8788C0 store sine and negative cosine.
+The native circle constant is a float32 value promoted to double.
+================
+*/
+// Native float32 constants, kept literal so this shared module owns no initialization work.
+const CLIENT_DIRECTION_EPSILON = 0.0000009999999974752427;
+const CLIENT_FULL_TURN = 6.2831854820251465;
+
+export function clientWalkingDirection( delta: readonly [number, number], fallbackYaw = 0 ): readonly [number, number] {
+	const x = Math.fround( delta[0] ), z = Math.fround( delta[1] );
+	const length = clientPlanarDistance( [ x, z ] );
+	const reciprocal = length > 0 ? Math.fround( 1 / length ) : 0;
+	const nx = Math.fround( x * reciprocal ), nz = Math.fround( z * reciprocal );
+	const normalizedLength = clientPlanarDistance( [ nx, nz ] );
+	let yaw = Math.fround( fallbackYaw );
+	if ( normalizedLength > CLIENT_DIRECTION_EPSILON ) {
+		const angle = Math.fround( Math.acos( Math.fround( -nz / normalizedLength ) ) );
+		yaw = nx >= 0 ? angle : Math.fround( CLIENT_FULL_TURN - angle );
+	}
+	return clientWalkingVector( yaw );
+}
+
+/*
+================
+clientWalkingVector
+
+86C960/8788C0 stores the supplied float yaw directly for angular movement.
+================
+*/
+export function clientWalkingVector( yaw: number ): readonly [number, number] {
+	const angle = Math.fround( yaw );
+	return [ Math.fround( Math.sin( angle ) ), Math.fround( -Math.cos( angle ) ) ];
+}
+
+/*
+================
 movementGait
 
 Native movement mode 2 is walking; other modes use running speed.

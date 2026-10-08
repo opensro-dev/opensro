@@ -152,3 +152,41 @@ func TestThiefDenScrollRefusesAnyoneButADressedThief(t *testing.T) {
 	rt, _ := newTestRuntime(c, items)
 	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(3).U8(26).U16(scroll.TypeFlags()).Payload(), errCodeThievesOnly)
 }
+
+/*
+================
+TestJobSuitActivationHoldsTheSuit
+
+4E9EA9: a suit just worn waits ten state ticks (+0x2178) before it is
+active; until then it cannot come off (0x47), and a hit ends the wait
+(4E1EF4).
+================
+*/
+func TestJobSuitActivationHoldsTheSuit(t *testing.T) {
+	rt, clock, c := jobFixture(t)
+	c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"}
+	wear := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobTestSuitSlot, DestSlot: jobSuitSlot, Quantity: 1})
+	rt.HandleItemMove(testDivision, c, wear)
+	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
+	clock.now = clock.now.Add(jobDressSeconds * time.Second)
+	rt.advanceJobDresses(clock.NowMs())
+	if enterworld.DressedJob(c) != domain.JobTrader || !rt.jobActivationPending(testDivision, c, clock.NowMs()) {
+		t.Fatal("a freshly worn suit is active at once")
+	}
+	if code := rt.jobStripRefusal(testDivision, c, jobTestSuitSlot, clock.NowMs()); code != jobWearErrPending {
+		t.Fatalf("strip during activation = %#x, want %#x", code, jobWearErrPending)
+	}
+	clock.now = clock.now.Add(jobActivationMs*time.Millisecond - time.Millisecond)
+	if !rt.jobActivationPending(testDivision, c, clock.NowMs()) {
+		t.Fatal("the activation ended early")
+	}
+	clock.now = clock.now.Add(time.Millisecond)
+	if rt.jobActivationPending(testDivision, c, clock.NowMs()) {
+		t.Fatal("the activation outlived its ten ticks")
+	}
+	rt.startJobActivation(testDivision, c, clock.NowMs())
+	rt.endJobActivation(testDivision, c)
+	if rt.jobActivationPending(testDivision, c, clock.NowMs()) {
+		t.Fatal("a hit did not end the activation")
+	}
+}

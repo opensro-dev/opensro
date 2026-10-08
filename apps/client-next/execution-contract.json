@@ -2,6 +2,27 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
+			"functions": [
+				"callback"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
+			"functions": [
+				"clip"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
+			"functions": [
+				"callback:createEntities:3"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/fortress-mini-info.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
@@ -288,6 +309,20 @@
 			"provider": "src/engine/runtime/world/world.ts",
 			"functions": [
 				"soundSurface"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/world/world.ts",
+			"functions": [
+				"setTerrainNormals"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/runtime.ts",
+			"provider": "src/engine/runtime/frontend/stage/stage.ts",
+			"functions": [
+				"setTerrainNormals"
 			]
 		},
 		{
@@ -1239,14 +1274,16 @@
 			"consumer": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/gameplay/movement/navigation/navigation.ts",
 			"functions": [
-				"surface"
+				"surface",
+				"clip"
 			]
 		},
 		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/entities/motion/motion.ts",
 			"provider": "src/engine/runtime/simulation/worker/session/world/core.ts",
 			"functions": [
-				"callback:createEntities:0"
+				"callback:createEntities:0",
+				"callback:createEntities:3"
 			]
 		},
 		{
@@ -1402,6 +1439,7 @@
 				"callback:createEntities:0",
 				"callback:createEntities:1",
 				"callback:recolor:0",
+				"callback:refreshHoverAttack:0",
 				"nameContext"
 			]
 		},
@@ -1700,7 +1738,14 @@
 			"provider": "src/engine/runtime/renderer/device/device.ts",
 			"functions": [
 				"createColor",
-				"present"
+				"encodePresent"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
+			"provider": "src/engine/runtime/renderer/surface/surface.ts",
+			"functions": [
+				"encodePresent"
 			]
 		},
 		{
@@ -2049,6 +2094,14 @@
 				"footprints"
 			],
 			"reason": "The footprint owner publishes or clears its retained decals at the original frame and teardown positions."
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/player-attack.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/entities/entities.ts",
+			"functions": [
+				"read",
+				"rider"
+			]
 		}
 	],
 	"boundaries": [
@@ -2240,6 +2293,13 @@
 			"function": "resourceFor",
 			"kind": "callback",
 			"reason": "The parent structure-visual owner supplies the staged model synchronously, as before the lookups moved out of characters.ts."
+		},
+		{
+			"file": "src/engine/runtime/characters/appearance-lookup.ts",
+			"expression": "deathShown",
+			"function": "resourceFor",
+			"kind": "callback",
+			"reason": "Presentation state owns the death-entry decision (8E64F0); the lookup reads it synchronously so the death model and the death action start on the same frame."
 		},
 		{
 			"file": "src/engine/runtime/characters/dock-preview.ts",
@@ -3460,7 +3520,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "19c130d61da045b75393be7dd1f950571a0d402965aaf87a44defc7f67f3027f",
+			"sourceSha256": "7cd72749cd82e603d506f977041a9fc9a65761cf4710981a84d699b29973f8db",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

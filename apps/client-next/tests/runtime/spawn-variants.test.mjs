@@ -77,7 +77,7 @@ test("COS name masks and all native sub-kind tails consume exact boundaries", ()
 				assert.throws( () => decodeCharacterSpawn( p.subarray( 0, n ), "cos", 0x1c6 | (band << 11), true ) );
 			}
 			if ( moving ) {
-				const motion = createEntityMotion();
+				const motion = createEntityMotion( undefined, ( _from, to ) => to );
 				motion.spawn( e, 0 );
 				assert.equal( motion.step( 1000 )[0].x, 10 );
 			}

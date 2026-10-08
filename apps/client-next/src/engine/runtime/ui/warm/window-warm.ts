@@ -18,6 +18,7 @@ screen for that one frame.
 
 ===========================================================================
 */
+import type { UiPanel } from "@/engine/foundation/ui/panels";
 import type { SkillUi } from "@/engine/foundation/ui/skill-layout";
 
 /*
@@ -52,8 +53,8 @@ const WARM_WINDOWS = [
 createWindowWarm
 ================
 */
-export function createWindowWarm( windows: readonly string[] = WARM_WINDOWS ) {
-	let next = 0, current: string | null = null;
+export function createWindowWarm( windows: readonly UiPanel[] = WARM_WINDOWS ) {
+	let next = 0, current: UiPanel | null = null;
 	const demand = new Set<string>();
 	return {
 		/*
@@ -64,7 +65,7 @@ The window to build unseen this frame, or null when every window is warm
 or the caller is not idle.
 ================
 		*/
-		begin( idle: boolean ): string | null {
+		begin( idle: boolean ): UiPanel | null {
 			if ( current !== null ) throw new Error( "Window warm frame already open" );
 			if ( !idle || next >= windows.length ) return null;
 			current = windows[next++]!;

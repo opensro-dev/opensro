@@ -3,8 +3,8 @@
 
 native-texture.ts - admission and fallback decoding for retained native mips
 
-The NTX container preserves the source format and a complete mip chain from
-the build-time D3DX loader. GPU-capable devices upload the blocks unchanged;
+The NTX container preserves the source format and the authored mip levels
+selected by the build-time native loader. GPU-capable devices upload the blocks unchanged;
 devices without BC support decode one mip at a time without retaining RGBA.
 The format rules also serve CPU residency accounting and input validation.
 
@@ -66,10 +66,15 @@ contracts directly, and corrupt dimensions must not reach createTexture.
 */
 export function validateNativeTexture( texture: NativeTexture ): number {
 	const { width, height, levels } = texture;
+	// Containers carry the levels their source authored - the terrain ships
+	// single-level surfaces exactly as retail sampled them (0x9f8ea0 passes
+	// the file's own count), so a chain anywhere from one level to the full
+	// descent is valid; only a count beyond the dimensions is not. The world
+	// object lane still publishes full chains; its build validates that.
 	if (
 		!Number.isInteger( width ) || !Number.isInteger( height ) || width < 1 || height < 1 ||
 		width > MAX_DIMENSION || height > MAX_DIMENSION || (width & (width - 1)) || (height & (height - 1)) ||
-		levels.length !== 1 + Math.floor( Math.log2( Math.max( width, height ) ) )
+		levels.length < 1 || levels.length > 1 + Math.floor( Math.log2( Math.max( width, height ) ) )
 	) throw Error( "Invalid native texture dimensions or mip count" );
 	let bytes = 0;
 	for ( let level = 0; level < levels.length; level++ ) {
@@ -115,10 +120,10 @@ export function decodeNativeTexture( bytes: Uint8Array ): NativeTexture {
 		(() => {
 			throw Error( "Unsupported native texture format" );
 		})();
+	const full = 1 + Math.floor( Math.log2( Math.max( width, height ) ) );
 	if (
 		width < 1 || height < 1 || width > MAX_DIMENSION || height > MAX_DIMENSION ||
-		(width & (width - 1)) || (height & (height - 1)) ||
-		count !== 1 + Math.floor( Math.log2( Math.max( width, height ) ) )
+		(width & (width - 1)) || (height & (height - 1)) || count < 1 || count > full
 	) {
 		throw Error( "Invalid native texture dimensions or mip count" );
 	}

@@ -27,15 +27,16 @@ const BLOCK_PIXELS = 16;
 ================
 encodedTexture
 
-Write a 4x4 NTX resource with three authored mips. The caller supplies one
-block, reused in the 4x4, 2x2 and 1x1 levels so cropping can be checked.
+Write a 4x4 NTX resource with three authored mips (or fewer, as terrain
+ships). The caller supplies one block, reused in the 4x4, 2x2 and 1x1 levels
+so cropping can be checked.
 ================
 */
-function encodedTexture( format, block ) {
-	const bytes = new Uint8Array( 20 + block.length * 3 );
+function encodedTexture( format, block, levels = 3 ) {
+	const bytes = new Uint8Array( 20 + block.length * levels );
 	const header = new DataView( bytes.buffer );
-	[ 0x3158544e, 4, 4, format, 3 ].forEach( ( value, index ) => header.setUint32( index * 4, value, true ) );
-	for ( let level = 0; level < 3; level++ ) bytes.set( block, 20 + level * block.length );
+	[ 0x3158544e, 4, 4, format, levels ].forEach( ( value, index ) => header.setUint32( index * 4, value, true ) );
+	for ( let level = 0; level < levels; level++ ) bytes.set( block, 20 + level * block.length );
 	return bytes;
 }
 
@@ -175,7 +176,7 @@ test("native admission rejects malformed headers, trailing bytes and incomplete 
 		assert.throws( () => decodeNativeTexture( bytes.slice( 0, size ) ) );
 	}
 	assert.throws( () => decodeNativeTexture( new Uint8Array( [ ...bytes, 0 ] ) ) );
-	for ( const [offset, value] of [ [ 0, 0 ], [ 4, 3 ], [ 8, 16384 ], [ 12, 123 ], [ 16, 2 ] ] ) {
+	for ( const [offset, value] of [ [ 0, 0 ], [ 4, 3 ], [ 8, 16384 ], [ 12, 123 ], [ 16, 9 ] ] ) {
 		const bad = bytes.slice();
 		new DataView( bad.buffer ).setUint32( offset, value, true );
 		assert.throws( () => decodeNativeTexture( bad ) );
@@ -223,6 +224,36 @@ test("BC fallback uploads bounded RGBA mips and leaves the compressed source reu
 	fixture.owner.dispose();
 	assert.equal( fixture.destroyed(), 2 );
 	assert.equal( fixture.generated(), 0 );
+});
+
+test("single and partial authored chains stay intact on BC and fallback adapters", t => {
+	for ( const compressed of [ true, false ] ) {
+		const fixture = recordingDevice( t, compressed );
+		for ( const count of [ 1, 2 ] ) {
+			const source = decodeNativeTexture( encodedTexture( DXT1, colorBlock(), count ) );
+			const before = source.levels.map( bytes => bytes.slice() );
+			const firstWrite = fixture.writes.length;
+			const handle = fixture.owner.commands.upload( source );
+			const allocation = fixture.allocations.at( -1 );
+			assert.equal( allocation.format, compressed ? "bc1-rgba-unorm" : "rgba8unorm" );
+			assert.equal( allocation.mipLevelCount, count );
+			assert.equal( allocation.usage & 16, 0, "authored chains need no render attachment" );
+			const writes = fixture.writes.slice( firstWrite );
+			assert.equal( writes.length, count );
+			for ( const [level, write] of writes.entries() ) {
+				assert.equal( write.target.mipLevel, level );
+				assert.deepEqual(
+					write.bytes,
+					compressed ? source.levels[level] : decodeNativeTextureLevel( source, level )
+				);
+			}
+			assert.deepEqual( source.levels, before );
+			fixture.owner.commands.release( handle );
+		}
+		assert.equal( fixture.generated(), 0 );
+		assert.equal( fixture.destroyed(), 2 );
+		fixture.owner.dispose();
+	}
 });
 
 test("invalid native layers allocate nothing and a failed upload destroys its partial texture", t => {

@@ -45,6 +45,7 @@ export function createTerrainParts(
 	outdoor: ( region: number ) => boolean
 ) {
 	let anchor: number | null = null;
+	let terrainNormals = false;
 	const parts = new Map<number, WorldTerrainPart>();
 	const jobs = new Map<number, number>();
 
@@ -101,6 +102,19 @@ export function createTerrainParts(
 	return {
 		anchorFor,
 		cancelPending,
+		/*
+		================
+		setTerrainNormals
+
+		Port-only relief data must not share cached parts with native normals.
+		Cancel old requests before the next scene reserves replacement parts.
+		================
+		*/
+		setTerrainNormals( value: boolean ): void {
+			if ( terrainNormals === value ) return;
+			clear();
+			terrainNormals = value;
+		},
 		/*
 		================
 		neighbourhood
@@ -160,7 +174,8 @@ export function createTerrainParts(
 					assets.request(
 						new URL( `${path}#anchor=${hex}&part=terrain`, origin ).href,
 						TERRAIN_REQUEST_BYTES,
-						"world"
+						"world",
+						terrainNormals ? { terrainNormals: true } : undefined
 					)
 				);
 			}

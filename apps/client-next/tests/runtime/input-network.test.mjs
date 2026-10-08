@@ -223,17 +223,17 @@ test("pre-welcome refusal retains the server reason and malformed goodbye fails 
 });
 
 test("native sight modes constrain pitch, follow heading and preserve free yaw", () => {
-	const input = createInput();
+	const input = createInput(), start = input.camera().yaw;
 	input.accept( { kind: "pointer", x: 0, y: 0, buttons: 2, timeMs: 1 } );
 	const pitch = input.camera().pitch;
 	input.sight( 2 );
 	input.accept( { kind: "pointer", x: 20, y: 20, buttons: 2, timeMs: 2 } );
 	assert.equal( input.camera().pitch, pitch );
-	assert.equal( input.camera().yaw, .1 );
+	assert.equal( input.camera().yaw, start + .1 );
 	input.sight( 0 );
 	input.accept( { kind: "pointer", x: 40, y: 40, buttons: 2, timeMs: 3 } );
 	assert.ok( input.camera().pitch > pitch );
-	assert.equal( input.camera( 2 ).yaw, .2 );
+	assert.equal( input.camera( 2 ).yaw, start + .1 + .1 );
 	input.sight( 1 );
 	assert.equal( input.camera( 2 ).yaw, Math.fround( 1.5700000524520874 - 2 + 1.5707963705062866 ) - Math.PI );
 	const followed = input.camera().yaw;
@@ -243,15 +243,15 @@ test("native sight modes constrain pitch, follow heading and preserve free yaw",
 });
 
 test("alternate native mouse mode changes the drag button while the wheel still zooms", () => {
-	const input = createInput();
+	const input = createInput(), start = input.camera().yaw;
 	input.mouseMode( 1 );
 	input.accept( { kind: "pointer", x: 0, y: 0, buttons: 2, timeMs: 1 } );
 	input.accept( { kind: "pointer", x: 20, y: 20, buttons: 2, timeMs: 2 } );
-	assert.equal( input.camera().yaw, 0 );
+	assert.equal( input.camera().yaw, start );
 	input.accept( { kind: "release", timeMs: 3 } );
 	input.accept( { kind: "pointer", x: 0, y: 0, buttons: 1, timeMs: 4 } );
 	input.accept( { kind: "pointer", x: 20, y: 20, buttons: 1, timeMs: 5 } );
-	assert.equal( input.camera().yaw, .1 );
+	assert.equal( input.camera().yaw, start + .1 );
 	input.accept( { kind: "wheel", delta: 120, timeMs: 6 } );
 	assert.equal( input.camera().distance, 86 );
 });

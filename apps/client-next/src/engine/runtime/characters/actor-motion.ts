@@ -134,7 +134,8 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.hitStarted = hit.at;
 				state.hitCritical = hit.critical;
 			}
-			const downDeath = presentationState.idleStates.get( entity.gid )?.downDeath,
+			const deathEntry = presentationState.idleStates.get( entity.gid ),
+				downDeath = deathEntry?.downDeath,
 				quickDeath = resource.clips.includes( "deathquick" ) ?
 					"deathquick" :
 					resource.clips.includes( "downdie" ) ?
@@ -143,7 +144,11 @@ export function createActorMotion( owner: ActorOwner ) {
 			const sitting = entity.movementMode === MOVEMENT_MODE_SEATED && !entity.mountedOn;
 			const sittingClip = resource.clips.includes( "sit" ) ? "sit" : "charselect-state14";
 			if ( state.dead !== undefined && state.dead !== dead ) {
-				state.postureClip = dead ? (downDeath ? quickDeath : "death") : undefined;
+				// 8E64F0: downdie from state 4; otherwise the motion-4 one-shot only
+				// when state 2 or 3 was active, over the deathLoop base.
+				state.postureClip = dead ?
+					(downDeath ? quickDeath : deathEntry?.deathAction ? "death" : undefined) :
+					undefined;
 				state.postureStarted = seconds;
 			} else if ( !dead && state.sitting !== undefined && state.sitting !== sitting ) {
 				state.postureClip = sitting ?

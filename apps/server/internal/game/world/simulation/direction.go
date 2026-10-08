@@ -139,6 +139,9 @@ func ApplyDirectionLeg(world *WorldState, objectID uint32, movement MovementRequ
 
 	world.Spawn = goal
 	world.MoveSegment = world.TravelSegment(liveBefore, goal, world.MovementMode, nowMs)
+	if world.MoveSegment != nil {
+		world.MoveSegment.GroundAngular = true
+	}
 	world.SpawnSet = true
 	world.MovementSourceSeeded = true
 
@@ -181,7 +184,7 @@ must not bend it.
 ================
 */
 func ApplyStandingTurn(world *WorldState, heading uint16, nowMs int64) bool {
-	if world.MoveSegment.Valid() && nowMs < world.MoveSegment.ArrivesAtMs {
+	if world.MovingAt(nowMs) {
 		return false
 	}
 	world.SettleLive(nowMs)

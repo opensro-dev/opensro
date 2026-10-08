@@ -71,6 +71,7 @@ type Runtime struct {
 	returnCasts         sync.Map // simulation.WorldKey -> pendingReturn; division lock owns changes
 	playerDisplacements sync.Map // simulation.WorldKey -> playerDisplacement; a struck player's hold
 	jobDresses          sync.Map // simulation.WorldKey -> jobDress (jobdress.go)
+	jobActivations      sync.Map // simulation.WorldKey -> int64 end ms (jobdress.go)
 	// caravans are the registered trade caravans (caravan.go); caravanMu
 	// serializes the registry and caravanTickMs is its last advance.
 	caravanMu     sync.Mutex
@@ -217,6 +218,9 @@ type Runtime struct {
 
 	// MoveCOS delegates mounted movement to the sole movement/collision owner.
 	MoveCOS func(string, *enterworld.Character, uint32, []byte) []wire.Frame
+	// MoveCOSPublished orders native mounted movement acknowledgement with
+	// its terminal collision event under the movement owner's operation lock.
+	MoveCOSPublished func(string, *enterworld.Character, wire.CosCommand, func([]wire.Frame))
 	// SteerCOS and StopCOS delegate the vehicle's 0x769E steer (tag 0x04)
 	// and direction stop (tag 0x03) to the same owner. They return the
 	// acting session's frames and the observers' frames.
@@ -304,6 +308,14 @@ type Runtime struct {
 	// server-driven character move must use it and commit the returned walk,
 	// or the next move re-guesses the surface from a quantized height.
 	ConstrainWalk func(
+		characterName string,
+		from simulation.Spawn,
+		fromOwner simulation.NavOwner,
+		to simulation.Spawn,
+	) (simulation.Spawn, simulation.NavWalk, *simulation.MoveError)
+	// AdmitGroundWalk retains an ordinary movement goal for runtime collision
+	// stepping. Authored displacements keep the complete ConstrainWalk query.
+	AdmitGroundWalk func(
 		characterName string,
 		from simulation.Spawn,
 		fromOwner simulation.NavOwner,
@@ -420,7 +432,8 @@ type Runtime struct {
 	basicAttackIntents   map[string]basicAttackIntent
 	// actionSessions owns the pending back command and private B2CD count.
 	// Existing continuation and cast owners execute and commit gameplay.
-	actionSessions sync.Map
+	groundApproachStops sync.Map // motion revision terminal events; action tick owns retirement
+	actionSessions      sync.Map
 
 	// Exchanges holds the open player-to-player exchanges and their
 	// requests (exchange.go).
@@ -743,9 +756,9 @@ func (rt *Runtime) characterSnapshot(
 ==================
 writeBackWorld
 
-writeBackWorld persists the goal plane of the runtime world state onto the
-character record (the segment plane is runtime-only, like the fixture's
-in-memory moveSegment across restarts).
+writeBackWorld persists the accepted ground pose onto the character record.
+Authored displacement state keeps its existing destination semantics; the
+ordinary ground mover never persists a destination it has not reached.
 
 The write-back owns ONLY spawn/movementMode/spawnSet; every other world
 field (dungeonMinimap, movementSourceSeeded, updatedAt, moveSegment echo,
@@ -756,9 +769,10 @@ shallow copy) stay unchanged.
 ==================
 */
 func writeBackWorld(character *enterworld.Character, state simulation.WorldState) {
-	regionID := int64(state.Spawn.RegionID)
-	x, y, z := state.Spawn.X, state.Spawn.Y, state.Spawn.Z
-	angle := int64(state.Spawn.Angle)
+	spawn := state.PersistedSpawn()
+	regionID := int64(spawn.RegionID)
+	x, y, z := spawn.X, spawn.Y, spawn.Z
+	angle := int64(spawn.Angle)
 	mode := int64(state.MovementMode)
 	next := enterworld.CharacterWorld{}
 	if character.World != nil {
@@ -853,6 +867,27 @@ func (rt *Runtime) constrainWalk(
 	}
 
 	return to, simulation.NavWalk{}, nil
+}
+
+/*
+==================
+admitGroundWalk
+
+Player approaches retain their intended goal while the world owner checks
+each elapsed movement step. A skill displacement still resolves its whole
+authored chord through constrainWalk before it commits.
+==================
+*/
+func (rt *Runtime) admitGroundWalk(
+	characterName string,
+	from simulation.Spawn,
+	fromOwner simulation.NavOwner,
+	to simulation.Spawn,
+) (simulation.Spawn, simulation.NavWalk, *simulation.MoveError) {
+	if rt.AdmitGroundWalk != nil {
+		return rt.AdmitGroundWalk(characterName, from, fromOwner, to)
+	}
+	return rt.constrainWalk(characterName, from, fromOwner, to)
 }
 
 /*

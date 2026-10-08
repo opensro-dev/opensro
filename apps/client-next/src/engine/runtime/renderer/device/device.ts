@@ -22,9 +22,11 @@ import { createRetirement } from "./retirement";
 import type { RuntimePhase } from "@/engine/contracts/runtime";
 
 const DEFAULT_TEXTURE_DETAIL = 2;
-// The environment block (336 bytes) and the experimental video stages
-// vec4 after it (Environment.stages: height fog, water, sheen).
-const ENVIRONMENT_BLOCK_BYTES = 336;
+// The native prefix is 336 bytes; the port-only sun-direction vec4 makes
+// the environment block 352 bytes. The world environment packs it; the
+// experimental video stages vec4 follows at byte 352 (368 bytes total):
+// height fog, sun direction, terrain relief, textured horizon.
+const ENVIRONMENT_BLOCK_BYTES = 352;
 const ENVIRONMENT_UNIFORM_BYTES = ENVIRONMENT_BLOCK_BYTES + 16;
 const FULLSCREEN_VERTEX_COUNT = 6;
 
@@ -37,9 +39,9 @@ Initialize one device generation and grant checked capabilities after its pipeli
 */
 export function createDevice( timingEnabled = false, gpuAnimationEnabled = true ): DeviceOwner {
 	let textureFiltered = true, textureDetail = DEFAULT_TEXTURE_DETAIL;
-	// Experimental > Video. All off is the native frame: the plain copy to the
+	// Experimental > Image / World. All off is the native frame: the plain copy to the
 	// swapchain, retail samplers and env.stages zero.
-	let finishEnabled = false, anisotropic = false;
+	let finishEnabled = false, anisotropic = false, bloomFloat = false;
 	const stages = new Float32Array( 4 );
 	let timing: ReturnType<typeof createGpuTiming> | null = null;
 	let phase: RuntimePhase = "starting", failure: string | null = null, device: GPUDevice | null = null;
@@ -204,21 +206,19 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 
 						/*
 						================
-						present
+						encodePresent
 
-						Publish the intermediate frame: through the presentation pass
-						when the renderer enabled it, else the byte-exact native copy.
+						Append presentation after all existing frame passes, keeping
+						the finish shader or native copy in the final frame submission.
 						================
 						*/
-						present( target: GPUTexture ) {
+						encodePresent( encoder: GPUCommandEncoder, target: GPUTexture ) {
 							if ( !depthTextures.has( texture ) ) throw Error( "Disposed frame color" );
 							if ( finishEnabled && finish ) {
-								finish.present( texture, target );
+								finish.encode( encoder, texture, target );
 								return;
 							}
-							const encoder = current().createCommandEncoder( { label: "deferred-frame-present" } );
 							encoder.copyTextureToTexture( { texture }, { texture: target }, [ width, height ] );
-							current().queue.submit( [ encoder.finish() ] );
 						},
 
 						/*
@@ -429,7 +429,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		*/
 		bloom( width, height, enabled ) {
 			if ( phase !== "running" || !bloom ) throw Error( "Bloom device is not ready" );
-			return bloom.prepare( width, height, enabled );
+			return bloom.prepare( width, height, enabled, bloomFloat );
 		},
 		/*
 		================
@@ -460,13 +460,19 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		================
 		experimentalVideo
 
-		Experimental > Video: the presentation pass, the anisotropic samplers
+		Experimental > Image / World: the presentation pass, the anisotropic samplers
 		and the shader stages. Retained across startup like textureOptions.
 		================
 		*/
 		experimentalVideo( value ) {
 			finishEnabled = value.postProcessing;
-			stages.set( [ value.heightFog ? 1 : 0, 0, 0, 0 ] );
+			bloomFloat = value.floatBloom;
+			stages.set( [
+				value.heightFog ? 1 : 0,
+				value.dynamicSun ? 1 : 0,
+				value.terrainRelief ? 1 : 0,
+				value.texturedHorizon ? 1 : 0
+			] );
 			if ( anisotropic === value.anisotropicFiltering ) return;
 			anisotropic = value.anisotropicFiltering;
 			if ( phase === "running" ) geometry?.textureOptions( textureFiltered, textureDetail, anisotropic );

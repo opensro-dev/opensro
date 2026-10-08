@@ -5,7 +5,7 @@ experimental-hud.ts - saved and draft experimental preferences
 
 Opening starts a fresh draft on the first tab. Only Confirm changes
 effective preferences; closing or Escape leaves the saved value intact.
-The window's tabs (Video, Chat, Developer) only choose which rows show;
+The window's tabs (Image, World, Chat, Developer) only choose which rows show;
 every tab edits the same draft.
 
 ===========================================================================
@@ -36,36 +36,74 @@ export interface ExperimentalRow {
 ================
 EXPERIMENTAL_TABS
 
-The window's tabs, Options style: Video holds the renderer stages that
-deviate from the 2005 look, Chat and Developer the earlier additions.
+Port-only, not native. The window's tabs, Options style, at most four rows each: Image holds the
+frame-wide stages (edges, filtering, glow), World the lighting and
+atmosphere stages that deviate from the 2005 look, Chat and Developer the
+earlier additions.
 ================
 */
-export const EXPERIMENTAL_TABS: readonly { readonly title: string; readonly rows: readonly ExperimentalRow[]; }[] = [
+export const EXPERIMENTAL_TABS: readonly {
+	readonly title: string;
+	readonly section: string;
+	readonly rows: readonly ExperimentalRow[];
+}[] = [
 	{
-		title: "Video",
+		title: "Image",
+		section: "Image quality",
 		rows: [
 			{
 				key: "postProcessing",
 				id: "experimental-post-processing",
 				label: "Anti-aliasing and color grade",
-				description: "Smooths edges and grades color, UI included."
+				description: "Smooths edges and adjusts color, including UI."
 			},
 			{
 				key: "anisotropicFiltering",
 				id: "experimental-anisotropic-filtering",
 				label: "Anisotropic filtering",
-				description: "Sharper ground and walls at shallow angles."
+				description: "Sharper textures viewed at shallow angles."
 			},
+			{
+				key: "floatBloom",
+				id: "experimental-float-bloom",
+				label: "Smooth bloom",
+				description: "Requires Bloom effect in Video options."
+			}
+		]
+	},
+	{
+		title: "World",
+		section: "Lighting and terrain",
+		rows: [
 			{
 				key: "heightFog",
 				id: "experimental-height-fog",
 				label: "Height fog",
 				description: "Distance haze that thins with height."
+			},
+			{
+				key: "dynamicSun",
+				id: "experimental-dynamic-sun",
+				label: "Moving sunlight",
+				description: "Lighting follows the time of day."
+			},
+			{
+				key: "terrainRelief",
+				id: "experimental-terrain-relief",
+				label: "Terrain relief",
+				description: "Shades slopes. Reloads the current area."
+			},
+			{
+				key: "texturedHorizon",
+				id: "experimental-textured-horizon",
+				label: "Textured horizon",
+				description: "Shows distant ground textures; may shimmer."
 			}
 		]
 	},
 	{
 		title: "Chat",
+		section: "Chat display",
 		rows: [ {
 			key: "chatTimestamps",
 			id: "experimental-chat-timestamps",
@@ -75,6 +113,7 @@ export const EXPERIMENTAL_TABS: readonly { readonly title: string; readonly rows
 	},
 	{
 		title: "Developer",
+		section: "Diagnostics",
 		rows: [ {
 			key: "developerDiagnostics",
 			id: "experimental-developer-diagnostics",

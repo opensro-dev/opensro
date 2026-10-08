@@ -48,13 +48,14 @@ createEntities
 export function createEntities(
 	surface?: import("@/engine/contracts/navigation").SurfaceResolver,
 	lifecycle?: ( event: Extract<WorldEvent, { kind: "spawn" | "despawn"; }> ) => void,
-	nameContext?: ( entity?: EntityState ) => NameColorContext | undefined
+	nameContext?: ( entity?: EntityState ) => NameColorContext | undefined,
+	clip?: import("./motion/motion").MotionClip
 ) {
 	// A 16 MiB admitted server bootstrap can require twice that in UTF-16
 	// accounting. Static catalogues publish once; event count stays bounded.
 	const journalByteLimit = 32 << 20, objectListByteLimit = 8 << 20;
 	let skillRefs = spawnSkillReferences( [] );
-	const motion = createEntityMotion( surface );
+	const motion = createEntityMotion( surface, clip );
 	const itemRefs = new Map<number, number>(), itemNames = new Map<number, string>();
 	// /LOADMONSTER resolves a typed codename here, as the native client reads
 	// its own character data (GlobalDataManager_GetItemRecordByCodeName).
@@ -282,8 +283,24 @@ export function createEntities(
 			}
 		}
 	}
+	/*
+	================
+	refreshHoverAttack
+
+	Republishes each player's and pet's hover attack verdict (6875F0) when
+	it changes; verdict judges one entity.
+	================
+	*/
+	function refreshHoverAttack( verdict: ( e: EntityState ) => number ) {
+		for ( const e of entities.values() ) {
+			if ( e.kind !== "player" && e.kind !== "cos" ) continue;
+			const hoverAttack = verdict( e );
+			if ( hoverAttack !== (e.hoverAttack ?? 0) ) apply( { kind: "state", entity: { ...e, hoverAttack } } );
+		}
+	}
 	return {
 		recolor,
+		refreshHoverAttack,
 		/*
 		================
 		characterCountry
@@ -1177,6 +1194,17 @@ export function createEntities(
 			}
 		},
 		read: ( gid: number ) => entities.get( gid ),
+		/*
+		================
+		rider
+
+		The entity riding the horse `gid` (CICharactor_GetMountedHorseOrVehicle).
+		================
+		*/
+		rider( gid: number ) {
+			for ( const entity of entities.values() ) if ( entity.mountedOn === gid ) return entity;
+			return undefined;
+		},
 		/*
 		================
 		groundItems

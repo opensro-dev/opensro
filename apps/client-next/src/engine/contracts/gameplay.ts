@@ -116,6 +116,7 @@ Older untimed publishers retain sample-based presentation.
 export interface MovementPath {
 	readonly from: Pose;
 	readonly to: Pose;
+	readonly walkingPath?: readonly Pose[];
 	readonly durationMs?: number;
 	/** Simulation clock origin of a fixed-timing displacement leg. */
 	readonly startedAtMs?: number;
@@ -147,6 +148,9 @@ export interface MovementTransition {
 	readonly eligible: boolean;
 	readonly pathEligible?: boolean;
 	readonly corridor?: { readonly from: Pose; readonly to: Pose; };
+	// Ordered connected ground samples, including terrain-following heights.
+	// This proves recovery behind the current pose, not future velocity.
+	readonly walkingPath?: readonly Pose[];
 	// An accepted receipt can replace the first publication of its click.
 	// Retain the admitted walk behind its rebased anchor for presentation.
 	readonly previousPath?: { readonly from: Pose; readonly to: Pose; };
@@ -327,6 +331,9 @@ export type GameplayCommand =
 		readonly query?: import("./navigation").GroundPickQuery;
 		readonly skillId: number;
 		readonly gid?: number;
+		// GetKeyState(VK_MENU) when the press executes (6FCD50): Alt admits an
+		// offensive skill at a player who is not otherwise hostile.
+		readonly alt?: boolean;
 	}
 	| {
 		readonly kind: "inventory-move";
@@ -670,10 +677,11 @@ export interface GameplayState {
 	readonly avatarInventory?: readonly InventoryItem[];
 	readonly inventory: readonly InventoryItem[];
 	readonly inventoryPending: boolean;
-	// Slot flashes raised by the 0x3645 item-state update (item-slot-effects.ts).
+	// Slot flashes raised by the 0x3645 item-state and 0x31E8 durability updates
+	// (item-slot-effects.ts).
 	readonly itemFlashes?: readonly {
 		readonly slot: number;
-		readonly kind: "changed" | "life";
+		readonly kind: "changed" | "life" | "repair";
 		readonly atMs: number;
 	}[];
 	readonly vitals: readonly VitalState[];

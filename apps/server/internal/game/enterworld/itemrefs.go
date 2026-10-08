@@ -241,7 +241,9 @@ func (t *TextdataItems) load() {
 		if item == nil || (item.TypeIDs != [4]int64{3, 3, 3, 2} && !wire.IsCosSummoner(item.TypeFlags())) || item.AssociatedCharacterCodename == "" {
 			continue
 		}
-		summonable[item.AssociatedCharacterCodename] = struct{}{}
+		for _, code := range summonCharacterCodenames(item) {
+			summonable[code] = struct{}{}
+		}
 	}
 	// Retained pets advance to later characterdata rows. Their item still
 	// names the initial row, so publish the whole supported pet family.
@@ -417,6 +419,9 @@ var itemdataRecordColumns = []itemdataRecordColumn{
 	// Token 22 (server ref +0x8C bit 6, client RefObjData+0xAA): itemdata
 	// CanRepair, read by CGObj_CanRepair 483E80 for NPC and hammer repair.
 	{22, "canRepair", "int"},
+	// Token 23 (server ref +0x8C bit 7): itemdata CanRevive, read by
+	// CGObj_CanRevive 483EB0 before a smith repairs a broken item.
+	{23, "canRevive", "int"},
 	// Authored CanUse flags: bit 0 admits direct activation; other bits
 	// describe additional behavior (pet skill rows carry 129, not just 1).
 	{24, "canUse", "int"},
@@ -569,6 +574,9 @@ func buildItemRef(fields []string, names map[string]string) *ItemRef {
 		if v, ok := textdataInt(fields[9+i]); ok {
 			ref.TypeIDs[i] = v
 		}
+	}
+	if len(fields) > 121 {
+		ref.SummonLevelThresholds = summonLevelThresholds(ref)
 	}
 	// Desc1 (RefItem+0x2A4) names the skill a scroll (TID3 13) or a
 	// monster mask (CGItemMonsterCapsule, TID 3/2/2; 493C30), or a fortress

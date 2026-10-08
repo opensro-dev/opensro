@@ -48,7 +48,7 @@ fixture
 */
 function fixture( options = {} ) {
 	let id = 0;
-	const ready = new Map(), requests = [], cancelled = [], textures = [];
+	const ready = new Map(), requests = [], cancelled = [], textures = [], admissions = [];
 	const world = createWorldRenderer();
 	let camera;
 	const assets = {
@@ -58,9 +58,9 @@ function fixture( options = {} ) {
 		request
 		================
 		*/
-		request( url, limit, decode ) {
+		request( url, limit, decode, requestOptions ) {
 			const key = ++id;
-			requests.push( { key, url, decode } );
+			requests.push( { key, url, decode, options: requestOptions } );
 			if ( decode === "world" ) {
 				// The stream asks for an outdoor scene as its objects plus one terrain
 				// part per region, all in the anchor region's coordinates.
@@ -90,7 +90,11 @@ function fixture( options = {} ) {
 							},
 							geometry: {
 								positions: new Float32Array( [ 0, 0, 0, 1, 0, 0, 0, 1, 0 ] ),
-								normals: new Float32Array( 9 ),
+								normals: Float32Array.from(
+									requestOptions?.terrainNormals ?
+										[ -.5, 1, 0, -.5, 1, 0, -.5, 1, 0 ] :
+										[ 0, 1, 0, 0, 1, 0, 0, 1, 0 ]
+								),
 								uvs: new Float32Array( 6 ),
 								indices: new Uint32Array( [ 0, 1, 2 ] ),
 								instances: identity(),
@@ -171,7 +175,10 @@ function fixture( options = {} ) {
 	const renderer = {
 		cancelWorldUpdate: () => world.cancelPending(),
 		setWorld: scene => world.scene( scene ),
-		adoptWorld: lease => world.adopt( lease ),
+		adoptWorld( lease, detail, parts = [] ) {
+			admissions.push( parts.flatMap( part => part.groups.map( group => [ ...group.geometry.normals ] ) ) );
+			world.adopt( lease );
+		},
 		setWorldTexture( path, image ) {
 			textures.push( { path, image } );
 			world.texture( path, image );
@@ -199,7 +206,7 @@ function fixture( options = {} ) {
 		world.prepare( { upload: data => ({ data }), release() {} }, { upload: () => ({}), release() {} }, 1 );
 		assert.equal( stream.error(), null );
 	}
-	return { stream, world, step, requests, cancelled, ready, textures, camera: () => camera };
+	return { stream, world, step, requests, cancelled, ready, textures, admissions, camera: () => camera };
 }
 test("stream revisits an evicted region and finishes its texture transaction", () => {
 	const f = fixture();
@@ -575,4 +582,50 @@ test("a crossing requests terrain only for the regions it adds, in one anchor", 
 	assert.equal( f.world.stats().pendingGroups, 0 );
 	f.stream.dispose();
 	f.world.dispose();
+});
+
+test("terrain relief reloads admitted and cached neighbors in one mode and same-value writes do nothing", () => {
+	const f = fixture( { neighborTerrain: true } );
+	for ( let i = 0; i < 8; i++ ) f.step( 2 );
+	assert.equal( f.stream.ready(), true );
+	assert.equal( f.admissions.at( -1 ).length, 3 );
+	for ( const enabled of [ true, false ] ) {
+		const before = f.requests.length;
+		f.stream.setTerrainNormals( enabled );
+		assert.equal( f.stream.ready(), false );
+		assert.equal( f.world.stats().sceneId, "2:objects", "retain displayed scene until replacement admission" );
+		for ( let i = 0; i < 8; i++ ) f.step( 2 );
+		assert.equal( f.stream.ready(), true );
+		const parts = f.requests.slice( before ).filter( r => new URL( r.url ).hash.includes( "part=terrain" ) );
+		assert.equal( parts.length, 3, "every old-mode cached part must be decoded again" );
+		assert.ok( parts.every( r => (r.options?.terrainNormals === true) === enabled ) );
+		const admitted = f.admissions.at( -1 );
+		assert.equal( admitted.length, 3 );
+		assert.ok( admitted.every( normals => normals[0] === (enabled ? -.5 : 0) ) );
+		const after = f.requests.length;
+		f.stream.setTerrainNormals( enabled );
+		for ( let i = 0; i < 4; i++ ) f.step( 2 );
+		assert.equal( f.requests.length, after );
+	}
+	f.stream.dispose();
+});
+
+test("terrain relief cancels in-flight old-mode parts and prefetched scene handles", () => {
+	const f = fixture( { neighborTerrain: true } );
+	f.step( 2 );
+	f.step( 2 );
+	const old = [ ...f.ready.keys() ];
+	assert.ok( old.length > 0 );
+	f.stream.setTerrainNormals( true );
+	assert.ok( old.every( id => f.cancelled.includes( id ) ) );
+	for ( let i = 0; i < 8; i++ ) f.step( 2 );
+	// Positive edge movement reserves the next region's object scene.
+	f.stream.step( { regionId: 2, x: 1500, y: 0, z: 0, angle: 0 } );
+	const future = f.requests.at( -1 );
+	assert.ok( scene( future, "c.json" ) );
+	f.stream.setTerrainNormals( false );
+	assert.ok( f.cancelled.includes( future.key ) );
+	for ( let i = 0; i < 8; i++ ) f.step( 2 );
+	assert.ok( f.admissions.at( -1 ).every( normals => normals[0] === 0 ) );
+	f.stream.dispose();
 });

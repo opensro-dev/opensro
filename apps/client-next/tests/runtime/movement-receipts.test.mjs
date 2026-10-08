@@ -83,7 +83,9 @@ test("a receipt arriving between worker steps keeps the predicted walk's elapsed
 		movement.step( now );
 		const expected = 10 + 50 * now / 1000;
 		assert.ok(
-			Math.abs( movement.state().pose.x - expected ) < 1e-6,
+			// Native float32 additions may differ below a source-wire quantum;
+			// the separate native arithmetic fixture compares bit for bit.
+			Math.abs( movement.state().pose.x - expected ) < 1 / 8192,
 			`receipt lost walking time at ${now}: ${movement.state().pose.x} vs ${expected}`
 		);
 	}

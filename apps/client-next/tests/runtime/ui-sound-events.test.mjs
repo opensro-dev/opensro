@@ -21,12 +21,22 @@ const { createGameplay } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
 );
 const { createPresentation } = await import( "../../src/engine/runtime/presentation/presentation.ts" );
+/*
+================
+equipment
+================
+*/
 function equipment( durability ) {
 	const p = Buffer.alloc( 18 );
 	p.writeUInt32LE( 1 );
 	p.writeUInt32LE( durability, 13 );
 	return [ ...p ];
 }
+/*
+================
+durability
+================
+*/
 function durability( slot, value ) {
 	const p = Buffer.alloc( 5 );
 	p[0] = slot;
@@ -51,6 +61,26 @@ test("durability audio follows native signed comparisons, slot gates and exact t
 	assert.throws( () => owner.receive( 0x31e8, durability( 12, 0 ) ) );
 	assert.deepEqual( owner.state().inventory, before );
 	assert.equal( sounds.length, 1 );
+});
+test("a durability increase flashes the repaired slot; wear does not (77C300 -> 54FA20)", () => {
+	const owner = createInventory( () => {}, () => {} );
+	owner.bootstrap( {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x2c } ],
+		equipItems: [ { slot: 0, refObjId: 1, body: equipment( 7 ) }, { slot: 13, refObjId: 1, body: equipment( 7 ) } ]
+	} );
+	owner.receive( 0x31e8, durability( 0, 6 ), 100 );
+	assert.deepEqual( owner.state().itemFlashes, [] );
+	owner.receive( 0x31e8, durability( 0, 30 ), 200 );
+	owner.receive( 0x31e8, durability( 13, 30 ), 300 );
+	assert.deepEqual( owner.state().itemFlashes, [
+		{ slot: 0, kind: "repair", atMs: 200 },
+		{ slot: 13, kind: "repair", atMs: 300 }
+	] );
+	owner.receive( 0x31e8, durability( 0, 40 ), 400 );
+	assert.deepEqual( owner.state().itemFlashes, [
+		{ slot: 13, kind: "repair", atMs: 300 },
+		{ slot: 0, kind: "repair", atMs: 400 }
+	], "A second repair restarts this slot without stacking or resetting another slot" );
 });
 test("only accepted potion-family use emits a potion cue", () => {
 	const cues = [], owner = createInventory( () => {}, h => cues.push( h ) );

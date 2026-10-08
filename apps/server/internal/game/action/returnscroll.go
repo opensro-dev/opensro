@@ -473,6 +473,7 @@ retireReturnForReentry
 */
 func (rt *Runtime) retireReturnForReentry(division string, c *enterworld.Character) {
 	rt.jobDresses.Delete(simulation.WorldKey(division, c.Name))
+	rt.endJobActivation(division, c)
 	rt.deps.Update(c, "return-scroll-retire-reentry", func() bool {
 		rt.returnCasts.Delete(simulation.WorldKey(division, c.Name))
 		if c.NativeTeleportMode == 0 {

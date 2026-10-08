@@ -655,8 +655,7 @@ func (c *refItemCollector) finish() []RefItemRow {
 		if characters == nil || item.AssociatedCharacterCodename == "" {
 			continue
 		}
-		if ref, found := characters.CharacterRefByCodename(item.AssociatedCharacterCodename); found && ref != nil {
-			flags := ref.TidWord
+		if flags, found := summonCharacterTypeFlags(characters, item); found {
 			c.rows[i].SummonedCharacterTypeFlags = &flags
 		}
 	}

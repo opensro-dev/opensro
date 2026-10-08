@@ -285,3 +285,51 @@ func TestThiefMonsterKillPaysHunterJobExp(t *testing.T) {
 		t.Fatalf("job EXP %d, want 100", paid)
 	}
 }
+
+/*
+================
+TestPlayerAttackPKLimitsApplyOnlyToNeutrals
+
+5293A0: a neutral target is refused at the attacker's daily limit
+(0x3014); an aggressor target is a legal enemy (52B6D0) whose attack
+never reads the limits.
+================
+*/
+func TestPlayerAttackPKLimitsApplyOnlyToNeutrals(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	level := int64(30)
+	a.Level, v.Level = &level, &level
+	a.Aggressions = nil
+	a.PK = &domain.PKRecord{DailyCount: playerCombatMaxDailyPK}
+	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0x3014 {
+		t.Fatalf("attack on a neutral at the daily limit = %#x, want 0x3014", code)
+	}
+	v.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(a): playerAggressionTicks}
+	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0 {
+		t.Fatalf("attack on an aggressor at the daily limit = %#x, want admitted", code)
+	}
+}
+
+/*
+================
+TestJobAttackIgnoresTheSuitActivation
+
+529521 admits opposing jobs before 529557 reads +0x2178, so a suit still
+activating fights at once; no 0x3019 WAITFOR_JOB_ACTIVATE is sent.
+================
+*/
+func TestJobAttackIgnoresTheSuitActivation(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	items := rt.deps.ItemReferences().(staticItemSource)
+	for i, c := range []*enterworld.Character{a, v} {
+		suit := &enterworld.ItemRef{RefObjID: uint32(9201 + i), Codename: []string{"ITEM_CH_M_TRADE_TRADER_04", "ITEM_CH_M_TRADE_THIEF_04"}[i],
+			Country: 3, TypeIDs: [4]int64{3, 1, 7, int64(1 + i)}, ReqQuadTypes: [4]int64{-1, -1, -1, -1}, Combat: &enterworld.ItemCombatRef{}}
+		items[suit.Codename] = suit
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: int64(jobSuitSlot),
+			RefObjID: suit.RefObjID, Codename: suit.Codename, TypeFlags: suit.TypeFlags(), StackCount: 1})
+	}
+	rt.startJobActivation(testDivision, a, clock.NowMs())
+	if code := rt.playerAttackTargetRefusal(testDivision, a, v, clock.NowMs()); code != 0 {
+		t.Fatalf("job attack while activating = %#x, want admitted", code)
+	}
+}

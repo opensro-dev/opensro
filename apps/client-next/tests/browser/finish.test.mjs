@@ -1,9 +1,19 @@
+/*
+===========================================================================
+
+finish.test.mjs - real GPU presentation shader and native copy behavior
+
+The public experimental setting selects the pass. Both paths encode after
+scene drawing in one submission; source pixels and edge checks stay fixed.
+
+===========================================================================
+*/
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
 
-// The presentation pass replaces ColorTarget.present's byte-exact copy with
+// The presentation pass replaces ColorTarget.encodePresent's byte-exact copy with
 // FXAA, sharpening and a grade. Black, mid gray and white are fixed points
 // and sit below FXAA's local-contrast floor, so a three-band pattern pins
 // the pass: flat interiors survive byte-for-byte, the soft band boundary
@@ -34,8 +44,18 @@ test( "presentation finish preserves flat colours and gates FXAA off hard edges"
 			const bitmap = await createImageBitmap( pattern );
 			const canvas = document.createElement( "canvas" );
 			document.body.append( canvas );
+			/*
+			================
+			run
+			================
+			*/
 			const run = async ( finishEnabled, width, height ) => {
-				const device = createDevice( false, true, finishEnabled );
+				const device = createDevice();
+				device.experimentalVideo( {
+					postProcessing: finishEnabled,
+					anisotropicFiltering: false,
+					heightFog: false
+				} );
 				try {
 					const deadline = performance.now() + 15000;
 					while ( device.phase() === "starting" ) {
@@ -66,13 +86,13 @@ test( "presentation finish preserves flat colours and gates FXAA off hard edges"
 					pass.setViewport( 0, 0, width, height, 0, 1 );
 					pass.draw( 6 );
 					pass.end();
-					device.commands().submit( encoder.finish() );
 					canvas.width = width;
 					canvas.height = height;
 					const context = canvas.getContext( "webgpu" );
 					if ( !context ) throw Error( "WebGPU canvas unavailable" );
 					device.surfaceCommands().configure( context, device.format() );
-					out.present( context.getCurrentTexture() );
+					out.encodePresent( encoder, context.getCurrentTexture() );
+					device.commands().submit( encoder.finish() );
 					const copy = document.createElement( "canvas" );
 					copy.width = width;
 					copy.height = height;
@@ -81,9 +101,15 @@ test( "presentation finish preserves flat colours and gates FXAA off hard edges"
 					const image = await createImageBitmap( canvas );
 					reader.drawImage( image, 0, 0 );
 					image.close();
+					/*
+					================
+					pixel
+					================
+					*/
 					const pixel = x => [ ...reader.getImageData( x, height >> 1, 1, 1 ).data ];
 					depth.dispose();
 					out.dispose();
+					if ( device.error() ) throw Error( device.error() );
 					return pixel;
 				} finally {
 					device.dispose();

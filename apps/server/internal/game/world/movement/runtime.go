@@ -115,6 +115,9 @@ type Runtime struct {
 	operations characterOperationLocks
 	// directions is the registry of direction walks (direction.go).
 	directions directionWalks
+	// GroundBlocked retires only the approach bound to this motion revision.
+	GroundBlocked func(string, string, uint64)
+	groundEnabled bool
 }
 
 /*
@@ -186,7 +189,12 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 			log.Debug("movement: 0x7738 before enter-world bind ignored")
 			return
 		}
-		outcome := rt.HandleMove(divisionID, character, payload)
+		if rt.AdvanceResidentRegion != nil {
+			rt.AdvanceResidentRegion(divisionID, character.Name, rt.Now().UnixMilli())
+		}
+		unlock := rt.lockCharacter(divisionID, character.Name)
+		defer unlock()
+		outcome := rt.handleMoveLocked(divisionID, character, payload, 0)
 		if outcome.Refusal != nil {
 			// Retail keeps movement refusals silent on the wire. Keep the
 			// authority verdict observable here, at the one live transport
@@ -285,6 +293,25 @@ func (rt *Runtime) HandleCOSMove(divisionID string, character *enterworld.Charac
 }
 
 /*
+================
+HandleCOSMovePublished
+
+The action lane validates the mounted actor before entering this boundary.
+Its native reply is enqueued before releasing the same lock used by ground
+stop delivery, so a completed finite step cannot overtake the move response.
+================
+*/
+func (rt *Runtime) HandleCOSMovePublished(divisionID string, character *enterworld.Character, command wire.CosCommand, emit func([]wire.Frame)) {
+	if character == nil || command.CosGid == 0 || emit == nil {
+		return
+	}
+	unlock := rt.lockCharacter(divisionID, character.Name)
+	defer unlock()
+	outcome := rt.handleMoveLocked(divisionID, character, command.Movement, command.CosGid)
+	emit(outcome.Frames)
+}
+
+/*
 ==================
 handleMove
 
@@ -295,18 +322,33 @@ a turn in place. Any accepted command other than a direction walk ends the
 mover's direction walk.
 ==================
 */
-func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character, payload []byte, cosGID uint32) (outcome MoveOutcome) {
+func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character, payload []byte, cosGID uint32) MoveOutcome {
+	if character == nil {
+		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorUnknownCharacter, Reason: "characterNotFound"})
+	}
+	unlock := rt.lockCharacter(divisionID, character.Name)
+	defer unlock()
+	return rt.handleMoveLocked(divisionID, character, payload, cosGID)
+}
+
+/*
+================
+handleMoveLocked
+
+Transport callers retain this operation lock through reliable response enqueue.
+The ground-stop hook cannot publish a later stop ahead of this command receipt.
+================
+*/
+func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Character, payload []byte, cosGID uint32) (outcome MoveOutcome) {
 	if character == nil {
 		return refusedMove(&simulation.MoveError{NativeErrorCode: simulation.NativeErrorUnknownCharacter, Reason: "characterNotFound"})
 	}
 
-	unlock := rt.lockCharacter(divisionID, character.Name)
-	defer unlock()
 	defer func() {
-		outcome.ServerTimeMs = rt.Now().UnixMilli()
 		rt.deps.Read(divisionID, func() {
 			outcome.Authority = rt.Worlds.Snapshot(simulation.WorldKey(divisionID, character.Name), func() simulation.WorldState { return simulation.SeedWorldState(character) })
 		})
+		outcome.ServerTimeMs = rt.Now().UnixMilli()
 	}()
 
 	admission, refusal := rt.admitMove(divisionID, character, cosGID)
@@ -378,7 +420,7 @@ func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character
 				Reason:          "areaAccessDenied",
 			})
 		}
-		committed, committedWalk, refusal := rt.ConstrainMovementFrom(character.Name, live, state.LiveOwnerAt(nowMs), goal)
+		committed, committedWalk, refusal := rt.AdmitGroundWalk(character.Name, live, state.LiveOwnerAt(nowMs), goal)
 		if refusal != nil {
 			return refusedMove(refusal)
 		}
@@ -415,7 +457,7 @@ func (rt *Runtime) handleMove(divisionID string, character *enterworld.Character
 
 	return MoveOutcome{
 		Frames: []wire.Frame{
-			{Opcode: simulation.OpMovementAck, Payload: result.AckPayload, Current: func() bool { return rt.Worlds.MovementCurrent(worldKey, committedWorld) }},
+			{Opcode: simulation.OpMovementAck, Payload: result.AckPayload, Current: func() bool { return rt.Worlds.AdmissionCurrent(worldKey, committedWorld) }},
 		},
 		Result: &result,
 	}
@@ -671,7 +713,7 @@ func (rt *Runtime) UsePendingTracker(tracker *grounditem.PendingTracker) {
 ==================
 writeBackWorld
 
-writeBackWorld persists the goal plane of the runtime world state onto
+writeBackWorld persists the accepted ground pose of the runtime world state onto
 the character record (the segment plane is runtime-only, like the
 fixture's in-memory moveSegment across restarts). Mirror of the item
 lane's write-back so both lanes leave the same persisted shape.
@@ -684,9 +726,10 @@ of the old record (the character snapshot's shallow copy) stay unchanged.
 ==================
 */
 func writeBackWorld(character *enterworld.Character, state simulation.WorldState) {
-	regionID := int64(state.Spawn.RegionID)
-	x, y, z := state.Spawn.X, state.Spawn.Y, state.Spawn.Z
-	angle := int64(state.Spawn.Angle)
+	spawn := state.PersistedSpawn()
+	regionID := int64(spawn.RegionID)
+	x, y, z := spawn.X, spawn.Y, spawn.Z
+	angle := int64(spawn.Angle)
 	mode := int64(state.MovementMode)
 	next := enterworld.CharacterWorld{}
 	if character.World != nil {
