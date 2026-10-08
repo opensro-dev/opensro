@@ -10,6 +10,7 @@ build/world/paths.mjs.
 
 ===========================================================================
 */
+import { assertInsideRoot, containedPublicFile, normalizePublicAssetPath } from "./build/shared/assetPaths.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -80,8 +81,8 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 	let compressedPackBytes = 0;
 	let identityPackBytes = 0;
 	for ( const pack of packs ) {
-		const identityPath = resolvePublicPath( pack.path );
-		const zstdPath = resolvePublicPath( pack.zstdPath );
+		const identityPath = containedPublicFile( publicRoot, pack.path );
+		const zstdPath = containedPublicFile( publicRoot, pack.zstdPath );
 		const zstdStats = await stat( zstdPath );
 		if ( !zstdStats.isFile() || zstdStats.size !== pack.zstdBytes ) {
 			throw new Error( `Pack sidecar size mismatch: ${pack.zstdPath}` );
@@ -92,14 +93,14 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 		if ( identity.byteLength !== pack.bytes || digest !== pack.sha256.toLowerCase() ) {
 			throw new Error( `Pack sidecar does not reproduce the manifest identity bytes: ${pack.zstdPath}` );
 		}
-		assertInside( publicAssetsRoot, identityPath, `pack identity ${pack.path}` );
+		assertInsideRoot( publicAssetsRoot, identityPath, `pack identity ${pack.path}` );
 		compressedPackBytes += compressed.byteLength;
 		identityPackBytes += identity.byteLength;
 	}
 
 	const packedLogicalPaths = new Set();
 	for ( const asset of manifest.assets ) {
-		const normalized = normalizePublicPath( asset.path ).toLowerCase();
+		const normalized = normalizePublicAssetPath( asset.path ).toLowerCase();
 		packedLogicalPaths.add( normalized );
 		if ( normalized.endsWith( ".json.gz" ) ) {
 			packedLogicalPaths.add( normalized.slice( 0, -".gz".length ) );
@@ -113,7 +114,7 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 		if ( typeof pack.zstdPath !== "string" ) {
 			throw new Error( `Pack has no zstd representation: ${pack.path}` );
 		}
-		keepPaths.add( normalizePublicPath( pack.zstdPath ).toLowerCase() );
+		keepPaths.add( normalizePublicAssetPath( pack.zstdPath ).toLowerCase() );
 	}
 
 	for ( const filePath of allPublicFiles ) {
@@ -128,14 +129,14 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 	}
 
 	for ( const bootstrapPath of BOOTSTRAP_PUBLIC_PATHS ) {
-		await requireFile( resolvePublicPath( bootstrapPath ), `bootstrap asset ${bootstrapPath}` );
+		await requireFile( containedPublicFile( publicRoot, bootstrapPath ), `bootstrap asset ${bootstrapPath}` );
 		keepPaths.add( bootstrapPath );
 	}
 
 	// Retain only the smallest fresh negotiated representation for the few JSON
 	// files that remain loose (principally the two manifests).
 	for ( const publicPath of [ ...keepPaths ] ) {
-		const basePath = resolvePublicPath( publicPath );
+		const basePath = containedPublicFile( publicRoot, publicPath );
 		const baseStats = await stat( basePath ).catch( () => undefined );
 		if ( !baseStats?.isFile() ) {
 			continue;
@@ -158,7 +159,7 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 		!keepPaths.has( toPublicPath( filePath ).toLowerCase() )
 	);
 	for ( const filePath of removePaths ) {
-		assertInside( publicAssetsRoot, filePath, "compact asset removal" );
+		assertInsideRoot( publicAssetsRoot, filePath, "compact asset removal" );
 		await rm( filePath, { force: true } );
 	}
 
@@ -175,15 +176,17 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 	if ( dropGeneratedCache ) {
 		await requireRegenerationSources();
 		droppedGeneratedCache = await measureTree( generatedAssetsRoot );
-		assertInside( rebuildRoot, generatedAssetsRoot, "generated image staging cache" );
+		// The staging cache belongs to the generated root, which a worktree may
+		// share from another checkout (SRO_GENERATED_ROOT).
+		assertInsideRoot( generatedRoot, generatedAssetsRoot, "generated image staging cache" );
 		await rm( generatedAssetsRoot, { recursive: true, force: true } );
 	}
 
 	const serverArchive = await validateServerGameDataArchive( serverGameDataArchivePath );
 	const droppedServerProjection = await measureTree( serverGameDataRoot );
-	assertInside( rebuildRoot, serverGameDataRoot, "loose server game-data projection" );
+	assertGeneratedPath( serverGameDataRoot, "loose server game-data projection" );
 	await rm( serverGameDataRoot, { recursive: true, force: true } );
-	assertInside( rebuildRoot, serverGameDataCacheRoot, "server game-data extraction cache" );
+	assertGeneratedPath( serverGameDataCacheRoot, "server game-data extraction cache" );
 	await rm( serverGameDataCacheRoot, { recursive: true, force: true } );
 	const after = await measureAssetFootprint();
 	const publicFiles = (await listFiles( publicAssetsRoot )).map( toPublicPath ).sort();
@@ -306,36 +309,12 @@ async function measureTree( root ) {
 
 /*
 ================
-resolvePublicPath
-================
-*/
-function resolvePublicPath( publicPath ) {
-	const absolutePath = path.resolve( publicRoot, normalizePublicPath( publicPath ).replace( /^\/+/, "" ) );
-	assertInside( publicRoot, absolutePath, `public path ${publicPath}` );
-	return absolutePath;
-}
-
-/*
-================
 toPublicPath
 ================
 */
 function toPublicPath( filePath ) {
-	assertInside( publicRoot, filePath, "public asset" );
+	assertInsideRoot( publicRoot, filePath, "public asset" );
 	return `/${path.relative( publicRoot, filePath ).split( path.sep ).join( "/" )}`;
-}
-
-/*
-================
-normalizePublicPath
-================
-*/
-function normalizePublicPath( value ) {
-	const normalized = `/${String( value ).replaceAll( "\\", "/" ).replace( /^\/+/, "" )}`.replace( /\/{2,}/g, "/" );
-	if ( !normalized.startsWith( "/assets/" ) ) {
-		throw new Error( `Expected a public /assets path, got ${value}` );
-	}
-	return normalized;
 }
 
 /*
@@ -349,21 +328,26 @@ function isSidecarPath( publicPath ) {
 
 /*
 ================
-assertInside
-================
-*/
-function assertInside( root, target, label ) {
-	const relative = path.relative( path.resolve( root ), path.resolve( target ) );
-	if ( relative === "" || relative.startsWith( ".." ) || path.isAbsolute( relative ) ) {
-		throw new Error( `${label} must stay below ${root}, got ${target}` );
-	}
-}
-
-/*
-================
 formatBytes
 ================
 */
 function formatBytes( bytes ) {
 	return `${(bytes / (1024 ** 3)).toFixed( 3 )} GiB (${bytes.toLocaleString( "en-US" )} bytes)`;
+}
+
+/*
+================
+assertGeneratedPath
+
+The server game-data projection may live in another checkout's Go module
+(SRO_SERVER_GAME_DATA_ROOT), so its removal is bounded by the one thing
+every location shares: it sits below a .generated folder.
+================
+*/
+function assertGeneratedPath( target, label ) {
+	const parts = path.resolve( target ).split( path.sep );
+	const marker = parts.lastIndexOf( ".generated" );
+	if ( marker === -1 || marker === parts.length - 1 ) {
+		throw new Error( `${label} must stay below a .generated folder, got ${target}` );
+	}
 }

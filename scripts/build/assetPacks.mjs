@@ -16,6 +16,7 @@ up between full builds.
 ===========================================================================
 */
 
+import { assertInsideRoot, containedPublicFile } from "./shared/assetPaths.mjs";
 import { buildJobs } from "./shared/buildParallelism.mjs";
 import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { ASSET_SCHEMA } from "./assetSchema.mjs";
@@ -80,7 +81,7 @@ export async function listPublicAssetFiles( options = {} ) {
 	const files = [];
 
 	for ( const rootPublicPath of roots ) {
-		const absoluteRoot = resolvePublicAssetFile( root, rootPublicPath );
+		const absoluteRoot = containedPublicFile( root, rootPublicPath );
 		const rootStat = await stat( absoluteRoot );
 		if ( rootStat.isFile() ) {
 			const publicPath = normalizePublicPath( rootPublicPath );
@@ -113,7 +114,7 @@ export async function buildAssetPacks( options = {} ) {
 	const defaultTargetBytes = options.targetBytes ?? DEFAULT_ASSET_PACK_TARGET_BYTES;
 	const groups = options.groups ?? [];
 
-	assertInside( root, outputRoot, "asset pack output root" );
+	assertInsideRoot( root, outputRoot, "asset pack output root" );
 	await mkdir( outputRoot, { recursive: true } );
 
 	// Incremental reuse: a pack is fully determined by its ordered member contents plus the
@@ -260,7 +261,7 @@ async function buildAssetPackGroup(
 	const name = normalizeGroupName( group.name );
 	const publicPaths = uniquePublicPaths( group.files ?? [] );
 	const files = await mapWithConcurrency( publicPaths, FILE_STAT_CONCURRENCY, async ( publicPath ) => {
-		const absolutePath = resolvePublicAssetFile( publicRoot, publicPath );
+		const absolutePath = containedPublicFile( publicRoot, publicPath );
 		const fileStat = await stat( absolutePath );
 		if ( !fileStat.isFile() ) {
 			throw new Error( `Asset pack input is not a file: ${publicPath}` );
@@ -304,7 +305,7 @@ async function buildAssetPackGroup(
 			buildOrReusePack( {
 				name,
 				plan,
-				outputRoot: plan.dir ? resolvePublicAssetFile( publicRoot, plan.dir ) : outputRoot,
+				outputRoot: plan.dir ? containedPublicFile( publicRoot, plan.dir ) : outputRoot,
 				publicRoot,
 				reusablePacks,
 				hashCache,
@@ -403,8 +404,8 @@ packOutputsIntact
 */
 async function packOutputsIntact( publicRoot, pack ) {
 	try {
-		const binPath = resolvePublicAssetFile( publicRoot, pack.path );
-		const zstdPath = resolvePublicAssetFile( publicRoot, pack.zstdPath ?? `${pack.path}.zst` );
+		const binPath = containedPublicFile( publicRoot, pack.path );
+		const zstdPath = containedPublicFile( publicRoot, pack.zstdPath ?? `${pack.path}.zst` );
 		const [binStat, zstdStat] = await Promise.all( [
 			stat( binPath ).catch( () => undefined ),
 			stat( zstdPath ).catch( () => undefined )
@@ -584,18 +585,6 @@ function compressAssetPackZstd( bytes ) {
 
 /*
 ================
-resolvePublicAssetFile
-================
-*/
-function resolvePublicAssetFile( root, publicPath ) {
-	const relative = publicPath.replace( /^\/+/, "" );
-	const absolutePath = path.resolve( root, relative );
-	assertInside( root, absolutePath, `asset ${publicPath}` );
-	return absolutePath;
-}
-
-/*
-================
 uniquePublicPaths
 ================
 */
@@ -629,20 +618,6 @@ function normalizeGroupName( name ) {
 		throw new Error( "Asset pack group is missing a usable name." );
 	}
 	return normalized;
-}
-
-/*
-================
-assertInside
-================
-*/
-function assertInside( root, target, label ) {
-	const relative = path.relative( path.resolve( root ), path.resolve( target ) );
-	if ( relative === "" || (!relative.startsWith( ".." ) && !path.isAbsolute( relative )) ) {
-		return;
-	}
-
-	throw new Error( `${label} must stay inside ${root}, got ${target}` );
 }
 
 /*

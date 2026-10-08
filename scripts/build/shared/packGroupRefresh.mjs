@@ -14,6 +14,7 @@ The caller holds the generated-assets lock.
 
 ===========================================================================
 */
+import { normalizePublicPath } from "./assetPaths.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { archiveGeneratedArtifact } from "../artifacts/generatedArtifactArchive.mjs";
@@ -116,15 +117,6 @@ function resolvePackFile( publicPath ) {
 		throw new Error( `Refusing to retire a pack outside ${PACKS_ROOT}: ${resolved}` );
 	}
 	return resolved;
-}
-
-/*
-================
-normalizePublicPath
-================
-*/
-function normalizePublicPath( value ) {
-	return `/${String( value ).replaceAll( "\\", "/" ).replace( /^\/+/, "" )}`.replace( /\/{2,}/g, "/" );
 }
 
 /*

@@ -15,7 +15,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 
 import { refreshPrecompressedSidecars } from "./generatedManifestSidecars.mjs";
-import { normalizePublicAssetPath } from "./shared/assetPaths.mjs";
+import { containedPublicFile, normalizePublicAssetPath } from "./shared/assetPaths.mjs";
 import { mapWithConcurrency } from "./shared/asyncUtils.mjs";
 import { patchAssetPackGroupFromLooseFiles } from "./sparseAssetPackGroupRefresh.mjs";
 
@@ -84,7 +84,7 @@ async function existingJsonAuthorities( publicRoot, assets ) {
 			.map( ( publicPath ) => publicPath.slice( 0, -3 ) )
 	);
 	const rows = await mapWithConcurrency( candidates, DISCOVERY_CONCURRENCY, async ( publicPath ) => {
-		const absolutePath = resolvePublicFile( publicRoot, publicPath );
+		const absolutePath = containedPublicFile( publicRoot, publicPath );
 		return (await isFile( absolutePath )) ? absolutePath : undefined;
 	} );
 	return rows.filter( Boolean );
@@ -100,7 +100,7 @@ Group members that still have a loose file on disk.
 async function existingLooseMembers( publicRoot, assets ) {
 	const candidates = uniquePaths( assets.map( ( asset ) => asset.path ) );
 	const rows = await mapWithConcurrency( candidates, DISCOVERY_CONCURRENCY, async ( publicPath ) => {
-		return (await isFile( resolvePublicFile( publicRoot, publicPath ) )) ? publicPath : undefined;
+		return (await isFile( containedPublicFile( publicRoot, publicPath ) )) ? publicPath : undefined;
 	} );
 	return rows.filter( Boolean );
 }
@@ -120,24 +120,6 @@ async function isFile( filePath ) {
 		if ( error?.code === "ENOENT" ) return false;
 		throw error;
 	}
-}
-
-/*
-================
-resolvePublicFile
-
-Maps a public asset path to its file under publicRoot, refusing any path
-that would escape it.
-================
-*/
-function resolvePublicFile( publicRoot, publicPath ) {
-	const normalized = normalizePublicAssetPath( publicPath );
-	const resolved = path.resolve( publicRoot, normalized.replace( /^\/+/, "" ) );
-	const relative = path.relative( publicRoot, resolved );
-	if ( relative.startsWith( ".." ) || path.isAbsolute( relative ) ) {
-		throw new Error( `Public asset escapes ${publicRoot}: ${publicPath}` );
-	}
-	return resolved;
 }
 
 /*
