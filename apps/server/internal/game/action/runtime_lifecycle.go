@@ -9,10 +9,10 @@ runtime_lifecycle.go - the action runtime's tick hooks
 package action
 
 import (
-	"opensro.online/server/internal/domain"
 	"strings"
 	"time"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/loot"
@@ -171,39 +171,75 @@ slow consumer can close and reenter gameplay cleanup safely.
 ================
 */
 func (rt *Runtime) publishPendingPickup(pending grounditem.Pending, now time.Time) []simulation.DivisionFrames {
-	unlockPublication := rt.lockPublication(pending.DivisionID)
+	unlockPublication := rt.LockPublication(pending.DivisionID)
 	defer unlockPublication()
+	var publishActor func([]wire.Frame)
+	var publishRecipients []func([]wire.Frame)
 	result, character := func() (OpResult, *enterworld.Character) {
 		unlock := rt.lockDivision(pending.DivisionID)
 		defer unlock()
-		return rt.completePendingPickup(pending, now)
+		result, character := rt.completePendingPickup(pending, now)
+		if rt.CaptureCharacterFrames == nil {
+			return result, character
+		}
+		// The commit is complete, but relocation cannot replace its scene
+		// until all recipients have been captured and this lock is released.
+		owners := make(map[int64]func([]wire.Frame))
+		if character != nil && len(result.Frames) > 0 {
+			publishActor = rt.CaptureCharacterFrames(pending.DivisionID, character.Name)
+			owners[character.ID] = publishActor
+		}
+		publishRecipients = make([]func([]wire.Frame), len(result.Recipients))
+		for index, recipient := range result.Recipients {
+			if len(recipient.Frames) == 0 {
+				continue
+			}
+			if publish, found := owners[recipient.CharacterID]; found {
+				publishRecipients[index] = publish
+				continue
+			}
+			var owner *enterworld.Character
+			if character != nil && character.ID == recipient.CharacterID {
+				owner = character
+			} else if source, ok := rt.deps.(domain.CharacterLookup); ok {
+				owner = source.CharacterByID(pending.DivisionID, recipient.CharacterID)
+			} else {
+				for _, candidate := range rt.deps.CharactersForDivision(pending.DivisionID) {
+					if candidate != nil && candidate.ID == recipient.CharacterID {
+						owner = candidate
+						break
+					}
+				}
+			}
+			var publish func([]wire.Frame)
+			if owner != nil {
+				publish = rt.CaptureCharacterFrames(pending.DivisionID, owner.Name)
+			}
+			owners[recipient.CharacterID] = publish
+			publishRecipients[index] = publish
+		}
+		return result, character
 	}()
+	// Preserve native publication order even when the actor also receives a
+	// party receipt: actor burst, public pickup, then recipient-private tails.
+	if publishActor != nil {
+		publishActor(result.Frames)
+	}
 	if character != nil {
-		if rt.PushCharacterFrames != nil && len(result.Frames) > 0 {
+		if rt.CaptureCharacterFrames == nil && rt.PushCharacterFrames != nil && len(result.Frames) > 0 {
 			rt.PushCharacterFrames(pending.DivisionID, character.Name, result.Frames)
 		}
 		if rt.PushDivisionPeerFrames != nil && len(result.Broadcast) > 0 {
 			rt.PushDivisionPeerFrames(pending.DivisionID, character.Name, result.Broadcast)
 		}
 	}
-	if rt.PushCharacterFrames == nil {
+	if rt.CaptureCharacterFrames == nil {
 		// Transport-free runtimes retain the existing returned routing contract.
 		return recipientDivisionFrames(pending.DivisionID, result.Recipients)
 	}
-	for _, recipient := range result.Recipients {
-		var owner *enterworld.Character
-		if source, ok := rt.deps.(domain.CharacterLookup); ok {
-			owner = source.CharacterByID(pending.DivisionID, recipient.CharacterID)
-		} else {
-			for _, candidate := range rt.deps.CharactersForDivision(pending.DivisionID) {
-				if candidate != nil && candidate.ID == recipient.CharacterID {
-					owner = candidate
-					break
-				}
-			}
-		}
-		if owner != nil && len(recipient.Frames) > 0 {
-			rt.PushCharacterFrames(pending.DivisionID, owner.Name, recipient.Frames)
+	for index, publish := range publishRecipients {
+		if publish != nil {
+			publish(result.Recipients[index].Frames)
 		}
 	}
 	return nil

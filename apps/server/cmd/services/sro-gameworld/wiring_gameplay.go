@@ -99,6 +99,9 @@ func newGameplayPlane(
 		return nil, err
 	}
 	items := action.NewRuntime(deps, deps.MonsterState)
+	items.CaptureCharacterFrames = func(division, name string) func([]wire.Frame) {
+		return captureCharacterFrames(ts.Hub, division, name)
+	}
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
@@ -447,6 +450,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.ConstrainMovement == nil {
 		return fmt.Errorf("action: pickup movement constraint is required")
 	}
+	if game.items.CaptureCharacterFrames == nil {
+		return fmt.Errorf("action: scene-bound private receipt capture is required")
+	}
 	if game.items.SpawnRegionAvailable == nil || game.items.ConstrainCompanionSpawn == nil || game.items.CompanionSurfaceHeight == nil {
 		return fmt.Errorf("action: companion region and collision admission are required")
 	}
@@ -626,4 +632,40 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.guildInvites.Register(hub)
 	game.mentorInvites.Register(hub)
 	return nil
+}
+
+/*
+================
+captureCharacterFrames
+
+Capture is read-only under the action division lock. The returned delivery
+runs outside that lock so queue failure can synchronously retire gameplay.
+================
+*/
+func captureCharacterFrames(hub *transport.Hub, division, name string) func([]wire.Frame) {
+	type recipient struct {
+		session  *transport.Session
+		revision uint64
+	}
+	var recipients []recipient
+	for _, session := range hub.CharacterSessions(division, name) {
+		revision, valid := session.SceneReceiptRevision()
+		if valid {
+			recipients = append(recipients, recipient{session: session, revision: revision})
+		}
+	}
+	if len(recipients) == 0 {
+		return nil
+	}
+	return func(frames []wire.Frame) {
+		batch := make([]transport.Frame, len(frames))
+		for i, frame := range frames {
+			batch[i] = transport.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: transport.ScopeChanges(frame.Scope)}
+		}
+		for _, recipient := range recipients {
+			if err := recipient.session.SendSceneReceiptBatch(recipient.revision, batch); err != nil {
+				log.WithError(err).WithField("session", recipient.session.ID).Debug("action: captured private receipt refused")
+			}
+		}
+	}
 }

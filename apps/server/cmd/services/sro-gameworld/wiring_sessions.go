@@ -28,6 +28,7 @@ installSessionLifecycle
 ================
 */
 func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authorityStore *store.Store) {
+	game.deps.LockPublication = game.items.LockPublication
 	game.deps.OnWorldBound = func(
 		session *transport.Session,
 		divisionID string,

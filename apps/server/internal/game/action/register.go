@@ -148,7 +148,7 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 			return
 		}
 
-		unlockPublication := rt.lockPublication(divisionID)
+		unlockPublication := rt.LockPublication(divisionID)
 		defer unlockPublication()
 		result := op(divisionID, character, payload)
 		if result.DiagnosticRefusal != "" {

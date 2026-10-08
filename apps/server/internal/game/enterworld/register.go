@@ -243,8 +243,20 @@ RegisterEnterWorld
 */
 func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 	hub.Handle(transport.OpEnterWorld, func(s *transport.Session, _ uint16, payload []byte) {
-		s.BeginSceneAdmission()
 		admission := *deps
+		// Acquire before invalidating the old scene. A committed pickup must
+		// publish before this replacement snapshot, including entry refills.
+		if deps.LockPublication != nil {
+			if request, err := transport.DecodeEnterWorld(payload); err == nil {
+				division := resolveBootstrapDivision(deps, request.Division)
+				admission.ResolveDivisionID = func(string) string { return division }
+				if division != "" {
+					unlock := deps.LockPublication(division)
+					defer unlock()
+				}
+			}
+		}
+		s.BeginSceneAdmission()
 		var claimedDivision, claimedName string
 		published := false
 		defer func() {

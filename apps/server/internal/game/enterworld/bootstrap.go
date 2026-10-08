@@ -60,14 +60,9 @@ path).
 ================
 */
 func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
-	divisionID := request.DivisionID
-	if deps.ResolveDivisionID != nil {
-		divisionID = deps.ResolveDivisionID(request.DivisionID)
-		if divisionID == "" {
-			return Failure(nativeErrorInvalidRequest, "unknownDivision")
-		}
-	} else if divisionID == "" {
-		divisionID = DefaultDivisionID
+	divisionID := resolveBootstrapDivision(deps, request.DivisionID)
+	if divisionID == "" {
+		return Failure(nativeErrorInvalidRequest, "unknownDivision")
 	}
 	characterName := strings.TrimSpace(request.CharacterName)
 	if characterName == "" {

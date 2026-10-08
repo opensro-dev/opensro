@@ -369,9 +369,15 @@ type Runtime struct {
 	UpdateJobExperience func(character *enterworld.Character, delta int64) ([]wire.Frame, bool)
 
 	// PushCharacterFrames delivers the actor's complete ordered progression
-	// burst after the authority door closes. It also delivers the private half
-	// of a pickup whose server-owned approach completes on the simulation tick.
+	// burst after the authority door closes. Pending pickups use captured
+	// delivery when configured; detached runtimes retain this actor fallback.
 	PushCharacterFrames func(divisionID, characterName string, frames []wire.Frame)
+
+	// CaptureCharacterFrames snapshots recipient sessions and their scene
+	// revisions under the division lock, after the character door closes.
+	// Capture must not send. Invoke the returned handle only after releasing
+	// the division lock; a nil handle means no recipient was captured.
+	CaptureCharacterFrames func(divisionID, characterName string) func([]wire.Frame)
 
 	// PushDivisionPeerFrames delivers public presentation frames to every
 	// same-division session except the acting character: pickup animation/world

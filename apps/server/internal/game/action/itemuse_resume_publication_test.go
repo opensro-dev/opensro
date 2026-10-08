@@ -220,7 +220,34 @@ func newPublicationHarness(t *testing.T, refill bool, quantity int64) *publicati
 		return transport.AdmissionIdentity{AccountID: "publication-test", ShardID: testDivision}, nil
 	})
 	auth := entryauth.NewAuthenticatedSessionFixture(t, srv.Hub)
+	rt.CaptureCharacterFrames = func(division, name string) func([]wire.Frame) {
+		type recipient struct {
+			session  *transport.Session
+			revision uint64
+		}
+		var recipients []recipient
+		for _, session := range srv.Hub.CharacterSessions(division, name) {
+			revision, valid := session.SceneReceiptRevision()
+			if valid {
+				recipients = append(recipients, recipient{session: session, revision: revision})
+			}
+		}
+		if len(recipients) == 0 {
+			return nil
+		}
+		return func(frames []wire.Frame) {
+			batch := make([]transport.Frame, len(frames))
+			for i, frame := range frames {
+				batch[i] = transport.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: transport.ScopeChanges(frame.Scope)}
+			}
+			for _, recipient := range recipients {
+				// Overflow tests deliberately exercise synchronous close hooks.
+				_ = recipient.session.SendSceneReceiptBatch(recipient.revision, batch)
+			}
+		}
+	}
 	enterworld.RegisterEnterWorld(srv.Hub, deps)
+	enterworld.RegisterGameReady(srv.Hub, deps)
 	srv.Hub.Handle(publicationFence, func(s *transport.Session, opcode uint16, payload []byte) {
 		if err := s.Send(opcode, payload); err != nil {
 			panic(err)
@@ -255,6 +282,21 @@ enter
 func (h *publicationHarness) enter(t *testing.T, c *publicationConn) []transport.Frame {
 	t.Helper()
 	c.in <- transport.Frame{Opcode: transport.OpEnterWorld, Payload: transport.EncodeEnterWorld(h.auth.Entry(testDivision, h.character.Name))}
+	c.in <- transport.Frame{Opcode: publicationFence}
+	return publicationThrough(t, c, publicationFence)
+}
+
+/*
+================
+ready
+
+Exercise the real game-ready transition; TryMarkWorldReady alone leaves the
+scene-loading fence set and does not admit scene-scoped receipts.
+================
+*/
+func (h *publicationHarness) ready(t *testing.T, c *publicationConn) []transport.Frame {
+	t.Helper()
+	c.in <- transport.Frame{Opcode: enterworld.OpcodeGameReady}
 	c.in <- transport.Frame{Opcode: publicationFence}
 	return publicationThrough(t, c, publicationFence)
 }

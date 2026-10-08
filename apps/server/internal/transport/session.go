@@ -268,7 +268,23 @@ sendSceneBatch
 ================
 */
 func (s *Session) sendSceneBatch(frames []Frame, revision *uint64, reset bool) error {
-	return s.sendSceneObjectBatch(frames, revision, reset, 0, nil)
+	return s.sendSceneObjectBatch(frames, sceneBatchOptions{revision: revision, reset: reset})
+}
+
+/*
+================
+sceneBatchOptions
+
+Private receipts may follow an already queued bootstrap while its scene is
+loading. Visibility producers retain the active-scene requirement.
+================
+*/
+type sceneBatchOptions struct {
+	revision     *uint64
+	reset        bool
+	observedGID  uint32
+	changes      []ObjectScopeChange
+	allowLoading bool
 }
 
 /*
@@ -276,9 +292,9 @@ func (s *Session) sendSceneBatch(frames []Frame, revision *uint64, reset bool) e
 sendSceneObjectBatch
 ================
 */
-func (s *Session) sendSceneObjectBatch(frames []Frame, revision *uint64, reset bool, observedGID uint32, changes []ObjectScopeChange) error {
+func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions) error {
 	// Copy before appending: callers retain ownership of their metadata.
-	changes = append([]ObjectScopeChange(nil), changes...)
+	changes := append([]ObjectScopeChange(nil), options.changes...)
 	for _, frame := range frames {
 		changes = append(changes, frame.Scope...)
 	}
@@ -306,13 +322,13 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, revision *uint64, reset b
 		batchBytes += frameBytes
 	}
 	s.mu.Lock()
-	if observedGID != 0 {
-		if _, observed := s.observedObjects[observedGID]; !observed || s.sceneLoading {
+	if options.observedGID != 0 {
+		if _, observed := s.observedObjects[options.observedGID]; !observed || s.sceneLoading {
 			s.mu.Unlock()
 			return nil
 		}
 	}
-	if revision != nil && (s.sceneLoading || s.sceneRevision != *revision) {
+	if options.revision != nil && ((!options.allowLoading && s.sceneLoading) || s.sceneRevision != *options.revision) {
 		s.mu.Unlock()
 		return nil
 	}
@@ -332,7 +348,7 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, revision *uint64, reset b
 			return ErrSessionEvicted
 		}
 	}
-	if reset {
+	if options.reset {
 		s.sceneRevision++
 		s.sceneLoading = true
 		clear(s.observedObjects)

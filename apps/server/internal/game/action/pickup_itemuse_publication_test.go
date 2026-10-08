@@ -100,9 +100,26 @@ func TestPickupItemUsePublicationOrder(t *testing.T) {
 					t.Fatalf("initial quantity %d, want %d", quantity, initial)
 				}
 				session, _ := h.server.Hub.Session(welcome.SessionID)
-				session.TryMarkWorldReady()
+				h.ready(t, conn)
 				armPublicationPickup(h, shared)
+				pickupPublicationPresence(t, h, shared)
 				var pausePickup sync.Once
+				capture := h.rt.CaptureCharacterFrames
+				if capture == nil {
+					t.Fatal("shared harness must install scene capture")
+				}
+				h.rt.CaptureCharacterFrames = func(division, name string) func([]wire.Frame) {
+					publish := capture(division, name)
+					if publish == nil {
+						return nil
+					}
+					return func(frames []wire.Frame) {
+						if pickupFirst {
+							pausePickup.Do(func() { close(paused); <-release })
+						}
+						publish(frames)
+					}
+				}
 				h.rt.PushCharacterFrames = func(division, name string, frames []wire.Frame) {
 					if pickupFirst {
 						pausePickup.Do(func() { close(paused); <-release })
@@ -193,7 +210,7 @@ func TestPickupItemUsePublicationOverflowClosesOutsideDivision(t *testing.T) {
 			conn, welcome := h.connect(t, nil)
 			h.enter(t, conn)
 			session, _ := h.server.Hub.Session(welcome.SessionID)
-			session.TryMarkWorldReady()
+			h.ready(t, conn)
 			h.rt.BeginCommerceSession(testDivision, h.character, session.ID)
 			closed := make(chan error, 1)
 			h.server.Hub.OnSessionClose(func(s *transport.Session, cause error) {
@@ -213,6 +230,21 @@ func TestPickupItemUsePublicationOverflowClosesOutsideDivision(t *testing.T) {
 			if err := session.SendBatch(queue); err != nil {
 				t.Fatalf("fill reliable queue: %v", err)
 			}
+			capturedPublication := false
+			capture := h.rt.CaptureCharacterFrames
+			if capture == nil {
+				t.Fatal("shared harness must install scene capture")
+			}
+			h.rt.CaptureCharacterFrames = func(division, name string) func([]wire.Frame) {
+				publish := capture(division, name)
+				if publish == nil {
+					return nil
+				}
+				return func(frames []wire.Frame) {
+					capturedPublication = true
+					publish(frames)
+				}
+			}
 			h.rt.PushCharacterFrames = func(division, name string, frames []wire.Frame) {
 				for _, target := range h.server.Hub.CharacterSessions(division, name) {
 					SendFrames(target, frames)
@@ -231,6 +263,9 @@ func TestPickupItemUsePublicationOverflowClosesOutsideDivision(t *testing.T) {
 				h.rt.advancePendingPickups(h.clock.NowMs())
 			}()
 			wait.Eventually(t, publicationTimeout, "overflow publisher returned", func() bool { return lenSignal(done) })
+			if producer != "itemuse" && !capturedPublication {
+				t.Fatal("overflow did not exercise captured publication")
+			}
 			select {
 			case cause := <-closed:
 				if cause == nil || !strings.Contains(cause.Error(), "outbound queue overflow") {

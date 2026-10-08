@@ -126,7 +126,10 @@ type Deps struct {
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
-	OnWorldBound      func(
+	// LockPublication orders bootstrap snapshots with action/tick inventory
+	// receipts. The returned release runs only after the full batch is queued.
+	LockPublication func(divisionID string) func()
+	OnWorldBound    func(
 		session *transport.Session,
 		divisionID string,
 		character *Character,
@@ -381,6 +384,7 @@ func (d *Deps) Validate() error {
 	require("Roster", d.Roster == nil)
 	require("Characters", d.Characters == nil)
 	require("ResolveDivisionID", d.ResolveDivisionID == nil)
+	require("LockPublication", d.LockPublication == nil)
 	require("MutateCharacter", d.MutateCharacter == nil)
 	require("MutateCharacters", d.MutateCharacters == nil)
 	require("UpdateCharacter", d.UpdateCharacter == nil)
