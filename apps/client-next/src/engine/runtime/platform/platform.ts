@@ -190,13 +190,24 @@ export function createPlatform(
 	================
 	displayScale
 
-	CSS pixels per native UI pixel. The bitmap UI is laid out in physical
-	pixels, matching the canvas backing store. Browser zoom changes CSS units,
-	not the number of pixels in a glyph, its control, or its pointer hit box.
+	CSS pixels per native UI pixel. Full-window UI follows display density,
+	with whole physical pixels per bitmap texel to keep retail text sharp.
+	Explicit screen sizes retain their selected physical-pixel dimensions.
 	================
 	*/
 	function displayScale(): number {
-		return 1 / devicePixelRatio;
+		return uiPixelScale() / devicePixelRatio;
+	}
+	/*
+	================
+	uiPixelScale
+
+	Nearest integer enlargement restores logical UI size on Retina displays
+	without interpolating bitmap text at fractional browser/OS scales.
+	================
+	*/
+	function uiPixelScale(): number {
+		return video.displaySize ? 1 : Math.max( 1, Math.round( devicePixelRatio ) );
 	}
 	/*
 	================
@@ -248,6 +259,22 @@ export function createPlatform(
 		if ( lastUi ) bridge.present( lastUi );
 	}
 	addEventListener( "resize", resizeCanvas, { signal: lifetime.signal } );
+	let densityQuery = matchMedia( `(resolution: ${devicePixelRatio}dppx)` );
+	/*
+	================
+	densityChanged
+
+	Moving between displays can change density without a CSS resize. Rearm
+	the exact-density query and reposition retained controls in that case too.
+	================
+	*/
+	function densityChanged() {
+		densityQuery.removeEventListener( "change", densityChanged );
+		densityQuery = matchMedia( `(resolution: ${devicePixelRatio}dppx)` );
+		densityQuery.addEventListener( "change", densityChanged );
+		resizeCanvas();
+	}
+	densityQuery.addEventListener( "change", densityChanged );
 	/*
 	================
 	uiPoint
@@ -511,7 +538,21 @@ export function createPlatform(
 		if ( blocksUi( ...uiPoint( event ) ) ) return;
 		onInput( { kind: "wheel", delta: cameraWheelDelta( event ), timeMs: timeMs() } );
 	}, { signal: lifetime.signal, passive: false } );
-	const viewport = { width: 1, height: 1 };
+	const viewport = { width: 1, height: 1 }, uiViewport = { width: 1, height: 1 };
+	/*
+	================
+	readViewport
+
+	The device pixels the canvas covers: a chosen screen size changes the
+	canvas CSS box (layoutCanvas), never the backing store's sharpness.
+	================
+	*/
+	function readViewport() {
+		const box = canvasSize();
+		viewport.width = Math.max( 1, Math.round( box.width * devicePixelRatio ) );
+		viewport.height = Math.max( 1, Math.round( box.height * devicePixelRatio ) );
+		return viewport;
+	}
 	return {
 		displayScale,
 		saveExperimentalOptions,
@@ -733,17 +774,19 @@ export function createPlatform(
 		canvasSize,
 		/*
 		================
-		readViewport
+		readUiViewport
+
+		Keep fractional logical extents when the backing size is odd; rounding
+		them would stretch every glyph by a noninteger number of physical pixels.
 		================
 		*/
-		readViewport() {
-			// Always the device pixels the canvas covers: a chosen screen size
-			// changes the canvas's CSS box (layoutCanvas), never its sharpness.
-			const box = canvasSize();
-			viewport.width = Math.max( 1, Math.round( box.width * devicePixelRatio ) );
-			viewport.height = Math.max( 1, Math.round( box.height * devicePixelRatio ) );
-			return viewport;
+		readUiViewport() {
+			const physical = readViewport(), scale = uiPixelScale();
+			uiViewport.width = physical.width / scale;
+			uiViewport.height = physical.height / scale;
+			return uiViewport;
 		},
+		readViewport,
 		/*
 		================
 		report
@@ -812,6 +855,7 @@ export function createPlatform(
 		================
 		*/
 		dispose() {
+			densityQuery.removeEventListener( "change", densityChanged );
 			lastUi = null;
 			canvasObserver?.disconnect();
 			lifetime.abort();

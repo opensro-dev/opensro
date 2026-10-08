@@ -300,6 +300,8 @@ function layoutGlyphs(
 			],
 			color,
 			texture: atlas.image,
+			// Retail masks stay binary when a high-density display enlarges them.
+			sampling: "nearest",
 			clip
 		};
 		x += g.advanceX;

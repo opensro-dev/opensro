@@ -222,7 +222,9 @@ export interface Platform extends Disposable {
 	/** The canvas CSS size, observed rather than read (no forced layout). */
 	canvasSize(): { readonly width: number; readonly height: number; };
 	readViewport(): Viewport;
-	/** CSS pixels per native UI pixel; reciprocal of the current device pixel ratio. */
+	/** Logical UI extent; whole physical pixels per native bitmap pixel. */
+	readUiViewport(): Viewport;
+	/** CSS pixels per native UI pixel, shared by DOM controls and pointer input. */
 	displayScale(): number;
 	report( text: string, error?: unknown ): void;
 }

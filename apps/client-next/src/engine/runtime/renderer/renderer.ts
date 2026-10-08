@@ -549,7 +549,7 @@ export function createRenderer(
 					damageTextQuads( damageRows, timeSeconds, uiScene.width, uiScene.height ) :
 					[];
 				// Anchors use the UI scene's coordinate system, like the world
-				// annotations beside them. Runtime supplies physical pixel extents;
+				// annotations beside them. Runtime supplies logical UI extents;
 				// using that same extent keeps actor and label projections together.
 				const projectedUi = uiScene && (anchored?.size || uiProduct?.worldAnchors || damage.length) ?
 					projectCharacterLabels(

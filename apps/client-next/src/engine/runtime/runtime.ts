@@ -851,9 +851,9 @@ export function startRuntime(
 						session: sessionState,
 						gameplay: presentation.gameplay(),
 						entities: presentation.entities(),
-						// Native bitmap UI pixels match the physical render target at every browser zoom.
-						width: platform.readViewport().width,
-						height: platform.readViewport().height,
+						// Layout and picking share logical UI pixels; the world retains its full backing resolution.
+						width: platform.readUiViewport().width,
+						height: platform.readUiViewport().height,
 						worldReady: readySent || worldReady
 					},
 					now,
@@ -913,8 +913,8 @@ export function startRuntime(
 							frontendState.phase === "world" &&
 							hoverLocal &&
 							!ui.blocks(
-								worldPointer[0] * platform.readViewport().width,
-								worldPointer[1] * platform.readViewport().height
+								worldPointer[0] * platform.readUiViewport().width,
+								worldPointer[1] * platform.readUiViewport().height
 							) ?
 						renderer.pickEntity( worldPointer[0], worldPointer[1], hoverLocal, input.blindHeld() ) :
 						null;
