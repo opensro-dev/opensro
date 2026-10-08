@@ -7,19 +7,49 @@ One owner for durable verified bytes, bounded publication and LRU order,
 kept in Cache Storage keyed by content digest. Cache failure is an
 optional-storage failure, never an asset admission failure.
 
+The budget is half the origin quota, between MIN_BUDGET_BYTES and
+MAX_BUDGET_BYTES: browsers grant an origin 60% of the disk (Chrome,
+Safari) or the smaller of 10% and 10 GiB (Firefox best effort), so the
+whole game fits on most machines and a player who explores never
+re-downloads areas already visited. Pinned entries - the startup groups
+every session needs before the first frame - are never evicted; the rest
+leave least recently used first.
+
 ===========================================================================
 */
 
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
 
+const MIN_BUDGET_BYTES = 512 * 1024 * 1024;
+const MAX_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
+// Share of the origin quota this store may fill; the rest stays for the
+// browser's own caches and other storage.
+const QUOTA_SHARE = 0.5;
+// The response header that marks a pinned entry, so a reload knows it too.
+const PINNED_HEADER = "x-sro-pinned";
+
+/*
+================
+budgetFromQuota
+================
+*/
+export function budgetFromQuota( quota: number | undefined ) {
+	if ( !quota ) return MIN_BUDGET_BYTES;
+	return Math.min( MAX_BUDGET_BYTES, Math.max( MIN_BUDGET_BYTES, Math.floor( quota * QUOTA_SHARE ) ) );
+}
+
 /*
 ================
 createPersistentAssets
+
+budgetOf turns the origin quota into this store's byte budget
+(budgetFromQuota; tests inject a small one).
 ================
 */
-export function createPersistentAssets() {
+export function createPersistentAssets( budgetOf: ( quota: number | undefined ) => number = budgetFromQuota ) {
 	let opened: Promise<Cache | null> | null = null, tail: Promise<void> = Promise.resolve();
-	let inventory: Map<string, number> | null = null, total = 0, budget = 512 << 20, estimatedAt = -Infinity;
+	let inventory: Map<string, number> | null = null, total = 0, budget = MIN_BUDGET_BYTES, estimatedAt = -Infinity;
+	const pinned = new Set<string>();
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
 	const pending = new Set<string>(), touched = new Set<string>();
 	function open() {
@@ -57,7 +87,7 @@ export function createPersistentAssets() {
 			errors++;
 		}
 	}
-	async function publish( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
+	async function publish( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer>, pin: boolean ) {
 		const cache = await open();
 		if ( !cache ) return;
 		try {
@@ -65,7 +95,7 @@ export function createPersistentAssets() {
 				estimatedAt = performance.now();
 				try {
 					const estimate = await navigator.storage.estimate();
-					if ( estimate.quota ) budget = Math.min( 512 << 20, Math.floor( estimate.quota / 4 ) );
+					budget = budgetOf( estimate.quota );
 				} catch {}
 			}
 			if ( bytes.length > budget ) return;
@@ -77,6 +107,7 @@ export function createPersistentAssets() {
 						size = Number( response?.headers.get( "content-length" ) ) || 0;
 					total += size;
 					inventory.set( request.url, size );
+					if ( response?.headers.get( PINNED_HEADER ) === "1" ) pinned.add( request.url );
 				}
 				const recent = [ ...touched ];
 				touched.clear();
@@ -88,9 +119,16 @@ export function createPersistentAssets() {
 				return;
 			}
 			async function evict() {
-				const first = inventory!.entries().next().value;
-				if ( !first ) return false;
-				const [url, size] = first;
+				// Least recently used first, skipping the pinned startup entries.
+				let victim: [string, number] | undefined;
+				for ( const entry of inventory!.entries() ) {
+					if ( !pinned.has( entry[0] ) ) {
+						victim = entry;
+						break;
+					}
+				}
+				if ( !victim ) return false;
+				const [url, size] = victim;
 				await cache!.delete( url );
 				total -= size;
 				inventory!.delete( url );
@@ -104,7 +142,8 @@ export function createPersistentAssets() {
 					new Response( bytes, {
 						headers: {
 							"content-length": String( bytes.length ),
-							"content-type": "application/octet-stream"
+							"content-type": "application/octet-stream",
+							...(pin ? { [PINNED_HEADER]: "1" } : {})
 						}
 					} )
 				);
@@ -117,6 +156,7 @@ export function createPersistentAssets() {
 				await put();
 			}
 			inventory.set( target, bytes.length );
+			if ( pin ) pinned.add( target );
 			total += bytes.length;
 			writes++;
 		} catch {
@@ -124,8 +164,8 @@ export function createPersistentAssets() {
 			inventory = null;
 		}
 	}
-	function write( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
-		const operation = tail.then( () => publish( origin, digest, bytes ) );
+	function write( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer>, pin = false ) {
+		const operation = tail.then( () => publish( origin, digest, bytes, pin ) );
 		tail = operation.catch( () => {
 			errors++;
 		} );
@@ -178,7 +218,8 @@ export function createPersistentAssets() {
 		write,
 		// Copy before the caller transfers/detaches its buffer. Never wait for disk on
 		// the admission path; excess demand skips optional persistence, not rendering.
-		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
+		// pin keeps the entry through eviction (the startup groups).
+		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer>, pin = false ) {
 			const id = key( origin, digest );
 			if ( pending.has( id ) ) return;
 			if ( pending.size >= 64 || queuedBytes + bytes.length > (32 << 20) ) {
@@ -188,12 +229,12 @@ export function createPersistentAssets() {
 			const owned = bytes.slice();
 			queuedBytes += owned.length;
 			pending.add( id );
-			void write( origin, digest, owned ).finally( () => {
+			void write( origin, digest, owned, pin ).finally( () => {
 				queuedBytes -= owned.length;
 				pending.delete( id );
 			} );
 		},
 		flush: () => tail,
-		stats: () => ({ hits, misses, writes, errors, evictions, queuedBytes, skipped })
+		stats: () => ({ hits, misses, writes, errors, evictions, queuedBytes, skipped, budget, pinned: pinned.size })
 	};
 }

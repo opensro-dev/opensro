@@ -171,7 +171,7 @@ export function createPacks(
 			if ( missing && await sha( bytes ) !== descriptor.sha256 ) throw new Error( "Pack SHA-256 mismatch" );
 			const loaded = { bytes, start: parser.header( bytes, descriptor ) };
 			if ( disposed ) throw new Error( "Pack owner disposed" );
-			if ( missing ) persistent.enqueue( base, descriptor.sha256, bytes );
+			if ( missing ) persistent.enqueue( base, descriptor.sha256, bytes, descriptor.load === "startup" );
 			while ( residentBytes + bytes.length > (128 << 20) && cache.size ) {
 				const key = cache.keys().next().value!;
 				residentBytes -= cache.get( key )!.bytes.length;
@@ -301,7 +301,10 @@ export function createPacks(
 			if ( bytes.length !== entry.length ) throw new Error( "Asset length disagrees with manifest" );
 			if ( !saved && await sha( bytes ) !== entry.sha256 ) throw new Error( "Asset SHA-256 mismatch" );
 			if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
-			if ( !saved && !cache.has( entry.packPath ) ) persistent.enqueue( url.origin, entry.sha256, bytes );
+			if ( !saved && !cache.has( entry.packPath ) ) {
+				const startup = registry.packs.get( entry.packPath )?.load === "startup";
+				persistent.enqueue( url.origin, entry.sha256, bytes, startup );
+			}
 			const result = gzip ?
 				await gunzipBytes( bytes, limit ) :
 				bytes;

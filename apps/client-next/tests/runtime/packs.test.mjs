@@ -373,7 +373,7 @@ test("persistent payload eviction obeys the quota-derived budget without clearin
 		else delete globalThis.navigator;
 	} );
 	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" ),
-		owner = createPersistentAssets();
+		owner = createPersistentAssets( quota => quota / 4 );
 	await Promise.all(
 		[ "a", "b", "c" ].map( key => owner.write( "http://localhost", key, Uint8Array.of( 1, 2, 3 ) ) )
 	);
@@ -382,6 +382,39 @@ test("persistent payload eviction obeys the quota-derived budget without clearin
 	assert.deepEqual( [ ...await owner.read( "http://localhost", "c", 3 ) ], [ 1, 2, 3 ] );
 	assert.equal( owner.stats().evictions, 1 );
 	await owner.write( "http://localhost", "oversized", new Uint8Array( 9 ) );
+	assert.equal( d.rows.size, 2 );
+});
+
+test("the budget is half the quota between 512 MiB and 4 GiB", async () => {
+	const { budgetFromQuota } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" );
+	const MiB = 1024 * 1024, GiB = 1024 * MiB;
+	assert.equal( budgetFromQuota( undefined ), 512 * MiB );
+	assert.equal( budgetFromQuota( 100 * MiB ), 512 * MiB );
+	assert.equal( budgetFromQuota( 3 * GiB ), 1.5 * GiB );
+	assert.equal( budgetFromQuota( 600 * GiB ), 4 * GiB );
+});
+
+test("pinned startup entries survive eviction, also after a reload", async t => {
+	const d = disk( t ), old = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
+	Object.defineProperty( globalThis, "navigator", {
+		configurable: true,
+		value: { storage: { estimate: async () => ({ quota: 32 }) } }
+	} );
+	t.after( () => {
+		if ( old ) Object.defineProperty( globalThis, "navigator", old );
+		else delete globalThis.navigator;
+	} );
+	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" );
+	const first = createPersistentAssets( quota => quota / 4 );
+	await first.write( "http://localhost", "ui", Uint8Array.of( 1, 2, 3 ), true );
+	await first.write( "http://localhost", "world-a", Uint8Array.of( 1, 2, 3 ) );
+	await first.write( "http://localhost", "world-b", Uint8Array.of( 1, 2, 3 ) );
+	assert.ok( await first.read( "http://localhost", "ui", 3 ), "the pinned entry outlives two evictions" );
+	assert.equal( await first.read( "http://localhost", "world-a", 3 ), null );
+	// A new owner rebuilds its inventory from Cache Storage and still knows the pin.
+	const second = createPersistentAssets( quota => quota / 4 );
+	await second.write( "http://localhost", "world-c", Uint8Array.of( 1, 2, 3 ) );
+	assert.ok( await second.read( "http://localhost", "ui", 3 ) );
 	assert.equal( d.rows.size, 2 );
 });
 
@@ -604,7 +637,7 @@ test("bounded publication drops optional writes under pressure and refreshes LRU
 		else delete globalThis.navigator;
 	} );
 	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" ),
-		owner = createPersistentAssets();
+		owner = createPersistentAssets( quota => quota / 4 );
 	for ( const key of [ "a", "b" ] ) await owner.write( "http://localhost", key, Uint8Array.of( 1, 2, 3 ) );
 	await owner.read( "http://localhost", "a", 3 );
 	await owner.write( "http://localhost", "c", Uint8Array.of( 1, 2, 3 ) );

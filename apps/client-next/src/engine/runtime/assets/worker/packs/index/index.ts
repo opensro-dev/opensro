@@ -19,7 +19,7 @@ export function createPackIndex() {
     for(const rawPack of array(group.packs)){
      const p=object(rawPack),key=path(p.path);if(!key.startsWith("/assets/packs/")||!key.endsWith(".bin")||packs.has(key))throw new Error("Invalid or duplicate pack identity");
      const bytes=integer(p.bytes),assetCount=integer(p.assetCount);if(bytes<12||bytes>(64<<20))throw new Error("Pack exceeds admission budget");
-     packs.set(key,{path:key,bytes,assetCount,sha256:hash(p.sha256),entries:[]});count+=assetCount;
+     packs.set(key,{path:key,bytes,assetCount,sha256:hash(p.sha256),entries:[],...(typeof group.load==="string"?{load:group.load}:{})});count+=assetCount;
     }
     if(count!==integer(group.assetCount))throw new Error("Pack group count mismatch");
    }
