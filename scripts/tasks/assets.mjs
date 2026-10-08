@@ -55,7 +55,7 @@ export const REFRESH_FAMILIES = [
 	"world-map-markers"
 ];
 
-// Standalone publishers: `assets build` does not run them, so run `assets publish` after it.
+// The publish rows of the same table (kind: "publish"), run by the same runner.
 // Monster material variants are published by the full build (group game-models).
 export const PUBLISH_FAMILIES = [
 	"dungeon-worlds",
@@ -87,7 +87,7 @@ export const ASSET_TASKS = [
 		familyTask(
 			"publish",
 			family,
-			[ `apps/client-next/tools/publish-${family}.mjs` ],
+			[ "scripts/refresh_asset_family.mjs", family ],
 			`Publish ${family} assets outside the full build`
 		)
 	),
