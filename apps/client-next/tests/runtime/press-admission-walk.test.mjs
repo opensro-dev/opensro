@@ -59,7 +59,7 @@ for ( const path of [ "targeted", "self", "untargeted" ] ) {
 			game.seed( LOCAL );
 			const navigation = product();
 			navigation.objects = [];
-			game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0 );
+			game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0, undefined );
 			game.command( { kind: "move", destination: { ...START, x: 900 } }, 0, undefined, LOCAL );
 			game.step( 100, LOCAL );
 			assert.equal( game.take()?.pose?.x, 105 );
@@ -75,7 +75,7 @@ for ( const path of [ "targeted", "self", "untargeted" ] ) {
 			assert.equal( pending?.pose?.x, admitted ? 105 : 110, "no latency-length stop for a refused press" );
 			assert.equal( !!pending?.castPrediction, admitted );
 			assert.equal(
-				pending?.skillCooldowns.some( row => row.provisionalUntilMs !== undefined ) ?? false,
+				pending?.skillCooldowns?.some( row => row.provisionalUntilMs !== undefined ) ?? false,
 				admitted
 			);
 			if ( !admitted ) {
