@@ -11,7 +11,10 @@ the Bard-specific decisions about which source instances may coexist.
 
 package action
 
-import "opensro.online/server/internal/game/enterworld"
+import (
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
+)
 
 /*
 ==================
@@ -30,10 +33,40 @@ another Bard's aura has an AuraParentToken. The caller holds c's door.
 ==================
 */
 func (rt *Runtime) replaceOwnAura(division string, c *enterworld.Character, skill enterworld.SkillRow, token uint32) {
+	for _, effect := range rt.ownFamilyAuras(division, c, skill, token) {
+		rt.effects.RequestVoluntaryStop(division, c.Name, effect.SkillID, effect.InstanceToken)
+	}
+}
+
+/*
+==================
+replacesOwnAura
+
+Whether c already plays an aura of skill's Bard family, which rule 1 makes
+this cast replace. Such a cast is not put to the native source admission
+(58E2F4): the playing aura's own states would refuse its replacement, and
+the owner's rule decides it instead (replaceOwnAura).
+==================
+*/
+func (rt *Runtime) replacesOwnAura(division string, c *enterworld.Character, skill enterworld.SkillRow) bool {
+	return len(rt.ownFamilyAuras(division, c, skill, 0)) != 0
+}
+
+/*
+==================
+ownFamilyAuras
+
+c's own live source instances of skill's Bard family, other than token. A
+child c holds from another Bard's aura has an AuraParentToken and is not
+its own.
+==================
+*/
+func (rt *Runtime) ownFamilyAuras(division string, c *enterworld.Character, skill enterworld.SkillRow, token uint32) []statuseffect.Effect {
 	family := skill.AuraFamily()
 	if family == enterworld.AuraFamilyNone {
-		return
+		return nil
 	}
+	var own []statuseffect.Effect
 	for _, effect := range rt.effects.Snapshot(division, c.Name) {
 		if effect.InstanceToken == token || effect.AuraParentToken != 0 || effect.StopRequested {
 			continue
@@ -42,8 +75,9 @@ func (rt *Runtime) replaceOwnAura(division string, c *enterworld.Character, skil
 		if !ok || row.AuraFamily() != family {
 			continue
 		}
-		rt.effects.RequestVoluntaryStop(division, c.Name, effect.SkillID, effect.InstanceToken)
+		own = append(own, effect)
 	}
+	return own
 }
 
 /*

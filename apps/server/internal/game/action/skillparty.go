@@ -155,7 +155,9 @@ func (rt *Runtime) acceptPartyBuff(division string, c, snapshot *enterworld.Char
 	}
 	// 58E2F4 validates untargeted source instances too. The area link lets
 	// 59D9CE retire the previous source instead of opening another healer.
-	if !rt.auraReplacementAllowed(division, snapshot, skill, true) {
+	// A Bard switching its own instrument or dance follows owner rule 1
+	// instead (replacesOwnAura).
+	if !rt.replacesOwnAura(division, snapshot, skill) && !rt.auraReplacementAllowed(division, snapshot, skill, true) {
 		return offensiveRefusal(0x300c)
 	}
 	radius, ok := rt.auraRadius(division, snapshot, skill)

@@ -155,6 +155,33 @@ func TestBardKeepsOneInstrumentAuraBesideMovingMarch(t *testing.T) {
 
 /*
 ================
+TestBardReplacesItsInstrumentWithALowerRank
+
+Owner's rule 1 replaces the instrument a Bard plays with whatever it casts
+next, a lower rank of the same line included. The native source admission
+(58E2F4) would refuse that downgrade with 0x300C; the owner's rule decides.
+================
+*/
+func TestBardReplacesItsInstrumentWithALowerRank(t *testing.T) {
+	rt, clock, c, _ := marchFixture(t, guardTambour8ID)
+	learnAura(t, rt, c, guardTambourID)
+	mate := partyMate(rt, c, 12, "lower-rank-mate", 100)
+	setParty(rt, c, mate)
+
+	mustCast(t, rt, clock, c, guardTambour8ID)
+	mustCast(t, rt, clock, c, guardTambourID)
+	bardTick(rt, clock, time.Millisecond)
+	bardTick(rt, clock, time.Millisecond)
+
+	for _, who := range []*enterworld.Character{c, mate} {
+		if hasSkillEffect(rt, who.Name, guardTambour8ID) || !hasSkillEffect(rt, who.Name, guardTambourID) {
+			t.Errorf("%s does not hold the lower Guard Tambour alone", who.Name)
+		}
+	}
+}
+
+/*
+================
 TestBardAuraEndsWhenItsBardRunsOutOfMP
 
 Owner's rule 1: the pulse that finds less MP than its onff word ends the
