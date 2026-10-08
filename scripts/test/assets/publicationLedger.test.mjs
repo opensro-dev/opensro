@@ -1,0 +1,96 @@
+/*
+===========================================================================
+
+publicationLedger.test.mjs - owners claim, replace, merge and audit
+
+Runs the ledger against an isolated generated root: a complete run
+replaces its owner's record, a partial run merges, sidecars follow their
+base, and the audit reports exactly the swept files nobody claimed.
+
+===========================================================================
+*/
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+
+const root = await mkdtemp( path.join( os.tmpdir(), "sro-ledger-" ) );
+process.env.SRO_GENERATED_ROOT = root;
+const ledger = await import( "../../build/shared/publicationLedger.mjs" );
+const assets = path.join( root, "client-public", "assets" );
+
+/*
+================
+publicFile
+================
+*/
+async function publicFile( publicPath, bytes = "x" ) {
+	const file = path.join( root, "client-public", publicPath.slice( 1 ) );
+	await mkdir( path.dirname( file ), { recursive: true } );
+	await writeFile( file, bytes );
+	return file;
+}
+
+test.after( () => rm( root, { recursive: true, force: true } ) );
+
+test("only files under client-public/assets outside the pack tail are public", () => {
+	assert.equal( ledger.toPublicPath( path.join( assets, "images", "a.png" ) ), "/assets/images/a.png" );
+	assert.equal( ledger.toPublicPath( path.join( assets, "packs", "x.bin" ) ), null );
+	assert.equal( ledger.toPublicPath( path.join( assets, "manifest.json" ) ), null );
+	assert.equal( ledger.toPublicPath( path.join( root, "intermediate", "a.png" ) ), null );
+});
+
+test("claims outside an open publication are ignored", async () => {
+	ledger.claimPublicFile( path.join( assets, "stray.png" ) );
+	assert.equal( (await ledger.readClaims()).claimed.has( "/assets/stray.png" ), false );
+});
+
+test("a complete run replaces its record and a partial run merges", async () => {
+	ledger.beginPublication( "outdoor-world" );
+	ledger.claimPublicPaths( [ "/assets/world/a.json", "/assets/world/b.json" ] );
+	await ledger.commitPublication();
+	ledger.beginPublication( "outdoor-world", { complete: false } );
+	ledger.claimPublicPaths( [ "/assets/world/c.json" ] );
+	await ledger.commitPublication();
+	let { owners } = await ledger.readClaims();
+	assert.deepEqual( [ ...owners.get( "outdoor-world" ) ].sort(), [
+		"/assets/world/a.json",
+		"/assets/world/b.json",
+		"/assets/world/c.json"
+	] );
+	ledger.beginPublication( "outdoor-world" );
+	ledger.claimPublicPaths( [ "/assets/world/a.json" ] );
+	await ledger.commitPublication();
+	({ owners } = await ledger.readClaims());
+	assert.deepEqual( [ ...owners.get( "outdoor-world" ) ], [ "/assets/world/a.json" ] );
+});
+
+test("a precompressed sidecar follows its base, and a base its packed .gz member", () => {
+	const claimed = new Set( [ "/assets/data/a.json", "/assets/data/b.json.gz" ] );
+	assert.ok( ledger.isClaimed( "/assets/data/a.json.gz", claimed ) );
+	assert.ok( ledger.isClaimed( "/assets/data/A.json.br", claimed ) );
+	assert.ok( ledger.isClaimed( "/assets/data/b.json", claimed ) );
+	assert.ok( !ledger.isClaimed( "/assets/data/c.png", claimed ) );
+});
+
+test("the audit reports the swept files no owner claimed, with bytes", async () => {
+	await publicFile( "/assets/images/live.png" );
+	await publicFile( "/assets/images/stale.png", "1234" );
+	ledger.beginPublication( "resource-build" );
+	ledger.claimPublicPaths( [ "/assets/images/live.png" ] );
+	await ledger.commitPublication();
+	const report = await ledger.auditClaims( [
+		{ name: "game-images", files: [ "/assets/images/live.png", "/assets/images/stale.png" ] }
+	] );
+	assert.deepEqual( report.unclaimed, [ { path: "/assets/images/stale.png", group: "game-images", bytes: 4 } ] );
+	assert.equal( report.bytes, 4 );
+	const written = JSON.parse( await readFile( path.join( root, "unclaimed-assets.json" ), "utf8" ) );
+	assert.equal( written.files, 1 );
+});
+
+test("a second open publication is refused", () => {
+	ledger.beginPublication( "family-a" );
+	assert.throws( () => ledger.beginPublication( "family-b" ), /still open/ );
+	ledger.abandonPublication();
+});

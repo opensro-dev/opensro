@@ -15,6 +15,7 @@ requests.
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { imagePublicRoot, imageSourceRoot } from "../world/paths.mjs";
+import { claimPublicFile } from "./publicationLedger.mjs";
 
 const IMAGE_PUBLIC_PREFIX = "/assets/images/";
 
@@ -51,6 +52,7 @@ export async function publishConvertedImage( publicPath ) {
 	const target = path.join( imagePublicRoot, relative );
 	await mkdir( path.dirname( target ), { recursive: true } );
 	await copyFile( source, target );
+	claimPublicFile( target );
 	return publicPath;
 }
 

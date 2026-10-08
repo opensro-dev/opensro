@@ -2,6 +2,7 @@ import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { describeHeldFile } from "./pythonRun.mjs";
+import { claimPublicFile } from "./publicationLedger.mjs";
 
 const WINDOWS_RENAME_ATTEMPTS = 30;
 
@@ -15,6 +16,7 @@ export async function publishFileFromTemp(temporaryPath, targetPath, options = {
     try {
       if ((await readFile(targetPath)).equals(bytes)) {
         await rm(temporaryPath, { force: true });
+        claimPublicFile(targetPath);
         return false;
       }
     } catch {
@@ -25,6 +27,7 @@ export async function publishFileFromTemp(temporaryPath, targetPath, options = {
   for (let attempt = 1; attempt <= WINDOWS_RENAME_ATTEMPTS; attempt += 1) {
     try {
       await rename(temporaryPath, targetPath);
+      claimPublicFile(targetPath);
       return true;
     } catch (error) {
       if (error.code !== "EPERM") {
@@ -47,6 +50,7 @@ export async function publishFileFromTemp(temporaryPath, targetPath, options = {
     throw decorateHeldFileError(error, targetPath);
   }
   await rm(temporaryPath, { force: true });
+  claimPublicFile(targetPath);
   return true;
 }
 

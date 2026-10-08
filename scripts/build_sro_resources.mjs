@@ -20,6 +20,7 @@ import {
 	writeRecordedFingerprint
 } from "./build/shared/resourceBuildFingerprint.mjs";
 import { buildSroResources, formatResourceBuildSummary } from "./build/resourceBuild.mjs";
+import { beginPublication, commitPublication } from "./build/shared/publicationLedger.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
 
 // Fail fast when the Python side of the pipeline is missing. convert_images.py
@@ -82,7 +83,11 @@ await withGeneratedAssetsLock( "SRO resource build", async () => {
 	}
 
 	await checkPythonBuildDeps();
+	// Everything this run writes or keeps is claimed for the resource build;
+	// a failed run throws before the commit and leaves the old record.
+	beginPublication( "resource-build" );
 	const results = await buildSroResources();
+	await commitPublication();
 	for ( const line of formatResourceBuildSummary( results ) ) console.log( line );
 
 	const after = await computeResourceBuildFingerprint();

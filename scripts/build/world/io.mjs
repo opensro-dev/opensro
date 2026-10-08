@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathExists } from "../shared/fsUtils.mjs";
 import { writeJsonIfChanged } from "../shared/jsonOut.mjs";
+import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { publicRoot } from "./paths.mjs";
 
 /**
@@ -17,6 +18,7 @@ export async function writePublicFile(publicPath, bytes) {
   const targetPath = path.join(publicRoot, publicPath.replace(/^\/+/, ""));
   await mkdir(path.dirname(targetPath), { recursive: true });
   await writeFile(targetPath, bytes);
+  claimPublicFile(targetPath);
 }
 
 export const exists = pathExists;

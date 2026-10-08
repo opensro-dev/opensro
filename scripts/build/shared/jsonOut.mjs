@@ -7,10 +7,12 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { claimPublicFile } from "./publicationLedger.mjs";
 
 /** Returns true when the file was written (content changed or file was missing). */
 export async function writeJsonIfChanged(targetPath, value) {
   const bytes = Buffer.from(JSON.stringify(value), "utf8");
+  claimPublicFile(targetPath);
   try {
     if ((await readFile(targetPath)).equals(bytes)) {
       return false;
@@ -26,6 +28,7 @@ export async function writeJsonIfChanged(targetPath, value) {
 /** Synchronous variant for the sync build steps. */
 export function writeJsonIfChangedSync(targetPath, value) {
   const bytes = Buffer.from(JSON.stringify(value), "utf8");
+  claimPublicFile(targetPath);
   try {
     if (readFileSync(targetPath).equals(bytes)) {
       return false;

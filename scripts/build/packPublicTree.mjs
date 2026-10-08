@@ -29,6 +29,7 @@ import { collectAssetPackGroups } from "./assetPackGroups.mjs";
 import { buildAssetPacks, DEFAULT_ASSET_PACK_TARGET_BYTES } from "./assetPacks.mjs";
 import { optimizePublicJsonAssets } from "./jsonAssetCompression.mjs";
 import { retireUnownedSidecars } from "./precompressedSidecars.mjs";
+import { auditClaims } from "./shared/publicationLedger.mjs";
 import { buildWebAssetManifest } from "./webManifest.mjs";
 import { publicRoot as defaultPublicRoot } from "./world/paths.mjs";
 
@@ -38,6 +39,7 @@ export const PACK_TREE_STEPS = Object.freeze( {
 	buildPacks: ( request ) => buildAssetPacks( request ),
 	packFileExists: ( file ) => existsSync( file ),
 	retireSidecars: ( request ) => retireUnownedSidecars( request ),
+	auditClaims: ( groups ) => auditClaims( groups ),
 	buildWebManifest: () => buildWebAssetManifest()
 } );
 
@@ -87,6 +89,10 @@ export async function packPublicTree( request, steps = PACK_TREE_STEPS ) {
 	const publicRoot = request.publicRoot ?? defaultPublicRoot;
 	const jsonOptimization = await timed( "jsonOptimization", () => steps.optimizeJson() );
 	const packGroups = await timed( "packListings", () => steps.collectGroups( request.groupInputs ) );
+	// Report-only for now: which swept files no build owner claimed (publicationLedger.mjs).
+	const claimAudit = request.auditClaims ?
+		await timed( "claimAudit", () => steps.auditClaims( packGroups.groups ) ) :
+		null;
 	const assetPacks = await timed(
 		"assetPacks",
 		() => steps.buildPacks( { targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES, groups: packGroups.groups } )
@@ -100,5 +106,13 @@ export async function packPublicTree( request, steps = PACK_TREE_STEPS ) {
 		null;
 	const manifest = await timed( "webManifest", () => steps.buildWebManifest() );
 	const finalJsonOptimization = await timed( "finalJsonOptimization", () => steps.optimizeJson() );
-	return { jsonOptimization, packGroups, assetPacks, sidecarRetirement, manifest, finalJsonOptimization };
+	return {
+		jsonOptimization,
+		packGroups,
+		claimAudit,
+		assetPacks,
+		sidecarRetirement,
+		manifest,
+		finalJsonOptimization
+	};
 }

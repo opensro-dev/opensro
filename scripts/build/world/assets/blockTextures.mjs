@@ -27,6 +27,7 @@ import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { publishFileFromTemp } from "../../shared/atomicPublish.mjs";
+import { claimPublicFile } from "../../shared/publicationLedger.mjs";
 import { exists } from "../io.mjs";
 import { generatedRoot } from "../paths.mjs";
 import { sha256Hex } from "../../shared/hash.mjs";
@@ -254,8 +255,11 @@ Resolve when the NTX1 container of the authored source exists at target
 (the world object lane: authored levels plus the generated suffix).
 ================
 */
-export function publishBlockTextureFile( source, target ) {
-	return enqueueBlockTexture( { source, target } );
+export async function publishBlockTextureFile( source, target ) {
+	const result = await enqueueBlockTexture( { source, target } );
+	// A cache hit resolves without writing; the existing container is still this run's.
+	claimPublicFile( target );
+	return result;
 }
 
 const pendingJobs = [];

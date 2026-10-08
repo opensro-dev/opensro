@@ -22,6 +22,7 @@ import { refreshGeneratedManifestSidecars } from "../generatedManifestSidecars.m
 import { patchAssetPackGroupFromLooseFiles } from "../sparseAssetPackGroupRefresh.mjs";
 import { buildWebAssetManifest } from "../webManifest.mjs";
 import { publicRoot } from "../world/paths.mjs";
+import { beginPublication, claimPublicPaths, commitPublication, isPublicationOpen } from "./publicationLedger.mjs";
 
 /*
 ================
@@ -74,5 +75,13 @@ export async function publishLooseFamily( family ) {
 	}
 	await buildWebAssetManifest();
 	await refreshGeneratedManifestSidecars( { publicRoot, onlyWhenStale: true } );
+	// The family's files are its whole claim (publicationLedger.mjs). Inside a
+	// larger open publication they join that owner instead.
+	if ( isPublicationOpen() ) claimPublicPaths( family.files );
+	else {
+		beginPublication( `family-${family.name}` );
+		claimPublicPaths( family.files );
+		await commitPublication();
+	}
 	return updates;
 }

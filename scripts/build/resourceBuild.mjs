@@ -491,13 +491,15 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	const packed = await steps.packTree( {
 		timed,
 		retireSidecars: true,
+		auditClaims: true,
 		groupInputs: {
 			uiImagePreloadPaths: uiImagePreload.images.map( ( image ) => image.path ),
 			missionMinimapTilePaths: missionMinimapTiles.map( ( tile ) => tile.publicPath ),
 			includeOutdoorWorld: Boolean( outdoorWorldRegion )
 		}
 	} );
-	const { jsonOptimization, packGroups, assetPacks, sidecarRetirement, manifest, finalJsonOptimization } = packed;
+	const { jsonOptimization, packGroups, claimAudit, assetPacks, sidecarRetirement, manifest, finalJsonOptimization } =
+		packed;
 	return {
 		stepTimings,
 		fontCatalog,
@@ -547,6 +549,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		skillStageModels,
 		backgroundInstall,
 		packGroups,
+		claimAudit,
 		jsonOptimization,
 		assetPacks,
 		sidecarRetirement,
@@ -728,6 +731,15 @@ export function formatResourceBuildSummary( results ) {
 			`and packed ${assetPacks.assetCount} assets into ${assetPacks.packCount} browser asset pack(s) ` +
 			`with ${assetPacks.zstdSidecarCount} zstd19/w23 sidecar(s).`
 	);
+	if ( results.claimAudit ) {
+		const audit = results.claimAudit, mib = bytes => (bytes / 1048576).toFixed( 1 );
+		out.push(
+			`Publication ledger: ${audit.files} packed file(s), ${mib( audit.bytes )} MiB, claimed by no build owner ` +
+				`(report only; see .generated/unclaimed-assets.json)` +
+				audit.folders.slice( 0, 8 ).map( f => `
+  ${f.folder}: ${f.files} file(s), ${mib( f.bytes )} MiB` ).join( "" )
+		);
+	}
 	out.push( formatOptimizationSummary( jsonOptimization ) );
 	if ( finalJsonOptimization.minifiedFiles > 0 || finalJsonOptimization.compressionJobs > 0 ) {
 		out.push( formatOptimizationSummary( finalJsonOptimization ) );

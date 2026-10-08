@@ -15,6 +15,7 @@ import {
 	buildOutdoorWorldRegionResources
 } from "./build/world/buildOutdoorWorldRegionResources.mjs";
 import { runConvertImages } from "./build/shared/convertImagesRunner.mjs";
+import { beginPublication, commitPublication } from "./build/shared/publicationLedger.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
 import { assertClientInputs } from "./build/shared/clientInputs.mjs";
 
@@ -60,7 +61,10 @@ const runBuild = async () => {
 			throw new Error( `Source image conversion failed with exit status ${sourceImages.status}.` );
 		}
 	}
+	// A --region run claims only its regions and merges into the full record.
+	if ( !options.planOnly ) beginPublication( "outdoor-world", { complete: options.regionIds.length === 0 } );
 	const result = await buildOutdoorWorldRegionResources( options );
+	if ( !options.planOnly ) await commitPublication();
 	if ( result.planOnly ) {
 		console.log(
 			`Outdoor build plan: ${result.sectorCount} valid sectors, ${result.selectedSectorCount} selected.`
