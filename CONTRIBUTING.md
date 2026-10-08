@@ -25,6 +25,11 @@ OpenSRO ports the original game's behaviour; it does not reinvent it.
 
 A change that makes the game behave like the original needs no special approval; it needs evidence and tests.
 
+You do not need Binary Ninja to contribute native evidence. Start with the
+[Python reverse-engineering tutorial](docs/REVERSE_ENGINEERING.md), then follow
+[saving labels and research progress](docs/RESEARCH_PROGRESS.md) so people and
+AI agents can continue your investigation later.
+
 ---
 
 ## 🚩 3. Anything non-native goes behind a flag
