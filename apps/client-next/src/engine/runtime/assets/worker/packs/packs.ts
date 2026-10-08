@@ -4,7 +4,8 @@
 packs.ts - verified reads from the published asset packs
 
 Every asset the client loads is read here, in the asset worker: resolved
-through the pack index, fetched the cheapest way the delivery allows, and
+through the pack index, fetched whole or by range, decoded when its pack
+stores it gzip-compressed (SROPACK2, native DecompressionStream), and
 checked against the manifest's length and SHA-256 before anyone sees it.
 Verified bytes are kept in the persistent store so a later session reads
 them locally.
@@ -16,7 +17,7 @@ it, silently, so the installer never shows on a loading screen.
 */
 
 import { createPersistentAssets } from "./persistent";
-import { createPackIndex } from "./index/index";
+import { createPackIndex, PACK_MAGIC } from "./index/index";
 import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-contract";
 import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 import { createPackBlocks } from "./blocks";
@@ -47,7 +48,7 @@ createPacks
 
 The worker's pack reader: resolves a published path through the pack index
 and serves verified bytes from the persistent store, a resident pack, a
-per-asset transport, a pack member or a loose file.
+pack member or a loose file.
 ================
 */
 export function createPacks(
@@ -61,9 +62,7 @@ export function createPacks(
 	let origin: string | null = null, index: Promise<Index> | null = null, disposed = false, residentBytes = 0;
 	const unpacked = new Set<string>();
 	const loading = new Map<string, Promise<Loaded>>(), cache = new Map<string, Loaded>();
-	// Manifest-owned offsets only; failed reads are evicted, disposal clears all.
-	const transports = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
-	let transportBytes = 0, transportDecodedBytes = 0, hashCalls = 0, hashBytes = 0;
+	let storedBytes = 0, decodedBytes = 0, hashCalls = 0, hashBytes = 0;
 	const headers = new Map<string, Promise<number>>();
 	/*
 	================
@@ -79,7 +78,7 @@ export function createPacks(
 					end: 11,
 					total: descriptor.bytes
 				} );
-				if ( prefix.length !== 12 || new TextDecoder().decode( prefix.subarray( 0, 8 ) ) !== "SROPACK1" ) {
+				if ( prefix.length !== 12 || new TextDecoder().decode( prefix.subarray( 0, 8 ) ) !== PACK_MAGIC ) {
 					throw Error( "Invalid pack identity" );
 				}
 				const length = new DataView( prefix.buffer, prefix.byteOffset, 12 ).getUint32( 8, true );
@@ -100,7 +99,23 @@ export function createPacks(
 		}
 		const start = await header;
 		if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
-		const bytes = await blocks.read( base, descriptor, start, entry );
+		return decoded( entry, await blocks.read( base, descriptor, start, entry ) );
+	}
+	/*
+	================
+	decoded
+
+	A member's bytes as the manifest names them: the stored bytes of a raw
+	member, or the gzip decoding of a compressed one. The caller still checks
+	length and SHA-256.
+	================
+	*/
+	async function decoded( entry: PackEntry, stored: Uint8Array<ArrayBuffer> ): Promise<Uint8Array<ArrayBuffer>> {
+		if ( !entry.stored ) return stored;
+		storedBytes += stored.length;
+		decodedBytes += entry.length;
+		const bytes = await gunzipBytes( stored, entry.length );
+		if ( bytes.length !== entry.length ) throw Error( "Stored member decodes to the wrong length" );
 		return bytes;
 	}
 	/*
@@ -203,36 +218,6 @@ export function createPacks(
 	}
 	/*
 	================
-	compressed
-	================
-	*/
-	async function compressed( base: string, entry: PackEntry ) {
-		const t = entry.transport!, key = t.sha256;
-		while ( transports.size >= 4 && !transports.has( key ) ) {
-			await Promise.race( [ ...transports.values() ].map( work => work.catch( () => {} ) ) );
-			if ( disposed ) throw Error( "Pack owner disposed" );
-		}
-		let work = transports.get( key );
-		if ( !work ) {
-			work = (async () => {
-				const encoded = await download( base + t.path, t.length, lifetime.signal );
-				if ( encoded.length !== t.length || await sha( encoded ) !== t.sha256 ) {
-					throw Error( "Compressed transport SHA-256 mismatch" );
-				}
-				const bytes = await gunzipBytes( encoded, entry.length );
-				transportBytes += encoded.length;
-				transportDecodedBytes += bytes.length;
-				return bytes;
-			})();
-			transports.set( key, work );
-			void work.finally( () => {
-				transports.delete( key );
-			} ).catch( () => {} );
-		}
-		return (await work).slice();
-	}
-	/*
-	================
 	loose
 	================
 	*/
@@ -244,7 +229,7 @@ export function createPacks(
 	================
 	readVerified
 
-	One verified asset read: persistent store, resident pack, transport, pack
+	One verified asset read: persistent store, resident pack, pack
 	member or loose file, in that order, checked against the manifest's
 	length and SHA-256. `report` publishes loading activity; the background
 	installer reads silently so it never shows on a loading screen.
@@ -283,12 +268,11 @@ export function createPacks(
 			if ( saved ) bytes = saved;
 			else if ( cache.has( entry.packPath ) ) {
 				const loaded = await pack( url.origin, registry.packs.get( entry.packPath )! );
-				bytes = loaded.bytes.slice(
-					loaded.start + entry.offset,
-					loaded.start + entry.offset + entry.length
+				bytes = await decoded(
+					entry,
+					loaded.bytes.slice( loaded.start + entry.offset, loaded.start + entry.offset + entry.span )
 				);
-			} else if ( entry.transport ) bytes = await compressed( url.origin, entry );
-			else if ( unpacked.has( entry.packPath ) ) bytes = await loose( url.origin, entry, signal );
+			} else if ( unpacked.has( entry.packPath ) ) bytes = await loose( url.origin, entry, signal );
 			else {
 				try {
 					const descriptor = registry.packs.get( entry.packPath )!;
@@ -296,9 +280,12 @@ export function createPacks(
 						bytes = await member( url.origin, descriptor, entry, signal );
 					} else {
 						const loaded = await pack( url.origin, descriptor );
-						bytes = loaded.bytes.slice(
-							loaded.start + entry.offset,
-							loaded.start + entry.offset + entry.length
+						bytes = await decoded(
+							entry,
+							loaded.bytes.slice(
+								loaded.start + entry.offset,
+								loaded.start + entry.offset + entry.span
+							)
 						);
 					}
 				} catch ( error ) {
@@ -368,8 +355,8 @@ export function createPacks(
 		stats: () => ({
 			...persistent.stats(),
 			...blocks.stats(),
-			transportBytes,
-			transportDecodedBytes,
+			storedBytes,
+			decodedBytes,
 			hashCalls,
 			hashBytes
 		}),
@@ -409,7 +396,6 @@ export function createPacks(
 			index = null;
 			cache.clear();
 			headers.clear();
-			transports.clear();
 			loading.clear();
 			unpacked.clear();
 			residentBytes = 0;

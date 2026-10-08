@@ -61,12 +61,12 @@ const PERMISSION_LINE_PATTERN = /PermissionError|\[WinError 5\]|\[Errno 1[36]\]|
 // Ways Windows says "that command exists but there is no Python behind it":
 // the Store alias stub, the py launcher's version miss, and cmd's not-found.
 const NO_INTERPRETER_PATTERNS = [
-  /Python was not found/i,
-  /No suitable Python/i,
-  /Requested Python version .* not (?:found|installed)/i,
-  /Can't find a (?:usable|default) (?:init\.tcl|Python)/i,
-  /Unable to create process using/i,
-  /is not recognized as an internal or external command/i
+	/Python was not found/i,
+	/No suitable Python/i,
+	/Requested Python version .* not (?:found|installed)/i,
+	/Can't find a (?:usable|default) (?:init\.tcl|Python)/i,
+	/Unable to create process using/i,
+	/is not recognized as an internal or external command/i
 ];
 const STDERR_TAIL_LIMIT = 6000;
 
@@ -77,13 +77,13 @@ const STDERR_TAIL_LIMIT = 6000;
  * @param {string} filePath
  * @returns {string}
  */
-export function describeHeldFile(filePath) {
-  const fontLike = /\.(ttf|ttc|otf)(\.tmp)?$/i.test(filePath);
-  return (
-    "another process may be holding it open (" +
-    (fontLike ? "on Windows the Font Cache Service is a known culprit for .ttf files; " : "") +
-    "antivirus scanners and dev servers also pin freshly written files)"
-  );
+export function describeHeldFile( filePath ) {
+	const fontLike = /\.(ttf|ttc|otf)(\.tmp)?$/i.test( filePath );
+	return (
+		"another process may be holding it open (" +
+		(fontLike ? "on Windows the Font Cache Service is a known culprit for .ttf files; " : "") +
+		"antivirus scanners and dev servers also pin freshly written files)"
+	);
 }
 
 /**
@@ -92,81 +92,81 @@ export function describeHeldFile(filePath) {
  * @param {PythonAttemptResult} attempt
  * @returns {PythonFailureClassification}
  */
-export function classifyPythonFailure(attempt) {
-  if (attempt.spawnError !== null) {
-    return {
-      kind: "no-interpreter",
-      summary: `interpreter did not run (spawn: ${attempt.spawnError.message})`,
-      permission: null
-    };
-  }
+export function classifyPythonFailure( attempt ) {
+	if ( attempt.spawnError !== null ) {
+		return {
+			kind: "no-interpreter",
+			summary: `interpreter did not run (spawn: ${attempt.spawnError.message})`,
+			permission: null
+		};
+	}
 
-  const stderr = attempt.stderr.trim();
-  const stdout = attempt.stdout.trim();
-  const diagnostic = [stderr, stdout].filter((stream) => stream.length > 0).join("\n");
-  const lines = diagnostic.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
-  const lastLine = lines.length > 0 ? lines[lines.length - 1] : "";
-  const firstLine = lines.length > 0 ? lines[0] : "";
+	const stderr = attempt.stderr.trim();
+	const stdout = attempt.stdout.trim();
+	const diagnostic = [ stderr, stdout ].filter( ( stream ) => stream.length > 0 ).join( "\n" );
+	const lines = diagnostic.split( /\r?\n/ ).map( ( line ) => line.trim() ).filter( ( line ) => line.length > 0 );
+	const lastLine = lines.length > 0 ? lines[lines.length - 1] : "";
+	const firstLine = lines.length > 0 ? lines[0] : "";
 
-  if (MODULE_MISSING_PATTERN.test(lastLine)) {
-    return {
-      kind: "missing-module",
-      summary: `interpreter ran but a required module is missing (${lastLine})`,
-      permission: null
-    };
-  }
+	if ( MODULE_MISSING_PATTERN.test( lastLine ) ) {
+		return {
+			kind: "missing-module",
+			summary: `interpreter ran but a required module is missing (${lastLine})`,
+			permission: null
+		};
+	}
 
-  const pythonRanThePayload =
-    PYTHON_TRACEBACK_PATTERN.test(diagnostic) ||
-    PYTHON_STRING_FRAME_PATTERN.test(diagnostic) ||
-    PYTHON_EXCEPTION_LINE_PATTERN.test(lastLine);
-  if (pythonRanThePayload) {
-    const permissionLine = [...lines].reverse().find((line) => PERMISSION_LINE_PATTERN.test(line)) ?? null;
-    const pathMatch = permissionLine !== null ? permissionLine.match(/'([^']+)'\s*$/) ?? permissionLine.match(/'([^']+)'/) : null;
-    // The quoted path is a Python repr: undo its backslash escaping.
-    const heldPath = pathMatch !== null ? pathMatch[1].replace(/\\\\/g, "\\") : null;
-    return {
-      kind: "operation",
-      summary: `the operation failed (${lastLine})`,
-      permission: permissionLine !== null ? { path: heldPath, line: permissionLine } : null
-    };
-  }
+	const pythonRanThePayload = PYTHON_TRACEBACK_PATTERN.test( diagnostic ) ||
+		PYTHON_STRING_FRAME_PATTERN.test( diagnostic ) ||
+		PYTHON_EXCEPTION_LINE_PATTERN.test( lastLine );
+	if ( pythonRanThePayload ) {
+		const permissionLine = [ ...lines ].reverse().find( ( line ) => PERMISSION_LINE_PATTERN.test( line ) ) ?? null;
+		const pathMatch = permissionLine !== null ?
+			permissionLine.match( /'([^']+)'\s*$/ ) ?? permissionLine.match( /'([^']+)'/ ) :
+			null;
+		// The quoted path is a Python repr: undo its backslash escaping.
+		const heldPath = pathMatch !== null ? pathMatch[1].replace( /\\\\/g, "\\" ) : null;
+		return {
+			kind: "operation",
+			summary: `the operation failed (${lastLine})`,
+			permission: permissionLine !== null ? { path: heldPath, line: permissionLine } : null
+		};
+	}
 
-  if (NO_INTERPRETER_PATTERNS.some((pattern) => pattern.test(diagnostic))) {
-    return {
-      kind: "no-interpreter",
-      summary: `interpreter did not run (${firstLine})`,
-      permission: null
-    };
-  }
+	if ( NO_INTERPRETER_PATTERNS.some( ( pattern ) => pattern.test( diagnostic ) ) ) {
+		return {
+			kind: "no-interpreter",
+			summary: `interpreter did not run (${firstLine})`,
+			permission: null
+		};
+	}
 
-  // A non-zero payload that emitted stdout got far enough to run its
-  // operation.  Audit/check commands commonly reserve stderr for crashes and
-  // print their expected failure report to stdout before exiting 1.  Treating
-  // that shape as an unknown environment failure retries another interpreter
-  // and, worse, drops the only diagnostic (the WIP proof gate is one concrete
-  // example).  Non-empty stdout is therefore positive execution evidence,
-  // not a reason to fall back.
-  if (attempt.stdout.trim().length > 0) {
-    const firstOutputLine = attempt.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0) ?? "non-empty stdout";
-    return {
-      kind: "operation",
-      summary: `the operation reported failure (${firstOutputLine})`,
-      permission: null
-    };
-  }
+	// A non-zero payload that emitted stdout got far enough to run its
+	// operation.  Audit/check commands commonly reserve stderr for crashes and
+	// print their expected failure report to stdout before exiting 1.  Treating
+	// that shape as an unknown environment failure retries another interpreter
+	// and, worse, drops the only diagnostic (the WIP proof gate is one concrete
+	// example).  Non-empty stdout is therefore positive execution evidence,
+	// not a reason to fall back.
+	if ( attempt.stdout.trim().length > 0 ) {
+		const firstOutputLine = attempt.stdout
+			.split( /\r?\n/ )
+			.map( ( line ) => line.trim() )
+			.find( ( line ) => line.length > 0 ) ?? "non-empty stdout";
+		return {
+			kind: "operation",
+			summary: `the operation reported failure (${firstOutputLine})`,
+			permission: null
+		};
+	}
 
-  return {
-    kind: "operation",
-    summary:
-      attempt.exitCode === null
-        ? `the launched payload died from a signal (${lastLine || "no diagnostic output"})`
-        : `the launched payload exited ${attempt.exitCode} (${lastLine || "no diagnostic output"})`,
-    permission: null
-  };
+	return {
+		kind: "operation",
+		summary: attempt.exitCode === null ?
+			`the launched payload died from a signal (${lastLine || "no diagnostic output"})` :
+			`the launched payload exited ${attempt.exitCode} (${lastLine || "no diagnostic output"})`,
+		permission: null
+	};
 }
 
 /**
@@ -175,7 +175,7 @@ export function classifyPythonFailure(attempt) {
  * @returns {string}
  */
 export function pythonExecutable() {
-  return process.env.SRO_PYTHON || (process.platform === "win32" ? "python" : "python3");
+	return process.env.SRO_PYTHON || (process.platform === "win32" ? "python" : "python3");
 }
 
 /**
@@ -185,18 +185,18 @@ export function pythonExecutable() {
  * @param {string[]} pythonArgs
  * @returns {{ label: string, command: string, args: string[] }[]}
  */
-export function pythonAttempts(pythonArgs) {
-  const attempts = [];
-  if (process.env.SRO_PYTHON) {
-    attempts.push({ label: "SRO_PYTHON", command: process.env.SRO_PYTHON, args: [...pythonArgs] });
-  }
-  if (process.platform === "win32") {
-    attempts.push({ label: "py -3", command: "py", args: ["-3", ...pythonArgs] });
-  } else {
-    attempts.push({ label: "python3", command: "python3", args: [...pythonArgs] });
-  }
-  attempts.push({ label: "python", command: "python", args: [...pythonArgs] });
-  return attempts;
+export function pythonAttempts( pythonArgs ) {
+	const attempts = [];
+	if ( process.env.SRO_PYTHON ) {
+		attempts.push( { label: "SRO_PYTHON", command: process.env.SRO_PYTHON, args: [ ...pythonArgs ] } );
+	}
+	if ( process.platform === "win32" ) {
+		attempts.push( { label: "py -3", command: "py", args: [ "-3", ...pythonArgs ] } );
+	} else {
+		attempts.push( { label: "python3", command: "python3", args: [ ...pythonArgs ] } );
+	}
+	attempts.push( { label: "python", command: "python", args: [ ...pythonArgs ] } );
+	return attempts;
 }
 
 /**
@@ -211,32 +211,32 @@ export function pythonAttempts(pythonArgs) {
  * @returns {Promise<{ command: string, stdout: string, stderr: string }>} the
  *   winning attempt's label (see pythonAttempts) and captured output
  */
-export async function runPython(pythonArgs, options) {
-  const context = options.context ?? [];
-  const cwd = options.cwd ?? process.cwd();
-  const attempts = pythonAttempts(pythonArgs);
+export async function runPython( pythonArgs, options ) {
+	const context = options.context ?? [];
+	const cwd = options.cwd ?? process.cwd();
+	const attempts = pythonAttempts( pythonArgs );
 
-  /** @type {{ label: string, classification: PythonFailureClassification, stdout: string, stderr: string }[]} */
-  const environmentFailures = [];
-  for (const attempt of attempts) {
-    const result = await runPythonAttempt(attempt.command, attempt.args, cwd);
-    if (result.spawnError === null && result.exitCode === 0) {
-      return { command: attempt.label, stdout: result.stdout, stderr: result.stderr };
-    }
+	/** @type {{ label: string, classification: PythonFailureClassification, stdout: string, stderr: string }[]} */
+	const environmentFailures = [];
+	for ( const attempt of attempts ) {
+		const result = await runPythonAttempt( attempt.command, attempt.args, cwd );
+		if ( result.spawnError === null && result.exitCode === 0 ) {
+			return { command: attempt.label, stdout: result.stdout, stderr: result.stderr };
+		}
 
-    const classification = classifyPythonFailure(result);
-    if (classification.kind === "operation") {
-      throw new Error(formatOperationFailure(options.task, context, attempt.label, result, classification));
-    }
-    environmentFailures.push({
-      label: attempt.label,
-      classification,
-      stdout: result.stdout,
-      stderr: result.stderr
-    });
-  }
+		const classification = classifyPythonFailure( result );
+		if ( classification.kind === "operation" ) {
+			throw new Error( formatOperationFailure( options.task, context, attempt.label, result, classification ) );
+		}
+		environmentFailures.push( {
+			label: attempt.label,
+			classification,
+			stdout: result.stdout,
+			stderr: result.stderr
+		} );
+	}
 
-  throw new Error(formatEnvironmentFailure(options.task, context, environmentFailures));
+	throw new Error( formatEnvironmentFailure( options.task, context, environmentFailures ) );
 }
 
 /**
@@ -246,30 +246,30 @@ export async function runPython(pythonArgs, options) {
  * @param {string} cwd
  * @returns {Promise<PythonAttemptResult>}
  */
-function runPythonAttempt(command, args, cwd) {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
+function runPythonAttempt( command, args, cwd ) {
+	return new Promise( ( resolve ) => {
+		const child = spawn( command, args, { cwd, windowsHide: true } );
+		let stdout = "";
+		let stderr = "";
+		let settled = false;
 
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      resolve({ command, args, spawnError: error, exitCode: null, stdout, stderr });
-    });
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      resolve({ command, args, spawnError: null, exitCode: code, stdout, stderr });
-    });
-  });
+		child.stdout.on( "data", ( chunk ) => {
+			stdout += chunk;
+		} );
+		child.stderr.on( "data", ( chunk ) => {
+			stderr += chunk;
+		} );
+		child.on( "error", ( error ) => {
+			if ( settled ) return;
+			settled = true;
+			resolve( { command, args, spawnError: error, exitCode: null, stdout, stderr } );
+		} );
+		child.on( "close", ( code ) => {
+			if ( settled ) return;
+			settled = true;
+			resolve( { command, args, spawnError: null, exitCode: code, stdout, stderr } );
+		} );
+	} );
 }
 
 /**
@@ -284,31 +284,31 @@ function runPythonAttempt(command, args, cwd) {
  * @param {PythonFailureClassification} classification
  * @returns {string}
  */
-function formatOperationFailure(task, context, label, result, classification) {
-  const lines = [
-    `${task} failed.`,
-    ...context,
-    `\`${label}\` ran Python and the operation itself failed - the interpreter and its imports are fine, ` +
-      `so this is NOT a missing-Python or missing-module problem; do not reinstall anything over it.`
-  ];
-  if (classification.permission !== null) {
-    lines.push(
-      classification.permission.path !== null
-        ? `Permission/lock failure: could not write '${classification.permission.path}' - ` +
-            `${describeHeldFile(classification.permission.path)}.`
-        : `Permission/lock failure (${classification.permission.line}) - another process may be holding the target open.`
-    );
-  }
-  if (result.stdout.trim().length > 0) {
-    lines.push(`--- stdout (${label}) ---`, trimOutputTail(result.stdout));
-  }
-  if (result.stderr.trim().length > 0) {
-    lines.push(`--- stderr (${label}) ---`, trimOutputTail(result.stderr));
-  }
-  if (result.stdout.trim().length === 0 && result.stderr.trim().length === 0) {
-    lines.push(`--- output (${label}) ---`, "(empty)");
-  }
-  return lines.join("\n");
+function formatOperationFailure( task, context, label, result, classification ) {
+	const lines = [
+		`${task} failed.`,
+		...context,
+		`\`${label}\` ran Python and the operation itself failed - the interpreter and its imports are fine, ` +
+		`so this is NOT a missing-Python or missing-module problem; do not reinstall anything over it.`
+	];
+	if ( classification.permission !== null ) {
+		lines.push(
+			classification.permission.path !== null ?
+				`Permission/lock failure: could not write '${classification.permission.path}' - ` +
+				`${describeHeldFile( classification.permission.path )}.` :
+				`Permission/lock failure (${classification.permission.line}) - another process may be holding the target open.`
+		);
+	}
+	if ( result.stdout.trim().length > 0 ) {
+		lines.push( `--- stdout (${label}) ---`, trimOutputTail( result.stdout ) );
+	}
+	if ( result.stderr.trim().length > 0 ) {
+		lines.push( `--- stderr (${label}) ---`, trimOutputTail( result.stderr ) );
+	}
+	if ( result.stdout.trim().length === 0 && result.stderr.trim().length === 0 ) {
+		lines.push( `--- output (${label}) ---`, "(empty)" );
+	}
+	return lines.join( "\n" );
 }
 
 /**
@@ -320,33 +320,35 @@ function formatOperationFailure(task, context, label, result, classification) {
  * @param {{ label: string, classification: PythonFailureClassification, stdout: string, stderr: string }[]} failures
  * @returns {string}
  */
-function formatEnvironmentFailure(task, context, failures) {
-  const lines = [
-    `${task} failed: every Python attempt failed before the operation could run.`,
-    ...context,
-    ...failures.map((failure) => `  ${failure.label.padEnd(6)} -> ${failure.classification.summary}`)
-  ];
+function formatEnvironmentFailure( task, context, failures ) {
+	const lines = [
+		`${task} failed: every Python attempt failed before the operation could run.`,
+		...context,
+		...failures.map( ( failure ) => `  ${failure.label.padEnd( 6 )} -> ${failure.classification.summary}` )
+	];
 
-  const kinds = new Set(failures.map((failure) => failure.classification.kind));
-  if (kinds.has("missing-module")) {
-    lines.push(
-      "A Python 3 interpreter is present but a required module is not importable from it - " +
-        "do NOT reinstall Python; install the build dependencies instead:",
-      "  py -3 -m pip install -r rebuild/requirements.txt"
-    );
-  } else {
-    lines.push("No usable Python interpreter was found: install Python 3 and make sure the `py` launcher is on PATH.");
-  }
+	const kinds = new Set( failures.map( ( failure ) => failure.classification.kind ) );
+	if ( kinds.has( "missing-module" ) ) {
+		lines.push(
+			"A Python 3 interpreter is present but a required module is not importable from it - " +
+				"do NOT reinstall Python; install the build dependencies instead:",
+			"  py -3 -m pip install -r rebuild/requirements.txt"
+		);
+	} else {
+		lines.push(
+			"No usable Python interpreter was found: install Python 3 and make sure the `py` launcher is on PATH."
+		);
+	}
 
-  for (const failure of failures) {
-    if (failure.stdout.trim().length > 0) {
-      lines.push(`--- stdout (${failure.label}) ---`, trimOutputTail(failure.stdout));
-    }
-    if (failure.stderr.trim().length > 0) {
-      lines.push(`--- stderr (${failure.label}) ---`, trimOutputTail(failure.stderr));
-    }
-  }
-  return lines.join("\n");
+	for ( const failure of failures ) {
+		if ( failure.stdout.trim().length > 0 ) {
+			lines.push( `--- stdout (${failure.label}) ---`, trimOutputTail( failure.stdout ) );
+		}
+		if ( failure.stderr.trim().length > 0 ) {
+			lines.push( `--- stderr (${failure.label}) ---`, trimOutputTail( failure.stderr ) );
+		}
+	}
+	return lines.join( "\n" );
 }
 
 /**
@@ -355,10 +357,10 @@ function formatEnvironmentFailure(task, context, failures) {
  * @param {string} output
  * @returns {string}
  */
-function trimOutputTail(output) {
-  const trimmed = output.trim();
-  if (trimmed.length <= STDERR_TAIL_LIMIT) {
-    return trimmed;
-  }
-  return `[... ${trimmed.length - STDERR_TAIL_LIMIT} chars trimmed ...]\n${trimmed.slice(-STDERR_TAIL_LIMIT)}`;
+function trimOutputTail( output ) {
+	const trimmed = output.trim();
+	if ( trimmed.length <= STDERR_TAIL_LIMIT ) {
+		return trimmed;
+	}
+	return `[... ${trimmed.length - STDERR_TAIL_LIMIT} chars trimmed ...]\n${trimmed.slice( -STDERR_TAIL_LIMIT )}`;
 }

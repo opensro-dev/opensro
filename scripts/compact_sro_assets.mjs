@@ -14,7 +14,12 @@ build/world/paths.mjs.
 import { buildJobs } from "./build/shared/buildParallelism.mjs";
 import { assertInsideRoot, containedPublicFile, normalizePublicAssetPath } from "./build/shared/assetPaths.mjs";
 import { createLimiter, settleAll } from "./build/shared/asyncUtils.mjs";
-import { ASSET_PACK_ZSTD_LEVEL, ASSET_PACK_ZSTD_WINDOW_LOG, compressAssetPackZstd } from "./build/assetPacks.mjs";
+import {
+	ASSET_PACK_VERSION,
+	ASSET_PACK_ZSTD_LEVEL,
+	ASSET_PACK_ZSTD_WINDOW_LOG,
+	compressAssetPackZstd
+} from "./build/assetPacks.mjs";
 import { publishAssetPackManifest } from "./build/assetPackPublication.mjs";
 import { createHash } from "node:crypto";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -70,7 +75,7 @@ await withGeneratedAssetsLock( "compact browser asset release", async () => {
 	const manifest = JSON.parse( await readFile( packManifestPath, "utf8" ) );
 	const packs = manifest.groups.flatMap( ( group ) => group.packs );
 
-	if ( manifest.format !== "sro-asset-pack-index" || manifest.version !== 1 || packs.length === 0 ) {
+	if ( manifest.format !== "sro-asset-pack-index" || manifest.version !== ASSET_PACK_VERSION || packs.length === 0 ) {
 		throw new Error( `Cannot compact an invalid or empty asset-pack manifest: ${packManifestPath}` );
 	}
 	if ( typeof zlib.zstdDecompressSync !== "function" ) {

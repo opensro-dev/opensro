@@ -5,11 +5,11 @@ import { loadDataAsset } from "./jmxAssetIO.mjs";
  * normal null result. Only a missing file is downgraded; permission, I/O and
  * parse failures remain fatal at their owning boundary.
  */
-export async function loadOptionalDataAsset(gamePath) {
-  try {
-    return await loadDataAsset(gamePath);
-  } catch (error) {
-    if (error?.code === "ENOENT") return null;
-    throw error;
-  }
+export async function loadOptionalDataAsset( gamePath ) {
+	try {
+		return await loadDataAsset( gamePath );
+	} catch ( error ) {
+		if ( error?.code === "ENOENT" ) return null;
+		throw error;
+	}
 }

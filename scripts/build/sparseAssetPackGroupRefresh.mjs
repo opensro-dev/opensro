@@ -2,7 +2,8 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as zlib from "node:zlib";
 
-import { ASSET_PACK_MAGIC, buildAssetPacks, validateAssetPackIndex } from "./assetPacks.mjs";
+import { buildAssetPacks, validateAssetPackIndex } from "./assetPacks.mjs";
+import { ASSET_PACK_VERSION, decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
 import { assertInsideRoot, containedPublicFile, normalizePublicAssetPath } from "./shared/assetPaths.mjs";
 import { mapWithConcurrency } from "./shared/asyncUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
@@ -147,7 +148,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 	};
 	validateAssetPackIndex( {
 		format: "sro-asset-pack-index",
-		version: 1,
+		version: ASSET_PACK_VERSION,
 		generatedAt: previous.generatedAt,
 		targetPackBytes: previous.targetPackBytes,
 		groups: [ nextGroup ],
@@ -175,15 +176,10 @@ async function rebuildExistingPackSlot( options ) {
 			if ( targetStats?.isFile() ) {
 				continue;
 			}
-			const start = dataStart + member.offset;
-			const end = start + member.length;
-			if ( start < dataStart || end > identity.length ) {
-				throw new Error( `Packed member ${member.path} exceeds ${options.previousPack.path}.` );
-			}
-			const bytes = identity.subarray( start, end );
-			if ( sha256Hex( bytes ) !== member.sha256 ) {
-				throw new Error( `Packed member ${member.path} failed SHA-256 while hydrating a sparse refresh.` );
-			}
+			const bytes = decodeStoredMember(
+				storedMemberBytes( identity, dataStart, member, options.previousPack.path ),
+				member
+			);
 			await mkdir( path.dirname( targetPath ), { recursive: true } );
 			await writeFile( targetPath, bytes );
 			hydratedPaths.push( targetPath );
@@ -235,10 +231,7 @@ async function readPackIdentity( publicRoot, pack ) {
 }
 
 function packDataStart( buffer, packPath ) {
-	if ( buffer.length < 12 || buffer.subarray( 0, 8 ).toString( "ascii" ) !== ASSET_PACK_MAGIC ) {
-		throw new Error( `Invalid ${ASSET_PACK_MAGIC} header in ${packPath}.` );
-	}
-	const dataStart = 12 + buffer.readUInt32LE( 8 );
+	const dataStart = readPackPrefix( buffer, packPath );
 	if ( dataStart > buffer.length ) {
 		throw new Error( `Invalid header length in ${packPath}.` );
 	}

@@ -40,7 +40,7 @@ test("beta gates reject exposed source and opaque compressed leaks", () => {
 test("group policy rejects unclassified additions and removes developer artifacts", () => {
 	const index = {
 		format: "sro-asset-pack-index",
-		version: 1,
+		version: 2,
 		groups: [ { name: "developer-labs" }, { name: "game-data" } ],
 		assets: [ { group: "developer-labs" }, { group: "game-data" } ]
 	};

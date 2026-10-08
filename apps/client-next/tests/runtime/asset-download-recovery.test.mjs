@@ -204,49 +204,63 @@ test("HTTP failure survives a rejected response-body cleanup", async t => {
 ================
 packedAsset
 
-A valid compressed member lets tests exercise shared pack lifetime through
-the real loader. The range case omits its transport to demand a pack header.
+A real SROPACK2 pack holding one gzip-stored member, padded past the 4 MiB
+whole-pack limit so the loader reads the member by range: the pack header
+first, then the member's own block. serve() answers both as a host would.
 ================
 */
-function packedAsset( ranged = false ) {
-	const bytes = Uint8Array.of( 1, 2, 3 ), compressed = gzipSync( bytes );
+function packedAsset() {
+	const bytes = new Uint8Array( Buffer.alloc( 4096, 7 ) ), stored = gzipSync( bytes, { level: 9 } );
 	const hash = value => createHash( "sha256" ).update( value ).digest( "hex" );
-	const digest = hash( compressed ), path = "/assets/test.bin", packPath = "/assets/packs/test.bin";
-	const transportPath = `/assets/packs/transport/${digest}.gz`;
+	const path = "/assets/test.bin", packPath = "/assets/packs/test-001-000000000000.bin";
+	const row = {
+		path,
+		offset: 0,
+		length: bytes.length,
+		mime: "application/octet-stream",
+		sha256: hash( bytes ),
+		stored: { length: stored.length, encoding: "gzip" }
+	};
+	const header = Buffer.from( JSON.stringify( { format: "sro-asset-pack", version: 2, files: [ row ] } ) );
+	const prefix = Buffer.alloc( 12 );
+	prefix.write( "SROPACK2" );
+	prefix.writeUInt32LE( header.length, 8 );
+	const unpadded = Buffer.concat( [ prefix, header, stored ] );
+	const pack = Buffer.concat( [ unpadded, Buffer.alloc( (5 << 20) - unpadded.length ) ] );
 	const manifest = {
-		version: 1,
+		version: 2,
 		groups: [ {
 			name: "test",
 			assetCount: 1,
-			packs: [ {
-				path: packPath,
-				bytes: 5 << 20,
-				sha256: "0".repeat( 64 ),
-				assetCount: 1
-			} ]
+			packs: [ { path: packPath, bytes: pack.length, sha256: hash( pack ), assetCount: 1 } ]
 		} ],
-		assets: [ {
-			path,
-			packPath,
-			offset: 0,
-			length: bytes.length,
-			mime: "application/octet-stream",
-			sha256: hash( bytes ),
-			...(ranged ? {} : {
-				transport: {
-					path: transportPath,
-					length: compressed.length,
-					sha256: digest,
-					encoding: "gzip"
-				}
-			})
-		} ]
+		assets: [ { ...row, packPath } ]
 	};
-	return { bytes, compressed, manifest, path, transportPath };
+	const dataStart = 12 + header.length;
+	/*
+	================
+	serve
+
+	The host's answer to one request: the manifest, or a 206 slice of the pack.
+	================
+	*/
+	function serve( url, options ) {
+		if ( url.endsWith( "/manifest.json" ) ) return Response.json( manifest );
+		const range = /bytes=(\d+)-(\d+)/.exec( options?.headers?.Range ?? "" );
+		assert.ok( range, `pack read without a range: ${url}` );
+		const [start, end] = range.slice( 1 ).map( Number );
+		return new Response( pack.subarray( start, end + 1 ), {
+			status: 206,
+			headers: { "Content-Range": `bytes ${start}-${end}/${pack.length}` }
+		} );
+	}
+	// The member's own block, as opposed to the pack header reads before it.
+	const isMember = options => options?.headers?.Range?.startsWith( `bytes=${dataStart}-` ) ?? false;
+	return { bytes, manifest, path, serve, isMember };
 }
 
 for ( const dispose of [ false, true ] ) {
-	test( `shared transport backoff respects ${dispose ? "owner disposal" : "subscriber cancellation"}`, {
+	test( `shared member backoff respects ${dispose ? "owner disposal" : "subscriber cancellation"}`, {
 		timeout: 10000
 	}, async t => {
 		t.mock.timers.enable( { apis: [ "setTimeout" ] } );
@@ -260,11 +274,10 @@ for ( const dispose of [ false, true ] ) {
 		/** @type {{ signal?: AbortSignal }} */
 		const transport = {};
 		t.mock.method( globalThis, "fetch", async ( url, options ) => {
-			if ( url.endsWith( "/manifest.json" ) ) return Response.json( asset.manifest );
-			assert.ok( url.endsWith( asset.transportPath ) );
+			if ( !asset.isMember( options ) ) return asset.serve( url, options );
 			transport.signal = options.signal ?? undefined;
 			if ( ++attempts === 1 ) throw new TypeError( "Load failed" );
-			return new Response( asset.compressed );
+			return asset.serve( url, options );
 		} );
 		const loader = createLoader( message => {
 			if ( message.kind !== "progress" ) messages.push( message );
@@ -272,7 +285,7 @@ for ( const dispose of [ false, true ] ) {
 		} );
 		t.after( () => loader.dispose() );
 		for ( const id of [ 1, 2 ] ) {
-			loader.receive( { kind: "load", id, url: `https://example.test${asset.path}`, limit: 3 } );
+			loader.receive( { kind: "load", id, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
 		}
 		await settle();
 		assert.equal( attempts, 1 );
@@ -283,7 +296,7 @@ for ( const dispose of [ false, true ] ) {
 		// the backoff, which the attempt count below proves.
 		assert.ok( transport.signal );
 		t.mock.timers.tick( 250 );
-		// Decompression completes on a worker thread. Counted event-loop turns
+		// Decompression runs through DecompressionStream. Counted event-loop turns
 		// can finish first under the full test load; wait for the actual result.
 		if ( !dispose ) await deliveredResult;
 		else await settle();
@@ -303,7 +316,7 @@ for ( const dispose of [ false, true ] ) {
 
 test("invalid range stays permanent even when response cleanup rejects", async t => {
 	t.mock.timers.enable( { apis: [ "setTimeout" ] } );
-	const asset = packedAsset( true ), messages = [];
+	const asset = packedAsset(), messages = [];
 	let attempts = 0;
 	t.mock.method( globalThis, "fetch", async url => {
 		if ( url.endsWith( "/manifest.json" ) ) return Response.json( asset.manifest );
@@ -314,7 +327,7 @@ test("invalid range stays permanent even when response cleanup rejects", async t
 		if ( message.kind !== "progress" ) messages.push( message );
 	} );
 	t.after( () => loader.dispose() );
-	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: 3 } );
+	loader.receive( { kind: "load", id: 1, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
 	await settle();
 	t.mock.timers.tick( 60000 );
 	await settle();
@@ -581,7 +594,7 @@ test("a byte-limit failure whose body cancel never settles still answers", async
 });
 
 test(
-	"a stalled shared transport is abandoned once and serves the subscriber that stayed",
+	"a stalled shared member read is abandoned once and serves the subscriber that stayed",
 	{ timeout: 10000 },
 	async t => {
 		t.mock.timers.enable( { apis: [ "setTimeout" ] } );
@@ -592,15 +605,15 @@ test(
 			deliver = resolve;
 		} );
 		t.mock.method( globalThis, "fetch", ( url, options ) => {
-			if ( url.endsWith( "/manifest.json" ) ) return Promise.resolve( Response.json( asset.manifest ) );
+			if ( !asset.isMember( options ) ) return Promise.resolve( asset.serve( url, options ) );
 			transports.push( options.signal );
-			// The first transport request never answers; the retry does.
+			// The first member request never answers; the retry does.
 			if ( transports.length === 1 ) {
 				return new Promise( ( resolve, reject ) => {
 					options.signal.addEventListener( "abort", () => reject( options.signal.reason ), { once: true } );
 				} );
 			}
-			return Promise.resolve( new Response( asset.compressed ) );
+			return Promise.resolve( asset.serve( url, options ) );
 		} );
 		const loader = createLoader( message => {
 			if ( message.kind !== "progress" ) messages.push( message );
@@ -608,10 +621,10 @@ test(
 		} );
 		t.after( () => loader.dispose() );
 		for ( const id of [ 1, 2 ] ) {
-			loader.receive( { kind: "load", id, url: `https://example.test${asset.path}`, limit: 3 } );
+			loader.receive( { kind: "load", id, url: `https://example.test${asset.path}`, limit: asset.bytes.length } );
 		}
 		await settle();
-		assert.equal( transports.length, 1, "both subscribers share one transport request" );
+		assert.equal( transports.length, 1, "both subscribers share one member request" );
 		loader.receive( { kind: "cancel", id: 1 } );
 		await settle();
 		assert.equal( transports[0].aborted, false, "one subscriber leaving does not end the shared request" );

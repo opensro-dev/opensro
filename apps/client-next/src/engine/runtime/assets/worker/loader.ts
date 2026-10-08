@@ -250,7 +250,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			redirect: "error",
 			cache: range ?
 				"no-store" :
-				/(?:\/marks\/[GA][0-9_]+\.crb|\/assets\/packs\/transport\/[a-f0-9]{64}\.gz)$/.test(
+				/\/marks\/[GA][0-9_]+\.crb$/.test(
 						new URL( url ).pathname
 					) ?
 				"default" :

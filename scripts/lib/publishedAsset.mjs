@@ -3,6 +3,15 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import * as zlib from "node:zlib";
 import { CLIENT_PUBLIC_ROOT } from "./generatedRoot.mjs";
+import {
+	ASSET_PACK_VERSION,
+	decodeStoredMember,
+	parsePackHeader as parsePackTable,
+	sameStoredForm,
+	storedLength,
+	storedMemberBytes,
+	validStoredForm
+} from "../build/shared/packFormat.mjs";
 
 const defaultPublicRoot = CLIENT_PUBLIC_ROOT;
 const indexCache = new Map();
@@ -39,16 +48,8 @@ export function readPackedAssetBytesSync( publicPath, publicRoot = defaultPublic
 	if ( !headerEntry || !sameAssetDescriptor( headerEntry, entry ) ) {
 		throw new Error( `Pack header does not match the manifest entry for ${entry.path}.` );
 	}
-	const start = loadedPack.dataStart + entry.offset;
-	const end = start + entry.length;
-	if ( start < loadedPack.dataStart || end > loadedPack.bytes.length ) {
-		throw new Error( `Packed asset ${entry.path} exceeds ${pack.path}.` );
-	}
-	const assetBytes = loadedPack.bytes.subarray( start, end );
-	const digest = createHash( "sha256" ).update( assetBytes ).digest( "hex" );
-	if ( digest !== entry.sha256.toLowerCase() ) {
-		throw new Error( `Packed asset SHA-256 mismatch: ${entry.path}.` );
-	}
+	const stored = storedMemberBytes( loadedPack.bytes, loadedPack.dataStart, entry, pack.path );
+	const assetBytes = decodeStoredMember( stored, entry );
 	return decodeGzip ? zlib.gunzipSync( assetBytes ) : assetBytes;
 }
 
@@ -103,7 +104,10 @@ function loadPackIndex( publicRoot ) {
 	const cached = indexCache.get( manifestPath );
 	if ( cached ) return cached;
 	const manifest = JSON.parse( readFileSync( manifestPath, "utf8" ) );
-	if ( manifest.version !== 1 || !Array.isArray( manifest.groups ) || !Array.isArray( manifest.assets ) ) {
+	if (
+		manifest.version !== ASSET_PACK_VERSION || !Array.isArray( manifest.groups ) ||
+		!Array.isArray( manifest.assets )
+	) {
 		throw new Error( `Invalid asset-pack manifest: ${manifestPath}.` );
 	}
 	const packs = manifest.groups.flatMap( ( group ) => group.packs ?? [] );
@@ -156,16 +160,7 @@ function readPackIdentity( publicRoot, pack, expectedAssets ) {
 
 function parsePackHeader( bytes, pack, expectedAssets ) {
 	const packPath = pack.path;
-	if ( bytes.length < 12 || bytes.subarray( 0, 8 ).toString( "ascii" ) !== "SROPACK1" ) {
-		throw new Error( `Invalid asset-pack header: ${packPath}.` );
-	}
-	const headerLength = bytes.readUInt32LE( 8 );
-	const dataStart = 12 + headerLength;
-	if ( dataStart > bytes.length ) throw new Error( `Invalid asset-pack table length: ${packPath}.` );
-	const header = JSON.parse( bytes.subarray( 12, dataStart ).toString( "utf8" ) );
-	if ( header?.format !== "sro-asset-pack" || header.version !== 1 || !Array.isArray( header.files ) ) {
-		throw new Error( `Invalid asset-pack table: ${packPath}.` );
-	}
+	const { header, dataStart } = parsePackTable( bytes, packPath );
 
 	const entriesByPath = new Map();
 	let previousEnd = 0;
@@ -176,15 +171,18 @@ function parsePackHeader( bytes, pack, expectedAssets ) {
 		}
 		if (
 			!Number.isInteger( entry.offset ) || entry.offset < previousEnd || !Number.isInteger( entry.length ) ||
-			entry.length < 0
+			entry.length < 0 || !validStoredForm( entry )
 		) {
 			throw new Error( `Invalid or overlapping asset-pack range for ${entry.path} in ${packPath}.` );
 		}
-		if ( dataStart + entry.offset + entry.length > bytes.length || !/^[a-f0-9]{64}$/i.test( entry.sha256 ?? "" ) ) {
+		if (
+			dataStart + entry.offset + storedLength( entry ) > bytes.length ||
+			!/^[a-f0-9]{64}$/i.test( entry.sha256 ?? "" )
+		) {
 			throw new Error( `Asset-pack table range or digest is invalid for ${entry.path} in ${packPath}.` );
 		}
 		entriesByPath.set( key, entry );
-		previousEnd = entry.offset + entry.length;
+		previousEnd = entry.offset + storedLength( entry );
 	}
 
 	if ( header.files.length !== pack.assetCount || header.files.length !== expectedAssets.length ) {
@@ -204,7 +202,8 @@ function sameAssetDescriptor( left, right ) {
 		left.offset === right.offset &&
 		left.length === right.length &&
 		left.mime === right.mime &&
-		left.sha256.toLowerCase() === right.sha256.toLowerCase();
+		left.sha256.toLowerCase() === right.sha256.toLowerCase() &&
+		sameStoredForm( left, right );
 }
 
 function normalizePublicPath( value, publicRoot ) {

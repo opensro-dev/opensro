@@ -5,6 +5,9 @@
 # ===========================================================================
 
 game.example.com {
+	# Never add application/octet-stream to this encoder: asset packs are
+	# read with Range requests, and a range applies to the encoded bytes.
+	# Pack members carry their own gzip (SROPACK2); the client decodes them.
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=86400"
@@ -32,14 +35,14 @@ game.example.com {
 	@client path /play /play/ /index.html /release.json /assets/* /favicon.ico
 	handle @client {
 		# Cache policy. Content-hashed names never change meaning: Vite bundles
-		# (name-<8+ char hash>), packs (name-NNN-<12 hex>) and per-asset
-		# transports (<64 hex>) are immutable for a year. Every other client
+		# (name-<8+ char hash>) and packs (name-NNN-<12 hex>) are immutable
+		# for a year. Every other client
 		# path - the page, release.json, the pack index - revalidates on each
 		# use, which costs a 304 when unchanged, so a refresh or a new visit
 		# always sees the current release.
-		@immutable path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?|packs/transport/[0-9a-f]{64}\.gz)$
+		@immutable path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?)$
 		header @immutable Cache-Control "public, max-age=31536000, immutable"
-		@revalidate not path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?|packs/transport/[0-9a-f]{64}\.gz)$
+		@revalidate not path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?)$
 		header @revalidate Cache-Control "no-cache"
 
 		root * /var/www/opensro

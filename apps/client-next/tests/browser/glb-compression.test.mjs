@@ -39,7 +39,6 @@ test(
 			// Exercise the loose-deployment fallback with current middleware, without
 			// restarting the shared application server or altering installed packs.
 			const legacy = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/packs/manifest.json", "utf8" ) );
-			for ( const entry of legacy.assets ) delete entry.transport;
 			await page.context().route(
 				"**/assets/packs/manifest.json",
 				route =>

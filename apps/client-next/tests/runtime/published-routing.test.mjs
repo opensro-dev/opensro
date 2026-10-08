@@ -73,7 +73,7 @@ test("HTTP asset delivery revalidates, compresses JSON and bounds partial respon
 			req.end();
 		} );
 	const { zstdCompressSync } = await import( "node:zlib" ), { createHash } = await import( "node:crypto" );
-	const pack = Buffer.concat( [ Buffer.from( "SROPACK1" ), Buffer.alloc( 10000, 7 ) ] ),
+	const pack = Buffer.concat( [ Buffer.from( "SROPACK2" ), Buffer.alloc( 10000, 7 ) ] ),
 		name = "/assets/compact-" + createHash( "sha256" ).update( pack ).digest( "hex" ).slice( 0, 12 ) + ".bin";
 	fs.writeFileSync( path.join( root, name.slice( 1 ) + ".zst" ), zstdCompressSync( pack ) );
 	const compact = await get( name, { range: "bytes=100-199" } );
@@ -221,38 +221,14 @@ for ( const hook of [ "configureServer", "configurePreviewServer" ] ) {
 	} );
 }
 
-test("generated precompression serves full GET and HEAD without runtime encoding and preserves ranges", async t => {
+test("models are gzipped at request time, ranges stay raw and edits are never served stale", async t => {
 	const { createServer, request } = await import( "node:http" ),
-		{ createHash } = await import( "node:crypto" ),
-		{ gzipSync, gunzipSync } = await import( "node:zlib" );
+		{ gunzipSync } = await import( "node:zlib" );
 	const root = fs.mkdtempSync( path.join( os.tmpdir(), "next-precompressed-" ) );
 	t.after( () => fs.rmSync( root, { recursive: true, force: true } ) );
-	fs.mkdirSync( path.join( root, "assets/packs/transport" ), { recursive: true } );
-	const original = Buffer.alloc( 256 << 10, 13 ),
-		encoded = gzipSync( original ),
-		digest = createHash( "sha256" ).update( encoded ).digest( "hex" ),
-		filename = path.join( root, "assets/model.glb" );
+	fs.mkdirSync( path.join( root, "assets" ), { recursive: true } );
+	const original = Buffer.alloc( 256 << 10, 13 ), filename = path.join( root, "assets/model.glb" );
 	fs.writeFileSync( filename, original );
-	const transport = {
-			path: "/assets/packs/transport/" + digest + ".gz",
-			sha256: digest,
-			length: encoded.length,
-			encoding: "gzip"
-		},
-		source = fs.statSync( filename );
-	fs.writeFileSync( path.join( root, transport.path ), encoded );
-	fs.writeFileSync(
-		path.join( root, "assets/packs/delivery.json" ),
-		JSON.stringify( {
-			version: 1,
-			assets: [ {
-				path: "/assets/model.glb",
-				sourceSha256: createHash( "sha256" ).update( original ).digest( "hex" ),
-				sourceStat: { size: source.size, mtimeMs: source.mtimeMs, ctimeMs: source.ctimeMs },
-				transport
-			} ]
-		} )
-	);
 	let middleware;
 	const server = createServer( ( req, res ) => middleware( req, res, () => res.end() ) );
 	publishedAssets( root ).configureServer( {
@@ -284,24 +260,22 @@ test("generated precompression serves full GET and HEAD without runtime encoding
 			req.end();
 		} );
 	const first = await get( { "accept-encoding": "gzip" } );
-	assert.deepEqual( first.body, encoded );
-	assert.equal( Number( first.headers["content-length"] ), encoded.length );
+	assert.equal( first.headers["content-encoding"], "gzip" );
+	assert.deepEqual( gunzipSync( first.body ), original );
+	assert.ok( first.body.length < original.length / 10, "the model travelled compressed" );
 	const head = await get( { "accept-encoding": "gzip" }, "HEAD" );
-	assert.equal( Number( head.headers["content-length"] ), encoded.length );
+	assert.equal( head.headers["content-encoding"], "gzip" );
 	assert.equal( head.body.length, 0 );
+	// A range is identity bytes: an encoded range would break the pack reader.
 	const range = await get( { range: "bytes=4-10", "accept-encoding": "gzip" } );
 	assert.equal( range.status, 206 );
+	assert.equal( range.headers["content-encoding"], undefined );
 	assert.deepEqual( range.body, original.subarray( 4, 11 ) );
-	const direct = await get( {}, "GET", transport.path );
-	assert.match( direct.headers["cache-control"], /immutable/ );
-	assert.equal( direct.headers["content-encoding"], undefined );
-	assert.deepEqual( direct.body, encoded );
 	fs.writeFileSync( filename, Buffer.alloc( original.length, 14 ) );
 	const changed = await get( { "accept-encoding": "gzip" } );
-	assert.deepEqual( gunzipSync( changed.body ), Buffer.alloc( original.length, 14 ) );
-	assert.equal(
-		changed.headers["content-length"],
-		undefined,
-		"stale generated gzip must fall back to current streamed bytes"
+	assert.deepEqual(
+		gunzipSync( changed.body ),
+		Buffer.alloc( original.length, 14 ),
+		"an edit is never served stale"
 	);
 });

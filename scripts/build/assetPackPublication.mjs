@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { gunzipSync, zstdDecompressSync } from "node:zlib";
 import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { validateAssetPackIndex } from "./assetPackIndexValidation.mjs";
+import { decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
 import { collectPackGarbage } from "./assetPackGarbage.mjs";
 
 const hash = bytes => createHash( "sha256" ).update( bytes ).digest( "hex" );
@@ -51,18 +52,15 @@ export async function validatePackedFontAtlases( index, publicRoot, { partial = 
 					maxOutputLength: 64 << 20
 				} );
 			}
-			if (
-				bytes.length !== pack.bytes || hash( bytes ) !== pack.sha256 ||
-				bytes.subarray( 0, 8 ).toString() !== "SROPACK1"
-			) throw Error( "Font pack integrity mismatch: " + pack.path );
+			if ( bytes.length !== pack.bytes || hash( bytes ) !== pack.sha256 ) {
+				throw Error( "Font pack integrity mismatch: " + pack.path );
+			}
 			cache.set( entry.packPath, bytes );
 		}
-		const start = 12 + bytes.readUInt32LE( 8 ) + entry.offset,
-			result = bytes.subarray( start, start + entry.length );
-		if ( result.length !== entry.length || hash( result ) !== entry.sha256 ) {
-			throw Error( "Font member integrity mismatch: " + entry.path );
-		}
-		return result;
+		return decodeStoredMember(
+			storedMemberBytes( bytes, readPackPrefix( bytes, entry.packPath ), entry, entry.packPath ),
+			entry
+		);
 	}
 	for ( const entry of index.assets ) {
 		if ( !/^\/assets\/fonts\/[^/]+\.json(?:\.gz)?$/i.test( entry.path ) ) continue;

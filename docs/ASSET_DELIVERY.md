@@ -14,9 +14,11 @@ pack format, the asset worker or the release tools.
    `.generated/client-public/assets/` and packs it into about 190 binary
    packs (`assets/packs/*.bin`) listed in `assets/packs/manifest.json`.
 2. The browser's asset worker reads every file through that manifest:
-   a whole small pack, a byte range of a large pack, or a gzip "transport"
-   copy of a large member. Every file is verified against its SHA-256
-   before anything uses it, then kept in the browser's Cache Storage.
+   a whole small pack or a byte range of a large pack. A member that gzip
+   shrinks by at least a tenth is stored gzip-compressed inside its pack
+   (SROPACK2) and decoded with the browser's native `DecompressionStream`.
+   Every file is verified against its SHA-256 before anything uses it,
+   then kept in the browser's Cache Storage.
 3. A data release uploads only the bytes the live site does not already
    have, and pack layout is planned against the live manifest so unchanged
    packs keep their URLs and players' caches stay valid.
@@ -67,8 +69,8 @@ means Data.pk2 alone.
 | title-crowd-vat | lazy | 18 MiB | 9 MiB |
 | **Total** | | **2.84 GiB** | **2.04 GiB** |
 
-"On the wire" counts a member's gzip transport when it has one, else its
-raw bytes. A player never downloads all of it at once: the client requests
+"On the wire" was measured before SROPACK2 (2026-10-08), when large members
+travelled as separate gzip transports and the rest raw. A player never downloads all of it at once: the client requests
 files on demand, so the first world entry costs a few hundred MiB and the
 world streams as the player moves. "Load" is the group's intent label in
 the manifest; the client does not preload a group because of it.
@@ -85,9 +87,10 @@ Why the raw total exceeds the original:
 - **Leftovers of older builds were still packed** (for example tile2d
   PNGs next to the `.texture` files that replaced them). The publication
   ledger exists to stop this; see below.
-- **The host serves packs uncompressed.** A ranged read cannot use HTTP
-  `Content-Encoding` (the range would apply to the compressed bytes), so
-  compression has to be part of our own delivery format.
+- **The host serves packs uncompressed, and must.** A ranged read cannot use
+  HTTP `Content-Encoding` (the range would apply to the compressed bytes),
+  so compression is part of our own pack format (SROPACK2, below). Never
+  configure the web server to encode `application/octet-stream`.
 
 [Planned work](#planned-work) lists the measured fixes.
 
@@ -302,10 +305,11 @@ parallel.
 
 ### Compression the build does and does not do
 
-The build writes identity packs, gzip transports for large members and a
-`.gz` sidecar for each published JSON manifest
-(`PUBLISHED_SIDECAR_SUFFIXES` in `shared/compressionUtils.mjs`). It writes
-no Brotli or zstd sidecars: no host serves them. `pnpm assets compact` alone
+The build writes packs whose members are gzip-stored when that saves at
+least a tenth (`shared/memberCompression.mjs`), and a `.gz` sidecar for each
+published JSON manifest (`PUBLISHED_SIDECAR_SUFFIXES` in
+`shared/compressionUtils.mjs`). It writes no Brotli or zstd sidecars: no
+host serves them. `pnpm assets compact` alone
 makes the zstd copies of the packs it keeps (`ensurePackZstdCopies`),
 because only the compact release profile drops the identity copies.
 
@@ -343,9 +347,14 @@ previous `generatedAt` unless their content changed.
 
 ### Layout
 
-A pack is `SROPACK1` (8 bytes), a little-endian u32 header length, a JSON
-header listing its members (`path`, `offset`, `length`, `mime`, `sha256`),
-then the members' bytes back to back. Its file name is
+A pack is `SROPACK2` (8 bytes), a little-endian u32 header length, a JSON
+header (`{format: "sro-asset-pack", version: 2, files}`) listing its members
+(`path`, `offset`, `length`, `mime`, `sha256` and, for a compressed member,
+`stored: {length, encoding: "gzip"}`), then the members' stored bytes back
+to back. `length` and `sha256` are always the decoded identity; `offset`
+and `stored.length` describe the bytes in the pack. One module owns this
+layout on the Node side, `scripts/build/shared/packFormat.mjs`; every
+script reader goes through it. Its file name is
 `<group>-<slot>-<first 12 hex of its sha256>.bin`, so a pack's URL changes
 exactly when its bytes do. `assets/packs/manifest.json` lists every group,
 pack and member; the client admits it only if counts, ranges and digests
@@ -368,14 +377,26 @@ The baseline is the previous local build, or the live site's manifest when
 live manifest**; otherwise the layout follows your local history instead of
 what players have cached.
 
-### Gzip transports
+### Stored members
 
-For a member of at least 64 KiB, or any GLB, where gzip saves at least 10%,
-`scripts/build/assetDelivery.mjs` writes a gzip copy at
-`/assets/packs/transport/<sha256>.gz` and records it on the member. The
-client fetches that copy instead of the member's range, so large models and
-records travel compressed. On the host this is a second copy of the bytes;
-on the wire a player gets one or the other, never both.
+A member is stored gzip-compressed (level 9) when that saves at least 10% of
+its bytes; already-compressed media (PNG, MP3, `.json.gz`) stays raw.
+`scripts/build/shared/memberCompression.mjs` owns the rule and caches each
+verdict under `.state/pack-member-gzip/` by the member's SHA-256 (a hit is
+decoded and re-hashed before reuse; entries no full build used for 30 days
+are pruned). The gzip header's operating-system byte is normalised to 255,
+so the same input packs to the same bytes, and URLs, on Windows and Linux.
+
+Why gzip and not zstd or Brotli, measured on 2026-10-09 (every seventh
+member, same 10% rule): gzip-9 1.677 GiB, zstd-19 1.598 GiB, Brotli-11
+1.547 GiB of 2.506 GiB raw. Browsers decode gzip natively; `DecompressionStream`
+has no zstd in any engine and no Brotli in Chrome (proposed for Interop
+2027), so either would have needed a bundled WebAssembly decoder in a
+client that has no runtime dependencies. The 80-130 MiB difference did not
+justify that.
+
+The gzip transports and `delivery.json` that preceded SROPACK2 (asset
+schema 3) are retired; a full build archives their files.
 
 ## How the browser reads a file
 
@@ -387,14 +408,15 @@ All reads happen in the asset worker
 1. **Cache Storage** (`packs/persistent.ts`, cache `sro-next-verified-v1`),
    keyed by the member's digest. A hit is re-hashed; a mismatch is removed.
 2. **A resident pack** already in memory (up to 128 MiB of whole packs).
-3. **The member's gzip transport**, decoded with `DecompressionStream`.
-4. **The pack**:
+3. **The pack**:
    - a pack of at most 4 MiB is fetched whole, verified and kept;
    - a larger pack is read by HTTP Range. `packs/blocks.ts` groups adjacent
      members into reads of at most 1 MiB, never splitting a member, with at
      most four reads in flight and a 64 MiB block cache. The header is read
      first (also by range) and must agree with the manifest.
-5. **A loose file**, for development trees that are not packed.
+   A stored member is decoded with `DecompressionStream("gzip")`, bounded
+   by its declared length.
+4. **A loose file**, for development trees that are not packed.
 
 Every result is checked against the manifest's length and SHA-256 before
 any caller sees it, then queued for Cache Storage. Ranged responses are
@@ -457,7 +479,7 @@ at the commit being released:
 4. Package: `node apps/client-next/tools/beta/build.mjs` (from
    `apps/client-next`). It writes
    `temp/artifacts/beta/<stamp>/package/` and verifies every pack and
-   transport against the manifest.
+   member against the manifest.
 5. Stage: `python apps/server/ops/release/data_release.py <package> <output>
    --origin https://<origin> --ssh-target <stage user>@<host> --identity
    <stage key>`. It reads the live release, uploads in batches only the
@@ -502,7 +524,7 @@ data release.
 
 | Change | Measured effect |
 | --- | --- |
-| Members stored zstd-compressed inside packs (per member; 1 MiB blocks measured no better), retiring the gzip transports | region JSON 18.1% → 9.6% of raw; models about 50% → 23-38% |
+| Members stored gzip-compressed inside packs, retiring the gzip transports (asset schema 4) | done: 2.506 → about 1.68 GiB on the 2026-10-09 sample |
 | Original DXT blocks (`.texture`) instead of PNG for minimap, outdoor object textures and tile2d | minimap about 269 → 70 MiB; outdoor textures about 213 → 85 MiB; 4-8× less GPU memory |
 | Size gate (`check_compact_assets.mjs`) measures the bytes actually served | today it measures offline zstd copies nobody downloads |
 

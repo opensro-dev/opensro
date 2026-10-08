@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { publishAssetPackManifest, validatePackedFontAtlases } from "../../build/assetPackPublication.mjs";
 import { ASSET_SCHEMA } from "../../build/assetSchema.mjs";
+import { ASSET_PACK_MAGIC } from "../../build/shared/packFormat.mjs";
 
 const hash = b => createHash( "sha256" ).update( b ).digest( "hex" );
 const png = Buffer.from(
@@ -52,7 +53,7 @@ async function fixture( t, { height = 1, image = png, expected = hash( png ), na
 	// Separate immutable packs reproduce the cross-group partial-refresh failure.
 	for ( const [i, [member, bytes]] of members.entries() ) {
 		const header = Buffer.from( "{}" ), prefix = Buffer.alloc( 12 );
-		prefix.write( "SROPACK1" );
+		prefix.write( ASSET_PACK_MAGIC );
 		prefix.writeUInt32LE( header.length, 8 );
 		const identity = Buffer.concat( [ prefix, header, bytes ] ), packPath = "/assets/packs/" + i + ".bin";
 		await writeFile( path.join( root, packPath ), identity );

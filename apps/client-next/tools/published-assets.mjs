@@ -1,5 +1,4 @@
 import { CLIENT_PUBLIC_ROOT } from "../../../scripts/lib/generatedRoot.mjs";
-import { createPublishedDelivery } from "./published-delivery.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +32,6 @@ export function assetEncoding( header, compress ) {
 // never copies the multi-gigabyte asset tree or starts the legacy application.
 export function publishedAssets( root = CLIENT_PUBLIC_ROOT + "/" ) {
 	function install( server ) {
-		const delivery = createPublishedDelivery( root );
 		const packs = createPublishedPacks();
 		server.httpServer?.once( "close", () => packs.dispose() );
 		const buildRoot = path.resolve( server.config.root, server.config.build.outDir );
@@ -94,12 +92,7 @@ export function publishedAssets( root = CLIENT_PUBLIC_ROOT + "/" ) {
 				}"`;
 				response.setHeader( "ETag", etag );
 				response.setHeader( "Last-Modified", stat.mtime.toUTCString() );
-				response.setHeader(
-					"Cache-Control",
-					/^\/assets\/packs\/transport\/[a-f0-9]{64}\.gz$/.test( pathname ) ?
-						"public, max-age=31536000, immutable" :
-						"no-cache"
-				);
+				response.setHeader( "Cache-Control", "no-cache" );
 				response.setHeader( "Accept-Ranges", "bytes" );
 				response.setHeader(
 					"Content-Type",
@@ -149,31 +142,18 @@ export function publishedAssets( root = CLIENT_PUBLIC_ROOT + "/" ) {
 					response.setHeader( "Cache-Control", "no-store" );
 				}
 				const gzip = encoding === "gzip";
-				let precompressed;
-				try {
-					if ( gzip ) precompressed = await delivery.gzip( pathname, stat );
-				} catch {
-					response.statusCode = 500;
-					response.end( "Published compression failed integrity" );
-					return;
-				}
-				if ( response.destroyed ) return;
-				if ( gzip ) {
-					response.setHeader( "Content-Encoding", "gzip" );
-					if ( precompressed ) response.setHeader( "Content-Length", precompressed.length );
-				} else response.setHeader( "Content-Length", Math.max( 0, end - start + 1 ) );
+				if ( gzip ) response.setHeader( "Content-Encoding", "gzip" );
+				else response.setHeader( "Content-Length", Math.max( 0, end - start + 1 ) );
 				if ( request.method === "HEAD" ) {
 					response.end();
 					return;
 				}
-				const stream = precompressed ?
-					fs.createReadStream( precompressed.filename ) :
-					packed ?
+				const stream = packed ?
 					Readable.from( [ packed.bytes.subarray( start, end + 1 ) ] ) :
 					fs.createReadStream( target, stat.size ? { start, end } : undefined );
 				stream.on( "error", () => response.destroy() );
 				response.on( "close", () => stream.destroy() );
-				if ( gzip && !precompressed ) {
+				if ( gzip ) {
 					const encoder = createGzip();
 					encoder.on( "error", () => response.destroy() );
 					response.on( "close", () => encoder.destroy() );

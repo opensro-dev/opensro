@@ -8,12 +8,12 @@ await withGeneratedAssetsLock( "Generated lossless asset delivery", async () => 
 	await buildWebAssetManifest();
 	await refreshGeneratedManifestSidecars( { onlyWhenStale: true } );
 	const index = JSON.parse( await readFile( CLIENT_PUBLIC_ROOT + "/assets/packs/manifest.json", "utf8" ) );
-	const rows = index.assets.filter( e => e.transport );
+	const rows = index.assets.filter( e => e.stored );
 	console.log(
 		JSON.stringify( {
-			compressedMembers: rows.length,
+			storedMembers: rows.length,
 			identityBytes: rows.reduce( ( n, e ) => n + e.length, 0 ),
-			compressedBytes: rows.reduce( ( n, e ) => n + e.transport.length, 0 ),
+			storedBytes: rows.reduce( ( n, e ) => n + e.stored.length, 0 ),
 			animationManifests: index.assets.filter( e => e.animationSources ).length
 		} )
 	);

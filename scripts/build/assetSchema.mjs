@@ -13,8 +13,10 @@ History:
   1  crowd dress, weapon and cosmetic tables (roster catalog version 2)
   2  one per-item catalog keyed by RefItemID with codes (catalog version 3)
   3  character GLBs can embed original BC1/BC2/BC3 mip resources
+  4  SROPACK2 packs: members stored gzip-compressed when that saves a tenth;
+     no gzip transports or delivery.json (pack index version 2)
 
 ===========================================================================
 */
 
-export const ASSET_SCHEMA = 3;
+export const ASSET_SCHEMA = 4;

@@ -14,7 +14,7 @@ import "./build/shared/buildParallelism.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { collectOutdoorWorldFiles } from "./build/assetPackGroups.mjs";
-import { buildAssetPacks } from "./build/assetPacks.mjs";
+import { ASSET_PACK_VERSION, buildAssetPacks } from "./build/assetPacks.mjs";
 import { optimizeJsonAssets } from "./build/jsonAssetCompression.mjs";
 import { publishBytesAtomically } from "./build/shared/atomicPublish.mjs";
 import {
@@ -115,11 +115,11 @@ the cache knows which packs it may reuse.
 */
 async function seedOutdoorPackCache( previous ) {
 	const existing = await readFile( OUTDOOR_PACK_CACHE_INDEX, "utf8" ).then( JSON.parse ).catch( () => undefined );
-	if ( existing?.format === "sro-asset-pack-index" && existing.version === 1 ) return;
+	if ( existing?.format === "sro-asset-pack-index" && existing.version === ASSET_PACK_VERSION ) return;
 	const group = requireGroup( previous, OUTDOOR_GROUP );
 	const seed = {
 		format: "sro-asset-pack-index",
-		version: 1,
+		version: ASSET_PACK_VERSION,
 		generatedAt: previous.generatedAt,
 		targetPackBytes: previous.targetPackBytes,
 		groups: [ structuredClone( group ) ],

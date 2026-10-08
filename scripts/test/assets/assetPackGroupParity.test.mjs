@@ -19,6 +19,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
+import { ASSET_PACK_MAGIC, decodeStoredMember, storedLength } from "../../build/shared/packFormat.mjs";
 import {
 	collectAssetPackGroups,
 	OUTDOOR_WORLD_PACK_TARGET_BYTES,
@@ -232,10 +233,11 @@ test("the packed mission boot catalog is byte-identical to its current loose gzi
 	try {
 		const prefix = Buffer.alloc( 12 );
 		await pack.read( prefix, 0, prefix.length, 0 );
-		assert.equal( prefix.subarray( 0, 8 ).toString( "ascii" ), "SROPACK1" );
+		assert.equal( prefix.subarray( 0, 8 ).toString( "ascii" ), ASSET_PACK_MAGIC );
 		const dataStart = 12 + prefix.readUInt32LE( 8 );
-		const packedBytes = Buffer.alloc( asset.length );
-		await pack.read( packedBytes, 0, packedBytes.length, dataStart + asset.offset );
+		const stored = Buffer.alloc( storedLength( asset ) );
+		await pack.read( stored, 0, stored.length, dataStart + asset.offset );
+		const packedBytes = decodeStoredMember( stored, asset );
 
 		assert.deepEqual(
 			packedBytes,

@@ -28,6 +28,15 @@
 //                                    so temp trees never touch the production cache).
 
 import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
+import {
+	ASSET_PACK_HEADER_FORMAT,
+	ASSET_PACK_MAGIC,
+	ASSET_PACK_VERSION,
+	decodeStoredMember,
+	sameStoredForm,
+	storedLength,
+	validStoredForm
+} from "../build/shared/packFormat.mjs";
 import { createHash } from "node:crypto";
 import { open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -64,7 +73,7 @@ const assetsByPackPath = new Map();
 const groupStats = new Map();
 
 assertEqual( manifest.format, "sro-asset-pack-index", "manifest format" );
-assertEqual( manifest.version, 1, "manifest version" );
+assertEqual( manifest.version, ASSET_PACK_VERSION, "manifest version" );
 assertArray( manifest.groups, "manifest groups" );
 assertArray( manifest.assets, "manifest assets" );
 
@@ -131,6 +140,7 @@ for ( const asset of manifest.assets ) {
 		mime: assertString( asset.mime, `asset ${assetPath} mime` ),
 		sha256: sha256Digest( asset.sha256, `asset ${assetPath} sha256` )
 	};
+	if ( !validStoredForm( normalizedAsset ) ) fail( `asset ${assetPath} has an invalid stored form` );
 	assetsByPackPath.get( packPath ).push( normalizedAsset );
 
 	const stats = groupStats.get( asset.group );
@@ -223,9 +233,12 @@ for ( const [packPath, pack] of packByPath ) {
 		assertEqual( headerEntry.length, asset.length, `pack ${packPath} ${asset.path} length` );
 		assertEqual( headerEntry.mime, asset.mime, `pack ${packPath} ${asset.path} MIME type` );
 		assertEqual( headerEntry.sha256, asset.sha256, `pack ${packPath} ${asset.path} header SHA-256` );
+		if ( !sameStoredForm( headerEntry, asset ) ) {
+			fail( `pack ${packPath} ${asset.path} stored form differs from the manifest` );
+		}
 
 		const start = header.dataStart + asset.offset;
-		const end = start + asset.length;
+		const end = start + storedLength( asset );
 		if ( end > pack.bytes ) {
 			fail( `pack ${packPath} ${asset.path} extends past pack bytes` );
 		}
@@ -233,11 +246,11 @@ for ( const [packPath, pack] of packByPath ) {
 		// cache-confirmed path the pack bytes are proven identical to the manifest's
 		// whole-pack digest, and the header/manifest digest agreement above still runs.
 		if ( packBuffer ) {
-			assertEqual(
-				sha256Hex( packBuffer.subarray( start, end ) ),
-				asset.sha256,
-				`pack ${packPath} ${asset.path} slice SHA-256`
-			);
+			try {
+				decodeStoredMember( packBuffer.subarray( start, end ), asset );
+			} catch ( error ) {
+				fail( `pack ${packPath} ${asset.path} member: ${error.message}` );
+			}
 		}
 		checkedAssets += 1;
 	}
@@ -319,14 +332,15 @@ function parsePackHeader( buffer, packBytes, packPath ) {
 	if ( buffer.byteLength < 12 ) {
 		fail( `pack ${packPath} is too small` );
 	}
-	assertEqual( buffer.subarray( 0, 8 ).toString( "ascii" ), "SROPACK1", `pack ${packPath} magic` );
+	assertEqual( buffer.subarray( 0, 8 ).toString( "ascii" ), ASSET_PACK_MAGIC, `pack ${packPath} magic` );
 	const headerLength = buffer.readUInt32LE( 8 );
 	const dataStart = 12 + headerLength;
 	if ( headerLength <= 0 || dataStart > packBytes || dataStart > buffer.byteLength ) {
 		fail( `pack ${packPath} has invalid header length` );
 	}
 	const header = JSON.parse( buffer.subarray( 12, dataStart ).toString( "utf8" ) );
-	assertEqual( header.format, "sro-asset-pack", `pack ${packPath} header format` );
+	assertEqual( header.format, ASSET_PACK_HEADER_FORMAT, `pack ${packPath} header format` );
+	assertEqual( header.version, ASSET_PACK_VERSION, `pack ${packPath} header version` );
 	assertArray( header.files, `pack ${packPath} header files` );
 	const seen = new Set();
 	const files = header.files.map( ( entry, index ) => {
@@ -341,16 +355,20 @@ function parsePackHeader( buffer, packBytes, packPath ) {
 			offset: integer( entry.offset, `pack ${packPath} ${assetPath} offset` ),
 			length: integer( entry.length, `pack ${packPath} ${assetPath} length` ),
 			mime: assertString( entry.mime, `pack ${packPath} ${assetPath} mime` ),
-			sha256: sha256Digest( entry.sha256, `pack ${packPath} ${assetPath} sha256` )
+			sha256: sha256Digest( entry.sha256, `pack ${packPath} ${assetPath} sha256` ),
+			...(entry.stored === undefined ? {} : { stored: entry.stored })
 		};
 	} );
+	for ( const file of files ) {
+		if ( !validStoredForm( file ) ) fail( `pack ${packPath} ${file.path} has an invalid stored form` );
+	}
 	files.sort( ( left, right ) => left.offset - right.offset );
 	let previousEnd = 0;
 	for ( const file of files ) {
 		if ( file.offset < previousEnd ) {
 			fail( `pack ${packPath} header has overlapping range for ${file.path}` );
 		}
-		previousEnd = file.offset + file.length;
+		previousEnd = file.offset + storedLength( file );
 	}
 	return { dataStart, files };
 }
