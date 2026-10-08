@@ -7,14 +7,18 @@ package party_test
 // live session already holds the bind key (the friend lane's
 // FriendSessionClosed guard) and drop NOTHING: the character never went
 // offline, and the winner's live party state must survive its
-// predecessor's teardown.
+// predecessor's teardown. A resumed transport is the opposite edge: the
+// same session re-enters the same character and keeps its membership.
 
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	presence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/testsupport/wait"
+	"opensro.online/server/internal/transport"
 )
 
 // TestPartyReplacedTabKeepsWinnerMembership proves the presence guard on
@@ -72,4 +76,60 @@ func TestPartyReplacedTabKeepsWinnerMembership(t *testing.T) {
 	if !outstanding || invite.InviterName != e2eNameC {
 		t.Fatalf("the winner's pending invitation was consumed by the replaced tab's close (outstanding %v, inviter %q)", outstanding, invite.InviterName)
 	}
+}
+
+/*
+================
+TestPartyResumeKeepsMembership
+
+A resumed transport re-enters the same character on the same session. The
+client keeps its party across that entry, so the server keeps the member:
+the partner hears no LOGOUT, the registry still holds the pair, and the
+resumed session is still the member the party lane routes to.
+================
+*/
+func TestPartyResumeKeepsMembership(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "authority")
+	server := startPartyServer(t, dir, true)
+
+	connA := dialWS(t, server.srv)
+	helloWS(t, connA)
+	enterWorld(t, connA, e2eNameA)
+	connB := dialWS(t, server.srv)
+	welcomeB := helloTokenWS(t, connB, nil)
+	enterWorld(t, connB, e2eNameB)
+
+	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x00))
+	expectPartyPrompt(t, connB, gidA, "B's proposal", 2, 0)
+	sendFrame(t, connB, party.OpInvitationProposal, consentFrame(1))
+	pair := []party.MemberRow{chinaMaleRow(gidA, e2eNameA), chinaMaleRow(gidB, e2eNameB)}
+	expectPartySeed(t, connA, gidA, gidA, 0x00, pair, "A's form")
+	expectPartySeed(t, connB, gidB, gidA, 0x00, pair, "B's form")
+
+	// B's socket dies without a close frame; the session detaches and
+	// keeps its queue, then a second socket resumes it and re-enters B.
+	sessionB, ok := server.srv.Hub.Session(welcomeB.SessionID)
+	if !ok {
+		t.Fatal("B's session is not registered")
+	}
+	_ = connB.NetConn().Close()
+	wait.Eventually(t, 5*time.Second, "B's session detach", func() bool { return sessionB.Kind() == "detached" })
+	connB2 := dialWS(t, server.srv)
+	resumed := helloTokenWS(t, connB2, welcomeB.ResumeToken)
+	if !resumed.Resumed || resumed.SessionID != welcomeB.SessionID {
+		t.Fatalf("second socket did not resume B's session: %+v", resumed)
+	}
+	enterWorld(t, connB2, e2eNameB)
+
+	gameReadyBarrier(t, connA, "A after B's resume: no LOGOUT, no BROKEN")
+	if got := server.runtime.Registry().Count(); got != 1 {
+		t.Fatalf("registry count after resume = %d, want 1", got)
+	}
+	snapshot, partied := server.runtime.Registry().PartyOf(e2eDivision, e2eNameB)
+	if !partied || len(snapshot.Members) != 2 {
+		t.Fatalf("B's party after resume = %+v (partied %v), want the pair", snapshot, partied)
+	}
+
+	sendFrame(t, connA, transport.OpBye, []byte{transport.ByeReasonNormal})
+	sendFrame(t, connB2, transport.OpBye, []byte{transport.ByeReasonNormal})
 }

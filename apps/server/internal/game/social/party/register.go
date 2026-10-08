@@ -721,17 +721,26 @@ state, and reseeding it here would race the bootstrap frame order,
 so the honest posture is the same departure a disconnect takes
 (DECISION: a session boundary always drops the member; in-memory
 party state does not survive the player's transport).
+
+A resumed transport is not a session boundary: it re-enters the same
+character on the same session (s.Rebound), the client keeps its party
+across that entry as it does across a teleport, and the member stays.
+Dropping here left the resumed client holding a party the server had
+dissolved. A nil session (detached callers) is a new admission.
 ==================
 */
-func (r *Runtime) WorldBound(divisionID string, character *enterworld.Character) {
+func (r *Runtime) WorldBound(s *transport.Session, divisionID string, character *enterworld.Character) {
 	if character == nil {
 		return
 	}
-	// A prompt the PREVIOUS session received died with it - the fresh
-	// client shows no box, so a consent from the new session must find
+	// A prompt the PREVIOUS client received died with it - the fresh
+	// client shows no box, so a consent from the new entry must find
 	// nothing outstanding.
 	if r.registry.DropPendingInviteFor(divisionID, character.Name) {
 		log.Debugf("party: %s re-entered the world; stale pending invitation dropped", character.Name)
+	}
+	if s != nil && s.Rebound() {
+		return
 	}
 	if r.dropMember(divisionID, character.Name, PartyLeaveReasonLogout, nil) {
 		log.Debugf("party: %s re-entered the world; stale party membership dropped", character.Name)

@@ -191,7 +191,7 @@ func startCampServer(t *testing.T, dir string, seeds []*enterworld.Character) ca
 
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {
 		srv.Hub.BindExclusive(presence.BindKey(divisionID, character.Name), s)
-		partyRt.WorldBound(divisionID, character)
+		partyRt.WorldBound(s, divisionID, character)
 		guildInv.WorldBound(divisionID, character)
 		mentorInv.WorldBound(s, divisionID, character)
 	}

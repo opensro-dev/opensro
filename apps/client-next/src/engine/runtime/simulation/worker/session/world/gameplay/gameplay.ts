@@ -852,14 +852,17 @@ bootstrap
 Validate authoritative entry data before exposing character facts. Live
 packets own subsequent mutations; bootstrap owns only initial state.
 
-travel marks the entry that follows a 0x3369 world transfer. Party and
-guild state survive it: native keeps them in g_CharacterDependentData,
-which only CPSMission_OnCreate clears (829EE0 -> 828960), and the server
-keeps the membership and resends nothing. Wiping them here made the next
-0x3E58 type-6 row throw "Unknown party delta member" after every teleport.
+continued marks an entry that continues the same character's session: the
+one after a 0x3369 world transfer, or a resumed transport's repeated
+EnterWorld. Party and guild state survive it. Native keeps them in
+g_CharacterDependentData and its teleport reset retains the roster (the
+clear, 828960, runs from the party handlers, mission creation 829EE0 and
+teardown), and the server keeps the membership across both entries and
+resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
+"Unknown party delta member" after every teleport or reconnect.
 ================
 		*/
-		bootstrap( value: unknown, travel = false ) {
+		bootstrap( value: unknown, continued = false ) {
 			pickup.clear();
 			cosPickup.clear();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
@@ -952,8 +955,11 @@ keeps the membership and resends nothing. Wiping them here made the next
 			fortress = fortressBootstrap( value );
 			musicMode = 0;
 			const entryName = (value as { character?: { name?: string; }; }).character?.name ?? "";
-			// resetWorld already closed the transfer's prompts; the roster stays.
-			social = travel && social.localName === entryName ? social : emptySocial( entryName );
+			// The entry's prompts died with the old scene (resetWorld closes a
+			// transfer's; a resume's 0x3369 follows it); the roster stays.
+			social = continued && social.localName === entryName ?
+				withoutResurrection( { ...social, invitation: null } ) :
+				emptySocial( entryName );
 			bindings = skillBindings( value );
 			catalog = nextCatalog;
 			castMotion.catalog( nextCatalog );

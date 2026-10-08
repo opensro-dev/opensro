@@ -183,7 +183,7 @@ func startJoinServer(t *testing.T, dir string, seeds []*enterworld.Character) jo
 		if s.Evicted() {
 			return
 		}
-		partyRt.WorldBound(divisionID, character)
+		partyRt.WorldBound(s, divisionID, character)
 		runtime.WorldBound(divisionID, character)
 		mentorRt.WorldBound(s, divisionID, character)
 	}

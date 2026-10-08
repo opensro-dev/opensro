@@ -97,7 +97,7 @@ func (game *gameplayPlane) worldBound(
 	game.items.BindRecoverySession(divisionID, character, session.ID)
 	game.movement.WorldBound(session, divisionID, character)
 	community.FriendWorldBound(game.deps, game.presence, divisionID, character)
-	game.parties.WorldBound(divisionID, character)
+	game.parties.WorldBound(session, divisionID, character)
 	game.matches.WorldBound(divisionID, character)
 	game.guildInvites.WorldBound(divisionID, character)
 	game.unions.DropPendingInvite(divisionID, character.Name)

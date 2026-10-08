@@ -113,7 +113,7 @@ func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (
 	lane.PeerPending = parties.Registry().HasPendingInviteFor
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {
 		srv.Hub.BindExclusive(presence.BindKey(divisionID, character.Name), s)
-		parties.WorldBound(divisionID, character)
+		parties.WorldBound(s, divisionID, character)
 	}
 	srv.Hub.OnSessionClose(func(s *transport.Session, _ error) {
 		parties.SessionClosed(s)

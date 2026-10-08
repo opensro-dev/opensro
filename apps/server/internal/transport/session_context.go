@@ -26,6 +26,9 @@ type sessionPlayerContext struct {
 	objectID      uint32
 	worldReady    bool
 	worldSnapshot any
+	// rebound: the last BindCharacter named the character this session
+	// already carried (a resumed transport's repeated EnterWorld).
+	rebound bool
 }
 
 // BindAdmissionIdentity installs the HELLO account/shard identity or
@@ -75,6 +78,7 @@ BindCharacter
 func (s *Session) BindCharacter(divisionID, characterName string, objectID uint32) {
 	s.mu.Lock()
 	s.player.mu.Lock()
+	s.player.rebound = s.player.divisionID == divisionID && s.player.characterName == characterName
 	s.player.divisionID = divisionID
 	s.player.characterName = characterName
 	s.player.objectID = objectID
@@ -141,6 +145,24 @@ func (s *Session) TryMarkWorldReady() bool {
 		s.recordHistoryLocked("world_entered", nil)
 	}
 	return true
+}
+
+/*
+================
+Rebound
+
+Whether the current binding repeated the character this session already
+carried: a resumed transport re-enters the same character on the same
+session, while a first entry or another character is a new admission.
+Lanes that keep per-character state across a session (the party) tell
+the two apart with this; the client keeps that state across the same
+resume.
+================
+*/
+func (s *Session) Rebound() bool {
+	s.player.mu.RLock()
+	defer s.player.mu.RUnlock()
+	return s.player.rebound
 }
 
 // WorldReady reports whether this bound character completed scene admission.
@@ -212,6 +234,7 @@ func (s *Session) ClearGameplayContext() {
 	s.player.objectID = 0
 	s.player.worldReady = false
 	s.player.worldSnapshot = nil
+	s.player.rebound = false
 	s.player.mu.Unlock()
 	s.mu.Unlock()
 	s.hub.reindexDivision(s)

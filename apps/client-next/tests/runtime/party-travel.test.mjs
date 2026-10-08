@@ -3,9 +3,10 @@
 
 party-travel.test.mjs - tests for core.ts and gameplay.ts bootstrap
 
-A 0x3369 world transfer keeps the party: native keeps it in
-g_CharacterDependentData, which only CPSMission_OnCreate clears, and the
-server keeps the membership and resends nothing. The member deltas that
+A 0x3369 world transfer or a resumed transport keeps the party: native
+keeps it in g_CharacterDependentData and its teleport reset retains the
+roster, and the server keeps the membership across both entries and
+resends nothing. The member deltas that
 follow a teleport must find the roster ("Unknown party delta member").
 A new character, or a cleared session, starts with no party.
 
@@ -142,21 +143,35 @@ test("a cleared session or another character starts with no party", () => {
 	fresh.dispose();
 });
 
-test("a resumed transport keeps the party the server kept", () => {
-	// Login order: the EnterWorld result, then the bootstrap's own 0x3369. A
-	// resume repeats the EnterWorld result on the same session; the server
-	// keeps the membership (WorldBound runs once per session).
-	const core = createWorldCore( () => {} ), presentation = createPresentation();
-	core.bootstrap( entry( "Me" ) );
-	core.receive( frame( 0x3369, [ 0x4f, 0x69 ] ), 0 );
-	core.receive( frame( 0xb0d5, [ 1, ...u32( SELF_ID ) ] ), 0 );
-	core.receive(
-		frame( 0x35d6, [ 3, ...u32( SELF_ID ), 0, 2, ...partyRow( SELF_ID, "Me" ), ...partyRow( PEER_ID, "Other" ) ] ),
-		0
-	);
-	core.bootstrap( entry( "Me" ) );
-	core.receive( memberUpdate( PEER_ID, 22 ), 1 );
-	assert.equal( social( core, presentation ).members[1].level, 22 );
-	core.dispose();
-	presentation.dispose();
+test("a resumed transport keeps the party the server kept, after loading completed", () => {
+	// Login order: the EnterWorld result, then the bootstrap's own 0x3369.
+	// Loading completion (travelReady) retires that reset latch, so only the
+	// transport's resume state can mark the repeated EnterWorld (world.ts).
+	for ( const resumed of [ true, false ] ) {
+		const core = createWorldCore( () => {} ), presentation = createPresentation();
+		core.bootstrap( entry( "Me" ) );
+		core.receive( frame( 0x3369, [ 0x4f, 0x69 ] ), 0 );
+		core.travelReady();
+		core.receive( frame( 0xb0d5, [ 1, ...u32( SELF_ID ) ] ), 0 );
+		core.receive(
+			frame( 0x35d6, [
+				3,
+				...u32( SELF_ID ),
+				0,
+				2,
+				...partyRow( SELF_ID, "Me" ),
+				...partyRow( PEER_ID, "Other" )
+			] ),
+			0
+		);
+		core.bootstrap( entry( "Me" ), resumed );
+		if ( resumed ) {
+			core.receive( memberUpdate( PEER_ID, 22 ), 1 );
+			assert.equal( social( core, presentation ).members[1].level, 22 );
+		} else {
+			assert.deepEqual( social( core, presentation ).members, [], "a non-resumed entry starts over" );
+		}
+		core.dispose();
+		presentation.dispose();
+	}
 });

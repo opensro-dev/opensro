@@ -160,7 +160,7 @@ func startInviteServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 
 	deps.OnWorldBound = func(s *transport.Session, divisionID string, character *enterworld.Character) {
 		srv.Hub.BindExclusive(presence.BindKey(divisionID, character.Name), s)
-		partyRt.WorldBound(divisionID, character)
+		partyRt.WorldBound(s, divisionID, character)
 		invites.WorldBound(divisionID, character)
 	}
 	srv.Hub.OnSessionClose(func(s *transport.Session, _ error) {

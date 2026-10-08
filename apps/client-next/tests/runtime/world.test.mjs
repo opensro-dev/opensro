@@ -519,6 +519,111 @@ test("fresh admission on reconnect; WELCOME cannot reuse an old bootstrap barrie
 	assert.deepEqual( mints, [ "transport", "enterworld", "transport", "enterworld" ] );
 	world.dispose();
 });
+/*
+================
+partyFrames
+
+The 0xB0D5 seed and a two-member 0x35D6 roster, then one 0x3E58 type-6
+member delta, as the party lane sends them.
+================
+*/
+function partyFrames( selfId, peerId ) {
+	const word = n => {
+		const b = Buffer.alloc( 4 );
+		b.writeUInt32LE( n );
+		return [ ...b ];
+	};
+	const name = s => [ Buffer.byteLength( s ), 0, ...Buffer.from( s ) ];
+	const row = ( id, who ) => [
+		0x37,
+		...word( id ),
+		...name( who ),
+		...word( 1907 ),
+		20,
+		0x9a,
+		1,
+		1,
+		10,
+		0,
+		0,
+		0,
+		20,
+		0,
+		...word( 0 )
+	];
+	return {
+		seed: Uint8Array.from( [ 1, ...word( selfId ) ] ),
+		roster: Uint8Array.from( [
+			3,
+			...word( selfId ),
+			0,
+			2,
+			...row( selfId, "fixture" ),
+			...row( peerId, "Other" )
+		] ),
+		delta: level =>
+			Uint8Array.from( [ 6, ...word( peerId ), 0x26, level, 0x9a, 1, 1, 11, 0, 0, 0, 20, 0, ...word( 0 ) ] )
+	};
+}
+test("a resumed session keeps the party, so the next member delta applies after loading completed", async t => {
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	const presentation = createPresentation(), party = partyFrames( 11, 22 );
+	const drain = () => {
+		let batch;
+		while ( (batch = world.take()) ) {
+			world.ack( batch.sequence );
+			presentation.apply( batch );
+		}
+	};
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered() );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	world.step( 4 );
+	drain();
+	world.step( 5 );
+	// Loading completes: travelReady retires the login's reset latch.
+	world.ready();
+	first.receive( 0xb0d5, party.seed );
+	first.receive( 0x35d6, party.roster );
+	world.step( 6 );
+	drain();
+	assert.equal( defined( presentation.gameplay() ).social.members.length, 2 );
+	world.disconnect();
+	world.reconnect();
+	await settle();
+	world.step( 7 );
+	const second = sockets[1];
+	second.onopen();
+	second.receive( 2, welcome( true ) );
+	world.step( 8 );
+	await settle();
+	world.step( 9 );
+	// The resumed EnterWorld result precedes its own reset (login order).
+	second.receive( 7, entered() );
+	for ( const row of rows ) second.receive( row.opcode, row.payload );
+	world.step( 10 );
+	drain();
+	world.step( 11 );
+	world.ready();
+	second.receive( 0x3e58, party.delta( 21 ) );
+	world.step( 12 );
+	drain();
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+	const social = defined( presentation.gameplay() ).social;
+	assert.deepEqual( social.members.map( m => m.id ), [ 11, 22 ] );
+	assert.equal( social.members[1].level, 21 );
+	world.dispose();
+	presentation.dispose();
+});
 test("logout/disposal rejects a late token and opens no socket", async t => {
 	const sockets = socketHarness( t );
 	let resolve;

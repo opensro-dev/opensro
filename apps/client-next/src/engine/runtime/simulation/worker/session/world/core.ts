@@ -312,9 +312,12 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 		/*
 ================
 bootstrap
+
+resumed: the transport resumed this character's session (world.ts), so
+the entry continues it like the one after a world transfer.
 ================
 		*/
-		bootstrap( value: unknown ) {
+		bootstrap( value: unknown, resumed = false ) {
 			nameTimer = undefined;
 			capeTeams.clear();
 			for (
@@ -331,7 +334,7 @@ bootstrap
 			const travel = awaitingTravelBootstrap;
 			entities.bootstrap( value, travel );
 			awaitingTravelBootstrap = false;
-			gameplay.bootstrap( value, travel );
+			gameplay.bootstrap( value, travel || resumed );
 			if ( pendingTravel ) entities.publish( { kind: "travel", travel: pendingTravel } );
 		},
 		receive,

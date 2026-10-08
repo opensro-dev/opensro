@@ -251,7 +251,7 @@ receive
 			if ( wrapper.v !== 1 ) {
 				throw new Error( "Unsupported EnterWorld blob version", { cause: "unsupported_feature" } );
 			}
-			core.bootstrap( wrapper.bootstrap );
+			core.bootstrap( wrapper.bootstrap, resumedTransport );
 			boundThisTransport = true;
 			hasWorld = true;
 			ready = false;
@@ -470,7 +470,7 @@ step
 				references = { kind: "idle" };
 				controller = null;
 				try {
-					core.bootstrap( bootstrap );
+					core.bootstrap( bootstrap, resumedTransport );
 					boundThisTransport = true;
 					hasWorld = true;
 					ready = false;

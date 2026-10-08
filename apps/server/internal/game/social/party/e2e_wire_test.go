@@ -202,7 +202,7 @@ func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer
 		if s.Evicted() {
 			return
 		}
-		runtime.WorldBound(divisionID, character)
+		runtime.WorldBound(s, divisionID, character)
 	}
 	srv.Hub.OnSessionClose(func(s *transport.Session, _ error) {
 		runtime.SessionClosed(s)
@@ -319,11 +319,27 @@ helloWS
 */
 func helloWS(t *testing.T, c *websocket.Conn) {
 	t.Helper()
-	sendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{AdmissionToken: []byte("test-admission")}))
+	helloTokenWS(t, c, nil)
+}
+
+/*
+================
+helloTokenWS
+
+The handshake with an optional resume token; returns the WELCOME.
+================
+*/
+func helloTokenWS(t *testing.T, c *websocket.Conn, resumeToken []byte) transport.Welcome {
+	t.Helper()
+	sendFrame(t, c, transport.OpHello, transport.EncodeHello(transport.Hello{
+		ResumeToken: resumeToken, AdmissionToken: []byte("test-admission"),
+	}))
 	payload := expectFrame(t, c, transport.OpWelcome, "handshake")
-	if _, err := transport.DecodeWelcome(payload); err != nil {
+	welcome, err := transport.DecodeWelcome(payload)
+	if err != nil {
 		t.Fatalf("decoding WELCOME: %v", err)
 	}
+	return welcome
 }
 
 // enterWorld performs the 0x0006 bind and consumes the frozen bootstrap
