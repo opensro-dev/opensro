@@ -164,19 +164,19 @@ test( "Retina HUD keeps native logical size and blocks inventory clicks", { time
 			assert.equal( wideSlot.width, slot.width, "Ultrawide must not shrink the inventory controls" );
 			assert.equal( wideSlot.height, slot.height );
 			await page.screenshot( { path: `${ARTIFACT_DIRECTORY}/ultrawide-inventory.png` } );
-			// Doubling a 700x500 window would leave a 700x500 UI, smaller than the
-			// original's smallest screen mode (800x600): the enlargement steps down.
+			// Compact layout preserves readable pixel density below the native
+			// minimum extent instead of halving the controls on a Retina display.
 			await page.setViewportSize( { width: 700, height: 500 } );
 			await page.evaluate( async () => {
 				await new Promise( requestAnimationFrame );
 				await new Promise( requestAnimationFrame );
 			} );
 			const small = await fixture.evaluate( owner => owner.draw() );
-			assert.deepEqual( small.logical, [ 1400, 1000 ] );
+			assert.deepEqual( small.logical, [ 700, 500 ] );
 			assert.deepEqual( small.physical, [ 1400, 1000 ] );
 			const smallSlot = await page.locator( '[data-ui-id="slot:13"]' ).boundingBox();
 			assert.ok( smallSlot );
-			assert.equal( smallSlot.width, slot.width / 2, "below 800x600 a native pixel is one physical pixel" );
+			assert.equal( smallSlot.width, slot.width, "compact layout retains the inventory control size" );
 		} finally {
 			await fixture.evaluate( owner => owner.dispose() );
 			await fixture.dispose();

@@ -16,7 +16,7 @@ const DESKTOP_HEIGHT = 600;
 const SLOT_COUNT = 11;
 const SLOT_PITCH = 44;
 const TOOL_HEIGHT = 40;
-const TOOL_COUNT = 10;
+const TOOL_COUNT = 11;
 const MARGIN = 4;
 const CLOSE_TOUCH_SIZE = 40;
 

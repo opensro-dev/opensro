@@ -6651,10 +6651,23 @@ export function createUi(
 				barY: number
 			) {
 				const shown = records.filter( r => cosClass( r.band ) !== null );
+				const compactMargin = 15, compactPitch = 60, compactRowHeight = 90;
+				const compactColumns = Math.max( 1, Math.floor( (w - compactMargin * 2) / compactPitch ) );
+				let statusBottom = targetBottom;
 				shown.forEach( ( record, i ) => {
 					const cls = cosClass( record.band )!, chrome = cosStatusChrome( cls );
 					const reference = data.cosReferences.get( record.refObjId );
-					const r = cosStatusRect( w, i, cls ), [x, y] = r;
+					const nativeRect = cosStatusRect( w, i, cls );
+					const r: UiRect = compact ?
+						[
+							compactMargin + i % compactColumns * compactPitch,
+							targetBottom + compactMargin + Math.floor( i / compactColumns ) * compactRowHeight,
+							nativeRect[2],
+							nativeRect[3]
+						] :
+						nativeRect;
+					const [x, y] = r;
+					statusBottom = Math.max( statusBottom, y + r[3] );
 					if ( record.gid === cosHud.selected() ) {
 						image( [ x - 11, y - 11, chrome.outlineSize[0], chrome.outlineSize[1] ], chrome.outline );
 					}
@@ -6690,7 +6703,14 @@ export function createUi(
 				if ( !record ) return;
 				const commands = cosCommandButtons( cosClass( record.band )! );
 				if ( !commands.length ) return;
-				const layout = cosCommandLayout( barX, barY, commands.length );
+				const nativeLayout = cosCommandLayout( barX, barY, commands.length );
+				const layout = compact ?
+					cosCommandLayout(
+						barX + compactMargin - nativeLayout.rows[0]!.at[0],
+						barY + statusBottom + compactMargin - nativeLayout.rows[0]!.at[1],
+						commands.length
+					) :
+					nativeLayout;
 				const animal = "/assets/images/Media_extracted/interface/animal/";
 				if ( cosHud.open() ) {
 					commands.forEach( ( command, i ) => {
@@ -8366,18 +8386,29 @@ export function createUi(
 						}
 					} );
 				}
-				if ( hudData && game?.cosRecords?.length ) {
+				if (
+					hudData && game?.cosRecords?.length &&
+					(!compact || compact.overlay === "pets" && compact.top > targetBottom)
+				) {
 					const shown = (game.cosStatusRecords ?? game.cosRecords).map( record =>
 						game.cosRecords?.find( current => current.gid === record.gid ) ?? record
 					);
 					const mark = beginWindow();
 					drawCosHud( hudData, shown, barX, barY );
 					if ( compact ) {
-						fitUiGroup( quads, controls, mark[0], mark[1], compact.bounds, full, {
-							blocks,
-							firstBlock: mark[2],
-							disableDrag: compactWindowDrag
-						} );
+						fitUiGroup(
+							quads,
+							controls,
+							mark[0],
+							mark[1],
+							[ 0, targetBottom, w, compact.top - targetBottom ],
+							full,
+							{
+								blocks,
+								firstBlock: mark[2],
+								disableDrag: compactWindowDrag
+							}
+						);
 					}
 				}
 				if ( hudData && whispersOpen && (!compact || compact.overlay === "chat") ) {
@@ -8538,6 +8569,7 @@ export function createUi(
 						[ "compact-status", "Log" ],
 						[ "compact-extra", "Extra" ],
 						[ "compact-map", "Map" ],
+						[ "compact-pets", "Pets" ],
 						[ "hotbar-prev", "<" ],
 						[ "hotbar-next", ">" ]
 					];

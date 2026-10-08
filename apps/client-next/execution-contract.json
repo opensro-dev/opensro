@@ -1330,7 +1330,8 @@
 		},
 		{
 			"functions": [
-				"callback:systemMessageLayout:6"
+				"callback:systemMessageLayout:6",
+				"callback:systemMessageLayout:10"
 			],
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"consumer": "src/engine/foundation/ui/system-message-layout.ts"
@@ -1395,7 +1396,6 @@
 				"callback:textLines:2",
 				"callback:textBoardLines:2",
 				"measure",
-				"callback:textLines:2",
 				"callback:systemMessageLayout:10"
 			]
 		},

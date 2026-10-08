@@ -30,7 +30,8 @@ const UTILITY_IDS = [
 	"compact-extra",
 	"hotbar-prev",
 	"hotbar-next",
-	"compact-map"
+	"compact-map",
+	"compact-pets"
 ];
 const RECT_EPSILON = 0.1;
 const SLOT_BACKGROUND_SIZE = 40;
@@ -434,7 +435,9 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 						contained( report.controls, viewport );
 						slotBackgrounds( report );
 						assert.ok(
-							!report.controls.some( row => [ "chat-text", "ext-drag", "minimap-in" ].includes( row.id ) )
+							!report.controls.some( row =>
+								[ "chat-text", "ext-drag", "minimap-in", "cos-status:9" ].includes( row.id )
+							)
 						);
 						assert.deepEqual( report.bindings, desktop.bindings );
 						reports[name] = report;
@@ -475,6 +478,26 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 								"wrapped notice chrome fits the viewport"
 							);
 						}
+						await tap( page, "compact-pets" );
+						const pets = await admit( page, fixture, [ "cos-status:9", "cos-command-toggle" ] );
+						contained( pets.controls, viewport );
+						const noticeBottom = Math.max( combatBottom, ...pets.noticeRects.map( r => r[1] + r[3] ) );
+						for ( const row of pets.controls.filter( row => row.id.startsWith( "cos-" ) ) ) {
+							if ( row.id.startsWith( "cos-command:" ) ) {
+								assert.ok(
+									row.rect[2] >= 28 && row.rect[3] >= 28,
+									"companion action icons remain usable"
+								);
+							}
+							assert.ok(
+								row.rect[1] >= noticeBottom,
+								"companion controls remain below combat and notices"
+							);
+						}
+						reports[`${name}-pets`] = pets;
+						await page.screenshot( { path: `${artifactDirectory}/${name}-pets.png` } );
+						await tap( page, "compact-pets" );
+						await admit( page, fixture, UTILITY_IDS );
 						await fixture.evaluate( owner => owner.emptySlots( true ) );
 						report = await admit( page, fixture, HOTBAR_IDS );
 						assert.deepEqual( report.bindings, [] );

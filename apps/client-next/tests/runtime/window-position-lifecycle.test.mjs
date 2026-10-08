@@ -220,6 +220,7 @@ for ( const restored of [ false, true ] ) {
 			f.ui.step( view, 0 );
 			f.ui.event( { kind: "activate", id: "open-window:Game Guide" } );
 			const semantics = f.ui.step( view, 1 );
+			assert.ok( semantics );
 			const drag = semantics?.controls.find( control => control.id === "guide-drag" );
 			assert.ok( drag, "guide has been instantiated" );
 			const nativeOrigin = restored ? [ -120, -252 ] : [ -60, -126 ];
