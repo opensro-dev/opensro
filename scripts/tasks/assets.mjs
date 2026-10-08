@@ -230,6 +230,16 @@ export const ASSET_TASKS = [
 		args: [ "scripts/gc_asset_packs.mjs" ]
 	} ),
 	commandTask( {
+		name: "assets:ledger",
+		description: "Report packed assets no build owner claims (read-only; see docs/ASSET_DELIVERY.md)",
+		kind: "assets",
+		ci: false,
+		requires: [ "generated-assets" ],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/report_publication_ledger.mjs" ]
+	} ),
+	commandTask( {
 		name: "assets:lock",
 		description: "Show the generated-asset rebuild lock owner",
 		kind: "assets",

@@ -55,7 +55,7 @@ test("a complete run replaces its record and a partial run merges", async () => 
 	ledger.claimPublicPaths( [ "/assets/world/c.json" ] );
 	await ledger.commitPublication();
 	let { owners } = await ledger.readClaims();
-	assert.deepEqual( [ ...owners.get( "outdoor-world" ) ].sort(), [
+	assert.deepEqual( [ ...owners.get( "outdoor-world" ).keys() ].sort(), [
 		"/assets/world/a.json",
 		"/assets/world/b.json",
 		"/assets/world/c.json"
@@ -64,7 +64,7 @@ test("a complete run replaces its record and a partial run merges", async () => 
 	ledger.claimPublicPaths( [ "/assets/world/a.json" ] );
 	await ledger.commitPublication();
 	({ owners } = await ledger.readClaims());
-	assert.deepEqual( [ ...owners.get( "outdoor-world" ) ], [ "/assets/world/a.json" ] );
+	assert.deepEqual( [ ...owners.get( "outdoor-world" ).keys() ], [ "/assets/world/a.json" ] );
 });
 
 test("a precompressed sidecar follows its base, and a base its packed .gz member", () => {
@@ -116,6 +116,26 @@ test("a complete ledger soft-archives unclaimed files and retired owners' record
 		/1 packed asset\(s\) claimed by no build owner/
 	);
 	assert.deepEqual( await ledger.verifyIndexClaims( { assets: [ { path: "/assets/images/live.png" } ] } ), [] );
+});
+
+test("a claimed manifest keeps the files it names, transitively", async () => {
+	await publicFile( "/assets/npc/Manifest.json", JSON.stringify( { models: { a: "/assets/npc/catalog.json" } } ) );
+	await publicFile( "/assets/npc/catalog.json", JSON.stringify( { glb: "/assets/npc/Model.glb" } ) );
+	await publicFile( "/assets/npc/Model.glb" );
+	await publicFile( "/assets/npc/orphan.glb" );
+	for ( const owner of ledger.expectedOwners() ) {
+		ledger.beginPublication( owner );
+		if ( owner === "resource-build" ) ledger.claimPublicPaths( [ "/assets/npc/Manifest.json" ] );
+		await ledger.commitPublication();
+	}
+	const index = {
+		assets: [ "/assets/npc/catalog.json", "/assets/npc/Model.glb", "/assets/npc/orphan.glb" ].map( path => ({
+			path,
+			length: 1
+		}) )
+	};
+	const report = await ledger.indexClaimReport( index );
+	assert.deepEqual( report.unclaimed.map( row => row.path ), [ "/assets/npc/orphan.glb" ] );
 });
 
 test("a second open publication is refused", () => {

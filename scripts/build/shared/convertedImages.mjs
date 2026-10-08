@@ -49,11 +49,23 @@ export async function publishConvertedImage( publicPath ) {
 	if ( !source ) {
 		throw new Error( `Converted image missing: ${plain} (run the asset build first)` );
 	}
-	const target = path.join( imagePublicRoot, relative );
+	await copyIntoPublicTree( source, path.join( imagePublicRoot, relative ) );
+	return publicPath;
+}
+
+/*
+================
+copyIntoPublicTree
+
+Copies a prepared file (a converted image, a launcher bitmap) to its place
+in the public tree and claims it for the open publication. Every copy into
+client-public goes through here, so no copied file is left without an owner.
+================
+*/
+export async function copyIntoPublicTree( source, target ) {
 	await mkdir( path.dirname( target ), { recursive: true } );
 	await copyFile( source, target );
 	claimPublicFile( target );
-	return publicPath;
 }
 
 /*

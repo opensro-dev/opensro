@@ -70,6 +70,7 @@ import { rebuildRoot } from "./world/paths.mjs";
 import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
 import { buildJobs } from "./shared/buildParallelism.mjs";
+import { claimPublicPaths } from "./shared/publicationLedger.mjs";
 
 const RETAIL_CURSOR_IDS = [ "0x95", "0x96", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3" ];
 /*
@@ -92,6 +93,8 @@ async function extractRetailCursors() {
 	);
 	const output = result.stdout.trim();
 	if ( output ) console.log( output );
+	// The Python extractor writes the cursors; this step owns them.
+	claimPublicPaths( RETAIL_CURSOR_IDS.map( id => `/assets/cursors/sro_client_cursor_${id}.cur` ) );
 	return { count: RETAIL_CURSOR_IDS.length };
 }
 

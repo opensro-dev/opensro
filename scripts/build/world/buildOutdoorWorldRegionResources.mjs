@@ -14,7 +14,7 @@ ledger, so reuse never leaves a bundle naming images that are gone.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildJobs } from "../shared/buildParallelism.mjs";
-import { claimKeptOutput, claimPublicFile } from "../shared/publicationLedger.mjs";
+import { claimPublicFile } from "../shared/publicationLedger.mjs";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
 
@@ -397,8 +397,8 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 			} else {
 				await copyReferencedTerrainTileImages( tiles, sourceExtractedRoot );
 			}
-			// The kept bundle claims itself and everything it references (lightmaps).
-			claimKeptOutput( outputPath, await readFile( outputPath, "utf8" ) );
+			// A kept bundle claims itself; the ledger claims what it references (lightmaps).
+			claimPublicFile( outputPath );
 			reused += 1;
 			reportProgress( options, {
 				phase: "regions",
@@ -483,10 +483,9 @@ buildOutdoorSharedRenderResources
 */
 async function buildOutdoorSharedRenderResources( options = {} ) {
 	if ( !options.force && (await exists( OUTDOOR_WORLD_SHARED_RENDER_PATH )) ) {
-		const text = await readFile( OUTDOOR_WORLD_SHARED_RENDER_PATH, "utf8" );
-		const existing = JSON.parse( text );
+		const existing = JSON.parse( await readFile( OUTDOOR_WORLD_SHARED_RENDER_PATH, "utf8" ) );
 		validateSharedRenderResources( existing );
-		claimKeptOutput( OUTDOOR_WORLD_SHARED_RENDER_PATH, text );
+		claimPublicFile( OUTDOOR_WORLD_SHARED_RENDER_PATH );
 		return existing;
 	}
 
@@ -520,10 +519,9 @@ buildOutdoorSharedObjectResources
 */
 async function buildOutdoorSharedObjectResources( options ) {
 	if ( !options.force && (await exists( OUTDOOR_WORLD_OBJECT_INDEX_PATH )) ) {
-		const text = await readFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH, "utf8" );
-		const index = JSON.parse( text );
+		const index = JSON.parse( await readFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH, "utf8" ) );
 		validateObjectResourceIndex( index );
-		claimKeptOutput( OUTDOOR_WORLD_OBJECT_INDEX_PATH, text );
+		claimPublicFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH );
 		return {
 			index,
 			collisionResources: collisionResourcesFromIndex( index )

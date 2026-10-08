@@ -179,13 +179,14 @@ and shipped in a data release next to their replacements.
   `publishBlockTextureFile` (`world/assets/blockTextures.mjs`). A builder
   that writes through these needs no ledger code.
 - A builder that skips work because its output is current, without calling
-  a shared writer, must claim that output itself: `claimPublicFile` or
-  `claimPublicPaths` for the files, or `claimKeptOutput( file, text )` for a
-  kept output that names other public files. A kept output claims itself and
-  every `/assets/...` path its text references, because the client loads
-  exactly those (a reused outdoor region bundle keeps its lightmaps alive
-  this way). Forgetting to claim is the one way to get a live file archived;
-  see "Reading the report" below.
+  a shared writer, must claim that output itself with `claimPublicFile` or
+  `claimPublicPaths`. Forgetting this is the one way to get a live file
+  archived; see "Reading the report" below.
+- A claimed JSON output also claims every `/assets/...` file its text names,
+  transitively (`closeReferences`): the client loads exactly what its
+  manifests and catalogs reference, so a file a live manifest names is live
+  whichever step wrote it. A reused outdoor region bundle keeps its lightmaps
+  this way; the NPC manifest keeps its models and VAT files.
 - A complete run replaces its owner's record. A partial run (one outdoor
   region with `--region=`) merges into it.
 - `publishLooseFamily` records its family's files itself, so every focused

@@ -1,6 +1,7 @@
 // Split verbatim from resourcePipeline.mjs (2026-07-28): CIF/UI cluster -
 // resinfo layout bundles, runtime image allowlists and the image copy pass.
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
+import { copyIntoPublicTree } from "./convertedImages.mjs";
 import path from "node:path";
 import { toPublicImagePath } from "./assetPaths.mjs";
 
@@ -297,9 +298,7 @@ async function copyItemDataIconImage( ddjPath, copiedImages ) {
 	if ( !(await exists( collisionSource )) ) {
 		return;
 	}
-	const target = path.join( imagePublicRoot, relativePublic );
-	await mkdir( path.dirname( target ), { recursive: true } );
-	await copyFile( collisionSource, target );
+	await copyIntoPublicTree( collisionSource, path.join( imagePublicRoot, relativePublic ) );
 	copiedImages.add( publicPath );
 }
 async function buildLayoutBundle( sourcePath, copiedImages, cifDefines ) {
@@ -615,8 +614,7 @@ async function copyImageReference( ddjPath, copiedImages ) {
 		return;
 	}
 
-	await mkdir( path.dirname( target ), { recursive: true } );
-	await copyFile( source, target );
+	await copyIntoPublicTree( source, target );
 	copiedImages.add( publicPath );
 }
 
@@ -630,8 +628,7 @@ async function copyRequiredImageReference( ddjPath, copiedImages ) {
 	if ( copiedImages.has( publicPath ) ) return;
 
 	const target = path.join( imagePublicRoot, relativePublic );
-	await mkdir( path.dirname( target ), { recursive: true } );
-	await copyFile( source, target );
+	await copyIntoPublicTree( source, target );
 	copiedImages.add( publicPath );
 }
 
