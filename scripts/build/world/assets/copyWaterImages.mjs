@@ -5,6 +5,7 @@ copyWaterImages.mjs - native asset compilation
 
 ===========================================================================
 */
+import { claimPublicFile } from "../../shared/publicationLedger.mjs";
 import { copyIntoPublicTree } from "../../shared/publicWrite.mjs";
 import { runPython } from "../../shared/pythonRun.mjs";
 import { rebuildRoot } from "../paths.mjs";
@@ -45,6 +46,8 @@ export async function copyReferencedWaterImages( waterTextures ) {
 		path.join( imageSourceRoot, "Map_extracted", "skybox", "waterbump3.png" ),
 		bumpTarget
 	], { task: "native water bump conversion" } );
+	// The Python step writes the bump map; this step owns it.
+	claimPublicFile( bumpTarget );
 	const publicPaths = [
 		...waterTextures.normalFramePublicPaths,
 		waterTextures.specialTexturePublicPath,
