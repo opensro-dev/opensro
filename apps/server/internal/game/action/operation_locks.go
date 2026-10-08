@@ -31,7 +31,9 @@ action and every command.
 */
 type divisionLane struct {
 	sync.Mutex
-	release func()
+	release            func()
+	publication        sync.Mutex
+	releasePublication func()
 	// monsterAttack is the lane's monster attack capability, made at the
 	// first monster action and only ever used under the lane
 	// (RunMonsterAction).
@@ -68,6 +70,7 @@ func (locks *divisionOperationLocks) lane(divisionID string, maintenance *sync.R
 	lane := locks.division[divisionID]
 	if lane == nil {
 		lane = &divisionLane{}
+		lane.releasePublication = lane.publication.Unlock
 		lane.release = func() {
 			lane.Unlock()
 			maintenance.RUnlock()
@@ -90,4 +93,21 @@ func (rt *Runtime) lockDivision(divisionID string) func() {
 	lane := rt.operations.lane(divisionID, &rt.maintenance)
 	lane.Lock()
 	return lane.release
+}
+
+/*
+================
+lockPublication
+
+Request adapters and delayed pickups retain this outer gate from admission
+through receipt enqueue. Their operation releases the division/store locks
+before sending: a queue failure may synchronously run cleanup that takes
+the division lock again. Never acquire this gate inside an operation,
+transport callback, or cleanup hook.
+================
+*/
+func (rt *Runtime) lockPublication(divisionID string) func() {
+	lane := rt.operations.lane(divisionID, &rt.maintenance)
+	lane.publication.Lock()
+	return lane.releasePublication
 }

@@ -141,20 +141,6 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 }
 
 /*
-================
-pendingPickupDelivery
-
-Packet delivery leaves the division operation lock before touching sessions.
-================
-*/
-type pendingPickupDelivery struct {
-	divisionID    string
-	characterName string
-	frames        []wire.Frame
-	broadcast     []wire.Frame
-}
-
-/*
 ==================
 advancePendingPickups
 
@@ -169,31 +155,58 @@ packet halves are routed without duplicating the public frames to the actor.
 func (rt *Runtime) advancePendingPickups(nowMs int64) []simulation.DivisionFrames {
 	var recipients []simulation.DivisionFrames
 	now := time.UnixMilli(nowMs)
-	var deliveries []pendingPickupDelivery
 	for _, pending := range rt.Pending.Due(now) {
-		unlock := rt.lockDivision(pending.DivisionID)
-		result, character := rt.completePendingPickup(pending, now)
-		recipients = append(recipients, recipientDivisionFrames(pending.DivisionID, result.Recipients)...)
-		unlock()
-		if character == nil || (len(result.Frames) == 0 && len(result.Broadcast) == 0) {
-			continue
-		}
-		deliveries = append(deliveries, pendingPickupDelivery{
-			divisionID:    pending.DivisionID,
-			characterName: character.Name,
-			frames:        result.Frames,
-			broadcast:     result.Broadcast,
-		})
-	}
-	for _, delivery := range deliveries {
-		if rt.PushCharacterFrames != nil && len(delivery.frames) > 0 {
-			rt.PushCharacterFrames(delivery.divisionID, delivery.characterName, delivery.frames)
-		}
-		if rt.PushDivisionPeerFrames != nil && len(delivery.broadcast) > 0 {
-			rt.PushDivisionPeerFrames(delivery.divisionID, delivery.characterName, delivery.broadcast)
-		}
+		recipients = append(recipients, rt.publishPendingPickup(pending, now)...)
 	}
 	return recipients
+}
+
+/*
+================
+publishPendingPickup
+
+Keep one division's commit and all private receipts ordered against request
+handlers. Queue admission runs after the operation lock is released so a
+slow consumer can close and reenter gameplay cleanup safely.
+================
+*/
+func (rt *Runtime) publishPendingPickup(pending grounditem.Pending, now time.Time) []simulation.DivisionFrames {
+	unlockPublication := rt.lockPublication(pending.DivisionID)
+	defer unlockPublication()
+	result, character := func() (OpResult, *enterworld.Character) {
+		unlock := rt.lockDivision(pending.DivisionID)
+		defer unlock()
+		return rt.completePendingPickup(pending, now)
+	}()
+	if character != nil {
+		if rt.PushCharacterFrames != nil && len(result.Frames) > 0 {
+			rt.PushCharacterFrames(pending.DivisionID, character.Name, result.Frames)
+		}
+		if rt.PushDivisionPeerFrames != nil && len(result.Broadcast) > 0 {
+			rt.PushDivisionPeerFrames(pending.DivisionID, character.Name, result.Broadcast)
+		}
+	}
+	if rt.PushCharacterFrames == nil {
+		// Transport-free runtimes retain the existing returned routing contract.
+		return recipientDivisionFrames(pending.DivisionID, result.Recipients)
+	}
+	for _, recipient := range result.Recipients {
+		var owner *enterworld.Character
+		if source, ok := rt.deps.(domain.CharacterLookup); ok {
+			owner = source.CharacterByID(pending.DivisionID, recipient.CharacterID)
+		} else {
+			for _, candidate := range rt.deps.CharactersForDivision(pending.DivisionID) {
+				if candidate != nil && candidate.ID == recipient.CharacterID {
+					owner = candidate
+					break
+				}
+			}
+		}
+		if owner != nil && len(recipient.Frames) > 0 {
+			rt.PushCharacterFrames(pending.DivisionID, owner.Name, recipient.Frames)
+		}
+	}
+	return nil
 }
 
 /*
