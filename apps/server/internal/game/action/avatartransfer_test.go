@@ -20,7 +20,8 @@ func TestAvatarTransferRoundtripPreservesBodyAndVisualOrder(t *testing.T) {
 	if len(equip.Frames) != 2 || equip.Frames[0].Opcode != wire.OpItemMoveResponse || equip.Frames[1].Opcode != 0x3314 {
 		t.Fatalf("equip: %+v", equip)
 	}
-	if !reflect.DeepEqual(equip.Broadcast, equip.Frames[1:]) {
+	// Viewers get the avatar's reference first (#340), then the owner's visual.
+	if len(equip.Broadcast) != 2 || equip.Broadcast[0].Opcode != opCommerceItemReferences || !reflect.DeepEqual(equip.Broadcast[1:], equip.Frames[1:]) {
 		t.Fatalf("viewers: %+v", equip.Broadcast)
 	}
 	if len(c.MissionInventory) != 0 || c.AvatarInventory == nil || len(c.AvatarInventory.Rows) != 1 {

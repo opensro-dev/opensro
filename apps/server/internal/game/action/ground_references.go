@@ -43,11 +43,5 @@ func (rt *Runtime) groundReferences(drops []grounditem.Item) []wire.Frame {
 		seen[drop.RefObjID] = true
 		rows = append(rows, inventory.Item{RefObjID: drop.RefObjID, Codename: drop.Codename, TypeFlags: drop.TypeFlags})
 	}
-	var frames []wire.Frame
-	for len(rows) > 0 {
-		n := min(len(rows), maxReferencesPerFrame)
-		frames = append(frames, rt.commerceReferences(rows[:n], nil))
-		rows = rows[n:]
-	}
-	return frames
+	return rt.itemReferenceFrames(rows)
 }

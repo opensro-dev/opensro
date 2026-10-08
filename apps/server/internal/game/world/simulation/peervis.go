@@ -85,6 +85,25 @@ type PeerAppearance struct {
 	SpawnSkills []wire.SpawnSkillEntry
 }
 
+/*
+================
+ItemIDs
+
+The item ids a spawn row of this appearance names: the worn set and a
+player skin's copied equipment.
+================
+*/
+func (a *PeerAppearance) ItemIDs() []uint32 {
+	ids := make([]uint32, 0, len(a.Equipment)+len(a.Skin.Equipment))
+	for _, item := range a.Equipment {
+		ids = append(ids, item.RefObjID)
+	}
+	if a.Skin.Player {
+		ids = append(ids, a.Skin.Equipment[:]...)
+	}
+	return ids
+}
+
 // PeerScaleDenom is the +0x4d8 scale denominator for a player row: an
 // IEEE-754 FLOAT 100.0 on the wire (fld dword @0x0085fba5), which the client
 // turns into the neutral 100.0/100.0 = 1.0 reciprocal at +0x4dc - the same
@@ -192,11 +211,18 @@ func (t *Ticker) runPeerVisibility(state *divisionTickState, nowMs int64, sessio
 			pose := index.poses[peerIndex]
 			appearance := *peer.Appearance
 			appearance.Walk, appearance.Run = peer.World.MovementSpeeds()
-			frames := []Frame{{
+			// The row's items resolve only through references the viewer
+			// holds, and the peer may have acquired them after the viewer's
+			// bootstrap: they ride ahead of the row.
+			var frames []Frame
+			if t.ItemReferences != nil {
+				frames = t.ItemReferences(appearance.ItemIDs())
+			}
+			frames = append(frames, Frame{
 				ScopeGID: gid, ScopeVisible: true,
 				Opcode:  wire.OpSingleObjectSpawn,
 				Payload: BuildPeerSpawnRow(appearance, gid, pose),
-			}}
+			})
 			if peer.NativeBodyStatus != 0 {
 				frames = append(frames, Frame{Opcode: wire.OpObjectStateRefresh, Payload: (wire.ObjectStateRefresh{Gid: gid, StateType: wire.StateChannelBody, Value: peer.NativeBodyStatus}).Encode()})
 			}

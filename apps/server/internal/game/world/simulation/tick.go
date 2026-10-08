@@ -254,6 +254,10 @@ type Ticker struct {
 	Monsters *MonsterMoverOps
 	// PlayerMap enables the beta world map roster leg (playermap.go).
 	PlayerMap bool
+	// ItemReferences returns the item reference deltas a viewer receives
+	// before a peer's spawn row names those items (peervis.go); nil sends
+	// none.
+	ItemReferences func(ids []uint32) []Frame
 	// StallReport is how long a tick runs before the watchdog logs what it
 	// is doing (tick_watchdog.go). Values <= 0 use DefaultTickStallReport.
 	StallReport time.Duration

@@ -46,10 +46,9 @@ test("journal admits the expanded startup catalogue but still rejects excessive 
 	owner.publish( { kind: "gameplay", state } );
 	assert.throws(
 		() =>
-			owner.publish( {
-				kind: "gameplay",
-				state: { localGid: 2, skillCatalog: [ { id: 2, name: "y".repeat( 7 << 20 ) } ] }
-			} ),
+			// A queued gameplay snapshot is superseded rather than added
+			// (world-journal-gameplay.test.mjs); a bootstrap is never merged.
+			owner.publish( { kind: "bootstrap", value: { name: "y".repeat( 7 << 20 ) } } ),
 		/journal backlog exceeded/
 	);
 	const batch = owner.take();

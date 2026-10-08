@@ -367,6 +367,9 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		}
 		// 4F00F0 always refills the block; 4F0040 only an empty one.
 		if effect.TransformRefObjID != 0 && (word == 1 || character.TransformMode == 0) {
+			// A Duplicate copies another player's worn items, which neither
+			// the caster nor a viewer need hold (peer_references.go).
+			statusFrames = append(statusFrames, rt.itemReferencesByID(presentation.TransformEquipment[:])...)
 			statusFrames = append(statusFrames, applyTransform(character, word, presentation))
 		}
 		statusFrames = append(statusFrames, rt.refreshMovementEffects(divisionID, character, nowMs)...)
