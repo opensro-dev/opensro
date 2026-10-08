@@ -11,6 +11,7 @@ the modules under engine/.
 ===========================================================================
 */
 
+import { requestPersistentStorage } from "./engine/foundation/assets/persistent-storage";
 import { startRuntime } from "./engine/runtime/runtime";
 
 /*
@@ -40,3 +41,6 @@ if ( !(canvas instanceof HTMLCanvasElement) || !status ) {
 	throw new Error( "Missing runtime surface" );
 }
 export const runtime = startRuntime( canvas, status, undefined, diagnosticsFromQuery() );
+// Keep the verified game files through disk pressure, asked once per page
+// load (persistent-storage.ts); the runtime's frame never runs async work.
+void requestPersistentStorage();

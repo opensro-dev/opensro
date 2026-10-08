@@ -12,7 +12,6 @@ presentation set (assets/worker/install.ts).
 ===========================================================================
 */
 
-import { requestPersistentStorage } from "@/engine/foundation/assets/persistent-storage";
 import { nativeHeadingYaw } from "@/engine/foundation/math/angles";
 import { createRuntimeErrors } from "./runtime-errors";
 import { createPresentationRandom } from "./random/random";
@@ -880,8 +879,6 @@ export function startRuntime(
 					// Foreground loading is done: make combat sounds and effects local
 					// before their first play (worker/install.ts). Runs once per worker.
 					assets.install( new URL( BACKGROUND_INSTALL_LIST, location.origin ).href );
-					// Keep the verified files through disk pressure (persistent-storage.ts).
-					void requestPersistentStorage();
 				}
 				// Check for a newer release when the title opens or the connection
 				// drops (the moments a refresh costs the player nothing), and when

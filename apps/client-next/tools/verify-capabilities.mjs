@@ -29,6 +29,8 @@ const ASYNC_OWNERS = [
 	runtime + "assets/worker/navigation/navigation.ts",
 	// Background install of the combat presentation set; worker-only I/O.
 	runtime + "assets/worker/install.ts",
+	// navigator.storage.persist(): a Window-only call the asset worker cannot make.
+	"src/engine/foundation/assets/persistent-storage.ts",
 	// The bug reporter: its settings and upload, the capture stream's
 	// playback and the report window's send (issue #90).
 	runtime + "bug-report/bug-report.ts",

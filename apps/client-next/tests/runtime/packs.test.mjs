@@ -245,15 +245,18 @@ test("URL encoded filenames resolve against literal published names", async () =
 function disk( t ) {
 	const rows = new Map();
 	let denied = false, quota = false;
+	// A Cache takes a URL string or a Request (the store's inventory rebuild
+	// passes the Requests keys() returned).
+	const rowKey = request => request instanceof Request ? request.url : String( request );
 	const cache = {
 		async match( url ) {
-			return rows.get( String( url ) )?.clone();
+			return rows.get( rowKey( url ) )?.clone();
 		},
 		async keys() {
 			return [ ...rows.keys() ].map( url => new Request( url ) );
 		},
 		async delete( url ) {
-			return rows.delete( String( url ) );
+			return rows.delete( rowKey( url ) );
 		},
 		async put( url, response ) {
 			if ( denied ) throw Error( "denied" );
@@ -261,7 +264,7 @@ function disk( t ) {
 				quota = false;
 				throw new DOMException( "full", "QuotaExceededError" );
 			}
-			rows.set( String( url ), new Response( await response.arrayBuffer(), { headers: response.headers } ) );
+			rows.set( rowKey( url ), new Response( await response.arrayBuffer(), { headers: response.headers } ) );
 		}
 	};
 	const old = Object.getOwnPropertyDescriptor( globalThis, "caches" );

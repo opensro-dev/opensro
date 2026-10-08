@@ -425,9 +425,11 @@ store's `stats()`.
 When the device runs low on disk, browsers evict whole origins, least
 recently used first, and never evict an origin marked persistent
 ([MDN: storage quotas and eviction](https://developer.mozilla.org/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)).
-At world entry the client calls `navigator.storage.persist()`
-(`foundation/assets/persistent-storage.ts`): Chrome, Edge and Safari decide
-silently from engagement. Firefox would answer with a permission prompt in
+Once per page load, from the page entry (`src/bootstrap.ts`), the client calls
+`navigator.storage.persist()` (`foundation/assets/persistent-storage.ts`, a
+declared async owner because `persist()` exists only on `Window`): Chrome,
+Edge and Safari decide silently from site engagement, so a returning player
+is granted. Firefox would answer with a permission prompt in
 the middle of play, so it is not asked; its best-effort quota already holds
 the game. The Chrome storage team recommends the Cache API for large binary
 resources ([Chrome: cache models](https://developer.chrome.com/docs/ai/cache-models)),
