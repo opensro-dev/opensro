@@ -364,7 +364,7 @@ sendFrame
 sendSkillPress
 
 A skill press leaves: its answer times the round trip. When the server will
-start the cast as the press arrives (immediate: the server admits the press,
+start the cast as the press arrives (prediction "cast": the server admits the press,
 pressAdmitted, with no target or one within the skill's reach), its cooldown
 stands in from then until that answer. A press
 the server first walks the caster for starts nothing on arrival: a stand-in
@@ -376,16 +376,16 @@ when the cast finally started.
 		frame: WireFrame,
 		skillId: number,
 		now: number,
-		immediate: boolean,
+		prediction: "cast" | "approach" | null,
 		target = 0
 	): WireFrame {
 		const oneWay = skillPress.oneWayMs();
 		sendFrame( frame );
 		skillPress.sent( now, skillId );
-		if ( immediate ) {
+		if ( prediction === "cast" ) {
 			combat.pressed( skillId, now + oneWay, now + 4 * oneWay + SKILL_ANSWER_SLACK_MS, now );
 		} // The HUD shows it as next while the server runs the caster there.
-		else skillPress.approach( skillId, target, now );
+		else if ( prediction === "approach" ) skillPress.approach( skillId, target, now );
 		return frame;
 	}
 	/*
@@ -401,6 +401,9 @@ sent. A cost whose vital inputs are unknown waits for the server's answer.
 	*/
 	function pressAdmitted( metadata: SkillMetadata | undefined, local: EntityState | undefined ): boolean {
 		if ( !metadata || !local ) return false;
+		// TargetActionSkill refuses every mounted press and consumes a seated
+		// press by standing up. Neither starts a skill or a run toward a target.
+		if ( local.mountedOn || local.movementMode === MOVEMENT_SEATED ) return false;
 		if ( !potionFacts.maxMp && metadata.mpPercent ) return false;
 		const admission = pressAdmission( {
 			admit: metadata.admit,
@@ -2130,7 +2133,7 @@ state here before a command can claim a native wire conversation.
 					// 6FD536 -> 8786E0 -> 878100 sends the ground skill request
 					// without stopping the current walk. Travel begins on B245;
 					// the ordinary cast's press hold would freeze this entire RTT.
-					return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) );
+					return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) ? "cast" : null );
 				}
 				if ( metadata && !metadata.targetRequired ) command = { kind: "skill", skillId: command.skillId };
 				else if ( metadata?.targetRequired && !command.gid ) {
@@ -2140,7 +2143,7 @@ state here before a command can claim a native wire conversation.
 					const frame = combat.skill( skillId, localGid );
 					if ( pressAdmitted( metadata, local ) ) movement.holdForCast( now );
 					predictCast( metadata, undefined, local, now );
-					return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) );
+					return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) ? "cast" : null );
 				}
 			}
 			if ( command.kind === "skill" && command.gid === undefined ) {
@@ -2151,7 +2154,7 @@ state here before a command can claim a native wire conversation.
 				const skillId = command.skillId, metadata = catalog.find( row => row.id === skillId );
 				if ( metadata?.haltsWalk && pressAdmitted( metadata, local ) ) movement.holdForCast( now );
 				predictCast( metadata, undefined, local, now );
-				return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) );
+				return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) ? "cast" : null );
 			}
 			// 6B3E90 selects the portrait locally through 6813E0.
 			if ( entity && entity.gid === localGid && command.kind === "select" ) return selectEntity( entity, now );
@@ -2253,8 +2256,9 @@ state here before a command can claim a native wire conversation.
 				frame,
 				command.skillId,
 				now,
-				pressAdmitted( pressedMetadata, local ) &&
-					(entity.gid === localGid || withinReach( pressedMetadata, entity )),
+				pressAdmitted( pressedMetadata, local ) ?
+					(entity.gid === localGid || withinReach( pressedMetadata, entity ) ? "cast" : "approach") :
+					null,
 				entity.gid
 			);
 		},

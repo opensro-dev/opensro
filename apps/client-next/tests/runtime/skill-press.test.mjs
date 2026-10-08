@@ -449,6 +449,70 @@ test("a rider's footing press is sent with no cooldown stand-in", () => {
 	assert.ok( walking.shown, "an on-foot press stands in for its cooldown" );
 });
 
+test("seated and mounted skill presses never invent a pending approach", () => {
+	for ( const posture of [ "seated", "mounted" ] ) {
+		for ( const needsFooting of [ false, true ] ) {
+			for ( const path of [ "targeted", "self", "untargeted" ] ) {
+				const sent = [], game = createGameplay( frame => sent.push( frame ) );
+				const row = skillRef( SLOW, 5000 );
+				const caster = {
+					...local,
+					movementMode: posture === "seated" ? 4 : 0,
+					mountedOn: posture === "mounted" ? 99 : undefined
+				};
+				const target = { ...local, gid: 9, kind: /** @type {const} */ ("monster"), x: 150 };
+				game.bootstrap( {
+					simulationProtocolVersion: 1,
+					character: { skills: [ SLOW ] },
+					refSkillSnapshot: [ {
+						...row,
+						ui: {
+							...row.ui,
+							needsFooting,
+							actionMs: 1000,
+							targetRequired: path !== "untargeted",
+							targetSelf: path === "self",
+							targets: 7,
+							range: 60
+						}
+					} ]
+				} );
+				game.seed( caster );
+				game.command(
+					{ kind: "skill", skillId: SLOW, ...(path === "targeted" ? { gid: 9 } : {}) },
+					1000,
+					path === "targeted" ? target : undefined,
+					caster
+				);
+				assert.equal( sent.length, 1 );
+				assert.equal( sent[0].opcode, 0x72cd );
+				const pressed = game.take();
+				assert.equal( pressed?.castPrediction, undefined );
+				assert.equal( pressed?.skillQueue, undefined );
+				assert.equal(
+					pressed?.skillCooldowns?.some( entry => entry.provisionalUntilMs !== undefined ) ?? false,
+					false
+				);
+				if ( posture === "seated" ) {
+					// Our server consumes the command by standing: no B245 follows.
+					const stand = Buffer.alloc( 6 );
+					stand.writeUInt32LE( LOCAL_GID );
+					stand[4] = 1;
+					game.receive( { opcode: 0x3122, payload: stand }, 1100 );
+					game.step( 10000, { ...local, movementMode: 0 } );
+					assert.equal(
+						game.take()?.skillQueue,
+						undefined,
+						"a stand-only reply leaves no stuck next-skill icon"
+					);
+					assert.equal( sent.length, 1, "standing must not resend the consumed skill" );
+				}
+				game.dispose();
+			}
+		}
+	}
+});
+
 test("a press the server queues drops its cooldown stand-in", () => {
 	const { game } = presser();
 	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, local );

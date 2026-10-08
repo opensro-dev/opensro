@@ -74,6 +74,7 @@ for ( const path of [ "targeted", "self", "untargeted" ] ) {
 			const pending = game.take(), admitted = gate === "admitted";
 			assert.equal( pending?.pose?.x, admitted ? 105 : 110, "no latency-length stop for a refused press" );
 			assert.equal( !!pending?.castPrediction, admitted );
+			assert.equal( pending?.skillQueue, undefined, "a refused or unknown press is not an approach" );
 			assert.equal(
 				pending?.skillCooldowns?.some( row => row.provisionalUntilMs !== undefined ) ?? false,
 				admitted
