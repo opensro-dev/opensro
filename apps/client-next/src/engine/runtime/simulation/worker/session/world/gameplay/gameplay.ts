@@ -851,9 +851,15 @@ bootstrap
 
 Validate authoritative entry data before exposing character facts. Live
 packets own subsequent mutations; bootstrap owns only initial state.
+
+travel marks the entry that follows a 0x3369 world transfer. Party and
+guild state survive it: native keeps them in g_CharacterDependentData,
+which only CPSMission_OnCreate clears (829EE0 -> 828960), and the server
+keeps the membership and resends nothing. Wiping them here made the next
+0x3E58 type-6 row throw "Unknown party delta member" after every teleport.
 ================
 		*/
-		bootstrap( value: unknown ) {
+		bootstrap( value: unknown, travel = false ) {
 			pickup.clear();
 			cosPickup.clear();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
@@ -945,7 +951,9 @@ packets own subsequent mutations; bootstrap owns only initial state.
 			training.bootstrap( value );
 			fortress = fortressBootstrap( value );
 			musicMode = 0;
-			social = emptySocial( (value as { character?: { name?: string; }; }).character?.name ?? "" );
+			const entryName = (value as { character?: { name?: string; }; }).character?.name ?? "";
+			// resetWorld already closed the transfer's prompts; the roster stays.
+			social = travel && social.localName === entryName ? social : emptySocial( entryName );
 			bindings = skillBindings( value );
 			catalog = nextCatalog;
 			castMotion.catalog( nextCatalog );

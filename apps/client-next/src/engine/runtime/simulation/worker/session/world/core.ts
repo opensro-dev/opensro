@@ -328,9 +328,10 @@ bootstrap
 			) admitCape( row.refObjId, row.typeFlags, row.nativeFields?.itemParam2_2a0 );
 			if ( !pendingTravel ) loadingMode = 0;
 			invalidateProjection();
-			entities.bootstrap( value, awaitingTravelBootstrap );
+			const travel = awaitingTravelBootstrap;
+			entities.bootstrap( value, travel );
 			awaitingTravelBootstrap = false;
-			gameplay.bootstrap( value );
+			gameplay.bootstrap( value, travel );
 			if ( pendingTravel ) entities.publish( { kind: "travel", travel: pendingTravel } );
 		},
 		receive,
