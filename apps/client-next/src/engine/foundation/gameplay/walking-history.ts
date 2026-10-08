@@ -118,6 +118,37 @@ export function rewindWalkingHistory( points: readonly Pose[] | undefined, corne
 
 /*
 ================
+joinWalkingHistory
+
+Terrain between sampled vertices is piecewise linear. A later actual step
+can resolve a bend absent from the old lookahead chord. Keep that displayed
+chord, return on its certified edges to the shared actual anchor, then follow
+the newly accepted edges. Never invent a connector between the two surfaces.
+================
+*/
+export function joinWalkingHistory(
+	published: readonly Pose[] | undefined,
+	accepted: readonly Pose[] | undefined,
+	anchor: Pose
+): readonly Pose[] | undefined {
+	if ( !accepted?.length ) return undefined;
+	const returned = rewindWalkingHistory( published, anchor );
+	if ( !returned ) return undefined;
+	let index = accepted.length - 1;
+	while ( index >= 0 ) {
+		const point = accepted[index]!;
+		if ( sameSpace( point, anchor ) && surfaceDistance( point, anchor ) === 0 ) break;
+		index--;
+	}
+	if ( index < 0 ) return undefined;
+	const suffix = accepted.slice( index + 1 );
+	if ( suffix.some( point => !sameSpace( point, anchor ) ) ) return undefined;
+	const joined = [ ...returned, ...suffix ];
+	return joined.length > MAX_HISTORY_POINTS ? joined.slice( -MAX_HISTORY_POINTS ) : joined;
+}
+
+/*
+================
 correctWalkingHistory
 
 An authoritative endpoint adjustment does not revoke the accepted walk

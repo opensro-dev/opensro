@@ -12,10 +12,45 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { defined } from "../helpers/defined.mjs";
-const { correctWalkingHistory, extendWalkingHistory, rewindWalkingHistory } = await import(
+const { correctWalkingHistory, extendWalkingHistory, joinWalkingHistory, rewindWalkingHistory } = await import(
 	"../../src/engine/foundation/gameplay/walking-history.ts"
 );
 const START = { regionId: 257, x: 0, y: 0, z: 100, angle: 0 };
+
+test("resampled terrain joins only through an exact common accepted anchor", () => {
+	const anchor = { ...START, x: 2, y: 1 }, future = { ...START, x: 4 };
+	const actual = { ...START, x: 3, y: .8 }, published = [ START, anchor, future ];
+	assert.equal(
+		rewindWalkingHistory( published, actual ),
+		undefined,
+		"actual surface is off the old interpolated edge"
+	);
+	assert.deepEqual(
+		joinWalkingHistory( published, [ START, anchor, actual ], anchor ),
+		[ START, anchor, future, anchor, actual ],
+		"the join preserves both certified chains, including the return edge"
+	);
+	assert.equal(
+		joinWalkingHistory( published, [ actual ], anchor ),
+		undefined,
+		"a trimmed anchor cannot invent a connector"
+	);
+	assert.equal(
+		joinWalkingHistory( published, [ { ...anchor, y: 1.001 }, actual ], anchor ),
+		undefined,
+		"the accepted anchor must match exactly, not merely share planar coordinates"
+	);
+	assert.equal( joinWalkingHistory( published, [ anchor, { ...actual, regionId: 0x8001 } ], anchor ), undefined );
+	assert.deepEqual(
+		joinWalkingHistory( published, [ anchor, future, anchor, actual ], anchor ),
+		[ START, anchor, future, anchor, actual ],
+		"a retraced actual chain uses its latest shared anchor"
+	);
+	const accepted = [ anchor, ...Array.from( { length: 300 }, ( _, index ) => ({ ...actual, x: 3 + index }) ) ];
+	const bounded = joinWalkingHistory( published, accepted, anchor );
+	assert.equal( bounded?.length, 256 );
+	assert.deepEqual( bounded?.at( -1 ), accepted.at( -1 ) );
+});
 
 test("a correction appends its navigation-certified connector to the accepted terrain history", () => {
 	const hill = { ...START, x: 5, y: 10 }, end = { ...START, x: 10 }, to = { ...end, z: end.z + .01512 };
