@@ -1590,6 +1590,7 @@ test("a ground click during a self skill waits for its action window, not the se
 				targetRequired: false,
 				cooldownMs: 0,
 				actionMs: 2000,
+				admit: { weaponKinds: [ 255, 255 ] },
 				masteries: [ none, none ],
 				prerequisites: [ none, none, none ]
 			}

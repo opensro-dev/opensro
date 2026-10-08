@@ -193,6 +193,8 @@ function skillRef( id, cooldownMs ) {
 			spCost: 1,
 			targetRequired: false,
 			cooldownMs,
+			// Any weapon, no other gate: the server admits every press.
+			admit: { weaponKinds: [ 255, 255 ] },
 			masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
 			prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
 		}

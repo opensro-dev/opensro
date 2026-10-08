@@ -87,6 +87,92 @@ type SkillUiRow struct {
 	HoldsCaster   bool                `json:"holdsCaster,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
+	// Admit is what the client needs to replay Skill_ValidatePrerequisites
+	// AndCost (58D8F0) for its own press: the native press animates only on
+	// the server's answer (6FCD50), so the client predicts a cast and its
+	// cooldown only when every gate it can read admits the press. Player
+	// rows only.
+	Admit *SkillUiAdmit `json:"admit,omitempty"`
+}
+
+/*
+================
+SkillUiAdmit
+
+The 58D8F0 inputs of one row, in the order the server reads them. Gates
+on state only the server holds (an rpkt buff 58DB22, the qest area 58DB38,
+a transform mode 58DE1E, the dance selector 58DFF4, a knocked-down target
+58D199, battle state for hide modes 1 and 2 58DF20) collapse into
+ServerOnly: the client never predicts such a row.
+================
+*/
+type SkillUiAdmit struct {
+	// Nmf exempts the row from the frozen/asleep/stunned refusal (58DAEF).
+	Nmf bool `json:"nmf,omitempty"`
+	// ServerOnly marks a gate the client cannot evaluate.
+	ServerOnly bool `json:"serverOnly,omitempty"`
+	// Berserk refuses the row to a berserk caster (58DF20, 0x3031): a hide
+	// gate without a trap.
+	Berserk bool `json:"berserk,omitempty"`
+	// LowHP keeps the row for a caster at or below 30 % HP (58DF8C, 0x3036).
+	LowHP bool `json:"lowHp,omitempty"`
+	// StealthStrike needs the press issued in stealth (58DFE0, 0x3034).
+	StealthStrike bool `json:"stealthStrike,omitempty"`
+	// Teleports is tele or tel3, refused while rooted (58E010, 0x3009).
+	Teleports bool `json:"teleports,omitempty"`
+	// WeaponKinds are +0xC7/+0xC8, compared with the primary weapon's TID4
+	// when the row has no reqi pairs (58D480); 0xFF/0xFF admits anything.
+	WeaponKinds [2]uint8 `json:"weaponKinds"`
+	// Reqi are the row's equipment pairs (58D4E3); All is reqn.
+	Reqi *SkillUiReqi `json:"reqi,omitempty"`
+	// HP and HPPercent are the authored HP cost (58E1AC, 0x3013).
+	HP        uint32 `json:"hp,omitempty"`
+	HPPercent uint16 `json:"hpPercent,omitempty"`
+	// Ammunition needs a stack of the weapon's ammunition in socket 7
+	// (58E32D, 0x300E).
+	Ammunition bool `json:"ammunition,omitempty"`
+}
+
+/*
+================
+SkillUiReqi
+================
+*/
+type SkillUiReqi struct {
+	All   bool        `json:"all,omitempty"`
+	Pairs [][2]uint32 `json:"pairs"`
+}
+
+/*
+================
+skillUiAdmit
+
+The row's 58D8F0 inputs for the client (SkillUiAdmit).
+================
+*/
+func skillUiAdmit(row SkillRow) *SkillUiAdmit {
+	gate, reqc := row.CastGate, row.Reqc
+	admit := &SkillUiAdmit{
+		Nmf: gate.Nmf,
+		ServerOnly: gate.Rpkt || gate.Qest || gate.MschPresent || reqc.Dance || reqc.KnockedDown ||
+			gate.HideGatePresent && (gate.HideGateMode == 1 || gate.HideGateMode == 2),
+		Berserk:       gate.HideGatePresent && !gate.TrapPresent,
+		LowHP:         reqc.LowHP,
+		StealthStrike: reqc.Flag16,
+		Teleports:     gate.Tele || gate.Tel3,
+		WeaponKinds:   row.RequiredWeaponKinds,
+		Ammunition:    row.Ammunition.Count != 0,
+	}
+	if row.Reqi.Present {
+		admit.Reqi = &SkillUiReqi{All: row.Reqi.All, Pairs: make([][2]uint32, 0, row.Reqi.Count)}
+		for _, pair := range row.Reqi.Pairs[:row.Reqi.Count] {
+			admit.Reqi.Pairs = append(admit.Reqi.Pairs, [2]uint32{pair.Kind, pair.Value})
+		}
+	}
+	if row.Consumption.Pinned {
+		admit.HP, admit.HPPercent = row.Consumption.HP, row.Consumption.HPPercent
+	}
+	return admit
 }
 
 // SkillUiTarget bits of SkillUiRow.Targets.
@@ -217,6 +303,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 			}
 			if playerSkillCodename(row.Codename) {
 				projection.UI.Targets = skillUiTargets(row.Targets)
+				projection.UI.Admit = skillUiAdmit(row)
 			}
 			projection.UI.HoldsCaster = row.Wall.Pinned
 			if row.SpeedBuff.Present {
