@@ -124,6 +124,32 @@ def mission_monsters(fields, first, count_field):
 
 
 # ================
+# delivery_items
+#
+# A deliver mission holds +0x19 (byte) items, each a codename at +0x42 and
+# its quantity at +0x1A, both at a four-byte stride: the pairs
+# QuestBase_ValidateAndGrantMissionItems (9208D0) grants at acceptance.
+# The v1.150 line's count wins for a lone item, as it does elsewhere.
+# ================
+def delivery_items(text, mission):
+	fields = mission["fields"]
+	count = fields.get("0x19")
+	if not isinstance(count, int) or count <= 0:
+		raise Unsupported("delivery mission without items")
+	items = []
+	for i in range(count):
+		item = fields.get(hex(0x42 + 4 * i))
+		quantity = fields.get(hex(0x1a + 4 * i))
+		if not isinstance(item, str) or not isinstance(quantity, int) or quantity <= 0:
+			raise Unsupported("delivery mission item unavailable")
+		items.append({"ItemCodename": item, "Count": quantity})
+	line = text["objectives"].get(fields.get("0xd"))
+	if count == 1 and line and line["count"]:
+		items[0]["Count"] = line["count"]
+	return items
+
+
+# ================
 # project_mission
 #
 # One gather or kill mission as a MissionSpec-shaped row.
@@ -243,10 +269,7 @@ def project(code, quest, text, sql):
 		if MISSION_DIALOG in kinds:
 			spec["Objective"] = OBJECTIVE_TALK
 		else:
-			item = fields.get("0x42")
-			if not isinstance(item, str):
-				raise Unsupported("delivery mission without an item")
-			spec.update({"Objective": OBJECTIVE_DELIVERY, "DeliveryItems": [{"ItemCodename": item, "Count": objective_count(text, missions[0], "0x19")}]})
+			spec.update({"Objective": OBJECTIVE_DELIVERY, "DeliveryItems": delivery_items(text, missions[0])})
 	elif kinds <= {MISSION_GATHER, MISSION_KILL}:
 		rows = [project_mission(text, m) for m in missions]
 		if len(rows) == 1:

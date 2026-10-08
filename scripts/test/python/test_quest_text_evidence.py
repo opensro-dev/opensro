@@ -1,6 +1,7 @@
 """
 ===========================================================================
-test_quest_text_evidence.py - multiline quest text and versioned reward precedence
+test_quest_text_evidence.py - multiline quest text, versioned reward precedence
+and delivery mission items
 
 Synthetic text tables exercise the production importer and reward projector.
 The older popup owns advertised counts; newer SQL supplies unspecified values
@@ -15,7 +16,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_quest_text_evidence import advertised_rewards, plain, read_table
-from generate_compiled_quests import Unsupported, rewards
+from generate_compiled_quests import Unsupported, delivery_items, rewards
 
 
 # ================
@@ -103,6 +104,38 @@ class QuestTextEvidenceTests(unittest.TestCase):
 				row[field] = 1
 				with self.assertRaisesRegex(Unsupported, "reward " + field):
 					rewards("QUEST", {"reward": advertised_rewards("보상 인벤토리 2칸")}, {"QUEST": row})
+
+	# ================
+	# test_delivery_items_pair_each_codename_with_its_quantity
+	#
+	# +0x19 is the number of items, not a quantity: QNO_CA_HORSE_3 hands
+	# over thirty of its one item.
+	# ================
+	def test_delivery_items_pair_each_codename_with_its_quantity(self):
+		text = {"objectives": {}}
+		lone = {"fields": {"0xd": "SN_CON_LONE", "0x19": 1, "0x1a": 30, "0x42": "ITEM_LEATHER"}}
+		self.assertEqual(delivery_items(text, lone), [{"ItemCodename": "ITEM_LEATHER", "Count": 30}])
+		pair = {"fields": {"0x19": 2, "0x1a": 1, "0x1e": 4, "0x42": "ITEM_MEDICINE", "0x46": "ITEM_LETTER"}}
+		self.assertEqual(delivery_items(text, pair), [
+			{"ItemCodename": "ITEM_MEDICINE", "Count": 1}, {"ItemCodename": "ITEM_LETTER", "Count": 4}])
+
+	# ================
+	# test_delivery_line_count_wins_for_a_lone_item
+	# ================
+	def test_delivery_line_count_wins_for_a_lone_item(self):
+		text = {"objectives": {"SN_CON_LONE": {"count": 50}}}
+		lone = {"fields": {"0xd": "SN_CON_LONE", "0x19": 1, "0x1a": 60, "0x42": "ITEM_PADDLE"}}
+		self.assertEqual(delivery_items(text, lone), [{"ItemCodename": "ITEM_PADDLE", "Count": 50}])
+
+	# ================
+	# test_delivery_item_without_a_quantity_is_unsupported
+	# ================
+	def test_delivery_item_without_a_quantity_is_unsupported(self):
+		text = {"objectives": {}}
+		for fields in ({"0x19": 1, "0x42": "ITEM_LEATHER"}, {"0x19": 2, "0x1a": 1, "0x42": "ITEM_LEATHER"}, {"0x1a": 1}):
+			with self.subTest(fields=fields):
+				with self.assertRaises(Unsupported):
+					delivery_items(text, {"fields": fields})
 
 
 if __name__ == "__main__":
