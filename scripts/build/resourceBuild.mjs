@@ -399,6 +399,11 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		animatedWorldObjects
 	} = worldResults;
 
+	// The focused families extend the builders' outputs (code-selected art,
+	// catalog patches, world sky state): they run here, each as its own ledger
+	// owner, so the image sweep below and the pack tail see their files and a
+	// fresh tree needs no separate `pnpm assets publish` (families/looseFamilies.mjs).
+	const families = await timed( "families", () => steps.produceAllFamilies() );
 	// Every lane above has finished publishing before this sweep over
 	// assets/images/** runs (native-interface preload membership must see the
 	// final image tree).
@@ -466,11 +471,6 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// EnterWorld v2 sends semantic ids only. This client projection is generated
 	// after NPC/item builders settle and owns every presentation resource path.
 	const missionPresentation = steps.buildMissionPresentationAsset();
-	// The focused families extend the builders' outputs (code-selected art,
-	// catalog patches, world sky state): they run here, each as its own ledger
-	// owner, so the pack tail packs their files and a fresh tree needs no
-	// separate `pnpm assets publish` (families/looseFamilies.mjs).
-	const families = await timed( "families", () => steps.produceAllFamilies() );
 	// Every producing lane has finished: list what the client installs in the
 	// background after world entry, so it is packed with the other game data.
 	const backgroundInstall = await timed( "backgroundInstall", () => steps.buildBackgroundInstallAsset() );

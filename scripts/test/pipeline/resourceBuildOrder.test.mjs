@@ -136,3 +136,23 @@ test("a failed source-image conversion stops the build before any lane", async (
 	assert.equal( calls.buildCifResources, undefined );
 	assert.equal( calls.packTree, undefined );
 });
+
+for ( const laneCount of [ 1, 8 ] ) {
+	test(`the families run after every builder and before the image sweep and background install (${laneCount} lane(s))`, async () => {
+		const { events, steps } = recordingSteps();
+		await buildSroResources( steps, { laneCount, log: () => {} } );
+		const familiesStart = position( events, "start:produceAllFamilies" );
+		const familiesEnd = position( events, "end:produceAllFamilies" );
+		// Their code-selected art must be in the native-interface preload sweep,
+		// and their sounds in the background-install list.
+		assert.ok( familiesEnd < position( events, "start:buildUiImagePreloadManifest" ) );
+		assert.ok( familiesEnd < position( events, "start:buildBackgroundInstallAsset" ) );
+		for ( const builder of [ "buildCifResources", "buildNpcModelAssets", "buildTextResources" ] ) {
+			if ( !events.includes( `end:${builder}` ) ) continue;
+			assert.ok(
+				position( events, `end:${builder}` ) < familiesStart,
+				`${builder} finishes before the families`
+			);
+		}
+	});
+}
