@@ -85,6 +85,12 @@ globalThis.WebSocket = class extends NativeWebSocket {
 	}
 };
 globalThis.postMessage = ( message, transfer ) => parentPort.postMessage( message, transfer );
+// A dedicated worker's scope is self, and its location is the script URL: the
+// bundler compiles import.meta.url in a worker to self.location.href, so the
+// incident report's build name threw "self is not defined" here and hid the
+// incident it was reporting (every client gate since 2026-10-07).
+globalThis.self = globalThis;
+globalThis.location = new URL( workerUrl );
 await import( workerUrl );
 parentPort.on( "message", data => globalThis.onmessage?.( { data } ) );
 parentPort.postMessage( { kind: "__ready" } );

@@ -41,7 +41,9 @@ globalThis.onmessage = async ( { data } ) => {
 	] } } );
 	await new Promise( resolve => setTimeout( resolve, 100 ) );
 	postMessage( { kind: "session", state: { phase: "signed-out", seen: {
-		login: await login.json(), anonymous: await anonymous.json(), again: await again.json(), acked, recycled
+		login: await login.json(), anonymous: await anonymous.json(), again: await again.json(), acked, recycled,
+		// The incident report's build name, as the bundler compiles import.meta.url in a worker.
+		build: new URL( self.location.href ).pathname.split( "/" ).at( -1 )
 	} } } );
 };
 `;
@@ -96,6 +98,7 @@ test("the worker gets browser same-origin behaviour and the page's acknowledgeme
 	assert.deepEqual( state.seen.again, { origin, cookie: "session=abc" } );
 	assert.equal( state.seen.acked, 1 );
 	assert.equal( state.seen.recycled, 1 );
+	assert.equal( state.seen.build, "worker.mjs", "the worker scope has self and its own location" );
 	assert.equal( simulation.entityNamed( "Probe" )?.gid, 7 );
 	const cookies = simulation.cookies();
 	await simulation.stop();
