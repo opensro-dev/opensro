@@ -112,7 +112,7 @@ test("retained disconnect and reconnect keep the placement session until shutdow
 	ui.event( { kind: "window-positions", value: RECORD } );
 	ui.step( view, 0 );
 	const game = createGameplay( () => {} );
-	game.seed( { gid: 7, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
+	game.seed( { gid: 7, refObjId: 0, kind: "player", name: "Fixture", regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
 	const gameplay = game.take();
 	assert.ok( gameplay );
 	ui.step( { ...view, gameplay, session: { phase: "disconnected", revision: 2 } }, 1 );
@@ -227,7 +227,7 @@ for ( const restored of [ false, true ] ) {
 			f.ui.step( { ...view }, 200 );
 			f.dispose();
 			assert.deepEqual( saved.at( -1 ).windows.gameGuide, origin );
-			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, restored ? [ 0, -12 ] : [ 194, 181 ] );
+			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, restored ? [ 0, 0 ] : [ 194, 181 ] );
 		} finally {
 			f.dispose();
 		}
@@ -276,7 +276,7 @@ for ( const guideState of [ "open", "closed", "reopened" ] ) {
 			f.ui.step( { ...resized }, 200 );
 			f.dispose();
 			assert.deepEqual( saved.at( -1 ).windows.gameGuide, expected );
-			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, [ 720, 388 ] );
+			assert.deepEqual( saved.at( -1 ).windows.extendedQuickslot, [ 720, 568 ] );
 		} finally {
 			f.dispose();
 		}

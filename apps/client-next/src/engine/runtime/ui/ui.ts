@@ -996,14 +996,6 @@ export function createUi(
 	let extDraft = [ true, false, false, true ];
 	/*
 	================
-	extendedExtent
-	================
-	*/
-	function extendedExtent(): readonly [number, number] {
-		return extVertical ? (extDouble ? [ 80, 212 ] : [ 44, 405 ]) : (extDouble ? [ 213, 76 ] : [ 405, 40 ]);
-	}
-	/*
-	================
 	persistQuickslots
 	================
 	*/
@@ -6228,11 +6220,13 @@ export function createUi(
 					guideX = Math.trunc( next.width / 2 ) - 210;
 					guideY = Math.trunc( next.height / 2 ) - 226;
 				}
-				if ( extPosition ) {
-					const [width, height] = extendedExtent();
+				const extended = hud.data()?.extended[Number( extVertical ) * 2 + Number( extDouble )];
+				if ( extPosition && extended ) {
+					// 548490 sizes the widget root from header ID10, not the protruding slots.
+					const header = Object.values( extended ).find( node => node.id === 10 )!;
 					extPosition = [
-						Math.min( extPosition[0], next.width - width ),
-						Math.min( extPosition[1], next.height - height )
+						Math.min( extPosition[0], next.width - header.rect[2] ),
+						Math.min( extPosition[1], next.height - header.rect[3] )
 					];
 				}
 			}
@@ -8357,16 +8351,17 @@ export function createUi(
 				}
 				if ( hudData ) {
 					const layout = hudData.extended[Number( extVertical ) * 2 + Number( extDouble )]!;
-					const [width, height] = extendedExtent();
-					const headerWidth = Object.values( layout ).find( n => n.id === 10 )!.rect[2];
+					const header = Object.values( layout ).find( n => n.id === 10 )!;
 					if ( !extPosition ) {
-						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [ width, height ] ) ??
-							[ w - headerWidth - 26, 181 ];
+						extPosition = windowPlacement.takeRemembered( "extendedQuickslot", w, h, [
+							header.rect[2],
+							header.rect[3]
+						] ) ??
+							[ w - header.rect[2] - 26, 181 ];
 					}
 					const ex = extPosition[0],
 						ey = extPosition[1],
 						alpha = extTransparent ? 110 / 255 : 1;
-					const header = Object.values( layout ).find( n => n.id === 10 )!;
 					controls.push( {
 						id: "ext-drag",
 						label: "Move extended quickslot bar",
