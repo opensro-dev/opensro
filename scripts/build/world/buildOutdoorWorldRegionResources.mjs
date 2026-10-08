@@ -13,6 +13,7 @@ ledger, so reuse never leaves a bundle naming images that are gone.
 */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { claimKeptOutput, claimPublicFile } from "../shared/publicationLedger.mjs";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
 
@@ -395,6 +396,8 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 			} else {
 				await copyReferencedTerrainTileImages( tiles, sourceExtractedRoot );
 			}
+			// The kept bundle claims itself and everything it references (lightmaps).
+			claimKeptOutput( outputPath, await readFile( outputPath, "utf8" ) );
 			reused += 1;
 			reportProgress( options, {
 				phase: "regions",
@@ -479,8 +482,10 @@ buildOutdoorSharedRenderResources
 */
 async function buildOutdoorSharedRenderResources( options = {} ) {
 	if ( !options.force && (await exists( OUTDOOR_WORLD_SHARED_RENDER_PATH )) ) {
-		const existing = JSON.parse( await readFile( OUTDOOR_WORLD_SHARED_RENDER_PATH, "utf8" ) );
+		const text = await readFile( OUTDOOR_WORLD_SHARED_RENDER_PATH, "utf8" );
+		const existing = JSON.parse( text );
 		validateSharedRenderResources( existing );
+		claimKeptOutput( OUTDOOR_WORLD_SHARED_RENDER_PATH, text );
 		return existing;
 	}
 
@@ -514,8 +519,10 @@ buildOutdoorSharedObjectResources
 */
 async function buildOutdoorSharedObjectResources( options ) {
 	if ( !options.force && (await exists( OUTDOOR_WORLD_OBJECT_INDEX_PATH )) ) {
-		const index = JSON.parse( await readFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH, "utf8" ) );
+		const text = await readFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH, "utf8" );
+		const index = JSON.parse( text );
 		validateObjectResourceIndex( index );
+		claimKeptOutput( OUTDOOR_WORLD_OBJECT_INDEX_PATH, text );
 		return {
 			index,
 			collisionResources: collisionResourcesFromIndex( index )
@@ -572,6 +579,7 @@ async function buildOutdoorSharedObjectResources( options ) {
 			await mkdir( path.dirname( outputPath ), { recursive: true } );
 			await writeFile( outputPath, bytes );
 		}
+		claimPublicFile( outputPath );
 
 		meshFiles.push( {
 			sourcePath: mesh.sourcePath,
@@ -802,6 +810,7 @@ writeCompactJson
 async function writeCompactJson( outputPath, value ) {
 	await mkdir( path.dirname( outputPath ), { recursive: true } );
 	await writeFile( outputPath, `${JSON.stringify( value )}\n`, "utf8" );
+	claimPublicFile( outputPath );
 }
 
 /*

@@ -5,6 +5,7 @@
 | [GETTING_STARTED.md](GETTING_STARTED.md) | Running the server and client locally, from nothing |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | How the server, client and asset pipeline fit together |
 | [ASSET_PIPELINE.md](ASSET_PIPELINE.md) | Building and packaging game data |
+| [ASSET_DELIVERY.md](ASSET_DELIVERY.md) | How game data reaches the browser: sizes, packs, the publication ledger, caching, data releases |
 | [apps/server/ops/docs/DEPLOYMENT.md](../apps/server/ops/docs/DEPLOYMENT.md) | Production topology, security, state and recovery |
 | [apps/server/ops/nomad/README.md](../apps/server/ops/nomad/README.md) | Nomad operations |
 | [apps/server/cmd/README.md](../apps/server/cmd/README.md) | Server command catalog |

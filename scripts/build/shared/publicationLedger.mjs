@@ -114,6 +114,24 @@ export function claimPublicPaths( publicPaths ) {
 	}
 }
 
+// A JSON string value that is a public path; paths never contain a quote or backslash.
+const REFERENCED_PUBLIC_PATH = /"(\/assets\/[^"\\]+)"/g;
+
+/*
+================
+claimKeptOutput
+
+A builder that keeps an existing output instead of rewriting it claims the
+output and every /assets/... path the output's text references: the client
+loads exactly those paths, so they stay live as long as the output does.
+================
+*/
+export function claimKeptOutput( absolutePath, text ) {
+	if ( !current ) return;
+	claimPublicFile( absolutePath );
+	claimPublicPaths( [ ...text.matchAll( REFERENCED_PUBLIC_PATH ) ].map( match => match[1] ) );
+}
+
 /*
 ================
 commitPublication
@@ -172,6 +190,9 @@ async function readOwner( file ) {
 readClaims
 
 Every owner's record: { owners: Map<owner, Set<path>>, claimed: Set<path> }.
+The open publication of this process counts with what it has claimed so
+far, replacing its committed record: the full build audits its own claims
+before it commits them.
 ================
 */
 export async function readClaims() {
@@ -184,10 +205,13 @@ export async function readClaims() {
 	}
 	for ( const name of names.filter( name => name.endsWith( ".json" ) ).sort() ) {
 		const record = await readOwner( path.join( ledgerRoot(), name ) );
-		const files = new Set( record.files );
-		owners.set( record.owner, files );
-		for ( const file of files ) claimed.add( file );
+		owners.set( record.owner, new Set( record.files ) );
 	}
+	if ( current ) {
+		const previous = current.complete ? new Set() : owners.get( current.owner ) ?? new Set();
+		owners.set( current.owner, new Set( [ ...previous, ...current.files ] ) );
+	}
+	for ( const files of owners.values() ) for ( const file of files ) claimed.add( file );
 	return { owners, claimed };
 }
 

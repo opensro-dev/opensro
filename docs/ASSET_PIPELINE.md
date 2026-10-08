@@ -82,6 +82,13 @@ asset build. Builds take an exclusive lock
 (`scripts/rebuildLock.mjs`), so concurrent builds refuse rather than corrupt
 output.
 
+Focused families are rows of `scripts/build/families/looseFamilies.mjs`, run
+by `scripts/refresh_asset_family.mjs <family>`. Every build process records
+the public files it produced in the publication ledger, and the full build
+reports packed files no current builder produced. Sizes, the delivery path
+in the browser, the ledger and data releases are described in
+[ASSET_DELIVERY.md](ASSET_DELIVERY.md).
+
 ## Packs
 
 Small assets are delivered in binary packs (about 50 MiB each) instead of
