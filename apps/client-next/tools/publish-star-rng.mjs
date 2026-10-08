@@ -54,7 +54,11 @@ await withGeneratedAssetsLock( "star RNG continuation publication", async () => 
 	const index = JSON.parse(
 		await fs.readFile( path.join( publicRoot, "assets", "packs", "manifest.json" ), "utf8" )
 	);
-	const updates = await publishLooseFamily( { name: "star-rng", files: packedWorldFiles( index, published ) } );
+	const updates = await publishLooseFamily( {
+		name: "star-rng",
+		owner: "star-rng",
+		files: packedWorldFiles( index, published )
+	} );
 	console.log( JSON.stringify( {
 		updated: changes.length,
 		verified: published.length,

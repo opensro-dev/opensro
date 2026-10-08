@@ -27,6 +27,7 @@ await withGeneratedAssetsLock( "native skill UI publication", async () => {
 	} );
 	await publishLooseFamily( {
 		name: "skill-ui",
+		owner: "skill-ui",
 		files: [ "/assets/data/skillUi.json.gz" ],
 		defaultGroup: ( file, previous ) =>
 			previous.assets.find( row => row.path.toLowerCase() === MASTERY_DATA )?.group

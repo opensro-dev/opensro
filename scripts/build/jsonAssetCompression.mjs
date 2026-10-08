@@ -2,6 +2,7 @@ import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { availableParallelism } from "node:os";
+import { buildJobs } from "./shared/buildParallelism.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
@@ -42,7 +43,6 @@ export { PRECOMPRESSED_ASSET_SUFFIXES } from "./shared/compressionUtils.mjs";
 
 const DEFAULT_ENCODINGS = [ "br", "gzip", "zstd" ];
 const DEFAULT_COMPRESS_MIN_BYTES = 1024;
-const DEFAULT_COMPRESSION_JOBS = Math.min( Math.max( 1, availableParallelism() - 2 ), 4 );
 
 const ENCODING_DESCRIPTORS = {
 	br: {
@@ -388,8 +388,8 @@ function encodingsFromEnv() {
 }
 
 function normalizeConcurrency( value ) {
-	const parsed = Number( value ?? process.env.SRO_ASSET_COMPRESSION_JOBS );
-	const concurrency = Number.isFinite( parsed ) ? parsed : DEFAULT_COMPRESSION_JOBS;
+	const parsed = Number( value );
+	const concurrency = value !== undefined && Number.isFinite( parsed ) ? parsed : buildJobs();
 	return Math.max( 1, Math.min( Math.floor( concurrency ), availableParallelism() ) );
 }
 

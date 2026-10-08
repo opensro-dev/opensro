@@ -34,6 +34,7 @@ await withGeneratedAssetsLock( "native weather publication", async () => {
 	// The NPC manifest keeps its owner; a new weather sound joins game-audio.
 	await publishLooseFamily( {
 		name: "weather",
+		owner: "weather-assets",
 		files: [ "/assets/npc/manifest.json.gz", ...sounds ],
 		defaultGroup: file => file.endsWith( ".wav" ) ? "game-audio" : undefined
 	} );
