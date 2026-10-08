@@ -396,15 +396,16 @@ Whether the server will admit the local caster's press (press-admission.ts).
 The native press animates only on the server's answer (6FCD50), so a press
 it refuses or may refuse predicts neither its cast nor its cooldown: either
 would play and snap back (BUG-066 stun, a wrong weapon). The press is still
-sent. Unknown vitals count as paid, as the server's own keeper answers them.
+sent. A cost whose vital inputs are unknown waits for the server's answer.
 ================
 	*/
 	function pressAdmitted( metadata: SkillMetadata | undefined, local: EntityState | undefined ): boolean {
 		if ( !metadata || !local ) return false;
+		if ( !potionFacts.maxMp && metadata.mpPercent ) return false;
 		const admission = pressAdmission( {
 			admit: metadata.admit,
 			needsFooting: metadata.needsFooting,
-			mpCost: potionFacts.maxMp ? skillMpCost( metadata, potionFacts.maxMp ) : 0
+			mpCost: skillMpCost( metadata, potionFacts.maxMp )
 		}, {
 			abnormal: combat.state().vitals.find( v => v.gid === localGid )?.abnormal ?? 0,
 			hp: potionFacts.hp,
@@ -2137,7 +2138,7 @@ state here before a command can claim a native wire conversation.
 					// nothing is selected, as the server resolves the same row.
 					if ( !metadata.targetSelf || !localGid ) throw Error( "This skill requires a target" );
 					const frame = combat.skill( skillId, localGid );
-					movement.holdForCast( now );
+					if ( pressAdmitted( metadata, local ) ) movement.holdForCast( now );
 					predictCast( metadata, undefined, local, now );
 					return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) );
 				}
@@ -2148,7 +2149,7 @@ state here before a command can claim a native wire conversation.
 				// as a targeted command does (movement.holdForCast).
 				const frame = combat.skill( command.skillId );
 				const skillId = command.skillId, metadata = catalog.find( row => row.id === skillId );
-				if ( metadata?.haltsWalk ) movement.holdForCast( now );
+				if ( metadata?.haltsWalk && pressAdmitted( metadata, local ) ) movement.holdForCast( now );
 				predictCast( metadata, undefined, local, now );
 				return sendSkillPress( frame, skillId, now, pressAdmitted( metadata, local ) );
 			}
@@ -2233,14 +2234,16 @@ state here before a command can claim a native wire conversation.
 			}
 			if ( command.kind !== "skill" ) throw Error( "Unsupported gameplay command" );
 			const frame = combat.skill( command.skillId, entity.gid );
-			movement.holdForCast( now );
 			if ( entity.gid !== localGid ) markTarget( entity );
 			const pressedSkill = command.skillId;
 			const pressedMetadata = catalog.find( row => row.id === pressedSkill );
+			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
+			// Admission precedes the server's movement-to-cast handoff. A refused
+			// or unknown press must not stop a walk while its answer is in flight.
+			if ( admitted && pressAdmitted( pressedMetadata, local ) ) movement.holdForCast( now );
 			predictCast( pressedMetadata, entity, local, now );
 			// Only a target the row admits stands a cooldown in: any other is the
 			// server's to refuse, and its stand-in showed a cooldown that vanished.
-			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
 			if ( !admitted ) {
 				sendFrame( frame );
 				skillPress.sent( now, command.skillId );

@@ -184,12 +184,51 @@ test("low HP compares against the widened float 0.3", () => {
 	assert.equal( pressAdmission( skill, caster( { maxHp: 10, hp: 3 } ) ).kind, "admit" );
 });
 
-test("unknown MP counts as paid; the HP percent truncates", () => {
-	assert.equal( pressAdmission( press( {}, { mpCost: 999 } ), caster( { maxMp: 0, mp: 0 } ) ).kind, "admit" );
+test("paid skills need known vitals while genuinely free skills need no maxima", () => {
+	const unknown = caster( { maxHp: 0, hp: 0, maxMp: 0, mp: 0 } );
+	assert.deepEqual( pressAdmission( press( {}, { mpCost: 120 } ), unknown ), {
+		kind: "unknown",
+		gate: "unknown MP"
+	} );
+	for ( const admit of [ { hp: 1 }, { hpPercent: 1 }, { lowHp: true } ] ) {
+		assert.deepEqual( pressAdmission( press( admit ), unknown ), { kind: "unknown", gate: "unknown HP" } );
+	}
+	assert.deepEqual( pressAdmission( press( {} ), unknown ), { kind: "admit" } );
+	assert.deepEqual( pressAdmission( press( {}, { mpCost: 120 } ), caster( { mp: 0 } ) ), {
+		kind: "refuse",
+		code: 0x3004
+	} );
+	assert.deepEqual( pressAdmission( press( { hp: 1 } ), caster( { hp: 0 } ) ), {
+		kind: "refuse",
+		code: 0x3013
+	} );
+	assert.deepEqual( pressAdmission( press( { hp: 1 } ), { ...unknown, abnormal: 0x4000 } ), {
+		kind: "refuse",
+		code: 0x3009
+	}, "known earlier refusals retain their precedence" );
+});
+
+test("HP percentages match the server's signed crtFtol conversion", () => {
 	// 7 % of 1015 is 71.05: the cost is 71.
 	const skill = press( { hpPercent: 7 } );
 	assert.equal( pressAdmission( skill, caster( { maxHp: 1015, hp: 71 } ) ).kind, "admit" );
 	assert.equal( pressAdmission( skill, caster( { maxHp: 1015, hp: 70 } ) ).kind, "refuse" );
+	const boundary = press( { hpPercent: 200 } );
+	assert.deepEqual( pressAdmission( boundary, caster( { maxHp: 0x3fffffff, hp: 1 } ) ), {
+		kind: "refuse",
+		code: 0x3013
+	} );
+	assert.equal(
+		pressAdmission( boundary, caster( { maxHp: 0x40000000, hp: 1 } ) ).kind,
+		"admit",
+		"2^31 converts to INT32_MIN, not a positive cost"
+	);
+	assert.equal( pressAdmission( press( { hpPercent: 65535 } ), caster( { maxHp: 4000000, hp: 1 } ) ).kind, "admit" );
+	assert.deepEqual(
+		pressAdmission( press( { hp: 0xffffffff, hpPercent: 200 } ), caster( { maxHp: 0x80000001, hp: 1 } ) ),
+		{ kind: "refuse", code: 0x3013 },
+		"a signed-input product below INT32_MIN also converts to INT32_MIN before flat cost is added"
+	);
 });
 
 test("reqn needs every pair, and five matched pairs still fail (58D681)", () => {
@@ -236,11 +275,22 @@ test("the catalog parses admission inputs strictly", () => {
 			{ weaponKinds: [ 2, 256 ] },
 			{ weaponKinds: ANY, nmf: 1 },
 			{ weaponKinds: ANY, hp: -1 },
-			{ weaponKinds: ANY, reqi: { pairs: [ [ 1 ] ] } }
+			{ weaponKinds: ANY, reqi: { pairs: [ [ 1 ] ] } },
+			{ weaponKinds: ANY, reqi: { pairs: [ [ 6, undefined ] ] } },
+			{ weaponKinds: ANY, reqi: { pairs: [ [ undefined, 0 ] ] } },
+			{ weaponKinds: ANY, reqi: { pairs: [ [ 6, null ] ] } },
+			{ weaponKinds: ANY, reqi: { pairs: new Array( 1 ) } },
+			{ weaponKinds: ANY, reqi: { pairs: [ [ 6, 0x100000000 ] ] } },
+			{ weaponKinds: ANY, reqi: { pairs: Array.from( { length: 6 }, () => [ 6, 2 ] ) } }
 		]
 	) {
 		assert.throws( () => parsePressAdmit( bad ), Error, JSON.stringify( bad ) );
 	}
+	assert.deepEqual(
+		parsePressAdmit( { weaponKinds: ANY, reqi: { pairs: [ [ 6, 0 ] ] } } ).reqi?.pairs,
+		[ [ 6, 0 ] ],
+		"an explicit zero remains a valid required operand"
+	);
 	const none = { ID: 0, Level: 0 };
 	const row = admit => ({
 		id: 9,

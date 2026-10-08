@@ -1,19 +1,33 @@
+/*
+===========================================================================
+
+skill_ui_admit_test.go - published skill admission inputs for client prediction
+
+Named shipped rows pin the projection independently of its mapping logic.
+
+===========================================================================
+*/
 package enterworld
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 /*
 ================
 TestSkillUiAdmitMirrorsTheServerGates
 
-Every player row publishes the inputs of its 58D8F0 gates exactly as the
-server reads them, so the client's press prediction refuses what the
-server refuses (BUG-066, BR-261007-0624). Monster rows publish none.
+Every player row publishes its 58D8F0 inputs and monster rows none. Named
+shipped rows pin what each gate publishes, so a wrong mapping fails here
+rather than mispredicting a press (BUG-066, BR-261007-0624). No shipped
+player row carries nmf, the low-HP reqc bit or the stealth-strike bit;
+press-admission.test.mjs covers those gates on the client.
 ================
 */
 func TestSkillUiAdmitMirrorsTheServerGates(t *testing.T) {
 	skills := sharedShippedSkills(t)
-	ammunition, reqi := false, false
+	byCodename := map[string]*SkillUiAdmit{}
 	for _, row := range skills.SpawnSkillRows() {
 		source, ok := skills.SkillByID(row.ID)
 		if !ok || row.UI == nil {
@@ -29,38 +43,36 @@ func TestSkillUiAdmitMirrorsTheServerGates(t *testing.T) {
 		if admit == nil {
 			t.Fatalf("player skill %d (%s) published no admission inputs", row.ID, source.Codename)
 		}
-		gate, reqc := source.CastGate, source.Reqc
-		serverOnly := gate.Rpkt || gate.Qest || gate.MschPresent || reqc.Dance || reqc.KnockedDown ||
-			gate.HideGatePresent && (gate.HideGateMode == 1 || gate.HideGateMode == 2)
-		if admit.Nmf != gate.Nmf || admit.ServerOnly != serverOnly ||
-			admit.Berserk != (gate.HideGatePresent && !gate.TrapPresent) || admit.LowHP != reqc.LowHP ||
-			admit.StealthStrike != reqc.Flag16 || admit.Teleports != (gate.Tele || gate.Tel3) ||
-			admit.WeaponKinds != source.RequiredWeaponKinds || admit.Ammunition != (source.Ammunition.Count != 0) {
-			t.Fatalf("skill %d (%s) admission inputs %+v disagree with its row", row.ID, source.Codename, *admit)
-		}
-		if source.Consumption.Pinned && (admit.HP != source.Consumption.HP || admit.HPPercent != source.Consumption.HPPercent) {
-			t.Fatalf("skill %d HP cost %d/%d published as %d/%d", row.ID, source.Consumption.HP,
-				source.Consumption.HPPercent, admit.HP, admit.HPPercent)
-		}
-		if (admit.Reqi != nil) != source.Reqi.Present {
-			t.Fatalf("skill %d reqi presence %v published as %v", row.ID, source.Reqi.Present, admit.Reqi != nil)
-		}
-		if admit.Reqi != nil {
-			reqi = true
-			if admit.Reqi.All != source.Reqi.All || len(admit.Reqi.Pairs) != source.Reqi.Count {
-				t.Fatalf("skill %d reqi %+v disagrees with %+v", row.ID, *admit.Reqi, source.Reqi)
-			}
-			for i, pair := range admit.Reqi.Pairs {
-				if pair != [2]uint32{source.Reqi.Pairs[i].Kind, source.Reqi.Pairs[i].Value} {
-					t.Fatalf("skill %d reqi pair %d = %v, want %+v", row.ID, i, pair, source.Reqi.Pairs[i])
-				}
-			}
-		}
-		ammunition = ammunition || admit.Ammunition
+		byCodename[source.Codename] = admit
 	}
-	// The shipped data must exercise both: a bow or crossbow skill, and a
-	// skill that names its equipment through reqi pairs.
-	if !ammunition || !reqi {
-		t.Fatalf("shipped skills exercised ammunition=%v reqi=%v, want both", ammunition, reqi)
+	anyWeapon := [2]uint8{0xff, 0xff}
+	for codename, want := range map[string]SkillUiAdmit{
+		// reqc bit 0 wants a knocked-down target, which only the server sees.
+		"SKILL_CH_SWORD_DOWNATTACK_A_01": {ServerOnly: true, WeaponKinds: [2]uint8{2, 3}},
+		// A bow row needs arrows in the shield socket.
+		"SKILL_CH_BOW_BASE_01": {WeaponKinds: [2]uint8{6, 0xff}, Ammunition: true},
+		// tel3 is refused while rooted.
+		"SKILL_CH_LIGHTNING_GYEONGGONG_B_01": {Teleports: true, WeaponKinds: anyWeapon},
+		// A shield (reqi kind 4, TID4 1) in the secondary socket.
+		"SKILL_CH_SWORD_SHIELD_A_01": {WeaponKinds: anyWeapon, Reqi: &SkillUiReqi{Pairs: [][2]uint32{{4, 1}}}},
+		// 10 % of maximum HP, with any of three primary weapons.
+		"SKILL_EU_WARRIOR_FRENZYA_TOUNT_AREA_A_01": {
+			WeaponKinds: anyWeapon, HPPercent: 10,
+			Reqi: &SkillUiReqi{Pairs: [][2]uint32{{6, 7}, {6, 8}, {6, 9}}},
+		},
+		// A hide gate without a trap is refused to a berserk caster; stealth
+		// (hide mode 1) is also refused in battle, which only the server sees.
+		"SKILL_EU_ROG_STEALTHA_HIDING_A_01": {
+			ServerOnly: true, Berserk: true, WeaponKinds: [2]uint8{13, 12},
+			Reqi: &SkillUiReqi{Pairs: [][2]uint32{{6, 12}, {6, 13}}},
+		},
+	} {
+		got, ok := byCodename[codename]
+		if !ok {
+			t.Fatalf("%s published no admission inputs", codename)
+		}
+		if !reflect.DeepEqual(*got, want) {
+			t.Fatalf("%s admission inputs = %+v (reqi %+v), want %+v (reqi %+v)", codename, *got, got.Reqi, want, want.Reqi)
+		}
 	}
 }

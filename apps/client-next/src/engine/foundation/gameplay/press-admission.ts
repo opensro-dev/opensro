@@ -41,6 +41,7 @@ const ANY_WEAPON = 0xff, BARE_HAND = 1, FORTRESS_WEAPON = 16;
 const DISABLED = 0x3009, BERSERK_HIDE = 0x3031, NOT_LOW_HP = 0x3036, NOT_STEALTHED = 0x3034;
 const WRONG_WEAPON = 0x300d, FORTRESS_ONLY = 0x3047, BROKEN = 0x300f;
 const NO_HP = 0x3013, NO_MP = 0x3004, NO_AMMUNITION = 0x300e;
+const INT32_MIN = -0x80000000, INT32_LIMIT = 0x80000000;
 
 /*
 ================
@@ -137,8 +138,8 @@ export function parsePressAdmit( value: unknown ): PressAdmit {
 		}
 		return n;
 	};
-	const count = ( n: unknown, max: number ) => {
-		if ( n === undefined ) return 0;
+	const count = ( n: unknown, max: number, optional = false ) => {
+		if ( n === undefined && optional ) return 0;
 		if ( typeof n !== "number" || !Number.isInteger( n ) || n < 0 || n > max ) {
 			throw Error( "Invalid admission cost" );
 		}
@@ -157,7 +158,7 @@ export function parsePressAdmit( value: unknown ): PressAdmit {
 		}
 		reqi = {
 			all: r.all === true,
-			pairs: r.pairs.map( pair => {
+			pairs: Array.from( r.pairs, pair => {
 				if ( !Array.isArray( pair ) || pair.length !== 2 ) throw Error( "Invalid reqi pair" );
 				return [ count( pair[0], 0xffffffff ), count( pair[1], 0xffffffff ) ] as const;
 			} )
@@ -172,8 +173,8 @@ export function parsePressAdmit( value: unknown ): PressAdmit {
 		teleports: flag( "teleports" ),
 		weaponKinds: [ byte( v.weaponKinds[0] ), byte( v.weaponKinds[1] ) ],
 		...(reqi ? { reqi } : {}),
-		hp: count( v.hp, 0xffffffff ),
-		hpPercent: count( v.hpPercent, 0xffff ),
+		hp: count( v.hp, 0xffffffff, true ),
+		hpPercent: count( v.hpPercent, 0xffff, true ),
 		ammunition: flag( "ammunition" )
 	};
 }
@@ -198,6 +199,7 @@ export function pressAdmission( skill: PressSkill, caster: PressCaster ): PressA
 	// 58DF20: a hide gate without a trap refuses a berserk caster.
 	if ( admit.berserk && caster.body === BODY_BERSERK ) return { kind: "refuse", code: BERSERK_HIDE };
 	// 58DF8C: the row is kept for a caster at or below 30 % HP.
+	if ( admit.lowHp && caster.maxHp === 0 ) return { kind: "unknown", gate: "unknown HP" };
 	if ( admit.lowHp && caster.maxHp * LOW_HP_RATIO < caster.hp ) return { kind: "refuse", code: NOT_LOW_HP };
 	// 58DFE0: the press must be issued in stealth.
 	if ( admit.stealthStrike && caster.body !== BODY_STEALTH ) return { kind: "refuse", code: NOT_STEALTHED };
@@ -212,9 +214,15 @@ export function pressAdmission( skill: PressSkill, caster: PressCaster ): PressA
 	// 58E1AC: HP first, then MP. The MP rate (parameter 0x8D) starts at 100
 	// and only a dcmp buff lowers it, so a cost the full rate affords is
 	// admitted; a dcmp caster short of the full cost is merely not predicted.
+	// Zero maxima are the caller's missing-vitals sentinel. A paid press
+	// cannot use missing facts as permission; genuinely free rows need none.
+	if ( caster.maxHp === 0 && ((admit.hp ?? 0) > 0 || (admit.hpPercent ?? 0) > 0) ) {
+		return { kind: "unknown", gate: "unknown HP" };
+	}
 	const hpCost = (admit.hp ?? 0) + percentOf( caster.maxHp, admit.hpPercent ?? 0 );
 	if ( hpCost > 0 && caster.hp < hpCost ) return { kind: "refuse", code: NO_HP };
-	if ( caster.maxMp && skill.mpCost > caster.mp ) return { kind: "refuse", code: NO_MP };
+	if ( caster.maxMp === 0 && skill.mpCost > 0 ) return { kind: "unknown", gate: "unknown MP" };
+	if ( skill.mpCost > caster.mp ) return { kind: "refuse", code: NO_MP };
 	// 58E32D: a stack of the weapon's ammunition in the shield socket.
 	if ( admit.ammunition && !ammunitionReady( caster.equipped ) ) return { kind: "refuse", code: NO_AMMUNITION };
 	return { kind: "admit" };
@@ -224,11 +232,15 @@ export function pressAdmission( skill: PressSkill, caster: PressCaster ): PressA
 ================
 percentOf
 
-vitalPercent: the integer vital times percent / 100, truncated (crtFtol).
+vitalPercent: signed input times percent / 100, converted by crtFtol.
+The server returns INT32_MIN for a product outside the signed result domain.
 ================
 */
 function percentOf( vital: number, percent: number ): number {
-	return percent ? Math.trunc( (vital | 0) * (percent / 100) ) : 0;
+	if ( !percent ) return 0;
+	const value = (vital | 0) * (percent / 100);
+	if ( Number.isNaN( value ) || value >= INT32_LIMIT || value < INT32_MIN ) return INT32_MIN;
+	return Math.trunc( value );
 }
 
 /*
