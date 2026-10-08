@@ -37,7 +37,6 @@ const ENCODINGS = [
 // The loose manifests every publication regenerates, relative to the public root.
 const GENERATED_MANIFESTS = [
 	[ "assets", "packs", "manifest.json" ],
-	[ "assets", "packs", "delivery.json" ],
 	[ "assets", "manifest.json" ]
 ];
 

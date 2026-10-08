@@ -1,7 +1,7 @@
 {
 	"client": {
 		"protocol": 5,
-		"assetSchema": 3
+		"assetSchema": 4
 	},
 	"server": {
 		"protocolMin": 5,

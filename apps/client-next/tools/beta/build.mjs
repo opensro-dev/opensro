@@ -14,6 +14,12 @@ pack reader. Only the few files the browser loads by URL itself
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { verifyIndexClaims } from "../../../../scripts/build/shared/publicationLedger.mjs";
+import {
+	decodeStoredMember,
+	parsePackHeader,
+	sameStoredForm,
+	storedMemberBytes
+} from "../../../../scripts/build/shared/packFormat.mjs";
 import { clientBuildDefinitions } from "../build-metadata.mjs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -287,7 +293,6 @@ export async function buildBeta(
 	const native = new Set( nativeAssetUrls() );
 	requireNativeAssets( applicationFiles, native, new Set( index.assets.map( a => a.path ) ) );
 	// Pack members are inspected even when no loose representation remains.
-	const overrides = new Map();
 	for ( const group of index.groups ) {
 		for ( const pack of group.packs ) {
 			console.log( "[beta] pack", group.name, pack.path );
@@ -310,34 +315,37 @@ export async function buildBeta(
 				throw Error( "Publication pack drift " + pack.path );
 			}
 			const members = index.assets.filter( a => a.packPath === pack.path );
-			bytes = projectPack( pack, bytes, members, overrides );
-			// Zstandard files are an offline publication input. This adapter serves the
-			// materialized pack and authored gzip transports; never advertise absent URLs.
+			bytes = projectPack( pack, bytes, members );
+			// Zstandard pack copies are an offline publication input. This adapter
+			// serves the materialized pack; never advertise absent URLs.
 			for ( const key of [ "zstdPath", "zstdBytes", "zstdLevel", "zstdWindowLog" ] ) delete pack[key];
 			const file = "payload/" + pack.sha256 + ".bin";
 			await add( file, bytes, "data" );
 			route( { url: pack.path, file, length: bytes.length, mime: "application/octet-stream" } );
-			const start = 12 + bytes.readUInt32LE( 8 ), header = JSON.parse( bytes.subarray( 12, start ) );
+			const { header, dataStart: start } = parsePackHeader( bytes, pack.path );
 			if ( header.files.length !== members.length ) throw Error( "Pack membership drift" );
 			for ( const a of members ) {
 				const e = header.files.find( e => e.path === a.path );
-				if ( !e || e.offset !== a.offset || e.length !== a.length || e.sha256 !== a.sha256 ) {
+				if (
+					!e || e.offset !== a.offset || e.length !== a.length || e.sha256 !== a.sha256 ||
+					!sameStoredForm( e, a )
+				) {
 					throw Error( "Pack index drift " + a.path );
 				}
-				// Members are read from the pack; only browser-loaded files get a URL.
-				if ( native.has( a.path ) ) {
+				// Members are read from the pack; only browser-loaded files get a URL,
+				// and the browser needs their plain bytes: a compressed member is
+				// published decoded as its own file.
+				if ( !native.has( a.path ) ) continue;
+				if ( !a.stored ) {
 					route( { url: a.path, file, length: a.length, mime: a.mime, offset: start + a.offset } );
+					continue;
 				}
+				const plain = decodeStoredMember( storedMemberBytes( bytes, start, a, pack.path ), a );
+				const plainFile = "payload/" + a.sha256 + path.extname( a.path ).toLowerCase();
+				await add( plainFile, plain, "data" );
+				route( { url: a.path, file: plainFile, length: plain.length, mime: a.mime } );
 			}
 		}
-	}
-	const transports = new Map( index.assets.filter( a => a.transport ).map( a => [ a.transport.path, a.transport ] ) );
-	for ( const [url, t] of transports ) {
-		const bytes = overrides.get( url ) ?? await readFile( path.join( assetRoot, safeName( url.slice( 1 ) ) ) );
-		if ( bytes.length !== t.length || sha( bytes ) !== t.sha256 ) throw Error( "Transport drift " + url );
-		const file = "payload/" + t.sha256 + ".gz";
-		await add( file, bytes, "data" );
-		route( { url, file, length: bytes.length, mime: "application/octet-stream" } );
 	}
 	for ( const group of index.groups ) {
 		const members = index.assets.filter( a => a.group === group.name );

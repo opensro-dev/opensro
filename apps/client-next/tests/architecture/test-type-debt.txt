@@ -160,7 +160,6 @@ tests/helpers/native-source-loader.mjs
 tests/runtime/academy-notices.test.mjs
 tests/runtime/action-time.test.mjs
 tests/runtime/arrow-trail.test.mjs
-tests/runtime/asset-delivery.test.mjs
 tests/runtime/asset-handles.test.mjs
 tests/runtime/assets.test.mjs
 tests/runtime/audio-loop.test.mjs

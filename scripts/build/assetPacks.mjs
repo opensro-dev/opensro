@@ -36,6 +36,8 @@ import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { createLimiter, mapWithConcurrency, settleAll } from "./shared/asyncUtils.mjs";
 import { compressZstd, DEFAULT_ZSTD_LEVEL, DEFAULT_ZSTD_WINDOW_LOG } from "./shared/compressionUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
+import { openMemberCompression } from "./shared/memberCompression.mjs";
+import { ASSET_PACK_HEADER_FORMAT, ASSET_PACK_MAGIC, ASSET_PACK_VERSION } from "./shared/packFormat.mjs";
 import { listFiles } from "./shared/fsUtils.mjs";
 import { sha256Hex } from "./shared/hash.mjs";
 import { archiveGeneratedArtifact } from "./artifacts/generatedArtifactArchive.mjs";
@@ -50,7 +52,8 @@ const publicRoot = CLIENT_PUBLIC_ROOT;
 const packsRoot = path.join( publicRoot, "assets", "packs" );
 
 export const DEFAULT_ASSET_PACK_TARGET_BYTES = 50 * 1024 * 1024;
-export const ASSET_PACK_MAGIC = "SROPACK1";
+// The pack layout (packFormat.mjs); re-exported for existing importers.
+export { ASSET_PACK_MAGIC, ASSET_PACK_VERSION };
 export const ASSET_PACK_ZSTD_LEVEL = DEFAULT_ZSTD_LEVEL;
 export const ASSET_PACK_ZSTD_WINDOW_LOG = DEFAULT_ZSTD_WINDOW_LOG;
 
@@ -62,7 +65,8 @@ const FILE_STAT_CONCURRENCY = 64;
  * zstd fields are optional: reused packs come from a previous manifest, and older
  * manifests may predate the sidecar fields (indexReusablePacks filters on them anyway).
  * @typedef {{ path: string, bytes: number, sha256: string, assetCount: number, zstdPath?: string, zstdBytes?: number, zstdLevel?: number, zstdWindowLog?: number }} AssetPackEntry
- * @typedef {{ path: string, packPath: string, offset: number, length: number, mime: string, sha256: string, group: string }} AssetPackAssetRow
+ * @typedef {{ length: number, encoding: string }} AssetPackStoredForm
+ * @typedef {{ path: string, packPath: string, offset: number, length: number, mime: string, sha256: string, group: string, stored?: AssetPackStoredForm }} AssetPackAssetRow
  * @typedef {{ name: string, load: string, targetBytes: number, assetCount: number, totalBytes: number, packs: AssetPackEntry[] }} AssetPackGroupIndex
  */
 
@@ -130,13 +134,15 @@ export async function buildAssetPacks( options = {} ) {
 	// without it they write fixture hashes into the production .state cache (and, with
 	// SRO_BUILD_HASH_CACHE=0, used to truncate it - see fileHashCache.save()'s guard).
 	const hashCache = await openFileHashCache( options.hashCachePath );
+	// Injectable for the same reason as hashCachePath.
+	const memberCompression = openMemberCompression( { cacheRoot: options.memberCacheRoot } );
 	const counters = { built: 0, reused: 0, kept: 0, fresh: 0 };
 	const baselineIndex = await layoutBaseline( options, root, outputRoot, indexPath );
 
 	/** @type {{ format: string, version: number, assetSchema: number, generatedAt: string, targetPackBytes: number, groups: AssetPackGroupIndex[], assets: AssetPackAssetRow[] }} */
 	const index = {
 		format: "sro-asset-pack-index",
-		version: 1,
+		version: ASSET_PACK_VERSION,
 		// The format of the data this index serves (assetSchema.mjs).
 		assetSchema: ASSET_SCHEMA,
 		generatedAt: new Date().toISOString(),
@@ -159,6 +165,7 @@ export async function buildAssetPacks( options = {} ) {
 			targetBytes: group.targetBytes ?? defaultTargetBytes,
 			reusablePacks,
 			hashCache,
+			memberCompression,
 			counters,
 			baselineIndex,
 			packSlots
@@ -172,7 +179,7 @@ export async function buildAssetPacks( options = {} ) {
 	index.groups.sort( ( left, right ) => left.name.localeCompare( right.name ) );
 	index.assets.sort( ( left, right ) => left.path.localeCompare( right.path ) );
 	validateAssetPackIndex( index );
-	await prepareAssetDelivery( index, root, path.join( outputRoot, "delivery.json" ) );
+	await prepareAssetDelivery( index, root );
 	// Sparse builders publish partial indexes; the final merged publication
 	// requires every descriptor dependency before it replaces the live index.
 	await validatePackedFontAtlases( index, root, {
@@ -198,10 +205,13 @@ export async function buildAssetPacks( options = {} ) {
 	}
 	await archiveStaleOutputs( root, outputRoot, index, indexPath );
 	// The main index is the delivery authority: retire every file under the
-	// packs root it no longer uses, including superseded slots and transport
-	// files outside this build's own output root.
+	// packs root it no longer uses, including superseded slots and retired
+	// transport files outside this build's own output root. Only a full build
+	// prunes the member compression cache: a sparse refresh touches its own
+	// members alone.
 	if ( path.resolve( outputRoot ) === path.resolve( root, "assets", "packs" ) ) {
 		await collectPackGarbage( { publicRoot: root, apply: true, index } );
+		await memberCompression.prune();
 	}
 	await hashCache.save();
 
@@ -212,6 +222,10 @@ export async function buildAssetPacks( options = {} ) {
 		packCount: index.groups.reduce( ( sum, group ) => sum + group.packs.length, 0 ),
 		assetCount: index.assets.length,
 		totalBytes: index.assets.reduce( ( sum, asset ) => sum + asset.length, 0 ),
+		storedBytes: index.assets.reduce(
+			( sum, asset ) => sum + (asset.stored ? asset.stored.length : asset.length),
+			0
+		),
 		zstdSidecarCount: index.groups.reduce(
 			( sum, group ) => sum + group.packs.filter( ( pack ) => typeof pack.zstdBytes === "number" ).length,
 			0
@@ -258,7 +272,18 @@ buildAssetPackGroup
 ================
 */
 async function buildAssetPackGroup(
-	{ publicRoot, outputRoot, group, targetBytes, reusablePacks, hashCache, counters, baselineIndex, packSlots }
+	{
+		publicRoot,
+		outputRoot,
+		group,
+		targetBytes,
+		reusablePacks,
+		hashCache,
+		memberCompression,
+		counters,
+		baselineIndex,
+		packSlots
+	}
 ) {
 	const name = normalizeGroupName( group.name );
 	const publicPaths = uniquePublicPaths( group.files ?? [] );
@@ -311,6 +336,7 @@ async function buildAssetPackGroup(
 				publicRoot,
 				reusablePacks,
 				hashCache,
+				memberCompression,
 				counters
 			} )
 		)
@@ -336,7 +362,7 @@ function packContentKey( groupName, members ) {
 	hash.update(
 		JSON.stringify( {
 			format: ASSET_PACK_MAGIC,
-			version: 1,
+			version: ASSET_PACK_VERSION,
 			group: groupName,
 			files: members.map( ( member ) => [ member.publicPath, member.sha256, member.length, member.mime ] )
 		} )
@@ -356,7 +382,7 @@ async function indexReusablePacks( indexPath ) {
 	const previous = await readJsonOrUndefined( indexPath );
 	if (
 		previous?.format !== "sro-asset-pack-index" ||
-		previous.version !== 1 ||
+		previous.version !== ASSET_PACK_VERSION ||
 		!Array.isArray( previous.groups ) ||
 		!Array.isArray( previous.assets )
 	) {
@@ -441,7 +467,7 @@ buildOrReusePack
 ================
 */
 async function buildOrReusePack(
-	{ name, plan, outputRoot, publicRoot, reusablePacks, hashCache, counters }
+	{ name, plan, outputRoot, publicRoot, reusablePacks, hashCache, memberCompression, counters }
 ) {
 	const { slot, files: chunk } = plan;
 	const plannedKey = packContentKey(
@@ -475,21 +501,23 @@ async function buildOrReusePack(
 	for ( const file of chunk ) {
 		const bytes = await readFile( file.absolutePath );
 		const sha256 = hashCache.noteFileBytes( file.absolutePath, file.stat, bytes );
+		const { stored, encoding } = await memberCompression.store( bytes, sha256 );
 		entries.push( {
 			path: file.publicPath,
 			offset,
 			length: bytes.length,
 			mime: file.mime,
-			sha256
+			sha256,
+			...(encoding ? { stored: { length: stored.length, encoding } } : {})
 		} );
-		payloadParts.push( bytes );
-		offset += bytes.length;
+		payloadParts.push( stored );
+		offset += stored.length;
 	}
 
 	const headerJson = Buffer.from(
 		JSON.stringify( {
-			format: "sro-asset-pack",
-			version: 1,
+			format: ASSET_PACK_HEADER_FORMAT,
+			version: ASSET_PACK_VERSION,
 			files: entries
 		} ),
 		"utf8"
@@ -532,7 +560,8 @@ async function buildOrReusePack(
 		length: entry.length,
 		mime: entry.mime,
 		sha256: entry.sha256,
-		group: name
+		group: name,
+		...(entry.stored ? { stored: entry.stored } : {})
 	}) );
 	return { packEntry, assetRows };
 }

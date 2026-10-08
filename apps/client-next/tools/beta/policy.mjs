@@ -12,6 +12,15 @@ import { createHash } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
+import {
+	ASSET_PACK_MAGIC,
+	ASSET_PACK_VERSION,
+	decodeStoredMember,
+	parsePackHeader,
+	storedLength,
+	storedMemberBytes,
+	validStoredForm
+} from "../../../../scripts/build/shared/packFormat.mjs";
 /*
 ================
 sha
@@ -74,7 +83,8 @@ publicIndex
 */
 export function publicIndex( index ) {
 	if (
-		index?.format !== "sro-asset-pack-index" || index.version !== 1 || !Array.isArray( index.groups ) ||
+		index?.format !== "sro-asset-pack-index" || index.version !== ASSET_PACK_VERSION ||
+		!Array.isArray( index.groups ) ||
 		!Array.isArray( index.assets )
 	) throw Error( "Invalid publication authority" );
 	const classified = new Set();
@@ -98,24 +108,33 @@ inspect
 */
 export function inspect( name, bytes, { application = false } = {} ) {
 	safeName( name );
-	if ( bytes.subarray( 0, 8 ).toString() === "SROPACK1" ) {
-		const start = 12 + bytes.readUInt32LE( 8 ),
-			header = JSON.parse( bytes.subarray( 12, start ).toString( "utf8" ) );
-		if ( header.format !== "sro-asset-pack" || header.version !== 1 || !Array.isArray( header.files ) ) {
+	// Any SROPACK magic is a pack: an unknown version must fail here, never
+	// fall through to the plain-file rules and skip its members' inspection.
+	if ( bytes.subarray( 0, 7 ).toString() === ASSET_PACK_MAGIC.slice( 0, 7 ) ) {
+		let parsed;
+		try {
+			parsed = parsePackHeader( bytes, name );
+		} catch {
 			throw Error( "Invalid embedded pack" );
 		}
+		const { header, dataStart: start } = parsed;
 		let end = 0;
 		const names = new Set();
 		for ( const e of header.files ) {
 			const n = safeName( e.path.slice( 1 ) );
 			if (
 				names.has( n ) || !Number.isSafeInteger( e.offset ) || !Number.isSafeInteger( e.length ) ||
-				e.offset < end || e.length < 0 || start + e.offset + e.length > bytes.length
+				e.offset < end || e.length < 0 || !validStoredForm( e ) ||
+				start + e.offset + storedLength( e ) > bytes.length
 			) throw Error( "Invalid embedded pack member" );
 			names.add( n );
-			end = e.offset + e.length;
-			const b = bytes.subarray( start + e.offset, start + end );
-			if ( sha( b ) !== e.sha256 ) throw Error( "Embedded pack hash mismatch" );
+			end = e.offset + storedLength( e );
+			let b;
+			try {
+				b = decodeStoredMember( storedMemberBytes( bytes, start, e, name ), e );
+			} catch {
+				throw Error( "Embedded pack hash mismatch" );
+			}
 			inspect( n, b );
 		}
 		return;

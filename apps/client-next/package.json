@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5180 --strictPort",
     "dev:https": "vite --mode https --host --port 5180 --strictPort",
-    "check": "node ../../scripts/rebuildLock.mjs --label \"client check\" -- node ../../scripts/checks/run_if_changed.mjs client apps/client-next scripts/build scripts/lib scripts/rebuildLock.mjs scripts/rebuild_lock.py scripts/checks/check_asset_delivery.mjs package.json pnpm-lock.yaml @node,--version !.generated/client-public/assets/packs/manifest.json !.generated/client-public/assets/packs/delivery.json -- node apps/client-next/tools/check.mjs",
+    "check": "node ../../scripts/rebuildLock.mjs --label \"client check\" -- node ../../scripts/checks/run_if_changed.mjs client apps/client-next scripts/build scripts/lib scripts/rebuildLock.mjs scripts/rebuild_lock.py scripts/checks/check_asset_delivery.mjs package.json pnpm-lock.yaml @node,--version !.generated/client-public/assets/packs/manifest.json -- node apps/client-next/tools/check.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "verify:test-types": "node tools/verify-test-types.mjs",
     "verify:quick": "pnpm run typecheck && node tools/verify-ownership.mjs && node tools/verify-capabilities.mjs && node tools/generate-execution-map.mjs",

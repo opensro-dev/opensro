@@ -7,8 +7,8 @@ import { readdir } from "node:fs/promises";
  * directory instead, deterministically, so publication and catalog ownership
  * cannot drift apart.
  */
-export async function discoverCifLayouts(resinfoDir) {
-  return (await readdir(resinfoDir))
-    .filter((fileName) => fileName.toLowerCase().endsWith(".txt"))
-    .sort((left, right) => left.localeCompare(right));
+export async function discoverCifLayouts( resinfoDir ) {
+	return (await readdir( resinfoDir ))
+		.filter( ( fileName ) => fileName.toLowerCase().endsWith( ".txt" ) )
+		.sort( ( left, right ) => left.localeCompare( right ) );
 }

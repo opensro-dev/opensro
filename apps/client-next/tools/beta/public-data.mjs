@@ -10,6 +10,14 @@ runtime payloads and pack identity.
 */
 import { gunzipSync, gzipSync } from "node:zlib";
 import { sha, isPrivateAsset } from "./policy.mjs";
+import {
+	ASSET_PACK_MAGIC,
+	decodeStoredMember,
+	parsePackHeader,
+	storedLength,
+	storedMemberBytes
+} from "../../../../scripts/build/shared/packFormat.mjs";
+import { encodeStoredMemberSync } from "../../../../scripts/build/shared/memberCompression.mjs";
 // Version-qualified metadata projection. Runtime consumers read bsr/materialSets/
 // textures/meshFiles; missing reports and reconstruction citations are build-only.
 // Never delete arbitrary keys recursively: asset paths and protocol names matter.
@@ -32,50 +40,59 @@ export function projectMember( name, bytes ) {
 /*
 ================
 projectPack
+
+The pack without private members and with build-only metadata projected
+out of the members that carry it. A rewritten member is stored again by the
+builder's rule (memberCompression.mjs); untouched members keep their stored
+bytes. Returns the original bytes when nothing changed.
 ================
 */
 export function projectPack( pack, bytes, members, overrides ) {
-	const start = 12 + bytes.readUInt32LE( 8 ), header = JSON.parse( bytes.subarray( 12, start ) );
+	const { header, dataStart } = parsePackHeader( bytes, pack.path );
 	if ( header.files.filter( e => !isPrivateAsset( e.path ) ).length !== members.length ) {
 		throw Error( "Pack membership drift" );
 	}
 	const byName = new Map( members.map( a => [ a.path, a ] ) ), chunks = [];
 	let offset = 0, originalOffset = 0, changed = false;
 	const entries = header.files.flatMap( e => {
-		const a = byName.get( e.path ), original = bytes.subarray( start + e.offset, start + e.offset + e.length );
+		const a = byName.get( e.path ), stored = storedMemberBytes( bytes, dataStart, e, pack.path );
 		if ( e.offset !== originalOffset ) throw Error( "Unsupported noncontiguous pack: " + e.path );
-		originalOffset += e.length;
+		originalOffset += storedLength( e );
+		const original = decodeStoredMember( stored, e );
 		if ( !a && isPrivateAsset( e.path ) ) {
-			if ( sha( original ) !== e.sha256 ) throw Error( "Pack index drift " + e.path );
 			changed = true;
 			return [];
 		}
-		if ( !a || e.offset !== a.offset || e.length !== a.length || sha( original ) !== a.sha256 ) {
+		if ( !a || e.offset !== a.offset || e.length !== a.length || e.sha256 !== a.sha256 ) {
 			throw Error( "Pack index drift " + e.path );
 		}
 		const next = projectMember( e.path, original ), digest = sha( next );
-		changed ||= digest !== a.sha256;
-		if ( digest !== a.sha256 && a.transport ) {
-			const zipped = gzipSync( next, { level: 9 } ), id = sha( zipped );
-			a.transport = {
-				path: "/assets/packs/transport/" + id + ".gz",
-				sha256: id,
-				length: zipped.length,
-				encoding: "gzip"
+		let entry = { ...e, offset }, payload = stored;
+		if ( digest !== a.sha256 ) {
+			changed = true;
+			const form = encodeStoredMemberSync( next );
+			payload = form.stored;
+			const { stored: _retired, ...identity } = e;
+			entry = {
+				...identity,
+				offset,
+				length: next.length,
+				sha256: digest,
+				...(form.encoding ? { stored: { length: form.stored.length, encoding: form.encoding } } : {})
 			};
-			overrides.set( a.transport.path, zipped );
 		}
 		a.offset = offset;
-		a.length = next.length;
-		a.sha256 = digest;
-		chunks.push( next );
-		const entry = { ...e, offset, length: next.length, sha256: digest };
-		offset += next.length;
+		a.length = entry.length;
+		a.sha256 = entry.sha256;
+		if ( entry.stored ) a.stored = entry.stored;
+		else delete a.stored;
+		chunks.push( payload );
+		offset += payload.length;
 		return [ entry ];
 	} );
 	if ( !changed ) return bytes;
 	const table = Buffer.from( JSON.stringify( { ...header, files: entries } ) ), prefix = Buffer.alloc( 12 );
-	prefix.write( "SROPACK1" );
+	prefix.write( ASSET_PACK_MAGIC );
 	prefix.writeUInt32LE( table.length, 8 );
 	const result = Buffer.concat( [ prefix, table, ...chunks ] ), digest = sha( result ), old = pack.path;
 	pack.path = old.replace( /-[a-f0-9]{12}\.bin$/, "-" + digest.slice( 0, 12 ) + ".bin" );

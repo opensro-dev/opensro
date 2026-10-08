@@ -9,45 +9,45 @@ import { listFiles, pathExists } from "./fsUtils.mjs";
 import { writeJsonIfChanged } from "./jsonOut.mjs";
 import { stripFullLineComment } from "./textDataIo.mjs";
 import {
-  extractedRoot,
-  gameRoot,
-  imagePublicRoot,
-  imageSourceRoot,
-  normalizeAssetPath,
-  publicRoot,
-  rebuildRoot,
-  toGameRelative,
-  toHex16
+	extractedRoot,
+	gameRoot,
+	imagePublicRoot,
+	imageSourceRoot,
+	normalizeAssetPath,
+	publicRoot,
+	rebuildRoot,
+	toGameRelative,
+	toHex16
 } from "../world/paths.mjs";
 
-const mediaRoot = path.join(extractedRoot, "Media_extracted");
-const dataRoot = path.join(extractedRoot, "Data_extracted");
-const fontSourceRoot = path.join(extractedRoot, "Media_extracted", "fonts");
-const fontPublicRoot = path.join(publicRoot, "assets", "fonts");
-const musicSourceRoot = path.join(extractedRoot, "Music_mp3");
-const audioPublicRoot = path.join(publicRoot, "assets", "audio");
-const resinfoDir = path.join(extractedRoot, "Media_extracted", "resinfo");
-const textDataDir = path.join(extractedRoot, "Media_extracted", "server_dep", "silkroad", "textdata");
-const eventDataDir = path.join(extractedRoot, "Media_extracted", "server_dep", "silkroad", "event");
-async function readText(sourcePath) {
-  const bytes = await readFile(sourcePath);
+const mediaRoot = path.join( extractedRoot, "Media_extracted" );
+const dataRoot = path.join( extractedRoot, "Data_extracted" );
+const fontSourceRoot = path.join( extractedRoot, "Media_extracted", "fonts" );
+const fontPublicRoot = path.join( publicRoot, "assets", "fonts" );
+const musicSourceRoot = path.join( extractedRoot, "Music_mp3" );
+const audioPublicRoot = path.join( publicRoot, "assets", "audio" );
+const resinfoDir = path.join( extractedRoot, "Media_extracted", "resinfo" );
+const textDataDir = path.join( extractedRoot, "Media_extracted", "server_dep", "silkroad", "textdata" );
+const eventDataDir = path.join( extractedRoot, "Media_extracted", "server_dep", "silkroad", "event" );
+async function readText( sourcePath ) {
+	const bytes = await readFile( sourcePath );
 
-  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-    return bytes.subarray(2).toString("utf16le");
-  }
+	if ( bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe ) {
+		return bytes.subarray( 2 ).toString( "utf16le" );
+	}
 
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    throw new Error(`Unsupported UTF-16BE text file: ${sourcePath}`);
-  }
+	if ( bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff ) {
+		throw new Error( `Unsupported UTF-16BE text file: ${sourcePath}` );
+	}
 
-  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return bytes.subarray(3).toString("utf8");
-  }
+	if ( bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ) {
+		return bytes.subarray( 3 ).toString( "utf8" );
+	}
 
-  return new TextDecoder("euc-kr").decode(bytes);
+	return new TextDecoder( "euc-kr" ).decode( bytes );
 }
-function cleanNumber(raw) {
-  return Number(String(raw).replace(/f$/i, "")) || 0;
+function cleanNumber( raw ) {
+	return Number( String( raw ).replace( /f$/i, "" ) ) || 0;
 }
 
 /**
@@ -58,11 +58,11 @@ function cleanNumber(raw) {
  * table - dropping empty cells shifts every later column left; use
  * splitIndexedRowCells there instead.
  */
-function splitHierarchyTokens(rawLine) {
-  return rawLine
-    .split("\t")
-    .map((cell) => cell.trim())
-    .filter((cell) => cell.length > 0);
+function splitHierarchyTokens( rawLine ) {
+	return rawLine
+		.split( "\t" )
+		.map( ( cell ) => cell.trim() )
+		.filter( ( cell ) => cell.length > 0 );
 }
 
 /**
@@ -73,54 +73,54 @@ function splitHierarchyTokens(rawLine) {
  * for hierarchical indented formats - the indentation tabs would occupy the
  * leading indices; use splitHierarchyTokens there instead.
  */
-function splitIndexedRowCells(rawLine) {
-  return rawLine.split("\t").map((cell) => cell.trim());
+function splitIndexedRowCells( rawLine ) {
+	return rawLine.split( "\t" ).map( ( cell ) => cell.trim() );
 }
 
 const stripInlineComment = stripFullLineComment;
 
-function stripQuotes(value) {
-  return value.replace(/^"+|"+$/g, "").trim();
+function stripQuotes( value ) {
+	return value.replace( /^"+|"+$/g, "" ).trim();
 }
 const formatHexRegionId = toHex16;
 
 const writeJson = writeJsonIfChanged;
 const exists = pathExists;
 
-async function assertExists(targetPath) {
-  if (!(await exists(targetPath))) {
-    throw new Error(`Expected asset does not exist: ${targetPath}`);
-  }
+async function assertExists( targetPath ) {
+	if ( !(await exists( targetPath )) ) {
+		throw new Error( `Expected asset does not exist: ${targetPath}` );
+	}
 }
 export {
-  rebuildRoot,
-  gameRoot,
-  extractedRoot,
-  publicRoot,
-  imageSourceRoot,
-  imagePublicRoot,
-  mediaRoot,
-  dataRoot,
-  fontSourceRoot,
-  fontPublicRoot,
-  musicSourceRoot,
-  audioPublicRoot,
-  resinfoDir,
-  textDataDir,
-  eventDataDir,
-  readText,
-  cleanNumber,
-  splitHierarchyTokens,
-  splitIndexedRowCells,
-  stripInlineComment,
-  stripQuotes,
-  listFiles,
-  normalizeAssetPath,
-  uniqueStrings,
-  toGameRelative,
-  formatHexRegionId,
-  writeJson,
-  publishFileFromTemp,
-  exists,
-  assertExists
+	rebuildRoot,
+	gameRoot,
+	extractedRoot,
+	publicRoot,
+	imageSourceRoot,
+	imagePublicRoot,
+	mediaRoot,
+	dataRoot,
+	fontSourceRoot,
+	fontPublicRoot,
+	musicSourceRoot,
+	audioPublicRoot,
+	resinfoDir,
+	textDataDir,
+	eventDataDir,
+	readText,
+	cleanNumber,
+	splitHierarchyTokens,
+	splitIndexedRowCells,
+	stripInlineComment,
+	stripQuotes,
+	listFiles,
+	normalizeAssetPath,
+	uniqueStrings,
+	toGameRelative,
+	formatHexRegionId,
+	writeJson,
+	publishFileFromTemp,
+	exists,
+	assertExists
 };
