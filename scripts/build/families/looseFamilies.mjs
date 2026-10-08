@@ -392,8 +392,17 @@ export const LOOSE_FAMILIES = {
 			};
 		}
 	},
+	"entity-bsr": {
+		kind: "refresh",
+		label: "entity BSR dependencies",
+		packFolder: "entity-bsr",
+		defaultGroup: entityBsrGroup,
+		produce: produceEntityBsr,
+		packFiles: entityBsrPackFiles
+	},
 	// The complete generated EFP dependency closure: updating a loose JSON file
-	// alone leaves the packed copy stale.
+	// alone leaves the packed copy stale. It runs after entity-bsr, whose
+	// effect-program rebuild changes that closure.
 	"effect": {
 		kind: "refresh",
 		label: "effect resources",
@@ -408,14 +417,6 @@ export const LOOSE_FAMILIES = {
 			] );
 			return { files: [ ...records, ...new Set( Object.values( catalog.textures ) ) ] };
 		}
-	},
-	"entity-bsr": {
-		kind: "refresh",
-		label: "entity BSR dependencies",
-		packFolder: "entity-bsr",
-		defaultGroup: entityBsrGroup,
-		produce: produceEntityBsr,
-		packFiles: entityBsrPackFiles
 	},
 	// The renderer's terrain dependency must be published, not merely present in
 	// the converted-image tree: only the sand and snow footstep decals.

@@ -18,8 +18,8 @@ stamp that does not match forces every region and shared index to rebuild.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildJobs } from "../shared/buildParallelism.mjs";
-import { codeHash, stampIsCurrent, writeStamp } from "../shared/codeStamp.mjs";
-import { claimPublicFile } from "../shared/publicationLedger.mjs";
+import { codeHash, invalidateStamp, stampIsCurrent, writeStamp } from "../shared/codeStamp.mjs";
+import { claimKeptOutput, claimPublicFile } from "../shared/publicationLedger.mjs";
 import { OUTDOOR_WORLD_SHARED_RENDER_PUBLIC_PATH, REGION_SIZE, WATER_NORMAL_FRAME_DURATION_MS } from "./constants.mjs";
 import { copyReferencedSkyImages, resolveSkyTextures } from "./assets/copySkyImages.mjs";
 
@@ -373,6 +373,8 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 	// rebuilds what it selects and leaves the stamp stale for the next full run.
 	const builderHash = await codeHash( import.meta.url );
 	const codeCurrent = await stampIsCurrent( OUTDOOR_CODE_STAMP, builderHash );
+	// This run writes with other code: the old stamp must not survive it.
+	if ( !codeCurrent ) await invalidateStamp( OUTDOOR_CODE_STAMP );
 	const force = Boolean( options.force ) || !codeCurrent;
 	const forceShared = force || Boolean( options.forceShared );
 
@@ -411,8 +413,8 @@ export async function buildOutdoorWorldRegionResources( options = {} ) {
 			} else {
 				await copyReferencedTerrainTileImages( tiles, sourceExtractedRoot );
 			}
-			// A kept bundle claims itself; the ledger claims what it references (lightmaps).
-			claimPublicFile( outputPath );
+			// A kept bundle claims itself and what it names (its lightmaps).
+			await claimKeptOutput( outputPath );
 			reused += 1;
 			reportProgress( options, {
 				phase: "regions",
@@ -502,7 +504,8 @@ async function buildOutdoorSharedRenderResources( options = {} ) {
 	if ( !options.force && (await exists( OUTDOOR_WORLD_SHARED_RENDER_PATH )) ) {
 		const existing = JSON.parse( await readFile( OUTDOOR_WORLD_SHARED_RENDER_PATH, "utf8" ) );
 		validateSharedRenderResources( existing );
-		claimPublicFile( OUTDOOR_WORLD_SHARED_RENDER_PATH );
+		// The kept resources claim the sky and water textures they name.
+		await claimKeptOutput( OUTDOOR_WORLD_SHARED_RENDER_PATH );
 		return existing;
 	}
 
@@ -538,7 +541,8 @@ async function buildOutdoorSharedObjectResources( options ) {
 	if ( !options.force && (await exists( OUTDOOR_WORLD_OBJECT_INDEX_PATH )) ) {
 		const index = JSON.parse( await readFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH, "utf8" ) );
 		validateObjectResourceIndex( index );
-		claimPublicFile( OUTDOOR_WORLD_OBJECT_INDEX_PATH );
+		// The kept index claims the meshes and textures it names.
+		await claimKeptOutput( OUTDOOR_WORLD_OBJECT_INDEX_PATH );
 		return {
 			index,
 			collisionResources: collisionResourcesFromIndex( index )

@@ -13,7 +13,7 @@ build/world/paths.mjs.
 // First: it sizes libuv's thread pool, which runs the zstd compression below.
 import { buildJobs } from "./build/shared/buildParallelism.mjs";
 import { assertInsideRoot, containedPublicFile, normalizePublicAssetPath } from "./build/shared/assetPaths.mjs";
-import { createLimiter } from "./build/shared/asyncUtils.mjs";
+import { createLimiter, settleAll } from "./build/shared/asyncUtils.mjs";
 import { ASSET_PACK_ZSTD_LEVEL, ASSET_PACK_ZSTD_WINDOW_LOG, compressAssetPackZstd } from "./build/assetPacks.mjs";
 import { publishAssetPackManifest } from "./build/assetPackPublication.mjs";
 import { createHash } from "node:crypto";
@@ -354,7 +354,8 @@ parallel under the build's SRO_BUILD_JOBS budget.
 async function ensurePackZstdCopies( manifest, packs ) {
 	const slots = createLimiter( buildJobs() );
 	let written = 0;
-	await Promise.all( packs.map( pack =>
+	// settleAll: a failed copy waits for the others before the lock is released.
+	await settleAll( packs.map( pack =>
 		slots( async () => {
 			const zstdPublicPath = `${pack.path}.zst`;
 			const zstdPath = containedPublicFile( publicRoot, zstdPublicPath );

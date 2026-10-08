@@ -125,8 +125,21 @@ export function createPacks(
 		if ( origin !== null && origin !== base ) throw new Error( "Asset origin changed during session" );
 		origin = base;
 		if ( !index ) {
-			const operation = download( base + "/assets/packs/manifest.json", 16 << 20, lifetime.signal ).then( bytes =>
-				parser.manifest( JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ) )
+			const operation = download( base + "/assets/packs/manifest.json", 16 << 20, lifetime.signal ).then(
+				bytes => {
+					const admitted = parser.manifest(
+						JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) )
+					);
+					// The startup packs and their members are what eviction keeps.
+					persistent.setStartup(
+						base,
+						[ ...admitted.packs.values() ].filter( pack => pack.load === "startup" ).flatMap( pack => [
+							pack.sha256,
+							...pack.entries.map( entry => entry.sha256 )
+						] )
+					);
+					return admitted;
+				}
 			);
 			index = operation;
 			// Share in-flight work and successful admission, never cache a failure.
@@ -171,7 +184,7 @@ export function createPacks(
 			if ( missing && await sha( bytes ) !== descriptor.sha256 ) throw new Error( "Pack SHA-256 mismatch" );
 			const loaded = { bytes, start: parser.header( bytes, descriptor ) };
 			if ( disposed ) throw new Error( "Pack owner disposed" );
-			if ( missing ) persistent.enqueue( base, descriptor.sha256, bytes, descriptor.load === "startup" );
+			if ( missing ) persistent.enqueue( base, descriptor.sha256, bytes );
 			while ( residentBytes + bytes.length > (128 << 20) && cache.size ) {
 				const key = cache.keys().next().value!;
 				residentBytes -= cache.get( key )!.bytes.length;
@@ -302,8 +315,7 @@ export function createPacks(
 			if ( !saved && await sha( bytes ) !== entry.sha256 ) throw new Error( "Asset SHA-256 mismatch" );
 			if ( disposed || signal.aborted ) throw Error( "Asset request cancelled" );
 			if ( !saved && !cache.has( entry.packPath ) ) {
-				const startup = registry.packs.get( entry.packPath )?.load === "startup";
-				persistent.enqueue( url.origin, entry.sha256, bytes, startup );
+				persistent.enqueue( url.origin, entry.sha256, bytes );
 			}
 			const result = gzip ?
 				await gunzipBytes( bytes, limit ) :

@@ -399,15 +399,6 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		animatedWorldObjects
 	} = worldResults;
 
-	// The focused families extend the builders' outputs (code-selected art,
-	// catalog patches, world sky state): they run here, each as its own ledger
-	// owner, so the image sweep below and the pack tail see their files and one
-	// full build makes a complete tree (families/looseFamilies.mjs).
-	const families = await timed( "families", () => steps.produceAllFamilies() );
-	// Every lane above has finished publishing before this sweep over
-	// assets/images/** runs (native-interface preload membership must see the
-	// final image tree).
-	const uiImagePreload = await timed( "uiImagePreload", () => steps.buildUiImagePreloadManifest() );
 	// WIP skill-effect data plane (f0902c effect-record table -> effectRecords.json,
 	// read by the bridge's loadWipSkillEffectRecords at mission init): must run
 	// BEFORE JSON optimization + asset packs so the JSON gets compression sidecars
@@ -471,6 +462,16 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// EnterWorld v2 sends semantic ids only. This client projection is generated
 	// after NPC/item builders settle and owns every presentation resource path.
 	const missionPresentation = steps.buildMissionPresentationAsset();
+	// The focused families extend every producer's output (code-selected art,
+	// catalog patches, effect closures, world sky state) and read the data
+	// planes above (effect records and programs, skill and mastery data), so
+	// they run after all of them, each as its own ledger owner. One full build
+	// therefore makes a complete tree (families/looseFamilies.mjs).
+	const families = await timed( "families", () => steps.produceAllFamilies() );
+	// The native-interface preload sweep over assets/images/** runs once every
+	// producer, the families included, has published (their code-selected UI
+	// art belongs in the startup set).
+	const uiImagePreload = await timed( "uiImagePreload", () => steps.buildUiImagePreloadManifest() );
 	// Every producing lane has finished: list what the client installs in the
 	// background after world entry, so it is packed with the other game data.
 	const backgroundInstall = await timed( "backgroundInstall", () => steps.buildBackgroundInstallAsset() );

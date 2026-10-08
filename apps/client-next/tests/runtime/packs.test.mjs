@@ -397,28 +397,74 @@ test("the budget is half the quota between 512 MiB and 4 GiB", async () => {
 	assert.equal( budgetFromQuota( 600 * GiB ), 4 * GiB );
 });
 
-test("pinned startup entries survive eviction, also after a reload", async t => {
-	const d = disk( t ), old = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
+/*
+================
+quotaNavigator
+
+A navigator whose storage estimate reports quota bytes; restored after t.
+================
+*/
+function quotaNavigator( t, quota ) {
+	const old = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
 	Object.defineProperty( globalThis, "navigator", {
 		configurable: true,
-		value: { storage: { estimate: async () => ({ quota: 32 }) } }
+		value: { storage: { estimate: async () => ({ quota }) } }
 	} );
 	t.after( () => {
 		if ( old ) Object.defineProperty( globalThis, "navigator", old );
 		else delete globalThis.navigator;
 	} );
+}
+
+test("startup entries survive eviction, also after a reload", async t => {
+	const d = disk( t );
+	quotaNavigator( t, 32 );
 	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" );
+	const origin = "http://localhost", bytes = Uint8Array.of( 1, 2, 3 );
 	const first = createPersistentAssets( quota => quota / 4 );
-	await first.write( "http://localhost", "ui", Uint8Array.of( 1, 2, 3 ), true );
-	await first.write( "http://localhost", "world-a", Uint8Array.of( 1, 2, 3 ) );
-	await first.write( "http://localhost", "world-b", Uint8Array.of( 1, 2, 3 ) );
-	assert.ok( await first.read( "http://localhost", "ui", 3 ), "the pinned entry outlives two evictions" );
-	assert.equal( await first.read( "http://localhost", "world-a", 3 ), null );
-	// A new owner rebuilds its inventory from Cache Storage and still knows the pin.
+	first.setStartup( origin, [ "ui" ] );
+	for ( const digest of [ "ui", "world-a", "world-b" ] ) await first.write( origin, digest, bytes );
+	assert.ok( await first.read( origin, "ui", 3 ), "the startup entry outlives the eviction" );
+	assert.equal( await first.read( origin, "world-a", 3 ), null );
+	// A new owner rebuilds its inventory from Cache Storage; the manifest names the startup set again.
 	const second = createPersistentAssets( quota => quota / 4 );
-	await second.write( "http://localhost", "world-c", Uint8Array.of( 1, 2, 3 ) );
-	assert.ok( await second.read( "http://localhost", "ui", 3 ) );
+	second.setStartup( origin, [ "ui" ] );
+	await second.write( origin, "world-c", bytes );
+	assert.ok( await second.read( origin, "ui", 3 ) );
 	assert.equal( d.rows.size, 2 );
+});
+
+test("a write that cannot fit beside the startup entries is skipped, never stored over budget", async t => {
+	const d = disk( t );
+	quotaNavigator( t, 32 );
+	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" );
+	const origin = "http://localhost", bytes = Uint8Array.of( 1, 2, 3 );
+	const store = createPersistentAssets( quota => quota / 4 );
+	store.setStartup( origin, [ "ui-a", "ui-b" ] );
+	for ( const digest of [ "ui-a", "ui-b", "world" ] ) await store.write( origin, digest, bytes );
+	const stored = [ ...d.rows.values() ].reduce(
+		( sum, response ) => sum + Number( response.headers.get( "content-length" ) ),
+		0
+	);
+	assert.ok( stored <= 8, `stored ${stored} bytes against an 8-byte budget` );
+	assert.equal( await store.read( origin, "world", 3 ), null );
+	assert.ok( store.stats().skipped >= 1 );
+});
+
+test("a warm entry the manifest names becomes protected; one only an older release named does not", async t => {
+	disk( t );
+	quotaNavigator( t, 32 );
+	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" );
+	const origin = "http://localhost", bytes = Uint8Array.of( 1, 2, 3 );
+	const store = createPersistentAssets( quota => quota / 4 );
+	store.setStartup( origin, [ "old-ui" ] );
+	await store.write( origin, "old-ui", bytes );
+	await store.write( origin, "now-ui", bytes );
+	// The next release's manifest: now-ui is a startup entry, old-ui is not.
+	store.setStartup( origin, [ "now-ui" ] );
+	await store.write( origin, "world", bytes );
+	assert.ok( await store.read( origin, "now-ui", 3 ), "the warm entry is protected without a rewrite" );
+	assert.equal( await store.read( origin, "old-ui", 3 ), null, "the obsolete startup entry was evicted" );
 });
 
 test("large packs download verified ranges and persist only demanded members across reload", async t => {

@@ -11,9 +11,15 @@ The budget is half the origin quota, between MIN_BUDGET_BYTES and
 MAX_BUDGET_BYTES: browsers grant an origin 60% of the disk (Chrome,
 Safari) or the smaller of 10% and 10 GiB (Firefox best effort), so the
 whole game fits on most machines and a player who explores never
-re-downloads areas already visited. Pinned entries - the startup groups
-every session needs before the first frame - are never evicted; the rest
-leave least recently used first.
+re-downloads areas already visited. Startup entries - the packs and
+members of the startup groups every session needs before the first frame -
+are never evicted; the rest leave least recently used first, and a write
+that cannot fit after eviction is skipped, never stored over budget.
+
+Which entries are startup entries comes from the manifest the asset worker
+admitted (setStartup), never from what an earlier release stored: a warm
+entry the manifest names is protected at once, and one only an older
+release named becomes ordinary LRU data.
 
 ===========================================================================
 */
@@ -25,8 +31,6 @@ const MAX_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
 // Share of the origin quota this store may fill; the rest stays for the
 // browser's own caches and other storage.
 const QUOTA_SHARE = 0.5;
-// The response header that marks a pinned entry, so a reload knows it too.
-const PINNED_HEADER = "x-sro-pinned";
 
 /*
 ================
@@ -49,7 +53,8 @@ budgetOf turns the origin quota into this store's byte budget
 export function createPersistentAssets( budgetOf: ( quota: number | undefined ) => number = budgetFromQuota ) {
 	let opened: Promise<Cache | null> | null = null, tail: Promise<void> = Promise.resolve();
 	let inventory: Map<string, number> | null = null, total = 0, budget = MIN_BUDGET_BYTES, estimatedAt = -Infinity;
-	const pinned = new Set<string>();
+	// Keys of the current manifest's startup packs and members (setStartup).
+	let startup = new Set<string>();
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
 	const pending = new Set<string>(), touched = new Set<string>();
 	function open() {
@@ -87,7 +92,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			errors++;
 		}
 	}
-	async function publish( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer>, pin: boolean ) {
+	async function publish( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 		const cache = await open();
 		if ( !cache ) return;
 		try {
@@ -107,7 +112,6 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 						size = Number( response?.headers.get( "content-length" ) ) || 0;
 					total += size;
 					inventory.set( request.url, size );
-					if ( response?.headers.get( PINNED_HEADER ) === "1" ) pinned.add( request.url );
 				}
 				const recent = [ ...touched ];
 				touched.clear();
@@ -119,10 +123,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				return;
 			}
 			async function evict() {
-				// Least recently used first, skipping the pinned startup entries.
+				// Least recently used first, skipping the startup entries.
 				let victim: [string, number] | undefined;
 				for ( const entry of inventory!.entries() ) {
-					if ( !pinned.has( entry[0] ) ) {
+					if ( !startup.has( entry[0] ) ) {
 						victim = entry;
 						break;
 					}
@@ -136,14 +140,18 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				return true;
 			}
 			while ( total + bytes.length > budget && await evict() ) {}
+			// Only startup entries are left: the write is optional, the budget is not.
+			if ( total + bytes.length > budget ) {
+				skipped++;
+				return;
+			}
 			const put = () =>
 				cache.put(
 					target,
 					new Response( bytes, {
 						headers: {
 							"content-length": String( bytes.length ),
-							"content-type": "application/octet-stream",
-							...(pin ? { [PINNED_HEADER]: "1" } : {})
+							"content-type": "application/octet-stream"
 						}
 					} )
 				);
@@ -156,7 +164,6 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				await put();
 			}
 			inventory.set( target, bytes.length );
-			if ( pin ) pinned.add( target );
 			total += bytes.length;
 			writes++;
 		} catch {
@@ -164,8 +171,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			inventory = null;
 		}
 	}
-	function write( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer>, pin = false ) {
-		const operation = tail.then( () => publish( origin, digest, bytes, pin ) );
+	function write( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
+		const operation = tail.then( () => publish( origin, digest, bytes ) );
 		tail = operation.catch( () => {
 			errors++;
 		} );
@@ -218,8 +225,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		write,
 		// Copy before the caller transfers/detaches its buffer. Never wait for disk on
 		// the admission path; excess demand skips optional persistence, not rendering.
-		// pin keeps the entry through eviction (the startup groups).
-		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer>, pin = false ) {
+		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 			const id = key( origin, digest );
 			if ( pending.has( id ) ) return;
 			if ( pending.size >= 64 || queuedBytes + bytes.length > (32 << 20) ) {
@@ -229,12 +235,27 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			const owned = bytes.slice();
 			queuedBytes += owned.length;
 			pending.add( id );
-			void write( origin, digest, owned, pin ).finally( () => {
+			void write( origin, digest, owned ).finally( () => {
 				queuedBytes -= owned.length;
 				pending.delete( id );
 			} );
 		},
+		// The admitted manifest's startup packs and members: the entries eviction
+		// keeps. Replacing the set releases whatever only an older release named.
+		setStartup( origin: string, digests: Iterable<string> ) {
+			startup = new Set( Array.from( digests, digest => key( origin, digest ) ) );
+		},
 		flush: () => tail,
-		stats: () => ({ hits, misses, writes, errors, evictions, queuedBytes, skipped, budget, pinned: pinned.size })
+		stats: () => ({
+			hits,
+			misses,
+			writes,
+			errors,
+			evictions,
+			queuedBytes,
+			skipped,
+			budget,
+			pinned: inventory ? [ ...inventory.keys() ].filter( url => startup.has( url ) ).length : 0
+		})
 	};
 }

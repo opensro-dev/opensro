@@ -33,7 +33,7 @@ import {
 	toPublicPath as toPublicAssetPath
 } from "./shared/assetPaths.mjs";
 import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
-import { createLimiter, mapWithConcurrency } from "./shared/asyncUtils.mjs";
+import { createLimiter, mapWithConcurrency, settleAll } from "./shared/asyncUtils.mjs";
 import { compressZstd, DEFAULT_ZSTD_LEVEL, DEFAULT_ZSTD_WINDOW_LOG } from "./shared/compressionUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
 import { listFiles } from "./shared/fsUtils.mjs";
@@ -149,7 +149,9 @@ export async function buildAssetPacks( options = {} ) {
 	// must not leave the other cores idle while it compresses. Results keep the
 	// caller's group order, so the index is the same whatever finishes first.
 	const packSlots = createLimiter( buildJobs() );
-	const groupResults = await Promise.all( groups.map( group =>
+	// settleAll: a failed group waits for its siblings' writes before the
+	// caller releases the build lock.
+	const groupResults = await settleAll( groups.map( group =>
 		buildAssetPackGroup( {
 			publicRoot: root,
 			outputRoot,
@@ -300,7 +302,7 @@ async function buildAssetPackGroup(
 
 	// Each pack in flight holds its buffer and zstd output (about 2 x 50 MiB);
 	// packSlots bounds them across every group.
-	const results = await Promise.all( chunks.map( plan =>
+	const results = await settleAll( chunks.map( plan =>
 		packSlots( () =>
 			buildOrReusePack( {
 				name,

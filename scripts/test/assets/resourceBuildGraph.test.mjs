@@ -79,7 +79,16 @@ test("resource fingerprint reports every ownership root independently", async ()
 test("resource fingerprint covers the code the build runs outside scripts/build", async () => {
 	const labels = (await computeResourceBuildFingerprint()).roots.map( ( root ) => root.label );
 	// A converter change once matched the old fingerprint and skipped the build.
-	for ( const file of [ "scripts/convert_images.py", "scripts/sro_paths.py", "scripts/lib/generatedRoot.mjs" ] ) {
+	for (
+		const file of [
+			"scripts/convert_images.py",
+			"scripts/sro_paths.py",
+			"scripts/lib/generatedRoot.mjs",
+			// Named through path.join pieces; the first closure missed both.
+			"scripts/tools/refresh_native_window_images.py",
+			"apps/client-next/tools/build-skill-ui.py"
+		]
+	) {
 		assert.ok( labels.includes( `code:${file}` ), file );
 	}
 });

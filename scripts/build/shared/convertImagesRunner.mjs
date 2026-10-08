@@ -26,7 +26,7 @@ until an unfiltered pass under the current code succeeds.
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { codeHash, stampIsCurrent, writeStamp } from "./codeStamp.mjs";
+import { codeHash, invalidateStamp, stampIsCurrent, writeStamp } from "./codeStamp.mjs";
 import { pythonAttempts } from "./pythonRun.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
@@ -45,7 +45,11 @@ async function spawnConvertImages( args ) {
 	const converterHash = await codeHash( CONVERT_IMAGES_SCRIPT );
 	const codeCurrent = await stampIsCurrent( CONVERTER_CODE_STAMP, converterHash );
 	const env = codeCurrent ? process.env : { ...process.env, SRO_FORCE_IMAGE_CONVERT: "1" };
-	if ( !codeCurrent ) console.log( "[convert_images] converter code changed since the last full pass; reconverting" );
+	if ( !codeCurrent ) {
+		console.log( "[convert_images] converter code changed since the last full pass; reconverting" );
+		// This pass writes with other code: the old stamp must not survive it.
+		await invalidateStamp( CONVERTER_CODE_STAMP );
+	}
 	const result = await spawnPython( args, env );
 	if ( !codeCurrent && args.length === 0 && result.status === 0 ) {
 		await writeStamp( CONVERTER_CODE_STAMP, converterHash );

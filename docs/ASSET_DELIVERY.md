@@ -418,9 +418,13 @@ So on most machines the whole game stays local and a player who explores
 never downloads an area twice. Beyond the budget, files leave least
 recently used first, except the files of the startup groups (`native-ui`,
 `game-images`, `game-data`, whose packs the manifest marks `load: startup`):
-those are pinned with a response header and never evicted, so the next
-start never waits for them. The budget used and the pinned count are in the
-store's `stats()`.
+those are never evicted, so the next start never waits for them. Which
+files those are comes from the manifest the worker admitted
+(`setStartup`), not from anything an older release stored: a file the new
+manifest names is protected at once, and one only an older release named
+becomes ordinary LRU data. A write that still cannot fit after eviction is
+skipped, so the store never exceeds its budget. The budget used and the
+startup count are in the store's `stats()`.
 
 When the device runs low on disk, browsers evict whole origins, least
 recently used first, and never evict an origin marked persistent

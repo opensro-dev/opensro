@@ -27,3 +27,8 @@ test("every loose family names its pack folder once", () => {
 	const folders = Object.values( LOOSE_FAMILIES ).map( family => family.packFolder );
 	assert.equal( new Set( folders ).size, folders.length );
 });
+
+test("the effect family runs after entity-bsr, whose program rebuild changes the closure it records", () => {
+	const order = Object.keys( LOOSE_FAMILIES );
+	assert.ok( order.indexOf( "entity-bsr" ) < order.indexOf( "effect" ) );
+});

@@ -426,7 +426,6 @@ scripts/build/data/buildSkillMasteryDataAsset.mjs
 scripts/build/data/buildTeleportDataAsset.mjs
 scripts/build/effects/parseJmxVisualEffect.mjs
 scripts/build/server/serverGameDataArchive.mjs
-scripts/build/shared/asyncUtils.mjs
 scripts/build/shared/atomicPublish.mjs
 scripts/build/shared/binaryUtils.mjs
 scripts/build/shared/bsrModifiers.mjs

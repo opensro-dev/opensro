@@ -131,6 +131,26 @@ export function claimPublicPaths( publicPaths ) {
 	}
 }
 
+/*
+================
+claimKeptOutput
+
+A builder that keeps an earlier output because it is current claims it and
+everything it names, transitively (a kept region bundle names its lightmaps,
+a kept object index its meshes and textures): a complete run replaces the
+owner's record, so a kept output that claimed only itself would leave its
+references to the audit as files no step produced.
+================
+*/
+export async function claimKeptOutput( absolutePath ) {
+	if ( !current ) return;
+	claimPublicFile( absolutePath );
+	const publicPath = toPublicPath( absolutePath );
+	if ( !publicPath ) return;
+	const references = await referencedFiles( new Map( [ [ publicPath.toLowerCase(), publicPath ] ] ) );
+	claimPublicPaths( references.values() );
+}
+
 // A JSON string value that is a public path; paths never contain a quote or backslash.
 const REFERENCED_PUBLIC_PATH = /"(\/assets\/[^"\\]+)"/g;
 
@@ -282,11 +302,12 @@ referencedFiles
 Every /assets/... file the claimed JSON outputs name, transitively: the
 client loads exactly what its manifests and catalogs reference. spellings
 maps each claimed lower-cased path to its spelling on disk; returns the
-lower-cased referenced paths that are not themselves claimed.
+referenced paths that are not themselves claimed, lower-cased path to the
+spelling the manifest wrote.
 ================
 */
 async function referencedFiles( spellings ) {
-	const seen = new Set( spellings.keys() ), referenced = new Set();
+	const seen = new Set( spellings.keys() ), referenced = new Map();
 	const pending = [ ...spellings.values() ];
 	while ( pending.length > 0 ) {
 		const publicPath = pending.pop();
@@ -302,7 +323,7 @@ async function referencedFiles( spellings ) {
 			const key = reference.toLowerCase();
 			if ( seen.has( key ) ) continue;
 			seen.add( key );
-			referenced.add( key );
+			referenced.set( key, reference );
 			pending.push( reference );
 		}
 	}

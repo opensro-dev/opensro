@@ -33,15 +33,27 @@ const RESULTS = {
 ================
 recordingSteps
 
-Every producer in RESOURCE_BUILD_STEPS, recording "start"/"end" events and
-yielding between them so concurrent lanes interleave.
+Every producer in RESOURCE_BUILD_STEPS, recording "start"/"end" events. An
+async producer yields between them so concurrent lanes interleave; a
+synchronous one (the data planes) finishes before it returns, as it does in
+the build, which calls it without await.
 ================
 */
 function recordingSteps( overrides = {} ) {
 	const events = [];
 	const calls = {};
 	const steps = {};
-	for ( const name of Object.keys( RESOURCE_BUILD_STEPS ) ) {
+	for ( const [name, producer] of Object.entries( RESOURCE_BUILD_STEPS ) ) {
+		if ( producer.constructor.name !== "AsyncFunction" ) {
+			steps[name] = ( ...args ) => {
+				events.push( `start:${name}` );
+				(calls[name] ??= []).push( args );
+				events.push( `end:${name}` );
+				const result = overrides[name] ?? RESULTS[name];
+				return result ? result( ...args ) : {};
+			};
+			continue;
+		}
 		steps[name] = async ( ...args ) => {
 			events.push( `start:${name}` );
 			(calls[name] ??= []).push( args );
@@ -137,22 +149,31 @@ test("a failed source-image conversion stops the build before any lane", async (
 	assert.equal( calls.packTree, undefined );
 });
 
+// Steps that consume the families' output, or run after the tree is complete.
+const AFTER_FAMILIES = [ "buildUiImagePreloadManifest", "buildBackgroundInstallAsset", "packTree" ];
+
 for ( const laneCount of [ 1, 8 ] ) {
-	test(`the families run after every builder and before the image sweep and background install (${laneCount} lane(s))`, async () => {
+	test(`the families run after every producer and before the image sweep and background install (${laneCount} lane(s))`, async () => {
 		const { events, steps } = recordingSteps();
 		await buildSroResources( steps, { laneCount, log: () => {} } );
 		const familiesStart = position( events, "start:produceAllFamilies" );
 		const familiesEnd = position( events, "end:produceAllFamilies" );
+		// The families read the data planes (effect records and programs, skill
+		// and mastery data): a clean tree has none of them before their producer
+		// ran. Every producer, not a chosen few, finishes first.
+		for ( const event of events ) {
+			const name = event.slice( event.indexOf( ":" ) + 1 );
+			if ( !event.startsWith( "end:" ) || name === "produceAllFamilies" || AFTER_FAMILIES.includes( name ) ) {
+				continue;
+			}
+			assert.ok( position( events, event ) < familiesStart, `${name} finishes before the families` );
+		}
 		// Their code-selected art must be in the native-interface preload sweep,
 		// and their sounds in the background-install list.
-		assert.ok( familiesEnd < position( events, "start:buildUiImagePreloadManifest" ) );
-		assert.ok( familiesEnd < position( events, "start:buildBackgroundInstallAsset" ) );
-		for ( const builder of [ "buildCifResources", "buildNpcModelAssets", "buildTextResources" ] ) {
-			if ( !events.includes( `end:${builder}` ) ) continue;
-			assert.ok(
-				position( events, `end:${builder}` ) < familiesStart,
-				`${builder} finishes before the families`
-			);
+		for ( const name of AFTER_FAMILIES ) {
+			if ( events.includes( `start:${name}` ) ) {
+				assert.ok( familiesEnd < position( events, `start:${name}` ), `${name} starts after the families` );
+			}
 		}
 	});
 }

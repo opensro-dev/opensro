@@ -157,6 +157,62 @@ test("a file a claimed manifest names but no step produced is local-only, not ga
 	await stat( path.join( assets, "npc", "orphan.glb" ) );
 });
 
+test("a kept output claims what it names, so a reusing run leaves nothing local-only", async () => {
+	await publicFile(
+		"/assets/world/outdoor/regions/region-1.json",
+		JSON.stringify( {
+			lightmap: "/assets/world/outdoor/terrain-lightmaps/1-1.Texture",
+			catalog: "/assets/world/outdoor/c.json"
+		} )
+	);
+	await publicFile( "/assets/world/outdoor/c.json", JSON.stringify( { mesh: "/assets/world/outdoor/m.json" } ) );
+	await publicFile( "/assets/world/outdoor/terrain-lightmaps/1-1.Texture" );
+	await publicFile( "/assets/world/outdoor/m.json", "{}" );
+	for ( const owner of ledger.expectedOwners() ) {
+		ledger.beginPublication( owner );
+		// A complete run that kept its bundle instead of rebuilding it.
+		if ( owner === "outdoor-world" ) {
+			await ledger.claimKeptOutput( path.join( assets, "world", "outdoor", "regions", "region-1.json" ) );
+		}
+		await ledger.commitPublication();
+	}
+	const named = [
+		"/assets/world/outdoor/regions/region-1.json",
+		"/assets/world/outdoor/terrain-lightmaps/1-1.Texture",
+		"/assets/world/outdoor/c.json",
+		"/assets/world/outdoor/m.json"
+	];
+	const report = await ledger.indexClaimReport( { assets: named.map( path => ({ path, length: 1 }) ) } );
+	assert.deepEqual( report.localOnly, [] );
+	assert.deepEqual( report.unclaimed, [] );
+	// The spelling the manifest wrote is the one claimed (case-sensitive hosts).
+	assert.ok(
+		(await ledger.readClaims()).owners.get( "outdoor-world" ).has(
+			"/assets/world/outdoor/terrain-lightmaps/1-1.texture"
+		)
+	);
+});
+
+test("inside a build the UI preload sweep lists only images a current step produced", async () => {
+	const { buildUiImagePreloadManifest } = await import( "../../build/uiImagePreload.mjs" );
+	const interfaceRoot = "/assets/images/Media_extracted/interface/";
+	await publicFile( `${interfaceRoot}live.png` );
+	await publicFile( `${interfaceRoot}stale.png` );
+	ledger.beginPublication( "resource-build" );
+	try {
+		ledger.claimPublicPaths( [ `${interfaceRoot}live.png` ] );
+		const manifest = await buildUiImagePreloadManifest();
+		// The stale image stays out, so the audit archives it instead of
+		// refusing the build over a dependency nothing produced.
+		assert.deepEqual( manifest.images.map( image => image.path ), [ `${interfaceRoot}live.png` ] );
+	} finally {
+		await ledger.commitPublication();
+	}
+	// Outside a build the sweep keeps listing what is on disk.
+	const standalone = await buildUiImagePreloadManifest();
+	assert.equal( standalone.images.length, 2 );
+});
+
 test("a second open publication is refused", () => {
 	ledger.beginPublication( "family-a" );
 	assert.throws( () => ledger.beginPublication( "family-b" ), /still open/ );

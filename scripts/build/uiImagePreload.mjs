@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { toPublicPath as toPublicAssetPath } from "./shared/assetPaths.mjs";
 import { listFiles, pathExists as exists } from "./shared/fsUtils.mjs";
 import { writeJsonIfChanged } from "./shared/jsonOut.mjs";
+import { isClaimed, isPublicationOpen, readClaims } from "./shared/publicationLedger.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
 const rebuildRoot = path.resolve( scriptDir, "..", ".." );
@@ -25,7 +26,11 @@ export async function buildUiImagePreloadManifest( options = {} ) {
 	const root = options.imageRoot ?? imageRoot;
 	const targetPath = options.targetPath ?? preloadManifestPath;
 	const rootPublic = options.publicRoot ?? derivePublicRootFromImageRoot( root );
-	const images = await collectUiPreloadImages( root, rootPublic );
+	// Inside a build, only images a current step produced: a stale PNG an older
+	// pipeline left behind would otherwise become a manifest dependency, and
+	// the ledger audit would refuse the build instead of archiving the file.
+	const claimed = options.claimed ?? (isPublicationOpen() ? (await readClaims()).claimed : null);
+	const images = await collectUiPreloadImages( root, rootPublic, claimed );
 
 	// No timestamp: the same images give the same bytes on every machine, so a
 	// fresh clone packs exactly what this one does (and nothing re-downloads).
@@ -46,8 +51,9 @@ export async function buildUiImagePreloadManifest( options = {} ) {
 	};
 }
 
-async function collectUiPreloadImages( root, rootPublic ) {
-	const pngFiles = await listFiles( root, { extensions: [ ".png" ] } );
+async function collectUiPreloadImages( root, rootPublic, claimed ) {
+	const current = ( filePath ) => !claimed || isClaimed( toPublicAssetPath( filePath, rootPublic ), claimed );
+	const pngFiles = (await listFiles( root, { extensions: [ ".png" ] } )).filter( current );
 	const stateFiles = pngFiles.filter( ( filePath ) => INTERACTIVE_IMAGE_PATTERN.test( filePath ) );
 	const byPath = new Map();
 
@@ -61,7 +67,7 @@ async function collectUiPreloadImages( root, rootPublic ) {
 		await addImage( byPath, stateFile, rootPublic, "interactive-state" );
 
 		const normalFile = stateFile.replace( INTERACTIVE_IMAGE_PATTERN, ".png" );
-		if ( await exists( normalFile ) ) {
+		if ( await exists( normalFile ) && current( normalFile ) ) {
 			await addImage( byPath, normalFile, rootPublic, "interactive-normal" );
 		}
 	}
