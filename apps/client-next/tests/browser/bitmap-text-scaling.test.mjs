@@ -372,7 +372,8 @@ test(
 					};
 				} );
 				assert.ok( result.activated );
-				assert.equal( result.scale, factor / ratio );
+				// Chromium exposes emulated fractional density through a float32.
+				assert.ok( Math.abs( result.scale * ratio - factor ) < .000001 );
 				assert.deepEqual( result.uiViewport, {
 					width: result.viewport.width / factor,
 					height: result.viewport.height / factor
