@@ -145,13 +145,22 @@ export function createWindowPlacement() {
 		frame
 		================
 		*/
-		frame( id: string, initial: UiRect, w: number, h: number ): UiRect {
+		frame(
+			id: string,
+			initial: UiRect,
+			viewport: readonly [number, number],
+			restoreExtent?: readonly [number, number]
+		): UiRect {
+			const [w, h] = viewport;
 			const old = frames.get( id );
 			let rect: UiRect = old ? [ old.rect[0], old.rect[1], initial[2], initial[3] ] : initial;
 			// 69C2D7..69C2F6 checks a lazy window's remembered origin only when
 			// its real extent is known; negative origins remain valid natively.
 			if ( old && old.rect[2] === 0 ) {
-				rect = [ Math.min( w - rect[2], rect[0] ), Math.min( h - rect[3], rect[1] ), rect[2], rect[3] ];
+				// Some native roots are smaller than the children they draw, such as
+				// Alchemy's 376x152 root below its full visible control footprint.
+				const [width, height] = restoreExtent ?? [ rect[2], rect[3] ];
+				rect = [ Math.min( w - width, rect[0] ), Math.min( h - height, rect[1] ), rect[2], rect[3] ];
 			} else if ( !old || old.viewport[0] !== w || old.viewport[1] !== h ) {
 				// Native tab reflow changes extent without recentering the owner.
 				rect = clamp( rect, w, h );

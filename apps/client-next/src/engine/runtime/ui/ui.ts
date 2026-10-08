@@ -6303,8 +6303,14 @@ export function createUi(
 			windowOrigin
 			================
 			*/
-			function windowOrigin( name: string, initial: UiRect, id = "window-drag:" + name, drag?: UiRect ) {
-				const r = windowPlacement.frame( id, initial, w, h );
+			function windowOrigin(
+				name: string,
+				initial: UiRect,
+				id = "window-drag:" + name,
+				options: { drag?: UiRect; nativeExtent?: readonly [number, number]; } = {}
+			) {
+				const r = windowPlacement.frame( id, initial, [ w, h ], options.nativeExtent );
+				const drag = options.drag;
 				controls.push( {
 					id,
 					label: name,
@@ -11717,11 +11723,16 @@ export function createUi(
 				if ( panel === "Alchemy" && hudData ) {
 					const admission = beginWindow(),
 						frame = hudData.windows.ifnewalchemybox!,
+						root = Object.values( hudData.root ).find( node => node.id === 0x2c )!,
 						[px, py] = windowOrigin(
 							"Alchemy",
 							[ Math.max( 0, w - 388 - 392 ), Math.max( 0, h - 478 ), 376, 378 ],
 							"window-drag:Alchemy",
-							frame.GDR_ALCHEMYBOX_DRAG!.rect
+							{
+								drag: frame.GDR_ALCHEMYBOX_DRAG!.rect,
+								// 61FFD3 leaves the root at its authored extent; the tall pane is a child.
+								nativeExtent: [ root.rect[2], root.rect[3] ]
+							}
 						),
 						processing = [ "compound", "advanced", "dissolve" ].includes( alchemyMode ),
 						page = hudData.windows[processing ? "ifalchemyprocess" : "ifnewalchemyreinforce"]!,

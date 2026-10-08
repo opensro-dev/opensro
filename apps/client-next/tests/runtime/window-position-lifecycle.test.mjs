@@ -282,3 +282,36 @@ for ( const guideState of [ "open", "closed", "reopened" ] ) {
 		}
 	});
 }
+
+test("Alchemy restores against its native root extent while retaining its visible pane", () => {
+	const saved = [];
+	const f = uiFixture( undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+		saveWindowPositions: value => saved.push( value )
+	} );
+	try {
+		const view = { ...f.state, width: 800, height: 600 };
+		f.ui.event( {
+			kind: "window-positions",
+			value: {
+				width: view.width,
+				height: view.height,
+				windows: { alchemyBox: [ 1000, 1000 ] }
+			}
+		} );
+		f.ui.step( view, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Alchemy" } );
+		const semantics = f.ui.step( view, 1 );
+		assert.ok(
+			semantics?.controls.some( control => control.id === "window-drag:Alchemy" ),
+			"Alchemy was instantiated"
+		);
+		f.dispose();
+		assert.deepEqual(
+			saved.at( -1 ).windows.alchemyBox,
+			[ 424, 448 ],
+			"native root is 376 by 152, not the tall pane"
+		);
+	} finally {
+		f.dispose();
+	}
+});

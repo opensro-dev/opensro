@@ -48,10 +48,15 @@ test("a session restores lazy windows while eager windows keep layout defaults",
 	const entered = placement.enter( 1280, 720 );
 	assert.ok( entered );
 	assert.equal( entered.mainPopup, undefined );
-	assert.deepEqual( placement.frame( "window-drag:Alchemy", [ 0, 0, 254, 370 ], 1280, 720 ), [ 300, 40, 254, 370 ] );
+	assert.deepEqual( placement.frame( "window-drag:Alchemy", [ 0, 0, 254, 370 ], [ 1280, 720 ] ), [
+		300,
+		40,
+		254,
+		370
+	] );
 	assert.equal( placement.enter( 1280, 720 ), null, "a teleport must not reseed the open session" );
 	placement.drag( "window-drag:Alchemy", 5, 6 );
-	placement.frame( "window-drag:Storage", [ 0, 0, 254, 317 ], 1280, 720 );
+	placement.frame( "window-drag:Storage", [ 0, 0, 254, 317 ], [ 1280, 720 ] );
 	const saved = placement.leave( 1280, 720, { mainPopup: [ 510, 70 ], worldMap: [ 100, 100 ] } );
 	assert.deepEqual( saved, {
 		width: 1280,
@@ -91,7 +96,7 @@ test("resizing preserves an unopened window's remembered position at logout", ()
 	const placement = createWindowPlacement();
 	placement.load( { width: 1280, height: 720, windows: { exchange: [ 900, 600 ] } } );
 	placement.enter( 1280, 720 );
-	placement.frame( "window-drag:Shop", [ 20, 30, 254, 370 ], 960, 600 );
+	placement.frame( "window-drag:Shop", [ 20, 30, 254, 370 ], [ 960, 600 ] );
 	const saved = placement.leave( 960, 600, {} );
 	assert.ok( saved );
 	assert.equal( saved.width, 960 );
@@ -124,14 +129,19 @@ test("native initial layout replaces five eager origins and preserves five lazy 
 	const placement = createWindowPlacement();
 	placement.load( record );
 	placement.enter( 1280, 720 );
-	assert.deepEqual( placement.frame( "window-drag:Shop", [ 10, 20, 254, 370 ], 1280, 720 ), [ 10, 20, 254, 370 ] );
-	assert.deepEqual( placement.frame( "window-drag:COS inventory", [ 10, 20, 200, 300 ], 1280, 720 ), [
+	assert.deepEqual( placement.frame( "window-drag:Shop", [ 10, 20, 254, 370 ], [ 1280, 720 ] ), [
+		10,
+		20,
+		254,
+		370
+	] );
+	assert.deepEqual( placement.frame( "window-drag:COS inventory", [ 10, 20, 200, 300 ], [ 1280, 720 ] ), [
 		50,
 		60,
 		200,
 		300
 	] );
-	assert.deepEqual( placement.frame( "window-drag:Auto Potion", [ 10, 20, 100, 100 ], 1280, 720 ), [
+	assert.deepEqual( placement.frame( "window-drag:Auto Potion", [ 10, 20, 100, 100 ], [ 1280, 720 ] ), [
 		50,
 		60,
 		100,
@@ -148,15 +158,15 @@ test("lazy windows clamp remembered origins against their first real extent", ()
 	} );
 	placement.enter( 1280, 720 );
 	assert.deepEqual(
-		placement.frame( "window-drag:Alchemy", [ 0, 0, 300, 400 ], 1280, 720 ),
+		placement.frame( "window-drag:Alchemy", [ 0, 0, 300, 400 ], [ 1280, 720 ] ),
 		[ 980, 320, 300, 400 ]
 	);
 	assert.deepEqual(
-		placement.frame( "window-drag:Auto Potion", [ 0, 0, 200, 100 ], 1280, 720 ),
+		placement.frame( "window-drag:Auto Potion", [ 0, 0, 200, 100 ], [ 1280, 720 ] ),
 		[ -20, -30, 200, 100 ]
 	);
 	assert.deepEqual(
-		placement.frame( "window-drag:Alchemy", [ 0, 0, 400, 450 ], 1280, 720 ),
+		placement.frame( "window-drag:Alchemy", [ 0, 0, 400, 450 ], [ 1280, 720 ] ),
 		[ 980, 320, 400, 450 ],
 		"later tab extent changes do not replay remembered-position clamping"
 	);
@@ -174,7 +184,7 @@ test("a rejected viewport record is replaced immediately without retiring the se
 	for ( const point of Object.values( replacement.windows ) ) assert.deepEqual( point, [ 100, 200 ] );
 	assert.equal( placement.needsInitialSave(), false );
 	assert.equal( placement.enter( 960, 600 ), null, "saving replacement must not reopen the active session" );
-	placement.frame( "window-drag:Auto Potion", [ 20, 30, 100, 100 ], 960, 600 );
+	placement.frame( "window-drag:Auto Potion", [ 20, 30, 100, 100 ], [ 960, 600 ] );
 	placement.drag( "window-drag:Auto Potion", 10, 20 );
 	const saved = placement.leave( 960, 600, { mainPopup: [ 100, 200 ] } );
 	assert.deepEqual( saved?.windows.mainPopup, [ 100, 200 ] );
@@ -258,4 +268,25 @@ test("closing a manual lazy control remembers its latest origin and rearms resto
 	placement.reset();
 	placement.enter( 800, 600 );
 	assert.deepEqual( placement.takeRemembered( "gameGuide", 800, 600, [ 420, 452 ] ), [ 380, 148 ] );
+});
+
+test("remembered Alchemy clips against its native root while retaining the rendered footprint", () => {
+	const placement = createWindowPlacement();
+	placement.load( { width: 800, height: 600, windows: { alchemyBox: [ 100, 500 ] } } );
+	placement.enter( 800, 600 );
+	assert.deepEqual(
+		placement.frame( "window-drag:Alchemy", [ 0, 0, 376, 378 ], [ 800, 600 ], [ 376, 152 ] ),
+		[ 100, 448, 376, 378 ]
+	);
+	assert.deepEqual(
+		placement.frame( "window-drag:Alchemy", [ 0, 0, 376, 400 ], [ 800, 600 ], [ 376, 300 ] ),
+		[ 100, 448, 376, 400 ],
+		"later tab reflow does not replay the restoration bounds"
+	);
+	placement.drag( "window-drag:Alchemy", 0, 0 );
+	assert.deepEqual(
+		placement.read( "window-drag:Alchemy" ),
+		[ 100, 200, 376, 400 ],
+		"drag still uses the complete footprint"
+	);
 });
