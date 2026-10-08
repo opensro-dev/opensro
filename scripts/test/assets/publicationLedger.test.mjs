@@ -95,6 +95,9 @@ test("an incomplete ledger reports unclaimed files and moves nothing", async () 
 test("a complete ledger soft-archives unclaimed files and retired owners' records", async () => {
 	const stale = await publicFile( "/assets/images/stale.png", "1234" );
 	await publicFile( "/assets/images/live.png" );
+	const staleBase = await publicFile( "/assets/data/stale.json", "{}" );
+	const staleBrotli = await publicFile( "/assets/data/stale.json.br" );
+	await publicFile( "/assets/data/stale.json.gz" );
 	for ( const owner of ledger.expectedOwners() ) {
 		ledger.beginPublication( owner );
 		if ( owner === "resource-build" ) ledger.claimPublicPaths( [ "/assets/images/live.png" ] );
@@ -103,11 +106,20 @@ test("a complete ledger soft-archives unclaimed files and retired owners' record
 	ledger.beginPublication( "family-renamed-away" );
 	ledger.claimPublicPaths( [ "/assets/images/stale.png" ] );
 	await ledger.commitPublication();
-	const groups = [ { name: "game-images", files: [ "/assets/images/live.png", "/assets/images/stale.png" ] } ];
+	const groups = [
+		{ name: "game-images", files: [ "/assets/images/live.png", "/assets/images/stale.png" ] },
+		{ name: "game-data", files: [ "/assets/data/stale.json.gz" ] }
+	];
 	const report = await ledger.auditClaims( groups, { archiveRoot } );
 	assert.equal( report.archived, true );
+	// The stale member's base and sibling sidecars go with it, or the next build regenerates it.
+	await assert.rejects( stat( staleBase ), { code: "ENOENT" } );
+	await assert.rejects( stat( staleBrotli ), { code: "ENOENT" } );
 	assert.deepEqual( report.retiredOwners, [ "family-renamed-away" ] );
-	assert.deepEqual( report.groups, [ { name: "game-images", files: [ "/assets/images/live.png" ] } ] );
+	assert.deepEqual( report.groups, [
+		{ name: "game-images", files: [ "/assets/images/live.png" ] },
+		{ name: "game-data", files: [] }
+	] );
 	await assert.rejects( stat( stale ), { code: "ENOENT" } );
 	assert.equal( (await ledger.readClaims()).owners.has( "family-renamed-away" ), false );
 	const index = { assets: [ { path: "/assets/images/live.png" }, { path: "/assets/images/gone.png" } ] };
