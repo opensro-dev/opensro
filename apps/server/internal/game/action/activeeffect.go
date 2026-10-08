@@ -314,11 +314,13 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 			return nil, false
 		}
 	}
-	// These admitted producers have no source/area link context. Durable jobs
-	// restore both words; ordinary recipient effects have mode-specific words.
+	// 584222..5842EA and 582AF7..582C8C: an area link at +6C does not
+	// change the ordinary state words; the source-link branch is +68/LNKS.
+	// Durable jobs restore both words; recipients have mode-specific words.
 	unlinked := !row.Replacement.Lnks && !row.Replacement.Efr2
+	area := effect.AreaSourceGID != 0 && !row.Replacement.Lnks
 	producer := row.MovementModifier.Supported || row.BodyStatus.Supported || row.Imbue.Pinned || row.TimedEffect.Pinned
-	if row.ReplacementPinned && (effect.Persistent || unlinked && producer) {
+	if row.ReplacementPinned && (effect.Persistent || area || unlinked && producer) {
 		effect.InstalledStates, effect.RetirementStates = statuseffect.UnlinkedStateOperations(row.Replacement, presentation.Phase, effect.Persistent)
 	}
 	apply := func() bool {

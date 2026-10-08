@@ -531,6 +531,9 @@ func (rt *Runtime) leaveAura(u *auraUpdate, aura *partyAura, caster *enterworld.
 			continue
 		}
 		if !rt.instanceLive(aura.division, name, aura.skillID, token) {
+			// Finish a requested stop before the join walk can see the old
+			// source link and replace the still-live parent through it.
+			rt.endAuraInstance(u, *aura, name, token)
 			delete(aura.members, name)
 			continue
 		}
