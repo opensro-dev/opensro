@@ -20,7 +20,6 @@ import { positionSkillGoal } from "@/engine/foundation/gameplay/position-skill";
 import {
 	correctWalkingHistory,
 	extendWalkingHistory,
-	joinWalkingHistory,
 	rewindWalkingHistory
 } from "@/engine/foundation/gameplay/walking-history";
 import type { NavOwner, NavOwnerSpan } from "@/engine/foundation/navigation/dungeon-ownership";
@@ -1130,16 +1129,12 @@ correct
 			castHold = null;
 			const wasDisplacing = segment?.fixedTiming;
 			const publishedHistory = segment?.presentationHistory ?? transition.walkingPath;
-			const publishedAnchor = pose;
 			if ( now !== undefined ) advanceTo( now );
 			// The display can already occupy the checked lookahead. Advance
 			// retires that cache, so retain its proven return edges beforehand.
-			const acceptedHistory = segment?.history ?? transition.walkingPath;
 			const previousHistory = wasDisplacing || segment?.fixedTiming ?
 				undefined :
-				(pose && rewindWalkingHistory( publishedHistory, pose )) ??
-					(publishedAnchor && joinWalkingHistory( publishedHistory, acceptedHistory, publishedAnchor )) ??
-					acceptedHistory;
+				(pose && rewindWalkingHistory( publishedHistory, pose )) ?? segment?.history ?? transition.walkingPath;
 			beginTransition( "correction" );
 			const before = pose;
 			// A live source correction ends motion, but is not a new spawn.
@@ -1199,9 +1194,7 @@ request
 			if ( !pose || pending.size >= 32 || nextId === 0xffffffff ) {
 				throw new Error( "Movement command capacity exceeded or player absent" );
 			}
-			const wasDisplacing = segment?.fixedTiming;
 			const publishedHistory = segment?.presentationHistory;
-			const publishedAnchor = pose;
 			const incoming = segment?.admittedTo ?
 				{
 					from: segment.admittedFrom ?? segment.from,
@@ -1209,11 +1202,7 @@ request
 				} :
 				undefined;
 			advanceTo( now );
-			const acceptedHistory = segment?.history ?? transition.walkingPath;
-			const incomingHistory = wasDisplacing || segment?.fixedTiming ?
-				undefined :
-				rewindWalkingHistory( publishedHistory, pose ) ??
-					joinWalkingHistory( publishedHistory, acceptedHistory, publishedAnchor ) ?? acceptedHistory;
+			const incomingHistory = rewindWalkingHistory( publishedHistory, pose ) ?? segment?.history;
 			const p = admitPose( value ),
 				to = { ...p, x: Math.trunc( p.x ), y: Math.trunc( p.y ), z: Math.trunc( p.z ) },
 				id = nextId + 1;
@@ -1454,14 +1443,10 @@ receive
 			const previousTurn = transition.turn;
 			const wasDisplacing = segment?.fixedTiming;
 			const publishedHistory = segment?.presentationHistory ?? transition.walkingPath;
-			const publishedAnchor = pose;
 			advanceTo( now );
-			const acceptedHistory = segment?.history ?? transition.walkingPath;
 			const previousHistory = wasDisplacing || segment?.fixedTiming ?
 				undefined :
-				(pose && rewindWalkingHistory( publishedHistory, pose )) ??
-					(publishedAnchor && joinWalkingHistory( publishedHistory, acceptedHistory, publishedAnchor )) ??
-					acceptedHistory;
+				(pose && rewindWalkingHistory( publishedHistory, pose )) ?? segment?.history ?? transition.walkingPath;
 			const previousPath = segment?.admittedFrom && pose ?
 				{
 					from: segment.admittedFrom,
