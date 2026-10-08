@@ -135,6 +135,10 @@ digest must be the SHA-256 of bytes; the caller already holds it.
 */
 export function openMemberCompression( { cacheRoot = DEFAULT_CACHE_ROOT } = {} ) {
 	let hits = 0, misses = 0;
+	// One verdict per digest at a time: the same member can sit in several
+	// packs built at once, and on Windows a second rename onto a cache file
+	// another task is reading or replacing fails with EPERM.
+	const pending = new Map();
 
 	/*
 	================
@@ -168,8 +172,24 @@ export function openMemberCompression( { cacheRoot = DEFAULT_CACHE_ROOT } = {} )
 	store
 	================
 	*/
-	async function store( bytes, digest ) {
-		if ( bytes.length === 0 ) return { stored: bytes, encoding: null };
+	function store( bytes, digest ) {
+		if ( bytes.length === 0 ) return Promise.resolve( { stored: bytes, encoding: null } );
+		let verdict = pending.get( digest );
+		if ( !verdict ) {
+			verdict = resolve( bytes, digest ).finally( () => pending.delete( digest ) );
+			pending.set( digest, verdict );
+		}
+		return verdict;
+	}
+
+	/*
+	================
+	resolve
+
+	The cached verdict for one digest, or a fresh one written to the cache.
+	================
+	*/
+	async function resolve( bytes, digest ) {
 		const hit = await cached( bytes, digest );
 		if ( hit ) {
 			hits++;
