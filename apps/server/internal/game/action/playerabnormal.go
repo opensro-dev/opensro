@@ -14,18 +14,17 @@ package action
 
 import (
 	"math"
-	"opensro.online/server/internal/domain"
 	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/internal/vitals"
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -522,10 +521,16 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 	o.hits = append(o.hits, abnormalHit{source: source, credited: credited, damage: damage, reason: reason})
 	if remaining == 0 {
 		o.fatal = true
-		o.deathKiller = o.sources[source].killer.player
 		killer := o.sources[source].killer
+		if credited {
+			o.deathKiller = killer.player
+		}
 		o.warCombat = o.rt.prepareGuildWarCombat(o.division, o.c, killer)
 		o.deathKill = playerKill{kind: o.rt.deathKind(o.division, o.c, killer), victimLevel: rewardLevel(o.c)}
+		if o.deathKiller != nil {
+			// 52A3F9 calls the striker before the victim's death relief.
+			o.deathKill = o.rt.classifyPlayerKill(o.division, o.deathKiller, o.c)
+		}
 		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.sources[source].killer, o.now)
 	}
 }
@@ -751,16 +756,20 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 	if o.fatal {
 		rt.recordFortressDeath(division, c, o.deathKiller, o.now)
 		rt.publishGuildWarCombat(division, o.warCombat, o.now)
-		if o.deathKiller != nil && (o.deathKill.kind == pk.DeathSpecialWorld || o.deathKill.kind == pk.DeathGuildWar) {
+		if o.deathKiller != nil {
 			killer := rt.findCharacterByGid(division, enterworld.ObjectIDForCharacter(o.deathKiller))
 			if killer != nil {
 				var actor, public []wire.Frame
-				rt.deps.Update(killer, "fortress-abnormal-kill", func() bool {
-					actor, public, _ = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
+				var shares []jobKillShare
+				rt.deps.Update(killer, "player-abnormal-kill", func() bool {
+					actor, public, shares = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
 					return len(actor) != 0 || len(public) != 0
 				})
 				out.sources = append(out.sources, privateFrames{killer.ID, actor})
 				out.public = append(out.public, public...)
+				for _, recipient := range rt.payJobKillShares(shares) {
+					out.sources = append(out.sources, privateFrames{recipient.CharacterID, recipient.Frames})
+				}
 			}
 		}
 		out.public = append(out.public, o.deathEffects...)

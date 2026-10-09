@@ -110,6 +110,11 @@ players.css - guided recovery inside the shared operations dashboard
 	padding: 12px 24px 24px;
 	gap: 0 24px;
 }
+.recovery-actions {
+	display: grid;
+	gap: 24px;
+	min-width: 0;
+}
 .recovery-facts div {
 	padding: 10px 0;
 	border-bottom: 1px solid var(--line);

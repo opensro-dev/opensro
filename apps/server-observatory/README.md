@@ -152,7 +152,17 @@ SQL writes are used. The player logs in again afterward. Living/dead state,
 property and durable companions are retained; normal session cleanup retires
 transient combat and movement. Rescue does not grant GM privileges or revive.
 
-Every rescue writes and fsyncs an intent with the original diagnostic state
+**Clear active PK** uses the same authenticated recovery path. Inspect the
+exact character and server, review their penalty, PVP state, aggression count
+and daily/total kill history, enter a reason, and type the exact inspected name.
+The operation disconnects that character and clears their active penalty and
+aggression; daily and total kill history are retained. It does not relocate
+the character or grant items. The resulting PK state is shown beside the
+original values in the completion message. Changing either search field
+requires a fresh inspection; only one recovery operation can run at a time.
+Shards that do not expose PK diagnostics cannot use this action.
+
+Every recovery operation writes and fsyncs an intent with the original diagnostic state
 before mutation, then appends its outcome to `operator-audit.jsonl` beside the
 authority store. Request IDs remain consumed after restart, including failed
 attempts. A timeout or uncertain response requires inspection, never an
@@ -168,6 +178,7 @@ and companion data: treat exports and the journal as private operations data.
 npm test                                   # Node tests
 npm run test:browser                       # browser probe against live shards
 node tools/items-browser-probe.mjs         # item view probe
+node tools/player-recovery-browser.mjs     # isolated fixture-only recovery UI probe
 ```
 
 Browser probes use the repository Chrome launcher in

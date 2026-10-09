@@ -25,6 +25,65 @@ import (
 	"opensro.online/server/internal/transport"
 )
 
+const playerOperationWait = 5 * time.Second
+const playerOperationPoll = 50 * time.Millisecond
+
+/*
+================
+playerOperationControl
+
+The binding lease excludes reconnects while a disconnected recovery commits.
+================
+*/
+type playerOperationControl struct {
+	hub       *transport.Hub
+	authority *store.Store
+	shard     string
+}
+
+/*
+================
+run
+
+AcquireBindingControl evicts a bound session and waits for its final teardown.
+Storage can fail during teardown as well as during the requested mutation.
+The store retains dirty in-memory changes on failure; never report them as a
+durable success or encourage blindly replaying an audited operation.
+================
+*/
+func (control playerOperationControl) run(name, label string, apply func() error) error {
+	if control.authority.Health().LastError != "" {
+		return fmt.Errorf("storage is unhealthy; %s refused", label)
+	}
+	key := control.shard + ":" + strings.ToLower(name)
+	timeout := time.NewTimer(playerOperationWait)
+	defer timeout.Stop()
+	poll := time.NewTicker(playerOperationPoll)
+	defer poll.Stop()
+	for {
+		lease, acquired := control.hub.AcquireBindingControl(key)
+		if acquired {
+			defer lease.Release()
+			break
+		}
+		select {
+		case <-timeout.C:
+			return fmt.Errorf("character session is still closing; inspect before retrying")
+		case <-poll.C:
+		}
+	}
+	if control.authority.Health().LastError != "" {
+		return fmt.Errorf("storage is unhealthy after session teardown; %s refused", label)
+	}
+	if err := apply(); err != nil {
+		return err
+	}
+	if control.authority.Health().LastError != "" {
+		return fmt.Errorf("%s persistence failed; in-memory changes may remain; inspect storage before retrying", label)
+	}
+	return nil
+}
+
 /*
 ================
 installPlayerOperations
@@ -55,8 +114,17 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 		return map[string]any{"shard": shard, "capturedAt": time.Now().UTC().Format(time.RFC3339Nano), "player": player,
 			"towns": game.items.OperatorTowns(), "storage": authority.Health()}, nil
 	}
+	control := playerOperationControl{hub: hub, authority: authority, shard: shard}
 	return api.InstallPlayerOperations(agentapi.PlayerOperations{
 		Token: strings.TrimSpace(string(bytes)), AuditPath: filepath.Join(state, "operator-audit.jsonl"), Read: read,
+		ClearPK: func(request agentapi.PlayerOperation) (any, error) {
+			if err := control.run(request.Character, "PK clear", func() error {
+				return game.items.OperatorClearPK(shard, request.Character)
+			}); err != nil {
+				return nil, err
+			}
+			return read(request.Character)
+		},
 		GrantItems: func(request agentapi.PlayerOperation) (any, error) {
 			if authority.Health().LastError != "" {
 				return nil, fmt.Errorf("storage is unhealthy; item grant refused")
@@ -84,29 +152,10 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			if !valid {
 				return nil, fmt.Errorf("unknown rescue town")
 			}
-			if authority.Health().LastError != "" {
-				return nil, fmt.Errorf("storage is unhealthy; rescue refused")
-			}
-			key := shard + ":" + strings.ToLower(request.Character)
-			deadline := time.Now().Add(5 * time.Second)
-			var lease *transport.BindingControlLease
-			for {
-				var acquired bool
-				lease, acquired = hub.AcquireBindingControl(key)
-				if acquired {
-					break
-				}
-				if time.Now().After(deadline) {
-					return nil, fmt.Errorf("character session is still closing; inspect before retrying")
-				}
-				time.Sleep(50 * time.Millisecond)
-			}
-			defer lease.Release()
-			if err := game.items.OperatorRescue(shard, request.Character, request.Town); err != nil {
+			if err := control.run(request.Character, "rescue", func() error {
+				return game.items.OperatorRescue(shard, request.Character, request.Town)
+			}); err != nil {
 				return nil, err
-			}
-			if authority.Health().LastError != "" {
-				return nil, fmt.Errorf("rescue persistence failed; inspect storage health")
 			}
 			return read(request.Character)
 		},

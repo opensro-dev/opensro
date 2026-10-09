@@ -75,3 +75,31 @@ test("an older GameWorld gives an actionable unavailable message", async () => {
 	assert.equal( result.status, 503 );
 	assert.match( result.body.error, /not enabled/ );
 });
+
+test("clear-PK forwards the authenticated audit envelope without rescue or item fields", async () => {
+	const calls = [];
+	const command = {
+		id: "request-42",
+		operator: "audited-operator",
+		character: "Viper",
+		reason: "Correct PK record",
+		action: "clear-pk"
+	};
+	const after = { shard: "realm", player: { name: "Viper", pk: { penalty: 0, dailyCount: 2, totalCount: 9 } } };
+	const owner = createPlayerOperations(
+		[ { id: "realm", url: "http://127.0.0.1:8791" } ],
+		"test-token",
+		async ( url, options ) => {
+			calls.push( { url, options } );
+			return Response.json( after );
+		}
+	);
+	assert.deepEqual( await owner.request( "realm", null, command ), { status: 200, body: after } );
+	assert.equal( calls.length, 1 );
+	assert.equal( calls[0].url.pathname, "/internal/operations/player" );
+	assert.equal( calls[0].options.method, "POST" );
+	assert.equal( calls[0].options.headers.Authorization, "Bearer test-token" );
+	assert.deepEqual( JSON.parse( calls[0].options.body ), command );
+	const disabled = createPlayerOperations( [], "", () => assert.fail( "disabled gateway must not contact a shard" ) );
+	assert.equal( (await disabled.request( "realm", null, command )).status, 503 );
+});

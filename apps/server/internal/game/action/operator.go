@@ -16,6 +16,7 @@ import (
 	"sort"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -70,7 +71,47 @@ func (rt *Runtime) OperatorCharacter(division, name string) (map[string]any, err
 	world := rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) })
 	return map[string]any{"id": c.ID, "name": c.Name, "level": c.Level, "hp": c.CurrentHP, "mp": c.CurrentMP,
 		"savedWorld": c.World, "liveWorld": world, "teleportMode": c.NativeTeleportMode,
-		"bodyStatus": c.NativeBodyStatus, "companions": c.Companions(), "inventory": c.MissionInventory}, nil
+		"bodyStatus": c.NativeBodyStatus, "companions": c.Companions(), "inventory": c.MissionInventory,
+		"pk": c.PK, "pvpState": c.PVPState(), "aggressions": c.Aggressions}, nil
+}
+
+/*
+================
+OperatorClearPK
+
+Operator recovery is port-only, not native, and disabled by default unless
+the dedicated operator credential is configured. The caller holds the
+character's transport control lease.
+Daily and total history remain intact, including the daily attack cap. Repair
+and relief share one authority update so no intermediate red state is visible.
+The normal penalty owner supplies the keeper deadline; no live frames are sent
+to the evicted session. Entry publishes the resulting state on reconnect.
+================
+*/
+func (rt *Runtime) OperatorClearPK(division, name string) error {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	c := rt.findCharacter(division, name)
+	if c == nil {
+		return fmt.Errorf("character not found")
+	}
+	if !rt.deps.Update(c, "operator-clear-pk", func() bool {
+		if c.DeletePending {
+			return false
+		}
+		if c.PK != nil {
+			now := rt.Now()
+			pk.RepairKeeper(c, now)
+			pk.AddPenalty(c, -pk.MaxPenalty, now)
+		}
+		c.Aggressions = nil
+		return true
+	}) {
+		return fmt.Errorf("character PK clear refused")
+	}
+	rt.aggressionActors.Delete(simulation.WorldKey(division, c.Name))
+	rt.notePKRecord(division, c)
+	return nil
 }
 
 /*

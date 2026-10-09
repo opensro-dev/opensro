@@ -132,8 +132,8 @@ planPlayerHit
 
 58E5F0 for one player victim: every impact behind its wall, scaled by the
 running percent (a drain's share instead rides into 40F750), then the
-row's and the imbue's statuses. The kill is classified now, before any
-death changes the victim.
+row's and the imbue's statuses. The commit classifies the kill under the
+character door before death changes the victim.
 ================
 */
 func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
@@ -143,7 +143,7 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 		return playerHit{}, false
 	}
 	_, _, hp, _ := rt.playerKeeperVitals(in.division, victim)
-	h := playerHit{target: in.target, defender: defender, kill: rt.classifyPlayerKill(in.division, in.caster, victim)}
+	h := playerHit{target: in.target, defender: defender}
 	h.strike = playerStrike{division: in.division, victim: in.target.player, killer: deathKiller{player: in.caster},
 		skill: in.skill, impacts: in.impacts, now: in.now}
 	percent := in.percent
@@ -190,32 +190,41 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 commitPlayerHitInDoor
 
 Inside a door holding the caster and the victim: the recipient side, then
-the aggression ProcessNormalHit records (the victim's first, 4E1DF0, then
-the attacker's, 4E25C0), then a kill's rewards.
+the aggression ProcessNormalHit records and a kill's rewards. Preserve
+pre-death relation facts, and book the killer before its hostile-target
+registration, as 4E27C0 does.
 ================
 */
 func (rt *Runtime) commitPlayerHitInDoor(division string, caster *enterworld.Character, h *playerHit, now int64) playerHitCommit {
 	var out playerHitCommit
 	victim := h.target.player
-	if victim.DeletePending || !enterworld.CharacterAlive(victim) {
+	if victim.DeletePending || !enterworld.CharacterAlive(victim) || len(h.strike.formulas) == 0 {
 		return out
+	}
+	// 52AA30 records the recipient's aggression before 52A240 runs the
+	// killer callback. Capture the target under this door before death
+	// relief changes its red state, including the last 200 penalty points.
+	out.public = append(out.public, rt.registerPlayerAttacked(division, victim, caster, now)...)
+	h.kill = rt.classifyPlayerKill(division, caster, victim)
+	beforeDeath := *victim
+	if victim.PK != nil {
+		record := *victim.PK
+		beforeDeath.PK = &record
 	}
 	h.struck = rt.strikePlayerInDoor(h.strike)
 	if len(h.struck.impacts) == 0 {
 		return out
 	}
-	if !h.struck.fatal {
-		out.public = append(out.public, rt.registerPlayerAttacked(division, victim, caster, now)...)
-	}
-	attack := rt.registerPlayerAttack(division, caster, victim, now)
-	out.actor = append(out.actor, attack...)
-	out.public = append(out.public, attack...)
 	if h.struck.fatal {
 		actor, public, shares := rt.payPlayerKillInDoor(division, caster, victim, h.kill, now)
 		out.actor = append(out.actor, actor...)
 		out.public = append(out.public, public...)
 		out.shares = shares
 	}
+	// 4E27F4 books the kill before 4E280B registers the hostile target.
+	attack := rt.registerPlayerAttack(division, caster, &beforeDeath, now)
+	out.actor = append(out.actor, attack...)
+	out.public = append(out.public, attack...)
 	return out
 }
 

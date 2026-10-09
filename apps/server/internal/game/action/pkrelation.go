@@ -102,13 +102,13 @@ func murderer(c *enterworld.Character) bool {
 
 /*
 ================
-mercenaryNormalEnemy
+normalPlayerEnemy
 
 52B6D0 precedes the job/guild checks with both level floors. Cape colors
 are absent here; deliberate player attack permission is a different query.
 ================
 */
-func (rt *Runtime) mercenaryNormalEnemy(division string, owner, target *enterworld.Character) bool {
+func (rt *Runtime) normalPlayerEnemy(division string, owner, target *enterworld.Character) bool {
 	if owner == nil || target == nil || owner.ID == target.ID || owner.Level == nil || target.Level == nil ||
 		*owner.Level < playerCombatMinimumLevel || *target.Level < playerCombatMinimumLevel {
 		return false
@@ -121,19 +121,19 @@ func (rt *Runtime) mercenaryNormalEnemy(division string, owner, target *enterwor
 
 /*
 ================
-mercenaryEnemy
+worldPlayerEnemy
 
 52DA50 uses guild/union identity in fortress worlds, without the normal-world
 level floor. The same guild and union authorities own these identities.
 ================
 */
-func (rt *Runtime) mercenaryEnemy(division string, owner, target *enterworld.Character) bool {
+func (rt *Runtime) worldPlayerEnemy(division string, owner, target *enterworld.Character) bool {
 	if owner == nil || target == nil || owner.ID == target.ID {
 		return false
 	}
 	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(owner)).Definition())
 	if !found || !world.Siege() {
-		return rt.mercenaryNormalEnemy(division, owner, target)
+		return rt.normalPlayerEnemy(division, owner, target)
 	}
 	if len(target.Aggressions) != 0 || target.PVPState() == 2 {
 		return true

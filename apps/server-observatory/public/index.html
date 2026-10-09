@@ -292,11 +292,11 @@
 <section id="recovery" class="view" hidden>
  <div class="recovery-heading">
   <div><span class="eyebrow">CHARACTER AUTHORITY</span><h2>Get players back on the road.</h2>
-  <p>Inspect first. Preserve the evidence. Return a stranded character to a safe town.</p></div>
+  <p>Inspect first. Preserve the evidence. Rescue a stranded character or clear their active PK.</p></div>
   <span class="operator-badge" id="recovery-operator">Authenticating...</span>
  </div>
  <ol class="recovery-steps" aria-label="Recovery process">
-  <li><span>01</span> Find the character</li><li><span>02</span> Save a diagnostic</li><li><span>03</span> Rescue to town</li>
+  <li><span>01</span> Find the character</li><li><span>02</span> Save a diagnostic</li><li><span>03</span> Confirm an operation</li>
  </ol>
  <form id="recovery-inspect" class="recovery-search panel">
   <label>Server<select id="recovery-shard" required></select></label>
@@ -313,6 +313,7 @@
     <button id="recovery-download" class="button" type="button">Download diagnostic JSON</button></div>
     <details class="recovery-raw"><summary>View diagnostic state</summary><pre id="recovery-state"></pre></details>
    </article>
+   <div class="recovery-actions">
    <form id="recovery-rescue" class="panel recovery-form">
     <div class="panel-heading"><div><span class="eyebrow">AUDITED OPERATION</span><h2>Rescue to town</h2></div><span class="tag">REQUIRES RELOGIN</span></div>
     <div class="recovery-form-body">
@@ -324,6 +325,17 @@
      <p class="recovery-hint">The original state and result are recorded in the private audit log.</p>
     </div>
    </form>
+   <form id="recovery-clear-pk" class="panel recovery-form">
+    <div class="panel-heading"><div><span class="eyebrow">AUDITED OPERATION</span><h2>Clear active PK</h2></div><span class="tag">REQUIRES RELOGIN</span></div>
+    <div class="recovery-form-body">
+     <p class="recovery-note">Clears the inspected character's active PK penalty and aggression on the displayed server. Daily and total kill history are retained. Their active session will be disconnected. Ask the player to log in again afterward.</p>
+     <label>Reason<textarea id="recovery-pk-reason" required minlength="5" maxlength="500" rows="3" placeholder="Why must this character's active PK be cleared?"></textarea></label>
+     <label>Confirm character name<input id="recovery-pk-confirmation" required autocomplete="off" placeholder="Type the exact inspected name"></label>
+     <button id="recovery-clear-pk-button" class="button rescue-submit" type="submit">Disconnect and clear active PK</button>
+     <p class="recovery-hint">The original state and result are recorded in the private audit log. This operation does not select a town or grant items.</p>
+    </div>
+   </form>
+   </div>
   </div>
  </section>
 </section>

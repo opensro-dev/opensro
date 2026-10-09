@@ -36,7 +36,7 @@ func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCo
 	if found {
 		if target.snapshot != nil {
 			if step.ref.TidWord>>11 == domain.MercenaryBand &&
-				(!mercenaryBodyVisible(target.snapshot.NativeBodyStatus) || !rt.mercenaryEnemy(step.key.division, step.snapshot, target.snapshot)) {
+				(!mercenaryBodyVisible(target.snapshot.NativeBodyStatus) || !rt.worldPlayerEnemy(step.key.division, step.snapshot, target.snapshot)) {
 				return petCombatTarget{}, false
 			}
 			if ride := ridingCOS(target.snapshot); ride != 0 {
@@ -57,7 +57,7 @@ func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCo
 		domain.CharacterWorldInstance(snapshot) != domain.CharacterWorldInstance(step.snapshot) {
 		return petCombatTarget{}, false
 	}
-	if step.ref.TidWord>>11 == domain.MercenaryBand && !rt.mercenaryEnemy(step.key.division, step.snapshot, snapshot) {
+	if step.ref.TidWord>>11 == domain.MercenaryBand && !rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 		return petCombatTarget{}, false
 	}
 	pet := snapshot.CompanionByGID(gid)

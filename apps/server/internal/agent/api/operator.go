@@ -72,6 +72,7 @@ type PlayerOperations struct {
 	Read       func(string) (any, error)
 	Rescue     func(PlayerOperation) (any, error)
 	GrantItems func(PlayerOperation) (any, error)
+	ClearPK    func(PlayerOperation) (any, error)
 }
 
 /*
@@ -181,6 +182,12 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		operation = endpoint.config.GrantItems
+	case "clear-pk":
+		if endpoint.config.ClearPK == nil || request.Town != 0 || len(request.Items) != 0 {
+			http.Error(w, "invalid PK clear", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.ClearPK
 	default:
 		http.Error(w, "unknown player operation", http.StatusBadRequest)
 		return

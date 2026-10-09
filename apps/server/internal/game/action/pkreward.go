@@ -10,8 +10,9 @@ doubled when the victim was itself a murderer. Then
 CGObjPC_ProcessPvpKillRewards (4E1F60), reached from the killer's
 CGObjPC_EnterBattleOnAttack, keeps the books by the kill's kind:
 
-  - murder (3): a living killer's total PK +1, penalty +(total+1)/2*1200,
-    daily PK by the level-gap weight (pk.RecordMurder);
+  - ordinary player kill (3): unless the victim is a legal world enemy,
+    a living killer's total PK +1, penalty +(total+1)/2*1200, daily PK by
+    the level-gap weight (pk.RecordMurder);
   - job (1): job EXP (Formulae_CalculateJobKillExp 4103E0), shared by the
     killer's party (CGObjPC_DistributeJobKillExp 5BD7F0), then EXP of
     leveldata +0x1c of the lower level, three times over;
@@ -51,7 +52,8 @@ const (
 playerKill
 
 A fatal player hit's kill, classified before the victim's death changes
-its equipment (4E6EC0 stores the kind at victim +0x1CB4 first). murderer
+its equipment (4E6EC0 stores the kind at victim +0x1CB4 first). legalEnemy
+is 4EB590's target predicate before death relief; murderer
 is 4E6980's "victim penalty > 0 and kind != 5", read before the death's
 relief lowers the penalty.
 ================
@@ -59,6 +61,7 @@ relief lowers the penalty.
 type playerKill struct {
 	kind        pk.DeathKind
 	murderer    bool
+	legalEnemy  bool
 	victimLevel int64
 }
 
@@ -82,7 +85,7 @@ classifyPlayerKill
 func (rt *Runtime) classifyPlayerKill(division string, killer, victim *enterworld.Character) playerKill {
 	kind := rt.deathKind(division, victim, rt.prepareDeathKiller(division, victim, deathKiller{player: killer}))
 	murderer := victim.PK != nil && victim.PK.Penalty > 0 && kind != pk.DeathGuildWar
-	return playerKill{kind: kind, murderer: murderer, victimLevel: rewardLevel(victim)}
+	return playerKill{kind: kind, murderer: murderer, legalEnemy: rt.worldPlayerEnemy(division, killer, victim), victimLevel: rewardLevel(victim)}
 }
 
 /*
@@ -117,10 +120,9 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 	}
 	switch kill.kind {
 	case pk.DeathPlayer:
-		// 4E1FD3: only a living killer is booked. 4EB590 asks the killer's
-		// world (+0xD8) whether it keeps PK books; INFERENCE: every world
-		// the port opens is an ordinary field that does.
-		if !enterworld.CharacterAlive(killer) {
+		// 4E2004 passes the victim in ESI to 4EB590. The world controller
+		// tests that target (default: 52B6D0), before its death relief.
+		if !enterworld.CharacterAlive(killer) || kill.legalEnemy {
 			break
 		}
 		before := killer.PVPState()

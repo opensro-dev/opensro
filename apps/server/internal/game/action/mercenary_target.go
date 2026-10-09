@@ -58,7 +58,7 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 		target := rt.findCharacterByGid(step.key.division, present.GID)
 		snapshot := rt.characterSnapshot(step.key.division, target)
 		if snapshot == nil || snapshot.DeletePending ||
-			!rt.mercenaryEnemy(step.key.division, step.snapshot, snapshot) {
+			!rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 			continue
 		}
 		if enterworld.CharacterAlive(snapshot) && mercenaryBodyVisible(snapshot.NativeBodyStatus) {

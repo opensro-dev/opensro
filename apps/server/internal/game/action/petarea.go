@@ -74,7 +74,7 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 			continue
 		}
 		if step.ref.TidWord>>11 == domain.MercenaryBand {
-			if !rt.mercenaryEnemy(step.key.division, step.snapshot, snapshot) {
+			if !rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 				continue
 			}
 		} else if rt.playerAttackTargetRefusal(step.key.division, step.snapshot, snapshot, step.nowMs) != 0 {
