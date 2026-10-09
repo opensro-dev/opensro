@@ -272,6 +272,33 @@ def delivery_items(text, mission):
 
 
 # ================
+# handover_pages
+#
+# A deliver mission's hand-over dialogue (91CA00). With +0xBF pages the NPC
+# first shows +0xC0 with the reply +0xE8, then page k (1..N-1) at
+# +0xC4 + 4(k+1) with the reply +0xE8 + 4k, and the hand-over itself speaks
+# +0xC8 + 4N. Without pages it speaks +0xC0. Returns (pages, line).
+# ================
+def handover_pages(fields):
+	count = fields.get("0xbf", 0)
+	if not isinstance(count, int) or count < 0:
+		raise Unsupported("hand-over page count unavailable")
+	if count == 0:
+		return [], fields.get("0xc0")
+	pages = []
+	for k in range(count):
+		prompt = fields.get("0xc0" if k == 0 else hex(0xc4 + 4 * (k + 1)))
+		reply = fields.get(hex(0xe8 + 4 * k))
+		if not isinstance(prompt, str) or not isinstance(reply, str):
+			raise Unsupported("hand-over page %d unavailable" % k)
+		pages.append({"PromptSymbol": prompt, "ReplySymbol": reply})
+	line = fields.get(hex(0xc8 + 4 * count))
+	if not isinstance(line, str):
+		raise Unsupported("hand-over line after %d pages unavailable" % count)
+	return pages, line
+
+
+# ================
 # exchange_items
 #
 # What a two-leg hand-over gives back (91CA00): +0x6A (byte) the number of
@@ -469,7 +496,10 @@ def project(code, quest, text, sql):
 		fields = missions[0]["fields"]
 		# A class talk handler may hand over at its own NPC and line.
 		npc = behaviour.get("EndNpcCodename", fields.get("0x15"))
-		talk = behaviour.get("CompletePromptSymbol", fields.get("0x1e" if MISSION_DIALOG in kinds else "0xc0"))
+		pages, talk = [], fields.get("0x1e")
+		if MISSION_DIALOG not in kinds:
+			pages, talk = handover_pages(fields)
+		talk = behaviour.get("CompletePromptSymbol", talk)
 		if not isinstance(npc, str) or not isinstance(talk, str):
 			raise Unsupported("talk or delivery mission without an NPC or line")
 		spec.update({"EndNpcCodename": npc, "CompletePromptSymbol": talk})
@@ -477,6 +507,8 @@ def project(code, quest, text, sql):
 			spec["Objective"] = OBJECTIVE_TALK
 		else:
 			spec.update({"Objective": OBJECTIVE_DELIVERY, "DeliveryItems": delivery_items(text, missions[0])})
+			if pages and "TalkPages" not in behaviour:
+				spec["TalkPages"] = pages
 			# 91CA00 answers missing items with the mission's own line
 			# (+0xC4); the base word 0x133 wins where the class has one.
 			if "NotAchievedSymbol" not in spec and isinstance(fields.get("0xc4"), str):
@@ -494,6 +526,9 @@ def project(code, quest, text, sql):
 					raise Unsupported("two-leg delivery without an achieved line")
 				spec.update({"HandOverNpcCodename": npc, "HandOverSymbol": talk,
 					"EndNpcCodename": start, "CompletePromptSymbol": achieved})
+				# The pages lead to the hand-over, not to the report.
+				if spec.pop("TalkPages", None):
+					spec["HandOverPages"] = pages
 				exchange = exchange_items(fields)
 				if exchange:
 					spec["ExchangeItems"] = exchange

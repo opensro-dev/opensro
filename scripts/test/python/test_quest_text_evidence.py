@@ -16,7 +16,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_quest_text_evidence import advertised_rewards, plain, read_table
-from generate_compiled_quests import Unsupported, delivery_items, project, rewards
+from generate_compiled_quests import Unsupported, delivery_items, handover_pages, project, rewards
 
 
 # ================
@@ -189,6 +189,23 @@ class QuestTextEvidenceTests(unittest.TestCase):
 		quest["words"].pop("0x134")
 		with self.assertRaisesRegex(Unsupported, "achieved line"):
 			project("QUEST", quest, text, sql)
+
+	# ================
+	# test_handover_pages_follow_the_mission_layout
+	#
+	# 91CA00: +0xC0 [+0xE8], then +0xC4+4(k+1) [+0xE8+4k], and the hand-over
+	# line +0xC8+4N; without pages, +0xC0 itself (QNO_CA_THIEF_4: N = 3).
+	# ================
+	def test_handover_pages_follow_the_mission_layout(self):
+		self.assertEqual(handover_pages({"0xc0": "SN_LINE"}), ([], "SN_LINE"))
+		fields = {"0xbf": 3, "0xc0": "P0", "0xe8": "R0", "0xcc": "P1", "0xec": "R1", "0xd0": "P2", "0xf0": "R2", "0xd4": "HAND_OVER"}
+		pages, line = handover_pages(fields)
+		self.assertEqual(pages, [{"PromptSymbol": "P0", "ReplySymbol": "R0"}, {"PromptSymbol": "P1", "ReplySymbol": "R1"},
+			{"PromptSymbol": "P2", "ReplySymbol": "R2"}])
+		self.assertEqual(line, "HAND_OVER")
+		del fields["0xd4"]
+		with self.assertRaisesRegex(Unsupported, "hand-over line after 3 pages"):
+			handover_pages(fields)
 
 if __name__ == "__main__":
 	unittest.main()

@@ -488,7 +488,8 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			// 91CA00 at the mission's own NPC: the hand-over, or its
 			// not-delivered line while the items are missing.
 			if deliveryMet(character, def) {
-				completes = append(completes, NpcOption{Codename: handOverToken(def.Codename), TitleSymbol: def.TitleSymbol, PromptSymbol: def.HandOverSymbol, Complete: true})
+				completes = append(completes, NpcOption{Codename: handOverToken(def.Codename), TitleSymbol: def.TitleSymbol, PromptSymbol: def.HandOverSymbol,
+					Pages: def.HandOverPages, Complete: true})
 			} else if def.NotAchievedSymbol != "" {
 				completes = append(completes, NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: def.NotAchievedSymbol, Informational: true})
 			}

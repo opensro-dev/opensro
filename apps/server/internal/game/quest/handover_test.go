@@ -15,6 +15,7 @@ package quest
 import (
 	"testing"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/licensed"
 )
 
@@ -157,5 +158,39 @@ func TestHandOverRefusesARecordWithoutItsNode(t *testing.T) {
 	}
 	if captureItemCount(c, firecrackers) != 1 || captureItemCount(c, receipt) != 0 {
 		t.Fatal("the refused hand-over changed the bag")
+	}
+}
+
+/*
+================
+TestHandOverPagesPrecedeTheHandOver
+
+91CA00 pages a delivery's hand-over (+0xBF): QNO_CA_THIEF_4's NPC shows
+three pages before the hand-over line _12, and QNO_EU_EASTEU_8's smith one
+page [NEXT] before _07, instead of handing over on the first page.
+================
+*/
+func TestHandOverPagesPrecedeTheHandOver(t *testing.T) {
+	licensed.RequireGameData(t)
+	rt := expansionRuntime(t)
+	thief := mustQuest(t, rt, "QNO_CA_THIEF_4")
+	if len(thief.TalkPages) != 3 || thief.TalkPages[0].PromptSymbol != "SN_TALK_QNO_CA_THIEF_4_06" ||
+		thief.CompletePromptSymbol != "SN_TALK_QNO_CA_THIEF_4_12" {
+		t.Fatalf("THIEF_4 pages %+v, line %s", thief.TalkPages, thief.CompletePromptSymbol)
+	}
+	witch := mustQuest(t, rt, "QNO_EU_EASTEU_8")
+	if len(witch.HandOverPages) != 1 || witch.HandOverPages[0].ReplySymbol != "SN_TALK_COMMON_NEXT" ||
+		witch.HandOverSymbol != "SN_TALK_QNO_EU_EASTEU_8_07" || len(witch.TalkPages) != 0 {
+		t.Fatalf("EASTEU_8 hand-over pages %+v, line %s, report pages %+v", witch.HandOverPages, witch.HandOverSymbol, witch.TalkPages)
+	}
+	level, gold := int64(60), int64(0)
+	c := &enterworld.Character{ID: 12, Name: "smithrunner", ModelCodename: "CHAR_EU_MAN_NOBLE", Level: &level, Gold: &gold}
+	c.CompletedQuestIds = []uint32{mustQuest(t, rt, "QNO_EU_EASTEU_7").RefID}
+	if _, err := rt.StartQuest(c, witch.Codename); err != nil {
+		t.Fatalf("accept EASTEU_8: %v", err)
+	}
+	row, ok := npcRow(rt, c, witch.Codename, witch.HandOverNpcCodename)
+	if !ok || row.Codename != handOverToken(witch.Codename) || len(row.Pages) != 1 || row.PromptSymbol != "SN_TALK_QNO_EU_EASTEU_8_07" {
+		t.Fatalf("the smith's hand-over row %+v", row)
 	}
 }

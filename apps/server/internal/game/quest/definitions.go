@@ -270,8 +270,11 @@ type QuestSpec struct {
 	// ExchangeFullSymbol (+0xC8) answers a bag without room for the exchange.
 	HandOverNpcCodename string
 	HandOverSymbol      string
-	ExchangeItems       []RewardItemLead
-	ExchangeFullSymbol  string
+	// HandOverPages precede HandOverSymbol at the hand-over NPC (the
+	// mission's +0xBF pages, 91CA00).
+	HandOverPages      []OfferPage
+	ExchangeItems      []RewardItemLead
+	ExchangeFullSymbol string
 }
 
 // curatedQuestSpecs is the curated table. SMALL BY DESIGN: the starter
