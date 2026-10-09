@@ -150,6 +150,35 @@ in full and charged a new snapshot.
 ==================
 */
 func (rt *Runtime) offensivePhaseCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, prepared *pendingProjectileCast) (skillCharge, uint16) {
+	return rt.phaseCost(division, c, skill, now, prepared, true)
+}
+
+/*
+==================
+stagePhaseCost
+
+offensivePhaseCost for one stage of a skill sequence. A linked stage
+(rootID != 0) is admitted without the cooldown (4AECE7 returns the linked
+row to admission state 2, see acceptSkillStagePhaseAt) and its cost check
+skips it too: the stage rows share the root's group, whose cooldown the
+root installed when it fired, so checking it refused every second hit of
+a chain with a cooldown (Windless Spear) with 0x3005. Each stage still pays
+its own resources.
+==================
+*/
+func (rt *Runtime) stagePhaseCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, prepared *pendingProjectileCast, rootID uint32) (skillCharge, uint16) {
+	return rt.phaseCost(division, c, skill, now, prepared, rootID == 0)
+}
+
+/*
+==================
+phaseCost
+
+The shared body of offensivePhaseCost and stagePhaseCost; cooldown says
+whether a fresh phase checks the skill's cooldown.
+==================
+*/
+func (rt *Runtime) phaseCost(division string, c *enterworld.Character, skill enterworld.SkillRow, now int64, prepared *pendingProjectileCast, cooldown bool) (skillCharge, uint16) {
 	if prepared != nil {
 		if _, refusal := rt.offensiveResourceCost(division, c, skill); refusal != 0 {
 			return skillCharge{}, refusal
@@ -157,7 +186,13 @@ func (rt *Runtime) offensivePhaseCost(division string, c *enterworld.Character, 
 		return prepared.executionCost, 0
 	}
 
-	if _, refusal := rt.offensiveCost(division, c, skill, now); refusal != 0 {
+	if !skill.Consumption.Pinned || skill.Group == 0 || now < 0 {
+		return skillCharge{}, 0x3003
+	}
+	if cooldown && skillCoolingDown(c, skill, now) {
+		return skillCharge{}, 0x3005
+	}
+	if _, refusal := rt.offensiveResourceCost(division, c, skill); refusal != 0 {
 		return skillCharge{}, refusal
 	}
 	cost, err := rt.preparedExecutionMPCost(division, c, skill)

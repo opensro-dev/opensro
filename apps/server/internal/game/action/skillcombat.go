@@ -287,7 +287,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		return offensiveRefusal(code), skillCastRefused
 	}
 	if advanced {
-		if _, refusal := rt.offensivePhaseCost(divisionID, snapshot, skill, nowMs, release); refusal != 0 {
+		if _, refusal := rt.stagePhaseCost(divisionID, snapshot, skill, nowMs, release, rootID); refusal != 0 {
 			return offensiveRefusal(refusal), skillCastRefused
 		}
 	}
@@ -391,7 +391,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		if !rt.deps.UpdateMany(roster.characters, "player-basic-attack", func() bool {
 			var cost skillCharge
 			if advanced {
-				cost, refusal = rt.offensivePhaseCost(divisionID, character, skill, nowMs, release)
+				cost, refusal = rt.stagePhaseCost(divisionID, character, skill, nowMs, release, rootID)
 				if refusal != 0 {
 					return false
 				}

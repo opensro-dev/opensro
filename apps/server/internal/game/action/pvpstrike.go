@@ -296,7 +296,7 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 		return offensiveRefusal(0x3006), skillCastRefused
 	}
 	if st.advanced {
-		if _, refusal := rt.offensivePhaseCost(division, snapshot, skill, now, st.release); refusal != 0 {
+		if _, refusal := rt.stagePhaseCost(division, snapshot, skill, now, st.release, st.rootID); refusal != 0 {
 			return offensiveRefusal(refusal), skillCastRefused
 		}
 	}
@@ -373,7 +373,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	if !rt.deps.UpdateMany([]*enterworld.Character{character, target.player}, "player-strike-player", func() bool {
 		var cost skillCharge
 		if st.advanced {
-			if cost, refusal = rt.offensivePhaseCost(division, character, skill, now, st.release); refusal != 0 {
+			if cost, refusal = rt.stagePhaseCost(division, character, skill, now, st.release, st.rootID); refusal != 0 {
 				return false
 			}
 		}

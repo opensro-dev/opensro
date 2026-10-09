@@ -493,7 +493,7 @@ func (rt *Runtime) acceptSkillAreaAt(division string, character, snapshot *enter
 	if !rt.deps.UpdateMany(roster.characters, "player-area-attack", func() bool {
 		var cost skillCharge
 		if charged {
-			cost, refusal = rt.offensivePhaseCost(division, character, skill, nowMs, release)
+			cost, refusal = rt.stagePhaseCost(division, character, skill, nowMs, release, rootID)
 			if refusal != 0 {
 				return false
 			}
