@@ -32,13 +32,15 @@ captureSupply
 The Ivy trap is awarded by its material quest and has a different refill
 handler. The other handlers grant their items at quest acceptance. count is
 the grant size; spendAtGrant spends the day only when the grant lands, as
-Cerberus 1's 8B2420 stamps the day after its scissors are given.
+Cerberus 1's 8B2420 stamps the day after its scissors are given. unlimited
+handlers keep no allowance: Hidden Treasure 5's 8C7260 refills whenever
+no key is held.
 ================
 */
 type captureSupply struct {
 	quest, item, title, prompt, success, exhausted, full string
 	count                                                int
-	afterCompletion, spendAtGrant                        bool
+	afterCompletion, spendAtGrant, unlimited             bool
 }
 
 var captureSupplies = []captureSupply{
@@ -74,6 +76,14 @@ var captureSupplies = []captureSupply{
 		title: "SN_TALK_QNO_EU_EASTEU_19_08", prompt: "SN_TALK_QNO_EU_EASTEU_19_07",
 		success: "SN_TALK_QNO_EU_EASTEU_19_09", exhausted: "SN_TALK_QNO_EU_EASTEU_19_10",
 		full: "SN_TALK_QNO_EU_EASTEU_19_14",
+	},
+	{
+		// 8C7260 grants five Seal Keys (mission +0x1D) at acceptance and,
+		// with none held, again on every visit: _05 with the _06 row, _07 on
+		// the grant, _08 when the bag is full.
+		quest: treasureQuest, item: treasureKey, count: treasureKeyCount, spendAtGrant: true, unlimited: true,
+		title: "SN_TALK_QNO_CA_TREASURE_5_06", prompt: "SN_TALK_QNO_CA_TREASURE_5_05",
+		success: "SN_TALK_QNO_CA_TREASURE_5_07", full: "SN_TALK_QNO_CA_TREASURE_5_08",
 	},
 }
 
@@ -141,7 +151,7 @@ func (rt *Runtime) captureSupplyOption(c *enterworld.Character, def *Definition,
 	}
 	option := NpcOption{Codename: captureSupplyPrefix + def.Codename, TitleSymbol: supply.title,
 		PromptSymbol: supply.prompt, AcceptResponseSymbol: supply.success, Complete: true}
-	if state, exists := c.QuestSupplies[def.RefID]; exists && state.Day == rt.CalendarNow().Day {
+	if state, exists := c.QuestSupplies[def.RefID]; exists && !supply.unlimited && state.Day == rt.CalendarNow().Day {
 		option.Informational = true
 		option.PromptSymbol = supply.exhausted
 	}

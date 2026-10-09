@@ -15,6 +15,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const captureTimerCorrectionMinutes = 10
@@ -101,7 +102,7 @@ func (rt *Runtime) advanceCaptureMinute(c *enterworld.Character, at int, rule ca
 		return nil, false
 	}
 	if rule.quest == "QNO_EU_IVY_1" && rt.SpawnQuestMonster != nil {
-		rt.SpawnQuestMonster(c, ivyGuardian, 0, ivyGuardianRadius)
+		rt.SpawnQuestMonster(c, simulation.QuestMonsterSpawn{Codename: ivyGuardian, RadiusSpan: ivyGuardianRadius})
 	}
 	if record.RemainingMinutes == 1 {
 		frames, released := rt.releaseCapture(c, at, rule, rule.expired)

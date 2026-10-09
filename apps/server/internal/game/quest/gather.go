@@ -7,13 +7,15 @@ The item owner consumes the tool after admission. This owner retains the
 short online countdown and awards the gathered material through inventory
 authority. Leaving the world cancels the countdown, matching 8C8770.
 
-Three quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
+Four quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
 on a 50% roll. Cerberus 1's Long Scissors (QNO_EU_EASTEU_19, 8B2AB0) cut a
 Golden Apple after ten seconds with no roll, and the Golden Apple lures a
 quest Ladon whose Bloody Orbs are the quest's objective. Rahid 5's Essence
 of Roc Mountain (QNO_RM_OLDWOMAN_5, 8A0AA0) gathers a Pile of Rainbow Grass
 on each of seven peaks in order, the later peaks taking longer and the
-earlier ones failing more often.
+earlier ones failing more often. Hidden Treasure 5's Seal Key
+(QNO_CA_TREASURE_5, 8C7910) calls a Treasure Guardian at the Hungry Blood
+Ong habitat, whose King's Treasure Box is the quest's objective.
 
 ===========================================================================
 */
@@ -52,6 +54,16 @@ const (
 	rahidEssence             = "ITEM_QNO_RM_OLDWOMAN_5_08"
 	rahidPile                = "ITEM_QNO_RM_OLDWOMAN_7_03"
 	rahidPileTarget          = 7
+	treasureQuest            = "QNO_CA_TREASURE_5"
+	treasureKey              = "ITEM_QNO_CA_TREASURE_5_01"
+	treasureBox              = "ITEM_QNO_CA_TREASURE_5_02"
+	treasureGuardian         = "MOB_QT_01_ONG"
+	treasureKeyCount         = 5
+	treasureRegion           = 0x666b
+	treasureRadius           = 400
+	treasureGuardianMin      = 20
+	treasureGuardianSpan     = 80
+	treasureGuardianLifeMs   = 300000 // 8C7910: CEVENTHandler_SetTiming 0x493E0
 	questSecondMs            = 1000
 	OpQuestGatherStart       = 0x36bd
 	OpQuestGatherCancel      = 0x775d
@@ -228,6 +240,8 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		quest = cerberusQuest
 	case rahidEssence:
 		quest = rahidQuest
+	case treasureKey:
+		quest = treasureQuest
 	default:
 		return nil, false
 	}
@@ -242,6 +256,8 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		return rt.beginCerberusScissors(c, def, at, nowMs)
 	case rahidEssence:
 		return rt.beginRahidEssence(c, def, at, nowMs)
+	case treasureKey:
+		return rt.useTreasureKey(c, def, at)
 	}
 	return rt.useCerberusApple(c, def, at)
 }
@@ -336,10 +352,49 @@ func (rt *Runtime) useCerberusApple(c *enterworld.Character, def *Definition, at
 	if !withinQuestArea(at, cerberusLurePoint(), cerberusRadius) {
 		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_19_13")}, false
 	}
-	if rt.SpawnQuestMonster == nil || !rt.SpawnQuestMonster(c, cerberusLadon, cerberusLureMin, cerberusLureSpan) {
+	lure := simulation.QuestMonsterSpawn{Codename: cerberusLadon, RadiusMin: cerberusLureMin, RadiusSpan: cerberusLureSpan}
+	if rt.SpawnQuestMonster == nil || !rt.SpawnQuestMonster(c, lure) {
 		return nil, false
 	}
 	return nil, true
+}
+
+/*
+================
+useTreasureKey
+
+8C7910: a Seal Key works only while the quest runs unfinished (state 1 or
+7; holding the Treasure Box is state 8) and within 400 of the habitat
+point, else _17. It calls the Treasure Guardian 20-100 from that point,
+not from the player as Cerberus's apple does, and removes it after five
+minutes. A failed spawn keeps the key.
+================
+*/
+func (rt *Runtime) useTreasureKey(c *enterworld.Character, def *Definition, at simulation.Spawn) ([]wire.Frame, bool) {
+	if heldCollectCount(c, def) >= def.CollectCount {
+		return []wire.Frame{questNotification("UIIT_MSG_QUEST_ERR_CANNOT_USE_ITEM")}, false
+	}
+	if !withinQuestArea(at, treasureHabitat(), treasureRadius) {
+		return []wire.Frame{questNotification("SN_TALK_QNO_CA_TREASURE_5_17")}, false
+	}
+	guardian := simulation.QuestMonsterSpawn{Codename: treasureGuardian, Position: treasureHabitat(),
+		RadiusMin: treasureGuardianMin, RadiusSpan: treasureGuardianSpan, LifetimeMs: treasureGuardianLifeMs}
+	if rt.SpawnQuestMonster == nil || !rt.SpawnQuestMonster(c, guardian) {
+		return nil, false
+	}
+	return nil, true
+}
+
+/*
+================
+treasureHabitat
+
+8C7910 compares against region 0x666B (1525, 152, 1495), south of
+Samarkand.
+================
+*/
+func treasureHabitat() simulation.Spawn {
+	return simulation.Spawn{RegionID: treasureRegion, X: 1525, Y: 152, Z: 1495}
 }
 
 /*

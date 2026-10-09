@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/calendar"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const maxQuestWireRecords = 255
@@ -35,9 +36,10 @@ shares their presentation branch, but persistence preserves the distinction.
 type Runtime struct {
 	gatherMu   sync.Mutex
 	gatherJobs map[int64]gatherJob
-	// SpawnQuestMonster places a script monster radiusMin + fraction *
-	// radiusSpan from the character, inside the caller's character door.
-	SpawnQuestMonster func(c *enterworld.Character, codename string, radiusMin, radiusSpan float64) bool
+	// SpawnQuestMonster places a script monster RadiusMin + fraction *
+	// RadiusSpan from the request's Position, or from the character when it
+	// names none, inside the caller's character door.
+	SpawnQuestMonster func(c *enterworld.Character, request simulation.QuestMonsterSpawn) bool
 	CaptureRoll       func() (uint32, error)
 	CalendarNow       func() calendar.Value
 	calendarMu        sync.Mutex

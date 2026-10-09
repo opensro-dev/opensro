@@ -6,8 +6,8 @@ capture_specs.go - v1.150 ordinary captured-monster quest contracts
 Primary quest text owns objectives and rewards. Native handlers supply the
 capture mechanism; all references remain version-local codename joins.
 Promotion traps are excluded because their quests are absent from v1.150.
-The tool quests (Ivy 2, Cerberus 1, Rahid 5) share the supply and countdown
-owners.
+The tool quests (Ivy 2, Cerberus 1, Rahid 5, Hidden Treasure 5) share the
+supply and countdown owners.
 
 ===========================================================================
 */
@@ -118,6 +118,30 @@ var captureQuestSpecs = []QuestSpec{
 		RewardExp: 2200000, RewardSkillExp: 320000,
 		MonsterDrop: &MonsterDropRule{ItemCodename: rahidEssence, MonsterCodenames: []string{"MOB_RM_ROCKY"},
 			MonsterGrades: []uint8{4}, ChancePercent: 100, MaxHeld: 1000, DropCount: 5},
+	},
+	{
+		// Hidden Treasure 5 (CQNO_CA_TREASURE_5, 8C7260): Tricia's Seal Keys
+		// call a Treasure Guardian (8C7910) whose King's Treasure Box (+0x241,
+		// 100%) is the objective. Holding it, her talk pages through the
+		// box's opening (_09.._15) before the thanks _16 pays. Words
+		// 0x130..0x134/0x136/0x139 name the dialogue; 0x136 (_05, "You used
+		// all Seal Keys") is the class's own bag-full word. v1.150's popup
+		// pays 4,100 EXP; the reward row gives the fairy's present.
+		Codename: "QNO_CA_TREASURE_5", RequiredQuests: []string{"QNO_CA_TREASURE_4"},
+		KindByte: 1, Objective: ObjectiveCollect, CollectItemCodename: treasureBox, CollectCount: 1,
+		StartNpcCodename: "NPC_CA_SMITH", EndNpcCodename: "NPC_CA_SMITH",
+		OfferPromptSymbol: "SN_TALK_QNO_CA_TREASURE_5_01", AcceptResponseSymbol: "SN_TALK_QNO_CA_TREASURE_5_02",
+		DenyResponseSymbol: "SN_TALK_QNO_CA_TREASURE_5_03", NotAchievedSymbol: "SN_TALK_QNO_CA_TREASURE_5_04",
+		TalkPages: []OfferPage{
+			{PromptSymbol: "SN_TALK_QNO_CA_TREASURE_5_09", ReplySymbol: "SN_TALK_QNO_CA_TREASURE_5_10"},
+			{PromptSymbol: "SN_TALK_QNO_CA_TREASURE_5_11", ReplySymbol: "SN_TALK_QNO_CA_TREASURE_5_12"},
+			{PromptSymbol: "SN_TALK_QNO_CA_TREASURE_5_13", ReplySymbol: "SN_TALK_QNO_CA_TREASURE_5_15"},
+		},
+		CompletePromptSymbol: "SN_TALK_QNO_CA_TREASURE_5_16", InventoryFullSymbol: "SN_TALK_QNO_CA_TREASURE_5_05",
+		AchievedNowSymbol: "SN_TALK_QNO_CA_TREASURE_5_14",
+		RewardExp:         4100,
+		RewardItems:       []RewardItemLead{{ItemCodename: "ITEM_QNO_CA_TREASURE_5_03", Count: 1}},
+		MonsterDrop:       &MonsterDropRule{MonsterCodenames: []string{treasureGuardian}, ChancePercent: 100},
 	},
 	{
 		// 8C0F00 supplies the capture contract; v1.150 grants one courage scroll.

@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/world/calendar"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/licensed"
 )
 
@@ -116,11 +117,12 @@ func TestCerberusAppleLuresALadon(t *testing.T) {
 	rt, c, def, _ := cerberusFixture(t)
 	var lured []string
 	spawned := true
-	rt.SpawnQuestMonster = func(_ *enterworld.Character, codename string, radiusMin, radiusSpan float64) bool {
-		if radiusMin != cerberusLureMin || radiusSpan != cerberusLureSpan {
-			t.Fatalf("lure radius %v + %v", radiusMin, radiusSpan)
+	rt.SpawnQuestMonster = func(_ *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
+		if request.RadiusMin != cerberusLureMin || request.RadiusSpan != cerberusLureSpan ||
+			request.Position != (simulation.Spawn{}) || request.LifetimeMs != 0 {
+			t.Fatalf("lure %+v", request)
 		}
-		lured = append(lured, codename)
+		lured = append(lured, request.Codename)
 		return spawned
 	}
 	outside := cerberusLurePoint()

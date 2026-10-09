@@ -498,8 +498,8 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	quests.PlanInventory = game.items.PlanQuestInventory
-	quests.SpawnQuestMonster = func(character *enterworld.Character, codename string, radiusMin, radiusSpan float64) bool {
-		return game.items.SpawnQuestMonster(game.divisionID, character, codename, radiusMin, radiusSpan)
+	quests.SpawnQuestMonster = func(character *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
+		return game.items.SpawnQuestMonster(game.divisionID, character, request)
 	}
 	game.items.CanPlaceQuestTrap = quests.CanPlaceTrap
 	game.items.CaptureQuestTrap = quests.CaptureQuestTrap
