@@ -859,6 +859,7 @@
 				"Count": 1
 			}
 		],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_10",
 		"DeliveryKeepsItems": true,
 		"OfferPages": [
 			{

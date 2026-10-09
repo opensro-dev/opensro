@@ -60,6 +60,13 @@ func TestBirthdayGiftsStayForTheSecondDelivery(t *testing.T) {
 	if captureItemCount(c, medicine) != 1 || captureItemCount(c, letter) != 1 {
 		t.Fatal("acceptance did not hand over the medicine and the letter")
 	}
+	held := c.MissionInventory
+	c.MissionInventory = nil
+	if missing, _ := npcRow(rt, c, "QNO_WC_POTION_3", "NPC_CH_ACCESSORY"); !missing.Informational ||
+		missing.PromptSymbol != "SN_TALK_QNO_WC_ACCESSORY_3_10" {
+		t.Fatalf("Jinjin without the gifts: %+v, want the mission's +0xC4 line", missing)
+	}
+	c.MissionInventory = held
 	if row, _ := npcRow(rt, c, "QNO_WC_POTION_3", "NPC_WC_POTION"); !row.Informational || row.PromptSymbol != "SN_TALK_QNO_WC_POTION_3_05" {
 		t.Fatalf("Bori while the delivery runs: %+v", row)
 	}
@@ -67,8 +74,8 @@ func TestBirthdayGiftsStayForTheSecondDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hand over to Jinjin: %v", err)
 	}
-	if !questCompleted(c, mustQuest(t, rt, "QNO_WC_POTION_3").RefID) || !hasNotice(out.Frames, "SN_TALK_QNO_WC_POTION_3_16") {
-		t.Fatal("the hand-over did not complete with _16")
+	if !questCompleted(c, mustQuest(t, rt, "QNO_WC_POTION_3").RefID) || !hasNotice(out.Frames[:1], "SN_TALK_QNO_WC_POTION_3_16") {
+		t.Fatal("the hand-over did not complete with _16 sent first")
 	}
 	if captureItemCount(c, medicine) != 1 || captureItemCount(c, letter) != 1 {
 		t.Fatal("the hand-over took the gifts it keeps (+0x111 cleared)")

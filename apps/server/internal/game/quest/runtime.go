@@ -858,15 +858,16 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			frames = append(frames, questNotification(def.AchievedNowSymbol))
 		}
 	}
-	if advanced == nil && def.CompleteNoticeSymbol != "" {
-		frames = append(frames, questNotification(def.CompleteNoticeSymbol))
-	}
 	if goldFrame != nil {
 		frames = append(frames, *goldFrame)
 	}
 	frames = append(inventoryFrames, frames...)
 	frames = append(frames, objectiveFrames...)
 	frames = append(frames, experienceFrames...)
+	// 896360 sends its notice before it completes and pays the quest.
+	if advanced == nil && def.CompleteNoticeSymbol != "" {
+		frames = append([]wire.Frame{questNotification(def.CompleteNoticeSymbol)}, frames...)
+	}
 	return OpResult{
 		Frames:    frames,
 		Broadcast: wire.ProgressionBroadcastFrames(experienceFrames),

@@ -121,7 +121,6 @@ CLASS_BEHAVIOUR = {
 	("QNO_WC_SMITH_3", "0x58"): {
 		"OfferPromptSymbol": "SN_TALK_QNO_WC_SMITH_3_01",
 		"DenyResponseSymbol": "SN_TALK_QNO_WC_SMITH_3_03",
-		"NotAchievedSymbol": "SN_TALK_QNO_WC_SMITH_3_04",
 		"SideTalks": [{"NpcCodename": "NPC_WC_SMITH", "PromptSymbol": "SN_TALK_QNO_WC_SMITH_3_04"}],
 	},
 }
@@ -346,6 +345,10 @@ def project(code, quest, text, sql):
 			spec["Objective"] = OBJECTIVE_TALK
 		else:
 			spec.update({"Objective": OBJECTIVE_DELIVERY, "DeliveryItems": delivery_items(text, missions[0])})
+			# 91CA00 answers missing items with the mission's own line
+			# (+0xC4); the base word 0x133 wins where the class has one.
+			if "NotAchievedSymbol" not in spec and isinstance(fields.get("0xc4"), str):
+				spec["NotAchievedSymbol"] = fields["0xc4"]
 			# 91CA00 removes the delivered items only while +0x111 is set,
 			# as the mission constructor (872040) leaves it.
 			if fields.get("0x111", 1) == 0:
