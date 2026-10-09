@@ -31,6 +31,7 @@ import { companionItemTargetCommand, isCompanionLeaseItem } from "@/engine/found
 import {
 	createStoragePanel,
 	firstFreeSlot,
+	storageQuickMove,
 	storagePages,
 	storageSlotControlId
 } from "@/engine/foundation/ui/storage-panel";
@@ -5472,6 +5473,19 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				// Ctrl+click moves an item across the open warehouse as right-click
+				// does: port-only, not native (owner decision 2026-10-10).
+				if (
+					event.ctrl && panel === "Storage" && view?.gameplay &&
+					(event.id.startsWith( "slot:" ) || event.id.startsWith( "storage-slot:" ))
+				) {
+					const move = storageQuickMove( event.id, view.gameplay );
+					if ( move ) sendGameplay( { kind: "storage-move", move } );
+					carriedItem = null;
+					inventorySlot = -1;
+					dirty = true;
+					return;
+				}
 				if (
 					event.shift && event.id.startsWith( "slot:" ) &&
 					[ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel )
@@ -5544,34 +5558,12 @@ export function createUi(
 					activate( event.id );
 					return;
 				}
-				const room = view.gameplay.storage;
-				if ( panel === "Storage" && room?.phase === "open" && !view.gameplay.inventoryPending ) {
-					if ( event.id.startsWith( "slot:" ) ) {
-						const source = Number( event.id.slice( 5 ) ),
-							destination = firstFreeSlot( room.items, 0, room.capacity );
-						if ( destination !== null ) {
-							sendGameplay( {
-								kind: "storage-move",
-								move: { type: STORAGE_MOVE_DEPOSIT, source, destination, quantity: 0, gold: 0 }
-							} );
-						}
-						return;
-					}
-					if ( event.id.startsWith( "storage-slot:" ) ) {
-						const source = Number( event.id.slice( 13 ) ),
-							destination = firstFreeSlot(
-								view.gameplay.inventory,
-								view.gameplay.equipmentSlotCount ?? 13,
-								view.gameplay.inventorySlotCount ?? 13
-							);
-						if ( destination !== null ) {
-							sendGameplay( {
-								kind: "storage-move",
-								move: { type: STORAGE_MOVE_WITHDRAW, source, destination, quantity: 0, gold: 0 }
-							} );
-						}
-						return;
-					}
+				if (
+					panel === "Storage" && (event.id.startsWith( "slot:" ) || event.id.startsWith( "storage-slot:" ))
+				) {
+					const move = storageQuickMove( event.id, view.gameplay );
+					if ( move ) sendGameplay( { kind: "storage-move", move } );
+					return;
 				}
 				if ( event.id.startsWith( "slot:" ) ) {
 					const item = view.gameplay.inventory.find( row => row.slot === Number( event.id.slice( 5 ) ) );
