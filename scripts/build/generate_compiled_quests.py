@@ -158,7 +158,9 @@ CLASS_BEHAVIOUR = {
 	# fake evidence) or _04 (refuse the thief's deal). Each accepts with its
 	# own line and closes the other follow-up for good: _02 answers _03 and
 	# ends QNO_CA_THIEF_6_2 ("Reporting Truth"), _04 answers _05 and ends
-	# QNO_CA_THIEF_6_1 ("Reporting False Evidence").
+	# QNO_CA_THIEF_6_1 ("Reporting False Evidence"). Natively any answer but
+	# the first takes the _04 branch and there is no refusal row; the port's
+	# branch offer keeps its DENY row, a deviation.
 	("QNO_CA_THIEF_5", "0x58"): {
 		"OfferBranches": [
 			{"ReplySymbol": "SN_TALK_QNO_CA_THIEF_5_02", "AcceptResponseSymbol": "SN_TALK_QNO_CA_THIEF_5_03",

@@ -88,8 +88,8 @@ Ends the quest's AcceptEndsQuests, and the chosen reply's EndsQuests,
 when its Accept is pressed on a live offer. 8A77A0 ends them whether or
 not the acceptance (+0x188) succeeds (8A7857 skips only the start and its
 line), so this runs before StartQuest and survives its refusal. 8C6180
-ends its branch's quest after the acceptance; with the offer live and the
-reply valid that acceptance cannot fail differently, so one rule serves.
+likewise ends its reply's quest outside the +0x188 success branch: it ends
+whether or not the acceptance succeeds.
 ================
 */
 func (rt *Runtime) endOnAccept(character *enterworld.Character, def *Definition, branch int, branched bool) {
