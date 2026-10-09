@@ -16,6 +16,7 @@ import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world
 import type { Pose } from "@/engine/contracts/gameplay";
 import type { PresentationRandom } from "@/engine/contracts/presentation-random";
 import type { DeathModel, Resource, PresentationIdleState, PresentationOutput } from "./internal/presentation-contract";
+import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 /*
 ================
@@ -94,8 +95,6 @@ function enterDeath(
 	entry.deathModel = !down && input.deathModel && (input.uncensored || !input.deathLoop);
 	entry.deathAction = !down && (input.previousMask & (MASK_CAST | MASK_BASE)) !== 0;
 }
-
-const STALL_TITLE_MODE = 4;
 
 /*
 ================

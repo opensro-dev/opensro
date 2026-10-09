@@ -37,12 +37,12 @@ import type {
 	SecondaryModel,
 	ItemPresentation
 } from "./internal/presentation-contract";
+import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
 // table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
 const RIDER_ON_SADDLE = 0;
 const RIDE_COPIES_RIDER = 2;
-const STALL_OPEN = 4;
 const CHINESE_BOOTH = "res/item/china/item/cj_store.bsr";
 const EUROPEAN_BOOTH = "res/item/europe/item/euro_streetstall01.bsr";
 
@@ -201,7 +201,8 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				if ( event.kind === "reset" ) booths.clear();
 				else if ( event.kind === "despawn" ) booths.delete( event.gid );
 				else if (
-					event.kind === "spawn" || event.kind === "state" && event.entity.appearanceState?.[6] !== STALL_OPEN
+					event.kind === "spawn" ||
+					event.kind === "state" && event.entity.appearanceState?.[6] !== STALL_TITLE_MODE
 				) {
 					booths.delete( event.entity.gid );
 				}
@@ -222,7 +223,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 			for ( const entity of entities ) {
 				if (
 					(entity.kind !== "player" && entity.kind !== "local-player") ||
-					entity.appearanceState?.[6] !== STALL_OPEN
+					entity.appearanceState?.[6] !== STALL_TITLE_MODE
 				) continue;
 				alive.add( entity.gid );
 				const owner = next.get( entity.gid );

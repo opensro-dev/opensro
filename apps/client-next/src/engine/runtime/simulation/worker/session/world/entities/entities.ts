@@ -36,11 +36,12 @@ import { journalCost } from "@/engine/foundation/gameplay/journal-cost";
 import { mergeGameplaySnapshots } from "@/engine/foundation/gameplay/gameplay-snapshot";
 import type { WireFrame } from "@/engine/contracts/network";
 import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
+import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 // The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
 // fortress structures); ground items and skill objects are not characters.
 const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
-// Peer appearance slot 6 selects the overhead title; mode 4 owns a stall.
-const STALL_TITLE_SLOT = 6, STALL_TITLE_MODE = 4;
+// Peer appearance slot 6 selects the overhead title; STALL_TITLE_MODE owns a stall.
+const STALL_TITLE_SLOT = 6;
 // Wire authorities: server enterworld/{register,bootstrap,wire}.go,
 // world/simulation/{npc,monster}.go and item/wire/objectmove.go.
 /*

@@ -28,9 +28,9 @@ import { castFacing } from "@/engine/foundation/gameplay/cast-facing";
 import type { CharacterLayer } from "@/engine/contracts/character";
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
+import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 
 const PROTECTED_ANIMATION_DISTANCE = 300;
-const STALL_TITLE_MODE = 4;
 const STALL_ACTION_MASK = 0x8000;
 const STALL_MOTION = 80;
 
