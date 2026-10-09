@@ -72,18 +72,19 @@ test("HTTP asset delivery revalidates, compresses JSON and bounds partial respon
 			req.on( "error", reject );
 			req.end();
 		} );
-	const { zstdCompressSync } = await import( "node:zlib" ), { createHash } = await import( "node:crypto" );
+	// Packs are served as they lie on disk, by Range; a pack copy beside an
+	// absent pack is not a representation of it.
 	const pack = Buffer.concat( [ Buffer.from( "SROPACK2" ), Buffer.alloc( 10000, 7 ) ] ),
-		name = "/assets/compact-" + createHash( "sha256" ).update( pack ).digest( "hex" ).slice( 0, 12 ) + ".bin";
-	fs.writeFileSync( path.join( root, name.slice( 1 ) + ".zst" ), zstdCompressSync( pack ) );
-	const compact = await get( name, { range: "bytes=100-199" } );
-	assert.equal( compact.status, 206 );
-	assert.deepEqual( compact.body, pack.subarray( 100, 200 ) );
-	assert.equal( compact.headers["content-range"], "bytes 100-199/" + pack.length );
-	const compactHead = await get( name, {}, "HEAD" );
-	assert.equal( compactHead.headers["content-length"], String( pack.length ) );
-	fs.writeFileSync( path.join( root, "assets/bad-000000000000.bin.zst" ), zstdCompressSync( pack ) );
-	assert.equal( (await get( "/assets/bad-000000000000.bin" )).status, 500 );
+		name = "/assets/game-001-0123456789ab.bin";
+	fs.writeFileSync( path.join( root, name.slice( 1 ) ), pack );
+	const ranged = await get( name, { range: "bytes=100-199" } );
+	assert.equal( ranged.status, 206 );
+	assert.deepEqual( ranged.body, pack.subarray( 100, 200 ) );
+	assert.equal( ranged.headers["content-range"], "bytes 100-199/" + pack.length );
+	const packHead = await get( name, {}, "HEAD" );
+	assert.equal( packHead.headers["content-length"], String( pack.length ) );
+	fs.writeFileSync( path.join( root, "assets/absent-000000000000.bin.zst" ), pack );
+	assert.equal( (await get( "/assets/absent-000000000000.bin" )).status, 404 );
 	const first = await get( "/assets/manifest.json", { "accept-encoding": "gzip" } );
 	assert.equal( first.headers["content-encoding"], "gzip" );
 	assert.equal( gunzipSync( first.body ).toString(), body );

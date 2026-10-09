@@ -92,8 +92,8 @@ export function createConvertImagesRunner( spawnConversion ) {
 	let fullConversionComplete = false;
 	return function runConvertImages( args ) {
 		const run = queueTail.then( async () => {
-			// The full resource build runs the unfiltered pass first so compacted
-			// workspaces recreate their staging cache; later model builders need
+			// The full resource build runs the unfiltered pass first so a missing
+			// staging cache is recreated once; later model builders need
 			// not rescan the same extracted corpus.
 			if ( fullConversionComplete && args.length > 0 ) return { status: 0 };
 			const result = await spawnConversion( args );

@@ -176,8 +176,7 @@ export const missionRegionLoadingRuntimeImageReferences = [
 
 // CPSVersionCheck::OnCreate selects one of start_loading_01..10 entirely in
 // native code before the browser's packed-resource warmup begins. Publish the
-// complete random family; compact releases retain these few boot-critical
-// images loose while also indexing them with the native UI family.
+// complete random family, indexed with the native UI family.
 /*
 ================
 versionCheckLoadingRuntimeImageReferences

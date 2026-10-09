@@ -308,10 +308,9 @@ parallel.
 The build writes packs whose members are gzip-stored when that saves at
 least a tenth (`shared/memberCompression.mjs`), and a `.gz` sidecar for each
 published JSON manifest (`PUBLISHED_SIDECAR_SUFFIXES` in
-`shared/compressionUtils.mjs`). It writes no Brotli or zstd sidecars: no
-host serves them. `pnpm assets compact` alone
-makes the zstd copies of the packs it keeps (`ensurePackZstdCopies`),
-because only the compact release profile drops the identity copies.
+`shared/compressionUtils.mjs`). It writes no Brotli or zstd copies of
+anything: packs are served as they are, and the full build archives any
+older `.br` or `.zst` file it finds.
 
 ### Reuse is keyed by code
 
@@ -470,15 +469,10 @@ at the commit being released:
 1. Fetch the live manifest:
    `curl -o live-manifest.json https://<origin>/assets/packs/manifest.json`.
 2. Build against it:
-   `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`. On a tree
-   that was compacted, build `full` and run
-   `pnpm task build server-game-data`: compact removed loose files that a
-   plain build does not restore.
+   `SRO_ASSET_PACK_BASELINE=live-manifest.json pnpm assets build`.
 3. Run `pnpm assets ledger`. It must report no unclaimed asset and no
    missing owner; the packager refuses otherwise. If the build summary says
    it archived files, check they are leftovers (see the audit section).
-   `pnpm assets compact` runs only after step 5 (staging), never before
-   packaging: it drops the loose files the packager's client check reads.
 4. Package: `node apps/client-next/tools/beta/build.mjs` (from
    `apps/client-next`). It writes
    `temp/artifacts/beta/<stamp>/package/` and verifies every pack and
@@ -529,7 +523,7 @@ data release.
 | --- | --- |
 | Members stored gzip-compressed inside packs, retiring the gzip transports (asset schema 4) | done: packs 2.506 → 1.664 GiB served (full build, 2026-10-09) |
 | Original DXT blocks (`.texture`) instead of PNG for minimap, outdoor object textures and tile2d | minimap about 269 → 70 MiB; outdoor textures about 213 → 85 MiB; 4-8× less GPU memory |
-| Size gate measures the bytes actually served | done: `pnpm task assets:check:served` (`check_served_size.mjs`) sums the served packs, prints the full download, the startup share and each group, and fails above 80% of the original PK2s. The old compact gate still expects pre-schema-4 zstd sidecars. |
+| Size gate measures the bytes actually served | done: `pnpm assets check served` (`check_served_size.mjs`) sums the served packs, prints the full download, the startup share and each group, and fails above 80% of the original PK2s. The compact profile and its zstd pack copies are retired. |
 
 Target: a full download of about 1.1 GiB instead of 2.04 GiB, with no
 visual change.

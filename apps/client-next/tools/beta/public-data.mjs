@@ -100,7 +100,6 @@ export function projectPack( pack, bytes, members, overrides ) {
 	pack.sha256 = digest;
 	pack.bytes = result.length;
 	pack.assetCount = entries.length;
-	for ( const key of [ "zstdPath", "zstdBytes", "zstdLevel", "zstdWindowLog" ] ) delete pack[key];
 	for ( const a of members ) a.packPath = pack.path;
 	return result;
 }

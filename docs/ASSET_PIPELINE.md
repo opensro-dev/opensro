@@ -71,9 +71,8 @@ client together as a data release.
 | `pnpm assets refresh delivery` | Regenerate the web manifest and stale precompressed sidecars |
 | `pnpm assets repack` | Rebuild every pack from the published loose tree |
 | `pnpm assets gc` | Report asset-pack outputs the published index no longer uses; `-- --apply` soft-archives them to `temp/archives/` (publishers also do this after every index publish) |
-| `pnpm assets compact` | Release profile: keep compressed packs, drop loose duplicates |
 | `pnpm assets check integrity` | Verify pack manifests and artifacts |
-| `pnpm assets check compact` | Verify the compact release set is lossless |
+| `pnpm assets check served` | Measure the download as served (every pack) against 80% of the original PK2s |
 | `pnpm assets ledger` | Read-only: packed assets no build owner claims (the publication ledger); exits 1 unless empty |
 | `pnpm assets lock` | Show which process holds the generated-asset lock |
 
@@ -100,8 +99,8 @@ each pack's length and hash before exposing any slice. Code keeps using the
 logical `/assets/...` paths; only the loaders know about packs.
 
 Tests that read published assets go through `scripts/lib/publishedAsset.mjs`,
-which resolves a path through the installed packs and verifies it, so compacted
-trees behave like the real product.
+which resolves a path through the installed packs and verifies it, so tests
+read what the product reads.
 
 ## Layout
 
@@ -112,4 +111,4 @@ trees behave like the real product.
 | `scripts/build/effects/`, `data/`, `server/` | Effect programs, gameplay data tables, server projection |
 | `scripts/build/shared/` | Cross-domain I/O, hashing, atomic publication, compression |
 | `scripts/build/reference/` | Native reference data the builders consume |
-| `scripts/checks/` | Delivery, integrity, compaction and precompressed-sidecar checks |
+| `scripts/checks/` | Delivery, integrity, served-size and precompressed-sidecar checks |

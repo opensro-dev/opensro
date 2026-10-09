@@ -27,8 +27,7 @@ import { publicRoot } from "../world/paths.mjs";
 export const PACKS_ROOT = path.join( publicRoot, "assets", "packs" );
 export const PACK_INDEX_PATH = path.join( PACKS_ROOT, "manifest.json" );
 
-// Iteration sidecars for the regenerated manifests are lossless but fast;
-// the compact release step recompresses the retained manifests at maximum.
+// Iteration sidecars for the regenerated manifests are lossless but fast.
 const FAST_MANIFEST_SIDECARS = { gzipLevel: 3 };
 
 /**
@@ -101,15 +100,12 @@ Never deletes: a mistaken retirement is restored from temp/archives/.
 */
 async function retireSupersededPacks( previousGroup, refreshedGroup, reason ) {
 	const current = new Set(
-		refreshedGroup.packs.flatMap( pack => [ pack.path, pack.zstdPath ].filter( Boolean ) ).map(
-			normalizePublicPath
-		)
+		refreshedGroup.packs.map( pack => normalizePublicPath( pack.path ) )
 	);
 	for ( const pack of previousGroup?.packs ?? [] ) {
-		for ( const publicPath of [ pack.path, pack.zstdPath ].filter( Boolean ).map( normalizePublicPath ) ) {
-			if ( current.has( publicPath ) ) continue;
-			await archiveGeneratedArtifact( resolvePackFile( publicPath ), { scopeRoot: publicRoot, reason } );
-		}
+		const publicPath = normalizePublicPath( pack.path );
+		if ( current.has( publicPath ) ) continue;
+		await archiveGeneratedArtifact( resolvePackFile( publicPath ), { scopeRoot: publicRoot, reason } );
 	}
 }
 

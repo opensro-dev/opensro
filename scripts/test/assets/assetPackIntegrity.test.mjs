@@ -17,7 +17,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import test from "node:test";
 
 import { reconcileAssetPackGroupFromLooseAuthority } from "../../build/assetPackGroupAuthority.mjs";
-import { buildAssetPacks, compressAssetPackZstd } from "../../build/assetPacks.mjs";
+import { buildAssetPacks } from "../../build/assetPacks.mjs";
 import { patchAssetPackGroupFromLooseFiles } from "../../build/sparseAssetPackGroupRefresh.mjs";
 import { decodeStoredMember, parsePackHeader, storedMemberBytes } from "../../build/shared/packFormat.mjs";
 
@@ -33,7 +33,7 @@ test("integrity check hash cache confirms, never masks, and stays escapable", as
 	const tempRoot = await mkdtemp( path.join( os.tmpdir(), "sro-pack-integrity-" ) );
 	t.after( () => rm( tempRoot, { recursive: true, force: true } ) );
 
-	const { manifestPath, packPath, zstdPath } = await buildFixturePacks( tempRoot );
+	const { manifestPath, packPath } = await buildFixturePacks( tempRoot );
 	const cachePath = path.join( tempRoot, "integrity-hash-cache.json" );
 
 	// Cold run: everything is hashed from bytes; the run warms the check-owned cache.
@@ -87,107 +87,14 @@ test("integrity check hash cache confirms, never masks, and stays escapable", as
 	assert.equal( restored.code, 0, restored.output );
 	assert.match( restored.output, /stat-matched from cache/ );
 
-	// The zstd sidecar's decompressed digest rides the same cache; prove it appears
-	// in the warm output when the runtime can decompress zstd at all.
-	if ( zstdPath ) {
-		assert.match( restored.output, /Zstd sidecars: 0 hashed, 1 stat-matched from cache/ );
-
-		// Compact releases intentionally remove identity .bin files. The same gate
-		// must reconstruct the identity bytes from .bin.zst and still validate the
-		// header, whole-pack digest, and every asset slice contract.
-		await rm( packPath, { force: true } );
-		const compact = await runIntegrityCheck( manifestPath, cachePath );
-		assert.equal( compact.code, 0, compact.output );
-		assert.match( compact.output, /1 sidecar-only packs/ );
-	}
+	// A missing pack fails the gate: no other representation can stand in.
+	await rm( packPath, { force: true } );
+	const missing = await runIntegrityCheck( manifestPath, cachePath );
+	assert.notEqual( missing.code, 0, missing.output );
+	assert.match( missing.output, /is missing/ );
 });
 
-test("pack builder reuses unchanged zstd-only compact outputs", async ( t ) => {
-	const tempRoot = await mkdtemp( path.join( os.tmpdir(), "sro-pack-zstd-cache-" ) );
-	t.after( () => rm( tempRoot, { recursive: true, force: true } ) );
-
-	const publicRoot = path.join( tempRoot, "public" );
-	const inputPath = path.join( publicRoot, "assets", "world", "outdoor", "region.json.gz" );
-	const outputRoot = path.join( publicRoot, "assets", "packs", "outdoor" );
-	await mkdir( path.dirname( inputPath ), { recursive: true } );
-	await writeFile( inputPath, "stable-outdoor-fixture" );
-	const options = {
-		publicRoot,
-		outputRoot,
-		hashCachePath: path.join( tempRoot, "build-hash-cache.json" ),
-		targetBytes: 1024,
-		groups: [
-			{
-				name: "outdoor-world",
-				load: "manual",
-				files: [ "/assets/world/outdoor/region.json.gz" ]
-			}
-		]
-	};
-
-	const cold = await buildAssetPacks( options );
-	assert.equal( cold.builtPackCount, 1 );
-	const pack = cold.groups[0].packs[0];
-	assert.equal( pack.zstdPath, undefined, "the build writes identity packs only" );
-	const identityPath = path.join( publicRoot, pack.path.replace( /^\/+/, "" ) );
-	// Compact the tree as `pnpm assets compact` does: the zstd copy recorded in
-	// the index, the identity pack removed.
-	const zstdPath = `${identityPath}.zst`;
-	const compressed = await compressAssetPackZstd( await readFile( identityPath ) );
-	await writeFile( zstdPath, compressed );
-	const indexPath = cold.outputPath;
-	const index = JSON.parse( await readFile( indexPath, "utf8" ) );
-	Object.assign( index.groups[0].packs[0], { zstdPath: `${pack.path}.zst`, zstdBytes: compressed.length } );
-	await writeFile( indexPath, JSON.stringify( index ) );
-	await rm( identityPath, { force: true } );
-
-	const warm = await buildAssetPacks( options );
-	assert.equal( warm.builtPackCount, 0, "compact cache must not reconstruct and recompress identity bytes" );
-	assert.equal( warm.reusedPackCount, 1 );
-	await assert.rejects(
-		stat( identityPath ),
-		( error ) => error instanceof Error && "code" in error && error.code === "ENOENT"
-	);
-	assert.equal( (await stat( zstdPath )).size, compressed.length );
-});
-
-test("a reused pack beside its identity bytes drops its compact copy", async ( t ) => {
-	const tempRoot = await mkdtemp( path.join( os.tmpdir(), "sro-pack-zstd-retire-" ) );
-	t.after( () => rm( tempRoot, { recursive: true, force: true } ) );
-
-	const publicRoot = path.join( tempRoot, "public" );
-	const inputPath = path.join( publicRoot, "assets", "world", "outdoor", "region.json.gz" );
-	await mkdir( path.dirname( inputPath ), { recursive: true } );
-	await writeFile( inputPath, "stable-outdoor-fixture" );
-	const options = {
-		publicRoot,
-		outputRoot: path.join( publicRoot, "assets", "packs", "outdoor" ),
-		hashCachePath: path.join( tempRoot, "build-hash-cache.json" ),
-		targetBytes: 1024,
-		groups: [ { name: "outdoor-world", load: "manual", files: [ "/assets/world/outdoor/region.json.gz" ] } ]
-	};
-
-	const cold = await buildAssetPacks( options );
-	const pack = cold.groups[0].packs[0];
-	const identityPath = path.join( publicRoot, pack.path.replace( /^\/+/, "" ) );
-	// A copy an older build (or compact) recorded, while the identity pack stays.
-	const compressed = await compressAssetPackZstd( await readFile( identityPath ) );
-	await writeFile( `${identityPath}.zst`, compressed );
-	const index = JSON.parse( await readFile( cold.outputPath, "utf8" ) );
-	Object.assign( index.groups[0].packs[0], { zstdPath: `${pack.path}.zst`, zstdBytes: compressed.length } );
-	await writeFile( cold.outputPath, JSON.stringify( index ) );
-
-	const warm = await buildAssetPacks( options );
-	assert.equal( warm.reusedPackCount, 1 );
-	assert.equal( warm.groups[0].packs[0].zstdPath, undefined );
-	assert.equal( (await stat( identityPath )).size, pack.bytes );
-	await assert.rejects(
-		stat( `${identityPath}.zst` ),
-		( error ) => error instanceof Error && "code" in error && error.code === "ENOENT"
-	);
-});
-
-test("sparse group refresh patches one compacted pack without dropping absent assets", async ( t ) => {
+test("sparse group refresh patches one pack without dropping absent loose assets", async ( t ) => {
 	const tempRoot = await mkdtemp( path.join( os.tmpdir(), "sro-pack-sparse-refresh-" ) );
 	t.after( () => rm( tempRoot, { recursive: true, force: true } ) );
 
@@ -215,16 +122,6 @@ test("sparse group refresh patches one compacted pack without dropping absent as
 	for ( const publicPath of publicPaths ) {
 		await rm( path.join( publicRoot, publicPath.replace( /^\/+/, "" ) ), { force: true } );
 	}
-	// Compact the tree as `pnpm assets compact` does: zstd copies recorded in the
-	// index, the identity packs removed.
-	for ( const pack of previous.groups[0].packs ) {
-		const identityPath = path.join( publicRoot, pack.path.replace( /^\/+/, "" ) );
-		const compressed = await compressAssetPackZstd( await readFile( identityPath ) );
-		await writeFile( `${identityPath}.zst`, compressed );
-		Object.assign( pack, { zstdPath: `${pack.path}.zst`, zstdBytes: compressed.length } );
-		await rm( identityPath, { force: true } );
-	}
-	await writeFile( cold.outputPath, JSON.stringify( previous ) );
 	const changedPath = publicPaths[1];
 	const changedAbsolutePath = path.join( publicRoot, changedPath.replace( /^\/+/, "" ) );
 	await mkdir( path.dirname( changedAbsolutePath ), { recursive: true } );
@@ -339,15 +236,11 @@ async function buildFixturePacks( tempRoot ) {
 	const index = JSON.parse( await readFile( result.outputPath, "utf8" ) );
 	const packPublicPath = index.groups[0].packs[0].path;
 	const packPath = path.join( publicRoot, packPublicPath.replace( /^\/+/, "" ) );
-	const zstdPath = index.groups[0].packs[0].zstdPath ? `${packPath}.zst` : null;
 
 	// Pin mtimes to a whole second so the corruption drill can restore them exactly.
 	await utimes( packPath, PINNED_MTIME, PINNED_MTIME );
-	if ( zstdPath ) {
-		await utimes( zstdPath, PINNED_MTIME, PINNED_MTIME );
-	}
 
-	return { manifestPath: result.outputPath, packPath, zstdPath };
+	return { manifestPath: result.outputPath, packPath };
 }
 
 async function runIntegrityCheck( manifestPath, cachePath, extraEnv = {} ) {

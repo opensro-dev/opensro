@@ -6,8 +6,7 @@ servedSize.mjs - the bytes a player downloads, from the pack manifest
 Packs are what the host serves for game data: a full download is every
 pack, and the startup groups are what loads before the login screen. The
 member compression lives inside the packs (SROPACK2), so a pack's manifest
-bytes are its wire bytes. The ceiling is 80% of the original PK2 payload,
-the budget the compact gate held the offline tree to.
+bytes are its wire bytes. The ceiling is 80% of the original PK2 payload.
 
 ===========================================================================
 */

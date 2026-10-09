@@ -6,8 +6,8 @@ asset-delivery.test.mjs - a pack build delivers exactly what it was given
 End to end through the real builder and the real client reader: new files
 are stored gzip-compressed inside SROPACK2 packs when that saves a tenth,
 world animation catalogs carry their source index, two builds of the same
-tree are byte-identical, and a compact deployment with no loose files and
-no identity pack still serves every member.
+tree are byte-identical, and a deployment with no loose files serves every
+member from its packs.
 
 ===========================================================================
 */
@@ -19,7 +19,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { buildAssetPacks, compressAssetPackZstd } from "../../../../scripts/build/assetPacks.mjs";
+import { buildAssetPacks } from "../../../../scripts/build/assetPacks.mjs";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 
 const { createPacks } = await import( sourceFileUrl( "src/engine/runtime/assets/worker/packs/packs.ts" ).href );
@@ -112,15 +112,8 @@ test("the client reader returns every member exactly as it was built", async t =
 	assert.ok( packs.stats().storedBytes > 0 && packs.stats().storedBytes < packs.stats().decodedBytes );
 });
 
-test("a compact deployment with no loose files and no identity pack still serves every member", async t => {
-	const f = await build( t, "compact" );
-	const pack = f.index.groups[0].packs[0], identity = path.join( f.root, pack.path );
-	const compact = await compressAssetPackZstd( await readFile( identity ) );
-	await writeFile( identity + ".zst", compact );
-	pack.zstdPath = pack.path + ".zst";
-	pack.zstdBytes = compact.length;
-	await writeFile( path.join( f.root, "assets/packs/manifest.json" ), JSON.stringify( f.index ) );
-	await rm( identity );
+test("a deployment with no loose files serves every member from its packs", async t => {
+	const f = await build( t, "packed" );
 	for ( const file of Object.keys( f.files ) ) await rm( path.join( f.root, file ) );
 	for ( const [file, bytes] of Object.entries( f.files ) ) {
 		assert.equal( sha( readPublishedAssetBytesSync( file, f.root ) ), sha( bytes ), file );

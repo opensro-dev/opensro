@@ -34,7 +34,6 @@ import {
 } from "./shared/assetPaths.mjs";
 import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { createLimiter, mapWithConcurrency, settleAll } from "./shared/asyncUtils.mjs";
-import { compressZstd, DEFAULT_ZSTD_LEVEL, DEFAULT_ZSTD_WINDOW_LOG } from "./shared/compressionUtils.mjs";
 import { openFileHashCache } from "./shared/fileHashCache.mjs";
 import { openMemberCompression } from "./shared/memberCompression.mjs";
 import { ASSET_PACK_HEADER_FORMAT, ASSET_PACK_MAGIC, ASSET_PACK_VERSION } from "./shared/packFormat.mjs";
@@ -54,17 +53,13 @@ const packsRoot = path.join( publicRoot, "assets", "packs" );
 export const DEFAULT_ASSET_PACK_TARGET_BYTES = 50 * 1024 * 1024;
 // The pack layout (packFormat.mjs); re-exported for existing importers.
 export { ASSET_PACK_MAGIC, ASSET_PACK_VERSION };
-export const ASSET_PACK_ZSTD_LEVEL = DEFAULT_ZSTD_LEVEL;
-export const ASSET_PACK_ZSTD_WINDOW_LOG = DEFAULT_ZSTD_WINDOW_LOG;
 
 const FILE_HASH_CONCURRENCY = 8;
 /** stat() sweeps are cheap syscalls; high fan-out matters on Windows where each is slow. */
 const FILE_STAT_CONCURRENCY = 64;
 
 /**
- * zstd fields are optional: reused packs come from a previous manifest, and older
- * manifests may predate the sidecar fields (indexReusablePacks filters on them anyway).
- * @typedef {{ path: string, bytes: number, sha256: string, assetCount: number, zstdPath?: string, zstdBytes?: number, zstdLevel?: number, zstdWindowLog?: number }} AssetPackEntry
+ * @typedef {{ path: string, bytes: number, sha256: string, assetCount: number }} AssetPackEntry
  * @typedef {{ length: number, encoding: string }} AssetPackStoredForm
  * @typedef {{ path: string, packPath: string, offset: number, length: number, mime: string, sha256: string, group: string, stored?: AssetPackStoredForm }} AssetPackAssetRow
  * @typedef {{ name: string, load: string, targetBytes: number, assetCount: number, totalBytes: number, packs: AssetPackEntry[] }} AssetPackGroupIndex
@@ -122,8 +117,8 @@ export async function buildAssetPacks( options = {} ) {
 	await mkdir( outputRoot, { recursive: true } );
 
 	// Incremental reuse: a pack is fully determined by its ordered member contents plus the
-	// format/zstd constants, so packs from the previous manifest whose members are unchanged
-	// are reused as-is - no re-read, no rewrite, no zstd-19 re-compression. (The old behavior
+	// format, so packs from the previous manifest whose members are unchanged
+	// are reused as-is - no re-read, no rewrite, no re-compression. (The old behavior
 	// wiped the directory and re-compressed every pack on every run, which dominated the
 	// build; it also left the directory manifest-less if the run was interrupted.)
 	const reuseEnabled = process.env.SRO_ASSET_PACKS_NO_CACHE !== "1";
@@ -226,14 +221,6 @@ export async function buildAssetPacks( options = {} ) {
 			( sum, asset ) => sum + (asset.stored ? asset.stored.length : asset.length),
 			0
 		),
-		zstdSidecarCount: index.groups.reduce(
-			( sum, group ) => sum + group.packs.filter( ( pack ) => typeof pack.zstdBytes === "number" ).length,
-			0
-		),
-		zstdBytes: index.groups.reduce(
-			( sum, group ) => sum + group.packs.reduce( ( packSum, pack ) => packSum + (pack.zstdBytes ?? 0), 0 ),
-			0
-		),
 		builtPackCount: counters.built,
 		reusedPackCount: counters.reused,
 		keptPackCount: counters.kept,
@@ -325,7 +312,7 @@ async function buildAssetPackGroup(
 	/** @type {AssetPackAssetRow[]} */
 	const assets = [];
 
-	// Each pack in flight holds its buffer and zstd output (about 2 x 50 MiB);
+	// Each pack in flight holds its buffer and its members (about 2 x 50 MiB);
 	// packSlots bounds them across every group.
 	const results = await settleAll( chunks.map( plan =>
 		packSlots( () =>
@@ -426,39 +413,15 @@ async function indexReusablePacks( indexPath ) {
 
 /*
 ================
-packOutputsIntact
+packOutputIntact
 
-Which representation of an unchanged pack is on disk: "identity" when the
-pack is at its recorded size, "zstd" in a compacted tree, which keeps only
-the copy `pnpm assets compact` made, or null when neither is intact.
+An unchanged pack is reusable only while its file is on disk at its
+recorded size.
 ================
 */
-async function packOutputsIntact( publicRoot, pack ) {
-	try {
-		const binStat = await stat( containedPublicFile( publicRoot, pack.path ) ).catch( () => undefined );
-		if ( binStat ) return binStat.isFile() && binStat.size === pack.bytes ? "identity" : null;
-		if ( typeof pack.zstdPath !== "string" ) return null;
-		const zstdStat = await stat( containedPublicFile( publicRoot, pack.zstdPath ) ).catch( () => undefined );
-		return zstdStat?.isFile() && zstdStat.size === pack.zstdBytes ? "zstd" : null;
-	} catch {
-		return null;
-	}
-}
-
-/*
-================
-reusedPackEntry
-
-An unchanged pack's index entry. Beside its identity pack the compact copy
-is dropped from the entry, so archiveStaleOutputs retires the .bin.zst: a
-copy carried forward stayed live forever in an uncompacted tree (1.46 GiB
-of them on 2026-10-08). `pnpm assets compact` makes it again when needed.
-================
-*/
-function reusedPackEntry( pack, representation ) {
-	if ( representation !== "identity" ) return { ...pack };
-	const { zstdPath, zstdBytes, zstdLevel, zstdWindowLog, ...identity } = pack;
-	return identity;
+async function packOutputIntact( publicRoot, pack ) {
+	const packStat = await stat( containedPublicFile( publicRoot, pack.path ) ).catch( () => undefined );
+	return packStat?.isFile() === true && packStat.size === pack.bytes;
 }
 
 /*
@@ -482,15 +445,14 @@ async function buildOrReusePack(
 	const reusable = reusablePacks.get( plannedKey );
 	// Folder and slot are part of the pack's URL: reuse only a pack built for both.
 	const packDir = toPublicAssetPath( outputRoot, publicRoot );
-	const representation = reusable && reusable.groupName === name &&
-			packSlotOf( reusable.pack.path ) === slot &&
-			reusable.pack.path.slice( 0, reusable.pack.path.lastIndexOf( "/" ) ) === packDir ?
-		await packOutputsIntact( publicRoot, reusable.pack ) :
-		null;
-	if ( reusable && representation ) {
+	const intact = reusable && reusable.groupName === name &&
+		packSlotOf( reusable.pack.path ) === slot &&
+		reusable.pack.path.slice( 0, reusable.pack.path.lastIndexOf( "/" ) ) === packDir &&
+		await packOutputIntact( publicRoot, reusable.pack );
+	if ( reusable && intact ) {
 		counters.reused += 1;
 		return {
-			packEntry: reusedPackEntry( reusable.pack, representation ),
+			packEntry: { ...reusable.pack },
 			assetRows: reusable.members.map( ( member ) => ({ ...member }) )
 		};
 	}
@@ -540,10 +502,6 @@ async function buildOrReusePack(
 	}
 	await mkdir( outputRoot, { recursive: true } );
 
-	// The identity pack is what every reader serves. Its zstd-19 copy exists only
-	// for the compact release footprint, so `pnpm assets compact` makes it
-	// (compressAssetPackZstd); compressing every changed pack here cost most of a
-	// clean build's pack step.
 	await writeFile( packPath, buffer );
 	counters.built += 1;
 
@@ -610,20 +568,6 @@ async function archiveStaleOutputs( publicRoot, outputRoot, index, indexPath ) {
 			reason: "superseded-asset-pack-output"
 		} );
 	}
-}
-
-/*
-================
-compressAssetPackZstd
-
-The compact release's at-rest copy of one pack (pnpm assets compact).
-================
-*/
-export function compressAssetPackZstd( bytes ) {
-	return compressZstd( bytes, {
-		level: ASSET_PACK_ZSTD_LEVEL,
-		windowLog: ASSET_PACK_ZSTD_WINDOW_LOG
-	} );
 }
 
 /*

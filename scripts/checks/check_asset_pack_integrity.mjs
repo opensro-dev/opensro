@@ -1,6 +1,6 @@
 // Asset pack integrity gate: validates the generated manifest.json against the pack
 // files on disk (schema, sizes, headers, per-asset offsets/lengths/mimes, SHA-256
-// values, zstd sidecars).
+// values).
 //
 // Byte-hashing is the expensive part (~GBs of packs), so it can be short-circuited
 // through a persistent stat-keyed hash cache (scripts/build/shared/fileHashCache.mjs),
@@ -16,7 +16,7 @@
 //   - Entries are written from bytes this check actually read and hashed, and the
 //     cache file is saved only after the whole check passed.
 //   - Structural checks (manifest schema, file sizes, pack headers, per-asset
-//     offsets/lengths/mimes/digest agreement, zstd sidecar presence and size) run
+//     offsets/lengths/mimes/digest agreement) run
 //     unconditionally on every run; only re-hashing of unchanged bytes is skipped.
 //   - Known caveat (same as the build cache): a tamper that preserves BOTH size and
 //     mtimeMs is invisible to the stat check. SRO_ASSET_INTEGRITY_NO_CACHE=1 forces
@@ -41,7 +41,6 @@ import { createHash } from "node:crypto";
 import { open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as zlib from "node:zlib";
 import { fileHashCacheDisabled, openFileHashCache } from "../build/shared/fileHashCache.mjs";
 
 const scriptDir = path.dirname( fileURLToPath( import.meta.url ) );
@@ -54,7 +53,6 @@ const manifestPath = path.resolve(
 // root is derived from it; an explicitly passed manifest (tests, temp trees) then
 // resolves its /assets/... paths inside its own tree instead of the production one.
 const publicRoot = path.resolve( path.dirname( manifestPath ), "..", ".." );
-const skipZstd = process.argv.includes( "--skip-zstd" );
 
 const cacheDisabledBy = process.env.SRO_ASSET_INTEGRITY_NO_CACHE === "1" ?
 	"SRO_ASSET_INTEGRITY_NO_CACHE=1" :
@@ -103,11 +101,6 @@ for ( const group of manifest.groups ) {
 			assetCount: integer( pack.assetCount, `pack ${packPath} assetCount` ),
 			sha256: sha256Digest( pack.sha256, `pack ${packPath} sha256` )
 		};
-		if ( pack.zstdPath !== undefined ) {
-			normalizedPack.zstdPath = normalizePublicPath( pack.zstdPath, `pack ${packPath} zstdPath` );
-			normalizedPack.zstdBytes = integer( pack.zstdBytes, `pack ${packPath} zstdBytes` );
-			assertEqual( normalizedPack.zstdPath, `${packPath}.zst`, `pack ${packPath} zstdPath` );
-		}
 		packByPath.set( packPath, normalizedPack );
 		packGroupByPath.set( packPath, group.name );
 		assetsByPackPath.set( packPath, [] );
@@ -160,12 +153,8 @@ for ( const [groupName, stats] of groupStats ) {
 let checkedPacks = 0;
 let checkedAssets = 0;
 let checkedBytes = 0;
-let checkedZstd = 0;
 let hashedPacks = 0;
 let statMatchedPacks = 0;
-let hashedZstd = 0;
-let statMatchedZstd = 0;
-let sidecarOnlyPacks = 0;
 
 for ( const [packPath, pack] of packByPath ) {
 	const absolutePackPath = resolvePublicPath( packPath );
@@ -173,39 +162,17 @@ for ( const [packPath, pack] of packByPath ) {
 		if ( error?.code === "ENOENT" ) return undefined;
 		throw error;
 	} );
-	if ( packStats ) {
-		assertEqual( packStats.size, pack.bytes, `pack ${packPath} file size` );
+	if ( !packStats ) {
+		fail( `pack ${packPath} is missing` );
 	}
+	assertEqual( packStats.size, pack.bytes, `pack ${packPath} file size` );
 
 	// The cached digest counts only if it matches the manifest exactly; anything else
 	// (miss, stale entry, disagreement) re-reads and re-hashes the real bytes.
-	const cachedPackSha = packStats ? hashCache?.peekFileHash( absolutePackPath, packStats ) : undefined;
+	const cachedPackSha = hashCache?.peekFileHash( absolutePackPath, packStats );
 	let packBuffer = null;
 	let headerBytes;
-	let sidecarOnlyZstdStats;
-	let sidecarOnlyZstdValidated = false;
-	if ( !packStats ) {
-		if ( skipZstd || !pack.zstdPath ) {
-			fail( `pack ${packPath} has neither an identity file nor an enabled zstd representation` );
-		}
-		if ( typeof zlib.zstdDecompressSync !== "function" ) {
-			fail( `pack ${packPath} is zstd-only but this Node runtime cannot decompress zstd` );
-		}
-
-		const zstdAbsolutePath = resolvePublicPath( pack.zstdPath );
-		sidecarOnlyZstdStats = await stat( zstdAbsolutePath );
-		assertEqual( sidecarOnlyZstdStats.size, pack.zstdBytes, `pack ${pack.zstdPath} file size` );
-		const zstdBuffer = await readFile( zstdAbsolutePath );
-		packBuffer = zlib.zstdDecompressSync( zstdBuffer );
-		assertEqual( packBuffer.byteLength, pack.bytes, `pack ${packPath} decompressed byte length` );
-		const actualSha = sha256Hex( packBuffer );
-		assertEqual( actualSha, pack.sha256, `pack ${packPath} decompressed SHA-256` );
-		hashCache?.noteFileBytes( `${zstdAbsolutePath}#decompressed`, sidecarOnlyZstdStats, packBuffer );
-		headerBytes = packBuffer;
-		sidecarOnlyZstdValidated = true;
-		sidecarOnlyPacks += 1;
-		hashedPacks += 1;
-	} else if ( cachedPackSha === pack.sha256 ) {
+	if ( cachedPackSha === pack.sha256 ) {
 		headerBytes = await readPackHeaderPrefix( absolutePackPath, packStats.size, packPath );
 		statMatchedPacks += 1;
 	} else {
@@ -255,33 +222,6 @@ for ( const [packPath, pack] of packByPath ) {
 		checkedAssets += 1;
 	}
 
-	if ( !skipZstd && pack.zstdPath ) {
-		const zstdAbsolutePath = resolvePublicPath( pack.zstdPath );
-		const zstdStats = sidecarOnlyZstdStats ?? (await stat( zstdAbsolutePath ));
-		assertEqual( zstdStats.size, pack.zstdBytes, `pack ${pack.zstdPath} file size` );
-		if ( sidecarOnlyZstdValidated ) {
-			hashedZstd += 1;
-		} else if ( typeof zlib.zstdDecompressSync === "function" ) {
-			// The manifest pins no digest for the raw sidecar bytes; what matters is that
-			// they decompress to the pack. Cache that DECOMPRESSED digest under a synthetic
-			// key (stat-keyed to the sidecar file) in the check-owned cache file.
-			const decompressedCacheKey = `${zstdAbsolutePath}#decompressed`;
-			const cachedDecompressedSha = hashCache?.peekFileHash( decompressedCacheKey, zstdStats );
-			if ( cachedDecompressedSha === pack.sha256 ) {
-				statMatchedZstd += 1;
-			} else {
-				const zstdBuffer = await readFile( zstdAbsolutePath );
-				const decompressed = zlib.zstdDecompressSync( zstdBuffer );
-				const decompressedSha = hashCache ?
-					hashCache.noteFileBytes( decompressedCacheKey, zstdStats, decompressed ) :
-					sha256Hex( decompressed );
-				assertEqual( decompressedSha, pack.sha256, `pack ${pack.zstdPath} decompressed SHA-256` );
-				hashedZstd += 1;
-			}
-		}
-		checkedZstd += 1;
-	}
-
 	checkedPacks += 1;
 	checkedBytes += pack.bytes;
 }
@@ -290,14 +230,12 @@ for ( const [packPath, pack] of packByPath ) {
 await hashCache?.save();
 
 console.log(
-	`Asset pack integrity OK: ${checkedPacks} packs, ${checkedAssets} assets, ${formatBytes( checkedBytes )}, ` +
-		`${checkedZstd} zstd sidecars, ${sidecarOnlyPacks} sidecar-only packs.`
+	`Asset pack integrity OK: ${checkedPacks} packs, ${checkedAssets} assets, ${formatBytes( checkedBytes )}.`
 );
 console.log(
 	hashCache ?
-		`Pack SHA-256: ${hashedPacks} hashed, ${statMatchedPacks} stat-matched from cache. ` +
-		`Zstd sidecars: ${hashedZstd} hashed, ${statMatchedZstd} stat-matched from cache.` :
-		`Hash cache disabled (${cacheDisabledBy}): ${hashedPacks} packs and ${hashedZstd} zstd sidecars fully re-hashed.`
+		`Pack SHA-256: ${hashedPacks} hashed, ${statMatchedPacks} stat-matched from cache.` :
+		`Hash cache disabled (${cacheDisabledBy}): ${hashedPacks} packs fully re-hashed.`
 );
 
 /*

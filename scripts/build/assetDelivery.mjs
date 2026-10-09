@@ -15,15 +15,12 @@ allowlist decides membership.
 */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { gunzipSync, zstdDecompress } from "node:zlib";
-import { promisify } from "node:util";
+import { gunzipSync } from "node:zlib";
 import { decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
 import { publishAssetPackManifest, validatePackedFontAtlases } from "./assetPackPublication.mjs";
 
 export const DELIVERY_VERSION = 2;
 const ANIMATION_CATALOG = /^\/assets\/world\/[^/]+\/animated-objects\.json(?:\.gz)?$/i;
-const MAX_PACK_BYTES = 64 << 20;
-const decodePack = promisify( zstdDecompress );
 
 /*
 ================
@@ -40,7 +37,7 @@ prepareAssetDelivery
 
 Writes each animation catalog's source index into the pack index rows and
 stamps deliveryVersion. A member is read loose when present, else from its
-pack (identity or compact copy), and verified against its row.
+pack, and verified against its row.
 ================
 */
 export async function prepareAssetDelivery( index, root ) {
@@ -68,12 +65,7 @@ export async function prepareAssetDelivery( index, root ) {
 		if ( loadedPath !== entry.packPath ) {
 			const pack = packs.get( entry.packPath );
 			if ( !pack ) throw Error( "Missing delivery pack: " + entry.packPath );
-			loadedBytes = await readFile( target( pack.path ) ).catch( async error => {
-				if ( error.code !== "ENOENT" ) throw error;
-				return decodePack( await readFile( target( pack.zstdPath ?? pack.path + ".zst" ) ), {
-					maxOutputLength: MAX_PACK_BYTES
-				} );
-			} );
+			loadedBytes = await readFile( target( pack.path ) );
 			if ( loadedBytes.length !== pack.bytes ) throw Error( "Delivery pack length mismatch: " + pack.path );
 			dataStart = readPackPrefix( loadedBytes, pack.path );
 			loadedPath = entry.packPath;

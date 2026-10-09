@@ -7,12 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 
-import {
-	ASSET_PACK_MAGIC,
-	buildAssetPacks,
-	compressAssetPackZstd,
-	listPublicAssetFiles
-} from "../../build/assetPacks.mjs";
+import { ASSET_PACK_MAGIC, buildAssetPacks, listPublicAssetFiles } from "../../build/assetPacks.mjs";
 import { minifyJsonBytes, optimizeJsonAssets } from "../../build/jsonAssetCompression.mjs";
 import { decodeStoredMember, parsePackHeader, storedMemberBytes } from "../../build/shared/packFormat.mjs";
 import { buildUiImagePreloadManifest } from "../../build/uiImagePreload.mjs";
@@ -193,16 +188,12 @@ test("buildAssetPacks writes reusable 50 MiB-style binary packs with path offset
 	const packPublicPath = index.groups[0].packs[0].path;
 	const packPath = path.join( publicRoot, packPublicPath.replace( /^\/+/, "" ) );
 	const packBuffer = await readFile( packPath );
-	const zstdPath = `${packPath}.zst`;
 
 	assert.equal( packBuffer.subarray( 0, 8 ).toString( "ascii" ), ASSET_PACK_MAGIC );
 	assert.equal( index.groups[0].load, "startup" );
 	assert.equal( index.groups[0].targetBytes, 50 * 1024 * 1024 );
 	assert.equal( index.assets.length, 3 );
 	assert.match( packPublicPath, /^\/assets\/packs\/native-ui-001-[a-f0-9]{12}\.bin$/ );
-	// The build writes the identity pack only; `pnpm assets compact` makes the zstd copy.
-	assert.equal( index.groups[0].packs[0].zstdPath, undefined );
-	await assert.rejects( stat( zstdPath ), { code: "ENOENT" } );
 
 	const { header, dataStart } = parsePackHeader( packBuffer, packPublicPath );
 	const focusEntry = header.files.find( ( file ) => file.path.endsWith( "button_focus.png" ) );
@@ -220,10 +211,6 @@ test("buildAssetPacks writes reusable 50 MiB-style binary packs with path offset
 	assert.equal( focusManifestEntry.sha256, focusEntry.sha256 );
 	assert.equal( focusManifestEntry.offset, focusEntry.offset );
 	assert.equal( focusManifestEntry.length, focusEntry.length );
-
-	if ( typeof zlib.zstdDecompressSync === "function" ) {
-		assert.deepEqual( zlib.zstdDecompressSync( await compressAssetPackZstd( packBuffer ) ), packBuffer );
-	}
 });
 
 test("listPublicAssetFiles collects image files and excludes native UI paths", async ( t ) => {

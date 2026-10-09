@@ -183,12 +183,12 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	const runResourceTasks = ( tasks ) => mapWithConcurrency( tasks, resourceLaneCount, ( task ) => task() );
 	log( `[resource-build] worker lanes: ${resourceLaneCount}` );
 
-	// `pnpm assets compact` deliberately removes rebuild/assets,
-	// including every converted DDJ/TGA staging image. A full resource build must
-	// therefore recreate that cache from the extracted PK2 inputs before any lane
-	// tries to publish terrain, UI, model or effect textures. The converter is
-	// incremental, so an ordinary non-compacted rebuild only scans and skips fresh
-	// outputs; convertImagesRunner suppresses the narrower duplicate passes below.
+	// The converted DDJ/TGA staging images may be absent (a fresh checkout, a
+	// cleared cache), so a full resource build recreates them from the
+	// extracted PK2 inputs before any lane publishes terrain, UI, model or
+	// effect textures. The converter is incremental, so a warm rebuild only
+	// scans and skips fresh outputs; convertImagesRunner suppresses the
+	// narrower duplicate passes below.
 	await timed( "nativeLensResources", () => steps.buildNativeLensResources() );
 	await timed( "nativeCharacterTextures", () => steps.buildNativeCharacterTextures() );
 	const sourceImages = await timed( "sourceImages", () => steps.runConvertImages( [] ) );
@@ -720,8 +720,7 @@ export function formatResourceBuildSummary( results ) {
 				backgroundInstall["world-sounds"]
 			} world-sound file(s) for background install, ` +
 			`retired ${sidecarRetirement.retired.length} unowned precompressed sidecar(s), ` +
-			`and packed ${assetPacks.assetCount} assets into ${assetPacks.packCount} browser asset pack(s) ` +
-			`with ${assetPacks.zstdSidecarCount} zstd19/w23 sidecar(s).`
+			`and packed ${assetPacks.assetCount} assets into ${assetPacks.packCount} browser asset pack(s).`
 	);
 	if ( results.families ) {
 		out.push(

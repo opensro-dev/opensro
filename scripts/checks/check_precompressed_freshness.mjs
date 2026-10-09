@@ -17,7 +17,6 @@
 // Repair:   node scripts/checks/check_precompressed_freshness.mjs --fix
 
 import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { refreshPrecompressedSidecars } from "../build/generatedManifestSidecars.mjs";
@@ -37,7 +36,7 @@ export const PRECOMPRESSED_TOLERANCE_MS = 1000;
 // scripts/test/assets/generatedAssetMembership.test.mjs share one definition instead of two copies
 // that can drift. Callers supply the stats because collecting them is the expensive part and
 // the test already has a sweep of the same tree in hand.
-export function evaluatePrecompressedFreshness( filePaths, statsByPath, sidecarOnlyPaths = new Set() ) {
+export function evaluatePrecompressedFreshness( filePaths, statsByPath ) {
 	const stale = new Map();
 	const orphans = [];
 	let scanned = 0;
@@ -50,10 +49,6 @@ export function evaluatePrecompressedFreshness( filePaths, statsByPath, sidecarO
 		const assetPath = filePath.slice( 0, -suffix.length );
 		const assetStat = statsByPath.get( path.resolve( assetPath ) );
 		if ( !assetStat ) {
-			// Compact releases deliberately retain only each pack's zstd
-			// representation. Those files are primary, manifest-owned payloads, not
-			// transparent encodings shadowing a missing .bin file.
-			if ( sidecarOnlyPaths.has( path.resolve( filePath ) ) ) continue;
 			orphans.push( filePath );
 			continue;
 		}
@@ -98,27 +93,7 @@ export function precompressedStatTargets( filePaths ) {
 export async function findStalePrecompressedSidecars( root = publicRoot ) {
 	const filePaths = await listFilesUnder( root );
 	const statsByPath = await statFilesByPath( precompressedStatTargets( filePaths ) );
-	const sidecarOnlyPaths = await readManifestOwnedPackSidecars( root );
-	return evaluatePrecompressedFreshness( filePaths, statsByPath, sidecarOnlyPaths );
-}
-
-async function readManifestOwnedPackSidecars( root ) {
-	const manifestPath = path.join( root, "assets", "packs", "manifest.json" );
-	let manifest;
-	try {
-		manifest = JSON.parse( await readFile( manifestPath, "utf8" ) );
-	} catch ( error ) {
-		if ( error?.code === "ENOENT" ) return new Set();
-		throw new Error( `Cannot read asset-pack manifest while checking sidecars: ${manifestPath}`, { cause: error } );
-	}
-	const paths = new Set();
-	for ( const group of manifest.groups ?? [] ) {
-		for ( const pack of group.packs ?? [] ) {
-			if ( typeof pack.zstdPath !== "string" ) continue;
-			paths.add( path.resolve( root, pack.zstdPath.replace( /^\/+/, "" ) ) );
-		}
-	}
-	return paths;
+	return evaluatePrecompressedFreshness( filePaths, statsByPath );
 }
 
 const invokedDirectly = process.argv[1] !== undefined &&

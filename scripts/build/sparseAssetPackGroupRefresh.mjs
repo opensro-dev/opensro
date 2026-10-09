@@ -3,7 +3,7 @@
 
 sparseAssetPackGroupRefresh.mjs - replace changed pack members from loose files
 
-Preserve untouched packs and hydrate compacted siblings only while rebuilding.
+Preserve untouched packs and hydrate packed siblings only while rebuilding.
 Match client identities case-insensitively, but read supplied filesystem paths
 with their original spelling so Linux and Windows publish the same bytes.
 
@@ -11,7 +11,6 @@ with their original spelling so Linux and Windows publish the same bytes.
 */
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import * as zlib from "node:zlib";
 
 import { buildAssetPacks, validateAssetPackIndex } from "./assetPacks.mjs";
 import { ASSET_PACK_VERSION, decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
@@ -26,8 +25,8 @@ const HASH_CONCURRENCY = 8;
 ================
 patchAssetPackGroupFromLooseFiles
 
-Compaction intentionally deletes packed logical files. Absence cannot mean
-deletion: reconstruct affected packs' missing members from their packed bytes.
+Packed logical files need not exist loose, so absence cannot mean deletion:
+reconstruct the affected packs' missing members from their packed bytes.
 ================
 */
 export async function patchAssetPackGroupFromLooseFiles( options ) {
@@ -235,19 +234,7 @@ readPackIdentity
 ================
 */
 async function readPackIdentity( publicRoot, pack ) {
-	const identityPath = containedPublicFile( publicRoot, pack.path );
-	let bytes;
-	try {
-		bytes = await readFile( identityPath );
-	} catch ( error ) {
-		if ( error?.code !== "ENOENT" ) {
-			throw error;
-		}
-		if ( typeof zlib.zstdDecompressSync !== "function" || typeof pack.zstdPath !== "string" ) {
-			throw new Error( `Cannot hydrate compact pack ${pack.path}: zstd decompression is unavailable.` );
-		}
-		bytes = zlib.zstdDecompressSync( await readFile( containedPublicFile( publicRoot, pack.zstdPath ) ) );
-	}
+	const bytes = await readFile( containedPublicFile( publicRoot, pack.path ) );
 	if ( bytes.length !== pack.bytes || sha256Hex( bytes ) !== pack.sha256 ) {
 		throw new Error( `Pack identity mismatch while hydrating ${pack.path}.` );
 	}

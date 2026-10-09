@@ -240,10 +240,7 @@ test("the packed mission boot catalog is byte-identical to its current loose gzi
 		if ( error?.code === "ENOENT" ) return undefined;
 		throw error;
 	} );
-	if ( !looseBytes ) {
-		t.skip( "compact profile intentionally removes the loose generated authority" );
-		return;
-	}
+	assert.ok( looseBytes, `loose authority ${assetPath} is missing; run pnpm assets build full` );
 	const packPath = path.join( publicRoot, asset.packPath.slice( 1 ) );
 	const pack = await open( packPath, "r" );
 	try {

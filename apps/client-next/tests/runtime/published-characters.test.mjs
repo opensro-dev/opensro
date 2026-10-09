@@ -13,9 +13,8 @@ import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { zstdDecompressSync } from "node:zlib";
 import { build } from "esbuild";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import {
@@ -89,9 +88,7 @@ test("packed NPC models match their published authority and pass the production 
 	for ( const [packPath, members] of grouped ) {
 		const pack = index.groups.flatMap( group => group.packs ).find( pack => pack.path === packPath );
 		const identity = path.join( publicRoot, packPath );
-		const bytes = existsSync( identity ) ?
-			readFileSync( identity ) :
-			zstdDecompressSync( readFileSync( path.join( publicRoot, pack.zstdPath ?? `${packPath}.zst` ) ) );
+		const bytes = readFileSync( identity );
 		assert.equal( sha256( bytes ), pack.sha256 );
 		const { dataStart } = parsePackHeader( bytes, packPath );
 		for ( const member of members ) {

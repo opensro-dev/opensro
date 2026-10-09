@@ -88,7 +88,7 @@ test("a full build refreshes, collects, packs, retires, registers, then refreshe
 TestRepackNeverRetires
 ================
 */
-test("a repack never retires sidecars (a compacted tree drops loose bases on purpose)", async () => {
+test("a repack never retires sidecars (a partial build proves no absence)", async () => {
 	const { calls, steps } = recordingSteps();
 	const result = await packPublicTree( { publicRoot: PUBLIC_ROOT, retireSidecars: false, groupInputs: {} }, steps );
 	assert.ok( !calls.some( ( call ) => call[0] === "retireSidecars" ) );
@@ -111,13 +111,13 @@ test("a pack the index names but the tree lacks fails before the web manifest", 
 
 /*
 ================
-TestZstdOnlyPackCounts
+TestPackPresence
 ================
 */
-test("a zstd-only pack (the compact profile) counts as present", () => {
-	const zstd = path.join( PUBLIC_ROOT, "assets/packs/game-data-001-abcdefabcdef.bin.zst" );
-	assert.deepEqual( missingPackFiles( PACKS, PUBLIC_ROOT, ( file ) => file === zstd ), [] );
-	assert.deepEqual( missingPackFiles( PACKS, PUBLIC_ROOT, () => false ), [
+test("only the pack file itself counts as present", () => {
+	const pack = path.join( PUBLIC_ROOT, "assets/packs/game-data-001-abcdefabcdef.bin" );
+	assert.deepEqual( missingPackFiles( PACKS, PUBLIC_ROOT, ( file ) => file === pack ), [] );
+	assert.deepEqual( missingPackFiles( PACKS, PUBLIC_ROOT, ( file ) => file === pack + ".zst" ), [
 		"/assets/packs/game-data-001-abcdefabcdef.bin"
 	] );
 });

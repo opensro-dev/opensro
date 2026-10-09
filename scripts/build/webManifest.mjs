@@ -1,6 +1,5 @@
 import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
 import { refreshAssetDelivery } from "./assetDelivery.mjs";
-import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,14 +46,7 @@ export function isRegisterableAssetFile( filePath ) {
 	if ( path.resolve( filePath ) === path.resolve( webManifestPath ) ) {
 		return false;
 	}
-	if ( !isPrecompressedAssetPath( filePath ) ) {
-		return true;
-	}
-
-	// In the compact profile a pack's .bin.zst is the installed artifact, not a
-	// derived duplicate beside an identity .bin. Register that physical file so
-	// launcher/update manifests describe the bytes that actually ship.
-	return /[.]bin[.]zst$/i.test( filePath ) && !existsSync( filePath.slice( 0, -".zst".length ) );
+	return !isPrecompressedAssetPath( filePath );
 }
 
 export async function listRegisterableAssetFiles() {

@@ -17,7 +17,7 @@ const defaultPublicRoot = CLIENT_PUBLIC_ROOT;
 const indexCache = new Map();
 const packCache = new Map();
 
-/** Read the installed public-asset authority in either loose or compact form. */
+/** Read the installed public-asset authority: the loose file, else its pack member. */
 export function readPublishedAssetBytesSync( publicPath, publicRoot = defaultPublicRoot ) {
 	const normalized = normalizePublicPath( publicPath, publicRoot );
 	const loosePath = resolveInsidePublic( publicRoot, normalized );
@@ -135,20 +135,7 @@ function readPackIdentity( publicRoot, pack, expectedAssets ) {
 	const cacheKey = `${path.resolve( publicRoot )}\0${pack.path}`;
 	const cached = packCache.get( cacheKey );
 	if ( cached ) return cached;
-	const identityPath = resolveInsidePublic( publicRoot, pack.path );
-	let bytes;
-	if ( existsSync( identityPath ) ) {
-		bytes = readFileSync( identityPath );
-	} else {
-		if ( typeof zlib.zstdDecompressSync !== "function" || typeof pack.zstdPath !== "string" ) {
-			throw new Error( `Cannot read compact pack ${pack.path}: zstd decompression is unavailable.` );
-		}
-		const compressedBytes = readFileSync( resolveInsidePublic( publicRoot, pack.zstdPath ) );
-		if ( typeof pack.zstdBytes === "number" && compressedBytes.length !== pack.zstdBytes ) {
-			throw new Error( `Compact pack byte-length mismatch: ${pack.zstdPath}.` );
-		}
-		bytes = zlib.zstdDecompressSync( compressedBytes );
-	}
+	const bytes = readFileSync( resolveInsidePublic( publicRoot, pack.path ) );
 	const digest = createHash( "sha256" ).update( bytes ).digest( "hex" );
 	if ( bytes.length !== pack.bytes || digest !== pack.sha256.toLowerCase() ) {
 		throw new Error( `Pack identity mismatch: ${pack.path}.` );

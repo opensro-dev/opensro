@@ -15,7 +15,7 @@ import { ASSET_SCHEMA } from "./assetSchema.mjs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { gunzipSync, zstdDecompressSync } from "node:zlib";
+import { gunzipSync } from "node:zlib";
 import { publishBytesAtomically } from "./shared/atomicPublish.mjs";
 import { validateAssetPackIndex } from "./assetPackIndexValidation.mjs";
 import { decodeStoredMember, readPackPrefix, storedMemberBytes } from "./shared/packFormat.mjs";
@@ -44,14 +44,7 @@ export async function validatePackedFontAtlases( index, publicRoot, { partial = 
 		if ( !bytes ) {
 			const pack = packs.get( entry.packPath );
 			if ( !pack ) throw Error( "Missing font pack: " + entry.packPath );
-			try {
-				bytes = await readFile( resolve( pack.path ) );
-			} catch ( error ) {
-				if ( error.code !== "ENOENT" ) throw error;
-				bytes = zstdDecompressSync( await readFile( resolve( pack.zstdPath ?? pack.path + ".zst" ) ), {
-					maxOutputLength: 64 << 20
-				} );
-			}
+			bytes = await readFile( resolve( pack.path ) );
 			if ( bytes.length !== pack.bytes || hash( bytes ) !== pack.sha256 ) {
 				throw Error( "Font pack integrity mismatch: " + pack.path );
 			}

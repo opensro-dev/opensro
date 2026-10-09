@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { buildAssetPacks, compressAssetPackZstd } from "../../build/assetPacks.mjs";
+import { buildAssetPacks } from "../../build/assetPacks.mjs";
 import {
 	listPublishedAssetPathsSync,
 	publishedAssetExistsSync,
@@ -13,7 +13,7 @@ import {
 	readPublishedAssetJsonSync
 } from "../../lib/publishedAsset.mjs";
 
-test("published assets keep one logical read contract across loose and compact installations", async ( t ) => {
+test("published assets keep one logical read contract with and without loose files", async ( t ) => {
 	const tempRoot = await mkdtemp( path.join( os.tmpdir(), "sro-published-asset-" ) );
 	t.after( () => rm( tempRoot, { recursive: true, force: true } ) );
 
@@ -42,19 +42,6 @@ test("published assets keep one logical read contract across loose and compact i
 	await mkdir( archiveRoot, { recursive: true } );
 	await rename( loosePath, path.join( archiveRoot, "catalog.json" ) );
 	await rename( gzipPath, path.join( archiveRoot, "catalog.json.gz" ) );
-	const identityPublicPath = index.groups[0].packs[0].path;
-	// What `pnpm assets compact` does: write the pack's zstd copy and record it in
-	// the index, so the reader serves the compact tree after the identity pack goes.
-	const identityFile = path.join( publicRoot, identityPublicPath.replace( /^\/+/, "" ) );
-	const compact = await compressAssetPackZstd( await readFile( identityFile ) );
-	await writeFile( identityFile + ".zst", compact );
-	index.groups[0].packs[0].zstdPath = identityPublicPath + ".zst";
-	index.groups[0].packs[0].zstdBytes = compact.length;
-	await writeFile( result.outputPath, JSON.stringify( index ) );
-	await rename(
-		path.join( publicRoot, identityPublicPath.replace( /^\/+/, "" ) ),
-		path.join( archiveRoot, path.basename( identityPublicPath ) )
-	);
 
 	assert.equal( publishedAssetExistsSync( logicalPath, publicRoot ), true );
 	assert.deepEqual( readPublishedAssetJsonSync( logicalPath, publicRoot ), { source: "pack", rows: [ 1, 2, 3 ] } );

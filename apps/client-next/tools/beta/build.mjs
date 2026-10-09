@@ -25,7 +25,6 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
-import { zstdDecompressSync } from "node:zlib";
 import { files, inspect, publicIndex, safeName, sha, releaseIdentity, verifyDirectory } from "./policy.mjs";
 import { ASSET_SCHEMA, RELEASE_PROTOCOL } from "../../src/engine/foundation/release/protocol.ts";
 import { nativeAssetUrls } from "../../src/engine/foundation/assets/native-assets.ts";
@@ -302,23 +301,12 @@ export async function buildBeta(
 			================
 			*/
 			const resolve = n => path.join( assetRoot, safeName( n.slice( 1 ) ) );
-			let bytes;
-			try {
-				bytes = await readFile( resolve( pack.path ) );
-			} catch ( e ) {
-				if ( e.code !== "ENOENT" ) throw e;
-				bytes = zstdDecompressSync( await readFile( resolve( pack.zstdPath ) ), {
-					maxOutputLength: 128 << 20
-				} );
-			}
+			let bytes = await readFile( resolve( pack.path ) );
 			if ( bytes.length !== pack.bytes || sha( bytes ) !== pack.sha256 ) {
 				throw Error( "Publication pack drift " + pack.path );
 			}
 			const members = index.assets.filter( a => a.packPath === pack.path );
 			bytes = projectPack( pack, bytes, members );
-			// Zstandard pack copies are an offline publication input. This adapter
-			// serves the materialized pack; never advertise absent URLs.
-			for ( const key of [ "zstdPath", "zstdBytes", "zstdLevel", "zstdWindowLog" ] ) delete pack[key];
 			const file = "payload/" + pack.sha256 + ".bin";
 			await add( file, bytes, "data" );
 			route( { url: pack.path, file, length: bytes.length, mime: "application/octet-stream" } );

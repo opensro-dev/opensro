@@ -10,11 +10,9 @@ and each step reads what the one before it published:
      sidecar packed now would hide a newer loose file;
   2. collect the pack groups (assetPackGroups.mjs owns the one group list);
   3. build the packs;
-  4. verify every pack the index names exists (identity or zstd-only, the
-     compact profile keeps only the latter);
+  4. verify every pack the index names exists;
   5. retire precompressed sidecars nothing produces - the full build only:
-     a compacted tree drops loose bases on purpose, and retiring there would
-     delete sidecars the release still serves;
+     a partial build produces some families, so absence proves nothing;
   6. build the web manifest;
   7. refresh the sidecars the regenerated manifests just aged out of.
 
@@ -58,17 +56,14 @@ function untimed( label, task ) {
 ================
 missingPackFiles
 
-The pack paths an index names that exist neither as the identity file nor
-as its zstd sidecar under publicRoot.
+The pack paths an index names that are not on disk under publicRoot.
 ================
 */
 export function missingPackFiles( assetPacks, publicRoot, exists ) {
 	const missing = [];
 	for ( const group of assetPacks.groups ) {
 		for ( const pack of group.packs ) {
-			const identityPath = path.join( publicRoot, pack.path.replace( /^\/+/, "" ) );
-			const zstdPath = path.join( publicRoot, (pack.zstdPath ?? `${pack.path}.zst`).replace( /^\/+/, "" ) );
-			if ( !exists( identityPath ) && !exists( zstdPath ) ) missing.push( pack.path );
+			if ( !exists( path.join( publicRoot, pack.path.replace( /^\/+/, "" ) ) ) ) missing.push( pack.path );
 		}
 	}
 	return missing;

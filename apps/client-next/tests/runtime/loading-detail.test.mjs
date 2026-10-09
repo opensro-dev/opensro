@@ -37,7 +37,7 @@ function progress( overrides ) {
 
 test("pack files are named by their group in player words", () => {
 	assert.equal( loadingFileLabel( "/assets/packs/game-images-004-49d89ab4c651.bin" ), "interface images" );
-	assert.equal( loadingFileLabel( "/assets/packs/outdoor/outdoor-world-001-ca0f58a9a930.bin.zst" ), "world terrain" );
+	assert.equal( loadingFileLabel( "/assets/packs/outdoor/outdoor-world-001-ca0f58a9a930.bin" ), "world terrain" );
 	assert.equal(
 		loadingFileLabel( "https://opensro.online/assets/packs/game-data-002-46b77966d6a9.bin" ),
 		"game data"

@@ -3,8 +3,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGzip } from "node:zlib";
-import { Readable } from "node:stream";
-import { createPublishedPacks } from "./published-pack.mjs";
 // RFC 9110 12.5.3: explicit exclusions override wildcard acceptance.
 // Prefer gzip on equal weights; an absent/empty header keeps identity.
 export function assetEncoding( header, compress ) {
@@ -32,8 +30,6 @@ export function assetEncoding( header, compress ) {
 // never copies the multi-gigabyte asset tree or starts the legacy application.
 export function publishedAssets( root = CLIENT_PUBLIC_ROOT + "/" ) {
 	function install( server ) {
-		const packs = createPublishedPacks();
-		server.httpServer?.once( "close", () => packs.dispose() );
 		const buildRoot = path.resolve( server.config.root, server.config.build.outDir );
 		server.middlewares.use( ( request, response, next ) => {
 			let pathname;
@@ -69,19 +65,8 @@ export function publishedAssets( root = CLIENT_PUBLIC_ROOT + "/" ) {
 				response.end();
 				return;
 			}
-			fs.stat( target, async ( error, stat ) => {
-				let packed;
-				if ( error?.code === "ENOENT" ) {
-					try {
-						packed = await packs.read( target );
-						if ( packed ) stat = packed.stat;
-					} catch {
-						response.statusCode = 500;
-						response.end( "Published pack could not be decoded" );
-						return;
-					}
-				}
-				if ( !packed && (error || !stat.isFile()) ) {
+			fs.stat( target, ( error, stat ) => {
+				if ( error || !stat.isFile() ) {
 					response.statusCode = 404;
 					response.end( "Published asset absent" );
 					return;
@@ -148,9 +133,7 @@ export function publishedAssets( root = CLIENT_PUBLIC_ROOT + "/" ) {
 					response.end();
 					return;
 				}
-				const stream = packed ?
-					Readable.from( [ packed.bytes.subarray( start, end + 1 ) ] ) :
-					fs.createReadStream( target, stat.size ? { start, end } : undefined );
+				const stream = fs.createReadStream( target, stat.size ? { start, end } : undefined );
 				stream.on( "error", () => response.destroy() );
 				response.on( "close", () => stream.destroy() );
 				if ( gzip ) {

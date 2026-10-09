@@ -28,7 +28,7 @@ reconcileAssetPackGroupFromLooseAuthority
 
 Reconciles every loose authority that still exists for one asset-pack group.
 
-A sparse refresh may preserve compacted members that no longer have loose
+A sparse refresh may preserve packed members that no longer have loose
 files. That is safe, but a caller-provided delta is not proof that the rest
 of the group's loose projection is current. Before publishing, this:
 

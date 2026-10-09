@@ -213,10 +213,10 @@ test("packed game-data bytes match their current generated source files", async 
 		if ( error?.code === "ENOENT" ) return false;
 		throw error;
 	} );
-	if ( !hasLooseAuthority ) {
-		t.skip( "compact profile intentionally removes loose generated game-data authorities" );
-		return;
-	}
+	assert.ok(
+		hasLooseAuthority,
+		`loose game-data authority ${firstSourcePath} is missing; run pnpm assets build full`
+	);
 
 	for ( const asset of gameDataAssets ) {
 		const publicPath = normalizePublicPath( asset.path );
@@ -273,11 +273,8 @@ test("pack files listed by the pack manifest are present in the generated web ma
 	const { packIndex, webPathSet } = await loadGeneratedAssetMembership();
 	const missing = packIndex.groups
 		.flatMap( ( group ) => group.packs )
-		.filter( ( pack ) =>
-			!webPathSet.has( normalizePublicPath( pack.path ).toLowerCase() ) &&
-			!webPathSet.has( normalizePublicPath( pack.zstdPath ).toLowerCase() )
-		)
-		.map( ( pack ) => `${normalizePublicPath( pack.path )} or ${normalizePublicPath( pack.zstdPath )}` );
+		.filter( ( pack ) => !webPathSet.has( normalizePublicPath( pack.path ).toLowerCase() ) )
+		.map( ( pack ) => normalizePublicPath( pack.path ) );
 
 	assert.deepEqual( missing, [] );
 });
@@ -373,14 +370,6 @@ async function computeAssetTreeMembership() {
 		readJson( packManifestPath )
 	] );
 	const treeFileSet = new Set( treeFiles.map( ( filePath ) => path.resolve( filePath ) ) );
-	const manifestPackSidecars = new Set(
-		packIndex.groups.flatMap( ( group ) =>
-			group.packs
-				.map( ( pack ) => pack.zstdPath )
-				.filter( ( publicPath ) => typeof publicPath === "string" )
-				.map( ( publicPath ) => normalizePublicPath( publicPath ) )
-		)
-	);
 
 	const onDisk = new Set();
 	const orphanSidecars = [];
@@ -397,10 +386,7 @@ async function computeAssetTreeMembership() {
 		excludedCount += 1;
 		const suffix = PRECOMPRESSED_ASSET_SUFFIXES.find( ( candidate ) => filePath.endsWith( candidate ) );
 		if ( suffix ) {
-			if (
-				!treeFileSet.has( path.resolve( filePath.slice( 0, -suffix.length ) ) ) &&
-				!manifestPackSidecars.has( publicPath )
-			) {
+			if ( !treeFileSet.has( path.resolve( filePath.slice( 0, -suffix.length ) ) ) ) {
 				orphanSidecars.push( publicPath );
 			}
 			continue;

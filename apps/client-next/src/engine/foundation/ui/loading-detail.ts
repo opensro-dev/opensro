@@ -123,7 +123,7 @@ export function loadingFileLabel( file: string ): string {
 	} catch {
 		// Not a URL; use it as a path.
 	}
-	const pack = /\/packs\/(?:.*\/)?([a-z-]+?)-\d{3}-[0-9a-f]+\.bin(?:\.zst)?$/i.exec( path );
+	const pack = /\/packs\/(?:.*\/)?([a-z-]+?)-\d{3}-[0-9a-f]+\.bin$/i.exec( path );
 	if ( pack ) return packGroupName( pack[1]!.toLowerCase() );
 	const folder = /^\/assets\/([^/]+)\//i.exec( path );
 	if ( folder ) return assetFolderName( folder[1]!.toLowerCase() );

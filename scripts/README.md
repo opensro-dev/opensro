@@ -16,7 +16,6 @@ in [tasks/](tasks/README.md). The pipeline itself is described in
 | `refresh_{native_font,title_crowd,outdoor,world_map}_asset_packs.mjs` | `pnpm assets refresh fonts`, `title-crowd`, `outdoor`, `world-map` |
 | `refresh_asset_delivery.mjs` | `pnpm assets refresh delivery` |
 | `rebuild_asset_packs_from_public.mjs` | `pnpm assets repack` |
-| `compact_sro_assets.mjs` | `pnpm assets compact` |
 | `rebuildLock.mjs`, `rebuild_lock.py` | The generated-asset lock shared by the JS and Python steps; `pnpm assets lock` |
 | `convert_images.py` | Spawned by the build: DDJ/DDS to browser images |
 | `extract_client_cursors.py` | Spawned by the build: client cursors |
@@ -29,7 +28,7 @@ in [tasks/](tasks/README.md). The pipeline itself is described in
 | Folder | Contents |
 | --- | --- |
 | `build/` | Pipeline modules by domain: `char/` (`native/` holds v1.150 data-format tables), `world/`, `effects/`, `data/`, `server/`, `shared/`, `artifacts/`, `reference/` |
-| `checks/` | Asset delivery, pack integrity, compaction, precompressed sidecars, Go server gates, source size (`size-baseline.txt`), source encoding, shared native fixtures, formatting ratchet (`format-baseline.txt`) |
+| `checks/` | Asset delivery, pack integrity, served size, precompressed sidecars, Go server gates, source size (`size-baseline.txt`), source encoding, shared native fixtures, formatting ratchet (`format-baseline.txt`) |
 | `lib/` | Published-asset access, probe endpoints and sessions, the Chrome launcher for browser tests |
 | `analysis/` | `project_hive_caps.py` (generates the server's hive-cap table), `verify_particle_archive.py` |
 | `tools/` | Localization gap data, native window image refresh |

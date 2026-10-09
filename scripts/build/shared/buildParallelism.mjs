@@ -6,8 +6,8 @@ buildParallelism.mjs - how many cores the asset build may use
 One setting, SRO_BUILD_JOBS, sizes every parallel stage of the asset build:
 the concurrent resource-build lanes, outdoor region builders, pack builds,
 JSON compression workers, image conversion processes (convert_images.py
-reads the same variable) and libuv's thread pool, which runs the zlib and
-zstd compression the pack builder awaits. The default leaves one core for
+reads the same variable) and libuv's thread pool, which runs the gzip
+member compression the pack builder awaits. The default leaves one core for
 the rest of the machine.
 
 Outputs never depend on the setting - every stage writes the same bytes
