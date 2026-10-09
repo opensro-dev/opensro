@@ -31,6 +31,9 @@ count is a broken manifest, not a free download.
 export function servedSize( manifest ) {
 	if ( !Array.isArray( manifest?.groups ) ) throw Error( "Pack manifest has no groups" );
 	const groups = manifest.groups.map( group => {
+		if ( typeof group.name !== "string" || typeof group.load !== "string" ) {
+			throw Error( `Pack group ${group.name} has no name or load class` );
+		}
 		let bytes = 0;
 		for ( const pack of group.packs ?? [] ) {
 			if ( !Number.isSafeInteger( pack.bytes ) || pack.bytes < 0 ) {

@@ -30,7 +30,11 @@ for ( const group of manifest.groups ?? [] ) {
 }
 
 const size = servedSize( manifest );
-console.log( `Full download: ${formatBytes( size.total )} (${percentOfOriginal( size.total )} of the original PK2s)` );
+console.log(
+	`Full download (game-data packs): ${formatBytes( size.total )} (${
+		percentOfOriginal( size.total )
+	} of the original PK2s)`
+);
 console.log( `Before login (startup groups): ${formatBytes( size.startup )}` );
 for ( const group of [ ...size.groups ].sort( ( a, b ) => b.bytes - a.bytes ) ) {
 	console.log(

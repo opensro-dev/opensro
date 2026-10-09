@@ -48,6 +48,7 @@ test("a pack without a byte count is a broken manifest", () => {
 		/no byte count/
 	);
 	assert.throws( () => servedSize( {} ), /no groups/ );
+	assert.throws( () => servedSize( { groups: [ { name: "x", packs: [] } ] } ), /no name or load class/ );
 });
 
 test("the ceiling is 80% of the original PK2 payload", () => {
