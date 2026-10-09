@@ -66,7 +66,8 @@ func TestVersion2EquipmentReadsItsWidths(t *testing.T) {
 TestVersion2CatalogRejections
 
 Each table row has exactly its width, sums to at most 1, every item sits
-below its table's width, and every rolled class has an item.
+below its table's width, and every rolled class reaches an item at or below
+it, as selectEquipment's walk down from an empty class (724120) does.
 ================
 */
 func TestVersion2CatalogRejections(t *testing.T) {
@@ -79,7 +80,7 @@ func TestVersion2CatalogRejections(t *testing.T) {
 		"row width":     func(s *equipmentSource) { s.Rare[3] = s.Rare[3][:59] },
 		"sum over one":  func(s *equipmentSource) { s.Normal[79][1] = 0.6 },
 		"item width":    func(s *equipmentSource) { s.Items[0].Group = 36 },
-		"no item class": func(s *equipmentSource) { s.Normal[10][5] = 0.1 },
+		"no item below": func(s *equipmentSource) { s.Items[0].Group = 6 },
 		"version":       func(s *equipmentSource) { s.Version = 3 },
 	} {
 		source := base()
@@ -97,7 +98,11 @@ func TestVersion2CatalogRejections(t *testing.T) {
 		t.Fatalf("a 20-wide stone family: %v", err)
 	}
 	consumable.Classes[8][79][16] = 0.01
-	if _, err := compileConsumables(consumable); err == nil || !strings.Contains(err.Error(), "has no item") {
-		t.Fatalf("a rolled stone class without an item: %v", err)
+	if _, err := compileConsumables(consumable); err != nil {
+		t.Fatalf("an empty stone class above an item falls to it: %v", err)
+	}
+	consumable.Classes[8][79][14] = 0.01
+	if _, err := compileConsumables(consumable); err == nil || !strings.Contains(err.Error(), "no item at or below") {
+		t.Fatalf("a rolled stone class with nothing below it: %v", err)
 	}
 }

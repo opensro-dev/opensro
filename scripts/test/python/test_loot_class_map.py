@@ -57,18 +57,19 @@ class LootClassMapTest(unittest.TestCase):
 				self.assertIsNone(class_for(source, "Alchemy_MagicStone", row(codename, degree + 1), CLIENT[codename]))
 
 	# ================
-	# test_consumable_index_matches_the_projection
+	# test_consumable_index_matches_the_class_table
 	#
-	# The committed vSRO projection already places HP_POTION_01 (authored
-	# class 1) and the degree-1 stone at group 0.
+	# vSRO's level-1 magic stone row rolls only index 0, the degree-1 stone
+	# (authored class 1), as the old vSRO projection placed HP_POTION_01
+	# (class 1) at group 0.
 	# ================
-	def test_consumable_index_matches_the_projection(self):
-		projected = json.loads((ROOT / "data/loot/consumables-source.json").read_text(encoding="utf-8"))["items"]
-		groups = {item["codename"]: item["group"] for item in projected}
-		self.assertEqual(groups["ITEM_ETC_HP_POTION_01"], class_for("vsro", "Recover", row("ITEM_ETC_HP_POTION_01", 1),
-			CLIENT["ITEM_ETC_HP_POTION_01"]))
-		self.assertEqual(groups["ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01"], class_for("vsro", "Alchemy_MagicStone",
-			row("ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01", 1), CLIENT["ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01"]))
+	def test_consumable_index_matches_the_class_table(self):
+		drops = json.loads((ROOT / "data/loot/vsro-drops-source.json").read_text(encoding="utf-8"))
+		level, probabilities = drops["classes"]["Alchemy_MagicStone"]["rows"][0]
+		self.assertEqual((level, [i for i, p in enumerate(probabilities) if p > 0]), (1, [0]))
+		self.assertEqual(class_for("vsro", "Alchemy_MagicStone", row("ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01", 1),
+			CLIENT["ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01"]), 0)
+		self.assertEqual(class_for("vsro", "Recover", row("ITEM_ETC_HP_POTION_01", 1), CLIENT["ITEM_ETC_HP_POTION_01"]), 0)
 
 	# ================
 	# test_unplaceable_rows

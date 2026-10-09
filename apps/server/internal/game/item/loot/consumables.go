@@ -202,12 +202,13 @@ func compileConsumables(s consumableSource) (consumableCatalog, error) {
 		b.alternatives[r.Type] = append(b.alternatives[r.Type], uint32(len(b.refs)-1))
 	}
 	if s.Version >= 2 {
-		// The generator drops and logs a class with no v1.150 item.
+		// As equipment: an empty class falls to the next lower class with
+		// items (724120); the generator zeroes one with nothing below it.
 		for family, e := range c.families {
 			for level, row := range e.classes[0] {
 				for _, class := range row {
-					if e.buckets[equipmentKey{0, class.group, false}] == nil {
-						return c, fmt.Errorf("consumable family %d level %d class %d has no item", family, level+1, class.group)
+					if !e.anyAtOrBelow(class.group, false) {
+						return c, fmt.Errorf("consumable family %d level %d class %d has no item at or below it", family, level+1, class.group)
 					}
 				}
 			}

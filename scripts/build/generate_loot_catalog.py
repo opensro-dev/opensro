@@ -1,9 +1,17 @@
 """
 ===========================================================================
+
 generate_loot_catalog.py - compile immutable v1.150 loot and eligibility audit
 
-Only committed normalized evidence is read. Inferred ordinary consumable rates
-are deliberately explicit here; they are not represented as recovered rates.
+Only committed normalized evidence is read: the client snapshot, both
+backups' drop selection (vsro/isro-drops-source.json) and their reward rules.
+Neither backup is proven retail, so the merge below is an inference (#459):
+ISRO-R is preferred wherever it authors a class row or assigns an item, and
+vSRO fills every level and item ISRO-R leaves empty. The audit names the
+source of every class row and assignment and every row the merge dropped.
+Inferred ordinary consumable rates are deliberately explicit here; they are
+not represented as recovered rates.
+
 ===========================================================================
 """
 
@@ -12,12 +20,37 @@ import copy
 import json
 from pathlib import Path
 
+from loot_class_map import class_for
+
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "scripts/data/loot"
 OUTPUT = ROOT / "apps/server/internal/game/item/loot/.generated"
 INFERRED_RATES = {2: 0.10, 3: 0.02, 4: 0.05, 5: 0.05, 6: 0.01}
 SPECIAL_ITEMS = ["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_" + kind + "_B"
 	for kind in ("WEAPON", "SHIELD", "ARMOR", "ACCESSARY")] + ["ITEM_ETC_SCROLL_RETURN_02"]
+# Preference order: the first source that authors a row or an item wins.
+SOURCE_ORDER = ("isro", "vsro")
+# Owner, 2026-10-10 (#457): rare equipment keeps vSRO's table and items.
+# ISRO-R's rare table rolls only d9 A at levels 76-90, which would leave
+# every other degree's rare unreachable there.
+RARE_SOURCE_ORDER = ("vsro", "isro")
+# The catalog's level rows, as the runtime's catalogLevels.
+CATALOG_LEVELS = 180
+# The runtime's negligibleProbability: a class at or below it never rolls.
+NEGLIGIBLE = 0.000001
+# _RefDropItemAssign service value of an enabled row.
+SERVICE_ENABLED = 1
+# The equipment class tables, keyed by the catalog's rare flag.
+EQUIPMENT_TABLES = {False: "Equip", True: "RareEquip"}
+# The consumable families' class tables. Arrows and bolts share Ammo.
+FAMILY_TABLES = {2: "Recover", 3: "Cure", 4: "Ammo", 5: "Ammo", 6: "Scroll", 7: "Alchemy_Tablet",
+	8: "Alchemy_MagicStone", 9: "Alchemy_ATTRStone", 10: "Reinforce"}
+# The potion a potion tablet manufactures (process.go's potion product).
+POTION_PRODUCT_TYPE = [3, 3, 13, 1]
+# Client TypeID3/TypeID4 of each ordinary consumable family; the committed
+# vSRO projection held exactly these pairs.
+FAMILY_BY_TYPE = {(1, 1): 2, (1, 2): 2, (1, 3): 2, (2, 6): 3, (3, 1): 6, (4, 1): 4, (4, 2): 5, (10, 1): 10,
+	(11, 1): 8, (11, 2): 9, (11, 3): 7}
 
 
 # ================
@@ -35,29 +68,227 @@ def level_band(level):
 
 
 # ================
+# level_spans
+#
+# [[first, last], ...] runs of consecutive levels, for a readable audit.
+# ================
+def level_spans(levels):
+	spans = []
+	for level in sorted(levels):
+		if spans and spans[-1][1] == level - 1:
+			spans[-1][1] = level
+		else:
+			spans.append([level, level])
+	return spans
+
+
+# ================
+# merge_class_table
+#
+# One class table across both sources, padded to the widest. Per level the
+# first source whose row rolls any class supplies the whole row; a level no
+# source authors stays empty. Rows are never mixed within a level, so each
+# level keeps one source's probabilities and total.
+# ================
+def merge_class_table(drops, table):
+	order = RARE_SOURCE_ORDER if table == EQUIPMENT_TABLES[True] else SOURCE_ORDER
+	width = max(drops[source]["classes"][table]["width"] for source in order)
+	authored = {}
+	for source in order:
+		authored[source] = {level: probabilities for level, probabilities in drops[source]["classes"][table]["rows"]}
+	rows, origins = [], {}
+	for level in range(1, CATALOG_LEVELS + 1):
+		row, origin = [0.0] * width, "none"
+		for source in order:
+			probabilities = authored[source].get(level)
+			if probabilities and any(p > NEGLIGIBLE for p in probabilities):
+				row[:len(probabilities)] = probabilities
+				origin = source
+				break
+		rows.append(row)
+		origins.setdefault(origin, []).append(level)
+	return rows, {origin: level_spans(levels) for origin, levels in origins.items()}
+
+
+# ================
+# live_generations
+#
+# A backup keeps older generations of an updated _RefDropItemAssign row on
+# other pages. The row on the page with the newest LSN is the live one: it
+# reproduces every choice of the old committed vSRO projection (336 of 336
+# duplicated stones). Generations are keyed by item and class and chosen
+# before any filter, so a newer disabled generation disables the item.
+# ================
+def live_generations(rows, audit, source):
+	generations = {}
+	for row in rows:
+		generations.setdefault((row["item"], row["class"]), []).append(row)
+	live = set()
+	for key, group in generations.items():
+		group = sorted(group, key=lambda row: row["lsn"])
+		for older, newer in zip(group, group[1:]):
+			if older["lsn"] == newer["lsn"]:
+				raise ValueError("Two generations share an LSN: " + str(newer["codename"]))
+		live.add(id(group[-1]))
+		if len(group) > 1:
+			audit.append({"source": source, "item": group[-1]["codename"], "class": key[1],
+				"kept": [group[-1]["service"], group[-1]["weight"], group[-1]["absolute"]],
+				"older": [[row["service"], row["weight"], row["absolute"]] for row in group[:-1]]})
+	return [row for row in rows if id(row) in live]
+
+
+# ================
+# select_assignments
+#
+# Each item's live, enabled _RefDropItemAssign rows from the first source
+# that enables it, in RARE_SOURCE_ORDER for rare equipment. Rows naming an item the v1.150 client lacks are dropped and
+# logged by source and raw id; zero-weight rows are dropped and logged.
+# ================
+def select_assignments(drops, items, audit):
+	enabled = {source: {} for source in SOURCE_ORDER}
+	for source in SOURCE_ORDER:
+		for row in live_generations(drops[source]["assignments"], audit["olderGenerations"], source):
+			if row["service"] != SERVICE_ENABLED:
+				continue
+			if not row["client"]:
+				audit["absentFromClient"].append({"source": source, "item": row["item"], "codename": row["codename"]})
+				continue
+			if row["weight"] == 0:
+				# A zero weight is never picked; the runtime refuses it.
+				audit["zeroWeight"].append({"source": source, "item": row["codename"], "class": row["class"]})
+				continue
+			enabled[source].setdefault(row["codename"], []).append(row)
+	chosen = {}
+	for codename in sorted(set(enabled["isro"]) | set(enabled["vsro"])):
+		ref = items[codename]
+		order = RARE_SOURCE_ORDER if ref["type"][1] == 1 and ref["rarity"] > 0 else SOURCE_ORDER
+		source = next(source for source in order if codename in enabled[source])
+		chosen[codename] = (source, enabled[source][codename])
+		audit["assignmentSources"][source].append(codename)
+	for source in SOURCE_ORDER:
+		audit["assignmentSources"][source].sort()
+	# ISRO-R service-0 rows for an item only vSRO enables: vSRO still
+	# supplies it, since ISRO-R retired content v1.150 still has.
+	retired = set()
+	for row in drops["isro"]["assignments"]:
+		if row["service"] != SERVICE_ENABLED and row["client"] and chosen.get(row["codename"], ("", None))[0] == "vsro":
+			retired.add(row["codename"])
+	audit["isroRetiredFromVsro"] = sorted(retired)
+	return chosen
+
+
+# ================
+# project_assignments
+#
+# The catalog rows of the chosen assignments: equipment joins its normal or
+# rare table by the client's rarity, consumables their family by client
+# type, each at the class class_for() places it in.
+# ================
+def project_assignments(chosen, items, audit):
+	equipment, consumables = [], []
+	# RefObjID order, as the committed vSRO projection: a bucket's weighted
+	# pool keeps the reference data's load order.
+	for codename, (source, rows) in sorted(chosen.items(), key=lambda entry: items[entry[0]]["id"]):
+		ref = items[codename]
+		kind = ref["type"][1]
+		family = FAMILY_BY_TYPE.get(tuple(ref["type"][2:])) if kind == 3 else None
+		if kind != 1 and family is None:
+			audit["unplacedAssignments"].append({"item": codename, "source": source, "reason": "no-ordinary-class-table"})
+			continue
+		for row in rows:
+			rare = ref["rarity"] > 0
+			table = EQUIPMENT_TABLES[rare] if kind == 1 else FAMILY_TABLES[family]
+			group = class_for(source, table, row, ref)
+			if group is None:
+				audit["unplacedAssignments"].append({"item": codename, "source": source, "class": row["class"],
+					"reason": "class-for-refused"})
+				continue
+			type_name = ":".join(str(part) for part in ref["type"])
+			if kind == 1:
+				equipment.append({"codename": codename, "country": ref["country"], "group": group, "rare": rare,
+					"type": type_name, "weight": row["weight"], "absolute": row["absolute"], "level": ref["level"]})
+			else:
+				consumables.append({"codename": codename, "family": family, "group": group, "weight": row["weight"],
+					"absolute": row["absolute"], "level": 0, "type": type_name, "count": row["count"]})
+	return equipment, consumables
+
+
+# ================
+# drop_itemless_classes
+#
+# A class that rolls at some level but holds no v1.150 item. 724120 walks
+# down from an empty class to the next class that holds items, so such a
+# class stays and its roll falls to that lower class (d10 equipment rolls at
+# levels 91-101 fall to d9). Only a class with no item at or below it is
+# zeroed: its roll could never produce anything, so the outcome is the same,
+# and the runtime refuses an unreachable class. Both are logged; no
+# probability is ever redistributed.
+# ================
+def drop_itemless_classes(name, rows, groups, audit):
+	logged = {}
+	for level, row in enumerate(rows, 1):
+		for group, probability in enumerate(row):
+			if probability <= NEGLIGIBLE or group in groups:
+				continue
+			lower = max((candidate for candidate in groups if candidate < group), default=None)
+			if lower is None:
+				row[group] = 0.0
+			logged.setdefault((group, lower), []).append(level)
+	for (group, lower), levels in sorted(logged.items(), key=lambda entry: (entry[0][0], entry[0][1] is None, entry[0][1] or 0)):
+		audit.append({"table": name, "class": group, "fallsTo": lower, "levels": level_spans(levels)})
+
+
+# ================
+# tablet_manufactures
+#
+# Whether compounding the tablet can succeed: 509BC0 makes a stone only from
+# a nonempty assimilation distribution (its param2) and a potion as is. The
+# v1.150 SOLID stones carry none, so their tablets would drop as dead items.
+# ================
+def tablet_manufactures(tablet, items):
+	product = items.get(tablet.get("product"))
+	if product is None:
+		return False
+	if product["type"] == POTION_PRODUCT_TYPE:
+		return True
+	return product["type"][2] == 11 and product["param2"] != 0
+
+
+# ================
 # compile_catalogs
 # ================
 def compile_catalogs():
 	client = read_source("client")
-	equipment = read_source("equipment")
-	consumables = read_source("consumables")
+	drops = {source: read_source(source + "-drops") for source in SOURCE_ORDER}
 	vsro, isro = read_source("vsro-rewards"), read_source("isro-rewards")
 	if vsro["custom"] or isro["custom"]:
 		raise ValueError("New applicable custom loot rules need a versioned implementation")
 	items = client["items"]
+	merge_audit = {"classRows": {}, "assignmentSources": {source: [] for source in SOURCE_ORDER},
+		"absentFromClient": [], "zeroWeight": [], "olderGenerations": [], "unplacedAssignments": [], "itemlessClasses": []}
+	tables = {}
+	for table in sorted(set(EQUIPMENT_TABLES.values()) | set(FAMILY_TABLES.values())):
+		tables[table], merge_audit["classRows"][table] = merge_class_table(drops, table)
+	chosen = select_assignments(drops, items, merge_audit)
+	equipment_items, consumable_items = project_assignments(chosen, items, merge_audit)
+	equipment = {"version": 2, "widths": {"normal": len(tables["Equip"][0]), "rare": len(tables["RareEquip"][0])},
+		"normal": tables["Equip"], "rare": tables["RareEquip"], "items": equipment_items}
+	consumables = {"version": 2, "widths": {str(family): len(tables[table][0]) for family, table in FAMILY_TABLES.items()},
+		"classes": {str(family): copy.deepcopy(tables[table]) for family, table in FAMILY_TABLES.items()},
+		"items": consumable_items}
 	equipment_rebindings = []
 	for row in equipment["items"]:
 		if not row["rare"]:
 			continue
 		group = row["group"]
 		remaining = equipment["rare"][row["level"] - 1:]
-		if any(level[group] > 0.000001 for level in remaining):
+		if any(level[group] > NEGLIGIBLE for level in remaining):
 			continue
 		# Client-required torso levels outlive the donor's A-rare class window.
 		# Reconstruction: join those assignments to the next enabled class of
 		# the same degree. Preserve all class rates and the original item weight.
 		for candidate in range(group + 1, (group // 3 + 1) * 3):
-			if any(level[candidate] > 0.000001 for level in remaining):
+			if any(level[candidate] > NEGLIGIBLE for level in remaining):
 				equipment_rebindings.append({"item": row["codename"], "from": group, "to": candidate,
 					"reason": "client-required-level-outlives-source-class-window"})
 				row["group"] = candidate
@@ -71,6 +302,11 @@ def compile_catalogs():
 		ref = items[row["codename"]]
 		if row["family"] in (8, 9) and ref["param1"] not in degrees:
 			excluded.append({"item": row["codename"], "reason": "material-degree-has-no-client-equipment"})
+		elif row["family"] == 7 and items.get(ref.get("product"), {}).get("type", [0, 0, 0])[2] == 11 and 			items[ref["product"]]["param1"] not in degrees:
+			# The stone it makes is itself unavailable for want of equipment.
+			excluded.append({"item": row["codename"], "reason": "material-degree-has-no-client-equipment"})
+		elif row["family"] == 7 and not tablet_manufactures(ref, items):
+			excluded.append({"item": row["codename"], "reason": "tablet-product-cannot-be-manufactured"})
 		else:
 			filtered.append(row)
 	consumables["items"] = filtered
@@ -91,11 +327,17 @@ def compile_catalogs():
 	active = []
 	for row in consumables["items"]:
 		classes = consumables["classes"][str(row["family"])]
-		if any(row["group"] < len(level) and level[row["group"]] > 0.000001 for level in classes):
+		if any(row["group"] < len(level) and level[row["group"]] > NEGLIGIBLE for level in classes):
 			active.append(row)
 		else:
 			excluded.append({"item": row["codename"], "reason": "source-class-disabled"})
 	consumables["items"] = active
+	for rare, name in EQUIPMENT_TABLES.items():
+		groups = {row["group"] for row in equipment["items"] if row["rare"] == rare}
+		drop_itemless_classes(name, equipment["rare" if rare else "normal"], groups, merge_audit["itemlessClasses"])
+	for family in FAMILY_TABLES:
+		groups = {row["group"] for row in consumables["items"] if row["family"] == family}
+		drop_itemless_classes(str(family), consumables["classes"][str(family)], groups, merge_audit["itemlessClasses"])
 	consumables["fixed"] = []
 	for row in vsro["fixed"]:
 		ref = items[row["item"]]
@@ -160,14 +402,19 @@ def compile_catalogs():
 		eligibility.append({"codename": code, "category": category})
 	properties = {"items": {code: items[code] for code in sorted(ordinary | special) if items[code]["type"][1] == 1},
 		"magic": client["magic"], "assignments": client["magicAssignments"]}
-	audit = {"version": 1, "generatedBy": "scripts/build/generate_loot_catalog.py", "sourceHashes": client["hashes"],
+	audit = {"version": 2, "generatedBy": "scripts/build/generate_loot_catalog.py", "sourceHashes": client["hashes"],
 		"equipmentClassRebindings": equipment_rebindings,
 		"backupHashes": {"vsro": vsro["sha256"], "isro": isro["sha256"]},
+		"dropBackupHashes": {source: drops[source]["sha256"] for source in SOURCE_ORDER},
 		"inferredRates": INFERRED_RATES, "bands": [1, 20, 40, 60, 80, 90],
 		"inferences": ["Ordinary family 7 follows the native ordinary categories using its authored class table.",
-			"Monster material pairs (characterdata 99..108) roll as fixed per-monster rewards, one item each."],
+			"Monster material pairs (characterdata 99..108) roll as fixed per-monster rewards, one item each.",
+			"Each class table level takes ISRO-R's row when it rolls any class, else vSRO's.",
+			"Each item takes ISRO-R's enabled assignment rows when it has any, else vSRO's.",
+			"Rare equipment prefers vSRO's table and items instead (owner, #457).",
+			"Of a row's generations in a backup, the one on the newest-LSN page is live."],
 		"specialItems": SPECIAL_ITEMS, "eligibility": eligibility, "excludedMaterials": excluded,
-		"excludedSourceRows": {"vsro": vsro["excluded"], "isro": isro["excluded"]}}
+		"excludedSourceRows": {"vsro": vsro["excluded"], "isro": isro["excluded"]}, "merge": merge_audit}
 	return {"equipment.json": equipment, "consumables.json": consumables, "properties.json": properties, "audit.json": audit}
 
 

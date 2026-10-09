@@ -5,17 +5,13 @@
 neither the build nor the running server reads research directories or SQL
 backups. `pnpm task check:loot-catalog` checks byte-for-byte regeneration.
 
-The client is the content boundary. vSRO supplies the baseline assignments and
-mechanics; compatible ISRO random assignments fill gaps. Names, types, magic
+The client is the content boundary. Ordinary drops merge both backups (#459,
+below); compatible ISRO random assignments fill reward gaps. Names, types, magic
 option IDs, degrees, and required levels come from the v1.150 client. Numeric
 item identities from newer backups never become runtime item identities.
 
 ## Inputs and reproduction
 
-- `equipment-source.json` and `consumables-source.json` preserve the existing
-  vSRO projection before reconstruction. The equipment snapshot contains normal
-  and rare class rows; the consumable snapshot contains separate family rows,
-  weights, absolute chances, quantities, and the old assigned rewards.
 - `client-source.json` records enabled client items, monsters, option definitions
   and option assignments, with SHA-256 hashes of each source textdata file.
 - `vsro-rewards-source.json` and `isro-rewards-source.json` record joined fixed,
@@ -32,9 +28,11 @@ item identities from newer backups never become runtime item identities.
   its provenance: backup page offset, record offset and page LSN. A backup
   holds older generations of a row on other pages, sometimes enabled
   together (383 item/class pairs in vSRO, 56 in ISRO-R, none at an equal
-  LSN), so every generation is kept and the generator chooses. The vSRO class tables reproduce
-  `equipment-source.json` and `consumables-source.json` value for value.
-  The catalog generator owns every merge and filter decision (#459). Neither
+  LSN), so every generation is kept and the generator chooses. These
+  snapshots replace the old vSRO-only `equipment-source.json` and
+  `consumables-source.json`: the vSRO snapshot reproduced the equipment
+  projection row for row and both class sets value for value. The catalog
+  generator owns every merge and filter decision (#459). Neither
   backup is proven retail: ISRO-R authors most tables only around levels
   71-90, and vSRO's levels 74-89 run about ten times lower than ISRO-R's.
 
@@ -51,6 +49,26 @@ parameters it cannot represent. The compiler rejects newly applicable custom
 rules. This avoids silently dropping a feature when evidence changes. In the
 current snapshots all applicable fixed rows have zero authored modifiers and
 no rent code, and neither source has a custom rule for a v1.150 monster.
+
+## Merging the two backups (#459)
+
+An inference, since neither backup is proven retail (`audit.json` `merge`
+records each decision):
+
+- Class rows: per table and level, ISRO-R's row when it rolls any class,
+  else vSRO's. ISRO-R authors ordinary equipment at 71-90, stones at 1-90,
+  elixirs at 15-90 and 111+, so vSRO fills the rest and all tablets. Rare
+  equipment prefers vSRO (owner, #457): ISRO-R's rare table rolls only d9 A.
+- Assignments: an item takes ISRO-R's enabled rows when it has any, else
+  vSRO's (rare equipment the other way round). Rows the v1.150 client lacks
+  and zero-weight rows are dropped and logged with their raw id.
+- Of a row's generations (same item and class), the one on the newest-LSN
+  page is live, enabled or not. That rule reproduces all 336 choices the
+  old vSRO projection made among its duplicated stones.
+- A class without a v1.150 item stays when a lower class holds items:
+  724120 walks down to it, so d10 equipment rolls at 91-101 fall to d9 and
+  ISRO-R's level elixirs fall to the B elixir. A class with nothing below it
+  is zeroed, the same outcome.
 
 ## Recovered rules and deliberate reconstruction
 
