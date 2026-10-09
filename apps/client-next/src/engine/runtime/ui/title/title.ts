@@ -24,6 +24,7 @@ import type { ButtonAccess } from "@/engine/foundation/ui/button-state";
 import { dockSlot } from "@/engine/foundation/rendering/dock-slots";
 import { screenPoint } from "@/engine/foundation/rendering/screen-point";
 import type { TitleNode, TitleInteraction } from "./internal/title-contract";
+import { skillPointReadouts } from "@/engine/foundation/ui/hud-readouts";
 /*
 ================
 createTitleUi
@@ -228,6 +229,24 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 						], { fontIndex: style?.fontIndex, hAlign, vAlign: style?.vAlign, overflow } )
 					);
 				}
+			}
+			/*
+			================
+			fittingText
+
+			The first value whose drawn width fits width (the last when none
+			does): the skill point count's port-only shortening, as the HUD's.
+			================
+			*/
+			function fittingText( values: readonly string[], width: number, style?: TitleNode ) {
+				if ( !data ) return values[0]!;
+				const font = data.font;
+				return values.find( value => {
+					const glyphs = titleText( font, value, [ 0, 0, 1e5, 100 ], [ 0, 0, 1e5, 100 ], [ 1, 1, 1, 1 ], {
+						fontIndex: style?.fontIndex
+					} );
+					return Math.max( 0, ...glyphs.map( g => g.rect[0] + g.rect[2] ) ) <= width;
+				} ) ?? values.at( -1 )!;
 			}
 			/*
 			================
@@ -476,7 +495,10 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 								1
 							] );
 						}
-						const value = values[node.name] ?? data.text[node.text ?? ""];
+						// GDR_STA_SP (49 wide) overflows at beta skill point counts.
+						const value = node.name === "GDR_STA_SP" ?
+							fittingText( skillPointReadouts( chosen.skillPoints ?? 0 ), area[2], node ) :
+							values[node.name] ?? data.text[node.text ?? ""];
 						if ( value ) authoredText( node, value, area, 1 );
 					}
 					fitUiGroup( quads, controls, q, c, playfield, full );

@@ -1246,6 +1246,24 @@ test("inventory separates equipment and bag pages and double-click uses the sele
 	}
 });
 
+test("a beta skill point count stays inside the underbar's 48-pixel GDR_STATIC_SP", () => {
+	const f = uiFixture();
+	try {
+		f.state.gameplay = { ...f.state.gameplay, progression: { level: 10, masteries: [], skillPoints: 123456789 } };
+		for ( let t = 0; t < 1200; t += 100 ) f.ui.step( f.state, t );
+		assert.equal( f.hasText( "123456789" ), false, "the full nine digits overflow the gauge" );
+		// With the shipped font "123456K" is wider than 48 pixels, so the first
+		// candidate that fits is whole millions.
+		assert.equal( f.hasText( "123456K" ), false );
+		assert.equal( f.hasText( "123M" ), true, "the first shortened form that fits" );
+		f.state.gameplay = { ...f.state.gameplay, progression: { level: 10, masteries: [], skillPoints: 1234 } };
+		for ( let t = 1200; t < 2400; t += 100 ) f.ui.step( f.state, t );
+		assert.equal( f.hasText( "1234" ), true, "a count that fits is the native %d" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("death prompt opens 3 s after the death state, never at LIFE ingress, and routes native choices", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {

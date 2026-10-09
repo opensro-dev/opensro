@@ -7060,6 +7060,25 @@ export function createUi(
 			}
 			/*
 			================
+			authoredSkillPoints
+
+			A skill point count in its static: the first of skillPointReadouts
+			that fits the static's width (port-only shortening, hud-readouts.ts).
+			The underbar's GDR_STATIC_SP (48) and the restoration page's
+			GDR_SKILL_TEXT_SP_NUM (45) overflow at beta counts.
+			================
+			*/
+			function authoredSkillPoints( node: AuthoredControl, ox: number, oy: number, points: number ) {
+				const room = authoredClientRect( node, ox, oy )[2], readouts = skillPointReadouts( points );
+				authoredText(
+					node,
+					ox,
+					oy,
+					readouts.find( value => text.run( value, 0, node.fontIndex ).width <= room ) ?? readouts.at( -1 )!
+				);
+			}
+			/*
+			================
 			drawTransientBanners
 
 			Desktop retains the native draw order and fixed origins. Compact mode
@@ -8639,15 +8658,7 @@ export function createUi(
 							);
 						}
 						if ( game?.progression?.skillPoints !== undefined ) {
-							const node = bar.GDR_STATIC_SP!, room = authoredClientRect( node, barX, barY )[2];
-							const readouts = skillPointReadouts( game.progression.skillPoints );
-							authoredText(
-								node,
-								barX,
-								barY,
-								readouts.find( value => text.run( value, 0, node.fontIndex ).width <= room ) ??
-									readouts.at( -1 )!
-							);
+							authoredSkillPoints( bar.GDR_STATIC_SP!, barX, barY, game.progression.skillPoints );
 						}
 					} );
 				}
@@ -11315,7 +11326,7 @@ export function createUi(
 							`${withdrawalState.quantity} ${hudCopy( "UIIT_STT_UNIT" )}`
 						);
 					}
-					authoredText( page.GDR_SKILL_TEXT_SP_NUM!, ox, oy, String( game?.progression?.skillPoints ?? 0 ) );
+					authoredSkillPoints( page.GDR_SKILL_TEXT_SP_NUM!, ox, oy, game?.progression?.skillPoints ?? 0 );
 					const model = next.entities.find( e => e.gid === game?.localGid )?.refObjId,
 						country = model === undefined ? game?.guide?.country : hudData.countries[model],
 						cap = game?.masteryTotalOverride ?? (country === 0 ?
