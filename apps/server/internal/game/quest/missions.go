@@ -53,8 +53,9 @@ type MissionSpec struct {
 	NotAchievedSymbol   string
 	// PendingNoticeSymbol (mission +0x108) is sent when another mission is
 	// handed over while this one still waits ("Doji's medicine has been
-	// delivered. Deliver Bori's book to Chau."). Inference: no reader was
-	// found in the deliver handler; every line reads as that reminder.
+	// delivered. Deliver Bori's book to Chau."). Inference: its only writer is
+	// QuestLua_LoadQuestConfiguration (92A7E8), and neither the deliver handler
+	// nor 91CEB0 reads it; every line reads as that reminder.
 	PendingNoticeSymbol string
 	deliveryRefs        []uint32
 	handOverNpcRef      uint32
