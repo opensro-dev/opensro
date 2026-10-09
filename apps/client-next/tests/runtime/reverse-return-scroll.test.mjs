@@ -157,19 +157,28 @@ for ( const change of [ "replacement", "travel", "character", "pending" ] ) {
 		try {
 			f.ui.event( { kind: "right-activate", id: "slot:13" } );
 			f.ui.step( f.state, 1300 );
-			const game = f.state.gameplay;
+			/** @type {import("../../src/engine/contracts/ui").UiView} */
+			let state = f.state;
+			const game = state.gameplay;
+			assert.ok( game );
 			if ( change === "replacement" ) {
-				f.state.gameplay = {
-					...game,
-					inventory: game.inventory.map( row => ({ ...row, refObjId: row.refObjId + 1 }) )
+				state = {
+					...state,
+					gameplay: {
+						...game,
+						inventory: game.inventory.map( row => ({ ...row, refObjId: row.refObjId + 1 }) )
+					}
 				};
 			}
-			if ( change === "character" ) f.state.gameplay = { ...game, localGid: game.localGid + 1 };
-			if ( change === "pending" ) f.state.gameplay = { ...game, inventoryPending: true };
-			if ( change === "travel" ) f.state = { ...f.state, travel: { mode: 1, region: 257 } };
-			f.ui.step( f.state, 1400 );
-			f.state = { ...f.state, travel: null, gameplay: game };
-			assert.deepEqual( boxIds( f.ui.step( f.state, 1500 ) ), [] );
+			if ( change === "character" ) {
+				state = { ...state, gameplay: { ...game, localGid: (game.localGid ?? 0) + 1 } };
+			}
+			if ( change === "pending" ) state = { ...state, gameplay: { ...game, inventoryPending: true } };
+			if ( change === "travel" ) state = { ...state, travel: { mode: 1, region: 257 } };
+			const cleared = f.ui.step( state, 1400 );
+			state = { ...state, travel: null, gameplay: game };
+			// A null result keeps the last published scene; it is not a new empty scene.
+			assert.deepEqual( boxIds( f.ui.step( state, 1500 ) ?? cleared ), [] );
 			assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
 		} finally {
 			f.dispose();
