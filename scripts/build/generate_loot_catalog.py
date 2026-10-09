@@ -239,6 +239,19 @@ def drop_itemless_classes(name, rows, groups, audit):
 
 
 # ================
+# tablet_stone_degree
+#
+# The degree of the stone a tablet makes, or None for a potion tablet or a
+# product the client lacks.
+# ================
+def tablet_stone_degree(tablet, items):
+	product = items.get(tablet.get("product"))
+	if product is None or product["type"][2] != 11:
+		return None
+	return product["param1"]
+
+
+# ================
 # tablet_manufactures
 #
 # Whether compounding the tablet can succeed: 509BC0 makes a stone only from
@@ -302,7 +315,7 @@ def compile_catalogs():
 		ref = items[row["codename"]]
 		if row["family"] in (8, 9) and ref["param1"] not in degrees:
 			excluded.append({"item": row["codename"], "reason": "material-degree-has-no-client-equipment"})
-		elif row["family"] == 7 and items.get(ref.get("product"), {}).get("type", [0, 0, 0])[2] == 11 and 			items[ref["product"]]["param1"] not in degrees:
+		elif row["family"] == 7 and tablet_stone_degree(ref, items) not in degrees | {None}:
 			# The stone it makes is itself unavailable for want of equipment.
 			excluded.append({"item": row["codename"], "reason": "material-degree-has-no-client-equipment"})
 		elif row["family"] == 7 and not tablet_manufactures(ref, items):
