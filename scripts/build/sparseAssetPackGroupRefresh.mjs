@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+sparseAssetPackGroupRefresh.mjs - replace changed pack members from loose files
+
+Preserve untouched packs and hydrate compacted siblings only while rebuilding.
+Match client identities case-insensitively, but read supplied filesystem paths
+with their original spelling so Linux and Windows publish the same bytes.
+
+===========================================================================
+*/
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as zlib from "node:zlib";
@@ -11,15 +22,14 @@ import { sha256Hex } from "./shared/hash.mjs";
 
 const HASH_CONCURRENCY = 8;
 
-/**
- * Patch one asset-pack group from a sparse loose projection.
- *
- * Compaction intentionally deletes packed logical files. A focused rebuild may
- * recreate only one region, so absence cannot mean deletion. This routine
- * hashes the loose delta, reconstructs only each affected pack's missing
- * members from its existing identity/zstd bytes, and preserves every untouched
- * pack and asset row verbatim.
- */
+/*
+================
+patchAssetPackGroupFromLooseFiles
+
+Compaction intentionally deletes packed logical files. Absence cannot mean
+deletion: reconstruct affected packs' missing members from their packed bytes.
+================
+*/
 export async function patchAssetPackGroupFromLooseFiles( options ) {
 	const publicRoot = path.resolve( options.publicRoot );
 	const outputRoot = path.resolve( options.outputRoot );
@@ -34,7 +44,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 	const previousAssets = previous.assets
 		.filter( ( asset ) => asset.group === groupName )
 		.map( ( asset ) => structuredClone( asset ) );
-	const previousByPath = new Map( previousAssets.map( ( asset ) => [ asset.path, asset ] ) );
+	const previousByPath = new Map( previousAssets.map( ( asset ) => [ asset.path.toLowerCase(), asset ] ) );
 	const hashCache = await openFileHashCache( options.hashCachePath );
 	const loosePaths = uniquePublicPaths( options.looseFiles ?? [] );
 	const looseRows = await mapWithConcurrency( loosePaths, HASH_CONCURRENCY, async ( publicPath ) => {
@@ -49,16 +59,17 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 		};
 	} );
 	await hashCache.save();
+	const incomingPaths = new Map( looseRows.map( row => [ row.publicPath.toLowerCase(), row.publicPath ] ) );
 
 	const changedExisting = looseRows.filter( ( row ) => {
-		const previousAsset = previousByPath.get( row.publicPath );
+		const previousAsset = previousByPath.get( row.publicPath.toLowerCase() );
 		return previousAsset && previousAsset.sha256 !== row.sha256;
 	} );
 	const newPaths = looseRows
-		.filter( ( row ) => !previousByPath.has( row.publicPath ) )
+		.filter( ( row ) => !previousByPath.has( row.publicPath.toLowerCase() ) )
 		.map( ( row ) => row.publicPath );
 	const affectedPackPaths = new Set(
-		changedExisting.map( ( row ) => previousByPath.get( row.publicPath ).packPath )
+		changedExisting.map( ( row ) => previousByPath.get( row.publicPath.toLowerCase() ).packPath )
 	);
 
 	if ( affectedPackPaths.size === 0 && newPaths.length === 0 ) {
@@ -73,7 +84,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 	}
 
 	const nextPacks = previousGroup.packs.map( ( pack ) => [ structuredClone( pack ) ] );
-	const nextAssetsByPath = new Map( previousAssets.map( ( asset ) => [ asset.path, asset ] ) );
+	const nextAssetsByPath = new Map( previousAssets.map( ( asset ) => [ asset.path.toLowerCase(), asset ] ) );
 	let builtPackCount = 0;
 	let reusedPackCount = previousGroup.packs.length - affectedPackPaths.size;
 	let hydratedAssetCount = 0;
@@ -85,6 +96,9 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 		}
 		const members = previousAssets
 			.filter( ( asset ) => asset.packPath === previousPack.path )
+			// Incoming spelling names the actual loose file on Linux. Replacing
+			// the folded identity below prevents the old spelling surviving too.
+			.map( asset => ({ ...asset, path: incomingPaths.get( asset.path.toLowerCase() ) ?? asset.path }) )
 			.sort( ( left, right ) => left.offset - right.offset );
 		const slotRoot = path.join( outputRoot, "slots", `slot-${previousPack.sha256}` );
 		const rebuilt = await rebuildExistingPackSlot( {
@@ -97,7 +111,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 		} );
 		nextPacks[packIndex] = rebuilt.groups[0].packs;
 		for ( const asset of rebuilt.assets ) {
-			nextAssetsByPath.set( asset.path, asset );
+			nextAssetsByPath.set( asset.path.toLowerCase(), asset );
 		}
 		builtPackCount += rebuilt.builtPackCount;
 		reusedPackCount += rebuilt.reusedPackCount;
@@ -111,7 +125,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 		// manifest on the next append. Give each delta its own immutable namespace.
 		const deltaHash = sha256Hex( Buffer.from( JSON.stringify(
 			looseRows
-				.filter( ( row ) => !previousByPath.has( row.publicPath ) )
+				.filter( ( row ) => !previousByPath.has( row.publicPath.toLowerCase() ) )
 				.sort( ( a, b ) => a.publicPath.localeCompare( b.publicPath ) )
 		) ) );
 		const newRoot = path.join( outputRoot, "slots", `new-${deltaHash}` );
@@ -131,7 +145,7 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 		} );
 		nextPacks.push( appended.groups[0].packs );
 		for ( const asset of appended.assets ) {
-			nextAssetsByPath.set( asset.path, asset );
+			nextAssetsByPath.set( asset.path.toLowerCase(), asset );
 		}
 		builtPackCount += appended.builtPackCount;
 		reusedPackCount += appended.reusedPackCount;
@@ -165,6 +179,11 @@ export async function patchAssetPackGroupFromLooseFiles( options ) {
 	};
 }
 
+/*
+================
+rebuildExistingPackSlot
+================
+*/
 async function rebuildExistingPackSlot( options ) {
 	const identity = await readPackIdentity( options.publicRoot, options.previousPack );
 	const dataStart = packDataStart( identity, options.previousPack.path );
@@ -210,6 +229,11 @@ async function rebuildExistingPackSlot( options ) {
 	}
 }
 
+/*
+================
+readPackIdentity
+================
+*/
 async function readPackIdentity( publicRoot, pack ) {
 	const identityPath = containedPublicFile( publicRoot, pack.path );
 	let bytes;
@@ -230,6 +254,11 @@ async function readPackIdentity( publicRoot, pack ) {
 	return bytes;
 }
 
+/*
+================
+packDataStart
+================
+*/
 function packDataStart( buffer, packPath ) {
 	const dataStart = readPackPrefix( buffer, packPath );
 	if ( dataStart > buffer.length ) {
@@ -238,6 +267,11 @@ function packDataStart( buffer, packPath ) {
 	return dataStart;
 }
 
+/*
+================
+uniquePublicPaths
+================
+*/
 function uniquePublicPaths( values ) {
 	const byLower = new Map();
 	for ( const value of values ) {

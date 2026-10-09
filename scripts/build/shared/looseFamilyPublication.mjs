@@ -16,8 +16,7 @@ The caller holds the generated-assets lock.
 
 ===========================================================================
 */
-import { readFile } from "node:fs/promises";
-import { PACK_INDEX_PATH, refreshPackGroups } from "./packGroupRefresh.mjs";
+import { refreshOwnedPackFiles } from "./ownedPackRefresh.mjs";
 import { beginPublication, claimPublicPaths, commitPublication, isPublicationOpen } from "./publicationLedger.mjs";
 
 /*
@@ -36,20 +35,10 @@ export async function publishLooseFamily( family ) {
 	// The ledger owner is the family's task name (assets:refresh|publish:<owner>),
 	// so the build can tell a family that never ran from one that ran.
 	if ( !family.owner ) throw new Error( `${family.name}: publishLooseFamily needs the family's task name as owner` );
-	const previous = JSON.parse( await readFile( PACK_INDEX_PATH, "utf8" ) );
-	const groupOf = typeof family.defaultGroup === "function" ? family.defaultGroup : () => family.defaultGroup;
-	const owners = new Map( previous.assets.map( row => [ row.path, row.group ] ) );
-	const deltas = new Map();
-	for ( const file of new Set( family.files ) ) {
-		const group = owners.get( file ) ?? groupOf( file, previous );
-		if ( !group ) throw new Error( `${family.name}: ${file} has no asset-pack owner` );
-		const rows = deltas.get( group ) ?? [];
-		rows.push( file );
-		deltas.set( group, rows );
-	}
-	const { updates } = await refreshPackGroups( {
+	const { updates } = await refreshOwnedPackFiles( {
 		name: family.name,
-		deltas: [ ...deltas ].map( ( [groupName, files] ) => ({ groupName, files }) ),
+		files: family.files,
+		defaultGroup: family.defaultGroup,
 		// Families keep the full-strength manifest sidecars they always published.
 		manifestSidecars: {}
 	} );
