@@ -242,15 +242,19 @@ test("native sight modes constrain pitch, follow heading and preserve free yaw",
 	assert.throws( () => input.sight( 3 ), /Invalid sight/ );
 });
 
-test("alternate native mouse mode changes the drag button while the wheel still zooms", () => {
+// 67CCA0: mode 1 orbits while the wheel button is held (buttons 4); the
+// right button uses the mouse quickslot and the left button moves.
+test("alternate native mouse mode orbits with the wheel button while the wheel still zooms", () => {
 	const input = createInput(), start = input.camera().yaw;
 	input.mouseMode( 1 );
-	input.accept( { kind: "pointer", x: 0, y: 0, buttons: 2, timeMs: 1 } );
-	input.accept( { kind: "pointer", x: 20, y: 20, buttons: 2, timeMs: 2 } );
-	assert.equal( input.camera().yaw, start );
-	input.accept( { kind: "release", timeMs: 3 } );
-	input.accept( { kind: "pointer", x: 0, y: 0, buttons: 1, timeMs: 4 } );
-	input.accept( { kind: "pointer", x: 20, y: 20, buttons: 1, timeMs: 5 } );
+	for ( const buttons of [ 2, 1 ] ) {
+		input.accept( { kind: "pointer", x: 0, y: 0, buttons, timeMs: 1 } );
+		input.accept( { kind: "pointer", x: 20, y: 20, buttons, timeMs: 2 } );
+		assert.equal( input.camera().yaw, start, `buttons ${buttons} must not orbit in mode 1` );
+		input.accept( { kind: "release", timeMs: 3 } );
+	}
+	input.accept( { kind: "pointer", x: 0, y: 0, buttons: 4, timeMs: 4 } );
+	input.accept( { kind: "pointer", x: 20, y: 20, buttons: 4, timeMs: 5 } );
 	assert.equal( input.camera().yaw, start + .1 );
 	input.accept( { kind: "wheel", delta: 120, timeMs: 6 } );
 	assert.equal( input.camera().distance, 86 );

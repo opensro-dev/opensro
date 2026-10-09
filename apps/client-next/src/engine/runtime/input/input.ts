@@ -21,6 +21,7 @@ import {
 import type { InputOwner, InputCommand, RawInput } from "@/engine/contracts/input";
 import { zoomCamera } from "@/engine/foundation/rendering/camera-wheel";
 import { virtualKey } from "@/engine/foundation/ui/input-options";
+import { cameraDragButtons } from "@/engine/foundation/ui/mouse-modes";
 
 const MAX_QUEUED_COMMANDS = 512;
 // Native camera drag: radians per pixel, and the pitch rails.
@@ -116,7 +117,9 @@ export function createInput(): InputOwner {
 			// Platform capture has already filtered UI-owned events. Camera
 			// response belongs to this display-thread owner, not worker ticks.
 			if ( event.kind === "pointer" ) {
-				const drag = mouseMode === 0 ? 2 : 1;
+				// 67CCA0: mode 0 orbits while the right button is held, mode 1
+				// while the wheel button is (PointerEvent.buttons 2 / 4).
+				const drag = cameraDragButtons( mouseMode );
 				if ( pointer && buttons & drag && event.buttons & drag ) {
 					yaw += (event.x - pointer.x) * DRAG_RADIANS_PER_PIXEL;
 					if ( sight !== 2 ) {

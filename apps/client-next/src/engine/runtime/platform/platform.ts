@@ -24,6 +24,7 @@ import {
 	type VideoOptions
 } from "@/engine/foundation/rendering/video-options";
 import { defaultInputOptions, inputOptions, virtualKey, type InputOptions } from "@/engine/foundation/ui/input-options";
+import { cameraDragButtons, shortcutButton } from "@/engine/foundation/ui/mouse-modes";
 import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-options";
 import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
 import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
@@ -477,7 +478,7 @@ export function createPlatform(
 						alt: event.altKey
 					} );
 				}
-			} else touchInput( touchCamera.move( event.pointerId, x, y, bindings.mouseMode === 0 ? 2 : 1 ) );
+			} else touchInput( touchCamera.move( event.pointerId, x, y, cameraDragButtons( bindings.mouseMode ) ) );
 			return;
 		}
 		if ( uiPointer ) {
@@ -507,7 +508,7 @@ export function createPlatform(
 			if ( uiTouches.size || blocksUi( x, y ) ) return;
 			if ( document.activeElement instanceof HTMLElement ) document.activeElement.blur();
 			canvas.setPointerCapture( event.pointerId );
-			touchInput( touchCamera.down( event.pointerId, x, y, bindings.mouseMode === 0 ? 2 : 1 ) );
+			touchInput( touchCamera.down( event.pointerId, x, y, cameraDragButtons( bindings.mouseMode ) ) );
 			return;
 		}
 		uiPointer = blocksUi( ...uiPoint( event ) );
@@ -534,9 +535,14 @@ export function createPlatform(
 		) return;
 		const r = canvas.getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
 		const blocked = blocksUi( ...uiPoint( event ) );
-		if ( event.button === 2 && bindings.mouseMode === 1 && !blocked ) {
+		// 67CCA0: the mode's shortcut button uses quickslot 0 (CIFUnderBar
+		// 0x204 in mode 1, 0x207 in mode 0); the other button orbits.
+		if ( event.button === shortcutButton( bindings.mouseMode ) && !blocked ) {
 			onUi( { kind: "activate", id: "hotbar:0" } );
 		}
+		// A wheel click is a game button: the browser must not start its
+		// auto-scroll on the canvas.
+		if ( event.button === 1 ) event.preventDefault();
 		if ( event.button === 0 && !blocked && r.width > 0 && r.height > 0 ) {
 			onWorldClick( x / r.width, y / r.height, { shift: event.shiftKey, alt: event.altKey } );
 		}

@@ -290,6 +290,7 @@ import {
 import { masteryTooltip } from "@/engine/foundation/ui/mastery-tooltip";
 import { petMiniInfo } from "@/engine/foundation/ui/pet-mini-info";
 import { pkStatusTooltip } from "@/engine/foundation/gameplay/pk-status";
+import { mouseModeLabel } from "@/engine/foundation/ui/mouse-modes";
 import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
@@ -9789,9 +9790,7 @@ export function createUi(
 							labels = inputLabels();
 						for ( let i = 0; i < 2; i++ ) {
 							const r: UiRect = [ ox + 29, oy + 43 + i * 22, 16, 16 ],
-								key = i === 0 ?
-									"UIIT_STT_USE_WHEEL_TO_CHANGE_SIGHT" :
-									"UIIT_STT_USE_WHEEL_TO_USE_SKILL";
+								key = mouseModeLabel( i as 0 | 1 );
 							for ( const state of [ "on", "off" ] ) {
 								paths.push( ROOT + "interface/ifcommon/com_radiobutton_" + state + ".png" );
 							}
