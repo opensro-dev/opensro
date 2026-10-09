@@ -1709,9 +1709,13 @@ receive
 				// cooldown lane from the answer's type word. It never compares the
 				// count with what the client held, so a use answered after another
 				// change to the stack (a pickup merge) still applies, and no answer
-				// ends the session. An answer for a slot the client no longer holds,
-				// or holds another item in, has nothing to apply: the count belongs
-				// to the item the server used, which the client has already lost.
+				// ends the session.
+				// Deliberate deviation, port-only, not native: 755E40 stamps the count
+				// and cooldown on whatever item now sits in the slot, so an answer that
+				// races a move rewrites an unrelated item. That is a bug in the
+				// original, so the port applies nothing when the slot is empty or
+				// holds another type word: the count belongs to the item the server
+				// used, and the lane's duration needs that item's reference.
 				// Every success answer starts its lane (CGInterface_AddItemCooldown),
 				// as 755E40 does; failure answers ([2][code]) never reach here.
 				if ( item ) {
