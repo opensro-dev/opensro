@@ -128,7 +128,9 @@ test("right-click opens a modal choice without toggling the inventory behind it"
 		assert.equal( boxIds( f.ui.step( f.state, 1300 ) ).length, 3 );
 		f.ui.event( { kind: "key", code: "KeyI" } );
 		f.ui.event( { kind: "activate", id: "reverse-scroll-cancel" } );
-		assert.ok( f.ui.step( f.state, 1400 ).controls.some( c => c.id === "slot:13" ) );
+		const restored = f.ui.step( f.state, 1400 );
+		assert.ok( restored );
+		assert.ok( restored.controls.some( c => c.id === "slot:13" ) );
 		assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
 	} finally {
 		f.dispose();
@@ -158,7 +160,7 @@ for ( const change of [ "replacement", "travel", "character", "pending" ] ) {
 			f.ui.event( { kind: "right-activate", id: "slot:13" } );
 			f.ui.step( f.state, 1300 );
 			/** @type {import("../../src/engine/contracts/ui").UiView} */
-			let state = f.state;
+			let state = /** @type {any} */ (f.state);
 			const game = state.gameplay;
 			assert.ok( game );
 			if ( change === "replacement" ) {
