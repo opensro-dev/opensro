@@ -143,6 +143,14 @@ variable "beta_mastery" {
   default = "on"
 }
 
+# beta_silk gives every account an Item Mall silk allowance, refilled at each
+# world entry and never stored, so testers can try the mall (BUG-062). "off"
+# restores native balances; "on" is 100000, or set an amount.
+variable "beta_silk" {
+  type    = string
+  default = "100000"
+}
+
 # party_masteries puts each member's two main mastery trees on the quick party
 # board. Set off for the native roster rows.
 variable "party_masteries" {
@@ -317,6 +325,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_STARTER_KIT               = var.beta_starter_kit
         SRO_BETA_PLAYER_MAP                = var.beta_player_map
         SRO_BETA_MASTERY                   = var.beta_mastery
+        SRO_BETA_SILK                      = var.beta_silk
         SRO_PARTY_MASTERIES                = var.party_masteries
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate

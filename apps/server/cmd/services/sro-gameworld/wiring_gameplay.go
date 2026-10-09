@@ -142,9 +142,17 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
-	if err := items.ConfigureMall(devPaths.TextdataDir, authorityStore); err != nil {
+	// SRO_BETA_SILK (port-only, not native): the beta's Item Mall silk
+	// allowance, refilled at world entry and never stored (betasilk.go).
+	betaSilk, err := action.BetaSilkFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	mallAuthority, refillMallAllowance := action.WithBetaSilk(authorityStore, betaSilk)
+	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
+	deps.EntryMallAllowance = refillMallAllowance
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames

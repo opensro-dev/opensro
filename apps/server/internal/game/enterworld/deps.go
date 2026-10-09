@@ -71,7 +71,10 @@ type Deps struct {
 	PrepareEntry         func(divisionID, characterName string) error
 	EntryPopulationLease func(divisionID, characterName string) (instance.Lease, bool)
 	// Pure quest projection on the detached entry snapshot; never grants items.
-	NormalizeEntryQuests         func(character *Character) error
+	NormalizeEntryQuests func(character *Character) error
+	// EntryMallAllowance refills the beta Item Mall silk allowance
+	// (SRO_BETA_SILK, port-only); nil in native mode.
+	EntryMallAllowance           func(character *Character)
 	AdmitCharacterSession        func(divisionID, characterName string, session uint64) error
 	RetireCharacterSession       func(divisionID, characterName string, session uint64)
 	EntryActionSpeed             func(divisionID, characterName string) float32
