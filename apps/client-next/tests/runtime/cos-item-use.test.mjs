@@ -517,3 +517,12 @@ test("automatic companion refusal feedback distinguishes absent, incompatible, r
 	assert.equal( autoPotionTargetNotice( flags( 1, 9 ), [ { ...pet, satiety: 9899 } ], pet.gid ), null );
 	assert.equal( autoPotionTargetNotice( flags( 1, 1 ), [], 0 ), null );
 });
+
+test("the reverse return scroll carries its chosen point as one byte (6971B0 case 0x1E)", () => {
+	const scroll = flags( 3, 3 );
+	assert.deepEqual( cosItemUseTail( scroll, [], { records: [], reverseChoice: 2 } ), Uint8Array.of( 2 ) );
+	assert.deepEqual( cosItemUseTail( scroll, [], { records: [], reverseChoice: 3 } ), Uint8Array.of( 3 ) );
+	for ( const reverseChoice of [ undefined, 0, 7 ] ) {
+		assert.throws( () => cosItemUseTail( scroll, [], { records: [], reverseChoice } ), /reverse return/ );
+	}
+});

@@ -234,6 +234,13 @@ func (rt *Runtime) HandleItemUse(
 		if family == itemUseReturn {
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
 		}
+		if family == itemUseReverseReturn {
+			// The tail is the u8 point the client's choice box picked (6971B0).
+			if len(tail) != 1 {
+				return false
+			}
+			return rt.beginReverseReturnScroll(divisionID, character, ref, rowIndex, tail[0], nowMs, &result)
+		}
 		if family == itemUseRepairHammer {
 			if len(tail) != 0 {
 				return false

@@ -2134,7 +2134,8 @@ state here before a command can claim a native wire conversation.
 					revivalSlot: command.revivalSlot,
 					summonerSlot: command.summonerSlot,
 					skin: command.skin,
-					targetSlot: command.targetSlot
+					targetSlot: command.targetSlot,
+					reverseChoice: command.reverseChoice
 				};
 				const refusal = inventory.useNotice( command.slot, context );
 				if ( refusal ) {

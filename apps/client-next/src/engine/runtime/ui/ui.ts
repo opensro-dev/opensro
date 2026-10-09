@@ -27,7 +27,11 @@ const STALL_CHAT_TEXT = "stall-chat-text";
 // CIFChatModule rows are 16 pixels; the input row sits under them.
 const STALL_CHAT_ROW = 16;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
-import { companionItemTargetCommand, isCompanionLeaseItem } from "@/engine/foundation/gameplay/cos-item-use";
+import {
+	companionItemTargetCommand,
+	isCompanionLeaseItem,
+	isReverseReturnScroll
+} from "@/engine/foundation/gameplay/cos-item-use";
 import {
 	createStoragePanel,
 	firstFreeSlot,
@@ -918,6 +922,8 @@ export function createUi(
 	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
 	// both move it; the release or the next press places it.
 	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
+	// The bag slot whose reverse return scroll waits in its choice box.
+	let reverseScrollSlot: number | null = null;
 	/*
 	================
 	carriedRow
@@ -1568,6 +1574,13 @@ export function createUi(
 			if ( item && isGlobalChatItem( item.typeFlags ) && command.message === undefined ) {
 				globalChatHud.open( item.slot );
 				focusAtEnd( GLOBAL_CHAT_TEXT, "" );
+				dirty = true;
+				return;
+			}
+			// 6971B0 case 0x1E: the reverse return scroll asks for its point
+			// first; the row's pick runs the use with that byte.
+			if ( item && isReverseReturnScroll( item.typeFlags ) && command.reverseChoice === undefined ) {
+				reverseScrollSlot = item.slot;
 				dirty = true;
 				return;
 			}
@@ -3156,7 +3169,15 @@ export function createUi(
 		} else if ( id.startsWith( "premium-reverse:" ) ) {
 			sendGameplay( { kind: "premium-command", command: "reverse-return", choice: Number( id.slice( 16 ) ) } );
 		} else if ( id === "premium-reverse-cancel" ) sendGameplay( { kind: "premium-command-cancel" } );
-		else if ( id.startsWith( "count-job:" ) ) {
+		else if ( id.startsWith( "reverse-scroll:" ) && reverseScrollSlot !== null ) {
+			const slot = reverseScrollSlot;
+			reverseScrollSlot = null;
+			sendGameplay( { kind: "item-use", slot, reverseChoice: Number( id.slice( "reverse-scroll:".length ) ) } );
+			dirty = true;
+		} else if ( id === "reverse-scroll-cancel" ) {
+			reverseScrollSlot = null;
+			dirty = true;
+		} else if ( id.startsWith( "count-job:" ) ) {
 			// 6E2840: a package slot (kind 5) opens its package window.
 			compositeItemHud.open( Number( id.slice( "count-job:".length ) ) );
 			dirty = true;
@@ -3855,6 +3876,11 @@ export function createUi(
 					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
 					event.kind === "drag-end" || event.kind === "edit"
 				) return;
+			}
+			if ( reverseScrollSlot !== null && event.kind === "key" && event.code === "Escape" ) {
+				reverseScrollSlot = null;
+				dirty = true;
+				return;
 			}
 			if ( shopWarning ) {
 				if (
@@ -11659,8 +11685,29 @@ export function createUi(
 					);
 					endWindow( admission, "composite-item" );
 				}
-				if ( game?.reverseReturnChoice ) {
-					// 6AD990's type 0x24 confirm box: the reverse return's two points.
+				// The scroll's box closes when its slot no longer holds the scroll.
+				if (
+					reverseScrollSlot !== null &&
+					!game?.inventory.some( row =>
+						row.slot === reverseScrollSlot && isReverseReturnScroll( row.typeFlags )
+					)
+				) reverseScrollSlot = null;
+				// 6AD990's type 0x24 confirm box and the scroll's box 0x1E (6971B0)
+				// share the layout: the reverse return's two points and Cancel.
+				const reverseBox = game?.reverseReturnChoice ?
+					{
+						title: "UIIT_CTL_PREMIUM_REVERSE_RETURN",
+						prefix: "premium-reverse:",
+						cancel: "premium-reverse-cancel"
+					} :
+					reverseScrollSlot !== null ?
+					{
+						title: "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_REVERSE_PORTAL",
+						prefix: "reverse-scroll:",
+						cancel: "reverse-scroll-cancel"
+					} :
+					null;
+				if ( reverseBox ) {
 					controls = [];
 					const admission = beginWindow(), box = guildProposalLayout( w, h );
 					blocks.push( full );
@@ -11675,7 +11722,7 @@ export function createUi(
 					);
 					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
 					quads.push(
-						...text.quads( hudCopy( "UIIT_CTL_PREMIUM_REVERSE_RETURN" ), box.title, full, white, {
+						...text.quads( hudCopy( reverseBox.title ), box.title, full, white, {
 							hAlign: 1,
 							vAlign: 0
 						} )
@@ -11687,7 +11734,7 @@ export function createUi(
 						] as const
 					) {
 						button(
-							"premium-reverse:" + choice,
+							reverseBox.prefix + choice,
 							hudCopy( key ),
 							box.frame[0] + 16,
 							box.frame[1] + 44 + index * 26,
@@ -11695,7 +11742,7 @@ export function createUi(
 						);
 					}
 					button(
-						"premium-reverse-cancel",
+						reverseBox.cancel,
 						hudCopy( "UIIT_CTL_CANCEL" ),
 						box.refuse[0],
 						box.refuse[1],

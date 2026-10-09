@@ -359,6 +359,8 @@ export type GameplayCommand =
 		readonly targetSlot?: number;
 		// The Global Chatting window's line (CIFGlobalChatItem_OnSend 6D1EE0).
 		readonly message?: string;
+		// The reverse return scroll's point (6971B0 message box 0x1E).
+		readonly reverseChoice?: number;
 	}
 	| {
 		readonly kind: "navigation";

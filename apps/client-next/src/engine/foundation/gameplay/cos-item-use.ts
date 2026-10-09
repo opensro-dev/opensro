@@ -12,6 +12,7 @@ import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
 import type { CosRecord, GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
 import { isSkinChangeScroll, skinChangeTail, type SkinChoice } from "./skin-change";
+import { REVERSE_RETURN_LAST_DEATH, REVERSE_RETURN_LAST_RECALL } from "./count-job";
 
 /*
 ================
@@ -32,6 +33,8 @@ export interface CosItemUseContext {
 	readonly skin?: SkinChoice;
 	// The bag item an armour gender change tool was dropped on.
 	readonly targetSlot?: number;
+	// The reverse return scroll's chosen point (2 recall, 3 death).
+	readonly reverseChoice?: number;
 }
 
 /*
@@ -90,6 +93,14 @@ export function cosItemUseTail(
 		if ( context?.targetSlot === undefined ) throw Error( "Drop the tool on the armour to change" );
 		return Uint8Array.of( context.targetSlot );
 	}
+	if ( isReverseReturnScroll( flags ) ) {
+		// 6971B0 case 0x1E: the choice box's row is the one byte after the type.
+		const choice = context?.reverseChoice;
+		if ( choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH ) {
+			throw Error( "Choose where the reverse return scroll goes" );
+		}
+		return Uint8Array.of( choice );
+	}
 	if ( isSkinChangeScroll( flags ) ) {
 		if ( !context?.skin ) throw Error( "Choose a skin in the change window" );
 		return skinChangeTail( context.skin );
@@ -126,6 +137,18 @@ export function cosItemUseTail(
 	const tail = new Uint8Array( 4 );
 	new DataView( tail.buffer ).setUint32( 0, gid, true );
 	return tail;
+}
+
+/*
+================
+isReverseReturnScroll
+
+3/3/3/3, ITEM_MALL_REVERSE_RETURN_SCROLL: a right click asks for its point
+(6971B0 case 0x1E) before the use is sent.
+================
+*/
+export function isReverseReturnScroll( flags: number ): boolean {
+	return (flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 3 && (flags >>> 11 & 31) === 3;
 }
 
 /*
