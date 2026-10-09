@@ -49,17 +49,54 @@ func TestLoadMonsterRideMetadataModes(t *testing.T) {
 	}
 
 	metadata := loadMonsterRideMetadata(dir)
-	if got := metadata["MOB_CH_TIGERWOMAN"]; got.modelPath != `res\mob\china\bluetiger.bsr` || got.transformMode != 0 {
+	if got := metadata.byCodename["MOB_CH_TIGERWOMAN"]; got.modelPath != `res\mob\china\bluetiger.bsr` || got.transformMode != 0 {
 		t.Fatalf("Tiger Girl ride metadata = %+v", got)
 	}
-	if got := metadata["MOB_FIXED"]; got.transformMode != 1 {
+	if got := metadata.byCodename["MOB_FIXED"]; got.transformMode != 1 {
 		t.Fatalf("RT_FIXED mode = %+v, want 1", got)
 	}
-	if got := metadata["MOB_DUMMY"]; got.transformMode != 2 {
+	if got := metadata.byCodename["MOB_DUMMY"]; got.transformMode != 2 {
 		t.Fatalf("RT_DUMMY mode = %+v, want 2", got)
 	}
-	if _, ok := metadata["MOB_UNKNOWN"]; ok {
+	if _, ok := metadata.byCodename["MOB_UNKNOWN"]; ok {
 		t.Fatal("unknown Ride Type was silently accepted")
+	}
+}
+
+/*
+================
+TestCharacterInfoRideLookupFollows9171B0
+
+Own record, then the original reference's, then the first record naming a
+known reference. A record without a ride still ends the lookup, and a
+numbered range registers every name in it.
+================
+*/
+func TestCharacterInfoRideLookupFollows9171B0(t *testing.T) {
+	dir := t.TempDir()
+	const skillEffect = "#section\tcharacterInfo\n" +
+		"MOB_UNKNOWN_FIRST\tX\t1\tRT_FIXED\tres\\mob\\never.bsr\n" +
+		"CHAR_DEFAULT\tX\t1\tnone\tnone\n" +
+		"MOB_CH_TIGERWOMAN\tX\t2.8\tnone\tres\\mob\\china\\bluetiger.bsr\n" +
+		"MOB_WALKER\tX\t1\tnone\tnone\n" +
+		"MOB_RIDER001~003\tX\t1\tRT_DUMMY\tres\\mob\\horse.bsr\n"
+	if err := os.WriteFile(filepath.Join(dir, "skilleffect.txt"), []byte(skillEffect), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rides := loadMonsterRideMetadata(dir)
+	known := map[string]bool{"CHAR_DEFAULT": true, "MOB_CH_TIGERWOMAN": true, "MOB_WALKER": true}
+	if got := rides.resolve("MOB_CH_TIGERWOMAN_L2", "MOB_CH_TIGERWOMAN", known); got.modelPath != `res\mob\china\bluetiger.bsr` {
+		t.Fatalf("a variant without a record rides %+v, want its original's mount", got)
+	}
+	if got := rides.resolve("MOB_WALKER", "MOB_CH_TIGERWOMAN", known); got.modelPath != "" {
+		t.Fatalf("an own record without a ride fell through to %+v", got)
+	}
+	if got := rides.resolve("MOB_RIDER002", "", known); got.modelPath != `res\mob\horse.bsr` || got.transformMode != 2 {
+		t.Fatalf("a ranged record resolved %+v", got)
+	}
+	// The default skips MOB_UNKNOWN_FIRST: it names no known reference.
+	if got := rides.resolve("MOB_ORPHAN", "MOB_NOBODY", known); got.modelPath != "" {
+		t.Fatalf("the default resolved %+v, want CHAR_DEFAULT's none", got)
 	}
 }
 

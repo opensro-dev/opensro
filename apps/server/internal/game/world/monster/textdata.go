@@ -20,10 +20,12 @@ package monster
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"opensro.online/server/internal/data/texttable"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -257,7 +259,10 @@ fault (the TextdataItems loader posture).
 */
 func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 	refs := make(map[uint32]MonsterRef)
-	rideMetadata := loadMonsterRideMetadata(textdataDir)
+	rides := loadMonsterRideMetadata(textdataDir)
+	// Every characterdata codename, served or not: the characterInfo default
+	// is the first record naming a known reference (91B7E0).
+	known := make(map[string]bool)
 	// textdataname.txt is the shipped symbol table: fields[1] is the
 	// SN_* symbol and fields[8] is English. This is the same column contract
 	// used by bootstrap's item loader; keeping the tiny reader local avoids
@@ -280,6 +285,9 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 	sort.Strings(matches)
 	for _, path := range matches {
 		for _, cols := range readTabbedFile(path) {
+			if len(cols) > colCodename {
+				known[strings.TrimSpace(cols[colCodename])] = true
+			}
 			if len(cols) <= colMaxHP {
 				continue
 			}
@@ -353,7 +361,6 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				displayName = strings.TrimSpace(cols[colCodename])
 			}
 			codename := strings.TrimSpace(cols[colCodename])
-			ride := rideMetadata[codename]
 			refs[refObjID] = MonsterRef{
 				RefObjID:           refObjID,
 				TidWord:            word,
@@ -364,8 +371,6 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				NameStrID:          nameStrID,
 				Name:               displayName,
 				ModelPath:          strings.TrimSpace(cols[colModel]),
-				RideModelPath:      ride.modelPath,
-				RiderTransformMode: ride.transformMode,
 				Level:              uint8(level),
 				MaxHP:              maxHP,
 				Country:            uint8(country),
@@ -393,6 +398,11 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 			}
 		}
 	}
+	for id, ref := range refs {
+		ride := rides.resolve(ref.Codename, ref.OriginalCodename, known)
+		ref.RideModelPath, ref.RiderTransformMode = ride.modelPath, ride.transformMode
+		refs[id] = ref
+	}
 	return refs
 }
 
@@ -407,6 +417,70 @@ type monsterRideMetadata struct {
 }
 
 /*
+================
+characterInfoRides
+
+The characterInfo records of skilleffect.txt by codename, and their file
+order. A record without a ride still counts: it ends the lookup.
+================
+*/
+type characterInfoRides struct {
+	byCodename map[string]monsterRideMetadata
+	order      []string
+}
+
+/*
+================
+resolve
+
+CharacterInfo_FindByRefThenOriginalThenDefault (9171B0): the reference's
+own record, else its original reference's (characterdata column 4, the
+OrgObjCodeName at +0x5C), else the default, the first record in file order
+whose codename names a known reference (91B7E0). The unique encounters'
+_L2/_L3 variants have no record of their own and ride their base's mount.
+The bake's media resolver (buildNpcModelAssets characterInfoResolver)
+follows the same chain and refuses any drift.
+================
+*/
+func (r characterInfoRides) resolve(codename, original string, known map[string]bool) monsterRideMetadata {
+	if ride, ok := r.byCodename[codename]; ok {
+		return ride
+	}
+	if ride, ok := r.byCodename[original]; ok {
+		return ride
+	}
+	for _, name := range r.order {
+		if known[name] {
+			return r.byCodename[name]
+		}
+	}
+	return monsterRideMetadata{}
+}
+
+// characterInfoRange is a record codename covering an inclusive numbered
+// range ("NAME001~010"), registered once per name (0091B830).
+var characterInfoRange = regexp.MustCompile(`^(.*?)(\d{3})~(\d{3})$`)
+
+/*
+================
+characterInfoCodenames
+================
+*/
+func characterInfoCodenames(codename string) []string {
+	m := characterInfoRange.FindStringSubmatch(codename)
+	if m == nil {
+		return []string{codename}
+	}
+	start, _ := strconv.Atoi(m[2])
+	end, _ := strconv.Atoi(m[3])
+	var names []string
+	for i := start; i <= end; i++ {
+		names = append(names, fmt.Sprintf("%s%03d", m[1], i))
+	}
+	return names
+}
+
+/*
 ==================
 loadMonsterRideMetadata
 
@@ -414,10 +488,11 @@ loadMonsterRideMetadata projects the complete native ride contract from
 skilleffect.txt. The enum values are executable-authored (the static table
 consumed by sub_916700 at 0xf091fc): none=0, RT_FIXED=1, RT_DUMMY=2.
 Unknown tokens are rejected rather than silently inventing a transform.
+Records with no ride are kept: they end the 9171B0 lookup.
 ==================
 */
-func loadMonsterRideMetadata(textdataDir string) map[string]monsterRideMetadata {
-	result := make(map[string]monsterRideMetadata)
+func loadMonsterRideMetadata(textdataDir string) characterInfoRides {
+	result := characterInfoRides{byCodename: make(map[string]monsterRideMetadata)}
 	inCharacterInfo := false
 	for _, cols := range readTabbedFile(filepath.Join(textdataDir, "skilleffect.txt")) {
 		if len(cols) == 0 {
@@ -432,8 +507,12 @@ func loadMonsterRideMetadata(textdataDir string) map[string]monsterRideMetadata 
 			continue
 		}
 		codename := first
+		if codename == "" || strings.HasPrefix(codename, "//") {
+			continue
+		}
 		ridePath := strings.TrimSpace(cols[4])
-		if codename == "" || ridePath == "" || strings.EqualFold(ridePath, "none") {
+		if ridePath == "" || strings.EqualFold(ridePath, "none") {
+			result.register(codename, monsterRideMetadata{})
 			continue
 		}
 		var mode uint8
@@ -447,9 +526,24 @@ func loadMonsterRideMetadata(textdataDir string) map[string]monsterRideMetadata 
 		default:
 			continue
 		}
-		result[codename] = monsterRideMetadata{modelPath: ridePath, transformMode: mode}
+		result.register(codename, monsterRideMetadata{modelPath: ridePath, transformMode: mode})
 	}
 	return result
+}
+
+/*
+================
+register
+================
+*/
+func (r *characterInfoRides) register(codename string, ride monsterRideMetadata) {
+	for _, name := range characterInfoCodenames(codename) {
+		if _, duplicate := r.byCodename[name]; duplicate {
+			continue
+		}
+		r.byCodename[name] = ride
+		r.order = append(r.order, name)
+	}
 }
 
 /*

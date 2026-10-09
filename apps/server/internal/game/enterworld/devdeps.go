@@ -161,7 +161,7 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
-		template, err = withMonsterSummonReferences(template, skills)
+		template, err = WithMonsterSummonReferences(template, skills)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}

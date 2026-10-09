@@ -48,8 +48,10 @@ maintained. The retail client has no roster at all - CICMonster spawn
 (CICMonster_DeserializeSpawnPacket 0x861B00) binds the refObjId to its characterdata record and loads the
 record's .bsr on demand (LoadVisualModelAndCacheBounds 0x853e70); the
 offline-bake analog is "bake exactly what the server can ever stream". That
-set is monsterpop.LoadTemplate().SpawnableRefs() - the npcpos.txt spawn
-points joined with the binary-pinned CICMonster TypeID gate - exported by
+set is monster.LoadTemplate().SpawnableRefs() after
+enterworld.WithMonsterSummonReferences - the npcpos.txt spawn points joined
+with the binary-pinned CICMonster TypeID gate, plus the unique encounters'
+summon closure (their _L2/_L3 variants have no nest, #369) - exported by
 server sro-evidence spawnable-monsters and consumed here at bake time. The
 classifier lives in Go ONLY; duplicating the TypeID gate here was rejected
 as cross-plane drift risk.

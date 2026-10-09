@@ -49,7 +49,7 @@ func TestShippedUniqueSummonReferenceClosure(t *testing.T) {
 		t.Fatal("verified v1.150 projection is required")
 	}
 	skills := NewTextdataSkills(dir)
-	template, err := withMonsterSummonReferences(monster.TemplateFromParts(refs, nil), skills)
+	template, err := WithMonsterSummonReferences(monster.TemplateFromParts(refs, nil), skills)
 	if err != nil {
 		t.Fatal(err)
 	}
