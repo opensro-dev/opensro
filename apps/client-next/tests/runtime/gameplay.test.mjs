@@ -556,6 +556,26 @@ test("unrelated pickup cannot acknowledge a move and timed-out transactions cann
 	assert.throws( () => inv.receive( 0xb5bd, Uint8Array.of( 1, 14, 8, 0, 0x6c, 0 ) ), /reconnect/ );
 	assert.throws( () => inv.use( 14, 22001 ), /reconnect/ );
 });
+test("an item use answer sets the stack the server reports, as 755E40, even after another change", () => {
+	// Production incident: 0xB5BD 01 19 1f00 ec10 (slot 25, 31 left, an HP
+	// potion) reached a client that no longer held 32 there. 755E40 never
+	// compares; the port used to end the session ("Stale recovery item use").
+	const inv = createInventory( () => {} );
+	inv.bootstrap( {
+		refItemSnapshot: [ { refObjId: 7, typeFlags: 0x10ec, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 7, slot: 25, body: item( 7, 29 ) } ]
+	} );
+	inv.use( 25, 1000 );
+	const recovery = { country: 0, abnormal: 0 };
+	assert.equal( inv.receive( 0xb5bd, Uint8Array.of( 1, 0x19, 0x1f, 0x00, 0xec, 0x10 ), 1000, recovery ), true );
+	assert.equal( inv.state().inventory.find( row => row.slot === 25 )?.quantity, 31 );
+	assert.equal( inv.state().inventoryPending, false, "the answer still settles the use" );
+	// An answer for a slot the client no longer holds changes nothing and settles.
+	inv.use( 25, 2000 );
+	assert.doesNotThrow( () => inv.receive( 0xb5bd, Uint8Array.of( 1, 30, 0, 0, 0xec, 0x10 ), 2000, recovery ) );
+	inv.receive( 0xb5bd, Uint8Array.of( 1, 0x19, 0, 0, 0xec, 0x10 ), 3000, recovery );
+	assert.equal( inv.state().inventory.some( row => row.slot === 25 ), false, "count 0 empties the slot" );
+});
 test("rejected transport submission leaves movement, inventory and targeting available", () => {
 	let blocked = true;
 	const sent = [],

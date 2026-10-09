@@ -1702,59 +1702,60 @@ receive
 				if ( p.length !== 6 ) {
 					throw new Error( "Invalid item use result" );
 				}
-				const n = p[1]!, item = next.get( n ), quantity = v.getUint16( 2, true );
-				if ( !item || item.typeFlags !== v.getUint16( 4, true ) ) {
-					throw new Error( "Stale item use result" );
-				}
-				const category = potionCategory( item.typeFlags );
-				const potionFamily = (item.typeFlags & 0x7fe) === 0xec || (item.typeFlags & 0x7fe) === 0x16c;
-				if ( potionFamily ) {
-					// The server's published unlimited-item extension acknowledges use
-					// without spending a stack. It still requires this pending request.
-					const unlimited = quantity === item.quantity &&
-						recovery?.unlimitedItems?.includes( item.refObjId ) &&
-						pending?.opcode === op && pending.source === n;
-					if ( !unlimited && quantity !== item.quantity - 1 ) throw Error( "Stale recovery item use result" );
-				}
-				if ( category ) {
-					// Read the reference before last-stack removal; failed receipts never reach here.
-					{
-						const durationMs = potionCooldownMs(
-							category,
-							tooltipRefs.get( item.refObjId )?.fields ?? {},
-							recovery?.country,
-							recovery?.abnormal ?? 0
-						);
-						itemCooldowns = [ ...itemCooldowns.filter( row => row.category !== category ), {
-							category,
-							startedAtMs: now,
-							durationMs
-						} ];
-					}
-				}
-				// 755F02 registers authored cooldowns separately from potion lanes.
-				const fields = tooltipRefs.get( item.refObjId )?.fields ?? {};
-				const durationMs = fields.useCooldownDuration528 ?? 0;
-				if ( durationMs > 0 ) {
-					const group = fields.useCooldownGroup524 ?? 0;
-					itemCooldowns = [
-						...itemCooldowns.filter( row =>
-							row.category !== 18 ||
-							(group ? row.group !== group : !!row.group || row.refObjId !== item.refObjId)
-						),
+				const n = p[1]!, held = next.get( n ), quantity = v.getUint16( 2, true );
+				const item = held?.typeFlags === v.getUint16( 4, true ) ? held : undefined;
+				// CPSMission_OnItemUseResponse0xB5BD (755E40) takes the answer's count
+				// as the slot's truth (CSOItem_SetCount; an empty slot at 0) and its
+				// cooldown lane from the answer's type word. It never compares the
+				// count with what the client held, so a use answered after another
+				// change to the stack (a pickup merge) still applies, and no answer
+				// ends the session. An answer for a slot the client no longer holds,
+				// or holds another item in, has nothing to apply: the count belongs
+				// to the item the server used, which the client has already lost.
+				// Every success answer starts its lane (CGInterface_AddItemCooldown),
+				// as 755E40 does; failure answers ([2][code]) never reach here.
+				if ( item ) {
+					const category = potionCategory( v.getUint16( 4, true ) );
+					if ( category ) {
+						// Read the reference before last-stack removal; failed receipts never reach here.
 						{
-							category: 18,
-							group,
-							refObjId: item.refObjId,
-							startedAtMs: now,
-							durationMs
+							const durationMs = potionCooldownMs(
+								category,
+								tooltipRefs.get( item.refObjId )?.fields ?? {},
+								recovery?.country,
+								recovery?.abnormal ?? 0
+							);
+							itemCooldowns = [ ...itemCooldowns.filter( row => row.category !== category ), {
+								category,
+								startedAtMs: now,
+								durationMs
+							} ];
 						}
-					];
-				}
-				if ( quantity ) {
-					next.set( n, { ...item, quantity } );
-				} else {
-					next.delete( n );
+					}
+					// 755F02 registers authored cooldowns separately from potion lanes.
+					const fields = tooltipRefs.get( item.refObjId )?.fields ?? {};
+					const durationMs = fields.useCooldownDuration528 ?? 0;
+					if ( durationMs > 0 ) {
+						const group = fields.useCooldownGroup524 ?? 0;
+						itemCooldowns = [
+							...itemCooldowns.filter( row =>
+								row.category !== 18 ||
+								(group ? row.group !== group : !!row.group || row.refObjId !== item.refObjId)
+							),
+							{
+								category: 18,
+								group,
+								refObjId: item.refObjId,
+								startedAtMs: now,
+								durationMs
+							}
+						];
+					}
+					if ( quantity ) {
+						next.set( n, { ...item, quantity } );
+					} else {
+						next.delete( n );
+					}
 				}
 			} else if ( p[1] === 0 ) {
 				if ( p.length < 7 || p.length !== 7 + p[6]! * 5 ) {

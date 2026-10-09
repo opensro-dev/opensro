@@ -3243,8 +3243,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					throw Error( "Invalid return cancellation response" );
 				}
 				const previousTarget = targeting.state();
-				const used = frame.opcode === 0xb5bd && frame.payload[0] === 1 ?
-					inventory.state().inventory.find( i => i.slot === frame.payload[1] ) :
+				// The used item is the slot's only while it is the answer's type
+				// (inventory.ts applies nothing otherwise).
+				const used = frame.opcode === 0xb5bd && frame.payload[0] === 1 && frame.payload.length === 6 ?
+					inventory.state().inventory.find( i =>
+						i.slot === frame.payload[1] && i.typeFlags === (frame.payload[4]! | frame.payload[5]! << 8)
+					) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now ) : undefined;
 				// 756CF0 compares the bag slot before and after a 0xB06D pickup.

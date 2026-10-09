@@ -60,7 +60,7 @@ test("native recovery receipt timings, abnormal bits and category boundaries", (
 	for ( const type of [ 0x6c, 0xec, 0x9ec, 0x216c, 0x116e ] ) assert.equal( p.recoveryCategory( type ), null );
 	assert.equal( p.recoveryCategory( 0x10ec ), 2 );
 });
-test("only acknowledged consumption starts a shared lane; rejected and duplicate replies cannot restart it", () => {
+test("only a success answer starts a shared lane; a rejection never does, a repeat restarts it as 755E40", () => {
 	const sent = [], owner = createInventory( f => sent.push( f ) );
 	owner.bootstrap( fixture() );
 	owner.use( 14, 100 );
@@ -73,14 +73,20 @@ test("only acknowledged consumption starts a shared lane; rejected and duplicate
 	assert.deepEqual( snapshot, [ { category: 2, startedAtMs: 210, durationMs: 1000 } ] );
 	assert.equal( owner.use( 16, 1209 ), null );
 	assert.equal( sent.length, 2, "another grade/slot cannot bypass lane" );
-	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 2, 2 ), 500, context ), /Stale/ );
-	assert.equal( owner.state().itemCooldowns, snapshot );
+	// 755E40 applies every success answer: a repeat restarts the lane at its time.
+	owner.receive( 0xb5bd, receipt( 14, 2, 2 ), 500, context );
+	assert.deepEqual( owner.state().itemCooldowns, [ { category: 2, startedAtMs: 500, durationMs: 1000 } ] );
+	assert.deepEqual(
+		snapshot,
+		[ { category: 2, startedAtMs: 210, durationMs: 1000 } ],
+		"published arrays are immutable"
+	);
 	owner.use( 13, 500 );
 	assert.equal( sent.length, 3, "HP is independent" );
 	owner.receive( 0xb5bd, receipt( 13, 2, 1 ), 501, context );
 	assert.equal( snapshot.length, 1, "published timer arrays are immutable" );
 	assert.equal( owner.state().itemCooldowns.length, 2 );
-	owner.use( 16, 1210 );
+	owner.use( 16, 1500 );
 	assert.equal( sent.length, 4, "exact client deadline permits request" );
 });
 test("last stack removal preserves category timer; step expiry and clear invalidate it", () => {
@@ -200,20 +206,20 @@ test("every companion and cure category starts on success and blocks only its la
 	for ( const subtype of [ 0, 6, 8, 10, 31 ] ) assert.equal( p.potionCategory( word( subtype ) ), null );
 });
 
-test("published unlimited potions acknowledge once without spending or bypassing cooldown", () => {
-	const owner = createInventory( () => {} ), unlimited = { ...context, unlimitedItems: [ 2 ] };
+test("an unspent answer (an unlimited potion) settles once and never bypasses the cooldown", () => {
+	const owner = createInventory( () => {} );
 	owner.bootstrap( fixture() );
 	owner.use( 14, 0 );
-	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 10, context ), /Stale/ );
-	owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 10, unlimited );
+	// The count stays 3: 755E40 sets what the server reports.
+	owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 10, context );
 	assert.equal( owner.state().inventory.find( item => item.slot === 14 )?.quantity, 3 );
 	assert.equal( owner.state().inventoryPending, false );
 	assert.deepEqual( owner.state().itemCooldowns, [ { category: 2, startedAtMs: 10, durationMs: 1000 } ] );
 	assert.equal( owner.use( 14, 1009 ), null );
-	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 500, unlimited ), /Stale/ );
-	owner.use( 16, 1010 );
-	assert.throws( () => owner.receive( 0xb5bd, receipt( 16, 3, 2 ), 1011, unlimited ), /Stale/ );
-	assert.throws( () => owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 1011, unlimited ), /Stale/ );
+	// A repeat is applied as 755E40 does: same count, the lane restarts.
+	owner.receive( 0xb5bd, receipt( 14, 3, 2 ), 500, context );
+	assert.equal( owner.state().inventory.find( item => item.slot === 14 )?.quantity, 3 );
+	assert.deepEqual( owner.state().itemCooldowns, [ { category: 2, startedAtMs: 500, durationMs: 1000 } ] );
 });
 
 for ( const group of [ 0, 242 ] ) {

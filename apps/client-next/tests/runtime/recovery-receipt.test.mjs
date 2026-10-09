@@ -5,7 +5,10 @@ recovery-receipt.test.mjs - recovery counts across inventory publications
 
 Literal success receipts exercise the inventory and gameplay owners. Setup
 sequences are regression scenarios, not reconstructions of incident history.
-No test relaxes the stale-count guard or substitutes a private reducer.
+The answer's count is the slot's truth (755E40 never compares it with
+what the client held); a repeated answer is applied (its lane restarts,
+as 755E40) without ending the session. No test substitutes a
+private reducer.
 
 ===========================================================================
 */
@@ -89,11 +92,8 @@ for ( const receipt of RECEIPTS ) {
 		assert.equal( quantity( owner, receipt.slot ), receipt.count );
 		assert.equal( owner.state().inventoryPending, false );
 		const before = owner.state().inventory;
-		assert.throws(
-			() => owner.receive( 0xb5bd, Buffer.from( receipt.hex, "hex" ), 5, RECOVERY ),
-			/Stale recovery/
-		);
-		assert.deepEqual( owner.state().inventory, before, "a duplicate count must not be accepted" );
+		assert.doesNotThrow( () => owner.receive( 0xb5bd, Buffer.from( receipt.hex, "hex" ), 5, RECOVERY ) );
+		assert.deepEqual( owner.state().inventory, before, "a repeated answer restates the same count" );
 	});
 }
 

@@ -226,9 +226,12 @@ test("inventory admission precedes mode changes and nonzero appearance cooldown 
 	const core = createWorldCore( () => {} );
 	core.bootstrap( bootstrap );
 	drain( core );
-	assert.throws( () => core.receive( item( 0x09ec ), 0 ), /Stale item/ );
+	// An answer for a slot the client does not hold applies nothing to the bag
+	// and ends no session; 755E40 still branches on the answer's own type word,
+	// so a return-scroll answer selects return travel.
+	assert.doesNotThrow( () => core.receive( item( 0x09ec ), 0 ) );
 	core.receive( { opcode: 0x366a, payload: Uint8Array.of( 0x4f, 0x69 ) }, 0 );
-	assert.equal( drain( core ).events.find( e => e.kind === "travel" ).travel.mode, 0 );
+	assert.equal( drain( core ).events.find( e => e.kind === "travel" ).travel.mode, 2 );
 	core.dispose();
 });
 
