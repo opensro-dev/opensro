@@ -32,8 +32,9 @@ export async function refreshOwnedPackFiles( request ) {
 		files.set( file.toLowerCase(), file );
 	}
 	const deltas = new Map();
+	const incoming = [ ...files.values() ];
 	for ( const [key, file] of files ) {
-		const group = owners.get( key ) ?? groupOf( file, previous );
+		const group = owners.get( key ) ?? groupOf( file, previous, incoming );
 		if ( !group ) throw new Error( `${request.name}: ${file} has no asset-pack owner` );
 		const rows = deltas.get( group ) ?? [];
 		rows.push( file );

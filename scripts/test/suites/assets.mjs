@@ -49,6 +49,7 @@ export default {
 		"scripts/test/assets/assetPackOwnership.test.mjs",
 		"scripts/test/assets/imagePackOwnership.test.mjs",
 		"scripts/test/assets/packGroupRefresh.test.mjs",
+		"scripts/test/assets/worldMapPackOwnership.test.mjs",
 		"scripts/test/assets/pythonRun.test.mjs",
 		"scripts/test/assets/optionalDataAsset.test.mjs",
 		"scripts/test/assets/nameFilterAsset.test.mjs",
