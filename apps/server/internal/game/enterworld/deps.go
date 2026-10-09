@@ -125,7 +125,13 @@ type Deps struct {
 	UpdateCharacter  func(character *Character, label string, update func() bool) bool
 	UpdateCharacters func(characters []*Character, label string, update func() bool) bool
 	UpdateTrade      func(characters []*Character, label string, update func(*domain.TradeRewardPool) bool) bool
-	ReadCharacter    func(divisionID string, read func())
+	// CloseJobWeek and JobRankings own the job guilds' weekly close and its
+	// ranking snapshot (store jobweek.go).
+	CloseJobWeek func(divisionID string, week int64, label string) bool
+	JobRankings  func(divisionID string) domain.JobRankings
+	// fixtureJobRankings is CloseWeek's snapshot when no authority is wired.
+	fixtureJobRankings map[string]domain.JobRankings
+	ReadCharacter      func(divisionID string, read func())
 
 	SystemMessages    func(character *Character) interface{}
 	ResolveDivisionID func(requestDivisionID string) string
@@ -265,6 +271,48 @@ func (d *Deps) SettleTrade(characters []*Character, label string, update func(*d
 		pool := domain.TradeRewardPool{}
 		return update(&pool)
 	})
+}
+
+/*
+================
+CloseWeek
+
+Production closes the week in the authority. Isolated gameplay fixtures,
+which run no durable authority, close it over the fixture's characters
+and keep the snapshot in memory.
+================
+*/
+func (d *Deps) CloseWeek(divisionID string, week int64, label string) bool {
+	if d.CloseJobWeek != nil {
+		return d.CloseJobWeek(divisionID, week, label)
+	}
+	previous := d.fixtureJobRankings[divisionID]
+	if week <= previous.Week {
+		return false
+	}
+	if d.fixtureJobRankings == nil {
+		d.fixtureJobRankings = map[string]domain.JobRankings{}
+	}
+	if previous.Week == 0 {
+		previous.Week = week
+		d.fixtureJobRankings[divisionID] = previous
+		return true
+	}
+	pool := domain.TradeRewardPool{}
+	d.fixtureJobRankings[divisionID] = domain.CloseJobWeek(d.CharactersForDivision(divisionID), &pool, previous, week)
+	return true
+}
+
+/*
+================
+WeekRankings
+================
+*/
+func (d *Deps) WeekRankings(divisionID string) domain.JobRankings {
+	if d.JobRankings != nil {
+		return d.JobRankings(divisionID)
+	}
+	return d.fixtureJobRankings[divisionID]
 }
 
 // Read routes mutable character reads through the authority read door.
@@ -419,6 +467,8 @@ func (d *Deps) Validate() error {
 	require("UpdateCharacter", d.UpdateCharacter == nil)
 	require("UpdateCharacters", d.UpdateCharacters == nil)
 	require("UpdateTrade", d.UpdateTrade == nil)
+	require("CloseJobWeek", d.CloseJobWeek == nil)
+	require("JobRankings", d.JobRankings == nil)
 	require("ReadCharacter", d.ReadCharacter == nil)
 	require("Letters", d.Letters == nil)
 	require("Guilds", d.Guilds == nil)

@@ -36,6 +36,14 @@ import {
 	jobExpUpdate,
 	jobGuildAnswer,
 	jobJoinRequest,
+	jobOutcomeAnswer,
+	jobOutcomeRequest,
+	jobPrevInfoAnswer,
+	jobPrevInfoRequest,
+	type JobOutcome,
+	jobRankAnswer,
+	jobRankRequest,
+	type JobRanks,
 	jobWithdrawRequest,
 	noJob,
 	type LocalJob
@@ -561,6 +569,10 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let playerModels: { readonly country: number; readonly models: readonly PlayerModel[]; } | null = null;
 	// The local player's job guild membership (job-guild.ts).
 	let job: LocalJob = noJob();
+	// The job rank lists 0xB37E answered this session (job-guild.ts).
+	let jobRanks: JobRanks = { lists: [], opened: null };
+	// The week's outcome the guild NPC told this session (job-guild.ts).
+	let jobOutcome: JobOutcome | null = null;
 	/*
 	================
 	localPlayerModels
@@ -859,6 +871,8 @@ selected entities, cooldowns or world-entry state.
 		localGid = 0;
 		localCountry = undefined;
 		job = noJob();
+		jobRanks = { lists: [], opened: null };
+		jobOutcome = null;
 		cosRecords.clear();
 		cosSelection.reset();
 		cosRefs.clear();
@@ -1375,6 +1389,30 @@ state here before a command can claim a native wire conversation.
 						jobWithdrawRequest( command.gid ) :
 						jobAliasRequest( command.gid, command.mode, command.alias )
 				);
+			}
+			if ( command.kind === "job-outcome" || command.kind === "job-previous" ) {
+				// 5DA1B0 cases 0x24/0x25 and 0x26, on the selected guild NPC.
+				if ( !localGid || targeting.state().target !== command.gid ) throw Error( "Select a job guild NPC" );
+				return sendFrame(
+					command.kind === "job-outcome" ?
+						jobOutcomeRequest( command.gid, command.mode ) :
+						jobPrevInfoRequest( command.gid )
+				);
+			}
+			if ( command.kind === "job-rank" ) {
+				// 5DA1B0 cases 0x22/0x23: a cached list opens its window at once;
+				// otherwise 0x737E asks for it and the answer opens it.
+				if ( !localGid || targeting.state().target !== command.gid ) throw Error( "Select a job guild NPC" );
+				const rankJob = command.job, rankKind = command.rank;
+				if ( jobRanks.lists.some( l => l.job === rankJob && l.kind === rankKind ) ) {
+					jobRanks = {
+						...jobRanks,
+						opened: { job: rankJob, kind: rankKind, sequence: (jobRanks.opened?.sequence ?? 0) + 1 }
+					};
+					dirty = true;
+					return null;
+				}
+				return sendFrame( jobRankRequest( command.gid, rankJob, rankKind ) );
 			}
 			if ( command.kind === "fortress-schedule" || command.kind === "fortress-staff" ) {
 				const target = targeting.state();
@@ -3322,6 +3360,30 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				const rankAnswer = jobRankAnswer( frame );
+				if ( rankAnswer ) {
+					const list = rankAnswer.list;
+					if ( list ) {
+						jobRanks = {
+							lists: [ ...jobRanks.lists.filter( l => l.job !== list.job || l.kind !== list.kind ), list ],
+							opened: { job: list.job, kind: list.kind, sequence: (jobRanks.opened?.sequence ?? 0) + 1 }
+						};
+					}
+					if ( rankAnswer.notice ) {
+						notices = [ ...notices.slice( -99 ), { ...rankAnswer.notice, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
+				const outcomeAnswer = jobOutcomeAnswer( frame, jobOutcome, targeting.state().target ?? 0 );
+				const prevAnswer = outcomeAnswer ? null : jobPrevInfoAnswer( frame );
+				if ( outcomeAnswer || prevAnswer ) {
+					if ( outcomeAnswer ) jobOutcome = outcomeAnswer.outcome;
+					const notice = outcomeAnswer ? outcomeAnswer.notice : prevAnswer;
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
 				const jobExp = jobExpUpdate( frame, job, localCountry );
 				if ( jobExp ) {
 					job = jobExp.job;
@@ -3674,6 +3736,8 @@ The published plane when something changed since the last take, else null.
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),
 				job,
+				jobRanks,
+				jobOutcome,
 				cosWindows: cosWindows.filter( row => cosItemRefs2.has( row.itemRefObjId ) ).map( row => ({
 					...row,
 					reference: cosItemRefs2.get( row.itemRefObjId )!

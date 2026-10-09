@@ -473,3 +473,41 @@ func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
 		t.Fatalf("second upgrade = %v, want ErrAuthorityCurrent", err)
 	}
 }
+
+/*
+================
+TestJobRewardUpgradeKeepsSchema18Records
+
+Schema 18 has no job reward or ranking snapshot: its authority upgrades to
+19 with every record in place and opens at week 0.
+================
+*/
+func TestJobRewardUpgradeKeepsSchema18Records(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	c := seededCharacter()
+	c.Job = domain.CharacterJob{Type: domain.JobHunter, Grade: 2, Exp: 40, Alias: "Watch", WeeklyReward: 9}
+	if err := s.CreateCharacter(testDivision, "account", c); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preJobRewardVersion)
+	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
+		t.Fatalf("upgrade %q: %v", backup, err)
+	}
+	reopened := openTest(t, dir, newTestClock())
+	var after string
+	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatal("schema-only upgrade rewrote the character")
+	}
+	if week := reopened.JobRankings(testDivision).Week; week != 0 {
+		t.Fatalf("an upgraded shard starts at week %d", week)
+	}
+}

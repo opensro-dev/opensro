@@ -66,6 +66,9 @@ func (s *Store) commitOnceLocked() error {
 	if err := writeTradeRewards(tx, s.meta.TradeRewards); err != nil {
 		return err
 	}
+	if err := writeJobRankings(tx, s.meta.JobRankings); err != nil {
+		return err
+	}
 
 	if err := upsertMetaTx(tx, metaKeySchemaVersion, fmt.Sprintf("%d", CurrentVersion)); err != nil {
 		return err

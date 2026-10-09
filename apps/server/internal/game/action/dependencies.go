@@ -27,6 +27,8 @@ type Dependencies interface {
 	Update(character *domain.Character, label string, update func() bool) bool
 	UpdateMany(characters []*domain.Character, label string, update func() bool) bool
 	SettleTrade(characters []*domain.Character, label string, update func(*domain.TradeRewardPool) bool) bool
+	CloseWeek(divisionID string, week int64, label string) bool
+	WeekRankings(divisionID string) domain.JobRankings
 	Read(divisionID string, fn func())
 	ItemReferences() enterworld.ItemRefSource
 	LevelData() enterworld.LevelDataSource

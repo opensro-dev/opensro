@@ -858,7 +858,8 @@ export function createEntities(
 							type: Number( local.jobType ?? 0 ),
 							grade: Number( local.jobGrade ?? 0 ),
 							exp: Number( local.jobExp ?? 0 ),
-							alias: String( local.jobAlias ?? "" )
+							alias: String( local.jobAlias ?? "" ),
+							contribution: Number( local.jobContribution ?? 0 )
 						},
 						regionId: finite( pose.regionId ),
 						x: finite( pose.x ),

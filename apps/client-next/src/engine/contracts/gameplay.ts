@@ -244,6 +244,9 @@ export type GameplayCommand =
 	| { readonly kind: "job-join"; readonly gid: number; readonly job: number; }
 	| { readonly kind: "job-withdraw"; readonly gid: number; }
 	| { readonly kind: "job-alias"; readonly gid: number; readonly mode: number; readonly alias: string; }
+	| { readonly kind: "job-rank"; readonly gid: number; readonly job: number; readonly rank: number; }
+	| { readonly kind: "job-outcome"; readonly gid: number; readonly mode: number; }
+	| { readonly kind: "job-previous"; readonly gid: number; }
 	| { readonly kind: "storage-close"; }
 	| { readonly kind: "storage-move"; readonly move: import("@/engine/foundation/gameplay/storage-room").StorageMove; }
 	| {
@@ -570,6 +573,10 @@ export interface GameplayState {
 	readonly storage?: import("@/engine/foundation/gameplay/storage-room").StorageRoom | null;
 	readonly playerModels?: readonly import("@/engine/foundation/gameplay/skin-change").PlayerModel[];
 	readonly job?: import("@/engine/foundation/gameplay/job-guild").LocalJob;
+	// The cached job rank lists and the one whose window last opened.
+	readonly jobRanks?: import("@/engine/foundation/gameplay/job-guild").JobRanks;
+	// The week's outcome the guild NPC last told (0xB7BE).
+	readonly jobOutcome?: import("@/engine/foundation/gameplay/job-guild").JobOutcome | null;
 	readonly cosWindows?: readonly (import("@/engine/foundation/gameplay/cos-timer").CosItemWindow & {
 		readonly reference: import("@/engine/foundation/gameplay/cos-timer").CosItemWindowReference;
 	})[];

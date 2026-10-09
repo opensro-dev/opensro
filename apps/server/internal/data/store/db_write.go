@@ -260,5 +260,8 @@ func seedAuthorityDBTx(tx *sql.Tx, data *authoritySeed) error {
 	if err := writeTradeRewards(tx, data.meta.TradeRewards); err != nil {
 		return err
 	}
+	if err := writeJobRankings(tx, data.meta.JobRankings); err != nil {
+		return err
+	}
 	return upsertMetaTx(tx, metaKeyUpdatedAtMs, fmt.Sprintf("%d", data.updatedAt))
 }

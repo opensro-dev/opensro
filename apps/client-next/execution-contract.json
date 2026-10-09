@@ -1360,6 +1360,15 @@
 			"consumer": "src/engine/runtime/renderer/characters/portrait.ts"
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/job-rank.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy",
+				"callback:jobRankPage:4",
+				"callback:jobContributionSelf:3"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/player-info-job.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [

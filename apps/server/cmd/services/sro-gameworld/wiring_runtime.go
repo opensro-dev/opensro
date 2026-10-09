@@ -65,6 +65,11 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		// The fortress war's schedule edges run on the mission clock.
 		game.siege.Tick,
 		game.guildWars.Tick,
+		// The job guilds' week closes on the mission clock (jobrank.go).
+		func(nowMs int64) []simulation.DivisionFrames {
+			game.items.JobWeekTick(game.divisionID, nowMs)
+			return nil
+		},
 	)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}

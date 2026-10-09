@@ -27,12 +27,12 @@ const THRESHOLDS = jobExpThresholds( {
 } );
 
 test("no job publishes the None rows and an empty gauge", () => {
-	const job = playerInfoJob( { type: 0, grade: 0, exp: 0, alias: "" }, 0, THRESHOLDS, copy );
+	const job = playerInfoJob( { type: 0, grade: 0, exp: 0, alias: "", contribution: 0 }, 0, THRESHOLDS, copy );
 	assert.deepEqual( job, { alias: "<None>", icon: null, title: "<None>", grade: "", exp: "0%", fraction: 0 } );
 });
 
 test("a thief shows the alias, icon, grade title and experience share", () => {
-	const job = playerInfoJob( { type: 2, grade: 1, exp: 500, alias: "Shade" }, 0, THRESHOLDS, copy );
+	const job = playerInfoJob( { type: 2, grade: 1, exp: 500, alias: "Shade", contribution: 0 }, 0, THRESHOLDS, copy );
 	assert.equal( job.alias, "Shade" );
 	assert.equal( job.icon, "com_job_thief" );
 	assert.equal( job.title, "[UIIT_STT_CLASS_THIEF_1]" );
@@ -42,22 +42,22 @@ test("a thief shows the alias, icon, grade title and experience share", () => {
 });
 
 test("a European character reads the EU grade title", () => {
-	const job = playerInfoJob( { type: 3, grade: 2, exp: 0, alias: "" }, 1, THRESHOLDS, copy );
+	const job = playerInfoJob( { type: 3, grade: 2, exp: 0, alias: "", contribution: 0 }, 1, THRESHOLDS, copy );
 	assert.equal( job.title, "[UIIT_STT_CLASS_EU_HUNTER_2]" );
 	assert.equal( job.alias, "<None>" );
 });
 
 test("grade 7 is full, and a -1 threshold reads unsigned", () => {
-	const top = playerInfoJob( { type: 1, grade: 7, exp: 9, alias: "" }, 0, THRESHOLDS, copy );
+	const top = playerInfoJob( { type: 1, grade: 7, exp: 9, alias: "", contribution: 0 }, 0, THRESHOLDS, copy );
 	assert.equal( top.exp, "100%" );
 	assert.equal( top.fraction, 1 );
-	const unsigned = playerInfoJob( { type: 2, grade: 2, exp: 85899346, alias: "" }, 0, THRESHOLDS, copy );
+	const unsigned = playerInfoJob( { type: 2, grade: 2, exp: 85899346, alias: "", contribution: 0 }, 0, THRESHOLDS, copy );
 	assert.equal( unsigned.exp, "1% (85899346)" );
 });
 
 test("rows without all three job columns are left out", () => {
 	assert.equal( THRESHOLDS[3], undefined );
-	const missing = playerInfoJob( { type: 1, grade: 3, exp: 5, alias: "" }, 0, THRESHOLDS, copy );
+	const missing = playerInfoJob( { type: 1, grade: 3, exp: 5, alias: "", contribution: 0 }, 0, THRESHOLDS, copy );
 	assert.equal( missing.exp, "0% (5)" );
 	assert.equal( missing.fraction, 0 );
 	assert.deepEqual( THRESHOLDS[1], [ 1000, 2000, 3000 ] );
@@ -76,11 +76,11 @@ const update = ( grade, exp ) => {
 	new DataView( payload.buffer ).setUint32( 2, exp, true );
 	return { opcode: 0x35ee, payload };
 };
-const THIEF = { type: 2, grade: 1, exp: 100, alias: "Shade" };
+const THIEF = { type: 2, grade: 1, exp: 100, alias: "Shade", contribution: 0 };
 
 test("0x35EE stores the grade and experience and reports the gain", () => {
 	const answer = jobExpUpdate( update( 1, 160 ), THIEF, 0 );
-	assert.deepEqual( answer?.job, { type: 2, grade: 1, exp: 160, alias: "Shade" } );
+	assert.deepEqual( answer?.job, { type: 2, grade: 1, exp: 160, alias: "Shade", contribution: 0 } );
 	assert.deepEqual( answer?.notices, [ { key: "UIIT_STT_JOB_EXP_THIEF_GET", value: 60, nativeType: 1 } ] );
 	assert.equal( jobExpUpdate( update( 1, 40 ), THIEF, 0 )?.notices[0]?.key, "UIIT_STT_JOB_EXP_THIEF_LOST" );
 	assert.deepEqual( jobExpUpdate( update( 1, 100 ), THIEF, 0 )?.notices, [] );

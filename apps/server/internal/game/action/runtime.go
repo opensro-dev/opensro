@@ -55,7 +55,9 @@ type Runtime struct {
 	berserkActors    sync.Map // derived expiry index; character store owns state
 	battleActors     sync.Map // battle-state expiry index (battlestate.go)
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
-	BerserkRoll      combat.Roll32767
+	// jobWeek is the last week JobWeekTick handed to the store (jobrank.go).
+	jobWeek     atomic.Int64
+	BerserkRoll combat.Roll32767
 	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
 	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the

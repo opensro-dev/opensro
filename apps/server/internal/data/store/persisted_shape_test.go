@@ -100,6 +100,7 @@ var strictRecords = []struct {
 	{"fortress", reflect.TypeOf(domain.FortressRecord{})},
 	{"fortress-structure", reflect.TypeOf(domain.FortressStructureRecord{})},
 	{"trade-reward-pool", reflect.TypeOf(domain.TradeRewardPool{})},
+	{"job-rankings", reflect.TypeOf(domain.JobRankings{})},
 	{"account-storage", reflect.TypeOf(domain.AccountStorage{})},
 }
 

@@ -79,6 +79,10 @@ type LocalPlayerEntry struct {
 	JobGrade uint8  `json:"jobGrade,omitempty"`
 	JobExp   uint32 `json:"jobExp,omitempty"`
 	JobAlias string `json:"jobAlias,omitempty"`
+	// JobContribution is the week's contribution so far (CICPlayer
+	// +contribution from the spawn's job block; the contribution rank
+	// window's own entry).
+	JobContribution int32 `json:"jobContribution,omitempty"`
 	// BodyShape is the shape byte (+0x758; height low, volume high) the
 	// skin change window starts from.
 	BodyShape     *uint8        `json:"bodyShape,omitempty"`
@@ -255,6 +259,7 @@ func ResolveLocalPlayerEntry(character *Character, roster *Roster) LocalPlayerEn
 		JobType:           character.Job.Type,
 		JobGrade:          character.Job.Grade,
 		JobExp:            character.Job.Exp,
+		JobContribution:   character.Job.WeeklyReward,
 		JobAlias:          character.Job.Alias,
 		BodyShape:         entryBodyShape(character),
 		ModelRef:          identity.ModelRef,

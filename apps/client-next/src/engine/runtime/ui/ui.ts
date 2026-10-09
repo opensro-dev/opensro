@@ -78,6 +78,7 @@ import {
 import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
 import { playerInfoJob } from "@/engine/foundation/gameplay/player-info-job";
 import { MALL_NOTIFY_HEIGHT, MALL_NOTIFY_WIDTH, mallNotifyOrigin } from "@/engine/foundation/ui/mall-notify";
+import { jobContributionSelf, jobRankPage, jobRankPages } from "@/engine/foundation/gameplay/job-rank";
 import { createMapTeleport } from "./hud/map-teleport";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { academyRank } from "@/engine/foundation/gameplay/academy";
@@ -220,6 +221,10 @@ import { noticeText } from "@/engine/foundation/ui/notice-text";
 import {
 	JOB_ALIAS_CHECK,
 	JOB_ALIAS_CREATE,
+	JOB_OUTCOME_COLLECT,
+	JOB_OUTCOME_QUERY,
+	JOB_RANK_ACTIVITY,
+	JOB_RANK_CONTRIBUTION,
 	jobGuildsOffered,
 	jobMenuRows,
 	noJob
@@ -528,6 +533,8 @@ const GLOBAL_CHAT_TEXT = "wholechat-text";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
 const FORTRESS_WAR_PANEL = "Fortress war application";
 const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
+// CIFJobRank and CIFJobContributionRank share one panel (job-hud.ts).
+const JOB_RANK_PANEL = "Job ranking";
 // The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
 const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
@@ -1282,6 +1289,7 @@ export function createUi(
 		if ( next !== SKIN_PANEL ) skinHud.close();
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
+		if ( next !== JOB_RANK_PANEL ) jobHud.closeRank();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
 		blockDialog = null;
@@ -2145,7 +2153,22 @@ export function createUi(
 			else if ( id.startsWith( "npc-job-alias:" ) ) {
 				jobHud.openAlias( conversation.gid, !!view.gameplay?.job?.alias );
 				focusAtEnd( "job-alias-text", "" );
-			}
+			} else if ( id.startsWith( "npc-job-rank:" ) || id.startsWith( "npc-job-contribution:" ) ) {
+				// Cases 0x22 and 0x23: the cached list, or 0x737E for it.
+				sendGameplay( {
+					kind: "job-rank",
+					gid: conversation.gid,
+					job,
+					rank: id.startsWith( "npc-job-rank:" ) ? JOB_RANK_ACTIVITY : JOB_RANK_CONTRIBUTION
+				} );
+			} else if ( id.startsWith( "npc-job-outcome:" ) || id.startsWith( "npc-job-collect:" ) ) {
+				// Cases 0x24 and 0x25: tell, then collect, the week's outcome.
+				sendGameplay( {
+					kind: "job-outcome",
+					gid: conversation.gid,
+					mode: id.startsWith( "npc-job-outcome:" ) ? JOB_OUTCOME_QUERY : JOB_OUTCOME_COLLECT
+				} );
+			} else if ( id.startsWith( "npc-job-previous:" ) ) sendGameplay( { kind: "job-previous", gid: conversation.gid } );
 			dirty = true;
 			return;
 		}
@@ -3319,6 +3342,12 @@ export function createUi(
 			}
 		} else if ( id === "fortress-schedule-close" ) {
 			setPanel( "" );
+		} else if ( id === "job-rank-close" ) {
+			setPanel( "" );
+		} else if ( id === "job-rank-prev" || id === "job-rank-next" ) {
+			const open = jobHud.rank(),
+				list = open && view.gameplay?.jobRanks?.lists.find( l => l.job === open.job && l.kind === open.kind );
+			jobHud.pageRank( id === "job-rank-prev" ? -1 : 1, jobRankPages( list?.rows.length ?? 0 ) );
 		} else if ( id === "fortress-schedule-prev" || id === "fortress-schedule-next" ) {
 			fortressScheduleHud.page(
 				id === "fortress-schedule-prev" ? -1 : 1,
@@ -5868,6 +5897,15 @@ export function createUi(
 					next.gameplay.npcConversation.gid :
 					undefined
 			);
+			// A collected outcome closes the talk (75D5C0); a rank answer opens its window.
+			if ( jobHud.observe( next.gameplay?.jobRanks?.opened, next.gameplay?.jobOutcome ) ) {
+				sendGameplay( { kind: "npc-close" } );
+				dirty = true;
+			}
+			if ( jobHud.rank() && panel !== JOB_RANK_PANEL && canLeavePanel() ) {
+				setPanel( JOB_RANK_PANEL );
+				dirty = true;
+			}
 			if ( fortressScheduleHud.isOpen() && panel !== FORTRESS_SCHEDULE_PANEL && canLeavePanel() ) {
 				setPanel( FORTRESS_SCHEDULE_PANEL );
 				dirty = true;
@@ -12112,6 +12150,10 @@ export function createUi(
 					const copy = ( symbol: string ) =>
 						guideResources.data()!.questPresentation.text[symbol] ?? hudCopy( symbol );
 					const capabilities = game.targetCapabilities ?? 0;
+					// 5D7870's outcome page replaces the menu of the NPC that told it.
+					const outcomePage = game.npcConversation.phase === "menu" &&
+							jobHud.outcome() === game.npcConversation.gid,
+						outcomeReward = game.jobOutcome?.reward ?? 0;
 					const output = npcTalkLayout( {
 						state: game.npcConversation,
 						layout,
@@ -12144,7 +12186,12 @@ export function createUi(
 							) :
 							null,
 						canTalk: !!(capabilities & 2),
-						prompt: guildManagerHud.soldiers() ?
+						prompt: outcomePage ?
+							copy( "UIIT_STT_OUTCOME_WINDOW" ).replace( "%s", game.social?.localName ?? "" ).replace(
+								"%s",
+								outcomeReward.toLocaleString( "en-US" )
+							) :
+							guildManagerHud.soldiers() ?
 							guildSoldierPrompt( game.social?.guild?.flags ?? 0, copy ) :
 							fortressStaffHud.target() ?
 							copy( "UIIT_STT_FORT_MANAGER_HIRE" ) :
@@ -12157,7 +12204,16 @@ export function createUi(
 						canFortressOfficial: !!(capabilities & 0x800000),
 						canFortressManager: !!(capabilities & 0x400000),
 						canFortressHire: !!(capabilities & 0x400000) && fortressStaffView().holder,
-						guildSoldierRows: guildManagerHud.soldiers() ?
+						// 5D7870: the outcome page offers only the collect row (0x25),
+						// and only for a reward above zero.
+						guildSoldierRows: outcomePage ?
+							(outcomeReward > 0 ?
+								[ {
+									id: "npc-job-collect:" + (game.job?.type ?? 0),
+									label: copy( "UIIT_STT_NPC_CHATTING_HUNTERMENU_OUTCOME" )
+								} ] :
+								[]) :
+							guildManagerHud.soldiers() ?
 							guildSoldierRows().map( row => ({ id: row.id, label: copy( row.symbol ) }) ) :
 							null,
 						fortressStaffRows: fortressStaffHud.target() ?
@@ -12605,6 +12661,93 @@ export function createUi(
 						}
 					}
 					endWindow( admission, "service:" + FORTRESS_WAR_PANEL );
+				}
+				const jobRank = panel === JOB_RANK_PANEL ? jobHud.rank() : null;
+				if ( jobRank && hudData?.windows.ifjobrank && hudData.windows.ifjobcontributionrank ) {
+					// CIFJobRank (648110) and CIFJobContributionRank (646FC0): the cached
+					// list's page of ten slots, the spin control and, for the
+					// contribution window, the viewer's own entry (job-rank.ts).
+					const contribution = jobRank.kind === JOB_RANK_CONTRIBUTION,
+						root = contribution ? hudData.root.GDR_JOB_CONTRIBUTION_RANK : hudData.root.GDR_JOB_RANK,
+						layout = contribution ? hudData.windows.ifjobcontributionrank : hudData.windows.ifjobrank,
+						slotLayout = contribution ?
+							hudData.windows.ifjobcontributionrankslot :
+							hudData.windows.ifjobrankslot,
+						list = game?.jobRanks?.lists.find( l => l.job === jobRank.job && l.kind === jobRank.kind );
+					if ( root && slotLayout && list ) {
+						const admission = beginWindow(),
+							nodes = Object.values( layout ),
+							slotNodes = Object.values( slotLayout ),
+							byId = ( id: number ) => nodes.find( n => n.id === id ),
+							firstSlot = contribution ? 30 : 20,
+							spinId = contribution ? 50 : 40,
+							own = contribution ? jobContributionSelf( game?.job ?? noJob(), jobRank.job, hudCopy ) : null,
+							page = jobRankPage( list, jobRank.page, hudData.jobExpThresholds, hudCopy ),
+							[px, py] = windowOrigin( JOB_RANK_PANEL, [
+								Math.max( 0, (w - root.rect[2]) / 2 ),
+								Math.max( 0, (h - root.rect[3]) / 2 ),
+								root.rect[2],
+								root.rect[3]
+							] );
+						nativeFrame( root, px, py, page.title, "job-rank-close" );
+						const custom = Array.from( { length: 10 }, ( _, i ) => firstSlot + i );
+						custom.push( spinId );
+						// 646FC0 relabels the title (20) and header (28) by job, and shows the
+						// own entry (10, 13-16) or the "no entry" line (60).
+						if ( contribution ) custom.push( 10, 13, 14, 15, 16, 20, 28, 60 );
+						nativePage( layout, px, py, custom );
+						const say = ( id: number, value: string ) => {
+							const node = byId( id );
+							if ( node ) authoredText( node, px, py, value );
+						};
+						if ( contribution ) {
+							const trader = jobRank.job === 1;
+							say( 20, hudCopy( trader ? "UIIT_STT_JOBGUILD_CONTRIBUTERANK" : "UIIT_STT_JOBGUILD_CONTRIBUTERANK2" ) );
+							const header = byId( 28 );
+							if ( header ) {
+								authoredChrome( { ...header, text: trader ? "UIIT_STT_DONATION" : "UIIT_STT_CONTRIBUTE" }, px, py );
+							}
+							if ( own ) {
+								const note = byId( 10 );
+								if ( note ) {
+									const r = authoredRect( note, px, py ),
+										out = text.guide( guideTokens( own.note ), r, r, note.color, resources.size );
+									quads.push( ...out.quads );
+									paths.push( ...out.paths );
+								}
+								say( 13, own.label );
+								say( 14, own.alias );
+								say( 15, own.grade );
+								say( 16, own.amount );
+							} else say( 60, hudCopy( "UIIT_STT_JOBGUILD_RANKING_NOEXIST" ) );
+						}
+						for ( const [index, slot] of page.slots.entries() ) {
+							const holder = byId( firstSlot + index );
+							if ( !holder ) continue;
+							const [sx, sy] = authoredRect( holder, px, py );
+							nativePage( slotLayout, sx, sy, [ 10, 11, 12, 13, 14 ] );
+							for ( const node of slotNodes ) {
+								const value = slot[node.id];
+								if ( value !== undefined ) authoredText( node, sx, sy, value );
+							}
+						}
+						const spin = byId( spinId );
+						if ( spin ) {
+							const [sx, sy, sw] = authoredRect( spin, px, py );
+							button( "job-rank-prev", "<", sx, sy, 20, jobRank.page === 0 );
+							quads.push(
+								...text.quads(
+									jobRank.page + 1 + " / " + page.pages,
+									[ sx + 22, sy + 2, sw - 44, 14 ],
+									full,
+									white,
+									{ hAlign: 1, vAlign: 0 }
+								)
+							);
+							button( "job-rank-next", ">", sx + sw - 20, sy, 20, jobRank.page + 1 >= page.pages );
+						}
+						endWindow( admission, "service:" + JOB_RANK_PANEL );
+					}
 				}
 				const grant = game?.magicOption;
 				if ( panel === GRANT_PANEL && grant && hudData?.windows.ifgrantmagicattributewnd ) {

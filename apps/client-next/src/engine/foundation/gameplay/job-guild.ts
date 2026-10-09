@@ -11,6 +11,10 @@ to it. Their confirmations send
 	0x7439 [u32 npc][u8 job]               -> 0xB439 [1][job][grade][u32 exp]
 	0x7661 [u32 npc]                       -> 0xB661 [1]
 	0x7620 [u32 npc][u8 mode][ascii alias] -> 0xB620 [1][mode][ascii alias]
+	0x737E [u32 npc][u8 job][u8 kind]      -> 0xB37E [1][job][kind][u8 n]
+	                                           { [u8 rank][ascii alias][u8 grade][u32 value] }
+	0x77BE [u32 npc][u8 mode]              -> 0xB7BE [1][mode][u32 reward]
+	0x75EE [u32 npc]                       -> 0xB5EE (previous job information)
 
 and a refusal is [2][code] in notice category 0x18 (the alias answer also
 echoes mode and alias). The rank, contribution and previous-job rows are
@@ -33,6 +37,18 @@ export const OP_JOB_WITHDRAW_RESPONSE = 0xb661;
 export const OP_JOB_ALIAS = 0x7620;
 export const OP_JOB_ALIAS_RESPONSE = 0xb620;
 export const OP_JOB_DRESS_BAR = 0x3434;
+export const OP_JOB_RANK = 0x737e;
+export const OP_JOB_OUTCOME = 0x77be;
+export const OP_JOB_OUTCOME_RESPONSE = 0xb7be;
+export const OP_JOB_PREV_INFO = 0x75ee;
+export const OP_JOB_PREV_INFO_RESPONSE = 0xb5ee;
+// 0x77BE's modes: tell the week's outcome, then collect it.
+export const JOB_OUTCOME_QUERY = 0;
+export const JOB_OUTCOME_COLLECT = 1;
+export const OP_JOB_RANK_RESPONSE = 0xb37e;
+// 0x737E's kinds: the activity rank (CIFJobRank) and the contribution rank.
+export const JOB_RANK_ACTIVITY = 0;
+export const JOB_RANK_CONTRIBUTION = 1;
 // CPSMission_OnJobTypeLevelUpdate0x35EE (75F0C0): [u8 job][u8 grade][u32 exp].
 export const OP_JOB_EXP_UPDATE = 0x35ee;
 const JOB_NOTICE_CATEGORY = 0x18;
@@ -51,7 +67,8 @@ const JOB_GUILD_HUNTER = 0x200000;
 LocalJob
 
 The joined job (0 none, 1 trader, 2 thief, 3 hunter), its grade and
-experience, and the alias.
+experience, the alias, and the week's contribution so far (the entry's
+job block; the contribution rank window's own entry).
 ================
 */
 export interface LocalJob {
@@ -59,6 +76,7 @@ export interface LocalJob {
 	readonly grade: number;
 	readonly exp: number;
 	readonly alias: string;
+	readonly contribution: number;
 }
 
 /*
@@ -67,7 +85,7 @@ noJob
 ================
 */
 export function noJob(): LocalJob {
-	return { type: 0, grade: 0, exp: 0, alias: "" };
+	return { type: 0, grade: 0, exp: 0, alias: "", contribution: 0 };
 }
 
 /*
@@ -99,8 +117,10 @@ export function jobGuildsOffered( capabilities: number ): readonly number[] {
 ================
 jobMenuRows
 
-5D79E0's rows for each offered guild: join with no job; withdraw and the
-alias (create or modify) for a member of that guild.
+5D79E0's rows for each offered guild: join with no job; withdraw, the
+alias (create or modify) and, for a thief or hunter, the week's outcome for
+a member of that guild; then the contribution and activity ranks and the
+previous job information for anyone.
 ================
 */
 export function jobMenuRows(
@@ -111,9 +131,24 @@ export function jobMenuRows(
 	for ( const guild of guilds ) {
 		const menu = "UIIT_STT_NPC_CHATTING_" + jobMenuName( guild );
 		if ( job.type === 0 ) rows.push( { id: "npc-job-join:" + guild, symbol: menu + "_JOIN" } );
-		if ( job.type !== guild ) continue;
-		rows.push( { id: "npc-job-withdraw:" + guild, symbol: menu + "_WITHD" } );
-		rows.push( { id: "npc-job-alias:" + guild, symbol: menu + (job.alias ? "_ALIASMODIFY" : "_ALIASCREATE") } );
+		if ( job.type === guild ) {
+			rows.push( { id: "npc-job-withdraw:" + guild, symbol: menu + "_WITHD" } );
+			rows.push( { id: "npc-job-alias:" + guild, symbol: menu + (job.alias ? "_ALIASMODIFY" : "_ALIASCREATE") } );
+			// Case 0x24: thieves and hunters share the hunters' outcome row.
+			if ( guild !== 1 ) {
+				rows.push( { id: "npc-job-outcome:" + guild, symbol: "UIIT_STT_NPC_CHATTING_HUNTERMENU_OUTCOME" } );
+			}
+		}
+		// Every visitor then gets the contribution and activity ranks
+		// (cases 0x23 and 0x22); thieves share the hunters' contribution row.
+		rows.push( {
+			id: "npc-job-contribution:" + guild,
+			symbol: guild === 1 ?
+				"UIIT_STT_NPC_CHATTING_TRADERMENU_DONATIONRANK" :
+				"UIIT_STT_NPC_CHATTING_HUNTERMENU_CONTRIBUTERANK"
+		} );
+		rows.push( { id: "npc-job-rank:" + guild, symbol: menu + "_JOBRANK" } );
+		rows.push( { id: "npc-job-previous:" + guild, symbol: "UIIT_STT_NPC_CHATTING_JOBINFO_OLD" } );
 	}
 	return rows;
 }
@@ -158,6 +193,181 @@ export function jobAliasRequest( npc: number, mode: number, alias: string ): Wir
 
 /*
 ================
+jobRankRequest
+================
+*/
+export function jobRankRequest( npc: number, job: number, kind: number ): WireFrame {
+	const payload = new Uint8Array( 6 );
+	new DataView( payload.buffer ).setUint32( 0, npc, true );
+	payload[4] = job;
+	payload[5] = kind;
+	return { opcode: OP_JOB_RANK, payload };
+}
+
+/*
+================
+JobRankRow
+================
+*/
+export interface JobRankRow {
+	readonly rank: number;
+	readonly alias: string;
+	readonly grade: number;
+	readonly value: number;
+}
+
+/*
+================
+JobRankList
+================
+*/
+export interface JobRankList {
+	readonly job: number;
+	readonly kind: number;
+	readonly rows: readonly JobRankRow[];
+}
+
+/*
+================
+JobRanks
+
+CGInterface keeps one list per job and kind (GetJobActiveRankRecord 67B300,
+GetJobContributionRankRecord 67B330) until the next answer replaces it.
+opened names the list whose window the last menu row or answer opened.
+================
+*/
+export interface JobRanks {
+	readonly lists: readonly JobRankList[];
+	readonly opened: { readonly job: number; readonly kind: number; readonly sequence: number; } | null;
+}
+
+/*
+================
+jobRankAnswer
+
+CPSMission_OnJobRankListResponse0xB37E (763F00): a list replaces the cached
+one for its job and kind and opens its window; a refusal [2][code][job]
+[kind] is the category 0x18 notice. Null for any other frame.
+================
+*/
+export function jobRankAnswer(
+	frame: WireFrame
+): { readonly list: JobRankList | null; readonly notice: SystemNotice | null; } | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_JOB_RANK_RESPONSE ) return null;
+	if ( p[0] === 2 ) {
+		if ( p.length !== 4 ) throw Error( "Invalid job rank refusal" );
+		return { list: null, notice: constantNativeNotice( JOB_NOTICE_CATEGORY, p[1]! ) };
+	}
+	if ( p[0] !== 1 || p.length < 4 ) throw Error( "Invalid job rank list" );
+	const v = new DataView( p.buffer, p.byteOffset, p.byteLength ), rows: JobRankRow[] = [];
+	let at = 4;
+	for ( let i = 0; i < p[3]!; i++ ) {
+		if ( at >= p.length ) throw Error( "Truncated job rank list" );
+		const rank = p[at]!, alias = readAscii( p, at + 1 );
+		if ( alias.next + 5 > p.length ) throw Error( "Truncated job rank list" );
+		rows.push( { rank, alias: alias.text, grade: p[alias.next]!, value: v.getUint32( alias.next + 1, true ) } );
+		at = alias.next + 5;
+	}
+	if ( at !== p.length ) throw Error( "Trailing job rank bytes" );
+	return { list: { job: p[1]!, kind: p[2]!, rows }, notice: null };
+}
+
+/*
+================
+jobOutcomeRequest
+================
+*/
+export function jobOutcomeRequest( npc: number, mode: number ): WireFrame {
+	const payload = new Uint8Array( 5 );
+	new DataView( payload.buffer ).setUint32( 0, npc, true );
+	payload[4] = mode;
+	return { opcode: OP_JOB_OUTCOME, payload };
+}
+
+/*
+================
+jobPrevInfoRequest
+================
+*/
+export function jobPrevInfoRequest( npc: number ): WireFrame {
+	const payload = new Uint8Array( 4 );
+	new DataView( payload.buffer ).setUint32( 0, npc, true );
+	return { opcode: OP_JOB_PREV_INFO, payload };
+}
+
+/*
+================
+JobOutcome
+
+The week's outcome the guild NPC told (0xB7BE mode 0); collected counts
+the collections (mode 1), each of which closes the talk.
+================
+*/
+export interface JobOutcome {
+	readonly npc: number;
+	readonly reward: number;
+	readonly sequence: number;
+	readonly collected: number;
+}
+
+/*
+================
+jobOutcomeAnswer
+
+CPSMission_OnJobOutcomeResponse0xB7BE (75D5C0): mode 0 turns the talk into
+the outcome page (CIFNPCTalk_ShowJobOutcome 5D7870); mode 1 stores the
+reward, closes the talk and prints UIIT_MSG_OUTCOM_COMPLETE (system chat
+type 5) with the amount grouped by thousands; [2][code][mode] is the
+category 0x18 notice. Null for any other frame.
+================
+*/
+export function jobOutcomeAnswer(
+	frame: WireFrame,
+	outcome: JobOutcome | null,
+	npc: number
+): { readonly outcome: JobOutcome | null; readonly notice: SystemNotice | null; } | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_JOB_OUTCOME_RESPONSE ) return null;
+	if ( p[0] === 2 ) {
+		if ( p.length !== 3 ) throw Error( "Invalid job outcome refusal" );
+		return { outcome, notice: constantNativeNotice( JOB_NOTICE_CATEGORY, p[1]! ) };
+	}
+	if ( p[0] !== 1 || p.length !== 6 || p[1]! > JOB_OUTCOME_COLLECT ) throw Error( "Invalid job outcome" );
+	const reward = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+	const sequence = (outcome?.sequence ?? 0) + 1, collected = outcome?.collected ?? 0;
+	if ( p[1] === JOB_OUTCOME_QUERY ) return { outcome: { npc, reward, sequence, collected }, notice: null };
+	return {
+		outcome: { npc, reward: 0, sequence, collected: collected + 1 },
+		notice: {
+			key: "UIIT_MSG_OUTCOM_COMPLETE",
+			value: 0,
+			arguments: [ reward.toLocaleString( "en-US" ) ],
+			formatKinds: [ "s" ],
+			nativeType: 5
+		}
+	};
+}
+
+/*
+================
+jobPrevInfoAnswer
+
+CPSMission_OnPrevJobInfoResponse0xB5EE (75C650): [2][code] is the
+category 0x18 notice (code 0x29: UIIT_MSG_JOBINFO_OLD_NOTEXIST). The [1]
+answer carries a character's pre-tri-job levels for CIFPrevJobInfo; no
+port character has them, so the server never sends it.
+================
+*/
+export function jobPrevInfoAnswer( frame: WireFrame ): SystemNotice | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_JOB_PREV_INFO_RESPONSE ) return null;
+	if ( p[0] !== 2 || p.length !== 2 ) throw Error( "Unsupported previous job information" );
+	return constantNativeNotice( JOB_NOTICE_CATEGORY, p[1]! );
+}
+
+/*
+================
 readAscii
 ================
 */
@@ -194,7 +404,7 @@ export function jobGuildAnswer(
 		if ( p.length !== 7 || p[0] !== 1 ) throw Error( "Invalid job join" );
 		const exp = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 3, true );
 		return {
-			job: { type: p[1]!, grade: p[2]!, exp, alias: "" },
+			job: { type: p[1]!, grade: p[2]!, exp, alias: "", contribution: 0 },
 			notice: { key: "UIIT_MSG_JOBGUILD_JOIN_COMPELET", value: 0 }
 		};
 	}

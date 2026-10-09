@@ -121,3 +121,36 @@ func TestJobExpGradesUpOnce(t *testing.T) {
 		t.Fatalf("job = %+v frames %v", c.Job, frames)
 	}
 }
+
+/*
+================
+TestJobExpMovesThiefAndHunterContribution
+
+60DD90 -> 60E0A0: a thief's or hunter's job EXP delta moves the week's
+contribution, floored at 0 and capped at 2,000,000,000; a trader's does
+not (traders contribute on sales).
+================
+*/
+func TestJobExpMovesThiefAndHunterContribution(t *testing.T) {
+	hunter := &enterworld.Character{}
+	hunter.Job.Type, hunter.Job.Grade, hunter.Job.Exp, hunter.Job.WeeklyReward = 3, 1, 100, 10
+	AddJobExp(hunter, deathLevels{}, 50)
+	if hunter.Job.WeeklyReward != 60 {
+		t.Fatalf("hunter contribution = %d, want 60", hunter.Job.WeeklyReward)
+	}
+	AddJobExp(hunter, deathLevels{}, -90)
+	if hunter.Job.WeeklyReward != 0 {
+		t.Fatalf("a loss left contribution %d, want 0", hunter.Job.WeeklyReward)
+	}
+	hunter.Job.WeeklyReward = 1999999990
+	AddJobExp(hunter, deathLevels{}, 50)
+	if hunter.Job.WeeklyReward != 2000000000 {
+		t.Fatalf("contribution %d passed the cap", hunter.Job.WeeklyReward)
+	}
+	trader := &enterworld.Character{}
+	trader.Job.Type, trader.Job.Grade, trader.Job.Exp = 1, 1, 100
+	AddJobExp(trader, deathLevels{}, 50)
+	if trader.Job.WeeklyReward != 0 {
+		t.Fatalf("a trader's job EXP contributed %d", trader.Job.WeeklyReward)
+	}
+}

@@ -57,7 +57,10 @@ func isVersionMismatch(err error) bool {
 // state 5: the KT blacksmith fork and QNO_CA_THIEF_5's reply). It shipped
 // first in a schema 17 server, so a schema 17 authority may already carry it;
 // the offline upgrade accepts those records as they are and rewrites none.
-const CurrentVersion = 18
+// Version 19 adds the optional job reward (job.reward, _CharTrijob.Reward:
+// the thief's or hunter's weekly outcome) and the job ranking snapshot in
+// metadata. The offline upgrade rewrites no record.
+const CurrentVersion = 19
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.
@@ -80,6 +83,7 @@ type Meta struct {
 	NextCharID   map[string]int64                  `json:"nextCharId,omitempty"`
 	NextGuildID  map[string]int64                  `json:"nextGuildId,omitempty"`
 	TradeRewards map[string]domain.TradeRewardPool `json:"tradeRewards,omitempty"`
+	JobRankings  map[string]domain.JobRankings     `json:"jobRankings,omitempty"`
 }
 
 // retiredCharacterFields are v13 record keys no current field owns. Records

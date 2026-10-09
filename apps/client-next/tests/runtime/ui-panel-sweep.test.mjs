@@ -92,6 +92,13 @@ const OPENERS = {
 		f.ui.event( { kind: "activate", id: "npc-fortress-war" } );
 		f.state.gameplay.fortressApplication = { warStart: null, applied: null, sequence: 1 };
 	},
+	"Job ranking"( f ) {
+		// A 0xB37E answer opens its window (job-hud.ts observe).
+		f.state.gameplay.jobRanks = {
+			lists: [ { job: 1, kind: 0, rows: [ { rank: 1, alias: "Trader", grade: 2, value: 40 } ] } ],
+			opened: { job: 1, kind: 0, sequence: 1 }
+		};
+	},
 	"Fortress war schedule"( f, step ) {
 		talkTo( f );
 		Object.assign( f.state.gameplay, {
