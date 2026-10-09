@@ -85,6 +85,7 @@ consumableSource
 */
 type consumableSource struct {
 	Version int
+	Widths  map[int]int
 	Items   []consumableRef
 	Classes map[int][][]float32
 	Fixed   []assignedDrop
@@ -125,10 +126,25 @@ func mustConsumables() consumableCatalog {
 
 /*
 ================
+vsroConsumableWidths
+
+A version 1 catalog's class counts per family: vSRO's _RefDropClassSel_*
+tables (2 HP/MP, 3 cure, 4 return, 5 arrow and bolt, 6 sky scroll,
+7 alchemy, 8 magic stone, 9 attribute stone, 10 reinforce).
+================
+*/
+func vsroConsumableWidths() map[int]int {
+	return map[int]int{2: 7, 3: 14, 4: 6, 5: 6, 6: 3, 7: 12, 8: 12, 9: 12, 10: 2}
+}
+
+/*
+================
 probabilityValid
 ================
 */
-func probabilityValid(p float32) bool { return !math.IsNaN(float64(p)) && p >= 0 && p <= 1 }
+func probabilityValid(p float32) bool {
+	return !math.IsNaN(float64(p)) && !math.IsInf(float64(p), 0) && p >= 0 && p <= 1
+}
 
 /*
 ================
@@ -137,7 +153,12 @@ compileConsumables
 */
 func compileConsumables(s consumableSource) (consumableCatalog, error) {
 	c := consumableCatalog{families: map[int]equipmentCatalog{}, fixed: map[string][]assignedDrop{}, random: map[string][]assignedRandom{}, groups: s.Groups}
-	if s.Version != 1 {
+	widths := s.Widths
+	switch s.Version {
+	case 1:
+		widths = vsroConsumableWidths()
+	case 2:
+	default:
 		return c, fmt.Errorf("invalid consumable catalog version")
 	}
 	for family, rows := range s.Classes {
@@ -146,34 +167,19 @@ func compileConsumables(s consumableSource) (consumableCatalog, error) {
 		default:
 			return c, fmt.Errorf("unknown consumable family %d", family)
 		}
-		if len(rows) != 180 {
-			return c, fmt.Errorf("incomplete class family %d", family)
+		table, err := compileClassTable(rows, widths[family])
+		if err != nil {
+			return c, fmt.Errorf("consumable family %d: %w", family, err)
 		}
-		e := equipmentCatalog{buckets: map[equipmentKey]*equipmentBucket{}}
-		e.classes[0] = make([][]classThreshold, 180)
-		for level, probabilities := range rows {
-			if len(probabilities) == 0 || len(probabilities) > 36 {
-				return c, fmt.Errorf("invalid class width")
-			}
-			var sum float32
-			for group, p := range probabilities {
-				if !probabilityValid(p) {
-					return c, fmt.Errorf("invalid class probability")
-				}
-				if p <= 0.000001 {
-					continue
-				}
-				sum += p
-				e.classes[0][level] = append(e.classes[0][level], classThreshold{group, uint32(float64(sum) * 1e6)})
-			}
-		}
+		e := equipmentCatalog{buckets: map[equipmentKey]*equipmentBucket{}, widths: [2]int{widths[family], 0}}
+		e.classes[0] = table
 		c.families[family] = e
 	}
 	seen := map[string]bool{}
 	for _, r := range s.Items {
 		e, ok := c.families[r.Family]
 		key := fmt.Sprintf("%d/%d/%s", r.Family, r.Group, r.Codename)
-		if !ok || seen[key] || r.Codename == "" || r.Group < 0 || r.Group >= 36 || r.Count == 0 || r.Weight == 0 || r.Absolute > 100 {
+		if !ok || seen[key] || r.Codename == "" || r.Group < 0 || r.Group >= e.widths[0] || r.Count == 0 || r.Weight == 0 || r.Absolute > 100 {
 			return c, fmt.Errorf("invalid consumable assignment %s", key)
 		}
 		seen[key] = true
@@ -194,6 +200,18 @@ func compileConsumables(s consumableSource) (consumableCatalog, error) {
 		b.refs = append(b.refs, r.equipmentRef)
 		b.weights = append(b.weights, weight)
 		b.alternatives[r.Type] = append(b.alternatives[r.Type], uint32(len(b.refs)-1))
+	}
+	if s.Version >= 2 {
+		// The generator drops and logs a class with no v1.150 item.
+		for family, e := range c.families {
+			for level, row := range e.classes[0] {
+				for _, class := range row {
+					if e.buckets[equipmentKey{0, class.group, false}] == nil {
+						return c, fmt.Errorf("consumable family %d level %d class %d has no item", family, level+1, class.group)
+					}
+				}
+			}
+		}
 	}
 	for _, r := range s.Fixed {
 		if r.Monster == "" || r.Item == "" || r.Min > r.Max || r.Max == 0 || !probabilityValid(r.Probability) {

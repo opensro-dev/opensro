@@ -75,7 +75,7 @@ func TestEquipmentProbabilityBoundaries(t *testing.T) {
 func TestAbsoluteRateAndRandomFailure(t *testing.T) {
 	for _, rate := range []uint32{0, 50, 100} {
 		r := equipmentRef{Codename: "fixture", Type: "weapon", Weight: 100, Absolute: rate, Level: 1}
-		c := equipmentCatalog{buckets: map[equipmentKey]*equipmentBucket{{0, 0, false}: {refs: []equipmentRef{r}, weights: []uint32{100}}}}
+		c := equipmentCatalog{buckets: map[equipmentKey]*equipmentBucket{{0, 0, false}: {refs: []equipmentRef{r}, weights: []uint32{100}}}, widths: [2]int{1, 1}}
 		for roll := uint32(0); roll < 100; roll++ {
 			_, ok := c.selectEquipment(0, 0, false, 1, func() (uint32, error) { return roll, nil })
 			if ok != (roll <= rate) {

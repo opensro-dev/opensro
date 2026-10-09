@@ -73,37 +73,134 @@ type classThreshold struct {
 /*
 ================
 equipmentCatalog
+
+widths are each table's class count (normal, rare): a group is an index
+below its table's width.
 ================
 */
 type equipmentCatalog struct {
 	buckets map[equipmentKey]*equipmentBucket
 	classes [2][][]classThreshold
+	widths  [2]int
 }
 
-var equipment = loadEquipmentCatalog()
+const (
+	// catalogLevels is the 180 level rows every class table carries.
+	catalogLevels = 180
+	// vsroEquipmentWidth is a version 1 catalog's class count (vSRO's
+	// _RefDropClassSel_Equip and _RareEquip both carry 36).
+	vsroEquipmentWidth = 36
+	// thresholdScale turns a cumulative float32 probability into the
+	// million-roll threshold (7244F0).
+	thresholdScale = 1_000_000
+	// negligibleProbability is a class too small to be rolled.
+	negligibleProbability = 0.000001
+)
+
+var equipment = mustEquipmentCatalog()
 
 /*
 ================
-loadEquipmentCatalog
+equipmentSource
+
+Version 1 is vSRO's fixed 36/36 layout; version 2 names each table's
+width, which ISRO-R widens (its RareEquip table has 60 classes).
 ================
 */
-func loadEquipmentCatalog() equipmentCatalog {
-	var source struct {
-		Version      int
-		Items        []equipmentRef
-		Normal, Rare [][]float32
-	}
+type equipmentSource struct {
+	Version      int
+	Widths       map[string]int
+	Items        []equipmentRef
+	Normal, Rare [][]float32
+}
+
+/*
+================
+mustEquipmentCatalog
+================
+*/
+func mustEquipmentCatalog() equipmentCatalog {
+	var source equipmentSource
 	if err := json.Unmarshal(equipmentJSON, &source); err != nil {
 		panic(err)
 	}
-	if source.Version != 1 || len(source.Normal) != 180 || len(source.Rare) != 180 {
-		panic("invalid equipment catalog version/levels")
+	c, err := compileEquipment(source)
+	if err != nil {
+		panic(err)
 	}
+	return c
+}
+
+/*
+================
+compileClassTable
+
+One table's level rows as cumulative thresholds. Every row has exactly
+width classes; each probability is finite and non-negative and a row sums
+to at most 1. Classes below negligibleProbability are never rolled.
+================
+*/
+func compileClassTable(rows [][]float32, width int) ([][]classThreshold, error) {
+	if len(rows) != catalogLevels || width <= 0 {
+		return nil, fmt.Errorf("class table needs %d level rows and a positive width", catalogLevels)
+	}
+	table := make([][]classThreshold, len(rows))
+	for level, probabilities := range rows {
+		if len(probabilities) != width {
+			return nil, fmt.Errorf("level %d has %d classes, want %d", level+1, len(probabilities), width)
+		}
+		var sum, total float64
+		var cumulative float32
+		for group, p := range probabilities {
+			if !probabilityValid(p) {
+				return nil, fmt.Errorf("level %d class %d probability %v", level+1, group, p)
+			}
+			total += float64(p)
+			if p <= negligibleProbability {
+				continue
+			}
+			// float32 accumulation is the native one (7244F0).
+			cumulative += p
+			sum = float64(cumulative)
+			table[level] = append(table[level], classThreshold{group, uint32(sum * thresholdScale)})
+		}
+		if total > 1+negligibleProbability {
+			return nil, fmt.Errorf("level %d probabilities sum to %v", level+1, total)
+		}
+	}
+	return table, nil
+}
+
+/*
+================
+compileEquipment
+================
+*/
+func compileEquipment(source equipmentSource) (equipmentCatalog, error) {
 	c := equipmentCatalog{buckets: map[equipmentKey]*equipmentBucket{}}
+	switch source.Version {
+	case 1:
+		c.widths = [2]int{vsroEquipmentWidth, vsroEquipmentWidth}
+	case 2:
+		c.widths = [2]int{source.Widths["normal"], source.Widths["rare"]}
+	default:
+		return c, fmt.Errorf("equipment catalog version %d", source.Version)
+	}
+	for kind, rows := range [2][][]float32{source.Normal, source.Rare} {
+		table, err := compileClassTable(rows, c.widths[kind])
+		if err != nil {
+			return c, fmt.Errorf("equipment table %d: %w", kind, err)
+		}
+		c.classes[kind] = table
+	}
 	seen := map[string]bool{}
 	for _, r := range source.Items {
-		if seen[r.Codename] || r.Codename == "" || r.Country > 1 || r.Group < 0 || r.Group >= 36 || r.Weight == 0 || r.Absolute > 100 {
-			panic(fmt.Sprintf("invalid equipment assignment: %+v", r))
+		width := c.widths[0]
+		if r.Rare {
+			width = c.widths[1]
+		}
+		if seen[r.Codename] || r.Codename == "" || r.Country > 1 || r.Group < 0 || r.Group >= width || r.Weight == 0 || r.Absolute > 100 {
+			return c, fmt.Errorf("invalid equipment assignment: %+v", r)
 		}
 		seen[r.Codename] = true
 		key := equipmentKey{r.Country, r.Group, r.Rare}
@@ -120,26 +217,31 @@ func loadEquipmentCatalog() equipmentCatalog {
 		b.weights = append(b.weights, weight)
 		b.alternatives[r.Type] = append(b.alternatives[r.Type], uint32(len(b.refs)-1))
 	}
-	for kind, rows := range [2][][]float32{source.Normal, source.Rare} {
-		c.classes[kind] = make([][]classThreshold, len(rows))
-		for level, probabilities := range rows {
-			if len(probabilities) != 36 {
-				panic("invalid equipment class width")
-			}
-			var sum float32
-			for group, p := range probabilities {
-				if p < 0 || p > 1 {
-					panic("invalid equipment probability")
+	if source.Version >= 2 {
+		// The v2 generator drops and logs a class with no v1.150 item; one
+		// that reaches the runtime is a broken catalog.
+		for kind := range c.classes {
+			for level, row := range c.classes[kind] {
+				for _, class := range row {
+					if !c.anyCountry(class.group, kind == 1) {
+						return c, fmt.Errorf("equipment table %d level %d class %d has no item", kind, level+1, class.group)
+					}
 				}
-				if p <= 0.000001 {
-					continue
-				}
-				sum += p
-				c.classes[kind][level] = append(c.classes[kind][level], classThreshold{group, uint32(float64(sum) * 1_000_000)})
 			}
 		}
 	}
-	return c
+	return c, nil
+}
+
+/*
+================
+anyCountry
+
+Whether either country holds an item of the class.
+================
+*/
+func (c equipmentCatalog) anyCountry(group int, rare bool) bool {
+	return c.buckets[equipmentKey{0, group, rare}] != nil || c.buckets[equipmentKey{1, group, rare}] != nil
 }
 
 // EquipmentGroup preserves float32 accumulation and native lower_bound
@@ -196,7 +298,11 @@ selectEquipment
 ================
 */
 func (c equipmentCatalog) selectEquipment(country uint8, group int, rare bool, level uint8, roll func() (uint32, error)) (equipmentRef, bool) {
-	if country > 1 || group < 0 || group >= 36 || level == 0 || roll == nil {
+	width := c.widths[0]
+	if rare {
+		width = c.widths[1]
+	}
+	if country > 1 || group < 0 || group >= width || level == 0 || roll == nil {
 		return equipmentRef{}, false
 	}
 	typeKey := ""
