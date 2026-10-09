@@ -62,6 +62,14 @@ With the original production selector overlaid, the same-team and re-entry
 phases fail for groups 1 through 4 in both attacker bands; the fixed selector
 passes. These are selection tests, not a full connected-client battle replay.
 
+The secondary-owner extension is an inference, not a completed native area
+call-chain proof. `528FAB..529000` proves the direct-player team exclusion.
+`58CC70` validates its supplied target vector, but `585A53` / `585AB5` later
+expand area targets before damage calculation at `585AD1`. The around-target
+selector also filters relations at `58AAD1..58AB15`; that does not establish
+that every expanded victim reaches `528F40`. Applying the existing team rule
+consistently to secondary owners and companions is the bounded inference here.
+
 ### Broader transition owner
 
 The later server's `7516` free-battle mode request, `4E0D50` state changer and

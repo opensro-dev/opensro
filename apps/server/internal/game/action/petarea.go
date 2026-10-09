@@ -73,8 +73,9 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 		if snapshot == nil || snapshot.DeletePending {
 			continue
 		}
-		// 528F40's cape-team exclusion precedes owner permission for every
-		// victim, including secondary players and their companions.
+		// 528F40 excludes same-team player targets before owner permission.
+		// INFERENCE: apply that companion rule to secondary owners and their
+		// companions too, so area selection cannot bypass team protection.
 		if rt.companionTeamRefusal(step.snapshot, snapshot) != 0 {
 			continue
 		}
