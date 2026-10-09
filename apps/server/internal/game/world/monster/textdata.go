@@ -534,15 +534,18 @@ func loadMonsterRideMetadata(textdataDir string) characterInfoRides {
 /*
 ================
 register
+
+Records the ride of one characterInfo row under every name it covers.
 ================
 */
 func (r *characterInfoRides) register(codename string, ride monsterRideMetadata) {
 	for _, name := range characterInfoCodenames(codename) {
-		if _, duplicate := r.byCodename[name]; duplicate {
-			continue
+		// 91B7E0 overwrites a repeated record; its place in the default
+		// search stays where the name first appeared.
+		if _, known := r.byCodename[name]; !known {
+			r.order = append(r.order, name)
 		}
 		r.byCodename[name] = ride
-		r.order = append(r.order, name)
 	}
 }
 

@@ -79,7 +79,9 @@ func TestCharacterInfoRideLookupFollows9171B0(t *testing.T) {
 		"CHAR_DEFAULT\tX\t1\tnone\tnone\n" +
 		"MOB_CH_TIGERWOMAN\tX\t2.8\tnone\tres\\mob\\china\\bluetiger.bsr\n" +
 		"MOB_WALKER\tX\t1\tnone\tnone\n" +
-		"MOB_RIDER001~003\tX\t1\tRT_DUMMY\tres\\mob\\horse.bsr\n"
+		"MOB_RIDER001~003\tX\t1\tRT_DUMMY\tres\\mob\\horse.bsr\n" +
+		"MOB_TWICE\tX\t1\tnone\tnone\n" +
+		"MOB_TWICE\tX\t1\tRT_FIXED\tres\\mob\\later.bsr\n"
 	if err := os.WriteFile(filepath.Join(dir, "skilleffect.txt"), []byte(skillEffect), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -93,6 +95,10 @@ func TestCharacterInfoRideLookupFollows9171B0(t *testing.T) {
 	}
 	if got := rides.resolve("MOB_RIDER002", "", known); got.modelPath != `res\mob\horse.bsr` || got.transformMode != 2 {
 		t.Fatalf("a ranged record resolved %+v", got)
+	}
+	// 91B7E0 keeps the last of two records for one name.
+	if got := rides.resolve("MOB_TWICE", "", known); got.modelPath != `res\mob\later.bsr` || got.transformMode != 1 {
+		t.Fatalf("a repeated record resolved %+v, want the later one", got)
 	}
 	// The default skips MOB_UNKNOWN_FIRST: it names no known reference.
 	if got := rides.resolve("MOB_ORPHAN", "MOB_NOBODY", known); got.modelPath != "" {
