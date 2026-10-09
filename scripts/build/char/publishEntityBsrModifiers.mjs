@@ -15,8 +15,13 @@ export async function publishEntityBsrModifiers() {
 	for ( const domain of [ "itemdrop", "npc" ] ) {
 		const url = `/assets/${domain}/manifest.json`,
 			manifest = JSON.parse( readPublishedAssetBytesSync( url, publicRoot ) );
-		for ( const [key, row] of Object.entries( manifest.models ) ) {
-			const bsr = row.bsr ?? `res/${key}`;
+		// The NPC manifest keeps each BSR's bake once (npcManifest.mjs, v9): the
+		// modifiers and the rewritten GLB size belong to that resource, not to
+		// each reference that aliases it.
+		const rows = domain === "npc" ?
+			Object.entries( manifest.resources ?? {} ).map( ( [bsr, resource] ) => [ bsr, resource, bsr ] ) :
+			Object.entries( manifest.models ).map( ( [key, row] ) => [ key, row, row.bsr ?? `res/${key}` ] );
+		for ( const [, row, bsr] of rows ) {
 			if ( !cache.has( bsr ) ) {
 				cache.set( bsr, parseCharacterBsr( fs.readFileSync( dataAssetPath( bsr ) ), bsr ) );
 			}

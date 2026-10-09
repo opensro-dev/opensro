@@ -8,6 +8,7 @@ import { build } from "esbuild";
 import { parseCharacterBsr } from "../../../scripts/build/char/formats.mjs";
 import { dataAssetPath } from "../../../scripts/build/shared/jmxAssetIO.mjs";
 import { readPublishedAssetBytesSync, readPackedAssetBytesSync } from "../../../scripts/lib/publishedAsset.mjs";
+import { npcManifestModels } from "../../../scripts/build/shared/npcManifest.mjs";
 const root = path.resolve( import.meta.dirname, ".." ), publicRoot = CLIENT_PUBLIC_ROOT;
 const output = path.join( root, "temp/artifacts/bsr-parity" );
 fs.mkdirSync( output, { recursive: true } );
@@ -51,7 +52,7 @@ const cache = new Map(), effects = new Set();
 for ( const domain of [ "itemdrop", "npc", "skillfx" ] ) {
 	const bytes = read( `/assets/${domain}/manifest.json` ), manifest = JSON.parse( bytes );
 	report.inputs[domain] = hash( bytes );
-	for ( const [key, row] of Object.entries( manifest.models ) ) {
+	for ( const [key, row] of Object.entries( npcManifestModels( manifest ) ) ) {
 		const source = row.bsr ?? (key.startsWith( "res/" ) ? key : `res/${key}`);
 		if ( !cache.has( source ) ) {
 			const bytes = fs.readFileSync( dataAssetPath( source ) );

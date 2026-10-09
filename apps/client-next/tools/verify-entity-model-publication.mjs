@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { readPackedAssetBytesSync, readPublishedAssetBytesSync } from "../../../scripts/lib/publishedAsset.mjs";
+import { npcManifestModels } from "../../../scripts/build/shared/npcManifest.mjs";
 const root = path.resolve( import.meta.dirname, ".." ), publicRoot = CLIENT_PUBLIC_ROOT;
 const output = path.join( root, "temp/artifacts/bsr-parity" );
 fs.mkdirSync( output, { recursive: true } );
@@ -32,7 +33,7 @@ let bindings = 0;
 const catalog = JSON.parse( read( "/assets/npc/animation-catalog.json" ) );
 for ( const domain of [ "npc", "itemdrop" ] ) {
 	const manifest = JSON.parse( read( `/assets/${domain}/manifest.json` ) );
-	for ( const [key, row] of Object.entries( manifest.models ) ) {
+	for ( const [key, row] of Object.entries( npcManifestModels( manifest ) ) ) {
 		try {
 			if ( domain === "npc" ) {
 				if ( Number.isInteger( row.refObjId ) && catalog.models[key]?.refObjId !== row.refObjId ) {
