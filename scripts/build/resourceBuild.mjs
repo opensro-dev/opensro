@@ -95,7 +95,7 @@ async function extractRetailCursors() {
 	const output = result.stdout.trim();
 	if ( output ) console.log( output );
 	// The Python extractor writes the cursors; this step owns them.
-	claimPublicPaths( RETAIL_CURSOR_IDS.map( id => `/assets/cursors/sro_client_cursor_${id}.cur` ) );
+	claimPublicPaths( RETAIL_CURSOR_IDS.map( id => `/assets/cursors/sro_client_cursor_${id}.png` ) );
 	return { count: RETAIL_CURSOR_IDS.length };
 }
 

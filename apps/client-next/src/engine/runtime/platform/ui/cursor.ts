@@ -8,7 +8,9 @@ hotspot; it owns pointer presentation independently of game frames outside
 editor interaction. Admit the image on editor hover, before a click can
 focus it and before Windows can hide the native pointer. Keep that owner
 through focused editing/selection; never hand off on keys. The cursor files
-are browser-loaded assets (foundation/assets/native-assets.ts).
+are browser-loaded PNGs decoded from the native DIBs
+(scripts/extract_client_cursors.py): every browser draws a PNG cursor, and
+Safari drew no .cur at all (BUG-068).
 
 ===========================================================================
 */

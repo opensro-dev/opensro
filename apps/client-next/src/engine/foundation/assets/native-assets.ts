@@ -33,7 +33,7 @@ cursorAssetUrl
 ================
 */
 export function cursorAssetUrl( value: WorldCursor ): string {
-	return `/assets/cursors/sro_client_cursor_0x${value.toString( 16 )}.cur`;
+	return `/assets/cursors/sro_client_cursor_0x${value.toString( 16 )}.png`;
 }
 
 /*

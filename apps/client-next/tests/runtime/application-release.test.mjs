@@ -117,7 +117,7 @@ test("a clock cursor route owned by the replaced application cannot satisfy admi
 	const url = cursorAssetUrl( 0xa6 );
 	const cursor = manifest.routes.find( row => row.url === url );
 	assert.ok( cursor );
-	cursor.file = "application/old-clock.cur";
+	cursor.file = "application/old-clock.png";
 	manifest.files.push( { path: cursor.file, length: 2, sha256: sha( "{}" ), kind: "application" } );
 	manifest.releaseId = releaseIdentity( manifest );
 	await assert.rejects(
