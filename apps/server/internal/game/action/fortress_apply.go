@@ -95,7 +95,7 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 		return OpResult{}
 	}
 	gid := request.Target
-	if subtype == siege.ActionSchedule || subtype == siege.ActionAide || subtype == siege.ActionTaxQuery || subtype == siege.ActionTaxRate || subtype == siege.ActionStaffQuery || subtype == siege.ActionStaffHire {
+	if subtype == siege.ActionSchedule || subtype == siege.ActionAide || subtype == siege.ActionTaxQuery || subtype == siege.ActionTaxRate || subtype == siege.ActionTaxCollect || subtype == siege.ActionStaffQuery || subtype == siege.ActionStaffHire {
 		unlock := rt.lockDivision(division)
 		defer unlock()
 		return rt.fortressServiceQuery(division, c, request)

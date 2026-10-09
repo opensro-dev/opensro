@@ -115,7 +115,28 @@ type FortressStaffStore interface {
 	HireFortressStaff(divisionID string, record FortressRecord, actorID int64, requested uint8) (uint8, error)
 }
 
+/*
+================
+FortressTaxStore
+
+Collection commits the treasury debit and master's credit together. The
+authority holds its lock until the returned amount is applied in memory.
+================
+*/
+type FortressTaxStore interface {
+	CollectFortressTax(divisionID string, record FortressRecord, actorID int64, requested int64) (int64, uint8, error)
+}
+
 const (
 	FortressStaffGold int64  = 30000
 	FortressStaffGP   uint32 = 3000
+)
+
+// v1.150 754A40 reads the low byte of the v1.188 fortress refusal.
+const (
+	FortressTaxErrFailure uint8 = 2
+	FortressTaxErrUnknown uint8 = 3
+	FortressTaxErrOwner   uint8 = 6
+	FortressTaxErrMaster  uint8 = 7
+	FortressTaxErrPeriod  uint8 = 8
 )

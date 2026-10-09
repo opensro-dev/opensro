@@ -44,6 +44,9 @@ func (rt *Runtime) fortressServiceQuery(division string, c *enterworld.Character
 	if request.Action == siege.ActionStaffQuery || request.Action == siege.ActionStaffHire {
 		return rt.fortressStaffService(division, c, request)
 	}
+	if request.Action == siege.ActionTaxCollect {
+		return rt.fortressTaxCollect(division, c, request)
+	}
 	if request.Action == siege.ActionAide {
 		return OpResult{}
 	}
