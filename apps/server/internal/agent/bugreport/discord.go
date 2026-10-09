@@ -7,10 +7,13 @@ One message per report: an embed with the description and context, the
 replay or screenshot as a file Discord plays inline. On a forum channel
 each message opens its own post (thread_name).
 
-Two rules matter more than the formatting:
+Three rules matter more than the formatting:
 
   - allowed_mentions is empty, so nothing a player types can ping
     @everyone, a role or a user.
+  - The channel is public, so the post never names the account: a login
+    name is half of a credential. Staff map a post to its account through
+    report.json and the Agent log, both keyed by the Report ID.
   - net/http errors embed the request URL, and this URL holds the webhook
     token. Every error leaving this file is rebuilt without it.
 
@@ -193,8 +196,9 @@ func encodeMessage(report Report, forum bool) (io.Reader, string, error) {
 ================
 buildEmbed
 
-Identity fields first (from the session, trusted), then client context,
-then as many recent errors as the embed budget leaves room for.
+Identity fields first (from the session, trusted; never the account, see
+the file header), then client context, then as many recent errors as the
+embed budget leaves room for.
 ================
 */
 func buildEmbed(report Report) discordEmbed {
@@ -219,7 +223,6 @@ func buildEmbed(report Report) discordEmbed {
 		used += size
 		embed.Fields = append(embed.Fields, discordField{Name: name, Value: value, Inline: true})
 	}
-	add("Account", report.Account)
 	add("Server", report.Division)
 	add("Character", report.Character)
 	for _, field := range report.Context {

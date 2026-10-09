@@ -107,14 +107,18 @@ func (server *Server) submitBugReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := server.bugReports.Deliver(r.Context(), bugreport.Report{
+	report := bugreport.Report{
 		Account:    identity.accountID,
 		Division:   identity.definition.Name,
 		Character:  identity.character,
 		Submission: submission,
-	})
+	}
+	// The public post omits the account; this private log line and
+	// report.json map its Report ID back to the reporter.
+	reportID := bugreport.ReportID(report)
+	id, err := server.bugReports.Deliver(r.Context(), report)
 	if err != nil {
-		log.Warnf("agent: bug report from %s not delivered: %v", identity.accountID, err)
+		log.Warnf("agent: bug report %s from %s not delivered: %v", reportID, identity.accountID, err)
 		if errors.Is(err, bugreport.ErrBusy) {
 			w.Header().Set("Retry-After", "30")
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"ok": false, "code": "BUSY", "retryAfter": 30})
@@ -124,6 +128,6 @@ func (server *Server) submitBugReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	delivered = true
-	log.Infof("agent: bug report from %s delivered (message %s)", identity.accountID, id)
+	log.Infof("agent: bug report %s from %s delivered (message %s)", reportID, identity.accountID, id)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }

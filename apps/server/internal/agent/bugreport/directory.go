@@ -75,13 +75,14 @@ type directoryReport struct {
 
 /*
 ================
-reportID
+ReportID
 
-The client's id when it has the expected shape, else empty. It only names
-the directory, so an unexpected value is dropped rather than refused.
+The client's id when it has the expected shape, else empty. It names the
+directory and the Agent's log line, so an unexpected value is dropped
+rather than refused.
 ================
 */
-func reportID(report Report) string {
+func ReportID(report Report) string {
 	for _, field := range report.Context {
 		if field.Name == reportIDField && reportIDPattern.MatchString(field.Value) {
 			return field.Value
@@ -100,7 +101,7 @@ Discord message id in the Agent's reply and log.
 */
 func writeDirectory(root string, report Report, now time.Time) (string, error) {
 	name := now.UTC().Format(directoryStampLayout)
-	if id := reportID(report); id != "" {
+	if id := ReportID(report); id != "" {
 		name += "-" + id
 	}
 	if err := os.MkdirAll(root, directoryMode); err != nil {

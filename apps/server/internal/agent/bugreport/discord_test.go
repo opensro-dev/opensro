@@ -153,7 +153,10 @@ func TestDeliverPostsEmbedAndClipWithoutMentions(t *testing.T) {
 	for _, field := range embed.Fields {
 		names[field.Name] = field.Value
 	}
-	if names["Account"] != "tester" || names["Server"] != "Global Official" || names["Build"] != "290e29b" {
+	if _, named := names["Account"]; named || strings.Contains(embed.Title+payload.ThreadName, "tester") {
+		t.Fatalf("the public post names the account: %+v", embed)
+	}
+	if names["Server"] != "Global Official" || names["Build"] != "290e29b" {
 		t.Fatalf("fields %+v", embed.Fields)
 	}
 	if errorsField := names[errorsFieldName]; strings.Count(errorsField, "```") != 2 {

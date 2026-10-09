@@ -202,10 +202,14 @@ func TestBugReportDeliversWithSessionIdentity(t *testing.T) {
 	if len(recorder.payloads) != 1 {
 		t.Fatalf("want one Discord message, got %d", len(recorder.payloads))
 	}
-	for _, want := range []string{`"name":"Account","value":"tester"`, `"name":"Server","value":"Alpha"`, `"allowed_mentions":{"parse":[]}`} {
+	for _, want := range []string{`"name":"Server","value":"Alpha"`, `"allowed_mentions":{"parse":[]}`} {
 		if !strings.Contains(recorder.payloads[0], want) {
 			t.Fatalf("payload lacks %s: %s", want, recorder.payloads[0])
 		}
+	}
+	// The channel is public: the login name never reaches it.
+	if strings.Contains(recorder.payloads[0], "tester") {
+		t.Fatalf("the public post names the account: %s", recorder.payloads[0])
 	}
 
 	again := postBugReport(t, fixture, cookie, "The bridge eats my character again")
