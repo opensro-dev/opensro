@@ -98,10 +98,23 @@ offensiveCost is the full check for a new cast: data, cooldown, then MP.
 ================
 */
 func (rt *Runtime) offensiveCost(division string, c *enterworld.Character, skill enterworld.SkillRow, nowMs int64) (int64, uint16) {
+	return rt.checkedCost(division, c, skill, nowMs, true)
+}
+
+/*
+================
+checkedCost
+
+The one owner of the fresh-cast checks, in the server's order: data
+(0x3003), cooldown (0x3005) unless cooldown is false, then resources. A
+linked chain stage passes false (stagePhaseCost).
+================
+*/
+func (rt *Runtime) checkedCost(division string, c *enterworld.Character, skill enterworld.SkillRow, nowMs int64, cooldown bool) (int64, uint16) {
 	if !skill.Consumption.Pinned || skill.Group == 0 || nowMs < 0 {
 		return 0, 0x3003
 	}
-	if skillCoolingDown(c, skill, nowMs) {
+	if cooldown && skillCoolingDown(c, skill, nowMs) {
 		return 0, 0x3005
 	}
 	return rt.offensiveResourceCost(division, c, skill)
@@ -186,13 +199,7 @@ func (rt *Runtime) phaseCost(division string, c *enterworld.Character, skill ent
 		return prepared.executionCost, 0
 	}
 
-	if !skill.Consumption.Pinned || skill.Group == 0 || now < 0 {
-		return skillCharge{}, 0x3003
-	}
-	if cooldown && skillCoolingDown(c, skill, now) {
-		return skillCharge{}, 0x3005
-	}
-	if _, refusal := rt.offensiveResourceCost(division, c, skill); refusal != 0 {
+	if _, refusal := rt.checkedCost(division, c, skill, now, cooldown); refusal != 0 {
 		return skillCharge{}, refusal
 	}
 	cost, err := rt.preparedExecutionMPCost(division, c, skill)

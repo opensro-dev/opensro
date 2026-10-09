@@ -14,6 +14,10 @@ import { isReturnScroll } from "./travel";
 /*
 ================
 ReturnScrollCast
+
+skillId marks the repair kit's kind-4 delay row, which raises CIFDelayInfo
++0x36C; gameplay's interactionBlocked (67D090) reads it. A later delay
+kind that raises the flag (1 or 3) joins that predicate when it is ported.
 ================
 */
 export interface ReturnScrollCast {
