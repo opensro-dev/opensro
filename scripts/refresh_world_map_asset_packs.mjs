@@ -4,7 +4,7 @@
 refresh_world_map_asset_packs.mjs - republish the world-map image closure
 
 Converts and publishes every image the world-map tables and layout reach,
-repacks game-images sparsely and soft-archives the packs it superseded.
+preserves each image's published group and retires only superseded packs.
 
 ===========================================================================
 */
@@ -12,7 +12,8 @@ repacks game-images sparsely and soft-archives the packs it superseded.
 import "./build/shared/buildParallelism.mjs";
 import { buildWorldMapImageResources, imagePublicPath } from "./build/shared/cifResources.mjs";
 import { runConvertImages } from "./build/shared/convertImagesRunner.mjs";
-import { refreshPackGroups, timedStep } from "./build/shared/packGroupRefresh.mjs";
+import { refreshOwnedPackFiles } from "./build/shared/ownedPackRefresh.mjs";
+import { timedStep } from "./build/shared/packGroupRefresh.mjs";
 import { beginPublication, claimPublicPaths, commitPublication } from "./build/shared/publicationLedger.mjs";
 import { collectWorldMapImageReferences } from "./build/shared/worldMapImageReferences.mjs";
 import { withGeneratedAssetsLock } from "./rebuildLock.mjs";
@@ -30,10 +31,11 @@ await withGeneratedAssetsLock( "world-map asset-pack refresh", async () => {
 	const published = await timed( "strict publication", () => buildWorldMapImageResources() );
 	const looseFiles = published.references.map( imagePublicPath );
 	claimPublicPaths( looseFiles );
-	const { totals, webManifest } = await refreshPackGroups( {
+	const { totals, webManifest } = await refreshOwnedPackFiles( {
 		name: "world-map",
 		timed,
-		deltas: [ { groupName: "game-images", startup: true, files: looseFiles } ]
+		startup: true,
+		files: looseFiles
 	} );
 	await commitPublication();
 	console.log(
