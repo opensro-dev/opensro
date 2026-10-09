@@ -245,6 +245,18 @@ test("only accepted local casts start cooldowns; duplicates, refusals and cast r
 	c.receive( 0xb245, other, 6000 );
 	assert.deepEqual( c.state().skillCooldowns, [] );
 });
+test("a world transfer keeps the skill cooldowns; ending the session drops them", () => {
+	// CSkillCoolTimeManager lives on CGInterface, which the 0x366A reset
+	// (685400) keeps: a teleport never makes a cooling skill ready.
+	const c = createCombat();
+	c.cooldownReferences( 1, [ { id: 7, cooldownMs: 5000, cooldownGroup: 3 } ] );
+	c.receive( 0xb245, header().u8( 1 ).u8( 1 ).u8( 1 ).u32( 2 ).u8( 0 ).u32( 10 << 8 ).u32( 0 ).bytes(), 100 );
+	c.clear( true );
+	c.cooldownReferences( 1, [ { id: 7, cooldownMs: 5000, cooldownGroup: 3 } ] );
+	assert.deepEqual( c.state().skillCooldowns, [ { skill: 7, group: 3, startedAtMs: 100, durationMs: 5000 } ] );
+	c.clear();
+	assert.deepEqual( c.state().skillCooldowns, [] );
+});
 /*
 ================
 knockback decoration

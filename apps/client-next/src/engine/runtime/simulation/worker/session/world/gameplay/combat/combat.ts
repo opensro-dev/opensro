@@ -932,6 +932,9 @@ export function createCombat(
 		================
 		clear
 		End the session lifetime, including local-only result identities.
+		preserveReferences marks a world transfer (0x366A): the skill
+		cooldowns survive it, as CSkillCoolTimeManager lives on CGInterface,
+		which the reset (685400) keeps; only its destructor clears the list.
 		================
 		*/
 		clear( preserveReferences = false ) {
@@ -939,7 +942,7 @@ export function createCombat(
 			attackedName = undefined;
 			attackedNameUntil = 0;
 			huntingPoints = [];
-			cooldowns.clear();
+			if ( !preserveReferences ) cooldowns.clear();
 			prediction.clear();
 			temporaryToken = 0;
 			instanceSerial = 0;
