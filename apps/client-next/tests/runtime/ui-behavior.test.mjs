@@ -3313,6 +3313,37 @@ test("matching form derives job from live equipment and refuses a stale job choi
 	}
 });
 
+test("a shortcut carried across an F1-F4 bar switch lands on the shown bar", async () => {
+	const { hotbarSlot } = await load( "src/engine/foundation/gameplay/quickslots.ts" );
+	const commands = [], f = uiFixture( c => commands.push( c.command ) );
+	try {
+		f.state.gameplay.skills = [ 7 ];
+		f.state.gameplay.quickSlots = [ { slot: 1, kind: 0x49, payload: 7 } ];
+		f.state.gameplay.skillCatalog = [ { id: 7, name: "Fixture", cooldownGroup: 0, cooldownMs: 2000 } ];
+		let now = 1000, output;
+		const draw = () => output = f.ui.step( { ...f.state }, now += 20 ) ?? output;
+		const control = id => defined( output ).controls.find( c => c.id === id );
+		draw();
+		f.ui.event( { kind: "drag", id: "hotbar:1", dx: 4, dy: -20 } );
+		draw();
+		f.ui.event( { kind: "key", code: "F2" } );
+		draw();
+		const destination = "hotbar:" + hotbarSlot( 1, 3 );
+		assert.equal( control( "hotbar:1" ), undefined, "F2 took the dragged slot's bar off screen" );
+		assert.ok( control( destination ), "F2 shows the second bar" );
+		f.ui.event( { kind: "drag", id: "hotbar:1", dx: 10, dy: 0 } );
+		const target = control( destination );
+		f.ui.event( { kind: "drag-end", id: "hotbar:1", x: target.rect[0] + 2, y: target.rect[1] + 2 } );
+		draw();
+		assert.deepEqual( commands.filter( c => c.kind === "quickslot-set" ), [
+			{ kind: "quickslot-set", binding: { slot: 1, kind: 0, payload: 0 } },
+			{ kind: "quickslot-set", binding: { slot: hotbarSlot( 1, 3 ), kind: 0x49, payload: 7 } }
+		] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("retail extended quickslot layouts, fixed bindings, locks and bottom-bar activation share one path", () => {
 	const commands = [], f = uiFixture( c => commands.push( c.command ) );
 	try {

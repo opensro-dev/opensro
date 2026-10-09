@@ -4564,19 +4564,23 @@ export function createUi(
 				(event.id.startsWith( "skill:" ) || event.id.startsWith( "hotbar:" ) ||
 					event.id.startsWith( "action:" ))
 			) {
+				// A carried shortcut keeps following the pointer after its own slot
+				// leaves the screen: F1-F4 switch the bar mid-drag, and the drop
+				// below moves it onto the other bar.
 				const source = controls.find( c => c.id === event.id && c.draggable && !c.disabled );
-				if ( source ) {
-					const prior = carriedShortcut ??
-						{
-							id: event.id,
-							x: source.rect[0] + source.rect[2] / 2,
-							y: source.rect[1] + source.rect[3] / 2
-						};
+				const prior = carriedShortcut?.id === event.id ?
+					carriedShortcut :
+					source ?
+					{ id: event.id, x: source.rect[0] + source.rect[2] / 2, y: source.rect[1] + source.rect[3] / 2 } :
+					null;
+				if ( prior ) {
 					carriedShortcut = { ...prior, x: prior.x + event.dx, y: prior.y + event.dy };
 					dirty = true;
 				}
 				return;
 			}
+			// The shortcut this drag carried, whether or not its slot is still drawn.
+			const carried = event.kind === "drag-end" && carriedShortcut?.id === event.id;
 			if ( event.kind === "drag-end" ) carriedShortcut = null;
 			if ( event.kind === "drag-end" && event.id === "ext-drag" ) {
 				persistQuickslots();
@@ -4598,7 +4602,7 @@ export function createUi(
 					const slot = Number( target.id.slice( 7 ) ),
 						source = controls.find( c => c.id === event.id && c.draggable && !c.disabled );
 					if (
-						source &&
+						(source || carried) &&
 						!(extSlotLock &&
 							(slot >= 41 || event.id.startsWith( "hotbar:" ) && Number( event.id.slice( 7 ) ) >= 41))
 					) {
@@ -4620,7 +4624,7 @@ export function createUi(
 					const slot = Number( event.id.slice( 7 ) ),
 						source = controls.find( c => c.id === event.id && c.draggable && !c.disabled );
 					if (
-						source && !(slot >= 41 && extSlotLock) &&
+						(source || carried) && !(slot >= 41 && extSlotLock) &&
 						view.gameplay.quickSlots?.some( row => row.slot === slot && row.kind !== 0 )
 					) sendGameplay( { kind: "quickslot-set", binding: { slot, kind: 0, payload: 0 } } );
 					dirty = true;
