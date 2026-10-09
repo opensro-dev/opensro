@@ -193,7 +193,12 @@ import { createCastMotionLock } from "@/engine/foundation/gameplay/cast-motion-l
 import { createSkillPressQueue, decidePress } from "@/engine/foundation/gameplay/skill-queue";
 import { pressAdmission } from "@/engine/foundation/gameplay/press-admission";
 import { movementHeading } from "@/engine/foundation/gameplay/native-movement";
-import { bootstrapProgression, progressionPacket, type Progression } from "@/engine/foundation/gameplay/progression";
+import {
+	bootstrapProgression,
+	progressionPacket,
+	skillPointNotice,
+	type Progression
+} from "@/engine/foundation/gameplay/progression";
 import { skillBindings, quickSlotPacket } from "@/engine/foundation/gameplay/quickslots";
 import { decodeCosRecord } from "@/engine/foundation/gameplay/cos-record";
 import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
@@ -2822,6 +2827,10 @@ Packet handling must not depend on which HUD panel is currently open.
 							sequence: ++noticeSequence
 						} ];
 					}
+				}
+				if ( nextProgression && frame.opcode === 0x30b3 ) {
+					const lost = skillPointNotice( progression.skillPoints, frame.payload );
+					if ( lost ) notices = [ ...notices.slice( -99 ), { ...lost, sequence: ++noticeSequence } ];
 				}
 				if ( nextProgression ) {
 					if ( frame.opcode === 0xb165 && frame.payload[0] === 2 ) {

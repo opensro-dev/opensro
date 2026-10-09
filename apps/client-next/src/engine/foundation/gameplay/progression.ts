@@ -11,6 +11,7 @@ it. Experience deltas (0x30D2) belong to the level owner, not here.
 ===========================================================================
 */
 import { playerStats, type PlayerStats } from "./player-stats";
+import type { SystemNotice } from "./system-notices";
 
 /*
 ================
@@ -80,6 +81,32 @@ export function progressionPacket( state: Progression, opcode: number, p: Uint8A
 		};
 	}
 	return null;
+}
+
+/*
+================
+skillPointNotice
+
+CPSMission_OnPointUpdate30B3 type 2 (779DD9): with its notify byte set the
+client compares the new value with the one it held. A loss prints
+UIIT_MSG_JSERR_SINCE_YOU_DIE_IN_MURDERER_SP_DEPRIVED_BY_SERVER, anything
+else UIIT_STT_SKILL_POINT_RECOVER_RESULT, to the system chat (type 0) and
+the notice banner. The server sets the byte only for a death's skill-point
+loss (progression applyDeathPenalty).
+================
+*/
+export function skillPointNotice( held: number | undefined, p: Uint8Array ): SystemNotice | null {
+	if ( p[0] !== 2 || p.length !== 6 || p[5] === 0 || held === undefined ) return null;
+	const next = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 1, true );
+	const lost = held - next;
+	return lost > 0 ?
+		{
+			key: "UIIT_MSG_JSERR_SINCE_YOU_DIE_IN_MURDERER_SP_DEPRIVED_BY_SERVER",
+			value: lost,
+			nativeType: 0,
+			banner: true
+		} :
+		{ key: "UIIT_STT_SKILL_POINT_RECOVER_RESULT", value: next - held, nativeType: 0, banner: true };
 }
 
 /*
