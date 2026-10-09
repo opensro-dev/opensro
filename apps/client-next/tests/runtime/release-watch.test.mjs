@@ -38,7 +38,11 @@ function scriptedAssets() {
 		setStale( value ) {
 			stale = value;
 		},
-		releaseStale: () => stale,
+		takeReleaseStale() {
+			const taken = stale;
+			stale = false;
+			return taken;
+		},
 		setFree( slots ) {
 			free = slots;
 		},
@@ -142,7 +146,7 @@ test("the check waits for free load slots and a development page never checks", 
 	assert.equal( development.requests.length, 0 );
 });
 
-test("a listed file gone 404 checks at once, even with one free slot, and offers the update", () => {
+test("a listed file gone 404 checks at once, with one free slot, and offers the update", () => {
 	// A teleport two minutes after a publish asked for the replaced release's
 	// region files (BR-261008-2319): the 10 minute interval was still running.
 	const assets = scriptedAssets();
@@ -159,15 +163,20 @@ test("a listed file gone 404 checks at once, even with one free slot, and offers
 	assert.equal( watch.newerAvailable(), true );
 });
 
-test("a stale file whose page names this release rechecks only once per stale gap", () => {
+test("a lost file that is no release costs one check, then the normal schedule resumes", () => {
 	const assets = scriptedAssets();
 	const watch = createReleaseWatch( assets, PAGE, RUNNING );
-	assets.setStale( true );
 	watch.step( 0, false );
 	assets.reply( { kind: "release", entry: RUNNING } );
 	watch.step( 16, false );
+	assets.setStale( true );
 	watch.step( RELEASE_STALE_GAP_MS - 1, false );
-	assert.equal( assets.requests.length, 1 );
+	assert.equal( assets.requests.length, 1, "a stale file checked inside the stale gap" );
 	watch.step( RELEASE_STALE_GAP_MS, false );
 	assert.equal( assets.requests.length, 2 );
+	assets.reply( { kind: "release", entry: RUNNING } );
+	watch.step( RELEASE_STALE_GAP_MS + 16, false );
+	watch.step( 10 * RELEASE_STALE_GAP_MS, false );
+	assert.equal( assets.requests.length, 2, "the consumed stale file kept rechecking" );
+	assert.equal( watch.newerAvailable(), false );
 });

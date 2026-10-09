@@ -178,7 +178,11 @@ export function createAssets(): AssetOwner {
 				{ phase: "running" };
 		},
 		available: () => disposed || failure ? 0 : 4 - jobs.size,
-		releaseStale: () => releaseStale,
+		takeReleaseStale: () => {
+			const stale = releaseStale;
+			releaseStale = false;
+			return stale;
+		},
 
 		/*
 		================

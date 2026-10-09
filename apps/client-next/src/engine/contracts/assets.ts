@@ -139,8 +139,9 @@ export interface AssetOwner {
 	progress(): AssetProgress | null;
 	health(): { phase: "running"; } | { phase: "failed"; error: string; } | { phase: "disposed"; };
 	available(): number;
-	// Latched once any listed file came back 404 (an error's stale flag).
-	releaseStale?(): boolean;
+	// Whether a listed file came back 404 (an error's stale flag) since the
+	// last call; each call consumes it.
+	takeReleaseStale?(): boolean;
 	request(
 		url: string,
 		limit?: number,

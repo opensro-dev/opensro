@@ -1831,7 +1831,7 @@
 				"request",
 				"take",
 				"available",
-				"releaseStale",
+				"takeReleaseStale",
 				"cancel"
 			]
 		},
