@@ -276,12 +276,15 @@ test("dungeon tiles use floor-specific art and negative logical coordinate secto
 	assert.equal( defined( map.get( 32769 ) )[0], floor );
 	const p = { ...pose, regionId: 32769, x: -10, z: -10 };
 	assert.equal( minimapTiles( p, 160 ).length, 0 );
-	const art = new Set(
-		floor.tiles.map( t => "/assets/images/media_extracted/minimap_d/donwhang/dh_a01_floor02_" + t + ".png" )
+	const art = new Map(
+		floor.tiles.map( t => {
+			const base = "/assets/images/media_extracted/minimap_d/donwhang/dh_a01_floor02_" + t;
+			return [ base, base + ".texture" ];
+		} )
 	);
 	const tiles = minimapTiles( p, 160, floor, art );
 	assert.equal( tiles.length, 2 );
-	assert.ok( tiles.every( t => t.path.includes( "/donwhang/dh_a01_floor02_" ) ) );
+	assert.ok( tiles.every( t => t.path.includes( "/donwhang/dh_a01_floor02_" ) && t.path.endsWith( ".texture" ) ) );
 	assert.equal( minimapTiles( pose, 160 ).length, 0 );
 });
 test("hunting has no roster floor gate; the region adapter uses zero offset for either dungeon", () => {
@@ -315,18 +318,19 @@ test("all outdoor region grids request only retail artwork, including every edge
 		),
 		art = minimapArt( catalog ),
 		seen = new Set();
+	const published = new Set( [ ...art.values() ].map( p => p.toLowerCase() ) );
 	for ( let regionId = 0; regionId < 32768; regionId++ ) {
 		for ( const tile of minimapTiles( { ...pose, regionId }, 160, undefined, art ) ) {
-			assert.ok( art.has( tile.path.toLowerCase() ) );
+			assert.ok( published.has( tile.path.toLowerCase() ) );
 			seen.add( tile.path.toLowerCase() );
 		}
 	}
-	const outdoor = [ ...art ].filter( p => p.includes( "/minimap/" ) );
+	const outdoor = [ ...published ].filter( p => p.includes( "/minimap/" ) );
 	assert.equal( seen.size, outdoor.length );
 	for ( const p of outdoor ) assert.ok( seen.has( p ) );
 	const edge = minimapTiles( { ...pose, regionId: (110 << 8) | 77 }, 160, undefined, art );
-	assert.ok( edge.some( t => t.path.endsWith( "/77x110.png" ) ) );
-	assert.ok( !edge.some( t => t.path.endsWith( "/77x111.png" ) ) );
+	assert.ok( edge.some( t => /\/77x110\.(?:png|texture)$/.test( t.path ) ) );
+	assert.ok( !edge.some( t => /\/77x111\./.test( t.path ) ) );
 	assert.throws( () => minimapArt( { ...catalog, tilePaths: undefined } ), /catalog/ );
 	assert.throws(
 		() => minimapArt( { ...catalog, tilePaths: [ catalog.tilePaths[0], catalog.tilePaths[0] ] } ),
@@ -334,6 +338,18 @@ test("all outdoor region grids request only retail artwork, including every edge
 	);
 	assert.throws(
 		() => minimapArt( { ...catalog, tilePaths: [ "/assets/images/Media_extracted/minimap/../bad.png" ] } ),
+		/path/
+	);
+	// One tile cannot ship as both a texture and a PNG.
+	assert.throws(
+		() =>
+			minimapArt( {
+				...catalog,
+				tilePaths: [
+					"/assets/images/Media_extracted/minimap/1x1.png",
+					"/assets/images/Media_extracted/minimap/1x1.texture"
+				]
+			} ),
 		/path/
 	);
 });

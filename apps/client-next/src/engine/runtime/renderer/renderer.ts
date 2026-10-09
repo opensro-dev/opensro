@@ -30,6 +30,7 @@ import { createStaleDrawGuard } from "./frame/stale-draws";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
+import type { UiTexture } from "@/engine/contracts/texture";
 const INVENTORY_DOLL_WIDTH = 176;
 const INVENTORY_DOLL_HEIGHT = 318;
 
@@ -68,7 +69,7 @@ export function createRenderer(
 	let dollDepth: import("./internal/gpu-contract").DepthTarget | null = null;
 	const uiPreparation = createUiPreparation();
 	let uiProduct: ReturnType<typeof prepareUi> | null = null;
-	const uiTextures = new Map<string, ImageBitmap | ImageData>(), dirtyUi = new Set<string>();
+	const uiTextures = new Map<string, UiTexture>(), dirtyUi = new Set<string>();
 	let residentUi = new Set<string>(), residentUiProduct: ReturnType<typeof prepareUi> | null = null;
 	// The damage text a scene's world annotations show (setDamageText), drawn
 	// each frame; its glyphs stay resident while such a scene is.

@@ -11,6 +11,7 @@ Draw handles and the command interfaces the device owners implement
 import type { UiScene } from "@/engine/contracts/ui";
 import type { Geometry } from "@/engine/contracts/geometry";
 import type { Disposable, RuntimePhase, Viewport } from "@/engine/contracts/runtime";
+import type { UiTexture } from "@/engine/contracts/texture";
 // Narrow capabilities: device and queue never leave their owner.
 /*
 ================
@@ -160,7 +161,7 @@ export interface DeviceOwner extends Disposable {
 	sunShadow(): SunShadowOwner;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
-	uiTexture( id: string, image: ImageBitmap | ImageData | null ): void;
+	uiTexture( id: string, image: UiTexture | null ): void;
 	ui( scene: UiScene | null ): readonly UiDraw[];
 	worldView( transform: Float32Array, environment: Float32Array, shadowEnabled?: boolean ): void;
 	sky(): ImageDraw | null;

@@ -495,6 +495,7 @@ import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
 import type { EntityState } from "@/engine/contracts/world";
+import type { UiTexture } from "@/engine/contracts/texture";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
@@ -568,7 +569,7 @@ export function createUi(
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
 	commands: ( command: SessionCommand ) => void,
 	publish: ( scene: UiScene | null ) => void,
-	texture: ( id: string, image: ImageBitmap | ImageData | null ) => void,
+	texture: ( id: string, image: UiTexture | null ) => void,
 	base: string,
 	apiBase: string,
 	clickSound: () => void = () => {},

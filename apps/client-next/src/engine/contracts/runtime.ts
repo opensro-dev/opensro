@@ -9,7 +9,7 @@ surface. Types only.
 
 ===========================================================================
 */
-import type { WorldTexture } from "@/engine/contracts/texture";
+import type { UiTexture, WorldTexture } from "@/engine/contracts/texture";
 
 import type { Geometry } from "./geometry";
 import type { SessionCommand, SessionState } from "./session";
@@ -276,7 +276,7 @@ export interface Renderer extends Disposable {
 	setUi( scene: import("./ui").UiScene | null ): void;
 	/** The damage text a scene's world annotations show this frame (UiScene.damageText). */
 	setDamageText( rows: readonly import("./damage-text").DamageText[] ): void;
-	setUiTexture( id: string, image: ImageBitmap | ImageData | null ): void;
+	setUiTexture( id: string, image: UiTexture | null ): void;
 	retainCharacterModels( ids: readonly string[] ): void;
 	setCharacterAssembly( id: string, base: string, parts: readonly import("./character").CharacterAttachment[] ): void;
 	characterStats( details?: boolean, posed?: boolean ): CharacterStatistics;

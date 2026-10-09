@@ -35,3 +35,13 @@ owned memory and become collectible when their final consumer releases them.
 ================
 */
 export type WorldTexture = ImageBitmap | NativeTexture;
+
+/*
+================
+UiTexture
+
+A UI image: a decoded bitmap or pixel array, or a native block texture
+whose first level the UI renderer draws (minimap tiles).
+================
+*/
+export type UiTexture = ImageBitmap | ImageData | NativeTexture;

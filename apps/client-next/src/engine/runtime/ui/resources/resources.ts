@@ -18,6 +18,8 @@ static with no texture does.
 */
 
 import type { AssetOwner } from "@/engine/contracts/assets";
+import type { UiTexture } from "@/engine/contracts/texture";
+import { decodeNativeTexture } from "@/engine/foundation/assets/native-texture";
 
 const ICON_ROOT = "/assets/images/Media_extracted/icon/";
 const DEFAULT_ICON = ICON_ROOT + "icon_default.png";
@@ -35,7 +37,7 @@ Retry history belongs to current demand and disappears when a screen releases it
 */
 export function createUiAssets(
 	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
-	publish: ( id: string, image: ImageBitmap | null ) => void,
+	publish: ( id: string, image: UiTexture | null ) => void,
 	base: string,
 	report: (
 		event: { kind: "failed" | "recovered" | "released"; path: string; attempts: number; message: string; }
@@ -46,10 +48,14 @@ export function createUiAssets(
 ) {
 	const pending = new Map<string, number>();
 	const loaded = new Map<string, readonly [number, number]>();
+	// What each loaded image holds in memory: RGBA for a bitmap, the block
+	// levels for a native texture (a .texture minimap tile).
+	const residentOf = new Map<string, number>();
 	const failures = new Map<string, { attempts: number; retryAt: number; message: string; }>();
 	// Paths no load will deliver (absent images, unreadable crests) and absent
 	// icons that ride icon_default. Both outlive demand up to a bound.
 	const missing = new Set<string>(), fallback = new Set<string>();
+	const isNativeTexture = ( path: string ) => path.endsWith( ".texture" );
 	const crest = ( path: string ) => /\/marks\/[GA][0-9]{1,10}_[0-9]{1,10}_[0-9]{1,10}\.crb$/.test( path );
 	let disposed = false;
 	let wanted = new Set<string>();
@@ -85,11 +91,11 @@ export function createUiAssets(
 				loaded.size + incomingCount <= MAX_RESIDENT_IMAGES
 			) break;
 			if ( wanted.has( path ) ) continue;
-			const size = loaded.get( path )!;
 			publish( path, null );
 			loaded.delete( path );
 			evictions++;
-			residentBytes -= size[0] * size[1] * 4;
+			residentBytes -= residentOf.get( path ) ?? 0;
+			residentOf.delete( path );
 		}
 	}
 
@@ -184,12 +190,22 @@ export function createUiAssets(
 				const result = assets.take( id );
 				if ( !result ) continue;
 				pending.delete( path );
-				if ( result.kind === "image" ) {
-					const size = [ result.image.width, result.image.height ] as const;
-					trim( size[0] * size[1] * 4, 1 );
-					publish( path, result.image );
+				const image = result.kind === "image" ?
+					result.image :
+					result.kind === "bytes" && isNativeTexture( path ) ?
+					decodeNativeTexture( new Uint8Array( result.buffer ) ) :
+					null;
+				if ( image ) {
+					// Read the size before publish: the renderer owns the image after it.
+					const size = [ image.width, image.height ] as const;
+					const bytes = "kind" in image ?
+						image.levels.reduce( ( sum, level ) => sum + level.byteLength, 0 ) :
+						size[0] * size[1] * 4;
+					trim( bytes, 1 );
+					publish( path, image );
 					loaded.set( path, size );
-					residentBytes += size[0] * size[1] * 4;
+					residentOf.set( path, bytes );
+					residentBytes += bytes;
 					clearFailure( path, "recovered" );
 					changed = true;
 				} else if ( crest( path ) ) {
@@ -223,7 +239,8 @@ export function createUiAssets(
 						assets.request(
 							new URL( fallback.has( path ) ? DEFAULT_ICON : path, base ).href,
 							crest( path ) ? 256 : 4 * 1024 * 1024,
-							crest( path ) ? "crest" : "png"
+							// A native texture arrives as its container bytes.
+							crest( path ) ? "crest" : isNativeTexture( path ) ? undefined : "png"
 						)
 					);
 				} catch ( error ) {
@@ -306,6 +323,7 @@ export function createUiAssets(
 			}
 			pending.clear();
 			loaded.clear();
+			residentOf.clear();
 			residentBytes = 0;
 			evictions++;
 			failures.clear();

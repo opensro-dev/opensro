@@ -12,6 +12,18 @@ import type { UiScene, UiQuad } from "@/engine/contracts/ui";
 import type { UiDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { uiRecordCount, UI_RECORD_LIMIT } from "@/engine/foundation/rendering/text-run";
 import { destroyNow, type Retire } from "./retirement";
+import type { UiTexture } from "@/engine/contracts/texture";
+import {
+	decodeNativeTextureLevel,
+	nativeTextureBlockBytes,
+	nativeTextureLevelBytes,
+	validateNativeTexture
+} from "@/engine/foundation/assets/native-texture";
+
+// The edge of a block-compressed block; WebGPU needs block-aligned extents.
+const BLOCK_SIDE = 4;
+// Resident UI texture bytes the slots may hold together.
+const UI_TEXTURE_BUDGET_BYTES = 64 << 20;
 // Device-owned UI resources. Stable instance storage and draw bundles survive data edits.
 /*
 ================
@@ -177,6 +189,9 @@ fs
 		texture: GPUTexture;
 		width: number;
 		height: number;
+		// What the slot costs the device: RGBA8, or the uploaded block size.
+		bytes: number;
+		format: GPUTextureFormat;
 		// Portrait targets carry their format: the HDR stage can flip it.
 		portrait?: GPUTextureFormat;
 		// Created once per slot and returned by identity: the same view object
@@ -196,9 +211,13 @@ fs
 	/*
 	================
 	texture
+
+	A native texture draws its first level. Block-compressed levels upload
+	unchanged where the adapter samples BC and the extent is block-aligned
+	(as device/images.ts does); elsewhere the level is decoded to RGBA8.
 	================
 	*/
-	function texture( id: string, image: ImageBitmap | ImageData | null ) {
+	function texture( id: string, image: UiTexture | null ) {
 		if ( disposed ) return;
 		if ( !image ) {
 			const released = textures.get( id );
@@ -207,17 +226,26 @@ fs
 			return;
 		}
 		if ( image.width > 4096 || image.height > 4096 ) throw new Error( "UI texture budget exceeded" );
+		const native = "kind" in image ? image : null;
+		if ( native ) validateNativeTexture( native );
+		const blockBytes = native ? nativeTextureBlockBytes( native.format ) : 0;
+		const compressed = native !== null && blockBytes > 0 && device.features.has( "texture-compression-bc" ) &&
+			native.width % BLOCK_SIDE === 0 && native.height % BLOCK_SIDE === 0;
+		const format: GPUTextureFormat = compressed ? native.format : "rgba8unorm";
+		const bytes = compressed ?
+			nativeTextureLevelBytes( native.format, native.width, native.height ) :
+			image.width * image.height * 4;
 		let slot = textures.get( id );
-		if ( !slot || slot.width !== image.width || slot.height !== image.height ) {
+		if ( !slot || slot.width !== image.width || slot.height !== image.height || slot.format !== format ) {
 			// Native HUD + Inventory + modal demand exceeds 256 small sprites (the
 			// disconnect capture hit that cap at 26.3 MiB). Reserve 512 descriptors
 			// for composed windows while retaining the independent 64 MiB limit.
-			const resident = [ ...textures.values() ].reduce( ( sum, row ) => sum + row.width * row.height * 4, 0 ) -
-				(slot ? slot.width * slot.height * 4 : 0);
-			if ( (!slot && textures.size >= 512) || resident + image.width * image.height * 4 > (64 << 20) ) {
+			const resident = [ ...textures.values() ].reduce( ( sum, row ) => sum + row.bytes, 0 ) -
+				(slot ? slot.bytes : 0);
+			if ( (!slot && textures.size >= 512) || resident + bytes > UI_TEXTURE_BUDGET_BYTES ) {
 				throw new Error(
-					"UI texture residency budget exceeded: count=" + textures.size + " bytes=" +
-						(resident + image.width * image.height * 4) + " path=" + id
+					"UI texture residency budget exceeded: count=" + textures.size + " bytes=" + (resident + bytes) +
+						" path=" + id
 				);
 			}
 			if ( slot ) retire( slot.texture );
@@ -225,25 +253,39 @@ fs
 				texture: device.createTexture( {
 					label: "ui:" + id,
 					size: [ image.width, image.height ],
-					format: "rgba8unorm",
+					format,
 					usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST |
-						GPUTextureUsage.RENDER_ATTACHMENT
+						(compressed ? 0 : GPUTextureUsage.RENDER_ATTACHMENT)
 				} ),
 				width: image.width,
-				height: image.height
+				height: image.height,
+				bytes,
+				format
 			};
 			textures.set( id, slot );
 			resourceRevision++;
 		}
-		if ( "data" in image ) {
+		if ( "kind" in image ) {
+			device.queue.writeTexture(
+				{ texture: slot.texture },
+				(compressed ? image.levels[0]! : decodeNativeTextureLevel( image, 0 )) as Uint8Array<ArrayBuffer>,
+				{
+					bytesPerRow: compressed ? (image.width / BLOCK_SIDE) * blockBytes : image.width * 4,
+					rowsPerImage: compressed ? image.height / BLOCK_SIDE : image.height
+				},
+				[ image.width, image.height ]
+			);
+		} else if ( "data" in image ) {
 			device.queue.writeTexture( { texture: slot.texture }, image.data, { bytesPerRow: image.width * 4 }, [
 				image.width,
 				image.height
 			] );
-		} else {device.queue.copyExternalImageToTexture( { source: image, flipY: false }, { texture: slot.texture }, [
+		} else {
+			device.queue.copyExternalImageToTexture( { source: image, flipY: false }, { texture: slot.texture }, [
 				image.width,
 				image.height
-			] );}
+			] );
+		}
 	}
 	texture( "", { data: new Uint8ClampedArray( [ 255, 255, 255, 255 ] ), width: 1, height: 1, colorSpace: "srgb" } );
 	return {
@@ -275,6 +317,8 @@ fs
 					} ),
 					width,
 					height,
+					bytes: width * height * 4,
+					format: target,
 					portrait: target
 				};
 				textures.set( id, slot );
