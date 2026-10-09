@@ -80,6 +80,11 @@ func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCo
 		domain.CharacterWorldInstance(snapshot) != domain.CharacterWorldInstance(step.snapshot) {
 		return petCombatTarget{}, false
 	}
+	// 529304..529324 checks the COS owner's body as well as the victim's.
+	// Recheck here so protection acquired during preparation cancels the cast.
+	if !petAttackBodyAllowed(step.pet, combatTarget{snapshot: snapshot}) {
+		return petCombatTarget{}, false
+	}
 	if step.ref.TidWord>>11 == domain.MercenaryBand && !rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 		return petCombatTarget{}, false
 	}
