@@ -275,26 +275,49 @@ func (rt *Runtime) NormalizeEntryRecords(c *enterworld.Character) error {
 		// Records saved before the journal carried targets gain them here, so
 		// the enter-world section already names the NPC to visit.
 		c.ActiveQuests[i], _ = withJournalTargets(c, def, c.ActiveQuests[i])
-		if def.Objective != ObjectiveParallel {
-			continue
-		}
-		nodes := make([]enterworld.ActiveQuestContentsNode, missionCount(def))
-		used := make(map[int]bool)
-		for j := range nodes {
-			m := missionDefinition(def, j)
-			at := missionNodeIndex(record.Contents, m.missionIndex+1, m.ContentsSymbol)
-			if at < 0 || used[at] {
-				return fmt.Errorf("quest %s unresolved persisted mission %d", def.Codename, j)
+		if def.Objective == ObjectiveParallel {
+			if err := normalizeMissionNodes(c, def, i); err != nil {
+				return err
 			}
-			used[at] = true
-			nodes[j] = record.Contents[at]
-			nodes[j].Tag = m.missionIndex + 1
 		}
-		if len(used) != len(record.Contents) {
-			return fmt.Errorf("quest %s orphan persisted mission", def.Codename)
+		// Native gather and change-item counts are never stored: 91C7F0
+		// and 91D5E0 count the held items each time they judge or publish.
+		// A saved count that lags the saved bag (a restart between the two
+		// writes, a catalog change) is re-derived here, as an inventory
+		// change would; once the drop cap is held nothing else would.
+		if collectsItems(def) && !(def.TimeLimitMinutes > 0 && c.ActiveQuests[i].RemainingMinutes == 0) {
+			c.ActiveQuests[i], _ = refreshMissions(c, def, c.ActiveQuests[i], "", 0)
 		}
-		c.ActiveQuests[i].Contents = nodes
 	}
+	return nil
+}
+
+/*
+================
+normalizeMissionNodes
+
+A parallel quest's saved nodes in mission order, each under its mission's
+tag; an unresolved or orphan node refuses the entry.
+================
+*/
+func normalizeMissionNodes(c *enterworld.Character, def *Definition, i int) error {
+	record := c.ActiveQuests[i]
+	nodes := make([]enterworld.ActiveQuestContentsNode, missionCount(def))
+	used := make(map[int]bool)
+	for j := range nodes {
+		m := missionDefinition(def, j)
+		at := missionNodeIndex(record.Contents, m.missionIndex+1, m.ContentsSymbol)
+		if at < 0 || used[at] {
+			return fmt.Errorf("quest %s unresolved persisted mission %d", def.Codename, j)
+		}
+		used[at] = true
+		nodes[j] = record.Contents[at]
+		nodes[j].Tag = m.missionIndex + 1
+	}
+	if len(used) != len(record.Contents) {
+		return fmt.Errorf("quest %s orphan persisted mission", def.Codename)
+	}
+	c.ActiveQuests[i].Contents = nodes
 	return nil
 }
 
