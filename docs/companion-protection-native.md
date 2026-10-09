@@ -44,6 +44,26 @@ the token once and leave monster HP unchanged.
 
 ## Remaining #218 scope
 
+### Secondary area victims
+
+The cape-team refusal added in #468 covered command admission and the primary
+victim on each combat tick. The secondary area selector still consulted only
+the owner's permission or world-enemy predicate. Aggression could therefore
+admit a same-cape player and that player's companion as splash victims even
+though the primary-target path refused them.
+
+`petAreaTargets` now applies the existing companion team predicate before
+either owner-permission query and before collecting the player's companions.
+It uses current slot-8 equipment on every selection. The bounded regression
+checks attack pets and guild soldiers, all five cape groups, different colors,
+joining a team, owner exit and re-entry, and victim exit. Each phase checks
+both the player and its summoned companion. Group 5 remains hostile to itself.
+With the original production selector overlaid, the same-team and re-entry
+phases fail for groups 1 through 4 in both attacker bands; the fixed selector
+passes. These are selection tests, not a full connected-client battle replay.
+
+### Broader transition owner
+
 The later server's `7516` free-battle mode request, `4E0D50` state changer and
 `4F0E90` group broadcast are separate from this v1.150 client's slot-8 capes.
 They have not been added by this fix. The adjacent branch at `528FAB..529000`

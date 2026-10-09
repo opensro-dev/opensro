@@ -73,6 +73,11 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 		if snapshot == nil || snapshot.DeletePending {
 			continue
 		}
+		// 528F40's cape-team exclusion precedes owner permission for every
+		// victim, including secondary players and their companions.
+		if rt.companionTeamRefusal(step.snapshot, snapshot) != 0 {
+			continue
+		}
 		if step.ref.TidWord>>11 == domain.MercenaryBand {
 			if !rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 				continue
