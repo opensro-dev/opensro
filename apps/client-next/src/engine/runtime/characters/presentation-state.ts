@@ -9,7 +9,8 @@ is rendered. The parent supplies current frame inputs and owns publication.
 ===========================================================================
 */
 import { emoteRoute, emoteAttachments } from "@/engine/foundation/animation/emote";
-import { transitionPosture } from "@/engine/foundation/animation/posture";
+import { postureClip, transitionPosture } from "@/engine/foundation/animation/posture";
+import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
 import { advanceRandomIdle } from "@/engine/foundation/animation/random-idle";
 import type { AnimationMetadata } from "@/engine/foundation/animation/animation-metadata";
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
@@ -211,14 +212,19 @@ export function createPresentationState() {
 							} );
 						} else if ( action === null && !moving ) entry.idle.remaining = 0;
 					}
+					// 86A880: an open stall (title mode 4) holds action state 0xF, the
+					// vendor loop, until the stall closes.
+					if ( isPlayer && resource.clips.includes( "vendor" ) ) {
+						entry.posture = transitionPosture( entry.posture, {
+							kind: "vendor",
+							at: seconds,
+							open: entity.appearanceState?.[6] === STALL_TITLE_MODE
+						} );
+					}
 					// A monster the authority killed never wakes: it waits down for its
 					// shown death, which then enters from state 4 as downdie.
 					if ( entry.posture && !(dead && entry.posture.kind === "down") ) {
-						const role = entry.posture.kind === "emote" ?
-							entry.posture.clip :
-							entry.posture.kind === "recover" ?
-							"wakeup" :
-							"down";
+						const role = postureClip( entry.posture );
 						entry.posture = transitionPosture( entry.posture, {
 							kind: "tick",
 							at: seconds,

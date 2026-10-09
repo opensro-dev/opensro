@@ -25,7 +25,7 @@ import { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
 // CResAnimationClip.resourceLoadRequest.
 
 import fs from "node:fs";
-import { NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS } from "./buildAvatar.mjs";
+import { NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS, NATIVE_VENDOR_STATE_CLIPS } from "./buildAvatar.mjs";
 import path from "node:path";
 import {
 	pickAnimationStateTableMetadata,
@@ -277,7 +277,7 @@ export async function buildLocomotionBanAssets() {
 			};
 			clipCount += 1;
 		}
-		for ( const { role, stateId } of [ ...NATIVE_IDLE_STATE_CLIPS, ...NATIVE_EMOTE_STATE_CLIPS ] ) {
+		for ( const { role, stateId } of [ ...NATIVE_IDLE_STATE_CLIPS, ...NATIVE_EMOTE_STATE_CLIPS, ...NATIVE_VENDOR_STATE_CLIPS ] ) {
 			const idlePath = pickDefaultSetStateClip( bsr, stateId );
 			if ( !idlePath ) continue;
 			entry[role] = {

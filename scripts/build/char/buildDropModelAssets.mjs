@@ -51,12 +51,23 @@ import { gameRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.m
 
 const textdataDir = retailTextdataRoot;
 const publicAssets = publicAssetsRoot;
+// itemdata TypeID1..4 (columns 9-12) of a stall decoration item, and the
+// column of its RefObjCommon model (+0x11C), the booth 86A880 loads.
+const STALL_DECORATION_TYPE = "3/3/3/4";
+const ITEM_TYPE_COLUMN = 9;
+const ITEM_MODEL_COLUMN = 52;
+// 86A880's default booths when a stall has no decoration, by race.
+const DEFAULT_STALL_MODELS = [ "item/china/item/cj_store.bsr", "item/europe/item/euro_streetstall01.bsr" ];
+
 /*
 ================
 collectDropModels
 
 Distinct AssocFileDrop values across itemdata*.txt (utf16le rows; the
-drop model is the LAST .bsr field - referenceData.mjs reads the same).
+drop model is the LAST .bsr field - referenceData.mjs reads the same),
+plus the stall booths CICharactor_SetStallState (86A880) draws beside a
+stall owner: each decoration item's model and the two default booths.
+Both are standalone item models, drawn as a ground drop is.
 Key = normalized game path ("item/etc/drop_ch_bag.bsr").
 ================
 */
@@ -71,8 +82,14 @@ function collectDropModels() {
 				if ( /\.bsr$/i.test( col ) ) drop = col;
 			}
 			if ( drop ) models.add( drop.replaceAll( "\\", "/" ).toLowerCase() );
+			const type = cols.slice( ITEM_TYPE_COLUMN, ITEM_TYPE_COLUMN + 4 ).join( "/" );
+			const booth = cols[ITEM_MODEL_COLUMN] ?? "";
+			if ( type === STALL_DECORATION_TYPE && /\.bsr$/i.test( booth ) ) {
+				models.add( booth.replaceAll( "\\", "/" ).toLowerCase() );
+			}
 		}
 	}
+	for ( const booth of DEFAULT_STALL_MODELS ) models.add( booth );
 	// data_ccb98c / g_goldDropCoinModelPath: the gold-drop coin fanfare the
 	// native CIItem_LoadModel fallback path (StaticInit_DropMoneyModelPath 0xBBCB60) -
 	// referenced by address, not by any itemdata column.

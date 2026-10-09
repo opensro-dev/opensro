@@ -30,6 +30,7 @@ import {
 	NATIVE_REACTION_STATE_CLIPS,
 	NATIVE_IDLE_STATE_CLIPS,
 	NATIVE_EMOTE_STATE_CLIPS,
+	NATIVE_VENDOR_STATE_CLIPS,
 	assembleAvatar,
 	characterSelectAnimationRoleForStateId,
 	previewAnimationRoleForSetName,
@@ -67,6 +68,7 @@ const CROWD_CLIP_ROLES = new Set( [
 	// Mission inventory borrows this model and plays native weapon-set state 0.
 	...NATIVE_CREATE_PREVIEW_ANIMATION_SET_NAMES.map( previewAnimationRoleForSetName ),
 	...NATIVE_EMOTE_STATE_CLIPS.map( ( { role } ) => role ),
+	...NATIVE_VENDOR_STATE_CLIPS.map( ( { role } ) => role ),
 	...NATIVE_IDLE_STATE_CLIPS.map( ( { role } ) => role ),
 	"walk",
 	"run",

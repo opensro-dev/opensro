@@ -17,7 +17,7 @@ import { type AnimationDispatch, createAnimationDispatch } from "@/engine/founda
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
 import { blindableCharacter } from "@/engine/foundation/ui/name-visibility";
 import { monsterScale } from "@/engine/foundation/rendering/monster-scale";
-import { postureLayers } from "@/engine/foundation/animation/posture";
+import { postureClip, postureLayers } from "@/engine/foundation/animation/posture";
 import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
 import { changeLocomotion, stopLocomotion, locomotionLayers } from "@/engine/foundation/animation/locomotion-blend";
 import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
@@ -590,11 +590,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				"";
 			const posture = presentationState.idleStates.get( entity.gid )?.posture;
 			if ( !dead && posture ) {
-				const role = posture.kind === "emote" ?
-					posture.clip :
-					posture.kind === "recover" ?
-					"wakeup" :
-					"down";
+				const role = postureClip( posture );
 				const projected = bindLayers(
 					postureLayers( posture, seconds, resources.duration( resource.glb, role ) ),
 					"posture",

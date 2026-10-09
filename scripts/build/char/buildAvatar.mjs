@@ -90,6 +90,10 @@ export const NATIVE_IDLE_STATE_CLIPS = [
 // 778190 -> state 13; 8E6310 selects action byte + 0x32.
 export const NATIVE_EMOTE_STATE_CLIPS = Array.from({length:7},(_,action)=>({stateId:50+action,role:`emote${action}`}));
 
+// 8E6B50 (CICharactor_Action_OpenVendor, action state 0xF): a stall owner
+// plays motion 0x50 (ANI_VENDOR01) for as long as the stall is open.
+export const NATIVE_VENDOR_STATE_CLIPS = [{ stateId: 0x50, role: "vendor" }];
+
 export function characterSelectAnimationRoleForStateId(stateId) {
   return `charselect-state${stateId}`;
 }
@@ -384,7 +388,7 @@ export async function assembleAvatar(bsrAssetPath, options = {}) {
         clip: parseBan(await loadDataAsset(attackClip.path), attackClip.path)
       });
     }
-    for (const reactionClip of [...pickReactionStateClips(bsr), ...pickIdleStateClips(bsr), ...pickStateClips(bsr,NATIVE_EMOTE_STATE_CLIPS)]) {
+    for (const reactionClip of [...pickReactionStateClips(bsr), ...pickIdleStateClips(bsr), ...pickStateClips(bsr,NATIVE_EMOTE_STATE_CLIPS), ...pickStateClips(bsr,NATIVE_VENDOR_STATE_CLIPS)]) {
       clips.push({
         role: reactionClip.role,
         path: reactionClip.path,

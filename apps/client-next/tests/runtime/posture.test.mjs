@@ -42,3 +42,22 @@ test("emote holds cursor during entry, exits over 200ms and cannot replace knock
 	assert.equal( advance( down, { kind: "cancel" } ), undefined );
 	assert.throws( () => advance( undefined, { kind: "down", at: 0, recoveryMs: NaN } ) );
 });
+test("an open stall holds the vendor loop until it closes, over an emote but never a knockdown", () => {
+	let state = advance( undefined, { kind: "vendor", at: 1, open: true } );
+	assert.equal( state.kind, "vendor" );
+	const entry = layers( state, 1.1, 13.333 )[0];
+	assert.equal( entry.clip, "vendor" );
+	assert.equal( entry.loop, true );
+	assert.ok( Math.abs( entry.weight - .5 ) < 1e-6 );
+	assert.equal( layers( state, 30, 13.333 )[0].time, 29 );
+	assert.equal( advance( state, { kind: "tick", at: 99, duration: 13.333 } ), state );
+	assert.equal( advance( state, { kind: "vendor", at: 2, open: true } ), state );
+	assert.equal( advance( state, { kind: "emote", action: 1, at: 2 } ), state );
+	assert.equal( advance( state, { kind: "vendor", at: 3, open: false } ), undefined );
+	const emote = advance( undefined, { kind: "emote", action: 1, at: 1 } );
+	assert.equal( advance( emote, { kind: "vendor", at: 1.5, open: true } ).kind, "vendor" );
+	assert.equal( advance( emote, { kind: "vendor", at: 1.5, open: false } ), emote );
+	const down = advance( undefined, { kind: "down", at: 1, recoveryMs: 1000 } );
+	assert.equal( advance( down, { kind: "vendor", at: 1.5, open: true } ), down );
+	assert.equal( advance( down, { kind: "vendor", at: 1.5, open: false } ), down );
+});
