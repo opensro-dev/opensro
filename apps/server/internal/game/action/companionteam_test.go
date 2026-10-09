@@ -51,27 +51,3 @@ func TestCompanionNeverStrikesItsOwnersFreeBattleTeam(t *testing.T) {
 		t.Fatalf("an owner out of free battle refused: %#x", code)
 	}
 }
-
-/*
-================
-TestWornCapeCannotComeOffInBattle
-
-The v1.150 client's 0x77, "Cannot unequip voucher during combat": a worn
-free-battle cape refuses to come off in battle with its own code, while a
-job suit keeps the suit's battle refusal (0x48).
-================
-*/
-func TestWornCapeCannotComeOffInBattle(t *testing.T) {
-	p := scornOpponentPair(t, shippedOffense(t, "SKILL_EU_ROG_STEALTHA_CHANGE_A_01"))
-	now := p.rt.Now().UnixMilli()
-	p.c.BattleUntilMs = now + 10000
-	if code := p.rt.jobStripRefusal(testDivision, p.c, 30, now); code != capeStripErrBattle {
-		t.Fatalf("a worn cape came off in battle: %#x", code)
-	}
-	items := p.rt.deps.ItemReferences().(staticItemSource)
-	suit := items[p.c.MissionInventory[1].Codename]
-	suit.NativeFields = suit.NativeFields.With(freeBattleGroupField, 0)
-	if code := p.rt.jobStripRefusal(testDivision, p.c, 30, now); code != jobWearErrBattle {
-		t.Fatalf("a job suit's battle refusal changed: %#x", code)
-	}
-}

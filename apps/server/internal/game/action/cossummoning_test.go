@@ -458,7 +458,8 @@ func TestGrowthPetsCannotBeSummonedInFreeBattle(t *testing.T) {
 	cape := &enterworld.ItemRef{Codename: "TEST_PVP_CAPE", RefObjID: 63000, TypeIDs: [4]int64{3, 1, 7, 5},
 		NativeFields: enterworld.NewNativeFields(map[string]float64{freeBattleGroupField: 1})}
 	refs.staticItemSource[cape.Codename] = cape
-	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 8, RefObjID: cape.RefObjID, Codename: cape.Codename, TypeFlags: cape.TypeFlags(), StackCount: 1})
+	capeRow := enterworld.InventoryRow{Slot: 8, RefObjID: cape.RefObjID, Codename: cape.Codename, TypeFlags: cape.TypeFlags(), StackCount: 1}
+	c.MissionInventory = append(c.MissionInventory, capeRow)
 	rt, _ := newTestRuntime(c, refs)
 	attack := refs.staticItemSource["SUMMON_ATTACK"]
 	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(3).U8(23).U16(attack.TypeFlags()).Payload(), cosSummonFreeBattle)
@@ -470,4 +471,11 @@ func TestGrowthPetsCannotBeSummonedInFreeBattle(t *testing.T) {
 		}
 	}
 	useSummonerFixture(t, rt, c, 23, attack)
+	c.MissionInventory = append(c.MissionInventory, capeRow)
+	useSummonerFixture(t, rt, c, 23, attack)
+	row, ok := inventoryRowAt(c, 23)
+	if !ok || row.Summon == nil || row.Summon.Summoned {
+		t.Fatal("a caped owner could not dismiss its retained growth pet")
+	}
+	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(3).U8(23).U16(attack.TypeFlags()).Payload(), cosSummonFreeBattle)
 }

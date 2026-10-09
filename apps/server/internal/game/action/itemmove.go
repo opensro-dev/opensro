@@ -165,6 +165,14 @@ func (rt *Runtime) applyInventoryMove(
 			result = failureResult(fault.Code)
 			return false
 		}
+		// INFERENCE: v1.150 notice 0x77 forbids taking off a cape in combat.
+		// Capes use ordinary transfers, not the job-suit timer. Either swap
+		// leg can displace slot eight; reject before committing the trial bag.
+		if (request.SourceSlot == jobSuitSlot || request.DestSlot == jobSuitSlot) &&
+			character.BattleUntilMs > rt.Now().UnixMilli() && rt.inFreeBattle(character) {
+			result = failureResult(capeStripErrBattle)
+			return false
+		}
 
 		subMoves, fault := rt.completeEquipmentPair(inv, request.SourceSlot, request.DestSlot)
 		if fault != nil {

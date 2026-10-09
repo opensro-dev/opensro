@@ -237,13 +237,6 @@ func (rt *Runtime) jobStripRefusal(division string, c *enterworld.Character, des
 	switch {
 	case mountedOnCOS(c):
 		return jobWearErrRide
-	case c.BattleUntilMs > now && rt.inFreeBattle(c):
-		// INFERENCE: v1.188's CanUnequip (497510) gates job suits only (its
-		// free-battle cape is a requested mode, not a worn item), but the
-		// v1.150 client names a worn cape's own battle refusal: 0x77, "Cannot
-		// unequip voucher during combat". The rest of the strip order is the
-		// suit's.
-		return capeStripErrBattle
 	case c.BattleUntilMs > now:
 		return jobWearErrBattle
 	case rt.summonedVehicle(c):
