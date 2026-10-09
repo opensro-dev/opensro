@@ -84,11 +84,17 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if pet == nil || !pet.Summoned || pet.Mounted || pet.CurrentHP == 0 || targetGID == 0 {
 		return OpResult{}
 	}
-	if ref, ok := rt.cosReference(pet); !ok || ref.TidWord>>11 != attackPetBand {
+	ref, ok := rt.cosReference(pet)
+	if !ok || ref.TidWord>>11 != attackPetBand {
 		return OpResult{}
 	}
-	target, ok := rt.resolveCombatTarget(division, snapshot, targetGID, nowMs)
-	if !ok || !petAttackBodyAllowed(pet, target) {
+	// 4D24B5..4D24E4 validates a COS target through its owner; 4D2575
+	// retains the requested object for the AI event. Use the tick's resolver
+	// so a companion GID reaches that same permission and damage path.
+	target, ok := rt.resolvePetCombatTarget(petCombatStep{
+		key: petOwnerKey{division: division}, snapshot: snapshot, pet: pet, ref: ref, nowMs: nowMs,
+	}, targetGID)
+	if !ok || !petAttackBodyAllowed(pet, target.combatTarget) {
 		return OpResult{}
 	}
 	if target.player != nil && (rt.companionTeamRefusal(snapshot, target.snapshot) != 0 ||

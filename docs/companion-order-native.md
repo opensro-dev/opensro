@@ -41,7 +41,33 @@ self-application phase, so the event mask is actually live.
 
 ## Remaining audit
 
+### Direct orders against another companion
+
+The native dispatcher explicitly handles a COS victim:
+`4D2495..4D24C3` checks target virtual `+0x2C` and substitutes that object's
+owner at `+0x1CD8` for permission checking. `4D24E4` calls the attacking
+companion's validator through virtual `+0x624`. Once admitted, `4D2575` pushes
+the retained target GID for event `0x19`, so permission through an owner does
+not redirect damage to that owner. The 229 bytes `[4D2495,4D257A)` have SHA-256
+`0cc1f97050156df92c7191a4d0002872d7940c492f0da8c71e021e3c24237e7d`
+in the server binary identified above.
+
+The command path used the player/monster-only resolver, silently rejecting a
+companion GID, while ongoing combat already had a companion-aware resolver.
+Command admission now uses that existing resolver and preserves its target
+identity. Existing attacker, victim, owner-body and owner-permission gates
+still apply. The order fixture sends the real command, asserts the stored
+companion GID, then advances combat until that companion loses HP while its
+owner's HP stays unchanged. Eleven controls refuse dead, dismissed, mounted,
+pickup, protected, hidden, owner-protected, own, missing, party and same-cape
+targets. The original command resolver fails the live-companion case.
+
+The v1.150 refusal-response wire and the complete callback graph are outside
+this change; existing silent-refusal behavior is retained.
+
+### Broader callback graph
+
 Issue #219 remains open for the complete callback graph, target-switch timing,
-state-entry/exit effects and lifecycle cleanup. This fix changes only owner
-effect retirement for repeated admitted attack orders. Native follow steering
+state-entry/exit effects and lifecycle cleanup. The bounded fixes above cover
+owner-effect retirement and direct companion-target admission. Native follow steering
 and formation fixture boundaries remain those in `guild-soldier-native.md`.
