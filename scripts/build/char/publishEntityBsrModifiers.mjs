@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+publishEntityBsrModifiers.mjs - refresh entity resource modifiers in place
+
+Preserve published geometry and VAT while refreshing authored BSR metadata,
+including secondary stall booth resources owned by the NPC publisher.
+
+===========================================================================
+*/
+
 import { entityMaterialMetadata } from "./entityMaterialMetadata.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,6 +21,11 @@ import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 
 // Metadata-only rebuild: retain byte-identical meshes and the VAT owner's
 // enrichment. Full model builders publish the same original BSR payload.
+/*
+================
+publishEntityBsrModifiers
+================
+*/
 export async function publishEntityBsrModifiers() {
 	const cache = new Map(), paths = [], updated = new Map();
 	for ( const domain of [ "itemdrop", "npc" ] ) {
@@ -19,7 +35,9 @@ export async function publishEntityBsrModifiers() {
 		// modifiers and the rewritten GLB size belong to that resource, not to
 		// each reference that aliases it.
 		const rows = domain === "npc" ?
-			Object.entries( manifest.resources ?? {} ).map( ( [bsr, resource] ) => [ bsr, resource, bsr ] ) :
+			Object.entries( { ...manifest.resources, ...manifest.boothModels } ).map( (
+				[bsr, resource]
+			) => [ bsr, resource, bsr ] ) :
 			Object.entries( manifest.models ).map( ( [key, row] ) => [ key, row, row.bsr ?? `res/${key}` ] );
 		for ( const [, row, bsr] of rows ) {
 			if ( !cache.has( bsr ) ) {

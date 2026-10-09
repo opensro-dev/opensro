@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-presentation-auxiliary.ts - presentation-owned hair, rides and avatar children
+presentation-auxiliary.ts - presentation-owned hair, rides, booths and avatar children
 
 Children follow the committed body selection. Their ids and locomotion
 survive frame publication, and retirement can borrow their current actors.
@@ -9,7 +9,7 @@ survive frame publication, and retirement can borrow their current actors.
 ===========================================================================
 */
 import type { CharacterActor } from "@/engine/contracts/character";
-import type { EntityState } from "@/engine/contracts/world";
+import type { EntityState, WorldEvent } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { DressCatalog } from "@/engine/foundation/animation/equipment-appearance";
@@ -29,12 +29,71 @@ import {
 	type ModifierSelector
 } from "@/engine/foundation/animation/model-animation";
 import type { AnimationParticleSet } from "@/engine/foundation/animation/animation-emission";
-import type { Resource, LinkedRide, Auxiliary } from "./internal/presentation-contract";
+import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
+import type {
+	Resource,
+	LinkedRide,
+	Auxiliary,
+	SecondaryModel,
+	ItemPresentation
+} from "./internal/presentation-contract";
 
 // The ride transform modes 8602C0 reads from ride+0x29D (EffectSyntax_RotationType
 // table CCDB10: none = 0, RT_FIXED = 1, RT_DUMMY = 2).
 const RIDER_ON_SADDLE = 0;
 const RIDE_COPIES_RIDER = 2;
+const STALL_OPEN = 4;
+const CHINESE_BOOTH = "res/item/china/item/cj_store.bsr";
+const EUROPEAN_BOOTH = "res/item/europe/item/euro_streetstall01.bsr";
+
+/*
+================
+BoothFrame
+================
+*/
+interface BoothFrame {
+	readonly entities: readonly EntityState[];
+	readonly seconds: number;
+	readonly next: Map<number, CharacterActor>;
+	readonly animationHolders: { actor: CharacterActor; sets: readonly AnimationParticleSet[]; }[];
+	readonly particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[];
+}
+
+/*
+================
+BoothBindings
+================
+*/
+interface BoothBindings {
+	readonly boothModels: ReadonlyMap<string, SecondaryModel>;
+	readonly items: Readonly<Record<string, ItemPresentation>>;
+	readonly resources: {
+		plan( paths: readonly string[] ): boolean;
+		ready( path: string ): boolean;
+		duration( path: string, clip: string ): number;
+	};
+	readonly renderer: Pick<Renderer, "setCharacterAssembly">;
+}
+
+/*
+================
+boothResourcePath
+
+86A90E falls through to the race default only when the item lookup is null.
+An existing item with no model does not silently substitute a default booth.
+================
+*/
+function boothResourcePath( entity: EntityState, items: BoothBindings["items"] ): string | undefined {
+	if ( (entity.titleId ?? 0) > 0 ) {
+		const item = items[String( entity.titleId )];
+		if ( item ) {
+			const path = item.wornModelPath?.replaceAll( "\\", "/" ).toLowerCase();
+			// Itemcommon names are relative to res; the NPC catalog keys full BSRs.
+			return path ? (path.startsWith( "res/" ) ? path : "res/" + path) : undefined;
+		}
+	}
+	return entity.countryByte9c === 0 ? CHINESE_BOOTH : entity.countryByte9c === 1 ? EUROPEAN_BOOTH : undefined;
+}
 
 /*
 ================
@@ -100,6 +159,15 @@ createAuxiliaryPresentation
 ================
 */
 export function createAuxiliaryPresentation( allocateActor: () => number ) {
+	const booths = new Map<number, {
+		gid: number;
+		resource: SecondaryModel;
+		started?: number;
+		activation?: AnimationActivation;
+		delta: ReturnType<typeof createModifierDelta>;
+		dispatch: ReturnType<typeof createAnimationDispatch>;
+		selection: ReturnType<typeof createModelAnimation>;
+	}>();
 	const stageAnimations = new Map<
 		number,
 		{
@@ -120,6 +188,124 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 	return {
 		linkedRides,
 		auxiliaryActors,
+		/*
+		================
+		receiveBooths
+
+		A close or despawn can be followed by a reopen/spawn before the next
+		frame. Retire at the event boundary so reused gids cannot inherit it.
+		================
+		*/
+		receiveBooths( events: readonly WorldEvent[] ) {
+			for ( const event of events ) {
+				if ( event.kind === "reset" ) booths.clear();
+				else if ( event.kind === "despawn" ) booths.delete( event.gid );
+				else if (
+					event.kind === "spawn" || event.kind === "state" && event.entity.appearanceState?.[6] !== STALL_OPEN
+				) {
+					booths.delete( event.entity.gid );
+				}
+			}
+		},
+		/*
+		================
+		presentBooths
+
+		The separate CCObjAnimation is cached until close (86A880). It never
+		borrows the character's stall posture clip or animation clock.
+		================
+		*/
+		presentBooths( frame: BoothFrame, bindings: BoothBindings ) {
+			const { entities, seconds, next, animationHolders, particleHolders } = frame;
+			const { boothModels, items, resources, renderer } = bindings;
+			const alive = new Set<number>();
+			for ( const entity of entities ) {
+				if (
+					(entity.kind !== "player" && entity.kind !== "local-player") ||
+					entity.appearanceState?.[6] !== STALL_OPEN
+				) continue;
+				alive.add( entity.gid );
+				const owner = next.get( entity.gid );
+				if ( !owner ) continue;
+				let state = booths.get( entity.gid );
+				if ( !state ) {
+					const path = boothResourcePath( entity, items ),
+						resource = path ? boothModels.get( path ) : undefined;
+					if ( !resource ) continue;
+					state = {
+						gid: allocateActor(),
+						resource,
+						delta: createModifierDelta(),
+						dispatch: createAnimationDispatch(),
+						selection: createModelAnimation()
+					};
+					booths.set( entity.gid, state );
+				}
+				const resource = state.resource;
+				const paths = [
+					resource.glb,
+					...(resource.animationParticlePaths ?? []),
+					...(resource.ambientParticles ?? []).map( particle =>
+						"/assets/effects/programs.json#" + encodeURIComponent( particle.effectPath )
+					)
+				];
+				// Start only after the model and particle programs are resident, so
+				// admission cannot consume a time-zero animation modifier key.
+				const ready = paths.map( path => resources.ready( path ) ).every( Boolean );
+				if ( !ready || !resources.plan( paths ) || next.size >= CHARACTER_ACTORS ) continue;
+				if ( state.started === undefined ) {
+					state.started = seconds;
+					state.activation = animationActivation( seconds );
+				}
+				const clip = resource.clips.includes( "stand" ) ? "stand" : "";
+				const layers: NonNullable<CharacterActor["layers"]> = clip ?
+					[ {
+						clip,
+						time: seconds - state.started,
+						loop: true,
+						weight: 1,
+						lane: "timed",
+						activation: state.activation
+					} ] :
+					[];
+				const dispatch = state.dispatch.step(
+					layers,
+					state.delta( seconds ),
+					name =>
+						resource.animationStates?.[name]?.durationMs ??
+							Math.trunc( resources.duration( resource.glb, name ) * 1000 )
+				);
+				const model = `booth:${state.gid}:${resource.glb}`;
+				renderer.setCharacterAssembly( model, resource.glb, [] );
+				// 86AB90 copies the body's complete geometry matrix. Root attachment
+				// retains its scale; the renderer also inherits current body alpha.
+				const actor: CharacterActor = {
+					gid: state.gid,
+					model,
+					pose: owner.pose,
+					clip,
+					time: seconds - state.started,
+					loop: true,
+					layers,
+					scale: 1,
+					pickable: false,
+					attachment: { gid: entity.gid, bone: "", root: true, offset: [ 0, 0, 0 ] },
+					modelAnimation: state.selection.step(
+						dispatch,
+						resource.modifierBindings ?? [],
+						resource.modifierSelectors ?? []
+					)
+				};
+				next.set( actor.gid, actor );
+				if ( resource.ambientParticles?.length ) {
+					particleHolders.push( { actor, particles: resource.ambientParticles } );
+				}
+				if ( resource.animationParticles?.length ) {
+					animationHolders.push( { actor, sets: resource.animationParticles } );
+				}
+			}
+			for ( const gid of booths.keys() ) if ( !alive.has( gid ) ) booths.delete( gid );
+		},
 		/*
 		================
 		presentStages
@@ -183,6 +369,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		*/
 		resetStages() {
 			stageAnimations.clear();
+			booths.clear();
 		},
 		/*
 		================

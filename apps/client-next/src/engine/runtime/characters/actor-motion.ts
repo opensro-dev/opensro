@@ -30,6 +30,9 @@ import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
 
 const PROTECTED_ANIMATION_DISTANCE = 300;
+const STALL_TITLE_MODE = 4;
+const STALL_ACTION_MASK = 0x8000;
+const STALL_MOTION = 80;
 
 /*
 ================
@@ -177,7 +180,8 @@ export function createActorMotion( owner: ActorOwner ) {
 					resource.clips.includes( "downdie" ) ?
 					"downdie" :
 					"death";
-			const sitting = entity.movementMode === MOVEMENT_MODE_SEATED && !entity.mountedOn;
+			const stall = !dead && entity.appearanceState?.[6] === STALL_TITLE_MODE;
+			const sitting = !stall && entity.movementMode === MOVEMENT_MODE_SEATED && !entity.mountedOn;
 			const seat = seatedVehicle( entity, output.displayed );
 			const sittingClip = resource.clips.includes( "sit" ) ? "sit" : "charselect-state14";
 			if ( state.dead !== undefined && state.dead !== dead ) {
@@ -187,6 +191,8 @@ export function createActorMotion( owner: ActorOwner ) {
 					(downDeath ? quickDeath : deathEntry?.deathAction ? "death" : undefined) :
 					undefined;
 				state.postureStarted = seconds;
+			} else if ( stall ) {
+				state.postureClip = undefined;
 			} else if ( !dead && state.sitting !== undefined && state.sitting !== sitting ) {
 				state.postureClip = sitting ?
 					(resource.clips.includes( "sitdown" ) ? "sitdown" : "charselect-state13") :
@@ -194,6 +200,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.postureStarted = seconds;
 			}
 			const heightTarget = sitting ? .5 : 1;
+			if ( stall && !state.actionInput?.stall ) state.actionHeight = { from: 1, to: 1, at: seconds };
 			if ( state.sitting !== sitting ) {
 				const old = state.actionHeight,
 					current = old ?
@@ -214,7 +221,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			// 85C590 writes +0xB9 from the FZ bit with no hp test.
 			// Death selects its own clip; it does not clear the lock.
 			const poseFrozen = statusView.poseLocked;
-			if ( poseFrozen ) moving = false;
+			if ( poseFrozen || stall ) moving = false;
 			const requestedMoving = moving;
 			const movementRevision =
 				(localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0;
@@ -235,6 +242,8 @@ export function createActorMotion( owner: ActorOwner ) {
 			const waiting = !dead && waitingActors.has( entity.gid );
 			const derivedMask = dead ?
 				2 :
+				stall ?
+				STALL_ACTION_MASK :
 				sitting ?
 				0x40 :
 				activePosture?.kind === "down" ?
@@ -242,7 +251,8 @@ export function createActorMotion( owner: ActorOwner ) {
 				(waiting ? 0 : 8 | (moving ? 0x200 : 0x100)) | (cast ? 4 : 0);
 			const previousInput = state.actionInput;
 			const inputChanged = !previousInput || previousInput.dead !== dead ||
-				previousInput.sitting !== sitting || previousInput.mountedOn !== (entity.mountedOn ?? 0) ||
+				previousInput.stall !== stall || previousInput.sitting !== sitting ||
+				previousInput.mountedOn !== (entity.mountedOn ?? 0) ||
 				previousInput.movementMode !== entity.movementMode ||
 				previousInput.requestedMoving !== requestedMoving ||
 				previousInput.movementRevision !== movementRevision ||
@@ -254,6 +264,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			mask = (mask & ~4) | (cast ? 4 : 0);
 			if ( previousInput && inputChanged ) {
 				if ( dead || activePosture?.kind === "down" || entity.mountedOn ) mask = derivedMask;
+				else if ( stall ) commands.push( { kind: "enter", state: 15 } );
 				else if ( sitting ) commands.push( { kind: "enter", state: 6 } );
 				else if ( waiting ) commands.push( { kind: "leave", state: 3 } );
 				else {
@@ -281,6 +292,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.actionInput = {
 					dead,
 					sitting,
+					stall,
 					mountedOn: entity.mountedOn ?? 0,
 					movementMode: entity.movementMode,
 					requestedMoving,
@@ -348,8 +360,37 @@ export function createActorMotion( owner: ActorOwner ) {
 					(!motion.banUrl || resources.animation( resource.glb, motion.clip, motion.banUrl ))
 				) combatIdle = motion;
 			}
+			// 8E6B50 installs motion 80 with a 200 ms blend and full actor height.
+			// The character virtual dispatch retains its weapon/override lookup.
+			if ( stall ) {
+				const metadata = published.animationStates.get( resource.codename ), set = motionSet || "default";
+				if (
+					state.stallMotion?.body !== resource || state.stallMotion.metadata !== metadata ||
+					state.stallMotion.set !== set
+				) {
+					state.stallMotion = {
+						body: resource,
+						metadata,
+						set,
+						motion: skillMotionResolveAnimation( {
+							role: `native:${set}:${STALL_MOTION}`,
+							clips: resource.clips,
+							bodyStates: resource.animationStates,
+							catalogStates: metadata,
+							motionUrls: published.nativeMotionUrls.get( resource.codename )
+						} )
+					};
+				}
+			}
+			const stallMotion = stall ? state.stallMotion?.motion : undefined;
+			const stallClip = stallMotion && (!stallMotion.banUrl ||
+					resources.animation( resource.glb, stallMotion.clip, stallMotion.banUrl )) ?
+				stallMotion.clip :
+				undefined;
 			const baseRole = dead ?
 				(downDeath ? quickDeath : deadLoop) :
+				stall ?
+				stallClip ?? "stand" :
 				seat !== undefined ?
 				"ride" :
 				sitting ?
@@ -357,13 +398,13 @@ export function createActorMotion( owner: ActorOwner ) {
 				(moving || !state.navigationHold && posePresentation.moving( entity.gid )) ?
 				movementGait( entity.movementMode ) :
 				combatIdle?.clip ?? "stand";
-			let clip = baseRole === combatIdle?.clip || resource.clips.includes( baseRole ) ?
+			let clip = baseRole === stallClip || baseRole === combatIdle?.clip || resource.clips.includes( baseRole ) ?
 				baseRole :
 				resource.clips.includes( "stand" ) ?
 				"stand" :
 				resource.clips[0] ?? "";
 			if (
-				motionSet && !entity.mountedOn && !dead && !sitting &&
+				motionSet && !entity.mountedOn && !dead && !sitting && !stall &&
 				(baseRole === "run" || baseRole === "walk" || baseRole === "stand")
 			) {
 				const role = `native:${motionSet}:${baseRole === "run" ? 7 : baseRole === "walk" ? 1 : 0}`;
@@ -426,7 +467,7 @@ export function createActorMotion( owner: ActorOwner ) {
 						continue;
 					}
 					if ( effect.kind === "leave" ) {
-						if ( effect.state === 8 || effect.state === 9 || effect.state === 6 ) {
+						if ( effect.state === 8 || effect.state === 9 || effect.state === 6 || effect.state === 15 ) {
 							state.locomotion = stopLocomotion( state.locomotion, seconds );
 						}
 						if ( effect.state === 8 || effect.state === 7 ) {
@@ -508,6 +549,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				changeLocomotion( state.locomotion, clip, looping, seconds, baseRole );
 			if ( !waiting && previousLocomotion?.clip === "" ) state.locomotion.enter = .2;
 			if ( previousLocomotion !== state.locomotion ) {
+				if ( stallClip && clip === stallClip ) state.locomotion.enter = .2;
 				state.locomotion.rate = baseRole === "run" || baseRole === "walk" ? entryRate : 1;
 				// 777F60 mounts and 85E930 dismounts with PlayAnimation(0,0,0,0,1,1):
 				// no blend, so the rider snaps into and out of the ride pose.
@@ -623,7 +665,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				state.pickupStarted = seconds;
 			}
 			const idle = presentationState.idleStates.get( entity.gid )?.idle;
-			if ( idle?.clip ) {
+			if ( !stall && idle?.clip ) {
 				const idleClip = idle.clip, age = seconds - idle.started;
 				const idleLayers = bindLayers(
 					oneShotLayers( idleClip, clip, age, resources.duration( resource.glb, idleClip ), .2 ),
@@ -655,7 +697,9 @@ export function createActorMotion( owner: ActorOwner ) {
 			const metadata = resource.animationStates ?? published.animationStates.get( resource.codename );
 			// Retain the native idle metadata through its outgoing blend.
 			const motionMetadata = ( name: string ) =>
-				state.combatIdle?.motion?.clip === name ?
+				state.stallMotion?.motion?.clip === name ?
+					state.stallMotion.motion.definition :
+					state.combatIdle?.motion?.clip === name ?
 					state.combatIdle.motion.definition :
 					metadata?.[name] ?? published.animationStates.get( resource.codename )?.[name];
 			// Resolve equipment, surface and world position only when a cue

@@ -9,7 +9,9 @@ bake result once under resources[bsr] (the GLB, clips, animation and
 particle tables, VAT reference) and keeps models[codename] to the fields a
 reference owns. Every reader joins the two through npcManifestModels, so
 no reader depends on how the file is laid out; the browser's presentation
-catalog performs the same join on admission.
+catalog performs the same join on admission. Stall booth resources live in
+boothModels[bsr], with kind "booth" reference rows and the same resource shape.
+A BSR has one bake entry across resources and boothModels.
 
 ===========================================================================
 */
@@ -50,7 +52,7 @@ A row whose bake failed carries no resource and stays as written.
 ================
 */
 export function npcManifestModels( manifest ) {
-	const resources = manifest?.resources ?? {};
+	const resources = { ...manifest?.resources, ...manifest?.boothModels };
 	const joined = {};
 	for ( const [codename, row] of Object.entries( manifest?.models ?? {} ) ) {
 		const resource = row?.bsr ? resources[row.bsr] : undefined;
@@ -82,6 +84,7 @@ carry the same bake result; a difference is a bake defect, not a choice.
 export function splitNpcManifestModels( entries ) {
 	const models = {};
 	const resources = {};
+	const boothModels = {};
 	const resourceJson = new Map();
 	for ( const entry of entries ) {
 		const row = {};
@@ -98,7 +101,12 @@ export function splitNpcManifestModels( entries ) {
 			throw new Error( `[npc] ${entry.bsr}: references of one BSR carry different bake results` );
 		}
 		resourceJson.set( entry.bsr, json );
-		resources[entry.bsr] = resource;
+		if ( entry.kind === "booth" ) {
+			boothModels[entry.bsr] = resource;
+			delete resources[entry.bsr];
+		} else if ( !boothModels[entry.bsr] ) {
+			resources[entry.bsr] = resource;
+		}
 	}
-	return { models, resources };
+	return { models, resources, boothModels };
 }

@@ -95,6 +95,8 @@ function enterDeath(
 	entry.deathAction = !down && (input.previousMask & (MASK_CAST | MASK_BASE)) !== 0;
 }
 
+const STALL_TITLE_MODE = 4;
+
 /*
 ================
 createPresentationState
@@ -241,7 +243,7 @@ export function createPresentationState() {
 				// resets the fidget timer to 15s; it does not consume that frame.
 				const suppressIdle = (combatStanceEnds.get( entity.gid ) ?? -Infinity) > entry.idle.previous;
 				const eligible = !suppressIdle && !dead && !moving && !entity.mountedOn &&
-					entity.movementMode !== MOVEMENT_MODE_SEATED &&
+					entity.movementMode !== MOVEMENT_MODE_SEATED && entity.appearanceState?.[6] !== STALL_TITLE_MODE &&
 					!entry.posture && !castByActor.has( entity.gid ) && !hit && !state?.postureClip &&
 					!(state?.pickupStarted !== undefined &&
 						seconds - state.pickupStarted < resources.duration( resource.glb, "pick" ));

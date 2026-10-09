@@ -180,3 +180,26 @@ test("ground decals disable depth writes without changing selection or ordinary 
 	// The same state is one pipeline.
 	assert.equal( pipelines.geometry( geometryPipelineState( { ...base, groundDecal: true } ) ), decal );
 });
+
+/*
+================
+Stall action transitions
+
+The state-15 native dispatch clears every conflicting action; closing the
+stall enters state 3, whose clear mask includes state 15.
+================
+*/
+test("stall action stops navigation and returns to ordinary idle on close", () => {
+	for ( const mask of [ 0x108, 0x208, 0x40 ] ) {
+		const opened = transitionActionStates( mask, true, [ { kind: "enter", state: 15 } ] );
+		assert.equal( opened.mask, 0x8000 );
+		assert.equal( opened.navigation, false );
+		assert.deepEqual( trace( opened ).slice( -1 ), [ "enter15" ] );
+		const closed = transitionActionStates( opened.mask, false, [ { kind: "enter", state: 3 } ] );
+		assert.equal( closed.mask, 0x108 );
+		assert.deepEqual( trace( closed ), [ "leave15", "enter3", "enter8" ] );
+		const refreshed = refreshActionStates( opened.mask, false, true );
+		assert.equal( refreshed.mask, 0x8000 );
+		assert.deepEqual( trace( refreshed ), [ "commit" ] );
+	}
+});

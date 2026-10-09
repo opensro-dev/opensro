@@ -2395,7 +2395,7 @@ Route each native reply to its owner before scheduling presentation.
 Packet handling must not depend on which HUD panel is currently open.
 ================
 		*/
-		receive( frame: WireFrame, now: number, chatSender?: EntityState ) {
+		receive( frame: WireFrame, now: number, chatSender?: EntityState, stallReceipt?: { title?: string; } ) {
 			const inventoryBefore = inventory.state().inventory;
 			// Every skill press is answered at once by B245 or B2CD.
 			const answer = skillPressAnswer( frame, localGid );
@@ -2811,6 +2811,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				// title frames also reach the entities (751430, 751520, 74F8F0).
 				const stallOutcome = inventory.stallReceive( frame, localGid ?? 0 );
 				if ( stallOutcome ) {
+					// Title edit kind 7 acknowledges the title already stored by
+					// the request. Only its successful owner receipt updates the actor.
+					const titleEdit = 7;
+					if (
+						stallReceipt && frame.opcode === 0xb1a8 && frame.payload[0] === 1 &&
+						frame.payload[1] === titleEdit && stallOutcome.state.phase === "owner"
+					) stallReceipt.title = stallOutcome.state.title;
 					dirty = true;
 					if ( stallOutcome.notice ) {
 						const notice = constantNativeNotice( stallOutcome.notice.category, stallOutcome.notice.code );

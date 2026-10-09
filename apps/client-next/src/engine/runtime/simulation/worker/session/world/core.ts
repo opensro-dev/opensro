@@ -217,9 +217,13 @@ cross-owner follow-ups (name colours, displacements, cancellations).
 				) :
 				undefined;
 		const oldNameContext = nameContext(), oldSocial = gameplay.nameInputs().social;
-		if ( !gameplay.receive( frame, now, chatSender ) ) {
+		const stallReceipt: { title?: string; } | undefined = frame.opcode === 0xb1a8 ? {} : undefined;
+		if ( !gameplay.receive( frame, now, chatSender, stallReceipt ) ) {
 			entities.receive( frame, now );
 		}
+		// The owner's edit receipt carries no title; gameplay resolves the
+		// accepted request before the entity journal publishes it.
+		if ( stallReceipt?.title !== undefined ) entities.renameStall( localGid, stallReceipt.title );
 		const social = gameplay.nameInputs().social;
 		if ( frame.opcode === 0x35d6 ) entities.recolor( e => social.members.some( m => m.name === e.name ) );
 		if ( frame.opcode === 0x3e58 ) {

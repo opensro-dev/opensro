@@ -42,6 +42,8 @@ Textures: .ddj under prim/mtrl are converted by scripts/convert_images.py
 */
 
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
+import { loadBoothModelRoster } from "./boothModelRoster.mjs";
+import { bakeNpcSecondaryResources } from "./npcSecondaryResources.mjs";
 import { authoredAnimationBindings } from "./authoredAnimationBindings.mjs";
 import { pickAttachedMotionClips } from "./attachedMotionClips.mjs";
 
@@ -835,46 +837,38 @@ export async function buildNpcModelAssets( options = {} ) {
 	// CICharactor_Action_KnockdownDie (8E64F0) reloads a dying body from its
 	// characterInfo death BSR the same way; death models bake with the monster
 	// clip policy but require death 4 and deathLoop 36 instead of stand.
-	const bakeSecondaryResource = async ( key, kind, fields, requiredStates ) => {
-		const output = resourceGlbOutput( key, { namespace: "npc", publicAssetsRoot: publicAssets } );
-		claimResourceOutput( outputOwners, key, output.publicPath );
-		const entry = { codename: key, kind, bsr: key, ...fields };
-		retailAnimationModels.set( key, { codename: key, refObjId: null, kind, bsr: key } );
-		try {
-			const prior = bakedByBsr.get( key );
-			if ( prior ) {
-				if ( !prior.isMob ) throw new Error( `${key}: ${kind} resource collides with an NPC-only stand bake` );
-				Object.assign( entry, prior.baked );
-				reusedModels += 1;
-			} else {
-				const baked = await bakeCharacterResource( key, output, true, requiredStates );
-				const { retailAnimationCatalog, ...missionBaked } = baked;
-				Object.assign( entry, missionBaked );
-				bakedByBsr.set( key, { isMob: true, baked: missionBaked } );
-				retailAnimationResources.set( key, {
-					bsr: key,
-					glb: missionBaked.glb,
-					animations: retailAnimationCatalog
-				} );
-				builtResources += 1;
+	const secondaryResources = [
+		...[ ...rideResources.values() ].map( ride => ({
+			bsrPath: ride.bsrPath,
+			kind: "ride",
+			isMob: true,
+			requiredStates: BODY_REQUIRED_STATES,
+			fields: {
+				requiredBy: ride.requiredBy,
+				riderTransformModes: [ ...ride.transformModes ].sort( ( a, b ) => a - b )
 			}
-			coveredModels += 1;
-			console.log( `[npc] OK   ${key} -> ${entry.glb} (${prior ? "shared bake" : `${entry.bytes} B`})` );
-		} catch ( error ) {
-			entry.error = String( error?.message ?? error );
-			console.warn( `[npc] FAIL ${key} ${entry.error}` );
-		}
-		models.push( entry );
-	};
-	for ( const ride of rideResources.values() ) {
-		await bakeSecondaryResource( ride.bsrPath, "ride", {
-			requiredBy: ride.requiredBy,
-			riderTransformModes: [ ...ride.transformModes ].sort( ( a, b ) => a - b )
-		}, BODY_REQUIRED_STATES );
-	}
-	for ( const death of deathResources.values() ) {
-		await bakeSecondaryResource( death.bsrPath, "death", { requiredBy: death.requiredBy }, DEATH_REQUIRED_STATES );
-	}
+		}) ),
+		...[ ...deathResources.values() ].map( death => ({
+			bsrPath: death.bsrPath,
+			kind: "death",
+			isMob: true,
+			requiredStates: DEATH_REQUIRED_STATES,
+			fields: { requiredBy: death.requiredBy }
+		}) ),
+		...loadBoothModelRoster( textdataDir )
+	];
+	const secondary = await bakeNpcSecondaryResources( {
+		publicAssetsRoot: publicAssets,
+		models,
+		bakedByBsr,
+		outputOwners,
+		retailAnimationModels,
+		retailAnimationResources,
+		bake: bakeCharacterResource
+	}, secondaryResources );
+	builtResources += secondary.built;
+	coveredModels += secondary.covered;
+	reusedModels += secondary.reused;
 
 	// CICATStruct_SetVisualStage (4F78A0) reloads the model from the stage's
 	// atstructeffect BSR, falling back to the record's own; stage models are
@@ -914,7 +908,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	}
 
 	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest, { publicAssetsRoot: publicAssets } );
-	const { models: referenceRows, resources } = splitNpcManifestModels( models );
+	const { models: referenceRows, resources, boothModels } = splitNpcManifestModels( models );
 	const manifest = {
 		format: NPC_MANIFEST_FORMAT,
 		version: NPC_MANIFEST_VERSION,
@@ -926,6 +920,7 @@ export async function buildNpcModelAssets( options = {} ) {
 		reusedCount: reusedModels,
 		models: referenceRows,
 		resources,
+		boothModels,
 		...(preservedVat.contract ? { vat: preservedVat.contract } : {})
 	};
 	const failures = models.filter( ( model ) => model.error );

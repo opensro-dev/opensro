@@ -32,6 +32,7 @@ export default {
 		"scripts/test/assets/publishedAssetBoundary.test.mjs",
 		"scripts/test/assets/generatedAssetMembership.test.mjs",
 		"scripts/test/assets/npcModelPublication.test.mjs",
+		"scripts/test/assets/boothModelAssets.test.mjs",
 		"scripts/test/assets/cifSpriteCatalog.test.mjs",
 		"scripts/test/assets/slotEffectPublication.test.mjs",
 		"scripts/test/assets/skillPaneImageReferences.test.mjs",

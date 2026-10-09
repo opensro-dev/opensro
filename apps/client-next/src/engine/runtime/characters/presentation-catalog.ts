@@ -40,6 +40,7 @@ import type {
 	ItemPresentation,
 	LinkedRide,
 	Resource,
+	SecondaryModel,
 	SoundRule
 } from "./internal/presentation-contract";
 
@@ -84,13 +85,29 @@ projections are the same ones a body row receives.
 ================
 */
 function admitDeathModel( row: Resource & { requiredBy?: unknown; }, deaths: Map<string, DeathModel> ) {
+	if ( !Array.isArray( row.requiredBy ) || row.requiredBy.some( owner => typeof owner !== "string" ) ) {
+		throw new Error( "Invalid death model owners" );
+	}
+	const model = admitSecondaryModel( row );
+	for ( const owner of row.requiredBy as string[] ) deaths.set( owner, model );
+}
+
+/*
+================
+admitSecondaryModel
+
+Booths and death resources carry the same BSR animation and modifier planes.
+================
+*/
+function admitSecondaryModel( row: Partial<Resource> ): SecondaryModel {
 	if (
+		!row ||
 		typeof row.glb !== "string" || !row.glb.startsWith( "/assets/npc/" ) || row.glb.includes( ".." ) ||
-		!Array.isArray( row.clips ) || row.clips.some( clip => typeof clip !== "string" ) ||
-		!Array.isArray( row.requiredBy ) || row.requiredBy.some( owner => typeof owner !== "string" )
-	) throw new Error( "Invalid death model" );
+		!row.glb.endsWith( ".glb" ) ||
+		!Array.isArray( row.clips ) || row.clips.some( clip => typeof clip !== "string" )
+	) throw new Error( "Invalid secondary model" );
 	const particles = modelAnimationParticles( row.particleModifiers );
-	const model: DeathModel = {
+	const model: SecondaryModel = {
 		glb: row.glb,
 		clips: row.clips,
 		animationStates: row.animationStates ? animationMetadata( row.animationStates ) : undefined,
@@ -106,7 +123,7 @@ function admitDeathModel( row: Resource & { requiredBy?: unknown; }, deaths: Map
 		modifierBindings: modelAnimationBindings( row.animationBindings ),
 		modifierSelectors: modelModifierSets( row.modifierSets )
 	};
-	for ( const owner of row.requiredBy as string[] ) deaths.set( owner, model );
+	return model;
 }
 
 /*
@@ -200,6 +217,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 	const ridesByRider = new Map<string, LinkedRide>();
 	// characterInfo death models: the dying codename -> the mesh 8E64F0 loads.
 	const deathModels = new Map<string, DeathModel>();
+	const boothModels = new Map<string, SecondaryModel>();
 	let manifest = 0;
 	return {
 		recoveryByCodename,
@@ -216,6 +234,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 		nativeMotionUrls,
 		ridesByRider,
 		deathModels,
+		boothModels,
 		get dress() {
 			return dress;
 		},
@@ -263,6 +282,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 					tradeSkinPools?: unknown;
 					models?: Resource[] | Record<string, Resource>;
 					resources?: Record<string, Partial<Resource>>;
+					boothModels?: Record<string, Partial<Resource>>;
 					dress?: typeof dress;
 					itemsByRefObjId?: typeof items;
 					rules?: SoundRule[];
@@ -277,7 +297,27 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						anchorOffset?: { x: number; y: number; z: number; };
 					}[];
 				};
-				if ( value.resources ) value.models = joinModelResources( value.models, value.resources );
+				if ( value.resources || value.boothModels ) {
+					value.models = joinModelResources( value.models, { ...value.resources, ...value.boothModels } );
+				}
+				const nextBooths = new Map( boothModels );
+				if ( value.boothModels !== undefined ) {
+					if (
+						!value.boothModels || typeof value.boothModels !== "object" ||
+						Array.isArray( value.boothModels )
+					) {
+						throw new Error( "Invalid booth catalog" );
+					}
+					for ( const [bsr, row] of Object.entries( value.boothModels ) ) {
+						if (
+							!bsr.startsWith( "res/" ) || !bsr.endsWith( ".bsr" ) || bsr.includes( ".." ) ||
+							bsr.includes( "\\" )
+						) {
+							throw new Error( "Invalid booth resource path" );
+						}
+						nextBooths.set( bsr, admitSecondaryModel( row ) );
+					}
+				}
 				if ( value.characterShadowSizes ) {
 					for ( const [id, size] of value.characterShadowSizes ) {
 						if (
@@ -608,6 +648,8 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 				for ( const [key, row] of nextRides ) ridesByRider.set( key, row );
 				deathModels.clear();
 				for ( const [key, row] of nextDeaths ) deathModels.set( key, row );
+				boothModels.clear();
+				for ( const [key, row] of nextBooths ) boothModels.set( key, row );
 				animationStates.clear();
 				for ( const [key, row] of nextAnimations ) animationStates.set( key, row );
 				nativeMotionUrls.clear();
@@ -636,6 +678,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 		dispose() {
 			catalog.clear();
 			nativeMotionUrls.clear();
+			boothModels.clear();
 			animationStates.clear();
 			soundProfiles.clear();
 		}

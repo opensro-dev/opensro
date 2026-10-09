@@ -398,6 +398,14 @@ function fixture(
 				}
 			}
 			if ( failures.has( job.url ) ) return { kind: "error", error: "Unavailable " + job.url };
+			if ( options.boothModels && job.url.endsWith( "/npc/manifest.json" ) ) {
+				return {
+					kind: "bytes",
+					buffer:
+						new TextEncoder().encode( JSON.stringify( { models: {}, boothModels: options.boothModels } ) )
+							.buffer
+				};
+			}
 			if ( gear && job.url.endsWith( "/char/roster.json" ) ) {
 				return {
 					kind: "bytes",
@@ -518,6 +526,7 @@ function fixture(
 			}
 			if ( job.decode === "character" || job.decode === "effect" ) {
 				const value = model( options.sourceFloats );
+				for ( const name of options.extraClips ?? [] ) value.clips.push( { name, duration: 1, channels: [] } );
 				for ( const clip of value.clips ) clip.duration = options.clipDurations?.[clip.name] ?? clip.duration;
 				if ( metadataAdmission.appearance?.overrideTest ) {
 					value.clips.push( { name: "native:avatar_wing:7", duration: 1, channels: [] } );
@@ -723,7 +732,7 @@ function fixture(
 		*/
 		/** @param {Record<string, unknown> | null} [gameplay] Partial gameplay fixture for this owner. */
 		step( entities, time, gameplay = null ) {
-			presentation.step( entities, gameplay, time );
+			presentation.step( entities, gameplay, time, undefined, options.cameraPitch );
 			return characters.prepare( gpu, {
 				/*
 				================
@@ -762,6 +771,100 @@ function fixture(
 		}
 	};
 }
+test("stall state selects motion 80, keeps full height and retires its independently animated booth on close", () => {
+	const role = "native:default:80", bsr = "res/item/china/item/cj_store.bsr";
+	const options = {
+		cameraPitch: 0,
+		extraClips: [ role ],
+		boothModels: { [bsr]: { glb: "/assets/npc/booth.glb", clips: [ "stand" ] } }
+	};
+	const appearance = {
+		extraClips: [ role ],
+		items: {},
+		roster: {
+			models: [ {
+				refObjId: 1,
+				codename: "NPC_1",
+				glb: "/assets/1.glb",
+				clips: [ "stand", role ],
+				animationStates: { [role]: { stateId: 80, durationMs: 1000, loop: true } }
+			} ]
+		}
+	};
+	const f = fixture(
+		{},
+		1,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{ appearance, rows: [ { codename: "NPC_1", soundProfileName: "NPC_1", heightFactor: 2 } ] },
+		options
+	);
+	const closed = entity( 1, { kind: "local-player", countryByte9c: 0, appearanceState: [ 1, 0, 0, 0, 0, 0, 0 ] } );
+	const open = { ...closed, appearanceState: [ 1, 0, 0, 0, 0, 0, 4 ] };
+	const gameplay = { localGid: 1, inventory: [], vitals: [], casts: [], skills: [], moving: false };
+	let now = 0;
+	/*
+	================
+	advance
+
+	Drive resource admission and the native 200 ms animation blend through
+	publication and the real renderer, not only the action mask helper.
+	================
+	*/
+	function advance( current ) {
+		let draws;
+		for ( let i = 0; i < 60; i++ ) draws = f.step( [ current ], now += .05, gameplay );
+		assert.equal( f.presentation.error(), null );
+		return draws;
+	}
+	try {
+		advance( closed );
+		assert.equal( f.actors.find( actor => actor.gid === 1 )?.clip, "stand" );
+		assert.equal( f.actors.some( actor => actor.model.startsWith( "booth:" ) ), false );
+		assert.ok( advance( open ).length >= 2, "both body and booth reach the renderer" );
+		const body = f.actors.find( actor => actor.gid === 1 );
+		const booth = f.actors.find( actor => actor.model.startsWith( "booth:" ) );
+		assert.ok( body && booth );
+		assert.equal( body.clip, role );
+		assert.equal( body.height, 40, "stall preserves full reference height rather than seated half-height" );
+		assert.equal( booth.clip, "stand", "booth never borrows motion 80" );
+		assert.equal( booth.attachment.gid, body.gid );
+		assert.deepEqual(
+			f.renderer.characterMatrix( f.actors, booth.gid ),
+			f.renderer.characterMatrix( f.actors, body.gid )
+		);
+		options.cameraPitch = -1;
+		const hidden = advance( open );
+		assert.equal( f.actors.find( actor => actor.gid === 1 )?.opacity, 0 );
+		assert.equal( hidden.length, 0, "a fully hidden body cannot leave its booth drawn" );
+		options.cameraPitch = 0;
+		advance( closed );
+		assert.equal( f.actors.find( actor => actor.gid === 1 )?.clip, "stand" );
+		assert.equal( f.actors.some( actor => actor.model.startsWith( "booth:" ) ), false );
+		advance( open );
+		const reopened = f.actors.find( actor => actor.model.startsWith( "booth:" ) );
+		assert.ok( reopened );
+		assert.notEqual( reopened.gid, booth.gid );
+		f.presentation.receiveLifecycle( [ { kind: "despawn", gid: 1 } ] );
+		f.step( [], now += .05, gameplay );
+		assert.equal( f.actors.some( actor => actor.model.startsWith( "booth:" ) ), false );
+		f.presentation.reset();
+		assert.equal( f.actors.length, 0 );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("a released buff never leaves an empty pose after a stall or equipment change", () => {
 	const f = fixture(
 		{ 7: { clips: [ "walk", "run" ], phaseClips: [ [], [ "walk" ], [ "run" ] ], stages: [] } },

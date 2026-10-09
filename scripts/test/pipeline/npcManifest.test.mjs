@@ -70,3 +70,24 @@ test("a failed bake keeps its row and publishes no resource", () => {
 	assert.deepEqual( models.MOB_BROKEN, failed );
 	assert.deepEqual( resources, {} );
 });
+
+test("booth references join their separate resource map without duplicating a shared BSR", () => {
+	const bsr = "res/item/avatar/booth.bsr";
+	const booth = {
+		codename: bsr,
+		kind: "booth",
+		bsr,
+		requiredBy: [ "ITEM_MALL_BOOTH_TEST" ],
+		...structuredClone( TIGER )
+	};
+	const reference = { codename: "NPC_SHARED", kind: "npc", bsr, ...structuredClone( TIGER ) };
+	for ( const entries of [ [ booth, reference ], [ reference, booth ] ] ) {
+		const manifest = splitNpcManifestModels( entries );
+		assert.deepEqual( manifest.resources, {} );
+		assert.deepEqual( manifest.boothModels, { [bsr]: TIGER } );
+		assert.deepEqual(
+			npcManifestModels( manifest ),
+			Object.fromEntries( entries.map( row => [ row.codename, row ] ) )
+		);
+	}
+});

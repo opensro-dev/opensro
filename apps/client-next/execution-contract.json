@@ -2962,6 +2962,27 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "renderer.setCharacterAssembly",
+			"function": "presentBooths",
+			"kind": "callback",
+			"reason": "Booth children use the parent renderer's existing model assembly path."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "resources.ready",
+			"function": "callback:map:0",
+			"kind": "callback",
+			"reason": "Admit booth models and particle programs before publishing their assembly."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "resources.plan",
+			"function": "presentBooths",
+			"kind": "callback",
+			"reason": "Booth model and particle dependencies are requested before their animation clock starts."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
 			"expression": "effects.animationModel",
 			"function": "presentStages",
 			"kind": "callback",

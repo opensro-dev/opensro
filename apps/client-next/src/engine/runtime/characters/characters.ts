@@ -731,6 +731,10 @@ export function createCharacterPresentation(
 				committedAuxiliary
 			}
 		);
+		auxiliary.presentBooths(
+			{ entities, seconds, next, animationHolders, particleHolders },
+			{ boothModels: published.boothModels, items: published.items, resources, renderer }
+		);
 		for ( const gid of avatarOverrides.keys() ) if ( !active.has( gid ) ) avatarOverrides.delete( gid );
 		sounds.retain( active );
 		posePresentation.retain( active );
@@ -803,6 +807,7 @@ export function createCharacterPresentation(
 		================
 		*/
 		receiveLifecycle( events: readonly import("@/engine/contracts/world").WorldEvent[] ) {
+			auxiliary.receiveBooths( events );
 			entityLod.receive( events );
 			const next: WeatherLifecycleEvent[] = [];
 			for ( const event of events ) {

@@ -39,6 +39,8 @@ import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
 // The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
 // fortress structures); ground items and skill objects are not characters.
 const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
+// Peer appearance slot 6 selects the overhead title; mode 4 owns a stall.
+const STALL_TITLE_SLOT = 6, STALL_TITLE_MODE = 4;
 // Wire authorities: server enterworld/{register,bootstrap,wire}.go,
 // world/simulation/{npc,monster}.go and item/wire/objectmove.go.
 /*
@@ -653,16 +655,20 @@ export function createEntities(
 				// 751520 renames it, 74F8F0 takes it down (CICharactor_SetStallState).
 				const entity = entities.get( v.getUint32( 0, true ) );
 				if ( !entity ) return;
+				// The local latch has no peer appearance row. Supply its alive,
+				// idle defaults so the owner's booth reaches presentation too.
+				const appearanceState = [
+					...(entity.appearanceState ?? [ 1, 0, 0, entity.pvpState ?? 0, 0, 0, 0, 0, 0 ])
+				];
 				if ( frame.opcode === 0x33d1 ) {
-					const appearanceState = entity.appearanceState ? [ ...entity.appearanceState ] : undefined;
-					if ( appearanceState ) appearanceState[6] = 0;
+					appearanceState[STALL_TITLE_SLOT] = 0;
 					apply( {
 						kind: "state",
 						entity: {
 							...entity,
 							titleText: undefined,
 							titleId: undefined,
-							...(appearanceState ? { appearanceState } : {})
+							appearanceState
 						}
 					} );
 					return;
@@ -671,11 +677,10 @@ export function createEntities(
 				if ( 6 + n * 2 > p.length ) throw Error( "Invalid stall title" );
 				const titleText = new TextDecoder( "utf-16le" ).decode( p.subarray( 6, 6 + n * 2 ) );
 				const titleId = frame.opcode === 0x30df ? v.getUint32( 6 + n * 2, true ) : entity.titleId;
-				const appearanceState = entity.appearanceState ? [ ...entity.appearanceState ] : undefined;
-				if ( appearanceState ) appearanceState[6] = 4;
+				appearanceState[STALL_TITLE_SLOT] = STALL_TITLE_MODE;
 				apply( {
 					kind: "state",
-					entity: { ...entity, titleText, titleId, ...(appearanceState ? { appearanceState } : {}) }
+					entity: { ...entity, titleText, titleId, appearanceState }
 				} );
 				return;
 			}
@@ -1261,6 +1266,19 @@ export function createEntities(
 			}
 		},
 		read: ( gid: number ) => entities.get( gid ),
+		/*
+		================
+		renameStall
+
+		An accepted owner title edit changes only the existing stall's text.
+		The open broadcast remains the authority for title mode and decoration.
+		================
+		*/
+		renameStall( gid: number, titleText: string ) {
+			const entity = entities.get( gid );
+			if ( !entity || entity.appearanceState?.[STALL_TITLE_SLOT] !== STALL_TITLE_MODE ) return;
+			apply( { kind: "state", entity: { ...entity, titleText } } );
+		},
 		/*
 		================
 		rider

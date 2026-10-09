@@ -112,16 +112,13 @@ export interface LinkedRide {
 
 /*
 ================
-DeathModel
+SecondaryModel
 
-A characterInfo death model (skilleffect.txt section characterInfo, column 5,
-record +0x28), published as an npc manifest row of kind "death". The mesh
-fields replace the body's while it is dead (CICharactor_Action_KnockdownDie
-8E64F0); identity, sound profile and scale stay the character's, because the
-action keeps the same characterInfo record (+0x710).
+A separately loaded BSR with its own animation and modifier planes. Death
+appearance overlays and child booth actors share this resource shape.
 ================
 */
-export interface DeathModel {
+export interface SecondaryModel {
 	readonly glb: string;
 	readonly clips: readonly string[];
 	readonly animationStates?: Record<string, AnimationMetadata>;
@@ -131,6 +128,16 @@ export interface DeathModel {
 	readonly modifierBindings?: readonly ModelAnimationBinding[];
 	readonly modifierSelectors?: readonly ModifierSelector[];
 }
+
+/*
+================
+DeathModel
+
+CharacterInfo column 5 replaces the body's mesh on death (8E64F0) while
+retaining its identity, sound profile and scale.
+================
+*/
+export type DeathModel = SecondaryModel;
 
 /*
 ================
@@ -189,6 +196,7 @@ instead of allocating and serializing the same key for every rendered actor.
 export interface ActionInput {
 	readonly dead: boolean;
 	readonly sitting: boolean;
+	readonly stall: boolean;
 	readonly mountedOn: number;
 	readonly movementMode: number | undefined;
 	readonly requestedMoving: boolean;
@@ -229,6 +237,7 @@ export interface CharacterPresentationState {
 	sitting?: boolean;
 	postureClip?: string;
 	postureStarted?: number;
+	stallMotion?: CharacterPresentationState["combatIdle"];
 	combatIdle?: {
 		body: Resource;
 		metadata: Record<string, AnimationMetadata> | undefined;
