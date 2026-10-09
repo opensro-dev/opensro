@@ -13,6 +13,7 @@ package action
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -30,6 +31,7 @@ type fakeSilkWallet struct {
 	silk     uint32
 	starters int
 	exists   bool
+	fail     bool
 }
 
 /*
@@ -52,6 +54,9 @@ CreditBetaSilk
 ================
 */
 func (w *fakeSilkWallet) CreditBetaSilk(_ string, amount, bankCap uint32) (domain.MallBalance, bool, error) {
+	if w.fail {
+		return domain.MallBalance{}, false, errors.New("credit failure")
+	}
 	if w.silk >= bankCap {
 		return domain.MallBalance{Silk: w.silk}, false, nil
 	}
@@ -70,7 +75,7 @@ func TestBetaSilkFromEnv(t *testing.T) {
 		text string
 		rate uint32
 		bad  bool
-	}{{"", 0, false}, {"off", 0, false}, {"on", BetaSilkHourlyDefault, false}, {"75", 75, false},
+	}{{"", 0, false}, {"off", 0, false}, {"on", BetaSilkHourlyDefault, false}, {"1", 1, false}, {"75", 75, false},
 		{"-1", 0, true}, {"x", 0, true}, {"100001", 0, true}} {
 		t.Setenv(EnvBetaSilk, value.text)
 		rate, err := BetaSilkFromEnv()
@@ -169,5 +174,104 @@ func TestBetaSilkStallNeverCreditsIdleTime(t *testing.T) {
 	beta.Tick(betaSilkHourMs, online, lookup)
 	if wallet.silk != 0 {
 		t.Fatalf("a stalled hour credited: silk %d", wallet.silk)
+	}
+}
+
+/*
+================
+MallBalance
+================
+*/
+func (w *fakeSilkWallet) MallBalance(*domain.Character) (domain.MallBalance, error) {
+	return domain.MallBalance{Silk: w.silk}, nil
+}
+
+/*
+================
+PurchaseMall
+================
+*/
+func (w *fakeSilkWallet) PurchaseMall(_ *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
+	if cost.Silk > w.silk {
+		return domain.MallBalance{}, domain.MallInsufficientCurrency{}
+	}
+	if _, err := grant(nil); err != nil {
+		return domain.MallBalance{}, err
+	}
+	w.silk -= cost.Silk
+	return domain.MallBalance{Silk: w.silk}, nil
+}
+
+/*
+================
+TestBetaSilkStartsAtFirstObservationAndRetriesCredit
+================
+*/
+func TestBetaSilkStartsAtFirstObservationAndRetriesCredit(t *testing.T) {
+	wallet := &fakeSilkWallet{exists: true}
+	beta := NewBetaSilk(wallet, 1)
+	character := &domain.Character{ID: 1, AccountID: "acct"}
+	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}}
+	lookup := func(string, int64) *domain.Character { return character }
+	start := int64(10 * betaSilkHourMs)
+	beta.Tick(start, online, lookup)
+	for minute := int64(1); minute < 60; minute++ {
+		if frames := beta.Tick(start+minute*betaSilkMaxStepMs, online, lookup); len(frames) != 0 {
+			t.Fatal("credited time before first observation")
+		}
+	}
+	wallet.fail = true
+	beta.Tick(start+betaSilkHourMs, online, lookup)
+	wallet.fail = false
+	frames := beta.Tick(start+betaSilkHourMs+betaSilkMaxStepMs, online, lookup)
+	if wallet.silk != 1 || len(frames) != 1 {
+		t.Fatalf("failed credit lost earned hour: silk=%d frames=%v", wallet.silk, frames)
+	}
+}
+
+/*
+================
+TestBetaSilkCapPausesTimeUntilPurchase
+================
+*/
+func TestBetaSilkCapPausesTimeUntilPurchase(t *testing.T) {
+	wallet := &fakeSilkWallet{exists: true, silk: betaSilkBankCap}
+	beta := NewBetaSilk(wallet, 50)
+	character := &domain.Character{ID: 1, AccountID: "acct"}
+	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}}
+	lookup := func(string, int64) *domain.Character { return character }
+	for minute := int64(0); minute <= 59; minute++ {
+		beta.Tick(minute*betaSilkMaxStepMs, online, lookup)
+	}
+	_, err := beta.PurchaseMall(character, domain.MallBalance{Silk: 100}, func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for minute := int64(60); minute < 120; minute++ {
+		if frames := beta.Tick(minute*betaSilkMaxStepMs, online, lookup); len(frames) != 0 {
+			t.Fatal("time at cap paid after spending")
+		}
+	}
+	if frames := beta.Tick(120*betaSilkMaxStepMs, online, lookup); len(frames) != 1 || wallet.silk != 1450 {
+		t.Fatalf("earnings did not resume: %v %d", frames, wallet.silk)
+	}
+}
+
+/*
+================
+TestBetaSilkAccountCountsOnceAndPushesEverySession
+================
+*/
+func TestBetaSilkAccountCountsOnceAndPushesEverySession(t *testing.T) {
+	wallet := &fakeSilkWallet{exists: true}
+	beta := NewBetaSilk(wallet, 50)
+	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}, {DivisionID: "d", CharacterID: 2}}
+	lookup := func(_ string, id int64) *domain.Character { return &domain.Character{ID: id, AccountID: "acct"} }
+	for minute := int64(0); minute < 60; minute++ {
+		beta.Tick(minute*betaSilkMaxStepMs, online, lookup)
+	}
+	frames := beta.Tick(betaSilkHourMs, online, lookup)
+	if wallet.silk != 50 || len(frames) != 2 {
+		t.Fatalf("account time or session publication: silk=%d frames=%v", wallet.silk, frames)
 	}
 }

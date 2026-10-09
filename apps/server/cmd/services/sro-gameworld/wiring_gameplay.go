@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
@@ -145,9 +146,6 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
-	if err := items.ConfigureMall(devPaths.TextdataDir, authorityStore); err != nil {
-		return nil, fmt.Errorf("mall catalogue: %w", err)
-	}
 	// SRO_BETA_SILK (port-only, not native): silk earned per in-world hour,
 	// credited into the account's real wallet (action/betasilk.go).
 	betaSilkRate, err := action.BetaSilkFromEnv()
@@ -155,9 +153,14 @@ func newGameplayPlane(
 		return nil, err
 	}
 	betaSilk := action.NewBetaSilk(authorityStore, betaSilkRate)
+	var mallAuthority domain.MallAuthority = authorityStore
 	if betaSilk != nil {
+		mallAuthority = betaSilk
 		deps.EntryBetaSilk = betaSilk.Starter
 		log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, betaSilkRate)
+	}
+	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority); err != nil {
+		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
