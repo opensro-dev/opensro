@@ -18,6 +18,7 @@ import { publicRoot } from "../../../../scripts/build/world/paths.mjs";
 import { loadDataAsset } from "../../../../scripts/build/shared/jmxAssetIO.mjs";
 import { parseCharacterBsr } from "../../../../scripts/build/char/formats.mjs";
 import { entityMaterialMetadata } from "../../../../scripts/build/char/entityMaterialMetadata.mjs";
+import { npcManifestModels } from "../../../../scripts/build/shared/npcManifest.mjs";
 async function load( file ) {
 	return import( sourceFileUrl( file ).href );
 }
@@ -31,7 +32,8 @@ test("every original entity material modifier binds through GLB publication and 
 	for ( const domain of [ "itemdrop", "npc" ] ) {
 		for (
 			const [key, row] of Object.entries(
-				readPublishedAssetJsonSync( "/assets/" + domain + "/manifest.json", publicRoot ).models
+				// The NPC manifest keeps each GLB on its BSR's resource (v9).
+				npcManifestModels( readPublishedAssetJsonSync( "/assets/" + domain + "/manifest.json", publicRoot ) )
 			)
 		) {
 			if ( seen.has( row.glb ) ) continue;
