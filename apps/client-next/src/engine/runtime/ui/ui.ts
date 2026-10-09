@@ -3749,6 +3749,12 @@ export function createUi(
 					return;
 				}
 
+				// F10 shuts the mall it opened, as every window hotkey toggles; an
+				// open question or point box is cancelled with the window.
+				if ( event.kind === "key" && event.code === "F10" ) {
+					activate( "item-mall-close" );
+					return;
+				}
 				if ( event.kind === "key" && event.code === "Escape" ) {
 					activate(
 						itemMall.read().pointDialog ?
@@ -8496,13 +8502,15 @@ export function createUi(
 						authoredButton( bar.GDR_BTN_MENU!, barX, barY, "hud-menu", "Menu" );
 						authoredButton( bar.GDR_BTN_OPTION!, barX, barY, "toggle-window:System", "System" );
 						authoredButton( bar.GDR_BTN_COMMUNITY!, barX, barY, "toggle-window:Guild", "Community" );
-						authoredImage( bar.GDR_BTN_ITEM_MALL!, barX, barY );
-						controls.push( {
-							id: "item-mall",
-							label: hudCopy( "UIIT_STT_SILKMALL_SHORT_KEY" ),
-							kind: "region",
-							rect: authoredRect( bar.GDR_BTN_ITEM_MALL!, barX, barY )
-						} );
+						// CIFButton 7 (ub_mall_button, with focus and press art): a
+						// region never activates, so the mall opened only from F10.
+						authoredButton(
+							bar.GDR_BTN_ITEM_MALL!,
+							barX,
+							barY,
+							"item-mall",
+							hudCopy( "UIIT_STT_SILKMALL_SHORT_KEY" )
+						);
 						authoredButton( bar.GDR_BTN_QUICKSLOTUP!, barX, barY, "hotbar-prev", "Previous quickslot bar" );
 						authoredButton( bar.GDR_BTN_QUICKSLOTDOWN!, barX, barY, "hotbar-next", "Next quickslot bar" );
 						authoredText( bar.GDR_STATIC_QUICKSLOT!, barX, barY, "F" + (hotbarPage + 1) );

@@ -427,6 +427,30 @@ test("F10 opens the Item Mall and a world transfer closes it, as the native rese
 	}
 });
 
+test("the underbar mall button is a clickable button and F10 toggles the mall", () => {
+	const f = uiFixture();
+	try {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		const frame = () => {
+			for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+			return last;
+		};
+		const button = frame()?.controls.find( control => control.id === "item-mall" );
+		// The platform layer activates buttons only: a region click did nothing.
+		assert.equal( button?.kind, "button", "CIFButton 7 must publish as a button" );
+		const open = () => !!frame()?.controls.some( control => control.id === "item-mall-close" );
+		f.ui.event( { kind: "activate", id: "item-mall" } );
+		assert.equal( open(), true, "the button opens the mall" );
+		f.ui.event( { kind: "key", code: "F10" } );
+		assert.equal( open(), false, "F10 closes the mall it opened" );
+		f.ui.event( { kind: "key", code: "F10" } );
+		assert.equal( open(), true, "and opens it again" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("window hotkeys sound on retarget, close once, and preserve sidebar click-only selection", () => {
 	const f = uiFixture();
 	f.ui.step( f.state, 1000 );
