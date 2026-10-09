@@ -24,7 +24,8 @@ const HORSE_REF = {
 	magicalDefence: 0,
 	parry: 65,
 	hit: 65,
-	skills: []
+	skills: [],
+	speed2: 90
 };
 const TRANSPORT = { gid: 8, refObjId: 3914, band: 2, hp: 100, mp: 0, status: 0, dead: false };
 const TRANSPORT_REF = { icon: "cos\\cos_t_dhorse3.ddj", maxHp: 87829, rideable: true };
@@ -152,7 +153,8 @@ test("info page texts use the native formats", () => {
 test("the presentation catalog rejects malformed rows", () => {
 	const references = cos.decodeCosReferences( {
 		format: "sro-cos-presentation",
-		rows: { 2191: [ "cos\\cos_c_horse1.ddj", 983, false, 0, 0, 65, 65, [] ] }
+		rows: { 2191: [ "cos\\cos_c_horse1.ddj", 983, false, 0, 0, 65, 65, [] ] },
+		speed2: { 2191: 90 }
 	} );
 	assert.deepEqual( references.get( 2191 ), HORSE_REF );
 	assert.throws( () =>

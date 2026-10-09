@@ -1,16 +1,19 @@
 /*
 ===========================================================================
 
-buildLevelDataAsset.mjs - publish authored progression and restoration prices
+buildLevelDataAsset.mjs - publish authored progression, restoration and trade prices
 
 Native CLevelData supplies experience, mastery and job thresholds. CDropGoldData
-supplies the resuscitation gold basis through dg.txt, not levelgold.txt. Publish
-both by level so the browser quote and server transaction use the same tables.
+supplies the resuscitation gold basis through dg.txt, not levelgold.txt.
+CLevelGoldData (levelgold.txt) supplies the trade scale's basis
+(CIFSpecialtyDeal_ComputeTradeScale 649050 reads its second column). Publish
+all three by level so the browser quote and server transaction use the same tables.
 
 ===========================================================================
 */
 import fs from "node:fs";
 import path from "node:path";
+import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { exportDataAsset } from "../shared/dataAssetExport.mjs";
 import { isMainScript } from "../shared/fsUtils.mjs";
 import { readTextDataLinesSync, splitTextDataRow } from "../shared/textDataIo.mjs";
@@ -52,7 +55,7 @@ buildLevelDataAsset
 Their different layouts must not be confused by the similarly named records.
 ================
 */
-export function buildLevelDataAsset() {
+export async function buildLevelDataAsset() {
 	const source = path.join( retailTextdataRoot, "leveldata.txt" );
 	if ( !fs.existsSync( source ) ) {
 		console.warn( `[level-data] source missing (${source}) - skipping` );
@@ -62,6 +65,13 @@ export function buildLevelDataAsset() {
 	for ( const [level, minimum] of readNumericTable( "dg.txt", GOLD_COLUMNS ) ) {
 		if ( gold.has( level ) || minimum <= 0 ) throw Error( `[level-data] invalid drop-gold level ${level}` );
 		gold.set( level, minimum );
+	}
+	// CLevelGoldData_ParseThreeColumns (80CFF0): level, then the column the
+	// trade scale reads (+8), then a third column no trade code reads.
+	const tradeGold = new Map();
+	for ( const [level, basis] of readNumericTable( "levelgold.txt", GOLD_COLUMNS ) ) {
+		if ( tradeGold.has( level ) || basis <= 0 ) throw Error( `[level-data] invalid level-gold level ${level}` );
+		tradeGold.set( level, basis );
 	}
 	const table = {};
 	let rows = 0;
@@ -75,15 +85,18 @@ export function buildLevelDataAsset() {
 			jobExpTrader: cells[6],
 			jobExpThief: cells[7],
 			jobExpHunter: cells[8],
-			withdrawalGoldBasis: gold.get( level )
+			withdrawalGoldBasis: gold.get( level ),
+			tradeGoldBasis: tradeGold.get( level )
 		};
 		rows++;
 	}
 	const { outPath } = exportDataAsset( { publicRoot, outputFileName: "levelData.json", value: table } );
+	// The packs carry the compressed sidecar; a stale one would ship the old rows.
+	await refreshPrecompressedSidecars( [ outPath ], { onlyWhenStale: true } );
 	console.log( `[level-data] wrote ${rows} level rows -> ${path.relative( publicRoot, outPath )}` );
 	return { written: true, records: rows, outPath };
 }
 
 if ( isMainScript( import.meta.url ) ) {
-	buildLevelDataAsset();
+	await buildLevelDataAsset();
 }

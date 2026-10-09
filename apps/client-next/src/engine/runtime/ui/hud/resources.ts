@@ -15,6 +15,7 @@ import { decodePortalCatalog, type PortalCatalog } from "@/engine/foundation/gam
 import { decodeTooltipMasteries, type TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
 import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
 import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
+import { tradeGoldBases } from "@/engine/foundation/gameplay/specialty-deal";
 import { decodeMallNotify, type MallNotify } from "@/engine/foundation/ui/mall-notify";
 import { type JobExpThresholds, jobExpThresholds } from "@/engine/foundation/gameplay/player-info-job";
 import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
@@ -58,6 +59,8 @@ interface HudData {
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
 	readonly masteryCosts: Readonly<Record<number, number>>;
 	readonly withdrawalGoldPrices: Readonly<Record<number, number>>;
+	// levelgold.txt column 2 by level: the trade scale's basis (649050).
+	readonly tradeGoldBases: Readonly<Record<number, number>>;
 	readonly mallNotify: MallNotify;
 	readonly jobExpThresholds: JobExpThresholds;
 	readonly extended: readonly AuthoredLayout[];
@@ -219,7 +222,8 @@ export function createHudResources(
 		"ifchattingblockingslot",
 		"ifwhisperblockingslot",
 		"ifcompositeitemwnd",
-		"ifwholechat"
+		"ifwholechat",
+		"ifspecialtydeal"
 	];
 	const layouts = [
 		"ginterface",
@@ -256,6 +260,7 @@ export function createHudResources(
 	let data: HudData | null = null;
 	let withdrawalPage: AuthoredLayout = {};
 	let goldPrices: Readonly<Record<number, number>> = {};
+	let tradeBases: Readonly<Record<number, number>> = {};
 	let jobThresholds: JobExpThresholds = {};
 	// The skill catalogue's decode while its state is "decoding".
 	let skillDecoder: ReturnType<typeof createTooltipSkillDecoder> | null = null;
@@ -336,6 +341,7 @@ export function createHudResources(
 							else if ( i === layouts.length + 11 ) {
 								value = masteryCosts( raw );
 								goldPrices = withdrawalGoldPrices( raw );
+								tradeBases = tradeGoldBases( raw );
 								jobThresholds = jobExpThresholds( raw );
 							} else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
 							else if ( i === layouts.length + 8 ) {
@@ -374,6 +380,7 @@ export function createHudResources(
 				data = {
 					withdrawalPage,
 					withdrawalGoldPrices: goldPrices,
+					tradeGoldBases: tradeBases,
 					jobExpThresholds: jobThresholds,
 					portals: values[layouts.length + 13] as PortalCatalog,
 					cosReferences: values[layouts.length + 14] as HudData["cosReferences"],

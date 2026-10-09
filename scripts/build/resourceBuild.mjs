@@ -461,7 +461,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// WIP level-data plane (leveldata.txt -> levelData.json, read by the
 	// bridge's loadWipLevelData for the 0x30D2 exp/level-up fold's REAL 7e0f20
 	// record getter). Same placement rules as the effect records above.
-	const levelData = steps.buildLevelDataAsset();
+	const levelData = await steps.buildLevelDataAsset();
 	// WIP action-record data plane (actionwnddata.txt raw rows ->
 	// actionwnddata.json, seeded through the REAL sub_80cb00 parse fold into the
 	// data_cec870 +0x258 map the CIFAction_OnCreate populate iterates). Same

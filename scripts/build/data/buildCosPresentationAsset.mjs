@@ -20,9 +20,15 @@ An attack pet's info page also derives its ability table from the reference
 	columns 89..98 -> +0x210 default skills, up to the first zero; the first
 	                 physical and magical attack blocks give the attack ranges
 
+The trade window's scale (CIFSpecialtyDeal_ComputeTradeScale 649050) reads
+the transport's RefObjCommon run speed:
+
+	column 47 -> +0x104 Speed2 (m_nSpeed2, asserted nonzero there)
+
 Every in-service COS reference (TypeID 1/2/3, TID4 band 1..6) ships, keyed by
 its RefObj id: refObjId -> [icon, maxHp, rideable, physicalDefence,
-magicalDefence, parry, hit, skills].
+magicalDefence, parry, hit, skills]. The run speeds sit in their own
+refObjId -> speed2 map, so a reader of the rows alone keeps working.
 
 ===========================================================================
 */
@@ -39,6 +45,7 @@ const COLUMN_TYPE_ID1 = 9;
 const COLUMN_TYPE_ID2 = 10;
 const COLUMN_TYPE_ID3 = 11;
 const COLUMN_TYPE_ID4 = 12;
+const COLUMN_SPEED2 = 47;
 const COLUMN_ICON = 54;
 const COLUMN_MAX_HP = 59;
 const COLUMN_RIDEABLE = 68;
@@ -58,7 +65,7 @@ buildCosPresentationAsset
 */
 export async function buildCosPresentationAsset( options = {} ) {
 	const textdataRoot = options.textdataRoot ?? retailTextdataRoot;
-	const rows = {};
+	const rows = {}, speed2 = {};
 	for ( const shard of listTextDataShardNamesSync( textdataRoot, /^characterdata.*\.txt$/i ) ) {
 		for ( const cols of readTextDataRowsSync( path.join( textdataRoot, shard ) ) ) {
 			const band = Number( cols[COLUMN_TYPE_ID4] );
@@ -97,12 +104,13 @@ export async function buildCosPresentationAsset( options = {} ) {
 				stat( COLUMN_HIT ),
 				skills
 			];
+			speed2[String( id )] = stat( COLUMN_SPEED2 );
 		}
 	}
 	const { outPath } = exportDataAsset( {
 		publicRoot: options.publicRoot ?? publicRoot,
 		outputFileName: "cosPresentation.json",
-		value: { format: "sro-cos-presentation", version: 1, rows }
+		value: { format: "sro-cos-presentation", version: 1, rows, speed2 }
 	} );
 	// The packs carry the compressed sidecars; a stale one would ship the
 	// previous rows.

@@ -156,6 +156,17 @@ import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createGlobalChatHud } from "./hud/global-chat-hud";
 import { createReverseReturnHud } from "./hud/reverse-return-hud";
+import { createSpecialtyDealHud } from "./hud/specialty-deal-hud";
+import {
+	dealSums,
+	isTradeGoods,
+	NATIVE_LANGUAGE_ENGLISH,
+	tradeGoldBasis,
+	tradeScale,
+	tradeScaleQuantity,
+	tradeScaleRow,
+	tradeScaleRows
+} from "@/engine/foundation/gameplay/specialty-deal";
 import { GLOBAL_CHAT_MAX_LENGTH, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
@@ -542,6 +553,9 @@ const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
 const GLOBAL_CHAT_PANEL = "Global chat";
 const GLOBAL_CHAT_TEXT = "wholechat-text";
+// CIFSpecialtyDeal, the trade goods window, and its quantity edit (control 30).
+const SPECIALTY_DEAL_PANEL = "Specialty deal";
+const SPECIALTY_DEAL_COUNT = "specialty-deal-count";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
 const FORTRESS_WAR_PANEL = "Fortress war application";
 const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
@@ -762,6 +776,8 @@ export function createUi(
 	const skinHud = createSkinChangeHud();
 	const globalChatHud = createGlobalChatHud();
 	const reverseScrollHud = createReverseReturnHud();
+	const specialtyDealHud = createSpecialtyDealHud();
+	let specialtyCombo = false;
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
 	const fortressScheduleHud = createFortressScheduleHud();
@@ -1687,8 +1703,181 @@ export function createUi(
 			sendGameplay( merchantCommand( choice, item.quantity ) );
 			return;
 		}
+		if ( game.shop.cosGid && isTradeGoods( item.typeFlags ) ) {
+			openSpecialtySale( choice, item );
+			return;
+		}
 		beginShopDialog( choice, String( item.quantity ) );
 		if ( shopChoice ) sendGameplay( { kind: "shop-open", gid: shopChoice.npc } );
+	}
+	/*
+	================
+	openSpecialtyPurchase
+
+	CIFSpecialtyDeal_OpenForPackageItem (64A0E0): a trade goods offer bought
+	into the transport opens at one full stack (+0x1A8), priced at the
+	package's buy price (+0x7D0).
+	================
+	*/
+	function openSpecialtyPurchase( index: number ) {
+		const game = view?.gameplay, shop = game?.shop, offer = shop?.offers[index];
+		if ( !game || !shop?.cosGid || !offer || game.inventoryPending || shop.error || game.target !== shop.npc ) {
+			return;
+		}
+		const choice = merchantSelection( "buy", index, shop, merchantRows( game ) );
+		if ( !choice ) return;
+		closeShopDialog();
+		specialtyCombo = false;
+		specialtyDealHud.open( {
+			mode: "buy",
+			selection: choice,
+			name: offer.name,
+			refObjId: offer.refObjId,
+			cosGid: shop.cosGid,
+			unitBuy: Number( offer.price ),
+			stack: offer.maxStack,
+			count: offer.maxStack
+		} );
+		focusAndSelect( SPECIALTY_DEAL_COUNT, 0, String( offer.maxStack ).length );
+	}
+	/*
+	================
+	openSpecialtySale
+
+	CIFSpecialtyDeal_OpenForSaleItem (6496E0): the transport's trade goods
+	sold back open at the whole stack. The purchase sum uses the goods'
+	reference price (RefItemData +0xB0); the sale sum is the server's quote.
+	================
+	*/
+	function openSpecialtySale(
+		choice: MerchantSelection,
+		item: NonNullable<UiView["gameplay"]>["inventory"][number]
+	) {
+		const game = view?.gameplay;
+		if ( !game?.shop?.cosGid ) return;
+		closeShopDialog();
+		specialtyCombo = false;
+		specialtyDealHud.open( {
+			mode: "sell",
+			selection: choice,
+			name: item.name ?? "",
+			refObjId: item.refObjId,
+			cosGid: game.shop.cosGid,
+			unitBuy: item.tooltip?.fields.price ?? 0,
+			stack: item.quantity,
+			count: item.quantity
+		} );
+		focusAndSelect( SPECIALTY_DEAL_COUNT, 0, String( item.quantity ).length );
+	}
+	/*
+	================
+	specialtyStock
+
+	The transport's stock of the deal's goods: what each request moved is the
+	change in it.
+	================
+	*/
+	function specialtyStock( game: UiView["gameplay"] | undefined ) {
+		const deal = specialtyDealHud.state();
+		if ( !deal ) return 0;
+		return (game?.cosRecords?.find( r => r.gid === deal.cosGid )?.inventory ?? []).reduce(
+			( n, row ) => row.refObjId === deal.refObjId ? n + row.quantity : n,
+			0
+		);
+	}
+	/*
+	================
+	specialtyLimit
+
+	The quantity edit's numeric limit: a purchase can spend the whole purse
+	(6492C0: CIFEdit_SetNumericLimit64( gold / unit buy )); a sale sells at
+	most the transport's stack (6496E0).
+	================
+	*/
+	function specialtyLimit( game: UiView["gameplay"] | undefined ) {
+		const deal = specialtyDealHud.state();
+		if ( !deal ) return 0;
+		if ( deal.mode === "sell" ) return deal.stack;
+		if ( deal.unitBuy <= 0 ) return 0;
+		const most = BigInt( game?.progression?.gold ?? "0" ) / BigInt( deal.unitBuy );
+		return Number( most > BigInt( Number.MAX_SAFE_INTEGER ) ? BigInt( Number.MAX_SAFE_INTEGER ) : most );
+	}
+	/*
+	================
+	pickSpecialtyScale
+
+	CIFSpecialtyDeal_OnTradeScaleSelected (64A9E0): a TRADESCALE row sets the
+	quantity that purchase scale holds.
+	================
+	*/
+	function pickSpecialtyScale( row: number ) {
+		const deal = specialtyDealHud.state(), game = view?.gameplay;
+		specialtyCombo = false;
+		if ( !deal || deal.mode !== "buy" || deal.dealing ) return;
+		const inputs = specialtyInputs( game );
+		const quantity = tradeScaleQuantity( {
+			row,
+			basis: inputs.basis,
+			speed2: inputs.speed2,
+			unitBuy: deal.unitBuy,
+			maxStack: deal.stack,
+			capacity: inputs.capacity
+		} );
+		specialtyDealHud.type( String( quantity ), specialtyLimit( game ) );
+	}
+	/*
+	================
+	sendSpecialtyChunk
+
+	One CGInterface_RequestItemMove of the deal loop (64A660): the shop or
+	transport move of this many goods, through the same merchant command the
+	shop dialog sends.
+	================
+	*/
+	function sendSpecialtyChunk( quantity: number ) {
+		const deal = specialtyDealHud.state();
+		if ( deal && quantity > 0 ) sendGameplay( merchantCommand( deal.selection, quantity ) );
+	}
+	/*
+	================
+	confirmSpecialtyDeal
+
+	CIFSpecialtyDeal_OnConfirm (64A8F0): starts the loop from the transport's
+	stock; a purchase past one stack raises the "currently purchasing" notice.
+	================
+	*/
+	function confirmSpecialtyDeal() {
+		const deal = specialtyDealHud.state(), game = view?.gameplay;
+		if ( !deal || deal.dealing || !game?.shop || game.inventoryPending || game.target !== deal.selection.npc ) {
+			return;
+		}
+		const started = specialtyDealHud.confirm( specialtyStock( game ), uiNow );
+		specialtyCombo = false;
+		if ( !started ) return;
+		if ( started.progress ) hudMessages.append( hudCopy( "UIIT_MSG_SPECIALTY_ALLBUY_PROGRESS_WINDOW" ) );
+		sendSpecialtyChunk( started.chunk );
+	}
+	/*
+	================
+	specialtyInputs
+
+	The trade scale's inputs: the levelgold basis at the local level, the
+	transport's reference run speed and bag capacity. The client ships the
+	English text tables (type.txt Language = English), so the combo lists all
+	five TRADESCALE rows unless the shard rule says otherwise.
+	================
+	*/
+	function specialtyInputs( game: UiView["gameplay"] | undefined ) {
+		const deal = specialtyDealHud.state(), data = hud.data();
+		const record = deal ? game?.cosRecords?.find( r => r.gid === deal.cosGid ) : undefined;
+		const level = game?.progression?.level ?? 0;
+		return {
+			basis: tradeGoldBasis( data?.tradeGoldBases[level] ?? 0 ),
+			speed2: record ? data?.cosReferences.get( record.refObjId )?.speed2 ?? 0 : 0,
+			capacity: record?.status ?? 0,
+			rows: tradeScaleRows( NATIVE_LANGUAGE_ENGLISH, view?.session?.nativeServerName ),
+			gold: BigInt( game?.progression?.gold ?? "0" )
+		};
 	}
 	/*
 	================
@@ -3554,7 +3743,12 @@ export function createUi(
 			shopChoice = null;
 			shopDialog = false;
 		} else if ( id.startsWith( "shop-offer:" ) || id.startsWith( "shop-buyback:" ) ) {
-			if ( view.gameplay?.shop ) {
+			const offer = id.startsWith( "shop-offer:" ) ?
+				view.gameplay?.shop?.offers[Number( id.slice( 11 ) )] :
+				undefined;
+			if ( offer && view.gameplay?.shop?.cosGid && isTradeGoods( offer.items?.[0]?.typeFlags ?? 0 ) ) {
+				openSpecialtyPurchase( Number( id.slice( 11 ) ) );
+			} else if ( view.gameplay?.shop ) {
 				beginShopDialog(
 					merchantSelection(
 						id.startsWith( "shop-offer:" ) ? "buy" : "buyback",
@@ -4087,6 +4281,44 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			const specialtyDeal = specialtyDealHud.state();
+			if ( specialtyDeal !== null ) {
+				// CIFSpecialtyDeal: Esc or the frame's close leaves it unless a deal
+				// is running; Enter in the count edit confirms like OK (control 40).
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "specialty-deal-close"
+				) {
+					if ( !specialtyDeal.dealing ) specialtyDealHud.close();
+					specialtyCombo = false;
+					focus = null;
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === SPECIALTY_DEAL_COUNT ) {
+					specialtyDealHud.type( event.value, specialtyLimit( view?.gameplay ) );
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && event.id === "specialty-deal-scale" ) {
+					if ( specialtyDeal.mode === "buy" && !specialtyDeal.dealing ) specialtyCombo = !specialtyCombo;
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "activate" && event.id.startsWith( "specialty-deal-row:" ) ) {
+					pickSpecialtyScale( Number( event.id.slice( 19 ) ) );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing && focus === SPECIALTY_DEAL_COUNT ||
+					event.kind === "activate" && event.id === "specialty-deal-ok"
+				) {
+					confirmSpecialtyDeal();
+					dirty = true;
+					return;
+				}
 			}
 			const wholeChat = globalChatHud.state();
 			if ( wholeChat !== null ) {
@@ -6242,6 +6474,24 @@ export function createUi(
 			view = next;
 			probe?.detailBegin( "ui-assembly" );
 			uiNow = now;
+			const specialty = specialtyDealHud.state();
+			if ( specialty ) {
+				const shop = next.gameplay?.shop;
+				if ( !shop || shop.npc !== specialty.selection.npc || (shop.cosGid ?? 0) !== specialty.cosGid ) {
+					// The shop or its transport went away: nothing more can move.
+					specialtyDealHud.close();
+					specialtyCombo = false;
+				} else if ( specialty.dealing ) {
+					const chunk = specialtyDealHud.observe(
+						!!next.gameplay?.inventoryPending,
+						specialtyStock( next.gameplay ),
+						now
+					);
+					if ( chunk ) sendSpecialtyChunk( chunk );
+				}
+				// The loop and its 5000 ms timer advance on frames, not only on news.
+				dirty = true;
+			}
 			const phase = next.session?.phase ?? "signed-out";
 			if ( phase === "world" ) {
 				for ( const notice of next.gameplay?.notices ?? [] ) {
@@ -13045,6 +13295,109 @@ export function createUi(
 						}
 					}
 					endWindow( admission, "service:" + GLOBAL_CHAT_PANEL );
+				}
+				const specialtyDeal = specialtyDealHud.state();
+				if ( specialtyDeal && hudData?.windows.ifspecialtydeal && hudData.root.GDR_SPECIALTY_DEAL ) {
+					// CIFSpecialtyDeal (ginterface GDR_SPECIALTY_DEAL, resinfo ifspecialtydeal.txt).
+					const admission = beginWindow(),
+						root = hudData.root.GDR_SPECIALTY_DEAL,
+						layout = hudData.windows.ifspecialtydeal,
+						nodes = Object.values( layout ),
+						byId = ( id: number ) => nodes.find( n => n.id === id ),
+						[px, py] = windowOrigin( SPECIALTY_DEAL_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						buying = specialtyDeal.mode === "buy",
+						count = specialtyDealHud.count(),
+						inputs = specialtyInputs( game ),
+						// A sale's sum is the server's quote (the shop dialog's).
+						quote = buying ?
+							undefined :
+							merchantQuote(
+								specialtyDeal.selection,
+								game?.shop,
+								merchantRows( game ),
+								String( count ),
+								game?.progression?.gold
+							),
+						sums = dealSums( count, specialtyDeal.unitBuy, buying ? undefined : quote?.total ?? undefined ),
+						grouped = ( value: bigint | undefined ) =>
+							value === undefined ? "" : value.toLocaleString( "en-US" ),
+						grey: AuthoredControl["color"] = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ],
+						scaleRow = tradeScaleRow( tradeScale( sums.buy, inputs.basis, inputs.speed2 ), inputs.rows );
+					nativeFrame( root, px, py, hudCopy( root.text ), "specialty-deal-close" );
+					// 6492C0 greys the sale and profit labels while buying; 6496E0 greys
+					// the scale label while selling.
+					nativePage( layout, px, py, [ 18, 22, 23, 24, 30, 31, 32, 33, 34, 40 ] );
+					for ( const id of [ 22, 23, 24 ] ) {
+						const node = byId( id );
+						const dim = buying ? id !== 24 : id === 24;
+						if ( node ) authoredText( dim ? { ...node, color: grey } : node, px, py, hudCopy( node.text ) );
+					}
+					const name = byId( 18 ), edit = byId( 30 );
+					if ( name ) authoredText( name, px, py, specialtyDeal.name );
+					if ( edit ) {
+						partyEdit(
+							edit,
+							px,
+							py,
+							SPECIALTY_DEAL_COUNT,
+							specialtyDeal.dealing ?
+								String( specialtyDeal.dealing.target ) :
+								count ?
+								String( count ) :
+								"",
+							12
+						);
+					}
+					const buySum = byId( 31 ), profitSum = byId( 32 ), sellSum = byId( 33 );
+					if ( buySum ) authoredText( buySum, px, py, grouped( sums.buy ) );
+					if ( profitSum ) authoredText( profitSum, px, py, grouped( sums.profit ) );
+					if ( sellSum ) authoredText( sellSum, px, py, grouped( sums.sell ) );
+					const combo = byId( 34 );
+					if ( combo ) {
+						const r = authoredRect( combo, px, py );
+						comboBox(
+							r,
+							"specialty-deal-scale",
+							hudCopy( "UIIT_STT_TRADE_TRADESCALE" ),
+							buying ? hudCopy( "UIIT_STT_TRADE_TRADESCALE" + (scaleRow + 1) ) : "",
+							!buying || !!specialtyDeal.dealing
+						);
+						if ( specialtyCombo && buying ) {
+							const list: UiRect = [ r[0], r[1] + r[3], r[2], inputs.rows * 18 ];
+							rect( list, [ 0, 0, 0, 1 ] );
+							blocks.push( list );
+							for ( let row = 0; row < inputs.rows; row++ ) {
+								const entry: UiRect = [ list[0], list[1] + row * 18, list[2], 18 ];
+								const label = hudCopy( "UIIT_STT_TRADE_TRADESCALE" + (row + 1) );
+								quads.push(
+									...text.quads( label, [ entry[0] + 4, entry[1], entry[2] - 8, 18 ], entry, white )
+								);
+								controls.push( {
+									id: "specialty-deal-row:" + row,
+									label,
+									rect: entry,
+									kind: "button"
+								} );
+							}
+						}
+					}
+					const ok = byId( 40 );
+					if ( ok ) {
+						authoredLabeledButton(
+							ok,
+							px,
+							py,
+							"specialty-deal-ok",
+							hudCopy( ok.text ),
+							count === 0 || !!specialtyDeal.dealing || !!game?.inventoryPending
+						);
+					}
+					endWindow( admission, "service:" + SPECIALTY_DEAL_PANEL );
 				}
 				if ( (panel === "COS inventory" || panel === "Shop" && game?.shop?.cosGid) && hudData ) {
 					const admission = beginWindow(),

@@ -69,6 +69,10 @@ export interface CosReference {
 	readonly parry: number;
 	readonly hit: number;
 	readonly skills: readonly number[];
+	// RefObjCommon +0x104 Speed2, the run speed the trade scale reads (649050).
+	// The catalogue always fills it (0 for a row without one); a reference
+	// built elsewhere may leave it out.
+	readonly speed2?: number;
 }
 
 /*
@@ -375,15 +379,20 @@ export function cosInfoSections( cls: number ) {
 decodeCosReferences
 
 /assets/data/cosPresentation.json (buildCosPresentationAsset.mjs):
-refObjId -> [icon, maxHp, rideable]. Malformed rows reject the catalog.
+refObjId -> [icon, maxHp, rideable, physicalDefence, magicalDefence, parry,
+hit, skills], and a refObjId -> speed2 map beside the rows (0 when a row
+has none: no trade scale). Malformed rows reject the catalog.
 ================
 */
 export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosReference> {
-	const value = raw as { format?: unknown; rows?: unknown; };
+	const value = raw as { format?: unknown; rows?: unknown; speed2?: unknown; };
 	if ( value?.format !== "sro-cos-presentation" || !value.rows || typeof value.rows !== "object" ) {
 		throw Error( "Invalid COS presentation catalog" );
 	}
 	const references = new Map<number, CosReference>();
+	const speeds = value.speed2 && typeof value.speed2 === "object" ?
+		value.speed2 as Record<string, unknown> :
+		undefined;
 	for ( const [key, row] of Object.entries( value.rows as Record<string, unknown> ) ) {
 		const id = Number( key );
 		if (
@@ -392,6 +401,10 @@ export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosRefe
 			typeof row[2] !== "boolean" || !row.slice( 3, 7 ).every( Number.isSafeInteger ) ||
 			!Array.isArray( row[7] ) || !row[7].every( skill => Number.isSafeInteger( skill ) && skill > 0 )
 		) throw Error( "Invalid COS presentation row " + key );
+		const speed = speeds?.[key];
+		if ( speed !== undefined && !(Number.isSafeInteger( speed ) && (speed as number) >= 0) ) {
+			throw Error( "Invalid COS presentation speed " + key );
+		}
 		references.set( id, {
 			icon: row[0],
 			maxHp: row[1],
@@ -400,7 +413,8 @@ export function decodeCosReferences( raw: unknown ): ReadonlyMap<number, CosRefe
 			magicalDefence: row[4],
 			parry: row[5],
 			hit: row[6],
-			skills: row[7]
+			skills: row[7],
+			speed2: (speed as number | undefined) ?? 0
 		} );
 	}
 	return references;
