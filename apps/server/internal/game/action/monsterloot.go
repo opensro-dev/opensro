@@ -308,7 +308,7 @@ func (rt *Runtime) prepareEquipmentDrop(
 	if err != nil {
 		return grounditem.Item{}, false
 	}
-	rare := rarityRoll%1000 == 1
+	rare := rareEquipmentRoll(rarityRoll, rt.RareRate)
 	_, _, attempts := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
 	for attempt := 0; attempt < attempts; attempt++ {
 		if item, ok := rt.prepareEquipmentDropKind(monster, at, droppedBy, now, rare); ok {
@@ -316,6 +316,23 @@ func (rt *Runtime) prepareEquipmentDrop(
 		}
 	}
 	return grounditem.Item{}, false
+}
+
+// rareEquipmentDomain is the native rare roll's modulus: rand() % 1000 == 1.
+const rareEquipmentDomain = 1000
+
+/*
+================
+rareEquipmentRoll
+
+Native: one rand() % 1000 == 1. The beta rate (port-only, not native) admits
+the residues 1..rate instead, from the same single roll, so the RNG order is
+unchanged and a rate of 0 or 1 is exactly native.
+================
+*/
+func rareEquipmentRoll(roll uint32, rate int) bool {
+	residue := int(roll % rareEquipmentDomain)
+	return residue >= 1 && residue <= max(rate, 1)
 }
 
 /*

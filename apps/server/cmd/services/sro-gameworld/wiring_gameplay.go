@@ -473,9 +473,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	}
 	stats.Growth = progression.BetaGrowthFromEnv()
 	if stats.Growth.Enabled {
-		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d, gold x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.GoldRate)
+		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d, gold x%d, rare (SoX) x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.GoldRate, stats.Growth.RareRate)
 		game.items.DropPassRate = stats.Growth.DropRate
 		game.items.GoldRate = stats.Growth.GoldRate
+		game.items.RareRate = stats.Growth.RareRate
 		game.items.PartyShareFloor = true
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()

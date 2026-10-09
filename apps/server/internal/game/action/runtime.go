@@ -260,6 +260,10 @@ type Runtime struct {
 	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
 	GoldRate int
 
+	// RareRate multiplies the chance that an equipment drop is rare (SoX).
+	// 0 or 1 is native; the closed-beta growth switch raises it.
+	RareRate int
+
 	// PartyShareFloor raises every party member's EXP share to at least an
 	// even split (partyRewardFactors). Off is native; the closed-beta growth
 	// switch turns it on.

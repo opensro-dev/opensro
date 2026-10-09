@@ -27,7 +27,9 @@ Drops: a kill rolls its drop passes DropRate times over (each pass rolls
 gold, equipment and consumables), still bounded by the monster's native
 drop capacity, so more and richer loot falls without inventing items. Every
 gold heap is GoldRate times its native amount, because levelling at the
-compressed pace outruns native gold income for gear.
+compressed pace outruns native gold income for gear. An equipment drop is
+rare (Seal of Star/Moon/Sun) RareRate times as often: the native single roll
+admits the residues 1..RareRate of 1000 instead of 1 alone.
 
 ===========================================================================
 */
@@ -53,6 +55,9 @@ const EnvBetaDropRate = "SRO_BETA_DROP_RATE"
 // EnvBetaGoldRate overrides the beta gold-heap multiplier.
 const EnvBetaGoldRate = "SRO_BETA_GOLD_RATE"
 
+// EnvBetaRareRate overrides the beta rare-equipment (SoX) multiplier.
+const EnvBetaRareRate = "SRO_BETA_RARE_RATE"
+
 // BetaReferenceLevel is the level whose kill pace every level is held to.
 const BetaReferenceLevel = 1
 
@@ -71,6 +76,12 @@ const betaGoldRateDefault = 50
 // maxBetaGoldRate bounds an operator override; heaps also clamp to a dword.
 const maxBetaGoldRate = 10_000
 
+// betaRareRateDefault makes a rare (SoX) equipment drop five times as likely.
+const betaRareRateDefault = 5
+
+// maxBetaRareRate bounds an operator override to the native roll's domain.
+const maxBetaRareRate = 1000
+
 /*
 ================
 GrowthRates
@@ -83,6 +94,7 @@ type GrowthRates struct {
 	SkillExpRate int64
 	DropRate     int
 	GoldRate     int
+	RareRate     int
 }
 
 /*
@@ -101,6 +113,7 @@ func BetaGrowthFromEnv() GrowthRates {
 		SkillExpRate: betaSkillExpRateDefault,
 		DropRate:     betaDropRateDefault,
 		GoldRate:     betaGoldRateDefault,
+		RareRate:     betaRareRateDefault,
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaSkillExpRate)); text != "" {
 		if n, err := strconv.ParseInt(text, 10, 64); err == nil && n >= 1 {
@@ -115,6 +128,11 @@ func BetaGrowthFromEnv() GrowthRates {
 	if text := strings.TrimSpace(os.Getenv(EnvBetaGoldRate)); text != "" {
 		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaGoldRate {
 			rates.GoldRate = n
+		}
+	}
+	if text := strings.TrimSpace(os.Getenv(EnvBetaRareRate)); text != "" {
+		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaRareRate {
+			rates.RareRate = n
 		}
 	}
 	return rates

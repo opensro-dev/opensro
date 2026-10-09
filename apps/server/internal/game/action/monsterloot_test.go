@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -192,6 +193,33 @@ func TestBetaGoldRateScalesTheNativeHeapWithoutExtraDraws(t *testing.T) {
 	rt.DropRoll = dropRollSequence(0, 0)
 	if amount, ok := rt.rollMonsterGoldAmount(target); !ok || amount != math.MaxInt32 {
 		t.Fatalf("oversized beta heap = %d/%v, want the dword clamp", amount, ok)
+	}
+}
+
+/*
+================
+TestBetaRareRateWidensTheNativeRareResidues
+
+Native admits residue 1 alone; rate 5 admits 1..5 of every 1000 rolls, never
+residue 0, from the same single roll.
+================
+*/
+func TestBetaRareRateWidensTheNativeRareResidues(t *testing.T) {
+	count := func(rate int) (admitted []uint32) {
+		for roll := uint32(0); roll < 2000; roll++ {
+			if rareEquipmentRoll(roll, rate) {
+				admitted = append(admitted, roll)
+			}
+		}
+		return admitted
+	}
+	for _, rate := range []int{0, 1} {
+		if got := count(rate); !slices.Equal(got, []uint32{1, 1001}) {
+			t.Fatalf("rate %d admitted %v, want the native residue 1", rate, got)
+		}
+	}
+	if got := count(5); !slices.Equal(got, []uint32{1, 2, 3, 4, 5, 1001, 1002, 1003, 1004, 1005}) {
+		t.Fatalf("rate 5 admitted %v", got)
 	}
 }
 

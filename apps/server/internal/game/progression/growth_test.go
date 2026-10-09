@@ -89,7 +89,7 @@ func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 	t.Setenv(EnvBetaGrowth, "on")
 	t.Setenv(EnvBetaSkillExpRate, "25")
 	if rates := BetaGrowthFromEnv(); !rates.Enabled || rates.SkillExpRate != 25 || rates.DropRate != betaDropRateDefault ||
-		rates.GoldRate != betaGoldRateDefault {
+		rates.GoldRate != betaGoldRateDefault || rates.RareRate != betaRareRateDefault {
 		t.Fatalf("beta switch = %+v", rates)
 	}
 	t.Setenv(EnvBetaDropRate, "8")
@@ -110,6 +110,16 @@ func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 		t.Setenv(EnvBetaGoldRate, bad)
 		if rates := BetaGrowthFromEnv(); rates.GoldRate != betaGoldRateDefault {
 			t.Fatalf("gold override %q = %+v", bad, rates)
+		}
+	}
+	t.Setenv(EnvBetaRareRate, "10")
+	if rates := BetaGrowthFromEnv(); rates.RareRate != 10 {
+		t.Fatalf("rare override = %+v", rates)
+	}
+	for _, bad := range []string{"0", "-3", "1001", "x"} {
+		t.Setenv(EnvBetaRareRate, bad)
+		if rates := BetaGrowthFromEnv(); rates.RareRate != betaRareRateDefault {
+			t.Fatalf("rare override %q = %+v", bad, rates)
 		}
 	}
 }
