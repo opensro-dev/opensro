@@ -11,14 +11,16 @@ entry also creates the wallet with betaSilkStarter, once per account (the
 wallet row is the persisted marker).
 
 Credited silk is REAL: it survives restarts and deploys, and switching the
-beta off stops new credits but does not take earned silk back. A launch must
-wipe beta accounts or zero their silk (an owner decision).
+beta off stops new credits but does not take earned silk back. The official
+launch runs on a separate shard, so beta silk never reaches it (owner,
+2026-10-10).
 
 The hour clock counts world-ready time only (sessions in the world tick, not
 the title screen or character select) and lives in this process, so a
 restart loses uncredited progress, including a failed credit awaiting retry;
-it never credits the same completed payment twice. A credit pushes the new balance to the player's
-session (MALL_BALANCE_CONTROL), so an open mall shows it at once.
+it never credits the same completed payment twice. A credit pushes the new
+balance to the player's session (MALL_BALANCE_CONTROL), so an open mall
+shows it at once.
 
 ===========================================================================
 */
