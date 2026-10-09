@@ -155,6 +155,7 @@ import {
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createGlobalChatHud } from "./hud/global-chat-hud";
+import { createReverseReturnHud } from "./hud/reverse-return-hud";
 import { GLOBAL_CHAT_MAX_LENGTH, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
@@ -755,6 +756,7 @@ export function createUi(
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
 	const globalChatHud = createGlobalChatHud();
+	const reverseScrollHud = createReverseReturnHud();
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
 	const fortressScheduleHud = createFortressScheduleHud();
@@ -922,8 +924,6 @@ export function createUi(
 	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
 	// both move it; the release or the next press places it.
 	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
-	// The bag slot whose reverse return scroll waits in its choice box.
-	let reverseScrollSlot: number | null = null;
 	/*
 	================
 	carriedRow
@@ -1580,7 +1580,8 @@ export function createUi(
 			// 6971B0 case 0x1E: the reverse return scroll asks for its point
 			// first; the row's pick runs the use with that byte.
 			if ( item && isReverseReturnScroll( item.typeFlags ) && command.reverseChoice === undefined ) {
-				reverseScrollSlot = item.slot;
+				if ( !view?.gameplay?.localGid || view.gameplay.inventoryPending || view.travel ) return;
+				reverseScrollHud.open( item, view.gameplay.localGid );
 				dirty = true;
 				return;
 			}
@@ -3169,13 +3170,12 @@ export function createUi(
 		} else if ( id.startsWith( "premium-reverse:" ) ) {
 			sendGameplay( { kind: "premium-command", command: "reverse-return", choice: Number( id.slice( 16 ) ) } );
 		} else if ( id === "premium-reverse-cancel" ) sendGameplay( { kind: "premium-command-cancel" } );
-		else if ( id.startsWith( "reverse-scroll:" ) && reverseScrollSlot !== null ) {
-			const slot = reverseScrollSlot;
-			reverseScrollSlot = null;
-			sendGameplay( { kind: "item-use", slot, reverseChoice: Number( id.slice( "reverse-scroll:".length ) ) } );
+		else if ( id.startsWith( "reverse-scroll:" ) ) {
+			const command = reverseScrollHud.choose( Number( id.slice( "reverse-scroll:".length ) ), view );
+			if ( command ) sendGameplay( command );
 			dirty = true;
 		} else if ( id === "reverse-scroll-cancel" ) {
-			reverseScrollSlot = null;
+			reverseScrollHud.close();
 			dirty = true;
 		} else if ( id.startsWith( "count-job:" ) ) {
 			// 6E2840: a package slot (kind 5) opens its package window.
@@ -3877,9 +3877,18 @@ export function createUi(
 					event.kind === "drag-end" || event.kind === "edit"
 				) return;
 			}
-			if ( reverseScrollSlot !== null && event.kind === "key" && event.code === "Escape" ) {
-				reverseScrollSlot = null;
-				dirty = true;
+			if ( reverseScrollHud.reconcile( view ) ) dirty = true;
+			if ( reverseScrollHud.active() ) {
+				if ( event.kind === "key" && event.code === "Escape" ) {
+					reverseScrollHud.close();
+					dirty = true;
+				} else if (
+					event.kind === "activate" &&
+					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-cancel" ].includes( event.id )
+				) {
+					activate( event.id );
+				}
+				// Message box 0x1E owns input until a destination or Cancel wins.
 				return;
 			}
 			if ( shopWarning ) {
@@ -5871,6 +5880,7 @@ export function createUi(
 		================
 		*/
 		step( next: UiView, now = 0, probe?: UiFrameProbe ): UiSemantics | null {
+			if ( reverseScrollHud.reconcile( next ) ) dirty = true;
 			quickslotTime = next.simulationTimeMs ?? now;
 			if (
 				cosHud.reconcileClock(
@@ -11685,13 +11695,6 @@ export function createUi(
 					);
 					endWindow( admission, "composite-item" );
 				}
-				// The scroll's box closes when its slot no longer holds the scroll.
-				if (
-					reverseScrollSlot !== null &&
-					!game?.inventory.some( row =>
-						row.slot === reverseScrollSlot && isReverseReturnScroll( row.typeFlags )
-					)
-				) reverseScrollSlot = null;
 				// 6AD990's type 0x24 confirm box and the scroll's box 0x1E (6971B0)
 				// share the layout: the reverse return's two points and Cancel.
 				const reverseBox = game?.reverseReturnChoice ?
@@ -11700,7 +11703,7 @@ export function createUi(
 						prefix: "premium-reverse:",
 						cancel: "premium-reverse-cancel"
 					} :
-					reverseScrollSlot !== null ?
+					reverseScrollHud.active() ?
 					{
 						title: "UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_REVERSE_PORTAL",
 						prefix: "reverse-scroll:",

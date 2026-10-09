@@ -26,8 +26,9 @@ point. 755E40 (type 4 = 3) starts the cast as a return scroll's.
 CGItemExpendable_UseReverseReturnScroll (v1.188 4A00C0) reads the byte: the
 shared return admissions, the recorded point (0x1885 / 0x1886 when absent),
 the timed cast, and the answer on the item-use channel (0xB5BD with the
-scroll's slot, category-1 notice 390). v1.188's choice 7 (a saved point
-and its u32) has no v1.150 sender and is refused.
+scroll's slot, category-1 notice 390). The v1.150 dialog sends only 2 and
+3; this path does not encode the saved-point u32 required by v1.188's
+choice 7, which is refused.
 
 INFERENCE: a teleport gate also lists the rows while the player holds a
 scroll, and the click runs the same scroll rule.
@@ -69,6 +70,10 @@ const (
 	// The low bytes of 4A00C0's 0x1885 and 0x1886.
 	errCodeNoRecallPoint uint8 = 0x85
 	errCodeNoDeathPoint  uint8 = 0x86
+	// 4A00D6..4A0102 and 4A02CE..4A030C: reverse-scroll world restrictions.
+	errCodeReverseWorld uint8 = 0xf5
+	errCodeReverseJob   uint8 = 0xe9
+	errCodeReverseWar   uint8 = 0xf2
 )
 
 /*
@@ -241,6 +246,11 @@ The caller holds the character's update.
 ================
 */
 func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, choice uint8, now int64, result *OpResult) bool {
+	// 5F85A0 requires the current world's reference type (+0x20) to be zero.
+	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); !ok || here.NativeType != 0 {
+		*result = itemUseFailure(errCodeReverseWorld)
+		return false
+	}
 	if choice != reverseReturnLastRecall && choice != reverseReturnLastDeath {
 		return false
 	}
@@ -252,6 +262,18 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 	if refusal != 0 {
 		*result = itemUseFailure(refusal)
 		return false
+	}
+	// Reverse return has its own siege admission, not the gate's guild or
+	// population rules. Job mode is refused before active-war mode (4A02CE).
+	if world, ok := instance.Lookup(destination.world.Definition()); ok && world.Siege() {
+		if rt.jobDressed(c) {
+			*result = itemUseFailure(errCodeReverseJob)
+			return false
+		}
+		if rt.Fortresses != nil && rt.Fortresses.WarActive(division) {
+			*result = itemUseFailure(errCodeReverseWar)
+			return false
+		}
 	}
 	return rt.startReturnCast(returnCast{division: division, character: c, row: row,
 		slot: uint8(c.MissionInventory[row].Slot), typeWord: ref.TypeFlags(), duration: duration,

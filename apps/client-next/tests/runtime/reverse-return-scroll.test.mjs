@@ -89,7 +89,7 @@ test("cancel and Escape close the box without a use", () => {
 		f.ui.step( f.state, 1500 );
 		f.ui.event( { kind: "key", code: "Escape" } );
 		assert.deepEqual( boxIds( f.ui.step( f.state, 1600 ) ), [] );
-		assert.equal( sent.length, 0 );
+		assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
 	} finally {
 		f.dispose();
 	}
@@ -120,3 +120,59 @@ test("the worker sends the point as the byte after the type word", () => {
 	} ] );
 	gameplay.dispose();
 });
+
+test("right-click opens a modal choice without toggling the inventory behind it", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		assert.equal( boxIds( f.ui.step( f.state, 1300 ) ).length, 3 );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-cancel" } );
+		assert.ok( f.ui.step( f.state, 1400 ).controls.some( c => c.id === "slot:13" ) );
+		assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("a choice cannot survive leaving the world and reopening the same inventory", () => {
+	const sent = [], f = open( sent );
+	try {
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		f.ui.step( f.state, 1300 );
+		const session = f.state.session;
+		f.state.session = { ...session, phase: "signed-out" };
+		f.ui.step( f.state, 1400 );
+		f.state.session = session;
+		assert.deepEqual( boxIds( f.ui.step( f.state, 1500 ) ), [] );
+		assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
+	} finally {
+		f.dispose();
+	}
+});
+
+for ( const change of [ "replacement", "travel", "character", "pending" ] ) {
+	test(`the pending choice is discarded on ${change}`, () => {
+		const sent = [], f = open( sent );
+		try {
+			f.ui.event( { kind: "right-activate", id: "slot:13" } );
+			f.ui.step( f.state, 1300 );
+			const game = f.state.gameplay;
+			if ( change === "replacement" ) {
+				f.state.gameplay = {
+					...game,
+					inventory: game.inventory.map( row => ({ ...row, refObjId: row.refObjId + 1 }) )
+				};
+			}
+			if ( change === "character" ) f.state.gameplay = { ...game, localGid: game.localGid + 1 };
+			if ( change === "pending" ) f.state.gameplay = { ...game, inventoryPending: true };
+			if ( change === "travel" ) f.state = { ...f.state, travel: { mode: 1, region: 257 } };
+			f.ui.step( f.state, 1400 );
+			f.state = { ...f.state, travel: null, gameplay: game };
+			assert.deepEqual( boxIds( f.ui.step( f.state, 1500 ) ), [] );
+			assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
+		} finally {
+			f.dispose();
+		}
+	});
+}
