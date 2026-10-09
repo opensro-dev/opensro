@@ -293,6 +293,25 @@ test("an open NPC function blocks world-click movement until the window closes",
 	}
 });
 
+test("an open alchemy window blocks world-click movement until it closes", () => {
+	// 67D090 refuses the click while the alchemy box exists (67D0A3), not
+	// only under the NPC interaction lock.
+	const f = fixture();
+	const move = now =>
+		f.game.command( { kind: "move", destination: { regionId: 1, x: 600, y: 0, z: 0, angle: 0 } }, now, undefined );
+	try {
+		f.game.command( { kind: "navigation", regionId: 1, bundle: navigation() }, 0, undefined );
+		f.game.command( { kind: "alchemy-open" }, 1, undefined );
+		const before = f.sent.length;
+		assert.equal( move( 2 ), null, "a click is ignored while the alchemy box is open" );
+		assert.equal( f.sent.length, before );
+		f.game.command( { kind: "alchemy-close" }, 3, undefined );
+		assert.equal( move( 4 )?.opcode, MOVEMENT_REQUEST, "the closed window lets the player walk" );
+	} finally {
+		f.game.dispose();
+	}
+});
+
 test("close and release barrier retire a conversation before the same NPC opens again", () => {
 	for ( const close of [ "npc-close", "release-target" ] ) {
 		const f = fixture();

@@ -631,6 +631,19 @@ stallPhase
 		},
 		/*
 ================
+interactionWindowOpen
+
+The windows CGInterface_IsInteractionBlocked (67D090) tests after the NPC
+lock: the alchemy box (67D0A3), a visible stall control for its owner or a
+visitor (67D0AE), the gacha machine (67D0CB) and the stall network (67D0D6).
+================
+		*/
+		interactionWindowOpen() {
+			return alchemy.state().visible || gacha.state().visible || stall.phase === "owner" ||
+				stall.phase === "visitor" || stall.network.open;
+		},
+		/*
+================
 stallCommand
 ================
 		*/

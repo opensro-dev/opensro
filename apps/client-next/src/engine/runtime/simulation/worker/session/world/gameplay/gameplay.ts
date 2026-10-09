@@ -489,6 +489,20 @@ would turn it.
 	}
 	/*
 ================
+interactionBlocked
+
+CGInterface_IsInteractionBlocked (67D090). Its last test is CIFDelayInfo
++0x36C, which StartDelay (6B14E0) raises only for delay kinds 1, 3 and 4.
+Of the rows ported, the repair kit's kind-4 row raises it; the return
+scroll's kind-0 row does not.
+================
+	*/
+	function interactionBlocked() {
+		return npcConversation.interactionLocked() || inventory.interactionWindowOpen() ||
+			returnScroll?.skillId !== undefined;
+	}
+	/*
+================
 cancelActionForMovement
 
 Cancel continuation before waiting on presentation. Otherwise a new basic
@@ -1443,10 +1457,11 @@ state here before a command can claim a native wire conversation.
 				[ "move", "ground-move", "attack", "skill", "pickup", "cos-attack" ].includes( command.kind )
 			) return null;
 			// 698740 opens with CGInterface_IsInteractionBlocked (67D090): while an NPC
-			// talk, shop or storage holds the interaction lock (+0x4F4), a world click
-			// neither walks, attacks nor picks up. The window closes first.
+			// talk, shop or storage holds the interaction lock (+0x4F4), an alchemy,
+			// stall, gacha or stall-network window is open, or a delay row that locks
+			// input runs, a world click neither walks, attacks nor picks up.
 			if (
-				npcConversation.interactionLocked() &&
+				interactionBlocked() &&
 				[ "move", "ground-move", "attack", "pickup", "cos-attack" ].includes( command.kind )
 			) return null;
 			// 6932D7..69338D: a ground click cancels a running action and a
