@@ -127,7 +127,8 @@ func TestCapKillDropsIsUniform(t *testing.T) {
 TestCapKillDropsRejectsBiasedRolls
 
 A 3-way choice accepts rolls below 32766 only; 32766 and 32767 are drawn
-again. A failed or out-of-domain roll fails the plan.
+again. A failed or out-of-domain roll fails the plan, and so does a source
+that keeps landing in the rejected range (it must not spin forever).
 ================
 */
 func TestCapKillDropsRejectsBiasedRolls(t *testing.T) {
@@ -152,6 +153,10 @@ func TestCapKillDropsRejectsBiasedRolls(t *testing.T) {
 	}
 	if _, ok := capKillDrops(planned, 0, 1, nil); ok {
 		t.Fatal("a missing roll was accepted")
+	}
+	stuck := 0
+	if _, ok := capKillDrops(planned, 0, 1, func() (uint32, error) { stuck++; return 32767, nil }); ok || stuck != maxCapRejections {
+		t.Fatalf("a source stuck in the rejected range: ok=%v draws=%d", ok, stuck)
 	}
 }
 

@@ -492,6 +492,12 @@ func (rt *Runtime) planMonsterKillLoot(
 // dropRollDomain is DropRoll's range: 0..32767, as combat.Roll32767.
 const dropRollDomain = 32768
 
+// maxCapRejections bounds the redraws of one cap index. A draw is rejected
+// with probability below n/32768 (under 0.5% at a 160-item kill), so a real
+// source never comes near it; a constant or broken one fails the plan
+// instead of spinning the game tick.
+const maxCapRejections = 64
+
 /*
 ================
 capKillDrops
@@ -503,7 +509,8 @@ the rest a uniform random subset of dropCap survives, in planned order, so
 no item family is favoured by the planner's fill order. A partial
 Fisher-Yates draws each index by rejection sampling on the 15-bit roll, so
 no index is likelier than another. 0 keeps every item. False when a roll
-fails or leaves its domain, as the planner's other rolls do.
+fails or leaves its domain, as the planner's other rolls do, or when one
+index is rejected maxCapRejections times in a row.
 ================
 */
 func capKillDrops(prepared []grounditem.Item, uniqueRound, dropCap int, roll func() (uint32, error)) ([]grounditem.Item, bool) {
@@ -525,16 +532,16 @@ func capKillDrops(prepared []grounditem.Item, uniqueRound, dropCap int, roll fun
 	for k := 0; k < dropCap; k++ {
 		n := uint32(len(ordinary) - k)
 		limit := dropRollDomain - dropRollDomain%n
-		var r uint32
-		for {
+		r, drawn := uint32(0), false
+		for attempt := 0; attempt < maxCapRejections && !drawn; attempt++ {
 			value, err := roll()
 			if err != nil || value >= dropRollDomain {
 				return nil, false
 			}
-			if value < limit {
-				r = value
-				break
-			}
+			r, drawn = value, value < limit
+		}
+		if !drawn {
+			return nil, false
 		}
 		j := k + int(r%n)
 		ordinary[k], ordinary[j] = ordinary[j], ordinary[k]
