@@ -439,7 +439,12 @@ import {
 	type MapMarker,
 	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
-import { experienceReadout, minimapCoordinates, minimapRotation } from "@/engine/foundation/ui/hud-readouts";
+import {
+	experienceReadout,
+	minimapCoordinates,
+	minimapRotation,
+	skillPointReadouts
+} from "@/engine/foundation/ui/hud-readouts";
 import { tooltipBubble, hudTooltipKey } from "@/engine/foundation/ui/helper-bubble";
 import { playerAbilityValues } from "@/engine/foundation/gameplay/player-stats";
 import { academyLayout } from "@/engine/foundation/ui/academy-layout";
@@ -8634,7 +8639,15 @@ export function createUi(
 							);
 						}
 						if ( game?.progression?.skillPoints !== undefined ) {
-							authoredText( bar.GDR_STATIC_SP!, barX, barY, String( game.progression.skillPoints ) );
+							const node = bar.GDR_STATIC_SP!, room = authoredClientRect( node, barX, barY )[2];
+							const readouts = skillPointReadouts( game.progression.skillPoints );
+							authoredText(
+								node,
+								barX,
+								barY,
+								readouts.find( value => text.run( value, 0, node.fontIndex ).width <= room ) ??
+									readouts.at( -1 )!
+							);
 						}
 					} );
 				}

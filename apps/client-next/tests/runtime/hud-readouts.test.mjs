@@ -19,7 +19,9 @@ async function load( file ) {
 	return import( sourceFileUrl( path.join( root, "src/engine", file + ".ts" ) ).href );
 }
 const { bootstrapProgression, progressionPacket } = await load( "foundation/gameplay/progression" );
-const { experienceReadout, minimapCoordinates, minimapRotation } = await load( "foundation/ui/hud-readouts" );
+const { experienceReadout, minimapCoordinates, minimapRotation, skillPointReadouts } = await load(
+	"foundation/ui/hud-readouts"
+);
 const { movementHeading } = await load( "foundation/gameplay/native-movement" );
 const { feedbackLevels } = await load( "foundation/gameplay/feedback-levels" );
 const { worldMapQuads, worldMapPageAt } = await load( "foundation/ui/world-map" );
@@ -126,4 +128,14 @@ test("minimap and full-map arrows face movement across all quadrants and sector 
 		assert.equal( arrow.rotation, rotation );
 	}
 	assert.ok( Math.abs( Math.cos( minimapRotation( 65535 ) ) - 1 ) < 1e-12, "wrapped zero faces east" );
+});
+
+test("the underbar skill points stay inside GDR_STATIC_SP: native %d first, then whole units", () => {
+	assert.deepEqual( skillPointReadouts( 12345678 ), [ "12345678", "12345K", "12M", "0B" ] );
+	assert.deepEqual( skillPointReadouts( 98765432109 ), [ "98765432109", "98765432K", "98765M", "98B" ] );
+	// The HUD draws the first that fits GDR_STATIC_SP (48 pixels, 6-pixel digits).
+	const fits = value => value.length * 6 <= 48;
+	assert.equal( skillPointReadouts( 12345678 ).find( fits ), "12345678" );
+	assert.equal( skillPointReadouts( 123456789 ).find( fits ), "123456K" );
+	assert.equal( skillPointReadouts( 98765432109 ).find( fits ), "98765M" );
 });
