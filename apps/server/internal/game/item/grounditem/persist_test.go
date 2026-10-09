@@ -150,16 +150,41 @@ func TestRestoreGuardsCounterAgainstStaleValue(t *testing.T) {
 	}
 }
 
-func TestAddRefusesExhaustedGroundIdentitySpace(t *testing.T) {
+// The beta server exhausted the band in one process lifetime (gidCounter
+// 99999) and every later drop was refused: the cursor wraps instead, past
+// any id a division still holds.
+func TestAddWrapsPastLiveIdsAtTheBandEnd(t *testing.T) {
 	registry := NewRegistry()
 	registry.Restore(domain.GroundSnapshot{
 		Version:    domain.GroundSnapshotVersion,
 		GidCounter: domain.MaxGroundItemGIDCounter,
+		Divisions: map[string][]domain.GroundItemRecord{
+			"global-official": {{Gid: GidBase + 1, RefObjID: 1, TypeFlags: 0x08AC, RegionID: 1}},
+			"other":           {{Gid: GidBase + 2, RefObjID: 1, TypeFlags: 0x08AC, RegionID: 1}},
+		},
 	})
-	if added := registry.Add("global-official", Item{RefObjID: 1}); added.Gid != 0 {
-		t.Fatalf("exhausted registry allocated wrapped gid %d", added.Gid)
+	added := registry.Add("global-official", Item{RefObjID: 3})
+	if added.Gid != GidBase+3 {
+		t.Fatalf("wrapped gid = %d, want %d (past the ids both divisions still hold)", added.Gid, GidBase+3)
 	}
-	if snapshot := registry.Snapshot(); snapshot.GidCounter != domain.MaxGroundItemGIDCounter || snapshot.ItemCount() != 0 {
-		t.Fatalf("exhaustion refusal mutated registry: %+v", snapshot)
+	if snapshot := registry.Snapshot(); snapshot.GidCounter != 3 {
+		t.Fatalf("cursor = %d, want 3", snapshot.GidCounter)
+	}
+}
+
+func TestAddRefusesABandFullOfLiveDrops(t *testing.T) {
+	registry := NewRegistry()
+	for range domain.MaxGroundItemGIDCounter {
+		if added := registry.Add("global-official", Item{RefObjID: 1}); added.Gid == 0 {
+			t.Fatal("a free id was refused")
+		}
+	}
+	if added := registry.Add("global-official", Item{RefObjID: 1}); added.Gid != 0 {
+		t.Fatalf("a full band allocated gid %d, which a live drop already holds", added.Gid)
+	}
+	removed := registry.All("global-official")[0]
+	registry.Remove("global-official", removed.Gid)
+	if added := registry.Add("global-official", Item{RefObjID: 1}); added.Gid != removed.Gid {
+		t.Fatalf("gid = %d, want the freed %d", added.Gid, removed.Gid)
 	}
 }

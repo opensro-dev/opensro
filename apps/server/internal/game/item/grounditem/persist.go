@@ -139,9 +139,8 @@ func (r *Registry) snapshotLocked() domain.GroundSnapshot {
 // Restore replaces the registry's contents with the snapshot's: items come
 // back with their ORIGINAL drop timestamps (the TTL continues across a
 // restart as if it never happened) and the gid counter resumes where it
-// left off. As a guard against a stale counter in a hand-edited file, the
-// counter is bumped past every restored gid - a live gid must never be
-// handed to a second drop. Boot rehydration is not a mutation: nothing
+// left off, moved past every restored gid. Add never hands out a gid a
+// division still holds (nextFreeSlot), whatever the counter says. Boot rehydration is not a mutation: nothing
 // is committed by a Restore.
 /*
 ================

@@ -218,18 +218,58 @@ func (r *Registry) Add(divisionID string, item Item) Item {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.counter >= domain.MaxGroundItemGIDCounter {
+	slot, ok := r.nextFreeSlot()
+	if !ok {
 		return Item{}
 	}
-	r.counter++
+	r.counter = slot
 	r.revision++
-	item.Gid = GidBase + r.counter
+	item.Gid = GidBase + slot
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
 	r.division(divisionID)[item.Gid] = item
 	item.MagicOptions = append([]uint64(nil), item.MagicOptions...)
 	item.Summon = domain.CloneCOS(item.Summon)
 	return item
+}
+
+/*
+================
+nextFreeSlot
+
+The ground band holds MaxGroundItemGIDCounter ids and a beta server drops
+far more items than that between restarts, so the cursor wraps: the
+original server likewise recycles object ids once their objects are gone.
+An id is reused only when no division still holds it, so a client can never
+see a live drop's id handed to a second one. A band full of live drops is
+the only refusal. Caller holds r.mu.
+================
+*/
+func (r *Registry) nextFreeSlot() (uint32, bool) {
+	slot := r.counter
+	for range domain.MaxGroundItemGIDCounter {
+		slot = slot%domain.MaxGroundItemGIDCounter + 1
+		if !r.holdsGid(GidBase + slot) {
+			return slot, true
+		}
+	}
+	return 0, false
+}
+
+/*
+================
+holdsGid
+
+Caller holds r.mu.
+================
+*/
+func (r *Registry) holdsGid(gid uint32) bool {
+	for _, items := range r.byDivision {
+		if _, ok := items[gid]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Get returns the entry with the given entity id.

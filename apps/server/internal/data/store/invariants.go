@@ -76,12 +76,11 @@ func validateLetterRecord(letter domain.LetterRecord) error {
 	return nil
 }
 
-func validateGroundItemRecord(item domain.GroundItemRecord, counter uint32) error {
-	if item.Gid <= domain.GroundItemGIDBase {
+// The allocation cursor wraps (grounditem nextFreeSlot), so a live gid may lie
+// above the persisted counter; only the band bounds it.
+func validateGroundItemRecord(item domain.GroundItemRecord) error {
+	if item.Gid <= domain.GroundItemGIDBase || item.Gid > domain.GroundItemGIDLimit {
 		return fmt.Errorf("gid %d is outside the ground entity band", item.Gid)
-	}
-	if item.Gid-domain.GroundItemGIDBase > counter {
-		return fmt.Errorf("gid %d exceeds allocation counter %d", item.Gid, counter)
 	}
 	if item.RefObjID == 0 {
 		return fmt.Errorf("refObjId is zero")

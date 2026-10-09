@@ -9,6 +9,7 @@ golddrop_test.go - gold drops and their refusals
 package action
 
 import (
+	"opensro.online/server/internal/game/item/grounditem"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -84,10 +85,11 @@ func TestGroundIdentityExhaustionDoesNotDebitCharacter(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			character := testCharacter()
 			rt, _ := newTestRuntime(character, testItems())
-			rt.Ground.Restore(domain.GroundSnapshot{
-				Version:    domain.GroundSnapshotVersion,
-				GidCounter: domain.MaxGroundItemGIDCounter,
-			})
+			// The cursor wraps, so only a band full of live drops exhausts it;
+			// they lie in another division so this one's count stays zero.
+			for range domain.MaxGroundItemGIDCounter {
+				rt.Ground.Add("elsewhere", grounditem.Item{RefObjID: 1})
+			}
 
 			result := rt.HandleItemMove(testDivision, character, encodeMove(t, test.request))
 			assertOpcodes(t, result.Frames, wire.OpItemMoveResponse)

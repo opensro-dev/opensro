@@ -364,7 +364,7 @@ validateLoadedAuthorityGraph
 func validateLoadedAuthorityGraph(loaded *loadedDB) error {
 	for divisionID, rows := range loaded.ground {
 		for index, row := range rows {
-			if err := validateGroundItemRecord(row, loaded.meta.GidCounter); err != nil {
+			if err := validateGroundItemRecord(row); err != nil {
 				return fmt.Errorf("division %s ground item %d: %w", divisionID, index, err)
 			}
 		}
