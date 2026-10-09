@@ -136,11 +136,12 @@ CLASS_BEHAVIOUR = {
 	# hunt (mission 1, bit 1). Unachieved, the start NPC names what is
 	# left: _04 (the hunt) once the box is delivered, _05 (the delivery)
 	# once the hunt is done, _06 for both. A full bag at the pay answers
-	# a hard-coded _08; word 0x136 (_07) stays the acceptance line.
+	# a hard-coded _08; word 0x136 (_07) stays the acceptance line. The
+	# delivery's line is _05 and the hunt's _04, by kind.
 	**{(code, "0x58"): {
 		"NotAchievedSymbol": "SN_TALK_" + code + "_06",
 		"RewardFullSymbol": "SN_TALK_" + code + "_08",
-		"SolePendingSymbols": ["SN_TALK_" + code + "_05", "SN_TALK_" + code + "_04"],
+		"SolePendingSymbols": {MISSION_DELIVER: "SN_TALK_" + code + "_05", MISSION_KILL: "SN_TALK_" + code + "_04"},
 	} for code in ("QNO_TRADE_CH_SPECIAL2_1", "QNO_TRADE_RM_SPECIAL_1", "QNO_TRADE_TK_SPECIAL_1", "QNO_TRADE_WC_SPECIAL2_1")},
 	# CQNO_EU_EASTEU_4_OnNpcTalk (8AB930): the base talk behind one story
 	# page, _01 with the reply _02, before the 0x130 offer. Its initializer
@@ -638,13 +639,15 @@ def project(code, quest, text, sql):
 			spec.update({"Objective": OBJECTIVE_PARALLEL, "Objectives": rows})
 	elif kinds <= {MISSION_GATHER, MISSION_KILL, MISSION_DELIVER} and MISSION_DELIVER in kinds and len(missions) > 1:
 		rows = [delivery_row(text, m) if m["fields"].get("0x9") == MISSION_DELIVER else project_mission(text, m) for m in missions]
-		# A class line per mission, sent while that mission alone is left.
+		# A class line per mission, sent while that mission alone is left,
+		# keyed by the mission's kind so the class order cannot swap them.
 		sole = behaviour.pop("SolePendingSymbols", None)
 		if sole is not None:
-			if len(sole) != len(rows):
+			kinds_here = [m["fields"].get("0x9") for m in missions]
+			if sorted(kinds_here) != sorted(sole):
 				raise Unsupported("sole-pending lines do not match the missions")
-			for row, line in zip(rows, sole):
-				row["SolePendingSymbol"] = line
+			for row, kind in zip(rows, kinds_here):
+				row["SolePendingSymbol"] = sole[kind]
 		spec.update(parallel_with_deliveries(text, quest, rows, start))
 	else:
 		raise Unsupported("mission kinds " + ",".join(str(k) for k in sorted(kinds, key=str)))
