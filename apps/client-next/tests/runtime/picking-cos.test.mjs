@@ -105,6 +105,16 @@ test("renderer picking selects nearest submitted entity and invalidates on remov
 		"held V skips the front monster and picks the still-visible item/NPC behind"
 	);
 	assert.equal( defined( c.pick( [ ray ], 0, false ) ).gid, 3, "release restores the front target" );
+	// 692680 (BUG report: dead players cannot be selected): a dead player in
+	// front is skipped by an ordinary click and taken by a filtered (SHIFT)
+	// one; a dead monster stays out of both.
+	c.actors( [ actor( 2, .2 ), { ...actor( 3, 0 ), pickable: false, pickWhenFiltered: true } ] );
+	c.prepare( gpu, { upload: () => ({}), release() {} }, 257 );
+	assert.equal( defined( c.pick( [ ray ], 0 ) ).gid, 2, "an ordinary click passes a dead player" );
+	assert.equal( defined( c.pick( [ ray ], 0, false, true ) ).gid, 3, "SHIFT takes the dead player" );
+	c.actors( [ actor( 2, .2 ), { ...actor( 3, 0 ), pickable: false } ] );
+	c.prepare( gpu, { upload: () => ({}), release() {} }, 257 );
+	assert.equal( defined( c.pick( [ ray ], 0, false, true ) ).gid, 2, "SHIFT still passes a dead monster" );
 	c.actors( [] );
 	assert.equal( c.pick( [ ray ], 0 ), null );
 	c.invalidate();

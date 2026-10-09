@@ -214,6 +214,10 @@ export interface CharacterActor {
 	readonly effectAnchor?: { readonly bone: string | null; readonly offset: readonly [number, number, number]; };
 	readonly height?: number;
 	readonly pickable?: boolean;
+	/** An unpickable actor a filtered pick still takes: a dead player, which
+	 * World_PickEntityAtScreenPoint (692680) admits when the world click
+	 * holds SHIFT or the local player is dead (698740's filter flag). */
+	readonly pickWhenFiltered?: boolean;
 	/** A linked ride's rider: a pick on the ride answers with this gid
 	 * (World_PickEntityAtScreenPoint 692680 reads the ride's +0x2A4). */
 	readonly pickOwner?: number;

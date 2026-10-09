@@ -270,7 +270,7 @@ export interface Renderer extends Disposable {
 		/** A native model-space offset, turned by the holder's root (8D6880). */
 		offset: readonly [number, number, number]
 	): import("./character").CharacterActor["pose"] | null;
-	pickEntity( x: number, y: number, excluded: number, blindHeld?: boolean ): number | null;
+	pickEntity( x: number, y: number, excluded: number, blindHeld?: boolean, filtered?: boolean ): number | null;
 	setWeather( value: import("@/engine/foundation/gameplay/weather").WeatherOptions | null ): void;
 	setWorldClock( value: { timeOfDay: number; lunarDay: number; } | null ): void;
 	setUi( scene: import("./ui").UiScene | null ): void;

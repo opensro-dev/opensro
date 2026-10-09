@@ -225,7 +225,7 @@ export function createRenderer(
 		pickEntity
 		================
 		*/
-		pickEntity( x, y, excluded, blindHeld = false ) {
+		pickEntity( x, y, excluded, blindHeld = false, filtered = false ) {
 			if ( disposed || failure || !pickView || device.phase() !== "running" ) return null;
 			const project = pickRayProjector( pickView );
 			if ( !project ) return null;
@@ -240,7 +240,7 @@ export function createRenderer(
 					rays.push( ray );
 				}
 			}
-			let hit = characters.pick( rays, excluded, blindHeld ),
+			let hit = characters.pick( rays, excluded, blindHeld, filtered ),
 				best = hit ?
 					hit.depth * hypot3( rays[hit.ray]!.delta[0]!, rays[hit.ray]!.delta[1]!, rays[hit.ray]!.delta[2]! ) :
 					Infinity;

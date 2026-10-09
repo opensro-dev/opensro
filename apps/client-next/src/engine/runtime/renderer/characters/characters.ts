@@ -2513,7 +2513,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		Resolve world selection against visible actor volumes in ray order.
 		================
 		*/
-		pick( rays: readonly PickRay[], excluded: number, blindHeld = false ) {
+		pick( rays: readonly PickRay[], excluded: number, blindHeld = false, filtered = false ) {
 			const current = snapshots.index, ride = current.get( excluded )?.mountedOn;
 			// Native 856540 uses the aggregate transformed box, independent of
 			// texture alpha and animated limb triangles. Preserve actor order.
@@ -2528,7 +2528,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				const gid = actor.gid, matrix = drawn.get( gid ), resource = models.get( actor.model );
 				if (
 					blindHeld && actor.blindable || gid === excluded || gid === ride || actor.attachment ||
-					(actor.opacity ?? 1) <= 0 || actor.pickable === false || !matrix || !resource
+					(actor.opacity ?? 1) <= 0 || actor.pickable === false && !(filtered && actor.pickWhenFiltered) ||
+					!matrix || !resource
 				) continue;
 				const bounds = pickVolumeOf( resource.model );
 				const hits: { ray: number; depth: number; distance: number; }[] = [];

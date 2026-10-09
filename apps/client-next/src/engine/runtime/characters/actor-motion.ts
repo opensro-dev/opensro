@@ -751,6 +751,9 @@ export function createActorMotion( owner: ActorOwner ) {
 				heightFactor: published.heightFactors.get( resource.codename ),
 				effectAnchor: published.effectAnchors.get( resource.codename ),
 				pickable: !authorityDead || entity.gid === gameplay?.localGid,
+				// 692680: a filtered pick (SHIFT, or a dead local player) takes a
+				// dead player; dead monsters and companions stay out of it.
+				pickWhenFiltered: authorityDead && entity.kind === "player",
 				height: published.heights.has( resource.codename ) ?
 					published.heights.get( resource.codename )! *
 					(state.actionHeight ?

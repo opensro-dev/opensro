@@ -378,11 +378,13 @@ export function startRuntime(
 			// 6989A5 -> 6813E0: a dead player's own corpse remains clickable;
 			// selecting it reopens confirmation type 3 without a gameplay packet.
 			if ( local?.appearanceState?.[0] === 2 ) {
-				const corpse = renderer.pickEntity( x, y, 0, input.blindHeld() );
+				const corpse = renderer.pickEntity( x, y, 0, input.blindHeld(), true );
 				if ( corpse === game.localGid ) ui.event( { kind: "world-select", gid: corpse } );
 				return;
 			}
-			const gid = renderer.pickEntity( x, y, game.localGid, input.blindHeld() ),
+			// 698740: SHIFT sets 692680's filter flag, which also takes dead
+			// players (a corpse to select, or to whisper).
+			const gid = renderer.pickEntity( x, y, game.localGid, input.blindHeld(), shift ),
 				entity = gid === null ? null : presentation.read( gid ),
 				attackable = entity?.kind === "monster" && entity.appearanceState?.[0] !== 2,
 				now = performance.now();

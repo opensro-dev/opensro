@@ -101,6 +101,7 @@ export function createActorSnapshots() {
 		target.drawGeometry = source.drawGeometry;
 		target.height = source.height;
 		target.pickable = source.pickable;
+		target.pickWhenFiltered = source.pickWhenFiltered;
 		target.pickOwner = source.pickOwner;
 		target.bodyVolume = source.bodyVolume ? { ...source.bodyVolume } : undefined;
 		target.opacity = source.opacity;
