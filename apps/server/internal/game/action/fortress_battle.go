@@ -301,6 +301,9 @@ func (rt *Runtime) capturePlayerAbnormalSources(division string, victim *enterwo
 	sources := rt.captureAbnormalSources(division, block, records)
 	for gid, source := range sources {
 		source.killer = rt.prepareDeathKiller(division, victim, source.killer)
+		if source.killer.player != nil {
+			source.kill = rt.classifyPlayerKill(division, source.killer.player, victim)
+		}
 		sources[gid] = source
 	}
 	return sources

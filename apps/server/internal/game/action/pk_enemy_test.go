@@ -98,7 +98,7 @@ func TestPeriodicPlayerKillBooksOnlyNeutralVictims(t *testing.T) {
 		victim.PK = &domain.PKRecord{Penalty: penalty, TotalCount: 1}
 		gid := enterworld.ObjectIDForCharacter(killer)
 		owner := rt.newPlayerAbnormalOwner(testDivision, victim, clock.NowMs())
-		owner.sources = map[uint32]abnormalSourceState{gid: rt.captureAbnormalSource(testDivision, gid)}
+		owner.sources = rt.capturePlayerAbnormalSources(testDivision, victim, owner.block, []abnormal.Record{{SourceGID: gid}})
 		owner.Hit(gid, tc.credited, 1, abnormalDamageOverTimeReason, abnormal.Burn)
 		rt.playerAbnormalPublication(testDivision, victim, owner)
 		booked := killer.PK != nil && killer.PK.Penalty != 0

@@ -32,6 +32,9 @@ type abnormalSourceState struct {
 	// killer is the source as a death's killer (pkdeath.go), captured
 	// here because the fatal status hit runs inside the victim's write.
 	killer deathKiller
+	// kill carries external relation facts only for player recipients;
+	// capturePlayerAbnormalSources prepares it before their store write.
+	kill playerKill
 }
 
 /*

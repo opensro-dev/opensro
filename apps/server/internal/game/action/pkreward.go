@@ -62,6 +62,7 @@ type playerKill struct {
 	kind        pk.DeathKind
 	murderer    bool
 	legalEnemy  bool
+	enemyRules  playerEnemyRules
 	victimLevel int64
 }
 
@@ -80,12 +81,29 @@ type jobKillShare struct {
 /*
 ================
 classifyPlayerKill
+
+Capture faction/world facts before the character door; those authorities
+can persist while holding their own mutex. withVictim refreshes local facts.
 ================
 */
 func (rt *Runtime) classifyPlayerKill(division string, killer, victim *enterworld.Character) playerKill {
 	kind := rt.deathKind(division, victim, rt.prepareDeathKiller(division, victim, deathKiller{player: killer}))
-	murderer := victim.PK != nil && victim.PK.Penalty > 0 && kind != pk.DeathGuildWar
-	return playerKill{kind: kind, murderer: murderer, legalEnemy: rt.worldPlayerEnemy(division, killer, victim), victimLevel: rewardLevel(victim)}
+	kill := playerKill{kind: kind, enemyRules: rt.worldPlayerEnemyRules(division, killer, victim)}
+	return kill.withVictim(killer, victim)
+}
+
+/*
+================
+withVictim
+
+Refresh local criminal facts without acquiring external authority locks.
+================
+*/
+func (kill playerKill) withVictim(killer, victim *enterworld.Character) playerKill {
+	kill.murderer = murderer(victim) && kill.kind != pk.DeathGuildWar
+	kill.legalEnemy = kill.enemyRules.enemy(killer, victim)
+	kill.victimLevel = rewardLevel(victim)
+	return kill
 }
 
 /*

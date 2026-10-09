@@ -529,7 +529,7 @@ func (o *playerAbnormalOwner) Hit(source uint32, credited bool, damage uint32, r
 		o.deathKill = playerKill{kind: o.rt.deathKind(o.division, o.c, killer), victimLevel: rewardLevel(o.c)}
 		if o.deathKiller != nil {
 			// 52A3F9 calls the striker before the victim's death relief.
-			o.deathKill = o.rt.classifyPlayerKill(o.division, o.deathKiller, o.c)
+			o.deathKill = o.sources[source].kill.withVictim(o.deathKiller, o.c)
 		}
 		o.deathEffects, o.deathTarget = o.rt.settlePlayerDeathInDoor(o.division, o.c, o.sources[source].killer, o.now)
 	}

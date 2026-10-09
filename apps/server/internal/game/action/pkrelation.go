@@ -102,21 +102,49 @@ func murderer(c *enterworld.Character) bool {
 
 /*
 ================
-normalPlayerEnemy
+playerEnemyRules
+
+External relation facts captured before the character-store write. Fortress
+and union persistence take their own locks before the character store.
+================
+*/
+type playerEnemyRules struct {
+	minimumLevel    int64
+	hostileRelation bool
+}
+
+/*
+================
+enemy
+
+Only character-local facts are refreshed inside the fatal transaction.
+================
+*/
+func (rules playerEnemyRules) enemy(owner, target *enterworld.Character) bool {
+	if owner == nil || target == nil || owner.ID == target.ID {
+		return false
+	}
+	if rules.minimumLevel != 0 && (owner.Level == nil || target.Level == nil ||
+		*owner.Level < rules.minimumLevel || *target.Level < rules.minimumLevel) {
+		return false
+	}
+	return len(target.Aggressions) != 0 || target.PVPState() == 2 || rules.hostileRelation
+}
+
+/*
+================
+normalPlayerEnemyRules
 
 52B6D0 precedes the job/guild checks with both level floors. Cape colors
 are absent here; deliberate player attack permission is a different query.
 ================
 */
-func (rt *Runtime) normalPlayerEnemy(division string, owner, target *enterworld.Character) bool {
-	if owner == nil || target == nil || owner.ID == target.ID || owner.Level == nil || target.Level == nil ||
-		*owner.Level < playerCombatMinimumLevel || *target.Level < playerCombatMinimumLevel {
-		return false
+func (rt *Runtime) normalPlayerEnemyRules(division string, owner, target *enterworld.Character) playerEnemyRules {
+	rules := playerEnemyRules{minimumLevel: playerCombatMinimumLevel}
+	if owner != nil && target != nil {
+		rules.hostileRelation = hostileJobs(enterworld.DressedJob(owner), enterworld.DressedJob(target)) || rt.guildsAtWar(division, owner, target)
 	}
-	if len(target.Aggressions) != 0 || target.PVPState() == 2 {
-		return true
-	}
-	return hostileJobs(enterworld.DressedJob(owner), enterworld.DressedJob(target)) || rt.guildsAtWar(division, owner, target)
+	return rules
 }
 
 /*
@@ -128,15 +156,23 @@ level floor. The same guild and union authorities own these identities.
 ================
 */
 func (rt *Runtime) worldPlayerEnemy(division string, owner, target *enterworld.Character) bool {
+	return rt.worldPlayerEnemyRules(division, owner, target).enemy(owner, target)
+}
+
+/*
+================
+worldPlayerEnemyRules
+
+Read the world controller's faction rules before entering a character door.
+================
+*/
+func (rt *Runtime) worldPlayerEnemyRules(division string, owner, target *enterworld.Character) playerEnemyRules {
 	if owner == nil || target == nil || owner.ID == target.ID {
-		return false
+		return playerEnemyRules{}
 	}
 	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(owner)).Definition())
 	if !found || !world.Siege() {
-		return rt.normalPlayerEnemy(division, owner, target)
-	}
-	if len(target.Aggressions) != 0 || target.PVPState() == 2 {
-		return true
+		return rt.normalPlayerEnemyRules(division, owner, target)
 	}
 	var a, b int64
 	if owner.GuildID != nil {
@@ -146,7 +182,7 @@ func (rt *Runtime) worldPlayerEnemy(division string, owner, target *enterworld.C
 		b = *target.GuildID
 	}
 	if a == b || rt.Unions.Allied(division, a, b) {
-		return false
+		return playerEnemyRules{}
 	}
-	return rt.Fortresses != nil && rt.Fortresses.WarActive(division)
+	return playerEnemyRules{hostileRelation: rt.Fortresses != nil && rt.Fortresses.WarActive(division)}
 }

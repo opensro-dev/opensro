@@ -170,24 +170,24 @@ func TestMercenaryNormalEnemyUsesTargetStateAndBothLevelFloors(t *testing.T) {
 	owner.Level = &level
 	target := owner.Snapshot()
 	target.ID++
-	if rt.normalPlayerEnemy(testDivision, owner, target) {
+	if rt.worldPlayerEnemy(testDivision, owner, target) {
 		t.Fatal("neutral bystander acquired")
 	}
 	owner.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(target): 20}
-	if rt.normalPlayerEnemy(testDivision, owner, target) {
+	if rt.worldPlayerEnemy(testDivision, owner, target) {
 		t.Fatal("owner aggression authorized a neutral target")
 	}
 	target.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(owner): 1}
-	if !rt.normalPlayerEnemy(testDivision, owner, target) {
+	if !rt.worldPlayerEnemy(testDivision, owner, target) {
 		t.Fatal("target aggression record ignored")
 	}
 	young := int64(19)
 	target.Level = &young
-	if rt.normalPlayerEnemy(testDivision, owner, target) {
+	if rt.worldPlayerEnemy(testDivision, owner, target) {
 		t.Fatal("underlevel target acquired")
 	}
 	target.Level, owner.Level = &level, &young
-	if rt.normalPlayerEnemy(testDivision, owner, target) {
+	if rt.worldPlayerEnemy(testDivision, owner, target) {
 		t.Fatal("underlevel owner acquired player")
 	}
 }

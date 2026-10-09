@@ -13,10 +13,11 @@ compact setup without making unsafe admission available to the game binary.
 package action
 
 import (
+	"testing"
+
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/monster"
-	"testing"
 )
 
 /*
@@ -32,7 +33,7 @@ func (rt *Runtime) applyPlayerAbnormalInDoor(division string, character *enterwo
 		return nil
 	}
 	owner := rt.newPlayerAbnormalOwner(division, character, now)
-	owner.sources = rt.captureAbnormalSources(division, owner.block, records)
+	owner.sources = rt.capturePlayerAbnormalSources(division, character, owner.block, records)
 	owner.applyHit(abnormal.HitContext{Magical: damaged, Attack: damaged}, records)
 	return owner
 }

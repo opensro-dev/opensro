@@ -135,7 +135,7 @@ func TestGuildWarCompanionStatusSourceLifecycle(t *testing.T) {
 	}
 	v.CurrentHP = testInt64(1)
 	owner := rt.newPlayerAbnormalOwner(testDivision, v, 1000)
-	owner.sources = map[uint32]abnormalSourceState{pet.GID: source}
+	owner.sources = rt.capturePlayerAbnormalSources(testDivision, v, owner.block, []abnormal.Record{{SourceGID: pet.GID}})
 	owner.Hit(pet.GID, true, 1, abnormalDamageOverTimeReason, abnormal.Burn)
 	var credits []domain.GuildWarCombat
 	rt.GuildWarKill = func(_ string, credit domain.GuildWarCombat, _ int64) { credits = append(credits, credit) }

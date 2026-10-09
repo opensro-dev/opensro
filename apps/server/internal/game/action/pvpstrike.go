@@ -143,7 +143,7 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 		return playerHit{}, false
 	}
 	_, _, hp, _ := rt.playerKeeperVitals(in.division, victim)
-	h := playerHit{target: in.target, defender: defender}
+	h := playerHit{target: in.target, defender: defender, kill: rt.classifyPlayerKill(in.division, in.caster, victim)}
 	h.strike = playerStrike{division: in.division, victim: in.target.player, killer: deathKiller{player: in.caster},
 		skill: in.skill, impacts: in.impacts, now: in.now}
 	percent := in.percent
@@ -205,7 +205,7 @@ func (rt *Runtime) commitPlayerHitInDoor(division string, caster *enterworld.Cha
 	// killer callback. Capture the target under this door before death
 	// relief changes its red state, including the last 200 penalty points.
 	out.public = append(out.public, rt.registerPlayerAttacked(division, victim, caster, now)...)
-	h.kill = rt.classifyPlayerKill(division, caster, victim)
+	h.kill = h.kill.withVictim(caster, victim)
 	beforeDeath := *victim
 	if victim.PK != nil {
 		record := *victim.PK

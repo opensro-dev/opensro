@@ -424,7 +424,7 @@ func (rt *Runtime) petStrikePlayer(step petCombatStep, target combatTarget, skil
 	if level == 0 {
 		level = step.ref.Level
 	}
-	hit := playerHit{target: target, defender: defender}
+	hit := playerHit{target: target, defender: defender, kill: rt.classifyPlayerKill(division, owner, victim)}
 	hit.strike = playerStrike{division: division, victim: target.player, killer: deathKiller{player: owner, strikerLevel: int64(level)}, skill: skill, now: step.nowMs}
 	if !rt.planPlayerStrike(&hit.strike,
 		func(wall *enterworld.SkillWall) (combat.WallOutcome, error) {
