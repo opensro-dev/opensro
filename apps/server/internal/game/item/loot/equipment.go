@@ -218,13 +218,15 @@ func compileEquipment(source equipmentSource) (equipmentCatalog, error) {
 		b.alternatives[r.Type] = append(b.alternatives[r.Type], uint32(len(b.refs)-1))
 	}
 	if source.Version >= 2 {
-		// The v2 generator drops and logs a class with no v1.150 item; one
-		// that reaches the runtime is a broken catalog.
+		// selectEquipment walks down from an empty class (724120), so a
+		// class without a v1.150 item is kept when one below it holds items.
+		// The v2 generator zeroes and logs a class with nothing at or below
+		// it; one that reaches the runtime is a broken catalog.
 		for kind := range c.classes {
 			for level, row := range c.classes[kind] {
 				for _, class := range row {
-					if !c.anyCountry(class.group, kind == 1) {
-						return c, fmt.Errorf("equipment table %d level %d class %d has no item", kind, level+1, class.group)
+					if !c.anyAtOrBelow(class.group, kind == 1) {
+						return c, fmt.Errorf("equipment table %d level %d class %d has no item at or below it", kind, level+1, class.group)
 					}
 				}
 			}
@@ -235,13 +237,19 @@ func compileEquipment(source equipmentSource) (equipmentCatalog, error) {
 
 /*
 ================
-anyCountry
+anyAtOrBelow
 
-Whether either country holds an item of the class.
+Whether either country holds an item of the class or of a lower class: the
+classes selectEquipment can reach from it.
 ================
 */
-func (c equipmentCatalog) anyCountry(group int, rare bool) bool {
-	return c.buckets[equipmentKey{0, group, rare}] != nil || c.buckets[equipmentKey{1, group, rare}] != nil
+func (c equipmentCatalog) anyAtOrBelow(group int, rare bool) bool {
+	for ; group >= 0; group-- {
+		if c.buckets[equipmentKey{0, group, rare}] != nil || c.buckets[equipmentKey{1, group, rare}] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // EquipmentGroup preserves float32 accumulation and native lower_bound

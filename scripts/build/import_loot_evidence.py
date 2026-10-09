@@ -30,6 +30,8 @@ def write_json(path, value):
 # their own alchemy materials through them.
 MATERIAL_DROP_COLUMN = 99
 MATERIAL_DROP_PAIRS = 5
+# itemdata TypeID1..4 of an alchemy tablet.
+TABLET_TYPE = [3, 3, 11, 3]
 
 
 # ================
@@ -60,7 +62,12 @@ def read_media(directory):
 					"id": int(cells[1]), "codename": code, "type": list(map(int, cells[9:13])),
 					"country": int(cells[14]), "rarity": int(cells[15]), "class": int(cells[61]),
 					"maxMagic": int(cells[158]), "level": int(cells[33]), "param1": int(cells[118]),
+					# A stone's assimilation distribution (509BC0 needs it nonzero).
+					"param2": int(cells[120]),
 				}
+				if items[code]["type"] == TABLET_TYPE:
+					# Desc5: the stone or potion a tablet manufactures.
+					items[code]["product"] = cells[127]
 	magic = []
 	assign = []
 	for name in ("magicoption.txt", "magicoptionassign.txt"):
