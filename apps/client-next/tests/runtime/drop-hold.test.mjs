@@ -13,10 +13,23 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 const { undroppedLoot } = await import( "../../src/engine/runtime/characters/actor-presentation.ts" );
 
-const monster = { gid: 7, kind: "monster" },
-	own = { gid: 901, kind: "item", groundItem: { typeFlags: 0x2ec, goldAmount: 1, tint: 0, dropperGid: 7 } },
-	other = { gid: 902, kind: "item", groundItem: { typeFlags: 0x2ec, goldAmount: 1, tint: 0, dropperGid: 8 } },
-	loose = { gid: 903, kind: "item", groundItem: { typeFlags: 0x2ec, goldAmount: 1, tint: 0 } };
+/*
+================
+entity
+
+One presented entity at the origin; drop is its ground item, if any.
+================
+*/
+function entity( gid, kind, drop ) {
+	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
+	const state = { gid, refObjId: 1, kind, name: "", regionId: 1, x: 0, y: 0, z: 0, heading: 0 };
+	return drop ? { ...state, groundItem: { typeFlags: 0x2ec, goldAmount: 1, tint: 0, ...drop } } : state;
+}
+
+const monster = entity( 7, "monster" ),
+	own = entity( 901, "ground-item", { dropperGid: 7 } ),
+	other = entity( 902, "ground-item", { dropperGid: 8 } ),
+	loose = entity( 903, "ground-item", {} );
 
 test("a held death holds its own drops and nothing else", () => {
 	const selected = [ monster, own, other, loose ];
