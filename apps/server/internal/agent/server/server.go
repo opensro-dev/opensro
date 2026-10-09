@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/url"
 	"opensro.online/server/internal/releaseprotocol"
+	"strconv"
 	"strings"
 	"time"
 
@@ -265,11 +266,13 @@ requireRunning
 func (server *Server) requireRunning(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !server.readiness.Ready() {
-			w.Header().Set("Retry-After", "1")
+			code, message := server.readiness.Refusal("Agent")
+			w.Header().Set("Retry-After", strconv.Itoa(readiness.RetryAfterSeconds))
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-				"ok":      false,
-				"code":    "PROCESS_DRAINING",
-				"message": "The Agent is draining.",
+				"ok":         false,
+				"code":       code,
+				"message":    message,
+				"retryAfter": readiness.RetryAfterSeconds,
 			})
 			return
 		}

@@ -10,13 +10,22 @@ import (
 const (
 	PathHealth = "/healthz"
 	PathReady  = "/readyz"
+
+	// The refusal codes a closed gate answers with. The client retries a
+	// starting process after Retry-After.
+	CodeStarting = "PROCESS_STARTING"
+	CodeDraining = "PROCESS_DRAINING"
+	// RetryAfterSeconds is the Retry-After a refusal carries.
+	RetryAfterSeconds = 1
 )
 
 // Gate is closed during startup and shutdown, and open only while the
-// process can accept new work. It deliberately carries no lifecycle history:
-// orchestration owns process state; the application owns admission.
+// process can accept new work. It keeps one bit of history, whether it has
+// ever opened, so a refusal can tell a starting process (retry soon) from a
+// draining one (#246); orchestration still owns process state.
 type Gate struct {
-	open atomic.Bool
+	open   atomic.Bool
+	opened atomic.Bool
 }
 
 func NewGate() *Gate {
@@ -24,6 +33,7 @@ func NewGate() *Gate {
 }
 
 func (gate *Gate) Open() {
+	gate.opened.Store(true)
 	gate.open.Store(true)
 }
 
@@ -33,6 +43,21 @@ func (gate *Gate) Close() {
 
 func (gate *Gate) Ready() bool {
 	return gate != nil && gate.open.Load()
+}
+
+// Starting reports a gate that is closed and has never opened: the process
+// is still coming up, as opposed to draining after it ran.
+func (gate *Gate) Starting() bool {
+	return gate != nil && !gate.open.Load() && !gate.opened.Load()
+}
+
+// Refusal is the code and message a closed gate answers with, naming the
+// process ("GameWorld", "Agent").
+func (gate *Gate) Refusal(process string) (string, string) {
+	if gate.Starting() {
+		return CodeStarting, "The " + process + " is starting."
+	}
+	return CodeDraining, "The " + process + " is draining."
 }
 
 // HealthHandler is a liveness check. Reaching the handler proves that the

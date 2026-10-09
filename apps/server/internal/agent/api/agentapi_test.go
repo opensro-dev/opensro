@@ -198,6 +198,26 @@ func bearerHandler(next http.Handler, token string) http.Handler {
 	})
 }
 
+// TestStartingGameWorldAsksTheClientToRetry: before the gate first opens
+// (the population boot fill, #245), a refusal names the start, not a drain,
+// and carries the retry delay in the header and the body (#246).
+func TestStartingGameWorldAsksTheClientToRetry(t *testing.T) {
+	api, _ := newTestAPI(t)
+	api.readiness = readiness.NewGate()
+	response := httptest.NewRecorder()
+	authenticatedHandler(t, api, "").ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/character/list", nil))
+	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "1" {
+		t.Fatalf("starting refusal = %d, Retry-After %q", response.Code, response.Header().Get("Retry-After"))
+	}
+	var body map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["code"] != readiness.CodeStarting || body["message"] != "The GameWorld is starting." || body["retryAfter"] != float64(1) {
+		t.Fatalf("starting refusal body = %#v", body)
+	}
+}
+
 func TestReadinessStopsNewGameWorldRequests(t *testing.T) {
 	api, _ := newTestAPI(t)
 

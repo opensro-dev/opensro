@@ -19,6 +19,28 @@ func TestGateSeparatesLivenessFromReadiness(t *testing.T) {
 	assertStatus(t, http.HandlerFunc(gate.ReadyHandler), PathReady, http.StatusServiceUnavailable)
 }
 
+// TestRefusalTellsStartingFromDraining: a gate that never opened answers
+// PROCESS_STARTING (the client retries); one that opened and closed again
+// answers PROCESS_DRAINING (#246).
+func TestRefusalTellsStartingFromDraining(t *testing.T) {
+	gate := NewGate()
+	if code, message := gate.Refusal("GameWorld"); code != CodeStarting || message != "The GameWorld is starting." {
+		t.Fatalf("new gate refusal = %q %q", code, message)
+	}
+	gate.Open()
+	if gate.Starting() {
+		t.Fatal("an open gate reports starting")
+	}
+	gate.Close()
+	if code, message := gate.Refusal("GameWorld"); code != CodeDraining || message != "The GameWorld is draining." {
+		t.Fatalf("closed-after-open refusal = %q %q", code, message)
+	}
+	var missing *Gate
+	if missing.Starting() || missing.Ready() {
+		t.Fatal("a nil gate reports starting or ready")
+	}
+}
+
 func TestHealthAndReadyAreReadOnly(t *testing.T) {
 	gate := NewGate()
 	for _, handler := range []http.Handler{

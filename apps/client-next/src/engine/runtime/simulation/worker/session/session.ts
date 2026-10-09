@@ -17,6 +17,7 @@ import { createSessionDecoder } from "./decode/decode";
 import { createSessionHttp } from "./http/http";
 import type { SessionOwner, SessionState } from "@/engine/contracts/session";
 import type { ClientIncident } from "@/engine/contracts/network";
+import { MAX_STARTING_WAIT_MS, STARTING_CODE, serverStarting } from "@/engine/foundation/session/server-starting";
 
 // How long a failure report may take; it never holds up the session ending.
 const INCIDENT_TIMEOUT_MS = 5000;
@@ -35,6 +36,11 @@ export function createSession(): SessionOwner {
 	let crestPrefix: number | undefined;
 	let restoreAttempted = false, browserBase: string | undefined, logoutPending = false;
 	let resumeCharacter: string | undefined, restoringWorld = false;
+	// A title request answered PROCESS_STARTING is repeated (server-starting.ts):
+	// the command to repeat, when, and since when the server has been starting.
+	let lastTitleCommand: Parameters<SessionOwner["command"]>[0] | undefined;
+	let startingRetry: { dueMs: number; command: Parameters<SessionOwner["command"]>[0]; } | null = null;
+	let startingSince: number | undefined, repeatingStart = false;
 	let generation = 0, disposed = false, controller: AbortController | null = null;
 	let state: SessionState = Object.freeze( { phase: "signed-out", revision: 0 } ), dirty = false;
 	let identity: {
@@ -170,6 +176,7 @@ cancelTitleRequest
 		controller = null;
 		completion = null;
 		logoutPending = false;
+		startingRetry = null;
 	}
 	/*
 ================
@@ -239,7 +246,7 @@ baseUrl
 		}
 		return url.toString().replace( /\/$/, "" );
 	}
-	return {
+	const session: SessionOwner = {
 		isWorldReady: () => world.status().phase === "world" && world.status().ready,
 		/*
 		================
@@ -249,6 +256,11 @@ baseUrl
 		command( command, now ) {
 			if ( disposed ) {
 				throw new Error( "Session disposed" );
+			}
+			if ( command.kind === "servers" || command.kind === "login" ) {
+				lastTitleCommand = command;
+				// A player's own request starts a fresh wait.
+				if ( !repeatingStart ) startingSince = undefined;
 			}
 			if ( command.kind === "chat-blocks" ) {
 				world.chatBlocks( command.value );
@@ -547,6 +559,16 @@ baseUrl
 			}
 			world.step( now );
 			flushIncidents();
+			if ( startingRetry && now >= startingRetry.dueMs && scope === "title" ) {
+				const repeat = startingRetry.command;
+				startingRetry = null;
+				repeatingStart = true;
+				try {
+					session.command( repeat, now );
+				} finally {
+					repeatingStart = false;
+				}
+			}
 			const departure = world.takeDeparture();
 			if ( departure && identity ) {
 				cancelTitleRequest();
@@ -594,6 +616,25 @@ baseUrl
 				controller = null;
 				if ( scope === "title" && result.generation === generation ) {
 					try {
+						// The server is still starting: keep the waiting state and
+						// repeat the request after its Retry-After, up to the cap.
+						const starting = result.value && !result.value.httpOk &&
+								(result.kind === "servers" || result.kind === "login") ?
+							serverStarting( result.value.body ) :
+							null;
+						if ( starting && lastTitleCommand ) {
+							startingSince ??= now;
+							if ( now - startingSince < MAX_STARTING_WAIT_MS ) {
+								startingRetry = { dueMs: now + starting.retryMs, command: lastTitleCommand };
+								const waiting = dirty ? state : null;
+								dirty = false;
+								return waiting;
+							}
+							startingSince = undefined;
+							publish( { phase: "failed", code: STARTING_CODE, error: starting.message } );
+							dirty = false;
+							return state;
+						}
 						if ( result.kind === "return-to-dock" ) {
 							if (
 								result.error || !result.value?.httpOk ||
@@ -852,4 +893,5 @@ baseUrl
 			}
 		}
 	};
+	return session;
 }

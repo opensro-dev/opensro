@@ -971,3 +971,54 @@ test("a server speaking another release protocol marks the session outdated and 
 	assert.equal( session.step().releaseOutdated, true );
 	session.dispose();
 });
+
+// #246: a server whose gate never opened answers PROCESS_STARTING; the title
+// keeps waiting and repeats the request after Retry-After instead of failing.
+const STARTING = { ok: false, code: "PROCESS_STARTING", message: "The Agent is starting.", retryAfter: 1 };
+
+test("a starting server is waited for and the server list is repeated after Retry-After", async t => {
+	let starting = 2;
+	const calls = [];
+	t.mock.method( globalThis, "fetch", async url => {
+		calls.push( new URL( url ).pathname );
+		if ( starting > 0 ) {
+			starting--;
+			return Response.json( STARTING, { status: 503, headers: { "Retry-After": "1" } } );
+		}
+		return url.endsWith( "/title/session" ) ? Response.json( { ok: false }, { status: 401 } ) : Response.json( [] );
+	} );
+	const session = createSession();
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	session.step( 0 );
+	await settle();
+	// The restore and the list both answered "starting": no failure, still listing.
+	assert.equal( session.step( 10 )?.phase ?? "listing-servers", "listing-servers" );
+	assert.notEqual( session.step( 20 )?.phase, "failed" );
+	// Before Retry-After nothing is repeated; after it the list is asked again.
+	const before = calls.length;
+	session.step( 500 );
+	await settle();
+	assert.equal( calls.length, before );
+	session.step( 1100 );
+	await settle();
+	assert.equal( session.step( 1200 ).phase, "signed-out" );
+	assert.deepEqual( calls, [ "/title/session", "/title/servers", "/title/servers" ] );
+	session.dispose();
+});
+
+test("a server that keeps starting past the cap fails with its own message", async t => {
+	t.mock.method( globalThis, "fetch", async () => Response.json( STARTING, { status: 503 } ) );
+	const session = createSession();
+	session.command( { kind: "servers", apiBase: command.apiBase } );
+	let state, now = 0;
+	session.step( now );
+	await settle();
+	for ( ; now <= 62_000 && state?.phase !== "failed"; now += 500 ) {
+		state = session.step( now ) ?? state;
+		await settle();
+	}
+	assert.equal( state?.phase, "failed" );
+	assert.equal( state.code, "PROCESS_STARTING" );
+	assert.equal( state.error, "The Agent is starting." );
+	session.dispose();
+});

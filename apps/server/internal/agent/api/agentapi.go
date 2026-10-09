@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -601,11 +602,13 @@ requireRunning
 func (api *API) requireRunning(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !api.readiness.Ready() {
-			w.Header().Set("Retry-After", "1")
+			code, message := api.readiness.Refusal("GameWorld")
+			w.Header().Set("Retry-After", strconv.Itoa(readiness.RetryAfterSeconds))
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-				"ok":      false,
-				"code":    "PROCESS_DRAINING",
-				"message": "The GameWorld is draining.",
+				"ok":         false,
+				"code":       code,
+				"message":    message,
+				"retryAfter": readiness.RetryAfterSeconds,
 			})
 			return
 		}
