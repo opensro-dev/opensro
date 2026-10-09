@@ -91,7 +91,8 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if !ok {
 		return OpResult{}
 	}
-	if target.player != nil && rt.playerAttackTargetRefusal(division, snapshot, target.snapshot, nowMs) != 0 {
+	if target.player != nil && (rt.companionTeamRefusal(snapshot, target.snapshot) != 0 ||
+		rt.playerAttackTargetRefusal(division, snapshot, target.snapshot, nowMs) != 0) {
 		return OpResult{}
 	}
 	state := rt.petSessionFor(division, character.Name, cosGID)
@@ -173,7 +174,10 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 		defer func() { frames = append(speedFrames, frames...) }()
 	}
 	target, ok := rt.resolvePetCombatTarget(step, intent.target)
-	if !ok || target.player != nil && step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0 {
+	// 528F40 runs on every companion strike: the owner's free-battle team is
+	// refused first, so a cape put on mid-fight ends an attack on a team-mate.
+	if !ok || target.player != nil && (rt.companionTeamRefusal(step.snapshot, target.snapshot) != 0 ||
+		step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0) {
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return nil, false
 	}

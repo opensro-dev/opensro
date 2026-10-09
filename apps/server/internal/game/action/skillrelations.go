@@ -25,7 +25,9 @@ const (
 	playerCombatMaxPenalty   = 200000
 	playerCombatMaxDailyPK   = 15
 	freeBattleAllOpponents   = 5
-	freeBattleGroupField     = "itemParam2_2a0"
+	// 528F40's refusal for an attack on the owner's free-battle team.
+	companionTeamRefused uint16 = 0x3020
+	freeBattleGroupField        = "itemParam2_2a0"
 )
 
 /*
@@ -76,6 +78,27 @@ func (rt *Runtime) hostilePlayerCapes(caster, target *enterworld.Character) bool
 	_, aCape := rt.playerRelationEquipment(caster)
 	_, bCape := rt.playerRelationEquipment(target)
 	return aCape != 0 && bCape != 0 && (aCape != bCape || aCape == freeBattleAllOpponents)
+}
+
+/*
+================
+companionTeamRefusal
+
+CGObjCOS_ValidateAttackTargetThroughOwner (528F40): a companion never
+strikes a player on its owner's free-battle team. With the owner in free
+battle (CGObjPC_IsInFreeBattle 4959D0, groups 1..5) and its group not the
+everyone-opposes group 5, a target in the same group is refused 0x3020
+before the owner's own target check (vtable +0x628) is consulted, so guild
+war, jobs or aggression cannot open a team-mate to the owner's pet.
+================
+*/
+func (rt *Runtime) companionTeamRefusal(owner, target *enterworld.Character) uint16 {
+	_, ownerCape := rt.playerRelationEquipment(owner)
+	_, targetCape := rt.playerRelationEquipment(target)
+	if ownerCape >= 1 && ownerCape < freeBattleAllOpponents && ownerCape == targetCape {
+		return companionTeamRefused
+	}
+	return 0
 }
 
 /*
