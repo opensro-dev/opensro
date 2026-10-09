@@ -64,6 +64,34 @@ retire prepared actions, and hold movement until recovery.
 
 ## Verification boundaries
 
+### Nearest-target distance boundaries (#219)
+
+The distance-selection tail of selector 6 was checked in v1.188
+`SR_GameServer.exe`, SHA-256
+`bec2375e2c4c1073e3bf7761571470c430de251de74b452dbb86537348ef5290`.
+All addresses here are preferred VAs (image base `0x400000`). The 225-byte
+window `[546D71,546E52)` has SHA-256
+`91ee8b3f4795a977b3bd30d009c5e5b2822d7ba3292bb07d5376da6770908c5b`.
+
+- `546D76` stores the distance as float32 before comparison.
+- `546D90..546D97` compares sight range against distance; `TEST AH,5` / `JPO`
+  rejects a distance greater than the sight limit, accepting equality.
+- `546DAA..546DB1` distinguishes an empty selection from an existing target.
+- `546DF0..546E0B` compares distance against the existing unsigned integer best;
+  `TEST AH,5` / `JPE` preserves the first target on equality.
+- Both accepted branches truncate the float32 distance to the integer best
+  through `FISTP` with round-toward-zero control.
+
+The port previously combined sight and replacement into a single strict
+comparison and kept distance as float64. This missed enemies exactly at the
+130-unit sight limit and changed a near-tie decision. The acquisition tests
+cover ten player-candidate cases and three monster-distance cases, including
+integer truncation, equal distances, float32 rounding and the outside control.
+They exercise the existing eligibility and population paths. They do not prove
+the entire native spatial query, candidate enumeration order, or AI graph.
+
+### Lifecycle and callback coverage
+
 Focused tests exercise summon debit, duplicate refusal, group dismissal,
 expiry polling, signed expired entry, store reopen, count tables, master-transfer
 precedence, attribute purchase/reset/refusal, initial HP order, area damage,

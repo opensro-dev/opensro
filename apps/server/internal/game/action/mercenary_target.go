@@ -39,8 +39,10 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 	at := step.state.follower.Position(step.nowMs)
 	best, gid := uint32(mercenarySightRange), uint32(0)
 	admit := func(target uint32, pose simulation.Spawn) {
-		distance := areaDistance(at, pose)
-		if distance >= float64(best) {
+		// 546D76 stores float32 before the inclusive sight test at 546D90.
+		// Only an existing selection uses the strict integer-best test (546E02).
+		distance := float64(float32(areaDistance(at, pose)))
+		if distance > mercenarySightRange || gid != 0 && distance >= float64(best) {
 			return
 		}
 		best, gid = uint32(distance), target
