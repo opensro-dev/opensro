@@ -1902,6 +1902,106 @@
 		"HandOverSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_06"
 	},
 	{
+		"Codename": "QNO_WC_WAREHOUSE_W_2",
+		"MaxCompletions": 2,
+		"MinLevel": 18,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_WAREHOUSE_W",
+		"EndNpcCodename": "NPC_WC_WAREHOUSE_W",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_06",
+		"RequiredQuests": [
+			"QNO_WC_WAREHOUSE_W_1"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_10",
+		"RewardExp": 169000,
+		"RewardGold": 0,
+		"RewardSkillExp": 20000,
+		"RewardItems": [],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_WC_WAREHOUSE_W_2",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_WC_WAREHOUSE_W_2_02",
+				"CollectCount": 100
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_WC_WAREHOUSE_W_2",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_WC_WAREHOUSE_W_2_01",
+				"CollectCount": 10000,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_WC_EARTHKING",
+						"MOB_WC_EARTHKING_CLON"
+					],
+					"ChancePercent": 50.0
+				},
+				"Optional": true
+			}
+		],
+		"RepeatOfferPromptSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_07",
+		"RepeatOfferAcceptRowSymbol": "SN_TALK_COMMON_OK",
+		"RepeatAcceptResponseSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_08"
+	},
+	{
+		"Codename": "QNO_WC_WAREHOUSE_W_3",
+		"MaxCompletions": 1,
+		"MinLevel": 18,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_WAREHOUSE_W",
+		"EndNpcCodename": "NPC_WC_WAREHOUSE_W",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_3_06",
+		"RequiredQuests": [
+			"QNO_WC_WAREHOUSE_W_2"
+		],
+		"RequiredQuestCompletions": [
+			2
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_3_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_3_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_3_07",
+		"RewardExp": 337000,
+		"RewardGold": 0,
+		"RewardSkillExp": 40000,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_WAREHOUSE_W_2_04",
+				"Count": 1
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_WC_WAREHOUSE_W_3",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_WC_WAREHOUSE_W_2_02",
+				"CollectCount": 200
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_WC_WAREHOUSE_W_3",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_WC_WAREHOUSE_W_2_01",
+				"CollectCount": 10000,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_WC_EARTHKING",
+						"MOB_WC_EARTHKING_CLON"
+					],
+					"ChancePercent": 50.0
+				},
+				"Optional": true
+			}
+		]
+	},
+	{
 		"Codename": "QSP_CA_EXINVENTORY_2",
 		"MaxCompletions": 1,
 		"MinLevel": 30,

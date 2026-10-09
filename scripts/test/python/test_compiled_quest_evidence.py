@@ -247,7 +247,31 @@ class CompiledQuestFieldTests(unittest.TestCase):
 		quest["words"]["vf17c"] = 0
 		self.assertNotIn("Optional", project("QUEST", quest, text, {})["Objectives"][1])
 		with self.assertRaisesRegex(Unsupported, "custom behaviour 0x4"):
-			project("QNO_WC_WAREHOUSE_W_3", quest, text, {})
+			project("QNO_EU_WITCH_1", quest, text, {})
+
+	# ================
+	# test_change_item_mission_holds_its_result
+	#
+	# CMissionChangeItem (91D540) holds +0x19 of +0x1D; an optional hunt
+	# keeps its class cap; Irina's orders carry v1.150's one caption.
+	# ================
+	def test_change_item_mission_holds_its_result(self):
+		change = {"fields": {"0x8": 0, "0x9": 10, "0xd": "SN_CON_QNO_WC_WAREHOUSE_W_2_01", "0x15": "ITEM_HUNTED",
+			"0x19": 70, "0x1d": "ITEM_AUTHENTIC"}}
+		hunt = {"fields": {"0x8": 1, "0x9": 1, "0xd": "SN_CON_QNO_WC_WAREHOUSE_W_2_01", "0x19": 1, "0x1d": "MOB_A",
+			"0x23d": 10000, "0x241": "ITEM_HUNTED", "0x14d": 50.0}}
+		quest = {"words": {"0x130": "OFFER", "0x134": "PAY", "vf17c": 1}, "tables": {"0xc2": {"flags": 2},
+			"0xc4": {"0x8": "NPC_A"}}, "lists": {}, "missions": [change, hunt], "overrides": []}
+		text = {"objectives": {"SN_CON_QNO_WC_WAREHOUSE_W_2_01": {"count": 100}}, "symbols": ["SN_CON_QNO_WC_WAREHOUSE_W_2"],
+			"reward": {"exp": 1, "skillExp": 0, "gold": 0, "inventorySlots": 0}}
+		rows = project("QNO_WC_WAREHOUSE_W_2", quest, text, {})["Objectives"]
+		self.assertEqual([(r["CollectItemCodename"], r["CollectCount"], r.get("Optional", False)) for r in rows],
+			[("ITEM_AUTHENTIC", 100, False), ("ITEM_HUNTED", 10000, True)])
+		with self.assertRaisesRegex(Unsupported, "contents caption unavailable"):
+			project("QNO_WC_WAREHOUSE_W_2", quest, {**text, "symbols": []}, {})
+		text["symbols"] = ["SN_CON_QNO_WC_WAREHOUSE_W_3"]
+		rows = project("QNO_WC_WAREHOUSE_W_3", quest, text, {})["Objectives"]
+		self.assertEqual({r["ContentsSymbol"] for r in rows}, {"SN_CON_QNO_WC_WAREHOUSE_W_3"})
 
 if __name__ == "__main__":
 	unittest.main()

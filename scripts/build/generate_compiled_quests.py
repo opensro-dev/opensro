@@ -41,6 +41,7 @@ MISSION_GATHER = 1
 MISSION_KILL = 2
 MISSION_DELIVER = 3
 MISSION_DIALOG = 6
+MISSION_CHANGE_ITEM = 10
 
 # QuestSpec objectives (definitions.go ObjectiveKind).
 OBJECTIVE_TALK = 0
@@ -127,10 +128,32 @@ ITEM_USE_HANDLERS = {
 }
 REQUIRED_MISSIONS = "vf17c"
 
+# Classes whose v1.188 mission captions v1.150 never shipped as contents:
+# v1.150's questcontentsdata names one caption per quest, which every
+# mission node then carries. Irina's orders caption their missions
+# SN_CON_..._W_2_01/_02 ("genuine charms"); v1.150 names
+# SN_CON_QNO_WC_WAREHOUSE_W_2 / _W_3 ("Collect 100/200 real charms").
+CONTENTS_CAPTIONS = {
+	"QNO_WC_WAREHOUSE_W_2": "SN_CON_QNO_WC_WAREHOUSE_W_2",
+	"QNO_WC_WAREHOUSE_W_3": "SN_CON_QNO_WC_WAREHOUSE_W_3",
+}
+
 CLASS_BEHAVIOUR = {
 	# CQNO_EU_ADVENTURER_1_UseShinyMoss (8B6840): the archers' Shiny Moss
 	# calls a crab near the Troy wooden horse (quest.useShinyMoss).
 	("QNO_EU_ADVENTURER_1", "0x4"): {},
+	# CQNO_WC_WAREHOUSE_W_2/W_3_UseAmulet (895BC0 / 8970F0): a hunted amulet
+	# is right-clicked into an authentic or a flawed one (quest.useAmulet).
+	("QNO_WC_WAREHOUSE_W_2", "0x4"): {},
+	("QNO_WC_WAREHOUSE_W_3", "0x4"): {},
+	# CQNO_WC_WAREHOUSE_W_2_OnNpcTalk (895740): the base talk, except that a
+	# second run (completion count +0x1A4 > 0) is offered with _07 and a
+	# single OK row (word 0x140) that accepts, answered _08.
+	("QNO_WC_WAREHOUSE_W_2", "0x58"): {
+		"RepeatOfferPromptSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_07",
+		"RepeatOfferAcceptRowSymbol": "SN_TALK_COMMON_OK",
+		"RepeatAcceptResponseSymbol": "SN_TALK_QNO_WC_WAREHOUSE_W_2_08",
+	},
 	# CQSP_KT_EXINVENTORY_3_OnNpcTalk (8CF8F0): the base talk, plus a
 	# 10,000 gold fee checked before the reward and taken after it.
 	("QSP_KT_EXINVENTORY_3", "0x58"): {
@@ -444,6 +467,16 @@ def project_mission(text, mission):
 		row.update({"Objective": OBJECTIVE_KILL, "KillMonsterCodenames": mission_monsters(fields, 0x19, "0x15"),
 			"KillCount": objective_count(text, mission, "0x149")})
 		return row
+	# CMissionChangeItem (IsIncomplete 91D540): hold +0x19 of +0x1D. The
+	# item comes from the class's own item-use handler (vtable +0x4), which
+	# turns +0x15 into it.
+	if kind == MISSION_CHANGE_ITEM:
+		item = fields.get("0x1d")
+		if not isinstance(item, str) or not isinstance(fields.get("0x15"), str):
+			raise Unsupported("change-item mission without its items")
+		row.update({"Objective": OBJECTIVE_COLLECT, "CollectItemCodename": item,
+			"CollectCount": objective_count(text, mission, "0x19")})
+		return row
 	raise Unsupported("mission kind %s in a parallel quest" % kind)
 
 
@@ -650,7 +683,7 @@ def project(code, quest, text, sql):
 					spec["ExchangeItems"] = exchange
 				if isinstance(fields.get("0xc8"), str):
 					spec["ExchangeFullSymbol"] = fields["0xc8"]
-	elif kinds <= {MISSION_GATHER, MISSION_KILL}:
+	elif kinds <= {MISSION_GATHER, MISSION_KILL, MISSION_CHANGE_ITEM}:
 		rows = [project_mission(text, m) for m in missions]
 		if len(rows) == 1:
 			row = rows[0]
@@ -673,6 +706,11 @@ def project(code, quest, text, sql):
 	else:
 		raise Unsupported("mission kinds " + ",".join(str(k) for k in sorted(kinds, key=str)))
 	spec.update(behaviour)
+	if code in CONTENTS_CAPTIONS:
+		if CONTENTS_CAPTIONS[code] not in text.get("symbols", []) or not spec.get("Objectives"):
+			raise Unsupported("contents caption unavailable")
+		for row in spec["Objectives"]:
+			row["ContentsSymbol"] = CONTENTS_CAPTIONS[code]
 	# vf17C's N (CBasicQuest_vfE4 91F7D0): only the first N missions make
 	# the reward key; a later one still runs (its drops, its journal node)
 	# but never gates the pay. N = 0 requires every mission.
@@ -681,8 +719,13 @@ def project(code, quest, text, sql):
 		rows = spec.get("Objectives")
 		if not rows or len(rows) != len(missions):
 			raise Unsupported("required missions on a scalar objective")
-		for row in rows[required:]:
+		for row, mission in zip(rows[required:], missions[required:]):
 			row["Optional"] = True
+			# The v1.150 line counts the required mission (WC_WAREHOUSE_W_2's
+			# two missions share one caption); an optional gather keeps its
+			# own class cap.
+			if mission["fields"].get("0x9") == MISSION_GATHER and isinstance(mission["fields"].get("0x23d"), int):
+				row["CollectCount"] = mission["fields"]["0x23d"]
 	# An absent base word is no field: POTION_4's offer has no deny line.
 	spec = {key: value for key, value in spec.items() if value is not None}
 	if not spec.get("CompletePromptSymbol") or not spec.get("OfferPromptSymbol"):

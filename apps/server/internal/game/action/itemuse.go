@@ -13,6 +13,7 @@ package action
 
 import (
 	"math"
+	"slices"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
@@ -192,6 +193,14 @@ func (rt *Runtime) HandleItemUse(
 			frames, admitted := rt.UseQuestItem(character, ref.Codename, at, nowMs)
 			if !admitted {
 				result.Frames = append(result.Frames, frames...)
+				return false
+			}
+			// A quest tool may grant its result before it is spent (the
+			// warehouse amulets, 895BC0): find the used row again by its slot.
+			rowIndex = slices.IndexFunc(character.MissionInventory, func(row enterworld.InventoryRow) bool {
+				return row.Slot == int64(request.Slot) && row.Codename == ref.Codename
+			})
+			if rowIndex < 0 {
 				return false
 			}
 			remaining := rt.consumeItemUseRow(character, rowIndex)

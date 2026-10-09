@@ -268,6 +268,12 @@ type QuestSpec struct {
 	// OfferAcceptRowSymbol replaces the offer's yes/no with this one row,
 	// which accepts: 897680 accepts on _01's SN_TALK_COMMON_NEXT.
 	OfferAcceptRowSymbol string
+	// RepeatOfferAcceptRowSymbol and RepeatAcceptResponseSymbol replace the
+	// row and the answer when RepeatOfferPromptSymbol is offered: 895740
+	// offers a second run with _07 and one OK row (word 0x140) that
+	// accepts, answered _08 (QNO_WC_WAREHOUSE_W_2).
+	RepeatOfferAcceptRowSymbol string
+	RepeatAcceptResponseSymbol string
 	// HandOverNpcCodename makes a delivery two legs (mission +0x110 clear,
 	// the 872040 default). 91CA00 takes the items at this NPC after
 	// HandOverSymbol (+0xC0), gives ExchangeItems back (+0x6A count, +0x93

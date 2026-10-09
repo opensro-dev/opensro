@@ -514,3 +514,43 @@ func TestComputePotionAmountFollowsNative(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestQuestToolSpendsItsOwnRowAfterAGrant
+
+A quest tool's handler may grant its result before the tool is spent
+(the warehouse amulets, 895BC0); the spend finds the used row by its slot
+even when the grant moved it in the inventory slice.
+================
+*/
+func TestQuestToolSpendsItsOwnRowAfterAGrant(t *testing.T) {
+	character := testCharacter()
+	tool := wire.PackTypeFlags(3, 3, 9, 0)
+	character.MissionInventory = append(character.MissionInventory, enterworld.InventoryRow{
+		Slot: 21, RefObjID: 9001, Codename: "ITEM_TEST_QUEST_TOOL", TypeFlags: tool, VarianceBits: "0", StackCount: 2,
+	})
+	items := testItems()
+	items["ITEM_TEST_QUEST_TOOL"] = &enterworld.ItemRef{RefObjID: 9001, Codename: "ITEM_TEST_QUEST_TOOL",
+		TypeIDs: [4]int64{3, 3, 9, 0}, NativeFields: enterworld.NewNativeFields(map[string]float64{"maxStack": 50, "canUse": 1})}
+	rt, _ := newTestRuntime(character, items)
+	rt.UseQuestItem = func(c *enterworld.Character, code string, _ simulation.Spawn, _ int64) ([]wire.Frame, bool) {
+		granted := enterworld.InventoryRow{Slot: 22, RefObjID: 3630, Codename: "ITEM_ETC_HP_POTION_01",
+			TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), VarianceBits: "0", StackCount: 1}
+		c.MissionInventory = append([]enterworld.InventoryRow{granted}, c.MissionInventory...)
+		return nil, code == "ITEM_TEST_QUEST_TOOL"
+	}
+	rt.HandleItemUse(testDivision, character, []byte{21, byte(tool), byte(tool >> 8)})
+	var used, granted int64
+	for _, row := range character.MissionInventory {
+		switch row.Slot {
+		case 21:
+			used = row.StackCount
+		case 22:
+			granted = row.StackCount
+		}
+	}
+	if used != 1 || granted != 1 {
+		t.Fatalf("tool stack %d and grant %d, want 1 and 1: %+v", used, granted, character.MissionInventory)
+	}
+}

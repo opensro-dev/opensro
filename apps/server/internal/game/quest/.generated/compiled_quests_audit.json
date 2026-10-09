@@ -38,8 +38,6 @@
 	"QNO_RM_OLDWOMAN_5": "custom behaviour 0xc,0x58,0x5c,0x94,0x98,0x4",
 	"QNO_RM_OLDWOMAN_6": "custom behaviour 0x58,0x5c,0x60,0x74,0xac",
 	"QNO_RM_SLAVE2_2": "custom behaviour 0x58,0x98",
-	"QNO_WC_WAREHOUSE_W_2": "custom behaviour 0x58,0x4",
-	"QNO_WC_WAREHOUSE_W_3": "custom behaviour 0x4",
 	"QNO_CA_GORIA_3": "prerequisite QNO_CA_GORIA_2 pending",
 	"QNO_CA_WAREHOUSE_4": "prerequisite QNO_CA_WAREHOUSE_3 pending",
 	"QNO_EU_EASTEU_17": "prerequisite QNO_EU_EASTEU_16 pending",

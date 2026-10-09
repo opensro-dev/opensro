@@ -506,17 +506,23 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		// The level gates taking a quest, never reporting one already taken:
 		// a character that lost a level keeps its turn-in (as MarkerStates).
 		if !active && admissionLevel(def) <= level && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
-			prompt := def.OfferPromptSymbol
+			prompt, accept, row := def.OfferPromptSymbol, def.AcceptResponseSymbol, def.OfferAcceptRowSymbol
 			// Native 9206ec..92073f: DifferentString only selects the
 			// after-one-clear offer when the persisted completion count > 0.
 			if def.RepeatOfferPromptSymbol != "" && completionCount(character, def.RefID) > 0 {
 				prompt = def.RepeatOfferPromptSymbol
+				if def.RepeatOfferAcceptRowSymbol != "" {
+					row = def.RepeatOfferAcceptRowSymbol
+				}
+				if def.RepeatAcceptResponseSymbol != "" {
+					accept = def.RepeatAcceptResponseSymbol
+				}
 			}
 			offers = append(offers, NpcOption{
 				Codename: def.Codename, TitleSymbol: def.TitleSymbol,
 				PromptSymbol:         prompt,
-				AcceptResponseSymbol: def.AcceptResponseSymbol, DenyResponseSymbol: def.DenyResponseSymbol,
-				Pages: def.OfferPages, Branches: offerBranchRows(def), AcceptRowSymbol: def.OfferAcceptRowSymbol,
+				AcceptResponseSymbol: accept, DenyResponseSymbol: def.DenyResponseSymbol,
+				Pages: def.OfferPages, Branches: offerBranchRows(def), AcceptRowSymbol: row,
 			})
 		}
 		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && def.NotAchievedSymbol != "" {

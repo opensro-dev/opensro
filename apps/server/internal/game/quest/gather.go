@@ -7,7 +7,7 @@ The item owner consumes the tool after admission. This owner retains the
 short online countdown and awards the gathered material through inventory
 authority. Leaving the world cancels the countdown, matching 8C8770.
 
-Five quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
+Seven quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
 on a 50% roll. Cerberus 1's Long Scissors (QNO_EU_EASTEU_19, 8B2AB0) cut a
 Golden Apple after ten seconds with no roll, and the Golden Apple lures a
 quest Ladon whose Bloody Orbs are the quest's objective. Rahid 5's Essence
@@ -17,7 +17,9 @@ earlier ones failing more often. Hidden Treasure 5's Seal Key
 (QNO_CA_TREASURE_5, 8C7910) calls a Treasure Guardian at the Hungry Blood
 Ong habitat, whose King's Treasure Box is the quest's objective. Demetri's
 Shiny Moss (QNO_EU_ADVENTURER_1, 8B6840) lures a Red Spotted Crab by the
-Troy wooden horse; its Yellow Eggs are the objective.
+Troy wooden horse; its Yellow Eggs are the objective. Irina's amulet
+orders (QNO_WC_WAREHOUSE_W_2 and _3, 895BC0 / 8970F0) turn each hunted
+amulet into an authentic or a flawed one on a right-click.
 
 ===========================================================================
 */
@@ -63,6 +65,11 @@ const (
 	adventurerRadius         = 420 // 8B6840: 0x1A4
 	adventurerCrabMin        = 20
 	adventurerCrabSpan       = 80
+	amuletFirstQuest         = "QNO_WC_WAREHOUSE_W_2"
+	amuletSecondQuest        = "QNO_WC_WAREHOUSE_W_3"
+	amuletHunted             = "ITEM_QNO_WC_WAREHOUSE_W_2_01"
+	amuletAuthentic          = "ITEM_QNO_WC_WAREHOUSE_W_2_02"
+	amuletFlawed             = "ITEM_QNO_WC_WAREHOUSE_W_2_03"
 	treasureQuest            = "QNO_CA_TREASURE_5"
 	treasureKey              = "ITEM_QNO_CA_TREASURE_5_01"
 	treasureBox              = "ITEM_QNO_CA_TREASURE_5_02"
@@ -253,6 +260,8 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		quest = treasureQuest
 	case adventurerMoss:
 		quest = adventurerQuest
+	case amuletHunted:
+		return rt.useAmulet(c)
 	default:
 		return nil, false
 	}
@@ -421,6 +430,55 @@ func (rt *Runtime) useShinyMoss(c *enterworld.Character, def *Definition, at sim
 		return nil, false
 	}
 	return nil, true
+}
+
+/*
+================
+useAmulet
+
+895BC0 / 8970F0 (one per order, both on the W_2 items): while the order is
+running, a hunted amulet becomes an authentic one or a flawed one on an
+even or odd rand(), until the order's count of authentic ones is held;
+then it is refused and kept. The grant lands before the amulet is spent,
+so a full bag keeps it too. The orders never overlap: the second needs the
+first completed twice.
+INFERENCE: the v1.188 handlers stop at 0x46 and 0x82, their classes' own
+counts; v1.150's lines ask for 100 and 200, so the stop is the order's
+count.
+================
+*/
+func (rt *Runtime) useAmulet(c *enterworld.Character) ([]wire.Frame, bool) {
+	var def *Definition
+	for _, code := range []string{amuletFirstQuest, amuletSecondQuest} {
+		if d, exists := rt.Defs.ByCodename(code); exists && activeQuestIndex(c, d.RefID) >= 0 {
+			def = d
+		}
+	}
+	if def == nil || def.Objective != ObjectiveParallel {
+		return []wire.Frame{questNotification("UIIT_MSG_QUEST_ERR_CANNOT_USE_ITEM")}, false
+	}
+	if captureItemCount(c, amuletAuthentic) >= def.Objectives[0].CollectCount {
+		return nil, false
+	}
+	roll := rt.CaptureRoll
+	if roll == nil {
+		roll = combat.SecureRoll32767
+	}
+	value, err := roll()
+	if err != nil {
+		return nil, false
+	}
+	award := amuletAuthentic
+	if value&1 != 0 {
+		award = amuletFlawed
+	}
+	rows, updates, err := rt.PlanInventory(c, nil, []inventory.ItemAmount{{Codename: award, Count: 1}})
+	if err != nil {
+		return nil, false
+	}
+	c.MissionInventory = rows
+	objectives, _ := rt.applyInventoryChange(c)
+	return append(updates, objectives...), true
 }
 
 /*
