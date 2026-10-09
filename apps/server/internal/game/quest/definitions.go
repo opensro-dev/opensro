@@ -143,8 +143,12 @@ type QuestSpec struct {
 	// the last quest of a superseded chain that covered the same route. A
 	// character who finished that chain is neither offered this quest again
 	// nor shown it as undone.
-	CompletedBy          []string
-	MaxCompletions       uint32
+	CompletedBy    []string
+	MaxCompletions uint32
+	// MinLevel is the lowest level that may take the quest (condition
+	// table 0xC2 +0x4 under flag 1, CBasicQuest_MeetsPrerequisites 9262A0).
+	// Zero means the questdata level, which otherwise only picks the marker.
+	MinLevel             uint8
 	Stages               []QuestStage
 	MonsterDrop          *MonsterDropRule
 	Codename             string

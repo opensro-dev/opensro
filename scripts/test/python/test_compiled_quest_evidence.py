@@ -17,7 +17,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_compiled_quest_evidence import parse_initializer
-from generate_compiled_quests import Unsupported, check_fields
+from generate_compiled_quests import Unsupported, check_fields, conditions
 
 
 # ================
@@ -59,6 +59,47 @@ class CompiledQuestFieldTests(unittest.TestCase):
 			with self.subTest(words=words):
 				with self.assertRaisesRegex(Unsupported, reason):
 					check_fields({"words": words})
+
+	# ================
+	# test_table_flags_are_recorded_through_their_alias
+	# ================
+	def test_table_flags_are_recorded_through_their_alias(self):
+		quest = parse_initializer(
+			"int32_t* eax_3 = arg3[0xc2]\n"
+			"*eax_3 |= 2\n"
+			"int32_t* eax_8 = arg3[0xc2]\n"
+			"*eax_8 |= 1\n"
+			"*(arg3[0xc2] + 4) = 0x37\n"
+		)
+		self.assertEqual(quest["tables"], {"0xc2": {"flags": 3, "0x4": 55}})
+
+	# ================
+	# test_minimum_level_follows_flag_one
+	#
+	# 9262A0: flag 1 admits from +0x4; without it there is no minimum.
+	# ================
+	def test_minimum_level_follows_flag_one(self):
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": {"flags": 3, "0x4": 55, "0x23": 68}}}), {"MinLevel": 55})
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": {"flags": 2, "0x4": 55}}}), {})
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": {"flags": 0x103, "0x4": 5}}}), {"MinLevel": 5})
+
+	# ================
+	# test_unported_conditions_are_refused
+	# ================
+	def test_unported_conditions_are_refused(self):
+		cases = (
+			({"flags": 1, "0x4": 2}, "skip the prerequisites"),
+			({"flags": 0x1003, "0x4": 2}, "condition flag 0x1000"),
+			({"flags": 0x10003, "0x4": 2}, "condition flag 0x10000"),
+			({"flags": 7, "0x4": 2}, "condition flag 0x4"),
+			({"flags": 3}, "minimum level unavailable"),
+		)
+		for table, reason in cases:
+			with self.subTest(table=table):
+				with self.assertRaisesRegex(Unsupported, reason):
+					conditions("QUEST", {"tables": {"0xc2": table}})
+		# The one held-item gap on a live quest is recorded, not refused.
+		self.assertEqual(conditions("QNO_WC_POTION_4", {"tables": {"0xc2": {"flags": 7, "0x4": 22}}}), {"MinLevel": 22})
 
 
 if __name__ == "__main__":

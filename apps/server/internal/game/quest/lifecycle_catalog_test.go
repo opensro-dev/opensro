@@ -177,9 +177,10 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					}
 				}
 			}
-			if def.Level > 1 {
+			// The lowest admitted level: the class's MinLevel, else questdata's.
+			if admissionLevel(def) > 1 {
 				authority.UpdateCharacter(character, "test-low-level", func() bool {
-					low := int64(def.Level) - 1
+					low := admissionLevel(def) - 1
 					character.Level = &low
 					return true
 				})

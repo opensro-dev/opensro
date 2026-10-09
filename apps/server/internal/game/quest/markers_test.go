@@ -248,23 +248,28 @@ func TestEveryQuestMarkerNpcHasAuthoredPlacement(t *testing.T) {
 TestOfferMarkerFollowsTheNativeLevelGap
 
 925D20 / 40FE90: below the quest's level the NPC shows the red scroll;
-within six levels above it the offer mark; further above, nothing.
+within six levels above it the offer mark; further above, nothing. A
+minimum level (9262A0 flag 1) hides the quest below it.
 ================
 */
 func TestOfferMarkerFollowsTheNativeLevelGap(t *testing.T) {
 	for _, tc := range []struct {
-		level, questLevel int64
-		state             uint8
-		shown             bool
+		level, minLevel, questLevel int64
+		state                       uint8
+		shown                       bool
 	}{
-		{1, 10, markerStateTooLow, true},
-		{9, 10, markerStateTooLow, true},
-		{10, 10, markerStateOffer, true},
-		{16, 10, markerStateOffer, true},
-		{17, 10, 0, false},
+		{1, 0, 10, markerStateTooLow, true},
+		{9, 0, 10, markerStateTooLow, true},
+		{10, 0, 10, markerStateOffer, true},
+		{16, 0, 10, markerStateOffer, true},
+		{17, 0, 10, 0, false},
+		{1, 5, 10, 0, false},
+		{4, 5, 10, 0, false},
+		{5, 5, 10, markerStateTooLow, true},
+		{10, 5, 10, markerStateOffer, true},
 	} {
-		if state, shown := offerMarkerState(tc.level, tc.questLevel); state != tc.state || shown != tc.shown {
-			t.Fatalf("level %d quest %d = (%d, %v), want (%d, %v)", tc.level, tc.questLevel, state, shown, tc.state, tc.shown)
+		if state, shown := offerMarkerState(tc.level, tc.minLevel, tc.questLevel); state != tc.state || shown != tc.shown {
+			t.Fatalf("level %d min %d quest %d = (%d, %v), want (%d, %v)", tc.level, tc.minLevel, tc.questLevel, state, shown, tc.state, tc.shown)
 		}
 	}
 }

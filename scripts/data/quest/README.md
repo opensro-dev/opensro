@@ -48,6 +48,13 @@ writes as `"0x106.b"`, keeping a value read at run time as null. The generator
 projects the first entry's count as `RequiredQuestCompletions`, and refuses
 any other field that differs from the constructor's default (91E200), such
 as 0x15B/0x15C, which tie the quest to an instance world.
+The condition table (0xC2) gates the offer through its flag word, which the
+initializer sets through a pointer copy (`*eax |= 1`); the importer records
+it as the table's `flags`. Flag 1 admits from +0x4, projected as `MinLevel`
+(+0x23 is the questdata level, which only picks the marker); flag 2 checks
+the repeat limit and the lists; 0x100 is the country. The generator refuses
+any other flag, a condition the port does not check, except WC_POTION_4's
+held-item gate (flag 4), recorded as a known gap.
 
 A class that overrides vtable slots has custom behaviour (NPC talk at +0x58,
 dialogue at +0x90, the capture escort's +0x80/+0x9C/+0xA8 timers and events).

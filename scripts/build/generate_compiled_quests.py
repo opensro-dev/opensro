@@ -86,6 +86,27 @@ FIELD_MEANINGS = {
 # check passes because acceptance sets the byte (922DE0).
 KT_SHARED_TALK = {}
 
+# The condition table's flag word (table 0xC2 +0, CBasicQuest_MeetsPrerequisites
+# 9262A0): which conditions apply to the offer.
+#	1:     the character's level is at least +0x4 (MinLevel). +0x23 is the
+#	       questdata level, which only picks the marker (CBasicQuest_vf118)
+#	2:     the repeat limit and the prerequisite lists are checked
+#	4:     items the character must hold (+0x2C every one, +0x3C any one)
+#	0x100: country +0x27 (3 = both); the port reads questcontentsdata's
+#	       country byte, which carries the same value
+# Any other bit is a condition the port does not check, so the quest is
+# not projected.
+TABLE_CONDITIONS = "0xc2"
+CONDITION_MIN_LEVEL, CONDITION_PREREQUISITES = 0x1, 0x2
+CONDITION_HELD_ITEMS, CONDITION_COUNTRY = 0x4, 0x100
+CONDITIONS_PORTED = CONDITION_MIN_LEVEL | CONDITION_PREREQUISITES | CONDITION_COUNTRY
+# A held-item gate the port does not check yet, on a quest already live.
+# Without it the quest is still offered when the items were dropped.
+CONDITION_GAPS = {
+	# 897680 consumes the medicine and letter POTION_3 left in the bag.
+	("QNO_WC_POTION_4", CONDITION_HELD_ITEMS),
+}
+
 # What a class's own override does, as the QuestSpec fields that port it,
 # keyed by (quest, vtable slot). Each row cites the override it reads.
 CLASS_BEHAVIOUR = {
@@ -356,6 +377,29 @@ def check_fields(quest):
 
 
 # ================
+# conditions
+#
+# The offer's condition flags as QuestSpec fields: the minimum level, or
+# a refusal for a condition the port would otherwise skip.
+# ================
+def conditions(code, quest):
+	table = quest["tables"].get(TABLE_CONDITIONS, {})
+	flags = table.get("flags", 0)
+	if not flags & CONDITION_PREREQUISITES:
+		raise Unsupported("condition flags %#x skip the prerequisites" % flags)
+	unported = flags & ~CONDITIONS_PORTED
+	for bit in range(32):
+		if unported & (1 << bit) and (code, 1 << bit) not in CONDITION_GAPS:
+			raise Unsupported("condition flag %#x" % (1 << bit))
+	if not flags & CONDITION_MIN_LEVEL:
+		return {}
+	level = table.get("0x4")
+	if not isinstance(level, int) or level < 1:
+		raise Unsupported("minimum level unavailable")
+	return {"MinLevel": level}
+
+
+# ================
 # project
 # ================
 def project(code, quest, text, sql):
@@ -366,6 +410,7 @@ def project(code, quest, text, sql):
 	if unknown:
 		raise Unsupported("quest list " + ",".join(unknown))
 	check_fields(quest)
+	offer_conditions = conditions(code, quest)
 	missions = quest["missions"]
 	if not missions:
 		raise Unsupported("no missions")
@@ -376,6 +421,7 @@ def project(code, quest, text, sql):
 	spec = {
 		"Codename": code,
 		"MaxCompletions": quest["words"].get("+0x2d", 1),
+		**offer_conditions,
 		"KindByte": 1,
 		"StartNpcCodename": start,
 		"EndNpcCodename": (lists.get(LIST_COMPLETION_NPCS) or lists.get(LIST_QUEST_NPCS) or [start])[0],

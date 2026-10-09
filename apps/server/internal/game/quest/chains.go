@@ -57,6 +57,21 @@ func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 
 /*
 ================
+admissionLevel
+
+The lowest level that may take def: its MinLevel when the class sets one,
+else the questdata level.
+================
+*/
+func admissionLevel(def *Definition) int64 {
+	if def.MinLevel > 0 {
+		return int64(def.MinLevel)
+	}
+	return int64(def.Level)
+}
+
+/*
+================
 validateQuestChains
 
 Check both dependency families at load time, never recursively on NPC clicks.

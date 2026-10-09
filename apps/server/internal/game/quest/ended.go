@@ -74,7 +74,7 @@ func offerAvailable(c *enterworld.Character, def *Definition) bool {
 	if c.Level != nil {
 		level = *c.Level
 	}
-	if level < int64(def.Level) || (def.CountryByte != 3 && int(def.CountryByte) != enterworld.NativeCountryByte9C(c)) {
+	if level < admissionLevel(def) || (def.CountryByte != 3 && int(def.CountryByte) != enterworld.NativeCountryByte9C(c)) {
 		return false
 	}
 	return activeQuestIndex(c, def.RefID) < 0 && canAcceptAgain(c, def) && prerequisitesMet(c, def)

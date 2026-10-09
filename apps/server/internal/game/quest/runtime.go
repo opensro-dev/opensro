@@ -328,7 +328,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		if character.Level != nil {
 			level = *character.Level
 		}
-		if level < int64(def.Level) || (def.CountryByte != 3 && int(def.CountryByte) != enterworld.NativeCountryByte9C(character)) {
+		if level < admissionLevel(def) || (def.CountryByte != 3 && int(def.CountryByte) != enterworld.NativeCountryByte9C(character)) {
 			refusal = fmt.Errorf("quest start: %s is unavailable for this level/country", codename)
 			return false
 		}
@@ -507,7 +507,7 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 		}
 		// The level gates taking a quest, never reporting one already taken:
 		// a character that lost a level keeps its turn-in (as MarkerStates).
-		if !active && int64(def.Level) <= level && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
+		if !active && admissionLevel(def) <= level && canAcceptAgain(character, def) && prerequisitesMet(character, def) && rt.calendarAvailable(def, false) && questNpcMatches(def, def.StartNpcCodename, npcCodename) {
 			prompt := def.OfferPromptSymbol
 			// Native 9206ec..92073f: DifferentString only selects the
 			// after-one-clear offer when the persisted completion count > 0.

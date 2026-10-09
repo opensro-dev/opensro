@@ -153,7 +153,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 					fields["0x111"] = written
 				quest = {
 					"words": {"0x130": "SN_OFFER"}, "lists": {}, "overrides": [],
-					"tables": {"0xc4": {"0x8": "NPC_START"}}, "missions": [{"fields": fields}],
+					"tables": {"0xc2": {"flags": 2}, "0xc4": {"0x8": "NPC_START"}}, "missions": [{"fields": fields}],
 				}
 				spec = project("QUEST", quest, text, sql)
 				self.assertEqual(spec.get("DeliveryKeepsItems", False), kept)
@@ -176,7 +176,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 		}
 		quest = {
 			"words": {"0x130": "SN_OFFER", "0x134": "SN_ACHIEVED"}, "lists": {}, "overrides": [],
-			"tables": {"0xc4": {"0x8": "NPC_START"}}, "missions": [{"fields": fields}],
+			"tables": {"0xc2": {"flags": 2}, "0xc4": {"0x8": "NPC_START"}}, "missions": [{"fields": fields}],
 		}
 		spec = project("QUEST", quest, text, sql)
 		self.assertEqual((spec["HandOverNpcCodename"], spec["HandOverSymbol"]), ("NPC_HAND_OVER", "SN_HAND_OVER"))

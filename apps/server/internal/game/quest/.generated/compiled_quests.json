@@ -2,6 +2,7 @@
 	{
 		"Codename": "QNO_CA_HORSE_3",
 		"MaxCompletions": 1,
+		"MinLevel": 19,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CA_HORSE",
 		"EndNpcCodename": "NPC_CA_WAREHOUSE",
@@ -30,6 +31,7 @@
 	{
 		"Codename": "QNO_CA_THIEF_4",
 		"MaxCompletions": 1,
+		"MinLevel": 21,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CA_HUNTER",
 		"EndNpcCodename": "NPC_CA_SPECIAL",
@@ -109,6 +111,7 @@
 	{
 		"Codename": "QNO_CH_POTION_2",
 		"MaxCompletions": 1,
+		"MinLevel": 7,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_POTION",
 		"EndNpcCodename": "NPC_CH_POTION",
@@ -137,6 +140,7 @@
 	{
 		"Codename": "QNO_CH_PRIEST_1",
 		"MaxCompletions": 1,
+		"MinLevel": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_PRIEST",
 		"EndNpcCodename": "NPC_CH_PRIEST",
@@ -268,6 +272,7 @@
 	{
 		"Codename": "QNO_CH_SHAMAN_1",
 		"MaxCompletions": 1,
+		"MinLevel": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_SHAMAN",
 		"EndNpcCodename": "NPC_CH_SHAMAN",
@@ -426,6 +431,7 @@
 	{
 		"Codename": "QNO_CH_SHAMAN_2",
 		"MaxCompletions": 1,
+		"MinLevel": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_SHAMAN",
 		"EndNpcCodename": "NPC_CH_SHAMAN",
@@ -462,6 +468,7 @@
 	{
 		"Codename": "QNO_EU_ADVENTURER_1",
 		"MaxCompletions": 3,
+		"MinLevel": 16,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_ADVENTURER",
 		"EndNpcCodename": "NPC_EU_ADVENTURER",
@@ -508,6 +515,7 @@
 	{
 		"Codename": "QNO_EU_CONS_11",
 		"MaxCompletions": 1,
+		"MinLevel": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_UNION1",
 		"EndNpcCodename": "NPC_EU_SPECIAL",
@@ -654,6 +662,7 @@
 	{
 		"Codename": "QNO_EU_CONS_2",
 		"MaxCompletions": 1,
+		"MinLevel": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_POTION",
 		"EndNpcCodename": "NPC_EU_MERCHANT",
@@ -680,6 +689,7 @@
 	{
 		"Codename": "QNO_EU_CONS_3_1",
 		"MaxCompletions": 1,
+		"MinLevel": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_MERCHANT",
 		"EndNpcCodename": "NPC_EU_SPECIAL",
@@ -708,6 +718,7 @@
 	{
 		"Codename": "QNO_EU_EASTEU_11",
 		"MaxCompletions": 1,
+		"MinLevel": 5,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_HUNTER",
 		"EndNpcCodename": "NPC_EU_WITCH",
@@ -736,6 +747,7 @@
 	{
 		"Codename": "QNO_EU_EASTEU_14",
 		"MaxCompletions": 1,
+		"MinLevel": 6,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_ADVENTURER",
 		"EndNpcCodename": "NPC_EU_WITCH",
@@ -764,6 +776,7 @@
 	{
 		"Codename": "QNO_EU_EASTEU_4",
 		"MaxCompletions": 1,
+		"MinLevel": 2,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_WITCH",
 		"EndNpcCodename": "NPC_EU_WITCH",
@@ -797,6 +810,7 @@
 	{
 		"Codename": "QNO_EU_EASTEU_8",
 		"MaxCompletions": 1,
+		"MinLevel": 4,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_WITCH",
 		"EndNpcCodename": "NPC_EU_WITCH",
@@ -840,6 +854,7 @@
 	{
 		"Codename": "QNO_KT_ACCESSORY_2",
 		"MaxCompletions": 1,
+		"MinLevel": 55,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_KT_ACCESSORY",
 		"EndNpcCodename": "NPC_KT_ACCESSORY",
@@ -877,6 +892,7 @@
 	{
 		"Codename": "QNO_KT_ACCESSORY_3",
 		"MaxCompletions": 1,
+		"MinLevel": 55,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_KT_ACCESSORY",
 		"EndNpcCodename": "NPC_KT_ACCESSORY",
@@ -907,6 +923,7 @@
 	{
 		"Codename": "QNO_KT_SMITH_2",
 		"MaxCompletions": 1,
+		"MinLevel": 55,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_KT_SMITH",
 		"EndNpcCodename": "NPC_KT_SMITH",
@@ -956,6 +973,7 @@
 	{
 		"Codename": "QNO_KT_SMITH_3",
 		"MaxCompletions": 1,
+		"MinLevel": 55,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_KT_SMITH",
 		"EndNpcCodename": "NPC_KT_SMITH",
@@ -986,6 +1004,7 @@
 	{
 		"Codename": "QNO_RM_FLYSHIP1_2",
 		"MaxCompletions": 1,
+		"MinLevel": 72,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_RM_FLYSHIP1",
 		"EndNpcCodename": "NPC_RM_FLYSHIP1",
@@ -1021,6 +1040,7 @@
 	{
 		"Codename": "QNO_WC_ACCESSORY_3",
 		"MaxCompletions": 1,
+		"MinLevel": 16,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_ACCESSORY",
 		"EndNpcCodename": "NPC_WC_ACCESSORY",
@@ -1063,6 +1083,7 @@
 	{
 		"Codename": "QNO_WC_ARMOR_1",
 		"MaxCompletions": 1,
+		"MinLevel": 28,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_ARMOR",
 		"EndNpcCodename": "NPC_WC_ARMOR",
@@ -1091,6 +1112,7 @@
 	{
 		"Codename": "QNO_WC_POTION_3",
 		"MaxCompletions": 1,
+		"MinLevel": 22,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_POTION",
 		"EndNpcCodename": "NPC_CH_ACCESSORY",
@@ -1137,6 +1159,7 @@
 	{
 		"Codename": "QNO_WC_POTION_4",
 		"MaxCompletions": 1,
+		"MinLevel": 22,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_ACCESSORY",
 		"EndNpcCodename": "NPC_WC_SPECIAL",
@@ -1191,6 +1214,7 @@
 	{
 		"Codename": "QNO_WC_PRIEST1_1",
 		"MaxCompletions": 1,
+		"MinLevel": 11,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_PRIEST1",
 		"EndNpcCodename": "NPC_WC_PRIEST1",
@@ -1215,6 +1239,7 @@
 	{
 		"Codename": "QNO_WC_SMITH_3",
 		"MaxCompletions": 1,
+		"MinLevel": 30,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_SMITH",
 		"EndNpcCodename": "NPC_WC_FERRY3",
@@ -1254,6 +1279,7 @@
 	{
 		"Codename": "QNO_WC_SOLDIER_EA2_3",
 		"MaxCompletions": 1,
+		"MinLevel": 13,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_SOLDIER_EA2",
 		"EndNpcCodename": "NPC_WC_SOLDIER_EA2",
@@ -1306,6 +1332,7 @@
 	{
 		"Codename": "QSP_CA_EXINVENTORY_2",
 		"MaxCompletions": 1,
+		"MinLevel": 30,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CA_ACCESSORY",
 		"EndNpcCodename": "NPC_CA_ACCESSORY",
@@ -1336,6 +1363,7 @@
 	{
 		"Codename": "QSP_CH_EXINVENTORY_1",
 		"MaxCompletions": 1,
+		"MinLevel": 5,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_ACCESSORY",
 		"EndNpcCodename": "NPC_CH_ACCESSORY",
@@ -1364,6 +1392,7 @@
 	{
 		"Codename": "QSP_EU_EXINVENTORY_1",
 		"MaxCompletions": 1,
+		"MinLevel": 5,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_ACCESSORY",
 		"EndNpcCodename": "NPC_EU_ACCESSORY",
@@ -1392,6 +1421,7 @@
 	{
 		"Codename": "QSP_KT_EXINVENTORY_3",
 		"MaxCompletions": 1,
+		"MinLevel": 60,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_KT_ACCESSORY",
 		"EndNpcCodename": "NPC_KT_ACCESSORY",
@@ -1426,6 +1456,7 @@
 	{
 		"Codename": "QSP_RM_EXINVENTORY_4",
 		"MaxCompletions": 1,
+		"MinLevel": 90,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_RM_YOUNGWOMAN2",
 		"EndNpcCodename": "NPC_RM_YOUNGWOMAN2",
@@ -1456,6 +1487,7 @@
 	{
 		"Codename": "QSP_WC_EXINVENTORY_2",
 		"MaxCompletions": 1,
+		"MinLevel": 30,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_ACCESSORY",
 		"EndNpcCodename": "NPC_WC_ACCESSORY",

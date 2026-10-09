@@ -171,8 +171,21 @@ def parse_initializer(text):
 	quest = {"words": {}, "tables": {}, "lists": {}, "missions": []}
 	last_string = {}
 	mission, mission_vars = None, set()
+	# A table's flag word is set through a pointer copy:
+	# "int32_t* eax_8 = arg3[0xc2]" then "*eax_8 |= 1". The bits are
+	# recorded OR-ed together as the table's "flags".
+	table_aliases = {}
 	for raw in lines:
 		line = raw.strip()
+		m = re.match(r'(?:int32_t\* )?(\w+) = arg\d\[(0x[0-9a-f]+)\]$', line)
+		if m:
+			table_aliases[m.group(1)] = m.group(2)
+			continue
+		m = re.match(r'\*(\w+) \|= (0x[0-9a-f]+|\d+)$', line)
+		if m and m.group(1) in table_aliases:
+			table = quest["tables"].setdefault(table_aliases[m.group(1)], {})
+			table["flags"] = table.get("flags", 0) | literal(m.group(2))
+			continue
 		m = re.match(r'std_string_assign_cstr_n\(&(var_\w+), "([^"]*)"', line)
 		if m:
 			last_string[m.group(1)] = m.group(2)
