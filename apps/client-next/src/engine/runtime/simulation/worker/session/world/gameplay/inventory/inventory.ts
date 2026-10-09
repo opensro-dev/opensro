@@ -1716,8 +1716,9 @@ receive
 				// original, so the port applies nothing when the slot is empty or
 				// holds another type word: the count belongs to the item the server
 				// used, and the lane's duration needs that item's reference.
-				// Every success answer starts its lane (CGInterface_AddItemCooldown),
-				// as 755E40 does; failure answers ([2][code]) never reach here.
+				// Every success answer for the held item starts its lane
+				// (CGInterface_AddItemCooldown), as 755E40 does; failure answers
+				// ([2][code]) never reach here.
 				if ( item ) {
 					const category = potionCategory( v.getUint16( 4, true ) );
 					if ( category ) {
