@@ -352,6 +352,15 @@ func TestReceiveOnlyHandOverAmongGathers(t *testing.T) {
 		t.Fatalf("accept: %v", err)
 	}
 	const water = "ITEM_QNO_CA_TREASURE_4_03"
+	// The gathers alone never pay: the receive-only mission is met at once
+	// for its hand-over, but completes only on the hand-over's latch.
+	for _, m := range def.Objectives[:2] {
+		holdItems(t, rt, c, m.CollectItemCodename, m.CollectCount)
+	}
+	rt.InventoryUpdater()(c)
+	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err == nil {
+		t.Fatal("Tricia paid before the water was received")
+	}
 	row, ok := npcRow(rt, c, def.Codename, "NPC_CA_POTION")
 	if !ok || row.Codename != handOverToken(def.Codename) || row.PromptSymbol != "SN_TALK_QNO_CA_TREASURE_4_07" {
 		t.Fatalf("the potion shop's row %+v", row)
@@ -359,13 +368,6 @@ func TestReceiveOnlyHandOverAmongGathers(t *testing.T) {
 	if _, err := rt.AdvanceNpcQuest(c, row.Codename, "NPC_CA_POTION"); err != nil || captureItemCount(c, water) != 1 {
 		t.Fatalf("receiving the water: %v (holding %d)", err, captureItemCount(c, water))
 	}
-	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err == nil {
-		t.Fatal("Tricia paid before the gathers")
-	}
-	for _, m := range def.Objectives[:2] {
-		holdItems(t, rt, c, m.CollectItemCodename, m.CollectCount)
-	}
-	rt.InventoryUpdater()(c)
 	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err != nil || !questCompleted(c, def.RefID) {
 		t.Fatalf("Tricia did not pay: %v", err)
 	}
