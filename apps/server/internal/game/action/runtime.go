@@ -260,6 +260,12 @@ type Runtime struct {
 	// the closed-beta growth switch raises it (port-only, not native).
 	DropPassRate int
 
+	// DropCap bounds the ordinary items one kill leaves once DropPassRate has
+	// grown its capacity: a uniform random subset survives. Gold heaps and a
+	// unique's prepass are never cut. 0 leaves every planned item (port-only,
+	// not native; the closed-beta growth switch sets it).
+	DropCap int
+
 	// GoldRate multiplies every monster gold heap after the native rarity
 	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
 	GoldRate int

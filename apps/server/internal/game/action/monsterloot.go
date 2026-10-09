@@ -429,6 +429,7 @@ func (rt *Runtime) planMonsterKillLoot(
 	passes *= rate
 	capacity *= rate
 	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
+	uniqueRound := len(prepared)
 	for round := 0; round < rate && len(prepared) < capacity; round++ {
 		for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
 			if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
@@ -469,6 +470,12 @@ func (rt *Runtime) planMonsterKillLoot(
 		}
 	}
 
+	// Before admission, so the per-item level check cannot lower the cap.
+	prepared, ok := capKillDrops(prepared, uniqueRound, rt.DropCap, rt.DropRoll)
+	if !ok {
+		return nil
+	}
+
 	ownerJID := enterworld.ObjectIDForCharacter(snapshot)
 	admitted := make([]grounditem.Item, 0, len(prepared))
 	for _, planned := range prepared {
@@ -480,4 +487,67 @@ func (rt *Runtime) planMonsterKillLoot(
 		admitted = append(admitted, planned)
 	}
 	return admitted
+}
+
+// dropRollDomain is DropRoll's range: 0..32767, as combat.Roll32767.
+const dropRollDomain = 32768
+
+/*
+================
+capKillDrops
+
+Port-only, not native: bounds the ordinary items one kill leaves to dropCap
+once the beta rate has grown its capacity. The first uniqueRound items (a
+unique's own prepass, one native round) and every gold heap are kept; of
+the rest a uniform random subset of dropCap survives, in planned order, so
+no item family is favoured by the planner's fill order. A partial
+Fisher-Yates draws each index by rejection sampling on the 15-bit roll, so
+no index is likelier than another. 0 keeps every item. False when a roll
+fails or leaves its domain, as the planner's other rolls do.
+================
+*/
+func capKillDrops(prepared []grounditem.Item, uniqueRound, dropCap int, roll func() (uint32, error)) ([]grounditem.Item, bool) {
+	if dropCap <= 0 {
+		return prepared, true
+	}
+	var ordinary []int
+	for i := uniqueRound; i < len(prepared); i++ {
+		if !prepared[i].IsGold() {
+			ordinary = append(ordinary, i)
+		}
+	}
+	if len(ordinary) <= dropCap {
+		return prepared, true
+	}
+	if roll == nil {
+		return nil, false
+	}
+	for k := 0; k < dropCap; k++ {
+		n := uint32(len(ordinary) - k)
+		limit := dropRollDomain - dropRollDomain%n
+		var r uint32
+		for {
+			value, err := roll()
+			if err != nil || value >= dropRollDomain {
+				return nil, false
+			}
+			if value < limit {
+				r = value
+				break
+			}
+		}
+		j := k + int(r%n)
+		ordinary[k], ordinary[j] = ordinary[j], ordinary[k]
+	}
+	dropped := make(map[int]bool, len(ordinary)-dropCap)
+	for _, i := range ordinary[dropCap:] {
+		dropped[i] = true
+	}
+	kept := make([]grounditem.Item, 0, len(prepared)-len(dropped))
+	for i, item := range prepared {
+		if !dropped[i] {
+			kept = append(kept, item)
+		}
+	}
+	return kept, true
 }

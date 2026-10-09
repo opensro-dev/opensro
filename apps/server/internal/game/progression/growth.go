@@ -32,6 +32,13 @@ because levelling at the compressed pace outruns native gold income for gear. An
 rare (Seal of Star/Moon/Sun) RareRate times as often: the native single roll
 admits the residues 1..RareRate of 1000 instead of 1 alone.
 
+Drop cap: DropRate grows a kill's capacity with its passes (an ordinary
+monster's 8 becomes 160 at rate 20), which floods the ground. DropCap bounds
+the ordinary items one kill leaves: the kill plans as before, then a uniform
+random subset of DropCap survives, so no item family is favoured. Gold heaps
+(native count, value-scaled) and a unique's own prepass (one native round)
+are never cut. 0 leaves every planned item.
+
 ===========================================================================
 */
 package progression
@@ -59,6 +66,9 @@ const EnvBetaGoldRate = "SRO_BETA_GOLD_RATE"
 // EnvBetaRareRate overrides the beta rare-equipment (SoX) multiplier.
 const EnvBetaRareRate = "SRO_BETA_RARE_RATE"
 
+// EnvBetaDropCap overrides the beta per-kill item cap (0 turns it off).
+const EnvBetaDropCap = "SRO_BETA_DROP_CAP"
+
 // BetaReferenceLevel is the level whose kill pace every level is held to.
 const BetaReferenceLevel = 1
 
@@ -71,6 +81,14 @@ const betaDropRateDefault = 20
 
 // maxBetaDropRate bounds an operator override; capacity bounds the drops.
 const maxBetaDropRate = 100
+
+// betaDropCapDefault keeps a kill to sixteen ordinary items, twice an
+// ordinary monster's native capacity, so the rate shows as better finds
+// rather than a carpet of potions.
+const betaDropCapDefault = 16
+
+// maxBetaDropCap bounds an operator override.
+const maxBetaDropCap = 1000
 
 // betaGoldRateDefault makes each gold heap fifty times its native amount.
 const betaGoldRateDefault = 50
@@ -95,6 +113,7 @@ type GrowthRates struct {
 	Enabled      bool
 	SkillExpRate int64
 	DropRate     int
+	DropCap      int
 	GoldRate     int
 	RareRate     int
 }
@@ -114,6 +133,7 @@ func BetaGrowthFromEnv() GrowthRates {
 		Enabled:      true,
 		SkillExpRate: betaSkillExpRateDefault,
 		DropRate:     betaDropRateDefault,
+		DropCap:      betaDropCapDefault,
 		GoldRate:     betaGoldRateDefault,
 		RareRate:     betaRareRateDefault,
 	}
@@ -125,6 +145,11 @@ func BetaGrowthFromEnv() GrowthRates {
 	if text := strings.TrimSpace(os.Getenv(EnvBetaDropRate)); text != "" {
 		if n, err := strconv.Atoi(text); err == nil && n >= 1 && n <= maxBetaDropRate {
 			rates.DropRate = n
+		}
+	}
+	if text := strings.TrimSpace(os.Getenv(EnvBetaDropCap)); text != "" {
+		if n, err := strconv.Atoi(text); err == nil && n >= 0 && n <= maxBetaDropCap {
+			rates.DropCap = n
 		}
 	}
 	if text := strings.TrimSpace(os.Getenv(EnvBetaGoldRate)); text != "" {

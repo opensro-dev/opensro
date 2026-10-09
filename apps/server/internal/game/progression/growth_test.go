@@ -88,6 +88,7 @@ TestBetaGrowthSwitchReadsTheEnvironment
 */
 func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 	t.Setenv(EnvBetaDropRate, "")
+	t.Setenv(EnvBetaDropCap, "64")
 	t.Setenv(EnvBetaGoldRate, "")
 	t.Setenv(EnvBetaRareRate, "1000")
 	t.Setenv(EnvBetaGrowth, "")
@@ -95,6 +96,7 @@ func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 		t.Fatalf("unset switch honored an override: %+v", rates)
 	}
 	t.Setenv(EnvBetaRareRate, "")
+	t.Setenv(EnvBetaDropCap, "")
 	t.Setenv(EnvBetaGrowth, "on")
 	t.Setenv(EnvBetaSkillExpRate, "25")
 	if rates := BetaGrowthFromEnv(); !rates.Enabled || rates.SkillExpRate != 25 || rates.DropRate != betaDropRateDefault ||
@@ -111,6 +113,20 @@ func TestBetaGrowthSwitchReadsTheEnvironment(t *testing.T) {
 			t.Fatalf("drop override %q = %+v", bad, rates)
 		}
 	}
+	t.Setenv(EnvBetaDropRate, "")
+	if rates := BetaGrowthFromEnv(); rates.DropCap != betaDropCapDefault {
+		t.Fatalf("drop cap default = %+v", rates)
+	}
+	for _, value := range []struct {
+		text string
+		cap  int
+	}{{"0", 0}, {"8", 8}, {"1000", 1000}, {"-1", betaDropCapDefault}, {"1001", betaDropCapDefault}, {"x", betaDropCapDefault}} {
+		t.Setenv(EnvBetaDropCap, value.text)
+		if rates := BetaGrowthFromEnv(); rates.DropCap != value.cap {
+			t.Fatalf("drop cap override %q = %+v", value.text, rates)
+		}
+	}
+	t.Setenv(EnvBetaDropCap, "")
 	t.Setenv(EnvBetaGoldRate, "200")
 	if rates := BetaGrowthFromEnv(); rates.GoldRate != 200 {
 		t.Fatalf("gold override = %+v", rates)

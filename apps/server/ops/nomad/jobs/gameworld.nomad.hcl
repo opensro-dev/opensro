@@ -164,7 +164,9 @@ variable "party_masteries" {
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
 # prepass and the gold heap count stay native), multiplies gold heaps by
 # beta_gold_rate and makes a rare (SoX) equipment drop beta_rare_rate times as
-# likely. "off" restores the native rates.
+# likely. beta_drop_cap keeps a kill to that many ordinary items (a uniform
+# random subset; gold heaps and a unique's prepass are never cut; 0 = no cap).
+# "off" restores the native rates.
 variable "beta_growth" {
   type    = string
   default = "on"
@@ -178,6 +180,11 @@ variable "beta_skill_exp_rate" {
 variable "beta_drop_rate" {
   type    = string
   default = "20"
+}
+
+variable "beta_drop_cap" {
+  type    = string
+  default = "16"
 }
 
 variable "beta_gold_rate" {
@@ -334,6 +341,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                 = var.beta_gold_rate
         SRO_BETA_RARE_RATE                 = var.beta_rare_rate
+        SRO_BETA_DROP_CAP                  = var.beta_drop_cap
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir
