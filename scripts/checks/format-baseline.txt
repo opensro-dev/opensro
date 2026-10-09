@@ -404,7 +404,6 @@ scripts/build/char/weatherEvents.mjs
 scripts/build/data/buildActionWndDataAsset.mjs
 scripts/build/data/buildCharacterDataCountryAsset.mjs
 scripts/build/data/buildGInterfaceSectionsAsset.mjs
-scripts/build/data/buildMissionPresentationAsset.mjs
 scripts/build/data/buildQuestDataAsset.mjs
 scripts/build/data/buildSiegeFortressDataAsset.mjs
 scripts/build/data/buildSkillMasteryDataAsset.mjs

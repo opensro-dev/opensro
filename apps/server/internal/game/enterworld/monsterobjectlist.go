@@ -136,9 +136,9 @@ PublicMonsterRefObjRows
 The monster rows of the public reference file: every monster the server
 can create (Template.CreatableRefs), so a GM LOADMONSTER or a quest
 script spawn resolves in the browser as it does in the native client,
-which holds the whole characterdata (#369). Thieves and hunters wait for
-their trade appearance (861720); until it is ported the browser holds no
-row for them and drops their spawn, as it does today.
+which holds the whole characterdata (#369). A thief or hunter's row also
+carries its country byte: 861720 picks the skin pool its body comes from by
+record +0x9d, the Country column (808AD0 stores it at +0x9c and +0x9d).
 ================
 */
 func PublicMonsterRefObjRows(registry *simulation.MonsterState) []RefObjRow {
@@ -147,9 +147,11 @@ func PublicMonsterRefObjRows(registry *simulation.MonsterState) []RefObjRow {
 	}
 	var rows []RefObjRow
 	for _, ref := range registry.CreatableRefs() {
-		if !ref.TradeAppearance() {
-			rows = append(rows, monsterRefObjRow(ref))
+		row := monsterRefObjRow(ref)
+		if ref.TradeAppearance() {
+			row.CountryByte9C = bytePointer(ref.Country)
 		}
+		rows = append(rows, row)
 	}
 	return rows
 }

@@ -18,6 +18,7 @@ whether a dock, a creation preview or a world roster needs one.
 ===========================================================================
 */
 
+import type { TradeSkinPools } from "@/engine/foundation/animation/trade-appearance";
 import { validateEquipmentBranches } from "@/engine/foundation/animation/equipment-sockets";
 import { validateEquipmentParticles } from "@/engine/foundation/animation/equipment-particles";
 import {
@@ -138,6 +139,28 @@ function joinModelResources(
 
 /*
 ================
+readTradeSkinPools
+
+The China and Europe skin pools: [refObjId, sex] rows, sex 0 or 1.
+================
+*/
+function readTradeSkinPools( value: unknown ): TradeSkinPools {
+	const pools = value as { china?: unknown; europe?: unknown; } | null;
+	const rows = ( list: unknown ) => {
+		if (
+			!Array.isArray( list ) || list.length > 0xffff ||
+			list.some( row =>
+				!Array.isArray( row ) || row.length !== 2 || !Number.isSafeInteger( row[0] ) || row[0] <= 0 ||
+				(row[1] !== 0 && row[1] !== 1)
+			)
+		) throw Error( "Invalid trade skin pool" );
+		return list as [number, number][];
+	};
+	return { china: rows( pools?.china ), europe: rows( pools?.europe ) };
+}
+
+/*
+================
 createPresentationCatalog
 ================
 */
@@ -147,6 +170,8 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 	const catalog = new Map<number, Resource>();
 	let dress: DressCatalog = {},
 		itemIds: ReadonlyMap<string, number> = new Map(),
+		// The trade bandits' bodies (missionPresentation.json, 861720).
+		tradeSkinPools: TradeSkinPools = { china: [], europe: [] },
 		items: Record<string, ItemPresentation> = {};
 	let dropModels: Record<string, DropModel> = {};
 	const animationStates = new Map<string, Record<string, AnimationMetadata>>(),
@@ -194,6 +219,9 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 		get dress() {
 			return dress;
 		},
+		get tradeSkinPools() {
+			return tradeSkinPools;
+		},
 		get itemIds() {
 			return itemIds;
 		},
@@ -232,6 +260,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 					effectAppearanceReferences?: readonly (readonly [number, number, number])[];
 					skillAudioRows?: string[];
 					recoveryByCodename?: Record<string, number>;
+					tradeSkinPools?: unknown;
 					models?: Resource[] | Record<string, Resource>;
 					resources?: Record<string, Partial<Resource>>;
 					dress?: typeof dress;
@@ -536,12 +565,16 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						}
 					}
 				}
+				const nextTradeSkinPools = value.tradeSkinPools === undefined ?
+					tradeSkinPools :
+					readTradeSkinPools( value.tradeSkinPools );
 				if ( value.recoveryByCodename ) {
 					recoveryByCodename.clear();
 					for ( const [name, period] of Object.entries( value.recoveryByCodename ) ) {
 						recoveryByCodename.set( name, period );
 					}
 				}
+				tradeSkinPools = nextTradeSkinPools;
 				if ( value.rules ) sounds.catalog( value.rules );
 				if ( value.effectAppearanceStores ) {
 					const pools = value.effectAppearanceStores;

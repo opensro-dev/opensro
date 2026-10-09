@@ -2153,6 +2153,14 @@
 				"encodeUpscale",
 				"encodeDepthUpscale"
 			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/trade-appearance.ts",
+			"provider": "src/engine/runtime/characters/appearance-lookup.ts",
+			"functions": [
+				"callback",
+				"callback:tradeAppearance:2"
+			]
 		}
 	],
 	"boundaries": [

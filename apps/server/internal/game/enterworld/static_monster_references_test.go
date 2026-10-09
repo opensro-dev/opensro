@@ -61,8 +61,8 @@ TestEveryCreatableMonsterIsPublished
 
 On the shipped data: script spawns and GM-only rows are published with the
 name fields the browser's unique announcements require, every populated
-monster is among them, and the thieves and hunters wait for their trade
-appearance.
+monster is among them, and every thief and hunter carries the country byte
+its trade appearance (861720) picks a skin pool by.
 ================
 */
 func TestEveryCreatableMonsterIsPublished(t *testing.T) {
@@ -84,13 +84,26 @@ func TestEveryCreatableMonsterIsPublished(t *testing.T) {
 		}
 	}
 	for _, ref := range template.SpawnableRefs() {
-		if !ref.Structure && !ref.TradeAppearance() && !byID[ref.RefObjID] {
+		if !ref.Structure && !byID[ref.RefObjID] {
 			t.Fatalf("populated monster %s is not published", ref.Codename)
 		}
 	}
+	bandits := 0
 	for _, ref := range template.CreatableRefs() {
-		if ref.TradeAppearance() && byID[ref.RefObjID] {
-			t.Fatalf("trade-appearance %s published before its appearance is ported", ref.Codename)
+		row, published := byName[ref.Codename]
+		if !published {
+			t.Fatalf("creatable monster %s is not published", ref.Codename)
 		}
+		if ref.TradeAppearance() {
+			bandits++
+			if row.CountryByte9C == nil || *row.CountryByte9C != ref.Country {
+				t.Fatalf("bandit %s row lacks its country byte: %+v", ref.Codename, row)
+			}
+		} else if row.CountryByte9C != nil {
+			t.Fatalf("monster %s carries a country byte only bandits need", ref.Codename)
+		}
+	}
+	if bandits == 0 {
+		t.Fatal("the shipped data has no thief or hunter")
 	}
 }
