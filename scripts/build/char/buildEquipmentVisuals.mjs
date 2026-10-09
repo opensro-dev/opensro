@@ -25,6 +25,20 @@ import { publishEquipmentParticleMetadata } from "./equipmentParticles.mjs";
 import { publicRoot } from "../world/paths.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { publishBytesAtomically } from "../shared/atomicPublish.mjs";
+import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
+
+// The equipment slots equipmentGlowModelIds reads glows for.
+const GLOW_SLOT_WEAPON = 6;
+const GLOW_SLOT_SHIELD = 7;
+
+/*
+================
+asBuffer
+================
+*/
+function asBuffer( bytes ) {
+	return Buffer.isBuffer( bytes ) ? bytes : Buffer.from( bytes.buffer, bytes.byteOffset, bytes.byteLength );
+}
 
 /*
 ================
@@ -48,6 +62,11 @@ export async function buildEquipmentVisuals( dress ) {
 	);
 	dress.avatarAuxiliary = await buildAuxiliaryAvatarSets( dress.avatarVisualOverrides );
 	const cacheKey = ( body, paths ) => body + ":" + paths.join( "|" );
+	// Weapons and shields may carry enhancement glows, known only once every
+	// row is mapped: their GLBs are held and written once, glow included,
+	// instead of written plain and rewritten with the glow on every build.
+	const glows = equipmentGlowCatalog(), held = new Map();
+	const hold = ( diskPath, bytes, publicPath ) => held.set( publicPath, { diskPath, bytes } );
 	// Items sharing native source paths share one conversion.
 	let built = 0;
 	for ( const row of rows.values() ) {
@@ -94,7 +113,8 @@ export async function buildEquipmentVisuals( dress ) {
 						key: body + "_" + createHash( "sha256" ).update( key ).digest( "hex" ).slice( 0, 20 ),
 						...donor,
 						pieces: paths.map( ( itemBsrPath, i ) => ({ part: `EQ${i}`, itemBsrPath }) ),
-						outSubdir: "equipment"
+						outSubdir: "equipment",
+						...(row.slot === GLOW_SLOT_WEAPON || row.slot === GLOW_SLOT_SHIELD ? { write: hold } : {})
 					} );
 					if ( !entry ) throw Error( `Empty equipment conversion ${row.code}: ${paths}` );
 					cache.set( key, entry );
@@ -108,8 +128,14 @@ export async function buildEquipmentVisuals( dress ) {
 	await buildDefaultWear( dress );
 	// Preserve native enhancement metadata in normal rebuilds as well as focused
 	// material publication. Reused and freshly converted weapons share this gate.
-	const glows = equipmentGlowCatalog();
-	for ( const [asset, ids] of equipmentGlowModelIds( out, glows ) ) {
+	const glowing = equipmentGlowModelIds( out, glows );
+	for ( const [asset, { diskPath, bytes }] of held ) {
+		const ids = glowing.get( asset );
+		writeIntoPublicTreeSync( diskPath, ids ? equipmentGlowGlb( asBuffer( bytes ), ids, glows ) : bytes );
+		glowing.delete( asset );
+	}
+	// A glowing model this pass did not build keeps its published bytes.
+	for ( const [asset, ids] of glowing ) {
 		await publishBytesAtomically(
 			path.join( publicRoot, asset ),
 			equipmentGlowGlb( readPublishedAssetBytesSync( asset, publicRoot ), ids, glows )

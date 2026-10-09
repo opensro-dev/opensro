@@ -105,9 +105,13 @@ Build one item-set GLB (armor pieces OR weapon/shield parts - natively both are
 the same CRes attachable on the same CRTBranch mechanism) on a donor body skeleton.
 pieces: [{ part, itemBsrPath }]; returns a manifest entry { glb, parts, covers }
 or null when nothing was bindable. `tag` is the log prefix ("dress"/"weapon").
+write( diskPath, bytes, publicPath ) publishes the GLB (writeIntoPublicTreeSync
+by default); a caller that post-processes the bytes holds them instead.
 ================
 */
-export async function buildItemSetGlb( { tag, key, donor, donorSkel, pieces, outSubdir } ) {
+export async function buildItemSetGlb(
+	{ tag, key, donor, donorSkel, pieces, outSubdir, write = writeIntoPublicTreeSync }
+) {
 	// Resolve every piece's item .bsr -> skinned mesh paths + material set + cover keys.
 	const meshPaths = [];
 	const materialSetPaths = [];
@@ -251,7 +255,7 @@ export async function buildItemSetGlb( { tag, key, donor, donorSkel, pieces, out
 	// body's box would only mislead.
 	avatar.aggregateBox = null;
 	const glb = avatarToGlb( avatar );
-	writeIntoPublicTreeSync( diskPath, glb );
+	write( diskPath, glb, publicPath );
 
 	// Keep cover keys only for parts that survived the export.
 	const partCovers = {};
