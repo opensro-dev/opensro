@@ -135,7 +135,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 		mover.Pose = displacement.Pose
 		mover.From, mover.To = displacement.Pose, displacement.Pose
 		if state.movers == nil {
-			state.movers = moverStorage{}
+			state.movers = newMoverStorage(nil)
 		}
 		state.movers.set(gid, mover)
 		state.behavior.set(gid, 0)

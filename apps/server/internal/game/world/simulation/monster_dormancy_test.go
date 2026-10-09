@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monster_dormancy_test.go - simulation monster  dormancy test ownership
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -5,6 +13,11 @@ import (
 	"testing"
 )
 
+/*
+================
+TestUniqueRespawnClockContinuesWithoutPlayersWithDormancyEnabled
+================
+*/
 func TestUniqueRespawnClockContinuesWithoutPlayersWithDormancyEnabled(t *testing.T) {
 	ref := lifecycleRef(1)
 	ref.MonsterType = 3
@@ -20,6 +33,11 @@ func TestUniqueRespawnClockContinuesWithoutPlayersWithDormancyEnabled(t *testing
 	}
 }
 
+/*
+================
+TestDormancyPreservesPositionAndWakesBeforeVisibility
+================
+*/
 func TestDormancyPreservesPositionAndWakesBeforeVisibility(t *testing.T) {
 	s := NewMonsterState(monster.Template{})
 	s.EnableRegionDormancy()
@@ -29,7 +47,7 @@ func TestDormancyPreservesPositionAndWakesBeforeVisibility(t *testing.T) {
 	defer s.Close()
 	s.StartDivision("sleep")
 	d := s.divs["sleep"]
-	d.movers = make(moverStorage)
+	d.movers = newMoverStorage(nil)
 	s.prepareDormancy(100000, "sleep", nil)
 	actor := monster.Instance{Gid: 123, Ref: monster.MonsterRef{MaxHP: 100}, Nest: monster.NestRow{Respawn: true}, CurrentHP: 100}
 	pose := monster.Pose{RegionID: 0x6060, X: 123, Y: 45, Z: 678, Heading: 321}
@@ -83,6 +101,11 @@ func TestDormancyPreservesPositionAndWakesBeforeVisibility(t *testing.T) {
 	}
 }
 
+/*
+================
+TestDormancyNeverSuspendsUniqueOrActiveEncounter
+================
+*/
 func TestDormancyNeverSuspendsUniqueOrActiveEncounter(t *testing.T) {
 	for _, kind := range []string{"unique", "wounded", "summoned", "controlled", "moving", "corpse"} {
 		t.Run(kind, func(t *testing.T) {
@@ -90,7 +113,7 @@ func TestDormancyNeverSuspendsUniqueOrActiveEncounter(t *testing.T) {
 			s.EnableRegionDormancy()
 			s.StartDivision("sleep")
 			d := s.divs["sleep"]
-			d.movers = make(moverStorage)
+			d.movers = newMoverStorage(nil)
 			s.prepareDormancy(100000, "sleep", nil)
 			actor := monster.Instance{Gid: 1, Ref: monster.MonsterRef{MaxHP: 100}, Nest: monster.NestRow{Respawn: true}, CurrentHP: 100}
 			mover := monster.PendingMover{Pose: monster.Pose{RegionID: 0x6060}, Activity: monster.ActivityCadence{Interval: 1500}}.Expand()

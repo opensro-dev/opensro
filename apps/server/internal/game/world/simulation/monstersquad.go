@@ -36,7 +36,7 @@ func (s *MonsterState) TargetSquad(division string, target uint32) []uint32 {
 		if state == nil {
 			return
 		}
-		for gid, record := range state.movers {
+		for gid, record := range state.movers.records() {
 			if record.live != nil && record.live.TargetGID() == target && state.instances.get(gid).CurrentHP != 0 {
 				out = append(out, gid)
 			}
@@ -66,7 +66,7 @@ func (s *MonsterState) squadAdmits(division string, gid, target uint32) bool {
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
 	members := 0
-	for other, record := range state.movers {
+	for other, record := range state.movers.records() {
 		if other == gid || record.live == nil || record.live.TargetGID() != target {
 			continue
 		}

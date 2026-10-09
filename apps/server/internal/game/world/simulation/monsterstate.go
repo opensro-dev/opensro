@@ -50,13 +50,13 @@ type divisionMonsterState struct {
 	uniqueDeaths     map[uint32]bool
 	// lifetimes holds the CGObjMob tick timers (monsterlifetime.go).
 	lifetimes map[uint32]monsterLifetime
-	// byRegion indexes gids by their generated spawn region so scoped
-	// emission never scans a flat map on the 100ms tick.
+	// byRegion indexes generated spawn regions for nest/lifecycle queries
+	// and non-mover interest fallback. Movers own their live spatial index.
 	byRegion map[uint16][]uint32
 	// materialized indexes all regions whose nest timers belong to this world.
 	materialized map[uint16]bool
 	// movers holds per-instance movement state and is seeded at activation.
-	movers         moverStorage
+	movers         *moverStorage
 	aiTimers       map[uint32]*monster.AITimeManager
 	storedAITimers map[uint32]monster.StoredAITimers
 	sparseMapPeaks [3]int

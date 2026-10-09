@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monster_visibility_delta_test.go - simulation monster  visibility delta test ownership
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -6,6 +14,11 @@ import (
 	"testing"
 )
 
+/*
+================
+TestArchivedMonsterMetadataAndKnownVisibilityAvoidBackingReads
+================
+*/
 func TestArchivedMonsterMetadataAndKnownVisibilityAvoidBackingReads(t *testing.T) {
 	s := NewMonsterState(monster.Template{})
 	s.StartDivision("world")
@@ -14,7 +27,7 @@ func TestArchivedMonsterMetadataAndKnownVisibilityAvoidBackingReads(t *testing.T
 	}
 	defer s.Close()
 	d := s.divs["world"]
-	d.movers = make(moverStorage)
+	d.movers = newMoverStorage(nil)
 	actor := monster.Instance{Gid: 42, Ref: monster.MonsterRef{MaxHP: 100}, CurrentHP: 100, Spawn: monster.SpawnPoint{RegionID: 0x6060, X: 10, Z: 10}}
 	mover := monster.PendingMover{Pose: monster.Pose{RegionID: 0x6060, X: 10, Z: 10}}.Expand()
 	d.instances.set(42, actor)
@@ -62,6 +75,11 @@ func TestArchivedMonsterMetadataAndKnownVisibilityAvoidBackingReads(t *testing.T
 	}
 }
 
+/*
+================
+BenchmarkMonsterVisibilityKnown1000
+================
+*/
 func BenchmarkMonsterVisibilityKnown1000(b *testing.B) {
 	s, d := queueBenchmarkState(1000)
 	known := make(map[uint32]bool, 1000)

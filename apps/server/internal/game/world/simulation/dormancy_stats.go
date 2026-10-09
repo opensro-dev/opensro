@@ -1,6 +1,19 @@
+/*
+===========================================================================
+
+dormancy_stats.go - simulation dormancy stats ownership
+
+===========================================================================
+*/
+
 package simulation
 
 // DormancyStats reads counters only; it never expands the complete population.
+/*
+================
+DormancyStats
+================
+*/
 func (s *MonsterState) DormancyStats(division string) map[string]int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -20,7 +33,7 @@ func (s *MonsterState) DormancyStats(division string) map[string]int {
 		out["scheduled"] += d.behavior.Len()
 		out["liveAITimers"] += len(d.aiTimers)
 		out["storedAITimers"] += len(d.storedAITimers)
-		for _, r := range d.movers {
+		for _, r := range d.movers.records() {
 			if r.pending != nil {
 				out["compactPending"]++
 			} else {

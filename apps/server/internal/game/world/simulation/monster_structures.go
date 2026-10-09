@@ -148,7 +148,7 @@ func (s *MonsterState) removeInstanceLocked(state *divisionMonsterState, gid uin
 	state.forgetDormant(gid)
 	delete(state.contributions, gid)
 	state.releaseApproachActor(gid)
-	delete(state.movers, gid)
+	state.movers.remove(gid)
 	state.behavior.remove(gid)
 	delete(state.aiTimers, gid)
 	delete(state.gidNests, gid)

@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+development_follow_test.go - simulation development follow test ownership
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -6,6 +14,11 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+TestFollowFixtureDoesNotReadUnrelatedDormantArchive
+================
+*/
 func TestFollowFixtureDoesNotReadUnrelatedDormantArchive(t *testing.T) {
 	s := NewMonsterState(monster.Template{})
 	state := s.division("fixture")
@@ -14,7 +27,7 @@ func TestFollowFixtureDoesNotReadUnrelatedDormantArchive(t *testing.T) {
 	for gid := uint32(99); gid < 99+51672; gid++ {
 		state.instances.cold[gid] = archivedMonster{}
 	}
-	state.movers = make(moverStorage)
+	state.movers = newMoverStorage(nil)
 	for _, actor := range []monster.Instance{
 		{Gid: 1, Ref: monster.MonsterRef{MonsterType: 3}},
 		{Gid: 2, SummonerGID: 1},
@@ -37,6 +50,11 @@ func TestFollowFixtureDoesNotReadUnrelatedDormantArchive(t *testing.T) {
 
 // Compare active-family observation with an empty and a populated sleeping
 // archive. No archive reader is installed: deserializing any cold row fails.
+/*
+================
+BenchmarkFollowSnapshotSleepingPopulation
+================
+*/
 func BenchmarkFollowSnapshotSleepingPopulation(b *testing.B) {
 	for _, count := range []int{0, 51672} {
 		name := "empty"
@@ -50,7 +68,7 @@ func BenchmarkFollowSnapshotSleepingPopulation(b *testing.B) {
 			for i := 0; i < count; i++ {
 				state.instances.cold[uint32(i+99)] = archivedMonster{}
 			}
-			state.movers = make(moverStorage)
+			state.movers = newMoverStorage(nil)
 			for _, actor := range []monster.Instance{{Gid: 1, Ref: monster.MonsterRef{MonsterType: 3}}, {Gid: 2, SummonerGID: 1}} {
 				state.instances.set(actor.Gid, actor)
 				state.movers.set(actor.Gid, monster.NewSpawnMover(actor, 1000))

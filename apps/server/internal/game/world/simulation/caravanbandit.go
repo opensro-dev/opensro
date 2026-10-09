@@ -111,7 +111,7 @@ func (s *MonsterState) SpawnCaravanBandit(request CaravanBanditSpawn) bool {
 	mover := monster.NewSpawnMover(actor, request.NowMs)
 	mover.Activity = monster.NewActivityCadence(uint32(request.NowMs), s.randomWord())
 	if state.movers == nil {
-		state.movers = make(moverStorage)
+		state.movers = newMoverStorage(nil)
 	}
 	state.instances.set(actor.Gid, actor)
 	state.movers.set(actor.Gid, mover)

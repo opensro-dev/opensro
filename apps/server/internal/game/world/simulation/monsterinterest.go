@@ -20,8 +20,8 @@ import (
 // Monster visibility uses the native message-block interest area
 // (worldgeom.InterestVisible): the viewer's 320-unit block and its eight
 // neighbours, measured at live positions. RegionScopeRing stays the
-// materialization and AI candidate set; it contains every block a viewer can
-// see, so interest only narrows it.
+// nest/materialization index. Live mover bounds supply visibility candidates
+// independently, including actors travelling far from their spawn regions.
 
 type monsterObjectListKey struct {
 	divisionID string

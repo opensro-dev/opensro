@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monsterfollow_lifecycle_test.go - simulation monster follow lifecycle test ownership
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -9,6 +17,11 @@ import (
 // The owner lookup temporarily disappears and returns with the SAME identity.
 // This fixture models lookup availability, not native resurrection or a new
 // spawn inheriting an old GID. The existing binding must survive every cycle.
+/*
+================
+TestFollowRepeatedControllerLookupLossAndReturn
+================
+*/
 func TestFollowRepeatedControllerLookupLossAndReturn(t *testing.T) {
 	ops, parent, child, now := followFixture(t)
 	s := ops.Monsters
@@ -46,6 +59,11 @@ func TestFollowRepeatedControllerLookupLossAndReturn(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFollowStationaryLeaderRetainsAcceptedGoalSilently
+================
+*/
 func TestFollowStationaryLeaderRetainsAcceptedGoalSilently(t *testing.T) {
 	ops, _, child, now := followFixture(t)
 	s := ops.Monsters
@@ -66,6 +84,11 @@ func TestFollowStationaryLeaderRetainsAcceptedGoalSilently(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFollowReplacementLeaderDoesNotInheritBinding
+================
+*/
 func TestFollowReplacementLeaderDoesNotInheritBinding(t *testing.T) {
 	ops, parent, child, now := followFixture(t)
 	s := ops.Monsters
@@ -84,6 +107,11 @@ func TestFollowReplacementLeaderDoesNotInheritBinding(t *testing.T) {
 	}
 }
 
+/*
+================
+TestFollowFamilyCleanupAtEveryFixturePhase
+================
+*/
 func TestFollowFamilyCleanupAtEveryFixturePhase(t *testing.T) {
 	for _, phase := range []string{"pending-cast", "spawned", "follow-entry", "moving", "satisfied", "controller-lost", "arrived-without-controller", "retaliation"} {
 		t.Run(phase, func(t *testing.T) {
@@ -164,7 +192,7 @@ func TestFollowFamilyCleanupAtEveryFixturePhase(t *testing.T) {
 			if len(state.instances.cold) != 1 || len(state.pendingSummons) != 0 {
 				t.Fatal("archive changed or pending wave survived")
 			}
-			if len(state.movers) != 0 || len(state.aiTimers) != 0 || len(state.storedAITimers) != 0 {
+			if state.movers.len() != 0 || len(state.aiTimers) != 0 || len(state.storedAITimers) != 0 {
 				t.Fatal("family runtime owners survived")
 			}
 			for _, gids := range state.byRegion {

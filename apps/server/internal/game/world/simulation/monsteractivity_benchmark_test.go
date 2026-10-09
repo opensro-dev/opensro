@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monsteractivity_benchmark_test.go - simulation monster activity benchmark test ownership
+
+===========================================================================
+*/
+
 package simulation
 
 import (
@@ -8,9 +16,14 @@ import (
 	"opensro.online/server/internal/game/world/monster"
 )
 
+/*
+================
+queueBenchmarkState
+================
+*/
 func queueBenchmarkState(count int) (*MonsterState, *divisionMonsterState) {
 	s := NewMonsterState(monster.Template{})
-	d := &divisionMonsterState{instances: newMonsterStorage(nil), movers: make(moverStorage)}
+	d := &divisionMonsterState{instances: newMonsterStorage(nil), movers: newMoverStorage(nil)}
 	s.divs["benchmark"] = d
 	for gid := uint32(1); gid <= uint32(count); gid++ {
 		d.instances.set(gid, monster.Instance{Gid: gid, CurrentHP: 100, Ref: monster.MonsterRef{MaxHP: 100}})
@@ -21,6 +34,11 @@ func queueBenchmarkState(count int) (*MonsterState, *divisionMonsterState) {
 }
 
 // Keeps the pre-optimization batch algorithm as a benchmark-only control.
+/*
+================
+BenchmarkBehaviorBatch
+================
+*/
 func BenchmarkBehaviorBatch(b *testing.B) {
 	for _, legacy := range []bool{true, false} {
 		name := "identities"
@@ -55,6 +73,11 @@ func BenchmarkBehaviorBatch(b *testing.B) {
 	}
 }
 
+/*
+================
+TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity
+================
+*/
 func TestBehaviorDispatchReadsCurrentActorAndSkipsRetiredIdentity(t *testing.T) {
 	s, d := queueBenchmarkState(3)
 	batch := s.behaviorBatches(0)[0]

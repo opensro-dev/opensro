@@ -46,7 +46,7 @@ func (s *MonsterState) DevelopmentCreateLeader(division string, refID uint32, po
 	mover.BehaviorDeadlineMs = until
 	state := s.division(division)
 	if state.movers == nil {
-		state.movers = make(moverStorage)
+		state.movers = newMoverStorage(nil)
 	}
 	state.instances.set(instance.Gid, instance)
 	state.movers.set(instance.Gid, mover)
@@ -56,6 +56,11 @@ func (s *MonsterState) DevelopmentCreateLeader(division string, refID uint32, po
 }
 
 // Script only the fixture leader. Children always use ordinary MonsterMoverOps.
+/*
+================
+DevelopmentMoveLeader
+================
+*/
 func (ops *MonsterMoverOps) DevelopmentMoveLeader(division string, gid uint32, destination monster.Pose, now int64) ([]Frame, error) {
 	instance, ok := ops.Monsters.Get(division, gid)
 	if !ok || instance.CurrentHP == 0 {
@@ -81,6 +86,11 @@ func (ops *MonsterMoverOps) DevelopmentMoveLeader(division string, gid uint32, d
 	return ops.commitSegment(division, instance, mover, destination, instance.RunSpeed(), wire.MoveStateRun, now), nil
 }
 
+/*
+================
+DevelopmentStopLeader
+================
+*/
 func (ops *MonsterMoverOps) DevelopmentStopLeader(division string, gid uint32, now, until int64) []Frame {
 	mover, ok := ops.Monsters.Mover(division, gid)
 	if !ok {
@@ -102,6 +112,11 @@ func (ops *MonsterMoverOps) DevelopmentStopLeader(division string, gid uint32, n
 	return ops.Monsters.CommitMoverFrames(division, gid, mover, []Frame{correctionFrame(gid, mover.Pose)})
 }
 
+/*
+================
+DevelopmentActorSnapshot
+================
+*/
 type DevelopmentActorSnapshot struct {
 	SelfEffects     monster.SelfEffects `json:"selfEffects"`
 	ConditionalUsed uint8               `json:"conditionalUsed"`
@@ -122,6 +137,11 @@ type DevelopmentActorSnapshot struct {
 	Timer0, Timer7  monster.AITimerEntry
 }
 
+/*
+================
+DevelopmentFollowSnapshot
+================
+*/
 func (s *MonsterState) DevelopmentFollowSnapshot(division string, leader uint32, now int64) []DevelopmentActorSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -148,6 +168,11 @@ func (s *MonsterState) DevelopmentFollowSnapshot(division string, leader uint32,
 	return out
 }
 
+/*
+================
+DevelopmentRemoveFamily
+================
+*/
 func (s *MonsterState) DevelopmentRemoveFamily(division string, leader uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,7 +183,7 @@ func (s *MonsterState) DevelopmentRemoveFamily(division string, leader uint32) {
 			state.instances.remove(gid)
 			delete(state.contributions, gid)
 			state.releaseApproachActor(gid)
-			delete(state.movers, gid)
+			state.movers.remove(gid)
 			state.behavior.remove(gid)
 			delete(state.aiTimers, gid)
 			delete(state.storedAITimers, gid)
@@ -168,6 +193,11 @@ func (s *MonsterState) DevelopmentRemoveFamily(division string, leader uint32) {
 	}
 }
 
+/*
+================
+DevelopmentRemoveLeader
+================
+*/
 func (s *MonsterState) DevelopmentRemoveLeader(division string, leader uint32) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -176,7 +206,7 @@ func (s *MonsterState) DevelopmentRemoveLeader(division string, leader uint32) {
 		state.instances.remove(leader)
 		delete(state.contributions, leader)
 		state.releaseApproachActor(leader)
-		delete(state.movers, leader)
+		state.movers.remove(leader)
 		state.behavior.remove(leader)
 		delete(state.aiTimers, leader)
 		delete(state.storedAITimers, leader)

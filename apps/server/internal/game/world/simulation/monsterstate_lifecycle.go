@@ -554,7 +554,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(5, ref.RefObjID, ""))
 	}
 	if state.movers == nil {
-		state.movers = make(moverStorage)
+		state.movers = newMoverStorage(nil)
 	}
 	mover := monster.NewSpawnMover(instance, nowMs)
 	mover.Activity = monster.NewActivityCadence(uint32(nowMs), s.randomWord())
@@ -667,7 +667,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 	state.forgetDormant(gid)
 	delete(state.contributions, gid)
 	state.releaseApproachActor(gid)
-	delete(state.movers, gid)
+	state.movers.remove(gid)
 	state.behavior.remove(gid)
 	delete(state.aiTimers, gid)
 	delete(state.gidNests, gid)

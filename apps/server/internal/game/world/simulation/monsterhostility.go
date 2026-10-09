@@ -1,3 +1,11 @@
+/*
+===========================================================================
+
+monsterhostility.go - simulation monster hostility ownership
+
+===========================================================================
+*/
+
 package simulation
 
 import "opensro.online/server/internal/game/world/monster"
@@ -20,6 +28,11 @@ type HostilityEvent struct {
 // RecordHostility commits one completed action's damage/aggression event.
 // MonsterState owns both records and the resulting mover transition; a caller
 // cannot replace a live mover from its earlier snapshot.
+/*
+================
+RecordHostility
+================
+*/
 func (s *MonsterState) RecordHostility(division string, gid, attacker, damage, aggression uint32, candidates [3]monster.OpponentCandidate, now int64) bool {
 	byGID := make(map[uint32]monster.OpponentCandidate, len(candidates))
 	for _, c := range candidates {
@@ -30,6 +43,11 @@ func (s *MonsterState) RecordHostility(division string, gid, attacker, damage, a
 
 // Linked threat dispatches source then attacker. Both events must see the
 // preceding ledger mutation before a mover tick can observe the final target.
+/*
+================
+RecordHostilitySequence
+================
+*/
 func (s *MonsterState) RecordHostilitySequence(division string, gid uint32, events []HostilityEvent, byGID map[uint32]monster.OpponentCandidate, now int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -73,7 +91,7 @@ func (s *MonsterState) RecordHostilitySequence(division string, gid uint32, even
 			panic(err)
 		}
 		if state.movers == nil {
-			state.movers = make(moverStorage)
+			state.movers = newMoverStorage(nil)
 		}
 		state.movers.set(gid, mover)
 		state.syncApproachActor(gid, mover)

@@ -17,6 +17,11 @@ const regionSleepGraceMs int64 = 30000
 
 // EnableRegionDormancy must be installed before tickers start. Nest/unique
 // timers remain global; only safe settled PENDING actors leave the due queue.
+/*
+================
+EnableRegionDormancy
+================
+*/
 func (s *MonsterState) EnableRegionDormancy() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -25,6 +30,11 @@ func (s *MonsterState) EnableRegionDormancy() {
 
 // prepareDormancy runs before visibility publication. A full sector ring wakes
 // before the much smaller message-block visibility/aggro boundary is reached.
+/*
+================
+prepareDormancy
+================
+*/
 func (s *MonsterState) prepareDormancy(now int64, division string, sessions []SessionSnapshot) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,6 +85,11 @@ func (s *MonsterState) prepareDormancy(now int64, division string, sessions []Se
 	}
 }
 
+/*
+================
+tryDormant
+================
+*/
 func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m monster.MoverState, now int64) bool {
 	if !s.regionDormancy || state.keepAwakeUntil == nil {
 		return false
@@ -85,7 +100,7 @@ func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m mon
 	if now < state.keepAwakeUntil[m.Pose.RegionID] {
 		return false
 	}
-	if state.movers[gid].pending == nil {
+	if !state.movers.compact(gid) {
 		return false
 	}
 	actor, ok := state.instances.lookup(gid)
@@ -127,6 +142,11 @@ func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m mon
 	return true
 }
 
+/*
+================
+forgetDormant
+================
+*/
 func (state *divisionMonsterState) forgetDormant(gid uint32) {
 	state.aiTimer(gid)
 	if region, ok := state.dormant[gid]; ok {

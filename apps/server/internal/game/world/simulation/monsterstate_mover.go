@@ -1,8 +1,21 @@
+/*
+===========================================================================
+
+monsterstate_mover.go - simulation monster state mover ownership
+
+===========================================================================
+*/
+
 package simulation
 
 import "opensro.online/server/internal/game/world/monster"
 
 // Mover returns a value snapshot of an instance's movement state.
+/*
+================
+Mover
+================
+*/
 func (s *MonsterState) Mover(divisionID string, gid uint32) (monster.MoverState, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -28,6 +41,11 @@ func (s *MonsterState) Mover(divisionID string, gid uint32) (monster.MoverState,
 // mutation behind the simulation authority boundary. True means this value
 // was accepted, not merely that its GID exists. Frame-producing planners must
 // use CommitMoverFrames; attack planners must obtain admission before damage.
+/*
+================
+CommitMover
+================
+*/
 func (s *MonsterState) CommitMover(divisionID string, gid uint32, mover monster.MoverState) bool {
 	if err := mover.Validate(); err != nil {
 		panic(err)
@@ -41,6 +59,11 @@ func (s *MonsterState) CommitMover(divisionID string, gid uint32, mover monster.
 }
 
 // Caller holds s.mu; FOLLOW commits use this same state/entry-effect owner.
+/*
+================
+commitMoverLocked
+================
+*/
 func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32, mover monster.MoverState) bool {
 	if err := mover.Validate(); err != nil {
 		panic(err)
@@ -50,7 +73,7 @@ func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32
 		return false
 	}
 	if state.movers == nil {
-		state.movers = make(moverStorage)
+		state.movers = newMoverStorage(nil)
 	}
 	// Packet-side damage can arm retaliation between a tick's snapshot read
 	// and commit. Reject only a plan from an older retaliation revision.
@@ -81,6 +104,11 @@ func (s *MonsterState) commitMoverLocked(state *divisionMonsterState, gid uint32
 // CommitMoverFrames is the publication boundary for movement-only decisions.
 // Building frames is pure; only an accepted owner transaction can release them
 // to the tick's pusher. Do not call CommitMover and then return unchecked frames.
+/*
+================
+CommitMoverFrames
+================
+*/
 func (s *MonsterState) CommitMoverFrames(divisionID string, gid uint32, mover monster.MoverState, frames []Frame) []Frame {
 	if !s.CommitMover(divisionID, gid, mover) {
 		return nil
@@ -90,6 +118,11 @@ func (s *MonsterState) CommitMoverFrames(divisionID string, gid uint32, mover mo
 
 // ArmRetaliation makes a surviving monster pursue the player who damaged it.
 // The state lock keeps this edge coherent with whole-value mover commits.
+/*
+================
+ArmRetaliation
+================
+*/
 func (s *MonsterState) ArmRetaliation(divisionID string, gid, attackerGID uint32) bool {
 	if attackerGID == 0 {
 		return false
@@ -104,7 +137,7 @@ func (s *MonsterState) ArmRetaliation(divisionID string, gid, attackerGID uint32
 		return false
 	}
 	if state.movers == nil {
-		state.movers = make(moverStorage)
+		state.movers = newMoverStorage(nil)
 	}
 	mover, ok := state.movers.lookup(gid)
 	if !ok {

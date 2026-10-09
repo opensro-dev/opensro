@@ -1,3 +1,12 @@
+/*
+===========================================================================
+
+monster_worlds.go - population lifetime and world-scoped monster queries
+
+World leases isolate actors; interest queries use current movement geometry.
+
+===========================================================================
+*/
 package simulation
 
 import (
@@ -22,6 +31,11 @@ type populationKey struct {
 	lease    instance.Lease
 }
 
+/*
+================
+CurrentTimeMillis
+================
+*/
 func (s *MonsterState) CurrentTimeMillis() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -31,6 +45,11 @@ func (s *MonsterState) CurrentTimeMillis() int64 {
 // AllocatePopulation binds a fresh timer/actor population to an allocated
 // layer. No elapsed callback runs in this transition. All layers share the
 // process GID allocator and immutable references, never live nest counters.
+/*
+================
+AllocatePopulation
+================
+*/
 func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (instance.Lease, instance.Status) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -53,6 +72,11 @@ func (s *MonsterState) AllocatePopulation(division string, id instance.ID) (inst
 // ReleasePopulation invalidates the lease and all of its timers, live GIDs,
 // contribution ledgers, summon reservations and burn sources in one owner
 // transaction. A callback retaining the old lease cannot remove a replacement.
+/*
+================
+ReleasePopulation
+================
+*/
 func (s *MonsterState) ReleasePopulation(division string, lease instance.Lease) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -72,6 +96,11 @@ func (s *MonsterState) ReleasePopulation(division string, lease instance.Lease) 
 	return true
 }
 
+/*
+================
+populationForLease
+================
+*/
 func (s *MonsterState) populationForLease(division string, lease instance.Lease) *divisionMonsterState {
 	if state := s.divs[division]; state != nil && state.lease == lease {
 		return state
@@ -81,6 +110,11 @@ func (s *MonsterState) populationForLease(division string, lease instance.Lease)
 
 // populationForObject follows a native GID lookup back to its population.
 // Unknown GIDs return an empty lookup state; queries never allocate a world.
+/*
+================
+populationForObject
+================
+*/
 func (s *MonsterState) populationForObject(division string, gid uint32) *divisionMonsterState {
 	if state := s.divs[division]; state != nil {
 		if state.instances.contains(gid) {
@@ -97,6 +131,11 @@ func (s *MonsterState) populationForObject(division string, gid uint32) *divisio
 	return &divisionMonsterState{}
 }
 
+/*
+================
+PopulationLease
+================
+*/
 func (s *MonsterState) PopulationLease(division string, id instance.ID) (instance.Lease, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,6 +154,11 @@ CGameWorld_CheckTransfer (5EC5B0): the non-mutating door a teleport asks
 before it moves a PC into another world. Nothing is reserved.
 ================
 */
+/*
+================
+CheckPopulationTransfer
+================
+*/
 func (s *MonsterState) CheckPopulationTransfer(division string, destination instance.ID, capacityBypass bool) instance.Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -122,6 +166,11 @@ func (s *MonsterState) CheckPopulationTransfer(division string, destination inst
 	return s.worldAllocators[division].CheckTransfer(destination, capacityBypass)
 }
 
+/*
+================
+AdmitPopulationPC
+================
+*/
 func (s *MonsterState) AdmitPopulationPC(division string, lease instance.Lease, gid uint32, capacityBypass bool) instance.Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,6 +180,11 @@ func (s *MonsterState) AdmitPopulationPC(division string, lease instance.Lease, 
 	return s.worldAllocators[division].AdmitPC(lease, gid, capacityBypass)
 }
 
+/*
+================
+LeavePopulationPC
+================
+*/
 func (s *MonsterState) LeavePopulationPC(division string, lease instance.Lease, gid uint32) (instance.Status, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -144,6 +198,11 @@ func (s *MonsterState) LeavePopulationPC(division string, lease instance.Lease, 
 	return status, request
 }
 
+/*
+================
+BeginPopulationRetirement
+================
+*/
 func (s *MonsterState) BeginPopulationRetirement(division string, lease instance.Lease) ([]uint32, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -157,6 +216,11 @@ func (s *MonsterState) BeginPopulationRetirement(division string, lease instance
 	return residents, exists
 }
 
+/*
+================
+requestPopulationRetirement
+================
+*/
 func (s *MonsterState) requestPopulationRetirement(division string, lease instance.Lease) {
 	if s.retirementRequests == nil {
 		s.retirementRequests = make(map[populationKey]struct{})
@@ -167,6 +231,11 @@ func (s *MonsterState) requestPopulationRetirement(division string, lease instan
 // PendingPopulationRetirements is the manager's native 7C14 release-request
 // inbox. Reading does not acknowledge it: only releasing that exact lifetime
 // removes the request, so a disconnected caller cannot lose the last leave.
+/*
+================
+PendingPopulationRetirements
+================
+*/
 func (s *MonsterState) PendingPopulationRetirements(division string) []instance.Lease {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -182,6 +251,11 @@ func (s *MonsterState) PendingPopulationRetirements(division string) []instance.
 
 // PopulationInstances is a read: allocation, callbacks and random draws are
 // separate operations. The exact lease is required, including its generation.
+/*
+================
+PopulationInstances
+================
+*/
 func (s *MonsterState) PopulationInstances(division string, lease instance.Lease, regions []uint16) []monster.Instance {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -207,6 +281,11 @@ func (s *MonsterState) PopulationInstances(division string, lease instance.Lease
 // PopulationInterestInstances projects one allocated lifetime under the owner
 // lock. Release, pose changes and replacement allocation cannot interleave
 // between candidate collection and visibility filtering.
+/*
+================
+PopulationInterestInstances
+================
+*/
 func (s *MonsterState) PopulationInterestInstances(division string, lease instance.Lease, viewer worldgeom.RegionXZ, nowMs int64) []monster.Instance {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -222,19 +301,35 @@ func (s *MonsterState) PopulationInterestInstances(division string, lease instan
 	return out
 }
 
-// Caller holds MonsterState.mu; geometry rejects candidates before archive I/O.
+/*
+================
+populationInterestGIDs
+
+The spawn index owns nest/lifecycle queries. Visibility instead queries the
+mover's live region bounds: a pursuing actor can leave its spawn region ring.
+Filter exact live blocks before any archived actor read (native 53AC20).
+Caller holds MonsterState.mu.
+================
+*/
 func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
 	var out []uint32
+	for gid := range state.movers.candidates(viewer) {
+		if !state.instances.contains(gid) {
+			continue
+		}
+		pose := state.movers.get(gid).LivePoseAt(nowMs, nil)
+		if worldgeom.InterestVisible(viewer, worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}) {
+			out = append(out, gid)
+		}
+	}
+	// Static entries without a mover still use their immutable spawn position.
 	for _, region := range RegionScopeRing(viewer.RegionID) {
 		for _, gid := range state.byRegion[region] {
-			var position worldgeom.RegionXZ
-			if mover, exists := state.movers.lookup(gid); exists {
-				pose := mover.LivePoseAt(nowMs, nil)
-				position = worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}
-			} else {
-				actor := state.instances.get(gid)
-				position = worldgeom.RegionXZ{RegionID: actor.Spawn.RegionID, X: actor.Spawn.X, Z: actor.Spawn.Z}
+			if _, exists := state.movers.lookup(gid); exists {
+				continue
 			}
+			actor := state.instances.get(gid)
+			position := worldgeom.RegionXZ{RegionID: actor.Spawn.RegionID, X: actor.Spawn.X, Z: actor.Spawn.Z}
 			if worldgeom.InterestVisible(viewer, position) {
 				out = append(out, gid)
 			}
@@ -247,6 +342,11 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 // Visibility is a delta stream. Copy full actors only for new/unseeded viewers,
 // not every already-published monster on every viewer tick. Both the identity
 // set and required snapshots are captured under the same population lock.
+/*
+================
+populationInterestDelta
+================
+*/
 func (s *MonsterState) populationInterestDelta(division string, lease instance.Lease, viewer worldgeom.RegionXZ, nowMs int64, known map[uint32]bool) ([]uint32, map[uint32]monster.Instance) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -268,6 +368,11 @@ func (s *MonsterState) populationInterestDelta(division string, lease instance.L
 	return gids, snapshots
 }
 
+/*
+================
+ObjectPopulation
+================
+*/
 func (s *MonsterState) ObjectPopulation(division string, gid uint32) (instance.Lease, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -277,6 +382,11 @@ func (s *MonsterState) ObjectPopulation(division string, gid uint32) (instance.L
 
 // GetInWorld is the actor-facing lookup. A GID remains globally resolvable
 // for internal callbacks, but a resident cannot use it across a world boundary.
+/*
+================
+GetInWorld
+================
+*/
 func (s *MonsterState) GetInWorld(division string, world instance.ID, gid uint32) (monster.Instance, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -294,6 +404,11 @@ func (s *MonsterState) GetInWorld(division string, world instance.ID, gid uint32
 	return actor, exists
 }
 
+/*
+================
+GetInPopulation
+================
+*/
 func (s *MonsterState) GetInPopulation(division string, lease instance.Lease, gid uint32) (monster.Instance, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -311,6 +426,11 @@ func (s *MonsterState) GetInPopulation(division string, lease instance.Lease, gi
 	return actor, exists
 }
 
+/*
+================
+populationKeys
+================
+*/
 func (s *MonsterState) populationKeys() []populationKey {
 	keys := make([]populationKey, 0, len(s.divs)+len(s.worldPopulations))
 	for division, state := range s.divs {
