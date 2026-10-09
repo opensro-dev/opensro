@@ -330,6 +330,16 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 						t.Fatal("completed before all parallel objectives")
 					}
 					m := missionDefinition(def, i)
+					if m.Objective == ObjectiveDelivery {
+						// Acceptance granted every mission's items; each is
+						// handed over at its own NPC (91CA00), through the
+						// runtime's own transaction, not inside this one.
+						if _, err := rt.handOverDelivery(character, def.Codename, m.HandOverNpcCodename); err != nil {
+							t.Fatal(err)
+						}
+						restart()
+						continue
+					}
 					authority.UpdateCharacter(character, "test-parallel-objective", func() bool {
 						switch m.Objective {
 						case ObjectiveKill:

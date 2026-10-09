@@ -39,6 +39,25 @@ type MissionSpec struct {
 	KillRanks            []uint8
 	MonsterDrop          *MonsterDropRule
 	collectRef           uint32
+	// A delivery mission is a two-leg hand-over at its own NPC (QuestSpec's
+	// fields of the same names). Its items are granted at acceptance with
+	// every other mission's, and its node latches when it is handed over
+	// (91CEB0 keeps quest-user +3 as a bit per mission).
+	DeliveryItems       []RewardItemLead
+	DeliveryKeepsItems  bool
+	HandOverNpcCodename string
+	HandOverSymbol      string
+	HandOverPages       []OfferPage
+	ExchangeItems       []RewardItemLead
+	ExchangeFullSymbol  string
+	NotAchievedSymbol   string
+	// PendingNoticeSymbol (mission +0x108) is sent when another mission is
+	// handed over while this one still waits ("Doji's medicine has been
+	// delivered. Deliver Bori's book to Chau."). Inference: no reader was
+	// found in the deliver handler; every line reads as that reminder.
+	PendingNoticeSymbol string
+	deliveryRefs        []uint32
+	handOverNpcRef      uint32
 }
 
 /*
@@ -78,6 +97,20 @@ func loadMissions(def *Definition, symbols []string, items enterworld.ItemRefSou
 			if m.KillCount == 0 || len(m.KillMonsterCodenames) == 0 || m.CollectCount != 0 || m.CollectItemCodename != "" {
 				return fmt.Errorf("quest %s mission %d invalid kill targets", def.Codename, i)
 			}
+		case ObjectiveDelivery:
+			// A parallel delivery completes only through the report, so each
+			// one is a two-leg hand-over at its own NPC.
+			if m.HandOverNpcCodename == "" {
+				return fmt.Errorf("quest %s mission %d parallel delivery without a hand-over", def.Codename, i)
+			}
+			md := missionDefinition(def, i)
+			if err := loadDelivery(md, items); err != nil {
+				return err
+			}
+			if err := validateDeliveryExtras(md.QuestSpec, items); err != nil {
+				return err
+			}
+			m.deliveryRefs = md.deliveryRefs
 		default:
 			return fmt.Errorf("quest %s mission %d unsupported kind", def.Codename, i)
 		}
@@ -120,6 +153,12 @@ func missionDefinition(def *Definition, index int) *Definition {
 	d.CollectItemCodename, d.CollectCount, d.CollectItemRefID = m.CollectItemCodename, m.CollectCount, m.collectRef
 	d.KillRanks = m.KillRanks
 	d.KillMonsterCodenames, d.KillCount, d.MonsterDrop = m.KillMonsterCodenames, m.KillCount, m.MonsterDrop
+	d.DeliveryItems, d.DeliveryKeepsItems, d.deliveryRefs = m.DeliveryItems, m.DeliveryKeepsItems, m.deliveryRefs
+	d.HandOverNpcCodename, d.HandOverSymbol, d.HandOverPages = m.HandOverNpcCodename, m.HandOverSymbol, m.HandOverPages
+	d.ExchangeItems, d.ExchangeFullSymbol, d.handOverNpcRef = m.ExchangeItems, m.ExchangeFullSymbol, m.handOverNpcRef
+	if m.NotAchievedSymbol != "" {
+		d.NotAchievedSymbol = m.NotAchievedSymbol
+	}
 	return &d
 }
 
@@ -224,7 +263,7 @@ func collectsItems(def *Definition) bool {
 		return true
 	}
 	for i := 0; i < missionCount(def); i++ {
-		if missionDefinition(def, i).Objective == ObjectiveCollect {
+		if kind := missionDefinition(def, i).Objective; kind == ObjectiveCollect || kind == ObjectiveDelivery {
 			return true
 		}
 	}

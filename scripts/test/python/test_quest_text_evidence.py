@@ -207,5 +207,27 @@ class QuestTextEvidenceTests(unittest.TestCase):
 		with self.assertRaisesRegex(Unsupported, "hand-over line after 3 pages"):
 			handover_pages(fields)
 
+	# ================
+	# test_parallel_deliveries_hand_over_then_report
+	#
+	# Two deliver missions, each two-leg at its own NPC, project as parallel
+	# hand-overs paid at the start NPC; a one-leg one among them is refused.
+	# ================
+	def test_parallel_deliveries_hand_over_then_report(self):
+		text = {"objectives": {}, "reward": advertised_rewards("")}
+		sql = {"QUEST": sql_reward() | {"items": [], "inventorySlots": 0}}
+		def mission(index, npc):
+			return {"fields": {"0x8": index, "0x9": 3, "0x15": npc, "0xd": "SN_CON_%d" % index, "0x19": 1, "0x1a": 1,
+				"0x42": "ITEM_%d" % index, "0xc0": "SN_HAND_%d" % index, "0xc4": "SN_MISSING_%d" % index, "0x108": "SN_LEFT_%d" % index}}
+		quest = {"words": {"0x130": "SN_OFFER", "0x134": "SN_ACHIEVED"}, "lists": {}, "overrides": [],
+			"tables": {"0xc2": {"flags": 2}, "0xc4": {"0x8": "NPC_START"}}, "missions": [mission(0, "NPC_A"), mission(1, "NPC_B")]}
+		spec = project("QUEST", quest, text, sql)
+		self.assertEqual((spec["Objective"], spec["EndNpcCodename"], spec["CompletePromptSymbol"]), (3, "NPC_START", "SN_ACHIEVED"))
+		self.assertEqual([m["HandOverNpcCodename"] for m in spec["Objectives"]], ["NPC_A", "NPC_B"])
+		self.assertEqual(spec["Objectives"][1]["PendingNoticeSymbol"], "SN_LEFT_1")
+		quest["missions"][1]["fields"]["0x110"] = 1
+		with self.assertRaisesRegex(Unsupported, "one-leg mission in a parallel delivery"):
+			project("QUEST", quest, text, sql)
+
 if __name__ == "__main__":
 	unittest.main()

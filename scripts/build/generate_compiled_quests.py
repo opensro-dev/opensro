@@ -299,6 +299,44 @@ def handover_pages(fields):
 
 
 # ================
+# parallel_deliveries
+#
+# Several deliver missions in one quest: each is handed over at its own
+# NPC (two legs, +0x110 clear) and latches its own bit (91CEB0), and the
+# quest pays at its start NPC with the ACHIEVED word once all have been.
+# A one-leg mission among them would complete the quest at its NPC, which
+# no shipped class does, so it is refused.
+# ================
+def parallel_deliveries(text, quest, missions, start):
+	achieved = word(quest, MENU_ACHIEVED)
+	if not achieved:
+		raise Unsupported("parallel delivery without an achieved line")
+	rows = []
+	for mission in missions:
+		fields = mission["fields"]
+		if fields.get("0x110", 0) != 0:
+			raise Unsupported("one-leg mission in a parallel delivery")
+		npc = fields.get("0x15")
+		pages, line = handover_pages(fields)
+		if not isinstance(npc, str) or not isinstance(line, str):
+			raise Unsupported("parallel delivery mission without an NPC or line")
+		row = {"ContentsSymbol": fields.get("0xd"), "Objective": OBJECTIVE_DELIVERY,
+			"DeliveryItems": delivery_items(text, mission), "HandOverNpcCodename": npc, "HandOverSymbol": line}
+		if pages:
+			row["HandOverPages"] = pages
+		if fields.get("0x111", 1) == 0:
+			row["DeliveryKeepsItems"] = True
+		exchange = exchange_items(fields)
+		if exchange:
+			row["ExchangeItems"] = exchange
+		for key, field in (("ExchangeFullSymbol", "0xc8"), ("NotAchievedSymbol", "0xc4"), ("PendingNoticeSymbol", "0x108")):
+			if isinstance(fields.get(field), str):
+				row[key] = fields[field]
+		rows.append(row)
+	return {"Objective": OBJECTIVE_PARALLEL, "Objectives": rows, "EndNpcCodename": start, "CompletePromptSymbol": achieved}
+
+
+# ================
 # exchange_items
 #
 # What a two-leg hand-over gives back (91CA00): +0x6A (byte) the number of
@@ -490,9 +528,11 @@ def project(code, quest, text, sql):
 			spec[key] = word(quest, slot)
 	spec.update(rewards(code, text, sql))
 	kinds = {m["fields"].get("0x9") for m in missions}
-	if kinds == {MISSION_DIALOG} or kinds == {MISSION_DELIVER}:
+	if kinds == {MISSION_DELIVER} and len(missions) > 1 and not behaviour:
+		spec.update(parallel_deliveries(text, quest, missions, start))
+	elif kinds == {MISSION_DIALOG} or kinds == {MISSION_DELIVER}:
 		if len(missions) != 1:
-			raise Unsupported("several talk or delivery missions")
+			raise Unsupported("several talk missions")
 		fields = missions[0]["fields"]
 		# A class talk handler may hand over at its own NPC and line.
 		npc = behaviour.get("EndNpcCodename", fields.get("0x15"))

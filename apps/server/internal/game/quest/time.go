@@ -164,9 +164,7 @@ func (rt *Runtime) planQuestCleanup(c *enterworld.Character, def *Definition) ([
 	for _, code := range order {
 		consume = append(consume, inventory.ItemAmount{Codename: code, Count: counts[code]})
 	}
-	if def.Objective == ObjectiveDelivery {
-		consume = append(consume, deliveryCleanup(c, def)...)
-	}
+	consume = append(consume, deliveryCleanup(c, def)...)
 	consume = append(consume, captureSupplyCleanup(c, def)...)
 	consume = append(consume, questToolCleanup(c, def)...)
 	if len(consume) == 0 {

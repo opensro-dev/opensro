@@ -333,9 +333,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 			return false
 		}
 		var acceptanceItems []inventory.ItemAmount
-		if def.Objective == ObjectiveDelivery {
-			acceptanceItems = deliveryAmounts(def)
-		}
+		acceptanceItems = acceptanceGrants(def)
 		supply, suppliesTraps := captureSupplyForQuest(def.Codename)
 		suppliesTraps = suppliesTraps && !supply.afterCompletion
 		if suppliesTraps {
@@ -484,16 +482,13 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			continue
 		}
 
-		if active && def.HandOverNpcCodename == npcCodename && !handedOver(character.ActiveQuests[activeQuestIndex(character, def.RefID)]) {
-			// 91CA00 at the mission's own NPC: the hand-over, or its
-			// not-delivered line while the items are missing.
-			if deliveryMet(character, def) {
-				completes = append(completes, NpcOption{Codename: handOverToken(def.Codename), TitleSymbol: def.TitleSymbol, PromptSymbol: def.HandOverSymbol,
-					Pages: def.HandOverPages, Complete: true})
-			} else if def.NotAchievedSymbol != "" {
-				completes = append(completes, NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: def.NotAchievedSymbol, Informational: true})
+		if active {
+			if row, handled := handOverRow(character, def, npcCodename); handled {
+				if row != nil {
+					completes = append(completes, *row)
+				}
+				continue
 			}
-			continue
 		}
 		if active && rewardNpcMatches(def, npcCodename) && (def.Objective == ObjectiveTalk || objectiveMet(character, def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])) {
 			if len(def.RewardChoices) > 0 {

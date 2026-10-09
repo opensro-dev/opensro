@@ -99,12 +99,48 @@ abandonment, not merely the originally granted quantity.
 */
 func deliveryCleanup(c *enterworld.Character, def *Definition) []inventory.ItemAmount {
 	var amounts []inventory.ItemAmount
-	for i, ref := range def.deliveryRefs {
-		if count := deliveryHeld(c, ref); count > 0 {
-			amounts = append(amounts, inventory.ItemAmount{Codename: def.DeliveryItems[i].ItemCodename, Count: count})
+	for _, m := range deliveryMissions(def) {
+		for i, ref := range m.deliveryRefs {
+			if count := deliveryHeld(c, ref); count > 0 {
+				amounts = append(amounts, inventory.ItemAmount{Codename: m.DeliveryItems[i].ItemCodename, Count: count})
+			}
 		}
 	}
 	return append(amounts, exchangeReturns(c, def)...)
+}
+
+/*
+================
+deliveryMissions
+
+The quest's delivery missions as definitions: the quest itself for a single
+delivery, or each delivery mission of a parallel quest.
+================
+*/
+func deliveryMissions(def *Definition) []*Definition {
+	var out []*Definition
+	for i := 0; i < missionCount(def); i++ {
+		if m := missionDefinition(def, i); m.Objective == ObjectiveDelivery {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+/*
+================
+acceptanceGrants
+
+Every delivery mission's items, granted together when the quest is
+accepted (9208D0 walks all kind-3 missions).
+================
+*/
+func acceptanceGrants(def *Definition) []inventory.ItemAmount {
+	var amounts []inventory.ItemAmount
+	for _, m := range deliveryMissions(def) {
+		amounts = append(amounts, deliveryAmounts(m)...)
+	}
+	return amounts
 }
 
 /*
@@ -205,10 +241,13 @@ never refuses.
 ================
 */
 func exchangeReturns(c *enterworld.Character, def *Definition) []inventory.ItemAmount {
-	if def.HandOverNpcCodename == "" {
-		return nil
+	var amounts []inventory.ItemAmount
+	for _, m := range deliveryMissions(def) {
+		if m.HandOverNpcCodename != "" {
+			amounts = append(amounts, heldAmounts(c, m.ExchangeItems)...)
+		}
 	}
-	return heldAmounts(c, def.ExchangeItems)
+	return amounts
 }
 
 /*

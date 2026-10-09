@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"slices"
 	"strings"
 )
 
@@ -187,7 +188,67 @@ latch, so the hand-over NPC cannot pay before the hand-over.
 ================
 */
 func rewardNpcMatches(def *Definition, npc string) bool {
-	return questNpcMatches(def, def.EndNpcCodename, npc) || def.HandOverNpcCodename != "" && def.HandOverNpcCodename == npc
+	if questNpcMatches(def, def.EndNpcCodename, npc) {
+		return true
+	}
+	for _, m := range deliveryMissions(def) {
+		if m.HandOverNpcCodename != "" && m.HandOverNpcCodename == npc {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+================
+pendingHandOver
+
+The delivery mission npc still has to take, and its node in record: the
+first not yet handed over (a parallel quest's missions each name their own
+NPC, so at most one matches).
+================
+*/
+func pendingHandOver(record enterworld.ActiveQuestRecord, def *Definition, npc string) (*Definition, int) {
+	for _, m := range deliveryMissions(def) {
+		if m.HandOverNpcCodename == "" || m.HandOverNpcCodename != npc {
+			continue
+		}
+		at := missionNodeIndex(record.Contents, m.missionIndex+1, m.ContentsSymbol)
+		if at < 0 || missionCompletionReached(record.Contents[at]) {
+			continue
+		}
+		return m, at
+	}
+	return nil, -1
+}
+
+/*
+================
+handOverRow
+
+91CA00 at a delivery mission's own NPC: the hand-over row while its items
+are held, its not-delivered line while they are missing. handled reports
+that the NPC belongs to a pending hand-over, so no other row of the quest
+is offered there.
+================
+*/
+func handOverRow(c *enterworld.Character, def *Definition, npc string) (*NpcOption, bool) {
+	at := activeQuestIndex(c, def.RefID)
+	if at < 0 {
+		return nil, false
+	}
+	m, _ := pendingHandOver(c.ActiveQuests[at], def, npc)
+	if m == nil {
+		return nil, false
+	}
+	if deliveryMet(c, m) {
+		return &NpcOption{Codename: handOverToken(def.Codename), TitleSymbol: def.TitleSymbol, PromptSymbol: m.HandOverSymbol,
+			Pages: m.HandOverPages, Complete: true}, true
+	}
+	if m.NotAchievedSymbol != "" {
+		return &NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: m.NotAchievedSymbol, Informational: true}, true
+	}
+	return nil, true
 }
 
 /*
@@ -202,7 +263,7 @@ journal update and the achieved-now banner follow the latch.
 */
 func (rt *Runtime) handOverDelivery(c *enterworld.Character, code, npc string) (OpResult, error) {
 	def, ok := rt.Defs.ByCodename(code)
-	if !ok || def.HandOverNpcCodename == "" || npc != def.HandOverNpcCodename {
+	if !ok || !slices.ContainsFunc(deliveryMissions(def), func(m *Definition) bool { return m.HandOverNpcCodename != "" && m.HandOverNpcCodename == npc }) {
 		return OpResult{}, fmt.Errorf("quest %s has no hand-over at %s", code, npc)
 	}
 	if rt.PlanInventory == nil {
@@ -215,26 +276,31 @@ func (rt *Runtime) handOverDelivery(c *enterworld.Character, code, npc string) (
 		if c != nil && !c.DeletePending {
 			at = activeQuestIndex(c, def.RefID)
 		}
-		// The latch lives in the record's one delivery node; a record
-		// without exactly one (a corrupt or foreign row) is refused, never
-		// indexed.
-		if at < 0 || len(c.ActiveQuests[at].Contents) != 1 || handedOver(c.ActiveQuests[at]) || !deliveryMet(c, def) {
+		// The latch lives in the mission's own node (91CEB0: one bit of
+		// quest-user +3 per mission); a record without that node is refused,
+		// never indexed.
+		var m *Definition
+		node := -1
+		if at >= 0 {
+			m, node = pendingHandOver(c.ActiveQuests[at], def, npc)
+		}
+		if m == nil || !deliveryMet(c, m) {
 			refusal = fmt.Errorf("quest %s hand-over is not due", code)
 			return false
 		}
 		var taken []inventory.ItemAmount
-		if !def.DeliveryKeepsItems {
-			taken = deliveryAmounts(def)
+		if !m.DeliveryKeepsItems {
+			taken = deliveryAmounts(m)
 		}
 		var given []inventory.ItemAmount
-		for _, item := range def.ExchangeItems {
+		for _, item := range m.ExchangeItems {
 			given = append(given, inventory.ItemAmount{Codename: item.ItemCodename, Count: item.Count})
 		}
 		rows, updates, err := rt.PlanInventory(c, taken, given)
 		if err != nil {
 			var fault *inventory.Fault
-			if errors.As(err, &fault) && fault.Code == wire.ErrCodeStorageFull && def.ExchangeFullSymbol != "" {
-				refusal = &dialogueRefusal{err, def.ExchangeFullSymbol}
+			if errors.As(err, &fault) && fault.Code == wire.ErrCodeStorageFull && m.ExchangeFullSymbol != "" {
+				refusal = &dialogueRefusal{err, m.ExchangeFullSymbol}
 			} else {
 				// Without its own +0xC8 line the quest's bag-full word answers.
 				refusal = inventoryRefusal(def, err)
@@ -245,10 +311,11 @@ func (rt *Runtime) handOverDelivery(c *enterworld.Character, code, npc string) (
 		previous := c.ActiveQuests[at]
 		record := previous
 		record.Contents = append([]enterworld.ActiveQuestContentsNode(nil), previous.Contents...)
-		record.Contents[0].CompletionReached, record.Contents[0].Kind = true, 0
+		record.Contents[node].CompletionReached, record.Contents[node].Kind = true, 0
 		record, _ = withJournalTargets(c, def, record)
 		c.ActiveQuests[at] = record
 		frames = append(updates, missionProgressFrames(def, previous, record)...)
+		frames = append(frames, pendingNotices(def, record)...)
 		objectives, _ := rt.applyInventoryChange(c)
 		frames = append(frames, objectives...)
 		return true
@@ -260,4 +327,27 @@ func (rt *Runtime) handOverDelivery(c *enterworld.Character, code, npc string) (
 		return OpResult{}, fmt.Errorf("hand-over character no longer authoritative")
 	}
 	return OpResult{Frames: frames}, nil
+}
+
+/*
+================
+pendingNotices
+
+After a hand-over, each parallel delivery still waiting sends its +0x108
+line ("Doji's medicine has been delivered. Deliver Bori's book to Chau.").
+================
+*/
+func pendingNotices(def *Definition, record enterworld.ActiveQuestRecord) []wire.Frame {
+	var frames []wire.Frame
+	for i := range def.Objectives {
+		spec := def.Objectives[i]
+		if spec.Objective != ObjectiveDelivery || spec.PendingNoticeSymbol == "" {
+			continue
+		}
+		at := missionNodeIndex(record.Contents, uint8(i)+1, spec.ContentsSymbol)
+		if at >= 0 && !missionCompletionReached(record.Contents[at]) {
+			frames = append(frames, questNotification(spec.PendingNoticeSymbol))
+		}
+	}
+	return frames
 }

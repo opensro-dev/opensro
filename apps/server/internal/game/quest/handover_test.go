@@ -194,3 +194,134 @@ func TestHandOverPagesPrecedeTheHandOver(t *testing.T) {
 		t.Fatalf("the smith's hand-over row %+v", row)
 	}
 }
+
+/*
+================
+TestParallelDeliveriesHandOverInEitherOrder
+
+QNO_CH_POTION_4 carries Doji's medicine and Bori's book together. Each
+latches its own mission at its own NPC (91CEB0's per-mission bit), the
+other's +0x108 line reminds the player of what is left, the journal moves
+to the remaining NPC, and Yangyun pays once both are handed over.
+================
+*/
+func TestParallelDeliveriesHandOverInEitherOrder(t *testing.T) {
+	licensed.RequireGameData(t)
+	rt := expansionRuntime(t)
+	def := mustQuest(t, rt, "QNO_CH_POTION_4")
+	if def.Objective != ObjectiveParallel || len(def.Objectives) != 2 {
+		t.Fatalf("POTION_4 objective %d with %d missions", def.Objective, len(def.Objectives))
+	}
+	c := deliveryCharacter(t, rt, "QNO_CH_POTION_2")
+	if _, err := rt.StartQuest(c, def.Codename); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	const medicine, book = "ITEM_QNO_CH_POTION_4_01", "ITEM_QNO_CH_POTION_4_02"
+	if captureItemCount(c, medicine) != 1 || captureItemCount(c, book) != 1 {
+		t.Fatal("acceptance did not grant both deliveries")
+	}
+	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err == nil {
+		t.Fatal("Yangyun paid before either hand-over")
+	}
+	// The book first, at Chau.
+	row, ok := npcRow(rt, c, def.Codename, "NPC_CH_FERRY")
+	if !ok || row.Codename != handOverToken(def.Codename) || row.PromptSymbol != "SN_TALK_QNO_CH_POTION_4_08" {
+		t.Fatalf("Chau's hand-over row %+v", row)
+	}
+	out, err := rt.AdvanceNpcQuest(c, row.Codename, "NPC_CH_FERRY")
+	if err != nil {
+		t.Fatalf("hand the book over: %v", err)
+	}
+	if captureItemCount(c, book) != 0 || captureItemCount(c, medicine) != 1 {
+		t.Fatal("Chau did not take only the book")
+	}
+	if !hasNotice(out.Frames, "SN_TALK_QNO_CH_POTION_4_13") || hasNotice(out.Frames, "SN_TALK_QNO_CH_POTION_4_11") {
+		t.Fatal("the book's hand-over did not remind of the medicine, or announced completion early")
+	}
+	if target := questTarget(c, def, c.ActiveQuests[0]); target.Codename != "NPC_CH_FERRY2" {
+		t.Fatalf("journal after the book points at %s, want Doji", target.Codename)
+	}
+	// Even holding a book again, Chau's mission stays latched.
+	holdItems(t, rt, c, book, 1)
+	if _, err := rt.AdvanceNpcQuest(c, row.Codename, "NPC_CH_FERRY"); err == nil {
+		t.Fatal("Chau took the book twice")
+	}
+	if _, offered := npcRow(rt, c, def.Codename, "NPC_CH_FERRY"); offered {
+		if again, _ := npcRow(rt, c, def.Codename, "NPC_CH_FERRY"); again.Codename == handOverToken(def.Codename) {
+			t.Fatal("Chau offers a second hand-over")
+		}
+	}
+	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err == nil {
+		t.Fatal("Yangyun paid with the medicine still undelivered")
+	}
+	out, err = rt.AdvanceNpcQuest(c, handOverToken(def.Codename), "NPC_CH_FERRY2")
+	if err != nil {
+		t.Fatalf("hand the medicine over: %v", err)
+	}
+	if !hasNotice(out.Frames, "SN_TALK_QNO_CH_POTION_4_11") {
+		t.Fatal("the last hand-over did not send the achieved-now line")
+	}
+	if target := questTarget(c, def, c.ActiveQuests[0]); target.Codename != def.EndNpcCodename || target.State != markerStateReport {
+		t.Fatalf("journal after both points at %+v, want Yangyun to report", target)
+	}
+	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err != nil || !questCompleted(c, def.RefID) {
+		t.Fatalf("Yangyun did not pay: %v", err)
+	}
+}
+
+/*
+================
+TestParallelExchangesReturnAtTheReport
+
+QNO_RM_SLAVE1_3's two plans each come back as an exchange at their NPC
+after one [NEXT] page; Jabr takes both back with the reward, and an
+abandoned quest leaves no plan behind.
+================
+*/
+func TestParallelExchangesReturnAtTheReport(t *testing.T) {
+	licensed.RequireGameData(t)
+	rt := expansionRuntime(t)
+	def := mustQuest(t, rt, "QNO_RM_SLAVE1_3")
+	newCharacter := func() *enterworld.Character {
+		c := deliveryCharacter(t, rt, "QNO_RM_SLAVE1_2")
+		*c.Level = int64(max(def.Level, 80))
+		c.ModelCodename = "CHAR_EU_MAN_NOBLE"
+		if def.CountryByte == 0 {
+			c.ModelCodename = "CHAR_CH_MAN_ADVENTURER"
+		}
+		if _, err := rt.StartQuest(c, def.Codename); err != nil {
+			t.Fatalf("accept: %v", err)
+		}
+		return c
+	}
+	c := newCharacter()
+	for _, npc := range []string{"NPC_RM_SLAVE2", "NPC_RM_SLAVE3"} {
+		row, ok := npcRow(rt, c, def.Codename, npc)
+		if !ok || len(row.Pages) != 1 || row.Pages[0].ReplySymbol != "SN_TALK_COMMON_NEXT" {
+			t.Fatalf("%s hand-over row %+v", npc, row)
+		}
+		if _, err := rt.AdvanceNpcQuest(c, row.Codename, npc); err != nil {
+			t.Fatalf("hand over at %s: %v", npc, err)
+		}
+	}
+	if captureItemCount(c, "ITEM_QNO_RM_SLAVE1_3_02") != 1 || captureItemCount(c, "ITEM_QNO_RM_SLAVE1_3_03") != 1 {
+		t.Fatal("the hand-overs did not give both plans back")
+	}
+	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err != nil {
+		t.Fatalf("report to Jabr: %v", err)
+	}
+	if captureItemCount(c, "ITEM_QNO_RM_SLAVE1_3_02") != 0 || captureItemCount(c, "ITEM_QNO_RM_SLAVE1_3_03") != 0 {
+		t.Fatal("Jabr did not take the plans back")
+	}
+	abandoned := newCharacter()
+	if _, err := rt.AdvanceNpcQuest(abandoned, handOverToken(def.Codename), "NPC_RM_SLAVE2"); err != nil {
+		t.Fatalf("hand over at SLAVE2: %v", err)
+	}
+	held := map[string]uint32{}
+	for _, item := range deliveryCleanup(abandoned, def) {
+		held[item.Codename] = item.Count
+	}
+	if held["ITEM_QNO_RM_SLAVE1_3_04"] != 1 || held["ITEM_QNO_RM_SLAVE1_3_02"] != 1 || len(held) != 2 {
+		t.Fatalf("abandonment would remove %v, want the undelivered plan and the exchange", held)
+	}
+}

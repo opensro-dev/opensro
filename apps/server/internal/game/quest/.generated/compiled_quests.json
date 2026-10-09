@@ -153,6 +153,72 @@
 		"HandOverSymbol": "SN_TALK_QNO_CH_POTION_2_08"
 	},
 	{
+		"Codename": "QNO_CH_POTION_4",
+		"MaxCompletions": 1,
+		"MinLevel": 7,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CH_POTION",
+		"EndNpcCodename": "NPC_CH_POTION",
+		"OfferPromptSymbol": "SN_TALK_QNO_CH_POTION_4_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CH_POTION_4_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_CH_POTION_4_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_CH_POTION_4_10",
+		"RequiredQuests": [
+			"QNO_CH_POTION_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_4_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_CH_POTION_4_05",
+		"AchievedNowSymbol": "SN_TALK_QNO_CH_POTION_4_11",
+		"RewardExp": 18000,
+		"RewardGold": 0,
+		"RewardSkillExp": 4500,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_ETC_MP_POTION_02",
+				"Count": 50
+			},
+			{
+				"ItemCodename": "ITEM_ETC_MP_POTION_02",
+				"Count": 50
+			},
+			{
+				"ItemCodename": "ITEM_ETC_MP_POTION_02",
+				"Count": 25
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_POTION_4_01",
+				"Objective": 4,
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_CH_POTION_4_01",
+						"Count": 1
+					}
+				],
+				"HandOverNpcCodename": "NPC_CH_FERRY2",
+				"HandOverSymbol": "SN_TALK_QNO_CH_POTION_4_06",
+				"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_4_07",
+				"PendingNoticeSymbol": "SN_TALK_QNO_CH_POTION_4_13"
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CH_POTION_4_02",
+				"Objective": 4,
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_CH_POTION_4_02",
+						"Count": 1
+					}
+				],
+				"HandOverNpcCodename": "NPC_CH_FERRY",
+				"HandOverSymbol": "SN_TALK_QNO_CH_POTION_4_08",
+				"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_4_09",
+				"PendingNoticeSymbol": "SN_TALK_QNO_CH_POTION_4_12"
+			}
+		]
+	},
+	{
 		"Codename": "QNO_CH_PRIEST_1",
 		"MaxCompletions": 1,
 		"MinLevel": 1,
@@ -1063,6 +1129,86 @@
 		],
 		"HandOverNpcCodename": "NPC_RM_YOUNGWOMAN1",
 		"HandOverSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_07"
+	},
+	{
+		"Codename": "QNO_RM_SLAVE1_3",
+		"MaxCompletions": 1,
+		"MinLevel": 75,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_SLAVE1",
+		"EndNpcCodename": "NPC_RM_SLAVE1",
+		"OfferPromptSymbol": "SN_TALK_QNO_RM_SLAVE1_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_RM_SLAVE1_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_RM_SLAVE1_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_SLAVE1_3_13",
+		"RequiredQuests": [
+			"QNO_RM_SLAVE1_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_RM_SLAVE1_3_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_RM_SLAVE1_3_09",
+		"AchievedNowSymbol": "SN_TALK_QNO_RM_SLAVE1_3_16",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_RM_SLAVE1_3_14",
+		"RewardExp": 120000,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_SLAVE1_3_02",
+				"Objective": 4,
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_RM_SLAVE1_3_01",
+						"Count": 1
+					}
+				],
+				"HandOverNpcCodename": "NPC_RM_SLAVE2",
+				"HandOverSymbol": "SN_TALK_QNO_RM_SLAVE1_3_08",
+				"HandOverPages": [
+					{
+						"PromptSymbol": "SN_TALK_QNO_RM_SLAVE1_3_06",
+						"ReplySymbol": "SN_TALK_COMMON_NEXT"
+					}
+				],
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_RM_SLAVE1_3_02",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_RM_SLAVE1_3_09",
+				"NotAchievedSymbol": "SN_TALK_QNO_RM_SLAVE1_3_17",
+				"PendingNoticeSymbol": "SN_TALK_QNO_RM_SLAVE1_3_14"
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_RM_SLAVE1_3_03",
+				"Objective": 4,
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_RM_SLAVE1_3_04",
+						"Count": 1
+					}
+				],
+				"HandOverNpcCodename": "NPC_RM_SLAVE3",
+				"HandOverSymbol": "SN_TALK_QNO_RM_SLAVE1_3_11",
+				"HandOverPages": [
+					{
+						"PromptSymbol": "SN_TALK_QNO_RM_SLAVE1_3_10",
+						"ReplySymbol": "SN_TALK_COMMON_NEXT"
+					}
+				],
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_RM_SLAVE1_3_03",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_RM_SLAVE1_3_12",
+				"NotAchievedSymbol": "SN_TALK_QNO_RM_SLAVE1_3_18",
+				"PendingNoticeSymbol": "SN_TALK_QNO_RM_SLAVE1_3_15"
+			}
+		]
 	},
 	{
 		"Codename": "QNO_WC_ACCESSORY_3",
