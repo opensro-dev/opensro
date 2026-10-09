@@ -4,9 +4,9 @@
 test_compiled_quest_evidence.py - byte and word fields of a compiled quest
 
 Synthetic HLIL lines exercise the production importer, and synthetic
-snapshot rows the generator's field check: a prerequisite that must be
-completed three times is refused, never projected as completed once. No
-licensed input or generated output is read or written.
+snapshot rows the generator's field check: a prerequisite's completion
+count is projected, never dropped, and a field it cannot carry is refused.
+No licensed input or generated output is read or written.
 
 ===========================================================================
 """
@@ -43,13 +43,15 @@ class CompiledQuestFieldTests(unittest.TestCase):
 	def test_constructor_defaults_pass(self):
 		check_fields({"words": {"0x106.b": 1, "0xc3.b": 0, "0x130": "SN_TALK_FIXTURE_01"}})
 		check_fields({"words": {}})
+		# A completion count is projected as RequiredQuestCompletions.
+		check_fields({"words": {"0x106.b": 3}})
 
 	# ================
 	# test_changed_fields_are_refused
 	# ================
 	def test_changed_fields_are_refused(self):
 		cases = (
-			({"0x106.b": 3}, "prerequisite completed 3 times"),
+			({"0x106.b": None}, "quest field 0x106.b = None"),
 			({"0x15b.b": 1, "0x15c.w": None}, "instance world quest"),
 			({"0x1a0.b": 2}, "quest field 0x1a0.b = 2"),
 		)

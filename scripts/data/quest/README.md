@@ -39,13 +39,15 @@ of a quest whose popup advertises none, as they did for the script-backed
 the importer joins them into one record.
 
 Lists: 0xF3 completion NPCs, 0xF7 quest NPCs, 0x102 every quest completed,
-0x10C quests active, 0x114 any one quest completed
-(`CBasicQuest_MeetsPrerequisites` 9262A0). 0x108 and 0x110 are not yet read.
+0x10C quests active, 0x114 any one quest completed, 0x108 quests ended and
+never completed (`CBasicQuest_MeetsPrerequisites` 9262A0; the server's
+`EndedQuestIds`). 0x110 is not yet read.
 A 0x102 entry must be completed as many times as its byte at +0x418 says
 (one byte per entry, 1 by default). The importer records such byte and word
 writes as `"0x106.b"`, keeping a value read at run time as null. The generator
-refuses any that differs from the constructor's default (91E200): a count
-above 1, or 0x15B/0x15C, which tie the quest to an instance world.
+projects the first entry's count as `RequiredQuestCompletions`, and refuses
+any other field that differs from the constructor's default (91E200), such
+as 0x15B/0x15C, which tie the quest to an instance world.
 
 A class that overrides vtable slots has custom behaviour (NPC talk at +0x58,
 dialogue at +0x90, the capture escort's +0x80/+0x9C/+0xA8 timers and events).

@@ -91,11 +91,16 @@ OfferPage
 
 One story page an NPC shows before a quest offer: its prompt and the single
 reply row that turns the page (Rahid 5's 8A03F0 dialogue states 0xA..0x28).
+A page with a RefuseSymbol shows it as a second row: choosing it answers
+RefuseResponseSymbol and ends the quest's RefuseEndsQuests (KT_SMITH_2's
+_01 page, rows _02/_04, 8A77A0).
 ================
 */
 type OfferPage struct {
-	PromptSymbol string
-	ReplySymbol  string
+	PromptSymbol         string
+	ReplySymbol          string
+	RefuseSymbol         string
+	RefuseResponseSymbol string
 }
 
 /*
@@ -148,7 +153,18 @@ type QuestSpec struct {
 	// RequiredAnyQuests is quest list 0x114 (+0x450): one of these completed
 	// suffices (CBasicQuest_MeetsPrerequisites 9262A0).
 	RequiredAnyQuests []string
-	Repeatable        bool
+	// RequiredQuestCompletions[i] is how many times RequiredQuests[i] must
+	// be completed (the +0x418 bytes, 9262A0); a missing entry is 1.
+	RequiredQuestCompletions []uint32
+	// RequiredEndedQuests is quest list 0x108 (+0x420): each must be ended
+	// and never completed (9262A0: count 0 and state 5).
+	RequiredEndedQuests []string
+	// AcceptEndsQuests are ended when the offer's Accept is pressed, and
+	// RefuseEndsQuests when an offer page's refusal row is chosen
+	// (KT_SMITH_2 8A77A0). See ended.go.
+	AcceptEndsQuests []string
+	RefuseEndsQuests []string
+	Repeatable       bool
 	// KindByte is the wire u10 the CIFQuestReward content button
 	// switches on (sub_5c26e0): 1/7/8 open the give-up window, 2 opens
 	// the REWARD window (its action button composes 0x729A - the
@@ -390,6 +406,9 @@ type Definition struct {
 	RequiredActiveQuestIDs []uint32
 	RequiredAnyQuestIDs    []uint32
 	handOverNpcRef         uint32
+	RequiredEndedQuestIDs  []uint32
+	AcceptEndsQuestIDs     []uint32
+	RefuseEndsQuestIDs     []uint32
 }
 
 /*
@@ -598,6 +617,9 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 			if _, loaded := defs.byCodename[code]; !loaded {
 				defs.externalPrerequisites[parent.ID] = true
 			}
+		}
+		if err := loadEndedQuests(def, defs); err != nil {
+			return nil, err
 		}
 	}
 	if err := validateQuestChains(defs); err != nil {

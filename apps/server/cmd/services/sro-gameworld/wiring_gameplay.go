@@ -526,7 +526,8 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 			for _, row := range rows {
 				pages := make([]action.NpcDialogPage, 0, len(row.Pages))
 				for _, page := range row.Pages {
-					pages = append(pages, action.NpcDialogPage{PromptSymbol: page.PromptSymbol, ReplySymbol: page.ReplySymbol})
+					pages = append(pages, action.NpcDialogPage{PromptSymbol: page.PromptSymbol, ReplySymbol: page.ReplySymbol,
+						RefuseSymbol: page.RefuseSymbol, RefuseResponseSymbol: page.RefuseResponseSymbol})
 				}
 				branches := make([]action.NpcDialogBranch, 0, len(row.Branches))
 				for _, branch := range row.Branches {
@@ -559,6 +560,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 				return result.Frames, err
 			}
 			result, err := quests.AdvanceNpcQuest(character, codename, npcCodename)
+			return result.Frames, err
+		},
+		Refuse: func(character *enterworld.Character, codename string) ([]wire.Frame, error) {
+			result, err := quests.RefuseQuestOffer(character, codename)
 			return result.Frames, err
 		},
 	}

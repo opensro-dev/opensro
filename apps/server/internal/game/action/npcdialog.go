@@ -70,12 +70,16 @@ const npcDialogRefuseRow = "SN_TALK_COMMON_DENY"
 ================
 NpcDialogPage
 One page of an NPC's story before a quest offer: a prompt and the single
-reply row that turns the page (Rahid 5's 8A03F0 pages _01.._08).
+reply row that turns the page (Rahid 5's 8A03F0 pages _01.._08). A page
+with a RefuseSymbol adds it as the second row; choosing it refuses the
+quest through NpcQuestHooks.Refuse (KT_SMITH_2's _01 page, 8A77A0).
 ================
 */
 type NpcDialogPage struct {
-	PromptSymbol string
-	ReplySymbol  string
+	PromptSymbol         string
+	ReplySymbol          string
+	RefuseSymbol         string
+	RefuseResponseSymbol string
 }
 
 /*
@@ -90,6 +94,7 @@ type NpcQuestHooks struct {
 	Prepare func(character *enterworld.Character, codename, npcCodename string) (string, error)
 	Accept  func(character *enterworld.Character, codename string) ([]wire.Frame, error)
 	Finish  func(character *enterworld.Character, codename, npcCodename string) ([]wire.Frame, error)
+	Refuse  func(character *enterworld.Character, codename string) ([]wire.Frame, error)
 }
 
 /*
@@ -291,6 +296,10 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 		}
 		return rt.openNpcDialogConfirm(divisionID, character, conversation)
 	case npcDialogPages:
+		page := conversation.Pending.Pages[conversation.Page]
+		if page.RefuseSymbol != "" && choice == npcDialogFirstRow+1 {
+			return rt.refuseNpcQuest(divisionID, character, conversation, page), ""
+		}
 		if choice != npcDialogFirstRow {
 			return nil, fmt.Sprintf("page choice %d is not the page's reply row", choice)
 		}
@@ -433,9 +442,35 @@ func (rt *Runtime) openNpcDialogConfirm(divisionID string, character *enterworld
 
 /*
 ================
+refuseNpcQuest
+
+A page's refusal row ends the conversation with the page's answer. When
+the quest owner turns the refusal down (the offer no longer stands), the
+NPC answers its base prompt instead and nothing is ended.
+================
+*/
+func (rt *Runtime) refuseNpcQuest(divisionID string, character *enterworld.Character, conversation npcDialogSession, page NpcDialogPage) []wire.Frame {
+	rt.NpcDialogs.Clear(divisionID, character.Name)
+	if rt.NpcQuests.Refuse == nil {
+		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}
+	}
+	frames, err := rt.NpcQuests.Refuse(character, conversation.Pending.Codename)
+	if err != nil {
+		log.Debugf("npcdialog: quest refusal %s refused: %v", conversation.Pending.Codename, err)
+		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(conversation.DefaultSymbol)}}
+	}
+	return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(page.RefuseResponseSymbol)})
+}
+
+/*
+================
 npcDialogPageFrame
 ================
 */
 func npcDialogPageFrame(page NpcDialogPage) wire.Frame {
-	return wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(page.PromptSymbol, []string{page.ReplySymbol})}
+	rows := []string{page.ReplySymbol}
+	if page.RefuseSymbol != "" {
+		rows = append(rows, page.RefuseSymbol)
+	}
+	return wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(page.PromptSymbol, rows)}
 }

@@ -96,6 +96,8 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 				model = "CHAR_EU_MAN_NOBLE"
 			}
 			character = &enterworld.Character{Name: "questmatrix", ModelCodename: model, Level: &level, Gold: &gold, Experience: &experience, CompletedQuestIds: completedPrerequisites(def)}
+			character.QuestCompletionCounts = prerequisiteCounts(def)
+			character.EndedQuestIds = slices.Clone(def.RequiredEndedQuestIDs)
 			for _, id := range def.RequiredActiveQuestIDs {
 				parent, exists := defs.ByRefID(id)
 				if !exists {
@@ -604,4 +606,16 @@ func completedPrerequisites(def *Definition) []uint32 {
 		completed = append(completed, def.RequiredAnyQuestIDs[0])
 	}
 	return completed
+}
+
+// prerequisiteCounts completes each prerequisite as often as its count asks.
+func prerequisiteCounts(def *Definition) map[uint32]uint32 {
+	if len(def.RequiredQuestCompletions) == 0 {
+		return nil
+	}
+	counts := map[uint32]uint32{}
+	for i, count := range def.RequiredQuestCompletions {
+		counts[def.RequiredQuestIDs[i]] = count
+	}
+	return counts
 }

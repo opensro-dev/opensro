@@ -15,6 +15,7 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 		Level:                 &level,
 		BlockedWhisperers:     []string{"whisper-a"},
 		CompletedQuestIds:     []uint32{},
+		EndedQuestIds:         []uint32{43},
 		MissionInventory: []InventoryRow{{
 			Slot:         6,
 			MagicOptions: []uint64{11},
@@ -47,6 +48,10 @@ func TestCharacterSnapshotDetachesMutableRecordGraph(t *testing.T) {
 	character.QuestCompletionCounts[42] = 3
 	if snapshot.QuestCompletionCounts[42] != 2 {
 		t.Fatal("snapshot shared quest completion counts")
+	}
+	character.EndedQuestIds[0] = 44
+	if snapshot.EndedQuestIds[0] != 43 {
+		t.Fatal("snapshot shared ended quests")
 	}
 
 	*character.Level = 11

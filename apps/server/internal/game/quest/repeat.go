@@ -11,6 +11,10 @@ func completionCount(c *enterworld.Character, id uint32) uint32 {
 }
 
 func canAcceptAgain(c *enterworld.Character, def *Definition) bool {
+	// An ended quest is in state 5, which the talk never offers (state 4).
+	if questEnded(c, def.RefID) {
+		return false
+	}
 	if def.Repeatable {
 		return true
 	}

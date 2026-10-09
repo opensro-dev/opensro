@@ -391,6 +391,12 @@ type Character struct {
 	// continues to carry only the unique completed quest IDs.
 	QuestCompletionCounts map[uint32]uint32           `json:"questCompletionCounts,omitempty"`
 	QuestSupplies         map[uint32]QuestSupplyState `json:"questSupplies,omitempty"`
+	// EndedQuestIds are quests closed for good without being completed
+	// (native quest state 5, QuestManager_CreateEndedRecord 570F10): a
+	// branch the character turned down. Server-side only, like the
+	// counts: the native server sends no update for state 5. A completed
+	// quest that is also ended keeps its completion and count.
+	EndedQuestIds []uint32 `json:"endedQuestIds,omitempty"`
 
 	// ActiveQuests are the in-progress quest records the 0x32B3 quest
 	// block's SECOND section emits (sub_8673d0 section 2: u8 count +

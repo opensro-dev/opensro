@@ -60,22 +60,31 @@ LIST_COMPLETION_NPCS, LIST_QUEST_NPCS = "0xf3", "0xf7"
 LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE = "0x102", "0x10c"
 # One of these completed suffices (CBasicQuest_MeetsPrerequisites 9262A0).
 LIST_REQUIRED_ANY = "0x114"
-KNOWN_LISTS = {LIST_COMPLETION_NPCS, LIST_QUEST_NPCS, LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE, LIST_REQUIRED_ANY}
+# Each ended and never completed (9262A0: count 0 and state 5).
+LIST_REQUIRED_ENDED = "0x108"
+KNOWN_LISTS = {LIST_COMPLETION_NPCS, LIST_QUEST_NPCS, LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE, LIST_REQUIRED_ANY,
+	LIST_REQUIRED_ENDED}
 
 # The byte and word fields an initializer may write inside a dword slot,
 # with the value the CBasicQuest constructor (91E200) leaves there:
 #	0x106.b: the first prerequisite's completion count (+0x418, one byte
-#	         per list 0x102 entry; CBasicQuest_MeetsPrerequisites 9262A0)
+#	         per list 0x102 entry; CBasicQuest_MeetsPrerequisites 9262A0),
+#	         projected as RequiredQuestCompletions
 #	0xc3.b:  the initializers only rewrite its default
 #	0x15b.b: the quest belongs to an instance world, whose id 0x15c.w
 #	         holds (looked up by its INS_ codename)
 # Any other value changes the quest and is not projected yet.
 FIELD_DEFAULTS = {"0x106.b": 1, "0xc3.b": 0, "0x15b.b": 0, "0x15c.w": 1}
+FIELD_PROJECTED = {"0x106.b"}
 FIELD_MEANINGS = {
-	"0x106.b": "prerequisite completed %s times",
 	"0x15b.b": "instance world quest",
 	"0x15c.w": "instance world quest",
 }
+
+# 8A5CA0, the talk KT_SMITH_3 and KT_ACCESSORY_2/3 share, is the base talk
+# in effect: it drops gates these quests do not use, and its record byte 0
+# check passes because acceptance sets the byte (922DE0).
+KT_SHARED_TALK = {}
 
 # What a class's own override does, as the QuestSpec fields that port it,
 # keyed by (quest, vtable slot). Each row cites the override it reads.
@@ -130,6 +139,23 @@ CLASS_BEHAVIOUR = {
 		"DenyResponseSymbol": "SN_TALK_QNO_WC_SMITH_3_03",
 		"SideTalks": [{"NpcCodename": "NPC_WC_SMITH", "PromptSymbol": "SN_TALK_QNO_WC_SMITH_3_04"}],
 	},
+	# CQNO_KT_SMITH_2_OnNpcTalk (8A77A0): the blacksmith's fork. Page _01
+	# offers _02 (word 0x143) to go on to the offer, or _04 (0x144) to
+	# turn it down for good: _05, and SMITH_2 and SMITH_3 end. Pressing
+	# Accept ends ACCESSORY_2 and ACCESSORY_3 (8A789E on).
+	("QNO_KT_SMITH_2", "0x58"): {
+		"OfferPages": [{
+			"PromptSymbol": "SN_TALK_QNO_KT_SMITH_2_01",
+			"ReplySymbol": "SN_TALK_QNO_KT_SMITH_2_02",
+			"RefuseSymbol": "SN_TALK_QNO_KT_SMITH_2_04",
+			"RefuseResponseSymbol": "SN_TALK_QNO_KT_SMITH_2_05",
+		}],
+		"RefuseEndsQuests": ["QNO_KT_SMITH_2", "QNO_KT_SMITH_3"],
+		"AcceptEndsQuests": ["QNO_KT_ACCESSORY_2", "QNO_KT_ACCESSORY_3"],
+	},
+	("QNO_KT_SMITH_3", "0x58"): KT_SHARED_TALK,
+	("QNO_KT_ACCESSORY_2", "0x58"): KT_SHARED_TALK,
+	("QNO_KT_ACCESSORY_3", "0x58"): KT_SHARED_TALK,
 }
 
 
@@ -296,8 +322,8 @@ def rewards(code, text, sql):
 # check_fields
 #
 # A byte or word field that differs from its constructor default changes
-# the quest: refuse it until QuestSpec carries it, rather than project a
-# three-times prerequisite as a once.
+# the quest: refuse it unless QuestSpec carries it (FIELD_PROJECTED),
+# rather than drop it. A value read at run time (null) is never projected.
 # ================
 def check_fields(quest):
 	for key in sorted(quest["words"]):
@@ -305,6 +331,8 @@ def check_fields(quest):
 			continue
 		value = quest["words"][key]
 		if key in FIELD_DEFAULTS and value == FIELD_DEFAULTS[key]:
+			continue
+		if key in FIELD_PROJECTED and isinstance(value, int) and value > 0:
 			continue
 		meaning = FIELD_MEANINGS.get(key)
 		if meaning is None:
@@ -346,6 +374,13 @@ def project(code, quest, text, sql):
 		spec["RequiredActiveQuests"] = lists[LIST_REQUIRED_ACTIVE]
 	if lists.get(LIST_REQUIRED_ANY):
 		spec["RequiredAnyQuests"] = lists[LIST_REQUIRED_ANY]
+	if lists.get(LIST_REQUIRED_ENDED):
+		spec["RequiredEndedQuests"] = lists[LIST_REQUIRED_ENDED]
+	completions = quest["words"].get("0x106.b", 1)
+	if completions != 1:
+		if not spec["RequiredQuests"]:
+			raise Unsupported("completion count without a prerequisite")
+		spec["RequiredQuestCompletions"] = [completions]
 	behaviour = {}
 	for slot in quest["overrides"]:
 		behaviour.update(CLASS_BEHAVIOUR[(code, slot)])
@@ -447,7 +482,9 @@ def build():
 		changed = False
 		for code in sorted(specs):
 			spec = specs[code]
-			missing = [q for q in spec["RequiredQuests"] + spec.get("RequiredActiveQuests", []) if q not in specs and q not in elsewhere]
+			named = spec["RequiredQuests"] + spec.get("RequiredActiveQuests", []) + spec.get("RequiredEndedQuests", [])
+			named += spec.get("AcceptEndsQuests", []) + spec.get("RefuseEndsQuests", [])
+			missing = [q for q in named if q not in specs and q not in elsewhere]
 			anyof = spec.get("RequiredAnyQuests", [])
 			if anyof and not any(q in specs or q in elsewhere for q in anyof):
 				missing += anyof

@@ -101,6 +101,7 @@ func cloneCharacter(source *Character) *Character {
 	}
 	clone.QuickSlots = cloneSlice(source.QuickSlots)
 	clone.CompletedQuestIds = cloneSlice(source.CompletedQuestIds)
+	clone.EndedQuestIds = cloneSlice(source.EndedQuestIds)
 	if source.QuestCompletionCounts != nil {
 		clone.QuestCompletionCounts = make(map[uint32]uint32, len(source.QuestCompletionCounts))
 		for id, count := range source.QuestCompletionCounts {

@@ -22,20 +22,31 @@ import (
 prerequisitesMet
 
 An active requirement cannot be satisfied by an already completed quest.
-Every required quest must be completed; of the any-of list, one.
+Every required quest must be completed, as many times as its count asks;
+every required ended quest must be ended and never completed; of the
+any-of list, one.
 ================
 */
 func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 	if def.AcceptanceUnavailable != "" {
 		return false
 	}
-	for _, id := range def.RequiredQuestIDs {
-		if !questCompleted(c, id) {
+	for i, id := range def.RequiredQuestIDs {
+		need := uint32(1)
+		if i < len(def.RequiredQuestCompletions) {
+			need = def.RequiredQuestCompletions[i]
+		}
+		if !questCompleted(c, id) || completionCount(c, id) < need {
 			return false
 		}
 	}
 	for _, id := range def.RequiredActiveQuestIDs {
 		if activeQuestIndex(c, id) < 0 {
+			return false
+		}
+	}
+	for _, id := range def.RequiredEndedQuestIDs {
+		if !questEnded(c, id) || completionCount(c, id) > 0 {
 			return false
 		}
 	}

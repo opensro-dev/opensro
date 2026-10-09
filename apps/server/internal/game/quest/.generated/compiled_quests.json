@@ -787,6 +787,152 @@
 		"ExchangeFullSymbol": "SN_TALK_QNO_EU_EASTEU_8_09"
 	},
 	{
+		"Codename": "QNO_KT_ACCESSORY_2",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_KT_ACCESSORY",
+		"EndNpcCodename": "NPC_KT_ACCESSORY",
+		"OfferPromptSymbol": "SN_TALK_QNO_KT_ACCESSORY_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_KT_ACCESSORY_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_KT_ACCESSORY_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_KT_ACCESSORY_2_05",
+		"RequiredQuests": [
+			"QNO_KT_ACCESSORY_1"
+		],
+		"RequiredEndedQuests": [
+			"QNO_KT_SMITH_2",
+			"QNO_KT_SMITH_3"
+		],
+		"RequiredQuestCompletions": [
+			3
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_KT_ACCESSORY_2_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_KT_ACCESSORY_2_06",
+		"RewardExp": 0,
+		"RewardGold": 925000,
+		"RewardSkillExp": 90000,
+		"RewardItems": [],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_KT_SMITH_2_01",
+		"CollectCount": 300,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_TK_DEVILEYE_CLON",
+				"MOB_TK_DEVILEYE"
+			],
+			"ChancePercent": 20.0
+		}
+	},
+	{
+		"Codename": "QNO_KT_ACCESSORY_3",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_KT_ACCESSORY",
+		"EndNpcCodename": "NPC_KT_ACCESSORY",
+		"OfferPromptSymbol": "SN_TALK_QNO_KT_ACCESSORY_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_KT_ACCESSORY_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_KT_ACCESSORY_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_KT_ACCESSORY_3_05",
+		"RequiredQuests": [
+			"QNO_KT_ACCESSORY_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_KT_ACCESSORY_3_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_KT_ACCESSORY_3_06",
+		"RewardExp": 0,
+		"RewardGold": 1000000,
+		"RewardSkillExp": 96000,
+		"RewardItems": [],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_KT_ACCESSORY_3_01",
+		"CollectCount": 200,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_TK_BONESOLDIER_CLON",
+				"MOB_TK_BONESOLDIER"
+			],
+			"ChancePercent": 20.0
+		}
+	},
+	{
+		"Codename": "QNO_KT_SMITH_2",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_KT_SMITH",
+		"EndNpcCodename": "NPC_KT_SMITH",
+		"OfferPromptSymbol": "SN_TALK_QNO_KT_SMITH_2_03",
+		"AcceptResponseSymbol": "SN_TALK_QNO_KT_SMITH_2_06",
+		"DenyResponseSymbol": "SN_TALK_QNO_KT_SMITH_2_07",
+		"CompletePromptSymbol": "SN_TALK_QNO_KT_SMITH_2_09",
+		"RequiredQuests": [
+			"QNO_KT_ACCESSORY_1"
+		],
+		"RequiredQuestCompletions": [
+			3
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_KT_SMITH_2_08",
+		"AchievedNowSymbol": "SN_TALK_QNO_KT_SMITH_2_10",
+		"RewardExp": 3400000,
+		"RewardGold": 0,
+		"RewardSkillExp": 90000,
+		"RewardItems": [],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_KT_SMITH_2_01",
+		"CollectCount": 300,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_TK_DEVILEYE",
+				"MOB_TK_DEVILEYE_CLON"
+			],
+			"ChancePercent": 20.0
+		},
+		"OfferPages": [
+			{
+				"PromptSymbol": "SN_TALK_QNO_KT_SMITH_2_01",
+				"ReplySymbol": "SN_TALK_QNO_KT_SMITH_2_02",
+				"RefuseSymbol": "SN_TALK_QNO_KT_SMITH_2_04",
+				"RefuseResponseSymbol": "SN_TALK_QNO_KT_SMITH_2_05"
+			}
+		],
+		"RefuseEndsQuests": [
+			"QNO_KT_SMITH_2",
+			"QNO_KT_SMITH_3"
+		],
+		"AcceptEndsQuests": [
+			"QNO_KT_ACCESSORY_2",
+			"QNO_KT_ACCESSORY_3"
+		]
+	},
+	{
+		"Codename": "QNO_KT_SMITH_3",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_KT_SMITH",
+		"EndNpcCodename": "NPC_KT_SMITH",
+		"OfferPromptSymbol": "SN_TALK_QNO_KT_SMITH_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_KT_SMITH_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_KT_SMITH_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_KT_SMITH_3_05",
+		"RequiredQuests": [
+			"QNO_KT_SMITH_2"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_KT_SMITH_3_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_KT_SMITH_3_06",
+		"RewardExp": 4000000,
+		"RewardGold": 0,
+		"RewardSkillExp": 96000,
+		"RewardItems": [],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_KT_SMITH_3_01",
+		"CollectCount": 200,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_TK_BONESOLDIER_CLON",
+				"MOB_TK_BONESOLDIER"
+			],
+			"ChancePercent": 20.0
+		}
+	},
+	{
 		"Codename": "QNO_RM_FLYSHIP1_2",
 		"MaxCompletions": 1,
 		"KindByte": 1,

@@ -291,6 +291,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 	if branched != (len(def.OfferBranches) > 0) || branch >= max(1, len(def.OfferBranches)) {
 		return OpResult{}, fmt.Errorf("quest start: %s needs one of its %d offer replies", codename, len(def.OfferBranches))
 	}
+	rt.endOnAccept(character, def)
 	var refusal error
 	var record enterworld.ActiveQuestRecord
 	var inventoryFrames []wire.Frame
