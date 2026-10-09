@@ -40,9 +40,9 @@ game.example.com {
 		# path - the page, release.json, the pack index - revalidates on each
 		# use, which costs a 304 when unchanged, so a refresh or a new visit
 		# always sees the current release.
-		@immutable path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?)$
+		@immutable path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin)$
 		header @immutable Cache-Control "public, max-age=31536000, immutable"
-		@revalidate not path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin(\.zst)?)$
+		@revalidate not path_regexp ^/assets/(.+-[A-Za-z0-9_-]{8,}\.(js|css)|packs/(.+/)?[a-z0-9-]+-[0-9]{3}-[0-9a-f]{12}\.bin)$
 		header @revalidate Cache-Control "no-cache"
 
 		root * /var/www/opensro
