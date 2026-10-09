@@ -17,7 +17,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from bundle import release_files
+from bundle import FILES, release_files
 from client_bundle import application_files, safe_name
 from release_state import identity
 
@@ -31,6 +31,25 @@ def directory(config, component, release):
 	if component not in ("client", "server"):
 		raise ValueError("invalid retention component")
 	return Path(config["candidate_records"]).parent / "retained" / component / identity(release)
+
+
+# Retained server executables keep owner execute: a revert runs the retained
+# release's own sro-game-data-check in place (server_data.check). Every other
+# retained file is private data.
+RETAINED_EXECUTABLE = 0o700
+RETAINED_FILE = 0o600
+
+
+# ================
+# retained_mode
+#
+# The mode a retained input holds: a server binary (bin/ in bundle.FILES) is
+# executable, anything else is not.
+# ================
+def retained_mode(component, name):
+	if component == "server" and FILES.get(name, "").startswith("bin/"):
+		return RETAINED_EXECUTABLE
+	return RETAINED_FILE
 
 
 # ================
@@ -69,6 +88,9 @@ def preserve(config, component, row, live, raw_manifest):
 			with (target / name).open("rb") as stream:
 				if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
 					raise ValueError("retained input changed")
+			# Controls before RETAINED_EXECUTABLE retained binaries as 0600, so a
+			# revert to one of them failed to run its game data check.
+			(target / name).chmod(retained_mode(component, name))
 		return target
 	with tempfile.TemporaryDirectory(prefix="retain-", dir=target.parent) as temporary:
 		staging = Path(temporary) / "files"
@@ -77,6 +99,7 @@ def preserve(config, component, row, live, raw_manifest):
 			destination = staging / name
 			destination.parent.mkdir(parents=True, exist_ok=True)
 			shutil.copyfile(source, destination)
+			destination.chmod(retained_mode(component, name))
 			with destination.open("rb") as stream:
 				if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
 					raise ValueError("live input differs from the retained release manifest")
