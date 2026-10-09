@@ -79,7 +79,7 @@ function harness( { deathLoop = false, deathModel = true, uncensored = false } =
 					states: actionStates,
 					health: undefined,
 					deadGids: new Set(),
-					hitByActor: new Map( down ? [ [ 1, { downAt: seconds * 1000 } ] ] : [] ),
+					hitByActor: new Map( down ? [ [ 1, { downAt: seconds } ] ] : [] ),
 					castByActor: new Map(),
 					resources: { duration: () => 1 },
 					random: { range: () => 0 },
@@ -168,6 +168,30 @@ test("death from the down posture plays downdie on the body", () => {
 	assert.equal( entry.downDeath, true );
 	assert.equal( entry.deathModel, false );
 	assert.equal( entry.deathAction, false );
+});
+
+test("a monster killed while down stays down until its killing hit plays, then plays downdie", () => {
+	const h = harness( { uncensored: true } );
+	h.step( { mask: MASK_BASE } );
+	h.step( { mask: MASK_BASE, down: true } );
+	// The authority's death arrives first; the killing hit is still held, for
+	// longer than the 2.5 s knockdown, which must not wake a dead monster.
+	for ( let i = 0; i < 40; i++ ) {
+		const held = h.step( { dead: true, pending: true, mask: 0x10 } );
+		assert.equal( held.posture?.kind, "down", "the held death stood the monster up" );
+	}
+	const entry = h.step( { dead: true, mask: 0x10 } );
+	assert.equal( entry.downDeath, true );
+	assert.equal( entry.deathModel, false );
+});
+
+test("a living monster still wakes from its knockdown", () => {
+	const h = harness();
+	h.step( { mask: MASK_BASE } );
+	h.step( { mask: MASK_BASE, down: true } );
+	let entry;
+	for ( let i = 0; i < 40; i++ ) entry = h.step( { mask: 0x10 } );
+	assert.notEqual( entry?.posture?.kind, "down" );
 });
 
 test("a corpse first seen dead still loads its death model without the one-shot", () => {

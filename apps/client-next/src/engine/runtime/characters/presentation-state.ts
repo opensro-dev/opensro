@@ -162,15 +162,21 @@ export function createPresentationState() {
 				const isPlayer = entity.kind === "local-player" || entity.kind === "player" ||
 					/^CHAR_/.test( resource.codename );
 				const previousEmote = entry.posture?.kind === "emote" ? entry.posture.clip : undefined;
-				if ( dead && entry.posture?.kind === "down" ) entry.downDeath = true;
+				// The death the actor shows: the authority's, once its killing hit
+				// has played. Natively LIFE dead enters state 1 straight from the
+				// down state 4 (8E64F0 plays downdie), so a knocked-down monster
+				// stays down until then; cancelling its posture at the authority's
+				// death stood it up for the length of the held hit.
+				const shownDead = dead && !pendingDeaths.has( entity.gid );
+				if ( shownDead && entry.posture?.kind === "down" ) entry.downDeath = true;
 				else if ( !dead ) entry.downDeath = false;
-				enterDeath( entry, dead && !pendingDeaths.has( entity.gid ), {
+				enterDeath( entry, shownDead, {
 					previousMask: state?.actionMask ?? 0,
 					deathModel: deathModels.has( resource.codename ),
 					deathLoop: resource.clips.includes( "deathLoop" ) || resource.clips.includes( "deathloop" ),
 					uncensored
 				} );
-				if ( dead || entity.mountedOn || entity.movementMode === MOVEMENT_MODE_SEATED ) {
+				if ( shownDead || entity.mountedOn || entity.movementMode === MOVEMENT_MODE_SEATED ) {
 					entry.posture = transitionPosture( entry.posture, { kind: "cancel" } );
 				} else {
 					if ( hit?.downAt !== undefined ) {
@@ -205,7 +211,9 @@ export function createPresentationState() {
 							} );
 						} else if ( action === null && !moving ) entry.idle.remaining = 0;
 					}
-					if ( entry.posture ) {
+					// A monster the authority killed never wakes: it waits down for its
+					// shown death, which then enters from state 4 as downdie.
+					if ( entry.posture && !(dead && entry.posture.kind === "down") ) {
 						const role = entry.posture.kind === "emote" ?
 							entry.posture.clip :
 							entry.posture.kind === "recover" ?
