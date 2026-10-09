@@ -68,6 +68,8 @@ type gameplayPlane struct {
 	matches       *match.Runtime
 	siege         *siege.Lane
 	quests        *quest.Runtime
+	// betaSilk earns the beta's Item Mall silk (nil when SRO_BETA_SILK is off).
+	betaSilk *action.BetaSilk
 }
 
 /*
@@ -143,17 +145,20 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
-	// SRO_BETA_SILK (port-only, not native): the beta's Item Mall silk
-	// allowance, refilled at world entry and never stored (betasilk.go).
-	betaSilk, err := action.BetaSilkFromEnv()
+	if err := items.ConfigureMall(devPaths.TextdataDir, authorityStore); err != nil {
+		return nil, fmt.Errorf("mall catalogue: %w", err)
+	}
+	// SRO_BETA_SILK (port-only, not native): silk earned per in-world hour,
+	// credited into the account's real wallet (action/betasilk.go).
+	betaSilkRate, err := action.BetaSilkFromEnv()
 	if err != nil {
 		return nil, err
 	}
-	mallAuthority, refillMallAllowance := action.WithBetaSilk(authorityStore, betaSilk)
-	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority); err != nil {
-		return nil, fmt.Errorf("mall catalogue: %w", err)
+	betaSilk := action.NewBetaSilk(authorityStore, betaSilkRate)
+	if betaSilk != nil {
+		deps.EntryBetaSilk = betaSilk.Starter
+		log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, betaSilkRate)
 	}
-	deps.EntryMallAllowance = refillMallAllowance
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames
@@ -356,6 +361,7 @@ func newGameplayPlane(
 		mentorInvites: mentorInvites,
 		matches:       matches,
 		siege:         siegeRuntime,
+		betaSilk:      betaSilk,
 	}, nil
 }
 

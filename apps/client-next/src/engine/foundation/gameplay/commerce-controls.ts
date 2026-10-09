@@ -21,6 +21,9 @@ export const COMMERCE_REFERENCES_CONTROL = 14;
 export const MALL_CATALOG_CONTROL = 15;
 // The server's replayed public transcript (chat/history.go OpChatHistory).
 export const CHAT_HISTORY_CONTROL = 16;
+// The beta's earned silk pushes the account's new mall balance (server
+// action/betasilk.go opMallBalance; port-only, not native).
+export const MALL_BALANCE_CONTROL = 17;
 
 /*
 ================
@@ -30,5 +33,5 @@ isWorldControl
 export function isWorldControl( opcode: number ): boolean {
 	return opcode === SHOP_CATALOG_CONTROL || opcode === SHOP_INVENTORY_CONTROL ||
 		opcode === SHOP_BUYBACK_CONTROL || opcode === COMMERCE_REFERENCES_CONTROL || opcode === MALL_CATALOG_CONTROL ||
-		opcode === CHAT_HISTORY_CONTROL;
+		opcode === CHAT_HISTORY_CONTROL || opcode === MALL_BALANCE_CONTROL;
 }

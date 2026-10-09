@@ -1,42 +1,73 @@
 /*
 ===========================================================================
 
-betasilk.go - the closed-beta Item Mall silk allowance (port-only, not native)
+betasilk.go - the closed beta's earned Item Mall silk (port-only, not native)
 
-Native silk is what the account's mall row holds. For the closed beta the
-operator can give every account a silk allowance with one environment
-variable (SRO_BETA_SILK, BUG-062) so testers can try the Item Mall: each
-world entry refills it to the configured amount, and a purchase spends it
-before the account's own silk.
+Native silk is what the account's mall wallet holds. For the closed beta
+(SRO_BETA_SILK) testers EARN silk by playing: every full hour a character
+spends in the world credits the hourly rate to the account's real wallet
+(mall_accounts.silk), until the wallet holds betaSilkBankCap. A first world
+entry also creates the wallet with betaSilkStarter, once per account (the
+wallet row is the persisted marker). The three agents agreed these numbers
+unanimously (owner's brainstorm, 2026-10-10): enough to test every mall flow
+over a few days of play, while protection stones and premium time stay a
+choice.
 
-The allowance lives only in this process. It never reaches the store, so
-switching back is unsetting the variable and restarting the game world:
-every silk balance is then exactly the native one. What testers bought
-with the allowance stays bought: those items are ordinary inventory rows,
-and the store keeps no record of which silk paid for them. Each world
-entry refills the full amount, so a relog is a fresh allowance.
+Credited silk is REAL: it survives restarts and deploys, and switching the
+beta off stops new credits but does not take earned silk back. A launch must
+wipe beta accounts or zero their silk (an owner decision).
+
+The hour clock counts world-ready time only (sessions in the world tick, not
+the title screen or character select) and lives in this process, so a
+restart can lose at most the account's current partial hour; it never
+credits an hour twice. A credit pushes the new balance to the player's
+session (MALL_BALANCE_CONTROL), so an open mall shows it at once.
 
 ===========================================================================
 */
 package action
 
 import (
+	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
-// EnvBetaSilk is the beta silk allowance: "off" (native), "on" for
-// BetaSilkDefault, or an amount.
+// EnvBetaSilk is the beta silk earn rate: "off" (native), "on" for
+// BetaSilkHourlyDefault, or silk per in-world hour.
 const EnvBetaSilk = "SRO_BETA_SILK"
 
-// BetaSilkDefault is the allowance "on" grants (BUG-062 asks for 100k).
-const BetaSilkDefault = 100000
+// BetaSilkHourlyDefault is the silk one in-world hour earns.
+const BetaSilkHourlyDefault = 50
+
+// betaSilkBankCap pauses earning once the wallet holds this much silk.
+const betaSilkBankCap = 1500
+
+// betaSilkStarter is the silk a new account's wallet starts with.
+const betaSilkStarter = 300
+
+// betaSilkHourMs is the in-world time one credit takes.
+const betaSilkHourMs = 60 * 60 * 1000
+
+// betaSilkMaxStepMs bounds the time one tick can add, so a stalled tick or a
+// clock jump never credits idle time at once.
+const betaSilkMaxStepMs = 60 * 1000
+
+// opMallBalance pushes an account's mall balance to its session; the client
+// updates an open mall (commerce-controls.ts MALL_BALANCE_CONTROL).
+const opMallBalance uint16 = 17
+
+// maxBetaSilkRate bounds an operator override.
+const maxBetaSilkRate = 100000
 
 /*
 ================
@@ -52,111 +83,139 @@ func BetaSilkFromEnv() (uint32, error) {
 	case "", "off", "0", "false":
 		return 0, nil
 	case "on", "1", "true":
-		return BetaSilkDefault, nil
+		return BetaSilkHourlyDefault, nil
 	}
-	amount, err := strconv.ParseUint(value, 10, 32)
-	if err != nil || amount == 0 {
-		return 0, fmt.Errorf("%s must be off, on or a silk amount", EnvBetaSilk)
+	rate, err := strconv.ParseUint(value, 10, 32)
+	if err != nil || rate == 0 || rate > maxBetaSilkRate {
+		return 0, fmt.Errorf("%s must be off, on or a silk amount per in-world hour (1-%d)", EnvBetaSilk, maxBetaSilkRate)
 	}
-	return uint32(amount), nil
+	return uint32(rate), nil
 }
 
 /*
 ================
-betaSilk
+BetaSilkWallet
 
-A MallAuthority over the store that adds each account's allowance to its
-silk. One lock serializes purchases so a spend cannot race a refill.
+The persisted wallet the credits land in (store/betasilk.go).
 ================
 */
-type betaSilk struct {
-	inner     domain.MallAuthority
-	amount    uint32
-	mu        sync.Mutex
-	allowance map[string]uint32
+type BetaSilkWallet interface {
+	GrantBetaSilkStarter(accountID string, starter uint32) (bool, error)
+	CreditBetaSilk(accountID string, amount, bankCap uint32) (domain.MallBalance, bool, error)
 }
 
 /*
 ================
-WithBetaSilk
+betaSilkClock
 
-The authority the mall uses: the store itself when the allowance is off,
-so native mode runs exactly the native path. refill is the world-entry
-hook that tops an account up; nil when off.
+One account's in-world time toward its next credit. generation is the last
+tick the account was in the world, so time away is never counted.
 ================
 */
-func WithBetaSilk(inner domain.MallAuthority, amount uint32) (domain.MallAuthority, func(*domain.Character)) {
-	if amount == 0 || inner == nil {
-		return inner, nil
+type betaSilkClock struct {
+	earnedMs   int64
+	lastMs     int64
+	generation uint64
+}
+
+/*
+================
+BetaSilk
+
+The beta silk owner: the starter at world entry and the hourly credits.
+================
+*/
+type BetaSilk struct {
+	wallet     BetaSilkWallet
+	rate       uint32
+	mu         sync.Mutex
+	generation uint64
+	clocks     map[string]*betaSilkClock
+}
+
+/*
+================
+NewBetaSilk
+
+nil when the rate is 0: native mode installs no hook at all.
+================
+*/
+func NewBetaSilk(wallet BetaSilkWallet, rate uint32) *BetaSilk {
+	if rate == 0 || wallet == nil {
+		return nil
 	}
-	beta := &betaSilk{inner: inner, amount: amount, allowance: make(map[string]uint32)}
-	return beta, beta.refill
+	return &BetaSilk{wallet: wallet, rate: rate, clocks: make(map[string]*betaSilkClock)}
 }
 
 /*
 ================
-refill
+Starter
 
-World entry tops the account's allowance up to the configured amount.
+World entry: create the account's wallet with the starter silk if it has
+none. A failure is logged, never fatal to the entry.
 ================
 */
-func (b *betaSilk) refill(character *domain.Character) {
-	if character == nil || character.AccountID == "" {
+func (b *BetaSilk) Starter(character *domain.Character) {
+	if b == nil || character == nil || character.AccountID == "" {
 		return
 	}
-	b.mu.Lock()
-	b.allowance[character.AccountID] = b.amount
-	b.mu.Unlock()
+	if _, err := b.wallet.GrantBetaSilkStarter(character.AccountID, betaSilkStarter); err != nil {
+		log.WithError(err).WithField("character", character.Name).Warn("beta silk: starter grant failed")
+	}
 }
 
 /*
 ================
-withAllowance
-================
-*/
-func withAllowance(balance domain.MallBalance, allowance uint32) domain.MallBalance {
-	balance.Silk = uint32(min(uint64(balance.Silk)+uint64(allowance), math.MaxUint32))
-	return balance
-}
+Tick
 
-/*
-================
-MallBalance
+Advance every in-world account's clock and credit each full hour. lookup
+resolves a session's character. Returns the balance pushes for the
+sessions whose wallet changed.
 ================
 */
-func (b *betaSilk) MallBalance(character *domain.Character) (domain.MallBalance, error) {
-	balance, err := b.inner.MallBalance(character)
-	if err != nil || character == nil {
-		return balance, err
+func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionSnapshot, lookup func(division string, id int64) *domain.Character) []simulation.DivisionFrames {
+	if b == nil || lookup == nil {
+		return nil
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return withAllowance(balance, b.allowance[character.AccountID]), nil
-}
-
-/*
-================
-PurchaseMall
-
-The allowance pays first; the store debits only the rest, so a failed
-purchase leaves both untouched.
-================
-*/
-func (b *betaSilk) PurchaseMall(character *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
-	if character == nil {
-		return b.inner.PurchaseMall(character, cost, grant)
+	b.generation++
+	var out []simulation.DivisionFrames
+	for _, session := range sessions {
+		character := lookup(session.DivisionID, session.CharacterID)
+		if character == nil || character.AccountID == "" {
+			continue
+		}
+		clock := b.clocks[character.AccountID]
+		if clock == nil {
+			clock = &betaSilkClock{}
+			b.clocks[character.AccountID] = clock
+		}
+		if clock.generation == b.generation {
+			continue // a second session of one account counts once
+		}
+		if clock.generation == b.generation-1 && nowMs > clock.lastMs {
+			clock.earnedMs += min(nowMs-clock.lastMs, betaSilkMaxStepMs)
+		}
+		clock.lastMs, clock.generation = nowMs, b.generation
+		if clock.earnedMs < betaSilkHourMs {
+			continue
+		}
+		clock.earnedMs -= betaSilkHourMs
+		balance, credited, err := b.wallet.CreditBetaSilk(character.AccountID, b.rate, betaSilkBankCap)
+		if err != nil {
+			log.WithError(err).WithField("character", character.Name).Warn("beta silk: credit failed")
+			continue
+		}
+		if !credited {
+			continue
+		}
+		payload, err := json.Marshal(balance)
+		if err != nil {
+			continue
+		}
+		out = append(out, simulation.DivisionFrames{DivisionID: session.DivisionID, OnlyCharacterID: session.CharacterID,
+			Frames: simFrames([]wire.Frame{{Opcode: opMallBalance, Payload: payload}})})
 	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	allowance := b.allowance[character.AccountID]
-	spent := min(cost.Silk, allowance)
-	rest := cost
-	rest.Silk -= spent
-	balance, err := b.inner.PurchaseMall(character, rest, grant)
-	if err != nil {
-		return withAllowance(balance, allowance), err
-	}
-	allowance -= spent
-	b.allowance[character.AccountID] = allowance
-	return withAllowance(balance, allowance), nil
+	return out
 }

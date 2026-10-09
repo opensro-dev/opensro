@@ -148,8 +148,8 @@ func Build(deps *Deps, request BootstrapRequest) *BootstrapResult {
 			return Failure(nativeErrorInvalidRequest, "invalidQuestState: "+err.Error())
 		}
 	}
-	if deps.EntryMallAllowance != nil {
-		deps.EntryMallAllowance(character)
+	if deps.EntryBetaSilk != nil {
+		deps.EntryBetaSilk(character)
 	}
 	// World entry is where the v1.150 client learns its capacity, so slots
 	// an expansion quest paid become usable here (inventory_capacity.go).

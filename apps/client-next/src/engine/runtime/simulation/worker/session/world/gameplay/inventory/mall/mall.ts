@@ -21,6 +21,29 @@ const REQUEST_TIMEOUT_MS = 10000;
 createMall
 ================
 */
+// A wallet field is the server's uint32 (domain.MallBalance).
+const MAX_BALANCE = 0xffffffff;
+
+/*
+================
+mallBalance
+
+Strictly decode a balance push: exactly silk, giftSilk and points.
+================
+*/
+function mallBalance( payload: Uint8Array ): { silk: number; giftSilk: number; points: number; } {
+	const decoded: unknown = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( payload ) );
+	if ( !decoded || typeof decoded !== "object" || Array.isArray( decoded ) ) throw Error( "Invalid mall balance" );
+	const row = decoded as Record<string, unknown>;
+	const keys = Object.keys( row ).sort().join( "," );
+	const field = ( value: unknown ) =>
+		typeof value === "number" && Number.isInteger( value ) && value >= 0 && value <= MAX_BALANCE;
+	if ( keys !== "giftSilk,points,silk" || !field( row.silk ) || !field( row.giftSilk ) || !field( row.points ) ) {
+		throw Error( "Invalid mall balance" );
+	}
+	return { silk: row.silk as number, giftSilk: row.giftSilk as number, points: row.points as number };
+}
+
 export function createMall() {
 	let state: MallState | undefined;
 	let request: MallPurchase | "catalog" | null = null;
@@ -128,6 +151,20 @@ export function createMall() {
 			}
 			request = null;
 			return true;
+		},
+		/*
+  ================
+  balance
+
+  A balance push (MALL_BALANCE_CONTROL): the beta credited earned silk to
+  the account. It updates an open mall's balance in place; with no mall
+  state yet there is nothing to show, and the next catalog carries it.
+  ================
+  */
+		balance( payload: Uint8Array ) {
+			const next = mallBalance( payload );
+			if ( !state ) return;
+			state = { ...state, ...next, revision: ++revision };
 		},
 		/*
   ================

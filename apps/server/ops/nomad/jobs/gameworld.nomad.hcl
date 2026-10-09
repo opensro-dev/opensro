@@ -143,13 +143,13 @@ variable "beta_mastery" {
   default = "on"
 }
 
-# beta_silk gives every account an Item Mall silk allowance, refilled at each
-# world entry and never stored, so testers can try the mall (BUG-062). "off"
-# restores native balances (items already bought stay in inventories); "on"
-# is 100000, or set an amount.
+# beta_silk is the silk one in-world hour earns into the account's real Item
+# Mall wallet (BUG-062, port-only): earning pauses at 1500, and a new account
+# starts with 300. Earned silk is REAL and survives "off", which only stops
+# new credits; a launch wipes or zeroes it. "on" is 50.
 variable "beta_silk" {
   type    = string
-  default = "100000"
+  default = "50"
 }
 
 # maintenance_gate_path is the maintenance release gate (ops/release

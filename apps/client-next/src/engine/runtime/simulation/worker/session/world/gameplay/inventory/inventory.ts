@@ -74,6 +74,7 @@ import {
 } from "@/engine/foundation/gameplay/stall";
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 
 const NPC_SHOP_CAPABILITY = 0x1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
@@ -1336,6 +1337,10 @@ receive
 					} ];
 					published = null;
 				}
+				return true;
+			}
+			if ( op === MALL_BALANCE_CONTROL ) {
+				mall.balance( p );
 				return true;
 			}
 			if ( op === 15 ) {

@@ -70,6 +70,10 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			game.items.JobWeekTick(game.divisionID, nowMs)
 			return nil
 		},
+		// The beta's earned silk counts in-world time (action/betasilk.go).
+		func(nowMs int64) []simulation.DivisionFrames {
+			return game.betaSilk.Tick(nowMs, ticker.Source.SnapshotSessions(), game.deps.CharacterByID)
+		},
 	)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}

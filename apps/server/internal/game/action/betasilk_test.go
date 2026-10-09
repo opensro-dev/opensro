@@ -1,59 +1,63 @@
 /*
 ===========================================================================
 
-betasilk_test.go - the beta Item Mall silk allowance and its native mode
+betasilk_test.go - the beta's earned Item Mall silk and its native mode
 
-The allowance is refilled at world entry, pays before the account's silk
-and never reaches the store; off, the mall talks to the store directly.
+In-world time earns the hourly rate into the account's wallet, which stops
+at the bank cap; a credit pushes the new balance to the player's session;
+time away never counts; off, nothing is installed.
 
 ===========================================================================
 */
 package action
 
 import (
-	"errors"
+	"encoding/json"
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
 ================
-fakeMallStore
+fakeSilkWallet
 
-A store that keeps one silk balance and records every debit it commits.
+One account's silk, capped as the store caps it, with every starter grant.
 ================
 */
-type fakeMallStore struct {
-	silk   uint32
-	debits []uint32
-	fail   bool
+type fakeSilkWallet struct {
+	silk     uint32
+	starters int
+	exists   bool
 }
 
 /*
 ================
-fakeMallStore.MallBalance
+GrantBetaSilkStarter
 ================
 */
-func (s *fakeMallStore) MallBalance(*domain.Character) (domain.MallBalance, error) {
-	return domain.MallBalance{Silk: s.silk}, nil
+func (w *fakeSilkWallet) GrantBetaSilkStarter(_ string, starter uint32) (bool, error) {
+	if w.exists {
+		return false, nil
+	}
+	w.exists, w.silk = true, starter
+	w.starters++
+	return true, nil
 }
 
 /*
 ================
-fakeMallStore.PurchaseMall
+CreditBetaSilk
 ================
 */
-func (s *fakeMallStore) PurchaseMall(_ *domain.Character, cost domain.MallBalance, grant func([]domain.InventoryRow) ([]domain.InventoryRow, error)) (domain.MallBalance, error) {
-	if s.fail {
-		return domain.MallBalance{Silk: s.silk}, errors.New("grant failed")
+func (w *fakeSilkWallet) CreditBetaSilk(_ string, amount, bankCap uint32) (domain.MallBalance, bool, error) {
+	if w.silk >= bankCap {
+		return domain.MallBalance{Silk: w.silk}, false, nil
 	}
-	if cost.Silk > s.silk {
-		return domain.MallBalance{Silk: s.silk}, domain.MallInsufficientCurrency{}
-	}
-	s.silk -= cost.Silk
-	s.debits = append(s.debits, cost.Silk)
-	return domain.MallBalance{Silk: s.silk}, nil
+	w.silk = min(w.silk+amount, bankCap)
+	w.exists = true
+	return domain.MallBalance{Silk: w.silk}, true, nil
 }
 
 /*
@@ -62,74 +66,108 @@ TestBetaSilkFromEnv
 ================
 */
 func TestBetaSilkFromEnv(t *testing.T) {
-	for value, want := range map[string]uint32{"": 0, "off": 0, "0": 0, "on": BetaSilkDefault, "TRUE": BetaSilkDefault, "250000": 250000} {
-		t.Setenv(EnvBetaSilk, value)
-		if got, err := BetaSilkFromEnv(); err != nil || got != want {
-			t.Fatalf("%q: %d %v, want %d", value, got, err, want)
+	for _, value := range []struct {
+		text string
+		rate uint32
+		bad  bool
+	}{{"", 0, false}, {"off", 0, false}, {"on", BetaSilkHourlyDefault, false}, {"75", 75, false},
+		{"-1", 0, true}, {"x", 0, true}, {"100001", 0, true}} {
+		t.Setenv(EnvBetaSilk, value.text)
+		rate, err := BetaSilkFromEnv()
+		if (err != nil) != value.bad || rate != value.rate {
+			t.Fatalf("%q: rate=%d err=%v", value.text, rate, err)
 		}
 	}
-	for _, value := range []string{"lots", "-5", "99999999999"} {
-		t.Setenv(EnvBetaSilk, value)
-		if _, err := BetaSilkFromEnv(); err == nil {
-			t.Fatalf("%q accepted", value)
-		}
+	if NewBetaSilk(&fakeSilkWallet{}, 0) != nil {
+		t.Fatal("rate 0 must install nothing (native)")
 	}
 }
 
 /*
 ================
-TestBetaSilkOffIsTheStore
-
-Native mode hands the mall the store itself and no entry hook.
+TestBetaSilkEarnsPerInWorldHourUpToTheCap
 ================
 */
-func TestBetaSilkOffIsTheStore(t *testing.T) {
-	store := &fakeMallStore{silk: 7}
-	authority, refill := WithBetaSilk(store, 0)
-	if authority != domain.MallAuthority(store) || refill != nil {
-		t.Fatal("native mode wrapped the store")
+func TestBetaSilkEarnsPerInWorldHourUpToTheCap(t *testing.T) {
+	wallet := &fakeSilkWallet{}
+	beta := NewBetaSilk(wallet, 50)
+	character := &domain.Character{ID: 7, Name: "Tester", AccountID: "acct"}
+	lookup := func(_ string, id int64) *domain.Character {
+		if id == character.ID {
+			return character
+		}
+		return nil
+	}
+	beta.Starter(character)
+	beta.Starter(character)
+	if wallet.starters != 1 || wallet.silk != betaSilkStarter {
+		t.Fatalf("starter: %d grants, silk %d", wallet.starters, wallet.silk)
+	}
+	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: character.ID}}
+	now := int64(0)
+	tick := func( /* one minute */ ) []simulation.DivisionFrames {
+		now += 60 * 1000
+		return beta.Tick(now, online, lookup)
+	}
+	beta.Tick(now, online, lookup)
+	var pushed []simulation.DivisionFrames
+	for range 59 {
+		pushed = append(pushed, tick()...)
+	}
+	if wallet.silk != betaSilkStarter || len(pushed) != 0 {
+		t.Fatalf("59 minutes credited: silk %d, %d pushes", wallet.silk, len(pushed))
+	}
+	pushed = tick()
+	if wallet.silk != betaSilkStarter+50 || len(pushed) != 1 || pushed[0].OnlyCharacterID != character.ID {
+		t.Fatalf("hour 1: silk %d, pushes %+v", wallet.silk, pushed)
+	}
+	var balance domain.MallBalance
+	if frame := pushed[0].Frames[0]; frame.Opcode != opMallBalance || json.Unmarshal(frame.Payload, &balance) != nil || balance.Silk != wallet.silk {
+		t.Fatalf("push: %+v", pushed[0].Frames[0])
+	}
+
+	// Time away (no session in the tick) never counts.
+	now += 5 * betaSilkHourMs
+	beta.Tick(now, nil, lookup)
+	beta.Tick(now, online, lookup)
+	if wallet.silk != betaSilkStarter+50 {
+		t.Fatalf("away time credited: silk %d", wallet.silk)
+	}
+
+	// Earning stops at the bank cap: no credit and no push there.
+	wallet.silk = betaSilkBankCap - 20
+	for range 60 {
+		tick()
+	}
+	if wallet.silk != betaSilkBankCap {
+		t.Fatalf("cap clamp: silk %d", wallet.silk)
+	}
+	for i := 0; i < 60; i++ {
+		if frames := tick(); len(frames) != 0 {
+			t.Fatalf("a full wallet pushed %+v", frames)
+		}
+	}
+	if wallet.silk != betaSilkBankCap {
+		t.Fatalf("past the cap: silk %d", wallet.silk)
 	}
 }
 
 /*
 ================
-TestBetaSilkAllowancePaysFirstAndRefillsAtEntry
+TestBetaSilkStallNeverCreditsIdleTime
 
-Before entry the balance is native. Entry adds the allowance; a purchase
-spends it before the account's silk, and the store is debited only for the
-rest. A failed purchase spends nothing; the next entry refills.
+A tick an hour after the last one adds at most one minute.
 ================
 */
-func TestBetaSilkAllowancePaysFirstAndRefillsAtEntry(t *testing.T) {
-	store := &fakeMallStore{silk: 50}
-	authority, refill := WithBetaSilk(store, 100)
-	c := &domain.Character{AccountID: "acct"}
-	grant := func(rows []domain.InventoryRow) ([]domain.InventoryRow, error) { return rows, nil }
-	if balance, _ := authority.MallBalance(c); balance.Silk != 50 {
-		t.Fatalf("balance before entry %d, want the native 50", balance.Silk)
-	}
-	refill(c)
-	if balance, _ := authority.MallBalance(c); balance.Silk != 150 {
-		t.Fatalf("balance after entry %d, want 150", balance.Silk)
-	}
-	balance, err := authority.PurchaseMall(c, domain.MallBalance{Silk: 80}, grant)
-	if err != nil || balance.Silk != 70 || store.silk != 50 || len(store.debits) != 1 || store.debits[0] != 0 {
-		t.Fatalf("allowance purchase: %d %v, store %d %v", balance.Silk, err, store.silk, store.debits)
-	}
-	balance, err = authority.PurchaseMall(c, domain.MallBalance{Silk: 40}, grant)
-	if err != nil || balance.Silk != 30 || store.silk != 30 || store.debits[1] != 20 {
-		t.Fatalf("mixed purchase: %d %v, store %d %v", balance.Silk, err, store.silk, store.debits)
-	}
-	store.fail = true
-	if balance, err = authority.PurchaseMall(c, domain.MallBalance{Silk: 10}, grant); err == nil || balance.Silk != 30 {
-		t.Fatalf("failed purchase: %d %v", balance.Silk, err)
-	}
-	store.fail = false
-	if _, err = authority.PurchaseMall(c, domain.MallBalance{Silk: 31}, grant); !errors.As(err, &domain.MallInsufficientCurrency{}) {
-		t.Fatalf("over-budget purchase: %v", err)
-	}
-	refill(c)
-	if balance, _ := authority.MallBalance(c); balance.Silk != 130 || store.silk != 30 {
-		t.Fatalf("refill: %d, store %d", balance.Silk, store.silk)
+func TestBetaSilkStallNeverCreditsIdleTime(t *testing.T) {
+	wallet := &fakeSilkWallet{exists: true}
+	beta := NewBetaSilk(wallet, 50)
+	character := &domain.Character{ID: 1, AccountID: "acct"}
+	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}}
+	lookup := func(string, int64) *domain.Character { return character }
+	beta.Tick(0, online, lookup)
+	beta.Tick(betaSilkHourMs, online, lookup)
+	if wallet.silk != 0 {
+		t.Fatalf("a stalled hour credited: silk %d", wallet.silk)
 	}
 }
