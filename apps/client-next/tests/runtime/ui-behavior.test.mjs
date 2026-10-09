@@ -2939,6 +2939,65 @@ test("inventory rotation updates the admitted doll while preserving world comman
 	}
 });
 
+test("the party delete question is the native simple message box with its tiled body", () => {
+	// 635300 opens it through 6888C0: 360x151, the client tiled at (16,40),
+	// Yes/No 37 above the bottom around the centre (52E720). It drew only
+	// its frame ring, so the party window showed through it.
+	const f = uiFixture();
+	try {
+		f.state.gameplay.partyMatching = {
+			page: 0,
+			pages: 1,
+			rows: [],
+			own: {
+				id: 7,
+				party: 0,
+				name: "Player",
+				race: 0,
+				members: 1,
+				type: 3,
+				purpose: 0,
+				min: 1,
+				max: 90,
+				title: "Mine"
+			},
+			request: null,
+			pending: null,
+			result: null,
+			auto: []
+		};
+		f.state.gameplay.social = { localName: "Player", self: 1, leader: 0, options: 3, members: [] };
+		f.state.gameplay.progression = { level: 10, masteries: [] };
+		for ( let t = 0; t < 1600; t += 100 ) f.ui.step( f.state, t );
+		f.ui.event( { kind: "key", code: "KeyE" } );
+		f.ui.step( f.state, 1700 );
+		f.ui.event( { kind: "activate", id: "party-match:20" } );
+		let scene;
+		for ( let t = 1800; t < 2400; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
+		const quads = f.scenes.at( -1 ).quads,
+			ring = quads.filter( q => q.texture.includes( "/msgbox2_window_" ) );
+		const bounds = list => [
+			Math.min( ...list.map( q => q.rect[0] ) ),
+			Math.min( ...list.map( q => q.rect[1] ) ),
+			Math.max( ...list.map( q => q.rect[0] + q.rect[2] ) ),
+			Math.max( ...list.map( q => q.rect[1] + q.rect[3] ) )
+		];
+		const [x, y, x2, y2] = bounds( ring );
+		assert.deepEqual( [ x2 - x, y2 - y ], [ 360, 151 ] );
+		const tiles = quads.filter( q =>
+			q.texture.endsWith( "/com_bg_tile_b.png" ) && q.rect[0] >= x && q.rect[1] >= y && q.rect[0] < x2 &&
+			q.rect[1] < y2
+		);
+		assert.deepEqual( bounds( tiles ), [ x + 16, y + 40, x + 360 - 16, y + 151 - 16 ], "the client is tiled" );
+		const yes = scene.controls.find( c => c.id === "party-form-confirm" ),
+			no = scene.controls.find( c => c.id === "party-form-cancel" );
+		assert.deepEqual( [ yes.label, yes.rect ], [ "Yes", [ x + 99, y + 114, 76, 24 ] ] );
+		assert.deepEqual( [ no.label, no.rect ], [ "No", [ x + 185, y + 114, 76, 24 ] ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("party matching native form, local filters and owner approval are actionable without background leakage", () => {
 	const sent = [], f = uiFixture( c => sent.push( c ) );
 	try {

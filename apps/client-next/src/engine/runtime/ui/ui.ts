@@ -7116,6 +7116,40 @@ export function createUi(
 			}
 			/*
 			================
+			simpleMessageBox
+
+			The box every caller of CGInterface_ShowSimpleMessageBox (6888C0)
+			opens: the tiled CIFMessageBox client under its frame ring, the
+			caption, the body lines left at (30,65) and the centred Yes/No pair
+			(52E720), sized by its lines (textMessageBoxLayout). Its sisters draw
+			through this one owner so they share one look. The caller owns the
+			blocks and controls around it.
+			================
+			*/
+			function simpleMessageBox(
+				box: { title: string; lines: readonly string[]; yes: string; no: string; yesDisabled?: boolean; }
+			) {
+				const layout = textMessageBoxLayout( w, h, box.lines.map( line => text.run( line ).width ) );
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
+				);
+				for ( const [i, line] of box.lines.entries() ) {
+					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
+				}
+				button( box.yes, hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76, !!box.yesDisabled );
+				button( box.no, hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+				return layout;
+			}
+			/*
+			================
 			nativePage
 			================
 			*/
@@ -11411,43 +11445,18 @@ export function createUi(
 				if ( confirmAbandon && questDetails ) {
 					controls = [];
 					const admission = beginWindow(),
-						box = guildProposalLayout( w, h ),
 						meta = guideResources.data()?.questPresentation.records[selectedQuest];
 					blocks.push( full );
-					paths.push( ...partyProposalAssets() );
-					quads.push(
-						...frameRing(
-							box.frame,
-							MESSAGE_FRAME,
-							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-							full
-						)
-					);
-					quads.push( ...normalTile( box.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
-					quads.push(
-						...text.quads( hudCopy( "UIIT_STT_AGREEMENT_BOX" ), box.title, full, white, {
-							hAlign: 1,
-							vAlign: 0
-						} )
-					);
-					const message = text.guide(
-						guideTokens(
+					// 5C2290 asks through a 6888C0 simple message box, type 1. Its
+					// line is plain text under the 600-pixel wrap (52DB20), so one line.
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_AGREEMENT_BOX" ),
+						lines: [
 							hudCopy( meta?.warn ? "UIIT_MSG_QUEST_GIVEUP_WINDOW_2" : "UIIT_MSG_QUEST_GIVEUP_WINDOW_1" )
-						),
-						[ box.frame[0] + 16, box.frame[1] + 48, 276, 44 ],
-						box.frame,
-						white,
-						resources.size
-					);
-					quads.push( ...message.quads );
-					paths.push( ...message.paths );
-					for (
-						const [id, key, r] of [ [ "quest-abandon-yes", "UIIT_CTL_YES", box.accept ], [
-							"quest-abandon-no",
-							"UIIT_CTL_NO",
-							box.refuse
-						] ] as const
-					) button( id, hudCopy( key ), r[0], r[1], r[2] );
+						],
+						yes: "quest-abandon-yes",
+						no: "quest-abandon-no"
+					} );
 					endWindow( admission, "quest-abandon" );
 				}
 				const compositePackage = compositeItemHud.packageId(),
@@ -11693,7 +11702,21 @@ export function createUi(
 						kind: "button"
 					} );
 					endWindow( admission );
-					if ( blockDialog ) {
+					if ( blockDialog === "remove" ) {
+						// 61B6C0 / 61E340 ask through a 6888C0 simple message box, type 1:
+						// white text and Yes/No, unlike the entry window below.
+						const mark = beginWindow();
+						controls = [];
+						blocks.push( full );
+						simpleMessageBox( {
+							title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+							lines: [ hudCopy( "UIIT_STT_BLOCKMAN_DELETE_WND" ).replace( "%s", blockSelected ) ],
+							yes: "blocking-ok",
+							no: "blocking-cancel"
+						} );
+						endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:" + panel );
+						blocks.push( full );
+					} else if ( blockDialog ) {
 						const mark = beginWindow(),
 							dx = Math.max( 0, Math.floor( (w - 306) / 2 ) ),
 							dy = Math.max( 0, Math.floor( (h - 151) / 2 ) );
@@ -15438,51 +15461,45 @@ export function createUi(
 					remove = partyDialog === "delete",
 					automatic = partyDialog === "auto",
 					width = request ? 360 : 314,
-					height = request ? 315 : remove ? 150 : automatic ? 337 : 373,
+					height = request ? 315 : automatic ? 337 : 373,
 					px = Math.floor( (w - width) / 2 ),
 					py = Math.floor( (h - height) / 2 );
 				controls = [];
 				blocks.push( full );
-				const prefix = ROOT + "interface/messagebox/msgbox2_window_";
-				paths.push( ...PARTS.map( p => prefix + p + ".png" ) );
-				quads.push(
-					...frameRing(
-						[ px, py, width, height ],
-						prefix,
-						PARTS.map( p => resources.size( prefix + p + ".png" ) ),
-						full
-					)
-				);
-				quads.push(
-					...text.quads(
-						hudCopy(
-							request ?
-								"UIIT_PAG_PARTYMATCH_JOINREQUEST" :
-								remove ?
-								"UIIT_STT_CONFIRM_BOX" :
-								automatic ?
-								"UIIT_PAG_PARTYMATCH_AUTOMATCH" :
-								"UIIT_PAG_PARTYMATCH_RECORD"
-						),
-						[ px + 10, py + 11, width - 20, 12 ],
-						full,
-						white,
-						{ hAlign: 1 }
-					)
-				);
 				if ( remove ) {
+					// 635300 asks through a 6888C0 simple message box, type 1 (Yes/No).
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: [ hudCopy( "UIIT_STT_PARTYMATCH_DELETE_CONFIRM" ) ],
+						yes: "party-form-confirm",
+						no: "party-form-cancel"
+					} );
+				} else {
+					const prefix = ROOT + "interface/messagebox/msgbox2_window_";
+					paths.push( ...PARTS.map( p => prefix + p + ".png" ) );
+					quads.push(
+						...frameRing(
+							[ px, py, width, height ],
+							prefix,
+							PARTS.map( p => resources.size( prefix + p + ".png" ) ),
+							full
+						)
+					);
 					quads.push(
 						...text.quads(
-							hudCopy( "UIIT_STT_PARTYMATCH_DELETE_CONFIRM" ),
-							[ px + 16, py + 48, width - 32, 48 ],
+							hudCopy(
+								request ?
+									"UIIT_PAG_PARTYMATCH_JOINREQUEST" :
+									automatic ?
+									"UIIT_PAG_PARTYMATCH_AUTOMATCH" :
+									"UIIT_PAG_PARTYMATCH_RECORD"
+							),
+							[ px + 10, py + 11, width - 20, 12 ],
 							full,
 							white,
 							{ hAlign: 1 }
 						)
 					);
-					button( "party-form-confirm", hudCopy( "UIIT_CTL_CONFIRM" ), px + 72, py + 110, 76 );
-					button( "party-form-cancel", hudCopy( "UIIT_CTL_CANCEL" ), px + 167, py + 110, 76 );
-				} else {
 					const layout = partyHudData.windows[
 						request ?
 							"ifpartymatchreqjoin" :
@@ -16184,9 +16201,9 @@ export function createUi(
 			}
 			const unionAsk = unionHud.question();
 			if ( worldVisible && unionAsk ) {
-				// 5F7670: the union's question box over the MsgBoxINIF geometry.
-				const layout = guildProposalLayout( w, h ),
-					title = unionAsk.kind === "exit" ?
+				// 5F7670 asks through a 6888C0 simple message box (both calls,
+				// 5F778A and 5F7817), not the MsgBoxINIF proposal geometry.
+				const title = unionAsk.kind === "exit" ?
 						"UIIT_STT_GUILD_RESPECT_ALLY_EXIT" :
 						"UIIT_STT_GUILD_RESPECT_ALLY_EXPULSION",
 					question = unionAsk.kind === "exit" ?
@@ -16194,28 +16211,12 @@ export function createUi(
 						hudCopy( "UIIT_MSG_QUESTION_GUILD_RESPECT_ALLY_EXPEL" ).replace( "%s", () => unionAsk.name );
 				controls = [];
 				blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					),
-					...text.quads( hudCopy( title ), layout.title, full, white, { hAlign: 1, vAlign: 0 } ),
-					...text.quads( question, layout.name, full, white, { hAlign: 1, vAlign: 0 } )
-				);
-				button(
-					"union-ask-yes",
-					hudCopy( "UIIT_CTL_YES" ),
-					...layout.accept.slice( 0, 3 ) as [number, number, number]
-				);
-				button(
-					"union-ask-no",
-					hudCopy( "UIIT_CTL_NO" ),
-					...layout.refuse.slice( 0, 3 ) as [number, number, number]
-				);
+				simpleMessageBox( {
+					title: hudCopy( title ),
+					lines: [ question ],
+					yes: "union-ask-yes",
+					no: "union-ask-no"
+				} );
 			}
 			if ( worldVisible && recallConfirm !== null ) {
 				// 5C82D0 / 52F460 type 5 retain the 308x148 MsgBoxINIF geometry.
@@ -16689,69 +16690,26 @@ export function createUi(
 				);
 			}
 			if ( worldVisible && shopWarning ) {
-				const copy = hudCopy( "UIIT_MSG_CANNOT_BUYBACK_ITEM_SELL" ).replace( "%s", shopWarning.name ),
-					dw = Math.max( 360, Math.ceil( text.run( copy ).width ) + 60 ),
-					layout = messageBox( w, h, dw, 151 ),
-					[x, y] = layout.frame;
 				controls = [];
 				blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					)
-				);
-				quads.push(
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, { hAlign: 1 } ),
-					...text.quads( copy, [ x + 30, y + 65, dw - 60, 23 ], full, white )
-				);
-				button(
-					"shop-warning-confirm",
-					hudCopy( "UIIT_CTL_YES" ),
-					x + (dw >> 1) - 81,
-					y + 114,
-					76,
-					!!game?.inventoryPending
-				);
-				button( "shop-warning-cancel", hudCopy( "UIIT_CTL_NO" ), x + (dw >> 1) + 5, y + 114, 76 );
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ hudCopy( "UIIT_MSG_CANNOT_BUYBACK_ITEM_SELL" ).replace( "%s", shopWarning.name ) ],
+					yes: "shop-warning-confirm",
+					no: "shop-warning-cancel",
+					yesDisabled: !!game?.inventoryPending
+				} );
 			}
 			if ( worldVisible && groundDrop ) {
-				const lines = [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ].map( key => hudCopy( key ) ),
-					layout = textMessageBoxLayout( w, h, lines.map( line => text.run( line ).width ) );
 				controls = [];
 				blocks = [ full ];
-				paths.push( ...partyProposalAssets() );
-				quads.push(
-					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
-					...frameRing(
-						layout.frame,
-						MESSAGE_FRAME,
-						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
-						full
-					)
-				);
-				quads.push(
-					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
-						hAlign: 1,
-						vAlign: 0
-					} )
-				);
-				for ( const [i, line] of lines.entries() ) {
-					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
-				}
-				button(
-					"ground-drop-confirm",
-					hudCopy( "UIIT_CTL_YES" ),
-					layout.accept[0],
-					layout.accept[1],
-					76,
-					!!game?.inventoryPending
-				);
-				button( "ground-drop-cancel", hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: [ "UIIT_MSG_DROP_WARNING_1", "UIIT_MSG_DROP_WARNING_2" ].map( key => hudCopy( key ) ),
+					yes: "ground-drop-confirm",
+					no: "ground-drop-cancel",
+					yesDisabled: !!game?.inventoryPending
+				} );
 			}
 			const gathering = game?.questGathering;
 			const delayRows = [
