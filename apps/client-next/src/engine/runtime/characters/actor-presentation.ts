@@ -21,6 +21,23 @@ import type { CharacterActor } from "@/engine/contracts/character";
 import { createActorAppearance } from "./actor-appearance";
 import { createActorMotion } from "./actor-motion";
 import type { ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
+import type { EntityState } from "@/engine/contracts/world";
+
+/*
+================
+undroppedLoot
+
+The selected entities without the drops still waiting on their monster's
+death. The server publishes a victim's drops at its death transition
+(CGObjMob_CreditKillerOnDeath 4C42F0), but the client holds that death until
+the killing hit plays; the drops wait with it, unseen and unpickable, so the
+item lands when the monster falls instead of before the last blow.
+================
+*/
+export function undroppedLoot( selected: readonly EntityState[], pendingDeaths: ReadonlySet<number> ) {
+	if ( !pendingDeaths.size ) return selected;
+	return selected.filter( entity => !pendingDeaths.has( entity.groundItem?.dropperGid ?? 0 ) );
+}
 
 /*
 ================
@@ -47,8 +64,9 @@ export function createActorPresentation( owner: ActorOwner ) {
 				active,
 				entities,
 				gameplay,
-				selected
+				pendingDeaths
 			} = frame;
+			const selected = undroppedLoot( frame.selected, pendingDeaths );
 			const appearanceActive = new Set( selected.map( entity => entity.gid ) );
 			for ( const gid of appearances.keys() ) if ( !appearanceActive.has( gid ) ) appearances.delete( gid );
 			const animationHolders: { actor: CharacterActor; sets: readonly AnimationParticleSet[]; }[] = [];

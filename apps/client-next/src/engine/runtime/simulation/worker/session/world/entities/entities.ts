@@ -74,6 +74,9 @@ export function createEntities(
 			merchantBranches?: EntityState["merchantBranches"];
 		}>();
 	let receivedAt = 0;
+	// The monster whose LIFE dead frame came last: the drops that follow it
+	// directly are its own (the server's per-victim publication order).
+	let dropSource = 0;
 	let epoch = 0, sequence = 0, inflight: WorldBatch | null = null, bytes = 0;
 	let events: WorldEvent[] = [], staged: WorldEvent[] | null = null, remaining = 0, stagedBytes = 0;
 	// Only locally sampled coordinates are replaceable. Wire state/lifecycle
@@ -623,6 +626,9 @@ export function createEntities(
 		*/
 		receive( frame: WireFrame, now = 0 ) {
 			receivedAt = now;
+			// Any frame but the dead monster's own drops ends its publication.
+			const followsDeath = dropSource;
+			dropSource = 0;
 			const p = frame.payload, v = new DataView( p.buffer, p.byteOffset, p.byteLength );
 			if ( frame.opcode === 0x3449 ) {
 				if ( p.length !== 8 ) throw Error( "Invalid external item effect" );
@@ -971,7 +977,17 @@ export function createEntities(
 				return;
 			}
 			if ( frame.opcode === 0x30d7 ) {
-				const event = spawn( frame );
+				let event = spawn( frame );
+				if ( event.kind === "spawn" && event.entity.groundItem && followsDeath ) {
+					event = {
+						...event,
+						entity: {
+							...event.entity,
+							groundItem: { ...event.entity.groundItem, dropperGid: followsDeath }
+						}
+					};
+					dropSource = followsDeath;
+				}
 				apply( event );
 				// 86DC10 suppresses drop fanfare for grouped visibility lists.
 				// Every single item reaches ITEM/snd_dropitem. The authored
@@ -1036,6 +1052,7 @@ export function createEntities(
 					const appearanceState = [ ...(entity.appearanceState ?? [ 1, 0, 0 ]) ];
 					appearanceState[0] = p[5]!;
 					const stopped = p[5] === 2 ? motion.stopForDeath( entity, now ) : null;
+					if ( p[5] === 2 && entity.kind === "monster" ) dropSource = entity.gid;
 					apply( {
 						kind: "state",
 						entity: Object.freeze( {

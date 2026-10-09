@@ -1787,6 +1787,37 @@ test("monster LIFE preserves native impact displacement but stops cast-owned rus
 	}
 });
 
+test("a dead monster's own drops name it; drops after any other frame do not", () => {
+	// Independent gold golden from server item/wire/grounditemrow_test.go; the
+	// gid lives at bytes 8..12.
+	const golden = Buffer.from( "e20e000060220000e19304004f6b00a096440000a0420000c6430000000001", "hex" );
+	const gold = gid => {
+		const row = Buffer.from( golden );
+		row.writeUInt32LE( gid, 8 );
+		return { opcode: 0x30d7, payload: row };
+	};
+	const owner = createEntities();
+	owner.bootstrap( { ...bootstrap, refItemSnapshot: [ { refObjId: 3810, typeFlags: 0x2ec, codename: "Gold" } ] } );
+	flush( owner );
+	for ( const row of rows ) owner.receive( row, 0 );
+	flush( owner );
+	const gid = fixture.expect.gid, life = Buffer.alloc( 6 );
+	life.writeUInt32LE( gid );
+	life[5] = 2;
+	owner.receive( { opcode: 0x3122, payload: life }, 20 );
+	owner.receive( gold( 901 ), 20 );
+	owner.receive( gold( 902 ), 20 );
+	flush( owner );
+	assert.equal( owner.read( 901 ).groundItem.dropperGid, gid );
+	assert.equal( owner.read( 902 ).groundItem.dropperGid, gid );
+	// 901's ownership expiry: any frame between ends the victim's drops.
+	owner.receive( { opcode: 0x36ab, payload: gold( 901 ).payload.subarray( 8, 12 ) }, 21 );
+	owner.receive( gold( 903 ), 21 );
+	flush( owner );
+	assert.equal( owner.read( 903 ).groundItem.dropperGid, undefined );
+	owner.dispose();
+});
+
 /*
 ================
 admitWaitingWorld

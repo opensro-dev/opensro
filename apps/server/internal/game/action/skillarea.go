@@ -167,9 +167,11 @@ their settlements, and the striker's side of its player hits.
 ==================
 */
 type areaCommit struct {
-	committed    [][]simulation.MonsterDamageResult
-	progression  []wire.Frame
-	drops        []grounditem.Item
+	committed   [][]simulation.MonsterDamageResult
+	progression []wire.Frame
+	// drops are each fatal victim's own, by gid: its publication follows
+	// that victim's LIFE frame (publishArea).
+	drops        map[uint32][]grounditem.Item
 	settlements  monsterSettlement
 	playerActor  []wire.Frame
 	playerPublic []wire.Frame
@@ -232,7 +234,7 @@ Inside the roster's door: every monster whose last committed impact was
 fatal settles through the shared reward door at the pose its plan kept.
 ==================
 */
-func (rt *Runtime) settleAreaFatalities(division string, c *enterworld.Character, roster rewardRoster, committed [][]simulation.MonsterDamageResult, plan *areaStrikePlan, now int64) (progression []wire.Frame, drops []grounditem.Item, settlements monsterSettlement) {
+func (rt *Runtime) settleAreaFatalities(division string, c *enterworld.Character, roster rewardRoster, committed [][]simulation.MonsterDamageResult, plan *areaStrikePlan, now int64) (progression []wire.Frame, drops map[uint32][]grounditem.Item, settlements monsterSettlement) {
 	poses := make([]monster.Pose, len(plan.sequences))
 	for _, victim := range plan.victims {
 		if victim.sequence >= 0 {
@@ -246,7 +248,12 @@ func (rt *Runtime) settleAreaFatalities(division string, c *enterworld.Character
 		}
 		s := rt.settleMonsterInsideDoor(division, c, roster, impact, poses[index], now)
 		progression = append(progression, s.actorFrames...)
-		drops = append(drops, s.drops...)
+		if len(s.drops) > 0 {
+			if drops == nil {
+				drops = make(map[uint32][]grounditem.Item)
+			}
+			drops[impact.Instance.Gid] = append(drops[impact.Instance.Gid], s.drops...)
+		}
 		settlements.public = append(settlements.public, s.public...)
 		settlements.otherPublic = append(settlements.otherPublic, s.otherPublic...)
 		settlements.others = append(settlements.others, s.others...)
@@ -324,17 +331,20 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 			rt.queueMonsterDefeat(division, gid, now+monsterDeathPresentationRetention.Milliseconds())
 			// 4A9C80 publishes LIFE for every alive-to-dead transition, area
 			// victims included; without it the client keeps moving the corpse.
+			// Each victim's drops follow its own LIFE frame, as the native
+			// death credit publishes them (CGObjMob_CreditKillerOnDeath
+			// 4C42F0 -> +0x638), so a drop is known by the death it follows.
 			deaths = append(deaths, monsterLifeDeadFrame(gid))
+			deaths = append(deaths, rt.groundReferences(commit.drops[gid])...)
+			for _, drop := range commit.drops[gid] {
+				deaths = append(deaths, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
+			}
 		}
 		// A fatal victim records no aggression; its damage still feeds a
 		// Mana Switch link.
 		rt.commitSkillHostility(division, source, gid, skill, impacts, now)
 	}
 	out.after = append(out.after, deaths...)
-	out.after = append(out.after, rt.groundReferences(commit.drops)...)
-	for _, drop := range commit.drops {
-		out.after = append(out.after, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
-	}
 	out.after = append(out.after, commit.playerPublic...)
 	out.recipients = append(out.recipients, rt.payJobKillShares(commit.shares)...)
 	return out

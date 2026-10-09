@@ -210,3 +210,63 @@ func TestAreaBatchRefusesStaleAndDuplicateVictimsBeforeMutation(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestAreaVictimDropsFollowTheirOwnDeath
+
+The client knows a drop by the death it follows (it holds both until the
+killing hit plays), so each victim's LIFE dead frame is followed directly by
+its own drops, as the native death credit publishes them (4C42F0). Each
+victim's gold lands at its own pose, which names the dropper.
+================
+*/
+func TestAreaVictimDropsFollowTheirOwnDeath(t *testing.T) {
+	rt, targets := areaFixture(t, 1)
+	installSmallGoldRef(rt)
+	one := len(assignedDropMisses()) + 5 + 16 + 4
+	// Each victim draws one complete gold-only sequence.
+	draws := 0
+	var roll func() (uint32, error)
+	rt.DropRoll = func() (uint32, error) {
+		if draws%one == 0 {
+			roll = goldOnlyMonsterDropRoll(0, 0)
+		}
+		draws++
+		return roll()
+	}
+	c := rt.findCharacter(testDivision, "asd2")
+	skill := shippedOffense(t, "SKILL_CH_LIGHTNING_CHUNDUNG_A_01")
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.Skills = append(c.Skills, skill.ID)
+	c.Intellect = testInt64(200)
+	c.CurrentMP = testInt64(1000)
+	result := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: targets[0].Gid}.Encode())
+	poses := map[float32]uint32{}
+	for _, target := range targets {
+		poses[float32(target.Spawn.X+8)] = target.Gid
+	}
+	var dying uint32
+	drops := 0
+	for _, frame := range result.Frames {
+		switch {
+		case frame.Opcode == wire.OpObjectStateRefresh && len(frame.Payload) == 6 && frame.Payload[4] == wire.StateChannelLife &&
+			frame.Payload[5] == wire.LifeStateDead:
+			dying = binary.LittleEndian.Uint32(frame.Payload)
+		case frame.Opcode == wire.OpSingleObjectSpawn:
+			row, err := wire.DecodeGroundItemRow(frame.Payload, wire.PackTypeFlags(3, 3, 5, 1), true)
+			if err != nil {
+				t.Fatalf("drop row: %v", err)
+			}
+			if dying == 0 || poses[row.X] != dying {
+				t.Fatalf("drop at x=%v follows the death of %d, want its own victim %d", row.X, dying, poses[row.X])
+			}
+			drops++
+		default:
+			dying = 0
+		}
+	}
+	if drops != 3 {
+		t.Fatalf("published %d victim drops, want 3", drops)
+	}
+}
