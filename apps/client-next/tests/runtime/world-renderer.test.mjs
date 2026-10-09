@@ -162,6 +162,33 @@ test("resident alpha is prepared before hover and retained across device recreat
 	world.dispose( geometry, textures );
 });
 
+test("a native block texture's transparent texels do not pick", () => {
+	// One DXT1 block each. color0 <= color1 with every index 3 is punch-through
+	// transparent; color0 > color1 with index 0 is opaque red.
+	const native = blocks => ({
+		kind: "native-texture",
+		width: 4,
+		height: 4,
+		format: "bc1-rgba-unorm",
+		levels: [ blocks ]
+	});
+	const geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		textures = { upload: () => ({}), release() {} },
+		ray = { start: [ .25, .25, 1 ], delta: [ 0, 0, -2 ] };
+	const depthThrough = texture => {
+		const world = createWorldRenderer();
+		world.scene( scene( "cutout", "/cutout.texture" ) );
+		world.texture( "/cutout.texture", texture );
+		world.camera( { eye: [ .25, .25, 2 ], target: [ .25, .25, 0 ], near: .1, far: 10000, fov: Math.PI / 3 } );
+		world.prepare( geometry, textures, 1, 0 );
+		const depth = world.pick( ray, 1 );
+		world.dispose( geometry, textures );
+		return depth;
+	};
+	assert.equal( depthThrough( native( new Uint8Array( [ 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff ] ) ) ), null );
+	assert.notEqual( depthThrough( native( new Uint8Array( [ 0, 0xf8, 0, 0, 0, 0, 0, 0 ] ) ) ), null );
+});
+
 test("animated instances use the pose envelope rather than an unskinned vertex box", () => {
 	const world = createWorldRenderer(),
 		geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },

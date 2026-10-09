@@ -104,7 +104,7 @@ import {
 	visibleFrustumBox,
 	terrainLod
 } from "@/engine/foundation/rendering/world-math";
-import { validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+import { nativePickAlpha, validPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 /*
 ================
@@ -386,7 +386,24 @@ export function createWorldRenderer(
 	// The frustum of the last selection walk. Instanced groups submit placements
 	// outside it for the GPU to clip; picks keep to the ones inside it.
 	let pickFrustum: Float64Array | null = null;
-	const alphaMasks = new WeakMap<ImageBitmap, PickAlpha>();
+	const alphaMasks = new WeakMap<import("@/engine/contracts/texture").WorldTexture, PickAlpha>();
+	/*
+	================
+	pickMask
+
+	A resident texture's picking mask, made once: a native texture decodes
+	its first level, a bitmap is read back (readAlpha).
+	================
+	*/
+	const pickMask = ( texture: import("@/engine/contracts/texture").WorldTexture ): PickAlpha => {
+		let alpha = alphaMasks.get( texture );
+		if ( alpha ) return alpha;
+		if ( "kind" in texture ) alpha = nativePickAlpha( texture );
+		else if ( readAlpha ) alpha = readAlpha( texture );
+		else throw new Error( "Missing picking readback capability" );
+		alphaMasks.set( texture, alpha );
+		return alpha;
+	};
 	// Immutable admitted positions own these bounds; replacement storage invalidates them.
 	const pickBounds = new WeakMap<Float32Array, PickBounds>();
 	const pickBlocks = new WeakMap<WorldGroup, Float64Array>();
@@ -947,13 +964,7 @@ export function createWorldRenderer(
 				const paths = texturePaths( group ),
 					path = paths.length ? paths[Math.floor( pickSeconds * 10 ) % paths.length] : undefined,
 					image = path ? images.get( path )?.source : undefined;
-				const bitmap = image && !("kind" in image) ? image : undefined;
-				let alpha = bitmap ? alphaMasks.get( bitmap ) : undefined;
-				if ( bitmap && !alpha ) {
-					if ( !readAlpha ) throw new Error( "Missing picking readback capability" );
-					alpha = readAlpha( bitmap );
-					alphaMasks.set( bitmap, alpha );
-				}
+				const alpha = image ? pickMask( image ) : undefined;
 				const mesh = { ...source, indices, material: group.material },
 					surface = {
 						alpha,
@@ -1404,14 +1415,11 @@ export function createWorldRenderer(
 					const paths = texturePaths( group );
 					// Alpha readback belongs to bounded resource admission, not the first
 					// hover over a resident object. Animated texture frames are admitted too.
-					if (
-						readAlpha && !group.material.sky && !group.material.lightmap && !blendAdds( group.material )
-					) {
+					if ( !group.material.sky && !group.material.lightmap && !blendAdds( group.material ) ) {
 						for ( const path of paths ) {
-							const bitmap = images.get( path )?.source;
-							if ( bitmap && !("kind" in bitmap) && !alphaMasks.has( bitmap ) ) {
-								alphaMasks.set( bitmap, readAlpha( bitmap ) );
-							}
+							const texture = images.get( path )?.source;
+							// Without readAlpha a bitmap keeps its worker mask or none, as before.
+							if ( texture && ("kind" in texture || readAlpha) ) pickMask( texture );
 						}
 					}
 					const key = imageDrawKey( paths );

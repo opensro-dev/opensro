@@ -9,11 +9,14 @@ canvas draw plus getImageData), which stalled frames on region changes.
 The asset worker now takes it from the pixels it decodes for DDS world
 textures, and reads its own PNG bitmaps back (bitmapPickAlpha); the main
 thread reads a bitmap back (readback.ts) only for a texture that arrives
-without one.
+without one. A native block texture (.texture) has no bitmap: its mask is
+its first level decoded (nativePickAlpha).
 
 ===========================================================================
 */
 
+import type { NativeTexture } from "@/engine/contracts/texture";
+import { decodeNativeTextureLevel } from "@/engine/foundation/assets/native-texture";
 import type { PickAlpha } from "@/engine/foundation/rendering/picking";
 
 /*
@@ -27,6 +30,20 @@ export function rgbaPickAlpha( width: number, height: number, rgba: ArrayLike<nu
 	const pixels = new Uint8Array( width * height );
 	for ( let i = 0; i < pixels.length; i++ ) pixels[i] = rgba[i * 4 + 3]!;
 	return { width, height, pixels };
+}
+
+/*
+================
+nativePickAlpha
+
+The alpha of a native block texture's first level: DXT1 punch-through and
+DXT3/DXT5 alpha cut the same outlines the converted PNGs did (the decoder
+is bit-exact against them, minimapTextureParity.test.mjs). Without it a
+cutout object (leaves, fences) picked as a solid quad.
+================
+*/
+export function nativePickAlpha( texture: NativeTexture ): PickAlpha {
+	return rgbaPickAlpha( texture.width, texture.height, decodeNativeTextureLevel( texture, 0 ) );
 }
 
 /*
