@@ -341,6 +341,32 @@ func rareEquipmentRoll(roll uint32, rate int) bool {
 
 /*
 ================
+prepareGoldHeap
+
+One drop pass's gold: the rolled amount as the heap of its tier.
+================
+*/
+func (rt *Runtime) prepareGoldHeap(items enterworld.ItemRefSource, monster monster.Instance, at simulation.Spawn, droppedBy string, now time.Time) (grounditem.Item, bool) {
+	amount, ok := rt.rollMonsterGoldAmount(monster)
+	if !ok {
+		return grounditem.Item{}, false
+	}
+	ref, found := items.ItemRefByCodename(inventory.GoldHeapTier(amount))
+	if !found || ref == nil {
+		return grounditem.Item{}, false
+	}
+	return PlanGoldDrop(GoldHeapRef{
+		RefObjID: ref.RefObjID,
+		Codename: ref.Codename,
+		Tid1:     uint8(ref.TypeIDs[0]),
+		Tid2:     uint8(ref.TypeIDs[1]),
+		Tid3:     uint8(ref.TypeIDs[2]),
+		Tid4:     uint8(ref.TypeIDs[3]),
+	}, amount, at, droppedBy, now), true
+}
+
+/*
+================
 prepareEquipmentDropKind
 ================
 */
@@ -390,28 +416,32 @@ func (rt *Runtime) planMonsterKillLoot(
 	}
 	now := time.UnixMilli(nowMs)
 	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
-	if rt.DropPassRate > 1 {
-		passes *= rt.DropPassRate
+	// Port-only, not native: the beta rate scales every drop a kill makes:
+	// the unique prepass, the monster's assigned rewards, the ordinary passes
+	// and the capacity that bounds them, so testers see every item family
+	// (equipment to upgrade, alchemy materials) far more often. 1 is native.
+	rate := max(1, rt.DropPassRate)
+	// Gold keeps its native heap count: the beta gold rate already scales
+	// each heap, and a heap per scaled pass would only litter the ground.
+	goldPasses := passes
+	passes *= rate
+	capacity *= rate
+	var prepared []grounditem.Item
+	for round := 0; round < rate; round++ {
+		prepared = append(prepared, rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})...)
 	}
-	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
-	for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
-		if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
-			prepared = append(prepared, item)
+	for round := 0; round < rate && len(prepared) < capacity; round++ {
+		for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
+			if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
+				prepared = append(prepared, item)
+			}
 		}
 	}
 	items := rt.deps.ItemReferences()
 	for pass := 0; pass < passes && len(prepared) < capacity; pass++ {
-		if amount, ok := rt.rollMonsterGoldAmount(monster); ok && items != nil {
-			tier := inventory.GoldHeapTier(amount)
-			if ref, found := items.ItemRefByCodename(tier); found && ref != nil {
-				prepared = append(prepared, PlanGoldDrop(GoldHeapRef{
-					RefObjID: ref.RefObjID,
-					Codename: ref.Codename,
-					Tid1:     uint8(ref.TypeIDs[0]),
-					Tid2:     uint8(ref.TypeIDs[1]),
-					Tid3:     uint8(ref.TypeIDs[2]),
-					Tid4:     uint8(ref.TypeIDs[3]),
-				}, amount, at, snapshot.Name, now))
+		if pass < goldPasses && items != nil {
+			if heap, ok := rt.prepareGoldHeap(items, monster, at, snapshot.Name, now); ok {
+				prepared = append(prepared, heap)
 			}
 		}
 		if len(prepared) >= capacity {

@@ -23,11 +23,12 @@ SkillExpRate on top. A flat rate alone fell behind: at level 42 EXP is worth
 ~738x native but SP only 100x, so testers had to hold a mastery gap to keep
 their skills level with their character.
 
-Drops: a kill rolls its drop passes DropRate times over (each pass rolls
-gold, equipment and consumables), still bounded by the monster's native
-drop capacity, so more and richer loot falls without inventing items. Every
-gold heap is GoldRate times its native amount, because levelling at the
-compressed pace outruns native gold income for gear. An equipment drop is
+Drops: a kill makes every drop DropRate times over (the unique prepass, the
+monster's assigned rewards and its ordinary passes of equipment and
+consumables) and its capacity grows with them, so testers can find gear to
+upgrade and alchemy materials often without inventing items. Gold keeps its
+native heap count; every gold heap is GoldRate times its native amount,
+because levelling at the compressed pace outruns native gold income for gear. An equipment drop is
 rare (Seal of Star/Moon/Sun) RareRate times as often: the native single roll
 admits the residues 1..RareRate of 1000 instead of 1 alone.
 
@@ -64,8 +65,9 @@ const BetaReferenceLevel = 1
 // betaSkillExpRateDefault makes skill training generous for testers.
 const betaSkillExpRateDefault = 100
 
-// betaDropRateDefault rolls each kill's drop passes five times over.
-const betaDropRateDefault = 5
+// betaDropRateDefault makes every drop of a kill twenty times over: a test
+// server, so plus upgrades and alchemy can be tried without long farming.
+const betaDropRateDefault = 20
 
 // maxBetaDropRate bounds an operator override; capacity bounds the drops.
 const maxBetaDropRate = 100

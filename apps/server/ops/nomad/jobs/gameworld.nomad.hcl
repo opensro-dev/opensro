@@ -176,7 +176,7 @@ variable "beta_skill_exp_rate" {
 
 variable "beta_drop_rate" {
   type    = string
-  default = "5"
+  default = "20"
 }
 
 variable "beta_gold_rate" {

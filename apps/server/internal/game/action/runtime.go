@@ -251,9 +251,10 @@ type Runtime struct {
 	// every bandit draw (60BF30), in native order.
 	CaravanRoll combat.Roll32767
 
-	// DropPassRate multiplies a kill's drop passes (gold, equipment and
-	// consumable rolls), still bounded by the monster's native drop
-	// capacity. 0 or 1 is native; the closed-beta growth switch raises it.
+	// DropPassRate multiplies every drop a kill makes: its unique prepass,
+	// its assigned rewards, its ordinary passes (gold, equipment and
+	// consumable rolls) and the capacity bounding them. 0 or 1 is native;
+	// the closed-beta growth switch raises it (port-only, not native).
 	DropPassRate int
 
 	// GoldRate multiplies every monster gold heap after the native rarity

@@ -397,3 +397,38 @@ func TestDropAdmissionNegativeThresholdAndGradeSeven(t *testing.T) {
 		t.Fatal("a grade-7 monster's quadrupled threshold refused roll 100")
 	}
 }
+
+/*
+================
+TestBetaDropRateScalesEveryDropButTheGoldHeapCount
+
+Port-only beta rate: a kill makes its drops DropPassRate times over, its
+capacity grows with them, and gold keeps its native heap count (the beta
+gold rate scales each heap instead). With every roll at 0 one pass is a
+gold heap and one equipment item.
+================
+*/
+func TestBetaDropRateScalesEveryDropButTheGoldHeapCount(t *testing.T) {
+	for _, rate := range []int{1, 3} {
+		rt, _, character, target := newCombatTestRuntime(t, 1)
+		installSmallGoldRef(rt)
+		items := rt.deps.ItemReferences().(staticItemSource)
+		items["ITEM_CH_SWORD_01_A"] = &enterworld.ItemRef{RefObjID: 90000, Codename: "ITEM_CH_SWORD_01_A", TypeIDs: [4]int64{3, 1, 6, 2}}
+		rt.DropRoll = constantDropRoll(0)
+		rt.DropPassRate = rate
+		drops := rt.planMonsterKillLoot(character, target, monster.Pose{
+			RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z,
+		}, rt.Now().UnixMilli())
+		gold, swords := 0, 0
+		for _, drop := range drops {
+			if drop.IsGold() {
+				gold++
+			} else if drop.Codename == "ITEM_CH_SWORD_01_A" {
+				swords++
+			}
+		}
+		if gold != 1 || swords != rate {
+			t.Fatalf("rate %d: %d gold heaps and %d swords, want 1 and %d", rate, gold, swords, rate)
+		}
+	}
+}
