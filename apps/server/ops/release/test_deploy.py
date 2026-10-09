@@ -328,13 +328,13 @@ class MaintenanceDeployTests(unittest.TestCase):
 		config = {"module": str(self.module), "maintenance_accounts": ["release-probe"]}
 		(self.module / ".state/cluster").mkdir(parents=True)
 		with patch.object(deploy, "own_gate") as owned:
-			deploy.open_gate(config)
+			deploy.shut_gate(config)
 		path = self.module / deploy.MAINTENANCE_GATE
 		self.assertEqual(json.loads(path.read_text()), {"accounts": ["release-probe"]})
 		owned.assert_called_once()
-		deploy.close_gate(config)
+		deploy.lift_gate(config)
 		self.assertFalse(path.exists())
-		deploy.close_gate(config)
+		deploy.lift_gate(config)
 		for accounts in (None, [], [""], [" probe"], "probe"):
 			with self.assertRaisesRegex(ValueError, "maintenance_accounts"):
 				deploy.gate_accounts({"maintenance_accounts": accounts})

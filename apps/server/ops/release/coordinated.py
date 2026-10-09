@@ -112,7 +112,7 @@ def publish(config, request, scratch, verify=check_entry):
 	upgrade = maintenance and store_upgrade_required(state, manifest["plan"])
 	try:
 		if maintenance:
-			deploy.open_gate(config)
+			deploy.shut_gate(config)
 		warning = deploy.rollout(config, Path(scratch) / "server", manifest, upgrade=upgrade,
 			on_upgrade=journal_upgrade(config, pending) if upgrade else None)
 	except Exception:
@@ -178,7 +178,7 @@ def confirm(config):
 	write_state(config["production_state"], result)
 	# The release is recorded before anyone is let in.
 	if operation.get("maintenance"):
-		deploy.close_gate(config)
+		deploy.lift_gate(config)
 	return result
 
 
@@ -214,7 +214,7 @@ def revert(config, reason, verify=check_entry):
 		manifest = json.loads((retained_server / "release.json").read_text())
 		deploy.rollout(config, retained_server, manifest, notice=False, restore=operation.get("authorities") or None)
 		if operation.get("maintenance"):
-			deploy.close_gate(config)
+			deploy.lift_gate(config)
 	except Exception:
 		enter(config, state, "revert-failed")
 		deploy.alert_staff(config, "Coordinated release revert failed. Production needs an operator: check Nomad and the client link.")

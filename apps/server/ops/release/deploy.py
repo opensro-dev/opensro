@@ -362,13 +362,14 @@ def gate_accounts(config):
 
 
 # ================
-# open_gate
+# shut_gate
 #
-# Keep players out of a maintenance release until it is confirmed: the
-# GameWorlds mint EnterWorld tokens only for the listed accounts (the
-# release probe). Readable by the task group, replaced atomically.
+# Shut the world to players (write the gate file) until a maintenance
+# release is confirmed: the GameWorlds mint EnterWorld tokens only for the
+# listed accounts (the release probe). Readable by the task group, replaced
+# atomically.
 # ================
-def open_gate(config):
+def shut_gate(config):
 	accounts = gate_accounts(config)
 	path = Path(config["module"]) / MAINTENANCE_GATE
 	temporary = path.with_name(path.name + ".incoming")
@@ -388,9 +389,12 @@ def own_gate(path):
 
 
 # ================
-# close_gate
+# lift_gate
+#
+# Let players back in: remove the gate file (on confirm, or once a revert
+# has the old pair back).
 # ================
-def close_gate(config):
+def lift_gate(config):
 	(Path(config["module"]) / MAINTENANCE_GATE).unlink(missing_ok=True)
 
 
