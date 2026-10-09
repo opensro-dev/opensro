@@ -134,3 +134,28 @@ func TestAbandonedHandOverLeavesNoExchange(t *testing.T) {
 		t.Fatalf("abandonment would remove %+v, want the receipt", cleanup)
 	}
 }
+
+/*
+================
+TestHandOverRefusesARecordWithoutItsNode
+
+A record without exactly one delivery node is refused under the write
+lock, never indexed, and leaves the bag as it was.
+================
+*/
+func TestHandOverRefusesARecordWithoutItsNode(t *testing.T) {
+	licensed.RequireGameData(t)
+	rt := expansionRuntime(t)
+	c := deliveryCharacter(t, rt, "QNO_WC_ACCESSORY_2")
+	def := mustQuest(t, rt, "QNO_WC_ACCESSORY_3")
+	if _, err := rt.StartQuest(c, def.Codename); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	c.ActiveQuests[0].Contents = nil
+	if _, err := rt.AdvanceNpcQuest(c, handOverToken(def.Codename), jinjin); err == nil {
+		t.Fatal("a record without its delivery node was handed over")
+	}
+	if captureItemCount(c, firecrackers) != 1 || captureItemCount(c, receipt) != 0 {
+		t.Fatal("the refused hand-over changed the bag")
+	}
+}

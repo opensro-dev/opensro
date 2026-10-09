@@ -180,8 +180,10 @@ func handOverToken(code string) string {
 rewardNpcMatches
 
 Where a quest pays: its end NPC, or a two-leg delivery's hand-over NPC
-once the hand-over is done (CBasicQuest_vf154 admits every NPC of the
-quest's table, and the base talk pays an achieved quest at either).
+(CBasicQuest_vf154 admits every NPC of the quest's table, and the base
+talk pays an achieved quest at either). This only names the NPC: payment
+still needs objectiveMet, which for a two-leg delivery is the hand-over
+latch, so the hand-over NPC cannot pay before the hand-over.
 ================
 */
 func rewardNpcMatches(def *Definition, npc string) bool {
@@ -213,7 +215,10 @@ func (rt *Runtime) handOverDelivery(c *enterworld.Character, code, npc string) (
 		if c != nil && !c.DeletePending {
 			at = activeQuestIndex(c, def.RefID)
 		}
-		if at < 0 || handedOver(c.ActiveQuests[at]) || !deliveryMet(c, def) {
+		// The latch lives in the record's one delivery node; a record
+		// without exactly one (a corrupt or foreign row) is refused, never
+		// indexed.
+		if at < 0 || len(c.ActiveQuests[at].Contents) != 1 || handedOver(c.ActiveQuests[at]) || !deliveryMet(c, def) {
 			refusal = fmt.Errorf("quest %s hand-over is not due", code)
 			return false
 		}
@@ -231,6 +236,7 @@ func (rt *Runtime) handOverDelivery(c *enterworld.Character, code, npc string) (
 			if errors.As(err, &fault) && fault.Code == wire.ErrCodeStorageFull && def.ExchangeFullSymbol != "" {
 				refusal = &dialogueRefusal{err, def.ExchangeFullSymbol}
 			} else {
+				// Without its own +0xC8 line the quest's bag-full word answers.
 				refusal = inventoryRefusal(def, err)
 			}
 			return false
