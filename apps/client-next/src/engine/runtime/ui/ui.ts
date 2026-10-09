@@ -4052,7 +4052,7 @@ export function createUi(
 				// CIFWholeChat_OnKey (6D2290): Enter sends, Esc closes.
 				if (
 					event.kind === "key" && event.code === "Escape" ||
-					event.kind === "activate" && event.id === "wholechat-exit"
+					event.kind === "activate" && (event.id === "wholechat-exit" || event.id === "wholechat-close")
 				) {
 					globalChatHud.close();
 					focus = null;
@@ -12949,7 +12949,9 @@ export function createUi(
 						] ),
 						// 6D1D90: the slot's count, and Use only while one is left.
 						count = game?.inventory.find( row => row.slot === wholeChat.slot )?.quantity ?? 0;
-					nativeFrame( root, px, py, hudCopy( "UIIT_STT_WHOLECHAT" ), "wholechat-exit" );
+					// The frame's close and the Cancel button are two controls with the
+					// same effect; one id for both was a duplicate control identity.
+					nativeFrame( root, px, py, hudCopy( "UIIT_STT_WHOLECHAT" ), "wholechat-close" );
 					nativePage( layout, px, py, [ 31, 32, 35, 36 ] );
 					const edit = byName( "GDR_WHOLE_CHAT_EDITBOX_INPUT" ), odd = byName( "GDR_WHOLE_CHAT_ODDITEM" );
 					if ( edit ) partyEdit( edit, px, py, GLOBAL_CHAT_TEXT, wholeChat.text, GLOBAL_CHAT_MAX_LENGTH );

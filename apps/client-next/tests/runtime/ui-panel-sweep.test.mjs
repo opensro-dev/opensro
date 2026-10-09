@@ -9,6 +9,8 @@ publication, so opening each registered panel through the production HUD
 proves the whole class. A window must actually open (new controls appear).
 Most open from their window id; service windows open through the flow that
 opens them in game (a storage room, an official's answer, a used scroll).
+SERVICE_WINDOWS adds the windows no registered panel opens (Global chat
+crashed with a frame close and Cancel sharing "wholechat-exit").
 
 ===========================================================================
 */
@@ -19,6 +21,9 @@ const { uiPanels } = await import( "../../src/engine/foundation/ui/panels.ts" );
 const { emptyStall, stallRequest } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
 
 const OFFICIAL = 17;
+// A type word isGlobalChatItem accepts (global-chat.ts): TID 3/3/5/2.
+const GLOBAL_CHAT_TYPE = 0x29ec;
+const BAG_SLOT = 13;
 
 /** @typedef {{ state: any, ui: { event: ( event: any ) => void } }} Fixture */
 
@@ -122,7 +127,43 @@ const OPENERS = {
 	}
 };
 
-for ( const panel of uiPanels() ) {
+/*
+================
+SERVICE_WINDOWS
+
+Windows drawn outside the panel registry, each opened by its game flow.
+================
+*/
+/** @type {Record<string, (f: Fixture, step: () => void) => void>} */
+const SERVICE_WINDOWS = {
+	"Global chat"( f ) {
+		// 69D4F0: using the Global Chatting item opens CIFWholeChat on its slot.
+		Object.assign( f.state.gameplay, {
+			inventorySlotCount: 45,
+			inventory: [ { slot: BAG_SLOT, refObjId: 24600, typeFlags: GLOBAL_CHAT_TYPE, quantity: 3 } ]
+		} );
+		f.ui.event( { kind: "double-activate", id: "slot:" + BAG_SLOT } );
+	},
+	"Exchange"( f ) {
+		f.state.gameplay.exchange = {
+			open: true,
+			partner: 2,
+			own: [],
+			theirs: [],
+			ownGold: 0,
+			theirGold: 0,
+			ownLocked: false,
+			theirLocked: false,
+			approved: false,
+			requesting: false
+		};
+	},
+	"Stall"( f ) {
+		f.state.gameplay.stall = { ...emptyStall(), phase: "owner", title: "Stall" };
+	}
+};
+
+for ( const panel of [ ...uiPanels(), ...Object.keys( SERVICE_WINDOWS ) ] ) {
 	test(`${panel} opens with unique control ids`, t => {
 		const f = uiFixture();
 		t.after( () => f.dispose() );
@@ -137,7 +178,8 @@ for ( const panel of uiPanels() ) {
 		};
 		step();
 		const before = new Set( seen.presentation?.controls.map( control => control.id ) ?? [] );
-		const open = OPENERS[panel] ?? (() => f.ui.event( { kind: "activate", id: "open-window:" + panel } ));
+		const open = OPENERS[panel] ?? SERVICE_WINDOWS[panel] ??
+			(() => f.ui.event( { kind: "activate", id: "open-window:" + panel } ));
 		open( f, step );
 		step();
 		assert.ok(
