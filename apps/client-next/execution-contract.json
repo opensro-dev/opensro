@@ -2,6 +2,11 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [ "callback:createCharacterSounds:2" ]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/layout.ts",
 			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
 			"functions": [ "compactWindowDrag" ]
@@ -1783,6 +1788,7 @@
 			"consumer": "src/engine/runtime/characters/characters.ts",
 			"provider": "src/engine/runtime/renderer/renderer.ts",
 			"functions": [
+				"audioListener",
 				"presentationCamera",
 				"presentationNight"
 			]

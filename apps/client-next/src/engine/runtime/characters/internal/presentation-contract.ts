@@ -168,6 +168,8 @@ export interface SoundRule {
 	readonly event3?: string;
 	readonly publicPath?: string;
 	readonly volume?: number;
+	// effectsound column 7: triggers swallowed between two plays (8F9280).
+	readonly skip?: number;
 }
 
 /*

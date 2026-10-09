@@ -257,6 +257,8 @@ function fixture(
 			actors = value;
 		},
 		presentationNight: () => false,
+		// No listener: rule sounds are not distance-culled in these tests.
+		audioListener: () => null,
 		characterSocket: () => null
 	};
 	const presentation = createCharacterPresentation(

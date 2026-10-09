@@ -258,7 +258,7 @@ async function appendEffectSoundRules(
 			continue;
 		}
 
-		const [object, handle, skillId, event1, event2, event3, blank, folder, fileName, volume, description] = cells;
+		const [object, handle, skillId, event1, event2, event3, skip, folder, fileName, volume, description] = cells;
 		if ( !object || !handle || !folder || !fileName ) {
 			continue;
 		}
@@ -282,7 +282,9 @@ async function appendEffectSoundRules(
 			event1,
 			event2,
 			event3,
-			blank: Number( blank ) || 0,
+			// Column 7: the rule's skip count. CGEffSoundBody_PlayNamedSound (8F9280)
+			// swallows that many triggers between plays (COS_P_CAT SND_STAND 23).
+			skip: Math.max( 0, Math.trunc( Number( skip ) ) || 0 ),
 			folder: normalizeAssetPath( folder ),
 			fileName,
 			sourcePath,

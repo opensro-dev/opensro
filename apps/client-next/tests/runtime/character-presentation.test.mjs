@@ -642,6 +642,8 @@ function fixture(
 		characterMatrix: characters.matrix,
 		characterParticleTime: characters.particleTime,
 		presentationNight: () => true,
+		// No listener: rule sounds are not distance-culled in these tests.
+		audioListener: () => null,
 		characterSocket: () => null,
 		setCharacterModel: characters.model,
 		/*

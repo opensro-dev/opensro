@@ -173,7 +173,8 @@ export function createCharacterPresentation(
 	const statusOwner = createStatusOwner();
 	const skillObjects = createSkillObjects( allocateActor );
 	const resources = createCharacterResources( assets, renderer, origin ),
-		sounds = createCharacterSounds( play, random.range );
+		// 8F9280 measures each rule's 600-unit reach from the audio listener.
+		sounds = createCharacterSounds( play, random.range, () => renderer.audioListener()?.position );
 	const published = createPresentationCatalog( { resources, sounds, referenceAppearances } );
 	const effects = createCharacterEffects(
 		assets,
