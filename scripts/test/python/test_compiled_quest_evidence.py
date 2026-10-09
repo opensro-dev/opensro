@@ -110,7 +110,7 @@ class CompiledQuestFieldTests(unittest.TestCase):
 		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": every}}),
 			{"RequiredHeldItems": ["ITEM_A", "ITEM_B"], "MinLevel": 22})
 		anyone = {"flags": 6, "0x38": ["ITEM_C", "ITEM_D"]}
-		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": anyone}}), {"RequiredAnyHeldItem": ["ITEM_C", "ITEM_D"]})
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": anyone}}), {"RequiredAnyHeldItems": ["ITEM_C", "ITEM_D"]})
 
 	# ================
 	# test_held_item_pushes_are_recorded_in_both_forms

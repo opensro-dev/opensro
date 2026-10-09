@@ -63,7 +63,9 @@ func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 heldItemsMet
 
 9262A0 under flag 4: every RequiredHeldItems codename held at least once
-(CountItemByCodename > 0), and one of RequiredAnyHeldItem when listed.
+(CountItemByCodename > 0), and one of RequiredAnyHeldItems when listed.
+The count's location argument (2) is taken to mean the bag: inference, as
+every item these lists name is a quest item that only the bag holds.
 ================
 */
 func heldItemsMet(c *enterworld.Character, def *Definition) bool {
@@ -72,7 +74,7 @@ func heldItemsMet(c *enterworld.Character, def *Definition) bool {
 			return false
 		}
 	}
-	return len(def.RequiredAnyHeldItem) == 0 || slices.ContainsFunc(def.RequiredAnyHeldItem, func(code string) bool {
+	return len(def.RequiredAnyHeldItems) == 0 || slices.ContainsFunc(def.RequiredAnyHeldItems, func(code string) bool {
 		return captureItemCount(c, code) > 0
 	})
 }

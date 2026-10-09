@@ -216,10 +216,10 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 			} else {
 				// A held-item condition (9262A0 flag 4) refuses the offer
 				// until the character carries every item it names.
-				if len(def.RequiredHeldItems) > 0 || len(def.RequiredAnyHeldItem) > 0 {
+				if len(def.RequiredHeldItems) > 0 || len(def.RequiredAnyHeldItems) > 0 {
 					assertIneligible("missing held items")
 					authority.UpdateCharacter(character, "test-held-items", func() bool {
-						held := append(append([]string(nil), def.RequiredHeldItems...), def.RequiredAnyHeldItem...)
+						held := append(append([]string(nil), def.RequiredHeldItems...), def.RequiredAnyHeldItems...)
 						var amounts []inventory.ItemAmount
 						for _, code := range held {
 							amounts = append(amounts, inventory.ItemAmount{Codename: code, Count: 1})

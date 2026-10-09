@@ -62,7 +62,7 @@ the repeat limit and the lists; 0x100 is the country. The generator refuses
 any other flag, a condition the port does not check. Flag 4 requires held
 items: every one of the vector the initializer pushes at +0x28 (begin/end
 +0x2C) and, when listed, one of +0x38 (+0x3C), projected as
-`RequiredHeldItems` / `RequiredAnyHeldItem`. The importer records those pushes
+`RequiredHeldItems` / `RequiredAnyHeldItems`. The importer records those pushes
 as the table's `"0x28"` / `"0x38"` lists, whether the initializer names the
 table `arg3[0xc2]` or `*(arg1 + 0x308)`.
 

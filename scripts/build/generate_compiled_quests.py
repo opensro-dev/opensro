@@ -400,7 +400,7 @@ def conditions(code, quest):
 		if every:
 			out["RequiredHeldItems"] = every
 		if anyone:
-			out["RequiredAnyHeldItem"] = anyone
+			out["RequiredAnyHeldItems"] = anyone
 	if not flags & CONDITION_MIN_LEVEL:
 		return out
 	level = table.get("0x4")
