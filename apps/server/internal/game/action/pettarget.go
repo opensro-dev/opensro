@@ -28,12 +28,35 @@ type petCombatTarget struct {
 
 /*
 ================
+petAttackBodyAllowed
+
+528F5D..528FA5 rejects a companion in body mode 2 and player victims in
+modes 2 through 4 before consulting the owner's attack permission. Read
+the companion's own mode: owner transitions do not always propagate to it.
+================
+*/
+func petAttackBodyAllowed(pet *enterworld.CharacterCOS, target combatTarget) bool {
+	if pet.NativeBodyStatus == untouchableBodyStatus {
+		return false
+	}
+	return target.snapshot == nil || target.snapshot.NativeBodyStatus < mercenaryBodyProtectedFirst ||
+		target.snapshot.NativeBodyStatus > mercenaryBodyProtectedLast
+}
+
+/*
+================
 resolvePetCombatTarget
 ================
 */
 func (rt *Runtime) resolvePetCombatTarget(step petCombatStep, gid uint32) (petCombatTarget, bool) {
+	if step.pet.NativeBodyStatus == untouchableBodyStatus {
+		return petCombatTarget{}, false
+	}
 	target, found := rt.resolveCombatTarget(step.key.division, step.snapshot, gid, step.nowMs)
 	if found {
+		if !petAttackBodyAllowed(step.pet, target) {
+			return petCombatTarget{}, false
+		}
 		if target.snapshot != nil {
 			if step.ref.TidWord>>11 == domain.MercenaryBand &&
 				(!mercenaryBodyVisible(target.snapshot.NativeBodyStatus) || !rt.worldPlayerEnemy(step.key.division, step.snapshot, target.snapshot)) {

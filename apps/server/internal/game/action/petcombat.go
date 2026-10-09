@@ -88,7 +88,7 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 		return OpResult{}
 	}
 	target, ok := rt.resolveCombatTarget(division, snapshot, targetGID, nowMs)
-	if !ok {
+	if !ok || !petAttackBodyAllowed(pet, target) {
 		return OpResult{}
 	}
 	if target.player != nil && (rt.companionTeamRefusal(snapshot, target.snapshot) != 0 ||
