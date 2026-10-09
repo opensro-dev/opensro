@@ -221,6 +221,14 @@ func TestBetaRareRateWidensTheNativeRareResidues(t *testing.T) {
 	if got := count(5); !slices.Equal(got, []uint32{1, 2, 3, 4, 5, 1001, 1002, 1003, 1004, 1005}) {
 		t.Fatalf("rate 5 admitted %v", got)
 	}
+	for _, rate := range []int{999, 1000} {
+		for roll := uint32(0); roll < 2000; roll++ {
+			want := rate == 1000 || roll%1000 != 0
+			if got := rareEquipmentRoll(roll, rate); got != want {
+				t.Fatalf("rate %d roll %d = %v, want %v", rate, roll, got, want)
+			}
+		}
+	}
 }
 
 /*

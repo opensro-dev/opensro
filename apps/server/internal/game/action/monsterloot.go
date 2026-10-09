@@ -327,10 +327,14 @@ rareEquipmentRoll
 
 Native: one rand() % 1000 == 1. The beta rate (port-only, not native) admits
 the residues 1..rate instead, from the same single roll, so the RNG order is
-unchanged and a rate of 0 or 1 is exactly native.
+unchanged and a rate of 0 or 1 is exactly native. At the domain limit every
+residue is admitted, including zero.
 ================
 */
 func rareEquipmentRoll(roll uint32, rate int) bool {
+	if rate >= rareEquipmentDomain {
+		return true
+	}
 	residue := int(roll % rareEquipmentDomain)
 	return residue >= 1 && residue <= max(rate, 1)
 }
