@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -29,6 +30,10 @@ func TestPetAttackOrderTargetsEnemyCompanion(t *testing.T) {
 			ref.Parameters.DefaultSkillIDs[0] = 2
 			ref.Parameters.HitRate = 10000
 			rt.CombatRoll = func() (uint32, error) { return 0, nil }
+			// As in the other pet-combat fixture, movement uses an admitted
+			// flat surface; this test owns command/HP routing, not navigation.
+			rt.CompanionSurfaceHeight = func(_ uint16, _ float64, y float64, _ float64) (float64, bool) { return y, true }
+			rt.ConstrainMovement = func(_ string, _, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
 			rt.BindPetSession(testDivision, owner, 1)
 			pet := *owner.ActiveCOS
 			pet.GID, _ = enterworld.CosObjectIDForCharacter(victim)
