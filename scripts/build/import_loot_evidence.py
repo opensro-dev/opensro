@@ -166,6 +166,33 @@ DROP_CLASS_TABLES = ("Equip", "RareEquip", "Recover", "Cure", "Ammo", "Scroll", 
 	"Alchemy_MagicStone", "Alchemy_ATTRStone", "Reinforce")
 
 
+# The page header's log sequence number (<IIH at page offset 40). A backup
+# holds older generations of a row on other pages; the newest LSN is the
+# current one, and equal LSNs with different values are a conflict.
+PAGE_LSN_OFFSET = 40
+
+
+# ================
+# read_assignments
+#
+# _RefDropItemAssign rows: [service][item][weight][absolute][class or -1]
+# [count], each with the source item id and its provenance (backup page
+# offset, record offset, page LSN). The backup keeps historical generations
+# of a row, sometimes enabled together, so every generation is kept and the
+# catalog generator chooses by LSN and audits the choice (#459).
+# ================
+def read_assignments(backup, names, media):
+	assignments = []
+	for offset, at, page in backup.named_rows("_RefDropItemAssign"):
+		service, item, weight, absolute, klass, count = struct.unpack_from("<6i", page, at + 4)
+		code = names.get(item)
+		assignments.append({"service": service, "codename": code, "item": item, "weight": weight,
+			"absolute": absolute, "class": klass, "count": count, "client": code in media["items"],
+			"page": offset, "record": at, "lsn": list(struct.unpack_from("<IIH", page, PAGE_LSN_OFFSET))})
+	assignments.sort(key=lambda row: (row["codename"] or "", row["class"], row["lsn"], row["page"], row["record"]))
+	return assignments
+
+
 # ================
 # read_drops
 #
@@ -193,14 +220,7 @@ def read_drops(path, media):
 			rows.append([struct.unpack_from("<I", page, at + 4)[0], list(struct.unpack_from("<%df" % count, page, at + 8))])
 		rows.sort()
 		classes[table] = {"width": width, "rows": rows}
-	# _RefDropItemAssign: [service][item][weight][absolute][class or -1][count].
-	assignments = []
-	for _, at, page in backup.named_rows("_RefDropItemAssign"):
-		service, item, weight, absolute, klass, count = struct.unpack_from("<6i", page, at + 4)
-		code = names.get(item)
-		assignments.append({"service": service, "codename": code, "weight": weight, "absolute": absolute,
-			"class": klass, "count": count, "client": code in media["items"]})
-	assignments.sort(key=lambda row: (row["codename"] or "", row["class"], row["weight"]))
+	assignments = read_assignments(backup, names, media)
 	# _RefDropGold: [u8 level][float probability][int min][int max].
 	gold = []
 	for _, at, page in backup.named_rows("_RefDropGold"):

@@ -28,7 +28,11 @@ item identities from newer backups never become runtime item identities.
   its own width (ISRO-R's rare equipment has 60 classes, its stones 20 and
   its elixirs 3, against vSRO's 36, 12 and 2), the `_RefDropItemAssign` rows
   resolved to codenames and flagged when the v1.150 client lacks the item,
-  and the `_RefDropGold` rows. The vSRO class tables reproduce
+  and the `_RefDropGold` rows. Each assignment keeps its source item id and
+  its provenance: backup page offset, record offset and page LSN. A backup
+  holds older generations of a row on other pages, sometimes enabled
+  together (383 item/class pairs in vSRO, 56 in ISRO-R, none at an equal
+  LSN), so every generation is kept and the generator chooses. The vSRO class tables reproduce
   `equipment-source.json` and `consumables-source.json` value for value.
   The catalog generator owns every merge and filter decision (#459). Neither
   backup is proven retail: ISRO-R authors most tables only around levels
