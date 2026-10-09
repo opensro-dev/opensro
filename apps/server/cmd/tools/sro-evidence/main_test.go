@@ -12,7 +12,7 @@ func TestEvidenceCommandCatalog(t *testing.T) {
 		"navsweep",
 		"performance-ring",
 		"spawnable-npcs",
-		"spawnable-monsters",
+		"creatable-monsters",
 		"fortress-structures",
 	}
 	got := make([]string, 0, len(evidenceCommands))

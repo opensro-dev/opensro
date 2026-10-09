@@ -18,10 +18,11 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
-// Protocol 5 adds populated persistent summoners and concurrent COS lifetimes.
-export const RELEASE_PROTOCOL = 5;
+// Protocol 6 publishes every creatable monster's row in the reference file
+// (#369); 5 added populated persistent summoners and concurrent COS lifetimes.
+export const RELEASE_PROTOCOL = 6;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
-export const REFERENCES_CONTRACT = 2;
+export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";
 // 426 Upgrade Required: the server speaks another release protocol.
 export const RELEASE_OUTDATED_STATUS = 426;

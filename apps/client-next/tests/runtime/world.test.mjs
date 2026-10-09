@@ -1410,10 +1410,11 @@ test("reference admission holds native packets until verified data, and cancella
 	const sockets = socketHarness( t );
 	let release, signal;
 	const data = JSON.stringify( {
-			referencesVersion: 2,
+			referencesVersion: 3,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
-			refItemSnapshot: []
+			refItemSnapshot: [],
+			refObjSnapshot: []
 		} ),
 		bytes = new TextEncoder().encode( data ),
 		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
@@ -1490,13 +1491,22 @@ begin
 	world.dispose();
 });
 
-test("published static item rows join the login's own rows before the world is admitted", async t => {
+test("published static item and monster rows join the login's own rows before the world is admitted", async t => {
 	const sockets = socketHarness( t ), presentation = createPresentation();
 	const data = JSON.stringify( {
-			referencesVersion: 2,
+			referencesVersion: 3,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
-			refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ]
+			refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
+			// A creatable monster no nest populates (#369): the login does not repeat it.
+			refObjSnapshot: [ {
+				refObjId: 9001,
+				tidWord: 0xc6,
+				codename: "MOB_PUBLISHED",
+				nameStrId: "SN_MOB_PUBLISHED",
+				name: "Published",
+				kind: "monster"
+			} ]
 		} ),
 		bytes = new TextEncoder().encode( data ),
 		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
@@ -1563,10 +1573,11 @@ test("published static item rows join the login's own rows before the world is a
 test("an edge-routed transport base carries its route to the socket and the reference fetch", async t => {
 	const sockets = socketHarness( t ), requested = [];
 	const data = JSON.stringify( {
-			referencesVersion: 2,
+			referencesVersion: 3,
 			skillLifecycleVersion: 1,
 			refSkillSnapshot: [],
-			refItemSnapshot: []
+			refItemSnapshot: [],
+			refObjSnapshot: []
 		} ),
 		bytes = new TextEncoder().encode( data ),
 		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );

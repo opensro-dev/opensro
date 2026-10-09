@@ -240,6 +240,17 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 	if deps.RefObjSnapshot != nil {
 		refObjSnapshot = deps.RefObjSnapshot()
 	}
+	// The browser holds the published monster rows from the cached reference
+	// file; repeating them would break the disjoint catalog it requires.
+	if deps.BrowserReferences != nil && len(deps.BrowserReferences.objectIDs) > 0 {
+		own := refObjSnapshot[:0:0]
+		for _, row := range refObjSnapshot {
+			if !deps.BrowserReferences.objectIDs[row.RefObjID] {
+				own = append(own, row)
+			}
+		}
+		refObjSnapshot = own
+	}
 	if refObjSnapshot == nil {
 		refObjSnapshot = []RefObjRow{}
 	}

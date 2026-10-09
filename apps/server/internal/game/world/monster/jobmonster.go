@@ -23,6 +23,22 @@ const (
 
 /*
 ================
+TradeAppearance
+
+A thief or hunter reference has no model of its own (characterdata names
+"xxx"): CICMonster_DeserializeSpawnPacket (861B00) reads its trade
+variant and CICMonster_InitializeTradeEquipmentAndSkill (861720) dresses
+a character body from the trade equipment table. The model bake skips
+these; their look is the job appearance's, not a BSR's.
+================
+*/
+func (r MonsterRef) TradeAppearance() bool {
+	word := NativeTypeWord(r) & typeWordFlagMask
+	return word == thiefMonsterTypeWord || word == hunterMonsterTypeWord
+}
+
+/*
+================
 ThiefMonster
 ================
 */

@@ -220,6 +220,15 @@ func (s *MonsterState) SpawnableRefs() []monster.MonsterRef {
 	return s.template.SpawnableRefs()
 }
 
+/*
+================
+CreatableRefs
+================
+*/
+func (s *MonsterState) CreatableRefs() []monster.MonsterRef {
+	return s.template.CreatableRefs()
+}
+
 // Reference reads the immutable catalog, including rows without a nest.
 /*
 ================

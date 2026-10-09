@@ -4,10 +4,9 @@
 monstersummonrefs.go - the unique encounter's monster reference closure
 
 Unique encounters summon creatures (and their _L2/_L3 variants) that have
-no npcpos nest. The GameWorld seeds them into the refObjSnapshot, and the
-asset bake exports the same closure through sro-evidence
-spawnable-monsters, so a reference the server can stream always has a
-model (#369). One function owns the closure; both call it.
+no npcpos nest. The closure joins them to the template's spawnable set
+before network admission. What the browser can draw is wider: every
+creatable monster rides the public reference file (#369).
 
 ===========================================================================
 */

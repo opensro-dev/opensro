@@ -48,13 +48,14 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current            = 5
+	Current            = 6
 	CompanionsContract = 1
 	BootstrapContract  = 2 // the EnterWorld DTO
 	RosterContract     = 2 // the character list: worn items as (RefItemID, plus)
-	// The reference file: 2 publishes the static item rows a login used to
-	// repeat (refItemSnapshot); 1 held skills and item commands only.
-	ReferencesContract = 2
+	// The reference file: 3 adds every creatable monster's row
+	// (refObjSnapshot, #369); 2 published the static item rows a login used
+	// to repeat (refItemSnapshot); 1 held skills and item commands only.
+	ReferencesContract = 3
 )
 
 // history names every protocol a release has shipped. A browser and a
@@ -63,6 +64,7 @@ var history = map[int]Contracts{
 	2:       {Bootstrap: 2, Roster: 1, References: 1},
 	3:       {Bootstrap: 2, Roster: 2, References: 1},
 	4:       {Bootstrap: 2, Roster: 2, References: 2},
+	5:       {Bootstrap: 2, Roster: 2, References: 2, Companions: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract},
 }
 

@@ -35,8 +35,10 @@ type BrowserReferences struct {
 	SHA256   string `json:"sha256"`
 	Bytes    int    `json:"bytes"`
 	gzipData []byte
-	// itemIDs are the published item rows; a login skips them.
-	itemIDs map[uint32]bool
+	// itemIDs and objectIDs are the published item and object rows; a
+	// login skips them.
+	itemIDs   map[uint32]bool
+	objectIDs map[uint32]bool
 }
 
 // The browser refuses a reference file past these bounds (http.ts
@@ -54,6 +56,9 @@ type BrowserReferenceSources struct {
 	ItemCommands interface{ ItemCommandReferences() []ItemCommandReference }
 	// StaticItems are the item rows every viewer needs (StaticRefItemRows).
 	StaticItems []RefItemRow
+	// Monsters are the monster rows every viewer needs
+	// (PublicMonsterRefObjRows).
+	Monsters []RefObjRow
 }
 
 /*
@@ -87,13 +92,28 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		}
 		itemIDs[row.RefObjID] = true
 	}
+	if len(sources.Monsters) > maxPublicReferenceRows {
+		return nil, fmt.Errorf("invalid public monster catalogue size: %d", len(sources.Monsters))
+	}
+	objectRows := sources.Monsters
+	if objectRows == nil {
+		objectRows = []RefObjRow{}
+	}
+	objectIDs := make(map[uint32]bool, len(objectRows))
+	for _, row := range objectRows {
+		if objectIDs[row.RefObjID] {
+			return nil, fmt.Errorf("public monster catalogue repeats %d", row.RefObjID)
+		}
+		objectIDs[row.RefObjID] = true
+	}
 	data, err := json.Marshal(struct {
 		ReferencesVersion     int                    `json:"referencesVersion"`
 		SkillLifecycleVersion int                    `json:"skillLifecycleVersion"`
 		RefSkillSnapshot      []SpawnSkillRow        `json:"refSkillSnapshot"`
 		RefItemSnapshot       []RefItemRow           `json:"refItemSnapshot"`
+		RefObjSnapshot        []RefObjRow            `json:"refObjSnapshot"`
 		ItemCommandReferences []ItemCommandReference `json:"itemCommandReferences,omitempty"`
-	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, commandRows})
+	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, objectRows, commandRows})
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +131,12 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		return nil, err
 	}
 	return &BrowserReferences{
-		Path:     "/transport/references/" + hash + ".json",
-		SHA256:   hash,
-		Bytes:    len(data),
-		gzipData: compressed.Bytes(),
-		itemIDs:  itemIDs,
+		Path:      "/transport/references/" + hash + ".json",
+		SHA256:    hash,
+		Bytes:     len(data),
+		gzipData:  compressed.Bytes(),
+		itemIDs:   itemIDs,
+		objectIDs: objectIDs,
 	}, nil
 }
 

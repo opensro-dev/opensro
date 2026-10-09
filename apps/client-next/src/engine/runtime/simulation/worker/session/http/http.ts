@@ -144,15 +144,21 @@ outlive its session. References are content-addressed static files beside
 the transport, so they carry no release declaration.
 
 refItemSnapshot here is the static item catalogue (every drop, alchemy
-output and gacha reward). The login blob carries only the rows that depend
-on the division's players and ground, disjoint from these.
+output and gacha reward), and refObjSnapshot every monster the server can
+create (#369). The login blob carries only the rows that depend on the
+division's players and ground, disjoint from these.
 ================
 */
 async function loadWorldReferences(
 	value: unknown,
 	base: string,
 	signal: AbortSignal
-): Promise<{ refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; itemCommandReferences?: unknown[]; }> {
+): Promise<{
+	refSkillSnapshot: unknown[];
+	refItemSnapshot: unknown[];
+	refObjSnapshot: unknown[];
+	itemCommandReferences?: unknown[];
+}> {
 	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; };
 	if (
 		!ref || typeof ref.sha256 !== "string" || !/^[a-f0-9]{64}$/.test( ref.sha256 ) ||
@@ -181,13 +187,14 @@ async function loadWorldReferences(
 		skillLifecycleVersion?: unknown;
 		refSkillSnapshot?: unknown;
 		refItemSnapshot?: unknown;
+		refObjSnapshot?: unknown;
 		itemCommandReferences?: unknown;
 	};
 	if (
 		!parsed ||
 		Object.keys( parsed ).some( key =>
 			key !== "referencesVersion" && key !== "skillLifecycleVersion" && key !== "refSkillSnapshot" &&
-			key !== "refItemSnapshot" && key !== "itemCommandReferences"
+			key !== "refItemSnapshot" && key !== "refObjSnapshot" && key !== "itemCommandReferences"
 		) ||
 		!Array.isArray( parsed.refSkillSnapshot ) || parsed.refSkillSnapshot.length > REFERENCE_ROWS_LIMIT
 	) throw Error( "Invalid world references" );
@@ -202,6 +209,9 @@ async function loadWorldReferences(
 	if ( !Array.isArray( parsed.refItemSnapshot ) || parsed.refItemSnapshot.length > REFERENCE_ROWS_LIMIT ) {
 		throw Error( "Invalid item references" );
 	}
+	if ( !Array.isArray( parsed.refObjSnapshot ) || parsed.refObjSnapshot.length > REFERENCE_ROWS_LIMIT ) {
+		throw Error( "Invalid object references" );
+	}
 	if (
 		parsed.itemCommandReferences !== undefined &&
 		(!Array.isArray( parsed.itemCommandReferences ) || parsed.itemCommandReferences.length > REFERENCE_ROWS_LIMIT)
@@ -209,6 +219,7 @@ async function loadWorldReferences(
 	return {
 		refSkillSnapshot: parsed.refSkillSnapshot,
 		refItemSnapshot: parsed.refItemSnapshot,
+		refObjSnapshot: parsed.refObjSnapshot,
 		...(parsed.itemCommandReferences === undefined ?
 			{} :
 			{ itemCommandReferences: parsed.itemCommandReferences as unknown[] })

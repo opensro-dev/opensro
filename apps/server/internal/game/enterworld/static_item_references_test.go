@@ -110,7 +110,7 @@ func TestPublishedStaticItemsLeaveTheLogin(t *testing.T) {
 	if err = json.Unmarshal(data, &served); err != nil {
 		t.Fatal(err)
 	}
-	if served.ReferencesVersion != 2 || !equalIDs(refItemIDs(served.RefItemSnapshot), refItemIDs(static)) {
+	if served.ReferencesVersion != 3 || !equalIDs(refItemIDs(served.RefItemSnapshot), refItemIDs(static)) {
 		t.Fatalf("served contract %d rows %v", served.ReferencesVersion, refItemIDs(served.RefItemSnapshot))
 	}
 }

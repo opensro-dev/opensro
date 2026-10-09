@@ -454,10 +454,11 @@ test("HTTP admission refuses old immutable reference schema and accepts versione
 	}
 	await assert.rejects( load(), /rebuild the server/ );
 	data = JSON.stringify( {
-		referencesVersion: 2,
+		referencesVersion: 3,
 		skillLifecycleVersion: 1,
 		refSkillSnapshot: refs,
-		refItemSnapshot: []
+		refItemSnapshot: [],
+		refObjSnapshot: []
 	} );
 	const loaded = await load();
 	assert.deepEqual( loaded.refSkillSnapshot, refs );

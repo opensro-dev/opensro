@@ -299,6 +299,29 @@ func (t Template) WithAdditionalNests(nests []NestRow) Template {
 
 /*
 ==================
+CreatableRefs
+
+Every monster reference the server can create, ordered by RefObjID: the
+nests and summons, and every other row a GM's LOADMONSTER or a quest
+script may name. The native client draws any characterdata monster on
+demand (CICMonster_DeserializeSpawnPacket 861B00 loads its BSR), so the
+browser's reference catalogue and the model bake cover this set, not the
+populated one (#369). Fortress structures are their own roster.
+==================
+*/
+func (t Template) CreatableRefs() []MonsterRef {
+	refs := make([]MonsterRef, 0, len(t.Refs))
+	for _, ref := range t.Refs {
+		if !ref.Structure {
+			refs = append(refs, ref)
+		}
+	}
+	sort.Slice(refs, func(i, j int) bool { return refs[i].RefObjID < refs[j].RefObjID })
+	return refs
+}
+
+/*
+==================
 SpawnableRefs
 
 SpawnableRefs returns the monster references that actually appear in

@@ -6,7 +6,7 @@ npcModelRoster.mjs - which references the mission NPC model bake covers
 The bake publishes models for three sets, and this module owns all three:
 
 - spawnable NPCs and monsters, exported by the server itself
-  (sro-evidence spawnable-npcs / spawnable-monsters), so bake coverage tracks
+  (sro-evidence spawnable-npcs / creatable-monsters), so bake coverage tracks
   what the server can ever stream;
 - every enabled COS reference (growth pets and hidden transports) in
   characterdata, per the native action-1 routing at 582110.
@@ -43,18 +43,18 @@ const ROSTER_EXPORT_MAX_BYTES = 16 * 1024 * 1024;
 ================
 loadServerRoster
 
-Monster roster: DERIVED from the server's spawnable join, never hand
-maintained. The retail client has no roster at all - CICMonster spawn
-(CICMonster_DeserializeSpawnPacket 0x861B00) binds the refObjId to its characterdata record and loads the
-record's .bsr on demand (LoadVisualModelAndCacheBounds 0x853e70); the
-offline-bake analog is "bake exactly what the server can ever stream". That
-set is monster.LoadTemplate().SpawnableRefs() after
-enterworld.WithMonsterSummonReferences - the npcpos.txt spawn points joined
-with the binary-pinned CICMonster TypeID gate, plus the unique encounters'
-summon closure (their _L2/_L3 variants have no nest, #369) - exported by
-server sro-evidence spawnable-monsters and consumed here at bake time. The
-classifier lives in Go ONLY; duplicating the TypeID gate here was rejected
-as cross-plane drift risk.
+Monster roster: DERIVED from the server, never hand maintained. The retail
+client has no roster at all - CICMonster spawn
+(CICMonster_DeserializeSpawnPacket 0x861B00) binds the refObjId to its
+characterdata record and loads the record's .bsr on demand
+(LoadVisualModelAndCacheBounds 0x853e70); the offline-bake analog is "bake
+every monster the server can create". That set is
+monster.LoadTemplate().CreatableRefs() - every characterdata row behind the
+binary-pinned CICMonster TypeID gate, populated or not, so GM LOADMONSTER
+and quest script spawns draw too (#369) - exported by server sro-evidence
+creatable-monsters and consumed here at bake time. The classifier lives in
+Go ONLY; duplicating the TypeID gate here was rejected as cross-plane drift
+risk.
 
 History: the previous hand-enumerated list missed MOB_CH_WHITETIGER_CLON and
 the human saw a permanent peg (monster-live board seq693/695).
@@ -117,11 +117,27 @@ function loadServerRoster( subcommand, expectedFormat, label ) {
 
 /*
 ================
-loadSpawnableMobRoster
+loadCreatableMobRoster
 ================
 */
-export function loadSpawnableMobRoster() {
-	return loadServerRoster( "spawnable-monsters", "sro-spawnable-monster-roster", "spawnable monster" );
+export function loadCreatableMobRoster() {
+	return loadServerRoster( "creatable-monsters", "sro-creatable-monster-roster", "creatable monster" );
+}
+
+/*
+================
+loadModelledMobRoster
+
+The creatable monsters drawn from a BSR: every one but the thieves and
+hunters, which 861720 dresses from the trade equipment table (the server's
+tradeAppearance mark, MonsterRef.TradeAppearance).
+================
+*/
+export function loadModelledMobRoster() {
+	const roster = loadCreatableMobRoster();
+	const modelled = roster.filter( ( ref ) => !ref.tradeAppearance );
+	console.log( `[npc] ${roster.length - modelled.length} trade-appearance thieves and hunters dress at spawn` );
+	return modelled;
 }
 
 /*

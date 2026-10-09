@@ -10,7 +10,7 @@ slice) publishes only these authored models; the WIP shadow world stays
 the data authority (position/yaw/lifecycle), the GLB is twin-side visuals.
 
 The monster roster is DERIVED at bake time from the server's spawnable
-join (sro-evidence spawnable-monsters; see npcModelRoster.mjs) - the same set the
+join (sro-evidence creatable-monsters; see npcModelRoster.mjs) - the same set the
 bootstrap refObjSnapshot seeds per session, so bake coverage tracks the
 server mechanically. NPCs come from sro-evidence spawnable-npcs, which exports
 the unique RefObj types in mission.LoadNpcWorldRoster instead of requiring a
@@ -63,7 +63,7 @@ import { loadCharacterDataRows } from "./resolveCharRoster.mjs";
 import {
 	enabledCosReferences,
 	loadFortressStructureRoster,
-	loadSpawnableMobRoster,
+	loadModelledMobRoster,
 	loadSpawnableNpcRoster
 } from "./npcModelRoster.mjs";
 import { parseStructureEffects } from "./structureEffects.mjs";
@@ -657,7 +657,7 @@ export async function buildNpcModelAssets( options = {} ) {
 	const characterInfo = loadCharacterInfo();
 	const resolveCharacterInfo = characterInfoResolver( characterInfo, rows );
 	const npcRoster = loadSpawnableNpcRoster();
-	const mobRoster = loadSpawnableMobRoster();
+	const mobRoster = loadModelledMobRoster();
 	const mobRosterByCodename = new Map( mobRoster.map( ( ref ) => [ ref.codename, ref ] ) );
 	// 582110: growth pets and hidden transports route action 1 to state 50.
 	// Publish every enabled reference, sharing the native BSR bake across levels.

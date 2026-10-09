@@ -228,6 +228,7 @@ func newGameWorldApplication(
 		Skills:       gameplay.deps.Skills,
 		ItemCommands: authority.textdata.Items,
 		StaticItems:  enterworld.StaticRefItemRows(gameplay.deps),
+		Monsters:     enterworld.PublicMonsterRefObjRows(gameplay.deps.MonsterState),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("browser references: %w", err)

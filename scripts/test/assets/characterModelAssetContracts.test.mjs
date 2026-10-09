@@ -29,7 +29,7 @@ import {
 import {
 	enabledCosReferences,
 	loadFortressStructureRoster,
-	loadSpawnableMobRoster,
+	loadModelledMobRoster,
 	loadSpawnableNpcRoster
 } from "../../build/char/npcModelRoster.mjs";
 import { loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
@@ -428,7 +428,7 @@ test("every characterInfo death model is published with native motions 4 and 36"
 test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	const manifest = joinedNpcManifest( readJson( path.join( publicAssets, "npc", "manifest.json" ) ) );
 	const npcRoster = loadSpawnableNpcRoster();
-	const mobRoster = loadSpawnableMobRoster();
+	const mobRoster = loadModelledMobRoster();
 	const cosRoster = enabledCosReferences( loadCharacterDataRows( textdataDir, { codenamePattern: /./ } ) );
 	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
 

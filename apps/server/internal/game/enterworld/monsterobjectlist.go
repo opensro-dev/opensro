@@ -124,22 +124,56 @@ func (c MonsterSpawnConfig) MonsterRefObjSnapshot(registry *simulation.MonsterSt
 	refs := registry.SpawnableRefs()
 	rows := make([]RefObjRow, 0, len(refs))
 	for _, ref := range refs {
-		rows = append(rows, RefObjRow{
-			RefObjID: ref.RefObjID,
-			// The client's RefObj word carries TID4 in bits 11-15: its
-			// thief/hunter (861B00) and headquarters (4FA0B0) rows read
-			// extra fields by it.
-			TidWord:     monster.NativeTypeWord(ref),
-			Codename:    ref.Codename,
-			NameStrID:   ref.NameStrID,
-			Name:        ref.DisplayName(),
-			Level:       ref.Level,
-			MaxHP:       ref.MaxHP,
-			MonsterType: ref.MonsterType,
-			Kind:        refObjKind(ref),
-		})
+		rows = append(rows, monsterRefObjRow(ref))
 	}
 	return rows
+}
+
+/*
+================
+PublicMonsterRefObjRows
+
+The monster rows of the public reference file: every monster the server
+can create (Template.CreatableRefs), so a GM LOADMONSTER or a quest
+script spawn resolves in the browser as it does in the native client,
+which holds the whole characterdata (#369). Thieves and hunters wait for
+their trade appearance (861720); until it is ported the browser holds no
+row for them and drops their spawn, as it does today.
+================
+*/
+func PublicMonsterRefObjRows(registry *simulation.MonsterState) []RefObjRow {
+	if registry == nil {
+		return nil
+	}
+	var rows []RefObjRow
+	for _, ref := range registry.CreatableRefs() {
+		if !ref.TradeAppearance() {
+			rows = append(rows, monsterRefObjRow(ref))
+		}
+	}
+	return rows
+}
+
+/*
+================
+monsterRefObjRow
+================
+*/
+func monsterRefObjRow(ref monster.MonsterRef) RefObjRow {
+	return RefObjRow{
+		RefObjID: ref.RefObjID,
+		// The client's RefObj word carries TID4 in bits 11-15: its
+		// thief/hunter (861B00) and headquarters (4FA0B0) rows read
+		// extra fields by it.
+		TidWord:     monster.NativeTypeWord(ref),
+		Codename:    ref.Codename,
+		NameStrID:   ref.NameStrID,
+		Name:        ref.DisplayName(),
+		Level:       ref.Level,
+		MaxHP:       ref.MaxHP,
+		MonsterType: ref.MonsterType,
+		Kind:        refObjKind(ref),
+	}
 }
 
 /*

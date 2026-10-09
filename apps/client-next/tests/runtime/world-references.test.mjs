@@ -18,10 +18,11 @@ const { createSessionHttp } = await import(
 	sourceFileUrl( "src/engine/runtime/simulation/worker/session/http/http.ts" ).href
 );
 const data = JSON.stringify( {
-		referencesVersion: 2,
+		referencesVersion: 3,
 		skillLifecycleVersion: 1,
 		refSkillSnapshot: [],
-		refItemSnapshot: [ { refObjId: 7 } ]
+		refItemSnapshot: [ { refObjId: 7 } ],
+		refObjSnapshot: [ { refObjId: 9, kind: "monster" } ]
 	} ),
 	bytes = new TextEncoder().encode( data ),
 	hash = Buffer.from( await crypto.subtle.digest( "SHA-256", bytes ) ).toString( "hex" );
@@ -37,7 +38,8 @@ test("immutable public references require bounded bytes, matching content identi
 	} );
 	assert.deepEqual( await http.references( identity, base, signal ), {
 		refSkillSnapshot: [],
-		refItemSnapshot: [ { refObjId: 7 } ]
+		refItemSnapshot: [ { refObjId: 7 } ],
+		refObjSnapshot: [ { refObjId: 9, kind: "monster" } ]
 	} );
 	assert.equal( requested, base + identity.path );
 	response = new Response( data );
@@ -58,17 +60,43 @@ test("immutable public references require bounded bytes, matching content identi
 	await assert.rejects( http.references( { ...identity, bytes: 33 << 20 }, base, signal ), /identity/ );
 	await assert.rejects( http.references( identity, "wss://fixture.invalid", signal ), /transport base/ );
 });
+/*
+================
+loadDocument
+
+Serves one reference document under its own content identity.
+================
+*/
+async function loadDocument( t, document ) {
+	const text = JSON.stringify( document ),
+		encoded = new TextEncoder().encode( text ),
+		digest = Buffer.from( await crypto.subtle.digest( "SHA-256", encoded ) ).toString( "hex" );
+	t.mock.method( globalThis, "fetch", async () => new Response( text ) );
+	return createSessionHttp().references(
+		{ path: `/transport/references/${digest}.json`, sha256: digest, bytes: encoded.length },
+		"https://fixture.invalid",
+		new AbortController().signal
+	);
+}
+
 test("references of the previous contract are refused", async t => {
-	const legacy = JSON.stringify( { skillLifecycleVersion: 1, refSkillSnapshot: [] } ),
-		legacyBytes = new TextEncoder().encode( legacy ),
-		legacyHash = Buffer.from( await crypto.subtle.digest( "SHA-256", legacyBytes ) ).toString( "hex" );
-	t.mock.method( globalThis, "fetch", async () => new Response( legacy ) );
+	// Contract 2 published no monster rows (#369); a browser of 3 needs them.
 	await assert.rejects(
-		createSessionHttp().references(
-			{ path: `/transport/references/${legacyHash}.json`, sha256: legacyHash, bytes: legacyBytes.length },
-			"https://fixture.invalid",
-			new AbortController().signal
-		),
-		/contract undefined, expected 2/
+		loadDocument( t, {
+			referencesVersion: 2,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: []
+		} ),
+		/contract 2, expected 3/
+	);
+	await assert.rejects(
+		loadDocument( t, {
+			referencesVersion: 3,
+			skillLifecycleVersion: 1,
+			refSkillSnapshot: [],
+			refItemSnapshot: []
+		} ),
+		/Invalid object references/
 	);
 });
