@@ -1037,7 +1037,15 @@
 				"0xc2": {
 					"flags": 7,
 					"0x23": 35,
-					"0x4": 25
+					"0x4": 25,
+					"0x38": [
+						"ITEM_QNO_CH_POTION_5_04",
+						"ITEM_QNO_CH_POTION_5_05",
+						"ITEM_QNO_CH_POTION_5_06",
+						"ITEM_QNO_CH_EUROPE_3_04",
+						"ITEM_QNO_CH_EUROPE_3_05",
+						"ITEM_QNO_CH_EUROPE_3_06"
+					]
 				},
 				"0xc4": {
 					"flags": 1,
@@ -1167,7 +1175,13 @@
 				"+0x2d": 1,
 				"+0x4e0": "SN_NPC_CH_LOTTERY_QS"
 			},
-			"tables": {},
+			"tables": {
+				"0xc2": {
+					"0x28": [
+						"ITEM_QNO_WC_FERRY4_1_01"
+					]
+				}
+			},
 			"lists": {},
 			"missions": [],
 			"overrides": [
@@ -1185,7 +1199,15 @@
 				"0xc2": {
 					"flags": 7,
 					"0x23": 35,
-					"0x4": 25
+					"0x4": 25,
+					"0x38": [
+						"ITEM_QNO_CH_POTION_5_04",
+						"ITEM_QNO_CH_POTION_5_05",
+						"ITEM_QNO_CH_POTION_5_06",
+						"ITEM_QNO_CH_EUROPE_3_04",
+						"ITEM_QNO_CH_EUROPE_3_05",
+						"ITEM_QNO_CH_EUROPE_3_06"
+					]
 				},
 				"0xc4": {
 					"flags": 1,
@@ -5348,7 +5370,11 @@
 				"0xc2": {
 					"flags": 7,
 					"0x23": 32,
-					"0x4": 22
+					"0x4": 22,
+					"0x28": [
+						"ITEM_QNO_WC_POTION_3_01",
+						"ITEM_QNO_WC_POTION_3_02"
+					]
 				},
 				"0xc4": {
 					"flags": 1,

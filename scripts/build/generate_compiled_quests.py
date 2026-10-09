@@ -91,7 +91,9 @@ KT_SHARED_TALK = {}
 #	1:     the character's level is at least +0x4 (MinLevel). +0x23 is the
 #	       questdata level, which only picks the marker (CBasicQuest_vf118)
 #	2:     the repeat limit and the prerequisite lists are checked
-#	4:     items the character must hold (+0x2C every one, +0x3C any one)
+#	4:     items the character must hold: every one of the vector at +0x28
+#	       (9262A0 reads its begin/end at +0x2C) and, when listed, any one
+#	       of +0x38 (+0x3C); RequiredHeldItems and RequiredAnyHeldItems
 #	0x100: country +0x27 (3 = both); the port reads questcontentsdata's
 #	       country byte, which carries the same value
 # Any other bit is a condition the port does not check, so the quest is
@@ -99,13 +101,12 @@ KT_SHARED_TALK = {}
 TABLE_CONDITIONS = "0xc2"
 CONDITION_MIN_LEVEL, CONDITION_PREREQUISITES = 0x1, 0x2
 CONDITION_HELD_ITEMS, CONDITION_COUNTRY = 0x4, 0x100
-CONDITIONS_PORTED = CONDITION_MIN_LEVEL | CONDITION_PREREQUISITES | CONDITION_COUNTRY
-# A held-item gate the port does not check yet, on a quest already live.
-# Without it the quest is still offered when the items were dropped.
-CONDITION_GAPS = {
-	# 897680 consumes the medicine and letter POTION_3 left in the bag.
-	("QNO_WC_POTION_4", CONDITION_HELD_ITEMS),
-}
+CONDITIONS_PORTED = CONDITION_MIN_LEVEL | CONDITION_PREREQUISITES | CONDITION_HELD_ITEMS | CONDITION_COUNTRY
+# A condition the port does not check yet, on a quest already live, keyed
+# (quest, flag). Empty: every live quest's conditions are ported.
+CONDITION_GAPS = set()
+# The held-item vectors in the condition table (flag 4).
+HELD_ALL, HELD_ANY = "0x28", "0x38"
 
 # What a class's own override does, as the QuestSpec fields that port it,
 # keyed by (quest, vtable slot). Each row cites the override it reads.
@@ -391,12 +392,22 @@ def conditions(code, quest):
 	for bit in range(32):
 		if unported & (1 << bit) and (code, 1 << bit) not in CONDITION_GAPS:
 			raise Unsupported("condition flag %#x" % (1 << bit))
+	out = {}
+	if flags & CONDITION_HELD_ITEMS:
+		every, anyone = table.get(HELD_ALL, []), table.get(HELD_ANY, [])
+		if not every and not anyone or not all(isinstance(item, str) for item in every + anyone):
+			raise Unsupported("held-item condition without its items")
+		if every:
+			out["RequiredHeldItems"] = every
+		if anyone:
+			out["RequiredAnyHeldItem"] = anyone
 	if not flags & CONDITION_MIN_LEVEL:
-		return {}
+		return out
 	level = table.get("0x4")
 	if not isinstance(level, int) or level < 1:
 		raise Unsupported("minimum level unavailable")
-	return {"MinLevel": level}
+	out["MinLevel"] = level
+	return out
 
 
 # ================

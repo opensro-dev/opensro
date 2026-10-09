@@ -198,6 +198,16 @@ def parse_initializer(text):
 		if m:
 			quest["lists"].setdefault(m.group(1), []).append(last_string.get(m.group(2)))
 			continue
+		# A string vector inside a table object: the condition table's
+		# held items (0xC2 +0x28 every one, +0x38 any one; 9262A0 reads
+		# their begin/end at +0x2C/+0x3C). An initializer names the table
+		# as arg3[0xc2] or by its byte offset, *(arg1 + 0x308).
+		m = re.match(r'QuestStringVector_PushBack\((?:arg\d\[(0x[0-9a-f]+)\]|\*\(arg\d \+ (0x[0-9a-f]+)\)) \+ (0x[0-9a-f]+), &(var_\w+)\)', line)
+		if m:
+			table = m.group(1) or hex(literal(m.group(2)) // 4)
+			vector = quest["tables"].setdefault(table, {}).setdefault(hex(literal(m.group(3))), [])
+			vector.append(last_string.get(m.group(4)))
+			continue
 		m = re.match(r'(?:void\* )?(\w+) = CRT_operator_new\((0x[0-9a-f]+|\d+)\)', line)
 		if m:
 			mission, mission_vars = {"size": literal(m.group(2)), "fields": {}}, {m.group(1)}

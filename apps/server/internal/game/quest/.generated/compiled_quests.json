@@ -1160,6 +1160,10 @@
 	{
 		"Codename": "QNO_WC_POTION_4",
 		"MaxCompletions": 1,
+		"RequiredHeldItems": [
+			"ITEM_QNO_WC_POTION_3_01",
+			"ITEM_QNO_WC_POTION_3_02"
+		],
 		"MinLevel": 22,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_ACCESSORY",

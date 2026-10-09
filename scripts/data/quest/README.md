@@ -19,6 +19,12 @@ Ninety-one v1.150 quests are hand-written C++ classes in the v1.188
 - `sql-rewards-source.json`: the newer server's `refqusetreward` and
   `refquestrewarditems` rows for the same quests.
 
+The HLIL and methods dumps the class snapshot is imported from are kept
+outside the product, in `research/investigations/quest/compiled-dumps/`
+(`compiled_hlil.json`, sha256 `1a23832e...`, the snapshot's `dumpSHA256`, and
+`compiled_methods.json`, with `SHA256SUMS`). Re-importing them must reproduce
+`compiled-quests-source.json` byte for byte.
+
 ```text
 python -B scripts/build/import_compiled_quest_evidence.py --hlil <dump> --methods <dump>
 python -B scripts/build/import_quest_text_evidence.py --textdata <v1.150-textdata> --sql <SR_GameRefData>
@@ -53,8 +59,12 @@ initializer sets through a pointer copy (`*eax |= 1`); the importer records
 it as the table's `flags`. Flag 1 admits from +0x4, projected as `MinLevel`
 (+0x23 is the questdata level, which only picks the marker); flag 2 checks
 the repeat limit and the lists; 0x100 is the country. The generator refuses
-any other flag, a condition the port does not check, except WC_POTION_4's
-held-item gate (flag 4), recorded as a known gap.
+any other flag, a condition the port does not check. Flag 4 requires held
+items: every one of the vector the initializer pushes at +0x28 (begin/end
++0x2C) and, when listed, one of +0x38 (+0x3C), projected as
+`RequiredHeldItems` / `RequiredAnyHeldItem`. The importer records those pushes
+as the table's `"0x28"` / `"0x38"` lists, whether the initializer names the
+table `arg3[0xc2]` or `*(arg1 + 0x308)`.
 
 A class that overrides vtable slots has custom behaviour (NPC talk at +0x58,
 dialogue at +0x90, the capture escort's +0x80/+0x9C/+0xA8 timers and events).

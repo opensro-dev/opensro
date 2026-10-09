@@ -213,8 +213,28 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					character.ActiveQuests = append(character.ActiveQuests, BuildActiveQuestRecord(def, 0))
 					return true
 				})
-			} else if _, err := rt.StartQuest(character, acceptToken(def)); err != nil {
-				t.Fatal(err)
+			} else {
+				// A held-item condition (9262A0 flag 4) refuses the offer
+				// until the character carries every item it names.
+				if len(def.RequiredHeldItems) > 0 || len(def.RequiredAnyHeldItem) > 0 {
+					assertIneligible("missing held items")
+					authority.UpdateCharacter(character, "test-held-items", func() bool {
+						held := append(append([]string(nil), def.RequiredHeldItems...), def.RequiredAnyHeldItem...)
+						var amounts []inventory.ItemAmount
+						for _, code := range held {
+							amounts = append(amounts, inventory.ItemAmount{Codename: code, Count: 1})
+						}
+						rows, _, err := rt.PlanInventory(character, nil, amounts)
+						if err != nil {
+							t.Fatal(err)
+						}
+						character.MissionInventory = rows
+						return true
+					})
+				}
+				if _, err := rt.StartQuest(character, acceptToken(def)); err != nil {
+					t.Fatal(err)
+				}
 			}
 			restart()
 			before := snapshot()

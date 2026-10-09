@@ -140,6 +140,14 @@ func validateDeliveryExtras(spec QuestSpec, items enterworld.ItemRefSource) erro
 	if (len(spec.ExchangeItems) > 0 || spec.ExchangeFullSymbol != "") && spec.HandOverNpcCodename == "" {
 		return fmt.Errorf("quest %s exchange without a hand-over", spec.Codename)
 	}
+	for _, code := range append(append([]string(nil), spec.RequiredHeldItems...), spec.RequiredAnyHeldItem...) {
+		if items == nil {
+			return fmt.Errorf("quest %s needs the item catalog for its held items", spec.Codename)
+		}
+		if ref, ok := items.ItemRefByCodename(code); !ok || ref == nil {
+			return fmt.Errorf("quest %s unresolved held item %s", spec.Codename, code)
+		}
+	}
 	for _, list := range [][]RewardItemLead{spec.AcceptanceConsumes, spec.ExchangeItems} {
 		seen := map[string]bool{}
 		for _, item := range list {

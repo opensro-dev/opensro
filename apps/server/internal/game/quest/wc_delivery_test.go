@@ -105,21 +105,31 @@ func TestBirthdayGiftsStayForTheSecondDelivery(t *testing.T) {
 
 /*
 ================
-TestSecondGiftAcceptsWithoutTheFirst
+TestSecondGiftNeedsBothFirstGifts
 
-897680 only raises a minidump when the medicine or letter is gone; the
-wrapped gift is still granted and the quest accepted.
+9262A0's held-item condition (flag 4, vector +0x28) offers POTION_4 only
+while the medicine and the letter are both in the bag; with one of them
+it is neither offered nor accepted. 897680's minidump for a missing gift
+is therefore unreachable through an offer.
 ================
 */
-func TestSecondGiftAcceptsWithoutTheFirst(t *testing.T) {
+func TestSecondGiftNeedsBothFirstGifts(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := expansionRuntime(t)
 	c := deliveryCharacter(t, rt, "QNO_WC_POTION_3")
-	if _, err := rt.StartQuest(c, "QNO_WC_POTION_4"); err != nil {
-		t.Fatalf("accept without the first gifts: %v", err)
+	holdItems(t, rt, c, "ITEM_QNO_WC_POTION_3_01", 1)
+	if offeredAt(rt, c, "QNO_WC_POTION_4", "NPC_CH_ACCESSORY") {
+		t.Fatal("POTION_4 offered with only the medicine")
 	}
-	if captureItemCount(c, "ITEM_QNO_WC_POTION_3_03") != 1 {
-		t.Fatal("the wrapped gift was not granted")
+	if _, err := rt.StartQuest(c, "QNO_WC_POTION_4"); err == nil {
+		t.Fatal("POTION_4 accepted with only the medicine")
+	}
+	holdItems(t, rt, c, "ITEM_QNO_WC_POTION_3_02", 1)
+	if !offeredAt(rt, c, "QNO_WC_POTION_4", "NPC_CH_ACCESSORY") {
+		t.Fatal("POTION_4 not offered with both gifts")
+	}
+	if _, err := rt.StartQuest(c, "QNO_WC_POTION_4"); err != nil || captureItemCount(c, "ITEM_QNO_WC_POTION_3_03") != 1 {
+		t.Fatalf("accept with both gifts: %v", err)
 	}
 }
 

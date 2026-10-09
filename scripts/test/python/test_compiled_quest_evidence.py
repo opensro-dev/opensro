@@ -91,15 +91,41 @@ class CompiledQuestFieldTests(unittest.TestCase):
 			({"flags": 1, "0x4": 2}, "skip the prerequisites"),
 			({"flags": 0x1003, "0x4": 2}, "condition flag 0x1000"),
 			({"flags": 0x10003, "0x4": 2}, "condition flag 0x10000"),
-			({"flags": 7, "0x4": 2}, "condition flag 0x4"),
+			({"flags": 7, "0x4": 2}, "held-item condition without its items"),
+			({"flags": 7, "0x4": 2, "0x28": [None]}, "held-item condition without its items"),
 			({"flags": 3}, "minimum level unavailable"),
 		)
 		for table, reason in cases:
 			with self.subTest(table=table):
 				with self.assertRaisesRegex(Unsupported, reason):
 					conditions("QUEST", {"tables": {"0xc2": table}})
-		# The one held-item gap on a live quest is recorded, not refused.
-		self.assertEqual(conditions("QNO_WC_POTION_4", {"tables": {"0xc2": {"flags": 7, "0x4": 22}}}), {"MinLevel": 22})
+
+	# ================
+	# test_held_items_project_both_vectors
+	#
+	# 9262A0 flag 4: every item of +0x28, and one of +0x38 when listed.
+	# ================
+	def test_held_items_project_both_vectors(self):
+		every = {"flags": 7, "0x4": 22, "0x28": ["ITEM_A", "ITEM_B"]}
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": every}}),
+			{"RequiredHeldItems": ["ITEM_A", "ITEM_B"], "MinLevel": 22})
+		anyone = {"flags": 6, "0x38": ["ITEM_C", "ITEM_D"]}
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": anyone}}), {"RequiredAnyHeldItem": ["ITEM_C", "ITEM_D"]})
+
+	# ================
+	# test_held_item_pushes_are_recorded_in_both_forms
+	#
+	# An initializer names the condition table as arg3[0xc2] or by its byte
+	# offset; both pushes land in the table's vector.
+	# ================
+	def test_held_item_pushes_are_recorded_in_both_forms(self):
+		quest = parse_initializer(
+			'std_string_assign_cstr_n(&var_34, "ITEM_A", 6)\n'
+			"QuestStringVector_PushBack(arg3[0xc2] + 0x28, &var_34)\n"
+			'std_string_assign_cstr_n(&var_50, "ITEM_B", 6)\n'
+			"QuestStringVector_PushBack(*(arg1 + 0x308) + 0x38, &var_50)\n"
+		)
+		self.assertEqual(quest["tables"], {"0xc2": {"0x28": ["ITEM_A"], "0x38": ["ITEM_B"]}})
 
 
 if __name__ == "__main__":

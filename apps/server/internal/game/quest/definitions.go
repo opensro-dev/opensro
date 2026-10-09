@@ -148,7 +148,12 @@ type QuestSpec struct {
 	// MinLevel is the lowest level that may take the quest (condition
 	// table 0xC2 +0x4 under flag 1, CBasicQuest_MeetsPrerequisites 9262A0).
 	// Zero means the questdata level, which otherwise only picks the marker.
-	MinLevel             uint8
+	MinLevel uint8
+	// RequiredHeldItems must all be in the bag and RequiredAnyHeldItem needs
+	// one, for the quest to be offered (condition table 0xC2 flag 4, its
+	// vectors at +0x28 and +0x38; CBasicQuest_MeetsPrerequisites 9262A0).
+	RequiredHeldItems    []string
+	RequiredAnyHeldItem  []string
 	Stages               []QuestStage
 	MonsterDrop          *MonsterDropRule
 	Codename             string
