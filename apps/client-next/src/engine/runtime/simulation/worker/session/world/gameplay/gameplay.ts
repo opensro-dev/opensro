@@ -3365,7 +3365,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					const list = rankAnswer.list;
 					if ( list ) {
 						jobRanks = {
-							lists: [ ...jobRanks.lists.filter( l => l.job !== list.job || l.kind !== list.kind ), list ],
+							lists: [
+								...jobRanks.lists.filter( l => l.job !== list.job || l.kind !== list.kind ),
+								list
+							],
 							opened: { job: list.job, kind: list.kind, sequence: (jobRanks.opened?.sequence ?? 0) + 1 }
 						};
 					}

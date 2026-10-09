@@ -51,7 +51,12 @@ test("grade 7 is full, and a -1 threshold reads unsigned", () => {
 	const top = playerInfoJob( { type: 1, grade: 7, exp: 9, alias: "", contribution: 0 }, 0, THRESHOLDS, copy );
 	assert.equal( top.exp, "100%" );
 	assert.equal( top.fraction, 1 );
-	const unsigned = playerInfoJob( { type: 2, grade: 2, exp: 85899346, alias: "", contribution: 0 }, 0, THRESHOLDS, copy );
+	const unsigned = playerInfoJob(
+		{ type: 2, grade: 2, exp: 85899346, alias: "", contribution: 0 },
+		0,
+		THRESHOLDS,
+		copy
+	);
 	assert.equal( unsigned.exp, "1% (85899346)" );
 });
 
