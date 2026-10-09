@@ -56,8 +56,10 @@ export function uiFixture(
 				requested.push( path );
 				try {
 					const bytes = readFileSync( CLIENT_PUBLIC_ROOT + path );
-					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) ) pending.set( id, bytes );
-					else if ( path.endsWith( ".png" ) ) {
+					// A native .texture is container bytes the UI decodes itself (#414).
+					if ( path.endsWith( ".json" ) || path.endsWith( ".txt" ) || path.endsWith( ".texture" ) ) {
+						pending.set( id, bytes );
+					} else if ( path.endsWith( ".png" ) ) {
 						pending.set( id, {
 							path,
 							image: {

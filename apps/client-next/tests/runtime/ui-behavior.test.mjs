@@ -4331,7 +4331,10 @@ test("minimap zoom advances while world inputs are unchanged and resets on exit"
 	try {
 		f.state.gameplay.pose = { regionId: 0x6262, x: 900, y: 0, z: 900, angle: 0 };
 		for ( let i = 0; i < 40; i++ ) f.ui.step( f.state, i * 100 );
-		const width = () => f.scenes.at( -1 ).quads.find( q => q.texture.endsWith( "/minimap/98x98.png" ) )?.rect[2];
+		// The tile is what the build published: a native .texture for a DXT1
+		// source, else a .png (copyMissionMinimapTileImages.mjs).
+		const tile = /\/minimap\/98x98\.(png|texture)$/;
+		const width = () => f.scenes.at( -1 ).quads.find( q => tile.test( q.texture ) )?.rect[2];
 		assert.equal( width(), 160 );
 		f.ui.event( { kind: "activate", id: "minimap-in" } );
 		f.ui.step( f.state, 3910 );
