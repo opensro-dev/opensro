@@ -121,7 +121,9 @@ CLASS_BEHAVIOUR = {
 	# or teleport) when the quest's byte +0x30C (word 0xC3) is set or a
 	# mission's +0x11 is not 1. These classes override it with
 	# CBasicQuest_NoOpEvent (92F270): they never block, as the port's
-	# compiled quests already do not (no compiled initializer sets either).
+	# compiled quests already do not. Neither trigger fires for a compiled
+	# quest: QuestMission_Construct (872110) writes +0x11 = 1, which no
+	# initializer overrides, and +0x30C keeps its default of 0.
 	("QNO_CA_GORIA_3", "0x90"): {},
 	("QNO_EU_CONS_6", "0x90"): {},
 	("QNO_EU_EASTEU_9", "0x90"): {},
