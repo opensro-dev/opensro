@@ -15598,10 +15598,15 @@ export function createUi(
 				nativePage( noticeLayout, nx, ny, [ 3, 4, 5 ] );
 				const contents = node( 3 );
 				if ( contents ) {
+					// CIFMallNotifyWnd_LoadText (6CC490) writes the text into static 3,
+					// which keeps its authored FontColor (61,34,0) unless the file names
+					// a TextColor; v1.150's mall_notify.txt names none.
 					const [cx, cy, cw] = authoredRect( contents, nx, ny ),
 						pitch = contents.rect[3] + notice.lineSpacing;
 					for ( const [i, line] of notice.text.split( "\n" ).entries() ) {
-						quads.push( ...text.quads( line, [ cx, cy + i * pitch, cw, contents.rect[3] ], full, white ) );
+						quads.push(
+							...text.quads( line, [ cx, cy + i * pitch, cw, contents.rect[3] ], full, contents.color )
+						);
 					}
 				}
 				const enter = node( 4 ), exit = node( 5 );

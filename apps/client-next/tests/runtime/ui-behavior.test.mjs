@@ -451,6 +451,27 @@ test("the underbar mall button is a clickable button and F10 toggles the mall", 
 	}
 });
 
+test("the Item Mall notice text keeps its static's authored dark FontColor, as 6CC490", () => {
+	const f = uiFixture();
+	try {
+		for ( let i = 0; i < 20; i++ ) f.ui.step( f.state, 1100 + i * 50 );
+		const face = fontAtlas.fonts["0"],
+			uv = ( /** @type {string} */ c ) => {
+				const g = face.glyphs[c.codePointAt( 0 ) ?? 0];
+				return [ g.x / fontAtlas.atlasWidth, g.y / fontAtlas.atlasHeight ].join( "," );
+			},
+			glyphs = defined( f.scenes.at( -1 ) ).quads.filter( q => q.texture === fontAtlas.image ),
+			uvs = glyphs.map( q => q.uv.slice( 0, 2 ).join( "," ) ),
+			word = Array.from( "stocked", uv ),
+			at = uvs.findIndex( ( _, i ) => word.every( ( u, k ) => uvs[i + k] === u ) );
+		assert.ok( at >= 0, "the notice text is drawn" );
+		// ifmallnotifywnd.txt GDR_MALL_NOTIFY_CONTENTS FontColor=255,61,34,0.
+		assert.deepEqual( glyphs[at]?.color, [ 61 / 255, 34 / 255, 0, 1 ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("the Item Mall notice opens once per session at world entry, as 683B40", () => {
 	const f = uiFixture();
 	try {
