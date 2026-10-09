@@ -147,6 +147,7 @@ import {
 	academyNoticeRequest
 } from "@/engine/foundation/gameplay/academy";
 import { academyAcknowledgment } from "@/engine/foundation/gameplay/academy-notices";
+import { pkStatusBootstrap, pkStatusPacket } from "@/engine/foundation/gameplay/pk-status";
 import {
 	guideBootstrap,
 	revealGuide,
@@ -326,6 +327,7 @@ export function createGameplay(
 	const guideSummons = new Map<number, number>();
 	let guide: GameplayState["guide"];
 	let academy: GameplayState["academy"];
+	let pkStatus: GameplayState["pkStatus"];
 	let selectionDecal: GameplayState["selectionDecal"] = null;
 	// The bootstrap's unlimited-item ids (beta starter kit); empty without one.
 	let unlimitedItems: readonly number[] = [];
@@ -788,6 +790,7 @@ selected entities, cooldowns or world-entry state.
 		guide = undefined;
 		guideSummons.clear();
 		academy = undefined;
+		pkStatus = undefined;
 		feedback.reset();
 		training.reset();
 		social = emptySocial();
@@ -967,6 +970,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 				}
 			}
 			academy = academyBootstrap( value );
+			pkStatus = pkStatusBootstrap( value );
 			const nextGroups = new Map<number, { group: number; level: number; }>();
 			for ( const row of b.refSkillSnapshot ?? [] ) {
 				if (
@@ -2440,6 +2444,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( pkStatus ) {
+					const next = pkStatusPacket( pkStatus, frame );
+					if ( next ) {
+						pkStatus = next;
+						dirty = true;
+						return true;
+					}
+				}
 				if ( academy ) {
 					const next = academyPacket( academy, frame );
 					if ( next ) {
@@ -3581,6 +3593,7 @@ The published plane when something changed since the last take, else null.
 				notices,
 				partyMatching,
 				academy,
+				pkStatus,
 				guide,
 				paramJobs: paramJobs.state(),
 				countJobs: countJobs.state(),

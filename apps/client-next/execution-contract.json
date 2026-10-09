@@ -35,6 +35,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/pk-status.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/renderer/world/terrain-layers.ts",
 			"provider": "src/engine/runtime/renderer/device/geometry.ts",
 			"functions": [

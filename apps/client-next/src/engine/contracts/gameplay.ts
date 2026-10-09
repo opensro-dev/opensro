@@ -586,6 +586,7 @@ export interface GameplayState {
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];
 	readonly partyMatching?: import("@/engine/foundation/gameplay/party-matching").PartyMatching;
 	readonly academy?: import("@/engine/foundation/gameplay/academy").AcademyState;
+	readonly pkStatus?: import("@/engine/foundation/gameplay/pk-status").PkStatus;
 	readonly guide?: import("@/engine/foundation/gameplay/guide").GuideState;
 	readonly weather?: import("@/engine/foundation/gameplay/weather").WeatherOptions;
 	readonly alchemy?: import("./item-process").AlchemyState;

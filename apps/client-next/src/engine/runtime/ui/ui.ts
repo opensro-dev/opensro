@@ -289,6 +289,7 @@ import {
 } from "@/engine/foundation/ui/practice-box";
 import { masteryTooltip } from "@/engine/foundation/ui/mastery-tooltip";
 import { petMiniInfo } from "@/engine/foundation/ui/pet-mini-info";
+import { pkStatusTooltip } from "@/engine/foundation/gameplay/pk-status";
 import { tooltipDescription } from "@/engine/foundation/ui/tooltip-description";
 import { tooltipItems, actionTooltipKey } from "@/engine/foundation/ui/tooltip-target";
 import { itemTooltip } from "@/engine/foundation/ui/item-tooltip";
@@ -7608,6 +7609,8 @@ export function createUi(
 						game?.localGid,
 						game?.target === game?.localGid,
 						game?.fortress,
+						// GDR_PMI_PK and its tooltip (6B5150).
+						game?.pkStatus,
 						game?.social?.guild,
 						game?.guide?.country,
 						next.session?.character,
@@ -7744,6 +7747,14 @@ export function createUi(
 									authoredText( p["GDR_PMI_TXT_" + key + "DAT"]!, px, py, value );
 								}
 							}
+						}
+						// 6B5150: GDR_PMI_PK shows while any PK counter is non-zero.
+						const pkTip = game?.pkStatus && pkStatusTooltip( game.pkStatus, hudCopy );
+						if ( pkTip && p.GDR_PMI_PK ) {
+							authoredImage( p.GDR_PMI_PK, px, py, ROOT + "icon/etc/stwin_pk.png" );
+							const rect = authoredRect( p.GDR_PMI_PK, px, py );
+							controls.push( { id: "GDR_PMI_PK", kind: "region", label: pkTip, helpText: pkTip, rect } );
+							blocks.push( rect );
 						}
 						if ( game?.fortress ) {
 							for (

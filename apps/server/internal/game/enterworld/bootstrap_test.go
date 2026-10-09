@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/domain"
 )
 
 type fakeItems map[string]*ItemRef
@@ -32,6 +34,36 @@ func TestBootstrapJSONOmitsBrowserPresentationPaths(t *testing.T) {
 		if strings.Contains(string(blob), `"`+forbidden+`"`) {
 			t.Errorf("EnterWorld v2 emitted browser presentation field %q: %s", forbidden, blob)
 		}
+	}
+}
+
+// TestBootstrapJSONCarriesThePKCounters pins the bootstrap fields the
+// client seeds its PK counters from (pk-status.ts): v1.150 reads daily,
+// total and penalty at world entry (863880), so a renamed field would
+// hide the mini-info PK icon until the next PK update.
+func TestBootstrapJSONCarriesThePKCounters(t *testing.T) {
+	character := &Character{Name: "murderer", AccountID: "a", PK: &domain.PKRecord{DailyCount: 2, TotalCount: 5, Penalty: 300}}
+	blob, err := json.Marshal(&BootstrapResult{
+		NativeResult: nativeResultSuccess, Character: character, LocalPlayerEntry: &LocalPlayerEntry{RaceKey: RaceKeyChina},
+		ChatMessages: []string{}, SystemMessages: []string{}, Packets: []Packet{},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var view struct {
+		Character struct {
+			PK struct {
+				DailyCount uint8  `json:"dailyCount"`
+				TotalCount uint16 `json:"totalCount"`
+				Penalty    uint32 `json:"penalty"`
+			} `json:"pk"`
+		} `json:"character"`
+	}
+	if err := json.Unmarshal(blob, &view); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := view.Character.PK; got.DailyCount != 2 || got.TotalCount != 5 || got.Penalty != 300 {
+		t.Fatalf("bootstrap character.pk = %+v, want daily 2 total 5 penalty 300", got)
 	}
 }
 
