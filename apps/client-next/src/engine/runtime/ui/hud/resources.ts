@@ -15,6 +15,7 @@ import { decodePortalCatalog, type PortalCatalog } from "@/engine/foundation/gam
 import { decodeTooltipMasteries, type TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
 import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
 import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
+import { type JobExpThresholds, jobExpThresholds } from "@/engine/foundation/gameplay/player-info-job";
 import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
 import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matching";
 import { createTooltipSkillDecoder } from "@/engine/foundation/ui/skill-tooltip-catalog";
@@ -56,6 +57,7 @@ interface HudData {
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
 	readonly masteryCosts: Readonly<Record<number, number>>;
 	readonly withdrawalGoldPrices: Readonly<Record<number, number>>;
+	readonly jobExpThresholds: JobExpThresholds;
 	readonly extended: readonly AuthoredLayout[];
 	readonly countries: Readonly<Record<number, number>>;
 	readonly tooltipSkills: TooltipSkillCatalog;
@@ -245,6 +247,7 @@ export function createHudResources(
 	let data: HudData | null = null;
 	let withdrawalPage: AuthoredLayout = {};
 	let goldPrices: Readonly<Record<number, number>> = {};
+	let jobThresholds: JobExpThresholds = {};
 	// The skill catalogue's decode while its state is "decoding".
 	let skillDecoder: ReturnType<typeof createTooltipSkillDecoder> | null = null;
 	const warm = new Set<string>();
@@ -323,6 +326,7 @@ export function createHudResources(
 							else if ( i === layouts.length + 11 ) {
 								value = masteryCosts( raw );
 								goldPrices = withdrawalGoldPrices( raw );
+								jobThresholds = jobExpThresholds( raw );
 							} else if ( i === layouts.length + 10 ) value = partyCharacterCountries( raw );
 							else if ( i === layouts.length + 8 ) {
 								skillDecoder = createTooltipSkillDecoder( raw );
@@ -360,6 +364,7 @@ export function createHudResources(
 				data = {
 					withdrawalPage,
 					withdrawalGoldPrices: goldPrices,
+					jobExpThresholds: jobThresholds,
 					portals: values[layouts.length + 13] as PortalCatalog,
 					cosReferences: values[layouts.length + 14] as HudData["cosReferences"],
 					tooltipMasteries: values[layouts.length + 12] as HudData["tooltipMasteries"],

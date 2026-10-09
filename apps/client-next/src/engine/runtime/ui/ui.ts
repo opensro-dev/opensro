@@ -76,6 +76,7 @@ import {
 	WITHDRAWAL_SKILL_FRAME_HEIGHT
 } from "./hud/withdrawal";
 import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
+import { playerInfoJob } from "@/engine/foundation/gameplay/player-info-job";
 import { createMapTeleport } from "./hud/map-teleport";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { academyRank } from "@/engine/foundation/gameplay/academy";
@@ -10067,11 +10068,17 @@ export function createUi(
 					values.GDR_PI_HONOR_DATA = game?.academy?.member ?
 						(academySelf ? String( academySelf.honor ) : "") :
 						hudCopy( "UIIT_STT_TC_CAMP_NOT_JOIN" );
-					if ( !next.entities.find( e => e.gid === game?.localGid )?.jobType ) {
-						values.GDR_PI_JOB_ALIAS = "<" + hudCopy( "UIIT_STT_NONE" ) + ">";
-						values.GDR_PI_JOB_TITLE = values.GDR_PI_JOB_ALIAS;
-						values.GDR_PI_JOB_EXP = "0%";
-					}
+					// 59FFA0's job block: alias, icon, grade title, grade and experience.
+					const job = playerInfoJob(
+						game?.job ?? noJob(),
+						next.entities.find( e => e.gid === game?.localGid )?.countryByte9c,
+						hudData.jobExpThresholds,
+						hudCopy
+					);
+					values.GDR_PI_JOB_ALIAS = job.alias;
+					values.GDR_PI_JOB_TITLE = job.title;
+					values.GDR_PI_JOB_GRADE = job.grade;
+					values.GDR_PI_JOB_EXP = job.exp;
 					if ( stats && level !== undefined ) {
 						const v = playerAbilityValues( stats, level );
 						for (
@@ -10092,6 +10099,15 @@ export function createUi(
 							);
 						}
 						if ( node.name in values ) authoredText( node, ox, oy, values[node.name]! );
+						if ( node.id === 71 && job.icon ) {
+							authoredImage(
+								{ ...node, uv: [ 0, 0, 1, 1 ] },
+								ox,
+								oy,
+								"/assets/images/Media_extracted/interface/ifcommon/" + job.icon + ".png"
+							);
+						}
+						if ( node.id === 74 ) authoredImage( node, ox, oy, undefined, job.fraction );
 						if ( node.type === "CIFGauge" && node.id !== 74 ) {
 							const hp = node.id === 20,
 								max = hp ? stats?.maxHp : stats?.maxMp,
