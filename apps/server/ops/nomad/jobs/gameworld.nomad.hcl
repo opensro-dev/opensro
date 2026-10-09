@@ -152,6 +152,14 @@ variable "beta_silk" {
   default = "100000"
 }
 
+# maintenance_gate_path is the maintenance release gate (ops/release
+# deploy.py): while the file exists, EnterWorld tokens go only to the
+# accounts it lists. Empty disables the gate.
+variable "maintenance_gate_path" {
+  type    = string
+  default = ""
+}
+
 # party_masteries puts each member's two main mastery trees on the quick party
 # board. Set off for the native roster rows.
 variable "party_masteries" {
@@ -328,6 +336,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_PLAYER_MAP                = var.beta_player_map
         SRO_BETA_MASTERY                   = var.beta_mastery
         SRO_BETA_SILK                      = var.beta_silk
+        SRO_MAINTENANCE_GATE_PATH          = var.maintenance_gate_path
         SRO_PARTY_MASTERIES                = var.party_masteries
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate

@@ -8,7 +8,10 @@ this state. Candidates bind a component generation, not just a Git commit: an
 intervening deploy followed by a rollback must still invalidate an old approval.
 A release that changes the protocol moves both components in one
 coordinated operation: each candidate is admitted alone for its own rules,
-and the pair is admitted together immediately before publication.
+and the pair is admitted together immediately before publication. A
+maintenance pair is a coordinated pair published inside a closed window: it
+may also upgrade the persisted schema, because its revert restores the
+database backups the upgrade journaled before the old pair returns.
 This module never changes binaries, web roots, databases or remote services.
 
 ===========================================================================
@@ -151,6 +154,8 @@ def admit_component(state, plan):
 		raise ValueError("release is already live")
 	if plan.get("coordinated", True) is not True:
 		raise ValueError("invalid coordination declaration")
+	if plan.get("maintenance", True) is not True or plan.get("maintenance") and not plan.get("coordinated"):
+		raise ValueError("invalid maintenance declaration")
 	mode = plan.get("mode")
 	if mode == "forward":
 		ancestors = plan.get("ancestors", [])
@@ -246,6 +251,26 @@ def admit_pair(state, server_plan, client_plan):
 
 
 # ================
+# admit_maintenance
+#
+# A maintenance pair is published with every player kept out until it is
+# confirmed (coordinated.py), so its revert can restore each shard's
+# database from the backup the offline upgrade journaled and redeploy the
+# old pair on it. It is therefore not bound by admit_pair's rule that the
+# live server reads the candidate's state; the server must still be able to
+# take over the live schema (admit_component). Both halves must declare it.
+# ================
+def admit_maintenance(state, server_plan, client_plan):
+	if not server_plan.get("maintenance") or not client_plan.get("maintenance"):
+		raise ValueError("both candidates must be built for the maintenance release")
+	if admit_component(state, server_plan) != "server" or admit_component(state, client_plan) != "client":
+		raise ValueError("a maintenance release pairs one server with one client")
+	if server_plan["mode"] != "forward" or client_plan["mode"] != "forward":
+		raise ValueError("a maintenance release moves forward")
+	require_pair(client_plan["compatibility"], server_plan["compatibility"])
+
+
+# ================
 # begin
 #
 # Journal the intent before touching a running component. Interrupted work is
@@ -272,10 +297,15 @@ def begin(state, plan, now):
 #
 # One journal entry names both candidates; the phase moves from deploying
 # (server, then client) to verifying (post-switch browser evidence) and ends
-# in confirmation or a revert of both.
+# in confirmation or a revert of both. A maintenance pair also journals each
+# shard's upgrade backup (authorities) as the upgrade takes it.
 # ================
 def begin_pair(state, server_plan, client_plan, now):
-	admit_pair(state, server_plan, client_plan)
+	maintenance = bool(server_plan.get("maintenance") or client_plan.get("maintenance"))
+	if maintenance:
+		admit_maintenance(state, server_plan, client_plan)
+	else:
+		admit_pair(state, server_plan, client_plan)
 	result = json.loads(json.dumps(state))
 	result["operation"] = {
 		"component": COORDINATED,
@@ -286,6 +316,8 @@ def begin_pair(state, server_plan, client_plan, now):
 		"startedAt": now,
 		"phaseStartedAt": now,
 	}
+	if maintenance:
+		result["operation"].update(maintenance=True, authorities={})
 	return result
 
 

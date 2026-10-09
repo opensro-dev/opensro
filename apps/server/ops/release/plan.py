@@ -59,15 +59,21 @@ def require_current(component, commit, root=None):
 # The caller supplies the immutable artifact identity after building it. The
 # plan preserves the production generation read before that build began.
 # intent holds the optional declarations: kind "data" for a release that
-# carries its own asset data (client_data.py), and coordinated for a
-# candidate that publishes only together with its counterpart component.
+# carries its own asset data (client_data.py), coordinated for a candidate
+# that publishes only together with its counterpart component, and
+# maintenance for a coordinated pair published inside a closed maintenance
+# window (coordinated.py), which may upgrade the persisted schema.
 # ================
 def build_plan(component, release, state, intent=None):
 	intent = dict(intent or {})
-	if set(intent) - {"kind", "coordinated"}:
+	if set(intent) - {"kind", "coordinated", "maintenance"}:
 		raise ValueError("unknown plan intent")
 	if intent.get("kind") == "application":
 		del intent["kind"]
+	if intent.get("maintenance"):
+		intent["coordinated"] = True
+	elif "maintenance" in intent:
+		del intent["maintenance"]
 	if not intent.get("coordinated", True):
 		del intent["coordinated"]
 	root = Path(git(["rev-parse", "--show-toplevel"]))
@@ -105,6 +111,7 @@ def main():
 	parser.add_argument("--release")
 	parser.add_argument("--output")
 	parser.add_argument("--coordinated", action="store_true")
+	parser.add_argument("--maintenance", action="store_true", help="a coordinated pair for a maintenance window")
 	arguments = parser.parse_args()
 	if arguments.check_commit:
 		require_current(arguments.component, arguments.check_commit)
@@ -112,7 +119,7 @@ def main():
 	if not all((arguments.state, arguments.release, arguments.output)):
 		parser.error("building a plan requires --state, --release and --output")
 	plan = build_plan(arguments.component, arguments.release, read_state(arguments.state),
-		{"coordinated": arguments.coordinated})
+		{"coordinated": arguments.coordinated, "maintenance": arguments.maintenance})
 	Path(arguments.output).write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 

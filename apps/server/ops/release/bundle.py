@@ -148,10 +148,12 @@ def main():
 	parser.add_argument("archive", type=Path)
 	parser.add_argument("state")
 	parser.add_argument("--coordinated", action="store_true", help="publish only together with a client candidate")
+	parser.add_argument("--maintenance", action="store_true", help="a coordinated pair for a maintenance window (implies --coordinated)")
 	arguments = parser.parse_args()
 	module = Path(__file__).resolve().parents[2]
 	commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=module, text=True).strip()
-	plan = build_plan("server", commit, read_state(arguments.state), {"coordinated": arguments.coordinated})
+	plan = build_plan("server", commit, read_state(arguments.state),
+		{"coordinated": arguments.coordinated, "maintenance": arguments.maintenance})
 	bundle(module, arguments.archive, commit, plan)
 
 

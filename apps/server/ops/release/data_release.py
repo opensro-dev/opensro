@@ -164,6 +164,7 @@ def main():
 	parser.add_argument("--ssh-target", required=True)
 	parser.add_argument("--identity", type=Path, required=True)
 	parser.add_argument("--coordinated", action="store_true", help="publish only together with a server candidate")
+	parser.add_argument("--maintenance", action="store_true", help="a coordinated pair for a maintenance window (implies --coordinated)")
 	parser.add_argument("--max-batch-mib", type=int, default=client_data.MAX_BATCH_BYTES >> 20,
 		help="split the payload into smaller uploads for a slow link")
 	parser.add_argument("--server-data", type=Path, help="also stage this server game-data archive (server.srogz)")
@@ -184,7 +185,8 @@ def main():
 		raise RuntimeError("the origin's live manifest and production state disagree; retry later")
 	compatibility(state["client"]["compatibility"], "client")
 	release = json.loads((arguments.package / "release.json").read_bytes())["releaseId"]
-	plan = build_plan("client", release, state, {"kind": "data", "coordinated": arguments.coordinated})
+	plan = build_plan("client", release, state, {"kind": "data", "coordinated": arguments.coordinated,
+		"maintenance": arguments.maintenance})
 	if arguments.max_batch_mib < 1:
 		parser.error("--max-batch-mib must be at least 1")
 	present = stored_payloads(client_data.needed_payloads(arguments.package, base), arguments.ssh_target,

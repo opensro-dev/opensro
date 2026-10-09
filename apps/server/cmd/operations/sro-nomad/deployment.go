@@ -679,6 +679,11 @@ func (deployment *deployment) gameVariables(
 			deployment.StateDir,
 			"dev-certs",
 		)),
+		// deploy.py MAINTENANCE_GATE: present only inside a maintenance release.
+		"maintenance_gate_path": slashPath(filepath.Join(
+			deployment.StateDir,
+			"maintenance-gate.json",
+		)),
 		"transport_cert_file": deployment.TransportCert,
 		"transport_key_file":  deployment.TransportKey,
 		"transport_tls_id":    deployment.TransportTLSID,

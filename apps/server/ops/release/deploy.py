@@ -6,7 +6,9 @@ deploy.py - replace the running server with verified release inputs.
 The receiver (receiver.py) owns the SSH capability and the host lock and
 calls in here: publish_server for a server alone, the coordinated owner
 (coordinated.py) for a server released together with its client. Nomad owns
-rollout health and job reversion. No live database is copied back.
+rollout health and job reversion. A database is copied back only by the
+revert of a maintenance release, from the backup its own upgrade journaled
+(restore_authorities); nothing else restores state.
 
 ===========================================================================
 """
@@ -39,6 +41,13 @@ LISTENER_TIMEOUT = 5
 MAINTENANCE_SERVERS = "maintenance-servers.json"
 # Root-only, one line: the bug reporter's Discord webhook (bug_report_environment).
 BUG_REPORT_WEBHOOK = "/etc/opensro-release/bug-report-webhook"
+# The maintenance gate the GameWorlds read before minting an EnterWorld token
+# (SRO_MAINTENANCE_GATE_PATH, sro-nomad); in the cluster directory, which the
+# task user may traverse but not list.
+MAINTENANCE_GATE = ".state/cluster/maintenance-gate.json"
+# sro-authority-upgrade -commit names the backup it kept on this line.
+UPGRADE_BACKUP_PREFIX = "Upgrade backup path: "
+AUTHORITY_DB = "state.db"
 
 
 # ================
@@ -227,6 +236,31 @@ def publish_maintenance_list(config, module, executable):
 
 
 # ================
+# enabled_shards
+# ================
+def enabled_shards(module):
+	return [shard["id"] for shard in json.loads((module / "config/shards.json").read_text())["shards"] if shard["enabled"]]
+
+
+# ================
+# authority_directory
+#
+# A shard's authority directory, always derived from the module, never from
+# a path read back from the journal.
+# ================
+def authority_directory(module, shard_id):
+	return module / ".state/shards" / shard_id / "authority"
+
+
+# ================
+# file_sha256
+# ================
+def file_sha256(path):
+	with Path(path).open("rb") as stream:
+		return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+# ================
 # upgrade_authorities
 #
 # A release whose server cannot open the live database stops the fleet and
@@ -234,20 +268,128 @@ def publish_maintenance_list(config, module, executable):
 # database owner so the game server keeps its file access. The upgrade keeps
 # a backup beside the database and refuses an authority still in use; an
 # authority already upgraded by an interrupted attempt is left as it is.
+# on_upgrade, when given, journals each shard before its commit (None) and
+# after it (the backup the upgrade kept, with its sha256), so a revert knows
+# what to restore even if the release fails between two shards.
 # ================
-def upgrade_authorities(module, executable, arguments, environment):
+def upgrade_authorities(module, executable, arguments, environment, on_upgrade=None):
 	import pwd
 	run([executable, "stop", *arguments], cwd=module, env=environment)
 	upgrader = str(module / "sro-authority-upgrade")
-	for shard in json.loads((module / "config/shards.json").read_text())["shards"]:
-		if not shard["enabled"]:
-			continue
-		authority = module / ".state/shards" / shard["id"] / "authority"
-		owner = pwd.getpwuid((authority / "state.db").stat().st_uid).pw_name
+	for shard in enabled_shards(module):
+		authority = authority_directory(module, shard)
+		owner = pwd.getpwuid((authority / AUTHORITY_DB).stat().st_uid).pw_name
 		command = ["runuser", "-u", owner, "--", upgrader, "-authority-dir", str(authority)]
 		run(command, cwd=module, env=environment)
-		run(command + ["-commit"], cwd=module, env=environment)
-		print("Shard " + shard["id"] + " authority upgraded.", flush=True)
+		if not on_upgrade:
+			run(command + ["-commit"], cwd=module, env=environment)
+		else:
+			on_upgrade(shard, None)
+			output = run(command + ["-commit"], cwd=module, env=environment, capture=True).stdout
+			print(output, end="", flush=True)
+			on_upgrade(shard, upgrade_backup(authority, output, shard))
+		print("Shard " + shard + " authority upgraded.", flush=True)
+
+
+# ================
+# upgrade_backup
+#
+# The backup one committed upgrade kept, named on its report line; it must
+# lie in that shard's own authority directory.
+# ================
+def upgrade_backup(authority, output, shard):
+	named = [line[len(UPGRADE_BACKUP_PREFIX):].strip() for line in output.splitlines() if line.startswith(UPGRADE_BACKUP_PREFIX)]
+	if len(named) != 1 or Path(named[0]).parent.resolve() != authority.resolve():
+		raise RuntimeError("shard " + shard + " upgrade named no backup in its authority directory")
+	backup = Path(named[0])
+	return {"backup": backup.name, "sha256": file_sha256(backup)}
+
+
+# ================
+# restore_authorities
+#
+# The revert of a maintenance release: with the fleet stopped, every shard
+# the upgrade touched gets back the database its upgrade backed up. Each
+# backup must still match its journaled sha256 before anything is moved;
+# a shard journaled as started but without a backup refuses the restore,
+# since only an operator can tell which state it is in. The upgraded
+# database (and any WAL beside it) is kept as state.failed-<time>.db.
+# ================
+def restore_authorities(module, executable, arguments, environment, authorities):
+	backups = {}
+	for shard, row in sorted(authorities.items()):
+		if row is None:
+			raise RuntimeError("shard " + shard + " has no journaled upgrade backup; restore it by hand")
+		authority = authority_directory(module, shard)
+		backup = authority / Path(row["backup"]).name
+		if not backup.is_file() or file_sha256(backup) != row["sha256"]:
+			raise RuntimeError("shard " + shard + " upgrade backup is missing or changed; restore refused")
+		backups[shard] = backup
+	run([executable, "stop", *arguments], cwd=module, env=environment)
+	stamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
+	for shard, backup in backups.items():
+		authority = authority_directory(module, shard)
+		database = authority / AUTHORITY_DB
+		status = database.stat()
+		for suffix in ("", "-wal", "-shm"):
+			current = authority / (AUTHORITY_DB + suffix)
+			if current.exists():
+				os.replace(current, authority / ("state.failed-" + stamp + ".db" + suffix))
+		temporary = authority / (AUTHORITY_DB + ".restoring")
+		shutil.copyfile(backup, temporary)
+		os.chown(temporary, status.st_uid, status.st_gid)
+		temporary.chmod(status.st_mode & 0o777)
+		with temporary.open("rb+") as stream:
+			os.fsync(stream.fileno())
+		os.replace(temporary, database)
+		print("Shard " + shard + " authority restored from " + backup.name + ".", flush=True)
+
+
+# ================
+# gate_accounts
+#
+# The accounts a closed gate still admits: maintenance_accounts in the host
+# configuration, the release probe. A maintenance release refuses to start
+# without them.
+# ================
+def gate_accounts(config):
+	accounts = config.get("maintenance_accounts")
+	if not isinstance(accounts, list) or not accounts or not all(isinstance(account, str) and account.strip() == account and account for account in accounts):
+		raise ValueError("a maintenance release needs maintenance_accounts in the host configuration")
+	return accounts
+
+
+# ================
+# open_gate
+#
+# Keep players out of a maintenance release until it is confirmed: the
+# GameWorlds mint EnterWorld tokens only for the listed accounts (the
+# release probe). Readable by the task group, replaced atomically.
+# ================
+def open_gate(config):
+	accounts = gate_accounts(config)
+	path = Path(config["module"]) / MAINTENANCE_GATE
+	temporary = path.with_name(path.name + ".incoming")
+	temporary.write_text(json.dumps({"accounts": accounts}) + "\n")
+	own_gate(temporary)
+	os.replace(temporary, path)
+
+
+# ================
+# own_gate
+#
+# The GameWorlds run as the task user in group sro.
+# ================
+def own_gate(path):
+	shutil.chown(path, user="root", group="sro")
+	path.chmod(0o640)
+
+
+# ================
+# close_gate
+# ================
+def close_gate(config):
+	(Path(config["module"]) / MAINTENANCE_GATE).unlink(missing_ok=True)
 
 
 # ================
@@ -257,13 +399,17 @@ def upgrade_authorities(module, executable, arguments, environment):
 # maintenance window. Nomad alone owns service replacement and health checks.
 # A revert passes notice=False: it restores the retained server at once, and
 # the release it replaces may not be able to announce anything. upgrade runs
-# the candidate's offline store upgrade inside the announced window.
+# the candidate's offline store upgrade inside the announced window, journaled
+# through on_upgrade; restore (a maintenance revert) puts the journaled
+# backups back with the fleet stopped, before the retained server deploys.
 # ================
-def deploy(config, staging, manifest, notice=True, upgrade=False):
+def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None):
 	module = Path(config["module"])
 	names = release_files(manifest["files"])
 	if upgrade and "sro-authority-upgrade" not in names:
 		raise ValueError("a store upgrade release must carry sro-authority-upgrade")
+	if upgrade and restore:
+		raise ValueError("a deployment upgrades or restores, never both")
 	clean_env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
 	version = run(["nomad", "version"], capture=True).stdout.splitlines()[0]
 	if version != "Nomad v" + config["nomad_version"]:
@@ -301,7 +447,9 @@ def deploy(config, staging, manifest, notice=True, upgrade=False):
 			if config.get("bootstrap_notice", False):
 				warning(config, module, executable)
 		if upgrade:
-			upgrade_authorities(module, executable, arguments, environment)
+			upgrade_authorities(module, executable, arguments, environment, on_upgrade)
+		if restore:
+			restore_authorities(module, executable, arguments, environment, restore)
 		if game_data:
 			server_data.install(config, game_data)
 			materialize(config, module, executable, arguments, environment)
@@ -373,9 +521,11 @@ def deployed(config, manifest):
 # deploy, where an error after the health checks passed (token cleanup) is
 # a warning, returned for the journal, not a failed release.
 # ================
-def rollout(config, staging, manifest, notice=True, upgrade=False):
+def rollout(config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None):
 	try:
-		deploy(config, staging, manifest, notice, upgrade)
+		# The maintenance hooks travel only when set (a plain release passes none).
+		hooks = {name: value for name, value in (("on_upgrade", on_upgrade), ("restore", restore)) if value}
+		deploy(config, staging, manifest, notice, upgrade, **hooks)
 	except Exception as error:
 		if not deployed(config, manifest):
 			raise

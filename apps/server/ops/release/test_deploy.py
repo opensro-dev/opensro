@@ -4,6 +4,7 @@ test_deploy.py - failed preflight cannot restart the fleet or retain its token
 ===========================================================================
 """
 
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -209,6 +210,130 @@ class DeployTests(unittest.TestCase):
 		self.assertFalse(deploy.shard_listening({"controlUrl": f"http://127.0.0.1:{port}"}))
 		with self.assertRaisesRegex(RuntimeError, "loopback"):
 			deploy.shard_listening({"controlUrl": "http://10.0.0.1:8791"})
+
+
+# ================
+# MaintenanceDeployTests
+#
+# The host side of a maintenance release on a real module tree: the upgrade
+# journals each shard's backup, the revert puts those backups back, and the
+# gate file admits only the configured accounts. Only the commands (run),
+# the owner lookup and file ownership are injected.
+# ================
+class MaintenanceDeployTests(unittest.TestCase):
+	# ================
+	# setUp
+	# ================
+	def setUp(self):
+		directory = tempfile.TemporaryDirectory()
+		self.addCleanup(directory.cleanup)
+		self.module = Path(directory.name)
+		(self.module / "config").mkdir()
+		(self.module / "config/shards.json").write_text(json.dumps({"shards": [
+			{"id": "global-official", "enabled": True}, {"id": "test", "enabled": False}]}))
+		self.authority = self.module / ".state/shards/global-official/authority"
+		self.authority.mkdir(parents=True)
+		(self.authority / "state.db").write_bytes(b"schema 17")
+		self.calls = []
+		owner = SimpleNamespace(getpwuid=lambda uid: SimpleNamespace(pw_name="sro"))
+		for patcher in (patch.dict(sys.modules, {"pwd": owner}), patch.object(deploy, "run", side_effect=self.fake_run),
+			patch.object(deploy.os, "chown", create=True)):
+			patcher.start()
+			self.addCleanup(patcher.stop)
+
+	# ================
+	# fake_run
+	#
+	# The upgrade's commit keeps a backup of the old database and reports it,
+	# as sro-authority-upgrade does, then leaves an upgraded database and WAL.
+	# ================
+	def fake_run(self, arguments, **_options):
+		self.calls.append(arguments)
+		if arguments[-1] != "-commit":
+			return SimpleNamespace(stdout="")
+		backup = self.authority / "state.before-upgrade-1.db"
+		backup.write_bytes((self.authority / "state.db").read_bytes())
+		(self.authority / "state.db").write_bytes(b"schema 20")
+		(self.authority / "state.db-wal").write_bytes(b"wal")
+		return SimpleNamespace(stdout="Upgrade backup path: " + str(backup) + "\nAuthority upgraded.\n")
+
+	# ================
+	# upgrade
+	# ================
+	def upgrade(self):
+		journal = []
+		deploy.upgrade_authorities(self.module, "sro-nomad", ["-namespace", "sro"], {},
+			lambda shard, row: journal.append((shard, row)))
+		return journal
+
+	# ================
+	# test_the_upgrade_journals_each_backup_before_and_after_its_commit
+	# ================
+	def test_the_upgrade_journals_each_backup_before_and_after_its_commit(self):
+		journal = self.upgrade()
+		digest = hashlib.sha256(b"schema 17").hexdigest()
+		self.assertEqual(journal, [("global-official", None),
+			("global-official", {"backup": "state.before-upgrade-1.db", "sha256": digest})])
+		self.assertEqual(self.calls[0], ["sro-nomad", "stop", "-namespace", "sro"])
+
+	# ================
+	# test_a_backup_outside_the_authority_is_refused
+	# ================
+	def test_a_backup_outside_the_authority_is_refused(self):
+		output = "Upgrade backup path: " + str(self.module / "state.before-upgrade-1.db") + "\n"
+		with self.assertRaisesRegex(RuntimeError, "named no backup"):
+			deploy.upgrade_backup(self.authority, output, "global-official")
+		with self.assertRaisesRegex(RuntimeError, "named no backup"):
+			deploy.upgrade_backup(self.authority, "Authority already in the current format.\n", "global-official")
+
+	# ================
+	# test_restore_puts_the_backup_back_and_keeps_the_failed_state
+	# ================
+	def test_restore_puts_the_backup_back_and_keeps_the_failed_state(self):
+		_, (_, row) = self.upgrade()
+		self.calls.clear()
+		deploy.restore_authorities(self.module, "sro-nomad", ["-namespace", "sro"], {}, {"global-official": row})
+		self.assertEqual(self.calls, [["sro-nomad", "stop", "-namespace", "sro"]])
+		self.assertEqual((self.authority / "state.db").read_bytes(), b"schema 17")
+		self.assertFalse((self.authority / "state.db-wal").exists())
+		failed = sorted(path.name for path in self.authority.glob("state.failed-*"))
+		self.assertEqual(len(failed), 2)
+		self.assertEqual((self.authority / failed[0]).read_bytes(), b"schema 20")
+		self.assertTrue((self.authority / "state.before-upgrade-1.db").exists())
+
+	# ================
+	# test_restore_refuses_before_stopping_anything
+	#
+	# A changed backup or a shard journaled without one stops nothing and
+	# moves nothing.
+	# ================
+	def test_restore_refuses_before_stopping_anything(self):
+		_, (_, row) = self.upgrade()
+		self.calls.clear()
+		for authorities in ({"global-official": dict(row, sha256="0" * 64)}, {"global-official": None},
+			{"global-official": dict(row, backup="state.before-upgrade-9.db")}):
+			with self.assertRaisesRegex(RuntimeError, "restore"):
+				deploy.restore_authorities(self.module, "sro-nomad", [], {}, authorities)
+		self.assertEqual(self.calls, [])
+		self.assertEqual((self.authority / "state.db").read_bytes(), b"schema 20")
+
+	# ================
+	# test_the_gate_lists_the_configured_accounts
+	# ================
+	def test_the_gate_lists_the_configured_accounts(self):
+		config = {"module": str(self.module), "maintenance_accounts": ["release-probe"]}
+		(self.module / ".state/cluster").mkdir(parents=True)
+		with patch.object(deploy, "own_gate") as owned:
+			deploy.open_gate(config)
+		path = self.module / deploy.MAINTENANCE_GATE
+		self.assertEqual(json.loads(path.read_text()), {"accounts": ["release-probe"]})
+		owned.assert_called_once()
+		deploy.close_gate(config)
+		self.assertFalse(path.exists())
+		deploy.close_gate(config)
+		for accounts in (None, [], [""], [" probe"], "probe"):
+			with self.assertRaisesRegex(ValueError, "maintenance_accounts"):
+				deploy.gate_accounts({"maintenance_accounts": accounts})
 
 
 if __name__ == "__main__":

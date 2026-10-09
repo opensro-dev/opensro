@@ -213,8 +213,10 @@ def main():
 	parser.add_argument("archive", type=Path)
 	parser.add_argument("state")
 	parser.add_argument("--coordinated", action="store_true", help="publish only together with a server candidate")
+	parser.add_argument("--maintenance", action="store_true", help="a coordinated pair for a maintenance window (implies --coordinated)")
 	arguments = parser.parse_args()
-	bundle(arguments.package, arguments.archive, read_state(arguments.state), {"coordinated": arguments.coordinated})
+	bundle(arguments.package, arguments.archive, read_state(arguments.state),
+		{"coordinated": arguments.coordinated, "maintenance": arguments.maintenance})
 
 
 if __name__ == "__main__":

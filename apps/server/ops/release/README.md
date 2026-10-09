@@ -145,12 +145,52 @@ its live commit and the candidate, and pair every changed decoder with the
 encoder that forced it.
 
 Open tabs of the old client are refused with HTTP 426 and told to reload. A
-pair is admitted only when the old server can read what the new one writes, so
-a revert never needs a database restore. A store upgrade therefore ships as a
-server release on its own, never inside a coordinated pair, and no rollback can
-cross it: going back means restoring the upgrade's backup by hand. A server rollout that fails its own
+plain pair is admitted only when the old server can read what the new one
+writes, so its revert never needs a database restore. A store upgrade that
+must move with a new protocol ships as a maintenance pair (below); otherwise
+it ships as a server release on its own. A server rollout that fails its own
 health checks leaves the journal `failed`; revert is the recovery. While the
 journal is open, every other publication is refused.
+
+## Maintenance releases
+
+A maintenance release is a coordinated pair published inside a closed
+window, so it may also upgrade the persisted schema. Build both candidates
+with `--maintenance` (`bundle.py`, `client_bundle.py` or `data_release.py`;
+it implies `--coordinated`), and publish with
+`ci.py coordinate SERVER CLIENT --commit SHA --maintenance`, which refuses
+unless both staged candidates declare it. Admission keeps every rule of a
+pair except one: the live server need not read the new state, because the
+revert restores it. The server must still take the live schema over through
+its offline upgrade, and nothing may downgrade it.
+
+The host configuration must name the accounts that may still play during
+the window, normally the release probe account:
+`"maintenance_accounts": ["<probe username>"]`. A maintenance publication
+without them is refused before it changes anything.
+
+1. `publish` closes the gate: `<module>/.state/cluster/maintenance-gate.json`
+   lists those accounts, and every GameWorld then mints EnterWorld tokens for
+   them alone (`SRO_MAINTENANCE_GATE_PATH`, set by `sro-nomad`). It then
+   announces, backs up, stops the fleet and runs the server's offline upgrade
+   on every enabled shard. Each shard is journaled before its commit, then
+   with the backup the upgrade kept and its sha256, before the new server
+   deploys and the client switches.
+2. The release gate runs as the probe account against the closed window, and
+   its evidence is recorded as for any pair.
+3. `confirm` records the release, then removes the gate: players refresh and
+   play on the new pair.
+4. `revert`, at any point before confirm, checks every journaled backup
+   against its sha256, stops the fleet, keeps each upgraded database as
+   `state.failed-<time>.db`, restores the backup, redeploys the retained
+   server and client, and only then removes the gate. Nobody but the probe
+   played on the new state, so the restore loses nothing. A backup that is
+   missing or changed, or a shard journaled without one, refuses the restore
+   and leaves the journal `revert-failed` with the gate closed for an
+   operator.
+
+After confirm, no workflow crosses the schema back; that takes restoring
+the upgrade's backup by hand.
 
 ## Rollback and interrupted operations
 
@@ -239,7 +279,8 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "agent_memory_mb": 256,
   "gameworld_memory_mb": 1024,
   "public_webhook": "/etc/opensro-release/discord-announcements-webhook",
-  "staff_webhook": "/etc/opensro-backup/discord-webhook"
+  "staff_webhook": "/etc/opensro-backup/discord-webhook",
+  "maintenance_accounts": ["release-probe"]
 }
 ```
 

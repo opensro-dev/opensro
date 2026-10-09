@@ -70,6 +70,7 @@ def candidate_status(config):
 			"mode": plan["mode"],
 			"createdAt": record.stat().st_mtime,
 			"coordinated": bool(plan.get("coordinated")),
+			"maintenance": bool(plan.get("maintenance")),
 			"restartRequired": plan["component"] == "server" or bool(plan.get("coordinated")),
 		}
 		# The browser smoke checks the served entry against this digest; the

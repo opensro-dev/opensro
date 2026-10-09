@@ -445,6 +445,10 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 	// matured deletion must not receive a bind ticket.
 	api.store.ReapMaturedDeletions()
 	division := requestShardID(r)
+	if !maintenanceAdmits(api.maintenanceGatePath, requestAccountID(r)) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "MAINTENANCE"})
+		return
+	}
 	found, startable := api.characterStartable(division, requestAccountID(r), request.CharacterName)
 	if !found || !startable {
 		log.WithField("character", request.CharacterName).

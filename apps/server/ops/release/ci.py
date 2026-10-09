@@ -11,7 +11,9 @@ chooses a newer artifact after approval or runs a remote shell command.
 A coordinated release (coordinated.py) takes three publication requests:
 coordinate puts the pair live, the workflow runs the browser smoke against
 it and records the evidence with the staging key, and confirm or revert ends
-the operation.
+the operation. coordinate --maintenance publishes a maintenance pair (both
+candidates built with --maintenance); the flag only asserts what the plans
+already declare, so a workflow cannot publish one by mistake.
 
 ===========================================================================
 """
@@ -73,19 +75,33 @@ def send(request, role):
 
 
 # ================
+# staged_rows
+#
+# The host's public candidate list.
+# ================
+def staged_rows():
+	origin = os.environ["RELEASE_ORIGIN"].rstrip("/")
+	with urllib.request.urlopen(origin + "/releases/candidates.json", timeout=FETCH_TIMEOUT_SECONDS) as response:
+		return json.loads(response.read())["candidates"]
+
+
+# ================
 # staged_client_commit
 #
 # A coordinated client is staged by the operator, not by a preparation run,
 # so its source commit comes from the host's public candidate list. The
-# freshness rule is the same as for every other candidate.
+# freshness rule is the same as for every other candidate. With maintenance,
+# both staged candidates must have been built for a maintenance release.
 # ================
-def staged_client_commit(candidate):
-	origin = os.environ["RELEASE_ORIGIN"].rstrip("/")
-	with urllib.request.urlopen(origin + "/releases/candidates.json", timeout=FETCH_TIMEOUT_SECONDS) as response:
-		rows = json.loads(response.read())["candidates"]
+def staged_client_commit(candidate, maintenance=False, server=None, rows=None):
+	rows = staged_rows() if rows is None else rows
 	row = next((row for row in rows if row["candidate"] == candidate), None)
 	if row is None or row["component"] != "client" or not row.get("coordinated"):
 		raise ValueError("the client is not a staged coordinated candidate")
+	if maintenance:
+		peer = next((peer for peer in rows if peer["candidate"] == server), None)
+		if not row.get("maintenance") or peer is None or peer["component"] != "server" or not peer.get("maintenance"):
+			raise ValueError("both candidates must be staged maintenance candidates")
 	return identity(row["commit"])
 
 
@@ -137,6 +153,7 @@ def main():
 	command.add_argument("server")
 	command.add_argument("client")
 	command.add_argument("--commit", required=True, help="Public source commit of the server candidate")
+	command.add_argument("--maintenance", action="store_true", help="a maintenance pair: closed window and store upgrade")
 	command = commands.add_parser("confirm")
 	command = commands.add_parser("revert")
 	command.add_argument("--reason", required=True)
@@ -152,7 +169,8 @@ def main():
 		result = send({"operation": "publish-" + arguments.component, "candidate": identity(arguments.source)}, "publish")
 	elif arguments.role == "coordinate":
 		require_current("server", arguments.commit)
-		require_current("client", staged_client_commit(identity(arguments.client)))
+		require_current("client", staged_client_commit(identity(arguments.client), arguments.maintenance,
+			identity(arguments.server)))
 		result = send({"operation": "publish-coordinated", "server": identity(arguments.server),
 			"client": identity(arguments.client)}, "publish")
 		# The browser smoke loads the live client by its candidate identity.

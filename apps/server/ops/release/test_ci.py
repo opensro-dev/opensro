@@ -68,7 +68,7 @@ class CiTests(unittest.TestCase):
 		self.replies.append({"phase": "verifying", "server": {}, "client": client})
 		with patch.object(ci, "staged_client_commit", return_value="6" * 40) as staged:
 			current = self.run_command("coordinate", SERVER, CLIENT, "--commit", COMMIT)
-		staged.assert_called_once_with(CLIENT)
+		staged.assert_called_once_with(CLIENT, False, SERVER)
 		self.assertEqual([call.args for call in current.call_args_list], [("server", COMMIT), ("client", "6" * 40)])
 		self.assertEqual(self.sent, [("publish", {"operation": "publish-coordinated", "server": SERVER, "client": CLIENT})])
 		self.assertEqual(json.loads(Path("candidate.json").read_text()), client)
@@ -123,6 +123,26 @@ class CiTests(unittest.TestCase):
 				ci.staged_client_commit(CLIENT)
 			rows["candidates"][0]["coordinated"] = True
 			self.assertEqual(ci.staged_client_commit(CLIENT), COMMIT)
+
+
+	# ================
+	# test_a_maintenance_pair_needs_two_maintenance_candidates
+	#
+	# --maintenance only asserts what both staged plans declare.
+	# ================
+	def test_a_maintenance_pair_needs_two_maintenance_candidates(self):
+		client = {"candidate": CLIENT, "component": "client", "commit": COMMIT, "coordinated": True, "maintenance": True}
+		server = {"candidate": SERVER, "component": "server", "commit": COMMIT, "coordinated": True, "maintenance": False}
+		with self.assertRaisesRegex(ValueError, "maintenance candidates"):
+			ci.staged_client_commit(CLIENT, True, SERVER, [client, server])
+		server["maintenance"] = True
+		self.assertEqual(ci.staged_client_commit(CLIENT, True, SERVER, [client, server]), COMMIT)
+		with self.assertRaisesRegex(ValueError, "maintenance candidates"):
+			ci.staged_client_commit(CLIENT, True, SERVER, [client])
+		client["maintenance"] = False
+		with self.assertRaisesRegex(ValueError, "maintenance candidates"):
+			ci.staged_client_commit(CLIENT, True, SERVER, [client, server])
+		self.assertEqual(ci.staged_client_commit(CLIENT, False, SERVER, [client, server]), COMMIT)
 
 
 if __name__ == "__main__":

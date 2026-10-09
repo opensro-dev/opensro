@@ -13,8 +13,11 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from plan import git, require_current
+import plan
+from plan import build_plan, git, require_current
+from test_release_state import NEW_COMMIT, NEXT_RELEASE, OLD_COMMIT, production
 
 
 # ================
@@ -89,6 +92,45 @@ class PlanTests(unittest.TestCase):
 		git(["update-ref", "refs/remotes/origin/main", self.original], self.root)
 		with self.assertRaises(subprocess.CalledProcessError):
 			require_current("client", branch, self.root)
+
+
+
+# ================
+# IntentTests
+#
+# The declarations a plan carries, with Git answering for this checkout.
+# ================
+class IntentTests(unittest.TestCase):
+	# ================
+	# plan
+	# ================
+	def plan(self, intent):
+		root = str(Path(__file__).resolve().parents[4])
+		answers = {"--show-toplevel": root, "HEAD": NEW_COMMIT}
+
+		# ================
+		# fake_git
+		# ================
+		def fake_git(arguments, _root=None):
+			if arguments[0] == "rev-list":
+				return NEW_COMMIT + "\n" + OLD_COMMIT
+			return answers[arguments[-1]]
+
+		with patch.object(plan, "git", side_effect=fake_git):
+			return build_plan("client", NEXT_RELEASE, production(), intent)
+
+	# ================
+	# test_maintenance_implies_coordinated
+	# ================
+	def test_maintenance_implies_coordinated(self):
+		declared = self.plan({"kind": "data", "maintenance": True})
+		self.assertEqual((declared["coordinated"], declared["maintenance"], declared["kind"]), (True, True, "data"))
+		# Without either declaration the protocol-changing client stands alone,
+		# and the live server refuses it.
+		with self.assertRaisesRegex(ValueError, "incompatible"):
+			self.plan({"kind": "data", "coordinated": False, "maintenance": False})
+		with self.assertRaisesRegex(ValueError, "unknown plan intent"):
+			self.plan({"kind": "data", "closed": True})
 
 
 if __name__ == "__main__":

@@ -181,6 +181,9 @@ type Config struct {
 	PrivateNetwork bool
 	Readiness      *readiness.Gate
 	Now            func() time.Time
+	// MaintenanceGatePath is the maintenance release gate (EnvMaintenanceGate,
+	// maintenance_gate.go); empty means no gate.
+	MaintenanceGatePath string
 }
 
 // API serves the agent HTTP surface.
@@ -213,6 +216,7 @@ type API struct {
 	readiness               *readiness.Gate
 	privateNetwork          bool
 	now                     func() time.Time
+	maintenanceGatePath     string
 
 	allowedOrigins map[string]struct{}
 	listener       httpLifecycle
@@ -273,6 +277,7 @@ func New(config Config) (*API, error) {
 		readiness:               config.Readiness,
 		privateNetwork:          config.PrivateNetwork,
 		now:                     now,
+		maintenanceGatePath:     config.MaintenanceGatePath,
 		allowedOrigins:          allowedOrigins,
 	}
 	log.Infof(
