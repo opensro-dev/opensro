@@ -141,6 +141,7 @@
 		"QNO_CA_GORIA_6": {
 			"words": {
 				"+0x2d": 1,
+				"0xc3.b": 0,
 				"0x121": 1,
 				"0x138": "SN_NPC_EU_HUNTER_QS",
 				"0x130": "SN_TALK_QNO_CA_GORIA_6_01",
@@ -185,6 +186,8 @@
 				"+0x2d": 1,
 				"+0x2e": 1,
 				"0x151": 1,
+				"0x15b.b": 1,
+				"0x15c.w": null,
 				"+0x572": 1,
 				"0x121": 2,
 				"0x138": "SN_NPC_CA_HUNTER_QS",
@@ -940,6 +943,7 @@
 		"QNO_CA_WAREHOUSE_4": {
 			"words": {
 				"+0x2d": 3,
+				"0x106.b": 1,
 				"0x121": 1,
 				"0x138": "SN_NPC_CA_WAREHOUSE_QS",
 				"0x130": "SN_TALK_QNO_CA_WAREHOUSE_4_01",
@@ -2276,6 +2280,7 @@
 		"QNO_EU_EASTEU_11_1": {
 			"words": {
 				"+0x2d": 1,
+				"0xc3.b": 0,
 				"0x121": 1,
 				"0x138": "SN_NPC_EU_WITCH_QS",
 				"0x130": "SN_TALK_QNO_EU_EASTEU_11_1_01",
@@ -2438,6 +2443,7 @@
 		"QNO_EU_EASTEU_14_1": {
 			"words": {
 				"+0x2d": 1,
+				"0xc3.b": 0,
 				"0x121": 1,
 				"0x138": "SN_NPC_EU_WITCH_QS",
 				"0x130": "SN_TALK_QNO_EU_EASTEU_14_1_01",
@@ -2582,6 +2588,7 @@
 		"QNO_EU_EASTEU_17_1": {
 			"words": {
 				"+0x2d": 1,
+				"0xc3.b": 0,
 				"0x121": 1,
 				"0x138": "SN_NPC_EU_WITCH_QS",
 				"0x130": "SN_TALK_QNO_EU_EASTEU_17_1_01",
@@ -2775,6 +2782,8 @@
 				"+0x2d": 1,
 				"+0x2e": 1,
 				"0x151": 1,
+				"0x15b.b": 1,
+				"0x15c.w": null,
 				"+0x572": 1,
 				"0x121": 2,
 				"0x138": "SN_NPC_EU_WITCH_QS",
@@ -2934,6 +2943,7 @@
 		"QNO_EU_EASTEU_5": {
 			"words": {
 				"+0x2d": 1,
+				"0xc3.b": 0,
 				"0x121": 1,
 				"0x138": "SN_NPC_EU_WITCH_QS",
 				"0x130": "SN_TALK_QNO_EU_EASTEU_5_01",
@@ -3165,6 +3175,7 @@
 		"QNO_EU_GENERAL_1": {
 			"words": {
 				"+0x2d": 1,
+				"0xc3.b": 0,
 				"0x121": 1,
 				"0x138": "SN_NPC_EU_GENERAL_QS",
 				"0x130": "SN_TALK_QNO_EU_GENERAL_1_01",
@@ -3290,6 +3301,7 @@
 		"QNO_EU_IVY_1": {
 			"words": {
 				"+0x2d": 1,
+				"0xc3.b": 0,
 				"0x121": 2,
 				"0x138": "SN_NPC_EU_GENERAL_QS",
 				"0x130": "SN_TALK_QNO_EU_IVY_1_01",
@@ -3415,6 +3427,8 @@
 				"+0x2d": 1,
 				"+0x2e": 1,
 				"0x151": 1,
+				"0x15b.b": 1,
+				"0x15c.w": null,
 				"+0x572": 1,
 				"0x121": 6,
 				"0x138": "SN_NPC_EU_GENERAL_QS",
@@ -3597,6 +3611,7 @@
 		"QNO_KT_ACCESSORY_2": {
 			"words": {
 				"+0x2d": 1,
+				"0x106.b": 3,
 				"0x121": 1,
 				"0x138": "SN_NPC_KT_ACCESSORY_QS",
 				"0x130": "SN_TALK_QNO_KT_ACCESSORY_2_01",
@@ -3838,6 +3853,7 @@
 		"QNO_KT_SMITH_2": {
 			"words": {
 				"+0x2d": 1,
+				"0x106.b": 3,
 				"0x121": 1,
 				"0x138": "SN_NPC_KT_SMITH_QS",
 				"0x130": "SN_TALK_QNO_KT_SMITH_2_03",
@@ -4458,6 +4474,8 @@
 				"+0x2d": 1,
 				"+0x2e": 1,
 				"0x151": 1,
+				"0x15b.b": 1,
+				"0x15c.w": null,
 				"+0x572": 1,
 				"0x121": 2,
 				"0x138": "SN_NPC_RM_SLAVE2_QS",
@@ -5107,6 +5125,7 @@
 		"QNO_WC_POTION_3": {
 			"words": {
 				"+0x2d": 1,
+				"0x106.b": 1,
 				"0x151": 1,
 				"0x121": 1,
 				"0x126": "SN_NPC_WC_POTION_QS",
@@ -5439,6 +5458,7 @@
 		"QNO_WC_WAREHOUSE_W_3": {
 			"words": {
 				"+0x2d": 1,
+				"0x106.b": 2,
 				"0x121": 2,
 				"0x138": "SN_NPC_WC_WAREHOUSE_W_QS",
 				"0x130": "SN_TALK_QNO_WC_WAREHOUSE_W_3_01",

@@ -62,6 +62,21 @@ LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE = "0x102", "0x10c"
 LIST_REQUIRED_ANY = "0x114"
 KNOWN_LISTS = {LIST_COMPLETION_NPCS, LIST_QUEST_NPCS, LIST_REQUIRED_DONE, LIST_REQUIRED_ACTIVE, LIST_REQUIRED_ANY}
 
+# The byte and word fields an initializer may write inside a dword slot,
+# with the value the CBasicQuest constructor (91E200) leaves there:
+#	0x106.b: the first prerequisite's completion count (+0x418, one byte
+#	         per list 0x102 entry; CBasicQuest_MeetsPrerequisites 9262A0)
+#	0xc3.b:  the initializers only rewrite its default
+#	0x15b.b: the quest belongs to an instance world, whose id 0x15c.w
+#	         holds (looked up by its INS_ codename)
+# Any other value changes the quest and is not projected yet.
+FIELD_DEFAULTS = {"0x106.b": 1, "0xc3.b": 0, "0x15b.b": 0, "0x15c.w": 1}
+FIELD_MEANINGS = {
+	"0x106.b": "prerequisite completed %s times",
+	"0x15b.b": "instance world quest",
+	"0x15c.w": "instance world quest",
+}
+
 # What a class's own override does, as the QuestSpec fields that port it,
 # keyed by (quest, vtable slot). Each row cites the override it reads.
 CLASS_BEHAVIOUR = {
@@ -190,6 +205,26 @@ def rewards(code, text, sql):
 
 
 # ================
+# check_fields
+#
+# A byte or word field that differs from its constructor default changes
+# the quest: refuse it until QuestSpec carries it, rather than project a
+# three-times prerequisite as a once.
+# ================
+def check_fields(quest):
+	for key in sorted(quest["words"]):
+		if not re.fullmatch(r'0x[0-9a-f]+\.[bw]', key):
+			continue
+		value = quest["words"][key]
+		if key in FIELD_DEFAULTS and value == FIELD_DEFAULTS[key]:
+			continue
+		meaning = FIELD_MEANINGS.get(key)
+		if meaning is None:
+			raise Unsupported("quest field %s = %s" % (key, value))
+		raise Unsupported(meaning % value if "%s" in meaning else meaning)
+
+
+# ================
 # project
 # ================
 def project(code, quest, text, sql):
@@ -199,6 +234,7 @@ def project(code, quest, text, sql):
 	unknown = sorted(set(quest["lists"]) - KNOWN_LISTS)
 	if unknown:
 		raise Unsupported("quest list " + ",".join(unknown))
+	check_fields(quest)
 	missions = quest["missions"]
 	if not missions:
 		raise Unsupported("no missions")

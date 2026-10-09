@@ -204,6 +204,14 @@ def parse_initializer(text):
 		if m:
 			quest["words"][m.group(1)] = literal(m.group(2))
 			continue
+		# A byte or word inside a dword slot ("0x106.b": the first
+		# prerequisite's completion count). A value read at run time is
+		# kept as null so the generator cannot mistake it for a default.
+		m = re.match(r'arg\d\[(0x[0-9a-f]+)\]\.([bw]) = (.+)$', line)
+		if m:
+			value = literal(m.group(3)) if re.fullmatch(VALUE, m.group(3)) else None
+			quest["words"][m.group(1) + "." + m.group(2)] = value
+			continue
 		m = re.match(r'\*\(arg\d \+ (0x[0-9a-f]+)\) = ' + VALUE + r'$', line)
 		if m:
 			quest["words"]["+" + m.group(1)] = literal(m.group(2))

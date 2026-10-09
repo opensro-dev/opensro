@@ -60,7 +60,7 @@
 	"QNO_WC_POTION_4": "custom behaviour 0x58",
 	"QNO_WC_SMITH_3": "custom behaviour 0x58",
 	"QNO_WC_WAREHOUSE_W_2": "custom behaviour 0x58",
-	"QNO_WC_WAREHOUSE_W_3": "mission kinds 1,10",
+	"QNO_WC_WAREHOUSE_W_3": "prerequisite completed 2 times",
 	"QNO_CA_WAREHOUSE_4": "prerequisite QNO_CA_WAREHOUSE_3 pending",
 	"QNO_EU_EASTEU_17": "prerequisite QNO_EU_EASTEU_16 pending",
 	"QNO_EU_EASTEU_2": "prerequisite QNO_EU_EASTEU_1 pending",
