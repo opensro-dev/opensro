@@ -16,11 +16,6 @@ import { mallPurchasePayload, type MallPurchase } from "@/engine/foundation/game
 const ITEM_MOVE_REQUEST = 0x706d;
 const REQUEST_TIMEOUT_MS = 10000;
 
-/*
-================
-createMall
-================
-*/
 // A wallet field is the server's uint32 (domain.MallBalance).
 const MAX_BALANCE = 0xffffffff;
 
@@ -44,6 +39,11 @@ function mallBalance( payload: Uint8Array ): { silk: number; giftSilk: number; p
 	return { silk: row.silk as number, giftSilk: row.giftSilk as number, points: row.points as number };
 }
 
+/*
+================
+createMall
+================
+*/
 export function createMall() {
 	let state: MallState | undefined;
 	let request: MallPurchase | "catalog" | null = null;

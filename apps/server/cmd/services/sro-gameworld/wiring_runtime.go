@@ -47,9 +47,7 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	game.items.Steps.Slow = func(name string, elapsed time.Duration) {
 		game.hub.RecordSlowStep("action.TickHook/"+name, elapsed)
 	}
-	ticker = worldsession.NewTicker(
-		game.hub,
-		game.items.NpcRoster,
+	hooks := []simulation.TickHook{
 		game.movement.GroundTickHook(),
 		game.items.TickHook(),
 		// Direction walks continue leg by leg on the mission clock.
@@ -70,11 +68,14 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 			game.items.JobWeekTick(game.divisionID, nowMs)
 			return nil
 		},
-		// The beta's earned silk counts in-world time (action/betasilk.go).
-		func(nowMs int64) []simulation.DivisionFrames {
-			return game.betaSilk.Tick(nowMs, ticker.Source.SnapshotSessions(), game.deps.CharacterByID)
-		},
-	)
+	}
+	// Native/off installs no hook and takes no extra session snapshots.
+	if game.betaSilk != nil {
+		hooks = append(hooks, func(nowMs int64) []simulation.DivisionFrames {
+			return game.betaSilkTick(ticker, nowMs)
+		})
+	}
+	ticker = worldsession.NewTicker(game.hub, game.items.NpcRoster, hooks...)
 	ticker.Source.(*worldsession.Bridge).PopulationLease = game.items.CharacterPopulationLease
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}
 	// A peer's spawn row is preceded by the item references it names (#340).
