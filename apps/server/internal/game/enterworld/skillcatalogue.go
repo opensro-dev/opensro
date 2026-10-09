@@ -84,7 +84,11 @@ type SkillUiRow struct {
 	// HoldsCaster marks a cast whose WAIT the server never releases while
 	// its object stands (a Force wall, pw): the client keeps the caster in
 	// action state 2, rooted, until the object's retirement cancels it.
-	HoldsCaster   bool                `json:"holdsCaster,omitempty"`
+	HoldsCaster bool `json:"holdsCaster,omitempty"`
+	// Chain marks a sequence root (ChainNext set, not itself a stage). Its
+	// cast stays open through every server-owned stage (extendChainBracket),
+	// far past ActionMs, so the client holds the caster until the close.
+	Chain         bool                `json:"chain,omitempty"`
 	Masteries     [2]SkillRequirement `json:"masteries"`
 	Prerequisites [3]SkillRequirement `json:"prerequisites"`
 	// Admit is what the client needs to replay Skill_ValidatePrerequisites
@@ -306,6 +310,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 				projection.UI.Admit = skillUiAdmit(row)
 			}
 			projection.UI.HoldsCaster = row.Wall.Pinned
+			projection.UI.Chain = row.ChainNext != 0 && !row.ChainSub
 			if row.SpeedBuff.Present {
 				projection.UI.SpeedBuff = &SkillUiSpeedBuff{Active: row.SpeedBuff.Active}
 			}

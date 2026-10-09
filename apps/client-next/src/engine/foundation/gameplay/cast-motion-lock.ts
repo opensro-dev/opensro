@@ -22,6 +22,10 @@ server sends no WAIT release for it (CastLifecycle_ProcessPersistent 584337),
 so the caster holds action state 2, rooted in the casting pose, until the
 wall's retirement cancels the cast (holdsCaster).
 
+A sequence root (chain) is the same: its linked stages run on the root's
+decoration, which reaches its last motion stage only with the last stage,
+so the lock holds until the server's close retires the cast.
+
 ===========================================================================
 */
 import type { CastState } from "@/engine/contracts/gameplay";
@@ -35,7 +39,7 @@ Owns the action window of each catalogued skill.
 ================
 */
 export function createCastMotionLock() {
-	let windows = new Map<number, number>(), held = new Set<number>();
+	let windows = new Map<number, number>(), held = new Set<number>(), chained = new Set<number>();
 	return {
 		/*
 		================
@@ -45,13 +49,15 @@ export function createCastMotionLock() {
 		================
 		*/
 		catalog( rows: readonly SkillMetadata[] ) {
-			const next = new Map<number, number>(), holding = new Set<number>();
+			const next = new Map<number, number>(), holding = new Set<number>(), chaining = new Set<number>();
 			for ( const row of rows ) {
 				if ( row.actionMs ) next.set( row.id, row.actionMs );
 				if ( row.holdsCaster ) holding.add( row.id );
+				if ( row.chain ) chaining.add( row.id );
 			}
 			windows = next;
 			held = holding;
+			chained = chaining;
 		},
 		/*
 		================
@@ -67,6 +73,8 @@ export function createCastMotionLock() {
 			for ( const cast of casts ) {
 				if ( cast.caster !== caster || cast.resultOnly || cast.cancelledAtMs !== undefined ) continue;
 				if ( held.has( cast.skill ) ) return true;
+				// A sequence root holds until the server's close requests it.
+				if ( chained.has( cast.skill ) && cast.cancellationRequestedAtMs === undefined ) return true;
 				const window = windows.get( cast.skill );
 				if ( window === undefined ) {
 					if ( committed ) return true;
@@ -84,6 +92,7 @@ export function createCastMotionLock() {
 		clear() {
 			windows = new Map();
 			held = new Set();
+			chained = new Set();
 		}
 	};
 }

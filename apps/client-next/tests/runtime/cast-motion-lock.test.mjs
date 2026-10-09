@@ -100,6 +100,20 @@ test("a skill without a known window keeps the committed-command fallback", () =
 	assert.equal( lock.locked( [ cast( {} ) ], LOCAL, 10, false ), false );
 });
 
+test("a sequence root holds its caster through its linked stages until the server closes it", () => {
+	// SKILL_EU_WIZARD_FIREA_SPRAY_B_01 (Salamander Blow) roots six linked stages;
+	// the server keeps the root's cast open through them (extendChainBracket).
+	const SALAMANDER_BLOW = 8918;
+	const lock = createCastMotionLock();
+	lock.catalog( [ { ...skill( SALAMANDER_BLOW, 1500 ), chain: true } ] );
+	const root = cast( { skill: SALAMANDER_BLOW, receivedAtMs: 0 } );
+	assert.ok( lock.locked( [ root ], LOCAL, 6000, false ), "the caster walked out between linked stages" );
+	assert.ok(
+		!lock.locked( [ { ...root, cancellationRequestedAtMs: 6000 } ], LOCAL, 6001, false ),
+		"the server's close left the caster held"
+	);
+});
+
 test("a Force wall's cast roots its caster until the wall retires", () => {
 	// SKILL_CH_COLD_BINGBYEOK_A_01 (Crystal Wall): its WAIT is never released.
 	const CRYSTAL_WALL = 99;

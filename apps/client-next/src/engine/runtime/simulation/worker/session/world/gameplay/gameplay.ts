@@ -669,8 +669,10 @@ holds until it ends, as before.
 		return combat.state().casts.some( c => {
 			if ( c.caster !== localGid || c.cancelledAtMs !== undefined ) return false;
 			const row = catalog.find( row => row.id === c.skill );
-			// A wall's cast holds until the wall retires (cast-motion-lock).
+			// A wall's cast holds until the wall retires, a sequence root's until
+			// the server closes it after its last linked stage (cast-motion-lock).
 			if ( row?.holdsCaster ) return true;
+			if ( row?.chain && c.cancellationRequestedAtMs === undefined ) return true;
 			const actionMs = row?.actionMs;
 			return !actionMs || c.receivedAtMs === undefined || now - c.receivedAtMs < actionMs;
 		} );

@@ -67,6 +67,9 @@ export interface SkillMetadata {
 	// A Force wall's cast: the server never releases its WAIT while the wall
 	// stands, so the caster stays in action state 2, rooted (cast-motion-lock).
 	readonly holdsCaster?: boolean;
+	// A sequence root: the server keeps its cast open through every linked
+	// stage (extendChainBracket), past actionMs, until its close arrives.
+	readonly chain?: boolean;
 	// The row's 58D8F0 inputs (press-admission.ts): the local press is
 	// predicted only when the server will admit it.
 	readonly admit?: PressAdmit;
@@ -230,6 +233,7 @@ export function skillCatalog( value: unknown ): readonly SkillMetadata[] {
 			...(ui.mpPercent ? { mpPercent: uint( ui.mpPercent, 65535 ) } : {}),
 			...(ui.targets ? { targets: uint( ui.targets, 0xffff ) } : {}),
 			...(ui.holdsCaster === true ? { holdsCaster: true } : {}),
+			...(ui.chain === true ? { chain: true } : {}),
 			...(ui.admit === undefined ? {} : { admit: parsePressAdmit( ui.admit ) }),
 			cooldownGroup: uint( ui.cooldownGroup ?? 0, 255 ),
 			masteries: requirements( ui.masteries, 2 ),

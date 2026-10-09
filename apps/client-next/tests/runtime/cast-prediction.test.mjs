@@ -349,6 +349,19 @@ test("a standing wall or aura holds the prediction only for its action time", ()
 	assert.equal( pressAt( 50, {}, castAt( 0 ) )?.skill, 30, "a finished action held the press" );
 });
 
+test("a sequence root holds the prediction past its own action time until the server closes it", () => {
+	// Salamander Blow roots six linked stages that the server runs on the
+	// root's open cast (extendChainBracket): a press between them used to
+	// predict a new cast the server then holds back.
+	const fixture = JSON.parse( readFileSync( FIXTURE, "utf8" ) ), row = fixture.scenarios[0];
+	const payload = Buffer.from( row.payloadHex, "hex" );
+	payload.writeUInt32LE( 30, 2 );
+	payload.writeUInt32LE( LOCAL_GID, 6 );
+	const castAt = at => game => game.receive( { opcode: row.opcode, payload }, at );
+	assert.equal( pressAt( 50, { chain: true }, castAt( 0 ) ), undefined, "a running sequence must hold" );
+	assert.equal( pressAt( 50, {}, castAt( 0 ) )?.skill, 30, "a plain row's finished action held the press" );
+});
+
 test("the windup sound plays at the press, not when the server answers", () => {
 	// Soft Guard of Ice: READY authors csk_cold_ready.wav. Held until the
 	// answer, its 0.25 s window had passed at production latency.
