@@ -1442,6 +1442,13 @@ state here before a command can claim a native wire conversation.
 				local?.appearanceState?.[0] === 2 &&
 				[ "move", "ground-move", "attack", "skill", "pickup", "cos-attack" ].includes( command.kind )
 			) return null;
+			// 698740 opens with CGInterface_IsInteractionBlocked (67D090): while an NPC
+			// talk, shop or storage holds the interaction lock (+0x4F4), a world click
+			// neither walks, attacks nor picks up. The window closes first.
+			if (
+				npcConversation.interactionLocked() &&
+				[ "move", "ground-move", "attack", "pickup", "cos-attack" ].includes( command.kind )
+			) return null;
 			// 6932D7..69338D: a ground click cancels a running action and a
 			// logout countdown before the seated and navigation checks.
 			if ( command.kind === "ground-move" || command.kind === "move" ) {

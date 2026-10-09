@@ -270,6 +270,29 @@ test("a service window can close the talk pane while retaining a target that mus
 	}
 });
 
+test("an open NPC function blocks world-click movement until the window closes", () => {
+	// 698740 opens with CGInterface_IsInteractionBlocked (67D090): the shop's
+	// interaction lock refuses the click, so the player cannot walk away from
+	// an open shop and keep trading. Closing the window releases the lock.
+	const f = fixture();
+	const move = now =>
+		f.game.command( { kind: "move", destination: { regionId: 1, x: 600, y: 0, z: 0, angle: 0 } }, now, undefined );
+	try {
+		f.game.command( { kind: "navigation", regionId: 1, bundle: navigation() }, 0, undefined );
+		f.select();
+		f.grant();
+		f.game.receive( { opcode: 0xb338, payload: Uint8Array.of( 1, 1, 0, 0, 0 ) }, 2 );
+		const before = f.sent.length;
+		assert.equal( move( 3 ), null, "a click is ignored while the shop holds the lock" );
+		assert.equal( f.sent.length, before );
+		f.game.command( { kind: "npc-close" }, 4, undefined );
+		f.game.receive( { opcode: RELEASE_RESULT, payload: Uint8Array.of( 1 ) }, 5 );
+		assert.equal( move( 6 )?.opcode, MOVEMENT_REQUEST, "the closed window lets the player walk" );
+	} finally {
+		f.game.dispose();
+	}
+});
+
 test("close and release barrier retire a conversation before the same NPC opens again", () => {
 	for ( const close of [ "npc-close", "release-target" ] ) {
 		const f = fixture();
