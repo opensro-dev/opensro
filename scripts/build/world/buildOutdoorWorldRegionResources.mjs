@@ -36,6 +36,8 @@ import { sha256Hex } from "../shared/hash.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { exists, writeJson } from "./io.mjs";
 import { writeIntoPublicTree } from "../shared/publicWrite.mjs";
+
+const NEWLINE_BYTE = 0x0a;
 import { parseJmxMapObjectPlacementO2, readJmxMapObjectInfo, readJmxMapTileCatalog } from "./jmx/index.mjs";
 import { buildJmxWorldRegionBundle } from "./maploader/buildMapLoaderRegionBundle.mjs";
 import { buildTitleSectorObjectResources } from "./objects/buildTitleSectorObjectResources.mjs";
@@ -630,8 +632,9 @@ async function buildOutdoorSharedObjectResources( options ) {
 		const outputPath = publicPathToFile( publicPath, publicRoot );
 		// Content-addressed: a forced rebuild still leaves identical bytes alone,
 		// so their mtimes, sidecars and pack hashes stay fresh.
-		if ( options.force || !(await exists( outputPath )) ) await writeIntoPublicTree( outputPath, bytes );
-		else claimPublicFile( outputPath );
+		if ( options.force || !(await exists( outputPath )) ) {
+			await writeIntoPublicTree( outputPath, publishedJson( bytes ) );
+		} else claimPublicFile( outputPath );
 
 		meshFiles.push( {
 			sourcePath: mesh.sourcePath,
@@ -856,6 +859,24 @@ export function outdoorRegionBundlePublicPath( id ) {
 
 /*
 ================
+publishedJson
+
+The bytes the JSON pass leaves on disk for one of this builder's records
+(jsonAssetCompression.mjs minifyJsonBytes): JSON.stringify output loses only
+its trailing newline. Writing that form directly stops every rebuild from
+rewriting 16k files the pass then rewrites and regzips again.
+
+The names and descriptors still hash the newline form, as they always have
+(a mesh file's sha256 is not its name's); renaming every mesh would be a
+data release of its own.
+================
+*/
+function publishedJson( bytes ) {
+	return bytes.at( -1 ) === NEWLINE_BYTE ? bytes.subarray( 0, -1 ) : bytes;
+}
+
+/*
+================
 writeCompactJson
 ================
 */
@@ -863,7 +884,7 @@ async function writeCompactJson( outputPath, value ) {
 	const text = `${JSON.stringify( value )}\n`;
 	// An unchanged bundle keeps its mtime: a rebuild of all 2123 regions
 	// otherwise sent every one back through the JSON gzip pass.
-	await writeIntoPublicTree( outputPath, Buffer.from( text, "utf8" ) );
+	await writeIntoPublicTree( outputPath, publishedJson( Buffer.from( text, "utf8" ) ) );
 	return text;
 }
 
