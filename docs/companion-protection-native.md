@@ -46,7 +46,11 @@ the token once and leave monster HP unchanged.
 
 The later server's `7516` free-battle mode request, `4E0D50` state changer and
 `4F0E90` group broadcast are separate from this v1.150 client's slot-8 capes.
-They have not been added by this fix. The adjacent mounted-owner/cape branch at
-`528FAB..529000`, transition callers, and complete soldier/companion behavior
-when entering and leaving cape combat still need a v1.150-scoped audit. Issue
-#218 remains open. No new gameplay mode or non-native exception is introduced.
+They have not been added by this fix. The adjacent branch at `528FAB..529000`
+rejects the owner and target sharing a free-battle team, except group 5. Its
+`4959D0` predicate reads group byte `+0x21EC` and accepts groups 1 through 5;
+it does not test mount state. PR #468 ports that same-team refusal.
+
+Transition callers and complete soldier/companion behavior when entering and
+leaving cape combat still need a v1.150-scoped audit. Issue #218 remains open.
+No new gameplay mode or non-native exception is introduced.
