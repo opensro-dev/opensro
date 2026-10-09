@@ -270,6 +270,9 @@ const ACTION_STATE_ARM = 1;
 const QUEUED_COMMANDS = 2;
 const ITEM_NOTICE_CATEGORY = 1;
 const ITEM_INTERACTION_REFUSAL = 0x35;
+// 6FCD50's skill-use notices: category 4, code 0x21 refuses a rider.
+const SKILL_NOTICE_CATEGORY = 4;
+const SKILL_RIDING_REFUSAL = 0x21;
 
 /*
 ================
@@ -2156,21 +2159,21 @@ state here before a command can claim a native wire conversation.
 					dirty = true;
 					return null;
 				}
+				// 6FCD50: after the cooldown, a rider (+0x434 == 1, on a horse or
+				// a transport) is refused at the press with notice 4/0x21
+				// (UIIT_MSG_SKILL_USE_FAIL_CANT_USESKILL_IN_RIDESTATE); nothing
+				// is sent. Dismount first.
+				if ( local?.mountedOn ) {
+					const notice = constantNativeNotice( SKILL_NOTICE_CATEGORY, SKILL_RIDING_REFUSAL );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return null;
+				}
 				// A press sent now supersedes any held one.
 				if ( skillPress.cancel() ) dirty = true;
-				// 58E0BF refuses an ao/pw row to a rider with 0x3009, which the
-				// native client answers with nothing: send it bare, with no
-				// cooldown stand-in or animation that would snap back.
-				if ( metadata?.needsFooting && local?.mountedOn ) {
-					const frame = command.gid ? combat.skill( skillId, command.gid ) : combat.skill( skillId );
-					sendFrame( frame );
-					skillPress.sent( now, skillId );
-					return frame;
-				}
 				if ( metadata?.groundTarget ) {
 					const from = movement.state().pose;
 					if ( !from || !command.query ) throw Error( "Point into the world to cast this skill" );
-					if ( local?.mountedOn ) throw Error( "Cannot cast while mounted" );
 					const to = movement.groundSkillGoal( command.query, now );
 					if ( !to ) return null;
 					const frame = positionSkillRequest( skillId, to );

@@ -420,11 +420,12 @@ test("a press the caster cannot pay MP for shows no cooldown", () => {
 ================
 cooldownAfterRidingPress
 
-Presses an untargeted ao/pw skill (5 s cooldown) as a rider or on foot and
-returns whether it was sent and the cooldown the client shows right after.
+Presses an untargeted skill (5 s cooldown) as a rider or on foot and
+returns whether it was sent, the cooldown the client shows right after and
+the notices raised.
 ================
 */
-function cooldownAfterRidingPress( mountedOn ) {
+function cooldownAfterRidingPress( mountedOn, needsFooting ) {
 	/** @type {{ opcode: number, payload: Uint8Array }[]} */
 	const sent = [];
 	const game = createGameplay( f => sent.push( f ) );
@@ -432,21 +433,31 @@ function cooldownAfterRidingPress( mountedOn ) {
 	game.bootstrap( {
 		simulationProtocolVersion: 1,
 		character: { skills: [ SLOW ] },
-		refSkillSnapshot: [ { ...row, ui: { ...row.ui, needsFooting: true } } ]
+		refSkillSnapshot: [ { ...row, ui: { ...row.ui, needsFooting } } ]
 	} );
 	const rider = { ...local, ...(mountedOn ? { mountedOn } : {}) };
 	game.seed( rider );
 	game.command( { kind: "skill", skillId: SLOW }, 1000, undefined, rider );
-	const shown = cooldowns.skillCooldown( game.take()?.skillCooldowns ?? [], SLOW, 0, 1010 );
+	const state = game.take();
+	const shown = cooldowns.skillCooldown( state?.skillCooldowns ?? [], SLOW, 0, 1010 );
 	game.dispose();
-	return { sent: sent.filter( f => f.opcode === 0x72cd && f.payload[1] === 4 ).length, shown };
+	return {
+		sent: sent.filter( f => f.opcode === 0x72cd && f.payload[1] === 4 ).length,
+		shown,
+		notices: (state?.notices ?? []).map( n => n.key )
+	};
 }
 
-test("a rider's footing press is sent with no cooldown stand-in", () => {
-	const riding = cooldownAfterRidingPress( 88 ), walking = cooldownAfterRidingPress( 0 );
-	assert.equal( riding.sent, 1, "the press never left: the server answers it" );
-	assert.equal( riding.shown, null, "a press the server refuses to a rider showed a cooldown" );
-	assert.ok( walking.shown, "an on-foot press stands in for its cooldown" );
+test("a rider's press is refused at the press, as 6FCD50", () => {
+	for ( const needsFooting of [ false, true ] ) {
+		const riding = cooldownAfterRidingPress( 88, needsFooting ),
+			walking = cooldownAfterRidingPress( 0, needsFooting );
+		assert.equal( riding.sent, 0, "a rider's skill press left the client" );
+		assert.equal( riding.shown, null, "a refused press showed a cooldown" );
+		assert.ok( riding.notices.includes( "UIIT_MSG_SKILL_USE_FAIL_CANT_USESKILL_IN_RIDESTATE" ) );
+		assert.equal( walking.sent, 1 );
+		assert.ok( walking.shown, "an on-foot press stands in for its cooldown" );
+	}
 });
 
 test("seated and mounted skill presses never invent a pending approach", () => {
@@ -484,8 +495,9 @@ test("seated and mounted skill presses never invent a pending approach", () => {
 					path === "targeted" ? target : undefined,
 					caster
 				);
-				assert.equal( sent.length, 1 );
-				assert.equal( sent[0].opcode, 0x72cd );
+				// 6FCD50 sends nothing for a rider.
+				assert.equal( sent.length, posture === "mounted" ? 0 : 1 );
+				if ( sent.length ) assert.equal( sent[0].opcode, 0x72cd );
 				const pressed = game.take();
 				assert.equal( pressed?.castPrediction, undefined );
 				assert.equal( pressed?.skillQueue, undefined );
