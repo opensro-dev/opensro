@@ -35,6 +35,7 @@ import { mapWithConcurrency } from "../shared/asyncUtils.mjs";
 import { sha256Hex } from "../shared/hash.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { exists, writeJson } from "./io.mjs";
+import { writeIntoPublicTree } from "../shared/publicWrite.mjs";
 import { parseJmxMapObjectPlacementO2, readJmxMapObjectInfo, readJmxMapTileCatalog } from "./jmx/index.mjs";
 import { buildJmxWorldRegionBundle } from "./maploader/buildMapLoaderRegionBundle.mjs";
 import { buildTitleSectorObjectResources } from "./objects/buildTitleSectorObjectResources.mjs";
@@ -627,11 +628,10 @@ async function buildOutdoorSharedObjectResources( options ) {
 		const sha256 = sha256Hex( bytes );
 		const publicPath = `${OUTDOOR_WORLD_OBJECT_MESH_ROOT_PUBLIC_PATH}/${sha256}.json`;
 		const outputPath = publicPathToFile( publicPath, publicRoot );
-		if ( options.force || !(await exists( outputPath )) ) {
-			await mkdir( path.dirname( outputPath ), { recursive: true } );
-			await writeFile( outputPath, bytes );
-		}
-		claimPublicFile( outputPath );
+		// Content-addressed: a forced rebuild still leaves identical bytes alone,
+		// so their mtimes, sidecars and pack hashes stay fresh.
+		if ( options.force || !(await exists( outputPath )) ) await writeIntoPublicTree( outputPath, bytes );
+		else claimPublicFile( outputPath );
 
 		meshFiles.push( {
 			sourcePath: mesh.sourcePath,
@@ -861,9 +861,9 @@ writeCompactJson
 */
 async function writeCompactJson( outputPath, value ) {
 	const text = `${JSON.stringify( value )}\n`;
-	await mkdir( path.dirname( outputPath ), { recursive: true } );
-	await writeFile( outputPath, text, "utf8" );
-	claimPublicFile( outputPath );
+	// An unchanged bundle keeps its mtime: a rebuild of all 2123 regions
+	// otherwise sent every one back through the JSON gzip pass.
+	await writeIntoPublicTree( outputPath, Buffer.from( text, "utf8" ) );
 	return text;
 }
 
