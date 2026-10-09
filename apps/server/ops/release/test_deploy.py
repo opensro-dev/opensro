@@ -300,6 +300,10 @@ class MaintenanceDeployTests(unittest.TestCase):
 		self.assertEqual(len(failed), 2)
 		self.assertEqual((self.authority / failed[0]).read_bytes(), b"schema 20")
 		self.assertTrue((self.authority / "state.before-upgrade-1.db").exists())
+		# A shard whose database went missing still gets its backup back.
+		(self.authority / "state.db").unlink()
+		deploy.restore_authorities(self.module, "sro-nomad", [], {}, {"global-official": row})
+		self.assertEqual((self.authority / "state.db").read_bytes(), b"schema 17")
 
 	# ================
 	# test_restore_refuses_before_stopping_anything

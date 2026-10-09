@@ -330,7 +330,9 @@ def restore_authorities(module, executable, arguments, environment, authorities)
 	for shard, backup in backups.items():
 		authority = authority_directory(module, shard)
 		database = authority / AUTHORITY_DB
-		status = database.stat()
+		# The restored file keeps the database owner's identity; a missing
+		# database takes the backup's, which the upgrade wrote as that owner.
+		status = (database if database.exists() else backup).stat()
 		for suffix in ("", "-wal", "-shm"):
 			current = authority / (AUTHORITY_DB + suffix)
 			if current.exists():

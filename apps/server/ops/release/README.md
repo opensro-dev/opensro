@@ -190,7 +190,11 @@ without them is refused before it changes anything.
    operator.
 
 After confirm, no workflow crosses the schema back; that takes restoring
-the upgrade's backup by hand.
+the upgrade's backup by hand. After any manual recovery, reopen the game by
+deleting `<module>/.state/cluster/maintenance-gate.json` (as root); the
+GameWorlds read it at every EnterWorld token, so no restart is needed.
+`maintenance_accounts` lists login usernames (case-insensitive), normally
+the probe account the release gate signs in with.
 
 ## Rollback and interrupted operations
 
