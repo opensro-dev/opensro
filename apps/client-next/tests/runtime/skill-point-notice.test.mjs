@@ -34,26 +34,26 @@ function skillPoints( value, notify ) {
 	return p;
 }
 
-test( "a notified loss prints the murderer skill-point message with the amount", () => {
+test("a notified loss prints the murderer skill-point message with the amount", () => {
 	assert.deepEqual( skillPointNotice( 5000, skillPoints( 3800, 1 ) ), {
 		key: "UIIT_MSG_JSERR_SINCE_YOU_DIE_IN_MURDERER_SP_DEPRIVED_BY_SERVER",
 		value: 1200,
 		nativeType: 0,
 		banner: true
 	} );
-} );
+});
 
-test( "a notified gain or no change prints the recovery message", () => {
+test("a notified gain or no change prints the recovery message", () => {
 	assert.equal( skillPointNotice( 100, skillPoints( 150, 1 ) ).key, "UIIT_STT_SKILL_POINT_RECOVER_RESULT" );
 	assert.equal( skillPointNotice( 100, skillPoints( 150, 1 ) ).value, 50 );
 	assert.equal( skillPointNotice( 100, skillPoints( 100, 1 ) ).value, 0 );
-} );
+});
 
-test( "a silent update, another type or an unknown balance prints nothing", () => {
+test("a silent update, another type or an unknown balance prints nothing", () => {
 	assert.equal( skillPointNotice( 5000, skillPoints( 3800, 0 ) ), null );
 	assert.equal( skillPointNotice( undefined, skillPoints( 3800, 1 ) ), null );
 	const gold = new Uint8Array( 10 );
 	gold[0] = 1;
 	gold[9] = 1;
 	assert.equal( skillPointNotice( 5000, gold ), null );
-} );
+});
