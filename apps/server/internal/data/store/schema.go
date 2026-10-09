@@ -53,7 +53,11 @@ func isVersionMismatch(err error) bool {
 // Version 17 retains trade-cargo owner aliases and personal weekly reward
 // contributions, with the shard-wide reward pools in metadata. Layout stays 6;
 // the preserving offline upgrade leaves existing records unchanged.
-const CurrentVersion = 17
+// Version 18 adds the optional ended-quest list (endedQuestIds, native quest
+// state 5: the KT blacksmith fork and QNO_CA_THIEF_5's reply). It shipped
+// first in a schema 17 server, so a schema 17 authority may already carry it;
+// the offline upgrade accepts those records as they are and rewrites none.
+const CurrentVersion = 18
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

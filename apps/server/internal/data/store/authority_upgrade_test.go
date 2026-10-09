@@ -420,3 +420,56 @@ func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
 		t.Fatalf("new war owner %+v %v", wars, err)
 	}
 }
+
+/*
+================
+TestEndedQuestUpgradeKeepsSchema17Records
+
+The schema 17 server 491cc962 already wrote endedQuestIds. Its authority
+upgrades to 18 with that record byte-for-byte in place, the backup still
+validates as schema 17, and the upgraded store reads the ended quests.
+================
+*/
+func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	c := seededCharacter()
+	c.EndedQuestIds = []uint32{231, 232}
+	if err := s.CreateCharacter(testDivision, "account", c); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preEndedQuestVersion)
+	backup, err := UpgradeAuthority(dir, true)
+	if err != nil || backup == "" {
+		t.Fatalf("upgrade %q: %v", backup, err)
+	}
+	old, err := connectDB(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer old.Close()
+	if _, err := loadDB(old, preEndedQuestVersion, CurrentLayoutVersion); err != nil {
+		t.Fatalf("schema 17 backup no longer validates: %v", err)
+	}
+	reopened := openTest(t, dir, newTestClock())
+	var after string
+	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatal("schema-only upgrade rewrote the character")
+	}
+	loaded := reopened.Characters().CharactersForDivision(testDivision)[0]
+	if len(loaded.EndedQuestIds) != 2 || loaded.EndedQuestIds[0] != 231 || loaded.EndedQuestIds[1] != 232 {
+		t.Fatalf("ended quests lost: %v", loaded.EndedQuestIds)
+	}
+	reopened.Close()
+	if _, err := UpgradeAuthority(dir, true); !errors.Is(err, ErrAuthorityCurrent) {
+		t.Fatalf("second upgrade = %v, want ErrAuthorityCurrent", err)
+	}
+}
