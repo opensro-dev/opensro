@@ -22,11 +22,13 @@ import (
 
 // CCOSManager_TryBindRideActor 4FC636 compares the 3D distance against 30.
 const (
-	cosMountRange               = 30
-	cosRideBusy           uint8 = 2
-	cosRideInvalidActor   uint8 = 3
-	cosRideOutOfRange     uint8 = 4
-	cosRideInvalidState   uint8 = 5
+	cosMountRange             = 30
+	cosRideBusy         uint8 = 2
+	cosRideInvalidActor uint8 = 3
+	cosRideOutOfRange   uint8 = 4
+	cosRideInvalidState uint8 = 5
+	// UIIT_MSG_CMSERR_CANT_GETOFF_FROM_RUNNING_HORSE (category 14, code 6).
+	cosRideRunning        uint8 = 6
 	cosRideUnknownActor   uint8 = 7
 	cosRideNotUsable      uint8 = 8
 	cosRideInvalidPosture uint8 = 12
@@ -64,6 +66,15 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 	// byte is set (moving, seated, changing posture, at a wall, frozen,
 	// stunned or asleep) and 5119FA one in battle state (+0x30 +0xD).
 	// Dismount is refused for neither.
+	//
+	// INFERENCE: v1.188's dismount (4FC6D0) stops a moving mount instead,
+	// but the v1.150 client answers code 6 with
+	// CMSERR_CANT_GETOFF_FROM_RUNNING_HORSE ("Can step down while the
+	// transport is moving", 777F60 -> category 14), so the v1.150 server
+	// refused a step-down while the mount moved: stop first, then dismount.
+	if payload[0] == 0 && rt.riderMoving(division, c) {
+		return cosRideFailure(cosRideRunning)
+	}
 	if payload[0] == 1 {
 		if rider := rt.characterSnapshot(division, c); rider != nil {
 			now := rt.Now().UnixMilli()
@@ -80,6 +91,28 @@ func (rt *Runtime) HandleCosRide(division string, c *enterworld.Character, paylo
 		return cosRideFailure(cosRideUnknownActor)
 	}
 	return rt.changeCosRide(division, c, snapshot, payload[0] == 1)
+}
+
+/*
+================
+riderMoving
+
+Whether the mount under c is still travelling (CGObjPC_IsMovingOrMountMoving
+4EF380 asks the vehicle): a mounted rider's movement is its own world's.
+================
+*/
+func (rt *Runtime) riderMoving(division string, c *enterworld.Character) bool {
+	if rt.Worlds == nil {
+		return false
+	}
+	rider := rt.characterSnapshot(division, c)
+	if rider == nil || rider.ActiveCOS == nil || !rider.ActiveCOS.Mounted {
+		return false
+	}
+	world := rt.Worlds.Snapshot(simulation.WorldKey(division, c.Name), func() simulation.WorldState {
+		return simulation.SeedWorldState(rider)
+	})
+	return world.MovingAt(rt.Now().UnixMilli())
 }
 
 /*

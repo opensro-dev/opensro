@@ -253,3 +253,44 @@ func TestCosMountRefusedWhileTheRiderHasAMotion(t *testing.T) {
 		t.Fatal("mount after the thaw refused")
 	}
 }
+
+/*
+================
+TestCosDismountRefusedWhileTheMountRuns
+
+The v1.150 client's code 6 (CMSERR_CANT_GETOFF_FROM_RUNNING_HORSE): a
+rider cannot step down while the mount is still travelling; once it stops,
+the same request dismounts.
+================
+*/
+func TestCosDismountRefusedWhileTheMountRuns(t *testing.T) {
+	c := testCharacter()
+	rt, clock := newTestRuntime(c, testCosSource(testItems()))
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3",
+		CurrentHP: 100, Summoned: true}
+	rt.BindPetSession(testDivision, c, 1)
+	key := simulation.WorldKey(testDivision, c.Name)
+	seed := func() simulation.WorldState { return simulation.SeedWorldState(c) }
+	vehicle := rt.PetPresentation(testDivision, c.Name).World.Spawn
+	rt.Worlds.Update(key, seed, func(w *simulation.WorldState) {
+		*w = simulation.SeedWorldState(c)
+		w.Spawn = vehicle
+	})
+	if rt.HandleCosRide(testDivision, c, wire.NewWriter(5).U8(1).U32(gid).Payload()); !c.ActiveCOS.Mounted {
+		t.Fatal("the fixture did not mount")
+	}
+	now := clock.Now().UnixMilli()
+	rt.Worlds.Update(key, seed, func(w *simulation.WorldState) {
+		w.MoveSegment = &simulation.MoveSegment{From: w.Spawn, StartedAtMs: now - 100, ArrivesAtMs: now + 1000}
+	})
+	dismount := wire.NewWriter(5).U8(0).U32(gid).Payload()
+	if result := rt.HandleCosRide(testDivision, c, dismount); !reflect.DeepEqual(result.Frames, cosRideFailure(cosRideRunning).Frames) || !c.ActiveCOS.Mounted {
+		t.Fatal("a running mount let the rider step down", result)
+	}
+	clock.Advance(2 * time.Second)
+	rt.HandleCosRide(testDivision, c, dismount)
+	if c.ActiveCOS.Mounted {
+		t.Fatal("a stopped mount refused the dismount")
+	}
+}
