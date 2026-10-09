@@ -3,7 +3,7 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 19 to schema 19, layout 7. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 20 to schema 20, layout 7. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6. Existing tables and
@@ -35,6 +35,7 @@ const preWorldPointVersion = 15
 const preTradeRewardVersion = 16
 const preEndedQuestVersion = 17
 const preJobRewardVersion = 18
+const preStallDecorationVersion = 19
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -111,6 +112,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	case preJobRewardVersion:
 		// Schema 18 ran at layouts 5 through 7 and has no job reward or
 		// ranking snapshot; its records read unchanged.
+		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preStallDecorationVersion:
+		// Schema 19 ran at layouts 5 through 7 and has no stall decoration;
+		// its records read unchanged.
 		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}

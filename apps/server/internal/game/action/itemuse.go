@@ -250,6 +250,20 @@ func (rt *Runtime) HandleItemUse(
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
 			return true
 		}
+		if family == itemUseStallDecoration {
+			// 49B9F0 case 3 -> 4A3F10: the item's reference id becomes the
+			// character's permanent stall decoration; an open stall keeps the
+			// booth it opened with until it reopens.
+			if len(tail) != 0 {
+				return false
+			}
+			character.StallDecoration = ref.RefObjID
+			remaining := rt.consumeItemUseRow(character, rowIndex)
+			result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse,
+				Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}}
+			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
+			return true
+		}
 		if family == itemUseFirework {
 			if len(tail) != 0 {
 				return false

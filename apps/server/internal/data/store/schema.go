@@ -60,7 +60,10 @@ func isVersionMismatch(err error) bool {
 // Version 19 adds the optional job reward (job.reward, _CharTrijob.Reward:
 // the thief's or hunter's weekly outcome) and the job ranking snapshot in
 // metadata. The offline upgrade rewrites no record.
-const CurrentVersion = 19
+// Version 20 adds the optional permanent stall decoration (stallDecoration,
+// the ITEM_MALL_BOOTH_* item a character applied). The offline upgrade
+// rewrites no record.
+const CurrentVersion = 20
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

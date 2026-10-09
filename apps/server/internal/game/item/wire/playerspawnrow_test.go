@@ -264,6 +264,8 @@ func TestDecodePlayerSpawnRowRoundTrip(t *testing.T) {
 		{RefObjID: 3643, TypeFlags: tidChClothesBA, OptLevel: 1},
 		{RefObjID: 107, TypeFlags: tidChBlade, OptLevel: 3},
 	}
+	row.StallTitle = "Cheap blades"
+	row.StallDecoration = 24701
 	tids := map[uint32]uint16{3643: tidChClothesBA, 107: tidChBlade}
 
 	for _, withTail := range []bool{true, false} {
@@ -278,7 +280,8 @@ func TestDecodePlayerSpawnRowRoundTrip(t *testing.T) {
 			decoded.RegionID != row.RegionID || decoded.X != row.X ||
 			decoded.Z != row.Z || decoded.Heading != row.Heading ||
 			decoded.WalkSpeed != 20 || decoded.RunSpeed != 50 ||
-			decoded.ScaleDenom != 100 || len(decoded.Equipment) != 2 {
+			decoded.ScaleDenom != 100 || len(decoded.Equipment) != 2 ||
+			decoded.StallTitle != row.StallTitle || decoded.StallDecoration != row.StallDecoration {
 			t.Fatalf("withTail=%v round trip drifted: %+v", withTail, decoded)
 		}
 		if withTail && decoded.AppearFlag != 1 {

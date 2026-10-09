@@ -511,3 +511,46 @@ func TestJobRewardUpgradeKeepsSchema18Records(t *testing.T) {
 		t.Fatalf("an upgraded shard starts at week %d", week)
 	}
 }
+
+/*
+================
+TestStallDecorationUpgradeKeepsSchema19Records
+
+Schema 19 has no stall decoration: its authority upgrades to 20 with
+every record in place, and a decoration written afterwards persists.
+================
+*/
+func TestStallDecorationUpgradeKeepsSchema19Records(t *testing.T) {
+	dir := t.TempDir()
+	s := openTest(t, dir, newTestClock())
+	c := seededCharacter()
+	if err := s.CreateCharacter(testDivision, "account", c); err != nil {
+		t.Fatal(err)
+	}
+	var before string
+	if err := s.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preStallDecorationVersion)
+	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
+		t.Fatalf("upgrade %q: %v", backup, err)
+	}
+	reopened := openTest(t, dir, newTestClock())
+	var after string
+	if err := reopened.db.QueryRow("SELECT record FROM characters WHERE division = ? AND id = ?", testDivision, c.ID).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if before != after {
+		t.Fatal("schema-only upgrade rewrote the character")
+	}
+	member := reopened.Characters().CharactersForDivision(testDivision)[0]
+	if !reopened.UpdateCharacter(member, "booth", func() bool { member.StallDecoration = 3848; return true }) {
+		t.Fatal("decoration refused")
+	}
+	reopened.Close()
+	again := openTest(t, dir, newTestClock())
+	if got := again.Characters().CharactersForDivision(testDivision)[0].StallDecoration; got != 3848 {
+		t.Fatalf("decoration after reopen %d", got)
+	}
+}

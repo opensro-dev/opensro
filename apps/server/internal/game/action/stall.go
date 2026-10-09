@@ -102,10 +102,11 @@ func (rt *Runtime) HandleStallCreate(division string, c *enterworld.Character, p
 	if code := rt.stallPlaceRefusal(division, c); code != 0 {
 		return refuse(code)
 	}
-	if err := rt.Stalls.Open(division, c.Name, title); err != nil {
+	decoration := c.StallDecorationAt(rt.Now().UnixMilli())
+	if err := rt.Stalls.Open(division, c.Name, title, decoration); err != nil {
 		return refuse(wire.StallErrHasStall)
 	}
-	opened := wire.Frame{Opcode: wire.OpStallOpened, Payload: wire.EncodeStallOpened(enterworld.ObjectIDForCharacter(c), title, 0)}
+	opened := wire.Frame{Opcode: wire.OpStallOpened, Payload: wire.EncodeStallOpened(enterworld.ObjectIDForCharacter(c), title, decoration)}
 	rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{opened})
 	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpStallCreateResult, Payload: wire.EncodeStallResult(0)}, opened}}
 }

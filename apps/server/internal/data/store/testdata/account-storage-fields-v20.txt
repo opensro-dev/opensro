@@ -1,0 +1,47 @@
+# account-storage record fields owned by store schema 20 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 21, its upgrade
+# step and account-storage-fields-v21.txt.
+capacity
+gold
+rows
+rows[].codename
+rows[].durability
+rows[].magicOptions
+rows[].plus
+rows[].recordId
+rows[].refObjId
+rows[].slot
+rows[].stackCount
+rows[].summon
+rows[].summon.codename
+rows[].summon.commandMode
+rows[].summon.container
+rows[].summon.container.capacity
+rows[].summon.container.rows
+rows[].summon.currentHp
+rows[].summon.currentMp
+rows[].summon.experience
+rows[].summon.gid
+rows[].summon.inventorySlot
+rows[].summon.level
+rows[].summon.mercenaryAttributes
+rows[].summon.mounted
+rows[].summon.name
+rows[].summon.refObjId
+rows[].summon.rentalExpiresAtUnix
+rows[].summon.rentalRemainingSeconds
+rows[].summon.rentals
+rows[].summon.rentals[].expiresAtUnix
+rows[].summon.rentals[].flag
+rows[].summon.rentals[].id
+rows[].summon.rentals[].kind
+rows[].summon.rentals[].remainingSeconds
+rows[].summon.rentals[].tag
+rows[].summon.satiety
+rows[].summon.stateFlags
+rows[].summon.summonGeneration
+rows[].summon.summoned
+rows[].tradeOwner
+rows[].transformRefObjId
+rows[].typeFlags
+rows[].varianceBits

@@ -69,14 +69,17 @@ Stall
 ================
 */
 type Stall struct {
-	Owner    string
-	Title    string
-	Greeting string
-	Open     bool
-	Network  bool
-	Mode     uint8
-	Slots    [Slots]*Slot
-	Visitors []string
+	Owner string
+	Title string
+	// Decoration is the booth item the stall shows, fixed when it opens
+	// (domain.Character.StallDecorationAt); zero is the default stall.
+	Decoration uint32
+	Greeting   string
+	Open       bool
+	Network    bool
+	Mode       uint8
+	Slots      [Slots]*Slot
+	Visitors   []string
 }
 
 /*
@@ -135,14 +138,14 @@ Open
 Starts a stall for owner, closed for business and empty.
 ================
 */
-func (r *Registry) Open(divisionID, owner, title string) error {
+func (r *Registry) Open(divisionID, owner, title string, decoration uint32) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	k := key(divisionID, owner)
 	if _, ok := r.stalls[k]; ok {
 		return ErrHasStall
 	}
-	r.stalls[k] = &Stall{Owner: owner, Title: title}
+	r.stalls[k] = &Stall{Owner: owner, Title: title, Decoration: decoration}
 	return nil
 }
 

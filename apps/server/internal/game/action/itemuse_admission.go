@@ -56,6 +56,7 @@ const (
 	itemUseStructureRepair
 	itemUseMercenary
 	itemUseGlobalChat
+	itemUseStallDecoration
 )
 
 /*
@@ -108,6 +109,10 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	// bomb, a siege item.
 	if ref.TypeIDs == [4]int64{3, 3, 6, 1} {
 		return itemUseFirework
+	}
+	// 49B9F0 case 3 (type 4 = 4): a stall booth decoration, kept for good.
+	if ref.TypeIDs == [4]int64{3, 3, 3, 4} {
+		return itemUseStallDecoration
 	}
 	// 49C2B0 case 6 (type 4 = 7): the repair hammer (npcrepair.go).
 	if ref.TypeIDs == [4]int64{3, 3, 13, 7} {

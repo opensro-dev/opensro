@@ -286,6 +286,11 @@ type Character struct {
 	// CompositeJobs are the premium package's limited uses and booth buffs
 	// (CTJ_CompositeItemKeeper works UIL1, UQL1, BFI1).
 	CompositeJobs []CompositeJob `json:"compositeJobs,omitempty"`
+	// StallDecoration is the stall booth decoration (ITEM_MALL_BOOTH_*, TID
+	// 3.3.3.4) the character applied for good: v1.188 CGItemExpendable_UseItem
+	// stores the item's reference id in the persistent record through
+	// 4A3F10. Zero is the country's default stall.
+	StallDecoration uint32 `json:"stallDecoration,omitempty"`
 	// PremiumClock is the running premium ticket's daily allotment
 	// (CTJ_PremiumKeeper); nil when no ticket runs.
 	PremiumClock *PremiumClock `json:"premiumClock,omitempty"`

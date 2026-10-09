@@ -74,6 +74,8 @@ type PeerAppearance struct {
 	AllianceCrest  uint32
 	// StallTitle names the stall the peer keeps (empty: none).
 	StallTitle string
+	// StallDecoration is that stall's booth item (zero: the default stall).
+	StallDecoration uint32
 	// FortSiegeAuthority is the guild sub-block's trailing team byte
 	// (client sub_869df0 @0x0086a1b2 -> sub_869940 -> CICPlayer+0x7e0),
 	// sourced from the member row's FortressRole - the SAME byte the
@@ -161,6 +163,7 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 		CrestParamB:        appearance.AllianceID,
 		CrestParamC:        appearance.AllianceCrest,
 		StallTitle:         appearance.StallTitle,
+		StallDecoration:    appearance.StallDecoration,
 		FortSiegeAuthority: appearance.FortSiegeAuthority,
 		SpawnSkills:        appearance.SpawnSkills,
 		WithAppearTail:     true,

@@ -128,6 +128,7 @@ func (p *sessionWorld) WorldSnapshot() simulation.SessionSnapshot {
 	if appearance != nil && p.rt.Stalls != nil {
 		if s, ok := p.rt.Stalls.Get(p.divisionID, captured.name); ok {
 			appearance.StallTitle = s.Title
+			appearance.StallDecoration = s.Decoration
 		}
 	}
 	if appearance != nil && p.rt.ActionSpeed != nil {

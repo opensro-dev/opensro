@@ -260,6 +260,8 @@ type PlayerSpawnRow struct {
 	// StallTitle is the title of the stall the player keeps (empty: none);
 	// it sets the title mode to 4 and rides after the guild sub-block.
 	StallTitle string
+	// StallDecoration is that stall's booth item reference (zero: default).
+	StallDecoration uint32
 	// WithAppearTail selects the 0x30D7 single-object form, which appends
 	// the appear byte the drop-in presentation reads (vt+0x68 sub_851590).
 	WithAppearTail bool
@@ -448,7 +450,7 @@ func (p PlayerSpawnRow) Encode() []byte {
 
 	// @0x0086a26d: a stall's [wstr title][u32 decoration] -> +0x75C/+0x754.
 	if p.StallTitle != "" {
-		w.WStr(p.StallTitle).U32(0)
+		w.WStr(p.StallTitle).U32(p.StallDecoration)
 	}
 
 	// @0x0086a2ff: action-progress seconds -> +0x780 (sub_8686a0).
@@ -648,7 +650,7 @@ func DecodePlayerSpawnRowWithSkills(payload []byte, tidByRef map[uint32]uint16, 
 		if out.StallTitle, err = r.WStr(); err != nil {
 			return out, err
 		}
-		if _, err = r.U32(); err != nil { // decoration
+		if out.StallDecoration, err = r.U32(); err != nil { // decoration
 			return out, err
 		}
 	}
