@@ -372,6 +372,16 @@ Gain changes preserve live source identity, authored weighting and timers.
 	return {
 		/*
 ================
+effectsEnabled
+
+Cue owners must reject muted triggers before consuming native countdowns.
+================
+		*/
+		effectsEnabled() {
+			return !preferences.muteEffects && preferences.effects > 0;
+		},
+		/*
+================
 options
 ================
 		*/

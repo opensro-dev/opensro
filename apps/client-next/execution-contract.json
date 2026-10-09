@@ -684,7 +684,8 @@
 			"consumer": "src/engine/runtime/characters/characters.ts",
 			"provider": "src/engine/runtime/audio/audio.ts",
 			"functions": [
-				"enqueue"
+				"enqueue",
+				"effectsEnabled"
 			]
 		},
 		{
@@ -700,7 +701,8 @@
 			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
 			"provider": "src/engine/runtime/audio/audio.ts",
 			"functions": [
-				"enqueue"
+				"enqueue",
+				"effectsEnabled"
 			]
 		},
 		{
@@ -3632,7 +3634,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "7f7d924cd01ecf5654eca4c466013e3310b3bcd878f7c307f395ce0797f4dd80",
+			"sourceSha256": "b93de1366cb292d6231d1dce2ca7a175aab896650bf69078438cef13c702823f",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

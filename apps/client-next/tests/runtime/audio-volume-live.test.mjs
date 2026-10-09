@@ -14,6 +14,41 @@ import assert from "node:assert/strict";
 const { createAudio } = await import( "../../src/engine/runtime/audio/audio.ts" );
 const { initialAudioOptions, audioAmplitude } = await import( "../../src/engine/foundation/audio/options.ts" );
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
+const { createCharacterSounds } = await import( "../../src/engine/runtime/characters/sounds/sounds.ts" );
+
+test("live effects preferences gate rule countdowns without muting other channels", t => {
+	const { audio } = fixture( t );
+	const heard = [];
+	const sounds = createCharacterSounds( event => heard.push( event ), () => 0, () => null, audio.effectsEnabled );
+	sounds.catalog( [ {
+		object: "CAT",
+		handle: "SND_STAND",
+		event1: "-",
+		skip: 1,
+		publicPath: "/assets/audio/sfx/cat.wav"
+	} ] );
+	for (
+		const patch of [
+			{ muteEffects: true },
+			{ effects: 0 },
+			{ muteBgm: true, muteEnvironment: true },
+			{ muteEffects: true },
+			{ effects: .02 },
+			{ effects: 50 }
+		]
+	) {
+		audio.options( { ...initialAudioOptions(), ...patch } );
+		sounds.emit(
+			String( heard.length ),
+			"CAT",
+			[ "SND_STAND" ],
+			{ player: false, berserk: false },
+			[ 0, 0, 0 ],
+			0
+		);
+	}
+	assert.equal( heard.length, 2 );
+});
 
 /*
 ================

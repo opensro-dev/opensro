@@ -447,7 +447,8 @@ export function startRuntime(
 				audio.enqueue,
 				random,
 				world.soundSurface,
-				presentation
+				presentation,
+				audio.effectsEnabled
 			)
 		);
 		// Platform installation publishes saved preferences synchronously. Install

@@ -1,5 +1,13 @@
-// Split verbatim from resourcePipeline.mjs (2026-07-28): audio cluster -
-// music/sfx copies plus the effectenvsnd/effectsound/regioninfo catalogs.
+/*
+===========================================================================
+
+audioResources.mjs - native audio tables and sound resource publication
+
+Publishes music and sound effects with their authored selection and cadence
+fields. All copies use the shared public-tree writer.
+
+===========================================================================
+*/
 import { copyIntoPublicTree } from "./publicWrite.mjs";
 import { copyFile, mkdir, readdir, stat, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -29,6 +37,11 @@ const regionInfoPath = path.join( textDataDir, "regioninfo.txt" );
 // resinfo copy's skilleffectset sound set is a strict subset (measured
 // 2026-07-29: 35 unique wavs, all also present among textdata's 169).
 const skillEffectPath = path.join( textDataDir, "skilleffect.txt" );
+/*
+================
+buildAudioResources
+================
+*/
 export async function buildAudioResources() {
 	const audioCatalog = await buildAudioCatalog();
 	await writeJson( path.join( audioPublicRoot, "catalog.json" ), audioCatalog );
@@ -62,6 +75,11 @@ export async function buildAudioResources() {
 		regionInfoCatalog
 	};
 }
+/*
+================
+buildAudioCatalog
+================
+*/
 async function buildAudioCatalog() {
 	const musicPublicRoot = path.join( audioPublicRoot, "music" );
 	await mkdir( musicPublicRoot, { recursive: true } );
@@ -111,6 +129,11 @@ async function buildAudioCatalog() {
  *   resource build; pass null (the default) to resolve layer publicPaths
  *   without copying any wav, which the byte-identity probe relies on.
  */
+/*
+================
+buildEffectEnvSndCatalog
+================
+*/
 async function buildEffectEnvSndCatalog( copiedSfxAssets = null ) {
 	const raw = await readText( effectEnvSndPath );
 	const profiles = [];
@@ -191,6 +214,11 @@ async function buildEffectEnvSndCatalog( copiedSfxAssets = null ) {
  * @param {Set<string>} [copiedSfxAssets] shared copy ledger from the resource
  *   build so wavs also referenced by the env catalog are copied only once.
  */
+/*
+================
+buildEffectSoundCatalog
+================
+*/
 export async function buildEffectSoundCatalog( copiedSfxAssets = null ) {
 	const raw = await readText( effectSoundPath );
 	const rules = [];
@@ -238,6 +266,11 @@ export async function buildEffectSoundCatalog( copiedSfxAssets = null ) {
  *   skipExisting?: boolean
  * }} options
  */
+/*
+================
+appendEffectSoundRules
+================
+*/
 async function appendEffectSoundRules(
 	raw,
 	{
@@ -284,7 +317,8 @@ async function appendEffectSoundRules(
 			event3,
 			// Column 7: the rule's skip count. CGEffSoundBody_PlayNamedSound (8F9280)
 			// swallows that many triggers between plays (COS_P_CAT SND_STAND 23).
-			skip: Math.max( 0, Math.trunc( Number( skip ) ) || 0 ),
+			// 8FB490 stores the tokenizer's integer into a signed 16-bit word.
+			skip: Number( skip ) << 16 >> 16,
 			folder: normalizeAssetPath( folder ),
 			fileName,
 			sourcePath,
@@ -303,6 +337,11 @@ async function appendEffectSoundRules(
 	}
 }
 
+/*
+================
+effectSoundRuleKey
+================
+*/
 function effectSoundRuleKey( { object, handle, skillId, event1, event2, event3, folder, fileName } ) {
 	return [ object, handle, skillId, event1, event2, event3, folder, fileName ]
 		.map( ( part ) => normalizeEffectSoundKeyPart( part ?? "" ) )
@@ -329,6 +368,11 @@ function effectSoundRuleKey( { object, handle, skillId, event1, event2, event3, 
  *   resource build; pass null (the default) to resolve publicPaths without
  *   copying any wav.
  */
+/*
+================
+buildSkillEffectSoundCatalog
+================
+*/
 async function buildSkillEffectSoundCatalog( copiedSfxAssets = null ) {
 	const raw = await readText( skillEffectPath );
 	/** @type {SkillEffectSoundEntry[]} */
@@ -384,6 +428,11 @@ async function buildSkillEffectSoundCatalog( copiedSfxAssets = null ) {
  * @param {Set<string> | null} copiedSfxAssets
  * @returns {Promise<SkillEffectSoundRef | undefined>}
  */
+/*
+================
+resolveSkillEffectSound
+================
+*/
 async function resolveSkillEffectSound( cell, copiedSfxAssets ) {
 	const fileName = cell ?? "";
 	if ( !fileName || fileName.toLowerCase() === "none" ) {
@@ -405,6 +454,11 @@ async function resolveSkillEffectSound( cell, copiedSfxAssets ) {
  * @returns {Promise<string | undefined>} undefined when the source wav is
  *   absent from the extract - callers ship no path rather than a broken one.
  */
+/*
+================
+copySfxReference
+================
+*/
 async function copySfxReference( sourcePath, copiedSfxAssets ) {
 	const normalized = normalizeAssetPath( sourcePath );
 	const publicPath = `/assets/audio/sfx/${normalized}`;
@@ -423,6 +477,11 @@ async function copySfxReference( sourcePath, copiedSfxAssets ) {
 	return publicPath;
 }
 
+/*
+================
+buildRegionInfoCatalog
+================
+*/
 async function buildRegionInfoCatalog() {
 	const raw = await readText( regionInfoPath );
 
@@ -436,6 +495,11 @@ async function buildRegionInfoCatalog() {
  * @typedef {{ sectorX: number, sectorY: number, coverage: "rect" | "all", rect?: { x: number, y: number, width: number, height: number } }} RegionInfoEntry
  * @typedef {{ kind: "town" | "field", name: string, alias: string | undefined, entries: RegionInfoEntry[] }} RegionInfoRegion
  */
+/*
+================
+parseRegionInfoRegions
+================
+*/
 function parseRegionInfoRegions( raw ) {
 	const regions = [];
 	/** @type {RegionInfoRegion | null} */
@@ -487,11 +551,21 @@ function parseRegionInfoRegions( raw ) {
 
 	return regions;
 }
+/*
+================
+parseAudioRange
+================
+*/
 function parseAudioRange( value ) {
 	const [min = 0, max = 0] = value.split( "~" ).map( ( part ) => Number( part.trim() ) || 0 );
 	return { min, max };
 }
 
+/*
+================
+normalizeDayPeriod
+================
+*/
 function normalizeDayPeriod( value ) {
 	if ( value === "\ubc24" ) {
 		return "night";
@@ -500,14 +574,29 @@ function normalizeDayPeriod( value ) {
 	return "day";
 }
 
+/*
+================
+normalizeAudioFileName
+================
+*/
 function normalizeAudioFileName( value ) {
 	return normalizeAssetPath( stripQuotes( value ) ).split( "/" ).at( -1 ) ?? "";
 }
 
+/*
+================
+normalizeEffectSoundKeyPart
+================
+*/
 function normalizeEffectSoundKeyPart( value ) {
 	return value.trim().toUpperCase();
 }
 
+/*
+================
+resolveMusicPublicPath
+================
+*/
 function resolveMusicPublicPath( originalName ) {
 	const mp3Name = normalizeAudioFileName( originalName ).replace( /\.ogg$/i, ".mp3" );
 	return `/assets/audio/music/${mp3Name}`;
@@ -515,6 +604,11 @@ function resolveMusicPublicPath( originalName ) {
 export { buildEffectEnvSndCatalog, buildRegionInfoCatalog, parseRegionInfoRegions, resolveMusicPublicPath };
 
 // CGWeatherManager::Initialize 8CF2D0 and SWorld option 25 setter 8A54C0.
+/*
+================
+buildWeatherSoundResources
+================
+*/
 export async function buildWeatherSoundResources( copiedSfxAssets = new Set() ) {
 	const paths = [];
 	for ( const name of [ "lightning1", "lightning2", "lightning3", "rain1" ] ) {
@@ -528,6 +622,11 @@ export async function buildWeatherSoundResources( copiedSfxAssets = new Set() ) 
 // Direct filename producers bypass effectsound.txt. Keep their resource closure
 // tied to the extracted native reference census, not a manually growing WAV list.
 // A published file is not a claim that its UI/effect/weather trigger is ported.
+/*
+================
+buildNativeDirectSoundResources
+================
+*/
 export async function buildNativeDirectSoundResources( copiedSfxAssets = new Set() ) {
 	const source = JSON.parse(
 		await readFile( new URL( "../reference/native-audio-surface.json", import.meta.url ), "utf8" )
@@ -560,6 +659,11 @@ export async function buildNativeDirectSoundResources( copiedSfxAssets = new Set
 }
 
 // CIFPlayerMiniInfo 6B6D00 requests this directly, outside effectsound.txt.
+/*
+================
+buildAlarmSoundResource
+================
+*/
 export async function buildAlarmSoundResource( copiedSfxAssets = new Set() ) {
 	const source = "prim/snd/ui/alarm_sound.wav";
 	const published = await copySfxReference( source, copiedSfxAssets );

@@ -77,9 +77,69 @@ test("the countdown belongs to the rule, shared by every actor using it", () => 
 
 test("a skip count outside the native int16 range rejects the catalog", () => {
 	const sounds = createCharacterSounds( () => {} );
-	for ( const skip of [ -1, 1.5, 0x8000 ] ) {
+	for ( const skip of [ -0x8001, 1.5, 0x8000 ] ) {
 		assert.throws( () => sounds.catalog( [ rule( "COS_P_CAT", skip ) ] ), /Invalid sound rule/ );
 	}
+});
+
+test("muting returns before random selection and preserves the countdown", () => {
+	const heard = [];
+	let enabled = false, choices = 0;
+	const sounds = createCharacterSounds(
+		event => heard.push( event ),
+		() => {
+			choices++;
+			return 0;
+		},
+		() => AT,
+		() => enabled
+	);
+	sounds.catalog( [ rule( "CAT", 1 ), { ...rule( "CAT", 1 ), publicPath: "/assets/audio/sfx/other.wav" } ] );
+	assert.equal( sounds.emit( "muted", "MISSING", [ "SND_STAND" ], CONTEXT, AT, 0 ), true );
+	assert.deepEqual( triggers( sounds, heard, "CAT", 3 ), [] );
+	assert.equal( choices, 0 );
+	enabled = true;
+	assert.deepEqual( triggers( sounds, heard, "CAT", 1 ), [ 0 ] );
+	enabled = false;
+	assert.deepEqual( triggers( sounds, heard, "CAT", 1 ), [] );
+	enabled = true;
+	assert.deepEqual( triggers( sounds, heard, "CAT", 2 ), [ 1 ] );
+	assert.equal( choices, 3 );
+});
+
+test("distance uses the native float stores at the 600-unit boundary", () => {
+	const heard = [];
+	const sounds = createCharacterSounds( event => heard.push( event ), () => 0, () => [ 600, .1, 0 ] );
+	sounds.catalog( [ rule( "CAT", 0 ) ] );
+	assert.deepEqual( triggers( sounds, heard, "CAT", 1 ), [ 0 ] );
+});
+
+test("signed skip values and the int16 countdown wrap match the native rule", () => {
+	const heard = [], sounds = createCharacterSounds( event => heard.push( event ) );
+	sounds.catalog( [ rule( "NEGATIVE", -1 ), rule( "WRAP", -0x8000 ) ] );
+	assert.deepEqual( triggers( sounds, heard, "NEGATIVE", 3 ), [ 0, 1, 2 ] );
+	assert.deepEqual( triggers( sounds, heard, "WRAP", 0x8002 ), [ 0, 0x8001 ] );
+});
+
+test("random variants keep separate countdowns and pickup bypasses distance", () => {
+	const heard = [];
+	let choice = 0;
+	const sounds = createCharacterSounds( event => heard.push( event ), () => choice, () => [ 601, 0, 0 ] );
+	sounds.catalog( [
+		{ ...rule( "ITEM", 1 ), handle: "SND_PICKUP" },
+		{ ...rule( "ITEM", 1 ), handle: "SND_PICKUP", publicPath: "/assets/audio/sfx/other.wav" }
+	] );
+	for ( const selected of [ 0, 1, 0, 1, 0, 1 ] ) {
+		choice = selected;
+		sounds.emit( String( selected ), "ITEM", [ "SND_PICKUP" ], CONTEXT, AT, 0 );
+	}
+	assert.deepEqual( heard.map( row => row.path ), [
+		"/assets/audio/sfx/ITEM.wav",
+		"/assets/audio/sfx/other.wav",
+		"/assets/audio/sfx/ITEM.wav",
+		"/assets/audio/sfx/other.wav"
+	] );
+	assert.ok( heard.every( row => row.spatial === false ) );
 });
 
 test("a positional trigger beyond 600 units is dropped before it counts", () => {

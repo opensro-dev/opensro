@@ -19,6 +19,7 @@ import type { SoundRule } from "../internal/presentation-contract";
 
 // 8FB490 reads the skip count as an int16.
 const MAX_SKIP = 0x7fff;
+const MIN_SKIP = -0x8000;
 // 8F9280 drops a positional sound beyond 600 units of the listener (it
 // compares the squared distance with 360000) before it counts the trigger.
 const MAX_RULE_DISTANCE_SQ = 360000;
@@ -46,7 +47,8 @@ createCharacterSounds
 export function createCharacterSounds(
 	play: ( event: SoundEvent ) => void,
 	choose: ( min: number, max: number ) => number = () => 0,
-	listener: () => readonly [number, number, number] | null | undefined = () => null
+	listener: () => readonly [number, number, number] | null | undefined = () => null,
+	enabled: () => boolean = () => true
 ) {
 	let serial = 0;
 	const cursors = new Map<
@@ -83,13 +85,18 @@ export function createCharacterSounds(
 		now: number,
 		surface?: string
 	): boolean {
+		// 8F92BC: mute is handled before lookup, RNG, or countdown changes.
+		if ( !enabled() ) return true;
 		const at = listener();
 		for ( const cue of cues ) {
 			const nonPositional = cue === "SND_PICKUP"; // 8F994A passes null position.
 			if ( !nonPositional && at ) {
-				const dx = position[0] - at[0], dy = position[1] - at[1], dz = position[2] - at[2];
+				// 8F92E2..8F931C store each delta and the squared sum as floats.
+				const dx = Math.fround( position[0] - at[0] ),
+					dy = Math.fround( position[1] - at[1] ),
+					dz = Math.fround( position[2] - at[2] );
 				// Native returns "handled" here: the trigger never reaches a countdown.
-				if ( dx * dx + dy * dy + dz * dz > MAX_RULE_DISTANCE_SQ ) return true;
+				if ( Math.fround( dx * dx + dy * dy + dz * dz ) > MAX_RULE_DISTANCE_SQ ) return true;
 			}
 			const matches = characterSoundKeys( profile, cue, context, surface ).map( key =>
 				rules.get( key )
@@ -100,7 +107,8 @@ export function createCharacterSounds(
 			const rule = matches[matches.length === 1 ? 0 : choose( 0, matches.length )]!;
 			// 8F9280 decrements before it plays: while the countdown stays at or
 			// above zero the trigger is swallowed, otherwise it resets and plays.
-			const left = (countdowns.get( rule ) ?? 0) - 1;
+			// 8F941C decrements a word; -32768 wraps to +32767.
+			const left = ((countdowns.get( rule ) ?? 0) - 1) << 16 >> 16;
 			if ( left >= 0 ) {
 				countdowns.set( rule, left );
 				return true;
@@ -181,7 +189,7 @@ export function createCharacterSounds(
 							rule.publicPath.includes( ".." ))) ||
 					(rule.volume !== undefined && !Number.isFinite( rule.volume )) ||
 					(rule.skip !== undefined &&
-						(!Number.isInteger( rule.skip ) || rule.skip < 0 || rule.skip > MAX_SKIP))
+						(!Number.isInteger( rule.skip ) || rule.skip < MIN_SKIP || rule.skip > MAX_SKIP))
 				) throw new Error( "Invalid sound rule" );
 				if (
 					[ rule.skillId, rule.event2, rule.event3 ].some( value =>
