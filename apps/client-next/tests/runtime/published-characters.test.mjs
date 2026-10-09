@@ -23,6 +23,7 @@ import {
 	storedMemberBytes
 } from "../../../../scripts/build/shared/packFormat.mjs";
 import { equipmentModelFiles, hwanModelFiles } from "../../../../scripts/build/assetPackOwnership.mjs";
+import { joinedNpcManifest } from "../../../../scripts/build/shared/npcManifest.mjs";
 
 const entry = "src/engine/runtime/assets/worker/model/model.ts";
 const publicRoot = CLIENT_PUBLIC_ROOT;
@@ -60,7 +61,7 @@ function sha256( bytes ) {
 }
 
 test("every published NPC model passes the production character decoder", () => {
-	const manifest = readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot );
+	const manifest = joinedNpcManifest( readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot ) );
 	const paths = new Set( Object.values( manifest.models ).map( model => model.glb ) );
 	assert.ok( paths.size > 0, "NPC manifest must contain models" );
 	const decoder = createModelDecoder();
@@ -75,7 +76,7 @@ test("every published NPC model passes the production character decoder", () => 
 
 test("packed NPC models match their published authority and pass the production decoder", () => {
 	const index = JSON.parse( readFileSync( path.join( publicRoot, "assets/packs/manifest.json" ), "utf8" ) );
-	const manifest = readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot );
+	const manifest = joinedNpcManifest( readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot ) );
 	const paths = new Set( Object.values( manifest.models ).map( model => model.glb ) );
 	const grouped = new Map();
 	for ( const resource of paths ) {
@@ -105,7 +106,7 @@ test("packed NPC models match their published authority and pass the production 
 });
 
 test("special COS references share authored state-50 models and matching VAT clips", () => {
-	const manifest = readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot );
+	const manifest = joinedNpcManifest( readPublishedAssetJsonSync( "/assets/npc/manifest.json", publicRoot ) );
 	const cos = Object.values( manifest.models ).filter( row => row.kind === "cos" );
 	// Reviewed 2026-10-02: every COS band whose BSR ships. Riding mounts,
 	// transports and quest companions author no state-50 emote; 582110's

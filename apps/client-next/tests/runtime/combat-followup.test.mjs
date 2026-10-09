@@ -19,6 +19,7 @@ import { characterMaterialVariants } from "../../../../scripts/build/char/materi
 import { convertedTexturePath } from "../../../../scripts/build/shared/jmxAssetIO.mjs";
 import { dataExtractedRoot } from "../../../../scripts/build/world/paths.mjs";
 import path from "node:path";
+import { joinedNpcManifest } from "../../../../scripts/build/shared/npcManifest.mjs";
 async function load( path ) {
 	return import( sourceFileUrl( "src/engine/" + path ).href );
 }
@@ -84,7 +85,9 @@ test("native grade chooses material slots independently of motion and enlargemen
 	assert.ok( existsSync( convertedTexturePath( "prim/mtrl/mob/oasis/redeyeghost_champ.ddj" ) ) );
 });
 test("published champion GLB changes material images while retaining identical animations and geometry", () => {
-	const m = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/npc/manifest.json", "utf8" ) );
+	const m = joinedNpcManifest(
+		JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/npc/manifest.json", "utf8" ) )
+	);
 	const row = m.models.MOB_CH_CHAKJI;
 	assert.equal( row.materialKind, 0 );
 	const json = p => {

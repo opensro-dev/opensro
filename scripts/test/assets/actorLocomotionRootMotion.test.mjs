@@ -20,6 +20,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { avatarToGlb } from "../../build/char/exportGlb.mjs";
+import { npcManifestModels } from "../../build/shared/npcManifest.mjs";
 
 const rebuildRoot = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), "..", "..", ".." );
 const publicRoot = CLIENT_PUBLIC_ROOT;
@@ -277,7 +278,7 @@ test("every holder-driven actor resource exports in-place locomotion", () => {
 	// COS (growth pets, transports) are counted apart from NPCs, monsters and
 	// avatars, so each census still flags a new or removed resource.
 	const resources = new Map();
-	for ( const entry of Object.values( npcManifest.models ) ) {
+	for ( const entry of Object.values( npcManifestModels( npcManifest ) ) ) {
 		if ( !entry.glb || resources.has( entry.glb ) ) continue;
 		resources.set( entry.glb, { label: `NPC resource ${entry.glb}`, cos: entry.kind === "cos" } );
 	}

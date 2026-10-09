@@ -359,7 +359,6 @@ apps/client-next/tests/oracles/legacy/packages/runtime/src/world/dungeon/parseDo
 apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/nativeObjectNavPayload.ts
 apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshRuntimeTypes.ts
 apps/client-next/tests/oracles/legacy/packages/wip-bridge/src/navmesh/navmeshWireDecode.ts
-apps/client-next/tests/runtime/authored-animation-bindings.test.mjs
 apps/client-next/tests/runtime/character-info.test.mjs
 apps/client-next/tests/runtime/snapshot-age.test.mjs
 apps/client-next/tests/runtime/ui-cleanup.test.mjs
@@ -402,7 +401,6 @@ scripts/build/char/materialVariants.mjs
 scripts/build/char/native/animationSetNames.ts
 scripts/build/char/native/scriptObjAnimationRegistry.ts
 scripts/build/char/native/skillEffectAnimationRegistry.ts
-scripts/build/char/resourceGlbOutput.mjs
 scripts/build/char/weatherEvents.mjs
 scripts/build/data/buildActionWndDataAsset.mjs
 scripts/build/data/buildCharacterDataCountryAsset.mjs
@@ -447,7 +445,6 @@ scripts/checks/lib/methodBlock.mjs
 scripts/clean_release_workspace.mjs
 scripts/lib/clipOracleWalkPlane.mjs
 scripts/lib/missionMovementFixture.mjs
-scripts/lib/npcAnimationContactMarkers.mjs
 scripts/lib/probeCharacter.mjs
 scripts/lib/probeEndpoints.mjs
 scripts/lib/probeTransportProtocol.mjs

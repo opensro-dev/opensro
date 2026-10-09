@@ -110,6 +110,34 @@ function admitDeathModel( row: Resource & { requiredBy?: unknown; }, deaths: Map
 
 /*
 ================
+joinModelResources
+
+The NPC manifest stores each baked model once under its BSR and keeps one
+slim row per reference (npcManifest.mjs, v9); a row is its resource with
+the reference's own fields over it. A row naming a BSR the file does not
+hold is a broken publication.
+================
+*/
+function joinModelResources(
+	models: Resource[] | Record<string, Resource> | undefined,
+	resources: Record<string, Partial<Resource>>
+): Record<string, Resource> {
+	const joined: Record<string, Resource> = {};
+	for ( const [codename, row] of Object.entries( models ?? {} ) ) {
+		const bsr = (row as { bsr?: unknown; }).bsr;
+		if ( typeof bsr !== "string" ) {
+			joined[codename] = row;
+			continue;
+		}
+		const resource = resources[bsr];
+		if ( !resource || typeof resource !== "object" ) throw Error( "Missing model resource " + bsr );
+		joined[codename] = { ...resource, ...row } as Resource;
+	}
+	return joined;
+}
+
+/*
+================
 createPresentationCatalog
 ================
 */
@@ -205,6 +233,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 					skillAudioRows?: string[];
 					recoveryByCodename?: Record<string, number>;
 					models?: Resource[] | Record<string, Resource>;
+					resources?: Record<string, Partial<Resource>>;
 					dress?: typeof dress;
 					itemsByRefObjId?: typeof items;
 					rules?: SoundRule[];
@@ -219,6 +248,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						anchorOffset?: { x: number; y: number; z: number; };
 					}[];
 				};
+				if ( value.resources ) value.models = joinModelResources( value.models, value.resources );
 				if ( value.characterShadowSizes ) {
 					for ( const [id, size] of value.characterShadowSizes ) {
 						if (

@@ -92,7 +92,10 @@ export async function loadCrowdModels( renderer, actors ) {
 				"/assets/char/roster.json" :
 				"/assets/npc/manifest.json";
 			const catalog = await readCatalog( catalogPath );
-			const body = Object.values( catalog.models ).find( row => row.glb === id );
+			// The NPC manifest keeps each GLB on its BSR's resource (npc v9).
+			const body = Object.values( catalog.models ).find( row =>
+				(row.glb ?? catalog.resources?.[row.bsr]?.glb) === id
+			);
 			const motions = await readCatalog( "/assets/anim/manifest.json" );
 			const path = motions.models[body?.codename]?.animationSets?.[role[1]]?.[role[2]]?.url;
 			if ( typeof path !== "string" || !path.startsWith( "/assets/anim/" ) || !path.endsWith( ".ban" ) ) {

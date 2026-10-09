@@ -95,8 +95,9 @@ export async function buildNpcVatAssets( options = {} ) {
 		manifestPath,
 		settings: NPC_VAT_SETTINGS,
 		logTag: "npc-vat",
-		// models is a Record keyed by codename (buildNpcModelAssets.mjs), not an array.
-		getModels: ( npcManifest ) => Object.values( npcManifest.models ?? {} ),
+		// One VAT per baked model: the resources keyed by BSR (npcManifest.mjs)
+		// hold each GLB once, and every reference of it joins the VAT.
+		getModels: ( npcManifest ) => Object.values( npcManifest.resources ?? {} ),
 		classifyModel: ( model ) => {
 			if ( !model?.glb ) return "ignore";
 			return Array.isArray( model.clips ) &&

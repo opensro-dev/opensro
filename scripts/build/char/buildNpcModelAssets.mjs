@@ -85,6 +85,12 @@ import {
 	resourceGlbOutput
 } from "./resourceGlbOutput.mjs";
 import { gameRoot, publicAssetsRoot, retailTextdataRoot } from "../world/paths.mjs";
+import {
+	NPC_MANIFEST_FORMAT,
+	NPC_MANIFEST_VERSION,
+	npcManifestModels,
+	splitNpcManifestModels
+} from "../shared/npcManifest.mjs";
 
 const textdataDir = retailTextdataRoot;
 const publicAssets = publicAssetsRoot;
@@ -125,7 +131,9 @@ the VAT builder is the only owner allowed to regenerate it.
 export function preserveFreshNpcVatReferences( models, previousManifest, options = {} ) {
 	const publicAssetsRoot = options.publicAssetsRoot ?? publicAssets;
 	const previousVatContract = previousManifest?.vat;
-	const previousModels = Object.values( previousManifest?.models ?? {} );
+	// A v8 manifest holds joined entries already; the join leaves them as is.
+	const previousJoined = npcManifestModels( previousManifest );
+	const previousModels = Object.values( previousJoined );
 	if ( !previousVatContract || previousModels.length === 0 ) {
 		return { contract: null, preserved: 0, stale: 0 };
 	}
@@ -170,8 +178,8 @@ export function preserveFreshNpcVatReferences( models, previousManifest, options
 			stale += 1;
 			continue;
 		}
-		const previous = previousManifest.models?.[model.codename]?.glb === model.glb ?
-			previousManifest.models[model.codename] :
+		const previous = previousJoined[model.codename]?.glb === model.glb ?
+			previousJoined[model.codename] :
 			previousByGlb.get( model.glb );
 		const reference = previous?.vat;
 		if ( !reference ) continue;
@@ -906,17 +914,18 @@ export async function buildNpcModelAssets( options = {} ) {
 	}
 
 	const preservedVat = preserveFreshNpcVatReferences( models, previousManifest, { publicAssetsRoot: publicAssets } );
+	const { models: referenceRows, resources } = splitNpcManifestModels( models );
 	const manifest = {
-		format: "sro-mission-npc-models",
-		// v8: characterInfo death models (kind "death", 8E64F0).
-		version: 8,
+		format: NPC_MANIFEST_FORMAT,
+		version: NPC_MANIFEST_VERSION,
 		source:
 			"server NPC spawn roster + server-exported spawnable monster roster; PathCtl-owned in-place horizontal locomotion, complete native default CResAnimationStateTable event-map/time-warp payloads, BSR ModDataSound cursor tracks, and the unified skilleffect characterInfo sound + CICRide resource contract",
 		count: models.length,
 		builtCount: builtResources,
 		coveredCount: coveredModels,
 		reusedCount: reusedModels,
-		models: Object.fromEntries( models.map( ( m ) => [ m.codename, m ] ) ),
+		models: referenceRows,
+		resources,
 		...(preservedVat.contract ? { vat: preservedVat.contract } : {})
 	};
 	const failures = models.filter( ( model ) => model.error );

@@ -35,6 +35,7 @@ import { parseWeatherEvents } from "../char/weatherEvents.mjs";
 import { buildEffectProgramsAsset } from "../effects/buildEffectPrograms.mjs";
 import { refreshPrecompressedSidecars } from "../generatedManifestSidecars.mjs";
 import { publishBytesAtomically } from "../shared/atomicPublish.mjs";
+import { npcManifestModels } from "../shared/npcManifest.mjs";
 import {
 	buildAlarmSoundResource,
 	buildNativeDirectSoundResources,
@@ -263,7 +264,7 @@ async function produceEntityBsr( flags ) {
 	await buildEffectProgramsAsset();
 	if ( flags.has( "--rebuilt-npc" ) ) {
 		const npc = await readPublicJson( "/assets/npc/manifest.json" );
-		for ( const row of Object.values( npc.models ) ) {
+		for ( const row of Object.values( npcManifestModels( npc ) ) ) {
 			manifests.push(
 				row.glb,
 				...Object.values( row.materialVariants ?? {} ),

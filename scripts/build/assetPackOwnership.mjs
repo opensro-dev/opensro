@@ -21,6 +21,7 @@ its own group over the same paths.
 */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { npcManifestModels } from "./shared/npcManifest.mjs";
 
 // Native texture containers preserve authored mip levels alongside ordinary images.
 export const IMAGE_ASSET_EXTENSIONS = [ ".png", ".jpg", ".jpeg", ".dds", ".webp", ".cur", ".texture" ];
@@ -97,7 +98,7 @@ COS (pet and transport) models and their VAT artifacts from the NPC manifest.
 ================
 */
 export function cosModelFiles( npcManifest ) {
-	const rows = Object.values( npcManifest?.models ?? {} ).filter( ( row ) => row?.kind === "cos" );
+	const rows = Object.values( npcManifestModels( npcManifest ) ).filter( ( row ) => row?.kind === "cos" );
 	return unique( rows.flatMap( ( row ) => [ row.glb, ...(row.vat ? [ row.vat.manifest, row.vat.bin ] : []) ] ) );
 }
 

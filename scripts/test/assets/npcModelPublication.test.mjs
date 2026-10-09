@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { readPublishedAssetJson } from "../../lib/publishedAsset.mjs";
+import { npcManifestModels } from "../../build/shared/npcManifest.mjs";
 
 test("every NPC model and authored material variant has exactly one published pack owner", async () => {
 	const catalog = await readPublishedAssetJson( "/assets/npc/manifest.json" );
@@ -16,7 +17,7 @@ test("every NPC model and authored material variant has exactly one published pa
 	}
 	const packs = new Set( index.groups.flatMap( group => group.packs.map( pack => pack.path ) ) );
 	const failures = [];
-	for ( const [model, row] of Object.entries( catalog.models ) ) {
+	for ( const [model, row] of Object.entries( npcManifestModels( catalog ) ) ) {
 		if ( row.error ) continue;
 		for ( const file of [ row.glb, ...Object.values( row.materialVariants ?? {} ) ] ) {
 			const entries = owners.get( file?.toLowerCase() ) ?? [];

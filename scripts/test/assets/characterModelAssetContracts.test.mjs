@@ -38,6 +38,7 @@ import { loadDataAsset } from "../../build/shared/jmxAssetIO.mjs";
 import { sha256Hex } from "../../build/shared/hash.mjs";
 import { readPublishedAssetBytesSync, readPublishedAssetJsonSync } from "../../lib/publishedAsset.mjs";
 import { gameRoot, publicAssetsRoot, publicRoot, retailTextdataRoot } from "../../build/world/paths.mjs";
+import { joinedNpcManifest, NPC_MANIFEST_VERSION } from "../../build/shared/npcManifest.mjs";
 
 const textdataDir = retailTextdataRoot;
 const publicAssets = publicAssetsRoot;
@@ -396,7 +397,7 @@ test("characterdata identity duplicates fail instead of taking shard order", ( t
 });
 
 test("every characterInfo death model is published with native motions 4 and 36", () => {
-	const manifest = readJson( path.join( publicAssets, "npc", "manifest.json" ) );
+	const manifest = joinedNpcManifest( readJson( path.join( publicAssets, "npc", "manifest.json" ) ) );
 	const catalog = readJson( path.join( publicAssets, "npc", "animation-catalog.json" ) );
 	const entries = Object.values( manifest.models );
 	const owners = entries.filter( ( entry ) => entry.deathModel );
@@ -425,14 +426,14 @@ test("every characterInfo death model is published with native motions 4 and 36"
 });
 
 test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
-	const manifest = readJson( path.join( publicAssets, "npc", "manifest.json" ) );
+	const manifest = joinedNpcManifest( readJson( path.join( publicAssets, "npc", "manifest.json" ) ) );
 	const npcRoster = loadSpawnableNpcRoster();
 	const mobRoster = loadSpawnableMobRoster();
 	const cosRoster = enabledCosReferences( loadCharacterDataRows( textdataDir, { codenamePattern: /./ } ) );
 	const roster = [ ...npcRoster, ...mobRoster, ...cosRoster ];
 
 	assert.equal( manifest.format, "sro-mission-npc-models" );
-	assert.equal( manifest.version, 8 );
+	assert.equal( manifest.version, NPC_MANIFEST_VERSION );
 	// Fortress structures whose v1.150 BSR ships (the small guard towers do not).
 	const structureNames = new Set( loadFortressStructureRoster().map( ( ref ) => ref.codename ) );
 	const structureRows = Object.values( manifest.models ).filter( ( entry ) => entry.kind === "structure" );
@@ -459,7 +460,7 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 });
 
 test("NPC model outputs, animation policy, and byte metadata are internally consistent", () => {
-	const manifest = readJson( path.join( publicAssets, "npc", "manifest.json" ) );
+	const manifest = joinedNpcManifest( readJson( path.join( publicAssets, "npc", "manifest.json" ) ) );
 	const catalog = readJson( path.join( publicAssets, "npc", "animation-catalog.json" ) );
 	const entries = Object.values( manifest.models );
 	const successful = entries.filter( ( entry ) => !entry.error && entry.glb );
