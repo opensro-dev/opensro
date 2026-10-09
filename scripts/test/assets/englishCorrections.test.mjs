@@ -10,31 +10,17 @@ record framing and format placeholders. Stale corrections must fail closed.
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { completedEnglish, completeEnglishTextProjection } from "../../build/shared/englishCompletions.mjs";
 
-const CASES = [
-	[ "textdataname.txt", "SN_NPC_CH_SOLDIER_EA2", "Solder Sangnam [Teleport]", "Soldier Sangnam [Teleport]" ],
-	[ "textdataname.txt", "SN_ZONE_25031_2", "Karakoram South Sock", "Karakoram South Dock" ],
-	[ "textdataname.txt", "SN_ITEM_QNO_CH_EUROPE_3_02", "Blood Devil 's leaf", "Blood Devil's leaf" ],
-	[
-		"textuisystem.txt",
-		"UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_LEVEL_FOR_TELEPORT",
-		"Cannot transport because your level is too low.",
-		"Cannot transport because your level does not meet the requirement."
-	],
-	[
-		"textquest.txt",
-		"SN_CON_QSP_ALL_POTION_3_01",
-		"Collect  Purification Seed (%d)",
-		"Collect Purification Seed (%d)"
-	],
-	[
-		"textquest.txt",
-		"SN_CON_QSP_ALL_POTION_4",
-		"Collect  Purification Fruit (%d)",
-		"Collect Purification Fruit (%d)"
-	]
-];
+// Every reviewed correction, straight from the shared table.
+const TABLE = JSON.parse(
+	readFileSync( path.join( import.meta.dirname, "../../build/shared/englishCorrections.json" ), "utf8" )
+);
+const CASES = Object.entries( TABLE ).flatMap( ( [file, rows] ) =>
+	Object.entries( rows ).map( ( [key, row] ) => [ file, key, row.before, row.after ] )
+);
 
 test("reviewed English reaches catalog and server without changing other cells or framing", () => {
 	for ( const [file, key, before, after] of CASES ) {

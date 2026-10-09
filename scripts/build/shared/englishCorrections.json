@@ -1,0 +1,332 @@
+{
+	"textdataname.txt": {
+		"SN_ITEM_CH_TBLADE_07_C": {
+			"before": "Muhwang's Frozne Glavie",
+			"after": "Muhwang's Frozen Glavie"
+		},
+		"SN_ITEM_CH_TBLADE_07_C_RARE": {
+			"before": "Frozne Glavie",
+			"after": "Frozen Glavie"
+		},
+		"SN_ITEM_COS_P_BROWNIE_SCROLL_TT_DESC": {
+			"before": "<sml2>A Sylph that came from the Western Europe. Being a Sylph, the size is small, heigh being only 1/4 of a normal human being. Occasionally magic is used, however very feeble. Sylph is very smart and very friendly to humans.<br><br><strong><font color=\"255,236,219,156\">How To Use</font></strong><br>The time is applied when the scroll is used, and player must be level 5 or higher to be able to use.<br><br><strong><font color=\"255,236,219,156\">Restriction</font></strong><br>Cannot be summoned simultaneously with other Silk pets.</sml2>",
+			"after": "<sml2>A Sylph that came from the Western Europe. Being a Sylph, the size is small, height being only 1/4 of a normal human being. Occasionally magic is used, however very feeble. Sylph is very smart and very friendly to humans.<br><br><strong><font color=\"255,236,219,156\">How To Use</font></strong><br>The time is applied when the scroll is used, and player must be level 5 or higher to be able to use.<br><br><strong><font color=\"255,236,219,156\">Restriction</font></strong><br>Cannot be summoned simultaneously with other Silk pets.</sml2>"
+		},
+		"SN_ITEM_ETC_ARCHEMY_MATERIAL_AM_WOLF2": {
+			"before": "Dark Enery Wolf Hair",
+			"after": "Dark Energy Wolf Hair"
+		},
+		"SN_ITEM_MALL_GLOBAL_CHATTING_TT_DESC": {
+			"before": "<sml2>Allows chat messages to be sent that can be seen by all the players on the same server.<br><br><strong><font color=\"255,236,219,156\">How To Use</font></strong><br>When you use this item to send a server wide message, click the ok button after entering the chat messsage in the box.<br><br><strong><font color=\"255,236,219,156\">Restriction</font></strong><br>None</sml2>",
+			"after": "<sml2>Allows chat messages to be sent that can be seen by all the players on the same server.<br><br><strong><font color=\"255,236,219,156\">How To Use</font></strong><br>When you use this item to send a server wide message, click the ok button after entering the chat message in the box.<br><br><strong><font color=\"255,236,219,156\">Restriction</font></strong><br>None</sml2>"
+		},
+		"SN_ITEM_MALL_WAREHOUSE_TICKET": {
+			"before": "Long-range strorage ticket",
+			"after": "Long-range storage ticket"
+		},
+		"SN_ITEM_QNO_CA_THIEF_5_02_TT_DESC": {
+			"before": "HP recovery rate incresed by 5 times, duration 1 hour",
+			"after": "HP recovery rate increased by 5 times, duration 1 hour"
+		},
+		"SN_ITEM_QNO_CH_EUROPE_3_02": {
+			"before": "Blood Devil 's leaf",
+			"after": "Blood Devil's leaf"
+		},
+		"SN_ITEM_QSP_ALL_POTION_1_02": {
+			"before": "Curst heart",
+			"after": "Cursed heart",
+			"why": "Korean 저주받은 심장, a cursed heart."
+		},
+		"SN_MOB_RM_FEATHERMASK_CLON": {
+			"before": "Feather Cloke",
+			"after": "Feather Cloak",
+			"why": "Korean 페더 클로크, a feather cloak."
+		},
+		"SN_MOB_WC_DEVILBUG_CLON": {
+			"before": "Devil Bug larve",
+			"after": "Devil Bug larva"
+		},
+		"SN_MOB_WC_GHOSTBUG_CLON": {
+			"before": "Ghost Bug larve",
+			"after": "Ghost Bug larva"
+		},
+		"SN_MSKILL_FW_HAGIAZO_ATTACK05_TT_DESC": {
+			"before": "Skill of howling to sooth depressing heart when witnessing the foe not easily falling down. The tremendous howling causes damage to the surrounding foe, and brings them into panic conditions.",
+			"after": "Skill of howling to soothe depressing heart when witnessing the foe not easily falling down. The tremendous howling causes damage to the surrounding foe, and brings them into panic conditions."
+		},
+		"SN_NPC_AM_FERRY2": {
+			"before": "Priate Blackbeard",
+			"after": "Pirate Blackbeard"
+		},
+		"SN_NPC_CH_BEGGARBOY": {
+			"before": "Bagger Sochil",
+			"after": "Beggar Sochil",
+			"why": "Korean 거지 소칠, Sochil the beggar."
+		},
+		"SN_NPC_CH_SOLDIER_EA2": {
+			"before": "Solder Sangnam [Teleport]",
+			"after": "Soldier Sangnam [Teleport]"
+		},
+		"SN_SKILL_CH_BOW_AREA_C_STUDY": {
+			"before": "The third stage of Explosion Arrow Series is calle Devil arrow. It explodes like atrocious devils crying deep down in the darkness.",
+			"after": "The third stage of Explosion Arrow Series is called Devil arrow. It explodes like atrocious devils crying deep down in the darkness."
+		},
+		"SN_SKILL_CH_BOW_CHAIN_A_STUDY": {
+			"before": "Arrow Combo Attack Series begins from training to shoot two arrows in realy. Picks two arrows at one time and shoot them fast in relay. It is called 2 Arrow combo.",
+			"after": "Arrow Combo Attack Series begins from training to shoot two arrows in relay. Picks two arrows at one time and shoot them fast in relay. It is called 2 Arrow combo."
+		},
+		"SN_SKILL_CH_FIRE_DESCRY_B_STUDY": {
+			"before": "Insert dark lightening fire energy made with intensified inner energy into the eyes to detect hiding enemies.",
+			"after": "Insert dark lightning fire energy made with intensified inner energy into the eyes to detect hiding enemies."
+		},
+		"SN_SKILL_CH_FIRE_GIGONGTA_D_STUDY": {
+			"before": "The fourth skill of Fire Force Series is called Fire Soul to mean that the soul of a god who takes chargo of fire is put into it. Carries the force of Fire Souls that even demons familiar to the fire of Hell cannot endure to the enemy's heart to painful death.",
+			"after": "The fourth skill of Fire Force Series is called Fire Soul to mean that the soul of a god who takes charge of fire is put into it. Carries the force of Fire Souls that even demons familiar to the fire of Hell cannot endure to the enemy's heart to painful death."
+		},
+		"SN_SKILL_CH_FIRE_PASSIVE_A_STUDY": {
+			"before": "The Hwaryeong sect lays stress mainly on training the attack skills agreeable to their warlike and aggressive traits. The Fire Force Matery disciples gain their vigor and inner force by recieving the force of Fire and infusing it into the blood vessel and circulating it through. Its power depends on the intensity and level of training.",
+			"after": "The Hwaryeong sect lays stress mainly on training the attack skills agreeable to their warlike and aggressive traits. The Fire Force Mastery disciples gain their vigor and inner force by receiving the force of Fire and infusing it into the blood vessel and circulating it through. Its power depends on the intensity and level of training."
+		},
+		"SN_SKILL_CH_SPEAR_CHAIN_D_STUDY": {
+			"before": "In the third skill of the Chain Spear Attack Series is a move called Pluto. Like the king of Pluto strikes down, it has agreat power attack. It strikes 4 times continuously.",
+			"after": "In the third skill of the Chain Spear Attack Series is a move called Pluto. Like the king of Pluto strikes down, it has a great power attack. It strikes 4 times continuously."
+		},
+		"SN_SKILL_CH_SPEAR_FRONTAREA_B_TT_DESC": {
+			"before": "Sweep your spear twices to apply double attacks to the enemies in front.",
+			"after": "Sweep your spear twice to apply double attacks to the enemies in front."
+		},
+		"SN_SKILL_CH_SPEAR_PIERCE_D_STUDY": {
+			"before": "The motion of the user charging at the enemy looks like a hungry hawk flying at its prey. This is the fourth skill of Annihilating Blde Series.",
+			"after": "The motion of the user charging at the enemy looks like a hungry hawk flying at its prey. This is the fourth skill of Annihilating Blade Series."
+		},
+		"SN_SKILL_CH_WATER_CURE_C": {
+			"before": "Force cure-Condiion",
+			"after": "Force cure-Condition"
+		},
+		"SN_SKILL_EU_BARD_DANCEA_ROG_A_STUDY": {
+			"before": "Brightens party memebers' feelings by expressing vitality of life in dance, and saves MP when using it. Cannot be used simultaneously with other skills, and the effect will disappear when attacked. This skill will only work when you are within the distance of the music play effect of another player's music play.",
+			"after": "Brightens party members' feelings by expressing vitality of life in dance, and saves MP when using it. Cannot be used simultaneously with other skills, and the effect will disappear when attacked. This skill will only work when you are within the distance of the music play effect of another player's music play."
+		},
+		"SN_SKILL_EU_BARD_DANCEA_ROG_A_TT_DESC": {
+			"before": "Brightens party memebers' feelings by expressing vitality of life in dance, and saves MP when using it. Cannot be used simultaneously with other skills, and the effect will disappear when attacked. This skill will only work when you are within the distance of the music play effect of another player's music play.",
+			"after": "Brightens party members' feelings by expressing vitality of life in dance, and saves MP when using it. Cannot be used simultaneously with other skills, and the effect will disappear when attacked. This skill will only work when you are within the distance of the music play effect of another player's music play."
+		},
+		"SN_SKILL_EU_ROG_POISONA_FIELD_B_STUDY": {
+			"before": "Deadly poisoned seeds made from the vivious component of poison is hiddon in the ground, and will damage enemies that step on it.",
+			"after": "Deadly poisoned seeds made from the vicious component of poison is hidden in the ground, and will damage enemies that step on it."
+		},
+		"SN_SKILL_EU_ROG_POISONA_FIELD_B_TT_DESC": {
+			"before": "Deadly poisoned seeds made from the vivious component of poison is hiddon in the ground, and will damage enemies that step on it.",
+			"after": "Deadly poisoned seeds made from the vicious component of poison is hidden in the ground, and will damage enemies that step on it."
+		},
+		"SN_ZONE_25031_2": {
+			"before": "Karakoram South Sock",
+			"after": "Karakoram South Dock",
+			"why": "The Korean source says southern landing/dock, not a rock formation."
+		}
+	},
+	"texthelp.txt": {
+		"SRO_GGW_BK_BATTLEGUIDE": {
+			"before": "<sml2><strong>how to fight</strong><br><br>if you select a monster to hunt, the mouse icon turns to a sword. and if you click on it again at the moment, your character approaches and attack the monster automatically and keeps attacking unless you type other commands. (it's the same with double-clicking on it.) <br><br>you can attack the monster automatically with [ctrl]key + [selection] without double-clicking.<br><br><br><strong>how to do pvp</strong><br>to attack other palyers, you have to hold [alt] key and select the other character. you keep attacking them unless you type other commands.</sml2>",
+			"after": "<sml2><strong>how to fight</strong><br><br>if you select a monster to hunt, the mouse icon turns to a sword. and if you click on it again at the moment, your character approaches and attack the monster automatically and keeps attacking unless you type other commands. (it's the same with double-clicking on it.) <br><br>you can attack the monster automatically with [ctrl]key + [selection] without double-clicking.<br><br><br><strong>how to do pvp</strong><br>to attack other players, you have to hold [alt] key and select the other character. you keep attacking them unless you type other commands.</sml2>"
+		},
+		"SRO_GGW_BK_LEVELUPSTATPOINT": {
+			"before": "<sml2><strong>level up and stat point</strong><br><br>if you kill a monster, you gain a certain amount of experience. you can chek this by seeing the green experience bar in the bottom left of your screen being filled. if the bar is fulfuilled, you advance one level and gain 4 stat points. you can invest the stat point in hp or mp directly to grow your character. the higher leve monsters you hunt, the more experience you gain but it's riskier.</sml2>",
+			"after": "<sml2><strong>level up and stat point</strong><br><br>if you kill a monster, you gain a certain amount of experience. you can check this by seeing the green experience bar in the bottom left of your screen being filled. if the bar is filled, you advance one level and gain 4 stat points. you can invest the stat point in hp or mp directly to grow your character. the higher level monsters you hunt, the more experience you gain but it's riskier.</sml2>"
+		},
+		"SRO_GGW_BK_SKILLPONTFIND": {
+			"before": "<sml2><strong>skill point and skill learning</strong><br><br>if you kill a monster, you gain skill experience except character experience. as you gain skill expeirence, the sp bar is filled up in the bottom left of your screen. if this bar is fulfilled, you gain sp(skill point) 1. you can advance your mastery level with this point.<br><br>to acquire a skill, you have to advance the mastery level. the mastery refers to the skills, usually such a job as fighter, bowman, magician in the rpg game. if your mastery level increases, you can acquire the skill belonged to the mastery. and you can acquire the skill with sp(skill point).</sml2>",
+			"after": "<sml2><strong>skill point and skill learning</strong><br><br>if you kill a monster, you gain skill experience except character experience. as you gain skill experience, the sp bar is filled up in the bottom left of your screen. if this bar is fulfilled, you gain sp(skill point) 1. you can advance your mastery level with this point.<br><br>to acquire a skill, you have to advance the mastery level. the mastery refers to the skills, usually such a job as fighter, bowman, magician in the rpg game. if your mastery level increases, you can acquire the skill belonged to the mastery. and you can acquire the skill with sp(skill point).</sml2>"
+		},
+		"SRO_GGW_BO_MOUSEOPE": {
+			"before": "<sml2><strong>mouce controlling</strong><br><br>click the left button of the mouse -  move , select a target , select a button<br><br>double-click the left button of the mouse - attack 1<br><br>click the right button of the mouse - changes the view<br><br>use the wheel button of the mouse - zoom in / out , attack with a skill<br><br>[ctrl] key + left-click - attack 2<br><br>[alt] key + left-click - attack by force (pk attack)</sml2>",
+			"after": "<sml2><strong>mouse controlling</strong><br><br>click the left button of the mouse -  move , select a target , select a button<br><br>double-click the left button of the mouse - attack 1<br><br>click the right button of the mouse - changes the view<br><br>use the wheel button of the mouse - zoom in / out , attack with a skill<br><br>[ctrl] key + left-click - attack 2<br><br>[alt] key + left-click - attack by force (pk attack)</sml2>"
+		},
+		"SRO_GGW_INT_QUICKPARTY": {
+			"before": "<sml2><strong>4. quick party window</strong><br><br>the information of your party members is displayed. it displays the health and mgaic power and also the state of your party member.<br><br>the party member will be grayed out when he is out of the distance limit.<br><br>when your party member is dead, it'll be displayed in the window.</sml2>",
+			"after": "<sml2><strong>4. quick party window</strong><br><br>the information of your party members is displayed. it displays the health and magic power and also the state of your party member.<br><br>the party member will be grayed out when he is out of the distance limit.<br><br>when your party member is dead, it'll be displayed in the window.</sml2>"
+		},
+		"SRO_GGW_PG_ATTRIBUTE": {
+			"before": "<sml2><strong>additional attributes of an item</strong><br><br>[power]<br>increases power.<br><br>[intellect]<br>increases intellect.<br><br>[defence against the abnormal state]<br>reduce the time of being in the abnormal state by percentage.<br>usable only ot the accessories.<br><br>-  decreases the time of being frozen or frostbitten.<br>-  decreases the time of being burnt.<br>-  decreases the time of being electrically shocked.<br>-  decreases the time of being posioned.<br>-  decreases the time of being a zombie.<br><br>[indestructibility]<br>it prevents the item from being broken when reinforcing the equipment.<br>the index number is reduced when applied and if the number is 0, then its attribute disappears automatically.<br><br>[solid]<br>it prevents the tolerance of the item from being damaged when reinforcing the equipment.<br>the index number is reduced when applied and if the number is 0, then its attribute disappears automatically.<br><br>[luck]<br>increases the probability of success when equipped.<br>the index number is the reduction when applied and if the number is 0, then its attribute disappears automatically.<br></sml2>",
+			"after": "<sml2><strong>additional attributes of an item</strong><br><br>[power]<br>increases power.<br><br>[intellect]<br>increases intellect.<br><br>[defence against the abnormal state]<br>reduce the time of being in the abnormal state by percentage.<br>usable only on the accessories.<br><br>-  decreases the time of being frozen or frostbitten.<br>-  decreases the time of being burnt.<br>-  decreases the time of being electrically shocked.<br>-  decreases the time of being posioned.<br>-  decreases the time of being a zombie.<br><br>[indestructibility]<br>it prevents the item from being broken when reinforcing the equipment.<br>the index number is reduced when applied and if the number is 0, then its attribute disappears automatically.<br><br>[solid]<br>it prevents the tolerance of the item from being damaged when reinforcing the equipment.<br>the index number is reduced when applied and if the number is 0, then its attribute disappears automatically.<br><br>[luck]<br>increases the probability of success when equipped.<br>the index number is the reduction when applied and if the number is 0, then its attribute disappears automatically.<br></sml2>"
+		},
+		"SRO_GGW_PG_GROWTH": {
+			"before": "<sml2><strong>1. the way to grow your character</strong><br><br>to grow your character in the online world of silkroad, you have to advance your level. you can advance your level by hunting monsters. You can hunt them if you go to an open field or dungeon out of a village or a castle. To hunt monsters effectively, you have to manage your hp (stamina) and mp (magic power). If your hp is 0, then your character die. If your mp is insufficient, then you can't use magical or qigong skills. So you have to manage your hp and mp properly before going to hunt monsters.<br><br><strong>level up</strong><br>If you hunt a monster, you gain “level experience“. and if you gain a certain amount of level experience, you achieve \"level up\". if you achieve level up, you can increase hp and mp through stat points and equip higher level of weapons and defensive tools and learn more powerful skills.<br><br><strong>auto attack</strong><br>to hunt a monster, place your mouse cursor over the monster then it turns to a sword icon. double-click on it at this moment, then your character will automatically attack the monster. unless you type anything or act differently, your attack against the monster will continue. and you can do auto-attacking if you use [ctrl + select] even without double-clicking on it.<br><br><strong>recovery</strong><br>you have to restore hp and mp during combat if you are to run out of them soon. if you are not in the state of fighting, you can restore them a bit automatically. if you are sitting on an open field using [sit] key, you can restore a little bit more. and you can also restore them with a “recovery item“ which you can buy.<br><br><br><strong>abnormal state</strong><br>some monsters can cast the spell of “abnormal state“ on you. when you've caught in this spell, you can see through the [character's state window] in the upper left of your screen.<br><br><strong>* abnormal states</strong><br><strong>1. frozen</strong> – if you are frozen, you can't move or use skills over time. but if your character has a [tolerance] to the freezing attack, the time of being frozen is reduced.<br><strong>2. frostbitten</strong> – if you are frostbitten, your movement is slowered over time. but if your character has a [tolerance] to the frostbitting attack, the time of being frostbitten is reduced.<br><strong>3. electrically shocked</strong> – if you are electrically shocked, your dodge is reduced over time. but if your character has a [tolerance] to the electrically shocking attack, the time of being shocked is reduced.<br><strong>4. posioned</strong> – if you are posioned, you're given continuous damage over time. but if your character has a [tolerance] to the posioning attack, the time of being posioned is reduced.<br><strong>5. zombie</strong> – if you became a zombie and try to heal yourself, you'll be rather given the damage over time. but if your character has a [tolerance] to the zombie attack, the time of being a zombie is reduced.<br><br><strong>2. to cure the abnormal state</strong><br>the character in the abnormal state has to heal himself quickly by using “abnormal state healing item“ or “abnormal state recovery magic“. and you have to use a proper medicine by checking the symptoms of abnormal state. fore example, you've been damaged with 30 seconds of abnormal state but if you use just10 seconds effective recovery item then you are under the abnormal state during the rest 20 seconds.</sml2>",
+			"after": "<sml2><strong>1. the way to grow your character</strong><br><br>to grow your character in the online world of silkroad, you have to advance your level. you can advance your level by hunting monsters. You can hunt them if you go to an open field or dungeon out of a village or a castle. To hunt monsters effectively, you have to manage your hp (stamina) and mp (magic power). If your hp is 0, then your character die. If your mp is insufficient, then you can't use magical or qigong skills. So you have to manage your hp and mp properly before going to hunt monsters.<br><br><strong>level up</strong><br>If you hunt a monster, you gain “level experience“. and if you gain a certain amount of level experience, you achieve \"level up\". if you achieve level up, you can increase hp and mp through stat points and equip higher level of weapons and defensive tools and learn more powerful skills.<br><br><strong>auto attack</strong><br>to hunt a monster, place your mouse cursor over the monster then it turns to a sword icon. double-click on it at this moment, then your character will automatically attack the monster. unless you type anything or act differently, your attack against the monster will continue. and you can do auto-attacking if you use [ctrl + select] even without double-clicking on it.<br><br><strong>recovery</strong><br>you have to restore hp and mp during combat if you are to run out of them soon. if you are not in the state of fighting, you can restore them a bit automatically. if you are sitting on an open field using [sit] key, you can restore a little bit more. and you can also restore them with a “recovery item“ which you can buy.<br><br><br><strong>abnormal state</strong><br>some monsters can cast the spell of “abnormal state“ on you. when you've caught in this spell, you can see through the [character's state window] in the upper left of your screen.<br><br><strong>* abnormal states</strong><br><strong>1. frozen</strong> – if you are frozen, you can't move or use skills over time. but if your character has a [tolerance] to the freezing attack, the time of being frozen is reduced.<br><strong>2. frostbitten</strong> – if you are frostbitten, your movement is slowered over time. but if your character has a [tolerance] to the frostbitting attack, the time of being frostbitten is reduced.<br><strong>3. electrically shocked</strong> – if you are electrically shocked, your dodge is reduced over time. but if your character has a [tolerance] to the electrically shocking attack, the time of being shocked is reduced.<br><strong>4. posioned</strong> – if you are posioned, you're given continuous damage over time. but if your character has a [tolerance] to the posioning attack, the time of being posioned is reduced.<br><strong>5. zombie</strong> – if you became a zombie and try to heal yourself, you'll be rather given the damage over time. but if your character has a [tolerance] to the zombie attack, the time of being a zombie is reduced.<br><br><strong>2. to cure the abnormal state</strong><br>the character in the abnormal state has to heal himself quickly by using “abnormal state healing item“ or “abnormal state recovery magic“. and you have to use a proper medicine by checking the symptoms of abnormal state. for example, you've been damaged with 30 seconds of abnormal state but if you use just10 seconds effective recovery item then you are under the abnormal state during the rest 20 seconds.</sml2>"
+		}
+	},
+	"textquest.txt": {
+		"SN_CON_QSP_ALL_POTION_3_01": {
+			"before": "Collect  Purification Seed (%d)",
+			"after": "Collect Purification Seed (%d)"
+		},
+		"SN_CON_QSP_ALL_POTION_4": {
+			"before": "Collect  Purification Fruit (%d)",
+			"after": "Collect Purification Fruit (%d)"
+		},
+		"SN_TALK_QEV_CH_EVENT_KISAENG1_A_M1": {
+			"before": "Give 10 clothes and 10 poles and recieve the Taegeug flag.",
+			"after": "Give 10 clothes and 10 poles and receive the Taegeug flag."
+		},
+		"SN_TALK_QNO_CA_GORIA_7_16": {
+			"before": "Quest will end in 10 mintutes. Please hurry.",
+			"after": "Quest will end in 10 minutes. Please hurry."
+		},
+		"SN_TALK_QNO_CA_GORIA_7_17": {
+			"before": "Quest will end in 5 mintutes. Please hurry.",
+			"after": "Quest will end in 5 minutes. Please hurry."
+		}
+	},
+	"textuisystem.txt": {
+		"DE_UIIT_MSG_STATE_SKILL_CURSING_CHAOS": {
+			"before": "Confusion refers to the state where you see mixture of objects nearby, and cannot distinguish comrades from enemies. This status error is only affective on monsters, and confused monsters will attack the enemies of the caster.",
+			"after": "Confusion refers to the state where you see mixture of objects nearby, and cannot distinguish comrades from enemies. This status error is only effective on monsters, and confused monsters will attack the enemies of the caster."
+		},
+		"UIIT_CTL_WNETWORK_MERCHANT": {
+			"before": "Merchang",
+			"after": "Merchant"
+		},
+		"UIIT_MSG_FLEAMARKET_ERR_NOTHING_TO_SELL": {
+			"before": "Cannot open a new shop whithout the registered goods.",
+			"after": "Cannot open a new shop without the registered goods."
+		},
+		"UIIT_MSG_GUILDERR_SAME_GUILDNAME_EXIST": {
+			"before": "The selected guild name already exsists.",
+			"after": "The selected guild name already exists."
+		},
+		"UIIT_MSG_GUILDWARERR_REQUISITION_TIME_OUT": {
+			"before": "The leader of the selected guild dosen't respond.",
+			"after": "The leader of the selected guild doesn't respond."
+		},
+		"UIIT_MSG_GUILDWARERR_TARGET_MAX_HOSTILE_GUILD": {
+			"before": "Opposite guild can not make more hostile guile",
+			"after": "Opposite guild can not make more hostile guilds"
+		},
+		"UIIT_MSG_GUILDWAR_LOSEGUILD": {
+			"before": "Loose in a war with [%s]gild",
+			"after": "Defeat in a war with [%s] guild",
+			"why": "The loss twin of UIIT_MSG_GUILDWAR_WINERGUILD's Victory."
+		},
+		"UIIT_MSG_GUILDWAR_WINERGUILD": {
+			"before": "Victory in a war with [%s]gild",
+			"after": "Victory in a war with [%s] guild"
+		},
+		"UIIT_MSG_GUILD_ERROR_GUILD_EXIT_SIEGE": {
+			"before": "Cannot leave the alliance during the seige.",
+			"after": "Cannot leave the alliance during the siege."
+		},
+		"UIIT_MSG_GUILD_NAME_GRANT_INPUT": {
+			"before": "Enter the title to adress [%s]",
+			"after": "Enter the title to address [%s]"
+		},
+		"UIIT_MSG_GUILD_QUESTION_NAME_CONFIRM": {
+			"before": "Will you namel your guild as [%s]?",
+			"after": "Will you name your guild as [%s]?"
+		},
+		"UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_LEVEL_FOR_TELEPORT": {
+			"before": "Cannot transport because your level is too low.",
+			"after": "Cannot transport because your level does not meet the requirement.",
+			"why": "Korean 요구 레벨이 맞지 않아 (the required level does not match): the soldier teleports serve levels 1-20 (teleportlink condition 1), so the refusal usually meets a character above the range, never only below."
+		},
+		"UIIT_MSG_PARTYERR_ALL_LOCALMEMBER_LEFT": {
+			"before": "The party is to be dismissed due to insufficient umber of members",
+			"after": "The party is to be dismissed due to insufficient number of members"
+		},
+		"UIIT_MSG_PARTYMATCH_RECORD_COMPLETE": {
+			"before": "Party has succesfully joined the matching sysytem.",
+			"after": "Party has successfully joined the matching system."
+		},
+		"UIIT_MSG_PARTY_HOST_ROLE_DELEGATED": {
+			"before": "The leader position of  the pary is entrusted to [%s].",
+			"after": "The leader position of the party is entrusted to [%s]."
+		},
+		"UIIT_MSG_REINFORCERR_STUFF_CANT_BE_LOADED_MULTIPLE_TIME": {
+			"before": "Cannot put the item because the same one already exsists.",
+			"after": "Cannot put the item because the same one already exists."
+		},
+		"UIIT_MSG_REINFORCERR_TARGETEQUIP_CANT_BE_REINFORCED": {
+			"before": "The selected equiptment cannot be reinforced.",
+			"after": "The selected equipment cannot be reinforced."
+		},
+		"UIIT_MSG_STRGERR_CANT_DROP_EQUIPED_ITEM_DIRECTLY": {
+			"before": "Cannot drop the equpped item.",
+			"after": "Cannot drop the equipped item."
+		},
+		"UIIT_MSG_STRGERR_EQUIPITEM": {
+			"before": "Cannot equipt the selected item",
+			"after": "Cannot equip the selected item"
+		},
+		"UIIT_MSG_STRGERR_WAIT_FOR_JOBITEM_DETACH_COMPLETE": {
+			"before": "Cannot equip any job item for 10 minuites after unequipping it.",
+			"after": "Cannot equip any job item for 10 minutes after unequipping it."
+		},
+		"UIIT_MSG_TC_ERROR_OPEN_GOLD": {
+			"before": "Academy cannot be established due to insufficient amound of gold.",
+			"after": "Academy cannot be established due to insufficient amount of gold."
+		},
+		"UIIT_MSG_WARENETWORK_ERROR_FAIL": {
+			"before": "Registraion of item on stall network has failed.",
+			"after": "Registration of item on stall network has failed."
+		},
+		"UIIT_MSG_XMAS_EVENT_ERROR_INVENTORY": {
+			"before": "I can't give you a gift because you have no space available in the inventory.. \\n Hmm.. deposit your things in storage or sell them.. anyhow\\n first put away odd ands and ends like potions in the inventory and come back to me again..\\n make enough space",
+			"after": "I can't give you a gift because you have no space available in the inventory.. \\n Hmm.. deposit your things in storage or sell them.. anyhow\\n first put away odds and ends like potions in the inventory and come back to me again..\\n make enough space"
+		},
+		"UIIT_MSG_XMAS_EVENT_SO-OK": {
+			"before": "\"Hi, pretty sister and handsome brother, merry Christmas!! Yuhuh~\\nI am, in everybody's mouth that I am the most beautiful Santa, sent to offer gifts to all of you here to celebrate Christmass. Come to the Christmass tree and recieve your gifts.\\nOops! Wh",
+			"after": "\"Hi, pretty sister and handsome brother, merry Christmas!! Yuhuh~\\nI am, in everybody's mouth that I am the most beautiful Santa, sent to offer gifts to all of you here to celebrate Christmas. Come to the Christmas tree and receive your gifts.\\nOops! Wh"
+		},
+		"UIIT_STT_CAS_CUSTOMER_CENTER_REPORT_BUG": {
+			"before": "Bug Reprt",
+			"after": "Bug Report"
+		},
+		"UIIT_STT_COSNEWUI_TECHNOLOGY_SICKNESS": {
+			"before": "Abnomal state setting",
+			"after": "Abnormal state setting"
+		},
+		"UIIT_STT_INPUT_TTDESC_03": {
+			"before": "Opens character information window.  Can check basic information on character such as equpiment equipped status, character's strength, and intelligence from character information window.",
+			"after": "Opens character information window.  Can check basic information on character such as equipment equipped status, character's strength, and intelligence from character information window."
+		},
+		"UIIT_STT_INPUT_TTDESC_19": {
+			"before": "Opens the action window.  There are various feeling expression hot keys and different action imoticons such as open a stall or open an alchemy on anction window.",
+			"after": "Opens the action window.  There are various feeling expression hot keys and different action emoticons such as open a stall or open an alchemy on the action window."
+		},
+		"UIIT_STT_INPUT_TTDESC_22": {
+			"before": "Chage the view point.  View point chages on every click: Free view -> Third-party view -> Quarter view -> (again) Free view.",
+			"after": "Change the view point.  View point changes on every click: Free view -> Third-party view -> Quarter view -> (again) Free view."
+		},
+		"UIIT_STT_PARTY_INFO": {
+			"before": "Party informaiton",
+			"after": "Party information"
+		},
+		"UIIT_STT_QUESTGUIDE2": {
+			"before": "Qust Dictionary",
+			"after": "Quest Dictionary"
+		},
+		"UIIT_STT_VIDIO_TTDESC_11": {
+			"before": "Texture detail is the degree of texture detail.  An object or a thing's texture quailty will increase as texture detail increases.",
+			"after": "Texture detail is the degree of texture detail.  An object or a thing's texture quality will increase as texture detail increases."
+		},
+		"UILM_MSG_DETECTED_ABNORMAL_PROCESS": {
+			"before": "An abnomal execution of Silkroad program is found. (System Error)",
+			"after": "An abnormal execution of Silkroad program is found. (System Error)"
+		},
+		"UILM_STT_FARM_NAME": {
+			"before": "Fram Name",
+			"after": "Farm Name"
+		},
+		"UIO_MSG_CHAR_DEL_TIME": {
+			"before": "<sml2>Complete deletion of the selected character in <font color=\"255,255,208,81\">%d</font>days <font color=\"255,255,208,81\">%d</font>hours <font color=\"255,255,208,81\">%d</font>minuites left.</sml2>",
+			"after": "<sml2>Complete deletion of the selected character in <font color=\"255,255,208,81\">%d</font>days <font color=\"255,255,208,81\">%d</font>hours <font color=\"255,255,208,81\">%d</font>minutes left.</sml2>"
+		},
+		"UIO_MSG_ERROR_OVERLAP": {
+			"before": "The user is alread connected. In a case that the user was forced to exit due to error, it can be checked as still connected. Please try again 5 minutes later.",
+			"after": "The user is already connected. In a case that the user was forced to exit due to error, it can be checked as still connected. Please try again 5 minutes later."
+		},
+		"UIO_STT_CHAR_RECOVERY_CONFIRM": {
+			"before": "The character will be restored.\\nIf you restore it, the reservation will be canceled.\\nSo you can use it normally.\\nIf you cancel the restoration, it will be reserved again.\\n\\nWill you now resotre the character?",
+			"after": "The character will be restored.\\nIf you restore it, the reservation will be canceled.\\nSo you can use it normally.\\nIf you cancel the restoration, it will be reserved again.\\n\\nWill you now restore the character?"
+		}
+	}
+}

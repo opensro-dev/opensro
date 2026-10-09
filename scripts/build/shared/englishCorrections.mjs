@@ -7,30 +7,17 @@ The client catalogs and server projection share this policy. Match both the
 symbol and original cell so changed source data cannot silently receive an
 obsolete correction. Native captures and the extracted archive stay intact.
 
+The reviewed table is englishCorrections.json: { file: { key: { before,
+after, why? } } }. `before` is the exact retail English cell, `after` the
+product text, `why` the evidence when the change is more than spelling.
+
 ===========================================================================
 */
 
-const CORRECTIONS = {
-	"textdataname.txt": {
-		SN_NPC_CH_SOLDIER_EA2: [ "Solder Sangnam [Teleport]", "Soldier Sangnam [Teleport]" ],
-		// The Korean source says southern landing/dock, not a rock formation.
-		SN_ZONE_25031_2: [ "Karakoram South Sock", "Karakoram South Dock" ],
-		SN_ITEM_QNO_CH_EUROPE_3_02: [ "Blood Devil 's leaf", "Blood Devil's leaf" ]
-	},
-	"textuisystem.txt": {
-		// Korean 요구 레벨이 맞지 않아 (the required level does not match): the
-		// soldier teleports serve levels 1-20 (teleportlink condition 1), so the
-		// refusal usually meets a character above the range, never only below.
-		UIIT_MSG_INTERACTION_FAIL_OUT_OF_REQUIRED_LEVEL_FOR_TELEPORT: [
-			"Cannot transport because your level is too low.",
-			"Cannot transport because your level does not meet the requirement."
-		]
-	},
-	"textquest.txt": {
-		SN_CON_QSP_ALL_POTION_3_01: [ "Collect  Purification Seed (%d)", "Collect Purification Seed (%d)" ],
-		SN_CON_QSP_ALL_POTION_4: [ "Collect  Purification Fruit (%d)", "Collect Purification Fruit (%d)" ]
-	}
-};
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+const CORRECTIONS = JSON.parse( readFileSync( path.join( import.meta.dirname, "englishCorrections.json" ), "utf8" ) );
 
 /*
 ================
@@ -43,8 +30,7 @@ change output. New source wording requires a human review of this table.
 export function correctedEnglish( fileName, key, english ) {
 	const correction = CORRECTIONS[fileName.toLowerCase()]?.[key];
 	if ( !correction ) return english;
-	const [before, after] = correction;
-	if ( english === after ) return english;
-	if ( english !== before ) throw new Error( `Stale English correction ${fileName}:${key}` );
-	return after;
+	if ( english === correction.after ) return english;
+	if ( english !== correction.before ) throw new Error( `Stale English correction ${fileName}:${key}` );
+	return correction.after;
 }
