@@ -23,6 +23,7 @@ package domain
 import (
 	"cmp"
 	"math"
+	"math/bits"
 	"slices"
 )
 
@@ -111,13 +112,15 @@ func splitJobReward(members []*Character, pool *int64) {
 	}
 	if total > 0 {
 		for _, c := range members {
-			share := int64(0)
-			if contribution := int64(max(c.Job.WeeklyReward, 0)); contribution > 0 {
-				// pool * contribution fits: the pool and a contribution are
-				// both below 2^31 in practice, and the bigint keeps 2^63.
-				share = *pool * contribution / total
+			share := uint64(0)
+			if contribution := uint64(max(c.Job.WeeklyReward, 0)); contribution > 0 {
+				// The procedure's bigint product: a boosted pool times a
+				// contribution can pass 2^63, so multiply in 128 bits. The
+				// quotient never exceeds the pool (contribution <= total).
+				hi, lo := bits.Mul64(uint64(max(*pool, 0)), contribution)
+				share, _ = bits.Div64(hi, lo, uint64(total))
 			}
-			c.Job.Reward = int32(min(share+int64(max(c.Job.Reward, 0)), math.MaxInt32))
+			c.Job.Reward = int32(min(share+uint64(max(c.Job.Reward, 0)), math.MaxInt32))
 		}
 	}
 	// With gold in the pool and nobody contributing, the procedure's share

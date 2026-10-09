@@ -80,9 +80,14 @@ starts; the store refuses a week it already closed.
 */
 func (rt *Runtime) JobWeekTick(division string, nowMs int64) {
 	week := JobWeekIndex(time.UnixMilli(nowMs), time.Local)
-	if rt.jobWeek.Swap(week) == week {
+	if last, seen := rt.jobWeeks.Swap(division, week); seen && last.(int64) == week {
 		return
 	}
+	// The first tick after boot always asks: the store compares the week with
+	// its persisted snapshot, so a boot inside an unclosed week closes it, a
+	// boot in the same week does nothing, and a shard's very first sighting
+	// only records the week (a shard has no "last week" before one ends).
+	// Server-local time is the shard's clock, as the siege schedule's.
 	rt.deps.CloseWeek(division, week, "job-week")
 }
 

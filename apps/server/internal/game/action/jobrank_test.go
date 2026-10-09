@@ -107,3 +107,52 @@ func TestJobWeekIndexTurnsOnMonday(t *testing.T) {
 		t.Fatal("the epoch week is misplaced")
 	}
 }
+
+/*
+================
+jobWeekRecorder
+
+The fixture's dependencies, recording the weeks each division closes.
+================
+*/
+type jobWeekRecorder struct {
+	Dependencies
+	closed map[string][]int64
+}
+
+/*
+================
+CloseWeek
+================
+*/
+func (r jobWeekRecorder) CloseWeek(division string, week int64, label string) bool {
+	r.closed[division] = append(r.closed[division], week)
+	return true
+}
+
+/*
+================
+TestJobWeekTickClosesEveryDivision
+
+Each division hands its own week to the store once per week; one division
+latching a week must not hide it from another.
+================
+*/
+func TestJobWeekTickClosesEveryDivision(t *testing.T) {
+	rt, _, _ := jobFixture(t)
+	recorder := jobWeekRecorder{Dependencies: rt.deps, closed: map[string][]int64{}}
+	rt.deps = recorder
+	now := time.Date(2026, 10, 12, 12, 0, 0, 0, time.Local).UnixMilli()
+	for _, at := range []int64{now, now + 1000} {
+		rt.JobWeekTick("a", at)
+		rt.JobWeekTick("b", at)
+	}
+	week := JobWeekIndex(time.UnixMilli(now), time.Local)
+	if len(recorder.closed["a"]) != 1 || len(recorder.closed["b"]) != 1 || recorder.closed["b"][0] != week {
+		t.Fatalf("closed %+v", recorder.closed)
+	}
+	rt.JobWeekTick("a", now+7*24*3600*1000)
+	if got := recorder.closed["a"]; len(got) != 2 || got[1] != week+1 {
+		t.Fatalf("the next week did not reach the store: %+v", got)
+	}
+}

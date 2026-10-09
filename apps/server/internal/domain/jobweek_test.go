@@ -87,3 +87,30 @@ func TestCloseJobWeekSplitsThePools(t *testing.T) {
 		t.Fatalf("an uncontributed pool: reward %d, pool %+v", idle.Job.Reward, pool)
 	}
 }
+
+/*
+================
+TestCloseJobWeekSharesAHugePoolExactly
+
+A boosted pool times a contribution passes 2^63; the share is still exact
+(the procedure's bigint) before the INT_MAX cap.
+================
+*/
+func TestCloseJobWeekSharesAHugePoolExactly(t *testing.T) {
+	big := jobWeekMember("Big", JobHunter, 1, 0, 2000000000, 0)
+	small := jobWeekMember("Small", JobHunter, 1, 0, 1000000000, 0)
+	pool := TradeRewardPool{Hunters: 30_000_000_000}
+	CloseJobWeek([]*Character{big, small}, &pool, JobRankings{}, 1)
+	// 3e10 * 1e9 / 3e9 = 1e10, capped to INT_MAX; neither share wrapped.
+	if big.Job.Reward != math.MaxInt32 || small.Job.Reward != math.MaxInt32 {
+		t.Fatalf("rewards %d %d", big.Job.Reward, small.Job.Reward)
+	}
+	tiny := jobWeekMember("Tiny", JobHunter, 1, 0, 3, 0)
+	rest := jobWeekMember("Rest", JobHunter, 1, 0, 2000000000, 0)
+	pool = TradeRewardPool{Hunters: 9_000_000_000}
+	CloseJobWeek([]*Character{tiny, rest}, &pool, JobRankings{}, 2)
+	// 9e9 * 3 / 2000000003 = 13 (truncated), exact without overflow.
+	if tiny.Job.Reward != 13 {
+		t.Fatalf("small share %d, want 13", tiny.Job.Reward)
+	}
+}
