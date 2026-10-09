@@ -14,7 +14,7 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { defaultVideoOptions, changeVideo, videoOptions, backgroundDrawDistance } = await import(
+const { defaultVideoOptions, changeVideo, videoOptions, backgroundDrawDistance, uiPixelScaleFor } = await import(
 	sourceFileUrl( "src/engine/foundation/rendering/video-options.ts" ).href
 );
 test("background range and effect quality survive the persisted two-record option format", () => {
@@ -48,4 +48,31 @@ test("native store-only slots and implemented water/cloth settings persist indep
 	assert.equal( backgroundDrawDistance( saved ), backgroundDrawDistance( defaultVideoOptions() ) );
 	assert.equal( videoOptions( changeVideo( saved, 4, 1 ) ).records[0][4], 1 );
 	assert.equal( videoOptions( changeVideo( saved, 12, 0 ) ).records[0][12], 0 );
+});
+
+/*
+================
+UI scale by screen
+
+Physical size and pixel ratio of maximized browser windows. A window at
+least 800x600 CSS pixels keeps the desktop HUD (UI at least 800x600);
+a smaller one keeps its whole-number enlargement and goes compact.
+================
+*/
+test("a desktop window keeps the desktop HUD and only small windows go compact", () => {
+	const cases = [
+		{ name: "1080p at 100%", width: 1920, height: 945, ratio: 1, scale: 1, desktop: true },
+		{ name: "1080p at 125%", width: 1920, height: 913, ratio: 1.25, scale: 1, desktop: true },
+		{ name: "1080p at 150%", width: 1920, height: 926, ratio: 1.5, scale: 1, desktop: true },
+		{ name: "1440p at 150%", width: 2561, height: 1313, ratio: 1.5, scale: 2, desktop: true },
+		{ name: "MacBook Air", width: 2940, height: 1660, ratio: 2, scale: 2, desktop: true },
+		{ name: "1366x768 at 100%", width: 1366, height: 625, ratio: 1, scale: 1, desktop: true },
+		{ name: "phone landscape", width: 2532, height: 1170, ratio: 3, scale: 3, desktop: false },
+		{ name: "phone portrait", width: 1170, height: 2532, ratio: 3, scale: 3, desktop: false },
+		{ name: "small window at 200%", width: 1400, height: 1000, ratio: 2, scale: 2, desktop: false }
+	];
+	for ( const { name, width, height, ratio, scale, desktop } of cases ) {
+		assert.equal( uiPixelScaleFor( width, height, ratio ), scale, name );
+		assert.equal( width / scale >= 800 && height / scale >= 600, desktop, name + " layout" );
+	}
 });

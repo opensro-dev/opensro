@@ -17,7 +17,12 @@ import {
 	type ExtendedQuickslotOptions
 } from "@/engine/foundation/ui/extended-quickslot";
 import { chatBlocks } from "@/engine/foundation/gameplay/chat-blocks";
-import { defaultVideoOptions, videoOptions, type VideoOptions } from "@/engine/foundation/rendering/video-options";
+import {
+	defaultVideoOptions,
+	uiPixelScaleFor,
+	videoOptions,
+	type VideoOptions
+} from "@/engine/foundation/rendering/video-options";
 import { defaultInputOptions, inputOptions, virtualKey, type InputOptions } from "@/engine/foundation/ui/input-options";
 import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-options";
 import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
@@ -203,14 +208,16 @@ export function createPlatform(
 	uiPixelScale
 
 	Nearest integer enlargement restores logical UI size on Retina displays
-	without interpolating bitmap text at fractional browser/OS scales. Below
-	the native minimum extent, the compact layout fits the controls instead
-	of shrinking their text. This also covers a docked browser inspector.
+	without interpolating bitmap text at fractional browser/OS scales. A
+	window smaller than the native minimum gets the compact layout at that
+	enlargement; a larger one steps down to keep the desktop HUD
+	(uiPixelScaleFor). This also covers a docked browser inspector.
 	================
 	*/
 	function uiPixelScale(): number {
 		if ( video.displaySize ) return 1;
-		return Math.max( 1, Math.round( devicePixelRatio ) );
+		const physical = readViewport();
+		return uiPixelScaleFor( physical.width, physical.height, devicePixelRatio );
 	}
 	/*
 	================

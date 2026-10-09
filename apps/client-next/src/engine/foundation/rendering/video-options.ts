@@ -58,6 +58,31 @@ export function displaySizes(): readonly (readonly [number, number])[] {
 
 /*
 ================
+uiPixelScaleFor
+
+Physical pixels per native UI pixel for the whole-page screen size. The
+nearest whole multiple of the browser's pixel ratio keeps bitmap text
+sharp. A browser window smaller than the original's smallest screen mode
+(800x600 in CSS pixels: a phone, a small window) keeps that multiple and
+gets the compact HUD. Any larger window steps the multiple down until the
+UI is at least that mode, so a 1080p laptop at 150% keeps the desktop HUD
+at scale 1 instead of a 960x463 compact one.
+================
+*/
+export function uiPixelScaleFor( physicalWidth: number, physicalHeight: number, pixelRatio: number ): number {
+	const modes = displaySizes().filter( ( [width] ) => width > 0 );
+	const minimumWidth = Math.min( ...modes.map( mode => mode[0] ) ),
+		minimumHeight = Math.min( ...modes.map( mode => mode[1] ) );
+	let scale = Math.max( 1, Math.round( pixelRatio ) );
+	if ( physicalWidth / pixelRatio < minimumWidth || physicalHeight / pixelRatio < minimumHeight ) return scale;
+	while ( scale > 1 && (physicalWidth / scale < minimumWidth || physicalHeight / scale < minimumHeight) ) {
+		scale--;
+	}
+	return scale;
+}
+
+/*
+================
 displaySizeIndex
 
 The listed mode equal to `size`, 0 (the whole page) when none is.
