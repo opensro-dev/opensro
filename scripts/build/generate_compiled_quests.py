@@ -86,6 +86,13 @@ CLASS_BEHAVIOUR = {
 		"TurnInGold": 10000,
 		"TurnInGoldShortSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_05",
 	},
+	# CQNO_EU_EASTEU_4_OnNpcTalk (8AB930): the base talk behind one story
+	# page, _01 with the reply _02, before the 0x130 offer. Its initializer
+	# (8AB710) pushes no prerequisite: the v1.150 "Link (Stable
+	# Purification)" caption is display text only.
+	("QNO_EU_EASTEU_4", "0x58"): {
+		"OfferPages": [{"PromptSymbol": "SN_TALK_QNO_EU_EASTEU_4_01", "ReplySymbol": "SN_TALK_QNO_EU_EASTEU_4_02"}],
+	},
 	# 8E6440 sends the start NPC to vtable +0x19C and the end NPC to +0x1A0.
 	# Their lines are hard-coded; the base words supply the rest. None of the
 	# three sets a travel block, though SMITH_3's _02 warns against Return.

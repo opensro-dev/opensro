@@ -711,6 +711,39 @@
 		]
 	},
 	{
+		"Codename": "QNO_EU_EASTEU_4",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_WITCH",
+		"EndNpcCodename": "NPC_EU_WITCH",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_4_03",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_4_04",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_4_05",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_4_07",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_4_06",
+		"AchievedNowSymbol": "SN_TALK_QNO_EU_EASTEU_4_08",
+		"RewardExp": 28000,
+		"RewardGold": 10000,
+		"RewardSkillExp": 10000,
+		"RewardItems": [],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_EU_EASTEU_4_01",
+		"CollectCount": 40,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_EU_KYKLOPES_CLON2"
+			],
+			"ChancePercent": 25.0
+		},
+		"OfferPages": [
+			{
+				"PromptSymbol": "SN_TALK_QNO_EU_EASTEU_4_01",
+				"ReplySymbol": "SN_TALK_QNO_EU_EASTEU_4_02"
+			}
+		]
+	},
+	{
 		"Codename": "QNO_EU_EASTEU_8",
 		"MaxCompletions": 1,
 		"KindByte": 1,
