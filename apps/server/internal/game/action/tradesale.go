@@ -106,17 +106,17 @@ The native foreign sale multiplies both unit prices as uint32 before their
 signed 64-bit difference. Thief valuation sign-extends the IMUL result.
 ================
 */
-func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc simulation.NpcDef, item inventory.Item) (uint64, int64, bool) {
+func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc simulation.NpcDef, item inventory.Item) (uint64, int64, int64, bool) {
 	ref, ok := rt.deps.ItemReferences().ItemRefByCodename(item.Codename)
 	if !ok || ref == nil || ref.RefObjID != item.RefObjID || ref.TypeFlags() != item.TypeFlags {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 	if item.Quantity == 0 || item.Quantity > maxTradeGoodsStack || item.Quantity > rt.maxStackFor(item.TypeFlags, item.Codename) {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 	base, present := ref.NativeFields.Lookup("price")
 	if !present || base < 1 || base > math.MaxUint32 || base != math.Trunc(base) {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 	var credit, profit int64
 	switch {
@@ -125,7 +125,7 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 	case rt.merchantStocksItem(npc, item.RefObjID):
 		unit, valid := commerce.SaleUnitPrice(ref, item.MagicOptions, rt.Commerce.Magic)
 		if !valid {
-			return 0, 0, false
+			return 0, 0, 0, false
 		}
 		credit = int64(uint32(unit) * uint32(item.Quantity))
 	default:
@@ -136,15 +136,15 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 		// This port therefore has no later-version safety state to reset.
 		quote, found := rt.Commerce.TradeQuotations[[2]uint32{npc.RefObjID, item.RefObjID}]
 		if !found || quote.Lower != quote.Upper {
-			return 0, 0, false
+			return 0, 0, 0, false
 		}
 		unit, err := commerce.TradeQuotationPrice(uint32(base), quote)
 		if err != nil {
-			return 0, 0, false
+			return 0, 0, 0, false
 		}
 		credit = int64(unit * uint32(item.Quantity))
 		profit = credit - int64(uint32(base)*uint32(item.Quantity))
 	}
-	taxed, valid := commerce.AdjustPrice(uint64(max(credit, 0)), rt.commerceTax(division, npc.RefObjID, c), false)
-	return taxed, max(profit, 0), valid
+	taxed, valid := commerce.AdjustPrice(uint64(max(credit, 0)), rt.commerceTax(division, npc, c), false)
+	return taxed, max(profit, 0), int64(uint64(max(credit, 0)) - taxed), valid
 }

@@ -66,9 +66,7 @@ func TestTraderQuoteAndPartialSaleUseNativeProfitAndTax(t *testing.T) {
 	rt.deps.(*enterworld.Deps).UpdateTrade = func(_ []*enterworld.Character, _ string, update func(*domain.TradeRewardPool) bool) bool {
 		return update(&pool)
 	}
-	if err := rt.SetCommerceTax(testDivision, 2010, 20, 53, nil); err != nil {
-		t.Fatal(err)
-	}
+	bindMerchantTax(t, rt, 2010, 20, 0)
 	var quote shopProjection
 	if err := json.Unmarshal(rt.shopCatalog(testDivision, c, 17).Payload, &quote); err != nil {
 		t.Fatal(err)

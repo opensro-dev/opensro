@@ -326,7 +326,7 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 	if target.npc != nil && target.npc.Teleport != nil {
 		w := wire.NewWriter(11).U8(1).U32(gid).U32(flags)
 		if target.npc.Teleport.FortressID != 0 {
-			tax := rt.commerceTax(divisionID, target.npc.RefObjID, character)
+			tax := rt.commerceTax(divisionID, *target.npc, character)
 			rate := tax.Percent
 			if rate > 0 && tax.Exempt {
 				rate = 0

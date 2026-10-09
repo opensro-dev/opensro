@@ -211,8 +211,6 @@ type Runtime struct {
 	pkOwners petSkillWindowIndex
 	// pulseAreas are the owners of live pulse areas (skillpulsearea.go).
 	pulseAreas            pulseAreaClock
-	commercePolicyMu      sync.RWMutex
-	commerceTaxes         map[merchantTaxKey]merchantTax
 	commerceReferenceSeed []wire.Frame
 
 	// UnlimitedItems names the item codenames whose use is never spent (the

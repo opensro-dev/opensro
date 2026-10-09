@@ -23,15 +23,20 @@ type NpcDef struct {
 	// ObjectID is the stable division-world identity for this NPC position.
 	// Every roster row must provide one; NPC identity never depends on the
 	// observing character or on roster position at runtime.
-	ObjectID  uint32
-	RefObjID  uint32
-	TidWord   uint16
-	Codename  string
-	NameStrID string
-	Name      string
-	ModelPath string
-	Level     uint8
-	MaxHP     uint32
+	ObjectID uint32
+	RefObjID uint32
+	// FortressID is the fortress whose tax this object charges and collects
+	// (CGObj_BindFortressFromReference 486140 resolves the reference row's
+	// column 55 codename at spawn); zero binds nothing. A gate also carries
+	// it in Teleport for the browser's fortress gate flag.
+	FortressID uint32
+	TidWord    uint16
+	Codename   string
+	NameStrID  string
+	Name       string
+	ModelPath  string
+	Level      uint8
+	MaxHP      uint32
 	// BaseSpeechSymbol / QuestSpeechSymbol are npcchat.txt's BS/PS columns.
 	// The generic 0x7338 talk action returns the BS symbol through the native
 	// 0x3773 dialog wire; neither the server nor the browser invents prose.

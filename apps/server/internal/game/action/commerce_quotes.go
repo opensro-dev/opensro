@@ -71,7 +71,7 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 			if rt.tradeAdmission(division, c, npc, item) != 0 {
 				continue
 			}
-			price, _, valid := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc.RefObjID, c))
+			price, _, valid := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc, c))
 			quote := shopSaleQuote{CosGID: source.gid, NoBuyback: commerceNoBuyback(item.TypeFlags, item.Codename), Slot: item.Slot, Ref: item.RefObjID, Quantity: item.Quantity, Price: strconv.FormatUint(price, 10)}
 			if inventory.IsTradeGoods(item.TypeFlags) {
 				if item.Quantity == 0 || item.Quantity > maxTradeGoodsStack {
@@ -80,7 +80,7 @@ func (rt *Runtime) shopSaleQuotes(division string, c *enterworld.Character, npc 
 				for amount := uint16(1); amount <= item.Quantity; amount++ {
 					part := item
 					part.Quantity = amount
-					credit, profit, ok := rt.tradeSaleValue(division, c, npc, part)
+					credit, profit, _, ok := rt.tradeSaleValue(division, c, npc, part)
 					if !ok {
 						valid = false
 						break

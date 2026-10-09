@@ -2,16 +2,42 @@ package action
 
 import (
 	"encoding/json"
-	"opensro.online/server/internal/game/item/wire"
 	"reflect"
 	"testing"
+
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/fortress"
 )
+
+/*
+================
+bindMerchantTax
+
+Binds the roster NPCs of reference ref to fortress 1 and sets its ratio;
+a non-zero holder occupies the fortress.
+================
+*/
+func bindMerchantTax(t *testing.T, rt *Runtime, ref uint32, rate int16, holder int64) {
+	t.Helper()
+	if _, ok := rt.Fortresses.Get(testDivision, 1); !ok {
+		rt.Fortresses = fortress.New([]fortress.Catalog{{ID: 1}})
+	}
+	for i := range rt.NpcRoster {
+		if rt.NpcRoster[i].RefObjID == ref {
+			rt.NpcRoster[i].FortressID = 1
+		}
+	}
+	if holder != 0 && !rt.Fortresses.Occupy(testDivision, 1, holder) {
+		t.Fatal("occupy")
+	}
+	if record, _ := rt.Fortresses.Get(testDivision, 1); record.TaxRate != rate && !rt.Fortresses.SetTaxRate(testDivision, 1, rate) {
+		t.Fatal("tax rate", rate)
+	}
+}
 
 func TestTaxedCommerceCreditsAndRetentionDiffer(t *testing.T) {
 	rt, c := merchantFixture(t)
-	if err := rt.SetCommerceTax(testDivision, 100, 20, 53, nil); err != nil {
-		t.Fatal(err)
-	}
+	bindMerchantTax(t, rt, 100, 20, 0)
 	trade(t, rt, c, wire.ItemMoveRequest{MovementType: 8, NpcGID: 17, ShopSlot: 2, Quantity: 2})
 	if goldOf(c) != 4856 {
 		t.Fatal("taxed package purchase", goldOf(c))
@@ -21,9 +47,7 @@ func TestTaxedCommerceCreditsAndRetentionDiffer(t *testing.T) {
 		t.Fatal("sale tax was reused as restoration discount", goldOf(c), c.Buyback)
 	}
 	// Later tax changes cannot reprice the retained object.
-	if err := rt.SetCommerceTax(testDivision, 100, 50, 64, nil); err != nil {
-		t.Fatal(err)
-	}
+	bindMerchantTax(t, rt, 100, -20, 0)
 	buyback(t, rt, c, 17, c.Buyback[0].ID)
 	if goldOf(c) != 4850 || len(c.Buyback) != 0 {
 		t.Fatal("retained price changed")
@@ -34,11 +58,7 @@ func TestTaxExemptionAndCatalogUseSameAuthority(t *testing.T) {
 	rt, c := merchantFixture(t)
 	guild := int64(77)
 	c.GuildID = &guild
-	exempt := []int64{guild}
-	if err := rt.SetCommerceTax(testDivision, 100, 20, 53, exempt); err != nil {
-		t.Fatal(err)
-	}
-	exempt[0] = 88
+	bindMerchantTax(t, rt, 100, 20, guild)
 	var catalog shopProjection
 	if err := json.Unmarshal(rt.shopCatalog(testDivision, c, 17).Payload, &catalog); err != nil {
 		t.Fatal(err)
@@ -50,9 +70,7 @@ func TestTaxExemptionAndCatalogUseSameAuthority(t *testing.T) {
 	if goldOf(c) != 4940 {
 		t.Fatal("exempt charge disagrees with quote")
 	}
-	if err := rt.SetCommerceTax(testDivision, 100, -20, 53, []int64{guild}); err != nil {
-		t.Fatal(err)
-	}
+	bindMerchantTax(t, rt, 100, -20, 0)
 	trade(t, rt, c, wire.ItemMoveRequest{MovementType: 9, NpcGID: 17, SourceSlot: 13, Quantity: 1})
 	if goldOf(c) != 4958 || c.Buyback[0].Price != 18 {
 		t.Fatal("exemption erased negative adjustment")
@@ -91,5 +109,36 @@ func TestBuybackLivesWithLogicalSessionAndNotPersistedCharacter(t *testing.T) {
 	rt.EndCommerceSession(testDivision, c, 102)
 	if len(c.Buyback) != 0 || c.BuybackSession != 0 {
 		t.Fatal("final teardown retained sold objects")
+	}
+}
+
+/*
+================
+TestPurchaseTaxFillsTheTreasury
+
+6186D0 credits the bound fortress with the taxed price minus the untaxed
+one; an ordinary item sale collects nothing (no sale path calls 486330).
+================
+*/
+func TestPurchaseTaxFillsTheTreasury(t *testing.T) {
+	rt, c := merchantFixture(t)
+	bindMerchantTax(t, rt, 100, 20, 0)
+	treasury := func() int64 {
+		record, _ := rt.Fortresses.Get(testDivision, 1)
+		return record.TaxGold
+	}
+	trade(t, rt, c, wire.ItemMoveRequest{MovementType: 8, NpcGID: 17, ShopSlot: 2, Quantity: 2})
+	if goldOf(c) != 4856 || treasury() != 24 {
+		t.Fatalf("purchase: gold %d treasury %d", goldOf(c), treasury())
+	}
+	trade(t, rt, c, wire.ItemMoveRequest{MovementType: 9, NpcGID: 17, SourceSlot: 13, Quantity: 2})
+	if treasury() != 24 {
+		t.Fatalf("an item sale reached the treasury: %d", treasury())
+	}
+	// A negative ratio is a discount: nothing is collected.
+	bindMerchantTax(t, rt, 100, -20, 0)
+	trade(t, rt, c, wire.ItemMoveRequest{MovementType: 8, NpcGID: 17, ShopSlot: 2, Quantity: 1})
+	if treasury() != 24 {
+		t.Fatalf("a discount reached the treasury: %d", treasury())
 	}
 }

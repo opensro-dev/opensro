@@ -10,9 +10,7 @@ import (
 func TestMerchantSaleQuoteMatchesTaxedCommitAndRefreshesPartialStack(t *testing.T) {
 	rt, c := merchantFixture(t)
 	trade(t, rt, c, wire.ItemMoveRequest{MovementType: 8, NpcGID: 17, ShopSlot: 2, Quantity: 4})
-	if err := rt.SetCommerceTax(testDivision, 100, 20, 53, nil); err != nil {
-		t.Fatal(err)
-	}
+	bindMerchantTax(t, rt, 100, 20, 0)
 	read := func() shopProjection {
 		var p shopProjection
 		if err := json.Unmarshal(rt.shopCatalog(testDivision, c, 17).Payload, &p); err != nil {

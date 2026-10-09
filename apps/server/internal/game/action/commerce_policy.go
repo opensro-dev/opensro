@@ -1,52 +1,70 @@
+/*
+===========================================================================
+
+commerce_policy.go - what a merchant charges on top of its list price, and
+each shopper's buyback ledger
+
+The adjustment is the fortress tax of the fortress a merchant or gate is
+bound to; the tax it collects fills that fortress's treasury. The ledger
+of sold items lives as long as the player's logical session.
+
+===========================================================================
+*/
 package action
 
 import (
-	"fmt"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
-	"strings"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
-type merchantTaxKey struct {
-	division string
-	merchant uint32
-}
-type merchantTax struct {
-	tax    commerce.Tax
-	exempt map[int64]bool
-}
+// fortressTaxPrecision is the x87 precision CGObj_CalculateFortressTax
+// (486390) divides at: the server process keeps the CRT's default control
+// word 0x27F, 53-bit.
+const fortressTaxPrecision = 53
 
-// SetCommerceTax is the server authority boundary for a merchant's rate and
-// owning/allied guilds. No native request is allowed to provide these values.
-// An absent row means no configured tax, not an inferred fortress schedule.
-func (rt *Runtime) SetCommerceTax(division string, merchant uint32, percent int16, precision uint, exemptGuilds []int64) error {
-	if division == "" || strings.TrimSpace(division) != division || merchant == 0 || precision != 24 && precision != 53 && precision != 64 {
-		return fmt.Errorf("invalid merchant tax authority")
+/*
+================
+commerceTax
+
+A merchant's or gate's adjustment, from the fortress it is bound to
+(NpcDef.FortressID). CGObj_GetFortressTaxRate (4862A0): an unbound object
+charges nothing, a ratio of zero or below applies to everyone, and a
+positive ratio spares the holder guild and its allies (fortressDefender).
+commerce.AdjustPrice applies the exemption to a positive ratio only.
+================
+*/
+func (rt *Runtime) commerceTax(division string, npc simulation.NpcDef, c *enterworld.Character) commerce.Tax {
+	if npc.FortressID == 0 || rt.Fortresses == nil {
+		return commerce.Tax{}
 	}
-	row := merchantTax{tax: commerce.Tax{Percent: percent, Precision: precision}, exempt: map[int64]bool{}}
-	for _, gid := range exemptGuilds {
-		if gid <= 0 {
-			return fmt.Errorf("invalid exempt guild")
-		}
-		row.exempt[gid] = true
+	record, ok := rt.Fortresses.Get(division, npc.FortressID)
+	if !ok || record.TaxRate == 0 {
+		return commerce.Tax{}
 	}
-	rt.commercePolicyMu.Lock()
-	defer rt.commercePolicyMu.Unlock()
-	if rt.commerceTaxes == nil {
-		rt.commerceTaxes = map[merchantTaxKey]merchantTax{}
-	}
-	rt.commerceTaxes[merchantTaxKey{division, merchant}] = row
-	return nil
-}
-func (rt *Runtime) commerceTax(division string, merchant uint32, c *enterworld.Character) commerce.Tax {
-	rt.commercePolicyMu.RLock()
-	defer rt.commercePolicyMu.RUnlock()
-	row := rt.commerceTaxes[merchantTaxKey{division, merchant}]
-	tax := row.tax
+	tax := commerce.Tax{Percent: record.TaxRate, Precision: fortressTaxPrecision}
 	if c != nil && c.GuildID != nil {
-		tax.Exempt = row.exempt[*c.GuildID]
+		tax.Exempt = rt.fortressDefender(division, record, *c.GuildID)
 	}
 	return tax
+}
+
+/*
+================
+collectFortressTax
+
+CGObj_AccumulateFortressTax (486330): the tax a purchase, a gate fee or a
+trade goods sale actually paid goes to the bound fortress's treasury.
+Callers pass the taxed amount minus the untaxed one, as
+CShopApp_ChargePurchaseAndAccumulateTax (6186D0) does; the authority ignores
+anything not positive.
+================
+*/
+func (rt *Runtime) collectFortressTax(division string, npc simulation.NpcDef, paid int64) {
+	if npc.FortressID == 0 || rt.Fortresses == nil {
+		return
+	}
+	rt.Fortresses.AccumulateTax(division, npc.FortressID, paid)
 }
 
 // A logical player lifetime owns the ledger. Rebinding/resuming the same

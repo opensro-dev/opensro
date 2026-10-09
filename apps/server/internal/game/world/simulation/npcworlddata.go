@@ -33,8 +33,12 @@ const (
 	npcColRun       = 47
 	npcColScale     = 48
 	npcColModel     = 52
-	npcColLevel     = 57
-	npcColMaxHP     = 59
+	// npcColFortress is the reference row's fortress codename ("xxx" binds
+	// nothing), read by CGObj_BindFortressFromReference (486140). The same
+	// column carries it in teleportbuilding.txt.
+	npcColFortress = 55
+	npcColLevel    = 57
+	npcColMaxHP    = 59
 )
 
 type npcWorldRef struct {
@@ -51,6 +55,7 @@ type npcWorldRef struct {
 	scale    float64
 	base     string
 	quest    string
+	fortress string
 }
 
 // LoadNpcWorldRoster projects every enabled NPC position in the shipped
@@ -62,6 +67,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 	if len(refs) == 0 {
 		return nil
 	}
+	fortresses := loadSiegeFortressIDs(textdataDir)
 	storeGroupsByNpc := loadNpcStoreGroupIndex(textdataDir, refs)
 	fixtureByCode := make(map[string]NpcDef)
 	for _, row := range DefaultNpcRoster() {
@@ -97,6 +103,7 @@ func LoadNpcWorldRoster(textdataDir string) []NpcDef {
 		row := NpcDef{
 			ObjectID:          domain.NPCGIDBase + uint32(index) + 1,
 			RefObjID:          ref.refObjID,
+			FortressID:        fortresses[ref.fortress],
 			TidWord:           ref.tidWord,
 			Codename:          ref.codename,
 			NameStrID:         ref.nameID,
@@ -285,10 +292,30 @@ func loadNpcWorldRefs(textdataDir string) map[uint32]npcWorldRef {
 				nameID: nameID, name: name, model: strings.TrimSpace(cols[npcColModel]),
 				level: uint8(level), maxHP: maxHP, walk: walk, run: run, scale: scale,
 				base: chat[0], quest: chat[1],
+				fortress: strings.TrimSpace(cols[npcColFortress]),
 			}
 		}
 	}
 	return refs
+}
+
+/*
+================
+loadSiegeFortressIDs
+
+siegefortress.txt's enabled rows: fortress codename to fortress id.
+================
+*/
+func loadSiegeFortressIDs(textdataDir string) map[string]uint32 {
+	fortresses := map[string]uint32{}
+	for _, c := range readNpcTabbed(filepath.Join(textdataDir, "siegefortress.txt")) {
+		if len(c) > 2 && c[0] == "1" {
+			if id, ok := npcUint32(c[1]); ok {
+				fortresses[c[2]] = id
+			}
+		}
+	}
+	return fortresses
 }
 
 func npcUint16(value string) (uint16, bool) {
@@ -350,15 +377,7 @@ func AppendTeleportGates(dir string, roster []NpcDef) ([]NpcDef, error) {
 			names[c[1]] = c[8]
 		}
 	}
-	fortresses := map[string]uint32{}
-	for _, c := range readNpcTabbed(filepath.Join(dir, "siegefortress.txt")) {
-		if len(c) > 2 && c[0] == "1" {
-			id, ok := npcUint32(c[1])
-			if ok {
-				fortresses[c[2]] = id
-			}
-		}
-	}
+	fortresses := loadSiegeFortressIDs(dir)
 	rows := readNpcTabbed(filepath.Join(dir, "teleportbuilding.txt"))
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("missing teleportbuilding table")
@@ -409,7 +428,7 @@ func AppendTeleportGates(dir string, roster []NpcDef) ([]NpcDef, error) {
 		if gid >= domain.GroundItemGIDBase {
 			return nil, fmt.Errorf("teleport identity overflow")
 		}
-		result = append(result, NpcDef{ObjectID: gid, RefObjID: ref, TidWord: tid, Codename: c[2], NameStrID: c[5], Name: names[c[5]], AuthoredSpawn: true, Spawn: Spawn{RegionID: region, X: values[0], Y: values[1], Z: values[2]}, Teleport: &TeleportGateBounds{Radius: values[4], Height: values[3], FortressID: fortresses[c[55]]}})
+		result = append(result, NpcDef{ObjectID: gid, RefObjID: ref, TidWord: tid, Codename: c[2], NameStrID: c[5], Name: names[c[5]], FortressID: fortresses[c[npcColFortress]], AuthoredSpawn: true, Spawn: Spawn{RegionID: region, X: values[0], Y: values[1], Z: values[2]}, Teleport: &TeleportGateBounds{Radius: values[4], Height: values[3], FortressID: fortresses[c[npcColFortress]]}})
 	}
 	return result, ValidateNpcRoster(result)
 }

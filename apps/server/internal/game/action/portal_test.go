@@ -3,6 +3,7 @@ package action
 import (
 	"bytes"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
@@ -119,5 +120,48 @@ func TestPortalStructureGrantAndDestinationTransaction(t *testing.T) {
 	}
 	if *c.Gold != before-int64(rt.portals.links[[2]uint32{1, 2}].fee) {
 		t.Fatal("city fee not committed")
+	}
+}
+
+// TestFortressGateFeeTaxFillsTheTreasury: a gate bound to a fortress
+// (teleportbuilding column 55) shows the holder's ratio on select, charges
+// it on the fee and credits the tax to the treasury once the move holds
+// (4F2E95, 4F331D).
+func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
+	licensed.RequireGameData(t)
+	rt, c, _, _ := returnFixture(t, 30000)
+	rt.NpcSpawn.Enabled, rt.NpcSpawn.AtPlayer = true, true
+	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 252094, RefObjID: 2094, Codename: "STORE_CH", FortressID: 1,
+		Teleport: &simulation.TeleportGateBounds{Radius: 10, Height: 25, FortressID: 1}}}
+	if err := rt.ConfigurePortals(gamedatatest.TextdataDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	bindMerchantTax(t, rt, 2094, 10, 0)
+	out := rt.HandleObjectSelect(testDivision, c, wire.NewWriter(4).U32(252094).Payload())
+	want := wire.NewWriter(11).U8(1).U32(252094).U32(0xc0).U16(10).Payload()
+	if len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, want) {
+		t.Fatalf("select did not carry the fortress ratio: %+v", out)
+	}
+	base := uint64(rt.portals.links[[2]uint32{1, 2}].fee)
+	fee, ok := commerce.AdjustPrice(base, commerce.Tax{Percent: 10, Precision: fortressTaxPrecision}, true)
+	if !ok || fee <= base {
+		t.Fatalf("expected a taxed fee above %d, got %d", base, fee)
+	}
+	// Gold covering the base fee but not its tax is refused (portalAdmission 7).
+	*c.Gold = int64(fee) - 1
+	request := wire.NewWriter(9).U32(252094).U8(2).U32(2).Payload()
+	refused := rt.HandlePortal(testDivision, c, request)
+	if len(refused.Frames) != 1 || !bytes.Equal(refused.Frames[0].Payload, []byte{2, 7}) {
+		t.Fatalf("taxed fee above the purse was not refused: %+v", refused)
+	}
+	*c.Gold = int64(fee) + 1000
+	before := *c.Gold
+	result := rt.HandlePortal(testDivision, c, request)
+	if len(result.Frames) == 0 || result.Frames[0].Opcode != enterworld.OpcodeResetClient {
+		t.Fatalf("gate travel with gold %d, fee %d: %+v", before, fee, result)
+	}
+	record, _ := rt.Fortresses.Get(testDivision, 1)
+	if *c.Gold != before-int64(fee) || record.TaxGold != int64(fee-base) {
+		t.Fatalf("fee %d of base %d: gold %d -> %d, treasury %d", fee, base, before, *c.Gold, record.TaxGold)
 	}
 }

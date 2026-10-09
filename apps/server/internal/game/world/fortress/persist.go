@@ -66,7 +66,7 @@ func (a *Authority) Restore(divisionID string, store domain.FortressStore) error
 		if row.TaxRate < -20 || row.TaxRate > 20 || row.TaxGold < 0 {
 			return fmt.Errorf("fortress: invalid tax state for fortress %d", row.FortressID)
 		}
-		record.TaxRate, record.TaxGold = row.TaxRate, row.TaxGold
+		record.TaxRate, record.TaxGold, record.savedTax = row.TaxRate, row.TaxGold, row.TaxGold
 	}
 	for _, row := range requests {
 		record, ok := state.records[row.FortressID]
@@ -87,18 +87,24 @@ func (a *Authority) Restore(divisionID string, store domain.FortressStore) error
 saveRecordLocked
 
 Writes one fortress's occupation rows; a nil store (fixtures, a shard
-with no authority) keeps the state in memory only.
+with no authority) keeps the state in memory only. Every row carries the
+treasury, so a successful write also settles the unsaved tax.
 ================
 */
 func (a *Authority) saveRecordLocked(divisionID string, record *Record) error {
 	if a.store == nil {
+		record.savedTax = record.TaxGold
 		return nil
 	}
-	return a.store.SaveFortress(divisionID, domain.FortressRecord{
+	err := a.store.SaveFortress(divisionID, domain.FortressRecord{
 		FortressID: record.ID, GuildID: record.GuildID, TempGuildID: record.TempGuildID,
 		BattleRecords: battleRows(record), StaffFlags: record.StaffFlags,
 		TaxRate: record.TaxRate, TaxGold: record.TaxGold,
 	})
+	if err == nil {
+		record.savedTax = record.TaxGold
+	}
+	return err
 }
 
 /*

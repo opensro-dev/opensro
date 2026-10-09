@@ -171,7 +171,7 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 		}
 		p.Buyback = rt.buybackOffers(rt.characterSnapshot(division, c), npc.RefObjID)
 		p.SaleQuotes = rt.shopSaleQuotes(division, snapshot, npc)
-		tax := rt.commerceTax(division, npc.RefObjID, snapshot)
+		tax := rt.commerceTax(division, npc, snapshot)
 		rt.eachShopOffer(npc, func(tab uint8, o commerce.Offer) {
 			price, valid := offerUnitPrice(o, tax)
 			if !valid {
@@ -233,6 +233,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	// generic code covers requests the retail client cannot compose.
 	refusal := wire.ErrCodeInvalidRequest
 	roster := rt.commerceRoster(division, c)
+	var collected int64
 	committed := rt.deps.SettleTrade(roster.members, "shop-transaction", func(pool *domain.TradeRewardPool) bool {
 		if c.DeletePending {
 			return false
@@ -253,6 +254,11 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 		var response []byte
 		var payouts []tradePayout
 		var weeklyCredit uint64
+		// collected is the fortress tax this trade paid (the taxed price
+		// minus the untaxed one): 6186D0 for a purchase, 619610 for a trade
+		// goods sale. An ordinary item sale collects nothing; no sale path
+		// in the original calls 486330.
+		collected = 0
 		settledPool := *pool
 		buyback, nextID := c.Buyback, c.BuybackNext
 		switch q.MovementType {
@@ -267,11 +273,14 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if offer == nil || q.Quantity == 0 {
 				return false
 			}
-			unit, valid := offerUnitPrice(*offer, rt.commerceTax(division, npc.RefObjID, c))
+			unit, valid := offerUnitPrice(*offer, rt.commerceTax(division, npc, c))
 			if !valid || unit > math.MaxInt64/uint64(q.Quantity) {
 				return false
 			}
 			cost := unit * uint64(q.Quantity)
+			if offer.Currency != commerce.PaymentHonor {
+				collected = int64(cost) - int64(offer.Price*uint64(q.Quantity))
+			}
 			if offer.Currency == commerce.PaymentHonor {
 				if cost > honorPoints(c) {
 					refusal = wire.ErrCodeNotEnoughHonor
@@ -339,7 +348,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 			if q.Quantity == 0 || q.Quantity > item.Quantity {
 				return false
 			}
-			price, restore, priced := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc.RefObjID, c))
+			price, restore, priced := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc, c))
 			if !priced || price > math.MaxInt64/uint64(q.Quantity) || restore > math.MaxInt64/uint64(q.Quantity) {
 				return false
 			}
@@ -348,7 +357,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				part := item
 				part.Quantity = q.Quantity
 				var profit int64
-				credit, profit, priced = rt.tradeSaleValue(division, c, npc, part)
+				credit, profit, collected, priced = rt.tradeSaleValue(division, c, npc, part)
 				if !priced {
 					return false
 				}
@@ -435,6 +444,7 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 	if !committed {
 		return failureResult(refusal)
 	}
+	rt.collectFortressTax(division, npc, collected)
 	return result
 }
 

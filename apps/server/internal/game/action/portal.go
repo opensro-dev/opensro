@@ -354,15 +354,20 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 	if refusal != 0 {
 		return portalFailure(refusal)
 	}
-	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel"}, func() (int64, OpResult, bool) {
+	// The gate fee's tax goes to the gate's fortress once the move holds
+	// (CGObjPC_HandleTeleportUseRequest0x705A_Body, 4F331D).
+	var collected int64
+	settled := func() { rt.collectFortressTax(division, npc, collected) }
+	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: destination, world: destinationWorld, reason: "portal-travel", settled: settled}, func() (int64, OpResult, bool) {
 		mask := uint32(0)
 		if rt.QuestTravelBlocks != nil {
 			mask = rt.QuestTravelBlocks(c)
 		}
-		fee, valid := commerce.AdjustPrice(uint64(link.fee), rt.commerceTax(division, npc.RefObjID, c), true)
+		fee, valid := commerce.AdjustPrice(uint64(link.fee), rt.commerceTax(division, npc, c), true)
 		if !valid {
 			return 0, portalFailure(2), false
 		}
+		collected = int64(fee) - link.fee
 		link.fee = int64(fee)
 		if failure := portalAdmission(c, source, link, mask, rt.hasSummonedTransportCOS(c)); failure != 0 {
 			return 0, portalFailure(failure), false
@@ -379,7 +384,8 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 gateTravel
 
 One move through a gate: the destination point, the world it lies in
-(a fortress gate's is the fortress world) and the store reason.
+(a fortress gate's is the fortress world), the store reason, and what to
+do once the move has committed and can no longer roll back.
 ================
 */
 type gateTravel struct {
@@ -388,6 +394,7 @@ type gateTravel struct {
 	destination simulation.Spawn
 	world       instance.ID
 	reason      string
+	settled     func()
 }
 
 /*
@@ -477,6 +484,9 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	rt.clearCompoundJob(compoundKey{division, c.Name})
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
 	corpses, corpseDespawns := rt.retireCompanionCorpses(division, c)
+	if travel.settled != nil {
+		travel.settled()
+	}
 	return OpResult{Frames: append(missionReentryFrames(packets), corpses...), Broadcast: append(corpseDespawns, wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: destination.RegionID, X: float32(destination.X), Y: float32(destination.Y), Z: float32(destination.Z), Heading: destination.Angle}}.Encode()})}
 }
 

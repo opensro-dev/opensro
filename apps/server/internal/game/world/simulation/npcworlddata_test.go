@@ -117,3 +117,35 @@ func TestNpcQuestGreetingsNeverBorrowMissingNpcChatPS(t *testing.T) {
 		t.Fatalf("guide coverage %d", found)
 	}
 }
+
+/*
+================
+TestShippedFortressBindingsComeFromColumn55
+
+Column 55 of characterdata and teleportbuilding names the fortress whose
+treasury a merchant or gate pays (CGObj_BindFortressFromReference 486140).
+v1.150 enables only FORTRESS_JANGAN; its smith and its town gate bind to it,
+and rows naming no fortress stay untaxed.
+================
+*/
+func TestShippedFortressBindingsComeFromColumn55(t *testing.T) {
+	dir := licensed.RetailTextdataDir(t)
+	roster := LoadNpcWorldRoster(dir)
+	if len(roster) < 150 {
+		t.Skipf("shipped NPC world data unavailable (loaded %d rows)", len(roster))
+	}
+	gates, err := AppendTeleportGates(dir, roster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound := make(map[string]uint32)
+	for _, npc := range gates {
+		bound[npc.Codename] = npc.FortressID
+	}
+	want := map[string]uint32{"NPC_CH_SMITH": 1, "STORE_CH_GATE": 1, "NPC_CH_HORSE": 0, "NPC_WC_SMITH": 0}
+	for code, id := range want {
+		if got, ok := bound[code]; !ok || got != id {
+			t.Fatalf("%s fortress = %d (present %v), want %d", code, got, ok, id)
+		}
+	}
+}

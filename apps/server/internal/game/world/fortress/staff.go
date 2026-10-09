@@ -44,6 +44,7 @@ func (a *Authority) HireStaff(divisionID string, fortressID uint32, actorID int6
 	code, err := store.HireFortressStaff(divisionID, next, actorID, flags)
 	if code == 0 && err == nil {
 		record.StaffFlags |= flags
+		record.savedTax = record.TaxGold
 	}
 	return code, err
 }

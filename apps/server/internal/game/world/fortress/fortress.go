@@ -46,6 +46,9 @@ type Record struct {
 	// 61DA40 serializes the signed tax ratio and accumulated tax gold.
 	TaxRate int16
 	TaxGold int64
+	// savedTax is the TaxGold last written (6201A0's +0x80); the treasury
+	// is written again once it has grown past it by taxFlushThreshold.
+	savedTax int64
 	// MaxEntrance, RequestFee and OfficialNpc copy the catalog row.
 	MaxEntrance uint32
 	RequestFee  uint64
