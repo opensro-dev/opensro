@@ -445,6 +445,19 @@ useCooldown
 		present,
 		/*
 ================
+presented
+
+Rows another owner holds (the storage room) with the bag's names, icons and
+tooltips. A listed storage row carries only its reference id; without this
+it drew nothing, and only rows moved in from the bag (which keep theirs)
+showed until the next login (BUG-069).
+================
+		*/
+		presented( items: readonly InventoryItem[] ): InventoryItem[] {
+			return items.map( present );
+		},
+		/*
+================
 references
 ================
 		*/

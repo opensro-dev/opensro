@@ -504,6 +504,17 @@ scroll's kind-0 row does not.
 	}
 	/*
 ================
+presentedStorage
+
+The open storage room with its rows named and drawn like the bag's.
+================
+	*/
+	function presentedStorage() {
+		const room = storage.state();
+		return room && { ...room, items: inventory.presented( room.items ) };
+	}
+	/*
+================
 cancelActionForMovement
 
 Cancel continuation before waiting on presentation. Otherwise a new basic
@@ -3657,7 +3668,7 @@ The published plane when something changed since the last take, else null.
 				paramJobs: paramJobs.state(),
 				countJobs: countJobs.state(),
 				reverseReturnChoice: countJobs.choosing() !== null,
-				storage: storage.state(),
+				storage: presentedStorage(),
 				playerModels: localPlayerModels(),
 				job,
 				cosWindows: cosWindows.filter( row => cosItemRefs2.has( row.itemRefObjId ) ).map( row => ({

@@ -11,6 +11,9 @@ import "../helpers/native-source-loader.mjs";
 import { defined } from "../helpers/defined.mjs";
 
 const room = await import( "../../src/engine/foundation/gameplay/storage-room.ts" );
+const { createInventory } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts"
+);
 
 // ITEM_ETC_HP_POTION_01: expendable stack class (typeFlags & 0x7E) === 0x6C.
 const POTION = 3630, POTION_FLAGS = 0x6c | 0x80;
@@ -106,4 +109,23 @@ test("only the 3/3/13/10 type word is the warehouse ticket", () => {
 	assert.equal( room.isWarehouseTicket( word( 3, 3, 13, 7 ) ), false ); // the repair hammer
 	assert.equal( room.isWarehouseTicket( word( 3, 3, 12, 10 ) ), false );
 	assert.equal( room.isWarehouseTicket( word( 3, 3, 13, 10 ) | 2 ), false );
+});
+
+test("a listed room row is named and drawn like the bag's (BUG-069)", () => {
+	// After a login every row comes from the list, which carries only the
+	// reference id; the opcode 14 references ahead of it name and draw it.
+	const inventory = createInventory( () => {} );
+	inventory.bootstrap( { inventorySlotCount: 45, equipmentSlotCount: 13, refItemSnapshot: [], equipItems: [] } );
+	inventory.references( [ {
+		refObjId: POTION,
+		typeFlags: POTION_FLAGS,
+		name: "HP Recovery Potion (Small)",
+		icon: "item/etc/hp_potion_01.ddj"
+	} ] );
+	const listed = room.decodeStorageList( Uint8Array.from( [ 150, 1, ...potionRow( 0, 30 ) ] ), refs ).items;
+	assert.equal( listed[0]?.icon, undefined, "the wire row has no icon of its own" );
+	const [shown] = inventory.presented( listed );
+	assert.equal( shown?.icon, "item/etc/hp_potion_01.ddj" );
+	assert.equal( shown?.name, "HP Recovery Potion (Small)" );
+	assert.equal( shown?.quantity, 30 );
 });
