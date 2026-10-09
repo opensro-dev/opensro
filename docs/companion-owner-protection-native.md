@@ -31,10 +31,10 @@ the companion's body. A prepared attack targeting a companion could remain
 active when its owner entered protection.
 
 The direct COS branch now applies the existing `petAttackBodyAllowed` helper
-to the owner snapshot. Command admission, ongoing combat and area candidate
-selection all use this resolver. Target identity and damage routing remain
-with the companion, and the existing cancellation owner closes a prepared
-cast when target resolution fails.
+to the owner snapshot. Ongoing combat and area candidate selection use this
+resolver; direct command admission through it is the separate change in PR
+#491. Target identity and damage routing remain with the companion, and the
+existing cancellation owner closes a prepared cast when target resolution fails.
 
 The behavioral regression seeds an admitted AI target independently of command
 routing, prepares a real cast against an initially unprotected companion, then
