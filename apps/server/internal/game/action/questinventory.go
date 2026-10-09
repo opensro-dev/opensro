@@ -55,6 +55,13 @@ func (rt *Runtime) PlanQuestInventory(c *enterworld.Character, consume, grant []
 		if !ok || ref == nil {
 			return nil, nil, fmt.Errorf("unresolved quest reward %s", request.Codename)
 		}
+		// A gold heap (the gold band, ITEM_ETC_GOLD_*) only lies on the
+		// ground: pickup credits the balance and never writes a row. A row
+		// would carry a gold type word the inventory body cannot encode,
+		// and the client fails world entry on it for good (#367).
+		if wire.IsGoldBand(ref.TypeFlags()) {
+			return nil, nil, fmt.Errorf("ground-only item %s cannot enter an inventory", request.Codename)
+		}
 		item := inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), Quantity: uint16(request.Count)}
 		if ref.TypeIDs[1] == 1 {
 			item.Durability = 100

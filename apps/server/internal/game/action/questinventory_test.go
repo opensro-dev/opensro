@@ -75,6 +75,9 @@ func TestQuestInventoryMissingConsumptionAndMissingRewardRefuse(t *testing.T) {
 		{consume: []inventory.ItemAmount{{Codename: "MISSING", Count: 1}}},
 		{grant: []inventory.ItemAmount{{Codename: "MISSING", Count: 1}}},
 		{grant: []inventory.ItemAmount{{Codename: "ITEM_ETC_HP_POTION_01", Count: 0}}},
+		// A gold heap is ground-only: an operator grant or a reward that
+		// names one is refused whole (#367).
+		{grant: []inventory.ItemAmount{{Codename: "ITEM_ETC_HP_POTION_01", Count: 1}, {Codename: "ITEM_ETC_GOLD_02", Count: 1}}},
 	} {
 		if _, _, err := rt.PlanQuestInventory(c, req.consume, req.grant); err == nil {
 			t.Fatal("invalid transaction accepted")
