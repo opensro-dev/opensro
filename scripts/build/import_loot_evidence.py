@@ -157,6 +157,62 @@ def read_backup(path, media):
 	return result
 
 
+# The class-selection tables (_RefDropClassSel_<name>). Each row is a 4-byte
+# record header (the u16 at +2 ends its fixed data), the monster level as
+# an int at +4, then one float32 probability per class from +8. Sources
+# differ in width (ISRO-R RareEquip has 60 classes to vSRO's 36), so every
+# table records its own.
+DROP_CLASS_TABLES = ("Equip", "RareEquip", "Recover", "Cure", "Ammo", "Scroll", "Alchemy_Tablet",
+	"Alchemy_MagicStone", "Alchemy_ATTRStone", "Reinforce")
+
+
+# ================
+# read_drops
+#
+# One backup's drop selection: every class table, its item assignments and
+# its gold rows, with item ids resolved to codenames and flagged when the
+# v1.150 client lacks the item. Raw values only; the catalog generator owns
+# every merge and filter decision.
+# ================
+def read_drops(path, media):
+	backup = Backup(path)
+	names = {}
+	for _, at, page in backup.named_rows("_RefObjCommon"):
+		fields = variable_fields(page, at)
+		if fields:
+			names[struct.unpack_from("<I", page, at + 4)[0]] = fields[0].decode("ascii", errors="backslashreplace")
+	classes = {}
+	for table in DROP_CLASS_TABLES:
+		rows, width = [], None
+		for _, at, page in backup.named_rows("_RefDropClassSel_" + table):
+			count = (struct.unpack_from("<H", page, at + 2)[0] - 8) // 4
+			if width is None:
+				width = count
+			elif count != width:
+				raise ValueError("Ragged class table " + table)
+			rows.append([struct.unpack_from("<I", page, at + 4)[0], list(struct.unpack_from("<%df" % count, page, at + 8))])
+		rows.sort()
+		classes[table] = {"width": width, "rows": rows}
+	# _RefDropItemAssign: [service][item][weight][absolute][class or -1][count].
+	assignments = []
+	for _, at, page in backup.named_rows("_RefDropItemAssign"):
+		service, item, weight, absolute, klass, count = struct.unpack_from("<6i", page, at + 4)
+		code = names.get(item)
+		assignments.append({"service": service, "codename": code, "weight": weight, "absolute": absolute,
+			"class": klass, "count": count, "client": code in media["items"]})
+	assignments.sort(key=lambda row: (row["codename"] or "", row["class"], row["weight"]))
+	# _RefDropGold: [u8 level][float probability][int min][int max].
+	gold = []
+	for _, at, page in backup.named_rows("_RefDropGold"):
+		level = page[at + 4]
+		probability, low, high = struct.unpack_from("<fii", page, at + 5)
+		gold.append([level, probability, low, high])
+	gold.sort()
+	digest = hashlib.sha256(backup.raw).hexdigest()
+	backup.close()
+	return {"sha256": digest, "classes": classes, "assignments": assignments, "gold": gold}
+
+
 # ================
 # main
 # ================
@@ -170,6 +226,7 @@ def main():
 	for name in ("vsro", "isro"):
 		result = read_backup(getattr(args, name), media)
 		write_json(args.output / (name + "-rewards-source.json"), result)
+		write_json(args.output / (name + "-drops-source.json"), read_drops(getattr(args, name), media))
 		print(name, "fixed", len(result["fixed"]), "random", len(result["random"]), "custom", len(result["custom"]))
 
 

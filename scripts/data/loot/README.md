@@ -23,7 +23,18 @@ item identities from newer backups never become runtime item identities.
   records retain page and row offsets. SQL extraction excludes ghost rows and
   secondary indexes and joins allocation metadata to table names.
 
-To refresh the client and reward snapshots from local evidence:
+- `vsro-drops-source.json` and `isro-drops-source.json` record each backup's
+  drop selection as raw values: every `_RefDropClassSel_*` class table with
+  its own width (ISRO-R's rare equipment has 60 classes, its stones 20 and
+  its elixirs 3, against vSRO's 36, 12 and 2), the `_RefDropItemAssign` rows
+  resolved to codenames and flagged when the v1.150 client lacks the item,
+  and the `_RefDropGold` rows. The vSRO class tables reproduce
+  `equipment-source.json` and `consumables-source.json` value for value.
+  The catalog generator owns every merge and filter decision (#459). Neither
+  backup is proven retail: ISRO-R authors most tables only around levels
+  71-90, and vSRO's levels 74-89 run about ten times lower than ISRO-R's.
+
+To refresh the client, reward and drop snapshots from local evidence:
 
 ```text
 python -B scripts/build/import_loot_evidence.py --media <v1.150-textdata> --vsro <vSRO-backup> --isro <ISRO-backup> --output scripts/data/loot
