@@ -12,7 +12,10 @@ reloads on its own: that would drop a player mid-session.
 
 It checks when a trigger arrives (the title screen opens, the connection
 drops, the tab becomes visible again), no more than once per
-RELEASE_TRIGGER_GAP_MS, and otherwise every RELEASE_CHECK_INTERVAL_MS. The
+RELEASE_TRIGGER_GAP_MS, and otherwise every RELEASE_CHECK_INTERVAL_MS. A
+file the page's manifest lists coming back 404 (the asset owner's
+releaseStale) is the publish itself showing: that checks at once, without
+waiting for a free slot, no more than once per RELEASE_STALE_GAP_MS. The
 frame clock drives it; it owns no timer. A page without a hashed entry (a
 development server) never checks.
 
@@ -23,6 +26,7 @@ import type { AssetOwner } from "@/engine/contracts/assets";
 
 export const RELEASE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
 export const RELEASE_TRIGGER_GAP_MS = 30 * 1000;
+export const RELEASE_STALE_GAP_MS = 5 * 1000;
 const RELEASE_PAGE_BYTES = 256 * 1024;
 // Leave foreground loads a slot; the check is never urgent.
 const RELEASE_MIN_FREE_SLOTS = 2;
@@ -56,9 +60,11 @@ export function createReleaseWatch( assets: AssetOwner, pageUrl: string, running
 				if ( result.kind === "release" && result.entry !== null && result.entry !== runningEntry ) newer = true;
 				return;
 			}
+			// A stale file means the scene in hand cannot finish: check now.
+			const stale = assets.releaseStale?.() === true && nowMs - lastCheckMs >= RELEASE_STALE_GAP_MS;
 			const due = nowMs - lastCheckMs >= RELEASE_CHECK_INTERVAL_MS ||
 				triggered && nowMs - lastCheckMs >= RELEASE_TRIGGER_GAP_MS;
-			if ( !due || assets.available() < RELEASE_MIN_FREE_SLOTS ) return;
+			if ( stale ? assets.available() < 1 : !due || assets.available() < RELEASE_MIN_FREE_SLOTS ) return;
 			lastCheckMs = nowMs;
 			job = assets.request( pageUrl, RELEASE_PAGE_BYTES, "release" );
 		},

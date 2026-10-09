@@ -50,6 +50,19 @@ const DOWNLOAD_NO_PROGRESS_MS = 15000;
 const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
 /*
 ================
+listedFileGone
+
+A 404 for a path the manifest listed (an absent path is AssetAbsentError):
+the published files belong to a newer release than this page's manifest.
+================
+*/
+function listedFileGone( error: unknown ) {
+	return !(error instanceof AssetAbsentError) && error instanceof Error && "status" in error &&
+		Number( error.status ) === 404;
+}
+
+/*
+================
 createLoader
 
 Own decoders, foreground requests and the background installation scheduler.
@@ -661,7 +674,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					id: request.id,
 					error: String( error ),
 					...(transientAssetFailure( error ) ? { transient: true as const } : {}),
-					...(error instanceof AssetAbsentError ? { absent: true as const } : {})
+					...(error instanceof AssetAbsentError ? { absent: true as const } : {}),
+					// The live-page check is not a manifest file; its own 404 is no news.
+					...(request.decode !== "release" && listedFileGone( error ) ? { stale: true as const } : {})
 				}, [] );
 			}
 		} finally {

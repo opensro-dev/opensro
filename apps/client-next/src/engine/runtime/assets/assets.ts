@@ -36,6 +36,7 @@ export function createAssets(): AssetOwner {
 		cancelled?: boolean;
 	}>();
 	let progress: import("@/engine/contracts/assets").AssetProgress | null = null;
+	let releaseStale = false;
 	let nextId = 0, disposed = false, failure: string | null = null;
 
 	/*
@@ -130,6 +131,7 @@ export function createAssets(): AssetOwner {
 			return;
 		}
 		const result = event.data, job = jobs.get( result.id );
+		if ( result.kind === "error" && result.stale ) releaseStale = true;
 		if ( job?.cancelled ) {
 			close( result );
 			jobs.delete( result.id );
@@ -176,6 +178,7 @@ export function createAssets(): AssetOwner {
 				{ phase: "running" };
 		},
 		available: () => disposed || failure ? 0 : 4 - jobs.size,
+		releaseStale: () => releaseStale,
 
 		/*
 		================

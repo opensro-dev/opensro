@@ -124,6 +124,9 @@ export type AssetResult =
 		absent?: true;
 		// Exhausted bounded transport retries; validation failures never set this.
 		transient?: true;
+		// The session's manifest lists the file but the server answered 404:
+		// the release it describes has been replaced (release-watch.ts).
+		stale?: true;
 	};
 /*
 ================
@@ -136,6 +139,8 @@ export interface AssetOwner {
 	progress(): AssetProgress | null;
 	health(): { phase: "running"; } | { phase: "failed"; error: string; } | { phase: "disposed"; };
 	available(): number;
+	// Latched once any listed file came back 404 (an error's stale flag).
+	releaseStale?(): boolean;
 	request(
 		url: string,
 		limit?: number,

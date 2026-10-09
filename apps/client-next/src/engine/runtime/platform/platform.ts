@@ -331,6 +331,9 @@ export function createPlatform(
 	// the page shell carries hidden (index.html #update-notice).
 	let visibleAgain = false;
 	let onlineAgain = false;
+	// A newer release is live: like a native client the gateway sends to the
+	// patcher, the outdated page stops playing until it reloads.
+	let updateRequired = false;
 	window.addEventListener( "online", () => {
 		onlineAgain = true;
 	}, { signal: lifetime.signal } );
@@ -570,6 +573,8 @@ export function createPlatform(
 	}, { signal: lifetime.signal, capture: true } );
 	window.addEventListener( "keydown", event => {
 		if ( event.isComposing || event.keyCode === 229 ) return;
+		// The update prompt holds focus; Enter reaches its Refresh button.
+		if ( updateRequired ) return;
 		const vk = virtualKey( event.code );
 		if (
 			(vk && bindings.keys.includes( vk )) ||
@@ -903,11 +908,18 @@ export function createPlatform(
 		================
 		*/
 		presentUpdate( newer ) {
-			// The refresh is the player's choice: reloading on our own would
-			// drop a live session.
+			// An outdated page cannot keep playing (its next scene may name files
+			// the release replaced), so the prompt covers the game and takes the
+			// keys. The reload itself is the player's click.
 			// Called every frame: write only a change. Assigning hidden, even to its
 			// current value, invalidates style (1.8 ms a frame in a trace).
 			if ( updateNotice && updateNotice.hidden === newer ) updateNotice.hidden = !newer;
+			if ( newer === updateRequired ) return;
+			updateRequired = newer;
+			if ( !newer ) return;
+			uiPointer = false;
+			onInput( { kind: "release", timeMs: timeMs() } );
+			updateNotice?.querySelector( "button" )?.focus();
 		},
 		/*
 		================

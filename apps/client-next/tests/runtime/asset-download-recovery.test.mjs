@@ -200,6 +200,21 @@ test("HTTP failure survives a rejected response-body cleanup", async t => {
 	assert.match( messages[0].error, /Asset HTTP 404/ );
 });
 
+test("a listed file answered 404 is marked stale", async t => {
+	// The release watch reads stale as the publish replacing this page's files.
+	const gone = fixture( t, async () => new Response( "gone", { status: 404 } ) );
+	await settle();
+	assert.equal( gone.messages[0].kind, "error" );
+	assert.equal( gone.messages[0].stale, true );
+});
+
+test("a refused request is not stale", async t => {
+	const refused = fixture( t, async () => new Response( "forbidden", { status: 403 } ) );
+	await settle();
+	assert.equal( refused.messages[0].kind, "error" );
+	assert.equal( refused.messages[0].stale, undefined );
+});
+
 /*
 ================
 packedAsset
