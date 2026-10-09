@@ -60,6 +60,7 @@
 	{
 		"Codename": "QNO_CA_THIEF_5",
 		"MaxCompletions": 1,
+		"MinLevel": 21,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CA_SPECIAL",
 		"EndNpcCodename": "NPC_CA_SPECIAL",
