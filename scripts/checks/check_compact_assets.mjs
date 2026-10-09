@@ -18,12 +18,12 @@ import { toPublicImagePath } from "../build/shared/assetPaths.mjs";
 import { collectWorldMapImageReferences } from "../build/shared/worldMapImageReferences.mjs";
 import { validateServerGameDataArchive } from "../build/server/serverGameDataArchive.mjs";
 import { generatedRoot, publicAssetsRoot, serverGameDataRoot } from "../build/world/paths.mjs";
+import { ORIGINAL_PK2_BYTES as originalPk2Bytes } from "../build/shared/servedSize.mjs";
 
 const generatedAssetsRoot = path.join( generatedRoot, "intermediate" );
 const serverGameDataArchivePath = `${serverGameDataRoot}.srogz`;
 const statePath = compactStatePath( generatedRoot );
 const manifestPath = path.join( publicAssetsRoot, "packs", "manifest.json" );
-const originalPk2Bytes = 2_356_998_144;
 const maximumCompactBytes = Math.floor( originalPk2Bytes * 0.8 );
 const expectedOutdoorRegionCount = 2_123;
 const requiredOutdoorPaths = [

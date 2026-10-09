@@ -263,6 +263,16 @@ export const ASSET_TASKS = [
 		args: [ "scripts/checks/check_compact_assets.mjs" ]
 	} ),
 	commandTask( {
+		name: "assets:check:served",
+		description: "Measure the served packs against the 80%-of-PK2 ceiling",
+		kind: "check",
+		ci: false,
+		requires: [ "generated-assets" ],
+		timeoutClass: "short",
+		command: "node",
+		args: [ "scripts/checks/check_served_size.mjs" ]
+	} ),
+	commandTask( {
 		name: "assets:check:integrity",
 		description: "Validate generated asset-pack manifests and artifacts",
 		kind: "check",

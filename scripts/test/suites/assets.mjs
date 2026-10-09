@@ -60,6 +60,7 @@ export default {
 		"scripts/test/assets/bsrAuthoredBox.test.mjs",
 		"scripts/test/assets/englishCorrections.test.mjs",
 		"scripts/test/assets/memberCompression.test.mjs",
+		"scripts/test/assets/servedSize.test.mjs",
 		"scripts/test/assets/stallNetworkAssets.test.mjs",
 		"scripts/test/assets/terrainBlockTextures.test.mjs"
 	]
