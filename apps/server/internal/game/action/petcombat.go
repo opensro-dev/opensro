@@ -99,6 +99,14 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	if state == nil {
 		return OpResult{}
 	}
+	// 4D2588..4D2592 retires the owner's event-bit-2 effects after the
+	// admitted order, including a repeated order for the existing target.
+	defer func() {
+		rt.deps.Update(character, "pet-attack-order", func() bool {
+			rt.retireEffectsOnEvent(division, character, effectEventSkillCast, nowMs)
+			return true
+		})
+	}()
 	if state.combat != nil && state.combat.target == targetGID {
 		return OpResult{}
 	}
@@ -112,12 +120,6 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	state.combat = intent
 	// Entering BATTLE leaves PICKITEM: a pending pickup ends unanswered.
 	state.pickup = nil
-	// 4D2200 retires the owner's effects with event bit 2 when it posts the
-	// order, the same retirement a skill cast performs (59B745).
-	rt.deps.Update(character, "pet-attack-order", func() bool {
-		rt.retireEffectsOnEvent(division, character, effectEventSkillCast, nowMs)
-		return true
-	})
 	return OpResult{}
 }
 
