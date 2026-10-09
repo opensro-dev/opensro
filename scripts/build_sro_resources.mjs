@@ -88,8 +88,12 @@ await withGeneratedAssetsLock( "SRO resource build", async () => {
 	// Everything this run writes or keeps is claimed for the resource build;
 	// a failed run throws before the commit and leaves the old record.
 	beginPublication( "resource-build" );
-	const results = await buildSroResources();
+	// A lane whose inputs did not change replays its last result
+	// (laneMemo.mjs); SRO_LANE_MEMO=0 runs every lane.
+	const laneMemo = process.env.SRO_LANE_MEMO === "0" ? undefined : { force };
+	const results = await buildSroResources( undefined, { laneMemo } );
 	await commitPublication();
+	await results.laneMemo?.commit();
 	for ( const line of formatResourceBuildSummary( results ) ) console.log( line );
 
 	const after = await computeResourceBuildFingerprint();

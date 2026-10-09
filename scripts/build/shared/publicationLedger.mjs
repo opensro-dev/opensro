@@ -30,6 +30,7 @@ build, the ledger report and the packager refuse it.
 
 ===========================================================================
 */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { containedPublicFile } from "./assetPaths.mjs";
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -49,6 +50,8 @@ const CORE_OWNERS = [ "resource-build", "outdoor-world" ];
 const OPTIONAL_OWNERS = [ "world-map" ];
 
 let current = null;
+// The claim set of the build lane running in this async context (recordClaims).
+const claimRecorder = new AsyncLocalStorage();
 
 /*
 ================
@@ -113,9 +116,23 @@ publication (a test, a one-off tool) this is a no-op.
 export function claimPublicFile( absolutePath ) {
 	if ( !current ) return;
 	const publicPath = toPublicPath( absolutePath );
+	if ( publicPath ) claimRecorder.getStore()?.add( publicPath );
 	if ( publicPath && !current.files.has( publicPath.toLowerCase() ) ) {
 		current.files.set( publicPath.toLowerCase(), publicPath );
 	}
+}
+
+/*
+================
+recordClaims
+
+Runs task and adds every path it claims, in its own async context, to
+claims: what one build lane produced or kept (laneMemo.mjs). Claims made
+elsewhere at the same time are not recorded.
+================
+*/
+export function recordClaims( claims, task ) {
+	return claimRecorder.run( claims, task );
 }
 
 /*

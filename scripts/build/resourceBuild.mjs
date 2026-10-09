@@ -71,7 +71,10 @@ import { rebuildRoot } from "./world/paths.mjs";
 import { formatOptimizationSummary } from "./jsonAssetCompression.mjs";
 import { packPublicTree } from "./packPublicTree.mjs";
 import { buildJobs } from "./shared/buildParallelism.mjs";
-import { claimPublicPaths } from "./shared/publicationLedger.mjs";
+import { claimPublicPaths, recordClaims } from "./shared/publicationLedger.mjs";
+import { createLaneMemo, outputSignatures, signatureHash } from "./shared/laneMemo.mjs";
+import { dataRootsHash, serverRosterRoots } from "./shared/resourceBuildFingerprint.mjs";
+import { fileURLToPath } from "node:url";
 
 const RETAIL_CURSOR_IDS = [ "0x95", "0x96", "0x97", "0x98", "0x99", "0x9a", "0xa0", "0xa1", "0xa3", "0xa6" ];
 /*
@@ -97,6 +100,33 @@ async function extractRetailCursors() {
 	// The Python extractor writes the cursors; this step owns them.
 	claimPublicPaths( RETAIL_CURSOR_IDS.map( id => `/assets/cursors/sro_client_cursor_${id}.png` ) );
 	return { count: RETAIL_CURSOR_IDS.length };
+}
+
+// The modules that hold each memoized lane's steps: laneMemo.mjs keys a lane
+// by their code closures. The world lane is not memoized; it reads the
+// outdoor build's public output, which no lane key covers.
+const LANE_MODULES = {
+	interfaceImages: [ "./cif.mjs", "./launcher.mjs", "./world/assets/copyMissionMinimapTileImages.mjs" ],
+	text: [ "./text.mjs", "./launcher.mjs", "./config.mjs" ],
+	fonts: [ "./fonts.mjs" ],
+	audio: [ "./audio.mjs" ],
+	cursors: [ "../extract_client_cursors.py" ],
+	titleCharacters: [
+		"./char/buildRoster.mjs",
+		"./char/buildCrowdVatAssets.mjs",
+		"./char/buildLocomotionBanAssets.mjs",
+		"./char/buildDropModelAssets.mjs"
+	],
+	npc: [ "./char/buildNpcModelAssets.mjs", "./char/buildNpcVatAssets.mjs" ]
+};
+
+/*
+================
+laneModules
+================
+*/
+function laneModules( name ) {
+	return LANE_MODULES[name].map( module => fileURLToPath( new URL( module, import.meta.url ) ) );
 }
 
 export const RESOURCE_BUILD_STEPS = Object.freeze( {
@@ -158,7 +188,9 @@ buildSroResources
 
 Runs every producer in dependency order and returns their results.
 options.laneCount overrides SRO_BUILD_JOBS (shared/buildParallelism.mjs); options.log receives
-progress lines (console.log by default).
+progress lines (console.log by default). options.laneMemo ({ force }) lets a lane whose inputs did
+not change replay its last result (shared/laneMemo.mjs); the caller commits results.laneMemo
+after the publication. Without it every lane runs, as tests and focused callers need.
 ================
 */
 export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options = {} ) {
@@ -189,12 +221,28 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// effect textures. The converter is incremental, so a warm rebuild only
 	// scans and skips fresh outputs; convertImagesRunner suppresses the
 	// narrower duplicate passes below.
-	await timed( "nativeLensResources", () => steps.buildNativeLensResources() );
-	await timed( "nativeCharacterTextures", () => steps.buildNativeCharacterTextures() );
-	const sourceImages = await timed( "sourceImages", () => steps.runConvertImages( [] ) );
+	// The start-up steps always run; what they publish is part of every lane's
+	// upstream, so their claims are recorded for the lane memo.
+	const startupClaims = new Set();
+	const startup = ( task ) => options.laneMemo ? recordClaims( startupClaims, task ) : task();
+	await startup( () => timed( "nativeLensResources", () => steps.buildNativeLensResources() ) );
+	await startup( () => timed( "nativeCharacterTextures", () => steps.buildNativeCharacterTextures() ) );
+	const sourceImages = await startup( () => timed( "sourceImages", () => steps.runConvertImages( [] ) ) );
 	if ( sourceImages.status !== 0 ) {
 		throw new Error( `Source image conversion failed with exit status ${sourceImages.status}.` );
 	}
+	const memo = options.laneMemo ?
+		createLaneMemo( {
+			upstream: {
+				data: await dataRootsHash(),
+				startup: signatureHash( await outputSignatures( startupClaims ) )
+			},
+			force: options.laneMemo.force,
+			entry: fileURLToPath( import.meta.url ),
+			log
+		} ) :
+		null;
+	const lane = ( name, inputs, run ) => memo ? () => memo.lane( name, inputs, run ) : run;
 
 	// The early build fans out into parallel lanes. Each lane is strictly ordered
 	// internally; two lanes may only overlap because their filesystem inputs and
@@ -366,13 +414,13 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		npcAssets,
 		worldResults
 	] = await runResourceTasks( [
-		interfaceImagesLane,
-		textLane,
-		fontsLane,
-		audioLane,
-		cursorAssetsLane,
-		titleCharacterAssetsLane,
-		npcAssetsLane,
+		lane( "interface-images", { modules: laneModules( "interfaceImages" ) }, interfaceImagesLane ),
+		lane( "text", { modules: laneModules( "text" ) }, textLane ),
+		lane( "fonts", { modules: laneModules( "fonts" ) }, fontsLane ),
+		lane( "audio", { modules: laneModules( "audio" ) }, audioLane ),
+		lane( "cursors", { modules: laneModules( "cursors" ) }, cursorAssetsLane ),
+		lane( "title-characters", { modules: laneModules( "titleCharacters" ) }, titleCharacterAssetsLane ),
+		lane( "npc", { modules: laneModules( "npc" ), roots: serverRosterRoots() }, npcAssetsLane ),
 		worldLane
 	] );
 	const titleRosterAssets = titleCharacterAssets.roster;
@@ -492,6 +540,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	const { jsonOptimization, packGroups, claimAudit, assetPacks, sidecarRetirement, manifest, finalJsonOptimization } =
 		packed;
 	return {
+		laneMemo: memo,
 		stepTimings,
 		fontCatalog,
 		cifResult,

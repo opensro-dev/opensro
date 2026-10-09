@@ -45,7 +45,7 @@ const FINGERPRINT_VERSION = 7;
 const DIRECTORY_CONCURRENCY = 32;
 
 /** Env vars that alter the build's outputs; a change must invalidate the skip. */
-const ENV_KNOBS = [
+export const ENV_KNOBS = [
 	"SRO_SERVER_SOURCE_ROOT",
 	"SRO_ALLOW_DEV_OUTDOOR_ROUTING",
 	"SRO_SKIP_TEXTURE_CONVERT",
@@ -85,6 +85,62 @@ const FINGERPRINT_ROOTS = [
 	{ label: "lock-helper", absolutePath: path.join( rebuildRoot, "scripts", "rebuildLock.mjs" ) },
 	{ label: "public", absolutePath: publicRoot }
 ];
+
+// The retail and converted inputs every lane may read (laneMemo.mjs): not
+// the code, not the public tree, and not the server sources, which only
+// the NPC lane's roster export runs (serverRosterRoots).
+const DATA_ROOT_LABELS = new Set( [ "extracted", "client-executable", "particle-archive", "rebuild-assets" ] );
+
+/*
+================
+hashRoots
+
+The stat hash (path, size, mtime) over the given roots, absent ones included.
+================
+*/
+export async function hashRoots( roots ) {
+	const hash = createHash( "sha256" );
+	for ( const root of roots ) {
+		const rootLines = [];
+		await collectRoot( root, rootLines );
+		rootLines.sort();
+		hash.update( `${root.label}\n${hashFingerprintLines( rootLines )}\n` );
+	}
+	return hash.digest( "hex" );
+}
+
+/*
+================
+dataRootsHash
+
+The stat hash of each data root, by label, so a lane that runs can say
+which root moved.
+================
+*/
+export async function dataRootsHash() {
+	const hashes = {};
+	for ( const root of FINGERPRINT_ROOTS.filter( root => DATA_ROOT_LABELS.has( root.label ) ) ) {
+		hashes[root.label] = await hashRoots( [ root ] );
+	}
+	return hashes;
+}
+
+/*
+================
+serverRosterRoots
+
+The server sources the roster exporter (sro-evidence) compiles from: the
+whole internal tree, since the roster joins enterworld, monster and more.
+================
+*/
+export function serverRosterRoots() {
+	return [
+		{ label: "server-go-mod", absolutePath: path.join( serverSourceRoot, "go.mod" ) },
+		{ label: "server-go-sum", absolutePath: path.join( serverSourceRoot, "go.sum" ) },
+		{ label: "server-cmd", absolutePath: path.join( serverSourceRoot, "cmd" ) },
+		{ label: "server-internal", absolutePath: path.join( serverSourceRoot, "internal" ) }
+	];
+}
 
 /*
 ================
