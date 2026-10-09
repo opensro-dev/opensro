@@ -183,6 +183,7 @@ import {
 	type SocialCommand
 } from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
+import { pickupNotice } from "@/engine/foundation/gameplay/pickup-notice";
 import {
 	skillAdmitsPredictedTarget,
 	skillCatalog,
@@ -3177,6 +3178,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					inventory.state().inventory.find( i => i.slot === frame.payload[1] ) :
 					undefined;
 				const cast = used ? returnScrollCast( used, now ) : undefined;
+				// 756CF0 compares the bag slot before and after a 0xB06D pickup.
+				const pickupSlot = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 6 &&
+						frame.payload.length > 3 && frame.payload[2] !== 254 ?
+					frame.payload[2] :
+					undefined;
+				const pickupBefore = pickupSlot === undefined ?
+					undefined :
+					inventory.state().inventory.find( i => i.slot === pickupSlot );
 				const mallRequest = inventory.state().itemMall?.pending === true;
 				const room = storage.state();
 				if ( frame.opcode === 0xb06d && room ) {
@@ -3233,6 +3242,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				if ( item && used && localGid && isWarehouseTicket( used.typeFlags ) ) {
 					storage.open( localGid );
 					dirty = true;
+				}
+				if ( item && pickupSlot !== undefined ) {
+					const notice = pickupNotice(
+						pickupBefore,
+						inventory.state().inventory.find( i => i.slot === pickupSlot )
+					);
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 				}
 				// A pickup into the gold slot (0xFE) prints the whole heap: pickup types
 				// 6/0x1C resolve to window 0x46 with slot 0xFE (7653D0), and that branch

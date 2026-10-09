@@ -278,6 +278,38 @@ test("gold grant and balance refresh reach gameplay without an unhandled packet 
 	core.dispose();
 });
 
+test("an item pickup prints the native gain line: the stack it lands as, then only what a merge adds", () => {
+	// 756CF0 prints UIIT_MSG_STATE_GET_ITEM_* for 0xB06D type 6 into a bag slot;
+	// a consumable already in the slot reports the gained count.
+	const core = createWorldCore( () => {} ),
+		flush = () => {
+			const b = core.take();
+			if ( b ) core.ack( b.sequence );
+			return b;
+		};
+	core.bootstrap( {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [],
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		localPlayerEntry: { modelRef: 1933, startProfile: { regionId: 257, x: 1, y: 2, z: 3, angle: 0 } }
+	} );
+	flush();
+	const stack = ( ref, quantity ) => {
+		const body = Buffer.alloc( 6 );
+		body.writeUInt32LE( ref );
+		body.writeUInt16LE( quantity, 4 );
+		return [ ...body ];
+	};
+	core.receive( { opcode: 0xb06d, payload: Buffer.from( [ 1, 6, 13, ...stack( 1, 3 ) ] ) }, 1 );
+	core.receive( { opcode: 0xb06d, payload: Buffer.from( [ 1, 6, 13, ...stack( 1, 5 ) ] ) }, 2 );
+	core.step( 2 );
+	const gameplay = defined( defined( flush() ).events.find( e => e.kind === "gameplay" ) ).state;
+	const gains = defined( gameplay.notices ).filter( n => n.key === "UIIT_MSG_STATE_GET_ITEM_EXPENDABLE" );
+	assert.deepEqual( gains.map( n => n.value ), [ 3, 2 ] );
+	core.dispose();
+});
+
 test("COS record gates mounting; result feedback never invents a ride and despawn clears capability", () => {
 	const frames = [], core = createWorldCore( f => frames.push( f ) );
 	const flush = () => {
