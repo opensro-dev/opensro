@@ -227,6 +227,9 @@ export interface CharacterActor {
 	 * (character-fade.ts attachedOpacity). */
 	readonly effectEntity?: boolean;
 	readonly layers?: readonly CharacterLayer[];
+	/** A CCompChar bone rotator (spine-aim.ts): the bone and its rotation in
+	 * model space, multiplied after the sampled local rotation. */
+	readonly boneRotation?: { readonly bone: string; readonly rotation: readonly [number, number, number, number]; };
 	readonly attachment?: {
 		readonly gid: number;
 		readonly bone: string;

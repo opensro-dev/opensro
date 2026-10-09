@@ -111,3 +111,19 @@ export function slerp(
 		right = sin < 1e-6 ? t : Math.sin( t * angle ) / sin;
 	for ( let i = 0; i < 4; i++ ) out[i] = a[aOffset + i]! * left + b[bOffset + i]! * right * sign;
 }
+
+/*
+================
+multiplyQuaternion
+
+out = a * b in Hamilton order (b's rotation first, then a's), x y z w. out
+may alias either input.
+================
+*/
+export function multiplyQuaternion( a: ArrayLike<number>, b: ArrayLike<number>, out: Float32Array ) {
+	const ax = a[0]!, ay = a[1]!, az = a[2]!, aw = a[3]!, bx = b[0]!, by = b[1]!, bz = b[2]!, bw = b[3]!;
+	out[0] = aw * bx + ax * bw + ay * bz - az * by;
+	out[1] = aw * by - ax * bz + ay * bw + az * bx;
+	out[2] = aw * bz + ax * by - ay * bx + az * bw;
+	out[3] = aw * bw - ax * bx - ay * by - az * bz;
+}

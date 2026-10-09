@@ -344,6 +344,7 @@ export interface ActorOwner {
 			materialTint: readonly [number, number, number] | undefined;
 			scale: number;
 			pointLight?: CharacterPointLight;
+			boneRotation?: CharacterActor["boneRotation"];
 		};
 		hostMotions(
 			gid: number

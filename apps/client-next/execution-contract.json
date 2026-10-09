@@ -3512,6 +3512,13 @@
 			"reason": "Presentation-events supplies the existing sampled character socket callback; no renderer or flight clock is replaced."
 		},
 		{
+			"file": "src/engine/runtime/characters/effects/spine-aims.ts",
+			"expression": "socket",
+			"function": "bindingHeight",
+			"kind": "callback",
+			"reason": "Effects forwards the same sampled character socket callback to measure the spine aim's binding heights once per armed cast."
+		},
+		{
 			"file": "src/engine/runtime/characters/effects/effects.ts",
 			"expression": "duration",
 			"function": "step",

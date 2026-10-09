@@ -59,6 +59,8 @@ import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SoundEvent } from "@/engine/contracts/audio";
 import type { EffectCatalog, EffectStage, EffectVisual, EffectTrigger } from "@/engine/contracts/effects";
 import { importedModelBasis, nativeRootOffset } from "@/engine/foundation/rendering/world-math";
+import { SPINE_AIM_BONE } from "@/engine/foundation/animation/spine-aim";
+import { createSpineAims } from "./spine-aims";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { characterHeadingYaw, nativeHeadingYaw, radians, type Radians } from "@/engine/foundation/math/angles";
@@ -238,6 +240,7 @@ export function createCharacterEffects(
 	>();
 	let weapons: Record<string, string> = {};
 	const weaponOwners = new Map<number, number>(), hiddenWeapons = new Set<number>();
+	const spineAims = createSpineAims();
 	let job: {
 			id: number;
 			kind: "records" | "models" | "named";
@@ -1027,6 +1030,7 @@ export function createCharacterEffects(
 						catalog?.[String( cast.skill )]?.hideWeapon === 1
 					) weaponOwners.set( cast.token, cast.caster );
 				}
+				spineAims.step( { casts: gameplay?.casts ?? [], catalog, triggers, presented, now }, socket );
 				for ( const [gid, row] of materials ) {
 					if ( !byGid.has( gid ) ) {
 						materials.delete( gid );
@@ -2896,9 +2900,11 @@ export function createCharacterEffects(
 		================
 		*/
 		appearance( gid: number ) {
+			const spineRotation = spineAims.rotation( gid );
 			return {
 				...(hitLights.get( gid ) ? { pointLight: hitLights.get( gid ) } : {}),
 				weaponHidden: hiddenWeapons.has( gid ),
+				...(spineRotation ? { boneRotation: { bone: SPINE_AIM_BONE, rotation: spineRotation } } : {}),
 				materialTint: materials.get( gid )?.color,
 				scale: hwan.get( gid )?.value ?? 1
 			};
@@ -3044,6 +3050,7 @@ export function createCharacterEffects(
 			hawkImpacts.length = 0;
 			weaponOwners.clear();
 			hiddenWeapons.clear();
+			spineAims.reset();
 			materials.clear();
 			materialOwners.clear();
 			hwan.clear();
@@ -3081,6 +3088,7 @@ export function createCharacterEffects(
 			hawkImpacts.length = 0;
 			weaponOwners.clear();
 			hiddenWeapons.clear();
+			spineAims.reset();
 			materials.clear();
 			materialOwners.clear();
 			hwan.clear();

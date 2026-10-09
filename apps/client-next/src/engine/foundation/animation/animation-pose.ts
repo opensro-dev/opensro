@@ -16,7 +16,7 @@ bone names (A981A0 searches compound branches in order for a marker).
 import { createAttachmentBindPose } from "./equipment-sockets";
 import { createAnimationTimelines } from "./animation-timelines";
 import type { CharacterModel, CharacterPrimitive, CharacterLayer, CharacterClip } from "@/engine/contracts/character";
-import { compose, multiplyDisjoint as multiply, slerp } from "@/engine/foundation/math/pose-math";
+import { compose, multiplyDisjoint as multiply, multiplyQuaternion, slerp } from "@/engine/foundation/math/pose-math";
 import { paletteBindings } from "./palette-bindings";
 import { bodyBoneScale } from "./body-shape";
 
@@ -125,6 +125,10 @@ without changing skeleton storage, the selected layers or their revision.
     */
 	type ResolvedLayer = { clip: CharacterClip | undefined; time: number; weight: number; lane: "event" | "timed"; };
 	let resolved: ResolvedLayer[] = [], pendingLayers: ResolvedLayer[] = [], hasPose = false;
+	// One CCompChar bone rotator (spine-aim.ts): its node, rotation and whether
+	// it changed since the last evaluation. A released node recomposes once.
+	const boneRotation = new Float32Array( 4 );
+	let rotatedNode = -1, releasedNode = -1, rotationChanged = false;
 	let cpuPending = false, cpuEvaluations = 0;
 	const sampleRequest = { clip: model.clips[0]!, time: 0 };
 	/*
@@ -136,7 +140,7 @@ gpuSample
 		const layer = resolved[0];
 		if (
 			volume !== DEFAULT_BODY_VOLUME || resolved.length !== 1 || !layer?.clip || layer.weight !== 1 ||
-			!gpuClips.has( layer.clip )
+			!gpuClips.has( layer.clip ) || rotatedNode >= 0
 		) return null;
 		sampleRequest.clip = layer.clip;
 		sampleRequest.time = layer.time;
@@ -293,12 +297,17 @@ materialize
 				}
 			}
 		}
+		// A9ADD0 multiplies the rotator after the sampled local rotation.
+		if ( rotatedNode >= 0 ) {
+			multiplyQuaternion( boneRotation, rotations[rotatedNode]!, rotations[rotatedNode]! );
+		}
 		let matricesChanged = !matricesInitialized;
 		for ( const n of order ) {
 			const node = model.nodes[n]!;
 			let localChanged = !matricesInitialized;
-			if ( !matricesInitialized || animatedLocal[n] ) {
-				localChanged = !reuseMatrices || !sameLocalSample( n );
+			const rotated = n === rotatedNode || n === releasedNode;
+			if ( !matricesInitialized || animatedLocal[n] || rotated ) {
+				localChanged = rotated || !reuseMatrices || !sameLocalSample( n );
 				if ( localChanged ) {
 					if ( node.matrix ) {
 						locals[n]!.set( node.matrix );
@@ -327,6 +336,7 @@ materialize
 		}
 		if ( matricesChanged ) paletteVersion++;
 		matricesInitialized = true;
+		releasedNode = -1;
 		directMatrices = direct;
 		cpuPending = false;
 		cpuEvaluations++;
@@ -367,6 +377,33 @@ quaternion scratch is charged and allocated only when playback needs it.
 		revision: () => poseVersion,
 		/*
         ================
+        setBoneRotation
+
+        Install, update or drop the named bone's rotator rotation (x y z w in
+        model space) before the next evaluate. A bone the model lacks is ignored,
+        as CAnimTrack_FindMarkerByName fails in A9C370.
+        ================
+        */
+		setBoneRotation( bone: string, rotation: readonly number[] | null ) {
+			const node = rotation ? sockets.get( bone ) ?? -1 : -1;
+			if ( node < 0 ) {
+				if ( rotatedNode < 0 ) return;
+				releasedNode = rotatedNode;
+				rotatedNode = -1;
+				rotationChanged = true;
+				return;
+			}
+			if (
+				node === rotatedNode && boneRotation[0] === rotation![0] && boneRotation[1] === rotation![1] &&
+				boneRotation[2] === rotation![2] && boneRotation[3] === rotation![3]
+			) return;
+			if ( rotatedNode >= 0 && rotatedNode !== node ) releasedNode = rotatedNode;
+			rotatedNode = node;
+			boneRotation.set( rotation! );
+			rotationChanged = true;
+		},
+		/*
+        ================
         evaluate
         ================
         */
@@ -375,7 +412,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 			// Their combined population is not bounded by eight. The mixer uses
 			// skeleton-sized scratch and must preserve every live sparse track.
 			const count = layers?.length ?? 1;
-			let changed = !hasPose || count !== resolved.length;
+			let changed = !hasPose || count !== resolved.length || rotationChanged;
 			for ( let i = 0; i < count; i++ ) {
 				const source = layers?.[i],
 					clipName = source ? source.clip : name,
@@ -412,6 +449,7 @@ quaternion scratch is charged and allocated only when playback needs it.
 				return false;
 			}
 			pendingLayers.length = count;
+			rotationChanged = false;
 			const previous = resolved;
 			resolved = pendingLayers;
 			pendingLayers = previous;

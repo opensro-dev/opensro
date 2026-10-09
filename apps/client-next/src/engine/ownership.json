@@ -111,6 +111,7 @@
     "src/engine/runtime/audio/audio.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/characters/sounds/sounds.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/effects/effects.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/effects/spine-aims.ts": "src/engine/runtime/characters/effects/effects.ts",
     "src/engine/runtime/assets/worker/effects/effects.ts": "src/engine/runtime/assets/worker/loader.ts",
     "src/engine/runtime/assets/worker/effects/program/program.ts": "src/engine/runtime/assets/worker/effects/effects.ts",
     "src/engine/runtime/ui/ui.ts": "src/engine/runtime/runtime.ts",

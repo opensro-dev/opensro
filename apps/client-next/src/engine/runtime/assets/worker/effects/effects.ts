@@ -17,6 +17,52 @@ import { effectScript } from "@/engine/foundation/animation/effect-script";
 import type { EffectCatalog, EffectRecord, EffectStage } from "@/engine/contracts/effects";
 /*
 ================
+spineAimBinding
+================
+*/
+function spineAimBinding( value: unknown ): import("@/engine/contracts/effects").SpineAimBinding | undefined {
+	if ( value === undefined ) return undefined;
+	const row = value as { bone?: unknown; offsetY?: unknown; addHeight?: unknown; };
+	if (
+		!row || typeof row !== "object" ||
+		(row.bone !== null && (typeof row.bone !== "string" || row.bone.length > 64)) ||
+		typeof row.offsetY !== "number" || !Number.isFinite( row.offsetY ) || typeof row.addHeight !== "boolean"
+	) throw Error( "Invalid spine aim binding" );
+	return { bone: row.bone as string | null, offsetY: row.offsetY, addHeight: row.addHeight };
+}
+
+/*
+================
+spineAimRecord
+
+The animation set's rotation axis (1..6) with its height bindings and release.
+================
+*/
+function spineAimRecord( value: unknown ): import("@/engine/contracts/effects").SpineAim {
+	const row = value as { axis?: unknown; start?: unknown; target?: unknown; release?: unknown; };
+	if (
+		!row || typeof row !== "object" || !Number.isInteger( row.axis ) || (row.axis as number) < 1 ||
+		(row.axis as number) > 6
+	) {
+		throw Error( "Invalid spine aim axis" );
+	}
+	const release = row.release as { phase?: unknown; event?: unknown; } | undefined;
+	if (
+		release !== undefined &&
+		(!release || typeof release.phase !== "string" || release.phase.length > 16 ||
+			!Number.isInteger( release.event ))
+	) throw Error( "Invalid spine aim release" );
+	const start = spineAimBinding( row.start ), target = spineAimBinding( row.target );
+	return {
+		axis: row.axis as number,
+		...(start ? { start } : {}),
+		...(target ? { target } : {}),
+		...(release ? { release: { phase: release.phase as string, event: release.event as number } } : {})
+	};
+}
+
+/*
+================
 createEffectDecoder
 
 Decode the published native skilleffectset projection in the asset worker.
@@ -57,6 +103,7 @@ export function createEffectDecoder() {
 					arrowTrailEffectPath?: string | null;
 					arrowForceEffectPath?: string | null;
 					hideWeapon?: number;
+					spineAim?: unknown;
 					authoredShotAnimationNames?: string[];
 					animTable0?: string[];
 					animTable1?: string[];
@@ -142,8 +189,10 @@ export function createEffectDecoder() {
 						!Number.isFinite( v ) || v < 0 || v > 1
 					) || ![ hitLight.duration, hitLight.range, hitLight.attenuation ].every( Number.isFinite ))
 				) throw Error( "Invalid hit light" );
+				const spineAim = row.spineAim ? spineAimRecord( row.spineAim ) : undefined;
 				result[id] = {
 					hitLight,
+					...(spineAim ? { spineAim } : {}),
 					attachedMotion,
 					damageEffect,
 					secondaryEffect: secondary !== 0,

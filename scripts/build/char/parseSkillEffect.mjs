@@ -51,7 +51,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { animationSetKeyForName } from "./native/animationSetNames.ts";
 import { SKILL_EFFECT_ANIMATION_ID_BY_NAME } from "./native/skillEffectAnimationRegistry.ts";
-import { SKILL_EFFECT_MOVE_TYPE_ID_BY_NAME } from "./native/skillEffectStage.ts";
+import {
+	SKILL_EFFECT_ACTION_TYPE_ID_BY_NAME,
+	SKILL_EFFECT_MOVE_TYPE_ID_BY_NAME,
+	SKILL_EFFECT_PHASE_ID_BY_NAME
+} from "./native/skillEffectStage.ts";
 import { SkillEffectSet_ParseRow } from "./native/skillEffectSetParseRow.ts";
 import {
 	listTextDataShardNamesSync,
@@ -112,8 +116,25 @@ const ANI_COL = {
 	arrowForceEffect: 20,
 	hideWeapon: 4,
 	objectResource: 22,
+	spineAimAxis: 23,
 	attackSkillFlagBe: 25
 };
+
+// EffectSyntax_RotationAxis (g_aRotationAxisSyntaxTable 0xCCDAD0): the token
+// 91DAE0 stores at record+0xBC. Nonzero arms CIDecoSkill's Spine_Base aim.
+const SPINE_AIM_AXIS_BY_NAME = new Map( [
+	[ "none", 0 ],
+	[ "Roll", 1 ],
+	[ "Yaw", 2 ],
+	[ "Pitch", 3 ],
+	[ "RollR", 4 ],
+	[ "YawR", 5 ],
+	[ "PitchR", 6 ]
+] );
+// 916AA0 keeps the last stage whose action type (+0x0E) is AT_MOV_1TAR..
+// AT_MOV_PIERCE (7..11) as record+0xB8, the aim's bone pair.
+const AIM_STAGE_FIRST_ACTION = 7;
+const AIM_STAGE_LAST_ACTION = 11;
 
 /*
 ================
@@ -284,6 +305,7 @@ export function parseSkillAniSet( skillEffectPath ) {
 			arrowTrailEffectPath: optionalResourcePath( c[ANI_COL.arrowTrailEffect] ),
 			arrowForceEffectPath: optionalResourcePath( c[ANI_COL.arrowForceEffect] ),
 			hideWeapon: Number( c[ANI_COL.hideWeapon] ) || 0,
+			spineAimAxis: spineAimAxis( baseName, c[ANI_COL.spineAimAxis] ),
 			// sub_91dae0 @0x91e6f4 stores the final authored byte at record+0xbe.
 			// Single-projectile 8ddde0 snapshots that record into stage+0x1b4;
 			// 8d7fd0 uses +0xbe to gate the target's secondary action effect.
@@ -417,6 +439,57 @@ export function resolveSkillEffectSetRows( baseName, effectSets ) {
 	const suffixedName = `${baseName}_01`;
 	const suffixed = effectSets.get( suffixedName );
 	return suffixed ?? [];
+}
+
+/*
+================
+spineAimAxis
+
+The record+0xBC rotation axis token. An unknown token has no native value.
+================
+*/
+function spineAimAxis( baseName, value ) {
+	const token = String( value ?? "none" ).trim() || "none";
+	const axis = SPINE_AIM_AXIS_BY_NAME.get( token );
+	if ( axis === undefined ) throw new Error( `skillaniset ${baseName}: unknown rotation axis ${token}` );
+	return axis;
+}
+
+/*
+================
+spineAimRecord
+
+CIDecoSkill_InitializeCast (8E07D7) arms the aim for a nonzero axis and
+measures its height from the record+0xB8 stage's start and target bindings
+(+0x3C/+0x54). 916AA0 walks the ten phase lists (READY..S_RETURN) in stage
+order: the last AT_MOV_* stage becomes +0xB8, and the last stage of all is
+tagged 8, the stage whose command releases the aim (8DDE93). Without an
+AT_MOV_* stage the height term is zero (8E0928).
+================
+*/
+function spineAimRecord( axis, authoredStages ) {
+	if ( !axis ) return null;
+	let aim = null, last = null;
+	for ( let phase = 0; phase <= 9; phase++ ) {
+		for ( const stage of authoredStages ) {
+			if ( SKILL_EFFECT_PHASE_ID_BY_NAME.get( stage.animationPhase ) !== phase ) continue;
+			last = stage;
+			const action = SKILL_EFFECT_ACTION_TYPE_ID_BY_NAME.get( stage.actionType );
+			if ( action !== undefined && action >= AIM_STAGE_FIRST_ACTION && action <= AIM_STAGE_LAST_ACTION ) {
+				aim = stage;
+			}
+		}
+	}
+	return {
+		axis,
+		...(aim ?
+			{
+				start: { bone: aim.startBone, offsetY: aim.startOffset[1], addHeight: aim.startAddHeight },
+				target: { bone: aim.targetBone, offsetY: aim.targetOffset[1], addHeight: aim.targetAddHeight }
+			} :
+			{}),
+		...(last ? { release: { phase: last.animationPhase, event: Number( last.startEvent ) } } : {})
+	};
 }
 
 /*
@@ -583,6 +656,7 @@ export function buildEffectRecordTable(
 			arrowForceEffectPath: ani.arrowForceEffectPath,
 			hideWeapon: ani.hideWeapon,
 			byteBe: Number( ani.attackSkillFlagBe ?? 0 ) & 0xff,
+			spineAim: spineAimRecord( ani.spineAimAxis, authoredStages ),
 			authoredStages
 		};
 	};

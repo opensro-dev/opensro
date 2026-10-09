@@ -119,6 +119,30 @@ export interface EffectStage {
 }
 /*
 ================
+SpineAimBinding
+One record+0xB8 stage binding the aim height is measured from.
+================
+*/
+export interface SpineAimBinding {
+	readonly bone: string | null;
+	readonly offsetY: number;
+	readonly addHeight: boolean;
+}
+/*
+================
+SpineAim
+The animation set's Spine_Base aim (spine-aim.ts): the rotation axis, the
+bindings its height is measured between, and the final stage that releases it.
+================
+*/
+export interface SpineAim {
+	readonly axis: number;
+	readonly start?: SpineAimBinding;
+	readonly target?: SpineAimBinding;
+	readonly release?: { readonly phase: string; readonly event: number; };
+}
+/*
+================
 EffectRecord
 A skill's compiled effect record: clips, stages and related resources.
 ================
@@ -135,6 +159,7 @@ export interface EffectRecord {
 	readonly secondaryEffect?: boolean;
 	readonly arrowEffects?: readonly [string | null, string | null];
 	readonly hideWeapon?: number;
+	readonly spineAim?: SpineAim;
 	readonly overlap?: boolean;
 	readonly attachedAction?: import("@/engine/foundation/animation/impact-source").AttachedAction;
 	readonly phaseClips?: readonly (readonly string[])[];

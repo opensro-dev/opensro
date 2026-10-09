@@ -90,6 +90,8 @@ every actor every frame.
 */
 function samePoseInputs( a: CharacterActor, b: CharacterActor ): boolean {
 	if ( a.clip !== b.clip || a.time !== b.time || a.loop !== b.loop ) return false;
+	// A rotated bone is the actor's own (spine-aim.ts).
+	if ( a.boneRotation || b.boneRotation ) return false;
 	if ( a.bodyVolume?.index !== b.bodyVolume?.index || a.bodyVolume?.female !== b.bodyVolume?.female ) return false;
 	const x = a.layers, y = b.layers;
 	if ( x === y ) return true;
@@ -636,7 +638,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		const optional = actor.animationLod?.optional && !actor.attachment && !actor.mountedOn &&
 			!resource!.plan.emission;
 		const mustSample = catalogChanged || state.sampled === undefined || state.clip !== actor.clip ||
-			actor.animationLod?.optional === false || actor.layers?.some( layer => layer.lane === "event" );
+			actor.animationLod?.optional === false || actor.layers?.some( layer => layer.lane === "event" ) ||
+			!!actor.boneRotation;
 		const lodAllowed = !actor.animationLod ||
 			state.lod.sample( actor.animationLod.fraction, actor.animationLod.crowded, poseFrame );
 		const interval = frameWork?.level() === 2 ? .1 : frameWork?.level() === 1 ? .05 : 0;
@@ -652,6 +655,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		if ( !mustSample && !lodAllowed ) return state.pose;
 		const started = optional && frameWork ? performance.now() : 0;
 		state.pose.bodyVolume( actor.bodyVolume?.index, actor.bodyVolume?.female );
+		state.pose.setBoneRotation( actor.boneRotation?.bone ?? "", actor.boneRotation?.rotation ?? null );
 		if (
 			state.pose.evaluate(
 				actor.clip,
@@ -1779,6 +1783,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					clocked || plan.clips.get( actor.clip )?.channels.length ? actor.time : 0,
 					actor.loop,
 					actor.layers,
+					actor.boneRotation,
 					actor.attachment,
 					frame.chains.get( actor.gid )!.slice( 1 )
 				]

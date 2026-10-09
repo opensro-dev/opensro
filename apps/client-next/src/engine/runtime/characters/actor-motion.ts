@@ -761,6 +761,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				previewClip: resource.clips.includes( armedIdle ) ? armedIdle : "stand",
 				materialTint: appearance.materialTint,
 				pointLight: appearance.pointLight,
+				...(appearance.boneRotation ? { boneRotation: appearance.boneRotation } : {}),
 				modifierId: state.modifierId,
 				bloodEffects: published.bloodEffects.get( resource.codename ),
 				effectBaseScale: baseScale,
