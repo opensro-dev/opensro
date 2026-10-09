@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/world/instance"
 )
 
 /*
@@ -97,4 +98,55 @@ A player with PK penalty points: PvP state 2 (CGObjPC_AddPKPenaltyPoints
 */
 func murderer(c *enterworld.Character) bool {
 	return c != nil && c.PK != nil && c.PK.Penalty > 0
+}
+
+/*
+================
+mercenaryNormalEnemy
+
+52B6D0 precedes the job/guild checks with both level floors. Cape colors
+are absent here; deliberate player attack permission is a different query.
+================
+*/
+func (rt *Runtime) mercenaryNormalEnemy(division string, owner, target *enterworld.Character) bool {
+	if owner == nil || target == nil || owner.ID == target.ID || owner.Level == nil || target.Level == nil ||
+		*owner.Level < playerCombatMinimumLevel || *target.Level < playerCombatMinimumLevel {
+		return false
+	}
+	if len(target.Aggressions) != 0 || target.PVPState() == 2 {
+		return true
+	}
+	return hostileJobs(enterworld.DressedJob(owner), enterworld.DressedJob(target)) || rt.guildsAtWar(division, owner, target)
+}
+
+/*
+================
+mercenaryEnemy
+
+52DA50 uses guild/union identity in fortress worlds, without the normal-world
+level floor. The same guild and union authorities own these identities.
+================
+*/
+func (rt *Runtime) mercenaryEnemy(division string, owner, target *enterworld.Character) bool {
+	if owner == nil || target == nil || owner.ID == target.ID {
+		return false
+	}
+	world, found := instance.Lookup(instance.ID(domain.CharacterWorldInstance(owner)).Definition())
+	if !found || !world.Siege() {
+		return rt.mercenaryNormalEnemy(division, owner, target)
+	}
+	if len(target.Aggressions) != 0 || target.PVPState() == 2 {
+		return true
+	}
+	var a, b int64
+	if owner.GuildID != nil {
+		a = *owner.GuildID
+	}
+	if target.GuildID != nil {
+		b = *target.GuildID
+	}
+	if a == b || rt.Unions.Allied(division, a, b) {
+		return false
+	}
+	return rt.Fortresses != nil && rt.Fortresses.WarActive(division)
 }
