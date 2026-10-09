@@ -222,9 +222,10 @@ system chat (type 1): UIIT_STT_JOB_EXP_<JOB>_GET or _LOST with the
 difference, and on a grade rise the UIIT_STT_JOB_LVUP_<JOB>_CLASS banner
 naming the new grade title (UIIT_STT_CLASS_[EU_]<JOB>_<grade> by country).
 
-Across a grade change the native chat amount reads the CLevelData row
-(payload +0x1C on a rise, +0x20 on a fall), which this worker does not
-hold; those lines wait for the level data to reach it. The server never
+Across a grade change the native chat line reads CLevelData, which this
+worker does not hold, so those lines wait for the level data to reach it:
+a rise prints _GET with row(old grade)+0x1C - old exp + new exp, a fall
+_LOST with row(new grade)+0x20 - new exp + old exp. The server never
 lowers a grade (progression AddJobExp floors a loss at zero).
 ================
 */
