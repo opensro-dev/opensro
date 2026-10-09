@@ -2168,7 +2168,9 @@ export function createUi(
 					gid: conversation.gid,
 					mode: id.startsWith( "npc-job-outcome:" ) ? JOB_OUTCOME_QUERY : JOB_OUTCOME_COLLECT
 				} );
-			} else if ( id.startsWith( "npc-job-previous:" ) ) sendGameplay( { kind: "job-previous", gid: conversation.gid } );
+			} else if ( id.startsWith( "npc-job-previous:" ) ) {
+				sendGameplay( { kind: "job-previous", gid: conversation.gid } );
+			}
 			dirty = true;
 			return;
 		}
@@ -12681,7 +12683,9 @@ export function createUi(
 							byId = ( id: number ) => nodes.find( n => n.id === id ),
 							firstSlot = contribution ? 30 : 20,
 							spinId = contribution ? 50 : 40,
-							own = contribution ? jobContributionSelf( game?.job ?? noJob(), jobRank.job, hudCopy ) : null,
+							own = contribution ?
+								jobContributionSelf( game?.job ?? noJob(), jobRank.job, hudCopy ) :
+								null,
 							page = jobRankPage( list, jobRank.page, hudData.jobExpThresholds, hudCopy ),
 							[px, py] = windowOrigin( JOB_RANK_PANEL, [
 								Math.max( 0, (w - root.rect[2]) / 2 ),
@@ -12702,10 +12706,19 @@ export function createUi(
 						};
 						if ( contribution ) {
 							const trader = jobRank.job === 1;
-							say( 20, hudCopy( trader ? "UIIT_STT_JOBGUILD_CONTRIBUTERANK" : "UIIT_STT_JOBGUILD_CONTRIBUTERANK2" ) );
+							say(
+								20,
+								hudCopy(
+									trader ? "UIIT_STT_JOBGUILD_CONTRIBUTERANK" : "UIIT_STT_JOBGUILD_CONTRIBUTERANK2"
+								)
+							);
 							const header = byId( 28 );
 							if ( header ) {
-								authoredChrome( { ...header, text: trader ? "UIIT_STT_DONATION" : "UIIT_STT_CONTRIBUTE" }, px, py );
+								authoredChrome(
+									{ ...header, text: trader ? "UIIT_STT_DONATION" : "UIIT_STT_CONTRIBUTE" },
+									px,
+									py
+								);
 							}
 							if ( own ) {
 								const note = byId( 10 );
