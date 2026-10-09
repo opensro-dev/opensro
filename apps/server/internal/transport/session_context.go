@@ -29,6 +29,36 @@ type sessionPlayerContext struct {
 	// rebound: the last BindCharacter named the character this session
 	// already carried (a resumed transport's repeated EnterWorld).
 	rebound bool
+	// releaseProtocol is the browser release protocol the EnterWorld token
+	// bound (auth.MintProtocol); 0 until a verified EnterWorld sets it.
+	releaseProtocol int
+}
+
+// SetReleaseProtocol records the release protocol a verified EnterWorld
+// token bound. The game owner picks its protocol-dependent encodings by it;
+// transport only carries the number.
+/*
+================
+SetReleaseProtocol
+================
+*/
+func (s *Session) SetReleaseProtocol(protocol int) {
+	s.player.mu.Lock()
+	defer s.player.mu.Unlock()
+	s.player.releaseProtocol = protocol
+}
+
+// ReleaseProtocol returns the recorded release protocol, or 0 before a
+// verified EnterWorld.
+/*
+================
+ReleaseProtocol
+================
+*/
+func (s *Session) ReleaseProtocol() int {
+	s.player.mu.RLock()
+	defer s.player.mu.RUnlock()
+	return s.player.releaseProtocol
 }
 
 // BindAdmissionIdentity installs the HELLO account/shard identity or

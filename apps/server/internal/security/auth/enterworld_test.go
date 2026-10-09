@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -89,15 +90,15 @@ func TestVerifyForgedAndMalformed(t *testing.T) {
 
 	// Stretch the expiry claim without re-signing: forged.
 	parts := strings.Split(token, ".")
-	stretched := strings.Join([]string{parts[0], "9999999999", parts[2], parts[3]}, ".")
+	stretched := strings.Join([]string{parts[0], "9999999999", parts[2], parts[3], parts[4]}, ".")
 	if err := Verify(testSecret, stretched, testDivision, "asd2", testNow); !errors.Is(err, ErrForged) {
 		t.Errorf("stretched expiry = %v, want ErrForged", err)
 	}
 
 	for _, bad := range []string{
-		"", "garbage", "SEA3", "SEA3.123", "SEA3.123.%%%", "SEA2.123.AAAA",
-		"SEA3.notanumber." + parts[2] + "." + parts[3],
-		"SEA3.123.AAAA.AAAA", token + ".extra",
+		"", "garbage", "SEA4", "SEA4.123", "SEA4.123.6.%%%", "SEA3.123.AAAA.AAAA",
+		"SEA4.notanumber." + parts[2] + "." + parts[3] + "." + parts[4],
+		"SEA4.123.6.AAAA.AAAA", token + ".extra",
 	} {
 		if err := Verify(testSecret, bad, testDivision, "asd2", testNow); !errors.Is(err, ErrMalformed) {
 			t.Errorf("Verify(%q) = %v, want ErrMalformed", bad, err)
@@ -110,8 +111,8 @@ func TestVerifyRejectsNonCanonicalBase64URL(t *testing.T) {
 	parts := strings.Split(token, ".")
 
 	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-	last := len(parts[3]) - 1
-	index := strings.IndexByte(alphabet, parts[3][last])
+	last := len(parts[4]) - 1
+	index := strings.IndexByte(alphabet, parts[4][last])
 	if index < 0 {
 		t.Fatal("minted MAC is not base64url")
 	}
@@ -119,7 +120,7 @@ func TestVerifyRejectsNonCanonicalBase64URL(t *testing.T) {
 	// A 32-byte MAC leaves four unused bits in its final raw-base64 digit.
 	// Toggle one of them: the decoded bytes stay identical, but the spelling
 	// is non-canonical and must not become a second identity for one bearer.
-	parts[3] = parts[3][:last] + string(alphabet[index^1])
+	parts[4] = parts[4][:last] + string(alphabet[index^1])
 
 	if err := Verify(
 		testSecret,
@@ -144,14 +145,15 @@ func TestVerifierPolicy(t *testing.T) {
 
 	check := func(name, token string, want error) {
 		t.Helper()
-		err := verifier(token, testDivision, "asd2")
+		_, err := verifier(token, testDivision, "asd2")
 		if !errors.Is(err, want) {
 			t.Errorf("%s: error = %v, want %v", name, err, want)
 		}
 	}
 
 	check("good", good, nil)
-	check("forged", "SEA3.99.AAAA.AAAA", ErrMalformed)
+	check("forged", "SEA4.99.6.AAAA.AAAA", ErrMalformed)
+	check("previous layout", "SEA3.99.AAAA.AAAA", ErrMalformed)
 	check("stale", stale, ErrExpired)
 	check("tokenless", "", ErrMalformed)
 	check("replay", good, ErrReplay)
@@ -195,11 +197,11 @@ func TestVerifierConcurrent(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < 200; i++ {
 				good := mintOK(t, "asd2", testNow.Add(time.Minute))
-				if err := fn(good, testDivision, "asd2"); err != nil {
+				if _, err := fn(good, testDivision, "asd2"); err != nil {
 					t.Errorf("goroutine %d: good token refused", g)
 					return
 				}
-				if err := fn("SEA3.1.AAAA.AAAA", testDivision, "asd2"); err == nil {
+				if _, err := fn("SEA4.1.6.AAAA.AAAA", testDivision, "asd2"); err == nil {
 					t.Errorf("goroutine %d: forged token accepted", g)
 					return
 				}
@@ -207,4 +209,44 @@ func TestVerifierConcurrent(t *testing.T) {
 		}(g)
 	}
 	wg.Wait()
+}
+
+/*
+================
+TestTokenBindsTheReleaseProtocol
+
+The protocol a minting request declared is authenticated with the rest of
+the claim: it verifies back unchanged, cannot be rewritten without the key,
+and only a byte-sized protocol can be minted or parsed.
+================
+*/
+func TestTokenBindsTheReleaseProtocol(t *testing.T) {
+	for _, protocol := range []int{5, 6} {
+		token, err := MintProtocol(testSecret, testDivision, "asd2", protocol, testNow.Add(time.Minute))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := VerifyProtocol(testSecret, token, testDivision, "asd2", testNow)
+		if err != nil || got != protocol {
+			t.Fatalf("protocol %d verified as %d, %v", protocol, got, err)
+		}
+		parts := strings.Split(token, ".")
+		parts[2] = strconv.Itoa(11 - protocol)
+		if _, err := VerifyProtocol(testSecret, strings.Join(parts, "."), testDivision, "asd2", testNow); !errors.Is(err, ErrForged) {
+			t.Fatalf("protocol %d rewritten: %v, want forged", protocol, err)
+		}
+		parts[2] = "0" + strconv.Itoa(protocol)
+		if _, err := VerifyProtocol(testSecret, strings.Join(parts, "."), testDivision, "asd2", testNow); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("protocol %d non-canonical: %v, want malformed", protocol, err)
+		}
+	}
+	for _, protocol := range []int{-1, maxTokenProtocol + 1} {
+		if _, err := MintProtocol(testSecret, testDivision, "asd2", protocol, testNow.Add(time.Minute)); err == nil {
+			t.Fatalf("protocol %d minted", protocol)
+		}
+	}
+	token := mintOK(t, "asd2", testNow.Add(time.Minute))
+	if got, err := Verifier(testSecret, func() time.Time { return testNow })(token, testDivision, "asd2"); err != nil || got != 0 {
+		t.Fatalf("Mint binds %d, %v; want no declared protocol", got, err)
+	}
 }

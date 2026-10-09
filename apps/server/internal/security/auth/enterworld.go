@@ -1,6 +1,7 @@
 // Package auth owns EnterWorld identity-token minting and verification.
 // It is dependency-light by design: a token is an HMAC-SHA256 over
-// division+character+expiry+a random nonce under one GameWorld process key.
+// division+character+release protocol+expiry+a random nonce under one
+// GameWorld process key.
 // The process creates that key at boot and shares it only between its private
 // agentapi mint and transport verifier. It is never stored in Nomad, written
 // to disk, or shared across shards. The verifier consumes each valid token
@@ -33,12 +34,18 @@ const (
 )
 
 // tokenPrefix versions the token layout:
-// "SEA3.<expiryUnix>.<b64url nonce>.<b64url mac>". SEA3 binds division and
-// character and gives every mint a unique nonce so the verifier can consume
-// tickets exactly once.
+// "SEA4.<expiryUnix>.<protocol>.<b64url nonce>.<b64url mac>". SEA4 binds
+// division, character and the release protocol the minting request declared
+// (the session's encoders pick their contracts by it), and gives every mint
+// a unique nonce so the verifier can consume tickets exactly once. The key is
+// process-local and tickets live a minute, so no older layout is accepted.
 const (
-	tokenPrefix = "SEA3"
+	tokenPrefix = "SEA4"
 	nonceBytes  = 16
+	// maxTokenProtocol bounds the protocol claim. Which protocols a server
+	// serves is releaseprotocol's to decide at the minting route; 0 means the
+	// minting request declared none.
+	maxTokenProtocol = 255
 )
 
 // DenyCodeUnauthorized is the 0x0007 nativeErrorCode for every auth
@@ -78,26 +85,38 @@ func ValidateSecret(secret []byte) error {
 // mac computes the HMAC-SHA256 over the canonical claim string. Divisions
 // are case-sensitive store keys; character names bind case-insensitively,
 // matching the transport's division:lower(name) bind-key convention.
-func computeMAC(secret []byte, divisionID, charName string, expiryUnix int64, nonce []byte) []byte {
+func computeMAC(secret []byte, divisionID, charName string, protocol int, expiryUnix int64, nonce []byte) []byte {
 	h := hmac.New(sha256.New, secret)
 	fmt.Fprintf(
 		h,
-		"%s\n%s\n%s\n%d\n%s",
+		"%s\n%s\n%s\n%d\n%d\n%s",
 		tokenPrefix,
 		divisionID,
 		strings.ToLower(charName),
+		protocol,
 		expiryUnix,
 		base64.RawURLEncoding.EncodeToString(nonce),
 	)
 	return h.Sum(nil)
 }
 
-// Mint issues a unique token binding divisionID+charName until expiresAt:
-// "SEA3.<expiryUnix>.<base64url(nonce)>.<base64url(HMAC-SHA256(...))>".
-// Under 100 ASCII bytes, far below the wire's MaxAuthTokenLen (512).
+// Mint issues a unique token binding divisionID+charName, with no declared
+// release protocol (0), until expiresAt (MintProtocol). The GameWorld treats
+// an undeclared session as the current protocol.
 func Mint(secret []byte, divisionID, charName string, expiresAt time.Time) (string, error) {
+	return MintProtocol(secret, divisionID, charName, 0, expiresAt)
+}
+
+// MintProtocol issues a unique token binding divisionID+charName+protocol
+// until expiresAt:
+// "SEA4.<expiryUnix>.<protocol>.<base64url(nonce)>.<base64url(HMAC-SHA256(...))>".
+// Under 100 ASCII bytes, far below the wire's MaxAuthTokenLen (512).
+func MintProtocol(secret []byte, divisionID, charName string, protocol int, expiresAt time.Time) (string, error) {
 	if err := ValidateSecret(secret); err != nil {
 		return "", err
+	}
+	if protocol < 0 || protocol > maxTokenProtocol {
+		return "", fmt.Errorf("auth: minting release protocol %d out of range", protocol)
 	}
 	if strings.TrimSpace(divisionID) == "" {
 		return "", errors.New("auth: minting requires a division id")
@@ -110,61 +129,83 @@ func Mint(secret []byte, divisionID, charName string, expiresAt time.Time) (stri
 		return "", fmt.Errorf("auth: minting nonce: %w", err)
 	}
 	expiry := expiresAt.Unix()
-	mac := computeMAC(secret, divisionID, charName, expiry, nonce)
+	mac := computeMAC(secret, divisionID, charName, protocol, expiry, nonce)
 	return fmt.Sprintf(
-		"%s.%d.%s.%s",
+		"%s.%d.%d.%s.%s",
 		tokenPrefix,
 		expiry,
+		protocol,
 		base64.RawURLEncoding.EncodeToString(nonce),
 		base64.RawURLEncoding.EncodeToString(mac),
 	), nil
 }
 
 // Verify checks token against the claimed division and character name at
-// instant now. nil means authentic and unexpired. MAC compares first
-// (constant time), so the expiry claim is only trusted once proven authentic.
+// instant now (VerifyProtocol). nil means authentic and unexpired.
 func Verify(secret []byte, token, divisionID, charName string, now time.Time) error {
-	if err := ValidateSecret(secret); err != nil {
-		return err
-	}
-	expiry, nonce, mac, err := parseToken(token)
-	if err != nil {
-		return err
-	}
-	if !hmac.Equal(mac, computeMAC(secret, divisionID, charName, expiry, nonce)) {
-		return ErrForged
-	}
-	if now.Unix() > expiry {
-		return ErrExpired
-	}
-	if expiry > now.Add(MaxTokenLifetime).Unix() {
-		return ErrTooFar
-	}
-	return nil
+	_, err := VerifyProtocol(secret, token, divisionID, charName, now)
+	return err
 }
 
-func parseToken(token string) (int64, []byte, []byte, error) {
+// VerifyProtocol checks token against the claimed division and character
+// name at instant now and returns the release protocol it binds. MAC
+// compares first (constant time), so the expiry and protocol claims are only
+// trusted once proven authentic.
+func VerifyProtocol(secret []byte, token, divisionID, charName string, now time.Time) (int, error) {
+	if err := ValidateSecret(secret); err != nil {
+		return 0, err
+	}
+	claims, err := parseToken(token)
+	if err != nil {
+		return 0, err
+	}
+	if !hmac.Equal(claims.mac, computeMAC(secret, divisionID, charName, claims.protocol, claims.expiry, claims.nonce)) {
+		return 0, ErrForged
+	}
+	if now.Unix() > claims.expiry {
+		return 0, ErrExpired
+	}
+	if claims.expiry > now.Add(MaxTokenLifetime).Unix() {
+		return 0, ErrTooFar
+	}
+	return claims.protocol, nil
+}
+
+// tokenClaims are the parsed, not yet authenticated, token fields.
+type tokenClaims struct {
+	expiry   int64
+	protocol int
+	nonce    []byte
+	mac      []byte
+}
+
+func parseToken(token string) (tokenClaims, error) {
 	parts := strings.Split(token, ".")
-	if len(parts) != 4 || parts[0] != tokenPrefix {
-		return 0, nil, nil, ErrMalformed
+	if len(parts) != 5 || parts[0] != tokenPrefix {
+		return tokenClaims{}, ErrMalformed
 	}
 	expiry, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return 0, nil, nil, ErrMalformed
+		return tokenClaims{}, ErrMalformed
 	}
-	nonce, err := decodeCanonicalBase64URL(parts[2])
+	protocol, err := strconv.Atoi(parts[2])
+	if err != nil || strconv.Itoa(protocol) != parts[2] || protocol < 0 || protocol > maxTokenProtocol {
+		return tokenClaims{}, ErrMalformed
+	}
+	nonce, err := decodeCanonicalBase64URL(parts[3])
 	if err != nil || len(nonce) != nonceBytes {
-		return 0, nil, nil, ErrMalformed
+		return tokenClaims{}, ErrMalformed
 	}
-	mac, err := decodeCanonicalBase64URL(parts[3])
+	mac, err := decodeCanonicalBase64URL(parts[4])
 	if err != nil || len(mac) != sha256.Size {
-		return 0, nil, nil, ErrMalformed
+		return tokenClaims{}, ErrMalformed
 	}
-	return expiry, nonce, mac, nil
+	return tokenClaims{expiry: expiry, protocol: protocol, nonce: nonce, mac: mac}, nil
 }
 
-// VerifyFunc checks one transport-independent EnterWorld claim.
-type VerifyFunc func(token, divisionID, characterName string) error
+// VerifyFunc checks one transport-independent EnterWorld claim and returns
+// the release protocol the token binds.
+type VerifyFunc func(token, divisionID, characterName string) (int, error)
 
 // Verifier binds a secret and clock into a goroutine-safe verifier.
 // Transport adaptation and refusal logging belong to the composition root.
@@ -177,18 +218,20 @@ func Verifier(secret []byte, now func() time.Time) VerifyFunc {
 		replayMu sync.Mutex
 		used     = make(map[[sha256.Size]byte]int64)
 	)
-	return func(token, divisionID, characterName string) error {
+	return func(token, divisionID, characterName string) (int, error) {
 		if token == "" {
-			return ErrMalformed
+			return 0, ErrMalformed
 		}
 		at := now()
-		if err := Verify(key, token, divisionID, characterName, at); err != nil {
-			return err
-		}
-		expiry, _, _, err := parseToken(token)
+		protocol, err := VerifyProtocol(key, token, divisionID, characterName, at)
 		if err != nil {
-			return err
+			return 0, err
 		}
+		claims, err := parseToken(token)
+		if err != nil {
+			return 0, err
+		}
+		expiry := claims.expiry
 		digest := sha256.Sum256([]byte(token))
 
 		replayMu.Lock()
@@ -199,9 +242,9 @@ func Verifier(secret []byte, now func() time.Time) VerifyFunc {
 			}
 		}
 		if _, replayed := used[digest]; replayed {
-			return ErrReplay
+			return 0, ErrReplay
 		}
 		used[digest] = expiry
-		return nil
+		return protocol, nil
 	}
 }

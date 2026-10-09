@@ -46,7 +46,7 @@ func TestBrowserRoutesRefuseAnotherReleaseProtocol(t *testing.T) {
 		{http.MethodPost, "/auth/transport-token"},
 	}
 	for _, route := range routes {
-		for _, declared := range []string{"", strconv.Itoa(releaseprotocol.Current - 1), strconv.Itoa(releaseprotocol.Current + 1)} {
+		for _, declared := range []string{"", strconv.Itoa(releaseprotocol.Oldest - 1), strconv.Itoa(releaseprotocol.Current + 1)} {
 			request := httptest.NewRequest(route.method, route.path, strings.NewReader(`{}`))
 			request.Header.Set("Authorization", "Bearer "+token)
 			if declared != "" {

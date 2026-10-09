@@ -8,6 +8,11 @@ the same for every viewer, so they live in one immutable, content-addressed
 file the browser caches, not in each EnterWorld result. A login names the
 file; its own blob carries only what depends on the character and division.
 
+One file is built per reference contract the served release protocols name
+(releaseprotocol.ContractsOf): contract 3 adds every creatable monster's row,
+which a contract-2 browser refuses as an unknown key, so its file omits them
+and its logins carry their monster rows themselves, as before #369.
+
 ===========================================================================
 */
 package enterworld
@@ -57,9 +62,20 @@ type BrowserReferenceSources struct {
 	// StaticItems are the item rows every viewer needs (StaticRefItemRows).
 	StaticItems []RefItemRow
 	// Monsters are the monster rows every viewer needs
-	// (PublicMonsterRefObjRows).
+	// (PublicMonsterRefObjRows). Contract 2 has no table for them.
 	Monsters []RefObjRow
+	// Contract is the reference contract to encode, 0 for the current one
+	// (releaseprotocol.ReferencesContract).
+	Contract int
 }
+
+// firstMonsterContract is the reference contract that publishes monster rows
+// (refObjSnapshot, #369). Contract 1 (skills and commands only) is no longer
+// served by any supported protocol.
+const (
+	firstMonsterContract = 3
+	oldestServedContract = 2
+)
 
 /*
 ================
@@ -67,6 +83,13 @@ NewBrowserReferences
 ================
 */
 func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, error) {
+	contract := sources.Contract
+	if contract == 0 {
+		contract = releaseprotocol.ReferencesContract
+	}
+	if contract < oldestServedContract || contract > releaseprotocol.ReferencesContract {
+		return nil, fmt.Errorf("unserved reference contract %d", contract)
+	}
 	rows := spawnSkillSnapshot(sources.Skills)
 	if len(rows) == 0 || len(rows) > maxPublicReferenceRows {
 		return nil, fmt.Errorf("invalid public skill catalogue size: %d", len(rows))
@@ -96,7 +119,7 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		return nil, fmt.Errorf("invalid public monster catalogue size: %d", len(sources.Monsters))
 	}
 	objectRows := sources.Monsters
-	if objectRows == nil {
+	if objectRows == nil || contract < firstMonsterContract {
 		objectRows = []RefObjRow{}
 	}
 	objectIDs := make(map[uint32]bool, len(objectRows))
@@ -106,14 +129,27 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		}
 		objectIDs[row.RefObjID] = true
 	}
-	data, err := json.Marshal(struct {
-		ReferencesVersion     int                    `json:"referencesVersion"`
-		SkillLifecycleVersion int                    `json:"skillLifecycleVersion"`
-		RefSkillSnapshot      []SpawnSkillRow        `json:"refSkillSnapshot"`
-		RefItemSnapshot       []RefItemRow           `json:"refItemSnapshot"`
-		RefObjSnapshot        []RefObjRow            `json:"refObjSnapshot"`
-		ItemCommandReferences []ItemCommandReference `json:"itemCommandReferences,omitempty"`
-	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, objectRows, commandRows})
+	var data []byte
+	var err error
+	if contract >= firstMonsterContract {
+		data, err = json.Marshal(struct {
+			ReferencesVersion     int                    `json:"referencesVersion"`
+			SkillLifecycleVersion int                    `json:"skillLifecycleVersion"`
+			RefSkillSnapshot      []SpawnSkillRow        `json:"refSkillSnapshot"`
+			RefItemSnapshot       []RefItemRow           `json:"refItemSnapshot"`
+			RefObjSnapshot        []RefObjRow            `json:"refObjSnapshot"`
+			ItemCommandReferences []ItemCommandReference `json:"itemCommandReferences,omitempty"`
+		}{contract, 1, rows, itemRows, objectRows, commandRows})
+	} else {
+		// Contract 2's exact key set: the protocol-5 browser refuses any other.
+		data, err = json.Marshal(struct {
+			ReferencesVersion     int                    `json:"referencesVersion"`
+			SkillLifecycleVersion int                    `json:"skillLifecycleVersion"`
+			RefSkillSnapshot      []SpawnSkillRow        `json:"refSkillSnapshot"`
+			RefItemSnapshot       []RefItemRow           `json:"refItemSnapshot"`
+			ItemCommandReferences []ItemCommandReference `json:"itemCommandReferences,omitempty"`
+		}{contract, 1, rows, itemRows, commandRows})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +174,79 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		itemIDs:   itemIDs,
 		objectIDs: objectIDs,
 	}, nil
+}
+
+/*
+================
+BrowserReferenceSet
+
+The reference files of every served protocol, keyed by protocol. Serving
+dispatches on the content-addressed path, so each browser fetches exactly
+the file its login named.
+================
+*/
+type BrowserReferenceSet map[int]*BrowserReferences
+
+/*
+================
+NewBrowserReferenceSet
+
+One file per distinct reference contract of releaseprotocol.Oldest through
+Current, shared by the protocols that name the same contract.
+================
+*/
+func NewBrowserReferenceSet(sources BrowserReferenceSources) (BrowserReferenceSet, error) {
+	set := BrowserReferenceSet{}
+	byContract := map[int]*BrowserReferences{}
+	for protocol := releaseprotocol.Oldest; protocol <= releaseprotocol.Current; protocol++ {
+		contracts, ok := releaseprotocol.ContractsOf(protocol)
+		if !ok {
+			return nil, fmt.Errorf("release protocol %d has no contracts", protocol)
+		}
+		references := byContract[contracts.References]
+		if references == nil {
+			variant := sources
+			variant.Contract = contracts.References
+			built, err := NewBrowserReferences(variant)
+			if err != nil {
+				return nil, fmt.Errorf("protocol %d references: %w", protocol, err)
+			}
+			references = built
+			byContract[contracts.References] = built
+		}
+		set[protocol] = references
+	}
+	return set, nil
+}
+
+/*
+================
+For
+
+The file a session of this protocol is named; 0 (not yet known) and any
+unserved protocol get the current one.
+================
+*/
+func (set BrowserReferenceSet) For(protocol int) *BrowserReferences {
+	if references := set[protocol]; references != nil {
+		return references
+	}
+	return set[releaseprotocol.Current]
+}
+
+/*
+================
+ServeHTTP
+================
+*/
+func (set BrowserReferenceSet) ServeHTTP(w http.ResponseWriter, q *http.Request) {
+	for _, references := range set {
+		if q.URL.Path == references.Path {
+			references.ServeHTTP(w, q)
+			return
+		}
+	}
+	http.NotFound(w, q)
 }
 
 func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {

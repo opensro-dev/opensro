@@ -452,8 +452,15 @@ func (api *API) handleEnterWorldToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "UNKNOWN_CHARACTER"})
 		return
 	}
+	// The route passed releaseprotocol.Require; the token carries the
+	// declared protocol into the transport session, whose entry encoders
+	// differ between the protocols this server serves.
+	protocol, declared := releaseprotocol.Declared(r)
+	if !declared {
+		protocol = releaseprotocol.Current
+	}
 	expiresAt := api.now().Add(enterWorldTokenTTL)
-	token, err := auth.Mint(api.enterWorldAuthSecret, division, request.CharacterName, expiresAt)
+	token, err := auth.MintProtocol(api.enterWorldAuthSecret, division, request.CharacterName, protocol, expiresAt)
 	if err != nil {
 		log.Errorf("agentapi: EnterWorld token mint for %q failed: %v", request.CharacterName, err)
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "code": "INTERNAL"})

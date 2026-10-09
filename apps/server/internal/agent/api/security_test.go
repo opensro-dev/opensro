@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"opensro.online/server/internal/releaseprotocol"
 	"opensro.online/server/internal/security/auth"
 )
 
@@ -131,10 +133,28 @@ func TestEnterWorldTokenBindsShardCharacterAndTTL(t *testing.T) {
 		"characterName": "TokenHero",
 	})
 	token, _ := minted["token"].(string)
-	if minted["ok"] != true || !strings.HasPrefix(token, "SEA3.") {
+	if minted["ok"] != true || !strings.HasPrefix(token, "SEA4.") {
 		t.Fatalf("mint = %v", minted)
 	}
 	now := api.now()
+	if protocol, err := auth.VerifyProtocol([]byte(testEnterWorldSecret), token, testDivision, "TokenHero", now); err != nil ||
+		protocol != releaseprotocol.Current {
+		t.Fatalf("current browser token binds %d, %v", protocol, err)
+	}
+	// A protocol-5 tab's token carries 5 into its transport session.
+	session, err := auth.MintAgentSession(testAgentKeyID, testAgentPrivateKey, testAccount, testDivision, now.Add(auth.AgentSessionLifetime))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := bearerHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set(releaseprotocol.Header, strconv.Itoa(releaseprotocol.Oldest))
+		api.Handler().ServeHTTP(w, r)
+	}), session)
+	legacyToken, _ := postJSON(t, legacy, "/auth/enterworld-token", map[string]any{"characterName": "TokenHero"})["token"].(string)
+	if protocol, err := auth.VerifyProtocol([]byte(testEnterWorldSecret), legacyToken, testDivision, "TokenHero", now); err != nil ||
+		protocol != releaseprotocol.Oldest {
+		t.Fatalf("protocol-5 browser token binds %d, %v", protocol, err)
+	}
 	if err := auth.Verify(
 		[]byte(testEnterWorldSecret),
 		token,

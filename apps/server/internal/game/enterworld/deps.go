@@ -46,6 +46,13 @@ Deps
 */
 type Deps struct {
 	BrowserReferences *BrowserReferences
+	// ProtocolReferences is the reference file of each served release
+	// protocol; nil serves BrowserReferences to every session.
+	ProtocolReferences BrowserReferenceSet
+	// CharacterProtocol is the release protocol of the session bound to a
+	// character (0 when none is bound), for entries built without one in
+	// hand: teleports, relocation and rebirth.
+	CharacterProtocol func(divisionID, characterName string) int
 	Roster            *Roster
 	Characters        CharacterSource
 
@@ -340,7 +347,7 @@ ReentryPackets
 ================
 */
 func (d *Deps) ReentryPackets(divisionID, characterName string) ([]Packet, bool) {
-	projection := *d
+	projection := d.forCharacterProtocol(divisionID, characterName)
 	projection.RestoreEntryEffects = nil // Caller already owns the live actor transaction.
 	projection.PrepareEntry = nil
 	projection.AdoptEntrySpawn = nil
@@ -348,7 +355,7 @@ func (d *Deps) ReentryPackets(divisionID, characterName string) ([]Packet, bool)
 		DivisionID:    divisionID,
 		CharacterName: characterName,
 	})
-	return d.encodeReentry(result)
+	return projection.encodeReentry(result)
 }
 
 // PreparedReentry couples the packets to the resolved placement they encode.
@@ -381,13 +388,13 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 			return PreparedReentry{}, false
 		}
 	}
-	projection := *d
+	projection := d.forCharacterProtocol(divisionID, character.Name)
 	// The caller holds the division lock and commits the returned stand only
 	// after preparation succeeds. Login adoption would re-enter that lock.
 	projection.AdoptEntrySpawn = nil
 	snapshot.PresentInventoryExpansion()
 	result := buildCharacterProjection(&projection, divisionID, snapshot)
-	packets, ok := d.encodeReentry(result)
+	packets, ok := projection.encodeReentry(result)
 	if !ok {
 		return PreparedReentry{}, false
 	}
@@ -395,6 +402,39 @@ func (d *Deps) PrepareReentry(divisionID string, character *Character) (Prepared
 	return PreparedReentry{Packets: packets, Spawn: simulation.Spawn{
 		RegionID: uint16(spawn.RegionID), X: spawn.X, Y: spawn.Y, Z: spawn.Z, Angle: uint16(spawn.Angle),
 	}, InventorySize: snapshot.InventoryCapacity()}, true
+}
+
+/*
+================
+forProtocol
+
+A projection of the bootstrap dependencies naming the reference file of one
+release protocol. Build reads it to decide which rows the login repeats
+(bootstrap.go: a contract-2 file publishes no monster rows, so the login
+carries them), and the entry blob names it.
+================
+*/
+func (d *Deps) forProtocol(protocol int) Deps {
+	projection := *d
+	if d.ProtocolReferences != nil {
+		projection.BrowserReferences = d.ProtocolReferences.For(protocol)
+	}
+	return projection
+}
+
+/*
+================
+forCharacterProtocol
+
+forProtocol for the protocol of the session bound to a character.
+================
+*/
+func (d *Deps) forCharacterProtocol(divisionID, characterName string) Deps {
+	protocol := 0
+	if d.CharacterProtocol != nil {
+		protocol = d.CharacterProtocol(divisionID, characterName)
+	}
+	return d.forProtocol(protocol)
 }
 
 /*

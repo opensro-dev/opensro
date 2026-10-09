@@ -17,9 +17,9 @@ func TestEnterWorldVerifierRejectsForeignShardBeforeTokenVerification(
 	verified := false
 	gate := enterWorldVerifierForShard(
 		ownedShard,
-		func(token, division, character string) error {
+		func(token, division, character string) (int, error) {
 			verified = true
-			return nil
+			return 6, nil
 		},
 	)
 	ok, code := gate(nil, transport.EnterWorld{

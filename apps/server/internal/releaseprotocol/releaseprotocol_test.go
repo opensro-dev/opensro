@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-releaseprotocol_test.go - one protocol, refused otherwise
+releaseprotocol_test.go - the served protocols pass, every other is refused
 
 ===========================================================================
 */
@@ -38,12 +38,23 @@ func serve(t *testing.T, method, declared string) (bool, *httptest.ResponseRecor
 
 /*
 ================
-TestTheCurrentProtocolPasses
+TestTheServedProtocolsPass
+
+Oldest through Current pass: the protocol-5 tabs live when this server
+ships keep working until the protocol-6 browser replaces them.
 ================
 */
-func TestTheCurrentProtocolPasses(t *testing.T) {
-	if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(Current)); !reached {
-		t.Fatalf("current protocol refused with %d", recorder.Code)
+func TestTheServedProtocolsPass(t *testing.T) {
+	if Oldest != 5 || Current != 6 {
+		t.Fatalf("served protocols %d..%d; this release bridges 5 to 6", Oldest, Current)
+	}
+	for protocol := Oldest; protocol <= Current; protocol++ {
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); !reached {
+			t.Fatalf("protocol %d refused with %d", protocol, recorder.Code)
+		}
+	}
+	if declared, ok := Declared(httptest.NewRequest(http.MethodGet, "/", nil)); ok {
+		t.Fatalf("an undeclared request read as %d", declared)
 	}
 }
 
@@ -56,7 +67,7 @@ declaration is no better. Each is told which protocol the server speaks.
 ================
 */
 func TestAnyOtherDeclarationIsRefusedAsOutdated(t *testing.T) {
-	for _, declared := range []string{"", strconv.Itoa(Current - 1), strconv.Itoa(Current + 1), "three"} {
+	for _, declared := range []string{"", strconv.Itoa(Oldest - 1), strconv.Itoa(Current + 1), "three"} {
 		reached, recorder := serve(t, http.MethodGet, declared)
 		if reached || recorder.Code != http.StatusUpgradeRequired {
 			t.Fatalf("declared %q: reached %v, status %d; want refused with 426", declared, reached, recorder.Code)

@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
+	"opensro.online/server/internal/releaseprotocol"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
 )
@@ -224,7 +225,9 @@ func newGameWorldApplication(
 	application.heightCache = gameplay.water
 	// Built after gameplay construction: the static item rows name the
 	// alchemy and Magic Pop catalogues it configures.
-	references, err := enterworld.NewBrowserReferences(enterworld.BrowserReferenceSources{
+	// One file per served release protocol's reference contract: protocol-5
+	// tabs (contract 2) stay playable while the protocol-6 browser rolls out.
+	references, err := enterworld.NewBrowserReferenceSet(enterworld.BrowserReferenceSources{
 		Skills:       gameplay.deps.Skills,
 		ItemCommands: authority.textdata.Items,
 		StaticItems:  enterworld.StaticRefItemRows(gameplay.deps),
@@ -233,7 +236,16 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("browser references: %w", err)
 	}
-	gameplay.deps.BrowserReferences = references
+	gameplay.deps.BrowserReferences = references.For(releaseprotocol.Current)
+	gameplay.deps.ProtocolReferences = references
+	hub := ts.Hub
+	gameplay.deps.CharacterProtocol = func(divisionID, characterName string) int {
+		session, bound := hub.BoundSession(divisionID + ":" + strings.ToLower(characterName))
+		if !bound {
+			return 0
+		}
+		return session.ReleaseProtocol()
+	}
 	ts.SetPublicReferences(references)
 	if err := gameplay.register(ts.Hub, authority.loadQuests); err != nil {
 		return nil, fmt.Errorf("gameplay wiring: %w", err)

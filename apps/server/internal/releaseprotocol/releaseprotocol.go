@@ -9,13 +9,17 @@ versions; their encoders read them from here, so a wire change cannot
 happen without a new release protocol.
 
 Every browser request declares the protocol it was built for in the
-X-OpenSRO-Protocol header. A server refuses any other with 426 Upgrade
-Required and the protocol it speaks; the browser then offers the newer
-release instead of failing inside a decoder. Release admission publishes a
-protocol change only as one coordinated server and client release.
+X-OpenSRO-Protocol header. A server serves Oldest through Current and
+refuses any other with 426 Upgrade Required and the protocol it speaks; the
+browser then offers the newer release instead of failing inside a decoder.
+Release admission publishes a protocol change only as one coordinated
+server and client release, or as a server that still serves the live
+browser's protocol (Oldest) followed by the browser.
 
 Transport sessions need no second check: their admission tokens are minted
-only by requests that passed this one.
+only by requests that passed this one, and the EnterWorld token carries the
+declared protocol into the session (auth.MintProtocol), so the encoders that
+differ between protocols pick the session's contract.
 
 This package imports nothing from the module, so every owner can use it.
 
@@ -45,9 +49,17 @@ type Contracts struct {
 	References int // the public reference file beside the transport
 }
 
-// Current is the release protocol this build speaks, and the contract
+// Current is the newest release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
+//
+// Oldest is the oldest protocol it still serves. Protocol 6 changed only the
+// reference file (contract 3), so a server that also publishes the contract-2
+// file and the login monster rows serves protocol-5 tabs too. That lets a
+// server carrying a store upgrade ship alone while protocol-5 tabs are live
+// (a coordinated pair may not change the store). Raise Oldest once every
+// browser runs 6.
 const (
+	Oldest             = 5
 	Current            = 6
 	CompanionsContract = 1
 	BootstrapContract  = 2 // the EnterWorld DTO
@@ -82,11 +94,39 @@ func ContractsOf(protocol int) (Contracts, bool) {
 
 /*
 ================
+Supported
+
+Whether this build serves a protocol: Oldest through Current, each one a
+release shipped (history).
+================
+*/
+func Supported(protocol int) bool {
+	_, shipped := history[protocol]
+	return shipped && protocol >= Oldest && protocol <= Current
+}
+
+/*
+================
+Declared
+
+The protocol a request declares, when it is one this build serves.
+================
+*/
+func Declared(r *http.Request) (int, bool) {
+	declared, err := strconv.Atoi(r.Header.Get(Header))
+	if err != nil || !Supported(declared) {
+		return 0, false
+	}
+	return declared, true
+}
+
+/*
+================
 Require
 
-Refuses a browser request whose declared protocol is not Current. CORS
-preflights pass untouched: they carry no declaration and no application
-state, and the browser sends the declared request next.
+Refuses a browser request whose declared protocol this build does not
+serve. CORS preflights pass untouched: they carry no declaration and no
+application state, and the browser sends the declared request next.
 ================
 */
 func Require(next http.Handler) http.Handler {
@@ -95,8 +135,7 @@ func Require(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		declared, err := strconv.Atoi(r.Header.Get(Header))
-		if err != nil || declared != Current {
+		if _, ok := Declared(r); !ok {
 			refuse(w)
 			return
 		}

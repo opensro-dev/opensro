@@ -4,7 +4,7 @@
 		"assetSchema": 4
 	},
 	"server": {
-		"protocolMin": 6,
+		"protocolMin": 5,
 		"protocolMax": 6,
 		"storeReadMin": 20,
 		"storeReadMax": 20,

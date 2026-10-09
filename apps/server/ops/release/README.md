@@ -138,7 +138,16 @@ neither can be published alone. After approval:
 
 A new protocol is any change the live counterpart cannot decode, including
 new bytes in an existing packet: a field added, a length changed, a layout
-version raised. Those need a protocol bump and a coordinated release. A new
+version raised. Those need a protocol bump and a coordinated release.
+
+A coordinated pair cannot also upgrade the store (the live server must read
+what the new one writes). When main carries both, the server serves its
+previous protocol too: `releaseprotocol.Oldest` through `Current`, each
+session encoded for the protocol its EnterWorld token binds
+(`auth.MintProtocol`), and `compatibility.json` declares that range. It
+then ships server-only with the store upgrade while the old tabs keep
+playing, and the new browser follows as a client release. Raise `Oldest`
+once no tab runs the old protocol. A new
 opcode or a new JSON key is not one; the browser client ignores both. Before
 publishing one component alone, diff the other component's decoders between
 its live commit and the candidate, and pair every changed decoder with the

@@ -169,13 +169,16 @@ func installTransportAdmissionVerifier(
 /*
 ================
 enterWorldVerifierForShard
+
+A verified token also hands the session the release protocol its minting
+request declared, before the EnterWorld handler builds the entry.
 ================
 */
 func enterWorldVerifierForShard(
 	ownedShardID string,
 	verifier auth.VerifyFunc,
 ) transport.EnterWorldAuthFunc {
-	return func(_ *transport.Session, enter transport.EnterWorld) (bool, uint32) {
+	return func(session *transport.Session, enter transport.EnterWorld) (bool, uint32) {
 		if enter.Division != ownedShardID {
 			log.WithFields(log.Fields{
 				"workerShard": ownedShardID,
@@ -184,8 +187,11 @@ func enterWorldVerifierForShard(
 			}).Warn("auth: EnterWorld refused for foreign shard")
 			return false, auth.DenyCodeUnauthorized
 		}
-		err := verifier(string(enter.AuthToken), enter.Division, enter.CharName)
+		protocol, err := verifier(string(enter.AuthToken), enter.Division, enter.CharName)
 		if err == nil {
+			if session != nil {
+				session.SetReleaseProtocol(protocol)
+			}
 			return true, 0
 		}
 		log.WithFields(log.Fields{

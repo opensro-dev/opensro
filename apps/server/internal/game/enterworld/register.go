@@ -244,7 +244,9 @@ RegisterEnterWorld
 */
 func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 	hub.Handle(transport.OpEnterWorld, func(s *transport.Session, _ uint16, payload []byte) {
-		admission := *deps
+		// The verified token recorded the session's release protocol; the
+		// entry names that protocol's reference file (BrowserReferenceSet).
+		admission := deps.forProtocol(s.ReleaseProtocol())
 		// Acquire before invalidating the old scene. A committed pickup must
 		// publish before this replacement snapshot, including entry refills.
 		if deps.LockPublication != nil {
