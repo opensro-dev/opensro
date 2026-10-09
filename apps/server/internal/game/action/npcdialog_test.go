@@ -277,3 +277,37 @@ func TestQuestOfferPagesTurnBeforeTheQuestion(t *testing.T) {
 		t.Fatalf("offer after pages did not accept: %v %q %d", frames, refusal, accepted)
 	}
 }
+
+/*
+================
+TestQuestOfferAcceptRowAcceptsWithoutAQuestion
+
+QNO_WC_POTION_4's _01 shows one NEXT row and NEXT accepts (897680): no
+yes/no confirm opens, and only that row is answered.
+================
+*/
+func TestQuestOfferAcceptRowAcceptsWithoutAQuestion(t *testing.T) {
+	c := testCharacter()
+	rt := selectTestRuntime(c)
+	rt.NpcSpawn = enterworld.NpcSpawnConfig{Enabled: true, AtPlayer: true}
+	npc := rt.NpcRoster[0]
+	rt.Selected.Set(testDivision, c.Name, npc.ObjectID)
+	rt.NpcDialogs.Put(testDivision, c.Name, npcDialogSession{NpcGID: npc.ObjectID, NpcCode: npc.Codename, DefaultSymbol: "BASE",
+		Stage: npcDialogOptions, Options: []NpcQuestOption{{Codename: "QUEST", PromptSymbol: "OFFER", AcceptResponseSymbol: "ACCEPT", AcceptRowSymbol: "NEXT"}}})
+	accepted := 0
+	rt.NpcQuests.Accept = func(*enterworld.Character, string) ([]wire.Frame, error) { accepted++; return nil, nil }
+	frames, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{npcDialogFirstRow})
+	if refusal != "" || len(frames) != 1 || string(frames[0].Payload) != string(wire.EncodeNpcDialogOptions("OFFER", []string{"NEXT"})) {
+		t.Fatalf("offer did not show its accept row: %v %q", frames, refusal)
+	}
+	if _, refusal := rt.HandleNpcDialogResponse(testDivision, c, []byte{npcDialogConfirmYes}); refusal == "" || accepted != 0 {
+		t.Fatal("a confirm yes answered the accept row")
+	}
+	frames, refusal = rt.HandleNpcDialogResponse(testDivision, c, []byte{npcDialogFirstRow})
+	if refusal != "" || accepted != 1 || string(frames[len(frames)-1].Payload) != string(wire.EncodeNpcDialogSymbol("ACCEPT")) {
+		t.Fatalf("the accept row did not accept: %v %q %d", frames, refusal, accepted)
+	}
+	if _, open := rt.NpcDialogs.Get(testDivision, c.Name); open {
+		t.Fatal("acceptance kept the conversation open")
+	}
+}

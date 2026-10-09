@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+missions.go - parallel missions inside one quest's acceptance and reward
+
+A parallel quest runs several counters (collect, kill) under one journal
+record and one reward. This file loads them, maps persisted nodes back to
+their missions, and rebuilds counters from inventory and kills.
+
+===========================================================================
+*/
 package quest
 
 import (
@@ -9,9 +20,15 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
-// MissionSpec describes simultaneous counters within one acceptance/reward
-// transaction. Native collection data has a separate item, count and target
-// array per mission (86bf20 -> 929f1b); these are not tutorial stages.
+/*
+================
+MissionSpec
+
+Describes simultaneous counters within one acceptance/reward
+transaction. Native collection data has a separate item, count and target
+array per mission (86bf20 -> 929f1b); these are not tutorial stages.
+================
+*/
 type MissionSpec struct {
 	ContentsSymbol       string
 	Objective            ObjectiveKind
@@ -24,6 +41,11 @@ type MissionSpec struct {
 	collectRef           uint32
 }
 
+/*
+================
+loadMissions
+================
+*/
 func loadMissions(def *Definition, symbols []string, items enterworld.ItemRefSource) error {
 	if def.Objective != ObjectiveParallel {
 		if len(def.Objectives) != 0 {
@@ -69,6 +91,11 @@ func loadMissions(def *Definition, symbols []string, items enterworld.ItemRefSou
 	return nil
 }
 
+/*
+================
+missionCount
+================
+*/
 func missionCount(def *Definition) int {
 	if def.Objective == ObjectiveParallel {
 		return len(def.Objectives)
@@ -76,6 +103,11 @@ func missionCount(def *Definition) int {
 	return 1
 }
 
+/*
+================
+missionDefinition
+================
+*/
 func missionDefinition(def *Definition, index int) *Definition {
 	if def.Objective != ObjectiveParallel {
 		return def
@@ -91,10 +123,16 @@ func missionDefinition(def *Definition, index int) *Definition {
 	return &d
 }
 
-// Native 91BF04 publishes mission-data +8 plus one as the wire tag.
-// Captions are not identities: compiled EU_GENERAL_2 uses the same caption
-// for two independent missions. Old port records used tag 1 for every node;
-// migrate those only when the caption identifies exactly one persisted node.
+/*
+================
+missionNodeIndex
+
+Native 91BF04 publishes mission-data +8 plus one as the wire tag.
+Captions are not identities: compiled EU_GENERAL_2 uses the same caption
+for two independent missions. Old port records used tag 1 for every node;
+migrate those only when the caption identifies exactly one persisted node.
+================
+*/
 func missionNodeIndex(nodes []enterworld.ActiveQuestContentsNode, tag uint8, description string) int {
 	for i, node := range nodes {
 		if node.Tag == tag && node.Description == description {
@@ -113,6 +151,11 @@ func missionNodeIndex(nodes []enterworld.ActiveQuestContentsNode, tag uint8, des
 	return found
 }
 
+/*
+================
+missionRecord
+================
+*/
 func missionRecord(record enterworld.ActiveQuestRecord, def *Definition) enterworld.ActiveQuestRecord {
 	if i := missionNodeIndex(record.Contents, def.missionIndex+1, def.ContentsSymbol); i >= 0 {
 		record.Contents = []enterworld.ActiveQuestContentsNode{record.Contents[i]}
@@ -122,12 +165,18 @@ func missionRecord(record enterworld.ActiveQuestRecord, def *Definition) enterwo
 	return record
 }
 
-// NormalizeEntryRecords operates on the detached bootstrap snapshot. Legacy
-// tag-1 siblings must be repaired before the client's tag-keyed merge sees
-// them, not deferred until the next kill. No acceptance or reward is replayed.
-// A character who finished a superseded chain before its replacement existed
-// is shown the replacement as done (CompletedBy); the server's own gates read
-// the same rule, so nothing is persisted here.
+/*
+================
+NormalizeEntryRecords
+
+Operates on the detached bootstrap snapshot. Legacy
+tag-1 siblings must be repaired before the client's tag-keyed merge sees
+them, not deferred until the next kill. No acceptance or reward is replayed.
+A character who finished a superseded chain before its replacement existed
+is shown the replacement as done (CompletedBy); the server's own gates read
+the same rule, so nothing is persisted here.
+================
+*/
 func (rt *Runtime) NormalizeEntryRecords(c *enterworld.Character) error {
 	creditPredecessorCompletions(c, rt.Defs)
 	for i, record := range c.ActiveQuests {
@@ -165,6 +214,11 @@ func (rt *Runtime) NormalizeEntryRecords(c *enterworld.Character) error {
 	return nil
 }
 
+/*
+================
+collectsItems
+================
+*/
 func collectsItems(def *Definition) bool {
 	if def.Objective == ObjectiveDelivery {
 		return true
@@ -177,8 +231,19 @@ func collectsItems(def *Definition) bool {
 	return false
 }
 
+/*
+================
+collectionConsumption
+
+What the turn-in takes: each collect mission's count, or the delivery
+items unless the mission keeps them (QuestSpec.DeliveryKeepsItems).
+================
+*/
 func collectionConsumption(def *Definition) []inventory.ItemAmount {
 	if def.Objective == ObjectiveDelivery {
+		if def.DeliveryKeepsItems {
+			return nil
+		}
 		return deliveryAmounts(def)
 	}
 	var out []inventory.ItemAmount
@@ -191,8 +256,14 @@ func collectionConsumption(def *Definition) []inventory.ItemAmount {
 	return out
 }
 
-// Rebuild contents while retaining the envelope (run number, timers, targets,
-// stage). Inventory changes must never erase a simultaneous kill counter.
+/*
+================
+refreshMissions
+
+Rebuild contents while retaining the envelope (run number, timers, targets,
+stage). Inventory changes must never erase a simultaneous kill counter.
+================
+*/
 func refreshMissions(c *enterworld.Character, def *Definition, record enterworld.ActiveQuestRecord, killed string, rarity uint8) (enterworld.ActiveQuestRecord, bool) {
 	// A waiting branch's progress is its timer (89E050), never item counts.
 	if waitingBranch(def, record) {
@@ -224,12 +295,23 @@ func refreshMissions(c *enterworld.Character, def *Definition, record enterworld
 	return updated, changed || retargeted
 }
 
+/*
+================
+missionCompletionReached
+================
+*/
 func missionCompletionReached(node enterworld.ActiveQuestContentsNode) bool {
 	return node.CompletionReached || node.Kind == 0 || node.Kind == 2
 }
 
-// Native mission gates return 2 only on the first threshold hit. Persisted
-// complete state is 0; the edge belongs to the ordered publication, not login.
+/*
+================
+encodeMissionProgress
+
+Native mission gates return 2 only on the first threshold hit. Persisted
+complete state is 0; the edge belongs to the ordered publication, not login.
+================
+*/
 func encodeMissionProgress(previous, next enterworld.ActiveQuestRecord) []byte {
 	next.Flags &^= 4 // Contents updates must not rearm the independent client timer.
 	next.Contents = slices.Clone(next.Contents)
@@ -282,8 +364,14 @@ func allMissionsReached(record enterworld.ActiveQuestRecord) bool {
 	return true
 }
 
-// Native 91bc82..91bc9b indexes the rank by the matching species, and
-// CGObjMob::GetMonsterClass (4c1c60) returns only the low rarity nibble.
+/*
+================
+killTargetMatches
+
+Native 91bc82..91bc9b indexes the rank by the matching species, and
+CGObjMob::GetMonsterClass (4c1c60) returns only the low rarity nibble.
+================
+*/
 func killTargetMatches(def *Definition, code string, rarity uint8) bool {
 	for i, target := range def.KillMonsterCodenames {
 		if target == code && (len(def.KillRanks) == 0 || i < len(def.KillRanks) && def.KillRanks[i] == rarity&15) {
@@ -293,6 +381,11 @@ func killTargetMatches(def *Definition, code string, rarity uint8) bool {
 	return false
 }
 
+/*
+================
+validateKillRanks
+================
+*/
 func validateKillRanks(spec QuestSpec) error {
 	if len(spec.KillRanks) == 0 {
 		return nil

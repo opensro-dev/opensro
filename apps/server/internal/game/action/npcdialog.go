@@ -44,6 +44,9 @@ type NpcQuestOption struct {
 	SideTalk             bool
 	Complete             bool
 	Immediate            bool
+	// AcceptRowSymbol replaces an offer's yes/no with this one row, which
+	// accepts (QNO_WC_POTION_4's _01 [NEXT], 897680).
+	AcceptRowSymbol string
 }
 
 /*
@@ -101,10 +104,14 @@ const (
 	npcDialogConfirm
 	npcDialogPages
 	npcDialogBranches
+	npcDialogAcceptRow
 )
 
 // npcDialogFirstRow is the client's choice byte for a kind-4 dialog's first row.
 const npcDialogFirstRow = 5
+
+// npcDialogConfirmYes is the client's choice byte for a confirm dialog's yes.
+const npcDialogConfirmYes = 2
 
 /*
 ================
@@ -320,6 +327,13 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			symbol = conversation.DefaultSymbol
 		}
 		return append(frames, wire.Frame{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}), ""
+	case npcDialogAcceptRow:
+		// The offer's only row is its acceptance: answer it as confirm's yes.
+		if choice != npcDialogFirstRow {
+			return nil, fmt.Sprintf("accept row choice %d is not the offer's row", choice)
+		}
+		choice = npcDialogConfirmYes
+		fallthrough
 	case npcDialogConfirm:
 		if choice == 3 {
 			rt.NpcDialogs.Clear(divisionID, character.Name)
@@ -329,7 +343,7 @@ func (rt *Runtime) HandleNpcDialogResponse(divisionID string, character *enterwo
 			}
 			return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogSymbol(symbol)}}, ""
 		}
-		if choice != 2 {
+		if choice != npcDialogConfirmYes {
 			return nil, fmt.Sprintf("confirm choice %d is neither yes(2) nor no(3)", choice)
 		}
 		var frames []wire.Frame
@@ -405,6 +419,12 @@ func (rt *Runtime) openNpcDialogConfirm(divisionID string, character *enterworld
 		}
 		rows = append(rows, npcDialogRefuseRow)
 		rt.NpcDialogs.Put(divisionID, character.Name, conversation)
+		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(conversation.Pending.PromptSymbol, rows)}}, ""
+	}
+	if conversation.Pending.AcceptRowSymbol != "" && !conversation.Pending.Complete {
+		conversation.Stage = npcDialogAcceptRow
+		rt.NpcDialogs.Put(divisionID, character.Name, conversation)
+		rows := []string{conversation.Pending.AcceptRowSymbol}
 		return []wire.Frame{{Opcode: wire.OpNpcDialog, Payload: wire.EncodeNpcDialogOptions(conversation.Pending.PromptSymbol, rows)}}, ""
 	}
 	rt.NpcDialogs.Put(divisionID, character.Name, conversation)

@@ -86,6 +86,44 @@ CLASS_BEHAVIOUR = {
 		"TurnInGold": 10000,
 		"TurnInGoldShortSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_05",
 	},
+	# 8E6440 sends the start NPC to vtable +0x19C and the end NPC to +0x1A0.
+	# Their lines are hard-coded; the base words supply the rest. None of the
+	# three sets a travel block, though SMITH_3's _02 warns against Return.
+	#
+	# CQNO_WC_POTION_3 8960A0 / 896360: _01 [NEXT], then _02 accept/deny,
+	# deny _04; while active Bori answers _05. The hand-over (+0x111 cleared)
+	# keeps the medicine and letter, and 896360 sends _16 once it completes.
+	("QNO_WC_POTION_3", "0x58"): {
+		"OfferPages": [{"PromptSymbol": "SN_TALK_QNO_WC_POTION_3_01", "ReplySymbol": "SN_TALK_COMMON_NEXT"}],
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_POTION_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_POTION_3_04",
+		"SideTalks": [{"NpcCodename": "NPC_WC_POTION", "PromptSymbol": "SN_TALK_QNO_WC_POTION_3_05"}],
+		"CompleteNoticeSymbol": "SN_TALK_QNO_WC_POTION_3_16",
+	},
+	# CQNO_WC_POTION_4 897680 / 897A40: Jinjin's _01 [NEXT] accepts at once,
+	# taking one medicine and one letter before the wrapped gift is granted;
+	# while active she answers _03. Asa pages _05 [NEXT], says _06, then
+	# takes the gift and pays.
+	("QNO_WC_POTION_4", "0x58"): {
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_POTION_4_01",
+		"OfferAcceptRowSymbol": "SN_TALK_COMMON_NEXT",
+		"AcceptanceConsumes": [
+			{"ItemCodename": "ITEM_QNO_WC_POTION_3_01", "Count": 1},
+			{"ItemCodename": "ITEM_QNO_WC_POTION_3_02", "Count": 1},
+		],
+		"SideTalks": [{"NpcCodename": "NPC_CH_ACCESSORY", "PromptSymbol": "SN_TALK_QNO_WC_POTION_4_03"}],
+		"EndNpcCodename": "NPC_WC_SPECIAL",
+		"TalkPages": [{"PromptSymbol": "SN_TALK_QNO_WC_POTION_4_05", "ReplySymbol": "SN_TALK_COMMON_NEXT"}],
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_POTION_4_06",
+	},
+	# CQNO_WC_SMITH_3 896840 / 896AA0: _01 accept/deny, deny _03; while
+	# active Agol answers _04, the mission's own not-delivered line (+0xC4).
+	("QNO_WC_SMITH_3", "0x58"): {
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_SMITH_3_01",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_SMITH_3_03",
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_SMITH_3_04",
+		"SideTalks": [{"NpcCodename": "NPC_WC_SMITH", "PromptSymbol": "SN_TALK_QNO_WC_SMITH_3_04"}],
+	},
 }
 
 
@@ -284,8 +322,9 @@ def project(code, quest, text, sql):
 		spec["RequiredActiveQuests"] = lists[LIST_REQUIRED_ACTIVE]
 	if lists.get(LIST_REQUIRED_ANY):
 		spec["RequiredAnyQuests"] = lists[LIST_REQUIRED_ANY]
+	behaviour = {}
 	for slot in quest["overrides"]:
-		spec.update(CLASS_BEHAVIOUR[(code, slot)])
+		behaviour.update(CLASS_BEHAVIOUR[(code, slot)])
 	for key, slot in (("NotAchievedSymbol", MENU_NOT_ACHIEVED), ("InventoryFullSymbol", MENU_INVENTORY_FULL),
 			("RepeatOfferPromptSymbol", MENU_ACCEPT_AFTER_CLEAR), ("AchievedNowSymbol", MENU_ACHIEVED_NOW),
 			("AcceptNoticeSymbol", MENU_MIDDLE)):
@@ -297,8 +336,9 @@ def project(code, quest, text, sql):
 		if len(missions) != 1:
 			raise Unsupported("several talk or delivery missions")
 		fields = missions[0]["fields"]
-		npc = fields.get("0x15")
-		talk = fields.get("0x1e" if MISSION_DIALOG in kinds else "0xc0")
+		# A class talk handler may hand over at its own NPC and line.
+		npc = behaviour.get("EndNpcCodename", fields.get("0x15"))
+		talk = behaviour.get("CompletePromptSymbol", fields.get("0x1e" if MISSION_DIALOG in kinds else "0xc0"))
 		if not isinstance(npc, str) or not isinstance(talk, str):
 			raise Unsupported("talk or delivery mission without an NPC or line")
 		spec.update({"EndNpcCodename": npc, "CompletePromptSymbol": talk})
@@ -306,6 +346,10 @@ def project(code, quest, text, sql):
 			spec["Objective"] = OBJECTIVE_TALK
 		else:
 			spec.update({"Objective": OBJECTIVE_DELIVERY, "DeliveryItems": delivery_items(text, missions[0])})
+			# 91CA00 removes the delivered items only while +0x111 is set,
+			# as the mission constructor (872040) leaves it.
+			if fields.get("0x111", 1) == 0:
+				spec["DeliveryKeepsItems"] = True
 	elif kinds <= {MISSION_GATHER, MISSION_KILL}:
 		rows = [project_mission(text, m) for m in missions]
 		if len(rows) == 1:
@@ -316,7 +360,10 @@ def project(code, quest, text, sql):
 			spec.update({"Objective": OBJECTIVE_PARALLEL, "Objectives": rows})
 	else:
 		raise Unsupported("mission kinds " + ",".join(str(k) for k in sorted(kinds, key=str)))
-	if not spec["CompletePromptSymbol"] or not spec["OfferPromptSymbol"]:
+	spec.update(behaviour)
+	# An absent base word is no field: POTION_4's offer has no deny line.
+	spec = {key: value for key, value in spec.items() if value is not None}
+	if not spec.get("CompletePromptSymbol") or not spec.get("OfferPromptSymbol"):
 		raise Unsupported("dialogue symbols unavailable")
 	return spec
 

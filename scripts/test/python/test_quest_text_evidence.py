@@ -16,7 +16,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_quest_text_evidence import advertised_rewards, plain, read_table
-from generate_compiled_quests import Unsupported, delivery_items, rewards
+from generate_compiled_quests import Unsupported, delivery_items, project, rewards
 
 
 # ================
@@ -136,6 +136,28 @@ class QuestTextEvidenceTests(unittest.TestCase):
 			with self.subTest(fields=fields):
 				with self.assertRaises(Unsupported):
 					delivery_items(text, {"fields": fields})
+
+	# ================
+	# test_delivery_keeps_items_only_when_the_mission_clears_0x111
+	#
+	# 91CA00 removes the delivered items while +0x111 is set, the
+	# constructor's default; the importer records only explicit writes.
+	# ================
+	def test_delivery_keeps_items_only_when_the_mission_clears_0x111(self):
+		text = {"objectives": {}, "reward": advertised_rewards("")}
+		sql = {"QUEST": sql_reward() | {"items": [], "inventorySlots": 0}}
+		for written, kept in ((None, False), (1, False), (0, True)):
+			with self.subTest(written=written):
+				fields = {"0x9": 3, "0x15": "NPC_END", "0x19": 1, "0x1a": 1, "0x42": "ITEM_LEATHER", "0xc0": "SN_HAND_OVER"}
+				if written is not None:
+					fields["0x111"] = written
+				quest = {
+					"words": {"0x130": "SN_OFFER"}, "lists": {}, "overrides": [],
+					"tables": {"0xc4": {"0x8": "NPC_START"}}, "missions": [{"fields": fields}],
+				}
+				spec = project("QUEST", quest, text, sql)
+				self.assertEqual(spec.get("DeliveryKeepsItems", False), kept)
+				self.assertNotIn(None, spec.values())
 
 
 if __name__ == "__main__":

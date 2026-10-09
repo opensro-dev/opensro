@@ -830,6 +830,105 @@
 		}
 	},
 	{
+		"Codename": "QNO_WC_POTION_3",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_POTION",
+		"EndNpcCodename": "NPC_CH_ACCESSORY",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_POTION_3_02",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_POTION_3_03",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_POTION_3_04",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_POTION_3_15",
+		"RequiredQuests": [
+			"QNO_WC_POTION_2"
+		],
+		"InventoryFullSymbol": "SN_TALK_QNO_WC_POTION_3_06",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_WC_POTION_3_07",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_POTION_3_01",
+				"Count": 1
+			},
+			{
+				"ItemCodename": "ITEM_QNO_WC_POTION_3_02",
+				"Count": 1
+			}
+		],
+		"DeliveryKeepsItems": true,
+		"OfferPages": [
+			{
+				"PromptSymbol": "SN_TALK_QNO_WC_POTION_3_01",
+				"ReplySymbol": "SN_TALK_COMMON_NEXT"
+			}
+		],
+		"SideTalks": [
+			{
+				"NpcCodename": "NPC_WC_POTION",
+				"PromptSymbol": "SN_TALK_QNO_WC_POTION_3_05"
+			}
+		],
+		"CompleteNoticeSymbol": "SN_TALK_QNO_WC_POTION_3_16"
+	},
+	{
+		"Codename": "QNO_WC_POTION_4",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CH_ACCESSORY",
+		"EndNpcCodename": "NPC_WC_SPECIAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_POTION_4_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_POTION_4_02",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_POTION_4_06",
+		"RequiredQuests": [
+			"QNO_WC_POTION_3"
+		],
+		"InventoryFullSymbol": "SN_TALK_QNO_WC_POTION_4_04",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_WC_POTION_4_07",
+		"RewardExp": 167000,
+		"RewardGold": 0,
+		"RewardSkillExp": 3000,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_POTION_4_01",
+				"Count": 2
+			}
+		],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_POTION_3_03",
+				"Count": 1
+			}
+		],
+		"OfferAcceptRowSymbol": "SN_TALK_COMMON_NEXT",
+		"AcceptanceConsumes": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_POTION_3_01",
+				"Count": 1
+			},
+			{
+				"ItemCodename": "ITEM_QNO_WC_POTION_3_02",
+				"Count": 1
+			}
+		],
+		"SideTalks": [
+			{
+				"NpcCodename": "NPC_CH_ACCESSORY",
+				"PromptSymbol": "SN_TALK_QNO_WC_POTION_4_03"
+			}
+		],
+		"TalkPages": [
+			{
+				"PromptSymbol": "SN_TALK_QNO_WC_POTION_4_05",
+				"ReplySymbol": "SN_TALK_COMMON_NEXT"
+			}
+		]
+	},
+	{
 		"Codename": "QNO_WC_PRIEST1_1",
 		"MaxCompletions": 1,
 		"KindByte": 1,
@@ -852,6 +951,45 @@
 			"MOB_WC_HYUNGNO_CLON"
 		],
 		"KillCount": 30
+	},
+	{
+		"Codename": "QNO_WC_SMITH_3",
+		"MaxCompletions": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_SMITH",
+		"EndNpcCodename": "NPC_WC_FERRY3",
+		"OfferPromptSymbol": "SN_TALK_QNO_WC_SMITH_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_WC_SMITH_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_WC_SMITH_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_SMITH_3_06",
+		"RequiredQuests": [
+			"QNO_WC_SMITH_2"
+		],
+		"InventoryFullSymbol": "SN_TALK_QNO_WC_SMITH_3_05",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_WC_SMITH_3_07",
+		"RewardExp": 221500,
+		"RewardGold": 0,
+		"RewardSkillExp": 50000,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_SMITH_3_02",
+				"Count": 5
+			}
+		],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_SMITH_3_01",
+				"Count": 50
+			}
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_WC_SMITH_3_04",
+		"SideTalks": [
+			{
+				"NpcCodename": "NPC_WC_SMITH",
+				"PromptSymbol": "SN_TALK_QNO_WC_SMITH_3_04"
+			}
+		]
 	},
 	{
 		"Codename": "QNO_WC_SOLDIER_EA2_3",
@@ -1004,8 +1142,6 @@
 			"QSP_WC_EXINVENTORY_2",
 			"QSP_CA_EXINVENTORY_2"
 		],
-		"TurnInGold": 10000,
-		"TurnInGoldShortSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_05",
 		"NotAchievedSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_04",
 		"AchievedNowSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_07",
 		"RewardExp": 0,
@@ -1021,7 +1157,9 @@
 				"MOB_KK_GWHITESPIDER"
 			],
 			"ChancePercent": 10.0
-		}
+		},
+		"TurnInGold": 10000,
+		"TurnInGoldShortSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_05"
 	},
 	{
 		"Codename": "QSP_RM_EXINVENTORY_4",

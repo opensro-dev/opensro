@@ -221,6 +221,21 @@ type QuestSpec struct {
 	AchievedNowSymbol    string
 	DeliveryNpcCodename  string
 	DeliveryPromptSymbol string
+	// DeliveryKeepsItems is the deliver mission's byte +0x111 cleared: the
+	// hand-over leaves the delivered items in the bag. 91CA00 removes them
+	// only while it is set, the mission constructor's default (872040).
+	// QNO_WC_POTION_3's medicine and letter stay for QNO_WC_POTION_4.
+	DeliveryKeepsItems bool
+	// AcceptanceConsumes leave the bag when the quest is accepted, each up
+	// to Count and only as many as are held: 897680 takes QNO_WC_POTION_3's
+	// medicine and letter before it grants the wrapped gift.
+	AcceptanceConsumes []RewardItemLead
+	// CompleteNoticeSymbol is the notice sent once the quest completes
+	// (896360's _16, "Ask Jinjin about the birthday gift").
+	CompleteNoticeSymbol string
+	// OfferAcceptRowSymbol replaces the offer's yes/no with this one row,
+	// which accepts: 897680 accepts on _01's SN_TALK_COMMON_NEXT.
+	OfferAcceptRowSymbol string
 }
 
 // curatedQuestSpecs is the curated table. SMALL BY DESIGN: the starter
@@ -515,6 +530,9 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 			return nil, err
 		}
 		if err := loadDelivery(def, items); err != nil {
+			return nil, err
+		}
+		if err := validateAcceptanceItems(spec, items); err != nil {
 			return nil, err
 		}
 		if err := loadStages(def, items); err != nil {

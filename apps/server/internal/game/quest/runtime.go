@@ -337,12 +337,15 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		if suppliesTraps {
 			acceptanceItems = append(acceptanceItems, inventory.ItemAmount{Codename: supply.item, Count: uint32(supply.count)})
 		}
-		if len(acceptanceItems) > 0 {
+		// 897680 takes what it consumes before it grants the delivery, in the
+		// same inventory transaction here.
+		acceptanceTaken := acceptanceConsumption(character, def)
+		if len(acceptanceItems) > 0 || len(acceptanceTaken) > 0 {
 			if rt.PlanInventory == nil {
 				refusal = fmt.Errorf("quest acceptance inventory owner unavailable")
 				return false
 			}
-			rows, frames, err := rt.PlanInventory(character, nil, acceptanceItems)
+			rows, frames, err := rt.PlanInventory(character, acceptanceTaken, acceptanceItems)
 			if err != nil {
 				refusal = inventoryRefusal(def, err)
 				return false
@@ -382,7 +385,7 @@ func (rt *Runtime) StartQuest(character *enterworld.Character, codename string) 
 		next = append(next, character.ActiveQuests...)
 		next = append(next, record)
 		character.ActiveQuests = next
-		if len(acceptanceItems) > 0 {
+		if len(acceptanceItems) > 0 || len(acceptanceTaken) > 0 {
 			updates, _ := rt.applyInventoryChange(character)
 			inventoryFrames = append(inventoryFrames, updates...)
 		}
@@ -421,6 +424,9 @@ type NpcOption struct {
 	// AdvanceNpcQuest (89FDA0's pending bit).
 	SideTalk bool
 	Complete bool
+	// AcceptRowSymbol, on an offer, is its one reply row, which accepts
+	// (QuestSpec.OfferAcceptRowSymbol).
+	AcceptRowSymbol string
 }
 
 /*
@@ -498,7 +504,7 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 				Codename: def.Codename, TitleSymbol: def.TitleSymbol,
 				PromptSymbol:         prompt,
 				AcceptResponseSymbol: def.AcceptResponseSymbol, DenyResponseSymbol: def.DenyResponseSymbol,
-				Pages: def.OfferPages, Branches: offerBranchRows(def),
+				Pages: def.OfferPages, Branches: offerBranchRows(def), AcceptRowSymbol: def.OfferAcceptRowSymbol,
 			})
 		}
 		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && def.NotAchievedSymbol != "" {
@@ -851,6 +857,9 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 		if def.AchievedNowSymbol != "" {
 			frames = append(frames, questNotification(def.AchievedNowSymbol))
 		}
+	}
+	if advanced == nil && def.CompleteNoticeSymbol != "" {
+		frames = append(frames, questNotification(def.CompleteNoticeSymbol))
 	}
 	if goldFrame != nil {
 		frames = append(frames, *goldFrame)

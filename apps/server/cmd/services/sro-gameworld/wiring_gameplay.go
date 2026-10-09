@@ -537,6 +537,7 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 					PromptSymbol: row.PromptSymbol, Complete: row.Complete,
 					AcceptResponseSymbol: row.AcceptResponseSymbol, DenyResponseSymbol: row.DenyResponseSymbol,
 					Pages: pages, Branches: branches, Informational: row.Informational, SideTalk: row.SideTalk,
+					AcceptRowSymbol: row.AcceptRowSymbol,
 				})
 			}
 			if resuscitation {
