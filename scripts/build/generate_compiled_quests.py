@@ -142,6 +142,23 @@ CLASS_BEHAVIOUR = {
 	# CQNO_EU_ADVENTURER_1_UseShinyMoss (8B6840): the archers' Shiny Moss
 	# calls a crab near the Troy wooden horse (quest.useShinyMoss).
 	("QNO_EU_ADVENTURER_1", "0x4"): {},
+	# Sunset Witch's stable (QNO_EU_EASTEU_1). Holy water used by the stable
+	# (8AA700, vtable +0x4) runs the shared countdown (8C8620 +0xC, 8C8770
+	# +0x94) that 8AA630 (+0x98) ends with a Stable Filth (quest.gather.go).
+	# Its talk (8AA0C0) answers _04 ("get holy water first") while none is
+	# held, else _05; the base words supply the rest.
+	("QNO_EU_EASTEU_1", "0x4"): {},
+	("QNO_EU_EASTEU_1", "0xc"): {},
+	("QNO_EU_EASTEU_1", "0x94"): {},
+	("QNO_EU_EASTEU_1", "0x98"): {},
+	("QNO_EU_EASTEU_1", "0x58"): {
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_1_05",
+		"ToolMissingSymbol": "SN_TALK_QNO_EU_EASTEU_1_04",
+		"ToolCodename": "ITEM_QNO_EU_EASTEU_3_02",
+	},
+	# Uvetino's talk (8AB070): the base talk, and once the quest is done his
+	# daily holy water (quest.captureSupplies).
+	("QNO_EU_EASTEU_3", "0x58"): {},
 	# CQNO_WC_WAREHOUSE_W_2/W_3_UseAmulet (895BC0 / 8970F0): a hunted amulet
 	# is right-clicked into an authentic or a flawed one (quest.useAmulet).
 	("QNO_WC_WAREHOUSE_W_2", "0x4"): {},

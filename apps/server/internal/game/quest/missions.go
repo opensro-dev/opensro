@@ -184,6 +184,9 @@ remaining mission names its own line answers with that, else the quest's.
 ================
 */
 func notAchievedSymbol(c *enterworld.Character, def *Definition, record enterworld.ActiveQuestRecord) string {
+	if def.ToolMissingSymbol != "" && captureItemCount(c, def.ToolCodename) == 0 {
+		return def.ToolMissingSymbol
+	}
 	if def.Objective != ObjectiveParallel {
 		return def.NotAchievedSymbol
 	}

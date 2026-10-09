@@ -39,8 +39,14 @@ no key is held.
 */
 type captureSupply struct {
 	quest, item, title, prompt, success, exhausted, full string
-	count                                                int
-	afterCompletion, spendAtGrant, unlimited             bool
+	// held, when set, answers a player who still holds the item (8AB070's
+	// _11) instead of offering nothing.
+	held                                     string
+	count                                    int
+	afterCompletion, spendAtGrant, unlimited bool
+	// grantOnlyStamps leaves the day unstamped at completion: 8AB070
+	// stamps record +6 only when it grants, unlike Ivy 2's supply.
+	grantOnlyStamps bool
 }
 
 var captureSupplies = []captureSupply{
@@ -76,6 +82,16 @@ var captureSupplies = []captureSupply{
 		title: "SN_TALK_QNO_EU_EASTEU_19_08", prompt: "SN_TALK_QNO_EU_EASTEU_19_07",
 		success: "SN_TALK_QNO_EU_EASTEU_19_09", exhausted: "SN_TALK_QNO_EU_EASTEU_19_10",
 		full: "SN_TALK_QNO_EU_EASTEU_19_14",
+	},
+	{
+		// Uvetino (8AB070): once QNO_EU_EASTEU_3 is done, ten holy water a
+		// day for the Sunset Witch's stable: _05 with the _09 row, _10 on
+		// the grant, _12 when today's water is given, _11 while some is
+		// still held, _06 when the bag is full.
+		quest: "QNO_EU_EASTEU_3", item: holyWater, count: 10, afterCompletion: true, grantOnlyStamps: true,
+		title: "SN_TALK_QNO_EU_EASTEU_3_09", prompt: "SN_TALK_QNO_EU_EASTEU_3_05",
+		success: "SN_TALK_QNO_EU_EASTEU_3_10", exhausted: "SN_TALK_QNO_EU_EASTEU_3_12",
+		full: "SN_TALK_QNO_EU_EASTEU_3_06", held: "SN_TALK_QNO_EU_EASTEU_3_11",
 	},
 	{
 		// 8C7260 grants five Seal Keys (mission +0x1D) at acceptance and,
@@ -131,8 +147,15 @@ when the NPC's list is rendered (8B843D..8B84C9).
 */
 func (rt *Runtime) captureSupplyOption(c *enterworld.Character, def *Definition, npc string) (NpcOption, bool) {
 	supply, found := captureSupplyForQuest(def.Codename)
-	if !found || npc != def.StartNpcCodename || captureItemCount(c, supply.item) > 0 {
+	if !found || npc != def.StartNpcCodename {
 		return NpcOption{}, false
+	}
+	if captureItemCount(c, supply.item) > 0 {
+		if supply.held == "" || !supply.afterCompletion || !questCompleted(c, def.RefID) || activeQuestIndex(c, def.RefID) >= 0 ||
+			!prerequisitesMet(c, def) {
+			return NpcOption{}, false
+		}
+		return NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: supply.held, Informational: true}, true
 	}
 	if supply.afterCompletion {
 		if !questCompleted(c, def.RefID) || !prerequisitesMet(c, def) {

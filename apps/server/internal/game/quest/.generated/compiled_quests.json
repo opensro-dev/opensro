@@ -886,6 +886,50 @@
 		"Objective": 0
 	},
 	{
+		"Codename": "QNO_EU_EASTEU_1",
+		"MaxCompletions": 1,
+		"MinLevel": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_WITCH",
+		"EndNpcCodename": "NPC_EU_WITCH",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_1_07",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_1_05",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_1_06",
+		"AchievedNowSymbol": "SN_TALK_QNO_EU_EASTEU_1_08",
+		"RewardExp": 1300,
+		"RewardGold": 0,
+		"RewardSkillExp": 500,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_1_01",
+				"Count": 1
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_EU_EASTEU_1_01",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_QT_01_BAROI"
+				],
+				"KillCount": 10
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_EU_EASTEU_1_02",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_EU_EASTEU_1_02",
+				"CollectCount": 5
+			}
+		],
+		"ToolMissingSymbol": "SN_TALK_QNO_EU_EASTEU_1_04",
+		"ToolCodename": "ITEM_QNO_EU_EASTEU_3_02"
+	},
+	{
 		"Codename": "QNO_EU_EASTEU_11",
 		"MaxCompletions": 1,
 		"MinLevel": 5,
@@ -982,6 +1026,75 @@
 		"RewardSkillExp": 750,
 		"RewardItems": [],
 		"Objective": 0
+	},
+	{
+		"Codename": "QNO_EU_EASTEU_2",
+		"MaxCompletions": 1,
+		"MinLevel": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_PRIEST",
+		"EndNpcCodename": "NPC_EU_UNION2",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_2_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_2_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_2_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_2_06",
+		"RequiredQuests": [],
+		"RequiredActiveQuests": [
+			"QNO_EU_EASTEU_1"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_2_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_2_05",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_EASTEU_2_07",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 250,
+		"RewardItems": [],
+		"Objective": 4,
+		"DeliveryItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_2_01",
+				"Count": 1
+			}
+		]
+	},
+	{
+		"Codename": "QNO_EU_EASTEU_3",
+		"MaxCompletions": 1,
+		"MinLevel": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_UNION2",
+		"EndNpcCodename": "NPC_EU_UNION2",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_3_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_3_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_3_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_3_07",
+		"RequiredQuests": [
+			"QNO_EU_EASTEU_2"
+		],
+		"RequiredActiveQuests": [
+			"QNO_EU_EASTEU_1"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_3_04",
+		"InventoryFullSymbol": "SN_TALK_QNO_EU_EASTEU_3_06",
+		"AchievedNowSymbol": "SN_TALK_QNO_EU_EASTEU_3_08",
+		"RewardExp": 19500,
+		"RewardGold": 0,
+		"RewardSkillExp": 7500,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_3_02",
+				"Count": 10
+			}
+		],
+		"Objective": 1,
+		"CollectItemCodename": "ITEM_QNO_EU_EASTEU_3_01",
+		"CollectCount": 30,
+		"MonsterDrop": {
+			"MonsterCodenames": [
+				"MOB_EU_DOWB_CLON"
+			],
+			"ChancePercent": 20.0
+		}
 	},
 	{
 		"Codename": "QNO_EU_EASTEU_4",

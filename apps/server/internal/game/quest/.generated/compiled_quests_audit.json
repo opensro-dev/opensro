@@ -14,13 +14,11 @@
 	"QNO_CH_POTION_5": "custom behaviour 0x58",
 	"QNO_EU_CONS_4": "custom behaviour 0x58,0x90",
 	"QNO_EU_CONS_7": "custom behaviour 0x58,0x90",
-	"QNO_EU_EASTEU_1": "custom behaviour 0xc,0x58,0x94,0x98,0x4",
 	"QNO_EU_EASTEU_11_1": "custom behaviour 0x58,0x5c,0x80,0x9c,0xa8,0x4",
 	"QNO_EU_EASTEU_14_1": "custom behaviour 0x58,0x5c,0x80,0x9c,0xa4,0xa8,0x4",
 	"QNO_EU_EASTEU_17_1": "custom behaviour 0x58,0x5c,0x80,0x9c,0xa8,0x4",
 	"QNO_EU_EASTEU_19": "custom behaviour 0xc,0x58,0x5c,0x94,0x98,0x4",
 	"QNO_EU_EASTEU_21": "custom behaviour 0x58,0x5c,0x60,0xac,0x4",
-	"QNO_EU_EASTEU_3": "custom behaviour 0x58",
 	"QNO_EU_EASTEU_5": "custom behaviour 0x58,0x5c,0x80,0x9c,0xa8,0x4",
 	"QNO_EU_FERRY2_1": "custom behaviour 0x58,0x60",
 	"QNO_EU_GENERAL_1": "custom behaviour 0x58,0x5c,0x80,0x9c,0xa4,0xa8",
@@ -41,7 +39,6 @@
 	"QNO_CA_GORIA_3": "prerequisite QNO_CA_GORIA_2 pending",
 	"QNO_CA_WAREHOUSE_4": "prerequisite QNO_CA_WAREHOUSE_3 pending",
 	"QNO_EU_EASTEU_17": "prerequisite QNO_EU_EASTEU_16 pending",
-	"QNO_EU_EASTEU_2": "prerequisite QNO_EU_EASTEU_1 pending",
 	"QNO_EU_WITCH_1_1": "prerequisite QNO_EU_WITCH_1 pending",
 	"QNO_RM_OLDWOMAN_7": "prerequisite QNO_RM_OLDWOMAN_6 pending"
 }

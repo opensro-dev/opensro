@@ -7,7 +7,7 @@ The item owner consumes the tool after admission. This owner retains the
 short online countdown and awards the gathered material through inventory
 authority. Leaving the world cancels the countdown, matching 8C8770.
 
-Seven quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
+Eight quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
 on a 50% roll. Cerberus 1's Long Scissors (QNO_EU_EASTEU_19, 8B2AB0) cut a
 Golden Apple after ten seconds with no roll, and the Golden Apple lures a
 quest Ladon whose Bloody Orbs are the quest's objective. Rahid 5's Essence
@@ -19,7 +19,9 @@ Ong habitat, whose King's Treasure Box is the quest's objective. Demetri's
 Shiny Moss (QNO_EU_ADVENTURER_1, 8B6840) lures a Red Spotted Crab by the
 Troy wooden horse; its Yellow Eggs are the objective. Irina's amulet
 orders (QNO_WC_WAREHOUSE_W_2 and _3, 895BC0 / 8970F0) turn each hunted
-amulet into an authentic or a flawed one on a right-click.
+amulet into an authentic or a flawed one on a right-click. The Sunset
+Witch's holy water (QNO_EU_EASTEU_1, 8AA700) purifies her stable for ten
+seconds, and a Stable Filth comes of it about half the time (8AA630).
 
 ===========================================================================
 */
@@ -65,6 +67,14 @@ const (
 	adventurerRadius         = 420 // 8B6840: 0x1A4
 	adventurerCrabMin        = 20
 	adventurerCrabSpan       = 80
+	stableQuest              = "QNO_EU_EASTEU_1"
+	holyWater                = "ITEM_QNO_EU_EASTEU_3_02"
+	stableFilth              = "ITEM_QNO_EU_EASTEU_1_02"
+	stableFilthTarget        = 5
+	stablePurifySeconds      = 10
+	stableRegion             = 0x6a4b
+	stableRadius             = 200 // 8AA700: 0xC8
+	stablePurifyChance       = 50  // 8AA630 fails rand % 101 above 0x32
 	amuletFirstQuest         = "QNO_WC_WAREHOUSE_W_2"
 	amuletSecondQuest        = "QNO_WC_WAREHOUSE_W_3"
 	amuletHunted             = "ITEM_QNO_WC_WAREHOUSE_W_2_01"
@@ -262,6 +272,8 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		quest = adventurerQuest
 	case amuletHunted:
 		return rt.useAmulet(c)
+	case holyWater:
+		return rt.beginHolyWater(c, at, nowMs)
 	default:
 		return nil, false
 	}
@@ -430,6 +442,40 @@ func (rt *Runtime) useShinyMoss(c *enterworld.Character, def *Definition, at sim
 		return nil, false
 	}
 	return nil, true
+}
+
+/*
+================
+beginHolyWater
+
+8AA700: the holy water works only while the Sunset Witch's quest runs
+(else EASTEU_3's _13, which also answers a purification already under way),
+within 200 of her stable (region 0x6A4B 249, 24, 759; _09), while fewer than
+five Filths are held (_11) and with an empty slot (_10). Then the shared
+ten-second countdown runs; 8AA630 grants a Filth unless rand() % 101 is
+above 50 (_12). The water is spent when the purification starts.
+================
+*/
+func (rt *Runtime) beginHolyWater(c *enterworld.Character, at simulation.Spawn, nowMs int64) ([]wire.Frame, bool) {
+	def, exists := rt.Defs.ByCodename(stableQuest)
+	if !exists || activeQuestIndex(c, def.RefID) < 0 {
+		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_3_13")}, false
+	}
+	if !withinQuestArea(at, simulation.Spawn{RegionID: stableRegion, X: 249, Y: 24, Z: 759}, stableRadius) {
+		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_1_09")}, false
+	}
+	if captureItemCount(c, stableFilth) >= stableFilthTarget {
+		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_1_11")}, false
+	}
+	if !emptyQuestBagSlot(c) {
+		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_1_10")}, false
+	}
+	frames, started := rt.startGatherJob(c, gatherJob{quest: def.RefID, remaining: stablePurifySeconds, nextMs: nowMs + questSecondMs,
+		award: stableFilth, failSymbol: "SN_TALK_QNO_EU_EASTEU_1_12", roll: gatherAtMost, chance: stablePurifyChance})
+	if !started {
+		return []wire.Frame{questNotification("SN_TALK_QNO_EU_EASTEU_3_13")}, false
+	}
+	return frames, true
 }
 
 /*

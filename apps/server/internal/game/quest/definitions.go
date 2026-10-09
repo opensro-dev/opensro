@@ -274,6 +274,11 @@ type QuestSpec struct {
 	// accepts, answered _08 (QNO_WC_WAREHOUSE_W_2).
 	RepeatOfferAcceptRowSymbol string
 	RepeatAcceptResponseSymbol string
+	// ToolMissingSymbol is the not-achieved line while ToolCodename is not
+	// held: 8AA0C0 sends the Sunset Witch's players for holy water (_04)
+	// before it reminds them of the hunt (_05).
+	ToolMissingSymbol string
+	ToolCodename      string
 	// HandOverNpcCodename makes a delivery two legs (mission +0x110 clear,
 	// the 872040 default). 91CA00 takes the items at this NPC after
 	// HandOverSymbol (+0xC0), gives ExchangeItems back (+0x6A count, +0x93

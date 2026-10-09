@@ -833,7 +833,7 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			next = append(next, character.ActiveQuests[at+1:]...)
 			character.ActiveQuests = next
 			recordCompletion(character, refID)
-			if supply, exists := captureSupplyForQuest(def.Codename); exists && supply.afterCompletion {
+			if supply, exists := captureSupplyForQuest(def.Codename); exists && supply.afterCompletion && !supply.grantOnlyStamps {
 				setCaptureSupply(character, refID, rt.CalendarNow().Day, false)
 			}
 			completed := make([]uint32, 0, len(character.CompletedQuestIds)+1)
