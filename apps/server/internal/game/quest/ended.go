@@ -84,21 +84,27 @@ func offerAvailable(c *enterworld.Character, def *Definition) bool {
 ================
 endOnAccept
 
-Ends the quest's AcceptEndsQuests when its Accept is pressed on a live
-offer. 8A77A0 ends them whether or not the acceptance (+0x188) succeeds
-(8A7857 skips only the start and its line), so this runs before
-StartQuest and survives its refusal.
+Ends the quest's AcceptEndsQuests, and the chosen reply's EndsQuests,
+when its Accept is pressed on a live offer. 8A77A0 ends them whether or
+not the acceptance (+0x188) succeeds (8A7857 skips only the start and its
+line), so this runs before StartQuest and survives its refusal. 8C6180
+ends its branch's quest after the acceptance; with the offer live and the
+reply valid that acceptance cannot fail differently, so one rule serves.
 ================
 */
-func (rt *Runtime) endOnAccept(character *enterworld.Character, def *Definition) {
-	if len(def.AcceptEndsQuestIDs) == 0 {
+func (rt *Runtime) endOnAccept(character *enterworld.Character, def *Definition, branch int, branched bool) {
+	ids := def.AcceptEndsQuestIDs
+	if branched && branch < len(def.OfferBranches) {
+		ids = append(append([]uint32(nil), ids...), def.OfferBranches[branch].endsQuestIDs...)
+	}
+	if len(ids) == 0 {
 		return
 	}
 	rt.deps.Update(character, "quest-accept-ends", func() bool {
 		if character.DeletePending || !offerAvailable(character, def) {
 			return false
 		}
-		return markQuestsEnded(character, def.AcceptEndsQuestIDs)
+		return markQuestsEnded(character, ids)
 	})
 }
 
@@ -176,6 +182,15 @@ func loadEndedQuests(def *Definition, defs *Definitions) error {
 		{def.RequiredEndedQuests, &def.RequiredEndedQuestIDs},
 		{def.AcceptEndsQuests, &def.AcceptEndsQuestIDs},
 		{def.RefuseEndsQuests, &def.RefuseEndsQuestIDs},
+	}
+	// Do not resolve into the shared spec table's branch slice.
+	def.OfferBranches = append([]OfferBranch(nil), def.OfferBranches...)
+	for i := range def.OfferBranches {
+		branch := &def.OfferBranches[i]
+		lists = append(lists, struct {
+			codes []string
+			ids   *[]uint32
+		}{branch.EndsQuests, &branch.endsQuestIDs})
 	}
 	for _, list := range lists {
 		for _, code := range list.codes {

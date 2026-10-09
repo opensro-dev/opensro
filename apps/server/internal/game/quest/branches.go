@@ -43,6 +43,11 @@ type OfferBranch struct {
 	WaitMinutes uint16
 	// NoReward pays nothing (v1.150 popup: "[Option 2] Wait 2 months None").
 	NoReward bool
+	// EndsQuests are ended when the quest is accepted with this reply:
+	// CQNO_CA_THIEF_5 (8C6180) closes the follow-up the reply turned away
+	// from (+0x18C, then SetQuestState 5). Resolved by loadEndedQuests.
+	EndsQuests   []string
+	endsQuestIDs []uint32
 }
 
 /*

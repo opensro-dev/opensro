@@ -154,6 +154,19 @@ CLASS_BEHAVIOUR = {
 		"AcceptEndsQuests": ["QNO_KT_ACCESSORY_2", "QNO_KT_ACCESSORY_3"],
 	},
 	("QNO_KT_SMITH_3", "0x58"): KT_SHARED_TALK,
+	# CQNO_CA_THIEF_5_OnNpcTalk (8C6180): the 0x130 offer replies _02 (the
+	# fake evidence) or _04 (refuse the thief's deal). Each accepts with its
+	# own line and closes the other follow-up for good: _02 answers _03 and
+	# ends QNO_CA_THIEF_6_2 ("Reporting Truth"), _04 answers _05 and ends
+	# QNO_CA_THIEF_6_1 ("Reporting False Evidence").
+	("QNO_CA_THIEF_5", "0x58"): {
+		"OfferBranches": [
+			{"ReplySymbol": "SN_TALK_QNO_CA_THIEF_5_02", "AcceptResponseSymbol": "SN_TALK_QNO_CA_THIEF_5_03",
+				"EndsQuests": ["QNO_CA_THIEF_6_2"]},
+			{"ReplySymbol": "SN_TALK_QNO_CA_THIEF_5_04", "AcceptResponseSymbol": "SN_TALK_QNO_CA_THIEF_5_05",
+				"EndsQuests": ["QNO_CA_THIEF_6_1"]},
+		],
+	},
 	("QNO_KT_ACCESSORY_2", "0x58"): KT_SHARED_TALK,
 	("QNO_KT_ACCESSORY_3", "0x58"): KT_SHARED_TALK,
 }
@@ -484,6 +497,7 @@ def build():
 			spec = specs[code]
 			named = spec["RequiredQuests"] + spec.get("RequiredActiveQuests", []) + spec.get("RequiredEndedQuests", [])
 			named += spec.get("AcceptEndsQuests", []) + spec.get("RefuseEndsQuests", [])
+			named += [q for branch in spec.get("OfferBranches", []) for q in branch.get("EndsQuests", [])]
 			missing = [q for q in named if q not in specs and q not in elsewhere]
 			anyof = spec.get("RequiredAnyQuests", [])
 			if anyof and not any(q in specs or q in elsewhere for q in anyof):
