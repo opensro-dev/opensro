@@ -51,9 +51,24 @@ class LootClassMapTest(unittest.TestCase):
 		for codename in stones:
 			degree = CLIENT[codename]["param1"]
 			for source in ("isro", "vsro"):
-				self.assertEqual(class_for(source, "Alchemy_MagicStone", row(codename, degree), CLIENT[codename]), degree)
+				# The 0-based table index is the 1-based degree less one.
+				self.assertEqual(class_for(source, "Alchemy_MagicStone", row(codename, degree), CLIENT[codename]), degree - 1)
 				# An authored class that disagrees with the v1.150 degree is refused.
 				self.assertIsNone(class_for(source, "Alchemy_MagicStone", row(codename, degree + 1), CLIENT[codename]))
+
+	# ================
+	# test_consumable_index_matches_the_projection
+	#
+	# The committed vSRO projection already places HP_POTION_01 (authored
+	# class 1) and the degree-1 stone at group 0.
+	# ================
+	def test_consumable_index_matches_the_projection(self):
+		projected = json.loads((ROOT / "data/loot/consumables-source.json").read_text(encoding="utf-8"))["items"]
+		groups = {item["codename"]: item["group"] for item in projected}
+		self.assertEqual(groups["ITEM_ETC_HP_POTION_01"], class_for("vsro", "Recover", row("ITEM_ETC_HP_POTION_01", 1),
+			CLIENT["ITEM_ETC_HP_POTION_01"]))
+		self.assertEqual(groups["ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01"], class_for("vsro", "Alchemy_MagicStone",
+			row("ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01", 1), CLIENT["ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01"]))
 
 	# ================
 	# test_unplaceable_rows
@@ -63,7 +78,10 @@ class LootClassMapTest(unittest.TestCase):
 		self.assertIsNone(class_for("vsro", "Reinforce", row("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", -1),
 			CLIENT["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"]))
 		self.assertEqual(class_for("vsro", "Reinforce", row("ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A", 1),
-			CLIENT["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"]), 1)
+			CLIENT["ITEM_ETC_ARCHEMY_REINFORCE_RECIPE_WEAPON_A"]), 0)
+		# The #458 snapshot keeps rows as dicts.
+		self.assertEqual(class_for("isro", "Equip", {"service": 1, "codename": "ITEM_CH_BLADE_08_A", "weight": 1,
+			"absolute": 100, "class": -1, "count": 1}, CLIENT["ITEM_CH_BLADE_08_A"]), 21)
 		with self.assertRaises(ValueError):
 			class_for("kor", "Equip", row("ITEM_CH_BLADE_08_A", -1), CLIENT["ITEM_CH_BLADE_08_A"])
 
