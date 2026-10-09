@@ -26,6 +26,7 @@ import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { imagePackGroup, isImageAsset } from "../assetPackOwnership.mjs";
+import { uiImagePreloadReason } from "../shared/uiImageEligibility.mjs";
 import { buildSkillStageModelAssets } from "../char/buildSkillStageModelAssets.mjs";
 import { publishEntityBsrModifiers } from "../char/publishEntityBsrModifiers.mjs";
 import { buildQuestDataAsset } from "../data/buildQuestDataAsset.mjs";
@@ -85,7 +86,7 @@ const SKILL_UI_SCRIPT = path.join(
 const SKILL_MASTERY_DATA = "/assets/data/skillmasterydata.json.gz";
 
 /**
- * @typedef {string | ((file: string, index: object) => string | undefined)} DefaultGroup
+ * @typedef {string | ((file: string, index: object, files?: string[]) => string | undefined)} DefaultGroup
  * @typedef {{ files: string[], note?: string, defaultGroup?: DefaultGroup, [extra: string]: unknown }} FamilyOutput
  * @typedef {{
  *   kind: "refresh" | "publish",
@@ -343,6 +344,20 @@ function slotEffectPackFiles( output, index ) {
 
 /*
 ================
+mixedUiImageGroup
+
+Existing owners are preserved by the publisher. For a new image, include
+packed-only siblings and all incoming files when applying UI preload rules.
+================
+*/
+function mixedUiImageGroup( file, index, files = [] ) {
+	const inventory = new Set( [ ...(index.assets ?? []).map( row => row.path ), ...files ]
+		.map( path => path.toLowerCase() ) );
+	return uiImagePreloadReason( file, inventory ) ? "native-ui" : imagePackGroup( file );
+}
+
+/*
+================
 produceOverlays
 
 Each folder contributes only the files its selector keeps. A <stem>.ddj.png
@@ -497,7 +512,7 @@ export const LOOSE_FAMILIES = {
 		kind: "refresh",
 		label: "party status, fortress and party control images",
 		packFolder: "overlays",
-		defaultGroup: "native-ui",
+		defaultGroup: mixedUiImageGroup,
 		produce: produceOverlays
 	},
 	// The quick HP/MP gauges and the low-health alarm are loaded by code.
@@ -569,7 +584,8 @@ export const LOOSE_FAMILIES = {
 		kind: "refresh",
 		label: "item-slot effect sheets",
 		packFolder: "slot-effects",
-		defaultGroup: file => file === SPRITE_CATALOG ? "game-data" : imagePackGroup( file ),
+		defaultGroup: ( file, index, files ) =>
+			file === SPRITE_CATALOG ? "game-data" : mixedUiImageGroup( file, index, files ),
 		produce: produceSlotEffects,
 		packFiles: slotEffectPackFiles
 	},
