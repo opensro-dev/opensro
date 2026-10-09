@@ -707,7 +707,7 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 			return false
 		}
 		next := character.Snapshot()
-		refreshStats := row.PassiveDefense.Pinned
+		refreshStats := passiveChangesStats(row)
 		available -= row.SPCost
 		next.SkillPoints = &available
 		remainingSP = available
@@ -715,7 +715,7 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 		replaced := false
 		for i, learnedID := range next.Skills {
 			if existing, ok := rt.deps.SkillData().SkillByID(learnedID); ok && existing.Group == row.Group {
-				refreshStats = refreshStats || existing.PassiveDefense.Pinned
+				refreshStats = refreshStats || passiveChangesStats(existing)
 				next.Skills[i] = row.ID
 				replaced = true
 				break
@@ -760,6 +760,23 @@ func (rt *Runtime) HandleSkillLearn(divisionID string, character *enterworld.Cha
 		frames = append(frames, wire.Frame{Opcode: wire.OpBaseStats, Payload: statBlock})
 	}
 	return OpResult{Frames: frames}
+}
+
+/*
+==================
+passiveChangesStats
+
+A learned passive is a standing skill instance whose keeper writes
+(594AC0) change the derived stats: the setv, hpi/mpi/hr/er, br, reat/real
+and damage blocks (PassiveParameters), the flat critical (PassiveCritical)
+and the defense passives. Learning or replacing one resends the stat block,
+or the client keeps the old maximum MP, HP and rates until something else
+refreshes them. Inferred: native rebuilds the derived parameters on any
+passive learn, as withdrawal (59FA85) does on any removal.
+==================
+*/
+func passiveChangesStats(row enterworld.SkillRow) bool {
+	return row.PassiveParameters.Pinned || row.PassiveCritical.Pinned || row.PassiveDefense.Pinned
 }
 
 /*
