@@ -325,3 +325,51 @@ func TestParallelExchangesReturnAtTheReport(t *testing.T) {
 		t.Fatalf("abandonment would remove %v, want the undelivered plan and the exchange", held)
 	}
 }
+
+/*
+================
+TestReceiveOnlyHandOverAmongGathers
+
+QNO_CA_TREASURE_4 gathers Ong's tear and tail and receives Samarkand's
+Water at the potion shop: a hand-over that takes nothing and gives the
+exchange. Tricia pays once all three missions stand, and takes the water.
+================
+*/
+func TestReceiveOnlyHandOverAmongGathers(t *testing.T) {
+	licensed.RequireGameData(t)
+	rt := expansionRuntime(t)
+	def := mustQuest(t, rt, "QNO_CA_TREASURE_4")
+	if def.Objective != ObjectiveParallel || len(def.Objectives) != 3 {
+		t.Fatalf("TREASURE_4 objective %d with %d missions", def.Objective, len(def.Objectives))
+	}
+	c := deliveryCharacter(t, rt, "QNO_CA_TREASURE_3")
+	*c.Level = int64(max(def.Level, 34))
+	c.ModelCodename = "CHAR_EU_MAN_NOBLE"
+	if def.CountryByte == 0 {
+		c.ModelCodename = "CHAR_CH_MAN_ADVENTURER"
+	}
+	if _, err := rt.StartQuest(c, def.Codename); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	const water = "ITEM_QNO_CA_TREASURE_4_03"
+	row, ok := npcRow(rt, c, def.Codename, "NPC_CA_POTION")
+	if !ok || row.Codename != handOverToken(def.Codename) || row.PromptSymbol != "SN_TALK_QNO_CA_TREASURE_4_07" {
+		t.Fatalf("the potion shop's row %+v", row)
+	}
+	if _, err := rt.AdvanceNpcQuest(c, row.Codename, "NPC_CA_POTION"); err != nil || captureItemCount(c, water) != 1 {
+		t.Fatalf("receiving the water: %v (holding %d)", err, captureItemCount(c, water))
+	}
+	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err == nil {
+		t.Fatal("Tricia paid before the gathers")
+	}
+	for _, m := range def.Objectives[:2] {
+		holdItems(t, rt, c, m.CollectItemCodename, m.CollectCount)
+	}
+	rt.InventoryUpdater()(c)
+	if _, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename); err != nil || !questCompleted(c, def.RefID) {
+		t.Fatalf("Tricia did not pay: %v", err)
+	}
+	if captureItemCount(c, water) != 0 {
+		t.Fatal("Tricia did not take the water back")
+	}
+}

@@ -90,27 +90,49 @@ def substitute_x87(lines):
 def case_blocks(body, index):
 	shared, cases = [], {}
 	current, case_indent = None, None
+	# A branch may end in a label another branch jumps to ("label_8c6d17:"
+	# then "goto label_8c6d17", QNO_CA_TREASURE_4): the label's lines belong
+	# to the branch that holds them and to every branch that jumps there.
+	# A label falls through into the labels after it (QNO_CH_POTION_5's
+	# label_890bca sets the chance, then label_890bd0 writes it), so every
+	# open label keeps capturing until the branch ends.
+	labels, capturing, jumps = {}, [], []
 	for line in body:
 		stripped = line.strip()
 		m = re.match(r'case ([\d, ]+)$', stripped) or re.match(r'(?:else )?if \(' + re.escape(index) + r' == (\d+)\)$', stripped)
 		if m:
 			current = [int(k) for k in m.group(1).split(",")]
 			case_indent = indent_of(line)
+			capturing = []
 			for k in current:
 				cases.setdefault(k, [])
 			continue
+		m = re.match(r'(label_\w+):$', stripped)
+		if m and current is not None and indent_of(line) == case_indent:
+			capturing.append(m.group(1))
+			labels[m.group(1)] = []
+			continue
 		if current is not None and (stripped == "" or indent_of(line) > case_indent):
+			m = re.match(r'goto (label_\w+)$', stripped)
+			if m:
+				jumps.append((list(current), m.group(1)))
+				continue
 			for k in current:
 				cases[k].append(line)
+			for label in capturing:
+				labels[label].append(line)
 			continue
 		if current is not None and stripped == "else":
 			# The chain's fallthrough is the native's MiniDump guard.
 			current = []
 			continue
-		current = None
+		current, capturing = None, []
 		if re.match(r'(if \(' + re.escape(index) + r' u<= \d+\)|switch \(' + re.escape(index) + r'\))$', stripped):
 			continue
 		shared.append(line)
+	for keys, label in jumps:
+		for k in keys:
+			cases[k].extend(labels.get(label, []))
 	return shared, cases
 
 
@@ -137,6 +159,13 @@ def expand_loops(lines, count):
 					index = m.group(1)
 			shared, cases = case_blocks(body, index)
 			iterations = count if count else (max(cases) + 1 if cases else 1)
+			# The loop's own bound wins over the quest's mission count: a
+			# quest may push its other missions after the loop
+			# ("var_58 + 1 s< 2" with three missions, QNO_CA_TREASURE_4).
+			for row in body:
+				m = re.match(r'\s*\S+ = ' + re.escape(index) + r' \+ 1 s< (\d+)$', row)
+				if m:
+					iterations = int(m.group(1))
 			for k in range(iterations):
 				for row in shared:
 					out.append(re.sub(r'\b' + re.escape(index) + r'\.b\b', str(k), row))

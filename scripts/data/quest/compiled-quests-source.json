@@ -584,10 +584,11 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CA_SMITH",
-						"0x23d": 1,
 						"0xd": "SN_CON_QNO_CA_TREASURE_4_01",
 						"0x1d": "MOB_QT_01_ONG_CLON",
-						"0x241": "ITEM_QNO_CA_TREASURE_4_01"
+						"0x241": "ITEM_QNO_CA_TREASURE_4_01",
+						"0x14d": 100.0,
+						"0x23d": 1
 					}
 				},
 				{
@@ -606,29 +607,9 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CA_SMITH",
-						"0x14d": 100.0,
-						"0x23d": 1,
 						"0xd": "SN_CON_QNO_CA_TREASURE_4_02",
 						"0x1d": "MOB_CA_ONG",
-						"0x241": "ITEM_QNO_CA_TREASURE_4_02"
-					}
-				},
-				{
-					"size": 602,
-					"fields": {
-						"0x4": 0,
-						"0x8": 2,
-						"0x11": 1,
-						"0x19": 1,
-						"0x10d": 0,
-						"0x245": 1,
-						"0x249": 1,
-						"0x24d": 0,
-						"0x24e": 0,
-						"0x252": 0,
-						"0x256": 0,
-						"0x9": 1,
-						"0x15": "NPC_CA_SMITH",
+						"0x241": "ITEM_QNO_CA_TREASURE_4_02",
 						"0x14d": 10.0,
 						"0x23d": 1
 					}
@@ -1112,11 +1093,11 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CH_EUROPE",
-						"0x14d": 50.0,
-						"0x23d": 100,
 						"0xd": "SN_CON_QNO_CH_EUROPE_3_01",
 						"0x1d": "MOB_WC_EARTHKING_CLON",
-						"0x241": "ITEM_QNO_CH_EUROPE_3_01"
+						"0x241": "ITEM_QNO_CH_EUROPE_3_01",
+						"0x14d": 50.0,
+						"0x23d": 100
 					}
 				},
 				{
@@ -1135,11 +1116,11 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CH_EUROPE",
-						"0x14d": 50.0,
-						"0x23d": 100,
 						"0xd": "SN_CON_QNO_CH_EUROPE_3_02",
 						"0x1d": "MOB_OA_DESERTTRUNKZ",
-						"0x241": "ITEM_QNO_CH_EUROPE_3_02"
+						"0x241": "ITEM_QNO_CH_EUROPE_3_02",
+						"0x14d": 50.0,
+						"0x23d": 100
 					}
 				},
 				{
@@ -1158,11 +1139,11 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CH_EUROPE",
-						"0x14d": 50.0,
-						"0x23d": 100,
 						"0xd": "SN_CON_QNO_CH_EUROPE_3_03",
 						"0x1d": "MOB_OA_REDSCORPION",
-						"0x241": "ITEM_QNO_CH_EUROPE_3_03"
+						"0x241": "ITEM_QNO_CH_EUROPE_3_03",
+						"0x14d": 100.0,
+						"0x23d": 100
 					}
 				}
 			],
@@ -1419,11 +1400,11 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CH_POTION",
-						"0x14d": 50.0,
-						"0x23d": 100,
 						"0xd": "SN_CON_QNO_CH_POTION_5_01",
 						"0x1d": "MOB_WC_HYEONGCHEON",
-						"0x241": "ITEM_QNO_CH_POTION_5_01"
+						"0x241": "ITEM_QNO_CH_POTION_5_01",
+						"0x14d": 50.0,
+						"0x23d": 100
 					}
 				},
 				{
@@ -1442,11 +1423,11 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CH_POTION",
-						"0x14d": 50.0,
-						"0x23d": 100,
 						"0xd": "SN_CON_QNO_CH_POTION_5_02",
 						"0x1d": "MOB_OA_ONG",
-						"0x241": "ITEM_QNO_CH_POTION_5_02"
+						"0x241": "ITEM_QNO_CH_POTION_5_02",
+						"0x14d": 50.0,
+						"0x23d": 100
 					}
 				},
 				{
@@ -1465,11 +1446,11 @@
 						"0x256": 0,
 						"0x9": 1,
 						"0x15": "NPC_CH_POTION",
-						"0x14d": 50.0,
-						"0x23d": 100,
 						"0xd": "SN_CON_QNO_CH_POTION_5_03",
 						"0x1d": "MOB_OA_REDSCORPION_CLON",
-						"0x241": "ITEM_QNO_CH_POTION_5_03"
+						"0x241": "ITEM_QNO_CH_POTION_5_03",
+						"0x14d": 100.0,
+						"0x23d": 100
 					}
 				}
 			],
@@ -4775,12 +4756,6 @@
 					"fields": {
 						"0x8": 0,
 						"0x9": 3,
-						"0xe8": "SN_TALK_COMMON_NEXT",
-						"0xbf": 1,
-						"0x6b": 1,
-						"0x6a": 1,
-						"0x1a": 1,
-						"0x19": 1,
 						"0x15": "NPC_RM_SLAVE2",
 						"0xd": "SN_CON_QNO_RM_SLAVE1_3_02",
 						"0x42": "ITEM_QNO_RM_SLAVE1_3_01",
@@ -4789,7 +4764,13 @@
 						"0xc4": "SN_TALK_QNO_RM_SLAVE1_3_17",
 						"0xc8": "SN_TALK_QNO_RM_SLAVE1_3_09",
 						"0xcc": "SN_TALK_QNO_RM_SLAVE1_3_08",
-						"0x108": "SN_TALK_QNO_RM_SLAVE1_3_14"
+						"0x108": "SN_TALK_QNO_RM_SLAVE1_3_14",
+						"0xe8": "SN_TALK_COMMON_NEXT",
+						"0xbf": 1,
+						"0x6b": 1,
+						"0x6a": 1,
+						"0x1a": 1,
+						"0x19": 1
 					}
 				},
 				{
@@ -4797,12 +4778,6 @@
 					"fields": {
 						"0x8": 1,
 						"0x9": 3,
-						"0xe8": "SN_TALK_COMMON_NEXT",
-						"0xbf": 1,
-						"0x6b": 1,
-						"0x6a": 1,
-						"0x1a": 1,
-						"0x19": 1,
 						"0x15": "NPC_RM_SLAVE3",
 						"0xd": "SN_CON_QNO_RM_SLAVE1_3_03",
 						"0x42": "ITEM_QNO_RM_SLAVE1_3_04",
@@ -4811,7 +4786,13 @@
 						"0xc4": "SN_TALK_QNO_RM_SLAVE1_3_18",
 						"0xc8": "SN_TALK_QNO_RM_SLAVE1_3_12",
 						"0xcc": "SN_TALK_QNO_RM_SLAVE1_3_11",
-						"0x108": "SN_TALK_QNO_RM_SLAVE1_3_15"
+						"0x108": "SN_TALK_QNO_RM_SLAVE1_3_15",
+						"0xe8": "SN_TALK_COMMON_NEXT",
+						"0xbf": 1,
+						"0x6b": 1,
+						"0x6a": 1,
+						"0x1a": 1,
+						"0x19": 1
 					}
 				}
 			],

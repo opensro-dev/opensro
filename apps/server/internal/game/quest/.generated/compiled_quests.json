@@ -124,6 +124,68 @@
 		]
 	},
 	{
+		"Codename": "QNO_CA_TREASURE_4",
+		"MaxCompletions": 1,
+		"MinLevel": 23,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CA_SMITH",
+		"EndNpcCodename": "NPC_CA_SMITH",
+		"OfferPromptSymbol": "SN_TALK_QNO_CA_TREASURE_4_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_CA_TREASURE_4_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_CA_TREASURE_4_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_CA_TREASURE_4_05",
+		"RequiredQuests": [
+			"QNO_CA_TREASURE_3"
+		],
+		"NotAchievedSymbol": "SN_TALK_QNO_CA_TREASURE_4_04",
+		"AchievedNowSymbol": "SN_TALK_QNO_CA_TREASURE_4_06",
+		"RewardExp": 11000,
+		"RewardGold": 2300,
+		"RewardSkillExp": 1100,
+		"RewardItems": [],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_CA_TREASURE_4_01",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CA_TREASURE_4_01",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_QT_01_ONG_CLON"
+					],
+					"ChancePercent": 100.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CA_TREASURE_4_02",
+				"Objective": 1,
+				"CollectItemCodename": "ITEM_QNO_CA_TREASURE_4_02",
+				"CollectCount": 1,
+				"MonsterDrop": {
+					"MonsterCodenames": [
+						"MOB_CA_ONG"
+					],
+					"ChancePercent": 10.0
+				}
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_CA_TREASURE_4_03",
+				"Objective": 4,
+				"HandOverNpcCodename": "NPC_CA_POTION",
+				"HandOverSymbol": "SN_TALK_QNO_CA_TREASURE_4_07",
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_CA_TREASURE_4_03",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_CA_TREASURE_4_08",
+				"NotAchievedSymbol": "SN_TALK_QNO_CA_TREASURE_4_09"
+			}
+		]
+	},
+	{
 		"Codename": "QNO_CH_POTION_2",
 		"MaxCompletions": 1,
 		"MinLevel": 7,
@@ -191,28 +253,28 @@
 			{
 				"ContentsSymbol": "SN_CON_QNO_CH_POTION_4_01",
 				"Objective": 4,
+				"HandOverNpcCodename": "NPC_CH_FERRY2",
+				"HandOverSymbol": "SN_TALK_QNO_CH_POTION_4_06",
 				"DeliveryItems": [
 					{
 						"ItemCodename": "ITEM_QNO_CH_POTION_4_01",
 						"Count": 1
 					}
 				],
-				"HandOverNpcCodename": "NPC_CH_FERRY2",
-				"HandOverSymbol": "SN_TALK_QNO_CH_POTION_4_06",
 				"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_4_07",
 				"PendingNoticeSymbol": "SN_TALK_QNO_CH_POTION_4_13"
 			},
 			{
 				"ContentsSymbol": "SN_CON_QNO_CH_POTION_4_02",
 				"Objective": 4,
+				"HandOverNpcCodename": "NPC_CH_FERRY",
+				"HandOverSymbol": "SN_TALK_QNO_CH_POTION_4_08",
 				"DeliveryItems": [
 					{
 						"ItemCodename": "ITEM_QNO_CH_POTION_4_02",
 						"Count": 1
 					}
 				],
-				"HandOverNpcCodename": "NPC_CH_FERRY",
-				"HandOverSymbol": "SN_TALK_QNO_CH_POTION_4_08",
 				"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_4_09",
 				"PendingNoticeSymbol": "SN_TALK_QNO_CH_POTION_4_12"
 			}
@@ -1157,14 +1219,14 @@
 			{
 				"ContentsSymbol": "SN_CON_QNO_RM_SLAVE1_3_02",
 				"Objective": 4,
+				"HandOverNpcCodename": "NPC_RM_SLAVE2",
+				"HandOverSymbol": "SN_TALK_QNO_RM_SLAVE1_3_08",
 				"DeliveryItems": [
 					{
 						"ItemCodename": "ITEM_QNO_RM_SLAVE1_3_01",
 						"Count": 1
 					}
 				],
-				"HandOverNpcCodename": "NPC_RM_SLAVE2",
-				"HandOverSymbol": "SN_TALK_QNO_RM_SLAVE1_3_08",
 				"HandOverPages": [
 					{
 						"PromptSymbol": "SN_TALK_QNO_RM_SLAVE1_3_06",
@@ -1184,14 +1246,14 @@
 			{
 				"ContentsSymbol": "SN_CON_QNO_RM_SLAVE1_3_03",
 				"Objective": 4,
+				"HandOverNpcCodename": "NPC_RM_SLAVE3",
+				"HandOverSymbol": "SN_TALK_QNO_RM_SLAVE1_3_11",
 				"DeliveryItems": [
 					{
 						"ItemCodename": "ITEM_QNO_RM_SLAVE1_3_04",
 						"Count": 1
 					}
 				],
-				"HandOverNpcCodename": "NPC_RM_SLAVE3",
-				"HandOverSymbol": "SN_TALK_QNO_RM_SLAVE1_3_11",
 				"HandOverPages": [
 					{
 						"PromptSymbol": "SN_TALK_QNO_RM_SLAVE1_3_10",

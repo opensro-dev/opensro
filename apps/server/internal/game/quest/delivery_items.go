@@ -34,7 +34,11 @@ func loadDelivery(def *Definition, items enterworld.ItemRefSource) error {
 		}
 		return nil
 	}
-	if len(def.DeliveryItems) == 0 || len(def.DeliveryItems) > 10 || items == nil || len(def.Stages) != 0 || len(def.Objectives) != 0 || def.MonsterDrop != nil || def.DeliveryNpcCodename != "" || def.InventoryFullSymbol == "" || def.CollectItemCodename != "" || def.CollectCount != 0 || def.KillCount != 0 || len(def.KillMonsterCodenames) != 0 {
+	// A receive-only hand-over (no items, an exchange) is a delivery too. It
+	// grants nothing at acceptance, so only a delivery that does needs the
+	// acceptance bag-full line; the hand-over answers with +0xC8.
+	if len(def.DeliveryItems) == 0 && (len(def.ExchangeItems) == 0 || def.HandOverNpcCodename == "") ||
+		len(def.DeliveryItems) > 10 || items == nil || len(def.Stages) != 0 || len(def.Objectives) != 0 || def.MonsterDrop != nil || def.DeliveryNpcCodename != "" || len(def.DeliveryItems) > 0 && def.InventoryFullSymbol == "" || def.CollectItemCodename != "" || def.CollectCount != 0 || def.KillCount != 0 || len(def.KillMonsterCodenames) != 0 {
 		return fmt.Errorf("quest %s incomplete acceptance delivery contract", def.Codename)
 	}
 	seen := map[string]bool{}
@@ -78,8 +82,12 @@ deliveryMet
 ================
 */
 func deliveryMet(c *enterworld.Character, def *Definition) bool {
-	if len(def.deliveryRefs) == 0 || len(def.deliveryRefs) != len(def.DeliveryItems) {
+	if len(def.deliveryRefs) != len(def.DeliveryItems) {
 		return false
+	}
+	// A receive-only hand-over has nothing to hold.
+	if len(def.DeliveryItems) == 0 {
+		return def.HandOverNpcCodename != "" && len(def.ExchangeItems) > 0
 	}
 	for i, item := range def.DeliveryItems {
 		if deliveryHeld(c, def.deliveryRefs[i]) < item.Count {

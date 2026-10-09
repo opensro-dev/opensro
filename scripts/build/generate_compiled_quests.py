@@ -308,32 +308,55 @@ def handover_pages(fields):
 # no shipped class does, so it is refused.
 # ================
 def parallel_deliveries(text, quest, missions, start):
+	return parallel_with_deliveries(text, quest, [delivery_row(text, m) for m in missions], start)
+
+
+# ================
+# parallel_with_deliveries
+#
+# A parallel quest holding a delivery pays where the hand-over sends the
+# player: its start NPC, with the ACHIEVED word.
+# ================
+def parallel_with_deliveries(text, quest, rows, start):
 	achieved = word(quest, MENU_ACHIEVED)
 	if not achieved:
 		raise Unsupported("parallel delivery without an achieved line")
-	rows = []
-	for mission in missions:
-		fields = mission["fields"]
-		if fields.get("0x110", 0) != 0:
-			raise Unsupported("one-leg mission in a parallel delivery")
-		npc = fields.get("0x15")
-		pages, line = handover_pages(fields)
-		if not isinstance(npc, str) or not isinstance(line, str):
-			raise Unsupported("parallel delivery mission without an NPC or line")
-		row = {"ContentsSymbol": fields.get("0xd"), "Objective": OBJECTIVE_DELIVERY,
-			"DeliveryItems": delivery_items(text, mission), "HandOverNpcCodename": npc, "HandOverSymbol": line}
-		if pages:
-			row["HandOverPages"] = pages
-		if fields.get("0x111", 1) == 0:
-			row["DeliveryKeepsItems"] = True
-		exchange = exchange_items(fields)
-		if exchange:
-			row["ExchangeItems"] = exchange
-		for key, field in (("ExchangeFullSymbol", "0xc8"), ("NotAchievedSymbol", "0xc4"), ("PendingNoticeSymbol", "0x108")):
-			if isinstance(fields.get(field), str):
-				row[key] = fields[field]
-		rows.append(row)
 	return {"Objective": OBJECTIVE_PARALLEL, "Objectives": rows, "EndNpcCodename": start, "CompletePromptSymbol": achieved}
+
+
+# ================
+# delivery_row
+#
+# One deliver mission of a parallel quest as a MissionSpec row: always two
+# legs. A mission with no items (+0x19 = 0) only receives its exchange at
+# the NPC (QNO_CA_TREASURE_4: "Receive Samarkand's Water").
+# ================
+def delivery_row(text, mission):
+	fields = mission["fields"]
+	if fields.get("0x110", 0) != 0:
+		raise Unsupported("one-leg mission in a parallel delivery")
+	npc = fields.get("0x15")
+	pages, line = handover_pages(fields)
+	if not isinstance(npc, str) or not isinstance(line, str):
+		raise Unsupported("parallel delivery mission without an NPC or line")
+	exchange = exchange_items(fields)
+	items = delivery_items(text, mission) if fields.get("0x19", 0) else []
+	if not items and not exchange:
+		raise Unsupported("delivery mission that neither takes nor gives")
+	row = {"ContentsSymbol": fields.get("0xd"), "Objective": OBJECTIVE_DELIVERY,
+		"HandOverNpcCodename": npc, "HandOverSymbol": line}
+	if items:
+		row["DeliveryItems"] = items
+	if pages:
+		row["HandOverPages"] = pages
+	if fields.get("0x111", 1) == 0:
+		row["DeliveryKeepsItems"] = True
+	if exchange:
+		row["ExchangeItems"] = exchange
+	for key, field in (("ExchangeFullSymbol", "0xc8"), ("NotAchievedSymbol", "0xc4"), ("PendingNoticeSymbol", "0x108")):
+		if isinstance(fields.get(field), str):
+			row[key] = fields[field]
+	return row
 
 
 # ================
@@ -582,6 +605,9 @@ def project(code, quest, text, sql):
 			spec.update(row)
 		else:
 			spec.update({"Objective": OBJECTIVE_PARALLEL, "Objectives": rows})
+	elif kinds <= {MISSION_GATHER, MISSION_KILL, MISSION_DELIVER} and MISSION_DELIVER in kinds and len(missions) > 1 and not behaviour:
+		rows = [delivery_row(text, m) if m["fields"].get("0x9") == MISSION_DELIVER else project_mission(text, m) for m in missions]
+		spec.update(parallel_with_deliveries(text, quest, rows, start))
 	else:
 		raise Unsupported("mission kinds " + ",".join(str(k) for k in sorted(kinds, key=str)))
 	spec.update(behaviour)
