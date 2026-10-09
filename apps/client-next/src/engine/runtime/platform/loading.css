@@ -490,6 +490,17 @@ occupies its own full-width row below it instead of shrinking beside it.
 		font-size: 12px;
 		margin-top: 3px;
 	}
+
+	/* A phone is too narrow for the step, the file group, the bytes read and
+	   the rate on one line ("Loading scene models · world terrain · 8.9 MB
+	   read · 6 files ready"), so the detail wraps instead of ending in an
+	   ellipsis. Two lines stay reserved: the text changes several times a
+	   second and must not make the panel jump. */
+	.sro-boot-loading__detail {
+		min-height: 2.8em;
+		overflow-wrap: anywhere;
+		white-space: normal;
+	}
 }
 
 /* Developer diagnostics are a separate, console-enabled neighbor of FPS. */
