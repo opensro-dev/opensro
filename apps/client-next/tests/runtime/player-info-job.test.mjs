@@ -62,3 +62,35 @@ test("rows without all three job columns are left out", () => {
 	assert.equal( missing.fraction, 0 );
 	assert.deepEqual( THRESHOLDS[1], [ 1000, 2000, 3000 ] );
 });
+
+const { jobExpUpdate } = await import( "../../src/engine/foundation/gameplay/job-guild.ts" );
+
+/**
+ * @param {number} grade
+ * @param {number} exp
+ */
+const update = ( grade, exp ) => {
+	const payload = new Uint8Array( 6 );
+	payload[0] = 2;
+	payload[1] = grade;
+	new DataView( payload.buffer ).setUint32( 2, exp, true );
+	return { opcode: 0x35ee, payload };
+};
+const THIEF = { type: 2, grade: 1, exp: 100, alias: "Shade" };
+
+test("0x35EE stores the grade and experience and reports the gain", () => {
+	const answer = jobExpUpdate( update( 1, 160 ), THIEF, 0 );
+	assert.deepEqual( answer?.job, { type: 2, grade: 1, exp: 160, alias: "Shade" } );
+	assert.deepEqual( answer?.notices, [ { key: "UIIT_STT_JOB_EXP_THIEF_GET", value: 60, nativeType: 1 } ] );
+	assert.equal( jobExpUpdate( update( 1, 40 ), THIEF, 0 )?.notices[0]?.key, "UIIT_STT_JOB_EXP_THIEF_LOST" );
+	assert.deepEqual( jobExpUpdate( update( 1, 100 ), THIEF, 0 )?.notices, [] );
+});
+
+test("a grade rise raises the level-up banner with the country's title", () => {
+	const notice = jobExpUpdate( update( 2, 5 ), THIEF, 1 )?.notices[0];
+	assert.equal( notice?.key, "UIIT_STT_JOB_LVUP_THIEF_CLASS" );
+	assert.deepEqual( notice?.localizedArguments, [ "UIIT_STT_CLASS_EU_THIEF_2" ] );
+	assert.equal( notice?.bannerOnly, true );
+	assert.equal( jobExpUpdate( { opcode: 0x35ef, payload: new Uint8Array( 6 ) }, THIEF, 0 ), null );
+	assert.throws( () => jobExpUpdate( { opcode: 0x35ee, payload: new Uint8Array( 5 ) }, THIEF, 0 ) );
+});

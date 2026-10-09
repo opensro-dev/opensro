@@ -33,6 +33,8 @@ export const OP_JOB_WITHDRAW_RESPONSE = 0xb661;
 export const OP_JOB_ALIAS = 0x7620;
 export const OP_JOB_ALIAS_RESPONSE = 0xb620;
 export const OP_JOB_DRESS_BAR = 0x3434;
+// CPSMission_OnJobTypeLevelUpdate0x35EE (75F0C0): [u8 job][u8 grade][u32 exp].
+export const OP_JOB_EXP_UPDATE = 0x35ee;
 const JOB_NOTICE_CATEGORY = 0x18;
 // 0x3434's lead bytes for the job dress (kind 2, step 2).
 const JOB_DRESS_KIND = 2;
@@ -208,6 +210,63 @@ export function jobGuildAnswer(
 	return {
 		job: { ...job, alias: alias.text },
 		notice: { key: job.alias ? "UIIT_MSG_ALIAS_MODIFY_COMPLETE" : "UIIT_MSG_ALIAS_CREATE_COMPLETE", value: 0 }
+	};
+}
+
+/*
+================
+jobExpUpdate
+
+75F0C0 stores the new grade and experience, then reports the change in the
+system chat (type 1): UIIT_STT_JOB_EXP_<JOB>_GET or _LOST with the
+difference, and on a grade rise the UIIT_STT_JOB_LVUP_<JOB>_CLASS banner
+naming the new grade title (UIIT_STT_CLASS_[EU_]<JOB>_<grade> by country).
+
+Across a grade change the native chat amount reads the CLevelData row
+(payload +0x1C on a rise, +0x20 on a fall), which this worker does not
+hold; those lines wait for the level data to reach it. The server never
+lowers a grade (progression AddJobExp floors a loss at zero).
+================
+*/
+export function jobExpUpdate(
+	frame: WireFrame,
+	job: LocalJob,
+	country: number | undefined
+): { readonly job: LocalJob; readonly notices: readonly SystemNotice[]; } | null {
+	const p = frame.payload;
+	if ( frame.opcode !== OP_JOB_EXP_UPDATE ) return null;
+	if ( p.length !== 6 ) throw Error( "Invalid job experience update" );
+	const grade = p[1]!, exp = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+	const next = { ...job, grade, exp };
+	const name = [ "", "MERCHANT", "THIEF", "HUNTER" ][job.type];
+	if ( !name ) return { job: next, notices: [] };
+	if ( grade > job.grade ) {
+		const title = country === 0 ?
+			"UIIT_STT_CLASS_" + name + "_" + grade :
+			country === 1 ?
+			"UIIT_STT_CLASS_EU_" + name + "_" + grade :
+			null;
+		return {
+			job: next,
+			notices: [ {
+				key: "UIIT_STT_JOB_LVUP_" + name + "_CLASS",
+				value: 0,
+				localizedArguments: [ title ],
+				formatKinds: [ "s" ],
+				bannerOnly: true
+			} ]
+		};
+	}
+	if ( grade < job.grade || exp === job.exp ) return { job: next, notices: [] };
+	// 75F0C0 compares the two as signed 32-bit values.
+	const gained = (exp | 0) > (job.exp | 0);
+	return {
+		job: next,
+		notices: [ {
+			key: "UIIT_STT_JOB_EXP_" + name + (gained ? "_GET" : "_LOST"),
+			value: gained ? exp - job.exp : job.exp - exp,
+			nativeType: 1
+		} ]
 	};
 }
 

@@ -33,6 +33,7 @@ import type { PlayerModel } from "@/engine/foundation/gameplay/skin-change";
 import {
 	jobAliasRequest,
 	jobDressSeconds,
+	jobExpUpdate,
 	jobGuildAnswer,
 	jobJoinRequest,
 	jobWithdrawRequest,
@@ -3263,6 +3264,15 @@ Packet handling must not depend on which HUD panel is currently open.
 					job = answer.job;
 					if ( answer.notice ) {
 						notices = [ ...notices.slice( -99 ), { ...answer.notice, sequence: ++noticeSequence } ];
+					}
+					dirty = true;
+					return true;
+				}
+				const jobExp = jobExpUpdate( frame, job, localCountry );
+				if ( jobExp ) {
+					job = jobExp.job;
+					for ( const notice of jobExp.notices ) {
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
 					dirty = true;
 					return true;
