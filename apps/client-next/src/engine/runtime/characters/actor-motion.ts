@@ -32,6 +32,26 @@ const PROTECTED_ANIMATION_DISTANCE = 300;
 
 /*
 ================
+seatedVehicle
+
+The vehicle a rider sits on this frame: its mount, once that mount drew
+last frame (BUG-063). Natively the vehicle's model loads with the vehicle,
+so 85E000 always finds the seat (85D870) and the summoner is in the saddle,
+in the air, as the horse fades in. Here the vehicle's GLB can still be
+loading; the ride pose without its seat put the rider sitting on the
+ground until the horse drew and lifted it. Until then the rider keeps its
+own pose and placement and takes the saddle on the frame after the vehicle
+first draws, while the vehicle's CIDecoAppear ramp is still at its start
+(spawn-fades.ts). Only the seat waits: the mounted rules (no pickup, hidden
+weapon) follow the simulation's link.
+================
+*/
+function seatedVehicle( entity: EntityState, displayed: ReadonlyMap<number, unknown> ): number | undefined {
+	return entity.mountedOn !== undefined && displayed.has( entity.mountedOn ) ? entity.mountedOn : undefined;
+}
+
+/*
+================
 createActorMotion
 ================
 */
@@ -142,6 +162,7 @@ export function createActorMotion( owner: ActorOwner ) {
 					"downdie" :
 					"death";
 			const sitting = entity.movementMode === MOVEMENT_MODE_SEATED && !entity.mountedOn;
+			const seat = seatedVehicle( entity, output.displayed );
 			const sittingClip = resource.clips.includes( "sit" ) ? "sit" : "charselect-state14";
 			if ( state.dead !== undefined && state.dead !== dead ) {
 				// 8E64F0: downdie from state 4; otherwise the motion-4 one-shot only
@@ -313,7 +334,7 @@ export function createActorMotion( owner: ActorOwner ) {
 			}
 			const baseRole = dead ?
 				(downDeath ? quickDeath : deadLoop) :
-				entity.mountedOn ?
+				seat !== undefined ?
 				"ride" :
 				sitting ?
 				sittingClip :
@@ -738,7 +759,7 @@ export function createActorMotion( owner: ActorOwner ) {
 							Math.min( 1, Math.max( 0, seconds - state.actionHeight.at ) ) :
 						1) :
 					undefined,
-				mountedOn: entity.mountedOn,
+				mountedOn: seat,
 				gid: entity.gid,
 				model,
 				pose: {

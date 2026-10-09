@@ -279,6 +279,47 @@ test("local body transparency survives settled camera state and stays off the mo
 	assert.equal( f.actors.find( a => a.gid === 2 ).opacity ?? 1, 1 );
 	f.dispose();
 });
+test("a rider whose vehicle is still loading stands until the vehicle draws (BUG-063)", () => {
+	const blockedPaths = new Set( [ "http://localhost/assets/2.glb" ] );
+	const f = fixture(
+		{},
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		undefined,
+		undefined,
+		{},
+		{
+			blockedPaths
+		}
+	);
+	f.warm();
+	const entities = [ entity( 1, { kind: "player", mountedOn: 2 } ), entity( 2, { kind: "cos" } ) ];
+	const rider = () => f.actors.find( a => a.gid === 1 ), vehicle = () => f.actors.find( a => a.gid === 2 );
+	let now = 1;
+	for ( let i = 0; i < 10; i++ ) f.step( entities, now += .05 );
+	assert.equal( vehicle(), undefined, "the vehicle's model is still loading" );
+	assert.equal( rider().mountedOn, undefined, "the rider is not seated on a vehicle that has not drawn" );
+	assert.notEqual( rider().clip, "ride", "nor does it sit on the ground in the ride pose" );
+	blockedPaths.clear();
+	let seated = -1, drawn = -1;
+	for ( let i = 0; i < 30 && seated < 0; i++ ) {
+		f.step( entities, now += .05 );
+		if ( drawn < 0 && vehicle() ) drawn = i;
+		if ( rider().mountedOn === 2 ) seated = i;
+	}
+	assert.ok( drawn >= 0 && seated >= drawn, `seated at frame ${seated}, vehicle drawn at ${drawn}` );
+	assert.ok( seated - drawn <= 1, "the rider takes the saddle on the frame after the vehicle first draws" );
+	assert.equal( f.presentation.error(), null );
+	f.dispose();
+});
 /*
 ================
 fixture
