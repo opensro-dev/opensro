@@ -119,7 +119,7 @@ func TestCerberusAppleLuresALadon(t *testing.T) {
 	spawned := true
 	rt.SpawnQuestMonster = func(_ *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
 		if request.RadiusMin != cerberusLureMin || request.RadiusSpan != cerberusLureSpan ||
-			request.Position != (simulation.Spawn{}) || request.LifetimeMs != 0 {
+			request.FixedPosition || request.LifetimeMs != 0 {
 			t.Fatalf("lure %+v", request)
 		}
 		lured = append(lured, request.Codename)

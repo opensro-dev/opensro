@@ -29,7 +29,7 @@ SpawnQuestMonster
 The quest minute and quest item use already hold division and character
 authority. Resolve only the live population and pose here; do not open a
 nested character read door. The quest owner names the monster, its ring
-and its timer; a request without a Position lands around the character.
+and its timer; a request without a FixedPosition lands around the character.
 ================
 */
 func (rt *Runtime) SpawnQuestMonster(division string, c *enterworld.Character, request simulation.QuestMonsterSpawn) bool {
@@ -41,7 +41,7 @@ func (rt *Runtime) SpawnQuestMonster(division string, c *enterworld.Character, r
 		return false
 	}
 	request.Division, request.Population, request.NowMs = division, lease, rt.Now().UnixMilli()
-	if request.Position == (simulation.Spawn{}) {
+	if !request.FixedPosition {
 		request.Position = rt.liveSpawn(simulation.WorldKey(division, c.Name), c, request.NowMs)
 	}
 	return rt.Monsters.SpawnQuestMonster(request)

@@ -377,7 +377,7 @@ func (rt *Runtime) useTreasureKey(c *enterworld.Character, def *Definition, at s
 	if !withinQuestArea(at, treasureHabitat(), treasureRadius) {
 		return []wire.Frame{questNotification("SN_TALK_QNO_CA_TREASURE_5_17")}, false
 	}
-	guardian := simulation.QuestMonsterSpawn{Codename: treasureGuardian, Position: treasureHabitat(),
+	guardian := simulation.QuestMonsterSpawn{Codename: treasureGuardian, Position: treasureHabitat(), FixedPosition: true,
 		RadiusMin: treasureGuardianMin, RadiusSpan: treasureGuardianSpan, LifetimeMs: treasureGuardianLifeMs}
 	if rt.SpawnQuestMonster == nil || !rt.SpawnQuestMonster(c, guardian) {
 		return nil, false

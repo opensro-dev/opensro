@@ -29,19 +29,22 @@ QuestMonsterSpawn
 The action owner supplies residency and its live pose under division authority.
 The monster lands RadiusMin + fraction * RadiusSpan from Position: the
 player for Ivy and Cerberus, a fixed point for Hidden Treasure 5 (8C7910).
+FixedPosition says the quest named Position; otherwise the action owner
+fills it with the player's live pose.
 LifetimeMs, when set, is the quest's own removal timer (8C7910 registers
 one of 300 s whose handler, 8BBBE0, sends the monster to life state 3).
 ================
 */
 type QuestMonsterSpawn struct {
-	Division   string
-	Population instance.Lease
-	Codename   string
-	Position   Spawn
-	NowMs      int64
-	RadiusMin  float64
-	RadiusSpan float64
-	LifetimeMs int64
+	Division      string
+	Population    instance.Lease
+	Codename      string
+	Position      Spawn
+	FixedPosition bool
+	NowMs         int64
+	RadiusMin     float64
+	RadiusSpan    float64
+	LifetimeMs    int64
 }
 
 /*

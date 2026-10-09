@@ -80,7 +80,7 @@ func TestTreasureKeyCallsTheGuardianAtTheHabitat(t *testing.T) {
 	if _, admitted := rt.BeginItemUse(c, treasureKey, near, 0); !admitted || len(called) != 1 {
 		t.Fatal("key refused at the habitat", called)
 	}
-	want := simulation.QuestMonsterSpawn{Codename: treasureGuardian, Position: treasureHabitat(),
+	want := simulation.QuestMonsterSpawn{Codename: treasureGuardian, Position: treasureHabitat(), FixedPosition: true,
 		RadiusMin: 20, RadiusSpan: 80, LifetimeMs: 300000}
 	if called[0] != want {
 		t.Fatalf("guardian call %+v", called[0])

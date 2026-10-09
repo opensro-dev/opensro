@@ -37,8 +37,8 @@ type Runtime struct {
 	gatherMu   sync.Mutex
 	gatherJobs map[int64]gatherJob
 	// SpawnQuestMonster places a script monster RadiusMin + fraction *
-	// RadiusSpan from the request's Position, or from the character when it
-	// names none, inside the caller's character door.
+	// RadiusSpan from the request's FixedPosition, or from the character
+	// when it names none, inside the caller's character door.
 	SpawnQuestMonster func(c *enterworld.Character, request simulation.QuestMonsterSpawn) bool
 	CaptureRoll       func() (uint32, error)
 	CalendarNow       func() calendar.Value
