@@ -488,7 +488,7 @@ import {
 	resurrectionNoteColor,
 	resurrectionQuestion
 } from "@/engine/foundation/ui/resurrection-proposal";
-import { textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
+import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
 import { guideTokens } from "@/engine/foundation/ui/guide-content";
@@ -7130,7 +7130,8 @@ export function createUi(
 			function simpleMessageBox(
 				box: { title: string; lines: readonly string[]; yes: string; no: string; yesDisabled?: boolean; }
 			) {
-				const layout = textMessageBoxLayout( w, h, box.lines.map( line => text.run( line ).width ) );
+				const lines = messageBoxLines( box.lines, value => text.run( value ).width );
+				const layout = textMessageBoxLayout( w, h, lines.map( line => text.run( line ).width ) );
 				paths.push( ...partyProposalAssets() );
 				quads.push(
 					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
@@ -7142,7 +7143,7 @@ export function createUi(
 					),
 					...text.quads( box.title, layout.title, full, white, { hAlign: 1, vAlign: 0 } )
 				);
-				for ( const [i, line] of box.lines.entries() ) {
+				for ( const [i, line] of lines.entries() ) {
 					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
 				}
 				button( box.yes, hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76, !!box.yesDisabled );

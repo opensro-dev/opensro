@@ -11,7 +11,11 @@ This module only places rects; the caller owns text and input.
 */
 import type { UiRect } from "@/engine/contracts/ui";
 import { messageBox } from "./message-box";
+import { textLines } from "./text-lines";
 
+// CIFSimpleMessageBox_SetTextAndResize (52DB20) sets the chat block's wrap
+// width to 0x258 before appending the text; ResizeToText then grows the box.
+const WRAP_WIDTH = 600;
 // 6888C0 seeds 360x151; 52BCF0 grows it by the body plus (60,122).
 const MIN_WIDTH = 360;
 const MIN_HEIGHT = 151;
@@ -27,6 +31,18 @@ const BUTTON_HEIGHT = 24;
 const BUTTON_BOTTOM = 37;
 const YES_OFFSET = -81;
 const NO_OFFSET = 5;
+
+/*
+================
+messageBoxLines
+
+The body lines 52DB20 draws: each authored line wrapped at 600 px with the
+chat block's breaks (chat-layout's textLines).
+================
+*/
+export function messageBoxLines( lines: readonly string[], measure: ( value: string ) => number ): string[] {
+	return lines.flatMap( line => textLines( line, WRAP_WIDTH, measure ) );
+}
 
 /*
 ================

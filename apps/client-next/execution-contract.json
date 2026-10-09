@@ -1411,6 +1411,7 @@
 				"callback:tooltipBubble:3",
 				"callback:textLines:2",
 				"callback:textBoardLines:2",
+				"callback:messageBoxLines:1",
 				"measure",
 				"callback:systemMessageLayout:10"
 			]
