@@ -207,7 +207,7 @@ func objectiveMet(c *enterworld.Character, def *Definition, record enterworld.Ac
 		}
 		for i := range def.Objectives {
 			m := missionDefinition(def, i)
-			if !objectiveMet(c, m, missionRecord(record, m)) {
+			if !def.Objectives[i].Optional && !objectiveMet(c, m, missionRecord(record, m)) {
 				return false
 			}
 		}
@@ -790,6 +790,7 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			consume = append(consume, captureSupplyCleanup(character, def)...)
 			consume = append(consume, exchangeReturns(character, def)...)
 			consume = append(consume, questToolCleanup(character, def)...)
+			consume = append(consume, optionalMissionCleanup(character, def)...)
 			var grants []inventory.ItemAmount
 			for _, r := range rewardItemsWithChoice(def, choice) {
 				grants = append(grants, inventory.ItemAmount{Codename: rewardItemForCharacter(character, r.ItemCodename), Count: r.Count * count})

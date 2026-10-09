@@ -61,8 +61,12 @@ type MissionSpec struct {
 	// mission is the only one left (the TRADE_*_SPECIAL talks, 8CB8A0,
 	// read record byte 3's mission bits to pick it).
 	SolePendingSymbol string
-	deliveryRefs      []uint32
-	handOverNpcRef    uint32
+	// Optional is a mission past the class's required count (vf17C's N,
+	// CBasicQuest_vfE4 91F7D0): it runs, drops and shows, but never gates
+	// the pay. QNO_EU_ADVENTURER_1's Shiny Moss gather is one.
+	Optional       bool
+	deliveryRefs   []uint32
+	handOverNpcRef uint32
 }
 
 /*
@@ -79,6 +83,10 @@ func loadMissions(def *Definition, symbols []string, items enterworld.ItemRefSou
 	}
 	if len(def.Objectives) < 2 || len(def.Objectives) > 255 || len(def.Stages) != 0 || def.MonsterDrop != nil || def.CollectCount != 0 || def.KillCount != 0 {
 		return fmt.Errorf("quest %s invalid parallel mission contract", def.Codename)
+	}
+	// An optional mission never gates the pay, so at least one must.
+	if !slices.ContainsFunc(def.Objectives, func(m MissionSpec) bool { return !m.Optional }) {
+		return fmt.Errorf("quest %s has no required mission", def.Codename)
 	}
 	def.Objectives = append([]MissionSpec(nil), def.Objectives...)
 	collected := map[string]bool{}
@@ -182,7 +190,7 @@ func notAchievedSymbol(c *enterworld.Character, def *Definition, record enterwor
 	pending := -1
 	for i := range def.Objectives {
 		m := missionDefinition(def, i)
-		if objectiveMet(c, m, missionRecord(record, m)) {
+		if def.Objectives[i].Optional || objectiveMet(c, m, missionRecord(record, m)) {
 			continue
 		}
 		if pending >= 0 {
@@ -323,8 +331,42 @@ func collectionConsumption(def *Definition) []inventory.ItemAmount {
 	var out []inventory.ItemAmount
 	for i := 0; i < missionCount(def); i++ {
 		m := missionDefinition(def, i)
-		if m.Objective == ObjectiveCollect {
+		if m.Objective == ObjectiveCollect && !missionOptional(def, i) {
 			out = append(out, inventory.ItemAmount{Codename: m.CollectItemCodename, Count: m.CollectCount})
+		}
+	}
+	return out
+}
+
+/*
+================
+missionOptional
+================
+*/
+func missionOptional(def *Definition, index int) bool {
+	return def.Objective == ObjectiveParallel && def.Objectives[index].Optional
+}
+
+/*
+================
+optionalMissionCleanup
+
+What an optional collect mission gathered leaves with the paid quest, as
+much as is held. INFERENCE: the base pay takes the quest's own mission
+items (the class talks call QuestInventory_DeleteAllMatchingItems 915530
+after +0x104); an optional mission's count was never owed, so the held
+stacks go rather than the count.
+================
+*/
+func optionalMissionCleanup(c *enterworld.Character, def *Definition) []inventory.ItemAmount {
+	var out []inventory.ItemAmount
+	for i := 0; i < missionCount(def); i++ {
+		m := missionDefinition(def, i)
+		if m.Objective != ObjectiveCollect || !missionOptional(def, i) {
+			continue
+		}
+		if held := captureItemCount(c, m.CollectItemCodename); held > 0 {
+			out = append(out, inventory.ItemAmount{Codename: m.CollectItemCodename, Count: held})
 		}
 	}
 	return out
@@ -420,7 +462,7 @@ not repeat the banner.
 */
 func missionProgressFrames(def *Definition, previous, next enterworld.ActiveQuestRecord) []wire.Frame {
 	frames := []wire.Frame{{Opcode: OpQuestUpdate, Payload: encodeMissionProgress(previous, next)}}
-	if def.AchievedNowSymbol != "" && !allMissionsReached(previous) && allMissionsReached(next) {
+	if def.AchievedNowSymbol != "" && !allMissionsReached(def, previous) && allMissionsReached(def, next) {
 		frames = append(frames, questNotification(def.AchievedNowSymbol))
 	}
 	return frames
@@ -431,11 +473,16 @@ func missionProgressFrames(def *Definition, previous, next enterworld.ActiveQues
 allMissionsReached
 ================
 */
-func allMissionsReached(record enterworld.ActiveQuestRecord) bool {
+func allMissionsReached(def *Definition, record enterworld.ActiveQuestRecord) bool {
 	if len(record.Contents) == 0 {
 		return false
 	}
 	for _, node := range record.Contents {
+		// A node's tag is its mission index plus one (missionNodeIndex).
+		index := int(node.Tag) - 1
+		if def.Objective == ObjectiveParallel && index >= 0 && index < len(def.Objectives) && def.Objectives[index].Optional {
+			continue
+		}
 		if !missionCompletionReached(node) {
 			return false
 		}

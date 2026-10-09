@@ -38,6 +38,7 @@ FORMAT = "sro-compiled-quest-evidence-v1"
 
 VALUE = r'(0x[0-9a-f]+|-?\d+(?:\.\d+)?(?:e[-+]?\d+)?f|-?\d+|"[^"]*")'
 MISSION_COUNT_WORD = "0x121"
+REQUIRED_MISSIONS_WORD = "vf17c"
 
 
 # ================
@@ -208,8 +209,22 @@ def parse_initializer(text):
 	# names one table for the rest of the initializer, and a later copy
 	# into the same variable rebinds it.
 	table_aliases = {}
+	# The initializer ends with vtable +0x17C (CBasicQuest_vf17C 9287C0):
+	# "edx_5 = *(*arg3 + 0x17c)" then "edx_5(ecx_6, N, eax_2)". N is the
+	# required-mission count CBasicQuest_vfE4 (91F7D0) turns into the reward
+	# key: the first N missions, or all of them when N is 0.
+	reward_setup = None
 	for raw in lines:
 		line = raw.strip()
+		m = re.match(r'(?:int32_t )?(\w+) = \*\(\*arg\d \+ 0x17c\)$', line)
+		if m:
+			reward_setup = m.group(1)
+			continue
+		m = re.match(r'(?:.*= |if \()?(?:neg\.d\(neg\.d\()?(\w+)\(\w+, (0x[0-9a-f]+|\d+)[,)]', line)
+		if m and m.group(1) == reward_setup:
+			quest["words"][REQUIRED_MISSIONS_WORD] = literal(m.group(2))
+			reward_setup = None
+			continue
 		m = re.match(r'(?:int32_t\* )?(\w+) = arg\d\[(0x[0-9a-f]+)\]$', line)
 		if m:
 			table_aliases[m.group(1)] = m.group(2)

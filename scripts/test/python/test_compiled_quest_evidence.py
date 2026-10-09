@@ -17,7 +17,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "build"))
 from import_compiled_quest_evidence import parse_initializer
-from generate_compiled_quests import Unsupported, check_fields, conditions
+from generate_compiled_quests import Unsupported, check_fields, conditions, project
 
 
 # ================
@@ -206,6 +206,48 @@ class CompiledQuestFieldTests(unittest.TestCase):
 		]))
 		chances = [(m["fields"].get("0x241"), m["fields"].get("0x14d")) for m in quest["missions"]]
 		self.assertEqual(chances, [("ITEM_1", 50.0), ("ITEM_2", 50.0), ("ITEM_3", 100.0)])
+
+	# ================
+	# test_required_missions_word_follows_both_call_shapes
+	#
+	# The initializer's closing vtable +0x17C call names N, assigned or
+	# tested (QNO_EU_IVY_3 writes "if (edx_5(eax_24, 1) == 0)").
+	# ================
+	def test_required_missions_word_follows_both_call_shapes(self):
+		assigned = parse_initializer("\n".join([
+			"int32_t edx_5 = *(*arg3 + 0x17c)",
+			"int32_t result = neg.d(neg.d(edx_5(ecx_6, 1, eax_2) != 0 ? 1 : 0))",
+		]))
+		tested = parse_initializer("\n".join([
+			"int32_t edx_5 = *(*arg1 + 0x17c)",
+			"if (edx_5(eax_24, 1) == 0)",
+		]))
+		every = parse_initializer("\n".join([
+			"int32_t edx_3 = *(*arg1 + 0x17c)",
+			"int32_t result = neg.d(neg.d(edx_3(ecx_3, 0, eax_2) != 0 ? 1 : 0))",
+		]))
+		self.assertEqual([q["words"].get("vf17c") for q in (assigned, tested, every)], [1, 1, 0])
+
+	# ================
+	# test_missions_past_the_required_count_are_optional
+	#
+	# vf17C's N = 1 over two gathers (QNO_EU_ADVENTURER_1): the second
+	# gather runs but never gates the pay. A class that owns an item-use
+	# handler (vtable +0x4) waits for its CLASS_BEHAVIOUR row.
+	# ================
+	def test_missions_past_the_required_count_are_optional(self):
+		def gather(index, item):
+			return {"fields": {"0x8": index, "0x9": 1, "0xd": "SN_CON_Q", "0x19": 1, "0x1d": "MOB_A",
+				"0x23d": 5, "0x241": item, "0x14d": 50.0}}
+		quest = {"words": {"0x130": "OFFER", "0x134": "PAY", "vf17c": 1}, "tables": {"0xc2": {"flags": 2},
+			"0xc4": {"0x8": "NPC_A"}}, "lists": {}, "missions": [gather(0, "ITEM_A"), gather(1, "ITEM_B")], "overrides": []}
+		text = {"objectives": {}, "reward": {"exp": 1, "skillExp": 0, "gold": 0, "inventorySlots": 0}}
+		spec = project("QUEST", quest, text, {})
+		self.assertEqual([row.get("Optional", False) for row in spec["Objectives"]], [False, True])
+		quest["words"]["vf17c"] = 0
+		self.assertNotIn("Optional", project("QUEST", quest, text, {})["Objectives"][1])
+		with self.assertRaisesRegex(Unsupported, "custom behaviour 0x4"):
+			project("QNO_WC_WAREHOUSE_W_3", quest, text, {})
 
 if __name__ == "__main__":
 	unittest.main()

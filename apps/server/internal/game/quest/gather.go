@@ -7,7 +7,7 @@ The item owner consumes the tool after admission. This owner retains the
 short online countdown and awards the gathered material through inventory
 authority. Leaving the world cancels the countdown, matching 8C8770.
 
-Four quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
+Five quests own tools. Ivy 2's knife (8BB6C0) cuts a vine after ten seconds
 on a 50% roll. Cerberus 1's Long Scissors (QNO_EU_EASTEU_19, 8B2AB0) cut a
 Golden Apple after ten seconds with no roll, and the Golden Apple lures a
 quest Ladon whose Bloody Orbs are the quest's objective. Rahid 5's Essence
@@ -15,7 +15,9 @@ of Roc Mountain (QNO_RM_OLDWOMAN_5, 8A0AA0) gathers a Pile of Rainbow Grass
 on each of seven peaks in order, the later peaks taking longer and the
 earlier ones failing more often. Hidden Treasure 5's Seal Key
 (QNO_CA_TREASURE_5, 8C7910) calls a Treasure Guardian at the Hungry Blood
-Ong habitat, whose King's Treasure Box is the quest's objective.
+Ong habitat, whose King's Treasure Box is the quest's objective. Demetri's
+Shiny Moss (QNO_EU_ADVENTURER_1, 8B6840) lures a Red Spotted Crab by the
+Troy wooden horse; its Yellow Eggs are the objective.
 
 ===========================================================================
 */
@@ -54,6 +56,13 @@ const (
 	rahidEssence             = "ITEM_QNO_RM_OLDWOMAN_5_08"
 	rahidPile                = "ITEM_QNO_RM_OLDWOMAN_7_03"
 	rahidPileTarget          = 7
+	adventurerQuest          = "QNO_EU_ADVENTURER_1"
+	adventurerMoss           = "ITEM_QNO_EU_ADVENTURER_1_01"
+	adventurerCrab           = "MOB_QT_01_CRAB"
+	adventurerRegion         = 0x685a
+	adventurerRadius         = 420 // 8B6840: 0x1A4
+	adventurerCrabMin        = 20
+	adventurerCrabSpan       = 80
 	treasureQuest            = "QNO_CA_TREASURE_5"
 	treasureKey              = "ITEM_QNO_CA_TREASURE_5_01"
 	treasureBox              = "ITEM_QNO_CA_TREASURE_5_02"
@@ -242,6 +251,8 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		quest = rahidQuest
 	case treasureKey:
 		quest = treasureQuest
+	case adventurerMoss:
+		quest = adventurerQuest
 	default:
 		return nil, false
 	}
@@ -258,6 +269,8 @@ func (rt *Runtime) BeginItemUse(c *enterworld.Character, code string, at simulat
 		return rt.beginRahidEssence(c, def, at, nowMs)
 	case treasureKey:
 		return rt.useTreasureKey(c, def, at)
+	case adventurerMoss:
+		return rt.useShinyMoss(c, def, at)
 	}
 	return rt.useCerberusApple(c, def, at)
 }
@@ -383,6 +396,43 @@ func (rt *Runtime) useTreasureKey(c *enterworld.Character, def *Definition, at s
 		return nil, false
 	}
 	return nil, true
+}
+
+/*
+================
+useShinyMoss
+
+8B6840: with the Yellow Eggs gathered (quest state 8) the moss answers _09;
+otherwise it works only within 420 of the Troy wooden horse, else _08. It
+lures MOB_QT_01_CRAB 20-100 from the player, as Cerberus's apple does
+(the spawn ring's centre is the player's position from vtable +0x158),
+with no timer of its own. A failed spawn keeps the moss.
+================
+*/
+func (rt *Runtime) useShinyMoss(c *enterworld.Character, def *Definition, at simulation.Spawn) ([]wire.Frame, bool) {
+	if objectiveMet(c, def, c.ActiveQuests[activeQuestIndex(c, def.RefID)]) {
+		return []wire.Frame{questNotification("SN_TALK_QNO_EU_ADVENTURER_1_09")}, false
+	}
+	if !withinQuestArea(at, adventurerHorse(), adventurerRadius) {
+		return []wire.Frame{questNotification("SN_TALK_QNO_EU_ADVENTURER_1_08")}, false
+	}
+	crab := simulation.QuestMonsterSpawn{Codename: adventurerCrab, RadiusMin: adventurerCrabMin, RadiusSpan: adventurerCrabSpan}
+	if rt.SpawnQuestMonster == nil || !rt.SpawnQuestMonster(c, crab) {
+		return nil, false
+	}
+	return nil, true
+}
+
+/*
+================
+adventurerHorse
+
+8B6840 compares against region 0x685A (986, 20, 340), the Troy wooden
+horse northeast of Droa Dock.
+================
+*/
+func adventurerHorse() simulation.Spawn {
+	return simulation.Spawn{RegionID: adventurerRegion, X: 986, Y: 20, Z: 340}
 }
 
 /*

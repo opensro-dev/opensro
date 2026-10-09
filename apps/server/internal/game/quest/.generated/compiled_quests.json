@@ -651,7 +651,8 @@
 						"MOB_AM_ARCHER_CLON"
 					],
 					"ChancePercent": 50.0
-				}
+				},
+				"Optional": true
 			}
 		]
 	},

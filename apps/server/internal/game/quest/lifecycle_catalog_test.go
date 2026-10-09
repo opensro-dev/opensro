@@ -335,6 +335,11 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 				}
 			case ObjectiveParallel:
 				for i := range def.Objectives {
+					// An optional mission (past vf17C's required count) never
+					// gates the pay; the required ones alone are driven.
+					if def.Objectives[i].Optional {
+						continue
+					}
 					if _, err := complete(); err == nil {
 						t.Fatal("completed before all parallel objectives")
 					}

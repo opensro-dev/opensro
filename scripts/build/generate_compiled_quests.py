@@ -111,7 +111,26 @@ HELD_ALL, HELD_ANY = "0x28", "0x38"
 
 # What a class's own override does, as the QuestSpec fields that port it,
 # keyed by (quest, vtable slot). Each row cites the override it reads.
+# The classes that override CBasicQuest vtable +0x4, the quest-item use
+# handler (the base, 559000, answers 0). The methods dump lists no +0x4
+# entry, so this census of the v1.188 vtables (2026-10-09) stands in for
+# it: a class here is projected only once CLASS_BEHAVIOUR names its
+# (code, "0x4") row, whose handler the server's quest tools port.
+ITEM_USE_HANDLERS = {
+	"QNO_CA_GORIA_7": 0x8C47E0, "QNO_CA_TREASURE_5": 0x8C7910, "QNO_CA_WAREHOUSE_1": 0x8C87B0,
+	"QNO_CA_WAREHOUSE_3": 0x8CA7B0, "QNO_EU_ADVENTURER_1": 0x8B6840, "QNO_EU_EASTEU_1": 0x8AA700,
+	"QNO_EU_EASTEU_11_1": 0x8AE6C0, "QNO_EU_EASTEU_14_1": 0x8B05B0, "QNO_EU_EASTEU_17_1": 0x8B1C30,
+	"QNO_EU_EASTEU_19": 0x8B2AB0, "QNO_EU_EASTEU_21": 0x8B5D40, "QNO_EU_EASTEU_5": 0x8ACAD0,
+	"QNO_EU_GENERAL_2": 0x8B8C40, "QNO_EU_IVY_2": 0x8BB6C0, "QNO_EU_IVY_3": 0x8BEF10,
+	"QNO_EU_WITCH_1": 0x8BFF70, "QNO_RM_FLYSHIP1_3": 0x89D0E0, "QNO_RM_OLDWOMAN_5": 0x8A0AA0,
+	"QNO_WC_WAREHOUSE_W_2": 0x895BC0, "QNO_WC_WAREHOUSE_W_3": 0x8970F0,
+}
+REQUIRED_MISSIONS = "vf17c"
+
 CLASS_BEHAVIOUR = {
+	# CQNO_EU_ADVENTURER_1_UseShinyMoss (8B6840): the archers' Shiny Moss
+	# calls a crab near the Troy wooden horse (quest.useShinyMoss).
+	("QNO_EU_ADVENTURER_1", "0x4"): {},
 	# CQSP_KT_EXINVENTORY_3_OnNpcTalk (8CF8F0): the base talk, plus a
 	# 10,000 gold fee checked before the reward and taken after it.
 	("QSP_KT_EXINVENTORY_3", "0x58"): {
@@ -535,6 +554,8 @@ def conditions(code, quest):
 # ================
 def project(code, quest, text, sql):
 	unhandled = [slot for slot in quest["overrides"] if (code, slot) not in CLASS_BEHAVIOUR]
+	if code in ITEM_USE_HANDLERS and (code, "0x4") not in CLASS_BEHAVIOUR:
+		unhandled.append("0x4")
 	if unhandled:
 		raise Unsupported("custom behaviour " + ",".join(unhandled))
 	unknown = sorted(set(quest["lists"]) - KNOWN_LISTS)
@@ -652,6 +673,16 @@ def project(code, quest, text, sql):
 	else:
 		raise Unsupported("mission kinds " + ",".join(str(k) for k in sorted(kinds, key=str)))
 	spec.update(behaviour)
+	# vf17C's N (CBasicQuest_vfE4 91F7D0): only the first N missions make
+	# the reward key; a later one still runs (its drops, its journal node)
+	# but never gates the pay. N = 0 requires every mission.
+	required = quest["words"].get(REQUIRED_MISSIONS, 0)
+	if required and required < len(missions):
+		rows = spec.get("Objectives")
+		if not rows or len(rows) != len(missions):
+			raise Unsupported("required missions on a scalar objective")
+		for row in rows[required:]:
+			row["Optional"] = True
 	# An absent base word is no field: POTION_4's offer has no deny line.
 	spec = {key: value for key, value in spec.items() if value is not None}
 	if not spec.get("CompletePromptSymbol") or not spec.get("OfferPromptSymbol"):
