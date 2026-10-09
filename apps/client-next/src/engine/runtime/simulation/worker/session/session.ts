@@ -176,7 +176,21 @@ cancelTitleRequest
 		controller = null;
 		completion = null;
 		logoutPending = false;
+		forgetStartingRetry();
+	}
+	/*
+================
+forgetStartingRetry
+
+The repeat of a request answered "starting" holds the player's login
+command, password included; it lives only until that request settles.
+The wait's start survives the repeat itself, so the cap still applies.
+================
+	*/
+	function forgetStartingRetry() {
+		lastTitleCommand = undefined;
 		startingRetry = null;
+		if ( !repeatingStart ) startingSince = undefined;
 	}
 	/*
 ================
@@ -256,11 +270,6 @@ baseUrl
 		command( command, now ) {
 			if ( disposed ) {
 				throw new Error( "Session disposed" );
-			}
-			if ( command.kind === "servers" || command.kind === "login" ) {
-				lastTitleCommand = command;
-				// A player's own request starts a fresh wait.
-				if ( !repeatingStart ) startingSince = undefined;
 			}
 			if ( command.kind === "chat-blocks" ) {
 				world.chatBlocks( command.value );
@@ -391,6 +400,7 @@ baseUrl
 					return;
 				}
 				cancelTitleRequest();
+				if ( command.kind === "servers" ) lastTitleCommand = command;
 				controller = new AbortController();
 				const current = generation, kind = command.kind;
 				try {
@@ -482,6 +492,7 @@ baseUrl
 				state.servers?.find( s => s.id === command.serverId ) :
 				undefined;
 			reset();
+			if ( command.kind === "login" ) lastTitleCommand = command;
 			crestPrefix = selectedServer?.nativeServerId;
 			if ( command.kind === "logout" ) {
 				restoreAttempted = true;
@@ -630,11 +641,12 @@ baseUrl
 								dirty = false;
 								return waiting;
 							}
-							startingSince = undefined;
+							forgetStartingRetry();
 							publish( { phase: "failed", code: STARTING_CODE, error: starting.message } );
 							dirty = false;
 							return state;
 						}
+						forgetStartingRetry();
 						if ( result.kind === "return-to-dock" ) {
 							if (
 								result.error || !result.value?.httpOk ||

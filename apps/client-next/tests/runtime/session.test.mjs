@@ -1022,3 +1022,50 @@ test("a server that keeps starting past the cap fails with its own message", asy
 	assert.equal( state.error, "The Agent is starting." );
 	session.dispose();
 });
+
+// The repeat holds the login command, password included: it lives only
+// until the request settles or the player leaves the wait.
+test("a login waiting on a starting server is never sent again once the player signs out", async t => {
+	const logins = [];
+	t.mock.method( globalThis, "fetch", async ( url, options ) => {
+		if ( url.endsWith( "/title/login" ) ) {
+			logins.push( options?.body );
+			return Response.json( STARTING, { status: 503 } );
+		}
+		return Response.json( { ok: true } );
+	} );
+	const session = createSession();
+	session.command( command );
+	session.step( 0 );
+	await settle();
+	assert.notEqual( session.step( 10 )?.phase, "failed" );
+	session.command( { kind: "logout" }, 20 );
+	for ( let now = 100; now <= 5000; now += 500 ) {
+		session.step( now );
+		await settle();
+	}
+	assert.equal( logins.length, 1 );
+	session.dispose();
+});
+
+test("a login that settles after a starting wait is not repeated again", async t => {
+	let logins = 0;
+	t.mock.method( globalThis, "fetch", async url => {
+		if ( !url.endsWith( "/title/login" ) ) return Response.json( { ok: true } );
+		logins++;
+		return logins === 1 ?
+			Response.json( STARTING, { status: 503 } ) :
+			Response.json( { ok: false, message: "Invalid credentials" }, { status: 401 } );
+	} );
+	const session = createSession();
+	session.command( command );
+	let state;
+	for ( let now = 0; now <= 5000; now += 500 ) {
+		state = session.step( now ) ?? state;
+		await settle();
+	}
+	assert.equal( logins, 2 );
+	assert.equal( state?.phase, "failed" );
+	assert.notEqual( state?.code, "PROCESS_STARTING" );
+	session.dispose();
+});
