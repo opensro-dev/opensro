@@ -25,6 +25,11 @@ func TestPetSessionDrivesIndependentMotionAndCleansUp(t *testing.T) {
 	refs := testCosSource(testItems())
 	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 80}
 	rt, _ := newTestRuntime(c, refs)
+	// The spawn sampler places the pet around its owner. About one secure
+	// sample in sixteen (24056..26675) spawns it where the 1100 ms follow
+	// leaves it short, so it legitimately moves again at 1200 ms; pin the
+	// sample so the duplicate bind below is the only thing under test.
+	rt.CompanionRoll = func() (uint32, error) { return 0, nil }
 	gid, _ := enterworld.CosObjectIDForCharacter(c)
 	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true}
 	rt.CompanionSurfaceHeight = func(_ uint16, _ float64, y float64, _ float64) (float64, bool) { return y, true }
