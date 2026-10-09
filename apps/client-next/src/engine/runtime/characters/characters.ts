@@ -608,7 +608,8 @@ export function createCharacterPresentation(
 			pendingDeaths,
 			active,
 			next,
-			deadGids
+			deadGids,
+			entitiesByGid
 		} = events;
 		probe?.detailBegin( "presentation-state" );
 		presentationState.step(
@@ -640,6 +641,7 @@ export function createCharacterPresentation(
 			animationDeltaMs,
 			castByActor,
 			entities,
+			entitiesByGid,
 			gameplay,
 			hitByActor,
 			localMover,

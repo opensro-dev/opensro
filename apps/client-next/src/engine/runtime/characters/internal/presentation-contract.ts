@@ -214,6 +214,7 @@ export interface CharacterPresentationState {
 	activations?: Map<string, AnimationActivation>;
 	dispatch?: ReturnType<typeof createAnimationDispatch>;
 	modelAnimation?: ReturnType<typeof createModelAnimation>;
+	castFacing?: import("@/engine/foundation/gameplay/cast-facing").CastFacing;
 	navigationHold?: {
 		revision: number;
 		pose: import("@/engine/contracts/gameplay").Pose;
@@ -461,6 +462,7 @@ export interface ActorFrame {
 	readonly animationDeltaMs: number;
 	readonly castByActor: ReadonlyMap<number, CastState>;
 	readonly entities: readonly EntityState[];
+	readonly entitiesByGid: ReadonlyMap<number, EntityState>;
 	readonly gameplay: GameplayState | null;
 	readonly hitByActor: ReadonlyMap<
 		number,

@@ -24,6 +24,7 @@ import { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill
 import { weaponAnimationSet } from "@/engine/foundation/animation/animation-metadata";
 import { characterHeadingYaw } from "@/engine/foundation/math/angles";
 import { movementGait } from "@/engine/foundation/gameplay/native-movement";
+import { castFacing } from "@/engine/foundation/gameplay/cast-facing";
 import type { CharacterLayer } from "@/engine/contracts/character";
 import { MOVEMENT_MODE_SEATED, type EntityState } from "@/engine/contracts/world";
 import type { ActorAppearance, ActorFrame, ActorOwner, ActorPass } from "./internal/presentation-contract";
@@ -91,6 +92,7 @@ export function createActorMotion( owner: ActorOwner ) {
 				actionLayersByActor,
 				animationDeltaMs,
 				castByActor,
+				entitiesByGid,
 				gameplay,
 				hitByActor,
 				localMover,
@@ -143,9 +145,23 @@ export function createActorMotion( owner: ActorOwner ) {
 			const dead = (authorityDead || !!health?.dead( entity.gid )) && !pendingDeaths.has( entity.gid ),
 				cast = castByActor.get( entity.gid ),
 				hit = hitByActor.get( entity.gid );
+			// 8DC440 turns a live caster toward its target every frame. A rider's
+			// yaw belongs to its vehicle in this port, so riders keep theirs.
+			const castTarget = cast && !cast.cancelledAtMs && !cast.cancellationRequestedAtMs &&
+					cast.target !== entity.gid && !entity.mountedOn ?
+				entitiesByGid.get( cast.target ) :
+				undefined;
+			state.castFacing = castFacing( state.castFacing, {
+				caster: nativePose,
+				target: castTarget && logicalPose( castTarget ),
+				tracking: !!castTarget && !dead,
+				moving: !!(localMover( entity.gid ) ? gameplay!.moving : entity.moving),
+				revision: (localMover( entity.gid ) ? gameplay!.movementRevision : entity.movementRevision) ?? 0,
+				seconds
+			} );
 			let renderPose = posePresentation.pose(
 				entity.gid,
-				nativePose,
+				state.castFacing ? { ...nativePose, angle: Math.round( state.castFacing.angle ) % 65536 } : nativePose,
 				seconds,
 				dead && entity.moving === false
 			);
