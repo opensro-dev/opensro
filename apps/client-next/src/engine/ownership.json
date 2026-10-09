@@ -18,6 +18,7 @@
     "src/engine/runtime/ui/hud/auto-potion-input.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/repair-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/skin-change-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/global-chat-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/fortress-war-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/union-hud.ts": "src/engine/runtime/ui/ui.ts",

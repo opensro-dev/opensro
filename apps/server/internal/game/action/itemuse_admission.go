@@ -55,6 +55,7 @@ const (
 	itemUseSkillTimeTicket
 	itemUseStructureRepair
 	itemUseMercenary
+	itemUseGlobalChat
 )
 
 /*
@@ -71,6 +72,10 @@ func admittedItemUseFamily(ref *enterworld.ItemRef) itemUseFamily {
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 12, 1} {
 		return itemUseMercenary
+	}
+	// 49B9F0 case 4 (type 4 = 5): the Global Chatting item (globalchat.go).
+	if ref.TypeIDs == [4]int64{3, 3, 3, 5} {
+		return itemUseGlobalChat
 	}
 	if ref.TypeIDs == [4]int64{3, 3, 9, 0} {
 		return itemUseQuestTool

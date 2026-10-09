@@ -389,6 +389,16 @@ type Runtime struct {
 	// ordered burst through PushCharacterFrames, so exclusion prevents dupes.
 	PushDivisionPeerFrames func(divisionID, exceptCharacterName string, frames []wire.Frame)
 
+	// PushShardPeerFrames delivers frames to every character session in the
+	// division except the named character's, whether or not they observe it:
+	// the Global Chatting line (globalchat.go). Nil drops the broadcast.
+	PushShardPeerFrames func(divisionID, exceptCharacterName string, frames []wire.Frame)
+
+	// ChatRestricted reports whether the character's session holds the GM
+	// chat restriction, sending its notice when it does (4F0A00). Nil means
+	// no session can be restricted.
+	ChatRestricted func(divisionID, characterName string) bool
+
 	// PushMonsterCast publishes prepared-cast results before the division
 	// transaction ends. It must only enqueue (never perform network I/O).
 	// Detached runtimes leave it nil and inspect returned frames instead.

@@ -275,6 +275,10 @@ func (rt *Runtime) HandleItemUse(
 				division: divisionID, ref: ref, row: rowIndex, request: request, nowMs: nowMs,
 			}, character, tail, &result)
 		}
+		if family == itemUseGlobalChat {
+			return rt.useGlobalChatting(globalChatUse{division: divisionID, character: character, row: rowIndex,
+				request: request}, tail, &result, &after)
+		}
 		if family == itemUseWarehouseTicket {
 			if len(tail) != 0 || rt.storageAuthority == nil {
 				return false

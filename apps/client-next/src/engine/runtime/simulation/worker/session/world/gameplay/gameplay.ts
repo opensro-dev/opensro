@@ -2089,7 +2089,7 @@ state here before a command can claim a native wire conversation.
 					api.notice( refusal );
 					return null;
 				}
-				return inventory.use( command.slot, now, context );
+				return inventory.use( command.slot, now, context, command.message );
 			}
 			if ( command.kind === "premium-command" || command.kind === "count-job-use" ) {
 				// The chat command (6AD990) finds its row by item type; the

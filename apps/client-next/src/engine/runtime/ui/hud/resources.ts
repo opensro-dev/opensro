@@ -211,7 +211,8 @@ export function createHudResources(
 		"ifwhisperblocking",
 		"ifchattingblockingslot",
 		"ifwhisperblockingslot",
-		"ifcompositeitemwnd"
+		"ifcompositeitemwnd",
+		"ifwholechat"
 	];
 	const layouts = [
 		"ginterface",

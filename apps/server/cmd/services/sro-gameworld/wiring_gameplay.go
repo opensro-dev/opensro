@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
+	"opensro.online/server/internal/game/restriction"
 	"opensro.online/server/internal/game/siege"
 	livepresence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/chat"
@@ -606,6 +607,26 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 				action.SendFrames(session, frames)
 			}
 		}
+	}
+
+	game.items.PushShardPeerFrames = func(divisionID, exceptCharacterName string, frames []wire.Frame) {
+		except := map[uint64]bool{}
+		for _, session := range hub.CharacterSessions(divisionID, exceptCharacterName) {
+			except[session.ID] = true
+		}
+		for _, session := range hub.SessionsInDivision(divisionID) {
+			if _, _, ok := session.CharacterBinding(); ok && !except[session.ID] && session.WorldReady() {
+				action.SendFrames(session, frames)
+			}
+		}
+	}
+	game.items.ChatRestricted = func(divisionID, characterName string) bool {
+		for _, session := range hub.CharacterSessions(divisionID, characterName) {
+			if restriction.Report(session, transport.CommandRestrictionChat) {
+				return true
+			}
+		}
+		return false
 	}
 
 	game.items.PushMonsterCast = func(division string, source uint32, result simulation.MonsterAttackResult) {

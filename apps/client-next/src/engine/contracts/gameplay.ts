@@ -354,6 +354,8 @@ export type GameplayCommand =
 		// The skin change window's choice (CIFChangePlayerModel_OnConfirm).
 		readonly skin?: import("@/engine/foundation/gameplay/skin-change").SkinChoice;
 		readonly targetSlot?: number;
+		// The Global Chatting window's line (CIFGlobalChatItem_OnSend 6D1EE0).
+		readonly message?: string;
 	}
 	| {
 		readonly kind: "navigation";

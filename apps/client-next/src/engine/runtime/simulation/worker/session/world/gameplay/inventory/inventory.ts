@@ -13,6 +13,7 @@ import {
 	cosItemUseTail,
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
+import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
 import { planContainerMove, sameStackIdentity, stackable } from "@/engine/foundation/gameplay/container-transfer";
 import { createMall } from "./mall/mall";
 import { createCompanionRentals } from "./companion-rentals";
@@ -1260,18 +1261,17 @@ A job dress bar (0x3434) holds the suit move's answer for its seconds.
 use
 ================
 		*/
-		use( n: number, now = 0, context?: CosItemUseContext ) {
+		use( n: number, now = 0, context?: CosItemUseContext, message?: string ) {
 			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
 			const item = slots.get( slot( n ) );
 			if ( !item || busy() ) {
 				throw new Error( "Item use unavailable" );
 			}
 			if ( itemCooldown( itemCooldowns, item.typeFlags, now ) ) return null;
-			const tail = cosItemUseTail(
-				item.typeFlags,
-				[ ...slots.values() ],
-				companionContext( item.typeFlags, context )
-			);
+			// The Global Chatting item carries its line (693C90); nothing else does.
+			const tail = isGlobalChatItem( item.typeFlags ) ?
+				globalChatTail( message ?? "" ) :
+				cosItemUseTail( item.typeFlags, [ ...slots.values() ], companionContext( item.typeFlags, context ) );
 			const p = new Uint8Array( 3 + tail.length );
 			p.set( tail, 3 );
 			p[0] = n;

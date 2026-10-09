@@ -146,6 +146,8 @@ import {
 } from "@/engine/foundation/ui/window-positions";
 import { createRepairHud } from "./hud/repair-hud";
 import { createSkinChangeHud } from "./hud/skin-change-hud";
+import { createGlobalChatHud } from "./hud/global-chat-hud";
+import { GLOBAL_CHAT_MAX_LENGTH, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
 import { createJobHud } from "./hud/job-hud";
 import { fortressMiniIndicators } from "@/engine/foundation/ui/fortress-mini-info";
 import {
@@ -517,6 +519,9 @@ const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
+// CIFWholeChat, the Global Chatting item's window, and its line's edit box.
+const GLOBAL_CHAT_PANEL = "Global chat";
+const GLOBAL_CHAT_TEXT = "wholechat-text";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
 const FORTRESS_WAR_PANEL = "Fortress war application";
 const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
@@ -733,6 +738,7 @@ export function createUi(
 	const autoPotionInput = createAutoPotionInput();
 	const repairHud = createRepairHud();
 	const skinHud = createSkinChangeHud();
+	const globalChatHud = createGlobalChatHud();
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
 	const fortressScheduleHud = createFortressScheduleHud();
@@ -1541,6 +1547,14 @@ export function createUi(
 				dirty = true;
 				return;
 			}
+			// 69D4F0 opens CIFWholeChat on the Global Chatting item's slot; its
+			// Use button sends the line inside the item's use (6D1EE0).
+			if ( item && isGlobalChatItem( item.typeFlags ) && command.message === undefined ) {
+				globalChatHud.open( item.slot );
+				focusAtEnd( GLOBAL_CHAT_TEXT, "" );
+				dirty = true;
+				return;
+			}
 			// The skin scroll opens CIFChangePlayerModel; its confirm uses it.
 			if ( item && isSkinChangeScroll( item.typeFlags ) && !command.skin ) {
 				const game = view?.gameplay, local = view?.entities.find( e => e.gid === game?.localGid );
@@ -1690,6 +1704,29 @@ export function createUi(
 			focusAndSelect( STALL_PROMPT_TEXT, 0, prompt.text.length );
 		} else if ( prompt.kind === "price" ) focusAndSelect( STALL_PROMPT_PRICE, 0, prompt.price.length );
 		dirty = true;
+	}
+	/*
+	================
+	sendGlobalChat
+
+	CIFGlobalChatItem_OnSend (6D1EE0): with an item left, an empty line
+	prints UIIT_STT_WHOLECHAT_INPUTMSG and a line the abuse filter refuses
+	(CStringCheck_ContainsAbuse 790C70, the same two tests as 790B60)
+	prints UIIT_MSG_WHOLECHATERR_NOTINUSEMSG; otherwise the item is used
+	with the line. The line is cleared either way and the window stays.
+	================
+	*/
+	function sendGlobalChat( slot: number, line: string ) {
+		const item = view?.gameplay?.inventory.find( row => row.slot === slot );
+		if ( item && isGlobalChatItem( item.typeFlags ) && item.quantity > 0 ) {
+			const rules = hud.data()?.nameRules;
+			if ( !line ) hudMessages.append( hudCopy( "UIIT_STT_WHOLECHAT_INPUTMSG" ) );
+			else if ( rules && !textAllowed( line, rules ) ) {
+				hudMessages.append( hudCopy( "UIIT_MSG_WHOLECHATERR_NOTINUSEMSG" ) );
+			} else sendGameplay( { kind: "item-use", slot, message: line } );
+		}
+		globalChatHud.sent();
+		focusAtEnd( GLOBAL_CHAT_TEXT, "" );
 	}
 	/*
 	================
@@ -3956,6 +3993,32 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			const wholeChat = globalChatHud.state();
+			if ( wholeChat !== null ) {
+				// CIFWholeChat_OnKey (6D2290): Enter sends, Esc closes.
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "wholechat-exit"
+				) {
+					globalChatHud.close();
+					focus = null;
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === GLOBAL_CHAT_TEXT ) {
+					globalChatHud.type( event.value );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing && focus === GLOBAL_CHAT_TEXT ||
+					event.kind === "activate" && event.id === "wholechat-use"
+				) {
+					sendGlobalChat( wholeChat.slot, wholeChat.text );
+					dirty = true;
+					return;
+				}
 			}
 			const aliasWindow = jobHud.alias();
 			if ( aliasWindow !== null ) {
@@ -12689,6 +12752,42 @@ export function createUi(
 						} );
 					}
 					endWindow( admission, "service:" + SKIN_PANEL );
+				}
+				const wholeChat = globalChatHud.state();
+				if ( wholeChat && hudData?.windows.ifwholechat && hudData.root.GDR_WHOLE_CHAT ) {
+					// CIFWholeChat (ginterface GDR_WHOLE_CHAT, resinfo ifwholechat.txt).
+					const admission = beginWindow(),
+						root = hudData.root.GDR_WHOLE_CHAT,
+						layout = hudData.windows.ifwholechat,
+						nodes = Object.values( layout ),
+						byName = ( name: string ) => nodes.find( n => n.name === name ),
+						[px, py] = windowOrigin( GLOBAL_CHAT_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] ),
+						// 6D1D90: the slot's count, and Use only while one is left.
+						count = game?.inventory.find( row => row.slot === wholeChat.slot )?.quantity ?? 0;
+					nativeFrame( root, px, py, hudCopy( "UIIT_STT_WHOLECHAT" ), "wholechat-exit" );
+					nativePage( layout, px, py, [ 31, 32, 35, 36 ] );
+					const edit = byName( "GDR_WHOLE_CHAT_EDITBOX_INPUT" ), odd = byName( "GDR_WHOLE_CHAT_ODDITEM" );
+					if ( edit ) partyEdit( edit, px, py, GLOBAL_CHAT_TEXT, wholeChat.text, GLOBAL_CHAT_MAX_LENGTH );
+					if ( odd ) authoredText( odd, px, py, String( count ) );
+					for ( const [id, name] of [ [ "wholechat-use", "OK" ], [ "wholechat-exit", "CANCEL" ] ] as const ) {
+						const node = byName( "GDR_WHOLE_CHAT_BTN_" + name );
+						if ( node ) {
+							authoredLabeledButton(
+								node,
+								px,
+								py,
+								id,
+								hudCopy( node.text ),
+								id === "wholechat-use" && (count === 0 || !!game?.inventoryPending)
+							);
+						}
+					}
+					endWindow( admission, "service:" + GLOBAL_CHAT_PANEL );
 				}
 				if ( (panel === "COS inventory" || panel === "Shop" && game?.shop?.cosGid) && hudData ) {
 					const admission = beginWindow(),
