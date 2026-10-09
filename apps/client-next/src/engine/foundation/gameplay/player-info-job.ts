@@ -100,6 +100,9 @@ export function playerInfoJob(
 	}
 	let need = thresholds[job.grade]?.[job.type - 1] ?? 0;
 	if ( need < 0 ) need += U32_RANGE;
+	// A zero threshold divides to infinity, which 59FFA0's ftol turns into
+	// INT_MIN; leveldata has no such row, so the port shows an empty bar.
+	if ( need === 0 ) return { alias, icon, title, grade, exp: "0% (" + job.exp + ")", fraction: 0 };
 	// The gauge keeps a float32 ratio; the text truncates ratio * 100 (CRT_ftol2).
 	const fraction = Math.fround( job.exp / need );
 	return { alias, icon, title, grade, exp: Math.trunc( fraction * 100 ) + "% (" + job.exp + ")", fraction };
