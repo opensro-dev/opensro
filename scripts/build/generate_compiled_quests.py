@@ -117,6 +117,16 @@ CLASS_BEHAVIOUR = {
 		"TurnInGold": 10000,
 		"TurnInGoldShortSymbol": "SN_TALK_QSP_KT_EXINVENTORY_3_05",
 	},
+	# CBasicQuest_vf90 (921CE0) applies the travel block (0x60000, no Return
+	# or teleport) when the quest's byte +0x30C (word 0xC3) is set or a
+	# mission's +0x11 is not 1. These classes override it with
+	# CBasicQuest_NoOpEvent (92F270): they never block, as the port's
+	# compiled quests already do not (no compiled initializer sets either).
+	("QNO_CA_GORIA_3", "0x90"): {},
+	("QNO_EU_CONS_6", "0x90"): {},
+	("QNO_EU_EASTEU_9", "0x90"): {},
+	("QNO_EU_EASTEU_12", "0x90"): {},
+	("QNO_EU_EASTEU_15", "0x90"): {},
 	# CQNO_EU_EASTEU_4_OnNpcTalk (8AB930): the base talk behind one story
 	# page, _01 with the reply _02, before the 0x130 offer. Its initializer
 	# (8AB710) pushes no prerequisite: the v1.150 "Link (Stable

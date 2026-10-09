@@ -865,6 +865,26 @@
 		]
 	},
 	{
+		"Codename": "QNO_EU_CONS_6",
+		"MaxCompletions": 1,
+		"MinLevel": 1,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_SPECIAL",
+		"EndNpcCodename": "NPC_EU_UNION1",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_CONS_6_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_CONS_6_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_CONS_6_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_CONS_6_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_CONS_6_04",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_CONS_6_06",
+		"RewardExp": 350,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [],
+		"Objective": 0
+	},
+	{
 		"Codename": "QNO_EU_EASTEU_11",
 		"MaxCompletions": 1,
 		"MinLevel": 5,
@@ -894,6 +914,26 @@
 		]
 	},
 	{
+		"Codename": "QNO_EU_EASTEU_12",
+		"MaxCompletions": 1,
+		"MinLevel": 6,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_WITCH",
+		"EndNpcCodename": "NPC_EU_ADVENTURER",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_12_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_12_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_12_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_12_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_12_04",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_EASTEU_12_06",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 750,
+		"RewardItems": [],
+		"Objective": 0
+	},
+	{
 		"Codename": "QNO_EU_EASTEU_14",
 		"MaxCompletions": 1,
 		"MinLevel": 6,
@@ -921,6 +961,26 @@
 				"Count": 1
 			}
 		]
+	},
+	{
+		"Codename": "QNO_EU_EASTEU_15",
+		"MaxCompletions": 1,
+		"MinLevel": 7,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_WITCH",
+		"EndNpcCodename": "NPC_EU_GENERAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_15_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_15_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_15_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_15_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_15_04",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_EASTEU_15_06",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 750,
+		"RewardItems": [],
+		"Objective": 0
 	},
 	{
 		"Codename": "QNO_EU_EASTEU_4",
@@ -1005,6 +1065,26 @@
 			}
 		],
 		"ExchangeFullSymbol": "SN_TALK_QNO_EU_EASTEU_8_09"
+	},
+	{
+		"Codename": "QNO_EU_EASTEU_9",
+		"MaxCompletions": 1,
+		"MinLevel": 5,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_EU_WITCH",
+		"EndNpcCodename": "NPC_EU_HUNTER",
+		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_9_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_9_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_9_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_9_05",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_EU_EASTEU_9_04",
+		"AcceptNoticeSymbol": "SN_TALK_QNO_EU_EASTEU_9_06",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 750,
+		"RewardItems": [],
+		"Objective": 0
 	},
 	{
 		"Codename": "QNO_KT_ACCESSORY_2",
