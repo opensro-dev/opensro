@@ -416,20 +416,19 @@ func (rt *Runtime) planMonsterKillLoot(
 	}
 	now := time.UnixMilli(nowMs)
 	capacity, passes, _ := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
-	// Port-only, not native: the beta rate scales every drop a kill makes:
-	// the unique prepass, the monster's assigned rewards, the ordinary passes
-	// and the capacity that bounds them, so testers see every item family
-	// (equipment to upgrade, alchemy materials) far more often. 1 is native.
+	// Port-only, not native: the beta rate scales a kill's drops, its
+	// assigned rewards and ordinary passes and the capacity bounding them, so
+	// testers see every item family (equipment to upgrade, alchemy materials)
+	// far more often. 1 is native. The unique prepass runs once: a unique
+	// already drops 5-8 items (a Roc 50-80), and twenty rounds of that would
+	// put over a thousand items on the ground in one burst.
 	rate := max(1, rt.DropPassRate)
 	// Gold keeps its native heap count: the beta gold rate already scales
 	// each heap, and a heap per scaled pass would only litter the ground.
 	goldPasses := passes
 	passes *= rate
 	capacity *= rate
-	var prepared []grounditem.Item
-	for round := 0; round < rate; round++ {
-		prepared = append(prepared, rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})...)
-	}
+	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
 	for round := 0; round < rate && len(prepared) < capacity; round++ {
 		for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
 			if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
