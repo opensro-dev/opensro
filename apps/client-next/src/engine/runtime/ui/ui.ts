@@ -96,7 +96,8 @@ import {
 	mallCategoryIcon,
 	mallPageLayout,
 	mallCurrencyRows,
-	mallQuestionLayout
+	mallQuestionLayout,
+	MALL_ROWS_PER_PAGE
 } from "@/engine/foundation/ui/item-mall-layout";
 import {
 	quickslotCooldownQuads,
@@ -18205,7 +18206,25 @@ export function createUi(
 					}
 					const infoOrigin = mallControl( root, 90 ).rect;
 					const info = data.windows.ifitemmallmyinfo!;
-					nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [ 10, 11, 12, 14, 18 ] );
+					// CIFItemMallMyInfo_OnCreate (6BDA60) always hides the money sign
+					// (5); on an English client (GameConfig +0x138 language 4, the
+					// type.txt Language this port ships) it also hides the Point row
+					// (17 box, 18 value, 19 "P", 22 caption).
+					nativePage( info, ox + infoOrigin[0], oy + infoOrigin[1], [
+						5,
+						10,
+						11,
+						12,
+						14,
+						17,
+						18,
+						19,
+						22
+					] );
+					// 6BDA60 disables Buy silk (7) and Coupon (9) only when their link
+					// strings are shorter than 5; v1.150's open retail web pages.
+					// Deliberate deviation, port-only, not native: there is no shop to
+					// link to, so both stay disabled.
 					for ( const id of [ 7, 9 ] ) {
 						const node = mallControl( info, id );
 						authoredLabeledButton(
@@ -18243,8 +18262,7 @@ export function createUi(
 							[ 10, next.session?.character ],
 							[ 11, game.progression?.level ],
 							[ 12, game.itemMall?.silk ],
-							[ 14, game.itemMall?.giftSilk ],
-							[ 18, game.itemMall?.points ]
+							[ 14, game.itemMall?.giftSilk ]
 						] as const
 					) {
 						authoredText(
@@ -18438,10 +18456,17 @@ export function createUi(
 						}
 
 						const row = data.windows.ifitemmallshopslot!;
-						for ( let index = 0; index < state.offers.length; index++ ) {
-							const offer = state.offers[index]!;
+						for ( let index = 0; index < MALL_ROWS_PER_PAGE; index++ ) {
+							const offer = state.offers[index];
 							const origin = mallControl( shop, 61 + index ).rect;
 							const rx = sx + origin[0], ry = sy + origin[1];
+							if ( !offer ) {
+								// CIFItemMallShopSlot_ApplyVisibilityAndButtonStates (6C9420):
+								// an empty slot hides its bar, name, price, silk mark, icon and
+								// buttons, but the slot and its background (50) stay.
+								authoredChrome( mallControl( row, 50 ), rx, ry );
+								continue;
+							}
 							nativePage( row, rx, ry, [ 8, 10, 11 ] );
 							authoredText( mallControl( row, 11 ), rx, ry, hudCopy( offer.name ) );
 							authoredText( mallControl( row, 10 ), rx, ry, String( offer.silk ) );
