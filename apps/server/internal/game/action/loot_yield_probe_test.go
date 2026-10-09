@@ -1,12 +1,13 @@
 /*
 ===========================================================================
 
-loot_yield_probe_test.go - what a level-80 kill drops, per thousand kills
+loot_yield_probe_test.go - what a synthetic level-80 kill drops, per kill
 
 A measurement, not a regression: issue #461 reports the yield before and
 after the ISRO-R loot merge. Runs only with SRO_LOOT_YIELD_PROBE=1 and the
-shipped item references, and logs gold heaps, equipment and other items per
-kill at the native rate and at the beta rate.
+shipped item references, and logs gold heaps, equipment and other stacks per
+kill at the native rate and at the beta rate. The fixture is a Mangnyang with
+its level changed to 80, not a sample of all production level-80 monsters.
 
 ===========================================================================
 */
@@ -35,7 +36,8 @@ TestLootYieldProbe
 
 Kills one level-80 monster yieldProbeKills times through planMonsterKillLoot
 with a seeded roll and the shipped item references, at rate 1 (native) and
-20 (the beta default), and logs the per-kill yield by family.
+20 (the beta default), and logs raw stack counts and per-kill yield.
+Six decimal places keep a nonzero low-frequency result from rounding to zero.
 ================
 */
 func TestLootYieldProbe(t *testing.T) {
@@ -55,19 +57,24 @@ func TestLootYieldProbe(t *testing.T) {
 		gold, equipment, other := 0, 0, 0
 		for kill := 0; kill < yieldProbeKills; kill++ {
 			for _, drop := range rt.planMonsterKillLoot(c, target, pose, rt.Now().UnixMilli()) {
-				ref, _ := items.ItemRefByCodename(drop.Codename)
-				switch {
-				case drop.IsGold():
+				if drop.IsGold() {
 					gold++
-				case ref != nil && ref.TypeIDs[1] == 1:
+					continue
+				}
+				ref, found := items.ItemRefByCodename(drop.Codename)
+				if !found || ref == nil {
+					t.Fatalf("drop references unknown item %q", drop.Codename)
+				}
+				if ref.TypeIDs[1] == 1 {
 					equipment++
-				default:
+				} else {
 					other++
 				}
 			}
 		}
 		perKill := func(n int) float64 { return float64(n) / yieldProbeKills }
-		t.Logf("rate %2d: %.3f gold heaps, %.3f equipment, %.3f other items per kill (%d kills, level %d)",
-			rate, perKill(gold), perKill(equipment), perKill(other), yieldProbeKills, yieldProbeLevel)
+		t.Logf("rate %2d: %.6f gold heaps, %.6f equipment, %.6f other stacks per kill; totals=%d/%d/%d (%d kills, fixture=%s, level=%d, seed=%d/%d)",
+			rate, perKill(gold), perKill(equipment), perKill(other), gold, equipment, other,
+			yieldProbeKills, target.Ref.Codename, yieldProbeLevel, yieldProbeSeed, rate)
 	}
 }
