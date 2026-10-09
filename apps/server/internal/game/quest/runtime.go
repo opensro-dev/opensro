@@ -213,6 +213,9 @@ func objectiveMet(c *enterworld.Character, def *Definition, record enterworld.Ac
 	case ObjectiveTalk:
 		return true
 	case ObjectiveDelivery:
+		if def.HandOverNpcCodename != "" {
+			return handedOver(record)
+		}
 		return deliveryMet(c, def)
 	case ObjectiveCollect:
 		return heldCollectCount(c, def) >= def.CollectCount
@@ -480,7 +483,17 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 			continue
 		}
 
-		if active && questNpcMatches(def, def.EndNpcCodename, npcCodename) && (def.Objective == ObjectiveTalk || objectiveMet(character, def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])) {
+		if active && def.HandOverNpcCodename == npcCodename && !handedOver(character.ActiveQuests[activeQuestIndex(character, def.RefID)]) {
+			// 91CA00 at the mission's own NPC: the hand-over, or its
+			// not-delivered line while the items are missing.
+			if deliveryMet(character, def) {
+				completes = append(completes, NpcOption{Codename: handOverToken(def.Codename), TitleSymbol: def.TitleSymbol, PromptSymbol: def.HandOverSymbol, Complete: true})
+			} else if def.NotAchievedSymbol != "" {
+				completes = append(completes, NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: def.NotAchievedSymbol, Informational: true})
+			}
+			continue
+		}
+		if active && rewardNpcMatches(def, npcCodename) && (def.Objective == ObjectiveTalk || objectiveMet(character, def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])) {
 			if len(def.RewardChoices) > 0 {
 				completes = append(completes, rewardChoiceOptions(def, country)...)
 				continue
@@ -775,6 +788,7 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 				}
 			}
 			consume = append(consume, captureSupplyCleanup(character, def)...)
+			consume = append(consume, exchangeReturns(character, def)...)
 			consume = append(consume, questToolCleanup(character, def)...)
 			var grants []inventory.ItemAmount
 			for _, r := range rewardItemsWithChoice(def, choice) {

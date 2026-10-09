@@ -127,6 +127,14 @@ func questTarget(c *enterworld.Character, current *Definition, record enterworld
 	if current.DeliveryNpcCodename != "" && heldCollectCount(c, current) < current.CollectCount {
 		target = journalTarget{NpcMarker{Codename: current.DeliveryNpcCodename, State: markerStateReport}, current.deliveryNpcRef}
 	}
+	// A two-leg delivery sends the player to its hand-over NPC first.
+	if current.HandOverNpcCodename != "" && !handedOver(record) {
+		state := uint8(markerStateInProgress)
+		if deliveryMet(c, current) {
+			state = markerStateReport
+		}
+		target = journalTarget{NpcMarker{Codename: current.HandOverNpcCodename, State: state}, current.handOverNpcRef}
+	}
 	return target
 }
 
@@ -185,6 +193,9 @@ func (d *Definitions) ResolveJournalNpcs(refID func(codename string) (uint32, bo
 			return err
 		}
 		if def.deliveryNpcRef, err = resolve(def, def.DeliveryNpcCodename); err != nil {
+			return err
+		}
+		if def.handOverNpcRef, err = resolve(def, def.HandOverNpcCodename); err != nil {
 			return err
 		}
 		for i := range def.Stages {

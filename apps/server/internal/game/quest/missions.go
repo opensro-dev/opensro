@@ -241,7 +241,8 @@ items unless the mission keeps them (QuestSpec.DeliveryKeepsItems).
 */
 func collectionConsumption(def *Definition) []inventory.ItemAmount {
 	if def.Objective == ObjectiveDelivery {
-		if def.DeliveryKeepsItems {
+		// A hand-over already took the items at its own NPC.
+		if def.DeliveryKeepsItems || def.HandOverNpcCodename != "" {
 			return nil
 		}
 		return deliveryAmounts(def)
@@ -285,6 +286,11 @@ func refreshMissions(c *enterworld.Character, def *Definition, record enterworld
 		next := BuildActiveQuestRecord(m, progress).Contents[0]
 		if len(old.Contents) == 1 {
 			next.CompletionReached = next.CompletionReached || missionCompletionReached(old.Contents[0])
+		}
+		// A handed-over delivery stays complete in the journal: no later
+		// inventory change undoes 91CA00's latch.
+		if m.Objective == ObjectiveDelivery && next.CompletionReached {
+			next.Kind = 0
 		}
 		if len(old.Contents) != 1 || old.Contents[0].Tag != next.Tag || old.Contents[0].Kind != next.Kind || !slices.Equal(old.Contents[0].ObjectiveValues, next.ObjectiveValues) {
 			changed = true

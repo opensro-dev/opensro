@@ -148,7 +148,7 @@ class QuestTextEvidenceTests(unittest.TestCase):
 		sql = {"QUEST": sql_reward() | {"items": [], "inventorySlots": 0}}
 		for written, kept in ((None, False), (1, False), (0, True)):
 			with self.subTest(written=written):
-				fields = {"0x9": 3, "0x15": "NPC_END", "0x19": 1, "0x1a": 1, "0x42": "ITEM_LEATHER", "0xc0": "SN_HAND_OVER"}
+				fields = {"0x9": 3, "0x15": "NPC_END", "0x19": 1, "0x1a": 1, "0x42": "ITEM_LEATHER", "0xc0": "SN_HAND_OVER", "0x110": 1}
 				if written is not None:
 					fields["0x111"] = written
 				quest = {
@@ -159,6 +159,36 @@ class QuestTextEvidenceTests(unittest.TestCase):
 				self.assertEqual(spec.get("DeliveryKeepsItems", False), kept)
 				self.assertNotIn(None, spec.values())
 
+
+	# ================
+	# test_two_leg_delivery_hands_over_then_reports_to_the_start_npc
+	#
+	# +0x110 clear (the 872040 default): 91CA00 latches at the mission NPC
+	# and gives +0x6A/+0x93/+0x6B back; the quest pays at its start NPC with
+	# the ACHIEVED word. +0x110 set keeps the one-leg turn-in.
+	# ================
+	def test_two_leg_delivery_hands_over_then_reports_to_the_start_npc(self):
+		text = {"objectives": {}, "reward": advertised_rewards("")}
+		sql = {"QUEST": sql_reward() | {"items": [], "inventorySlots": 0}}
+		fields = {
+			"0x9": 3, "0x15": "NPC_HAND_OVER", "0x19": 1, "0x1a": 1, "0x42": "ITEM_FIRECRACKERS",
+			"0xc0": "SN_HAND_OVER", "0x6a": 1, "0x6b": 1, "0x93": "ITEM_RECEIPT", "0xc8": "SN_EXCHANGE_FULL",
+		}
+		quest = {
+			"words": {"0x130": "SN_OFFER", "0x134": "SN_ACHIEVED"}, "lists": {}, "overrides": [],
+			"tables": {"0xc4": {"0x8": "NPC_START"}}, "missions": [{"fields": fields}],
+		}
+		spec = project("QUEST", quest, text, sql)
+		self.assertEqual((spec["HandOverNpcCodename"], spec["HandOverSymbol"]), ("NPC_HAND_OVER", "SN_HAND_OVER"))
+		self.assertEqual((spec["EndNpcCodename"], spec["CompletePromptSymbol"]), ("NPC_START", "SN_ACHIEVED"))
+		self.assertEqual(spec["ExchangeItems"], [{"ItemCodename": "ITEM_RECEIPT", "Count": 1}])
+		self.assertEqual(spec["ExchangeFullSymbol"], "SN_EXCHANGE_FULL")
+		one_leg = project("QUEST", quest | {"missions": [{"fields": fields | {"0x110": 1}}]}, text, sql)
+		self.assertNotIn("HandOverNpcCodename", one_leg)
+		self.assertEqual((one_leg["EndNpcCodename"], one_leg["CompletePromptSymbol"]), ("NPC_HAND_OVER", "SN_HAND_OVER"))
+		quest["words"].pop("0x134")
+		with self.assertRaisesRegex(Unsupported, "achieved line"):
+			project("QUEST", quest, text, sql)
 
 if __name__ == "__main__":
 	unittest.main()

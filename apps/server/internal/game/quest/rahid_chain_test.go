@@ -52,7 +52,7 @@ The row npc shows for code, if any.
 */
 func npcRow(rt *Runtime, c *enterworld.Character, code, npc string) (NpcOption, bool) {
 	for _, row := range rt.OptionsForNpc(c, npc) {
-		token, _, _ := parseBranchToken(strings.TrimPrefix(row.Codename, sideTalkPrefix))
+		token, _, _ := parseBranchToken(strings.TrimPrefix(strings.TrimPrefix(row.Codename, sideTalkPrefix), handOverPrefix))
 		if base, _, _ := parseStageToken(token); base == code {
 			return row, true
 		}

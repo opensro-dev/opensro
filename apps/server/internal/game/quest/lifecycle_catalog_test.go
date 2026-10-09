@@ -291,6 +291,16 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 					return true
 				})
 				restart()
+				if def.HandOverNpcCodename != "" {
+					// A two-leg delivery pays only once its items are handed over.
+					if _, err := complete(); err == nil {
+						t.Fatal("two-leg delivery paid before its hand-over")
+					}
+					if _, err := rt.AdvanceNpcQuest(character, handOverToken(def.Codename), def.HandOverNpcCodename); err != nil {
+						t.Fatal(err)
+					}
+					restart()
+				}
 			case ObjectiveParallel:
 				for i := range def.Objectives {
 					if _, err := complete(); err == nil {

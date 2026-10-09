@@ -60,11 +60,11 @@
 		"MaxCompletions": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_POTION",
-		"EndNpcCodename": "NPC_CH_FERRY2",
+		"EndNpcCodename": "NPC_CH_POTION",
 		"OfferPromptSymbol": "SN_TALK_QNO_CH_POTION_2_02",
 		"AcceptResponseSymbol": "SN_TALK_QNO_CH_POTION_2_03",
 		"DenyResponseSymbol": "SN_TALK_QNO_CH_POTION_2_04",
-		"CompletePromptSymbol": "SN_TALK_QNO_CH_POTION_2_08",
+		"CompletePromptSymbol": "SN_TALK_QNO_CH_POTION_2_10",
 		"RequiredQuests": [],
 		"NotAchievedSymbol": "SN_TALK_QNO_CH_POTION_2_06",
 		"InventoryFullSymbol": "SN_TALK_QNO_CH_POTION_2_05",
@@ -79,7 +79,9 @@
 				"ItemCodename": "ITEM_QNO_CH_POTION_2_01",
 				"Count": 1
 			}
-		]
+		],
+		"HandOverNpcCodename": "NPC_CH_FERRY2",
+		"HandOverSymbol": "SN_TALK_QNO_CH_POTION_2_08"
 	},
 	{
 		"Codename": "QNO_CH_PRIEST_1",
@@ -375,11 +377,11 @@
 		"MaxCompletions": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_CH_SHAMAN",
-		"EndNpcCodename": "NPC_CH_INDIA",
+		"EndNpcCodename": "NPC_CH_SHAMAN",
 		"OfferPromptSymbol": "SN_TALK_QNO_CH_SHAMAN_2_01",
 		"AcceptResponseSymbol": "SN_TALK_QNO_CH_SHAMAN_2_02",
 		"DenyResponseSymbol": "SN_TALK_QNO_CH_SHAMAN_2_03",
-		"CompletePromptSymbol": "SN_TALK_QNO_CH_SHAMAN_2_07",
+		"CompletePromptSymbol": "SN_TALK_QNO_CH_SHAMAN_2_09",
 		"RequiredQuests": [
 			"QNO_CH_SHAMAN_1"
 		],
@@ -394,6 +396,14 @@
 		"DeliveryItems": [
 			{
 				"ItemCodename": "ITEM_QNO_CH_SHAMAN_1",
+				"Count": 1
+			}
+		],
+		"HandOverNpcCodename": "NPC_CH_INDIA",
+		"HandOverSymbol": "SN_TALK_QNO_CH_SHAMAN_2_07",
+		"ExchangeItems": [
+			{
+				"ItemCodename": "ITEM_QNO_CH_SHAMAN_2_01",
 				"Count": 1
 			}
 		]
@@ -705,11 +715,11 @@
 		"MaxCompletions": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_EU_WITCH",
-		"EndNpcCodename": "NPC_EU_SMITH",
+		"EndNpcCodename": "NPC_EU_WITCH",
 		"OfferPromptSymbol": "SN_TALK_QNO_EU_EASTEU_8_01",
 		"AcceptResponseSymbol": "SN_TALK_QNO_EU_EASTEU_8_02",
 		"DenyResponseSymbol": "SN_TALK_QNO_EU_EASTEU_8_03",
-		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_8_06",
+		"CompletePromptSymbol": "SN_TALK_QNO_EU_EASTEU_8_10",
 		"RequiredQuests": [
 			"QNO_EU_EASTEU_7"
 		],
@@ -732,18 +742,27 @@
 				"ItemCodename": "ITEM_QNO_EU_EASTEU_7_01",
 				"Count": 1
 			}
-		]
+		],
+		"HandOverNpcCodename": "NPC_EU_SMITH",
+		"HandOverSymbol": "SN_TALK_QNO_EU_EASTEU_8_06",
+		"ExchangeItems": [
+			{
+				"ItemCodename": "ITEM_QNO_EU_EASTEU_8_01",
+				"Count": 1
+			}
+		],
+		"ExchangeFullSymbol": "SN_TALK_QNO_EU_EASTEU_8_09"
 	},
 	{
 		"Codename": "QNO_RM_FLYSHIP1_2",
 		"MaxCompletions": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_RM_FLYSHIP1",
-		"EndNpcCodename": "NPC_RM_YOUNGWOMAN1",
+		"EndNpcCodename": "NPC_RM_FLYSHIP1",
 		"OfferPromptSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_01",
 		"AcceptResponseSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_02",
 		"DenyResponseSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_03",
-		"CompletePromptSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_07",
+		"CompletePromptSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_09",
 		"RequiredQuests": [
 			"QNO_RM_FLYSHIP1_1"
 		],
@@ -765,18 +784,20 @@
 				"ItemCodename": "ITEM_QNO_RM_FLYSHIP1_2_01",
 				"Count": 1
 			}
-		]
+		],
+		"HandOverNpcCodename": "NPC_RM_YOUNGWOMAN1",
+		"HandOverSymbol": "SN_TALK_QNO_RM_FLYSHIP1_2_07"
 	},
 	{
 		"Codename": "QNO_WC_ACCESSORY_3",
 		"MaxCompletions": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_ACCESSORY",
-		"EndNpcCodename": "NPC_CH_ACCESSORY",
+		"EndNpcCodename": "NPC_WC_ACCESSORY",
 		"OfferPromptSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_01",
 		"AcceptResponseSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_02",
 		"DenyResponseSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_03",
-		"CompletePromptSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_06",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_07",
 		"RequiredQuests": [
 			"QNO_WC_ACCESSORY_2"
 		],
@@ -797,6 +818,14 @@
 		"DeliveryItems": [
 			{
 				"ItemCodename": "ITEM_QNO_WC_ACCESSORY_3_01",
+				"Count": 1
+			}
+		],
+		"HandOverNpcCodename": "NPC_CH_ACCESSORY",
+		"HandOverSymbol": "SN_TALK_QNO_WC_ACCESSORY_3_06",
+		"ExchangeItems": [
+			{
+				"ItemCodename": "ITEM_QNO_WC_ACCESSORY_3_02",
 				"Count": 1
 			}
 		]
@@ -997,11 +1026,11 @@
 		"MaxCompletions": 1,
 		"KindByte": 1,
 		"StartNpcCodename": "NPC_WC_SOLDIER_EA2",
-		"EndNpcCodename": "NPC_CH_GENARAL",
+		"EndNpcCodename": "NPC_WC_SOLDIER_EA2",
 		"OfferPromptSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_01",
 		"AcceptResponseSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_02",
 		"DenyResponseSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_03",
-		"CompletePromptSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_06",
+		"CompletePromptSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_07",
 		"RequiredQuests": [
 			"QNO_WC_SOLDIER_EA2_2"
 		],
@@ -1040,7 +1069,9 @@
 				"ItemCodename": "ITEM_QNO_WC_SOLDIER_EA2_3_01",
 				"Count": 2
 			}
-		]
+		],
+		"HandOverNpcCodename": "NPC_CH_GENARAL",
+		"HandOverSymbol": "SN_TALK_QNO_WC_SOLDIER_EA2_3_06"
 	},
 	{
 		"Codename": "QSP_CA_EXINVENTORY_2",

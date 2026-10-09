@@ -236,6 +236,17 @@ type QuestSpec struct {
 	// OfferAcceptRowSymbol replaces the offer's yes/no with this one row,
 	// which accepts: 897680 accepts on _01's SN_TALK_COMMON_NEXT.
 	OfferAcceptRowSymbol string
+	// HandOverNpcCodename makes a delivery two legs (mission +0x110 clear,
+	// the 872040 default). 91CA00 takes the items at this NPC after
+	// HandOverSymbol (+0xC0), gives ExchangeItems back (+0x6A count, +0x93
+	// codenames, +0x6B quantities) and latches the mission. The reward then
+	// waits at EndNpcCodename, the start NPC the achieved-now line names, or
+	// back here: CBasicQuest_vf154 pays at either NPC of the quest's table.
+	// ExchangeFullSymbol (+0xC8) answers a bag without room for the exchange.
+	HandOverNpcCodename string
+	HandOverSymbol      string
+	ExchangeItems       []RewardItemLead
+	ExchangeFullSymbol  string
 }
 
 // curatedQuestSpecs is the curated table. SMALL BY DESIGN: the starter
@@ -378,6 +389,7 @@ type Definition struct {
 	CompletedByIDs         []uint32
 	RequiredActiveQuestIDs []uint32
 	RequiredAnyQuestIDs    []uint32
+	handOverNpcRef         uint32
 }
 
 /*
@@ -532,7 +544,7 @@ func LoadDefinitions(catalog *Catalog, items enterworld.ItemRefSource) (*Definit
 		if err := loadDelivery(def, items); err != nil {
 			return nil, err
 		}
-		if err := validateAcceptanceItems(spec, items); err != nil {
+		if err := validateDeliveryExtras(spec, items); err != nil {
 			return nil, err
 		}
 		if err := loadStages(def, items); err != nil {

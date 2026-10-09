@@ -202,6 +202,24 @@ def delivery_items(text, mission):
 
 
 # ================
+# exchange_items
+#
+# What a two-leg hand-over gives back (91CA00): +0x6A (byte) the number of
+# items, +0x93 their codenames and +0x6B their quantities, stride four.
+# ================
+def exchange_items(fields):
+	count = fields.get("0x6a", 0)
+	items = []
+	for i in range(count):
+		item = fields.get(hex(0x93 + 4 * i))
+		quantity = fields.get(hex(0x6b + 4 * i))
+		if not isinstance(item, str) or not isinstance(quantity, int) or quantity <= 0:
+			raise Unsupported("hand-over exchange item unavailable")
+		items.append({"ItemCodename": item, "Count": quantity})
+	return items
+
+
+# ================
 # project_mission
 #
 # One gather or kill mission as a MissionSpec-shaped row.
@@ -353,6 +371,20 @@ def project(code, quest, text, sql):
 			# as the mission constructor (872040) leaves it.
 			if fields.get("0x111", 1) == 0:
 				spec["DeliveryKeepsItems"] = True
+			# +0x110 clear (the 872040 default): the hand-over only latches
+			# the mission, and the quest pays where the achieved-now line
+			# sends the player, its start NPC, with the ACHIEVED word.
+			if fields.get("0x110", 0) == 0 and "EndNpcCodename" not in behaviour:
+				achieved = word(quest, MENU_ACHIEVED)
+				if not achieved:
+					raise Unsupported("two-leg delivery without an achieved line")
+				spec.update({"HandOverNpcCodename": npc, "HandOverSymbol": talk,
+					"EndNpcCodename": start, "CompletePromptSymbol": achieved})
+				exchange = exchange_items(fields)
+				if exchange:
+					spec["ExchangeItems"] = exchange
+				if isinstance(fields.get("0xc8"), str):
+					spec["ExchangeFullSymbol"] = fields["0xc8"]
 	elif kinds <= {MISSION_GATHER, MISSION_KILL}:
 		rows = [project_mission(text, m) for m in missions]
 		if len(rows) == 1:
