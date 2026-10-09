@@ -145,7 +145,8 @@ variable "beta_mastery" {
 
 # beta_silk gives every account an Item Mall silk allowance, refilled at each
 # world entry and never stored, so testers can try the mall (BUG-062). "off"
-# restores native balances; "on" is 100000, or set an amount.
+# restores native balances (items already bought stay in inventories); "on"
+# is 100000, or set an amount.
 variable "beta_silk" {
   type    = string
   default = "100000"

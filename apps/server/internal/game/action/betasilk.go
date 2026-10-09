@@ -11,7 +11,10 @@ before the account's own silk.
 
 The allowance lives only in this process. It never reaches the store, so
 switching back is unsetting the variable and restarting the game world:
-every balance is then exactly the native one, with nothing to undo.
+every silk balance is then exactly the native one. What testers bought
+with the allowance stays bought: those items are ordinary inventory rows,
+and the store keeps no record of which silk paid for them. Each world
+entry refills the full amount, so a relog is a fresh allowance.
 
 ===========================================================================
 */
