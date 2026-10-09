@@ -160,10 +160,11 @@ variable "party_masteries" {
 }
 
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
-# multiplies skill EXP by beta_skill_exp_rate on top, rolls drop passes
-# beta_drop_rate times, multiplies gold heaps by beta_gold_rate and makes a
-# rare (SoX) equipment drop beta_rare_rate times as likely. "off" restores the
-# native rates.
+# multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
+# rewards and ordinary drop passes beta_drop_rate times over (the unique
+# prepass and the gold heap count stay native), multiplies gold heaps by
+# beta_gold_rate and makes a rare (SoX) equipment drop beta_rare_rate times as
+# likely. "off" restores the native rates.
 variable "beta_growth" {
   type    = string
   default = "on"
