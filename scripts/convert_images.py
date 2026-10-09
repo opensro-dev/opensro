@@ -12,6 +12,7 @@ Roots come from sro_paths.py.
 from __future__ import annotations
 
 import csv
+import io
 import os
 import shutil
 import struct
@@ -81,36 +82,43 @@ def main() -> int:
     jobs = build_jobs()
     print(f"Conversion processes: {jobs} (SRO_BUILD_JOBS)")
 
-    with MANIFEST_PATH.open("w", newline="", encoding="utf-8") as manifest_file:
-        writer = csv.writer(manifest_file)
-        writer.writerow(["source", "output", "kind", "bytes"])
+    # The manifest is written only when it changes: a run that converts
+    # nothing leaves its mtime, so the build's stat fingerprints over the
+    # intermediate tree (the resource lane memo) stay hits.
+    manifest = io.StringIO(newline="")
+    writer = csv.writer(manifest)
+    writer.writerow(["source", "output", "kind", "bytes"])
 
-        # Results come back in input order, so the manifest is identical
-        # whatever the process count.
-        with ProcessPoolExecutor(max_workers=jobs) as pool:
-            results = pool.map(convert_one, assets, [force_convert] * len(assets), chunksize=CONVERT_CHUNK)
-            for index, (asset, (status, detail)) in enumerate(zip(assets, results), start=1):
-                if status == "failed":
-                    failed.append((asset, detail))
+    # Results come back in input order, so the manifest is identical
+    # whatever the process count.
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        results = pool.map(convert_one, assets, [force_convert] * len(assets), chunksize=CONVERT_CHUNK)
+        for index, (asset, (status, detail)) in enumerate(zip(assets, results), start=1):
+            if status == "failed":
+                failed.append((asset, detail))
+            else:
+                if status == "skipped":
+                    skipped += 1
                 else:
-                    if status == "skipped":
-                        skipped += 1
-                    else:
-                        ok += 1
-                    writer.writerow(
-                        [
-                            asset.relative.as_posix(),
-                            asset.output.relative_to(OUTPUT_ROOT).as_posix(),
-                            asset.kind,
-                            detail,
-                        ]
-                    )
+                    ok += 1
+                writer.writerow(
+                    [
+                        asset.relative.as_posix(),
+                        asset.output.relative_to(OUTPUT_ROOT).as_posix(),
+                        asset.kind,
+                        detail,
+                    ]
+                )
 
-                if index == 1 or index % 500 == 0 or index == len(assets):
-                    elapsed = time.monotonic() - start
-                    print(
-                        f"[{index}/{len(assets)}] converted={ok} skipped={skipped} failed={len(failed)} elapsed={elapsed:.1f}s"
-                    )
+            if index == 1 or index % 500 == 0 or index == len(assets):
+                elapsed = time.monotonic() - start
+                print(
+                    f"[{index}/{len(assets)}] converted={ok} skipped={skipped} failed={len(failed)} elapsed={elapsed:.1f}s"
+                )
+
+    data = manifest.getvalue().encode("utf-8")
+    if not MANIFEST_PATH.exists() or MANIFEST_PATH.read_bytes() != data:
+        MANIFEST_PATH.write_bytes(data)
 
     if failed:
         failure_path = GENERATED_ROOT / "intermediate" / "image-conversion-failures.txt"
