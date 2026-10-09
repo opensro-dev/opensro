@@ -33,9 +33,11 @@ const (
 	cosSummonPetLevel            uint8  = 0xa5
 	cosSummonDuplicateFamily     uint8  = 0xa9
 	cosSummonCancelDistance      uint8  = 0x97
-	cosItemStateOpcode           uint16 = 0x3645
-	cosItemStateMask             uint8  = 0x40
-	cosItemLeaseMask             uint8  = 0x80
+	// UIIT_MSG_COSPETERR_CANT_SUMMON_FREEBATTLE (item-use code 0xB9).
+	cosSummonFreeBattle uint8  = 0xb9
+	cosItemStateOpcode  uint16 = 0x3645
+	cosItemStateMask    uint8  = 0x40
+	cosItemLeaseMask    uint8  = 0x80
 	// Spawn sub-state 1: the pet was just called out (854CD0 plays
 	// SYSTEM_PET_APPEAR and the summon sound for it).
 	cosSpawnFresh uint8 = 1
@@ -110,6 +112,15 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 		if pet.Summoned {
 			return rt.togglePersistentCompanion(use, row.Summon, result)
 		}
+	}
+	// INFERENCE: v1.188's pet summoner (493100) has no free-battle check, but
+	// the v1.150 client answers item-use code 0xB9 with "Under free battle
+	// situation, growth pets cannot be summoned", so the v1.150 server refused
+	// a growth (attack) pet to an owner wearing a free-battle cape. Dismissing
+	// one already out stays allowed, as only the summon is named.
+	if ref.TidWord>>11 == attackPetBand && rt.inFreeBattle(c) {
+		*result = itemUseFailure(cosSummonFreeBattle)
+		return false
 	}
 	for _, other := range c.Companions() {
 		otherRef, valid := rt.cosReference(other)

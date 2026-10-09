@@ -442,3 +442,32 @@ func TestCancellationPublishesSelectedSummonerWithDormantGIDCollision(t *testing
 		t.Fatal("cancel omitted summoner state")
 	}
 }
+
+/*
+================
+TestGrowthPetsCannotBeSummonedInFreeBattle
+
+The v1.150 client's item-use code 0xB9: "Under free battle situation,
+growth pets cannot be summoned". An owner wearing a free-battle cape is
+refused the attack (growth) pet and nothing changes; the pickup pet is still
+summoned, and without the cape the growth pet is too.
+================
+*/
+func TestGrowthPetsCannotBeSummonedInFreeBattle(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	cape := &enterworld.ItemRef{Codename: "TEST_PVP_CAPE", RefObjID: 63000, TypeIDs: [4]int64{3, 1, 7, 5},
+		NativeFields: enterworld.NewNativeFields(map[string]float64{freeBattleGroupField: 1})}
+	refs.staticItemSource[cape.Codename] = cape
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 8, RefObjID: cape.RefObjID, Codename: cape.Codename, TypeFlags: cape.TypeFlags(), StackCount: 1})
+	rt, _ := newTestRuntime(c, refs)
+	attack := refs.staticItemSource["SUMMON_ATTACK"]
+	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(3).U8(23).U16(attack.TypeFlags()).Payload(), cosSummonFreeBattle)
+	useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
+	c.MissionInventory = c.MissionInventory[:len(c.MissionInventory)-1]
+	for i := range c.MissionInventory {
+		if c.MissionInventory[i].Slot == 8 {
+			t.Fatal("fixture: the cape is still worn")
+		}
+	}
+	useSummonerFixture(t, rt, c, 23, attack)
+}

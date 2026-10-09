@@ -60,10 +60,12 @@ const (
 	jobDressStep uint8 = 2
 
 	// Category 1 notices (v1.188 0x18xx low bytes).
-	jobWearErrBagFull    uint8 = 0x07
-	jobWearErrSwap       uint8 = 0x46
-	jobWearErrPending    uint8 = 0x47
-	jobWearErrBattle     uint8 = 0x48
+	jobWearErrBagFull uint8 = 0x07
+	jobWearErrSwap    uint8 = 0x46
+	jobWearErrPending uint8 = 0x47
+	jobWearErrBattle  uint8 = 0x48
+	// UIIT_MSG_STRGERR_CANT_DETACH_FREEBATTLEITEM_IN_BATTLESTATE.
+	capeStripErrBattle   uint8 = 0x77
 	jobWearErrCart       uint8 = 0x5A
 	jobWearErrNoPosition uint8 = 0xA2
 	jobWearErrNoJob      uint8 = 0x9E
@@ -235,6 +237,13 @@ func (rt *Runtime) jobStripRefusal(division string, c *enterworld.Character, des
 	switch {
 	case mountedOnCOS(c):
 		return jobWearErrRide
+	case c.BattleUntilMs > now && rt.inFreeBattle(c):
+		// INFERENCE: v1.188's CanUnequip (497510) gates job suits only (its
+		// free-battle cape is a requested mode, not a worn item), but the
+		// v1.150 client names a worn cape's own battle refusal: 0x77, "Cannot
+		// unequip voucher during combat". The rest of the strip order is the
+		// suit's.
+		return capeStripErrBattle
 	case c.BattleUntilMs > now:
 		return jobWearErrBattle
 	case rt.summonedVehicle(c):

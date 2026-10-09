@@ -82,6 +82,19 @@ func (rt *Runtime) hostilePlayerCapes(caster, target *enterworld.Character) bool
 
 /*
 ================
+inFreeBattle
+
+CGObjPC_IsInFreeBattle (4959D0): the player wears a free-battle cape, group
+1..5 (+0x21EC).
+================
+*/
+func (rt *Runtime) inFreeBattle(c *enterworld.Character) bool {
+	_, cape := rt.playerRelationEquipment(c)
+	return cape >= 1 && cape <= freeBattleAllOpponents
+}
+
+/*
+================
 companionTeamRefusal
 
 CGObjCOS_ValidateAttackTargetThroughOwner (528F40): a companion never
