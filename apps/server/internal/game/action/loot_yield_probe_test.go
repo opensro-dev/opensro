@@ -25,9 +25,10 @@ import (
 
 // The probe's sample: kills per rate and the level of killer and monster.
 const (
-	yieldProbeKills = 10000
-	yieldProbeLevel = 80
-	yieldProbeSeed  = 461
+	yieldProbeKills     = 10000
+	yieldProbeLevel     = 80
+	yieldProbeSeed      = 461
+	yieldProbeRollRange = 1 << 15
 )
 
 /*
@@ -51,7 +52,8 @@ func TestLootYieldProbe(t *testing.T) {
 		level := int64(yieldProbeLevel)
 		c.Level = &level
 		source := rand.New(rand.NewPCG(yieldProbeSeed, uint64(rate)))
-		rt.DropRoll = func() (uint32, error) { return source.Uint32(), nil }
+		// DropRoll has the same inclusive 0..32767 domain as combat.Roll32767.
+		rt.DropRoll = func() (uint32, error) { return source.Uint32N(yieldProbeRollRange), nil }
 		rt.DropPassRate = rate
 		pose := monster.Pose{RegionID: target.Spawn.RegionID, X: target.Spawn.X, Y: target.Spawn.Y, Z: target.Spawn.Z}
 		gold, equipment, other := 0, 0, 0
