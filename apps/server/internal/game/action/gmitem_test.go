@@ -56,3 +56,32 @@ func TestMakeItemAuthorityDropAndNormalPickup(t *testing.T) {
 	}
 	t.Fatal("created item did not reach inventory")
 }
+
+/*
+================
+TestMakeItemEquipmentStartsAtItsVarianceDurability
+
+A GM-made weapon has zero variance bits, so it starts at the durability
+that variance gives (the range floor), never above the maximum its
+tooltip and repairs use. Its plus is capped at 8.
+================
+*/
+func TestMakeItemEquipmentStartsAtItsVarianceDurability(t *testing.T) {
+	rt, _, c, _ := newCombatTestRuntime(t, 100)
+	deps := rt.deps.(*enterworld.Deps)
+	floor := int64(130)
+	ref := &enterworld.ItemRef{RefObjID: 4012, Codename: "ITEM_CH_BLADE_09_C_RARE", TypeIDs: [4]int64{3, 1, 6, 3},
+		MaxDurability: 159, VarianceIntMin1c0: &floor}
+	refs := rt.deps.ItemReferences().(staticItemSource)
+	refs[ref.Codename] = ref
+	deps.Items = gmItemSource{refs}
+	rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {}
+	c.GMPrivilege = true
+	if !rt.MakeGMItem(testDivision, c.Name, ref.RefObjID, 11) {
+		t.Fatal("the GM item was not made")
+	}
+	item := rt.Ground.All(testDivision)[0]
+	if item.Durability != 130 || item.Plus != 8 {
+		t.Fatalf("made durability %d plus %d, want 130 and 8", item.Durability, item.Plus)
+	}
+}

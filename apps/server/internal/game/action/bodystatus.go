@@ -9,6 +9,7 @@ package action
 
 import (
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
@@ -100,7 +101,10 @@ func (rt *Runtime) MakeGMItem(division, name string, id uint32, amount uint8) bo
 		if item.Plus > 8 {
 			item.Plus = 8
 		}
-		item.Durability = uint32(clampInt64(ref.MaxDurability, 0, 0xffffffff))
+		// The item is made with zero variance bits, so its durability is
+		// the maximum that variance gives (the floor of the range), as a
+		// monster drop's is (monsterloot.go). Dur_U would read 159/130.
+		item.Durability = combat.DurabilityFromVariance(ref, 0)
 	}
 	var added grounditem.Item
 	committed := rt.deps.Update(c, "gm-ground-drop", func() bool {

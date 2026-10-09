@@ -93,11 +93,13 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 		const n = int( lo, hi, index, perPlus );
 		if ( n ) add( key, `${magic ? modifier( n, ...magic ) : n} (+${percent( n, read( lo ), read( hi ) )}%)` );
 	};
+	// 555720 prints the enhanced stat; only its (+%) grade takes the plus
+	// back off, so the grade measures the variance alone.
 	const floatRow = ( key: string, lo: string, hi: string, index: number, perPlus: string ) => {
 		const n = float( lo, hi, index, perPlus );
 		if ( n ) {
-			const shown = Math.fround( n - plus * read( perPlus ) );
-			add( key, `${shown.toFixed( 1 )} (+${percent( shown, read( lo ), read( hi ) )}%)` );
+			const graded = Math.fround( n - plus * read( perPlus ) );
+			add( key, `${n.toFixed( 1 )} (+${percent( graded, read( lo ), read( hi ) )}%)` );
 		}
 	};
 	const attack = (
@@ -111,14 +113,17 @@ export function itemTooltipStats( item: InventoryItem, text: ( symbol: string ) 
 	) => {
 		const high = int( maxLo, maxHi, index, perPlus );
 		if ( high ) {
-			const p = Math.trunc( plus * read( perPlus ) ),
-				a = int( minLo, minHi, index, perPlus ) - p,
+			// 555A6C..555A93 print SItemStats' enhanced minimum and maximum;
+			// the plus comes off only for the grade.
+			const low = int( minLo, minHi, index, perPlus ),
+				p = Math.trunc( plus * read( perPlus ) ),
+				a = low - p,
 				b = high - p,
 				frac = ( n: number, lo: string, hi: string ) =>
 					read( lo ) === read( hi ) ? 1 : (Math.fround( n >>> 0 ) - read( lo )) / (read( hi ) - read( lo ));
 			add(
 				key,
-				`${a} ~ ${b} (+${Math.trunc( (frac( a, minLo, minHi ) + frac( b, maxLo, maxHi )) * .5 * 100 )}%)`
+				`${low} ~ ${high} (+${Math.trunc( (frac( a, minLo, minHi ) + frac( b, maxLo, maxHi )) * .5 * 100 )}%)`
 			);
 		}
 	};

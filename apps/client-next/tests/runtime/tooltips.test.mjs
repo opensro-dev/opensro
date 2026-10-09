@@ -255,7 +255,8 @@ test("weapon variance, opt level and broken durability use native display rules"
 		tooltip: { fields }
 	};
 	const rows = itemTooltipStats( item, s => s );
-	assert.equal( rows.find( r => r.value.startsWith( "PARAM_PA" ) ).value, "PARAM_PA 41 ~ 51 (+100%)" );
+	// 555720 prints the +5 stats (5 x 3 more) and grades the variance alone.
+	assert.equal( rows.find( r => r.value.startsWith( "PARAM_PA" ) ).value, "PARAM_PA 56 ~ 66 (+100%)" );
 	assert.equal( rows.find( r => r.value.startsWith( "PARAM_DUR" ) ).color, 0xffff4a4a );
 });
 test("tooltip wrapping retains row colors and blank separators across viewport edge placement", () => {
