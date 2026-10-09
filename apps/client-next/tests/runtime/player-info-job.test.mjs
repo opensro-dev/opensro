@@ -57,5 +57,8 @@ test("grade 7 is full, and a -1 threshold reads unsigned", () => {
 
 test("rows without all three job columns are left out", () => {
 	assert.equal( THRESHOLDS[3], undefined );
+	const missing = playerInfoJob( { type: 1, grade: 3, exp: 5, alias: "" }, 0, THRESHOLDS, copy );
+	assert.equal( missing.exp, "0% (5)" );
+	assert.equal( missing.fraction, 0 );
 	assert.deepEqual( THRESHOLDS[1], [ 1000, 2000, 3000 ] );
 });
