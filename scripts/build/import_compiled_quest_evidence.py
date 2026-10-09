@@ -173,7 +173,11 @@ def parse_initializer(text):
 	mission, mission_vars = None, set()
 	# A table's flag word is set through a pointer copy:
 	# "int32_t* eax_8 = arg3[0xc2]" then "*eax_8 |= 1". The bits are
-	# recorded OR-ed together as the table's "flags".
+	# recorded OR-ed together as the table's "flags", for every table:
+	# the generator reads 0xC2's; 0xC4 (the quest NPCs) sets bit 1 on its
+	# own, which nothing reads yet. An alias is never cleared: each copy
+	# names one table for the rest of the initializer, and a later copy
+	# into the same variable rebinds it.
 	table_aliases = {}
 	for raw in lines:
 		line = raw.strip()

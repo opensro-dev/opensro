@@ -25,7 +25,8 @@ TestSunsetWitchPagesBeforeTheOffer
 func TestSunsetWitchPagesBeforeTheOffer(t *testing.T) {
 	licensed.RequireGameData(t)
 	rt := expansionRuntime(t)
-	// The shipped questdata row offers it from level 12.
+	// Level 12 is the questdata level: the plain offer mark. The class's
+	// MinLevel (2) opens it earlier under the red scroll (min_level_test.go).
 	level, gold := int64(12), int64(0)
 	c := &enterworld.Character{ID: 11, Name: "stablehand", ModelCodename: "CHAR_EU_MAN_NOBLE", Level: &level, Gold: &gold}
 	offer, offered := npcRow(rt, c, "QNO_EU_EASTEU_4", "NPC_EU_WITCH")
