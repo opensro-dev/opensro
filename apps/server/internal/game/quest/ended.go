@@ -40,10 +40,11 @@ func questEnded(c *enterworld.Character, id uint32) bool {
 ================
 markQuestsEnded
 
-Adds each id once; returns whether the list changed. An active record is
-left alone: every ending this port authors targets quests whose own
-prerequisites keep them inactive at that moment (the KT fork), so the
-native overwrite of an active record's state never arises.
+Adds each id once; returns whether the list changed. The id is added even
+for an active quest, and its active record is left in place: native
+SetQuestState(5) would overwrite it, but every ending this port authors
+targets quests whose own prerequisites keep them inactive at that moment
+(the KT fork), so the case never arises.
 ================
 */
 func markQuestsEnded(c *enterworld.Character, ids []uint32) bool {
@@ -118,14 +119,26 @@ func (rt *Runtime) RefuseQuestOffer(character *enterworld.Character, codename st
 		return OpResult{}, fmt.Errorf("quest refuse: %s has no refusal", codename)
 	}
 	var refusal error
-	rt.deps.Update(character, "quest-refuse", func() bool {
+	settled := false
+	changed := rt.deps.Update(character, "quest-refuse", func() bool {
 		if character.DeletePending || !offerAvailable(character, def) {
 			refusal = fmt.Errorf("quest refuse: %s is not on offer", codename)
 			return false
 		}
-		return markQuestsEnded(character, def.RefuseEndsQuestIDs)
+		if !markQuestsEnded(character, def.RefuseEndsQuestIDs) {
+			// Already ended: the refusal stands without a write.
+			settled = true
+			return false
+		}
+		return true
 	})
-	return OpResult{}, refusal
+	if refusal != nil {
+		return OpResult{}, refusal
+	}
+	if !changed && !settled {
+		return OpResult{}, fmt.Errorf("quest refuse: character is no longer authoritative")
+	}
+	return OpResult{}, nil
 }
 
 /*

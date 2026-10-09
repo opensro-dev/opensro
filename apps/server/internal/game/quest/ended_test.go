@@ -20,6 +20,7 @@ import (
 	"slices"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/licensed"
 )
@@ -238,5 +239,41 @@ func TestEndedQuestsSurviveJSON(t *testing.T) {
 	}
 	if !slices.Equal(back.EndedQuestIds, []uint32{7, 9}) {
 		t.Fatalf("ended quests after reload = %v", back.EndedQuestIds)
+	}
+}
+
+/*
+================
+lostAuthority
+
+A dependency door that runs no transaction: the character's authority
+moved elsewhere between the page and the choice.
+================
+*/
+type lostAuthority struct{ Dependencies }
+
+/*
+================
+Update
+================
+*/
+func (lostAuthority) Update(*domain.Character, string, func() bool) bool { return false }
+
+/*
+================
+TestKhotanRefusalReportsLostAuthority
+
+A refusal whose transaction never ran is an error, so the NPC never
+answers _05 for an ending that was not recorded.
+================
+*/
+func TestKhotanRefusalReportsLostAuthority(t *testing.T) {
+	rt, c := ktForkFixture(t, 3)
+	rt.deps = lostAuthority{rt.deps}
+	if _, err := rt.RefuseQuestOffer(c, ktSmith2); err == nil {
+		t.Fatal("a refusal without a transaction reported success")
+	}
+	if len(c.EndedQuestIds) != 0 {
+		t.Fatalf("ended %v without a transaction", c.EndedQuestIds)
 	}
 }
