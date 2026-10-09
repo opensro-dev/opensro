@@ -4,7 +4,7 @@
 slotEffectPublication.test.mjs - focused slot effects keep packed metadata current
 
 Run the real publisher against an isolated generated tree. A loose catalog
-must not hide an older packed copy, and unrelated compacted members survive.
+must not hide an older packed copy, and unrelated packed members survive.
 
 ===========================================================================
 */
@@ -70,7 +70,11 @@ for ( const encoding of [ "identity", "gzip", "both" ] ) {
 			hashCachePath: path.join( temporary, "hash-cache.json" ),
 			groups: [
 				{ name: "game-data", load: "startup", files: [ ...catalogFiles, SENTINEL ] },
-				{ name: "game-images", load: "startup", files: [ UNRELATED_IMAGE ] }
+				{ name: "game-images", load: "startup", files: [ UNRELATED_IMAGE ] },
+				// The full build creates every image group (assetPackOwnership
+				// imagePackGroup); the slot-effect images are their first members.
+				{ name: "native-ui", load: "startup", files: [] },
+				{ name: "ui-icons", load: "startup", files: [] }
 			]
 		} );
 		const before = JSON.parse( await readFile( built.outputPath, "utf8" ) );
