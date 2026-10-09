@@ -1353,6 +1353,258 @@
 		]
 	},
 	{
+		"Codename": "QNO_TRADE_CH_SPECIAL2_1",
+		"MaxCompletions": 1,
+		"JobCondition": {
+			"Job": 1,
+			"Required": true
+		},
+		"MinLevel": 20,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_CH_SPECIAL2",
+		"EndNpcCodename": "NPC_CH_SPECIAL2",
+		"OfferPromptSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_12",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_06",
+		"InventoryFullSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_07",
+		"AchievedNowSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_13",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_COS_T_CAMEL1",
+				"Count": 5
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_CH_SPECIAL2_1_01",
+				"Objective": 4,
+				"HandOverNpcCodename": "NPC_CH_KISAENG3",
+				"HandOverSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_09",
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_CH_SPECIAL2_1_01",
+						"Count": 1
+					}
+				],
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_CH_SPECIAL2_1_02",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_11",
+				"NotAchievedSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_10",
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_05"
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_CH_SPECIAL2_1_02",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_CH_WHITETIGER"
+				],
+				"KillCount": 20,
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_04"
+			}
+		],
+		"RewardFullSymbol": "SN_TALK_QNO_TRADE_CH_SPECIAL2_1_08"
+	},
+	{
+		"Codename": "QNO_TRADE_RM_SPECIAL_1",
+		"MaxCompletions": 1,
+		"JobCondition": {
+			"Job": 1,
+			"Required": true
+		},
+		"MinLevel": 70,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_RM_SPECIAL",
+		"EndNpcCodename": "NPC_RM_SPECIAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_12",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_06",
+		"InventoryFullSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_07",
+		"AchievedNowSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_13",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_COS_T_COW1",
+				"Count": 10
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_RM_SPECIAL_1_01",
+				"Objective": 4,
+				"HandOverNpcCodename": "NPC_RM_YOUNGWOMAN1",
+				"HandOverSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_09",
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_RM_SPECIAL_1_01",
+						"Count": 1
+					}
+				],
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_RM_SPECIAL_1_02",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_11",
+				"NotAchievedSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_10",
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_05"
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_RM_SPECIAL_1_02",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_RM_FEATHERMASK_CLON"
+				],
+				"KillCount": 20,
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_04"
+			}
+		],
+		"RewardFullSymbol": "SN_TALK_QNO_TRADE_RM_SPECIAL_1_08"
+	},
+	{
+		"Codename": "QNO_TRADE_TK_SPECIAL_1",
+		"MaxCompletions": 1,
+		"JobCondition": {
+			"Job": 1,
+			"Required": true
+		},
+		"MinLevel": 60,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_TK_SPECIAL",
+		"EndNpcCodename": "NPC_TK_SPECIAL",
+		"OfferPromptSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_12",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_06",
+		"InventoryFullSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_07",
+		"AchievedNowSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_13",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_COS_T_COW1",
+				"Count": 5
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_TK_SPECIAL_1_01",
+				"Objective": 4,
+				"HandOverNpcCodename": "NPC_KT_SPECIAL",
+				"HandOverSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_09",
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_TK_SPECIAL_1_01",
+						"Count": 1
+					}
+				],
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_TK_SPECIAL_1_02",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_11",
+				"NotAchievedSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_10",
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_05"
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_TK_SPECIAL_1_02",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_TK_EDIMMU_CLON"
+				],
+				"KillCount": 20,
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_04"
+			}
+		],
+		"RewardFullSymbol": "SN_TALK_QNO_TRADE_TK_SPECIAL_1_08"
+	},
+	{
+		"Codename": "QNO_TRADE_WC_SPECIAL2_1",
+		"MaxCompletions": 1,
+		"JobCondition": {
+			"Job": 1,
+			"Required": true
+		},
+		"MinLevel": 30,
+		"KindByte": 1,
+		"StartNpcCodename": "NPC_WC_SPECIAL2",
+		"EndNpcCodename": "NPC_WC_SPECIAL2",
+		"OfferPromptSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_01",
+		"AcceptResponseSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_02",
+		"DenyResponseSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_03",
+		"CompletePromptSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_12",
+		"RequiredQuests": [],
+		"NotAchievedSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_06",
+		"InventoryFullSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_07",
+		"AchievedNowSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_13",
+		"RewardExp": 0,
+		"RewardGold": 0,
+		"RewardSkillExp": 0,
+		"RewardItems": [
+			{
+				"ItemCodename": "ITEM_COS_T_CAMEL2",
+				"Count": 5
+			}
+		],
+		"Objective": 3,
+		"Objectives": [
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_WC_SPECIAL2_1_01",
+				"Objective": 4,
+				"HandOverNpcCodename": "NPC_WC_WAREHOUSE_M",
+				"HandOverSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_09",
+				"DeliveryItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_WC_SPECIAL2_1_01",
+						"Count": 1
+					}
+				],
+				"ExchangeItems": [
+					{
+						"ItemCodename": "ITEM_QNO_TRADE_WC_SPECIAL2_1_02",
+						"Count": 1
+					}
+				],
+				"ExchangeFullSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_11",
+				"NotAchievedSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_10",
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_05"
+			},
+			{
+				"ContentsSymbol": "SN_CON_QNO_TRADE_WC_SPECIAL2_1_02",
+				"Objective": 2,
+				"KillMonsterCodenames": [
+					"MOB_WC_HYEONGCHEON"
+				],
+				"KillCount": 20,
+				"SolePendingSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_04"
+			}
+		],
+		"RewardFullSymbol": "SN_TALK_QNO_TRADE_WC_SPECIAL2_1_08"
+	},
+	{
 		"Codename": "QNO_WC_ACCESSORY_3",
 		"MaxCompletions": 1,
 		"MinLevel": 16,

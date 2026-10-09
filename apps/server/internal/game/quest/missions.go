@@ -57,8 +57,12 @@ type MissionSpec struct {
 	// QuestLua_LoadQuestConfiguration (92A7E8), and neither the deliver handler
 	// nor 91CEB0 reads it; every line reads as that reminder.
 	PendingNoticeSymbol string
-	deliveryRefs        []uint32
-	handOverNpcRef      uint32
+	// SolePendingSymbol is the start NPC's not-achieved line while this
+	// mission is the only one left (the TRADE_*_SPECIAL talks, 8CB8A0,
+	// read record byte 3's mission bits to pick it).
+	SolePendingSymbol string
+	deliveryRefs      []uint32
+	handOverNpcRef    uint32
 }
 
 /*
@@ -161,6 +165,35 @@ func missionDefinition(def *Definition, index int) *Definition {
 		d.NotAchievedSymbol = m.NotAchievedSymbol
 	}
 	return &d
+}
+
+/*
+================
+notAchievedSymbol
+
+The not-achieved line of an active quest: a parallel quest whose one
+remaining mission names its own line answers with that, else the quest's.
+================
+*/
+func notAchievedSymbol(c *enterworld.Character, def *Definition, record enterworld.ActiveQuestRecord) string {
+	if def.Objective != ObjectiveParallel {
+		return def.NotAchievedSymbol
+	}
+	pending := -1
+	for i := range def.Objectives {
+		m := missionDefinition(def, i)
+		if objectiveMet(c, m, missionRecord(record, m)) {
+			continue
+		}
+		if pending >= 0 {
+			return def.NotAchievedSymbol
+		}
+		pending = i
+	}
+	if pending >= 0 && def.Objectives[pending].SolePendingSymbol != "" {
+		return def.Objectives[pending].SolePendingSymbol
+	}
+	return def.NotAchievedSymbol
 }
 
 /*

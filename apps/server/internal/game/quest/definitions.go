@@ -154,6 +154,9 @@ type QuestSpec struct {
 	// vectors at +0x28 and +0x38; CBasicQuest_MeetsPrerequisites 9262A0).
 	RequiredHeldItems    []string
 	RequiredAnyHeldItems []string
+	// JobCondition gates the offer on the dressed job (condition table
+	// 0xC2 flag 0x1000; 9262A0 compares +0x20 with CGObjPC_GetJobState).
+	JobCondition         *JobCondition
 	Stages               []QuestStage
 	MonsterDrop          *MonsterDropRule
 	Codename             string
@@ -240,6 +243,10 @@ type QuestSpec struct {
 	NotAchievedSymbol       string
 	CompletePromptSymbol    string
 	InventoryFullSymbol     string
+	// RewardFullSymbol, when set, answers a full bag at the reward instead
+	// of InventoryFullSymbol, which then speaks only for acceptance (the
+	// TRADE_*_SPECIAL talks hard-code _08 at the pay, word 0x136 elsewhere).
+	RewardFullSymbol string
 	// AchievedNowSymbol is BASIC_MENUSTRING_ACHIEVED_NOW: the banner sent
 	// when the objective first stands complete ("... report to <NPC>").
 	// Script-backed quests take it from achieved_now_generated.json.

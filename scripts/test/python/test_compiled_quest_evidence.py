@@ -89,7 +89,8 @@ class CompiledQuestFieldTests(unittest.TestCase):
 	def test_unported_conditions_are_refused(self):
 		cases = (
 			({"flags": 1, "0x4": 2}, "skip the prerequisites"),
-			({"flags": 0x1003, "0x4": 2}, "condition flag 0x1000"),
+			({"flags": 0x1003, "0x4": 2}, "job condition unavailable"),
+			({"flags": 0x1003, "0x4": 2, "0x20": 1, "0x21": 2}, "job condition unavailable"),
 			({"flags": 0x10003, "0x4": 2}, "condition flag 0x10000"),
 			({"flags": 7, "0x4": 2}, "held-item condition without its items"),
 			({"flags": 7, "0x4": 2, "0x28": [None]}, "held-item condition without its items"),
@@ -99,6 +100,20 @@ class CompiledQuestFieldTests(unittest.TestCase):
 			with self.subTest(table=table):
 				with self.assertRaisesRegex(Unsupported, reason):
 					conditions("QUEST", {"tables": {"0xc2": table}})
+
+	# ================
+	# test_job_condition_follows_its_mode
+	#
+	# 9262A0 flag 0x1000: +0x21 set requires the job +0x20 to be worn
+	# (TRADE_*_SPECIAL); clear, refuses it (Rahid 3 and 4, the thief).
+	# ================
+	def test_job_condition_follows_its_mode(self):
+		trade = {"flags": 0x1003, "0x4": 20, "0x20": 1, "0x21": 1}
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": trade}}),
+			{"JobCondition": {"Job": 1, "Required": True}, "MinLevel": 20})
+		rahid = {"flags": 0x1003, "0x4": 79, "0x20": 2}
+		self.assertEqual(conditions("QUEST", {"tables": {"0xc2": rahid}}),
+			{"JobCondition": {"Job": 2, "Required": False}, "MinLevel": 79})
 
 	# ================
 	# test_held_items_project_both_vectors

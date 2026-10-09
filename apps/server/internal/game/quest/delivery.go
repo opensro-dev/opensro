@@ -76,6 +76,22 @@ func inventoryRefusal(def *Definition, err error) error {
 
 /*
 ================
+rewardFullDefinition
+
+The definition whose bag-full line answers a refused reward.
+================
+*/
+func rewardFullDefinition(def *Definition) *Definition {
+	if def.RewardFullSymbol == "" {
+		return def
+	}
+	d := *def
+	d.InventoryFullSymbol = def.RewardFullSymbol
+	return &d
+}
+
+/*
+================
 AdvanceNpcQuest
 
 Uses action's selection-bound NPC identity. The client cannot substitute an

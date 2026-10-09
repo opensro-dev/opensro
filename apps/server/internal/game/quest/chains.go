@@ -50,7 +50,7 @@ func prerequisitesMet(c *enterworld.Character, def *Definition) bool {
 			return false
 		}
 	}
-	if !heldItemsMet(c, def) {
+	if !heldItemsMet(c, def) || !jobConditionMet(c, def.JobCondition) {
 		return false
 	}
 	return len(def.RequiredAnyQuestIDs) == 0 || slices.ContainsFunc(def.RequiredAnyQuestIDs, func(id uint32) bool {
@@ -77,6 +77,33 @@ func heldItemsMet(c *enterworld.Character, def *Definition) bool {
 	return len(def.RequiredAnyHeldItems) == 0 || slices.ContainsFunc(def.RequiredAnyHeldItems, func(code string) bool {
 		return captureItemCount(c, code) > 0
 	})
+}
+
+/*
+================
+JobCondition
+
+9262A0 under flag 0x1000: byte +0x21 set requires the job state
+(CGObjPC_GetJobState 4DDC80, the worn suit's job, zero outside job mode)
+to equal +0x20; clear, to differ from it. The trade quests require a
+dressed trader (1, set); Rahid 3 and 4 refuse a dressed thief (2, clear).
+================
+*/
+type JobCondition struct {
+	Job      uint8
+	Required bool
+}
+
+/*
+================
+jobConditionMet
+================
+*/
+func jobConditionMet(c *enterworld.Character, condition *JobCondition) bool {
+	if condition == nil {
+		return true
+	}
+	return (enterworld.DressedJob(c) == condition.Job) == condition.Required
 }
 
 /*

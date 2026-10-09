@@ -232,6 +232,15 @@ func TestEveryLoadedQuestSurvivesRestartAndCompletesOnce(t *testing.T) {
 						return true
 					})
 				}
+				// A job condition (9262A0 flag 0x1000) that requires a job
+				// refuses the offer until its suit is worn.
+				if def.JobCondition != nil && def.JobCondition.Required {
+					assertIneligible("undressed job")
+					authority.UpdateCharacter(character, "test-job-suit", func() bool {
+						dressJob(character, def.JobCondition.Job)
+						return true
+					})
+				}
 				if _, err := rt.StartQuest(character, acceptToken(def)); err != nil {
 					t.Fatal(err)
 				}

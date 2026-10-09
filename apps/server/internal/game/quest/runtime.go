@@ -524,7 +524,8 @@ func (rt *Runtime) OptionsForNpc(character *enterworld.Character, npcCodename st
 				completes = append(completes, supply)
 				continue
 			}
-			completes = append(completes, NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: def.NotAchievedSymbol, Informational: true})
+			prompt := notAchievedSymbol(character, def, character.ActiveQuests[activeQuestIndex(character, def.RefID)])
+			completes = append(completes, NpcOption{Codename: def.Codename, TitleSymbol: def.TitleSymbol, PromptSymbol: prompt, Informational: true})
 		}
 		if !active {
 			if supply, available := rt.captureSupplyOption(character, def, npcCodename); available {
@@ -795,7 +796,7 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 			}
 			inventoryRows, inventoryFrames, err = rt.PlanInventory(character, consume, grants)
 			if err != nil {
-				refusal = inventoryRefusal(def, err)
+				refusal = inventoryRefusal(rewardFullDefinition(def), err)
 				return false
 			}
 		}
