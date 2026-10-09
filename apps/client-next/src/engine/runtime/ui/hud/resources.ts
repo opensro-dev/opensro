@@ -15,6 +15,7 @@ import { decodePortalCatalog, type PortalCatalog } from "@/engine/foundation/gam
 import { decodeTooltipMasteries, type TooltipMastery } from "@/engine/foundation/ui/mastery-tooltip";
 import { masteryCosts } from "@/engine/foundation/gameplay/skill-catalog";
 import { withdrawalGoldPrices } from "@/engine/foundation/gameplay/withdrawal";
+import { decodeMallNotify, type MallNotify } from "@/engine/foundation/ui/mall-notify";
 import { type JobExpThresholds, jobExpThresholds } from "@/engine/foundation/gameplay/player-info-job";
 import { nativeWindowSections } from "@/engine/foundation/ui/native-window-sections";
 import { partyCharacterCountries } from "@/engine/foundation/gameplay/party-matching";
@@ -57,6 +58,7 @@ interface HudData {
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
 	readonly masteryCosts: Readonly<Record<number, number>>;
 	readonly withdrawalGoldPrices: Readonly<Record<number, number>>;
+	readonly mallNotify: MallNotify;
 	readonly jobExpThresholds: JobExpThresholds;
 	readonly extended: readonly AuthoredLayout[];
 	readonly countries: Readonly<Record<number, number>>;
@@ -186,6 +188,7 @@ export function createHudResources(
 		"ifinventory",
 		"ifequipment",
 		"ifplayerinfo_trijob2",
+		"ifmallnotifywnd",
 		"ifparty",
 		"ifapprenticeship",
 		"ifapprenticeshipslot",
@@ -242,7 +245,8 @@ export function createHudResources(
 			"/assets/data/levelData.json",
 			"/assets/data/skillMasteryData.json",
 			"/assets/data/teleportData.json",
-			"/assets/data/cosPresentation.json"
+			"/assets/data/cosPresentation.json",
+			"/assets/data/mall-notify.json"
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
@@ -321,7 +325,8 @@ export function createHudResources(
 										warm.add( entry.publicPath );
 									}
 								}
-							} else if ( i === layouts.length + 14 ) value = decodeCosReferences( raw );
+							} else if ( i === layouts.length + 15 ) value = decodeMallNotify( raw );
+							else if ( i === layouts.length + 14 ) value = decodeCosReferences( raw );
 							else if ( i === layouts.length + 13 ) value = decodePortalCatalog( raw );
 							else if ( i === layouts.length + 12 ) value = decodeTooltipMasteries( raw );
 							else if ( i === layouts.length + 11 ) {
@@ -393,6 +398,7 @@ export function createHudResources(
 						windowNames.map( ( name, i ) => [ name, values[7 + targetNames.length + i] as AuthoredLayout ] )
 					),
 					tips: values[layouts.length + 2] as readonly MessageTip[],
+					mallNotify: values[layouts.length + 15] as MallNotify,
 					targets: Object.fromEntries(
 						targetNames.map( ( name, i ) => [ name, values[7 + i] as AuthoredLayout ] )
 					),

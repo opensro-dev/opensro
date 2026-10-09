@@ -77,6 +77,7 @@ import {
 } from "./hud/withdrawal";
 import { isRestorationPotion } from "@/engine/foundation/gameplay/withdrawal";
 import { playerInfoJob } from "@/engine/foundation/gameplay/player-info-job";
+import { MALL_NOTIFY_HEIGHT, MALL_NOTIFY_WIDTH, mallNotifyOrigin } from "@/engine/foundation/ui/mall-notify";
 import { createMapTeleport } from "./hud/map-teleport";
 import { SkillSlot_Resolve } from "./hud/skill-slot";
 import { academyRank } from "@/engine/foundation/gameplay/academy";
@@ -510,6 +511,8 @@ const VIDEO_FRAME_LIMIT_SLOT = -3;
 const VIDEO_VISIBLE_ROWS = 6;
 const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
 const ROOT = "/assets/images/Media_extracted/", BUTTON = ROOT + "interface/ifcommon/com_button.png";
+// 683B40 assigns the notice root this texture after creating it.
+const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
@@ -770,6 +773,9 @@ export function createUi(
 	const storagePanel = createStoragePanel();
 	const resurrectionPrompt = createResurrectionPrompt();
 	const itemMall = createItemMall();
+	// CIFMallNotifyWnd (mall-notify.ts): "pending" until the session's first
+	// world entry decides it, as 683B40's +0x6FC latch; then shown or closed.
+	let mallNotice: "pending" | "open" | "closed" = "pending";
 	const windowWarm = createWindowWarm();
 
 	let guideThumbTravel = 0, guideScrollMax = 0, guideIndexMax = 0;
@@ -1900,6 +1906,15 @@ export function createUi(
 		if ( id.startsWith( "item-mall-" ) && itemMall.compactAction( id ) ) {
 			dirty = true;
 			return;
+		}
+		if ( id === "mall-notice-close" || id === "mall-notice-enter" ) {
+			// Button 5 closes the notice; button 4 (UIIT_STT_SILKMALL_DIRECT_ENTER)
+			// enters the mall. INFERENCE: the notice has done its job once the
+			// mall opens, so entering closes it too.
+			mallNotice = "closed";
+			dirty = true;
+			if ( id === "mall-notice-close" ) return;
+			id = "item-mall";
 		}
 		if ( id === "item-mall" ) {
 			if ( view?.gameplay && !view.gameplay.inventoryPending ) sendGameplay( { kind: "mall-open" } );
@@ -5822,6 +5837,14 @@ export function createUi(
 				dirty = true;
 			}
 			if ( disposed ) return null;
+			// 683B40 creates the notice on the session's first world entry only.
+			const sessionPhase = next.session?.phase;
+			if ( sessionPhase !== "world" && sessionPhase !== "disconnected" && sessionPhase !== "reconnecting" ) {
+				mallNotice = "pending";
+			} else if ( sessionPhase === "world" && !next.travel && mallNotice === "pending" && hud.data() ) {
+				mallNotice = hud.data()!.mallNotify.open ? "open" : "closed";
+				dirty = true;
+			}
 			// 0x366A reset -> CGInterface_CloseTransientWindowsOnReset (685400) destroys
 			// the ItemMall section. A world transfer starting is that reset here.
 			if ( next.travel && !view?.travel && itemMall.read().visible ) {
@@ -15413,6 +15436,45 @@ export function createUi(
 					} );
 				}
 				endWindow( admission );
+			}
+			const noticeData = hud.data(), noticeLayout = noticeData?.windows.ifmallnotifywnd;
+			if ( worldVisible && mallNotice === "open" && noticeData && noticeLayout ) {
+				// CIFMallNotifyWnd (6CCC20): the mall_communicate frame, its two titles,
+				// the notice text with TextMargin between lines, and buttons 4 and 5.
+				const [nx, ny] = mallNotifyOrigin( w, h ),
+					notice = noticeData.mallNotify,
+					nodes = Object.values( noticeLayout ),
+					node = ( id: number ) => nodes.find( n => n.id === id );
+				blocks.push( [ nx, ny, MALL_NOTIFY_WIDTH, MALL_NOTIFY_HEIGHT ] );
+				image( [ nx, ny, MALL_NOTIFY_WIDTH, MALL_NOTIFY_HEIGHT ], MALL_NOTICE_FRAME );
+				nativePage( noticeLayout, nx, ny, [ 3, 4, 5 ] );
+				const contents = node( 3 );
+				if ( contents ) {
+					const [cx, cy, cw] = authoredRect( contents, nx, ny ),
+						pitch = contents.rect[3] + notice.lineSpacing;
+					for ( const [i, line] of notice.text.split( "\n" ).entries() ) {
+						quads.push( ...text.quads( line, [ cx, cy + i * pitch, cw, contents.rect[3] ], full, white ) );
+					}
+				}
+				const enter = node( 4 ), exit = node( 5 );
+				if ( enter ) {
+					authoredLabeledButton(
+						enter,
+						nx,
+						ny,
+						"mall-notice-enter",
+						hudCopy( "UIIT_STT_SILKMALL_DIRECT_ENTER" )
+					);
+				}
+				if ( exit ) {
+					authoredLabeledButton(
+						exit,
+						nx,
+						ny,
+						"mall-notice-close",
+						hudCopy( "UIIT_CTL_LETTER_WINDOWSCLOSE" )
+					);
+				}
 			}
 			if (
 				game?.social?.invitation && game.social.invitation.type !== 10 && worldVisible &&

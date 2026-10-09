@@ -451,6 +451,42 @@ test("the underbar mall button is a clickable button and F10 toggles the mall", 
 	}
 });
 
+test("the Item Mall notice opens once per session at world entry, as 683B40", () => {
+	const f = uiFixture();
+	try {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		const shown = ( /** @type {string} */ id ) => {
+			for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+			return !!last?.controls.some( control => control.id === id );
+		};
+		assert.equal( shown( "mall-notice-close" ), true, "CIFMallNotifyWnd after the first world entry" );
+		f.ui.event( { kind: "activate", id: "mall-notice-close" } );
+		assert.equal( shown( "mall-notice-close" ), false, "button 5 closes the notice" );
+		// A world transfer keeps the +0x6FC latch: the notice does not return.
+		f.state.travel = { mode: 1, region: 25000 };
+		shown( "mall-notice-close" );
+		f.state.travel = null;
+		assert.equal( shown( "mall-notice-close" ), false );
+	} finally {
+		f.dispose();
+	}
+	const g = uiFixture();
+	try {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		const shown = ( /** @type {string} */ id ) => {
+			for ( let i = 0; i < 20; i++ ) last = g.ui.step( g.state, 1100 + i * 50 ) ?? last;
+			return !!last?.controls.some( control => control.id === id );
+		};
+		assert.equal( shown( "mall-notice-enter" ), true );
+		g.ui.event( { kind: "activate", id: "mall-notice-enter" } );
+		assert.equal( shown( "item-mall-close" ), true, "button 4 enters the mall" );
+	} finally {
+		g.dispose();
+	}
+});
+
 test("window hotkeys sound on retarget, close once, and preserve sidebar click-only selection", () => {
 	const f = uiFixture();
 	f.ui.step( f.state, 1000 );
