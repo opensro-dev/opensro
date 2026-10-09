@@ -73,6 +73,9 @@ const FOOTPRINT_DDJ = /^effect\/footstep_(sand|snow)\.ddj$/;
 const WORLD_ROOT = path.join( publicRoot, "assets", "world" );
 // Lighter sidecar levels for the large world files these families rewrite.
 const WORLD_SIDECAR_LEVELS = { gzipLevel: 3 };
+// The top-level key a sky-carrying world file spells. The world writers are
+// JSON.stringify, which never escapes a key's characters.
+const SKY_KEY = Buffer.from( '"sky"' );
 const SKILL_UI_SCRIPT = path.join(
 	import.meta.dirname,
 	"..",
@@ -216,6 +219,10 @@ world, file ), which returns true when it changed it. The whole set is
 validated (update may throw) before any file is replaced. Returns the world
 files carrying a sky, changed or not, so an interrupted run is repaired by
 refreshing their sidecars too.
+
+Six of ~8000 world files carry a sky; a file whose bytes never spell the
+key cannot, so only those are parsed (the full parse was 2.5 GiB of JSON,
+~6 s per call).
 ================
 */
 async function rewriteWorldSkies( update ) {
@@ -223,7 +230,9 @@ async function rewriteWorldSkies( update ) {
 	for ( const name of await readdir( WORLD_ROOT, { recursive: true } ) ) {
 		if ( !name.endsWith( ".json" ) ) continue;
 		const file = path.join( WORLD_ROOT, name );
-		const value = JSON.parse( await readFile( file, "utf8" ) );
+		const bytes = await readFile( file );
+		if ( !bytes.includes( SKY_KEY ) ) continue;
+		const value = JSON.parse( bytes.toString( "utf8" ) );
 		if ( !value.sky ) continue;
 		published.push( file );
 		if ( update( value.sky, value, file ) ) changes.push( [ file, JSON.stringify( value ) ] );

@@ -24,6 +24,7 @@ export default {
 		"scripts/test/assets/nativeCharacterTextures.test.mjs",
 		"scripts/test/assets/fontAtlasPublication.test.mjs",
 		"scripts/test/assets/buildSharedUtilities.test.mjs",
+		"scripts/test/assets/publicWrite.test.mjs",
 		"scripts/test/assets/generatedArtifactArchive.test.mjs",
 		"scripts/test/assets/jsonAssetCompression.test.mjs",
 		"scripts/test/assets/vatPipeline.test.mjs",

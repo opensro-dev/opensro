@@ -38,4 +38,7 @@ for line in a['rows']:
   if sid not in chain_targets:
    skills.append({'id':sid,'group':int(c[1]),'level':int(c[2]),'mastery':int(c[4]),'row':int(c[16]),'column':int(c[17]),'icon':'icon/'+c[18] if c[18].endswith('.ddj') else '', 'name':c[19], 'study':c[28] if len(c)>28 and c[28]!='xxx' else ''})
 out={'version':1,'sources':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in [source,mastery]},'masteries':masters,'groups':groups,'skills':skills}
-p=base/'skillUi.json';p.write_text(json.dumps(out,separators=(',',':'))+'\n',encoding='utf-8');print(len(masters),len(groups),len(skills),p.stat().st_size)
+p=base/'skillUi.json';text=json.dumps(out,separators=(',',':'))+'\n'
+# An unchanged projection keeps its mtime, so the build's stat fingerprints and sidecar checks stay fresh.
+if not p.exists() or p.read_text(encoding='utf-8')!=text: p.write_text(text,encoding='utf-8')
+print(len(masters),len(groups),len(skills),p.stat().st_size)

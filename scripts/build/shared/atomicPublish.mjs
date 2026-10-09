@@ -1,4 +1,16 @@
-import { readFile, rename, rm, writeFile } from "node:fs/promises";
+/*
+===========================================================================
+
+atomicPublish.mjs - replace a public file whole, or not at all
+
+A tool's output reaches the public tree through a sibling temp file and a
+rename, so a reader never sees half a file. Windows holds a file a reader
+has open, so the rename retries and finally falls back to an in-place
+write. Every publish claims its target (publicationLedger.mjs).
+
+===========================================================================
+*/
+import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { describeHeldFile } from "./pythonRun.mjs";
@@ -6,10 +18,14 @@ import { claimPublicFile } from "./publicationLedger.mjs";
 
 const WINDOWS_RENAME_ATTEMPTS = 30;
 
-/**
- * Publish a tool-produced temporary file with stable-mtime handling and the
- * repository's Windows destination-lock retry/fallback policy.
- */
+/*
+================
+publishFileFromTemp
+
+Publish a tool-produced temporary file with stable-mtime handling and the
+repository's Windows destination-lock retry/fallback policy.
+================
+*/
 export async function publishFileFromTemp( temporaryPath, targetPath, options = {} ) {
 	const bytes = await readFile( temporaryPath );
 	if ( options.skipIfUnchanged !== false ) {
@@ -54,16 +70,48 @@ export async function publishFileFromTemp( temporaryPath, targetPath, options = 
 	return true;
 }
 
-/** Write bytes to a sibling temp file before publishing them. */
+/*
+================
+publishBytesAtomically
+
+Write bytes to a sibling temp file before publishing them. A target that
+already holds the bytes is left alone (no temp file, mtime kept), so its
+sidecars and the stat fingerprints stay fresh; skipIfUnchanged: false
+forces the write.
+================
+*/
 export async function publishBytesAtomically( targetPath, bytes, options = {} ) {
+	if ( options.skipIfUnchanged !== false && (await holdsBytes( targetPath, bytes )) ) {
+		claimPublicFile( targetPath );
+		return false;
+	}
 	const temporaryPath = options.temporaryPath ?? `${targetPath}.tmp`;
 	await writeFile( temporaryPath, bytes );
-	return publishFileFromTemp( temporaryPath, targetPath, {
-		...options,
-		skipIfUnchanged: options.skipIfUnchanged ?? false
-	} );
+	return publishFileFromTemp( temporaryPath, targetPath, { ...options, skipIfUnchanged: false } );
 }
 
+/*
+================
+holdsBytes
+
+Whether targetPath holds exactly bytes; a missing target does not.
+================
+*/
+async function holdsBytes( targetPath, bytes ) {
+	try {
+		if ( (await stat( targetPath )).size !== Buffer.byteLength( bytes ) ) return false;
+		return (await readFile( targetPath )).equals( Buffer.isBuffer( bytes ) ? bytes : Buffer.from( bytes ) );
+	} catch ( error ) {
+		if ( error?.code === "ENOENT" ) return false;
+		throw error;
+	}
+}
+
+/*
+================
+decorateHeldFileError
+================
+*/
 /**
  * @param {NodeJS.ErrnoException} error
  * @param {string} targetPath

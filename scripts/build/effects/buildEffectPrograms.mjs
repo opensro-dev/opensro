@@ -279,7 +279,7 @@ modifiers of its stage models (CICATStruct_SetVisualStage loads them).
 */
 export function collectStructureEffectReferences(
 	text = fs.readFileSync( path.join( retailTextdataRoot, "atstructeffect.txt" ), "utf16le" ),
-	known = codename => characterCodenames().has( codename ),
+	known = knownCharacter(),
 	readModel = resourcePath => parseCharacterBsr( fs.readFileSync( dataAssetPath( resourcePath ) ), resourcePath )
 ) {
 	const references = new Map();
@@ -308,11 +308,15 @@ export function collectStructureEffectReferences(
 
 /*
 ================
-characterCodenames
+knownCharacter
+
+Whether characterdata defines a codename. The rows are read once here: a
+lookup per structure row that reloaded them cost ~1.2 s of every build.
 ================
 */
-function characterCodenames() {
-	return new Set( loadCharacterDataRows( retailTextdataRoot, { codenamePattern: /./ } ).keys() );
+function knownCharacter() {
+	const codenames = new Set( loadCharacterDataRows( retailTextdataRoot, { codenamePattern: /./ } ).keys() );
+	return codename => codenames.has( codename );
 }
 
 /*

@@ -8,6 +8,8 @@ normalized values after filtering. Source neighbors wrap on both axes.
 
 ===========================================================================
 """
+import io
+import os
 import sys
 from PIL import Image
 
@@ -26,7 +28,17 @@ def convert(source, destination):
 			u = int((pixels[(x - 1) % width, y][2] - pixels[(x + 1) % width, y][2]) / 2)
 			v = int((pixels[x, (y - 1) % height][2] - pixels[x, (y + 1) % height][2]) / 2)
 			result[x, y] = (u + 128, v + 128, 0, 255)
-	output.save(destination)
+	# An unchanged map keeps its mtime, so the build's stat fingerprints
+	# and sidecar checks stay fresh.
+	encoded = io.BytesIO()
+	output.save(encoded, format="PNG")
+	data = encoded.getvalue()
+	if os.path.exists(destination):
+		with open(destination, "rb") as existing:
+			if existing.read() == data:
+				return
+	with open(destination, "wb") as target:
+		target.write(data)
 
 
 if __name__ == "__main__":

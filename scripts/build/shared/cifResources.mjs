@@ -1,3 +1,14 @@
+/*
+===========================================================================
+
+cifResources.mjs - the CIF/UI cluster of the resource build
+
+Resinfo layout bundles, the runtime image allowlists, the sprite catalog
+and the image copy pass that publishes every UI image they reference.
+Split verbatim from resourcePipeline.mjs (2026-07-28).
+
+===========================================================================
+*/
 // Split verbatim from resourcePipeline.mjs (2026-07-28): CIF/UI cluster -
 // resinfo layout bundles, runtime image allowlists and the image copy pass.
 import { mkdir, readFile } from "node:fs/promises";
@@ -27,7 +38,16 @@ import {
 } from "./skillPaneImageReferences.mjs";
 import { collectWorldMapImageReferences } from "./worldMapImageReferences.mjs";
 import { collectGuideImageReferences } from "./guideImageReferences.mjs";
+import { mapWithConcurrency } from "./asyncUtils.mjs";
 
+// Icon copies in flight at once; each is a stat, a compare and rarely a copy.
+const ICON_COPY_CONCURRENCY = 32;
+
+/*
+================
+buildCifResources
+================
+*/
 export async function buildCifResources() {
 	const copiedImages = new Set();
 	const spriteCatalog = { resourcesByDdjPath: {} };
@@ -72,20 +92,15 @@ export async function buildCifResources() {
 		spriteCatalog
 	);
 
-	for ( const ddjPath of await collectItemDataIconDdjReferences() ) {
-		await copyItemDataIconImage( ddjPath, copiedImages );
-	}
-
-	for ( const ddjPath of await collectActionWndDataIconDdjReferences() ) {
-		await copyItemDataIconImage( ddjPath, copiedImages );
-	}
-
-	for ( const ddjPath of await collectSkillDataIconDdjReferences() ) {
-		await copyItemDataIconImage( ddjPath, copiedImages );
-	}
-
-	for ( const ddjPath of await collectCosCharacterIconDdjReferences() ) {
-		await copyItemDataIconImage( ddjPath, copiedImages );
+	for (
+		const collect of [
+			collectItemDataIconDdjReferences,
+			collectActionWndDataIconDdjReferences,
+			collectSkillDataIconDdjReferences,
+			collectCosCharacterIconDdjReferences
+		]
+	) {
+		await copyItemDataIconImages( await collect(), copiedImages );
 	}
 
 	return {
@@ -94,10 +109,16 @@ export async function buildCifResources() {
 	};
 }
 
+/*
+================
+buildWorldMapImageResources
+
+Publish the complete data-driven/tiled world-map image closure. Unlike the
+broad historical CIF allowlists, every dependency here is required: a
+missing converted source is a broken resource build, not an optional skin.
+================
+*/
 /**
- * Publish the complete data-driven/tiled world-map image closure. Unlike the
- * broad historical CIF allowlists, every dependency here is required: a
- * missing converted source is a broken resource build, not an optional skin.
  * @param {{ copiedImages?: Set<string>, spriteCatalog?: { resourcesByDdjPath: Record<string, unknown> } }} [options]
  */
 export async function buildWorldMapImageResources( {
@@ -112,7 +133,14 @@ export async function buildWorldMapImageResources( {
 	return { ...closure, copiedImages };
 }
 
-/** @param {{ copiedImages?: Set<string>, spriteCatalog?: { resourcesByDdjPath: Record<string, unknown> } }} [options] */
+/*
+================
+buildGuideImageResources
+================
+*/
+/**
+ * @param {{ copiedImages?: Set<string>, spriteCatalog?: { resourcesByDdjPath: Record<string, unknown> } }} [options]
+ */
 export async function buildGuideImageResources( { copiedImages = new Set(), spriteCatalog } = {} ) {
 	// 6668f0 swaps the collapsed handle; the index opens categories dynamically.
 	// These images are absent from static resinfo and inline PML references.
@@ -137,6 +165,11 @@ export async function buildGuideImageResources( { copiedImages = new Set(), spri
 	return { references, copiedImages };
 }
 
+/*
+================
+registerSpriteResource
+================
+*/
 export async function registerSpriteResource( catalog, ddjPath ) {
 	const resource = await describeSpriteResource( ddjPath );
 	if ( resource ) {
@@ -144,6 +177,11 @@ export async function registerSpriteResource( catalog, ddjPath ) {
 	}
 }
 
+/*
+================
+buttonStateDdjPaths
+================
+*/
 function buttonStateDdjPaths( ddjPath ) {
 	const normalized = normalizeAssetPath( ddjPath );
 	const withoutExt = normalized.replace( /\.[^.]+$/, "" );
@@ -155,17 +193,21 @@ function buttonStateDdjPaths( ddjPath ) {
 	];
 }
 
-/**
- * Wire-item icons, data-driven: every icon the extracted itemdata rows can
- * reference - the FIRST .ddj column per row (referenceData.mjs reads the
- * same field), rooted under the native `icon\` base exactly like the wire
- * snapshot emitters (`icon\${row.icon}`). The native client resolves any of
- * these through the PK2 at draw time, so the browser build publishes them
- * all instead of the hand-carried starter subset in
- * runtimeCifImageReferences; referenced icons whose DDJ never shipped in
- * this Media.pk2 stay absent and ride the native icon_default fallback
- * (CIFSlotWithHelp_SetSpritePathWithFallback sub_55b450), same as retail.
- */
+/*
+================
+collectItemDataIconDdjReferences
+
+Wire-item icons, data-driven: every icon the extracted itemdata rows can
+reference - the FIRST .ddj column per row (referenceData.mjs reads the
+same field), rooted under the native `icon\` base exactly like the wire
+snapshot emitters (`icon\${row.icon}`). The native client resolves any of
+these through the PK2 at draw time, so the browser build publishes them
+all instead of the hand-carried starter subset in
+runtimeCifImageReferences; referenced icons whose DDJ never shipped in
+this Media.pk2 stay absent and ride the native icon_default fallback
+(CIFSlotWithHelp_SetSpritePathWithFallback sub_55b450), same as retail.
+================
+*/
 async function collectItemDataIconDdjReferences() {
 	const iconPaths = new Set();
 	for ( const fileName of await listTextDataShardNames( textDataDir, /^itemdata.*\.txt$/i ) ) {
@@ -183,17 +225,21 @@ async function collectItemDataIconDdjReferences() {
 	return [ ...iconPaths ].sort();
 }
 
-/**
- * CIFAction record icons, data-driven: the icon .ddj column of every
- * actionwnddata.txt record (the 0xcec870 action-data table the REAL
- * CIFAction_OnCreate sub_58b720 folds over). Natively these are runtime
- * references the record loader resolves through the PK2 at
- * SetupActionButton time, so the resinfo copy pass never sees them
- * (ifaction.txt authors every slot with DDJ="") - publish them from the
- * same shipped table the bridge record seed consumes. The commented-out
- * record rows (// prefix, e.g. 1005 autotarget) are skipped exactly like
- * the native parser skips them.
- */
+/*
+================
+collectActionWndDataIconDdjReferences
+
+CIFAction record icons, data-driven: the icon .ddj column of every
+actionwnddata.txt record (the 0xcec870 action-data table the REAL
+CIFAction_OnCreate sub_58b720 folds over). Natively these are runtime
+references the record loader resolves through the PK2 at
+SetupActionButton time, so the resinfo copy pass never sees them
+(ifaction.txt authors every slot with DDJ="") - publish them from the
+same shipped table the bridge record seed consumes. The commented-out
+record rows (// prefix, e.g. 1005 autotarget) are skipped exactly like
+the native parser skips them.
+================
+*/
 async function collectActionWndDataIconDdjReferences() {
 	const iconPaths = new Set();
 	const raw = await readText( path.join( textDataDir, "actionwnddata.txt" ) );
@@ -212,19 +258,23 @@ async function collectActionWndDataIconDdjReferences() {
 }
 
 /*
- * CIFSkillSlot icons, data-driven: the UI icon-path column (source column
- * 61 -> CSkillData GetData()+0x108, the exact column buildSkillDataAsset.mjs
- * ships) of every skilldata_*.txt record. Natively the slot bind sub_589050
- * (@0x005891ca) assigns that path onto the slot's icon child and the sprite
- * loader resolves it through the PK2 under the icon\ root, lowercased by the
- * parse (sub_811890 flag 1 @0x007f97e2) - publish every icon the shipped
- * rows can reference instead of a hand-carried subset. Icons whose DDJ never
- * shipped in this Media.pk2 (four europe *_base.ddj) stay absent and ride
- * the native icon_default fallback, same as retail.
- *
- * (Plain block comment, not JSDoc: the checkJs parser reads the @0x...
- * native offsets above as malformed JSDoc tags - TS1003.)
- */
+================
+collectSkillDataIconDdjReferences
+
+CIFSkillSlot icons, data-driven: the UI icon-path column (source column
+61 -> CSkillData GetData()+0x108, the exact column buildSkillDataAsset.mjs
+ships) of every skilldata_*.txt record. Natively the slot bind sub_589050
+(@0x005891ca) assigns that path onto the slot's icon child and the sprite
+loader resolves it through the PK2 under the icon\ root, lowercased by the
+parse (sub_811890 flag 1 @0x007f97e2) - publish every icon the shipped
+rows can reference instead of a hand-carried subset. Icons whose DDJ never
+shipped in this Media.pk2 (four europe *_base.ddj) stay absent and ride
+the native icon_default fallback, same as retail.
+
+(Plain block comment, not JSDoc: the checkJs parser reads the @0x...
+native offsets above as malformed JSDoc tags - TS1003.)
+================
+*/
 async function collectSkillDataIconDdjReferences() {
 	const iconPaths = new Set();
 	for ( const fileName of await listTextDataShardNames( textDataDir, /^skilldata_.*\.txt$/i ) ) {
@@ -243,13 +293,17 @@ async function collectSkillDataIconDdjReferences() {
 }
 
 /*
- * COS character icons, data-driven: the RefObjCommon icon column (source
- * column 54 -> +0x154) of every COS reference (TypeID 1/2/3, TID4 band 1..6).
- * CIFCOSStatus_BindCompanion (6AA290) puts it on the status icon slot (id 11)
- * and CIFPetMiniInfo (6B3AD0) on its picture (id 0x14); the sprite loader
- * resolves it under the icon\ root at bind time, so the resinfo pass never
- * sees it.
- */
+================
+collectCosCharacterIconDdjReferences
+
+COS character icons, data-driven: the RefObjCommon icon column (source
+column 54 -> +0x154) of every COS reference (TypeID 1/2/3, TID4 band 1..6).
+CIFCOSStatus_BindCompanion (6AA290) puts it on the status icon slot (id 11)
+and CIFPetMiniInfo (6B3AD0) on its picture (id 0x14); the sprite loader
+resolves it under the icon\ root at bind time, so the resinfo pass never
+sees it.
+================
+*/
 async function collectCosCharacterIconDdjReferences() {
 	const COLUMN_ICON = 54;
 	const iconPaths = new Set();
@@ -273,16 +327,31 @@ async function collectCosCharacterIconDdjReferences() {
 	return [ ...iconPaths ].sort();
 }
 
+/*
+================
+collectSkillMasteryIconDdjReferences
+================
+*/
 async function collectSkillMasteryIconDdjReferences() {
 	const raw = await readText( path.join( textDataDir, "skillmasterydata.txt" ) );
 	return collectSkillMasteryIconDdjReferencesFromRows( raw.split( /\r?\n/ ) );
 }
 
+/*
+================
+collectSkillGroupIconDdjReferences
+================
+*/
 async function collectSkillGroupIconDdjReferences() {
 	const raw = await readText( path.join( textDataDir, "skillgroup.txt" ) );
 	return collectSkillGroupIconDdjReferencesFromRows( raw.split( /\r?\n/ ) );
 }
 
+/*
+================
+copyItemDataIconImage
+================
+*/
 async function copyItemDataIconImage( ddjPath, copiedImages ) {
 	await copyImageReference( ddjPath, copiedImages );
 	const publicPath = imagePublicPath( ddjPath );
@@ -301,6 +370,39 @@ async function copyItemDataIconImage( ddjPath, copiedImages ) {
 	await copyIntoPublicTree( collisionSource, path.join( imagePublicRoot, relativePublic ) );
 	copiedImages.add( publicPath );
 }
+
+/*
+================
+copyItemDataIconImages
+
+copyItemDataIconImage over a list, ICON_COPY_CONCURRENCY at a time: one
+await per icon in sequence made this the slowest step of a warm build under
+load. Each public path is copied once and recorded in list order, so the
+result does not depend on which copy finishes first.
+================
+*/
+async function copyItemDataIconImages( ddjPaths, copiedImages ) {
+	const pending = new Map();
+	for ( const ddjPath of ddjPaths ) {
+		const publicPath = imagePublicPath( ddjPath );
+		if ( !copiedImages.has( publicPath ) && !pending.has( publicPath ) ) pending.set( publicPath, ddjPath );
+	}
+	const copied = new Set();
+	await mapWithConcurrency(
+		[ ...pending.values() ],
+		ICON_COPY_CONCURRENCY,
+		ddjPath => copyItemDataIconImage( ddjPath, copied )
+	);
+	for ( const publicPath of pending.keys() ) {
+		if ( copied.has( publicPath ) ) copiedImages.add( publicPath );
+	}
+}
+
+/*
+================
+buildLayoutBundle
+================
+*/
 async function buildLayoutBundle( sourcePath, copiedImages, cifDefines ) {
 	const raw = await readText( sourcePath );
 	const text = applyCifPreprocessor( raw, cifDefines );
@@ -342,13 +444,17 @@ async function buildLayoutBundle( sourcePath, copiedImages, cifDefines ) {
 }
 
 /*
- * The polymorphic vt+0x34 DDJ/content landing:
- * - complete .ddj paths load that sprite;
- * - CIFButton additionally derives its three visual-state siblings;
- * - prefix paths reach the shared CIFFrame suffix expansion. Missing suffix
- *   files remain absent from the catalog, matching the native null-handle
- *   gate instead of manufacturing a resource.
- */
+================
+expandAuthoredDdjPaths
+
+The polymorphic vt+0x34 DDJ/content landing:
+- complete .ddj paths load that sprite;
+- CIFButton additionally derives its three visual-state siblings;
+- prefix paths reach the shared CIFFrame suffix expansion. Missing suffix
+  files remain absent from the catalog, matching the native null-handle
+  gate instead of manufacturing a resource.
+================
+*/
 function expandAuthoredDdjPaths( node ) {
 	const sourcePath = normalizeAssetPath( node.ddj.sourcePath );
 	if ( /\.ddj$/i.test( sourcePath ) ) {
@@ -376,6 +482,11 @@ function expandAuthoredDdjPaths( node ) {
 	].map( ( suffix ) => `${sourcePath}${suffix}` );
 }
 
+/*
+================
+describeSpriteResource
+================
+*/
 async function describeSpriteResource( ddjPath ) {
 	const publicPath = imagePublicPath( ddjPath );
 	const relativePublic = publicPath.replace( /^\/assets\/images\//, "" );
@@ -404,27 +515,34 @@ async function describeSpriteResource( ddjPath ) {
 // removed: the parser skips blank lines anyway, and preserving the line count
 // lets parseCifLayout report diagnostics against the original file's line
 // numbers.
+
+/*
+================
+parseCifLayout
+
+  name: string,
+  type: string,
+  properties: Record<string, CifLayoutProperty>,
+  id?: number,
+  rect?: CifLayoutRect,
+  clientRect?: CifLayoutRect,
+  style?: number,
+  text?: string,
+  ddj?: { sourcePath: string, publicPath: string },
+  fontColor?: CifLayoutColor,
+  color?: CifLayoutColor,
+  fontIndex?: number,
+  hAlign?: number,
+  vAlign?: number,
+  subSection?: string
+}} CifLayoutNode
+================
+*/
 /**
  * @typedef {{ x: number, y: number, width: number, height: number }} CifLayoutRect
  * @typedef {{ a: number, r: number, g: number, b: number }} CifLayoutColor
  * @typedef {{ kind: string, raw: string, value: any }} CifLayoutProperty
  * @typedef {{
- *   name: string,
- *   type: string,
- *   properties: Record<string, CifLayoutProperty>,
- *   id?: number,
- *   rect?: CifLayoutRect,
- *   clientRect?: CifLayoutRect,
- *   style?: number,
- *   text?: string,
- *   ddj?: { sourcePath: string, publicPath: string },
- *   fontColor?: CifLayoutColor,
- *   color?: CifLayoutColor,
- *   fontIndex?: number,
- *   hAlign?: number,
- *   vAlign?: number,
- *   subSection?: string
- * }} CifLayoutNode
  * @typedef {{ name: string, rect: CifLayoutRect, style: number, nodes: CifLayoutNode[], rawLines: string[] }} CifLayoutSection
  */
 function parseCifLayout( text, sourcePath ) {
@@ -536,6 +654,11 @@ function parseCifLayout( text, sourcePath ) {
 	};
 }
 
+/*
+================
+parseProperty
+================
+*/
 function parseProperty( rawKind, rawValue ) {
 	switch ( rawKind ) {
 		case "RECT":
@@ -553,6 +676,11 @@ function parseProperty( rawKind, rawValue ) {
 	}
 }
 
+/*
+================
+assignKnownNodeProperty
+================
+*/
 function assignKnownNodeProperty( node, key, property ) {
 	const value = property.value;
 
@@ -586,24 +714,50 @@ function assignKnownNodeProperty( node, key, property ) {
 	}
 }
 
+/*
+================
+parseRect
+================
+*/
 function parseRect( raw ) {
 	const [x = 0, y = 0, width = 0, height = 0] = parseNumberList( raw );
 	return { x, y, width, height };
 }
 
+/*
+================
+parsePoint
+================
+*/
 function parsePoint( raw ) {
 	const [x = 0, y = 0] = parseNumberList( raw );
 	return { x, y };
 }
 
+/*
+================
+parseColor
+================
+*/
 function parseColor( raw ) {
 	const [a = 255, r = 255, g = 255, b = 255] = parseNumberList( raw );
 	return { a, r, g, b };
 }
 
+/*
+================
+parseNumberList
+================
+*/
 function parseNumberList( raw ) {
 	return raw.split( "," ).map( ( part ) => Number( part.trim().replace( /f$/i, "" ) ) || 0 );
 }
+
+/*
+================
+copyImageReference
+================
+*/
 async function copyImageReference( ddjPath, copiedImages ) {
 	const publicPath = imagePublicPath( ddjPath );
 	const relativePublic = publicPath.replace( /^\/assets\/images\//, "" );
@@ -618,6 +772,11 @@ async function copyImageReference( ddjPath, copiedImages ) {
 	copiedImages.add( publicPath );
 }
 
+/*
+================
+copyRequiredImageReference
+================
+*/
 async function copyRequiredImageReference( ddjPath, copiedImages ) {
 	const publicPath = imagePublicPath( ddjPath );
 	const relativePublic = publicPath.replace( /^\/assets\/images\//, "" );
@@ -632,11 +791,22 @@ async function copyRequiredImageReference( ddjPath, copiedImages ) {
 	copiedImages.add( publicPath );
 }
 
+/*
+================
+copyButtonStateImages
+================
+*/
 async function copyButtonStateImages( ddjPath, copiedImages ) {
 	for ( const statePath of buttonStateDdjPaths( ddjPath ).slice( 1 ) ) {
 		await copyImageReference( statePath, copiedImages );
 	}
 }
+
+/*
+================
+imagePublicPath
+================
+*/
 function imagePublicPath( ddjPath ) {
 	return toPublicImagePath( "Media_extracted", ddjPath );
 }
