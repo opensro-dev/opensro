@@ -164,7 +164,9 @@ export function createMall() {
 		balance( payload: Uint8Array ) {
 			const next = mallBalance( payload );
 			if ( !state ) return;
-			state = { ...state, ...next, revision: ++revision };
+			// Revision acknowledges a request to the HUD's purchase queue. A wallet
+			// publication changes the displayed balance without completing that request.
+			state = { ...state, ...next };
 		},
 		/*
   ================
