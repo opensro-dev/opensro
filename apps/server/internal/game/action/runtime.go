@@ -280,6 +280,11 @@ type Runtime struct {
 	// 0 or 1 is native; the closed-beta growth switch raises it.
 	RareRate int
 
+	// PetExpPace is the closed-beta growth multiplier for an attack pet's
+	// EXP gain, read at the owner's level (progression GrowthRates.ExpPace,
+	// petgrowth.go). Nil is native; the growth switch sets it (port-only).
+	PetExpPace func(ownerLevel int64) float64
+
 	// PartyShareFloor raises every party member's EXP share to at least an
 	// even split (partyRewardFactors). Off is native; the closed-beta growth
 	// switch turns it on.
