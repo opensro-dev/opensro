@@ -54,6 +54,13 @@ type MonsterRef struct {
 	TidWord uint16
 	// Structure is a fortress structure (structureTidGate).
 	Structure bool
+	// RepairPrice and RebuildPrice are a structure's characterdata columns
+	// 110 and 111, read as the structure reference's +0xA4 (the price of a
+	// full repair, CGObjSiegeStruct_ComputeRepairCost 4CFD50) and +0xA8
+	// (the base a destroyed structure pays first, 634950). INFERENCE: they
+	// are the record's only trailing pair; 110 grows with the structure's
+	// tier (5000 to 40000) and 111 is always a tenth of it.
+	RepairPrice, RebuildPrice uint32
 	// TypeID4 is characterdata column 12. The client classification gates
 	// ignore it, but the GameServer spawn routine reads the full TypeID word:
 	// monster TID4 4 (the MOB_QT_* quest monsters) never becomes a party
@@ -183,6 +190,9 @@ const (
 	colKORecoverMs   = 88
 	colDefaultSkill1 = 89
 	colDefaultSkillN = 98
+
+	colStructureRepairPrice  = 110
+	colStructureRebuildPrice = 111
 )
 
 /*
@@ -361,10 +371,17 @@ func LoadMonsterRefs(textdataDir string) map[uint32]MonsterRef {
 				displayName = strings.TrimSpace(cols[colCodename])
 			}
 			codename := strings.TrimSpace(cols[colCodename])
+			var repairPrice, rebuildPrice uint32
+			if structure && len(cols) > colStructureRebuildPrice {
+				repairPrice, _ = columnUint32(cols, colStructureRepairPrice)
+				rebuildPrice, _ = columnUint32(cols, colStructureRebuildPrice)
+			}
 			refs[refObjID] = MonsterRef{
 				RefObjID:           refObjID,
 				TidWord:            word,
 				Structure:          structure,
+				RepairPrice:        repairPrice,
+				RebuildPrice:       rebuildPrice,
 				TypeID4:            uint8(tid4),
 				Codename:           codename,
 				OriginalCodename:   strings.TrimSpace(cols[4]),
