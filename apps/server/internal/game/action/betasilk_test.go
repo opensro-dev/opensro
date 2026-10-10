@@ -275,3 +275,36 @@ func TestBetaSilkAccountCountsOnceAndPushesEverySession(t *testing.T) {
 		t.Fatalf("account time or session publication: silk=%d frames=%v", wallet.silk, frames)
 	}
 }
+
+/*
+================
+TestBetaSilkForgetsAccountsAwayForADay
+
+An absent account keeps its partial hour; one gone for betaSilkForgetMs
+is dropped, so the map holds only recent accounts, and it starts over on
+return.
+================
+*/
+func TestBetaSilkForgetsAccountsAwayForADay(t *testing.T) {
+	wallet := &fakeSilkWallet{exists: true}
+	b := NewBetaSilk(wallet, BetaSilkHourlyDefault)
+	lookup := func(_ string, id int64) *domain.Character {
+		return &domain.Character{ID: id, AccountID: "account-" + string(rune('0'+id))}
+	}
+	both := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}, {DivisionID: "d", CharacterID: 2}}
+	b.Tick(0, both, lookup)
+	b.Tick(betaSilkMaxStepMs, both, lookup)
+	b.Tick(2*betaSilkMaxStepMs, both[:1], lookup)
+	if clock := b.clocks["account-2"]; clock == nil || clock.earnedMs != betaSilkMaxStepMs {
+		t.Fatalf("a brief absence lost the partial hour: %+v", clock)
+	}
+	away := int64(betaSilkMaxStepMs) + betaSilkForgetMs + 1
+	b.Tick(away, both[:1], lookup)
+	if len(b.clocks) != 1 || b.clocks["account-2"] != nil {
+		t.Fatalf("an account away for a day kept its clock: %d clocks", len(b.clocks))
+	}
+	b.Tick(away+betaSilkMaxStepMs, both, lookup)
+	if clock := b.clocks["account-2"]; clock == nil || clock.earnedMs != 0 {
+		t.Fatalf("a returning account kept earlier time: %+v", clock)
+	}
+}

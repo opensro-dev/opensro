@@ -20,7 +20,16 @@ the title screen or character select) and lives in this process, so a
 restart loses uncredited progress, including a failed credit awaiting retry;
 it never credits the same completed payment twice. A credit pushes the new
 balance to the player's session (MALL_BALANCE_CONTROL), so an open mall
-shows it at once.
+shows it at once. That control is a browser frame the client's world gate
+must know, so it ships only in matching server and client releases (#529).
+
+Earning is per GameWorld process, keyed by account: an account online on
+two shards at once would earn on both. Harmless while the beta runs one
+shard; a second beta shard needs a shard-wide owner first (#529).
+
+The starter is once per wallet row, so an account that bought anything
+before the beta silk shipped (#505) already has a row and gets no starter.
+Accepted for the beta and announced; recorded so it is not rediscovered.
 
 ===========================================================================
 */
@@ -56,6 +65,9 @@ const betaSilkStarter = 300
 
 // betaSilkHourMs is the in-world time one credit takes.
 const betaSilkHourMs = 60 * 60 * 1000
+
+// betaSilkForgetMs is how long an absent account keeps its partial hour.
+const betaSilkForgetMs = 24 * 60 * 60 * 1000
 
 // betaSilkMaxStepMs bounds the time one tick can add, so a stalled tick or a
 // clock jump never credits idle time at once.
@@ -317,6 +329,15 @@ func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionSnapshot, look
 			continue
 		}
 		updates[character.AccountID] = payload
+	}
+	// Absence pauses an account's hour without losing it, but an account
+	// gone for betaSilkForgetMs is dropped rather than kept for every account
+	// the process has ever seen (#529). It starts over on return, with a
+	// fresh starter check and balance read.
+	for account, clock := range b.clocks {
+		if clock.generation != b.generation && nowMs-clock.lastMs > betaSilkForgetMs {
+			delete(b.clocks, account)
+		}
 	}
 	var out []simulation.DivisionFrames
 	for i, session := range sessions {
