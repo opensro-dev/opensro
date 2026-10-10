@@ -34,7 +34,9 @@ ShieldPhysicalDefense
 The equipped shield's item +0x198: its own physical defense rolled from
 variance slot 4 and the per-plus term (CGItemEquip_CalculateBaseStats,
 49689B), before magic options, which scale only HR and ER. Reports false
-when socket 7 holds no intact shield.
+when socket 7 holds no intact shield. 5950FD itself does not test
+durability; the broken test only repeats the cast's reqi (58D480 refuses a
+shield marked depleted at item +0x190), so it never differs from native.
 ================
 */
 func ShieldPhysicalDefense(character *domain.Character, items enterworld.ItemRefSource) (float64, bool) {
