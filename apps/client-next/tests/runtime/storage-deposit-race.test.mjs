@@ -83,10 +83,14 @@ function snapshot( game ) {
 test("a deposit answered after the window closed lands in the room copy and leaves the bag", () => {
 	const { game } = warehouseFixture();
 	assert.equal( snapshot( game ).storage?.phase, "open" );
-	game.command( {
-		kind: "storage-move",
-		move: { type: 2, source: BAG_SLOT, destination: 0, quantity: 0, gold: 0 }
-	}, 6, undefined );
+	game.command(
+		{
+			kind: "storage-move",
+			move: { type: 2, source: BAG_SLOT, destination: 0, quantity: 0, gold: 0 }
+		},
+		6,
+		undefined
+	);
 	game.command( { kind: "storage-close" }, 7, undefined );
 	game.receive( { opcode: ITEM_MOVE_RESULT, payload: Uint8Array.of( 1, 2, BAG_SLOT, 0 ) }, 8 );
 	const closed = snapshot( game );
