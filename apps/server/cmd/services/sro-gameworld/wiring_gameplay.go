@@ -500,6 +500,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		game.items.DropCap = stats.Growth.DropCap
 		game.items.GoldRate = stats.Growth.GoldRate
 		game.items.RareRate = stats.Growth.RareRate
+		// Attack pets grow at their owner's level pace (owner decision 2026-10-11).
+		growth, deps := stats.Growth, game.deps
+		game.items.PetExpPace = func(ownerLevel int64) float64 { return growth.ExpPace(deps.LevelData(), ownerLevel) }
 		game.items.PartyShareFloor = true
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()

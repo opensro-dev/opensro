@@ -219,6 +219,13 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 	if delta <= 0 || levels == nil || !ok {
 		return nil, nil
 	}
+	// Port-only, not native: the closed beta's growth pace. A pet's gain is
+	// worth what a gain at its OWNER's level is (owner decision 2026-10-11),
+	// so a pet catches up to its owner fast; it still never passes the owner
+	// (the bank below). Nil, the default, is the native rate.
+	if rt.PetExpPace != nil {
+		delta = int64(min(float64(delta)*max(rt.PetExpPace(rewardLevel(c)), 1), float64(1<<62)))
+	}
 	required, known := levels.ExpRequired(int64(ref.Level))
 	if !known || required <= 0 {
 		return nil, nil

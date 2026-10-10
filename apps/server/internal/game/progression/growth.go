@@ -207,6 +207,22 @@ func levelPace(levels enterworld.LevelDataSource, level int64) float64 {
 
 /*
 ================
+ExpPace
+
+The multiplier a positive EXP gain at this level gets: levelPace with the
+beta on, 1 (native) with it off. The attack pets' beta EXP reads it at the
+owner's level (action.Runtime.PetExpPace).
+================
+*/
+func (g GrowthRates) ExpPace(levels enterworld.LevelDataSource, level int64) float64 {
+	if !g.Enabled {
+		return 1
+	}
+	return levelPace(levels, level)
+}
+
+/*
+================
 scale
 
 Positive gains only: the death penalty and every refusal stay native.

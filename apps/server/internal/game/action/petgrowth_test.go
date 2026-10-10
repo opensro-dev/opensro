@@ -145,3 +145,44 @@ func TestPlayerKillFeedsThePetTheLowerLevelsBasis(t *testing.T) {
 		t.Fatalf("a murderer victim paid %d", pet.Experience-24)
 	}
 }
+
+/*
+================
+TestBetaPetExpGrowsAtTheOwnersPace
+
+Port-only, not native: with the closed-beta growth on, a pet's gain is
+multiplied by the pace of its OWNER's level (owner decision 2026-10-11).
+Off (nil) is native. A pace below one never shrinks a gain.
+================
+*/
+func TestBetaPetExpGrowsAtTheOwnersPace(t *testing.T) {
+	rt, c, pet := petGrowthFixture(t)
+	ref, _ := rt.cosReference(pet)
+	if owner, _ := rt.applyAttackPetExperience(c, pet, ref, 50, 0); pet.Level != 1 || pet.Experience != 50 ||
+		!bytes.Equal(owner[0].Payload, petExperienceFrame(pet.GID, 50, 0).Payload) {
+		t.Fatalf("native gain %+v", pet)
+	}
+
+	rt, c, pet = petGrowthFixture(t)
+	ref, _ = rt.cosReference(pet)
+	asked := int64(-1)
+	rt.PetExpPace = func(ownerLevel int64) float64 {
+		asked = ownerLevel
+		return 3
+	}
+	owner, _ := rt.applyAttackPetExperience(c, pet, ref, 50, 0)
+	if asked != 5 {
+		t.Fatalf("pace read at level %d, want the owner's 5 (the pet is level 1)", asked)
+	}
+	// 150 at level 1 pays its 100 and leaves 50 at level 2.
+	if pet.Level != 2 || pet.Experience != 50 || !bytes.Equal(owner[0].Payload, petExperienceFrame(pet.GID, 150, 0).Payload) {
+		t.Fatalf("beta gain %+v frames %+v", pet, owner)
+	}
+
+	rt, c, pet = petGrowthFixture(t)
+	ref, _ = rt.cosReference(pet)
+	rt.PetExpPace = func(int64) float64 { return 0.25 }
+	if rt.applyAttackPetExperience(c, pet, ref, 50, 0); pet.Experience != 50 {
+		t.Fatalf("a pace below one shrank the gain: %+v", pet)
+	}
+}
