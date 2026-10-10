@@ -118,6 +118,11 @@ type Authority struct {
 	mu        sync.Mutex
 	catalog   []Catalog
 	divisions map[string]*division
+	// war mirrors each division's warActive (division -> bool) so WarActive
+	// takes no lock: action code asks it while holding a character store
+	// door, and CollectTax/HireStaff hold mu while they write the store, so
+	// a locked read here would invert the store and authority lock order.
+	war sync.Map
 	// store keeps the occupation and request rows (persist.go); nil keeps
 	// them in memory only.
 	store domain.FortressStore
@@ -367,6 +372,9 @@ func (a *Authority) SetPeriod(divisionID string, period Period, on bool) bool {
 		return false
 	}
 	*flag = on
+	if period == PeriodWar {
+		a.war.Store(divisionID, on)
+	}
 	return true
 }
 
@@ -451,7 +459,6 @@ func (a *Authority) WarActive(divisionID string) bool {
 	if a == nil {
 		return false
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.divisionLocked(divisionID).warActive
+	on, _ := a.war.Load(divisionID)
+	return on == true
 }
