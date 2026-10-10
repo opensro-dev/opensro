@@ -641,7 +641,7 @@ test("entry cooldowns retain remaining time across loading, shared groups and ex
 	const first = { ...SKILL, cooldownMs: 180000, cooldownGroup: 7 };
 	owner.restore(
 		{
-			protocolVersion: 3,
+			protocolVersion: 2,
 			skillCooldowns: [ { skill: first.id, remainingMs: 60000, durationMs: 180000 } ]
 		},
 		[ first ],
@@ -657,7 +657,7 @@ test("entry cooldowns retain remaining time across loading, shared groups and ex
 	assert.equal( owner.state().length, 1, "a rejected press cannot erase restored authority" );
 	assert.equal( cooldowns.skillCooldown( owner.state(), first.id, 7, 69999 )?.remainingMs, 1 );
 	assert.equal( cooldowns.skillCooldown( owner.state(), first.id, 7, 70000 ), null );
-	owner.restore( { protocolVersion: 3, skillCooldowns: [] }, [ first ], 70000 );
+	owner.restore( { protocolVersion: 2, skillCooldowns: [] }, [ first ], 70000 );
 	assert.equal( owner.state().length, 0, "a different entry cannot inherit this character's rows" );
 });
 
@@ -668,7 +668,6 @@ test("malformed entry cooldowns never partially replace accepted rows", () => {
 	const valid = { skill: SKILL.id, remainingMs: 1000, durationMs: 2000 };
 	for (
 		const source of [
-			undefined,
 			null,
 			{},
 			[ null ],
@@ -682,7 +681,7 @@ test("malformed entry cooldowns never partially replace accepted rows", () => {
 		]
 	) {
 		assert.throws(
-			() => owner.restore( { protocolVersion: 3, skillCooldowns: source }, [ SKILL ], 2000 ),
+			() => owner.restore( { protocolVersion: 2, skillCooldowns: source }, [ SKILL ], 2000 ),
 			/Invalid entry skill cooldown/
 		);
 		assert.equal( owner.state(), before );
@@ -695,7 +694,7 @@ test("a fresh gameplay owner refuses restored reuse without predicting a cast, t
 	try {
 		game.bootstrap(
 			{
-				protocolVersion: 3,
+				protocolVersion: 2,
 				simulationProtocolVersion: 1,
 				character: { skills: [ SLOW ] },
 				refSkillSnapshot: [ skillRef( SLOW, 180000 ) ],
@@ -718,4 +717,12 @@ test("a fresh gameplay owner refuses restored reuse without predicting a cast, t
 	} finally {
 		game.dispose();
 	}
+});
+
+test("older entries without a cooldown projection clear the previous owner's rows", () => {
+	const owner = cooldowns.createSkillCooldowns();
+	owner.accepted( SKILL, 1000, 1000 );
+	assert.equal( owner.state().length, 1 );
+	owner.restore( { protocolVersion: 2 }, [ SKILL ], 2000 );
+	assert.deepEqual( owner.state(), [] );
 });

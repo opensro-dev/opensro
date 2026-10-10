@@ -1,11 +1,3 @@
-/*
-===========================================================================
-
-register_test.go - EnterWorld admission and native frame publication through the handler.
-
-===========================================================================
-*/
-
 package enterworld
 
 import (
@@ -22,11 +14,6 @@ import (
 // TestHandleEnterWorldSuccess drives the exact frame SCOUT-A's harness sends
 // (division "0", character asd2) through the enter-world core and checks the
 // frozen 0x0007 contract plus the native frame push order.
-/*
-================
-TestHandleEnterWorldSuccess
-================
-*/
 func TestHandleEnterWorldSuccess(t *testing.T) {
 	character := chinaSpearman()
 	character.ID = 7
@@ -67,8 +54,8 @@ func TestHandleEnterWorldSuccess(t *testing.T) {
 	if string(blob.Bootstrap["nativeResult"]) != "1" {
 		t.Errorf("blob nativeResult = %s", blob.Bootstrap["nativeResult"])
 	}
-	if string(blob.Bootstrap["protocolVersion"]) != "3" {
-		t.Errorf("blob protocolVersion = %s, want 3", blob.Bootstrap["protocolVersion"])
+	if string(blob.Bootstrap["protocolVersion"]) != "2" {
+		t.Errorf("blob protocolVersion = %s, want 2", blob.Bootstrap["protocolVersion"])
 	}
 	if _, ok := blob.Bootstrap["localPlayerEntry"]; !ok {
 		t.Error("blob lacks localPlayerEntry")
@@ -89,11 +76,6 @@ func TestHandleEnterWorldSuccess(t *testing.T) {
 	}
 }
 
-/*
-================
-TestHandleEnterWorldFailureAndMalformed
-================
-*/
 func TestHandleEnterWorldFailureAndMalformed(t *testing.T) {
 	deps := testDeps(chinaSpearman())
 
@@ -136,11 +118,6 @@ func TestHandleEnterWorldFailureAndMalformed(t *testing.T) {
 	}
 }
 
-/*
-================
-TestHandleGameReady
-================
-*/
 func TestHandleGameReady(t *testing.T) {
 	stats := wire.BaseStats{PhysicalAttackMin: 7, PhysicalAttackMax: 9}
 	if got := HandleGameReady(nil, stats); got != nil {
@@ -179,11 +156,6 @@ func TestHandleGameReady(t *testing.T) {
 	}
 }
 
-/*
-================
-TestDevResolveDivisionIDFromCatalog
-================
-*/
 func TestDevResolveDivisionIDFromCatalog(t *testing.T) {
 	source := StaticCharacterSource{DefaultDivisionID: {chinaSpearman()}}
 	allowed := []string{DefaultDivisionID, domain.TestDivisionID}
@@ -216,11 +188,6 @@ func TestDevResolveDivisionIDFromCatalog(t *testing.T) {
 // wiring (store.Characters()). The retired characters-dev.json loader this
 // test used to exercise is gone per ADR-1 D9 (the store is the only
 // character source; boot never reads a retired file).
-/*
-================
-TestEnterWorldOverInjectedSource
-================
-*/
 func TestEnterWorldOverInjectedSource(t *testing.T) {
 	record := `{"id": 3, "name": "asd2", "raceIndex": 1, "gender": 0,
 		 "modelCodename": "CHAR_CH_MAN_ADVENTURER",

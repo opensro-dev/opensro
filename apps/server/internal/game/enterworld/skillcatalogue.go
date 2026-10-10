@@ -283,7 +283,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 	for _, row := range t.rows.values() {
 		projection := SpawnSkillRow{LinkedSkillID: row.LinkedSkillID, CancellationDeferred: row.CancellationDeferred, NameAttackContent: row.NameAttackContent, Level: uint8(row.Level), Group: row.Group, ID: row.ID, Token: row.SpawnToken, Status: row.SpawnStatus, EffectRider: row.EffectRider, EffectDurationMs: row.EffectDurationMs, ZeroEffectDuration: row.EffectDurationPresent && row.EffectDurationMs == 0, HideDetectionBuff: row.HideDetectionBuff, IndefiniteBuffTimer: row.IndefiniteBuffTimer}
 		projection.HuntingPoint, projection.StealthDuration = row.HuntingPoint, row.StealthDuration
-		if row.Icon != "" || playerSkillCodename(row.Codename) {
+		if skillHasUI(row) {
 			projection.UI = &SkillUiRow{BuffSecondary: row.BuffSecondary, Name: row.Codename, SPCost: row.SPCost, Trainable: !row.ChainSub && row.SPCost > 0, TargetRequired: row.TargetRequired, TargetSelf: row.TargetRequired && row.Targets.Self, GroundTarget: row.PositionEffect.Pinned, CooldownMs: row.CoolTimeMs, CooldownGroup: row.CoolTimeGroup, Masteries: row.Masteries, Prerequisites: row.Prerequisites}
 			projection.UI.BuffCancel = "" // Omitted means the native ordinary/direct branch.
 			if row.VoluntaryCancelBlocked && !row.BuffCancelInstance {
@@ -335,6 +335,18 @@ func spawnSkillSnapshot(source SkillDataSource) []SpawnSkillRow {
 		return source.SpawnSkillRows()
 	}
 	return nil
+}
+
+/*
+================
+skillHasUI
+
+The catalogue and entry cooldown projection must agree on which rows the
+browser can resolve. Server-only skills retain their authoritative reuse.
+================
+*/
+func skillHasUI(row SkillRow) bool {
+	return row.Icon != "" || playerSkillCodename(row.Codename)
 }
 
 /*

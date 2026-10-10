@@ -45,7 +45,7 @@ func entrySkillCooldowns(deps *Deps, character *Character) []EntrySkillCooldown 
 	seen := map[uint32]bool{}
 	for _, id := range character.Skills {
 		skill, found := deps.Skills.SkillByID(id)
-		if !found || skill.CoolTimeMs == 0 || seen[id] {
+		if !found || !skillHasUI(skill) || skill.CoolTimeMs == 0 || seen[id] {
 			continue
 		}
 		seen[id] = true

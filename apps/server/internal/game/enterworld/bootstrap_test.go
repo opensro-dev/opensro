@@ -1,11 +1,3 @@
-/*
-===========================================================================
-
-bootstrap_test.go - Bootstrap envelopes, native packet ordering and inventory restoration.
-
-===========================================================================
-*/
-
 package enterworld
 
 import (
@@ -17,18 +9,8 @@ import (
 	"opensro.online/server/internal/domain"
 )
 
-/*
-================
-fakeItems
-================
-*/
 type fakeItems map[string]*ItemRef
 
-/*
-================
-TestBootstrapJSONOmitsBrowserPresentationPaths
-================
-*/
 func TestBootstrapJSONOmitsBrowserPresentationPaths(t *testing.T) {
 	result := &BootstrapResult{
 		NativeResult: nativeResultSuccess,
@@ -59,11 +41,6 @@ func TestBootstrapJSONOmitsBrowserPresentationPaths(t *testing.T) {
 // client seeds its PK counters from (pk-status.ts): v1.150 reads daily,
 // total and penalty at world entry (863880), so a renamed field would
 // hide the mini-info PK icon until the next PK update.
-/*
-================
-TestBootstrapJSONCarriesThePKCounters
-================
-*/
 func TestBootstrapJSONCarriesThePKCounters(t *testing.T) {
 	character := &Character{Name: "murderer", AccountID: "a", PK: &domain.PKRecord{DailyCount: 2, TotalCount: 5, Penalty: 300}}
 	blob, err := json.Marshal(&BootstrapResult{
@@ -90,11 +67,6 @@ func TestBootstrapJSONCarriesThePKCounters(t *testing.T) {
 	}
 }
 
-/*
-================
-ItemRefByCodename
-================
-*/
 func (f fakeItems) ItemRefByCodename(codename string) (*ItemRef, bool) {
 	row, ok := f[codename]
 	return row, ok
@@ -103,11 +75,6 @@ func (f fakeItems) ItemRefByCodename(codename string) (*ItemRef, bool) {
 // testItems carries the itemdata rows the china starter roster and the
 // measured bug fixtures resolve. TypeIDs [3,1,6,...] are the equipment
 // weapon family; garments [3,1,1,...].
-/*
-================
-testItems
-================
-*/
 func testItems() fakeItems {
 	// Country 3 / RequiredSex 2 are the equip-gate PASS values (the Go zero
 	// values mean China-only / female-only) - fixture refs must set them or
@@ -135,11 +102,6 @@ func testItems() fakeItems {
 	}
 }
 
-/*
-================
-testDeps
-================
-*/
 func testDeps(characters ...*Character) *Deps {
 	return &Deps{
 		Roster:            testRoster(),
@@ -149,11 +111,6 @@ func testDeps(characters ...*Character) *Deps {
 	}
 }
 
-/*
-================
-TestBuildFailurePaths
-================
-*/
 func TestBuildFailurePaths(t *testing.T) {
 	deps := testDeps(chinaSpearman())
 
@@ -174,11 +131,6 @@ func TestBuildFailurePaths(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildRefusesACharacterPersistedInsideAnUnauthorizedArea
-================
-*/
 func TestBuildRefusesACharacterPersistedInsideAnUnauthorizedArea(t *testing.T) {
 	character := chinaSpearman()
 	regionID := int64(0x7e7e)
@@ -209,11 +161,6 @@ func TestBuildRefusesACharacterPersistedInsideAnUnauthorizedArea(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildFailureEnvelopeShape
-================
-*/
 func TestBuildFailureEnvelopeShape(t *testing.T) {
 	result := Failure(0x10, "characterNotFound")
 	data, err := json.Marshal(result)
@@ -244,11 +191,6 @@ func TestBuildFailureEnvelopeShape(t *testing.T) {
 	}
 }
 
-/*
-================
-TestDescribeNativeAgentError
-================
-*/
 func TestDescribeNativeAgentError(t *testing.T) {
 	ok := DescribeNativeAgentError(0x01)
 	if !ok.OK || ok.Presentation != "none" {
@@ -269,11 +211,6 @@ func TestDescribeNativeAgentError(t *testing.T) {
 // the loadout lists what is now worn. A spearman created without armor gets
 // the spear only: the native create request carries item id 0 for the
 // garments (CharacterCreateRequest_Write), so nothing else is granted.
-/*
-================
-TestBuildFirstBootstrapSeedsInventory
-================
-*/
 func TestBuildFirstBootstrapSeedsInventory(t *testing.T) {
 	character := chinaSpearman()
 	character.ID = 7
@@ -318,11 +255,6 @@ func TestBuildFirstBootstrapSeedsInventory(t *testing.T) {
 // TestBuildRestoredSessionWornItemsOracle: a restored character wearing the
 // picked-up copper blade and the heavy pants is shown with exactly those
 // items, in socket order, off the actual bootstrap response.
-/*
-================
-TestBuildRestoredSessionWornItemsOracle
-================
-*/
 func TestBuildRestoredSessionWornItemsOracle(t *testing.T) {
 	character := chinaSpearman()
 	character.ID = 9
@@ -349,24 +281,12 @@ func TestBuildRestoredSessionWornItemsOracle(t *testing.T) {
 	}
 }
 
-/*
-================
-f64ToI64
-================
-*/
-func f64ToI64(v int64) *int64 {
-	return &v
-}
+func f64ToI64(v int64) *int64 { return &v }
 
 // TestBuildPayloadShapeStableAcrossSessions: the Node comment's exact
 // concern - a first-ever and a restored bootstrap must carry the same
 // visualLoadout field set, or the client takes different branches on the
 // same code path.
-/*
-================
-TestBuildPayloadShapeStableAcrossSessions
-================
-*/
 func TestBuildPayloadShapeStableAcrossSessions(t *testing.T) {
 	character := chinaSpearman()
 	deps := testDeps(character)
@@ -404,11 +324,6 @@ func TestBuildPayloadShapeStableAcrossSessions(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildPacketSequence
-================
-*/
 func TestBuildPacketSequence(t *testing.T) {
 	character := chinaSpearman()
 	character.ID = 3
@@ -451,11 +366,6 @@ func TestBuildPacketSequence(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildSuccessEnvelopeShape
-================
-*/
 func TestBuildSuccessEnvelopeShape(t *testing.T) {
 	character := chinaSpearman()
 	deps := testDeps(character)
@@ -471,8 +381,8 @@ func TestBuildSuccessEnvelopeShape(t *testing.T) {
 	if string(fields["bootstrapMode"]) != `"`+BootstrapMode+`"` {
 		t.Errorf("bootstrapMode = %s", fields["bootstrapMode"])
 	}
-	if string(fields["protocolVersion"]) != "3" {
-		t.Errorf("protocolVersion = %s, want 3", fields["protocolVersion"])
+	if string(fields["protocolVersion"]) != "2" {
+		t.Errorf("protocolVersion = %s, want 2", fields["protocolVersion"])
 	}
 	if string(fields["refObjSnapshot"]) != "[]" {
 		t.Errorf("refObjSnapshot = %s, want []", fields["refObjSnapshot"])
@@ -511,11 +421,6 @@ func TestBuildSuccessEnvelopeShape(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildRefItemSnapshotCoversInventoryAndGold
-================
-*/
 func TestBuildRefItemSnapshotCoversInventoryAndGold(t *testing.T) {
 	character := chinaSpearman()
 	character.MissionInventory = []InventoryRow{
@@ -553,11 +458,6 @@ func TestBuildRefItemSnapshotCoversInventoryAndGold(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildCaseInsensitiveNameAndDivisionDefault
-================
-*/
 func TestBuildCaseInsensitiveNameAndDivisionDefault(t *testing.T) {
 	character := chinaSpearman()
 	deps := testDeps(character)
@@ -570,11 +470,6 @@ func TestBuildCaseInsensitiveNameAndDivisionDefault(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBootstrapRequestUnmarshalToleratesNumericDivision
-================
-*/
 func TestBootstrapRequestUnmarshalToleratesNumericDivision(t *testing.T) {
 	var request BootstrapRequest
 	if err := json.Unmarshal([]byte(`{"characterName":"asd2","divisionId":0}`), &request); err != nil {
@@ -591,11 +486,6 @@ func TestBootstrapRequestUnmarshalToleratesNumericDivision(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildItemBodyBytes
-================
-*/
 func TestBuildItemBodyBytes(t *testing.T) {
 	body := BuildItemBody(WireItem{
 		RefObjID:     107,
@@ -615,11 +505,6 @@ func TestBuildItemBodyBytes(t *testing.T) {
 	}
 }
 
-/*
-================
-TestBuildLocalPlayerEntryPayloadStructure
-================
-*/
 func TestBuildLocalPlayerEntryPayloadStructure(t *testing.T) {
 	character := chinaSpearman()
 	character.ID = 3
@@ -676,11 +561,6 @@ func TestBuildLocalPlayerEntryPayloadStructure(t *testing.T) {
 	}
 }
 
-/*
-================
-TestGameTimeAndVitalsPayloads
-================
-*/
 func TestGameTimeAndVitalsPayloads(t *testing.T) {
 	if got := BuildGameTimePayload(); len(got) != 4 || got[2] >= 24 || got[3] >= 60 {
 		t.Fatalf("invalid clock: %v", got)

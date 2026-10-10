@@ -95,16 +95,16 @@ export function createSkillCooldowns() {
 		================
 		restore
 
-		Entry v3 carries server deadlines as remaining milliseconds. Anchor
+		Optional entry rows carry server deadlines as remaining milliseconds. Anchor
 		them at receipt, so loading references cannot restart or extend reuse.
-		v2 remains readable for recorded entries without cooldown projection.
+		Older servers omit the projection; their entries start with no cooldowns.
 		Validate the whole list before replacing this owner's state.
 		================
 		*/
 		restore( value: unknown, catalog: readonly SkillMetadata[], receivedAtMs: number ) {
-			const entry = value as { protocolVersion?: number; skillCooldowns?: unknown; };
+			const entry = value as { skillCooldowns?: unknown; };
 			const source = entry.skillCooldowns;
-			if ( source === undefined && entry.protocolVersion !== 3 ) {
+			if ( source === undefined ) {
 				rows = [];
 				return;
 			}
