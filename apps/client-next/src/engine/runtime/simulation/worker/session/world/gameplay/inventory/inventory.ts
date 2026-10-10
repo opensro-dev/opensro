@@ -29,7 +29,7 @@ import {
 	itemMagicReferences,
 	type ItemTooltipReference
 } from "@/engine/foundation/gameplay/item-tooltip-reference";
-import { planCosTransfer, cosTransferRequest } from "@/engine/foundation/gameplay/cos-transfer";
+import { cosQuickDestination, cosTransferRequest, planCosTransfer } from "@/engine/foundation/gameplay/cos-transfer";
 import {
 	storageMoveRequest,
 	storageMoveResult,
@@ -928,17 +928,25 @@ frame is not that echo (a rejection takes the generic receive path).
 		/*
 ================
 transferCos
+
+A quick transfer names no destination; the slot is picked here, where the
+stack limits are known. No slot to fill sends nothing.
 ================
 		*/
 		transferCos(
 			record: import("@/engine/contracts/gameplay").CosRecord,
 			toCos: boolean,
 			source: number,
-			destination: number,
+			requested: number | undefined,
 			now: number,
 			caps: ReadonlyMap<number, number>
 		) {
 			if ( busy() ) throw Error( "Inventory command unavailable" );
+			const destination = requested ?? cosQuickDestination( record, [ ...slots.values() ], toCos, source, {
+				capacity: inventorySlotCount!,
+				equipment: equipmentSlotCount!
+			}, caps );
+			if ( destination === null ) return null;
 			planCosTransfer(
 				record,
 				[ ...slots.values() ],

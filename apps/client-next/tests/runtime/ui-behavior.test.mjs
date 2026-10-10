@@ -2436,7 +2436,7 @@ test("merchant wheel scrolling follows the dragged window and ignores its old lo
 	}
 });
 
-test("GPU COS bag emits whole transfers to empty slots in either direction", () => {
+test("GPU COS bag leaves a quick transfer's slot to the worker in either direction", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
 		const game = {
@@ -2462,11 +2462,12 @@ test("GPU COS bag emits whole transfers to empty slots in either direction", () 
 		f.ui.event( { kind: "activate", id: "cos-player:13" } );
 		f.ui.step( { ...f.state, gameplay: game }, 3 );
 		f.ui.event( { kind: "activate", id: "to-cos" } );
-		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: true, source: 13, destination: 1 } );
+		// A quick transfer leaves the slot to the worker (cosQuickDestination).
+		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: true, source: 13 } );
 		f.ui.event( { kind: "activate", id: "cos-slot:0" } );
 		f.ui.step( { ...f.state, gameplay: game }, 4 );
 		f.ui.event( { kind: "activate", id: "from-cos" } );
-		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: false, source: 0, destination: 14 } );
+		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: false, source: 0 } );
 	} finally {
 		f.dispose();
 	}

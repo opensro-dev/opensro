@@ -3581,27 +3581,21 @@ export function createUi(
 				record?.inventory && !record.dead && record.hp > 0 && !game.inventoryPending &&
 				game.inventorySlotCount !== undefined && game.equipmentSlotCount !== undefined
 			) {
-				const rows = toCos ? record.inventory : game.inventory,
-					start = toCos ? 0 : game.equipmentSlotCount,
+				const start = toCos ? 0 : game.equipmentSlotCount,
 					end = toCos ? record.status : game.inventorySlotCount;
 				const source = toCos ? inventorySlot : cosSlot,
-					item = (toCos ? game.inventory : record.inventory).find( row => row.slot === source ),
 					selected = toCos ? cosSlot : inventorySlot;
-				const preferred = selected >= start && selected < end ?
-					selected :
-					item && (item.typeFlags & 0x7e) === 0x6c ?
-					rows.find( row => row.refObjId === item.refObjId )?.slot :
-					undefined;
-				let destination = preferred ?? start;
-				if ( preferred === undefined ) {
-					while ( destination < end && rows.some( row => row.slot === destination ) ) {
-						destination++;
-					}
-				}
-				if (
-					destination < end && (toCos ? game.inventory : record.inventory).some( row => row.slot === source )
-				) {
-					sendGameplay( { kind: "cos-transfer", gid: record.gid, toCos, source, destination } );
+				// A chosen slot is sent as is; a quick transfer leaves the slot to
+				// the worker, which knows the stack limits (cosQuickDestination).
+				const destination = selected >= start && selected < end ? selected : undefined;
+				if ( (toCos ? game.inventory : record.inventory).some( row => row.slot === source ) ) {
+					sendGameplay( {
+						kind: "cos-transfer",
+						gid: record.gid,
+						toCos,
+						source,
+						...(destination === undefined ? {} : { destination })
+					} );
 					inventorySlot = -1;
 					cosSlot = -1;
 				}

@@ -258,7 +258,8 @@ export type GameplayCommand =
 		readonly gid: number;
 		readonly toCos: boolean;
 		readonly source: number;
-		readonly destination: number;
+		// Omitted by a quick transfer: the worker picks it (cosQuickDestination).
+		readonly destination?: number;
 	}
 	| {
 		readonly kind: "cos-shop-buy";

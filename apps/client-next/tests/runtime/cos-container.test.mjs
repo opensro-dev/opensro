@@ -296,3 +296,30 @@ test("server cargo body decodes its owner without consuming the next item", asyn
 	assert.equal( second.next, joined.length );
 	for ( let n = 0; n < body.length; n++ ) assert.throws( () => decodeInventoryItem( body.slice( 0, n ), 0, refs ) );
 });
+
+test("a quick transfer fills a stack with room, else the first free slot", async () => {
+	const { cosQuickDestination } = await import(
+		sourceFileUrl( "src/engine/foundation/gameplay/cos-transfer.ts" ).href
+	);
+	const slots = { capacity: 16, equipment: 13 };
+	const record = { gid: 7, status: 4, inventory: [ { slot: 0, refObjId: 8, typeFlags: 0x86c, quantity: 1 } ] };
+	const bag = quantity => [ { slot: 13, refObjId: 8, typeFlags: 0x86c, quantity } ];
+	// An elixir's stack limit is 1: its twin in the bag is full, so the
+	// transfer takes a free slot instead of swapping the two.
+	assert.equal( cosQuickDestination( record, bag( 1 ), false, 0, slots, new Map( [ [ 8, 1 ] ] ) ), 14 );
+	assert.equal( cosQuickDestination( record, bag( 50 ), false, 0, slots, new Map( [ [ 8, 50 ] ] ) ), 14 );
+	assert.equal( cosQuickDestination( record, bag( 30 ), false, 0, slots, new Map( [ [ 8, 50 ] ] ) ), 13 );
+	const full = [ 13, 14, 15 ].map( slot => ({ slot, refObjId: 9, typeFlags: 0x86c, quantity: 1 }) );
+	assert.equal( cosQuickDestination( record, full, false, 0, slots, new Map( [ [ 8, 1 ] ] ) ), null );
+	assert.equal( cosQuickDestination( record, bag( 1 ), true, 13, slots, new Map( [ [ 8, 1 ] ] ) ), 1 );
+});
+
+test("a quick transfer without a destination is sent to the worker's slot", () => {
+	const { owner } = fixture();
+	const first = owner.command( { kind: "cos-transfer", gid: 7, toCos: false, source: 0 }, 0, entity );
+	assert.deepEqual( [ ...first.payload ], [ 0x1a, 7, 0, 0, 0, 0, 13 ] );
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, ...first.payload ] ) }, 1 );
+	// The bag's 30 has room under the limit of 50: the 40 merges into it.
+	const second = owner.command( { kind: "cos-transfer", gid: 7, toCos: false, source: 1 }, 2, entity );
+	assert.deepEqual( [ ...second.payload ], [ 0x1a, 7, 0, 0, 0, 1, 13 ] );
+});
