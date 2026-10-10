@@ -30,7 +30,7 @@ reads hntp) installs the hunt link and sends the caster its private
 B5ED naming the subject. While the subject is outside the caster's
 published set, each change of its position reaches the caster as 0x30E3
 for the subject's GID; an unchanged position or a subject in sight sends
-nothing.
+nothing, and neither does a stopped mark.
 ==================
 */
 func TestTagPointReportsTheMarkOutOfSight(t *testing.T) {
@@ -74,5 +74,16 @@ func TestTagPointReportsTheMarkOutOfSight(t *testing.T) {
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(marked) }, func(w *simulation.WorldState) { w.Spawn.X += 500 })
 	if seen := rt.AdvanceHuntingPoints(now, []simulation.SessionSnapshot{session}); len(seen) != 0 {
 		t.Fatalf("a subject in sight was reported: %+v", seen)
+	}
+	// A stopped mark reports nothing, before B6A0 retires its halves.
+	hunts := rt.effects.HuntLinks(now)
+	if len(hunts) != 1 {
+		t.Fatalf("live hunt links %d, want 1", len(hunts))
+	}
+	rt.effects.StopLink(testDivision, hunts[0].SourceToken)
+	session.PublishedObjects = []uint32{}
+	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(marked) }, func(w *simulation.WorldState) { w.Spawn.X += 500 })
+	if stopped := rt.AdvanceHuntingPoints(now, []simulation.SessionSnapshot{session}); len(stopped) != 0 {
+		t.Fatalf("a stopped mark was reported: %+v", stopped)
 	}
 }

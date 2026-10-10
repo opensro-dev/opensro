@@ -190,6 +190,33 @@ func (r *Registry) Links() []Link {
 	return out
 }
 
+/*
+==================
+HuntLinks
+
+The logically active hunt links (hntp). A stop or the expiry ends the
+reports at once, as it ends a threat share (ThreatLink): the source half
+leaves the native task list before B6A0 retires the recipient.
+==================
+*/
+func (r *Registry) HuntLinks(nowMs int64) []Link {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []Link
+	for _, l := range r.links {
+		if !l.Hunt || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
+			continue
+		}
+		for _, e := range r.byOwner[ownerKey(l.DivisionID, l.SourceName)] {
+			if e.LinkToken == l.SourceToken && e.Phase == 1 && !e.StopRequested {
+				out = append(out, l)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // ThreatLink is the installed, logically active target effect. A stop disables
 // contribution immediately, before the effect update emits B6A0 retirement.
 func (r *Registry) ThreatLink(division, target string, nowMs int64) (Link, bool) {

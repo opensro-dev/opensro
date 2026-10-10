@@ -61,10 +61,7 @@ func (rt *Runtime) AdvanceHuntingPoints(nowMs int64, sessions []simulation.Sessi
 	}
 	live := make(map[uint32]bool)
 	var out []simulation.DivisionFrames
-	for _, link := range rt.effects.Links() {
-		if !link.Hunt {
-			continue
-		}
+	for _, link := range rt.effects.HuntLinks(nowMs) {
 		live[link.SourceToken] = true
 		frame, ok := rt.huntingReport(link.DivisionID, link.SourceName, link.TargetName, link.TargetGID, link.SourceToken, nowMs, sessions)
 		if ok {
