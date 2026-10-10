@@ -326,6 +326,10 @@ func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *
 			}
 			// Discord Wave: a friendly-targeted hostility cut
 			// (discordwave.go).
+			if skill.Threat.Decrease && !skill.TargetRequired {
+				result, _ := rt.acceptMirage(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
+				return result
+			}
 			if skill.Threat.Decrease {
 				return rt.acceptDiscordWave(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
 			}

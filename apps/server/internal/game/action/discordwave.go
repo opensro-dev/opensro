@@ -79,13 +79,9 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 	if code := rt.skillAdmission(division, snapshot, skill, now, &admitTarget{at: to, player: view}, nil, admitExecution); code != 0 {
 		return offensiveRefusal(code)
 	}
-	weapon, ok := rt.casterMagicalWeapon(division, snapshot)
+	cut, ok := rt.threatDecreaseCut(division, snapshot, skill)
 	if !ok {
 		return OpResult{DiagnosticRefusal: "discord-weapon-unavailable"}
-	}
-	cut := skill.Threat.DecreaseFlat
-	if weapon.armed && skill.Threat.DecreaseWeaponPercent != 0 {
-		cut += uint32(max(0, combat.WeaponHealBonus(weapon.low, weapon.high, weapon.ratio, skill.Threat.DecreaseWeaponPercent)))
 	}
 	var refusal uint16
 	if !rt.deps.Update(c, "discord-wave", func() bool {
@@ -123,6 +119,26 @@ func (rt *Runtime) acceptDiscordWave(division string, c, snapshot *enterworld.Ch
 	})
 	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(casterGID, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, c))}
 	return OpResult{Frames: []wire.Frame{open, vitals}, Broadcast: []wire.Frame{open}, ActorPrivate: []wire.Frame{vitals}}
+}
+
+/*
+================
+threatDecreaseCut
+
+dtnt's flat word plus the mwdt weapon term (593DFE..593E49): the hate the
+event takes away before its percent word.
+================
+*/
+func (rt *Runtime) threatDecreaseCut(division string, snapshot *enterworld.Character, skill enterworld.SkillRow) (uint32, bool) {
+	weapon, ok := rt.casterMagicalWeapon(division, snapshot)
+	if !ok {
+		return 0, false
+	}
+	cut := skill.Threat.DecreaseFlat
+	if weapon.armed && skill.Threat.DecreaseWeaponPercent != 0 {
+		cut += uint32(max(0, combat.WeaponHealBonus(weapon.low, weapon.high, weapon.ratio, skill.Threat.DecreaseWeaponPercent)))
+	}
+	return cut, true
 }
 
 /*

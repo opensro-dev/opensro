@@ -10,8 +10,11 @@ description: "Removes Monsters' hostility toward their target by creating
 a big wave of discord around the target." The action owner is
 action/discordwave.go; admission is by executable shape, never by name.
 
-The Warlock's Mirage and Phantasma author the caster-centred, untargeted
-form (efr shape 1, no Self/Ally/Party) and are not admitted here.
+The Warlock's Mirage and Phantasma (SKILL_EU_WARLOCK_CONFUSIONA_AGGROLOW_A
+and _B) author the caster-centred, untargeted form: efr(1,1,r,n,0,16)
+dtnt(flat,0) mwdt(567), no target columns, a prepared cast. Their
+description: monsters attacking the caster "reduce their hostility". The
+action owner is action/mirage.go.
 
 ===========================================================================
 */
@@ -30,7 +33,9 @@ const (
 	tagMagicalWeaponDecrease = 0x6d776474
 
 	// decreaseAreaShape is efr shape 2: centred on the selected target.
-	decreaseAreaShape = 2
+	// The untargeted form centres on the caster (shape 1).
+	decreaseAreaShape       = 2
+	decreaseCasterAreaShape = 1
 
 	// decreaseAreaSelect is efr select 16 (0x10), the non-character
 	// objects of TargetSelection_AroundSource (58A020): monsters. The
@@ -42,21 +47,33 @@ const (
 ==================
 compileSkillThreatDecrease
 
-Admit an instant handler-0 program with no att whose friendly target is
-required, made of one primary-centred efr selecting monsters, one dtnt,
-an optional mwdt weapon term, ovl2 and known caster getv words.
+Admit a handler-0 program with no att made of one efr selecting monsters,
+one dtnt, an optional mwdt weapon term, ovl2 and known caster getv words.
+The targeted form is instant on a required friendly target with a
+primary-centred efr; the untargeted form names no target, centres its
+efr on the caster and may prepare.
 ==================
 */
 func compileSkillThreatDecrease(fields []string, row SkillRow) (SkillThreat, bool) {
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "0" ||
-		!row.TimingPinned || !row.Consumption.Pinned || !row.ActionRangePinned || row.ActionRange == 0 ||
-		row.ChainSub || row.ChainNext != 0 || row.ActionCastingTimeMs != 0 || row.ActionDurationMs == 0 ||
-		row.Attack.Present || !row.TargetRequired {
+		!row.TimingPinned || !row.Consumption.Pinned || !row.ActionRangePinned ||
+		row.ChainSub || row.ChainNext != 0 || row.ActionDurationMs == 0 || row.Attack.Present {
 		return SkillThreat{}, false
 	}
-	// A friendly target only: Self, Ally and Party, never an enemy.
-	if fields[26] != "1" || fields[27] != "1" || fields[28] != "1" || fields[29] != "0" || fields[30] != "0" {
-		return SkillThreat{}, false
+	shape := uint32(decreaseCasterAreaShape)
+	if row.TargetRequired {
+		// A friendly target only: Self, Ally and Party, never an enemy.
+		if row.ActionRange == 0 || row.ActionCastingTimeMs != 0 ||
+			fields[26] != "1" || fields[27] != "1" || fields[28] != "1" || fields[29] != "0" || fields[30] != "0" {
+			return SkillThreat{}, false
+		}
+		shape = decreaseAreaShape
+	} else {
+		for column := 21; column <= 30; column++ {
+			if fields[column] != "0" {
+				return SkillThreat{}, false
+			}
+		}
 	}
 	for _, column := range []int{15, 16, 17, 19, 20, 24, 25, 31, 32, 33, 56} {
 		if fields[column] != "0" {
@@ -78,11 +95,11 @@ func compileSkillThreatDecrease(fields []string, row SkillRow) (SkillThreat, boo
 		switch op.Tag {
 		case tagEfr:
 			a := op.Arguments
-			if a[0] != 1 || a[1] != decreaseAreaShape || a[2] == 0 || a[2] > 0xffff ||
+			if a[0] != 1 || a[1] != shape || a[2] == 0 || a[2] > 0xffff ||
 				a[3] == 0 || a[3] > 255 || a[4] != 0 || a[5] != decreaseAreaSelect {
 				return SkillThreat{}, false
 			}
-			out.Area = SkillOffensiveArea{Shape: decreaseAreaShape, Radius: a[2], MaxTargets: uint8(a[3]), Select: decreaseAreaSelect}
+			out.Area = SkillOffensiveArea{Shape: uint8(shape), Radius: a[2], MaxTargets: uint8(a[3]), Select: decreaseAreaSelect}
 		case tagThreatDecrease:
 			out.DecreaseFlat, out.DecreasePercent = op.Arguments[0], op.Arguments[1]
 		case tagMagicalWeaponDecrease:
