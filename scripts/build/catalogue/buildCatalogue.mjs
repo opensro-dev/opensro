@@ -15,7 +15,9 @@ always come from the generated tree.)
 
 ===========================================================================
 */
-import "./clientSourceHooks.mjs";
+// The client's own TypeScript loader (resolve and transform-mode type
+// stripping), the one its tests and tools register.
+import "../../../apps/client-next/tests/helpers/native-source-loader.mjs";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

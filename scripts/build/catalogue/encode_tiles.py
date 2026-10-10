@@ -58,11 +58,13 @@ def ntx_image( payload ):
 # ================
 #
 def main():
-	pairs = json.load( open( sys.argv[1], encoding="utf-8" ) )
+	with open( sys.argv[1], encoding="utf-8" ) as listing:
+		pairs = json.load( listing )
 	written = 0
 	for source, target in pairs:
 		os.makedirs( os.path.dirname( target ), exist_ok=True )
-		payload = open( source, "rb" ).read()
+		with open( source, "rb" ) as tile:
+			payload = tile.read()
 		image = ntx_image( payload ) if payload[:4] == NTX_MAGIC else Image.open( io.BytesIO( payload ) )
 		image.convert( "RGB" ).save( target, "WEBP", quality=TILE_QUALITY, method=4 )
 		written += 1

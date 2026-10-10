@@ -15,7 +15,8 @@ import json, os, sys
 from PIL import Image
 
 def main():
-	pairs = json.load( open( sys.argv[1], encoding="utf-8" ) )
+	with open( sys.argv[1], encoding="utf-8" ) as listing:
+		pairs = json.load( listing )
 	written = 0
 	for source, target in pairs:
 		os.makedirs( os.path.dirname( target ), exist_ok=True )

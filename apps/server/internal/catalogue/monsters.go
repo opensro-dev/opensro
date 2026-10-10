@@ -240,7 +240,9 @@ monsterVariants
 
 5607B0: an authored grade spawns as itself; an ordinary monster spawns
 normal, as a champion or giant from a nest with champion tactics, and as a
-party monster from an armed nest unless it is a quest monster.
+party monster from an armed nest unless it is a quest monster. A nest
+that forces its own grade (RarityOverride) is per position, not per
+reference, so it is not listed here.
 ================
 */
 func monsterVariants(ref monster.MonsterRef, promotes bool) []MonsterVariant {
@@ -289,12 +291,13 @@ func assignedDrops(codename string, itemID func(string) uint32) ([]MonsterDrop, 
 ================
 uniqueBonus
 
-The counts prepareUniqueDrops rolls for a unique (action.UniqueDropCounts);
-its two equipment batches are added together.
+The counts prepareUniqueDrops rolls for a monster whose grade runs the
+prepass (action.RollsUniqueDrops, UniqueDropCounts); its two equipment
+batches are added together.
 ================
 */
 func uniqueBonus(ref monster.MonsterRef) *UniqueBonus {
-	if ref.MonsterType != gradeUnique {
+	if !action.RollsUniqueDrops(ref.MonsterType) {
 		return nil
 	}
 	c := action.UniqueDropCounts(ref.MonsterType, ref.Codename)

@@ -122,6 +122,18 @@ var uniqueCountDefaults = [uniqueStages]UniqueCount{{5, 8, false}, {0, 2, false}
 
 /*
 ================
+RollsUniqueDrops
+
+Whether a kill of this spawn grade runs the unique prepass: grades 3 and 8
+(the low nibble; a party nibble does not change it).
+================
+*/
+func RollsUniqueDrops(rarity uint8) bool {
+	return rarity&15 == 3 || rarity&15 == 8
+}
+
+/*
+================
 UniqueDropCounts
 
 The count rule of each prepass stage for a monster: a grade-8 monster, the
@@ -194,7 +206,7 @@ capacity stops later assigned/ordinary additions; it does not truncate this list
 */
 func (rt *Runtime) prepareUniqueDrops(ctx uniqueDropContext) []grounditem.Item {
 	rarity := ctx.mob.Rarity()
-	if rarity&15 != 3 && rarity&15 != 8 {
+	if !RollsUniqueDrops(rarity) {
 		return nil
 	}
 	counts := UniqueDropCounts(rarity, ctx.mob.Ref.Codename)
