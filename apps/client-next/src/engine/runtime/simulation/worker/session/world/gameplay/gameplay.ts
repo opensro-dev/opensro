@@ -117,6 +117,8 @@ import {
 	fortressCaptureNotice,
 	fortressStructureState,
 	FORTRESS_NOTICE_CATEGORY,
+	FORTRESS_DEMOLISH,
+	FORTRESS_DISMISS,
 	FORTRESS_WAR_APPLY,
 	FORTRESS_WAR_STATUS,
 	FORTRESS_WAR_WITHDRAW,
@@ -1451,6 +1453,21 @@ state here before a command can claim a native wire conversation.
 						fortress: command.fortress,
 						word: command.kind === "fortress-tax-rate" ? command.rate : undefined,
 						gold: command.kind === "fortress-tax-collect" ? command.gold : undefined
+					} )
+				);
+			}
+			if ( command.kind === "fortress-dismantle" ) {
+				// CIFTargetWindowFortressStructure_OnMsgBoxResult (517CA0) sends
+				// {target, 0x16 or 0x17, fortress} for the selected object.
+				if (
+					!localGid || targeting.state().target !== command.gid ||
+					(command.action !== FORTRESS_DISMISS && command.action !== FORTRESS_DEMOLISH)
+				) throw Error( "Select the structure to remove" );
+				return sendFrame(
+					fortressServiceRequest( {
+						target: command.gid,
+						action: command.action,
+						fortress: command.fortress
 					} )
 				);
 			}

@@ -418,6 +418,45 @@ export function fortressActive( state: FortressState ): boolean {
 	return id !== undefined && ((state.wars.find( r => r.id === id )?.flags ?? 0) & 1) !== 0;
 }
 
+// 0x71E1 actions the structure target window's delete button sends.
+export const FORTRESS_DISMISS = 0x16;
+export const FORTRESS_DEMOLISH = 0x17;
+// Guild member fortress role bits (CGuildMember_IsFortressRole1/2/4).
+const ROLE_COMMANDER = 1;
+const ROLE_SUB_COMMANDER = 2;
+const ROLE_BATTLE_COMMANDER = 4;
+
+/*
+================
+fortressDeleteAction
+
+The 0x71E1 action the structure target window's delete button sends, or 0
+when 516BC0 hides the button. By layout kind (fortressTargetKind):
+- 1, a guard: outside the war, the local guild holds the fortress, role 1
+  or 4; it is dismissed (0x16).
+- 2, a barricade: during the war, the local guild holds the fortress, role
+  1, 2 or 4; it is demolished (0x17).
+- 3, a fortress-war object: during the war, role 1, and the object belongs
+  to the local guild; it is dismissed (0x16).
+INFERENCE: "during the war" is the current fortress's war flag
+(fortressActive), the port's reading of 7E1AE0.
+================
+*/
+export function fortressDeleteAction( kind: number, context: {
+	readonly war: boolean;
+	readonly holder: boolean;
+	readonly role: number;
+	readonly ownObject: boolean;
+} ): number {
+	const { war, holder, role, ownObject } = context;
+	if ( kind === 1 && !war && holder && role & (ROLE_COMMANDER | ROLE_BATTLE_COMMANDER) ) return FORTRESS_DISMISS;
+	if ( kind === 2 && war && holder && role & (ROLE_COMMANDER | ROLE_SUB_COMMANDER | ROLE_BATTLE_COMMANDER) ) {
+		return FORTRESS_DEMOLISH;
+	}
+	if ( kind === 3 && war && role & ROLE_COMMANDER && ownObject ) return FORTRESS_DISMISS;
+	return 0;
+}
+
 /*
 ================
 fortressMusicActive

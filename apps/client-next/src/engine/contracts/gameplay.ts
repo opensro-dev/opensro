@@ -231,6 +231,13 @@ export type GameplayCommand =
 	| { readonly kind: "fortress-schedule"; readonly gid: number; readonly fortress: number; }
 	// 0x71E1 actions 0 (query), 1 (rate) and 2 (collect) from the tax window.
 	| { readonly kind: "fortress-tax"; readonly gid: number; readonly fortress: number; }
+	// The structure target window's delete (517CA0): dismiss 0x16 or demolish 0x17.
+	| {
+		readonly kind: "fortress-dismantle";
+		readonly gid: number;
+		readonly action: number;
+		readonly fortress: number;
+	}
 	| { readonly kind: "fortress-tax-rate"; readonly gid: number; readonly fortress: number; readonly rate: number; }
 	| { readonly kind: "fortress-tax-collect"; readonly gid: number; readonly fortress: number; readonly gold: string; }
 	| {

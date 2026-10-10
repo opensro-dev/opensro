@@ -102,6 +102,7 @@ export function targetStatus(
 		texts: { node: AuthoredControl; value: string; }[] = [];
 	const roots = layouts.iftargetwindow!;
 	let width = 196, height = 51, frame = roots.GDR_TW_COMMONENEMY!, gradeIcon = previousGradeIcon;
+	let remove: AuthoredControl | undefined;
 	/*
  ================
  change
@@ -189,6 +190,9 @@ export function targetStatus(
 			)
 		} );
 		put( change( p.GDR_TWFS_TEXT_ID!, { rect: [ 34, 10, FORTRESS_TARGET_NAME_WIDTH, 12 ] } ), entity.name );
+		// OnCreate (517250) gives the delete button the dark close glyph; the
+		// caller shows it when 516BC0's eligibility allows (fortressDeleteAction).
+		remove = texture( p.GDR_TWFS_D_BUTTON!, "ifcommon/com_d_windowclose" );
 		if ( hp !== undefined && entity.maxHp ) {
 			images.push( {
 				node: change( p.GDR_TWFS_GAUGE_HPGAUGE!, { rect: [ 14, 37, FORTRESS_TARGET_GAUGE_WIDTH, 4 ] } ),
@@ -235,7 +239,7 @@ export function targetStatus(
 		texture: root + "ifcommon/com_windowclose.png",
 		uv: [ 0, 0, 1, 1 ]
 	} );
-	return { width, height, images, texts, close, gradeIcon };
+	return { width, height, images, texts, close, gradeIcon, ...(remove ? { remove } : {}) };
 }
 
 const COMPACT_TARGET_WIDTH = 196;

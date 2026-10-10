@@ -429,7 +429,8 @@ import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
 import { damageTextAssets } from "@/engine/foundation/ui/damage-text";
-import { targetStatus, compactTargetStatus } from "@/engine/foundation/ui/target-status";
+import { targetStatus, compactTargetStatus, fortressTargetKind } from "@/engine/foundation/ui/target-status";
+import { fortressActive, fortressDeleteAction } from "@/engine/foundation/gameplay/fortress";
 import {
 	loadingPresentation,
 	type LoadingPresentation,
@@ -970,6 +971,8 @@ export function createUi(
 	// storage-slot:, cos-slot:). A drag or a click-carry (the bridge's carry)
 	// both move it; the release or the next press places it.
 	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
+	// The structure target window's delete question (517750 -> 517CA0).
+	let structureRemoval: { gid: number; action: number; fortress: number; name: string; } | null = null;
 	/*
 	================
 	carriedRow
@@ -1306,6 +1309,27 @@ export function createUi(
 			master: member?.grade === 0,
 			flags: state?.staffFlags ?? 0
 		};
+	}
+
+	/*
+	================
+	structureRemoveAction
+
+	The 0x71E1 action the target's delete button sends, or 0 when 516BC0
+	hides it (fortressDeleteAction).
+	================
+	*/
+	function structureRemoveAction( target: EntityState ): number {
+		const game = view?.gameplay, state = game?.fortress, social = game?.social, kind = fortressTargetKind( target );
+		const staff = fortressStaffView();
+		if ( !kind || !state || staff.fortress === undefined ) return 0;
+		const member = social?.guild?.members.find( row => row.id === social.self );
+		return fortressDeleteAction( kind, {
+			war: fortressActive( state ),
+			holder: staff.holder,
+			role: member?.role ?? 0,
+			ownObject: !!social?.guild && target.guildId === social.guild.id
+		} );
 	}
 
 	/*
@@ -3955,7 +3979,14 @@ export function createUi(
 			sendGameplay( { kind: "select", gid: view.gameplay.localGid } );
 			requestRebirthPrompt( view.gameplay.localGid );
 		} else if ( id === "clear-target" ) sendGameplay( { kind: "release-target" } );
-		else if ( id === "inventory-next" ) {
+		else if ( id === "target-structure-remove" ) {
+			// 517750 asks before 517CA0 sends anything.
+			const game = view.gameplay, target = view.entities.find( row => row.gid === game?.target );
+			const action = target ? structureRemoveAction( target ) : 0, fortress = fortressStaffView().fortress;
+			if ( target && action && fortress !== undefined ) {
+				structureRemoval = { gid: target.gid, action, fortress, name: target.name };
+			}
+		} else if ( id === "inventory-next" ) {
 			// 59DF10 pages the bag alone: the 13 sockets hold no page.
 			const bag = inventorySlots(
 				0,
@@ -4588,6 +4619,30 @@ export function createUi(
 					(event.kind === "drag" || event.kind === "drag-end" || event.kind === "double-activate") &&
 					ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) )
 				) return;
+			}
+			if ( structureRemoval ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "structure-remove-cancel"
+				) {
+					structureRemoval = null;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "structure-remove-confirm"
+				) {
+					// 517CA0 on OK: {target, 0x16 or 0x17, fortress}.
+					const { gid, action, fortress } = structureRemoval;
+					structureRemoval = null;
+					dirty = true;
+					if ( view?.session?.phase === "world" ) {
+						sendGameplay( { kind: "fortress-dismantle", gid, action, fortress } );
+					}
+					return;
+				}
+				if ( event.kind !== "hover" ) return;
 			}
 			if ( cosHud.cleanConfirm() !== null ) {
 				if (
@@ -8948,6 +9003,13 @@ export function createUi(
 							}
 						}
 						authoredButton( output.close, tx, ty, "clear-target", "Clear target" );
+						if ( output.remove && structureRemoveAction( target ) ) {
+							// The compact layout keeps the delete glyph left of its close.
+							const remove = compactOutput ?
+								{ ...output.remove, rect: [ output.width - 40, 7, 16, 16 ] as UiRect } :
+								output.remove;
+							authoredButton( remove, tx, ty, "target-structure-remove", "Remove structure" );
+						}
 						// 5814D0 moves GDR_TW_BUFF to (window x, frame bottom + 1).
 						if ( game && [ "monster", "cos", "player" ].includes( target.kind ) ) {
 							const buffStart = controls.length, nativeBuffLayout = targetBuffViewer();
@@ -17681,6 +17743,44 @@ export function createUi(
 				);
 				button(
 					"repair-all-cancel",
+					hudCopy( "UIIT_CTL_NO" ),
+					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			if ( structureRemoval && view?.gameplay?.target !== structureRemoval.gid ) structureRemoval = null;
+			if ( worldVisible && structureRemoval ) {
+				// 517750 raises UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW naming the target.
+				const layout = guildProposalLayout( w, h );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} ),
+					...text.quads(
+						hudCopy( "UIIT_MSG_FORT_STRUCTURE_DELETE_WINDOW" ).replace( "%s", structureRemoval.name ),
+						layout.name,
+						full,
+						white,
+						{ hAlign: 1, vAlign: 0 }
+					)
+				);
+				button(
+					"structure-remove-confirm",
+					hudCopy( "UIIT_CTL_YES" ),
+					...layout.accept.slice( 0, 3 ) as [number, number, number]
+				);
+				button(
+					"structure-remove-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
