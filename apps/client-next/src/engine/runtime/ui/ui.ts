@@ -6764,8 +6764,11 @@ export function createUi(
 				dirty = true;
 			}
 			// 5A2890 -> 5A0F90 destroys the answered entry before the server replies.
-			// Only entering naming opens it; queued commands may leave that phase visible.
-			if ( stallState?.phase === "naming" && view?.gameplay?.stall?.phase !== "naming" && !stallPrompt ) {
+			// The request identity survives a coalesced naming -> none -> naming cycle.
+			if (
+				stallState?.phase === "naming" && (view?.gameplay?.stall?.phase !== "naming" ||
+					stallState.namingSequence !== view.gameplay.stall.namingSequence)
+			) {
 				openStallPrompt( {
 					kind: "title",
 					text: hudCopy( "UIIT_STT_STALL_DEFAULT_TITLE" ).replace( "%s", next.session?.character ?? "" )

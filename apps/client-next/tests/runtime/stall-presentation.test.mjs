@@ -540,5 +540,20 @@ test("a naming answer stays dismissed across queued commands and coalesced serve
 		draw( emptyStall() );
 		draw( stallRequest( state.gameplay.stall, { kind: "stall-name" } ).state );
 		assert.ok( input(), "a later naming action opens a fresh title entry" );
+		if ( outcome === "cancel" ) {
+			for ( let cycle = 0; cycle < 3; cycle++ ) {
+				queued.length = 0;
+				f.ui.event( { kind: "activate", id: "stall-prompt-cancel" } );
+				draw( { ...state.gameplay.stall } );
+				assert.equal( input(), undefined, "cancel stays dismissed before the worker consumes it" );
+				f.ui.event( { kind: "double-activate", id: "action:1009" } );
+				assert.deepEqual( queued.map( row => row.command.kind ), [ "stall-name-cancel", "stall-name" ] );
+				let next = state.gameplay.stall;
+				for ( const row of queued ) next = stallRequest( next, row.command ).state;
+				// No publication of the intermediate none phase reaches the UI.
+				draw( next );
+				assert.ok( input(), "each coalesced Cancel -> Stall action reopens a fresh naming prompt" );
+			}
+		}
 	}
 });

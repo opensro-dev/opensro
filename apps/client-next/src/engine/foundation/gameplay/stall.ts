@@ -96,6 +96,8 @@ StallState
 */
 export interface StallState {
 	readonly phase: "none" | "naming" | "owner" | "visitor";
+	// Local identity of an accepted naming action, retained across worker publications.
+	readonly namingSequence: number;
 	readonly owner: number;
 	readonly title: string;
 	readonly greeting: string;
@@ -121,9 +123,10 @@ export interface StallState {
 emptyStall
 ================
 */
-export function emptyStall(): StallState {
+export function emptyStall( namingSequence = 0 ): StallState {
 	return {
 		phase: "none",
+		namingSequence,
 		owner: 0,
 		title: "",
 		greeting: "",
@@ -221,7 +224,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			o = 1;
 			return done( {
 				state: {
-					...emptyStall(),
+					...emptyStall( state.namingSequence ),
 					network: state.network,
 					savedGreeting: state.savedGreeting,
 					phase: "owner",
@@ -233,7 +236,13 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 		case 0xb6e7:
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
-			return done( { state: { ...emptyStall(), network: state.network, savedGreeting: state.savedGreeting } } );
+			return done( {
+				state: {
+					...emptyStall( state.namingSequence ),
+					network: state.network,
+					savedGreeting: state.savedGreeting
+				}
+			} );
 		case 0xb61f: {
 			if ( p[0] !== 1 ) return refusal();
 			o = 1;
@@ -241,7 +250,7 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			const visitors = Array.from( { length: u8() }, u32 );
 			return done( {
 				state: {
-					...emptyStall(),
+					...emptyStall( state.namingSequence ),
 					network: state.network,
 					savedGreeting: state.savedGreeting,
 					phase: "visitor",
@@ -327,7 +336,11 @@ export function stallFrame( state: StallState, frame: WireFrame, ctx: StallConte
 			u8();
 			if ( state.phase === "visitor" && state.owner === gid ) {
 				return done( {
-					state: { ...emptyStall(), network: state.network, savedGreeting: state.savedGreeting }
+					state: {
+						...emptyStall( state.namingSequence ),
+						network: state.network,
+						savedGreeting: state.savedGreeting
+					}
 				} );
 			}
 			return null;
@@ -448,7 +461,8 @@ export function stallRequest(
 	switch ( command.kind ) {
 		case "stall-name":
 			if ( state.phase !== "none" ) throw Error( "Already at a stall" );
-			return { frames, state: { ...state, phase: "naming" } };
+			// A cancel and another action may coalesce into one naming publication.
+			return { frames, state: { ...state, phase: "naming", namingSequence: state.namingSequence + 1 } };
 		case "stall-name-cancel":
 			if ( state.phase !== "naming" ) throw Error( "No stall is being named" );
 			return { frames, state: { ...state, phase: "none" } };

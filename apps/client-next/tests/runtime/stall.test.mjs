@@ -28,6 +28,9 @@ const { textAllowed } = await import( "../../src/engine/foundation/ui/character-
 const { createChat } = await import(
 	"../../src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts"
 );
+const { createInventory } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts"
+);
 
 // ITEM_ETC_HP_POTION_01 (etc band, one u16 count).
 const POTION = 3630;
@@ -73,11 +76,40 @@ test("naming opens on the action and its answer sends the stall and its greeting
 	state = defined( stall.stallFrame( created.state, frame( 0xb049, [ 1 ] ), ctx ) ).state;
 	assert.equal( state.phase, "owner" );
 	assert.equal( state.title, "Potions" );
+	const ended = defined( stall.stallFrame( state, frame( 0xb42c, [ 1 ] ), ctx ) ).state;
+	assert.equal(
+		stall.stallRequest( ended, { kind: "stall-name" } ).state.namingSequence,
+		2,
+		"creation and close replies retain identity for the next naming action"
+	);
+	const visited = defined(
+		stall.stallFrame( ended, frame( 0xb61f, [ 1, ...u32( OWNER ), ...wstr( "Hi" ), 0, 0, 0xff, 0 ] ), ctx )
+	).state;
+	for ( const close of [ frame( 0xb6e7, [ 1 ] ), frame( 0x33d1, [ ...u32( OWNER ), 0 ] ) ] ) {
+		const closed = defined( stall.stallFrame( visited, close, ctx ) ).state;
+		assert.equal(
+			stall.stallRequest( closed, { kind: "stall-name" } ).state.namingSequence,
+			2,
+			"visit, leave and disappearance replies cannot reuse an earlier naming identity"
+		);
+	}
 	const cancelled = stall.stallRequest( stall.stallRequest( stall.emptyStall(), { kind: "stall-name" } ).state, {
 		kind: "stall-name-cancel"
 	} );
 	assert.equal( cancelled.state.phase, "none" );
 	assert.equal( cancelled.frames.length, 0 );
+	const inventory = createInventory( () => {} );
+	inventory.stallCommand( { kind: "stall-name" } );
+	let sequence = defined( inventory.state().stall ).namingSequence;
+	for ( const reset of [ () => inventory.bootstrap( {} ), () => inventory.clear() ] ) {
+		reset();
+		inventory.stallCommand( { kind: "stall-name" } );
+		assert.equal(
+			defined( inventory.state().stall ).namingSequence,
+			++sequence,
+			"bootstrap and clear cannot reuse a naming identity from an earlier publication"
+		);
+	}
 });
 
 test("a visitor sees the offers, buys one into the bag, and the owner gives it up", () => {
