@@ -71,6 +71,28 @@ type Catalog struct {
 
 /*
 ================
+merchandiseKind
+
+The item families an NPC shop sells: equipment (TypeID2 1), expendables
+(TypeID2 3) other than 3/3/5, and the pet summoners (3/2/1, the stable's
+Pet tab: the Grey Wolf Summon Scroll), which are sold without a record and
+whose empty summoner body (state 1) the inventory wire already carries.
+================
+*/
+func merchandiseKind(typeIDs [4]int64) bool {
+	switch typeIDs[1] {
+	case 1:
+		return true
+	case 2:
+		return typeIDs[2] == 1
+	case 3:
+		return typeIDs[2] != 5
+	}
+	return false
+}
+
+/*
+================
 Load
 
 Admits authored gold and honor packages and preserves every item template.
@@ -155,8 +177,7 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		}
 		admitted := true
 		for _, content := range contents {
-			ref := content.Ref
-			if (ref.TypeIDs[1] != 1 && ref.TypeIDs[1] != 3) || ref.TypeIDs[1] == 3 && ref.TypeIDs[2] == 5 {
+			if !merchandiseKind(content.Ref.TypeIDs) {
 				admitted = false
 				break
 			}

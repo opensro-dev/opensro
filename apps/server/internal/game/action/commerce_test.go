@@ -151,3 +151,34 @@ func TestShopPurchaseRefusalsNameTheirCause(t *testing.T) {
 		t.Fatalf("a refused purchase changed the character: gold %d rows %d", goldOf(c), len(c.MissionInventory))
 	}
 }
+
+/*
+================
+TestShopSellsAPetSummoner
+
+The stable's Pet tab sells a pet summoner (3/2/1) with no record: the
+bought scroll lands as an empty summoner (state 1) and summons its pet.
+================
+*/
+func TestShopSellsAPetSummoner(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	c.MissionInventory = c.MissionInventory[:0]
+	rt, _ := newTestRuntime(c, refs)
+	spawn := simulation.SeedWorldState(c).Spawn
+	rt.NpcSpawn.Enabled = true
+	rt.NpcRoster = []simulation.NpcDef{{ObjectID: 17, RefObjID: 100, TalkFlags: simulation.NpcTalkFlagShop, AuthoredSpawn: true, Spawn: spawn, NpcTalkStoreGroups: []simulation.NpcTalkStoreGroup{{StoreGroupID: 100, Tabs: []simulation.NpcTalkStoreTab{{TabID: 1}}}}}}
+	rt.Selected.Set(testDivision, c.Name, 17)
+	rt.Selected.OpenFunction(testDivision, c.Name, 17)
+	scroll := refs.staticItemSource["SUMMON_ATTACK"]
+	rt.Commerce = &commerce.Catalog{Tabs: map[int32][]commerce.Offer{1: {{Slot: 0, Ref: scroll, Price: 100, Stack: 1}}}}
+	rt.BindPetSession(testDivision, c, 101)
+	before := goldOf(c)
+	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: 8, NpcGID: 17, ShopSlot: 0, Quantity: 1})
+	if len(r.Frames) == 0 || goldOf(c) != before-100 || len(c.MissionInventory) != 1 || c.MissionInventory[0].RefObjID != scroll.RefObjID {
+		t.Fatalf("pet summoner purchase: %+v gold %d rows %+v", r.Frames, goldOf(c), c.MissionInventory)
+	}
+	useSummonerFixture(t, rt, c, uint8(c.MissionInventory[0].Slot), scroll)
+	if len(c.Companions()) != 1 || !c.Companions()[0].Summoned {
+		t.Fatal("the bought scroll did not summon its pet")
+	}
+}
