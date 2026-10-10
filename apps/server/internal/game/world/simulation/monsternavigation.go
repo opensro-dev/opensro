@@ -56,6 +56,7 @@ func (ops *MonsterMoverOps) planSegment(instance monster.Instance, mover monster
 	}
 	if !ready {
 		route := ops.PlanRoute(live, goal)
+		ops.Navigation.plan(callerForMode(mover.Mode()), route)
 		if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() == 0 {
 			return ops.waitForNavigation(instance.Gid, mover, live, goal, now)
 		}

@@ -139,6 +139,21 @@ type Metrics struct {
 	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
 	// Divisions whose own work in a tick ran >= 100 ms, by division ID.
 	SlowDivisions map[string]SlowHookStats `json:"slow_divisions"`
+	// MonsterNavigation is the world's route-plan and path-clip counters
+	// (simulation.NavigationMetrics), when the GameWorld installed them.
+	MonsterNavigation map[string]uint64 `json:"monster_navigation,omitempty"`
+}
+
+/*
+==================
+SetNavigationMetrics
+
+Installs the provider of the monster_navigation block. The transport only
+reads its counters; it never imports the world that counts them.
+==================
+*/
+func (h *Hub) SetNavigationMetrics(read func() map[string]uint64) {
+	h.navigationMetrics.Store(&read)
 }
 
 // Metrics snapshots the counters and the current live-session count.
@@ -218,6 +233,9 @@ func (h *Hub) Metrics() Metrics {
 	h.metrics.handshakes.snapshotHandshakeInto(&metrics)
 	h.metrics.ticks.snapshotInto(&metrics)
 	h.metrics.timing.snapshotInto(&metrics)
+	if read := h.navigationMetrics.Load(); read != nil && *read != nil {
+		metrics.MonsterNavigation = (*read)()
+	}
 	return metrics
 }
 

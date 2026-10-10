@@ -7,6 +7,8 @@ type NavigationRoute struct {
 	status NavigationRouteStatus
 	goal   Pose
 	points []Pose
+	// probes is the path queries the search spent (for metrics only).
+	probes int
 }
 
 type NavigationRouteStatus uint8
@@ -29,7 +31,13 @@ func (r *NavigationRoute) Status() NavigationRouteStatus { return r.status }
 func NewNavigationRoute(goal Pose, points []Pose) *NavigationRoute {
 	return &NavigationRoute{goal: goal, points: append([]Pose(nil), points...)}
 }
-func (r *NavigationRoute) Goal() Pose           { return r.goal }
+func (r *NavigationRoute) Goal() Pose { return r.goal }
+
+// WithProbes records the path queries the search spent; metrics read it.
+func (r *NavigationRoute) WithProbes(n int) *NavigationRoute { r.probes = n; return r }
+
+// Probes is the path queries the search spent.
+func (r *NavigationRoute) Probes() int          { return r.probes }
 func (r *NavigationRoute) Len() int             { return len(r.points) }
 func (r *NavigationRoute) Point(index int) Pose { return r.points[index] }
 

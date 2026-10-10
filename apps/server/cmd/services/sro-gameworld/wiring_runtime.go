@@ -103,7 +103,10 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		log.Infof("simulation: beta world map roster ON (%s)", simulation.EnvBetaPlayerMap)
 	}
 	if game.deps.MonsterState != nil {
+		navigation := &simulation.NavigationMetrics{}
+		game.hub.SetNavigationMetrics(navigation.Snapshot)
 		ticker.Monsters = &simulation.MonsterMoverOps{
+			Navigation:     navigation,
 			Monsters:       game.deps.MonsterState,
 			TacticsFor:     monster.ResolveTactics,
 			TerrainHeight:  game.water.TerrainHeightAt,

@@ -50,7 +50,10 @@ whenever the monster population is enabled - which is the DEFAULT
 ==================
 */
 type MonsterMoverOps struct {
-	divisionID     string // set by the owning ticker shard; empty only in direct fixtures
+	divisionID string // set by the owning ticker shard; empty only in direct fixtures
+	// Navigation counts route plans and path clips (navigation_metrics.go);
+	// nil counts nothing.
+	Navigation     *NavigationMetrics
 	MessageBlockAt func(Spawn) (worldgeom.MessageBlock, bool)
 	activity       *monsterActivitySnapshot
 	Monsters       *MonsterState
@@ -533,7 +536,7 @@ func (ops *MonsterMoverOps) startWanderLeg(divisionID string, instance monster.I
 	}
 	if ops.hasPlanner() {
 		probe := normalizeMonsterPose(motion.Destination(live, tactics.WanderProbeDistance))
-		path := ops.planPath(live, mover.LiveNavOwner(nowMs), probe)
+		path := ops.planPath(navWander, live, mover.LiveNavOwner(nowMs), probe)
 		if path == nil {
 			// Missing geometry cannot be interpreted as a successful probe.
 			mustMoverTransition(&mover, monster.MoverEventStartWander, 0)
@@ -592,7 +595,7 @@ func (ops *MonsterMoverOps) planReturnLeg(instance monster.Instance, mover monst
 		if ops.hasPlanner() {
 			// 545E14: clip from HOME, not the actor's current position. The
 			// anchor has no walked cell: the teleport rule resolves it.
-			path := ops.planPath(anchorPose(instance), NavOwner{}, dest)
+			path := ops.planPath(navReturn, anchorPose(instance), NavOwner{}, dest)
 			if path == nil {
 				if ops.PlanRoute != nil {
 					mover.SetNavigationMotion(speed, channel)
@@ -690,7 +693,7 @@ func (ops *MonsterMoverOps) planDirectSegment(instance monster.Instance, mover m
 	var navigation *monster.NavigationPath
 	if ops.hasPlanner() {
 		// Walk from the cell under the monster (native source pNavCell).
-		navigation = ops.planPath(from, mover.LiveNavOwner(nowMs), goal)
+		navigation = ops.planPath(callerForMode(mover.Mode()), from, mover.LiveNavOwner(nowMs), goal)
 		if navigation == nil {
 			return ops.holdNavigation(instance.Gid, mover, from, nowMs)
 		}
@@ -848,7 +851,8 @@ monster's live pose pass mover.LiveNavOwner; a leg from the nest anchor
 passes the zero owner (native teleport rule, 545E14 clips from HOME).
 ==================
 */
-func (ops *MonsterMoverOps) planPath(from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath {
+func (ops *MonsterMoverOps) planPath(caller navCaller, from monster.Pose, fromOwner NavOwner, goal monster.Pose) *monster.NavigationPath {
+	ops.Navigation.clip(caller)
 	if ops.PlanPathFrom != nil {
 		return ops.PlanPathFrom(from, fromOwner, goal)
 	}

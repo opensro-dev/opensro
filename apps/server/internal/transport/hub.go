@@ -91,6 +91,9 @@ type Hub struct {
 	// Transport observability, including simulation-tick duration, has its own
 	// synchronization and lifecycle.
 	metrics hubMetrics
+	// navigationMetrics reads the world's monster navigation counters
+	// (SetNavigationMetrics); nil publishes no block.
+	navigationMetrics atomic.Pointer[func() map[string]uint64]
 }
 
 // AdmissionIdentity is the authenticated account/shard identity carried by a
