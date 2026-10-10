@@ -95,6 +95,7 @@ import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
+import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
 	partyMatchPacket,
@@ -3556,6 +3557,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
+					alchemyNotice( frame.opcode, frame.payload ) ??
 					skillNotice( frame.opcode, frame.payload, localCountry, fortressActive( fortress ) );
 				if ( refusal ) notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
 				if ( target ) {
