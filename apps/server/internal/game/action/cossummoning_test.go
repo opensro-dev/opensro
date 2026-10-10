@@ -479,3 +479,23 @@ func TestGrowthPetsCannotBeSummonedInFreeBattle(t *testing.T) {
 	}
 	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(3).U8(23).U16(attack.TypeFlags()).Payload(), cosSummonFreeBattle)
 }
+
+/*
+================
+TestPetsSummonInBattle
+
+The battle refusal names vehicles and transports only: a player in battle
+still summons an attack pet and a pickup pet.
+================
+*/
+func TestPetsSummonInBattle(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	rt, clock := newTestRuntime(c, refs)
+	rt.BindPetSession(testDivision, c, 101)
+	c.BattleUntilMs = clock.NowMs() + battleStateMs
+	useSummonerFixture(t, rt, c, 23, refs.staticItemSource["SUMMON_ATTACK"])
+	useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
+	if !c.Companions()[0].Summoned || !c.Companions()[1].Summoned {
+		t.Fatal("a pet summon in battle was refused")
+	}
+}

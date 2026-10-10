@@ -75,10 +75,11 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	if row.StackCount != 1 || c.NativeTeleportMode != 0 || rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
 		return false
 	}
-	if inBattleState(c, use.nowMs) {
-		*result = itemUseFailure(cosSummonInBattle)
-		return false
-	}
+	// No battle check here. INFERENCE: the battle refusal (0x78) is
+	// UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE, "Cannot summon a vehicle to move
+	// or transport ... after the end of combat": it names riding and
+	// transport summons only (itemUseSummoner), not the growth and pickup
+	// pets this path calls, which a player may summon in battle.
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 	if !ok {
 		return false
