@@ -221,8 +221,11 @@ test("with no published table the box keeps its two native points", () => {
 			"reverse-scroll:3",
 			"reverse-scroll-cancel"
 		] );
+		// The map row is not offered, so naming it leaves the box as it was.
 		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
-		assert.notEqual( f.ui.step( f.state, 1400 )?.panel, "Map" );
+		const after = f.ui.step( f.state, 1400 );
+		assert.ok( !after || boxIds( after ).length === 3, "the box stays up" );
+		assert.ok( !after?.controls.some( c => c.id.startsWith( "reverse-map-point:" ) ), "no map points" );
 	} finally {
 		f.dispose();
 	}
