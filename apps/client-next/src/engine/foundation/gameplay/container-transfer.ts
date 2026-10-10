@@ -11,6 +11,7 @@ and capacity before calling in.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { etcCarriesPlusByte } from "./inventory-item";
 
 // Expendable stackable class bits: (typeFlags & 0x7E) === 0x6C.
 const STACKABLE_MASK = 0x7e;
@@ -23,6 +24,9 @@ const VIGOR_POTION_TYPE = 0x18ec;
 const PET_POTION_TYPE = 0x20ec;
 const PET_VIGOR_POTION_TYPE = 0x48ec;
 const LUCKY_POWDER_TYPE = 0x156c;
+const MAGIC_STONE_TYPE = 0x0dec;
+const ATTRIBUTE_STONE_TYPE = 0x15ec;
+const VALUELESS_STONE_TYPE = 0x3dec;
 
 /*
 ================
@@ -34,11 +38,13 @@ operator lowers SRO_STACK_SIZES. Only plain configurable families qualify.
 */
 function retainedOversizedStack( item: InventoryItem, cap: number ): boolean {
 	if (
-		cap < 1 || item.quantity <= cap || item.plus !== 0 || item.variance !== "0" ||
+		cap < 1 || item.quantity <= cap || item.variance !== "0" ||
 		item.magic.length !== 0 || (item.transformRefObjId ?? 0) !== 0 || item.summon || item.label
 	) return false;
 	const type = item.typeFlags & ITEM_TYPE_MASK;
-	if ( type === ELIXIR_TYPE ) return true;
+	if ( type === MAGIC_STONE_TYPE || type === ATTRIBUTE_STONE_TYPE ) return true;
+	if ( item.plus !== 0 ) return false;
+	if ( type === ELIXIR_TYPE || type === VALUELESS_STONE_TYPE ) return true;
 	if ( cap === 1 ) return false;
 	switch ( type ) {
 		case HP_POTION_TYPE:
@@ -133,8 +139,14 @@ export function planWholeTransfer(
 	const item = a.get( source );
 	if ( !item ) throw Error( "Transfer requires a source item" );
 	const other = b.get( destination );
-	if ( other && sameStackIdentity( item, other ) && stackable( item ) ) {
-		const cap = caps.get( item.refObjId );
+	const cap = caps.get( item.refObjId );
+	// 756A60's cap-one native arm swaps counts only. The port-only identity
+	// applies while stacking is enabled or either row retains a larger stack.
+	const nativeSingles = cap === 1 && item.quantity === 1 && other?.quantity === 1;
+	if (
+		other && stackable( item ) &&
+		(nativeSingles ? nativeStackIdentity( item, other ) : sameStackIdentity( item, other ))
+	) {
 		if (
 			cap === undefined || !Number.isInteger( cap ) || cap < 1 || cap > 65535 ||
 			![ item, other ].every( row =>
@@ -158,15 +170,31 @@ export function planWholeTransfer(
 
 /*
 ================
-sameStackIdentity
+nativeStackIdentity
 
 490230 compares the original cargo-owner string before merging trade goods.
 ================
 */
-export function sameStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
+export function nativeStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
 	if ( a.refObjId !== b.refObjId ) return false;
 	if ( (a.typeFlags & 0x7fe) === 0x46c || (b.typeFlags & 0x7fe) === 0x46c ) {
 		return (a.label ?? "") === (b.label ?? "");
 	}
+	return true;
+}
+
+/*
+================
+sameStackIdentity
+
+The merge identity: nativeStackIdentity, and port-only, not native, a
+stone's plus (its assimilation value) must match too. Native cap-one whole
+transfers explicitly use nativeStackIdentity; every quantity-combining path
+and retained oversized stack uses this rule (stackIdentityMatches, #583).
+================
+*/
+export function sameStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
+	if ( !nativeStackIdentity( a, b ) ) return false;
+	if ( etcCarriesPlusByte( a.typeFlags ) || etcCarriesPlusByte( b.typeFlags ) ) return a.plus === b.plus;
 	return true;
 }

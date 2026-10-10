@@ -32,17 +32,17 @@ function binding( slot, item ) {
 fixture
 ================
 */
-function fixture( items, typeFlags = 0x8ec ) {
+function fixture( items, typeFlags = 0x8ec, maxStack = 50 ) {
 	const sent = [], game = createGameplay( frame => sent.push( frame ) );
 	game.bootstrap( {
 		inventorySlotCount: 77,
 		equipmentSlotCount: 13,
 		character: { hp: 100, mp: 100, maxHp: 100, maxMp: 100, quickSlots: [ binding( 1, 13 ), binding( 2, 14 ) ] },
-		refItemSnapshot: [ { refObjId: 1, typeFlags, nativeFields: { maxStack: 50 } } ],
+		refItemSnapshot: [ { refObjId: 1, typeFlags, nativeFields: { maxStack } } ],
 		equipItems: items.map( ( [slot, quantity, plus = 0] ) => ({
 			slot,
 			refObjId: 1,
-			body: [ 1, 0, 0, 0, quantity, 0, ...(typeFlags === 0xdec ? [ plus ] : []) ]
+			body: [ 1, 0, 0, 0, quantity, 0, ...([ 0xdec, 0x15ec ].includes( typeFlags ) ? [ plus ] : []) ]
 		}) )
 	} );
 	const local = {
@@ -92,10 +92,87 @@ for ( const destinationCount of [ 20, 50 ] ) {
 }
 
 test("native destination-plus flag takes the other remap branch for enhanced stackables", () => {
-	const { game } = fixture( [ [ 13, 50, 0 ], [ 14, 20, 1 ] ], 0xdec );
+	// Magic stones at their native cap of 1: 757652 adds the destination's
+	// plus (its assimilation value) to the count and moves both bindings.
+	const { game } = fixture( [ [ 13, 1, 0 ], [ 14, 1, 1 ] ], 0xdec, 1 );
 	const state = move( game, 13, 14, 1 );
 	assert.deepEqual( state?.quickSlots, [ binding( 1, 14 ), binding( 2, 13 ) ] );
 	game.dispose();
+});
+
+test("stacked stones merge only with an equal assimilation value (port-only, #583)", () => {
+	const equal = fixture( [ [ 13, 10, 90 ], [ 14, 20, 90 ] ], 0xdec );
+	let state = move( equal.game, 13, 14, 10 );
+	assert.deepEqual( state?.inventory.map( row => [ row.slot, row.quantity, row.plus ] ), [ [ 14, 30, 90 ] ] );
+	// A merged stack keeps the destination's bindings, as any stackable does.
+	assert.deepEqual( state?.quickSlots, [ binding( 1, 14 ), binding( 2, 14 ) ] );
+	equal.game.dispose();
+	const different = fixture( [ [ 13, 10, 40 ], [ 14, 20, 90 ] ], 0xdec );
+	state = move( different.game, 13, 14, 10 );
+	assert.deepEqual( state?.inventory.map( row => [ row.slot, row.quantity, row.plus ] ), [ [ 13, 20, 90 ], [
+		14,
+		10,
+		40
+	] ] );
+	assert.deepEqual( state?.quickSlots, [ binding( 1, 14 ), binding( 2, 13 ) ] );
+	different.game.dispose();
+});
+
+test("retained stone swaps move bindings by assimilation after rollback", () => {
+	for ( const flags of [ 0xdec, 0x15ec ] ) {
+		for ( const quantity of [ 1, 5 ] ) {
+			const { game } = fixture( [ [ 13, 1, 90 ], [ 14, quantity, 0 ] ], flags, 1 );
+			const state = move( game, 13, 14, 1 );
+			assert.deepEqual( state?.inventory.map( row => [ row.slot, row.quantity, row.plus ] ), [ [
+				13,
+				quantity,
+				0
+			], [ 14, 1, 90 ] ] );
+			// Two native singles retain 757652's plus/count quirk. A retained
+			// stack is port-only and its binding follows its distinct value.
+			assert.deepEqual( state?.quickSlots, [ binding( 1, 14 ), binding( 2, quantity === 1 ? 14 : 13 ) ] );
+			game.dispose();
+		}
+	}
+});
+
+test("stone identity is shared by bag, warehouse and COS merge planning", () => {
+	const stone = ( slot, plus, quantity ) => ({
+		slot,
+		plus,
+		quantity,
+		refObjId: 1,
+		typeFlags: 0xdec,
+		durability: 0,
+		variance: "0",
+		magic: []
+	});
+	const a = stone( 13, 40, 10 ), b = stone( 14, 90, 20 ), caps = new Map( [ [ 1, 50 ] ] );
+	const swap = planContainerMove( [ a, b ], { source: 13, destination: 14, quantity: 10 }, caps, "storage" );
+	assert.deepEqual( swap, [ { ...b, slot: 13 }, { ...a, slot: 14 } ] );
+	const across = planWholeTransfer( [ a ], [ { ...b, slot: 0 } ], 13, 0, caps );
+	assert.deepEqual( across, { from: [ { ...b, slot: 13 } ], to: [ { ...a, slot: 0 } ] } );
+	const merge = planContainerMove(
+		[ a, { ...b, plus: 40 } ],
+		{ source: 13, destination: 14, quantity: 10 },
+		caps,
+		"COS"
+	);
+	assert.deepEqual( merge.map( row => [ row.slot, row.quantity, row.plus ] ), [ [ 14, 30, 40 ] ] );
+});
+
+test("cap-one retained stones reconstruct an acknowledged split through gameplay", () => {
+	for ( const flags of [ 0xdec, 0x15ec, 0x3dec ] ) {
+		const plus = flags === 0x3dec ? 0 : 90;
+		const { game } = fixture( [ [ 13, 50, plus ] ], flags, 1 );
+		const state = move( game, 13, 14, 3 );
+		assert.deepEqual( state?.inventory.map( row => [ row.slot, row.quantity, row.plus ] ), [ [ 13, 47, plus ], [
+			14,
+			3,
+			plus
+		] ] );
+		game.dispose();
+	}
 });
 
 test("expanded bag moves, drag bindings, persistence and depletion use the published capacity", () => {

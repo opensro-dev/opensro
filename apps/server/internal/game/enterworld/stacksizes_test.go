@@ -32,7 +32,7 @@ func TestParseStackSizes(t *testing.T) {
 		t.Fatalf("parsed %q", got)
 	}
 	for _, bad := range []string{
-		"stone=50",            // unknown group (stones wait for #583)
+		"stone=50",            // unknown group
 		"potion=50,potion=60", // repeated
 		"potion=0",
 		"potion=65536",
@@ -65,7 +65,7 @@ TestStackSizesRaiseOnlyTheirGroups
 ================
 */
 func TestStackSizesRaiseOnlyTheirGroups(t *testing.T) {
-	sizes := StackSizes{"potion": 2000, "petpotion": 500, "elixir": 50, "luckypowder": 100}
+	sizes := StackSizes{"potion": 2000, "petpotion": 500, "elixir": 50, "luckypowder": 100, "magicstone": 40, "attrstone": 30}
 	for _, c := range []struct {
 		name   string
 		ref    *ItemRef
@@ -84,9 +84,11 @@ func TestStackSizesRaiseOnlyTheirGroups(t *testing.T) {
 		{"single potion", stackRef(1, 3, 1), false, 1, 1},
 		// Above a native cap the override raises it, mall bags included.
 		{"mall potion bag", stackRef(1, 1, 1000), true, 2000, 1000},
-		// Stones are out of scope until their merge identity lands (#583).
-		{"magic stone", stackRef(11, 1, 1), false, 1, 1},
-		{"attribute stone", stackRef(11, 2, 1), false, 1, 1},
+		{"magic stone", stackRef(11, 1, 1), true, 40, 1},
+		{"athanasia stone", stackRef(11, 7, 1), true, 40, 1},
+		{"attribute stone", stackRef(11, 2, 1), true, 30, 1},
+		// Tablets, materials and elements already stack; no group names them.
+		{"magic tablet", stackRef(11, 3, 20), false, 20, 20},
 		{"pet scroll", stackRef(1, 6, 50), false, 50, 50},
 		{"equipment", &ItemRef{TypeIDs: [4]int64{3, 1, 6, 2}}, false, 0, 0},
 	} {

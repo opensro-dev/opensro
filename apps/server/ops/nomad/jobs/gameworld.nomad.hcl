@@ -206,7 +206,8 @@ variable "beta_rare_rate" {
 }
 
 # stack_sizes raises item stack caps per group (port-only, not native), e.g.
-# "potion=2000,elixir=50". Groups: potion, petpotion, elixir, luckypowder.
+# "potion=2000,elixir=50". Groups: potion, petpotion, elixir, luckypowder,
+# magicstone, attrstone (stones merge only with an equal assimilation value).
 # Empty keeps every itemdata cap; an unknown group or a cap outside 1..65535
 # stops GameWorld at boot.
 variable "stack_sizes" {

@@ -123,3 +123,15 @@ test("the delete stays hidden outside the war and for other roles", t => {
 		);
 	}
 });
+
+test("754A40 reports a dismissal in the chat and a demolition with nothing", () => {
+	// Only the reply decides; the rest of the fortress state is not read.
+	const reply = service => fortress.fortressDismissNotice( /** @type {any} */ ({ service }) );
+	assert.deepEqual( reply( { action: 0x16, result: 1 } ), {
+		key: "UIIT_MSG_FORT_COMMON_DISMISS_COMPLETE",
+		value: 0,
+		nativeType: 0
+	} );
+	assert.equal( reply( { action: 0x17, result: 1, reference: 109 } ), null );
+	assert.equal( reply( { action: 0x16, result: 2, error: 0x2a } ), null, "a refusal takes the 0x1E notice" );
+});

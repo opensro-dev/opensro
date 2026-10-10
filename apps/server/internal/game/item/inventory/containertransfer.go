@@ -36,12 +36,12 @@ func (inv *Inventory) TransferWholeTo(destination *Inventory, sourceSlot, destin
 	}
 	if j >= 0 {
 		source, target := inv.items[i], destination.items[j]
-		if IsEtcStackableTypeFlags(source.TypeFlags) && stackIdentityMatches(source, target) {
+		if IsEtcStackableTypeFlags(source.TypeFlags) && wholeStackIdentityMatches(source, target, stackCap) {
 			if stackCap == 0 || source.Quantity == 0 || target.Quantity == 0 {
 				return newFault(wire.ErrCodeInvalidRequest, "invalidContainerStack")
 			}
 			// Port-only, not native: lowering an operator cap does not corrupt
-			// an existing plain consumable stack. Keep the current cap for
+			// an existing consumable or stone stack. Keep the current cap for
 			// pouring; the shared primitive preserves excess or swaps counts.
 			if (source.Quantity > stackCap && !retainedOversizedStack(source, stackCap)) ||
 				(target.Quantity > stackCap && !retainedOversizedStack(target, stackCap)) {

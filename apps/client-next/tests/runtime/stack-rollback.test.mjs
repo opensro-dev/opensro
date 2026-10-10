@@ -74,7 +74,7 @@ test("retained elixirs split at cap one; native singles still swap", () => {
 });
 
 test("all configurable families transfer retained stacks", () => {
-	for ( const flags of [ 0x8ec, 0x10ec, 0x18ec, 0x20ec, 0x48ec, 0xd6c, 0x156c ] ) {
+	for ( const flags of [ 0x8ec, 0x10ec, 0x18ec, 0x20ec, 0x48ec, 0xd6c, 0x156c, 0xdec, 0x15ec, 0x3dec ] ) {
 		const result = planWholeTransfer(
 			[ item( 13, 100, flags ) ],
 			[ item( 0, 10, flags ) ],
@@ -88,7 +88,7 @@ test("all configurable families transfer retained stacks", () => {
 
 test("rollback eligibility does not admit unrelated oversized rows", () => {
 	for (
-		const row of [ item( 13, 50, 0xdec ), item( 13, 50, 0x46c ), item( 13, 50 ), {
+		const row of [ item( 13, 50, 0x1dec ), item( 13, 50, 0x46c ), item( 13, 50 ), {
 			...item( 13, 50, 0xd6c ),
 			plus: 1
 		}, item( 13, 65536, 0xd6c ) ]
@@ -97,5 +97,49 @@ test("rollback eligibility does not admit unrelated oversized rows", () => {
 			() => planWholeTransfer( [ row ], [ { ...row, slot: 0, quantity: 1 } ], 13, 0, new Map( [ [ 1, 1 ] ] ) ),
 			/Invalid transfer stack limit\/count/
 		);
+	}
+});
+
+test("retained stone stacks split and transfer without changing assimilation", () => {
+	for ( const flags of [ 0xdec, 0x15ec, 0x3dec ] ) {
+		const plus = flags === 0x3dec ? 0 : 90;
+		const source = { ...item( 13, 50, flags ), plus };
+		const split = planContainerMove(
+			[ source ],
+			{ source: 13, destination: 14, quantity: 3 },
+			new Map( [ [ 1, 1 ] ] ),
+			"bag"
+		);
+		assert.deepEqual( split.map( row => [ row.slot, row.quantity, row.plus ] ), [ [ 13, 47, plus ], [
+			14,
+			3,
+			plus
+		] ] );
+		for ( const cap of [ 1, 20 ] ) {
+			const target = { ...source, slot: 0, quantity: 1 };
+			const moved = planWholeTransfer( [ source ], [ target ], 13, 0, new Map( [ [ 1, cap ] ] ) );
+			assert.deepEqual( [ moved.from[0].quantity, moved.to[0].quantity ], cap === 1 ? [ 1, 50 ] : [ 31, 20 ] );
+			assert.equal( moved.from[0].plus, plus );
+			assert.equal( moved.to[0].plus, plus );
+		}
+	}
+});
+
+test("native stone singles retain count-only cross-container behavior", () => {
+	for ( const flags of [ 0xdec, 0x15ec ] ) {
+		const a = { ...item( 13, 1, flags ), plus: 40 }, b = { ...item( 0, 1, flags ), plus: 90 };
+		assert.deepEqual( planWholeTransfer( [ a ], [ b ], 13, 0, new Map( [ [ 1, 1 ] ] ) ), {
+			from: [ a ],
+			to: [ b ]
+		} );
+		assert.deepEqual( planWholeTransfer( [ a ], [ b ], 13, 0, new Map( [ [ 1, 50 ] ] ) ), {
+			from: [ { ...b, slot: 13 } ],
+			to: [ { ...a, slot: 0 } ]
+		} );
+		const retained = { ...a, quantity: 10 };
+		assert.deepEqual( planWholeTransfer( [ retained ], [ b ], 13, 0, new Map( [ [ 1, 1 ] ] ) ), {
+			from: [ { ...b, slot: 13 } ],
+			to: [ { ...retained, slot: 0 } ]
+		} );
 	}
 });

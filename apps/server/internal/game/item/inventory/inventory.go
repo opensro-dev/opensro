@@ -491,8 +491,8 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	// a whole-stack move. quantity == stackCount is NOT a split: that is the
 	// plain two-click move of a whole stackable, and it must keep reaching
 	// the swap/move leg.
-	// Port-only, not native: a retained elixir stack still needs to divide
-	// after its operator cap returns to one. This does not enable merging.
+	// Port-only, not native: retained elixir and stone stacks need to divide
+	// after their operator cap returns to one. This does not enable merging.
 	splittable := stackable || (bothInBag && retainedOversizedStack(inv.items[sourceIndex], stackCap))
 	if bothInBag && splittable && destIndex < 0 && quantity != sourceCount {
 		// Per-cause notice bytes (client sub_689420 copy): zero asks for a
@@ -578,21 +578,27 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 ================
 retainedOversizedStack
 
-Port-only, not native: SRO_STACK_SIZES can leave plain consumable rows above
+Port-only, not native: SRO_STACK_SIZES can leave consumable and stone rows above
 their current cap after a restart. Only its configurable families qualify;
-stones, cargo and per-item metadata must not acquire a new merge policy.
+cargo and unrelated per-item metadata must not acquire a new merge policy.
 Inventory has no cap-history marker, so eligibility follows the same type
-families as enterworld.stackGroups. Only elixirs can return to native cap 1.
+families as enterworld.stackGroups. Elixirs and stones can return to cap 1;
+only value-carrying stones may retain a nonzero assimilation byte.
 ================
 */
 func retainedOversizedStack(item Item, stackCap uint16) bool {
-	if stackCap == 0 || item.Quantity <= stackCap || item.Plus != 0 || item.VarianceBits != 0 ||
+	if stackCap == 0 || item.Quantity <= stackCap || item.VarianceBits != 0 ||
 		len(item.MagicOptions) != 0 || item.TransformRefObjID != 0 || item.Summon != nil || item.TradeOwner != "" {
 		return false
 	}
 	const itemTypeMask uint16 = 0xfffe
 	flags := item.TypeFlags & itemTypeMask
-	if flags == wire.PackTypeFlags(3, 3, 10, 1) {
+	if item.Plus != 0 && !wire.EtcCarriesPlusByte(item.TypeFlags) {
+		return false
+	}
+	switch flags {
+	case wire.PackTypeFlags(3, 3, 10, 1), wire.PackTypeFlags(3, 3, 11, 1),
+		wire.PackTypeFlags(3, 3, 11, 2), wire.PackTypeFlags(3, 3, 11, 7):
 		return true
 	}
 	if stackCap == 1 {

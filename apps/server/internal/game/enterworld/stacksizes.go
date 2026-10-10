@@ -56,15 +56,17 @@ type stackGroup struct {
 	raisesSingles bool
 }
 
-// stackGroups are the families #582 makes configurable. Magic and
-// attribute stones (3/3/11/1, 2, 7) are left out on purpose: each stone
-// carries its own assimilation value, and stacking them needs a merge
-// identity rule first (#583).
+// stackGroups are the configurable families. Magic stones (3/3/11/1) and
+// attribute stones (3/3/11/2) carry their assimilation value in Plus, so
+// they merge only with an equal value (inventory.stackIdentityMatches,
+// #583). The 3/3/11/7 magic stones carry none and merge like elixirs.
 var stackGroups = []stackGroup{
 	{name: "potion", typeID3: 1, typeID4s: []int64{1, 2, 3}},
 	{name: "petpotion", typeID3: 1, typeID4s: []int64{4, 9}},
 	{name: "elixir", typeID3: 10, typeID4s: []int64{1}, raisesSingles: true},
 	{name: "luckypowder", typeID3: 10, typeID4s: []int64{2}},
+	{name: "magicstone", typeID3: 11, typeID4s: []int64{1, 7}, raisesSingles: true},
+	{name: "attrstone", typeID3: 11, typeID4s: []int64{2}, raisesSingles: true},
 }
 
 /*
