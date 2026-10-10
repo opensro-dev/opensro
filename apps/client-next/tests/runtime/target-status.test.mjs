@@ -15,7 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { defined } from "../helpers/defined.mjs";
-const { targetStatus, targetDifficulty, monsterMaximumHp } = await import(
+const { targetStatus, targetDifficulty, monsterMaximumHp, fortressTargetKind } = await import(
 		"../../src/engine/foundation/ui/target-status.ts"
 	),
 	{ decodeAuthoredLayout } = await import( "../../src/engine/foundation/ui/authored-layout.ts" );
@@ -95,4 +95,38 @@ test("unhandled grade retains the native dynamic icon while clearing its title",
 	const result = render( { ...entity, rarity: 2 } );
 	assert.equal( defined( result ).gradeIcon, "remembered.png" );
 	assert.equal( defined( defined( result ).texts.find( row => row.node.name === "GDR_TWSM_TEXT_LEV" ) ).value, "" );
+});
+test("fortress structures and guards take the native fortress or wide NPC window", () => {
+	// TypeID words: barricade 1/2/5/6, fort stone 1/2/5/1, war object 1/2/4/3, guard 1/2/4/4.
+	const barricade = { ...entity, kind: "structure", tidWord: 0x2c4 | (6 << 11) };
+	const stone = { ...entity, kind: "structure", tidWord: 0x2c4 | (1 << 11) };
+	const gem = output => defined( output.images.find( i => i.node.name.endsWith( "_GEM" ) ) ).node.texture;
+	const gauge = output => defined( output.images.find( i => i.node.name.includes( "HPGAUGE" ) ) );
+	assert.deepEqual(
+		[ barricade, { ...entity, kind: "structure", tidWord: 0x244 | (3 << 11) }, stone ].map( fortressTargetKind ),
+		[ 2, 3, 0 ]
+	);
+	assert.deepEqual(
+		[ 4, 1, 3, 2 ].map( band => fortressTargetKind( { kind: "npc", tidWord: 0x244 | (band << 11) } ) ),
+		[ 1, 1, 3, 0 ]
+	);
+	// 516BC0: the fortress-structure child at 236x51, HP 195, name 177.
+	const fortress = defined( render( barricade ) );
+	assert.equal( fortress.images[0].node.name, "GDR_TW_FORTRESSSTRUCTER" );
+	assert.deepEqual( [ fortress.width, fortress.height ], [ 236, 51 ] );
+	assert.equal( gauge( fortress ).node.rect[2], 195 );
+	assert.equal( gauge( fortress ).fraction, .5 );
+	assert.equal( defined( fortress.texts.find( t => t.node.name === "GDR_TWFS_TEXT_ID" ) ).node.rect[2], 177 );
+	assert.ok( gem( fortress ).endsWith( "tw_gem_normal.png" ) );
+	assert.ok(
+		gem( defined( render( { ...entity, kind: "npc", tidWord: 0x244 | (4 << 11) } ) ) ).endsWith(
+			"tw_gem_player.png"
+		)
+	);
+	// Any other structure is a CICNPC: the wide NPC frame with the normal gem.
+	const wide = defined( render( stone ) );
+	assert.equal( wide.width, 236 );
+	assert.equal( gauge( wide ).node.rect[2], 208 );
+	assert.ok( gem( wide ).endsWith( "tw_gem_normal.png" ) );
+	assert.equal( layouts.iftw_fortressstructure.GDR_TWFS_GAUGE_HPGAUGE.rect[2], 50, "authored data is never mutated" );
 });
