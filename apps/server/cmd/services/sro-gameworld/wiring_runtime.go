@@ -56,16 +56,16 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		// Direction walks continue leg by leg on the mission clock.
 		game.movement.DirectionTickHook(),
 		func(nowMs int64) []simulation.DivisionFrames {
-			return game.items.AdvanceSkillObjects(nowMs, ticker.Source.SnapshotSessions())
+			return game.items.AdvanceSkillObjects(nowMs, sessionViews(ticker.Source))
 		},
 		// A marked player's moves reach its hunter out of sight (hntp).
 		func(nowMs int64) []simulation.DivisionFrames {
-			return game.items.AdvanceHuntingPoints(nowMs, ticker.Source.SnapshotSessions())
+			return game.items.AdvanceHuntingPoints(nowMs, sessionViews(ticker.Source))
 		},
 		game.questMarkerTick(),
 		func(nowMs int64) []simulation.DivisionFrames {
 			game.parties.ExpireInvitations(nowMs)
-			return game.parties.MemberUpdates(ticker.Source.SnapshotSessions(), nowMs)
+			return game.parties.MemberUpdates(sessionViews(ticker.Source), nowMs)
 		},
 		// The fortress war's schedule edges run on the mission clock.
 		game.siege.Tick,
@@ -127,6 +127,29 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	}
 
 	return ticker
+}
+
+/*
+================
+sessionViews
+
+The hooks' light session views: the bridge builds them without the peer
+presentation (worldsession.Bridge.SnapshotSessionViews); any other source
+is viewed through its full snapshots.
+================
+*/
+func sessionViews(source simulation.SessionSource) []simulation.SessionView {
+	if viewer, ok := source.(interface {
+		SnapshotSessionViews() []simulation.SessionView
+	}); ok {
+		return viewer.SnapshotSessionViews()
+	}
+	snaps := source.SnapshotSessions()
+	views := make([]simulation.SessionView, len(snaps))
+	for i := range snaps {
+		views[i] = snaps[i].View()
+	}
+	return views
 }
 
 /*

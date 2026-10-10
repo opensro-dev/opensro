@@ -53,7 +53,7 @@ The mission-tick hook: one 0x30E3 to each hunter whose marked recipient
 is out of its sight and has moved since the last report.
 ================
 */
-func (rt *Runtime) AdvanceHuntingPoints(nowMs int64, sessions []simulation.SessionSnapshot) []simulation.DivisionFrames {
+func (rt *Runtime) AdvanceHuntingPoints(nowMs int64, sessions []simulation.SessionView) []simulation.DivisionFrames {
 	rt.huntingReports.mu.Lock()
 	defer rt.huntingReports.mu.Unlock()
 	if rt.huntingReports.last == nil {
@@ -85,7 +85,7 @@ it and it moved. Seeing it again forgets the last report, so leaving
 sight reports at once.
 ================
 */
-func (rt *Runtime) huntingReport(division, sourceName, targetName string, targetGID, token uint32, nowMs int64, sessions []simulation.SessionSnapshot) (simulation.DivisionFrames, bool) {
+func (rt *Runtime) huntingReport(division, sourceName, targetName string, targetGID, token uint32, nowMs int64, sessions []simulation.SessionView) (simulation.DivisionFrames, bool) {
 	unlock := rt.lockDivision(division)
 	defer unlock()
 	source := rt.findCharacter(division, sourceName)
@@ -93,7 +93,7 @@ func (rt *Runtime) huntingReport(division, sourceName, targetName string, target
 	if source == nil || target == nil || enterworld.ObjectIDForCharacter(target) != targetGID {
 		return simulation.DivisionFrames{}, false
 	}
-	index := slices.IndexFunc(sessions, func(s simulation.SessionSnapshot) bool {
+	index := slices.IndexFunc(sessions, func(s simulation.SessionView) bool {
 		return s.DivisionID == division && s.CharacterID == source.ID
 	})
 	if index < 0 || sessions[index].PublishedObjects == nil {

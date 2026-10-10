@@ -106,6 +106,37 @@ type SessionSnapshot struct {
 
 /*
 ==================
+SessionView
+
+The part of a SessionSnapshot that tick hooks read: identity, population,
+publication set and world. It has no peer presentation (Appearance, COS,
+Companions), so it is cheap to build, and a consumer that needs the
+presentation cannot be handed one: monster acquisition, peer interest and
+the player map keep taking the full SessionSnapshot.
+==================
+*/
+type SessionView struct {
+	SessionID        string
+	DivisionID       string
+	CharacterID      int64
+	WorldInstance    uint32
+	Population       instance.Lease
+	PublishedObjects []uint32
+	World            WorldState
+}
+
+/*
+==================
+SessionSnapshot.View
+==================
+*/
+func (s SessionSnapshot) View() SessionView {
+	return SessionView{SessionID: s.SessionID, DivisionID: s.DivisionID, CharacterID: s.CharacterID,
+		WorldInstance: s.WorldInstance, Population: s.Population, PublishedObjects: s.PublishedObjects, World: s.World}
+}
+
+/*
+==================
 CloneWorldState
 
 CloneWorldState deep-copies a WorldState for a SessionSnapshot: the

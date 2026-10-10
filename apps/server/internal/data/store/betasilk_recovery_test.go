@@ -97,7 +97,7 @@ func TestBetaSilkStarterFailureRecoversBeforeHourlyCredit(t *testing.T) {
 		}
 		return nil
 	}
-	online := []simulation.SessionSnapshot{{DivisionID: testDivision, CharacterID: character.ID}}
+	online := []simulation.SessionView{{DivisionID: testDivision, CharacterID: character.ID}}
 	const minuteMs int64 = 60 * 1000
 	const startedMs int64 = 1_000_000
 	blockBetaSilkStarter(t, s)

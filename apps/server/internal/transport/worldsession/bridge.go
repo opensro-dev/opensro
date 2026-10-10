@@ -53,6 +53,19 @@ type SnapshotProvider interface {
 	WorldSnapshot() simulation.SessionSnapshot
 }
 
+/*
+==================
+ViewProvider
+
+An optional, cheaper SnapshotProvider face: the session's identity and
+world without its peer presentation (simulation.SessionView). A provider
+without it is viewed through its full WorldSnapshot.
+==================
+*/
+type ViewProvider interface {
+	WorldView() simulation.SessionView
+}
+
 // SessionIDString is the canonical mapping from a transport session ID to
 // the string ids the simulation package speaks.
 func SessionIDString(id uint64) string { return strconv.FormatUint(id, 10) }
@@ -149,6 +162,36 @@ func tickPhaseObserver(hub *transport.Hub) func(simulation.TickTiming) {
 
 // SnapshotSessions lists the in-world sessions for one tick.
 func (b *Bridge) SnapshotSessions() []simulation.SessionSnapshot {
+	return b.snapshot(false)
+}
+
+/*
+==================
+SnapshotSessionViews
+
+The same sessions as SnapshotSessions, without building their peer
+presentation (action speed, spawn skills, guild, stall, companions): the
+tick hooks that read only identity, population, publication and world.
+==================
+*/
+func (b *Bridge) SnapshotSessionViews() []simulation.SessionView {
+	snaps := b.snapshot(true)
+	views := make([]simulation.SessionView, len(snaps))
+	for i := range snaps {
+		views[i] = snaps[i].View()
+	}
+	return views
+}
+
+/*
+==================
+snapshot
+
+One walk for both faces: light skips the peer presentation where the
+provider offers WorldView. Every session filter is shared.
+==================
+*/
+func (b *Bridge) snapshot(light bool) []simulation.SessionSnapshot {
 	sessions := b.hub.Sessions()
 	out := make([]simulation.SessionSnapshot, 0, len(sessions))
 	for _, s := range sessions {
@@ -172,7 +215,14 @@ func (b *Bridge) SnapshotSessions() []simulation.SessionSnapshot {
 		if !ok {
 			continue
 		}
-		snap := provider.WorldSnapshot()
+		var snap simulation.SessionSnapshot
+		if viewer, ok := v.(ViewProvider); ok && light {
+			view := viewer.WorldView()
+			snap = simulation.SessionSnapshot{DivisionID: view.DivisionID, CharacterID: view.CharacterID,
+				WorldInstance: view.WorldInstance, World: view.World}
+		} else {
+			snap = provider.WorldSnapshot()
+		}
 		if b.PopulationLease != nil {
 			division, name, bound := s.CharacterBinding()
 			if !bound {

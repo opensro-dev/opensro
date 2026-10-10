@@ -54,25 +54,25 @@ func TestTagPointReportsTheMarkOutOfSight(t *testing.T) {
 		t.Fatal("no B5ED for the hunter")
 	}
 
-	session := simulation.SessionSnapshot{DivisionID: testDivision, CharacterID: c.ID, PublishedObjects: []uint32{}}
+	session := simulation.SessionView{DivisionID: testDivision, CharacterID: c.ID, PublishedObjects: []uint32{}}
 	now := clock.NowMs()
-	reports := rt.AdvanceHuntingPoints(now, []simulation.SessionSnapshot{session})
+	reports := rt.AdvanceHuntingPoints(now, []simulation.SessionView{session})
 	if len(reports) != 1 || reports[0].OnlyCharacterID != c.ID || len(reports[0].Frames) != 1 ||
 		reports[0].Frames[0].Opcode != wire.OpObjectSourceMove ||
 		binary.LittleEndian.Uint32(reports[0].Frames[0].Payload[16:20]) != subject {
 		t.Fatalf("out-of-sight report: %+v", reports)
 	}
-	if again := rt.AdvanceHuntingPoints(now, []simulation.SessionSnapshot{session}); len(again) != 0 {
+	if again := rt.AdvanceHuntingPoints(now, []simulation.SessionView{session}); len(again) != 0 {
 		t.Fatalf("an unchanged position was reported again: %+v", again)
 	}
 	key := simulation.WorldKey(testDivision, marked.Name)
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(marked) }, func(w *simulation.WorldState) { w.Spawn.X += 500 })
-	if moved := rt.AdvanceHuntingPoints(now, []simulation.SessionSnapshot{session}); len(moved) != 1 {
+	if moved := rt.AdvanceHuntingPoints(now, []simulation.SessionView{session}); len(moved) != 1 {
 		t.Fatalf("a move was not reported: %+v", moved)
 	}
 	session.PublishedObjects = []uint32{subject}
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(marked) }, func(w *simulation.WorldState) { w.Spawn.X += 500 })
-	if seen := rt.AdvanceHuntingPoints(now, []simulation.SessionSnapshot{session}); len(seen) != 0 {
+	if seen := rt.AdvanceHuntingPoints(now, []simulation.SessionView{session}); len(seen) != 0 {
 		t.Fatalf("a subject in sight was reported: %+v", seen)
 	}
 	// A stopped mark reports nothing, before B6A0 retires its halves.
@@ -83,7 +83,7 @@ func TestTagPointReportsTheMarkOutOfSight(t *testing.T) {
 	rt.effects.StopLink(testDivision, hunts[0].SourceToken)
 	session.PublishedObjects = []uint32{}
 	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(marked) }, func(w *simulation.WorldState) { w.Spawn.X += 500 })
-	if stopped := rt.AdvanceHuntingPoints(now, []simulation.SessionSnapshot{session}); len(stopped) != 0 {
+	if stopped := rt.AdvanceHuntingPoints(now, []simulation.SessionView{session}); len(stopped) != 0 {
 		t.Fatalf("a stopped mark was reported: %+v", stopped)
 	}
 }

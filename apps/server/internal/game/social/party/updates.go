@@ -74,16 +74,16 @@ The ticker routes returned batches to exact characters, independently of
 spawn interest. Unchanged rows stay quiet; the first sweep seeds the cache.
 ================
 */
-func (r *Runtime) MemberUpdates(sessions []simulation.SessionSnapshot, nowMs int64) []simulation.DivisionFrames {
+func (r *Runtime) MemberUpdates(sessions []simulation.SessionView, nowMs int64) []simulation.DivisionFrames {
 	state := &r.updates
 	if nowMs < state.nextAtMs {
 		return nil
 	}
 	state.nextAtMs = nowMs + partyUpdateIntervalMs
-	byDivision := make(map[string]map[uint32]simulation.SessionSnapshot)
+	byDivision := make(map[string]map[uint32]simulation.SessionView)
 	for _, session := range sessions {
 		if byDivision[session.DivisionID] == nil {
-			byDivision[session.DivisionID] = make(map[uint32]simulation.SessionSnapshot)
+			byDivision[session.DivisionID] = make(map[uint32]simulation.SessionView)
 		}
 		byDivision[session.DivisionID][simulation.PlayerObjectID(session.CharacterID)] = session
 	}

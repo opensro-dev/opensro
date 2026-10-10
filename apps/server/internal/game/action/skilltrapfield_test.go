@@ -66,7 +66,7 @@ func TestPoisonTrapPulsesOnItsPeriod(t *testing.T) {
 	if buffs := rt.effects.Snapshot(testDivision, c.Name); len(buffs) != 0 {
 		t.Fatalf("a trap field installed a board instance: %+v", buffs)
 	}
-	sessions := []simulation.SessionSnapshot{{
+	sessions := []simulation.SessionView{{
 		DivisionID: testDivision, CharacterID: c.ID, Population: objects[0].Population,
 		PublishedObjects: []uint32{}, World: simulation.SeedWorldState(c),
 	}}

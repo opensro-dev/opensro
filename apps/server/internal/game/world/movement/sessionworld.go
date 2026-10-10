@@ -73,6 +73,31 @@ type sessionWorld struct {
 
 /*
 ==================
+WorldView
+
+WorldSnapshot without the peer presentation: the world, its instance and
+the character's identity, read under the same door. Tick hooks that never
+spawn this player for a viewer take this (worldsession.ViewProvider), so
+action speed, spawn skills, guild, stall and companions are built once per
+tick, by the coordinator's full snapshot, not once per hook.
+==================
+*/
+func (p *sessionWorld) WorldView() simulation.SessionView {
+	key := simulation.WorldKey(p.divisionID, p.character.Name)
+	var view simulation.SessionView
+	p.rt.deps.Read(p.divisionID, func() {
+		view = simulation.SessionView{
+			DivisionID:    p.divisionID,
+			CharacterID:   p.character.ID,
+			WorldInstance: domain.CharacterWorldInstance(p.character),
+			World:         p.rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(p.character) }),
+		}
+	})
+	return view
+}
+
+/*
+==================
 WorldSnapshot
 
 WorldSnapshot yields the session's tick snapshot: the SHARED live

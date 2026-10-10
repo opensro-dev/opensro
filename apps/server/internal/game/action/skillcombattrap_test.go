@@ -127,7 +127,7 @@ func TestFireTrapExplodesOnTheFirstMonsterInRange(t *testing.T) {
 		t.Fatal("planting never closed its cast bracket")
 	}
 
-	sessions := []simulation.SessionSnapshot{{
+	sessions := []simulation.SessionView{{
 		DivisionID: testDivision, CharacterID: c.ID, Population: objects[0].Population,
 		PublishedObjects: []uint32{}, World: simulation.SeedWorldState(c),
 	}}
