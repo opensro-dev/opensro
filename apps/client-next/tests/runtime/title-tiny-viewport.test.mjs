@@ -53,20 +53,32 @@ function assertRect( rect, context ) {
 	assert.ok( rect[2] >= 0 && rect[3] >= 0, `${context}: nonnegative ${rect}` );
 }
 
-for ( const phase of [ "login", "dock", "create", "customize" ] ) {
+for ( const phase of [ "login", "dock", "create", "customize", "delete-character", "restore-character" ] ) {
 	for ( const race of /** @type {const} */ ([ 0, 1 ]) ) {
 		test(`${phase} race ${race}: tiny viewport keeps geometry valid and recovers desktop layout`, t => {
 			const owner = titleFixture();
 			t.after( () => owner.dispose() );
+			const modal = phase === "delete-character" || phase === "restore-character";
 			/** @type {import("../../src/engine/contracts/frontend").FrontendSnapshot} */
 			const state = {
-				phase: /** @type {import("../../src/engine/contracts/frontend").FrontendPhase} */ (phase),
+				phase: modal ?
+					"dock" :
+					/** @type {import("../../src/engine/contracts/frontend").FrontendPhase} */ (phase),
 				generation: 1,
 				elapsed: 10,
 				alpha: 1,
 				logoAlpha: 0,
 				error: null,
 				race,
+				dialog: modal ?
+					{
+						kind: phase,
+						character: "Fixture",
+						id: 1,
+						phase: "open",
+						alpha: 1
+					} :
+					null,
 				creation: {
 					selection: { ...initialCreation( race, 1 ), name: "Fixture" },
 					protectorFloor: 1,
@@ -105,11 +117,21 @@ for ( const phase of [ "login", "dock", "create", "customize" ] ) {
 			) {
 				const output = render( width, height );
 				assert.equal( output.controls.length, desktop.controls.length );
+				for ( const control of output.controls ) assertRect( control.rect, control.id );
+				if ( modal ) {
+					assert.deepEqual( output.controls.map( control => control.id ).sort(), [
+						"dock:warning-accept",
+						"dock:warning-cancel"
+					] );
+					assert.ok( output.controls.every( control => !control.disabled ) );
+					const dim = output.quads.find( q => q.texture === "" && q.color[3] === 128 / 255 );
+					assert.ok( dim, "modal dimming is published" );
+					assert.deepEqual( dim.rect, [ 0, 0, width, height ], "modal still covers the viewport" );
+				}
 				for ( const q of expandTextRuns( output.quads ) ) {
 					assertRect( q.rect, `${width}x${height} ${q.texture}` );
 					assertRect( q.clip, "clip" );
 				}
-				for ( const control of output.controls ) assertRect( control.rect, control.id );
 			}
 			assert.deepEqual(
 				render( 1024, 768 ),
