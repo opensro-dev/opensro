@@ -52,6 +52,7 @@ const (
 	tagTimedStatusResistance   = 0x7265616c // real
 	tagTimedElementResistance  = 0x62677261 // bgra
 	tagTimedRecovery           = 0x69726763 // irgc
+	tagTimedShieldAttack       = 0x73706461 // spda
 	efrKindArea                = 1
 	efrKindField               = 3
 	efrShapeCircle             = 1
@@ -106,7 +107,10 @@ type SkillTimedEffect struct {
 	// row's BuffModifiers, so the program only has to agree with them.
 	HitRate, Range bool
 	// Parry marks an admitted er block (Concentration, #508).
-	Parry                         bool
+	Parry bool
+	// ShieldAttack is spda (+0x264, Flying Heaven Art): percents of the
+	// shield's own defense moved from defense to attack (combat/shieldattack.go).
+	ShieldAttack                  SkillShieldAttack
 	Physical, Magical, CapPercent uint32
 	// Targeted rows (Warrior guards, Cleric blessings) install on a player
 	// within column 21's range instead of the caster.
@@ -179,6 +183,19 @@ func parseDamageReturn(op SkillInstruction) (SkillDamageReturn, bool) {
 	}
 	return SkillDamageReturn{Present: true, Chance: op.Arguments[0], Physical: op.Arguments[1],
 		Magical: op.Arguments[2], Range: op.Arguments[3]}, true
+}
+
+/*
+================
+SkillShieldAttack
+
+spda {defense percent, attack percent}, both of the equipped shield's
+physical defense (594AC0 5950DD..5951CE).
+================
+*/
+type SkillShieldAttack struct {
+	Present                       bool
+	DefensePercent, AttackPercent uint32
 }
 
 /*
@@ -660,6 +677,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Reat = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
+		case tagTimedShieldAttack:
+			// A self buff: the shield read is the recipient's own (5950FD).
+			if result.ShieldAttack.Present || op.Count != 2 || targeted || result.Area.Present || result.Field.Present ||
+				op.Arguments[0] == 0 && op.Arguments[1] == 0 {
+				return
+			}
+			result.ShieldAttack = SkillShieldAttack{Present: true, DefensePercent: op.Arguments[0], AttackPercent: op.Arguments[1]}
 		case tagTimedRecovery:
 			// irgc {HP %, MP %}: 595A33..595A93 add both to the recovery
 			// parameters 25 and 26 on the percent channel.
@@ -790,7 +814,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt || result.Link.Fence || result.Link.Quota) ||
 		result.Preemptive.Present ||
 		result.DamageReturn.Present ||
-		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present)
+		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present ||
+		result.ShieldAttack.Present)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {

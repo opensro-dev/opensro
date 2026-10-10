@@ -98,7 +98,7 @@ TestShippedParameterIndexRows
 The shipped rows the two walk properties reach: Root and Mesh Root (status
 casts with getv WIRU), Earth Barrier and Earth Fence (getv WIMD behind the
 zero after odar), and every SKILL_CH_FIRE_SHIELD_ row (reqi 4 1 behind the
-zero after bgra).
+zero after bgra), plus the #508 self-buff rows (Concentration, Flying Heaven Art).
 ================
 */
 func TestShippedParameterIndexRows(t *testing.T) {
@@ -155,6 +155,24 @@ func TestShippedParameterIndexRows(t *testing.T) {
 	}
 	if concentration != 21 {
 		t.Fatalf("%d SKILL_CH_LIGHTNING_JIPJUNG_ rows, want 21", concentration)
+	}
+
+	// #508: Flying Heaven Art's spda pins its timed self-effect behind
+	// the shield reqi.
+	art := 0
+	for _, row := range source.rows.values() {
+		if !strings.HasPrefix(row.Codename, "SKILL_CH_SWORD_SHIELDPD_") {
+			continue
+		}
+		art++
+		spda := row.TimedEffect.ShieldAttack
+		if !row.TimedEffect.Pinned || !spda.Present || spda.DefensePercent == 0 || spda.AttackPercent == 0 ||
+			!row.Reqi.Present || row.Reqi.Pairs[0] != (SkillReqiPair{Kind: 4, Value: 1}) {
+			t.Errorf("%s pinned %v spda %+v reqi %+v", row.Codename, row.TimedEffect.Pinned, spda, row.Reqi)
+		}
+	}
+	if art != 22 {
+		t.Fatalf("%d SKILL_CH_SWORD_SHIELDPD_ rows, want 22", art)
 	}
 
 }

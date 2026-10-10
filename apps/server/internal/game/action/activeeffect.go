@@ -298,6 +298,13 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		// 595698..5957EE: Fire Shield's element resistances.
 		writes = append(writes, combat.ElementResistanceWrites(row.TimedEffect.Bgra)...)
 	}
+	if row.TimedEffect.Pinned && row.TimedEffect.ShieldAttack.Present {
+		// 5950FD: no intact shield in socket 7, no trade (reqi already
+		// refused the cast without one).
+		if pd, ok := combat.ShieldPhysicalDefense(character, rt.statCatalogs().Items); ok {
+			writes = append(writes, combat.ShieldAttackWrites(row.TimedEffect.ShieldAttack, pd)...)
+		}
+	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Defense {
 		stats, _, err := rt.playerCombatStats(divisionID, character)
 		if err != nil {
