@@ -5,8 +5,9 @@ player_parameter_test.go - one unlinked parameter equals the full projection
 
 PlayerUnlinkedParameter skips equipment, passives and magic options for a
 parameter no other parameter feeds. On shipped data that must change
-nothing: for random characters, gear, learned skills, effect modifiers and
-abnormal blocks, it answers what PlayerStatsWithModifiers does.
+nothing: for random characters, gear, worn blessed avatars (#656), learned
+skills, effect modifiers and abnormal blocks, it answers what
+PlayerStatsWithModifiers does.
 
 ===========================================================================
 */
@@ -14,6 +15,7 @@ package combat
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -33,6 +35,10 @@ const (
 	unlinkedSamples    = 1500
 	unlinkedCompared   = 400
 	unlinkedSkillProbe = 40000
+	// unlinkedOptionProbe the magic option ids probed for avatar options.
+	unlinkedOptionProbe = 4096
+	// unlinkedAvatarSockets is the avatar container's capacity.
+	unlinkedAvatarSockets = 4
 	// unlinkedEffectSource is where installed effect sources start.
 	unlinkedEffectSource = 0x80000000
 )
@@ -47,6 +53,8 @@ The shipped item and skill references the samples draw from: equipment
 */
 type unlinkedCatalog struct {
 	equipment []enterworld.ItemCommandReference
+	avatars   []enterworld.ItemCommandReference
+	options   []uint32
 	skills    []uint32
 	passives  []uint32
 }
@@ -56,12 +64,21 @@ type unlinkedCatalog struct {
 loadUnlinkedCatalog
 ================
 */
-func loadUnlinkedCatalog(t *testing.T, items *enterworld.TextdataItems, skills *enterworld.TextdataSkills) unlinkedCatalog {
+func loadUnlinkedCatalog(t *testing.T, items *enterworld.TextdataItems, skills *enterworld.TextdataSkills, options enterworld.MagicOptionSource) unlinkedCatalog {
 	t.Helper()
 	var out unlinkedCatalog
 	for _, ref := range items.ItemCommandReferences() {
 		if ref.TypeFlags&0x7c == 0x2c {
 			out.equipment = append(out.equipment, ref)
+		}
+		if full, ok := items.ItemRefByCodename(ref.Codename); ok && full.TypeIDs[0] == avatarTypeID1 &&
+			full.TypeIDs[1] == avatarTypeID2 && full.TypeIDs[2] == avatarTypeID3 {
+			out.avatars = append(out.avatars, ref)
+		}
+	}
+	for id := uint32(1); id < unlinkedOptionProbe; id++ {
+		if row, ok := options.MagicOptionByParamID(id); ok && strings.HasPrefix(row.OptionName, "MATTR_AVATAR_") {
+			out.options = append(out.options, id)
 		}
 	}
 	for id := uint32(1); id < unlinkedSkillProbe; id++ {
@@ -74,8 +91,9 @@ func loadUnlinkedCatalog(t *testing.T, items *enterworld.TextdataItems, skills *
 			out.passives = append(out.passives, id)
 		}
 	}
-	if len(out.equipment) == 0 || len(out.passives) == 0 {
-		t.Fatalf("shipped catalog: %d equipment, %d passives", len(out.equipment), len(out.passives))
+	if len(out.equipment) == 0 || len(out.passives) == 0 || len(out.avatars) == 0 || len(out.options) == 0 {
+		t.Fatalf("shipped catalog: %d equipment, %d passives, %d avatars, %d avatar options",
+			len(out.equipment), len(out.passives), len(out.avatars), len(out.options))
 	}
 	return out
 }
@@ -84,8 +102,9 @@ func loadUnlinkedCatalog(t *testing.T, items *enterworld.TextdataItems, skills *
 ================
 randomUnlinkedCharacter
 
-A character with random level and stats, up to 13 equipped items and 40
-learned skills, half of them passives.
+A character with random level and stats, up to 13 equipped items, up to
+four worn avatars with up to three blessings each, and 40 learned skills,
+half of them passives.
 ================
 */
 func randomUnlinkedCharacter(rng *rand.Rand, catalog unlinkedCatalog) *domain.Character {
@@ -101,6 +120,21 @@ func randomUnlinkedCharacter(rng *rand.Rand, catalog unlinkedCatalog) *domain.Ch
 			Slot: slot, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags,
 			Plus: int64(rng.Intn(10)), VarianceBits: "0", Durability: int64(rng.Intn(100)),
 		})
+	}
+	if rng.Intn(2) == 0 {
+		c.AvatarInventory = &domain.AvatarInventory{Capacity: unlinkedAvatarSockets}
+		for slot := int64(0); slot < unlinkedAvatarSockets; slot++ {
+			if rng.Intn(2) == 0 {
+				continue
+			}
+			ref := catalog.avatars[rng.Intn(len(catalog.avatars))]
+			row := domain.InventoryRow{Slot: slot, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags, VarianceBits: "0"}
+			for n := rng.Intn(4); n > 0; n-- {
+				option := catalog.options[rng.Intn(len(catalog.options))]
+				row.MagicOptions = append(row.MagicOptions, uint64(1+rng.Intn(10))<<32|uint64(option))
+			}
+			c.AvatarInventory.Rows = append(c.AvatarInventory.Rows, row)
+		}
 	}
 	for i := 0; i < 40; i++ {
 		pool := catalog.skills
@@ -178,8 +212,9 @@ func TestUnlinkedParameterMatchesFullProjection(t *testing.T) {
 	licensed.RequireGameData(t)
 	dir := gamedatatest.TextdataDir(t)
 	items, skills := enterworld.NewTextdataItems(dir), enterworld.NewTextdataSkills(dir)
-	catalog := loadUnlinkedCatalog(t, items, skills)
-	catalogs := Catalogs{Items: items, Skills: skills}
+	options := enterworld.NewTextdataMagicOptions(dir)
+	catalog := loadUnlinkedCatalog(t, items, skills, options)
+	catalogs := Catalogs{Items: items, Skills: skills, MagicOptions: options}
 	rng := rand.New(rand.NewSource(20261011))
 	compared := 0
 	for sample := 0; sample < unlinkedSamples; sample++ {
