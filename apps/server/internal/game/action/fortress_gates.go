@@ -87,10 +87,10 @@ fortressGatePulley
 
 634C90 in its refusal order: a pulley with no gate zone answers 0x27 for
 an open request and 0x28 for a shut one, a gate of another fortress 0x29,
-no gate on the zone 3, a destroyed gate 0x3C. Otherwise the requested word
-becomes the gate's state (CGObjSiegeStruct_SetState 4CF860), which its
-world sees (0x3887) and the reply carries with the fortress and the zone,
-as 6232C0's 0x15 result writes it.
+no gate on the zone 3, a destroyed gate 0x3C. CGObjSiegeStruct_SetState
+(4CF860) applies the state mask and reports whether it changed. Only a
+change broadcasts 0x3887 and queues success (634E0F); 6232C0's 0x15 result
+carries the resulting state with the fortress and zone, not the request.
 ================
 */
 func (rt *Runtime) fortressGatePulley(division string, pulley simulation.NpcDef, request siege.Interaction) OpResult {
@@ -112,13 +112,16 @@ func (rt *Runtime) fortressGatePulley(division string, pulley simulation.NpcDef,
 	if fortressID != request.Fortress {
 		return fortressRefusal(request.Action, fortressErrGateWrongFort)
 	}
-	if gate.StructureState&structureDestroyedMask != 0 {
+	gate, changed := rt.Monsters.SetGateState(division, gate.Gid, state)
+	if gate.Gid == 0 {
 		return fortressRefusal(request.Action, fortressErrGateDestroyed)
 	}
-	rt.Monsters.RestoreStructure(division, gate.Gid, gate.CurrentHP, state)
+	if !changed {
+		return OpResult{}
+	}
 	rt.pushFortressWorld(division, world, siege.EncodeStructureState3887(siege.StructureState{
-		FortressID: fortressID, GID: gate.Gid, EventStructID: zone, State: state,
+		FortressID: fortressID, GID: gate.Gid, EventStructID: zone, State: gate.StructureState,
 	}))
-	reply := wire.NewWriter(12).U8(request.Action).U8(1).U32(fortressID).U32(zone).U16(state)
+	reply := wire.NewWriter(12).U8(request.Action).U8(1).U32(fortressID).U32(zone).U16(gate.StructureState)
 	return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 }
