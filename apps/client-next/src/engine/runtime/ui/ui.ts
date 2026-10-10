@@ -2272,12 +2272,10 @@ export function createUi(
 			dirty = true;
 			return;
 		}
-		if ( id.startsWith( "cos-status:" ) ) {
-			cosHud.select( Number( id.slice( 11 ) ) );
-			sendGameplay( { kind: "cos-select", gid: cosHud.selected() } );
-			dirty = true;
-			return;
-		}
+		// CIFCOSStatus maps no left-click message (6A9BC0: only 0x8074 and
+		// 0xD7), so the portrait's own 0x27 does nothing; selection is the
+		// right-button release (6A9E40), a touch hold on touch screens.
+		if ( id.startsWith( "cos-status:" ) ) return;
 		if ( id === "cos-command-toggle" ) {
 			cosHud.toggle();
 			dirty = true;

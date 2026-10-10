@@ -3913,6 +3913,26 @@ test("NPC portal destination menu uses native talk controls and sends the select
 	}
 });
 
+test("the pet portrait selects and targets on right release only, as CIFCOSStatus does", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		f.state.gameplay.cosRecords = [ { gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false } ];
+		f.ui.step( f.state, 0 );
+		// CIFCOSStatus maps no left-click message: the portrait's 0x27 has no
+		// handler (6A9BC0 map), so a left click does nothing.
+		f.ui.event( { kind: "activate", id: "cos-status:7" } );
+		f.ui.step( f.state, 1 );
+		assert.deepEqual( sent, [] );
+		// 6A9E40, the right-button release (vtable +0x80), selects the
+		// companion (6F21F0) and makes it the target (6813E0).
+		f.ui.event( { kind: "right-activate", id: "cos-status:7" } );
+		f.ui.step( f.state, 2 );
+		assert.deepEqual( sent, [ { kind: "cos-select", gid: 7 }, { kind: "select", gid: 7 } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("GPU merchant menu branches retain all tabs, sparse pages and native purchase identities", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
