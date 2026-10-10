@@ -200,13 +200,14 @@ export function targetStatus(
 			} );
 		}
 	} else if ( entity.kind === "npc" || entity.kind === "cos" || entity.kind === "structure" ) {
-		// A structure (CICATStruct) is a CICNPC: 5823B0 gives it the wide NPC
-		// frame, and 5814D0 the normal gem.
+		// A structure (CICATStruct, BB0EE0) is a CICNonuser beside CICNPC, not
+		// one: 5823B0's NPC cast fails and it takes the standard frame, while
+		// 5814D0's ATStruct arm gives it the normal gem.
 		const p = layouts.iftw_commonenemy!,
 			flags = entity.tidWord ?? 0,
 			compact = entity.kind === "cos" && (flags & 0x7fe) === 0x1c6 && [ 3, 4, 5 ].includes( flags >>> 11 );
 		let nameWidth = 137, gaugeWidth = 168;
-		if ( entity.kind === "npc" || entity.kind === "structure" ) {
+		if ( entity.kind === "npc" ) {
 			width = 236;
 			nameWidth = 177;
 			gaugeWidth = 208;

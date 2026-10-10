@@ -123,10 +123,12 @@ test("fortress structures and guards take the native fortress or wide NPC window
 			"tw_gem_player.png"
 		)
 	);
-	// Any other structure is a CICNPC: the wide NPC frame with the normal gem.
-	const wide = defined( render( stone ) );
-	assert.equal( wide.width, 236 );
-	assert.equal( gauge( wide ).node.rect[2], 208 );
-	assert.ok( gem( wide ).endsWith( "tw_gem_normal.png" ) );
+	// Any other structure is a CICNonuser, not a CICNPC: 5823B0's standard
+	// frame (196x51, HP 168, name 137) with the normal gem.
+	const standard = defined( render( stone ) );
+	assert.deepEqual( [ standard.width, standard.height ], [ 196, 51 ] );
+	assert.equal( gauge( standard ).node.rect[2], 168 );
+	assert.equal( defined( standard.texts.find( t => t.node.name === "GDR_TWCE_TEXT_ID" ) ).node.rect[2], 137 );
+	assert.ok( gem( standard ).endsWith( "tw_gem_normal.png" ) );
 	assert.equal( layouts.iftw_fortressstructure.GDR_TWFS_GAUGE_HPGAUGE.rect[2], 50, "authored data is never mutated" );
 });
