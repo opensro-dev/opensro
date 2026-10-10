@@ -96,6 +96,7 @@ func parseSkillOffense(fields []string, row *SkillRow) {
 	row.CreatureStatusCast = compileCreatureStatusCast(fields, *row)
 	row.CastGate.QuestTrap = compileQuestTrap(fields)
 	row.CombatTrap = compileCombatTrap(fields, *row)
+	row.TrapField = compileTrapField(fields, *row)
 }
 
 /*

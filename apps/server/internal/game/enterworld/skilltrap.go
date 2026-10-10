@@ -206,3 +206,94 @@ func compileCombatTrap(fields []string, row SkillRow) SkillCombatTrap {
 	trap.Pinned = true
 	return trap
 }
+
+//============================================================================
+
+/*
+================
+SkillTrapField
+
+A planted CGSkillObject in object mode 1 without the trap word (the Rogue's
+Poison Trap): CGSkillObject_SpawnAtOwner (48CCC0) picks mode 1 for a
+hostile execution selector, and each 48CEA0 pass collects up to MaxTargets
+hostiles within Radius of the object. CGSkillObject_ExecuteCollectedAttackRecipients
+(48D9B0) strikes the collection once PulseMs has passed since its last
+strike; the row's status blocks are the strike. Without trap (+0x4A0) the
+object never detonates: it lives its dura.
+================
+*/
+type SkillTrapField struct {
+	Pinned     bool
+	DurationMs uint32
+	PulseMs    uint32
+	Radius     uint32
+	MaxTargets uint32
+	// Select is the efr +0x14 mask (24: hostile characters and objects).
+	Select uint8
+}
+
+/*
+================
+compileTrapField
+
+Admit the Poison Trap shape: an untargeted prepared cast with dura, puls,
+one kind-3 caster-centred area with the hostile selector and no reduction,
+status blocks, caster getv modifiers and reqi pairs. No att, lnks or trap:
+those belong to compileCombatTrap. Anything else refuses.
+================
+*/
+func compileTrapField(fields []string, row SkillRow) SkillTrapField {
+	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "3" ||
+		row.TargetRequired || row.ChainSub || row.ChainNext != 0 || !row.TimingPinned || !row.Consumption.Pinned ||
+		row.ActionCastingTimeMs == 0 || row.Consumption.HP != 0 || row.Consumption.HPPercent != 0 || !row.Abnormal.Present() {
+		return SkillTrapField{}
+	}
+	for _, column := range []int{15, 16, 17, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 56} {
+		if fields[column] != "0" {
+			return SkillTrapField{}
+		}
+	}
+	program, err := CompileSkillProgram(fields)
+	if err != nil {
+		return SkillTrapField{}
+	}
+	var trap SkillTrapField
+	statuses := 0
+	seen := make(map[uint32]bool)
+	for i := 0; i < program.Len(); i++ {
+		op := program.Instruction(i)
+		a := op.Arguments
+		if seen[op.Tag] && op.Tag != tagGetv && op.Tag != tagReqi {
+			return SkillTrapField{}
+		}
+		seen[op.Tag] = true
+		if _, found := abnormal.SourceIndex(op.Tag); found {
+			statuses++
+			continue
+		}
+		switch op.Tag {
+		case tagDura:
+			trap.DurationMs = a[0]
+		case tagPulsePeriod:
+			trap.PulseMs = a[0]
+		case tagEfr:
+			if a[0] != 3 || a[1] != 1 || a[2] == 0 || a[2] > 0xffff || a[3] == 0 || a[3] > 255 || a[4] != 0 ||
+				a[5] != statusCastSelect {
+				return SkillTrapField{}
+			}
+			trap.Radius, trap.MaxTargets, trap.Select = a[2], a[3], uint8(a[5])
+		case tagReqi: // row.Reqi; 58D480 admits before dispatch
+		case tagGetv:
+			if _, known := SkillParameterFromKey(a[0]); !known {
+				return SkillTrapField{}
+			}
+		default:
+			return SkillTrapField{}
+		}
+	}
+	if trap.DurationMs == 0 || trap.PulseMs == 0 || trap.Radius == 0 || statuses == 0 {
+		return SkillTrapField{}
+	}
+	trap.Pinned = true
+	return trap
+}

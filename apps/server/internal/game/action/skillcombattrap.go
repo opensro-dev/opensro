@@ -1,13 +1,15 @@
 /*
 ===========================================================================
 
-skillcombattrap.go - planted hostile traps (the Wizard's Fire Trap)
+skillcombattrap.go - planted hostile traps (the Wizard's Fire Trap, the
+Rogue's Poison Trap)
 
 A prepared, untargeted cast plants a stationary skill object at the caster.
 The skill-object tick retires it on expiry, owner absence or distance, and
 explodes it on the first living monster inside its trigger radius. The
 explosion resolves with the owner's live stats against every victim around
 the trap and settles through the ordinary monster damage and reward doors.
+A trap field (skilltrapfield.go) plants the same way and pulses instead.
 
 ===========================================================================
 */
@@ -31,11 +33,13 @@ acceptCombatTrap
 Admission and preparation follow the timed self-effect owner. The release
 debits the prepared cost and plants the object; a planter keeps at most the
 authored number of live traps per link group, retiring the oldest first.
+A trap field has no lnks: no board instance and no live-trap cap.
 ================
 */
 func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Character, cast wire.SkillAction, skill enterworld.SkillRow, now int64, pending *pendingProjectileCast) (OpResult, skillCastDecision) {
 	trap := skill.CombatTrap
-	if !trap.Pinned {
+	program, planted := plantedTrapProgram(skill)
+	if !planted {
 		return OpResult{DiagnosticRefusal: "combat-trap-admission-refused"}, skillCastRefused
 	}
 	if out, decision, done := rt.beginUntargetedCast(division, c, snapshot, cast, skill, now, pending, func(p *pendingProjectileCast) { p.trap = true }); done {
@@ -61,19 +65,20 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 		}
 		object, err := rt.SkillObjects.Create(skillobject.Object{
 			Division: division, Population: lease, OwnerGID: gid, OwnerName: c.Name, CreatedMs: now,
-			Program: skillobject.Program{SkillID: skill.ID, DurationMs: trap.DurationMs, ScanMs: enterworld.CombatTrapScanMs,
-				Radius: trap.TriggerRadius, Combat: true, Hidden: trap.Hidden, OwnerDistance: trap.OwnerDistance, LinkGroup: trap.LinkGroup},
-			Spawn: wire.SkillObjectSpawn{Region: at.RegionID, X: float32(at.X), Y: float32(at.Y), Z: float32(at.Z), Heading: at.Angle},
+			Program: program,
+			Spawn:   wire.SkillObjectSpawn{Region: at.RegionID, X: float32(at.X), Y: float32(at.Y), Z: float32(at.Z), Heading: at.Angle},
 		})
 		if err != nil {
 			return false
 		}
 		// lnks' board word shows the live trap on the planter's buff board.
-		var installed bool
-		effects, installed = rt.commitCharacterEffect(division, c, skill, object.OwnerEffect, statuseffect.StateActive, false, EffectPresentation{Phase: 1}, now)
-		if !installed {
-			rt.SkillObjects.Remove(object.Spawn.GID)
-			return false
+		if object.OwnerEffect != 0 {
+			var installed bool
+			effects, installed = rt.commitCharacterEffect(division, c, skill, object.OwnerEffect, statuseffect.StateActive, false, EffectPresentation{Phase: 1}, now)
+			if !installed {
+				rt.SkillObjects.Remove(object.Spawn.GID)
+				return false
+			}
 		}
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, true)
 		return true
@@ -83,7 +88,9 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 		}
 		return OpResult{DiagnosticRefusal: "combat-trap-release-commit-refused"}, skillCastRefused
 	}
-	rt.retireExcessCombatTraps(division, c, trap, now)
+	if trap.Pinned {
+		rt.retireExcessCombatTraps(division, c, trap, now)
+	}
 	vitals := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceSkillRecovery, rt.publishedVitals(division, c))}
 	released := wire.SkillCastReleaseFrame(pending.token, 0)
 	// The release does not install an effect on the caster, so nothing else
@@ -92,6 +99,26 @@ func (rt *Runtime) acceptCombatTrap(division string, c, snapshot *enterworld.Cha
 	rt.queueDetachedCastClose(division, c.Name, gid, pending.token, now+int64(skill.ActionDurationMs))
 	public := append([]wire.Frame{released}, effects...)
 	return OpResult{Frames: append([]wire.Frame{vitals}, public...), Broadcast: public, ActorPrivate: []wire.Frame{vitals}}, skillCastAccepted
+}
+
+/*
+================
+plantedTrapProgram
+
+The object a trap cast plants: a combat trap (mode 1 with trap) watches
+for its trigger, a trap field (mode 1 without) pulses on its period.
+================
+*/
+func plantedTrapProgram(skill enterworld.SkillRow) (skillobject.Program, bool) {
+	if trap := skill.CombatTrap; trap.Pinned {
+		return skillobject.Program{SkillID: skill.ID, DurationMs: trap.DurationMs, ScanMs: enterworld.CombatTrapScanMs,
+			Radius: trap.TriggerRadius, Combat: true, Hidden: trap.Hidden, OwnerDistance: trap.OwnerDistance, LinkGroup: trap.LinkGroup}, true
+	}
+	if field := skill.TrapField; field.Pinned {
+		return skillobject.Program{SkillID: skill.ID, DurationMs: field.DurationMs, ScanMs: enterworld.CombatTrapScanMs,
+			Radius: field.Radius, Select: uint32(field.Select), MaxTargets: field.MaxTargets, Pulse: true, PulseMs: field.PulseMs}, true
+	}
+	return skillobject.Program{}, false
 }
 
 /*
@@ -179,53 +206,87 @@ explodeCombatTrap
 
 Each victim takes the trap's att once; damage falls by the area's reduction
 per victim in selection order, as the cast-owned area does. The trap object
-is not an actor on the wire: the result is a B3C6 pulse from the planter,
-who owns credit, rewards and hostility.
+is not an actor on the wire: 59B2A0 sends the trap identity, not its
+planter, who owns credit, rewards and hostility.
 ================
 */
 func (rt *Runtime) explodeCombatTrap(object skillobject.Object, c, snapshot *enterworld.Character, skill enterworld.SkillRow, primary combatTarget, lease instance.Lease, now int64) []simulation.DivisionFrames {
 	trap := skill.CombatTrap
-	attacker, _, err := rt.playerCombatStats(object.Division, snapshot)
-	if err != nil {
-		return nil
-	}
 	strike := skill
 	strike.Attack = trap.Attack
-	victims := rt.combatTrapVictims(object, snapshot, strike, lease, primary, trap.Area, now)
-	// One impact a victim, every victim's pose kept: the explosion settles
+	return rt.strikeFromObject(objectStrike{object: object, c: c, snapshot: snapshot, skill: strike,
+		victims: rt.combatTrapVictims(object, snapshot, strike, lease, primary, trap.Area, now), reduction: trap.Area.ReductionPercent,
+		result: func(targets []wire.SkillAreaTarget) wire.Frame {
+			return wire.SkillTrapResultsFrame(object.Spawn.GID, targets)
+		}}, now)
+}
+
+/*
+================
+objectStrike
+
+One strike a planted object resolves for its planter: the strike row, its
+victims in selection order, the per-victim reduction and the result frame
+that names the strike on the wire.
+================
+*/
+type objectStrike struct {
+	object      skillobject.Object
+	c, snapshot *enterworld.Character
+	skill       enterworld.SkillRow
+	victims     []combatTarget
+	reduction   uint8
+	result      func([]wire.SkillAreaTarget) wire.Frame
+}
+
+/*
+================
+strikeFromObject
+
+Resolves with the planter's live stats and settles through the ordinary
+area doors. The public batch carries the object as its source, so scope
+publication keeps the object available until the result is consumed.
+================
+*/
+func (rt *Runtime) strikeFromObject(s objectStrike, now int64) []simulation.DivisionFrames {
+	division := s.object.Division
+	attacker, _, err := rt.playerCombatStats(division, s.snapshot)
+	if err != nil || len(s.victims) == 0 {
+		return nil
+	}
+	// One impact a victim, every victim's pose kept: the strike settles
 	// each kill where the monster stood.
 	plan, planned := rt.planAreaVictims(areaPlanInput{
-		division: object.Division, caster: c, snapshot: snapshot, skill: strike, attacker: attacker, victims: victims,
-		reduction: trap.Area.ReductionPercent, impacts: 1, poseAll: true, now: now,
+		division: division, caster: s.c, snapshot: s.snapshot, skill: s.skill, attacker: attacker, victims: s.victims,
+		reduction: s.reduction, impacts: 1, poseAll: true, now: now,
 	})
 	if !planned {
 		return nil
 	}
 	var commit areaCommit
-	roster := rt.monsterRewardRoster(object.Division, c, now)
-	if !rt.deps.UpdateMany(roster.characters, "combat-trap-explosion", func() bool {
+	roster := rt.monsterRewardRoster(division, s.c, now)
+	if !rt.deps.UpdateMany(roster.characters, "planted-object-strike", func() bool {
 		var ok bool
-		commit, ok = rt.commitAreaInDoor(object.Division, c, roster, &plan, now)
+		commit, ok = rt.commitAreaInDoor(division, s.c, roster, &plan, now)
 		return ok
 	}) {
 		return nil
 	}
-	published := rt.publishArea(object.Division, snapshot, strike, 1, plan, commit, now)
-	targets, after := published.targets, published.after
-	// 59B2A0 sends the trap identity, not its planter. Scope publication
-	// keeps the object available until this result has been consumed.
-	success := wire.SkillTrapResultsFrame(object.Spawn.GID, targets)
-	public := append([]wire.Frame{success}, after...)
+	published := rt.publishArea(division, s.snapshot, s.skill, 1, plan, commit, now)
+	if len(published.targets) == 0 {
+		return nil
+	}
+	public := append([]wire.Frame{s.result(published.targets)}, published.after...)
 	public = append(public, commit.settlements.public...)
 	public = append(public, published.returned.Broadcast...)
-	out := []simulation.DivisionFrames{{DivisionID: object.Division, SourceGID: object.Spawn.GID, Frames: simFrames(public)}}
+	out := []simulation.DivisionFrames{{DivisionID: division, SourceGID: s.object.Spawn.GID, Frames: simFrames(public)}}
 	private := append(wire.ProgressionPrivateFrames(commit.progression), commit.settlements.otherPublic...)
 	private = append(private, commit.playerActor...)
 	private = append(private, published.returned.ActorPrivate...)
 	if len(private) > 0 {
-		out = append(out, simulation.DivisionFrames{DivisionID: object.Division, OnlyCharacterID: c.ID, Frames: simFrames(private)})
+		out = append(out, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: s.c.ID, Frames: simFrames(private)})
 	}
 	recipients := append(commit.settlements.others, published.recipients...)
 	recipients = append(recipients, published.returned.Recipients...)
-	return append(out, recipientDivisionFrames(object.Division, recipients)...)
+	return append(out, recipientDivisionFrames(division, recipients)...)
 }

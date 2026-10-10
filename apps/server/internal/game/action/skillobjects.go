@@ -201,6 +201,9 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 		rt.advanceSkillField(object, snapshot, ownerPresent, nowMs)
 		return nil
 	}
+	if object.Program.Pulse {
+		return rt.advanceTrapField(object, c, snapshot, ownerPresent, lease, nowMs)
+	}
 	var targets []skillobject.Target
 	if ownerPresent && nowMs >= object.NextScanMs && rt.Monsters != nil {
 		from := simulation.Spawn{RegionID: object.Spawn.Region, X: float64(object.Spawn.X),

@@ -50,6 +50,11 @@ type Program struct {
 	Field      bool
 	Select     uint32
 	MaxTargets uint32
+	// Pulse marks a hostile field (object mode 1 without trap, the
+	// Rogue's Poison Trap): each pass strikes up to MaxTargets hostiles in
+	// Radius once PulseMs has passed since its last strike.
+	Pulse   bool
+	PulseMs uint32
 }
 
 /*
@@ -88,6 +93,10 @@ type Object struct {
 	// Tracked is a buff field's recipient set, in admission order. Only
 	// Track replaces it; snapshots carry a copy.
 	Tracked []FieldRecipient
+	// LastPulseMs is a hostile field's last strike (+0x174). The native
+	// object clears it to zero (48CAA0), so the first collection strikes
+	// at once; only Pulsed writes it.
+	LastPulseMs int64
 }
 
 /*
@@ -314,4 +323,36 @@ func (r *Registry) Track(gid uint32, tracked []FieldRecipient) bool {
 	object.Tracked = append([]FieldRecipient(nil), tracked...)
 	r.objects[gid] = object
 	return true
+}
+
+/*
+================
+Pulsed
+
+48D9B0 restamps the pulse clock only when it strikes. Reports false once
+the object has retired.
+================
+*/
+func (r *Registry) Pulsed(gid uint32, nowMs int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	object, present := r.objects[gid]
+	if !present {
+		return false
+	}
+	object.LastPulseMs = nowMs
+	r.objects[gid] = object
+	return true
+}
+
+/*
+================
+PulseDue
+
+GetTickCount() - +0x174 >= puls (48DA12, unsigned): a zero period strikes
+every pass.
+================
+*/
+func PulseDue(object Object, nowMs int64) bool {
+	return nowMs-object.LastPulseMs >= int64(object.Program.PulseMs)
 }

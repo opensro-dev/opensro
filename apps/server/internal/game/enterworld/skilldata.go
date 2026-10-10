@@ -212,7 +212,10 @@ type SkillRow struct {
 	// life taken, which the caster recovers.
 	LifeSteal SkillLifeSteal
 	// CombatTrap is a planted hostile trap program (skilltrap.go).
-	CombatTrap    SkillCombatTrap
+	CombatTrap SkillCombatTrap
+	// TrapField is a planted hostile field that pulses its statuses
+	// (skilltrap.go).
+	TrapField     SkillTrapField
 	OffensiveArea SkillOffensiveArea
 	// ActionArea is efr kind 1 (RefSkill +0x28C) on any row, recorded by the
 	// parameter index: a monster's attack reads it although the player

@@ -25,15 +25,28 @@ import (
 ================
 combatTrapFixture
 
-A Wizard standing on the fixture monster, holding the authored staff.
+The Wizard's Fire Trap fixture.
 ================
 */
 func combatTrapFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character, enterworld.SkillRow, uint32) {
 	t.Helper()
+	return plantedTrapFixture(t, "SKILL_EU_WIZARD_FIREA_TRAP_A_01")
+}
+
+/*
+================
+plantedTrapFixture
+
+A caster standing on the fixture monster, holding a weapon of the row's
+first authored kind.
+================
+*/
+func plantedTrapFixture(t *testing.T, code string) (*Runtime, *fakeClock, *enterworld.Character, enterworld.SkillRow, uint32) {
+	t.Helper()
 	rt, clock, c, target := newCombatTestRuntime(t, 1000000)
-	skill := shippedOffense(t, "SKILL_EU_WIZARD_FIREA_TRAP_A_01")
-	if !skill.CombatTrap.Pinned {
-		t.Fatalf("Fire Trap not admitted: %+v", skill.CombatTrap)
+	skill := shippedOffense(t, code)
+	if !skill.CombatTrap.Pinned && !skill.TrapField.Pinned {
+		t.Fatalf("%s not admitted as a planted trap", code)
 	}
 	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
 	c.RaceIndex = testInt64(enterworld.RaceEurope)
@@ -72,11 +85,11 @@ func plantCombatTrap(t *testing.T, rt *Runtime, clock *fakeClock, c *enterworld.
 	t.Helper()
 	out := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
 	if frame, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok || frame.Payload[0] != 1 {
-		t.Fatalf("Fire Trap refused: %+v", out)
+		t.Fatalf("trap cast refused: %+v", out)
 	}
 	release := at + int64(skill.ActionCastingTimeMs) + 1
 	if len(rt.advanceProjectileCasts(release)) == 0 {
-		t.Fatal("Fire Trap never released")
+		t.Fatal("trap cast never released")
 	}
 	return release
 }
