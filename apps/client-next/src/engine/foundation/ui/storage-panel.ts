@@ -67,12 +67,16 @@ const DEFAULT_EQUIPMENT_SLOTS = 13;
 ================
 storageQuickMove
 
-One click moves an item across an open warehouse: a bag slot deposits into
-the room's first free slot, and a room slot withdraws into the bag's first
-free slot. The native client does this on right-click. Ctrl+click does the
-same; that is port-only, not native (owner decision 2026-10-10). Null when
-the room is not open, a move is pending, the slot is empty or there is no
-free slot.
+One click moves an item across an open warehouse: a room slot withdraws
+into the bag's first free slot, and a bag slot deposits into the first free
+slot of the room page that is open. The native client does this on
+right-click: 567290 (window 0x13 visible) asks 5B0BA0 for the first empty
+slot of the window's page (+0x7E4). On a full page native sends slot 0,
+which swaps out whatever item is there; the port instead takes the room's
+first free slot on any page (port-only, not native: the swap is a native
+bug). Ctrl+click does the same as right-click; that is port-only, not
+native (owner decision 2026-10-10). Null when the room is not open, a move
+is pending, the slot is empty or there is no free slot.
 ================
 */
 export function storageQuickMove(
@@ -80,7 +84,8 @@ export function storageQuickMove(
 	game: Pick<
 		GameplayState,
 		"storage" | "inventory" | "inventoryPending" | "equipmentSlotCount" | "inventorySlotCount"
-	>
+	>,
+	page: number
 ): StorageMove | null {
 	const room = game.storage;
 	if ( !room || room.phase !== "open" || game.inventoryPending ) return null;
@@ -88,7 +93,12 @@ export function storageQuickMove(
 	if ( id.startsWith( "slot:" ) ) {
 		const source = Number( id.slice( 5 ) );
 		if ( !game.inventory.some( row => row.slot === source ) ) return null;
-		const destination = firstFreeSlot( room.items, 0, room.capacity );
+		const pageStart = page * STORAGE_PAGE_SLOTS;
+		const destination = firstFreeSlot(
+			room.items,
+			pageStart,
+			Math.min( room.capacity, pageStart + STORAGE_PAGE_SLOTS )
+		) ?? firstFreeSlot( room.items, 0, room.capacity );
 		if ( destination === null ) return null;
 		return { type: STORAGE_MOVE_DEPOSIT, source, destination, quantity: 0, gold: 0 };
 	}
