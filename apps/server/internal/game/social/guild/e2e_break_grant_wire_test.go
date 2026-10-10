@@ -84,7 +84,7 @@ func grantE2ESeedOracle(golfID int64, hotelJID uint32, golfOffline, hotelOffline
 	oracle.u32(0)
 	oracle.str("")
 	oracle.u32(1907)
-	oracle.u8(0) // fortressRole
+	oracle.u8(1) // fortressRole: the leader is the commander
 	oracle.u8(golfOffline)
 	oracle.u32(hotelJID)
 	oracle.str(grantE2ENameH)

@@ -285,7 +285,8 @@ func TestHandlePositionGrantPersistsAndAnswers(t *testing.T) {
 
 // TestHandlePositionGrantRefusals proves the silent refusal arms:
 // non-leader actor, a role byte outside the pinned domain, unknown
-// target jid and malformed bodies.
+// target jid, the commander role, the master as target and malformed
+// bodies.
 func TestHandlePositionGrantRefusals(t *testing.T) {
 	t.Parallel()
 	deps, _, alfa, berk, guildID := newTwoMemberGuildFixture(t)
@@ -296,9 +297,13 @@ func TestHandlePositionGrantRefusals(t *testing.T) {
 		payload []byte
 		want    string
 	}{
-		{"non-leader", berk, mutatorPositionGrantPayload(mutatorBerkJID, 1), "cannot grant"},
+		{"non-leader", berk, mutatorPositionGrantPayload(mutatorBerkJID, 2), "cannot grant"},
 		{"role outside domain", alfa, mutatorPositionGrantPayload(mutatorBerkJID, 3), "outside the pinned domain"},
-		{"unknown jid", alfa, mutatorPositionGrantPayload(999999, 1), "no member with jid"},
+		{"unknown jid", alfa, mutatorPositionGrantPayload(999999, 2), "no member with jid"},
+		// The commander is the master's alone: never granted (5F4D70 offers
+		// no 1), never taken from the master (_Guild_Delegate_Master -1002).
+		{"commander", alfa, mutatorPositionGrantPayload(mutatorBerkJID, 1), "belongs to the guild master"},
+		{"the master", alfa, mutatorPositionGrantPayload(guild.GuildJID(alfa.ID), 0), "keeps the commander role"},
 		{"malformed", alfa, []byte{0x01}, ""},
 	}
 	for _, tc := range cases {
@@ -317,6 +322,9 @@ func TestHandlePositionGrantRefusals(t *testing.T) {
 	_, members, _ := deps.Guilds.Guild(mutatorDivision, guildID)
 	if row, _ := memberRowByJID(members, mutatorBerkJID); row.FortressRole != 0 {
 		t.Errorf("refused grants mutated the stored role to %#x", row.FortressRole)
+	}
+	if row, _ := memberRowByJID(members, guild.GuildJID(alfa.ID)); row.FortressRole != guild.FortressRoleCommander {
+		t.Errorf("the master's stored role = %#x, want the commander's", row.FortressRole)
 	}
 }
 

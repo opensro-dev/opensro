@@ -161,8 +161,9 @@ func newTwoMemberGuildFixture(t *testing.T) (*enterworld.Deps, *store.Store, *en
 // NightWatch as guild id 1: {u8 1} + the block with the documented
 // DECISION initial values (guild level 1, GP 0, empty notice, crest 0,
 // byte10 0; leader grade 0, level 12, donated 0, permMask 0xFFFFFFFF,
-// dwords 0, empty grantName, refObjId 1907, fortressRole 0) and the
-// derived offline flag.
+// dwords 0, empty grantName, refObjId 1907, fortressRole 1: the retail
+// _Guild_FnAddMember gives MemberClass 0 the commander's SiegeAuthority)
+// and the derived offline flag.
 func createAckOracle(alfaID int64, alfaOffline uint8) []byte {
 	oracle := &oracle32C4{}
 	oracle.u8(1) // result
@@ -186,7 +187,7 @@ func createAckOracle(alfaID int64, alfaOffline uint8) []byte {
 	oracle.u32(0)
 	oracle.str("")
 	oracle.u32(1907)
-	oracle.u8(0) // fortressRole
+	oracle.u8(1) // fortressRole: commander
 	oracle.u8(alfaOffline)
 	oracle.u8(0) // voteCount
 	return oracle.buf.Bytes()

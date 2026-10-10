@@ -463,7 +463,12 @@ func mutE2EBlockOracle(guildID int64, guildName string, members []mutE2EMember) 
 		oracle.u32(0)
 		oracle.str("")
 		oracle.u32(1907)
-		oracle.u8(0) // fortressRole
+		// The leader holds the commander role (_Guild_FnAddMember).
+		role := uint8(0)
+		if member.grade == 0 {
+			role = 1
+		}
+		oracle.u8(role) // fortressRole
 		oracle.u8(member.offline)
 	}
 	oracle.u8(0) // voteCount

@@ -77,4 +77,8 @@ func TestReleaseVoteElectsTheLeadingCandidate(t *testing.T) {
 	if stored.Vote != nil || roster[0].Grade != 10 || roster[1].Grade != 0 {
 		t.Fatalf("guild after the vote %+v %+v", stored, roster)
 	}
+	// The commander role moves with the master (5C46E0).
+	if roster[0].FortressRole != 0 || roster[1].FortressRole != domain.GuildFortressRoleCommander {
+		t.Fatalf("roles after the vote %d %d, want 0 and the commander's", roster[0].FortressRole, roster[1].FortressRole)
+	}
 }

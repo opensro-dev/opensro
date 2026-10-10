@@ -8,8 +8,9 @@ server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6, and every layout 7
 source the empty fortress production table of layout 8. Existing tables and
-their records survive unchanged; the new record fields are optional, so no
-path rewrites existing JSON.
+their records survive unchanged; the new record fields are optional. The
+one rewrite gives each guild master the commander role it lacked
+(guild_leader_role.go); it also runs on a current store that needs it.
 This operation is never called by server startup or a network request.
 
 ===========================================================================
@@ -89,7 +90,11 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if schema == CurrentVersion && layout == CurrentLayoutVersion {
+	repairs, err := leaderRoleRepairs(db)
+	if err != nil {
+		return "", fmt.Errorf("authority upgrade: master roles: %w", err)
+	}
+	if schema == CurrentVersion && layout == CurrentLayoutVersion && len(repairs) == 0 {
 		if _, err := loadDB(db, CurrentVersion, CurrentLayoutVersion); err != nil {
 			return "", fmt.Errorf("authority upgrade: current authority validation: %w", err)
 		}
@@ -134,7 +139,9 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		}
 		sourceLayout = layout
 	case CurrentVersion:
-		if layout < preFortressLayoutVersion || layout >= CurrentLayoutVersion {
+		// A current store still upgrades when a master lacks the commander
+		// role (guild_leader_role.go): the repair is its only change.
+		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
@@ -223,6 +230,9 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		if _, err := tx.Exec(fortressItemForgeSchema); err != nil {
 			return backupPath, err
 		}
+	}
+	if err := applyLeaderRoleRepairs(tx, repairs); err != nil {
+		return backupPath, err
 	}
 	if err := upsertMetaTx(tx, metaKeyLayoutVersion, fmt.Sprint(CurrentLayoutVersion)); err != nil {
 		return backupPath, err

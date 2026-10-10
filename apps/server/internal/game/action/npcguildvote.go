@@ -187,7 +187,10 @@ func (rt *Runtime) advanceGuildVotes(nowMs int64) {
 			if outcome.Elected {
 				frames = append(frames,
 					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberGrade3B29(outcome.Former.JID, outcome.Former.Grade, outcome.Former.PermMask)},
-					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberGrade3B29(outcome.Heir.JID, outcome.Heir.Grade, outcome.Heir.PermMask)})
+					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberGrade3B29(outcome.Heir.JID, outcome.Heir.Grade, outcome.Heir.PermMask)},
+					// The commander role moves with the master (5C46E0).
+					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(outcome.Former.JID, outcome.Former.FortressRole)},
+					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(outcome.Heir.JID, outcome.Heir.FortressRole)})
 			}
 			rt.pushGuildMembers(division, outcome.Snapshot.Members, 0, frames)
 		}

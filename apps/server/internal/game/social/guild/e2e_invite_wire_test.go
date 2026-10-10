@@ -243,7 +243,12 @@ func invE2EMemberRow(oracle *oracle32C4, member invE2EMember) {
 	oracle.u32(0)
 	oracle.str("")
 	oracle.u32(1907)
-	oracle.u8(0)
+	// fortressRole: the leader holds the commander role (_Guild_FnAddMember).
+	role := uint8(0)
+	if member.grade == 0 {
+		role = 1
+	}
+	oracle.u8(role)
 	oracle.u8(member.offline)
 }
 

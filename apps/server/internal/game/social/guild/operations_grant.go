@@ -3,6 +3,7 @@ package guild
 import (
 	"fmt"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -15,7 +16,7 @@ const (
 	GrantNameMaxBytes = GuildNameMaxBytes
 
 	FortressRoleNone      uint8 = 0
-	FortressRoleCommander uint8 = 0x01
+	FortressRoleCommander       = domain.GuildFortressRoleCommander
 	FortressRoleDeputy    uint8 = 0x02
 	FortressRoleEngineer  uint8 = 0x04
 	FortressRoleGuard     uint8 = 0x08
@@ -154,6 +155,14 @@ func HandlePositionGrant(deps Dependencies, divisionID string, actor *enterworld
 	if !ValidFortressRole(request.Position) {
 		return refusedGrant(fmt.Sprintf("fortress role %#x outside the pinned domain (0/1/2/4/8/0x10/0x20)", request.Position))
 	}
+	// The commander is the guild master's own role: the client's grant
+	// window offers 0, 2, 4, 8, 0x10 and 0x20 only (5F4D70), the retail
+	// _Guild_FnAddMember gives it to MemberClass 0, and
+	// _Guild_Delegate_Master refuses (-1002) a master without it. A grant
+	// can neither hand it out nor take it from the master.
+	if request.Position == FortressRoleCommander {
+		return refusedGrant("the commander role belongs to the guild master")
+	}
 	actor = characterSnapshot(deps, divisionID, actor)
 	if actor == nil {
 		return refusedGrant("characterNotFound")
@@ -177,6 +186,10 @@ func HandlePositionGrant(deps Dependencies, divisionID string, actor *enterworld
 			target, found = memberByJID(members, request.TargetJID)
 			if !found {
 				commandRefusal = fmt.Sprintf("no member with jid %d", request.TargetJID)
+				return guild, members, false
+			}
+			if target.Grade == LeaderGrade {
+				commandRefusal = "the guild master keeps the commander role"
 				return guild, members, false
 			}
 			for i := range members {

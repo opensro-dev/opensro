@@ -62,6 +62,16 @@ type GuildMemberRecord struct {
 	FortressRole uint8  `json:"fortressRole"`
 }
 
+// GuildLeaderGrade is the master's member grade; GuildFortressRoleCommander
+// is the fortress role the master alone holds. The retail
+// _Guild_FnAddMember gives MemberClass 0 SiegeAuthority 1, and a master
+// handover moves it (v1.188 5C46E0, _Guild_Delegate_Master). The client's
+// fortress windows gate on the role (827DB0), the server on the grade.
+const (
+	GuildLeaderGrade           uint8 = 0
+	GuildFortressRoleCommander uint8 = 0x01
+)
+
 // GuildAuthorization describes the actor policy a guild command must satisfy
 // while the authority store owns the aggregate.
 type GuildAuthorization struct {
