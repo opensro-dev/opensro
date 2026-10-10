@@ -78,6 +78,21 @@ Also:
 
 - **One concern per pull request.** Small and focused gets reviewed fast.
 - **Describe what a player or operator will notice,** the native evidence you used, and the checks you ran. Paste failing output rather than "all green" when something failed.
+- **List every native claim the change relies on** in a table, one row per
+  fact about the original: a function's behaviour, a field offset, a constant,
+  a message layout, a data rule. Write "none" when the change makes no native
+  claim. Each row names how it was checked, and an unchecked row is marked
+  open, never left out:
+
+  | Claim | Native evidence | Checked by | Status |
+  | --- | --- | --- | --- |
+  | The overhead pass draws the job icon right of the name | client 86B350 | disassembly read | verified |
+  | The bag size is learned only at world entry | client 8675F0, +0x1848 | disassembly read | verified |
+
+  "Checked by" is one of: disassembly read, emulator or difference test, game
+  data, native capture, or inference (stated in a code comment). A claim
+  that contradicts an existing comment or research note says so, and the PR
+  corrects the old text.
 - **Link the issue or bug report** (for example `BUG-064`) it fixes.
 - **Mark non-native behaviour** and name its flag (section 3).
 - Keep secrets out of commits and pull requests: tokens, passwords, webhook URLs.
