@@ -92,7 +92,7 @@ export const EXPERIMENTAL_TABS: readonly {
 				key: "monsterGuide",
 				id: "experimental-monster-guide",
 				label: "Monster hunting guide",
-				description: "Approximate outdoor areas and levels on M."
+				description: "Monster portraits and approximate level ranges on M."
 			},
 			{
 				key: "heightFog",

@@ -73,7 +73,7 @@ import {
 } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
 import { createHuntingGuideHud } from "./hud/hunting-guide";
-import { HUNTING_AREA_PREFIX, HUNTING_GUIDE_BAR_HEIGHT } from "@/engine/foundation/ui/hunting-guide";
+import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
 import { createSkillTrainingCache } from "./hud/skill-training";
 import {
 	createWithdrawalDialog,
@@ -3391,9 +3391,7 @@ export function createUi(
 			mapPan = [ 0, 0 ];
 			mapCenter = mapFollow ? null : view.gameplay?.pose ? { ...view.gameplay.pose } : null;
 		} // 575E90 flips AUTO MOVE only; the view stays where AUTO last centred it.
-		else if ( id === "map-hunting-reset" ) {
-			huntingGuide.reset();
-		} else if ( id === "map-follow" ) {
+		else if ( id === "map-follow" ) {
 			mapFollow = !mapFollow;
 			mapCenter = view.gameplay?.pose ? { ...view.gameplay.pose } : null;
 			mapPan = [ 0, 0 ];
@@ -6376,8 +6374,7 @@ export function createUi(
 				else if ( event.id === STALL_PROMPT_PRICE ) stallHud.type( "price", event.value );
 				else if ( event.id === "exchange-gold" ) {
 					exchangeHud.type( event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
-				} else if ( event.id.startsWith( "map-hunting-" ) ) huntingGuide.type( event.id, event.value );
-				else if ( event.id === "gm-input" ) consoleText = event.value;
+				} else if ( event.id === "gm-input" ) consoleText = event.value;
 				else if ( event.id === "chat-text" ) chatText = event.value.slice( 0, 100 );
 				else if ( event.id === "chat-target" ) chatTarget = event.value;
 				else if ( event.id === "account" ) account = event.value;
@@ -9773,12 +9770,11 @@ export function createUi(
 				mapX = mapLeft;
 				mapY = mapTop;
 				const mapGuideEnabled = experimental.state().saved.monsterGuide;
-				const mapGuideHeight = mapGuideEnabled ? HUNTING_GUIDE_BAR_HEIGHT : 0;
 				const mapClip: UiRect = [
 					mapLeft + 6,
-					mapTop + 34 + mapGuideHeight,
+					mapTop + 34,
 					mapWidth - 12,
-					mapHeight - 40 - mapGuideHeight
+					mapHeight - 40
 				];
 				const mapHits: UiControl[] = [];
 				// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
@@ -9872,14 +9868,47 @@ export function createUi(
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
 				const mapGuide = mapOpen && mapGuideEnabled && pose ?
-					huntingGuide.present( mapPage, mapClip, mapPan, mapCenter ?? pose ) :
+					huntingGuide.present( mapPage, mapClip, mapPan, mapCenter ?? pose, [
+						...(mapProjection?.overlay ?? []).map( q => q.rect ),
+						...(mapProjection?.markers ?? []).map( q => q.rect ),
+						...(mapProjection?.labels ?? []).map( row => {
+							const width = text.run( row.label.text, 0, row.label.font ).width;
+							return [
+								row.x - Math.floor( width / 2 ),
+								row.y,
+								width,
+								text.extentHeight( row.label.font )
+							] as UiRect;
+						} ),
+						...(mapSmall ?
+							[] :
+							[
+								[
+									mapLeft + hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[0],
+									mapTop + hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[1],
+									hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[2],
+									hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[3]
+								] as UiRect
+							])
+					] ) :
 					null;
 				const fontPath = text.path();
 				if ( !mapOpen && fontPath ) paths.push( fontPath );
 				const mapImages = mapProjection ?
 					[
 						...mapProjection.background,
-						...(mapGuide?.quads ?? []),
+						...(mapGuide?.quads ?? []).map( q =>
+							q.texture.startsWith( "/assets/npc/hunting-portraits/" ) && !resources.has( q.texture ) ?
+								{ ...q, texture: HUNTING_MONSTER_SIGN } :
+								q
+						),
+						...(mapGuide?.labels ?? []).flatMap( row =>
+							text.quads( row.value, row.rect, mapClip, row.color, {
+								hAlign: 1,
+								vAlign: 1,
+								overflow: "clip"
+							} )
+						),
 						...mapProjection.overlay,
 						...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 							const width = text.run( entry.text, 0, entry.font ).width,
@@ -9909,8 +9938,12 @@ export function createUi(
 						} );
 					}
 				}
-				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ).filter( Boolean ) );
-				else if ( pose ) {
+				if ( mapOpen ) {
+					paths.push(
+						...(mapGuide?.paths ?? []),
+						...mapImages.map( q => q.texture ).filter( Boolean )
+					);
+				} else if ( pose ) {
 					worldMapDemand(
 						mapPage,
 						mapClip,
@@ -9948,36 +9981,6 @@ export function createUi(
 					} );
 					quads.push( ...mapImages );
 					controls.push( ...(mapGuide?.controls ?? []), ...mapHits );
-					if ( mapGuideEnabled ) {
-						const bar = huntingGuide.toolbar( [ mx + 6, my + 34, mw - 12, mapGuideHeight ] );
-						quads.push( ...bar.quads );
-						controls.push( ...bar.controls );
-						for ( const row of bar.labels ) {
-							quads.push(
-								...text.quads( row.value, row.rect, row.rect, row.color, {
-									vAlign: 1,
-									overflow: "clip"
-								} )
-							);
-						}
-						for ( const field of bar.fields ) {
-							partyEdit(
-								{ ...hudData.map.GDR_WM_BTN_AUTO_MOVE!, name: field.label, rect: field.rect },
-								0,
-								0,
-								field.id,
-								field.value ?? "",
-								field.maxLength ?? 64
-							);
-							if ( !field.value && focus !== field.id ) {
-								quads.push(
-									...text.quads( field.label, field.rect, field.rect, [ .65, .69, .61, 1 ], {
-										overflow: "clip"
-									} )
-								);
-							}
-						}
-					}
 					const nodes = hudData.map;
 					authoredButton(
 						{ ...nodes.GDR_WM_BTN_WNDSIZE!, rect: [ mw - 44, 10, 16, 16 ] },

@@ -1,46 +1,17 @@
 /*
 ===========================================================================
 
-hunting-guide.ts - bounded public atlas decoding and approximate map areas
+hunting-guide.ts - bounded atlas decoding and native portrait marker layout
 
-Port-only, not native. Cells are visual guidance from static anchors, not
-spawn-radius, roaming, density or availability claims. Existing map art and
-marker passes remain the owners of the map's native presentation.
+Port-only approximate guidance from static outdoor anchors.
 
 ===========================================================================
 */
-
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { worldMapFrame } from "./world-map";
-
-const MAX_MONSTERS = 4096;
-const MAX_POINTS = 65536;
-const MAX_NAME = 128;
-const REGION_SIZE = 192;
-const LOCAL_SCALE = 10;
-const MAX_LOCAL_POSITION = 65536;
-const CELL_SIZE = 32;
-const CELL_INSET = 4;
-const MAX_HOVER_NAMES = 5;
-
+const MAX_MONSTERS = 4096, MAX_POINTS = 65536, MAX_NAME = 128;
+const REGION_SIZE = 192, LOCAL_SCALE = 10, MAX_LOCAL_POSITION = 65536, MAX_HOVER_NAMES = 5;
 export const HUNTING_AREA_PREFIX = "map-hunting-area:";
-export const HUNTING_GUIDE_BAR_HEIGHT = 92;
-/*
-================
-huntingLevelColors
-
-Fresh immutable presentation data; pure shared modules own no array state.
-================
-*/
-export function huntingLevelColors() {
-	return [
-		{ label: "1–20", max: 20, color: [ .24, .88, .48, 1 ] },
-		{ label: "21–40", max: 40, color: [ .98, .78, .28, 1 ] },
-		{ label: "41–60", max: 60, color: [ .32, .68, 1, 1 ] },
-		{ label: "61+", max: 255, color: [ .98, .42, .58, 1 ] }
-	] as const;
-}
-
 /*
 ================
 HuntingMonster
@@ -52,7 +23,6 @@ export interface HuntingMonster {
 	readonly nameKey: string;
 	readonly level: number;
 }
-
 /*
 ================
 HuntingPoint
@@ -63,30 +33,15 @@ interface HuntingPoint {
 	readonly x: number;
 	readonly z: number;
 }
-
 /*
 ================
 HuntingCatalogue
-
-Region index includes every anchor for a species, unlike the NPC lookup.
 ================
 */
 export interface HuntingCatalogue {
 	readonly monsters: readonly HuntingMonster[];
 	readonly regions: ReadonlyMap<number, readonly HuntingPoint[]>;
 }
-
-/*
-================
-HuntingFilter
-================
-*/
-export interface HuntingFilter {
-	readonly search: string;
-	readonly min: number;
-	readonly max: number;
-}
-
 /*
 ================
 decodeHuntingGuide
@@ -142,13 +97,46 @@ export function decodeHuntingGuide( value: unknown ): HuntingCatalogue {
 
 /*
 ================
+decodeHuntingPortraits
+
+The optional, locally generated art index cannot supply arbitrary URLs.
+================
+*/
+export function decodeHuntingPortraits( value: unknown ): ReadonlyMap<number, string> {
+	const data = value as { format?: unknown; version?: unknown; rows?: unknown; };
+	if (
+		!data || data.format !== "sro-hunting-portraits" || data.version !== 1 || !Array.isArray( data.rows ) ||
+		data.rows.length > 4096
+	) {
+		throw Error( "Invalid hunting portraits" );
+	}
+	const images = new Map<number, string>();
+	for ( const row of data.rows ) {
+		if (
+			!Array.isArray( row ) || !Number.isInteger( row[0] ) || row[0] <= 0 || images.has( row[0] ) ||
+			typeof row[1] !== "string" || !/^\/assets\/npc\/hunting-portraits\/[a-f0-9]{64}\.png$/.test( row[1] )
+		) {
+			throw Error( "Invalid hunting portrait reference" );
+		}
+		images.set( row[0], row[1] );
+	}
+	return images;
+}
+
+export const HUNTING_PORTRAITS = "/assets/npc/hunting-portraits/manifest.json";
+export const HUNTING_MONSTER_SIGN = "/assets/images/Media_extracted/interface/minimap/mm_sign_monster.png";
+const PORTRAIT_FRAME = "/assets/images/Media_extracted/interface/quick_slot/qsl_hriz01_slot_tile.png";
+
+/*
+================
 HuntingProjection
 ================
 */
 export interface HuntingProjection {
 	readonly quads: readonly UiQuad[];
 	readonly controls: readonly UiControl[];
-	readonly matches: number;
+	readonly paths: readonly string[];
+	readonly labels: readonly { value: string; rect: UiRect; color: UiQuad["color"]; }[];
 }
 
 /*
@@ -159,93 +147,141 @@ HuntingCell
 interface HuntingCell {
 	x: number;
 	y: number;
-	monsters: Map<number, HuntingMonster>;
+	count: number;
+	monsters: Map<number, { monster: HuntingMonster; count: number; }>;
+}
+
+/*
+================
+overlaps
+================
+*/
+function overlaps( a: UiRect, b: UiRect, gap = 4 ) {
+	return a[0] < b[0] + b[2] + gap && a[0] + a[2] + gap > b[0] && a[1] < b[1] + b[3] + gap && a[1] + a[3] + gap > b[1];
 }
 
 /*
 ================
 projectHuntingGuide
 
-Query visible regions, then aggregate into page-aligned 32px cells. No
-persistent labels crowd the art; hover shows the species in each cell.
+Group nearby static anchors at the displayed scale. One representative per
+group and bounded spacing leave native landmarks legible; the range and hover
+describe all species in that group. Counts are never presented as live mobs.
 ================
 */
 export function projectHuntingGuide(
 	catalogue: HuntingCatalogue,
-	filter: HuntingFilter,
+	images: ReadonlyMap<number, string>,
 	f: ReturnType<typeof worldMapFrame>,
-	clip: UiRect
+	clip: UiRect,
+	reserved: readonly UiRect[] = []
 ): HuntingProjection {
-	const search = filter.search.trim().toLowerCase();
-	const admitted = new Set(
-		catalogue.monsters.filter( row =>
-			row.level >= filter.min && row.level <= filter.max && row.name.toLowerCase().includes( search )
-		).map( row => row.refObjId )
-	);
+	const small = clip[2] < 350, cellSize = small ? 112 : 96;
 	const cells = new Map<string, HuntingCell>();
 	const scaleX = f.width / (f.right - f.left), scaleY = f.height / (f.top - f.bottom);
-	// Include a cell margin so an anchor just outside the clip still contributes
-	// to its partially visible area. Index normalized positions across regions.
-	const rx0 = Math.max( 0, Math.floor( (f.left + (clip[0] - f.ox - CELL_SIZE) / scaleX) / REGION_SIZE ) ),
-		rx1 = Math.min( 255, Math.floor( (f.left + (clip[0] + clip[2] - f.ox + CELL_SIZE) / scaleX) / REGION_SIZE ) ),
-		rz0 = Math.max( 0, Math.floor( (f.top - (clip[1] + clip[3] - f.oy + CELL_SIZE) / scaleY) / REGION_SIZE ) ),
-		rz1 = Math.min( 127, Math.floor( (f.top - (clip[1] - f.oy - CELL_SIZE) / scaleY) / REGION_SIZE ) );
+	const rx0 = Math.max( 0, Math.floor( (f.left + (clip[0] - f.ox) / scaleX) / REGION_SIZE ) ),
+		rx1 = Math.min( 255, Math.floor( (f.left + (clip[0] + clip[2] - f.ox) / scaleX) / REGION_SIZE ) ),
+		rz0 = Math.max( 0, Math.floor( (f.top - (clip[1] + clip[3] - f.oy) / scaleY) / REGION_SIZE ) ),
+		rz1 = Math.min( 127, Math.floor( (f.top - (clip[1] - f.oy) / scaleY) / REGION_SIZE ) );
 	for ( let rz = rz0; rz <= rz1; rz++ ) {
 		for ( let rx = rx0; rx <= rx1; rx++ ) {
 			for ( const point of catalogue.regions.get( rz * 256 + rx ) ?? [] ) {
-				if ( !admitted.has( point.monster.refObjId ) ) continue;
-				const mx = (point.x - f.left) * scaleX, my = (f.top - point.z) * scaleY;
-				if ( mx < 0 || my < 0 || mx >= f.width || my >= f.height ) continue;
-				const gx = Math.floor( mx / CELL_SIZE ),
-					gy = Math.floor( my / CELL_SIZE ),
-					x = f.ox + gx * CELL_SIZE,
-					y = f.oy + gy * CELL_SIZE;
+				const mx = (point.x - f.left) * scaleX, my = (f.top - point.z) * scaleY, x = f.ox + mx, y = f.oy + my;
 				if (
-					x + CELL_SIZE <= clip[0] || y + CELL_SIZE <= clip[1] ||
+					mx < 0 || my < 0 || mx >= f.width || my >= f.height || x < clip[0] || y < clip[1] ||
 					x >= clip[0] + clip[2] || y >= clip[1] + clip[3]
 				) continue;
-				const key = gx + ":" + gy, cell = cells.get( key ) ?? { x, y, monsters: new Map() };
-				cell.monsters.set( point.monster.refObjId, point.monster );
+				const key = Math.floor( mx / cellSize ) + ":" + Math.floor( my / cellSize );
+				const cell = cells.get( key ) ?? { x: 0, y: 0, count: 0, monsters: new Map() };
+				cell.x += x;
+				cell.y += y;
+				cell.count++;
+				const entry = cell.monsters.get( point.monster.refObjId ) ?? { monster: point.monster, count: 0 };
+				entry.count++;
+				cell.monsters.set( point.monster.refObjId, entry );
 				cells.set( key, cell );
 			}
 		}
 	}
-	const quads: UiQuad[] = [], controls: UiControl[] = [], bands = huntingLevelColors();
-	for ( const [key, cell] of cells ) {
-		const rows = [ ...cell.monsters.values() ].sort( ( a, b ) =>
-				a.level - b.level || a.name.localeCompare( b.name )
-			),
-			color = bands.find( band => rows[0]!.level <= band.max )!.color;
-		const rect: UiRect = [
-			cell.x + CELL_INSET,
-			cell.y + CELL_INSET,
-			CELL_SIZE - 2 * CELL_INSET,
-			CELL_SIZE - 2 * CELL_INSET
-		];
-		quads.push( { rect, clip, texture: "", uv: [ 0, 0, 1, 1 ], color: [ color[0], color[1], color[2], .22 ] } );
+	const quads: UiQuad[] = [], controls: UiControl[] = [], paths = new Set<string>();
+	const labels: { value: string; rect: UiRect; color: UiQuad["color"]; }[] = [];
+	const occupied = [ ...reserved ];
+	// Prioritize beginner groups when a dense viewport cannot fit everything.
+	const groups = [ ...cells.entries() ].sort( ( a, b ) =>
+		Math.min( ...[ ...a[1].monsters.values() ].map( r => r.monster.level ) ) -
+			Math.min( ...[ ...b[1].monsters.values() ].map( r => r.monster.level ) ) || a[0].localeCompare( b[0] )
+	);
+	const limit = small ? 4 : 18;
+	for ( const [key, cell] of groups ) {
+		if ( controls.length >= limit ) break;
+		const rows = [ ...cell.monsters.values() ].map( entry => entry.monster ).sort( ( a, b ) =>
+			a.level - b.level || a.refObjId - b.refObjId
+		);
+		const representative = [ ...cell.monsters.values() ].sort( ( a, b ) =>
+			b.count - a.count || a.monster.level - b.monster.level
+		)[0]!.monster;
+		const centerX = cell.x / cell.count, centerY = cell.y / cell.count;
+		const rect = [ [ 0, 0 ], [ -24, 0 ], [ 24, 0 ], [ 0, -24 ], [ 0, 24 ] ].map( ( [dx, dy] ) =>
+			[ Math.round( centerX - 30 + dx! ), Math.round( centerY - 29 + dy! ), 60, 58 ] as UiRect
+		).find( r =>
+			r[0] >= clip[0] && r[1] >= clip[1] && r[0] + r[2] <= clip[0] + clip[2] &&
+			r[1] + r[3] <= clip[1] + clip[3] && !occupied.some( other => overlaps( r, other ) )
+		);
+		if ( !rect ) continue;
+		occupied.push( rect );
+		const image = images.get( representative.refObjId ) ?? HUNTING_MONSTER_SIGN;
+		paths.add( image );
+		paths.add( PORTRAIT_FRAME );
+		paths.add( HUNTING_MONSTER_SIGN );
+		// The native slot tile has an opaque centre: paint it before the inset portrait.
 		quads.push( {
-			rect: [ rect[0], rect[1], rect[2], 1 ],
+			rect: [ rect[0] + 8, rect[1], 44, 44 ],
+			clip,
+			texture: PORTRAIT_FRAME,
+			uv: [ 0, 0, 1, 1 ],
+			color: [ 1, 1, 1, 1 ]
+		}, {
+			rect: [ rect[0] + 10, rect[1] + 2, 40, 40 ],
+			clip,
+			texture: image,
+			uv: [ 0, 0, 1, 1 ],
+			color: [ 1, 1, 1, 1 ]
+		}, {
+			rect: [ rect[0], rect[1] + 43, 60, 15 ],
 			clip,
 			texture: "",
 			uv: [ 0, 0, 1, 1 ],
-			color: [ color[0], color[1], color[2], .75 ]
+			color: [ .07, .055, .035, .86 ]
 		} );
-		const left = Math.max( rect[0], clip[0] ),
-			top = Math.max( rect[1], clip[1] ),
-			right = Math.min( rect[0] + rect[2], clip[0] + clip[2] ),
-			bottom = Math.min( rect[1] + rect[3], clip[1] + clip[3] );
-		if ( right <= left || bottom <= top ) continue;
-		const names = rows.slice( 0, MAX_HOVER_NAMES ).map( row => `${row.name} · Lv. ${row.level}` );
+		const low = rows[0]!.level, high = rows[rows.length - 1]!.level;
+		labels.push( {
+			value: `Lv ${low === high ? low : low + "-" + high}`,
+			rect: [ rect[0], rect[1] + 43, 60, 15 ],
+			color: [ .96, .83, .55, 1 ]
+		} );
+		if ( rows.length > 1 ) {
+			labels.push( {
+				value: "+" + (rows.length - 1),
+				rect: [ rect[0] + 38, rect[1] + 27, 20, 14 ],
+				color: [ 1, .93, .68, 1 ]
+			} );
+		}
+		const names = [
+			`${representative.name} - Lv. ${representative.level}`,
+			...rows.filter( row => row !== representative ).slice( 0, MAX_HOVER_NAMES - 1 ).map( row =>
+				`${row.name} - Lv. ${row.level}`
+			)
+		];
 		if ( rows.length > MAX_HOVER_NAMES ) names.push( `+${rows.length - MAX_HOVER_NAMES} more species` );
 		names.push( "Approximate hunting area" );
 		controls.push( {
 			id: HUNTING_AREA_PREFIX + key,
 			kind: "region",
 			draggable: true,
-			rect: [ left, top, right - left, bottom - top ],
+			rect,
 			label: names.join( "\n" ),
 			helpText: names.join( "\n" )
 		} );
 	}
-	return { quads, controls, matches: admitted.size };
+	return { quads, controls, labels, paths: [ ...paths ] };
 }
