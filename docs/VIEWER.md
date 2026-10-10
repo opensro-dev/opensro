@@ -100,6 +100,12 @@ The monster still needs four additive changes:
    resolves the presentation resource, loads the model into the renderer
    and produces `portraitSource(gid)`. No new model loader.
 4. A UI scene holding one full-size doll quad, no other UI.
+Progress: step 1 is done (c9cfc496): the doll input's `camera`, with no change for the inventory.
+Step 2 details:
+- The portrait and doll targets come from `device/ui.ts` `portraitTarget(id, width, height)`, with usage `TEXTURE_BINDING | RENDER_ATTACHMENT`. The readback needs `COPY_SRC` added, harmless for the HUD.
+- The format is the scene format (`sceneFormat()`), which is a float format with the HDR stage on, so the readback converts to 8-bit RGBA, keeping alpha.
+- Copy with `copyTextureToBuffer` (rows padded to 256 bytes) and `mapAsync`, as `device/timing.ts` does for its queries.
+
 The main canvas pass stays opaque. The PNG comes from the doll texture, so
 stills need no transparent canvas mode at all.
 
