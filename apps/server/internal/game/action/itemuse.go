@@ -12,6 +12,7 @@ Each family commits its effect and inventory consumption through one update.
 package action
 
 import (
+	"encoding/binary"
 	"math"
 	"slices"
 
@@ -235,11 +236,18 @@ func (rt *Runtime) HandleItemUse(
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
 		}
 		if family == itemUseReverseReturn {
-			// The tail is the u8 point the client's choice box picked (6971B0).
-			if len(tail) != 1 {
+			// The tail is the u8 point the client's choice box picked (6971B0),
+			// or the port-only map choice 7 with its u32 point id (reversemap.go).
+			target := reverseReturnTarget{}
+			switch {
+			case len(tail) == 1:
+				target.choice = tail[0]
+			case len(tail) == reverseMapTailBytes && tail[0] == reverseReturnMapChoice:
+				target.choice, target.point = tail[0], binary.LittleEndian.Uint32(tail[1:])
+			default:
 				return false
 			}
-			return rt.beginReverseReturnScroll(divisionID, character, ref, rowIndex, tail[0], nowMs, &result)
+			return rt.beginReverseReturnScroll(divisionID, character, ref, rowIndex, target, nowMs, &result)
 		}
 		if family == itemUseRepairHammer {
 			if len(tail) != 0 {

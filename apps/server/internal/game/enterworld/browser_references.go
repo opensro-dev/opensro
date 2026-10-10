@@ -59,6 +59,30 @@ type BrowserReferenceSources struct {
 	// Monsters are the monster rows every viewer needs
 	// (PublicMonsterRefObjRows).
 	Monsters []RefObjRow
+	// ReverseMapPoints is the reverse return scroll's map table: empty
+	// unless the port-only SRO_REVERSE_RETURN_MAP option is on.
+	ReverseMapPoints []ReverseMapPoint
+}
+
+// maxReverseMapNameBytes bounds a published point name.
+const maxReverseMapNameBytes = 128
+
+/*
+================
+ReverseMapPoint
+
+A reverse return map destination (port-only, not native). The browser paints
+it from these coordinates; a use names only its ID, which the server
+resolves (action/reversemap.go).
+================
+*/
+type ReverseMapPoint struct {
+	ID       uint32  `json:"id"`
+	Name     string  `json:"name"`
+	RegionID uint16  `json:"regionId"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+	Z        float64 `json:"z"`
 }
 
 /*
@@ -106,6 +130,11 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		}
 		objectIDs[row.RefObjID] = true
 	}
+	for index, point := range sources.ReverseMapPoints {
+		if point.ID != uint32(index+1) || len(point.Name) > maxReverseMapNameBytes {
+			return nil, fmt.Errorf("invalid reverse map point %d", point.ID)
+		}
+	}
 	data, err := json.Marshal(struct {
 		ReferencesVersion     int                    `json:"referencesVersion"`
 		SkillLifecycleVersion int                    `json:"skillLifecycleVersion"`
@@ -113,7 +142,8 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 		RefItemSnapshot       []RefItemRow           `json:"refItemSnapshot"`
 		RefObjSnapshot        []RefObjRow            `json:"refObjSnapshot"`
 		ItemCommandReferences []ItemCommandReference `json:"itemCommandReferences,omitempty"`
-	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, objectRows, commandRows})
+		ReverseMapPoints      []ReverseMapPoint      `json:"reverseMapPoints,omitempty"`
+	}{releaseprotocol.ReferencesContract, 1, rows, itemRows, objectRows, commandRows, sources.ReverseMapPoints})
 	if err != nil {
 		return nil, err
 	}

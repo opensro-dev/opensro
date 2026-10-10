@@ -24,6 +24,7 @@ const OFF = Object.freeze( {
 	renderScale: 100,
 	chatTimestamps: false,
 	developerDiagnostics: false,
+	reverseReturnMap: false,
 	postProcessing: false,
 	anisotropicFiltering: false,
 	heightFog: false,
@@ -177,7 +178,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Chat", "Developer" ]
+		[ "Image", "World", "Lighting", "Game", "Developer" ]
 	);
 	// Lighting keeps the direct-light stages; render scale joins Image without
 	// changing the indices used to reopen the existing tabs.

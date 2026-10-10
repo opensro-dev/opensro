@@ -27,8 +27,8 @@ CGItemExpendable_UseReverseReturnScroll (v1.188 4A00C0) reads the byte: the
 shared return admissions, the recorded point (0x1885 / 0x1886 when absent),
 the timed cast, and the answer on the item-use channel (0xB5BD with the
 scroll's slot, category-1 notice 390). The v1.150 dialog sends only 2 and
-3; this path does not encode the saved-point u32 required by v1.188's
-choice 7, which is refused.
+3. v1.188's choice 7 (a saved point, u32 id) is refused unless the
+port-only SRO_REVERSE_RETURN_MAP option is on (reversemap.go).
 
 INFERENCE: a teleport gate also lists the rows while the player holds a
 scroll, and the click runs the same scroll rule.
@@ -229,12 +229,25 @@ func (rt *Runtime) scrollReverseReturn(division string, c *enterworld.Character,
 			return false
 		}
 		used = ref
-		return rt.beginReverseReturnScroll(division, c, ref, row, choice, now, &result)
+		return rt.beginReverseReturnScroll(division, c, ref, row, reverseReturnTarget{choice: choice}, now, &result)
 	})
 	if committed && used != nil {
 		rt.publishItemUseVisual(c, used, &result)
 	}
 	return result
+}
+
+/*
+================
+reverseReturnTarget
+
+The point a use picked: choice 2 or 3, or the port-only map choice 7
+with its point id.
+================
+*/
+type reverseReturnTarget struct {
+	choice uint8
+	point  uint32
 }
 
 /*
@@ -245,23 +258,33 @@ beginReverseReturnScroll
 The caller holds the character's update.
 ================
 */
-func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, choice uint8, now int64, result *OpResult) bool {
+func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Character, ref *enterworld.ItemRef, row int, target reverseReturnTarget, now int64, result *OpResult) bool {
 	// 5F85A0 requires the current world's reference type (+0x20) to be zero.
 	if here, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition()); !ok || here.NativeType != 0 {
 		*result = itemUseFailure(errCodeReverseWorld)
 		return false
 	}
-	if choice != reverseReturnLastRecall && choice != reverseReturnLastDeath {
+	var destination travelPoint
+	if target.choice == reverseReturnMapChoice {
+		// An id the table does not hold is refused; with the option off the
+		// table is empty, so the native refusal of choice 7 is kept.
+		var found bool
+		if destination, found = rt.reverseMapDestination(target.point); !found {
+			return false
+		}
+	} else if target.choice != reverseReturnLastRecall && target.choice != reverseReturnLastDeath {
 		return false
 	}
 	duration, ok := returnScrollDuration(ref)
 	if !ok || !rt.returnScrollAdmission(division, c, result) {
 		return false
 	}
-	destination, refusal := reverseReturnPoint(c, choice)
-	if refusal != 0 {
-		*result = itemUseFailure(refusal)
-		return false
+	if target.choice != reverseReturnMapChoice {
+		var refusal uint8
+		if destination, refusal = reverseReturnPoint(c, target.choice); refusal != 0 {
+			*result = itemUseFailure(refusal)
+			return false
+		}
 	}
 	// Reverse return has its own siege admission, not the gate's guild or
 	// population rules. Job mode is refused before active-war mode (4A02CE).
