@@ -75,11 +75,15 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	if row.StackCount != 1 || c.NativeTeleportMode != 0 || rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
 		return false
 	}
-	// No battle check here. INFERENCE: the battle refusal (0x78) is
-	// UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE, "Cannot summon a vehicle to move
-	// or transport ... after the end of combat": it names riding and
-	// transport summons only (itemUseSummoner), not the growth and pickup
-	// pets this path calls, which a player may summon in battle.
+	// Native for pets too: CGItemCOSSummoner_Use (493100) tests the battle
+	// byte before any family branch and refuses 0x1878 (493183..49318C), and
+	// CGObjPC_TogglePersistentSummoner (4E8FC0) opens with the same test
+	// (4E8FC9). UIIT_MSG_COS_CAN_NOT_CREATE_BATTLE's text names vehicles,
+	// but the server sends it for attack and pickup pets as well.
+	if inBattleState(c, use.nowMs) {
+		*result = itemUseFailure(cosSummonInBattle)
+		return false
+	}
 	refs, ok := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
 	if !ok {
 		return false

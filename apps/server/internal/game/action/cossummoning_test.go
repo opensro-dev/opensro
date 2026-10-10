@@ -482,20 +482,25 @@ func TestGrowthPetsCannotBeSummonedInFreeBattle(t *testing.T) {
 
 /*
 ================
-TestPetsSummonInBattle
+TestPetsRefuseSummonInBattle
 
-The battle refusal names vehicles and transports only: a player in battle
-still summons an attack pet and a pickup pet.
+493100 refuses every persistent summon in battle with 0x78 before its
+family branch, attack and pickup pets alike, and admits it once battle
+ends.
 ================
 */
-func TestPetsSummonInBattle(t *testing.T) {
+func TestPetsRefuseSummonInBattle(t *testing.T) {
 	c, refs := persistentSummonFixture()
 	rt, clock := newTestRuntime(c, refs)
 	rt.BindPetSession(testDivision, c, 101)
 	c.BattleUntilMs = clock.NowMs() + battleStateMs
-	useSummonerFixture(t, rt, c, 23, refs.staticItemSource["SUMMON_ATTACK"])
-	useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
-	if !c.Companions()[0].Summoned || !c.Companions()[1].Summoned {
-		t.Fatal("a pet summon in battle was refused")
+	for i, name := range []string{"SUMMON_ATTACK", "SUMMON_PICKUP"} {
+		ref := refs.staticItemSource[name]
+		result := rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(uint8(23+i)).U16(ref.TypeFlags()).Payload())
+		if len(result.Frames) == 0 || result.Frames[0].Payload[0] != 2 || result.Frames[0].Payload[1] != cosSummonInBattle {
+			t.Fatalf("%s in battle answered %+v, want the 0x78 refusal", name, result.Frames)
+		}
 	}
+	c.BattleUntilMs = 0
+	useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
 }
