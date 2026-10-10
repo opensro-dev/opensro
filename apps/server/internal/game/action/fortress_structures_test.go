@@ -16,6 +16,8 @@ import (
 	"opensro.online/server/internal/game/world/fortress"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -173,5 +175,98 @@ func TestStructureRepairCostFollowsTheRecordPrice(t *testing.T) {
 	}
 	if _, _, code := structureRepairCost(row, 4999); code != fortressErrRepairGold {
 		t.Fatalf("a short purse answered %#x", code)
+	}
+}
+
+/*
+================
+gateFixture
+
+Jangan's world with one gate on zone 88 (STRUCTURE_POS_JA_GATE_01) and
+the pulley RefObjID that names it.
+================
+*/
+func gateFixture(t *testing.T) (*Runtime, uint32, monster.Instance) {
+	t.Helper()
+	const gateRef, pulleyRef = 19560, 19566
+	template := monster.TemplateFromParts(
+		map[uint32]monster.MonsterRef{
+			gateRef: {RefObjID: gateRef, MaxHP: 2000, ScaleDenom: 100, Structure: true, TypeID4: structureKindGate},
+		},
+		[]monster.NestRow{
+			{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: gateRef, RegionID: 0x62aa, X: 100, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: 88},
+		},
+	)
+	rt, c, clock := fortressFixtureWithPopulation(t, testFieldFortGate, template)
+	enterFortress(t, rt, c)
+	rt.Monsters.AdvancePopulation(clock.NowMs() + monster.NestHiveTickMs)
+	rt.gatePulleys = map[uint32]uint32{pulleyRef: 88}
+	jangan := uint32(0)
+	for _, record := range rt.Fortresses.Records(testDivision) {
+		if record.CodeName == "FORTRESS_JANGAN" {
+			jangan = record.ID
+		}
+	}
+	return rt, jangan, structureByRef(t, rt, gateRef)
+}
+
+/*
+================
+TestGatePulleyOpensAndShutsItsGate
+
+634C90: a pulley naming no gate answers 0x27 to an open request and 0x28
+to a shut one, a gate of another fortress 0x29, a destroyed gate 0x3C;
+otherwise the requested word becomes the gate's state and the reply
+carries the fortress, the zone and that word.
+================
+*/
+func TestGatePulleyOpensAndShutsItsGate(t *testing.T) {
+	rt, jangan, gate := gateFixture(t)
+	pull := func(refObjID, fortressID uint32, state uint16) []byte {
+		out := rt.fortressGatePulley(testDivision, simulation.NpcDef{RefObjID: refObjID},
+			siege.Interaction{Action: siege.ActionGate, Fortress: fortressID, Value16: state})
+		return out.Frames[0].Payload
+	}
+	refused := func(code uint8) []byte { return []byte{siege.ActionGate, 2, code} }
+	if got := pull(1, jangan, 2); !bytes.Equal(got, refused(fortressErrGateNoZoneOpen)) {
+		t.Fatalf("unknown pulley, open: % x", got)
+	}
+	if got := pull(1, jangan, 0); !bytes.Equal(got, refused(fortressErrGateNoZoneShut)) {
+		t.Fatalf("unknown pulley, shut: % x", got)
+	}
+	if got := pull(19566, jangan+1, 2); !bytes.Equal(got, refused(fortressErrGateWrongFort)) {
+		t.Fatalf("another fortress: % x", got)
+	}
+	want := wire.NewWriter(12).U8(siege.ActionGate).U8(1).U32(jangan).U32(88).U16(2).Payload()
+	if got := pull(19566, jangan, 2); !bytes.Equal(got, want) {
+		t.Fatalf("open answered % x, want % x", got, want)
+	}
+	if state := structureByRef(t, rt, gate.Ref.RefObjID).StructureState; state != 2 {
+		t.Fatalf("gate state %d after opening", state)
+	}
+	if got := pull(19566, jangan, 0); got[1] != 1 || structureByRef(t, rt, gate.Ref.RefObjID).StructureState != 0 {
+		t.Fatalf("shut answered % x", got)
+	}
+	rt.Monsters.RestoreStructure(testDivision, gate.Gid, 0, 3)
+	if got := pull(19566, jangan, 2); !bytes.Equal(got, refused(fortressErrGateDestroyed)) {
+		t.Fatalf("destroyed gate: % x", got)
+	}
+}
+
+/*
+================
+TestGatePulleysLoadFromCharacterData
+
+Jangan's three pulleys name its gate zones 88 to 90 in their column 4;
+the other fortresses' zones are not served in v1.150.
+================
+*/
+func TestGatePulleysLoadFromCharacterData(t *testing.T) {
+	pulleys, err := loadGatePulleys(licensed.RetailTextdataDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pulleys) != 3 || pulleys[19566] != 88 || pulleys[19567] != 89 || pulleys[19568] != 90 {
+		t.Fatalf("pulleys %v", pulleys)
 	}
 }

@@ -11,9 +11,9 @@ CICATStruct (TypeID band 0x2C6, CGObj_IsATStruct 482AB0):
   - a headquarters (TID4 5) of the attacker's own guild: 0x303E
   - another structure of the guild that holds its fortress: 0x303F
 
-52BF90 also refuses a gate whose state word (+0x44) is set, 0x3042: the
-gate pulley opens it. No pulley is ported, so every gate stays shut and
-that test always admits.
+52BF90's 0x3042 answers are a missing guild record (52C08F, 52C259) and
+a failed region line query (52C312); none tests a gate's state word, so
+an open gate (fortress_gates.go) is struck like a shut one.
 
 and for the fort stone, while guard towers stand 0x3040 and during the
 countdown after the last falls 0x3046 (the fortress authority's

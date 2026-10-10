@@ -151,6 +151,9 @@ type Runtime struct {
 	// another runtime or bootstrap's object list.
 	NpcRoster []simulation.NpcDef
 	portals   *portalCatalog
+	// gatePulleys maps a gate pulley's RefObjID to its gate's event zone
+	// (ConfigurePortals, fortress_gates.go).
+	gatePulleys map[uint32]uint32
 	// Fortresses is the fortress occupation and war-mode authority
 	// (ConfigurePortals installs it from siegefortress.txt).
 	Fortresses *fortress.Authority
