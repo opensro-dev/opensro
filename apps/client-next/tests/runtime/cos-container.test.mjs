@@ -36,7 +36,9 @@ test("COS ground requests and receipts keep the player bag isolated", () => {
 	assert.equal( s.cosRecords[0].inventory.length, 2 );
 	assert.equal( s.inventoryPending, false );
 	assert.deepEqual( s.inventory, [] );
-	assert.throws( () => owner.receive( reply, 4 ) );
+	// A pet pickup holds no lock: a repeated receipt re-states the same slot.
+	owner.receive( reply, 4 );
+	assert.equal( owner.take()?.cosRecords[0].inventory.length ?? 2, 2 );
 	owner.command( { kind: "cos-pickup", gid: 7, target: 124 }, 5, entity );
 	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 254, ...u32( 50 ) ] ) }, 6 );
 	assert.equal( owner.take().cosRecords[0].inventory.length, 2 );
@@ -55,6 +57,18 @@ test("a pet pickup the party hands to another member ends at the pet's scoop", (
 	other.command( { kind: "cos-pickup", gid: 7, target: 123 }, 0, entity );
 	other.receive( { opcode: 0x35c7, payload: Uint8Array.from( [ ...u32( 1 ), 64 ] ) }, 1 );
 	assert.throws( () => other.step( 10002 ), /reconnect/ );
+});
+test("a pet pickup's receipt still applies after an earlier scoop ended its request", () => {
+	// The pet's in-flight automatic scoop arrives first and ends the manual
+	// request; the manual pickup's own 0x11 receipt then follows unmatched.
+	const { owner, initial } = fixture();
+	const before = initial.cosRecords[0].inventory.length;
+	owner.command( { kind: "cos-pickup", gid: 7, target: 123 }, 0, entity );
+	owner.receive( { opcode: 0x35c7, payload: Uint8Array.from( [ ...u32( 7 ), 64 ] ) }, 1 );
+	const receipt = { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 3, ...u32( 8 ), 5, 0 ] ) };
+	assert.doesNotThrow( () => owner.receive( receipt, 2 ) );
+	assert.equal( owner.take().cosRecords[0].inventory.length, before + 1 );
+	assert.doesNotThrow( () => owner.step( 10002 ) );
 });
 function fixture() {
 	const sent = [], owner = createGameplay( f => sent.push( f ) );

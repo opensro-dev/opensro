@@ -1076,10 +1076,13 @@ cosGrounded
 		*/
 		cosGrounded( p: Uint8Array ) {
 			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
-			if (
-				!pending || pending.cosGid !== gid || pending.movementType !== p[1] ||
-				p[1] === 0x12 && pending.source !== p[6]
-			) throw Error( "Unmatched COS ground result" );
+			const matched = !!pending && pending.cosGid === gid && pending.movementType === p[1] &&
+				(p[1] !== 0x12 || pending.source === p[6]);
+			// A pet's pickup holds no lock in the original client: a receipt
+			// whose request another scoop already ended (cosPickupShown) still
+			// applies to the pet's bag. A drop answers only its own request.
+			if ( !matched && p[1] === 0x11 ) return;
+			if ( !matched ) throw Error( "Unmatched COS ground result" );
 			pending = null;
 			error = null;
 		},
