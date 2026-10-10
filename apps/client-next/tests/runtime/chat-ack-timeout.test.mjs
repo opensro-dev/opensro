@@ -43,7 +43,7 @@ test("an unacknowledged line releases chat at its deadline", () => {
 
 	assert.equal( chat.step( 10000 ), true );
 	assert.equal( chat.state().pending, false, "the deadline releases the slot" );
-	assert.match( chat.state().error, /not confirmed/ );
+	assert.match( chat.state().error ?? "", /not confirmed/ );
 
 	chat.request( 1, "second", "", 10001 );
 	assert.equal( sent.length, 2, "a later line still reaches the server" );

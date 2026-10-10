@@ -81,7 +81,7 @@ test("chat uses UTF-16 units and native keyed acknowledgements without optimisti
 	// The deadline releases the slot (chat.ts): an unanswered line no longer
 	// locks chat; it warns and the next line goes out.
 	assert.equal( chat.state().pending, false );
-	assert.match( chat.state().error, /not confirmed/ );
+	assert.match( chat.state().error ?? "", /not confirmed/ );
 	chat.request( 1, "after", "", 10012 );
 	chat.receive( { opcode: 0xb367, payload: Uint8Array.of( 1, 1, 255 ) }, 1 );
 	assert.equal( chat.state().error, null );
