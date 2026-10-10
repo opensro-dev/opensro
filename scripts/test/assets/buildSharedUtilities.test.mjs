@@ -10,7 +10,8 @@ import { gunzipSync } from "node:zlib";
 import {
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
-	pickDefaultSetStateClip
+	pickDefaultSetStateClip,
+	pickSetSoundEvents
 } from "../../build/char/animationUtils.mjs";
 import {
 	normalizeAssetPath,
@@ -351,4 +352,33 @@ test("shared animation and ResInfo helpers retain authored selection/order", () 
 			{ section: "Other", name: "OtherRoot", type: "CIFStatic" }
 		]
 	} );
+});
+
+test("a weapon set without its own ModDataSound plays the default set's (BindTrackMarkers AE1770)", () => {
+	const sound = ( animationSetName, stateId, tracks ) => ({
+		kind: 1,
+		stateId,
+		animationSetName,
+		entries: [ { animationName: "default", tracks } ]
+	});
+	const bsr = {
+		soundModifiers: [
+			sound( "default", 7, [ { triggerFrame: 289, cueName: "snd_run1" }, {
+				triggerFrame: 619,
+				cueName: "snd_run1"
+			} ] ),
+			sound( "bow", 7, [ { triggerFrame: 100, cueName: "snd_bow_run" } ] ),
+			sound( "cart", 7, [] )
+		]
+	};
+	const footsteps = [ { cursorMs: 289, cue: "snd_run1" }, { cursorMs: 619, cue: "snd_run1" } ];
+	// twohand_staff authors no run sound: the default set's footsteps apply.
+	assert.deepEqual( pickSetSoundEvents( bsr, "twohand_staff", 7 ), footsteps );
+	assert.deepEqual( pickSetSoundEvents( bsr, "TwoHand_Staff", 7 ), footsteps );
+	// A set's own ModDataSound wins, including an authored silent one.
+	assert.deepEqual( pickSetSoundEvents( bsr, "bow", 7 ), [ { cursorMs: 100, cue: "snd_bow_run" } ] );
+	assert.deepEqual( pickSetSoundEvents( bsr, "cart", 7 ), [] );
+	// No sound anywhere for the state stays silent.
+	assert.deepEqual( pickSetSoundEvents( bsr, "twohand_staff", 1 ), [] );
+	assert.deepEqual( pickSetSoundEvents( { soundModifiers: undefined }, "bow", 7 ), [] );
 });

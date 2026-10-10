@@ -30,6 +30,7 @@ import path from "node:path";
 import {
 	pickAnimationStateTableMetadata,
 	pickDefaultSetSoundEvents,
+	pickSetSoundEvents,
 	pickDefaultSetStateClip,
 	pickDefaultSetStateTableMetadata
 } from "./animationUtils.mjs";
@@ -102,24 +103,6 @@ function parseCharacterSoundProfiles( filePath ) {
 		for ( const name of expandCharacterInfoCodenames( modelCodename ) ) profiles.set( name, soundProfileName );
 	}
 	return profiles;
-}
-
-// Default-set state-id -> clip path (the pickPickupClip discipline,
-// generalized): the .bsr "default" animation set maps native motion/state
-// ids to .ban paths - no filename heuristics.
-function pickAnimationSetSoundEvents( bsr, animationSetName, stateId ) {
-	const soundSet = bsr.soundModifiers?.find(
-		( entry ) =>
-			entry.kind === 1 &&
-			entry.stateId === stateId &&
-			entry.animationSetName.toLowerCase() === animationSetName.toLowerCase()
-	);
-	const cueVariant = soundSet?.entries.find( ( entry ) => entry.animationName.toLowerCase() === "default" ) ??
-		soundSet?.entries[0];
-	return (cueVariant?.tracks ?? []).map( ( track ) => ({
-		cursorMs: track.triggerFrame,
-		cue: track.cueName
-	}) );
 }
 
 async function publishClip( gamePath, publishedByPath ) {
@@ -365,6 +348,7 @@ export async function buildLocomotionBanAssets() {
 			entry[motion.role] = {
 				...(await publishClip( motion.path, publishedByPath )),
 				loop: clip.field2 !== 0,
+				soundEvents: pickSetSoundEvents( bsr, motion.set, motion.id ),
 				...pickAnimationStateTableMetadata( motion.state )
 			};
 		}
@@ -396,7 +380,7 @@ export async function buildLocomotionBanAssets() {
 				}
 				states[String( motionId )] = {
 					...(await publishClip( state.animationPath, publishedByPath )),
-					soundEvents: pickAnimationSetSoundEvents( bsr, setName, motionId ),
+					soundEvents: pickSetSoundEvents( bsr, setName, motionId ),
 					...pickAnimationStateTableMetadata( state )
 				};
 				clipCount += 1;
