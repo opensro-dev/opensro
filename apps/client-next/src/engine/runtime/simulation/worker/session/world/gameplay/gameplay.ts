@@ -203,6 +203,7 @@ import {
 	type SocialCommand
 } from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
+import { COS_DISTANCE_ERROR, cosDistanceNotice } from "@/engine/foundation/gameplay/cos-distance-notice";
 import { pickupNotice } from "@/engine/foundation/gameplay/pickup-notice";
 import {
 	skillAdmitsPredictedTarget,
@@ -2547,6 +2548,13 @@ Packet handling must not depend on which HUD panel is currently open.
 						notices = [ ...notices.slice( -99 ), { ...academyAck.notice, sequence: ++noticeSequence } ];
 						dirty = true;
 					}
+					return true;
+				}
+				if ( frame.opcode === COS_DISTANCE_ERROR ) {
+					// The server stopped this player at its COS's tether.
+					const notice = cosDistanceNotice( frame.payload );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
 					return true;
 				}
 				if ( frame.opcode === 0x317d ) {

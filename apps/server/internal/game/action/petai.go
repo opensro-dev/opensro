@@ -56,7 +56,10 @@ type petSession struct {
 	// this same presentation owner; mounted motion comes from the rider owner.
 	transportCOS   *enterworld.CharacterCOS
 	transportWorld simulation.WorldState
-	generation     uint64
+	// tether is the parked trade transport's hold on its owner this tick
+	// (simulation/tether.go); nil for every other companion state.
+	tether     *simulation.Tether
+	generation uint64
 	// summonedAtMs marks a pet just called out of its item (not restored at
 	// entry): its first publication carries spawn sub-state 1.
 	summonedAtMs   int64
@@ -171,6 +174,7 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		return keys[i].gid < keys[j].gid
 	})
 	var out []simulation.DivisionFrames
+	var tethers map[string]simulation.Tether
 	for _, key := range keys {
 		unlock := rt.lockDivision(key.division)
 		frames := rt.advancePetSatiety(key, nowMs)
@@ -181,6 +185,12 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		characterID := int64(0)
 		if state != nil {
 			characterID = state.character.ID
+		}
+		if state != nil && state.tether != nil {
+			if tethers == nil {
+				tethers = make(map[string]simulation.Tether)
+			}
+			tethers[simulation.WorldKey(key.division, state.character.Name)] = *state.tether
 		}
 		var public []wire.Frame
 		var others []RecipientFrames
@@ -199,6 +209,9 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 			out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: characterID, Frames: frames})
 		}
 	}
+	if rt.Worlds != nil {
+		rt.Worlds.ReplaceTethers(tethers)
+	}
 	return out
 }
 
@@ -214,6 +227,7 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	if state == nil {
 		return nil
 	}
+	state.tether = nil
 	following := false
 	defer func() {
 		if !following {
@@ -258,6 +272,12 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	ref, found := refs.CharacterRefByCodename(cos.Codename)
 	if !found || ref == nil || ref.RefObjID != cos.RefObjID || ref.TidWord&0x7fe != 0x1c6 || !followingCOSBand(ref.TidWord>>11) {
 		state.follower = nil
+		if found && ref != nil && ref.RefObjID == cos.RefObjID && isVehicleCOS(ref.TidWord) {
+			// 4FD720: the first primary actor is a vehicle (CGObj_IsVehicleCOS
+			// 4827F0, the band-2 trade transport), so it holds its owner.
+			state.tether = &simulation.Tether{Anchor: rt.companionLiveSpawn(key.division, snapshot, cos, nowMs),
+				Range: simulation.TradeTransportTetherRange, Reason: simulation.TetherTradeTransport}
+		}
 		return nil
 	}
 	owner := rt.liveSpawn(simulation.WorldKey(key.division, snapshot.Name), snapshot, nowMs)
@@ -614,7 +634,8 @@ func (rt *Runtime) restoreCompanionRelocation(previous map[petOwnerKey]petSessio
 followingCOSBand
 
 Pets (3, 4) and a captured quest monster (6) follow their owner on foot;
-transports (1, 2) move only with their rider.
+transports (1, 2) move only with their rider. A parked trade transport
+instead holds its trader within range (advancePet's tether).
 ================
 */
 func followingCOSBand(band uint16) bool {

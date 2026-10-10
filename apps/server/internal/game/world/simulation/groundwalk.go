@@ -61,6 +61,9 @@ type GroundUpdate struct {
 	Revision uint64
 	Stopped  bool
 	Arrived  bool
+	// Tether is the native reason byte of a tether refusal (tether.go),
+	// zero for any other stop.
+	Tether uint8
 }
 
 /*
@@ -322,6 +325,16 @@ func (st *WorldStore) advanceGroundWalk(key string, w *WorldState) {
 	if step[0] == 0 && step[1] == 0 && step[2] == 0 {
 		g.At = now
 		w.Ground = &g
+		return
+	}
+	if tether, ok := st.tethers[key]; ok && tether.Refuses(g.Pose, goal) {
+		// 4F1230 stops the player where it stands (vf4B0) before any
+		// geometry runs for the refused step.
+		w.Spawn = g.Pose
+		w.MoveSegment = nil
+		w.SetGoalOwner(g.owner)
+		w.Ground = nil
+		st.groundUpdates[key] = GroundUpdate{Key: key, Revision: w.groundRevision, Stopped: true, Tether: tether.Reason}
 		return
 	}
 	accepted, owner, blocked := st.groundConfig.Step(g.Pose, g.owner, goal)

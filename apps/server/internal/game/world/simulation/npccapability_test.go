@@ -132,3 +132,21 @@ func TestJobGuildFollowsTheServiceSet(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestTownSpecialtyTradersSellTradeGoods
+
+v1.150's Jangan, Donwhang and Hotan specialty traders resolve the special
+trade bit next to the shop their store group grants, as SPECIAL2 does.
+================
+*/
+func TestTownSpecialtyTradersSellTradeGoods(t *testing.T) {
+	for _, codename := range []string{"NPC_CH_SPECIAL", "NPC_WC_SPECIAL", "NPC_KT_SPECIAL", "NPC_CH_SPECIAL2"} {
+		npc := NpcDef{Codename: codename, NpcTalkStoreGroups: []NpcTalkStoreGroup{{StoreGroupID: 786}}}
+		npc.Services = ResolveNpcServices(npc)
+		if got := ResolveNpcTalkFlags(npc); got != NpcTalkFlagShop|NpcTalkFlagSpecialTrade {
+			t.Errorf("%s resolves %#x, want shop|special trade", codename, got)
+		}
+	}
+}

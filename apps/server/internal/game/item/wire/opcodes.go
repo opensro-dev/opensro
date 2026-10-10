@@ -58,6 +58,11 @@ const (
 	// OpObjectSourceCorrection hard-corrects a remote entity's position.
 	// Handler sub_775b50.
 	OpObjectSourceCorrection uint16 = 0xB2F5
+	// OpCosDistanceError tells a player its step was refused by a COS
+	// tether: one byte, 1 = too far from the trade transport, 2 = too far
+	// from the capture-quest monster (CPSMission_OnCosTradeDistanceError0x342F
+	// 75DF40; v1.188 server 0x30E7 from 4F1230).
+	OpCosDistanceError uint16 = 0x342F
 	// OpObjectStateRefresh flips one discrete state channel on an entity.
 	// Handler sub_777b60.
 	OpObjectStateRefresh uint16 = 0x3122
