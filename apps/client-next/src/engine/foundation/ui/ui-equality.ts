@@ -83,7 +83,8 @@ export function sameUiSemantics( a: UiSemantics, b: UiSemantics ): boolean {
 		a.title !== b.title || a.message !== b.message || a.loading !== b.loading ||
 		a.loadingVisible !== b.loadingVisible || a.loadingStatus !== b.loadingStatus ||
 		a.loadingProgress !== b.loadingProgress || a.loadingError !== b.loadingError ||
-		!tuple( a.hudCorner, b.hudCorner ) || a.controls.length !== b.controls.length
+		!tuple( a.hudCorner, b.hudCorner ) || a.hudToolsTop !== b.hudToolsTop ||
+		a.controls.length !== b.controls.length
 	) return false;
 	if (
 		a.focusRequest !== b.focusRequest &&

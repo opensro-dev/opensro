@@ -751,7 +751,9 @@ export function createPlatform(
 			if ( fpsChip ) {
 				const scale = displayScale(),
 					right = state.hudCorner ? Math.max( 4, canvasSize().width - state.hudCorner[0] * scale + 6 ) : 8,
-					top = state.hudCorner ? Math.max( 4, state.hudCorner[1] * scale ) : 8;
+					top = state.hudCorner ?
+						Math.max( 4, Math.max( state.hudCorner[1], state.hudToolsTop ?? 0 ) * scale ) :
+						8;
 				// Write only changes: a style write invalidates layout every publication.
 				if ( fpsChip.style.right !== right + "px" ) {
 					fpsChip.style.right = right + "px";

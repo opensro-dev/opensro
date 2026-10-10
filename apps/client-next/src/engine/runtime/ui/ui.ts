@@ -577,6 +577,10 @@ const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
+// Port-only report/diagnostic tools: paired with --hud-tools-height in loading.css.
+const HUD_TOOLS_HEIGHT = 32;
+const HUD_TOOLS_GAP = 8;
+const COS_STATUS_OUTLINE_MARGIN = 11;
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
@@ -7260,7 +7264,7 @@ export function createUi(
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
 			const compact = compactHud.layout( w, h );
-			let targetBottom = 0, compactTelemetryTop = 4;
+			let targetBottom = 0, compactTelemetryTop = 4, companionToolsTop = 0;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
 				if ( alpha > 0 ) {
@@ -7542,8 +7546,23 @@ export function createUi(
 						nativeRect;
 					const [x, y] = r;
 					statusBottom = Math.max( statusBottom, y + r[3] );
+					if ( !compact ) {
+						// Reserve the selected outline too, without moving native companion controls.
+						companionToolsTop = Math.max(
+							companionToolsTop,
+							y - COS_STATUS_OUTLINE_MARGIN + chrome.outlineSize[1] + HUD_TOOLS_GAP
+						);
+					}
 					if ( record.gid === cosHud.selected() ) {
-						image( [ x - 11, y - 11, chrome.outlineSize[0], chrome.outlineSize[1] ], chrome.outline );
+						image(
+							[
+								x - COS_STATUS_OUTLINE_MARGIN,
+								y - COS_STATUS_OUTLINE_MARGIN,
+								chrome.outlineSize[0],
+								chrome.outlineSize[1]
+							],
+							chrome.outline
+						);
 					}
 					image( r, chrome.frame );
 					const icon = iconPath( reference?.icon );
@@ -9252,7 +9271,8 @@ export function createUi(
 				}
 				if ( compact && hudData ) {
 					// Banners own a separate strip below player, pet, target buffs and telemetry.
-					targetBottom = drawTransientBanners( Math.max( targetBottom, compactTelemetryTop + 20 ) + 12 );
+					compactTelemetryTop = Math.max( targetBottom, compactTelemetryTop );
+					targetBottom = drawTransientBanners( compactTelemetryTop + HUD_TOOLS_HEIGHT + 12 );
 				}
 				if ( target?.kind === "npc" && target.refObjId === 9251 ) {
 					button(
@@ -20464,11 +20484,11 @@ export function createUi(
 			probe?.detailBegin( "ui-finalize" );
 			const semantics = {
 				loadingVisible: !!loading && !assetFailure,
-				// The diagnostic chip gets a separate row below the compact Map
-				// button, whether the minimap is expanded or collapsed.
+				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
 					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
 					hudCorner,
+				hudToolsTop: compact ? undefined : Math.max( companionToolsTop, targetBottom ),
 				focusRequest: worldVisible && phase === "world" ? focusRequest : undefined,
 				loadingProgress: loading?.progress,
 				loadingStatus: loading?.status,

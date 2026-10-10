@@ -76,6 +76,7 @@ test("focus, caret, controls and loading changes remain observable even when pix
 			{ loadingStatus: "upload" },
 			{ loadingError: "failed" },
 			{ hudCorner: [ 1, 2, 3, 4 ] },
+			{ hudToolsTop: 80 },
 			{ focusRequest: { id: "chat", revision: 2, caret: 0 } },
 			{ focusRequest: { id: "chat", revision: 1, caret: 1 } }
 		]
