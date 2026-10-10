@@ -77,19 +77,7 @@ func (rt *Runtime) structureRepairTarget(c *enterworld.Character, use skillItemU
 	if holder := record.Holder(); holder != 0 && holder != guildID {
 		return none, repairWrongGuild
 	}
-	var role uint8
-	if rt.Guilds != nil {
-		_, members, found := rt.Guilds.Guild(use.division, guildID)
-		if found {
-			for _, member := range members {
-				if member.CharID == c.ID {
-					role = member.FortressRole
-					break
-				}
-			}
-		}
-	}
-	if role&uint8(use.ref.NativeFields.Get("itemParam5_2ac")) == 0 {
+	if rt.guildFortressRole(use.division, c)&uint8(use.ref.NativeFields.Get("itemParam5_2ac")) == 0 {
 		return none, repairWrongRole
 	}
 	if _, sameWorld := rt.characterMonster(use.division, c, gid); !sameWorld {

@@ -55,6 +55,11 @@ type nestRuntime struct {
 	// tickMs is the hive callback phase of a nest outside an overwrite hive.
 	tickMs    int64
 	scheduled int64
+	// vacant and occupant are a fortress structure zone's stored occupant
+	// (SetStructureOccupant): a vacant zone spawns nothing, and a nonzero
+	// occupant replaces the nest's authored reference.
+	vacant   bool
+	occupant uint32
 }
 
 /*
@@ -515,7 +520,13 @@ bool
 */
 func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, nowMs int64) bool {
 	n := state.nests[index]
+	if n.vacant {
+		return false
+	}
 	nest := s.template.Nests[index]
+	if n.occupant != 0 {
+		nest.RefObjID = n.occupant
+	}
 	ref := s.template.Refs[nest.RefObjID]
 	roll := monster.RollNativeSpawn(ref, nest, n.partyArmed, s.randomWord)
 	spawn, placement := s.placeNativeSpawn(nest, ref, roll.Grade())

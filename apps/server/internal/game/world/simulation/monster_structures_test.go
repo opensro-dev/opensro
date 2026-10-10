@@ -94,3 +94,52 @@ func TestStructuresFallAndStandAgain(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestStructureOccupantVacatesAndReplaces
+
+SetStructureOccupant with 0 empties a zone even under a nest that would
+respawn, and the hive leaves it empty; a reference stands that structure
+there at full hit points, whatever the nest authored.
+================
+*/
+func TestStructureOccupantVacatesAndReplaces(t *testing.T) {
+	s := NewMonsterState(monster.TemplateFromParts(
+		map[uint32]monster.MonsterRef{
+			19553: {RefObjID: 19553, MaxHP: 900, ScaleDenom: 100, Structure: true, TypeID4: 1},
+			19536: {RefObjID: 19536, MaxHP: 500, ScaleDenom: 100, Structure: true, TypeID4: 2},
+		},
+		[]monster.NestRow{
+			{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: 19536, RegionID: 0x62aa, X: 140, Y: 20, Z: 100},
+				PolicyPinned: true, MaxCount: 1, Respawn: true, EventStructID: 85},
+		},
+	))
+	now := int64(1)
+	s.SetTimeSource(func() time.Time { return time.UnixMilli(now) })
+	s.StartDivision("fort")
+	world := instance.Pack(2, 1)
+	s.AdvancePopulation(now + monster.NestHiveTickMs)
+	zone := func() []monster.Instance { return s.WorldStructures("fort", world) }
+	if len(zone()) != 1 {
+		t.Fatalf("zone 85 holds %d structures, want 1", len(zone()))
+	}
+	if !s.SetStructureOccupant("fort", world, 85, 0, now) || len(zone()) != 0 {
+		t.Fatal("the zone was not vacated")
+	}
+	for step := int64(1); step <= 20; step++ {
+		s.AdvancePopulation(now + step*10*monster.NestHiveTickMs)
+	}
+	if len(zone()) != 0 {
+		t.Fatal("a respawning nest rebuilt a vacant zone")
+	}
+	if !s.SetStructureOccupant("fort", world, 85, 19553, now) {
+		t.Fatal("the zone took no occupant")
+	}
+	if rows := zone(); len(rows) != 1 || rows[0].Ref.RefObjID != 19553 || rows[0].CurrentHP != 900 {
+		t.Fatalf("zone 85 holds %+v", rows)
+	}
+	if s.SetStructureOccupant("fort", world, 99, 0, now) {
+		t.Fatal("a zone without a structure nest took an occupant")
+	}
+}

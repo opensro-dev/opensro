@@ -101,6 +101,16 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 		defer unlock()
 		return rt.fortressServiceQuery(division, c, request)
 	}
+	// 519E60 skips the NPC range check for these two: the target is the
+	// summoned object or structure itself.
+	if subtype == siege.ActionDismiss || subtype == siege.ActionDemolish {
+		unlock := rt.lockDivision(division)
+		defer unlock()
+		if subtype == siege.ActionDismiss {
+			return rt.fortressDismissObject(division, c, request)
+		}
+		return rt.fortressDemolishStructure(division, c, request)
+	}
 	if subtype == fortressWarStatus {
 		unlock := rt.lockDivision(division)
 		defer unlock()

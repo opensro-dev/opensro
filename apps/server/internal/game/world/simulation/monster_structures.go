@@ -137,6 +137,66 @@ func (s *MonsterState) ReinstallStructures(divisionID string, world instance.ID,
 
 /*
 ================
+SetStructureOccupant
+
+The one owner of a fortress zone's occupant: the stored row's RefObjID.
+0 vacates the zone, as a demolition does (CSiegeFortress_HandleDatabaseResult
+6232C0 case 0x15 erases the structure and releases it): whatever stands
+there goes, and neither the hive nor ReinstallStructures spawns it again.
+Any other reference replaces what stands there with that structure at full
+hit points, also when it is not the nest's authored default (construction,
+upgrade). Reports false when the world has no structure nest on zone.
+================
+*/
+func (s *MonsterState) SetStructureOccupant(divisionID string, world instance.ID, zone uint32, refObjID uint32, nowMs int64) bool {
+	lease, ok := s.PopulationLease(divisionID, world)
+	if !ok {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(divisionID, lease)
+	if state == nil {
+		return false
+	}
+	index, found := -1, false
+	for candidate := range state.nests {
+		nest := s.template.Nests[candidate]
+		if nest.EventStructID == zone && s.template.Refs[nest.RefObjID].Structure {
+			index, found = candidate, true
+			break
+		}
+	}
+	if !found {
+		return false
+	}
+	if _, known := s.template.Refs[refObjID]; refObjID != 0 && !known {
+		return false
+	}
+	n := state.nests[index]
+	for gid, attached := range state.gidNests {
+		if attached != index {
+			continue
+		}
+		if row, live := state.instances.lookup(gid); live {
+			s.removeInstanceLocked(state, gid, row)
+		}
+		if n.live > 0 {
+			n.live--
+		}
+	}
+	n.vacant, n.occupant = refObjID == 0, 0
+	if refObjID != 0 && refObjID != s.template.Nests[index].RefObjID {
+		n.occupant = refObjID
+	}
+	if n.vacant {
+		return true
+	}
+	return s.attemptNestSpawn(state, index, nowMs)
+}
+
+/*
+================
 removeInstanceLocked
 
 Drops one instance and everything keyed by it, as Defeat does, without

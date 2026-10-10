@@ -8,8 +8,10 @@ CSiegeFortress_PersistState), and a structure's row is rewritten once its
 hit points have moved by 500 or its state changed
 (CGObjSiegeStruct_PublishChangedVitals 4CFB60, 0x1F4). After a restart the
 first tick that finds every fortress world's structures standing puts each
-zone's stored hit points and state back on it; a zone whose stored
-structure is another reference keeps the fresh one.
+zone's stored occupant, hit points and state back on it. A row's RefObjID
+is the zone's occupant: 0 is a vacant zone (a demolished structure), any
+other reference stands there even when it is not the nest's authored
+default (construction, upgrade); a zone with no row keeps the default.
 
 ===========================================================================
 */
@@ -66,7 +68,7 @@ func (rt *Runtime) advanceFortressStructures(nowMs int64) {
 		p.saved, p.restored, p.lastMs = map[savedStructureKey]domain.FortressStructureRecord{}, map[string]bool{}, map[string]int64{}
 	}
 	for _, division := range rt.Fortresses.Divisions() {
-		if !p.restored[division] && !rt.restoreFortressStructures(division) {
+		if !p.restored[division] && !rt.restoreFortressStructures(division, nowMs) {
 			continue
 		}
 		p.restored[division] = true
@@ -103,7 +105,7 @@ Applies the stored rows once every fortress world's structures stand;
 false until then (the populations spawn on their first hive tick).
 ================
 */
-func (rt *Runtime) restoreFortressStructures(division string) bool {
+func (rt *Runtime) restoreFortressStructures(division string, nowMs int64) bool {
 	byZone := map[savedStructureKey]monster.Instance{}
 	for fortressID, world := range rt.fortressWorlds() {
 		structures := rt.Monsters.WorldStructures(division, world)
@@ -118,11 +120,22 @@ func (rt *Runtime) restoreFortressStructures(division string) bool {
 	if err != nil {
 		return false
 	}
+	worlds := rt.fortressWorlds()
 	for _, record := range stored {
 		key := savedStructureKey{division, record.FortressID, record.EventStructID}
 		row, ok := byZone[key]
 		if !ok || row.Ref.RefObjID != record.RefObjID {
-			continue
+			world, known := worlds[record.FortressID]
+			if !known || !rt.Monsters.SetStructureOccupant(division, world, record.EventStructID, record.RefObjID, nowMs) {
+				continue
+			}
+			rt.fortressPersist.saved[key] = record
+			if record.RefObjID == 0 {
+				continue
+			}
+			if row, ok = rt.structureOnZone(division, world, record.EventStructID); !ok {
+				continue
+			}
 		}
 		rt.Monsters.RestoreStructure(division, row.Gid, record.HP, record.State)
 		rt.fortressPersist.saved[key] = record
@@ -183,4 +196,20 @@ func (rt *Runtime) forceFortressSave(division string) {
 	if rt.fortressPersist.lastMs != nil {
 		rt.fortressPersist.lastMs[division] = -fortressPersistPeriodMs
 	}
+}
+
+/*
+================
+structureOnZone
+
+The structure standing on a fortress world's event zone.
+================
+*/
+func (rt *Runtime) structureOnZone(division string, world instance.ID, zone uint32) (monster.Instance, bool) {
+	for _, row := range rt.Monsters.WorldStructures(division, world) {
+		if row.Nest.EventStructID == zone {
+			return row, true
+		}
+	}
+	return monster.Instance{}, false
 }
