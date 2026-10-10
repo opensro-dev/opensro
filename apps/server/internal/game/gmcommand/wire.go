@@ -57,6 +57,10 @@ const (
 	SubLieName uint8 = 0x19
 	// SubRealName: /REALNAME (@0x0050bbd1 var_4bc = 0x1a) - subcmd + ANSI name.
 	SubRealName uint8 = 0x1A
+	// SubGrantSilk is the port's /SILK name amount (operator tooling, not
+	// native): subcmd, u16 len + ANSI name, u32 amount. The native table
+	// ends at 0x30, so 0xF0 cannot collide with a retail command.
+	SubGrantSilk uint8 = 0xF0
 )
 
 // Ack result bytes (sub_751ec0 @0x00751f08 result == 1 / @0x00752111
@@ -87,6 +91,8 @@ type Request struct {
 	// HasName reports whether Subcmd is a name-payload command this lane
 	// decoded a name for.
 	HasName bool
+	// Silk is /SILK's amount.
+	Silk uint32
 }
 
 // nameSubcommands are the subcommands whose payload is a single sized ANSI
@@ -101,6 +107,8 @@ var nameSubcommands = map[uint8]bool{
 	0x12:        true, // /RECALLGUILD
 	SubLieName:  true,
 	SubRealName: true,
+	// SubGrantSilk's name is followed by the u32 amount.
+	SubGrantSilk: true,
 }
 
 // DecodeGmCommand reads the subcommand byte and, for the name-payload
@@ -168,6 +176,14 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 	}
 	request.Name = string(nameBytes)
 	request.HasName = true
+	if subcmd == SubGrantSilk {
+		if request.Silk, err = reader.U32(); err != nil {
+			return Request{}, err
+		}
+		if len(payload) != 3+int(nameLen)+4 {
+			return Request{}, fmt.Errorf("gmcommand: trailing /SILK bytes")
+		}
+	}
 	return request, nil
 }
 

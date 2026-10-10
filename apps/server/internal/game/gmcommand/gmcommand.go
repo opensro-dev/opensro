@@ -111,6 +111,19 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		return Outcome{Ack: []byte{AckResultOK, request.Subcmd}}
 	case SubFindUser:
 		return handleFindUser(deps, presence, divisionID, sender, request)
+	case SubGrantSilk:
+		// Operator tooling (action/operator_silk.go): the ack carries the
+		// recipient's new balance.
+		if len(status) > 0 && request.Name != "" {
+			if owner, ok := status[0].(interface {
+				GrantGMSilk(string, string, string, uint32) (uint32, bool)
+			}); ok {
+				if balance, granted := owner.GrantGMSilk(divisionID, sender.Name, request.Name, request.Silk); granted {
+					return Outcome{Ack: wire.NewWriter(6).U8(AckResultOK).U8(SubGrantSilk).U32(balance).Payload()}
+				}
+			}
+		}
+		return Outcome{Ack: []byte{AckResultFail, SubGrantSilk}, Refusal: "silk-grant-refused"}
 	default:
 		// Every command this server cannot honor: the faithful result-2
 		// refusal, no state touched.

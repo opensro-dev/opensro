@@ -397,6 +397,10 @@ type Runtime struct {
 	// burst after the authority door closes. Pending pickups use captured
 	// delivery when configured; detached runtimes retain this actor fallback.
 	PushCharacterFrames func(divisionID, characterName string, frames []wire.Frame)
+	// SilkWallet credits operator and GM silk grants (operator_silk.go);
+	// RecordSilkGrant journals each committed grant.
+	SilkWallet      SilkWallet
+	RecordSilkGrant func(SilkGrant)
 
 	// CaptureCharacterFrames snapshots recipient sessions and their scene
 	// revisions under the division lock, after the character door closes.

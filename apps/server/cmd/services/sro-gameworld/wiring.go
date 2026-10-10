@@ -25,6 +25,7 @@ import (
 	"opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
@@ -264,6 +265,10 @@ func newGameWorldApplication(
 	installMonsterQuery(authority.agentAPI, gameplay.deps.MonsterState, ownedShard.ID)
 	installObservatory(authority.agentAPI, gameplay.deps.MonsterState, ts.Hub, authority.store, ownedShard.ID)
 	installOperatorNotices(authority.agentAPI, ts.Hub, ownedShard.ID)
+	// GM and operator silk grants (operator tooling): the account wallet, and
+	// one history event per committed grant.
+	gameplay.items.SilkWallet = authority.store
+	gameplay.items.RecordSilkGrant = func(grant action.SilkGrant) { journal.Record(silkGrantEvent(grant)) }
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}

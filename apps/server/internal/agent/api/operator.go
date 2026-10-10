@@ -32,6 +32,9 @@ const operatorMaxGrantRows = 32
 const operatorMaxItemCodeBytes = 128
 const operatorMaxGrantCount = 1<<16 - 1
 
+// operatorMaxSilkGrant bounds one silk grant (action.MaxSilkGrant).
+const operatorMaxSilkGrant = 1_000_000
+
 var operatorRequestID = regexp.MustCompile(`^[a-zA-Z0-9_-]{16,80}$`)
 
 /*
@@ -47,6 +50,8 @@ type PlayerOperation struct {
 	Items     []OperatorItemGrant `json:"items,omitempty"`
 	Town      uint32              `json:"town"`
 	Reason    string              `json:"reason"`
+	// Silk is a grant-silk operation's amount.
+	Silk uint32 `json:"silk,omitempty"`
 }
 
 /*
@@ -75,6 +80,8 @@ type PlayerOperations struct {
 	ClearPK    func(PlayerOperation) (any, error)
 	// ResetStats returns spent STR/INT points to the free pool (port-only).
 	ResetStats func(PlayerOperation) (any, error)
+	// GrantSilk credits silk to the character's account (operator tooling).
+	GrantSilk func(PlayerOperation) (any, error)
 }
 
 /*
@@ -168,7 +175,7 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	operation := endpoint.config.Rescue
 	switch request.Action {
 	case "", "rescue":
-		if len(request.Items) != 0 {
+		if len(request.Items) != 0 || request.Silk != 0 {
 			http.Error(w, "rescue cannot grant items", http.StatusBadRequest)
 			return
 		}
@@ -190,6 +197,13 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		operation = endpoint.config.ClearPK
+	case "grant-silk":
+		if endpoint.config.GrantSilk == nil || request.Town != 0 || len(request.Items) != 0 ||
+			request.Silk == 0 || request.Silk > operatorMaxSilkGrant {
+			http.Error(w, "invalid silk grant", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.GrantSilk
 	case "reset-stats":
 		if endpoint.config.ResetStats == nil || request.Town != 0 || len(request.Items) != 0 {
 			http.Error(w, "invalid stat reset", http.StatusBadRequest)
