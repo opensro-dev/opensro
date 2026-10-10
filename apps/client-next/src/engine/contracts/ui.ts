@@ -129,6 +129,8 @@ UiControl
 ================
 */
 export interface UiControl {
+	// Optional convex hit outline in the same absolute UI coordinates as rect.
+	readonly hitPolygon?: readonly (readonly [number, number])[];
 	readonly valueText?: string;
 	readonly whisperTarget?: string;
 	readonly textAlign?: "left" | "center" | "right";

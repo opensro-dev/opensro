@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strings"
 
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/releaseprotocol"
 )
 
@@ -31,10 +32,12 @@ import (
 // Content identity, rather than a manually maintained asset list or version,
 // invalidates the browser cache when any source row or projection changes.
 type BrowserReferences struct {
-	Path     string `json:"path"`
-	SHA256   string `json:"sha256"`
-	Bytes    int    `json:"bytes"`
-	gzipData []byte
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Bytes  int    `json:"bytes"`
+	// Port-only, not native: a separately loaded, static beginner atlas.
+	HuntingGuide *BrowserReferences `json:"huntingGuide,omitempty"`
+	gzipData     []byte
 	// itemIDs and objectIDs are the published item and object rows; a
 	// login skips them.
 	itemIDs   map[uint32]bool
@@ -59,6 +62,8 @@ type BrowserReferenceSources struct {
 	// Monsters are the monster rows every viewer needs
 	// (PublicMonsterRefObjRows).
 	Monsters []RefObjRow
+	// Whitelisted locations from the effective immutable population template.
+	HuntingGuide []monster.HuntingGuideEntry
 }
 
 /*
@@ -120,27 +125,64 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 	if len(data) > maxPublicReferenceBytes {
 		return nil, fmt.Errorf("public references exceed decoded resource budget: %d", len(data))
 	}
+	result, err := newBrowserReferenceFile(data)
+	if err != nil {
+		return nil, err
+	}
+	result.itemIDs, result.objectIDs = itemIDs, objectIDs
+	if len(sources.HuntingGuide) > 0 {
+		guide, err := json.Marshal(struct {
+			Format  string                      `json:"format"`
+			Version int                         `json:"version"`
+			Rows    []monster.HuntingGuideEntry `json:"rows"`
+		}{"sro-hunting-guide", 1, sources.HuntingGuide})
+		if err != nil {
+			return nil, err
+		}
+		if len(guide) > 2<<20 {
+			return nil, fmt.Errorf("hunting guide exceeds resource budget")
+		}
+		result.HuntingGuide, err = newBrowserReferenceFile(guide)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+/*
+================
+newBrowserReferenceFile
+
+One immutable HTTP resource owner for reference tables and the optional atlas.
+================
+*/
+func newBrowserReferenceFile(data []byte) (*BrowserReferences, error) {
 	digest := sha256.Sum256(data)
 	hash := hex.EncodeToString(digest[:])
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
-	if _, err = writer.Write(data); err != nil {
+	if _, err := writer.Write(data); err != nil {
 		return nil, err
 	}
-	if err = writer.Close(); err != nil {
+	if err := writer.Close(); err != nil {
 		return nil, err
 	}
-	return &BrowserReferences{
-		Path:      "/transport/references/" + hash + ".json",
-		SHA256:    hash,
-		Bytes:     len(data),
-		gzipData:  compressed.Bytes(),
-		itemIDs:   itemIDs,
-		objectIDs: objectIDs,
-	}, nil
+	return &BrowserReferences{Path: "/transport/references/" + hash + ".json", SHA256: hash,
+		Bytes: len(data), gzipData: compressed.Bytes()}, nil
 }
 
+/*
+================
+ServeHTTP
+================
+*/
+
 func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {
+	if r.HuntingGuide != nil && q.URL.Path == r.HuntingGuide.Path {
+		r.HuntingGuide.ServeHTTP(w, q)
+		return
+	}
 	if q.URL.Path != r.Path {
 		http.NotFound(w, q)
 		return

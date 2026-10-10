@@ -424,7 +424,7 @@ drag delta after clipping it against the four view edges, so the stored
 position never leaves the page; pan is that clamped position.
 ================
 */
-function worldMapFrame( pageId: number, clip: UiRect, pan: readonly [number, number], center: Pose ) {
+export function worldMapFrame( pageId: number, clip: UiRect, pan: readonly [number, number], center: Pose ) {
 	const page = worldMapPages().find( ( row ) => row.id === pageId );
 	const width = page?.size[0] ?? 3584,
 		height = page?.size[1] ?? 1024;

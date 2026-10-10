@@ -320,6 +320,7 @@ test(
 				await page.evaluate( () => JSON.parse( localStorage.getItem( "sro:v1150:experimental-options:1" ) ) ),
 				{
 					chatTimestamps: false,
+					monsterGuide: false,
 					developerDiagnostics: false,
 					postProcessing: false,
 					anisotropicFiltering: false,

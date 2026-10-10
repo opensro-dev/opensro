@@ -72,6 +72,12 @@ import {
 	rosterPositions
 } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
+import { createHuntingGuideHud } from "./hud/hunting-guide";
+import {
+	HUNTING_AREA_PREFIX,
+	HUNTING_MONSTER_SIGN,
+	HUNTING_PORTRAIT_FRAME
+} from "@/engine/foundation/ui/hunting-guide";
 import { createSkillTrainingCache } from "./hud/skill-training";
 import {
 	createWithdrawalDialog,
@@ -863,6 +869,7 @@ export function createUi(
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
 	const mapTeleport = createMapTeleport();
+	const huntingGuide = createHuntingGuideHud( assets, base );
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
 	const hudMessages = createHudMessages( chooseTip );
@@ -2284,6 +2291,14 @@ export function createUi(
 	================
 	*/
 	function activate( id: string ) {
+		// Port-only shortcut to the same saved option exposed in Experimental.
+		if ( panel === "Map" && mapPage === 0 && id === "map-hunting-toggle" ) {
+			const saved = experimental.state().saved;
+			experimental.restore( { ...saved, monsterGuide: !saved.monsterGuide } );
+			extensions.saveExperimental?.( experimental.state().saved );
+			dirty = true;
+			return;
+		}
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
 			const row = EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
 			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
@@ -4878,7 +4893,8 @@ export function createUi(
 				if ( event.kind !== "hover" ) return;
 			}
 			if (
-				event.kind === "region-double" && event.id === "map-pan" &&
+				event.kind === "region-double" &&
+				(event.id === "map-pan" || event.id.startsWith( HUNTING_AREA_PREFIX )) &&
 				view?.session?.phase === "world" && view.gameplay?.eligibility?.gm
 			) {
 				if ( mapTeleport.pick( event.x, event.y ) ) dirty = true;
@@ -5957,7 +5973,10 @@ export function createUi(
 					if ( event.id === "map-drag" ) {
 						mapX = Math.max( 0, mapX + event.dx );
 						mapY = Math.max( 0, mapY + event.dy );
-					} else if ( (event.id === "map-pan" || event.id.startsWith( "map-town:" )) && !mapFollow ) {
+					} else if (
+						(event.id === "map-pan" || event.id.startsWith( "map-town:" ) ||
+							event.id.startsWith( HUNTING_AREA_PREFIX )) && !mapFollow
+					) {
 						mapPan = [ mapPan[0] + event.dx, mapPan[1] + event.dy ];
 					}
 					dirty = true;
@@ -6801,6 +6820,13 @@ export function createUi(
 				dirty = true;
 			}
 			if ( minimapResources.step( trackedQuest !== 0, next.session?.phase === "world" ) ) dirty = true;
+			if (
+				huntingGuide.step(
+					next.session?.huntingGuide,
+					panel === "Map" &&
+						experimental.state().saved.monsterGuide && next.session?.phase === "world"
+				)
+			) dirty = true;
 			const questPositions = (next.gameplay?.quests?.find( q => q.refId === trackedQuest )?.targetIds ?? [])
 				.flatMap( id => {
 					const p = minimapResources.positions()?.get( id );
@@ -9800,6 +9826,14 @@ export function createUi(
 					mapTop = Math.min( mapY, Math.max( 0, h - mapHeight ) );
 				mapX = mapLeft;
 				mapY = mapTop;
+				if ( mapPage !== 0 && hover?.startsWith( HUNTING_AREA_PREFIX ) ) hover = null;
+				const mapGuideEnabled = experimental.state().saved.monsterGuide;
+				const mapClip: UiRect = [
+					mapLeft + 6,
+					mapTop + 34,
+					mapWidth - 12,
+					mapHeight - 40
+				];
 				const mapHits: UiControl[] = [];
 				// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
 				// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
@@ -9863,7 +9897,7 @@ export function createUi(
 				if ( mapOpen && pose ) {
 					mapTeleport.view(
 						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapClip,
 						mapPan,
 						mapCenter ?? pose
 					);
@@ -9872,7 +9906,7 @@ export function createUi(
 					worldMapPresentation(
 						pose,
 						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapClip,
 						mapPan,
 						mapCenter ?? pose,
 						hudData?.mapLabels,
@@ -9891,11 +9925,26 @@ export function createUi(
 				// can never be hidden by a shop icon or a zone label.
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
+				const mapGuide = mapOpen && mapGuideEnabled && pose ?
+					huntingGuide.present( mapPage, mapClip, mapPan, mapCenter ?? pose, hover ) :
+					null;
 				const fontPath = text.path();
 				if ( !mapOpen && fontPath ) paths.push( fontPath );
 				const mapImages = mapProjection ?
 					[
 						...mapProjection.background,
+						...(mapGuide?.quads ?? []).map( q =>
+							q.texture.startsWith( "/assets/npc/hunting-portraits/" ) && !resources.has( q.texture ) ?
+								{ ...q, texture: HUNTING_MONSTER_SIGN } :
+								q
+						),
+						...(mapGuide?.labels ?? []).flatMap( row =>
+							text.quads( row.value, row.rect, mapClip, row.color, {
+								hAlign: 1,
+								vAlign: 1,
+								overflow: "clip"
+							} )
+						),
 						...mapProjection.overlay,
 						...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 							const width = text.run( entry.text, 0, entry.font ).width,
@@ -9925,11 +9974,15 @@ export function createUi(
 						} );
 					}
 				}
-				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ) );
-				else if ( pose ) {
+				if ( mapOpen ) {
+					paths.push(
+						...(mapGuide?.paths ?? []),
+						...mapImages.map( q => q.texture ).filter( Boolean )
+					);
+				} else if ( pose ) {
 					worldMapDemand(
 						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapClip,
 						mapPan,
 						mapCenter ?? pose,
 						hudData?.mapIcons ?? [],
@@ -9952,7 +10005,7 @@ export function createUi(
 					const page = worldMapPages().find( row => row.id === mapPage ),
 						caption = hudCopy( page ? "UIIT_STT_" + page.name : "UIIT_PAG_WORLDMAP" ) || "World Map";
 					windowBox( caption, mx, my, mw, mh );
-					const inner: UiRect = [ mx + 6, my + 34, mw - 12, mh - 40 ];
+					const inner = mapClip;
 					// The map surface is CIFWorldMap itself, not a CIFButton: pressing or
 					// dragging it never activates or plays SND_BUTTON_CLICK.
 					controls.push( { id: "map-pan", label: "Pan map", kind: "region", draggable: true, rect: inner }, {
@@ -9963,7 +10016,30 @@ export function createUi(
 						rect: [ mx + 20, my + 4, mw - 96, 24 ]
 					} );
 					quads.push( ...mapImages );
-					controls.push( ...mapHits );
+					controls.push( ...(mapGuide?.controls ?? []), ...mapHits );
+					if ( mapPage === 0 ) {
+						paths.push(
+							ROOT + "interface/ifcommon/com_checkbutton_on.png",
+							ROOT + "interface/ifcommon/com_checkbutton_off.png"
+						);
+						image(
+							[ mx + 10, my + 10, 16, 16 ],
+							ROOT + "interface/ifcommon/com_checkbutton_" + (mapGuideEnabled ? "on" : "off") + ".png"
+						);
+						quads.push(
+							...text.quads( "Hunting", [ mx + 30, my + 10, 48, 17 ], full, [ .96, .88, .66, 1 ], {
+								vAlign: 1
+							} )
+						);
+						controls.push( {
+							id: "map-hunting-toggle",
+							kind: "button",
+							label: "Hunting areas",
+							helpText: (mapGuideEnabled ? "Hide" : "Show") + " hunting areas",
+							rect: [ mx + 8, my + 7, 73, 20 ],
+							selected: mapGuideEnabled
+						} );
+					}
 					const nodes = hudData.map;
 					authoredButton(
 						{ ...nodes.GDR_WM_BTN_WNDSIZE!, rect: [ mw - 44, 10, 16, 16 ] },
@@ -20523,6 +20599,62 @@ export function createUi(
 					}
 				}
 			}
+			if (
+				worldVisible && panel === "Map" && mapPage === 0 && experimental.state().saved.monsterGuide && !pressed
+			) {
+				const detail = huntingGuide.details( hover, full );
+				if ( detail ) {
+					paths.push( ...detail.paths );
+					const [x, y, width, height] = detail.rect;
+					rect( detail.rect, [ .06, .075, .065, .97 ] );
+					quads.push(
+						...frameRing(
+							detail.rect,
+							FRAME,
+							PARTS.map( part => resources.size( FRAME + part + ".png" ) ),
+							full
+						)
+					);
+					quads.push(
+						...text.quads( detail.title, [ x + 10, y + 11, width - 20, 18 ], full, [ .96, .83, .55, 1 ], {
+							hAlign: 1,
+							fontStyle: 2
+						} )
+					);
+					for ( const row of detail.rows ) {
+						const [left, top] = row.rect;
+						rect( [ left, top, 32, 32 ], white, HUNTING_PORTRAIT_FRAME );
+						rect(
+							[ left + 2, top + 2, 28, 28 ],
+							white,
+							resources.has( row.image ) ? row.image : HUNTING_MONSTER_SIGN
+						);
+						quads.push(
+							...text.quads(
+								row.monster.name,
+								[ left + 40, top + 1, row.rect[2] - 46, 16 ],
+								full,
+								white,
+								{ overflow: "clip" }
+							),
+							...text.quads(
+								"Lv. " + row.monster.level,
+								[ left + 40, top + 17, row.rect[2] - 46, 14 ],
+								full,
+								[ .85, .75, .52, 1 ]
+							)
+						);
+					}
+					quads.push(
+						...text.quads( detail.caption, [ x + 10, y + height - 23, width - 20, 16 ], full, [
+							.72,
+							.7,
+							.63,
+							1
+						], { hAlign: 1 } )
+					);
+				}
+			}
 			if ( worldVisible && consolePhase !== 0 && game?.eligibility?.gm ) {
 				const r: UiRect = [ 0, consoleY, 600, 112 ];
 				blocks.push( r );
@@ -20696,6 +20828,7 @@ export function createUi(
 					hud,
 					guideResources,
 					minimapResources,
+					huntingGuide,
 					stallCategories,
 					localization,
 					title,
