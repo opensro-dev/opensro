@@ -1,13 +1,15 @@
 /*
 ===========================================================================
 
-privacy.go - the website's privacy write (port-only)
+privacy.go - the website's privacy setting (port-only)
 
+	GET /v1/accounts/{id}/characters                 -> 200 own characters
 	PUT /v1/accounts/{id}/characters/{name}/hidden  {"hidden": bool} -> 204
 
-The /account page calls it for the signed-in player's own characters. It is
-served on the same loopback listener as the reads but only when a write
-token is configured, and every request carries that bearer token: the
+The /account page lists the signed-in player's own characters with their
+current flag and sets it. Both are served on the same loopback listener as
+the reads but only when a write token is configured, and every request
+carries that bearer token: the
 listener keeps it off the network, the token keeps other local processes
 out (the provisioning API's two guards). The character must belong to the
 account in the path; any other name answers 404, exactly like an unknown
@@ -27,6 +29,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -58,13 +61,14 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 		return
 	}
 	digest := sha256.Sum256([]byte(token))
+	mux.HandleFunc("GET /v1/accounts/{id}/characters", func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(w, r, digest) {
+			return
+		}
+		s.ownCharacters(w, r.PathValue("id"))
+	})
 	mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/hidden", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Type", "application/json")
-		presented, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		presentedDigest := sha256.Sum256([]byte(presented))
-		if !found || subtle.ConstantTimeCompare(presentedDigest[:], digest[:]) != 1 {
-			writeStatus(w, http.StatusUnauthorized, "unauthorized")
+		if !authorized(w, r, digest) {
 			return
 		}
 		var body struct {
@@ -96,6 +100,58 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 		s.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})
+}
+
+/*
+================
+authorized
+
+Sets the private headers and checks the bearer token, comparing SHA-256
+digests so the time does not depend on the presented token's length.
+Answers 401 itself when the token is wrong.
+================
+*/
+func authorized(w http.ResponseWriter, r *http.Request, digest [sha256.Size]byte) bool {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	presented, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	presentedDigest := sha256.Sum256([]byte(presented))
+	if !found || subtle.ConstantTimeCompare(presentedDigest[:], digest[:]) != 1 {
+		writeStatus(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	return true
+}
+
+/*
+================
+ownCharacters
+
+The account's live characters from the shared roster, by name. A privacy
+write drops the roster, so the list shows a change at once. An unknown
+account is an empty list: the site only asks for its signed-in player.
+================
+*/
+func (s *Service) ownCharacters(w http.ResponseWriter, account string) {
+	out := OwnCharactersResponse{Characters: []OwnCharacter{}}
+	s.mu.Lock()
+	r := s.loadRoster()
+	for _, c := range r.all {
+		if account == "" || c.AccountID != account {
+			continue
+		}
+		race, _ := raceGender(c.ModelCodename)
+		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden})
+	}
+	s.mu.Unlock()
+	sort.Slice(out.Characters, func(i, j int) bool { return out.Characters[i].Name < out.Characters[j].Name })
+	body, err := json.Marshal(out)
+	if err != nil {
+		writeStatus(w, http.StatusInternalServerError, "encode")
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
 }
 
 /*

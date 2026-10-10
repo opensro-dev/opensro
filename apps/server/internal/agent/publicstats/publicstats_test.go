@@ -278,7 +278,7 @@ this pins the generator, not a hand-copied list.
 ================
 */
 func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
-	s := newFixture().service()
+	s := privacyService(newFixture(), testWriteToken)
 	var doc map[string]any
 	get(t, s, "/public/v1/schema", &doc)
 	endpoints, _ := doc["endpoints"].(map[string]any)
@@ -290,6 +290,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/characters":           "/public/v1/characters?q=k",
 		"/public/v1/characters/{name}":    "/public/v1/characters/Kekw",
 		"/public/v1/rules":                "/public/v1/rules",
+		"/v1/accounts/{id}/characters":    "/v1/accounts/alpha/characters",
 	}
 	if len(endpoints) != len(samples) {
 		t.Fatalf("schema lists %d endpoints, want %d", len(endpoints), len(samples))
@@ -300,7 +301,15 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 			t.Fatalf("schema has no %s", endpoint)
 		}
 		var answer any
-		if code := get(t, s, path, &answer); code != http.StatusOK {
+		if strings.HasPrefix(path, "/v1/") {
+			code, body := authorizedGet(s, path, testWriteToken)
+			if code != http.StatusOK {
+				t.Fatalf("%s answered %d", path, code)
+			}
+			if err := json.Unmarshal(body, &answer); err != nil {
+				t.Fatal(err)
+			}
+		} else if code := get(t, s, path, &answer); code != http.StatusOK {
 			t.Fatalf("%s answered %d", path, code)
 		}
 		if err := validate(schema, answer, endpoint); err != "" {

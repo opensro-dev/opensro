@@ -117,6 +117,21 @@ type CharacterSummary struct {
 	Guild string `json:"guild,omitempty"`
 }
 
+// OwnCharacter is one of an account's characters with its privacy flag.
+type OwnCharacter struct {
+	Name   string `json:"name"`
+	Level  int64  `json:"level"`
+	Race   string `json:"race"`
+	Hidden bool   `json:"hidden"`
+}
+
+// OwnCharactersResponse is the website's authenticated
+// GET /v1/accounts/{id}/characters (privacy.go): every live character of
+// the account, hidden ones included, so /account can show each switch.
+type OwnCharactersResponse struct {
+	Characters []OwnCharacter `json:"characters"`
+}
+
 // CharactersResponse is P5 GET /public/v1/characters.
 type CharactersResponse struct {
 	Characters []CharacterSummary `json:"characters"`

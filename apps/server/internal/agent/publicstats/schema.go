@@ -30,6 +30,7 @@ var endpointTypes = []struct {
 	{"/public/v1/characters", reflect.TypeOf(CharactersResponse{})},
 	{"/public/v1/characters/{name}", reflect.TypeOf(Profile{})},
 	{"/public/v1/rules", reflect.TypeOf(RulesResponse{})},
+	{"/v1/accounts/{id}/characters", reflect.TypeOf(OwnCharactersResponse{})},
 }
 
 /*
