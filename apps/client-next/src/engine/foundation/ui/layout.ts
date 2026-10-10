@@ -64,7 +64,13 @@ export function fitUiGroup(
 		top = source ? source[1] : Math.min( ...group.map( q => q.rect[1] ) ),
 		right = source ? source[0] + source[2] : Math.max( ...group.map( q => q.rect[0] + q.rect[2] ) ),
 		bottom = source ? source[1] + source[3] : Math.max( ...group.map( q => q.rect[1] + q.rect[3] ) );
-	const scale = Math.min( 1, bounds[2] / Math.max( 1, right - left ), bounds[3] / Math.max( 1, bottom - top ) );
+	// Insets can exceed a transient viewport. Keep a positive fitting area so
+	// the shared transform cannot invert artwork, glyphs or semantic hit targets.
+	const scale = Math.min(
+		1,
+		Math.max( 1, bounds[2] ) / Math.max( 1, right - left ),
+		Math.max( 1, bounds[3] ) / Math.max( 1, bottom - top )
+	);
 	const x = Math.max(
 		bounds[0],
 		Math.min( (left + right) / 2 - (right - left) * scale / 2, bounds[0] + bounds[2] - (right - left) * scale )

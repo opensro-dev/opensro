@@ -30,6 +30,44 @@ function quad( rect, clip ) {
 	return { rect, clip, uv: [ 0, 0, 1, 1 ], color: [ 1, 1, 1, 1 ], texture: "fixture" };
 }
 
+test("exhausted inset bounds retain a positive common transform for every group member", () => {
+	const screen = /** @type {UiRect} */ ([ 0, 0, 1, 1 ]);
+	const source = /** @type {UiRect} */ ([ 20, 20, 100, 50 ]);
+	for ( const [width, height] of [ [ -15, -16 ], [ 0, 0 ], [ -15, 50 ], [ 100, -16 ] ] ) {
+		for ( const explicit of [ false, true ] ) {
+			const local = /** @type {UiRect} */ ([ 30, 30, 20, 10 ]);
+			const run = textRunQuad( [ quad( local, local ) ] );
+			assert.ok( run );
+			const quads = [ quad( source, screen ), {
+				...run,
+				mask: { texture: "mask", rect: local },
+				textLayout: { box: local, fitted: run }
+			} ];
+			/** @type {UiControl[]} */
+			const controls = [ { id: "button", kind: "button", label: "Button", rect: local } ];
+			const blocks = [ local, screen ];
+			fitUiGroup( quads, controls, 0, 0, [ 8, 9, width, height ], screen, {
+				blocks,
+				...(explicit ? { sourceBounds: source } : {})
+			} );
+			const scale = width <= 0 ? 0.01 : 0.02;
+			const x = width <= 0 ? 8 : 69, y = height <= 0 ? 9 : 44.75;
+			assert.deepEqual( quads[0].rect, [ x, y, 100 * scale, 50 * scale ] );
+			const expected = [ x + 10 * scale, y + 10 * scale, 20 * scale, 10 * scale ];
+			assert.deepEqual( controls[0].rect, expected );
+			assert.deepEqual( blocks[0], expected );
+			assert.equal( blocks[1], screen );
+			assert.equal( quads[0].clip, screen );
+			assert.deepEqual( quads[1].clip, expected );
+			assert.deepEqual( quads[1].mask?.rect, expected );
+			assert.deepEqual( quads[1].textLayout?.box, expected );
+			assert.deepEqual( quads[1].textLayout?.fitted?.rect, expected );
+			assert.deepEqual( expandTextRuns( [ quads[1] ] )[0].rect, expected );
+			assert.deepEqual( run.rect, local, "cached text geometry stays reusable" );
+		}
+	}
+});
+
 test("fitting transforms only the selected artwork, controls and blocks", () => {
 	const screen = /** @type {const} */ ([ 0, 0, 200, 150 ]);
 	const prefix = quad( [ 1, 2, 3, 4 ], screen );
