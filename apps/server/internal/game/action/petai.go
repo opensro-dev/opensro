@@ -573,8 +573,7 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		rt.petMu.Unlock()
 		rt.cancelPetCombat(key, state, rt.Now().UnixMilli())
 		rt.releasePetFormation(key, state)
-		state.pickup = nil
-		state.pickupCommand = false
+		expireCosPickup(state)
 		state.public = nil
 		state.generation++
 		state.follower = nil

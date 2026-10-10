@@ -146,7 +146,7 @@ TestCosPickupCommandRetiresOnLifecycleFailure
 ================
 */
 func TestCosPickupCommandRetiresOnLifecycleFailure(t *testing.T) {
-	for _, cause := range []string{"death", "desummon", "target-loss", "timeout", "follow"} {
+	for _, cause := range []string{"death", "desummon", "target-loss", "timeout", "follow", "relocate"} {
 		t.Run(cause, func(t *testing.T) {
 			c := testCharacter()
 			refs := testCosSource(testItems())
@@ -181,6 +181,10 @@ func TestCosPickupCommandRetiresOnLifecycleFailure(t *testing.T) {
 				rt.Ground.Remove(testDivision, item.Gid)
 			case "timeout":
 				now = 1000 + cosPickupApproachTimeoutMs
+			case "relocate":
+				// The owner travelled: the pet is placed beside them and leaves
+				// PICKITEM, whose exit (55AD60) answers the pending pickup.
+				rt.relocateReturningPet(testDivision, c, pose)
 			}
 			for _, batch := range rt.TickHook()(now) {
 				for _, frame := range batch.Frames {

@@ -124,8 +124,8 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	}
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: cosGID}, state, nowMs)
 	state.combat = intent
-	// Entering BATTLE leaves PICKITEM: a pending pickup ends unanswered.
-	state.pickup = nil
+	// Entering BATTLE leaves PICKITEM, which answers a pending pickup.
+	expireCosPickup(state)
 	return OpResult{}
 }
 
