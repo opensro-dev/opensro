@@ -46,14 +46,16 @@ timedItemModifierWrites
 
 Each authored word is unsigned and rounded to float32 at the native call
 boundary. Percent-sum and flat are separate channels, not a precomputed bonus.
+irgc is shared: 594AC0 installs it for an item job and a skill buff
+(Harmony therapy) alike.
 ================
 */
 func (rt *Runtime) timedItemModifierWrites(division string, character *enterworld.Character, effect enterworld.SkillTimedEffect) ([]paramkeeper.Write, error) {
-	if !effect.Pinned || !effect.ItemProgram {
+	if !effect.Pinned {
 		return nil, nil
 	}
 	var writes []paramkeeper.Write
-	if effect.GoldDropPercent != 0 {
+	if effect.ItemProgram && effect.GoldDropPercent != 0 {
 		writes = append(writes, paramkeeper.Write{Parameter: itemParamGoldDrop, Value: float32(effect.GoldDropPercent)})
 	}
 	if effect.Recovery.Present {
@@ -61,6 +63,9 @@ func (rt *Runtime) timedItemModifierWrites(division string, character *enterworl
 			paramkeeper.Write{Parameter: itemParamHPRecovery, Channel: paramkeeper.PercentSum, Value: float32(effect.Recovery.HP)},
 			paramkeeper.Write{Parameter: itemParamMPRecovery, Channel: paramkeeper.PercentSum, Value: float32(effect.Recovery.MP)},
 		)
+	}
+	if !effect.ItemProgram {
+		return writes, nil
 	}
 	for _, block := range [...]struct {
 		parameter uint16

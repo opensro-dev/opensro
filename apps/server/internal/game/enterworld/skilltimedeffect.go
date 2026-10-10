@@ -46,6 +46,10 @@ const (
 	tagTimedStatusReduction    = 0x72656174 // reat
 	tagTimedStatusResistance   = 0x7265616c // real
 	tagTimedElementResistance  = 0x62677261 // bgra
+	tagTimedRecovery           = 0x69726763 // irgc
+	efrKindArea                = 1
+	efrKindField               = 3
+	efrShapeCircle             = 1
 	parameterWizardMP          = 0x57494d44
 	parameterBardMP            = 0x42444d44
 	parameterMusicArea         = 0x4d554552
@@ -105,6 +109,12 @@ type SkillTimedEffect struct {
 	// Area is an efr kind 1 selection. Each selected actor gets an instance;
 	// select 4/5 uses the party selector, other masks use around-source.
 	Area SkillRecipientArea
+	// Field is efr kind 3 (+0x294): the cast plants a skill object that
+	// hands each recipient standing in it an instance and retires it when
+	// the recipient leaves (48CEA0, 48D690; skillfield.go). Harmony
+	// therapy. Select takes bits 1 (owner), 2 (non-hostile others) and
+	// 4 (party).
+	Field SkillRecipientArea
 	// PhysicalAddend and MagicalAddend are getv HLBP / HLSM: the caster's
 	// value joins the recipient's defp (58381F; HLBP wins when both appear).
 	PhysicalAddend, MagicalAddend bool
@@ -361,10 +371,20 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	for i := 0; i < program.Len(); i++ {
 		if op := program.Instruction(i); op.Tag == tagEfr {
 			kind, shape, radius, most, reduction, sel := op.Arguments[0], op.Arguments[1], op.Arguments[2], op.Arguments[3], op.Arguments[4], op.Arguments[5]
-			if result.Area.Present || targeted || kind != 1 || shape != 1 || radius == 0 || reduction != 0 {
+			if result.Area.Present || result.Field.Present || targeted || shape != efrShapeCircle || radius == 0 || reduction != 0 {
 				return
 			}
-			result.Area = SkillRecipientArea{Present: true, Radius: radius, MaxTargets: most, Select: sel}
+			area := SkillRecipientArea{Present: true, Radius: radius, MaxTargets: most, Select: sel}
+			switch {
+			case kind == efrKindArea:
+				result.Area = area
+			case kind == efrKindField && sel != 0 && sel&^(SelectCaster|SelectCharacter|SelectParty) == 0:
+				// A buff field: the hostile (8) and handler (0x20) bits
+				// belong to trap fields, which have their own owner.
+				result.Field = area
+			default:
+				return
+			}
 		}
 	}
 	// Column 19 (continueBasicAttackColumn) is not among them: it only says
@@ -573,6 +593,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Reat = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
+		case tagTimedRecovery:
+			// irgc {HP %, MP %}: 595A33..595A93 add both to the recovery
+			// parameters 25 and 26 on the percent channel.
+			if result.Recovery.Present || op.Count != 2 {
+				return
+			}
+			result.Recovery = SkillRecoveryRates{Present: true, HP: op.Arguments[0], MP: op.Arguments[1]}
 		case tagTimedElementResistance:
 			if result.Bgra.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[0]&^0x3f != 0 {
 				return
@@ -643,11 +670,12 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	if result.Link.Threat && (result.Block.Present || result.IncomingReduction) ||
 		result.Link.Present && (defense || result.Area.Present || result.Persistent) ||
 		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present ||
-		result.Preemptive.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) {
+		result.Preemptive.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) ||
+		result.Field.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) {
 		return
 	}
 	partySelection := result.Area.Select == SelectParty || result.Area.Select == SelectParty|SelectCaster
-	if movement && (targeted || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
+	if movement && (targeted || result.Field.Present || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
 		musicParameters && !movement && !result.Preemptive.Present && !result.Link.Mana {
 		return
 	}
@@ -662,7 +690,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Parry || result.Range || result.Hawk.Present ||
 		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present ||
 		result.DamageReturn.Present ||
-		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0)
+		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {

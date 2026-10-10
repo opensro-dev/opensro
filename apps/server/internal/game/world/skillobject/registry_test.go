@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-registry_test.go - quest-trap scan, lifetime and target-isolation regressions
+registry_test.go - trap and buff-field scan, lifetime and isolation regressions
 
 Drive time explicitly. Boundaries come from 48CEA0/48D690, including the
 strict expiry and radius comparisons that ordinary timer helpers obscure.
@@ -151,5 +151,52 @@ func TestCombatTrapMatchesAnyLivingVictimAndReplicatesToObservers(t *testing.T) 
 	viewer.CharacterGID = object.OwnerGID
 	if !Visible(object, viewer) {
 		t.Fatal("hidden trap hidden from its owner")
+	}
+}
+
+/*
+================
+TestFieldAdvanceAndTrack
+
+A buff field passes every ScanMs without replaying missed passes, keeps its
+tracked set across passes, hands it back on retirement, and refuses a Track
+once retired so the caller can undo late admissions.
+================
+*/
+func TestFieldAdvanceAndTrack(t *testing.T) {
+	var registry Registry
+	object, err := registry.Create(Object{
+		Division: "field-test", Population: instance.Lease{ID: instance.Pack(1, 1), Generation: 1},
+		OwnerGID: 100001, OwnerName: "Healer", CreatedMs: 1000,
+		Program: Program{SkillID: 302, DurationMs: 900, ScanMs: 300, Radius: 60, Field: true, Select: 7},
+		Spawn:   wire.SkillObjectSpawn{Region: 0x6454, X: 100, Y: 10, Z: 200},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gid := object.Spawn.GID
+	if _, due, retired := registry.Advance(gid, 1299, true); due || retired {
+		t.Fatal("field passed before its first period")
+	}
+	if _, due, _ := registry.Advance(gid, 1300, true); !due {
+		t.Fatal("first pass not due")
+	}
+	tracked := []FieldRecipient{{Name: "Healer", GID: 100001}, {Name: "Mate", GID: 100002}}
+	if !registry.Track(gid, tracked) {
+		t.Fatal("live field refused its set")
+	}
+	tracked[0].Name = "aliased"
+	if got, due, _ := registry.Advance(gid, 1700, true); !due || len(got.Tracked) != 2 || got.Tracked[0].Name != "Healer" {
+		t.Fatalf("tracked set lost or aliased: %+v", got.Tracked)
+	}
+	if _, due, _ := registry.Advance(gid, 1800, true); due {
+		t.Fatal("a late pass replayed the missed period")
+	}
+	got, _, retired := registry.Advance(gid, 1901, true)
+	if !retired || len(got.Tracked) != 2 {
+		t.Fatalf("expiry did not retire with its set: %v %+v", retired, got.Tracked)
+	}
+	if registry.Track(gid, tracked) {
+		t.Fatal("retired field accepted a set")
 	}
 }

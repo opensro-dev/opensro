@@ -131,10 +131,11 @@ installRecipientEffects
 The recipient loop of 5830B0 (583DFE..583FE2): every recipient gets its
 own instance, in execution context mode 2, if buff replacement admits it.
 Runs after the caster's own door; each recipient is published to itself
-and its observers.
+and its observers. Returns the recipients that received an instance.
 ==================
 */
-func (rt *Runtime) installRecipientEffects(division string, recipients []*enterworld.Character, skill enterworld.SkillRow, rider uint32, now int64) {
+func (rt *Runtime) installRecipientEffects(division string, recipients []*enterworld.Character, skill enterworld.SkillRow, rider uint32, now int64) []*enterworld.Character {
+	var installed []*enterworld.Character
 	for _, c := range recipients {
 		if !rt.auraReplacementAllowed(division, c, skill, false) {
 			continue
@@ -151,6 +152,7 @@ func (rt *Runtime) installRecipientEffects(division string, recipients []*enterw
 		}) {
 			continue
 		}
+		installed = append(installed, c)
 		rt.publishBodyStatus(division, c.Name, frames)
 		// A recipient whose defense changed (Heal Shield) sees its new stats.
 		if skill.TimedEffect.Pinned && rt.PushCharacterFrames != nil {
@@ -159,6 +161,7 @@ func (rt *Runtime) installRecipientEffects(division string, recipients []*enterw
 			}
 		}
 	}
+	return installed
 }
 
 /*
