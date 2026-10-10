@@ -13,12 +13,18 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
+	requireRuntimeTextAssets,
+	REQUIRED_RUNTIME_TEXT_ASSETS
+} from "../../../../scripts/build/assetPackOwnership.mjs";
+import { validateAssetPackIndex } from "../../../../scripts/build/assetPackIndexValidation.mjs";
+import {
 	ASSET_PACK_MAGIC,
 	ASSET_PACK_VERSION,
 	decodeStoredMember,
 	parsePackHeader,
 	storedLength,
 	storedMemberBytes,
+	sameStoredForm,
 	validStoredForm
 } from "../../../../scripts/build/shared/packFormat.mjs";
 /*
@@ -256,5 +262,58 @@ export async function verifyDirectory( root ) {
 	if ( !routes.has( "/index.html" ) || !routes.has( "/assets/packs/manifest.json" ) ) {
 		throw Error( "Incomplete release roots" );
 	}
+	await verifyRuntimeTextAssets( root, manifest );
 	return manifest;
+}
+
+/*
+================
+verifyRuntimeTextAssets
+
+Hash-valid packages can still omit a required member. Read the served index,
+then bind each required row to its served pack and verified decoded bytes.
+Loose files and loose routes cannot replace absent manifest membership.
+================
+*/
+async function verifyRuntimeTextAssets( root, manifest ) {
+	/*
+	================
+	readRoute
+	================
+	*/
+	const readRoute = async url => {
+		const route = manifest.routes.find( row => row.url === url );
+		if ( !route ) throw Error( "Missing runtime pack route: " + url );
+		const file = await readFile( path.join( root, route.file ) );
+		const bytes = file.subarray( route.offset, route.offset + route.length );
+		return route.encoding === "gzip" ? gunzipSync( bytes, { maxOutputLength: 128 << 20 } ) : bytes;
+	};
+	const index = JSON.parse( (await readRoute( "/assets/packs/manifest.json" )).toString( "utf8" ) );
+	const published = publicIndex( index );
+	requireRuntimeTextAssets( published.assets.map( row => row.path ) );
+	validateAssetPackIndex( index );
+	const packs = new Map();
+	for ( const name of REQUIRED_RUNTIME_TEXT_ASSETS ) {
+		const row = published.assets.find( asset => asset.path.toLowerCase() === name );
+		let pack = packs.get( row.packPath );
+		if ( !pack ) {
+			const bytes = await readRoute( row.packPath );
+			const declaration = index.groups.flatMap( group => group.packs ).find( entry =>
+				entry.path === row.packPath
+			);
+			if ( bytes.length !== declaration.bytes || sha( bytes ) !== declaration.sha256 ) {
+				throw Error( "Runtime pack identity mismatch: " + row.packPath );
+			}
+			pack = { bytes, ...parsePackHeader( bytes, row.packPath ) };
+			packs.set( row.packPath, pack );
+		}
+		const member = pack.header.files.find( entry => entry.path === row.path );
+		if (
+			!member || member.offset !== row.offset || member.length !== row.length ||
+			member.sha256 !== row.sha256 || !sameStoredForm( member, row )
+		) {
+			throw Error( "Runtime pack index drift: " + name );
+		}
+		decodeStoredMember( storedMemberBytes( pack.bytes, pack.dataStart, row, row.packPath ), row );
+	}
 }

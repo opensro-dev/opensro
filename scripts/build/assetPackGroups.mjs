@@ -23,14 +23,14 @@ no outdoor region group; the standalone rebuild packs what is on disk).
 ===========================================================================
 */
 import { CLIENT_PUBLIC_ROOT } from "../lib/generatedRoot.mjs";
-import { STALL_NETWORK_FILES } from "./data/buildStallNetworkAssets.mjs";
 import path from "node:path";
 import { listPublicAssetFiles } from "./assetPacks.mjs";
 import {
 	collectDedicatedModelGroups,
 	IMAGE_ASSET_EXTENSIONS,
 	imagePackGroup,
-	isImageAsset
+	isImageAsset,
+	REQUIRED_RUNTIME_TEXT_ASSETS
 } from "./assetPackOwnership.mjs";
 import { rebuildRoot } from "./world/paths.mjs";
 
@@ -205,13 +205,9 @@ export async function collectAssetPackGroups( {
 		roots: [ "/assets/anim" ],
 		extensions: [ ".ban", ".bin" ]
 	} );
-	const nameFilterData =
-		(await listPublicAssetFiles( { publicRoot, roots: [ "/assets/textdata" ], extensions: [ ".txt" ] } )).filter(
-			publicPath =>
-				[
-					"/assets/textdata/abusefilter.txt",
-					...STALL_NETWORK_FILES.map( name => "/assets/textdata/" + name )
-				].includes( publicPath.toLowerCase() )
+	const runtimeTextData = (await listPublicAssetFiles( { publicRoot, roots: [ "/assets" ], extensions: [ ".txt" ] } ))
+		.filter(
+			publicPath => REQUIRED_RUNTIME_TEXT_ASSETS.includes( publicPath.toLowerCase() )
 		);
 
 	// Dev-only character labs consume this catalog on demand. Keep it out of
@@ -260,7 +256,7 @@ export async function collectAssetPackGroups( {
 		{
 			name: "game-data",
 			load: "startup",
-			files: [ ...compressedJson, ...rawJson, ...animationData, ...nameFilterData ]
+			files: [ ...compressedJson, ...rawJson, ...animationData, ...runtimeTextData ]
 		},
 		{ name: "developer-labs", load: "manual", files: developerLabData },
 		{ name: "game-audio", load: "manual", files: gameAudio },

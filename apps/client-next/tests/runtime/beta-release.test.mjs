@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+beta-release.test.mjs - package integrity and public serving contracts
+
+Exercises real archives, route admission, pack completeness and the beta
+compiler with synthetic assets; no licensed tree or live host is changed.
+
+===========================================================================
+*/
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
@@ -10,6 +20,9 @@ import { archiveRelease, verifyArchive } from "../../tools/beta/archive.mjs";
 import { serveBeta } from "../../tools/beta/serve.mjs";
 import { verifyServed } from "../../tools/beta/verify.mjs";
 import { defined } from "../helpers/defined.mjs";
+import { runtimeTextPack } from "../helpers/runtime-text-pack.mjs";
+import { REQUIRED_RUNTIME_TEXT_ASSETS } from "../../../../scripts/build/assetPackOwnership.mjs";
+import { validateAssetPackIndex } from "../../../../scripts/build/assetPackIndexValidation.mjs";
 
 test("beta gates reject exposed source and opaque compressed leaks", () => {
 	for (
@@ -62,15 +75,27 @@ test("metadata projection preserves runtime fields without recursive key deletio
 	const other = Buffer.from( '{"format":"other","missing":"keep"}' );
 	assert.equal( projectMember( "asset.json", other ), other );
 });
-async function fixture( t ) {
+/*
+================
+fixture
+================
+*/
+async function fixture( t, paths = REQUIRED_RUNTIME_TEXT_ASSETS ) {
 	const root = await mkdtemp( path.join( os.tmpdir(), "sro-beta-test-" ) );
 	t.after( () => rm( root, { recursive: true, force: true } ) );
 	await mkdir( path.join( root, "package/application/assets" ), { recursive: true } );
-	const entries = [ [ "application/index.html", '<script src="/assets/main-12345678.js"></script>', "application" ], [
-		"application/assets/main-12345678.js",
-		'document.title="ready";',
-		"application"
-	], [ "publication.json", "{}", "data" ] ];
+	const pack = runtimeTextPack( paths );
+	/** @type {Array<[string, string | Buffer, string]>} */
+	const entries = [
+		[ "application/index.html", '<script src="/assets/main-12345678.js"></script>', "application" ],
+		[
+			"application/assets/main-12345678.js",
+			'document.title="ready";',
+			"application"
+		],
+		[ "publication.json", JSON.stringify( pack.index ), "data" ],
+		[ "runtime-text.bin", pack.bytes, "data" ]
+	];
 	const files = entries.map( ( [p, s, kind] ) => ({
 		path: p,
 		length: Buffer.byteLength( s ),
@@ -79,7 +104,11 @@ async function fixture( t ) {
 	}) );
 	for ( const [p, s] of entries ) await writeFile( path.join( root, "package", p ), s );
 	const routes = files.map( e => ({
-		url: e.path === "publication.json" ? "/assets/packs/manifest.json" : "/" + e.path.replace( "application/", "" ),
+		url: e.path === "publication.json" ?
+			"/assets/packs/manifest.json" :
+			e.path === "runtime-text.bin" ?
+			pack.packPath :
+			"/" + e.path.replace( "application/", "" ),
 		file: e.path,
 		length: e.length,
 		offset: 0,
@@ -90,6 +119,57 @@ async function fixture( t ) {
 	await writeFile( path.join( root, "package/release.json" ), JSON.stringify( m ) );
 	return { root, packageRoot: path.join( root, "package" ), m };
 }
+
+/*
+================
+TestMissingRuntimeTable
+================
+*/
+test("hash-valid packages and archives reject each omitted raw runtime table", async t => {
+	for ( const missing of REQUIRED_RUNTIME_TEXT_ASSETS ) {
+		const paths = REQUIRED_RUNTIME_TEXT_ASSETS.filter( name => name !== missing );
+		assert.doesNotThrow( () => validateAssetPackIndex( runtimeTextPack( paths ).index ) );
+		const f = await fixture( t, paths );
+		await assert.rejects(
+			verifyDirectory( f.packageRoot ),
+			error =>
+				error instanceof Error && error.message.includes( "Missing required runtime asset" ) &&
+				error.message.includes( missing )
+		);
+		await assert.rejects(
+			archiveRelease( f.packageRoot, path.join( f.root, "incomplete.tar" ) ),
+			/Missing required runtime asset/
+		);
+	}
+});
+
+/*
+================
+TestLooseRouteDoesNotSatisfyMembership
+================
+*/
+test("a hash-valid loose route cannot replace the missing command pack member", async t => {
+	const missing = "/assets/config/command.txt";
+	const f = await fixture( t, REQUIRED_RUNTIME_TEXT_ASSETS.filter( name => name !== missing ) );
+	const entry = defined( f.m.files.find( row => row.path === "runtime-text.bin" ) );
+	f.m.routes.push( { url: missing, file: entry.path, offset: 0, length: entry.length, mime: "text/plain" } );
+	f.m.releaseId = releaseIdentity( f.m );
+	await writeFile( path.join( f.packageRoot, "release.json" ), JSON.stringify( f.m ) );
+	await assert.rejects( verifyDirectory( f.packageRoot ), /Missing required runtime asset.*command\.txt/ );
+});
+
+/*
+================
+TestRequiredPackRoute
+================
+*/
+test("a complete index cannot hide an unavailable required pack route", async t => {
+	const f = await fixture( t );
+	f.m.routes = f.m.routes.filter( row => row.file !== "runtime-text.bin" );
+	f.m.releaseId = releaseIdentity( f.m );
+	await writeFile( path.join( f.packageRoot, "release.json" ), JSON.stringify( f.m ) );
+	await assert.rejects( verifyDirectory( f.packageRoot ), /Missing runtime pack route/ );
+});
 test("manifest and archive detect extra files, replacement payloads and corruption", async t => {
 	const f = await fixture( t ), archive = path.join( f.root, "release.tar" );
 	await archiveRelease( f.packageRoot, archive );

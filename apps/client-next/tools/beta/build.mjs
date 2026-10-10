@@ -13,6 +13,7 @@ pack reader. Only the few files the browser loads by URL itself
 ===========================================================================
 */
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
+import { requireRuntimeTextAssets } from "../../../../scripts/build/assetPackOwnership.mjs";
 import { verifyIndexClaims } from "../../../../scripts/build/shared/publicationLedger.mjs";
 import {
 	decodeStoredMember,
@@ -274,6 +275,7 @@ export async function buildBeta(
 	const authority = await readFile( path.join( assetRoot, "assets/packs/manifest.json" ) );
 	manifest.assetAuthorityHash = sha( authority );
 	const original = JSON.parse( authority ), index = publicIndex( original );
+	requireRuntimeTextAssets( index.assets.map( asset => asset.path ) );
 	// The client reads one data format; packaging any other would ship a
 	// release whose code and data disagree.
 	if ( original.assetSchema !== ASSET_SCHEMA ) {

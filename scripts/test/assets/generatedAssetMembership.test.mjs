@@ -32,7 +32,11 @@ import {
 } from "../../build/webManifest.mjs";
 import { readPublishedAssetJson } from "../../lib/publishedAsset.mjs";
 import { collectPackGarbage } from "../../build/assetPackGarbage.mjs";
-import { collectDedicatedModelGroups } from "../../build/assetPackOwnership.mjs";
+import {
+	collectDedicatedModelGroups,
+	REQUIRED_RUNTIME_TEXT_ASSETS,
+	requireRuntimeTextAssets
+} from "../../build/assetPackOwnership.mjs";
 import { loadEnglishCompletions } from "../../build/shared/englishCompletions.mjs";
 
 const publicRoot = CLIENT_PUBLIC_ROOT;
@@ -43,13 +47,23 @@ const uiPreloadManifestPath = path.join( publicRoot, "assets/ui/preload-images.j
 const EXPLICIT_LOOSE_ASSETS = new Set( [
 	"/assets/fonts/sro-chat.ttf",
 	"/assets/fonts/sro-default.ttf",
-	"/assets/fonts/sro-english.ttf",
-	"/assets/textdata/abusefilter.txt",
-	// Raw native config bytes for the console-command registry (sub_68d9c0 twin):
-	// copied verbatim by resourcePipeline.mjs and prefetched at mission mount,
-	// same loose-text contract as abusefilter.txt.
-	"/assets/config/command.txt"
+	"/assets/fonts/sro-english.ttf"
 ] );
+
+/*
+================
+TestRequiredRuntimeTables
+================
+*/
+test("required runtime tables are packed even when absent from the web manifest", async () => {
+	const index = await readJson( packManifestPath );
+	requireRuntimeTextAssets( index.assets.map( asset => asset.path ) );
+	for ( const name of REQUIRED_RUNTIME_TEXT_ASSETS ) {
+		assert.deepEqual( index.assets.filter( row => row.path.toLowerCase() === name ).map( row => row.group ), [
+			"game-data"
+		], name );
+	}
+});
 
 test("generated public assets have explicit pack membership or a documented loose exception", async () => {
 	const { webPaths, packAssetsByPath } = await loadGeneratedAssetMembership();
@@ -452,6 +466,7 @@ expectedPackGroup
 */
 function expectedPackGroup( publicPath, uiPreloadImages ) {
 	const lowerPath = publicPath.toLowerCase();
+	if ( REQUIRED_RUNTIME_TEXT_ASSETS.includes( lowerPath ) ) return "game-data";
 
 	if ( uiPreloadImages.has( lowerPath ) ) {
 		return "native-ui";

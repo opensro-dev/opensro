@@ -24,6 +24,7 @@ recording stubs instead of reading an entry script's source.
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { collectAssetPackGroups } from "./assetPackGroups.mjs";
+import { requireRuntimeTextAssets } from "./assetPackOwnership.mjs";
 import { buildAssetPacks, DEFAULT_ASSET_PACK_TARGET_BYTES } from "./assetPacks.mjs";
 import { optimizePublicJsonAssets } from "./jsonAssetCompression.mjs";
 import { retireUnownedSidecars } from "./precompressedSidecars.mjs";
@@ -90,6 +91,9 @@ export async function packPublicTree( request, steps = PACK_TREE_STEPS ) {
 		await timed( "claimAudit", () => steps.auditClaims( packGroups.groups ) ) :
 		null;
 	const groups = claimAudit?.groups ?? packGroups.groups;
+	// Check after the claim audit too: a required file removed as unclaimed
+	// must stop publication, even if its loose bytes still exist.
+	requireRuntimeTextAssets( groups.flatMap( group => group.files ) );
 	const assetPacks = await timed(
 		"assetPacks",
 		() => steps.buildPacks( { targetBytes: DEFAULT_ASSET_PACK_TARGET_BYTES, groups } )

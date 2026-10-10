@@ -22,6 +22,33 @@ its own group over the same paths.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { npcManifestModels } from "./shared/npcManifest.mjs";
+import { STALL_NETWORK_FILES } from "./data/buildStallNetworkAssets.mjs";
+
+// Raw runtime tables are not JSON and must not depend on an extension sweep.
+// HUD command/name admission and stall categories read these through packs.
+export const REQUIRED_RUNTIME_TEXT_ASSETS = Object.freeze( [
+	"/assets/config/command.txt",
+	"/assets/textdata/abusefilter.txt",
+	...STALL_NETWORK_FILES.map( name => "/assets/textdata/" + name )
+] );
+
+/*
+================
+requireRuntimeTextAssets
+
+Full publications must contain these tables even when an older built tree
+is reused. Partial group publishers are deliberately outside this contract.
+================
+*/
+export function requireRuntimeTextAssets( paths ) {
+	const available = new Set( paths.map( name => name.toLowerCase() ) );
+	const missing = REQUIRED_RUNTIME_TEXT_ASSETS.filter( name => !available.has( name ) );
+	if ( missing.length ) {
+		throw new Error(
+			`Missing required runtime asset(s): ${missing.join( ", " )}. Rebuild asset data before release.`
+		);
+	}
+}
 
 // Native texture containers preserve authored mip levels alongside ordinary images.
 export const IMAGE_ASSET_EXTENSIONS = [ ".png", ".jpg", ".jpeg", ".dds", ".webp", ".cur", ".texture" ];
