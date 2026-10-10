@@ -373,21 +373,32 @@ test("worker query correlation follows accepted dispatches without changing nati
 	t.after( () => game.dispose() );
 	const pose = { regionId: 0x6b4f, x: 60, y: 10, z: 100, angle: 0 };
 	game.bootstrap( {} );
-	game.seed( { ...pose, gid: SELF, heading: 0 } );
-	game.command( { kind: "select", gid: SMITH }, 0, { ...pose, gid: SMITH, kind: "npc" } );
+	game.seed( { ...pose, gid: SELF, refObjId: 1907, kind: "player", name: "Player", heading: 0 } );
+	game.command( { kind: "select", gid: SMITH }, 0, {
+		...pose,
+		gid: SMITH,
+		refObjId: 2101,
+		kind: "npc",
+		name: "Smith",
+		heading: 0
+	} );
 	const grant = Buffer.alloc( 11 );
 	grant[0] = 1;
 	grant.writeUInt32LE( SMITH, 1 );
 	grant.writeUInt32LE( SMITH_CAPABILITY, 6 );
 	game.receive( { opcode: 0xb45a, payload: grant }, 1 );
 	const query = id =>
-		game.command( {
-			kind: "fortress-production",
-			gid: SMITH,
-			fortress: 1,
-			action: 0x0d,
-			queryId: id
-		}, 2 );
+		game.command(
+			{
+				kind: "fortress-production",
+				gid: SMITH,
+				fortress: 1,
+				action: 0x0d,
+				queryId: id
+			},
+			2,
+			undefined
+		);
 	query( 1 );
 	blocked = true;
 	assert.throws( () => query( 2 ), /backpressure/ );
