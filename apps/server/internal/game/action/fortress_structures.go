@@ -115,9 +115,11 @@ func (rt *Runtime) structureByZone(division string, zone uint32) (uint32, instan
 structureRepairCost
 
 CGObjSiegeStruct_ComputeRepairCost (4CFD50): a full repair or nothing.
-The price per hit point is the record's repair price over the maximum,
-never below one; a purse that cannot buy every missing point refuses.
-Returns the hit points restored and the price, or a refusal.
+The price per hit point is the record's CostRepair over the maximum, never
+below one; a purse that cannot buy every missing point refuses. A
+destroyed structure counts as one hit point and gets that point back too.
+Returns the hit points the structure ends with and the price, or a
+refusal.
 ================
 */
 func structureRepairCost(row monster.Instance, gold int64) (uint32, int64, uint8) {
@@ -125,18 +127,21 @@ func structureRepairCost(row monster.Instance, gold int64) (uint32, int64, uint8
 		return 0, 0, fortressErrRepairGold
 	}
 	maximum := row.EffectiveMaxHP()
-	if row.CurrentHP >= maximum {
+	hp, revived := row.CurrentHP, row.CurrentHP == 0
+	if revived {
+		hp = 1
+	}
+	if hp >= maximum {
 		return 0, 0, fortressErrRepairFull
 	}
-	missing := maximum - row.CurrentHP
-	perPoint := max(float32(row.Ref.RepairPrice)/float32(maximum), 1)
+	missing := maximum - hp
+	perPoint := max(float32(row.Ref.CostRepair)/float32(maximum), 1)
 	affordable := min(max(math.Trunc(float64(gold)/float64(perPoint)), 0), repairMaxAffordableHP)
 	if float64(missing) > affordable {
 		return 0, 0, fortressErrRepairGold
 	}
 	price := min(int64(math.Trunc(float64(perPoint)*float64(missing))), repairMaxPrice)
-	// 634B04..634C16 clamps the charge into [1, purse].
-	return missing, min(max(price, 1), gold), 0
+	return maximum, price, 0
 }
 
 /*
@@ -146,14 +151,13 @@ fortressStructureRepair
 CSiegeFortressMgr_HandleStructureRepair (634950), in its refusal order:
 a war in progress, an unknown zone, a zone of another fortress, no
 structure on it, then the purse. A standing structure is restored to full
-for 4CFD50's price, charged with the reply (CGObjSiegeStruct_
-ChargePendingRepairCost 4CFD00 after the 0xB05E 0x0C write in 6232C0),
-which carries the fortress, the zone and the new hit points.
-
-INFERENCE: a destroyed structure refuses with 0x32. Native admits one when
-its reference's +0x8C bit 7 is set (4CECF0), then charges the rebuild base
-first; no shipped column holds that bit, and the war's end reinstalls every
-destroyed structure (ReinstallStructures) in any case.
+for 4CFD50's price. A destroyed one must have CanRevive (vfunc +0xDC,
+4CECF0) or refuses 0x32; it pays CostRevive first, out of a purse that
+must hold it (0x30), then 4CFD50's price from what remains, and stands
+again. The charge is clamped into [1, purse] (634B04..634C16) and taken
+with the reply (CGObjSiegeStruct_ChargePendingRepairCost 4CFD00 after the
+0xB05E 0x0C write in 6232C0), which carries the fortress, the zone and the
+new hit points.
 ================
 */
 func (rt *Runtime) fortressStructureRepair(division string, c *enterworld.Character, request siege.Interaction) OpResult {
@@ -170,8 +174,9 @@ func (rt *Runtime) fortressStructureRepair(division string, c *enterworld.Charac
 	if fortressID != request.Fortress {
 		return fortressRefusal(request.Action, fortressErrOtherFortress)
 	}
-	if row.CurrentHP == 0 || row.StructureState&structureDestroyedMask != 0 {
-		return fortressRefusal(request.Action, fortressErrRepairDestroyed)
+	destroyed := row.CurrentHP == 0 || row.StructureState&structureDestroyedMask != 0
+	if destroyed {
+		row.CurrentHP = 0
 	}
 	var restored uint32
 	var refusal uint8
@@ -180,12 +185,28 @@ func (rt *Runtime) fortressStructureRepair(division string, c *enterworld.Charac
 		if c.Gold != nil {
 			gold = *c.Gold
 		}
+		if gold <= 0 {
+			refusal = fortressErrRepairGold
+			return false
+		}
+		base := int64(0)
+		if destroyed {
+			if !row.Ref.CanRevive {
+				refusal = fortressErrRepairDestroyed
+				return false
+			}
+			base = int64(row.Ref.CostRevive)
+			if base > gold {
+				refusal = fortressErrRepairGold
+				return false
+			}
+		}
 		var price int64
-		restored, price, refusal = structureRepairCost(row, gold)
+		restored, price, refusal = structureRepairCost(row, gold-base)
 		if refusal != 0 {
 			return false
 		}
-		left := gold - price
+		left := gold - min(max(price+base, 1), gold)
 		c.Gold = &left
 		return true
 	}) {
@@ -194,17 +215,27 @@ func (rt *Runtime) fortressStructureRepair(division string, c *enterworld.Charac
 		}
 		return fortressRefusal(request.Action, refusal)
 	}
-	healed, ok := rt.Monsters.HealStructure(division, row.Gid, restored)
-	if !ok {
-		healed = row
+	// A repair keeps a standing gate open or shut; a revive stands the
+	// structure up with state 0.
+	state := row.StructureState
+	if destroyed {
+		state = 0
 	}
-	hp := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(row.Gid, 0x40, healed.CurrentHP)}
+	rt.Monsters.RestoreStructure(division, row.Gid, restored, state)
+	if destroyed {
+		// SetState(0, 1): the structure stands again for its world.
+		rt.pushFortressWorld(division, world, siege.EncodeStructureState3887(siege.StructureState{
+			FortressID: fortressID, GID: row.Gid, EventStructID: row.Nest.EventStructID, State: 0,
+			Headquarters: row.Ref.TypeID4 == structureKindHeadquarters,
+		}))
+	}
+	hp := wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.HPRefreshPayload(row.Gid, 0x40, restored)}
 	if rt.PushCharacterFrames != nil {
 		for _, resident := range rt.fortressResidents(division, world) {
 			rt.PushCharacterFrames(division, resident.Name, []wire.Frame{hp})
 		}
 	}
-	reply := wire.NewWriter(14).U8(request.Action).U8(1).U32(fortressID).U32(row.Nest.EventStructID).U32(healed.CurrentHP)
+	reply := wire.NewWriter(14).U8(request.Action).U8(1).U32(fortressID).U32(row.Nest.EventStructID).U32(restored)
 	return OpResult{Frames: []wire.Frame{goldFrame(rt.characterSnapshot(division, c)),
 		{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 }

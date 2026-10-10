@@ -25,7 +25,7 @@ func captureFixture(t *testing.T) (*Runtime, *enterworld.Character, *fakeClock, 
 	template := monster.TemplateFromParts(
 		map[uint32]monster.MonsterRef{
 			19553: {RefObjID: 19553, MaxHP: 900, ScaleDenom: 100, Structure: true, TypeID4: structureKindFortStone},
-			19536: {RefObjID: 19536, MaxHP: 500, ScaleDenom: 100, Structure: true, TypeID4: structureKindGuardTower},
+			19536: {RefObjID: 19536, MaxHP: 500, ScaleDenom: 100, Structure: true, TypeID4: structureKindGuardTower, CanRevive: true, CostRevive: 100},
 		},
 		[]monster.NestRow{
 			{WorldCode: "INS_FORT_JA", SpawnPoint: monster.SpawnPoint{RefObjID: 19553, RegionID: 0x62aa, X: 100, Y: 20, Z: 100}, PolicyPinned: true, MaxCount: 1, EventStructID: 84},

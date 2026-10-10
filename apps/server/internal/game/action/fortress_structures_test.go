@@ -77,11 +77,13 @@ func structureByRef(t *testing.T, rt *Runtime, refObjID uint32) monster.Instance
 TestFortressStructureRepairRestoresFullHP
 
 634950 / 4CFD50 in order: a war refuses 0x18, a zone of another fortress
-0x26, an unknown zone 3, a destroyed structure 0x32, a purse that cannot
-buy every missing point 0x30 (charging nothing), and an undamaged
-structure 0x31. A paid repair restores full hit points for one gold a
-point (the fixture's records author no repair price), debits the purse
-and answers fortress, zone and the new hit points.
+0x26, an unknown zone 3, a purse that cannot buy every missing point 0x30
+(charging nothing), and an undamaged structure 0x31. A paid repair
+restores full hit points for one gold a point (the fixture authors no
+CostRepair), debits the purse and answers fortress, zone and the new hit
+points. A destroyed tower (CanRevive, CostRevive 100) pays the base, then
+its missing points counted from one, and stands again; a destroyed stone
+without CanRevive refuses 0x32.
 ================
 */
 func TestFortressStructureRepairRestoresFullHP(t *testing.T) {
@@ -116,8 +118,8 @@ func TestFortressStructureRepairRestoresFullHP(t *testing.T) {
 	}{
 		{"other fortress", jangan + 1, 84, fortressErrOtherFortress},
 		{"unknown zone", jangan, 999, fortressErrInvalid},
-		{"destroyed", jangan, 85, fortressErrRepairDestroyed},
 		{"purse short", jangan, 84, fortressErrRepairGold},
+		{"revive leaves nothing", jangan, 85, fortressErrRepairGold},
 	} {
 		if got := repair(tc.fortress, tc.zone); !bytes.Equal(got, refused(tc.code)) {
 			t.Fatalf("%s: % x, want code %#x", tc.name, got, tc.code)
@@ -138,19 +140,35 @@ func TestFortressStructureRepairRestoresFullHP(t *testing.T) {
 	if got := repair(jangan, 84); !bytes.Equal(got, refused(fortressErrRepairFull)) {
 		t.Fatalf("full: % x", got)
 	}
+
+	// Revive: 100 base, then 499 points (500 less the one it counts as).
+	c.Gold = testInt64(1000)
+	want = wire.NewWriter(14).U8(siege.ActionRepair).U8(1).U32(jangan).U32(85).U32(500).Payload()
+	if got := repair(jangan, 85); !bytes.Equal(got, want) {
+		t.Fatalf("revive answered % x, want % x", got, want)
+	}
+	revived := structureByRef(t, rt, 19536)
+	if *c.Gold != 1000-100-499 || revived.CurrentHP != 500 || revived.StructureState != 0 {
+		t.Fatalf("gold %d hp %d state %d after the revive", *c.Gold, revived.CurrentHP, revived.StructureState)
+	}
+	rt.Monsters.RestoreStructure(testDivision, stone.Gid, 0, 1)
+	if got := repair(jangan, 84); !bytes.Equal(got, refused(fortressErrRepairDestroyed)) {
+		t.Fatalf("a stone without CanRevive: % x", got)
+	}
 }
 
 /*
 ================
 TestStructureRepairCostFollowsTheRecordPrice
 
-4CFD50 with an authored price: 20000 over 10000 hit points is two gold a
-point, so 2500 missing points cost 5000, and a purse one short refuses.
+4CFD50 with an authored price: CostRepair 20000 over 10000 hit points is
+two gold a point, so 2500 missing points cost 5000, and a purse one short
+refuses.
 ================
 */
 func TestStructureRepairCostFollowsTheRecordPrice(t *testing.T) {
-	row := monster.Instance{Ref: monster.MonsterRef{MaxHP: 10000, ScaleDenom: 100, Structure: true, RepairPrice: 20000}, CurrentHP: 7500}
-	if restored, price, code := structureRepairCost(row, 5000); code != 0 || restored != 2500 || price != 5000 {
+	row := monster.Instance{Ref: monster.MonsterRef{MaxHP: 10000, ScaleDenom: 100, Structure: true, CostRepair: 20000}, CurrentHP: 7500}
+	if restored, price, code := structureRepairCost(row, 5000); code != 0 || restored != 10000 || price != 5000 {
 		t.Fatalf("restored %d price %d code %#x", restored, price, code)
 	}
 	if _, _, code := structureRepairCost(row, 4999); code != fortressErrRepairGold {
