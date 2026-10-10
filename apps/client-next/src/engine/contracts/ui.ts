@@ -160,6 +160,8 @@ UiSemantics
 export interface UiSemantics {
 	readonly loadingVisible?: boolean;
 	readonly hudCorner?: UiRect;
+	/** Top of the port-only tool row, clear of native player, target and companion chrome. */
+	readonly hudToolsTop?: number;
 	readonly focusRequest?: {
 		readonly id: string | null;
 		readonly revision: number;
