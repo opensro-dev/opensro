@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -34,8 +35,17 @@ func TestTradeCargoOwnerSurvivesDropPickupAndCharacterRestore(t *testing.T) {
 	if len(drops) != 1 || drops[0].TradeOwner != "OriginalTrader" || drops[0].StackCount != 10 {
 		t.Fatalf("ground identity: %+v", drops)
 	}
-	// The current holder and public-drop ownership do not change the cargo origin.
-	c.Job.Alias = "DifferentHolder"
+	// The current holder and public-drop ownership do not change the cargo
+	// origin. A thief with a transport may take another's goods (525DC0);
+	// they land in its cargo.
+	c.Job = domain.CharacterJob{Type: domain.JobThief, Grade: 1, Alias: "DifferentHolder"}
+	c.MissionInventory = append(c.MissionInventory, domain.InventoryRow{Slot: 8, RefObjID: 200, Codename: "SUIT",
+		TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobThief), StackCount: 1})
+	deps := rt.deps.(*enterworld.Deps)
+	deps.Items = testCosSource(deps.Items.(staticItemSource))
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &domain.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 4}}
 	result := rt.HandleTargetInteract(testDivision, c, wire.TargetInteract{Gid: drops[0].Gid}.Encode())
 	if rt.Ground.Count(testDivision) != 0 {
 		t.Fatalf("pickup failed: %+v", result)
@@ -48,8 +58,9 @@ func TestTradeCargoOwnerSurvivesDropPickupAndCharacterRestore(t *testing.T) {
 	if err = json.Unmarshal(data, &restored); err != nil {
 		t.Fatal(err)
 	}
-	if len(restored.MissionInventory) != 1 || restored.MissionInventory[0].StackCount != 10 || restored.MissionInventory[0].TradeOwner != "OriginalTrader" {
-		t.Fatalf("restored cargo: %+v", restored.MissionInventory)
+	cargo := restored.ActiveCOS.Container.Rows
+	if len(cargo) != 1 || cargo[0].StackCount != 10 || cargo[0].TradeOwner != "OriginalTrader" {
+		t.Fatalf("restored cargo: %+v", cargo)
 	}
 }
 

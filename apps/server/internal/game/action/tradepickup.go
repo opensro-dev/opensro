@@ -44,6 +44,21 @@ const tradePickupCartRange = 1000.0
 
 /*
 ================
+isPickupTradeGoods
+
+525DC0 asks CGObj_IsTradeGoods (482DE0), which in v1.188 is any 3.3.8
+item. INFERENCE: v1.150 also files its event food (3.3.8.0) and fortress
+manuals (3.3.8.8) under 3.3.8; only 3.3.8.1 and 3.3.8.2 are trade goods
+(ITEM_ETC_TRADE_*), so only those take the trade branch.
+================
+*/
+func isPickupTradeGoods(flags uint16) bool {
+	tid4 := flags >> 11
+	return inventory.IsTradeGoods(flags) && (tid4 == 1 || tid4 == 2)
+}
+
+/*
+================
 tradePickupRefusal
 
 525DC0's job test, by the job state (CGObjPC_GetJobState): the goods'

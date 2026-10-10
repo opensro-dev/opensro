@@ -121,7 +121,7 @@ func (rt *Runtime) grantPickup(
 ) OpResult {
 	// 525DC0: trade goods leave the party's item share for the picker's
 	// transport (tradepickup.go).
-	if inventory.IsTradeGoods(groundItem.TypeFlags) {
+	if isPickupTradeGoods(groundItem.TypeFlags) {
 		return rt.grantTradeGoodsPickup(pickupGrant{division: divisionID, worldKey: worldKey, picker: character,
 			recipient: character, snapshot: characterSnapshot, item: groundItem})
 	}
