@@ -19,6 +19,9 @@ import type { GameOptions } from "@/engine/foundation/gameplay/game-options";
 import { REGION_SIZE } from "@/engine/foundation/gameplay/native-movement";
 import { hasMonsterPartyMark } from "@/engine/foundation/ui/monster-nameplate";
 
+// NO_JOB_CLASS is the job class of a character outside job mode (856920).
+const NO_JOB_CLASS = 4;
+
 // Squared world distance past which a name board is hidden (300 units).
 const NAME_RANGE_SQUARED = 90000;
 
@@ -103,6 +106,20 @@ whose +0x779 bit 0 is set, inside its option +0x0C block.
 export function beginnerMarkShown( entity: EntityState, options: GameOptions ): boolean {
 	return options.ownName && (entity.kind === "local-player" || entity.kind === "player") &&
 		((entity.visualFlags ?? 0) & 1) !== 0;
+}
+
+/*
+================
+boardText
+
+CICharactor_SetName (85ABF0): a user whose active job class (vtable +0xA8)
+is not 4, that is one dressed in a job suit, shows "*" before the name on
+its board (L"*" at BE833C). Other entities show the name as given.
+================
+*/
+export function boardText( entity: Pick<EntityState, "kind" | "activeJob">, name: string ): string {
+	const user = entity.kind === "local-player" || entity.kind === "player";
+	return user && name && entity.activeJob !== undefined && entity.activeJob !== NO_JOB_CLASS ? "*" + name : name;
 }
 
 /*

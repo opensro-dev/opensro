@@ -314,7 +314,7 @@ func characterSnapshot(
 memberRowFor
 
 memberRowFor composes one masked wire row from the live character
-record: gid, name, the model resolve chain the local-player entry
+record: gid, name (the job alias while suited), the model resolve chain the local-player entry
 uses, the persisted level (>=1 floor), the derived-vitals status
 nibbles, and the settled spawn position. The packed world identity must
 match enter-world admission; zero is a real instance, not the overworld.
@@ -329,7 +329,9 @@ func (r *Runtime) memberRowFor(divisionID string, character *enterworld.Characte
 	if character == nil {
 		return row
 	}
-	row.Name = character.Name
+	// A suited member shows as its job alias (5BAE80); the registry still
+	// keys members by their own names.
+	row.Name = enterworld.PartyMemberName(character)
 	if r.masteries {
 		row.Masteries = true
 		row.PrimaryMastery, row.SecondaryMastery = domain.TopMasteries(character.Masteries)

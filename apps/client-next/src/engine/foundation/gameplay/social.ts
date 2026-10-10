@@ -14,6 +14,8 @@ import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
 import type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
+// NO_JOB_CLASS is the active job class outside job mode (856920).
+const NO_JOB_CLASS = 4;
 // The 0x3393 type a resurrection skill proposes to a dead player.
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
@@ -73,7 +75,7 @@ server-emitted arms enter this projection.
 export function socialPacket(
 	state: SocialState,
 	frame: WireFrame,
-	noticeContext: NativeNoticeContext & { readonly now?: number; } = {}
+	noticeContext: NativeNoticeContext & { readonly now?: number; readonly localJob?: number; } = {}
 ): SocialState | null {
 	const op = frame.opcode, p = frame.payload;
 	if (
@@ -401,7 +403,15 @@ export function socialPacket(
 			throw Error( "Invalid party flags" );
 		}
 		if ( flags & 1 ) {
-			next = { ...next, leader: u32(), options: u8(), members: [] };
+			// 81B710: the settings also latch whether the local player is in job
+			// mode (class 4 is none), the party window's job-party flag.
+			next = {
+				...next,
+				leader: u32(),
+				options: u8(),
+				members: [],
+				jobParty: (noticeContext.localJob ?? NO_JOB_CLASS) !== NO_JOB_CLASS
+			};
 		}
 		if ( next.options & ~7 ) {
 			throw Error( "Invalid party options" );

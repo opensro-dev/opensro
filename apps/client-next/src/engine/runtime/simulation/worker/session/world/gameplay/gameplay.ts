@@ -2978,7 +2978,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
-				const nextSocial = socialPacket( social, frame, { country: localCountry, now } );
+				const nextSocial = socialPacket( social, frame, {
+					country: localCountry,
+					now,
+					localJob: partyActiveJob( inventory.state().inventory )
+				} );
 				if ( nextSocial ) {
 					if ( nextSocial.members.length && !social.members.length ) guide = queueGuide( guide, [ 10 ] );
 					if ( nextSocial.notice ) {

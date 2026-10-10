@@ -68,6 +68,27 @@ func PartyJobClass(c *Character) uint8 {
 
 /*
 ================
+PartyMemberName
+
+The name a party roster row carries (v1.188 PartyMemberSnapshot_PopulateFromActor
+5BAE80): the job alias (CGObjPC_GetNickName 4DDC50) while the character is
+dressed in a job suit, its own name otherwise. The native writes the empty
+alias of a suited character with no alias and minidumps; the port keeps the
+character name instead (port-only, not native: never send an empty name).
+================
+*/
+func PartyMemberName(c *Character) string {
+	if c == nil {
+		return ""
+	}
+	if DressedJob(c) != 0 && c.Job.Alias != "" {
+		return c.Job.Alias
+	}
+	return c.Name
+}
+
+/*
+================
 JobsMayParty
 
 ShardManager 44ED20: traders and hunters (1, 3) party together, thieves

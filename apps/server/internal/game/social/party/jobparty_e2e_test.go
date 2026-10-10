@@ -1,7 +1,8 @@
 /*
 ===========================================================================
 
-jobparty_e2e_test.go - opposing job users cannot party together
+jobparty_e2e_test.go - opposing job users cannot party together, and a
+suited member shows as its job alias
 
 ShardManager 44ED70 (forming) and 44F130 (joining) refuse two players
 whose active job classes may not party (44ED20) with 0x2C23: traders and
@@ -22,6 +23,12 @@ import (
 	"opensro.online/server/internal/game/social/party"
 )
 
+// The job aliases the suited test members carry.
+const (
+	testTraderAlias = "Merchant"
+	testHunterAlias = "Ranger"
+)
+
 // jobSuitTypeFlags is a 3.1.7.<job> suit's packed type word.
 func jobSuitTypeFlags(job uint8) uint16 { return 0x3ac | uint16(job)<<11 }
 
@@ -34,6 +41,19 @@ Puts a job suit in the character's socket 8 before it enters the world.
 */
 func dressForJob(t *testing.T, server e2eServer, name string, job uint8) {
 	t.Helper()
+	dressForJobWithAlias(t, server, name, job, "")
+}
+
+/*
+================
+dressForJobWithAlias
+
+dressForJob, also giving the character its job alias (the nickname 5BAE80
+puts on a suited member's roster row).
+================
+*/
+func dressForJobWithAlias(t *testing.T, server e2eServer, name string, job uint8, alias string) {
+	t.Helper()
 	for _, c := range server.authority.Characters().CharactersForDivision(e2eDivision) {
 		if !strings.EqualFold(c.Name, name) {
 			continue
@@ -43,6 +63,7 @@ func dressForJob(t *testing.T, server e2eServer, name string, job uint8) {
 				Slot: enterworld.JobSuitSlot, RefObjID: 90000 + uint32(job),
 				Codename: "ITEM_TEST_JOB_SUIT", TypeFlags: jobSuitTypeFlags(job), StackCount: 1,
 			})
+			c.Job.Alias = alias
 		})
 		return
 	}
@@ -56,9 +77,9 @@ TestOpposingJobsCannotFormOrJoinAParty
 */
 func TestOpposingJobsCannotFormOrJoinAParty(t *testing.T) {
 	server := startPartyServer(t, filepath.Join(t.TempDir(), "authority"), true)
-	dressForJob(t, server, e2eNameA, domain.JobTrader)
+	dressForJobWithAlias(t, server, e2eNameA, domain.JobTrader, testTraderAlias)
 	dressForJob(t, server, e2eNameB, domain.JobThief)
-	dressForJob(t, server, e2eNameC, domain.JobHunter)
+	dressForJobWithAlias(t, server, e2eNameC, domain.JobHunter, testHunterAlias)
 	connA, connB, connC, connD := dialWS(t, server.srv), dialWS(t, server.srv), dialWS(t, server.srv), dialWS(t, server.srv)
 	helloWS(t, connA)
 	enterWorld(t, connA, e2eNameA)
@@ -81,11 +102,12 @@ func TestOpposingJobsCannotFormOrJoinAParty(t *testing.T) {
 		t.Fatalf("a trader and a thief formed %d party(s)", got)
 	}
 
-	// A trader and a hunter party together.
+	// A trader and a hunter party together, each row named by the member's
+	// job alias (5BAE80).
 	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidC, 0x03))
 	expectPartyPrompt(t, connC, gidA, "the hunter's proposal", 2, 3)
 	sendFrame(t, connC, party.OpInvitationProposal, consentFrame(1))
-	rows := []party.MemberRow{chinaMaleRow(gidA, e2eNameA), chinaMaleRow(gidC, e2eNameC)}
+	rows := []party.MemberRow{chinaMaleRow(gidA, testTraderAlias), chinaMaleRow(gidC, testHunterAlias)}
 	expectPartySeed(t, connA, gidA, gidA, 0x03, rows, "trader's party")
 	expectPartySeed(t, connC, gidC, gidA, 0x03, rows, "hunter's party")
 

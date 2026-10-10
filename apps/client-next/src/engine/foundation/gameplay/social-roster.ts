@@ -130,6 +130,10 @@ export interface SocialState {
 	readonly self: number;
 	readonly leader: number;
 	readonly options: number;
+	// The job-party flag (SPartyData +0x0C): the local player was dressed in
+	// a job suit when the party settings arrived (81B710 from vtable +0xA8).
+	// The party window then names every member "*name" with no guild.
+	readonly jobParty?: boolean;
 	readonly members: readonly PartyMember[];
 	readonly guild: Guild | null;
 	readonly alliances?: readonly {
