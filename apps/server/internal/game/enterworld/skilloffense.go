@@ -233,6 +233,14 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 				row.BuffModifiers.HrFlat = flat
 				row.BuffModifiers.HrRate = rate
 			}
+		case 0x6572: // er +0x27C
+			flat, flatOK := word(i + 1)
+			rate, rateOK := word(i + 2)
+			if flatOK && rateOK {
+				row.BuffModifiers.Er = true
+				row.BuffModifiers.ErFlat = flat
+				row.BuffModifiers.ErRate = rate
+			}
 		case 0x647275: // dru +0x3E4
 			first, firstOK := word(i + 1)
 			second, secondOK := word(i + 2)

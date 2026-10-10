@@ -64,16 +64,21 @@ Two more blocks are parameter writes of 594AC0 (action.buffModifierWrites):
 ==================
 */
 type SkillBuffModifiers struct {
-	Dru         bool
-	DruWords    [2]uint32
-	Odar        bool
-	OdarBits    uint32 // after the parser's fix-up
-	OdarWord    uint32
-	Ru          bool
-	RuRate      uint32
-	Hr          bool
-	HrFlat      uint32
-	HrRate      uint32
+	Dru      bool
+	DruWords [2]uint32
+	Odar     bool
+	OdarBits uint32 // after the parser's fix-up
+	OdarWord uint32
+	Ru       bool
+	RuRate   uint32
+	Hr       bool
+	HrFlat   uint32
+	HrRate   uint32
+	// Er is Concentration's parry block (+0x27C): 594AC0 0x595883 adds the
+	// flat to parameter 9 and the percent to its rate (0x5958BC).
+	Er          bool
+	ErFlat      uint32
+	ErRate      uint32
 	Rhru        bool
 	RhruWords   [2]uint32
 	Dcmp        bool
@@ -82,7 +87,7 @@ type SkillBuffModifiers struct {
 
 // Present reports a block 594AC0 would install.
 func (m SkillBuffModifiers) Present() bool {
-	return m.Dru || m.Odar || m.Ru || m.Hr || m.Rhru || m.Dcmp
+	return m.Dru || m.Odar || m.Ru || m.Hr || m.Er || m.Rhru || m.Dcmp
 }
 
 /*

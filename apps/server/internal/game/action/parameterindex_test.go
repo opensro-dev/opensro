@@ -148,11 +148,9 @@ func TestEarthBarrierCostCutByIntelligence(t *testing.T) {
 ================
 TestFireShieldReqiGates
 
-The Chinese Fire Shield's reqi 4 1 (a shield in slot 7) is now indexed on
-the row. It has no runtime effect while the rows stay refused: the cast is
-refused with a shield as well as without one, as before the reqi was
-indexed (only the code reported without a shield is now 58D480's 0x300D,
-which runs before the shape refusal). The 59F0E0 walk is pinned on seeded
+The Chinese Fire Shield's reqi 4 1 (a shield in slot 7) is indexed on the
+row: without a shield the cast is refused with 58D480's 0x300D, and with one
+it casts (bgra is pinned, #508). The 59F0E0 walk is pinned on seeded
 instances: it would retire a self-applied instance whose reqi the
 equipment no longer meets, but 59F397 exempts SKILL_CH_FIRE_SHIELD_ rows
 by name, so only the same row under another codename is retired when the
@@ -179,11 +177,12 @@ func TestFireShieldReqiGates(t *testing.T) {
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{
 		Slot: 7, RefObjID: shield.RefObjID, Codename: shield.Codename, TypeFlags: shield.TypeFlags(), VarianceBits: "0", Durability: 1, StackCount: 1,
 	})
+	// With its shield, Fire Shield casts (#508): bgra is pinned.
 	armed := castSelf(rt, c, fire.ID)
-	if armed.DiagnosticRefusal == "" || len(rt.effects.Snapshot(testDivision, c.Name)) != 0 {
-		t.Fatalf("Fire Shield with a shield is no longer refused: %+v", armed)
+	if armed.DiagnosticRefusal != "" || len(rt.effects.Snapshot(testDivision, c.Name)) != 1 {
+		t.Fatalf("Fire Shield with a shield refused: %+v", armed)
 	}
-	for i, row := range []enterworld.SkillRow{fire, renamed} {
+	for i, row := range []enterworld.SkillRow{renamed} {
 		e := statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: row.ID, SkillGroup: row.Group,
 			InstanceToken: uint32(200000 + i), State: statuseffect.StateActive, Phase: 1}
 		if !rt.effects.Apply(e) {

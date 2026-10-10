@@ -294,6 +294,10 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 		// 595542..59568F: a buff's reat, as a resistance passive's.
 		writes = append(writes, combat.StatusReductionWrites(row.TimedEffect.Reat)...)
 	}
+	if row.TimedEffect.Pinned && row.TimedEffect.Bgra.Mask != 0 {
+		// 595698..5957EE: Fire Shield's element resistances.
+		writes = append(writes, combat.ElementResistanceWrites(row.TimedEffect.Bgra)...)
+	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Defense {
 		stats, _, err := rt.playerCombatStats(divisionID, character)
 		if err != nil {
@@ -582,6 +586,14 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 		writes = append(writes,
 			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.PercentSum, Value: float32(m.HrRate)},
 			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.Flat, Value: float32(m.HrFlat)},
+		)
+	}
+	// 594AC0 0x595883..0x5958DE: er adds its flat (channel 0) and its rate
+	// (channel 1) to the parry keeper, as hr does to the hit rate.
+	if m.Er {
+		writes = append(writes,
+			paramkeeper.Write{Parameter: itemParamEvasion, Channel: paramkeeper.PercentSum, Value: float32(m.ErRate)},
+			paramkeeper.Write{Parameter: itemParamEvasion, Channel: paramkeeper.Flat, Value: float32(m.ErFlat)},
 		)
 	}
 	if m.Ru {

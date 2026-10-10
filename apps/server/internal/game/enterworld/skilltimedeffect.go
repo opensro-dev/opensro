@@ -45,6 +45,7 @@ const (
 	tagTimedPreemptive         = 0x706f6c61
 	tagTimedStatusReduction    = 0x72656174 // reat
 	tagTimedStatusResistance   = 0x7265616c // real
+	tagTimedElementResistance  = 0x62677261 // bgra
 	parameterWizardMP          = 0x57494d44
 	parameterBardMP            = 0x42444d44
 	parameterMusicArea         = 0x4d554552
@@ -79,8 +80,11 @@ type SkillTimedEffect struct {
 	// its resistance under the instance's execution context (59DF20), so
 	// both last as long as the instance. Holy Word / Holy Spell and Poison
 	// Circle / Vein Circle carry them.
-	Reat       SkillPassiveReat
-	Real       SkillPassiveReal
+	Reat SkillPassiveReat
+	Real SkillPassiveReal
+	// Bgra is Fire Shield's block (+0x2F8): the same mask and value shape as
+	// reat, written to the element resistances 0x1B+i instead (595698..5957EE).
+	Bgra       SkillPassiveReat
 	Pinned     bool
 	Persistent bool
 	// IncomingReduction marks an admitted odar block (Earth Barrier).
@@ -91,7 +95,9 @@ type SkillTimedEffect struct {
 	// HitRate and Range mark an admitted hr block (White Hawk Summon) and
 	// ru block (Demon Soul Arrow): like odar, 594AC0 installs both from the
 	// row's BuffModifiers, so the program only has to agree with them.
-	HitRate, Range                bool
+	HitRate, Range bool
+	// Parry marks an admitted er block (Concentration, #508).
+	Parry                         bool
 	Physical, Magical, CapPercent uint32
 	// Targeted rows (Warrior guards, Cleric blessings) install on a player
 	// within column 21's range instead of the caster.
@@ -276,6 +282,7 @@ type SkillEffectLink struct {
 // stores them).
 const (
 	skillTagHitRate = 0x6872
+	skillTagParry   = 0x6572 // er
 	skillTagRange   = 0x7275
 	skillTagSummon  = 0x73756d6d
 )
@@ -530,6 +537,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.HitRate = true
+		case skillTagParry:
+			// er {flat, rate}: 594AC0 0x595883 writes the parry keeper (9).
+			if result.Parry || op.Count != 2 || targeted || result.Area.Present || !row.BuffModifiers.Er ||
+				op.Arguments[0] != row.BuffModifiers.ErFlat || op.Arguments[1] != row.BuffModifiers.ErRate {
+				return
+			}
+			result.Parry = true
 		case skillTagRange:
 			// ru {distance}: 594AC0 0x5958E7 adds to the attack-range keeper
 			// (0x21), the reach of a skill without its own range.
@@ -559,6 +573,11 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Reat = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
+		case tagTimedElementResistance:
+			if result.Bgra.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[0]&^0x3f != 0 {
+				return
+			}
+			result.Bgra = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
 		case tagTimedStatusResistance:
 			if result.Real.Mask != 0 || op.Count != 3 || op.Arguments[0] == 0 {
 				return
@@ -640,10 +659,10 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Range || result.Hawk.Present ||
+		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Parry || result.Range || result.Hawk.Present ||
 		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present ||
 		result.DamageReturn.Present ||
-		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0)
+		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {
