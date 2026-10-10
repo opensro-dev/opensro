@@ -266,6 +266,9 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		state.generation++
 		state.refObjID = cos.RefObjID
 	}
+	// Relocation and summons build new followers; every tick installs the one
+	// planner they all route with.
+	state.follower.SetRoutePlanner(rt.PlanCompanionRoute)
 	if state.displacement != nil {
 		if nowMs < state.displacement.untilMs {
 			return state.follower.Stop(nowMs)

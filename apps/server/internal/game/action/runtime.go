@@ -321,6 +321,11 @@ type Runtime struct {
 		from, to simulation.Spawn,
 	) (simulation.Spawn, *simulation.MoveError)
 
+	// PlanCompanionRoute routes a pet around what its straight path cannot
+	// cross: the monster AI's detour (movement.PlanMonsterRoute). Nil keeps
+	// pets on their straight, clipped segment.
+	PlanCompanionRoute simulation.PetRoutePlanner
+
 	// ConstrainWalk is ConstrainMovement for a character walking from its
 	// retained surface owner (movement.Runtime.ConstrainMovementFrom). Every
 	// server-driven character move must use it and commit the returned walk,
