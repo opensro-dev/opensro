@@ -10,7 +10,10 @@ Port-only approximate guidance from static outdoor anchors.
 import type { UiControl, UiQuad, UiRect } from "@/engine/contracts/ui";
 import type { worldMapFrame } from "./world-map";
 const MAX_MONSTERS = 4096, MAX_POINTS = 65536, MAX_NAME = 128;
-const REGION_SIZE = 192, LOCAL_SCALE = 10, MAX_LOCAL_POSITION = 65536, MAX_HOVER_NAMES = 5;
+const REGION_SIZE = 192, LOCAL_SCALE = 10, MAX_LOCAL_POSITION = 65536;
+const ANCHOR_CELL_SIZE = 64, GROUP_SPACING = 132, SMALL_GROUP_SPACING = 144;
+const MAX_GROUPS = 12, MAX_SMALL_GROUPS = 4, MARKER_WIDTH = 52, MARKER_HEIGHT = 48;
+const PORTRAIT_SIZE = 34, LABEL_HEIGHT = 14, PLACEMENT_STEP = 16, PLACEMENT_REACH = 48;
 export const HUNTING_AREA_PREFIX = "map-hunting-area:";
 /*
 ================
@@ -145,10 +148,93 @@ HuntingCell
 ================
 */
 interface HuntingCell {
+	key: string;
 	x: number;
 	y: number;
 	count: number;
 	monsters: Map<number, { monster: HuntingMonster; count: number; }>;
+}
+
+/*
+================
+mergeHuntingCells
+
+Keep every species when nearby areas share a marker, including groups that
+cannot fit between native landmarks. Coordinates remain weighted anchors.
+================
+*/
+function mergeHuntingCells( target: HuntingCell, source: HuntingCell ) {
+	target.x += source.x;
+	target.y += source.y;
+	target.count += source.count;
+	for ( const [id, entry] of source.monsters ) {
+		const previous = target.monsters.get( id );
+		target.monsters.set( id, { monster: entry.monster, count: entry.count + (previous?.count ?? 0) } );
+	}
+}
+
+/*
+================
+huntingCellDistance
+================
+*/
+function huntingCellDistance( a: HuntingCell, b: HuntingCell ) {
+	return Math.hypot( a.x / a.count - b.x / b.count, a.y / a.count - b.y / b.count );
+}
+
+/*
+================
+groupHuntingCells
+
+Merge the closest neighbours instead of displaying one repeated portrait in
+every grid cell. The small seed grid only bounds work; it is never painted.
+================
+*/
+function groupHuntingCells( cells: HuntingCell[], small: boolean ) {
+	const spacing = small ? SMALL_GROUP_SPACING : GROUP_SPACING, limit = small ? MAX_SMALL_GROUPS : MAX_GROUPS;
+	while ( cells.length > 1 ) {
+		let first = 0, second = 1, nearest = Infinity;
+		for ( let a = 0; a < cells.length; a++ ) {
+			for ( let b = a + 1; b < cells.length; b++ ) {
+				const distance = huntingCellDistance( cells[a]!, cells[b]! );
+				if ( distance >= nearest ) continue;
+				first = a;
+				second = b;
+				nearest = distance;
+			}
+		}
+		if ( nearest >= spacing && cells.length <= limit ) break;
+		mergeHuntingCells( cells[first]!, cells[second]! );
+		cells.splice( second, 1 );
+	}
+	return cells;
+}
+
+/*
+================
+huntingMarkerRect
+
+Prefer the area's centre, then the nearest clear space. Edge groups remain
+inside the map and native names, landmarks and movement controls stay clear.
+================
+*/
+function huntingMarkerRect( cell: HuntingCell, clip: UiRect, occupied: readonly UiRect[] ): UiRect | undefined {
+	const candidates: { rect: UiRect; distance: number; }[] = [];
+	for ( let dy = -PLACEMENT_REACH; dy <= PLACEMENT_REACH; dy += PLACEMENT_STEP ) {
+		for ( let dx = -PLACEMENT_REACH; dx <= PLACEMENT_REACH; dx += PLACEMENT_STEP ) {
+			const x = Math.round( cell.x / cell.count - MARKER_WIDTH / 2 + dx ),
+				y = Math.round( cell.y / cell.count - MARKER_HEIGHT / 2 + dy );
+			const rect: UiRect = [
+				Math.max( clip[0], Math.min( clip[0] + clip[2] - MARKER_WIDTH, x ) ),
+				Math.max( clip[1], Math.min( clip[1] + clip[3] - MARKER_HEIGHT, y ) ),
+				MARKER_WIDTH,
+				MARKER_HEIGHT
+			];
+			if ( occupied.some( other => overlaps( rect, other ) ) ) continue;
+			candidates.push( { rect, distance: Math.hypot( dx, dy ) } );
+		}
+	}
+	return candidates.sort( ( a, b ) => a.distance - b.distance )[0]?.rect;
 }
 
 /*
@@ -176,7 +262,7 @@ export function projectHuntingGuide(
 	clip: UiRect,
 	reserved: readonly UiRect[] = []
 ): HuntingProjection {
-	const small = clip[2] < 350, cellSize = small ? 112 : 96;
+	const small = clip[2] < 350;
 	const cells = new Map<string, HuntingCell>();
 	const scaleX = f.width / (f.right - f.left), scaleY = f.height / (f.top - f.bottom);
 	const rx0 = Math.max( 0, Math.floor( (f.left + (clip[0] - f.ox) / scaleX) / REGION_SIZE ) ),
@@ -191,8 +277,8 @@ export function projectHuntingGuide(
 					mx < 0 || my < 0 || mx >= f.width || my >= f.height || x < clip[0] || y < clip[1] ||
 					x >= clip[0] + clip[2] || y >= clip[1] + clip[3]
 				) continue;
-				const key = Math.floor( mx / cellSize ) + ":" + Math.floor( my / cellSize );
-				const cell = cells.get( key ) ?? { x: 0, y: 0, count: 0, monsters: new Map() };
+				const key = Math.floor( mx / ANCHOR_CELL_SIZE ) + ":" + Math.floor( my / ANCHOR_CELL_SIZE );
+				const cell = cells.get( key ) ?? { key, x: 0, y: 0, count: 0, monsters: new Map() };
 				cell.x += x;
 				cell.y += y;
 				cell.count++;
@@ -206,76 +292,83 @@ export function projectHuntingGuide(
 	const quads: UiQuad[] = [], controls: UiControl[] = [], paths = new Set<string>();
 	const labels: { value: string; rect: UiRect; color: UiQuad["color"]; }[] = [];
 	const occupied = [ ...reserved ];
-	// Prioritize beginner groups when a dense viewport cannot fit everything.
-	const groups = [ ...cells.entries() ].sort( ( a, b ) =>
-		Math.min( ...[ ...a[1].monsters.values() ].map( r => r.monster.level ) ) -
-			Math.min( ...[ ...b[1].monsters.values() ].map( r => r.monster.level ) ) || a[0].localeCompare( b[0] )
-	);
-	const limit = small ? 4 : 18;
-	for ( const [key, cell] of groups ) {
-		if ( controls.length >= limit ) break;
+	const groups = groupHuntingCells( [ ...cells.values() ].sort( ( a, b ) => a.key.localeCompare( b.key ) ), small );
+	const placed: { cell: HuntingCell; rect: UiRect; }[] = [], unplaced: HuntingCell[] = [];
+	for ( const cell of groups ) {
+		const rect = huntingMarkerRect( cell, clip, occupied );
+		if ( !rect ) {
+			unplaced.push( cell );
+			continue;
+		}
+		occupied.push( rect );
+		placed.push( { cell, rect } );
+	}
+	for ( const cell of unplaced ) {
+		const nearest = [ ...placed ].sort( ( a, b ) =>
+			huntingCellDistance( a.cell, cell ) - huntingCellDistance( b.cell, cell )
+		)[0];
+		if ( nearest ) {
+			mergeHuntingCells( nearest.cell, cell );
+		}
+	}
+	const portraits = new Map<number, number>();
+	for ( const { cell, rect } of placed ) {
 		const rows = [ ...cell.monsters.values() ].map( entry => entry.monster ).sort( ( a, b ) =>
 			a.level - b.level || a.refObjId - b.refObjId
 		);
 		const representative = [ ...cell.monsters.values() ].sort( ( a, b ) =>
-			b.count - a.count || a.monster.level - b.monster.level
+			b.count / (1 + (portraits.get( b.monster.refObjId ) ?? 0)) -
+				a.count / (1 + (portraits.get( a.monster.refObjId ) ?? 0)) || a.monster.level - b.monster.level
 		)[0]!.monster;
-		const centerX = cell.x / cell.count, centerY = cell.y / cell.count;
-		const rect = [ [ 0, 0 ], [ -24, 0 ], [ 24, 0 ], [ 0, -24 ], [ 0, 24 ] ].map( ( [dx, dy] ) =>
-			[ Math.round( centerX - 30 + dx! ), Math.round( centerY - 29 + dy! ), 60, 58 ] as UiRect
-		).find( r =>
-			r[0] >= clip[0] && r[1] >= clip[1] && r[0] + r[2] <= clip[0] + clip[2] &&
-			r[1] + r[3] <= clip[1] + clip[3] && !occupied.some( other => overlaps( r, other ) )
-		);
-		if ( !rect ) continue;
-		occupied.push( rect );
+		portraits.set( representative.refObjId, (portraits.get( representative.refObjId ) ?? 0) + 1 );
 		const image = images.get( representative.refObjId ) ?? HUNTING_MONSTER_SIGN;
 		paths.add( image );
 		paths.add( PORTRAIT_FRAME );
 		paths.add( HUNTING_MONSTER_SIGN );
 		// The native slot tile has an opaque centre: paint it before the inset portrait.
 		quads.push( {
-			rect: [ rect[0] + 8, rect[1], 44, 44 ],
+			rect: [ rect[0] + 9, rect[1], PORTRAIT_SIZE, PORTRAIT_SIZE ],
 			clip,
 			texture: PORTRAIT_FRAME,
 			uv: [ 0, 0, 1, 1 ],
 			color: [ 1, 1, 1, 1 ]
 		}, {
-			rect: [ rect[0] + 10, rect[1] + 2, 40, 40 ],
+			rect: [ rect[0] + 11, rect[1] + 2, PORTRAIT_SIZE - 4, PORTRAIT_SIZE - 4 ],
 			clip,
 			texture: image,
 			uv: [ 0, 0, 1, 1 ],
 			color: [ 1, 1, 1, 1 ]
 		}, {
-			rect: [ rect[0], rect[1] + 43, 60, 15 ],
+			rect: [ rect[0], rect[1] + PORTRAIT_SIZE, MARKER_WIDTH, LABEL_HEIGHT ],
 			clip,
 			texture: "",
 			uv: [ 0, 0, 1, 1 ],
-			color: [ .07, .055, .035, .86 ]
+			color: [ .07, .055, .035, .72 ]
 		} );
 		const low = rows[0]!.level, high = rows[rows.length - 1]!.level;
 		labels.push( {
 			value: `Lv ${low === high ? low : low + "-" + high}`,
-			rect: [ rect[0], rect[1] + 43, 60, 15 ],
+			rect: [ rect[0], rect[1] + PORTRAIT_SIZE, MARKER_WIDTH, LABEL_HEIGHT ],
 			color: [ .96, .83, .55, 1 ]
 		} );
 		if ( rows.length > 1 ) {
+			const badge: UiRect = [ rect[0] + 35, rect[1] + 21, 17, 13 ];
+			quads.push( { rect: badge, clip, texture: "", uv: [ 0, 0, 1, 1 ], color: [ .07, .055, .035, .9 ] } );
 			labels.push( {
-				value: "+" + (rows.length - 1),
-				rect: [ rect[0] + 38, rect[1] + 27, 20, 14 ],
+				value: String( rows.length ),
+				rect: badge,
 				color: [ 1, .93, .68, 1 ]
 			} );
 		}
 		const names = [
-			`${representative.name} - Lv. ${representative.level}`,
-			...rows.filter( row => row !== representative ).slice( 0, MAX_HOVER_NAMES - 1 ).map( row =>
+			`Hunting area - ${rows.length} species`,
+			...rows.map( row =>
 				`${row.name} - Lv. ${row.level}`
-			)
+			),
+			"Approximate locations"
 		];
-		if ( rows.length > MAX_HOVER_NAMES ) names.push( `+${rows.length - MAX_HOVER_NAMES} more species` );
-		names.push( "Approximate hunting area" );
 		controls.push( {
-			id: HUNTING_AREA_PREFIX + key,
+			id: HUNTING_AREA_PREFIX + cell.key,
 			kind: "region",
 			draggable: true,
 			rect,

@@ -20397,6 +20397,14 @@ export function createUi(
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
+				if ( control?.id.startsWith( HUNTING_AREA_PREFIX ) && value ) {
+					const lines = value.split( "\n" );
+					tooltip = lines.map( ( value, index ) => ({
+						value,
+						color: index === 0 ? 0xffffdaa0 : index === lines.length - 1 ? 0xffc5bdab : 0xffffffff,
+						strong: index === 0
+					}) );
+				}
 				if (
 					control && game && hudData && phase === "world" && !carriedShortcut && !carriedItem && !pressed &&
 					!practice

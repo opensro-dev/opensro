@@ -85,6 +85,31 @@ test("portraits group nearby species honestly and avoid reserved native landmark
 	assert.ok( little.controls.length <= 4 );
 });
 
+test("decluttering keeps every local species reachable, including a group displaced by landmarks", () => {
+	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
+	const clip = [ 0, 0, 640, 384 ];
+	const frame = worldMapFrame( 0, clip, [ 0, 0 ], pose );
+	const rows = Array.from( { length: 12 }, ( _, i ) => ({
+		refObjId: i + 1,
+		name: `Species ${i + 1}`,
+		nameKey: "",
+		level: i + 1,
+		points: [ { regionId: pose.regionId + (i < 6 ? -6 : 6), x: 960, z: 960 } ]
+	}) );
+	const data = decodeHuntingGuide( { ...guide, rows } );
+	const open = projectHuntingGuide( data, new Map(), frame, clip );
+	assert.equal( open.controls.length, 2 );
+	// Block every placement around the left group. Its detail must move into
+	// the neighbouring area rather than disappearing behind a marker limit.
+	const result = projectHuntingGuide( data, new Map(), frame, clip, [ [ 0, 0, 230, 384 ] ] );
+	assert.equal( result.controls.length, 1 );
+	const detail = result.controls[0].helpText;
+	assert.ok( detail );
+	for ( const row of rows ) assert.ok( detail.includes( `${row.name} - Lv. ${row.level}` ) );
+	assert.ok( result.labels.some( label => label.value === "Lv 1-12" ) );
+	assert.ok( result.controls.every( control => control.rect[0] > 230 ) );
+});
+
 test("optional portrait index rejects duplicate identities and external or traversing images", () => {
 	const path = "/assets/npc/hunting-portraits/" + "a".repeat( 64 ) + ".png";
 	const data = { format: "sro-hunting-portraits", version: 1, rows: [ [ 1933, path ] ] };
