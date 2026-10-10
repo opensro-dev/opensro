@@ -123,9 +123,11 @@ createCrowd
 
 Provisioning is explicitly loopback-only and requires the existing local
 authority token. Scratch actors form a grid inside the observer's sector.
+loadoutFor( index ), when given, names each peer's level, intellect and
+skills (server-tick-bench.mjs).
 ================
 */
-export async function createCrowd( { count, fixture, provisioningUrl, tokenPath, journalPath } ) {
+export async function createCrowd( { count, fixture, provisioningUrl, tokenPath, journalPath, loadoutFor } ) {
 	assert.ok( Number.isInteger( count ) && count > 0 && count <= MAX_PEERS );
 	const url = new URL( provisioningUrl );
 	assert.ok( url.protocol === "http:" && [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ) );
@@ -233,6 +235,8 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 			timeoutMs: ADMISSION_TIMEOUT_MS,
 			fixture: {
 				...fixture,
+				// A load scenario gives each peer its own learned skills.
+				...(loadoutFor ? { loadout: loadoutFor( index ) } : {}),
 				start: {
 					...fixture.start,
 					x: fixture.start.x + index % 4 * 15,
