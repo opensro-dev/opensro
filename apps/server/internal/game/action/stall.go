@@ -358,13 +358,16 @@ func (rt *Runtime) applyStallEdit(division string, c *enterworld.Character, kind
 		}
 		code := uint8(0)
 		serial := rt.Stalls.NextSerial()
+		// Snapshot before Edit: the registry's lock must never be held
+		// while the store's is taken (characterSnapshot reads through it).
+		snapshot := rt.characterSnapshot(division, c)
 		_, _ = rt.Stalls.Edit(division, c.Name, func(s *stall.Stall) error {
 			offer := s.Slots[slot]
 			if offer == nil {
 				code = wire.StallErrBadSlot
 				return nil
 			}
-			if code = rt.stallCountRefusal(division, c, offer.BagSlot, count); code != 0 {
+			if code = stallCountRefusalIn(snapshot, offer.BagSlot, count); code != 0 {
 				return nil
 			}
 			offer.Quantity, offer.Price, offer.Serial = count, price, serial
@@ -575,7 +578,18 @@ stallCountRefusal
 ================
 */
 func (rt *Runtime) stallCountRefusal(division string, c *enterworld.Character, bagSlot uint8, count uint16) uint8 {
-	snapshot := rt.characterSnapshot(division, c)
+	return stallCountRefusalIn(rt.characterSnapshot(division, c), bagSlot, count)
+}
+
+/*
+================
+stallCountRefusalIn
+
+stallCountRefusal against a snapshot already taken, for callers inside the
+stall registry's Edit, which must not take the store lock.
+================
+*/
+func stallCountRefusalIn(snapshot *enterworld.Character, bagSlot uint8, count uint16) uint8 {
 	if snapshot == nil {
 		return wire.StallErrBadBagSlot
 	}
