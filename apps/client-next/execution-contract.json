@@ -2218,6 +2218,20 @@
 	],
 	"boundaries": [
 		{
+			"file": "src/engine/runtime/assets/worker/packs/persistent.ts",
+			"expression": "entry.fail",
+			"function": "drain",
+			"kind": "callback",
+			"reason": "Queued cache operation rejection: each waiting entry carries its own caller's fail closure (storage)."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/persistent.ts",
+			"expression": "queue.shift()!.start",
+			"function": "drain",
+			"kind": "callback",
+			"reason": "Queued cache operation admission: drain starts the next waiting entry's own start closure (storage)."
+		},
+		{
 			"file": "src/engine/foundation/animation/particle-commands.ts",
 			"expression": "random",
 			"function": "executeParticleCommands",
