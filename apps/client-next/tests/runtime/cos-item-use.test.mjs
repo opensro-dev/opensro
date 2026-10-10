@@ -525,4 +525,9 @@ test("the reverse return scroll carries its chosen point as one byte (6971B0 cas
 	for ( const reverseChoice of [ undefined, 0, 7 ] ) {
 		assert.throws( () => cosItemUseTail( scroll, [], { records: [], reverseChoice } ), /reverse return/ );
 	}
+	// Port-only (reverse-return-map.ts): choice 7 carries its map point id.
+	assert.deepEqual(
+		cosItemUseTail( scroll, [], { records: [], reverseChoice: 7, reverseMapPoint: 258 } ),
+		Uint8Array.of( 7, 2, 1, 0, 0 )
+	);
 });

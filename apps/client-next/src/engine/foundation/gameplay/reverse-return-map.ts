@@ -75,7 +75,9 @@ The item-use tail for a map point: choice 7 and the id, little-endian.
 ================
 */
 export function reverseMapTail( id: number ): Uint8Array {
-	if ( !Number.isInteger( id ) || id < 1 || id > 0xffffffff ) throw Error( "Choose a point on the map" );
+	if ( !Number.isInteger( id ) || id < 1 || id > 0xffffffff ) {
+		throw Error( "Choose a point on the map for the reverse return scroll" );
+	}
 	const tail = new Uint8Array( 5 );
 	tail[0] = REVERSE_RETURN_MAP;
 	new DataView( tail.buffer ).setUint32( 1, id, true );
