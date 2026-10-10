@@ -50,3 +50,39 @@ func DressedJob(c *Character) uint8 {
 	}
 	return 0
 }
+
+/*
+================
+PartyJobClass
+
+The active job class a party compares (client 856920, CICharactor
++0x4F5): the dressed job, or 4 outside job mode.
+================
+*/
+func PartyJobClass(c *Character) uint8 {
+	if job := DressedJob(c); job != 0 {
+		return job
+	}
+	return 4
+}
+
+/*
+================
+JobsMayParty
+
+ShardManager 44ED20: traders and hunters (1, 3) party together, thieves
+(2) only with thieves, and players outside job mode (4) only with each
+other. 44ED70 (forming) and 44F130 (joining) refuse any other pair.
+================
+*/
+func JobsMayParty(a, b uint8) bool {
+	switch a {
+	case 1, 3:
+		return b == 1 || b == 3
+	case 2:
+		return b == 2
+	case 4:
+		return b == 4
+	}
+	return false
+}
