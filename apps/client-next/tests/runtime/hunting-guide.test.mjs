@@ -102,12 +102,14 @@ test("HUD requests on demand, caches both resources and cancels replaced or disp
 		artBytes = new TextEncoder().encode(
 			JSON.stringify( { format: "sro-hunting-portraits", version: 1, rows: [] } )
 		);
+	const artBase = "https://assets.fixture.invalid", artUrl = new URL( HUNTING_PORTRAITS, artBase ).href;
 	const requests = [], cancels = [];
 	let delivered = true;
 	/** @type {Pick<import("../../src/engine/contracts/assets.ts").AssetOwner, "available" | "request" | "take" | "cancel">} */
 	const assets = {
 		available: () => 2,
 		request: ( url, limit ) => {
+			assert.doesNotThrow( () => new URL( url ), "The production worker requires absolute URLs" );
 			requests.push( { url, limit } );
 			return requests.length;
 		},
@@ -116,17 +118,18 @@ test("HUD requests on demand, caches both resources and cancels replaced or disp
 				{
 					kind: "bytes",
 					id,
-					buffer: (requests[id - 1].url === HUNTING_PORTRAITS ? artBytes : guideBytes).buffer
+					buffer: (requests[id - 1].url === artUrl ? artBytes : guideBytes).buffer
 				} :
 				null,
 		cancel: id => cancels.push( id )
 	};
-	const hud = createHuntingGuideHud( assets ),
+	const hud = createHuntingGuideHud( assets, artBase ),
 		source = { url: "http://fixture.invalid/guide.json", bytes: guideBytes.length };
 	hud.step( source, false );
 	assert.equal( requests.length, 0 );
 	hud.step( source, true );
 	assert.equal( requests.length, 2 );
+	assert.equal( requests[1].url, artUrl );
 	const result = hud.present( 0, [ 0, 0, 400, 200 ], [ 0, 0 ], pose );
 	assert.strictEqual( hud.present( 0, [ 0, 0, 400, 200 ], [ 0, 0 ], { ...pose } ), result );
 	hud.step( source, false );
@@ -139,7 +142,7 @@ test("HUD requests on demand, caches both resources and cancels replaced or disp
 	hud.step( { ...source, url: source.url + "?other" }, true );
 	hud.dispose();
 	assert.deepEqual( cancels, [ 3, 4 ] );
-	const pending = createHuntingGuideHud( assets );
+	const pending = createHuntingGuideHud( assets, artBase );
 	pending.step( source, true );
 	pending.dispose();
 	assert.deepEqual( cancels, [ 3, 4, 5, 6 ] );

@@ -865,7 +865,7 @@ export function createUi(
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
 	const mapTeleport = createMapTeleport();
-	const huntingGuide = createHuntingGuideHud( assets );
+	const huntingGuide = createHuntingGuideHud( assets, base );
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
 	const hudMessages = createHudMessages( chooseTip );

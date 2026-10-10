@@ -45,7 +45,10 @@ Replaced sources cannot publish into a new world. Completions are collected
 while hidden; only an open, explicitly enabled map starts either request.
 ================
 */
-export function createHuntingGuideHud( assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel"> ) {
+export function createHuntingGuideHud(
+	assets: Pick<AssetOwner, "available" | "request" | "take" | "cancel">,
+	base: string
+) {
 	let source: HuntingGuideSource | undefined, load: Load<HuntingCatalogue> = { kind: "idle" };
 	let art: Load<ReadonlyMap<number, string>> = { kind: "idle" }, cacheKey = "", projection = EMPTY;
 	/*
@@ -98,7 +101,10 @@ export function createHuntingGuideHud( assets: Pick<AssetOwner, "available" | "r
 				}
 			}
 			if ( art.kind === "idle" && needed && source && assets.available() > 0 ) {
-				art = { kind: "loading", id: assets.request( HUNTING_PORTRAITS, ART_BYTES_LIMIT ) };
+				art = {
+					kind: "loading",
+					id: assets.request( new URL( HUNTING_PORTRAITS, base ).href, ART_BYTES_LIMIT )
+				};
 				changed = true;
 			}
 			if ( art.kind === "loading" ) {
