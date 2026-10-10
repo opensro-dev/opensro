@@ -304,12 +304,8 @@ export function worldMapPresentation(
 		overlay: UiQuad[] = [],
 		markerQuads: UiQuad[] = [],
 		white = [ 1, 1, 1, 1 ] as const;
-	const { page, width, height, left, bottom, top, right, cx, cy, px, py, ox, oy } = worldMapFrame(
-		pageId,
-		clip,
-		pan,
-		center
-	);
+	const frame = worldMapFrame( pageId, clip, pan, center );
+	const { page, width, height, cx, cy, px, py, ox, oy } = frame;
 	/*
 	================
 	sprite
@@ -346,16 +342,8 @@ export function worldMapPresentation(
 		texture: string,
 		rotation: number
 	) {
-		if ( regionId & 0x8000 ) return;
-		const mx = (((regionId & 255) * 192 + x / 10 - left) / (right - left)) * width,
-			my = ((top - ((regionId >>> 8) * 192 + z / 10)) / (top - bottom)) * height;
-		sprite(
-			markerQuads,
-			texture,
-			[ ox + mx - 8, oy + my - 8, 16, 16 ],
-			[ 0, 0, 1, 1 ],
-			rotation
-		);
+		const rect = worldMapMarkerRect( frame, { regionId, x, z } );
+		if ( rect ) sprite( markerQuads, texture, rect, [ 0, 0, 1, 1 ], rotation );
 	}
 	if ( page ) {
 		const picture = "picture" in page ? page.picture : page.size;
@@ -562,4 +550,57 @@ export function mapLabelVisible( box: UiRect, clip: UiRect ): boolean {
 		box[1] + box[3] + MAP_LABEL_INK_MARGIN < clip[1] ||
 		box[1] - MAP_LABEL_INK_MARGIN > clip[1] + clip[3]
 	);
+}
+
+// MAP_MARKER_SIZE is a marker sprite's side in screen pixels.
+const MAP_MARKER_SIZE = 16;
+// MAP_REGION_UNITS is a region's side in map units (1920 local / 10).
+const MAP_REGION_UNITS = 192;
+// REVERSE_MAP_MARKER marks a reverse return map point (port-only): the
+// shipped hunting-point sign.
+export const REVERSE_MAP_MARKER = "/assets/images/Media_extracted/interface/worldmap/wmap_sign_huntingpoint.png";
+
+/*
+================
+worldMapMarkerRect
+
+One projection owns the native markers and the reverse return map points
+(after GrazKe, #336). Null for a dungeon region.
+================
+*/
+function worldMapMarkerRect(
+	frame: ReturnType<typeof worldMapFrame>,
+	point: { readonly regionId: number; readonly x: number; readonly z: number; }
+): UiRect | null {
+	if ( point.regionId & 0x8000 ) return null;
+	const { left, right, top, bottom, width, height, ox, oy } = frame;
+	const x = (((point.regionId & 255) * MAP_REGION_UNITS + point.x / 10 - left) / (right - left)) * width;
+	const y = ((top - ((point.regionId >>> 8) * MAP_REGION_UNITS + point.z / 10)) / (top - bottom)) * height;
+	return [ ox + x - MAP_MARKER_SIZE / 2, oy + y - MAP_MARKER_SIZE / 2, MAP_MARKER_SIZE, MAP_MARKER_SIZE ];
+}
+
+/*
+================
+worldMapPointMarkers
+
+Port-only: the reverse return map points inside the map's clip, with the
+rect each one is painted and clicked at.
+================
+*/
+export function worldMapPointMarkers<
+	Point extends { readonly regionId: number; readonly x: number; readonly z: number; }
+>(
+	view: {
+		readonly page: number;
+		readonly clip: UiRect;
+		readonly pan: readonly [number, number];
+		readonly center: Pose;
+		readonly points: readonly Point[];
+	}
+): { readonly point: Point; readonly rect: UiRect; }[] {
+	const frame = worldMapFrame( view.page, view.clip, view.pan, view.center );
+	return view.points.flatMap( point => {
+		const rect = worldMapMarkerRect( frame, point );
+		return rect && mapLabelVisible( rect, view.clip ) ? [ { point, rect } ] : [];
+	} );
 }

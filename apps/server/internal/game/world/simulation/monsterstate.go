@@ -540,3 +540,28 @@ func normalizeGeneratedMonsterSpawn(spawn monster.SpawnPoint) monster.SpawnPoint
 	spawn.Z = position.Z
 	return spawn
 }
+
+// uniqueMonsterType is characterdata column 15 for a unique (MonsterRef).
+const uniqueMonsterType = 3
+
+/*
+================
+UniqueReturnAnchors
+
+The field nests of unique monsters (monster type 3), from the static
+template rather than live spawn timing. Port-only, not native: they are
+the reverse return scroll's map destinations (action/reversemap.go).
+================
+*/
+func (s *MonsterState) UniqueReturnAnchors() []monster.SpawnPoint {
+	var points []monster.SpawnPoint
+	for _, nest := range s.template.Nests {
+		ref, ok := s.template.Refs[nest.RefObjID]
+		if !ok || ref.MonsterType != uniqueMonsterType || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
+			IsDungeonRegion(nest.RegionID) {
+			continue
+		}
+		points = append(points, nest.SpawnPoint)
+	}
+	return points
+}

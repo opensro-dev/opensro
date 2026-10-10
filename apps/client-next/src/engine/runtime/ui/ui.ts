@@ -470,6 +470,8 @@ import {
 	worldMapPageAt,
 	worldMapPages,
 	worldMapPresentation,
+	worldMapPointMarkers,
+	REVERSE_MAP_MARKER,
 	type MapMarker,
 	mapLabelVisible
 } from "@/engine/foundation/ui/world-map";
@@ -526,6 +528,7 @@ import {
 	partyProposalAssets,
 	partyProposalLayout,
 	guildProposalLayout,
+	reverseReturnLayout,
 	proposalLayout,
 	MESSAGE_FRAME,
 	MESSAGE_TILE,
@@ -1447,6 +1450,8 @@ export function createUi(
 		shopOpenRequest = null;
 		if ( next !== "Shop" ) repairHud.reset();
 		if ( next !== SKIN_PANEL ) skinHud.close();
+		// Port-only: leaving the map cancels the reverse return map choice.
+		if ( next !== "Map" && reverseScrollHud.mapping() ) reverseScrollHud.close();
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
 		if ( next !== FORTRESS_TAX_PANEL ) fortressTaxHud.close();
@@ -1774,6 +1779,17 @@ export function createUi(
 			if ( line.channel === 2 && !line.history && line.name && line.name !== self ) return line.name;
 		}
 		return "";
+	}
+	/*
+	================
+	reverseMapOffered
+
+	Port-only: the reverse return box offers the map when the Experimental
+	row is on and the server published a table (SRO_REVERSE_RETURN_MAP).
+	================
+	*/
+	function reverseMapOffered() {
+		return experimental.state().saved.reverseReturnMap && (view?.gameplay?.reverseMapPoints?.length ?? 0) > 0;
 	}
 	/*
 	================
@@ -3566,6 +3582,26 @@ export function createUi(
 		} else if ( id === "reverse-scroll-cancel" ) {
 			reverseScrollHud.close();
 			dirty = true;
+		} else if ( id === "reverse-scroll-map" ) {
+			// Port-only: the box hands the scroll to the world map.
+			if ( reverseMapOffered() && reverseScrollHud.openMap( view ) ) setPanel( "Map" );
+			dirty = true;
+		} else if ( id.startsWith( "reverse-map-point:" ) ) {
+			const point = reverseScrollHud.mapping() ?
+				view.gameplay?.reverseMapPoints?.find( row =>
+					row.id === Number( id.slice( "reverse-map-point:".length ) )
+				) :
+				undefined;
+			if ( point ) {
+				mapTeleport.choose( {
+					regionId: point.regionId,
+					x: point.x,
+					z: point.z,
+					name: point.name,
+					reversePoint: point.id
+				} );
+			}
+			dirty = true;
 		} else if ( id.startsWith( "count-job:" ) ) {
 			// 6E2840: a package slot (kind 5) opens its package window.
 			compositeItemHud.open( Number( id.slice( "count-job:".length ) ) );
@@ -4355,7 +4391,9 @@ export function createUi(
 					dirty = true;
 				} else if (
 					event.kind === "activate" &&
-					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-cancel" ].includes( event.id )
+					[ "reverse-scroll:2", "reverse-scroll:3", "reverse-scroll-map", "reverse-scroll-cancel" ].includes(
+						event.id
+					)
 				) {
 					activate( event.id );
 				}
@@ -4870,6 +4908,14 @@ export function createUi(
 				) {
 					mapTeleport.clear();
 					dirty = true;
+					if ( teleportTarget.reversePoint !== undefined ) {
+						const command = reverseScrollHud.choosePoint( teleportTarget.reversePoint, view );
+						if ( command ) {
+							sendGameplay( command );
+							setPanel( "" );
+						}
+						return;
+					}
 					if ( view?.session?.phase === "world" && view.gameplay?.eligibility?.gm ) {
 						sendGameplay( { kind: "gm-command", line: mapTeleport.command( teleportTarget ) } );
 					}
@@ -9925,6 +9971,33 @@ export function createUi(
 						} );
 					}
 				}
+				// Port-only: the reverse return map points while the map holds a scroll.
+				if ( mapOpen && pose && reverseScrollHud.mapping() ) {
+					const clip: UiRect = [ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ];
+					for (
+						const { point, rect } of worldMapPointMarkers( {
+							page: mapPage,
+							clip,
+							pan: mapPan,
+							center: mapCenter ?? pose,
+							points: game?.reverseMapPoints ?? []
+						} )
+					) {
+						mapImages.push( {
+							rect,
+							texture: REVERSE_MAP_MARKER,
+							uv: [ 0, 0, 1, 1 ],
+							color: [ 1, 1, 1, 1 ],
+							clip
+						} );
+						mapHits.push( {
+							id: "reverse-map-point:" + point.id,
+							label: point.name,
+							rect,
+							kind: "button"
+						} );
+					}
+				}
 				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ) );
 				else if ( pose ) {
 					worldMapDemand(
@@ -12500,7 +12573,9 @@ export function createUi(
 					null;
 				if ( reverseBox ) {
 					controls = [];
-					const admission = beginWindow(), box = guildProposalLayout( w, h );
+					// Port-only: the scroll's box grows a map row when it is offered.
+					const mapRow = reverseScrollHud.active() && reverseMapOffered();
+					const admission = beginWindow(), box = reverseReturnLayout( w, h, mapRow ? 3 : 2 );
 					blocks.push( full );
 					paths.push( ...partyProposalAssets() );
 					quads.push(
@@ -12529,6 +12604,15 @@ export function createUi(
 							hudCopy( key ),
 							box.frame[0] + 16,
 							box.frame[1] + 44 + index * 26,
+							box.frame[2] - 32
+						);
+					}
+					if ( mapRow ) {
+						button(
+							"reverse-scroll-map",
+							"Move to a location on the map.",
+							box.frame[0] + 16,
+							box.frame[1] + 44 + 2 * 26,
 							box.frame[2] - 32
 						);
 					}
@@ -18419,11 +18503,20 @@ export function createUi(
 					)
 				);
 				const region = String( teleportShown.regionId ),
-					place = hud.data()?.zones[region] ?? "Region " + region;
+					place = teleportShown.name ?? hud.data()?.zones[region] ?? "Region " + region,
+					reverse = teleportShown.reversePoint !== undefined;
 				quads.push(
-					...text.quads( "Teleport", layout.title, full, white, { hAlign: 1 } ),
+					...text.quads(
+						reverse ? hudCopy( "UIIT_CTL_WNETWORK_REVERSE_PORTAL" ) : "Teleport",
+						layout.title,
+						full,
+						white,
+						{ hAlign: 1 }
+					),
 					...text.quads( place, layout.name, full, white, { hAlign: 1 } ),
-					...text.quads( "Teleport here?", layout.question, full, white, { hAlign: 1 } )
+					...text.quads( reverse ? "Move here?" : "Teleport here?", layout.question, full, white, {
+						hAlign: 1
+					} )
 				);
 				button(
 					"map-teleport-confirm",

@@ -26,12 +26,17 @@ const MAP_WARP_LOCAL_MAX = 1919.9;
 /*
 ================
 MapTeleportTarget
+
+reversePoint names a reverse return map point (port-only): Yes answers
+the pending scroll with its id instead of issuing a GM warp.
 ================
 */
 export interface MapTeleportTarget {
 	readonly regionId: number;
 	readonly x: number;
 	readonly z: number;
+	readonly name?: string;
+	readonly reversePoint?: number;
 }
 
 /*
@@ -51,6 +56,9 @@ export function createMapTeleport() {
 		pick( x: number, y: number ): MapTeleportTarget | null {
 			pending = frame ? worldMapPoint( frame.page, frame.clip, frame.pan, frame.center, x, y ) : null;
 			return pending;
+		},
+		choose( target: MapTeleportTarget ) {
+			pending = target;
 		},
 		pending(): MapTeleportTarget | null {
 			return pending;

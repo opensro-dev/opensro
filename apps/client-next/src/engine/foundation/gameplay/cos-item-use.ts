@@ -13,6 +13,7 @@ import type { SystemNotice } from "./system-notices";
 import type { CosRecord, GameplayCommand, InventoryItem } from "@/engine/contracts/gameplay";
 import { isSkinChangeScroll, skinChangeTail, type SkinChoice } from "./skin-change";
 import { REVERSE_RETURN_LAST_DEATH, REVERSE_RETURN_LAST_RECALL } from "./count-job";
+import { REVERSE_RETURN_MAP, reverseMapTail } from "./reverse-return-map";
 
 /*
 ================
@@ -33,8 +34,10 @@ export interface CosItemUseContext {
 	readonly skin?: SkinChoice;
 	// The bag item an armour gender change tool was dropped on.
 	readonly targetSlot?: number;
-	// The reverse return scroll's chosen point (2 recall, 3 death).
+	// The reverse return scroll's chosen point (2 recall, 3 death, or the
+	// port-only 7, a map point).
 	readonly reverseChoice?: number;
+	readonly reverseMapPoint?: number;
 }
 
 /*
@@ -96,6 +99,7 @@ export function cosItemUseTail(
 	if ( isReverseReturnScroll( flags ) ) {
 		// 6971B0 case 0x1E: the choice box's row is the one byte after the type.
 		const choice = context?.reverseChoice;
+		if ( choice === REVERSE_RETURN_MAP ) return reverseMapTail( context?.reverseMapPoint ?? 0 );
 		if ( choice !== REVERSE_RETURN_LAST_RECALL && choice !== REVERSE_RETURN_LAST_DEATH ) {
 			throw Error( "Choose where the reverse return scroll goes" );
 		}
