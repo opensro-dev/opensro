@@ -9300,8 +9300,17 @@ export function createUi(
 							"item-mall",
 							hudCopy( "UIIT_STT_SILKMALL_SHORT_KEY" )
 						);
-						authoredButton( bar.GDR_BTN_QUICKSLOTUP!, barX, barY, "hotbar-prev", "Previous quickslot bar" );
-						authoredButton( bar.GDR_BTN_QUICKSLOTDOWN!, barX, barY, "hotbar-next", "Next quickslot bar" );
+						// CIFUnderBar's message map (initialized by BB2C90): control 13
+						// (QUICKSLOTUP) runs 572760, page + 1; control 12 (QUICKSLOTDOWN)
+						// runs 572750, page - 1. Both wrap through 571E40.
+						authoredButton( bar.GDR_BTN_QUICKSLOTUP!, barX, barY, "hotbar-next", "Next quickslot bar" );
+						authoredButton(
+							bar.GDR_BTN_QUICKSLOTDOWN!,
+							barX,
+							barY,
+							"hotbar-prev",
+							"Previous quickslot bar"
+						);
 						authoredText( bar.GDR_STATIC_QUICKSLOT!, barX, barY, "F" + (hotbarPage + 1) );
 						const required = levels.get( game?.progression?.level ?? 0 )?.[0];
 						paths.push( EXPERIENCE_BAR );

@@ -427,6 +427,23 @@ test("F10 opens the Item Mall and a world transfer closes it, as the native rese
 	}
 });
 
+test("the underbar's up arrow selects the next quickslot bar, as native control 13 does", () => {
+	// CIFUnderBar's message map (BB2C90): control 13, GDR_BTN_QUICKSLOTUP, runs
+	// 572760 (page + 1); control 12, GDR_BTN_QUICKSLOTDOWN, runs 572750 (page - 1).
+	const f = uiFixture();
+	try {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+		const next = last?.controls.find( control => control.id === "hotbar-next" );
+		const prev = last?.controls.find( control => control.id === "hotbar-prev" );
+		assert.ok( next && prev, "both quickslot arrows publish" );
+		assert.ok( next.rect[1] < prev.rect[1], "the upper arrow (QUICKSLOTUP) is next, the lower previous" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("the underbar mall button is a clickable button and F10 toggles the mall", () => {
 	const f = uiFixture();
 	try {
