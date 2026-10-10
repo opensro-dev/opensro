@@ -2214,6 +2214,16 @@
 			"functions": [
 				"callback:setAssetDump:0"
 			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/hunting-guide.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"cancel",
+				"request",
+				"take"
+			]
 		}
 	],
 	"boundaries": [

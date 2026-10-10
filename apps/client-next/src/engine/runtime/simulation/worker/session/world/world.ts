@@ -45,7 +45,14 @@ export function createWorldSession(
 		value: unknown,
 		base: string,
 		signal: AbortSignal
-	) => Promise<{ refSkillSnapshot: unknown[]; refItemSnapshot: unknown[]; refObjSnapshot: unknown[]; }>,
+	) => Promise<
+		{
+			refSkillSnapshot: unknown[];
+			refItemSnapshot: unknown[];
+			refObjSnapshot: unknown[];
+			huntingGuide?: import("@/engine/contracts/hunting-guide").HuntingGuideSource;
+		}
+	>,
 	reportIncident: ( incident: ClientIncident ) => void
 ) {
 	let failure: string | null = null, epoch = 0, disposed = false, controller: AbortController | null = null;
@@ -111,12 +118,14 @@ onNetworkFailure
 	let references: { kind: "idle"; } | { kind: "loading"; } | {
 		kind: "ready";
 		bootstrap: unknown;
+		huntingGuide?: import("@/engine/contracts/hunting-guide").HuntingGuideSource;
 		receivedAtMs: number;
 	} | {
 		kind: "failed";
 		error: string;
 	} = { kind: "idle" };
 	let lastError: string | undefined;
+	let huntingGuide: import("@/engine/contracts/hunting-guide").HuntingGuideSource | undefined;
 	let now = 0,
 		deadline = 0,
 		retryAt = 0,
@@ -241,13 +250,15 @@ receive
 					if ( !disposed && epoch === current ) {
 						// The published item and object rows and the login's own rows are
 						// disjoint (the server skips published ids); the catalogs reject a repeat.
+						const { huntingGuide: guide, ...tables } = refs;
 						const own = bootstrap as { refItemSnapshot?: unknown[]; refObjSnapshot?: unknown[]; };
 						references = {
 							kind: "ready",
 							receivedAtMs,
+							huntingGuide: guide,
 							bootstrap: {
 								...bootstrap,
-								...refs,
+								...tables,
 								refItemSnapshot: [ ...refs.refItemSnapshot, ...(own.refItemSnapshot ?? []) ],
 								refObjSnapshot: [ ...refs.refObjSnapshot, ...(own.refObjSnapshot ?? []) ]
 							}
@@ -261,6 +272,7 @@ receive
 			if ( wrapper.v !== 1 ) {
 				throw new Error( "Unsupported EnterWorld blob version", { cause: "unsupported_feature" } );
 			}
+			huntingGuide = undefined;
 			core.bootstrap( wrapper.bootstrap, resumedTransport, now );
 			boundThisTransport = true;
 			hasWorld = true;
@@ -476,11 +488,12 @@ step
 				}
 			}
 			if ( references.kind === "ready" ) {
-				const { bootstrap, receivedAtMs } = references;
+				const { bootstrap, receivedAtMs, huntingGuide: guide } = references;
 				references = { kind: "idle" };
 				controller = null;
 				try {
 					core.bootstrap( bootstrap, resumedTransport, receivedAtMs );
+					huntingGuide = guide;
 					boundThisTransport = true;
 					hasWorld = true;
 					ready = false;
@@ -590,6 +603,7 @@ status
 				character,
 				entities: core.count(),
 				pingMs,
+				huntingGuide: hasWorld ? huntingGuide : undefined,
 				attempt
 			};
 		},

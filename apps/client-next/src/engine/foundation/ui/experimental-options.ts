@@ -21,6 +21,8 @@ export interface ExperimentalOptions {
 	// Port-only, not native. Reduced scene resolution requires explicit opt-in.
 	readonly renderScale: RenderScale;
 	readonly chatTimestamps: boolean;
+	// Port-only, not native: beginner atlas on M, explicitly enabled.
+	readonly monsterGuide: boolean;
 	readonly developerDiagnostics: boolean;
 	// Video: renderer stages that deviate from the 2005 D3D9 look.
 	readonly postProcessing: boolean;
@@ -81,6 +83,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 	return {
 		renderScale: record.renderScale === 75 || record.renderScale === 50 ? record.renderScale : DEFAULT_RENDER_SCALE,
 		chatTimestamps: enabled( "chatTimestamps" ),
+		monsterGuide: enabled( "monsterGuide" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
 		postProcessing: enabled( "postProcessing" ),
 		anisotropicFiltering: enabled( "anisotropicFiltering" ),

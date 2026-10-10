@@ -72,6 +72,8 @@ import {
 	rosterPositions
 } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
+import { createHuntingGuideHud } from "./hud/hunting-guide";
+import { HUNTING_AREA_PREFIX, HUNTING_GUIDE_BAR_HEIGHT } from "@/engine/foundation/ui/hunting-guide";
 import { createSkillTrainingCache } from "./hud/skill-training";
 import {
 	createWithdrawalDialog,
@@ -863,6 +865,7 @@ export function createUi(
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
 	const mapTeleport = createMapTeleport();
+	const huntingGuide = createHuntingGuideHud( assets );
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
 	const hudMessages = createHudMessages( chooseTip );
@@ -3388,7 +3391,9 @@ export function createUi(
 			mapPan = [ 0, 0 ];
 			mapCenter = mapFollow ? null : view.gameplay?.pose ? { ...view.gameplay.pose } : null;
 		} // 575E90 flips AUTO MOVE only; the view stays where AUTO last centred it.
-		else if ( id === "map-follow" ) {
+		else if ( id === "map-hunting-reset" ) {
+			huntingGuide.reset();
+		} else if ( id === "map-follow" ) {
 			mapFollow = !mapFollow;
 			mapCenter = view.gameplay?.pose ? { ...view.gameplay.pose } : null;
 			mapPan = [ 0, 0 ];
@@ -4856,7 +4861,8 @@ export function createUi(
 				if ( event.kind !== "hover" ) return;
 			}
 			if (
-				event.kind === "region-double" && event.id === "map-pan" &&
+				event.kind === "region-double" &&
+				(event.id === "map-pan" || event.id.startsWith( HUNTING_AREA_PREFIX )) &&
 				view?.session?.phase === "world" && view.gameplay?.eligibility?.gm
 			) {
 				if ( mapTeleport.pick( event.x, event.y ) ) dirty = true;
@@ -5935,7 +5941,10 @@ export function createUi(
 					if ( event.id === "map-drag" ) {
 						mapX = Math.max( 0, mapX + event.dx );
 						mapY = Math.max( 0, mapY + event.dy );
-					} else if ( (event.id === "map-pan" || event.id.startsWith( "map-town:" )) && !mapFollow ) {
+					} else if (
+						(event.id === "map-pan" || event.id.startsWith( "map-town:" ) ||
+							event.id.startsWith( HUNTING_AREA_PREFIX )) && !mapFollow
+					) {
 						mapPan = [ mapPan[0] + event.dx, mapPan[1] + event.dy ];
 					}
 					dirty = true;
@@ -6367,7 +6376,8 @@ export function createUi(
 				else if ( event.id === STALL_PROMPT_PRICE ) stallHud.type( "price", event.value );
 				else if ( event.id === "exchange-gold" ) {
 					exchangeHud.type( event.value, Number( view?.gameplay?.progression?.gold ?? 0 ) );
-				} else if ( event.id === "gm-input" ) consoleText = event.value;
+				} else if ( event.id.startsWith( "map-hunting-" ) ) huntingGuide.type( event.id, event.value );
+				else if ( event.id === "gm-input" ) consoleText = event.value;
 				else if ( event.id === "chat-text" ) chatText = event.value.slice( 0, 100 );
 				else if ( event.id === "chat-target" ) chatTarget = event.value;
 				else if ( event.id === "account" ) account = event.value;
@@ -6756,6 +6766,13 @@ export function createUi(
 				dirty = true;
 			}
 			if ( minimapResources.step( trackedQuest !== 0, next.session?.phase === "world" ) ) dirty = true;
+			if (
+				huntingGuide.step(
+					next.session?.huntingGuide,
+					panel === "Map" &&
+						experimental.state().saved.monsterGuide && next.session?.phase === "world"
+				)
+			) dirty = true;
 			const questPositions = (next.gameplay?.quests?.find( q => q.refId === trackedQuest )?.targetIds ?? [])
 				.flatMap( id => {
 					const p = minimapResources.positions()?.get( id );
@@ -9755,6 +9772,14 @@ export function createUi(
 					mapTop = Math.min( mapY, Math.max( 0, h - mapHeight ) );
 				mapX = mapLeft;
 				mapY = mapTop;
+				const mapGuideEnabled = experimental.state().saved.monsterGuide;
+				const mapGuideHeight = mapGuideEnabled ? HUNTING_GUIDE_BAR_HEIGHT : 0;
+				const mapClip: UiRect = [
+					mapLeft + 6,
+					mapTop + 34 + mapGuideHeight,
+					mapWidth - 12,
+					mapHeight - 40 - mapGuideHeight
+				];
 				const mapHits: UiControl[] = [];
 				// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
 				// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
@@ -9818,7 +9843,7 @@ export function createUi(
 				if ( mapOpen && pose ) {
 					mapTeleport.view(
 						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapClip,
 						mapPan,
 						mapCenter ?? pose
 					);
@@ -9827,7 +9852,7 @@ export function createUi(
 					worldMapPresentation(
 						pose,
 						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapClip,
 						mapPan,
 						mapCenter ?? pose,
 						hudData?.mapLabels,
@@ -9846,11 +9871,15 @@ export function createUi(
 				// can never be hidden by a shop icon or a zone label.
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
+				const mapGuide = mapOpen && mapGuideEnabled && pose ?
+					huntingGuide.present( mapPage, mapClip, mapPan, mapCenter ?? pose ) :
+					null;
 				const fontPath = text.path();
 				if ( !mapOpen && fontPath ) paths.push( fontPath );
 				const mapImages = mapProjection ?
 					[
 						...mapProjection.background,
+						...(mapGuide?.quads ?? []),
 						...mapProjection.overlay,
 						...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
 							const width = text.run( entry.text, 0, entry.font ).width,
@@ -9880,11 +9909,11 @@ export function createUi(
 						} );
 					}
 				}
-				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ) );
+				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ).filter( Boolean ) );
 				else if ( pose ) {
 					worldMapDemand(
 						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
+						mapClip,
 						mapPan,
 						mapCenter ?? pose,
 						hudData?.mapIcons ?? [],
@@ -9907,7 +9936,7 @@ export function createUi(
 					const page = worldMapPages().find( row => row.id === mapPage ),
 						caption = hudCopy( page ? "UIIT_STT_" + page.name : "UIIT_PAG_WORLDMAP" ) || "World Map";
 					windowBox( caption, mx, my, mw, mh );
-					const inner: UiRect = [ mx + 6, my + 34, mw - 12, mh - 40 ];
+					const inner = mapClip;
 					// The map surface is CIFWorldMap itself, not a CIFButton: pressing or
 					// dragging it never activates or plays SND_BUTTON_CLICK.
 					controls.push( { id: "map-pan", label: "Pan map", kind: "region", draggable: true, rect: inner }, {
@@ -9918,7 +9947,37 @@ export function createUi(
 						rect: [ mx + 20, my + 4, mw - 96, 24 ]
 					} );
 					quads.push( ...mapImages );
-					controls.push( ...mapHits );
+					controls.push( ...(mapGuide?.controls ?? []), ...mapHits );
+					if ( mapGuideEnabled ) {
+						const bar = huntingGuide.toolbar( [ mx + 6, my + 34, mw - 12, mapGuideHeight ] );
+						quads.push( ...bar.quads );
+						controls.push( ...bar.controls );
+						for ( const row of bar.labels ) {
+							quads.push(
+								...text.quads( row.value, row.rect, row.rect, row.color, {
+									vAlign: 1,
+									overflow: "clip"
+								} )
+							);
+						}
+						for ( const field of bar.fields ) {
+							partyEdit(
+								{ ...hudData.map.GDR_WM_BTN_AUTO_MOVE!, name: field.label, rect: field.rect },
+								0,
+								0,
+								field.id,
+								field.value ?? "",
+								field.maxLength ?? 64
+							);
+							if ( !field.value && focus !== field.id ) {
+								quads.push(
+									...text.quads( field.label, field.rect, field.rect, [ .65, .69, .61, 1 ], {
+										overflow: "clip"
+									} )
+								);
+							}
+						}
+					}
 					const nodes = hudData.map;
 					authoredButton(
 						{ ...nodes.GDR_WM_BTN_WNDSIZE!, rect: [ mw - 44, 10, 16, 16 ] },
@@ -20639,6 +20698,7 @@ export function createUi(
 					hud,
 					guideResources,
 					minimapResources,
+					huntingGuide,
 					stallCategories,
 					localization,
 					title,

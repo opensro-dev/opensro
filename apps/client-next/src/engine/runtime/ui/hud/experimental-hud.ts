@@ -86,8 +86,14 @@ export const EXPERIMENTAL_TABS: readonly {
 	},
 	{
 		title: "World",
-		section: "Lighting and terrain",
+		section: "World and map",
 		rows: [
+			{
+				key: "monsterGuide",
+				id: "experimental-monster-guide",
+				label: "Monster hunting guide",
+				description: "Approximate outdoor areas and levels on M."
+			},
 			{
 				key: "heightFog",
 				id: "experimental-height-fog",

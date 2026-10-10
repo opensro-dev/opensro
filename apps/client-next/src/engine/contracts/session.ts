@@ -93,6 +93,8 @@ export type SessionState = Readonly<{
 	// page must be refreshed into the newer release.
 	releaseOutdated?: boolean;
 	marksBase?: string;
+	// Static atlas identity, never creature/session data. Loaded by the optional HUD.
+	huntingGuide?: import("./hunting-guide").HuntingGuideSource;
 	divisionId?: string;
 	error?: string;
 	code?: string;
