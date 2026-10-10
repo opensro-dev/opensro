@@ -65,6 +65,16 @@ func (rt *Runtime) useSkillItem(character *enterworld.Character, use skillItemUs
 			return false
 		}
 	}
+	// 59B8D0 runs 58D8F0 with mask 0xFFFF, so its 58E2F4 buff replacement
+	// check (59D870) holds for an item's skill as for a cast one: a damage
+	// scroll is refused 0x300C while an attack-up buff holds one of its
+	// states, exactly as that buff is refused while the scroll holds it. A
+	// row without a parsed replacement descriptor keeps the earlier path.
+	if skill.ReplacementPinned && !rt.requestSelfEffectReplacement(use.division, character, skill) {
+		failure := itemUseFailure(itemUseSkillRefused)
+		*result = OpResult{Frames: append(offensiveRefusal(0x300c).Frames, failure.Frames...)}
+		return false
+	}
 	token := atomic.AddUint32(&rt.castTokenCounter, 1)
 	if token == 0 {
 		token = atomic.AddUint32(&rt.castTokenCounter, 1)
