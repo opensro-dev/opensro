@@ -417,7 +417,8 @@ func (rt *Runtime) resolveLiveObject(
 		if record == nil {
 			continue
 		}
-		for _, pet := range rt.companionPresentations(divisionID, peer.Name) {
+		// The caller holds the read door (HandleObjectSelect).
+		for _, pet := range rt.companionPresentationsInDoor(divisionID, peer.Name) {
 			if pet.Row.Gid != gid || pet.LifeState == wire.LifeStateDead {
 				continue
 			}

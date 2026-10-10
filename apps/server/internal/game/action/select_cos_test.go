@@ -16,6 +16,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
 
@@ -54,5 +55,49 @@ func TestSelectingAnOwnCompanionGrantsItsHealth(t *testing.T) {
 	}
 	if binary.LittleEndian.Uint32(frame.Payload[1:]) != gid || binary.LittleEndian.Uint32(frame.Payload[6:]) != record.CurrentHP {
 		t.Fatalf("grant names %x, want gid %d and HP %d", frame.Payload, gid, record.CurrentHP)
+	}
+}
+
+/*
+================
+TestSelectingACompanionTakesTheReadDoorOnce
+
+HandleObjectSelect holds the character read door while it resolves the
+target; the companion lookup inside it must not take the door again. The
+store's door is a sync.RWMutex: a second RLock queued behind a waiting
+writer (the tick's UpdateCharacter) never returns, which froze GameWorld
+on 2026-10-10. The strict door below fails on any nesting.
+================
+*/
+func TestSelectingACompanionTakesTheReadDoorOnce(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	rt, _ := newTestRuntime(c, refs)
+	rt.CompanionRoll = func() (uint32, error) { return 0, nil }
+	rt.BindPetSession(testDivision, c, 101)
+	useSummonerFixture(t, rt, c, 23, refs.staticItemSource["SUMMON_ATTACK"])
+	pets := rt.CompanionPresentations(testDivision, c.Name)
+	if len(pets) == 0 {
+		t.Fatal("no summoned companion")
+	}
+	deps := rt.deps.(*enterworld.Deps)
+	prior := deps.ReadCharacter
+	depth, deepest := 0, 0
+	deps.ReadCharacter = func(division string, read func()) {
+		depth++
+		deepest = max(deepest, depth)
+		defer func() { depth-- }()
+		if prior != nil {
+			prior(division, read)
+			return
+		}
+		read()
+	}
+	payload := make([]byte, 4)
+	binary.LittleEndian.PutUint32(payload, pets[0].Row.Gid)
+	if out := rt.HandleObjectSelect(testDivision, c, payload); out.Refusal != "" {
+		t.Fatalf("companion select refused: %q", out.Refusal)
+	}
+	if deepest != 1 {
+		t.Fatalf("the select took the read door %d deep", deepest)
 	}
 }
