@@ -237,7 +237,7 @@ func (s *Session) Send(opcode uint16, payload []byte) error {
 	if len(s.queue) >= s.hub.cfg.OutboundQueue ||
 		s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
 		s.mu.Unlock()
-		s.hub.closeSession(s, errSlowConsumer)
+		s.hub.closeSessionFromSend(s, errSlowConsumer)
 		return errSlowConsumer
 	}
 	s.queue = append(s.queue, Frame{Opcode: opcode, Payload: owned})
@@ -302,7 +302,7 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		return nil
 	}
 	if len(frames) > s.hub.cfg.OutboundQueue {
-		s.hub.closeSession(s, errOutboundBurstTooLarge)
+		s.hub.closeSessionFromSend(s, errOutboundBurstTooLarge)
 		return errOutboundBurstTooLarge
 	}
 	batchBytes := 0
@@ -312,11 +312,11 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 		}
 		frameBytes := frame.EncodedLen()
 		if frameBytes > MaxFrameBytes {
-			s.hub.closeSession(s, ErrFrameTooLarge)
+			s.hub.closeSessionFromSend(s, ErrFrameTooLarge)
 			return ErrFrameTooLarge
 		}
 		if batchBytes > s.hub.cfg.OutboundQueueBytes-frameBytes {
-			s.hub.closeSession(s, errOutboundBurstTooLarge)
+			s.hub.closeSessionFromSend(s, errOutboundBurstTooLarge)
 			return errOutboundBurstTooLarge
 		}
 		batchBytes += frameBytes
@@ -339,7 +339,7 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 	if len(s.queue) > s.hub.cfg.OutboundQueue-len(frames) ||
 		s.queueBytes+s.lossyBytes > s.hub.cfg.OutboundQueueBytes-batchBytes {
 		s.mu.Unlock()
-		s.hub.closeSession(s, errSlowConsumer)
+		s.hub.closeSessionFromSend(s, errSlowConsumer)
 		return errSlowConsumer
 	}
 	for _, frame := range frames {

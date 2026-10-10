@@ -3,7 +3,9 @@ package transport
 import (
 	"bytes"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 )
 
 // TestSendBatchCarriesAdmissionBurstPastFormerFrameCap reproduces the live S2
@@ -129,5 +131,59 @@ func TestBatchCopiesPayloadAndDrainsByteAccounting(t *testing.T) {
 	}
 	if got := hub.Metrics().OutboundQueueBytes; got != 0 {
 		t.Fatalf("drained queue retains %d bytes", got)
+	}
+}
+
+/*
+================
+TestOverflowCloseHooksRunOffTheSendersStack
+
+A sender inside a store door overflows its session; the close hooks reach
+the store again. They must not run on the sender's stack while it holds the
+door: here the sender holds a lock the hook needs, which deadlocked when
+the hooks ran inline.
+================
+*/
+func TestOverflowCloseHooksRunOffTheSendersStack(t *testing.T) {
+	cfg := testCfg()
+	cfg.OutboundQueue = 1
+	hub := newHub(cfg)
+	session, err := hub.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var door sync.Mutex
+	hooked := 0
+	ran := make(chan struct{})
+	hub.OnSessionClose(func(*Session, error) {
+		door.Lock()
+		hooked++
+		door.Unlock()
+		close(ran)
+	})
+	sent := make(chan error, 1)
+	go func() {
+		door.Lock()
+		defer door.Unlock()
+		sent <- session.SendBatch([]Frame{{Opcode: 0x3417}, {Opcode: 0x3417}})
+	}()
+	select {
+	case err := <-sent:
+		if !errors.Is(err, errOutboundBurstTooLarge) {
+			t.Fatalf("overflow = %v, want the burst refusal", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the sender deadlocked on its own close hook")
+	}
+	hub.closeHooks.Wait()
+	select {
+	case <-ran:
+	default:
+		t.Fatal("the close hook never ran")
+	}
+	door.Lock()
+	defer door.Unlock()
+	if hooked != 1 {
+		t.Fatalf("close hooks ran %d times, want once", hooked)
 	}
 }

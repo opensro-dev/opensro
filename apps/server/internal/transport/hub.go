@@ -76,6 +76,9 @@ type Hub struct {
 	admission helloAdmissionGate
 	handlers  handlerRegistry
 	hooks     sessionHooks
+	// closeHooks counts close hooks running on their own goroutine
+	// (closeSessionFromSend); shutdown waits for them.
+	closeHooks sync.WaitGroup
 
 	// handshakeSlots bounds connections waiting for their first HELLO.
 	// Admission is non-blocking: a full server rejects new work instead of
@@ -961,4 +964,5 @@ func (h *Hub) shutdown(ctx context.Context) {
 			h.closeSession(s, errors.New("transport: shutdown deadline"))
 		}
 	}
+	h.closeHooks.Wait()
 }

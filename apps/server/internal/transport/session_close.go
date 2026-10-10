@@ -19,9 +19,48 @@ closeSession
 ================
 */
 func (h *Hub) closeSession(s *Session, cause error) {
-	closed, cause := s.closeNow(cause)
+	if closed, cause := h.retireSession(s, cause); closed {
+		h.runCloseHooks(s, cause)
+	}
+}
+
+/*
+================
+closeSessionFromSend
+
+A send that overflows or oversizes closes its session from the sender's
+stack, and senders run inside store doors (a skill's frames inside its
+Update). The close hooks reach the store again (the logout reads the
+character roster, friend presence), so running them inline deadlocked the
+door against a pending writer. The session is retired inline, so no later
+send queues to it; its hooks run on their own goroutine, which shutdown
+waits for.
+================
+*/
+func (h *Hub) closeSessionFromSend(s *Session, cause error) {
+	closed, cause := h.retireSession(s, cause)
 	if !closed {
 		return
+	}
+	h.closeHooks.Add(1)
+	go func() {
+		defer h.closeHooks.Done()
+		h.runCloseHooks(s, cause)
+	}()
+}
+
+/*
+================
+retireSession
+
+Closes the session once and removes it from every registry; false when it
+was already closed.
+================
+*/
+func (h *Hub) retireSession(s *Session, cause error) (bool, error) {
+	closed, cause := s.closeNow(cause)
+	if !closed {
+		return false, cause
 	}
 	h.mu.Lock()
 	delete(h.sessions, s.ID)
@@ -62,6 +101,15 @@ func (h *Hub) closeSession(s *Session, cause error) {
 
 	log.WithFields(log.Fields{"session": s.ID, "cause": fmt.Sprint(cause)}).
 		Info("transport: session closed")
+	return true, cause
+}
+
+/*
+================
+runCloseHooks
+================
+*/
+func (h *Hub) runCloseHooks(s *Session, cause error) {
 	for _, fn := range h.hooks.closeSnapshot() {
 		func() {
 			defer recoverHookPanic(s, "OnSessionClose")

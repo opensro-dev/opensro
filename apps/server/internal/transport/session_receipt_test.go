@@ -139,19 +139,24 @@ func TestSceneReceiptOverflowClosesOutsideQueueLock(t *testing.T) {
 			if err := session.SendSceneReceiptBatch(revision, []Frame{frame, frame}); err != nil {
 				t.Fatal(err)
 			}
-			closed := false
+			closed := make(chan struct{})
 			hub.OnSessionClose(func(s *Session, cause error) {
-				// Reenter a queue-lock accessor from the synchronous close hook.
+				// Reenter a queue-lock accessor from the close hook.
 				if _, valid := s.SceneReceiptRevision(); valid || !errors.Is(cause, errSlowConsumer) {
 					t.Errorf("overflow close valid=%t cause=%v", valid, cause)
 				}
-				closed = true
+				close(closed)
 			})
 			if err := session.SendSceneReceiptBatch(revision, []Frame{frame}); !errors.Is(err, errSlowConsumer) {
 				t.Fatalf("overflow = %v", err)
 			}
-			if !closed {
-				t.Fatal("overflow did not finish synchronous close hook")
+			// The overflow's hooks run off the sender's stack
+			// (closeSessionFromSend); shutdown waits for them.
+			hub.closeHooks.Wait()
+			select {
+			case <-closed:
+			default:
+				t.Fatal("overflow did not run its close hook")
 			}
 		})
 	}
