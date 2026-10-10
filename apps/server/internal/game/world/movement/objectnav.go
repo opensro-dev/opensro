@@ -59,7 +59,7 @@ objectNavPlacement
 ================
 */
 type objectNavPlacement struct {
-	terrainCells  *[][4]float32
+	terrainCells  *terrainCellSet
 	assetID       int
 	x, y, z       float64
 	yaw           float64
