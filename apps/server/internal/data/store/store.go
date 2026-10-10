@@ -175,8 +175,9 @@ type Store struct {
 
 	db *sql.DB
 
-	characters       map[string][]*domain.Character
-	characterLookups map[string]*characterLookupIndex
+	characters map[string][]*domain.Character
+	// characterLookups is the published per-division index (character_lookup.go).
+	characterLookups atomic.Pointer[map[string]*characterLookupIndex]
 	deleted          map[string][]json.RawMessage
 	meta             Meta
 
@@ -436,7 +437,7 @@ func (s *Store) recoverFromDBBak(cause error) error {
 func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	s.db = db
 	s.characters = loaded.characters
-	s.characterLookups = nil
+	s.rebuildAllCharacterLookupsLocked()
 	s.deleted = loaded.deleted
 	s.ground.loadedRecords = loaded.ground
 	s.mailboxes = loaded.mailboxes

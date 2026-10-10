@@ -111,7 +111,7 @@ func (s *Store) ReapMaturedDeletions() []string {
 		}
 		clear(s.characters[divisionID][len(kept):])
 		s.characters[divisionID] = kept
-		delete(s.characterLookups, divisionID)
+		s.rebuildCharacterLookupLocked(divisionID)
 	}
 	for _, update := range friendUpdates {
 		domain.SwapFriends(update.c, update.next)

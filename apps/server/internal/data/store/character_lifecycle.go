@@ -177,7 +177,7 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	}
 	s.meta.NextCharID[divisionID] = id + 1
 	s.characters[divisionID] = append(s.characters[divisionID], c)
-	delete(s.characterLookups, divisionID)
+	s.rebuildCharacterLookupLocked(divisionID)
 	s.charDivision[c] = divisionID
 	s.changes.characters[c] = true
 	s.changes.nextCharID[divisionID] = true

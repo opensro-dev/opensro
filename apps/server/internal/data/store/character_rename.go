@@ -128,7 +128,7 @@ func (s *Store) RenameCharacterOffline(division, before, after string) error {
 		domain.SwapFriends(c, next.Friends)
 		c.BlockedWhisperers = next.BlockedWhisperers
 	}
-	delete(s.characterLookups, division)
+	s.rebuildCharacterLookupLocked(division)
 	for id, members := range guilds {
 		s.guildMembers[division][id] = members
 	}
