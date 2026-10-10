@@ -14,14 +14,21 @@ import (
 	"io"
 	"net/http"
 	"opensro.online/server/internal/releaseprotocol"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/platform/history"
+	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 )
+
+// loginStartingRetrySeconds paces a login retried while its shard starts at
+// the login budget's own refill (login_limiter.go), so waiting never spends
+// the burst and turns into RATE_LIMITED.
+const loginStartingRetrySeconds = int(loginAttemptRefill / time.Second)
 
 /*
 ================
@@ -158,6 +165,19 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			status = candidate
 			break
 		}
+	}
+	if !status.Operating && status.Starting {
+		// A leased GameWorld still loading its worlds: the client waits and
+		// logs in again (server-starting.ts) instead of failing. Retry-After
+		// matches the login budget's refill, so the wait never spends it.
+		server.history.Record(history.Event{Kind: "login_refused", Code: readiness.CodeStarting, Category: "expected", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		w.Header().Set("Retry-After", strconv.Itoa(loginStartingRetrySeconds))
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"ok": false, "nativeTitleStatus": 5,
+			"code": readiness.CodeStarting, "message": "The server is starting.",
+			"retryAfter": loginStartingRetrySeconds,
+		})
+		return
 	}
 	if !status.Operating {
 		refuse(5, "SHARD_OFFLINE", "The selected server is not operating.")

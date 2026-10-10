@@ -53,11 +53,14 @@ type lease struct {
 	expiresAt     time.Time
 }
 
-// Status is one Agent title-list snapshot.
+// Status is one Agent title-list snapshot. Starting is a live owner that
+// holds its lease but has not opened admission yet: not operating, but
+// worth waiting for.
 type Status struct {
 	Definition
 	OnlinePlayers int
 	Operating     bool
+	Starting      bool
 }
 
 // Directory owns live GameWorld leases. At most one non-expired process may
@@ -220,7 +223,8 @@ func (directory *Directory) Snapshot(now time.Time) []Status {
 	statuses := make([]Status, 0, len(definitions))
 	for _, definition := range definitions {
 		current, exists := directory.leases[definition.ID]
-		operating := definition.Enabled && exists && now.Before(current.expiresAt) && !current.starting
+		live := definition.Enabled && exists && now.Before(current.expiresAt)
+		operating := live && !current.starting
 		online := 0
 		if operating {
 			online = current.onlinePlayers
@@ -229,6 +233,7 @@ func (directory *Directory) Snapshot(now time.Time) []Status {
 			Definition:    definition,
 			OnlinePlayers: online,
 			Operating:     operating,
+			Starting:      live && current.starting,
 		})
 	}
 	sort.SliceStable(statuses, func(i, j int) bool {
