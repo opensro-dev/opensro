@@ -2586,12 +2586,14 @@ test("Ctrl+click moves an item across the open pet bag in either direction", () 
 		f.ui.step( state, ++now );
 		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: false, source: 0 } );
 		// Bag to pet, as To Pet does with no slot chosen.
-		f.ui.event( { kind: "activate", id: "cos-player:13", ctrl: true } );
+		f.ui.event( { kind: "activate", id: "slot:13", ctrl: true } );
 		f.ui.step( state, ++now );
 		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: true, source: 13 } );
-		// An empty slot sends nothing.
+		// An empty slot and an equipment slot send nothing.
 		const count = sent.length;
 		f.ui.event( { kind: "activate", id: "cos-slot:3", ctrl: true } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:5", ctrl: true } );
 		f.ui.step( state, ++now );
 		assert.equal( sent.length, count );
 	} finally {
