@@ -21,6 +21,9 @@ const ACTION_STALL_NETWORK = 1013;
 // 5A2890: a title CStringCheck_IsTextAllowed refuses raises 0x0A/0x38.
 const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
 const STALL_PROMPT_TEXT = "stall-prompt-text";
+// The overhead job mark sits 4 px past the name board, which reaches 1.5 px
+// past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
+const JOB_MARK_GAP = 5.5;
 const STALL_PROMPT_QUANTITY = "stall-prompt-quantity";
 const STALL_PROMPT_PRICE = "stall-prompt-price";
 const STALL_CHAT_TEXT = "stall-chat-text";
@@ -417,6 +420,7 @@ import { overheadLayout } from "@/engine/foundation/ui/overhead-layout";
 import { vitalWarning } from "@/engine/foundation/ui/vital-warning";
 import {
 	beginnerMarkShown,
+	jobMark,
 	blindableCharacter,
 	hiddenSilkCos,
 	nameInRange,
@@ -16245,7 +16249,8 @@ export function createUi(
 						}
 					}
 					if ( named && beginnerMarkShown( entity, options ) ) {
-						const name = entity.name ?? (entity.gid === game?.localGid ? next.session?.character : "") ??
+						const name = entity.boardName ?? entity.name ??
+								(entity.gid === game?.localGid ? next.session?.character : "") ??
 								"",
 							width = text.run( name, selected ? 2 : 0 ).width,
 							height = text.boardHeight();
@@ -16263,7 +16268,8 @@ export function createUi(
 						}
 					}
 					if ( !named ) continue;
-					const name = entity.name ?? (entity.gid === game?.localGid ? next.session?.character : "") ?? "",
+					const name = entity.boardName ?? entity.name ??
+							(entity.gid === game?.localGid ? next.session?.character : "") ?? "",
 						width = text.run( name, selected ? 2 : 0 ).width,
 						height = text.boardHeight();
 					const left = -(width >> 1), top = -(height >> 1);
@@ -16276,6 +16282,24 @@ export function createUi(
 							texture: "",
 							color: [ 0, 0, 0, 64 / 255 ]
 						} );
+					}
+					// 86B350 draws the job mark 4 px right of the name board, level
+					// with the beginner mark on its left.
+					const job = jobMark( entity, options );
+					if ( job && height ) {
+						const jobPath = ROOT + "interface/ifcommon/" + job + ".png";
+						paths.push( jobPath );
+						if ( resources.has( jobPath ) ) {
+							quads.push( {
+								characterAnchor: entity.gid,
+								alphaCutoff: 128 / 255,
+								rect: [ left + width + JOB_MARK_GAP, top - 1.5, 16, 16 ],
+								clip: full,
+								uv: [ 0, 0, 1, 1 ],
+								texture: jobPath,
+								color: white
+							} );
+						}
 					}
 					// CICUser 858810 gives the actual [GM] name prefix priority over player
 					// relation colors. This is presentation, never a privilege check.

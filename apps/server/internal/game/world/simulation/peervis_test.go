@@ -243,7 +243,11 @@ type peerSpawnFixtureScenario struct {
 	GuildID        uint32 `json:"guildId,omitempty"`
 	GuildGrantName string `json:"guildGrantName,omitempty"`
 	CrestParamA    uint32 `json:"crestParamA,omitempty"`
-	PayloadHex     string `json:"payloadHex"`
+	// JobType/JobGrade are a suited peer's job mode (the alias rides as
+	// CharacterName, as sessionworld.go presents it).
+	JobType    uint8  `json:"jobType,omitempty"`
+	JobGrade   uint8  `json:"jobGrade,omitempty"`
+	PayloadHex string `json:"payloadHex"`
 }
 
 type peerSpawnFixtureItem struct {
@@ -310,6 +314,25 @@ func fixtureScenarios() []peerSpawnFixtureScenario {
 			GuildGrantName: "Vanguard",
 			CrestParamA:    7,
 		},
+		{
+			// A thief in job mode: the suit (3/1/7/2) in visual slot 8 sets
+			// the hold type and the client's active job class (868D00), and
+			// the job alias rides as the name.
+			Name:          "job-suit-peer",
+			CharacterName: "ty4_goods",
+			ModelRefObjID: 1907,
+			ModelTidWord:  0x0026,
+			BodyShapeByte: 4,
+			Gid:           PlayerObjectID(45),
+			RegionID:      25000,
+			X:             1628, Y: 20, Z: 1656,
+			Heading: 0,
+			Equipment: []peerSpawnFixtureItem{
+				{RefObjID: 2163, TypeFlags: 0x13AC, OptLevel: 0, Codename: "ITEM_CH_M_TRADE_THIEF_02"},
+			},
+			JobType:  2,
+			JobGrade: 1,
+		},
 	}
 }
 
@@ -322,6 +345,8 @@ func buildFixturePayload(s peerSpawnFixtureScenario) []byte {
 		GuildID:        s.GuildID,
 		GuildGrantName: s.GuildGrantName,
 		CrestParam:     s.CrestParamA,
+		JobType:        s.JobType,
+		JobGrade:       s.JobGrade,
 	}
 	for _, item := range s.Equipment {
 		appearance.Equipment = append(appearance.Equipment, wire.PlayerEquipItem{

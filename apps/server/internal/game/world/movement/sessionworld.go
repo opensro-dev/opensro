@@ -265,9 +265,10 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 	// players see the job alias in place of the name: v1.188's spawn tail
 	// (4E5B00, 4E5B55) writes vfunc +0xF0 (the alias, CInstancePC +0x48)
 	// unless the job state is 4, and the name (+0xEC) only then. The
-	// v1.150 client reads that one string as the peer's name (869E77); it
-	// never swaps its own name board to the alias (+0x1898 is read only by
-	// the job windows), so the player keeps seeing their real name.
+	// v1.150 client reads that one string as the peer's name (869E77). Its
+	// own board takes the alias only at world entry (8675F0 calls vtable
+	// +0x74 with +0x1898 when the entry's slot-8 suit sets a job class);
+	// the overhead job mark comes from that suit (868D00), not from here.
 	// Wearing a suit requires an alias (0x9F), so it is never empty here.
 	if job := enterworld.DressedJob(character); job != 0 {
 		captured.jobType, captured.jobGrade = job, character.Job.Grade

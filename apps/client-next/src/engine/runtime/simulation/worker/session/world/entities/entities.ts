@@ -37,6 +37,7 @@ import { mergeGameplaySnapshots } from "@/engine/foundation/gameplay/gameplay-sn
 import type { WireFrame } from "@/engine/contracts/network";
 import { SYSTEM_PET_APPEAR } from "@/engine/contracts/orb";
 import { STALL_TITLE_MODE } from "@/engine/foundation/gameplay/interaction-approach";
+import { JOB_SUIT_SLOT, partyActiveJob } from "@/engine/foundation/gameplay/party-matching";
 // The kinds whose spawn builds a CICharactor (players, NPCs, monsters, COS,
 // fortress structures); ground items and skill objects are not characters.
 const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "cos", "structure" ] );
@@ -88,7 +89,7 @@ export function createEntities(
 	// The queued gameplay snapshot a newer one merges into (supersedeGameplay).
 	let pendingGameplay: { index: number; size: number; } | undefined;
 	let stagedMode = 1, removalTail = new Uint8Array( 0 );
-	let synchronized = false, localName = "";
+	let synchronized = false, localName = "", localActiveJob = 4;
 	let localSkills: readonly import("@/engine/foundation/gameplay/spawn-skills").SpawnSkill[] = [];
 	let localAvatars: import("@/engine/contracts/world").EntityEquipment[] = [];
 	let local: Record<string, unknown> | null = null;
@@ -298,9 +299,12 @@ export function createEntities(
 		// Other native families stay in the reliable journal until their exact
 		// variable spawn schemas are implemented. Never guess offsets.
 		if ( ref?.kind === "player" ) {
+			const appearance = decodePeerAppearance( p, itemRefs, frame.opcode === 0x30d7, refs, skillRefs );
+			// 86AFB0 classifies the spawn's slot-8 suit (868D00); a later 0x3314
+			// leaves the class until the next spawn row, as natively.
 			return {
 				kind: "spawn",
-				entity: { ...ref, ...decodePeerAppearance( p, itemRefs, frame.opcode === 0x30d7, refs, skillRefs ) }
+				entity: { ...ref, ...appearance, activeJob: partyActiveJob( appearance.equipment ?? [] ) }
 			};
 		}
 		if ( !ref || ![ "npc", "monster", "cos", "structure" ].includes( ref.kind ) ) {
@@ -589,6 +593,14 @@ export function createEntities(
 				name?: unknown;
 			} | undefined;
 			localName = typeof character?.name === "string" ? character.name : "";
+			// CICPlayer_OnSpawnInitialize (869160) classifies the suit worn at
+			// entry; it holds until the next entry, like the alias board below.
+			const suit = ((b as { equipItems?: { slot: number; refObjId: number; }[]; }).equipItems ?? []).find(
+				row => row.slot === JOB_SUIT_SLOT
+			);
+			localActiveJob = partyActiveJob(
+				suit ? [ { slot: JOB_SUIT_SLOT, typeFlags: itemRefs.get( suit.refObjId ) ?? 0 } ] : []
+			);
 			const avatarRows = (b.character as
 				| { avatarInventory?: { rows?: { slot: number; refObjId: number; plus: number; }[]; }; }
 				| undefined)?.avatarInventory?.rows ?? [];
@@ -872,7 +884,11 @@ export function createEntities(
 						y: finite( pose.y ),
 						z: finite( pose.z ),
 						heading: finite( pose.angle ),
-						name: localName
+						name: localName,
+						activeJob: localActiveJob,
+						// 8675F0: a player entering in job mode names its own board
+						// with the job alias (vtable +0x74 with +0x1898).
+						...(localActiveJob !== 4 && local.jobAlias ? { boardName: String( local.jobAlias ) } : {})
 					} )
 				} );
 				return;

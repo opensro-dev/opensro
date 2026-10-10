@@ -108,6 +108,13 @@ export interface EntityState {
 	readonly spawnDestination?: Pose;
 	readonly jobType?: number;
 	readonly jobGrade?: number;
+	// The active job class (CICharactor +0x4F5: 1 trader, 2 thief, 3 hunter,
+	// 4 none), classified from the slot-8 suit when the character spawns
+	// (868D00). It feeds the overhead job mark only.
+	readonly activeJob?: number;
+	// The local player's name board text when it differs from the name: the
+	// job alias a suited player enters the world with (8675F0).
+	readonly boardName?: string;
 	// The local player's job block (entry only): joined job, grade, exp, alias.
 	readonly localJob?: import("@/engine/foundation/gameplay/job-guild").LocalJob;
 	// The overhead dress bar (CICUser +0x780/+0x77C, 0x3434): its seconds and

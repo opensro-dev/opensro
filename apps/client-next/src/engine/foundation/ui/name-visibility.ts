@@ -107,6 +107,30 @@ export function beginnerMarkShown( entity: EntityState, options: GameOptions ): 
 
 /*
 ================
+jobMark
+
+CICUser_RenderOverheadBoardPass (86B350) draws com_job_merchant, _thief or
+_hunter for a player whose active job class (vtable +0xA8, +0x4F5) is 1..3,
+in the same option +0x0C block as the beginner mark. Returns the image's
+base name, or null when no mark shows.
+================
+*/
+export function jobMark( entity: EntityState, options: GameOptions ): string | null {
+	if ( !options.ownName || (entity.kind !== "local-player" && entity.kind !== "player") ) return null;
+	// 86B350 picks the texture by class: 1 merchant, 2 thief, 3 hunter.
+	switch ( entity.activeJob ) {
+		case 1:
+			return "com_job_merchant";
+		case 2:
+			return "com_job_thief";
+		case 3:
+			return "com_job_hunter";
+	}
+	return null;
+}
+
+/*
+================
 overheadBoardVisible
 
 The one overhead decision: the native name decision, widened so that a
@@ -123,7 +147,8 @@ export function overheadBoardVisible(
 	overlayShown: boolean,
 	rideLinked = false
 ): boolean {
-	return overlayShown || beginnerMarkShown( entity, options ) || hasMonsterPartyMark( entity ) ||
+	return overlayShown || beginnerMarkShown( entity, options ) || jobMark( entity, options ) !== null ||
+		hasMonsterPartyMark( entity ) ||
 		nameVisible( entity, local, hovered, options, pose, rideLinked );
 }
 
