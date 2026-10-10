@@ -306,9 +306,16 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 		assert.deepEqual( control( "stall-prompt-ok" )?.rect, [ x + buttons[0], y + 104, 76, 24 ] );
 		assert.deepEqual( control( "stall-prompt-cancel" )?.rect, [ x + buttons[1], y + 104, 76, 24 ] );
 		const value = "W".repeat( maximum - 5 ) + "ABCDE", clip = control( "stall-prompt-text" ).rect;
-		for ( const start of [ maximum, maximum - 5, 0 ] ) {
-			const end = start === 0 ? 0 : maximum;
-			f.ui.event( { kind: "edit", id: "stall-prompt-text", value, start, end, composing: false } );
+		for (
+			const [start, end, direction] of /** @type {const} */ ([
+				[ maximum, maximum, undefined ],
+				[ maximum - 5, maximum, undefined ],
+				[ 0, 0, undefined ],
+				[ 0, maximum, "backward" ],
+				[ 0, maximum, "forward" ]
+			])
+		) {
+			f.ui.event( { kind: "edit", id: "stall-prompt-text", value, start, end, direction, composing: false } );
 			draw();
 			const quads = f.scenes.at( -1 )?.quads.filter( quad =>
 				quad.clip[0] >= clip[0] && quad.clip[1] >= clip[1] &&
@@ -326,17 +333,21 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 				quad.texture === fontAtlas.image && quad.rect[0] >= quad.clip[0] &&
 				quad.rect[0] + quad.rect[2] <= quad.clip[0] + quad.clip[2]
 			).map( quad => quad.uv );
-			if ( end ) {
+			if ( direction === "backward" ? start : end ) {
 				assert.deepEqual( visible.slice( -5 ), glyphWindows( "ABCDE" ), "End reveals the complete suffix" );
 			} else {
 				assert.deepEqual( visible[0], glyphWindows( "W" )[0], "Home restores the beginning of the text" );
-				assert.equal( caret.rect[0], clip[0] );
+				assert.equal( caret.rect[0], clip[0], "Home and backward selection follow the active beginning" );
 			}
 			if ( end > start ) {
 				const highlight = quads.find( quad => quad.texture === "" && quad.color[3] === .6 );
 				assert.ok( highlight, "the visible suffix selection is painted" );
-				assert.ok( highlight.rect[0] >= clip[0] );
-				assert.equal( highlight.rect[0] + highlight.rect[2], caret.rect[0] );
+				if ( start ) assert.ok( highlight.rect[0] >= clip[0] );
+				assert.equal(
+					direction === "backward" ? highlight.rect[0] : highlight.rect[0] + highlight.rect[2],
+					caret.rect[0],
+					"the normalized highlight range retains its active endpoint"
+				);
 			}
 		}
 		f.ui.event( { kind: "activate", id: "stall-prompt-cancel" } );
