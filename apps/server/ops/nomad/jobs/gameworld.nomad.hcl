@@ -195,9 +195,11 @@ variable "beta_drop_cap" {
   default = "16"
 }
 
+# 250 keeps gold per kill near its level before #463 stopped multiplying the
+# heap count by beta_drop_rate (owner, 2026-10-10).
 variable "beta_gold_rate" {
   type    = string
-  default = "50"
+  default = "250"
 }
 
 variable "beta_rare_rate" {
