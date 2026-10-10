@@ -99,6 +99,8 @@ const (
 	// combatTrapScanMs reuses the quest trap's stationary update cadence
 	// (48CEA0); the combat trap's lnks second word is its owner distance.
 	CombatTrapScanMs = questTrapScanMs
+	// SkillFieldScanMs is the same 48CEA0 pass for a buff field (efr kind 3).
+	SkillFieldScanMs = questTrapScanMs
 	// att flag lanes (combat/formula.go): 0x04 physical, 0x08 magical.
 	physicalAttackFlagBit = 0x04
 	magicalAttackFlagBit  = 0x08

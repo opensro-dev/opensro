@@ -39,6 +39,26 @@ func StatusReductionWrites(reat enterworld.SkillPassiveReat) []paramkeeper.Write
 
 /*
 ==================
+ElementResistanceWrites
+
+595698..5957EE: Fire Shield's bgra adds its value to the element resistance
+0x1B+i for each mask bit i (0..5), the block after reat's and the same
+writer (4B3510) and channel. The abnormal owner reads 0x1B+i when it weighs
+an incoming status (abnormalElementResistBase). The caller stamps the source.
+==================
+*/
+func ElementResistanceWrites(bgra enterworld.SkillPassiveReat) []paramkeeper.Write {
+	var writes []paramkeeper.Write
+	for i := uint16(0); i < 6; i++ {
+		if bgra.Mask&(1<<i) != 0 {
+			writes = append(writes, paramkeeper.Write{Parameter: 0x1b + i, Channel: paramkeeper.Flat, Value: float32(bgra.Value)})
+		}
+	}
+	return writes
+}
+
+/*
+==================
 FileStatusResistance
 
 59DF20: file real's flat under its grade in each masked status's bucket.

@@ -222,7 +222,7 @@ func TestAreaCandidatesIncludeHostilePlayers(t *testing.T) {
 	rt.RewardActorPresent = func(string, string) bool { return true }
 	now := clock.NowMs()
 	skill := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}}
-	q := areaQuery{division: testDivision, caster: a, skill: skill, center: rt.liveSpawn(simulation.WorldKey(testDivision, a.Name), a, now), reach: 50, now: now}
+	q := areaQuery{selects: 24, division: testDivision, caster: a, skill: skill, center: rt.liveSpawn(simulation.WorldKey(testDivision, a.Name), a, now), reach: 50, now: now}
 	found := false
 	for _, candidate := range rt.areaPlayerCandidates(q) {
 		found = found || candidate.target.player == v
@@ -381,5 +381,39 @@ func TestAttackingAMurdererLeavesTheAttackerWhite(t *testing.T) {
 	rt.registerPlayerAttack(testDivision, a, v, clock.NowMs())
 	if a.PVPState() != 1 {
 		t.Fatalf("attacking a neutral left state %d, want purple", a.PVPState())
+	}
+}
+
+/*
+================
+TestAreaSelectChoosesItsKinds
+
+The efr select mask decides which kinds an area may strike: 24 takes the
+monster beside the caster, 8 (Mana Drought) hostile characters alone.
+================
+*/
+func TestAreaSelectChoosesItsKinds(t *testing.T) {
+	rt, clock, c, target := newCombatTestRuntime(t, 100000)
+	now := clock.NowMs()
+	lease, ok := rt.casterPopulation(testDivision, c)
+	if !ok {
+		t.Fatal("no caster population")
+	}
+	skill := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true}}
+	monsterIn := func(selects uint8) bool {
+		q := areaQuery{selects: selects, division: testDivision, caster: c, skill: skill, lease: lease,
+			center: rt.liveSpawn(simulation.WorldKey(testDivision, c.Name), c, now), reach: 500, now: now}
+		for _, candidate := range rt.areaCandidates(q) {
+			if candidate.target.gid == target.Gid {
+				return true
+			}
+		}
+		return false
+	}
+	if !monsterIn(24) {
+		t.Fatal("select 24 left out the monster")
+	}
+	if monsterIn(8) {
+		t.Fatal("select 8 struck a monster")
 	}
 }

@@ -91,7 +91,8 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 	if skill.TimedEffect.Area.Present {
 		area = skill.TimedEffect.Area
 	}
-	self := !area.Present || area.Select&enterworld.SelectCaster != 0
+	field := skill.TimedEffect.Field.Present
+	self := !field && (!area.Present || area.Select&enterworld.SelectCaster != 0)
 	var effects []wire.Frame
 	var refusal uint16
 	if !rt.deps.Update(c, "release-timed-effect", func() bool {
@@ -116,6 +117,9 @@ func (rt *Runtime) acceptTimedSelfEffect(division string, c, snapshot *enterworl
 			if !ok {
 				return false
 			}
+		}
+		if field && !rt.plantSkillField(division, c, skill, now) {
+			return false
 		}
 		rt.commitOffensivePhaseCost(division, c, skill, cost, now, pending != nil)
 		// Native 4E6330 clamps stored HP before serializing changed vitals.

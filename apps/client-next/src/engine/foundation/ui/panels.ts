@@ -30,6 +30,7 @@ export function uiPanels() {
 		"Experimental",
 		"Fortress war application",
 		"Fortress war schedule",
+		"Fortress tax",
 		"Game Guide",
 		"Guild",
 		"Guild tools",

@@ -16,8 +16,18 @@ type Link struct {
 	// ManaPercent and ManaCap are lkdh's MP share of the recipient's dealt
 	// damage and its per-hit ceiling (Mana Switch); zero means no share.
 	ManaHPPercent, ManaPercent, ManaCap uint32
-	ExpiresAtMs, StartedAtMs            int64
-	ClientCancelable                    bool
+	// Hunt is hntp: the source keeps receiving the target's position while
+	// the link lives (Tag Point, Hunting Point; action/huntingpoint.go).
+	Hunt bool
+	// FenceMask, FencePercent and FenceMaxHits are lkdr's lane share
+	// (Physical / Magical Fence, 5A0F01); a zero percent means no fence.
+	// FenceHits counts the hits the link has absorbed (native link +0x3C).
+	FenceMask, FencePercent, FenceMaxHits, FenceHits uint32
+	// QuotaPercent is lkdd's shared percent (Pain Quota, 5A11BF); zero
+	// means no quota.
+	QuotaPercent             uint32
+	ExpiresAtMs, StartedAtMs int64
+	ClientCancelable         bool
 	// TargetModifiers are the recipient half's parameter writes (594AC0 in
 	// mode 2: stri/inti). 594F53 skips them for the source half, so a link
 	// never carries source modifiers.
@@ -60,6 +70,11 @@ func (r *Registry) ApplyLink(link Link) uint16 {
 	// 594EAC installs the latest target effect in ParamKeeper+210. It is
 	// a single pointer, not a sum of all incoming links.
 	r.threatOwners[target] = link.SourceToken
+	// 594E90 installs an lkdd effect in ParamKeeper+20C, again a single
+	// pointer: the latest quota wins.
+	if link.QuotaPercent != 0 {
+		r.quotaOwners[target] = link.SourceToken
+	}
 	return 0
 }
 
@@ -169,6 +184,9 @@ func (r *Registry) retireLinkHalfLocked(e Effect) {
 		// 582C19 clears +210 unconditionally; an older effect retiring does
 		// not restore a previous contributor or preserve a newer pointer.
 		delete(r.threatOwners, ownerKey(e.DivisionID, e.CharacterName))
+		if r.quotaOwners[ownerKey(e.DivisionID, e.CharacterName)] == e.LinkToken {
+			delete(r.quotaOwners, ownerKey(e.DivisionID, e.CharacterName))
+		}
 	}
 	if l.sourceRetired && l.targetRetired {
 		delete(r.links, key)
@@ -183,6 +201,33 @@ func (r *Registry) Links() []Link {
 	out := make([]Link, 0, len(r.links))
 	for _, l := range r.links {
 		out = append(out, l)
+	}
+	return out
+}
+
+/*
+==================
+HuntLinks
+
+The logically active hunt links (hntp). A stop or the expiry ends the
+reports at once, as it ends a threat share (ThreatLink): the source half
+leaves the native task list before B6A0 retires the recipient.
+==================
+*/
+func (r *Registry) HuntLinks(nowMs int64) []Link {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []Link
+	for _, l := range r.links {
+		if !l.Hunt || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
+			continue
+		}
+		for _, e := range r.byOwner[ownerKey(l.DivisionID, l.SourceName)] {
+			if e.LinkToken == l.SourceToken && e.Phase == 1 && !e.StopRequested {
+				out = append(out, l)
+				break
+			}
+		}
 	}
 	return out
 }
@@ -241,4 +286,97 @@ func (r *Registry) ManaLinks(division, target string, nowMs int64) (links []Link
 		out = append(out, l)
 	}
 	return out, held
+}
+
+/*
+==================
+FenceLinks
+
+The logically active links whose recipient is target and that move a share
+of its damage to their source (lkdr), in the order they were installed:
+594E77 appends each to the recipient's +2C8 list, and 5A0F01 walks it.
+A stop disables the share at once, as for ManaLinks.
+==================
+*/
+func (r *Registry) FenceLinks(division, target string, nowMs int64) []Link {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []Link
+	for _, e := range r.byOwner[ownerKey(division, target)] {
+		if e.LinkToken == 0 || e.Phase != 2 || e.StopRequested {
+			continue
+		}
+		l, ok := r.links[linkKey(division, e.LinkToken)]
+		if !ok || l.FencePercent == 0 || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
+			continue
+		}
+		l.TargetModifiers = Modifiers{}
+		out = append(out, l)
+	}
+	return out
+}
+
+/*
+==================
+QuotaLink
+
+The installed, logically active Pain Quota target effect (ParamKeeper+20C),
+as ThreatLink is for +210.
+==================
+*/
+func (r *Registry) QuotaLink(division, target string, nowMs int64) (Link, bool) {
+	if r == nil {
+		return Link{}, false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := ownerKey(division, target)
+	token, ok := r.quotaOwners[key]
+	if !ok {
+		return Link{}, false
+	}
+	l, ok := r.links[linkKey(division, token)]
+	if !ok || l.QuotaPercent == 0 || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
+		return Link{}, false
+	}
+	for _, e := range r.byOwner[key] {
+		if e.LinkToken == token && e.Phase == 2 && !e.StopRequested {
+			l.TargetModifiers = Modifiers{}
+			return l, true
+		}
+	}
+	return Link{}, false
+}
+
+/*
+==================
+CountFenceHit
+
+5A1092: a fence that moved a share counts the hit on its link (+0x3C) and,
+when lkdr's max hits is nonzero and reached, stops contributing (+0x10 = 0).
+Every shipped fence authors 0, so its link only ends with its duration,
+range or source. Reports whether the link still shares.
+==================
+*/
+func (r *Registry) CountFenceHit(division string, token uint32) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := linkKey(division, token)
+	l, ok := r.links[key]
+	if !ok {
+		return false
+	}
+	l.FenceHits++
+	r.links[key] = l
+	if l.FenceMaxHits != 0 && l.FenceHits >= l.FenceMaxHits {
+		r.stopLinkLocked(division, token)
+		return false
+	}
+	return true
 }

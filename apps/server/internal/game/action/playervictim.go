@@ -52,6 +52,12 @@ type playerStrike struct {
 	// rolled (playerdisplacement.go); nil for none.
 	displacement *playerDisplacement
 	displaceAt   int
+	// linkedShare marks a share a fence or Pain Quota moved onto this
+	// victim; its own links do not run again (linkeddamage.go).
+	linkedShare bool
+	// quotaMembers are the party members a Pain Quota on the victim divides
+	// among, planned before the door (planQuotaMembers).
+	quotaMembers []uint32
 	now          int64
 }
 
@@ -78,6 +84,9 @@ type playerStruck struct {
 	battle    []wire.Frame
 	wear      wearFrames
 	owner     *playerAbnormalOwner
+	// linkMoves are the shares fence and Pain Quota links took off the
+	// hits, applied to their takers after the door (strikeLinkedShares).
+	linkMoves []linkedMove
 }
 
 /*
@@ -123,6 +132,9 @@ func (rt *Runtime) planPlayerStrike(s *playerStrike,
 	if len(s.formulas) == 0 {
 		return false
 	}
+	if !s.linkedShare {
+		s.quotaMembers = rt.planQuotaMembers(s.division, s.victim, s.now)
+	}
 	s.owner = rt.newPlayerAbnormalOwner(s.division, s.victim, s.now)
 	s.killer = rt.prepareDeathKiller(s.division, s.victim, s.killer)
 	s.owner.sources = rt.capturePlayerAbnormalSources(s.division, s.victim, s.owner.block, s.records)
@@ -146,6 +158,11 @@ func (rt *Runtime) strikePlayerInDoor(s playerStrike) playerStruck {
 	redirect := rt.effects.DamageToMPPercent(s.division, c.Name)
 	for _, formula := range s.formulas {
 		hit.Magical = hit.Magical || formula.MagicalDamage != 0
+		// 5A0F01 and 5A11BF run before dgmp (5A13FE): fences and Pain Quota
+		// take their shares off the hit first.
+		if !s.linkedShare && !formula.Slain {
+			formula = rt.shareLinkedDamageInDoor(s, formula, &out)
+		}
 		// 58F72F runs dgmp per impact after the wall split, whoever struck;
 		// a ck kill takes the whole HP and redirects nothing.
 		if redirect != 0 && !formula.Slain {

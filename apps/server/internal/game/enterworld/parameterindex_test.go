@@ -133,8 +133,28 @@ func TestShippedParameterIndexRows(t *testing.T) {
 		if !row.Reqi.Present || row.Reqi.Count != 1 || row.Reqi.Pairs[0] != (SkillReqiPair{Kind: 4, Value: 1}) {
 			t.Errorf("%s reqi %+v, want one {4, 1}", row.Codename, row.Reqi)
 		}
+		// #508: bgra pins the timed self-effect (mask 63, all six elements).
+		if !row.TimedEffect.Pinned || row.TimedEffect.Bgra.Mask != 63 || row.TimedEffect.Bgra.Value == 0 {
+			t.Errorf("%s timed effect pinned %v bgra %+v", row.Codename, row.TimedEffect.Pinned, row.TimedEffect.Bgra)
+		}
 	}
 	if shields != 19 {
 		t.Fatalf("%d SKILL_CH_FIRE_SHIELD_ rows, want 19", shields)
 	}
+
+	// #508: Concentration's er block pins its timed self-effect.
+	concentration := 0
+	for _, row := range source.rows.values() {
+		if !strings.HasPrefix(row.Codename, "SKILL_CH_LIGHTNING_JIPJUNG_") {
+			continue
+		}
+		concentration++
+		if !row.BuffModifiers.Er || !row.TimedEffect.Parry || !row.TimedEffect.Pinned {
+			t.Errorf("%s er %v parry %v pinned %v", row.Codename, row.BuffModifiers.Er, row.TimedEffect.Parry, row.TimedEffect.Pinned)
+		}
+	}
+	if concentration != 21 {
+		t.Fatalf("%d SKILL_CH_LIGHTNING_JIPJUNG_ rows, want 21", concentration)
+	}
+
 }

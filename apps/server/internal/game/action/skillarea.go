@@ -305,6 +305,7 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 			out.recipients = append(out.recipients, private)
 			returned := rt.returnDamageToPlayer(division, victim.target.player, caster, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now)
 			out.returned = mergeOpResults(out.returned, returned)
+			out.returned = mergeOpResults(out.returned, rt.strikeLinkedShares(division, source, hit.strike.killer, skill, hit.struck.linkMoves, now))
 			continue
 		}
 		if victim.sequence >= len(commit.committed) {
@@ -394,7 +395,7 @@ func (rt *Runtime) areaVictims(division string, c *enterworld.Character, skill e
 	if !ok {
 		return nil
 	}
-	q := areaQuery{division: division, caster: c, skill: skill, lease: lease, center: primary.at, now: nowMs}
+	q := areaQuery{selects: area.Select, division: division, caster: c, skill: skill, lease: lease, center: primary.at, now: nowMs}
 	if area.Shape == 3 || area.Shape == 4 {
 		caster := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, nowMs)
 		shape := areaShape{shape: area.Shape, width: area.Radius, maxTargets: area.MaxTargets}

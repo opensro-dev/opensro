@@ -37,8 +37,9 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 		case "ifitemmallconfirmslot":
 			return [ "Create", "PointButton" ]; // 6BD350 constructs the button; currency type owns visibility.
 		case "ifmessagebox":
-			// 528430 / 52A2D0; rendering admits one modal branch.
-			return [ "Create", "MsgBoxStore", "MsgBoxStoreConfirm" ];
+			// 528430 / 52A2D0; rendering admits one modal branch. The fortress tax
+			// boxes (52A8D0 / 52A7E0) follow so the store's section indices hold.
+			return [ "Create", "MsgBoxStore", "MsgBoxStoreConfirm", "MsgBoxTaxModify", "MsgBoxTaxLevy" ];
 		case "ifapprenticeship":
 			return [ "Create", "NotifySubBox", "NotifyContents" ]; // 5C5B60.
 		case "ifskill":
@@ -55,6 +56,8 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 		case "ifpartymatch":
 			// 637400 creates the background before the inset search controls.
 			return [ "Create", "SearchInfo", "SlotListButton", "SlotList" ];
+		case "iftaxmanagement":
+			return [ "Create", "TexListSlot", "TexChangeSlot", "TaxLevySlot" ]; // 664DA0.
 		case "ifcos":
 		case "ifcosinventory":
 			return [ "Create" ]; // 6A13B0 / 6A9420.

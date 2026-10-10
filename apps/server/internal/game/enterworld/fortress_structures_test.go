@@ -2,6 +2,7 @@ package enterworld
 
 import (
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"opensro.online/server/internal/game/world/monster"
@@ -48,5 +49,39 @@ func TestJanganFortressStartsWithItsStructures(t *testing.T) {
 		if _, ok := byZone[zone]; ok {
 			t.Errorf("zone %d should start empty", zone)
 		}
+	}
+}
+
+/*
+================
+TestDefaultSiegeFortressRowsMatchShippedTextdata
+
+The bootstrap's fortress rows are a hand projection of siegefortress.txt
+(sub_7f22d0 case 0x36); every enabled row must agree with the shipped file,
+including the column 10 tax target mask the tax management window ticks.
+================
+*/
+func TestDefaultSiegeFortressRowsMatchShippedTextdata(t *testing.T) {
+	licensed.RequireGameData(t)
+	rows := ReadTextdataFile(filepath.Join(gamedatatest.TextdataDir(t), "siegefortress.txt"))
+	defaults := DefaultSiegeFortressDataRows()
+	enabled := 0
+	for _, r := range rows {
+		if len(r) < 14 || r[0] != "1" {
+			continue
+		}
+		if enabled >= len(defaults) {
+			t.Fatalf("shipped row %v has no bootstrap projection", r)
+		}
+		row := defaults[enabled]
+		enabled++
+		if strconv.FormatUint(uint64(row.FortressID), 10) != r[1] || row.CodeName != r[2] || row.NameStrID != r[4] ||
+			strconv.FormatUint(uint64(row.TaxTargets), 10) != r[10] ||
+			strconv.FormatUint(row.RequestFee, 10) != r[11] || row.OfficialNpcCode != r[13] {
+			t.Fatalf("bootstrap row %+v differs from shipped %v", row, r)
+		}
+	}
+	if enabled != len(defaults) {
+		t.Fatalf("%d shipped rows, %d bootstrap rows", enabled, len(defaults))
 	}
 }

@@ -26,9 +26,17 @@ ground targeting; Charge keeps an offensive target and guided arrival.
 ================
 */
 type SkillPositionEffect struct {
-	Pinned           bool
-	Charge           bool
-	Parameter, Range uint32
+	Pinned bool
+	Charge bool
+	// Parameter is argument zero, 500 in every shipped tele, tel2 and tel3
+	// row. The original reads it nowhere (#519): SkillGlobal_BuildParameterIndex
+	// binds the blocks at +2EC / +2F0 / +2F4, SkillAction_ApplyPositionEffect
+	// (5862E0) loads only word +4 of each, and SkillAction_Instant (586B41,
+	// 586F5C), SkillAction_Projectile (585A87) and
+	// Skill_ValidatePrerequisitesAndCost (58E019) only test the blocks'
+	// presence. Kept for the parse; no rule depends on it.
+	Parameter uint32
+	Range     uint32
 }
 
 /*

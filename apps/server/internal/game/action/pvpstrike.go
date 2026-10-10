@@ -490,7 +490,8 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	// 5A0C2D ran inside the hit outcome; the victim's dmgr returns its share
 	// to the attacker afterwards, as the victim's credited hit.
 	returned := rt.returnDamageToPlayer(division, target.player, character, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now)
-	return mergeOpResults(out, returned), skillCastAccepted
+	shared := rt.strikeLinkedShares(division, caster, hit.strike.killer, skill, hit.struck.linkMoves, now)
+	return mergeOpResults(mergeOpResults(out, returned), shared), skillCastAccepted
 }
 
 /*

@@ -126,6 +126,8 @@ export interface NpcTalkInput {
 	readonly canReverseReturn?: boolean;
 	// 5D8FF0 0x800000: the fortress official's application row.
 	readonly canFortressOfficial?: boolean;
+	// 5D7AD0 action 0x33: the manager's rows, only for the holding guild and
+	// its allies (canFortressManager); canFortressHire is the holder alone.
 	readonly canFortressManager?: boolean;
 	readonly guildSoldierRows?: readonly { id: string; label: string; }[] | null;
 	readonly fortressStaffRows?: readonly { id: string; label: string; disabled?: boolean; }[] | null;
@@ -166,7 +168,7 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 		for ( const text of wrap( copy( dialogue.prompt ) ) ) rows.push( { text, color: [ 1, 1, 1, 1 ] } );
 		rows.push( { text: "", color: normal } );
 	}
-	const options: { id: string; label: string; disabled?: boolean; }[] = dialogue ?
+	const options: { id: string; label: string; disabled?: boolean; color?: UiQuad["color"]; }[] = dialogue ?
 		dialogue.options.map( r => ({ id: "npc-choice:" + r.choice, label: npcDialogueCaption( r.symbol, copy ) }) ) :
 		[
 			...(input.guildSoldierRows ?? input.fortressStaffRows ?? portalRows ??
@@ -210,11 +212,20 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 						} ] :
 						[]),
 					...(input.jobRows ?? []),
-					...(input.canFortressHire ?
-						[ { id: "npc-fortress-staff", label: copy( "SN_FORTRESS_MANAGER_NPC" ) } ] :
-						[]),
+					// 5D7AD0 action 0x33 lists tax, staff and service in that order. An
+					// ally's staff row is drawn 0xFFFF4A4A and 5D8930 ignores its click.
 					...(input.canFortressManager ?
-						[ { id: "npc-fortress-schedule", label: copy( "SN_FORTRESS_MANAGER_SERVICE" ) } ] :
+						[
+							{ id: "npc-fortress-tax", label: copy( "SN_FORTRESS_MANAGER_TAX" ) },
+							{
+								id: "npc-fortress-staff",
+								label: copy( "SN_FORTRESS_MANAGER_NPC" ),
+								...(input.canFortressHire ?
+									{} :
+									{ disabled: true, color: [ 1, 74 / 255, 74 / 255, 1 ] })
+							},
+							{ id: "npc-fortress-schedule", label: copy( "SN_FORTRESS_MANAGER_SERVICE" ) }
+						] :
 						[]),
 					// 5D7AD0 action 0x34: the official's one row.
 					...(input.canFortressOfficial ?
@@ -224,11 +235,11 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }
 		];
 	options.forEach( ( option, i ) => {
-		const color = option.disabled ?
+		const color = option.color ?? (option.disabled ?
 			[ 180 / 255, 180 / 255, 180 / 255, 1 ] as const :
 			dialogue ?
 			choiceColor( dialogue.options[i]!.symbol ) :
-			normal;
+			normal);
 		for ( const text of wrap( `${i + 1}. ${option.label}` ) ) {
 			rows.push( { text, id: option.id, disabled: option.disabled, color } );
 		}

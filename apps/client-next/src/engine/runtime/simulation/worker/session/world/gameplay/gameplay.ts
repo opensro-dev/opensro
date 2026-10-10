@@ -120,8 +120,10 @@ import {
 	FORTRESS_WAR_APPLY,
 	FORTRESS_WAR_STATUS,
 	FORTRESS_WAR_WITHDRAW,
+	fortressTaxNotice,
 	type FortressApplication
 } from "@/engine/foundation/gameplay/fortress";
+import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
 import {
 	cosTimerPacket,
 	cosTimerReference,
@@ -554,6 +556,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	const skillGroups = new Map<number, { group: number; level: number; }>();
 	let fortress = fortressBootstrap( {} ), musicMode = 0;
 	let fortressApplication: (FortressApplication & { readonly sequence: number; }) | null = null;
+	// The fortress the last tax query answered for: 665730 names it in the
+	// rate change message.
+	let taxFortress: number | null = null;
 	// CIFActionTabPanel +0x390: when the fortress portal may be used again.
 	let fortressPortalUntilMs = 0;
 	let social = emptySocial();
@@ -845,6 +850,7 @@ selected entities, cooldowns or world-entry state.
 		social = emptySocial();
 		fortress = fortressBootstrap( {} );
 		fortressApplication = null;
+		taxFortress = null;
 		fortressPortalUntilMs = 0;
 		musicMode = 0;
 		bindings = skillBindings( {} );
@@ -1427,6 +1433,25 @@ state here before a command can claim a native wire conversation.
 						command.fortress,
 						command.kind === "fortress-staff" ? command.flag : undefined
 					)
+				);
+			}
+			if (
+				command.kind === "fortress-tax" || command.kind === "fortress-tax-rate" ||
+				command.kind === "fortress-tax-collect"
+			) {
+				// 5D8930 action 0x33 row 1 and CIFTaxManagement_OnMsgBoxResult (664CE0).
+				const target = targeting.state();
+				if ( !localGid || target.target !== command.gid || !((target.targetCapabilities ?? 0) & 0x400000) ) {
+					throw Error( "Select a fortress manager" );
+				}
+				return sendFrame(
+					fortressServiceRequest( {
+						target: command.gid,
+						action: command.kind === "fortress-tax" ? 0 : command.kind === "fortress-tax-rate" ? 1 : 2,
+						fortress: command.fortress,
+						word: command.kind === "fortress-tax-rate" ? command.rate : undefined,
+						gold: command.kind === "fortress-tax-collect" ? command.gold : undefined
+					} )
 				);
 			}
 			if ( command.kind === "fortress-war-status" || command.kind === "fortress-war-apply" ) {
@@ -2644,6 +2669,12 @@ Packet handling must not depend on which HUD panel is currently open.
 							fortressNext.service.error ?? 0
 						);
 						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					} else if ( frame.opcode === 0xb1e1 ) {
+						const taxed = fortressTaxNotice( fortressNext, taxFortress );
+						taxFortress = taxed.fortress;
+						if ( taxed.notice ) {
+							notices = [ ...notices.slice( -99 ), { ...taxed.notice, sequence: ++noticeSequence } ];
+						}
 					}
 					if ( frame.opcode === 0x3887 ) {
 						musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );

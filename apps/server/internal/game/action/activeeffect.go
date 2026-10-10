@@ -17,7 +17,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -295,6 +294,10 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	if row.TimedEffect.Pinned && row.TimedEffect.Reat.Mask != 0 {
 		// 595542..59568F: a buff's reat, as a resistance passive's.
 		writes = append(writes, combat.StatusReductionWrites(row.TimedEffect.Reat)...)
+	}
+	if row.TimedEffect.Pinned && row.TimedEffect.Bgra.Mask != 0 {
+		// 595698..5957EE: Fire Shield's element resistances.
+		writes = append(writes, combat.ElementResistanceWrites(row.TimedEffect.Bgra)...)
 	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Defense {
 		stats, _, err := rt.playerCombatStats(divisionID, character)
@@ -586,6 +589,14 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 			paramkeeper.Write{Parameter: itemParamAccuracy, Channel: paramkeeper.Flat, Value: float32(m.HrFlat)},
 		)
 	}
+	// 594AC0 0x595883..0x5958DE: er adds its flat (channel 0) and its rate
+	// (channel 1) to the parry keeper, as hr does to the hit rate.
+	if m.Er {
+		writes = append(writes,
+			paramkeeper.Write{Parameter: itemParamEvasion, Channel: paramkeeper.PercentSum, Value: float32(m.ErRate)},
+			paramkeeper.Write{Parameter: itemParamEvasion, Channel: paramkeeper.Flat, Value: float32(m.ErFlat)},
+		)
+	}
 	if m.Ru {
 		writes = append(writes, paramkeeper.Write{Parameter: combat.AttackRangeParameter, Channel: paramkeeper.Flat, Value: float32(m.RuRate)})
 	}
@@ -609,18 +620,6 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 	// (parameter 0x8D) by its word, negated with FCHS.
 	if m.Dcmp {
 		writes = append(writes, paramkeeper.Write{Parameter: 0x8d, Channel: paramkeeper.Flat, Value: float32(-float64(m.DcmpPercent))})
-	}
-	// Inferred: v1.150 bgra {mask, power} (84B910..84B92B) raises the
-	// elemental percentage resistances, unlike reat's flat power cuts.
-	// File additive points on the same 0x1B..0x20 keepers accessories raise;
-	// the abnormal roll already scales power and duration from that total.
-	if m.Bgra {
-		for status := abnormal.Freeze; status <= abnormal.Zombie; status++ {
-			if m.BgraMask&status.Bit() != 0 {
-				writes = append(writes, paramkeeper.Write{Parameter: abnormalElementResistBase + uint16(status),
-					Channel: paramkeeper.Flat, Value: float32(m.BgraPercent)})
-			}
-		}
 	}
 	if m.Odar {
 		writes = append(writes, combat.IncomingReductionWrites(m.OdarBits, m.OdarWord, 0)...)

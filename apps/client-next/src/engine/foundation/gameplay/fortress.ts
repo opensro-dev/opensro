@@ -73,6 +73,9 @@ export interface FortressRow {
 	readonly officialRefObjId?: number;
 	// The gold an attacking guild pays to apply (row +0x80).
 	readonly requestFee?: number;
+	// Column 10 (+0x96): bits 0..6 tick the tax management window's target
+	// boxes (CIFTaxManagement_Refresh 665470).
+	readonly taxTargets?: number;
 }
 
 /*
@@ -121,6 +124,7 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			officialNpcCode?: string;
 			requestFee?: number;
 			officialRefObjId?: number;
+			taxTargets?: number;
 		}[];
 	};
 	const worlds = (b.gameWorldData ?? []).map( r => ({ id: r.gameWorldId, code: r.warName }) ),
@@ -131,7 +135,8 @@ export function fortressBootstrap( value: unknown ): FortressState {
 			nameStrId: r.nameStrId,
 			official: r.officialNpcCode,
 			requestFee: r.requestFee,
-			officialRefObjId: r.officialRefObjId
+			officialRefObjId: r.officialRefObjId,
+			taxTargets: r.taxTargets
 		}) );
 	for ( const rows of [ worlds, fortresses ] ) {
 		if (
@@ -607,4 +612,43 @@ export function fortressCountdownNotices( state: FortressState ): SystemNotice[]
 		}
 	}
 	return out;
+}
+
+/*
+================
+fortressTaxNotice
+
+754A40 cases 0..2 after a successful 0xB1E1. A query names the window's
+fortress; a rate change reports that fortress and the new ratio
+(CIFTaxManagement_ApplyTaxRateResult 665730, which says nothing until a
+query has filled the window); a collection reports the levied gold.
+================
+*/
+export function fortressTaxNotice(
+	state: FortressState,
+	fortress: number | null
+): { readonly fortress: number | null; readonly notice: SystemNotice | null; } {
+	const service = state.service;
+	if ( !service || service.result !== 1 ) return { fortress, notice: null };
+	if ( service.action === 0 ) return { fortress: service.fortress ?? null, notice: null };
+	if ( service.action === 1 && fortress !== null ) {
+		const name = state.fortresses.find( row => row.id === fortress )?.nameStrId ?? null,
+			rate = service.taxRate ?? 0;
+		return {
+			fortress,
+			notice: {
+				key: "UIIT_MSG_FORT_MANAGER_TAXCHANGE_COMPLETE",
+				value: rate,
+				localizedArguments: [ name, null ],
+				arguments: [ "", String( rate ) ]
+			}
+		};
+	}
+	if ( service.action === 2 ) {
+		return {
+			fortress,
+			notice: { key: "UIIT_MSG_FORT_MANAGER_TAXLEVY_COMPLETE", value: 0, arguments: [ service.gold ?? "0" ] }
+		};
+	}
+	return { fortress, notice: null };
 }

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-registry.go - stationary quest-skill objects and their scan lifetime
+registry.go - stationary skill objects (traps, buff fields) and their scan lifetime
 
 One registry owns identities, native scan deadlines and retirement. The
 action owner supplies authoritative actor snapshots and commits quest events;
@@ -44,6 +44,25 @@ type Program struct {
 	Hidden        bool
 	OwnerDistance uint32
 	LinkGroup     uint32
+	// Field marks a buff field (efr kind 3, object mode 2): characters
+	// standing in Radius hold an instance of the skill, Select and
+	// MaxTargets (0 = unlimited) choose them.
+	Field      bool
+	Select     uint32
+	MaxTargets uint32
+}
+
+/*
+================
+FieldRecipient
+
+One member of a buff field's tracked set (the std::set at object +0x61
+words). GID tells a recipient from a later character of the same name.
+================
+*/
+type FieldRecipient struct {
+	Name string
+	GID  uint32
 }
 
 /*
@@ -66,6 +85,9 @@ type Object struct {
 	// OwnerEffect is the planter's buff-board instance that mirrors a combat
 	// trap's life (lnks board word); zero for quest traps.
 	OwnerEffect uint32
+	// Tracked is a buff field's recipient set, in admission order. Only
+	// Track replaces it; snapshots carry a copy.
+	Tracked []FieldRecipient
 }
 
 /*
@@ -148,6 +170,7 @@ func (r *Registry) Snapshot() []Object {
 	defer r.mu.Unlock()
 	out := make([]Object, 0, len(r.objects))
 	for _, object := range r.objects {
+		object.Tracked = append([]FieldRecipient(nil), object.Tracked...)
 		out = append(out, object)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Spawn.GID < out[j].Spawn.GID })
@@ -240,4 +263,55 @@ func Matches(object Object, target Target) bool {
 	to := worldgeom.RegionXZ{RegionID: target.Region, X: target.X, Z: target.Z}
 	distance := math.Hypot(worldgeom.Distance(from, to), target.Y-float64(object.Spawn.Y))
 	return distance < float64(object.Program.Radius)
+}
+
+/*
+================
+Advance
+
+A buff field's pass of 48CEA0: the same expiry as Scan (an absent owner or
+elapsed duration retires it), then a due pass every ScanMs without replaying
+missed ones. The caller does the recipient work of a due pass and stores the
+result with Track.
+================
+*/
+func (r *Registry) Advance(gid uint32, nowMs int64, ownerPresent bool) (object Object, due, retired bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	object, present := r.objects[gid]
+	if !present {
+		return Object{}, false, false
+	}
+	object.Tracked = append([]FieldRecipient(nil), object.Tracked...)
+	if !ownerPresent || nowMs-object.CreatedMs > int64(object.Program.DurationMs) {
+		delete(r.objects, gid)
+		return object, false, true
+	}
+	if nowMs < object.NextScanMs {
+		return object, false, false
+	}
+	stored := r.objects[gid]
+	stored.NextScanMs = nowMs + int64(object.Program.ScanMs)
+	r.objects[gid] = stored
+	return object, true, false
+}
+
+/*
+================
+Track
+
+Replace a live field's recipient set. Reports false once the object has
+retired, so the caller can retire what it admitted in the meantime.
+================
+*/
+func (r *Registry) Track(gid uint32, tracked []FieldRecipient) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	object, present := r.objects[gid]
+	if !present {
+		return false
+	}
+	object.Tracked = append([]FieldRecipient(nil), tracked...)
+	r.objects[gid] = object
+	return true
 }

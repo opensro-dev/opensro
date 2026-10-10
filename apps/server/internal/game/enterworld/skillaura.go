@@ -64,36 +64,36 @@ Two more blocks are parameter writes of 594AC0 (action.buffModifierWrites):
 ==================
 */
 type SkillBuffModifiers struct {
-	Dru         bool
-	DruWords    [2]uint32
-	Odar        bool
-	OdarBits    uint32 // after the parser's fix-up
-	OdarWord    uint32
-	Ru          bool
-	RuRate      uint32
-	Hr          bool
-	HrFlat      uint32
-	HrRate      uint32
+	Dru      bool
+	DruWords [2]uint32
+	Odar     bool
+	OdarBits uint32 // after the parser's fix-up
+	OdarWord uint32
+	Ru       bool
+	RuRate   uint32
+	Hr       bool
+	HrFlat   uint32
+	HrRate   uint32
+	// Er is Concentration's parry block (+0x27C): 594AC0 0x595883 adds the
+	// flat to parameter 9 and the percent to its rate (0x5958BC).
+	Er          bool
+	ErFlat      uint32
+	ErRate      uint32
 	Rhru        bool
 	RhruWords   [2]uint32
 	Dcmp        bool
 	DcmpPercent uint32
-	// Bgra is v1.150 bgra {element mask, resistance percent} (84B910).
-	// The percentage interpretation is inferred; action owns its keeper writes.
-	Bgra        bool
-	BgraMask    uint32
-	BgraPercent uint32
 }
 
 /*
 ================
 Present
 
-Reports an indexed recipient modifier, including inferred bgra resistance.
+Reports an indexed recipient modifier.
 ================
 */
 func (m SkillBuffModifiers) Present() bool {
-	return m.Dru || m.Odar || m.Ru || m.Hr || m.Rhru || m.Dcmp || m.Bgra
+	return m.Dru || m.Odar || m.Ru || m.Hr || m.Er || m.Rhru || m.Dcmp
 }
 
 /*

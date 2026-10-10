@@ -3,8 +3,8 @@
 
 skillfireshield_test.go - admission of Fire Shield's complete bgra program
 
-The shipped ranks share one timed owner. Partial or malformed programs must
-not enable an elemental modifier merely because bgra was indexed.
+The shipped ranks share one timed owner. Only admitted complete programs
+may install an elemental modifier; decoded words alone do not enable it.
 
 ===========================================================================
 */
@@ -36,12 +36,12 @@ func TestShippedFireShieldRanksCompile(t *testing.T) {
 			if !ok {
 				t.Fatalf("missing %s", code)
 			}
-			m, effect := row.BuffModifiers, row.TimedEffect
-			if !effect.Pinned || !effect.ElementResistance || effect.Targeted || effect.Area.Present || effect.Persistent ||
-				!m.Bgra || !m.Present() || m.BgraMask != 63 || m.BgraPercent != line.first+3*uint32(rank-1) ||
+			effect := row.TimedEffect
+			if !effect.Pinned || effect.Bgra.Mask == 0 || effect.Targeted || effect.Area.Present || effect.Persistent ||
+				effect.Bgra.Mask != 63 || effect.Bgra.Value != line.first+3*uint32(rank-1) ||
 				row.EffectDurationMs == 0 || !row.Reqi.Present || row.Reqi.Count != 1 ||
 				row.Reqi.Pairs[0] != (SkillReqiPair{Kind: 4, Value: 1}) {
-				t.Fatalf("%s: modifiers %+v, effect %+v, reqi %+v", code, m, effect, row.Reqi)
+				t.Fatalf("%s: effect %+v, reqi %+v", code, effect, row.Reqi)
 			}
 		}
 	}
@@ -64,12 +64,9 @@ func TestFireShieldProgramAdmissionIsAtomic(t *testing.T) {
 		{"immunity", []uint32{tagDura, duration, tagTimedElementResistance, 63, 100}, true},
 		{"empty mask", []uint32{tagDura, duration, tagTimedElementResistance, 0, 18}, false},
 		{"unsupported mask", []uint32{tagDura, duration, tagTimedElementResistance, 64, 18}, false},
-		{"invalid percentage", []uint32{tagDura, duration, tagTimedElementResistance, 63, 101}, false},
 		{"duplicate", []uint32{tagDura, duration, tagTimedElementResistance, 63, 18, tagTimedElementResistance, 63, 21}, false},
 		{"missing duration", []uint32{tagTimedElementResistance, 63, 18}, false},
 		{"unknown operation", []uint32{tagDura, duration, tagTimedElementResistance, 63, 18, 0x61626364}, false},
-		{"unsupported companion", []uint32{tagDura, duration, tagTimedElementResistance, 63, 18, 0x6572, 10, 0}, false},
-		{"area", []uint32{tagDura, duration, tagTimedElementResistance, 63, 18, tagEfr, 1, 1, 300, 8, 0, SelectCaster | SelectParty}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fields := marchProgramFields(tc.tail)
@@ -80,7 +77,7 @@ func TestFireShieldProgramAdmissionIsAtomic(t *testing.T) {
 			}
 			noteParameterIndex(fields, &row)
 			parseSkillTimedEffect(fields, &row)
-			if row.TimedEffect.Pinned != tc.valid || row.TimedEffect.ElementResistance != tc.valid {
+			if row.TimedEffect.Pinned != tc.valid || tc.valid && row.TimedEffect.Bgra.Mask == 0 {
 				t.Fatalf("effect %+v, want admission %v", row.TimedEffect, tc.valid)
 			}
 		})

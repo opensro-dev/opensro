@@ -37,14 +37,14 @@ func TestAreaCenterUsesLiveCasterOrPrimary(t *testing.T) {
 		shape     uint8
 		secondary int
 	}{{1, 1}, {2, 2}} {
-		area := enterworld.SkillOffensiveArea{Shape: tc.shape, Radius: 10, MaxTargets: 5}
+		area := enterworld.SkillOffensiveArea{Shape: tc.shape, Radius: 10, MaxTargets: 5, Select: 24}
 		got := areaTestVictims(rt, c, targets[0], area, 0, clock.Now().UnixMilli())
 		if len(got) != 2 || got[0].Gid != targets[0].Gid || got[1].Gid != targets[tc.secondary].Gid {
 			t.Fatalf("shape %d picked %+v", tc.shape, got)
 		}
 	}
 	for _, shape := range []uint8{0, 5, 7, 255} {
-		if got := areaTestVictims(rt, c, targets[0], enterworld.SkillOffensiveArea{Shape: shape, Radius: 1000, MaxTargets: 5}, 0, clock.Now().UnixMilli()); len(got) != 0 {
+		if got := areaTestVictims(rt, c, targets[0], enterworld.SkillOffensiveArea{Shape: shape, Radius: 1000, MaxTargets: 5, Select: 24}, 0, clock.Now().UnixMilli()); len(got) != 0 {
 			t.Fatalf("unknown shape %d became sphere", shape)
 		}
 	}
@@ -63,7 +63,7 @@ func TestTargetedChainNearestPrimaryCenterAndNoBodyExpansion(t *testing.T) {
 	rt.Monsters.StartDivision(testDivision)
 	rt.Monsters.AdvancePopulation(rt.Monsters.CurrentTimeMillis())
 	targets := rt.Monsters.InstancesInRegions(testDivision, []uint16{primary.Spawn.RegionID})
-	area := enterworld.SkillOffensiveArea{Shape: 6, Radius: 10, MaxTargets: 6}
+	area := enterworld.SkillOffensiveArea{Shape: 6, Radius: 10, MaxTargets: 6, Select: 24}
 	got := areaTestVictims(rt, c, targets[0], area, 0, clock.Now().UnixMilli())
 	want := []int{0, 2, 4, 1, 6}
 	if len(got) != len(want) {

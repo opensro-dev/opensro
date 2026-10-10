@@ -90,3 +90,27 @@ func TestEquipmentMaxDurabilityFollowsVarianceAndOptions(t *testing.T) {
 		t.Fatal("a non-repairable item was allowed a repair")
 	}
 }
+
+/*
+================
+TestDurabilityRoundsAsTheClientShowsIt
+
+The v1.150 client shows lo + span*v/31 + 0.5, truncated (78BD00). The
+server's maximum and a drop's first durability must be that same number
+for every variance, or a fresh drop reads one point short and its repair
+is refused as whole. An 85 shield (80..98) at variance 1 is 81, not 80.
+================
+*/
+func TestDurabilityRoundsAsTheClientShowsIt(t *testing.T) {
+	low := int64(80)
+	ref := &enterworld.ItemRef{MaxDurability: 98, VarianceIntMin1c0: &low}
+	for v := uint8(0); v <= 31; v++ {
+		client := uint32(float64(98-80)*float64(v)/31 + 80 + 0.5)
+		if got := DurabilityFromVariance(ref, v); got != client {
+			t.Fatalf("variance %d: server %d, client shows %d", v, got, client)
+		}
+	}
+	if got := DurabilityFromVariance(ref, 1); got != 81 {
+		t.Fatalf("variance 1: %d, want 81", got)
+	}
+}

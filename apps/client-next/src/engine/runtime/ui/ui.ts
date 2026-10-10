@@ -176,6 +176,7 @@ import {
 	createFortressScheduleHud,
 	FORTRESS_SCHEDULE_ROWS
 } from "./hud/fortress-war-hud";
+import { createFortressTaxHud, FORTRESS_TAX_MAX, FORTRESS_TAX_MIN } from "./hud/fortress-tax-hud";
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_MAX_STAKE, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
@@ -559,6 +560,17 @@ const SPECIALTY_DEAL_COUNT = "specialty-deal-count";
 // CIFFortressWarApplyWnd, opened by the fortress official's answer.
 const FORTRESS_WAR_PANEL = "Fortress war application";
 const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
+// CIFTaxManagement, the fortress manager's first row (fortress-tax-hud.ts).
+const FORTRESS_TAX_PANEL = "Fortress tax";
+const FORTRESS_TAX_RATE = "fortress-tax-rate";
+const FORTRESS_TAX_AMOUNT = "fortress-tax-amount";
+// 52A7E0 caps the levy edit at 64 characters.
+const FORTRESS_TAX_AMOUNT_LENGTH = 64;
+// 664DA0 positions the slider's arrows at 0 and 270 and gives the thumb
+// 234 px of travel between them (CIFScrollBar_SetPageStep 0xEA).
+const FORTRESS_TAX_ARROW = 20;
+const FORTRESS_TAX_ARROW_RIGHT = 270;
+const FORTRESS_TAX_TRAVEL = 234;
 // CIFJobRank and CIFJobContributionRank share one panel (job-hud.ts).
 const JOB_RANK_PANEL = "Job ranking";
 // The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
@@ -781,6 +793,7 @@ export function createUi(
 	const jobHud = createJobHud();
 	const fortressWarHud = createFortressWarHud();
 	const fortressScheduleHud = createFortressScheduleHud();
+	const fortressTaxHud = createFortressTaxHud();
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
 	const guildWarHud = createGuildWarHud();
@@ -1276,6 +1289,8 @@ export function createUi(
 		return {
 			fortress: row?.id,
 			holder: !!owner && owner === social?.guild?.name,
+			// GuildData_IsAllyGuildName: the holder is one of the local union's guilds.
+			ally: !!owner && !!social?.alliances?.some( guild => guild.name === owner ),
 			master: member?.grade === 0,
 			flags: state?.staffFlags ?? 0
 		};
@@ -1318,6 +1333,7 @@ export function createUi(
 		if ( next !== SKIN_PANEL ) skinHud.close();
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
+		if ( next !== FORTRESS_TAX_PANEL ) fortressTaxHud.close();
 		if ( next !== JOB_RANK_PANEL ) jobHud.closeRank();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
@@ -3559,6 +3575,32 @@ export function createUi(
 				fortressScheduleHud.request( conversation.gid, state?.serviceSequence ?? 0 );
 				sendGameplay( { kind: "fortress-schedule", gid: conversation.gid, fortress: fortress.id } );
 			}
+		} else if ( id === "npc-fortress-tax" ) {
+			// 5D8930 action 0x33 row 1: 0x71E1 action 0; the window shows at once.
+			const conversation = view?.gameplay?.npcConversation, staff = fortressStaffView();
+			if ( conversation?.phase === "menu" && staff.fortress !== undefined ) {
+				fortressTaxHud.request(
+					conversation.gid,
+					staff.fortress,
+					view?.gameplay?.fortress?.serviceSequence ?? 0
+				);
+				sendGameplay( { kind: "fortress-tax", gid: conversation.gid, fortress: staff.fortress } );
+			}
+		} else if ( id === "fortress-tax-close" ) {
+			setPanel( "" );
+		} else if ( id === "fortress-tax-prev" || id === "fortress-tax-next" ) {
+			fortressTaxHud.slide( fortressTaxHud.draft() + (id === "fortress-tax-prev" ? -1 : 1) );
+		} else if ( id === "fortress-tax-modify" || id === "fortress-tax-collect" ) {
+			// 665470 enables both buttons for the guild master only.
+			if ( fortressStaffView().master ) {
+				if ( id === "fortress-tax-modify" ) fortressTaxHud.askRate();
+				else {
+					fortressTaxHud.askCollect();
+					const asked = fortressTaxHud.question();
+					// 52C870 mode 9 moves the keyboard focus into the levy edit.
+					if ( asked?.kind === "collect" ) focusAtEnd( FORTRESS_TAX_AMOUNT, asked.amount );
+				}
+			}
 		} else if ( id === "fortress-schedule-close" ) {
 			setPanel( "" );
 		} else if ( id === "job-rank-close" ) {
@@ -4147,6 +4189,53 @@ export function createUi(
 					return;
 				}
 				if ( event.kind !== "hover" ) return;
+			}
+			if ( fortressTaxHud.question() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "fortress-tax-no"
+				) {
+					fortressTaxHud.takeQuestion();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === FORTRESS_TAX_AMOUNT ) {
+					fortressTaxHud.edit( event.value );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "fortress-tax-yes"
+				) {
+					// CIFTaxManagement_OnMsgBoxResult (664CE0).
+					const asked = fortressTaxHud.takeQuestion(),
+						gid = fortressTaxHud.npc(),
+						context = fortressTaxHud.context();
+					dirty = true;
+					if ( !asked || gid === null || !context || view?.session?.phase !== "world" ) return;
+					if ( view.gameplay?.target !== gid ) return;
+					if ( asked.kind === "rate" ) {
+						// An unchanged ratio is refused here, never sent.
+						if ( asked.from === asked.to ) {
+							hudMessages.append( hudCopy( "UIIT_MSG_FORT_MANAGER_TAX_ERROR_03" ) );
+						} else {sendGameplay( {
+								kind: "fortress-tax-rate",
+								gid,
+								fortress: context.fortress,
+								rate: asked.to
+							} );}
+					} else if ( asked.amount ) {
+						sendGameplay( {
+							kind: "fortress-tax-collect",
+							gid,
+							fortress: context.fortress,
+							gold: asked.amount
+						} );
+					}
+					return;
+				}
+				if ( event.kind === "activate" ) return;
 			}
 			if ( fortressStaffHud.question() !== null ) {
 				if (
@@ -5931,7 +6020,10 @@ export function createUi(
 					blockInput = event.value.slice( 0, 13 );
 				} else if ( event.id === "academy-name" ) academyName = event.value;
 				else if ( event.id === "alchemy-quantity" ) alchemyQuantity = event.value;
-				else if ( event.id === "shop-quantity" ) {
+				else if ( event.id === FORTRESS_TAX_RATE && panel === FORTRESS_TAX_PANEL ) {
+					// The slider's position is the ratio plus 20 (664C00).
+					fortressTaxHud.slide( Number( event.value ) + FORTRESS_TAX_MIN );
+				} else if ( event.id === "shop-quantity" ) {
 					const game = view?.gameplay;
 					const quote = merchantQuote(
 						shopChoice,
@@ -6159,6 +6251,19 @@ export function createUi(
 			}
 			// The official's answer opens or refreshes the application window.
 			fortressScheduleHud.observe( next.gameplay?.fortress, next.gameplay?.target ?? undefined );
+			fortressTaxHud.observe(
+				next.gameplay?.fortress,
+				next.gameplay?.target ?? undefined,
+				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu"
+			);
+			if ( fortressTaxHud.npc() !== null && panel !== FORTRESS_TAX_PANEL && canLeavePanel() ) {
+				setPanel( FORTRESS_TAX_PANEL );
+				dirty = true;
+			}
+			if ( panel === FORTRESS_TAX_PANEL && fortressTaxHud.npc() === null ) {
+				setPanel( "" );
+				dirty = true;
+			}
 			fortressStaffHud.observe(
 				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu" &&
 					next.gameplay.target === next.gameplay.npcConversation.gid ?
@@ -12521,7 +12626,8 @@ export function createUi(
 						canReverseReturn: !!(capabilities & 0x20000000),
 						canStorage: !!(capabilities & 4),
 						canFortressOfficial: !!(capabilities & 0x800000),
-						canFortressManager: !!(capabilities & 0x400000),
+						canFortressManager: !!(capabilities & 0x400000) &&
+							(fortressStaffView().holder || fortressStaffView().ally),
 						canFortressHire: !!(capabilities & 0x400000) && fortressStaffView().holder,
 						// 5D7870: the outcome page offers only the collect row (0x25),
 						// and only for a reward above zero.
@@ -12893,6 +12999,147 @@ export function createUi(
 						top + FORTRESS_SCHEDULE_ROWS >= applicants.length
 					);
 					endWindow( admission, "service:" + FORTRESS_SCHEDULE_PANEL );
+				}
+				if (
+					panel === FORTRESS_TAX_PANEL && fortressTaxHud.npc() !== null && hudData?.windows.iftaxmanagement &&
+					hudData.root.GDR_TAX_MANAGEMENT
+				) {
+					// CIFTaxManagement: OnCreate 664DA0 lays it out, Refresh 665470 fills it.
+					const admission = beginWindow(), root = hudData.root.GDR_TAX_MANAGEMENT;
+					const layout = hudData.windows.iftaxmanagement, context = fortressTaxHud.context();
+					const node = ( id: number ) => Object.values( layout ).find( row => row.id === id );
+					const [px, py] = windowOrigin( FORTRESS_TAX_PANEL, [
+						Math.max( 0, (w - root.rect[2]) / 2 ),
+						Math.max( 0, (h - root.rect[3]) / 2 ),
+						root.rect[2],
+						root.rect[3]
+					] );
+					nativeFrame( root, px, py, hudCopy( root.text ), "fortress-tax-close" );
+					// 19..21 carry help text only (style 0x80); the frames draw the captions.
+					nativePage( layout, px, py, [ 19, 20, 21, 30, 31, 32, 33, 34, 35, 36, 70, 71, 80 ] );
+					for (
+						const [id, key] of [
+							[ 19, "UIIT_MSG_TP_FORT_TAX_TARGET" ],
+							[ 20, "UIIT_MSG_TP_FORT_TAX_CHANGE" ],
+							[ 21, "UIIT_MSG_TP_FORT_TAX_LEVY" ]
+						] as const
+					) {
+						const help = node( id );
+						if ( help ) {
+							controls.push( {
+								id: "fortress-tax-help:" + id,
+								label: hudCopy( help.text ),
+								kind: "region",
+								rect: authoredRect( help, px, py ),
+								helpText: hudCopy( key )
+							} );
+						}
+					}
+					const row = view?.gameplay?.fortress?.fortresses.find( r => r.id === context?.fortress );
+					const name = node( 27 );
+					if ( name && context ) authoredText( name, px, py, row?.nameStrId ? hudCopy( row.nameStrId ) : "" );
+					// 665470 ticks box 30 + i from siegefortress column 10 bit i, then disables it.
+					for ( let i = 0; i < 7; i++ ) {
+						const box = node( 30 + i );
+						if ( !box ) continue;
+						const on = !!context && !!((row?.taxTargets ?? 0) & (1 << i));
+						authoredImage(
+							{ ...box, rect: [ box.rect[0], box.rect[1], 16, 16 ] },
+							px,
+							py,
+							box.texture.replace( "_off", on ? "_on" : "_off" )
+						);
+					}
+					const rate = fortressTaxHud.draft();
+					for (
+						const [id, value] of [
+							[ 52, String( rate ) ],
+							[ 53, "%" ],
+							[ 54, FORTRESS_TAX_MIN + "%" ],
+							[ 55, FORTRESS_TAX_MIN / 2 + "%" ],
+							[ 56, "0%" ],
+							[ 57, FORTRESS_TAX_MAX / 2 + "%" ],
+							[ 58, FORTRESS_TAX_MAX + "%" ]
+						] as const
+					) {
+						const label = node( id );
+						if ( label ) authoredText( label, px, py, value );
+					}
+					// Port-only, not native: 665470 prints the treasury with "%d", which
+					// shows only its low 32 bits; the port shows the whole amount.
+					const treasury = node( 67 );
+					if ( treasury && context ) authoredText( treasury, px, py, context.gold );
+					const slider = node( 80 );
+					if ( slider ) {
+						const r = authoredRect( slider, px, py ), position = rate - FORTRESS_TAX_MIN;
+						authoredImage( slider, px, py );
+						// The left arrow's DDJ path is misspelt in 664DA0
+						// (com_qst_lefttarrow_button.ddj), so native draws none there.
+						const right = ROOT + "interface/ifcommon/com_qst_rightarrow_button.png",
+							thumb = ROOT + "interface/ifcommon/com_scroll_button.png";
+						image( [ r[0] + FORTRESS_TAX_ARROW_RIGHT, r[1], 20, 20 ], right );
+						image(
+							[
+								r[0] + FORTRESS_TAX_ARROW + Math.trunc(
+									position * FORTRESS_TAX_TRAVEL / (FORTRESS_TAX_MAX - FORTRESS_TAX_MIN)
+								),
+								r[1] + 2,
+								16,
+								16
+							],
+							thumb
+						);
+						controls.push( {
+							id: "fortress-tax-prev",
+							label: "<",
+							kind: "button",
+							rect: [ r[0], r[1], 20, 20 ],
+							disabled: !context
+						} );
+						controls.push( {
+							id: "fortress-tax-next",
+							label: ">",
+							kind: "button",
+							rect: [ r[0] + FORTRESS_TAX_ARROW_RIGHT, r[1], 20, 20 ],
+							disabled: !context
+						} );
+						controls.push( {
+							id: FORTRESS_TAX_RATE,
+							label: hudCopy( "UIIT_STT_FORT_MANAGER_TAXCHANGE_RATE" ),
+							kind: "range",
+							rect: [
+								r[0] + FORTRESS_TAX_ARROW,
+								r[1],
+								FORTRESS_TAX_ARROW_RIGHT - FORTRESS_TAX_ARROW,
+								20
+							],
+							min: 0,
+							max: FORTRESS_TAX_MAX - FORTRESS_TAX_MIN,
+							value: String( position ),
+							valueText: rate + "%",
+							disabled: !context
+						} );
+					}
+					const master = fortressStaffView().master;
+					for (
+						const [id, control] of [ [ 70, "fortress-tax-modify" ], [
+							71,
+							"fortress-tax-collect"
+						] ] as const
+					) {
+						const at = node( id );
+						if ( at ) {
+							authoredLabeledButton(
+								{ ...at, rect: [ at.rect[0], at.rect[1], 56, 24 ] },
+								px,
+								py,
+								control,
+								hudCopy( at.text ),
+								!context || !master
+							);
+						}
+					}
+					endWindow( admission, "service:" + FORTRESS_TAX_PANEL );
 				}
 				const fortressWar = panel === FORTRESS_WAR_PANEL ? fortressWarView() : null;
 				if (
@@ -17024,6 +17271,81 @@ export function createUi(
 				);
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
+			const taxAsk = fortressTaxHud.question(), taxBox = hud.data()?.windows.ifmessagebox;
+			if ( worldVisible && taxAsk && taxBox ) {
+				// 665BA0 opens CIFMessageBox kind 0xA (MsgBoxTaxModify, 292x178) or
+				// 0xB (MsgBoxTaxLevy, 286x151); 52C870 modes 8 and 9 fill it.
+				const modify = taxAsk.kind === "rate", prefix = modify ? "GDR_MB_TAX_MODIFY_" : "GDR_MB_TAX_LEVY_";
+				const layout = messageBox( w, h, modify ? 292 : 286, modify ? 178 : 151 ), [fx, fy] = layout.frame;
+				const section = Object.fromEntries(
+					Object.entries( taxBox ).filter( ( [name] ) => name.startsWith( prefix ) )
+				);
+				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				nativePage( section, fx, fy, modify ? [ 100, 101 ] : [ 94, 95, 96 ] );
+				if ( taxAsk.kind === "rate" ) {
+					const context = fortressTaxHud.context();
+					const row = view?.gameplay?.fortress?.fortresses.find( r => r.id === context?.fortress );
+					for (
+						const [id, key, value] of [
+							[
+								104,
+								"UIIT_MSG_FORT_MANAGER_TAXCHANGE_WINDOW1",
+								row?.nameStrId ? hudCopy( row.nameStrId ) : ""
+							],
+							[ 105, "UIIT_MSG_FORT_MANAGER_TAXCHANGE_WINDOW2", String( taxAsk.from ) ],
+							[ 106, "UIIT_MSG_FORT_MANAGER_TAXCHANGE_WINDOW3", String( taxAsk.to ) ]
+						] as const
+					) {
+						const line = at( id );
+						if ( line ) {
+							authoredText(
+								line,
+								fx,
+								fy,
+								noticeText( hudCopy, { key, value: 0, arguments: [ value ] } )
+							);
+						}
+					}
+				} else {
+					const edit = at( 94 );
+					if ( edit ) {
+						partyEdit( edit, fx, fy, FORTRESS_TAX_AMOUNT, taxAsk.amount, FORTRESS_TAX_AMOUNT_LENGTH );
+					}
+				}
+				for (
+					const [id, control] of modify ?
+						[ [ 101, "fortress-tax-yes" ], [ 100, "fortress-tax-no" ] ] as const :
+						[ [ 96, "fortress-tax-yes" ], [ 95, "fortress-tax-no" ] ] as const
+				) {
+					const node = at( id );
+					if ( node ) {
+						authoredLabeledButton(
+							{ ...node, rect: [ node.rect[0], node.rect[1], 76, 24 ] },
+							fx,
+							fy,
+							control,
+							hudCopy( node.text ),
+							control === "fortress-tax-yes" && taxAsk.kind === "collect" && !taxAsk.amount
+						);
+					}
+				}
+			}
 			const fortressAsk = fortressWarHud.question(), staffAsk = fortressStaffHud.question();
 			if ( worldVisible && (fortressAsk || staffAsk) ) {
 				// 6649C0's question boxes 0x64-0x67.

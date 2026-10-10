@@ -197,6 +197,10 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 		enterworld.CharacterAlive(snapshot) && snapshot.NativeTeleportMode == 0 &&
 		enterworld.ObjectIDForCharacter(snapshot) == object.OwnerGID &&
 		domain.CharacterWorldInstance(snapshot) == uint32(object.Population.ID)
+	if object.Program.Field {
+		rt.advanceSkillField(object, snapshot, ownerPresent, nowMs)
+		return nil
+	}
 	var targets []skillobject.Target
 	if ownerPresent && nowMs >= object.NextScanMs && rt.Monsters != nil {
 		from := simulation.Spawn{RegionID: object.Spawn.Region, X: float64(object.Spawn.X),

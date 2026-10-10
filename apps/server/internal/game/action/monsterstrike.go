@@ -165,6 +165,9 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	// 5A0C2D ran inside the hit outcome, before the hit landed, so a fatal
 	// hit still returns its share; the attacker takes it afterwards.
 	returned := rt.returnDamageToMonster(divisionID, character, instance, in.from, skill.ID, defender, strike.formulas[:len(struck.impacts)], nowMs)
+	// The shares fence and Pain Quota links took off the hits land on their
+	// takers as this monster's hits (linkeddamage.go).
+	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs))
 	rt.queueMonsterLegRecipients(divisionID, returned.Recipients)
 	out.strike = monsterStrike{gid: enterworld.ObjectIDForCharacter(snapshot), owner: character, pose: pose,
 		impacts: struck.impacts, absorb: struck.absorb, fatal: struck.fatal,

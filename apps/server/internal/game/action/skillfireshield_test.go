@@ -31,7 +31,7 @@ func fireShieldFixture(t *testing.T, code string) (*Runtime, *fakeClock, *enterw
 	t.Helper()
 	rt, clock, c, shield, _ := shieldFixture(t)
 	row := shippedOffense(t, code)
-	if !row.TimedEffect.Pinned || !row.TimedEffect.ElementResistance {
+	if !row.TimedEffect.Pinned || row.TimedEffect.Bgra.Mask == 0 {
 		t.Fatalf("Fire Shield not admitted: %+v", row)
 	}
 	// Keep the level-1 stat row while affording every book's native MP cost.

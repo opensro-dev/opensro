@@ -26,6 +26,13 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 )
 
+const (
+	// The efr select bits an offensive area reads: hostile characters
+	// (Mana Drought authors 8 alone) and non-character objects.
+	areaSelectHostile = 0x08
+	areaSelectObjects = 0x10
+)
+
 /*
 ================
 areaQuery
@@ -35,6 +42,9 @@ radius unless nearest (shape 6) asks for bare distances.
 ================
 */
 type areaQuery struct {
+	// selects is the efr +0x14 mask (TargetSelection_AroundSource 58A020):
+	// 0x08 admits hostile characters, 0x10 non-character objects.
+	selects  uint8
 	division string
 	caster   *enterworld.Character
 	skill    enterworld.SkillRow
@@ -66,7 +76,7 @@ the query's centre, ordered for selection.
 */
 func (rt *Runtime) areaCandidates(q areaQuery) []areaCandidate {
 	var out []areaCandidate
-	if rt.Monsters != nil {
+	if rt.Monsters != nil && q.selects&areaSelectObjects != 0 {
 		for _, m := range rt.Monsters.CombatCandidatesInPopulation(q.division, q.lease, q.center, q.reach, q.now, q.nearest) {
 			mover, ok := rt.Monsters.Mover(q.division, m.Gid)
 			if !ok {
@@ -79,7 +89,9 @@ func (rt *Runtime) areaCandidates(q areaQuery) []areaCandidate {
 				distance: areaDistance(q.center, at), radius: m.BodyRadius()})
 		}
 	}
-	out = append(out, rt.areaPlayerCandidates(q)...)
+	if q.selects&areaSelectHostile != 0 {
+		out = append(out, rt.areaPlayerCandidates(q)...)
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if q.nearest && out[i].distance != out[j].distance {
 			return out[i].distance < out[j].distance

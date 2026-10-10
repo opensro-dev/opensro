@@ -22,13 +22,18 @@ const (
 	// maxBlockRatePercent is the admission ceiling for a br value, timed or
 	// passive: a percent of the whole block chance. Every shipped br is
 	// within it (passives 2..10).
-	maxBlockRatePercent        = 100
-	tagTimedStrength           = 0x73747269
-	tagTimedIntellect          = 0x696e7469
-	tagTimedLink               = 0x6c6e6b73
-	tagTimedLinkedThreat       = 0x6c6b6167
-	tagTimedLinkPerTarget      = 0x6c6b7332
-	tagTimedLinkedDamage       = 0x6c6b6468
+	maxBlockRatePercent   = 100
+	tagTimedStrength      = 0x73747269
+	tagTimedIntellect     = 0x696e7469
+	tagTimedLink          = 0x6c6e6b73
+	tagTimedLinkedThreat  = 0x6c6b6167
+	tagTimedLinkPerTarget = 0x6c6b7332
+	tagTimedLinkedDamage  = 0x6c6b6468
+	// tagTimedHunt is hntp (+0x48C, no words): the link's recipient is
+	// tracked for its source (SkillCombat_EngageSkill 593757).
+	tagTimedHunt               = 0x686e7470
+	tagTimedLinkedFence        = 0x6c6b6472 // lkdr
+	tagTimedLinkedQuota        = 0x6c6b6464 // lkdd
 	tagTimedRequireNot         = 0x7265716e
 	tagTimedMaxHP              = 0x687069
 	tagTimedAttack             = 0x61706175
@@ -43,11 +48,15 @@ const (
 	tagDamageReturn            = 0x646d6772
 	tagTimedOverlap            = 0x6f766c32
 	tagTimedPreemptive         = 0x706f6c61
+	tagTimedStatusReduction    = 0x72656174 // reat
+	tagTimedStatusResistance   = 0x7265616c // real
 	tagTimedElementResistance  = 0x62677261 // bgra
 	tagTimedShieldTradeoff     = 0x73706461 // spda
 	maxShieldDefensePenalty    = 100
-	tagTimedStatusReduction    = 0x72656174 // reat
-	tagTimedStatusResistance   = 0x7265616c // real
+	tagTimedRecovery           = 0x69726763 // irgc
+	efrKindArea                = 1
+	efrKindField               = 3
+	efrShapeCircle             = 1
 	parameterWizardMP          = 0x57494d44
 	parameterBardMP            = 0x42444d44
 	parameterMusicArea         = 0x4d554552
@@ -55,12 +64,6 @@ const (
 	parameterBlessingMagical   = 0x484c534d
 	parameterBlessingStrength  = 0x484c4653
 	parameterBlessingIntellect = 0x484c4d49
-)
-
-// bgra selects the six elemental statuses; shipped powers are 18..78.
-const (
-	timedElementResistanceMask  = 0x3f
-	maxElementResistancePercent = 100
 )
 
 /*
@@ -88,14 +91,15 @@ type SkillTimedEffect struct {
 	// its resistance under the instance's execution context (59DF20), so
 	// both last as long as the instance. Holy Word / Holy Spell and Poison
 	// Circle / Vein Circle carry them.
-	Reat       SkillPassiveReat
-	Real       SkillPassiveReal
+	Reat SkillPassiveReat
+	Real SkillPassiveReal
+	// Bgra is Fire Shield's block (+0x2F8): the same mask and value shape as
+	// reat, written to the element resistances 0x1B+i instead (595698..5957EE).
+	Bgra       SkillPassiveReat
 	Pinned     bool
 	Persistent bool
 	// IncomingReduction marks an admitted odar block (Earth Barrier).
 	IncomingReduction bool
-	// ElementResistance admits bgra (Fire Shield); BuffModifiers owns the words.
-	ElementResistance bool
 	ShieldTradeoff    SkillShieldTradeoff
 	// Hawk is summ (+0x308): the attacking hawk of Black and Light Hawk
 	// Summon (SkillSummonedHawk).
@@ -103,7 +107,9 @@ type SkillTimedEffect struct {
 	// HitRate and Range mark an admitted hr block (White Hawk Summon) and
 	// ru block (Demon Soul Arrow): like odar, 594AC0 installs both from the
 	// row's BuffModifiers, so the program only has to agree with them.
-	HitRate, Range                bool
+	HitRate, Range bool
+	// Parry marks an admitted er block (Concentration, #508).
+	Parry                         bool
 	Physical, Magical, CapPercent uint32
 	// Targeted rows (Warrior guards, Cleric blessings) install on a player
 	// within column 21's range instead of the caster.
@@ -111,6 +117,12 @@ type SkillTimedEffect struct {
 	// Area is an efr kind 1 selection. Each selected actor gets an instance;
 	// select 4/5 uses the party selector, other masks use around-source.
 	Area SkillRecipientArea
+	// Field is efr kind 3 (+0x294): the cast plants a skill object that
+	// hands each recipient standing in it an instance and retires it when
+	// the recipient leaves (48CEA0, 48D690; skillfield.go). Harmony
+	// therapy. Select takes bits 1 (owner), 2 (non-hostile others) and
+	// 4 (party).
+	Field SkillRecipientArea
 	// PhysicalAddend and MagicalAddend are getv HLBP / HLSM: the caster's
 	// value joins the recipient's defp (58381F; HLBP wins when both appear).
 	PhysicalAddend, MagicalAddend bool
@@ -296,12 +308,51 @@ type SkillEffectLink struct {
 	PerTarget                           bool
 	Mana                                bool
 	ManaHPPercent, ManaPercent, ManaCap uint32
+	// Hunt is hntp: while the link lives, 593757 attaches the recipient's
+	// action records to a task of the source (CActionTargetContext_SetCoordinates
+	// 4F9A90), so the source keeps receiving the recipient's position
+	// (Tag Point, Hunting Point).
+	Hunt bool
+	// Fence is lkdr {mask, percent, max hits} (+0x478, the Warrior's
+	// Physical / Magical Fence): 5A0F01 moves percent of the recipient's
+	// physical and/or magical damage lanes to the link source. FenceMask
+	// holds the loader's fix-up (linkFenceMask). A zero max hits never
+	// retires the link; every shipped row authors 0.
+	Fence                   bool
+	FenceMask, FencePercent uint32
+	FenceMaxHits            uint32
+	// Quota is lkdd {percent} (+0x480, Pain Quota): 5A11BF keeps
+	// 100 - percent of the recipient's hit and divides the rest among
+	// its party members within linkQuotaRange.
+	Quota        bool
+	QuotaPercent uint32
+}
+
+/*
+================
+linkFenceMask
+
+SkillGlobal_BuildParameterIndex (588A06..588A44) completes lkdr word 0 as it
+indexes it: a lane value (4 physical, 8 magical, 12 both) gains both share
+bits (|1|2), and a share value (1, 2, 3) gains both lanes (|4|8). 5A0F01
+moves a lane only when its lane bit and a share bit are both set.
+================
+*/
+func linkFenceMask(word uint32) uint32 {
+	switch word {
+	case 4, 8, 12:
+		return word | 1 | 2
+	case 1, 2, 3:
+		return word | 4 | 8
+	}
+	return word
 }
 
 // The hr, ru and summ instruction tags (big-endian ASCII, as the program
 // stores them).
 const (
 	skillTagHitRate = 0x6872
+	skillTagParry   = 0x6572 // er
 	skillTagRange   = 0x7275
 	skillTagSummon  = 0x73756d6d
 )
@@ -363,7 +414,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// own contracts. None may be erased to manufacture a self-only program.
 	// The one targeted shape is Required+Animal+Ally+Party with a range.
 	// Self (column 26) may join it.
-	targeted := fields[21] != "0" && fields[22] == "1" && fields[23] == "1" && fields[27] == "1" && fields[28] == "1"
+	// Party (28) with or without Ally (27): a party-only row (Pain Quota) is
+	// held to the caster's party by 58D7A0 (action.skillTargetPermission).
+	targeted := fields[21] != "0" && fields[22] == "1" && fields[23] == "1" && fields[28] == "1"
 	var result SkillTimedEffect
 	program, err := CompileSkillProgram(fields)
 	if err != nil {
@@ -373,17 +426,30 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// the link binds two players (acceptTimedTargetEffect refuses anything
 	// else with 0x3006), so those bytes only widen 58D7A0's player check;
 	// they are tolerated on a targeted lkdh row alone.
-	damageLink := false
+	// Tag Point and Hunting Point (hntp) name Enemy_P (column 30) on the
+	// same targeted shape: the mark lands on any player 58D7A0 admits.
+	damageLink, huntLink := false, false
 	for i := 0; i < program.Len(); i++ {
 		damageLink = damageLink || program.Instruction(i).Tag == tagTimedLinkedDamage
+		huntLink = huntLink || program.Instruction(i).Tag == tagTimedHunt
 	}
 	for i := 0; i < program.Len(); i++ {
 		if op := program.Instruction(i); op.Tag == tagEfr {
 			kind, shape, radius, most, reduction, sel := op.Arguments[0], op.Arguments[1], op.Arguments[2], op.Arguments[3], op.Arguments[4], op.Arguments[5]
-			if result.Area.Present || targeted || kind != 1 || shape != 1 || radius == 0 || reduction != 0 {
+			if result.Area.Present || result.Field.Present || targeted || shape != efrShapeCircle || radius == 0 || reduction != 0 {
 				return
 			}
-			result.Area = SkillRecipientArea{Present: true, Radius: radius, MaxTargets: most, Select: sel}
+			area := SkillRecipientArea{Present: true, Radius: radius, MaxTargets: most, Select: sel}
+			switch {
+			case kind == efrKindArea:
+				result.Area = area
+			case kind == efrKindField && sel != 0 && sel&^(SelectCaster|SelectCharacter|SelectParty) == 0:
+				// A buff field: the hostile (8) and handler (0x20) bits
+				// belong to trap fields, which have their own owner.
+				result.Field = area
+			default:
+				return
+			}
 		}
 	}
 	// Column 19 (continueBasicAttackColumn) is not among them: it only says
@@ -396,7 +462,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		if targeted && (col == 21 || col == 22 || col == 23 || col == 26 || col == 27 || col == 28) {
 			continue
 		}
-		if targeted && damageLink && (col == 29 || col == 30) {
+		if targeted && (damageLink || huntLink) && (col == 29 || col == 30) {
 			continue
 		}
 		if result.Area.Present && col == 21 {
@@ -423,9 +489,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// lkag and lkdh may be authored anywhere in the program; the native index
 	// keeps them wherever they sit, and they ride the row's lnks, which is
 	// checked once every block is read.
-	var linkThreat, linkDamage bool
-	var linkThreatPercent uint32
-	var linkDamageWords [3]uint32
+	var linkThreat, linkDamage, linkFence, linkQuota bool
+	var linkThreatPercent, linkQuotaPercent uint32
+	var linkDamageWords, linkFenceWords [3]uint32
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		switch op.Tag {
@@ -509,7 +575,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 		case tagTimedLink:
-			if result.Link.Present || op.Count != 4 || !targeted || op.Arguments[0] == 0 {
+			// Group 0 is legal: 59DC80 applies its same-group rule only to a
+			// nonzero group (Pain Quota authors 0).
+			if result.Link.Present || op.Count != 4 || !targeted {
 				return
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
@@ -537,6 +605,23 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			linkDamage = true
 			linkDamageWords = [3]uint32{op.Arguments[0], op.Arguments[1], op.Arguments[2]}
+		case tagTimedHunt:
+			if op.Count != 0 || !targeted {
+				return
+			}
+		case tagTimedLinkedFence:
+			// lkdr {mask, percent, max hits} (+0x478, 588A03: three words).
+			if linkFence || op.Count != 3 || op.Arguments[1] == 0 || op.Arguments[1] > 100 {
+				return
+			}
+			linkFence = true
+			linkFenceWords = [3]uint32{linkFenceMask(op.Arguments[0]), op.Arguments[1], op.Arguments[2]}
+		case tagTimedLinkedQuota:
+			// lkdd {percent} (+0x480, 5889E2: one word).
+			if linkQuota || op.Count != 1 || op.Arguments[0] == 0 || op.Arguments[0] > 100 {
+				return
+			}
+			linkQuota, linkQuotaPercent = true, op.Arguments[0]
 		case tagTimedDamageToMP:
 			if result.DamageToMP || op.Count != 1 || op.Arguments[0] > maxDamageToMPPercent {
 				return
@@ -556,6 +641,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.HitRate = true
+		case skillTagParry:
+			// er {flat, rate}: 594AC0 0x595883 writes the parry keeper (9).
+			if result.Parry || op.Count != 2 || targeted || result.Area.Present || !row.BuffModifiers.Er ||
+				op.Arguments[0] != row.BuffModifiers.ErFlat || op.Arguments[1] != row.BuffModifiers.ErRate {
+				return
+			}
+			result.Parry = true
 		case skillTagRange:
 			// ru {distance}: 594AC0 0x5958E7 adds to the attack-range keeper
 			// (0x21), the reach of a skill without its own range.
@@ -580,6 +672,18 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Preemptive = SkillPreemptiveGuard{Present: true, Mask: op.Arguments[0], Level: op.Arguments[1]}
+		case tagTimedStatusReduction:
+			if result.Reat.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[0]&^0x3f != 0 {
+				return
+			}
+			result.Reat = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
+		case tagTimedRecovery:
+			// irgc {HP %, MP %}: 595A33..595A93 add both to the recovery
+			// parameters 25 and 26 on the percent channel.
+			if result.Recovery.Present || op.Count != 2 {
+				return
+			}
+			result.Recovery = SkillRecoveryRates{Present: true, HP: op.Arguments[0], MP: op.Arguments[1]}
 		case tagTimedShieldTradeoff:
 			if result.ShieldTradeoff.Present || op.Count != 2 || op.Arguments[0] > maxShieldDefensePenalty {
 				return
@@ -587,18 +691,10 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			result.ShieldTradeoff = SkillShieldTradeoff{Present: true,
 				DefensePercent: op.Arguments[0], PhysicalAttack: op.Arguments[1]}
 		case tagTimedElementResistance:
-			if result.ElementResistance || op.Count != 2 || op.Arguments[0] == 0 ||
-				op.Arguments[0]&^timedElementResistanceMask != 0 || op.Arguments[1] > maxElementResistancePercent ||
-				targeted || result.Area.Present || row.EffectDurationMs == 0 || !row.BuffModifiers.Bgra ||
-				op.Arguments[0] != row.BuffModifiers.BgraMask || op.Arguments[1] != row.BuffModifiers.BgraPercent {
+			if result.Bgra.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[0]&^0x3f != 0 {
 				return
 			}
-			result.ElementResistance = true
-		case tagTimedStatusReduction:
-			if result.Reat.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[0]&^0x3f != 0 {
-				return
-			}
-			result.Reat = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
+			result.Bgra = SkillPassiveReat{Mask: op.Arguments[0], Value: op.Arguments[1]}
 		case tagTimedStatusResistance:
 			if result.Real.Mask != 0 || op.Count != 3 || op.Arguments[0] == 0 {
 				return
@@ -657,8 +753,32 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 		}
 	}
-	if result.ElementResistance && !duration {
+	if huntLink {
+		// A mark carries no writes, threat or MP share beside it.
+		if !result.Link.Present || linkThreat || linkDamage || linkFence || linkQuota || result.Strength.Present || result.Intellect.Present ||
+			result.Block.Present || result.IncomingReduction || len(attributeTags) != 0 {
+			return
+		}
+		result.Link.Hunt = true
+	}
+	// 594E5D installs one link slot per effect (+0x478, +0x3E0, +0x480,
+	// +0x47C, in that order); every shipped row authors one kind.
+	kinds := 0
+	for _, kind := range []bool{linkThreat, linkDamage, linkFence, linkQuota} {
+		if kind {
+			kinds++
+		}
+	}
+	if kinds > 1 {
 		return
+	}
+	if linkFence || linkQuota {
+		if !result.Link.Present {
+			return
+		}
+		result.Link.Fence, result.Link.FenceMask, result.Link.FencePercent, result.Link.FenceMaxHits =
+			linkFence, linkFenceWords[0], linkFenceWords[1], linkFenceWords[2]
+		result.Link.Quota, result.Link.QuotaPercent = linkQuota, linkQuotaPercent
 	}
 	if linkThreat || linkDamage {
 		if !result.Link.Present {
@@ -675,18 +795,24 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// odar would silently drop them and stays refused.
 	// A damage link carries lkdh alone: the linked runtime has no rule for
 	// it beside a threat share or stat writes.
+	// A fence or quota link carries its share alone, as Mana Switch does.
+	if (result.Link.Fence || result.Link.Quota) && (result.Strength.Present || result.Intellect.Present ||
+		result.Block.Present || result.IncomingReduction || len(attributeTags) != 0) {
+		return
+	}
 	if result.Link.Mana && (result.Link.Threat || result.Strength.Present || result.Intellect.Present ||
 		result.Block.Present || result.IncomingReduction || len(attributeTags) != 0) {
 		return
 	}
 	if result.Link.Threat && (result.Block.Present || result.IncomingReduction) ||
-		result.Link.Present && (defense || result.Area.Present || result.Persistent || result.ElementResistance) ||
+		result.Link.Present && (defense || result.Area.Present || result.Persistent) ||
 		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present ||
-		result.Preemptive.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) {
+		result.Preemptive.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) ||
+		result.Field.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) {
 		return
 	}
 	partySelection := result.Area.Select == SelectParty || result.Area.Select == SelectParty|SelectCaster
-	if movement && (targeted || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
+	if movement && (targeted || result.Field.Present || !result.Area.Present || !partySelection || result.Persistent || result.Link.Present || row.EffectDurationMs == 0) ||
 		musicParameters && !movement && !result.Preemptive.Present && !result.Link.Mana {
 		return
 	}
@@ -698,10 +824,11 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction || result.ElementResistance || result.ShieldTradeoff.Present || result.HitRate || result.Range || result.Hawk.Present ||
-		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present ||
+		result.Intellect.Present || result.IncomingReduction || result.ShieldTradeoff.Present || result.HitRate || result.Parry || result.Range || result.Hawk.Present ||
+		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt || result.Link.Fence || result.Link.Quota) ||
+		result.Preemptive.Present ||
 		result.DamageReturn.Present ||
-		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0)
+		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present)
 	result.Targeted = targeted
 	row.TimedEffect = result
 	if result.Pinned && movement {

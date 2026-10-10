@@ -428,6 +428,8 @@ type Runtime struct {
 	// castTokenCounter mints the per-cast 0xB245 instance token before the
 	// item-operation lane. First token is 1: a live bracket never carries 0.
 	castTokenCounter uint32
+	// huntingReports is the last position each hunt link reported (huntingpoint.go).
+	huntingReports huntingReports
 
 	// pendingSkillFinalizes is the server-owned close side of accepted
 	// 0xB245 brackets. The simulation tick drains due B505 frames by division;

@@ -143,6 +143,9 @@ func (rt *Runtime) operatorJobWrites(row enterworld.SkillRow, before combat.Stat
 		if effect.Reat.Mask != 0 {
 			writes = append(writes, combat.StatusReductionWrites(effect.Reat)...)
 		}
+		if effect.Bgra.Mask != 0 {
+			writes = append(writes, combat.ElementResistanceWrites(effect.Bgra)...)
+		}
 		if effect.Defense {
 			defense, err := combat.DefenseEffectWrites(combat.DefenseModifierInput{
 				Physical: effect.Physical, Magical: effect.Magical, CapPercent: effect.CapPercent,

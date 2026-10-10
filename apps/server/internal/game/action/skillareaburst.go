@@ -131,7 +131,7 @@ func (rt *Runtime) casterAreaVictims(division string, c *enterworld.Character, s
 	if !ok {
 		return nil
 	}
-	q := areaQuery{division: division, caster: c, skill: skill, lease: lease,
+	q := areaQuery{selects: area.Select, division: division, caster: c, skill: skill, lease: lease,
 		center: rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now), reach: float64(area.Radius) + radius, now: now}
 	var out []combatTarget
 	for _, candidate := range rt.areaCandidates(q) {
