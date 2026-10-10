@@ -105,15 +105,16 @@ parked on locks, every stack) and exits non-zero for the supervisor.
 func TestTickWatchdogDumpsAndExitsOnADeadlock(t *testing.T) {
 	var held sync.RWMutex
 	held.Lock()
-	parked := make(chan struct{})
+	reads := 0
 	go func() {
-		close(parked)
 		held.RLock()
-		held.RUnlock()
+		defer held.RUnlock()
+		reads++
 	}()
-	<-parked
 	defer held.Unlock()
-	time.Sleep(50 * time.Millisecond)
+	wait.Eventually(t, 5*time.Second, "the reader to park on the held lock", func() bool {
+		return strings.Contains(string(allStacks()), "[sync.RWMutex.RLock]")
+	})
 
 	dir := t.TempDir()
 	code := -1
