@@ -80,8 +80,15 @@ import {
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
+// v1.188 capacity announce 0x3092 [kind][capacity] (server 4E73D0 case 0x11);
+// kind 1 is the bag. Port-only, not native: v1.150 has no handler and learns
+// its bag size at world entry. The server sends it only with
+// SRO_INSTANT_INVENTORY_EXPANSION on, after a quest pays bag slots.
+const STORAGE_CAPACITY_OPCODE = 0x3092;
+const STORAGE_CAPACITY_INVENTORY = 1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
 /*
 ================
@@ -1391,6 +1398,18 @@ receive
 					} ];
 					published = null;
 				}
+				return true;
+			}
+			if ( op === STORAGE_CAPACITY_OPCODE ) {
+				// A bag only grows: the slots the player holds stay addressable.
+				const capacity = p[1]!;
+				if (
+					p.length !== 2 || p[0] !== STORAGE_CAPACITY_INVENTORY || inventorySlotCount === undefined ||
+					capacity < inventorySlotCount || capacity > MAX_INVENTORY_SLOT_COUNT
+				) {
+					throw Error( "Invalid inventory capacity" );
+				}
+				inventorySlotCount = capacity;
 				return true;
 			}
 			if ( op === MALL_BALANCE_CONTROL ) {
