@@ -41,6 +41,21 @@ test("COS ground requests and receipts keep the player bag isolated", () => {
 	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 254, ...u32( 50 ) ] ) }, 6 );
 	assert.equal( owner.take().cosRecords[0].inventory.length, 2 );
 });
+test("a pet pickup the party hands to another member ends at the pet's scoop", () => {
+	// 525DC0 rewrites a shared pickup to type 6 for the recipient: the owner
+	// gets the pet's 0x35C7 scoop and the despawn, never a 0x11 receipt.
+	const { owner } = fixture();
+	owner.command( { kind: "cos-pickup", gid: 7, target: 123 }, 0, entity );
+	owner.receive( { opcode: 0x35c7, payload: Uint8Array.from( [ ...u32( 7 ), 64 ] ) }, 1 );
+	assert.equal( owner.take().inventoryPending, false );
+	assert.doesNotThrow( () => owner.step( 10002 ) );
+
+	// Another actor's scoop leaves the request waiting for its own answer.
+	const other = fixture().owner;
+	other.command( { kind: "cos-pickup", gid: 7, target: 123 }, 0, entity );
+	other.receive( { opcode: 0x35c7, payload: Uint8Array.from( [ ...u32( 1 ), 64 ] ) }, 1 );
+	assert.throws( () => other.step( 10002 ), /reconnect/ );
+});
 function fixture() {
 	const sent = [], owner = createGameplay( f => sent.push( f ) );
 	owner.bootstrap( {

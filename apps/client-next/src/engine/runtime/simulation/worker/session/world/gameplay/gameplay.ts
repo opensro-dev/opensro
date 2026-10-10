@@ -2517,6 +2517,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				movement.castRefused( now );
 			}
 			try {
+				// The pet's scoop ends a manual pet pickup the party handed to
+				// another member (cosPickupShown); entities still animate it.
+				if ( frame.opcode === 0x35c7 && frame.payload.length >= 4 ) {
+					inventory.cosPickupShown(
+						new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true )
+					);
+				}
 				if ( betaMap.receive( frame ) ) {
 					dirty = true;
 					return true;

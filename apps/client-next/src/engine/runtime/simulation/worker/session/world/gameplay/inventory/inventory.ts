@@ -1054,6 +1054,23 @@ cosGround
 		},
 		/*
 ================
+cosPickupShown
+
+A pet's pickup that the party's item share hands to another member is
+answered to that member alone: 525DC0 rewrites the record to a type-6
+pickup addressed to the recipient (+0x28/+0x2C), so the owner sees only the
+pet's 0x35C7 scoop. The pet's own grant answers before its scoop in the same
+burst, so a scoop that finds the request still pending ends it.
+================
+		*/
+		cosPickupShown( gid: number ) {
+			if ( pending?.opcode === 0xb06d && pending.movementType === 0x11 && pending.cosGid === gid ) {
+				pending = null;
+				error = null;
+			}
+		},
+		/*
+================
 cosGrounded
 ================
 		*/
