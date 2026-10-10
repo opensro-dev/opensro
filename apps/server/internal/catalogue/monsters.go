@@ -163,7 +163,8 @@ type MonsterSource struct {
 ================
 BuildMonsters
 
-Every monster with a nest, and every unique, in id order.
+Every monster with a nest, and every unique (a grade that rolls the unique
+prepass, action.RollsUniqueDrops), in id order.
 ================
 */
 func BuildMonsters(source MonsterSource) ([]Monster, error) {
@@ -180,7 +181,7 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 	}
 	var monsters []Monster
 	for id, ref := range source.Template.Refs {
-		if ref.Structure || regions[id] == nil && ref.MonsterType != gradeUnique {
+		if ref.Structure || regions[id] == nil && !action.RollsUniqueDrops(ref.MonsterType) {
 			continue
 		}
 		m := Monster{ID: id, Codename: ref.Codename, Name: ref.Name, Level: int(ref.Level), HP: ref.MaxHP,
