@@ -17,6 +17,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -286,6 +287,7 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	writes = append(writes, itemWrites...)
 	if row.TimedEffect.Pinned {
 		writes = append(writes, combat.AttributeEffectWrites(row.TimedEffect.Attributes)...)
+		writes = append(writes, combat.ShieldTradeoffWrites(row.TimedEffect.ShieldTradeoff)...)
 	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
@@ -607,6 +609,18 @@ func buffModifierWrites(m enterworld.SkillBuffModifiers, itemAccuracy bool) []pa
 	// (parameter 0x8D) by its word, negated with FCHS.
 	if m.Dcmp {
 		writes = append(writes, paramkeeper.Write{Parameter: 0x8d, Channel: paramkeeper.Flat, Value: float32(-float64(m.DcmpPercent))})
+	}
+	// Inferred: v1.150 bgra {mask, power} (84B910..84B92B) raises the
+	// elemental percentage resistances, unlike reat's flat power cuts.
+	// File additive points on the same 0x1B..0x20 keepers accessories raise;
+	// the abnormal roll already scales power and duration from that total.
+	if m.Bgra {
+		for status := abnormal.Freeze; status <= abnormal.Zombie; status++ {
+			if m.BgraMask&status.Bit() != 0 {
+				writes = append(writes, paramkeeper.Write{Parameter: abnormalElementResistBase + uint16(status),
+					Channel: paramkeeper.Flat, Value: float32(m.BgraPercent)})
+			}
+		}
 	}
 	if m.Odar {
 		writes = append(writes, combat.IncomingReductionWrites(m.OdarBits, m.OdarWord, 0)...)

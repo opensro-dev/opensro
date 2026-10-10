@@ -118,7 +118,7 @@ decodeSkillOffense only validates them.
 	efr kind 2, onff     +0x290, +0x284        persistent aura (SkillAura)
 	efr kind 3           +0x294                qest radius word
 	dru, odar, ru, hr,
-	rhru, dcmp           +0x3E4, +0x270, ...   SkillBuffModifiers
+	rhru, dcmp, bgra     +0x3E4, +0x270, ...   SkillBuffModifiers
 	heal, mwhh, mwmh     +0x324..+0x32C        SkillHeal
 	eshp                 +0x298                aura heals the lowest HP ratio
 	nmf, tele/tel2/tel3,
@@ -251,6 +251,14 @@ func noteParameterIndex(fields []string, row *SkillRow) {
 			if percent, ok := word(i + 1); ok {
 				row.BuffModifiers.Dcmp = true
 				row.BuffModifiers.DcmpPercent = percent
+			}
+		case tagTimedElementResistance: // v1.150 84B910: two words, pointer at +0xD8
+			mask, maskOK := word(i + 1)
+			percent, percentOK := word(i + 2)
+			if maskOK && percentOK {
+				row.BuffModifiers.Bgra = true
+				row.BuffModifiers.BgraMask = mask
+				row.BuffModifiers.BgraPercent = percent
 			}
 		case 0x6f646172: // odar +0x270
 			bits, bitsOK := word(i + 1)

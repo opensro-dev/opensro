@@ -78,11 +78,22 @@ type SkillBuffModifiers struct {
 	RhruWords   [2]uint32
 	Dcmp        bool
 	DcmpPercent uint32
+	// Bgra is v1.150 bgra {element mask, resistance percent} (84B910).
+	// The percentage interpretation is inferred; action owns its keeper writes.
+	Bgra        bool
+	BgraMask    uint32
+	BgraPercent uint32
 }
 
-// Present reports a block 594AC0 would install.
+/*
+================
+Present
+
+Reports an indexed recipient modifier, including inferred bgra resistance.
+================
+*/
 func (m SkillBuffModifiers) Present() bool {
-	return m.Dru || m.Odar || m.Ru || m.Hr || m.Rhru || m.Dcmp
+	return m.Dru || m.Odar || m.Ru || m.Hr || m.Rhru || m.Dcmp || m.Bgra
 }
 
 /*

@@ -16,6 +16,7 @@ package action
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/statuseffect"
@@ -148,19 +149,13 @@ func TestEarthBarrierCostCutByIntelligence(t *testing.T) {
 ================
 TestFireShieldReqiGates
 
-The Chinese Fire Shield's reqi 4 1 (a shield in slot 7) is now indexed on
-the row. It has no runtime effect while the rows stay refused: the cast is
-refused with a shield as well as without one, as before the reqi was
-indexed (only the code reported without a shield is now 58D480's 0x300D,
-which runs before the shape refusal). The 59F0E0 walk is pinned on seeded
-instances: it would retire a self-applied instance whose reqi the
-equipment no longer meets, but 59F397 exempts SKILL_CH_FIRE_SHIELD_ rows
-by name, so only the same row under another codename is retired when the
-shield leaves.
+Fire Shield requires a Chinese shield to cast (reqi 4 1, 58D480). Its
+live effect survives unequipping: 59F397 exempts SKILL_CH_FIRE_SHIELD_
+rows by name. The same requirement on another row retires its instance.
 ================
 */
 func TestFireShieldReqiGates(t *testing.T) {
-	rt, _, c, shield, _ := shieldFixture(t)
+	rt, clock, c, shield, _ := shieldFixture(t)
 	fire := shippedOffense(t, fireShieldA1)
 	source := rt.deps.SkillData().(staticSkillSource)
 	source[fire.ID] = fire
@@ -180,16 +175,16 @@ func TestFireShieldReqiGates(t *testing.T) {
 		Slot: 7, RefObjID: shield.RefObjID, Codename: shield.Codename, TypeFlags: shield.TypeFlags(), VarianceBits: "0", Durability: 1, StackCount: 1,
 	})
 	armed := castSelf(rt, c, fire.ID)
-	if armed.DiagnosticRefusal == "" || len(rt.effects.Snapshot(testDivision, c.Name)) != 0 {
-		t.Fatalf("Fire Shield with a shield is no longer refused: %+v", armed)
+	if armed.DiagnosticRefusal != "" || !hasSkillEffect(rt, c.Name, fire.ID) {
+		t.Fatalf("Fire Shield with a shield refused: %+v", armed)
 	}
-	for i, row := range []enterworld.SkillRow{fire, renamed} {
-		e := statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: row.ID, SkillGroup: row.Group,
-			InstanceToken: uint32(200000 + i), State: statuseffect.StateActive, Phase: 1}
-		if !rt.effects.Apply(e) {
-			t.Fatalf("seed %s", row.Codename)
-		}
+	e := statuseffect.Effect{DivisionID: testDivision, CharacterName: c.Name, SkillID: renamed.ID, SkillGroup: renamed.Group,
+		InstanceToken: 200000, State: statuseffect.StateActive, Phase: 1}
+	if !rt.effects.Apply(e) {
+		t.Fatalf("seed %s", renamed.Codename)
 	}
+	clock.Advance(3 * time.Second)
+	rt.drainSkillFinalizes(clock.NowMs())
 	move := rt.HandleItemMove(testDivision, c, encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: 7, DestSlot: 20, Quantity: 1}))
 	if len(move.Frames) == 0 || move.Frames[0].Payload[0] != 1 {
 		t.Fatalf("unequip refused: %+v", move.Frames)

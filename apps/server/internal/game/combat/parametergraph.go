@@ -93,6 +93,12 @@ func playerParameterGraph(level uint8) (*paramkeeper.Graph, []paramkeeper.Write,
 	if err != nil {
 		return nil, nil, err
 	}
+	// The client-authored shield tradeoff has a known percentage unit but
+	// no verified native keeper identity. This detached node carries only
+	// the projection's effect contribution, with the same bounded unit.
+	definitions = append(definitions, paramkeeper.NodeDefinition{
+		ID: shieldDefensePenaltyParameter, SourceKey: parameterNodeKeyBase + uint32(shieldDefensePenaltyParameter),
+		Definition: paramkeeper.Definition{Minimum: 0, Maximum: shieldPenaltyPercent, Base: 0, Ignore: -1}})
 	g, err := paramkeeper.NewGraph(definitions)
 	if err != nil {
 		return nil, nil, err

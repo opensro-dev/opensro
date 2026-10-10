@@ -217,6 +217,7 @@ func PlayerStatsWithModifiers(
 	if items == nil {
 		return Stats{}, Loadout{}, fmt.Errorf("combat: item reference source is unavailable")
 	}
+	var physicalShieldDefense float32
 	var passiveWeaponKind uint8
 	seenSlots := make(map[int64]bool)
 	for _, row := range character.MissionInventory {
@@ -295,6 +296,9 @@ func PlayerStatsWithModifiers(
 		// 495CA0: CalculateBaseStats, then ApplyMagicOptions scales the
 		// item's own HR (+1D8) and ER (+19C) before any keeper insertion.
 		applyItemMagicOptions(&contribution, options)
+		if row.Slot == 7 && isBodyProtectorFamily(ref.TypeFlags()) {
+			physicalShieldDefense = float32(contribution.PhysicalDefense)
+		}
 		source := uint32(1024 + row.Slot)
 		writes = append(writes, statWrites(contribution, source)...)
 		writes = append(writes, equipmentReinforcementWrites(ref, varianceBits)...)
@@ -338,6 +342,7 @@ func PlayerStatsWithModifiers(
 	for _, w := range writes {
 		staticSources[w.Source] = struct{}{}
 	}
+	staticSources[shieldDefensePenaltySource] = struct{}{}
 	for _, w := range modifiers {
 		if _, collision := staticSources[w.Source]; collision || w.Source == 0 {
 			return Stats{}, Loadout{}, fmt.Errorf("combat: effect source %d aliases a base/equipment/passive owner", w.Source)
@@ -356,6 +361,9 @@ func PlayerStatsWithModifiers(
 				return Stats{}, Loadout{}, fmt.Errorf("combat: abnormal write to parameter %d: %w", m.Param, err)
 			}
 		}
+	}
+	if err = applyShieldDefensePenalty(graph, physicalShieldDefense); err != nil {
+		return Stats{}, Loadout{}, err
 	}
 	out.graph = graph
 	if err = readParameterStats(graph, &out); err != nil {

@@ -43,6 +43,9 @@ const (
 	tagDamageReturn            = 0x646d6772
 	tagTimedOverlap            = 0x6f766c32
 	tagTimedPreemptive         = 0x706f6c61
+	tagTimedElementResistance  = 0x62677261 // bgra
+	tagTimedShieldTradeoff     = 0x73706461 // spda
+	maxShieldDefensePenalty    = 100
 	tagTimedStatusReduction    = 0x72656174 // reat
 	tagTimedStatusResistance   = 0x7265616c // real
 	parameterWizardMP          = 0x57494d44
@@ -52,6 +55,12 @@ const (
 	parameterBlessingMagical   = 0x484c534d
 	parameterBlessingStrength  = 0x484c4653
 	parameterBlessingIntellect = 0x484c4d49
+)
+
+// bgra selects the six elemental statuses; shipped powers are 18..78.
+const (
+	timedElementResistanceMask  = 0x3f
+	maxElementResistancePercent = 100
 )
 
 /*
@@ -85,6 +94,9 @@ type SkillTimedEffect struct {
 	Persistent bool
 	// IncomingReduction marks an admitted odar block (Earth Barrier).
 	IncomingReduction bool
+	// ElementResistance admits bgra (Fire Shield); BuffModifiers owns the words.
+	ElementResistance bool
+	ShieldTradeoff    SkillShieldTradeoff
 	// Hawk is summ (+0x308): the attacking hawk of Black and Light Hawk
 	// Summon (SkillSummonedHawk).
 	Hawk SkillSummonedHawk
@@ -202,6 +214,20 @@ type SkillAttributeBoost struct {
 	// Mad Bow and Dagger Up).
 	DefensePenalty                                bool
 	PhysicalDefensePenalty, MagicalDefensePenalty uint32
+}
+
+/*
+================
+SkillShieldTradeoff
+
+v1.150 spda (84C964) is two words. Tooltip 7FC4CA..7FC5B6 prints
+word zero as shield physical defense percent lost, word one as flat
+physical attack gained. The timed owner retires both contributions.
+================
+*/
+type SkillShieldTradeoff struct {
+	Present                        bool
+	DefensePercent, PhysicalAttack uint32
 }
 
 /*
@@ -554,6 +580,20 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 			result.Preemptive = SkillPreemptiveGuard{Present: true, Mask: op.Arguments[0], Level: op.Arguments[1]}
+		case tagTimedShieldTradeoff:
+			if result.ShieldTradeoff.Present || op.Count != 2 || op.Arguments[0] > maxShieldDefensePenalty {
+				return
+			}
+			result.ShieldTradeoff = SkillShieldTradeoff{Present: true,
+				DefensePercent: op.Arguments[0], PhysicalAttack: op.Arguments[1]}
+		case tagTimedElementResistance:
+			if result.ElementResistance || op.Count != 2 || op.Arguments[0] == 0 ||
+				op.Arguments[0]&^timedElementResistanceMask != 0 || op.Arguments[1] > maxElementResistancePercent ||
+				targeted || result.Area.Present || row.EffectDurationMs == 0 || !row.BuffModifiers.Bgra ||
+				op.Arguments[0] != row.BuffModifiers.BgraMask || op.Arguments[1] != row.BuffModifiers.BgraPercent {
+				return
+			}
+			result.ElementResistance = true
 		case tagTimedStatusReduction:
 			if result.Reat.Mask != 0 || op.Count != 2 || op.Arguments[0] == 0 || op.Arguments[0]&^0x3f != 0 {
 				return
@@ -602,6 +642,24 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			return
 		}
 	}
+	if result.ShieldTradeoff.Present {
+		// Only the complete shield-bound self program has a producer. A
+		// companion area, link or item-job block cannot be dropped silently.
+		if !duration || targeted || row.EffectDurationMs == 0 || !row.Reqi.Present || row.Reqi.All ||
+			row.Reqi.Count != 1 || row.Reqi.Pairs[0] != (SkillReqiPair{Kind: 4, Value: 1}) {
+			return
+		}
+		for i := 0; i < program.Len(); i++ {
+			switch program.Instruction(i).Tag {
+			case tagDura, tagTimedShieldTradeoff, tagReqi:
+			default:
+				return
+			}
+		}
+	}
+	if result.ElementResistance && !duration {
+		return
+	}
 	if linkThreat || linkDamage {
 		if !result.Link.Present {
 			return
@@ -622,7 +680,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	if result.Link.Threat && (result.Block.Present || result.IncomingReduction) ||
-		result.Link.Present && (defense || result.Area.Present || result.Persistent) ||
+		result.Link.Present && (defense || result.Area.Present || result.Persistent || result.ElementResistance) ||
 		result.StrengthAddend && !result.Strength.Present || result.IntellectAddend && !result.Intellect.Present ||
 		result.Preemptive.Present && (result.Link.Present || result.Persistent || row.EffectDurationMs == 0) {
 		return
@@ -640,7 +698,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		return
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
-		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Range || result.Hawk.Present ||
+		result.Intellect.Present || result.IncomingReduction || result.ElementResistance || result.ShieldTradeoff.Present || result.HitRate || result.Range || result.Hawk.Present ||
 		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present ||
 		result.DamageReturn.Present ||
 		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0)
