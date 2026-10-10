@@ -85,8 +85,7 @@ func (rt *Runtime) monsterRewardRoster(division string, actor *enterworld.Charac
 	// The division list is taken before the read door: CharactersForDivision
 	// takes the store's read lock itself, and a second read lock inside the
 	// door waits behind any queued writer while the door holds that writer
-	// off (the 2026-10-10 11:10 freeze: a party pickup against a tick's
-	// UpdateCharacter). The slice is a fresh copy of the live pointers, so
+	// off. The slice is a fresh copy of the live pointers, so
 	// the field reads below stay inside the door.
 	characters := rt.deps.CharactersForDivision(division)
 	rt.deps.Read(division, func() {
