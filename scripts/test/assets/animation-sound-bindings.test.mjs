@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { pickAnimationSetSoundEvents, pickDefaultSetSoundEvents } from "../../build/char/animationUtils.mjs";
+import { attachedMotionMetadata, pickAttachedMotionClips } from "../../build/char/attachedMotionClips.mjs";
 import { parseCharacterBsr } from "../../build/char/formats.mjs";
 import { resolveRoster } from "../../build/char/resolveCharRoster.mjs";
 import { loadDataAsset } from "../../build/shared/jmxAssetIO.mjs";
@@ -144,4 +145,43 @@ test("licensed Exorcist staff inherits 289/619 while exact onehand staff and car
 		);
 		assert.deepEqual( pickAnimationSetSoundEvents( bsr, "cart", stateId ), [] );
 	}
+});
+
+/*
+================
+attachedFixture
+
+A default set that authors state 7's clip and sound, plus a named set that
+authors no clip of its own, so every attached clip comes from default.
+================
+*/
+function attachedFixture() {
+	return {
+		...fixture(),
+		animationSets: [
+			{ name: "default", states: [ { stateId: 7, animationPath: "default_run.ban" } ] },
+			{ name: "twohand_staff", states: [] }
+		]
+	};
+}
+
+test("an attached motion takes its sound from the request's whole binding", () => {
+	const request = { id: 7, set: "twohand_staff", role: "attached-twohand-staff-7" };
+	// Absent binding: the default set's sound, with the default clip.
+	let bsr = attachedFixture();
+	let [motion] = pickAttachedMotionClips( bsr, [ request ] );
+	assert.equal( motion.path, "default_run.ban" );
+	assert.deepEqual( attachedMotionMetadata( bsr, motion ).soundEvents, expected( 289 ) );
+	// The request's own binding with sound markers wins, though the clip
+	// still comes from default.
+	bsr = attachedFixture();
+	bsr.modifierSets.push( binding( "twohand_staff" ) );
+	bsr.soundModifiers.push( sound( "twohand_staff", 7, 120 ) );
+	[motion] = pickAttachedMotionClips( bsr, [ request ] );
+	assert.deepEqual( attachedMotionMetadata( bsr, motion ).soundEvents, expected( 120 ) );
+	// An explicit binding without sound is silence, not a fallback.
+	bsr = attachedFixture();
+	bsr.modifierSets.push( binding( "twohand_staff", 7, 0 ) );
+	[motion] = pickAttachedMotionClips( bsr, [ request ] );
+	assert.deepEqual( attachedMotionMetadata( bsr, motion ).soundEvents, [] );
 });

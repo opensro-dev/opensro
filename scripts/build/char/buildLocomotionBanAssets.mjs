@@ -8,7 +8,7 @@ binding fallback. BAN bytes remain unchanged for the browser native loader.
 import { loadAvatarVisualOverrides, avatarAnimationRequirements } from "./avatarVisualOverrides.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
-import { pickAttachedMotionClips } from "./attachedMotionClips.mjs";
+import { attachedMotionMetadata, pickAttachedMotionClips } from "./attachedMotionClips.mjs";
 import { expandCharacterInfoCodenames } from "../shared/characterInfo.mjs";
 // Animation Level B asset step: publish the RAW character .ban files used by
 // the live motion plane (idle, locomotion, attack, pickup, hit, sit, and death) as
@@ -375,7 +375,7 @@ export async function buildLocomotionBanAssets() {
 			entry[motion.role] = {
 				...(await publishClip( motion.path, publishedByPath )),
 				loop: clip.field2 !== 0,
-				...pickAnimationStateTableMetadata( motion.state )
+				...attachedMotionMetadata( bsr, motion )
 			};
 		}
 		entry.animationSets = {};

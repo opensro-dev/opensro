@@ -45,7 +45,7 @@ import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadBoothModelRoster } from "./boothModelRoster.mjs";
 import { bakeNpcSecondaryResources } from "./npcSecondaryResources.mjs";
 import { authoredAnimationBindings } from "./authoredAnimationBindings.mjs";
-import { pickAttachedMotionClips } from "./attachedMotionClips.mjs";
+import { attachedMotionMetadata, pickAttachedMotionClips } from "./attachedMotionClips.mjs";
 
 import fs from "node:fs";
 import { characterMaterialVariants } from "./materialVariants.mjs";
@@ -55,8 +55,7 @@ import {
 	findDefaultAnimationSet,
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
-	pickDefaultSetStateTableMetadata,
-	pickAnimationStateTableMetadata
+	pickDefaultSetStateTableMetadata
 } from "./animationUtils.mjs";
 import { assembleAvatar, primSlot, NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS } from "./buildAvatar.mjs";
 import { assembleStaticBsrModel } from "./compileBsrVisual.mjs";
@@ -508,8 +507,7 @@ export async function bakeCharacterResource( bsrPath, output, isMob, requiredSta
 			stateId: motion.id,
 			durationMs: clip.durationMs,
 			loop: clip.field2 !== 0,
-			soundEvents: [],
-			...pickAnimationStateTableMetadata( motion.state )
+			...attachedMotionMetadata( bsr, motion )
 		};
 	}
 	if ( isMob ) {
