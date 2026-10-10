@@ -177,17 +177,26 @@ commitPlayerDisplacementInDoor
 Inside the victim's door: the victim stops where the displacement ends,
 its preparing casts and command end, and the hold starts. Returns the
 impact's wire point and the victim's withdrawn casts.
+
+The push walks as a move (593D24 -> CGObjPC_MoveByStepUnlessMounted 4EF300
+-> CGObjChar_MoveByStep 48B920 -> CGObj_MoveTo 485740): the move query runs
+from the victim's own cell, a refused walk leaves it where it stood, and an
+admitted one ends where the walk came to rest, short of a blocked edge.
 ================
 */
 func (rt *Runtime) commitPlayerDisplacementInDoor(division string, victim *enterworld.Character, d *playerDisplacement) (wire.SkillCastFacingPoint, []wire.Frame, bool) {
+	key := simulation.WorldKey(division, victim.Name)
+	from, fromOwner := rt.liveNav(key, victim, rt.Now().UnixMilli())
+	landed, owner := rt.walkDisplacement(victim.Name, from, fromOwner, d.pose)
+	d.pose = simulation.Spawn{RegionID: landed.RegionID, X: landed.X, Y: landed.Y, Z: landed.Z}
 	point, valid := wire.NewSkillCastFacingPoint(d.pose.RegionID, d.pose.X, d.pose.Y, d.pose.Z)
 	if !valid {
 		return wire.SkillCastFacingPoint{}, nil, false
 	}
-	key := simulation.WorldKey(division, victim.Name)
 	state := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(victim) }, func(w *simulation.WorldState) {
 		w.Spawn = simulation.Spawn{RegionID: d.pose.RegionID, X: d.pose.X, Y: d.pose.Y, Z: d.pose.Z, Angle: w.Spawn.Angle}
 		w.MoveSegment = nil
+		w.SetGoalOwner(owner)
 		w.SpawnSet = true
 		w.MovementSourceSeeded = true
 	})
@@ -197,6 +206,29 @@ func (rt *Runtime) commitPlayerDisplacementInDoor(division string, victim *enter
 	withdrawn := rt.cancelPreparingProjectile(division, victim.Name)
 	rt.playerDisplacements.Store(key, *d)
 	return point, withdrawn, true
+}
+
+/*
+================
+walkDisplacement
+
+The point and surface owner a pushed character's walk from its own cell
+reaches. A refused walk (CGObj_MoveTo's blocked result) keeps the live
+point and owner.
+================
+*/
+func (rt *Runtime) walkDisplacement(name string, from simulation.Spawn, fromOwner simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, simulation.NavOwner) {
+	rest, walk, refused := rt.constrainWalk(name, from, fromOwner, to)
+	if refused != nil {
+		return from, fromOwner
+	}
+	owner := walk.Rest
+	if rt.ResolveNavOwner != nil {
+		if resolved, y, ok := rt.ResolveNavOwner(rest, walk.Rest); ok {
+			owner, rest.Y = resolved, y
+		}
+	}
+	return rest, owner
 }
 
 /*

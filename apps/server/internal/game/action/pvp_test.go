@@ -13,6 +13,7 @@ level gates, so the level-1 fixture rows stay valid.
 package action
 
 import (
+	"math"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -415,5 +416,65 @@ func TestAreaSelectChoosesItsKinds(t *testing.T) {
 	}
 	if monsterIn(8) {
 		t.Fatal("select 8 struck a monster")
+	}
+}
+
+/*
+================
+TestPlayerKnockbackWalksThroughTheMoveQuery
+
+CGObj_MoveTo moves a pushed player through the move query from its own
+cell: a refused walk leaves it where it stood, a clipped walk ends at the
+rest, and the published point is where it landed.
+================
+*/
+func TestPlayerKnockbackWalksThroughTheMoveQuery(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		refuse  bool
+		clipped bool
+	}{{"open", false, false}, {"clipped", false, true}, {"refused", true, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, clock, a, v := newPvpPair(t)
+			rt.CombatRoll = func() (uint32, error) { return 0, nil }
+			skill := enterworld.SkillRow{ID: 9, ActionDurationMs: 1000,
+				Knockback: enterworld.SkillKnockback{Present: true, Chance: 100, Distance: 30}}
+			now := clock.NowMs()
+			from := rt.liveSpawn(simulation.WorldKey(testDivision, a.Name), a, now)
+			at := rt.liveSpawn(simulation.WorldKey(testDivision, v.Name), v, now)
+			d, err := rt.planPlayerDisplacement(displacementRoll{division: testDivision,
+				actor: criticalActor{division: testDivision, character: a.Name}, from: from, skill: skill, victim: v, at: at, now: now})
+			if err != nil || d == nil || d.down {
+				t.Fatalf("knockback plan %+v, %v", d, err)
+			}
+			push := d.pose
+			rest := push
+			rest.X = (at.X + push.X) / 2
+			rt.ConstrainWalk = func(_ string, from simulation.Spawn, _ simulation.NavOwner, to simulation.Spawn) (simulation.Spawn, simulation.NavWalk, *simulation.MoveError) {
+				if tc.refuse {
+					return from, simulation.NavWalk{}, &simulation.MoveError{Reason: "blocked"}
+				}
+				if tc.clipped {
+					return rest, simulation.NavWalk{}, nil
+				}
+				return to, simulation.NavWalk{}, nil
+			}
+			want := push
+			switch {
+			case tc.refuse:
+				want = at
+			case tc.clipped:
+				want = rest
+			}
+			point, _, ok := rt.commitPlayerDisplacementInDoor(testDivision, v, d)
+			if !ok {
+				t.Fatal("knockback did not commit")
+			}
+			landed := rt.liveSpawn(simulation.WorldKey(testDivision, v.Name), v, now)
+			wantPoint, _ := wire.NewSkillCastFacingPoint(want.RegionID, want.X, want.Y, want.Z)
+			if math.Abs(landed.X-want.X) > 0.01 || point != wantPoint {
+				t.Fatalf("landed at %.2f (published %+v), want %.2f", landed.X, point, want.X)
+			}
+		})
 	}
 }
