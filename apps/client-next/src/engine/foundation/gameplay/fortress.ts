@@ -12,7 +12,7 @@ the fortress official's protocol: 0x71E1 requests
 
 ===========================================================================
 */
-import { type FortressForgeItem, fortressForgeCatalog } from "./fortress-production";
+import { FORTRESS_ROLE_COMMANDER, type FortressForgeItem, fortressForgeCatalog } from "./fortress-production";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "./system-notices";
 import {
@@ -426,7 +426,6 @@ export const FORTRESS_DISMISS = 0x16;
 export const FORTRESS_DEMOLISH = 0x17;
 // Guild member fortress roles; 827DB0, 827DE0 and 827E10 compare the
 // member's role (+0x5C) for equality.
-const ROLE_COMMANDER = 1;
 const ROLE_SUB_COMMANDER = 2;
 const ROLE_BATTLE_COMMANDER = 4;
 
@@ -453,7 +452,7 @@ export function fortressDeleteAction( kind: number, context: {
 	readonly ownObject: boolean;
 } ): number {
 	const { war, holder, role, ownObject } = context;
-	const commander = role === ROLE_COMMANDER, battle = role === ROLE_BATTLE_COMMANDER;
+	const commander = role === FORTRESS_ROLE_COMMANDER, battle = role === ROLE_BATTLE_COMMANDER;
 	if ( kind === 1 && !war && holder && (commander || battle) ) return FORTRESS_DISMISS;
 	if ( kind === 2 && war && holder && (commander || role === ROLE_SUB_COMMANDER || battle) ) return FORTRESS_DEMOLISH;
 	if ( kind === 3 && war && commander && ownObject ) return FORTRESS_DISMISS;
