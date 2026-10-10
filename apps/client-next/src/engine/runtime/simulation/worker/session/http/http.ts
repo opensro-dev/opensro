@@ -32,7 +32,7 @@ const BROWSER_AUTH_ROUTES = new Set( [
 	"/auth/enterworld-token"
 ] );
 
-type SessionResponse = { httpOk: boolean; body: unknown; };
+type SessionResponse = { httpOk: boolean; status: number; body: unknown; };
 
 type RequestOptions = {
 	base: string;
@@ -76,10 +76,17 @@ export function createSessionHttp() {
 		if ( response.status === RELEASE_OUTDATED_STATUS ) outdated = true;
 		if ( !response.body ) throw new Error( "Session response has no body" );
 		const bytes = await readBytes( response.body, limit );
-		return {
-			httpOk: response.ok,
-			body: JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ) as unknown
-		};
+		const text = new TextDecoder( "utf-8", { fatal: true } ).decode( bytes );
+		// A refusal can be plain text (the Agent proxy's "shard unavailable"
+		// 503); its status still tells the session what happened. An accepted
+		// answer must be JSON.
+		let parsed: unknown = null;
+		try {
+			parsed = JSON.parse( text ) as unknown;
+		} catch ( error ) {
+			if ( response.ok ) throw error;
+		}
+		return { httpOk: response.ok, status: response.status, body: parsed };
 	}
 
 	return {

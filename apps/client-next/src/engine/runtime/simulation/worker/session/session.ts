@@ -17,7 +17,12 @@ import { createSessionDecoder } from "./decode/decode";
 import { createSessionHttp } from "./http/http";
 import type { SessionOwner, SessionState } from "@/engine/contracts/session";
 import type { ClientIncident } from "@/engine/contracts/network";
-import { MAX_STARTING_WAIT_MS, STARTING_CODE, serverStarting } from "@/engine/foundation/session/server-starting";
+import {
+	MAX_STARTING_WAIT_MS,
+	rosterStarting,
+	STARTING_CODE,
+	serverStarting
+} from "@/engine/foundation/session/server-starting";
 
 // How long a failure report may take; it never holds up the session ending.
 const INCIDENT_TIMEOUT_MS = 5000;
@@ -54,6 +59,7 @@ export function createSession(): SessionOwner {
 		generation: number;
 		value?: {
 			httpOk: boolean;
+			status: number;
 			body: unknown;
 		};
 		error?: string;
@@ -400,7 +406,8 @@ baseUrl
 					return;
 				}
 				cancelTitleRequest();
-				if ( command.kind === "servers" ) lastTitleCommand = command;
+				// A roster is repeated like the server list while the shard starts.
+				if ( command.kind === "servers" || command.kind === "roster" ) lastTitleCommand = command;
 				controller = new AbortController();
 				const current = generation, kind = command.kind;
 				try {
@@ -629,9 +636,12 @@ baseUrl
 					try {
 						// The server is still starting: keep the waiting state and
 						// repeat the request after its Retry-After, up to the cap.
-						const starting = result.value && !result.value.httpOk &&
-								(result.kind === "servers" || result.kind === "login") ?
-							serverStarting( result.value.body ) :
+						const starting = result.value && !result.value.httpOk ?
+							(result.kind === "servers" || result.kind === "login" ?
+								serverStarting( result.value.body ) :
+								result.kind === "roster" ?
+								rosterStarting( result.value ) :
+								null) :
 							null;
 						if ( starting && lastTitleCommand ) {
 							startingSince ??= now;
@@ -656,6 +666,8 @@ baseUrl
 								// Refresh equipment/levels after play through the authoritative roster reader.
 								controller = new AbortController();
 								const current = generation;
+								// A starting shard's answer repeats this refresh (rosterStarting).
+								lastTitleCommand = { kind: "roster" };
 								http.roster( identity!.apiBase, identity!.token, controller.signal ).then( value => {
 									if ( !disposed && generation === current ) {
 										completion = {
@@ -848,6 +860,8 @@ baseUrl
 							controller = new AbortController();
 							const current = generation;
 							publish( { phase: "loading-roster", divisionId: identity.divisionId } );
+							// A starting shard's answer repeats this restore (rosterStarting).
+							lastTitleCommand = { kind: "roster" };
 							http.roster( identity.apiBase, identity.token, controller.signal ).then( value => {
 								if ( !disposed && current === generation ) {
 									completion = {

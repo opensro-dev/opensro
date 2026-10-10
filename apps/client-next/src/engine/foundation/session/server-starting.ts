@@ -48,3 +48,24 @@ export function serverStarting( body: unknown ): ServerStarting | null {
 		DEFAULT_RETRY_MS;
 	return { message, retryMs };
 }
+
+// HTTP 503: the Agent proxy answers it, plain text, while the shard is not
+// operating (agent server handlers.go: "shard unavailable").
+const SERVICE_UNAVAILABLE = 503;
+
+/*
+================
+rosterStarting
+
+A character-list answer that means "wait", not "no characters": the
+GameWorld's PROCESS_STARTING, or the Agent's bare 503 for a shard that is
+not operating yet. During a restart either can reach a player who is already
+logged in; an empty dock then reads as deleted characters.
+================
+*/
+export function rosterStarting( response: { status: number; body: unknown; } ): ServerStarting | null {
+	const starting = serverStarting( response.body );
+	if ( starting ) return starting;
+	if ( response.status !== SERVICE_UNAVAILABLE ) return null;
+	return { message: "The server is starting. Your characters will appear in a moment.", retryMs: DEFAULT_RETRY_MS };
+}
