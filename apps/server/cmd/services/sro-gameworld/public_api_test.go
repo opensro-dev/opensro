@@ -9,6 +9,9 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/agent/publicstats"
@@ -100,4 +103,33 @@ func TestKillAfterCloseIsDroppedNotPanicking(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.enqueue(domain.UniqueKill{RefObjID: 1954})
+}
+
+/*
+================
+TestABadTokenRenderLeavesTheWriteOff
+
+A secret template that rendered its missing-key placeholder, or any short
+token, disables the privacy write instead of guarding it with a guessable
+value; a full-length token is read back trimmed.
+================
+*/
+func TestABadTokenRenderLeavesTheWriteOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "public-api-token")
+	t.Setenv(publicstats.EnvTokenPath, path)
+	for _, payload := range []string{"<no value>\n", "", "short"} {
+		if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if token := readPublicWriteToken(); token != "" {
+			t.Fatalf("payload %q gave token %q, want the write disabled", payload, token)
+		}
+	}
+	full := strings.Repeat("c", publicstats.MinWriteTokenBytes)
+	if err := os.WriteFile(path, []byte(full+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if token := readPublicWriteToken(); token != full {
+		t.Fatalf("full token read as %q", token)
+	}
 }

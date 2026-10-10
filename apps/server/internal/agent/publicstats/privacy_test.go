@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-// testWriteToken is long enough for minWriteTokenBytes.
+// testWriteToken is long enough for MinWriteTokenBytes.
 const testWriteToken = "0123456789abcdef0123456789abcdef"
 
 /*

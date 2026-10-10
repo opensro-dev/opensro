@@ -408,12 +408,13 @@ EOH
         gid         = var.task_gid
       }
 
-      # The privacy-write token; an absent item renders an empty file, which
-      # leaves the write unserved. The GameWorld reads it once at boot, so a
+      # The privacy-write token. index, not .public_api_token: a missing map
+      # key must render empty, never the template's "<no value>". An empty
+      # or short file leaves the write unserved. The GameWorld reads it once at boot, so a
       # rotated token applies at the next restart rather than kicking players.
       template {
         data = <<EOH
-{{ with nomadVar "nomad/jobs/sro-gameworld-__SHARD_ID__/gameworld/gameworld" }}{{ .public_api_token }}{{ end }}
+{{ with nomadVar "nomad/jobs/sro-gameworld-__SHARD_ID__/gameworld/gameworld" }}{{ index . "public_api_token" }}{{ end }}
 EOH
 
         destination = "secrets/public-api-token"

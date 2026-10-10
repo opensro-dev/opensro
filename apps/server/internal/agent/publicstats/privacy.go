@@ -35,8 +35,9 @@ import (
 // token the website already holds). Unset or empty disables the write.
 const EnvTokenPath = "SRO_PUBLIC_API_TOKEN_PATH"
 
-// minWriteTokenBytes refuses a guessable token.
-const minWriteTokenBytes = 32
+// MinWriteTokenBytes refuses a guessable token: a shorter one leaves the
+// write unserved, so a bad secret render fails closed.
+const MinWriteTokenBytes = 32
 
 // maxPrivacyBody bounds the request body.
 const maxPrivacyBody = 256
@@ -53,7 +54,7 @@ Adds the write route when the token and the setter are both present.
 */
 func (s *Service) installPrivacy(mux *http.ServeMux) {
 	token := strings.TrimSpace(s.src.WriteToken)
-	if len(token) < minWriteTokenBytes || s.src.SetHidden == nil {
+	if len(token) < MinWriteTokenBytes || s.src.SetHidden == nil {
 		return
 	}
 	digest := sha256.Sum256([]byte(token))

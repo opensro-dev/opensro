@@ -188,7 +188,8 @@ func setPublicHidden(authority *store.Store, shard, account, name string, hidden
 ================
 readPublicWriteToken
 
-The write token file, or "" (write disabled) when unset or unreadable.
+The write token file, or "" (write disabled) when unset, unreadable or
+shorter than publicstats.MinWriteTokenBytes.
 ================
 */
 func readPublicWriteToken() string {
@@ -206,7 +207,15 @@ func readPublicWriteToken() string {
 		log.WithError(err).Warn("public api: write token unreadable; privacy write disabled")
 		return ""
 	}
-	return strings.TrimSpace(string(payload))
+	token := strings.TrimSpace(string(payload))
+	if len(token) < publicstats.MinWriteTokenBytes {
+		// Also catches a template that rendered "<no value>" for a missing item.
+		if token != "" {
+			log.WithField("path", path).Warn("public api: write token too short; privacy write disabled")
+		}
+		return ""
+	}
+	return token
 }
 
 /*
