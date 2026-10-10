@@ -2230,6 +2230,51 @@ test("GPU inventory uses one native gold confirmation with numeric clamp and mod
 	}
 });
 
+test("storage gold withdraws with an empty bag and clamps to the room's gold (BR-261010-1655-2B68)", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventoryPending: false,
+			progression: { gold: "0", masteries: [] },
+			storage: { npc: 7, phase: "open", capacity: 150, gold: "500", items: [] }
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		const click = id => {
+			f.ui.event( { kind: "activate", id } );
+			f.ui.step( state, ++now );
+		};
+		const edit = value => {
+			f.ui.event( {
+				kind: "edit",
+				id: "gold-amount",
+				value,
+				start: value.length,
+				end: value.length,
+				composing: false
+			} );
+			f.ui.step( state, ++now );
+		};
+		const withdraw = gold => ({
+			kind: "gameplay",
+			command: { kind: "storage-move", move: { type: 0x0b, source: 0, destination: 0, quantity: 0, gold } }
+		});
+		f.ui.step( state, now );
+		// The bag holds no gold: the withdraw draft follows the room, not the bag.
+		click( "storage-gold" );
+		edit( "300" );
+		click( "drop-gold" );
+		assert.deepEqual( sent.pop(), withdraw( 300 ) );
+		click( "storage-gold" );
+		edit( "900" );
+		click( "drop-gold" );
+		assert.deepEqual( sent.pop(), withdraw( 500 ) );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("GPU shop gates merchant capability, affordability and exact sale confirmation", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {

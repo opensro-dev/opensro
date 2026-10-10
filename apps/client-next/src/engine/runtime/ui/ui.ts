@@ -6316,8 +6316,15 @@ export function createUi(
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 5 );
 					splitAmount = raw ? String( Math.min( splitStack.quantity - 1, Number( raw ) ) ) : "";
 				} else if ( event.id === "gold-amount" ) {
+					// A withdrawal draws on the warehouse, so its draft clamps to the
+					// room's gold; the drop and deposit spend the bag's
+					// (BR-261010-1655-2B68: an empty bag zeroed every withdrawal).
 					const raw = event.value.replace( /[^0-9]/g, "" ).slice( 0, 20 ),
-						limit = BigInt( view?.gameplay?.progression?.gold ?? 0 );
+						limit = BigInt(
+							(goldDialog === "withdraw" ?
+								view?.gameplay?.storage?.gold :
+								view?.gameplay?.progression?.gold) ?? 0
+						);
 					goldAmount = raw ? String( BigInt( raw ) > limit ? limit : BigInt( raw ) ) : "";
 					confirmDrop = "";
 				} else if ( event.id === "social-name" ) socialName = event.value;
