@@ -44,7 +44,7 @@ ending the conversation closes it, as the talk window hides it.
 ================
 */
 export function createFortressProductionHud() {
-	let npc: number | null = null, staff: FortressStaff = "smith", fortress = 0, seen = 0;
+	let npc: number | null = null, staff: FortressStaff = "smith", fortress = 0, queryId = 0;
 	let pending = false, open = false, top = 0;
 	let order: FortressProductionOrder | null = null, question: FortressProductionQuestion | null = null;
 	return {
@@ -55,13 +55,13 @@ export function createFortressProductionHud() {
 		The query is in flight; the window waits for its answer.
 		================
 		*/
-		request( gid: number, who: FortressStaff, id: number, sequence: number ) {
+		request( gid: number, who: FortressStaff, id: number ) {
 			this.close();
 			npc = gid;
 			staff = who;
 			fortress = id;
-			seen = sequence;
 			pending = true;
+			return ++queryId;
 		},
 		/*
 		================
@@ -81,7 +81,7 @@ export function createFortressProductionHud() {
 			if ( !snapshot ) return;
 			if ( pending ) {
 				const query = snapshot.query;
-				if ( !query || query.sequence <= seen ) return;
+				if ( !query || query.id !== queryId ) return;
 				if ( query.reply.result !== 1 ) {
 					this.close();
 					return;

@@ -84,10 +84,34 @@ The deadline uses simulation time, like fortressPacket's injected clock.
 export interface FortressProductionSnapshot {
 	readonly fortress?: number;
 	readonly order: FortressProductionOrder | null;
-	readonly query?: { readonly sequence: number; readonly reply: FortressServiceReply; };
+	readonly pending?: readonly { readonly id: number; readonly fortress: number; }[];
+	readonly query?: { readonly id?: number; readonly sequence: number; readonly reply: FortressServiceReply; };
 }
 
 export type FortressProductionState = Readonly<Partial<Record<FortressStaff, FortressProductionSnapshot>>>;
+
+/*
+================
+fortressProductionQuery
+
+Remember successful dispatches in transport order. Native query refusals
+have no fortress or request ID; local IDs keep a closed window's answer
+from consuming a later window's query. These IDs never enter native wire.
+================
+*/
+export function fortressProductionQuery(
+	state: FortressProductionState | undefined,
+	staff: FortressStaff,
+	id: number | undefined,
+	fortress: number
+): FortressProductionState {
+	if ( !Number.isSafeInteger( id ) || !id || id < 0 ) throw Error( "Invalid fortress production query ID" );
+	const previous = state?.[staff];
+	return {
+		...state,
+		[staff]: { order: null, ...previous, pending: [ ...(previous?.pending ?? []), { id, fortress } ] }
+	};
+}
 
 /*
 ================
@@ -107,6 +131,8 @@ export function fortressProductionSnapshot(
 	if ( !staff ) return state;
 	const previous = state?.[staff];
 	const query = reply.action === fortressProductionAction( staff, FORTRESS_PRODUCTION_QUERY );
+	const context = previous?.pending?.[0];
+	if ( query && (!context || reply.result === 1 && reply.fortress !== context.fortress) ) return state;
 	if ( reply.result !== 1 && !query ) return state;
 	const current = previous?.fortress === reply.fortress ? previous?.order ?? null : null;
 	const order = fortressProductionOrder( current, reply, staff, nowMs );
@@ -116,7 +142,12 @@ export function fortressProductionSnapshot(
 			...previous,
 			order: order === undefined ? previous?.order ?? null : order,
 			...(reply.result === 1 ? { fortress: reply.fortress } : {}),
-			...(query ? { query: { sequence, reply } } : {})
+			...(query ?
+				{
+					pending: previous?.pending?.slice( 1 ) ?? [],
+					query: { id: context?.id, sequence, reply }
+				} :
+				{})
 		}
 	};
 }

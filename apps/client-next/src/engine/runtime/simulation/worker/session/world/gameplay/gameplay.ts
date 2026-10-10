@@ -127,7 +127,13 @@ import {
 	type FortressApplication
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
-import { type FortressForgeItem, fortressProductionStaff } from "@/engine/foundation/gameplay/fortress-production";
+import {
+	type FortressForgeItem,
+	FORTRESS_PRODUCTION_QUERY,
+	fortressProductionAction,
+	fortressProductionQuery,
+	fortressProductionStaff
+} from "@/engine/foundation/gameplay/fortress-production";
 import {
 	cosTimerPacket,
 	cosTimerReference,
@@ -1506,16 +1512,19 @@ state here before a command can claim a native wire conversation.
 				) {
 					throw Error( "Select a fortress smith or trainer" );
 				}
-				return sendFrame(
-					fortressServiceRequest( {
-						target: command.gid,
-						action: command.action,
-						fortress: command.fortress,
-						reference: command.reference,
-						word: command.count,
-						stackLimit: command.stackLimit
-					} )
-				);
+				const production = command.action === fortressProductionAction( staff, FORTRESS_PRODUCTION_QUERY ) ?
+					fortressProductionQuery( fortress.production, staff, command.queryId, command.fortress ) :
+					fortress.production;
+				const frame = sendFrame( fortressServiceRequest( {
+					target: command.gid,
+					action: command.action,
+					fortress: command.fortress,
+					reference: command.reference,
+					word: command.count,
+					stackLimit: command.stackLimit
+				} ) );
+				fortress = { ...fortress, production };
+				return frame;
 			}
 			if ( command.kind === "fortress-war-status" || command.kind === "fortress-war-apply" ) {
 				// The official's row exists only on the selected official (0x800000).

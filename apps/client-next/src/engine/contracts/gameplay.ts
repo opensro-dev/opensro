@@ -243,6 +243,8 @@ export type GameplayCommand =
 	// 0x71E1 actions 0x0D..0x14 from the smith's or trainer's production window.
 	| {
 		readonly kind: "fortress-production";
+		// Local query correlation only; never written to the native packet.
+		readonly queryId?: number;
 		readonly gid: number;
 		readonly fortress: number;
 		readonly action: number;

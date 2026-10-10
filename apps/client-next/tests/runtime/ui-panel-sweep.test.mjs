@@ -20,6 +20,7 @@ import { uiFixture } from "../helpers/ui-fixture.mjs";
 const { uiPanels } = await import( "../../src/engine/foundation/ui/panels.ts" );
 const { emptyStall, stallRequest } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
 const { fortressPacket } = await import( "../../src/engine/foundation/gameplay/fortress.ts" );
+const { fortressProductionQuery } = await import( "../../src/engine/foundation/gameplay/fortress-production.ts" );
 
 const OFFICIAL = 17;
 // A type word isGlobalChatItem accepts (global-chat.ts): TID 3/3/5/2.
@@ -166,6 +167,7 @@ const OPENERS = {
 		} );
 		step();
 		f.ui.event( { kind: "activate", id: "npc-fortress-production:trainer" } );
+		f.state.gameplay.fortress.production = fortressProductionQuery( undefined, "trainer", 1, 1 );
 		f.state.gameplay.fortress = fortressPacket( f.state.gameplay.fortress, {
 			opcode: 0xb1e1,
 			payload: Uint8Array.from( [ 0x11, 1, 1, 0, 0, 0, 0 ] )

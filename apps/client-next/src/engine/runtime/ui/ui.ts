@@ -3726,14 +3726,14 @@ export function createUi(
 				if ( who === "smith" && !staff.holder ) {
 					hudMessages.append( hudCopy( "UIIT_MSG_GUILDERR_PERMISSION_DENIED" ) );
 				} else {
-					fortressProductionHud.request(
+					const queryId = fortressProductionHud.request(
 						conversation.gid,
 						who,
-						staff.fortress,
-						view?.gameplay?.fortress?.serviceSequence ?? 0
+						staff.fortress
 					);
 					sendGameplay( {
 						kind: "fortress-production",
+						queryId,
 						gid: conversation.gid,
 						fortress: staff.fortress,
 						action: fortressProductionAction( who, FORTRESS_PRODUCTION_QUERY )

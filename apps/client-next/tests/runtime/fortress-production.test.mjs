@@ -40,7 +40,21 @@ holder is "Holders". Role 1 is the fortress commander, 8 the smith.
 function smithFixture( t, holder, member = { grade: 2, role: 1 } ) {
 	const sent = [];
 	const f = uiFixture( message => {
-		if ( message.kind === "gameplay" ) sent.push( message.command );
+		if ( message.kind !== "gameplay" ) return;
+		sent.push( message.command );
+		const command = message.command;
+		if ( command.kind === "fortress-production" && command.queryId !== undefined ) {
+			const state = f.state.gameplay.fortress;
+			f.state.gameplay.fortress = {
+				...state,
+				production: production.fortressProductionQuery(
+					state.production,
+					command.action === 0x11 ? "trainer" : "smith",
+					command.queryId,
+					command.fortress
+				)
+			};
+		}
 	} );
 	t.after( () => f.dispose() );
 	f.state.entities.push( { ...f.state.entities[0], gid: SMITH, refObjId: 2101, kind: "npc", name: "Smith" } );
@@ -156,7 +170,13 @@ test("the query answer opens the window, and make, cancel and collect follow the
 	const { f, sent, step, answer } = smithFixture( t, "Holders" );
 	step();
 	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
-	assert.deepEqual( sent.at( -1 ), { kind: "fortress-production", gid: SMITH, fortress: 1, action: 0x0d } );
+	assert.deepEqual( sent.at( -1 ), {
+		kind: "fortress-production",
+		queryId: 1,
+		gid: SMITH,
+		fortress: 1,
+		action: 0x0d
+	} );
 	// Unlike the tax window, nothing shows before the answer.
 	assert.equal( control( step(), "fortress-production-make:" + ITEM ), undefined );
 	let shown = answer( { action: 0x0d, result: 1, fortress: 1, producing: false } );
@@ -291,13 +311,37 @@ test("every role dialog choice sends its native role, including clear", t => {
 	}
 });
 
+test("a closed interaction's query refusal cannot cancel the next query", t => {
+	const { f, sent, step, receive } = smithFixture( t, "Holders" );
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
+	assert.equal( sent.at( -1 ).queryId, 1 );
+	f.state.gameplay.target = 0;
+	step();
+	f.state.gameplay.target = SMITH;
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
+	assert.equal( sent.at( -1 ).queryId, 2 );
+	// Query A's refusal arrives after B was dispatched, but before B's reply.
+	receive( "0d0203" );
+	assert.equal( control( step(), "fortress-production-close" ), undefined );
+	receive( "0d010100000000" );
+	assert.ok( control( step(), "fortress-production-close" ) );
+});
+
 test("the trainer countdown uses simulation time even when UI time differs", t => {
 	const { f, sent, step, receive } = smithFixture( t, "Holders", { grade: 10, role: 16 } );
 	Object.assign( f.state, { simulationTimeMs: 1000 } );
 	f.state.gameplay.targetCapabilities = 0x4000000;
 	step();
 	f.ui.event( { kind: "activate", id: "npc-fortress-production:trainer" } );
-	assert.deepEqual( sent.at( -1 ), { kind: "fortress-production", gid: SMITH, fortress: 1, action: 0x11 } );
+	assert.deepEqual( sent.at( -1 ), {
+		kind: "fortress-production",
+		queryId: 1,
+		gid: SMITH,
+		fortress: 1,
+		action: 0x11
+	} );
 	// Trainer item 9002, one item, two seconds from simulation time 500.
 	receive( "110101000000012a2300000100000200000000000000", 500 );
 	assert.ok( control( step(), "fortress-production-cancel" ) );
@@ -314,4 +358,54 @@ test("the trainer countdown uses simulation time even when UI time differs", t =
 		count: 1,
 		stackLimit: 1
 	} );
+});
+
+test("worker query correlation follows accepted dispatches without changing native bytes", async t => {
+	const { createGameplay } = await import(
+		"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+	);
+	const sent = [];
+	let blocked = false;
+	const game = createGameplay( frame => {
+		if ( blocked ) throw Error( "backpressure" );
+		sent.push( frame );
+	} );
+	t.after( () => game.dispose() );
+	const pose = { regionId: 0x6b4f, x: 60, y: 10, z: 100, angle: 0 };
+	game.bootstrap( {} );
+	game.seed( { ...pose, gid: SELF, heading: 0 } );
+	game.command( { kind: "select", gid: SMITH }, 0, { ...pose, gid: SMITH, kind: "npc" } );
+	const grant = Buffer.alloc( 11 );
+	grant[0] = 1;
+	grant.writeUInt32LE( SMITH, 1 );
+	grant.writeUInt32LE( SMITH_CAPABILITY, 6 );
+	game.receive( { opcode: 0xb45a, payload: grant }, 1 );
+	const query = id =>
+		game.command( {
+			kind: "fortress-production",
+			gid: SMITH,
+			fortress: 1,
+			action: 0x0d,
+			queryId: id
+		}, 2 );
+	query( 1 );
+	blocked = true;
+	assert.throws( () => query( 2 ), /backpressure/ );
+	blocked = false;
+	query( 3 );
+	assert.deepEqual(
+		sent.slice( 1 ).map( frame => [ frame.opcode, Buffer.from( frame.payload ).toString( "hex" ) ] ),
+		[
+			[ 0x71e1, "1f0000000d01000000" ],
+			[ 0x71e1, "1f0000000d01000000" ]
+		]
+	);
+	game.receive( { opcode: 0xb1e1, payload: Uint8Array.from( [ 0x0d, 2, 3 ] ) }, 3 );
+	assert.equal( game.take()?.fortress?.production?.smith?.query?.id, 1 );
+	game.receive( { opcode: 0xb1e1, payload: Uint8Array.from( [ 0x0d, 1, 1, 0, 0, 0, 0 ] ) }, 4 );
+	const state = game.take();
+	assert.equal( state?.fortress?.production?.smith?.query?.id, 3 );
+	assert.deepEqual( state?.fortress?.production?.smith?.pending, [] );
+	game.bootstrap( {} );
+	assert.equal( game.take()?.fortress?.production, undefined );
 });
