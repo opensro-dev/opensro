@@ -24,14 +24,14 @@ func TestHuntingGuideFiltersAndKeepsAllLocations(t *testing.T) {
 		6: {RefObjID: 6, TypeID4: 1, Name: "Summon or admin only", Level: 1},
 	}
 	ordinary := NestRow{SpawnPoint: SpawnPoint{RefObjID: 1, RegionID: 0x619f, X: 100, Z: 200},
-		WorldCode: "INS_DEFAULT", MaxCount: 1, RetailEvidence: true, PolicyPinned: true}
+		WorldCode: "INS_DEFAULT", MaxCount: 1, RetailEvidence: true, PolicyPinned: true, HiveKey: "ordinary"}
+	// A zero hive override selects ordinary member caps; it does not disable nests.
 	nests := []NestRow{ordinary, ordinary}
 	second := ordinary
 	second.X = 400
 	nests = append(nests, second)
 	for _, change := range []func(*NestRow){
 		func(n *NestRow) { n.MaxCount = 0 },
-		func(n *NestRow) { n.HiveKey, n.HiveMaxCount = "disabled", 0 },
 		func(n *NestRow) { n.WorldCode = "INS_FORT_JANGAN" },
 		func(n *NestRow) { n.RegionID = 0x8001 },
 		func(n *NestRow) { n.EventStructID = 1 },

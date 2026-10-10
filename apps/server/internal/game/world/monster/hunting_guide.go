@@ -60,7 +60,7 @@ func (t Template) HuntingGuide() []HuntingGuideEntry {
 		if !ok || ref.Structure || ref.TypeID4 != 1 || ref.MonsterType != 0 || ref.Level == 0 ||
 			ref.Name == "" || ref.Name == "xxx" || nest.RegionID&0x8000 != 0 ||
 			nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT" || nest.EventStructID != 0 ||
-			nest.StartVacant || nest.InstanceLimit() == 0 || nest.HiveKey != "" && nest.HiveMaxCount == 0 ||
+			nest.StartVacant || nest.InstanceLimit() == 0 ||
 			nest.PolicyPinned && !nest.RetailEvidence {
 			continue
 		}

@@ -160,7 +160,8 @@ export function createHuntingGuideHud( assets: Pick<AssetOwner, "available" | "r
 				rect: [ x + 4, y, width - 8, 14 ],
 				color: white
 			} );
-			const searchWidth = width - 130, fieldY = y + 16;
+			// Leave the native Auto/Manual button's authored row unobstructed.
+			const searchWidth = width - 130, fieldY = y + 40;
 			for (
 				const [id, name, value, left, size, limit] of [
 					[ "map-hunting-search", "Search monsters", search, x + 4, searchWidth, SEARCH_LIMIT ],
@@ -192,13 +193,13 @@ export function createHuntingGuideHud( assets: Pick<AssetOwner, "available" | "r
 			for ( const [index, band] of huntingLevelColors().entries() ) {
 				const left = x + 4 + index * 57;
 				quads.push( {
-					rect: [ left, y + 42, 7, 7 ],
+					rect: [ left, y + 66, 7, 7 ],
 					clip: box,
 					texture: "",
 					uv: [ 0, 0, 1, 1 ],
 					color: band.color
 				} );
-				labels.push( { value: band.label, rect: [ left + 10, y + 39, 45, 14 ], color: white } );
+				labels.push( { value: band.label, rect: [ left + 10, y + 63, 45, 14 ], color: white } );
 			}
 			const status = !source ? "Guide unavailable on this server" : load.kind === "failed" ?
 				"Guide unavailable" :
@@ -209,7 +210,7 @@ export function createHuntingGuideHud( assets: Pick<AssetOwner, "available" | "r
 				projection.matches === 0 ?
 				"No species match these filters" :
 				`${projection.matches} species · hover an area`;
-			labels.push( { value: status, rect: [ x + 4, y + 53, width - 8, 14 ], color: [ .7, .75, .67, 1 ] } );
+			labels.push( { value: status, rect: [ x + 4, y + 77, width - 8, 14 ], color: [ .7, .75, .67, 1 ] } );
 			return { quads, fields, controls, labels };
 		},
 		/*

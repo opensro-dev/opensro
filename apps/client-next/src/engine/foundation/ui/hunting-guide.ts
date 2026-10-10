@@ -24,7 +24,7 @@ const CELL_INSET = 4;
 const MAX_HOVER_NAMES = 5;
 
 export const HUNTING_AREA_PREFIX = "map-hunting-area:";
-export const HUNTING_GUIDE_BAR_HEIGHT = 68;
+export const HUNTING_GUIDE_BAR_HEIGHT = 92;
 /*
 ================
 huntingLevelColors
