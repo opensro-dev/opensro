@@ -431,6 +431,12 @@ func RegisterGameReady(hub *transport.Hub, deps *Deps) {
 				}
 			}
 		}
+		// Every game-ready that ends a loading scene (first entry, travel,
+		// a resumed transport's replacement bootstrap) settles the objects
+		// the bootstrap published against the live world.
+		if deps.ReconcileSceneObjects != nil {
+			deps.ReconcileSceneObjects(s, divisionID, snapshot)
+		}
 		// The hook gets the STORE record, not the detached snapshot: gameplay
 		// lanes share authoritative pointer identity. TryMarkWorldReady makes
 		// this lifecycle edge one-shot; reconnect resumes the same session and

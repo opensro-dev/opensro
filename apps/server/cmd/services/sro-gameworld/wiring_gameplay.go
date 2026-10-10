@@ -161,6 +161,7 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
+	deps.ReconcileSceneObjects = items.ReconcileGroundScope
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames
 	deps.ExtraMagicOptionIDs = items.AlchemyMagicOptionIDs
