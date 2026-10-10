@@ -3357,6 +3357,51 @@ test("a pending item move keeps inventory slots enabled and drops further moves"
 	}
 });
 
+test("pressing the hovered item keeps its tooltip; a press elsewhere hides it (BUG-072)", () => {
+	const f = uiFixture();
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventory: [ {
+				slot: 14,
+				refObjId: 1,
+				typeFlags: 0x6c,
+				quantity: 10,
+				name: "Tooltip Stack",
+				magic: [],
+				tooltip: { fields: {} }
+			} ],
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: false
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		const step = () => f.ui.step( state, ++now );
+		// The tooltip title may use the plain or the emphasized face.
+		const shown = () => [ 0, 2 ].some( style => f.hasText( "Tooltip Stack", "0", style ) );
+		step();
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		step();
+		f.ui.event( { kind: "hover", id: "slot:14" } );
+		step();
+		assert.ok( shown(), "hover shows the item tooltip" );
+		// A click (press then release) on the same slot, as a Ctrl+click sell.
+		f.ui.event( { kind: "press", id: "slot:14" } );
+		step();
+		assert.ok( shown(), "pressing the hovered slot keeps its tooltip" );
+		f.ui.event( { kind: "press", id: null } );
+		step();
+		assert.ok( shown() );
+		// A press held on another control still hides it.
+		f.ui.event( { kind: "press", id: "open-window:Inventory" } );
+		step();
+		assert.equal( shown(), false, "a press elsewhere hides the tooltip" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("an edit normalized back to the published value still republishes the field", () => {
 	// 521A85: the edit replaces an oversized draft with its limit. When that
 	// limit is already the field's value the semantics compare equal; the UI

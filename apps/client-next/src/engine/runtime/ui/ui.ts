@@ -20337,8 +20337,14 @@ export function createUi(
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
+				// A press elsewhere hides the tooltip; a press on the hovered control
+				// itself (a click, a Ctrl+click quick sell) keeps it, so it does not
+				// blink on every click (BUG-072). A drag hides it through the carry.
+				// INFERENCE until the native tooltip-on-press rule is read in BN.
+				const pressHides = pressed !== null && pressed !== hover;
 				if (
-					control && game && hudData && phase === "world" && !carriedShortcut && !carriedItem && !pressed &&
+					control && game && hudData && phase === "world" && !carriedShortcut && !carriedItem &&
+					!pressHides &&
 					!practice
 				) {
 					/*
@@ -20446,7 +20452,7 @@ export function createUi(
 					}
 				}
 				if (
-					control && tooltip.length && phase === "world" && !carriedShortcut && !carriedItem && !pressed &&
+					control && tooltip.length && phase === "world" && !carriedShortcut && !carriedItem && !pressHides &&
 					!practice
 				) {
 					const bubble = tooltipBubble(
