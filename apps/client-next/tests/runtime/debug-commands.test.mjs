@@ -47,6 +47,7 @@ test("a console line names a row exactly and carries its words", () => {
 });
 
 test("the GM console runs the console family and sends everything else", () => {
+	/** @type {any[]} */
 	const sent = [];
 	const f = uiFixture( message => {
 		if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -85,4 +86,60 @@ test("the GM console runs the console family and sends everything else", () => {
 	} finally {
 		f.dispose();
 	}
+});
+
+test("/Item uses the named bag slot as a double click does", () => {
+	/** @type {any[]} */
+	const sent = [];
+	const f = uiFixture( message => {
+		if ( message.kind === "gameplay" ) sent.push( message.command );
+	} );
+	try {
+		Object.assign( f.state.gameplay, {
+			eligibility: { gm: true },
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [ {
+				slot: 13,
+				refObjId: 1,
+				typeFlags: (3 << 2) | (3 << 5) | (1 << 7) | (1 << 11),
+				quantity: 5,
+				name: "HP Recovery Potion",
+				icon: "item/etc/hp_potion_01.ddj"
+			} ]
+		} );
+		let now = 0;
+		const step = () => {
+			for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, now += 100 );
+		};
+		const type = line => {
+			f.ui.event( {
+				kind: "edit",
+				id: "gm-input",
+				value: line,
+				start: line.length,
+				end: line.length,
+				composing: false
+			} );
+			f.ui.event( { kind: "activate", id: "submit" } );
+			step();
+		};
+		step();
+		f.ui.event( { kind: "key", code: "Backquote", shift: true } );
+		step();
+		type( "/Item 13 14" );
+		assert.equal( sent.length, 0, "two words are not one slot" );
+		type( "/Item 13" );
+		assert.equal( sent.length, 1 );
+		assert.equal( sent[0].kind, "item-use" );
+		assert.equal( sent[0].slot, 13 );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("command words read as wcstol reads them", () => {
+	assert.equal( commands.commandInteger( "13" ), 13 );
+	assert.equal( commands.commandInteger( "-4x" ), -4 );
+	assert.equal( commands.commandInteger( "slot" ), 0 );
 });

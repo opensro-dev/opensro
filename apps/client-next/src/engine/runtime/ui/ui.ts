@@ -510,7 +510,9 @@ import {
 	PARTY_OPTION
 } from "@/engine/foundation/ui/party-proposal";
 import {
+	commandInteger,
 	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_ITEM,
 	DEBUG_COMMAND_MESSAGE_CLEAR,
 	DEBUG_COMMAND_NULL,
 	DEBUG_COMMAND_PLAYER_COUNT,
@@ -1948,6 +1950,11 @@ export function createUi(
 				break;
 			case DEBUG_COMMAND_PLAYER_COUNT:
 				// Id 0 is below the 691CC4 table: 690C40 does nothing with it.
+				break;
+			case DEBUG_COMMAND_ITEM:
+				// The 0x190 branch: exactly one word, read by wcstol, then
+				// CIFInventory_ExecuteItemAction(slot, -1, -1) as a double click.
+				if ( command.args.length === 1 ) useInventorySlot( commandInteger( command.args[0]! ) );
 				break;
 		}
 	}

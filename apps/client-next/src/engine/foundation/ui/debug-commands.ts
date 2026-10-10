@@ -22,6 +22,8 @@ export const DEBUG_COMMAND_PLAYER_COUNT = 0;
 export const DEBUG_COMMAND_DEBUG = 1;
 export const DEBUG_COMMAND_MESSAGE_CLEAR = 2;
 export const DEBUG_COMMAND_NULL = 5;
+// 690C40's 0x190 branch: use the bag slot named by the single argument.
+export const DEBUG_COMMAND_ITEM = 400;
 
 /*
 ================
@@ -68,6 +70,19 @@ command.txt is CP949 (Korean comment lines), which WHATWG names euc-kr.
 */
 export function decodeCommandTable( bytes: ArrayBuffer ): ReadonlyMap<string, number> {
 	return parseCommandTable( new TextDecoder( "euc-kr", { fatal: true } ).decode( new Uint8Array( bytes ) ) );
+}
+
+/*
+================
+commandInteger
+
+j_Fn_Wraps_CRT_wcstol: the leading decimal digits (with an optional sign),
+zero when there are none.
+================
+*/
+export function commandInteger( word: string ): number {
+	const match = /^\s*[+-]?\d+/.exec( word );
+	return match ? Number.parseInt( match[0], 10 ) : 0;
 }
 
 /*
