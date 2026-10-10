@@ -291,7 +291,8 @@ RestoreStructure
 
 Puts a stored structure's hit points and state back on the instance that
 stands on its event zone (never above its maximum). Reports whether a
-structure was there.
+structure was there. State and HP are independent: the pulley can set
+state bits without a fatal hit. A genuinely dead record already has zero HP.
 ================
 */
 func (s *MonsterState) RestoreStructure(divisionID string, gid uint32, hp uint32, state uint16) bool {
@@ -304,9 +305,6 @@ func (s *MonsterState) RestoreStructure(divisionID string, gid uint32, hp uint32
 	}
 	row.CurrentHP = min(hp, row.EffectiveMaxHP())
 	row.StructureState = state
-	if row.StructureState&structureStateDestroyed != 0 {
-		row.CurrentHP = 0
-	}
 	population.instances.set(gid, row)
 	return true
 }

@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/world/fortress"
@@ -368,5 +369,46 @@ func TestGatePulleysLoadFromSyntheticTables(t *testing.T) {
 	}
 	if _, err := loadGatePulleys(dir); err == nil {
 		t.Fatal("invalid pulley reference was admitted")
+	}
+}
+
+/*
+================
+TestGatePulleyStateSurvivesSaveAndRestore
+
+Use the fortress save/restore owners around a fresh population. A mask
+operation can set the destroyed bit without changing HP; only a fatal hit
+actually produces the zero-HP pair.
+================
+*/
+func TestGatePulleyStateSurvivesSaveAndRestore(t *testing.T) {
+	for _, dead := range []bool{false, true} {
+		t.Run(fmt.Sprint(dead), func(t *testing.T) {
+			rt, fortressID, gate := gateFixture(t)
+			store := &structureRowStore{rows: map[uint32]domain.FortressStructureRecord{}}
+			rt.FortressStore = store
+			rt.advanceFortressStructures(rt.Now().UnixMilli())
+			if dead {
+				rt.Monsters.ApplyDamage(testDivision, gate.Gid, gate.CurrentHP)
+				rt.Monsters.MarkStructureDestroyed(testDivision, gate.Gid)
+			} else {
+				rt.fortressGatePulley(testDivision, simulation.NpcDef{RefObjID: 19566},
+					siege.Interaction{Action: siege.ActionGate, Fortress: fortressID, Value16: 1})
+			}
+			rt.saveFortressStructures(testDivision)
+			saved := store.rows[88]
+			fresh, _, newGate := gateFixture(t)
+			fresh.FortressStore = store
+			fresh.advanceFortressStructures(fresh.Now().UnixMilli())
+			restored, _ := fresh.Monsters.Get(testDivision, newGate.Gid)
+			wantHP, wantState := gate.CurrentHP, uint16(1)
+			if dead {
+				wantHP, wantState = 0, 3
+			}
+			if saved.HP != wantHP || saved.State != wantState || restored.CurrentHP != wantHP || restored.StructureState != wantState {
+				t.Fatalf("saved %+v, restored HP=%d state=%d; want HP=%d state=%d",
+					saved, restored.CurrentHP, restored.StructureState, wantHP, wantState)
+			}
+		})
 	}
 }

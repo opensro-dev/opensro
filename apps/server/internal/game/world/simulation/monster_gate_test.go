@@ -107,3 +107,27 @@ func TestGateStateCannotOverwriteDeath(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestGateRestorePreservesIndependentHPAndState
+
+Persistence restores the pair the state-only operation can produce, while
+a genuine dead gate retains zero HP and the population still clamps HP.
+================
+*/
+func TestGateRestorePreservesIndependentHPAndState(t *testing.T) {
+	for _, tc := range []struct {
+		hp, wantHP uint32
+		state      uint16
+	}{{1500, 1500, 1}, {1500, 1500, 3}, {0, 0, 3}, {3000, 2000, 2}} {
+		s, gate := gateStateFixture(t)
+		if !s.RestoreStructure("fort", gate.Gid, tc.hp, tc.state) {
+			t.Fatal("restore refused")
+		}
+		row, _ := s.Get("fort", gate.Gid)
+		if row.CurrentHP != tc.wantHP || row.StructureState != tc.state {
+			t.Fatalf("restore HP=%d state=%d became HP=%d state=%d", tc.hp, tc.state, row.CurrentHP, row.StructureState)
+		}
+	}
+}
