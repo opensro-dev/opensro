@@ -186,14 +186,16 @@ type SkillRow struct {
 	Ck bool
 	// CkChance is ck's kill chance (58EC63 copies it to the target group's
 	// +0xF; 58F74E rolls it).
-	CkChance             uint8
-	Recovery             SkillRecovery
-	TimedEffect          SkillTimedEffect
-	Concealment          SkillConcealment
-	MonsterCapture       SkillMonsterCapture
-	Duplicate            SkillDuplicate
-	DamageCancel         SkillDamageCancel
-	MonsterSelfEffect    SkillMonsterSelfEffect
+	CkChance          uint8
+	Recovery          SkillRecovery
+	TimedEffect       SkillTimedEffect
+	Concealment       SkillConcealment
+	MonsterCapture    SkillMonsterCapture
+	Duplicate         SkillDuplicate
+	DamageCancel      SkillDamageCancel
+	MonsterSelfEffect SkillMonsterSelfEffect
+	// HostileDebuff is an enemy-targeted buff instance (skillhostiledebuff.go).
+	HostileDebuff        SkillHostileDebuff
 	Consumption          SkillConsumption
 	DirectOffensePinned  bool
 	OffensiveStagePinned bool // complete executable stage; root admission also validates every link

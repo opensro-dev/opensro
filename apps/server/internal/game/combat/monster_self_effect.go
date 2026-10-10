@@ -33,7 +33,7 @@ func MonsterInstanceStats(instance monster.Instance) (Stats, error) {
 	// +0xD34 is the published abnormal mask (4A8575). atca at 58F52F tests it
 	// on the target (esi), which this projection is when the instance is the defender.
 	s.AbnormalMask = instance.AbnormalMask()
-	if err = applyMonsterSelfEffects(&s, instance.SelfEffects, instance.Abnormal); err != nil {
+	if err = applyMonsterSelfEffects(&s, instance.SelfEffects, instance.TargetEffects, instance.Abnormal); err != nil {
 		return Stats{}, err
 	}
 	if instance.Abnormal == nil {
@@ -63,7 +63,13 @@ func MonsterInstanceStats(instance monster.Instance) (Stats, error) {
 	return s, nil
 }
 
-func applyMonsterSelfEffects(s *Stats, effects monster.SelfEffects, block *abnormal.Block) error {
+// The terd and thrd program tags a target effect carries.
+const (
+	monsterEvasionDecrease = 0x74657264
+	monsterHitRateDecrease = 0x74687264
+)
+
+func applyMonsterSelfEffects(s *Stats, effects monster.SelfEffects, targets monster.TargetEffects, block *abnormal.Block) error {
 	for _, entry := range []struct {
 		id      uint16
 		value   *float64
@@ -74,7 +80,7 @@ func applyMonsterSelfEffects(s *Stats, effects monster.SelfEffects, block *abnor
 		{128, &s.PhysicalBasicRate, 1000}, {129, &s.PhysicalSkillRate, 1000}, {130, &s.MagicalBasicRate, 1000}, {131, &s.MagicalSkillRate, 1000},
 	} {
 		touched := block != nil && block.Touches(entry.id)
-		if effects == (monster.SelfEffects{}) && !touched {
+		if effects == (monster.SelfEffects{}) && targets == (monster.TargetEffects{}) && !touched {
 			continue
 		}
 		p, err := paramkeeper.New(paramkeeper.Definition{Base: float32(*entry.value), Maximum: entry.maximum})
@@ -117,6 +123,18 @@ func applyMonsterSelfEffects(s *Stats, effects monster.SelfEffects, block *abnor
 			}
 			if applies {
 				if _, err = p.Apply(paramkeeper.Flat, e.Token, float32(value)); err != nil {
+					return err
+				}
+			}
+		}
+		// 594AC0 writes another actor's terd / thrd negated on the flat
+		// channel: 9 evasion (59591A), 0xB hit rate (595954).
+		for _, e := range targets {
+			if e.Token == 0 {
+				continue
+			}
+			if e.Tag == monsterEvasionDecrease && entry.id == 9 || e.Tag == monsterHitRateDecrease && entry.id == 11 {
+				if _, err = p.Apply(paramkeeper.Flat, e.Token, -float32(e.First)); err != nil {
 					return err
 				}
 			}

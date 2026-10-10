@@ -207,7 +207,7 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		}
 	}
 	actionLifecycleMs, actionLifecyclePinned := skill.ActionLifecycleMs()
-	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only && !skill.StatusCast && !skill.FixedDamage.Present && !skill.LifeSteal.Present) ||
+	if !known || ((!skill.CombatPinned || !skill.Attack.Present) && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only && !skill.StatusCast && !skill.FixedDamage.Present && !skill.LifeSteal.Present && !skill.HostileDebuff.Pinned) ||
 		!actionLifecyclePinned || actionLifecycleMs == 0 && !skill.PositionEffect.Charge ||
 		!skill.TargetRequired || (!basic && !advanced) {
 		return OpResult{}, skillCastRefused
@@ -324,6 +324,10 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	if skill.Threat.Only {
 		return rt.releaseTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot,
 			skill: skill, primary: target, now: nowMs})
+	}
+	if skill.HostileDebuff.Pinned {
+		return rt.debuffMonster(debuffCast{division: divisionID, character: character, snapshot: snapshot,
+			skill: skill, target: target.Gid, now: nowMs})
 	}
 	if skill.OffensiveArea.Radius != 0 {
 		return rt.acceptSkillAreaAt(divisionID, character, snapshot, skill, skill.OffensiveArea, false, true, primary, attacker, loadout, consumeAmmo, nowMs, rootID, release)

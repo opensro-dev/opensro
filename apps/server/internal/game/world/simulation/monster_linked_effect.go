@@ -46,13 +46,7 @@ func (s *MonsterState) InstallMonsterLinkedEffects(division string, plans []Mons
 			return false
 		}
 		seen[plan.GID] = true
-		count := row.LinkedEffects.Len()
-		for _, effect := range row.SelfEffects {
-			if effect.Token != 0 {
-				count++
-			}
-		}
-		if count >= maxMonsterSpawnSkills {
+		if spawnEffectCount(row) >= maxMonsterSpawnSkills {
 			return false
 		}
 	}

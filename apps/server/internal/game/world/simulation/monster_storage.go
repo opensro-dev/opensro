@@ -56,6 +56,7 @@ Cold records omit transient effects; active effect owners keep actors resident.
 type monsterStorage struct {
 	linkedEffects map[uint32]*monster.EffectSnapshot
 	selfEffects   map[uint32]monster.SelfEffects
+	targetEffects map[uint32]monster.TargetEffects
 	hot           map[uint32]residentMonster
 	abnormal      map[uint32]*abnormal.Block // immutable non-nil blocks
 	cold          map[uint32]archivedMonster
@@ -100,6 +101,14 @@ func (s *monsterStorage) set(gid uint32, row monster.Instance) {
 		s.selfEffects[gid] = row.SelfEffects
 	} else {
 		delete(s.selfEffects, gid)
+	}
+	if row.TargetEffects != (monster.TargetEffects{}) {
+		if s.targetEffects == nil {
+			s.targetEffects = make(map[uint32]monster.TargetEffects)
+		}
+		s.targetEffects[gid] = row.TargetEffects
+	} else {
+		delete(s.targetEffects, gid)
 	}
 	if s.hot == nil {
 		s.hot = make(map[uint32]residentMonster)
@@ -155,6 +164,7 @@ func (s *monsterStorage) hotValue(gid uint32, r residentMonster) monster.Instanc
 	row.LinkedEffects = s.linkedEffects[gid]
 	row.Abnormal = s.abnormal[gid]
 	row.SelfEffects = s.selfEffects[gid]
+	row.TargetEffects = s.targetEffects[gid]
 	return row
 }
 
@@ -255,6 +265,7 @@ Retire all projections owned by an actor, including sparse effect mirrors.
 func (s *monsterStorage) remove(gid uint32) {
 	delete(s.linkedEffects, gid)
 	delete(s.selfEffects, gid)
+	delete(s.targetEffects, gid)
 	delete(s.hot, gid)
 	delete(s.abnormal, gid)
 	s.removeCold(gid)
@@ -296,7 +307,8 @@ command history must remain resident until their owners retire them.
 ================
 */
 func (s *monsterStorage) freeze(gid uint32) {
-	if s.linkedEffects[gid] != nil || s.selfEffects[gid] != (monster.SelfEffects{}) {
+	if s.linkedEffects[gid] != nil || s.selfEffects[gid] != (monster.SelfEffects{}) ||
+		s.targetEffects[gid] != (monster.TargetEffects{}) {
 		return
 	}
 	if s.archive == nil || s.abnormal[gid] != nil {

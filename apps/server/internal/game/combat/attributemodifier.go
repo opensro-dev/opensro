@@ -74,3 +74,28 @@ func AttributeEffectWrites(a enterworld.SkillAttributeBoost) []paramkeeper.Write
 	}
 	return writes
 }
+
+// The evasion (ER) and hit rate (HR) parameters a hostile debuff lowers.
+const (
+	attributeEvasionRate = 9
+	attributeHitRate     = 0x0b
+)
+
+/*
+================
+HostileDebuffWrites
+
+594AC0 59591A..5959A0: an enemy-cast buff's terd writes minus its word to
+evasion (9) and thrd to hit rate (0xB), each on the flat channel.
+================
+*/
+func HostileDebuffWrites(evasion, hitRate uint32) []paramkeeper.Write {
+	var writes []paramkeeper.Write
+	if evasion != 0 {
+		writes = append(writes, paramkeeper.Write{Parameter: attributeEvasionRate, Channel: paramkeeper.Flat, Value: -float32(evasion)})
+	}
+	if hitRate != 0 {
+		writes = append(writes, paramkeeper.Write{Parameter: attributeHitRate, Channel: paramkeeper.Flat, Value: -float32(hitRate)})
+	}
+	return writes
+}

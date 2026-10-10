@@ -69,6 +69,71 @@ func (s *MonsterState) InstallMonsterSelfEffect(division string, gid uint32, eff
 	return true
 }
 
+/*
+================
+InstallMonsterTargetEffect
+
+Another actor's buff instance on a living monster (Vital Spot's bbuf). An
+instance with the same program tag is replaced: INFERENCE, the recast
+refreshes the same skill line, as a player's same-group buff does. The
+replaced token is returned so the caller can retire it on the wire. A
+monster already holding eight such instances refuses the ninth.
+================
+*/
+func (s *MonsterState) InstallMonsterTargetEffect(division string, gid uint32, effect monster.SelfEffect, now int64) (uint32, bool) {
+	if effect.Token == 0 || effect.SkillID == 0 || effect.UntilMs <= now {
+		return 0, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForObject(division, gid)
+	r, ok := state.instances.hot[gid]
+	if !ok {
+		return 0, false
+	}
+	i := state.instances.hotValue(gid, r)
+	if i.CurrentHP == 0 {
+		return 0, false
+	}
+	slot, replaced := -1, uint32(0)
+	for n, e := range i.TargetEffects {
+		if e.Token != 0 && e.Tag == effect.Tag {
+			slot, replaced = n, e.Token
+			break
+		}
+		if e.Token == 0 && slot < 0 {
+			slot = n
+		}
+	}
+	if slot < 0 || replaced == 0 && spawnEffectCount(i) >= maxMonsterSpawnSkills {
+		return 0, false
+	}
+	i.TargetEffects[slot] = effect
+	state.instances.set(gid, i)
+	return replaced, true
+}
+
+/*
+================
+spawnEffectCount
+
+The effect records the create row carries (BuildMonsterCreateRow): every
+self, target and linked instance. The row's count is one byte.
+================
+*/
+func spawnEffectCount(i monster.Instance) int {
+	count := i.LinkedEffects.Len()
+	for n := range i.SelfEffects {
+		if i.SelfEffects[n].Token != 0 {
+			count++
+		}
+		if i.TargetEffects[n].Token != 0 {
+			count++
+		}
+	}
+	return count
+}
+
 type MonsterSelfEffectRetirement struct {
 	DivisionID string
 	GID        uint32
@@ -83,7 +148,14 @@ func (s *MonsterState) RetireMonsterSelfEffects(now int64) []MonsterSelfEffectRe
 	var out []MonsterSelfEffectRetirement
 	for _, key := range s.populationKeys() {
 		state := s.populationForLease(key.division, key.lease)
+		owners := make(map[uint32]bool, len(state.instances.selfEffects)+len(state.instances.targetEffects))
 		for gid := range state.instances.selfEffects {
+			owners[gid] = true
+		}
+		for gid := range state.instances.targetEffects {
+			owners[gid] = true
+		}
+		for gid := range owners {
 			r, ok := state.instances.hot[gid]
 			if !ok {
 				panic("monster effect lost resident owner")
@@ -94,6 +166,12 @@ func (s *MonsterState) RetireMonsterSelfEffects(now int64) []MonsterSelfEffectRe
 				if e.Token != 0 && (i.CurrentHP == 0 || !e.Active(now)) {
 					row.Tokens = append(row.Tokens, e.Token)
 					i.SelfEffects[n] = monster.SelfEffect{}
+				}
+			}
+			for n, e := range i.TargetEffects {
+				if e.Token != 0 && (i.CurrentHP == 0 || !e.Active(now)) {
+					row.Tokens = append(row.Tokens, e.Token)
+					i.TargetEffects[n] = monster.SelfEffect{}
 				}
 			}
 			if len(row.Tokens) > 0 {

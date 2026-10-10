@@ -17,7 +17,7 @@ import (
 func TestMonsterSelfEffectParametersAndDamagePlacement(t *testing.T) {
 	s := Stats{PhysicalDefense: 100, MagicalDefense: 200, CriticalRate: 90}
 	e := monster.SelfEffects{{Token: 1, Tag: 0x64656670, First: 16, Second: 7}, {Token: 2, Tag: 0x6372, First: 10, Second: 20}, {Token: 3, Tag: 0x647275, First: 20, Second: 30}}
-	if err := applyMonsterSelfEffects(&s, e, nil); err != nil {
+	if err := applyMonsterSelfEffects(&s, e, monster.TargetEffects{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if s.PhysicalDefense != 116 || s.MagicalDefense != 207 || s.CriticalRate != 100 || s.PhysicalBasicRate != 20 || s.PhysicalSkillRate != 20 || s.MagicalBasicRate != 30 || s.MagicalSkillRate != 30 {

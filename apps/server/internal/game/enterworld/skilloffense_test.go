@@ -44,9 +44,9 @@ func TestShippedDirectOffenseCoverage(t *testing.T) {
 		}
 		if row.DirectOffensePinned {
 			admitted++
-			// A status cast, a pdmg hit and an lfst hit are the complete
-			// offenses without att.
-			if !row.Consumption.Pinned || row.ChainNext != 0 || !row.CombatPinned && !row.StatusCast && !row.FixedDamage.Present && !row.LifeSteal.Present {
+			// A status cast, a pdmg hit, an lfst hit and an enemy-cast buff
+			// (Vital Spot) are the complete offenses without att.
+			if !row.Consumption.Pinned || row.ChainNext != 0 || !row.CombatPinned && !row.StatusCast && !row.FixedDamage.Present && !row.LifeSteal.Present && !row.HostileDebuff.Pinned {
 				t.Fatalf("incomplete admitted skill %s", row.Codename)
 			}
 		}

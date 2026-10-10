@@ -314,6 +314,10 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 	if skill.ActionCastingTimeMs != 0 && st.release == nil {
 		return rt.prepareOffensiveCast(division, character, snapshot, st.cast, skill, st.advanced, st.rootID, now)
 	}
+	if skill.HostileDebuff.Pinned {
+		return rt.debuffPlayer(debuffCast{division: division, character: character, snapshot: snapshot,
+			skill: skill, target: target.gid, player: target.player, now: now})
+	}
 	if skill.TimedEffect.Periodic.Pinned {
 		return rt.installPeriodicCast(periodicCast{division: division, character: character, snapshot: snapshot,
 			skill: skill, cast: st.cast, target: target, attacker: st.attacker, now: now, release: st.release})

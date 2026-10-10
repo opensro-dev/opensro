@@ -42,6 +42,7 @@ Detached wire projection shared by initial object lists and live scope entry.
 type MonsterDef struct {
 	LinkedEffects *monster.EffectSnapshot
 	SelfEffects   monster.SelfEffects
+	TargetEffects monster.TargetEffects
 	RefObjID      uint32
 	// TidWord rides the refObjSnapshot mirror row (kind "monster"), not
 	// the create row; the client's sub_851420 cascade classifies on it.
@@ -152,6 +153,11 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 			count++
 		}
 	}
+	for _, e := range def.TargetEffects {
+		if e.Token != 0 {
+			count++
+		}
+	}
 	if count > maxMonsterSpawnSkills {
 		panic("monster effect projection exceeds native spawn capacity")
 	}
@@ -159,6 +165,11 @@ func BuildMonsterCreateRow(def MonsterDef, gid uint32, spawn Spawn) []byte {
 	// Retail 85FB20 non-local actor: skill + token; these admitted programs
 	// have no status/rider byte and monsters have no remaining-duration word.
 	for _, e := range def.SelfEffects {
+		if e.Token != 0 {
+			w.U32(e.SkillID).U32(e.Token)
+		}
+	}
+	for _, e := range def.TargetEffects {
 		if e.Token != 0 {
 			w.U32(e.SkillID).U32(e.Token)
 		}
@@ -268,6 +279,11 @@ func MonsterWireDefFromInstance(instance monster.Instance, nowMs int64) MonsterD
 		for n, e := range instance.SelfEffects {
 			if e.Active(nowMs) {
 				def.SelfEffects[n] = e
+			}
+		}
+		for n, e := range instance.TargetEffects {
+			if e.Active(nowMs) {
+				def.TargetEffects[n] = e
 			}
 		}
 	}

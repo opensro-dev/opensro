@@ -442,6 +442,7 @@ type Instance struct {
 	LinkedEffects   *EffectSnapshot
 	ConditionalUsed uint8
 	SelfEffects     SelfEffects
+	TargetEffects   TargetEffects
 	Help            HelpInbox
 	Motion          MotionHold
 	// Abnormal is the immutable abnormal-state block snapshot (nil when no

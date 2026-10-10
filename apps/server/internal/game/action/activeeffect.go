@@ -287,6 +287,10 @@ func (rt *Runtime) commitCharacterEffectWithCheckpoint(divisionID string, charac
 	if row.TimedEffect.Pinned {
 		writes = append(writes, combat.AttributeEffectWrites(row.TimedEffect.Attributes)...)
 	}
+	if row.HostileDebuff.Pinned {
+		// 59591A / 595954: Vital Spot's terd or thrd, negated, on the flat channel.
+		writes = append(writes, combat.HostileDebuffWrites(row.HostileDebuff.Evasion, row.HostileDebuff.HitRate)...)
+	}
 	if row.TimedEffect.Pinned && row.TimedEffect.Block.Present {
 		writes = append(writes, combat.BlockRateWrites(row.TimedEffect.Block.Mask, row.TimedEffect.Block.Value)...)
 	}

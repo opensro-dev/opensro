@@ -405,6 +405,15 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 		row.Threat = decrease
 		return ""
 	}
+	if debuff := compileSkillHostileDebuff(fields, *row); debuff.Pinned {
+		// Vital Spot: one zero-damage record on the target, whose
+		// consequences are the installed buff and tant's aggression.
+		row.HostileDebuff = debuff
+		row.Attack.ImpactCount = 1
+		row.OffensiveStagePinned = true
+		row.DirectOffensePinned = true
+		return ""
+	}
 	if threat, ok := compileSkillStatusCast(fields, *row); ok {
 		// Retail initializes the generated-result count to one even without
 		// att or cm; the single record carries the status roll.
