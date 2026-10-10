@@ -100,7 +100,10 @@ The monster still needs four additive changes:
    resolves the presentation resource, loads the model into the renderer
    and produces `portraitSource(gid)`. No new model loader.
 4. A UI scene holding one full-size doll quad, no other UI.
-Progress: step 1 is done (c9cfc496): the doll input's `camera`, with no change for the inventory.
+Progress:
+- Step 1 is done (c9cfc496): the doll input's `camera`, with no change for the inventory.
+- Step 2 is done (fedb40fd): `Renderer.readDoll()` → `device.readPortrait("__doll")` → `copyTextureToBuffer` + `mapAsync` → `texel-readback.ts` `unpackRgba8`. The staging buffer retires through the device, and portrait targets carry `COPY_SRC`. The unpacker is unit-tested; the GPU path is untested until step 4 draws.
+- Next is step 3: feed one monster entity through `runtime/characters/characters.ts`. Read its construction in `runtime.ts` (`createCharacters` and its owners), and give the viewer the smallest set of them.
 Step 2 details:
 - The portrait and doll targets come from `device/ui.ts` `portraitTarget(id, width, height)`, with usage `TEXTURE_BINDING | RENDER_ATTACHMENT`. The readback needs `COPY_SRC` added, harmless for the HUD.
 - The format is the scene format (`sceneFormat()`), which is a float format with the HDR stage on, so the readback converts to 8-bit RGBA, keeping alpha.
