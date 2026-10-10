@@ -76,6 +76,19 @@ needs no new main-pass mode. Check two things:
 If both hold, the `{ transparent: true }` canvas option above is needed only
 for the interactive iframe, not for stills.
 
+Checked 2026-10-11:
+- The portrait target is a fixed 128-pixel texture ("portrait-128" in
+  frame.ts), and the equipment doll is its own target.
+- The portrait camera is hard-coded to the head: `PORTRAIT_DISTANCE` 6.5,
+  `PORTRAIT_PITCH` 0.2, field of view pi/6.
+- The doll's camera takes only `{ yaw, seconds, aspect }` (portrait.ts
+  `prepare`, line ~200).
+
+Plan: give `prepare` an optional explicit camera (`viewer-camera.ts`
+output) and the renderer an optional still target of the request's size,
+leaving the HUD calls' arguments and results unchanged (pin that with a
+test). Then read the still target back into the PNG.
+
 ## Serving
 
 The vite dev server already serves the generated asset tree, so the viewer
