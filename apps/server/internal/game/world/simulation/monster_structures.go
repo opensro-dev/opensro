@@ -201,7 +201,8 @@ StructureZone
 
 A fortress world's structure site on zone: the reference the event zone
 authors for it (the nest's default) and whether a structure stands there
-now. False when the world has no structure nest on zone.
+now. A zero reference when the zone names a structure that has none;
+false when the world has no structure nest on zone.
 ================
 */
 func (s *MonsterState) StructureZone(divisionID string, world instance.ID, zone uint32) (monster.MonsterRef, bool, bool) {
@@ -217,8 +218,15 @@ func (s *MonsterState) StructureZone(divisionID string, world instance.ID, zone 
 	}
 	for index := range state.nests {
 		nest := s.template.Nests[index]
-		ref := s.template.Refs[nest.RefObjID]
-		if nest.EventStructID != zone || !ref.Structure {
+		if nest.EventStructID != zone {
+			continue
+		}
+		ref, known := s.template.Refs[nest.RefObjID]
+		if !known {
+			// 6341B0's 0x281E: the zone names a structure with no reference.
+			return monster.MonsterRef{}, false, true
+		}
+		if !ref.Structure {
 			continue
 		}
 		occupied := false

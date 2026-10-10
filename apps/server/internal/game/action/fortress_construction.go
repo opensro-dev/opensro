@@ -7,7 +7,7 @@ fortress_construction.go - the fortress guild places a barricade
 (CIFFortressMap_OnConfirmMsgBox 65CD80 -> 703160) as {0x0A, fortress,
 zone}: the one 0x71E1 request without a target GID. The v1.188 server
 (CSiegeFortressMgr_HandleStructureConstruction 6341B0) admits it at the
-selected manager (519E60 case 0xA: service 0x19 in range), checks the zone
+selected aide (519E60 case 0xA: service 0x19 in range), checks the zone
 and queues QUERY_SIEGE_STRUCT_ADD (CSiegeFortress_RequestStructAdd 6226B0);
 the 0x13 result (6232C0) spawns the zone's structure and answers
 {0x0A, 1, fortress, zone}.
@@ -62,13 +62,15 @@ func (rt *Runtime) fortressConstructionRequest(division string, c *enterworld.Ch
 ================
 fortressConstruct
 
-519E60's manager admission, then 6341B0 in its refusal order: an unknown
+519E60's aide admission, then 6341B0 in its refusal order: an unknown
 zone (3), a zone whose structure has no reference (0x281E), a structure
 that is not a barricade (0x281F), a zone of another fortress (0x2820).
 INFERENCE: a zone that already holds a structure refuses as the request
 that could not be queued (2): the add's database row is keyed by zone,
 so a second one cannot be inserted. The barricade stands at full hit
-points, its row is stored at once, and the reply names fortress and zone.
+points at once: its build time (reference +0x3B8, Param3, characterdata
+column 112, read through 61E000's timer) is 0 in every v1.150 barricade
+row. Its row is stored at once, and the reply names fortress and zone.
 ================
 */
 func (rt *Runtime) fortressConstruct(division string, c *enterworld.Character, request siege.Interaction) OpResult {
