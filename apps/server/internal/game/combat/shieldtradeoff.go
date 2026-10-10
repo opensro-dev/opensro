@@ -23,8 +23,9 @@ const (
 	shieldDefensePenaltyParameter uint16 = 0x1fe
 	// Detached derived source: outside native small owners and equipment/passives.
 	shieldDefensePenaltySource uint32 = 512
-	shieldPenaltyPercent              = 100
 )
+
+const shieldPenaltyPercent = 100
 
 /*
 ================
