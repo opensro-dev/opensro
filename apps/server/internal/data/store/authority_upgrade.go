@@ -9,7 +9,7 @@ Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6, and every layout 7
 source the empty fortress production table of layout 8. Existing tables and
 their records survive unchanged; the new record fields are optional. The
-one rewrite gives each guild master the commander role it lacked
+role repair makes each guild master the sole commander
 (guild_leader_role.go); it also runs on a current store that needs it.
 This operation is never called by server startup or a network request.
 
@@ -139,8 +139,8 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		}
 		sourceLayout = layout
 	case CurrentVersion:
-		// A current store still upgrades when a master lacks the commander
-		// role (guild_leader_role.go): the repair is its only change.
+		// A current store still upgrades when commander roles disagree with
+		// member grades (guild_leader_role.go): the repair is its only change.
 		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}

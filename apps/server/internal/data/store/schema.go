@@ -65,7 +65,7 @@ func isVersionMismatch(err error) bool {
 // rewrites no record.
 // Version 21 adds the fortress production rows (fortress_item_forges,
 // layout 8: _SiegeFortressItemForge). The offline upgrade adds the empty
-// table and gives each guild master the commander fortress role
+// table and makes each guild master the sole commander fortress role holder
 // (guild_leader_role.go), the one record it rewrites.
 const CurrentVersion = 21
 

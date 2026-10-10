@@ -204,8 +204,11 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 				return record, members, false
 			}
 			next := append([]domain.GuildMemberRecord(nil), members...)
-			next[to].Grade, next[to].PermMask = 0, next[from].PermMask
+			next[to].Grade, next[to].PermMask = domain.GuildLeaderGrade, next[from].PermMask
+			// 5C47D3..5C47DF moves the commander role with the master.
+			next[to].FortressRole = domain.GuildFortressRoleCommander
 			next[from].Grade, next[from].PermMask = guild.JoinerGrade, guild.JoinerPermMask
+			next[from].FortressRole = 0
 			master, heir = next[from], next[to]
 			return record, next, true
 		})
@@ -219,6 +222,8 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 	pushes := []wire.Frame{
 		{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberGrade3B29(master.JID, master.Grade, master.PermMask)},
 		{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberGrade3B29(heir.JID, heir.Grade, heir.PermMask)},
+		{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(master.JID, master.FortressRole)},
+		{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(heir.JID, heir.FortressRole)},
 	}
 	for _, member := range snapshot.Members {
 		if member.CharID != c.ID && rt.PushCharacterFrames != nil {
