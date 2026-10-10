@@ -3933,7 +3933,7 @@ test("the pet portrait selects and targets on right release only, as CIFCOSStatu
 	}
 });
 
-test("R replies to the last player who whispered (UIIT_CTL_REPLY_TT, BUG-075)", () => {
+test("R replies to the last whisper partner (UIIT_CTL_REPLY_TT, BUG-075)", () => {
 	const f = uiFixture();
 	try {
 		let now = 0;
@@ -3941,25 +3941,45 @@ test("R replies to the last player who whispered (UIIT_CTL_REPLY_TT, BUG-075)", 
 			f.ui.event( { kind: "key", code: "KeyR" } );
 			return f.ui.step( f.state, ++now );
 		};
+		f.state.session = { phase: "world", revision: 1, character: "Player" };
 		f.ui.step( f.state, now );
 		// No whisper yet: nothing to answer.
 		assert.equal( press()?.focusRequest?.id === "chat-text" && f.hasText( "$" ), false );
+		const whisper = ( name, outgoing, history = false ) => ({ channel: 2, name, text: "x", outgoing, history });
 		f.state.gameplay.chat = {
 			lines: [
-				{ channel: 2, name: "Alice", text: "hi", outgoing: false },
-				{ channel: 2, name: "Old", text: "from history", outgoing: false, history: true },
-				{ channel: 2, name: "Carol", text: "yo", outgoing: false },
-				// This character's own whisper to Bob is not someone to reply to.
-				{ channel: 2, name: "Bob", text: "hey", outgoing: true },
+				whisper( "Alice", false ),
+				whisper( "Old", false, true ),
+				whisper( "Carol", false ),
+				// A whisper sent to Bob makes Bob the reply target (6AEBD0).
+				whisper( "Bob", true ),
 				{ channel: 1, name: "Dave", text: "public", outgoing: false }
 			]
 		};
-		const scene = press();
-		assert.equal( scene?.focusRequest?.id, "chat-text" );
-		assert.ok( f.hasText( "$Carol" ), "the draft names the newest incoming whisperer" );
-		assert.equal( f.hasText( "$Bob" ) || f.hasText( "$Old" ) || f.hasText( "$Dave" ), false );
+		assert.equal( press()?.focusRequest?.id, "chat-text" );
+		assert.ok( f.hasText( "$Bob" ), "the draft names the newest whisper partner, sent or received" );
+		assert.equal( f.hasText( "$Carol" ) || f.hasText( "$Old" ) || f.hasText( "$Dave" ), false );
 	} finally {
 		f.dispose();
+	}
+	// 6AC230 never stores this character's own name, nor is the replayed
+	// transcript a partner of this session: Bob stays the target.
+	const g = uiFixture();
+	try {
+		g.state.session = { phase: "world", revision: 1, character: "Player" };
+		g.state.gameplay.chat = {
+			lines: [
+				{ channel: 2, name: "Bob", text: "x", outgoing: true },
+				{ channel: 2, name: "Player", text: "x", outgoing: false },
+				{ channel: 2, name: "Eve", text: "x", outgoing: false, history: true }
+			]
+		};
+		g.ui.step( g.state, 0 );
+		g.ui.event( { kind: "key", code: "KeyR" } );
+		g.ui.step( g.state, 1 );
+		assert.ok( g.hasText( "$Bob" ) && !g.hasText( "$Player" ) && !g.hasText( "$Eve" ) );
+	} finally {
+		g.dispose();
 	}
 });
 

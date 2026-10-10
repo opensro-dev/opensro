@@ -1755,17 +1755,23 @@ export function createUi(
 	}
 	/*
 	================
-	lastWhisperSender
+	lastWhisperPartner
 
-	The newest player who whispered this character: an incoming channel-2
-	line said in this session (not this character's own whisper, not the
-	replayed transcript).
+	The reply target CIFChat keeps at +0x494 (read by the R case of 680A30,
+	written by 6AC230 through 6AD6E0): the newest whisper partner in either
+	direction. An incoming whisper names its sender (752800, channel 2); a
+	sent one names its recipient (6AEBD0, '$' mode 2), as an outgoing line's
+	name does here. 6AC230 never stores this character's own name. The
+	field starts empty each session, so the replayed transcript is skipped.
+	Native stores a sent recipient on Enter; the port's outgoing line exists
+	once the server accepts it, so a refused whisper is not a reply target.
 	================
 	*/
-	function lastWhisperSender( lines: readonly import("@/engine/contracts/gameplay").ChatLine[] ) {
+	function lastWhisperPartner( lines: readonly import("@/engine/contracts/gameplay").ChatLine[] ) {
+		const self = view?.session?.character;
 		for ( let i = lines.length - 1; i >= 0; i-- ) {
 			const line = lines[i]!;
-			if ( line.channel === 2 && !line.outgoing && !line.history && line.name ) return line.name;
+			if ( line.channel === 2 && !line.history && line.name && line.name !== self ) return line.name;
 		}
 		return "";
 	}
@@ -6441,13 +6447,12 @@ export function createUi(
 						activate( "berserk" );
 						return;
 					}
-					// UIIT_CTL_REPLY_TT (key slot 20, R by default): whisper back to
-					// the last player who whispered, through the same prefill as the
-					// whisper list (6AC0F0). INFERENCE: with no whisper received yet
-					// the key does nothing, as a reply has no one to answer.
+					// UIIT_CTL_REPLY_TT (key slot 20, R by default; 67A760 maps it to
+					// command 0x52): 680A30 reads the reply target and, only when it
+					// is set, prefills it as the whisper list does (6AC0F0).
 					if ( binding === 20 ) {
-						const sender = lastWhisperSender( view.gameplay?.chat?.lines ?? [] );
-						if ( sender ) beginWhisper( sender );
+						const partner = lastWhisperPartner( view.gameplay?.chat?.lines ?? [] );
+						if ( partner ) beginWhisper( partner );
 						dirty = true;
 						return;
 					}
