@@ -20411,7 +20411,6 @@ export function createUi(
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
-
 				if (
 					control && game && hudData && phase === "world" && !carriedShortcut && !carriedItem && !pressed &&
 					!practice
