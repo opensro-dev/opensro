@@ -182,6 +182,24 @@ func (rt *Runtime) playerSkillRelationAllowed(division string, caster, target *e
 	return true
 }
 
+// 5293A0's control flags (arg3). A direct attack (58CF1F) passes none; an
+// area selection passes them through CSkillManager_IsHostileTargetEligible
+// (5A1AD0): 3 for a player caster, 1 for any other (a pet).
+const (
+	// playerAttackIndirect refuses a neutral target the caster is not
+	// already fighting (not in its aggression map, 529610).
+	playerAttackIndirect uint8 = 1
+	// playerAttackSparesAggressor refuses an aggressor target (state 1)
+	// to a white caster (state 0), 5295A4.
+	playerAttackSparesAggressor uint8 = 2
+	// playerAttackArea and petAttackArea are 5A1AD0's two modes.
+	playerAttackArea = playerAttackIndirect | playerAttackSparesAggressor
+	petAttackArea    = playerAttackIndirect
+	// playerAttackFlagRefused stands for 5293A0's flag returns, which
+	// refuse without writing a code.
+	playerAttackFlagRefused uint16 = 0x3006
+)
+
 /*
 ================
 playerAttackTargetRefusal
@@ -191,6 +209,23 @@ must permit battle. Party protection precedes cape/job and ordinary PK rules.
 ================
 */
 func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *enterworld.Character, now int64) uint16 {
+	return rt.playerAttackRefusal(division, caster, target, now, 0)
+}
+
+/*
+================
+playerAttackRefusal
+
+5293A0 with its control flags. An area strike passes playerAttackArea (a pet
+petAttackArea): a white caster's area spares an aggressor (5295A4), and a
+neutral target the caster is not fighting is refused before the PK limits
+(529610). Without them, every area aimed at a monster struck the white
+players standing in it, made the caster a PK and, because each strike renews
+the client's twenty-second no-Alt window on that player, kept that player
+open to attack indefinitely.
+================
+*/
+func (rt *Runtime) playerAttackRefusal(division string, caster, target *enterworld.Character, now int64, flags uint8) uint16 {
 	if caster.ID == target.ID {
 		return 0x3006
 	}
@@ -231,8 +266,18 @@ func (rt *Runtime) playerAttackTargetRefusal(division string, caster, target *en
 	if rt.hostilePlayerJobs(caster, target) {
 		return 0
 	}
+	if flags&playerAttackSparesAggressor != 0 && caster.PVPState() == 0 && target.PVPState() == 1 {
+		return playerAttackFlagRefused
+	}
 	if caster.Aggressions[enterworld.ObjectIDForCharacter(target)] != 0 {
 		return 0
+	}
+	// 5294A6 then 529610: an enemy target (aggressor or murderer, both at
+	// level 20) is legal; anything else is neutral, which an area refuses.
+	enemy := caster.Level != nil && *caster.Level >= playerCombatMinimumLevel &&
+		target.Level != nil && *target.Level >= playerCombatMinimumLevel && target.PVPState() != 0
+	if flags&playerAttackIndirect != 0 && !enemy {
+		return playerAttackFlagRefused
 	}
 	if caster.Level == nil || *caster.Level < playerCombatMinimumLevel {
 		return 0x3016

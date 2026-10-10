@@ -83,7 +83,7 @@ func (rt *Runtime) petAreaTargets(step petCombatStep, primary petCombatTarget, s
 			if !rt.worldPlayerEnemy(step.key.division, step.snapshot, snapshot) {
 				continue
 			}
-		} else if rt.playerAttackTargetRefusal(step.key.division, step.snapshot, snapshot, step.nowMs) != 0 {
+		} else if rt.playerAttackRefusal(step.key.division, step.snapshot, snapshot, step.nowMs, petAttackArea) != 0 {
 			continue
 		}
 		if target, found := rt.resolvePetCombatTarget(step, present.GID); found {

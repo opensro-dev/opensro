@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -476,5 +477,92 @@ func TestPlayerKnockbackWalksThroughTheMoveQuery(t *testing.T) {
 				t.Fatalf("landed at %.2f (published %+v), want %.2f", landed.X, point, want.X)
 			}
 		})
+	}
+}
+
+/*
+================
+TestAreaStrikesSpareNeutralPlayers
+
+5293A0's control flags, as 5A1AD0 passes them for an area victim. Both
+players are level 20 in a battle region and the caster is white.
+
+  - A neutral target the caster is not fighting: a direct attack is legal
+    (open-field PK, Alt on the client), an area (player or pet) refuses.
+  - The same target once the caster fights it (aggression map): legal.
+  - A murderer target: an area strikes it.
+  - An aggressor target: a player's area spares it (bit 2), a pet's does
+    not (mode 1 lacks bit 2).
+
+The area candidate walk applies the same rule: a monster area leaves the
+neutral player out.
+================
+*/
+func TestAreaStrikesSpareNeutralPlayers(t *testing.T) {
+	rt, clock, a, v := newPvpPair(t)
+	now := clock.NowMs()
+	level := testInt64(playerCombatMinimumLevel)
+	a.Level, v.Level = level, level
+	a.Aggressions = nil
+
+	if code := rt.playerAttackRefusal(testDivision, a, v, now, 0); code != 0 {
+		t.Fatalf("a direct attack on a neutral player answered %#x", code)
+	}
+	for _, flags := range []uint8{playerAttackArea, petAttackArea} {
+		if code := rt.playerAttackRefusal(testDivision, a, v, now, flags); code == 0 {
+			t.Fatalf("an area (flags %d) struck a neutral player", flags)
+		}
+	}
+
+	a.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(v): playerAggressionTicks}
+	if code := rt.playerAttackRefusal(testDivision, a, v, now, playerAttackArea); code != 0 {
+		t.Fatalf("an area spared the player the caster fights: %#x", code)
+	}
+	a.Aggressions = nil
+
+	v.PK = &domain.PKRecord{Penalty: 1}
+	if code := rt.playerAttackRefusal(testDivision, a, v, now, playerAttackArea); code != 0 {
+		t.Fatalf("an area spared a murderer: %#x", code)
+	}
+	v.PK = nil
+
+	v.Aggressions = map[uint32]uint32{999: playerAggressionTicks}
+	if v.PVPState() != 1 {
+		t.Fatalf("fixture victim state %d, want aggressor", v.PVPState())
+	}
+	if code := rt.playerAttackRefusal(testDivision, a, v, now, playerAttackArea); code == 0 {
+		t.Fatal("a white caster's area struck an aggressor")
+	}
+	if code := rt.playerAttackRefusal(testDivision, a, v, now, petAttackArea); code != 0 {
+		t.Fatalf("a pet's area spared an aggressor: %#x", code)
+	}
+	v.Aggressions = nil
+
+	rt.RewardActorPresent = func(string, string) bool { return true }
+	lease, ok := rt.casterPopulation(testDivision, a)
+	if !ok {
+		t.Fatal("no caster population")
+	}
+	// An attack row that may name players (Enemy_M and Enemy_P).
+	hostile := enterworld.SkillRow{Attack: enterworld.SkillAttack{Present: true},
+		Targets:     enterworld.SkillTargets{Present: true, Animal: true, EnemyM: true, EnemyP: true},
+		Replacement: statuseffect.ReplacementDescriptor{MatchesExecutionSelector: true}}
+	q := areaQuery{selects: 24, division: testDivision, caster: a, skill: hostile,
+		lease: lease, center: rt.liveSpawn(simulation.WorldKey(testDivision, a.Name), a, now), reach: 500, now: now}
+	selected := func() bool {
+		for _, candidate := range rt.areaCandidates(q) {
+			if candidate.target.player != nil && candidate.target.player.ID == v.ID {
+				return true
+			}
+		}
+		return false
+	}
+	a.Aggressions = map[uint32]uint32{enterworld.ObjectIDForCharacter(v): playerAggressionTicks}
+	if !selected() {
+		t.Fatal("a monster area left out the player the caster fights")
+	}
+	a.Aggressions = nil
+	if selected() {
+		t.Fatal("a monster area selected the neutral player standing in it")
 	}
 }

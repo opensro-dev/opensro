@@ -38,6 +38,18 @@ a living target in the common permission predicate.
 ==================
 */
 func (rt *Runtime) playerSkillTarget(division string, caster, target *enterworld.Character, skill enterworld.SkillRow, now int64) uint16 {
+	return rt.playerSkillTargetWith(division, caster, target, skill, now, 0)
+}
+
+/*
+================
+playerSkillTargetWith
+
+playerSkillTarget with 5293A0's control flags for its hostile-player test
+(playerAttackArea when the target is an area victim).
+================
+*/
+func (rt *Runtime) playerSkillTargetWith(division string, caster, target *enterworld.Character, skill enterworld.SkillRow, now int64, flags uint8) uint16 {
 	if target == nil {
 		return 0x3006
 	}
@@ -60,7 +72,7 @@ func (rt *Runtime) playerSkillTarget(division string, caster, target *enterworld
 		return 0x3006
 	}
 	if skill.Replacement.MatchesExecutionSelector {
-		if code := rt.playerAttackTargetRefusal(division, caster, target, now); code != 0 {
+		if code := rt.playerAttackRefusal(division, caster, target, now, flags); code != 0 {
 			return code
 		}
 	}

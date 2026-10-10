@@ -140,7 +140,8 @@ func (rt *Runtime) areaPlayerCandidates(q areaQuery) []areaCandidate {
 		if distance > limit {
 			continue
 		}
-		if rt.hostilePlayerRefusal(q.division, q.caster, snapshot, q.skill, q.now) != 0 {
+		// 5A1AD0 asks 5293A0 with mode 3 for a player caster.
+		if rt.hostilePlayerRefusalWith(q.division, q.caster, snapshot, q.skill, q.now, playerAttackArea) != 0 {
 			continue
 		}
 		out = append(out, areaCandidate{target: combatTarget{gid: present.GID, player: player, snapshot: snapshot,

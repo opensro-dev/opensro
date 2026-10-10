@@ -117,11 +117,23 @@ ask for it. Zero admits.
 ================
 */
 func (rt *Runtime) hostilePlayerRefusal(division string, caster, target *enterworld.Character, skill enterworld.SkillRow, now int64) uint16 {
-	if code := rt.playerSkillTarget(division, caster, target, skill, now); code != 0 {
+	return rt.hostilePlayerRefusalWith(division, caster, target, skill, now, 0)
+}
+
+/*
+================
+hostilePlayerRefusalWith
+
+hostilePlayerRefusal with 5293A0's control flags (playerAttackArea for an
+area victim).
+================
+*/
+func (rt *Runtime) hostilePlayerRefusalWith(division string, caster, target *enterworld.Character, skill enterworld.SkillRow, now int64, flags uint8) uint16 {
+	if code := rt.playerSkillTargetWith(division, caster, target, skill, now, flags); code != 0 {
 		return code
 	}
 	if !skill.Replacement.MatchesExecutionSelector {
-		return rt.playerAttackTargetRefusal(division, caster, target, now)
+		return rt.playerAttackRefusal(division, caster, target, now, flags)
 	}
 	return 0
 }
