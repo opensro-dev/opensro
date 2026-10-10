@@ -27,7 +27,14 @@ import (
 DurabilityFromVariance
 
 The itemdata durability range interpolated by a variance field (0..31):
-VarianceIntMin (at least 1) to Dur_U.
+VarianceIntMin (at least 1) to Dur_U, rounded to the nearest point.
+
+Port-only, not native: v1.188 CGItemEquip_CalculateBaseStats (495D60)
+truncates, while the v1.150 client rounds the same interpolation
+(CSOItem_CalculateVarianceStats 78BD00, lo + span*v/31 + 0.5). A drop
+then started one point below the maximum the client showed, the client
+offered a repair and the server refused it as whole, silently. Rounding
+here, as the client does, keeps the two maxima equal.
 ================
 */
 func DurabilityFromVariance(ref *enterworld.ItemRef, field uint8) uint32 {
@@ -40,7 +47,7 @@ func DurabilityFromVariance(ref *enterworld.ItemRef, field uint8) uint32 {
 	if ref != nil && ref.MaxDurability > maximum {
 		maximum = ref.MaxDurability
 	}
-	durability := minimum + int64(float32(maximum-minimum)*(float32(field)/float32(31)))
+	durability := int64(float64(maximum-minimum)*float64(field)/31 + float64(minimum) + 0.5)
 	return uint32(min(durability, math.MaxUint32))
 }
 
