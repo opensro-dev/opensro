@@ -86,8 +86,8 @@ func (rt *Runtime) acceptLinkedTargetEffect(division string, c, snapshot, target
 		ManaHPPercent: d.Link.ManaHPPercent, ManaPercent: d.Link.ManaPercent, ManaCap: d.Link.ManaCap,
 		Hunt:      d.Link.Hunt,
 		FenceMask: d.Link.FenceMask, FencePercent: d.Link.FencePercent, FenceMaxHits: d.Link.FenceMaxHits,
-		QuotaPercent: d.Link.QuotaPercent,
-		StartedAtMs:  now, ExpiresAtMs: now + int64(skill.EffectDurationMs),
+		QuotaPercent: d.Link.QuotaPercent, ScreamRange: d.Link.ScreamRange,
+		StartedAtMs: now, ExpiresAtMs: now + int64(skill.EffectDurationMs),
 		ClientCancelable: !skill.VoluntaryCancelBlocked, TargetModifiers: modifiers,
 	}
 	if code := rt.effects.LinkRefusal(link); code != 0 {

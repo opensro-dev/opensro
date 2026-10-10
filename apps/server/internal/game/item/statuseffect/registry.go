@@ -148,7 +148,9 @@ type Registry struct {
 	links              map[string]Link
 	threatOwners       map[string]uint32
 	// quotaOwners is ParamKeeper+20C per recipient: its Pain Quota link.
-	quotaOwners   map[string]uint32
+	quotaOwners map[string]uint32
+	// screamOwners is ParamKeeper+200 per recipient: its Scream Mask link.
+	screamOwners  map[string]uint32
 	byOwner       map[string][]Effect
 	pendingOwners []string
 	pendingSet    map[string]bool
@@ -167,6 +169,7 @@ func NewRegistry() *Registry {
 		links:         make(map[string]Link),
 		threatOwners:  make(map[string]uint32),
 		quotaOwners:   make(map[string]uint32),
+		screamOwners:  make(map[string]uint32),
 	}
 }
 

@@ -12,6 +12,8 @@ Ordinary casts and item-owned timed jobs share effect descriptors and lifecycle.
 
 package enterworld
 
+import "opensro.online/server/internal/game/abnormal"
+
 const (
 	tagTimedHaste       = 0x68737465
 	tagTimedOverride    = 0x68737432
@@ -31,9 +33,10 @@ const (
 	tagTimedLinkedDamage  = 0x6c6b6468
 	// tagTimedHunt is hntp (+0x48C, no words): the link's recipient is
 	// tracked for its source (SkillCombat_EngageSkill 593757).
-	tagTimedHunt        = 0x686e7470
-	tagTimedLinkedFence = 0x6c6b6472 // lkdr
-	tagTimedLinkedQuota = 0x6c6b6464 // lkdd
+	tagTimedHunt         = 0x686e7470
+	tagTimedLinkedFence  = 0x6c6b6472 // lkdr
+	tagTimedLinkedQuota  = 0x6c6b6464 // lkdd
+	tagTimedLinkedScream = 0x61626e62 // abnb
 	// tagTimedDisguise is msch (+0x4A4). Word 0 mode 3 is the reference
 	// disguise (Illusion): SkillCombat_ApplySkillEffectsToTargets' mode
 	// switch (594AA4) has no server work for it, and the client redresses
@@ -335,6 +338,11 @@ type SkillEffectLink struct {
 	// its party members within linkQuotaRange.
 	Quota        bool
 	QuotaPercent uint32
+	// Scream is abnb {range} (+0x41C, Scream Mask): 5A14D8 rolls the row's
+	// status blocks on an attacker that hits the recipient from strictly
+	// inside ScreamRange.
+	Scream      bool
+	ScreamRange uint32
 }
 
 /*
@@ -501,11 +509,17 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// lkag and lkdh may be authored anywhere in the program; the native index
 	// keeps them wherever they sit, and they ride the row's lnks, which is
 	// checked once every block is read.
-	var linkThreat, linkDamage, linkFence, linkQuota bool
-	var linkThreatPercent, linkQuotaPercent uint32
+	var linkThreat, linkDamage, linkFence, linkQuota, linkScream bool
+	var linkThreatPercent, linkQuotaPercent, linkScreamRange uint32
+	// Status blocks are the roll of an abnb link (Scream Mask) alone.
+	statusBlocks := 0
 	var linkDamageWords, linkFenceWords [3]uint32
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
+		if _, found := abnormal.SourceIndex(op.Tag); found {
+			statusBlocks++
+			continue
+		}
 		switch op.Tag {
 		case tagTimedMaxHP, tagTimedAttack, tagTimedDamagePenalty, tagTimedThreat, tagTimedDamageRate, tagTimedMaxHPPenalty,
 			tagTimedDefensePenalty:
@@ -628,6 +642,13 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			linkFence = true
 			linkFenceWords = [3]uint32{linkFenceMask(op.Arguments[0]), op.Arguments[1], op.Arguments[2]}
+		case tagTimedLinkedScream:
+			// abnb {range} (+0x41C, one word): the status blocks after it
+			// are the row's own, rolled by 590680.
+			if linkScream || op.Count != 1 || op.Arguments[0] == 0 {
+				return
+			}
+			linkScream, linkScreamRange = true, op.Arguments[0]
 		case tagTimedLinkedQuota:
 			// lkdd {percent} (+0x480, 5889E2: one word).
 			if linkQuota || op.Count != 1 || op.Arguments[0] == 0 || op.Arguments[0] > 100 {
@@ -772,7 +793,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	if huntLink {
 		// A mark carries no writes, threat or MP share beside it.
-		if !result.Link.Present || linkThreat || linkDamage || linkFence || linkQuota || result.Strength.Present || result.Intellect.Present ||
+		if !result.Link.Present || linkThreat || linkDamage || linkFence || linkQuota || linkScream || result.Strength.Present || result.Intellect.Present ||
 			result.Block.Present || result.IncomingReduction || len(attributeTags) != 0 {
 			return
 		}
@@ -781,13 +802,22 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// 594E5D installs one link slot per effect (+0x478, +0x3E0, +0x480,
 	// +0x47C, in that order); every shipped row authors one kind.
 	kinds := 0
-	for _, kind := range []bool{linkThreat, linkDamage, linkFence, linkQuota} {
+	if statusBlocks != 0 && !linkScream {
+		return
+	}
+	for _, kind := range []bool{linkThreat, linkDamage, linkFence, linkQuota, linkScream} {
 		if kind {
 			kinds++
 		}
 	}
 	if kinds > 1 {
 		return
+	}
+	if linkScream {
+		if !result.Link.Present || statusBlocks == 0 || !row.Abnormal.Present() {
+			return
+		}
+		result.Link.Scream, result.Link.ScreamRange = true, linkScreamRange
 	}
 	if linkFence || linkQuota {
 		if !result.Link.Present {
@@ -813,7 +843,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// A damage link carries lkdh alone: the linked runtime has no rule for
 	// it beside a threat share or stat writes.
 	// A fence or quota link carries its share alone, as Mana Switch does.
-	if (result.Link.Fence || result.Link.Quota) && (result.Strength.Present || result.Intellect.Present ||
+	if (result.Link.Fence || result.Link.Quota || result.Link.Scream) && (result.Strength.Present || result.Intellect.Present ||
 		result.Block.Present || result.IncomingReduction || len(attributeTags) != 0) {
 		return
 	}
@@ -842,7 +872,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
 		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Parry || result.Range || result.Hawk.Present ||
-		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt || result.Link.Fence || result.Link.Quota) ||
+		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt || result.Link.Fence || result.Link.Quota || result.Link.Scream) ||
 		result.Preemptive.Present || result.Disguise ||
 		result.DamageReturn.Present ||
 		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present ||

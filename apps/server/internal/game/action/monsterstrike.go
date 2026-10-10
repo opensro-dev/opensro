@@ -168,6 +168,8 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 	// The shares fence and Pain Quota links took off the hits land on their
 	// takers as this monster's hits (linkeddamage.go).
 	returned = mergeOpResults(returned, rt.strikeLinkedShares(divisionID, instance.Gid, strike.killer, skill, struck.linkMoves, nowMs))
+	// A Scream Mask on the victim rolls its statuses on this monster (screammask.go).
+	returned = mergeOpResults(returned, rt.screamMaskMonster(divisionID, character, instance, in.from, nowMs))
 	rt.queueMonsterLegRecipients(divisionID, returned.Recipients)
 	out.strike = monsterStrike{gid: enterworld.ObjectIDForCharacter(snapshot), owner: character, pose: pose,
 		impacts: struck.impacts, absorb: struck.absorb, fatal: struck.fatal,

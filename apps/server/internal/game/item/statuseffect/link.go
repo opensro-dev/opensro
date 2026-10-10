@@ -25,7 +25,10 @@ type Link struct {
 	FenceMask, FencePercent, FenceMaxHits, FenceHits uint32
 	// QuotaPercent is lkdd's shared percent (Pain Quota, 5A11BF); zero
 	// means no quota.
-	QuotaPercent             uint32
+	QuotaPercent uint32
+	// ScreamRange is abnb's range (Scream Mask, 5A14D8): an attacker hitting
+	// the recipient within it rolls the row's statuses; zero means none.
+	ScreamRange              uint32
 	ExpiresAtMs, StartedAtMs int64
 	ClientCancelable         bool
 	// TargetModifiers are the recipient half's parameter writes (594AC0 in
@@ -74,6 +77,11 @@ func (r *Registry) ApplyLink(link Link) uint16 {
 	// pointer: the latest quota wins.
 	if link.QuotaPercent != 0 {
 		r.quotaOwners[target] = link.SourceToken
+	}
+	// 594EB9 installs an abnb effect in ParamKeeper+200, the same single
+	// pointer.
+	if link.ScreamRange != 0 {
+		r.screamOwners[target] = link.SourceToken
 	}
 	return 0
 }
@@ -184,8 +192,10 @@ func (r *Registry) retireLinkHalfLocked(e Effect) {
 		// 582C19 clears +210 unconditionally; an older effect retiring does
 		// not restore a previous contributor or preserve a newer pointer.
 		delete(r.threatOwners, ownerKey(e.DivisionID, e.CharacterName))
-		if r.quotaOwners[ownerKey(e.DivisionID, e.CharacterName)] == e.LinkToken {
-			delete(r.quotaOwners, ownerKey(e.DivisionID, e.CharacterName))
+		for _, owners := range []map[string]uint32{r.quotaOwners, r.screamOwners} {
+			if owners[ownerKey(e.DivisionID, e.CharacterName)] == e.LinkToken {
+				delete(owners, ownerKey(e.DivisionID, e.CharacterName))
+			}
 		}
 	}
 	if l.sourceRetired && l.targetRetired {
@@ -333,13 +343,41 @@ func (r *Registry) QuotaLink(division, target string, nowMs int64) (Link, bool) 
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.ownedLinkLocked(r.quotaOwners, division, target, nowMs, func(l Link) bool { return l.QuotaPercent != 0 })
+}
+
+/*
+==================
+ScreamLink
+
+The installed, logically active Scream Mask target effect (ParamKeeper+200).
+==================
+*/
+func (r *Registry) ScreamLink(division, target string, nowMs int64) (Link, bool) {
+	if r == nil {
+		return Link{}, false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ownedLinkLocked(r.screamOwners, division, target, nowMs, func(l Link) bool { return l.ScreamRange != 0 })
+}
+
+/*
+==================
+ownedLinkLocked
+
+The live link a single-pointer slot names for target: both halves
+installed, unexpired, the recipient half in phase 2 and not stopping.
+==================
+*/
+func (r *Registry) ownedLinkLocked(owners map[string]uint32, division, target string, nowMs int64, kind func(Link) bool) (Link, bool) {
 	key := ownerKey(division, target)
-	token, ok := r.quotaOwners[key]
+	token, ok := owners[key]
 	if !ok {
 		return Link{}, false
 	}
 	l, ok := r.links[linkKey(division, token)]
-	if !ok || l.QuotaPercent == 0 || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
+	if !ok || !kind(l) || l.sourceRetired || l.targetRetired || (Effect{ExpiresAtMs: l.ExpiresAtMs}).Expired(nowMs) {
 		return Link{}, false
 	}
 	for _, e := range r.byOwner[key] {

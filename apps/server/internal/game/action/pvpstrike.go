@@ -491,6 +491,8 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	// to the attacker afterwards, as the victim's credited hit.
 	returned := rt.returnDamageToPlayer(division, target.player, character, skill.ID, hit.defender, hit.strike.formulas[:len(hit.struck.impacts)], now)
 	shared := rt.strikeLinkedShares(division, caster, hit.strike.killer, skill, hit.struck.linkMoves, now)
+	// A Scream Mask on the victim rolls its statuses on the attacker (screammask.go).
+	shared = mergeOpResults(shared, rt.screamMaskPlayer(division, target.player, character, now))
 	return mergeOpResults(mergeOpResults(out, returned), shared), skillCastAccepted
 }
 

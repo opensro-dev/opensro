@@ -149,3 +149,55 @@ func TestFenceAndQuotaProgramAdmissionIsAtomic(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestShippedScreamMaskTiersAreLinks
+
+Every Scream Mask tier is a targeted link in group 0 whose abnb range
+rolls the row's status blocks; a status block without abnb, or abnb
+without a link, keeps a row unsupported.
+================
+*/
+func TestShippedScreamMaskTiersAreLinks(t *testing.T) {
+	source := sharedShippedSkills(t)
+	for tier := 1; tier <= 7; tier++ {
+		code := fmt.Sprintf("SKILL_EU_WARLOCK_SOULA_STUNLINK_A_%02d", tier)
+		row, ok := source.SkillByCodename(code)
+		if !ok {
+			t.Fatalf("missing %s", code)
+		}
+		d := row.TimedEffect
+		if !d.Pinned || !d.Targeted || !d.Link.Present || !d.Link.Scream || d.Link.ScreamRange != 150 || d.Link.Group != 0 ||
+			d.Link.Fence || d.Link.Quota || !row.Abnormal.Present() {
+			t.Fatalf("%s: %+v", code, d.Link)
+		}
+	}
+	link := []uint32{tagTimedLink, 0, fenceDistance, fenceOutgoing, 1}
+	scream := []uint32{tagTimedLinkedScream, 150}
+	stun := []uint32{0x7374, 5000, 35, 3}
+	for _, tc := range []struct {
+		name  string
+		tail  []uint32
+		valid bool
+	}{
+		{"scream mask", append(append(append([]uint32{tagDura, 120000}, link...), scream...), stun...), true},
+		{"scream without link", append(append([]uint32{tagDura, 120000}, scream...), stun...), false},
+		{"status without scream", append(append([]uint32{tagDura, 120000}, link...), stun...), false},
+		{"zero range", append(append(append([]uint32{tagDura, 120000}, link...), tagTimedLinkedScream, 0), stun...), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			row := SkillRow{
+				Consumption: SkillConsumption{Pinned: true}, TimingPinned: true,
+				ActionCastingTimePinned: true, ActionDurationPinned: true, ReplacementPinned: true,
+				EffectDurationMs: 120000,
+			}
+			fields := linkedThreatFields(tc.tail)
+			row.Abnormal = encodedAbnormalParams(fields)
+			parseSkillTimedEffect(fields, &row)
+			if row.TimedEffect.Pinned != tc.valid {
+				t.Fatalf("admission %v, want %v: %+v", row.TimedEffect.Pinned, tc.valid, row.TimedEffect.Link)
+			}
+		})
+	}
+}
