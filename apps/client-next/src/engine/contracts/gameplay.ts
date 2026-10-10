@@ -229,6 +229,10 @@ export type GameplayCommand =
 	| { readonly kind: "fortress-war-status"; readonly gid: number; }
 	| { readonly kind: "fortress-staff"; readonly gid: number; readonly fortress: number; readonly flag?: number; }
 	| { readonly kind: "fortress-schedule"; readonly gid: number; readonly fortress: number; }
+	// 0x71E1 actions 0 (query), 1 (rate) and 2 (collect) from the tax window.
+	| { readonly kind: "fortress-tax"; readonly gid: number; readonly fortress: number; }
+	| { readonly kind: "fortress-tax-rate"; readonly gid: number; readonly fortress: number; readonly rate: number; }
+	| { readonly kind: "fortress-tax-collect"; readonly gid: number; readonly fortress: number; readonly gold: string; }
 	| {
 		readonly kind: "fortress-war-apply";
 		readonly gid: number;

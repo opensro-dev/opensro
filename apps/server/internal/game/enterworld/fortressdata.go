@@ -20,6 +20,7 @@ func DefaultSiegeFortressDataRows() []SiegeFortressDataRow {
 			NameStrID:       "SN_FORTRESS_JANGAN",
 			OfficialNpcCode: "NPC_CH_FORTRESS_OFFICIAL",
 			RequestFee:      5000000,
+			TaxTargets:      63,
 		},
 	}
 }

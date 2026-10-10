@@ -126,6 +126,10 @@ type SiegeFortressDataRow struct {
 	// RequestFee is the row's +0x80 gold, which the official's application
 	// question quotes (6649C0 box 0x64, 7E16A0).
 	RequestFee uint64 `json:"requestFee"`
+	// TaxTargets is column 10 (+0x96): bits 0..6 tick the tax management
+	// window's smith, armor, grocery, potion, portal, specialty and warp
+	// boxes (CIFTaxManagement_Refresh 665470).
+	TaxTargets uint8 `json:"taxTargets"`
 	// OfficialRefObjID resolves OfficialNpcCode for the browser, which
 	// knows NPCs by RefObjID (662E80 matches the official in conversation).
 	OfficialRefObjID uint32 `json:"officialRefObjId,omitempty"`

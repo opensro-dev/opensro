@@ -23,6 +23,7 @@
     "src/engine/runtime/ui/hud/specialty-deal-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/job-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/fortress-war-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/fortress-tax-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/union-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/guild-war-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/exchange-hud.ts": "src/engine/runtime/ui/ui.ts",

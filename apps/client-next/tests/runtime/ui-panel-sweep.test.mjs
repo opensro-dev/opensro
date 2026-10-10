@@ -124,6 +124,28 @@ const OPENERS = {
 			serviceSequence: 1,
 			service: { action: 5, result: 1, applicants: [] }
 		};
+	},
+	"Fortress tax"( f, step ) {
+		// The manager's tax row shows the window at once (5D8930 action 0x33 row 1).
+		talkTo( f );
+		Object.assign( f.state.gameplay, {
+			fortress: {
+				...f.state.gameplay.fortress,
+				worldId: 7,
+				worlds: [ { id: 7, code: "FORTRESS_JANGAN" } ],
+				fortresses: [ { id: 1, code: "FORTRESS_JANGAN", nameStrId: "FORTRESS_NAME", taxTargets: 63 } ],
+				wars: [],
+				registered: [],
+				serviceSequence: 0
+			}
+		} );
+		step();
+		f.ui.event( { kind: "activate", id: "npc-fortress-tax" } );
+		f.state.gameplay.fortress = {
+			...f.state.gameplay.fortress,
+			serviceSequence: 1,
+			service: { action: 0, result: 1, fortress: 1, taxRate: 10, gold: "1234" }
+		};
 	}
 };
 
