@@ -34,10 +34,10 @@ const COPY = {
 smithFixture
 
 An open talk menu with a fortress smith; the local guild holds Jangan when
-holder is "Holders". grade 0 is the master; role 8 is the smith's.
+holder is "Holders". Role 1 is the fortress commander, 8 the smith.
 ================
 */
-function smithFixture( t, holder, member = { grade: 0, role: 0 } ) {
+function smithFixture( t, holder, member = { grade: 2, role: 1 } ) {
 	const sent = [];
 	const f = uiFixture( message => {
 		if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -119,11 +119,13 @@ test("the count edit keeps two digits capped at twenty", () => {
 	assert.equal( production.fortressProductionCount( "" ), "" );
 });
 
-test("the master or the exact staff role may operate the window", () => {
-	assert.equal( production.fortressProductionMayOperate( { grade: 0, role: 0 }, "smith" ), true );
-	assert.equal( production.fortressProductionMayOperate( { grade: 2, role: 8 }, "smith" ), true );
-	assert.equal( production.fortressProductionMayOperate( { grade: 2, role: 8 }, "trainer" ), false );
-	assert.equal( production.fortressProductionMayOperate( { grade: 2, role: 0x18 }, "smith" ), false );
+test("the commander or the exact staff role may operate the window", () => {
+	assert.equal( production.fortressProductionMayOperate( { role: 1 }, "smith" ), true );
+	// 659D50 never reads the guild grade: a leader without a role may not.
+	assert.equal( production.fortressProductionMayOperate( { role: 0 }, "smith" ), false );
+	assert.equal( production.fortressProductionMayOperate( { role: 8 }, "smith" ), true );
+	assert.equal( production.fortressProductionMayOperate( { role: 8 }, "trainer" ), false );
+	assert.equal( production.fortressProductionMayOperate( { role: 0x18 }, "smith" ), false );
 	assert.equal( production.fortressProductionMayOperate( undefined, "smith" ), false );
 });
 
@@ -195,7 +197,7 @@ test("the query answer opens the window, and make, cancel and collect follow the
 });
 
 test("a member without the staff role sees the window but cannot make", t => {
-	const { f, step, answer } = smithFixture( t, "Holders", { grade: 2, role: 0 } );
+	const { f, step, answer } = smithFixture( t, "Holders", { grade: 0, role: 0 } );
 	step();
 	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
 	const shown = answer( { action: 0x0d, result: 1, fortress: 1, producing: false } );

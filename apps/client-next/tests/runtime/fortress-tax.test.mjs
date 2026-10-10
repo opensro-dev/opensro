@@ -58,7 +58,7 @@ managerFixture
 An open talk menu with a fortress manager (capability 0x400000).
 ================
 */
-function managerFixture( t, holder, alliances = [], grade = 0 ) {
+function managerFixture( t, holder, alliances = [], role = 1 ) {
 	const sent = [];
 	const f = uiFixture( message => {
 		if ( message.kind === "gameplay" ) sent.push( message.command );
@@ -81,7 +81,7 @@ function managerFixture( t, holder, alliances = [], grade = 0 ) {
 				subject: "",
 				contents: "",
 				crest: 0,
-				members: [ { id: SELF, name: "Player", grade, level: 60, permissions: 31 } ]
+				members: [ { id: SELF, name: "Player", grade: 0, role, level: 60, permissions: 31 } ]
 			},
 			alliances
 		}
@@ -188,8 +188,10 @@ test("collection asks for an amount capped at the treasury and sends action 2", 
 	assert.ok( f.hasText( "1034" ) );
 });
 
-test("only the guild master may press the tax buttons", t => {
-	const { f, step, answer } = managerFixture( t, "Holders", [], 1 );
+test("only the fortress commander may press the tax buttons", t => {
+	// 665470 tests GuildMember_IsFortressRole1, not the guild grade: the
+	// leader without the commander role is refused.
+	const { f, step, answer } = managerFixture( t, "Holders", [], 0 );
 	step();
 	f.ui.event( { kind: "activate", id: "npc-fortress-tax" } );
 	const shown = answer( { action: 0, result: 1, fortress: 1, taxRate: 0, gold: "1" } );

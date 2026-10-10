@@ -183,6 +183,7 @@ import {
 	FORTRESS_PRODUCTION_COLLECT,
 	FORTRESS_PRODUCTION_QUERY,
 	FORTRESS_PRODUCTION_START,
+	FORTRESS_ROLE_COMMANDER,
 	type FortressStaff,
 	fortressProductionAction,
 	fortressProductionFactor,
@@ -1337,7 +1338,9 @@ export function createUi(
 			holder: !!owner && owner === social?.guild?.name,
 			// GuildData_IsAllyGuildName: the holder is one of the local union's guilds.
 			ally: !!owner && !!social?.alliances?.some( guild => guild.name === owner ),
-			master: member?.grade === 0,
+			// 5D7AD0 / 5D8930 / 665470 test the fortress commander role
+			// (GuildMember_IsFortressRole1), not the guild grade.
+			commander: member?.role === FORTRESS_ROLE_COMMANDER,
 			member,
 			flags: state?.staffFlags ?? 0
 		};
@@ -3701,7 +3704,7 @@ export function createUi(
 				} else {fortressStaffHud.ask(
 						Number( id.slice( "npc-fortress-hire:".length ) ),
 						staff.flags,
-						staff.master
+						staff.commander
 					);}
 			}
 		} else if ( id === "npc-fortress-schedule" ) {
@@ -3777,8 +3780,8 @@ export function createUi(
 		} else if ( id === "fortress-tax-prev" || id === "fortress-tax-next" ) {
 			fortressTaxHud.slide( fortressTaxHud.draft() + (id === "fortress-tax-prev" ? -1 : 1) );
 		} else if ( id === "fortress-tax-modify" || id === "fortress-tax-collect" ) {
-			// 665470 enables both buttons for the guild master only.
-			if ( fortressStaffView().master ) {
+			// 665470 enables both buttons for the fortress commander only (827DB0).
+			if ( fortressStaffView().commander ) {
 				if ( id === "fortress-tax-modify" ) fortressTaxHud.askRate();
 				else {
 					fortressTaxHud.askCollect();
@@ -4480,7 +4483,7 @@ export function createUi(
 					const asked = fortressStaffHud.takeQuestion(), staff = fortressStaffView();
 					dirty = true;
 					if (
-						asked && staff.holder && staff.master && !(staff.flags & asked.flag) &&
+						asked && staff.holder && staff.commander && !(staff.flags & asked.flag) &&
 						view?.session?.phase === "world" && view.gameplay?.npcConversation?.phase === "menu" &&
 						view.gameplay.npcConversation.gid === asked.gid && view.gameplay.target === asked.gid
 					) sendGameplay( { kind: "fortress-staff", ...asked } );
@@ -12932,7 +12935,8 @@ export function createUi(
 								id: "npc-fortress-hire:" + flag,
 								label: copy( "SN_FORTRESS_MANAGER_EMPLOY_" + name ) + " " +
 									copy( "SN_FORTRESS_MANAGER_EMPLOY_FEE" ),
-								disabled: !fortressStaffView().master || !!(fortressStaffView().flags & Number( flag ))
+								disabled: !fortressStaffView().commander ||
+									!!(fortressStaffView().flags & Number( flag ))
 							}) ) :
 							null,
 						canMagicOption: !!(capabilities & AVATAR_MAGIC_OPTION_FUNCTION),
@@ -13548,7 +13552,7 @@ export function createUi(
 							disabled: !context
 						} );
 					}
-					const master = fortressStaffView().master;
+					const commander = fortressStaffView().commander;
 					for (
 						const [id, control] of [ [ 70, "fortress-tax-modify" ], [
 							71,
@@ -13563,7 +13567,7 @@ export function createUi(
 								py,
 								control,
 								hudCopy( at.text ),
-								!context || !master
+								!context || !commander
 							);
 						}
 					}

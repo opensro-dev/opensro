@@ -26,6 +26,10 @@ export const FORTRESS_PRODUCTION_MAX_COUNT = 20;
 // The fortress role a staff member's discount needs exactly
 // (GuildData_FindSmithMember 825DB0: 8; GuildData_FindTrainerMember 825D40:
 // 0x10) and the x87 factor it applies.
+// GuildMember_IsFortressRole1 (827DB0): the fortress commander, the role
+// the guild leader grants (0x765F). Native gates the manager's and the
+// staff's windows on it, never on the guild grade.
+export const FORTRESS_ROLE_COMMANDER = 0x01;
 const ROLE_SMITH = 0x08;
 const ROLE_TRAINER = 0x10;
 // float32( 0.85 ), the x87 constant 65A280 loads.
@@ -225,16 +229,17 @@ export function fortressProductionRemaining( order: FortressProductionOrder, now
 fortressProductionMayOperate
 
 CIFFortressMakeItemWnd_ApplyStaffPermissions (659D50): the make, complete
-and cancel buttons answer the guild master, or the member who holds
-exactly the staff member's role (827E40 smith 8, 827E70 trainer 0x10).
+and cancel buttons answer the member whose fortress role is exactly the
+commander's (827DB0, 1) or the staff member's (827E40 smith 8, 827E70
+trainer 0x10).
 ================
 */
 export function fortressProductionMayOperate(
-	member: { readonly grade?: number; readonly role?: number; } | undefined,
+	member: { readonly role?: number; } | undefined,
 	staff: FortressStaff
 ): boolean {
-	if ( !member ) return false;
-	return member.grade === 0 || member.role === (staff === "smith" ? ROLE_SMITH : ROLE_TRAINER);
+	const role = member?.role;
+	return role === FORTRESS_ROLE_COMMANDER || role === (staff === "smith" ? ROLE_SMITH : ROLE_TRAINER);
 }
 
 /*

@@ -235,10 +235,14 @@ export function createFortressStaffHud() {
 		/*
   ================
   ask
+
+  5D8930 asks only the fortress commander (GuildMember_IsFortressRole1).
   ================
   */
-		ask( flag: number, flags: number, master: boolean ) {
-			if ( target && master && [ 1, 2, 4 ].includes( flag ) && !(flags & flag) ) question = { ...target, flag };
+		ask( flag: number, flags: number, commander: boolean ) {
+			if ( target && commander && [ 1, 2, 4 ].includes( flag ) && !(flags & flag) ) {
+				question = { ...target, flag };
+			}
 		},
 		/*
   ================
