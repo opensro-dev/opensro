@@ -1755,6 +1755,22 @@ export function createUi(
 	}
 	/*
 	================
+	lastWhisperSender
+
+	The newest player who whispered this character: an incoming channel-2
+	line said in this session (not this character's own whisper, not the
+	replayed transcript).
+	================
+	*/
+	function lastWhisperSender( lines: readonly import("@/engine/contracts/gameplay").ChatLine[] ) {
+		for ( let i = lines.length - 1; i >= 0; i-- ) {
+			const line = lines[i]!;
+			if ( line.channel === 2 && !line.outgoing && !line.history && line.name ) return line.name;
+		}
+		return "";
+	}
+	/*
+	================
 	beginWhisper
 
 	6AC0F0 replaces the draft with "$name " and rejects the local name.
@@ -6423,6 +6439,16 @@ export function createUi(
 					}
 					if ( binding === 8 ) {
 						activate( "berserk" );
+						return;
+					}
+					// UIIT_CTL_REPLY_TT (key slot 20, R by default): whisper back to
+					// the last player who whispered, through the same prefill as the
+					// whisper list (6AC0F0). INFERENCE: with no whisper received yet
+					// the key does nothing, as a reply has no one to answer.
+					if ( binding === 20 ) {
+						const sender = lastWhisperSender( view.gameplay?.chat?.lines ?? [] );
+						if ( sender ) beginWhisper( sender );
+						dirty = true;
 						return;
 					}
 					if ( binding === 12 ) {

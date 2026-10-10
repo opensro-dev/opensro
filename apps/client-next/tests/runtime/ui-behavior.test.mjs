@@ -3933,6 +3933,36 @@ test("the pet portrait selects and targets on right release only, as CIFCOSStatu
 	}
 });
 
+test("R replies to the last player who whispered (UIIT_CTL_REPLY_TT, BUG-075)", () => {
+	const f = uiFixture();
+	try {
+		let now = 0;
+		const press = () => {
+			f.ui.event( { kind: "key", code: "KeyR" } );
+			return f.ui.step( f.state, ++now );
+		};
+		f.ui.step( f.state, now );
+		// No whisper yet: nothing to answer.
+		assert.equal( press()?.focusRequest?.id === "chat-text" && f.hasText( "$" ), false );
+		f.state.gameplay.chat = {
+			lines: [
+				{ channel: 2, name: "Alice", text: "hi", outgoing: false },
+				{ channel: 2, name: "Old", text: "from history", outgoing: false, history: true },
+				{ channel: 2, name: "Carol", text: "yo", outgoing: false },
+				// This character's own whisper to Bob is not someone to reply to.
+				{ channel: 2, name: "Bob", text: "hey", outgoing: true },
+				{ channel: 1, name: "Dave", text: "public", outgoing: false }
+			]
+		};
+		const scene = press();
+		assert.equal( scene?.focusRequest?.id, "chat-text" );
+		assert.ok( f.hasText( "$Carol" ), "the draft names the newest incoming whisperer" );
+		assert.equal( f.hasText( "$Bob" ) || f.hasText( "$Old" ) || f.hasText( "$Dave" ), false );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("GPU merchant menu branches retain all tabs, sparse pages and native purchase identities", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
