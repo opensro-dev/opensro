@@ -84,7 +84,26 @@ Checked 2026-10-11:
 - The doll's camera takes only `{ yaw, seconds, aspect }` (portrait.ts
   `prepare`, line ~200).
 
-Plan: give `prepare` an optional explicit camera (`viewer-camera.ts`
+Route found (2026-10-11): the inventory doll is the right path, not the HUD
+portrait. The UI scene names it (`UiScene.doll = { gid, yaw }` plus a quad
+with `doll: true`). The renderer then prepares `characters.portraitSource(gid)`
+through the doll's `createPortrait` into a `__doll` texture of the quad's size,
+with a transparent clear (renderer.ts ~605..625, frame.ts "equipment-doll").
+The monster still needs four additive changes:
+1. `UiScene.doll.camera?: WorldCamera`, passed through to `prepare`'s doll
+   branch in place of its fixed `eye [0, 9, -40]` camera. Models face -z at
+   the doll's yaw, so `viewerCamera(bounds, [0, -1])`.
+2. A renderer method that copies the `__doll` texture to a buffer and
+   resolves RGBA. This is the still's readback, transparent by construction.
+3. The viewer feeds one monster entity at the origin through the runtime
+   character owner (runtime/characters/characters.ts), which already
+   resolves the presentation resource, loads the model into the renderer
+   and produces `portraitSource(gid)`. No new model loader.
+4. A UI scene holding one full-size doll quad, no other UI.
+The main canvas pass stays opaque. The PNG comes from the doll texture, so
+stills need no transparent canvas mode at all.
+
+Earlier plan, superseded by the route above: give `prepare` an optional explicit camera (`viewer-camera.ts`
 output) and the renderer an optional still target of the request's size,
 leaving the HUD calls' arguments and results unchanged (pin that with a
 test). Then read the still target back into the PNG.
