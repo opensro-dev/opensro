@@ -73,6 +73,10 @@ const (
 	ReinforceAstralFloor    = 4
 )
 
+// reinforceMaxDegree bounds a powder's authored degree (item classes run
+// to degree 16 in the widest catalog).
+const reinforceMaxDegree = 16
+
 // reinforceChanceLevels is the plus levels probability distinguishes:
 // +0..+10 each, and +11 for every level beyond.
 const reinforceChanceLevels = 12
@@ -110,7 +114,11 @@ func (c *Catalog) ReinforceTables() (elixirs, powders []ReinforceTable) {
 		case wire.PackTypeFlags(3, 3, 10, 1):
 			elixirs = append(elixirs, table)
 		case wire.PackTypeFlags(3, 3, 10, 2):
-			table.Degree = int(ref.Params[0])
+			// A powder's first parameter is its equipment degree; a value
+			// past any degree is authoring damage and publishes none.
+			if degree := ref.Params[0]; degree <= reinforceMaxDegree {
+				table.Degree = int(degree)
+			}
 			powders = append(powders, table)
 		}
 	}
