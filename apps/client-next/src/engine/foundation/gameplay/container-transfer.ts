@@ -11,6 +11,7 @@ and capacity before calling in.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { etcCarriesPlusByte } from "./inventory-item";
 
 // Expendable stackable class bits: (typeFlags & 0x7E) === 0x6C.
 const STACKABLE_MASK = 0x7e;
@@ -117,15 +118,31 @@ export function planWholeTransfer(
 
 /*
 ================
-sameStackIdentity
+nativeStackIdentity
 
 490230 compares the original cargo-owner string before merging trade goods.
 ================
 */
-export function sameStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
+export function nativeStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
 	if ( a.refObjId !== b.refObjId ) return false;
 	if ( (a.typeFlags & 0x7fe) === 0x46c || (b.typeFlags & 0x7fe) === 0x46c ) {
 		return (a.label ?? "") === (b.label ?? "");
 	}
+	return true;
+}
+
+/*
+================
+sameStackIdentity
+
+The merge identity: nativeStackIdentity, and port-only, not native, a
+stone's plus (its assimilation value) must match too. Natively stones stack
+1, so no merge reaches the extra test; the server applies the same rule
+(stackIdentityMatches, #583).
+================
+*/
+export function sameStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
+	if ( !nativeStackIdentity( a, b ) ) return false;
+	if ( etcCarriesPlusByte( a.typeFlags ) || etcCarriesPlusByte( b.typeFlags ) ) return a.plus === b.plus;
 	return true;
 }
