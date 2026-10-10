@@ -32,6 +32,8 @@ const (
 	// tagTimedHunt is hntp (+0x48C, no words): the link's recipient is
 	// tracked for its source (SkillCombat_EngageSkill 593757).
 	tagTimedHunt               = 0x686e7470
+	tagTimedLinkedFence        = 0x6c6b6472 // lkdr
+	tagTimedLinkedQuota        = 0x6c6b6464 // lkdd
 	tagTimedRequireNot         = 0x7265716e
 	tagTimedMaxHP              = 0x687069
 	tagTimedAttack             = 0x61706175
@@ -294,6 +296,39 @@ type SkillEffectLink struct {
 	// 4F9A90), so the source keeps receiving the recipient's position
 	// (Tag Point, Hunting Point).
 	Hunt bool
+	// Fence is lkdr {mask, percent, max hits} (+0x478, the Warrior's
+	// Physical / Magical Fence): 5A0F01 moves percent of the recipient's
+	// physical and/or magical damage lanes to the link source. FenceMask
+	// holds the loader's fix-up (linkFenceMask). A zero max hits never
+	// retires the link; every shipped row authors 0.
+	Fence                   bool
+	FenceMask, FencePercent uint32
+	FenceMaxHits            uint32
+	// Quota is lkdd {percent} (+0x480, Pain Quota): 5A11BF keeps
+	// 100 - percent of the recipient's hit and divides the rest among
+	// its party members within linkQuotaRange.
+	Quota        bool
+	QuotaPercent uint32
+}
+
+/*
+================
+linkFenceMask
+
+SkillGlobal_BuildParameterIndex (588A06..588A44) completes lkdr word 0 as it
+indexes it: a lane value (4 physical, 8 magical, 12 both) gains both share
+bits (|1|2), and a share value (1, 2, 3) gains both lanes (|4|8). 5A0F01
+moves a lane only when its lane bit and a share bit are both set.
+================
+*/
+func linkFenceMask(word uint32) uint32 {
+	switch word {
+	case 4, 8, 12:
+		return word | 1 | 2
+	case 1, 2, 3:
+		return word | 4 | 8
+	}
+	return word
 }
 
 // The hr, ru and summ instruction tags (big-endian ASCII, as the program
@@ -362,7 +397,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// own contracts. None may be erased to manufacture a self-only program.
 	// The one targeted shape is Required+Animal+Ally+Party with a range.
 	// Self (column 26) may join it.
-	targeted := fields[21] != "0" && fields[22] == "1" && fields[23] == "1" && fields[27] == "1" && fields[28] == "1"
+	// Party (28) with or without Ally (27): a party-only row (Pain Quota) is
+	// held to the caster's party by 58D7A0 (action.skillTargetPermission).
+	targeted := fields[21] != "0" && fields[22] == "1" && fields[23] == "1" && fields[28] == "1"
 	var result SkillTimedEffect
 	program, err := CompileSkillProgram(fields)
 	if err != nil {
@@ -435,9 +472,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// lkag and lkdh may be authored anywhere in the program; the native index
 	// keeps them wherever they sit, and they ride the row's lnks, which is
 	// checked once every block is read.
-	var linkThreat, linkDamage bool
-	var linkThreatPercent uint32
-	var linkDamageWords [3]uint32
+	var linkThreat, linkDamage, linkFence, linkQuota bool
+	var linkThreatPercent, linkQuotaPercent uint32
+	var linkDamageWords, linkFenceWords [3]uint32
 	for i := 0; i < program.Len(); i++ {
 		op := program.Instruction(i)
 		switch op.Tag {
@@ -521,7 +558,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 				return
 			}
 		case tagTimedLink:
-			if result.Link.Present || op.Count != 4 || !targeted || op.Arguments[0] == 0 {
+			// Group 0 is legal: 59DC80 applies its same-group rule only to a
+			// nonzero group (Pain Quota authors 0).
+			if result.Link.Present || op.Count != 4 || !targeted {
 				return
 			}
 			result.Link = SkillEffectLink{Present: true, Group: op.Arguments[0], MaxDistance: op.Arguments[1], MaxOutgoing: op.Arguments[2], Board: op.Arguments[3]}
@@ -553,6 +592,19 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			if op.Count != 0 || !targeted {
 				return
 			}
+		case tagTimedLinkedFence:
+			// lkdr {mask, percent, max hits} (+0x478, 588A03: three words).
+			if linkFence || op.Count != 3 || op.Arguments[1] == 0 || op.Arguments[1] > 100 {
+				return
+			}
+			linkFence = true
+			linkFenceWords = [3]uint32{linkFenceMask(op.Arguments[0]), op.Arguments[1], op.Arguments[2]}
+		case tagTimedLinkedQuota:
+			// lkdd {percent} (+0x480, 5889E2: one word).
+			if linkQuota || op.Count != 1 || op.Arguments[0] == 0 || op.Arguments[0] > 100 {
+				return
+			}
+			linkQuota, linkQuotaPercent = true, op.Arguments[0]
 		case tagTimedDamageToMP:
 			if result.DamageToMP || op.Count != 1 || op.Arguments[0] > maxDamageToMPPercent {
 				return
@@ -665,11 +717,30 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	if huntLink {
 		// A mark carries no writes, threat or MP share beside it.
-		if !result.Link.Present || linkThreat || linkDamage || result.Strength.Present || result.Intellect.Present ||
+		if !result.Link.Present || linkThreat || linkDamage || linkFence || linkQuota || result.Strength.Present || result.Intellect.Present ||
 			result.Block.Present || result.IncomingReduction || len(attributeTags) != 0 {
 			return
 		}
 		result.Link.Hunt = true
+	}
+	// 594E5D installs one link slot per effect (+0x478, +0x3E0, +0x480,
+	// +0x47C, in that order); every shipped row authors one kind.
+	kinds := 0
+	for _, kind := range []bool{linkThreat, linkDamage, linkFence, linkQuota} {
+		if kind {
+			kinds++
+		}
+	}
+	if kinds > 1 {
+		return
+	}
+	if linkFence || linkQuota {
+		if !result.Link.Present {
+			return
+		}
+		result.Link.Fence, result.Link.FenceMask, result.Link.FencePercent, result.Link.FenceMaxHits =
+			linkFence, linkFenceWords[0], linkFenceWords[1], linkFenceWords[2]
+		result.Link.Quota, result.Link.QuotaPercent = linkQuota, linkQuotaPercent
 	}
 	if linkThreat || linkDamage {
 		if !result.Link.Present {
@@ -686,6 +757,11 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// odar would silently drop them and stays refused.
 	// A damage link carries lkdh alone: the linked runtime has no rule for
 	// it beside a threat share or stat writes.
+	// A fence or quota link carries its share alone, as Mana Switch does.
+	if (result.Link.Fence || result.Link.Quota) && (result.Strength.Present || result.Intellect.Present ||
+		result.Block.Present || result.IncomingReduction || len(attributeTags) != 0) {
+		return
+	}
 	if result.Link.Mana && (result.Link.Threat || result.Strength.Present || result.Intellect.Present ||
 		result.Block.Present || result.IncomingReduction || len(attributeTags) != 0) {
 		return
@@ -711,7 +787,8 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
 		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Parry || result.Range || result.Hawk.Present ||
-		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt) || result.Preemptive.Present ||
+		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt || result.Link.Fence || result.Link.Quota) ||
+		result.Preemptive.Present ||
 		result.DamageReturn.Present ||
 		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present)
 	result.Targeted = targeted
