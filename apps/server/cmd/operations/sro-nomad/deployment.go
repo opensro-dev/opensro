@@ -76,10 +76,8 @@ type deployment struct {
 	StackSizes string
 	// PartyMasteries comes from the deployer's SRO_PARTY_MASTERIES.
 	PartyMasteries bool
-	// StorageAutoStack is the deployer's SRO_STORAGE_AUTO_STACK, "on" when
-	// unset (owner decision 2026-10-11); the GameWorld parses it, and its
-	// own unset value is native (port-only, action/storageautostack.go).
-	StorageAutoStack      string
+	// PortOnly are the port-only GameWorld switches (portonly.go).
+	PortOnly              portOnlySettings
 	TransportCert         string
 	TransportKey          string
 	TransportTLSID        string
@@ -399,7 +397,7 @@ func resolveDeployment(
 		BetaMastery:           betaMastery,
 		StackSizes:            stackSizes.String(),
 		PartyMasteries:        party.MasteriesFromEnv(),
-		StorageAutoStack:      storageAutoStackSetting(),
+		PortOnly:              portOnlySettingsFromEnv(),
 		TransportCert:         transportCert,
 		TransportKey:          transportKey,
 		TransportTLSID:        transportTLSID,
@@ -619,7 +617,7 @@ gameVariables
 func (deployment *deployment) gameVariables(
 	game shardDeployment,
 ) map[string]any {
-	return deployment.nodeVariables(deployment.GameCPU, deployment.GameMemoryMB, map[string]any{
+	return deployment.nodeVariables(deployment.GameCPU, deployment.GameMemoryMB, deployment.PortOnly.jobVariables(map[string]any{
 		"shard_id":                         game.Definition.ID,
 		"binary_path":                      slashPath(deployment.GameBinary),
 		"catalog_path":                     slashPath(deployment.Catalog),
@@ -650,9 +648,8 @@ func (deployment *deployment) gameVariables(
 		"stack_sizes":         deployment.StackSizes,
 		"public_api_addr":     game.PublicAPIAddr,
 		"party_masteries":     boolEnvValue(deployment.PartyMasteries),
-		"storage_auto_stack":  deployment.StorageAutoStack,
 		"transport_pprof":     boolEnvValue(deployment.Pprof),
-	})
+	}))
 }
 
 /*

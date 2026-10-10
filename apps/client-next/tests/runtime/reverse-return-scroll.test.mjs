@@ -187,3 +187,122 @@ for ( const change of [ "replacement", "travel", "character", "pending" ] ) {
 		}
 	});
 }
+
+// ============================================================================
+// Port-only, not native: the map choice (reverse-return-map.ts)
+// ============================================================================
+
+const { decodeReverseMapPoints } = await import( "../../src/engine/foundation/gameplay/reverse-return-map.ts" );
+
+/*
+================
+withMapTable
+
+The open fixture with a published reverse return map table: one point at
+the local player's own position, so the map centred there shows it.
+================
+*/
+function withMapTable( f ) {
+	const pose = { regionId: 0x62a8, x: 900, y: 0, z: 900, angle: 0 };
+	f.state.gameplay = /** @type {any} */ ({
+		...f.state.gameplay,
+		pose,
+		reverseMapPoints: [ { id: 1, name: "Jangan", regionId: pose.regionId, x: pose.x, y: pose.y, z: pose.z } ]
+	});
+	return f;
+}
+
+test("with the Experimental row off the box keeps its two native points", () => {
+	const sent = [], f = withMapTable( open( sent ) );
+	try {
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		assert.deepEqual( boxIds( f.ui.step( f.state, 1300 ) ), [
+			"reverse-scroll:2",
+			"reverse-scroll:3",
+			"reverse-scroll-cancel"
+		] );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
+		assert.notEqual( f.ui.step( f.state, 1400 )?.panel, "Map" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("with the row on, the map row picks a published point and sends choice 7 with its id", () => {
+	const sent = [], f = withMapTable( open( sent ) );
+	try {
+		f.ui.event( { kind: "experimental-preferences", value: { reverseReturnMap: true } } );
+		f.ui.event( { kind: "double-activate", id: "slot:13" } );
+		assert.deepEqual( boxIds( f.ui.step( f.state, 1300 ) ), [
+			"reverse-scroll:2",
+			"reverse-scroll:3",
+			"reverse-scroll-map",
+			"reverse-scroll-cancel"
+		] );
+		f.ui.event( { kind: "activate", id: "reverse-scroll-map" } );
+		let scene = f.ui.step( f.state, 1400 );
+		for (
+			let time = 1500;
+			time < 3000 && !scene?.controls.some( c => c.id === "reverse-map-point:1" );
+			time += 100
+		) {
+			scene = f.ui.step( f.state, time ) ?? scene;
+		}
+		assert.ok( scene?.controls.some( c => c.id === "reverse-map-point:1" ), "the map shows the published point" );
+		f.ui.event( { kind: "activate", id: "reverse-map-point:1" } );
+		f.ui.step( f.state, 3100 );
+		assert.ok( f.hasText( "Jangan" ) && f.hasText( "Move here?" ) );
+		assert.equal( sent.filter( row => row.kind === "gameplay" && row.command.kind === "item-use" ).length, 0 );
+		f.ui.event( { kind: "activate", id: "map-teleport-confirm" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 13, reverseChoice: 7, reverseMapPoint: 1 }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("the worker sends choice 7 and the point id as a u32 after the type word", () => {
+	const sent = [];
+	const gameplay = createGameplay( frame => sent.push( frame ) );
+	gameplay.bootstrap( {
+		refItemSnapshot: [ { refObjId: 3795, typeFlags: REVERSE_SCROLL } ],
+		equipItems: [ { refObjId: 3795, slot: 21, body: [ 0xd3, 0x0e, 0, 0, 2, 0 ] } ],
+		reverseMapPoints: [ { id: 1, name: "Jangan", regionId: 25000, x: 900, y: 0, z: 900 } ]
+	} );
+	gameplay.seed( {
+		gid: 1,
+		refObjId: 1,
+		kind: "local-player",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: 0,
+		name: "Author"
+	} );
+	gameplay.command( { kind: "item-use", slot: 21, reverseChoice: 7, reverseMapPoint: 0x01020304 }, 1, undefined );
+	assert.deepEqual( sent, [ {
+		opcode: 0x75bd,
+		payload: Uint8Array.of( 21, REVERSE_SCROLL & 255, REVERSE_SCROLL >>> 8, 7, 4, 3, 2, 1 )
+	} ] );
+	gameplay.dispose();
+});
+
+test("the published table is checked: ids in order, field regions, local coordinates", () => {
+	assert.deepEqual( decodeReverseMapPoints( undefined ), [] );
+	const good = { id: 1, name: "Jangan", regionId: 25000, x: 900, y: 0, z: 900 };
+	assert.equal( decodeReverseMapPoints( [ good ] ).length, 1 );
+	for (
+		const bad of [
+			{ ...good, id: 2 },
+			{ ...good, regionId: 0x8000 | 25000 },
+			{ ...good, x: 1920 },
+			{ ...good, z: -1 },
+			{ ...good, y: Infinity },
+			{ ...good, name: 5 }
+		]
+	) assert.throws( () => decodeReverseMapPoints( [ bad ] ) );
+	assert.throws( () => decodeReverseMapPoints( "points" ) );
+});

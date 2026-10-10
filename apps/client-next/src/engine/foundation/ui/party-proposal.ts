@@ -90,6 +90,24 @@ export function guildProposalLayout(
 	};
 }
 
+// REVERSE_RETURN_ROW is the reverse return box's row pitch (26 px).
+const REVERSE_RETURN_ROW = 26;
+
+/*
+================
+reverseReturnLayout
+
+The reverse return box: guildProposalLayout's 308 x 148 box for its two
+native rows. A port-only third row (the map, reverse-return-map.ts) grows
+the box and moves Cancel down by one row pitch.
+================
+*/
+export function reverseReturnLayout( width: number, height: number, rows: 2 | 3 ) {
+	const extra = (rows - 2) * REVERSE_RETURN_ROW;
+	const box = messageBox( width, height, 308, 148 + extra ), [x, y] = box.frame;
+	return { ...box, refuse: [ x + 152, y + 99 + extra, 76, 24 ] as UiRect };
+}
+
 /*
 ================
 unionProposalLayout

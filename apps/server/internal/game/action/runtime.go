@@ -151,6 +151,9 @@ type Runtime struct {
 	// another runtime or bootstrap's object list.
 	NpcRoster []simulation.NpcDef
 	portals   *portalCatalog
+	// reverseMapPoints is the reverse return scroll's map table, empty
+	// unless SRO_REVERSE_RETURN_MAP is on (ConfigureReverseReturnMap).
+	reverseMapPoints []enterworld.ReverseMapPoint
 	// gatePulleys maps a gate pulley's RefObjID to its gate's event zone
 	// (ConfigurePortals, fortress_gates.go).
 	gatePulleys map[uint32]uint32

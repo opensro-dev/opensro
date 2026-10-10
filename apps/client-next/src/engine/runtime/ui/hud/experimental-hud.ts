@@ -133,14 +133,22 @@ export const EXPERIMENTAL_TABS: readonly {
 		]
 	},
 	{
-		title: "Chat",
-		section: "Chat display",
-		rows: [ {
-			key: "chatTimestamps",
-			id: "experimental-chat-timestamps",
-			label: "Chat timestamps",
-			description: "Show message time on hover."
-		} ]
+		title: "Game",
+		section: "Chat and items",
+		rows: [
+			{
+				key: "chatTimestamps",
+				id: "experimental-chat-timestamps",
+				label: "Chat timestamps",
+				description: "Show message time on hover."
+			},
+			{
+				key: "reverseReturnMap",
+				id: "experimental-reverse-return-map",
+				label: "Reverse return map",
+				description: "Pick the reverse return scroll's point on the map."
+			}
+		]
 	},
 	{
 		title: "Developer",

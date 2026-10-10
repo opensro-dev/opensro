@@ -104,6 +104,7 @@ import {
 	partyPurposeAllowed
 } from "@/engine/foundation/gameplay/party-matching";
 import { gmRequest, gmReply, gmItemReferences, type GmReply } from "@/engine/foundation/gameplay/gm-command";
+import { decodeReverseMapPoints, type ReverseMapPoint } from "@/engine/foundation/gameplay/reverse-return-map";
 import {
 	fortressBootstrap,
 	advanceFortressCountdowns,
@@ -347,6 +348,8 @@ export function createGameplay(
 	let gmItems = gmItemReferences( {} );
 	// The server's port-only storage auto-stack rule (storageAutoStack).
 	let storageAutoStack = false;
+	// The port-only reverse return map table (reverse-return-map.ts).
+	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
 	let options = initialGameOptions();
 	let eligibility = { gm: false, pcRoomEvent: false };
@@ -998,6 +1001,9 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
 			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
+			reverseMapPoints = decodeReverseMapPoints(
+				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
+			);
 			unlimitedItems = unlimitedItemIds( value );
 			const entryEvents = entryEnvironment( value );
 			warnings = [ false, false ];
@@ -2239,7 +2245,8 @@ state here before a command can claim a native wire conversation.
 					summonerSlot: command.summonerSlot,
 					skin: command.skin,
 					targetSlot: command.targetSlot,
-					reverseChoice: command.reverseChoice
+					reverseChoice: command.reverseChoice,
+					reverseMapPoint: command.reverseMapPoint
 				};
 				const refusal = inventory.useNotice( command.slot, context );
 				if ( refusal ) {
@@ -3887,6 +3894,7 @@ The published plane when something changed since the last take, else null.
 				countJobs: countJobs.state(),
 				reverseReturnChoice: countJobs.choosing() !== null,
 				...(storageAutoStack ? { storageAutoStack } : {}),
+				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),
 				job,
