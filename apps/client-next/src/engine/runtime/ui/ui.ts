@@ -20337,10 +20337,13 @@ export function createUi(
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
-				// A press elsewhere hides the tooltip; a press on the hovered control
-				// itself (a click, a Ctrl+click quick sell) keeps it, so it does not
-				// blink on every click (BUG-072). A drag hides it through the carry.
-				// INFERENCE until the native tooltip-on-press rule is read in BN.
+				// A press on the hovered control itself (a click, a Ctrl+click quick
+				// sell) keeps its tooltip, so it does not blink on every click
+				// (BUG-072). Native tooltips follow hover alone: A115C0 hit-tests the
+				// cursor each frame and A012C0 sends 0x4009 (show) / 0x400A (hide),
+				// with no button check. Hiding while a press that began on another
+				// control is held is older port behaviour, not native. A drag hides
+				// it through the carry.
 				const pressHides = pressed !== null && pressed !== hover;
 				if (
 					control && game && hudData && phase === "world" && !carriedShortcut && !carriedItem &&
