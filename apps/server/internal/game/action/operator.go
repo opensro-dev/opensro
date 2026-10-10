@@ -15,9 +15,11 @@ package action
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
@@ -139,22 +141,33 @@ func (rt *Runtime) OperatorResetStats(division, name string) error {
 		return fmt.Errorf("character not found")
 	}
 	if !rt.deps.Update(c, "operator-reset-stats", func() bool {
-		if c.DeletePending || c.Level == nil {
+		if c.DeletePending || c.Level == nil || *c.Level < 1 || *c.Level > math.MaxUint8 ||
+			c.Strength == nil || c.Intellect == nil {
 			return false
 		}
 		base := progression.BaseStatAtLevel(*c.Level)
 		points := int64(0)
-		if c.StatPoints != nil && *c.StatPoints > 0 {
+		if c.StatPoints != nil {
 			points = *c.StatPoints
 		}
-		free := domain.CharacterStrength(c) + domain.CharacterIntellect(c) + points - 2*base
-		if free < 0 {
-			// Below the level's own base: an inconsistent record, not one to "reset".
+		// Validate raw fields before arithmetic: fallback values could invent
+		// points, and a refund wider than the wire word would silently lose them.
+		if *c.Strength < base || *c.Intellect < base || *c.Strength > enterworld.StatWordMax ||
+			*c.Intellect > enterworld.StatWordMax || points < 0 || points > enterworld.StatWordMax {
 			return false
 		}
+		free := (*c.Strength - base) + (*c.Intellect - base) + points
+		if free > enterworld.StatWordMax {
+			return false
+		}
+		next := c.Snapshot()
 		strength, intellect := base, base
-		c.Strength, c.Intellect, c.StatPoints = &strength, &intellect, &free
-		rt.clampStoredGaugeToKeeper(division, c)
+		next.Strength, next.Intellect, next.StatPoints = &strength, &intellect, &free
+		if err := rt.operatorResetVitals(next); err != nil {
+			return false
+		}
+		c.Strength, c.Intellect, c.StatPoints = next.Strength, next.Intellect, next.StatPoints
+		c.CurrentHP, c.CurrentMP = next.CurrentHP, next.CurrentMP
 		return true
 	}) {
 		return fmt.Errorf("character stat reset refused")

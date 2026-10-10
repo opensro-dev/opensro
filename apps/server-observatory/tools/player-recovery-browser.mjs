@@ -17,7 +17,7 @@ const publicRoot = new URL( "../public/", import.meta.url );
 const directory = new URL( "../temp/artifacts/player-recovery/", import.meta.url );
 const calls = [], errors = [];
 let pendingRead, pendingMutation, holdRead = false, holdMutation = false, failMutation = false;
-let includePK = true, configured = true;
+let includePK = true, includeStats = true, configured = true;
 const WAIT_TIMEOUT_MS = 5000;
 /*
 ================
@@ -36,7 +36,7 @@ async function waitForPending( read ) {
 snapshot
 ================
 */
-function snapshot( name, shard, cleared = false ) {
+function snapshot( name, shard, cleared = false, reset = false ) {
 	return {
 		shard,
 		capturedAt: "2026-10-09T08:00:00Z",
@@ -44,6 +44,7 @@ function snapshot( name, shard, cleared = false ) {
 			id: name === "Viper" ? 42 : 43,
 			name,
 			level: 30,
+			...(includeStats ? { strength: reset ? 49 : 80, intellect: 49, statPoints: reset ? 87 : 56 } : {}),
 			hp: 100,
 			mp: 80,
 			bound: !cleared,
@@ -108,7 +109,14 @@ try {
 				route.fulfill(
 					failMutation ?
 						{ status: 409, json: { error: "Authority refused operation" } } :
-						{ json: snapshot( body.character, url.searchParams.get( "shard" ), true ) }
+						{
+							json: snapshot(
+								body.character,
+								url.searchParams.get( "shard" ),
+								true,
+								body.action === "reset-stats"
+							)
+						}
 				);
 			if ( holdMutation ) pendingMutation = reply;
 			else await reply();
@@ -220,6 +228,31 @@ try {
 		calls.length,
 		"every explicit operation has a fresh audit ID"
 	);
+	await inspect();
+	assert.match( await field( "facts" ).textContent(), /STR 80; INT 49; free points 56/ );
+	await field( "stats-reason" ).fill( "Player requested stat reset" );
+	await field( "stats-confirmation" ).fill( "viper" );
+	await field( "reset-stats-button" ).click();
+	assert.equal( calls.length, 3 );
+	assert.match( await field( "status" ).textContent(), /exact name/ );
+	await field( "stats-confirmation" ).fill( "Viper" );
+	await field( "reset-stats-button" ).click();
+	await page.waitForFunction( () =>
+		document.getElementById( "recovery-status" ).textContent.includes( "stats reset" )
+	);
+	assert.equal( calls.length, 4 );
+	assert.equal( calls[3].body.action, "reset-stats" );
+	assert.deepEqual( Object.keys( calls[3].body ).sort(), [ "action", "character", "id", "reason" ] );
+	assert.match(
+		await field( "status" ).textContent(),
+		/Before: STR 80; INT 49; free points 56.*After: STR 49; INT 49; free points 87/
+	);
+	assert.equal( await field( "stats-confirmation" ).inputValue(), "", "a reset requires a fresh confirmation" );
+	await field( "reset-stats-button" ).click();
+	assert.equal( calls.length, 4 );
+	includeStats = false;
+	await inspect();
+	assert.equal( await field( "reset-stats-button" ).isDisabled(), true );
 	configured = false;
 	await page.reload();
 	await page.waitForFunction( () =>
@@ -240,6 +273,7 @@ try {
 					"late inspection",
 					"exclusive mutation",
 					"before/after PK",
+					"stat reset envelope, summary and renewed confirmation",
 					"uncertain outcome",
 					"older shard"
 				]

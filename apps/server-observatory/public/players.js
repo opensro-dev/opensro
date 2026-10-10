@@ -150,7 +150,7 @@ function showPlayer( value, shard ) {
 		option.textContent = townNames[town.code] ?? town.code;
 		return option;
 	} ) );
-	for ( const id of [ "confirmation", "pk-confirmation" ] ) byID( id ).value = "";
+	for ( const id of [ "confirmation", "pk-confirmation", "stats-confirmation" ] ) byID( id ).value = "";
 	syncControls();
 }
 /*
