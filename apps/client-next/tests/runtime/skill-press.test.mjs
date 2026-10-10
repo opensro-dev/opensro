@@ -632,3 +632,90 @@ test("an enemy skill pressed with nothing selected never animates, cools down or
 	assert.equal( sent.filter( f => f.opcode === 0x72cd ).length, 0 );
 	game.dispose();
 });
+
+// ============================================================================
+// Authoritative entry cooldowns
+
+test("entry cooldowns retain remaining time across loading, shared groups and exact expiry", () => {
+	const owner = cooldowns.createSkillCooldowns();
+	const first = { ...SKILL, cooldownMs: 180000, cooldownGroup: 7 };
+	owner.restore(
+		{
+			protocolVersion: 3,
+			skillCooldowns: [ { skill: first.id, remainingMs: 60000, durationMs: 180000 } ]
+		},
+		[ first ],
+		10000
+	);
+	assert.deepEqual( cooldowns.skillCooldown( owner.state(), first.id, 7, 15000 ), {
+		remainingMs: 55000,
+		fraction: 55000 / 180000
+	} );
+	assert.equal( cooldowns.skillCooldown( owner.state(), 99, 7, 15000 )?.remainingMs, 55000 );
+	assert.equal( cooldowns.skillCooldown( owner.state(), 99, 0, 15000 ), null );
+	owner.refused();
+	assert.equal( owner.state().length, 1, "a rejected press cannot erase restored authority" );
+	assert.equal( cooldowns.skillCooldown( owner.state(), first.id, 7, 69999 )?.remainingMs, 1 );
+	assert.equal( cooldowns.skillCooldown( owner.state(), first.id, 7, 70000 ), null );
+	owner.restore( { protocolVersion: 3, skillCooldowns: [] }, [ first ], 70000 );
+	assert.equal( owner.state().length, 0, "a different entry cannot inherit this character's rows" );
+});
+
+test("malformed entry cooldowns never partially replace accepted rows", () => {
+	const owner = cooldowns.createSkillCooldowns();
+	owner.accepted( SKILL, 1000, 1000 );
+	const before = owner.state();
+	const valid = { skill: SKILL.id, remainingMs: 1000, durationMs: 2000 };
+	for (
+		const source of [
+			undefined,
+			null,
+			{},
+			[ null ],
+			[ valid, valid ],
+			[ valid, { ...valid, skill: 99 } ],
+			[ { ...valid, remainingMs: -1 } ],
+			[ { ...valid, remainingMs: 0 } ],
+			[ { ...valid, remainingMs: 1.5 } ],
+			[ { ...valid, durationMs: 0 } ],
+			[ { ...valid, durationMs: 0x100000000 } ]
+		]
+	) {
+		assert.throws(
+			() => owner.restore( { protocolVersion: 3, skillCooldowns: source }, [ SKILL ], 2000 ),
+			/Invalid entry skill cooldown/
+		);
+		assert.equal( owner.state(), before );
+	}
+});
+
+test("a fresh gameplay owner refuses restored reuse without predicting a cast, then sends at expiry", () => {
+	const frames = [];
+	const game = createGameplay( frame => frames.push( frame ) );
+	try {
+		game.bootstrap(
+			{
+				protocolVersion: 3,
+				simulationProtocolVersion: 1,
+				character: { skills: [ SLOW ] },
+				refSkillSnapshot: [ skillRef( SLOW, 180000 ) ],
+				skillCooldowns: [ { skill: SLOW, remainingMs: 60000, durationMs: 180000 } ]
+			},
+			false,
+			10000
+		);
+		game.seed( local );
+		game.step( 15000, local );
+		game.command( { kind: "skill", skillId: SLOW }, 15000, undefined, local );
+		const state = game.take();
+		assert.equal( frames.filter( frame => frame.opcode === 0x72cd ).length, 0 );
+		assert.equal( state?.skillDenied?.skill, SLOW );
+		assert.deepEqual( state?.casts, [] );
+		assert.equal( cooldowns.skillCooldown( state?.skillCooldowns ?? [], SLOW, 0, 15000 )?.remainingMs, 55000 );
+		game.step( 70000, local );
+		game.command( { kind: "skill", skillId: SLOW }, 70000, undefined, local );
+		assert.equal( frames.filter( frame => frame.opcode === 0x72cd && frame.payload[1] === 4 ).length, 1 );
+	} finally {
+		game.dispose();
+	}
+});

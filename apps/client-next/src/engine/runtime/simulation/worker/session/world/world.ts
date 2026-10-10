@@ -108,7 +108,11 @@ onNetworkFailure
 		error?: string;
 	} | null = null;
 	let boundThisTransport = false, resumedTransport = false;
-	let references: { kind: "idle"; } | { kind: "loading"; } | { kind: "ready"; bootstrap: unknown; } | {
+	let references: { kind: "idle"; } | { kind: "loading"; } | {
+		kind: "ready";
+		bootstrap: unknown;
+		receivedAtMs: number;
+	} | {
 		kind: "failed";
 		error: string;
 	} = { kind: "idle" };
@@ -229,7 +233,7 @@ receive
 					!wrapper.bootstrap || typeof wrapper.bootstrap !== "object" || Array.isArray( wrapper.bootstrap ) ||
 					"refSkillSnapshot" in wrapper.bootstrap
 				) throw Error( "Invalid reference bootstrap" );
-				const bootstrap = wrapper.bootstrap, current = epoch;
+				const bootstrap = wrapper.bootstrap, current = epoch, receivedAtMs = now;
 				controller = new AbortController();
 				references = { kind: "loading" };
 				deadline = now + REFERENCE_TIMEOUT_MS;
@@ -240,6 +244,7 @@ receive
 						const own = bootstrap as { refItemSnapshot?: unknown[]; refObjSnapshot?: unknown[]; };
 						references = {
 							kind: "ready",
+							receivedAtMs,
 							bootstrap: {
 								...bootstrap,
 								...refs,
@@ -256,7 +261,7 @@ receive
 			if ( wrapper.v !== 1 ) {
 				throw new Error( "Unsupported EnterWorld blob version", { cause: "unsupported_feature" } );
 			}
-			core.bootstrap( wrapper.bootstrap, resumedTransport );
+			core.bootstrap( wrapper.bootstrap, resumedTransport, now );
 			boundThisTransport = true;
 			hasWorld = true;
 			ready = false;
@@ -471,11 +476,11 @@ step
 				}
 			}
 			if ( references.kind === "ready" ) {
-				const bootstrap = references.bootstrap;
+				const { bootstrap, receivedAtMs } = references;
 				references = { kind: "idle" };
 				controller = null;
 				try {
-					core.bootstrap( bootstrap, resumedTransport );
+					core.bootstrap( bootstrap, resumedTransport, receivedAtMs );
 					boundThisTransport = true;
 					hasWorld = true;
 					ready = false;

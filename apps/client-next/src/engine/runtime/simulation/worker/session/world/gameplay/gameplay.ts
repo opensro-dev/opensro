@@ -945,7 +945,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 "Unknown party delta member" after every teleport or reconnect.
 ================
 		*/
-		bootstrap( value: unknown, continued = false ) {
+		bootstrap( value: unknown, continued = false, receivedAtMs = 0 ) {
 			pickup.clear();
 			cosPickup.clear();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
@@ -1107,6 +1107,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			);
 			targeting.clear();
 			combat.clear();
+			combat.restoreCooldowns( value, nextCatalog, receivedAtMs );
 			combat.references( b.refSkillSnapshot ?? [] );
 			inventory.bootstrap( value );
 			guide = queueGuide( guide, [

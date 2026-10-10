@@ -21,6 +21,7 @@ import type { SkillMetadata } from "./skill-catalog";
 // How long a finished row is kept for the slot's completion flash.
 const RETAIN_AFTER_MS = 500;
 const MAX_ROWS = 4096;
+const MAX_WIRE_MS = 0xffffffff;
 
 /*
 ================
@@ -90,6 +91,47 @@ export function createSkillCooldowns() {
 		} ];
 	}
 	return {
+		/*
+		================
+		restore
+
+		Entry v3 carries server deadlines as remaining milliseconds. Anchor
+		them at receipt, so loading references cannot restart or extend reuse.
+		v2 remains readable for recorded entries without cooldown projection.
+		Validate the whole list before replacing this owner's state.
+		================
+		*/
+		restore( value: unknown, catalog: readonly SkillMetadata[], receivedAtMs: number ) {
+			const entry = value as { protocolVersion?: number; skillCooldowns?: unknown; };
+			const source = entry.skillCooldowns;
+			if ( source === undefined && entry.protocolVersion !== 3 ) {
+				rows = [];
+				return;
+			}
+			if ( !Array.isArray( source ) || source.length > MAX_ROWS || !Number.isFinite( receivedAtMs ) ) {
+				throw Error( "Invalid entry skill cooldowns" );
+			}
+			const next: SkillCooldown[] = [], seen = new Set<number>();
+			for ( const row of source ) {
+				if ( !row || typeof row !== "object" || Array.isArray( row ) ) {
+					throw Error( "Invalid entry skill cooldown" );
+				}
+				const { skill, remainingMs, durationMs } = row;
+				const ref = catalog.find( item => item.id === skill );
+				if (
+					!ref?.cooldownMs || seen.has( skill ) ||
+					![ remainingMs, durationMs ].every( n => Number.isInteger( n ) && n > 0 && n <= MAX_WIRE_MS )
+				) throw Error( "Invalid entry skill cooldown" );
+				seen.add( skill );
+				next.push( {
+					skill,
+					group: ref.cooldownGroup ?? 0,
+					startedAtMs: receivedAtMs + remainingMs - durationMs,
+					durationMs
+				} );
+			}
+			rows = next;
+		},
 		/*
 		================
 		accepted

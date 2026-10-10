@@ -480,7 +480,8 @@ export function createEntities(
 			}
 			const b = value as Record<string, unknown>;
 			if (
-				b.protocolVersion !== 2 || b.nativeResult !== 1 || !Array.isArray( b.refObjSnapshot ) ||
+				(b.protocolVersion !== 2 && b.protocolVersion !== 3) || b.nativeResult !== 1 ||
+				!Array.isArray( b.refObjSnapshot ) ||
 				!b.localPlayerEntry
 			) {
 				throw new Error( "Invalid world bootstrap" );

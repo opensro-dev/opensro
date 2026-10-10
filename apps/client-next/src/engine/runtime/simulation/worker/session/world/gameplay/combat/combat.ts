@@ -307,6 +307,14 @@ export function createCombat(
 		},
 		/*
 		================
+		restoreCooldowns
+		================
+		*/
+		restoreCooldowns( value: unknown, rows: readonly SkillMetadata[], receivedAtMs: number ) {
+			cooldowns.restore( value, rows, receivedAtMs );
+		},
+		/*
+		================
 		references
 		Install immutable packet-layout metadata before processing effects.
 		================
