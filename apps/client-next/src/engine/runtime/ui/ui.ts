@@ -8776,14 +8776,16 @@ export function createUi(
 						authoredImage( petPanel, px, py );
 						const [qx, qy] = authoredRect( petPanel, px, py );
 						blocks.push( authoredRect( petPanel, px, py ) );
-						// 6B3760 frames the picture with pmi_pet_face; 6B3AD0 sets its icon.
+						// 6B3760 backs the picture with pmi_pet_face, an opaque black disc,
+						// and 6B3AD0 sets the icon drawn over it, as the player window's
+						// portrait sits over pmi_face. Drawn last, the disc hid the icon.
+						authoredImage( petLayout.GDR_PET_MINI_PICTURE!, qx, qy, facePath );
 						if ( icon ) {
 							paths.push( icon );
 							if ( resources.has( icon ) ) {
 								rect( authoredRect( petLayout.GDR_PET_MINI_PICTURE!, qx, qy ), white, icon );
 							}
 						}
-						authoredImage( petLayout.GDR_PET_MINI_PICTURE!, qx, qy, facePath );
 						authoredText(
 							petLayout.GDR_PET_MINI_TXT_NAME!,
 							qx,
