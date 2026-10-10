@@ -15,9 +15,8 @@ import assert from "node:assert/strict";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
 import { readPublishedAssetBytesSync } from "../../../../scripts/lib/publishedAsset.mjs";
 import { defined } from "../helpers/defined.mjs";
+import { createSkillVisualFixture } from "../helpers/skill-visual-fixture.mjs";
 const { createEffectDecoder } = await import( "../../src/engine/runtime/assets/worker/effects/effects.ts" );
-const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
-const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
 const { radians } = await import( "../../src/engine/foundation/math/angles.ts" );
 
 const FIRE_SHIELD_BOOKS = [
@@ -29,130 +28,6 @@ const FIRE_SHIELD_BOOKS = [
 const CAST_SOUND = "/assets/audio/sfx/prim/snd/skill/csk_fire_gigong_hand.wav";
 const decoder = createEffectDecoder();
 const records = decoder.decode( readPublishedAssetBytesSync( "/assets/skill/effectRecords.json", CLIENT_PUBLIC_ROOT ) );
-
-/*
-================
-shieldSkillVisualFixture
-
-Asset jobs return the real decoded catalog. Model residency is synchronous
-here; program decoding and dependency publication are checked separately.
-================
-*/
-function shieldSkillVisualFixture() {
-	let serial = 0;
-	const jobs = new Map(), sounds = [];
-	const owner = createCharacterEffects(
-		{
-			progress: () => null,
-			health: () => ({ phase: "running" }),
-			/*
-			================
-			install
-			================
-			*/
-			install() {},
-			/*
-			================
-			dispose
-			================
-			*/
-			dispose() {},
-			available: () => 4,
-			/*
-			================
-			request
-			================
-			*/
-			request( url, limit, decode ) {
-				jobs.set(
-					++serial,
-					decode === "effects" ? { kind: "effects", catalog: records } : {
-						kind: "bytes",
-						buffer: new TextEncoder().encode(
-							JSON.stringify( { format: "sro-skill-stage-models", models: {} } )
-						).buffer
-					}
-				);
-				return serial;
-			},
-			/*
-			================
-			take
-			================
-			*/
-			take( id ) {
-				const result = jobs.get( id );
-				jobs.delete( id );
-				return result;
-			},
-			/*
-			================
-			cancel
-			================
-			*/
-			cancel( id ) {
-				jobs.delete( id );
-			}
-		},
-		"http://fixture.invalid",
-		cue => sounds.push( cue ),
-		createPresentationRandom( 1 )
-	);
-	/** @type {import('../../src/engine/contracts/world.ts').EntityState[]} */
-	const entities = [ 1, 2 ].map( gid => ({
-		gid,
-		name: "fixture",
-		kind: "player",
-		refObjId: 1,
-		regionId: 257,
-		x: gid * 10,
-		y: 20,
-		z: 30,
-		heading: 0
-	}) );
-	const bodies = entities.map( entity => ({
-		gid: entity.gid,
-		model: "body",
-		pose: { ...entity, yaw: radians( 0 ) },
-		scale: 1,
-		height: 20,
-		clip: "idle",
-		time: 0,
-		loop: false,
-		pickable: false
-	}) );
-	const game = {
-		localGid: 1,
-		pose: { regionId: 257, x: 10, y: 20, z: 30, angle: 0 },
-		vitals: [],
-		inventory: [],
-		/** @type {import('../../src/engine/contracts/gameplay.ts').CastState[]} */
-		casts: [],
-		/** @type {import('../../src/engine/foundation/gameplay/attached-effects.ts').AttachedEffect[]} */
-		attachedEffects: []
-	};
-	/*
-	================
-	frame
-	================
-	*/
-	function frame( now, triggers = [] ) {
-		return owner.step(
-			entities,
-			game,
-			now,
-			() => true,
-			model => model.includes( "damage_" ) ? .95 : 2,
-			triggers,
-			undefined,
-			bodies
-		);
-	}
-	frame( 0 );
-	frame( .1 );
-	frame( .2 );
-	return { owner, game, sounds, frame };
-}
 
 test("all 19 Fire Shield ranks retain the retail animation, hand binding, sound and two visual groups", () => {
 	for ( const book of FIRE_SHIELD_BOOKS ) {
@@ -206,7 +81,7 @@ test("the four retail Fire Shield EasyFX programs and every texture and sound ar
 test("each rank plays one hand cast and defensive hits only while attached, including restored buffs", () => {
 	for ( const book of FIRE_SHIELD_BOOKS ) {
 		for ( const skill of book.ids ) {
-			const f = shieldSkillVisualFixture();
+			const f = createSkillVisualFixture( { records } );
 			try {
 				const cast = { token: skill, caster: 1, target: 1, skill, damage: 0, fatal: false, receivedAtMs: 1000 };
 				f.game.casts = [ cast ];
@@ -345,7 +220,7 @@ test("every Flying Heaven Art rank plays all three event stages once through the
 	for ( const book of FLYING_HEAVEN_BOOKS ) {
 		for ( let rank = 0; rank < book.count; rank++ ) {
 			const skill = book.first + rank;
-			const f = shieldSkillVisualFixture();
+			const f = createSkillVisualFixture( { records } );
 			try {
 				const cast = { token: skill, caster: 1, target: 1, skill, damage: 0, fatal: false, receivedAtMs: 1000 };
 				f.game.casts = [ cast ];
