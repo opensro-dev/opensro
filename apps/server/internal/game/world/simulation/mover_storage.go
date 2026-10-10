@@ -169,6 +169,50 @@ func (s *moverStorage) lookup(gid uint32) (monster.MoverState, bool) {
 
 /*
 ================
+has
+
+Whether gid has a row, without building its MoverState.
+================
+*/
+func (s *moverStorage) has(gid uint32) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.rows[gid]
+	return ok
+}
+
+/*
+================
+livePoseAt
+
+lookup(gid).LivePoseAt(nowMs, ground) without expanding a pending row. A
+pending row is exact as stored: PendingSnapshot admits only DepartMs ==
+ArriveMs == 0, where LivePoseAt neither interpolates nor resolves ground and
+returns Pose. Visibility reads one pose per candidate per viewer per tick,
+so this keeps them off the full expansion.
+================
+*/
+func (s *moverStorage) livePoseAt(gid uint32, nowMs int64, ground monster.GroundResolver) (monster.Pose, bool) {
+	if s == nil {
+		return monster.Pose{}, false
+	}
+	r, ok := s.rows[gid]
+	switch {
+	case !ok:
+		return monster.Pose{}, false
+	case r.live != nil:
+		return r.live.LivePoseAt(nowMs, ground), true
+	case r.pending != nil:
+		return r.pending.pose, true
+	}
+	// A record with neither form reads as moverRecord.value() does: the
+	// zero MoverState. set never stores one; this keeps the two reads equal.
+	return monster.MoverState{}.LivePoseAt(nowMs, ground), true
+}
+
+/*
+================
 get
 ================
 */
