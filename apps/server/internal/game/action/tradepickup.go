@@ -6,8 +6,8 @@ tradepickup.go - picking trade goods up off the ground
 Trade goods never go to the bag. CPlayer_SelectPartyLootRecipient (525DC0)
 takes them out of the party's item share and admits them by the picker's
 job: a trader only their own goods, a thief anyone's but their own, and
-nobody else. The picker needs a summoned trade transport close by, and the
-goods go into it as a type 0x11 (COS pickup) move answered for the
+nobody else. The picker needs a summoned trade transport, and the goods go
+into it as a type 0x11 (COS pickup) move answered for the
 transport (CPlayer_ExecuteGroundPickup 526090).
 
 ===========================================================================
@@ -15,8 +15,6 @@ transport (CPlayer_ExecuteGroundPickup 526090).
 package action
 
 import (
-	"math"
-
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
@@ -35,12 +33,11 @@ const (
 	tradePickupErrNoJob uint8 = 0x64
 	// tradePickupErrOwnGoods is 0x186F, UIIT_MSG_STRGERR_ROBBER_CANT_PICK_HIS_ITEM.
 	tradePickupErrOwnGoods uint8 = 0x6F
-	// tradePickupErrCartFar is 525DC0's 4: the transport stands 1000 or more away.
-	tradePickupErrCartFar uint8 = 4
 )
 
-// tradePickupCartRange is 525DC0's 1000.0: the transport must stand closer.
-const tradePickupCartRange = 1000.0
+// 525DC0 also compares a vector's length with 1000.0 (refusal 4), but builds
+// that vector from fldz (525E52..525E78): it is always zero, so the test
+// never refuses. The port keeps no distance limit, as the original does.
 
 /*
 ================
@@ -102,12 +99,6 @@ func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 	ref, valid := rt.cosReference(cart)
 	if cart == nil || !cart.Summoned || cart.CurrentHP == 0 || !valid || !isVehicleCOS(ref.TidWord) {
 		return pickupRefusal(tradePickupErrNoCart)
-	}
-	now := rt.Now().UnixMilli()
-	a := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
-	b := rt.cosLiveSpawn(division, c, now)
-	if !(math.Hypot(simulation.WorldDistance2D(a, b), a.Y-b.Y) < tradePickupCartRange) {
-		return pickupRefusal(tradePickupErrCartFar)
 	}
 	world := rt.Worlds.Snapshot(g.worldKey, func() simulation.WorldState { return simulation.SeedWorldState(g.snapshot) })
 	anim := wire.PickupAnim{Gid: enterworld.ObjectIDForCharacter(c), Heading: wire.HeadingByteFromAngle(world.Spawn.Angle)}
