@@ -2552,7 +2552,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( storage.receive( frame, cosItemRefs ) && frame.opcode !== 0xb338 ) {
+				if ( storage.receive( frame, cosItemRefs, inventory.objectRefs() ) && frame.opcode !== 0xb338 ) {
 					dirty = true;
 					return true;
 				}

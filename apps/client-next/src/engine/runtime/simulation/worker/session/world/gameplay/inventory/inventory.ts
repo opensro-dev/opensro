@@ -451,6 +451,17 @@ useCooldown
 		present,
 		/*
 ================
+objectRefs
+
+The summonable character references (refObjSnapshot) a summoner's
+pet record names, for decoders of rows held elsewhere (the storage room).
+================
+		*/
+		objectRefs(): ReadonlyMap<number, number> {
+			return objRefs;
+		},
+		/*
+================
 reference
 
 A reference's name and icon by id, for rows that are no item (the forge).
