@@ -176,3 +176,35 @@ func TestShippedParameterIndexRows(t *testing.T) {
 	}
 
 }
+
+/*
+================
+TestShippedCutBladeChainsAdmit
+
+#509: every Devil and Demon Cut Blade root (SKILL_CH_SWORD_GEOMGI_C/D) and
+its second-stage row admit as a chained ammunition-free projectile.
+================
+*/
+func TestShippedCutBladeChainsAdmit(t *testing.T) {
+	source := NewTextdataSkills(gamedatatest.TextdataDir(t))
+	if err := source.Load(); err != nil {
+		t.Fatal(err)
+	}
+	roots, stages := 0, 0
+	for _, row := range source.rows.values() {
+		if !strings.HasPrefix(row.Codename, "SKILL_CH_SWORD_GEOMGI_C") && !strings.HasPrefix(row.Codename, "SKILL_CH_SWORD_GEOMGI_D") {
+			continue
+		}
+		if row.OffenseRefusal != "" || row.ActionHandler != SkillActionProjectile {
+			t.Errorf("%s refusal %q handler %d", row.Codename, row.OffenseRefusal, row.ActionHandler)
+		}
+		if row.ChainSub {
+			stages++
+		} else if row.ChainNext != 0 {
+			roots++
+		}
+	}
+	if roots != 15 || stages != 15 {
+		t.Fatalf("%d roots and %d stages, want 15 and 15", roots, stages)
+	}
+}

@@ -484,8 +484,11 @@ func decodeSkillOffense(fields []string, row *SkillRow) string {
 				crossbow := row.RequiredWeaponKinds == ([2]uint8{crossbowWeaponKind, 255})
 				// SkillAction_Projectile (5857B0) links stages for any
 				// launcher: the bow's Arrow Combo C and D chain zero-preparation
-				// shots exactly as the crossbow's lines do.
-				chained := crossbow || row.RequiredWeaponKinds == ([2]uint8{bowWeaponKind, 255})
+				// shots exactly as the crossbow's lines do, and the sword's
+				// Devil and Demon Cut Blade (#509) chain their second blade
+				// force the same way, with no ammunition.
+				chained := crossbow || row.RequiredWeaponKinds == ([2]uint8{bowWeaponKind, 255}) ||
+					!seen[0x636e736d] && ammunitionFreeWeapons(row.RequiredWeaponKinds)
 				// Several mc impacts resolve at release together and spend
 				// cnsm count x impacts arrows (585AF0).
 				if row.ActionHandler != SkillActionProjectile ||
