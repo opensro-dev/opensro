@@ -123,11 +123,13 @@ self, target and linked instance. The row's count is one byte.
 */
 func spawnEffectCount(i monster.Instance) int {
 	count := i.LinkedEffects.Len()
-	for n := range i.SelfEffects {
-		if i.SelfEffects[n].Token != 0 {
+	for _, e := range i.SelfEffects {
+		if e.Token != 0 {
 			count++
 		}
-		if i.TargetEffects[n].Token != 0 {
+	}
+	for _, e := range i.TargetEffects {
+		if e.Token != 0 {
 			count++
 		}
 	}
