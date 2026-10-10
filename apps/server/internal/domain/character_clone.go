@@ -77,6 +77,12 @@ func cloneCharacter(source *Character) *Character {
 		clock := *source.PremiumClock
 		clone.PremiumClock = &clock
 	}
+	if source.LevelReachedAt != nil {
+		clone.LevelReachedAt = make(map[uint8]int64, len(source.LevelReachedAt))
+		for level, at := range source.LevelReachedAt {
+			clone.LevelReachedAt[level] = at
+		}
+	}
 	if source.ItemGroupCooldowns != nil {
 		clone.ItemGroupCooldowns = make(map[uint32]int64, len(source.ItemGroupCooldowns))
 		for group, until := range source.ItemGroupCooldowns {

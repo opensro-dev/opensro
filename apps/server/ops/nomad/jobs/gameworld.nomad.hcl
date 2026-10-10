@@ -233,6 +233,14 @@ variable "stack_sizes" {
   default = ""
 }
 
+# The community site's public read API listener (internal/agent/publicstats):
+# a loopback address, or "off". sro-nomad gives the first shard the default
+# and every other shard "off".
+variable "public_api_addr" {
+  type    = string
+  default = "127.0.0.1:8790"
+}
+
 variable "cpu" {
   type    = number
   default = 2000
@@ -382,6 +390,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_RARE_RATE                 = var.beta_rare_rate
         SRO_BETA_DROP_CAP                  = var.beta_drop_cap
         SRO_STACK_SIZES                    = var.stack_sizes
+        SRO_PUBLIC_API_ADDR                = var.public_api_addr
+        SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir
@@ -401,6 +411,22 @@ job "sro-gameworld-__SHARD_ID__" {
 EOH
 
         destination = "secrets/agent-session-public-keys.json"
+        change_mode = "noop"
+        perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
+      }
+
+      # The privacy-write token. index, not .public_api_token: a missing map
+      # key must render empty, never the template's "<no value>". An empty
+      # or short file leaves the write unserved. The GameWorld reads it once at boot, so a
+      # rotated token applies at the next restart rather than kicking players.
+      template {
+        data = <<EOH
+{{ with nomadVar "nomad/jobs/sro-gameworld-__SHARD_ID__/gameworld/gameworld" }}{{ index . "public_api_token" }}{{ end }}
+EOH
+
+        destination = "secrets/public-api-token"
         change_mode = "noop"
         perms       = "0600"
         uid         = var.task_uid

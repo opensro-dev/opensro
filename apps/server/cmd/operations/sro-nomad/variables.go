@@ -30,8 +30,11 @@ const (
 	gameWorldVariableSuffix  = "/gameworld/gameworld"
 	accountChunkVariableItem = "payload"
 	bugReportWebhookItem     = "bug_report_discord_webhook"
-	nomadVariablePathBytes   = 128
-	nomadVariableItemsBytes  = 64 << 10
+	// publicAPITokenItem is the GameWorld variable item the job template
+	// renders into secrets/public-api-token.
+	publicAPITokenItem      = "public_api_token"
+	nomadVariablePathBytes  = 128
+	nomadVariableItemsBytes = 64 << 10
 )
 
 /*
@@ -375,14 +378,20 @@ func (deployment *deployment) desiredVariables() ([]desiredVariable, error) {
 		})
 	}
 	for _, game := range deployment.Shards {
+		gameWorldItems := nomad.VariableItems{
+			"agent_session_public_keys": deployment.Secrets.SessionPublic,
+		}
+		// Absent, not empty, without a token: the job template then renders
+		// an empty file and the GameWorld leaves the privacy write unserved.
+		if token := deployment.Secrets.PublicAPIToken; token != "" && game.PublicAPIAddr != "off" {
+			gameWorldItems[publicAPITokenItem] = token
+		}
 		jobID := gameWorldJobPrefix + game.Definition.ID
 		desired = append(desired, desiredVariable{
 			jobID: jobID,
 			path: gameWorldVariablePrefix + jobID +
 				gameWorldVariableSuffix,
-			items: nomad.VariableItems{
-				"agent_session_public_keys": deployment.Secrets.SessionPublic,
-			},
+			items: gameWorldItems,
 		})
 	}
 	return desired, nil

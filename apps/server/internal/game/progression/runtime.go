@@ -24,6 +24,8 @@ atomic against any other lane touching the same record.
 package progression
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
@@ -141,6 +143,9 @@ type Runtime struct {
 	BaseStats          func(*enterworld.Character) (wire.BaseStats, error)
 	RecoverLevelVitals func(*enterworld.Character) error
 	Withdrawal         WithdrawalHooks
+	// NowMs stamps the milestone levels a character reaches for the
+	// community site (Character.RecordLevelReached); nil reads the wall clock.
+	NowMs func() int64
 	// Growth is the closed-beta rate switch (growth.go); zero is native.
 	Growth GrowthRates
 	// MasteryTotalOverride is the beta budget; zero keeps native race rules.
@@ -880,4 +885,18 @@ func clampSkillPoints(value int64) int64 {
 		return 0x7fffffff
 	}
 	return value
+}
+
+/*
+================
+nowMs
+
+The runtime's clock in Unix milliseconds.
+================
+*/
+func (rt *Runtime) nowMs() int64 {
+	if rt.NowMs != nil {
+		return rt.NowMs()
+	}
+	return time.Now().UnixMilli()
 }

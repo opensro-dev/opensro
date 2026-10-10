@@ -69,13 +69,13 @@ func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
 ================
 dropFortressTables
 
-Removes the fortress, union, guild-war and production tables (layouts 6
-through 8) from a current test authority.
+Removes the fortress, union, guild-war, production and unique-kill tables
+(layouts 6 through 9) from a current test authority.
 ================
 */
 func dropFortressTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances; DROP TABLE guild_wars; DROP TABLE fortress_item_forges"); err != nil {
+	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances; DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -85,7 +85,8 @@ func dropFortressTables(t *testing.T, db *sql.DB) {
 downgradeToLayout7
 
 Turns a closed current test authority into the layout 7 a schema 20 (and
-older) server ran: layout 8's production table is gone.
+older) server ran: layout 8's production table and layout 9's unique-kill
+table are gone.
 ================
 */
 func downgradeToLayout7(t *testing.T, dir string) {
@@ -94,7 +95,7 @@ func downgradeToLayout7(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("DROP TABLE fortress_item_forges"); err != nil {
+	if _, err := db.Exec("DROP TABLE fortress_item_forges; DROP TABLE unique_kills"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -416,7 +417,7 @@ func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
 	if err := s.db.QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("DROP TABLE guild_wars; DROP TABLE fortress_item_forges"); err != nil {
+	if _, err := s.db.Exec("DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.db.Exec("UPDATE meta SET value=? WHERE key=?", preGuildWarLayoutVersion, metaKeyLayoutVersion); err != nil {

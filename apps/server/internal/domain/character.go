@@ -291,6 +291,17 @@ type Character struct {
 	// stores the item's reference id in the persistent record through
 	// 4A3F10. Zero is the country's default stall.
 	StallDecoration uint32 `json:"stallDecoration,omitempty"`
+	// PublicHidden keeps the character off the community site's public read
+	// API (port-only, not native: the opensro.online privacy choice). Its
+	// kills read as "a hunter" there and its profile answers 404.
+	PublicHidden bool `json:"publicHidden,omitempty"`
+	// LevelReachedAt is when the character first reached each milestone level
+	// (PublicLevelMilestones), in Unix milliseconds, for the site's
+	// world-firsts (port-only, not native).
+	LevelReachedAt map[uint8]int64 `json:"levelReachedAt,omitempty"`
+	// LastLoginAtMs is the character's latest world entry, in Unix
+	// milliseconds, for the site's player database (port-only, not native).
+	LastLoginAtMs int64 `json:"lastLoginAtMs,omitempty"`
 	// PremiumClock is the running premium ticket's daily allotment
 	// (CTJ_PremiumKeeper); nil when no ticket runs.
 	PremiumClock *PremiumClock `json:"premiumClock,omitempty"`

@@ -401,6 +401,10 @@ type Runtime struct {
 	// RecordSilkGrant journals each committed grant.
 	SilkWallet      SilkWallet
 	RecordSilkGrant func(SilkGrant)
+	// RecordUniqueKill queues each announced unique kill for the community
+	// site's record (port-only). It runs inside the character door, so it
+	// must only enqueue: the store write happens on its own goroutine.
+	RecordUniqueKill func(division string, kill domain.UniqueKill)
 
 	// CaptureCharacterFrames snapshots recipient sessions and their scene
 	// revisions under the division lock, after the character door closes.

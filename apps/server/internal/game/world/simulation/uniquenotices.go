@@ -14,13 +14,14 @@ func uniqueNotice(kind uint8, ref uint32, killer string) Frame {
 
 // RecordUniqueKiller attaches the committed combat kill owner once. Visibility
 // changes and subsequent hits on zero HP cannot create another announcement.
-func (s *MonsterState) RecordUniqueKiller(division string, gid uint32, name string) {
+// It reports the unique's reference id when this call announced the kill.
+func (s *MonsterState) RecordUniqueKiller(division string, gid uint32, name string) (uint32, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state := s.populationForObject(division, gid)
 	instance, ok := state.instances.lookup(gid)
 	if !ok || instance.CurrentHP != 0 || instance.Rarity()&15 != 3 || state.uniqueDeaths[gid] {
-		return
+		return 0, false
 	}
 	if state.uniqueDeaths == nil {
 		state.uniqueDeaths = map[uint32]bool{}
@@ -30,6 +31,7 @@ func (s *MonsterState) RecordUniqueKiller(division string, gid uint32, name stri
 		name = "???"
 	}
 	state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(6, instance.Ref.RefObjID, name))
+	return instance.Ref.RefObjID, true
 }
 
 // One tick-owned drain fans events out to the division, including distant

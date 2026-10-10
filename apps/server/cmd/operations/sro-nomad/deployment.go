@@ -26,6 +26,7 @@ import (
 
 	"opensro.online/server/internal/agent/bugreport"
 	"opensro.online/server/internal/agent/provisioning"
+	"opensro.online/server/internal/agent/publicstats"
 	agentserver "opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
@@ -122,18 +123,10 @@ type shardDeployment struct {
 	ControlPort   int
 	TransportPort int
 	AuthorityDir  string
-}
-
-/*
-================
-clusterSecrets
-================
-*/
-type clusterSecrets struct {
-	AccountChunks     []string
-	SessionPrivate    string
-	SessionPublic     string
-	ProvisioningToken string
+	// PublicAPIAddr is the community site's read API listener: the first
+	// shard serves it on publicstats.DefaultAddr, every other shard "off"
+	// (one host, one loopback port, one site).
+	PublicAPIAddr string
 }
 
 /*
@@ -366,11 +359,16 @@ func resolveDeployment(
 				err,
 			)
 		}
+		publicAPIAddr := "off"
+		if len(shards) == 0 {
+			publicAPIAddr = publicstats.DefaultAddr
+		}
 		shards = append(shards, shardDeployment{
 			Definition:    definition,
 			ControlPort:   controlPort,
 			TransportPort: transportPort,
 			AuthorityDir:  cleanAbsolute(authorityDir),
+			PublicAPIAddr: publicAPIAddr,
 		})
 	}
 	if requirePrerequisites && len(shards) == 0 {
@@ -439,66 +437,6 @@ func resolveDeployment(
 		Shards:     shards,
 		Secrets:    secrets,
 		BugReports: bugReports,
-	}, nil
-}
-
-/*
-================
-loadClusterSecrets
-================
-*/
-func loadClusterSecrets(stateDir string) (clusterSecrets, error) {
-	accountsPath := filepath.Join(stateDir, "accounts.json")
-	if _, err := auth.Load(accountsPath); err != nil {
-		return clusterSecrets{}, fmt.Errorf(
-			"account catalog %s: %w",
-			accountsPath,
-			err,
-		)
-	}
-	accountsJSON, err := os.ReadFile(accountsPath)
-	if err != nil {
-		return clusterSecrets{}, err
-	}
-	accountChunks, err := chunkAccountCatalog(accountsJSON)
-	if err != nil {
-		return clusterSecrets{}, fmt.Errorf(
-			"account catalog %s: %w",
-			accountsPath,
-			err,
-		)
-	}
-	keyRingPath := filepath.Join(
-		stateDir,
-		auth.AgentSessionPrivateKeyRingFile,
-	)
-	sessionPrivate, err := os.ReadFile(keyRingPath)
-	if err != nil {
-		return clusterSecrets{}, fmt.Errorf("%s: %w", keyRingPath, err)
-	}
-	sessionPublic, err := auth.PublicAgentSessionKeyRing(sessionPrivate)
-	if err != nil {
-		return clusterSecrets{}, fmt.Errorf("%s: %w", keyRingPath, err)
-	}
-	// The website holds a copy of this token; sro-provision-identity creates it.
-	tokenPath := filepath.Join(stateDir, auth.AgentProvisioningTokenFile)
-	tokenPayload, err := os.ReadFile(tokenPath)
-	if err != nil {
-		return clusterSecrets{}, fmt.Errorf("%s: %w (run sro-provision-identity)", tokenPath, err)
-	}
-	provisioningToken := strings.TrimSpace(string(tokenPayload))
-	if len(provisioningToken) < auth.MinProvisioningTokenBytes {
-		return clusterSecrets{}, fmt.Errorf(
-			"%s: token is shorter than %d bytes",
-			tokenPath,
-			auth.MinProvisioningTokenBytes,
-		)
-	}
-	return clusterSecrets{
-		AccountChunks:     accountChunks,
-		SessionPrivate:    string(sessionPrivate),
-		SessionPublic:     string(sessionPublic),
-		ProvisioningToken: provisioningToken,
 	}, nil
 }
 
@@ -710,6 +648,7 @@ func (deployment *deployment) gameVariables(
 		"gm_characters":       deployment.GMCharacters,
 		"beta_mastery":        deployment.BetaMastery,
 		"stack_sizes":         deployment.StackSizes,
+		"public_api_addr":     game.PublicAPIAddr,
 		"party_masteries":     boolEnvValue(deployment.PartyMasteries),
 		"storage_auto_stack":  deployment.StorageAutoStack,
 		"transport_pprof":     boolEnvValue(deployment.Pprof),
