@@ -652,6 +652,9 @@ commitIntentMovement
 ================
 */
 func (rt *Runtime) commitIntentMovement(character, snapshot *enterworld.Character, move intentMovement) OpResult {
+	if mountedOnCOS(snapshot) {
+		return rt.commitRiddenIntentMovement(character, snapshot, move)
+	}
 	intent, from, target, goal, nowMs := move.intent, move.from, move.target, move.goal, move.nowMs
 	worldKey := simulation.WorldKey(intent.DivisionID, character.Name)
 	_, fromOwner := rt.liveNav(worldKey, snapshot, nowMs)

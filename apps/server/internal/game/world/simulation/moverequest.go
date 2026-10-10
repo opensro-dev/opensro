@@ -184,6 +184,26 @@ func DecodeClientMovementRequest(payload []byte) (MovementRequest, *MoveError) {
 
 /*
 ================
+EncodeClientMovementRequest
+
+The 0x7738 ground-click body DecodeClientMovementRequest reads: mode 1,
+the region and the int16 region-local position the client serializes
+(sub_877cc0). Server-issued steps that must take the client's own movement
+path, such as a rider's pursuit through the vehicle owner, are built here.
+================
+*/
+func EncodeClientMovementRequest(m MovementRequest) []byte {
+	payload := make([]byte, ClientMovementRequestSize)
+	payload[0] = MovementAckDestinationMode
+	binary.LittleEndian.PutUint16(payload[1:3], m.RegionID)
+	binary.LittleEndian.PutUint16(payload[3:5], uint16(int16(m.X)))
+	binary.LittleEndian.PutUint16(payload[5:7], uint16(int16(m.Y)))
+	binary.LittleEndian.PutUint16(payload[7:9], uint16(int16(m.Z)))
+	return payload
+}
+
+/*
+================
 DecodeClientHeadingRequest
 
 Parses the [u16 heading] body shared by 0x72CF (steer) and 0x72F5 (stop),

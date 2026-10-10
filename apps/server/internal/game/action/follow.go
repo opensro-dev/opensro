@@ -201,3 +201,42 @@ func (rt *Runtime) advanceFollowIntent(character *enterworld.Character, intent b
 		intent: intent, from: from, target: to, goal: goal, nowMs: nowMs,
 	})
 }
+
+/*
+================
+commitRiddenIntentMovement
+
+A rider's pursuit step is the vehicle's move. Native 4ACD7A admits Trace
+mounted (it tests the mount only for attack and skill commands), and a
+ridden step belongs to the vehicle's movement owner as the client's own
+0x769E move does: the acknowledgement names the COS GID and the vehicle
+keeps its own speeds and mode, so the rider's run switch is not sent. A
+refused step is transient, as a walker's is, and is retried next tick.
+================
+*/
+func (rt *Runtime) commitRiddenIntentMovement(character, snapshot *enterworld.Character, move intentMovement) OpResult {
+	intent, nowMs := move.intent, move.nowMs
+	ride := snapshot.ActiveCOS
+	if rt.MoveCOS == nil || ride.CurrentHP == 0 || rt.cosMovementBlocked(intent.DivisionID, snapshot) {
+		return OpResult{}
+	}
+	key := simulation.WorldKey(intent.DivisionID, character.Name)
+	rt.bindResidentRegion(key, nowMs)
+	request := simulation.MovementRequest{Mode: simulation.MovementAckDestinationMode,
+		RegionID: move.goal.RegionID, X: move.goal.X, Y: move.goal.Y, Z: move.goal.Z}
+	frames := rt.MoveCOS(intent.DivisionID, character, ride.GID, simulation.EncodeClientMovementRequest(request))
+	acknowledged := false
+	for _, frame := range frames {
+		acknowledged = acknowledged || frame.Opcode == simulation.OpMovementAck
+	}
+	if !acknowledged {
+		return OpResult{}
+	}
+	world := rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(snapshot) })
+	intent.ApproachTargetSample = move.target
+	intent.ApproachIssuedAtMs = nowMs
+	intent.HasApproach = true
+	intent.ApproachMovementRevision = world.GroundRevision()
+	rt.setCombatIntent(intent)
+	return OpResult{Frames: frames}
+}

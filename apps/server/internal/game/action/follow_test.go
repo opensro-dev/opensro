@@ -90,25 +90,42 @@ func TestFollowPursuesHoldsAndResumesWithoutCombat(t *testing.T) {
 TestFollowAdmitsARider
 
 A rider may Trace: 4ACD7A refuses only attack and skill commands while
-mounted. The ridden pursuit moves the player's own world state.
+mounted. The ridden pursuit is the vehicle's move: it goes to the vehicle
+movement owner for the COS GID, as the client's own 0x769E move does, and
+no run switch is sent for the rider.
 ================
 */
 func TestFollowAdmitsARider(t *testing.T) {
 	rt, clock, actor, target := followFixture(t)
 	gid, _ := enterworld.CosObjectIDForCharacter(actor)
 	actor.ActiveCOS = &enterworld.CharacterCOS{GID: gid, CurrentHP: 100, Summoned: true, Mounted: true}
+	var moved []uint32
+	var request simulation.MovementRequest
+	rt.MoveCOS = func(_ string, _ *enterworld.Character, cos uint32, payload []byte) []wire.Frame {
+		moved = append(moved, cos)
+		decoded, fault := simulation.DecodeClientMovementRequest(payload)
+		if fault != nil {
+			t.Fatalf("the ridden step is not a 0x7738 body: %v", fault)
+		}
+		request = decoded
+		return []wire.Frame{{Opcode: simulation.OpMovementAck, Payload: wire.NewWriter(4).U32(cos).Payload()}}
+	}
 	result := rt.HandleTargetInteract(testDivision, actor, wire.FollowTarget{TargetGid: enterworld.ObjectIDForCharacter(target)}.Encode())
-	if result.DiagnosticRefusal != "" || len(result.Frames) == 0 || result.Frames[0].Opcode != simulation.OpMovementAck {
-		t.Fatalf("mounted follow admission = %+v", result)
+	if result.DiagnosticRefusal != "" || len(moved) != 1 || moved[0] != gid {
+		t.Fatalf("mounted follow moved %v, want the COS %d: %+v", moved, gid, result)
+	}
+	to := rt.liveSpawn(simulation.WorldKey(testDivision, target.Name), target, clock.NowMs())
+	if request.RegionID != to.RegionID || request.X >= to.X {
+		t.Fatalf("the ridden step %+v does not lead toward the target at %+v", request, to)
+	}
+	for _, frame := range append(result.Frames, result.Broadcast...) {
+		if frame.Opcode == wire.OpObjectStateRefresh {
+			t.Fatalf("a rider's pursuit switched the rider's movement mode: %+v", frame)
+		}
 	}
 	intents := rt.combatIntentSnapshot()
-	if len(intents) != 1 || !intents[0].FollowTarget {
+	if len(intents) != 1 || !intents[0].FollowTarget || !intents[0].HasApproach {
 		t.Fatalf("mounted follow intents = %+v", intents)
-	}
-	world := rt.Worlds.Snapshot(simulation.WorldKey(testDivision, actor.Name),
-		func() simulation.WorldState { return simulation.SeedWorldState(actor) })
-	if world.MoveSegment.ArrivesAtMs <= clock.NowMs() {
-		t.Fatalf("rider did not start the pursuit: %+v", world.MoveSegment)
 	}
 }
 
