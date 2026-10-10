@@ -42,7 +42,7 @@ function fixture( items, typeFlags = 0x8ec, maxStack = 50 ) {
 		equipItems: items.map( ( [slot, quantity, plus = 0] ) => ({
 			slot,
 			refObjId: 1,
-			body: [ 1, 0, 0, 0, quantity, 0, ...(typeFlags === 0xdec ? [ plus ] : []) ]
+			body: [ 1, 0, 0, 0, quantity, 0, ...([ 0xdec, 0x15ec ].includes( typeFlags ) ? [ plus ] : []) ]
 		}) )
 	} );
 	const local = {
@@ -141,6 +141,20 @@ test("stone identity is shared by bag, warehouse and COS merge planning", () => 
 		"COS"
 	);
 	assert.deepEqual( merge.map( row => [ row.slot, row.quantity, row.plus ] ), [ [ 14, 30, 40 ] ] );
+});
+
+test("cap-one retained stones reconstruct an acknowledged split through gameplay", () => {
+	for ( const flags of [ 0xdec, 0x15ec, 0x3dec ] ) {
+		const plus = flags === 0x3dec ? 0 : 90;
+		const { game } = fixture( [ [ 13, 50, plus ] ], flags, 1 );
+		const state = move( game, 13, 14, 3 );
+		assert.deepEqual( state?.inventory.map( row => [ row.slot, row.quantity, row.plus ] ), [ [ 13, 47, plus ], [
+			14,
+			3,
+			plus
+		] ] );
+		game.dispose();
+	}
 });
 
 test("expanded bag moves, drag bindings, persistence and depletion use the published capacity", () => {

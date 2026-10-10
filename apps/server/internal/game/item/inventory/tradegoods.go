@@ -33,26 +33,53 @@ func IsTradeGoods(flags uint16) bool {
 
 /*
 ================
-stackIdentityMatches
+nativeStackIdentityMatches
 
 The native reference comparison precedes the trade-owner string comparison.
 Ordinary merchandise retains its reference-only merge policy here.
-
-Port-only, not native: stones whose rows carry a Plus byte (the
-assimilation value, wire.EtcCarriesPlusByte) merge only with an equal
-value, or a 40% stone poured into a 90% stack would become 90%. At the
-native cap of 1 no merge reaches this test, so native play is unchanged.
 ================
 */
-func stackIdentityMatches(a, b Item) bool {
+func nativeStackIdentityMatches(a, b Item) bool {
 	if a.RefObjID != b.RefObjID {
 		return false
 	}
 	if IsTradeGoods(a.TypeFlags) || IsTradeGoods(b.TypeFlags) {
 		return a.TradeOwner == b.TradeOwner
 	}
+	return true
+}
+
+/*
+================
+stackIdentityMatches
+
+Port-only, not native: quantity transfers between value-carrying stones
+must preserve assimilation. Whole-container native singles use the native
+identity instead; other placement paths cannot pour into a full singleton.
+================
+*/
+func stackIdentityMatches(a, b Item) bool {
+	if !nativeStackIdentityMatches(a, b) {
+		return false
+	}
 	if wire.EtcCarriesPlusByte(a.TypeFlags) || wire.EtcCarriesPlusByte(b.TypeFlags) {
 		return a.Plus == b.Plus
 	}
 	return true
+}
+
+/*
+================
+wholeStackIdentityMatches
+
+Native 756A99..756AD5 and 756BF4..756C14 exchange counts even at cap one;
+7895F0 does not compare Plus. Retained stacks after rollback still need
+the port-only value guard, or a count exchange changes assimilation stock.
+================
+*/
+func wholeStackIdentityMatches(a, b Item, stackCap uint16) bool {
+	if stackCap == 1 && a.Quantity == 1 && b.Quantity == 1 {
+		return nativeStackIdentityMatches(a, b)
+	}
+	return stackIdentityMatches(a, b)
 }

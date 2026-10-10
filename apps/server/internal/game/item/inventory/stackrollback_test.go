@@ -138,7 +138,8 @@ func TestStackRollbackRejectsUnrelatedRows(t *testing.T) {
 		cap  uint16
 	}{
 		{"unknown-cap", Item{TypeFlags: wire.PackTypeFlags(3, 3, 10, 1)}, 0},
-		{"stone", Item{TypeFlags: wire.PackTypeFlags(3, 3, 11, 1)}, 1},
+		{"stone-variance", Item{TypeFlags: wire.PackTypeFlags(3, 3, 11, 1), Plus: 70, VarianceBits: 1}, 1},
+		{"valueless-stone-plus", Item{TypeFlags: wire.PackTypeFlags(3, 3, 11, 7), Plus: 1}, 1},
 		{"cargo", Item{TypeFlags: wire.PackTypeFlags(3, 3, 8, 1)}, 1},
 		{"metadata", Item{TypeFlags: wire.PackTypeFlags(3, 3, 10, 1), Plus: 1}, 1},
 		{"single-potion", Item{TypeFlags: wire.PackTypeFlags(3, 3, 1, 1)}, 1},
