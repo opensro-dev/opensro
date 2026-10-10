@@ -31,6 +31,7 @@ import {
 	pickAnimationStateTableMetadata,
 	pickDefaultSetSoundEvents,
 	pickSetSoundEvents,
+	pickSetTrackEvents,
 	pickDefaultSetStateClip,
 	pickDefaultSetStateTableMetadata
 } from "./animationUtils.mjs";
@@ -349,7 +350,8 @@ export async function buildLocomotionBanAssets() {
 				...(await publishClip( motion.path, publishedByPath )),
 				loop: clip.field2 !== 0,
 				soundEvents: pickSetSoundEvents( bsr, motion.set, motion.id ),
-				...pickAnimationStateTableMetadata( motion.state )
+				...pickAnimationStateTableMetadata( motion.state ),
+				trackEvents: pickSetTrackEvents( bsr, motion.state, motion.id )
 			};
 		}
 		entry.animationSets = {};
@@ -381,7 +383,8 @@ export async function buildLocomotionBanAssets() {
 				states[String( motionId )] = {
 					...(await publishClip( state.animationPath, publishedByPath )),
 					soundEvents: pickSetSoundEvents( bsr, setName, motionId ),
-					...pickAnimationStateTableMetadata( state )
+					...pickAnimationStateTableMetadata( state ),
+					trackEvents: pickSetTrackEvents( bsr, state, motionId )
 				};
 				clipCount += 1;
 			}

@@ -11,7 +11,8 @@ import {
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
 	pickDefaultSetStateClip,
-	pickSetSoundEvents
+	pickSetSoundEvents,
+	pickSetTrackEvents
 } from "../../build/char/animationUtils.mjs";
 import {
 	normalizeAssetPath,
@@ -381,4 +382,22 @@ test("a weapon set without its own ModDataSound plays the default set's (BindTra
 	// No sound anywhere for the state stays silent.
 	assert.deepEqual( pickSetSoundEvents( bsr, "twohand_staff", 1 ), [] );
 	assert.deepEqual( pickSetSoundEvents( { soundModifiers: undefined }, "bow", 7 ), [] );
+});
+
+test("a set state without foot contacts takes the default state's", () => {
+	const contacts = [ { cursorMs: 293, eventCode: 2, param0: 0, param1: 1 } ];
+	const bsr = {
+		animationSets: [ {
+			name: "default",
+			states: [ { stateId: 7, animationPath: "run.ban", trackEvents: contacts } ]
+		} ]
+	};
+	assert.deepEqual( pickSetTrackEvents( bsr, { stateId: 7, trackEvents: [] }, 7 ), contacts );
+	assert.deepEqual(
+		pickSetTrackEvents( bsr, { stateId: 7, trackEvents: [ { cursorMs: 0, eventCode: 0 } ] }, 7 ),
+		contacts
+	);
+	const own = [ { cursorMs: 291, eventCode: 2, param0: 0, param1: 1 } ];
+	assert.deepEqual( pickSetTrackEvents( bsr, { stateId: 7, trackEvents: own }, 7 ), own );
+	assert.deepEqual( pickSetTrackEvents( bsr, { stateId: 1, trackEvents: [] }, 1 ), [] );
 });

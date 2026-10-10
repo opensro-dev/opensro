@@ -56,6 +56,7 @@ import {
 	findDefaultAnimationState,
 	pickDefaultSetSoundEvents,
 	pickSetSoundEvents,
+	pickSetTrackEvents,
 	pickDefaultSetStateTableMetadata,
 	pickAnimationStateTableMetadata
 } from "./animationUtils.mjs";
@@ -510,7 +511,8 @@ export async function bakeCharacterResource( bsrPath, output, isMob, requiredSta
 			durationMs: clip.durationMs,
 			loop: clip.field2 !== 0,
 			soundEvents: pickSetSoundEvents( bsr, motion.set, motion.id ),
-			...pickAnimationStateTableMetadata( motion.state )
+			...pickAnimationStateTableMetadata( motion.state ),
+			trackEvents: pickSetTrackEvents( bsr, motion.state, motion.id )
 		};
 	}
 	if ( isMob ) {

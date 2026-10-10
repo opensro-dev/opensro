@@ -61,6 +61,19 @@ export function pickAnimationStateTableMetadata( state ) {
 	};
 }
 
+/**
+ * A set state's track events (foot contacts, eventCode 2), or the default
+ * state's when the set authors none: the same clip-only override, and the same
+ * open question, as pickSetSoundEvents. Keeps steps and foot effects in sync.
+ * @param {any} bsr
+ * @param {any} state
+ * @param {number} stateId
+ */
+export function pickSetTrackEvents( bsr, state, stateId ) {
+	const own = pickAnimationStateTrackEvents( state );
+	return own.length > 0 ? own : pickDefaultSetTrackEvents( bsr, stateId );
+}
+
 /** Match CAnimationState_ReadTransitionMap: records with eventCode 0 are absent. */
 /** @param {any} state */
 export function pickAnimationStateTrackEvents( state ) {
@@ -70,13 +83,18 @@ export function pickAnimationStateTrackEvents( state ) {
 /**
  * The sound events a motion of animation set `setName` plays for `stateId`.
  * The set's own ModDataSound wins; a set without one plays the default set's
- * for the same state. Native binds sound markers by the installation key and
- * the clip's track names (CRTAniInstallation_BindTrackMarkers AE1770), never
- * by the weapon prefix, and a motion with no set clip falls back to "default"
- * (CRTAniMixer_CreateMotionInstallation ADE9B0). INFERENCE: which CRTModSound
- * instances fill the character's marker map was not traced; weapon sets carry
- * no run/walk ModDataSound of their own, yet retail characters keep their
- * footsteps with any weapon, so the default set's tracks must apply to them.
+ * for the same state.
+ *
+ * Most weapon sets override a state's CLIP only: two-hand staff, two-hand
+ * sword, dagger, dual axe and harp author no run ModDataSound and no run foot
+ * contacts. Native falls back to "default" for a motion with no set clip
+ * (CRTAniMixer_CreateMotionInstallation ADE9B0) and binds sound markers by the
+ * installation key and the clip's track names, not by the weapon prefix
+ * (CRTAniInstallation_BindTrackMarkers AE1770). What fills that marker map
+ * was not traced (#525), so it is open whether retail plays the default
+ * footsteps for those sets or runs silently. If retail is silent, that is a
+ * data omission, and this fallback is a deliberate deviation: port-only, not
+ * native. Either way players keep their footsteps with every weapon.
  * @param {any} bsr
  * @param {string} setName
  * @param {number} stateId
