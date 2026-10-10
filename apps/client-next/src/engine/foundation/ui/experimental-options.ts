@@ -22,9 +22,6 @@ export interface ExperimentalOptions {
 	readonly renderScale: RenderScale;
 	readonly chatTimestamps: boolean;
 	readonly developerDiagnostics: boolean;
-	// Port-only, not native: the reverse return scroll's map destinations
-	// (reverse-return-map.ts), when the server offers them.
-	readonly reverseReturnMap: boolean;
 	// Video: renderer stages that deviate from the 2005 D3D9 look.
 	readonly postProcessing: boolean;
 	readonly anisotropicFiltering: boolean;
@@ -85,7 +82,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		renderScale: record.renderScale === 75 || record.renderScale === 50 ? record.renderScale : DEFAULT_RENDER_SCALE,
 		chatTimestamps: enabled( "chatTimestamps" ),
 		developerDiagnostics: enabled( "developerDiagnostics" ),
-		reverseReturnMap: enabled( "reverseReturnMap" ),
 		postProcessing: enabled( "postProcessing" ),
 		anisotropicFiltering: enabled( "anisotropicFiltering" ),
 		heightFog: enabled( "heightFog" ),

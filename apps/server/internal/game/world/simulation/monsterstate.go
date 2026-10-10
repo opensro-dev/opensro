@@ -544,8 +544,13 @@ func normalizeGeneratedMonsterSpawn(spawn monster.SpawnPoint) monster.SpawnPoint
 	return spawn
 }
 
-// uniqueMonsterType is characterdata column 15 for a unique (MonsterRef).
-const uniqueMonsterType = 3
+// uniqueMonsterType is a unique's grade in the low nibble of characterdata
+// column 15 (MonsterRef) or of a nest's spawn byte; uniqueRarityMask keeps
+// that nibble.
+const (
+	uniqueMonsterType = 3
+	uniqueRarityMask  = 15
+)
 
 /*
 ================
@@ -560,7 +565,13 @@ func (s *MonsterState) UniqueReturnAnchors() []monster.SpawnPoint {
 	var points []monster.SpawnPoint
 	for _, nest := range s.template.Nests {
 		ref, ok := s.template.Refs[nest.RefObjID]
-		if !ok || ref.MonsterType != uniqueMonsterType || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
+		// The nest's own grade first, then the reference's type byte: the
+		// same rule as #665's nestIsUnique (swap to that call once it lands).
+		rarity := ref.MonsterType
+		if nest.HasRarityOverride {
+			rarity = nest.RarityOverride
+		}
+		if !ok || rarity&uniqueRarityMask != uniqueMonsterType || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
 			IsDungeonRegion(nest.RegionID) {
 			continue
 		}

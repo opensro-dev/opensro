@@ -1784,12 +1784,14 @@ export function createUi(
 	================
 	reverseMapOffered
 
-	Port-only: the reverse return box offers the map when the Experimental
-	row is on and the server published a table (SRO_REVERSE_RETURN_MAP).
+	Port-only: the reverse return box offers the map whenever the server
+	published a table, which it does only with SRO_REVERSE_RETURN_MAP on. A
+	shard-wide deviation switches by its server flag alone (owner ruling
+	2026-10-11), so there is no browser opt-in.
 	================
 	*/
 	function reverseMapOffered() {
-		return experimental.state().saved.reverseReturnMap && (view?.gameplay?.reverseMapPoints?.length ?? 0) > 0;
+		return (view?.gameplay?.reverseMapPoints?.length ?? 0) > 0;
 	}
 	/*
 	================

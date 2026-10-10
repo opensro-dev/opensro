@@ -7,8 +7,8 @@ Owns the slot and character bound to message box 0x1E. Reconcile before
 input and painting so a delayed answer cannot use a replacement item or
 survive a world transition.
 
-Port-only, not native: with the Experimental "Reverse return map" row on
-and a server table published, the box has a third row. It hands the same
+Port-only, not native: when the server publishes a map table
+(SRO_REVERSE_RETURN_MAP), the box has a third row. It hands the same
 pending scroll to the world map, where a published point is the answer
 (reverse-return-map.ts).
 

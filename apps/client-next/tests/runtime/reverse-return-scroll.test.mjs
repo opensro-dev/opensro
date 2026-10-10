@@ -212,8 +212,8 @@ function withMapTable( f ) {
 	return f;
 }
 
-test("with the Experimental row off the box keeps its two native points", () => {
-	const sent = [], f = withMapTable( open( sent ) );
+test("with no published table the box keeps its two native points", () => {
+	const sent = [], f = open( sent );
 	try {
 		f.ui.event( { kind: "double-activate", id: "slot:13" } );
 		assert.deepEqual( boxIds( f.ui.step( f.state, 1300 ) ), [
@@ -228,10 +228,9 @@ test("with the Experimental row off the box keeps its two native points", () => 
 	}
 });
 
-test("with the row on, the map row picks a published point and sends choice 7 with its id", () => {
+test("with a published table, the map row picks a point and sends choice 7 with its id", () => {
 	const sent = [], f = withMapTable( open( sent ) );
 	try {
-		f.ui.event( { kind: "experimental-preferences", value: { reverseReturnMap: true } } );
 		f.ui.event( { kind: "double-activate", id: "slot:13" } );
 		assert.deepEqual( boxIds( f.ui.step( f.state, 1300 ) ), [
 			"reverse-scroll:2",

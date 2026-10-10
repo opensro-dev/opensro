@@ -7,8 +7,8 @@ Port-only, not native. v1.150's scroll offers two points (count-job.ts
 REVERSE_RETURN_LAST_*). Later clients add "move to a location on the map":
 v1.188's 4A00C0 reads choice 7 and a u32 saved-point id. The server
 publishes its table of points in the world references only when its
-SRO_REVERSE_RETURN_MAP option is on, and the Experimental window's row
-must be on too. A use sends only the point id; the server resolves it.
+SRO_REVERSE_RETURN_MAP option is on; the box offers the map whenever a
+table is published. A use sends only the point id; the server resolves it.
 The map choice was first written by GrazKe in #336.
 
 ===========================================================================
