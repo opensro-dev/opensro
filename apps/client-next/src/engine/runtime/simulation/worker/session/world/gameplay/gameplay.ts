@@ -3294,6 +3294,18 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( frame.payload[1] !== 0x11 || !cosPickup.receipt( gid ) ) {
 						inventory.cosGrounded( frame.payload );
 					}
+					// 74EF50 resolves a pet pickup (0x11) to the pet bag (0x7A) and
+					// 756CF0's pet branch prints the bag's item line for a ground
+					// source (7571C0 / 757145 / 757007); it has no gold line.
+					if ( frame.payload[1] === 0x11 && frame.payload[6] !== 254 ) {
+						const slot = frame.payload[6]!,
+							after = next.inventory?.find( row => row.slot === slot ),
+							notice = pickupNotice(
+								record.inventory?.find( row => row.slot === slot ),
+								after && { ...after, name: after.name ?? inventory.reference( after.refObjId ).name }
+							);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					cosRecords.set( gid, next );
 					dirty = true;
 					return true;

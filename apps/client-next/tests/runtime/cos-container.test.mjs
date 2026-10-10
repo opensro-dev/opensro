@@ -70,6 +70,21 @@ test("a pet pickup's receipt still applies after an earlier scoop ended its requ
 	assert.equal( owner.take().cosRecords[0].inventory.length, before + 1 );
 	assert.doesNotThrow( () => owner.step( 10002 ) );
 });
+test("a pet's ground pickup prints the bag's item line, and its gold prints none", () => {
+	// 756CF0's pet branch (window 0x7A, ground source): a new stack names its
+	// whole count (757145), a merge names the gain (757007); no gold line.
+	const { owner } = fixture();
+	const last = () => owner.take()?.notices?.at( -1 );
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 3, ...u32( 8 ), 5, 0 ] ) }, 1 );
+	const added = last();
+	assert.deepEqual( [ added?.key, added?.value ], [ "UIIT_MSG_STATE_GET_ITEM_EXPENDABLE", 5 ] );
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 0, ...u32( 8 ), 35, 0 ] ) }, 2 );
+	const merged = last();
+	assert.deepEqual( [ merged?.key, merged?.value ], [ "UIIT_MSG_STATE_GET_ITEM_EXPENDABLE", 5 ] );
+	assert.notEqual( merged?.sequence, added?.sequence );
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, 0x11, ...u32( 7 ), 254, ...u32( 50 ) ] ) }, 3 );
+	assert.equal( owner.take()?.notices?.at( -1 )?.sequence ?? merged?.sequence, merged?.sequence );
+});
 function fixture() {
 	const sent = [], owner = createGameplay( f => sent.push( f ) );
 	owner.bootstrap( {
