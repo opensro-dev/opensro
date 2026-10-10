@@ -356,16 +356,49 @@ func (rt *Runtime) CompanionPresentations(division, name string) []*simulation.P
 ================
 companionPresentations
 
-CompanionPresentations for a caller that already holds the division lock:
-it takes the character read door once.
+CompanionPresentations for a caller that already holds the division lock.
+The mercenary owner's guild name is resolved first, with no door held (the
+guild authority shares the store's RWMutex), then the character read door
+is taken once.
 ================
 */
 func (rt *Runtime) companionPresentations(division, name string) []*simulation.PeerCOS {
+	guildName := rt.companionGuildName(division, name)
 	var result []*simulation.PeerCOS
 	rt.deps.Read(division, func() {
-		result = rt.companionPresentationsInDoor(division, name)
+		result = rt.companionPresentationsInDoor(division, name, guildName)
 	})
 	return result
+}
+
+/*
+================
+companionGuildName
+
+The pet owner's guild name for a mercenary's row. Must run outside every
+store door: characterSnapshot takes and releases the read door itself, and
+the guild authority's Guild takes the same store RWMutex.
+================
+*/
+func (rt *Runtime) companionGuildName(division, name string) string {
+	rt.petMu.Lock()
+	owner := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(name)}]
+	rt.petMu.Unlock()
+	if owner == nil || !owner.ready {
+		return ""
+	}
+	c := rt.characterSnapshot(division, owner.character)
+	if c == nil || c.GuildID == nil {
+		return ""
+	}
+	store := rt.deps.GuildAuthority()
+	if store == nil {
+		return ""
+	}
+	if guild, _, found := store.Guild(division, *c.GuildID); found {
+		return guild.Name
+	}
+	return ""
 }
 
 /*
@@ -373,27 +406,20 @@ func (rt *Runtime) companionPresentations(division, name string) []*simulation.P
 companionPresentationsInDoor
 
 The presentations for a caller that already holds the character read door
-(HandleObjectSelect's resolveLiveObject). It must take no door itself: the
-store's read lock is a sync.RWMutex, and a second RLock queued behind a
-waiting writer never returns while the first is held (the 2026-10-10
-GameWorld deadlock: an object select with a summoned pet against the tick's
-UpdateCharacter).
+(HandleObjectSelect's resolveLiveObject). It must reach no store door of
+any kind: every store authority (characters, guilds, fortresses ...) shares
+one sync.RWMutex, and a second RLock queued behind a waiting writer never
+returns while the first is held (the 2026-10-10 GameWorld deadlock: an
+object select with a summoned pet against the tick's UpdateCharacter).
+guildName fills a mercenary's owner row; a caller that has none passes "".
 ================
 */
-func (rt *Runtime) companionPresentationsInDoor(division, name string) []*simulation.PeerCOS {
+func (rt *Runtime) companionPresentationsInDoor(division, name, guildName string) []*simulation.PeerCOS {
 	rt.petMu.Lock()
 	owner := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(name)}]
 	rt.petMu.Unlock()
 	if owner == nil || !owner.ready {
 		return nil
-	}
-	guildName := ""
-	if owner.character.GuildID != nil {
-		if store := rt.deps.GuildAuthority(); store != nil {
-			if guild, _, found := store.Guild(division, *owner.character.GuildID); found {
-				guildName = guild.Name
-			}
-		}
 	}
 	var result []*simulation.PeerCOS
 	for _, pet := range owner.character.Companions() {

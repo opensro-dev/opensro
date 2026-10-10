@@ -417,8 +417,9 @@ func (rt *Runtime) resolveLiveObject(
 		if record == nil {
 			continue
 		}
-		// The caller holds the read door (HandleObjectSelect).
-		for _, pet := range rt.companionPresentationsInDoor(divisionID, peer.Name) {
+		// The caller holds the read door (HandleObjectSelect); a select
+		// needs no mercenary owner name, so no guild lookup is made.
+		for _, pet := range rt.companionPresentationsInDoor(divisionID, peer.Name, "") {
 			if pet.Row.Gid != gid || pet.LifeState == wire.LifeStateDead {
 				continue
 			}
