@@ -249,3 +249,23 @@ test("only shrinking nearest bitmap runs uses linear sampling, including replace
 	}
 	assert.equal( run.sampling, "nearest", "the native cached run stays reusable on desktop" );
 });
+
+test("a viewport smaller than its padding never flips a rect (2026-10-10 crash)", () => {
+	// The title screen fits into [8, top + 8, w - 16, bottom - top - 16]; a 1x1
+	// window made that negative and the button rect came out [8, 9, -35.9, -16].
+	for ( const [w, h] of [ [ 1, 1 ], [ 1, 600 ], [ 800, 1 ], [ 15, 15 ], [ 16, 17 ] ] ) {
+		const screen = /** @type {const} */ ([ 0, 0, w, h ]);
+		const quads = [ quad( [ 100, 100, 72, 32 ], screen ), quad( [ 180, 100, 72, 32 ], screen ) ];
+		/** @type {UiControl[]} */
+		const controls = [ { id: "europe", kind: "button", label: "Europe", rect: [ 100, 100, 72, 32 ] } ];
+		fitUiGroup( quads, controls, 0, 0, [ 8, 9, w - 16, h - 17 ], screen );
+		for ( const rect of [ ...quads.map( q => q.rect ), ...controls.map( c => c.rect ) ] ) {
+			assert.ok( rect[2] > 0 && rect[3] > 0, `${w}x${h}: flipped rect ${rect}` );
+		}
+	}
+	// A normal viewport is unchanged by the clamp.
+	const screen = /** @type {const} */ ([ 0, 0, 1280, 720 ]);
+	const quads = [ quad( [ 100, 100, 72, 32 ], screen ) ];
+	fitUiGroup( quads, [], 0, 0, [ 8, 9, 1264, 695 ], screen );
+	assert.deepEqual( quads[0].rect, [ 100, 100, 72, 32 ] );
+});

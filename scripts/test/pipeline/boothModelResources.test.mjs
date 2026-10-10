@@ -146,7 +146,7 @@ test("secondary booths retain resource metadata, share one bake and have one pac
 		readPreviousResourceGlbPaths( manifestPath ).sort(),
 		Object.values( manifest.boothModels ).map( row => row.glb ).sort()
 	);
-	for ( const directory of [ "char/vat", "npc/vat", "anim", "audio", "textdata" ] ) {
+	for ( const directory of [ "char/vat", "npc/vat", "anim", "audio", "textdata", "config" ] ) {
 		await fs.mkdir( path.join( context.publicAssetsRoot, directory ), { recursive: true } );
 	}
 	const { groups } = await collectAssetPackGroups( {

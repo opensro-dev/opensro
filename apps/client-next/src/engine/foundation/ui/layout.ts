@@ -64,14 +64,18 @@ export function fitUiGroup(
 		top = source ? source[1] : Math.min( ...group.map( q => q.rect[1] ) ),
 		right = source ? source[0] + source[2] : Math.max( ...group.map( q => q.rect[0] + q.rect[2] ) ),
 		bottom = source ? source[1] + source[3] : Math.max( ...group.map( q => q.rect[1] + q.rect[3] ) );
-	const scale = Math.min( 1, bounds[2] / Math.max( 1, right - left ), bounds[3] / Math.max( 1, bottom - top ) );
+	// A viewport smaller than the caller's padding (a window resized to 1x1)
+	// leaves negative space: at least one pixel keeps the scale positive,
+	// where a negative one flips every rect and the renderer refuses it.
+	const width = Math.max( 1, bounds[2] ), height = Math.max( 1, bounds[3] );
+	const scale = Math.min( 1, width / Math.max( 1, right - left ), height / Math.max( 1, bottom - top ) );
 	const x = Math.max(
 		bounds[0],
-		Math.min( (left + right) / 2 - (right - left) * scale / 2, bounds[0] + bounds[2] - (right - left) * scale )
+		Math.min( (left + right) / 2 - (right - left) * scale / 2, bounds[0] + width - (right - left) * scale )
 	);
 	const y = Math.max(
 		bounds[1],
-		Math.min( (top + bottom) / 2 - (bottom - top) * scale / 2, bounds[1] + bounds[3] - (bottom - top) * scale )
+		Math.min( (top + bottom) / 2 - (bottom - top) * scale / 2, bounds[1] + height - (bottom - top) * scale )
 	);
 	if ( scale === 1 && x === left && y === top ) return;
 	/*

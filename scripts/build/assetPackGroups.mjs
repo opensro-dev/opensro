@@ -213,6 +213,12 @@ export async function collectAssetPackGroups( {
 					...STALL_NETWORK_FILES.map( name => "/assets/textdata/" + name )
 				].includes( publicPath.toLowerCase() )
 		);
+	// config\command.txt is a required HUD resource (runtime/ui/hud/resources.ts,
+	// the console command table). The client fetches only manifest-listed
+	// paths, so a loose copy alone is never loaded: it ships in game-data.
+	const configData = (
+		await listPublicAssetFiles( { publicRoot, roots: [ "/assets/config" ], extensions: [ ".txt" ] } )
+	).filter( publicPath => publicPath.toLowerCase() === "/assets/config/command.txt" );
 
 	// Dev-only character labs consume this catalog on demand. Keep it out of
 	// startup game-data so retail animation metadata has zero mission boot tax.
@@ -260,7 +266,7 @@ export async function collectAssetPackGroups( {
 		{
 			name: "game-data",
 			load: "startup",
-			files: [ ...compressedJson, ...rawJson, ...animationData, ...nameFilterData ]
+			files: [ ...compressedJson, ...rawJson, ...animationData, ...nameFilterData, ...configData ]
 		},
 		{ name: "developer-labs", load: "manual", files: developerLabData },
 		{ name: "game-audio", load: "manual", files: gameAudio },

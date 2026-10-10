@@ -95,6 +95,35 @@ interface HudData {
 	readonly zones: Readonly<Record<string, string>>;
 	readonly strings: Readonly<Record<string, string>>;
 }
+/*
+================
+HUD_REQUIRED_ASSETS
+
+The fixed files the HUD cannot start without, beside its authored layouts.
+The client loads only paths the pack manifest lists, so each must be packed;
+hud-assets-packed.test.mjs checks the built manifest against this list.
+================
+*/
+export const HUD_REQUIRED_ASSETS: readonly string[] = [
+	"/assets/text/textzonename.en.json",
+	"/assets/text/textuisystem.en.json",
+	"/assets/text/messagetips.en.json",
+	"/assets/data/skillUi.json",
+	"/assets/textdata/abusefilter.txt",
+	"/assets/data/worldmap-localinfo.json",
+	"/assets/text/textdataname.en.json",
+	"/assets/data/actionwnddata.json",
+	"/assets/data/skillData.json",
+	"/assets/text/regioncode.json",
+	"/assets/data/characterDataCountry.json",
+	"/assets/data/levelData.json",
+	"/assets/data/skillMasteryData.json",
+	"/assets/data/teleportData.json",
+	"/assets/data/cosPresentation.json",
+	"/assets/data/mall-notify.json",
+	"/assets/config/command.txt"
+];
+
 // Polled requests are children of the existing UI/asset lifetime. Layout and text
 // share admission and cancellation; neither can outlive its HUD.
 /*
@@ -245,23 +274,7 @@ export function createHudResources(
 	];
 	const paths = [
 			...layouts.map( p => "/assets/cif/layouts/" + p + ".json" ),
-			"/assets/text/textzonename.en.json",
-			"/assets/text/textuisystem.en.json",
-			"/assets/text/messagetips.en.json",
-			"/assets/data/skillUi.json",
-			"/assets/textdata/abusefilter.txt",
-			"/assets/data/worldmap-localinfo.json",
-			"/assets/text/textdataname.en.json",
-			"/assets/data/actionwnddata.json",
-			"/assets/data/skillData.json",
-			"/assets/text/regioncode.json",
-			"/assets/data/characterDataCountry.json",
-			"/assets/data/levelData.json",
-			"/assets/data/skillMasteryData.json",
-			"/assets/data/teleportData.json",
-			"/assets/data/cosPresentation.json",
-			"/assets/data/mall-notify.json",
-			"/assets/config/command.txt"
+			...HUD_REQUIRED_ASSETS
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;

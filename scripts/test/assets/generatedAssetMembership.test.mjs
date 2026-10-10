@@ -44,11 +44,7 @@ const EXPLICIT_LOOSE_ASSETS = new Set( [
 	"/assets/fonts/sro-chat.ttf",
 	"/assets/fonts/sro-default.ttf",
 	"/assets/fonts/sro-english.ttf",
-	"/assets/textdata/abusefilter.txt",
-	// Raw native config bytes for the console-command registry (sub_68d9c0 twin):
-	// copied verbatim by resourcePipeline.mjs and prefetched at mission mount,
-	// same loose-text contract as abusefilter.txt.
-	"/assets/config/command.txt"
+	"/assets/textdata/abusefilter.txt"
 ] );
 
 test("generated public assets have explicit pack membership or a documented loose exception", async () => {
