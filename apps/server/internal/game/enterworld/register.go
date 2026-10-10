@@ -8,6 +8,8 @@ register.go - service state and lifecycle integration
 package enterworld
 
 import (
+	"time"
+
 	"encoding/json"
 	"strings"
 
@@ -160,7 +162,17 @@ func handleEnterWorldWithDiagnostics(deps *Deps, payload []byte, session string)
 		failure := Failure(nativeErrorInvalidRequest, "blobEncodeFailed")
 		return enterWorldFailureOutcome(failure)
 	}
+	loggedIn := result.inventoryOwner
 	deps.adoptEncodedInventory(result)
+	// Port-only, not native: the community site's player database shows the
+	// latest login (Character.LastLoginAtMs). Teleport re-entries do not count.
+	if loggedIn != nil {
+		at := time.Now()
+		if deps.Now != nil {
+			at = deps.Now()
+		}
+		deps.Mutate(loggedIn, "last-login", func() { loggedIn.LastLoginAtMs = at.UnixMilli() })
+	}
 	characterName := ""
 	if result.Character != nil {
 		characterName = result.Character.Name

@@ -70,6 +70,7 @@ type gameWorldApplication struct {
 	transport       *transport.Server
 	authority       *store.Store
 	controlAPI      *agentapi.API
+	publicAPI       *publicAPI
 	controlErrors   <-chan error
 	reporter        *shard.Reporter
 	ticker          *simulation.Ticker
@@ -272,6 +273,7 @@ func newGameWorldApplication(
 	if err := installPlayerOperations(authority.agentAPI, gameplay, ts.Hub, authority.store, ownedShard.ID); err != nil {
 		return nil, fmt.Errorf("player operations: %w", err)
 	}
+	application.publicAPI = installPublicAPI(gameplay, ts.Hub, authority.store, ownedShard.ID)
 	application.controlErrors, err = authority.agentAPI.Start(controlAddr)
 	if err != nil {
 		return nil, fmt.Errorf("GameWorld control API: %w", err)
@@ -464,6 +466,11 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 
 	drainErr := application.drainNetwork()
 	runErr := group.Wait()
+	// The tick has stopped: no kill can be queued after this, and the queue
+	// commits before the authority store closes below.
+	if application.publicAPI != nil {
+		drainErr = errors.Join(drainErr, application.publicAPI.Close())
+	}
 	for _, cache := range []io.Closer{application.skillCache, application.itemCache} {
 		if cache != nil {
 			drainErr = errors.Join(drainErr, cache.Close())
@@ -576,6 +583,11 @@ func (application *gameWorldApplication) rollback() {
 	if err := application.drainNetwork(); err != nil &&
 		!errors.Is(err, http.ErrServerClosed) {
 		log.Warnf("startup rollback: %v", err)
+	}
+	if application.publicAPI != nil {
+		if err := application.publicAPI.Close(); err != nil {
+			log.Warnf("startup rollback public api: %v", err)
+		}
 	}
 	for _, cache := range []io.Closer{application.skillCache, application.itemCache} {
 		if cache != nil {

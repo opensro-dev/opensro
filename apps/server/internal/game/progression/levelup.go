@@ -645,6 +645,11 @@ func (rt *Runtime) commitExperience(
 		character.StatPoints = next.StatPoints
 		character.Level = next.Level
 		character.MaxLevel = next.MaxLevel
+		// Port-only, not native: the community site's world-firsts. Only a
+		// new highest level counts, so a level lost and regained is no first.
+		if newMaxLevels > 0 {
+			character.RecordLevelReached(uint8(min(maxLevel, 255)), uint8(min(walk.level, 255)), rt.nowMs())
+		}
 	}
 	if beginnerMarkCleared {
 		character.VisualFlags = next.VisualFlags
