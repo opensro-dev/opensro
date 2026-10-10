@@ -109,8 +109,9 @@ func (door storeGuildDoor) CastGuildBallotAs(divisionID string, actorID int64, v
 CloseDueGuildVotes
 
 Every vote past its end closes; a winner takes grade 0 with the master's
-permissions and the master falls to formerGrade / formerPerm, in the same
-commit as the close.
+permissions and the commander role, and the master falls to formerGrade /
+formerPerm without a role (5C46E0 clears the old master's role and sets
+the new one's to 1), in the same commit as the close.
 ================
 */
 func (door storeGuildDoor) CloseDueGuildVotes(divisionID string, nowMs int64, formerGrade uint8, formerPerm uint32) []domain.GuildVoteOutcome {
@@ -147,8 +148,10 @@ func (door storeGuildDoor) CloseDueGuildVotes(divisionID string, nowMs int64, fo
 				}
 			}
 			if from >= 0 && to >= 0 && from != to {
-				next[to].Grade, next[to].PermMask = 0, next[from].PermMask
+				next[to].Grade, next[to].PermMask = domain.GuildLeaderGrade, next[from].PermMask
+				next[to].FortressRole = domain.GuildFortressRoleCommander
 				next[from].Grade, next[from].PermMask = formerGrade, formerPerm
+				next[from].FortressRole = 0
 				members = next
 				s.guildMembers[divisionID][guildID] = guildMembersForStorage(next)
 				outcome.Elected, outcome.Heir, outcome.Former = true, next[to], next[from]
