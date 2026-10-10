@@ -11,9 +11,12 @@ CICATStruct (TypeID band 0x2C6, CGObj_IsATStruct 482AB0):
   - a headquarters (TID4 5) of the attacker's own guild: 0x303E
   - another structure of the guild that holds its fortress: 0x303F
 
-52BF90's 0x3042 answers are a missing guild record (52C08F, 52C259) and
-a failed region line query (52C312); none tests a gate's state word, so
-an open gate (fortress_gates.go) is struck like a shut one.
+52BF90 also refuses an open gate, 0x3042: past the headquarters branch,
+52C121 asks the target whether it is a gate (vfunc +0x3EC, 482B90) and
+then for its state word (+0x654, 4CED50); a nonzero word (a pulley opened
+it, fortress_gates.go) refuses every attacker, and a shut gate skips the
+own-structure test. (52BF90's other 0x3042 answers follow a missing guild
+record, 52C08F and 52C259, and a failed region line query, 52C312.)
 
 and for the fort stone, while guard towers stand 0x3040 and during the
 countdown after the last falls 0x3046 (the fortress authority's
@@ -37,6 +40,7 @@ const (
 	structureRefusedSkill        uint16 = 0x3006
 	structureRefusedOwnHQ        uint16 = 0x303e
 	structureRefusedOwnStructure uint16 = 0x303f
+	structureRefusedOpenGate     uint16 = 0x3042
 
 	// TypeID4 of the CICATStruct band (CGObj_IsFortStone 482AF0, gate
 	// 482B90, headquarters 482C30).
@@ -70,6 +74,10 @@ func (rt *Runtime) structureAttackRefusal(division string, attacker *enterworld.
 		if code := rt.Fortresses.StoneRefusal(division, record.ID, nowMs); code != 0 {
 			return code
 		}
+	}
+	// 52C121..52C141: an open gate refuses whoever strikes it.
+	if target.Ref.TypeID4 == structureKindGate && target.StructureState != 0 {
+		return structureRefusedOpenGate
 	}
 	// CGObjSiegeStruct +0x24: the fortress's structures belong to its
 	// holder; headquarters are placed by an attacking guild and carry their
