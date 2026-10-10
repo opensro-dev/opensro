@@ -65,9 +65,12 @@ func FenceShare(mask, percent uint32, hit Result) (Result, uint32) {
 ==================
 linkedLaneShare
 
-ftol(percent / 100.0 * lane) on the x87 stack (CRT_ftol truncates), the
-form 5A0F59 and its siblings use. Both operands are unsigned words loaded
-as signed and corrected, so they are exact in a double.
+ftol(percent / 100.0 * lane) on the x87 stack (CRT_ftol truncates). All
+four lane branches use it: 5A0FCA and 5A100C for physical, 5A105D and
+5A109B for magical. The last reuses the 100.0 the physical branch left on
+the stack (fdivrp at 5A10B1), which HLIL misreads as percent / percent.
+Both operands are unsigned words loaded as signed and corrected, so they
+are exact in a double.
 ==================
 */
 func linkedLaneShare(percent, lane uint32) uint32 {
