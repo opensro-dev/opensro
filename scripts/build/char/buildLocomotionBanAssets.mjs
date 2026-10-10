@@ -1,3 +1,10 @@
+/*
+===========================================================================
+buildLocomotionBanAssets.mjs - publish native character motion clips and metadata.
+BSR state tables own clip selection; the shared modifier selector owns sound
+binding fallback. BAN bytes remain unchanged for the browser native loader.
+===========================================================================
+*/
 import { loadAvatarVisualOverrides, avatarAnimationRequirements } from "./avatarVisualOverrides.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
@@ -28,6 +35,7 @@ import fs from "node:fs";
 import { NATIVE_IDLE_STATE_CLIPS, NATIVE_EMOTE_STATE_CLIPS } from "./buildAvatar.mjs";
 import path from "node:path";
 import {
+	pickAnimationSetSoundEvents,
 	pickAnimationStateTableMetadata,
 	pickDefaultSetSoundEvents,
 	pickDefaultSetStateClip,
@@ -48,6 +56,11 @@ const animPublicRoot = path.join( publicRoot, "assets", "anim" );
 const textdataDir = retailTextdataRoot;
 const skillEffectPath = path.join( textdataDir, "skilleffect.txt" );
 
+/*
+================
+collectRequiredSkillMotionIdsBySetName
+================
+*/
 function collectRequiredSkillMotionIdsBySetName() {
 	const animationIdByName = new Map( SKILL_EFFECT_ANIMATION_NAME_ID_ROWS );
 	const requiredSkillMotionIdsBySetName = new Map();
@@ -85,6 +98,11 @@ function collectRequiredSkillMotionIdsBySetName() {
 // interns column 2 (`ResourceTypeName`) into action-effect record +0x04.
 // CICharactor_BindRecords copies that pointer to CICharactor+0x64c, where
 // the CGEffSound profile handlers use it as the first lookup-key component.
+/*
+================
+parseCharacterSoundProfiles
+================
+*/
 function parseCharacterSoundProfiles( filePath ) {
 	const text = fs.readFileSync( filePath, "utf16le" ).replace( /^\uFEFF/, "" );
 	const profiles = new Map();
@@ -104,24 +122,11 @@ function parseCharacterSoundProfiles( filePath ) {
 	return profiles;
 }
 
-// Default-set state-id -> clip path (the pickPickupClip discipline,
-// generalized): the .bsr "default" animation set maps native motion/state
-// ids to .ban paths - no filename heuristics.
-function pickAnimationSetSoundEvents( bsr, animationSetName, stateId ) {
-	const soundSet = bsr.soundModifiers?.find(
-		( entry ) =>
-			entry.kind === 1 &&
-			entry.stateId === stateId &&
-			entry.animationSetName.toLowerCase() === animationSetName.toLowerCase()
-	);
-	const cueVariant = soundSet?.entries.find( ( entry ) => entry.animationName.toLowerCase() === "default" ) ??
-		soundSet?.entries[0];
-	return (cueVariant?.tracks ?? []).map( ( track ) => ({
-		cursorMs: track.triggerFrame,
-		cue: track.cueName
-	}) );
-}
-
+/*
+================
+publishClip
+================
+*/
 async function publishClip( gamePath, publishedByPath ) {
 	const normalized = normalizeAssetPath( gamePath );
 	const existing = publishedByPath.get( normalized );
@@ -149,6 +154,11 @@ async function publishClip( gamePath, publishedByPath ) {
 	return entry;
 }
 
+/*
+================
+buildLocomotionBanAssets
+================
+*/
 export async function buildLocomotionBanAssets() {
 	const requiredSkillMotionIdsBySetName = collectRequiredSkillMotionIdsBySetName();
 	const avatarOverrides = loadAvatarVisualOverrides(
