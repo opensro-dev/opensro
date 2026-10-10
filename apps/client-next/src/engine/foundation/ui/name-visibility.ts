@@ -18,9 +18,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameOptions } from "@/engine/foundation/gameplay/game-options";
 import { REGION_SIZE } from "@/engine/foundation/gameplay/native-movement";
 import { hasMonsterPartyMark } from "@/engine/foundation/ui/monster-nameplate";
-
-// NO_JOB_CLASS is the job class of a character outside job mode (856920).
-const NO_JOB_CLASS = 4;
+import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
 
 // Squared world distance past which a name board is hidden (300 units).
 const NAME_RANGE_SQUARED = 90000;

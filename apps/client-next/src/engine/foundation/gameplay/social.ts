@@ -12,10 +12,9 @@ is decoded completely before any state is published.
 import { GUILD_WAR_PROPOSAL, guildWarProposalReply } from "./guild-war";
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
+import { NO_JOB_CLASS } from "./job-guild";
 import type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
-// NO_JOB_CLASS is the active job class outside job mode (856920).
-const NO_JOB_CLASS = 4;
 // The 0x3393 type a resurrection skill proposes to a dead player.
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).

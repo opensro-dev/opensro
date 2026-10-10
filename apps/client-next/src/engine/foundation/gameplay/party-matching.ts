@@ -10,6 +10,7 @@ responses cannot disagree about which request is still answerable.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { readPartyMember, type PartyMember } from "./social";
+import { NO_JOB_CLASS } from "./job-guild";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
 const PARTY_JOIN_NO_REPLY = 2;
 
@@ -405,7 +406,7 @@ partyActiveJob
 */
 export function partyActiveJob( inventory: readonly { readonly slot: number; readonly typeFlags: number; }[] ): number {
 	const flags = inventory.find( row => row.slot === JOB_SUIT_SLOT )?.typeFlags ?? 0, job = flags >>> 11;
-	return (flags & 0x7fe) === 0x3ac && job >= 1 && job <= 3 ? job : 4;
+	return (flags & 0x7fe) === 0x3ac && job >= 1 && job <= 3 ? job : NO_JOB_CLASS;
 }
 // 63C010 / server 5BF240: only registration and modification use this matrix.
 /*

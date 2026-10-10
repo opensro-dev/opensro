@@ -30,6 +30,9 @@ import type { WireFrame } from "@/engine/contracts/network";
 import { constantNativeNotice } from "./native-notice";
 import type { SystemNotice } from "./system-notices";
 
+// NO_JOB_CLASS is the active job class of a character outside job mode
+// (856920, CICharactor +0x4F5): 1..3 are the trader, thief and hunter suits.
+export const NO_JOB_CLASS = 4;
 export const OP_JOB_JOIN = 0x7439;
 export const OP_JOB_JOIN_RESPONSE = 0xb439;
 export const OP_JOB_WITHDRAW = 0x7661;

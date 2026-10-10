@@ -46,6 +46,7 @@ import {
 	type JobRanks,
 	jobWithdrawRequest,
 	noJob,
+	NO_JOB_CLASS,
 	type LocalJob
 } from "@/engine/foundation/gameplay/job-guild";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
@@ -79,7 +80,6 @@ import {
 	STALL_ALCHEMY_CATEGORY,
 	STALL_ALCHEMY_CODE,
 	STALL_JOB_SUIT_CODE,
-	STALL_NO_JOB_CLASS,
 	STALL_NOTICE_CATEGORY,
 	type StallCommand
 } from "@/engine/foundation/gameplay/stall";
@@ -2024,7 +2024,9 @@ state here before a command can claim a native wire conversation.
 				// 695420 case 9: a job suit (active class +4F5 other than 4)
 				// refuses first, then an open alchemy window; else the title
 				// prompt opens.
-				const refusal = partyActiveJob( inventory.state().inventory ) !== STALL_NO_JOB_CLASS ?
+				// 695420 case 9: only a character outside job mode opens a stall; any
+				// other class refuses 0x0A/0x3B, an open alchemy window 0x12/0x16.
+				const refusal = partyActiveJob( inventory.state().inventory ) !== NO_JOB_CLASS ?
 					{ category: STALL_NOTICE_CATEGORY, code: STALL_JOB_SUIT_CODE } :
 					command.alchemy ?
 					{ category: STALL_ALCHEMY_CATEGORY, code: STALL_ALCHEMY_CODE } :
