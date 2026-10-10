@@ -211,7 +211,6 @@ apps/client-next/src/engine/runtime/ui/hud/progression-bars.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-banner.ts
 apps/client-next/src/engine/runtime/ui/hud/quest-timers.ts
 apps/client-next/src/engine/runtime/ui/hud/region-banner.ts
-apps/client-next/src/engine/runtime/ui/hud/scroll.ts
 apps/client-next/src/engine/runtime/ui/hud/skill-training.ts
 apps/client-next/src/engine/runtime/ui/hud/unique-banner.ts
 apps/client-next/src/engine/runtime/world/camera/camera.ts

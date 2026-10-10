@@ -55,6 +55,8 @@ HudData
 */
 interface HudData {
 	readonly withdrawalPage: AuthoredLayout;
+	readonly stallPricePage: AuthoredLayout;
+	readonly stallTextPage: AuthoredLayout;
 	readonly cosReferences: ReadonlyMap<number, CosReference>;
 	readonly portals: PortalCatalog;
 	readonly tooltipMasteries: ReadonlyMap<number, TooltipMastery>;
@@ -152,6 +154,7 @@ export function createHudResources(
 		"ifguildwaragree",
 		"ifexchange",
 		"ifstall",
+		"ifchatmodule",
 		"ifstallslot",
 		"ifstallnetwork",
 		"ifstallnetworkslot",
@@ -266,6 +269,7 @@ export function createHudResources(
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
 	let withdrawalPage: AuthoredLayout = {};
+	let stallPricePage: AuthoredLayout = {}, stallTextPage: AuthoredLayout = {};
 	let goldPrices: Readonly<Record<number, number>> = {};
 	let tradeBases: Readonly<Record<number, number>> = {};
 	let jobThresholds: JobExpThresholds = {};
@@ -318,6 +322,12 @@ export function createHudResources(
 							if ( i < layouts.length ) {
 								if ( layouts[i] === "ifskill" ) {
 									withdrawalPage = decodeAuthoredLayout( raw, [ "Create", "Withdrawal" ] );
+								}
+								if ( layouts[i] === "ifmessagebox" ) {
+									// 528670 / 529E00: separate modal constructions. StoreMoney
+									// reuses Store names and IDs, so it cannot join the NPC page.
+									stallPricePage = decodeAuthoredLayout( raw, [ "MsgBoxStoreMoney" ] );
+									stallTextPage = decodeAuthoredLayout( raw, [ "MsgBoxInsertMsg" ] );
 								}
 								value = layouts[i] === "ifextquickslot" ?
 									[ "Type1", "Type2", "Type3", "Type4", "Option" ].map( section =>
@@ -387,6 +397,8 @@ export function createHudResources(
 				const values = states.map( s => s.kind === "ready" ? s.value : null );
 				data = {
 					withdrawalPage,
+					stallPricePage,
+					stallTextPage,
 					withdrawalGoldPrices: goldPrices,
 					tradeGoldBases: tradeBases,
 					jobExpThresholds: jobThresholds,

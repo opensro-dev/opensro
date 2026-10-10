@@ -18,6 +18,7 @@ and an open stall closes for modification without asking.
 ===========================================================================
 */
 import type { StallCommand, StallListing, StallState } from "@/engine/foundation/gameplay/stall";
+import type { ChatLine } from "@/engine/contracts/gameplay";
 
 // CIFStallSlot_UpdateContents 0x5B0500 and Clear 0x5B06F0 select these backplates.
 export const STALL_SLOT_IMAGES = {
@@ -46,10 +47,14 @@ export function stallTradingPresentation( owner: boolean, open: boolean ) {
 	};
 }
 
-// The stall's text fields hold at most 64 characters (stallRequest wstr).
+// 52C870 submodes 0/1: title holds 40 units; greeting holds 64.
+export const STALL_TITLE_LIMIT = 40;
 export const STALL_TEXT_LIMIT = 64;
 // A chat line holds at most 100 UTF-16 units (ChatMessageMaxWideChars).
 export const STALL_CHAT_LIMIT = 100;
+// CIFChatModule's message textbox retains 50 logical entries (545BE0 / 53A150).
+const STALL_HISTORY_LIMIT = 50;
+const STALL_CHANNEL = 9;
 // INFERENCE: CIFStall lays its ten ifstallslot cells in two columns of five
 // over the display (id 12, 423x216), split at the divider tile (id 103 at
 // x 226, 15 wide).
@@ -67,7 +72,8 @@ export const STALL_PROMPT_SIZE = {
 // 5A1A40: the price edit takes ten digits, the quantity five.
 const PRICE_DIGITS = 10;
 const QUANTITY_DIGITS = 5;
-const MAX_PRICE = 0xffffffff;
+// 5A1D85 -> 5203B0: the native price editor's upper bound.
+const MAX_PRICE = 1000000000;
 
 export type StallPrompt =
 	| { readonly kind: "title"; readonly text: string; }
@@ -243,7 +249,48 @@ export function createStallHud() {
 	let network = EMPTY_NETWORK;
 	let searchedAt = -Infinity;
 	let chat = "";
+	let chatOwner: number | undefined;
+	let observedLine: ChatLine | undefined;
+	let messages: readonly ChatLine[] = [];
 	return {
+		/*
+		================
+		observeChat
+
+		5457C0 clears the module when a stall is left. Global chat survives
+		that exit; only newly delivered channel-9 lines belong to this module.
+		Sequence numbers also survive cloned worker snapshots.
+		================
+		*/
+		observeChat( stall: StallState | undefined, lines: readonly ChatLine[] ) {
+			const owner = stall?.phase === "owner" || stall?.phase === "visitor" ? stall.owner : undefined,
+				cleared = owner !== chatOwner,
+				last = lines.at( -1 ),
+				same = ( line: ChatLine | undefined ) =>
+					line === observedLine ||
+					line?.sequence !== undefined && line.sequence === observedLine?.sequence;
+			if ( cleared ) {
+				chat = "";
+				messages = [];
+			}
+			const added = owner !== undefined && !same( last ) ?
+				lines.slice( observedLine ? lines.findIndex( same ) + 1 : 0 ).filter( line =>
+					line.channel === STALL_CHANNEL
+				) :
+				[];
+			if ( added.length ) messages = [ ...messages, ...added ].slice( -STALL_HISTORY_LIMIT );
+			chatOwner = owner;
+			observedLine = last;
+			return { cleared, appended: added.length > 0 };
+		},
+		/*
+		================
+		messages
+		================
+		*/
+		messages(): readonly ChatLine[] {
+			return messages;
+		},
 		/*
 		================
 		chat
@@ -361,7 +408,10 @@ export function createStallHud() {
 		type( field: StallPromptField, raw: string ) {
 			if ( !prompt ) return;
 			if ( field === "text" && (prompt.kind === "title" || prompt.kind === "greeting") ) {
-				prompt = { ...prompt, text: raw.slice( 0, STALL_TEXT_LIMIT ) };
+				prompt = {
+					...prompt,
+					text: raw.slice( 0, prompt.kind === "title" ? STALL_TITLE_LIMIT : STALL_TEXT_LIMIT )
+				};
 			} else if ( field === "quantity" && prompt.kind === "price" ) {
 				const digits = raw.replace( /[^0-9]/g, "" ).slice( 0, QUANTITY_DIGITS );
 				prompt = { ...prompt, quantity: digits ? String( Math.min( prompt.carried, Number( digits ) ) ) : "" };

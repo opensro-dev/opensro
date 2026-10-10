@@ -24,8 +24,8 @@ const STALL_PROMPT_TEXT = "stall-prompt-text";
 const STALL_PROMPT_QUANTITY = "stall-prompt-quantity";
 const STALL_PROMPT_PRICE = "stall-prompt-price";
 const STALL_CHAT_TEXT = "stall-chat-text";
-// CIFChatModule rows are 16 pixels; the input row sits under them.
-const STALL_CHAT_ROW = 16;
+// CIFChatModule sets both text boxes' row pitch through 523C20(15).
+const STALL_CHAT_ROW = 15;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	companionItemTargetCommand,
@@ -211,6 +211,7 @@ import {
 	STALL_CHAT_LIMIT,
 	STALL_PROMPT_SIZE,
 	STALL_TEXT_LIMIT,
+	STALL_TITLE_LIMIT,
 	STALL_SLOT_IMAGES,
 	stallTradingPresentation,
 	type StallNetworkSort,
@@ -441,7 +442,7 @@ import {
 	type AutoPotionDraft
 } from "@/engine/foundation/gameplay/auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
-import { textBoardLines, textLines } from "@/engine/foundation/ui/text-lines";
+import { textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
@@ -890,6 +891,8 @@ export function createUi(
 	let rememberedMainPopup: MainPopupPage = "Character";
 	const compactHud = createCompactHud();
 	const chatScroll = createMessageScroll( "chat-scroll" ), statusScroll = createMessageScroll( "status-scroll" );
+	const stallChatScroll = createMessageScroll( "stall-chat-scroll" ),
+		stallMemberScroll = createMessageScroll( "stall-member-scroll", "head" );
 	const chatLayoutCache = createRetainedLayout<ReturnType<typeof chatLayout>>(),
 		statusLayoutCache = createRetainedLayout<ReturnType<typeof systemMessageLayout>>();
 	/*
@@ -2666,7 +2669,10 @@ export function createUi(
 		// CIFButtons; retail plays no click for them.
 		if ( control?.kind === "button" && !id.startsWith( "server:" ) && !id.startsWith( "map-town:" ) ) clickSound();
 		if (
-			control && (chatScroll.event( { kind: "activate", id } ) || statusScroll.event( { kind: "activate", id } ))
+			control &&
+			(chatScroll.event( { kind: "activate", id } ) || statusScroll.event( { kind: "activate", id } ) ||
+				stallChatScroll.event( { kind: "activate", id } ) ||
+				stallMemberScroll.event( { kind: "activate", id } ))
 		) {
 			dirty = true;
 			return;
@@ -5874,6 +5880,14 @@ export function createUi(
 				return;
 			}
 			if (
+				view?.session?.phase === "world" && (event.kind === "drag" || event.kind === "scroll") &&
+				controls.some( c => c.id === STALL_CHAT_TEXT ) &&
+				(stallChatScroll.event( event ) || stallMemberScroll.event( event ))
+			) {
+				dirty = true;
+				return;
+			}
+			if (
 				view?.session?.phase === "world" && (event.kind === "drag" || event.kind === "scroll" && !panel) &&
 				((controls.some( c => c.id === "chat-text" ) && chatScroll.event( event )) ||
 					(controls.some( c => c.id === "status-panel" ) && statusScroll.event( event )))
@@ -6740,6 +6754,12 @@ export function createUi(
 			// with the default title (5A1DF0 mode 1); a stall that moved on
 			// closes its prompt.
 			const stallState = next.gameplay?.stall, stallPrompt = stallHud.prompt();
+			const stallChat = stallHud.observeChat( stallState, next.gameplay?.chat?.lines ?? [] );
+			if ( stallChat.cleared || stallChat.appended ) {
+				stallChatScroll.reset();
+				if ( stallChat.cleared ) stallMemberScroll.reset();
+				dirty = true;
+			}
 			if ( stallState?.phase === "naming" && !stallPrompt ) {
 				openStallPrompt( {
 					kind: "title",
@@ -7950,20 +7970,43 @@ export function createUi(
 				oy: number,
 				id: string,
 				value: string,
-				maxLength: number
+				maxLength: number,
+				native = false
 			) {
-				const r = authoredRect( node, ox, oy );
-				controls.push( { id, label: node.name, kind: "text", value, rect: r, maxLength } );
+				const r = authoredRect( node, ox, oy ),
+					ink = native ? authoredClientRect( node, ox, oy ) : r,
+					hAlign = native ? node.hAlign : 0,
+					offset = Math.max( 0, ink[2] - text.run( value ).width ) *
+						(hAlign === 2 ? 1 : hAlign === 1 ? .5 : 0);
+				controls.push( {
+					id,
+					label: node.name,
+					kind: "text",
+					value,
+					rect: r,
+					maxLength,
+					...(native ?
+						{
+							textInsets: node.client,
+							textAlign: hAlign === 2 ? "right" : hAlign === 1 ? "center" : "left"
+						} :
+						{})
+				} );
 				const start = Math.min( value.length, selection[0] ?? 0 ),
 					end = Math.min( value.length, selection[1] ?? start ),
 					before = text.run( value.slice( 0, start ) ).width,
 					through = text.run( value.slice( 0, end ) ).width;
 				if ( focus === id && end > start ) {
-					rect( [ r[0] + before, r[1], through - before, r[3] ], [ .2, .4, .7, .6 ], "", [ 0, 0, 1, 1 ], r );
+					rect( [ ink[0] + offset + before, ink[1], through - before, ink[3] ], [ .2, .4, .7, .6 ], "", [
+						0,
+						0,
+						1,
+						1
+					], ink );
 				}
-				quads.push( ...text.quads( value, r, r, white, { overflow: "clip" } ) );
+				quads.push( ...text.quads( value, ink, ink, white, { overflow: "clip", hAlign } ) );
 				if ( focus === id && caretVisible ) {
-					rect( [ r[0] + through, r[1], 1, r[3] ], white, "", [ 0, 0, 1, 1 ], r );
+					rect( [ ink[0] + offset + through, ink[1], 1, ink[3] ], white, "", [ 0, 0, 1, 1 ], ink );
 				}
 			}
 			/*
@@ -14456,8 +14499,12 @@ export function createUi(
 					const state = game?.stall,
 						root = hudData?.root.GDR_STALL,
 						page = hudData?.windows.ifstall,
+						chat = hudData?.windows.ifchatmodule,
 						cell = hudData?.windows.ifstallslot;
-					if ( !state || (state.phase !== "owner" && state.phase !== "visitor") || !root || !page || !cell ) {
+					if (
+						!state || (state.phase !== "owner" && state.phase !== "visitor") || !root || !page || !chat ||
+						!cell
+					) {
 						return;
 					}
 					const admission = beginWindow(),
@@ -14478,34 +14525,90 @@ export function createUi(
 					nativePage( page, px, py, [ 3, 4, 5, 6, 14, 15 ] );
 					authoredImage( at( 15 ), px, py, presentation.icon );
 					authoredImage( at( 14 ), px, py );
-					// The chat module (3): the latest stall lines over the input row.
+					// The chat module (3) owns separate message and input controls in the left pane.
 					const box = authoredRect( at( 3 ), px, py ),
-						rows = Math.max( 0, Math.floor( box[3] / STALL_CHAT_ROW ) - 1 ),
-						said = (game.chat?.lines ?? []).filter( line => line.channel === STALL_CHAT_CHANNEL ).slice(
-							-rows
-						);
-					for ( const [i, line] of said.entries() ) {
-						const row: UiRect = [ box[0] + 4, box[1] + i * STALL_CHAT_ROW, box[2] - 8, STALL_CHAT_ROW ];
+						messages = authoredRect( chat.GDR_CHAT_CHATMESSAGE!, box[0], box[1] ),
+						rows = Math.max( 0, Math.floor( messages[3] / STALL_CHAT_ROW ) ),
+						said = stallHud.messages().flatMap( line =>
+							textBoxLines( line.name + ":" + line.text, messages[2], value => text.run( value ).width )
+						),
+						end = Math.max( 0, said.length - stallChatScroll.offset() ),
+						first = Math.max( 0, end - rows ),
+						padding = Math.max( 0, rows - said.length ) * STALL_CHAT_ROW;
+					// CIFChatModule's constructor (545BE0) attaches resinfo\ifchatmodule.txt.
+					nativePage( chat, box[0], box[1] );
+					for ( const [i, line] of said.slice( first, end ).entries() ) {
+						const row: UiRect = [
+							messages[0],
+							messages[1] + padding + i * STALL_CHAT_ROW,
+							messages[2],
+							STALL_CHAT_ROW
+						];
 						quads.push(
-							...text.quads( line.name + ":" + line.text, row, box, white, { overflow: "clip" } )
+							...text.quads( line, row, messages, white, { overflow: "clip" } )
 						);
 					}
+					const messageScroll = chatScrollbar(
+						"stall-chat-scroll",
+						authoredRect( chat.GDR_CHAT_VSCROLL!, box[0], box[1] ),
+						said.length,
+						rows,
+						stallChatScroll.offset(),
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...messageScroll.paths );
+					quads.push( ...messageScroll.quads );
+					controls.push( ...messageScroll.controls );
+					stallChatScroll.geometry( { ...messageScroll, bounds: messages } );
 					partyEdit(
-						{
-							...at( 3 ),
-							rect: [
-								at( 3 ).rect[0] + 4,
-								at( 3 ).rect[1] + at( 3 ).rect[3] - STALL_CHAT_ROW,
-								at( 3 ).rect[2] - 8,
-								14
-							]
-						},
-						px,
-						py,
+						chat.GDR_CHAT_INPUTBOX!,
+						box[0],
+						box[1],
 						STALL_CHAT_TEXT,
 						stallHud.chat(),
 						STALL_CHAT_LIMIT
 					);
+					// 5A24D0 adds the owner; 751720 then adds packet visitors and the local visitor.
+					const members = authoredRect( chat.GDR_CHAT_OTHERUSER!, box[0], box[1] ),
+						memberIds = new Set( [ state.owner, ...state.visitors, ...(owner ? [] : [ game.localGid ]) ] ),
+						memberNames = Array.from(
+							memberIds,
+							gid =>
+								next.entities.find( entity => entity.gid === gid && entity.kind === "player" )?.name ||
+								(gid === game.localGid ? next.session?.character ?? "" : "")
+						).filter( name => name ),
+						memberRows = Math.floor( members[3] / STALL_CHAT_ROW ),
+						memberBar = authoredRect( chat.GDR_CHAT_USERVSCROLL!, box[0], box[1] ),
+						memberRange = Math.max( 0, memberNames.length - memberRows );
+					// 545570 appends names without the message box's explicit tail selection.
+					stallMemberScroll.geometry( { range: memberRange, travel: memberBar[3], bounds: members } );
+					const memberFirst = memberRange - stallMemberScroll.offset();
+					for ( const [i, name] of memberNames.slice( memberFirst, memberFirst + memberRows ).entries() ) {
+						const row: UiRect = [
+							members[0],
+							members[1] + i * STALL_CHAT_ROW,
+							members[2],
+							STALL_CHAT_ROW
+						];
+						quads.push( ...text.quads( name, row, members, white, { overflow: "clip" } ) );
+					}
+					const memberScroll = chatScrollbar(
+						"stall-member-scroll",
+						memberBar,
+						memberNames.length,
+						memberRows,
+						stallMemberScroll.offset(),
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...memberScroll.paths );
+					quads.push( ...memberScroll.quads );
+					controls.push( ...memberScroll.controls );
 					authoredText( at( 10 ), px, py, title );
 					authoredText( at( 11 ), px, py, state.greeting );
 					authoredText(
@@ -18630,13 +18733,12 @@ export function createUi(
 					76
 				);
 			}
-			const stallBox = stallHud.prompt(), stallPage = hud.data()?.windows.ifstall;
-			if ( worldVisible && stallBox && game?.stall && stallPage ) {
+			const stallBox = stallHud.prompt(), stallPages = hud.data();
+			if ( worldVisible && stallBox && game?.stall && stallPages ) {
 				// CIFStall's message boxes (5A1DF0, 5A1A40): one modal box at a time.
 				const [boxWidth, boxHeight] = STALL_PROMPT_SIZE[stallBox.kind],
 					layout = messageBox( w, h, boxWidth, boxHeight ),
 					[x, y] = layout.frame,
-					template = Object.values( stallPage ).find( n => n.id === 11 )!,
 					line = ( value: string, dy: number ) => {
 						quads.push(
 							...text.quads( value, [ x + 20, y + dy, boxWidth - 40, 14 ], full, white, {
@@ -18644,13 +18746,6 @@ export function createUi(
 								vAlign: 0
 							} )
 						);
-					},
-					edit = ( id: string, value: string, r: UiRect, maxLength: number ) => {
-						image(
-							[ r[0] - 4, r[1] - 3, r[2] + 8, r[3] + 6 ],
-							ROOT + "interface/messagebox/msgbox_quantity.png"
-						);
-						partyEdit( { ...template, name: id, rect: r }, 0, 0, id, value, maxLength );
 					};
 				controls = [];
 				blocks = [ full ];
@@ -18675,27 +18770,67 @@ export function createUi(
 				);
 				const stall = game.stall;
 				if ( stallBox.kind === "title" || stallBox.kind === "greeting" ) {
-					line( hudCopy( stallBox.kind === "title" ? "UIIT_STT_INSERT_STALL_NAME" : "UIIT_STT_STALL" ), 48 );
-					edit( STALL_PROMPT_TEXT, stallBox.text, [ x + 28, y + 76, boxWidth - 56, 14 ], STALL_TEXT_LIMIT );
-				} else if ( stallBox.kind === "price" ) {
-					const item = game.inventory.find( row => row.slot === stallBox.bagSlot );
-					line( item?.name ?? "", 46 );
-					quads.push(
-						...text.quads(
-							hudCopy( "UIIT_CTL_WARENETWORK_RESULT_FIGURE" ),
-							[ x + 30, y + 72, 80, 14 ],
-							full,
-							white
+					// 52C870 submodes 0/1 resize MsgBoxInsertMsg for the two fields.
+					const title = stallBox.kind === "title",
+						rects: Readonly<Record<number, UiRect>> = title ?
+							{
+								10: [ 27, 47, 225, 14 ],
+								11: [ 11, 68, 257, 25 ],
+								12: [ 15, 72, 249, 17 ],
+								15: [ 18, 70, 243, 20 ],
+								205: [ 55, 104, 76, 24 ],
+								206: [ 143, 104, 76, 24 ]
+							} :
+							{
+								10: [ 0, 48, 420, 12 ],
+								11: [ 9, 66, 400, 28 ],
+								12: [ 13, 70, 392, 20 ],
+								15: [ 16, 68, 386, 20 ],
+								205: [ 128, 104, 76, 24 ],
+								206: [ 216, 104, 76, 24 ]
+							},
+						page = Object.fromEntries(
+							Object.entries( stallPages.stallTextPage ).map( (
+								[name, node]
+							) => [ name, { ...node, rect: rects[node.id] ?? node.rect } ] )
 						),
-						...text.quads(
-							hudCopy( "UIIT_CTL_WARENETWORK_RESULT_PRICE" ),
-							[ x + 30, y + 96, 80, 14 ],
-							full,
-							white
-						)
+						at = ( id: number ) => Object.values( page ).find( node => node.id === id )!;
+					nativePage( page, x, y, [ 10, 15, 205, 206 ] );
+					authoredText(
+						at( 10 ),
+						x,
+						y,
+						hudCopy( title ? "UIIT_STT_INSERT_STALL_NAME" : "UIIT_STT_INSERT_OWNER_MESSAGE" )
 					);
-					edit( STALL_PROMPT_QUANTITY, stallBox.quantity, [ x + 120, y + 72, 60, 14 ], 5 );
-					edit( STALL_PROMPT_PRICE, stallBox.price, [ x + 120, y + 96, 150, 14 ], 10 );
+					partyEdit(
+						at( 15 ),
+						x,
+						y,
+						STALL_PROMPT_TEXT,
+						stallBox.text,
+						title ? STALL_TITLE_LIMIT : STALL_TEXT_LIMIT,
+						true
+					);
+					authoredLabeledButton( at( 205 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					authoredLabeledButton( at( 206 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
+				} else if ( stallBox.kind === "price" ) {
+					// 5A1A40 creates kind 3 (528670), the authored MsgBoxStoreMoney.
+					const page = stallPages.stallPricePage,
+						at = ( id: number ) => Object.values( page ).find( node => node.id === id )!,
+						item = stallBox.modify ?
+							stall.offers.find( row => row.slot === stallBox.slot )?.item :
+							game.inventory.find( row => row.slot === stallBox.bagSlot ),
+						icon = iconPath( item?.icon );
+					nativePage( page, x, y, [ 1, 2, 3, 9, 11, 12, 215, 216 ] );
+					// 528920 mode 10 shows NAME1 and the price edit, hiding NAME2/static price.
+					authoredImage( at( 1 ), x, y );
+					authoredText( at( 1 ), x, y, item?.name ?? "" );
+					authoredImage( at( 3 ), x, y );
+					if ( icon ) image( authoredRect( at( 12 ), x, y ), icon );
+					partyEdit( at( 3 ), x, y, STALL_PROMPT_QUANTITY, stallBox.quantity, 5, true );
+					partyEdit( at( 11 ), x, y, STALL_PROMPT_PRICE, stallBox.price, 10, true );
+					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
+					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
 				} else if ( stallBox.kind === "buy" || stallBox.kind === "network-buy" ) {
 					const offer = stallBox.kind === "buy" ?
 						stall.offers.find( row => row.slot === stallBox.slot ) :
@@ -18713,22 +18848,24 @@ export function createUi(
 						line( hudCopy( "UIIT_MSG_WARENETWORK_REGIST_" + key ), 50 + i * 18 );
 					}
 				}
-				const pending = stallBox.kind === "network-buy" && stall.network.buying !== null;
-				button(
-					"stall-prompt-ok",
-					hudCopy( "UIIT_CTL_CONFIRM" ),
-					x + boxWidth / 2 - 80,
-					y + boxHeight - 40,
-					76,
-					pending
-				);
-				button(
-					"stall-prompt-cancel",
-					hudCopy( "UIIT_CTL_CANCEL" ),
-					x + boxWidth / 2 + 4,
-					y + boxHeight - 40,
-					76
-				);
+				if ( stallBox.kind !== "price" && stallBox.kind !== "title" && stallBox.kind !== "greeting" ) {
+					const pending = stallBox.kind === "network-buy" && stall.network.buying !== null;
+					button(
+						"stall-prompt-ok",
+						hudCopy( "UIIT_CTL_CONFIRM" ),
+						x + boxWidth / 2 - 80,
+						y + boxHeight - 40,
+						76,
+						pending
+					);
+					button(
+						"stall-prompt-cancel",
+						hudCopy( "UIIT_CTL_CANCEL" ),
+						x + boxWidth / 2 + 4,
+						y + boxHeight - 40,
+						76
+					);
+				}
 			}
 			if (
 				worldVisible && carriedItem &&
