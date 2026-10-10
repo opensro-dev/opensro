@@ -326,6 +326,11 @@ func (application *gameWorldApplication) admit(ctx context.Context) error {
 	}
 	open := func(settled bool) {
 		application.readiness.Open()
+		// The title and login follow admission, not the lease alone: a
+		// leased but loading shard showed online with an empty roster.
+		if application.reporter != nil {
+			application.reporter.MarkAdmitting()
+		}
 		fill := "population settled"
 		if !settled {
 			fill = "population NOT settled; admitted at the bound"

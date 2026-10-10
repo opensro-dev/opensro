@@ -25,18 +25,31 @@ var (
 )
 
 // Heartbeat is one GameWorld process's health and population publication.
-// InstanceID must be freshly generated for every process boot.
+// InstanceID must be freshly generated for every process boot. Phase says
+// whether the process admits players yet; empty is a GameWorld from before
+// the field, judged by its lease alone.
 type Heartbeat struct {
 	ShardID       string `json:"shardId"`
 	InstanceID    string `json:"instanceId"`
 	Sequence      uint64 `json:"sequence"`
 	OnlinePlayers int    `json:"onlinePlayers"`
+	Phase         string `json:"phase,omitempty"`
 }
+
+const (
+	// PhaseStarting: the process holds its lease but is still loading its
+	// worlds; the title shows the shard offline and login is refused.
+	PhaseStarting = "starting"
+	// PhaseAdmitting: GameWorld readiness has opened since this boot. It
+	// latches for the process, so a long tick never flaps the title.
+	PhaseAdmitting = "admitting"
+)
 
 type lease struct {
 	instanceID    string
 	sequence      uint64
 	onlinePlayers int
+	starting      bool
 	expiresAt     time.Time
 }
 
@@ -108,6 +121,9 @@ func (directory *Directory) Publish(heartbeat Heartbeat, now time.Time) error {
 	if heartbeat.Sequence == 0 {
 		return fmt.Errorf("shard heartbeat sequence must start at one")
 	}
+	if heartbeat.Phase != "" && heartbeat.Phase != PhaseStarting && heartbeat.Phase != PhaseAdmitting {
+		return fmt.Errorf("shard heartbeat phase %q is unknown", heartbeat.Phase)
+	}
 	if heartbeat.OnlinePlayers < 0 || heartbeat.OnlinePlayers > definition.Capacity {
 		return fmt.Errorf(
 			"shard %q population %d is outside 0..%d",
@@ -146,6 +162,7 @@ func (directory *Directory) Publish(heartbeat Heartbeat, now time.Time) error {
 		instanceID:    heartbeat.InstanceID,
 		sequence:      heartbeat.Sequence,
 		onlinePlayers: heartbeat.OnlinePlayers,
+		starting:      heartbeat.Phase == PhaseStarting,
 		expiresAt:     now.Add(directory.leaseTTL),
 	}
 	if directory.path != "" {
@@ -192,7 +209,8 @@ func (directory *Directory) Release(shardID, instanceID string) error {
 }
 
 // Snapshot returns stable native-order status. A configured shard is
-// operating only while its sole GameWorld owner holds a fresh lease.
+// operating only while its sole GameWorld owner holds a fresh lease and
+// has opened admission (a starting owner is not yet operating).
 func (directory *Directory) Snapshot(now time.Time) []Status {
 	definitions := directory.catalog.Definitions()
 
@@ -202,7 +220,7 @@ func (directory *Directory) Snapshot(now time.Time) []Status {
 	statuses := make([]Status, 0, len(definitions))
 	for _, definition := range definitions {
 		current, exists := directory.leases[definition.ID]
-		operating := definition.Enabled && exists && now.Before(current.expiresAt)
+		operating := definition.Enabled && exists && now.Before(current.expiresAt) && !current.starting
 		online := 0
 		if operating {
 			online = current.onlinePlayers
@@ -229,6 +247,7 @@ type persistedLease struct {
 	InstanceID    string    `json:"instanceId"`
 	Sequence      uint64    `json:"sequence"`
 	OnlinePlayers int       `json:"onlinePlayers"`
+	Starting      bool      `json:"starting,omitempty"`
 	ExpiresAt     time.Time `json:"expiresAt"`
 }
 
@@ -297,6 +316,7 @@ func (directory *Directory) load() error {
 			instanceID:    row.InstanceID,
 			sequence:      row.Sequence,
 			onlinePlayers: row.OnlinePlayers,
+			starting:      row.Starting,
 			expiresAt:     row.ExpiresAt,
 		}
 	}
@@ -311,6 +331,7 @@ func persistLeaseState(path string, leases map[string]lease) error {
 			InstanceID:    current.instanceID,
 			Sequence:      current.sequence,
 			OnlinePlayers: current.onlinePlayers,
+			Starting:      current.starting,
 			ExpiresAt:     current.expiresAt,
 		})
 	}
