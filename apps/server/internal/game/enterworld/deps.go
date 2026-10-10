@@ -58,6 +58,9 @@ type Deps struct {
 	StarterKit []WireItem
 	// MasteryTotalOverride is shared with progression; zero means native.
 	MasteryTotalOverride int64
+	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
+	// (action/storageautostack.go); false is native.
+	StorageAutoStack bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

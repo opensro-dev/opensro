@@ -253,6 +253,9 @@ type BootstrapResult struct {
 	// the client can show them as unlimited rather than a stack of one.
 	UnlimitedItems       []uint32
 	MasteryTotalOverride int64
+	// StorageAutoStack tells the client's storage quick move to prefer a
+	// matching stack (port-only, not native; false is native).
+	StorageAutoStack bool
 }
 
 /*
@@ -303,6 +306,7 @@ type bootstrapSuccessView struct {
 	Packets                   []Packet                 `json:"packets"`
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
+	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 }
 
 /*
@@ -378,6 +382,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		Packets:                   r.Packets,
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
+		StorageAutoStack:          r.StorageAutoStack,
 	})
 }
 

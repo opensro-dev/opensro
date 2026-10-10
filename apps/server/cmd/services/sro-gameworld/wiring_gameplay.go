@@ -483,6 +483,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	game.deps.MasteryTotalOverride = masteryOverride
+	// Port-only, not native: storage quick moves prefer a matching stack.
+	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
+	if game.deps.StorageAutoStack {
+		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)
+	}
 	stats := progression.NewRuntime(game.deps)
 	stats.MasteryTotalOverride = masteryOverride
 	if masteryOverride != 0 {

@@ -74,7 +74,11 @@ type deployment struct {
 	// StackSizes is the validated, port-only SRO_STACK_SIZES override.
 	StackSizes string
 	// PartyMasteries comes from the deployer's SRO_PARTY_MASTERIES.
-	PartyMasteries        bool
+	PartyMasteries bool
+	// StorageAutoStack is the deployer's SRO_STORAGE_AUTO_STACK, "on" when
+	// unset (owner decision 2026-10-11); the GameWorld parses it, and its
+	// own unset value is native (port-only, action/storageautostack.go).
+	StorageAutoStack      string
 	TransportCert         string
 	TransportKey          string
 	TransportTLSID        string
@@ -397,6 +401,7 @@ func resolveDeployment(
 		BetaMastery:           betaMastery,
 		StackSizes:            stackSizes.String(),
 		PartyMasteries:        party.MasteriesFromEnv(),
+		StorageAutoStack:      storageAutoStackSetting(),
 		TransportCert:         transportCert,
 		TransportKey:          transportKey,
 		TransportTLSID:        transportTLSID,
@@ -706,6 +711,7 @@ func (deployment *deployment) gameVariables(
 		"beta_mastery":        deployment.BetaMastery,
 		"stack_sizes":         deployment.StackSizes,
 		"party_masteries":     boolEnvValue(deployment.PartyMasteries),
+		"storage_auto_stack":  deployment.StorageAutoStack,
 		"transport_pprof":     boolEnvValue(deployment.Pprof),
 	})
 }
@@ -797,6 +803,21 @@ func chunkAccountCatalog(payload []byte) ([]string, error) {
 		start = end
 	}
 	return chunks, nil
+}
+
+// storageAutoStackDefault is the owner-approved deployment default.
+const storageAutoStackDefault = "on"
+
+/*
+================
+storageAutoStackSetting
+================
+*/
+func storageAutoStackSetting() string {
+	if value := strings.TrimSpace(os.Getenv("SRO_STORAGE_AUTO_STACK")); value != "" {
+		return value
+	}
+	return storageAutoStackDefault
 }
 
 /*

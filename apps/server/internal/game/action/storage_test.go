@@ -208,3 +208,57 @@ func TestWarehouseTicketOpensTheRoomAnywhere(t *testing.T) {
 		t.Fatalf("withdraw after the session ended = %+v", r)
 	}
 }
+
+/*
+================
+TestStorageQuickMovesOntoAStackMergeAsTheDragDoes
+
+The auto-stack quick move (port-only, storageautostack.go) aims a deposit
+or a withdrawal at a matching stack. The server needs no new rule: the
+native whole transfer (TransferWholeTo, 756A60) merges it.
+================
+*/
+func TestStorageQuickMovesOntoAStackMergeAsTheDragDoes(t *testing.T) {
+	rt, c, authority := storageFixture(t)
+	potion := rt.deps.ItemReferences().(staticItemSource)["ITEM_ETC_HP_POTION_01"]
+	potion.NativeFields = potion.NativeFields.With("maxStack", 100)
+	row := potionRow(t, c)
+	slot := uint8(row.Slot)
+	authority.room.Rows = []enterworld.InventoryRow{{Slot: 3, RefObjID: row.RefObjID, Codename: row.Codename,
+		TypeFlags: row.TypeFlags, StackCount: 20, VarianceBits: "0"}}
+	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageDeposit, SourceSlot: slot, DestSlot: 3, NpcGID: 17})
+	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 1 || authority.room.Rows[0].StackCount != 20+row.StackCount {
+		t.Fatalf("deposit onto the stack = %+v, room %+v", r, authority.room.Rows)
+	}
+	for _, bag := range c.MissionInventory {
+		if bag.Slot == row.Slot {
+			t.Fatalf("the merged potions stayed in the bag: %+v", bag)
+		}
+	}
+	// A bag stack of the same potion takes the room's stack back whole.
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: row.Slot, RefObjID: row.RefObjID,
+		Codename: row.Codename, TypeFlags: row.TypeFlags, StackCount: 5, VarianceBits: "0"})
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageWithdraw, SourceSlot: 3, DestSlot: slot, NpcGID: 17})
+	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 0 {
+		t.Fatalf("withdraw onto the stack = %+v, room %+v", r, authority.room.Rows)
+	}
+	for _, bag := range c.MissionInventory {
+		if bag.Slot == row.Slot && bag.StackCount != 5+20+row.StackCount {
+			t.Fatalf("bag stack %d, want %d", bag.StackCount, 5+20+row.StackCount)
+		}
+	}
+}
+
+/*
+================
+TestStorageAutoStackFromEnv
+================
+*/
+func TestStorageAutoStackFromEnv(t *testing.T) {
+	for value, want := range map[string]bool{"": false, "off": false, "0": false, "on": true, "1": true, "TRUE": true} {
+		t.Setenv(EnvStorageAutoStack, value)
+		if got := StorageAutoStackFromEnv(); got != want {
+			t.Fatalf("%s=%q: %v, want %v", EnvStorageAutoStack, value, got, want)
+		}
+	}
+}

@@ -6115,7 +6115,10 @@ export function createUi(
 					const move = storageQuickMove(
 						event.id,
 						view.gameplay,
-						storagePanel.page( view.gameplay.storage?.capacity ?? 0 )
+						{
+							page: storagePanel.page( view.gameplay.storage?.capacity ?? 0 ),
+							autoStack: view.gameplay.storageAutoStack === true
+						}
 					);
 					if ( move ) sendGameplay( { kind: "storage-move", move } );
 					carriedItem = null;
@@ -6233,7 +6236,10 @@ export function createUi(
 					const move = storageQuickMove(
 						event.id,
 						view.gameplay,
-						storagePanel.page( view.gameplay.storage?.capacity ?? 0 )
+						{
+							page: storagePanel.page( view.gameplay.storage?.capacity ?? 0 ),
+							autoStack: view.gameplay.storageAutoStack === true
+						}
 					);
 					if ( move ) sendGameplay( { kind: "storage-move", move } );
 					return;

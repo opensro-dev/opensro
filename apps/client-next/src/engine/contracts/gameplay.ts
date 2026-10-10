@@ -616,6 +616,9 @@ export interface GameplayState {
 		readonly itemName?: string;
 	})[];
 	readonly reverseReturnChoice?: boolean;
+	// The server's port-only SRO_STORAGE_AUTO_STACK rule, published at world
+	// entry: storage quick moves prefer a matching stack (storage-panel.ts).
+	readonly storageAutoStack?: boolean;
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly selectionDecal?: SelectionDecal | null;
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];

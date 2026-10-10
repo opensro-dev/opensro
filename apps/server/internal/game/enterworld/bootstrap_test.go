@@ -584,3 +584,31 @@ func TestGameTimeAndVitalsPayloads(t *testing.T) {
 		t.Errorf("vitals payload = %v, want %v", vitals, want)
 	}
 }
+
+/*
+================
+TestBootstrapJSONPublishesStorageAutoStack
+
+The port-only auto-stack rule reaches the client only when it is on; off
+leaves the blob as the native one.
+================
+*/
+func TestBootstrapJSONPublishesStorageAutoStack(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		blob, err := json.Marshal(&BootstrapResult{
+			NativeResult: nativeResultSuccess, Character: &Character{Name: "keeper", AccountID: "a"},
+			LocalPlayerEntry: &LocalPlayerEntry{RaceKey: RaceKeyChina},
+			ChatMessages:     []string{}, SystemMessages: []string{}, Packets: []Packet{},
+			StorageAutoStack: on,
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if got := strings.Contains(string(blob), `"storageAutoStack":true`); got != on {
+			t.Fatalf("StorageAutoStack=%v: blob carries the rule %v", on, got)
+		}
+		if !on && strings.Contains(string(blob), "storageAutoStack") {
+			t.Fatal("the native blob names the port-only rule")
+		}
+	}
+}

@@ -167,6 +167,14 @@ variable "party_masteries" {
   default = "on"
 }
 
+# storage_auto_stack lets a storage quick move (right-click, Ctrl+click) land
+# on a matching stack (port-only, not native; owner decision 2026-10-11).
+# "off" restores the native empty-slot rule.
+variable "storage_auto_stack" {
+  type    = string
+  default = "on"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
@@ -365,6 +373,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SILK                      = var.beta_silk
         SRO_MAINTENANCE_GATE_PATH          = var.maintenance_gate_path
         SRO_PARTY_MASTERIES                = var.party_masteries
+        SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate
