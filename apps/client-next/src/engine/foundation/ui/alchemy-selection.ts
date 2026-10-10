@@ -11,7 +11,9 @@ export function alchemySelection(mode:AlchemyMode,slots:readonly number[],item:I
   if(process){if(equipment)mode='dissolve';else if(flags===0x1dec)mode='advanced';else if(flags===0x25ec||flags===0x35ec)mode='compound';else return null;}
   else if(!equipment)return null;
  }else if(!process){
-  if(flags===0x0dec||flags===0x3dec)mode='attribute';else if(flags===0x15ec)mode='magic';else if(flags===0x0d6c)mode='reinforce';else if(flags!==0x156c||mode!=='reinforce')return null;
+  // 62B6D0: magic stones (3/3/11/1 0x0dec, 3/3/11/7 0x3dec) take the magic-option
+  // branch, attribute stones (3/3/11/2 0x15ec) the attribute one.
+  if(flags===0x0dec||flags===0x3dec)mode='magic';else if(flags===0x15ec)mode='attribute';else if(flags===0x0d6c)mode='reinforce';else if(flags!==0x156c||mode!=='reinforce')return null;
   if(slots.length>1&&flags!==0x156c)return {mode,slots:[slots[0]!,item.slot]};
  }else if(mode==='compound'&&flags!==0x25ec&&flags!==0x35ec||mode==='advanced'&&flags!==0x2dec||mode==='dissolve'&&flags!==0x35ec)return null;
  const capacity=alchemySlotCapacity(mode);

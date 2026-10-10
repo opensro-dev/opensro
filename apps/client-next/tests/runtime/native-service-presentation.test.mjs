@@ -24,7 +24,15 @@ test("reagents preserve every existing alchemy operation without a synthetic mod
 	const item = ( slot, typeFlags ) => ({ slot, typeFlags });
 	assert.equal( alchemySelection( "reinforce", [], item( 13, 0x8ec ) ), null );
 	assert.deepEqual( alchemySelection( "reinforce", [], item( 13, 0x32c ) ), { mode: "reinforce", slots: [ 13 ] } );
-	for ( const [flags, mode] of [ [ 0xd6c, "reinforce" ], [ 0xdec, "attribute" ], [ 0x15ec, "magic" ] ] ) {
+	// 62B6D0: magic stones are 3/3/11/1 (0xdec) and 3/3/11/7 (0x3dec); attribute
+	// stones are 3/3/11/2 (0x15ec). Swapping them sent every blue stone as an
+	// attribute operation, which the server refuses.
+	for (
+		const [flags, mode] of [ [ 0xd6c, "reinforce" ], [ 0xdec, "magic" ], [ 0x3dec, "magic" ], [
+			0x15ec,
+			"attribute"
+		] ]
+	) {
 		assert.deepEqual( alchemySelection( "reinforce", [ 13 ], item( 14, flags ) ), { mode, slots: [ 13, 14 ] } );
 	}
 	for ( const [flags, mode] of [ [ 0x32c, "dissolve" ], [ 0x1dec, "advanced" ], [ 0x25ec, "compound" ] ] ) {
