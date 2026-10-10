@@ -131,6 +131,8 @@ type Metrics struct {
 	TickMeanMs   float64 `json:"tick_mean_ms"`
 	TickMaxMs    float64 `json:"tick_max_ms"`
 	TickOverruns uint64  `json:"tick_overruns"`
+	// TickHistogram is the whole-tick distribution (tick_histogram.go).
+	TickHistogram TickHistogram `json:"tick_ms_histogram"`
 	// Request handler and tick phase histograms (timing.go).
 	HandlerMs   map[string]Histogram     `json:"handler_ms"`
 	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
@@ -301,6 +303,7 @@ type tickStats struct {
 	sum      time.Duration
 	max      time.Duration
 	overruns uint64
+	buckets  [tickHistogramBuckets]uint64
 }
 
 // durationStats is shared by low-frequency lifecycle duration aggregates.
@@ -357,6 +360,7 @@ func (h *Hub) RecordTickDuration(elapsed, interval time.Duration) {
 	if interval > 0 && elapsed > interval {
 		t.overruns++
 	}
+	t.buckets[tickBucket(elapsed)]++
 	t.mu.Unlock()
 }
 
@@ -368,6 +372,7 @@ func (t *tickStats) snapshotInto(m *Metrics) {
 	m.TickLastMs = float64(t.last) / float64(time.Millisecond)
 	m.TickMaxMs = float64(t.max) / float64(time.Millisecond)
 	m.TickOverruns = t.overruns
+	m.TickHistogram = tickHistogramSnapshot(&t.buckets, t.count, t.max)
 	if t.count > 0 {
 		m.TickMeanMs = float64(t.sum) / float64(time.Millisecond) / float64(t.count)
 	}
