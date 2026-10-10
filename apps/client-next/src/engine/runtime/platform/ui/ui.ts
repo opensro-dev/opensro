@@ -82,6 +82,7 @@ export function createUiBridge(
 			element: HTMLInputElement | HTMLButtonElement | HTMLDivElement;
 			value: UiControl;
 			order: number;
+			clipPath: string;
 			box: [number, number, number, number];
 		}
 	>();
@@ -782,7 +783,7 @@ export function createUiBridge(
 						element.setAttribute( "autocorrect", "off" );
 					}
 					root.append( element );
-					slot = { element, value: control, order: NaN, box: [ NaN, NaN, NaN, NaN ] };
+					slot = { element, value: control, order: NaN, clipPath: "", box: [ NaN, NaN, NaN, NaN ] };
 					controls.set( control.id, slot );
 				}
 				const el = slot.element;
@@ -878,7 +879,19 @@ export function createUiBridge(
 					el.style.height = height + "px";
 					hitLayoutChanged = true;
 				}
-				if ( !!slot.value.disabled !== !!control.disabled ) hitLayoutChanged = true;
+				const hitPolygon = control.hitPolygon ?
+					"polygon(" + control.hitPolygon.map( ( [px, py] ) =>
+						((px - x) * scale) + "px " + ((py - y) * scale) + "px"
+					).join( "," ) + ")" :
+					"";
+				if ( slot.clipPath !== hitPolygon ) {
+					slot.clipPath = hitPolygon;
+					el.style.clipPath = hitPolygon;
+					hitLayoutChanged = true;
+				}
+				if ( !!slot.value.disabled !== !!control.disabled ) {
+					hitLayoutChanged = true;
+				}
 				slot.value = control;
 			}
 			if ( hitLayoutChanged ) syncHover();

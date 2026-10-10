@@ -17,13 +17,14 @@ import {
 	decodeHuntingGuide,
 	decodeHuntingPortraits,
 	projectHuntingGuide,
+	huntingGuideDetails,
 	HUNTING_PORTRAITS,
 	type HuntingCatalogue,
 	type HuntingProjection
 } from "@/engine/foundation/ui/hunting-guide";
 import { worldMapFrame } from "@/engine/foundation/ui/world-map";
 
-const EMPTY: HuntingProjection = { quads: [], controls: [], labels: [], paths: [] };
+const EMPTY: HuntingProjection = { quads: [], controls: [], labels: [], paths: [], areas: [] };
 const ART_BYTES_LIMIT = 512 * 1024;
 /*
 ================
@@ -139,22 +140,32 @@ export function createHuntingGuideHud(
 			clip: UiRect,
 			pan: readonly [number, number],
 			center: Pose,
-			reserved: readonly UiRect[] = []
+			hover: string | null = null
 		) {
-			if ( load.kind !== "ready" || center.regionId & 0x8000 ) return EMPTY;
+			if ( page !== 0 || load.kind !== "ready" || center.regionId & 0x8000 ) {
+				invalidate();
+				return EMPTY;
+			}
 			const frame = worldMapFrame( page, clip, pan, center ),
-				key = [ page, ...clip, frame.ox, frame.oy, ...reserved.flat() ].join( "|" );
+				key = [ page, ...clip, frame.ox, frame.oy, hover ?? "" ].join( "|" );
 			if ( key !== cacheKey ) {
 				projection = projectHuntingGuide(
 					load.data,
-					art.kind === "ready" ? art.data : new Map(),
 					frame,
 					clip,
-					reserved
+					hover
 				);
 				cacheKey = key;
 			}
 			return projection;
+		},
+		/*
+		================
+		details
+		================
+		*/
+		details( hover: string | null, viewport: UiRect ) {
+			return huntingGuideDetails( projection, art.kind === "ready" ? art.data : new Map(), hover, viewport );
 		},
 		/*
 		================

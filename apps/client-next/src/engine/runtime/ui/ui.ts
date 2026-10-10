@@ -73,7 +73,11 @@ import {
 } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
 import { createHuntingGuideHud } from "./hud/hunting-guide";
-import { HUNTING_AREA_PREFIX, HUNTING_MONSTER_SIGN } from "@/engine/foundation/ui/hunting-guide";
+import {
+	HUNTING_AREA_PREFIX,
+	HUNTING_MONSTER_SIGN,
+	HUNTING_PORTRAIT_FRAME
+} from "@/engine/foundation/ui/hunting-guide";
 import { createSkillTrainingCache } from "./hud/skill-training";
 import {
 	createWithdrawalDialog,
@@ -2265,6 +2269,14 @@ export function createUi(
 	================
 	*/
 	function activate( id: string ) {
+		// Port-only shortcut to the same saved option exposed in Experimental.
+		if ( panel === "Map" && mapPage === 0 && id === "map-hunting-toggle" ) {
+			const saved = experimental.state().saved;
+			experimental.restore( { ...saved, monsterGuide: !saved.monsterGuide } );
+			extensions.saveExperimental?.( experimental.state().saved );
+			dirty = true;
+			return;
+		}
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
 			const row = EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
 			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
@@ -9769,6 +9781,7 @@ export function createUi(
 					mapTop = Math.min( mapY, Math.max( 0, h - mapHeight ) );
 				mapX = mapLeft;
 				mapY = mapTop;
+				if ( mapPage !== 0 && hover?.startsWith( HUNTING_AREA_PREFIX ) ) hover = null;
 				const mapGuideEnabled = experimental.state().saved.monsterGuide;
 				const mapClip: UiRect = [
 					mapLeft + 6,
@@ -9868,29 +9881,7 @@ export function createUi(
 				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
 				// its own font extent, subtracting the integer half-width from the anchor.
 				const mapGuide = mapOpen && mapGuideEnabled && pose ?
-					huntingGuide.present( mapPage, mapClip, mapPan, mapCenter ?? pose, [
-						...(mapProjection?.overlay ?? []).map( q => q.rect ),
-						...(mapProjection?.markers ?? []).map( q => q.rect ),
-						...(mapProjection?.labels ?? []).map( row => {
-							const width = text.run( row.label.text, 0, row.label.font ).width;
-							return [
-								row.x - Math.floor( width / 2 ),
-								row.y,
-								width,
-								text.extentHeight( row.label.font )
-							] as UiRect;
-						} ),
-						...(mapSmall ?
-							[] :
-							[
-								[
-									mapLeft + hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[0],
-									mapTop + hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[1],
-									hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[2],
-									hudData!.map.GDR_WM_BTN_AUTO_MOVE!.rect[3]
-								] as UiRect
-							])
-					] ) :
+					huntingGuide.present( mapPage, mapClip, mapPan, mapCenter ?? pose, hover ) :
 					null;
 				const fontPath = text.path();
 				if ( !mapOpen && fontPath ) paths.push( fontPath );
@@ -9981,6 +9972,29 @@ export function createUi(
 					} );
 					quads.push( ...mapImages );
 					controls.push( ...(mapGuide?.controls ?? []), ...mapHits );
+					if ( mapPage === 0 ) {
+						paths.push(
+							ROOT + "interface/ifcommon/com_checkbutton_on.png",
+							ROOT + "interface/ifcommon/com_checkbutton_off.png"
+						);
+						image(
+							[ mx + 10, my + 10, 16, 16 ],
+							ROOT + "interface/ifcommon/com_checkbutton_" + (mapGuideEnabled ? "on" : "off") + ".png"
+						);
+						quads.push(
+							...text.quads( "Hunting", [ mx + 30, my + 10, 48, 17 ], full, [ .96, .88, .66, 1 ], {
+								vAlign: 1
+							} )
+						);
+						controls.push( {
+							id: "map-hunting-toggle",
+							kind: "button",
+							label: "Hunting areas",
+							helpText: (mapGuideEnabled ? "Hide" : "Show") + " hunting areas",
+							rect: [ mx + 8, my + 7, 73, 20 ],
+							selected: mapGuideEnabled
+						} );
+					}
 					const nodes = hudData.map;
 					authoredButton(
 						{ ...nodes.GDR_WM_BTN_WNDSIZE!, rect: [ mw - 44, 10, 16, 16 ] },
@@ -20397,14 +20411,7 @@ export function createUi(
 							key && hudCopy( key ));
 				const hudData = hud.data();
 				let tooltip: readonly TooltipRow[] = value ? [ { value, color: 0xffffffff } ] : [];
-				if ( control?.id.startsWith( HUNTING_AREA_PREFIX ) && value ) {
-					const lines = value.split( "\n" );
-					tooltip = lines.map( ( value, index ) => ({
-						value,
-						color: index === 0 ? 0xffffdaa0 : index === lines.length - 1 ? 0xffc5bdab : 0xffffffff,
-						strong: index === 0
-					}) );
-				}
+
 				if (
 					control && game && hudData && phase === "world" && !carriedShortcut && !carriedItem && !pressed &&
 					!practice
@@ -20534,6 +20541,62 @@ export function createUi(
 							);
 						}
 					}
+				}
+			}
+			if (
+				worldVisible && panel === "Map" && mapPage === 0 && experimental.state().saved.monsterGuide && !pressed
+			) {
+				const detail = huntingGuide.details( hover, full );
+				if ( detail ) {
+					paths.push( ...detail.paths );
+					const [x, y, width, height] = detail.rect;
+					rect( detail.rect, [ .06, .075, .065, .97 ] );
+					quads.push(
+						...frameRing(
+							detail.rect,
+							FRAME,
+							PARTS.map( part => resources.size( FRAME + part + ".png" ) ),
+							full
+						)
+					);
+					quads.push(
+						...text.quads( detail.title, [ x + 10, y + 11, width - 20, 18 ], full, [ .96, .83, .55, 1 ], {
+							hAlign: 1,
+							fontStyle: 2
+						} )
+					);
+					for ( const row of detail.rows ) {
+						const [left, top] = row.rect;
+						rect( [ left, top, 32, 32 ], white, HUNTING_PORTRAIT_FRAME );
+						rect(
+							[ left + 2, top + 2, 28, 28 ],
+							white,
+							resources.has( row.image ) ? row.image : HUNTING_MONSTER_SIGN
+						);
+						quads.push(
+							...text.quads(
+								row.monster.name,
+								[ left + 40, top + 1, row.rect[2] - 46, 16 ],
+								full,
+								white,
+								{ overflow: "clip" }
+							),
+							...text.quads(
+								"Lv. " + row.monster.level,
+								[ left + 40, top + 17, row.rect[2] - 46, 14 ],
+								full,
+								[ .85, .75, .52, 1 ]
+							)
+						);
+					}
+					quads.push(
+						...text.quads( detail.caption, [ x + 10, y + height - 23, width - 20, 16 ], full, [
+							.72,
+							.7,
+							.63,
+							1
+						], { hAlign: 1 } )
+					);
 				}
 			}
 			if ( worldVisible && consolePhase !== 0 && game?.eligibility?.gm ) {

@@ -8,9 +8,10 @@ hunting-guide.test.mjs - catalogue, portrait decluttering and request-lifetime r
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import "../helpers/native-source-loader.mjs";
-const { decodeHuntingGuide, decodeHuntingPortraits, projectHuntingGuide, HUNTING_PORTRAITS } = await import(
-	"../../src/engine/foundation/ui/hunting-guide.ts"
-);
+const { decodeHuntingGuide, decodeHuntingPortraits, projectHuntingGuide, huntingGuideDetails, HUNTING_PORTRAITS } =
+	await import(
+		"../../src/engine/foundation/ui/hunting-guide.ts"
+	);
 const { worldMapFrame } = await import( "../../src/engine/foundation/ui/world-map.ts" );
 const { createHuntingGuideHud } = await import( "../../src/engine/runtime/ui/hud/hunting-guide.ts" );
 const { huntingGuideSource } = await import( "../../src/engine/runtime/simulation/worker/session/http/http.ts" );
@@ -46,68 +47,90 @@ test("atlas retains all species anchors and rejects dungeon/nonfinite positions"
 	}
 });
 
-test("portraits group nearby species honestly and avoid reserved native landmarks", () => {
+test("sections keep their world geometry and complete membership across pan and resize", () => {
 	const data = decodeHuntingGuide( guide );
 	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
 	const clip = [ 30, 40, 400, 200 ];
 	const frame = worldMapFrame( 0, clip, [ 0, 0 ], pose );
-	const image = "/assets/npc/hunting-portraits/" + "a".repeat( 64 ) + ".png";
-	const result = projectHuntingGuide( data, new Map( [ [ 1933, image ] ] ), frame, clip );
-	assert.ok(
-		result.controls.some( c =>
-			c.helpText?.includes( "Mangyang - Lv. 1" ) && c.helpText?.includes( "Water Ghost - Lv. 10" )
-		)
-	);
-	assert.ok( result.labels.some( r => r.value === "Lv 1-10" ) );
-	assert.ok( result.paths.includes( image ) );
-	assert.ok(
-		result.controls.every( c =>
-			c.draggable && c.rect[0] >= clip[0] && c.rect[1] >= clip[1] && c.rect[0] + c.rect[2] <= clip[0] + clip[2] &&
-			c.rect[1] + c.rect[3] <= clip[1] + clip[3]
-		)
-	);
-	const blocked = projectHuntingGuide( data, new Map(), frame, clip, [ clip ] );
-	assert.equal( blocked.controls.length, 0 );
-	const crowded = decodeHuntingGuide( {
-		...guide,
-		rows: [ {
-			...guide.rows[0],
-			points: Array.from(
-				{ length: 200 },
-				( _, i ) => ({ regionId: pose.regionId + (i % 8), x: (i % 12) * 150, z: Math.floor( i / 12 ) * 100 })
-			)
-		} ]
-	} );
-	assert.ok( projectHuntingGuide( crowded, new Map(), frame, clip ).controls.length <= 18 );
+	const initial = projectHuntingGuide( data, frame, clip );
+	const movedFrame = worldMapFrame( 0, clip, [ 17, 9 ], pose );
+	const moved = projectHuntingGuide( data, movedFrame, clip );
+	assert.ok( initial.controls.length );
+	for ( const a of initial.controls ) {
+		const b = moved.controls.find( row => row.id === a.id );
+		assert.ok( b && a.hitPolygon && b.hitPolygon );
+		assert.equal( b.label, a.label );
+		assert.equal( b.hitPolygon.length, a.hitPolygon.length );
+		for ( let i = 0; i < a.hitPolygon.length; i++ ) {
+			assert.ok( Math.abs( b.hitPolygon[i][0] - a.hitPolygon[i][0] - (movedFrame.ox - frame.ox) ) < 1e-8 );
+			assert.ok( Math.abs( b.hitPolygon[i][1] - a.hitPolygon[i][1] - (movedFrame.oy - frame.oy) ) < 1e-8 );
+		}
+	}
 	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
 	const small = [ 30, 40, 256, 256 ];
-	const little = projectHuntingGuide( crowded, new Map(), worldMapFrame( 0, small, [ 0, 0 ], pose ), small );
-	assert.ok( little.controls.length <= 4 );
+	const little = projectHuntingGuide( data, worldMapFrame( 0, small, [ 0, 0 ], pose ), small );
+	assert.deepEqual(
+		little.controls.map( row => [ row.id, row.label ] ),
+		initial.controls.map( row => [ row.id, row.label ] )
+	);
+	assert.ok(
+		little.controls.every( control =>
+			control.draggable &&
+			control.hitPolygon?.every( ( [x, y] ) =>
+				x >= small[0] && x <= small[0] + small[2] && y >= small[1] && y <= small[1] + small[3]
+			)
+		)
+	);
+	assert.equal( initial.paths.length, 0, "Unhovered sections do not demand portrait art" );
 });
 
-test("decluttering keeps every local species reachable, including a group displaced by landmarks", () => {
-	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
-	const clip = [ 0, 0, 640, 384 ];
-	const frame = worldMapFrame( 0, clip, [ 0, 0 ], pose );
-	const rows = Array.from( { length: 12 }, ( _, i ) => ({
+test("section hover reveals every local species with portraits and levels in a bounded card", () => {
+	const rows = Array.from( { length: 23 }, ( _, i ) => ({
+		...guide.rows[0],
 		refObjId: i + 1,
 		name: `Species ${i + 1}`,
-		nameKey: "",
 		level: i + 1,
-		points: [ { regionId: pose.regionId + (i < 6 ? -6 : 6), x: 960, z: 960 } ]
+		points: [ { regionId: pose.regionId, x: 960, z: 960 } ]
 	}) );
 	const data = decodeHuntingGuide( { ...guide, rows } );
-	const open = projectHuntingGuide( data, new Map(), frame, clip );
-	assert.equal( open.controls.length, 2 );
-	// Block every placement around the left group. Its detail must move into
-	// the neighbouring area rather than disappearing behind a marker limit.
-	const result = projectHuntingGuide( data, new Map(), frame, clip, [ [ 0, 0, 230, 384 ] ] );
-	assert.equal( result.controls.length, 1 );
-	const detail = result.controls[0].helpText;
+	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
+	const clip = [ 0, 0, 640, 384 ];
+	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
+	const viewport = [ 0, 0, 800, 600 ];
+	const projection = projectHuntingGuide( data, worldMapFrame( 0, clip, [ 0, 0 ], pose ), clip );
+	assert.equal( projection.controls.length, 1 );
+	const image = "/assets/npc/hunting-portraits/" + "a".repeat( 64 ) + ".png";
+	const detail = huntingGuideDetails( projection, new Map( [ [ 1, image ] ] ), projection.controls[0].id, viewport );
 	assert.ok( detail );
-	for ( const row of rows ) assert.ok( detail.includes( `${row.name} - Lv. ${row.level}` ) );
-	assert.ok( result.labels.some( label => label.value === "Lv 1-12" ) );
-	assert.ok( result.controls.every( control => control.rect[0] > 230 ) );
+	assert.equal( detail.rows.length, rows.length );
+	assert.ok( detail.title.includes( "Lv. 1-23" ) );
+	assert.ok( detail.paths.includes( image ) );
+	assert.deepEqual( detail.rows.map( row => row.monster.refObjId ), rows.map( row => row.refObjId ) );
+	assert.ok(
+		detail.rect[0] >= 0 && detail.rect[1] >= 0 && detail.rect[0] + detail.rect[2] <= viewport[2] &&
+			detail.rect[1] + detail.rect[3] <= viewport[3]
+	);
+	assert.equal( huntingGuideDetails( projection, new Map(), null, viewport ), null );
+});
+
+test("authored town pages suppress sections while world return restores the same areas", () => {
+	const data = decodeHuntingGuide( guide );
+	/** @type {import("../../src/engine/contracts/ui.ts").UiRect} */
+	const clip = [ 0, 0, 640, 384 ];
+	const world = projectHuntingGuide( data, worldMapFrame( 0, clip, [ 0, 0 ], pose ), clip );
+	assert.ok( world.areas.length );
+	for ( const page of [ 1, 2, 3, 4, 5 ] ) {
+		const town = projectHuntingGuide(
+			data,
+			worldMapFrame( page, clip, [ 0, 0 ], pose ),
+			clip,
+			world.controls[0].id
+		);
+		assert.equal( town.quads.length, 0 );
+		assert.equal( town.controls.length, 0 );
+		assert.equal( huntingGuideDetails( town, new Map(), world.controls[0].id, clip ), null );
+	}
+	assert.deepEqual( projectHuntingGuide( data, worldMapFrame( 0, clip, [ 0, 0 ], pose ), clip ), world );
 });
 
 test("optional portrait index rejects duplicate identities and external or traversing images", () => {
