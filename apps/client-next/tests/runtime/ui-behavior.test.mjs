@@ -4200,6 +4200,36 @@ test("cold service windows cannot republish the companion inventory as their ret
 	}
 });
 
+// 620180 gives the alchemy box alcm_window_2 (376x148) as its own texture and
+// 53F4B0 stretches it over the authored GDR_ALCHEMYBOX extent (376x152). At
+// the old 172 the scroll's dark rolled edge (image rows 82..90) slid under the
+// first line of the description, which then read as garbled text.
+test("the alchemy frame keeps its authored height, so the description sits on the parchment", () => {
+	const f = uiFixture();
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Alchemy" } );
+		for ( let i = 1; i < 20; i++ ) f.ui.step( f.state, i * 100 );
+		const quads = f.scenes.at( -1 ).quads;
+		const frame = quads.find( q => q.texture?.endsWith( "/alcm_window_2.png" ) );
+		assert.ok( frame, "the alchemy frame is drawn" );
+		assert.deepEqual( frame.rect.slice( 2 ), [ 376, 152 ] );
+		// The parchment spans image rows 92..138 of 148: 94.5..141.7 once stretched.
+		const parchmentTop = frame.rect[1] + 92 * 152 / 148;
+		const description = quads.filter( q =>
+			q.rect[1] >= frame.rect[1] + 90 && q.rect[1] < frame.rect[1] + 150 && q.rect[0] >= frame.rect[0] + 38 &&
+			q.texture?.includes( "font" )
+		);
+		assert.ok( description.length > 0, "the description glyphs are drawn" );
+		assert.ok(
+			description.every( q => q.rect[1] >= parchmentTop ),
+			"no description glyph starts on the rolled edge"
+		);
+	} finally {
+		f.dispose();
+	}
+});
+
 test("low-HP caution atlas keeps its 100 ms cadence on retained world frames", async () => {
 	const { defaultGameOptions } = await load( "src/engine/foundation/gameplay/game-options.ts" );
 	const f = uiFixture();

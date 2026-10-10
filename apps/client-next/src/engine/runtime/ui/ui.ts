@@ -13151,7 +13151,10 @@ export function createUi(
 						busy = !!game?.inventoryPending;
 					const top = ROOT + "interface/alchemy/alcm_window_2.png";
 					paths.push( top );
-					if ( resources.has( top ) ) rect( [ px, py, 376, 172 ], white, top );
+					// 620180 sets alcm_window_2 (376x148) as the box's own texture and
+					// 53F4B0 stretches it over the window's authored extent (ginterface
+					// GDR_ALCHEMYBOX 376x152), which keeps the parchment under the PML.
+					if ( resources.has( top ) ) rect( [ px, py, root.rect[2], root.rect[3] ], white, top );
 					blocks.push( [ px, py, 376, 378 ] );
 					authoredText( frame.GDR_ALCHEMYBOX_TITLE!, px, py, hudCopy( "UIIT_CTL_ALCHEMYBOX" ) );
 					authoredButton( frame.GDR_ALCHEMYBOX_CLOSE!, px, py, "close", hudCopy( "UIIT_CTL_CLOSE" ), busy );
