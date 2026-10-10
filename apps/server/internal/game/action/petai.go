@@ -362,9 +362,25 @@ it takes the character read door once.
 */
 func (rt *Runtime) companionPresentations(division, name string) []*simulation.PeerCOS {
 	var result []*simulation.PeerCOS
+	var guildID int64
 	rt.deps.Read(division, func() {
-		result = rt.companionPresentationsInDoor(division, name)
+		result, guildID = rt.companionPresentationsInDoor(division, name)
 	})
+	// Guild() takes the same store read lock as Read. Resolve its detached
+	// name only after releasing the character door, including peer snapshots.
+	guildName := ""
+	if guildID != 0 {
+		if store := rt.deps.GuildAuthority(); store != nil {
+			if guild, _, found := store.Guild(division, guildID); found {
+				guildName = guild.Name
+			}
+		}
+	}
+	for _, pet := range result {
+		if pet.Row.Band == domain.MercenaryBand {
+			pet.Row.OwnerName = guildName
+		}
+	}
 	return result
 }
 
@@ -377,23 +393,20 @@ The presentations for a caller that already holds the character read door
 store's read lock is a sync.RWMutex, and a second RLock queued behind a
 waiting writer never returns while the first is held (the 2026-10-10
 GameWorld deadlock: an object select with a summoned pet against the tick's
-UpdateCharacter).
+UpdateCharacter). The copied guild id lets publication resolve the guild
+name outside this door; selection needs only the pose and life state.
 ================
 */
-func (rt *Runtime) companionPresentationsInDoor(division, name string) []*simulation.PeerCOS {
+func (rt *Runtime) companionPresentationsInDoor(division, name string) ([]*simulation.PeerCOS, int64) {
 	rt.petMu.Lock()
 	owner := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(name)}]
 	rt.petMu.Unlock()
 	if owner == nil || !owner.ready {
-		return nil
+		return nil, 0
 	}
-	guildName := ""
+	var guildID int64
 	if owner.character.GuildID != nil {
-		if store := rt.deps.GuildAuthority(); store != nil {
-			if guild, _, found := store.Guild(division, *owner.character.GuildID); found {
-				guildName = guild.Name
-			}
-		}
+		guildID = *owner.character.GuildID
 	}
 	var result []*simulation.PeerCOS
 	for _, pet := range owner.character.Companions() {
@@ -408,14 +421,14 @@ func (rt *Runtime) companionPresentationsInDoor(division, name string) []*simula
 		}
 		if projection := rt.companionPresentation(division, state, pet); projection != nil {
 			if projection.Row.Band == domain.MercenaryBand {
-				projection.Row.OwnerName = guildName
+				projection.Row.OwnerName = ""
 				projection.Row.HoldType = enterworld.DressedJob(owner.character)
 				projection.Row.PvpState = owner.character.PVPState()
 			}
 			result = append(result, projection)
 		}
 	}
-	return result
+	return result, guildID
 }
 
 /*
