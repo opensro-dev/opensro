@@ -6,8 +6,8 @@ stall-hud.ts - the stall windows' prompts and their drafts
 CIFStall raises one message box at a time (CIFStall_ShowConfirmBox
 5A1DF0): the title entry (mode 1, 280x144), the greeting entry (mode 2,
 420x144) and the price entry for an offer (CIFStall_OpenTextInput 5A1A40,
-308x148, quantity and price). The purchase questions of the stall and the
-stall network are the same kind of box. This module owns the open prompt
+308x148, quantity and price). Network purchase and registration use the
+text-sized MsgBoxSimple (6888C0). This module owns the open prompt
 and its typed text; the UI draws from it and sends the command it yields.
 
 Opening the stall asks whether to list it on the stall network
@@ -61,14 +61,11 @@ const STALL_CHANNEL = 9;
 export const STALL_CELL_INSET = 6;
 export const STALL_CELL_PITCH_X = 206;
 export const STALL_CELL_PITCH_Y = 41;
-// 5A1DF0 / 5A1A40: the prompt boxes' sizes; the questions share the title's.
+// 5A1DF0 / 5A1A40: authored edit sizes. Questions use textMessageBoxLayout.
 export const STALL_PROMPT_SIZE = {
 	title: [ 280, 144 ],
 	greeting: [ 420, 144 ],
-	price: [ 308, 148 ],
-	buy: [ 280, 144 ],
-	"network-buy": [ 280, 144 ],
-	register: [ 308, 148 ]
+	price: [ 308, 148 ]
 } as const;
 // 5A1A40: the price edit takes ten digits, the quantity five.
 const PRICE_DIGITS = 10;

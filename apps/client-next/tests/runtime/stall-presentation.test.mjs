@@ -5,14 +5,15 @@ stall-presentation.test.mjs - native trading-state branches and warm admission
 
 The real HUD must replace the invalid authored icon before admission, draw
 the native open/closed resource and opaque chat panes, and preserve
-owner/visitor control gates.
+owner/visitor control gates. Native modal geometry keeps complete questions
+readable, and a naming answer stays dismissed across asynchronous snapshots.
 
 ===========================================================================
 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
-const { emptyStall } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
+const { emptyStall, stallRequest, stallFrame } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
 const { stallTradingPresentation } = await import( "../../src/engine/runtime/ui/hud/stall-hud.ts" );
 
 const ICON_ROOT = "/assets/images/Media_extracted/interface/stall/";
@@ -406,6 +407,23 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 		assert.deepEqual( priceQuads[label].run.glyphs.map( glyph => glyph.uv ), glyphWindows( value ) );
 		assert.ok( label > background, `${value} remains visible above the opaque item information background` );
 	}
+	// The widest measured retail item name exceeds NAME1's centered client width.
+	const name = "Summon of Crossbow Guard (Europe/Defense)";
+	f.state.gameplay.stall.offers[0].item.name = name;
+	draw();
+	const nameRun = f.products.at( -1 )?.quads.findLast( quad =>
+		quad.run?.glyphs.length === name.length && quad.rect[1] >= y + 51 && quad.rect[1] < y + 63
+	);
+	assert.ok( nameRun, "the price prompt retains the complete retail name in its text run" );
+	assert.deepEqual( nameRun.run.glyphs.map( glyph => glyph.uv ), glyphWindows( name ) );
+	const ink = nameRun.run.glyphs.map( glyph => [
+		Math.max( nameRun.rect[0] + glyph.x, nameRun.clip[0] ),
+		Math.min( nameRun.rect[0] + glyph.x + glyph.width, nameRun.clip[0] + nameRun.clip[2] )
+	] ).filter( ( [left, right] ) => right > left );
+	assert.ok(
+		ink.length && ink.every( ( [left, right] ) => left >= x && right <= x + 308 ),
+		"the retail price-name ink stays inside the fixed native modal frame"
+	);
 	f.ui.event( { kind: "edit", id: "stall-prompt-price", value: "9999999999", start: 10, end: 10, composing: false } );
 	f.ui.event( { kind: "edit", id: "stall-prompt-quantity", value: "99", start: 2, end: 2, composing: false } );
 	draw();
@@ -414,4 +432,113 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 	f.ui.event( { kind: "activate", id: "stall-prompt-cancel" } );
 	draw();
 	assert.equal( sent.length, 0, "cancelling each prompt leaves the stall unchanged" );
+	for ( const kind of [ "buy", "network-buy", "register" ] ) {
+		for ( const name of [ "HP recovery potion", "Divine Sword of the Heavenly Dragon King", "W".repeat( 120 ) ] ) {
+			const offer = { slot: 0, bagSlot: 13, quantity: 9999, price: 1000000000, item: { ...item, name } };
+			f.state.gameplay.stall = {
+				...emptyStall(),
+				phase: kind === "register" ? "owner" : "visitor",
+				owner: 2,
+				open: kind !== "register",
+				offers: [ offer ],
+				network: {
+					...emptyStall().network,
+					open: kind === "network-buy",
+					rows: [ { ...offer, owner: 2, serial: 1 } ]
+				}
+			};
+			draw();
+			if ( kind === "network-buy" ) {
+				f.ui.event( { kind: "activate", id: "stall-net-row:0" } );
+				draw();
+				f.ui.event( { kind: "activate", id: "stall-net-buy" } );
+			} else f.ui.event( { kind: "activate", id: kind === "buy" ? "stall-slot:0" : "stall-trading" } );
+			draw();
+			const quads = f.products.at( -1 )?.quads ?? [],
+				corners = quads.filter( quad => quad.texture.endsWith( "/msgbox2_window_left_up.png" ) ),
+				corner = corners.at( -1 ),
+				bottom = quads.filter( quad => quad.texture.endsWith( "/msgbox2_window_right_down.png" ) ).at( -1 );
+			assert.ok( corner && bottom && control( "stall-prompt-ok" ), `${kind} opens its question` );
+			const left = corner.rect[0],
+				top = corner.rect[1],
+				right = bottom.rect[0] + bottom.rect[2],
+				foot = bottom.rect[1] + bottom.rect[3],
+				body = quads.slice( quads.indexOf( corner ) ).filter( quad =>
+					quad.run && quad.rect[1] > top + 40 && quad.rect[1] < foot - 37
+				),
+				space = glyphWindows( " " )[0];
+			assert.ok( body.length, "the complete question is painted above the buttons" );
+			assert.ok(
+				body.every( quad =>
+					quad.rect[0] >= left + 30 && quad.rect[0] + quad.rect[2] <= right - 30 &&
+					quad.rect[1] + quad.rect[3] <= foot - 37
+				),
+				`${kind} body stays inside the native message-box margins`
+			);
+			const lines = kind === "register" ?
+				[
+					"Register items at stall network?",
+					"Items registered at stall networks can be sold fast and with ease",
+					"but 1% of the sold item will be payed as commission."
+				] :
+				[ `Are you sure you want to purchase [${name}]/ [9999]`, "1000000000" ];
+			assert.deepEqual(
+				body.flatMap( quad => quad.run.glyphs.map( glyph => glyph.uv ) ).filter( uv =>
+					uv.some( ( value, i ) => value !== space[i] )
+				),
+				glyphWindows( lines.join( "" ).replace( /\s/g, "" ) ),
+				"wrapping retains all purchase or commission text in reading order"
+			);
+			assert.equal( control( "stall-prompt-ok" ).rect[1], foot - 37, "buttons follow the resized native frame" );
+			f.ui.event( { kind: "activate", id: "stall-prompt-cancel" } );
+			draw();
+			if ( kind === "register" ) break;
+		}
+	}
+});
+
+test("a naming answer stays dismissed across queued commands and coalesced server acknowledgments", t => {
+	for ( const outcome of [ "success", "delayed", "refusal", "cancel" ] ) {
+		const queued = [], f = uiFixture( command => queued.push( command ) );
+		t.after( () => f.dispose() );
+		let state = { ...f.state, gameplay: { ...f.state.gameplay, stall: emptyStall() } }, now = 0, frame;
+		const draw = stall => {
+			// Worker publications are immutable, including repeated snapshots of naming.
+			state = { ...state, gameplay: { ...state.gameplay, stall } };
+			for ( let i = 0; i < 10; i++ ) frame = f.ui.step( state, now += 100 ) ?? frame;
+			assert.ok( frame );
+		};
+		const input = () => frame.controls.find( control => control.id === "stall-prompt-text" );
+		draw( state.gameplay.stall );
+		draw( stallRequest( state.gameplay.stall, { kind: "stall-name" } ).state );
+		assert.ok( input(), "a new naming action opens its title entry" );
+		f.ui.event( { kind: "activate", id: outcome === "cancel" ? "stall-prompt-cancel" : "stall-prompt-ok" } );
+		draw( { ...state.gameplay.stall } );
+		assert.equal( input(), undefined, "the answered prompt cannot reopen while its command waits for the worker" );
+		f.ui.event( { kind: "activate", id: "stall-prompt-ok" } );
+		assert.equal( queued.length, 1, "a repeated confirmation cannot queue another creation" );
+		const requested = stallRequest( state.gameplay.stall, queued[0].command ).state;
+		if ( outcome === "delayed" ) draw( requested );
+		if ( outcome === "cancel" ) draw( requested );
+		else {
+			const replied = stallFrame( requested, {
+				opcode: 0xb049,
+				payload: Uint8Array.from( outcome === "refusal" ? [ 2, 0x3b ] : [ 1 ] )
+			}, { localGid: 1, refs: new Map() } );
+			assert.ok( replied );
+			if ( outcome === "refusal" ) assert.equal( replied.notice?.code, 0x3b, "the real refusal is preserved" );
+			draw( replied.state );
+		}
+		assert.equal( input(), undefined, "the final acknowledgment leaves no creation modal above the stall" );
+		if ( state.gameplay.stall.phase === "owner" ) {
+			f.ui.event( { kind: "activate", id: "stall-change-title" } );
+			draw( state.gameplay.stall );
+			assert.ok( input(), "the owner can still open a separate title edit" );
+			f.ui.event( { kind: "activate", id: "stall-prompt-cancel" } );
+			draw( state.gameplay.stall );
+		}
+		draw( emptyStall() );
+		draw( stallRequest( state.gameplay.stall, { kind: "stall-name" } ).state );
+		assert.ok( input(), "a later naming action opens a fresh title entry" );
+	}
 });

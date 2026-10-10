@@ -6763,7 +6763,9 @@ export function createUi(
 				if ( stallChat.cleared ) stallMemberScroll.reset();
 				dirty = true;
 			}
-			if ( stallState?.phase === "naming" && !stallPrompt ) {
+			// 5A2890 -> 5A0F90 destroys the answered entry before the server replies.
+			// Only entering naming opens it; queued commands may leave that phase visible.
+			if ( stallState?.phase === "naming" && view?.gameplay?.stall?.phase !== "naming" && !stallPrompt ) {
 				openStallPrompt( {
 					kind: "title",
 					text: hudCopy( "UIIT_STT_STALL_DEFAULT_TITLE" ).replace( "%s", next.session?.character ?? "" )
@@ -18753,19 +18755,44 @@ export function createUi(
 				);
 			}
 			const stallBox = stallHud.prompt(), stallPages = hud.data();
-			if ( worldVisible && stallBox && game?.stall && stallPages ) {
+			if (
+				worldVisible && game?.stall &&
+				(stallBox?.kind === "buy" || stallBox?.kind === "network-buy" || stallBox?.kind === "register")
+			) {
+				const stall = game.stall,
+					offer = stallBox.kind === "buy" ?
+						stall.offers.find( row => row.slot === stallBox.slot ) :
+						stallBox.kind === "network-buy" ?
+						stall.network.rows[stallBox.row] :
+						undefined;
+				controls = [];
+				blocks = [ full ];
+				// 5A2795 / 5ADA0F use 6888C0's text-sized MsgBoxSimple. The personal
+				// purchase question uses that same native construction by inference.
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+					lines: stallBox.kind === "register" ?
+						[ "01", "02", "03" ].map( key => hudCopy( "UIIT_MSG_WARENETWORK_REGIST_" + key ) ) :
+						[
+							hudCopy( "UIIT_MSG_WARENETWORK_BUY_CONFIRM" ).replace( "%s", offer?.item.name ?? "" )
+								.replace(
+									"%d",
+									String( offer?.quantity ?? 0 )
+								),
+							String( offer?.price ?? "" )
+						],
+					yes: "stall-prompt-ok",
+					no: "stall-prompt-cancel",
+					yesDisabled: stallBox.kind === "network-buy" && stall.network.buying !== null
+				} );
+			} else if (
+				worldVisible && game?.stall && stallPages &&
+				(stallBox?.kind === "title" || stallBox?.kind === "greeting" || stallBox?.kind === "price")
+			) {
 				// CIFStall's message boxes (5A1DF0, 5A1A40): one modal box at a time.
 				const [boxWidth, boxHeight] = STALL_PROMPT_SIZE[stallBox.kind],
 					layout = messageBox( w, h, boxWidth, boxHeight ),
-					[x, y] = layout.frame,
-					line = ( value: string, dy: number ) => {
-						quads.push(
-							...text.quads( value, [ x + 20, y + dy, boxWidth - 40, 14 ], full, white, {
-								hAlign: 1,
-								vAlign: 0
-							} )
-						);
-					};
+					[x, y] = layout.frame;
 				controls = [];
 				blocks = [ full ];
 				paths.push( ...partyProposalAssets() );
@@ -18843,7 +18870,16 @@ export function createUi(
 					nativePage( page, x, y, [ 1, 2, 3, 7, 8, 9, 11, 12, 215, 216 ] );
 					// 528920 mode 10 shows NAME1 and the price edit, hiding NAME2/static price.
 					authoredImage( at( 1 ), x, y );
-					authoredText( at( 1 ), x, y, item?.name ?? "" );
+					// Inferred modal-boundary repair: 5381D0 does not clip plain CIFStatic
+					// text to its field. Keep NAME1's native alignment and complete name.
+					const name = at( 1 );
+					quads.push(
+						...text.quads( item?.name ?? "", authoredClientRect( name, x, y ), layout.frame, name.color, {
+							fontIndex: name.fontIndex,
+							hAlign: name.hAlign,
+							vAlign: name.vAlign
+						} )
+					);
 					// Native child order puts both price labels above NAME1's opaque background.
 					authoredChrome( at( 7 ), x, y );
 					authoredChrome( at( 8 ), x, y );
@@ -18853,40 +18889,6 @@ export function createUi(
 					partyEdit( at( 11 ), x, y, STALL_PROMPT_PRICE, stallBox.price, 10, true );
 					authoredLabeledButton( at( 215 ), x, y, "stall-prompt-ok", hudCopy( "UIIT_CTL_CONFIRM" ) );
 					authoredLabeledButton( at( 216 ), x, y, "stall-prompt-cancel", hudCopy( "UIIT_CTL_CANCEL" ) );
-				} else if ( stallBox.kind === "buy" || stallBox.kind === "network-buy" ) {
-					const offer = stallBox.kind === "buy" ?
-						stall.offers.find( row => row.slot === stallBox.slot ) :
-						stall.network.rows[stallBox.row];
-					line(
-						hudCopy( "UIIT_MSG_WARENETWORK_BUY_CONFIRM" ).replace( "%s", offer?.item.name ?? "" ).replace(
-							"%d",
-							String( offer?.quantity ?? 0 )
-						),
-						56
-					);
-					line( String( offer?.price ?? "" ), 76 );
-				} else {
-					for ( const [i, key] of [ "01", "02", "03" ].entries() ) {
-						line( hudCopy( "UIIT_MSG_WARENETWORK_REGIST_" + key ), 50 + i * 18 );
-					}
-				}
-				if ( stallBox.kind !== "price" && stallBox.kind !== "title" && stallBox.kind !== "greeting" ) {
-					const pending = stallBox.kind === "network-buy" && stall.network.buying !== null;
-					button(
-						"stall-prompt-ok",
-						hudCopy( "UIIT_CTL_CONFIRM" ),
-						x + boxWidth / 2 - 80,
-						y + boxHeight - 40,
-						76,
-						pending
-					);
-					button(
-						"stall-prompt-cancel",
-						hudCopy( "UIIT_CTL_CANCEL" ),
-						x + boxWidth / 2 + 4,
-						y + boxHeight - 40,
-						76
-					);
 				}
 			}
 			if (
