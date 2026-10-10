@@ -6,8 +6,11 @@ with no game session and no login. It serves the community website
 (opensro-web `docs/COMMUNITY.md`, V1): profile pages, unique cards and the
 catalogue's monster portraits.
 
-Status: design. The order of work is monster + still first (the catalogue's
-portraits), then `look` characters, then drag and zoom.
+Status: in progress on `feat/viewer-v1`. Done: the request parser and fixed
+reasons (`foundation/ui/viewer-request.ts`), and the framing camera
+(`foundation/rendering/viewer-camera.ts`), both tested. Next: the runtime
+owner and the renderer output. The order of work is monster + still first
+(the catalogue's portraits), then `look` characters, then drag and zoom.
 
 ## Contract
 
@@ -58,6 +61,20 @@ none of the session:
 - **Still readback:** after the first frame with the model drawn, the viewer
   copies the canvas texture to a buffer (no `preserveDrawingBuffer` in
   WebGPU) and encodes the PNG.
+
+### Next step: the portrait path (found 2026-10-11)
+
+`renderer/frame/frame.ts` already has a portrait branch: an offscreen
+character render with a transparent clear (`clearValue` alpha 0), which the
+HUD portraits use (`renderer/characters/portrait.ts`, `createPortrait`).
+Try that first for the still, since it is transparent by construction and
+needs no new main-pass mode. Check two things:
+- whether its output texture can be copied to a buffer for the PNG;
+- whether it takes an arbitrary camera (portrait.ts fixes yaw, pitch and
+  distance for the HUD).
+
+If both hold, the `{ transparent: true }` canvas option above is needed only
+for the interactive iframe, not for stills.
 
 ## Serving
 
