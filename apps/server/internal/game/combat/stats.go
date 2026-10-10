@@ -415,11 +415,13 @@ func PlayerBaseStatsWithModifiers(
 		// and abnormal factors are already in the graph.
 		MaxHP: clampDisplayU32(float64(hp)),
 		MaxMP: clampDisplayU32(float64(mp)),
-		// 75BE90 applies the final words on every refresh. Populate them
-		// here so effect retirement cannot overwrite the login attributes
-		// with zero when callers encode the projection directly.
-		StrWord: clampDisplayU16(float64(*character.Strength)),
-		IntWord: clampDisplayU16(float64(*character.Intellect)),
+		// 75BE90 applies the final words on every refresh. They are the
+		// keeper's params 1 and 2, buffs included, truncated as
+		// CGObjPC_SendParameterStats (4EBE30) writes them: a stri/inti
+		// effect (the premium tickets' APRU buff) raises the STR and INT
+		// the client shows and its equip gates read.
+		StrWord: clampDisplayU16(stats.Strength),
+		IntWord: clampDisplayU16(stats.Intellect),
 	}, nil
 }
 

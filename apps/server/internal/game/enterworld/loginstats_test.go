@@ -89,3 +89,21 @@ func TestBuildLoginStatBlockClampsToTheWord(t *testing.T) {
 		t.Fatalf("INT = %d, want the base fallback %d", got, BaseStat)
 	}
 }
+
+/*
+================
+TestBuildLoginStatBlockKeepsTheKeeperWords
+
+A keeper projection's STR and INT already carry every effect (params 1 and
+2, CGObjPC_SendParameterStats 4EBE30). The block keeps them instead of
+the stored attributes, so a level-up or equip refresh does not drop a
+buff's STR/INT from the client.
+================
+*/
+func TestBuildLoginStatBlockKeepsTheKeeperWords(t *testing.T) {
+	character := &Character{Name: "buffed", Strength: i64(20), Intellect: i64(20)}
+	payload := BuildLoginStatBlock(character, wire.BaseStats{StrWord: 23, IntWord: 23})
+	if str, intel := binary.LittleEndian.Uint16(payload[0x20:]), binary.LittleEndian.Uint16(payload[0x22:]); str != 23 || intel != 23 {
+		t.Fatalf("STR/INT = %d/%d, want the keeper's 23/23", str, intel)
+	}
+}

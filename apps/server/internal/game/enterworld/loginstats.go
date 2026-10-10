@@ -73,8 +73,14 @@ func BuildLoginStatBlock(c *Character, stats wire.BaseStats) []byte {
 	if stats.MaxMP == 0 {
 		stats.MaxMP = uint32(DerivedMaxMP(c))
 	}
-	stats.StrWord = uint16(clampStatWord(CharacterStrength(c)))
-	stats.IntWord = uint16(clampStatWord(CharacterIntellect(c)))
+	// The keeper projection carries STR and INT with every effect applied
+	// (params 1 and 2); replacing them with the stored attributes dropped a
+	// buff's STR/INT from every level-up, equip or recall refresh. Only a
+	// caller without a keeper gets the stored attributes.
+	if stats.StrWord == 0 && stats.IntWord == 0 {
+		stats.StrWord = uint16(clampStatWord(CharacterStrength(c)))
+		stats.IntWord = uint16(clampStatWord(CharacterIntellect(c)))
+	}
 	return stats.Encode()
 }
 
