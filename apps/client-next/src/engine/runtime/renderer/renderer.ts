@@ -616,7 +616,7 @@ export function createRenderer(
 						characters.portraitSource( dollInput.gid ),
 						device.geometry()!,
 						device.images()!,
-						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height }
+						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height, camera: dollInput.camera }
 					) :
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;

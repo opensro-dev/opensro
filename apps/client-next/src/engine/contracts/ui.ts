@@ -70,7 +70,13 @@ export interface UiQuad {
 	readonly sampling?: "linear" | "nearest";
 	readonly depth?: number;
 	readonly occlusion?: "scene" | "none";
-	readonly doll?: { readonly gid: number; readonly yaw: number; };
+	readonly doll?: {
+		readonly gid: number;
+		readonly yaw: number;
+		// Port-only: the 3D viewer's framing camera (viewer-camera.ts). Absent,
+		// the doll keeps the inventory's fixed camera.
+		readonly camera?: import("./scene").WorldCamera;
+	};
 	readonly worldAnchor?: Omit<import("./gameplay").Pose, "angle">;
 	readonly portraitGid?: number;
 	readonly rotation?: number;
