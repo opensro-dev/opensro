@@ -91,12 +91,15 @@ test("every admitted item-container route resolves its instance, including dupli
 		avatar = { slot: 0, typeFlags: 0xeac },
 		pet = { slot: 13, refObjId: 1 },
 		offer = { refObjId: 1, plus: 7 },
-		sold = { refObjId: 1, plus: 9 };
+		sold = { refObjId: 1, plus: 9 },
+		stallOffer = { refObjId: 1, plus: 11 },
+		networkOffer = { refObjId: 1, plus: 13 };
 	const game = {
 		inventory: [ bag, equipment ],
 		avatarInventory: [ avatar ],
 		cosRecords: [ { gid: 42, inventory: [ pet ] } ],
 		shop: { offers: [ { items: [ offer ] } ], buyback: [ { item: sold } ] },
+		stall: { offers: [ { slot: 3, item: stallOffer } ], network: { rows: [ { item: networkOffer } ] } },
 		quickSlots: [ { slot: 0, kind: 0x46, payload: 0 }, { slot: 1, kind: 0x47, payload: 6 } ]
 	};
 	for (
@@ -110,12 +113,16 @@ test("every admitted item-container route resolves its instance, including dupli
 			[ "cos-slot:13", pet ],
 			[ "shop-offer:0", offer ],
 			[ "shop-buyback:0", sold ],
+			[ "stall-slot:3", stallOffer ],
+			[ "stall-net-row:0", networkOffer ],
 			[ "hotbar:0", bag ],
 			[ "hotbar:1", equipment ]
 		]
 	) assert.equal( tooltipItems( id, game, 42 )[0], item, id );
 	assert.deepEqual( tooltipItems( "cos-slot:13", game, 43 ), [] );
 	assert.deepEqual( tooltipItems( "shop-buyback:1", game, 42 ), [] );
+	assert.deepEqual( tooltipItems( "stall-slot:0", game, 42 ), [] );
+	assert.deepEqual( tooltipItems( "stall-net-row:1", game, 42 ), [] );
 	game.shop.buyback[0] = { item: { ...sold, plus: 12 } };
 	assert.equal( tooltipItems( "shop-buyback:0", game, 42 )[0].plus, 12 );
 });

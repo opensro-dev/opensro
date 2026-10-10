@@ -218,6 +218,7 @@ export function createUiBridge(
 			value: element.value,
 			start: element.selectionStart ?? 0,
 			end: element.selectionEnd ?? 0,
+			direction: element.selectionDirection ?? "none",
 			composing
 		} );
 	}

@@ -36,7 +36,11 @@ export function tooltipItems( id: string, game: GameplayState, cosGid: number ):
 		);
 	} else if ( id.startsWith( "shop-offer:" ) ) return game.shop?.offers[Number( id.slice( 11 ) )]?.items ?? [];
 	else if ( id.startsWith( "shop-buyback:" ) ) item = game.shop?.buyback?.[Number( id.slice( 13 ) )]?.item;
-	else if ( id.startsWith( "hotbar:" ) ) {
+	else if ( id.startsWith( "stall-slot:" ) ) {
+		item = game.stall?.offers.find( row => row.slot === Number( id.slice( "stall-slot:".length ) ) )?.item;
+	} else if ( id.startsWith( "stall-net-row:" ) ) {
+		item = game.stall?.network.rows[Number( id.slice( "stall-net-row:".length ) )]?.item;
+	} else if ( id.startsWith( "hotbar:" ) ) {
 		const binding = game.quickSlots?.find( row => row.slot === Number( id.slice( 7 ) ) );
 		if ( binding && (binding.kind === 0x46 || binding.kind === 0x47) ) {
 			item = game.inventory.find( row => row.slot === quickSlotItemSlot( binding ) );

@@ -24,11 +24,11 @@ test(
 		} );
 		try {
 			await page.goto( new URL( "/tests/browser/fixtures/ui-bridge.html", CLIENT_NEXT_BASE_URL ).href );
-			await page.evaluate( async () => {
+			const observed = await page.evaluateHandle( async () => {
 				const modulePath = "/src/engine/runtime/platform/ui/ui.ts";
 				const { createUiBridge } = await import( modulePath );
 				const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById( "world" ));
-				const bridge = createUiBridge( canvas, () => {}, () => {} );
+				const events = [], bridge = createUiBridge( canvas, event => events.push( event ), () => {} );
 				bridge.present( {
 					title: "Regression controls",
 					message: "",
@@ -38,6 +38,7 @@ test(
 						{ id: "chat", label: "Chat", kind: "text", value: "Silkroad", rect: [ 20, 320, 250, 30 ] }
 					]
 				} );
+				return events;
 			} );
 			const button = page.locator( '[data-ui-id="map-follow"]' );
 			const input = page.locator( '[data-ui-id="chat"]' );
@@ -52,13 +53,27 @@ test(
 			await page.mouse.click( 600, 450 );
 			assert.equal( await button.evaluate( element => element === document.activeElement ), false );
 			await input.click();
-			await input.evaluate( element => /** @type {HTMLInputElement} */ (element).setSelectionRange( 1, 4 ) );
+			await input.evaluate( element => {
+				/** @type {HTMLInputElement} */ (element).setSelectionRange( 1, 4, "backward" );
+				element.dispatchEvent( new Event( "input", { bubbles: true } ) );
+			} );
 			assert.deepEqual(
 				await input.evaluate( element => {
 					const edit = /** @type {HTMLInputElement} */ (element);
 					return [ edit === document.activeElement, edit.selectionStart, edit.selectionEnd ];
 				} ),
 				[ true, 1, 4 ]
+			);
+			assert.deepEqual(
+				await observed.evaluate( events => {
+					const edit = events.filter( event => event.kind === "edit" ).at( -1 );
+					if ( !edit ) {
+						throw new Error( "The bridge did not publish the selection" );
+					}
+					return [ edit.start, edit.end, edit.direction ];
+				} ),
+				[ 1, 4, "backward" ],
+				"the bridge keeps normalized endpoints and the browser's active selection direction"
 			);
 			await page.keyboard.press( "Tab" );
 			assert.equal( await input.evaluate( element => element === document.activeElement ), false );

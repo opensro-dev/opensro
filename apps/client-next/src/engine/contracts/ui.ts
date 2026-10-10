@@ -211,7 +211,15 @@ export type UiEvent =
 		alt?: boolean;
 	}
 	| { kind: "hover" | "press"; id: string | null; }
-	| { kind: "edit"; id: string; value: string; start: number; end: number; composing: boolean; }
+	| {
+		kind: "edit";
+		id: string;
+		value: string;
+		start: number;
+		end: number;
+		direction?: "forward" | "backward" | "none";
+		composing: boolean;
+	}
 	| { kind: "focus"; id: string | null; }
 	| { kind: "key"; code: string; shift?: boolean; ctrl?: boolean; };
 /*
