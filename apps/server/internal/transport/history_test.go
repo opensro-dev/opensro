@@ -8,7 +8,6 @@ package transport
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 )
 
@@ -41,9 +40,14 @@ TestDrainClosePreservesReasonForHooksAndMetrics
 ================
 */
 func TestDrainClosePreservesReasonForHooksAndMetrics(t *testing.T) {
-	h := &Hub{}
-	s := &Session{hub: h, done: make(chan struct{}), closeReason: &CloseReason{ByeReasonShutdown}}
-	s.cond = sync.NewCond(&s.mu)
+	h := newHub(testCfg())
+	s, err := h.createSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.closeReason = &CloseReason{ByeReasonShutdown}
+	s.mu.Unlock()
 	var received error
 	h.OnSessionClose(func(_ *Session, cause error) { received = cause })
 	h.closeSession(s, nil)

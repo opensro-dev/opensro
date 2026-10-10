@@ -8,6 +8,7 @@ package transport
 import (
 	"errors"
 	"fmt"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -42,11 +43,7 @@ func (h *Hub) closeSessionFromSend(s *Session, cause error) {
 	if !closed {
 		return
 	}
-	h.closeHooks.Add(1)
-	go func() {
-		defer h.closeHooks.Done()
-		h.runCloseHooks(s, cause)
-	}()
+	go h.runCloseHooks(s, cause)
 }
 
 /*
@@ -107,9 +104,12 @@ func (h *Hub) retireSession(s *Session, cause error) (bool, error) {
 /*
 ================
 runCloseHooks
+
+The winning retirement owns the admission reservation through the final hook.
 ================
 */
 func (h *Hub) runCloseHooks(s *Session, cause error) {
+	defer h.closeHooks.Done()
 	for _, fn := range h.hooks.closeSnapshot() {
 		func() {
 			defer recoverHookPanic(s, "OnSessionClose")

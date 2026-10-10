@@ -542,7 +542,8 @@ func (s *Server) WSAddr() string {
 func (s *Server) Err() <-chan error { return s.errCh }
 
 // Shutdown says BYE to every session, drains them, and closes both
-// listeners. Bounded by ctx.
+// listeners. Context bounds network draining; session hooks must finish
+// before callers release the gameplay resources those hooks use.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	if s.closed {
