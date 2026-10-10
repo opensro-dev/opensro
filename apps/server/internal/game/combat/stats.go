@@ -165,35 +165,7 @@ func PlayerStatsWithModifiers(
 	if character == nil {
 		return out, loadout, fmt.Errorf("combat: missing character snapshot")
 	}
-	level, err := requiredLevel("level", character.Level)
-	if err != nil {
-		return out, loadout, err
-	}
-	// MaxLevel is an optional historical-high-water mark. Current records do
-	// not persist it unless it differs from the normal level projection; the
-	// entered-avatar wire uses Level as its exact fallback (bootstrap/wire.go).
-	// Combat must consume the same canonical value instead of making an
-	// omitted, optional field silently disable every attack.
-	maxLevelSource := character.MaxLevel
-	if maxLevelSource == nil {
-		maxLevelSource = character.Level
-	}
-	maxLevel, err := requiredLevel("maxLevel", maxLevelSource)
-	if err != nil {
-		return out, loadout, err
-	}
-	if maxLevel < level {
-		return out, loadout, fmt.Errorf(
-			"combat: maxLevel %d is below current level %d",
-			maxLevel,
-			level,
-		)
-	}
-	strength, err := requiredStat("strength", character.Strength)
-	if err != nil {
-		return out, loadout, err
-	}
-	intellect, err := requiredStat("intellect", character.Intellect)
+	level, maxLevel, strength, intellect, err := playerSnapshotCore(character)
 	if err != nil {
 		return out, loadout, err
 	}
@@ -352,15 +324,8 @@ func PlayerStatsWithModifiers(
 	if err = graph.ApplyBatch(writes); err != nil {
 		return Stats{}, Loadout{}, err
 	}
-	if block != nil {
-		for _, m := range block.Modifiers {
-			if !m.Used {
-				continue
-			}
-			if _, err = graph.Apply(m.Param, paramkeeper.Channel(m.Channel), m.Source, m.Value); err != nil {
-				return Stats{}, Loadout{}, fmt.Errorf("combat: abnormal write to parameter %d: %w", m.Param, err)
-			}
-		}
+	if err = applyAbnormalModifiers(graph, block); err != nil {
+		return Stats{}, Loadout{}, err
 	}
 	out.graph = graph
 	if err = readParameterStats(graph, &out); err != nil {
