@@ -589,6 +589,11 @@ func (rt *Runtime) relocateReturningPet(division string, c *enterworld.Character
 		keys = append(keys, key)
 	}
 	rt.petMu.Unlock()
+	// The parked transport travels with its trader; its tether follows on
+	// the next pet tick, and the old anchor holds nothing until then.
+	if rt.Worlds != nil {
+		rt.Worlds.ClearTether(simulation.WorldKey(division, c.Name))
+	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i].gid < keys[j].gid })
 	for _, key := range keys {
 		rt.petMu.Lock()

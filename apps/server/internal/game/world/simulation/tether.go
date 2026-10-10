@@ -112,3 +112,18 @@ func (st *WorldStore) TetherOf(key string) (Tether, bool) {
 	tether, ok := st.tethers[key]
 	return tether, ok
 }
+
+/*
+================
+ClearTether
+
+Drops one mover's tether until the next ReplaceTethers: a relocation moves
+the anchor with its owner, so the old anchor must not refuse the first
+steps taken at the destination.
+================
+*/
+func (st *WorldStore) ClearTether(key string) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	delete(st.tethers, key)
+}
