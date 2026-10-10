@@ -327,7 +327,7 @@ resumed: the transport resumed this character's session (world.ts), so
 the entry continues it like the one after a world transfer.
 ================
 		*/
-		bootstrap( value: unknown, resumed = false ) {
+		bootstrap( value: unknown, resumed = false, receivedAtMs = 0 ) {
 			nameTimer = undefined;
 			capeTeams.clear();
 			for (
@@ -344,7 +344,7 @@ the entry continues it like the one after a world transfer.
 			const travel = awaitingTravelBootstrap;
 			entities.bootstrap( value, travel );
 			awaitingTravelBootstrap = false;
-			gameplay.bootstrap( value, travel || resumed );
+			gameplay.bootstrap( value, travel || resumed, receivedAtMs );
 			if ( pendingTravel ) entities.publish( { kind: "travel", travel: pendingTravel } );
 		},
 		receive,

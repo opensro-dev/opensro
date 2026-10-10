@@ -218,6 +218,7 @@ type BootstrapResult struct {
 	EventGuideStateMask  uint32
 	RefObjSnapshot       []RefObjRow
 	RefSkillSnapshot     []SpawnSkillRow
+	SkillCooldowns       []EntrySkillCooldown
 	RefItemSnapshot      []RefItemRow
 	MagicOptionSnapshot  []MagicOptionRow
 	AvatarMagicOptions   []AvatarMagicOptionRow
@@ -269,6 +270,7 @@ type bootstrapSuccessView struct {
 	EventGuideStateMask       uint32                   `json:"eventGuideStateMask"`
 	RefObjSnapshot            []RefObjRow              `json:"refObjSnapshot"`
 	RefSkillSnapshot          []SpawnSkillRow          `json:"refSkillSnapshot"`
+	SkillCooldowns            []EntrySkillCooldown     `json:"skillCooldowns"`
 	RefItemSnapshot           []RefItemRow             `json:"refItemSnapshot"`
 	MagicOptionSnapshot       []MagicOptionRow         `json:"magicOptionSnapshot,omitempty"`
 	AvatarMagicOptions        []AvatarMagicOptionRow   `json:"avatarMagicOptions,omitempty"`
@@ -325,6 +327,10 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 			MaxMP:     DerivedMaxMP(r.Character),
 		}
 	}
+	cooldowns := r.SkillCooldowns
+	if cooldowns == nil {
+		cooldowns = []EntrySkillCooldown{}
+	}
 	return json.Marshal(bootstrapSuccessView{
 		DiagnosticSessionID:       r.DiagnosticSessionID,
 		InventorySlotCount:        inventory.BagEnd(r.Character),
@@ -339,6 +345,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		EventGuideStateMask:       r.EventGuideStateMask,
 		RefObjSnapshot:            r.RefObjSnapshot,
 		RefSkillSnapshot:          r.RefSkillSnapshot,
+		SkillCooldowns:            cooldowns,
 		RefItemSnapshot:           r.RefItemSnapshot,
 		MagicOptionSnapshot:       r.MagicOptionSnapshot,
 		AvatarMagicOptions:        r.AvatarMagicOptions,
