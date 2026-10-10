@@ -186,6 +186,7 @@ import {
 	FORTRESS_ROLE_COMMANDER,
 	type FortressStaff,
 	fortressProductionAction,
+	fortressGrantRole,
 	fortressProductionFactor,
 	fortressProductionMayOperate,
 	fortressProductionPrice,
@@ -4054,8 +4055,9 @@ export function createUi(
 			socialSubject = view.gameplay?.social?.guild?.subject ?? "";
 			socialContents = view.gameplay?.social?.guild?.contents ?? "";
 		} else if ( id === "guild-dialog-close" ) guildDialog = "";
-		else if ( id.startsWith( "guild-role-choice:" ) ) socialAmount = String( 1 << Number( id.slice( 18 ) ) );
-		else if ( id === "guild-sort:126" ) guildNameMode = (guildNameMode + 1) % 3;
+		else if ( id.startsWith( "guild-role-choice:" ) ) {
+			socialAmount = String( fortressGrantRole( Number( id.slice( 18 ) ) ) );
+		} else if ( id === "guild-sort:126" ) guildNameMode = (guildNameMode + 1) % 3;
 		else if ( id.startsWith( "guild-sort:" ) ) {
 			const sort = Number( id.slice( 11 ) );
 			guildDescending = guildSort === sort ? !guildDescending : false;
@@ -6523,12 +6525,11 @@ export function createUi(
 				setPanel( "" );
 				dirty = true;
 			}
-			productionClock = now;
+			productionClock = next.simulationTimeMs ?? now;
 			fortressProductionHud.observe(
 				next.gameplay?.fortress,
 				next.gameplay?.target ?? undefined,
-				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu",
-				now
+				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu"
 			);
 			if ( fortressProductionHud.npc() !== null && panel !== FORTRESS_PRODUCTION_PANEL && canLeavePanel() ) {
 				setPanel( FORTRESS_PRODUCTION_PANEL );
@@ -17400,7 +17401,7 @@ export function createUi(
 									b
 								) => a.id - b.id
 								).indexOf( node ),
-								chosen = Number( socialAmount ) === (1 << index);
+								chosen = Number( socialAmount ) === fortressGrantRole( index );
 							authoredImage( node, mx, my, node.texture.replace( "_off", chosen ? "_on" : "_off" ) );
 							controls.push( {
 								id: "guild-role-choice:" + index,

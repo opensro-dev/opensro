@@ -17,9 +17,7 @@ import {
 	type FortressProductionOrder,
 	type FortressStaff,
 	fortressProductionCount,
-	fortressProductionOrder,
-	fortressProductionRemaining,
-	fortressProductionStaff
+	fortressProductionRemaining
 } from "@/engine/foundation/gameplay/fortress-production";
 
 // CIFFortressMakeItemWnd_OnCreate (65AD70): the list shows seven 32 px rows.
@@ -73,26 +71,26 @@ export function createFortressProductionHud() {
 		refused query opens nothing; the worker reports the refusal.
 		================
 		*/
-		observe( state: FortressState | undefined, target: number | undefined, talking: boolean, nowMs: number ) {
+		observe( state: FortressState | undefined, target: number | undefined, talking: boolean ) {
 			if ( !pending && !open ) return;
 			if ( target !== npc || !talking ) {
 				this.close();
 				return;
 			}
-			const service = state?.service;
-			if ( !service || state?.serviceSequence === seen ) return;
-			seen = state?.serviceSequence ?? 0;
-			if ( fortressProductionStaff( service.action ) !== staff ) return;
-			const next = fortressProductionOrder( order, service, staff, nowMs );
+			const snapshot = state?.production?.[staff];
+			if ( !snapshot ) return;
 			if ( pending ) {
-				pending = false;
-				if ( next === undefined ) {
-					npc = null;
+				const query = snapshot.query;
+				if ( !query || query.sequence <= seen ) return;
+				if ( query.reply.result !== 1 ) {
+					this.close();
 					return;
 				}
+				if ( query.reply.fortress !== fortress ) return;
+				pending = false;
 				open = true;
 			}
-			if ( next !== undefined ) order = next;
+			if ( snapshot.fortress === fortress ) order = snapshot.order;
 		},
 		/*
 		================

@@ -89,10 +89,24 @@ function smithFixture( t, holder, member = { grade: 2, role: 1 } ) {
 	};
 	const answer = service => {
 		const state = f.state.gameplay.fortress;
-		f.state.gameplay.fortress = { ...state, serviceSequence: state.serviceSequence + 1, service };
+		const sequence = state.serviceSequence + 1;
+		f.state.gameplay.fortress = {
+			...state,
+			serviceSequence: sequence,
+			service,
+			production: production.fortressProductionSnapshot( state.production, service, sequence, now )
+		};
 		return step();
 	};
-	return { f, sent, step, answer };
+	const receive = ( hex, receivedAt = now ) => {
+		const next = fortress.fortressPacket( f.state.gameplay.fortress, {
+			opcode: 0xb1e1,
+			payload: Uint8Array.from( Buffer.from( hex, "hex" ) )
+		}, receivedAt );
+		assert.ok( next );
+		f.state.gameplay.fortress = next;
+	};
+	return { f, sent, step, answer, receive };
 }
 
 /*
@@ -215,4 +229,89 @@ test("a refused query opens nothing and leaving the smith closes the window", t 
 	);
 	f.state.gameplay.target = 0;
 	assert.equal( control( step(), "fortress-production-close" ), undefined );
+});
+
+test("two collection replies before one UI observation remove both items", t => {
+	const { f, step, receive } = smithFixture( t, "Holders" );
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
+	// Query: fortress 1, item 9001, two completed items, zero seconds left.
+	receive( "0d010100000001292300000200010000000000000000" );
+	assert.ok( control( step(), "fortress-production-complete" ) );
+	receive( "100101000000292300000100" );
+	receive( "100101000000292300000100" );
+	const shown = step();
+	assert.equal( control( shown, "fortress-production-complete" ), undefined );
+	assert.equal( control( shown, "fortress-production-make:" + ITEM )?.disabled, false );
+});
+
+test("reopening waits for its query despite an earlier mutation refusal", t => {
+	const { f, step, receive } = smithFixture( t, "Holders" );
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
+	receive( "0d010100000000" );
+	step();
+	f.ui.event( { kind: "activate", id: "fortress-production-close" } );
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-production:smith" } );
+	receive( "100209" );
+	assert.equal( control( step(), "fortress-production-close" ), undefined );
+	// A successful query for another fortress cannot open this window.
+	receive( "0d010200000000" );
+	assert.equal( control( step(), "fortress-production-close" ), undefined );
+	receive( "0d010100000000" );
+	// Another service reply in the same drain cannot hide the correct query.
+	receive( "11010100000000" );
+	assert.ok( control( step(), "fortress-production-close" ) );
+});
+
+test("every role dialog choice sends its native role, including clear", t => {
+	const { f, sent, step } = smithFixture( t, "Holders", { grade: 0, role: 1 } );
+	f.state.gameplay.social.guild.members.push( {
+		id: 22,
+		name: "Other",
+		level: 60,
+		grade: 10,
+		permissions: 0,
+		role: 0
+	} );
+	for ( const member of f.state.gameplay.social.guild.members ) Object.assign( member, { grant: "", donated: 0 } );
+	step();
+	f.ui.event( { kind: "activate", id: "open-window:Guild" } );
+	step();
+	f.ui.event( { kind: "activate", id: "social-member:22" } );
+	f.ui.event( { kind: "activate", id: "guild-dialog:role" } );
+	step();
+	for ( const [index, role] of [ 2, 4, 8, 16, 32, 0 ].entries() ) {
+		f.ui.event( { kind: "activate", id: "guild-role-choice:" + index } );
+		const shown = step();
+		assert.equal( control( shown, "guild-role-choice:" + index )?.selected, true );
+		f.ui.event( { kind: "activate", id: "guild-role" } );
+		assert.deepEqual( sent.at( -1 ), { kind: "guild-role", id: 22, role } );
+	}
+});
+
+test("the trainer countdown uses simulation time even when UI time differs", t => {
+	const { f, sent, step, receive } = smithFixture( t, "Holders", { grade: 10, role: 16 } );
+	Object.assign( f.state, { simulationTimeMs: 1000 } );
+	f.state.gameplay.targetCapabilities = 0x4000000;
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-production:trainer" } );
+	assert.deepEqual( sent.at( -1 ), { kind: "fortress-production", gid: SMITH, fortress: 1, action: 0x11 } );
+	// Trainer item 9002, one item, two seconds from simulation time 500.
+	receive( "110101000000012a2300000100000200000000000000", 500 );
+	assert.ok( control( step(), "fortress-production-cancel" ) );
+	assert.equal( control( step( 1000 ), "fortress-production-complete" ), undefined );
+	Object.assign( f.state, { simulationTimeMs: 2500 } );
+	assert.equal( control( step(), "fortress-production-complete" )?.disabled, false );
+	f.ui.event( { kind: "activate", id: "fortress-production-complete" } );
+	assert.deepEqual( sent.at( -1 ), {
+		kind: "fortress-production",
+		gid: SMITH,
+		fortress: 1,
+		action: 0x14,
+		reference: 9002,
+		count: 1,
+		stackLimit: 1
+	} );
 });

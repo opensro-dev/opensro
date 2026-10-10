@@ -12,7 +12,13 @@ the fortress official's protocol: 0x71E1 requests
 
 ===========================================================================
 */
-import { FORTRESS_ROLE_COMMANDER, type FortressForgeItem, fortressForgeCatalog } from "./fortress-production";
+import {
+	FORTRESS_ROLE_COMMANDER,
+	type FortressForgeItem,
+	type FortressProductionState,
+	fortressForgeCatalog,
+	fortressProductionSnapshot
+} from "./fortress-production";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "./system-notices";
 import {
@@ -94,6 +100,7 @@ export interface FortressState {
 	readonly fortresses: readonly FortressRow[];
 	// The smith's and trainer's producible items (fortress-production.ts).
 	readonly forge?: readonly FortressForgeItem[];
+	readonly production?: FortressProductionState;
 	readonly wars: readonly {
 		id: number;
 		name: string;
@@ -174,6 +181,12 @@ export function fortressPacket( state: FortressState, frame: WireFrame, now = 0 
 				...state,
 				service,
 				serviceSequence: (state.serviceSequence ?? 0) + 1,
+				production: fortressProductionSnapshot(
+					state.production,
+					service,
+					(state.serviceSequence ?? 0) + 1,
+					now
+				),
 				...(service.result === 1 && (service.action === 3 || service.action === 4) ?
 					{ staffFlags: service.flags } :
 					{})

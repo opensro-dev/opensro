@@ -27,7 +27,7 @@ export const FORTRESS_PRODUCTION_MAX_COUNT = 20;
 // (GuildData_FindSmithMember 825DB0: 8; GuildData_FindTrainerMember 825D40:
 // 0x10) and the x87 factor it applies.
 // GuildMember_IsFortressRole1 (827DB0): the fortress commander, the role
-// the guild leader grants (0x765F). Native gates the manager's and the
+// the guild master holds. Native gates the manager's and the
 // staff's windows on it, never on the guild grade.
 export const FORTRESS_ROLE_COMMANDER = 0x01;
 const ROLE_SMITH = 0x08;
@@ -70,6 +70,67 @@ export interface FortressProductionOrder {
 	readonly count: number;
 	readonly done: boolean;
 	readonly endsAtMs: number;
+}
+
+/*
+================
+FortressProductionSnapshot
+
+One staff member's latest order and query result. Fold replies in the
+worker: the UI may observe only once after several packets have arrived.
+The deadline uses simulation time, like fortressPacket's injected clock.
+================
+*/
+export interface FortressProductionSnapshot {
+	readonly fortress?: number;
+	readonly order: FortressProductionOrder | null;
+	readonly query?: { readonly sequence: number; readonly reply: FortressServiceReply; };
+}
+
+export type FortressProductionState = Readonly<Partial<Record<FortressStaff, FortressProductionSnapshot>>>;
+
+/*
+================
+fortressProductionSnapshot
+
+Keep query completion separately from mutations, so a later refusal or
+another staff answer cannot hide the query from the next UI snapshot.
+================
+*/
+export function fortressProductionSnapshot(
+	state: FortressProductionState | undefined,
+	reply: FortressServiceReply,
+	sequence: number,
+	nowMs: number
+): FortressProductionState | undefined {
+	const staff = fortressProductionStaff( reply.action );
+	if ( !staff ) return state;
+	const previous = state?.[staff];
+	const query = reply.action === fortressProductionAction( staff, FORTRESS_PRODUCTION_QUERY );
+	if ( reply.result !== 1 && !query ) return state;
+	const current = previous?.fortress === reply.fortress ? previous?.order ?? null : null;
+	const order = fortressProductionOrder( current, reply, staff, nowMs );
+	return {
+		...state,
+		[staff]: {
+			...previous,
+			order: order === undefined ? previous?.order ?? null : order,
+			...(reply.result === 1 ? { fortress: reply.fortress } : {}),
+			...(query ? { query: { sequence, reply } } : {})
+		}
+	};
+}
+
+/*
+================
+fortressGrantRole
+
+5F4D70 maps six radio choices to deputy, battle manager, smith, trainer,
+engineer and no role. The master's commander role is never grantable.
+================
+*/
+export function fortressGrantRole( index: number ): number {
+	return Number.isInteger( index ) && index >= 0 && index < 5 ? 2 ** (index + 1) : 0;
 }
 
 /*
