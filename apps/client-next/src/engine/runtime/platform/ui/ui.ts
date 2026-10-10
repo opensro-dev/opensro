@@ -25,6 +25,9 @@ const INPUT_FONT_PIXELS = 12;
 const TOUCH_HOLD_MS = 500;
 const TOUCH_HOLD_SLOP_PIXELS = 8;
 const TOUCH_CLICK_HISTORY = 32;
+// A browser that sends both the Mac Ctrl+click contextmenu and a click sends
+// them together; a later Ctrl+click on the slot is a new gesture.
+const MAC_CTRL_CLICK_WINDOW_MS = 1000;
 /*
 ================
 configureCredentialHints
@@ -443,7 +446,35 @@ export function createUiBridge(
 			}
 		}
 	}
-	root.addEventListener( "click", event => activatePrimary( event.target, event, event.detail > 0 ), {
+	// Port-only (macOS input, no native counterpart): a Mac turns Ctrl+click
+	// into the system's secondary click. The browser presses the primary
+	// button with ctrlKey, sends contextmenu and no click, so the CTRL item
+	// actions (quick sale, storage moves) would never reach activatePrimary.
+	// A primary Ctrl press followed by contextmenu on the same control is that
+	// gesture; a true right press is button 2 and never arms it.
+	let macCtrlPress: Element | null = null;
+	let macCtrlActivation: { element: Element; at: number; } | null = null;
+	root.addEventListener( "pointerdown", event => {
+		macCtrlPress = event.button === 0 && event.ctrlKey ? current( event.target )?.element ?? null : null;
+	}, { signal: lifetime.signal } );
+	root.addEventListener( "contextmenu", event => {
+		const pressed = macCtrlPress;
+		macCtrlPress = null;
+		const slot = current( event.target );
+		if ( !pressed || !event.ctrlKey || slot?.element !== pressed ) return;
+		macCtrlActivation = { element: slot.element, at: event.timeStamp };
+		activatePrimary( event.target, event, true );
+	}, { signal: lifetime.signal } );
+	root.addEventListener( "click", event => {
+		// A browser that also sends the click must not run the action twice.
+		const repeat = macCtrlActivation;
+		macCtrlActivation = null;
+		if (
+			repeat && event.ctrlKey && current( event.target )?.element === repeat.element &&
+			event.timeStamp - repeat.at < MAC_CTRL_CLICK_WINDOW_MS
+		) return;
+		activatePrimary( event.target, event, event.detail > 0 );
+	}, {
 		signal: lifetime.signal
 	} );
 	// Owner-authorized port-only mobile taps do not depend on Chrome emitting
