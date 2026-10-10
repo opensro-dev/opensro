@@ -251,7 +251,8 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 detourWaypoint
 
 The next waypoint toward goal when the straight segment (straight, the
-caller's constrained result) cannot reach it. A kept route serves while its
+caller's constrained result) cannot reach it; a clear one ends any route
+at once. A kept route serves while its
 goal stays within petDetourGoalSlack, or for one petDetourRetryMs after it was
 planned; reached waypoints are dropped. Otherwise a clipped straight segment
 asks the planner, at most once per petDetourRetryMs: after a plan, a failed
@@ -263,6 +264,12 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 		return Spawn{}, false
 	}
 	route := &p.detour
+	// A clear straight segment ends any detour: the route was only ever a way
+	// around what that segment could not cross.
+	if straight.fault == nil && WorldDistance2D(straight.reached, goal) < petDetourArrived {
+		route.points = nil
+		return Spawn{}, false
+	}
 	// A route serves while its goal stays within the slack, and for one retry
 	// window after it was planned however far the goal runs: a fleeing goal
 	// re-plans at most once per petDetourRetryMs.
@@ -275,9 +282,6 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 		}
 	}
 	route.points = nil
-	if straight.fault == nil && WorldDistance2D(straight.reached, goal) < petDetourArrived {
-		return Spawn{}, false
-	}
 	if nowMs < route.retryAt {
 		return Spawn{}, false
 	}

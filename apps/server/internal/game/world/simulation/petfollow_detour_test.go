@@ -152,3 +152,32 @@ func TestFleeingGoalReplansAtTheMonsterPace(t *testing.T) {
 		t.Fatalf("a fleeing goal re-planned %d times in one retry window, want 1", plans)
 	}
 }
+
+/*
+================
+TestClearStraightPathEndsTheDetour
+
+Once the wall no longer stands between the pet and its owner, the pet
+heads straight for the owner at once, not along the rest of its route.
+================
+*/
+func TestClearStraightPathEndsTheDetour(t *testing.T) {
+	p := NewPetFollower(55, Spawn{RegionID: detourRegion, X: 100, Z: 100})
+	owner := Spawn{RegionID: detourRegion, X: 130, Z: 100}
+	p.SetRoutePlanner(func(from, goal Spawn) []Spawn {
+		return []Spawn{{RegionID: detourRegion, X: 100, Z: 170}, {RegionID: detourRegion, X: 130, Z: 170}, goal}
+	})
+	p.Approach(owner, detourSpeed, 100, detourReach, detourWall)
+	if p.detour.points == nil {
+		t.Fatal("the blocked pet took no detour")
+	}
+	// The wall is gone: every segment is clear now.
+	open := func(_, to Spawn) (Spawn, *MoveError) { return to, nil }
+	p.Approach(owner, detourSpeed, 200, detourReach, open)
+	if p.detour.points != nil {
+		t.Fatal("the pet kept its detour although the straight path is clear")
+	}
+	if goal := p.world.Spawn; goal.Z != 100 {
+		t.Fatalf("the pet still heads for the route at %+v, not straight for its owner", goal)
+	}
+}
