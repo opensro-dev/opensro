@@ -1987,7 +1987,8 @@ state here before a command can claim a native wire conversation.
 					const selection = targeting.state();
 					const target = readEntity( selection.target ?? 0 );
 					if (
-						!localGid || !local || local.mountedOn || local.appearanceState?.[0] === 2 ||
+						// 695420 action 1003 does not test the mount: a rider may Trace.
+						!localGid || !local || local.appearanceState?.[0] === 2 ||
 						teleportMode === 1 ||
 						combat.guidedActive( localGid, now ) || selection.targetPending || !target ||
 						target.kind !== "player" ||

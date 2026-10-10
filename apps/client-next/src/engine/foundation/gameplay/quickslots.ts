@@ -128,7 +128,8 @@ export function quickSlotCommand(
 		}
 		if ( id === 1002 && state.target ) return { kind: "attack", gid: state.target };
 		if ( id === HELPER_ACTION_ID ) return { kind: "helper-mark" };
-		if ( id === TRACE_ACTION_ID && state.target && !state.targetPending && !mountedOn ) {
+		// 695420 action 1003 refuses only a blocked interface, not a rider.
+		if ( id === TRACE_ACTION_ID && state.target && !state.targetPending ) {
 			return { kind: "action-command", id };
 		}
 	}

@@ -87,6 +87,33 @@ func TestFollowPursuesHoldsAndResumesWithoutCombat(t *testing.T) {
 
 /*
 ================
+TestFollowAdmitsARider
+
+A rider may Trace: 4ACD7A refuses only attack and skill commands while
+mounted. The ridden pursuit moves the player's own world state.
+================
+*/
+func TestFollowAdmitsARider(t *testing.T) {
+	rt, clock, actor, target := followFixture(t)
+	gid, _ := enterworld.CosObjectIDForCharacter(actor)
+	actor.ActiveCOS = &enterworld.CharacterCOS{GID: gid, CurrentHP: 100, Summoned: true, Mounted: true}
+	result := rt.HandleTargetInteract(testDivision, actor, wire.FollowTarget{TargetGid: enterworld.ObjectIDForCharacter(target)}.Encode())
+	if result.DiagnosticRefusal != "" || len(result.Frames) == 0 || result.Frames[0].Opcode != simulation.OpMovementAck {
+		t.Fatalf("mounted follow admission = %+v", result)
+	}
+	intents := rt.combatIntentSnapshot()
+	if len(intents) != 1 || !intents[0].FollowTarget {
+		t.Fatalf("mounted follow intents = %+v", intents)
+	}
+	world := rt.Worlds.Snapshot(simulation.WorldKey(testDivision, actor.Name),
+		func() simulation.WorldState { return simulation.SeedWorldState(actor) })
+	if world.MoveSegment.ArrivesAtMs <= clock.NowMs() {
+		t.Fatalf("rider did not start the pursuit: %+v", world.MoveSegment)
+	}
+}
+
+/*
+================
 TestFollowInvalidationRetiresTheCommand
 ================
 */

@@ -64,9 +64,8 @@ func (rt *Runtime) beginFollow(division string, character *enterworld.Character,
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) || teleportBlocks(snapshot.NativeTeleportMode) {
 		return OpResult{DiagnosticRefusal: "follow-character-unavailable"}
 	}
-	if mountedOnCOS(snapshot) {
-		return mountedCommandRefusal()
-	}
+	// A rider may Trace: 4ACD7A refuses only attack (1) and skill (4)
+	// commands while mounted, never this family (3).
 	if stand, seated := rt.standForSeatedCommand(division, character, nowMs); seated {
 		return stand
 	}
@@ -101,7 +100,7 @@ port's explicit world-instance boundary to those native object checks.
 */
 func (rt *Runtime) followActors(actor *enterworld.Character, intent basicAttackIntent, nowMs int64) (*enterworld.Character, simulation.CombatSpacing, bool) {
 	var spacing simulation.CombatSpacing
-	if actor == nil || actor.DeletePending || !enterworld.CharacterAlive(actor) || teleportBlocks(actor.NativeTeleportMode) || mountedOnCOS(actor) {
+	if actor == nil || actor.DeletePending || !enterworld.CharacterAlive(actor) || teleportBlocks(actor.NativeTeleportMode) {
 		return nil, spacing, false
 	}
 	target := rt.characterSnapshot(intent.DivisionID, rt.findCharacterByGid(intent.DivisionID, intent.TargetGid))

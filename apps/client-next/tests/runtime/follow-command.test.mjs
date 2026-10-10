@@ -59,12 +59,25 @@ test("Trace uses the same native request through direct action and quickslot", (
 		assert.deepEqual( [ ...frame.payload ], [ 1, 3, 1, 7, 0, 0, 0 ] );
 	}
 	assert.equal( sent.length, 2 );
-	assert.equal( quickSlotCommand( { slot: 1, kind: 0x4a, payload: TRACE_ACTION_ID }, state, 123 ), null );
+	game.dispose();
+});
+
+test("a rider traces as a walker does (695420 does not test the mount)", () => {
+	const { game, sent, local } = followFixture();
+	const state = game.take();
+	assert.ok( state );
+	const command = quickSlotCommand( { slot: 1, kind: 0x4a, payload: TRACE_ACTION_ID }, state, 123 );
+	assert.deepEqual( command, { kind: "action-command", id: TRACE_ACTION_ID } );
+	assert.ok( command );
+	const frame = game.command( command, 100, undefined, { ...local, mountedOn: 123 } );
+	assert.ok( frame );
+	assert.deepEqual( [ frame.opcode, ...frame.payload ], [ 0x72cd, 1, 3, 1, 7, 0, 0, 0 ] );
+	assert.equal( sent.length, 1 );
 	game.dispose();
 });
 
 test("Trace rejects missing, dead, non-player and self targets and unavailable actors", () => {
-	for ( const reason of [ "missing", "dead target", "monster", "self", "dead actor", "mounted" ] ) {
+	for ( const reason of [ "missing", "dead target", "monster", "self", "dead actor" ] ) {
 		const { game, sent, local, target, entities } = followFixture();
 		let actor = local;
 		if ( reason === "missing" ) entities.delete( target.gid );
@@ -72,7 +85,6 @@ test("Trace rejects missing, dead, non-player and self targets and unavailable a
 		if ( reason === "monster" ) entities.set( target.gid, { ...target, kind: "monster" } );
 		if ( reason === "self" ) entities.set( target.gid, local );
 		if ( reason === "dead actor" ) actor = { ...local, appearanceState: [ 2 ] };
-		if ( reason === "mounted" ) actor = { ...local, mountedOn: 123 };
 		assert.equal(
 			game.command( { kind: "action-command", id: TRACE_ACTION_ID }, 100, undefined, actor ),
 			null,
