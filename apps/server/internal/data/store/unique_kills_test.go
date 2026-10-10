@@ -58,7 +58,7 @@ func TestCommunityUpgradeAddsTheUniqueKillTable(t *testing.T) {
 	if before != after {
 		t.Fatal("the upgrade rewrote the character")
 	}
-	kills, err := reopened.UniqueKills(testDivision, 0)
+	kills, err := reopened.UniqueKillsAfter(testDivision, 0)
 	if err != nil || len(kills) != 0 {
 		t.Fatalf("fresh unique-kill table %+v %v", kills, err)
 	}
@@ -73,7 +73,7 @@ func TestCommunityUpgradeAddsTheUniqueKillTable(t *testing.T) {
 TestUniqueKillsAppendInOrderAndSurviveReopen
 
 Each kill takes the division's next sequence; a reopen validates and reads
-them back oldest first, filtered by time.
+them back oldest first, and a reader holding a sequence gets only newer ones.
 ================
 */
 func TestUniqueKillsAppendInOrderAndSurviveReopen(t *testing.T) {
@@ -94,13 +94,13 @@ func TestUniqueKillsAppendInOrderAndSurviveReopen(t *testing.T) {
 	s.Close()
 	reopened := openTest(t, dir, newTestClock())
 	defer reopened.Close()
-	all, err := reopened.UniqueKills(testDivision, 0)
+	all, err := reopened.UniqueKillsAfter(testDivision, 0)
 	if err != nil || len(all) != 2 || all[0].KillerName != "Kekw" || all[1].Seq != 2 {
 		t.Fatalf("kills after reopen %+v %v", all, err)
 	}
-	recent, err := reopened.UniqueKills(testDivision, 1500)
+	recent, err := reopened.UniqueKillsAfter(testDivision, 1)
 	if err != nil || len(recent) != 1 || recent[0].RefObjID != 1982 {
-		t.Fatalf("kills since 1500 %+v %v", recent, err)
+		t.Fatalf("kills after sequence 1 %+v %v", recent, err)
 	}
 }
 

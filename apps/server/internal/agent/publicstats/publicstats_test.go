@@ -63,10 +63,10 @@ func newFixture() *fixture {
 func (f *fixture) service() *Service {
 	return New(Sources{
 		Characters: func() []*domain.Character { return f.chars },
-		Kills: func(sinceMs int64) ([]domain.UniqueKill, error) {
+		Kills: func(afterSeq int64) ([]domain.UniqueKill, error) {
 			var out []domain.UniqueKill
 			for _, k := range f.kills {
-				if k.AtMs >= sinceMs {
+				if k.Seq > afterSeq {
 					out = append(out, k)
 				}
 			}
@@ -408,5 +408,84 @@ func TestSchemaCoversEveryResponseField(t *testing.T) {
 		if !reflect.DeepEqual(schema, typeSchema(endpoint.typ)) {
 			t.Fatal("schema generation is not deterministic")
 		}
+	}
+}
+
+/*
+================
+TestDistinctRequestsShareOneSourceCopy
+
+A burst of different names and searches (each its own cache key) copies the
+characters and reads the kills once per snapshot period, not once per key;
+a privacy write drops the copy so the next read sees the change.
+================
+*/
+func TestDistinctRequestsShareOneSourceCopy(t *testing.T) {
+	f := newFixture()
+	s := privacyService(f, testWriteToken)
+	characterReads, killReads := 0, 0
+	characters, kills := s.src.Characters, s.src.Kills
+	s.src.Characters = func() []*domain.Character { characterReads++; return characters() }
+	s.src.Kills = func(afterSeq int64) ([]domain.UniqueKill, error) { killReads++; return kills(afterSeq) }
+	for _, path := range []string{
+		"/public/v1/characters/Kekw", "/public/v1/characters/Lune", "/public/v1/characters/Nobody1",
+		"/public/v1/characters/Nobody2", "/public/v1/characters?q=k", "/public/v1/characters?q=lu",
+		"/public/v1/uniques", "/public/v1/leaderboards/uniques?period=week", "/public/v1/firsts",
+	} {
+		get(t, s, path, nil)
+	}
+	if characterReads != 1 || killReads != 1 {
+		t.Fatalf("burst copied characters %d and read kills %d times, want 1 and 1", characterReads, killReads)
+	}
+	f.now = f.now.Add(snapshotMaxAge)
+	get(t, s, "/public/v1/characters/Ghost", nil)
+	if characterReads != 2 {
+		t.Fatalf("characters copied %d times after the period, want 2", characterReads)
+	}
+	put(s, "/v1/accounts/alpha/characters/Kekw/hidden", testWriteToken, `{"hidden":true}`)
+	get(t, s, "/public/v1/characters/Ghost2", nil)
+	if characterReads != 3 {
+		t.Fatalf("characters copied %d times after a privacy write, want 3", characterReads)
+	}
+}
+
+/*
+================
+TestKillListCatchesUpWithoutLosingOldKills
+
+The shared list pages through every kill on the first read, then asks only
+for sequences after the last one held: all-time answers keep the oldest
+kills however many follow, and a new kill appears after the period.
+================
+*/
+func TestKillListCatchesUpWithoutLosingOldKills(t *testing.T) {
+	f := newFixture()
+	s := f.service()
+	var asked []int64
+	kills := s.src.Kills
+	s.src.KillPage = 1
+	s.src.Kills = func(afterSeq int64) ([]domain.UniqueKill, error) {
+		asked = append(asked, afterSeq)
+		page, err := kills(afterSeq)
+		if len(page) > s.src.KillPage {
+			page = page[:s.src.KillPage]
+		}
+		return page, err
+	}
+	var firsts FirstsResponse
+	get(t, s, "/public/v1/firsts", &firsts)
+	if len(asked) != 4 || asked[0] != 0 || asked[3] != 3 {
+		t.Fatalf("first read asked after %v, want 0,1,2,3", asked)
+	}
+	f.kills = append(f.kills, domain.UniqueKill{Seq: 4, AtMs: 4000, RefObjID: uruchiRef, KillerCharID: 2, KillerName: "Lune"})
+	f.now = f.now.Add(snapshotMaxAge)
+	asked = nil
+	var feed KillsResponse
+	get(t, s, "/public/v1/uniques/kills?limit=100", &feed)
+	if len(asked) != 2 || asked[0] != 3 {
+		t.Fatalf("catch-up asked after %v, want 3 then 4", asked)
+	}
+	if len(feed.Kills) != 4 {
+		t.Fatalf("feed holds %d kills, want all 4", len(feed.Kills))
 	}
 }

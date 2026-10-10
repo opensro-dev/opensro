@@ -84,3 +84,20 @@ func TestSetPublicHiddenChecksTheOwnerAndPersists(t *testing.T) {
 		t.Fatal("the privacy flag did not survive a reopen")
 	}
 }
+
+/*
+================
+TestKillAfterCloseIsDroppedNotPanicking
+
+A kill that reaches the hook after Close is dropped: the recorder never
+sends on its closed queue, whatever order shutdown runs in.
+================
+*/
+func TestKillAfterCloseIsDroppedNotPanicking(t *testing.T) {
+	api := &publicAPI{kills: make(chan domain.UniqueKill, 1), done: make(chan struct{})}
+	close(api.done)
+	if err := api.Close(); err != nil {
+		t.Fatal(err)
+	}
+	api.enqueue(domain.UniqueKill{RefObjID: 1954})
+}

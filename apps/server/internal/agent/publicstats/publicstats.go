@@ -59,6 +59,10 @@ const (
 	rulesMaxAge      = 300 * time.Second
 )
 
+// snapshotMaxAge is how long the shared character and kill copies serve
+// every answer: the shortest answer period, so no answer is staler than it.
+const snapshotMaxAge = uniquesMaxAge
+
 // Request bounds.
 const (
 	defaultKillLimit   = 50
@@ -84,8 +88,11 @@ type Sources struct {
 	// Characters returns detached copies of every live (not deleted)
 	// character of the shard's division.
 	Characters func() []*domain.Character
-	// Kills returns the division's recorded unique kills since sinceMs.
-	Kills func(sinceMs int64) ([]domain.UniqueKill, error)
+	// Kills returns the division's recorded unique kills with a sequence
+	// above afterSeq, oldest first; fewer than KillPage means caught up.
+	Kills func(afterSeq int64) ([]domain.UniqueKill, error)
+	// KillPage is the most kills one Kills call returns (store.UniqueKillPage).
+	KillPage int
 	// Uniques returns every unique's live state (MonsterState.UniqueStates).
 	Uniques func() []simulation.UniqueState
 	// UniqueName returns a unique's display name, or "" for its codename.
@@ -113,6 +120,25 @@ type Sources struct {
 
 /*
 ================
+snapshot
+
+The source copies every answer shares (views.go loadRoster, allKills). Per
+answer caching alone keys on the request, so each new name or search would
+copy the whole shard under the store's read lock; these copies are taken at
+most once per snapshotMaxAge however many distinct requests arrive. Guarded
+by Service.mu, which every build holds.
+================
+*/
+type snapshot struct {
+	roster      roster
+	rosterUntil time.Time
+	kills       []domain.UniqueKill
+	killsUntil  time.Time
+	lastSeq     int64
+}
+
+/*
+================
 cacheEntry
 ================
 */
@@ -134,6 +160,7 @@ type Service struct {
 
 	mu    sync.Mutex
 	cache map[string]cacheEntry
+	snap  snapshot
 
 	server   *http.Server
 	listener net.Listener

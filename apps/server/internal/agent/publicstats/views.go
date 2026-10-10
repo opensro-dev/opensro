@@ -36,9 +36,27 @@ type roster struct {
 /*
 ================
 loadRoster
+
+The shared roster: one copy of the shard's characters per snapshotMaxAge,
+whatever names and searches the visitors ask for. Called only while cached
+holds s.mu.
 ================
 */
 func (s *Service) loadRoster() roster {
+	now := s.now()
+	if s.snap.rosterUntil.IsZero() || !now.Before(s.snap.rosterUntil) {
+		s.snap.roster = s.copyRoster()
+		s.snap.rosterUntil = now.Add(snapshotMaxAge)
+	}
+	return s.snap.roster
+}
+
+/*
+================
+copyRoster
+================
+*/
+func (s *Service) copyRoster() roster {
 	out := roster{byID: map[int64]*domain.Character{}, byName: map[string]*domain.Character{}}
 	if s.src.Characters == nil {
 		return out
@@ -90,13 +108,56 @@ func (s *Service) uniqueName(ref uint32, codename string) string {
 /*
 ================
 allKills
+
+The kills at or after sinceMs from the shared kill list: every kill ever
+recorded, oldest first, caught up at most once per snapshotMaxAge by
+reading only the sequences after the last one held. Called only while
+cached holds s.mu.
 ================
 */
 func (s *Service) allKills(sinceMs int64) ([]domain.UniqueKill, error) {
 	if s.src.Kills == nil {
 		return nil, nil
 	}
-	return s.src.Kills(sinceMs)
+	now := s.now()
+	if s.snap.killsUntil.IsZero() || !now.Before(s.snap.killsUntil) {
+		if err := s.catchUpKills(); err != nil {
+			return nil, err
+		}
+		s.snap.killsUntil = now.Add(snapshotMaxAge)
+	}
+	var out []domain.UniqueKill
+	for _, kill := range s.snap.kills {
+		if kill.AtMs >= sinceMs {
+			out = append(out, kill)
+		}
+	}
+	return out, nil
+}
+
+/*
+================
+catchUpKills
+
+Appends every kill recorded since the last read, page by page.
+================
+*/
+func (s *Service) catchUpKills() error {
+	for {
+		page, err := s.src.Kills(s.snap.lastSeq)
+		if err != nil {
+			return err
+		}
+		for _, kill := range page {
+			if kill.Seq > s.snap.lastSeq {
+				s.snap.kills = append(s.snap.kills, kill)
+				s.snap.lastSeq = kill.Seq
+			}
+		}
+		if len(page) == 0 || s.src.KillPage <= 0 || len(page) < s.src.KillPage {
+			return nil
+		}
+	}
 }
 
 /*

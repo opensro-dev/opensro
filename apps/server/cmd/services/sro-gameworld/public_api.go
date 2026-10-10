@@ -50,6 +50,11 @@ type publicAPI struct {
 	kills   chan domain.UniqueKill
 	done    chan struct{}
 	once    sync.Once
+
+	// mu guards closed: the hook never sends on the queue once Close has
+	// closed it, whatever order shutdown runs in.
+	mu     sync.Mutex
+	closed bool
 }
 
 /*
@@ -67,11 +72,7 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 		if division != shard {
 			return
 		}
-		select {
-		case api.kills <- kill:
-		default:
-			log.WithField("unique", kill.RefObjID).Warn("public api: unique-kill queue full; kill not recorded")
-		}
+		api.enqueue(kill)
 	}
 
 	addr := strings.TrimSpace(os.Getenv(publicstats.EnvAddr))
@@ -92,7 +93,8 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 			})
 			return out
 		},
-		Kills: func(sinceMs int64) ([]domain.UniqueKill, error) { return authority.UniqueKills(shard, sinceMs) },
+		Kills:    func(afterSeq int64) ([]domain.UniqueKill, error) { return authority.UniqueKillsAfter(shard, afterSeq) },
+		KillPage: store.UniqueKillPage,
 		Uniques: func() []simulation.UniqueState {
 			if monsters == nil {
 				return nil
@@ -209,6 +211,28 @@ func readPublicWriteToken() string {
 
 /*
 ================
+enqueue
+
+Never blocks the tick: a full queue or a closed recorder drops the kill
+with a warning.
+================
+*/
+func (api *publicAPI) enqueue(kill domain.UniqueKill) {
+	api.mu.Lock()
+	defer api.mu.Unlock()
+	if api.closed {
+		log.WithField("unique", kill.RefObjID).Warn("public api: recorder closed; kill not recorded")
+		return
+	}
+	select {
+	case api.kills <- kill:
+	default:
+		log.WithField("unique", kill.RefObjID).Warn("public api: unique-kill queue full; kill not recorded")
+	}
+}
+
+/*
+================
 recordKills
 
 Commits each queued kill until Close drains the queue.
@@ -236,7 +260,10 @@ func (api *publicAPI) Close() error {
 		if api.service != nil {
 			err = api.service.Close()
 		}
+		api.mu.Lock()
+		api.closed = true
 		close(api.kills)
+		api.mu.Unlock()
 		<-api.done
 	})
 	return err

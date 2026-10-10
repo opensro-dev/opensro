@@ -13,8 +13,9 @@ out (the provisioning API's two guards). The character must belong to the
 account in the path; any other name answers 404, exactly like an unknown
 one, so the write cannot be used to probe who owns what.
 
-A successful write empties the answer cache: a player who hides is gone
-from every read at once, not after the cache period.
+A successful write empties the answer cache and the shared snapshot: a
+player who hides is gone from every read at once, not after the cache
+period.
 
 ===========================================================================
 */
@@ -27,6 +28,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // EnvTokenPath names the file holding the write token (the provisioning
@@ -88,6 +90,8 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 		}
 		s.mu.Lock()
 		s.cache = map[string]cacheEntry{}
+		// The roster holds the flag; the kill list does not and stays.
+		s.snap.roster, s.snap.rosterUntil = roster{}, time.Time{}
 		s.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})

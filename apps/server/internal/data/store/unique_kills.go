@@ -33,8 +33,9 @@ CREATE TABLE IF NOT EXISTS unique_kills (
 );
 `
 
-// maxUniqueKillRead bounds one read of the newest kills.
-const maxUniqueKillRead = 10000
+// UniqueKillPage is the most kills one UniqueKillsAfter read returns; a
+// reader catching up pages until a read returns fewer.
+const UniqueKillPage = 10000
 
 /*
 ================
@@ -120,21 +121,23 @@ func (s *Store) RecordUniqueKill(division string, kill domain.UniqueKill) (domai
 
 /*
 ================
-UniqueKills
+UniqueKillsAfter
 
-Every kill of the division since sinceMs (0 for all), oldest first, at most
-maxUniqueKillRead of the newest.
+The division's kills with a sequence above afterSeq, oldest first, at most
+UniqueKillPage of them. Readers keep the last sequence they saw and ask
+only for what is new, so all-time answers never lose their oldest rows and
+no read grows with the table. Takes the read lock: a reader never holds
+off a game commit.
 ================
 */
-func (s *Store) UniqueKills(division string, sinceMs int64) ([]domain.UniqueKill, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (s *Store) UniqueKillsAfter(division string, afterSeq int64) ([]domain.UniqueKill, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.db == nil {
 		return nil, fmt.Errorf("unique kill: store unavailable")
 	}
-	rows, err := s.db.Query(`SELECT seq, record FROM (
-  SELECT seq, record FROM unique_kills WHERE division = ? ORDER BY seq DESC LIMIT ?
-) ORDER BY seq`, division, maxUniqueKillRead)
+	rows, err := s.db.Query(`SELECT seq, record FROM unique_kills
+WHERE division = ? AND seq > ? ORDER BY seq LIMIT ?`, division, afterSeq, UniqueKillPage)
 	if err != nil {
 		return nil, err
 	}
@@ -150,9 +153,7 @@ func (s *Store) UniqueKills(division string, sinceMs int64) ([]domain.UniqueKill
 		if err != nil {
 			return nil, err
 		}
-		if kill.AtMs >= sinceMs {
-			out = append(out, kill)
-		}
+		out = append(out, kill)
 	}
 	return out, rows.Err()
 }
