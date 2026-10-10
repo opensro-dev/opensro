@@ -283,17 +283,50 @@ func newBootstrapDependencies(
 
 /*
 ================
-configureStoreReadiness
+readinessProgress
+
+What readiness asks of the simulation: nil while ticks keep finishing
+(simulation.Ticker.Progress).
 ================
 */
-func configureStoreReadiness(
+type readinessProgress interface {
+	Progress(now time.Time) error
+}
+
+/*
+================
+configureReadiness
+
+Installs readyCheck as the transport's readiness probe. Liveness
+(/transport/healthz) stays independent of it.
+================
+*/
+func configureReadiness(
 	ts *transport.Server,
 	authorityStore *store.Store,
 	ready *readiness.Gate,
+	progress readinessProgress,
 ) {
-	ts.SetReadyCheck(func() error {
+	ts.SetReadyCheck(readyCheck(authorityStore, ready, progress))
+}
+
+/*
+================
+readyCheck
+
+The probe answers from atomics only: the process gate, the tick progress
+and the store's published health. It never takes the store or gameplay
+locks, so a stalled tick or a writer queued behind a reader yields a prompt
+not-ready instead of a probe that waits with them (#570).
+================
+*/
+func readyCheck(authorityStore *store.Store, ready *readiness.Gate, progress readinessProgress) func() error {
+	return func() error {
 		if !ready.Ready() {
 			return fmt.Errorf("process is not accepting traffic")
+		}
+		if err := progress.Progress(time.Now()); err != nil {
+			return err
 		}
 		health := authorityStore.Health()
 		if health.FailedWrites < storeReadyFailedWritesFloor {
@@ -305,7 +338,7 @@ func configureStoreReadiness(
 			health.FailingSince.Format(time.RFC3339),
 			health.LastError,
 		)
-	})
+	}
 }
 
 /*

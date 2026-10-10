@@ -230,6 +230,7 @@ func (s *Store) recordWriteFailureLocked(label string, err error) {
 	}
 	s.health.FailedWrites++
 	s.health.LastError = fmt.Sprintf("%s: %v", label, err)
+	s.publishHealthLocked()
 	if s.health.FailedWrites == 1 || s.now().Sub(s.lastFailLogAt) >= failureLogInterval {
 		s.lastFailLogAt = s.now()
 		log.Errorf("store: PERSIST FAILING (%d failure(s) since %s) - op %q failed to commit; earlier failed mutations may remain in memory: %v",
@@ -251,6 +252,7 @@ func (s *Store) recordWriteSuccessLocked() {
 	s.health.LastError = ""
 	s.health.FailingSince = time.Time{}
 	s.health.LastCommitAt = s.now()
+	s.publishHealthLocked()
 }
 
 // BackupTo writes a transactionally consistent snapshot of the LAST

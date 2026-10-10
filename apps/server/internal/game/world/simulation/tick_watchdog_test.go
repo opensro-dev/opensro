@@ -180,3 +180,42 @@ func TestTickStallExitFromEnv(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestTickProgressReportsAStallAndRecovers
+
+Readiness's tick signal (#570), on synthetic clocks: not ready before the
+first tick, ready while ticks finish, not ready when one runs past the
+bound or none finishes within it, and ready again once one finishes.
+================
+*/
+func TestTickProgressReportsAStallAndRecovers(t *testing.T) {
+	const bound = 5 * time.Second
+	var watch tickWatch
+	at := time.Unix(1000, 0)
+	if watch.progress(at, bound) == nil {
+		t.Fatal("ready before any tick finished")
+	}
+	watch.begin(at)
+	watch.end(at.Add(100 * time.Millisecond))
+	if err := watch.progress(at.Add(time.Second), bound); err != nil {
+		t.Fatalf("finishing ticks reported %v", err)
+	}
+	// A tick stuck in a hook.
+	watch.begin(at.Add(2 * time.Second))
+	if err := watch.progress(at.Add(4*time.Second), bound); err != nil {
+		t.Fatalf("a short tick reported %v", err)
+	}
+	if watch.progress(at.Add(8*time.Second), bound) == nil {
+		t.Fatal("a tick running 6 s left the world ready")
+	}
+	watch.end(at.Add(9 * time.Second))
+	if err := watch.progress(at.Add(9*time.Second), bound); err != nil {
+		t.Fatalf("the finished tick did not recover readiness: %v", err)
+	}
+	// The ticker stopped ticking altogether.
+	if watch.progress(at.Add(15*time.Second), bound) == nil {
+		t.Fatal("no tick for 6 s left the world ready")
+	}
+}

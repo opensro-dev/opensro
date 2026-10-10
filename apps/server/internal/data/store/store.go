@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -229,6 +230,9 @@ type Store struct {
 
 	health        Health
 	lastFailLogAt time.Time
+	// healthView is health as last published (publishHealthLocked), read by
+	// Health without s.mu so a readiness probe never queues behind a writer.
+	healthView atomic.Pointer[Health]
 }
 
 // failureLogInterval rate-limits repeat write-failure logs (first failure
@@ -423,6 +427,7 @@ func (s *Store) recoverFromDBBak(cause error) error {
 	}
 	s.adoptDB(db, loaded)
 	s.health.LoadedFromBak = true
+	s.publishHealthLocked()
 	log.Errorf("store: RECOVERED FROM %s (cause: %v) - the store is running on the previous generation (some recent progress may be missing); investigate the quarantine artifacts", DBBakFileName, cause)
 	return nil
 }

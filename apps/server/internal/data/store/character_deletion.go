@@ -80,6 +80,7 @@ func (s *Store) ReapMaturedDeletions() []string {
 		}
 		s.health.FailedWrites++
 		s.health.LastError = fmt.Sprintf("delete-reap: %v", err)
+		s.publishHealthLocked()
 		log.Errorf("store: delete-reap failed (%v); %d matured reservation(s) stay LIVE and pending (fail-closed) - the next trigger retries", err, len(victims))
 		return nil
 	}

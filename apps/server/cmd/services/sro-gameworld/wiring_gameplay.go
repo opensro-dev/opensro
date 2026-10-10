@@ -40,7 +40,6 @@ import (
 	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
-	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/transport"
 )
 
@@ -88,7 +87,6 @@ func newGameplayPlane(
 	devPaths enterworld.DevPaths,
 	characterRoster *enterworld.Roster,
 	worldAuthorityDir string,
-	ready *readiness.Gate,
 	authoredAreas *worldarea.Catalog,
 	textdata *enterworld.TextdataCatalogs,
 ) (*gameplayPlane, error) {
@@ -170,7 +168,6 @@ func newGameplayPlane(
 	items.Ground.Restore(authorityStore.GroundSnapshotForRestore())
 	authorityStore.AttachGround(items.Ground)
 
-	configureStoreReadiness(ts, authorityStore, ready)
 	logAuthorityReady(authorityStore, deps)
 	appendGroundObjectRows(deps, items)
 

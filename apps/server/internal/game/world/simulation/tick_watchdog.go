@@ -45,8 +45,12 @@ const (
 	// DefaultTickStallReport is ten tick budgets: far past any overrun the
 	// metric already counts, short enough to catch a stall while it lasts.
 	DefaultTickStallReport = time.Second
-	tickStallPoll          = 250 * time.Millisecond
-	tickStallStackBytes    = 1 << 20
+	// TickStallUnready is how long a tick may run, or the world go without
+	// finishing one, before readiness reports the world unready (#570).
+	// Longer than the report, so a single slow tick only logs.
+	TickStallUnready    = 5 * time.Second
+	tickStallPoll       = 250 * time.Millisecond
+	tickStallStackBytes = 1 << 20
 	// tickStallDumpMaxBytes bounds the dump's stack buffer; it doubles from
 	// tickStallStackBytes until every goroutine fits.
 	tickStallDumpMaxBytes = 64 << 20
@@ -89,6 +93,8 @@ type tickWatch struct {
 	phase    atomic.Int32
 	hook     atomic.Uintptr
 	reported atomic.Int64
+	// endNs is when the last tick finished; zero until the first one has.
+	endNs atomic.Int64
 }
 
 /*
@@ -107,7 +113,8 @@ func (w *tickWatch) begin(now time.Time) {
 tickWatch.end
 ================
 */
-func (w *tickWatch) end() {
+func (w *tickWatch) end(now time.Time) {
+	w.endNs.Store(now.UnixNano())
 	w.startNs.Store(0)
 	w.phase.Store(tickPhaseIdle)
 	w.hook.Store(0)
@@ -277,6 +284,43 @@ func TickStallExitFromEnv() time.Duration {
 		return DefaultTickStallExit
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+/*
+================
+tickWatch.progress
+
+nil while the simulation makes progress at now: no tick has run longer than
+after, and one finished within after. Atomics only, so a stalled tick or a
+contended lock cannot delay the answer.
+================
+*/
+func (w *tickWatch) progress(now time.Time, after time.Duration) error {
+	if start := w.startNs.Load(); start != 0 {
+		if elapsed := time.Duration(now.UnixNano() - start); elapsed >= after {
+			return fmt.Errorf("simulation tick running for %v", elapsed.Round(time.Millisecond))
+		}
+		return nil
+	}
+	end := w.endNs.Load()
+	if end == 0 {
+		return fmt.Errorf("simulation has not finished a tick")
+	}
+	if idle := time.Duration(now.UnixNano() - end); idle >= after {
+		return fmt.Errorf("no simulation tick finished for %v", idle.Round(time.Millisecond))
+	}
+	return nil
+}
+
+/*
+================
+Progress
+
+The readiness signal: nil while ticks keep finishing (TickStallUnready).
+================
+*/
+func (t *Ticker) Progress(now time.Time) error {
+	return t.watch.progress(now, TickStallUnready)
 }
 
 /*

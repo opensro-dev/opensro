@@ -282,13 +282,34 @@ func (s *Store) maxCharIDLocked(divisionID string) int64 {
 	return max
 }
 
-// Health returns the observable write condition. Never call from inside
-// a Mutate closure.
+/*
+================
+Health
+
+The observable write condition as last published. It takes no store lock:
+the readiness probe calls it, and a probe queued behind a waiting writer
+could not answer at all (#570). Safe from anywhere, Mutate closures
+included.
+================
+*/
 func (s *Store) Health() Health {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := s.health
-	return out
+	if view := s.healthView.Load(); view != nil {
+		return *view
+	}
+	return Health{}
+}
+
+/*
+================
+publishHealthLocked
+
+Publishes a copy of s.health for Health. Every writer of s.health holds
+s.mu and calls this after its change.
+================
+*/
+func (s *Store) publishHealthLocked() {
+	view := s.health
+	s.healthView.Store(&view)
 }
 
 // MetaView copies the counters for boot logs and tests. Never call from

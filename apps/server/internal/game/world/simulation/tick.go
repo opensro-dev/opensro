@@ -453,7 +453,7 @@ prepared division work on the fixed shard workers.
 func (t *Ticker) RunTick(nowMs int64) {
 	defer recoverTickPanic("tick")
 	t.watch.begin(time.Now())
-	defer t.watch.end()
+	defer func() { t.watch.end(time.Now()) }()
 	t.clock.begin(t.timingNow())
 	defer t.observePhases()
 
@@ -477,7 +477,7 @@ runScheduledTick
 func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []chan shardTickBatch) {
 	defer recoverTickPanic("scheduled tick")
 	t.watch.begin(time.Now())
-	defer t.watch.end()
+	defer func() { t.watch.end(time.Now()) }()
 	t.clock.begin(t.timingNow())
 	defer t.observePhases()
 
