@@ -31,6 +31,7 @@ import { decodeMessageTips, type MessageTip } from "@/engine/foundation/ui/messa
 import type { AssetOwner } from "@/engine/contracts/assets";
 import { decodeAuthoredLayout, type AuthoredLayout } from "@/engine/foundation/ui/authored-layout";
 import { decodeCosReferences, type CosReference } from "@/engine/foundation/ui/cos-command";
+import { decodeCommandTable } from "@/engine/foundation/ui/debug-commands";
 // Skill catalogue rows decoded per HUD step: about 2.5 ms of a frame, so the
 // 27,835-row catalogue settles in under 30 frames.
 const TOOLTIP_ROWS_PER_STEP = 1024;
@@ -62,6 +63,8 @@ interface HudData {
 	// levelgold.txt column 2 by level: the trade scale's basis (649050).
 	readonly tradeGoldBases: Readonly<Record<number, number>>;
 	readonly mallNotify: MallNotify;
+	// config\command.txt: the debug console's command names by id (68D9C0).
+	readonly commandTable: ReadonlyMap<string, number>;
 	readonly jobExpThresholds: JobExpThresholds;
 	readonly extended: readonly AuthoredLayout[];
 	readonly countries: Readonly<Record<number, number>>;
@@ -255,7 +258,8 @@ export function createHudResources(
 			"/assets/data/skillMasteryData.json",
 			"/assets/data/teleportData.json",
 			"/assets/data/cosPresentation.json",
-			"/assets/data/mall-notify.json"
+			"/assets/data/mall-notify.json",
+			"/assets/config/command.txt"
 		],
 		states: Load[] = paths.map( () => ({ kind: "idle" }) );
 	let data: HudData | null = null;
@@ -305,7 +309,7 @@ export function createHudResources(
 						changed = true;
 						try {
 							if ( r.kind !== "bytes" ) throw Error( "HUD resource unavailable: " + paths[i] );
-							const raw = i === layouts.length + 4 ?
+							const raw = i === layouts.length + 4 || i === layouts.length + 16 ?
 								null :
 								JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( r.buffer ) );
 							let value: unknown;
@@ -335,7 +339,8 @@ export function createHudResources(
 										warm.add( entry.publicPath );
 									}
 								}
-							} else if ( i === layouts.length + 15 ) value = decodeMallNotify( raw );
+							} else if ( i === layouts.length + 16 ) value = decodeCommandTable( r.buffer );
+							else if ( i === layouts.length + 15 ) value = decodeMallNotify( raw );
 							else if ( i === layouts.length + 14 ) value = decodeCosReferences( raw );
 							else if ( i === layouts.length + 13 ) value = decodePortalCatalog( raw );
 							else if ( i === layouts.length + 12 ) value = decodeTooltipMasteries( raw );
@@ -411,6 +416,7 @@ export function createHudResources(
 					),
 					tips: values[layouts.length + 2] as readonly MessageTip[],
 					mallNotify: values[layouts.length + 15] as MallNotify,
+					commandTable: values[layouts.length + 16] as ReadonlyMap<string, number>,
 					targets: Object.fromEntries(
 						targetNames.map( ( name, i ) => [ name, values[7 + i] as AuthoredLayout ] )
 					),

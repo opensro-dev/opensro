@@ -509,6 +509,14 @@ import {
 	MESSAGE_TILE,
 	PARTY_OPTION
 } from "@/engine/foundation/ui/party-proposal";
+import {
+	DEBUG_COMMAND_DEBUG,
+	DEBUG_COMMAND_MESSAGE_CLEAR,
+	DEBUG_COMMAND_NULL,
+	DEBUG_COMMAND_PLAYER_COUNT,
+	debugCommand,
+	type DebugCommand
+} from "@/engine/foundation/ui/debug-commands";
 import { messageBox } from "@/engine/foundation/ui/message-box";
 import { resourceErrorLines } from "@/engine/foundation/ui/resource-error";
 import { disconnectDialog } from "@/engine/foundation/ui/disconnect-dialog";
@@ -643,6 +651,8 @@ export function createUi(
 	const experimental = createExperimentalHud();
 	let consolePhase: 0 | 1 | 2 | 3 = 0, consoleY = -112, consoleLast = 0, consoleText = "", gmObserved = 0;
 	let consoleRows: string[] = [], consoleHistory: string[] = [], consoleHistoryIndex = 0;
+	// +0x7BC, the /Debug flag: the native debug-message switch (690C40 case 0).
+	let debugMessages = false;
 	let video = defaultVideoOptions(), videoDraft = video, videoScroll = 0, videoCombo = VIDEO_COMBO_CLOSED;
 	let bindings = defaultInputOptions(), bindingDraft = bindings, bindingSelected = -1, bindingScroll = 0;
 	let sight: SightMode = 0, sightDraft: SightMode = 0;
@@ -1914,6 +1924,35 @@ export function createUi(
 	}
 	/*
 	================
+	runDebugCommand
+
+	CGInterface_OnCommandMessage (690C40) for the console family. The other
+	command.txt families (camera, weather, time, render toggles) are not
+	ported yet and leave the line as typed.
+	================
+	*/
+	function runDebugCommand( command: DebugCommand ) {
+		switch ( command.id ) {
+			case DEBUG_COMMAND_DEBUG:
+				// Case 0 flips +0x7BC and reports the new state.
+				debugMessages = !debugMessages;
+				appendConsoleLine( debugMessages ? "DebugMsg On" : "DebugMsg Off" );
+				break;
+			case DEBUG_COMMAND_MESSAGE_CLEAR:
+				// Case 1 empties the console's lines, the command's echo included.
+				consoleRows = [];
+				break;
+			case DEBUG_COMMAND_NULL:
+				// Port-only, not native: case 4 writes through a null pointer to
+				// crash the client on purpose; the port ignores the line.
+				break;
+			case DEBUG_COMMAND_PLAYER_COUNT:
+				// Id 0 is below the 691CC4 table: 690C40 does nothing with it.
+				break;
+		}
+	}
+	/*
+	================
 	focusAtEnd
 	================
 	*/
@@ -2491,7 +2530,12 @@ export function createUi(
 				appendConsoleLine( consoleText );
 				consoleHistory = [ ...consoleHistory.slice( -199 ), consoleText ];
 				consoleHistoryIndex = consoleHistory.length;
-				sendGameplay( { kind: "gm-command", line: consoleText } );
+				// 50F260 tries a GM command, then the command.txt table. Their names
+				// are disjoint (the table lookup is case-sensitive), so the table
+				// match decides which owner takes the line.
+				const command = debugCommand( hud.data()?.commandTable ?? new Map(), consoleText );
+				if ( command ) runDebugCommand( command );
+				else sendGameplay( { kind: "gm-command", line: consoleText } );
 				consoleText = "";
 				selection = [ 0, 0 ];
 				focusRequest = { id: "gm-input", revision: ++focusRevision, caret: 0 };
