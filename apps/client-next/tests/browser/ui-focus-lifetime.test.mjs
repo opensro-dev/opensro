@@ -66,7 +66,10 @@ test(
 			);
 			assert.deepEqual(
 				await observed.evaluate( events => {
-					const edit = events.findLast( event => event.kind === "edit" );
+					const edit = events.filter( event => event.kind === "edit" ).at( -1 );
+					if ( !edit ) {
+						throw new Error( "The bridge did not publish the selection" );
+					}
 					return [ edit.start, edit.end, edit.direction ];
 				} ),
 				[ 1, 4, "backward" ],
