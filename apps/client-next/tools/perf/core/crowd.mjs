@@ -43,7 +43,9 @@ async function connectPeer( session, character ) {
 	endpoint.pathname = endpoint.pathname.replace( /\/$/, "" ) + "/transport/ws";
 	const socket = new WebSocket( endpoint );
 	socket.binaryType = "arraybuffer";
-	const evidence = { character, frames: 0, ready: false, closed: false };
+	// dead: gids seen dying (0x3122 life channel 0 = dead 2); a crowd that
+	// draws no kills of its own sees only peers die (server-tick-bench.mjs).
+	const evidence = { character, frames: 0, ready: false, closed: false, dead: new Set() };
 	try {
 		await new Promise( ( resolve, reject ) => {
 			const timer = setTimeout( () => reject( Error( "Crowd peer admission timed out" ) ), ADMISSION_TIMEOUT_MS );
@@ -61,6 +63,14 @@ async function connectPeer( session, character ) {
 				try {
 					const frame = codec.decode( new Uint8Array( event.data ) );
 					evidence.frames++;
+					if (
+						frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 0 &&
+						frame.payload[5] === 2
+					) {
+						evidence.dead.add(
+							new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true )
+						);
+					}
 					if ( frame.opcode === 2 ) {
 						codec.welcome( frame.payload );
 						socket.send( codec.encode( codec.enterWorld( session.divisionId, character, enter ) ) );
@@ -81,7 +91,12 @@ async function connectPeer( session, character ) {
 				}
 			};
 		} );
-		return { evidence, close: () => socket.close() };
+		return {
+			evidence,
+			close: () => socket.close(),
+			// A scenario's own frames after admission (server-tick-bench.mjs).
+			send: ( opcode, payload ) => socket.send( codec.encode( { opcode, payload } ) )
+		};
 	} catch ( error ) {
 		socket.close();
 		throw error;
@@ -119,18 +134,36 @@ function createLoginGate() {
 
 /*
 ================
+crowdGridSpot
+
+Where peer index stands: a four-wide grid, 15 units apart, starting 35
+units past the fixture's start along z.
+================
+*/
+export function crowdGridSpot( fixture, index ) {
+	return {
+		...fixture.start,
+		x: fixture.start.x + index % 4 * 15,
+		z: fixture.start.z + 35 + Math.floor( index / 4 ) * 15
+	};
+}
+
+/*
+================
 createCrowd
 
 Provisioning is explicitly loopback-only and requires the existing local
 authority token. Scratch actors form a grid inside the observer's sector.
+loadoutFor( index ), when given, names each peer's level, intellect and
+skills (server-tick-bench.mjs).
 ================
 */
-export async function createCrowd( { count, fixture, provisioningUrl, tokenPath, journalPath } ) {
+export async function createCrowd( { count, fixture, provisioningUrl, tokenPath, journalPath, loadoutFor } ) {
 	assert.ok( Number.isInteger( count ) && count > 0 && count <= MAX_PEERS );
 	const url = new URL( provisioningUrl );
 	assert.ok( url.protocol === "http:" && [ "127.0.0.1", "localhost", "[::1]" ].includes( url.hostname ) );
 	const token = (await readFile( tokenPath, "utf8" )).trim();
-	const accounts = [], peers = [], characters = [];
+	const accounts = [], peers = [], characters = [], byIndex = new Map();
 	const prefix = randomBytes( 3 ).toString( "hex" );
 	const login = createLoginGate();
 	/*
@@ -233,14 +266,14 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 			timeoutMs: ADMISSION_TIMEOUT_MS,
 			fixture: {
 				...fixture,
-				start: {
-					...fixture.start,
-					x: fixture.start.x + index % 4 * 15,
-					z: fixture.start.z + 35 + Math.floor( index / 4 ) * 15
-				}
+				// A load scenario gives each peer its own learned skills.
+				...(loadoutFor ? { loadout: loadoutFor( index ) } : {}),
+				start: crowdGridSpot( fixture, index )
 			}
 		} );
-		peers.push( await connectPeer( session, character ) );
+		const peer = await connectPeer( session, character );
+		peers.push( peer );
+		byIndex.set( index, peer );
 		console.log( `[crowd] admitted ${peers.length}/${count}` );
 	};
 	try {
@@ -249,7 +282,12 @@ export async function createCrowd( { count, fixture, provisioningUrl, tokenPath,
 		const settled = await Promise.allSettled( Array.from( { length: count }, ( _, index ) => admit( index ) ) );
 		const failed = settled.filter( result => result.status === "rejected" );
 		if ( failed.length ) throw failed[0].reason;
-		return { peers: peers.map( peer => peer.evidence ), close };
+		return {
+			peers: peers.map( peer => peer.evidence ),
+			close,
+			// send( index, opcode, payload ) writes one frame as peer index.
+			send: ( index, opcode, payload ) => byIndex.get( index )?.send( opcode, payload )
+		};
 	} catch ( error ) {
 		let failure = error instanceof Error ? error : new Error( String( error ) );
 		try {
