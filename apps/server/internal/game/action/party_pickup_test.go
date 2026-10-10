@@ -331,3 +331,50 @@ func TestPetPickupRunsThePartyItemShare(t *testing.T) {
 		t.Fatalf("the pet's gold was not split: %d -> %d, %d -> %d", pickerBefore, goldOf(picker), peerBefore, goldOf(peer))
 	}
 }
+
+/*
+================
+TestPetPickupShareKeepsThePetAdmissions
+
+The share runs only after the pet path's own admissions. Another player's
+reserved drop stays on the ground whatever the rotation names, and a
+mounted pet takes nothing for the party.
+================
+*/
+func TestPetPickupShareKeepsThePetAdmissions(t *testing.T) {
+	rt, picker, peer, gid, heap := sharedPetFixture(t)
+	pick := func(item grounditem.Item) {
+		payload, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: item.Gid}.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rt.HandleItemMove(testDivision, picker, payload)
+	}
+	peerBag := len(peer.MissionInventory)
+	potion := grounditem.Item{RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
+		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1}
+	const strangerJID = 0x7777777
+	reserved := potion
+	reserved.OwnerJID, reserved.DroppedAt = strangerJID, rt.Now()
+	for range 2 {
+		pick(heap(reserved))
+	}
+	gold := grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", TypeFlags: wire.PackTypeFlags(3, 3, 5, 2), GoldAmount: 101,
+		OwnerJID: strangerJID, DroppedAt: rt.Now()}
+	pickerGold, peerGold := goldOf(picker), goldOf(peer)
+	pick(heap(gold))
+	if len(rt.Ground.All(testDivision)) != 3 || len(peer.MissionInventory) != peerBag || goldOf(picker) != pickerGold ||
+		goldOf(peer) != peerGold || len(picker.ActiveCOS.Container.Rows) != 0 {
+		t.Fatalf("the pet took a stranger's reserved drop: %d left on the ground", len(rt.Ground.All(testDivision)))
+	}
+	for _, item := range rt.Ground.All(testDivision) {
+		rt.Ground.Remove(testDivision, item.Gid)
+	}
+	picker.ActiveCOS.Mounted = true
+	for range 2 {
+		pick(heap(potion))
+	}
+	if len(rt.Ground.All(testDivision)) != 2 || len(peer.MissionInventory) != peerBag {
+		t.Fatalf("a mounted pet shared a pickup: %d left on the ground", len(rt.Ground.All(testDivision)))
+	}
+}

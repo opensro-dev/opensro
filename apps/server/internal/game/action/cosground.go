@@ -86,7 +86,7 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {
 		sharedOwner = item.OwnerJID
 	}
-	if shared, handled := rt.sharePetPickup(division, c, q, at, now); handled {
+	if shared, handled := rt.sharePetPickup(division, c, q, petPickupAt{at: at, sharedOwner: sharedOwner, now: now}); handled {
 		return shared
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
@@ -190,6 +190,20 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 
 /*
 ================
+petPickupAt
+
+Where and when the pet stands for its pickup, and the reserved owner the
+party lets it take from (0 when none).
+================
+*/
+type petPickupAt struct {
+	at          simulation.Spawn
+	sharedOwner uint32
+	now         time.Time
+}
+
+/*
+================
 sharePetPickup
 
 A pet's pickup runs the party's item share as the owner's own pickup does:
@@ -200,15 +214,30 @@ gold the party splits, the grant is the player pickup's (the recipient's
 inventory, the gold shares), played by the pet. Otherwise the pet keeps
 its own pickup into its bag, which the v1.150 client defines: its pickup
 result table (77DD10) reports a full pet bag (B4). Trade goods never
-share (525DC0's first branch). The rotation is asked once, here.
+share (525DC0's first branch). The rotation is asked once, here, after the
+pet path's own admissions: a live, unmounted pet with its container, a live
+owner, and a drop the owner may take (its own, unreserved, or reserved to a
+member the party shares with).
 ================
 */
-func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wire.ItemMoveRequest, at simulation.Spawn, now time.Time) (OpResult, bool) {
+func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wire.ItemMoveRequest, p petPickupAt) (OpResult, bool) {
+	at, now := p.at, p.now
 	if q.MovementType != wire.MoveTypeCosPickup {
 		return OpResult{}, false
 	}
 	item, found := rt.characterGround(division, c, q.GroundGID)
 	if !found || item.TradeOwner != "" {
+		return OpResult{}, false
+	}
+	if item.OwnerJID != 0 && item.OwnerJID != enterworld.ObjectIDForCharacter(c) && item.OwnerJID != p.sharedOwner {
+		return OpResult{}, false
+	}
+	admitted := false
+	rt.deps.Read(division, func() {
+		_, _, valid := rt.ownedCOSContainer(c, q.CosGID)
+		admitted = valid && !c.CompanionByGID(q.CosGID).Mounted && enterworld.CurrentHP(c) != 0
+	})
+	if !admitted {
 		return OpResult{}, false
 	}
 	from := grounditem.Point{RegionID: at.RegionID, X: float32(at.X), Z: float32(at.Z)}
