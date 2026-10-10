@@ -22,13 +22,16 @@ const (
 	// maxBlockRatePercent is the admission ceiling for a br value, timed or
 	// passive: a percent of the whole block chance. Every shipped br is
 	// within it (passives 2..10).
-	maxBlockRatePercent        = 100
-	tagTimedStrength           = 0x73747269
-	tagTimedIntellect          = 0x696e7469
-	tagTimedLink               = 0x6c6e6b73
-	tagTimedLinkedThreat       = 0x6c6b6167
-	tagTimedLinkPerTarget      = 0x6c6b7332
-	tagTimedLinkedDamage       = 0x6c6b6468
+	maxBlockRatePercent   = 100
+	tagTimedStrength      = 0x73747269
+	tagTimedIntellect     = 0x696e7469
+	tagTimedLink          = 0x6c6e6b73
+	tagTimedLinkedThreat  = 0x6c6b6167
+	tagTimedLinkPerTarget = 0x6c6b7332
+	tagTimedLinkedDamage  = 0x6c6b6468
+	// tagTimedHunt is hntp (+0x48C, no words): the link's recipient is
+	// tracked for its source (SkillCombat_EngageSkill 593757).
+	tagTimedHunt               = 0x686e7470
 	tagTimedRequireNot         = 0x7265716e
 	tagTimedMaxHP              = 0x687069
 	tagTimedAttack             = 0x61706175
@@ -276,6 +279,11 @@ type SkillEffectLink struct {
 	PerTarget                           bool
 	Mana                                bool
 	ManaHPPercent, ManaPercent, ManaCap uint32
+	// Hunt is hntp: while the link lives, 593757 attaches the recipient's
+	// action records to a task of the source (CActionTargetContext_SetCoordinates
+	// 4F9A90), so the source keeps receiving the recipient's position
+	// (Tag Point, Hunting Point).
+	Hunt bool
 }
 
 // The hr, ru and summ instruction tags (big-endian ASCII, as the program
@@ -354,9 +362,12 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// the link binds two players (acceptTimedTargetEffect refuses anything
 	// else with 0x3006), so those bytes only widen 58D7A0's player check;
 	// they are tolerated on a targeted lkdh row alone.
-	damageLink := false
+	// Tag Point and Hunting Point (hntp) name Enemy_P (column 30) on the
+	// same targeted shape: the mark lands on any player 58D7A0 admits.
+	damageLink, huntLink := false, false
 	for i := 0; i < program.Len(); i++ {
 		damageLink = damageLink || program.Instruction(i).Tag == tagTimedLinkedDamage
+		huntLink = huntLink || program.Instruction(i).Tag == tagTimedHunt
 	}
 	for i := 0; i < program.Len(); i++ {
 		if op := program.Instruction(i); op.Tag == tagEfr {
@@ -377,7 +388,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		if targeted && (col == 21 || col == 22 || col == 23 || col == 26 || col == 27 || col == 28) {
 			continue
 		}
-		if targeted && damageLink && (col == 29 || col == 30) {
+		if targeted && (damageLink || huntLink) && (col == 29 || col == 30) {
 			continue
 		}
 		if result.Area.Present && col == 21 {
@@ -518,6 +529,10 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			linkDamage = true
 			linkDamageWords = [3]uint32{op.Arguments[0], op.Arguments[1], op.Arguments[2]}
+		case tagTimedHunt:
+			if op.Count != 0 || !targeted {
+				return
+			}
 		case tagTimedDamageToMP:
 			if result.DamageToMP || op.Count != 1 || op.Arguments[0] > maxDamageToMPPercent {
 				return
@@ -621,6 +636,14 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			return
 		}
 	}
+	if huntLink {
+		// A mark carries no writes, threat or MP share beside it.
+		if !result.Link.Present || linkThreat || linkDamage || result.Strength.Present || result.Intellect.Present ||
+			result.Block.Present || result.IncomingReduction || len(attributeTags) != 0 {
+			return
+		}
+		result.Link.Hunt = true
+	}
 	if linkThreat || linkDamage {
 		if !result.Link.Present {
 			return
@@ -660,7 +683,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	}
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
 		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Parry || result.Range || result.Hawk.Present ||
-		result.Link.Present && (result.Link.Threat || result.Link.Mana) || result.Preemptive.Present ||
+		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt) || result.Preemptive.Present ||
 		result.DamageReturn.Present ||
 		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0)
 	result.Targeted = targeted

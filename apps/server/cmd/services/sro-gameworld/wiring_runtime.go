@@ -55,6 +55,10 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 		func(nowMs int64) []simulation.DivisionFrames {
 			return game.items.AdvanceSkillObjects(nowMs, ticker.Source.SnapshotSessions())
 		},
+		// A marked player's moves reach its hunter out of sight (hntp).
+		func(nowMs int64) []simulation.DivisionFrames {
+			return game.items.AdvanceHuntingPoints(nowMs, ticker.Source.SnapshotSessions())
+		},
 		game.questMarkerTick(),
 		func(nowMs int64) []simulation.DivisionFrames {
 			game.parties.ExpireInvitations(nowMs)

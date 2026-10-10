@@ -16,8 +16,11 @@ type Link struct {
 	// ManaPercent and ManaCap are lkdh's MP share of the recipient's dealt
 	// damage and its per-hit ceiling (Mana Switch); zero means no share.
 	ManaHPPercent, ManaPercent, ManaCap uint32
-	ExpiresAtMs, StartedAtMs            int64
-	ClientCancelable                    bool
+	// Hunt is hntp: the source keeps receiving the target's position while
+	// the link lives (Tag Point, Hunting Point; action/huntingpoint.go).
+	Hunt                     bool
+	ExpiresAtMs, StartedAtMs int64
+	ClientCancelable         bool
 	// TargetModifiers are the recipient half's parameter writes (594AC0 in
 	// mode 2: stri/inti). 594F53 skips them for the source half, so a link
 	// never carries source modifiers.
