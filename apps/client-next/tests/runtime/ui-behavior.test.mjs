@@ -2555,6 +2555,50 @@ test("GPU COS bag leaves a quick transfer's slot to the worker in either directi
 	}
 });
 
+test("Ctrl+click moves an item across the open pet bag in either direction", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: false,
+			inventory: [ { slot: 13, refObjId: 8, quantity: 30 } ],
+			cosRecords: [ {
+				gid: 7,
+				refObjId: 102,
+				name: "Pet",
+				hp: 100,
+				dead: false,
+				status: 4,
+				inventory: [ { slot: 0, refObjId: 8, quantity: 40 } ]
+			} ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "cos-bag" } );
+		f.ui.step( state, ++now );
+		// Pet to bag, as From Pet does with no slot chosen.
+		f.ui.event( { kind: "activate", id: "cos-slot:0", ctrl: true } );
+		f.ui.step( state, ++now );
+		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: false, source: 0 } );
+		// Bag to pet, as To Pet does with no slot chosen.
+		f.ui.event( { kind: "activate", id: "cos-player:13", ctrl: true } );
+		f.ui.step( state, ++now );
+		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: true, source: 13 } );
+		// An empty slot sends nothing.
+		const count = sent.length;
+		f.ui.event( { kind: "activate", id: "cos-slot:3", ctrl: true } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, count );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("world camera snapshots retain idle HUD layout while gameplay, resize and tip deadlines invalidate it", () => {
 	const f = uiFixture();
 	let reads = 0;
