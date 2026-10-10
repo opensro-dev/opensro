@@ -184,8 +184,9 @@ func TestStatusCastAppliesStatusWithoutDamage(t *testing.T) {
 ================
 TestStatusCastCatalogShape
 
-Lightning Impact centres on its caster; Mana Drain, which names only
-players, stays refused; programs that also carry att remain attacks.
+Lightning Impact centres on its caster; Mana Drain and Mana Drought,
+which name only players, are status casts whose area selects players
+alone (select 8); programs that also carry att remain attacks.
 ================
 */
 func TestStatusCastCatalogShape(t *testing.T) {
@@ -194,8 +195,13 @@ func TestStatusCastCatalogShape(t *testing.T) {
 	if !ok || !impact.StatusCast || impact.TargetRequired || impact.OffensiveArea.Shape != 1 || impact.OffensiveArea.Radius != 120 {
 		t.Fatalf("caster-centred Lightning Impact: %+v %q", impact.OffensiveArea, impact.OffenseRefusal)
 	}
-	if drain, _ := source.SkillByCodename("SKILL_EU_WIZARD_COLDA_MANADRY_A_01"); drain.StatusCast {
-		t.Fatal("Mana Drain (Enemy_P only) admitted against monsters")
+	if drain, _ := source.SkillByCodename("SKILL_EU_WIZARD_COLDA_MANADRY_A_01"); !drain.StatusCast || drain.Targets.EnemyM ||
+		!drain.Targets.EnemyP || drain.OffensiveArea.Radius != 0 {
+		t.Fatalf("Mana Drain: status=%v area=%+v %q", drain.StatusCast, drain.OffensiveArea, drain.OffenseRefusal)
+	}
+	if drought, _ := source.SkillByCodename("SKILL_EU_WIZARD_COLDA_MANADRY_B_01"); !drought.StatusCast ||
+		drought.OffensiveArea.Shape != 2 || drought.OffensiveArea.Radius != 80 || drought.OffensiveArea.Select != 8 {
+		t.Fatalf("Mana Drought: status=%v area=%+v %q", drought.StatusCast, drought.OffensiveArea, drought.OffenseRefusal)
 	}
 	bolt, ok := source.SkillByCodename("SKILL_EU_WIZARD_COLDA_POINT_A_01")
 	if !ok || bolt.StatusCast || !bolt.Attack.Present || !bolt.DirectOffensePinned {
@@ -415,5 +421,46 @@ func TestPoisonFieldRefusesAnotherWeapon(t *testing.T) {
 		if after, _ := rt.Monsters.Get(testDivision, target.Gid); after.Abnormal != nil && after.Abnormal.Slots[abnormal.Poison].Active {
 			t.Fatal("refused Poison Field poisoned a monster")
 		}
+	}
+}
+
+/*
+================
+TestManaDrainBurnsAHostilePlayer
+
+Mana Drain names players only (Enemy_P) and carries Combustion (csmp)
+and its aggression, no att: cast at a hostile player, it lands the status
+and deals no damage.
+================
+*/
+func TestManaDrainBurnsAHostilePlayer(t *testing.T) {
+	rt, _, c, victim := newPvpPair(t)
+	skill := shippedOffense(t, "SKILL_EU_WIZARD_COLDA_MANADRY_A_01")
+	index, _ := abnormal.SourceIndex(0x63736d70)
+	skill.Abnormal.Params[index].Args[1] = 100
+	rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+	c.RaceIndex = testInt64(enterworld.RaceEurope)
+	c.ModelCodename = "CHAR_EU_MAN_NOBLE"
+	c.Skills = []uint32{skill.ID}
+	c.Intellect = testInt64(2000)
+	c.CurrentMP = testInt64(10000)
+	weapon := rt.deps.ItemReferences().(staticItemSource)[c.MissionInventory[0].Codename]
+	weapon.TypeIDs[3] = int64(skill.RequiredWeaponKinds[0])
+	c.MissionInventory[0].TypeFlags = weapon.TypeFlags()
+	// The victim carries a copy of the same equipment row.
+	victim.MissionInventory[0].TypeFlags = weapon.TypeFlags()
+	rt.CombatRoll = func() (uint32, error) { return 10, nil }
+	hp := *victim.CurrentHP
+
+	cast := wire.SkillAction{ActionId: skill.ID, HasTarget: true, TargetGid: enterworld.ObjectIDForCharacter(victim)}
+	out := rt.HandleTargetInteract(testDivision, c, cast.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	if *victim.CurrentHP != hp {
+		t.Fatalf("Mana Drain dealt damage: HP %d -> %d", hp, *victim.CurrentHP)
+	}
+	if block := rt.playerAbnormal(testDivision, victim.Name); block == nil || !block.Slots[abnormal.Combustion].Active {
+		t.Fatalf("Combustion did not land: %+v", block)
 	}
 }

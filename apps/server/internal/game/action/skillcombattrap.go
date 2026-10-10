@@ -159,7 +159,7 @@ the object), up to the authored cap.
 func (rt *Runtime) combatTrapVictims(object skillobject.Object, planter *enterworld.Character, skill enterworld.SkillRow, lease instance.Lease, primary combatTarget, area enterworld.SkillOffensiveArea, now int64) []combatTarget {
 	from := simulation.Spawn{RegionID: object.Spawn.Region, X: float64(object.Spawn.X), Y: float64(object.Spawn.Y), Z: float64(object.Spawn.Z)}
 	out := []combatTarget{primary}
-	q := areaQuery{division: object.Division, caster: planter, skill: skill, lease: lease, center: from,
+	q := areaQuery{selects: area.Select, division: object.Division, caster: planter, skill: skill, lease: lease, center: from,
 		reach: float64(area.Radius), nearest: true, now: now}
 	for _, candidate := range rt.areaCandidates(q) {
 		if len(out) >= int(area.MaxTargets) {

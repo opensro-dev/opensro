@@ -23,9 +23,11 @@ const (
 	// Shipped status casts author zero percent, leaving only the flat word.
 	tagStatusThreat = 0x74616e74
 
-	// statusCastSelect is the hostile character mask (efr +0x14) shared by
-	// every admitted offense area.
-	statusCastSelect = 24
+	// statusCastSelect is the efr +0x14 mask of most offense areas: hostile
+	// characters (0x08) and non-character objects (0x10). Mana Drought
+	// authors statusCastPlayers, hostile characters alone.
+	statusCastSelect  = 24
+	statusCastPlayers = 8
 
 	// statusCastContinueColumn is ContinueBasicAttack (skilldata column 19).
 	// Axis Quiver authors 1; the combat intent resumes the basic attack
@@ -46,16 +48,20 @@ Quiver); with both, tant wins (5903F6). 58E5F0 admits tnt2 without att and
 emits a successful zero-damage record (compileSkillTaunt). reqi pairs are stored
 on row.Reqi by noteParameterIndex and enforced before dispatch by 58D480
 (action.skillEquipmentRefusal, 0x300D); Poison Field authors two of them,
-so reqi, like getv, may repeat. A targeted row acts on monsters, so it
-must name Enemy_M (column 29): Mana Drain authors Enemy_P only and its
-description says it has no effect on monsters. An untargeted row selects
+so reqi, like getv, may repeat. A targeted row names an enemy (Enemy_M or
+Enemy_P, column 29): Mana Drain and Mana Drought author Enemy_P alone and
+apply Combustion (csmp) to players. Skill_ValidateTargetPermissions
+(58D7A0) judges player targets only, so the server refuses nothing for a
+monster. A targeted area selects around its primary (efr shape 2) with
+select 24 or, for Mana Drought, 8 (players). An untargeted row selects
 its hostile victims around the caster (efr shape 1, select 24) and leaves
 the target columns empty (Lightning Impact).
 ================
 */
 func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "0" ||
-		!row.TimingPinned || !row.Consumption.Pinned || !row.ActionRangePinned || row.TargetRequired && !row.Targets.EnemyM ||
+		!row.TimingPinned || !row.Consumption.Pinned || !row.ActionRangePinned ||
+		row.TargetRequired && !row.Targets.EnemyM && !row.Targets.EnemyP ||
 		row.ChainSub || row.ChainNext != 0 || row.ActionDurationMs == 0 || row.Attack.Present {
 		return SkillThreat{}, false
 	}
@@ -110,11 +116,12 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 				wantShape = 1
 			}
 			if a[0] != 1 || a[1] != wantShape || a[2] == 0 || a[2] > 0xffff ||
-				a[3] == 0 || a[3] > 255 || a[4] > 100 || a[5] != statusCastSelect {
+				a[3] == 0 || a[3] > 255 || a[4] > 100 ||
+				a[5] != statusCastSelect && (a[5] != statusCastPlayers || !row.TargetRequired) {
 				return SkillThreat{}, false
 			}
 			threat.Area = SkillOffensiveArea{Shape: uint8(a[1]), Radius: a[2], MaxTargets: uint8(a[3]),
-				ReductionPercent: uint8(a[4]), Select: statusCastSelect}
+				ReductionPercent: uint8(a[4]), Select: uint8(a[5])}
 		default:
 			return SkillThreat{}, false
 		}
