@@ -83,18 +83,7 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 	span := maximum - minimum
 	amount := minimum + uint32(float32(amountRoll)/float32(32767)*float32(span))
 
-	// CServerData_BuildMonsterGoldHeap @0x726900 rarity multipliers.
-	multiplier := uint64(1)
-	if monster.Rarity()>>4 == 1 {
-		multiplier *= 9
-	}
-	switch monster.Rarity() & 0x0f {
-	case 3, 8:
-		multiplier *= 30
-	case 4, 7:
-		multiplier *= 4
-	}
-	scaled := uint64(amount) * multiplier
+	scaled := uint64(amount) * monsterGoldMultiplier(monster.Rarity())
 	if scaled == 0 || scaled > math.MaxInt32 {
 		return 0, false
 	}
@@ -104,6 +93,45 @@ func (rt *Runtime) rollMonsterGoldAmount(monster monster.Instance) (uint32, bool
 		scaled = min(scaled*uint64(rt.GoldRate), math.MaxInt32)
 	}
 	return uint32(scaled), true
+}
+
+/*
+================
+monsterGoldMultiplier
+
+CServerData_BuildMonsterGoldHeap @0x726900 rarity multipliers: a party
+monster's heap is nine times over, a unique's thirty, a giant's four.
+================
+*/
+func monsterGoldMultiplier(rarity uint8) uint64 {
+	multiplier := uint64(1)
+	if rarity>>4 == 1 {
+		multiplier *= 9
+	}
+	switch rarity & 0x0f {
+	case 3, 8:
+		multiplier *= 30
+	case 4, 7:
+		multiplier *= 4
+	}
+	return multiplier
+}
+
+/*
+================
+MonsterGoldHeapRange
+
+The native amounts one gold heap of a monster of this level and spawn
+grade can hold, before the beta gold rate. The website's catalogue reads it.
+================
+*/
+func MonsterGoldHeapRange(level, rarity uint8) (uint64, uint64, bool) {
+	minimum, maximum, ok := monsterGoldRange(level)
+	if !ok {
+		return 0, 0, false
+	}
+	multiplier := monsterGoldMultiplier(rarity)
+	return uint64(minimum) * multiplier, uint64(maximum) * multiplier, true
 }
 
 // admitMonsterDrop is the publish-side CGObjMob gate. Retail runs it only
@@ -337,6 +365,25 @@ func rareEquipmentRoll(roll uint32, rate int) bool {
 	}
 	residue := int(roll % rareEquipmentDomain)
 	return residue >= 1 && residue <= max(rate, 1)
+}
+
+/*
+================
+RareEquipmentChance
+
+The chance one pass's rarity roll is rare at this beta rate (0 or 1 is
+native: 33 of the 32768 draws leave residue 1), counted through
+rareEquipmentRoll itself. The website's catalogue reads it.
+================
+*/
+func RareEquipmentChance(rate int) float64 {
+	rare := 0
+	for roll := uint32(0); roll < dropRollDomain; roll++ {
+		if rareEquipmentRoll(roll, rate) {
+			rare++
+		}
+	}
+	return float64(rare) / dropRollDomain
 }
 
 /*

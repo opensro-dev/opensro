@@ -14,6 +14,7 @@ package alchemy
 
 import (
 	"fmt"
+	"sort"
 
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
@@ -56,6 +57,67 @@ Refusal.Error
 ================
 */
 func (e Refusal) Error() string { return fmt.Sprintf("alchemy refusal 0x54%02x", uint8(e)) }
+
+// The reinforcement rules around the authored chances (501C00): a Lucky
+// option adds ReinforceLuckBonus, the result is clamped to
+// ReinforceMinChance..ReinforceMaxChance, and a failure from
+// ReinforceRiskPlus up destroys the item ReinforceDestroyPercent of the time
+// (else curses it); a failure resets the plus to 0, or to
+// ReinforceAstralFloor under an Astral charge.
+const (
+	ReinforceLuckBonus      = 5
+	ReinforceMinChance      = 10
+	ReinforceMaxChance      = 100
+	ReinforceRiskPlus       = 5
+	ReinforceDestroyPercent = 50
+	ReinforceAstralFloor    = 4
+)
+
+// reinforceChanceLevels is the plus levels probability distinguishes:
+// +0..+10 each, and +11 for every level beyond.
+const reinforceChanceLevels = 12
+
+/*
+================
+ReinforceTable
+
+One elixir's or powder's authored chance at each plus (+0..+11; +11 holds
+for every higher plus). Degree is a powder's equipment degree.
+================
+*/
+type ReinforceTable struct {
+	Codename string
+	Degree   int
+	Chances  [reinforceChanceLevels]int
+}
+
+/*
+================
+Catalog.ReinforceTables
+
+The elixirs (3/3/10/1) and lucky powders (3/3/10/2) Reinforce reads, by
+codename. The website's catalogue publishes them.
+================
+*/
+func (c *Catalog) ReinforceTables() (elixirs, powders []ReinforceTable) {
+	for codename, ref := range c.Items {
+		var table ReinforceTable
+		table.Codename = codename
+		for plus := range table.Chances {
+			table.Chances[plus] = probability(ref, uint8(plus))
+		}
+		switch ref.Flags {
+		case wire.PackTypeFlags(3, 3, 10, 1):
+			elixirs = append(elixirs, table)
+		case wire.PackTypeFlags(3, 3, 10, 2):
+			table.Degree = int(ref.Params[0])
+			powders = append(powders, table)
+		}
+	}
+	sort.Slice(elixirs, func(i, j int) bool { return elixirs[i].Codename < elixirs[j].Codename })
+	sort.Slice(powders, func(i, j int) bool { return powders[i].Codename < powders[j].Codename })
+	return elixirs, powders
+}
 
 /*
 ================
@@ -270,19 +332,19 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 		if int(p.Params[0]) != ref.Degree() {
 			return zero, Refusal(0x0a)
 		}
-		if chance < 100 {
+		if chance < ReinforceMaxChance {
 			chance += probability(p, item.Plus)
 		}
 	}
-	if chance < 100 && c.charge(item, 0x6c75636b) {
-		chance += 5
+	if chance < ReinforceMaxChance && c.charge(item, 0x6c75636b) {
+		chance += ReinforceLuckBonus
 	}
 	chance += bonus
-	if chance < 10 {
-		chance = 10
+	if chance < ReinforceMinChance {
+		chance = ReinforceMinChance
 	}
-	if chance > 100 {
-		chance = 100
+	if chance > ReinforceMaxChance {
+		chance = ReinforceMaxChance
 	}
 	n, err := draw(roll, 100)
 	if err != nil {
@@ -292,12 +354,12 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	if result.Success {
 		item.Plus++
 	} else {
-		if item.Plus >= 5 {
+		if item.Plus >= ReinforceRiskPlus {
 			n, err = draw(roll, 100)
 			if err != nil {
 				return zero, err
 			}
-			if n < 50 {
+			if n < ReinforceDestroyPercent {
 				result.Destroyed = item.TypeFlags&1 == 0
 				if result.Destroyed && c.charge(item, 0x61746861) {
 					result.Destroyed = false
@@ -309,8 +371,8 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 			}
 		}
 		if !result.Destroyed {
-			if item.Plus >= 4 && c.charge(item, 0x61737472) {
-				item.Plus = 4
+			if item.Plus >= ReinforceAstralFloor && c.charge(item, 0x61737472) {
+				item.Plus = ReinforceAstralFloor
 			} else {
 				item.Plus = 0
 			}

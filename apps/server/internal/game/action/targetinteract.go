@@ -299,6 +299,108 @@ func (rt *Runtime) handleTargetInteractLocked(divisionID string, character *ente
 	return prependOpResult(stopped, rt.grantPickup(divisionID, worldKey, character, snapshot, groundItem))
 }
 
+// skillRoute names the owner a pressed skill goes to, in dispatch order.
+type skillRoute uint8
+
+const (
+	skillRouteOffensive skillRoute = iota
+	skillRouteDuplicate
+	skillRouteCapture
+	skillRoutePosition
+	skillRouteMirage
+	skillRouteDiscordWave
+	skillRouteTaunt
+	skillRouteSupport
+	skillRouteTimedTarget
+	skillRouteTimedSelf
+	skillRoutePartyBuff
+	skillRouteWall
+	skillRouteStatusCast
+	skillRouteAreaBurst
+	skillRouteTrap
+)
+
+/*
+================
+routeSkillCommand
+
+The owner of a skill row's press, the first that claims its shape; an
+unclaimed row is an offensive skill.
+================
+*/
+func routeSkillCommand(skill enterworld.SkillRow) skillRoute {
+	switch {
+	case skill.Duplicate.Pinned:
+		return skillRouteDuplicate
+	case skill.MonsterCapture.Pinned:
+		return skillRouteCapture
+	case skill.PositionEffect.Pinned:
+		return skillRoutePosition
+	// Discord Wave: a friendly-targeted hostility cut (discordwave.go).
+	case skill.Threat.Decrease && !skill.TargetRequired:
+		return skillRouteMirage
+	case skill.Threat.Decrease:
+		return skillRouteDiscordWave
+	case skill.Threat.Only && !skill.TargetRequired:
+		return skillRouteTaunt
+	// Untargeted party-area heals, heals over time and resurrections: their
+	// action vector is the party selection (58BEF0).
+	case skill.Recovery.PartyResurrectPinned || skill.Recovery.PartyHealPinned || skill.Recovery.LowestHealPinned ||
+		skill.Recovery.HealOverTimePinned:
+		return skillRouteSupport
+	case skill.Recovery.SelfFlatPinned ||
+		(skill.Heal.Present || skill.Abnormal.AdmitDeadParty) && skill.TargetRequired ||
+		skill.Abnormal.CurePresent():
+		return skillRouteSupport
+	case skill.TimedEffect.Pinned && skill.TimedEffect.Targeted:
+		return skillRouteTimedTarget
+	case skill.TimedEffect.Pinned || skill.Concealment.Pinned:
+		return skillRouteTimedSelf
+	case skill.Aura.Present && (skill.BuffModifiers.Present() || skill.Aura.Eshp):
+		return skillRoutePartyBuff
+	case skill.Wall.Pinned:
+		return skillRouteWall
+	case skill.StatusCast && !skill.TargetRequired:
+		return skillRouteStatusCast
+	case skill.AreaBurst && !skill.TargetRequired:
+		return skillRouteAreaBurst
+	case skill.CombatTrap.Pinned || skill.TrapField.Pinned:
+		return skillRouteTrap
+	}
+	return skillRouteOffensive
+}
+
+/*
+================
+SkillPressHandled
+
+Whether pressing the skill reaches an owner that runs it: a claimed shape,
+or an offensive skill resolveOffensiveSkill admits by shape. The website's
+catalogue reads it; a press can still be refused for the moment (target,
+weapon, posture).
+================
+*/
+func SkillPressHandled(source enterworld.SkillDataSource, skill enterworld.SkillRow) bool {
+	if routeSkillCommand(skill) != skillRouteOffensive {
+		return true
+	}
+	_, immediate := enterworld.OffensiveSequence(source, skill.ID)
+	return offensiveShapeAdmitted(skill, immediate)
+}
+
+/*
+================
+offensiveShapeAdmitted
+
+resolveOffensiveSkill's shape gate: an immediate sequence (immediate:
+OffensiveSequence admitted the row), a periodic attack or a taunt, of a
+skill with a group.
+================
+*/
+func offensiveShapeAdmitted(skill enterworld.SkillRow, immediate bool) bool {
+	return skill.Group != 0 && (immediate || skill.TimedEffect.Periodic.Pinned || skill.Threat.Only)
+}
+
 /*
 ================
 dispatchSkillCommand
@@ -309,92 +411,50 @@ attack when it does.
 ================
 */
 func (rt *Runtime) dispatchSkillCommand(divisionID string, character, snapshot *enterworld.Character, cast wire.SkillAction) OpResult {
-	if source := rt.deps.SkillData(); source != nil {
-		if skill, ok := source.SkillByID(cast.ActionId); ok &&
-			!isPinnedBaseAttack(snapshot, skill.Codename) {
-
-			if skill.Duplicate.Pinned {
-				return rt.acceptDuplicate(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
-			}
-
-			if skill.MonsterCapture.Pinned {
-				return rt.acceptMonsterCapture(divisionID, character, snapshot, cast, skill)
-			}
-
-			if skill.PositionEffect.Pinned {
-				return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
-			}
-			// Discord Wave: a friendly-targeted hostility cut
-			// (discordwave.go).
-			if skill.Threat.Decrease && !skill.TargetRequired {
-				result, _ := rt.acceptMirage(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
-				return result
-			}
-			if skill.Threat.Decrease {
-				return rt.acceptDiscordWave(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
-			}
-			if skill.Threat.Only && !skill.TargetRequired {
-				return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
-			}
-
-			// Untargeted party-area heals, heals over time and
-			// resurrections: their action vector is the party
-			// selection (58BEF0).
-			if skill.Recovery.PartyResurrectPinned || skill.Recovery.PartyHealPinned || skill.Recovery.LowestHealPinned ||
-				skill.Recovery.HealOverTimePinned {
-				return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
-			}
-
-			if skill.Recovery.SelfFlatPinned ||
-				(skill.Heal.Present || skill.Abnormal.AdmitDeadParty) && skill.TargetRequired ||
-				skill.Abnormal.CurePresent() {
-				return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
-			}
-
-			if skill.TimedEffect.Pinned && skill.TimedEffect.Targeted {
-				return rt.acceptTimedTargetEffect(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
-			}
-
-			if skill.TimedEffect.Pinned || skill.Concealment.Pinned {
-				result, _ := rt.acceptTimedSelfEffect(
-					divisionID,
-					character,
-					snapshot,
-					cast,
-					skill,
-					rt.Now().UnixMilli(),
-					nil,
-				)
-				return result
-			}
-
-			if skill.Aura.Present && (skill.BuffModifiers.Present() || skill.Aura.Eshp) {
-				return rt.acceptPartyBuff(divisionID, character, snapshot, cast, skill)
-			}
-
-			if skill.Wall.Pinned {
-				return rt.acceptWall(divisionID, character, snapshot, cast, skill)
-			}
-
-			if skill.StatusCast && !skill.TargetRequired {
-				result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
-				return result
-			}
-
-			if skill.AreaBurst && !skill.TargetRequired {
-				return rt.acceptAreaBurst(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli())
-			}
-
-			if skill.CombatTrap.Pinned || skill.TrapField.Pinned {
-				result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, rt.Now().UnixMilli(), nil)
-				return result
-			}
-
-			return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)
-		}
+	source := rt.deps.SkillData()
+	if source == nil {
+		return rt.acceptSkillCast(divisionID, character, snapshot, cast)
 	}
-
-	return rt.acceptSkillCast(divisionID, character, snapshot, cast)
+	skill, ok := source.SkillByID(cast.ActionId)
+	if !ok || isPinnedBaseAttack(snapshot, skill.Codename) {
+		return rt.acceptSkillCast(divisionID, character, snapshot, cast)
+	}
+	now := rt.Now().UnixMilli()
+	switch routeSkillCommand(skill) {
+	case skillRouteDuplicate:
+		return rt.acceptDuplicate(divisionID, character, snapshot, cast, skill, now)
+	case skillRouteCapture:
+		return rt.acceptMonsterCapture(divisionID, character, snapshot, cast, skill)
+	case skillRoutePosition:
+		return rt.acceptPositionSkill(divisionID, character, snapshot, cast, skill)
+	case skillRouteMirage:
+		result, _ := rt.acceptMirage(divisionID, character, snapshot, cast, skill, now, nil)
+		return result
+	case skillRouteDiscordWave:
+		return rt.acceptDiscordWave(divisionID, character, snapshot, cast, skill, now)
+	case skillRouteTaunt:
+		return rt.acceptUntargetedTaunt(tauntCast{division: divisionID, character: character, snapshot: snapshot, skill: skill}, cast)
+	case skillRouteSupport:
+		return rt.acceptSupportSkill(divisionID, character, snapshot, cast, skill)
+	case skillRouteTimedTarget:
+		return rt.acceptTimedTargetEffect(divisionID, character, snapshot, cast, skill, now)
+	case skillRouteTimedSelf:
+		result, _ := rt.acceptTimedSelfEffect(divisionID, character, snapshot, cast, skill, now, nil)
+		return result
+	case skillRoutePartyBuff:
+		return rt.acceptPartyBuff(divisionID, character, snapshot, cast, skill)
+	case skillRouteWall:
+		return rt.acceptWall(divisionID, character, snapshot, cast, skill)
+	case skillRouteStatusCast:
+		result, _ := rt.acceptUntargetedStatusCast(divisionID, character, snapshot, cast, skill, now, nil)
+		return result
+	case skillRouteAreaBurst:
+		return rt.acceptAreaBurst(divisionID, character, snapshot, cast, skill, now)
+	case skillRouteTrap:
+		result, _ := rt.acceptCombatTrap(divisionID, character, snapshot, cast, skill, now, nil)
+		return result
+	}
+	return rt.beginOffensiveSkill(divisionID, character, snapshot, cast)
 }
 
 /*

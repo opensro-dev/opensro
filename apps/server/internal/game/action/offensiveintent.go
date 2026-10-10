@@ -28,7 +28,7 @@ func (rt *Runtime) resolveOffensiveSkill(c *enterworld.Character, id uint32) (en
 	}
 	skill, known := rt.deps.SkillData().SkillByID(id)
 	sequence, immediate := enterworld.OffensiveSequence(rt.deps.SkillData(), id)
-	if !known || skill.Group == 0 || (!immediate && !skill.TimedEffect.Periodic.Pinned && !skill.Threat.Only) {
+	if !known || !offensiveShapeAdmitted(skill, immediate) {
 		return enterworld.SkillRow{}, combat.Loadout{}, "offensive-shape-unsupported"
 	}
 	if immediate {
