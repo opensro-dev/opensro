@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
 	"opensro.online/server/internal/data/store"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/security/auth"
@@ -70,6 +71,8 @@ type deployment struct {
 	AllowedOrigins string
 	GMCharacters   string
 	BetaMastery    string
+	// StackSizes is the validated, port-only SRO_STACK_SIZES override.
+	StackSizes string
 	// PartyMasteries comes from the deployer's SRO_PARTY_MASTERIES.
 	PartyMasteries        bool
 	TransportCert         string
@@ -287,6 +290,10 @@ func resolveDeployment(
 	if err != nil {
 		return nil, err
 	}
+	stackSizes, err := enterworld.StackSizesFromEnv()
+	if err != nil {
+		return nil, err
+	}
 	for _, warning := range warnings {
 		fmt.Printf("Bug reports: %s\n", warning)
 	}
@@ -388,6 +395,7 @@ func resolveDeployment(
 		AllowedOrigins:        allowedOrigins,
 		GMCharacters:          gmCharacters,
 		BetaMastery:           betaMastery,
+		StackSizes:            stackSizes.String(),
 		PartyMasteries:        party.MasteriesFromEnv(),
 		TransportCert:         transportCert,
 		TransportKey:          transportKey,
@@ -696,6 +704,7 @@ func (deployment *deployment) gameVariables(
 		"allowed_origins":     deployment.AllowedOrigins,
 		"gm_characters":       deployment.GMCharacters,
 		"beta_mastery":        deployment.BetaMastery,
+		"stack_sizes":         deployment.StackSizes,
 		"party_masteries":     boolEnvValue(deployment.PartyMasteries),
 		"transport_pprof":     boolEnvValue(deployment.Pprof),
 	})

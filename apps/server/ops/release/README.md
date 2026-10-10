@@ -282,11 +282,21 @@ and install it as root-only `/etc/opensro-release/config.json`:
   "shard": "global-official",
   "agent_memory_mb": 256,
   "gameworld_memory_mb": 1024,
+  "stack_sizes": "",
   "public_webhook": "/etc/opensro-release/discord-announcements-webhook",
   "staff_webhook": "/etc/opensro-backup/discord-webhook",
   "maintenance_accounts": ["release-probe"]
 }
 ```
+
+`stack_sizes` is a port-only override; missing or empty keeps native item caps.
+For example, `"potion=2000,elixir=50"` raises those groups without lowering any
+native cap. Keep the value in this host configuration: each server release
+passes it as `SRO_STACK_SIZES` to `sro-nomad`, which validates it and supplies
+the Nomad job variable. Direct `sro-nomad` invocations accept the same environment
+variable. Changes take effect on server restart; they do not update a running
+server. Removing the override preserves existing quantities and permits moving
+or splitting retained oversized stacks without adding to them above the new cap.
 
 The in-game bug reporter (`/bug`) is on when root-only
 `/etc/opensro-release/bug-report-webhook` holds one line, a Discord webhook URL

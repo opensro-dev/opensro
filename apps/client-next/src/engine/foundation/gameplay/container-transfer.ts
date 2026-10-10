@@ -15,6 +15,26 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 // Expendable stackable class bits: (typeFlags & 0x7E) === 0x6C.
 const STACKABLE_MASK = 0x7e;
 const STACKABLE_CLASS = 0x6c;
+const ITEM_TYPE_MASK = 0xfffe;
+const ELIXIR_TYPE = 0x0d6c;
+const RAISED_STACK_TYPES = new Set( [ 0x08ec, 0x10ec, 0x18ec, 0x20ec, 0x48ec, ELIXIR_TYPE, 0x156c ] );
+
+/*
+================
+retainedOversizedStack
+
+Port-only, not native: mirror inventory.retainedOversizedStack after an
+operator lowers SRO_STACK_SIZES. Only plain configurable families qualify.
+================
+*/
+function retainedOversizedStack( item: InventoryItem, cap: number ): boolean {
+	if (
+		cap < 1 || item.quantity <= cap || item.plus !== 0 || item.variance !== "0" ||
+		item.magic.length !== 0 || (item.transformRefObjId ?? 0) !== 0 || item.summon || item.label
+	) return false;
+	const type = item.typeFlags & ITEM_TYPE_MASK;
+	return type === ELIXIR_TYPE || (cap > 1 && RAISED_STACK_TYPES.has( type ));
+}
 
 /*
 ================
@@ -57,18 +77,19 @@ export function planContainerMove(
 	const a = slots.get( move.source ), b = slots.get( move.destination );
 	if ( !a ) throw Error( `Empty ${label} source slot` );
 	const cap = stackCap( a, caps, label );
+	const splittable = cap > 1 || retainedOversizedStack( a, cap );
 	if ( cap > 1 && b && sameStackIdentity( a, b ) ) {
 		const dest = b.quantity >= cap ? a.quantity : Math.min( cap, a.quantity + b.quantity );
 		const remain = b.quantity >= cap ? b.quantity : a.quantity + b.quantity - dest;
 		slots.set( move.destination, { ...b, quantity: dest } );
 		if ( remain ) slots.set( move.source, { ...a, quantity: remain } );
 		else slots.delete( move.source );
-	} else if ( cap > 1 && !b && move.quantity < a.quantity ) {
+	} else if ( splittable && !b && move.quantity < a.quantity ) {
 		if ( move.quantity < 1 ) throw Error( `Invalid ${label} split quantity` );
 		slots.set( move.source, { ...a, quantity: a.quantity - move.quantity } );
 		slots.set( move.destination, { ...a, slot: move.destination, quantity: move.quantity } );
 	} else {
-		if ( cap > 1 && !b && move.quantity !== a.quantity ) throw Error( `Invalid ${label} split quantity` );
+		if ( splittable && !b && move.quantity !== a.quantity ) throw Error( `Invalid ${label} split quantity` );
 		slots.set( move.destination, { ...a, slot: move.destination } );
 		if ( b ) slots.set( move.source, { ...b, slot: move.source } );
 		else slots.delete( move.source );
@@ -99,10 +120,13 @@ export function planWholeTransfer(
 		const cap = caps.get( item.refObjId );
 		if (
 			cap === undefined || !Number.isInteger( cap ) || cap < 1 || cap > 65535 ||
-			![ item.quantity, other.quantity ].every( n => Number.isInteger( n ) && n > 0 && n <= cap )
+			![ item, other ].every( row =>
+				Number.isInteger( row.quantity ) && row.quantity > 0 && row.quantity <= 65535 &&
+				(row.quantity <= cap || retainedOversizedStack( row, cap ))
+			)
 		) throw Error( "Invalid transfer stack limit/count" );
-		const dest = other.quantity === cap ? item.quantity : Math.min( cap, item.quantity + other.quantity );
-		const remain = other.quantity === cap ? cap : item.quantity + other.quantity - dest;
+		const dest = other.quantity >= cap ? item.quantity : Math.min( cap, item.quantity + other.quantity );
+		const remain = other.quantity >= cap ? other.quantity : item.quantity + other.quantity - dest;
 		b.set( destination, { ...other, quantity: dest } );
 		if ( remain ) a.set( source, { ...item, quantity: remain } );
 		else a.delete( source );
