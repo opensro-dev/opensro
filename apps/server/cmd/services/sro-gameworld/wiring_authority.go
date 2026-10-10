@@ -116,6 +116,19 @@ func openAuthorityPlane(
 	if err != nil {
 		return authorityPlane{}, err
 	}
+	// Port-only, not native: raise configured stack caps before any owner
+	// reads a reference row. Unset keeps every itemdata cap.
+	stackSizes, err := enterworld.StackSizesFromEnv()
+	if err != nil {
+		return authorityPlane{}, err
+	}
+	raised, err := textdata.Items.ApplyStackSizes(stackSizes)
+	if err != nil {
+		return authorityPlane{}, err
+	}
+	if len(stackSizes) > 0 {
+		log.Infof("items: %s=%s raised %d item cap(s) (port-only, not native)", enterworld.EnvStackSizes, stackSizes, raised)
+	}
 	options := store.OptionsFromEnv()
 	options.DefaultSkills = enterworld.DefaultSkillSeeder(textdata.Skills)
 	options.DefaultInventory = enterworld.StarterInventorySeeder(

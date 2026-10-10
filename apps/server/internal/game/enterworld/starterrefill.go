@@ -71,7 +71,10 @@ func ResolveStarterRefills(items ItemRefSource) []StarterRefill {
 				complete = false
 				break
 			}
-			stack := int64(row.NativeFields.Get("maxStack"))
+			// The native full stack, even when SRO_STACK_SIZES raised the
+			// cap: a refill to the raised cap would hand out that many
+			// free potions on every world entry.
+			stack := row.NativeStackCap()
 			if stack < 1 {
 				stack = 1
 			}

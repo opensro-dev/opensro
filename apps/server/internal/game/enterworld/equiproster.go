@@ -64,6 +64,10 @@ type ItemRef struct {
 	// Pointer so an absent column takes the Node coercion fallback (100)
 	// while a present zero clamps to 1.
 	VarianceIntMin1c0 *int64
+	// NativeMaxStack is the itemdata MaxStack when SRO_STACK_SIZES raised
+	// this row's cap (port-only, stacksizes.go); 0 when the row keeps its
+	// native cap. Read it through NativeStackCap.
+	NativeMaxStack uint16
 
 	// Equip requirement columns, typed for the server-side equip gates (the
 	// native client's full-mask sub_789c60 bits compare the same

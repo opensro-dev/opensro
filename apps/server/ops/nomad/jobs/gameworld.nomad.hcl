@@ -205,6 +205,15 @@ variable "beta_rare_rate" {
   default = "5"
 }
 
+# stack_sizes raises item stack caps per group (port-only, not native), e.g.
+# "potion=2000,elixir=50". Groups: potion, petpotion, elixir, luckypowder.
+# Empty keeps every itemdata cap; an unknown group or a cap outside 1..65535
+# stops GameWorld at boot.
+variable "stack_sizes" {
+  type    = string
+  default = ""
+}
+
 variable "cpu" {
   type    = number
   default = 2000
@@ -351,6 +360,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_GOLD_RATE                 = var.beta_gold_rate
         SRO_BETA_RARE_RATE                 = var.beta_rare_rate
         SRO_BETA_DROP_CAP                  = var.beta_drop_cap
+        SRO_STACK_SIZES                    = var.stack_sizes
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir
