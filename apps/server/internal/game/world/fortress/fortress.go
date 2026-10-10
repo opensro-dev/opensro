@@ -66,6 +66,9 @@ type Record struct {
 	capture
 	battles           map[int64]domain.FortressBattleRecord
 	battleCheckpoints map[int64]domain.FortressBattleRecord
+	// forges are the running production orders (forge.go), at most one
+	// per staff member.
+	forges []domain.FortressItemForgeRecord
 }
 
 /*
@@ -223,6 +226,7 @@ func (a *Authority) Get(divisionID string, fortressID uint32) (Record, bool) {
 	copied := *record
 	copied.battleCheckpoints = nil
 	copied.battles = nil // Scores are read through BattleRecord, never a mutable map alias.
+	copied.forges = nil  // Orders are read through ItemForge.
 	copied.Applicants = make(map[int64]RequestKind, len(record.Applicants))
 	for guild, kind := range record.Applicants {
 		copied.Applicants[guild] = kind

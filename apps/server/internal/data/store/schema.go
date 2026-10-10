@@ -63,7 +63,10 @@ func isVersionMismatch(err error) bool {
 // Version 20 adds the optional permanent stall decoration (stallDecoration,
 // the ITEM_MALL_BOOTH_* item a character applied). The offline upgrade
 // rewrites no record.
-const CurrentVersion = 20
+// Version 21 adds the fortress production rows (fortress_item_forges,
+// layout 8: _SiegeFortressItemForge). The offline upgrade adds the empty
+// table and rewrites no record.
+const CurrentVersion = 21
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

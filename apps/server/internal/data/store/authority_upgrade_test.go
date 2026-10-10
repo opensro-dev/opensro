@@ -37,6 +37,7 @@ func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+	downgradeToLayout7(t, dir)
 	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preTradeRewardVersion)
 	backup, err := UpgradeAuthority(dir, true)
 	if err != nil || backup == "" {
@@ -47,7 +48,7 @@ func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := loadDB(old, preTradeRewardVersion, CurrentLayoutVersion); err != nil {
+	if _, err := loadDB(old, preTradeRewardVersion, preItemForgeLayoutVersion); err != nil {
 		t.Fatal(err)
 	}
 	s = openTest(t, dir, newTestClock())
@@ -68,15 +69,38 @@ func TestTradeUpgradePreservesExistingFortressTablesAndRecords(t *testing.T) {
 ================
 dropFortressTables
 
-Removes layout 6's fortress and union tables from a current test
-authority.
+Removes the fortress, union, guild-war and production tables (layouts 6
+through 8) from a current test authority.
 ================
 */
 func dropFortressTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances; DROP TABLE guild_wars"); err != nil {
+	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances; DROP TABLE guild_wars; DROP TABLE fortress_item_forges"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+/*
+================
+downgradeToLayout7
+
+Turns a closed current test authority into the layout 7 a schema 20 (and
+older) server ran: layout 8's production table is gone.
+================
+*/
+func downgradeToLayout7(t *testing.T, dir string) {
+	t.Helper()
+	db, err := connectDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DROP TABLE fortress_item_forges"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, preItemForgeLayoutVersion)
 }
 
 /*
@@ -392,7 +416,7 @@ func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
 	if err := s.db.QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("DROP TABLE guild_wars"); err != nil {
+	if _, err := s.db.Exec("DROP TABLE guild_wars; DROP TABLE fortress_item_forges"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.db.Exec("UPDATE meta SET value=? WHERE key=?", preGuildWarLayoutVersion, metaKeyLayoutVersion); err != nil {
@@ -443,6 +467,7 @@ func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+	downgradeToLayout7(t, dir)
 	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preEndedQuestVersion)
 	backup, err := UpgradeAuthority(dir, true)
 	if err != nil || backup == "" {
@@ -453,7 +478,7 @@ func TestEndedQuestUpgradeKeepsSchema17Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer old.Close()
-	if _, err := loadDB(old, preEndedQuestVersion, CurrentLayoutVersion); err != nil {
+	if _, err := loadDB(old, preEndedQuestVersion, preItemForgeLayoutVersion); err != nil {
 		t.Fatalf("schema 17 backup no longer validates: %v", err)
 	}
 	reopened := openTest(t, dir, newTestClock())
@@ -495,6 +520,7 @@ func TestJobRewardUpgradeKeepsSchema18Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+	downgradeToLayout7(t, dir)
 	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preJobRewardVersion)
 	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
 		t.Fatalf("upgrade %q: %v", backup, err)
@@ -532,6 +558,7 @@ func TestStallDecorationUpgradeKeepsSchema19Records(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+	downgradeToLayout7(t, dir)
 	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preStallDecorationVersion)
 	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
 		t.Fatalf("upgrade %q: %v", backup, err)

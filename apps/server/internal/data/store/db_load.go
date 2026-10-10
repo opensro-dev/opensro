@@ -64,6 +64,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, fmt.Errorf("validating guild wars: %w", err)
 		}
 	}
+	if currentLayout >= 8 {
+		if err := validateFortressItemForges(db); err != nil {
+			return nil, fmt.Errorf("validating fortress production: %w", err)
+		}
+	}
 	out := &loadedDB{
 		characters:   map[string][]*domain.Character{},
 		deleted:      map[string][]json.RawMessage{},

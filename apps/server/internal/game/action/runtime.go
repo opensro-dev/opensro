@@ -157,6 +157,9 @@ type Runtime struct {
 	// Fortresses is the fortress occupation and war-mode authority
 	// (ConfigurePortals installs it from siegefortress.txt).
 	Fortresses *fortress.Authority
+	// fortressForges are siegefortressitemforge.txt's enabled rows by item
+	// (ConfigurePortals loads them; fortress_production.go prices orders).
+	fortressForges map[uint32]fortressForgeRow
 	// Unions is the guild union authority the fortress war asks for the
 	// holder's allies (fortress_allies.go).
 	Unions       *union.Authority

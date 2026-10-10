@@ -3,10 +3,11 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 20 to schema 20, layout 7. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 21 to schema 21, layout 8. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
-source gains the empty fortress tables of layout 6. Existing tables and
+source gains the empty fortress tables of layout 6, and every layout 7
+source the empty fortress production table of layout 8. Existing tables and
 their records survive unchanged; the new record fields are optional, so no
 path rewrites existing JSON.
 This operation is never called by server startup or a network request.
@@ -30,12 +31,14 @@ const UpgradeFromVersion = 13
 const preMallLayoutVersion = 4
 const preFortressLayoutVersion = 5
 const preGuildWarLayoutVersion = 6
+const preItemForgeLayoutVersion = 7
 const preCompanionVersion = 14
 const preWorldPointVersion = 15
 const preTradeRewardVersion = 16
 const preEndedQuestVersion = 17
 const preJobRewardVersion = 18
 const preStallDecorationVersion = 19
+const preItemForgeVersion = 20
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -98,28 +101,35 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 		sourceLayout = preMallLayoutVersion
 	case preCompanionVersion, preWorldPointVersion:
 	case preTradeRewardVersion:
-		if layout >= preGuildWarLayoutVersion && layout <= CurrentLayoutVersion {
+		if layout >= preGuildWarLayoutVersion && layout <= preItemForgeLayoutVersion {
 			sourceLayout = layout
 		}
 	case preEndedQuestVersion:
 		// Schema 17 ran at layouts 5 through 7. Its records may already carry
 		// endedQuestIds (the schema 17 server 491cc962 wrote them), which the
 		// current decoder reads; nothing is rewritten.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
+		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
 	case preJobRewardVersion:
 		// Schema 18 ran at layouts 5 through 7 and has no job reward or
 		// ranking snapshot; its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
+		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
 	case preStallDecorationVersion:
 		// Schema 19 ran at layouts 5 through 7 and has no stall decoration;
 		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
+		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preItemForgeVersion:
+		// Schema 20 ran at layouts 5 through 7 and has no production table;
+		// its records read unchanged.
+		if layout < preFortressLayoutVersion || layout > preItemForgeLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
@@ -138,8 +148,11 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if sourceLayout < preGuildWarLayoutVersion {
 		added = []string{"fortresses", "fortress_requests", "fortress_structures", "alliances"}
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout < preItemForgeLayoutVersion {
 		added = append(added, "guild_wars")
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		added = append(added, "fortress_item_forges")
 	}
 	if sourceLayout == preMallLayoutVersion {
 		added = append(added, "mall_accounts", "account_storage")
@@ -201,8 +214,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return backupPath, err
 		}
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout < preItemForgeLayoutVersion {
 		if _, err := tx.Exec(guildWarSchema); err != nil {
+			return backupPath, err
+		}
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		if _, err := tx.Exec(fortressItemForgeSchema); err != nil {
 			return backupPath, err
 		}
 	}

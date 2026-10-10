@@ -116,6 +116,11 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 		}
 		return rt.fortressDemolishStructure(division, c, request)
 	}
+	if subtype >= siege.ActionSmithQuery && subtype <= siege.ActionTrainerCollect {
+		unlock := rt.lockDivision(division)
+		defer unlock()
+		return rt.fortressServiceQuery(division, c, request)
+	}
 	if subtype == fortressWarStatus {
 		unlock := rt.lockDivision(division)
 		defer unlock()

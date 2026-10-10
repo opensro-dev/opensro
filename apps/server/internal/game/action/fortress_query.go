@@ -59,6 +59,9 @@ func (rt *Runtime) fortressServiceQuery(division string, c *enterworld.Character
 	if request.Action == siege.ActionGate {
 		return rt.fortressGatePulley(division, npc, request)
 	}
+	if request.Action >= siege.ActionSmithQuery && request.Action <= siege.ActionTrainerCollect {
+		return rt.fortressProductionService(division, c, request)
+	}
 	if request.Action == siege.ActionTaxQuery || request.Action == siege.ActionTaxRate {
 		return rt.fortressTaxService(division, c, request)
 	}

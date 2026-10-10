@@ -6,9 +6,9 @@
 	"server": {
 		"protocolMin": 6,
 		"protocolMax": 6,
-		"storeReadMin": 20,
-		"storeReadMax": 20,
-		"storeWrite": 20,
+		"storeReadMin": 21,
+		"storeReadMax": 21,
+		"storeWrite": 21,
 		"storeUpgradeFrom": 13
 	}
 }

@@ -1,0 +1,8 @@
+# letter record fields owned by store schema 21 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 22, its upgrade
+# step and letter-fields-v22.txt.
+body
+packedReceiveTime
+readFlag
+sender
+senderModelRefId

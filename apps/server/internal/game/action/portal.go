@@ -276,6 +276,9 @@ func (rt *Runtime) ConfigurePortals(dir string) error {
 	if rt.gatePulleys, err = loadGatePulleys(dir); err != nil {
 		return err
 	}
+	if rt.fortressForges, err = loadFortressForges(dir); err != nil {
+		return err
+	}
 	for i := range rt.NpcRoster {
 		for _, row := range fortresses {
 			if rt.NpcRoster[i].Codename == row.OfficialNpc {

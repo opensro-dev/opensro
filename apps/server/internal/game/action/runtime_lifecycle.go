@@ -70,6 +70,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceFortressPhases", func() { rt.advanceFortressPhases(nowMs) })
 		frames("drainStructureDeaths", rt.drainStructureDeaths)
 		step("advanceFortressStructures", func() { rt.advanceFortressStructures(nowMs) })
+		step("advanceFortressForges", func() { rt.Fortresses.AdvanceItemForges(nowMs) })
 		step("advanceGuildVotes", func() { rt.advanceGuildVotes(nowMs) })
 		// Retirement is presentation-only. Reward state was already committed
 		// by the fatal hit, while the zero-HP source remains resolvable through

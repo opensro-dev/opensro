@@ -3,8 +3,8 @@
 
 persist.go - the fortress rows the authority store keeps
 
-Occupation, a war's temporary holder and the war's requests survive a
-restart, as the shard's _SiegeFortress and _SiegeFortressRequest rows do.
+Occupation, a war's temporary holder, the war's requests and the staff's
+production orders survive a restart, as the shard's _SiegeFortress and _SiegeFortressRequest rows do.
 Restore loads a division once at startup and attaches the store; every
 change that touches those rows saves before its caller goes on. A
 request whose save fails is undone and refused, so the official never
@@ -77,6 +77,9 @@ func (a *Authority) Restore(divisionID string, store domain.FortressStore) error
 			record.Applicants = map[int64]RequestKind{}
 		}
 		record.Applicants[row.GuildID] = RequestKind(row.Kind)
+	}
+	if err := a.restoreItemForgesLocked(divisionID, state, store); err != nil {
+		return err
 	}
 	a.store = store
 	return nil
