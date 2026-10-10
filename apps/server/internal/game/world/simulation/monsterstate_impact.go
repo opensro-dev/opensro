@@ -118,6 +118,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 		if !ok {
 			mover = monster.NewSpawnMover(instance, s.nowMillis())
 		}
+		live := mover.LivePoseAt(nowMs, nil)
 		if err := mover.Transition(monster.MoverEventDisplaced, mover.TargetGID()); err != nil {
 			panic(err)
 		}
@@ -132,6 +133,7 @@ func (s *MonsterState) applyDamageLocked(division string, state *divisionMonster
 				displacement = &grounded
 			}
 		}
+		displacement = s.clipDisplacementLocked(live, displacement)
 		mover.Pose = displacement.Pose
 		mover.From, mover.To = displacement.Pose, displacement.Pose
 		if state.movers == nil {
@@ -165,4 +167,31 @@ validImpactDisplacement
 */
 func validImpactDisplacement(ko, kb *MonsterKnockdownPlan) bool {
 	return !(ko != nil && kb != nil) && validKnockdownPlan(ko) && validKnockdownPlan(kb)
+}
+
+/*
+================
+clipDisplacementLocked
+
+The displacement walks as a move (593D24 -> CGObjChar_MoveByStep 48B920 ->
+CGObjMobile_MoveTo 48B660 -> CGObj_MoveTo 485740): the region manager's
+move query runs from the live position, a blocked result (0x10000000)
+leaves the victim where it stood, and any other result moves it to the
+point the query wrote, short of a blocked edge. A knockback therefore never
+lands a monster on a tile it could not have walked onto. Without an
+installed move test (geometry-free fixtures) the push is kept as computed.
+================
+*/
+func (s *MonsterState) clipDisplacementLocked(live monster.Pose, displacement *MonsterKnockdownPlan) *MonsterKnockdownPlan {
+	if s.collide == nil {
+		return displacement
+	}
+	clipped := *displacement
+	move := s.collide(poseToSpawn(live), poseToSpawn(displacement.Pose))
+	rest := move.Rest
+	if move.Result&monster.NavResultBlocked != 0 {
+		rest = poseToSpawn(live)
+	}
+	clipped.Pose = monster.Pose{RegionID: rest.RegionID, X: rest.X, Y: rest.Y, Z: rest.Z, Heading: displacement.Pose.Heading}
+	return &clipped
 }
