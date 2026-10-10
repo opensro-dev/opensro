@@ -82,7 +82,9 @@ export function decodeCharacterSpawn(
 		ownerGid: number | undefined,
 		cosAppearanceRefObjId: number | undefined;
 	const attackFlags = mask & 2 ? u32() : kind === "monster" ? 0x10 : 0;
-	if ( (kind === "npc" || kind === "structure") && name ) nameColor = 0xff9ed0ff; // 859DEB: custom NPC name (CICATStruct is a CICNPC).
+	// 859D40 reads the custom name for every non-user, but colours it only
+	// when IsKindOf(CICNPC); a structure (CICATStruct) is not one.
+	if ( kind === "npc" && name ) nameColor = 0xff9ed0ff;
 	if ( isNameColorGuard( { kind, tidWord } ) ) {
 		guildId = u32();
 		guildName = str();

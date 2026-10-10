@@ -37,6 +37,9 @@ test("516BC0 shows delete by window kind, war, holding and fortress role", () =>
 	assert.equal( allow( 3, { war: true, ownObject: false } ), 0 );
 	assert.equal( allow( 3, { war: true, ownObject: true, role: 2 } ), 0 );
 	assert.equal( allow( 0, { war: true } ), 0 );
+	// 827DB0..827E10 compare the role for equality: a combined value is none.
+	assert.equal( allow( 2, { war: true, role: 3 } ), 0 );
+	assert.equal( allow( 1, { role: 5 } ), 0 );
 	// 517CA0's request: target, action, the player's fortress.
 	assert.deepEqual(
 		[ ...services.fortressServiceRequest( { target: BARRICADE, action: 0x17, fortress: 1 } ).payload ],

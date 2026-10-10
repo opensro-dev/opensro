@@ -237,6 +237,10 @@ test("a fortress structure's hit points, zone and state precede the shared block
 		7,
 		"Stone"
 	] );
+	// 859D40 colours a custom name only for a CICNPC; a CICATStruct is not one.
+	assert.equal( stone.nameColor, undefined, "a structure's name took the NPC colour" );
+	const npc = decodeCharacterSpawn( standingRow( 19553, Buffer.alloc( 0 ), "Keeper" ), "npc", 0x8, false );
+	assert.equal( npc.nameColor, 0xff9ed0ff );
 	const headquarters = Buffer.concat( [ standingRow( 19553, prefix, "HQ" ), u32( 0 ), Buffer.from( [ 1 ] ) ] );
 	const hq = decodeCharacterSpawn( headquarters, "structure", 0x2c6 | (5 << 11), true );
 	assert.equal( hq.guildId, 0 );
