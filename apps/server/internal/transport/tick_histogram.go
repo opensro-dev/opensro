@@ -103,3 +103,54 @@ func tickHistogramSnapshot(counts *[tickHistogramBuckets]uint64, count uint64, m
 		P999Ms:   tickPercentile(counts, count, 0.999, max),
 	}
 }
+
+/*
+================
+TickWindow
+
+The ticks recorded between two Metrics snapshots: their count, how many
+overran the tick interval, and the median and 99th percentile read as in
+the cumulative histogram.
+================
+*/
+type TickWindow struct {
+	Count    uint64
+	Overruns uint64
+	P50Ms    float64
+	P99Ms    float64
+}
+
+/*
+================
+TickWindowBetween
+
+The window from earlier to later, two snapshots of the same hub. A
+percentile in the open last bucket reads as the largest tick the hub has
+seen (later.TickMaxMs): the window keeps no maximum of its own. A later
+snapshot that is not after earlier (a restarted hub) yields an empty
+window.
+================
+*/
+func TickWindowBetween(earlier, later Metrics) TickWindow {
+	if later.TickCount <= earlier.TickCount || len(later.TickHistogram.Counts) != tickHistogramBuckets {
+		return TickWindow{}
+	}
+	var counts [tickHistogramBuckets]uint64
+	for i := range counts {
+		before := uint64(0)
+		if i < len(earlier.TickHistogram.Counts) {
+			before = earlier.TickHistogram.Counts[i]
+		}
+		if later.TickHistogram.Counts[i] < before {
+			return TickWindow{}
+		}
+		counts[i] = later.TickHistogram.Counts[i] - before
+	}
+	count := later.TickCount - earlier.TickCount
+	maxTick := time.Duration(later.TickMaxMs * float64(time.Millisecond))
+	window := TickWindow{Count: count, P50Ms: tickPercentile(&counts, count, 0.50, maxTick), P99Ms: tickPercentile(&counts, count, 0.99, maxTick)}
+	if later.TickOverruns >= earlier.TickOverruns {
+		window.Overruns = later.TickOverruns - earlier.TickOverruns
+	}
+	return window
+}

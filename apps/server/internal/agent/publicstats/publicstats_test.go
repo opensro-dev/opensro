@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/transport"
 )
 
 const (
@@ -90,9 +91,15 @@ func (f *fixture) service() *Service {
 			}
 			return "", ""
 		},
-		Online: func(characterID int64) bool { return characterID == 1 },
-		Shard:  "beta",
-		Now:    func() time.Time { return f.now },
+		Online:    func(characterID int64) bool { return characterID == 1 },
+		Shard:     "beta",
+		Now:       func() time.Time { return f.now },
+		Sample:    func() (int, transport.Metrics) { return 3, transport.Metrics{} },
+		StartedAt: f.now.Add(-time.Hour),
+		Schedule: func(now time.Time) []ScheduledEvent {
+			return []ScheduledEvent{{Kind: "fortress", Title: "Fortress war", Start: now, End: now.Add(time.Hour), Running: true},
+				{Kind: "maintenance", Title: "Maintenance", Start: now, Running: true}}
+		},
 	})
 }
 
@@ -291,6 +298,8 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/characters/{name}":    "/public/v1/characters/Kekw",
 		"/public/v1/rules":                "/public/v1/rules",
 		"/v1/accounts/{id}/characters":    "/v1/accounts/alpha/characters",
+		"/public/v1/status":               "/public/v1/status",
+		"/public/v1/schedule":             "/public/v1/schedule",
 	}
 	if len(endpoints) != len(samples) {
 		t.Fatalf("schema lists %d endpoints, want %d", len(endpoints), len(samples))

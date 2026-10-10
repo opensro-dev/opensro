@@ -4,8 +4,9 @@
 publicstats.go - the community site's read-only public API (port-only)
 
 Port-only, not native. GET-only JSON for opensro.online: the unique
-tracker, kill feed, leaderboard and world-firsts, the player database and
-the Original vs OpenSRO rules (opensro-web docs/COMMUNITY.md, P1-P6, P9).
+tracker, kill feed, leaderboard and world-firsts, the player database, the
+server status and event schedule (status.go) and the Original vs OpenSRO
+rules (opensro-web docs/COMMUNITY.md, P1-P9).
 It runs in the GameWorld, whose authority store holds the characters and
 kills, on its own loopback-only listener (SRO_PUBLIC_API_ADDR), apart from
 the control API.
@@ -40,6 +41,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/transport"
 )
 
 // EnvAddr names the listener; DefaultAddr is its loopback default.
@@ -116,6 +118,13 @@ type Sources struct {
 	// either one missing leaves the write unserved.
 	SetHidden  func(accountID, name string, hidden bool) error
 	WriteToken string
+	// Sample reads the shard's online count and the hub's cumulative
+	// counters for P7 (status.go); nil leaves the status figures zero.
+	Sample func() (online int, metrics transport.Metrics)
+	// StartedAt is when the GameWorld started (P7 uptime).
+	StartedAt time.Time
+	// Schedule lists the events this server runs at now (P8).
+	Schedule func(now time.Time) []ScheduledEvent
 }
 
 /*
@@ -162,6 +171,8 @@ type Service struct {
 	cache map[string]cacheEntry
 	snap  snapshot
 
+	status statusState
+
 	server   *http.Server
 	listener net.Listener
 }
@@ -204,6 +215,8 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/characters/{name}", s.cached(charactersMaxAge, s.profile))
 	mux.HandleFunc("GET /public/v1/rules", s.cached(rulesMaxAge, s.rules))
 	mux.HandleFunc("GET /public/v1/schema", s.cached(rulesMaxAge, s.schema))
+	mux.HandleFunc("GET /public/v1/status", s.cached(uniquesMaxAge, s.serverStatus))
+	mux.HandleFunc("GET /public/v1/schedule", s.cached(boardsMaxAge, s.schedule))
 	s.installPrivacy(mux)
 	return mux
 }
@@ -293,6 +306,7 @@ func (s *Service) Start(addr string) error {
 	s.listener = listener
 	s.server = &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = s.server.Serve(listener) }()
+	s.startStatusSampler()
 	return nil
 }
 
@@ -314,6 +328,7 @@ Close
 ================
 */
 func (s *Service) Close() error {
+	s.stopStatusSampler()
 	if s.server == nil {
 		return nil
 	}

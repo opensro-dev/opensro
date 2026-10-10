@@ -4,7 +4,9 @@
 public_api.go - wiring the community site's public read API (port-only)
 
 Starts publicstats on its own loopback listener (SRO_PUBLIC_API_ADDR,
-"off" disables it), hands it read-only sources, and records unique kills:
+"off" disables it), hands it read-only sources (characters, kills, uniques,
+the online count and tick counters, the fortress and maintenance calendar),
+and records unique kills:
 the action runtime's hook only enqueues (it runs inside a character door,
 where a store call would re-enter the door), and one goroutine commits the
 queue to the authority store. Shutdown closes the listener and drains the
@@ -21,12 +23,15 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 	"opensro.online/server/internal/transport/worldsession"
@@ -82,6 +87,7 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 	}
 	bridge := worldsession.New(hub)
 	monsters := gameplay.deps.MonsterState
+	startedAt := time.Now()
 	service := publicstats.New(publicstats.Sources{
 		Characters: func() []*domain.Character {
 			var out []*domain.Character
@@ -132,6 +138,17 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 			return setPublicHidden(authority, shard, account, name, hidden)
 		},
 		WriteToken: readPublicWriteToken(),
+		Sample: func() (int, transport.Metrics) {
+			online := 0
+			for _, view := range bridge.SnapshotSessionViews() {
+				if view.DivisionID == shard && view.CharacterID != 0 {
+					online++
+				}
+			}
+			return online, hub.Metrics()
+		},
+		StartedAt: startedAt,
+		Schedule:  func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
 	})
 	if err := service.Start(addr); err != nil {
 		log.WithError(err).Warn("public api: listener not started; the community site reads its cache")
@@ -140,6 +157,40 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 	api.service = service
 	log.Infof("public api: serving on %s", service.Addr())
 	return api
+}
+
+// publicWindowEvents names the fortress lane's windows on the calendar.
+var publicWindowEvents = map[string]struct{ kind, title string }{
+	"AllowSiegeRequest": {"fortress-registration", "Fortress war registration"},
+	"SiegeProgressing":  {"fortress", "Fortress war"},
+}
+
+/*
+================
+publicSchedule
+
+P8's events: the fortress registration and war windows from the lane that
+runs them, and a maintenance release while its gate file is present (the
+release tool writes it at the release's start and removes it at the end,
+so the start is the file's time and the end is open).
+================
+*/
+func publicSchedule(lane *siege.Lane, now time.Time) []publicstats.ScheduledEvent {
+	var events []publicstats.ScheduledEvent
+	if path := strings.TrimSpace(os.Getenv(agentapi.EnvMaintenanceGate)); path != "" {
+		if info, err := os.Stat(path); err == nil {
+			events = append(events, publicstats.ScheduledEvent{Kind: "maintenance", Title: "Maintenance", Start: info.ModTime(), Running: true})
+		}
+	}
+	for _, window := range lane.Windows(now.UnixMilli()) {
+		names, ok := publicWindowEvents[window.Name]
+		if !ok {
+			continue
+		}
+		events = append(events, publicstats.ScheduledEvent{Kind: names.kind, Title: names.title, Start: window.Start,
+			End: window.End, Running: window.Running})
+	}
+	return events
 }
 
 /*

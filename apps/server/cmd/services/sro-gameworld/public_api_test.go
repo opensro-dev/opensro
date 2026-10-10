@@ -13,7 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
@@ -131,5 +133,28 @@ func TestABadTokenRenderLeavesTheWriteOff(t *testing.T) {
 	}
 	if token := readPublicWriteToken(); token != full {
 		t.Fatalf("full token read as %q", token)
+	}
+}
+
+/*
+================
+TestPublicScheduleShowsMaintenanceWhileTheGateExists
+
+The gate file marks a running, open-ended maintenance; without it, or
+without a fortress lane, nothing is invented.
+================
+*/
+func TestPublicScheduleShowsMaintenanceWhileTheGateExists(t *testing.T) {
+	gate := filepath.Join(t.TempDir(), "maintenance-gate.json")
+	t.Setenv(agentapi.EnvMaintenanceGate, gate)
+	if events := publicSchedule(nil, time.Now()); len(events) != 0 {
+		t.Fatalf("no gate and no lane listed %+v", events)
+	}
+	if err := os.WriteFile(gate, []byte(`{"accounts":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	events := publicSchedule(nil, time.Now())
+	if len(events) != 1 || events[0].Kind != "maintenance" || !events[0].Running || !events[0].End.IsZero() {
+		t.Fatalf("gate present listed %+v, want one running open-ended maintenance", events)
 	}
 }

@@ -281,3 +281,48 @@ func (l *Lane) WarDates(nowMs int64) (previous, next time.Time) {
 	}
 	return time.Time{}, next
 }
+
+/*
+================
+Window
+
+One player-facing fortress period: the span running now, or else the next
+one to start.
+================
+*/
+type Window struct {
+	// Name is the schedule's name in the shipped schedule
+	// (AllowSiegeRequest, SiegeProgressing).
+	Name       string
+	Start, End time.Time
+	Running    bool
+}
+
+// publicWindows are the periods a player plans around: guild registration
+// and the war itself. The tax period and the alerts are not events.
+var publicWindows = []string{"AllowSiegeRequest", "SiegeProgressing"}
+
+/*
+================
+Windows
+
+The registration and war windows from the same schedules that drive the
+war (no second timetable), for the community site's calendar. A schedule
+with no window left is omitted.
+================
+*/
+func (l *Lane) Windows(nowMs int64) []Window {
+	if l == nil {
+		return nil
+	}
+	now := time.UnixMilli(nowMs).In(l.config.Location)
+	var out []Window
+	for _, name := range publicWindows {
+		start, end, ok := l.config.Schedules[name].Window(now)
+		if !ok {
+			continue
+		}
+		out = append(out, Window{Name: name, Start: start, End: end, Running: !now.Before(start) && now.Before(end)})
+	}
+	return out
+}

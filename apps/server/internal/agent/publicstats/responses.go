@@ -205,6 +205,48 @@ type Deviation struct {
 	Now    string `json:"now"`
 }
 
+// StatusTick is the last five minutes of simulation ticks: the median
+// and 99th percentile durations and the percent over the tick interval.
+type StatusTick struct {
+	P50Ms       float64 `json:"p50Ms"`
+	P99Ms       float64 `json:"p99Ms"`
+	SlowPercent float64 `json:"slowPercent"`
+}
+
+// StatusPoint is one closed hour: its peak online and tick p99.
+type StatusPoint struct {
+	At     string  `json:"at"`
+	Online int     `json:"online"`
+	P99Ms  float64 `json:"p99Ms"`
+}
+
+// StatusResponse is P7 GET /public/v1/status. History holds up to 48
+// hourly points, oldest first, since the GameWorld started.
+type StatusResponse struct {
+	Up            bool          `json:"up"`
+	Online        int           `json:"online"`
+	UptimeSeconds int64         `json:"uptimeSeconds"`
+	Tick          StatusTick    `json:"tick"`
+	History       []StatusPoint `json:"history"`
+}
+
+// ScheduleEvent is one event the server runs. Kind is "fortress" (the
+// war), "fortress-registration" or "maintenance"; EndsAt is null for an
+// open-ended maintenance.
+type ScheduleEvent struct {
+	Kind     string  `json:"kind"`
+	Title    string  `json:"title"`
+	StartsAt string  `json:"startsAt"`
+	EndsAt   *string `json:"endsAt"`
+	Running  bool    `json:"running"`
+}
+
+// ScheduleResponse is P8 GET /public/v1/schedule.
+type ScheduleResponse struct {
+	ServerTime string          `json:"serverTime"`
+	Events     []ScheduleEvent `json:"events"`
+}
+
 // RulesResponse is P9 GET /public/v1/rules.
 type RulesResponse struct {
 	Rules      []Rule      `json:"rules"`
