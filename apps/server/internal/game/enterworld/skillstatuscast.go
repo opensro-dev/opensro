@@ -4,7 +4,8 @@
 skillstatuscast.go - complete damage-free hostile status programs
 
 The Wizard's Root, Mesh Root and Lightning Shock, the Warrior's Axis
-Quiver and the Rogue's Poison Field carry no att block: the cast is one
+Quiver, the Rogue's Poison Field and the Chinese Frost Nova carry no att
+block: the cast is one
 successful zero-damage record whose only consequences are the 590680
 status roll and the authored aggression. Admission is by executable
 shape, never by skill name.
@@ -62,9 +63,12 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 	if len(fields) != 118 || fields[0] != "1" || fields[8] != "2" || fields[68] != "0" ||
 		!row.TimingPinned || !row.Consumption.Pinned || !row.ActionRangePinned ||
 		row.TargetRequired && !row.Targets.EnemyM && !row.Targets.EnemyP ||
-		row.ChainSub || row.ChainNext != 0 || row.ActionDurationMs == 0 || row.Attack.Present {
+		row.ChainSub || row.ChainNext != 0 || row.Attack.Present {
 		return SkillThreat{}, false
 	}
+	// Frost Nova authors no action duration: the release ends the action
+	// at once (the close is queued at release + 0). Nothing in 58E5F0 reads
+	// column 13.
 	// No projectile, no ground target, no secondary-target columns.
 	for _, column := range []int{15, 16, 17, 20, 24, 25, 26, 27, 28, 31, 32, 33, 56} {
 		if fields[column] != "0" {
@@ -109,13 +113,15 @@ func compileSkillStatusCast(fields []string, row SkillRow) (SkillThreat, bool) {
 			}
 		case tagEfr:
 			a := op.Arguments
-			// A targeted row centres on its primary (shape 2); an untargeted
-			// row centres on the caster (shape 1, Lightning Impact).
-			wantShape := uint32(2)
-			if !row.TargetRequired {
-				wantShape = 1
+			// A targeted row centres on its primary (shape 2) or selects
+			// along the line to it (shapes 3 and 4, Frost Nova A to C;
+			// skillarea_directional.go); an untargeted row centres on the
+			// caster (shape 1, Lightning Impact, Frost Nova D).
+			shapeOK := a[1] == 1
+			if row.TargetRequired {
+				shapeOK = a[1] >= 2 && a[1] <= 4
 			}
-			if a[0] != 1 || a[1] != wantShape || a[2] == 0 || a[2] > 0xffff ||
+			if a[0] != 1 || !shapeOK || a[2] == 0 || a[2] > 0xffff ||
 				a[3] == 0 || a[3] > 255 || a[4] > 100 ||
 				a[5] != statusCastSelect && (a[5] != statusCastPlayers || !row.TargetRequired) {
 				return SkillThreat{}, false
