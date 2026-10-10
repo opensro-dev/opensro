@@ -65,6 +65,9 @@ fortressConstruct
 519E60's aide admission, then 6341B0 in its refusal order: an unknown
 zone (3), a zone whose structure has no reference (0x281E), a structure
 that is not a barricade (0x281F), a zone of another fortress (0x2820).
+Natively there is no holder, role or war check here: 519E60's aide
+admission is the only gate, and the add charges nothing (6226B0's
+reference +0x19C is MaxHP, not a price).
 INFERENCE: a zone that already holds a structure refuses as the request
 that could not be queued (2): the add's database row is keyed by zone,
 so a second one cannot be inserted. The barricade stands at full hit
@@ -104,10 +107,14 @@ func (rt *Runtime) fortressConstruct(division string, c *enterworld.Character, r
 		if !rt.Monsters.SetStructureOccupant(division, world, zone, ref.RefObjID, rt.Now().UnixMilli()) {
 			return fortressRefusal(request.Action, fortressErrUnknown)
 		}
-		record, _ := rt.Fortresses.Get(division, fortressID)
+		// 6226B0 queues the add with CGObjPC_GetGuildID(actor) as the owner.
+		var guild int64
+		if c.GuildID != nil {
+			guild = *c.GuildID
+		}
 		built, _ := rt.structureOnZone(division, world, zone)
 		rt.storeStructureRow(division, domain.FortressStructureRecord{FortressID: fortressID, EventStructID: zone,
-			RefObjID: ref.RefObjID, OwnerGuildID: record.Holder(), HP: built.CurrentHP})
+			RefObjID: ref.RefObjID, OwnerGuildID: guild, HP: built.CurrentHP})
 		reply := wire.NewWriter(10).U8(request.Action).U8(1).U32(fortressID).U32(zone)
 		return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 	}

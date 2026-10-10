@@ -132,7 +132,8 @@ func TestFortressConstructionRefusalOrder(t *testing.T) {
 ================
 TestFortressConstructionBuildsTheBarricade
 
-The success reply is {0x0A, 1, fortress, zone}. The barricade stands at
+The success reply is {0x0A, 1, fortress, zone}, whoever's guild asks;
+the row names the builder's guild. The barricade stands at
 full hit points (the build time, Param3, is 0 in every v1.150 barricade
 row), its row is stored for the restart, and a second request on the
 now occupied zone is refused 2.
@@ -144,6 +145,10 @@ func TestFortressConstructionBuildsTheBarricade(t *testing.T) {
 	if _, stands := rt.structureOnZone(testDivision, world, testBarricadeZone); stands {
 		t.Fatal("the barricade site did not start vacant")
 	}
+	// No holder check: a member of another guild builds, and the row is
+	// that guild's (6226B0 passes the actor's guild).
+	builder := int64(78)
+	c.GuildID = &builder
 	want := wire.NewWriter(10).U8(siege.ActionConstruct).U8(1).U32(jangan).U32(testBarricadeZone).Payload()
 	if got := construct(rt, c, jangan, testBarricadeZone); !bytes.Equal(got, want) {
 		t.Fatalf("construction answered % x, want % x", got, want)
@@ -153,7 +158,7 @@ func TestFortressConstructionBuildsTheBarricade(t *testing.T) {
 		t.Fatalf("the barricade does not stand at full hit points: %+v", built)
 	}
 	row, ok := store.rows[testBarricadeZone]
-	if !ok || row.RefObjID != testBarricadeRef || row.FortressID != jangan || row.OwnerGuildID != 77 || row.HP != 80000 {
+	if !ok || row.RefObjID != testBarricadeRef || row.FortressID != jangan || row.OwnerGuildID != builder || row.HP != 80000 {
 		t.Fatalf("construction not stored: %+v", store.rows)
 	}
 	if got := construct(rt, c, jangan, testBarricadeZone); !bytes.Equal(got, []byte{siege.ActionConstruct, 2, fortressErrUnknown}) {
