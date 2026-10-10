@@ -99,3 +99,34 @@ func TestOpposingJobsCannotFormOrJoinAParty(t *testing.T) {
 		t.Fatalf("the job party is %+v (%v), want its two members", snapshot, ok)
 	}
 }
+
+/*
+================
+TestMatchJoinCommitRefusesOpposingJobs
+
+The match board's commit repeats 44F850's pair test: a thief cannot join a
+trader's listing even once the owner has approved.
+================
+*/
+func TestMatchJoinCommitRefusesOpposingJobs(t *testing.T) {
+	server := startPartyServer(t, filepath.Join(t.TempDir(), "authority"), true)
+	dressForJob(t, server, e2eNameA, domain.JobTrader)
+	dressForJob(t, server, e2eNameB, domain.JobThief)
+	dressForJob(t, server, e2eNameC, domain.JobHunter)
+	connA, connB, connC := dialWS(t, server.srv), dialWS(t, server.srv), dialWS(t, server.srv)
+	helloWS(t, connA)
+	enterWorld(t, connA, e2eNameA)
+	helloWS(t, connB)
+	enterWorld(t, connB, e2eNameB)
+	helloWS(t, connC)
+	enterWorld(t, connC, e2eNameC)
+	if reason := server.runtime.AdmitMatchJoin(e2eDivision, e2eNameA, e2eNameB, 0x03); reason != "opposing job classes" {
+		t.Fatalf("a thief joining a trader's listing committed with %q", reason)
+	}
+	if got := server.runtime.Registry().Count(); got != 0 {
+		t.Fatalf("the refused match join formed %d party(s)", got)
+	}
+	if reason := server.runtime.AdmitMatchJoin(e2eDivision, e2eNameA, e2eNameC, 0x03); reason != "" {
+		t.Fatalf("a hunter joining a trader's listing was refused: %q", reason)
+	}
+}

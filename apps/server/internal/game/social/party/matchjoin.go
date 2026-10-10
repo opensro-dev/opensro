@@ -105,6 +105,12 @@ func (r *Runtime) AdmitMatchJoin(divisionID, ownerName, joinerName string, optio
 	if !joinerOnline {
 		return "joiner logged off"
 	}
+	// ShardManager 44F850 (0x7C16) tests the joiner against the party's job
+	// class (44ED20) when the join is requested; the commit repeats it, as
+	// the consent commits do, so a suit changed meanwhile cannot slip in.
+	if !enterworld.JobsMayParty(r.matchPartyJobClass(divisionID, owner), enterworld.PartyJobClass(joiner)) {
+		return "opposing job classes"
+	}
 	if _, partied := r.registry.PartyOf(divisionID, owner.Name); !partied {
 		leader := Member{MemberID: enterworld.ObjectIDForCharacter(owner), Name: owner.Name}
 		second := Member{MemberID: enterworld.ObjectIDForCharacter(joiner), Name: joiner.Name}
@@ -149,4 +155,19 @@ func (r *Runtime) ListingAuthority(divisionID, name string) (uint8, bool, bool) 
 	}
 	character := findCharacterByName(r.deps, divisionID, name)
 	return snapshot.OptionBits, true, character != nil && snapshot.LeaderID == enterworld.ObjectIDForCharacter(character)
+}
+
+/*
+================
+matchPartyJobClass
+
+The class a match join compares against: the owner's party's (its
+leader's), or the owner's own when the join forms the party.
+================
+*/
+func (r *Runtime) matchPartyJobClass(divisionID string, owner *enterworld.Character) uint8 {
+	if snapshot, partied := r.registry.PartyOf(divisionID, owner.Name); partied {
+		return r.partyJobClass(divisionID, snapshot, owner)
+	}
+	return enterworld.PartyJobClass(owner)
 }
