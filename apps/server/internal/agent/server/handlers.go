@@ -25,9 +25,10 @@ import (
 	"opensro.online/server/internal/security/auth"
 )
 
-// loginStartingRetrySeconds paces a login retried while its shard starts at
-// the login budget's own refill (login_limiter.go), so waiting never spends
-// the burst and turns into RATE_LIMITED.
+// loginStartingRetrySeconds paces a login retried while its shard starts.
+// The starting answer is not charged to the login budget; the pace still
+// matches the budget's refill (login_limiter.go) so a retry that lands just
+// as the shard opens is never refused as RATE_LIMITED.
 const loginStartingRetrySeconds = int(loginAttemptRefill / time.Second)
 
 /*
@@ -106,6 +107,27 @@ func OfflineServerList(catalog *shard.Catalog, now time.Time) ([]byte, error) {
 
 /*
 ================
+shardStarting
+
+Whether serverID names an enabled shard whose live owner holds its lease
+but has not opened admission yet.
+================
+*/
+func (server *Server) shardStarting(serverID string) bool {
+	definition, ok := server.catalog.Resolve(serverID)
+	if !ok || !definition.Enabled {
+		return false
+	}
+	for _, status := range server.directory.Snapshot(server.now()) {
+		if status.ID == definition.ID {
+			return status.Starting
+		}
+	}
+	return false
+}
+
+/*
+================
 handleLogin
 ================
 */
@@ -141,6 +163,20 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		refuse(5, "BAD_REQUEST", "Malformed login request.")
 		return
 	}
+	// A leased GameWorld still loading its worlds: the client waits and logs
+	// in again (server-starting.ts) instead of failing. Answered before the
+	// per-address login budget: it tests no credential, so players sharing an
+	// address cannot drain the budget while the shard starts.
+	if server.shardStarting(request.ServerID) {
+		server.history.Record(history.Event{Kind: "login_refused", Code: readiness.CodeStarting, Category: "expected", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		w.Header().Set("Retry-After", strconv.Itoa(loginStartingRetrySeconds))
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"ok": false, "nativeTitleStatus": 5,
+			"code": readiness.CodeStarting, "message": "The server is starting.",
+			"retryAfter": loginStartingRetrySeconds,
+		})
+		return
+	}
 	if !server.loginAttempts.Allow(clientIP(r)) {
 		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "rate_limited", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
 		w.Header().Set("Retry-After", "6")
@@ -165,19 +201,6 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			status = candidate
 			break
 		}
-	}
-	if !status.Operating && status.Starting {
-		// A leased GameWorld still loading its worlds: the client waits and
-		// logs in again (server-starting.ts) instead of failing. Retry-After
-		// matches the login budget's refill, so the wait never spends it.
-		server.history.Record(history.Event{Kind: "login_refused", Code: readiness.CodeStarting, Category: "expected", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
-		w.Header().Set("Retry-After", strconv.Itoa(loginStartingRetrySeconds))
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"ok": false, "nativeTitleStatus": 5,
-			"code": readiness.CodeStarting, "message": "The server is starting.",
-			"retryAfter": loginStartingRetrySeconds,
-		})
-		return
 	}
 	if !status.Operating {
 		refuse(5, "SHARD_OFFLINE", "The selected server is not operating.")

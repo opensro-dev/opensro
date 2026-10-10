@@ -47,6 +47,16 @@ func TestLoginWaitsForAStartingShard(t *testing.T) {
 		t.Fatalf("Retry-After %q / %v; want 6, the login budget's refill", got, body["retryAfter"])
 	}
 
+	// Players behind one address all wait through the start: the starting
+	// answer is not charged to the per-address login budget (burst 10), so
+	// twenty retries still leave the real login admissible.
+	for i := 0; i < 20; i++ {
+		response = performJSON(t, fixture.handler, http.MethodPost, "/title/login", loginBody, "")
+		if response.Code != http.StatusServiceUnavailable {
+			t.Fatalf("starting retry %d answered %d %#v; want 503 starting", i, response.Code, decodeObject(t, response))
+		}
+	}
+
 	// Once the shard admits, the same login is accepted.
 	publish(2, shard.PhaseAdmitting)
 	response = performJSON(t, fixture.handler, http.MethodPost, "/title/login", loginBody, "")
