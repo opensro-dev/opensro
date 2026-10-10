@@ -75,6 +75,18 @@ export function createCosHud() {
 		},
 		/*
 		================
+		targetUseBox
+
+		The confirmation's control prefix: a revival and a lease renewal each
+		own their ids, so no two boxes ever publish the same control.
+		================
+		*/
+		targetUseBox(): "cos-revive" | "cos-renew" | null {
+			if ( !targetUse || targetUse.kind !== "item-use" ) return null;
+			return targetUse.revivalSlot !== undefined ? "cos-revive" : "cos-renew";
+		},
+		/*
+		================
 		takeTargetUse
 		================
 		*/

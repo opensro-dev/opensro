@@ -4729,7 +4729,7 @@ export function createUi(
 			if ( cosHud.targetUse() !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
-					event.kind === "activate" && event.id === "cos-renew-cancel"
+					event.kind === "activate" && event.id === cosHud.targetUseBox() + "-cancel"
 				) {
 					cosHud.takeTargetUse();
 					dirty = true;
@@ -4737,7 +4737,7 @@ export function createUi(
 				}
 				if (
 					event.kind === "key" && event.code === "Enter" && !composing ||
-					event.kind === "activate" && event.id === "cos-renew-confirm"
+					event.kind === "activate" && event.id === cosHud.targetUseBox() + "-confirm"
 				) {
 					const command = cosHud.takeTargetUse();
 					if ( command && view?.session?.phase === "world" && !view.gameplay?.inventoryPending ) {
@@ -18297,12 +18297,12 @@ export function createUi(
 					)
 				);
 				button(
-					cosHud.targetUse() ? "cos-renew-confirm" : "cos-clean-confirm",
+					cosHud.targetUse() ? cosHud.targetUseBox() + "-confirm" : "cos-clean-confirm",
 					hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
-					cosHud.targetUse() ? "cos-renew-cancel" : "cos-clean-cancel",
+					cosHud.targetUse() ? cosHud.targetUseBox() + "-cancel" : "cos-clean-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);

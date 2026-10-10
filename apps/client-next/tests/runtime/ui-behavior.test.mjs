@@ -5378,13 +5378,61 @@ test("right-clicking Grass of Life arms the target cursor and confirms the click
 		f.ui.event( { kind: "activate", id: "slot:14" } );
 		assert.equal( f.ui.cursor(), null );
 		for ( let t = 2100; t <= 2500; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
-		assert.ok( defined( scene ).controls.some( row => row.id === "cos-renew-confirm" ) );
+		assert.ok( defined( scene ).controls.some( row => row.id === "cos-revive-confirm" ) );
 		assert.equal( sent.length, 0, "choosing the pet waits for confirmation" );
-		f.ui.event( { kind: "activate", id: "cos-renew-confirm" } );
+		f.ui.event( { kind: "activate", id: "cos-revive-confirm" } );
 		// The same use a drop of the grass on the whistle sends.
 		assert.deepEqual( sent.at( -1 ), {
 			kind: "gameplay",
 			command: { kind: "item-use", slot: 13, revivalSlot: 14 }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
+The revival and renewal boxes own distinct control ids
+================
+*/
+test("the grass and clock confirmations never publish the same control id", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const base = { quantity: 1, plus: 0, durability: 0, variance: "0", magic: [] };
+		const grass = { ...base, slot: 13, refObjId: 2128, typeFlags: 0x30ec, quantity: 3 };
+		const clock = { ...base, slot: 15, refObjId: 8985, typeFlags: 0x66ec };
+		const wolf = { ...base, slot: 14, refObjId: 901, typeFlags: 0x08cc, summon: { state: 4, rentals: [] } };
+		f.state.gameplay.inventory = [ grass, wolf, clock ];
+		f.state.gameplay.inventorySlotCount = 45;
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		let scene, t = 100;
+		const settle = () => {
+			for ( const end = t + 400; t <= end; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
+			return defined( scene ).controls.map( row => row.id );
+		};
+		settle();
+		// The grass box is pending; the clock's right-click cannot open a second.
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		f.ui.event( { kind: "activate", id: "slot:14" } );
+		f.ui.event( { kind: "right-activate", id: "slot:15" } );
+		let ids = settle();
+		assert.equal( new Set( ids ).size, ids.length, "every control id is unique" );
+		assert.ok( ids.includes( "cos-revive-confirm" ) && !ids.includes( "cos-renew-confirm" ) );
+		// Answered, the clock opens its own box under its own ids.
+		f.ui.event( { kind: "activate", id: "cos-revive-cancel" } );
+		settle();
+		f.ui.event( { kind: "right-activate", id: "slot:15" } );
+		settle();
+		f.ui.event( { kind: "activate", id: "slot:14" } );
+		ids = settle();
+		assert.equal( new Set( ids ).size, ids.length, "every control id is unique" );
+		assert.ok( ids.includes( "cos-renew-confirm" ) && !ids.includes( "cos-revive-confirm" ) );
+		f.ui.event( { kind: "activate", id: "cos-renew-confirm" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 15, summonerSlot: 14 }
 		} );
 	} finally {
 		f.dispose();
