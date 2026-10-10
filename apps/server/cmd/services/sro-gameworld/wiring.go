@@ -187,13 +187,10 @@ func newGameWorldApplication(
 		return nil, err
 	}
 	authority.agentAPI.InstallHistory(historyHandler)
-	if err := authority.textdata.Skills.UseBoundedCache(512); err != nil {
-		return nil, fmt.Errorf("skill cache: %w", err)
+	if err := configureCatalogues(authority.textdata.Skills, authority.textdata.Items, boundedCataloguesFromEnv()); err != nil {
+		return nil, err
 	}
 	application.skillCache = authority.textdata.Skills
-	if err := authority.textdata.Items.UseBoundedCache(512); err != nil {
-		return nil, fmt.Errorf("item cache: %w", err)
-	}
 	application.itemCache = authority.textdata.Items
 
 	gameplay, err := newGameplayPlane(
@@ -595,6 +592,53 @@ func (application *gameWorldApplication) rollback() {
 	if application.history != nil {
 		_ = application.history.Close()
 	}
+}
+
+// boundedCatalogueEnv opts a small host into the disk-backed skill and item
+// catalogues. Off (the default) keeps the loader's decoded rows resident:
+// a bounded miss decodes JSON under one mutex (~96 us and 19 KB per lookup,
+// measured 2026-10-11), and the tick looks skills up for every learned
+// skill of every player, which overran production's 100 ms budget.
+// Resident rows cost ~80 MiB (51.6 skills + 27.5 items). Not gameplay.
+const boundedCatalogueEnv = "SRO_BOUNDED_CATALOGUE"
+
+// boundedCatalogueRows is the resident window of each bounded catalogue.
+const boundedCatalogueRows = 512
+
+/*
+================
+boundedCataloguesFromEnv
+================
+*/
+func boundedCataloguesFromEnv() bool {
+	return strings.TrimSpace(os.Getenv(boundedCatalogueEnv)) == "1"
+}
+
+// boundableCatalogue is the one capability configureCatalogues needs.
+type boundableCatalogue interface {
+	UseBoundedCache(capacity int) error
+}
+
+/*
+================
+configureCatalogues
+
+Chooses where the immutable skill and item rows live. Bounded swaps each
+loader's resident rows for a disk-backed LRU; resident leaves them as Load
+built them, which is also the boot path with less work (no re-encode).
+================
+*/
+func configureCatalogues(skills, items boundableCatalogue, bounded bool) error {
+	if !bounded {
+		return nil
+	}
+	if err := skills.UseBoundedCache(boundedCatalogueRows); err != nil {
+		return fmt.Errorf("skill cache: %w", err)
+	}
+	if err := items.UseBoundedCache(boundedCatalogueRows); err != nil {
+		return fmt.Errorf("item cache: %w", err)
+	}
+	return nil
 }
 
 /*
