@@ -12,6 +12,39 @@ A missing model or a retired actor removes its whole anchored product.
 */
 import type { UiQuad, UiScene } from "@/engine/contracts/ui";
 
+// CICharactor_RenderOverheadNameAndIndicators (85F4A0): the board stands 2
+// above the character's height, or 7 above its ride's.
+const LABEL_LIFT = 2;
+const RIDE_LABEL_LIFT = 7;
+// CIItem labels stand five units above the ground (CIGIDObject height).
+const GROUND_ITEM_LABEL_HEIGHT = 5;
+
+/*
+================
+characterLabelHeight
+
+How far above its feet a character's name board is anchored. 85F4A0 adds
+the lift to CICharactor +0x224, the height that eases toward +0x220 =
+GetCompositeScale (characterInfo height x 0.5, record +0x08, times the
+actor's scale) x 20: the published height, never the model's bounds, so a
+quadruped whose rest pose is low still carries its name above it. bindTop
+serves only an actor the catalogue gives no height (not a CICharactor).
+================
+*/
+export function characterLabelHeight(
+	body: {
+		readonly height?: number;
+		readonly scale: number;
+		readonly groundItem?: boolean;
+	},
+	bindTop: number,
+	riding: boolean
+): number {
+	if ( body.groundItem ) return GROUND_ITEM_LABEL_HEIGHT;
+	const lift = riding ? RIDE_LABEL_LIFT : LABEL_LIFT;
+	return (body.height ?? bindTop) * body.scale + lift;
+}
+
 /*
 ================
 projectWorldAnchor

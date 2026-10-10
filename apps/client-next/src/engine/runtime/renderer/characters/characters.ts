@@ -6,6 +6,7 @@ characters.ts - admitted character models, world batches and separate portrait s
 ===========================================================================
 */
 import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
+import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
 import type { WorldTexture } from "@/engine/contracts/texture";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
@@ -2451,9 +2452,13 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				const bounds = bindBoundsOf( resource.model );
 				const matrix = transformFor( body, rows, origin, transforms );
 				if ( !matrix || !Number.isFinite( bounds[4] ) ) continue;
-				const lift = rideResource ? 7 : 2;
 				const x = matrix[12]!,
-					y = matrix[13]! + (actor.groundItem ? 5 : bounds[4] * body.scale + lift),
+					y = matrix[13]! +
+						characterLabelHeight(
+							{ height: body.height, scale: body.scale, groundItem: actor.groundItem },
+							bounds[4],
+							!!rideResource
+						),
 					z = matrix[14]!;
 				const clip = [ 0, 0, 0, 0 ];
 				for ( let n = 0; n < 4; n++ ) {
