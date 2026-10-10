@@ -1,9 +1,10 @@
-import type {AlchemyMode,AlchemyState} from '@/engine/contracts/item-process';
+import type {AlchemyMode,AlchemyOutcome,AlchemyState} from '@/engine/contracts/item-process';
 import type {InventoryItem} from '@/engine/contracts/gameplay';
 import type {UiSoundHandle} from '@/engine/foundation/ui/sound-catalog';
 // CIFAlchemyReinforce owns presentation state; inventory owns all item mutations.
 export function createAlchemy(){
  let state:AlchemyState={visible:false,pending:false,mode:'reinforce',flags:0,error:null,slot:null};
+ let outcomes=0;
  return {
   open(){state={...state,visible:true};},
   close(){state={...state,visible:false};},
@@ -25,8 +26,8 @@ export function createAlchemy(){
    const opcode=mode==='reinforce'?0x7373:0x7651,payload=Uint8Array.from([...(mode==='reinforce'?[]:[mode==='attribute'?2:3]),selected.length,...selected]);
    state={visible:true,pending:true,mode,flags:0,error:null,slot:selected[0]!};return {opcode,payload};
   },
-  result(slot:number,flags:number,error:number|null=null):readonly UiSoundHandle[]{
-   state={...state,pending:false,slot,flags,error};
+  result(slot:number,flags:number,error:number|null=null,detail?:Omit<AlchemyOutcome,'sequence'|'flags'>):readonly UiSoundHandle[]{
+   state={...state,pending:false,slot,flags,error,...(detail&&flags?{outcome:{...detail,flags,sequence:++outcomes}}:{})};
    if(!state.visible||!flags)return [];
    // 62B0B0: use always precedes the result cue; destroyed/cancelled reuse failure.
    return ['SND_ELIXIR_USE',flags&0x10?'SND_ELIXIR_SUCCESS':'SND_ELIXIR_FAILURE'];

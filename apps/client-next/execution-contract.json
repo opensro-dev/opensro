@@ -2,6 +2,13 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/foundation/ui/alchemy-result.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/fortress-production.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [

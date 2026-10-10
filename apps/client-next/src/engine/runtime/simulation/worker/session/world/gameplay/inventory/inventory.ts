@@ -1484,7 +1484,13 @@ receive
 				if ( next ) slots.set( n, { ...next, slot: n } );
 				else slots.delete( n );
 				published = null;
-				for ( const cue of alchemy.result( n, flags ) ) play( cue );
+				const detail = {
+					plus: next?.plus ?? 0,
+					previousPlus: old.plus,
+					durability: next?.durability ?? 0,
+					previousDurability: old.durability
+				};
+				for ( const cue of alchemy.result( n, flags, null, detail ) ) play( cue );
 				return true;
 			}
 			if ( op === 0x31e8 ) {

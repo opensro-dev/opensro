@@ -275,3 +275,57 @@ test("Magic Pop rejection does not execute result presentation or replace the pe
 		assert.deepEqual( sounds, cues );
 	}
 });
+test("a reinforcement records its outcome for the window (62B0B0)", () => {
+	const { owner } = setup();
+	owner.process( { kind: "alchemy-open" }, 0 );
+	owner.process( { kind: "alchemy-start", mode: "reinforce", slots: [ 13, 14 ] }, 0 );
+	const before = defined( owner.state().inventory.find( i => i.slot === 13 ) );
+	owner.receive( 0xb373, Uint8Array.from( [ 1, 1, 13, ...equipment( 1 ) ] ) );
+	assert.deepEqual( owner.state().alchemy.outcome, {
+		sequence: 1,
+		flags: 0x10,
+		plus: 1,
+		previousPlus: before.plus,
+		durability: defined( owner.state().inventory.find( i => i.slot === 13 ) ).durability,
+		previousDurability: before.durability
+	} );
+	owner.receive( 0xb373, Uint8Array.of( 1, 0, 13, 1 ) );
+	const destroyed = defined( owner.state().alchemy.outcome );
+	assert.deepEqual( [ destroyed.sequence, destroyed.flags, destroyed.plus, destroyed.previousPlus ], [
+		2,
+		0x40,
+		0,
+		1
+	] );
+	// A refusal finishes no reinforcement.
+	owner.receive( 0xb373, Uint8Array.of( 2, 0x10 ) );
+	assert.equal( defined( owner.state().alchemy.outcome ).sequence, 2 );
+});
+const result = await import( "../../src/engine/foundation/ui/alchemy-result.ts" );
+test("62B0B0 words the outcome and plays its effect once", () => {
+	const copy = key =>
+		({
+			UIIT_MSG_REINFORCERR_SUCCESS: "success [%d]",
+			UIIT_MSG_REINFORCERR_FAIL: "fail",
+			UIIT_MSG_REINFORCERR_FAIL_RESULT_OPTLV_ZERO: "level gone",
+			UIIT_MSG_REINFORCERR_FAIL_RESULT_OPTLV_DOWN: "level [%d] (down %d)",
+			UIIT_MSG_REINFORCERR_FAILDOWN_DURABILITY: "durability [%d] (down %d)",
+			UIIT_MSG_REINFORCERR_BREAKDOWN: "destroyed"
+		})[key] ?? key;
+	const outcome = flags => ({ sequence: 1, flags, plus: 3, previousPlus: 5, durability: 40, previousDurability: 52 });
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x10 ), copy ), [ "success [3]" ] );
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x20 ), copy ), [ "fail" ] );
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x23 ), copy ), [
+		"level [3] (down 2)",
+		"durability [40] (down 12)"
+	] );
+	assert.deepEqual( result.alchemyResultLines( { ...outcome( 0x21 ), plus: 0 }, copy ), [ "level gone" ] );
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x40 ), copy ), [ "destroyed" ] );
+	assert.equal( result.alchemyEffectTexture( 0x10 ), "interface/alchemy/alcm_effect_success" );
+	assert.equal( result.alchemyEffectTexture( 0x40 ), "interface/alchemy/alcm_effect_fail_1" );
+	// Sixteen 64 px cells of a 4x4 atlas, 50 ms each, then nothing.
+	assert.deepEqual( result.alchemyEffectCell( 0 ), [ 0, 0, .25, .25 ] );
+	assert.deepEqual( result.alchemyEffectCell( 5 * 50 ), [ .25, .25, .25, .25 ] );
+	assert.deepEqual( result.alchemyEffectCell( 15 * 50 + 49 ), [ .75, .75, .25, .25 ] );
+	assert.equal( result.alchemyEffectCell( 16 * 50 ), null );
+});

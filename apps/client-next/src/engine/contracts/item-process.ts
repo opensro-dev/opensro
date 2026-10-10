@@ -34,6 +34,9 @@ AlchemyState
 ================
 */
 export interface AlchemyState {
+	// The last finished reinforcement, for the window's effect and chat
+	// lines (alchemy-result.ts); sequence tells a new one from a republish.
+	readonly outcome?: AlchemyOutcome;
 	readonly locked?: boolean;
 	readonly remaining?: number;
 	readonly total?: number;
@@ -45,6 +48,23 @@ export interface AlchemyState {
 	readonly flags: number;
 	readonly error: number | null;
 	readonly slot: number | null;
+}
+
+/*
+================
+AlchemyOutcome
+
+One reinforcement's result as 62B0B0 reads it: the flag bits and the
+item's enhancement level and durability before and after.
+================
+*/
+export interface AlchemyOutcome {
+	readonly sequence: number;
+	readonly flags: number;
+	readonly plus: number;
+	readonly previousPlus: number;
+	readonly durability: number;
+	readonly previousDurability: number;
 }
 
 /*

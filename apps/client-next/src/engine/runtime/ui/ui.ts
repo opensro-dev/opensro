@@ -193,6 +193,7 @@ import {
 	fortressProductionRemaining,
 	fortressProductionTimeText
 } from "@/engine/foundation/gameplay/fortress-production";
+import { alchemyEffectCell, alchemyEffectTexture, alchemyResultLines } from "@/engine/foundation/ui/alchemy-result";
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_MAX_STAKE, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
@@ -840,6 +841,10 @@ export function createUi(
 	// The step clock the production window counts down on, and the second it
 	// last drew (65A5E0 runs on a 1000 ms timer).
 	let productionClock = 0, productionSecond = -1;
+	// The last reinforcement outcome shown, the effect it started, and the
+	// step clock the effect plays on (62B0B0, alchemy-result.ts).
+	let alchemyOutcomeSeen = 0, alchemyClock = 0;
+	let alchemyEffect: { readonly flags: number; readonly startedAt: number; } | null = null;
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
 	const guildWarHud = createGuildWarHud();
@@ -6542,6 +6547,22 @@ export function createUi(
 			// 65A5E0 redraws the countdown once a second.
 			if ( panel === FORTRESS_PRODUCTION_PANEL && Math.floor( now / 1000 ) !== productionSecond ) {
 				productionSecond = Math.floor( now / 1000 );
+				dirty = true;
+			}
+			// 62B0B0: a finished reinforcement writes its outcome to the chat and
+			// plays the success or failure effect once in the open window.
+			alchemyClock = now;
+			const outcome = next.gameplay?.alchemy?.outcome;
+			if ( outcome && outcome.sequence > alchemyOutcomeSeen ) {
+				alchemyOutcomeSeen = outcome.sequence;
+				if ( next.gameplay?.alchemy?.visible ) {
+					for ( const line of alchemyResultLines( outcome, hudCopy ) ) hudMessages.append( line );
+					alchemyEffect = { flags: outcome.flags, startedAt: now };
+				}
+				dirty = true;
+			}
+			if ( alchemyEffect ) {
+				if ( !alchemyEffectCell( now - alchemyEffect.startedAt ) ) alchemyEffect = null;
 				dirty = true;
 			}
 			fortressStaffHud.observe(
@@ -13117,6 +13138,14 @@ export function createUi(
 						} );
 					}
 					nativePage( page, px, py + 150 );
+					// CIFAlchemyReinforce's effect sprite, control 50 (625600).
+					const deco = page.GDR_AB_REINFORCE_PROCESS_DECO,
+						cell = alchemyEffect && alchemyEffectCell( alchemyClock - alchemyEffect.startedAt );
+					if ( !processing && deco && alchemyEffect && cell ) {
+						const effect = ROOT + alchemyEffectTexture( alchemyEffect.flags ) + ".png";
+						paths.push( effect );
+						if ( resources.has( effect ) ) image( authoredRect( deco, px, py + 150 ), effect, white, cell );
+					}
 					const slots = Object.values( page ).filter( n => n.type === "CIFSlotWithHelp" ).sort( ( a, b ) =>
 						a.id - b.id
 					);
