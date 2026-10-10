@@ -16699,6 +16699,9 @@ export function createUi(
 			if ( worldVisible && mallNotice === "open" && noticeData && noticeLayout ) {
 				// CIFMallNotifyWnd (6CCC20): the mall_communicate frame, its two titles,
 				// the notice text with TextMargin between lines, and buttons 4 and 5.
+				// One window admission: text and buttons wait for the frame, so a
+				// cold open after a teleport never shows them over the world.
+				const admission = beginWindow();
 				const [nx, ny] = mallNotifyOrigin( w, h ),
 					notice = noticeData.mallNotify,
 					nodes = Object.values( noticeLayout ),
@@ -16738,6 +16741,7 @@ export function createUi(
 						hudCopy( "UIIT_CTL_LETTER_WINDOWSCLOSE" )
 					);
 				}
+				endWindow( admission, "mall-notice" );
 			}
 			if (
 				game?.social?.invitation && game.social.invitation.type !== 10 && worldVisible &&

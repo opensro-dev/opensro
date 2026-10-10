@@ -472,6 +472,26 @@ test("the Item Mall notice text keeps its static's authored dark FontColor, as 6
 	}
 });
 
+test("the Item Mall notice waits for its frame instead of drawing bare text over the world", () => {
+	// A teleport or world entry cold-loads the frame; until it arrives the
+	// window (text and buttons) is withheld as one admission.
+	let held = true;
+	const f = uiFixture( undefined, path => held && path.endsWith( "/interface/mall/mall_communicate.png" ) );
+	try {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		const shown = () => {
+			for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+			return !!last?.controls.some( control => control.id === "mall-notice-close" );
+		};
+		assert.equal( shown(), false, "the notice showed before its frame loaded" );
+		held = false;
+		assert.equal( shown(), true, "the notice did not appear once its frame loaded" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("the Item Mall notice opens once per session at world entry, as 683B40", () => {
 	const f = uiFixture();
 	try {
