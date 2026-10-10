@@ -461,6 +461,22 @@ export function fortressDeleteAction( kind: number, context: {
 
 /*
 ================
+fortressDismissNotice
+
+754A40's success arms for the delete button: a dismissal (0x16) writes
+UIIT_MSG_FORT_COMMON_DISMISS_COMPLETE to the chat; a demolition (0x17)
+only clears the zone's occupant and writes nothing. Refusals take the
+generic category-0x1E notice.
+================
+*/
+export function fortressDismissNotice( state: FortressState ): SystemNotice | null {
+	const service = state.service;
+	if ( !service || service.result !== 1 || service.action !== FORTRESS_DISMISS ) return null;
+	return { key: "UIIT_MSG_FORT_COMMON_DISMISS_COMPLETE", value: 0, nativeType: 0 };
+}
+
+/*
+================
 fortressMusicActive
 ================
 */

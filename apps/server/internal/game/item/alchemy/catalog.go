@@ -15,6 +15,7 @@ package alchemy
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -83,6 +84,7 @@ LoadCatalog
 */
 func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) {
 	c := &Catalog{Items: map[string]Reference{}, Magic: map[uint16]Magic{}}
+	stackOverrides := map[string]uint16{}
 	files, err := filepath.Glob(filepath.Join(dir, "itemdata*.txt"))
 	if err != nil {
 		return nil, err
@@ -103,6 +105,14 @@ func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) 
 				return nil, fmt.Errorf("alchemy: invalid price/stack %s", a[2])
 			}
 			r.Price, r.Stack = uint32(max(price, 0)), uint16(max(stack, 0))
+			effectiveStack := ref.NativeFields.Get("maxStack")
+			if math.IsNaN(effectiveStack) || math.IsInf(effectiveStack, 0) || effectiveStack < -1 ||
+				effectiveStack > math.MaxUint16 || effectiveStack != math.Trunc(effectiveStack) {
+				return nil, fmt.Errorf("alchemy: invalid effective stack %s", a[2])
+			}
+			if effective := uint16(max(effectiveStack, 0)); effective != r.Stack {
+				stackOverrides[r.Name] = effective
+			}
 			if len(a) < 159 {
 				return nil, fmt.Errorf("alchemy: incomplete item %s", a[2])
 			}
@@ -174,6 +184,14 @@ func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) 
 	}
 	if err := c.loadDissolveProfile(); err != nil {
 		return nil, err
+	}
+	// The dissolution profile validates authored singleton stones. Apply
+	// port-only placement caps after admission so production uses the same
+	// effective limits as pickup without weakening that native-data check.
+	for name, stack := range stackOverrides {
+		ref := c.Items[name]
+		ref.Stack = stack
+		c.Items[name] = ref
 	}
 	return c, nil
 }

@@ -491,7 +491,10 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	// a whole-stack move. quantity == stackCount is NOT a split: that is the
 	// plain two-click move of a whole stackable, and it must keep reaching
 	// the swap/move leg.
-	if bothInBag && stackable && destIndex < 0 && quantity != sourceCount {
+	// Port-only, not native: retained elixir and stone stacks need to divide
+	// after their operator cap returns to one. This does not enable merging.
+	splittable := stackable || (bothInBag && retainedOversizedStack(inv.items[sourceIndex], stackCap))
+	if bothInBag && splittable && destIndex < 0 && quantity != sourceCount {
 		// Per-cause notice bytes (client sub_689420 copy): zero asks for a
 		// positive number (01:29), over-stack says fewer-than-remain
 		// (01:14). Retail UI clamps the divide input to [1, stack-1] before
@@ -542,7 +545,7 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 
 	// PARTIAL SPLIT: only into an EMPTY slot and only for less than the
 	// whole stack.
-	case stackable && destIndex < 0 && quantity > 0 && quantity < sourceCount:
+	case splittable && destIndex < 0 && quantity > 0 && quantity < sourceCount:
 		splitRow := splitInventoryRow(inv.items[sourceIndex], destSlot, quantity)
 		inv.items = append(inv.items, splitRow)
 		inv.items[sourceIndex].Quantity = sourceCount - quantity
@@ -569,6 +572,45 @@ func (inv *Inventory) Transfer(sourceSlot, destSlot uint8, quantity uint16, stac
 	}
 
 	return out, nil
+}
+
+/*
+================
+retainedOversizedStack
+
+Port-only, not native: SRO_STACK_SIZES can leave consumable and stone rows above
+their current cap after a restart. Only its configurable families qualify;
+cargo and unrelated per-item metadata must not acquire a new merge policy.
+Inventory has no cap-history marker, so eligibility follows the same type
+families as enterworld.stackGroups. Elixirs and stones can return to cap 1;
+only value-carrying stones may retain a nonzero assimilation byte.
+================
+*/
+func retainedOversizedStack(item Item, stackCap uint16) bool {
+	if stackCap == 0 || item.Quantity <= stackCap || item.VarianceBits != 0 ||
+		len(item.MagicOptions) != 0 || item.TransformRefObjID != 0 || item.Summon != nil || item.TradeOwner != "" {
+		return false
+	}
+	const itemTypeMask uint16 = 0xfffe
+	flags := item.TypeFlags & itemTypeMask
+	if item.Plus != 0 && !wire.EtcCarriesPlusByte(item.TypeFlags) {
+		return false
+	}
+	switch flags {
+	case wire.PackTypeFlags(3, 3, 10, 1), wire.PackTypeFlags(3, 3, 11, 1),
+		wire.PackTypeFlags(3, 3, 11, 2), wire.PackTypeFlags(3, 3, 11, 7):
+		return true
+	}
+	if stackCap == 1 {
+		return false
+	}
+	switch flags {
+	case wire.PackTypeFlags(3, 3, 1, 1), wire.PackTypeFlags(3, 3, 1, 2), wire.PackTypeFlags(3, 3, 1, 3),
+		wire.PackTypeFlags(3, 3, 1, 4), wire.PackTypeFlags(3, 3, 1, 9), wire.PackTypeFlags(3, 3, 10, 2):
+		return true
+	default:
+		return false
+	}
 }
 
 // SocketVisual is the post-move occupancy of one equipment socket a type-0x00

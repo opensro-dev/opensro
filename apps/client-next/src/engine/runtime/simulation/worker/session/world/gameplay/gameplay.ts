@@ -123,6 +123,7 @@ import {
 	FORTRESS_WAR_STATUS,
 	FORTRESS_WAR_WITHDRAW,
 	fortressTaxNotice,
+	fortressDismissNotice,
 	type FortressApplication
 } from "@/engine/foundation/gameplay/fortress";
 import { fortressServiceRequest } from "@/engine/foundation/gameplay/fortress-services";
@@ -2736,9 +2737,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					} else if ( frame.opcode === 0xb1e1 ) {
 						const taxed = fortressTaxNotice( fortressNext, taxFortress );
 						taxFortress = taxed.fortress;
-						if ( taxed.notice ) {
-							notices = [ ...notices.slice( -99 ), { ...taxed.notice, sequence: ++noticeSequence } ];
-						}
+						const done = taxed.notice ?? fortressDismissNotice( fortressNext );
+						if ( done ) notices = [ ...notices.slice( -99 ), { ...done, sequence: ++noticeSequence } ];
 					}
 					if ( frame.opcode === 0x3887 ) {
 						musicMode = fortressMusicMode( musicMode, fortress, fortressNext, frame.payload[0]! );

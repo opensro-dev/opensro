@@ -410,6 +410,9 @@ def lift_gate(config):
 # backups back with the fleet stopped, before the retained server deploys.
 # ================
 def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None):
+	stack_sizes = config.get("stack_sizes", "")
+	if not isinstance(stack_sizes, str):
+		raise ValueError("stack_sizes must be a string")
 	module = Path(config["module"])
 	names = release_files(manifest["files"])
 	if upgrade and "sro-authority-upgrade" not in names:
@@ -432,6 +435,7 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 	token = json.loads(issued.stdout)
 	environment = dict(clean_env, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
 		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
+		SRO_STACK_SIZES=stack_sizes,
 		**bug_report_environment(config))
 	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
 		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"])]

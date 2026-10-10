@@ -115,3 +115,29 @@ func TestAstralRequiresMoreImmortalChargesAndEnforcesCapacity(t *testing.T) {
 		t.Fatalf("astral exceeded immortal count: %v", e)
 	}
 }
+
+/*
+================
+TestStackedStoneSpendsOneAndKeepsItsValue
+
+Port-only stacking (#583): alchemy from a stack of five 70% stones uses
+one, success or failure, and the other four keep their slot and value.
+================
+*/
+func TestStackedStoneSpendsOneAndKeepsItsValue(t *testing.T) {
+	for _, draws := range [][]uint32{{51}, {50, 5, 4, 3, 2, 100}} {
+		c, items := stoneFixture(false)
+		items[1].Quantity, items[1].Plus = 5, 70
+		r, e := c.Stone(items, []uint8{13, 14}, false, 0, sequence(t, draws...))
+		if e != nil {
+			t.Fatal(e)
+		}
+		if r.Success != (draws[0] == 50) || len(r.Items) != 2 {
+			t.Fatalf("draws %v: rows %+v", draws, r.Items)
+		}
+		left := r.Items[1]
+		if left.Slot != 14 || left.Quantity != 4 || left.Plus != 70 {
+			t.Fatalf("draws %v: stone stack %+v, want four 70%% stones in slot 14", draws, left)
+		}
+	}
+}

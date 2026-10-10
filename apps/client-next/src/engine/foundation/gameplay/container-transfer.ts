@@ -11,10 +11,53 @@ and capacity before calling in.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+import { etcCarriesPlusByte } from "./inventory-item";
 
 // Expendable stackable class bits: (typeFlags & 0x7E) === 0x6C.
 const STACKABLE_MASK = 0x7e;
 const STACKABLE_CLASS = 0x6c;
+const ITEM_TYPE_MASK = 0xfffe;
+const ELIXIR_TYPE = 0x0d6c;
+const HP_POTION_TYPE = 0x08ec;
+const MP_POTION_TYPE = 0x10ec;
+const VIGOR_POTION_TYPE = 0x18ec;
+const PET_POTION_TYPE = 0x20ec;
+const PET_VIGOR_POTION_TYPE = 0x48ec;
+const LUCKY_POWDER_TYPE = 0x156c;
+const MAGIC_STONE_TYPE = 0x0dec;
+const ATTRIBUTE_STONE_TYPE = 0x15ec;
+const VALUELESS_STONE_TYPE = 0x3dec;
+
+/*
+================
+retainedOversizedStack
+
+Port-only, not native: mirror inventory.retainedOversizedStack after an
+operator lowers SRO_STACK_SIZES. Only plain configurable families qualify.
+================
+*/
+function retainedOversizedStack( item: InventoryItem, cap: number ): boolean {
+	if (
+		cap < 1 || item.quantity <= cap || item.variance !== "0" ||
+		item.magic.length !== 0 || (item.transformRefObjId ?? 0) !== 0 || item.summon || item.label
+	) return false;
+	const type = item.typeFlags & ITEM_TYPE_MASK;
+	if ( type === MAGIC_STONE_TYPE || type === ATTRIBUTE_STONE_TYPE ) return true;
+	if ( item.plus !== 0 ) return false;
+	if ( type === ELIXIR_TYPE || type === VALUELESS_STONE_TYPE ) return true;
+	if ( cap === 1 ) return false;
+	switch ( type ) {
+		case HP_POTION_TYPE:
+		case MP_POTION_TYPE:
+		case VIGOR_POTION_TYPE:
+		case PET_POTION_TYPE:
+		case PET_VIGOR_POTION_TYPE:
+		case LUCKY_POWDER_TYPE:
+			return true;
+		default:
+			return false;
+	}
+}
 
 /*
 ================
@@ -57,18 +100,19 @@ export function planContainerMove(
 	const a = slots.get( move.source ), b = slots.get( move.destination );
 	if ( !a ) throw Error( `Empty ${label} source slot` );
 	const cap = stackCap( a, caps, label );
+	const splittable = cap > 1 || retainedOversizedStack( a, cap );
 	if ( cap > 1 && b && sameStackIdentity( a, b ) ) {
 		const dest = b.quantity >= cap ? a.quantity : Math.min( cap, a.quantity + b.quantity );
 		const remain = b.quantity >= cap ? b.quantity : a.quantity + b.quantity - dest;
 		slots.set( move.destination, { ...b, quantity: dest } );
 		if ( remain ) slots.set( move.source, { ...a, quantity: remain } );
 		else slots.delete( move.source );
-	} else if ( cap > 1 && !b && move.quantity < a.quantity ) {
+	} else if ( splittable && !b && move.quantity < a.quantity ) {
 		if ( move.quantity < 1 ) throw Error( `Invalid ${label} split quantity` );
 		slots.set( move.source, { ...a, quantity: a.quantity - move.quantity } );
 		slots.set( move.destination, { ...a, slot: move.destination, quantity: move.quantity } );
 	} else {
-		if ( cap > 1 && !b && move.quantity !== a.quantity ) throw Error( `Invalid ${label} split quantity` );
+		if ( splittable && !b && move.quantity !== a.quantity ) throw Error( `Invalid ${label} split quantity` );
 		slots.set( move.destination, { ...a, slot: move.destination } );
 		if ( b ) slots.set( move.source, { ...b, slot: move.source } );
 		else slots.delete( move.source );
@@ -95,14 +139,23 @@ export function planWholeTransfer(
 	const item = a.get( source );
 	if ( !item ) throw Error( "Transfer requires a source item" );
 	const other = b.get( destination );
-	if ( other && sameStackIdentity( item, other ) && stackable( item ) ) {
-		const cap = caps.get( item.refObjId );
+	const cap = caps.get( item.refObjId );
+	// 756A60's cap-one native arm swaps counts only. The port-only identity
+	// applies while stacking is enabled or either row retains a larger stack.
+	const nativeSingles = cap === 1 && item.quantity === 1 && other?.quantity === 1;
+	if (
+		other && stackable( item ) &&
+		(nativeSingles ? nativeStackIdentity( item, other ) : sameStackIdentity( item, other ))
+	) {
 		if (
 			cap === undefined || !Number.isInteger( cap ) || cap < 1 || cap > 65535 ||
-			![ item.quantity, other.quantity ].every( n => Number.isInteger( n ) && n > 0 && n <= cap )
+			![ item, other ].every( row =>
+				Number.isInteger( row.quantity ) && row.quantity > 0 && row.quantity <= 65535 &&
+				(row.quantity <= cap || retainedOversizedStack( row, cap ))
+			)
 		) throw Error( "Invalid transfer stack limit/count" );
-		const dest = other.quantity === cap ? item.quantity : Math.min( cap, item.quantity + other.quantity );
-		const remain = other.quantity === cap ? cap : item.quantity + other.quantity - dest;
+		const dest = other.quantity >= cap ? item.quantity : Math.min( cap, item.quantity + other.quantity );
+		const remain = other.quantity >= cap ? other.quantity : item.quantity + other.quantity - dest;
 		b.set( destination, { ...other, quantity: dest } );
 		if ( remain ) a.set( source, { ...item, quantity: remain } );
 		else a.delete( source );
@@ -117,15 +170,31 @@ export function planWholeTransfer(
 
 /*
 ================
-sameStackIdentity
+nativeStackIdentity
 
 490230 compares the original cargo-owner string before merging trade goods.
 ================
 */
-export function sameStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
+export function nativeStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
 	if ( a.refObjId !== b.refObjId ) return false;
 	if ( (a.typeFlags & 0x7fe) === 0x46c || (b.typeFlags & 0x7fe) === 0x46c ) {
 		return (a.label ?? "") === (b.label ?? "");
 	}
+	return true;
+}
+
+/*
+================
+sameStackIdentity
+
+The merge identity: nativeStackIdentity, and port-only, not native, a
+stone's plus (its assimilation value) must match too. Native cap-one whole
+transfers explicitly use nativeStackIdentity; every quantity-combining path
+and retained oversized stack uses this rule (stackIdentityMatches, #583).
+================
+*/
+export function sameStackIdentity( a: InventoryItem, b: InventoryItem ): boolean {
+	if ( !nativeStackIdentity( a, b ) ) return false;
+	if ( etcCarriesPlusByte( a.typeFlags ) || etcCarriesPlusByte( b.typeFlags ) ) return a.plus === b.plus;
 	return true;
 }

@@ -14,7 +14,12 @@ import {
 	type CosItemUseContext
 } from "@/engine/foundation/gameplay/cos-item-use";
 import { globalChatTail, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
-import { planContainerMove, sameStackIdentity, stackable } from "@/engine/foundation/gameplay/container-transfer";
+import {
+	nativeStackIdentity,
+	planContainerMove,
+	sameStackIdentity,
+	stackable
+} from "@/engine/foundation/gameplay/container-transfer";
 import { createMall } from "./mall/mall";
 import { createCompanionRentals } from "./companion-rentals";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
@@ -55,7 +60,7 @@ import {
 	shopCatalog,
 	buybackEntries
 } from "@/engine/foundation/gameplay/commerce";
-import { decodeInventoryItem } from "@/engine/foundation/gameplay/inventory-item";
+import { decodeInventoryItem, etcCarriesPlusByte } from "@/engine/foundation/gameplay/inventory-item";
 import {
 	applyExchangeSwap,
 	emptyExchange,
@@ -1705,9 +1710,19 @@ receive
 				// 757652 reads destination +68 (plus), not +7C (count). Preserve
 				// that native flag: 574800 always moves source bindings, while this
 				// flag keeps destination bindings attached to the destination control.
+				// Port-only, not native: a stone stacked past its native cap of 1
+				// (SRO_STACK_SIZES, #583) carries its assimilation value in plus, so
+				// it reads 0 there and merges by the stone identity, keeping the same
+				// bindings as any other stack, including retained stacks after
+				// rollback. At cap 1 with two singles the native read stands.
+				const cap = a ? tooltipRefs.get( a.refObjId )?.fields.maxStack ?? 0 : 0;
+				const stackedStone = !!a && etcCarriesPlusByte( a.typeFlags ) &&
+					(cap > 1 || a.quantity > 1 || (b?.quantity ?? 0) > 1);
 				const keepDestination = !!a && !!b && source >= (equipmentSlotCount ?? 13) &&
-					destination >= (equipmentSlotCount ?? 13) && stackable( a ) && sameStackIdentity( a, b ) &&
-					a.quantity + b.plus <= (tooltipRefs.get( a.refObjId )?.fields.maxStack ?? 0);
+					destination >= (equipmentSlotCount ?? 13) && stackable( a ) &&
+					(stackedStone ?
+						sameStackIdentity( a, b ) && a.quantity <= cap :
+						nativeStackIdentity( a, b ) && a.quantity + b.plus <= cap);
 				transfer( next, source, destination, quantity );
 				committedMoves.push( {
 					source,

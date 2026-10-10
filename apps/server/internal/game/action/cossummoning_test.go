@@ -479,3 +479,28 @@ func TestGrowthPetsCannotBeSummonedInFreeBattle(t *testing.T) {
 	}
 	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(3).U8(23).U16(attack.TypeFlags()).Payload(), cosSummonFreeBattle)
 }
+
+/*
+================
+TestPetsRefuseSummonInBattle
+
+493100 refuses every persistent summon in battle with 0x78 before its
+family branch, attack and pickup pets alike, and admits it once battle
+ends.
+================
+*/
+func TestPetsRefuseSummonInBattle(t *testing.T) {
+	c, refs := persistentSummonFixture()
+	rt, clock := newTestRuntime(c, refs)
+	rt.BindPetSession(testDivision, c, 101)
+	c.BattleUntilMs = clock.NowMs() + battleStateMs
+	for i, name := range []string{"SUMMON_ATTACK", "SUMMON_PICKUP"} {
+		ref := refs.staticItemSource[name]
+		result := rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(uint8(23+i)).U16(ref.TypeFlags()).Payload())
+		if len(result.Frames) == 0 || result.Frames[0].Payload[0] != 2 || result.Frames[0].Payload[1] != cosSummonInBattle {
+			t.Fatalf("%s in battle answered %+v, want the 0x78 refusal", name, result.Frames)
+		}
+	}
+	c.BattleUntilMs = 0
+	useSummonerFixture(t, rt, c, 24, refs.staticItemSource["SUMMON_PICKUP"])
+}

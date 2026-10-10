@@ -43,8 +43,9 @@ class DeployTests(unittest.TestCase):
 	# test_preflight_and_token_lifecycle
 	# ================
 	def test_preflight_and_token_lifecycle(self):
-		for failure in (None, "validate", "notice", "deploy"):
-			with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+		for failure, stack_sizes in ((None, None), (None, ""), (None, "potion=2000,elixir=50"),
+			("validate", "potion=2000"), ("notice", "potion=2000"), ("deploy", "potion=2000")):
+			with self.subTest(failure=failure, stack_sizes=stack_sizes), tempfile.TemporaryDirectory() as directory:
 				root = Path(directory)
 				staging, module = root / "staging", root / "module"
 				(module / ".state/cluster").mkdir(parents=True)
@@ -61,6 +62,8 @@ class DeployTests(unittest.TestCase):
 					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture", "staff_webhook": "staff-fixture",
 				}
 				calls = []
+				if stack_sizes is not None:
+					config["stack_sizes"] = stack_sizes
 				manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
 
 				# ================
@@ -75,6 +78,7 @@ class DeployTests(unittest.TestCase):
 						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped-fixture", "AccessorID": "accessor-fixture"}))
 					if arguments[0].endswith("sro-nomad"):
 						self.assertEqual(options["env"]["NOMAD_TOKEN"], "scoped-fixture")
+						self.assertEqual(options["env"]["SRO_STACK_SIZES"], stack_sizes or "")
 						if arguments[1] == failure:
 							raise subprocess.CalledProcessError(1, arguments)
 					return SimpleNamespace(stdout="")
@@ -96,6 +100,16 @@ class DeployTests(unittest.TestCase):
 					else:
 						self.assertEqual(len(deployment_calls), 1)
 					self.assertEqual((module / "release.json").exists(), failure is None)
+
+	# ================
+	# test_invalid_stack_sizes_type_changes_nothing
+	# ================
+	def test_invalid_stack_sizes_type_changes_nothing(self):
+		for value in (None, 2000, {"potion": 2000}):
+			with self.subTest(value=value), patch.object(deploy, "run") as run:
+				with self.assertRaisesRegex(ValueError, "stack_sizes must be a string"):
+					deploy.deploy({"stack_sizes": value}, None, {})
+				run.assert_not_called()
 
 	# ================
 	# test_store_upgrade_stops_the_fleet_then_upgrades_enabled_shards

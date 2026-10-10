@@ -9,6 +9,20 @@ cannot shift the following item. Unknown states and families fail atomically.
 ===========================================================================
 */
 import type { InventoryItem } from "@/engine/contracts/gameplay";
+
+/*
+================
+etcCarriesPlusByte
+
+The ETC rows whose record carries a Plus byte: magic and attribute stones
+(TID 3.3.11.1 and 3.3.11.2), where it is the stone's assimilation value.
+================
+*/
+export function etcCarriesPlusByte( typeFlags: number ): boolean {
+	return (typeFlags & 0x60) === 0x60 && (typeFlags & 0x780) === 0x580 &&
+		((typeFlags & 0xf800) === 0x800 || (typeFlags & 0xf800) === 0x1000);
+}
+
 // CSOItem::Deserialize 78c830; magic list 78b1b0. Returns the next byte so
 // container owners can compose rows without guessing a reference-dependent size.
 /*
@@ -76,7 +90,7 @@ options
 				const n = u16(), at = take( n );
 				label = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
 			} else {
-				if ( group === 0x580 && (sub === 0x800 || sub === 0x1000) ) plus = u8();
+				if ( etcCarriesPlusByte( typeFlags ) ) plus = u8();
 				if ( group === 0x700 && sub === 0x1000 ) options();
 			}
 		}
