@@ -6109,6 +6109,15 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				// Ctrl+click puts a bag item into the open alchemy window as
+				// double-click does: port-only, not native (owner decision 2026-10-10).
+				if ( event.ctrl && panel === "Alchemy" && event.id.startsWith( "slot:" ) ) {
+					activate( "alchemy-slot:" + event.id.slice( 5 ) );
+					carriedItem = null;
+					inventorySlot = -1;
+					dirty = true;
+					return;
+				}
 				if (
 					event.shift && event.id.startsWith( "slot:" ) &&
 					[ "Inventory", "Shop", "COS inventory", "Storage" ].includes( panel )
