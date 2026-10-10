@@ -11,6 +11,18 @@ caller owns cancellation and the returned bytes.
 
 /*
 ================
+isResponseByteLimitError
+
+Observed overflow is corruption evidence; backend errors and cancellation are
+not. A discriminant preserves that distinction without matching error prose.
+================
+*/
+export function isResponseByteLimitError( error: unknown ): boolean {
+	return error instanceof Error && "code" in error && error.code === "ASSET_BYTE_LIMIT";
+}
+
+/*
+================
 readBytes
 
 Reads a stream into one buffer, failing once it exceeds limit bytes. A
@@ -37,7 +49,9 @@ export async function readBytes(
 			signal?.throwIfAborted();
 			if ( part.done ) break;
 			size += part.value.byteLength;
-			if ( size > limit ) throw new Error( "Response exceeds byte limit" );
+			if ( size > limit ) {
+				throw Object.assign( new Error( "Response exceeds byte limit" ), { code: "ASSET_BYTE_LIMIT" } );
+			}
 			chunks.push( part.value );
 			received?.( part.value.byteLength );
 		}

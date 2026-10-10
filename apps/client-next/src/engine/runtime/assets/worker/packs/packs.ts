@@ -189,9 +189,9 @@ export function createPacks(
 			if ( shared ) return shared;
 		}
 		const operation = (async () => {
-			let bytes = await persistent.read( base, descriptor.sha256, descriptor.bytes );
+			let bytes = await persistent.read( base, descriptor.sha256, descriptor.bytes, lifetime.signal );
 			if ( bytes && await sha( bytes ) !== descriptor.sha256 ) {
-				await persistent.remove( base, descriptor.sha256 );
+				void persistent.remove( base, descriptor.sha256 );
 				bytes = null;
 			}
 			const missing = !bytes;
@@ -260,9 +260,9 @@ export function createPacks(
 			// can satisfy demand directly without probing a known-absent pack again.
 			let saved = cache.has( entry.packPath ) ?
 				null :
-				await persistent.read( url.origin, entry.sha256, entry.length );
+				await persistent.read( url.origin, entry.sha256, entry.length, signal );
 			if ( saved && await sha( saved ) !== entry.sha256 ) {
-				await persistent.remove( url.origin, entry.sha256 );
+				void persistent.remove( url.origin, entry.sha256 );
 				saved = null;
 			}
 			if ( saved ) bytes = saved;
@@ -323,11 +323,12 @@ export function createPacks(
 	its own verified bytes, or, for a small pack read whole, the pack's.
 	================
 	*/
-	async function installed( origin: string, registry: Awaited<Index>, entry: PackEntry ) {
-		if ( await persistent.has( origin, entry.sha256 ) ) return true;
+	async function installed( origin: string, registry: Awaited<Index>, entry: PackEntry, signal: AbortSignal ) {
+		if ( await persistent.has( origin, entry.sha256, signal ) ) return true;
 		const descriptor = registry.packs.get( entry.packPath );
 		return Boolean(
-			descriptor && descriptor.bytes <= SMALL_PACK_BYTES && await persistent.has( origin, descriptor.sha256 )
+			descriptor && descriptor.bytes <= SMALL_PACK_BYTES &&
+				await persistent.has( origin, descriptor.sha256, signal )
 		);
 	}
 
@@ -345,7 +346,7 @@ export function createPacks(
 		if ( disposed || signal.aborted ) return false;
 		const registry = await manifest( url.origin );
 		const entry = registry.assets.get( decodeURIComponent( url.pathname ).toLowerCase() );
-		if ( !entry || await installed( url.origin, registry, entry ) ) return false;
+		if ( !entry || await installed( url.origin, registry, entry, signal ) ) return false;
 		await readVerified( url, entry.length, signal, false );
 		await persistent.flush();
 		return true;

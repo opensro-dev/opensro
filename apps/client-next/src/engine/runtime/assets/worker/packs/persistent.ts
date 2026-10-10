@@ -24,13 +24,16 @@ release named becomes ordinary LRU data.
 ===========================================================================
 */
 
-import { readBytes } from "@/engine/foundation/assets/read-bytes";
+import { isResponseByteLimitError, readBytes } from "@/engine/foundation/assets/read-bytes";
 
 const MIN_BUDGET_BYTES = 512 * 1024 * 1024;
 const MAX_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
 // Share of the origin quota this store may fill; the rest stays for the
 // browser's own caches and other storage.
 const QUOTA_SHARE = 0.5;
+// Optional disk reads must yield well before the network's 15-second stall window.
+const CACHE_OPERATION_MS = 2000;
+const MAX_CACHE_OPERATIONS = 8;
 
 /*
 ================
@@ -57,17 +60,119 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	let startup = new Set<string>();
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
 	const pending = new Set<string>(), touched = new Set<string>();
-	function open() {
-		return opened ??= Promise.resolve().then( () =>
-			typeof caches === "undefined" ? null : caches.open( "sro-next-verified-v1" )
+	const disabled = new AbortController();
+	let outstanding = 0, cleanups = 0;
+	const removals = new Map<string, Promise<void>>();
+	/*
+	================
+	storage
+
+	Cache Storage cannot abort its native operations. Cancellation releases only
+	this caller; its native work retains its slot and deadline until settlement.
+	Saturation bypasses optional storage. Only a real timeout disables this owner,
+	preventing a stuck backend from accumulating abandoned native operations.
+	================
+	*/
+	function storage<T>(
+		operation: () => Promise<T>,
+		signal?: AbortSignal,
+		abandoned?: ( value: T ) => void
+	): Promise<T> {
+		signal?.throwIfAborted();
+		if ( disabled.signal.aborted ) return Promise.reject( disabled.signal.reason );
+		if ( outstanding >= MAX_CACHE_OPERATIONS || cleanups >= MAX_CACHE_OPERATIONS ) {
+			return Promise.reject( Error( "Cache busy" ) );
+		}
+		return new Promise<T>( ( resolve, reject ) => {
+			let waiting = true;
+			const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
+			const clearWaiter = () => {
+				clearTimeout( timer );
+				disabled.signal.removeEventListener( "abort", abort );
+				signal?.removeEventListener( "abort", cancel );
+			};
+			const cancel = () => {
+				waiting = false;
+				signal?.removeEventListener( "abort", cancel );
+				reject( signal!.reason );
+			};
+			const abort = () => {
+				waiting = false;
+				clearWaiter();
+				reject( disabled.signal.reason );
+			};
+			disabled.signal.addEventListener( "abort", abort, { once: true } );
+			signal?.addEventListener( "abort", cancel, { once: true } );
+			outstanding++;
+			let work: Promise<T>;
+			try {
+				work = operation();
+			} catch ( error ) {
+				work = Promise.reject( error );
+			}
+			work.then( value => {
+				outstanding--;
+				clearWaiter();
+				if ( waiting ) resolve( value );
+				else abandoned?.( value );
+			}, error => {
+				outstanding--;
+				clearWaiter();
+				reject( error );
+			} );
+		} );
+	}
+	/*
+	================
+	release
+
+	Even stream cancellation can hang in a storage backend. Never await it.
+	================
+	*/
+	function release( response: Response | undefined ) {
+		if ( !response?.body || cleanups >= MAX_CACHE_OPERATIONS ) return;
+		// Late matches still own a body after timeout disabled new lookups.
+		// Cleanup has a separate finite allowance and never holds a load slot.
+		cleanups++;
+		const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
+		void response.body.cancel().catch( () => {} ).finally( () => {
+			cleanups--;
+			clearTimeout( timer );
+		} );
+	}
+
+	/*
+	================
+	open
+	================
+	*/
+	function open( signal?: AbortSignal ) {
+		if ( disabled.signal.aborted ) return Promise.resolve( null );
+		opened ??= storage( () =>
+			typeof caches === "undefined" ?
+				Promise.resolve( null ) :
+				caches.open( "sro-next-verified-v1" )
 		).catch( () => {
 			errors++;
 			return null;
 		} );
+		// Each caller owns cancellation even while sharing the initial open.
+		return storage( () => opened!, signal );
 	}
+
+	/*
+	================
+	key
+	================
+	*/
 	function key( origin: string, digest: string ) {
 		return origin + "/assets/.verified/" + digest;
 	}
+	/*
+	================
+	touch
+	================
+	*/
 	function touch( url: string ) {
 		if ( inventory?.has( url ) ) {
 			const size = inventory.get( url )!;
@@ -79,19 +184,41 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			if ( touched.size > 65536 ) touched.delete( touched.values().next().value! );
 		}
 	}
-	async function remove( origin: string, digest: string ) {
-		try {
-			const url = key( origin, digest );
-			await (await open())?.delete( url );
-			if ( inventory?.has( url ) ) {
-				total -= inventory.get( url )!;
-				inventory.delete( url );
+	/*
+	================
+	remove
+
+	Serialize invalidation before publication so a late delete cannot erase its
+	verified replacement. Foreground callers do not wait for this queue.
+	================
+	*/
+	function remove( origin: string, digest: string ) {
+		const url = key( origin, digest );
+		if ( disabled.signal.aborted ) return Promise.resolve();
+		if ( removals.has( url ) ) return removals.get( url )!;
+		if ( removals.size >= MAX_CACHE_OPERATIONS ) return Promise.resolve();
+		const operation = tail.then( async () => {
+			try {
+				const cache = await open();
+				if ( cache ) await storage( () => cache.delete( url ) );
+				if ( inventory?.has( url ) ) {
+					total -= inventory.get( url )!;
+					inventory.delete( url );
+				}
+				touched.delete( url );
+			} catch {
+				errors++;
 			}
-			touched.delete( url );
-		} catch {
-			errors++;
-		}
+		} ).finally( () => removals.delete( url ) );
+		removals.set( url, operation );
+		tail = operation;
+		return operation;
 	}
+	/*
+	================
+	publish
+	================
+	*/
 	async function publish( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 		const cache = await open();
 		if ( !cache ) return;
@@ -99,7 +226,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			if ( performance.now() - estimatedAt >= 60000 ) {
 				estimatedAt = performance.now();
 				try {
-					const estimate = await navigator.storage.estimate();
+					const estimate = await storage( () => navigator.storage.estimate() );
 					budget = budgetOf( estimate.quota );
 				} catch {}
 			}
@@ -107,9 +234,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			if ( !inventory ) {
 				inventory = new Map();
 				total = 0;
-				for ( const request of await cache.keys() ) {
-					const response = await cache.match( request ),
+				for ( const request of await storage( () => cache.keys() ) ) {
+					const response = await storage( () => cache.match( request ), undefined, release ),
 						size = Number( response?.headers.get( "content-length" ) ) || 0;
+					release( response );
 					total += size;
 					inventory.set( request.url, size );
 				}
@@ -122,6 +250,11 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				touch( target );
 				return;
 			}
+			/*
+			================
+			evict
+			================
+			*/
 			async function evict() {
 				// Least recently used first, skipping the startup entries.
 				let victim: [string, number] | undefined;
@@ -133,7 +266,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				}
 				if ( !victim ) return false;
 				const [url, size] = victim;
-				await cache!.delete( url );
+				await storage( () => cache!.delete( url ) );
 				total -= size;
 				inventory!.delete( url );
 				evictions++;
@@ -156,12 +289,12 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 					} )
 				);
 			try {
-				await put();
+				await storage( put );
 			} catch ( error ) {
 				if ( !(error instanceof DOMException) || error.name !== "QuotaExceededError" ) throw error;
 				const count = Math.max( 1, Math.ceil( inventory.size / 4 ) );
 				for ( let i = 0; i < count; i++ ) if ( !await evict() ) break;
-				await put();
+				await storage( put );
 			}
 			inventory.set( target, bytes.length );
 			total += bytes.length;
@@ -171,6 +304,11 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			inventory = null;
 		}
 	}
+	/*
+	================
+	write
+	================
+	*/
 	function write( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 		const operation = tail.then( () => publish( origin, digest, bytes ) );
 		tail = operation.catch( () => {
@@ -181,21 +319,40 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	return {
 		// Whether verified bytes are stored, without reading them. A storage
 		// failure reads as absent: the caller simply fetches again.
-		async has( origin: string, digest: string ) {
+		/*
+		================
+		has
+		================
+		*/
+		async has( origin: string, digest: string, signal?: AbortSignal ) {
 			try {
-				const response = await (await open())?.match( key( origin, digest ) );
+				signal?.throwIfAborted();
+				const cache = await open( signal );
+				const response = cache ?
+					await storage( () => cache.match( key( origin, digest ) ), signal, release ) :
+					undefined;
 				if ( !response ) return false;
-				await response.body?.cancel();
+				release( response );
 				touch( key( origin, digest ) );
 				return true;
 			} catch {
 				errors++;
+				signal?.throwIfAborted();
 				return false;
 			}
 		},
-		async read( origin: string, digest: string, length: number ) {
+		/*
+		================
+		read
+		================
+		*/
+		async read( origin: string, digest: string, length: number, signal?: AbortSignal ) {
 			try {
-				const url = key( origin, digest ), response = await (await open())?.match( url );
+				signal?.throwIfAborted();
+				const url = key( origin, digest );
+				if ( removals.has( url ) ) return null;
+				const cache = await open( signal );
+				const response = cache ? await storage( () => cache.match( url ), signal, release ) : undefined;
 				if ( !response ) {
 					if ( inventory?.has( url ) ) {
 						total -= inventory.get( url )!;
@@ -206,18 +363,36 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 					return null;
 				}
 				if ( Number( response.headers.get( "content-length" ) ) !== length || !response.body ) {
-					await remove( origin, digest );
+					release( response );
+					void remove( origin, digest );
 					misses++;
 					return null;
 				}
-				const bytes = await readBytes( response.body, length );
-				if ( bytes.length !== length ) throw Error( "Incomplete persistent asset" );
+				// A backend read rejection is not evidence that the stored entry is
+				// corrupt. Only observed metadata or completed bytes justify removal.
+				const bytes = await storage(
+					() =>
+						readBytes( response.body!, length, undefined, disabled.signal ).catch( error => {
+							if (
+								isResponseByteLimitError( error ) && !signal?.aborted && !disabled.signal.aborted
+							) {
+								void remove( origin, digest );
+							}
+							throw error;
+						} ),
+					signal
+				);
+				signal?.throwIfAborted();
+				if ( bytes.length !== length ) {
+					void remove( origin, digest );
+					throw Error( "Incomplete persistent asset" );
+				}
 				hits++;
 				touch( url );
 				return bytes;
 			} catch {
 				errors++;
-				await remove( origin, digest );
+				signal?.throwIfAborted();
 				return null;
 			}
 		},
@@ -225,9 +400,14 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		write,
 		// Copy before the caller transfers/detaches its buffer. Never wait for disk on
 		// the admission path; excess demand skips optional persistence, not rendering.
+		/*
+		================
+		enqueue
+		================
+		*/
 		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 			const id = key( origin, digest );
-			if ( pending.has( id ) ) return;
+			if ( disabled.signal.aborted || pending.has( id ) ) return;
 			if ( pending.size >= 64 || queuedBytes + bytes.length > (32 << 20) ) {
 				skipped++;
 				return;
@@ -242,6 +422,11 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		},
 		// The admitted manifest's startup packs and members: the entries eviction
 		// keeps. Replacing the set releases whatever only an older release named.
+		/*
+		================
+		setStartup
+		================
+		*/
 		setStartup( origin: string, digests: Iterable<string> ) {
 			startup = new Set( Array.from( digests, digest => key( origin, digest ) ) );
 		},

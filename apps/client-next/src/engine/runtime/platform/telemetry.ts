@@ -32,6 +32,7 @@ DeveloperConsole
 export interface DeveloperConsole {
 	setDiagnostics( enabled: boolean ): boolean;
 	dumpMovement(): unknown;
+	dumpAssets(): unknown;
 }
 declare global {
 	interface Window {
@@ -63,6 +64,7 @@ export function createTelemetry( options: TelemetryOptions ) {
 	let enabled = options.enabled;
 	let latest: FrameTelemetry | null = null;
 	let movementDump: (() => unknown) | undefined;
+	let assetDump: (() => unknown) | undefined;
 	chip?.insertBefore( toggle, fpsToggle );
 	chip?.append( readout );
 
@@ -137,6 +139,12 @@ export function createTelemetry( options: TelemetryOptions ) {
 		dumpMovement: () => movementDump?.() ?? null,
 		/*
 		================
+		dumpAssets
+		================
+		*/
+		dumpAssets: () => assetDump?.() ?? null,
+		/*
+		================
 		setDiagnostics
 		================
 		*/
@@ -167,6 +175,14 @@ export function createTelemetry( options: TelemetryOptions ) {
 		setMovementDump: ( dump: () => unknown ) => {
 			movementDump = dump;
 		},
+		/*
+		================
+		setAssetDump
+		================
+		*/
+		setAssetDump: ( dump: () => unknown ) => {
+			assetDump = dump;
+		},
 		setDiagnostics,
 		present,
 		active: () => enabled && !readout.hidden && !document.hidden,
@@ -177,6 +193,7 @@ export function createTelemetry( options: TelemetryOptions ) {
   */
 		dispose() {
 			movementDump = undefined;
+			assetDump = undefined;
 			lifetime.abort();
 			toggle.remove();
 			readout.remove();

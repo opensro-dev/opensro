@@ -194,6 +194,7 @@ Browser services granted to the runtime by the platform boundary.
 */
 export interface Platform extends Disposable {
 	setMovementDump( dump: () => unknown ): void;
+	setAssetDump( dump: () => unknown ): void;
 	saveVideoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
 	saveQuickslotOptions( value: import("@/engine/foundation/ui/extended-quickslot").ExtendedQuickslotOptions ): void;
 	saveWindowPositions( value: import("@/engine/foundation/ui/window-positions").WindowPositions ): void;

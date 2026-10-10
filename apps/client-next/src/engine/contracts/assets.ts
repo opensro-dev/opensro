@@ -130,12 +130,32 @@ export type AssetResult =
 	};
 /*
 ================
-AssetOwner
+AssetJobSnapshot
 
-The runtime asset owner grants bounded handles with explicit cancellation and disposal.
+Copied, bounded request state for diagnosing stalled or uncollected handles.
+================
+*/
+export interface AssetJobSnapshot {
+	readonly phase: "running" | "failed" | "disposed";
+	readonly error: string | null;
+	readonly available: number;
+	readonly jobs: readonly {
+		readonly id: number;
+		readonly path: string;
+		readonly decode: string;
+		readonly ageMs: number;
+		readonly state: "loading" | "completed" | "cancelling";
+		readonly result: AssetResult["kind"] | null;
+	}[];
+}
+/*
+================
+AssetOwner
 ================
 */
 export interface AssetOwner {
+	/** Copied diagnostics only; never consumes a result or advances a deadline. */
+	snapshot?(): AssetJobSnapshot;
 	progress(): AssetProgress | null;
 	health(): { phase: "running"; } | { phase: "failed"; error: string; } | { phase: "disposed"; };
 	available(): number;

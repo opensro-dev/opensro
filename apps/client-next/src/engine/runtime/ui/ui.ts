@@ -6438,6 +6438,7 @@ export function createUi(
 			}
 			// Hidden screens still collect their admitted work. Only new requests
 			// depend on visibility; otherwise completions retain the shared slots.
+			if ( title.step() ) dirty = true;
 			if ( text.step() ) {
 				dirty = true;
 				layoutResourcesRevision++;

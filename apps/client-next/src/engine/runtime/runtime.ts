@@ -470,6 +470,7 @@ export function startRuntime(
 			)
 		);
 		platform.setMovementDump( bugReport.dumpMovement );
+		platform.setAssetDump( () => ({ assets: assets.snapshot?.(), audio: audio.snapshot() }) );
 		// Offers a refresh once a newer client release is live (release-watch.ts).
 		const releaseWatch = own(
 			createReleaseWatch( assets, new URL( RELEASE_PAGE, location.origin ).href, platform.runningEntry() )

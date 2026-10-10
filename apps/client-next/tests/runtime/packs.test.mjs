@@ -345,6 +345,8 @@ test("loose payloads survive refresh without probing missing containers", async 
 		assert.deepEqual( [
 			...await packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal )
 		], [ 1, 2, 3 ] );
+		// Admission does not wait for optional persistence; reload after publication.
+		await packs.flush();
 		packs.dispose();
 	}
 	assert.equal( requests.length, 4 );
@@ -490,6 +492,8 @@ test("large packs download verified ranges and persist only demanded members acr
 		assert.deepEqual( [
 			...await packs.read( new URL( "http://localhost/assets/a.bin" ), 100, new AbortController().signal )
 		], [ 1, 2, 3 ] );
+		// Admission does not wait for optional persistence; reload after publication.
+		await packs.flush();
 		packs.dispose();
 	}
 	assert.equal(

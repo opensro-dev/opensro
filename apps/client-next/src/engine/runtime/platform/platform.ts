@@ -738,6 +738,7 @@ export function createPlatform(
 		*/
 		presentTelemetry: telemetry.present,
 		setMovementDump: telemetry.setMovementDump,
+		setAssetDump: telemetry.setAssetDump,
 		diagnosticsActive: telemetry.active,
 		/*
 		================

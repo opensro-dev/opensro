@@ -115,6 +115,7 @@ setMovementDump
 ================
 		*/
 		setMovementDump() {},
+		setAssetDump() {},
 		visibilityReturned: () => false,
 		connectionReturned: () => false,
 		/*
@@ -276,6 +277,7 @@ dispose
 	);
 	globalThis.__runtimeOwners.platform.runningEntry = () => null;
 	globalThis.__runtimeOwners.platform.setMovementDump = () => {};
+	globalThis.__runtimeOwners.platform.setAssetDump = () => {};
 	globalThis.__runtimeOwners.simulation.delivery = () => new Promise( () => {} );
 	for ( const name of Object.keys( factories ) ) {
 		const owner = globalThis.__runtimeOwners[name];
@@ -341,6 +343,7 @@ dispose
 		);
 	owners.platform.runningEntry = () => null;
 	owners.platform.setMovementDump = () => {};
+	owners.platform.setAssetDump = () => {};
 	owners.simulation.delivery = () => new Promise( () => {} );
 	globalThis.__runtimeOwners = owners;
 	globalThis.location = { search: "", origin: "http://localhost" };

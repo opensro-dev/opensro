@@ -111,9 +111,20 @@ export const rules = {
 	createGain: [ runtime + "audio/audio.ts" ],
 	requestAnimationFrame: [ runtime + "runtime.ts" ],
 	cancelAnimationFrame: [ runtime + "runtime.ts" ],
-	// The asset loader owns one trailing progress timer, cleared on dispose.
-	setTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts", uiBridge ],
-	clearTimeout: [ runtime + "simulation/worker/clock/clock.ts", runtime + "assets/worker/loader.ts", uiBridge ],
+	// The asset loader owns progress/retry timers; persistent storage owns bounded
+	// optional-cache deadlines, cleared on settlement or owner timeout.
+	setTimeout: [
+		runtime + "simulation/worker/clock/clock.ts",
+		runtime + "assets/worker/loader.ts",
+		runtime + "assets/worker/packs/persistent.ts",
+		uiBridge
+	],
+	clearTimeout: [
+		runtime + "simulation/worker/clock/clock.ts",
+		runtime + "assets/worker/loader.ts",
+		runtime + "assets/worker/packs/persistent.ts",
+		uiBridge
+	],
 	setInterval: [],
 	createRenderBundleEncoder: [ device ],
 	createBundleEncoder: [ device, frame ],
@@ -150,6 +161,7 @@ export const rules = {
 	unconfigure: [ surface ],
 	addEventListener: [
 		runtime + "assets/worker/loader.ts", // AbortSignal releases a pending download backoff.
+		runtime + "assets/worker/packs/persistent.ts", // Cancellation releases a cache waiter, retaining native admission.
 		// AbortSignal cancels a stalled body read; the listener is removed on every exit.
 		"src/engine/foundation/assets/read-bytes.ts",
 		runtime + "platform/telemetry.ts",

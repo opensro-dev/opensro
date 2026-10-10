@@ -15,6 +15,8 @@ using a slot.
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
 import { createWorldLease } from "./world-lease";
 import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
+const REQUEST_CAPACITY = 4;
+const REQUEST_DEADLINE_MS = 120000;
 /*
 ================
 createAssets
@@ -168,6 +170,34 @@ export function createAssets(): AssetOwner {
 	worker.onerror = () => fail( "Asset worker failed" );
 	worker.onmessageerror = () => fail( "Asset worker message could not be decoded" );
 	return {
+		/*
+		================
+		snapshot
+
+		Distinguish worker waits from completed handles a consumer has not collected.
+		Exclude URL credentials and query parameters from exported diagnostics.
+		================
+		*/
+		snapshot() {
+			const now = performance.now();
+			return {
+				phase: disposed ? "disposed" : failure ? "failed" : "running",
+				error: failure,
+				available: disposed || failure ? 0 : REQUEST_CAPACITY - jobs.size,
+				jobs: [ ...jobs ].map( ( [id, job] ) => ({
+					id,
+					path: new URL( job.url ).pathname,
+					decode: job.decode ?? "bytes",
+					ageMs: Math.max( 0, now - (job.deadline - REQUEST_DEADLINE_MS) ),
+					state: job.cancelled ?
+						"cancelling" as const :
+						job.result ?
+						"completed" as const :
+						"loading" as const,
+					result: job.result?.kind ?? null
+				}) )
+			};
+		},
 		progress: () => progress,
 		health: () => {
 			checkDeadline();
@@ -177,7 +207,7 @@ export function createAssets(): AssetOwner {
 				{ phase: "failed", error: failure } :
 				{ phase: "running" };
 		},
-		available: () => disposed || failure ? 0 : 4 - jobs.size,
+		available: () => disposed || failure ? 0 : REQUEST_CAPACITY - jobs.size,
 		takeReleaseStale: () => {
 			const stale = releaseStale;
 			releaseStale = false;
@@ -197,12 +227,13 @@ export function createAssets(): AssetOwner {
 			}
 			const url = new URL( value ).href;
 			if (
-				jobs.size >= 4 || !Number.isSafeInteger( limit ) || limit < 1 || limit > assetRequestBudget( decode )
+				jobs.size >= REQUEST_CAPACITY || !Number.isSafeInteger( limit ) || limit < 1 ||
+				limit > assetRequestBudget( decode )
 			) {
 				throw new Error( "Asset request exceeds budget" );
 			}
 			const id = ++nextId;
-			jobs.set( id, { deadline: performance.now() + 120000, url, limit, decode, result: null } );
+			jobs.set( id, { deadline: performance.now() + REQUEST_DEADLINE_MS, url, limit, decode, result: null } );
 
 			try {
 				send( {

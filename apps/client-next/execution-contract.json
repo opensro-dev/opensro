@@ -4,12 +4,16 @@
 		{
 			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
 			"provider": "src/engine/runtime/characters/characters.ts",
-			"functions": [ "callback:createCharacterSounds:2" ]
+			"functions": [
+				"callback:createCharacterSounds:2"
+			]
 		},
 		{
 			"consumer": "src/engine/foundation/ui/layout.ts",
 			"provider": "src/engine/runtime/ui/hud/compact-hud.ts",
-			"functions": [ "compactWindowDrag" ]
+			"functions": [
+				"compactWindowDrag"
+			]
 		},
 		{
 			"consumer": "src/engine/foundation/gameplay/walking-history.ts",
@@ -1983,7 +1987,8 @@
 			"functions": [
 				"present",
 				"active",
-				"setMovementDump"
+				"setMovementDump",
+				"setAssetDump"
 			]
 		},
 		{
@@ -2187,6 +2192,13 @@
 			"functions": [
 				"callback",
 				"callback:tradeAppearance:2"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/platform/telemetry.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:setAssetDump:0"
 			]
 		}
 	],
@@ -3634,7 +3646,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "b93de1366cb292d6231d1dce2ca7a175aab896650bf69078438cef13c702823f",
+			"sourceSha256": "5ff0714e43a2d0cc6ba5f7c82a4c734bbd7e784ba35e2ec53c521ef2efbccfc7",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

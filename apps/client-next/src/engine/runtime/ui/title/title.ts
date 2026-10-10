@@ -37,6 +37,17 @@ export function createTitleUi( assets: Pick<AssetOwner, "available" | "request" 
 	return {
 		/*
 		================
+		step
+
+		Collect metadata independently of title visibility and layout redraws.
+		Only render admits new title requests.
+		================
+		*/
+		step() {
+			return resources.step( false );
+		},
+		/*
+		================
 		message
 		================
 		*/

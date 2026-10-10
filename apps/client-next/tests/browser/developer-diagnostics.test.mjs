@@ -45,6 +45,12 @@ test(
 			assert.ok( movement && typeof movement === "object" && "version" in movement && "events" in movement );
 			assert.equal( movement.version, 1 );
 			assert.ok( Array.isArray( movement.events ) );
+			const dump = await page.evaluate( () => window.sroDebug?.dumpAssets() );
+			assert.ok( dump && typeof dump === "object" && "assets" in dump );
+			const assets = dump.assets;
+			assert.ok( assets && typeof assets === "object" && "jobs" in assets && "available" in assets );
+			assert.ok( Array.isArray( assets.jobs ) );
+			assert.equal( assets.available, 4 - assets.jobs.length );
 
 			assert.equal( await page.locator( "#developer-toggle" ).isVisible(), false );
 			await page.locator( "#fps-toggle" ).click();
