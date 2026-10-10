@@ -17,7 +17,12 @@ const STACKABLE_MASK = 0x7e;
 const STACKABLE_CLASS = 0x6c;
 const ITEM_TYPE_MASK = 0xfffe;
 const ELIXIR_TYPE = 0x0d6c;
-const RAISED_STACK_TYPES = new Set( [ 0x08ec, 0x10ec, 0x18ec, 0x20ec, 0x48ec, ELIXIR_TYPE, 0x156c ] );
+const HP_POTION_TYPE = 0x08ec;
+const MP_POTION_TYPE = 0x10ec;
+const VIGOR_POTION_TYPE = 0x18ec;
+const PET_POTION_TYPE = 0x20ec;
+const PET_VIGOR_POTION_TYPE = 0x48ec;
+const LUCKY_POWDER_TYPE = 0x156c;
 
 /*
 ================
@@ -33,7 +38,19 @@ function retainedOversizedStack( item: InventoryItem, cap: number ): boolean {
 		item.magic.length !== 0 || (item.transformRefObjId ?? 0) !== 0 || item.summon || item.label
 	) return false;
 	const type = item.typeFlags & ITEM_TYPE_MASK;
-	return type === ELIXIR_TYPE || (cap > 1 && RAISED_STACK_TYPES.has( type ));
+	if ( type === ELIXIR_TYPE ) return true;
+	if ( cap === 1 ) return false;
+	switch ( type ) {
+		case HP_POTION_TYPE:
+		case MP_POTION_TYPE:
+		case VIGOR_POTION_TYPE:
+		case PET_POTION_TYPE:
+		case PET_VIGOR_POTION_TYPE:
+		case LUCKY_POWDER_TYPE:
+			return true;
+		default:
+			return false;
+	}
 }
 
 /*

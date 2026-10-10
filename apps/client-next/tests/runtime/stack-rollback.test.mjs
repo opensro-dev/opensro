@@ -55,7 +55,9 @@ test("retained elixirs split at cap one; native singles still swap", () => {
 	const original = item( 13, 50, 0xd6c );
 	for ( const quantity of [ 1, 49, 50 ] ) {
 		const result = planContainerMove( [ original ], { source: 13, destination: 14, quantity }, caps, "bag" );
-		assert.equal( result.find( row => row.slot === 14 ).quantity, quantity );
+		const destination = result.find( row => row.slot === 14 );
+		assert.ok( destination );
+		assert.equal( destination.quantity, quantity );
 		assert.equal( result.reduce( ( count, row ) => count + row.quantity, 0 ), 50 );
 	}
 	for ( const quantity of [ 0, 51 ] ) {
