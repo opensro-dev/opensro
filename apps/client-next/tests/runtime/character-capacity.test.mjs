@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 const { createCharacters } = await import(
 	sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
 );
-const { CHARACTER_MODELS } = await import(
+const { CHARACTER_ASSEMBLIES, CHARACTER_MODELS } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/character-budget.ts" ).href
 );
 const I = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
@@ -413,9 +413,42 @@ test("the owned model count follows admission, eviction and disposal", () => {
 		owner.actors( [] );
 		owner.prepare( gpu, {}, 257 );
 		admit( CHARACTER_MODELS, 2 * CHARACTER_MODELS - 1 );
+		// A full budget of retained models still refuses one more.
+		owner.retain( [
+			"m0",
+			...Array.from( { length: CHARACTER_MODELS - 1 }, ( _, i ) => "m" + (CHARACTER_MODELS + i) )
+		] );
 		assert.throws( () => owner.model( "extra", model, [] ), /residency exceeds budget/ );
 	} finally {
 		owner.dispose( gpu, null );
+	}
+});
+test("a hidden session relieves the assembly budget without a prepare pass (BUG-070)", () => {
+	// A hidden tab presents actors but draws nothing, so no prepare pass
+	// retires residency. Assemblies nothing retains give way at the budget;
+	// their draws are released by the next visible pass.
+	const f = fixture();
+	try {
+		f.owner.retain( [ "m", "a0" ] );
+		f.owner.assembly( "a0", "m", [] );
+		f.owner.actors( [ { ...actors( [ 1 ], 0 )[0], model: "a0" } ] );
+		f.owner.prepare( f.gpu, {}, 257 );
+		assert.ok( f.stats().uploads > 0, "the drawn assembly owns draws" );
+		f.owner.retain( [ "m" ] );
+		f.owner.actors( [] );
+		for ( let i = 1; i < CHARACTER_ASSEMBLIES; i++ ) f.owner.assembly( "a" + i, "m", [] );
+		const releases = f.stats().releases;
+		assert.doesNotThrow( () => f.owner.assembly( "extra", "m", [] ) );
+		assert.equal( f.stats().releases, releases, "no GPU release happens outside a prepare pass" );
+		f.owner.prepare( f.gpu, {}, 257 );
+		assert.ok( f.stats().releases > releases, "the next prepare pass releases the retired draws" );
+		// Retained assemblies are never relieved: a full retained budget refuses.
+		const all = Array.from( { length: CHARACTER_ASSEMBLIES }, ( _, i ) => "r" + i );
+		f.owner.retain( [ "m", ...all ] );
+		for ( const id of all ) f.owner.assembly( id, "m", [] );
+		assert.throws( () => f.owner.assembly( "more", "m", [] ), /assembly residency exceeds budget/ );
+	} finally {
+		f.owner.dispose( f.gpu, null );
 	}
 });
 test("capacity changes retire obsolete batches before allocating replacement bands", () => {

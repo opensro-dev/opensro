@@ -360,6 +360,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// continuation may not release or resize them: their buffers must outlive
 	// the submit. The next full pass retires what the frame left behind.
 	const submitted = new Set<string>();
+	// Draws of models retired outside a prepare pass (retireModels under budget
+	// pressure, as in a hidden tab, which draws nothing). The next full pass
+	// releases them through the geometry commands.
+	let retiredDraws: GeometryDraw[] = [];
 	let actors: readonly CharacterActor[] = [], disposed = false;
 	const portraitSnapshots = createActorSnapshots();
 	let portraits: readonly CharacterActor[] = [];
@@ -1080,6 +1084,82 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	}
 	/*
 	================
+	retireModels
+
+	Drop the models and assemblies no retained, published or portrait actor
+	uses. CPU bookkeeping only: their batches' draws wait in retiredDraws for
+	the next full prepare pass, so this may run between frames.
+	================
+	*/
+	function retireModels( inUse: readonly CharacterActor[], pending: readonly string[] = [] ) {
+		if ( !retained ) return;
+		const keep = residencyKeep( inUse, pending );
+		for ( const [id, resource] of models ) {
+			if ( keep.has( id ) ) continue;
+			const batch = batches.get( id );
+			if ( batch ) retiredDraws.push( ...batch.draws );
+			batches.delete( id );
+			forgetModel( id, resource );
+		}
+	}
+	/*
+	================
+	residencyKeep
+
+	The retained, published and portrait models, their dependencies, and
+	the sources a caller is about to use.
+	================
+	*/
+	function residencyKeep( inUse: readonly CharacterActor[], pending: readonly string[] = [] ) {
+		const keep = new Set( [
+			...(retained ?? []),
+			...pending,
+			...inUse.map( actor => actor.model ),
+			...portraits.map( actor => actor.model )
+		] );
+		for ( const id of keep ) {
+			for ( const dependency of models.get( id )?.dependencies ?? [] ) {
+				keep.add( dependency );
+			}
+		}
+		return keep;
+	}
+	/*
+	================
+	forgetModel
+
+	Drop one model's CPU residency: owned images close and the counts fall.
+	================
+	*/
+	function forgetModel( id: string, resource: NonNullable<ReturnType<typeof models.get>> ) {
+		if ( resource.owned ) {
+			for ( const image of resource.images ) {
+				if ( !("kind" in image) ) image.close();
+			}
+			ownedModels--;
+		}
+		models.delete( id );
+		residentBytes -= resource.bytes;
+	}
+	/*
+	================
+	relieveResidency
+
+	A model or assembly at its budget first retires what nothing uses. A
+	hidden tab runs no prepare pass (runtime.ts draws only while visible)
+	yet keeps admitting the actors it presents, so without this the budget
+	filled during a long background session and the runtime failed
+	(BUG-070). The GPU half waits for the next visible frame. pending names
+	the sources the caller is about to use, which this step's retain may not
+	list yet.
+	================
+	*/
+	function relieveResidency( pending: readonly string[] = [] ) {
+		retireModels( actors, pending );
+		residencyDirty = true;
+	}
+	/*
+	================
 	retireResidency
 
 	Release models, batches and textures no retained or framed actor uses.
@@ -1091,35 +1171,23 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		frameActors: readonly CharacterActor[]
 	) {
 		residencyPasses++;
+		// A draw leaves the list only once released, so a failed release is
+		// retried by the next pass.
+		while ( retiredDraws.length ) {
+			geometry.release( retiredDraws[retiredDraws.length - 1]! );
+			retiredDraws.pop();
+		}
 		if ( retained ) {
-			const keep = new Set( [
-				...retained,
-				...frameActors.map( actor => actor.model ),
-				...portraits.map( actor => actor.model )
-			] );
-			for ( const id of keep ) {
-				for ( const dependency of models.get( id )?.dependencies ?? [] ) {
-					keep.add( dependency );
-				}
-			}
+			const keep = residencyKeep( frameActors );
 			for ( const [id, resource] of models ) {
-				if ( !keep.has( id ) ) {
-					const batch = batches.get( id );
-					if ( batch ) {
-						for ( const draw of batch.draws ) {
-							geometry.release( draw );
-						}
-					}
-					batches.delete( id );
-					if ( resource.owned ) {
-						for ( const image of resource.images ) {
-							if ( !("kind" in image) ) image.close();
-						}
-						ownedModels--;
-					}
-					models.delete( id );
-					residentBytes -= resource.bytes;
+				if ( keep.has( id ) ) continue;
+				// Release before forgetting the model, so a failed release
+				// leaves it resident for the retry.
+				for ( const draw of batches.get( id )?.draws ?? [] ) {
+					geometry.release( draw );
 				}
+				batches.delete( id );
+				forgetModel( id, resource );
 			}
 		}
 		const liveImages = new Set( [ ...models.values() ].flatMap( resource => resource.images ) );
@@ -2874,10 +2942,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			}
 			try {
 				const bytes = characterBytes( model, images );
-				if (
-					ownedModels >= CHARACTER_MODELS ||
-					residentBytes + bytes > CHARACTER_RESIDENT_BYTES
-				) {
+				const full = () => ownedModels >= CHARACTER_MODELS || residentBytes + bytes > CHARACTER_RESIDENT_BYTES;
+				if ( full() ) relieveResidency();
+				if ( full() ) {
 					throw new Error( "Character model residency exceeds budget" );
 				}
 				const admitted = structuredClone( model );
@@ -2917,6 +2984,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			}
 			if ( models.has( id ) ) {
 				return;
+			}
+			if ( models.size - ownedModels >= CHARACTER_ASSEMBLIES ) {
+				relieveResidency( [ base, ...parts.map( part => part.model ) ] );
 			}
 			if ( models.size - ownedModels >= CHARACTER_ASSEMBLIES ) {
 				throw new Error( "Character assembly residency exceeds budget" );
@@ -3150,6 +3220,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		invalidate() {
 			rowStreams.rowScratch = rowStreams.lightScratch = undefined;
 			batches.clear();
+			retiredDraws = [];
 			textures.clear();
 			for ( const resource of models.values() ) {
 				resource.textures = [];
@@ -3176,6 +3247,10 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					geometry?.release( draw );
 				}
 			}
+			for ( const draw of retiredDraws ) {
+				geometry?.release( draw );
+			}
+			retiredDraws = [];
 			for ( const resource of models.values() ) {
 				if ( resource.owned ) {
 					for ( const image of resource.images ) {
