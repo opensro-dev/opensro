@@ -210,3 +210,23 @@ func TestBetaPetExpNeverPassesTheOwner(t *testing.T) {
 		t.Fatalf("owner frame reports more than was credited: %x", owner[0].Payload)
 	}
 }
+
+/*
+================
+TestNativePetExpLoopHasNoOwnerCap
+
+With the beta pace off the level-up loop is 4D65F1's: no owner check, so a
+gain big enough walks the forms past an owner the pet started below.
+================
+*/
+func TestNativePetExpLoopHasNoOwnerCap(t *testing.T) {
+	rt, c, pet := petGrowthFixture(t)
+	level := int64(2)
+	c.Level = &level
+	ref, _ := rt.cosReference(pet)
+	// 500 at level 1 pays 100 and 200 and leaves 200 at level 3.
+	owner, _ := rt.applyAttackPetExperience(c, pet, ref, 500, 0)
+	if pet.Level != 3 || pet.Experience != 200 || !bytes.Equal(owner[0].Payload, petExperienceFrame(pet.GID, 500, 0).Payload) {
+		t.Fatalf("native gain %+v frames %+v", pet, owner)
+	}
+}

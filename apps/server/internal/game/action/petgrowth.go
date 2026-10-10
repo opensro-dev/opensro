@@ -242,9 +242,14 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 	exp := before + delta
 	form, consumed := ref, int64(0)
 	// 4D65F1's loop has no owner check: native gains never cross more than a
-	// level. Port-only, not native: the beta pace above can, so the loop
-	// stops at the owner's level and banks there as 4D6418 does on entry.
-	for int64(form.Level) < petMaxLevel && int64(form.Level) < rewardLevel(c) && exp >= required {
+	// level. Port-only, not native: the beta pace above can, so with the pace
+	// on the loop stops at the owner's level and banks there as 4D6418 does
+	// on entry. With it off the loop is native.
+	ceiling := int64(petMaxLevel)
+	if rt.PetExpPace != nil {
+		ceiling = min(ceiling, rewardLevel(c))
+	}
+	for int64(form.Level) < petMaxLevel && int64(form.Level) < ceiling && exp >= required {
 		next, found := refs.CharacterRefByCodename(form.NextCodename)
 		if !found || next == nil || next.TidWord != form.TidWord {
 			break
@@ -257,7 +262,7 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 		consumed += required
 		form, required = next, following
 	}
-	if int64(form.Level) >= rewardLevel(c) && exp >= required {
+	if rt.PetExpPace != nil && int64(form.Level) >= rewardLevel(c) && exp >= required {
 		exp = required - 1
 	}
 	pet.Experience = uint64(exp)
