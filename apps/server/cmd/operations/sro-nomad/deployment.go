@@ -805,21 +805,6 @@ func chunkAccountCatalog(payload []byte) ([]string, error) {
 	return chunks, nil
 }
 
-// storageAutoStackDefault is the owner-approved deployment default.
-const storageAutoStackDefault = "on"
-
-/*
-================
-storageAutoStackSetting
-================
-*/
-func storageAutoStackSetting() string {
-	if value := strings.TrimSpace(os.Getenv("SRO_STORAGE_AUTO_STACK")); value != "" {
-		return value
-	}
-	return storageAutoStackDefault
-}
-
 /*
 ================
 boolEnvValue
