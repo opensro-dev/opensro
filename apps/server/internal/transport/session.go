@@ -221,6 +221,10 @@ Send
 ================
 */
 func (s *Session) Send(opcode uint16, payload []byte) error {
+	if opcode == 0 {
+		s.hub.refuseEmptyFrame(s.ID, 1)
+		return ErrEmptyFrame
+	}
 	if opcode > maxReservedOpcode && s.evicted.Load() {
 		// Lame duck: the drain may flush only what the
 		// session machinery itself queues (BYE, PONG); no new game or
@@ -298,6 +302,9 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 	for _, frame := range frames {
 		changes = append(changes, frame.Scope...)
 	}
+	// An empty frame's scope change still applies; only its bytes are
+	// refused (emptyframe.go).
+	frames = s.withoutEmptyFrames(frames)
 	if len(frames) == 0 {
 		return nil
 	}

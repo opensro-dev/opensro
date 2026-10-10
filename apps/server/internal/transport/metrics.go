@@ -44,6 +44,7 @@ type hubMetrics struct {
 	writeErrors           atomic.Uint64
 	enterWorldAuthRefused atomic.Uint64
 	unhandledFrames       atomic.Uint64
+	emptyFramesRefused    atomic.Uint64
 	queueHighWater        atomic.Uint64
 	queueByteHighWater    atomic.Uint64
 	byeNormal             atomic.Uint64
@@ -106,15 +107,18 @@ type Metrics struct {
 
 	// FramesIn counts every inbound frame accepted by a session read loop,
 	// including frames later dropped by rate limiting.
-	FramesIn                   uint64 `json:"frames_in"`
-	BytesIn                    uint64 `json:"bytes_in"`
-	FramesOut                  uint64 `json:"frames_out"`
-	BytesOut                   uint64 `json:"bytes_out"`
-	DatagramsOut               uint64 `json:"datagrams_out"`
-	DatagramBytesOut           uint64 `json:"datagram_bytes_out"`
-	WriteErrors                uint64 `json:"write_errors"`
-	EnterWorldAuthRefused      uint64 `json:"enter_world_auth_refused"`
-	UnhandledOpcodeFrames      uint64 `json:"unhandled_opcode_frames"`
+	FramesIn              uint64 `json:"frames_in"`
+	BytesIn               uint64 `json:"bytes_in"`
+	FramesOut             uint64 `json:"frames_out"`
+	BytesOut              uint64 `json:"bytes_out"`
+	DatagramsOut          uint64 `json:"datagrams_out"`
+	DatagramBytesOut      uint64 `json:"datagram_bytes_out"`
+	WriteErrors           uint64 `json:"write_errors"`
+	EnterWorldAuthRefused uint64 `json:"enter_world_auth_refused"`
+	UnhandledOpcodeFrames uint64 `json:"unhandled_opcode_frames"`
+	// EmptyFramesRefused counts outbound opcode-0 frames the queue refused
+	// (emptyframe.go); any non-zero value is a producer bug to fix.
+	EmptyFramesRefused         uint64 `json:"empty_frames_refused"`
 	OutboundQueueBytes         int    `json:"outbound_queue_bytes"`
 	OutboundQueueByteHighWater uint64 `json:"outbound_queue_byte_high_water"`
 	ByeNormal                  uint64 `json:"bye_normal"`
@@ -201,6 +205,7 @@ func (h *Hub) Metrics() Metrics {
 		WriteErrors:                h.metrics.writeErrors.Load(),
 		EnterWorldAuthRefused:      h.metrics.enterWorldAuthRefused.Load(),
 		UnhandledOpcodeFrames:      h.metrics.unhandledFrames.Load(),
+		EmptyFramesRefused:         h.metrics.emptyFramesRefused.Load(),
 		OutboundQueueBytes:         queueBytes,
 		OutboundQueueByteHighWater: h.metrics.queueByteHighWater.Load(),
 		ByeNormal:                  h.metrics.byeNormal.Load(),

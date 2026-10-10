@@ -41,6 +41,9 @@ type Hub struct {
 	History HistoryObserver
 	cfg     Config
 
+	// emptyFrames throttles the opcode-0 refusal warning (emptyframe.go).
+	emptyFrames emptyFrameLog
+
 	mu       sync.RWMutex
 	sessions map[uint64]*Session
 	byToken  map[[ResumeTokenLen]byte]*Session
