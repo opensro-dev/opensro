@@ -167,8 +167,9 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// in again (server-starting.ts) instead of failing. Answered before the
 	// per-address login budget: it tests no credential, so players sharing an
 	// address cannot drain the budget while the shard starts.
+	// It writes no history: it is not a credential refusal, and an
+	// unthrottled answer must not become an unbounded history writer.
 	if server.shardStarting(request.ServerID) {
-		server.history.Record(history.Event{Kind: "login_refused", Code: readiness.CodeStarting, Category: "expected", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
 		w.Header().Set("Retry-After", strconv.Itoa(loginStartingRetrySeconds))
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"ok": false, "nativeTitleStatus": 5,
