@@ -258,7 +258,7 @@ newNestRuntime
 */
 func (s *MonsterState) newNestRuntime(index int) *nestRuntime {
 	nest := s.template.Nests[index]
-	n := &nestRuntime{enabled: true, respawn: nest.Respawn, remaining: nest.InstanceLimit()}
+	n := &nestRuntime{enabled: true, respawn: nest.Respawn, remaining: nest.InstanceLimit(), vacant: nest.StartVacant}
 	n.intervalMs, n.reduceMs = monster.NestDelay(nest.RespawnDelayMinSec, nest.RespawnDelayMaxSec, n.ratePct, s.randomWord)
 	return n
 }
@@ -275,8 +275,9 @@ func (s *MonsterState) materializeNest(state *divisionMonsterState, index int, n
 	n := s.newNestRuntime(index)
 	state.nests[index] = n
 	s.scheduleNest(state, index)
-	// A hive member is visited as its hive, which materializeHive awaits.
-	if s.template.Nests[index].HiveKey == "" {
+	// A hive member is visited as its hive, which materializeHive awaits; a
+	// vacant structure site has nothing to fill.
+	if s.template.Nests[index].HiveKey == "" && !n.vacant {
 		state.awaitFill(populationFillKey{nest: index}, n.scheduled, nowMs)
 	}
 }

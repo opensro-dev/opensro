@@ -86,6 +86,11 @@ func (rt *Runtime) HandleFortressInteraction(division string, c *enterworld.Char
 	if c == nil || len(payload) < 5 {
 		return OpResult{}
 	}
+	if request, ok := rt.fortressConstructionRequest(division, c, payload); ok {
+		unlock := rt.lockDivision(division)
+		defer unlock()
+		return rt.fortressConstruct(division, c, request)
+	}
 	subtype := payload[4]
 	request, err := siege.DecodeInteraction(payload)
 	if err != nil {

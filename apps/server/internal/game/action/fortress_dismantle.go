@@ -194,25 +194,26 @@ func (rt *Runtime) fortressDemolishStructure(division string, c *enterworld.Char
 	if !rt.Monsters.SetStructureOccupant(division, world, zone, 0, rt.Now().UnixMilli()) {
 		return fortressRefusal(request.Action, fortressErrUnknown)
 	}
-	rt.storeStructureVacancy(division, fortressID, zone, holder)
+	rt.storeStructureRow(division, domain.FortressStructureRecord{FortressID: fortressID, EventStructID: zone, OwnerGuildID: holder})
 	reply := wire.NewWriter(6).U8(request.Action).U8(1).U32(zone)
 	return OpResult{Frames: []wire.Frame{{Opcode: opFortressInteractionResult, Payload: reply.Payload()}}}
 }
 
 /*
 ================
-storeStructureVacancy
+storeStructureRow
 
-The vacated zone's row: RefObjID 0 (QUERY_SIEGE_STRUCT_REMOVE's effect).
-The periodic save writes standing structures only, so the row is written
-here and remembered as saved.
+Writes a zone's occupant row at once (QUERY_SIEGE_STRUCT_REMOVE and _ADD):
+RefObjID 0 for a vacated zone, the new structure for a built one. The
+periodic save walks standing structures only and rewrites a row only when
+it moved, so the row is remembered as saved.
 ================
 */
-func (rt *Runtime) storeStructureVacancy(division string, fortressID, zone uint32, holder int64) {
+func (rt *Runtime) storeStructureRow(division string, record domain.FortressStructureRecord) {
 	if rt.FortressStore == nil {
 		return
 	}
-	record := domain.FortressStructureRecord{FortressID: fortressID, EventStructID: zone, OwnerGuildID: holder}
+	fortressID, zone := record.FortressID, record.EventStructID
 	rt.fortressPersistMu.Lock()
 	defer rt.fortressPersistMu.Unlock()
 	if rt.FortressStore.SaveFortressStructure(division, record, true) != nil {

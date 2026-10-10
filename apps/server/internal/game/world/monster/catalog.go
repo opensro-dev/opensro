@@ -46,6 +46,10 @@ type NestRow struct {
 	// EventStructID is a fortress structure's event zone (eventzonedata id):
 	// the RefEventStructID its spawn row carries (CICATStruct 4FA0B0).
 	EventStructID uint32
+	// StartVacant is a fortress zone that starts with no structure (a
+	// barricade site): its nest spawns nothing until the zone takes an
+	// occupant (MonsterState.SetStructureOccupant).
+	StartVacant bool
 	// RetailEvidence reports that the server-side fields below came from a
 	// matched population row. An unmatched v1.150 anchor remains passive but
 	// receives the class-wide idle-wander primitive when its RefObj row has

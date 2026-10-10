@@ -45,10 +45,13 @@ func TestJanganFortressStartsWithItsStructures(t *testing.T) {
 			t.Errorf("zone %d holds no structure", zone)
 		}
 	}
-	for _, zone := range []uint32{91, 109} {
-		if _, ok := byZone[zone]; ok {
-			t.Errorf("zone %d should start empty", zone)
-		}
+	// An unbuilt defensive site has no nest; a barricade site's nest starts
+	// vacant until construction places its barricade.
+	if _, ok := byZone[91]; ok {
+		t.Error("zone 91 should hold no nest")
+	}
+	if barricade, ok := byZone[109]; !ok || !barricade.StartVacant || template.Refs[barricade.RefObjID].TypeID4 != 6 {
+		t.Errorf("zone 109 should be a vacant barricade site: %+v", barricade)
 	}
 }
 

@@ -197,6 +197,41 @@ func (s *MonsterState) SetStructureOccupant(divisionID string, world instance.ID
 
 /*
 ================
+StructureZone
+
+A fortress world's structure site on zone: the reference the event zone
+authors for it (the nest's default) and whether a structure stands there
+now. False when the world has no structure nest on zone.
+================
+*/
+func (s *MonsterState) StructureZone(divisionID string, world instance.ID, zone uint32) (monster.MonsterRef, bool, bool) {
+	lease, ok := s.PopulationLease(divisionID, world)
+	if !ok {
+		return monster.MonsterRef{}, false, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state := s.populationForLease(divisionID, lease)
+	if state == nil {
+		return monster.MonsterRef{}, false, false
+	}
+	for index := range state.nests {
+		nest := s.template.Nests[index]
+		ref := s.template.Refs[nest.RefObjID]
+		if nest.EventStructID != zone || !ref.Structure {
+			continue
+		}
+		occupied := false
+		for _, attached := range state.gidNests {
+			occupied = occupied || attached == index
+		}
+		return ref, occupied, true
+	}
+	return monster.MonsterRef{}, false, false
+}
+
+/*
+================
 removeInstanceLocked
 
 Drops one instance and everything keyed by it, as Defeat does, without

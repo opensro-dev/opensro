@@ -13,7 +13,8 @@ first structures, which a new shard's database holds.
 
 INFERENCE: a fresh shard's fortress holds, on every placed zone of kinds 1
 (fort stone, guard towers) and 3 (gates), that zone's default structure.
-Kind 2 zones (barricades) stay empty until a barricade is placed. A default
+Kind 2 zones (barricades) are nests that start vacant: a barricade stands
+there only once construction (0x71E1 action 0x0A) places it. A default
 whose record has no hit points (the _00 defensive sites) is an unbuilt site,
 not a live object. Each structure is one ordinary population nest of its
 fortress world: one instance, no respawn, never roaming.
@@ -34,9 +35,11 @@ import (
 )
 
 const (
-	// eventzonedata kinds that start built (1) and gates (3).
-	eventZoneBuilt = "1"
-	eventZoneGate  = "3"
+	// eventzonedata kinds that start built (1), barricade sites (2) and
+	// gates (3).
+	eventZoneBuilt     = "1"
+	eventZoneBarricade = "2"
+	eventZoneGate      = "3"
 )
 
 /*
@@ -90,7 +93,7 @@ func appendFortressStructures(template monster.Template, textdataDir, zonesPath 
 	}
 	var nests []monster.NestRow
 	for _, row := range ReadTextdataFile(filepath.Join(textdataDir, "eventzonedata.txt")) {
-		if len(row) < 11 || row[0] != "1" || (row[4] != eventZoneBuilt && row[4] != eventZoneGate) {
+		if len(row) < 11 || row[0] != "1" || (row[4] != eventZoneBuilt && row[4] != eventZoneBarricade && row[4] != eventZoneGate) {
 			continue
 		}
 		world := strings.TrimSpace(row[10])
@@ -115,6 +118,7 @@ func appendFortressStructures(template monster.Template, textdataDir, zonesPath 
 			PolicyPinned:  true,
 			MaxCount:      1,
 			EventStructID: uint32(id),
+			StartVacant:   row[4] == eventZoneBarricade,
 		})
 	}
 	return template.WithAdditionalNests(nests), nil
