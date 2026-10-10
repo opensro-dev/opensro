@@ -2,14 +2,15 @@
 ===========================================================================
 
 guild_leader_role.go - the offline repair that gives each master the
-commander role
+commander role exclusively to the master
 
 The retail _Guild_FnAddMember gives MemberClass 0 SiegeAuthority 1, and a
 master handover moves it (v1.188 5C46E0, _Guild_Delegate_Master). Guilds
 founded before the port did the same carry a master with role 0, whom the
 client's fortress windows (827DB0) refuse while the server's grade checks
 admit. The authority upgrade rewrites those rows once; server startup
-never does.
+never does. The old grant handler also allowed role 1 on nonmasters;
+clear those stale commanders while preserving legitimate staff roles.
 
 ===========================================================================
 */
@@ -27,7 +28,7 @@ import (
 ================
 leaderRoleRepair
 
-One guild_members row whose master lacks the commander role, with the
+One guild_members row whose commander role disagrees with its grade, with the
 record as it will be written.
 ================
 */
@@ -42,8 +43,8 @@ type leaderRoleRepair struct {
 ================
 leaderRoleRepairs
 
-The master rows the upgrade must rewrite. A row already holding the role
-is left alone, so the repair is idempotent.
+The rows the upgrade must rewrite. The master alone holds role 1;
+all other legitimate roles survive. Correct rows are left alone.
 ================
 */
 func leaderRoleRepairs(db *sql.DB) ([]leaderRoleRepair, error) {
@@ -63,10 +64,16 @@ func leaderRoleRepairs(db *sql.DB) ([]leaderRoleRepair, error) {
 		if err := decodeJSONStrict([]byte(record), &member); err != nil {
 			return nil, fmt.Errorf("division %s guild %d member record: %w", repair.division, repair.guildID, err)
 		}
-		if member.Grade != domain.GuildLeaderGrade || member.FortressRole == domain.GuildFortressRoleCommander {
+		role := member.FortressRole
+		if member.Grade == domain.GuildLeaderGrade {
+			role = domain.GuildFortressRoleCommander
+		} else if role == domain.GuildFortressRoleCommander {
+			role = 0
+		}
+		if member.FortressRole == role {
 			continue
 		}
-		member.FortressRole = domain.GuildFortressRoleCommander
+		member.FortressRole = role
 		encoded, err := json.Marshal(member)
 		if err != nil {
 			return nil, err

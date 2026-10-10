@@ -38,7 +38,7 @@ func guildManagerFixture(t *testing.T) *doorRuntime {
 	deps.Guilds = d.authority.Guilds()
 	c := d.character
 	if _, err := deps.Guilds.CreateGuild(testDivision, enterworld.GuildRecord{Name: "Lanterns", Level: 1, GP: 6000},
-		enterworld.GuildMemberRecord{CharID: c.ID, JID: 1, Name: c.Name, Grade: 0, PermMask: 0xffffffff}, c); err != nil {
+		enterworld.GuildMemberRecord{CharID: c.ID, JID: 1, Name: c.Name, Grade: 0, PermMask: 0xffffffff, FortressRole: guild.FortressRoleCommander}, c); err != nil {
 		t.Fatal(err)
 	}
 	npc := simulation.NpcDef{ObjectID: guildManagerGid, RefObjID: 7600, Codename: "NPC_EU_GUILD",
@@ -93,7 +93,7 @@ func TestGuildMasterHandsTheGuildToAMember(t *testing.T) {
 	guilds := d.authority.Guilds()
 	guildID, _ := guilds.GuildOfCharacter(testDivision, c.ID)
 	if _, refusal := guilds.AddGuildMemberAs(testDivision, guildID, c.ID, 0, enterworld.GuildMemberRecord{
-		CharID: heir.ID, JID: 2, Name: heir.Name, Grade: guild.JoinerGrade}); refusal.Refused() {
+		CharID: heir.ID, JID: 2, Name: heir.Name, Grade: guild.JoinerGrade, FortressRole: guild.FortressRoleGuard}); refusal.Refused() {
 		t.Fatalf("fixture join %v", refusal)
 	}
 	leave := func(target uint32) OpResult {
@@ -109,12 +109,36 @@ func TestGuildMasterHandsTheGuildToAMember(t *testing.T) {
 		t.Fatalf("fortress master transfer % X", out.Frames[0].Payload)
 	}
 	d.rt.Fortresses.SetPeriod(testDivision, fortress.PeriodWar, false)
+	var peerFrames []wire.Frame
+	d.rt.PushCharacterFrames = func(division, name string, frames []wire.Frame) {
+		if division != testDivision || name != heir.Name {
+			t.Fatalf("handover recipient %s/%s", division, name)
+		}
+		peerFrames = append(peerFrames, frames...)
+	}
 	out := leave(2)
-	assertOpcodes(t, out.Frames, opGuildMasterLeaveDone, guild.OpGuildUpdatePush, guild.OpGuildUpdatePush)
+	assertOpcodes(t, out.Frames, opGuildMasterLeaveDone, guild.OpGuildUpdatePush, guild.OpGuildUpdatePush, guild.OpGuildUpdatePush, guild.OpGuildUpdatePush)
+	want := [][]byte{
+		guild.EncodeMemberGrade3B29(1, guild.JoinerGrade, guild.JoinerPermMask),
+		guild.EncodeMemberGrade3B29(2, guild.LeaderGrade, guild.LeaderPermMask),
+		guild.EncodeMemberFortressRole3B29(1, 0),
+		guild.EncodeMemberFortressRole3B29(2, guild.FortressRoleCommander),
+	}
+	if len(peerFrames) != len(want) {
+		t.Fatalf("peer received %d frames, want %d", len(peerFrames), len(want))
+	}
+	for i, payload := range want {
+		if !bytes.Equal(out.Frames[i+1].Payload, payload) || !bytes.Equal(peerFrames[i].Payload, payload) {
+			t.Fatalf("handover update %d: actor %x peer %x want %x", i, out.Frames[i+1].Payload, peerFrames[i].Payload, payload)
+		}
+	}
 	_, members, _ := guilds.Guild(testDivision, guildID)
 	for _, member := range members {
 		if member.JID == 2 && member.Grade != 0 || member.JID == 1 && member.Grade != guild.JoinerGrade {
 			t.Fatalf("members after the hand-over %+v", members)
+		}
+		if member.JID == 2 && member.FortressRole != guild.FortressRoleCommander || member.JID == 1 && member.FortressRole != 0 {
+			t.Fatalf("roles after the hand-over %+v", members)
 		}
 	}
 	if out := leave(1); !bytes.Equal(out.Frames[0].Payload, []byte{2, guildNpcRefused}) {

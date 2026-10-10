@@ -117,3 +117,77 @@ func TestUpgradeRepairsACurrentStoreOnce(t *testing.T) {
 		t.Fatalf("second repair = %v, want ErrAuthorityCurrent", err)
 	}
 }
+
+/*
+================
+TestUpgradeRemovesStaleNonmasterCommanders
+
+The previous grant handler allowed role 1 on any member. Repair that
+persisted authority even when the master already has the correct role.
+================
+*/
+func TestUpgradeRemovesStaleNonmasterCommanders(t *testing.T) {
+	for _, older := range []bool{false, true} {
+		name := "current"
+		if older {
+			name = "older"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			master, smith := roleMasterGuild(t, dir)
+			s := openTest(t, dir, newTestClock())
+			stale := guildTestCharacter("oldcommand")
+			if err := s.CreateCharacter(testDivision, "stale-account", stale); err != nil {
+				t.Fatal(err)
+			}
+			guilds := s.Guilds()
+			guildID, _ := guilds.GuildOfCharacter(testDivision, master)
+			if _, refusal := guilds.AddGuildMemberAs(testDivision, guildID, master, 0,
+				domain.GuildMemberRecord{CharID: stale.ID, JID: 3, Name: stale.Name, Grade: 3, FortressRole: 1}); refusal.Refused() {
+				t.Fatalf("stale commander fixture: %v", refusal)
+			}
+			if !older {
+				if _, refusal := guilds.UpdateGuildAs(testDivision, master, "fixture-correct-master", domain.GuildAuthorization{},
+					func(g domain.GuildRecord, members []domain.GuildMemberRecord) (domain.GuildRecord, []domain.GuildMemberRecord, bool) {
+						for i := range members {
+							if members[i].CharID == master {
+								members[i].FortressRole = domain.GuildFortressRoleCommander
+							}
+						}
+						return g, members, true
+					}); refusal.Refused() {
+					t.Fatalf("master fixture: %v", refusal)
+				}
+			}
+			s.Close()
+			if older {
+				downgradeToLayout7(t, dir)
+				rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preItemForgeVersion)
+			}
+			if backup, err := UpgradeAuthority(dir, false); err != nil || backup != "" {
+				t.Fatalf("dry run %q: %v", backup, err)
+			}
+			// Reopening an older schema is refused; inspect its rows directly.
+			db, err := connectDB(dir + "/" + DBFileName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var role int
+			err = db.QueryRow("SELECT json_extract(record, '$.fortressRole') FROM guild_members WHERE char_id = ?", stale.ID).Scan(&role)
+			db.Close()
+			if err != nil || role != 1 {
+				t.Fatalf("dry run changed stale role: %d, %v", role, err)
+			}
+			if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
+				t.Fatalf("repair %q: %v", backup, err)
+			}
+			roles := storedRoles(t, dir)
+			if roles[master] != 1 || roles[smith] != 8 || roles[stale.ID] != 0 {
+				t.Fatalf("repaired roles %v", roles)
+			}
+			if _, err := UpgradeAuthority(dir, true); !errors.Is(err, ErrAuthorityCurrent) {
+				t.Fatalf("second repair: %v", err)
+			}
+		})
+	}
+}
