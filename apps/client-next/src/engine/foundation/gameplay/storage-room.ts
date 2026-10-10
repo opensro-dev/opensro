@@ -304,6 +304,9 @@ only through apply(), fed by the inventory transaction that owns them.
 */
 export function createStorageRoom( send: ( frame: WireFrame ) => void ) {
 	let room: StorageRoom | null = null;
+	// The room a close left while a move it admitted may still be answered:
+	// the warehouse data outlives its window, so the echo settles here.
+	let closed: StorageRoom | null = null;
 	let loaded: { readonly capacity: number; readonly gold: string; readonly items: readonly InventoryItem[]; } | null =
 		null;
 	let gold = "0";
@@ -317,6 +320,7 @@ The talk menu's storage row: list the room once, then ask for the function.
 		*/
 		open( npc: number ) {
 			if ( !Number.isInteger( npc ) || npc < 1 || npc > 0xffffffff ) throw Error( "Invalid storage NPC" );
+			closed = null;
 			if ( loaded ) {
 				room = { npc, phase: "opening", ...loaded };
 				send( storageOpenRequest( npc ) );
@@ -334,6 +338,7 @@ The guild manager's warehouse row: ask for the function, then the room.
 		*/
 		openGuild( npc: number ) {
 			if ( !Number.isInteger( npc ) || npc < 1 || npc > 0xffffffff ) throw Error( "Invalid guild manager" );
+			closed = null;
 			room = { npc, guild: true, phase: "function", capacity: 0, gold: "0", items: [] };
 			send( guildStorageFunctionRequest( npc ) );
 		},
@@ -419,11 +424,15 @@ True when the frame belonged to the warehouse.
 ================
 apply
 
-The room after an acknowledged move; the session copy follows it.
+The room after an acknowledged move; the session copy follows it, whether
+or not the window is still open.
 ================
 		*/
 		apply( next: StorageRoom ) {
-			room = next;
+			// A move answered after its window closed changes the data, never
+			// the window: the closed room takes it and stays closed.
+			if ( room ) room = next;
+			else closed = next;
 			if ( next.guild ) return;
 			loaded = { capacity: next.capacity, gold: next.gold, items: next.items };
 			gold = next.gold;
@@ -437,7 +446,19 @@ Leaving the warehouse keeps the session copy (+0x7BC stays set).
 		*/
 		close() {
 			if ( room?.guild && room.phase !== "function" ) send( npcRequest( OP_GUILD_STORAGE_RELEASE, room.npc ) );
+			closed = room?.phase === "open" ? room : null;
 			room = null;
+		},
+		/*
+================
+settling
+
+The room a pending move's answer applies to: the open one, or the one a
+close left behind.
+================
+		*/
+		settling(): StorageRoom | null {
+			return room ?? closed;
 		},
 		/*
 ================
@@ -448,6 +469,7 @@ World leave: the next session lists again.
 		*/
 		reset() {
 			room = null;
+			closed = null;
 			loaded = null;
 			gold = "0";
 		},

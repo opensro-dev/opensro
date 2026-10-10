@@ -3299,7 +3299,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					undefined :
 					inventory.state().inventory.find( i => i.slot === pickupSlot );
 				const mallRequest = inventory.state().itemMall?.pending === true;
-				const room = storage.state();
+				// A warehouse move answered after its window closed still settles.
+				const room = storage.settling();
 				if ( frame.opcode === 0xb06d && room ) {
 					const next = inventory.storageSettle( room, frame.payload, cosItemCaps );
 					if ( next ) {
