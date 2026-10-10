@@ -240,8 +240,11 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 		return []wire.Frame{petExperienceFrame(pet.GID, banked-before, source)}, nil
 	}
 	exp := before + delta
-	form := ref
-	for int64(form.Level) < petMaxLevel && exp >= required {
+	form, consumed := ref, int64(0)
+	// 4D65F1's loop has no owner check: native gains never cross more than a
+	// level. Port-only, not native: the beta pace above can, so the loop
+	// stops at the owner's level and banks there as 4D6418 does on entry.
+	for int64(form.Level) < petMaxLevel && int64(form.Level) < rewardLevel(c) && exp >= required {
 		next, found := refs.CharacterRefByCodename(form.NextCodename)
 		if !found || next == nil || next.TidWord != form.TidWord {
 			break
@@ -251,7 +254,11 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 			break
 		}
 		exp -= required
+		consumed += required
 		form, required = next, following
+	}
+	if int64(form.Level) >= rewardLevel(c) && exp >= required {
+		exp = required - 1
 	}
 	pet.Experience = uint64(exp)
 	if form != ref {
@@ -263,7 +270,9 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 			wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(pet.GID,
 				simulation.Vitals{CurrentHP: pet.CurrentHP, CurrentMP: pet.CurrentMP})})
 	}
-	return []wire.Frame{petExperienceFrame(pet.GID, delta, source)}, area
+	// The owner sees the EXP the pet was credited: all of it unless the
+	// owner's level banked the rest (as the entry bank reports banked-before).
+	return []wire.Frame{petExperienceFrame(pet.GID, consumed+exp-before, source)}, area
 }
 
 /*

@@ -186,3 +186,27 @@ func TestBetaPetExpGrowsAtTheOwnersPace(t *testing.T) {
 		t.Fatalf("a pace below one shrank the gain: %+v", pet)
 	}
 }
+
+/*
+================
+TestBetaPetExpNeverPassesTheOwner
+
+A paced gain big enough for several levels stops at the owner's level and
+banks one short of the next, reporting only what was credited.
+================
+*/
+func TestBetaPetExpNeverPassesTheOwner(t *testing.T) {
+	rt, c, pet := petGrowthFixture(t)
+	level := int64(2)
+	c.Level = &level
+	ref, _ := rt.cosReference(pet)
+	rt.PetExpPace = func(int64) float64 { return 10 }
+	// 50 x 10 = 500: level 1 pays 100, then level 2 is the owner's and banks.
+	owner, _ := rt.applyAttackPetExperience(c, pet, ref, 50, 0)
+	if pet.Level != 2 || pet.Experience != 199 {
+		t.Fatalf("pet passed or missed its owner: %+v", pet)
+	}
+	if !bytes.Equal(owner[0].Payload, petExperienceFrame(pet.GID, 100+199, 0).Payload) {
+		t.Fatalf("owner frame reports more than was credited: %x", owner[0].Payload)
+	}
+}
