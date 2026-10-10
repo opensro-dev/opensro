@@ -26,6 +26,7 @@ const STALL_PROMPT_PRICE = "stall-prompt-price";
 const STALL_CHAT_TEXT = "stall-chat-text";
 // CIFChatModule sets both text boxes' row pitch through 523C20(15).
 const STALL_CHAT_ROW = 15;
+const EDIT_CARET_WIDTH = 1;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	companionItemTargetCommand,
@@ -7976,7 +7977,8 @@ export function createUi(
 				const r = authoredRect( node, ox, oy ),
 					ink = native ? authoredClientRect( node, ox, oy ) : r,
 					hAlign = native ? node.hAlign : 0,
-					offset = Math.max( 0, ink[2] - text.run( value ).width ) *
+					width = text.run( value ).width,
+					offset = Math.max( 0, ink[2] - width ) *
 						(hAlign === 2 ? 1 : hAlign === 1 ? .5 : 0);
 				controls.push( {
 					id,
@@ -7996,17 +7998,31 @@ export function createUi(
 					end = Math.min( value.length, selection[1] ?? start ),
 					before = text.run( value.slice( 0, start ) ).width,
 					through = text.run( value.slice( 0, end ) ).width;
+				// Match chatLayout's caret-following viewport; fitting text keeps its authored alignment.
+				const scroll = focus === id && width > ink[2] ? Math.max( 0, through - ink[2] + EDIT_CARET_WIDTH ) : 0,
+					box: UiRect = [ ink[0] - scroll, ink[1], Math.max( ink[2], width ), ink[3] ];
 				if ( focus === id && end > start ) {
-					rect( [ ink[0] + offset + before, ink[1], through - before, ink[3] ], [ .2, .4, .7, .6 ], "", [
+					rect(
+						[ ink[0] + offset + before - scroll, ink[1], through - before, ink[3] ],
+						[ .2, .4, .7, .6 ],
+						"",
+						[
+							0,
+							0,
+							1,
+							1
+						],
+						ink
+					);
+				}
+				quads.push( ...text.quads( value, box, ink, white, { overflow: "clip", hAlign } ) );
+				if ( focus === id && caretVisible ) {
+					rect( [ ink[0] + offset + through - scroll, ink[1], EDIT_CARET_WIDTH, ink[3] ], white, "", [
 						0,
 						0,
 						1,
 						1
 					], ink );
-				}
-				quads.push( ...text.quads( value, ink, ink, white, { overflow: "clip", hAlign } ) );
-				if ( focus === id && caretVisible ) {
-					rect( [ ink[0] + offset + through, ink[1], 1, ink[3] ], white, "", [ 0, 0, 1, 1 ], ink );
 				}
 			}
 			/*
