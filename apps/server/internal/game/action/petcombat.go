@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/combat"
@@ -67,6 +69,8 @@ type petCombatIntent struct {
 	castToken    uint32
 	releaseAtMs  int64
 	pursuing     bool
+	// pursuingSinceMs is when the current approach began (petdiagnostics.go).
+	pursuingSinceMs int64
 }
 
 /*
@@ -80,13 +84,17 @@ note in item/wire/coscommand.go).
 ================
 */
 func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterworld.Character, cosGID, targetGID uint32, nowMs int64) OpResult {
+	refuse := func(reason string) OpResult {
+		rt.petDiagnostic(division, character.Name, cosGID, "order refused: "+reason, log.Fields{"target": targetGID})
+		return OpResult{DiagnosticRefusal: "pet attack: " + reason}
+	}
 	pet := snapshot.CompanionByGID(cosGID)
 	if pet == nil || !pet.Summoned || pet.Mounted || pet.CurrentHP == 0 || targetGID == 0 {
-		return OpResult{}
+		return refuse("pet not summoned, mounted, dead or no target")
 	}
 	ref, ok := rt.cosReference(pet)
 	if !ok || ref.TidWord>>11 != attackPetBand {
-		return OpResult{}
+		return refuse("not an attack pet")
 	}
 	// 4D24B5..4D24E4 validates a COS target through its owner; 4D2575
 	// retains the requested object for the AI event. Use the tick's resolver
@@ -94,16 +102,19 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	target, ok := rt.resolvePetCombatTarget(petCombatStep{
 		key: petOwnerKey{division: division}, snapshot: snapshot, pet: pet, ref: ref, nowMs: nowMs,
 	}, targetGID)
-	if !ok || !petAttackBodyAllowed(pet, target.combatTarget) {
-		return OpResult{}
+	if !ok {
+		return refuse("target not found")
+	}
+	if !petAttackBodyAllowed(pet, target.combatTarget) {
+		return refuse("body status forbids the attack")
 	}
 	if target.player != nil && (rt.companionTeamRefusal(snapshot, target.snapshot) != 0 ||
 		rt.playerAttackTargetRefusal(division, snapshot, target.snapshot, nowMs) != 0) {
-		return OpResult{}
+		return refuse("player target not attackable")
 	}
 	state := rt.petSessionFor(division, character.Name, cosGID)
 	if state == nil {
-		return OpResult{}
+		return refuse("no pet session")
 	}
 	// 4D2588..4D2592 retires the owner's event-bit-2 effects after the
 	// admitted order, including a repeated order for the existing target.
@@ -186,6 +197,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	// refused first, so a cape put on mid-fight ends an attack on a team-mate.
 	if !ok || target.player != nil && (rt.companionTeamRefusal(step.snapshot, target.snapshot) != 0 ||
 		step.ref.TidWord>>11 != domain.MercenaryBand && rt.playerAttackTargetRefusal(step.key.division, step.snapshot, target.snapshot, step.nowMs) != 0) {
+		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: target lost or not attackable", log.Fields{"target": intent.target})
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return nil, false
 	}
@@ -204,11 +216,13 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	// Pos_AreSamePlaneAndAdjacentSectors test 4D2200 applies to its position
 	// order) ends the fight and the pet returns to follow.
 	if !samePlaneAdjacent(owner, targetAt) {
+		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: target left the owner's sectors", log.Fields{"target": intent.target})
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return nil, false
 	}
 	skill, ok := rt.petAttackSkill(step, intent, simulation.AttackTarget{Distance: float32(areaDistance(step.state.follower.Position(step.nowMs), targetAt)), BodyRadius: targetRadius})
 	if !ok {
+		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: no usable attack skill", log.Fields{"target": intent.target, "ref": step.ref.Codename})
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return nil, false
 	}
@@ -219,11 +233,21 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 		ActionReach:      reducedActionReach(float32(skill.ActionRange), cosParameter(step.ref, step.pet, block, actionRangeCutParameter)),
 	}
 	if !spacing.Valid() {
+		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: invalid combat spacing", log.Fields{"target": intent.target, "petRadius": step.ref.Parameters.BodyRadius, "targetRadius": targetRadius, "reach": skill.ActionRange})
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return nil, false
 	}
 	at := step.state.follower.Position(step.nowMs)
 	if intent.castToken == 0 && !spacing.Contains(at, targetAt) {
+		if !intent.pursuing {
+			intent.pursuingSinceMs = step.nowMs
+		}
+		if step.nowMs-intent.pursuingSinceMs >= petApproachStallMs {
+			rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "approach not reaching strike range", log.Fields{
+				"target": intent.target, "distance": simulation.WorldDistance2D(at, targetAt), "admission": spacing.AdmissionRadius(),
+				"standOff": spacing.StandOffRadius(), "moving": step.state.follower.Moving(step.nowMs), "pursuingMs": step.nowMs - intent.pursuingSinceMs,
+			})
+		}
 		intent.pursuing = true
 		return step.state.follower.Approach(targetAt, float64(rt.cosPacedRun(step.ref, step.run)), step.nowMs, spacing.StandOffRadius(), step.constraint), true
 	}
@@ -248,6 +272,7 @@ func (rt *Runtime) advancePetCombat(step petCombatStep) (frames []simulation.Fra
 	}
 	strike, ok := rt.strikePetTargets(step, target, skill)
 	if !ok {
+		rt.petDiagnostic(step.key.division, step.snapshot.Name, step.pet.GID, "fight ended: the strike was refused", log.Fields{"target": intent.target, "skill": skill.ID})
 		rt.cancelPetCombat(step.key, step.state, step.nowMs)
 		return frames, true
 	}

@@ -113,6 +113,17 @@ func (p *PetFollower) Position(nowMs int64) Spawn { return p.world.LiveSpawnAt(n
 // division lock while copying; visibility never reads a mutable follower.
 /*
 ================
+Moving
+
+Whether a segment is still under way at nowMs.
+================
+*/
+func (p *PetFollower) Moving(nowMs int64) bool {
+	return p.world.MoveSegment.Valid() && nowMs < p.world.MoveSegment.ArrivesAtMs
+}
+
+/*
+================
 Presentation
 ================
 */
