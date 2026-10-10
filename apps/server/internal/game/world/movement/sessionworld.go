@@ -166,12 +166,15 @@ outside the door).
 ==================
 */
 type peerAppearanceCapture struct {
-	pvpState      uint8
-	eventTeam     uint8
-	hasEvent      bool
-	hasModel      bool
-	modelRef      uint32
-	name          string
+	pvpState  uint8
+	eventTeam uint8
+	hasEvent  bool
+	hasModel  bool
+	modelRef  uint32
+	name      string
+	// displayName is the name other players are shown: the job alias in
+	// job mode, else the character name (see capturePeerAppearance).
+	displayName   string
 	charID        int64
 	hasGuild      bool
 	guildID       int64
@@ -213,12 +216,13 @@ capture/build split, so the wire output is unchanged.
 */
 func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uint32) peerAppearanceCapture {
 	captured := peerAppearanceCapture{
-		pvpState:  character.PVPState(),
-		eventTeam: character.EventTeam(),
-		hasEvent:  character.EventTeam() != 0xff,
-		name:      character.Name,
-		charID:    character.ID,
-		modelRef:  resolvedModelRef,
+		pvpState:    character.PVPState(),
+		eventTeam:   character.EventTeam(),
+		hasEvent:    character.EventTeam() != 0xff,
+		name:        character.Name,
+		displayName: character.Name,
+		charID:      character.ID,
+		modelRef:    resolvedModelRef,
 	}
 	if resolvedModelRef == 0 {
 		return captured
@@ -232,9 +236,19 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 		captured.bodyShapeByte = uint8(*character.BodyShapeByte & 0xff)
 	}
 	captured.visualFlags = enterworld.ResolveVisualFlags(character)
-	// A worn job suit shows the job and its grade (job mode).
+	// A worn job suit shows the job and its grade (job mode), and other
+	// players see the job alias in place of the name: v1.188's spawn tail
+	// (4E5B00, 4E5B55) writes vfunc +0xF0 (the alias, CInstancePC +0x48)
+	// unless the job state is 4, and the name (+0xEC) only then. The
+	// v1.150 client reads that one string as the peer's name (869E77); it
+	// never swaps its own name board to the alias (+0x1898 is read only by
+	// the job windows), so the player keeps seeing their real name.
+	// Wearing a suit requires an alias (0x9F), so it is never empty here.
 	if job := enterworld.DressedJob(character); job != 0 {
 		captured.jobType, captured.jobGrade = job, character.Job.Grade
+		if character.Job.Alias != "" {
+			captured.displayName = character.Job.Alias
+		}
 	}
 	captured.skin = enterworld.CharacterTransformSkin(character)
 	captured.worn = make([]wornEquipRow, 0, len(character.MissionInventory))
@@ -285,7 +299,7 @@ func peerAppearance(guilds enterworld.GuildStore, unions *union.Authority, divis
 	appearance := &simulation.PeerAppearance{
 		PVPState:      captured.pvpState,
 		RefObjID:      captured.modelRef,
-		Name:          captured.name,
+		Name:          captured.displayName,
 		BodyShapeByte: captured.bodyShapeByte,
 		VisualFlags:   captured.visualFlags,
 		JobType:       captured.jobType,
