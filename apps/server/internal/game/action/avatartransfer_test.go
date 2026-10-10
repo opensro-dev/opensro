@@ -17,18 +17,22 @@ func TestAvatarTransferRoundtripPreservesBodyAndVisualOrder(t *testing.T) {
 	items := staticItemSource{"AVATAR_HAT": {RefObjID: 90001, Codename: "AVATAR_HAT", TypeIDs: [4]int64{3, 1, 13, 1}, Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1}}}
 	rt, _ := newTestRuntime(c, items)
 	equip := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 0})
-	if len(equip.Frames) != 2 || equip.Frames[0].Opcode != wire.OpItemMoveResponse || equip.Frames[1].Opcode != 0x3314 {
+	// The move, the visual, then the owner's refreshed stats (50F1F0): a
+	// worn avatar's options count only while it is worn.
+	if len(equip.Frames) != 3 || equip.Frames[0].Opcode != wire.OpItemMoveResponse || equip.Frames[1].Opcode != 0x3314 ||
+		equip.Frames[2].Opcode != wire.OpBaseStats {
 		t.Fatalf("equip: %+v", equip)
 	}
-	// Viewers get the avatar's reference first (#340), then the owner's visual.
-	if len(equip.Broadcast) != 2 || equip.Broadcast[0].Opcode != opCommerceItemReferences || !reflect.DeepEqual(equip.Broadcast[1:], equip.Frames[1:]) {
+	// Viewers get the avatar's reference first (#340), then the owner's visual,
+	// never the owner's stats.
+	if len(equip.Broadcast) != 2 || equip.Broadcast[0].Opcode != opCommerceItemReferences || !reflect.DeepEqual(equip.Broadcast[1:], equip.Frames[1:2]) {
 		t.Fatalf("viewers: %+v", equip.Broadcast)
 	}
 	if len(c.MissionInventory) != 0 || c.AvatarInventory == nil || len(c.AvatarInventory.Rows) != 1 {
 		t.Fatal("not committed")
 	}
 	unequip := rt.HandleItemMove(testDivision, c, []byte{0x23, 0, 20})
-	if len(unequip.Frames) != 2 || unequip.Frames[1].Opcode != 0x377c {
+	if len(unequip.Frames) != 3 || unequip.Frames[1].Opcode != 0x377c || unequip.Frames[2].Opcode != wire.OpBaseStats {
 		t.Fatalf("unequip: %+v", unequip)
 	}
 	if !reflect.DeepEqual(c.MissionInventory, []enterworld.InventoryRow{original}) || len(c.AvatarInventory.Rows) != 0 {
@@ -64,7 +68,10 @@ func TestAvatarDressRemovalMovesAttachmentAtomicallyAndUsesFirstFreeSlots(t *tes
 			attachment := enterworld.InventoryRow{Slot: 0, RefObjID: 90003, Codename: "ATTACHMENT", TypeFlags: 0x1eac, StackCount: 1, VarianceBits: "456", Plus: 3, Durability: 23}
 			c.AvatarInventory = &domain.AvatarInventory{Capacity: 4, Rows: []enterworld.InventoryRow{dress, attachment}}
 			before := append([]enterworld.InventoryRow(nil), c.MissionInventory...)
-			rt, _ := newTestRuntime(c, nil)
+			rt, _ := newTestRuntime(c, staticItemSource{
+				"DRESS":      {RefObjID: 90002, Codename: "DRESS", TypeIDs: [4]int64{3, 1, 13, 2}, ReqQuadTypes: [4]int64{-1, -1, -1, -1}},
+				"ATTACHMENT": {RefObjID: 90003, Codename: "ATTACHMENT", TypeIDs: [4]int64{3, 1, 13, 3}, ReqQuadTypes: [4]int64{-1, -1, -1, -1}},
+			})
 			result := rt.HandleItemMove(testDivision, c, []byte{0x23, 3, 20})
 			if freeCount < 2 {
 				if len(result.Frames) != 1 || !reflect.DeepEqual(result.Frames[0].Payload, []byte{2, 7}) || !reflect.DeepEqual(before, c.MissionInventory) || len(c.AvatarInventory.Rows) != 2 {
@@ -72,13 +79,14 @@ func TestAvatarDressRemovalMovesAttachmentAtomicallyAndUsesFirstFreeSlots(t *tes
 				}
 				return
 			}
-			if len(result.Frames) != 3 || !reflect.DeepEqual(result.Frames[0].Payload, []byte{1, 0x23, 3, 43, 1, 0, 1, 0x23, 0, 44, 1, 0}) {
+			if len(result.Frames) != 4 || result.Frames[3].Opcode != wire.OpBaseStats ||
+				!reflect.DeepEqual(result.Frames[0].Payload, []byte{1, 0x23, 3, 43, 1, 0, 1, 0x23, 0, 44, 1, 0}) {
 				t.Fatalf("wire: %+v", result)
 			}
 			if binary.LittleEndian.Uint32(result.Frames[1].Payload[5:]) != 90003 || binary.LittleEndian.Uint32(result.Frames[2].Payload[5:]) != 90002 {
 				t.Fatal("attachment must disappear before dress")
 			}
-			if !reflect.DeepEqual(result.Broadcast, result.Frames[1:]) {
+			if !reflect.DeepEqual(result.Broadcast, result.Frames[1:3]) {
 				t.Fatalf("viewers: %+v", result.Broadcast)
 			}
 			dress.Slot = 43

@@ -1,6 +1,8 @@
 package action
 
 import (
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
@@ -9,7 +11,7 @@ import (
 
 // 594980: avatar records occupy independent storage slots; their TID4 selects
 // the visible socket. Occupied costume sockets refuse replacement.
-func (rt *Runtime) applyAvatarTransfer(c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
+func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Character, q wire.ItemMoveRequest) OpResult {
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	rt.deps.Update(c, "avatar-transfer", func() bool {
 		if c.DeletePending {
@@ -95,8 +97,22 @@ func (rt *Runtime) applyAvatarTransfer(c *enterworld.Character, q wire.ItemMoveR
 			}
 		}
 
-		c.MissionInventory = rowsFromInvItems(player.Items())
-		c.AvatarInventory = &domain.AvatarInventory{Capacity: 4, Rows: rowsFromInvItems(avatars.Items())}
+		nextBag := rowsFromInvItems(player.Items())
+		nextAvatars := &domain.AvatarInventory{Capacity: 4, Rows: rowsFromInvItems(avatars.Items())}
+		// 50F1F0 installs or removes the avatar's contributions (4E3760 /
+		// 4E3860) and the actor's stats refresh, as for equipment: the
+		// blessed options count only while the avatar is worn. Derived on
+		// the next snapshot so a broken record refuses before anything moves.
+		next := c.Snapshot()
+		next.MissionInventory, next.AvatarInventory = nextBag, nextAvatars
+		display, err := rt.PlayerBaseStats(divisionID, next)
+		if err != nil {
+			log.Warnf("action: avatar move %d->%d refused - %v", q.SourceSlot, q.DestSlot, err)
+			return false
+		}
+		statFrame := wire.Frame{Opcode: wire.OpBaseStats, Payload: enterworld.BuildLoginStatBlock(next, display)}
+		c.MissionInventory = nextBag
+		c.AvatarInventory = nextAvatars
 		visual := wire.UnequipVisualFrame(wire.UnequipVisual{Gid: enterworld.ObjectIDForCharacter(c), Slot: q.SourceSlot, RefObjID: item.RefObjID})
 		if equip {
 			visual = wire.EquipVisualFrame(wire.EquipVisual{Gid: enterworld.ObjectIDForCharacter(c), RefObjID: item.RefObjID, TypeFlags: item.TypeFlags, OptLevel: item.Plus})
@@ -117,11 +133,16 @@ func (rt *Runtime) applyAvatarTransfer(c *enterworld.Character, q wire.ItemMoveR
 		result.Frames = append(result.Frames, visual)
 		// Viewers see the dress change as the owner does (applyInventoryMove),
 		// after the reference for an avatar they may never have been sent.
-		result.Broadcast = result.Frames[1:]
+		// A copy: the owner's stats frame is appended to Frames below.
+		result.Broadcast = append([]wire.Frame(nil), result.Frames[1:]...)
 		if equip {
 			references := rt.itemReferenceFrames([]inventory.Item{item})
 			result.Broadcast = append(references, result.Broadcast...)
 		}
+		// The stats are the owner's alone, after the move and visuals.
+		hp, mp := rt.clampStoredGaugeToKeeper(divisionID, c)
+		result.Frames = append(result.Frames, statFrame)
+		result.Frames = append(result.Frames, rt.gaugeDropFrames(divisionID, c, hp, mp, false)...)
 		return true
 	})
 	return result

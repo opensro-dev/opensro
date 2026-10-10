@@ -324,6 +324,11 @@ func PlayerStatsWithModifiers(
 			})
 		}
 	}
+	avatarWrites, err := avatarOptionWrites(character, items, catalogs.MagicOptions)
+	if err != nil {
+		return Stats{}, Loadout{}, err
+	}
+	writes = append(writes, avatarWrites...)
 	passives, power, err := learnedPassives(character, skills, catalogs.Items, passiveWeaponKind)
 	if err != nil {
 		return Stats{}, Loadout{}, err

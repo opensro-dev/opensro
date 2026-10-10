@@ -74,7 +74,7 @@ func (rt *Runtime) HandleItemMove(
 
 	switch request.MovementType {
 	case wire.MoveTypeAvatarToPlayer, wire.MoveTypePlayerToAvatar:
-		return rt.applyAvatarTransfer(character, request)
+		return rt.applyAvatarTransfer(divisionID, character, request)
 
 	case wire.MoveTypeCosPickup, wire.MoveTypeCosDrop:
 		result := rt.applyCosGround(divisionID, character, request)
