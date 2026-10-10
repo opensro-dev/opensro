@@ -170,7 +170,10 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		status
 		================
 		*/
-		status() {
+		status(): string | undefined {
+			// Nothing is wanted after clear (world entry): no scene is loading,
+			// so report no status rather than a manifest that never comes (#527).
+			if ( !wanted ) return undefined;
 			if ( error ) return error;
 			if ( !manifest ) return "Loading scene description";
 			if ( !admitted ) return "Loading scene models";

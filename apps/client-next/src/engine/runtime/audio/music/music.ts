@@ -298,17 +298,19 @@ status
 ================
 		*/
 		status() {
-			return error ?
-				"failed" :
-				mode === "stopped" ?
-				"stopped" :
-				blocked ?
-				"waiting-for-gesture" :
-				playing() ?
-				(mode === "priming" ? "primed" : fading ? "fading" : "playing") :
-				mode === "audible" ?
-				"loading" :
-				"stopped";
+			if ( error ) return "failed";
+			if ( mode === "stopped" ) return "stopped";
+			if ( blocked ) return "waiting-for-gesture";
+			if ( playing() ) return mode === "priming" ? "primed" : fading ? "fading" : "playing";
+			if ( mode !== "audible" ) return "stopped";
+			// Audible but not sounding: name the reason, so "loading" means a
+			// request in flight and "queued" a track waiting for an asset slot.
+			// A world region without music asks for the empty track (#527).
+			if ( !current?.path ) return "silent";
+			if ( volume === 0 ) return "muted";
+			if ( job !== null ) return "loading";
+			if ( !element ) return "queued";
+			return element.ended ? "ended" : "starting";
 		},
 		snapshot: () => ({ world, path: current?.path ?? null, loop: current?.loop ?? false, fading, volume, error }),
 		error: () => error,

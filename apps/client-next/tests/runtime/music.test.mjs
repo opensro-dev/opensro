@@ -18,7 +18,7 @@ import { defined } from "../helpers/defined.mjs";
 const { createMusic } = await import( sourceFileUrl( "src/engine/runtime/audio/music/music.ts" ).href );
 const settle = () => new Promise( setImmediate );
 function fixture( t, blocked = false ) {
-	let id = 0;
+	let id = 0, slots = 4;
 	const requests = [], cancelled = [], results = new Map(), elements = [];
 	class Media {
 		paused = true;
@@ -52,7 +52,7 @@ function fixture( t, blocked = false ) {
 		else delete globalThis.Audio;
 	} );
 	const assets = {
-		available: () => 4,
+		available: () => slots,
 		request( url ) {
 			requests.push( url );
 			return ++id;
@@ -78,7 +78,18 @@ function fixture( t, blocked = false ) {
 		results.set( 2, { kind: "bytes", buffer: Uint8Array.of( 0xff, 0xfb, 0x90, 0 ).buffer } );
 		music.step();
 	}
-	return { music, requests, cancelled, elements, revoked, results, load };
+	return {
+		music,
+		requests,
+		cancelled,
+		elements,
+		revoked,
+		results,
+		load,
+		setSlots: n => {
+			slots = n;
+		}
+	};
 }
 test("music primes during loading, loops once active, and survives repeated scene frames without rewinding", async t => {
 	const f = fixture( t );
@@ -483,5 +494,29 @@ test("live quiet/native/mute changes preserve the stream and zero remains silent
 		assert.ok( media.volume <= amplitude );
 		if ( amplitude === 0 ) assert.equal( media.volume, 0 );
 	}
+	f.music.dispose();
+});
+
+test("world music status names silence, a queued track and a request in flight apart", async t => {
+	const f = fixture( t );
+	f.music.active( true, true );
+	f.music.step();
+	assert.equal( f.music.status(), "silent", "a region without music is not a pending load" );
+	f.setSlots( 0 );
+	f.music.regional( "/assets/audio/music/jangan.mp3", 0 );
+	f.music.step();
+	assert.equal( f.requests.length, 0 );
+	assert.equal( f.music.status(), "queued", "a track waiting for an asset slot" );
+	f.setSlots( 4 );
+	f.music.step();
+	assert.equal( f.requests.length, 1 );
+	assert.equal( f.music.status(), "loading" );
+	f.results.set( 1, { kind: "bytes", buffer: Uint8Array.of( 0xff, 0xfb, 0x90, 0 ).buffer } );
+	f.music.step();
+	// Hold the element as a play that has not taken effect yet.
+	f.elements[0].paused = true;
+	f.elements[0].play = () => new Promise( () => {} );
+	f.music.step();
+	assert.equal( f.music.status(), "starting", "an element that has not begun playing" );
 	f.music.dispose();
 });

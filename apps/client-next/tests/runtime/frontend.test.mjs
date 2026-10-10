@@ -563,6 +563,7 @@ test("startup texture status describes queued work, not the changing request con
 		neededWorldTextures: () => needed
 	};
 	const stage = createFrontendStage( assets, renderer, "http://fixture.invalid" );
+	assert.equal( stage.status(), undefined, "no scene is wanted before install" );
 	stage.install( "/assets/title.json" );
 	assert.equal( stage.status(), "Loading scene description" );
 	stage.step();
@@ -600,6 +601,12 @@ test("startup texture status describes queued work, not the changing request con
 		stage.step();
 	}
 	assert.equal( stage.status(), "Preparing scene graphics" );
+	// World entry clears the stage: nothing loads, so nothing is reported
+	// (#527). A return to the title wants the manifest again.
+	stage.clear();
+	assert.equal( stage.status(), undefined );
+	stage.install( "/assets/title.json" );
+	assert.equal( stage.status(), "Loading scene description" );
 	stage.dispose();
 });
 
