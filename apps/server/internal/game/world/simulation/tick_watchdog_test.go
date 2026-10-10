@@ -9,7 +9,10 @@ tick_watchdog_test.go - a stalled tick is reported once, by phase and hook
 package simulation
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -88,5 +91,91 @@ func TestTickWatchdogIgnoresATickWithinTheThreshold(t *testing.T) {
 	watch.begin(now)
 	if report := watch.check(now.Add(500*time.Millisecond), time.Second); report != "" {
 		t.Fatalf("a 500 ms tick was reported: %.120s", report)
+	}
+}
+
+/*
+================
+TestTickWatchdogDumpsAndExitsOnADeadlock
+
+A tick stuck past StallExit writes the dump (phase, hook, the goroutines
+parked on locks, every stack) and exits non-zero for the supervisor.
+================
+*/
+func TestTickWatchdogDumpsAndExitsOnADeadlock(t *testing.T) {
+	var held sync.RWMutex
+	held.Lock()
+	parked := make(chan struct{})
+	go func() {
+		close(parked)
+		held.RLock()
+		held.RUnlock()
+	}()
+	<-parked
+	defer held.Unlock()
+	time.Sleep(50 * time.Millisecond)
+
+	dir := t.TempDir()
+	code := -1
+	ticker := &Ticker{StallExit: time.Second, StallDumpDir: dir, exit: func(c int) { code = c }}
+	now := time.Now()
+	ticker.watch.begin(now.Add(-2 * time.Second))
+	ticker.watch.phase.Store(tickPhaseHooks)
+	if !ticker.stallExpired(now) || code != tickStallExitCode {
+		t.Fatalf("stuck tick: expired with code %d, want %d", code, tickStallExitCode)
+	}
+	dumps, _ := filepath.Glob(filepath.Join(dir, "tick-stall-*.txt"))
+	if len(dumps) != 1 {
+		t.Fatalf("dumps = %v, want one", dumps)
+	}
+	body, err := os.ReadFile(dumps[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	waiters := text[strings.Index(text, "== goroutines waiting on locks =="):strings.Index(text, "== all goroutines ==")]
+	if !strings.Contains(text, "phase:   hooks") || !strings.Contains(waiters, "[sync.RWMutex.RLock]") ||
+		!strings.Contains(waiters, "TestTickWatchdogDumpsAndExitsOnADeadlock") {
+		t.Fatalf("dump lacks the stalled phase or the parked reader: %.2000s", text)
+	}
+}
+
+/*
+================
+TestTickWatchdogExitNeedsAStuckTick
+
+No exit within StallExit, between ticks, or with the exit disabled.
+================
+*/
+func TestTickWatchdogExitNeedsAStuckTick(t *testing.T) {
+	exited := false
+	stub := func(int) { exited = true }
+	now := time.Now()
+	short := &Ticker{StallExit: time.Minute, StallDumpDir: t.TempDir(), exit: stub}
+	short.watch.begin(now.Add(-2 * time.Second))
+	idle := &Ticker{StallExit: time.Second, StallDumpDir: t.TempDir(), exit: stub}
+	off := &Ticker{StallDumpDir: t.TempDir(), exit: stub}
+	off.watch.begin(now.Add(-time.Hour))
+	for _, ticker := range []*Ticker{short, idle, off} {
+		if ticker.stallExpired(now) || exited {
+			t.Fatal("exited without a tick stuck past StallExit")
+		}
+	}
+}
+
+/*
+================
+TestTickStallExitFromEnv
+================
+*/
+func TestTickStallExitFromEnv(t *testing.T) {
+	for _, c := range []struct {
+		text string
+		want time.Duration
+	}{{"", DefaultTickStallExit}, {"0", 0}, {"45", 45 * time.Second}, {"soon", DefaultTickStallExit}, {"-1", DefaultTickStallExit}} {
+		t.Setenv(EnvTickStallExit, c.text)
+		if got := TickStallExitFromEnv(); got != c.want {
+			t.Errorf("%q = %v, want %v", c.text, got, c.want)
+		}
 	}
 }

@@ -261,7 +261,14 @@ type Ticker struct {
 	// StallReport is how long a tick runs before the watchdog logs what it
 	// is doing (tick_watchdog.go). Values <= 0 use DefaultTickStallReport.
 	StallReport time.Duration
-	watch       tickWatch
+	// StallExit is how long one tick may stay stuck before the watchdog
+	// writes a dump file to StallDumpDir and exits the process so the
+	// supervisor restarts it (tick_watchdog.go). Zero never exits.
+	StallExit    time.Duration
+	StallDumpDir string
+	// exit ends the process after a stall dump; nil is os.Exit.
+	exit  func(code int)
+	watch tickWatch
 	// PhaseObserver receives each tick's phase durations and slow hooks
 	// (tick_timing.go); nil records nothing.
 	PhaseObserver func(TickTiming)

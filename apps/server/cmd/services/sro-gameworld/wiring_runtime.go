@@ -10,9 +10,12 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -84,6 +87,17 @@ func (game *gameplayPlane) newMissionTicker(peerReferences *action.PeerReference
 	ticker.BeforeHooks = []simulation.TickHook{game.items.MonsterActionTickHook()}
 	// A peer's spawn row is preceded by the item references it names (#340).
 	ticker.ItemReferences = peerReferences.Frames
+	// A deadlocked tick dumps its stacks and exits for the supervisor to
+	// restart (tick_watchdog.go); the dumps sit beside the authority store.
+	ticker.StallExit = simulation.TickStallExitFromEnv()
+	ticker.StallDumpDir = os.Getenv(simulation.EnvTickStallDumpDir)
+	if ticker.StallDumpDir == "" {
+		ticker.StallDumpDir = filepath.Join(".state", "stall-dumps")
+		if dir := store.DirFromEnv(); dir != "" {
+			ticker.StallDumpDir = filepath.Join(dir, "stall-dumps")
+		}
+	}
+	log.Infof("simulation: a tick stuck %v dumps to %s and exits for restart (%s, 0 = never)", ticker.StallExit, ticker.StallDumpDir, simulation.EnvTickStallExit)
 	ticker.PlayerMap = simulation.BetaPlayerMapEnabled()
 	if ticker.PlayerMap {
 		log.Infof("simulation: beta world map roster ON (%s)", simulation.EnvBetaPlayerMap)
