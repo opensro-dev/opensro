@@ -335,6 +335,16 @@
      <p class="recovery-hint">The original state and result are recorded in the private audit log. This operation does not select a town or grant items.</p>
     </div>
    </form>
+   <form id="recovery-reset-stats" class="panel recovery-form">
+    <div class="panel-heading"><div><span class="eyebrow">AUDITED OPERATION</span><h2>Reset stats</h2></div><span class="tag">REQUIRES RELOGIN</span></div>
+    <div class="recovery-form-body">
+     <p class="recovery-note">Returns the inspected character's STR and INT to their value at the current level and gives every spent point back as a free stat point. No earned point is lost. Health and mana above the new maximum are trimmed. Their active session will be disconnected. Ask the player to log in again afterward.</p>
+     <label>Reason<textarea id="recovery-stats-reason" required minlength="5" maxlength="500" rows="3" placeholder="Why must this character's stats be reset?"></textarea></label>
+     <label>Confirm character name<input id="recovery-stats-confirmation" required autocomplete="off" placeholder="Type the exact inspected name"></label>
+     <button id="recovery-reset-stats-button" class="button rescue-submit" type="submit">Disconnect and reset stats</button>
+     <p class="recovery-hint">The original state and result are recorded in the private audit log. This operation does not move the character or grant items.</p>
+    </div>
+   </form>
    </div>
   </div>
  </section>

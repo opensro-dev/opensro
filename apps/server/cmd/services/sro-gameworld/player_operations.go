@@ -125,6 +125,14 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			}
 			return read(request.Character)
 		},
+		ResetStats: func(request agentapi.PlayerOperation) (any, error) {
+			if err := control.run(request.Character, "stat reset", func() error {
+				return game.items.OperatorResetStats(shard, request.Character)
+			}); err != nil {
+				return nil, err
+			}
+			return read(request.Character)
+		},
 		GrantItems: func(request agentapi.PlayerOperation) (any, error) {
 			if authority.Health().LastError != "" {
 				return nil, fmt.Errorf("storage is unhealthy; item grant refused")

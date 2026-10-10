@@ -37,10 +37,11 @@ function syncControls() {
 	byID( "inspect-button" ).disabled = !enabled || mutating || inspecting;
 	byID( "shard" ).disabled = mutating;
 	byID( "character" ).disabled = mutating;
-	for ( const form of [ "rescue", "clear-pk" ] ) {
+	for ( const form of [ "rescue", "clear-pk", "reset-stats" ] ) {
 		for ( const control of byID( form ).elements ) control.disabled = !enabled || mutating || !snapshot;
 	}
 	byID( "clear-pk-button" ).disabled ||= !snapshot?.player || !("pk" in snapshot.player);
+	byID( "reset-stats-button" ).disabled ||= !snapshot?.player || !("strength" in snapshot.player);
 }
 /*
 ================
@@ -56,7 +57,11 @@ function invalidateSelection() {
 	selectedName = selectedShard = "";
 	inspectedInput = "";
 	byID( "result" ).hidden = true;
-	for ( const id of [ "confirmation", "pk-confirmation", "reason", "pk-reason" ] ) byID( id ).value = "";
+	for (
+		const id of [ "confirmation", "pk-confirmation", "stats-confirmation", "reason", "pk-reason", "stats-reason" ]
+	) {
+		byID( id ).value = "";
+	}
 	status.textContent = "Inspect this character and server before making changes.";
 	syncControls();
 }
@@ -69,6 +74,15 @@ function pkSummary( player ) {
 	if ( !("pk" in player) ) return "Unavailable on this shard";
 	const pk = player.pk;
 	return `Penalty ${pk?.penalty ?? 0}; daily kills ${pk?.dailyCount ?? 0}; total kills ${pk?.totalCount ?? 0}`;
+}
+/*
+================
+statSummary
+================
+*/
+function statSummary( player ) {
+	if ( !("strength" in player) ) return "Unavailable on this shard";
+	return `STR ${player.strength}; INT ${player.intellect}; free points ${player.statPoints ?? 0}`;
 }
 
 /*
@@ -113,6 +127,7 @@ function showPlayer( value, shard ) {
 			"aggressions" in player ? Object.keys( player.aggressions ?? {} ).length : "Unavailable"
 		],
 		[ "Level", player.level ],
+		[ "Stats", statSummary( player ) ],
 		[ "Health", player.hp ],
 		[ "Mana", player.mp ],
 		[ "Region", spawn?.regionId ?? "Unknown" ],
@@ -172,7 +187,8 @@ mutatePlayer
 async function mutatePlayer( event, action ) {
 	event.preventDefault();
 	if ( !enabled || mutating || inspecting ) return;
-	const clearPK = action === "clear-pk", prefix = clearPK ? "pk-" : "";
+	const clearPK = action === "clear-pk", resetStats = action === "reset-stats";
+	const prefix = clearPK ? "pk-" : resetStats ? "stats-" : "";
 	if ( !snapshot || byID( "shard" ).value !== selectedShard || byID( "character" ).value.trim() !== inspectedInput ) {
 		invalidateSelection();
 		return;
@@ -190,13 +206,19 @@ async function mutatePlayer( event, action ) {
 		status.textContent = "PK state is unavailable. This shard must support PK inspection before clearing it.";
 		return;
 	}
-	const originalPK = pkSummary( snapshot.player );
+	if ( resetStats && !("strength" in snapshot.player) ) {
+		status.textContent = "Stats are unavailable. This shard must support stat inspection before resetting them.";
+		return;
+	}
+	const originalPK = pkSummary( snapshot.player ), originalStats = statSummary( snapshot.player );
 	const characterID = snapshot.player.id, current = inspection;
 	mutating = true;
 	syncControls();
 	const character = selectedName, shard = selectedShard;
 	status.textContent = clearPK ?
 		"Closing this player's session and clearing active PK..." :
+		resetStats ?
+		"Closing this player's session and resetting STR and INT..." :
 		"Closing this player's session and saving the rescue...";
 	try {
 		const result = await requestJSON( "/api/player?" + new URLSearchParams( { shard } ), {
@@ -205,7 +227,7 @@ async function mutatePlayer( event, action ) {
 			body: JSON.stringify( {
 				id: crypto.randomUUID(),
 				character,
-				...(clearPK ? { action: "clear-pk" } : { town: Number( byID( "town" ).value ) }),
+				...(clearPK || resetStats ? { action } : { town: Number( byID( "town" ).value ) }),
 				reason
 			} )
 		} );
@@ -218,6 +240,10 @@ async function mutatePlayer( event, action ) {
 			`${character} active PK cleared on ${shard}. Before: ${originalPK}. After: ${
 				pkSummary( result.player )
 			}. Daily and total kill history are retained. Ask the player to log in again.` :
+			resetStats ?
+			`${character} stats reset on ${shard}. Before: ${originalStats}. After: ${
+				statSummary( result.player )
+			}. Every earned point is now free to spend. Ask the player to log in again.` :
 			`${character} was rescued on ${shard}. Ask the player to log in again.`;
 	} catch ( error ) {
 		invalidateSelection();
@@ -270,6 +296,7 @@ async function init() {
 byID( "inspect" ).addEventListener( "submit", inspectPlayer );
 byID( "rescue" ).addEventListener( "submit", event => void mutatePlayer( event, "rescue" ) );
 byID( "clear-pk" ).addEventListener( "submit", event => void mutatePlayer( event, "clear-pk" ) );
+byID( "reset-stats" ).addEventListener( "submit", event => void mutatePlayer( event, "reset-stats" ) );
 byID( "shard" ).addEventListener( "change", invalidateSelection );
 byID( "character" ).addEventListener( "input", invalidateSelection );
 byID( "download" ).addEventListener( "click", downloadSnapshot );

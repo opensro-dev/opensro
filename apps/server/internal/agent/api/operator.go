@@ -73,6 +73,8 @@ type PlayerOperations struct {
 	Rescue     func(PlayerOperation) (any, error)
 	GrantItems func(PlayerOperation) (any, error)
 	ClearPK    func(PlayerOperation) (any, error)
+	// ResetStats returns spent STR/INT points to the free pool (port-only).
+	ResetStats func(PlayerOperation) (any, error)
 }
 
 /*
@@ -188,6 +190,12 @@ func (endpoint *operatorEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		operation = endpoint.config.ClearPK
+	case "reset-stats":
+		if endpoint.config.ResetStats == nil || request.Town != 0 || len(request.Items) != 0 {
+			http.Error(w, "invalid stat reset", http.StatusBadRequest)
+			return
+		}
+		operation = endpoint.config.ResetStats
 	default:
 		http.Error(w, "unknown player operation", http.StatusBadRequest)
 		return

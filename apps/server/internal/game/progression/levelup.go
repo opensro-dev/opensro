@@ -28,6 +28,7 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/pk"
@@ -57,6 +58,18 @@ const (
 	// returns without touching experience.
 	DeathPenaltyProtectedMaxLevel int64 = 10
 )
+
+/*
+================
+BaseStatAtLevel
+
+The STR (and INT) a character holds at a level with no point spent: the
+creation value plus the automatic +1 of every level gained.
+================
+*/
+func BaseStatAtLevel(level int64) int64 {
+	return domain.BaseStat + max(level-1, 0)*autoStatPerLevel
+}
 
 // SkillExpPerSP is the skill-exp accumulator period: natively pinned by
 // the client's own wrap (sub_779620 adds the delta to CICPlayer+0x830

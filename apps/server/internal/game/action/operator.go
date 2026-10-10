@@ -6,6 +6,8 @@ operator.go - operator diagnostics and recovery through character authority
 Recovery runs under an exclusive transport control lease supplied by the
 composition root. It uses authored town destinations and ordinary persistence;
 it never grants GM privileges, spends items, revives a corpse, or edits SQL.
+The stat reset is the one that changes a character's build: it keeps every
+earned point and only returns the spent ones to the free pool.
 
 ===========================================================================
 */
@@ -17,6 +19,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -72,7 +75,8 @@ func (rt *Runtime) OperatorCharacter(division, name string) (map[string]any, err
 	return map[string]any{"id": c.ID, "name": c.Name, "level": c.Level, "hp": c.CurrentHP, "mp": c.CurrentMP,
 		"savedWorld": c.World, "liveWorld": world, "teleportMode": c.NativeTeleportMode,
 		"bodyStatus": c.NativeBodyStatus, "companions": c.Companions(), "inventory": c.MissionInventory,
-		"pk": c.PK, "pvpState": c.PVPState(), "aggressions": c.Aggressions}, nil
+		"pk": c.PK, "pvpState": c.PVPState(), "aggressions": c.Aggressions,
+		"strength": domain.CharacterStrength(c), "intellect": domain.CharacterIntellect(c), "statPoints": c.StatPoints}, nil
 }
 
 /*
@@ -111,6 +115,50 @@ func (rt *Runtime) OperatorClearPK(division, name string) error {
 	}
 	rt.aggressionActors.Delete(simulation.WorldKey(division, c.Name))
 	rt.notePKRecord(division, c)
+	return nil
+}
+
+/*
+================
+OperatorResetStats
+
+Port-only, not native: the operator's stat reset, under the same disabled-by-
+default credential and transport control lease as the other recoveries.
+STR and INT return to their value at the character's level with nothing spent
+(progression.BaseStatAtLevel); every point above that comes back as a free
+stat point, so the total is kept and nothing earned is lost, including points
+kept through a level-down. A lower maximum trims the stored current HP/MP as
+any other maximum drop does (4E3294); entry publishes the result on reconnect.
+================
+*/
+func (rt *Runtime) OperatorResetStats(division, name string) error {
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	c := rt.findCharacter(division, name)
+	if c == nil {
+		return fmt.Errorf("character not found")
+	}
+	if !rt.deps.Update(c, "operator-reset-stats", func() bool {
+		if c.DeletePending || c.Level == nil {
+			return false
+		}
+		base := progression.BaseStatAtLevel(*c.Level)
+		points := int64(0)
+		if c.StatPoints != nil && *c.StatPoints > 0 {
+			points = *c.StatPoints
+		}
+		free := domain.CharacterStrength(c) + domain.CharacterIntellect(c) + points - 2*base
+		if free < 0 {
+			// Below the level's own base: an inconsistent record, not one to "reset".
+			return false
+		}
+		strength, intellect := base, base
+		c.Strength, c.Intellect, c.StatPoints = &strength, &intellect, &free
+		rt.clampStoredGaugeToKeeper(division, c)
+		return true
+	}) {
+		return fmt.Errorf("character stat reset refused")
+	}
 	return nil
 }
 
