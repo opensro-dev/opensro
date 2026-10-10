@@ -86,6 +86,11 @@ export function createUiBridge(
 		}
 	>();
 	let composing = false;
+	// An Enter whose keydown reported a composition (Firefox on Linux reports
+	// keyCode 229 / isComposing for plain typing under IBus or Fcitx, and a
+	// lost compositionend can leave `composing` set). Its keyup submits unless
+	// a compositionend in between shows the Enter only committed IME text.
+	let imeEnter: EventTarget | null = null;
 	let drag: { id: string; pointer: number; x: number; y: number; moved?: boolean; } | null = null, focusRevision = -1;
 	let suppressClick: string | null = null;
 	// Abandoning a drag or a carry is reported as drag-cancel, never as
@@ -232,7 +237,13 @@ export function createUiBridge(
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "keydown", event => {
 		event.stopPropagation();
-		if ( event.isComposing || composing || event.keyCode === 229 ) return;
+		if ( event.isComposing || composing || event.keyCode === 229 ) {
+			if ( event.key === "Enter" && !event.repeat && event.target instanceof HTMLInputElement ) {
+				imeEnter = event.target;
+			}
+			return;
+		}
+		imeEnter = null;
 		if (
 			/^F([1-9]|1[0-2])$/.test( event.code ) && event.code !== "F5" && event.code !== "F11" &&
 			event.code !== "F12"
@@ -271,6 +282,14 @@ export function createUiBridge(
 	root.addEventListener( "keyup", event => {
 		event.stopPropagation();
 		heldKey( event.code, false );
+		if (
+			event.key === "Enter" && imeEnter !== null && event.target === imeEnter && !event.isComposing &&
+			event.keyCode !== 229
+		) {
+			imeEnter = null;
+			composing = false;
+			emit( { kind: "activate", id: "submit" } );
+		}
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "pointerup", event => {
 		if ( event.button === 0 && (!drag || event.pointerId === drag.pointer) ) emit( { kind: "press", id: null } );
@@ -292,9 +311,13 @@ export function createUiBridge(
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "compositionend", event => {
 		composing = false;
+		imeEnter = null;
 		if ( event.target instanceof HTMLInputElement ) edit( event.target, event.target.dataset.uiId! );
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "input", event => {
+		// A committed (non-composing) edit proves no composition is open, so a
+		// compositionstart whose end was lost cannot block Enter for good.
+		if ( event instanceof InputEvent && !event.isComposing ) composing = false;
 		if ( event.target instanceof HTMLInputElement ) edit( event.target, event.target.dataset.uiId! );
 	}, { signal: lifetime.signal } );
 	document.addEventListener( "selectionchange", () => {
@@ -893,6 +916,7 @@ export function createUiBridge(
 			carry = null;
 			rightPressed = null;
 			composing = false;
+			imeEnter = null;
 			lifetime.abort();
 			root.remove();
 			controls.clear();
