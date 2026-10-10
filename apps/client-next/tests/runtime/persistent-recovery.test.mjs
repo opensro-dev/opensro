@@ -28,6 +28,72 @@ never
 ================
 */
 const never = () => new Promise( () => {} );
+
+test("cancellation after match settlement releases the body before reader admission", async t => {
+	let resolveMatch = response => {}, cancels = 0, deletes = 0;
+	backend( t, {
+		match: () =>
+			new Promise( resolve => {
+				resolveMatch = resolve;
+			} ),
+		delete: async () => {
+			deletes++;
+			return true;
+		}
+	} );
+	const store = createPersistentAssets(), controller = new AbortController();
+	const read = assert.rejects( store.read( "https://example.test", "handoff", 3, controller.signal ), {
+		name: "AbortError"
+	} );
+	await settle();
+	resolveMatch(
+		new Response(
+			new ReadableStream( {
+				cancel() {
+					cancels++;
+				}
+			} ),
+			{ headers: { "content-length": "3" } }
+		)
+	);
+	queueMicrotask( () => controller.abort() );
+	await read;
+	await settle();
+	assert.equal( cancels, 1, "matched response must retain an owner through body admission" );
+	assert.equal( deletes, 0 );
+});
+
+test("overflow cleanup retains bounded admission and its deadline", async t => {
+	let matches = 0, cancels = 0;
+	backend( t, {
+		match: async () => {
+			matches++;
+			return new Response(
+				new ReadableStream( {
+					start( controller ) {
+						controller.enqueue( Uint8Array.of( 1, 2, 3, 4 ) );
+					},
+					cancel() {
+						cancels++;
+						return never();
+					}
+				} ),
+				{ headers: { "content-length": "3" } }
+			);
+		}
+	} );
+	const store = createPersistentAssets();
+	for ( let i = 0; i < 20; i++ ) {
+		assert.equal( await store.read( "https://example.test", String( i ), 3 ), null );
+		await store.flush();
+	}
+	assert.ok( cancels > 0 && cancels <= 8, `cleanup admission exceeded: ${cancels}` );
+	const before = matches;
+	t.mock.timers.tick( 2000 );
+	await settle();
+	assert.equal( await store.read( "https://example.test", "after-timeout", 3 ), null );
+	assert.equal( matches, before );
+});
 /*
 ================
 backend

@@ -3602,6 +3602,20 @@
 			"function": "flush",
 			"kind": "callback",
 			"reason": "Presentation-events supplies the current gameplay/entity position closure for delayed impact sound emission."
+		},
+		{
+			"file": "src/engine/foundation/assets/read-bytes.ts",
+			"expression": "onCancel",
+			"function": "cancel",
+			"kind": "callback",
+			"reason": "Persistent asset owner observes stream cancellation completion through ReadBytesOptions to retain cleanup accounting."
+		},
+		{
+			"file": "src/engine/foundation/assets/read-bytes.ts",
+			"expression": "received",
+			"function": "readBytes",
+			"kind": "callback",
+			"reason": "Asset loader supplies received-byte progress through ReadBytesOptions; callers without progress leave it absent."
 		}
 	],
 	"sequences": [

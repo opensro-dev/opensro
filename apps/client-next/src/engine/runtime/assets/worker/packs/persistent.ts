@@ -80,7 +80,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	): Promise<T> {
 		signal?.throwIfAborted();
 		if ( disabled.signal.aborted ) return Promise.reject( disabled.signal.reason );
-		if ( outstanding >= MAX_CACHE_OPERATIONS || cleanups >= MAX_CACHE_OPERATIONS ) {
+		if ( outstanding + cleanups >= MAX_CACHE_OPERATIONS ) {
 			return Promise.reject( Error( "Cache busy" ) );
 		}
 		return new Promise<T>( ( resolve, reject ) => {
@@ -124,21 +124,30 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	}
 	/*
 	================
+	trackCleanup
+
+	Retain cancellation admission until native settlement, even after a read fails.
+	================
+	*/
+	function trackCleanup( completion: Promise<void> ) {
+		cleanups++;
+		const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
+		void completion.catch( () => {} ).finally( () => {
+			cleanups--;
+			clearTimeout( timer );
+		} );
+	}
+	/*
+	================
 	release
 
-	Even stream cancellation can hang in a storage backend. Never await it.
+	Late matches still own a body after timeout disables new lookups. Cleanup
+	keeps finite admission and never delays the foreground caller.
 	================
 	*/
 	function release( response: Response | undefined ) {
 		if ( !response?.body || cleanups >= MAX_CACHE_OPERATIONS ) return;
-		// Late matches still own a body after timeout disabled new lookups.
-		// Cleanup has a separate finite allowance and never holds a load slot.
-		cleanups++;
-		const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
-		void response.body.cancel().catch( () => {} ).finally( () => {
-			cleanups--;
-			clearTimeout( timer );
-		} );
+		trackCleanup( response.body.cancel() );
 	}
 
 	/*
@@ -347,12 +356,14 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		================
 		*/
 		async read( origin: string, digest: string, length: number, signal?: AbortSignal ) {
+			let unclaimed: Response | undefined;
 			try {
 				signal?.throwIfAborted();
 				const url = key( origin, digest );
 				if ( removals.has( url ) ) return null;
 				const cache = await open( signal );
 				const response = cache ? await storage( () => cache.match( url ), signal, release ) : undefined;
+				unclaimed = response;
 				if ( !response ) {
 					if ( inventory?.has( url ) ) {
 						total -= inventory.get( url )!;
@@ -363,7 +374,6 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 					return null;
 				}
 				if ( Number( response.headers.get( "content-length" ) ) !== length || !response.body ) {
-					release( response );
 					void remove( origin, digest );
 					misses++;
 					return null;
@@ -371,15 +381,19 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				// A backend read rejection is not evidence that the stored entry is
 				// corrupt. Only observed metadata or completed bytes justify removal.
 				const bytes = await storage(
-					() =>
-						readBytes( response.body!, length, undefined, disabled.signal ).catch( error => {
-							if (
-								isResponseByteLimitError( error ) && !signal?.aborted && !disabled.signal.aborted
-							) {
-								void remove( origin, digest );
-							}
-							throw error;
-						} ),
+					() => {
+						// Transfer body ownership only after storage admits the read.
+						unclaimed = undefined;
+						return readBytes( response.body!, length, { signal: disabled.signal, onCancel: trackCleanup } )
+							.catch( error => {
+								if (
+									isResponseByteLimitError( error ) && !signal?.aborted && !disabled.signal.aborted
+								) {
+									void remove( origin, digest );
+								}
+								throw error;
+							} );
+					},
 					signal
 				);
 				signal?.throwIfAborted();
@@ -394,6 +408,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				errors++;
 				signal?.throwIfAborted();
 				return null;
+			} finally {
+				release( unclaimed );
 			}
 		},
 		remove,

@@ -284,13 +284,16 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			void response.body.cancel().catch( () => {} );
 			throw Error( "Invalid asset range response" );
 		}
-		const bytes = await readBytes( response.body, limit, size => {
-			// An empty chunk is not progress.
-			if ( size > 0 ) progressed();
-			bytesRead += size;
-			if ( range ) received += size;
-			progress();
-		}, signal );
+		const bytes = await readBytes( response.body, limit, {
+			received: size => {
+				// An empty chunk is not progress.
+				if ( size > 0 ) progressed();
+				bytesRead += size;
+				if ( range ) received += size;
+				progress();
+			},
+			signal
+		} );
 		// Ranges are identity bytes with no HTTP cache. For other responses,
 		// Resource Timing distinguishes compressed transfers from HTTP cache
 		// reads; counting decoded stream chunks would invent warm downloads.
