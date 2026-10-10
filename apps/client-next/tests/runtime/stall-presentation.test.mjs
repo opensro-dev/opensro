@@ -17,6 +17,7 @@ const { stallTradingPresentation } = await import( "../../src/engine/runtime/ui/
 
 const ICON_ROOT = "/assets/images/Media_extracted/interface/stall/";
 const ITEM_ICON = "/assets/images/Media_extracted/icon/item/etc/hp_potion_01.png";
+const PRICE_BACKGROUND = "/assets/images/Media_extracted/interface/messagebox/msgbox_iteminfo.png";
 const CHAT_BACKGROUND = "/assets/images/Media_extracted/interface/ifcommon/bg_tile/com_bg_tile_e.png";
 // ifstall control 3 plus ifchatmodule controls 102/103, relative to the stall.
 const CHAT_PANES = [
@@ -320,6 +321,25 @@ test("stall prompts use native edits, item artwork and nonoverlapping confirmati
 		),
 		"the price prompt displays the offered item in its native icon frame"
 	);
+	const priceQuads = f.products.at( -1 )?.quads ?? [];
+	const background = priceQuads.findLastIndex( quad => quad.texture === PRICE_BACKGROUND );
+	assert.ok( background >= 0, "the price prompt paints the native item information background" );
+	for (
+		const [value, dx, dy, width, height] of /** @type {const} */ ([
+			[ "Price", 77, 71, 43, 12 ],
+			[ "Gold", 255, 72, 23, 12 ]
+		])
+	) {
+		// Centered "Gold" is 24px wide in the native 23px label; allow its one-pixel overhang.
+		const label = priceQuads.findIndex( quad =>
+			quad.run && quad.rect[0] + quad.rect[2] / 2 >= x + dx &&
+			quad.rect[0] + quad.rect[2] / 2 <= x + dx + width && quad.rect[1] >= y + dy &&
+			quad.rect[1] + quad.rect[3] <= y + dy + height
+		);
+		assert.ok( label >= 0, `${value} paints at its native label rectangle` );
+		assert.deepEqual( priceQuads[label].run.glyphs.map( glyph => glyph.uv ), glyphWindows( value ) );
+		assert.ok( label > background, `${value} remains visible above the opaque item information background` );
+	}
 	f.ui.event( { kind: "edit", id: "stall-prompt-price", value: "9999999999", start: 10, end: 10, composing: false } );
 	f.ui.event( { kind: "edit", id: "stall-prompt-quantity", value: "99", start: 2, end: 2, composing: false } );
 	draw();

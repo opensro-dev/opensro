@@ -18821,10 +18821,13 @@ export function createUi(
 							stall.offers.find( row => row.slot === stallBox.slot )?.item :
 							game.inventory.find( row => row.slot === stallBox.bagSlot ),
 						icon = iconPath( item?.icon );
-					nativePage( page, x, y, [ 1, 2, 3, 9, 11, 12, 215, 216 ] );
+					nativePage( page, x, y, [ 1, 2, 3, 7, 8, 9, 11, 12, 215, 216 ] );
 					// 528920 mode 10 shows NAME1 and the price edit, hiding NAME2/static price.
 					authoredImage( at( 1 ), x, y );
 					authoredText( at( 1 ), x, y, item?.name ?? "" );
+					// Native child order puts both price labels above NAME1's opaque background.
+					authoredChrome( at( 7 ), x, y );
+					authoredChrome( at( 8 ), x, y );
 					authoredImage( at( 3 ), x, y );
 					if ( icon ) image( authoredRect( at( 12 ), x, y ), icon );
 					partyEdit( at( 3 ), x, y, STALL_PROMPT_QUANTITY, stallBox.quantity, 5, true );
