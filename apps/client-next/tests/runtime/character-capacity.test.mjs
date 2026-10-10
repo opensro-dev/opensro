@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 const { createCharacters } = await import(
 	sourceFileUrl( "src/engine/runtime/renderer/characters/characters.ts" ).href
 );
-const { CHARACTER_ASSEMBLIES, CHARACTER_MODELS } = await import(
+const { CHARACTER_ASSEMBLIES, CHARACTER_MODELS, CHARACTER_RESIDENT_BYTES, characterBytes } = await import(
 	sourceFileUrl( "src/engine/foundation/animation/character-budget.ts" ).href
 );
 const I = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
@@ -423,6 +423,46 @@ test("the owned model count follows admission, eviction and disposal", () => {
 		owner.dispose( gpu, null );
 	}
 });
+/*
+================
+publishAssemblyFrame
+
+Hidden presentation still publishes actors and retention; only GPU preparation stops.
+================
+*/
+function publishAssemblyFrame( owner, ids ) {
+	owner.actors( ids.map( ( id, index ) => ({ ...actors( [ index + 1 ], 0 )[0], model: id }) ) );
+	owner.retain( [ "m", ...ids ] );
+}
+
+for ( const reuseCached of [ false, true ] ) {
+	test(`assembly budget relief preserves ${reuseCached ? "a cached" : "a new"} request before actor publication`, () => {
+		const f = fixture();
+		try {
+			// Leave one slot for the first new request, or fill the budget before a cache hit.
+			const history = CHARACTER_ASSEMBLIES - (reuseCached ? 0 : 1);
+			for ( let i = 0; i < history; i++ ) {
+				const id = "history" + i;
+				f.owner.assembly( id, "m", [] );
+				publishAssemblyFrame( f.owner, [ id ] );
+			}
+			const first = reuseCached ? "history0" : "first";
+			f.owner.assembly( first, "m", [] );
+			f.owner.assembly( "second", "m", [] );
+			publishAssemblyFrame( f.owner, [ first, "second" ] );
+			const draws = f.owner.prepare( f.gpu, {}, 257 );
+			assert.deepEqual(
+				draws.flatMap( draw => Array.from( { length: draw.count }, ( _, i ) => draw.instances[i * 16 + 12] ) )
+					.sort(),
+				[ 1, 2 ],
+				"both requested assemblies must render after the second admission relieves residency"
+			);
+		} finally {
+			f.owner.dispose( f.gpu, null );
+		}
+	});
+}
+
 test("a hidden session relieves the assembly budget without a prepare pass (BUG-070)", () => {
 	// A hidden tab presents actors but draws nothing, so no prepare pass
 	// retires residency. Assemblies nothing retains give way at the budget;
@@ -436,14 +476,20 @@ test("a hidden session relieves the assembly budget without a prepare pass (BUG-
 		assert.ok( f.stats().uploads > 0, "the drawn assembly owns draws" );
 		f.owner.retain( [ "m" ] );
 		f.owner.actors( [] );
-		for ( let i = 1; i < CHARACTER_ASSEMBLIES; i++ ) f.owner.assembly( "a" + i, "m", [] );
+		for ( let i = 1; i < CHARACTER_ASSEMBLIES; i++ ) {
+			const id = "a" + i;
+			f.owner.assembly( id, "m", [] );
+			publishAssemblyFrame( f.owner, [ id ] );
+		}
 		const releases = f.stats().releases;
 		assert.doesNotThrow( () => f.owner.assembly( "extra", "m", [] ) );
 		assert.equal( f.stats().releases, releases, "no GPU release happens outside a prepare pass" );
+		publishAssemblyFrame( f.owner, [ "extra" ] );
 		f.owner.prepare( f.gpu, {}, 257 );
 		assert.ok( f.stats().releases > releases, "the next prepare pass releases the retired draws" );
 		// Retained assemblies are never relieved: a full retained budget refuses.
 		const all = Array.from( { length: CHARACTER_ASSEMBLIES }, ( _, i ) => "r" + i );
+		f.owner.actors( [] );
 		f.owner.retain( [ "m", ...all ] );
 		for ( const id of all ) f.owner.assembly( id, "m", [] );
 		assert.throws( () => f.owner.assembly( "more", "m", [] ), /assembly residency exceeds budget/ );
@@ -451,6 +497,86 @@ test("a hidden session relieves the assembly budget without a prepare pass (BUG-
 		f.owner.dispose( f.gpu, null );
 	}
 });
+test("animation growth relieves hidden stale sources but refuses a fully retained byte budget", () => {
+	const f = fixture(), stale = [], closed = [];
+	const bodyBytes = characterBytes( model, [] );
+	const pixel = { width: 1, height: 1 };
+	const pixelBytes = characterBytes( { ...model, images: [ pixel ] }, [ pixel ] ) - bodyBytes;
+	let residentBytes = bodyBytes;
+	try {
+		// Dimension-only bitmaps charge residency without allocating their pixel buffers.
+		const chunk = { width: 1024, height: 2048 };
+		const chunkBytes = characterBytes( { ...model, images: [ chunk ] }, [ chunk ] );
+		while ( CHARACTER_RESIDENT_BYTES - residentBytes >= bodyBytes + pixelBytes ) {
+			const remaining = CHARACTER_RESIDENT_BYTES - residentBytes;
+			let dimensions;
+			if ( remaining >= chunkBytes ) {
+				dimensions = [ chunk ];
+			} else {
+				const pixels = Math.floor( (remaining - bodyBytes) / pixelBytes );
+				const height = Math.floor( pixels / chunk.width ), width = pixels % chunk.width;
+				dimensions = [];
+				if ( height ) dimensions.push( { width: chunk.width, height } );
+				if ( width ) dimensions.push( { width, height: 1 } );
+			}
+			const images = dimensions.map( dimension => {
+				const index = closed.length;
+				closed.push( 0 );
+				return {
+					...dimension,
+					/*
+					================
+					close
+
+					Count ownership retirement without allocating browser image resources.
+					================
+					*/
+					close() {
+						closed[index]++;
+					}
+				};
+			} );
+			const source = { ...model, images: dimensions }, id = "stale" + stale.length;
+			f.owner.model( id, source, images );
+			residentBytes += characterBytes( source, images );
+			stale.push( id );
+		}
+		const native = {
+			duration: 1,
+			channels: [ {
+				bone: "root",
+				path: "translation",
+				interpolation: "LINEAR",
+				times: Float32Array.of( 0, 1 ),
+				values: Float32Array.of( 0, 0, 0, 10, 0, 0 )
+			} ]
+		};
+		const expectedBytes = characterBytes( {
+			...model,
+			clips: [ ...model.clips, {
+				name: "native:move",
+				duration: native.duration,
+				channels: native.channels.map( channel => ({ ...channel, node: 0 }) )
+			} ]
+		}, [] );
+		assert.ok( residentBytes + expectedBytes - bodyBytes > CHARACTER_RESIDENT_BYTES );
+		f.owner.actors( actors( [ 1 ], 0 ) );
+		f.owner.retain( [ "m", ...stale ] );
+		assert.throws( () => f.owner.animation( "m", "native:move", native ), /animation residency budget/ );
+		assert.ok( closed.every( count => count === 0 ), "refusal preserves all retained images" );
+		f.owner.retain( [ "m" ] );
+		assert.equal( f.owner.animation( "m", "native:move", native ), expectedBytes );
+		assert.ok( closed.every( count => count === 1 ), "admission retires each stale bitmap exactly once" );
+		f.owner.actors( [ { ...actors( [ 1 ], 0 )[0], clip: "native:move", time: .5, loop: false } ] );
+		const draws = f.owner.prepare( f.gpu, {}, 257 );
+		assert.equal( draws.length, 1, "the active body survives residency relief" );
+		assert.equal( draws[0].bones[12], 5, "the admitted native clip drives the body pose" );
+	} finally {
+		f.owner.dispose( f.gpu, null );
+	}
+	assert.ok( closed.every( count => count === 1 ), "disposal does not close retired images twice" );
+});
+
 test("capacity changes retire obsolete batches before allocating replacement bands", () => {
 	const owner = createCharacters();
 	owner.model( "a", model, [] );

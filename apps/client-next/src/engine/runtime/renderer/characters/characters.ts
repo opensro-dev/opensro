@@ -360,6 +360,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	// continuation may not release or resize them: their buffers must outlive
 	// the submit. The next full pass retires what the frame left behind.
 	const submitted = new Set<string>();
+	// Assembly requests precede actor publication. Protect every requested
+	// assembly, including cache hits, until that publication takes ownership.
+	const requestedAssemblies = new Set<string>();
 	// Draws of models retired outside a prepare pass (retireModels under budget
 	// pressure, as in a hidden tab, which draws nothing). The next full pass
 	// releases them through the geometry commands.
@@ -1113,6 +1116,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 	function residencyKeep( inUse: readonly CharacterActor[], pending: readonly string[] = [] ) {
 		const keep = new Set( [
 			...(retained ?? []),
+			...requestedAssemblies,
 			...pending,
 			...inUse.map( actor => actor.model ),
 			...portraits.map( actor => actor.model )
@@ -2884,6 +2888,9 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			const clip = bindNativeClip( structuredClone( source ), name, base.model.nodes ),
 				model = { ...base.model, clips: [ ...base.model.clips, clip ] },
 				bytes = characterBytes( model, base.images );
+			// Hidden presentation can drop cache entries without a GPU prepare.
+			// Reclaim those charges before rejecting growth of the active body.
+			if ( residentBytes + bytes - base.bytes > CHARACTER_RESIDENT_BYTES ) relieveResidency( [ id ] );
 			if ( residentBytes + bytes - base.bytes > CHARACTER_RESIDENT_BYTES ) {
 				throw Error( "Character animation residency budget" );
 			}
@@ -2983,6 +2990,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				throw new Error( "Characters disposed" );
 			}
 			if ( models.has( id ) ) {
+				requestedAssemblies.add( id );
 				return;
 			}
 			if ( models.size - ownedModels >= CHARACTER_ASSEMBLIES ) {
@@ -3052,6 +3060,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				dependencies: [ base, ...parts.map( part => part.model ) ],
 				bytes: 0
 			} );
+			requestedAssemblies.add( id );
 			residencyDirty = true;
 		},
 		/*
@@ -3075,6 +3084,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			if ( portraitSnapshots.modelRevision() !== portraitRevision ) residencyDirty = true;
 			const revision = snapshots.modelRevision();
 			actors = snapshots.update( value );
+			requestedAssemblies.clear();
 			for ( const gid of particleSnapshots.keys() ) {
 				if ( !snapshots.index.has( gid ) ) particleSnapshots.delete( gid );
 			}
@@ -3286,6 +3296,7 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			retained = null;
 			retainedScratch.clear();
 			actors = [];
+			requestedAssemblies.clear();
 		}
 	};
 }
