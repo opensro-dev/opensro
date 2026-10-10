@@ -194,11 +194,21 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 	from := p.Position(nowMs)
 	target := goal
 	goal, fault := constrain(from, target)
-	if waypoint, ok := p.detourWaypoint(from, target, petClip{reached: goal, fault: fault}, nowMs); ok {
+	waypoint, detouring := p.detourWaypoint(from, target, petClip{reached: goal, fault: fault}, nowMs)
+	if detouring {
 		goal, fault = constrain(from, waypoint)
 	}
+	// A refused leg ends its route; the next plan waits out the retry pace,
+	// as a failed plan does, rather than searching again every tick.
+	refuse := func() []Frame {
+		frames := p.Stop(nowMs)
+		if detouring {
+			p.detour.retryAt = nowMs + petDetourRetryMs
+		}
+		return frames
+	}
 	if fault != nil || !finitePetSpawn(goal) || !petSamePlane(from.RegionID, goal.RegionID) {
-		return p.Stop(nowMs)
+		return refuse()
 	}
 	// Destination packets carry integer coordinates: simulate that same goal.
 	goal.X, goal.Y, goal.Z = math.Round(goal.X), math.Round(goal.Y), math.Round(goal.Z)
@@ -209,19 +219,19 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 	// Compare that same quantized height instead of rejecting every slope.
 	checked.Y = math.Round(checked.Y)
 	if fault != nil || !samePetGoal(checked, goal) {
-		return p.Stop(nowMs)
+		return refuse()
 	}
 	if p.world.MoveSegment.Valid() && nowMs < p.world.MoveSegment.ArrivesAtMs && samePetGoal(p.world.Spawn, goal) {
 		return nil
 	}
 	distance := WorldDistance2D(from, goal)
 	if !(distance > 0) || math.IsInf(distance, 0) {
-		return p.Stop(nowMs)
+		return refuse()
 	}
 	goal.Angle, _ = HeadingFromMovement(from, goal)
 	duration := math.Ceil(distance / speed * 1000)
 	if duration > float64(math.MaxInt64-nowMs) || duration < 1 {
-		return p.Stop(nowMs)
+		return refuse()
 	}
 	p.world.Spawn = goal
 	p.world.MoveSegment = &MoveSegment{From: from, StartedAtMs: nowMs, ArrivesAtMs: nowMs + int64(duration)}
@@ -242,9 +252,10 @@ detourWaypoint
 
 The next waypoint toward goal when the straight segment (straight, the
 caller's constrained result) cannot reach it. A kept route serves while its
-goal stays within petDetourGoalSlack; reached waypoints are dropped.
-Otherwise a clipped straight segment asks the planner, at most once per
-petDetourRetryMs while no route is found.
+goal stays within petDetourGoalSlack, or for one petDetourRetryMs after it was
+planned; reached waypoints are dropped. Otherwise a clipped straight segment
+asks the planner, at most once per petDetourRetryMs: after a plan, a failed
+plan, or a refused leg (moveTo).
 ================
 */
 func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs int64) (Spawn, bool) {
@@ -252,7 +263,10 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 		return Spawn{}, false
 	}
 	route := &p.detour
-	if len(route.points) > 0 && WorldDistance2D(route.goal, goal) <= petDetourGoalSlack {
+	// A route serves while its goal stays within the slack, and for one retry
+	// window after it was planned however far the goal runs: a fleeing goal
+	// re-plans at most once per petDetourRetryMs.
+	if len(route.points) > 0 && (WorldDistance2D(route.goal, goal) <= petDetourGoalSlack || nowMs < route.retryAt) {
 		for len(route.points) > 1 && WorldDistance2D(from, route.points[0]) < petDetourArrived {
 			route.points = route.points[1:]
 		}
@@ -272,7 +286,7 @@ func (p *PetFollower) detourWaypoint(from, goal Spawn, straight petClip, nowMs i
 		route.retryAt = nowMs + petDetourRetryMs
 		return Spawn{}, false
 	}
-	route.points, route.goal, route.retryAt = points, goal, 0
+	route.points, route.goal, route.retryAt = points, goal, nowMs+petDetourRetryMs
 	return points[0], true
 }
 

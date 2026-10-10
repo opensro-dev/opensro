@@ -103,3 +103,52 @@ func TestUnplannedPetRetriesAtTheMonsterPace(t *testing.T) {
 		t.Fatalf("an unrouted pet crossed the wall to %+v", at)
 	}
 }
+
+/*
+================
+TestRefusedDetourLegRetriesAtTheMonsterPace
+
+The planner answers, but the leg to its first waypoint is refused: the
+route ends and the next plan waits out the retry window, not one tick.
+================
+*/
+func TestRefusedDetourLegRetriesAtTheMonsterPace(t *testing.T) {
+	p := NewPetFollower(55, Spawn{RegionID: detourRegion, X: 100, Z: 100})
+	owner := Spawn{RegionID: detourRegion, X: 130, Z: 100}
+	plans := 0
+	p.SetRoutePlanner(func(from, goal Spawn) []Spawn {
+		plans++
+		// The waypoint sits behind the wall too, so its leg is clipped.
+		return []Spawn{{RegionID: detourRegion, X: 120, Z: 100}, goal}
+	})
+	for now := int64(100); now <= 1000; now += 100 {
+		p.Approach(owner, detourSpeed, now, detourReach, detourWall)
+	}
+	if plans != 1 {
+		t.Fatalf("a refused detour leg re-planned %d times in one retry window, want 1", plans)
+	}
+}
+
+/*
+================
+TestFleeingGoalReplansAtTheMonsterPace
+
+A goal running past the corridor slack every tick re-plans at most once per
+retry window; the route in hand serves in between.
+================
+*/
+func TestFleeingGoalReplansAtTheMonsterPace(t *testing.T) {
+	p := NewPetFollower(55, Spawn{RegionID: detourRegion, X: 100, Z: 100})
+	plans := 0
+	p.SetRoutePlanner(func(from, goal Spawn) []Spawn {
+		plans++
+		return []Spawn{{RegionID: detourRegion, X: 100, Z: 170}, {RegionID: detourRegion, X: 130, Z: 170}, goal}
+	})
+	for now := int64(100); now <= 1000; now += 100 {
+		owner := Spawn{RegionID: detourRegion, X: 130 + float64(now)/10*4, Z: 100}
+		p.Approach(owner, detourSpeed, now, detourReach, detourWall)
+	}
+	if plans != 1 {
+		t.Fatalf("a fleeing goal re-planned %d times in one retry window, want 1", plans)
+	}
+}
