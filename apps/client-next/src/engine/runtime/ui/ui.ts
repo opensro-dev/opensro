@@ -29,7 +29,7 @@ const STALL_CHAT_ROW = 16;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import {
 	companionItemTargetCommand,
-	isCompanionLeaseItem,
+	armsItemTargetCursor,
 	isReverseReturnScroll
 } from "@/engine/foundation/gameplay/cos-item-use";
 import {
@@ -1704,13 +1704,16 @@ export function createUi(
 			const item = view?.gameplay?.inventory.find( row => row.slot === command.slot );
 			// 572858 dispatches hotbar items through the same cursor arming as
 			// an inventory activation. A confirmed use already has its target.
-			if ( item && isCompanionLeaseItem( item.typeFlags ) && command.summonerSlot === undefined ) {
+			if (
+				item && armsItemTargetCursor( item.typeFlags ) && command.summonerSlot === undefined &&
+				command.revivalSlot === undefined
+			) {
 				if ( item.slot < 13 || view?.gameplay?.inventoryPending ) return;
 				carriedItem = null;
 				carriedShortcut = null;
 				inventorySlot = -1;
 				repairHud.disarm();
-				cosHud.armClock( item );
+				cosHud.armItemTarget( item );
 				dirty = true;
 				return;
 			}
@@ -4723,12 +4726,12 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
-			if ( cosHud.renewal() !== null ) {
+			if ( cosHud.targetUse() !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
 					event.kind === "activate" && event.id === "cos-renew-cancel"
 				) {
-					cosHud.takeRenewal();
+					cosHud.takeTargetUse();
 					dirty = true;
 					return;
 				}
@@ -4736,7 +4739,7 @@ export function createUi(
 					event.kind === "key" && event.code === "Enter" && !composing ||
 					event.kind === "activate" && event.id === "cos-renew-confirm"
 				) {
-					const command = cosHud.takeRenewal();
+					const command = cosHud.takeTargetUse();
 					if ( command && view?.session?.phase === "world" && !view.gameplay?.inventoryPending ) {
 						sendGameplay( command );
 					}
@@ -4745,15 +4748,15 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
-			if ( cosHud.clockCursor() !== null ) {
+			if ( cosHud.itemTargetCursor() !== null ) {
 				if ( event.kind === "right-activate" || event.kind === "key" && event.code === "Escape" ) {
-					cosHud.takeRenewal();
+					cosHud.takeTargetUse();
 					dirty = true;
 					return;
 				}
 				if ( event.kind === "activate" && event.id.startsWith( "slot:" ) ) {
 					if ( controls.some( c => c.id === event.id && !c.disabled ) ) {
-						cosHud.chooseClockTarget(
+						cosHud.chooseItemTarget(
 							view?.gameplay?.inventory.find( item => item.slot === Number( event.id.slice( 5 ) ) )
 						);
 						dirty = true;
@@ -6476,7 +6479,7 @@ export function createUi(
 		================
 		*/
 		cursor(): import("@/engine/foundation/ui/world-cursor").WorldCursor | null {
-			return cosHud.clockCursor() ?? repairHud.cursor();
+			return cosHud.itemTargetCursor() ?? repairHud.cursor();
 		},
 		/*
 		================
@@ -6487,7 +6490,7 @@ export function createUi(
 			if ( reverseScrollHud.reconcile( next ) ) dirty = true;
 			quickslotTime = next.simulationTimeMs ?? now;
 			if (
-				cosHud.reconcileClock(
+				cosHud.reconcileItemTarget(
 					next.gameplay?.inventory ?? [],
 					next.session?.phase === "world" && !next.travel
 				)
@@ -8145,8 +8148,8 @@ export function createUi(
 					disabled,
 					selected,
 					rightActivate: !!item && (id.startsWith( "slot:" ) || id.startsWith( "storage-slot:" )),
-					draggable: !!item && !repairHud.armed() && cosHud.clockCursor() === null,
-					carry: !repairHud.armed() && cosHud.clockCursor() === null && !!item &&
+					draggable: !!item && !repairHud.armed() && cosHud.itemTargetCursor() === null,
+					carry: !repairHud.armed() && cosHud.itemTargetCursor() === null && !!item &&
 						ITEM_SLOT_PREFIXES.some( prefix => id.startsWith( prefix ) )
 				} );
 				itemCount( item, r );
@@ -11504,8 +11507,8 @@ export function createUi(
 							disabled: !enabled,
 							selected: inventorySlot === slot,
 							rightActivate: !!item || repairHud.armed(),
-							draggable: !!item && !repairHud.armed() && cosHud.clockCursor() === null,
-							carry: !repairHud.armed() && cosHud.clockCursor() === null && !!item
+							draggable: !!item && !repairHud.armed() && cosHud.itemTargetCursor() === null,
+							carry: !repairHud.armed() && cosHud.itemTargetCursor() === null && !!item
 						} );
 						if ( enabled && item ) {
 							for (
@@ -11604,8 +11607,8 @@ export function createUi(
 								// 699359 drops moves while one is pending; avatar slots stay enabled.
 								disabled: false,
 								rightActivate: !!item || repairHud.armed(),
-								draggable: !!item && !repairHud.armed() && cosHud.clockCursor() === null,
-								carry: !repairHud.armed() && cosHud.clockCursor() === null && !!item
+								draggable: !!item && !repairHud.armed() && cosHud.itemTargetCursor() === null,
+								carry: !repairHud.armed() && cosHud.itemTargetCursor() === null && !!item
 							} );
 						}
 					}
@@ -18237,7 +18240,7 @@ export function createUi(
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);
 			}
-			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.renewal() !== null) ) {
+			if ( worldVisible && (cosHud.cleanConfirm() !== null || cosHud.targetUse() !== null) ) {
 				// 6A2350 case 5 raises the type 0xD box with the two
 				// UIIT_MSG_COS_CLEAN_CONFIRM lines before a transport is destroyed.
 				const layout = guildProposalLayout( w, h );
@@ -18259,7 +18262,7 @@ export function createUi(
 					...text.quads(
 						// CIFMessageBox type 0x1F (52F460) asks with the two CANCLE lines.
 						hudCopy(
-							cosHud.renewal() ?
+							cosHud.targetUse() ?
 								"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_1" :
 								"UIIT_MSG_COS_CLEAN_CONFIRM1"
 						),
@@ -18273,7 +18276,7 @@ export function createUi(
 					),
 					...text.quads(
 						hudCopy(
-							cosHud.renewal() ?
+							cosHud.targetUse() ?
 								"UIIT_MSG_QUESTION_SILKMALL_ITEM_USE_CANCLE_2" :
 								"UIIT_MSG_COS_CLEAN_CONFIRM2"
 						),
@@ -18287,12 +18290,12 @@ export function createUi(
 					)
 				);
 				button(
-					cosHud.renewal() ? "cos-renew-confirm" : "cos-clean-confirm",
+					cosHud.targetUse() ? "cos-renew-confirm" : "cos-clean-confirm",
 					hudCopy( "UIIT_CTL_YES" ),
 					...layout.accept.slice( 0, 3 ) as [number, number, number]
 				);
 				button(
-					cosHud.renewal() ? "cos-renew-cancel" : "cos-clean-cancel",
+					cosHud.targetUse() ? "cos-renew-cancel" : "cos-clean-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
 				);

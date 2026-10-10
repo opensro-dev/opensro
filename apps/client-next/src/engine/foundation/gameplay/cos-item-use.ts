@@ -164,6 +164,30 @@ export function isCompanionLeaseItem( flags: number ): boolean {
 
 /*
 ================
+isRevivalGrass
+
+Grass of Life: ETC group 1, subtype 6 (550340 tests the group; 696490 case 6).
+================
+*/
+export function isRevivalGrass( flags: number ): boolean {
+	return (flags & 0x7c) === 0x6c && (flags >>> 7 & 15) === 1 && (flags >>> 11 & 31) === 6;
+}
+
+/*
+================
+armsItemTargetCursor
+
+Right-button use of these items arms cursor A6 instead of using them
+(561D50: group 1 subtype 6 at 5621C9, the clock through the group-13 branch).
+The next inventory click names the item they act on.
+================
+*/
+export function armsItemTargetCursor( flags: number ): boolean {
+	return isRevivalGrass( flags ) || isCompanionLeaseItem( flags );
+}
+
+/*
+================
 companionItemTargetCommand
 ================
 */

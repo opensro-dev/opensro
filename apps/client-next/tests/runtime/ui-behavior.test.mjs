@@ -5296,6 +5296,58 @@ test("the player panel draws native siege rank and guild status and removes them
 
 /*
 ================
+Grass of Life revives a pet through the same item-target cursor
+================
+*/
+test("right-clicking Grass of Life arms the target cursor and confirms the clicked pet", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		// ETC group 1, subtype 6: 561D50 arms cursor A6 for it (5621C9).
+		const grass = {
+			slot: 13,
+			refObjId: 2128,
+			typeFlags: 0x30ec,
+			quantity: 3,
+			plus: 0,
+			durability: 0,
+			variance: "0",
+			magic: []
+		};
+		const wolf = {
+			...grass,
+			slot: 14,
+			refObjId: 901,
+			typeFlags: 0x08cc,
+			quantity: 1,
+			summon: { state: 4, rentals: [] }
+		};
+		f.state.gameplay.inventory = [ grass, wolf ];
+		f.state.gameplay.inventorySlotCount = 45;
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		let scene;
+		for ( let t = 100; t <= 2000; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		assert.equal( f.ui.cursor(), 0xa6 );
+		assert.equal( sent.length, 0, "arming never spends the grass" );
+		f.ui.event( { kind: "activate", id: "slot:14" } );
+		assert.equal( f.ui.cursor(), null );
+		for ( let t = 2100; t <= 2500; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
+		assert.ok( defined( scene ).controls.some( row => row.id === "cos-renew-confirm" ) );
+		assert.equal( sent.length, 0, "choosing the pet waits for confirmation" );
+		f.ui.event( { kind: "activate", id: "cos-renew-confirm" } );
+		// The same use a drop of the grass on the whistle sends.
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 13, revivalSlot: 14 }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
 Clock of Reincarnation targets a pet through the retail yellow cursor
 ================
 */
