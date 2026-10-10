@@ -31,9 +31,15 @@ const (
 	tagTimedLinkedDamage  = 0x6c6b6468
 	// tagTimedHunt is hntp (+0x48C, no words): the link's recipient is
 	// tracked for its source (SkillCombat_EngageSkill 593757).
-	tagTimedHunt               = 0x686e7470
-	tagTimedLinkedFence        = 0x6c6b6472 // lkdr
-	tagTimedLinkedQuota        = 0x6c6b6464 // lkdd
+	tagTimedHunt        = 0x686e7470
+	tagTimedLinkedFence = 0x6c6b6472 // lkdr
+	tagTimedLinkedQuota = 0x6c6b6464 // lkdd
+	// tagTimedDisguise is msch (+0x4A4). Word 0 mode 3 is the reference
+	// disguise (Illusion): SkillCombat_ApplySkillEffectsToTargets' mode
+	// switch (594AA4) has no server work for it, and the client redresses
+	// the caster per viewer (appearance-lookup.ts).
+	tagTimedDisguise           = 0x6d736368
+	timedDisguiseMode          = 3
 	tagTimedRequireNot         = 0x7265716e
 	tagTimedMaxHP              = 0x687069
 	tagTimedAttack             = 0x61706175
@@ -101,6 +107,9 @@ type SkillTimedEffect struct {
 	// Hawk is summ (+0x308): the attacking hawk of Black and Light Hawk
 	// Summon (SkillSummonedHawk).
 	Hawk SkillSummonedHawk
+	// Disguise is msch 3 (Illusion): the instance is the whole effect; the
+	// client draws the caster as another character while it lives.
+	Disguise bool
 	// HitRate and Range mark an admitted hr block (White Hawk Summon) and
 	// ru block (Demon Soul Arrow): like odar, 594AC0 installs both from the
 	// row's BuffModifiers, so the program only has to agree with them.
@@ -400,6 +409,9 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	// Party (28) with or without Ally (27): a party-only row (Pain Quota) is
 	// held to the caster's party by 58D7A0 (action.skillTargetPermission).
 	targeted := fields[21] != "0" && fields[22] == "1" && fields[23] == "1" && fields[28] == "1"
+	// Illusion authors a range word (column 21) with no target. Inferred:
+	// it is unread, as a self buff reaches nobody; a disguise row keeps it.
+	disguise := row.CastGate.MschPresent && row.CastGate.MschMode == timedDisguiseMode && fields[22] == "0"
 	var result SkillTimedEffect
 	program, err := CompileSkillProgram(fields)
 	if err != nil {
@@ -448,7 +460,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 		if targeted && (damageLink || huntLink) && (col == 29 || col == 30) {
 			continue
 		}
-		if result.Area.Present && col == 21 {
+		if (result.Area.Present || disguise) && col == 21 {
 			continue // an area buff's range word is not a target reach
 		}
 		if fields[col] != "0" {
@@ -678,6 +690,25 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 			}
 			result.Real = SkillPassiveReal{Mask: op.Arguments[0], Flat: op.Arguments[1], Grade: op.Arguments[2]}
 		case tagTimedOverlap: // ovl2: the replacement descriptor's casting-state word
+		case tagTimedDisguise:
+			// 58DE1E admits the cast (action.mschRefusal); nothing installs.
+			if !disguise || op.Arguments[0] != timedDisguiseMode {
+				return
+			}
+			result.Disguise = true
+		case tagSkc:
+			// The event mask is the replacement's (skillreplacement.go);
+			// Illusion's 2 ends it on the caster's next cast (59B745).
+			if !disguise {
+				return
+			}
+		case tagStatusThreat:
+			// tant (+3C8) is read only into a hit record's aggression
+			// (590402); a self buff's one record is the caster's own, which
+			// holds no hostility ledger. Inferred inert on a disguise.
+			if !disguise {
+				return
+			}
 		case tagNbuf, tagBbuf: // cancellation policy and secondary board, already projected
 		case tagReqi, tagTimedRequireNot: // 58D480 admits, 59F0E0 re-checks on equipment change
 		case tagEfr: // read above
@@ -788,7 +819,7 @@ func parseSkillTimedEffect(fields []string, row *SkillRow) {
 	result.Pinned = duration && (attributes || defense || movement || result.Block.Present || result.Strength.Present ||
 		result.Intellect.Present || result.IncomingReduction || result.HitRate || result.Parry || result.Range || result.Hawk.Present ||
 		result.Link.Present && (result.Link.Threat || result.Link.Mana || result.Link.Hunt || result.Link.Fence || result.Link.Quota) ||
-		result.Preemptive.Present ||
+		result.Preemptive.Present || result.Disguise ||
 		result.DamageReturn.Present ||
 		result.DamageToMP || result.Reat.Mask != 0 || result.Real.Mask != 0 || result.Bgra.Mask != 0 || result.Recovery.Present)
 	result.Targeted = targeted
