@@ -200,13 +200,13 @@ body,
 
 /*
 Port-only report/telemetry tools for index.html. The platform follows the HUD's
-reserved row beside the map. Opaque controls stay legible over bright terrain;
-only their own hit targets intercept the game. Above the boot overlay so
-startup frames remain measurable.
+reserved row beside the map. Compact translucent controls brighten on hover
+or focus; only their own hit targets intercept the game. Above the boot
+overlay so startup frames remain measurable.
 */
 
 .sro-fps-chip {
-	--hud-tools-height: 32px;
+	--hud-tools-height: 18px;
 	position: fixed;
 	z-index: 1001;
 	top: 8px;
@@ -218,7 +218,7 @@ startup frames remain measurable.
 	gap: 4px;
 	pointer-events: none;
 	color: #d7e8ed;
-	font: 12px/1.35 ui-monospace, "Cascadia Mono", Consolas, monospace;
+	font: 10px/1.35 ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
 .sro-fps-chip__toggle {
@@ -226,20 +226,26 @@ startup frames remain measurable.
 	width: var(--hud-tools-height);
 	height: var(--hud-tools-height);
 	padding: 0;
-	border: 1px solid #caa552;
+	border: 1px solid rgba(202, 165, 82, 0.38);
 	border-radius: 3px;
-	background: #060a0e;
-	color: #f0dca8;
+	background: rgba(6, 10, 14, 0.62);
+	color: #cba85e;
 	pointer-events: auto;
 	cursor: pointer;
 	font: inherit;
 	font-weight: 700;
-	line-height: 30px;
+	line-height: 16px;
+	opacity: 0.55;
+	transition: opacity 120ms ease;
 }
 
 .sro-fps-chip__toggle:hover,
 .sro-fps-chip__toggle:focus-visible {
-	background: #2a2010;
+	opacity: 1;
+}
+
+.sro-fps-chip[data-expanded="true"] .sro-fps-chip__toggle {
+	opacity: 1;
 }
 
 .sro-fps-chip__toggle:focus-visible {
@@ -511,6 +517,7 @@ occupies its own full-width row below it instead of shrinking beside it.
 }
 
 /* Developer diagnostics are a separate, console-enabled neighbor of FPS. */
+#developer-toggle { width: 24px; }
 .sro-developer-readout {
 	width: max-content;
 	max-width: min(280px, calc(100vw - var(--telemetry-right, 8px) - 8px));

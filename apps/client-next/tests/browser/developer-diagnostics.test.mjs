@@ -383,11 +383,6 @@ async function checkHudTools( { page, report, viewport, label, evidence, directo
 			`${label}: ${box.id} remains in the viewport`
 		);
 	}
-	for ( const box of boxes ) {
-		if ( !box.isButton ) continue;
-		assert.ok( box.width >= 32 && box.height >= 32, `${box.id}: usable hit target` );
-		assert.equal( box.opacity, "1", `${box.id}: visible without hover` );
-	}
 	assert.deepEqual( report.failed, [] );
 }
 

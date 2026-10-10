@@ -578,7 +578,7 @@ const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
 const BUG_REPORTS_DISABLED = "Bug reports are disabled on this server.";
 const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report window opens as soon as it answers.";
 // Port-only report/diagnostic tools: paired with --hud-tools-height in loading.css.
-const HUD_TOOLS_HEIGHT = 32;
+const HUD_TOOLS_HEIGHT = 18;
 const HUD_TOOLS_GAP = 8;
 const COS_STATUS_OUTLINE_MARGIN = 11;
 // The skin change scroll's window (CIFChangePlayerModel).

@@ -12,7 +12,7 @@ would have taken it past the size limit.
 
 /*
 Bug reporter (runtime/bug-report, issue #90). The launcher shares the port-only
-tool row's visible 32px controls (fixed top right when there is no chip).
+tool row's compact 18px controls (fixed top right when there is no chip).
 The report window covers the game until it is sent or dismissed.
 */
 
@@ -20,18 +20,20 @@ The report window covers the game until it is sent or dismissed.
 	position: fixed;
 	z-index: 1001;
 	top: 8px;
-	right: 44px;
+	right: 30px;
 	flex-shrink: 0;
-	width: var(--hud-tools-height, 32px);
-	height: var(--hud-tools-height, 32px);
+	width: var(--hud-tools-height, 18px);
+	height: var(--hud-tools-height, 18px);
 	padding: 0;
-	border: 1px solid #caa552;
+	border: 1px solid rgba(202, 165, 82, 0.38);
 	border-radius: 3px;
-	background: #060a0e;
-	color: #f0dca8;
-	font: 700 14px/30px ui-monospace, "Cascadia Mono", Consolas, monospace;
+	background: rgba(6, 10, 14, 0.62);
+	color: #cba85e;
+	font: 700 10px/16px ui-monospace, "Cascadia Mono", Consolas, monospace;
 	pointer-events: auto;
 	cursor: pointer;
+	opacity: 0.55;
+	transition: opacity 120ms ease;
 }
 
 .sro-fps-chip .sro-bug-launcher {
@@ -40,7 +42,7 @@ The report window covers the game until it is sent or dismissed.
 
 .sro-bug-launcher:hover,
 .sro-bug-launcher:focus-visible {
-	background: #2a2010;
+	opacity: 1;
 }
 
 .sro-bug-launcher:focus-visible,
@@ -67,7 +69,7 @@ when there is none), so the pill grows away from the screen edge.
 	position: fixed;
 	z-index: 1001;
 	top: 8px;
-	right: 80px;
+	right: 52px;
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -82,21 +84,22 @@ when there is none), so the pill grows away from the screen edge.
 	display: grid;
 	place-items: center;
 	flex-shrink: 0;
-	width: var(--hud-tools-height, 32px);
-	height: var(--hud-tools-height, 32px);
+	width: var(--hud-tools-height, 18px);
+	height: var(--hud-tools-height, 18px);
 	padding: 0;
-	border: 1px solid #caa552;
+	border: 1px solid rgba(202, 165, 82, 0.38);
 	border-radius: 3px;
-	background: #060a0e;
+	background: rgba(6, 10, 14, 0.62);
 	pointer-events: auto;
 	cursor: pointer;
-	transition: border-color 120ms ease;
+	opacity: 0.55;
+	transition: opacity 120ms ease, border-color 120ms ease;
 }
 
 .sro-bug-record__button:hover,
 .sro-bug-record__button:focus-visible,
 .sro-bug-record:not([data-phase="idle"]) .sro-bug-record__button {
-	background: #2a2010;
+	opacity: 1;
 }
 
 .sro-bug-record__button:disabled {
@@ -104,8 +107,8 @@ when there is none), so the pill grows away from the screen edge.
 }
 
 .sro-bug-record__icon {
-	width: 10px;
-	height: 10px;
+	width: 8px;
+	height: 8px;
 	border-radius: 50%;
 	background: #d8463c;
 	transition: border-radius 120ms ease, background-color 120ms ease;
