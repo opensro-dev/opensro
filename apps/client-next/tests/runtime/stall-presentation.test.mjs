@@ -19,11 +19,15 @@ const ICON_ROOT = "/assets/images/Media_extracted/interface/stall/";
 const ITEM_ICON = "/assets/images/Media_extracted/icon/item/etc/hp_potion_01.png";
 const PRICE_BACKGROUND = "/assets/images/Media_extracted/interface/messagebox/msgbox_iteminfo.png";
 const CHAT_BACKGROUND = "/assets/images/Media_extracted/interface/ifcommon/bg_tile/com_bg_tile_e.png";
-// ifstall control 3 plus ifchatmodule controls 102/103, relative to the stall.
-const CHAT_PANES = [
+// Chat module interiors and ifstall display inside its 12px frame, relative to the stall.
+const STALL_INTERIORS = [
 	{ name: "message", rect: [ 34, 369, 281, 86 ] },
-	{ name: "member", rect: [ 344, 369, 89, 86 ] }
+	{ name: "member", rect: [ 344, 369, 89, 86 ] },
+	{ name: "item grid", rect: [ 34, 120, 399, 192 ] }
 ];
+// Both retail slot DDS/PNG variants have transparent right/bottom padding.
+const SLOT_IMAGE_SIZE = [ 208, 44 ];
+const SLOT_OPAQUE_SIZE = [ 205, 41 ];
 
 /*
 ================
@@ -44,17 +48,24 @@ function glyphWindows( value ) {
 
 /*
 ================
-assertChatBackgrounds
+assertStallBackgrounds
 
-Require clipped opaque retail tiles over every pixel of both pane interiors.
-Checking coverage catches gaps and misplaced children as well as missing art.
+Require retail opaque coverage over both chat panes and the entire item-grid
+interior. Slot padding contributes no coverage; row seams and the center gutter
+must be painted by the natural slot art and the authored black divider.
 ================
 */
-function assertChatBackgrounds( quads, origin ) {
-	const backgrounds = quads.filter( quad =>
-		quad.texture === CHAT_BACKGROUND && quad.color.every( channel => channel === 1 )
-	);
-	for ( const pane of CHAT_PANES ) {
+function assertStallBackgrounds( quads, origin ) {
+	const backgrounds = quads.flatMap( quad => {
+		if ( !quad.color.every( channel => channel === 1 ) ) return [];
+		if ( quad.texture === CHAT_BACKGROUND ) return [ quad ];
+		if ( quad.texture !== ICON_ROOT + "stl_slot_02.png" && quad.texture !== ICON_ROOT + "stl_slot_05.png" ) {
+			return [];
+		}
+		assert.deepEqual( quad.rect.slice( 2 ), SLOT_IMAGE_SIZE, "slot artwork retains its native extent" );
+		return [ { ...quad, rect: [ ...quad.rect.slice( 0, 2 ), ...SLOT_OPAQUE_SIZE ] } ];
+	} );
+	for ( const pane of STALL_INTERIORS ) {
 		const [dx, dy, width, height] = pane.rect, x = origin[0] + dx, y = origin[1] + dy;
 		const painted = new Uint8Array( width * height );
 		for ( const quad of backgrounds ) {
@@ -67,7 +78,10 @@ function assertChatBackgrounds( quads, origin ) {
 				painted.fill( 1, row * width + Math.ceil( left - x ), row * width + Math.floor( right - x ) );
 			}
 		}
-		assert.ok( painted.every( pixel => pixel === 1 ), `${pane.name} pane has a complete opaque black background` );
+		assert.ok(
+			painted.every( pixel => pixel === 1 ),
+			`${pane.name} has complete opaque retail background coverage`
+		);
 	}
 }
 
@@ -117,8 +131,10 @@ for ( const owner of [ true, false ] ) {
 			const quads = f.scenes.at( -1 )?.quads ?? [];
 			const drag = control( "window-drag:Stall" );
 			assert.ok( drag );
-			assertChatBackgrounds( quads, [ drag.rect[0] - 10, drag.rect[1] ] );
+			assertStallBackgrounds( quads, [ drag.rect[0] - 10, drag.rect[1] ] );
 			const origin = [ drag.rect[0] - 10, drag.rect[1] ];
+			assert.deepEqual( control( "stall-slot:0" )?.rect, [ origin[0] + 31, origin[1] + 117, 32, 32 ] );
+			assert.deepEqual( control( "stall-slot:9" )?.rect, [ origin[0] + 237, origin[1] + 281, 32, 32 ] );
 			assert.deepEqual( control( "stall-chat-text" )?.rect, [ origin[0] + 31, origin[1] + 443, 270, 20 ] );
 			const messageClip = [ origin[0] + 31, origin[1] + 365, 270, 75 ];
 			assert.ok(
@@ -157,6 +173,11 @@ for ( const owner of [ true, false ] ) {
 			const presentation = stallTradingPresentation( owner, open );
 			assert.equal( presentation.status, open ? "UIIT_STT_TRADING_NOW" : "UIIT_STT_STALL_MODIFYING" );
 			assert.equal( presentation.toggle, open ? "UIIT_STT_END_STALL" : "UIIT_STT_START_STALL" );
+			stall.offers = [];
+			for ( let i = 0; i < 20; i++ ) frame = f.ui.step( f.state, now += 100 ) ?? frame;
+			const emptyQuads = f.scenes.at( -1 )?.quads ?? [];
+			assertStallBackgrounds( emptyQuads, origin );
+			assert.equal( emptyQuads.filter( quad => quad.texture === ICON_ROOT + "stl_slot_05.png" ).length, 10 );
 		}
 	});
 }

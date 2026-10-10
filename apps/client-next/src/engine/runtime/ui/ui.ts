@@ -204,6 +204,7 @@ import {
 	stallNetworkOrder,
 	stallPromptCommand,
 	stallPromptLive,
+	STALL_CELL_INSET,
 	STALL_CELL_PITCH_X,
 	STALL_CELL_PITCH_Y,
 	STALL_COMBO_DEGREE,
@@ -14655,8 +14656,8 @@ export function createUi(
 					}
 					const display = at( 12 ).rect;
 					for ( let slot = 0; slot < STALL_SLOTS; slot++ ) {
-						const ox = px + display[0] + (slot % 2) * STALL_CELL_PITCH_X,
-							oy = py + display[1] + Math.floor( slot / 2 ) * STALL_CELL_PITCH_Y,
+						const ox = px + display[0] + STALL_CELL_INSET + (slot % 2) * STALL_CELL_PITCH_X,
+							oy = py + display[1] + STALL_CELL_INSET + Math.floor( slot / 2 ) * STALL_CELL_PITCH_Y,
 							offer = state.offers.find( row => row.slot === slot ),
 							r = authoredRect( part( 1 ), ox, oy );
 						const background = offer ? STALL_SLOT_IMAGES.occupied : STALL_SLOT_IMAGES.empty;

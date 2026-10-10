@@ -55,11 +55,12 @@ export const STALL_CHAT_LIMIT = 100;
 // CIFChatModule's message textbox retains 50 logical entries (545BE0 / 53A150).
 const STALL_HISTORY_LIMIT = 50;
 const STALL_CHANNEL = 9;
-// INFERENCE: CIFStall lays its ten ifstallslot cells in two columns of five
-// over the display (id 12, 423x216), split at the divider tile (id 103 at
-// x 226, 15 wide).
-export const STALL_CELL_PITCH_X = 219;
-export const STALL_CELL_PITCH_Y = 43;
+// CIFStall OnCreate 5A2F76..5A2FA0 configures its display manager: 6px inset,
+// two columns, 206px column pitch and 41px row pitch. Layout 6F3D43..6F3D81
+// adds the inset to the display origin; slot art's final 3px are transparent.
+export const STALL_CELL_INSET = 6;
+export const STALL_CELL_PITCH_X = 206;
+export const STALL_CELL_PITCH_Y = 41;
 // 5A1DF0 / 5A1A40: the prompt boxes' sizes; the questions share the title's.
 export const STALL_PROMPT_SIZE = {
 	title: [ 280, 144 ],
