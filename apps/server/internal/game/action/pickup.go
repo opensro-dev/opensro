@@ -117,9 +117,40 @@ func (rt *Runtime) grantPickup(
 	divisionID, worldKey string,
 	character, characterSnapshot *enterworld.Character,
 	groundItem grounditem.Item,
-) (result OpResult) {
-	picker := character
-	character = rt.partyPickupRecipient(divisionID, picker, groundItem, rt.Now().UnixMilli())
+) OpResult {
+	recipient := rt.partyPickupRecipient(divisionID, character, groundItem, rt.Now().UnixMilli())
+	return rt.grantPickupTo(pickupGrant{division: divisionID, worldKey: worldKey, picker: character,
+		recipient: recipient, snapshot: characterSnapshot, item: groundItem})
+}
+
+/*
+==================
+pickupGrant
+
+One pickup the party rotation has already resolved (it advances once per
+pickup, so the caller asks it once): the picker, the chosen recipient,
+the picker's snapshot and the heap. actor names the object that plays the
+pickup animation when it is not the picker (a pet's pickup).
+==================
+*/
+type pickupGrant struct {
+	division, worldKey string
+	picker, recipient  *enterworld.Character
+	snapshot           *enterworld.Character
+	item               grounditem.Item
+	actor              *wire.PickupAnim
+}
+
+/*
+==================
+grantPickupTo
+
+grantPickup's grant for a recipient the rotation already chose.
+==================
+*/
+func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
+	divisionID, worldKey, groundItem, characterSnapshot := g.division, g.worldKey, g.item, g.snapshot
+	picker, character := g.picker, g.recipient
 	defer func() {
 		result = routeSharedPickup(result, picker, character)
 		// A granted pickup publishes its scoop; only then does the party learn of it.
@@ -133,6 +164,9 @@ func (rt *Runtime) grantPickup(
 	anim := wire.PickupAnim{
 		Gid:     enterworld.ObjectIDForCharacter(picker),
 		Heading: wire.HeadingByteFromAngle(snapshot.Spawn.Angle),
+	}
+	if g.actor != nil {
+		anim = *g.actor
 	}
 
 	if groundItem.IsGold() {

@@ -3,8 +3,11 @@
 
 cosground.go - pet inventory pickup and drop transactions
 
-The pet's live position and persisted container own every grant. Both manual
-inventory operations and native automatic pickup commands enter this owner.
+The pet's live position and persisted container own every grant the party
+leaves with the owner; a pickup the party's item share hands to another
+member, or gold it splits, is granted as a player pickup (sharePetPickup).
+Both manual inventory operations and native automatic pickup commands
+enter this owner.
 
 ===========================================================================
 */
@@ -20,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 const cosPickupApproachTimeoutMs = 9000
@@ -81,6 +85,9 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 	var sharedOwner uint32
 	if item, ok := rt.characterGround(division, c, q.GroundGID); ok && item.OwnerJID != 0 && rt.CanPickupOwnedDrop != nil && rt.CanPickupOwnedDrop(division, c.Name, item.OwnerJID) {
 		sharedOwner = item.OwnerJID
+	}
+	if shared, handled := rt.sharePetPickup(division, c, q, at, now); handled {
+		return shared
 	}
 	result := failureResult(wire.ErrCodeInvalidRequest)
 	rt.deps.Update(c, "cos-ground-item", func() bool {
@@ -179,4 +186,42 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 		return true
 	})
 	return result
+}
+
+/*
+================
+sharePetPickup
+
+A pet's pickup runs the party's item share as the owner's own pickup does:
+CPlayer_ExecuteGroundPickup (526090) serves move type 0x11 as it serves 6,
+and CPlayer_SelectPartyLootRecipient (525DC0) picks the recipient by the
+party's rotation. When the rotation names another member, or the heap is
+gold the party splits, the grant is the player pickup's (the recipient's
+inventory, the gold shares), played by the pet. Otherwise the pet keeps
+its own pickup into its bag, which the v1.150 client defines: its pickup
+result table (77DD10) reports a full pet bag (B4). Trade goods never
+share (525DC0's first branch). The rotation is asked once, here.
+================
+*/
+func (rt *Runtime) sharePetPickup(division string, c *enterworld.Character, q wire.ItemMoveRequest, at simulation.Spawn, now time.Time) (OpResult, bool) {
+	if q.MovementType != wire.MoveTypeCosPickup {
+		return OpResult{}, false
+	}
+	item, found := rt.characterGround(division, c, q.GroundGID)
+	if !found || item.TradeOwner != "" {
+		return OpResult{}, false
+	}
+	from := grounditem.Point{RegionID: at.RegionID, X: float32(at.X), Z: float32(at.Z)}
+	distance := grounditem.Distance2D(from, item.Position)
+	if !grounditem.SameWorld(from, item.Position) || math.IsNaN(distance) || distance > grounditem.ExecuteRange {
+		return OpResult{}, false
+	}
+	recipient := rt.partyPickupRecipient(division, c, item, now.UnixMilli())
+	split := item.IsGold() && rt.partyGoldShares(division, recipient, item.GoldAmount, now.UnixMilli()) != nil
+	if recipient == c && !split {
+		return OpResult{}, false
+	}
+	actor := wire.PickupAnim{Gid: q.CosGID, Heading: wire.HeadingByteFromAngle(at.Angle)}
+	return rt.grantPickupTo(pickupGrant{division: division, worldKey: simulation.WorldKey(division, c.Name), picker: c,
+		recipient: recipient, snapshot: rt.characterSnapshot(division, c), item: item, actor: &actor}), true
 }

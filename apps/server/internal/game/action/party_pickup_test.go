@@ -9,6 +9,9 @@ package action
 
 import (
 	"testing"
+	"time"
+
+	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
@@ -25,10 +28,21 @@ sharedPickupFixture
 */
 func sharedPickupFixture(t *testing.T) (*Runtime, *fakeClock, *enterworld.Character, *enterworld.Character, *party.Registry) {
 	t.Helper()
-	picker := testCharacter()
+	return sharedPickupFixtureWith(t, testCharacter(), testItems())
+}
+
+/*
+================
+sharedPickupFixtureWith
+
+The item-share party of picker and a peer, over source.
+================
+*/
+func sharedPickupFixtureWith(t *testing.T, picker *enterworld.Character, source enterworld.ItemRefSource) (*Runtime, *fakeClock, *enterworld.Character, *enterworld.Character, *party.Registry) {
+	t.Helper()
 	peer := picker.Snapshot()
 	peer.ID, peer.Name = 4, "LootPeer"
-	rt, clock := newTestRuntime(picker, testItems())
+	rt, clock := newTestRuntime(picker, source)
 	fixtureCharacters(rt.deps.(*enterworld.Deps).Characters)[testDivision] = []*enterworld.Character{picker, peer}
 	registry := party.NewRegistry()
 	_, refusal := registry.Form(testDivision, party.Member{MemberID: enterworld.ObjectIDForCharacter(picker), Name: picker.Name}, party.Member{MemberID: enterworld.ObjectIDForCharacter(peer), Name: peer.Name}, party.PartyOptionItemShare)
@@ -247,5 +261,73 @@ func TestPartyMonsterIsHighNibbleOne(t *testing.T) {
 		if got := isPartyMonster(instance); got != want {
 			t.Errorf("rarity %#x: party monster %v, want %v", rarity, got, want)
 		}
+	}
+}
+
+/*
+================
+sharedPetFixture
+
+The shared-loot party with a summoned pickup pet beside the picker, its
+bag empty; heap drops one item where the pet stands.
+================
+*/
+func sharedPetFixture(t *testing.T) (*Runtime, *enterworld.Character, *enterworld.Character, uint32, func(grounditem.Item) grounditem.Item) {
+	t.Helper()
+	picker := testCharacter()
+	refs := testCosSource(testItems())
+	refs.characters["PET"] = &enterworld.CharacterRef{Codename: "PET", RefObjID: 9, TidWord: 0x21c6, RunSpeed: 100}
+	rt, _, _, peer, _ := sharedPickupFixtureWith(t, picker, refs)
+	rt.Now = func() time.Time { return time.UnixMilli(1000) }
+	gid, _ := enterworld.CosObjectIDForCharacter(picker)
+	picker.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 9, Codename: "PET", CurrentHP: 100, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 4}}
+	rt.BindPetSession(testDivision, picker, 1)
+	rt.TickHook()(1000)
+	pose := rt.PetPresentation(testDivision, picker.Name).World.Spawn
+	heap := func(item grounditem.Item) grounditem.Item {
+		item.Position = grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X), Z: float32(pose.Z)}
+		item.Y = float32(pose.Y)
+		return rt.Ground.Add(testDivision, item)
+	}
+	return rt, picker, peer, gid, heap
+}
+
+/*
+================
+TestPetPickupRunsThePartyItemShare
+
+525DC0 runs the item-share rotation for a pet's pickup (move type 0x11)
+as for the owner's own: over two pickups the rotation hands one potion to
+the peer's inventory and leaves the other in the pet's bag, and the pet's
+gold pickup is split between the members.
+================
+*/
+func TestPetPickupRunsThePartyItemShare(t *testing.T) {
+	rt, picker, peer, gid, heap := sharedPetFixture(t)
+	pick := func(item grounditem.Item) OpResult {
+		payload, err := wire.ItemMoveRequest{MovementType: wire.MoveTypeCosPickup, CosGID: gid, GroundGID: item.Gid}.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rt.HandleItemMove(testDivision, picker, payload)
+	}
+	peerBag := len(peer.MissionInventory)
+	potion := grounditem.Item{RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
+		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1}
+	for range 2 {
+		pick(heap(potion))
+	}
+	if len(rt.Ground.All(testDivision)) != 0 {
+		t.Fatal("a shared pickup left the item on the ground")
+	}
+	if got := len(peer.MissionInventory) - peerBag; got != 1 || len(picker.ActiveCOS.Container.Rows) != 1 {
+		t.Fatalf("the peer gained %d items and the pet bag holds %d, want one each", got, len(picker.ActiveCOS.Container.Rows))
+	}
+	before := goldOf(picker) + goldOf(peer)
+	pickerBefore, peerBefore := goldOf(picker), goldOf(peer)
+	pick(heap(grounditem.Item{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", TypeFlags: wire.PackTypeFlags(3, 3, 5, 2), GoldAmount: 101}))
+	if goldOf(picker)+goldOf(peer)-before != 101 || goldOf(picker) == pickerBefore || goldOf(peer) == peerBefore {
+		t.Fatalf("the pet's gold was not split: %d -> %d, %d -> %d", pickerBefore, goldOf(picker), peerBefore, goldOf(peer))
 	}
 }
