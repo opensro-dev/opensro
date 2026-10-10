@@ -12,6 +12,7 @@ import type { UiScene, UiQuad } from "@/engine/contracts/ui";
 import type { UiDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { uiRecordCount, UI_RECORD_LIMIT } from "@/engine/foundation/rendering/text-run";
 import { destroyNow, type Retire } from "./retirement";
+import { paddedRowBytes, unpackRgba8 } from "@/engine/foundation/rendering/texel-readback";
 import type { UiTexture } from "@/engine/contracts/texture";
 import {
 	decodeNativeTextureLevel,
@@ -313,7 +314,9 @@ fs
 						label: id,
 						size: [ width, height ],
 						format: target,
-						usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+						// COPY_SRC lets the 3D viewer read a still back (readPortrait).
+						usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT |
+							GPUTextureUsage.COPY_SRC
 					} ),
 					width,
 					height,
@@ -326,6 +329,40 @@ fs
 			}
 			slot.view ??= slot.texture.createView();
 			return slot.view;
+		},
+		/*
+		================
+		readPortrait
+
+		The portrait target's last rendered pixels as packed 8-bit RGBA, for
+		the 3D viewer's still (port-only). Submits its own copy after the
+		frames already queued, so it reads what they drew. The staging buffer
+		retires through the device's retirement, never destroyed directly.
+		================
+		*/
+		async readPortrait( id: string ): Promise<{ width: number; height: number; rgba: Uint8ClampedArray; }> {
+			const slot = textures.get( id );
+			if ( !slot?.portrait ) throw Error( "No portrait target " + id );
+			const { width, height } = slot, stride = paddedRowBytes( width, slot.format );
+			const buffer = device.createBuffer( {
+				label: id + "-readback",
+				size: stride * height,
+				usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+			} );
+			try {
+				const encoder = device.createCommandEncoder( { label: id + "-readback" } );
+				encoder.copyTextureToBuffer( { texture: slot.texture }, { buffer, bytesPerRow: stride }, [
+					width,
+					height
+				] );
+				device.queue.submit( [ encoder.finish() ] );
+				await buffer.mapAsync( GPUMapMode.READ );
+				const rgba = unpackRgba8( new Uint8Array( buffer.getMappedRange() ), width, height, slot.format );
+				buffer.unmap();
+				return { width, height, rgba };
+			} finally {
+				retire( buffer );
+			}
 		},
 		/*
 		================

@@ -255,6 +255,8 @@ export interface Renderer extends Disposable {
 	pickFrontendRace( x: number, y: number ): 0 | 1 | null;
 	frontendRaceCenters(): readonly (readonly [number, number, number] | null)[];
 	setCharacterPreview( camera: import("./scene").WorldCamera | null ): void;
+	/** Port-only: the doll target's last frame as packed RGBA (the 3D viewer's still). */
+	readDoll?(): Promise<{ readonly width: number; readonly height: number; readonly rgba: Uint8ClampedArray; }>;
 	characterParticleSnapshot( gid: number ): { readonly matrix: Float32Array; readonly regionId: number; } | null;
 	characterParticleTime( gid: number ): number | undefined;
 	presentationNight(): boolean;

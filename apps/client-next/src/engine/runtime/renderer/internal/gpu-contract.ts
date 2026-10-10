@@ -161,6 +161,8 @@ export interface DeviceOwner extends Disposable {
 	sunShadow(): SunShadowOwner;
 	gpuTiming(): GpuTimingStats | null;
 	portraitTarget( id?: string, width?: number, height?: number ): GPUTextureView;
+	/** A portrait target's last frame as packed RGBA (the 3D viewer's still). */
+	readPortrait( id: string ): Promise<{ width: number; height: number; rgba: Uint8ClampedArray; }>;
 	uiTexture( id: string, image: UiTexture | null ): void;
 	ui( scene: UiScene | null ): readonly UiDraw[];
 	worldView( transform: Float32Array, environment: Float32Array, shadowEnabled?: boolean ): void;

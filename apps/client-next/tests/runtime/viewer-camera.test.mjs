@@ -30,13 +30,15 @@ function fits( camera, bounds ) {
 		camera.far > distance + radius;
 }
 
+/** @typedef {import("../../src/engine/foundation/rendering/viewer-camera.ts").ViewerBounds} ViewerBounds */
+
 test("tall, wide and tiny models fit the view from the fixed angle", () => {
 	for (
-		const bounds of [
+		const bounds of /** @type {ViewerBounds[]} */ ([
 			{ min: [ -0.5, 0, -0.5 ], max: [ 0.5, 4, 0.5 ] },
 			{ min: [ -6, 0, -3 ], max: [ 6, 2, 3 ] },
 			{ min: [ -0.01, 0, -0.01 ], max: [ 0.01, 0.02, 0.01 ] }
-		]
+		])
 	) {
 		const camera = viewerCamera( bounds, [ 0, 1 ] );
 		assert.ok( fits( camera, bounds ), JSON.stringify( bounds ) );
@@ -50,7 +52,7 @@ test("tall, wide and tiny models fit the view from the fixed angle", () => {
 });
 
 test("the front direction turns the view with it", () => {
-	const bounds = { min: [ -1, 0, -1 ], max: [ 1, 2, 1 ] };
+	const bounds = /** @type {ViewerBounds} */ ({ min: [ -1, 0, -1 ], max: [ 1, 2, 1 ] });
 	const a = viewerCamera( bounds, [ 0, 1 ] ), b = viewerCamera( bounds, [ 1, 0 ] );
 	const da = Math.atan2( a.eye[0] - a.target[0], a.eye[2] - a.target[2] );
 	const db = Math.atan2( b.eye[0] - b.target[0], b.eye[2] - b.target[2] );

@@ -54,7 +54,9 @@ test("a look request decodes the public API's look object", () => {
 	} );
 	// worn plus defaults to zero; empty lists are allowed.
 	assert.deepEqual(
-		parseViewerRequest( "?look=" + lookParam( { bodyRefObjId: 1907, worn: [ { slot: 1, refItemId: 9 } ] } ) ).look,
+		/** @type {any} */ (parseViewerRequest(
+			"?look=" + lookParam( { bodyRefObjId: 1907, worn: [ { slot: 1, refItemId: 9 } ] } )
+		)).look,
 		{
 			bodyRefObjId: 1907,
 			worn: [ { slot: 1, refItemId: 9, plus: 0 } ],
@@ -90,7 +92,9 @@ test("anything malformed is a bad request, never a guess", () => {
 	) {
 		assert.throws(
 			() => parseViewerRequest( search ),
-			error => error instanceof Error && error.message === "bad-request" && error.reason === "bad-request",
+			error =>
+				error instanceof Error && error.message === "bad-request" && /** @type {any} */
+				(error).reason === "bad-request",
 			search
 		);
 	}

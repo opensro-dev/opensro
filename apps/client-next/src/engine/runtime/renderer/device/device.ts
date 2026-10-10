@@ -573,6 +573,18 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		},
 		/*
 		================
+		readPortrait
+
+		Read a portrait target back through the UI resource owner (the 3D
+		viewer's still).
+		================
+		*/
+		readPortrait( id: string ) {
+			if ( !ui ) throw Error( "UI device is not ready" );
+			return ui.readPortrait( id );
+		},
+		/*
+		================
 		uiTexture
 
 		Transfer a UI image to the UI texture owner.

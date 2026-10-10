@@ -217,6 +217,17 @@ export function createRenderer(
 		setCharacterPreview
 		================
 		*/
+		/*
+		================
+		readDoll
+
+		The doll target's last rendered frame (port-only: the 3D viewer's
+		still). Rejects when no doll has been drawn.
+		================
+		*/
+		readDoll() {
+			return device.readPortrait( "__doll" );
+		},
 		setCharacterPreview( camera ) {
 			preview = camera ? structuredClone( camera ) : null;
 		},
