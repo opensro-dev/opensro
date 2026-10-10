@@ -147,9 +147,11 @@ type Registry struct {
 	castingStates      map[string]CastingConflictSnapshot
 	links              map[string]Link
 	threatOwners       map[string]uint32
-	byOwner            map[string][]Effect
-	pendingOwners      []string
-	pendingSet         map[string]bool
+	// quotaOwners is ParamKeeper+20C per recipient: its Pain Quota link.
+	quotaOwners   map[string]uint32
+	byOwner       map[string][]Effect
+	pendingOwners []string
+	pendingSet    map[string]bool
 }
 
 /*
@@ -164,6 +166,7 @@ func NewRegistry() *Registry {
 		pendingSet:    make(map[string]bool),
 		links:         make(map[string]Link),
 		threatOwners:  make(map[string]uint32),
+		quotaOwners:   make(map[string]uint32),
 	}
 }
 

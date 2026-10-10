@@ -14,7 +14,9 @@ The Warrior's Protect (GUARDA_AGGRO) is the same pair with lkag and no
 writes: the link carries the threat share commitAggression hands to the
 source (594EAC, 5A03A0). The Bard's Mana Switch (BATTLAA_MPSTEAL) is the
 pair with lkdh: the link hands the Bard MP from the member's dealt damage
-(linkedmana.go).
+(linkedmana.go). The Warrior's Physical and Magical Fence carry lkdr and
+Pain Quota lkdd: the links move part of the member's incoming damage to
+the Warrior or the party (linkeddamage.go).
 
 ===========================================================================
 */
@@ -82,8 +84,10 @@ func (rt *Runtime) acceptLinkedTargetEffect(division string, c, snapshot, target
 		SkillID: skill.ID, SkillGroup: skill.Group,
 		Group: d.Link.Group, MaxDistance: d.Link.MaxDistance, MaxOutgoing: d.Link.MaxOutgoing, ThreatPercent: d.Link.ThreatPercent,
 		ManaHPPercent: d.Link.ManaHPPercent, ManaPercent: d.Link.ManaPercent, ManaCap: d.Link.ManaCap,
-		Hunt:        d.Link.Hunt,
-		StartedAtMs: now, ExpiresAtMs: now + int64(skill.EffectDurationMs),
+		Hunt:      d.Link.Hunt,
+		FenceMask: d.Link.FenceMask, FencePercent: d.Link.FencePercent, FenceMaxHits: d.Link.FenceMaxHits,
+		QuotaPercent: d.Link.QuotaPercent,
+		StartedAtMs:  now, ExpiresAtMs: now + int64(skill.EffectDurationMs),
 		ClientCancelable: !skill.VoluntaryCancelBlocked, TargetModifiers: modifiers,
 	}
 	if code := rt.effects.LinkRefusal(link); code != 0 {
