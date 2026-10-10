@@ -34,6 +34,10 @@ const QUOTA_SHARE = 0.5;
 // Optional disk reads must yield well before the network's 15-second stall window.
 const CACHE_OPERATION_MS = 2000;
 const MAX_CACHE_OPERATIONS = 8;
+// A whole-pack body read gets at least the time its bytes need at a
+// deliberately slow disk rate (10 MB/s): a 50 MB startup pack has 5 s, not 2,
+// and must not time out and download again.
+const CACHE_READ_BYTES_PER_MS = 10 * 1024;
 
 /*
 ================
@@ -60,7 +64,12 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	let startup = new Set<string>();
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
 	const pending = new Set<string>(), touched = new Set<string>();
-	const disabled = new AbortController();
+	// Operations past their deadline that have not settled yet. While any is
+	// open the store takes no new work: a stuck backend stays suspended, a
+	// slow one resumes when its late operation settles. A timeout fails only
+	// its own caller (2026-10-10: one slow startup read used to disable the
+	// store for the session, so every refresh downloaded everything again).
+	let stalled = 0;
 	let outstanding = 0, cleanups = 0;
 	const removals = new Map<string, Promise<void>>();
 	/*
@@ -68,56 +77,64 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	storage
 
 	Cache Storage cannot abort its native operations. Cancellation releases only
-	this caller; its native work retains its slot and deadline until settlement.
-	Saturation bypasses optional storage. Only a real timeout disables this owner,
-	preventing a stuck backend from accumulating abandoned native operations.
+	this caller; its native work retains its slot until settlement. Saturation
+	bypasses optional storage. A timeout releases only this caller (the asset
+	falls back to the network) and suspends new work until this operation
+	settles, so a stuck backend cannot accumulate abandoned native operations
+	while a merely slow one keeps serving. deadline aborts at the timeout, for
+	operations that can stop early (a body read).
 	================
 	*/
 	function storage<T>(
-		operation: () => Promise<T>,
+		operation: ( deadline: AbortSignal ) => Promise<T>,
 		signal?: AbortSignal,
-		abandoned?: ( value: T ) => void
+		abandoned?: ( value: T ) => void,
+		deadlineMs = CACHE_OPERATION_MS
 	): Promise<T> {
 		signal?.throwIfAborted();
-		if ( disabled.signal.aborted ) return Promise.reject( disabled.signal.reason );
+		if ( stalled > 0 ) return Promise.reject( Error( "Cache suspended" ) );
 		if ( outstanding + cleanups >= MAX_CACHE_OPERATIONS ) {
 			return Promise.reject( Error( "Cache busy" ) );
 		}
 		return new Promise<T>( ( resolve, reject ) => {
-			let waiting = true;
-			const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
-			const clearWaiter = () => {
-				clearTimeout( timer );
-				disabled.signal.removeEventListener( "abort", abort );
-				signal?.removeEventListener( "abort", cancel );
-			};
+			let waiting = true, overdue = false;
+			const deadline = new AbortController();
 			const cancel = () => {
 				waiting = false;
 				signal?.removeEventListener( "abort", cancel );
 				reject( signal!.reason );
 			};
-			const abort = () => {
-				waiting = false;
-				clearWaiter();
-				reject( disabled.signal.reason );
-			};
-			disabled.signal.addEventListener( "abort", abort, { once: true } );
+			const timer = setTimeout( () => {
+				overdue = true;
+				stalled++;
+				deadline.abort( Error( "Cache operation timed out" ) );
+				if ( waiting ) {
+					waiting = false;
+					signal?.removeEventListener( "abort", cancel );
+					reject( deadline.signal.reason );
+				}
+			}, deadlineMs );
 			signal?.addEventListener( "abort", cancel, { once: true } );
 			outstanding++;
 			let work: Promise<T>;
 			try {
-				work = operation();
+				work = operation( deadline.signal );
 			} catch ( error ) {
 				work = Promise.reject( error );
 			}
-			work.then( value => {
+			const settle = () => {
 				outstanding--;
-				clearWaiter();
+				clearTimeout( timer );
+				signal?.removeEventListener( "abort", cancel );
+				if ( overdue ) stalled--;
+			};
+			work.then( value => {
+				settle();
 				if ( waiting ) resolve( value );
 				else abandoned?.( value );
 			}, error => {
-				outstanding--;
-				clearWaiter();
+				settle();
+				waiting = false;
 				reject( error );
 			} );
 		} );
@@ -131,10 +148,15 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	*/
 	function trackCleanup( completion: Promise<void> ) {
 		cleanups++;
-		const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
+		let overdue = false;
+		const timer = setTimeout( () => {
+			overdue = true;
+			stalled++;
+		}, CACHE_OPERATION_MS );
 		void completion.catch( () => {} ).finally( () => {
 			cleanups--;
 			clearTimeout( timer );
+			if ( overdue ) stalled--;
 		} );
 	}
 	/*
@@ -156,13 +178,16 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	================
 	*/
 	function open( signal?: AbortSignal ) {
-		if ( disabled.signal.aborted ) return Promise.resolve( null );
+		if ( stalled > 0 ) return Promise.resolve( null );
+		// A failed or late open is retried by the next caller, never kept for
+		// the session.
 		opened ??= storage( () =>
 			typeof caches === "undefined" ?
 				Promise.resolve( null ) :
 				caches.open( "sro-next-verified-v1" )
 		).catch( () => {
 			errors++;
+			opened = null;
 			return null;
 		} );
 		// Each caller owns cancellation even while sharing the initial open.
@@ -203,7 +228,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	*/
 	function remove( origin: string, digest: string ) {
 		const url = key( origin, digest );
-		if ( disabled.signal.aborted ) return Promise.resolve();
+		if ( stalled > 0 ) return Promise.resolve();
 		if ( removals.has( url ) ) return removals.get( url )!;
 		if ( removals.size >= MAX_CACHE_OPERATIONS ) return Promise.resolve();
 		const operation = tail.then( async () => {
@@ -381,20 +406,22 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				// A backend read rejection is not evidence that the stored entry is
 				// corrupt. Only observed metadata or completed bytes justify removal.
 				const bytes = await storage(
-					() => {
+					deadline => {
 						// Transfer body ownership only after storage admits the read.
 						unclaimed = undefined;
-						return readBytes( response.body!, length, { signal: disabled.signal, onCancel: trackCleanup } )
+						return readBytes( response.body!, length, { signal: deadline, onCancel: trackCleanup } )
 							.catch( error => {
 								if (
-									isResponseByteLimitError( error ) && !signal?.aborted && !disabled.signal.aborted
+									isResponseByteLimitError( error ) && !signal?.aborted && !deadline.aborted
 								) {
 									void remove( origin, digest );
 								}
 								throw error;
 							} );
 					},
-					signal
+					signal,
+					undefined,
+					Math.max( CACHE_OPERATION_MS, Math.ceil( length / CACHE_READ_BYTES_PER_MS ) )
 				);
 				signal?.throwIfAborted();
 				if ( bytes.length !== length ) {
@@ -423,7 +450,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		*/
 		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 			const id = key( origin, digest );
-			if ( disabled.signal.aborted || pending.has( id ) ) return;
+			if ( stalled > 0 || pending.has( id ) ) return;
 			if ( pending.size >= 64 || queuedBytes + bytes.length > (32 << 20) ) {
 				skipped++;
 				return;
