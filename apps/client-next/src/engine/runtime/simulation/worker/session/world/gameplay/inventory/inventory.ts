@@ -446,6 +446,16 @@ useCooldown
 		present,
 		/*
 ================
+reference
+
+A reference's name and icon by id, for rows that are no item (the forge).
+================
+		*/
+		reference( refObjId: number ) {
+			return { name: names.get( refObjId ), icon: icons.get( refObjId ) };
+		},
+		/*
+================
 presented
 
 Rows another owner holds (the storage room) with the bag's names, icons and

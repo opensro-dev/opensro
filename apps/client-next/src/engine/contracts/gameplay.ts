@@ -240,6 +240,16 @@ export type GameplayCommand =
 	}
 	| { readonly kind: "fortress-tax-rate"; readonly gid: number; readonly fortress: number; readonly rate: number; }
 	| { readonly kind: "fortress-tax-collect"; readonly gid: number; readonly fortress: number; readonly gold: string; }
+	// 0x71E1 actions 0x0D..0x14 from the smith's or trainer's production window.
+	| {
+		readonly kind: "fortress-production";
+		readonly gid: number;
+		readonly fortress: number;
+		readonly action: number;
+		readonly reference?: number;
+		readonly count?: number;
+		readonly stackLimit?: number;
+	}
 	| {
 		readonly kind: "fortress-war-apply";
 		readonly gid: number;
@@ -626,6 +636,8 @@ export interface GameplayState {
 	readonly trainingError?: string | null;
 	// Included with the dynamic snapshot; omission does not retain an older fortress.
 	readonly fortress?: import("@/engine/foundation/gameplay/fortress").FortressState;
+	// The forge catalog with each item's name, icon and stack limit.
+	readonly fortressForge?: readonly import("@/engine/foundation/gameplay/fortress-production").FortressForgeItem[];
 	// The official's last answer; sequence advances with every answer, which
 	// opens or refreshes the application window.
 	readonly fortressApplication?:

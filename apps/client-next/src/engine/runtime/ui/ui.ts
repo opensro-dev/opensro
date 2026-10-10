@@ -177,6 +177,20 @@ import {
 	FORTRESS_SCHEDULE_ROWS
 } from "./hud/fortress-war-hud";
 import { createFortressTaxHud, FORTRESS_TAX_MAX, FORTRESS_TAX_MIN } from "./hud/fortress-tax-hud";
+import { createFortressProductionHud, FORTRESS_PRODUCTION_ROWS } from "./hud/fortress-production-hud";
+import {
+	FORTRESS_PRODUCTION_CANCEL,
+	FORTRESS_PRODUCTION_COLLECT,
+	FORTRESS_PRODUCTION_QUERY,
+	FORTRESS_PRODUCTION_START,
+	type FortressStaff,
+	fortressProductionAction,
+	fortressProductionFactor,
+	fortressProductionMayOperate,
+	fortressProductionPrice,
+	fortressProductionRemaining,
+	fortressProductionTimeText
+} from "@/engine/foundation/gameplay/fortress-production";
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_MAX_STAKE, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
@@ -575,6 +589,19 @@ const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
 const FORTRESS_TAX_PANEL = "Fortress tax";
 const FORTRESS_TAX_RATE = "fortress-tax-rate";
 const FORTRESS_TAX_AMOUNT = "fortress-tax-amount";
+// CIFFortressMakeItemWnd, the smith's and trainer's production window
+// (fortress-production-hud.ts), and its count box's edit (MsgBoxMakeItem 116).
+const FORTRESS_PRODUCTION_PANEL = "Fortress production";
+const FORTRESS_PRODUCTION_COUNT = "fortress-production-count";
+// 52C870 mode 0xA: the count edit takes two characters.
+const FORTRESS_PRODUCTION_COUNT_LENGTH = 2;
+// CIFFortressMakeItemWnd_OnCreate (65AD70): list rows of 32 px; the gauge
+// marks (232..236) read 0% to 100% in quarters.
+const FORTRESS_PRODUCTION_ROW_HEIGHT = 32;
+const FORTRESS_PRODUCTION_MARKS = 5;
+// 52A960: the make-item box is CIFMessageBox's Create client (16,40,284,122)
+// inside its frame.
+const FORTRESS_PRODUCTION_BOX: readonly [number, number] = [ 316, 178 ];
 // 52A7E0 caps the levy edit at 64 characters.
 const FORTRESS_TAX_AMOUNT_LENGTH = 64;
 // 664DA0 positions the slider's arrows at 0 and 270 and gives the thumb
@@ -807,6 +834,10 @@ export function createUi(
 	const fortressWarHud = createFortressWarHud();
 	const fortressScheduleHud = createFortressScheduleHud();
 	const fortressTaxHud = createFortressTaxHud();
+	const fortressProductionHud = createFortressProductionHud();
+	// The step clock the production window counts down on, and the second it
+	// last drew (65A5E0 runs on a 1000 ms timer).
+	let productionClock = 0, productionSecond = -1;
 	const fortressStaffHud = createFortressStaffHud();
 	const unionHud = createUnionHud();
 	const guildWarHud = createGuildWarHud();
@@ -1307,6 +1338,7 @@ export function createUi(
 			// GuildData_IsAllyGuildName: the holder is one of the local union's guilds.
 			ally: !!owner && !!social?.alliances?.some( guild => guild.name === owner ),
 			master: member?.grade === 0,
+			member,
 			flags: state?.staffFlags ?? 0
 		};
 	}
@@ -1329,6 +1361,41 @@ export function createUi(
 			holder: staff.holder,
 			role: member?.role ?? 0,
 			ownObject: !!social?.guild && target.guildId === social.guild.id
+		} );
+	}
+
+	/*
+	================
+	fortressProductionItems
+
+	The open window's catalog: SetStaff (65C370) puts every forge-group row
+	of its staff member into the one tab, in file order.
+	================
+	*/
+	function fortressProductionItems() {
+		const staff = fortressProductionHud.staff();
+		return (view?.gameplay?.fortressForge ?? []).filter( item => item.staff === staff );
+	}
+
+	/*
+	================
+	sendFortressProduction
+
+	One 0x71E1 production step for the open window's staff member.
+	================
+	*/
+	function sendFortressProduction(
+		smithAction: number,
+		extra: { reference?: number; count?: number; stackLimit?: number; }
+	) {
+		const gid = fortressProductionHud.npc();
+		if ( gid === null || view?.session?.phase !== "world" || view.gameplay?.target !== gid ) return;
+		sendGameplay( {
+			kind: "fortress-production",
+			gid,
+			fortress: fortressProductionHud.fortress(),
+			action: fortressProductionAction( fortressProductionHud.staff(), smithAction ),
+			...extra
 		} );
 	}
 
@@ -1370,6 +1437,7 @@ export function createUi(
 		if ( next !== FORTRESS_WAR_PANEL ) fortressWarHud.close();
 		if ( next !== FORTRESS_SCHEDULE_PANEL ) fortressScheduleHud.close();
 		if ( next !== FORTRESS_TAX_PANEL ) fortressTaxHud.close();
+		if ( next !== FORTRESS_PRODUCTION_PANEL ) fortressProductionHud.close();
 		if ( next !== JOB_RANK_PANEL ) jobHud.closeRank();
 		// Leave hooks run only after admission. Never restore drafts or close a
 		// server workflow for a rejected switch or a repeated open/select action.
@@ -3644,6 +3712,55 @@ export function createUi(
 				fortressScheduleHud.request( conversation.gid, state?.serviceSequence ?? 0 );
 				sendGameplay( { kind: "fortress-schedule", gid: conversation.gid, fortress: fortress.id } );
 			}
+		} else if ( id.startsWith( "npc-fortress-production:" ) ) {
+			// 5D8C86: the smith's row checks that the player's guild holds the
+			// fortress (else notice 0x10/0x1E); the trainer's row does not. Each
+			// sends its query, whose answer opens the window.
+			const conversation = view?.gameplay?.npcConversation, staff = fortressStaffView();
+			const who: FortressStaff = id.endsWith( ":trainer" ) ? "trainer" : "smith";
+			if ( conversation?.phase === "menu" && staff.fortress !== undefined ) {
+				if ( who === "smith" && !staff.holder ) {
+					hudMessages.append( hudCopy( "UIIT_MSG_GUILDERR_PERMISSION_DENIED" ) );
+				} else {
+					fortressProductionHud.request(
+						conversation.gid,
+						who,
+						staff.fortress,
+						view?.gameplay?.fortress?.serviceSequence ?? 0
+					);
+					sendGameplay( {
+						kind: "fortress-production",
+						gid: conversation.gid,
+						fortress: staff.fortress,
+						action: fortressProductionAction( who, FORTRESS_PRODUCTION_QUERY )
+					} );
+				}
+			}
+		} else if ( id === "fortress-production-close" ) {
+			setPanel( "" );
+		} else if ( id.startsWith( "fortress-production-make:" ) ) {
+			const item = fortressProductionItems().find( row =>
+				row.refObjId === Number( id.slice( "fortress-production-make:".length ) )
+			);
+			if ( item ) {
+				fortressProductionHud.askMake( item );
+				// 52C870 mode 0xA moves the keyboard focus into the count edit.
+				focusAtEnd( FORTRESS_PRODUCTION_COUNT, "" );
+			}
+		} else if ( id === "fortress-production-cancel" ) {
+			fortressProductionHud.askCancel();
+		} else if ( id === "fortress-production-complete" ) {
+			// CIFFortressMakeItemWnd_SendCollect (656430): the request takes at
+			// most one stack (fortressServiceRequest clamps it).
+			const order = fortressProductionHud.order();
+			const item = fortressProductionItems().find( row => row.refObjId === order?.refObjId );
+			if ( order ) {
+				sendFortressProduction( FORTRESS_PRODUCTION_COLLECT, {
+					reference: order.refObjId,
+					count: order.count,
+					stackLimit: item?.maxStack ?? 1
+				} );
+			}
 		} else if ( id === "npc-fortress-tax" ) {
 			// 5D8930 action 0x33 row 1: 0x71E1 action 0; the window shows at once.
 			const conversation = view?.gameplay?.npcConversation, staff = fortressStaffView();
@@ -4266,6 +4383,40 @@ export function createUi(
 				}
 				if ( event.kind !== "hover" ) return;
 			}
+			if ( fortressProductionHud.question() !== null ) {
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "fortress-production-no"
+				) {
+					fortressProductionHud.takeQuestion();
+					dirty = true;
+					return;
+				}
+				if ( event.kind === "edit" && event.id === FORTRESS_PRODUCTION_COUNT ) {
+					fortressProductionHud.edit( event.value );
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" && event.code === "Enter" && !composing ||
+					event.kind === "activate" && event.id === "fortress-production-yes"
+				) {
+					// The make box starts the order; the cancel box's confirm reaches
+					// CIFFortressMakeItemWnd_OnCancelMsgBox (656480).
+					const asked = fortressProductionHud.takeQuestion();
+					dirty = true;
+					if ( asked?.kind === "make" && Number( asked.count ) > 0 ) {
+						sendFortressProduction( FORTRESS_PRODUCTION_START, {
+							reference: asked.item.refObjId,
+							count: Number( asked.count )
+						} );
+					} else if ( asked?.kind === "cancel" ) {
+						sendFortressProduction( FORTRESS_PRODUCTION_CANCEL, { reference: asked.order.refObjId } );
+					}
+					return;
+				}
+				if ( event.kind === "activate" ) return;
+			}
 			if ( fortressTaxHud.question() !== null ) {
 				if (
 					event.kind === "key" && event.code === "Escape" ||
@@ -4867,6 +5018,11 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+			}
+			if ( event.kind === "scroll" && panel === FORTRESS_PRODUCTION_PANEL ) {
+				fortressProductionHud.scroll( Math.sign( event.delta ), fortressProductionItems().length );
+				dirty = true;
+				return;
 			}
 			if ( event.kind === "scroll" && panel === "Party Matching" ) {
 				partyMatchOffset = Math.max( 0, partyMatchOffset + Math.sign( event.delta ) );
@@ -6362,6 +6518,26 @@ export function createUi(
 			}
 			if ( panel === FORTRESS_TAX_PANEL && fortressTaxHud.npc() === null ) {
 				setPanel( "" );
+				dirty = true;
+			}
+			productionClock = now;
+			fortressProductionHud.observe(
+				next.gameplay?.fortress,
+				next.gameplay?.target ?? undefined,
+				next.session?.phase === "world" && next.gameplay?.npcConversation?.phase === "menu",
+				now
+			);
+			if ( fortressProductionHud.npc() !== null && panel !== FORTRESS_PRODUCTION_PANEL && canLeavePanel() ) {
+				setPanel( FORTRESS_PRODUCTION_PANEL );
+				dirty = true;
+			}
+			if ( panel === FORTRESS_PRODUCTION_PANEL && fortressProductionHud.npc() === null ) {
+				setPanel( "" );
+				dirty = true;
+			}
+			// 65A5E0 redraws the countdown once a second.
+			if ( panel === FORTRESS_PRODUCTION_PANEL && Math.floor( now / 1000 ) !== productionSecond ) {
+				productionSecond = Math.floor( now / 1000 );
 				dirty = true;
 			}
 			fortressStaffHud.observe(
@@ -12737,6 +12913,8 @@ export function createUi(
 						canFortressManager: !!(capabilities & 0x400000) &&
 							(fortressStaffView().holder || fortressStaffView().ally),
 						canFortressHire: !!(capabilities & 0x400000) && fortressStaffView().holder,
+						canFortressSmith: !!(capabilities & 0x2000000),
+						canFortressTrainer: !!(capabilities & 0x4000000),
 						// 5D7870: the outcome page offers only the collect row (0x25),
 						// and only for a reward above zero.
 						guildSoldierRows: outcomePage ?
@@ -13107,6 +13285,148 @@ export function createUi(
 						top + FORTRESS_SCHEDULE_ROWS >= applicants.length
 					);
 					endWindow( admission, "service:" + FORTRESS_SCHEDULE_PANEL );
+				}
+				if (
+					panel === FORTRESS_PRODUCTION_PANEL && fortressProductionHud.npc() !== null &&
+					hudData?.windows.iffortressmakeitemwnd && hudData.windows.iffortressmakeitemwndslot &&
+					hudData.root.GDR_FORTRESS_MAKEITEM_WND
+				) {
+					// CIFFortressMakeItemWnd: OnCreate 65AD70 lays it out, SetStaff 65C370
+					// titles it and fills its one tab, RefreshProductionState 65A280 and
+					// OnTimer 65A5E0 show the order.
+					const admission = beginWindow(),
+						root = hudData.root.GDR_FORTRESS_MAKEITEM_WND,
+						layout = hudData.windows.iffortressmakeitemwnd,
+						slotLayout = hudData.windows.iffortressmakeitemwndslot,
+						byId = ( id: number ) => Object.values( layout ).find( n => n.id === id ),
+						slotById = ( id: number ) => Object.values( slotLayout ).find( n => n.id === id ),
+						staff = fortressProductionHud.staff(),
+						items = fortressProductionItems(),
+						order = fortressProductionHud.order(),
+						done = fortressProductionHud.done( productionClock ),
+						asking = fortressProductionHud.question() !== null,
+						may = fortressProductionMayOperate( fortressStaffView().member, staff ),
+						[px, py] = windowOrigin( FORTRESS_PRODUCTION_PANEL, [
+							Math.max( 0, (w - root.rect[2]) / 2 ),
+							Math.max( 0, (h - root.rect[3]) / 2 ),
+							root.rect[2],
+							root.rect[3]
+						] );
+					nativeFrame(
+						root,
+						px,
+						py,
+						hudCopy( staff === "smith" ? "SN_FORTRESS_SMITH_PRODUCT" : "UIIT_STT_FORT_ETC_TRAINING" ),
+						"fortress-production-close"
+					);
+					nativePage( layout, px, py, [ 212, 213, 231, 232, 233, 234, 235, 236, 238, 240 ] );
+					// CreateTabs (65C0F0) makes one 72x24 tab at (25,55).
+					nativeTab(
+						"fortress-production-tab",
+						hudCopy( staff === "smith" ? "UIIT_STT_FORT_ETC_SIEGEWEAPON" : "SN_TAB_VEHICLE" ),
+						[ px + 25, py + 55, 72, 24 ],
+						true,
+						{ family: "com_tab" }
+					);
+					for ( let i = 0; i < FORTRESS_PRODUCTION_MARKS; i++ ) {
+						const mark = byId( 232 + i );
+						if ( mark ) authoredText( mark, px, py, i * 25 + "%" );
+					}
+					const list = byId( 210 ),
+						slotIcon = slotById( 11 ),
+						slotName = slotById( 12 ),
+						make = slotById( 13 );
+					const rowWidth = slotById( 10 )?.rect[2] ?? 0;
+					if ( list ) {
+						const [lx, ly] = authoredRect( list, px, py ), top = fortressProductionHud.top();
+						for ( let row = 0; row < FORTRESS_PRODUCTION_ROWS; row++ ) {
+							const item = items[top + row];
+							if ( !item ) break;
+							const sy = ly + row * FORTRESS_PRODUCTION_ROW_HEIGHT;
+							// AddListRow (659FD0) skins each row with gil_bar02_deselect.
+							image(
+								[ lx, sy, rowWidth, FORTRESS_PRODUCTION_ROW_HEIGHT ],
+								ROOT + "interface/guild/gil_bar02_deselect.png"
+							);
+							nativePage( slotLayout, lx, sy, [ 11, 12, 13, 14, 15 ] );
+							const name = item.name ?? String( item.refObjId );
+							if ( slotIcon ) {
+								const r = authoredRect( slotIcon, lx, sy ), icon = iconPath( item.icon );
+								if ( icon ) image( r, icon );
+								controls.push( {
+									id: "fortress-production-item:" + item.refObjId,
+									label: name,
+									helpText: name,
+									kind: "region",
+									rect: r
+								} );
+							}
+							if ( slotName ) authoredText( slotName, lx, sy, name );
+							// SetRowsMakeEnabled (659CE0): no row makes while an order exists.
+							if ( make ) {
+								authoredLabeledButton(
+									make,
+									lx,
+									sy,
+									"fortress-production-make:" + item.refObjId,
+									hudCopy( make.text ),
+									!may || !!order || asking
+								);
+							}
+						}
+					}
+					if ( order ) {
+						const item = items.find( row => row.refObjId === order.refObjId );
+						const icon = byId( 212 ), name = byId( 213 ), count = byId( 238 ), left = byId( 231 );
+						const label = item?.name ?? String( order.refObjId );
+						if ( icon ) {
+							const r = authoredRect( icon, px, py ), path = iconPath( item?.icon );
+							if ( path ) image( r, path );
+							controls.push( {
+								id: "fortress-production-order",
+								label,
+								helpText: label,
+								kind: "region",
+								rect: r
+							} );
+						}
+						if ( name ) authoredText( name, px, py, label );
+						if ( count ) authoredText( count, px, py, String( order.count ) );
+						const remaining = fortressProductionRemaining( order, productionClock );
+						if ( left && !done ) {
+							authoredText( left, px, py, fortressProductionTimeText( remaining, hudCopy ) );
+						}
+						const gauge = byId( 240 );
+						if ( gauge && item ) {
+							// 65A280: the gauge is the elapsed share of count x minutes,
+							// discounted when the guild holds the staff member's role.
+							const total = fortressProductionPrice(
+								item,
+								order.count,
+								fortressProductionFactor( view?.gameplay?.social?.guild?.members ?? [], staff )
+							).seconds;
+							authoredImage(
+								gauge,
+								px,
+								py,
+								gauge.texture,
+								done || total <= 0 ? 1 : Math.max( 0, Math.min( 1, (total - remaining) / total ) )
+							);
+						}
+						// 65A280: a running order shows cancel, a finished one complete.
+						const button = byId( done ? 214 : 215 );
+						if ( button ) {
+							authoredLabeledButton(
+								button,
+								px,
+								py,
+								done ? "fortress-production-complete" : "fortress-production-cancel",
+								hudCopy( button.text ),
+								!may || asking
+							);
+						}
+					}
+					endWindow( admission, "service:" + FORTRESS_PRODUCTION_PANEL );
 				}
 				if (
 					panel === FORTRESS_TAX_PANEL && fortressTaxHud.npc() !== null && hudData?.windows.iftaxmanagement &&
@@ -17379,6 +17699,82 @@ export function createUi(
 				);
 			}
 			if ( !game?.npcConversation || game.npcConversation.phase !== "menu" ) jobHud.reset();
+			const productionAsk = fortressProductionHud.question(), productionBox = hud.data()?.windows.ifmessagebox;
+			if ( worldVisible && productionAsk && productionBox ) {
+				// 656CA0 / 65C6D0 open CIFMessageBox kind 0xC (MsgBoxMakeItem) or 0xD
+				// (MsgBoxMakeItemCancel); 52C870 modes 0xA and 0xB fill them.
+				const making = productionAsk.kind === "make", base = making ? 110 : 120;
+				const layout = messageBox( w, h, FORTRESS_PRODUCTION_BOX[0], FORTRESS_PRODUCTION_BOX[1] ),
+					[fx, fy] = layout.frame;
+				const section = Object.fromEntries(
+					Object.entries( productionBox ).filter( ( [, row] ) => row.id >= base && row.id <= base + 6 )
+				);
+				const at = ( id: number ) => Object.values( section ).find( row => row.id === id );
+				const item = making ?
+					productionAsk.item :
+					fortressProductionItems().find( row => row.refObjId === productionAsk.order.refObjId );
+				controls = [];
+				blocks = [ full ];
+				paths.push( ...partyProposalAssets() );
+				quads.push(
+					...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ),
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					),
+					...text.quads( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title, full, white, {
+						hAlign: 1,
+						vAlign: 0
+					} )
+				);
+				nativePage( section, fx, fy, [ base, base + 1, base + 4, base + 6 ] );
+				const main = at( base + 4 );
+				if ( main ) {
+					authoredText(
+						main,
+						fx,
+						fy,
+						hudCopy(
+							making ? "UIIT_MSG_FORT_SMITH_PRODUCT_WINDOW" : "UIIT_MSG_FORT_SMITH_PRODUCT_CANCEL_WINDOW"
+						).replace( "%s", item?.name ?? "" )
+					);
+				}
+				const edit = at( base + 6 );
+				if ( edit && productionAsk.kind === "make" ) {
+					partyEdit(
+						edit,
+						fx,
+						fy,
+						FORTRESS_PRODUCTION_COUNT,
+						productionAsk.count,
+						FORTRESS_PRODUCTION_COUNT_LENGTH
+					);
+				} else if ( edit && productionAsk.kind === "cancel" ) {
+					// 52DC80 disables the edit and prints the order's count in it.
+					authoredText( edit, fx, fy, String( productionAsk.order.count ) );
+				}
+				for (
+					const [id, control] of [
+						[ base + 1, "fortress-production-yes" ],
+						[ base, "fortress-production-no" ]
+					] as const
+				) {
+					const node = at( id );
+					if ( node ) {
+						authoredLabeledButton(
+							{ ...node, rect: [ node.rect[0], node.rect[1], 76, 24 ] },
+							fx,
+							fy,
+							control,
+							hudCopy( node.text ),
+							control === "fortress-production-yes" && productionAsk.kind === "make" &&
+								!Number( productionAsk.count )
+						);
+					}
+				}
+			}
 			const taxAsk = fortressTaxHud.question(), taxBox = hud.data()?.windows.ifmessagebox;
 			if ( worldVisible && taxAsk && taxBox ) {
 				// 665BA0 opens CIFMessageBox kind 0xA (MsgBoxTaxModify, 292x178) or

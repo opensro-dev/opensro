@@ -166,6 +166,8 @@ export function createHudResources(
 		"iffortressbusiness",
 		"iffortressbusinessslot",
 		"iftaxmanagement",
+		"iffortressmakeitemwnd",
+		"iffortressmakeitemwndslot",
 		"ifchangeplayermodel",
 		"ifgrantmagicattributewnd",
 		"ifnewalchemybox",

@@ -39,7 +39,16 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 		case "ifmessagebox":
 			// 528430 / 52A2D0; rendering admits one modal branch. The fortress tax
 			// boxes (52A8D0 / 52A7E0) follow so the store's section indices hold.
-			return [ "Create", "MsgBoxStore", "MsgBoxStoreConfirm", "MsgBoxTaxModify", "MsgBoxTaxLevy" ];
+			return [
+				"Create",
+				"MsgBoxStore",
+				"MsgBoxStoreConfirm",
+				"MsgBoxTaxModify",
+				"MsgBoxTaxLevy",
+				// 52A960 / 52DC80: the fortress production boxes.
+				"MsgBoxMakeItem",
+				"MsgBoxMakeItemCancel"
+			];
 		case "ifapprenticeship":
 			return [ "Create", "NotifySubBox", "NotifyContents" ]; // 5C5B60.
 		case "ifskill":

@@ -104,9 +104,26 @@ projections consumed by the fortress NPC manager-hire menu.
 ================
 */
 type SiegeItemForgeGroupRow struct {
-	GroupID         uint32   `json:"groupId"`
-	SmithItemRefs   []uint32 `json:"smithItemRefs"`
-	TrainerItemRefs []uint32 `json:"trainerItemRefs"`
+	GroupID         uint32               `json:"groupId"`
+	SmithItemRefs   []uint32             `json:"smithItemRefs"`
+	TrainerItemRefs []uint32             `json:"trainerItemRefs"`
+	Items           []SiegeItemForgeItem `json:"items"`
+}
+
+/*
+================
+SiegeItemForgeItem
+
+One row's price and time per item (CRefData_FindSiegeFortressItemForge
+63BCA0: +0xC gold, +0x10 guild points, +0x14 minutes). The production
+window (CIFFortressMakeItemWnd 65A280) counts count * minutes * 60 down.
+================
+*/
+type SiegeItemForgeItem struct {
+	RefObjID uint32 `json:"refObjId"`
+	Gold     uint32 `json:"gold"`
+	GP       uint32 `json:"gp"`
+	Minutes  uint32 `json:"minutes"`
 }
 
 /*

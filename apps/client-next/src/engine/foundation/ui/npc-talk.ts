@@ -132,6 +132,10 @@ export interface NpcTalkInput {
 	readonly guildSoldierRows?: readonly { id: string; label: string; }[] | null;
 	readonly fortressStaffRows?: readonly { id: string; label: string; disabled?: boolean; }[] | null;
 	readonly canFortressHire?: boolean;
+	// 5D8C86: the fortress smith's (0x2000000) and trainer's (0x4000000)
+	// production rows.
+	readonly canFortressSmith?: boolean;
+	readonly canFortressTrainer?: boolean;
 	// jobRows are the job guild rows (job-guild.ts jobMenuRows).
 	readonly jobRows?: readonly { readonly id: string; readonly label: string; }[];
 }
@@ -230,6 +234,12 @@ export function npcTalkLayout( input: NpcTalkInput ) {
 					// 5D7AD0 action 0x34: the official's one row.
 					...(input.canFortressOfficial ?
 						[ { id: "npc-fortress-war", label: copy( "SN_FORTRESS_OFFICIAL_WARAPPLY" ) } ] :
+						[]),
+					...(input.canFortressSmith ?
+						[ { id: "npc-fortress-production:smith", label: copy( "SN_FORTRESS_SMITH_PRODUCT" ) } ] :
+						[]),
+					...(input.canFortressTrainer ?
+						[ { id: "npc-fortress-production:trainer", label: copy( "UIIT_STT_FORT_ETC_TRAINING" ) } ] :
 						[])
 				]),
 			{ id: "npc-talkend", label: copy( "UIIT_STT_NPC_CHATTING_WND_TALKEND" ) }

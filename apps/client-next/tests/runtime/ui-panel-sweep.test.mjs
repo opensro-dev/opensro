@@ -146,6 +146,30 @@ const OPENERS = {
 			serviceSequence: 1,
 			service: { action: 0, result: 1, fortress: 1, taxRate: 10, gold: "1234" }
 		};
+	},
+	"Fortress production"( f, step ) {
+		// The trainer's row queries; the answer opens the window (754A40 0x11).
+		talkTo( f );
+		Object.assign( f.state.gameplay, {
+			targetCapabilities: 0x4000000,
+			fortressForge: [ { refObjId: 9001, gold: 1, gp: 1, minutes: 1, staff: "trainer", name: "Cart" } ],
+			fortress: {
+				...f.state.gameplay.fortress,
+				worldId: 7,
+				worlds: [ { id: 7, code: "FORTRESS_JANGAN" } ],
+				fortresses: [ { id: 1, code: "FORTRESS_JANGAN", nameStrId: "FORTRESS_NAME", taxTargets: 63 } ],
+				wars: [],
+				registered: [],
+				serviceSequence: 0
+			}
+		} );
+		step();
+		f.ui.event( { kind: "activate", id: "npc-fortress-production:trainer" } );
+		f.state.gameplay.fortress = {
+			...f.state.gameplay.fortress,
+			serviceSequence: 1,
+			service: { action: 0x11, result: 1, fortress: 1, producing: false }
+		};
 	}
 };
 

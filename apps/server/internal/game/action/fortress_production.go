@@ -25,10 +25,6 @@ collection with them (data/store/fortress_item_forge.go).
 package action
 
 import (
-	"fmt"
-	"path/filepath"
-	"strconv"
-
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
@@ -66,38 +62,21 @@ type fortressForgeRow struct {
 
 /*
 ================
-loadFortressForges
+fortressForgeRows
 
-Enabled rows keyed by item: Service, Group, ItemRefID, Gold, GP, Minutes.
+The forge rows by item, from the bootstrap's projection of
+siegefortressitemforge.txt (enterworld.DefaultSiegeItemForgeGroups), so
+the price the server charges is the one the window shows.
 ================
 */
-func loadFortressForges(dir string) (map[uint32]fortressForgeRow, error) {
-	rows := enterworld.ReadTextdataFile(filepath.Join(dir, "siegefortressitemforge.txt"))
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("siegefortressitemforge is absent or empty")
+func fortressForgeRows() map[uint32]fortressForgeRow {
+	out := map[uint32]fortressForgeRow{}
+	for _, group := range enterworld.DefaultSiegeItemForgeGroups() {
+		for _, item := range group.Items {
+			out[item.RefObjID] = fortressForgeRow{gold: item.Gold, gp: item.GP, minutes: item.Minutes}
+		}
 	}
-	out := make(map[uint32]fortressForgeRow, len(rows))
-	for i, r := range rows {
-		if r[0] != "1" {
-			continue
-		}
-		if len(r) < 6 {
-			return nil, fmt.Errorf("siegefortressitemforge row %d is truncated", i+1)
-		}
-		var values [4]uint32
-		for j := range values {
-			v, err := strconv.ParseUint(r[2+j], 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("siegefortressitemforge row %d column %d", i+1, 3+j)
-			}
-			values[j] = uint32(v)
-		}
-		if values[0] == 0 {
-			return nil, fmt.Errorf("siegefortressitemforge row %d names no item", i+1)
-		}
-		out[values[0]] = fortressForgeRow{gold: values[1], gp: values[2], minutes: values[3]}
-	}
-	return out, nil
+	return out
 }
 
 /*

@@ -107,6 +107,10 @@ func (rt *Runtime) CommerceReferenceSeed() []wire.Frame {
 /*
 ================
 prepareCommerceReferences
+
+The seed covers every shop content and every fortress forge item. The
+native client reads its own refobjitem; here the production window names
+and draws the forge items, which no shop sells, from this seed.
 ================
 */
 func (rt *Runtime) prepareCommerceReferences() {
@@ -122,6 +126,14 @@ func (rt *Runtime) prepareCommerceReferences() {
 				}
 				seen[ref.RefObjID] = true
 				items = append(items, inventory.Item{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags()})
+			}
+		}
+	}
+	if source := rt.deps.ItemReferences(); source != nil {
+		for id := range fortressForgeRows() {
+			if ref, ok := source.ItemRefByID(id); ok && ref != nil && !seen[id] {
+				seen[id] = true
+				items = append(items, inventory.Item{RefObjID: id, Codename: ref.Codename, TypeFlags: ref.TypeFlags()})
 			}
 		}
 	}

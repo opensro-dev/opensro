@@ -12,6 +12,7 @@ the fortress official's protocol: 0x71E1 requests
 
 ===========================================================================
 */
+import { type FortressForgeItem, fortressForgeCatalog } from "./fortress-production";
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SystemNotice } from "./system-notices";
 import {
@@ -91,6 +92,8 @@ export interface FortressState {
 	readonly worldId: number;
 	readonly worlds: readonly { id: number; code: string; }[];
 	readonly fortresses: readonly FortressRow[];
+	// The smith's and trainer's producible items (fortress-production.ts).
+	readonly forge?: readonly FortressForgeItem[];
 	readonly wars: readonly {
 		id: number;
 		name: string;
@@ -149,7 +152,7 @@ export function fortressBootstrap( value: unknown ): FortressState {
 	if ( !Number.isInteger( worldId ) || worldId < 0 || worldId > 0xffffffff ) {
 		throw Error( "Invalid packed fortress world" );
 	}
-	return { worldId, worlds, fortresses, wars: [], registered: [], listId: 0 };
+	return { worldId, worlds, fortresses, forge: fortressForgeCatalog( value ), wars: [], registered: [], listId: 0 };
 }
 
 const FORTRESS_TIMER_PERIOD_MS = 1000;
