@@ -11,6 +11,7 @@ move all three duration controls together (617730).
 */
 import { packWarPeriod, type GuildWarCommand, type GuildWarTerms } from "@/engine/foundation/gameplay/guild-war";
 import type { GuildMember, GuildWar, SocialState } from "@/engine/foundation/gameplay/social";
+import { guildSelf } from "@/engine/foundation/gameplay/social-roster";
 
 /*
 ================
@@ -121,7 +122,7 @@ export function createGuildWarHud() {
 		================
 		*/
 		command( id: string, social: SocialState | undefined ): GuildWarCommand | null {
-			const master = social?.guild?.members.find( m => m.id === social.self )?.grade === 0;
+			const master = guildSelf( social )?.grade === 0;
 			if ( id === "war-result-close" ) result = undefined;
 			else if ( id.startsWith( "war-relation:" ) ) {
 				relation = Number( id.split( ":" )[1] );
@@ -196,7 +197,7 @@ export function createGuildWarHud() {
 				result = social.warResult;
 				resultSequence = result.sequence;
 			}
-			if ( social?.guild?.members.find( m => m.id === social.self )?.grade !== 0 ) {
+			if ( guildSelf( social )?.grade !== 0 ) {
 				mode = "closed";
 				combo = 0;
 				money = null;

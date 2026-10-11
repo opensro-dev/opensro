@@ -127,6 +127,8 @@ export interface SocialState {
 		allianceCrest?: number;
 	}[];
 	readonly localName: string;
+	// The local player's PARTY member id (0xB0D5/0xB452 result); 0 outside a
+	// party. The guild roster finds the local player with guildSelf instead.
 	readonly self: number;
 	readonly leader: number;
 	readonly options: number;
@@ -166,4 +168,19 @@ export interface SocialState {
 	// claim box (5D4050) asks before 0x73F7 collects it.
 	readonly compensation?: number;
 	readonly error: string | null;
+}
+
+/*
+================
+guildSelf
+
+The local player's guild member row, by name: the guild roster carries no
+party id, and social.self is the party's (0 outside a party), which left a
+guild master without a party unable to donate, title, assign roles or
+manage the guild.
+================
+*/
+export function guildSelf( social: SocialState | null | undefined ): GuildMember | undefined {
+	if ( !social?.guild || !social.localName ) return undefined;
+	return social.guild.members.find( member => member.name === social.localName );
 }

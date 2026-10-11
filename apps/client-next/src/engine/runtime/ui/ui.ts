@@ -200,6 +200,7 @@ import { alchemyEffectCell, alchemyEffectTexture, alchemyResultLines } from "@/e
 import { createUnionHud } from "./hud/union-hud";
 import { createGuildWarHud } from "./hud/guild-war-hud";
 import { guildWarRequest, warScoreLimits, WAR_MAX_STAKE, WAR_UNLIMITED } from "@/engine/foundation/gameplay/guild-war";
+import { guildSelf } from "@/engine/foundation/gameplay/social-roster";
 import { createExchangeHud } from "./hud/exchange-hud";
 import {
 	createStallHud,
@@ -1346,7 +1347,7 @@ export function createUi(
 		const world = state?.worlds.find( row => row.id === (state.worldId & 0xffff) );
 		const row = state?.fortresses.find( row => row.code === world?.code );
 		const owner = state?.wars.find( war => war.id === row?.id )?.name;
-		const member = social?.guild?.members.find( member => member.id === social.self );
+		const member = guildSelf( social );
 		return {
 			fortress: row?.id,
 			holder: !!owner && owner === social?.guild?.name,
@@ -1372,7 +1373,7 @@ export function createUi(
 		const game = view?.gameplay, state = game?.fortress, social = game?.social, kind = fortressTargetKind( target );
 		const staff = fortressStaffView();
 		if ( !kind || !state || staff.fortress === undefined ) return 0;
-		const member = social?.guild?.members.find( row => row.id === social.self );
+		const member = guildSelf( social );
 		return fortressDeleteAction( kind, {
 			war: fortressActive( state ),
 			holder: staff.holder,
@@ -15115,7 +15116,7 @@ export function createUi(
 						for ( const id of [ 33, 34 ] ) {
 							authoredLabeledButton( at( id ), gx, gy, "war-sort:" + id, hudCopy( at( id ).text ) );
 						}
-						const master = social?.guild?.members.find( m => m.id === social.self )?.grade === 0;
+						const master = guildSelf( social )?.grade === 0;
 						authoredLabeledButton( at( 51 ), gx, gy, "war-declare", hudCopy( at( 51 ).text ), !master );
 						authoredLabeledButton(
 							at( 52 ),
@@ -15211,7 +15212,7 @@ export function createUi(
 							page = hudData.windows.ifguild!,
 							social = game?.social,
 							guild = social?.guild,
-							self = guild?.members.find( member => member.id === social?.self );
+							self = guildSelf( social );
 						image( [ x + 6, y + 28, width - 12, height - 34 ], at( page, 1 ).texture );
 						nativeFrame( { ...root, rect: [ 0, 0, width, height ] }, x, y, hudCopy( root.text ) );
 						/*
@@ -15844,7 +15845,7 @@ export function createUi(
 							if ( !guild ) authoredText( at( 38 ), gx, gy, hudCopy( "UIIT_STT_NO_GUILD" ) );
 							if ( guild ) {
 								const leader = guild.members.find( m => m.grade === 0 ),
-									self = guild.members.find( m => m.id === game?.social?.self );
+									self = guildSelf( game?.social );
 								for (
 									const [id, value] of [
 										[ 38, guild.name ],
@@ -15879,8 +15880,10 @@ export function createUi(
 									grantPanel(
 										hudData.windows.ifguildgrantpower,
 										hudData.windows.ifguildgrantpowerslot,
-										gx + at( 150 ).rect[0],
-										gy + at( 150 ).rect[1],
+										// ifguild/GrantPower control 150 is a separately created
+										// child, deliberately absent from the base page decoder.
+										gx + 14,
+										gy + 138,
 										self?.grade === 0
 									);
 								} else {rows.slice( socialPage * 6, socialPage * 6 + 6 ).forEach( ( row, i ) => {
