@@ -51,6 +51,12 @@ const (
 	// u8 count, u8 type (CHAMP 1, GIANT 4, NORMAL 0, else the record's +0xA0).
 	SubLoadMonster uint8 = 0x06
 	SubWarp        uint8 = 0x10
+	// SubWorldStatus: /WORLDSTATUS - subcmd alone (51DE90 case 3).
+	SubWorldStatus uint8 = 0x04
+	// SubBan: /BAN - subcmd + ANSI name (51DE90 case 0xA).
+	SubBan uint8 = 0x0D
+	// SubRecallGuild: /RECALLGUILD - subcmd + ANSI guild name (case 0xE).
+	SubRecallGuild uint8 = 0x12
 	// SubGoTown: /GOTOWN - subcmd alone. The server answers it in
 	// CGObjPC_MsgHandler_SpecialCommand (v1.188 51DE90) case 1.
 	SubGoTown uint8 = 0x02
@@ -109,14 +115,14 @@ type Request struct {
 // name (subcmd byte then sub_4fd5b0 u16 len + bytes). This lane decodes the
 // name for exactly these; MAKEITEM is decoded independently below.
 var nameSubcommands = map[uint8]bool{
-	SubFindUser:   true,
-	SubToTown:     true,
-	SubMoveToUser: true,
-	0x0D:          true, // /BAN
-	SubRecallUser: true,
-	0x12:          true, // /RECALLGUILD
-	SubLieName:    true,
-	SubRealName:   true,
+	SubFindUser:    true,
+	SubToTown:      true,
+	SubMoveToUser:  true,
+	SubBan:         true,
+	SubRecallUser:  true,
+	SubRecallGuild: true,
+	SubLieName:     true,
+	SubRealName:    true,
 	// SubGrantSilk's name is followed by the u32 amount.
 	SubGrantSilk: true,
 }
