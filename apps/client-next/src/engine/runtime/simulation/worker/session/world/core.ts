@@ -397,6 +397,12 @@ UI and quickslot commands. A skill aims at the newest selection intent
 			// 6FD830 / 6FDA50: an invitation goes to a player, a ridden horse's
 			// rider for the horse, and the proposer's line names the invitee.
 			let invitee: EntityState | null = null;
+			if ( command.kind === "party-invite-named" ) {
+				// 6AD990: the named player must be in view; otherwise nothing is sent.
+				const named = entities.playerNamed( command.name );
+				if ( !named ) return;
+				command = { kind: "party-invite", gid: named.gid, options: command.options };
+			}
 			if ( command.kind === "party-invite" ) {
 				invitee = partyInviteTarget( command.gid, gameplay.localIdentity(), {
 					entity: entities.read,

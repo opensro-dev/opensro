@@ -1644,6 +1644,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/party-chat-command.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/gameplay/avatar-magic-option.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [

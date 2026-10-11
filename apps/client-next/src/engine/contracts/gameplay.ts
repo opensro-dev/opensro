@@ -319,6 +319,9 @@ export type GameplayCommand =
 	| { readonly kind: "action-command"; readonly id: number; }
 	| { readonly kind: "cos-attack"; readonly gid: number; }
 	| import("@/engine/foundation/gameplay/social").SocialCommand
+	// "/Invite to party name" (party-chat-command.ts): the world core turns
+	// the name into a party-invite at the visible player of that name.
+	| { readonly kind: "party-invite-named"; readonly name: string; readonly options: number; }
 	| { readonly kind: "skill-train"; readonly id: number; }
 	| { readonly kind: "mastery-train"; readonly id: number; }
 	| { readonly kind: "quickslot-bind"; readonly slot: number; readonly skillId: number; }

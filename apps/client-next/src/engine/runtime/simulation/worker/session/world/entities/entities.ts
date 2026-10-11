@@ -1309,6 +1309,20 @@ export function createEntities(
 		},
 		/*
 		================
+		playerNamed
+
+		The visible player of this name (EntityManager_FindGidByName, as the
+		chat commands read it).
+		================
+		*/
+		playerNamed( name: string ) {
+			for ( const entity of entities.values() ) {
+				if ( entity.kind === "player" && entity.name === name ) return entity;
+			}
+			return undefined;
+		},
+		/*
+		================
 		groundItems
 
 		The ground items in the table now, every despawn already applied.

@@ -244,6 +244,7 @@ import {
 	REVERSE_RETURN_LAST_DEATH,
 	REVERSE_RETURN_LAST_RECALL
 } from "@/engine/foundation/gameplay/count-job";
+import { partyChatCommand, partyChatOrder } from "@/engine/foundation/gameplay/party-chat-command";
 import {
 	AVATAR_MAGIC_OPTION_FUNCTION,
 	avatarMagicOptionCount,
@@ -3574,6 +3575,19 @@ export function createUi(
 			// package's limited use; they are never sent as chat.
 			const command = premiumCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )!;
 			sendGameplay( { kind: "premium-command", command } );
+			chatText = chatTabPrefix( chatTab );
+			selection = [ chatText.length, chatText.length ];
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			dirty = true;
+			return;
+		} else if (
+			id === "chat-send" && partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
+		) {
+			// 6AD990: the party commands act on the party; they are never sent as chat.
+			const command = partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )!;
+			const order = partyChatOrder( command, view.gameplay?.social, partyOptions );
+			if ( order ) sendGameplay( order );
 			chatText = chatTabPrefix( chatTab );
 			selection = [ chatText.length, chatText.length ];
 			focus = null;
