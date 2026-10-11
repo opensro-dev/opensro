@@ -506,6 +506,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.MasteryTotalOverride = masteryOverride
 	// Port-only, not native: storage quick moves prefer a matching stack.
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
+	// Port-only, not native: a GM's /SETSPEED.
+	game.items.GMSetSpeed = action.GMSetSpeedFromEnv()
+	if game.items.GMSetSpeed {
+		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
+	}
 	if game.deps.StorageAutoStack {
 		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)
 	}

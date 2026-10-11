@@ -15,6 +15,9 @@ parses it; the GameWorld's own unset value is always native.
   - SRO_ALCHEMY_RATES (alchemy_rates): the reinforcement rate table
     (alchemy/rates.go). The deployment default is on, as the owner
     decided on 2026-10-11; "off" is the authored chances.
+  - SRO_GM_SETSPEED (gm_setspeed): a GM's /SETSPEED (action/gmspeed.go).
+    The deployment default is on, as the owner decided on 2026-10-12;
+    "off" refuses the command, which v1.150 does not have.
 
 ===========================================================================
 */
@@ -31,6 +34,9 @@ const storageAutoStackDefault = "on"
 // alchemyRatesDefault is the owner-approved deployment default.
 const alchemyRatesDefault = "on"
 
+// gmSetSpeedDefault is the owner-approved deployment default.
+const gmSetSpeedDefault = "on"
+
 /*
 ================
 portOnlySettings
@@ -40,6 +46,7 @@ type portOnlySettings struct {
 	StorageAutoStack string
 	ReverseReturnMap string
 	AlchemyRates     string
+	GMSetSpeed       string
 }
 
 /*
@@ -55,12 +62,16 @@ func portOnlySettingsFromEnv() portOnlySettings {
 		StorageAutoStack: strings.TrimSpace(os.Getenv("SRO_STORAGE_AUTO_STACK")),
 		ReverseReturnMap: strings.TrimSpace(os.Getenv("SRO_REVERSE_RETURN_MAP")),
 		AlchemyRates:     strings.TrimSpace(os.Getenv("SRO_ALCHEMY_RATES")),
+		GMSetSpeed:       strings.TrimSpace(os.Getenv("SRO_GM_SETSPEED")),
 	}
 	if settings.StorageAutoStack == "" {
 		settings.StorageAutoStack = storageAutoStackDefault
 	}
 	if settings.AlchemyRates == "" {
 		settings.AlchemyRates = alchemyRatesDefault
+	}
+	if settings.GMSetSpeed == "" {
+		settings.GMSetSpeed = gmSetSpeedDefault
 	}
 	return settings
 }
@@ -76,5 +87,6 @@ func (settings portOnlySettings) jobVariables(variables map[string]any) map[stri
 	variables["storage_auto_stack"] = settings.StorageAutoStack
 	variables["reverse_return_map"] = settings.ReverseReturnMap
 	variables["alchemy_rates"] = settings.AlchemyRates
+	variables["gm_setspeed"] = settings.GMSetSpeed
 	return variables
 }

@@ -143,6 +143,16 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 			}
 		}
 		return Outcome{Ack: []byte{AckResultFail, SubGrantSilk}, Refusal: "silk-grant-refused"}
+	case SubSetSpeed:
+		// The port's /SETSPEED (action/gmspeed.go): the ack echoes the percent.
+		if len(status) > 0 && status[0] != nil {
+			if owner, ok := status[0].(interface {
+				SetGMSpeed(string, string, uint16) bool
+			}); ok && owner.SetGMSpeed(divisionID, sender.Name, request.SpeedPercent) {
+				return Outcome{Ack: wire.NewWriter(4).U8(AckResultOK).U8(SubSetSpeed).U16(request.SpeedPercent).Payload()}
+			}
+		}
+		return Outcome{Ack: []byte{AckResultFail, SubSetSpeed}, Refusal: "set-speed-refused"}
 	default:
 		// Every command this server cannot honor: the faithful result-2
 		// refusal, no state touched.

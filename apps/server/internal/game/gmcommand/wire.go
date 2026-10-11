@@ -77,6 +77,9 @@ const (
 	// native): subcmd, u16 len + ANSI name, u32 amount. The native table
 	// ends at 0x30, so 0xF0 cannot collide with a retail command.
 	SubGrantSilk uint8 = 0xF0
+	// SubSetSpeed is the port's /SETSPEED percent (GM tooling, not native,
+	// action/gmspeed.go): subcmd, u16 percent of the effective speed.
+	SubSetSpeed uint8 = 0xF1
 )
 
 // Ack result bytes (sub_751ec0 @0x00751f08 result == 1 / @0x00752111
@@ -109,6 +112,8 @@ type Request struct {
 	HasName bool
 	// Silk is /SILK's amount.
 	Silk uint32
+	// SpeedPercent is /SETSPEED's percent of the effective speed.
+	SpeedPercent uint16
 }
 
 // nameSubcommands are the subcommands whose payload is a single sized ANSI
@@ -149,6 +154,13 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 		}
 		request.Destination = p
 		return request, nil
+	}
+	if subcmd == SubSetSpeed {
+		if len(payload) != 3 {
+			return Request{}, fmt.Errorf("gmcommand: SETSPEED requires three bytes")
+		}
+		request.SpeedPercent, err = reader.U16()
+		return request, err
 	}
 	if subcmd == SubMakeItem {
 		if len(payload) != 6 {

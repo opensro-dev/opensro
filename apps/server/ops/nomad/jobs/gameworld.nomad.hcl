@@ -182,6 +182,13 @@ variable "reverse_return_map" {
   default = ""
 }
 
+# gm_setspeed admits a GM's /SETSPEED (port-only, not native; owner decision
+# 2026-10-12). Anything but "on" refuses it, as v1.150 has no such command.
+variable "gm_setspeed" {
+  type    = string
+  default = "on"
+}
+
 # alchemy_rates replaces each elixir's authored reinforcement chance with one
 # table by plus (port-only, not native; owner decision 2026-10-11): "on" is
 # +1 100% ... +11 5%, a comma list such as "100,80,70" is custom, "off" is
@@ -421,6 +428,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PARTY_MASTERIES                = var.party_masteries
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
+        SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate

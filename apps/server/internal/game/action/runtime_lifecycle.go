@@ -492,6 +492,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.berserkActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.battleActors.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.aggressionActors.Delete(simulation.WorldKey(divisionID, characterName))
+	rt.gmSpeeds.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.leavePopulationSession(divisionID, characterName)
 	rt.forgetCriticalCharacter(divisionID, characterName)
 	var departedGID uint32

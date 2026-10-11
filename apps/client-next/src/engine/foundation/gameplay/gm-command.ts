@@ -20,6 +20,14 @@ const MAX_GM_NAME_BYTES = 128;
 // 0xF0, past the native table's last command (0x30).
 const GM_GRANT_SILK = 0xf0;
 const MAX_SILK_GRANT = 1_000_000;
+// The port's /SETSPEED [percent] (GM tooling, not native; the server's
+// SRO_GM_SETSPEED): subcommand 0xF1 and a u16 percent of the effective
+// speed. A bare /SETSPEED asks for normal speed. The server enforces the
+// same range (action/gmspeed.go).
+const GM_SET_SPEED = 0xf1;
+const GM_SPEED_NORMAL_PERCENT = 100;
+const GM_SPEED_MIN_PERCENT = 10;
+const GM_SPEED_MAX_PERCENT = 1000;
 
 /*
 ================
@@ -118,6 +126,16 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		const balance = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
 		return { console: true, text: "-> silk granted, balance " + balance };
 	}
+	if ( code === GM_SET_SPEED ) {
+		// The port's /SETSPEED answer: the percent now in force, or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM speed refusal bytes" );
+			return { console: true, text: "Failed. -> speed change refused" };
+		}
+		if ( p.length !== 4 ) throw Error( "Invalid GM speed reply" );
+		const percent = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint16( 2, true );
+		return { console: true, text: "-> speed set to " + percent + "%" };
+	}
 	if ( result === 1 && code === 4 ) {
 		if ( p.length !== 14 ) throw Error( "Invalid GM world status" );
 		const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -206,6 +224,15 @@ export function gmRequest(
 			0;
 		const payload = Uint8Array.of( 6, 0, 0, 0, 0, count, type );
 		new DataView( payload.buffer ).setUint32( 1, ref.refObjId, true );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	// Any case: the command is port-only, and players type it as /setspeed.
+	if ( name?.toUpperCase() === "/SETSPEED" ) {
+		if ( tokens.length > 2 || (tokens.length === 2 && !/^[0-9]+$/.test( tokens[1]! )) ) return null;
+		const percent = tokens.length === 2 ? Number( tokens[1] ) : GM_SPEED_NORMAL_PERCENT;
+		if ( percent < GM_SPEED_MIN_PERCENT || percent > GM_SPEED_MAX_PERCENT ) return null;
+		const payload = Uint8Array.of( GM_SET_SPEED, 0, 0 );
+		new DataView( payload.buffer ).setUint16( 1, percent, true );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
 	if ( name === "/SILK" ) {

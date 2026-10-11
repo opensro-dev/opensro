@@ -58,7 +58,11 @@ type Runtime struct {
 	aggressionActors sync.Map // scheduled counters; character owns aggression entries
 	// jobWeeks holds, per division, the last week JobWeekTick handed to the
 	// store (jobrank.go).
-	jobWeeks    sync.Map
+	jobWeeks sync.Map
+	// gmSpeeds holds each GM's /SETSPEED percent (gmspeed.go), session only.
+	gmSpeeds sync.Map
+	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
+	GMSetSpeed  bool
 	BerserkRoll combat.Roll32767
 	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
