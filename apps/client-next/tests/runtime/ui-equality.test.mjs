@@ -97,3 +97,14 @@ test("focus, caret, controls and loading changes remain observable even when pix
 		]
 	) assert.equal( sameUiSemantics( first, { ...first, controls: [ { ...first.controls[0], ...update } ] } ), false );
 });
+
+test("a doll quad whose camera moved is a new quad (the 3D viewer's zoom)", () => {
+	const camera = { eye: [ 0, 1, -5 ], target: [ 0, 1, 0 ], fov: 0.6, near: 1, far: 10 };
+	const doll = { ...quad(), doll: { gid: 1, yaw: 0, camera } };
+	assert.equal( sameUiQuads( [ doll ], [ structuredClone( doll ) ] ), true );
+	const closer = structuredClone( doll );
+	closer.doll.camera.eye[2] = -4;
+	assert.equal( sameUiQuads( [ doll ], [ closer ] ), false );
+	const plain = { ...quad(), doll: { gid: 1, yaw: 0 } };
+	assert.equal( sameUiQuads( [ doll ], [ plain ] ), false );
+});

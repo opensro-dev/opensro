@@ -105,3 +105,30 @@ export function unpackRgba8( source: Uint8Array, width: number, height: number, 
 	}
 	return out;
 }
+
+/*
+================
+opaqueBox
+
+The box of every pixel with alpha above zero in packed RGBA, as
+[left, top, right, bottom] with right and bottom exclusive, or null when
+nothing is drawn. The 3D viewer frames what it drew (viewer-camera.ts).
+================
+*/
+export function opaqueBox(
+	rgba: Uint8ClampedArray,
+	width: number,
+	height: number
+): [number, number, number, number] | null {
+	let left = width, top = height, right = 0, bottom = 0;
+	for ( let y = 0; y < height; y++ ) {
+		for ( let x = 0; x < width; x++ ) {
+			if ( rgba[(y * width + x) * 4 + 3] === 0 ) continue;
+			if ( x < left ) left = x;
+			if ( x >= right ) right = x + 1;
+			if ( y < top ) top = y;
+			if ( y >= bottom ) bottom = y + 1;
+		}
+	}
+	return right > left ? [ left, top, right, bottom ] : null;
+}

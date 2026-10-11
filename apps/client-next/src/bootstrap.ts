@@ -62,9 +62,12 @@ entry starts the 3D viewer instead of the game. Port-only, not native.
 ================
 */
 function startViewer() {
-	const canvas = document.querySelector( "canvas" );
-	if ( !(canvas instanceof HTMLCanvasElement) ) throw new Error( "Missing viewer canvas" );
-	startViewerRuntime( canvas, location.search );
+	const canvas = document.querySelector( "canvas[data-viewer=render]" ),
+		picture = document.querySelector( "canvas[data-viewer=picture]" );
+	if ( !(canvas instanceof HTMLCanvasElement) || !(picture instanceof HTMLCanvasElement) ) {
+		throw new Error( "Missing viewer canvas" );
+	}
+	startViewerRuntime( canvas, picture, location.search );
 	return null;
 }
 

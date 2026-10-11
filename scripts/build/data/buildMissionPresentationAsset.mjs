@@ -6,8 +6,9 @@ buildMissionPresentationAsset.mjs - the browser's presentation projection
 Enriches the semantic EnterWorld v2 rows. The GameWorld sends stable
 RefObj/item identities and gameplay records; native resource paths and the
 client-side textdata tables stay in this client artifact
-(/assets/data/missionPresentation.json): character models, item icons and
-worn/drop models, recovery periods, and the trade bandits' skin pools.
+(/assets/data/missionPresentation.json): character models, item icons,
+worn/drop models and type words, recovery periods, and the trade bandits'
+skin pools.
 
 ===========================================================================
 */
@@ -31,6 +32,27 @@ const COL_SERVICE = 0, COL_REF_OBJ_ID = 1, COL_CODENAME = 2, COL_COUNTRY = 14, C
 const COUNTRY_CHINA = 0, COUNTRY_EUROPE = 1;
 // The native sex selector (+0x1ac): 0 female, 1 male.
 const SEX_FEMALE = 0, SEX_MALE = 1;
+// itemdata columns of the packed type word: the char bit (8), TypeID1..4 (9..12).
+const COL_ITEM_CHAR_BIT = 8, COL_ITEM_TYPE_ID1 = 9;
+
+/*
+================
+itemTypeFlags
+
+The item's packed type word as the server packs it (enterworld/itemrefs.go
+characterTidWord): TypeID1..4 in bits 2..15 and the char bit as 0x2. A
+look's weapon picks its idle stance from bits 11..15 (weaponAnimationSet).
+Undefined for a row whose fields are not integers in range.
+================
+*/
+function itemTypeFlags( columns ) {
+	const [charBit, tid1, tid2, tid3, tid4] = [ COL_ITEM_CHAR_BIT, ...[ 0, 1, 2, 3 ].map( i => COL_ITEM_TYPE_ID1 + i ) ]
+		.map( column => Number( columns[column]?.trim() ) );
+	if ( ![ charBit, tid1, tid2, tid3, tid4 ].every( v => Number.isInteger( v ) && v >= 0 ) || tid4 > 0x1f ) {
+		return undefined;
+	}
+	return ((tid1 & 7) << 2 | (tid2 & 3) << 5 | (tid3 & 0xf) << 7 | tid4 << 11 | (charBit !== 0 ? 0x0002 : 0)) & 0xffff;
+}
 
 /*
 ================
@@ -95,8 +117,10 @@ export function buildMissionPresentationAsset( options = {} ) {
 					dropModelPath = normalizeGamePath( value );
 				}
 			}
+			const typeFlags = itemTypeFlags( columns );
 			itemsByRefObjId[String( refObjId )] = {
 				codename,
+				...(typeFlags !== undefined ? { typeFlags } : {}),
 				// Native RefObjCommon worn resource, distinct from field53 ground-drop resource.
 				// Preserve authored absence; it is not a failed conversion.
 				wornModelPath: readWornModelPath( columns[52] ),

@@ -187,7 +187,9 @@ export const rules = {
 		bugDialog,
 		bugTrimmer,
 		bugTranscode,
-		bugJournal
+		bugJournal,
+		// The 3D viewer's drag and wheel on its picture canvas (docs/VIEWER.md).
+		runtime + "viewer/viewer.ts"
 	],
 	fetch: [
 		runtime + "simulation/worker/session/http/http.ts",

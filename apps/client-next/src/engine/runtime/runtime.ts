@@ -1086,11 +1086,12 @@ startViewerRuntime
 Port-only, not native (docs/VIEWER.md): the embeddable 3D viewer page. It
 creates only the owners one drawn model needs (assets, renderer and the
 character presentation, as startRuntime builds them) and drives
-viewer/viewer.ts once per animation frame, disposing the owners when the
-viewer is done. No session, input, audio or UI.
+viewer/viewer.ts by animation frames only while it asks for them: an idle
+interactive view costs nothing until input wakes it. The owners are
+disposed when the viewer is done. No session, input, audio or UI.
 ================
 */
-export function startViewerRuntime( canvas: HTMLCanvasElement, search: string ): void {
+export function startViewerRuntime( canvas: HTMLCanvasElement, picture: HTMLCanvasElement, search: string ): void {
 	const random = createPresentationRandom( 1 );
 	const assets = createAssets();
 	const renderer = createRenderer( canvas, random );
@@ -1101,20 +1102,33 @@ export function startViewerRuntime( canvas: HTMLCanvasElement, search: string ):
 		() => {},
 		random
 	);
-	const viewer = createViewer( { canvas, search, renderer, characters } );
+	let scheduled = false, disposed = false;
 	/*
 	================
 	viewerFrame
 	================
 	*/
 	const viewerFrame = ( now: number ) => {
-		if ( viewer.frame( now ) ) {
-			requestAnimationFrame( viewerFrame );
-			return;
+		scheduled = false;
+		const next = viewer.frame( now );
+		if ( next === "draw" ) wake();
+		else if ( next === "done" ) {
+			disposed = true;
+			characters.dispose();
+			renderer.dispose();
+			assets.dispose();
 		}
-		characters.dispose();
-		renderer.dispose();
-		assets.dispose();
 	};
-	requestAnimationFrame( viewerFrame );
+	/*
+	================
+	wake
+	================
+	*/
+	const wake = () => {
+		if ( scheduled || disposed ) return;
+		scheduled = true;
+		requestAnimationFrame( viewerFrame );
+	};
+	const viewer = createViewer( { canvas, picture, search, renderer, characters, wake } );
+	wake();
 }

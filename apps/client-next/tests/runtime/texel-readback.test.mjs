@@ -12,7 +12,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { unpackRgba8, paddedRowBytes, texelBytes, COPY_ROW_ALIGNMENT } = await import(
+const { unpackRgba8, paddedRowBytes, texelBytes, opaqueBox, COPY_ROW_ALIGNMENT } = await import(
 	"../../src/engine/foundation/rendering/texel-readback.ts"
 );
 
@@ -62,4 +62,12 @@ test("short or unreadable copies are refused", () => {
 	assert.throws( () => unpackRgba8( new Uint8Array( 10 ), 2, 2, "rgba8unorm" ) );
 	assert.throws( () => unpackRgba8( new Uint8Array( 512 ), 1, 1, "depth24plus" ) );
 	assert.throws( () => unpackRgba8( new Uint8Array( 512 ), 0, 1, "rgba8unorm" ) );
+});
+
+test("the opaque box spans every drawn pixel, exclusive at right and bottom", () => {
+	const width = 4, height = 3, rgba = new Uint8ClampedArray( width * height * 4 );
+	assert.equal( opaqueBox( rgba, width, height ), null );
+	rgba[(1 * width + 1) * 4 + 3] = 255;
+	rgba[(2 * width + 2) * 4 + 3] = 1;
+	assert.deepEqual( opaqueBox( rgba, width, height ), [ 1, 1, 3, 3 ] );
 });

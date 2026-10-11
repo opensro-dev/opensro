@@ -150,6 +150,8 @@ export interface ItemPresentation {
 	codename: string;
 	dropModelPath?: string;
 	wornModelPath?: string | null;
+	// The packed type word (TypeID1..4, buildMissionPresentationAsset.mjs).
+	typeFlags?: number;
 }
 
 /*

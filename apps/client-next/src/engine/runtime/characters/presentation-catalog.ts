@@ -564,7 +564,12 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 				}
 				if ( value.itemsByRefObjId ) {
 					for ( const entry of Object.values( value.itemsByRefObjId ) ) {
-						if ( !entry || typeof entry.codename !== "string" ) {
+						if (
+							!entry || typeof entry.codename !== "string" ||
+							entry.typeFlags !== undefined &&
+								(!Number.isInteger( entry.typeFlags ) || entry.typeFlags < 0 ||
+									entry.typeFlags > 0xffff)
+						) {
 							throw new Error( "Invalid item presentation" );
 						}
 					}

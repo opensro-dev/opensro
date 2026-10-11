@@ -93,3 +93,79 @@ test( "an unknown monster fails with its reason", { timeout: 90000 }, async () =
 		await browser.close();
 	}
 } );
+
+/*
+================
+lookQuery
+
+A base64url P6 look: the adventurer body in the heavy set 01 with the
+first spear (sockets 0..6), or one naming an item that does not exist.
+================
+*/
+function lookQuery( unknownItem = false ) {
+	const worn = [ [ 0, 287 ], [ 1, 395 ], [ 2, 359 ], [ 3, 467 ], [ 4, 431 ], [ 5, 503 ], [
+		6,
+		unknownItem ? 99999999 : 143
+	] ];
+	const look = {
+		bodyRefObjId: 1907,
+		worn: worn.map( ( [slot, refItemId] ) => ({ slot, refItemId, plus: 0 }) ),
+		avatar: []
+	};
+	return "look=" + Buffer.from( JSON.stringify( look ) ).toString( "base64url" );
+}
+
+test( "a look draws its dressed character, and an unknown item is a bad request", { timeout: 120000 }, async () => {
+	const { browser, page } = await launchProbeBrowser();
+	try {
+		const still = await viewerOutcome( page, lookQuery() + `&still=1&size=${STILL_SIZE}` );
+		assert.equal( still.reason, undefined, still.reason );
+		assert.equal( still.corner, 0 );
+		assert.ok( still.span > 0.6 && still.span <= 1, String( still.span ) );
+		assert.deepEqual( await viewerOutcome( page, lookQuery( true ) + "&still=1" ), {
+			reason: "bad-request",
+			stage: "model"
+		} );
+	} finally {
+		await browser.close();
+	}
+} );
+
+test(
+	"the interactive view stops asking for frames once drawn, and a drag draws again",
+	{ timeout: 120000 },
+	async () => {
+		const { browser, page } = await launchProbeBrowser( { viewport: { width: 300, height: 400 } } );
+		try {
+			await page.goto( new URL( "viewer.html?" + lookQuery(), CLIENT_NEXT_BASE_URL ).href );
+			await page.evaluate( () => /** @type {Promise<string>} */ (Reflect.get( window, "__viewerStill" )) );
+			// Count the animation frames the page asks for: none while idle.
+			const frames = () =>
+				page.evaluate( () =>
+					new Promise( resolve => {
+						let asked = 0;
+						const raf = window.requestAnimationFrame.bind( window );
+						window.requestAnimationFrame = callback => {
+							asked++;
+							return raf( callback );
+						};
+						setTimeout( () => {
+							window.requestAnimationFrame = raf;
+							resolve( asked );
+						}, 1000 );
+					} )
+				);
+			assert.equal( await frames(), 0 );
+			const before = await page.screenshot( { omitBackground: true } );
+			await page.mouse.move( 150, 200 );
+			await page.mouse.down();
+			await page.mouse.move( 250, 200, { steps: 5 } );
+			await page.mouse.up();
+			await page.waitForTimeout( 1000 );
+			assert.equal( await frames(), 0 );
+			assert.notDeepEqual( await page.screenshot( { omitBackground: true } ), before );
+		} finally {
+			await browser.close();
+		}
+	}
+);

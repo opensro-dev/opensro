@@ -51,6 +51,7 @@ import { createDockPreview } from "./dock-preview";
 import { createPresentationWeather, type WeatherLifecycleEvent } from "./presentation-weather";
 import { createSpawnFades } from "./spawn-fades";
 import { createAppearanceLookup } from "./appearance-lookup";
+import { createViewerQueries } from "./viewer-queries";
 import { uncensoredShard } from "@/engine/foundation/animation/default-wear-policy";
 import { initialCameraPitch } from "@/engine/foundation/rendering/camera-options";
 import { createAuxiliaryPresentation } from "./presentation-auxiliary";
@@ -768,6 +769,7 @@ export function createCharacterPresentation(
 		);
 		probe?.detailEnd( "presentation-finalize" );
 	}
+	const viewerQueries = createViewerQueries( { published, appearances, output }, resourceFor );
 	return {
 		/*
 		================
@@ -933,9 +935,10 @@ export function createCharacterPresentation(
 				uncensoredShard( published.dress.defaultWearLanguage ?? 4, nativeServerName );
 		},
 		ready: ( gid: number ) => output.displayed.has( gid ),
-		// Port-only (the 3D viewer): whether the catalogue has the entity's model; undefined until all of it is admitted.
-		knows: ( entity: EntityState ) =>
-			published.manifest < published.manifests.length ? undefined : resourceFor( entity ) !== undefined,
+		// Port-only: the 3D viewer's read-only queries (viewer-queries.ts).
+		knows: viewerQueries.knows,
+		itemType: viewerQueries.itemType,
+		dressed: viewerQueries.dressed,
 		/*
 		================
 		entryReady

@@ -6,28 +6,40 @@ with no game session and no login. It serves the community website
 (opensro-web `docs/COMMUNITY.md`, V1): profile pages, unique cards and the
 catalogue's monster portraits.
 
-Status: in progress on `feat/viewer-v1`. Monster stills work: `viewer.html?monster=<refObjId>&still=1`
-draws the model through the game's renderer into a transparent PNG. Still to do: `look` characters,
-then the interactive iframe (drag and zoom), then a static-build check.
+Status: on `feat/viewer-v1`. Monster stills, `look` characters, and the interactive view
+(drag to turn, wheel to zoom) work. Still to do: a static-build check.
 
 ## Contract
 
 `viewer.html?monster=<refObjId>` or `viewer.html?look=<base64url JSON>` (the
-P6 `look` object: `bodyRefObjId`, `worn[]`, `avatar[]`).
+P6 `look` object: `bodyRefObjId`, `worn[]` of `{slot, refItemId, plus}`,
+`avatar[]` of `{slot, refItemId}`; sockets as the server's `inventory/slots.go`).
 
-- `&still=1` draws one frame and stops. `&size=` sets the square still in
-  pixels: 64..1024, default 384.
-- The background is always transparent.
+- `&still=1` draws one picture and stops. `&size=` sets the square still in
+  pixels: 64..1024, default 384. A still fits the whole model (92% of its
+  longer axis).
+- Without `still`, the view is interactive. The picture takes the iframe's own box
+  at device pixels (longer side at most 1024) and fills 88% of its height,
+  centred. A long weapon may leave the sides. Drag turns the model, and the wheel
+  zooms (0.4..2.5x from that fit). The page draws only while something changes:
+  an idle view asks for no animation frames, so several embeds cost nothing at rest.
+- The background is always transparent. The embedding iframe must set
+  `color-scheme: normal` (or the same scheme as the viewer page, which declares
+  none). Otherwise Chrome paints an opaque backdrop behind a frame whose scheme
+  differs from its parent's.
 - Camera: a fixed three-quarter front view (35 degrees off the model's front,
-  a slight downward pitch), framed to the model's bind-pose bounds with a
-  margin. The model is in its idle pose at time 0 for a still.
+  a 12-degree downward pitch). It is framed to the clip pose's box, then refit
+  once to the first drawn picture's opaque pixels. The model stands in its idle
+  pose (a dressed look holds its weapon's armed idle).
 - When the model is drawn, the page posts `{ type: "viewer-ready" }` to its
   parent or opener. A still also posts `{ type: "viewer-still", png }` (a PNG
-  data URL) and resolves `window.__viewerStill` with the same data URL.
+  data URL). `window.__viewerStill` resolves with the PNG of the first picture,
+  in both modes.
 - On failure the page posts `{ type: "viewer-error", reason, stage }` and rejects
   `window.__viewerStill` with `Error(reason)`, whose `cause.stage` is the same stage.
   `reason` is one of a fixed set, exported from `viewer-request.ts`:
   `no-webgpu`, `bad-request`, `unknown-monster`, `asset-load`, `render`, `timeout`.
+  A look whose body or any item the game does not have fails `bad-request`.
   `stage` says how far the draw got: `request`, `catalogue` (the presentation
   catalogue loading), `model` (the model loading), `first-frame` (framed, not yet
   read), or `readback`.
@@ -78,6 +90,22 @@ so the viewer is a second start-up path inside the same tree:
 - Readiness: the character owner's `ready(gid)` says the model is displayed, and its
   `knows(entity)` says whether the admitted catalogue has the model at all. That is how
   an unknown id fails at once with `unknown-monster`, not after the timeout.
+- A look is a `player` entity with the look's body. It spawns bare, which starts
+  the catalogue loading. Once the catalogue is in, it is dressed with each item
+  typed by its packed type word, published per item as `typeFlags` in
+  `missionPresentation.json` by `buildMissionPresentationAsset.mjs` (packed as the
+  server's `characterTidWord`). The weapon's type picks the armed idle, as in the
+  world.
+- `characters/viewer-queries.ts` is the viewer's read-only window on the
+  presentation: `knows` (the catalogue has the model), `itemType`, and `dressed`
+  (every worn part is resident and worn, so the picture is never taken half-dressed).
+- The interactive view paints each readback into a visible 2D picture canvas. The
+  WebGPU canvas stays hidden, so both modes show the same transparent doll pixels,
+  and the game's opaque main pass is untouched. `runtime.ts` schedules frames only
+  while `frame()` answers `draw`. Input calls the runtime's `wake`.
+- A doll quad's camera is part of the UI quad's identity
+  (`foundation/ui/ui-equality.ts`); otherwise a zoom alone would reuse the
+  previous quad.
 - A hidden page gets no animation frames, so the viewer draws only when visible. An
   embedding iframe must be on screen, and a headless capture runs with background
   throttling off (`launchProbeBrowser`).
@@ -95,5 +123,9 @@ before the PR merges and written here.
   without leaving it, from the fixed angle.
 - `tests/runtime/texel-readback.test.mjs`: padded rows in the three portrait formats.
 - `tests/browser/viewer-still.test.mjs`, run alone against a dev server, never with the
-  whole browser suite: Tiger Girl (1954) as a 256-pixel transparent still that spans
-  most of the frame, and an unknown id failing `unknown-monster`.
+  whole browser suite:
+  - Tiger Girl (1954) as a 256-pixel transparent still that spans most of the frame;
+  - an unknown id failing `unknown-monster`;
+  - a dressed look as a still, and an unknown item failing `bad-request`;
+  - the interactive view asking for no frames when idle and redrawing on a drag.
+- `tests/runtime/ui-equality.test.mjs`: a doll quad whose camera moved is a new quad.

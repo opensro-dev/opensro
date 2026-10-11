@@ -13,7 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { viewerCamera, VIEWER_YAW, VIEWER_PITCH } = await import(
+const { viewerCamera, refitCamera, VIEWER_YAW, VIEWER_PITCH } = await import(
 	"../../src/engine/foundation/rendering/viewer-camera.ts"
 );
 
@@ -21,11 +21,12 @@ const { viewerCamera, VIEWER_YAW, VIEWER_PITCH } = await import(
 ================
 spread
 
-The largest |offset| / depth of the box's corners along the camera's right
-and up axes, or Infinity when a corner is outside the near and far planes.
+The largest |offset| / depth of the box's corners along the camera's up
+axis, and along its right axis divided by the aspect, or Infinity when a
+corner is outside the near and far planes.
 ================
 */
-function spread( camera, bounds ) {
+function spread( camera, bounds, aspect = 1 ) {
 	const f = camera.target.map( ( v, i ) => v - camera.eye[i] ), length = Math.hypot( ...f );
 	const forward = f.map( v => v / length );
 	const flat = Math.hypot( forward[0], forward[2] );
@@ -43,7 +44,7 @@ function spread( camera, bounds ) {
 		);
 		const depth = dot( p, forward );
 		if ( depth <= camera.near || depth >= camera.far ) return Infinity;
-		widest = Math.max( widest, Math.abs( dot( p, right ) ) / depth, Math.abs( dot( p, up ) ) / depth );
+		widest = Math.max( widest, Math.abs( dot( p, right ) ) / depth / aspect, Math.abs( dot( p, up ) ) / depth );
 	}
 	return widest;
 }
@@ -72,6 +73,17 @@ test("tall, wide and tiny models fit the view from the fixed angle", () => {
 	}
 });
 
+test("a portrait frame fits a tall model by its height, not its width", () => {
+	const bounds = /** @type {ViewerBounds} */ ({ min: [ -0.5, 0, -0.5 ], max: [ 0.5, 2, 0.5 ] }), aspect = 0.75;
+	const square = viewerCamera( bounds, [ 0, 1 ] ), portrait = viewerCamera( bounds, [ 0, 1 ], aspect );
+	const edge = Math.tan( portrait.fov / 2 ), widest = spread( portrait, bounds, aspect );
+	assert.ok( widest <= edge && widest > edge * 0.85, String( widest ) );
+	// A narrower frame never brings the camera closer.
+	const distance = c => Math.hypot( ...c.eye.map( ( v, i ) => v - c.target[i] ) );
+	assert.ok( distance( portrait ) >= distance( square ) - 1e-9 );
+	assert.throws( () => viewerCamera( bounds, [ 0, 1 ], 0 ) );
+});
+
 test("the front direction turns the view with it", () => {
 	const bounds = /** @type {ViewerBounds} */ ({ min: [ -1, 0, -1 ], max: [ 1, 2, 1 ] });
 	const a = viewerCamera( bounds, [ 0, 1 ] ), b = viewerCamera( bounds, [ 1, 0 ] );
@@ -83,4 +95,24 @@ test("the front direction turns the view with it", () => {
 test("empty or broken bounds are refused", () => {
 	assert.throws( () => viewerCamera( { min: [ 1, 0, 0 ], max: [ 0, 1, 1 ] }, [ 0, 1 ] ) );
 	assert.throws( () => viewerCamera( { min: [ 0, 0, 0 ], max: [ NaN, 1, 1 ] }, [ 0, 1 ] ) );
+});
+
+test("refitting scales the drawn box to the fill and keeps a centred one centred", () => {
+	const camera = viewerCamera( { min: [ -1, 0, -1 ], max: [ 1, 2, 1 ] }, [ 0, 1 ], 0.75 );
+	const distance = c => Math.hypot( ...c.eye.map( ( v, i ) => v - c.target[i] ) );
+	// A centred box already at the fill changes nothing.
+	const same = refitCamera( camera, [ 60, 24, 240, 376 ], 300, 400, { kind: "height", share: 0.88 } );
+	assert.ok( Math.abs( distance( same ) - distance( camera ) ) < 1e-9 );
+	same.target.forEach( ( v, i ) => assert.ok( Math.abs( v - camera.target[i] ) < 1e-9 ) );
+	// Half the fill's height: the camera comes halfway in, along the same line.
+	const near = refitCamera( camera, [ 105, 112, 195, 288 ], 300, 400, { kind: "height", share: 0.88 } );
+	assert.ok( Math.abs( distance( near ) - distance( camera ) * 0.5 ) < 1e-9 );
+	// Contain lets the wider axis decide: a box as wide as the frame backs off.
+	const wide = refitCamera( camera, [ 0, 112, 300, 288 ], 300, 400, { kind: "contain", share: 0.9 } );
+	assert.ok( Math.abs( distance( wide ) - distance( camera ) / 0.9 ) < 1e-9 );
+	// An off-centre box moves the target, never the view direction.
+	const moved = refitCamera( camera, [ 0, 24, 180, 376 ], 300, 400, { kind: "height", share: 0.88 } );
+	const dir = c => c.eye.map( ( v, i ) => (v - c.target[i]) / distance( c ) );
+	dir( moved ).forEach( ( v, i ) => assert.ok( Math.abs( v - dir( camera )[i] ) < 1e-9 ) );
+	assert.ok( Math.hypot( ...moved.target.map( ( v, i ) => v - camera.target[i] ) ) > 0.01 );
 });

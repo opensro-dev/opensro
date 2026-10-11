@@ -10,6 +10,7 @@ serializing whole scenes.
 ===========================================================================
 */
 
+import type { WorldCamera } from "@/engine/contracts/scene";
 import type { UiQuad, UiSemantics } from "@/engine/contracts/ui";
 import { sameTextRun } from "@/engine/foundation/rendering/text-run";
 
@@ -24,6 +25,21 @@ function tuple( a: readonly number[] | undefined, b: readonly number[] | undefin
 	for ( let i = 0; i < a.length; i++ ) if ( !Object.is( a[i], b[i] ) ) return false;
 	return true;
 }
+/*
+================
+sameDollCamera
+
+The 3D viewer's doll camera (port-only): equal when absent on both or the
+same framing. A zoom or re-framing changes only the camera, so it must
+not compare equal to the previous one.
+================
+*/
+function sameDollCamera( a: WorldCamera | undefined, b: WorldCamera | undefined ): boolean {
+	return a === b ||
+		!!a && !!b && tuple( a.eye, b.eye ) && tuple( a.target, b.target ) && Object.is( a.fov, b.fov ) &&
+			Object.is( a.near, b.near ) && Object.is( a.far, b.far );
+}
+
 /*
 ================
 sameUiQuads
@@ -62,7 +78,9 @@ export function sameUiQuad( x: UiQuad, y: UiQuad ): boolean {
 		(!x.mask || !y.mask || x.mask.texture !== y.mask.texture || !tuple( x.mask.rect, y.mask.rect ))
 	) return false;
 	if (
-		x.doll !== y.doll && (!x.doll || !y.doll || x.doll.gid !== y.doll.gid || !Object.is( x.doll.yaw, y.doll.yaw ))
+		x.doll !== y.doll &&
+		(!x.doll || !y.doll || x.doll.gid !== y.doll.gid || !Object.is( x.doll.yaw, y.doll.yaw ) ||
+			!sameDollCamera( x.doll.camera, y.doll.camera ))
 	) return false;
 	if (
 		x.worldAnchor !== y.worldAnchor &&
