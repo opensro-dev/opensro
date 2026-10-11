@@ -380,6 +380,7 @@ takeDeparture
 			return value;
 		},
 		options: core.options,
+		experimental: core.experimental,
 		/*
 ================
 command

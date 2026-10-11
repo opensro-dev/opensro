@@ -85,6 +85,30 @@ test("the server's shorter run-up is adopted without stepping back", () => {
 	assert.ok( Math.abs( x( m ) - 380 ) < 1, `ends at the server's goal (x ${x( m )})` );
 });
 
+test("a server-led run-up stands under the cast's settle: no jump", () => {
+	// The native default. The server walks from the start on reading the
+	// press and settles where it enters its combat spacing (x 300 here),
+	// sending the correction with the cast. Its walk reached the client one
+	// delivery after it began, and so does the correction.
+	const m = createMovement( () => {} ), navigation = product();
+	navigation.objects = [];
+	m.seed( start );
+	m.navigation( 257, navigation );
+	m.speeds( 20, RUN_SPEED, 0 );
+	const acknowledged = 2 * LATENCY_MS, settle = { ...start, x: 300 };
+	for ( let now = STEP_MS; now < acknowledged; now += STEP_MS ) m.step( now );
+	m.native( walkTo( 380 ), acknowledged, GID );
+	// The server reached x 300 after (300 - 100) / RUN_SPEED seconds of its
+	// walk; its correction lands that long after the acknowledgement.
+	const corrected = acknowledged + (settle.x - start.x) / RUN_SPEED * 1000;
+	let now = acknowledged + STEP_MS;
+	for ( ; now < corrected; now += STEP_MS ) m.step( now );
+	m.step( corrected );
+	const before = x( m );
+	m.correct( settle, corrected );
+	assert.ok( Math.abs( x( m ) - before ) < 1, `the settle lands under the caster (${before} -> ${x( m )})` );
+});
+
 test("a server walk the other way is not the run-up", () => {
 	const m = pressed();
 	m.native( walkTo( 20 ), 2 * LATENCY_MS, GID );
@@ -129,10 +153,11 @@ const { createGameplay } = await import(
 gameplayPress
 
 A caster at rest with skill 30 (range 60, an enemy action) pressed at a
-monster 300 units east at time 0, over flat navigation.
+monster 300 units east at time 0, over flat navigation. predicted turns on
+the Experimental window's Predicted run-up row.
 ================
 */
-function gameplayPress() {
+function gameplayPress( predicted = true ) {
 	const local = {
 		gid: GID,
 		refObjId: 1907,
@@ -170,6 +195,7 @@ function gameplayPress() {
 		} ]
 	} );
 	game.seed( local );
+	game.experimental( { predictedRunUp: predicted } );
 	const navigation = product();
 	navigation.objects = [];
 	game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0, undefined );
@@ -178,7 +204,17 @@ function gameplayPress() {
 	return { game, local, monster };
 }
 
-test("a press beyond reach starts the run-up at once", () => {
+test("natively a press beyond reach waits for the server's walk", () => {
+	// 6FCD50 sends the command and reads no range; the server's movement
+	// acknowledgement walks the caster, so the press itself never moves it.
+	const { game, local } = gameplayPress( false );
+	game.step( 200, local );
+	const pose = defined( game.take()?.pose );
+	game.dispose();
+	assert.ok( Math.abs( pose.x - local.x ) < 0.01, `stands at the press (x ${pose.x})` );
+});
+
+test("with the Predicted run-up row a press beyond reach starts the run-up at once", () => {
 	const { game, local } = gameplayPress();
 	game.step( 200, local );
 	const pose = defined( game.take()?.pose );

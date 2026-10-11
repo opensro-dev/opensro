@@ -487,14 +487,17 @@ range: unknown, so not within.
 ================
 skillRunUpGoal
 
-Port-only presentation: where an admitted press on a target beyond reach
-walks the caster before its cast. Native 58D8F0 walks the caster into
-reach on the server; predicting that run-up (movement.predictApproach)
-starts the walk at the press instead of one delivery later, which left
-the caster behind the server and snapped it forward when the cast began.
-The goal stands at the authored range on the line to the target; the
-server's own walk (combat spacing) is adopted when it arrives. Only from
-rest, on foot, alive, with no cast in flight, and within one region.
+Port-only, not native, and off by default (the Experimental window's
+Predicted run-up row). Where an admitted press on a target beyond reach
+walks the caster before its cast. The native press (6FCD50) reads no
+range: it sends the command and the server's movement acknowledgement
+walks the caster into reach (58D8F0), one round trip after the press,
+which never jumps. The prediction starts the walk at the press instead,
+but the server casts where it enters its combat spacing (both bodies plus
+the reach) while the predicted walk runs on, so the cast pulls the caster
+back. The goal stands at the authored range on the line to the target;
+the server's own walk is adopted when it arrives. Only from rest, on foot,
+alive, with no cast in flight, and within one region.
 ================
 	*/
 	function skillRunUpGoal(
@@ -505,7 +508,7 @@ rest, on foot, alive, with no cast in flight, and within one region.
 	): import("@/engine/contracts/gameplay").Pose | null {
 		const walking = movement.state(), pose = walking.pose;
 		if (
-			!metadata?.range || !pose || walking.moving || !local || local.mountedOn ||
+			!predictedRunUp || !metadata?.range || !pose || walking.moving || !local || local.mountedOn ||
 			local.appearanceState?.[0] === 2 || localCastHolds( now ) || target.regionId !== pose.regionId ||
 			target.kind === "monster" && target.appearanceState?.[0] === 2
 		) return null;
@@ -696,8 +699,9 @@ fails; retry persistence without restoring stale slot occupancy.
 	let worldClock: GameplayState["worldClock"];
 	let environment = entryEnvironment( {} ).state;
 	let cosError: string | null = null;
-	// The skill a predicted run-up was pressed for (skillRunUpGoal).
-	let runUpSkill = 0;
+	// The skill a predicted run-up was pressed for (skillRunUpGoal), and
+	// whether the Experimental row predicts run-ups at all.
+	let runUpSkill = 0, predictedRunUp = false;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1015,6 +1019,16 @@ options
 			options = gameOptions( value );
 			chat.options( options.whispers );
 			dirty = true;
+		},
+		/*
+================
+experimental
+
+The Experimental window's gameplay rows (experimentalGameplay).
+================
+		*/
+		experimental( value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay ) {
+			predictedRunUp = value.predictedRunUp === true;
 		},
 		/*
 ================

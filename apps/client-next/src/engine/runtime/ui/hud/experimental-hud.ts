@@ -121,13 +121,18 @@ export const EXPERIMENTAL_TABS: readonly {
 		]
 	},
 	{
-		title: "Chat",
-		section: "Chat display",
+		title: "Game",
+		section: "Chat and movement",
 		rows: [ {
 			key: "chatTimestamps",
 			id: "experimental-chat-timestamps",
 			label: "Chat timestamps",
 			description: "Show message time on hover."
+		}, {
+			key: "predictedRunUp",
+			id: "experimental-predicted-run-up",
+			label: "Predicted run-up",
+			description: "Walk toward a far target at the press; may jump at the cast."
 		} ]
 	},
 	{

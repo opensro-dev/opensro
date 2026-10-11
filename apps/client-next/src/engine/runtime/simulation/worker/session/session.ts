@@ -285,6 +285,10 @@ baseUrl
 				world.options( command.value );
 				return;
 			}
+			if ( command.kind === "experimental-gameplay" ) {
+				world.experimental( command.value );
+				return;
+			}
 			if ( command.kind === "cancel-character-operation" ) {
 				if ( scope === "title" && state.characterOperation?.status === "pending" ) {
 					cancelTitleRequest();

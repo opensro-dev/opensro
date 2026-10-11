@@ -13,7 +13,7 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { experimentalOptions, experimentalVideo, renderScales } = await import(
+const { experimentalGameplay, experimentalOptions, experimentalVideo, renderScales } = await import(
 	"../../src/engine/foundation/ui/experimental-options.ts"
 );
 const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
@@ -31,7 +31,8 @@ const OFF = Object.freeze( {
 	floatBloom: false,
 	hdrToneMap: false,
 	sunShadow: false,
-	perPixelLighting: false
+	perPixelLighting: false,
+	predictedRunUp: false
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -182,7 +183,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Chat", "Developer" ]
+		[ "Image", "World", "Lighting", "Game", "Developer" ]
 	);
 	// Lighting keeps the direct-light stages; render scale joins Image without
 	// changing the indices used to reopen the existing tabs.
@@ -286,4 +287,20 @@ test("render scale selections remain drafts until Confirm and reject unsupported
 		hud.reset();
 		hud.confirm();
 	}
+});
+
+/*
+================
+Gameplay rows
+================
+*/
+test("the predicted run-up defaults off and reaches only the worker's slice", () => {
+	// The native press (6FCD50) never walks before the server answers.
+	assert.deepEqual( experimentalGameplay( experimentalOptions() ), { predictedRunUp: false } );
+	for ( const value of [ 1, "true", null, {} ] ) {
+		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, false );
+	}
+	const on = experimentalOptions( { predictedRunUp: true } );
+	assert.deepEqual( experimentalGameplay( on ), { predictedRunUp: true } );
+	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
 });

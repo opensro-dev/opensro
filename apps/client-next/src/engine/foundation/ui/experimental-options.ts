@@ -31,6 +31,8 @@ export interface ExperimentalOptions {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	// Gameplay: a skill press's run-up walks before the server's answer.
+	readonly predictedRunUp: boolean;
 }
 
 /*
@@ -90,7 +92,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		floatBloom: enabled( "floatBloom" ),
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
-		perPixelLighting: enabled( "perPixelLighting" )
+		perPixelLighting: enabled( "perPixelLighting" ),
+		predictedRunUp: enabled( "predictedRunUp" )
 	};
 }
 
@@ -131,4 +134,25 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting
 	};
+}
+
+/*
+================
+ExperimentalGameplay
+
+The simulation worker's slice of the preferences. Every flag off is the
+native client.
+================
+*/
+export interface ExperimentalGameplay {
+	readonly predictedRunUp: boolean;
+}
+
+/*
+================
+experimentalGameplay
+================
+*/
+export function experimentalGameplay( options: ExperimentalOptions ): ExperimentalGameplay {
+	return { predictedRunUp: options.predictedRunUp };
 }

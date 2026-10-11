@@ -44,6 +44,10 @@ export type SessionCommand =
 	| WorldExitCommand
 	| { readonly kind: "chat-blocks"; readonly value: readonly string[]; }
 	| {
+		readonly kind: "experimental-gameplay";
+		readonly value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay;
+	}
+	| {
 		readonly kind: "game-options";
 		readonly value: import("@/engine/foundation/gameplay/game-options").GameOptions;
 	}

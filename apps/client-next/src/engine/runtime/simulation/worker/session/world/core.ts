@@ -352,6 +352,7 @@ the entry continues it like the one after a world transfer.
 		notice: gameplay.notice,
 		chatBlocks: gameplay.chatBlocks,
 		options: gameplay.options,
+		experimental: gameplay.experimental,
 		/*
 ================
 command
