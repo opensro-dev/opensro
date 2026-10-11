@@ -86,11 +86,7 @@ const SUN_HDR_GAIN = 4.0; // sun disc radiance multiplier while the HDR stage is
 // around the eye (sun-shadow-math.ts builds the matrix), 2048 taps with a
 // 3x3 hardware PCF, fading to unshadowed at the cascade border so the
 // boundary never shows a hard step.
-// The strength is the only darkness dial: how much of the sun term a full
-// shadow removes. The ambient already stands, and most of the sun term must
-// survive too, or materials without authored ambient (terrain lightmaps)
-// shade to black patches. 0.45 keeps a clearly readable shade.
-const SUN_SHADOW_STRENGTH = 0.45;
+const SUN_SHADOW_STRENGTH = 1.0; // fraction of the diffuse term a full shadow removes
 const SUN_SHADOW_TEXEL = 1.0 / 2048.0; // one cascade tap in shadow-map UV space
 const SUN_SHADOW_FADE = 0.45; // border fraction where the cascade fade begins
 
@@ -353,12 +349,8 @@ fn sunShadowFactor(world:vec3f)->f32{
  // projection: NDC x/y the caster pass rasterizes, [0,1] depth both sides
  // compare. Receivers sample at the centred UV.
  let clip=env.shadowMatrix*vec4f(world,1.0);
- // Both passes must address the cascade identically: the caster rasterizes
- // light-space NDC x/y, the sampler reads the same texel through this plain
- // half mapping. Flipping only the receiver mirrors the cascade, so a
- // symmetric caster keeps its own shadow while every off-axis caster
- // (buildings, characters) stops shading the ground.
- let uv=clip.xy*0.5+vec2f(0.5);
+ // WebGPU rasterization maps positive NDC Y to the top of the texture.
+ let uv=vec2f(clip.x*0.5+0.5,0.5-clip.y*0.5);
  if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0||clip.z>1.0||clip.z<0.0){return 1.0;}
  var sum=0.0;
  for(var y:i32=-1;y<=1;y++){
