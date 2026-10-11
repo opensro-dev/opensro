@@ -247,6 +247,13 @@ func run(out, release, textdata string) error {
 		clientReferences(refs, skillData)); err != nil {
 		return err
 	}
+	// Every magicoption.txt definition, as the enter-world magicOptionSnapshot
+	// ships it: the website's tooltip bundle resolves a worn item's options
+	// through the same rows the game client does.
+	if err := writeJSON(filepath.Join(out, "_build", "magic-options.json"),
+		enterworld.NewTextdataMagicOptions(dir).AllMagicOptions()); err != nil {
+		return err
+	}
 	files := map[string]any{
 		"items.json":    catalogue.ItemsFile{Header: header, Items: items},
 		"quests.json":   catalogue.QuestsFile{Header: header, Quests: quests},

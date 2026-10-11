@@ -13,6 +13,37 @@ go through MagicOption_FormatAvatarParam (553980).
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { TooltipRow } from "./tooltip-rows";
 import { avatarMagicOptionText } from "@/engine/foundation/gameplay/avatar-magic-option";
+import type { ItemMagicReference } from "@/engine/foundation/gameplay/item-tooltip-reference";
+
+/*
+================
+itemMagicDefinitions
+
+The magic-option definitions an item's tooltip reads: each encoded
+option's own row, plus the same option's row at the item's degree, whose
+bracket words grade it (55B608 picks the degree; class zero is degree one
+by signed division toward zero). The game's inventory and the website's
+tooltip bundle both present items through this.
+================
+*/
+export function itemMagicDefinitions(
+	magic: readonly string[],
+	references: ReadonlyMap<number, ItemMagicReference>,
+	itemClass: number | undefined
+): ItemMagicReference[] {
+	const degree = Math.trunc( ((itemClass ?? 1) - 1) / 3 ) + 1, definitions = new Map<number, ItemMagicReference>();
+	for ( const encoded of magic ) {
+		const ref = references.get( Number( BigInt( encoded ) & 0xffffn ) );
+		if ( !ref ) continue;
+		definitions.set( ref.paramId, ref );
+		for ( const candidate of references.values() ) {
+			if ( candidate.optionName === ref.optionName && candidate.degree === degree ) {
+				definitions.set( candidate.paramId, candidate );
+			}
+		}
+	}
+	return [ ...definitions.values() ];
+}
 
 /*
 ================

@@ -32,13 +32,10 @@ import { runPython } from "../shared/pythonRun.mjs";
 import { playerNotes } from "./playerNotes.mjs";
 import { renderPortraits } from "./renderPortraits.mjs";
 
-const { itemTooltip } = await import( "../../../apps/client-next/src/engine/foundation/ui/item-tooltip.ts" );
-const { itemMaxDurability } = await import(
-	"../../../apps/client-next/src/engine/foundation/ui/item-tooltip-stats.ts"
-);
-const { itemTooltipReference } = await import(
-	"../../../apps/client-next/src/engine/foundation/gameplay/item-tooltip-reference.ts"
-);
+// The client's TypeScript loads through the loader above, so these import
+// late: an item's tooltip as the game prints it, and the website's bundle.
+const { createMagicTable, itemTooltipRows } = await import( "./siteTooltip.mjs" );
+const { writeTooltipBundle } = await import( "./tooltipBundle.mjs" );
 const { skillTooltip } = await import( "../../../apps/client-next/src/engine/foundation/ui/skill-tooltip.ts" );
 const { createTooltipSkillDecoder } = await import(
 	"../../../apps/client-next/src/engine/foundation/ui/skill-tooltip-catalog.ts"
@@ -49,9 +46,6 @@ const serverRoot = path.join( repositoryRoot, "apps", "server" );
 // The WebP encoders' content cache (webp_pool.py): an image unchanged since
 // any earlier build is copied, not encoded again.
 const WEBP_CACHE = path.join( repositoryRoot, ".state", "catalogue-webp-cache" );
-// The bag's first slot: the tooltip reads an item instance, and a catalogue
-// row is the item as it drops (no plus, no options, lowest variance).
-const CATALOGUE_SLOT = 13;
 // A requirement value no item asks for: requirements read as met (white),
 // since the catalogue has no player to compare against.
 const MET = 0xffff;
@@ -108,48 +102,6 @@ function textLookup() {
 		}
 		return "";
 	};
-}
-
-/*
-================
-tooltipRows
-
-One catalogue item's tooltip, from the client's own builder over the item
-as it drops, with requirements shown as met.
-================
-*/
-function tooltipRows( reference, text ) {
-	const tooltip = itemTooltipReference( reference.nativeFields, reference.descriptionSymbol );
-	const base = {
-		slot: CATALOGUE_SLOT,
-		refObjId: reference.refObjId,
-		typeFlags: reference.typeFlags,
-		quantity: 1,
-		plus: 0,
-		durability: 0,
-		variance: "0",
-		magic: [],
-		name: reference.name,
-		tooltip
-	};
-	const item = { ...base, durability: itemMaxDurability( base ) };
-	const masteries = [];
-	for ( let i = 1; i <= 4; i++ ) {
-		const type = tooltip?.fields["reqLevelType" + i];
-		if ( type !== undefined && type > 10 ) masteries.push( { id: type, level: MET } );
-	}
-	const progression = { level: MET, stats: { strength: MET, intellect: MET }, masteries };
-	// The race and sex rows read as met too: the wearer is whoever may wear it.
-	const country = tooltip?.fields.country, sex = tooltip?.fields.reqGender;
-	const identity = {
-		...(country === 0 || country === 1 ? { country } : {}),
-		...(sex === 0 || sex === 1 ? { sex } : {})
-	};
-	return itemTooltip( item, progression, text, identity ).map( row =>
-		row.value.trim() === "" ?
-			{ text: "" } :
-			{ text: row.value, color: "#" + (row.color & 0xffffff).toString( 16 ).padStart( 6, "0" ) }
-	);
 }
 
 /*
@@ -379,9 +331,24 @@ async function main() {
 			readJSON( path.join( work, "_build", "item-references.json" ) ).map( r => [ r.refObjId, r ] )
 		);
 		const items = readJSON( path.join( work, "items.json" ) );
+		const magicRows = readJSON( path.join( work, "_build", "magic-options.json" ) );
+		// A catalogue row is the item as it drops: no plus, no options, lowest
+		// variance, full durability, through the website's own tooltip code.
+		const noMagic = createMagicTable( [] );
 		for ( const item of items.items ) {
 			const reference = references.get( item.id );
-			if ( reference ) item.tooltip = tooltipRows( reference, text );
+			if ( !reference?.nativeFields ) continue;
+			item.tooltip = itemTooltipRows(
+				{ refObjId: reference.refObjId },
+				{
+					name: reference.name,
+					typeFlags: reference.typeFlags,
+					fields: reference.nativeFields,
+					descriptionSymbol: reference.descriptionSymbol
+				},
+				noMagic,
+				text
+			);
 		}
 		const skills = readJSON( path.join( work, "skills.json" ) );
 		fillSkills( skills, text );
@@ -394,6 +361,10 @@ async function main() {
 		rmSync( out, { recursive: true, force: true } );
 		mkdirSync( path.join( out, "schema" ), { recursive: true } );
 		writeFileSync( path.join( out, "items.json" ), JSON.stringify( items ) + "\n" );
+		const tooltip = await writeTooltipBundle( { out, items: items.items, references, magicRows, text } );
+		console.log(
+			`tooltip bundle: ${tooltip.items} items, ${tooltip.symbols} text symbols, ${tooltip.vectors} golden vectors`
+		);
 		writeFileSync( path.join( out, "skills.json" ), JSON.stringify( skills ) + "\n" );
 		const regions = readJSON( path.join( work, "regions.json" ) );
 		fillRegions( regions );

@@ -73,6 +73,8 @@ is {"text": ""} with no colour.
 type TooltipRow struct {
 	Text  string `json:"text"`
 	Color string `json:"color,omitempty"`
+	// Strong is the client's bold line (55B540 style 3: magic options).
+	Strong bool `json:"strong,omitempty"`
 }
 
 var raceEnum = []string{"chinese", "european", "any"}

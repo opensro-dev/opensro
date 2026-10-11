@@ -51,6 +51,7 @@ import { createGacha } from "./gacha/gacha";
 import { createMagicOptionGrant } from "./magic-option/magic-option";
 import { itemStateDelta } from "@/engine/foundation/gameplay/item-state-delta";
 import { itemSlotFlashKinds } from "@/engine/foundation/ui/item-slot-effects";
+import { itemMagicDefinitions } from "@/engine/foundation/ui/item-tooltip-magic";
 import type { ItemProcessCommand } from "@/engine/contracts/item-process";
 import {
 	saleResult,
@@ -208,29 +209,13 @@ present
 	function present( item: InventoryItem ): InventoryItem {
 		const cached = presentations.get( item );
 		if ( cached ) return cached;
-		const tooltip = tooltipRefs.get( item.refObjId ),
-			// 55B608 selects degree one for class zero by signed division toward zero.
-			degree = Math.trunc( ((tooltip?.fields.itemClass ?? 1) - 1) / 3 ) + 1,
-			definitions = new Map<
-				number,
-				import("@/engine/foundation/gameplay/item-tooltip-reference").ItemMagicReference
-			>();
-		for ( const encoded of item.magic ) {
-			const ref = magicRefs.get( Number( BigInt( encoded ) & 0xffffn ) );
-			if ( !ref ) continue;
-			definitions.set( ref.paramId, ref );
-			for ( const candidate of magicRefs.values() ) {
-				if ( candidate.optionName === ref.optionName && candidate.degree === degree ) {
-					definitions.set( candidate.paramId, candidate );
-				}
-			}
-		}
+		const tooltip = tooltipRefs.get( item.refObjId );
 		const result = {
 			...item,
 			name: names.get( item.refObjId ) ?? item.name,
 			icon: icons.get( item.refObjId ) ?? item.icon,
 			tooltip,
-			magicReferences: [ ...definitions.values() ]
+			magicReferences: itemMagicDefinitions( item.magic, magicRefs, tooltip?.fields.itemClass )
 		};
 		presentations.set( item, result );
 		return result;
