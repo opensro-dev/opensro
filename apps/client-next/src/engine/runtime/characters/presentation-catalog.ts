@@ -24,6 +24,7 @@ import { validateEquipmentParticles } from "@/engine/foundation/animation/equipm
 import {
 	createItemCodenameIndex,
 	type DressCatalog,
+	type AuxiliaryEntry,
 	type SetEntry
 } from "@/engine/foundation/animation/equipment-appearance";
 import { modelAnimationParticles } from "@/engine/foundation/animation/animation-emission";
@@ -515,6 +516,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						) throw Error( "Invalid avatar visual override" );
 					}
 					const equipmentEntries: Record<string, SetEntry> = {};
+					const auxiliaryEntries: Record<string, AuxiliaryEntry> = {};
 					for ( const [id, row] of Object.entries( value.dress.equipment ?? {} ) ) {
 						if (
 							!row || !/^\d+$/.test( id ) ||
@@ -522,15 +524,23 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 							!row.bodies || typeof row.bodies !== "object"
 						) throw Error( "Invalid native equipment reference" );
 						for ( const [body, entry] of Object.entries( row.bodies ) ) {
-							if ( entry !== null ) equipmentEntries[id + body] = entry;
+							if ( entry === null ) continue;
+							equipmentEntries[id + body] = entry;
+							if ( entry.auxiliary ) auxiliaryEntries[id + body] = entry.auxiliary;
 						}
 					}
-					for ( const entry of Object.values( value.dress.avatarAuxiliary ?? {} ) ) {
+					for (
+						const entry of [
+							...Object.values( value.dress.avatarAuxiliary ?? {} ),
+							...Object.values( auxiliaryEntries )
+						]
+					) {
 						if (
 							!entry || typeof entry.bone !== "string" || !entry.bone ||
 							!Array.isArray( entry.clips ) || !entry.clips.includes( "stand" ) ||
 							entry.clips.some( clip => typeof clip !== "string" )
 						) throw Error( "Invalid auxiliary avatar" );
+						modelAmbientParticles( entry.particleModifiers );
 					}
 					for (
 						const entries of [
@@ -538,7 +548,8 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 							value.dress.defaultWear ?? {},
 							value.dress.fortressWear ?? {},
 							value.dress.avatarAuxiliary ?? {},
-							equipmentEntries
+							equipmentEntries,
+							auxiliaryEntries
 						]
 					) {
 						if ( !entries || typeof entries !== "object" || Array.isArray( entries ) ) {

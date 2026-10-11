@@ -22,7 +22,7 @@ const WEAPON_TYPE = 6;
 const DUAL_WEAPON_TYPES = new Set( [ 9, 13 ] );
 const HARP_TYPE = 14;
 // ModDataParticle set kind of the always-on ambient set (model-particles.ts).
-const AMBIENT_MODIFIER_KIND = 2;
+export const AMBIENT_MODIFIER_KIND = 2;
 
 /*
 ================
@@ -117,7 +117,8 @@ ABC680 links the private hierarchy; A981A0 searches its markers for skill
 attachments. Mesh weights and rarity do not determine whether a bone exists.
 Namespaced handles let item particles continue to select an exact branch.
 A branch also carries its resource's ambient particle set, whose bones are
-private nodes of that branch.
+private nodes of that branch; an animated resource is an auxiliary handle
+instead and carries the set itself.
 ================
 */
 export async function publishEquipmentParticleMetadata( dress ) {
@@ -130,7 +131,8 @@ export async function publishEquipmentParticleMetadata( dress ) {
 		const effects = particles[id] ?? [], visual = dress.equipment[id];
 		if ( !visual ) continue;
 		for ( const [body, entry] of Object.entries( visual.bodies ) ) {
-			if ( !entry ) continue;
+			// An auxiliary entry carries its own ambient set on its own bones.
+			if ( !entry || entry.auxiliary ) continue;
 			const paths = equipmentSources( record, body.endsWith( "_W" ) );
 			if ( record.tid[2] !== WEAPON_TYPE && effects.length === 0 && !paths.some( p => ambient.has( p ) ) ) {
 				continue;
@@ -144,12 +146,10 @@ export async function publishEquipmentParticleMetadata( dress ) {
 					const bsr = parseCharacterBsr( await loadDataAsset( source ), source );
 					if ( !bsr.skeletonPath || !bsr.skeletonAttachBone ) branch = null;
 					else {
-						// A weapon's markers are skill launch points and must not
-						// freeze. The EU shoulder garments animate their crystals
-						// (clothes_sa.ban), but the port draws that mesh rigid at
-						// the bind pose (itemAttachments resolveUnboundBone), so
-						// their particles stay on the drawn mesh at the bind pose.
-						if ( bsr.animationPaths.length && record.tid[2] === WEAPON_TYPE ) {
+						// An animated resource is its own auxiliary handle
+						// (buildEquipmentVisuals animatedEquipmentEntry); a
+						// branch here would freeze its bones at the bind pose.
+						if ( bsr.animationPaths.length ) {
 							throw Error( "Unresolved animated equipment branch " + source );
 						}
 						const skeleton = parseBsk( await loadDataAsset( bsr.skeletonPath ), bsr.skeletonPath );

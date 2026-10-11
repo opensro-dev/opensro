@@ -243,35 +243,58 @@ test("a shoulder garment's ambient set rides its private branch onto the wearer"
 });
 /*
 ================
-publishedBody
+decodePublished
 
-The decoded player body GLB of one prefix ("CH_M"), cached per test.
+One decoded published character GLB, cached per test.
 ================
 */
-function publishedBody( roster, prefix, cache ) {
-	const [race, sex] = prefix.split( "_" ),
-		body = roster.models.find( r => r.codename.startsWith( `CHAR_${race}_${sex === "M" ? "MAN" : "WOMAN"}_` ) );
-	let model = cache.get( body.glb );
+function decodePublished( glb, cache ) {
+	let model = cache.get( glb );
 	if ( !model ) {
-		const bytes = readPublishedAssetBytesSync( body.glb, publicRoot ),
+		const bytes = readPublishedAssetBytesSync( glb, publicRoot ),
 			end = 20 + bytes.readUInt32LE( 12 ),
 			bin = bytes.subarray( end + 8 );
 		model = createCharacterDecoder().decode( {
 			json: JSON.parse( bytes.subarray( 20, end ) ),
 			binary: bin.buffer.slice( bin.byteOffset, bin.byteOffset + bin.length )
 		} );
-		cache.set( body.glb, model );
+		cache.set( glb, model );
 	}
 	return model;
 }
-test("every equipment ambient set is published on its items' branches with reachable programs", () => {
+
+/*
+================
+publishedBody
+
+The decoded player body GLB of one prefix ("CH_M").
+================
+*/
+function publishedBody( roster, prefix, cache ) {
+	const [race, sex] = prefix.split( "_" ),
+		body = roster.models.find( r => r.codename.startsWith( `CHAR_${race}_${sex === "M" ? "MAN" : "WOMAN"}_` ) );
+	return decodePublished( body.glb, cache );
+}
+
+/*
+================
+every equipment ambient set
+
+A rigid garment (CH) carries its set on its private branch, and every
+socket resolves on the real published body. An animated garment (EU) is
+its own auxiliary handle: the set rides that handle, whose "stand" track
+turns the crystal bones the particles sit on.
+================
+*/
+test("every equipment ambient set is published with its garment and reachable programs", () => {
 	const roster = readPublishedAssetJsonSync( "/assets/char/roster.json", publicRoot ),
 		programs = readPublishedAssetJsonSync( "/assets/effects/programs.json", publicRoot ),
 		ambient = equipmentAmbientParticles(),
-		bodies = new Map();
-	let cases = 0;
+		models = new Map();
+	let branches = 0, animated = 0;
 	assert.equal( ambient.size, 36 );
 	for ( const [source, modifiers] of ambient ) {
+		const bones = modifiers.flatMap( m => m.entries ).map( e => e.boneName );
 		for ( const entry of modifiers.flatMap( m => m.entries ) ) {
 			const effectPath = entry.effectPath.replaceAll( "\\", "/" ).toLowerCase();
 			assert.ok( programs.effects[effectPath], effectPath );
@@ -280,23 +303,36 @@ test("every equipment ambient set is published on its items' branches with reach
 			if ( record.model !== source ) continue;
 			for ( const [prefix, entry] of Object.entries( record.bodies ) ) {
 				if ( !entry ) continue;
+				if ( entry.auxiliary ) {
+					assert.equal( entry.branches, undefined, source );
+					assert.deepEqual( entry.auxiliary.particleModifiers, modifiers, source );
+					const model = decodePublished( entry.auxiliary.glb, models ),
+						pose = createCharacterPose( model );
+					pose.evaluate( "stand", 0 );
+					const start = bones.map( bone => [ ...pose.socket( bone ) ] );
+					pose.evaluate( "stand", 0.5 );
+					assert.ok(
+						bones.every( ( bone, i ) =>
+							pose.socket( bone ).some( ( v, j ) => Math.abs( v - start[i][j] ) > 1e-3 )
+						),
+						source + ": the crystal bones do not move"
+					);
+					animated++;
+					continue;
+				}
 				validateEquipmentBranches( entry.branches );
 				assert.deepEqual( entry.branches.map( b => b.particleModifiers ), [ modifiers ], source );
-				// Every socket resolves on the real published body.
-				const nodes = appendEquipmentSockets(
-						publishedBody( roster, prefix, bodies ).nodes,
-						entry.branches,
-						record.slot
-					),
-					pose = createCharacterPose( { ...publishedBody( roster, prefix, bodies ), nodes } );
+				const body = publishedBody( roster, prefix, models ),
+					nodes = appendEquipmentSockets( body.nodes, entry.branches, record.slot ),
+					pose = createCharacterPose( { ...body, nodes } );
 				pose.evaluate( "stand", 0 );
-				for ( const entry of modifiers.flatMap( m => m.entries ) ) {
-					const matrix = pose.socket( equipmentSocket( record.slot, "EQ0", entry.boneName ) );
+				for ( const bone of bones ) {
+					const matrix = pose.socket( equipmentSocket( record.slot, "EQ0", bone ) );
 					assert.ok( matrix && [ ...matrix ].every( Number.isFinite ), source + ":" + prefix );
 				}
-				cases++;
+				branches++;
 			}
 		}
 	}
-	assert.ok( cases >= 36 );
+	assert.ok( branches >= 18 && animated >= 18, branches + " rigid, " + animated + " animated" );
 });

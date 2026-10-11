@@ -18,7 +18,9 @@ import path from "node:path";
 import { retailTextdataRoot, clientV150ResinfoRoot } from "../world/paths.mjs";
 import { loadAvatarVisualOverrides } from "./avatarVisualOverrides.mjs";
 import { resolveRoster } from "./resolveCharRoster.mjs";
-import { buildItemSetGlb, createDonorPool, buildAuxiliaryAvatarSets } from "./itemAttachments.mjs";
+import { buildItemSetGlb, createDonorPool, buildAuxiliaryAvatarSets, buildAuxiliarySet } from "./itemAttachments.mjs";
+import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
+import { parseCharacterBsr } from "./formats.mjs";
 import { loadEquipmentRecords } from "./equipmentVisualRecords.mjs";
 import { equipmentGlowCatalog, equipmentGlowModelIds, equipmentGlowGlb } from "./equipmentGlowMetadata.mjs";
 import { publishEquipmentParticleMetadata } from "./equipmentParticles.mjs";
@@ -38,6 +40,39 @@ asBuffer
 */
 function asBuffer( bytes ) {
 	return Buffer.isBuffer( bytes ) ? bytes : Buffer.from( bytes.buffer, bytes.byteOffset, bytes.byteLength );
+}
+
+/*
+================
+animatedEquipmentEntry
+
+A worn resource with its own skeleton AND animation is drawn as its own
+animated handle, like an avatar's auxiliary resource. In v1.150 that is the
+18 EU shoulder garments, whose crystals spin through clothes_sa.ban, and
+the two Santa hat avatars. Baking it
+onto the wearer would freeze it. Returns null for every other resource.
+Weapons never take this path: their private markers are skill launch
+points (equipmentParticles.mjs refuses an animated weapon branch).
+
+INFERENCE: the item is linked as a CRTBranch under its .bsr socket
+(ABC680) and its installation plays the resource's own BAN, as an avatar's
+second handle does (8E9DD0).
+================
+*/
+async function animatedEquipmentEntry( row, paths, cache ) {
+	if ( paths.length !== 1 || row.slot === GLOW_SLOT_WEAPON || row.slot === GLOW_SLOT_SHIELD ) return null;
+	const source = paths[0], key = "auxiliary:" + source;
+	if ( cache.has( key ) ) return cache.get( key );
+	const bsr = parseCharacterBsr( await loadDataAsset( source ), source );
+	let entry = null;
+	if ( bsr.skeletonPath && bsr.skeletonAttachBone && bsr.animationPaths.length ) {
+		const name = createHash( "sha256" ).update( source ).digest( "hex" ).slice( 0, 20 ),
+			auxiliary = await buildAuxiliarySet( source, `/assets/char/equipment/equipment_aux_${name}.glb`, "EQ0" );
+		// The body draws nothing of its own; the auxiliary handle is the item.
+		entry = { glb: auxiliary.glb, parts: [], covers: {}, sources: auxiliary.sources, auxiliary };
+	}
+	cache.set( key, entry );
+	return entry;
 }
 
 /*
@@ -103,6 +138,11 @@ export async function buildEquipmentVisuals( dress ) {
 							model.replace( /\.bsr$/, "_f.bsr" ) :
 							model
 					];
+				const animated = await animatedEquipmentEntry( row, paths, cache );
+				if ( animated ) {
+					record.bodies[body] = animated;
+					continue;
+				}
 				const key = cacheKey( body, paths );
 				let entry = cache.get( key );
 				if ( !entry ) {

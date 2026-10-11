@@ -41,9 +41,13 @@ export type SetEntry = {
 	glb: string;
 	parts: string[];
 	covers?: Record<string, number[]>;
+	// An animated worn resource drawn as its own handle (the EU shoulder
+	// garments): the body entry reserves it and draws nothing itself.
+	auxiliary?: AuxiliaryEntry;
 };
 
-export type AuxiliaryEntry = SetEntry & { bone: string; clips: readonly string[]; };
+// particleModifiers: the resource's ambient sets, on its own animated bones.
+export type AuxiliaryEntry = SetEntry & { bone: string; clips: readonly string[]; particleModifiers?: unknown; };
 
 export interface EquipmentRecord {
 	code?: string;
@@ -254,6 +258,13 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 		// missing conversion remains an error, never a fabricated helmet.
 		if ( entry === undefined ) throw Error( `Equipment visual body mismatch ${item.refObjId}: ${prefix}` );
 		if ( entry === null ) continue;
+		if ( entry.auxiliary ) {
+			// Reserve resource/coverage with the body transaction; the animated
+			// geometry is a private-skeleton socket child, as for avatars.
+			auxiliary.push( { id: item.refObjId, entry: entry.auxiliary } );
+			parts.push( { model: entry.auxiliary.glb, parts: [], covers: coverIndices( entry.auxiliary, resource ) } );
+			continue;
+		}
 		const armament = item.slot === WEAPON_SLOT || item.slot === SHIELD_SLOT;
 		parts.push( {
 			model: entry.glb,
@@ -296,6 +307,12 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 		if ( entry === null ) continue;
 		// Native item masks already decide admission. Mesh coverage hides
 		// base-body geometry; it must not remove another accepted item.
+		if ( entry.auxiliary ) {
+			// An animated avatar resource (the Santa hats) is its own handle.
+			auxiliary.push( { id: item.refObjId, entry: entry.auxiliary } );
+			parts.push( { model: entry.auxiliary.glb, parts: [], covers: coverIndices( entry.auxiliary, resource ) } );
+			continue;
+		}
 		parts.push( { model: entry.glb, parts: entry.parts, covers: coverIndices( entry, resource ) } );
 		if ( dress.avatarVisualOverrides?.[item.refObjId]?.additionalBsr ) {
 			const extra = dress.avatarAuxiliary?.[item.refObjId];

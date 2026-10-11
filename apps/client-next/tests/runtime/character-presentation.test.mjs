@@ -2805,6 +2805,90 @@ test("mounting hides native weapon and shield visuals and dismount restores both
 	f.dispose();
 });
 
+/*
+================
+EU shoulder garments animate their crystals
+
+The 18 EU shoulder garments link their own skeleton under Bip01 Neck and
+play clothes_sa.ban (#730). The worn item is a private-skeleton child that
+keeps running its track, and its ambient glow rides that child's bones.
+================
+*/
+test("a worn EU shoulder garment is its own animated handle carrying its crystal glow", () => {
+	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
+	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )
+		.itemsByRefObjId;
+	for ( const prefix of [ "EU_M", "EU_W" ] ) {
+		const [race, sex] = prefix.split( "_" ),
+			appearance = {
+				items,
+				roster: {
+					models: [ {
+						refObjId: 1,
+						codename: `CHAR_${race}_${sex === "M" ? "MAN" : "WOMAN"}_TEST`,
+						glb: "/assets/1.glb",
+						clips: [ "stand", "walk", "run" ]
+					} ],
+					dress: roster.dress
+				}
+			};
+		const f = fixture(
+			{},
+			2,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			{ appearance }
+		);
+		const id = Number(
+			Object.entries( roster.dress.equipment ).find( ( [, r] ) =>
+				r.slot === 2 && r.bodies[prefix]?.auxiliary && r.code.includes( "_CLOTHES_01_SA_" )
+			)?.[0]
+		);
+		assert.ok( id, prefix );
+		const shoulder = roster.dress.equipment[id].bodies[prefix].auxiliary;
+		let now = 0;
+		const step = () => {
+			for ( let i = 0; i < 30; i++ ) {
+				f.presentation.step(
+					[ entity( 1, { kind: "player", equipment: [ { slot: 2, refObjId: id } ] } ) ],
+					null,
+					now += .01
+				);
+			}
+		};
+		step();
+		assert.equal( f.presentation.error(), null );
+		const child = f.actors.find( a => a.model === shoulder.glb );
+		assert.ok( child, "the garment is drawn as its own handle" );
+		assert.deepEqual( [ child.attachment.gid, child.attachment.bone, child.attachment.basis, child.clip ], [
+			1,
+			"Bip01 Neck",
+			"compound",
+			"stand"
+		] );
+		const glow = f.actors.filter( a => a.attachment?.gid === child.gid && a.model.includes( "programs.json#" ) );
+		assert.deepEqual(
+			glow.map( a => a.attachment.bone ).sort(),
+			shoulder.particleModifiers.flatMap( m => m.entries ).map( e => e.boneName ).sort(),
+			"the glow rides the crystal bones of the animated handle"
+		);
+		step();
+		const later = f.actors.find( a => a.gid === child.gid );
+		assert.ok( later.time > child.time, "the crystals keep turning" );
+		f.dispose();
+	}
+});
+
 test("auxiliary avatar wings keep independent tracks and retire across cold replacement, masking, unequip, despawn and reset", () => {
 	const roster = JSON.parse( readFileSync( path.join( publicRoot, "assets/char/roster.json" ), "utf8" ) );
 	const items = JSON.parse( readFileSync( path.join( publicRoot, "assets/data/missionPresentation.json" ), "utf8" ) )

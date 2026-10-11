@@ -32,7 +32,8 @@ test("every enabled reference has an exact native equipment visual classificatio
 					continue;
 				}
 				counts[race]++;
-				assert.ok( entry?.parts.length, `${row.code} ${body} has no parts` );
+				// An animated resource draws through its own handle (#730).
+				assert.ok( (entry?.auxiliary ?? entry)?.parts.length, `${row.code} ${body} has no parts` );
 				assert.ok( fs.existsSync( path.join( publicRoot, entry.glb ) ), `${row.code} missing ${entry.glb}` );
 			}
 		}

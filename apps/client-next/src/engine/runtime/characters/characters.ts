@@ -724,7 +724,7 @@ export function createCharacterPresentation(
 			{ renderer, resources, effects }
 		);
 		auxiliary.step(
-			{ entities, seconds, next, gameplay, localMover, castByActor },
+			{ entities, seconds, next, gameplay, localMover, castByActor, particleHolders },
 			{
 				resourceFor,
 				dress: published.dress,

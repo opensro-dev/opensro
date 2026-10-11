@@ -30,7 +30,7 @@ import type { AnimationActivation } from "@/engine/foundation/animation/animatio
 import type { createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
 import type { skillMotionResolveAnimation } from "@/engine/foundation/animation/skill-motion-resolve";
 import type { LocomotionBlend } from "@/engine/foundation/animation/locomotion-blend";
-import type { DressCatalog, SetEntry } from "@/engine/foundation/animation/equipment-appearance";
+import type { AuxiliaryEntry, DressCatalog, SetEntry } from "@/engine/foundation/animation/equipment-appearance";
 import type { AvatarOverrideSelection } from "@/engine/foundation/animation/avatar-override";
 import type { GroundVisualClock } from "@/engine/foundation/animation/ground-visual";
 import type { AppearanceChoice } from "@/engine/foundation/animation/reference-appearance";
@@ -269,7 +269,7 @@ export interface CharacterPresentationState {
 Auxiliary
 ================
 */
-export type Auxiliary = { id: number; entry: SetEntry & { bone: string; clips: readonly string[]; }; };
+export type Auxiliary = { id: number; entry: AuxiliaryEntry; };
 
 /*
 ================
