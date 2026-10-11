@@ -313,10 +313,7 @@ func (j *Journal) write(e Event) error {
 		var account string
 		if err := tx.QueryRow(`SELECT account FROM events WHERE id=?`, e.ID).Scan(&account); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				// #716: the insert was skipped although no event holds this
-				// id, so a constraint other than the id refused it. Name the
-				// producer, not the id, so the message repeats only per kind.
-				return fmt.Errorf("%s event (preset id %t) skipped by a constraint other than its id", e.Kind, e.receipt != nil)
+				return skippedInsertError(tx, e)
 			}
 			return err
 		}
@@ -336,6 +333,27 @@ func (j *Journal) write(e Event) error {
 		}
 	}
 	return tx.Commit()
+}
+
+/*
+================
+skippedInsertError
+
+#716: INSERT OR IGNORE affected no row, yet no event has this id. The
+production schema has no other unique index and no trigger, so either the
+insert's row count was wrong or the duplicate is stored in a form the
+plain lookup misses. Probe both and name the producer: the kind, and
+whether the id came through RecordConfirmed. The id itself stays out so
+the message repeats only per cause (failure prints on a change).
+================
+*/
+func skippedInsertError(tx *sql.Tx, e Event) error {
+	var loose int
+	var stored string
+	if err := tx.QueryRow(`SELECT count(*), coalesce(max(typeof(id)), '') FROM events WHERE CAST(id AS TEXT) = CAST(? AS TEXT)`, e.ID).Scan(&loose, &stored); err != nil {
+		return fmt.Errorf("%s event skipped with no row for its id; probe failed: %w", e.Kind, err)
+	}
+	return fmt.Errorf("%s event (confirmed %t) skipped with no row for its id; loose matches %d, stored type %q", e.Kind, e.receipt != nil, loose, stored)
 }
 
 /*
