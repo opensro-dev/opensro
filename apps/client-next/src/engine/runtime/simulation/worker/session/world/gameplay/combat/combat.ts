@@ -292,6 +292,17 @@ export function createCombat(
 		},
 		/*
 		================
+		assistsCompanions
+
+		Whether a cast of skill sends the caster's attack pets in: the motion
+		record's +0xBD (776830), projected as the reference row's flag.
+		================
+		*/
+		assistsCompanions( skill: number ) {
+			return effectRefs.get( skill )?.assistsCompanions === true;
+		},
+		/*
+		================
 		cooldownReferences
 		Changing the local actor rebuilds its board from retained effects.
 		================

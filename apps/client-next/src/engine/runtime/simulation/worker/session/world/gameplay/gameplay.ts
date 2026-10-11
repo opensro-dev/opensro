@@ -191,6 +191,7 @@ import {
 	cosGroundRequest,
 	cosGroundResult
 } from "@/engine/foundation/gameplay/cos-container";
+import { ownCastTarget, petAssistOrders, retainedPetAssists } from "@/engine/foundation/gameplay/pet-assist";
 import { cosBehaviorResult, applyCosBehavior, cosBehaviorRequest } from "@/engine/foundation/gameplay/cos-behavior";
 import { createFeedback } from "./feedback/feedback";
 import { saleResult, soldInventory, commerceJson, commerceInteger } from "@/engine/foundation/gameplay/commerce";
@@ -625,6 +626,8 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	const cosItemRefs = new Map<number, number>(), cosItemCaps = new Map<number, number>();
 	const cosRefs = new Map<number, number>(),
 		cosRecords = new Map<number, import("@/engine/contracts/gameplay").CosRecord>();
+	// Each owned attack pet's assist target (+0xAB2C, pet-assist.ts).
+	let petAssists: ReadonlyMap<number, number> = new Map();
 	let uniqueRefs = uniqueReferences( {} );
 	let gmReplies: readonly (GmReply & { sequence: number; })[] = [];
 	let gmSequence = 0;
@@ -962,6 +965,7 @@ selected entities, cooldowns or world-entry state.
 		jobRanks = { lists: [], opened: null };
 		jobOutcome = null;
 		cosRecords.clear();
+		petAssists = new Map();
 		cosSelection.reset();
 		cosRefs.clear();
 		cosItemRefs.clear();
@@ -1149,6 +1153,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			cosResult = undefined;
 			cosError = null;
 			cosRecords.clear();
+			petAssists = new Map();
 			cosSelection.reset();
 			cosRefs.clear();
 			cosItemRefs.clear();
@@ -1910,6 +1915,12 @@ state here before a command can claim a native wire conversation.
 				const payload = new Uint8Array( 5 );
 				new DataView( payload.buffer ).setUint32( 0, record.gid, true );
 				payload[4] = 9;
+				// 6A2350 tag 9 clears the assist target (+0xAB2C).
+				if ( petAssists.has( record.gid ) ) {
+					const next = new Map( petAssists );
+					next.delete( record.gid );
+					petAssists = next;
+				}
 				return sendFrame( { opcode: 0x769e, payload } );
 			}
 			if ( command.kind === "cos-pet-attack" ) {
@@ -1929,6 +1940,7 @@ state here before a command can claim a native wire conversation.
 				v.setUint32( 0, record.gid, true );
 				payload[4] = 2;
 				v.setUint32( 5, entity.gid, true );
+				petAssists = new Map( petAssists ).set( record.gid, entity.gid );
 				return sendFrame( { opcode: 0x769e, payload } );
 			}
 			if ( command.kind === "cos-clean" ) {
@@ -3491,6 +3503,20 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				if ( fight && frame.opcode === 0xb245 ) {
+					// 776830: the local player's own cast of a skill that assists,
+					// at a target in the world, sends its attack pets in.
+					const cast = ownCastTarget( frame.payload, localGid );
+					if ( cast && cast.target && combat.assistsCompanions( cast.skill ) && readEntity( cast.target ) ) {
+						const pets = [ ...cosRecords.values() ].map( record => ({
+							...record,
+							present: readEntity( record.gid ) !== undefined
+						}) );
+						const assist = petAssistOrders( cast.target, pets, petAssists );
+						petAssists = assist.assisting;
+						for ( const order of assist.orders ) sendFrame( order );
+					}
+				}
 				if (
 					fight && frame.opcode === 0x33a6 &&
 					new DataView( frame.payload.buffer, frame.payload.byteOffset, frame.payload.byteLength ).getUint32(
@@ -3694,6 +3720,14 @@ before take assembles the presentation snapshot.
 ================
 		*/
 		step( now: number, local?: EntityState ) {
+			if ( petAssists.size ) {
+				const targets = new Map<number, EntityState>();
+				for ( const target of petAssists.values() ) {
+					const row = readEntity( target );
+					if ( row ) targets.set( target, row );
+				}
+				petAssists = retainedPetAssists( petAssists, new Set( cosRecords.keys() ), targets );
+			}
 			const warNext = advanceGuildWarClock( social, now );
 			if ( warNext !== social ) {
 				if ( warNext.notice ) {
@@ -4073,6 +4107,7 @@ World transfer retires spatial work while retaining character/session data.
 			cosResult = undefined;
 			cosError = null;
 			cosRecords.clear();
+			petAssists = new Map();
 			cosSelection.reset();
 			dirty = true;
 		},

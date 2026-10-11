@@ -254,22 +254,25 @@ SpawnSkillRow
 ================
 */
 type SpawnSkillRow struct {
-	LinkedSkillID        uint32      `json:"linkedSkillId,omitempty"`
-	CancellationDeferred bool        `json:"cancellationDeferred,omitempty"`
-	NameAttackContent    bool        `json:"nameHit,omitempty"`
-	UI                   *SkillUiRow `json:"ui,omitempty"`
-	Level                uint8       `json:"level"`
-	Group                uint32      `json:"group"`
-	ID                   uint32      `json:"id"`
-	Token                bool        `json:"token"`
-	Status               bool        `json:"status"`
-	EffectDurationMs     uint32      `json:"effectDurationMs"`
-	ZeroEffectDuration   bool        `json:"zeroEffectDuration,omitempty"`
-	HideDetectionBuff    bool        `json:"hideDetectionBuff,omitempty"`
-	IndefiniteBuffTimer  bool        `json:"indefiniteBuffTimer,omitempty"`
-	EffectRider          bool        `json:"effectRider"`
-	HuntingPoint         bool        `json:"huntingPoint,omitempty"`
-	StealthDuration      bool        `json:"stealthDuration,omitempty"`
+	LinkedSkillID        uint32 `json:"linkedSkillId,omitempty"`
+	CancellationDeferred bool   `json:"cancellationDeferred,omitempty"`
+	NameAttackContent    bool   `json:"nameHit,omitempty"`
+	// AssistsCompanions: the client orders its attack pets onto this cast's
+	// target (776830 reads motion record +0xBD; skillassist.go).
+	AssistsCompanions   bool        `json:"assistsCompanions,omitempty"`
+	UI                  *SkillUiRow `json:"ui,omitempty"`
+	Level               uint8       `json:"level"`
+	Group               uint32      `json:"group"`
+	ID                  uint32      `json:"id"`
+	Token               bool        `json:"token"`
+	Status              bool        `json:"status"`
+	EffectDurationMs    uint32      `json:"effectDurationMs"`
+	ZeroEffectDuration  bool        `json:"zeroEffectDuration,omitempty"`
+	HideDetectionBuff   bool        `json:"hideDetectionBuff,omitempty"`
+	IndefiniteBuffTimer bool        `json:"indefiniteBuffTimer,omitempty"`
+	EffectRider         bool        `json:"effectRider"`
+	HuntingPoint        bool        `json:"huntingPoint,omitempty"`
+	StealthDuration     bool        `json:"stealthDuration,omitempty"`
 }
 
 /*
@@ -283,6 +286,7 @@ func (t *TextdataSkills) SpawnSkillRows() []SpawnSkillRow {
 	for _, row := range t.rows.values() {
 		projection := SpawnSkillRow{LinkedSkillID: row.LinkedSkillID, CancellationDeferred: row.CancellationDeferred, NameAttackContent: row.NameAttackContent, Level: uint8(row.Level), Group: row.Group, ID: row.ID, Token: row.SpawnToken, Status: row.SpawnStatus, EffectRider: row.EffectRider, EffectDurationMs: row.EffectDurationMs, ZeroEffectDuration: row.EffectDurationPresent && row.EffectDurationMs == 0, HideDetectionBuff: row.HideDetectionBuff, IndefiniteBuffTimer: row.IndefiniteBuffTimer}
 		projection.HuntingPoint, projection.StealthDuration = row.HuntingPoint, row.StealthDuration
+		projection.AssistsCompanions = row.AssistsCompanions
 		if skillHasUI(row) {
 			projection.UI = &SkillUiRow{BuffSecondary: row.BuffSecondary, Name: row.Codename, SPCost: row.SPCost, Trainable: !row.ChainSub && row.SPCost > 0, TargetRequired: row.TargetRequired, TargetSelf: row.TargetRequired && row.Targets.Self, GroundTarget: row.PositionEffect.Pinned, CooldownMs: row.CoolTimeMs, CooldownGroup: row.CoolTimeGroup, Masteries: row.Masteries, Prerequisites: row.Prerequisites}
 			projection.UI.BuffCancel = "" // Omitted means the native ordinary/direct branch.

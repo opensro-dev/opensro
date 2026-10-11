@@ -91,6 +91,9 @@ export interface AttachedEffectReference {
 	readonly indefiniteBuffTimer?: boolean;
 	readonly huntingPoint?: boolean;
 	readonly stealthDuration?: boolean;
+	// A cast of this skill sends the caster's attack pets onto its target
+	// (776830 reads the motion record's +0xBD; pet-assist.ts).
+	readonly assistsCompanions?: boolean;
 }
 /*
 ================
@@ -131,7 +134,8 @@ export function attachedEffectReferences(
 				"zeroEffectDuration",
 				"hideDetectionBuff",
 				"indefiniteBuffTimer",
-				"cancellationDeferred"
+				"cancellationDeferred",
+				"assistsCompanions"
 			] as const
 		) {
 			if ( row[field] !== undefined && typeof row[field] !== "boolean" ) {
@@ -153,6 +157,7 @@ export function attachedEffectReferences(
 			effectRider: row.effectRider,
 			huntingPoint: row.huntingPoint ?? false,
 			stealthDuration: row.stealthDuration ?? false,
+			...(row.assistsCompanions ? { assistsCompanions: true } : {}),
 			...(row.effectDurationMs !== undefined ? { effectDurationMs: row.effectDurationMs } : {})
 		} );
 	}
