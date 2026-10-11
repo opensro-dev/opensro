@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
@@ -149,7 +150,16 @@ func newGameplayPlane(
 	if err := items.ConfigureStallNetwork(devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
-	if err := items.ConfigureCommerce(devPaths.TextdataDir); err != nil {
+	// SRO_SHOP_EXTRA_GOODS (port-only, not native): operator NPC shop goods;
+	// "off" is the v1.150 stock (commerce/extragoods.go).
+	extraGoods, err := commerce.ExtraGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if len(extraGoods) > 0 {
+		log.Infof("commerce: %d extra NPC shop goods from %s", len(extraGoods), commerce.EnvShopExtraGoods)
+	}
+	if err := items.ConfigureCommerce(devPaths.TextdataDir, extraGoods); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
