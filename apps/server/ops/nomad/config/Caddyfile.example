@@ -32,7 +32,9 @@ game.example.com {
 
 	# The browser client. `sro-nomad publish-client` keeps the current release
 	# at client and the one before it at previous (ops/nomad/LINUX_SINGLE_HOST.md).
-	@client path /play /play/ /index.html /release.json /assets/* /favicon.ico
+	# viewer.html is the embeddable 3D viewer (docs/VIEWER.md), served beside
+	# index.html; the website embeds /viewer.html.
+	@client path /play /play/ /index.html /viewer.html /release.json /assets/* /favicon.ico
 	handle @client {
 		# Cache policy. Content-hashed names never change meaning: Vite bundles
 		# (name-<8+ char hash>) and packs (name-NNN-<12 hex>) are immutable
