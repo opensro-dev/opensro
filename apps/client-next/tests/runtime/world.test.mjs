@@ -1090,6 +1090,46 @@ test("versioned shop controls cross the admitted world boundary only after Enter
 	world.dispose();
 });
 
+test("a resumed transport admits a world control queued before its EnterWorld result", async t => {
+	const sockets = socketHarness( t ), world = createWorldSession( async () => "ticket", undefined, ignoreIncident );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const first = sockets[0];
+	first.onopen();
+	first.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	first.receive( 7, entered() );
+	for ( const row of rows ) first.receive( row.opcode, row.payload );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	world.disconnect();
+	world.reconnect();
+	await settle();
+	world.step( 6 );
+	const second = sockets[1];
+	second.onopen();
+	// WELCOME resumed=1 is followed by the frames queued while detached
+	// (transport/doc.go): here a purchase's item reference delta.
+	second.receive( 2, welcome( true ) );
+	second.receive( 14, Buffer.from( JSON.stringify( { version: 1, items: [] } ) ) );
+	world.step( 7 );
+	await settle();
+	world.step( 8 );
+	assert.equal( world.status().error, undefined );
+	second.receive( 7, entered() );
+	for ( const row of rows ) second.receive( row.opcode, row.payload );
+	world.step( 9 );
+	flush( world );
+	world.step( 10 );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( world.status().error, undefined );
+	world.dispose();
+});
+
 test("bootstrap reference tables remain worker-owned and cannot exhaust presentation journal", () => {
 	const owner = createEntities();
 	owner.bootstrap( { ...bootstrap, workerOnlyTable: "x".repeat( 5 << 20 ) } );

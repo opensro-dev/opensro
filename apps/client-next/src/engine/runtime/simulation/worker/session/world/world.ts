@@ -275,7 +275,11 @@ receive
 			return;
 		}
 		if ( isWorldControl( frame.opcode ) ) {
-			if ( !boundThisTransport ) throw Error( "World control packet before EnterWorld" );
+			// A resumed transport replays the frames the old one lost, which
+			// can precede its EnterWorld result (a purchase's item reference
+			// delta). Native packets are admitted there too; the world they
+			// apply to is the one the resume keeps.
+			if ( !boundThisTransport && !resumedTransport ) throw Error( "World control packet before EnterWorld" );
 			core.receive( frame, now );
 			return;
 		}
