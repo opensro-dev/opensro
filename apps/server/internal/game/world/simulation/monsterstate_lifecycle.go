@@ -675,7 +675,7 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(6, instance.Ref.RefObjID, "???"))
 	}
 	if instance.Rarity()&15 == 3 {
-		state.markUniqueDeath(instance.Ref.RefObjID, at.UnixMilli())
+		state.markUniqueDeath(instance.Ref.RefObjID)
 	}
 	delete(state.uniqueDeaths, gid)
 	delete(state.lifetimes, gid)

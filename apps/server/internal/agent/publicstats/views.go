@@ -164,7 +164,7 @@ func (s *Service) catchUpKills() error {
 ================
 uniques
 
-P1: every unique with its live state, respawn window and last kill.
+P1: every unique with its live state and last kill.
 ================
 */
 func (s *Service) uniques(*http.Request) (any, error) {
@@ -185,13 +185,6 @@ func (s *Service) uniques(*http.Request) (any, error) {
 		u := Unique{
 			RefObjID: state.RefObjID, Name: s.uniqueName(state.RefObjID, state.Codename), Level: state.Level,
 			RegionID: state.RegionID, Alive: state.Alive, SpawnedAt: optionalTime(state.SpawnedAtMs),
-			Respawn: Respawn{MinSeconds: state.RespawnMinSec, MaxSeconds: state.RespawnMaxSec},
-		}
-		if !state.Alive && state.DiedAtMs > 0 {
-			u.NextWin = &Window{
-				OpensAt:  rfc3339(state.DiedAtMs + int64(state.RespawnMinSec)*1000),
-				ClosesAt: rfc3339(state.DiedAtMs + int64(state.RespawnMaxSec)*1000),
-			}
 		}
 		if kill, ok := last[state.RefObjID]; ok {
 			name, guild := s.killerOf(r, kill)

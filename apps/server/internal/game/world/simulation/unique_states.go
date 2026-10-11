@@ -4,11 +4,10 @@
 unique_states.go - every unique monster's spawn and death times
 
 Port-only, not native: the community site's unique tracker shows whether
-each unique is alive, when it spawned and, while it is dead, the window its
-nest can bring it back in (death + the nest's minimum and maximum respawn
-delay). The original keeps the same times on its nests (560D00) but never
-publishes them; the exact rolled interval stays private, so the site shows
-the authored window, not the second a unique will appear.
+each unique is alive and when it spawned. The original keeps the same
+times on its nests (560D00) but never publishes them. When a dead unique
+returns stays secret (owner, 2026-10-11), so no respawn delay or death
+time leaves this file.
 
 The timeline is written on the spawn and defeat paths the population
 already runs under its lock; UniqueStates copies it for a reader that runs
@@ -34,7 +33,6 @@ One unique reference's last spawn and death in a division.
 type uniqueTimeline struct {
 	live        int
 	spawnedAtMs int64
-	diedAtMs    int64
 	regionID    uint16
 }
 
@@ -42,20 +40,17 @@ type uniqueTimeline struct {
 ================
 UniqueState
 
-What the public tracker knows about one unique reference. SpawnedAtMs and
-DiedAtMs are zero until the first spawn or death since the server started.
+What the public tracker knows about one unique reference. SpawnedAtMs is
+zero until the first spawn since the server started.
 ================
 */
 type UniqueState struct {
-	RefObjID      uint32
-	Codename      string
-	Level         uint8
-	RegionID      uint16
-	Alive         bool
-	SpawnedAtMs   int64
-	DiedAtMs      int64
-	RespawnMinSec int
-	RespawnMaxSec int
+	RefObjID    uint32
+	Codename    string
+	Level       uint8
+	RegionID    uint16
+	Alive       bool
+	SpawnedAtMs int64
 }
 
 /*
@@ -97,7 +92,7 @@ func (state *divisionMonsterState) markUniqueSpawn(ref uint32, regionID uint16, 
 markUniqueDeath
 ================
 */
-func (state *divisionMonsterState) markUniqueDeath(ref uint32, nowMs int64) {
+func (state *divisionMonsterState) markUniqueDeath(ref uint32) {
 	line := state.uniqueTimes[ref]
 	if line == nil {
 		return
@@ -105,7 +100,6 @@ func (state *divisionMonsterState) markUniqueDeath(ref uint32, nowMs int64) {
 	if line.live > 0 {
 		line.live--
 	}
-	line.diedAtMs = nowMs
 }
 
 /*
@@ -114,8 +108,7 @@ UniqueStates
 
 Every unique the division's nests can spawn, ordered by reference id, with
 its live state. One reference may own several nests (a hive of alternative
-locations): it is alive while any of them holds it, and its window spans
-the widest delay among them.
+locations): it is alive while any of them holds it.
 ================
 */
 func (s *MonsterState) UniqueStates(division string) []UniqueState {
@@ -130,11 +123,9 @@ func (s *MonsterState) UniqueStates(division string) []UniqueState {
 		entry := byRef[ref.RefObjID]
 		if entry == nil {
 			entry = &UniqueState{RefObjID: ref.RefObjID, Codename: ref.Codename, Level: ref.Level,
-				RegionID: nest.RegionID, RespawnMinSec: nest.RespawnDelayMinSec, RespawnMaxSec: nest.RespawnDelayMaxSec}
+				RegionID: nest.RegionID}
 			byRef[ref.RefObjID] = entry
 		}
-		entry.RespawnMinSec = min(entry.RespawnMinSec, nest.RespawnDelayMinSec)
-		entry.RespawnMaxSec = max(entry.RespawnMaxSec, nest.RespawnDelayMaxSec)
 	}
 	if state := s.divs[division]; state != nil {
 		for ref, line := range state.uniqueTimes {
@@ -144,7 +135,6 @@ func (s *MonsterState) UniqueStates(division string) []UniqueState {
 			}
 			entry.Alive = line.live > 0
 			entry.SpawnedAtMs = line.spawnedAtMs
-			entry.DiedAtMs = line.diedAtMs
 			if line.regionID != 0 {
 				entry.RegionID = line.regionID
 			}

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -75,8 +76,8 @@ func (f *fixture) service() *Service {
 		},
 		Uniques: func() []simulation.UniqueState {
 			return []simulation.UniqueState{
-				{RefObjID: tigerRef, Codename: "MOB_CH_TIGERWOMAN", Level: 20, RegionID: 23687, Alive: true, SpawnedAtMs: 4000, RespawnMinSec: 3600, RespawnMaxSec: 7200},
-				{RefObjID: uruchiRef, Codename: "MOB_OA_URUCHI", Level: 40, RegionID: 23688, DiedAtMs: 3500, RespawnMinSec: 60, RespawnMaxSec: 120},
+				{RefObjID: tigerRef, Codename: "MOB_CH_TIGERWOMAN", Level: 20, RegionID: 23687, Alive: true, SpawnedAtMs: 4000},
+				{RefObjID: uruchiRef, Codename: "MOB_OA_URUCHI", Level: 40, RegionID: 23688},
 			}
 		},
 		UniqueName: func(ref uint32) string {
@@ -127,25 +128,63 @@ func get(t *testing.T, s *Service, path string, out any) int {
 
 /*
 ================
-TestUniquesShowStateWindowAndPrivateKiller
+TestUniquesShowStateAndPrivateKiller
 
-P1: a live unique has no window; a dead one returns between death + min and
-death + max; the last kill names a visible killer and its guild.
+P1: a unique says whether it is up and since when; the last kill names a
+visible killer and its guild.
 ================
 */
-func TestUniquesShowStateWindowAndPrivateKiller(t *testing.T) {
+func TestUniquesShowStateAndPrivateKiller(t *testing.T) {
 	var out UniquesResponse
 	if code := get(t, newFixture().service(), "/public/v1/uniques", &out); code != http.StatusOK || len(out.Uniques) != 2 {
 		t.Fatalf("uniques %d %+v", code, out)
 	}
 	tiger, uruchi := out.Uniques[0], out.Uniques[1]
-	if tiger.Name != "Tiger Girl" || !tiger.Alive || tiger.NextWin != nil || tiger.LastKill == nil ||
+	if tiger.Name != "Tiger Girl" || !tiger.Alive || tiger.SpawnedAt == nil || tiger.LastKill == nil ||
 		tiger.LastKill.Killer != "Kekw" || tiger.LastKill.Guild != "Silk" {
 		t.Fatalf("tiger %+v %+v", tiger, tiger.LastKill)
 	}
-	if uruchi.Name != "MOB_OA_URUCHI" || uruchi.Alive || uruchi.NextWin == nil ||
-		uruchi.NextWin.OpensAt != rfc3339(3500+60_000) || uruchi.NextWin.ClosesAt != rfc3339(3500+120_000) {
-		t.Fatalf("uruchi %+v %+v", uruchi, uruchi.NextWin)
+	if uruchi.Name != "MOB_OA_URUCHI" || uruchi.Alive || uruchi.SpawnedAt != nil {
+		t.Fatalf("uruchi %+v", uruchi)
+	}
+}
+
+/*
+================
+TestUniquesKeepTheRespawnSecret
+
+When a unique returns is a secret: neither a live nor a dead unique's row,
+nor the published schema, carries a respawn delay or a return window.
+================
+*/
+func TestUniquesKeepTheRespawnSecret(t *testing.T) {
+	s := newFixture().service()
+	var raw struct {
+		Uniques []map[string]json.RawMessage `json:"uniques"`
+	}
+	if code := get(t, s, "/public/v1/uniques", &raw); code != http.StatusOK || len(raw.Uniques) != 2 {
+		t.Fatalf("uniques %d %+v", code, raw)
+	}
+	want := []string{"alive", "lastKill", "level", "name", "refObjId", "regionId", "spawnedAt"}
+	for _, row := range raw.Uniques {
+		keys := make([]string, 0, len(row))
+		for key := range row {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		if !reflect.DeepEqual(keys, want) {
+			t.Fatalf("unique row keys %v, want %v", keys, want)
+		}
+	}
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/public/v1/schema", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"spawnedAt"`) {
+		t.Fatalf("schema %d %s", rec.Code, rec.Body.String())
+	}
+	for _, secret := range []string{"respawn", "nextWindow", "opensAt", "closesAt"} {
+		if strings.Contains(rec.Body.String(), `"`+secret+`"`) {
+			t.Fatalf("schema publishes %q", secret)
+		}
 	}
 }
 

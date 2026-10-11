@@ -15,20 +15,9 @@ Port-only, not native: the original has no public read API.
 */
 package publicstats
 
-// SchemaVersion moves when a response shape changes incompatibly.
-const SchemaVersion = 1
-
-// Respawn is a unique nest's authored delay range.
-type Respawn struct {
-	MinSeconds int `json:"minSeconds"`
-	MaxSeconds int `json:"maxSeconds"`
-}
-
-// Window is the span a dead unique can return in.
-type Window struct {
-	OpensAt  string `json:"opensAt"`
-	ClosesAt string `json:"closesAt"`
-}
+// SchemaVersion moves when a response shape changes incompatibly. 2: a
+// unique no longer carries its respawn delay or return window.
+const SchemaVersion = 2
 
 // LastKill is a unique's most recent recorded kill.
 type LastKill struct {
@@ -37,7 +26,9 @@ type LastKill struct {
 	Guild  string `json:"guild,omitempty"`
 }
 
-// Unique is one P1 row.
+// Unique is one P1 row. When a unique returns is a secret (owner,
+// 2026-10-11): the row says only whether it is up, since when, and who
+// killed it last, never its nest's respawn delay.
 type Unique struct {
 	RefObjID  uint32    `json:"refObjId"`
 	Name      string    `json:"name"`
@@ -45,8 +36,6 @@ type Unique struct {
 	RegionID  uint16    `json:"regionId"`
 	Alive     bool      `json:"alive"`
 	SpawnedAt *string   `json:"spawnedAt"`
-	Respawn   Respawn   `json:"respawn"`
-	NextWin   *Window   `json:"nextWindow"`
 	LastKill  *LastKill `json:"lastKill"`
 }
 
