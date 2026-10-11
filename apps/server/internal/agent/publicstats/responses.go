@@ -191,8 +191,9 @@ type Profile struct {
 	Stats     Stats     `json:"stats"`
 	Look      Look      `json:"look"`
 	// GearHidden is the player's "hide my gear" choice: look keeps the
-	// items, plus and sockets (the 3D view draws them) but no rolls, blue
-	// stats or durability.
+	// items, plus and sockets (the 3D view draws them, and the game shows
+	// +N glows to anyone nearby) but no rolls, blue stats or durability.
+	// The +N therefore stays public, here and in the rankings' gear plus.
 	GearHidden  bool    `json:"gearHidden,omitempty"`
 	UniqueKills int     `json:"uniqueKills"`
 	LastLogin   *string `json:"lastLogin"`
