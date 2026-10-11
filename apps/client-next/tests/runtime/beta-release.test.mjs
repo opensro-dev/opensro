@@ -271,6 +271,38 @@ test("compiler keeps main and worker maps private, drops beta branches and exclu
 	await assert.rejects( () => symbolicate( privateRoot, "compile-test", "/" + name.slice( 0, -4 ), 1, 1 ) );
 });
 
+/*
+================
+the viewer page ships beside the game
+
+tools/beta/build.mjs freezes and builds every application page from its
+own frozen copy: the viewer must not come out as a second game page.
+================
+*/
+test("the release builds the viewer page from its own frozen source beside the game's", async t => {
+	const { buildApplication } = await import( "../../tools/beta/build.mjs" );
+	const base = await mkdtemp( path.join( os.tmpdir(), "sro-beta-pages-" ) );
+	t.after( () => rm( base, { recursive: true, force: true } ) );
+	const source = {
+		"index.html": '<title>GAME_PAGE</title><script type="module" src="/src/main.ts"></script>',
+		"viewer.html": '<title>VIEWER_PAGE</title><script type="module" src="/src/main.ts"></script>',
+		"src/main.ts": "console.log('shared bootstrap');"
+	};
+	for ( const [name, s] of Object.entries( source ) ) {
+		await mkdir( path.dirname( path.join( base, name ) ), { recursive: true } );
+		// The disk copy differs: only the frozen source may reach the release.
+		await writeFile( path.join( base, name ), name.endsWith( ".html" ) ? "<title>DISK_COPY</title>" : s );
+	}
+	const directory = path.join( base, "release/package/application" );
+	await buildApplication( { base, directory, source } );
+	const game = await readFile( path.join( directory, "index.html" ), "utf8" ),
+		viewer = await readFile( path.join( directory, "viewer.html" ), "utf8" );
+	assert.match( game, /GAME_PAGE/ );
+	assert.match( viewer, /VIEWER_PAGE/ );
+	assert.doesNotMatch( game + viewer, /DISK_COPY/ );
+	assert.match( viewer, /assets\/[^"]+\.js/ );
+});
+
 test("API adapter fixes upstream origin, rejects development paths and never trusts forwarded headers", async t => {
 	const http = await import( "node:http" );
 	const seen = [];

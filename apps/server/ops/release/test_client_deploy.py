@@ -287,6 +287,22 @@ class ClientDeployTests(unittest.TestCase):
 			application_routes(changed, {"application/index.html": b"new browser"})
 
 	# ================
+	# test_application_serves_its_two_pages_and_no_other
+	#
+	# The game (index.html) and the embeddable viewer (viewer.html, served at
+	# /play/viewer.html) are the application's pages; any other page is not.
+	# ================
+	def test_application_serves_its_two_pages_and_no_other(self):
+		def page(url, data):
+			return {"url": url, "file": "application" + url, "offset": 0, "length": len(data)}
+		pages = {"application/index.html": b"game", "application/viewer.html": b"viewer"}
+		manifest = {"routes": [page("/index.html", b"game"), page("/viewer.html", b"viewer")]}
+		self.assertEqual(application_routes(manifest, pages), {"index.html": b"game", "viewer.html": b"viewer"})
+		manifest["routes"].append(page("/other.html", b"other"))
+		with self.assertRaisesRegex(ValueError, "outside"):
+			application_routes(manifest, {**pages, "application/other.html": b"other"})
+
+	# ================
 	# test_explicit_rollback_reuses_verified_bytes_with_a_new_approval
 	#
 	# Exercise a complete forward publication and rollback on real filesystem

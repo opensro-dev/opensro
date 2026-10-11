@@ -32,6 +32,9 @@ from retention import preserve
 HTTP_TIMEOUT_SECONDS = 20
 MAX_ENTRY_BYTES = 1 << 20
 APPLICATION_ASSET = re.compile(r"assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]{8,}\.(?:js|css)")
+# The application's own pages: the game and the embeddable 3D viewer served
+# beside it (apps/client-next/tools/beta/build.mjs APPLICATION_PAGES).
+APPLICATION_PAGES = ("index.html", "viewer.html")
 
 
 # ================
@@ -102,7 +105,7 @@ def application_routes(manifest, payloads):
 		if not route["file"].startswith("application/"):
 			continue
 		name = safe_name(route["url"].removeprefix("/"))
-		if name != "index.html" and not APPLICATION_ASSET.fullmatch(name):
+		if name not in APPLICATION_PAGES and not APPLICATION_ASSET.fullmatch(name):
 			raise ValueError("application route is outside the browser application")
 		data = payloads[route["file"]]
 		if route["offset"] != 0 or route["length"] != len(data) or name in outputs:

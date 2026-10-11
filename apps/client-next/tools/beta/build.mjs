@@ -46,6 +46,10 @@ const write = async ( p, b ) => {
 	await mkdir( path.dirname( p ), { recursive: true } );
 	await writeFile( p, b, { flag: "wx" } );
 };
+// The application's pages: the game, and the embeddable 3D viewer
+// (docs/VIEWER.md) served beside it at /play/viewer.html.
+const APPLICATION_PAGES = [ "index.html", "viewer.html" ];
+
 /*
 ================
 freezeSource
@@ -56,7 +60,7 @@ export async function freezeSource( base = root ) {
 	for ( const f of await files( path.join( base, "src" ) ) ) {
 		source["src/" + f] = await readFile( path.join( base, "src", f ), "utf8" );
 	}
-	source["index.html"] = await readFile( path.join( base, "index.html" ), "utf8" );
+	for ( const page of APPLICATION_PAGES ) source[page] = await readFile( path.join( base, page ), "utf8" );
 	return source;
 }
 /*
@@ -114,7 +118,15 @@ export async function buildApplication( { base = root, directory, source, mode =
 			}
 			return inputs.get( p );
 		},
-		transformIndexHtml: { order: "pre", handler: () => source["index.html"] },
+		transformIndexHtml: {
+			order: "pre",
+			// Each page builds from its own frozen copy, never the game's.
+			handler: ( _html, context ) => {
+				const page = normal( path.relative( base, context.filename ) );
+				if ( source[page] === undefined ) throw Error( "Unfrozen application page " + page );
+				return source[page];
+			}
+		},
 		/*
 		================
 		generateBundle
@@ -149,7 +161,16 @@ export async function buildApplication( { base = root, directory, source, mode =
 			emptyOutDir: false,
 			sourcemap: "hidden",
 			minify: "esbuild",
-			rollupOptions: { output: {} }
+			rollupOptions: {
+				// The frozen pages (freezeSource holds every APPLICATION_PAGES entry).
+				input: Object.fromEntries(
+					APPLICATION_PAGES.filter( page => source[page] !== undefined ).map( page => [
+						page.replace( /\.html$/, "" ),
+						path.join( base, page )
+					] )
+				),
+				output: {}
+			}
 		},
 		// frame-probes.ts folds its probe lookup away outside development, so
 		// no diagnostic global name reaches the release (policy.mjs checks it).
