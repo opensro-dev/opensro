@@ -82,5 +82,26 @@ class LootCatalogMergeTest(unittest.TestCase):
 		self.assertEqual(audit, [{"table": "Equip", "class": 2, "fallsTo": 0, "levels": [[1, 1]]}])
 
 
+
+	# ================
+	# test_mall_stones_never_drop
+	#
+	# Type 11/7 holds Luck and Steady, which drop with the magic stones, and
+	# the Astral, Immortal and repair stones, which the Item Mall sells: a
+	# weighted assignment of one of those is refused, never placed.
+	# ================
+	def test_mall_stones_never_drop(self):
+		names = ["ITEM_ETC_ARCHEMY_MAGICSTONE_ASTRAL_01", "ITEM_ETC_ARCHEMY_MAGICSTONE_ATHANASIA_01",
+			"ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_01"]
+		items = {name: {"id": i + 1, "type": [3, 3, 11, 7], "rarity": 0, "country": 0, "level": 0}
+			for i, name in enumerate(names)}
+		row = {"class": 1, "weight": 300, "absolute": 100, "count": 1}
+		chosen = {name: ("vsro", [row]) for name in names}
+		audit = {"unplacedAssignments": []}
+		equipment, consumables = catalog.project_assignments(chosen, items, audit)[:2]
+		self.assertEqual((equipment, consumables), ([], []))
+		self.assertEqual(sorted((x["item"], x["reason"]) for x in audit["unplacedAssignments"]),
+			[(name, "mall-only-stone") for name in sorted(names)])
+
 if __name__ == "__main__":
 	unittest.main()

@@ -55,6 +55,10 @@ POTION_PRODUCT_TYPE = [3, 3, 13, 1]
 # their degree. Without it they were never placed and never dropped.
 FAMILY_BY_TYPE = {(1, 1): 2, (1, 2): 2, (1, 3): 2, (2, 6): 3, (3, 1): 6, (4, 1): 4, (4, 2): 5, (10, 1): 10,
 	(11, 1): 8, (11, 2): 9, (11, 3): 7, (11, 7): 8}
+# Type 11/7 also holds the Astral, Immortal (ATHANASIA) and repair stones,
+# which v1.150 sells in the Item Mall; only these two join the drop table,
+# so a future source that weights the others can never make them drop.
+DROPPED_SPECIAL_STONES = ("ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_", "ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_")
 
 
 # ================
@@ -198,6 +202,9 @@ def project_assignments(chosen, items, audit):
 		family = FAMILY_BY_TYPE.get(tuple(ref["type"][2:])) if kind == 3 else None
 		if kind != 1 and family is None:
 			audit["unplacedAssignments"].append({"item": codename, "source": source, "reason": "no-ordinary-class-table"})
+			continue
+		if tuple(ref["type"][2:]) == (11, 7) and not codename.startswith(DROPPED_SPECIAL_STONES):
+			audit["unplacedAssignments"].append({"item": codename, "source": source, "reason": "mall-only-stone"})
 			continue
 		for row in rows:
 			rare = ref["rarity"] > 0
