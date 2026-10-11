@@ -14,9 +14,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const { viewProjection } = await import( "../../src/engine/foundation/rendering/world-math.ts" );
-const { viewerCamera, refitCamera, touchesEdge, widenCamera, VIEWER_YAW, VIEWER_PITCH } = await import(
-	"../../src/engine/foundation/rendering/viewer-camera.ts"
-);
+const { viewerCamera, refitCamera, touchesEdge, widenCamera, framed, nextFraming, VIEWER_YAW, VIEWER_PITCH } =
+	await import(
+		"../../src/engine/foundation/rendering/viewer-camera.ts"
+	);
 
 /*
 ================
@@ -169,4 +170,62 @@ test("the refit centres an off-centre model in the drawn picture, both ways acro
 		const [cx, cy] = pixelOf( next, point, 400, 400 );
 		assert.ok( Math.abs( cx - 200 ) < 12 && Math.abs( cy - 200 ) < 12, `side ${side}: ${cx}, ${cy}` );
 	}
+});
+
+/*
+================
+drawnBox
+
+The opaque box a picture of these world points would show: each point
+projected through the renderer's projection, the box clipped to the
+picture as a readback clips it.
+================
+*/
+/** @returns {[number, number, number, number]} */
+function drawnBox( camera, points, width, height ) {
+	const pixels = points.map( point => pixelOf( camera, point, width, height ) );
+	const clip = ( v, limit ) => Math.max( 0, Math.min( limit, v ) );
+	return [
+		clip( Math.min( ...pixels.map( p => p[0] ) ), width ),
+		clip( Math.min( ...pixels.map( p => p[1] ) ), height ),
+		clip( Math.max( ...pixels.map( p => p[0] ) ), width ),
+		clip( Math.max( ...pixels.map( p => p[1] ) ), height )
+	];
+}
+
+test("a model reaching far off the target's depth is framed by the loop, not by one refit", () => {
+	// A body the first framing knows, and a wing toward the camera it does not.
+	const body = [ 0, 1, 2, 3, 4, 5, 6, 7 ].map( c => [ c & 1 ? 1 : -1, c & 2 ? 2 : 0, c & 4 ? 1 : -1 ] );
+	const points = [ ...body, [ 4, 3, -4 ], [ 5, 2.5, -2 ] ];
+	const fill = /** @type {import("../../src/engine/foundation/rendering/viewer-camera.ts").ViewerFill} */ ({
+		kind: "contain",
+		share: 0.92
+	});
+	let camera = viewerCamera( { min: [ -1, 0, -1 ], max: [ 1, 2, 1 ] }, [ 0, -1 ] );
+	let box = drawnBox( camera, points, 384, 384 ), fitting = { widened: 0, refits: 0 };
+	assert.ok( touchesEdge( box, 384, 384 ), "the first framing clips the wing" );
+	const once = drawnBox( refitCamera( camera, box, 384, 384, fill ), points, 384, 384 );
+	assert.equal( framed( once, 384, 384, fill ), false, "one refit of a clipped picture misses" );
+	for ( let step = 0; step < 20; step++ ) {
+		const next = nextFraming( camera, box, 384, 384, fill, fitting );
+		if ( !next ) break;
+		camera = next.camera;
+		fitting = next.fitting;
+		box = drawnBox( camera, points, 384, 384 );
+	}
+	assert.ok( framed( box, 384, 384, fill ), `framed: ${box.map( Math.round )}` );
+	assert.equal( nextFraming( camera, box, 384, 384, fill, fitting ), null );
+});
+
+test("a height fill may leave the sides; a contained still may not", () => {
+	/** @typedef {import("../../src/engine/foundation/rendering/viewer-camera.ts").ViewerFill} Fill */
+	const height = /** @type {Fill} */ ({ kind: "height", share: 0.88 }),
+		contain = /** @type {Fill} */ ({ kind: "contain", share: 0.9 });
+	assert.equal( touchesEdge( [ 0, 24, 300, 376 ], 300, 400, height ), false );
+	assert.equal( touchesEdge( [ 0, 24, 300, 376 ], 300, 400, contain ), true );
+	assert.equal( touchesEdge( [ 10, 0, 290, 376 ], 300, 400, height ), true );
+	assert.equal( framed( [ 0, 24, 300, 376 ], 300, 400, height ), true );
+	assert.equal( framed( [ 15, 20, 285, 380 ], 300, 400, contain ), true );
+	assert.equal( framed( [ 60, 60, 240, 340 ], 300, 400, contain ), false );
+	assert.equal( framed( [ 40, 20, 300, 380 ], 300, 400, contain ), false );
 });

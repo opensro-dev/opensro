@@ -150,11 +150,19 @@ export function refitCamera(
 touchesEdge
 
 Whether a drawn picture's opaque box reaches the picture's border: the
-model may run past the frame, so the box measures only what fitted.
+model may run past the frame, so the box measures only what fitted. With
+a "height" fill only the top and bottom count, since that fill lets a long
+weapon leave the sides.
 ================
 */
-export function touchesEdge( box: readonly [number, number, number, number], width: number, height: number ): boolean {
-	return box[0] <= 0 || box[1] <= 0 || box[2] >= width || box[3] >= height;
+export function touchesEdge(
+	box: readonly [number, number, number, number],
+	width: number,
+	height: number,
+	fill?: ViewerFill
+): boolean {
+	const sides = fill?.kind !== "height" && (box[0] <= 0 || box[2] >= width);
+	return sides || box[1] <= 0 || box[3] >= height;
 }
 
 /*
@@ -173,4 +181,91 @@ export function widenCamera( camera: WorldCamera, factor: number ): WorldCamera 
 		near: Math.max( MIN_NEAR, (camera.near ?? MIN_NEAR) * factor ),
 		far: (camera.far ?? Math.hypot( ...camera.eye.map( ( v, i ) => v - camera.target[i]! ) ) * 2) * factor
 	};
+}
+
+// How far a refit picture may miss its fill and the centre, as a share of
+// the picture, and still count as framed.
+const FRAMED_TOLERANCE = 0.02;
+
+/*
+================
+framed
+
+Whether a drawn picture's opaque box already meets the fill: centred and
+at the fill's share within FRAMED_TOLERANCE, and clear of the border. A
+"height" fill may leave the sides (a long weapon), so it judges only the
+height and the vertical centre.
+================
+*/
+export function framed(
+	box: readonly [number, number, number, number],
+	width: number,
+	height: number,
+	fill: ViewerFill
+): boolean {
+	const tall = (box[3] - box[1]) / height, wide = (box[2] - box[0]) / width;
+	const dy = Math.abs( (box[1] + box[3]) / 2 - height / 2 ) / height,
+		dx = Math.abs( (box[0] + box[2]) / 2 - width / 2 ) / width;
+	if ( fill.kind === "height" ) {
+		return Math.abs( tall - fill.share ) <= FRAMED_TOLERANCE && dy <= FRAMED_TOLERANCE && box[1] > 0 &&
+			box[3] < height;
+	}
+	return Math.abs( Math.max( tall, wide ) - fill.share ) <= FRAMED_TOLERANCE && dx <= FRAMED_TOLERANCE &&
+		dy <= FRAMED_TOLERANCE && !touchesEdge( box, width, height );
+}
+
+// The fitting loop's limits: a clipped measuring picture is drawn again
+// from WIDEN_FACTOR times as far (REFIT_WIDEN_FACTOR once a refit has run,
+// a gentle back-off), at most MAX_WIDENS times; a picture off the fill is
+// refit at most MAX_REFITS times.
+const WIDEN_FACTOR = 2;
+const REFIT_WIDEN_FACTOR = 1.25;
+const MAX_WIDENS = 8;
+const MAX_REFITS = 6;
+
+/*
+================
+ViewerFitting
+
+How often the fitting loop has widened and refit one camera.
+================
+*/
+export interface ViewerFitting {
+	readonly widened: number;
+	readonly refits: number;
+}
+
+/*
+================
+nextFraming
+
+One step of fitting the camera to what it drew: the camera to draw the
+next measuring picture with, and the counts, or null once the picture is
+framed (or the limits are spent). A refit can only frame what was drawn,
+so a clipped picture is widened first. One refit measures at the target's
+depth, and a model that reaches far off it (a ride, a wing) lands off the
+fill, so the refit picture is measured and refit again.
+================
+*/
+export function nextFraming(
+	camera: WorldCamera,
+	box: readonly [number, number, number, number],
+	width: number,
+	height: number,
+	fill: ViewerFill,
+	fitting: ViewerFitting
+): { readonly camera: WorldCamera; readonly fitting: ViewerFitting; } | null {
+	if ( fitting.widened < MAX_WIDENS && touchesEdge( box, width, height, fill ) ) {
+		return {
+			camera: widenCamera( camera, fitting.refits === 0 ? WIDEN_FACTOR : REFIT_WIDEN_FACTOR ),
+			fitting: { ...fitting, widened: fitting.widened + 1 }
+		};
+	}
+	if ( fitting.refits < MAX_REFITS && !framed( box, width, height, fill ) ) {
+		return {
+			camera: refitCamera( camera, box, width, height, fill ),
+			fitting: { ...fitting, refits: fitting.refits + 1 }
+		};
+	}
+	return null;
 }

@@ -55,6 +55,7 @@
 			"functions": [
 				"phase",
 				"characterBounds",
+				"setViewerLight",
 				"setUi",
 				"frame",
 				"readDoll"

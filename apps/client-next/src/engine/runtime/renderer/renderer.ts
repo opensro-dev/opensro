@@ -31,6 +31,12 @@ import type { Renderer } from "@/engine/contracts/runtime";
 import type { SurfaceOwner, FrameOwner, ImageDraw, GeometryDraw } from "./internal/gpu-contract";
 import { hypot3 } from "@/engine/foundation/math/hypot";
 import type { UiTexture } from "@/engine/contracts/texture";
+// The Environment uniform's diffuse and ambient vec4s (pipelines.ts struct
+// order: zenith, horizon, diffuse, ambient) and the sun-direction vec4 after
+// the native 336 bytes (environment-block.ts), as worldEnvironment packs them.
+const ENVIRONMENT_DIFFUSE = 8;
+const ENVIRONMENT_AMBIENT = 12;
+const ENVIRONMENT_SUN_DIRECTION = 84;
 const INVENTORY_DOLL_WIDTH = 176;
 const INVENTORY_DOLL_HEIGHT = 318;
 
@@ -89,6 +95,9 @@ export function createRenderer(
 	let gates: readonly import("@/engine/contracts/world").EntityState[] = [];
 	let disposed = false, failure: string | null = null;
 	let readbackWait = 0;
+	// Port-only (the 3D viewer): the studio light written over the frame
+	// environment, or null for the environment's own.
+	let viewerLight: import("@/engine/contracts/runtime").ViewerLight | null = null;
 	return {
 		/*
 		================
@@ -232,6 +241,21 @@ export function createRenderer(
 		*/
 		characterBounds( gid ) {
 			return characters.bindBounds( gid );
+		},
+		/*
+		================
+		setViewerLight
+
+		Port-only (the 3D viewer's page, which draws no world): replaces the
+		environment's diffuse and ambient colours and the light's direction
+		for every following frame.
+		The game never calls it, so its portraits keep the native light.
+		================
+		*/
+		setViewerLight( light ) {
+			viewerLight = light ?
+				{ diffuse: [ ...light.diffuse ], ambient: [ ...light.ambient ], direction: [ ...light.direction ] } :
+				null;
 		},
 		/*
 		================
@@ -524,8 +548,13 @@ export function createRenderer(
 					video.records[video.active][12] === 1
 				);
 				scene.environment[83] = video.records[video.active][6] === 1 ? 1 : 0;
+				if ( viewerLight ) {
+					scene.environment.set( viewerLight.diffuse, ENVIRONMENT_DIFFUSE );
+					scene.environment.set( viewerLight.ambient, ENVIRONMENT_AMBIENT );
+					scene.environment.set( viewerLight.direction, ENVIRONMENT_SUN_DIRECTION );
+				}
 				const shadowOn = experimental.sunShadow && !preview;
-				device.worldView( scene.matrix, scene.environment, shadowOn );
+				device.worldView( scene.matrix, scene.environment, shadowOn, viewerLight !== null );
 				presentationCamera = {
 					regionId: scene.originRegion,
 					x: scene.camera.eye[0],

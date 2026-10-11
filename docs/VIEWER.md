@@ -28,9 +28,18 @@ P6 `look` object: `bodyRefObjId`, `worn[]` of `{slot, refItemId, plus}`,
   none). Otherwise Chrome paints an opaque backdrop behind a frame whose scheme
   differs from its parent's.
 - Camera: a fixed three-quarter front view (35 degrees off the model's front,
-  a 12-degree downward pitch). It is framed to the clip pose's box, then refit
-  once to the first drawn picture's opaque pixels. The model stands in its idle
-  pose (a dressed look holds its weapon's armed idle).
+  a 12-degree downward pitch). It is framed to the clip pose's box, then fitted
+  to the drawn pictures' opaque pixels (`nextFraming`, viewer-camera.ts): a
+  picture that reaches the border is drawn again from farther away, and one off
+  the fill is refit and measured again, until it is framed (a few passes at most;
+  a ride or a wing far off the target's depth needs more than one). The model
+  stands in its idle pose (a dressed look holds its weapon's armed idle).
+- Light: a studio light of the viewer's own (`VIEWER_LIGHT`, viewer.ts): a warm
+  key from in front of the model and above, over a cooler, lower fill. Without
+  it the page, which draws no world, would light the model with the empty
+  environment's white ambient. The renderer applies it only for the viewer page
+  (`setViewerLight`); the game's inventory and party portraits keep the native
+  light.
 - When the model is drawn, the page posts `{ type: "viewer-ready" }` to its
   parent or opener. A still also posts `{ type: "viewer-still", png }` (a PNG
   data URL). `window.__viewerStill` resolves with the PNG of the first picture,

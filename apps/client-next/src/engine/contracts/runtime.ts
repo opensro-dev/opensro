@@ -259,6 +259,8 @@ export interface Renderer extends Disposable {
 	readDoll?(): Promise<{ readonly width: number; readonly height: number; readonly rgba: Uint8ClampedArray; }>;
 	/** Port-only: an actor's scaled bind-pose bounds [minX, minY, minZ, maxX, maxY, maxZ] (the 3D viewer's framing). */
 	characterBounds?( gid: number ): readonly [number, number, number, number, number, number] | null;
+	/** Port-only: the 3D viewer's studio light (key, fill and direction); null keeps the environment's. */
+	setViewerLight?( light: ViewerLight | null ): void;
 	characterParticleSnapshot( gid: number ): { readonly matrix: Float32Array; readonly regionId: number; } | null;
 	characterParticleTime( gid: number ): number | undefined;
 	presentationNight(): boolean;
@@ -449,4 +451,21 @@ export interface RuntimeControl extends Disposable {
 	/** Copied last prepared world view; null before preparation or after failure/disposal. */
 	worldView(): WorldViewSnapshot | null;
 	takeNative(): import("./world").WorldEvent[];
+}
+
+/*
+================
+ViewerLight
+
+Port-only, not native: the 3D viewer's studio light. The renderer writes it
+over the frame environment's diffuse and ambient colours (linear 0..1 RGB)
+and lights along direction (a unit vector toward the light, in the doll's
+space) in place of the retail 45-degree light. The game never sets one, so
+every in-game portrait keeps the native light.
+================
+*/
+export interface ViewerLight {
+	readonly diffuse: readonly [number, number, number];
+	readonly ambient: readonly [number, number, number];
+	readonly direction: readonly [number, number, number];
 }

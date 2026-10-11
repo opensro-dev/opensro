@@ -641,7 +641,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		Publish the frame transform and environment uniforms together.
 		================
 		*/
-		worldView( transform, environment, shadowEnabled = true ) {
+		worldView( transform, environment, shadowEnabled = true, directional = false ) {
 			if ( phase === "running" ) {
 				// Preview scenes have no cascade; keep the saved preference for world re-entry.
 				stages[5] = sunShadowOn && shadowEnabled ? 1 : 0;
@@ -653,7 +653,12 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 					environment.byteOffset,
 					environment.byteLength
 				);
+				// The viewer's studio light uses the sun-direction stage's switch for
+				// its own frames only; the saved Experimental choice is kept.
+				const dynamicSun = stages[1]!;
+				if ( directional ) stages[1] = 1;
 				device!.queue.writeBuffer( environmentBuffer!, ENVIRONMENT_STAGES_OFFSET, stages );
+				stages[1] = dynamicSun;
 			}
 		},
 		/*
