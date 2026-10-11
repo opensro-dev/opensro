@@ -39,6 +39,8 @@ CLEAN_ENV = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 # validate -assume-stopped opens each line naming a credential variable that
 # needs the fleet stopped with this word (sro-nomad variables.go).
 REQUIRES_STOP = "requires-stop"
+# materialize's answer when the release's sro-nomad predates -assume-stopped.
+LEGACY_VALIDATE = None
 # Cluster state a rehearsal copy leaves out: Nomad's immutable release tree
 # (binaries validate never reads) and the maintenance gate.
 REHEARSAL_SKIPPED_STATE = ("releases", "maintenance-gate.json")
@@ -217,17 +219,45 @@ def warning(config, module, executable):
 
 
 # ================
+# requires_stop
+#
+# The credential variables validate -assume-stopped reports as needing the
+# fleet stopped, as (job, path) pairs.
+# ================
+def requires_stop(output):
+	stops = []
+	for line in output.splitlines():
+		words = line.split()
+		if len(words) == 3 and words[0] == REQUIRES_STOP:
+			stops.append((words[1], words[2]))
+	return stops
+
+
+# ================
 # materialize
 #
 # Unpack the game data as root (sro-nomad validate resolves it) and let the
 # GameWorld's user read the cache: it cannot create the extraction itself.
+# With assume_stopped, validate checks everything but reports, instead of
+# refusing, a credential variable that changes while its job is registered;
+# those come back to the caller (requires_stop).
 # ================
-def materialize(config, module, executable, arguments, environment):
-	run([executable, "validate", *arguments], cwd=module, env=environment)
+def materialize(config, module, executable, arguments, environment, assume_stopped=False):
+	mode = ["-assume-stopped"] if assume_stopped else []
+	try:
+		output = run([executable, "validate", *mode, *arguments], cwd=module, env=environment, capture=True).stdout or ""
+	except subprocess.CalledProcessError as error:
+		# A release built before validate learned -assume-stopped (opensro
+		# #760) refuses the flag: the caller falls back (LEGACY_VALIDATE).
+		if assume_stopped and "assume-stopped" in (error.stderr or "") and "not defined" in (error.stderr or ""):
+			return LEGACY_VALIDATE
+		raise
+	print(output, end="", flush=True)
 	cache = Path(config["game_data"]).parent / ".game-data-cache"
 	if cache.is_dir():
 		for path in [cache, *cache.rglob("*")]:
 			path.chmod(0o755 if path.is_dir() else 0o644)
+	return requires_stop(output)
 
 
 # ================
@@ -517,12 +547,7 @@ def rehearse(config, staging, manifest):
 			revoke(management, token)
 	finally:
 		shutil.rmtree(copy, ignore_errors=True)
-	stops = []
-	for line in output.splitlines():
-		words = line.split()
-		if len(words) == 3 and words[0] == REQUIRES_STOP:
-			stops.append((words[1], words[2]))
-	return stops
+	return requires_stop(output)
 
 
 # ================
@@ -536,7 +561,7 @@ def rehearse(config, staging, manifest):
 # through on_upgrade; restore (a maintenance revert) puts the journaled
 # backups back with the fleet stopped, before the retained server deploys.
 # ================
-def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None):
+def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None, maintenance=False):
 	stack_sizes = config.get("stack_sizes", "")
 	if not isinstance(stack_sizes, str):
 		raise ValueError("stack_sizes must be a string")
@@ -560,15 +585,24 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 		cluster = module / ".state/cluster"
 		shutil.chown(cluster, user="root", group="sro")
 		cluster.chmod(0o710)
-		# A maintenance deployment (store upgrade or its restore) stops the
-		# fleet anyway, and sro-nomad refuses to replace a credential variable
+		# Every check runs before anything stops, so any refusal leaves the
+		# server running. sro-nomad refuses to replace a credential variable
 		# (a release's new public-api-token, a rotated webhook) while its job
-		# is registered: validating before that stop could never pass such a
-		# release (2026-10-11). A plain release still validates before
-		# anything stops, so its refusal leaves the server running.
-		maintenance = upgrade or bool(restore)
-		if not maintenance:
-			materialize(config, module, executable, arguments, environment)
+		# is registered (2026-10-11); -assume-stopped reports those instead.
+		# Only a maintenance deployment may stop the fleet for them.
+		maintenance = maintenance or upgrade or bool(restore)
+		stops = materialize(config, module, executable, arguments, environment, assume_stopped=True)
+		if stops is LEGACY_VALIDATE:
+			# An older release (a revert target) cannot report credential
+			# changes: validate as #759 did, after the stop when maintenance
+			# stops anyway, before anything stops otherwise.
+			if maintenance:
+				stops = [("legacy", "unknown")]
+			else:
+				stops = materialize(config, module, executable, arguments, environment)
+		if stops and not maintenance:
+			raise RuntimeError("this release changes credential variables (" + ", ".join(path for _, path in stops) +
+				"); only a maintenance release can stop the fleet to replace them")
 		publish_maintenance_list(config, module, executable)
 		if notice and warning(config, module, executable):
 			announce(config["public_webhook"], "OpenSRO will restart in two minutes for a server update. Please find a safe place.")
@@ -578,11 +612,12 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 			# On the first installation, check again after the warning window.
 			if config.get("bootstrap_notice", False):
 				warning(config, module, executable)
-		if maintenance:
+		if stops:
 			# A restore's backups are checked before this stop, so a refused
 			# restore still leaves the fleet running. The upgrade and the
 			# restore stop again; a second stop finds no job and does nothing
-			# (sro-nomad stopJob checks jobExists).
+			# (sro-nomad stopJob checks jobExists). With the fleet stopped the
+			# plain validate must now pass.
 			if restore:
 				verify_restore(module, restore)
 			run([executable, "stop", *arguments], cwd=module, env=environment)
@@ -662,10 +697,10 @@ def deployed(config, manifest):
 # deploy, where an error after the health checks passed (token cleanup) is
 # a warning, returned for the journal, not a failed release.
 # ================
-def rollout(config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None):
+def rollout(config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None, maintenance=False):
 	try:
 		# The maintenance hooks travel only when set (a plain release passes none).
-		hooks = {name: value for name, value in (("on_upgrade", on_upgrade), ("restore", restore)) if value}
+		hooks = {name: value for name, value in (("on_upgrade", on_upgrade), ("restore", restore), ("maintenance", maintenance)) if value}
 		deploy(config, staging, manifest, notice, upgrade, **hooks)
 	except Exception as error:
 		if not deployed(config, manifest):

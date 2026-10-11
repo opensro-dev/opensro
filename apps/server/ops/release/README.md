@@ -172,10 +172,24 @@ without them is refused before it changes anything.
 1. `publish` closes the gate: `<module>/.state/cluster/maintenance-gate.json`
    lists those accounts, and every GameWorld then mints EnterWorld tokens for
    them alone (`SRO_MAINTENANCE_GATE_PATH`, set by `sro-nomad`). It then
-   announces, backs up, stops the fleet and runs the server's offline upgrade
-   on every enabled shard. Each shard is journaled before its commit, then
-   with the backup the upgrade kept and its sha256, before the new server
-   deploys and the client switches.
+   backs up, validates the new release, announces, stops the fleet and runs
+   the server's offline upgrade on every enabled shard. Each shard is
+   journaled before its commit, then with the backup the upgrade kept and its
+   sha256, before the new server deploys and the client switches.
+
+   Validation (`sro-nomad validate -assume-stopped`) runs before anything
+   stops, so any refusal leaves the server running. `sro-nomad` refuses to
+   replace a credential variable while its job is registered; with
+   `-assume-stopped` it reports such a variable (`requires-stop <job> <path>`)
+   instead. A release that changes one (anything `sro-provision-identity`
+   creates, such as `public-api-token`) can therefore ship only as a
+   maintenance release: the deploy stops the fleet after the notice and
+   validates again. A plain release that changes one is refused, as is a
+   staged candidate whose rehearsal finds one and is not built for
+   maintenance. A maintenance revert stops the same way when the release it
+   restores changes a credential back. A revert to a release built before
+   `-assume-stopped` stops first in maintenance and validates before anything
+   stops otherwise (2026-10-11, opensro #759 and this change).
 2. The release gate runs as the probe account against the closed window, and
    its evidence is recorded as for any pair.
 3. `confirm` records the release, then removes the gate: players refresh and
@@ -188,6 +202,10 @@ without them is refused before it changes anything.
    missing or changed, or a shard journaled without one, refuses the restore
    and leaves the journal `revert-failed` with the gate closed for an
    operator.
+
+A failed request's reason is in the host journal (`journalctl -t
+opensro-release`, secret-like strings masked) as well as on the operator's
+SSH stream.
 
 After confirm, no workflow crosses the schema back; that takes restoring
 the upgrade's backup by hand. After any manual recovery, reopen the game by

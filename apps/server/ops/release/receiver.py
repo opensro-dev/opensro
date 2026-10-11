@@ -28,7 +28,7 @@ import client_data
 import server_data
 import coordinated
 from deploy import masked, publish_server, receive, rehearse
-from release_state import admit, identity, read_state, store_upgrade_required, write_state
+from release_state import admit, identity, read_state, write_state
 from rollback import prepare as prepare_rollback
 
 try:
@@ -111,10 +111,10 @@ def stage_server(config, archive, scratch):
 	state = read_state(config["production_state"])
 	admit(state, manifest["plan"])
 	stops = rehearse(config, scratch / "server", manifest)
-	if stops and not stops_before_validate(state, manifest["plan"]):
+	if stops and not can_stop_for_credentials(manifest["plan"]):
 		raise ValueError("release replaces credential variable(s) " + ", ".join(path for _, path in stops) +
-			" while their jobs run; only a maintenance release that upgrades the store stops the fleet before it"
-			" validates, so this release would fail inside its window")
+			" while their jobs run; only a maintenance release may stop the fleet for that,"
+			" so this release would fail inside its window")
 	with archive.open("rb") as stream:
 		candidate_id = hashlib.file_digest(stream, "sha256").hexdigest()
 	record = Path(config["candidate_records"]) / candidate_id
@@ -137,16 +137,16 @@ def stage_server(config, archive, scratch):
 
 
 # ================
-# stops_before_validate
+# can_stop_for_credentials
 #
-# Whether this release's deployment stops the fleet before sro-nomad
-# validates (deploy.py deploy): only a maintenance pair whose store needs an
-# upgrade does (coordinated.py publish passes upgrade only then). Any other
-# release validates with the fleet running, so a credential variable it
-# replaces would refuse it.
+# Whether this release's deployment may stop the fleet to replace a
+# credential variable (deploy.py deploy): every maintenance pair may,
+# whether or not its store upgrades (coordinated.py passes maintenance to
+# the publish and the revert). A plain release validates with the fleet
+# running, so a credential variable it replaces refuses it.
 # ================
-def stops_before_validate(state, plan):
-	return bool(plan.get("maintenance")) and store_upgrade_required(state, plan)
+def can_stop_for_credentials(plan):
+	return bool(plan.get("maintenance"))
 
 
 # ================

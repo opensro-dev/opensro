@@ -102,17 +102,18 @@ class DeployTests(unittest.TestCase):
 					self.assertEqual((module / "release.json").exists(), failure is None)
 
 	# ================
-	# test_a_maintenance_release_validates_its_new_credentials_after_the_stop
+	# test_validation_runs_before_any_stop_and_only_credentials_stop_first
 	#
 	# sro-nomad refuses to replace a credential variable while its job is
-	# registered (2026-10-11: a release's new public-api-token failed every
-	# maintenance publish). The fake refuses the same way: validate fails
-	# until stop has run. A maintenance deployment must stop first; a plain
-	# release still validates before anything stops and never stops.
+	# registered (2026-10-11); validate -assume-stopped reports it instead.
+	# Every deployment validates before anything stops. A changed credential
+	# then stops the fleet (maintenance only) and validates again; a plain
+	# release with one is refused, and any other refusal stops nothing.
 	# ================
-	def test_a_maintenance_release_validates_its_new_credentials_after_the_stop(self):
-		for maintenance in (True, False):
-			with self.subTest(maintenance=maintenance), tempfile.TemporaryDirectory() as directory:
+	def test_validation_runs_before_any_stop_and_only_credentials_stop_first(self):
+		for maintenance, credential, refusal in ((True, True, False), (False, True, False), (True, False, False), (True, False, True)):
+			with self.subTest(maintenance=maintenance, credential=credential, refusal=refusal), \
+				tempfile.TemporaryDirectory() as directory:
 				root = Path(directory)
 				staging, module = root / "staging", root / "module"
 				(module / ".state/cluster").mkdir(parents=True)
@@ -133,6 +134,9 @@ class DeployTests(unittest.TestCase):
 
 				# ================
 				# execute
+				#
+				# A fake sro-nomad with the real refusal: a plain validate
+				# refuses a changed credential until stop has run.
 				# ================
 				def execute(arguments, **_options):
 					calls.append(arguments)
@@ -142,24 +146,87 @@ class DeployTests(unittest.TestCase):
 						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
 					if arguments[0].endswith("sro-nomad") and arguments[1] == "stop":
 						registered[0] = False
-					# A maintenance release brings a new credential; a plain one does not.
-					if arguments[0].endswith("sro-nomad") and arguments[1] == "validate" and maintenance and registered[0]:
-						raise subprocess.CalledProcessError(1, arguments)
+					if arguments[0].endswith("sro-nomad") and arguments[1] == "validate":
+						if refusal:
+							raise subprocess.CalledProcessError(1, arguments)
+						if credential and registered[0]:
+							if "-assume-stopped" not in arguments:
+								raise subprocess.CalledProcessError(1, arguments)
+							return SimpleNamespace(stdout="requires-stop sro-gameworld-x nomad/jobs/sro-gameworld-x/gameworld/gameworld\n")
 					return SimpleNamespace(stdout="")
 
 				with patch.object(deploy, "run", side_effect=execute), patch.object(deploy.shutil, "chown"), \
 					patch.object(deploy.server_data, "choose", return_value=None), \
-					patch.object(deploy, "warning", return_value=False), \
-					patch.object(deploy, "upgrade_authorities") as upgrade:
-					deploy.deploy(config, staging, manifest, notice=False, upgrade=maintenance)
+					patch.object(deploy, "warning", return_value=False):
+					if refusal or (credential and not maintenance):
+						with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
+							deploy.deploy(config, staging, manifest, notice=False, maintenance=maintenance)
+					else:
+						deploy.deploy(config, staging, manifest, notice=False, maintenance=maintenance)
 				verbs = [call[1] for call in calls if call[0].endswith("sro-nomad")]
-				if maintenance:
-					self.assertLess(verbs.index("stop"), verbs.index("validate"))
-					upgrade.assert_called_once()
+				first = next(call for call in calls if call[0].endswith("sro-nomad") and call[1] == "validate")
+				self.assertIn("-assume-stopped", first)
+				self.assertEqual(calls[-1], ["nomad", "acl", "token", "delete", "accessor"])
+				if refusal or (credential and not maintenance):
+					self.assertNotIn("stop", verbs)
+					self.assertNotIn("deploy", verbs)
+				elif credential:
+					self.assertEqual(verbs[:3], ["validate", "stop", "validate"])
+					self.assertEqual(verbs[-2:], ["deploy", "status"])
 				else:
 					self.assertNotIn("stop", verbs)
-					self.assertLess(verbs.index("validate"), verbs.index("deploy"))
-				self.assertEqual(verbs[-2:], ["deploy", "status"])
+					self.assertEqual(verbs[-2:], ["deploy", "status"])
+
+	# ================
+	# test_a_release_older_than_assume_stopped_still_deploys
+	#
+	# A revert target built before validate learned -assume-stopped rejects
+	# the flag: a maintenance deployment then stops before validating, and a
+	# plain one validates before anything stops.
+	# ================
+	def test_a_release_older_than_assume_stopped_still_deploys(self):
+		for maintenance in (True, False):
+			with self.subTest(maintenance=maintenance), tempfile.TemporaryDirectory() as directory:
+				root = Path(directory)
+				staging, module = root / "staging", root / "module"
+				(module / ".state/cluster").mkdir(parents=True)
+				for name in FILES:
+					path = staging / name
+					path.parent.mkdir(parents=True, exist_ok=True)
+					path.write_text("fixture")
+				bootstrap = root / "bootstrap.json"
+				bootstrap.write_text(json.dumps({"SecretID": "management-fixture"}))
+				config = {
+					"module": str(module), "game_data": str(root / "server.srogz"),
+					"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
+					"origin": "https://example.test", "agent_memory_mb": 256,
+					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture",
+				}
+				manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
+				calls = []
+
+				# ================
+				# execute
+				# ================
+				def execute(arguments, **_options):
+					calls.append(arguments)
+					if arguments[:2] == ["nomad", "version"]:
+						return SimpleNamespace(stdout="Nomad v2.0.7")
+					if arguments[:4] == ["nomad", "acl", "token", "create"]:
+						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+					if arguments[0].endswith("sro-nomad") and "-assume-stopped" in arguments:
+						raise subprocess.CalledProcessError(2, arguments, stderr="flag provided but not defined: -assume-stopped")
+					return SimpleNamespace(stdout="")
+
+				with patch.object(deploy, "run", side_effect=execute), patch.object(deploy.shutil, "chown"), \
+					patch.object(deploy.server_data, "choose", return_value=None), \
+					patch.object(deploy, "warning", return_value=False):
+					deploy.deploy(config, staging, manifest, notice=False, maintenance=maintenance)
+				verbs = [call[1] for call in calls if call[0].endswith("sro-nomad")]
+				if maintenance:
+					self.assertEqual(verbs, ["validate", "stop", "validate", "deploy", "status"])
+				else:
+					self.assertEqual(verbs, ["validate", "validate", "deploy", "status"])
 
 	# ================
 	# test_a_refused_restore_stops_nothing

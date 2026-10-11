@@ -214,9 +214,10 @@ class PairFixture(LiveDataFixture):
 	# Nomad: record what was rolled out and write the release record, as a
 	# healthy rollout does.
 	# ================
-	def fake_deploy(self, _config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None):
+	def fake_deploy(self, _config, staging, manifest, notice=True, upgrade=False, on_upgrade=None, restore=None,
+		maintenance=False):
 		self.rollouts.append((manifest["commit"], notice, (Path(staging) / "agent").read_bytes()))
-		self.deployments.append({"upgrade": upgrade, "restore": restore})
+		self.deployments.append({"upgrade": upgrade, "restore": restore, "maintenance": maintenance})
 		if upgrade and on_upgrade:
 			for shard in self.shards:
 				on_upgrade(shard, None)
@@ -282,7 +283,7 @@ class CoordinatedFlowTests(PairFixture, unittest.TestCase):
 		result = self.publish()
 		self.assertEqual(result["phase"], "verifying")
 		self.assertEqual(self.rollouts, [(NEW_COMMIT, True, b"next server agent")])
-		self.assertEqual(self.deployments, [{"upgrade": False, "restore": None}])
+		self.assertEqual(self.deployments, [{"upgrade": False, "restore": None, "maintenance": False}])
 		self.assertEqual(self.live_client(), self.tree.resolve())
 		pending = read_state(self.config["production_state"])
 		self.assertEqual(pending["operation"]["phase"], "verifying")
@@ -421,7 +422,8 @@ class MaintenanceFlowTests(PairFixture, unittest.TestCase):
 	def test_the_gate_holds_until_confirmation(self):
 		result = self.publish()
 		self.assertTrue(result["maintenance"])
-		self.assertEqual(self.deployments, [{"upgrade": True, "restore": None}])
+		# maintenance reaches the deploy, so it may stop for a changed credential.
+		self.assertEqual(self.deployments, [{"upgrade": True, "restore": None, "maintenance": True}])
 		# Each shard was journaled as started before its backup was recorded.
 		self.assertEqual(self.journaled, [None, None])
 		pending = read_state(self.config["production_state"])
@@ -440,7 +442,7 @@ class MaintenanceFlowTests(PairFixture, unittest.TestCase):
 		self.publish()
 		authorities = read_state(self.config["production_state"])["operation"]["authorities"]
 		state = coordinated.revert(self.config, "browser smoke failed", self.edge)
-		self.assertEqual(self.deployments[-1], {"upgrade": False, "restore": authorities})
+		self.assertEqual(self.deployments[-1], {"upgrade": False, "restore": authorities, "maintenance": True})
 		self.assertEqual(self.rollouts[-1], (self.state["server"]["commit"], False, b"live server agent"))
 		self.assertEqual(state["server"]["compatibility"]["storeWrite"], 13)
 		self.assertIsNone(state["operation"])

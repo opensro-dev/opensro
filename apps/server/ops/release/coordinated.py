@@ -113,8 +113,10 @@ def publish(config, request, scratch, verify=check_entry):
 	try:
 		if maintenance:
 			deploy.shut_gate(config)
+		# maintenance lets the deploy stop the fleet for a changed credential
+		# even without a store upgrade (2026-10-11).
 		warning = deploy.rollout(config, Path(scratch) / "server", manifest, upgrade=upgrade,
-			on_upgrade=journal_upgrade(config, pending) if upgrade else None)
+			on_upgrade=journal_upgrade(config, pending) if upgrade else None, maintenance=maintenance)
 	except Exception:
 		enter(config, pending, "failed")
 		deploy.alert_staff(config, "Coordinated release " + manifest["commit"] + " failed in the server rollout. Run the revert workflow.")
@@ -212,7 +214,10 @@ def revert(config, reason, verify=check_entry):
 		# still shows the old release record, so the record cannot prove
 		# which jobs Nomad is running.
 		manifest = json.loads((retained_server / "release.json").read_text())
-		deploy.rollout(config, retained_server, manifest, notice=False, restore=operation.get("authorities") or None)
+		# Reverting a pair that added a credential replaces it again: a
+		# maintenance revert may stop the fleet for that, as the publish did.
+		deploy.rollout(config, retained_server, manifest, notice=False, restore=operation.get("authorities") or None,
+			maintenance=bool(operation.get("maintenance")))
 		if operation.get("maintenance"):
 			deploy.lift_gate(config)
 	except Exception:

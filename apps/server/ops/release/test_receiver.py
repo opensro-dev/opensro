@@ -78,7 +78,7 @@ class ReceiverTests(unittest.TestCase):
 				(root / "records").mkdir()
 				write_state(config["production_state"], production())
 				with patch.object(receiver, "rehearse", return_value=stops if needed else []), \
-					patch.object(receiver, "stops_before_validate", return_value=upgrades):
+					patch.object(receiver, "can_stop_for_credentials", return_value=upgrades):
 					if refused:
 						with self.assertRaisesRegex(ValueError, "would fail inside its window"):
 							receiver.stage_server(config, archive, root / "scratch")
@@ -87,14 +87,15 @@ class ReceiverTests(unittest.TestCase):
 						self.assertIn("candidate", receiver.stage_server(config, archive, root / "scratch"))
 
 	# ================
-	# test_only_an_upgrading_maintenance_pair_stops_before_validating
+	# test_every_maintenance_pair_may_stop_for_credentials
+	#
+	# With or without a store upgrade: the deploy validates first and stops
+	# only for a reported credential. A plain release never may.
 	# ================
-	def test_only_an_upgrading_maintenance_pair_stops_before_validating(self):
-		for maintenance, upgrade, expected in ((False, True, False), (True, False, False), (True, True, True)):
-			with self.subTest(maintenance=maintenance, upgrade=upgrade), \
-				patch.object(receiver, "store_upgrade_required", return_value=upgrade):
-				plan = {"maintenance": True} if maintenance else {}
-				self.assertEqual(receiver.stops_before_validate({}, plan), expected)
+	def test_every_maintenance_pair_may_stop_for_credentials(self):
+		for plan, expected in (({}, False), ({"maintenance": False}, False), ({"maintenance": True}, True)):
+			with self.subTest(plan=plan):
+				self.assertEqual(receiver.can_stop_for_credentials(plan), expected)
 
 	# ================
 	# test_staging_cannot_dispatch_publication
