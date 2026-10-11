@@ -33,6 +33,9 @@ export interface ExperimentalOptions {
 	readonly perPixelLighting: boolean;
 	// Gameplay: a skill press's run-up walks before the server's answer.
 	readonly predictedRunUp: boolean;
+	// Camera: ease the follow target's height and the collision release
+	// (camera-smoothing.ts); native 68F830 snaps both.
+	readonly smoothCamera: boolean;
 }
 
 /*
@@ -93,7 +96,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
-		predictedRunUp: enabled( "predictedRunUp" )
+		predictedRunUp: enabled( "predictedRunUp" ),
+		smoothCamera: enabled( "smoothCamera" )
 	};
 }
 
@@ -115,6 +119,7 @@ export interface ExperimentalVideo {
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
+	readonly smoothCamera: boolean;
 }
 
 /*
@@ -132,7 +137,8 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		floatBloom: options.floatBloom,
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,
-		perPixelLighting: options.perPixelLighting
+		perPixelLighting: options.perPixelLighting,
+		smoothCamera: options.smoothCamera
 	};
 }
 

@@ -72,6 +72,13 @@ import {
 	animatedCameraCandidates,
 	type RegionCollision
 } from "@/engine/foundation/rendering/follow-camera";
+import {
+	beginCameraSmoothingFrame,
+	createCameraSmoothing,
+	resetCameraSmoothing,
+	smoothCameraDistance,
+	smoothCameraHeight
+} from "@/engine/foundation/rendering/camera-smoothing";
 import { initialStarFlicker } from "@/engine/foundation/rendering/star-flicker";
 import { createCharacterPose } from "@/engine/foundation/animation/animation-pose";
 import {
@@ -416,6 +423,10 @@ export function createWorldRenderer(
 		collisionParts: ReturnType<typeof cameraCollisionParts> = [],
 		collisionDistance: number | null = null;
 	let collisionCamera: WorldCamera | null = null;
+	// Port-only, not native: the Experimental "Smooth camera" row eases the
+	// follow target's height and the collision release (camera-smoothing.ts).
+	const cameraSmoothing = createCameraSmoothing();
+	let smoothCamera = false;
 	// The inputs the retained collisionCamera was resolved for (followInput).
 	const collisionInput = new Float64Array( FOLLOW_INPUT_LENGTH );
 	let collisionInputValid = false;
@@ -1331,6 +1342,20 @@ export function createWorldRenderer(
 		},
 		/*
 		================
+		smoothCamera
+
+		The Experimental "Smooth camera" row. Turning it either way drops the
+		history, so the first frame after is the native camera.
+		================
+		*/
+		smoothCamera( enabled: boolean ) {
+			if ( (enabled === true) === smoothCamera ) return;
+			smoothCamera = enabled === true;
+			resetCameraSmoothing( cameraSmoothing );
+			collisionInputValid = false;
+		},
+		/*
+		================
 		neededTextures
 		================
 		*/
@@ -1557,15 +1582,41 @@ export function createWorldRenderer(
 				refitAnimatedCameraParts( candidates );
 				if ( changed.size ) collisionInputValid = false;
 			}
+			// Smooth camera (port-only): the frame's step, 0 when it snaps.
+			const smoothStep = smoothCamera && camera.follow ?
+				beginCameraSmoothingFrame(
+					cameraSmoothing,
+					seconds,
+					camera.originRegion ?? 0,
+					!!camera.follow.mounted
+				) :
+				0;
+			if ( smoothCamera && camera.follow ) {
+				localCamera = {
+					...localCamera,
+					target: [
+						localCamera.target[0],
+						smoothCameraHeight( cameraSmoothing, localCamera.target[1], smoothStep ),
+						localCamera.target[2]
+					] as const
+				};
+			} else if ( !camera.follow ) {
+				resetCameraSmoothing( cameraSmoothing );
+			}
 			if ( camera.follow ) {
 				if (
 					followInput( localCamera.target, camera.follow, collisionDistance, collisionInput ) ||
 					!collisionInputValid
 				) {
+					// The target-height feedback (68F830) reads the last distance; the
+					// smooth camera feeds it the eased one, so the lift eases with it.
+					const liftDistance = smoothCamera && cameraSmoothing.distance !== null ?
+						cameraSmoothing.distance :
+						collisionDistance;
 					const result = resolveFollowCamera(
 						localCamera,
 						collisionParts,
-						collisionDistance,
+						liftDistance,
 						collisionQuery
 					);
 					probe?.worldCount?.( "camera-queries", 1 );
@@ -1578,6 +1629,24 @@ export function createWorldRenderer(
 					collisionInputValid = true;
 				}
 				localCamera = { ...localCamera, eye: collisionCamera!.eye, target: collisionCamera!.target };
+				if ( smoothCamera ) {
+					// An obstruction pulls in at once; its release eases back out
+					// along the same view ray.
+					const query = followCameraQuery( localCamera, collisionDistance );
+					const resolved = collisionDistance ?? query.distance;
+					const eased = smoothCameraDistance( cameraSmoothing, resolved, smoothStep );
+					if ( eased !== resolved ) {
+						const target = collisionCamera!.target;
+						localCamera = {
+							...localCamera,
+							eye: [
+								target[0] + query.direction[0]! * eased,
+								target[1] + query.direction[1]! * eased,
+								target[2] + query.direction[2]! * eased
+							] as const
+						};
+					}
+				}
 			} else {
 				collisionScene = null;
 				collisionParts = [];

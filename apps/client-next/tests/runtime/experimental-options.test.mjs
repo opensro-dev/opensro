@@ -32,7 +32,8 @@ const OFF = Object.freeze( {
 	hdrToneMap: false,
 	sunShadow: false,
 	perPixelLighting: false,
-	predictedRunUp: false
+	predictedRunUp: false,
+	smoothCamera: false
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -109,7 +110,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		floatBloom: false,
 		hdrToneMap: false,
 		sunShadow: false,
-		perPixelLighting: false
+		perPixelLighting: false,
+		smoothCamera: false
 	} );
 	for (
 		const key of [
@@ -120,7 +122,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
-			"perPixelLighting"
+			"perPixelLighting",
+			"smoothCamera"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );

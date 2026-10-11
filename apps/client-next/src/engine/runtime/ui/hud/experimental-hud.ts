@@ -133,6 +133,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-predicted-run-up",
 			label: "Predicted run-up",
 			description: "Walk toward a far target at the press; may jump at the cast."
+		}, {
+			key: "smoothCamera",
+			id: "experimental-smooth-camera",
+			label: "Smooth camera",
+			description: "Ease small camera height jumps and the return after a wall."
 		} ]
 	},
 	{

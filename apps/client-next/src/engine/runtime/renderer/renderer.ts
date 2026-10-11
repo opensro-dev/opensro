@@ -165,6 +165,7 @@ export function createRenderer(
 			const hdrChanged = value.hdrToneMap !== experimental.hdrToneMap;
 			experimental = value;
 			device.experimentalVideo( value );
+			world.smoothCamera( value.smoothCamera );
 			if ( hdrChanged && draw ) {
 				// The fullscreen image draw carries its pipeline; re-upload
 				// it in the new scene format.
