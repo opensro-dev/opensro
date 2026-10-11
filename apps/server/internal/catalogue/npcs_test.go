@@ -52,7 +52,8 @@ func TestNpcRowsJoinPositionsServicesAndGoods(t *testing.T) {
 ================
 TestTradeListsOnlyFixedRateQuotations
 
-The sale path refuses a quotation whose bounds differ, so it is not listed.
+The sale path refuses a quotation whose bounds differ, so it is not listed;
+nor is a quotation of a trader v1.150 does not place.
 ================
 */
 func TestTradeListsOnlyFixedRateQuotations(t *testing.T) {
@@ -60,13 +61,28 @@ func TestTradeListsOnlyFixedRateQuotations(t *testing.T) {
 	fixed := commerce.TradeQuotation{Base: 1.1, Lower: 1.1, Upper: 1.1, BaseStock: 100, Step: 1, Stock: 100}
 	ranged := fixed
 	ranged.Upper = 1.5
-	quotes := BuildTrade(map[[2]uint32]commerce.TradeQuotation{{2010, 2151}: fixed, {2011, 2151}: ranged},
-		func(id uint32) *enterworld.ItemRef { return silk })
+	quotes := BuildTrade(map[[2]uint32]commerce.TradeQuotation{{2010, 2151}: fixed, {2011, 2151}: ranged, {26794, 2151}: fixed},
+		func(id uint32) *enterworld.ItemRef { return silk }, func(id uint32) bool { return id != 26794 })
 	if len(quotes) != 1 || quotes[0].NpcID != 2010 || quotes[0].SellPrice <= quotes[0].BasePrice ||
 		quotes[0].Profit != int64(quotes[0].SellPrice)-348 {
 		t.Fatalf("quotes %+v", quotes)
 	}
 	if ThiefRate() != 0.75 {
 		t.Fatalf("thief rate %v", ThiefRate())
+	}
+}
+
+/*
+================
+TestBonusSourcesListTheReinforcementBuffs
+
+Skills with a reinforcement bonus are listed with it; others are not.
+================
+*/
+func TestBonusSourcesListTheReinforcementBuffs(t *testing.T) {
+	rows := []enterworld.SkillRow{{ID: 7092, Codename: "SKILL_MALL_PRE_APRU_4W_01", AlchemyReinforceBonus: 5}, {ID: 3, Codename: "SKILL_CH_SWORD"}}
+	sources := bonusSources(AlchemySource{Skills: rows})
+	if len(sources) != 1 || sources[0].ID != 7092 || sources[0].Bonus != 5 || sources[0].Kind != "skill" {
+		t.Fatalf("sources %+v", sources)
 	}
 }

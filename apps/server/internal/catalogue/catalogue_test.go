@@ -206,3 +206,19 @@ func TestItemRarityNamesTheSeal(t *testing.T) {
 		t.Errorf("an element of class 7 has degree %d", got)
 	}
 }
+
+/*
+================
+TestSchemaCarriesFieldDocs
+
+A doc tag ships as the property's description, so the site reads the
+rule beside the data.
+================
+*/
+func TestSchemaCarriesFieldDocs(t *testing.T) {
+	schema := Schema("alchemy.json", AlchemyFile{})
+	rules := schema["properties"].(map[string]any)["rules"].(map[string]any)["properties"].(map[string]any)
+	if doc, _ := rules["minChance"].(map[string]any)["description"].(string); !strings.Contains(doc, "clamped") {
+		t.Fatalf("minChance description %q", doc)
+	}
+}

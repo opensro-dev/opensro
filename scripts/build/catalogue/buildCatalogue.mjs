@@ -9,9 +9,10 @@ only the client knows: each item's tooltip, built by client-next's own
 itemTooltip, and the web icons, encoded to WebP from the client's published
 PNGs. Output: <generated>/catalogue/<release>/ and catalogue/latest.json.
 
-usage: node scripts/build/catalogue/buildCatalogue.mjs [--release <id>] [--out <dir>]
+usage: node scripts/build/catalogue/buildCatalogue.mjs [--release <id>] [--out <dir>] [--since <commit>]
 (--out writes the catalogue somewhere else, for a trial run; the inputs
-always come from the generated tree.)
+always come from the generated tree. --since is the previous release's
+commit: notes.json lists the player notes of the merges after it.)
 
 ===========================================================================
 */
@@ -25,6 +26,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
+import { playerNotes } from "./playerNotes.mjs";
 
 const { itemTooltip } = await import( "../../../apps/client-next/src/engine/foundation/ui/item-tooltip.ts" );
 const { itemMaxDurability } = await import(
@@ -53,13 +55,17 @@ parseArguments
 ================
 */
 function parseArguments( argv ) {
-	const options = { release: "dev", out: "" };
+	const options = { release: "dev", out: "", since: "" };
 	for ( let i = 0; i < argv.length; i++ ) {
 		if ( argv[i] === "--release" ) options.release = argv[++i] ?? "";
 		else if ( argv[i] === "--out" ) options.out = path.resolve( argv[++i] ?? "" );
+		else if ( argv[i] === "--since" ) options.since = argv[++i] ?? "";
 		else throw Error( "unknown argument " + argv[i] );
 	}
 	if ( !/^[A-Za-z0-9._-]{1,64}$/.test( options.release ) ) throw Error( "invalid --release " + options.release );
+	if ( options.since && !/^[0-9a-f]{7,40}$/i.test( options.since ) ) {
+		throw Error( "invalid --since " + options.since );
+	}
 	return options;
 }
 
@@ -396,6 +402,10 @@ async function main() {
 			regions: regions.regions
 		} );
 		writeFileSync( path.join( out, "search.json" ), JSON.stringify( search ) + "\n" );
+		const notes = readJSON( path.join( work, "notes.json" ) );
+		notes.since = options.since;
+		notes.entries = playerNotes( repositoryRoot, options.since );
+		writeFileSync( path.join( out, "notes.json" ), JSON.stringify( notes ) + "\n" );
 		const atlas = readJSON( path.join( work, "atlas.json" ) );
 		const tiles = atlasTiles( out );
 		atlas.tiles = tiles.map( ( [key] ) => key.split( "x" ).map( Number ) );
@@ -404,9 +414,10 @@ async function main() {
 		for ( const name of readdirSync( work ) ) {
 			if (
 				name.endsWith( ".json" ) &&
-				![ "items.json", "skills.json", "regions.json", "npcs.json", "search.json", "atlas.json" ].includes(
-					name
-				)
+				![ "items.json", "skills.json", "regions.json", "npcs.json", "search.json", "atlas.json", "notes.json" ]
+					.includes(
+						name
+					)
 			) {
 				writeFileSync( path.join( out, name ), readFileSync( path.join( work, name ) ) );
 			}

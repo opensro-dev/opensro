@@ -3,6 +3,7 @@ package action
 import (
 	"math"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/statuseffect"
 )
 
@@ -30,7 +31,7 @@ func (rt *Runtime) alchemyBonuses(division string, character *enterworld.Charact
 				continue
 			}
 			for _, value := range row.MagicOptions {
-				if m, ok := rt.Alchemy.Magic[uint16(value)]; ok && m.Tag == 0x6c756361 {
+				if m, ok := rt.Alchemy.Magic[uint16(value)]; ok && m.Tag == alchemy.MagicTagAlchemyBonus {
 					reinforce += uint64(uint32(value >> 32))
 				}
 			}

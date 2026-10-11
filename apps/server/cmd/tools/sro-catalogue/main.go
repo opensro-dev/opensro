@@ -220,8 +220,14 @@ func run(out, release, textdata string) error {
 		return fmt.Errorf("alchemy: %w", err)
 	}
 	npcs := catalogue.BuildNpcs(catalogue.NpcSource{Roster: simulation.LoadNpcWorldRoster(dir), Shops: shops})
+	placedNpcs := map[uint32]bool{}
+	for _, npc := range npcs {
+		placedNpcs[npc.ID] = true
+	}
+	text := englishText(dir)
 	skillData := enterworld.NewTextdataSkills(dir)
-	skills := catalogue.BuildSkills(catalogue.SkillSource{Rows: skillRows(skillData),
+	skillList := skillRows(skillData)
+	skills := catalogue.BuildSkills(catalogue.SkillSource{Rows: skillList,
 		Handled: func(row enterworld.SkillRow) bool { return action.SkillPressHandled(skillData, row) },
 		Plan:    func(id uint32) enterworld.SkillExecutionKind { return skillData.ExecutionPlan(id).Kind() }})
 	if err := writeJSON(filepath.Join(out, "_build", "item-references.json"),
@@ -235,11 +241,18 @@ func run(out, release, textdata string) error {
 		"skills.json":   catalogue.SkillsFile{Header: header, Masteries: []catalogue.SkillMastery{}, Skills: skills},
 		"regions.json":  catalogue.RegionsFile{Header: header, Regions: []catalogue.Region{}},
 		"npcs.json":     catalogue.NpcsFile{Header: header, Npcs: npcs},
-		"alchemy.json":  catalogue.BuildAlchemy(header, alchemyCatalog, itemID),
-		"search.json":   catalogue.SearchFile{Header: header, Entries: []catalogue.SearchEntry{}},
-		"atlas.json":    catalogue.NewAtlas(header),
+		"alchemy.json": catalogue.BuildAlchemy(header, catalogue.AlchemySource{Catalog: alchemyCatalog, ItemID: itemID,
+			Skills: skillList, SkillName: func(row enterworld.SkillRow) string {
+				if name := text(row.NameSymbol); name != "" {
+					return name
+				}
+				return row.Codename
+			}}),
+		"search.json": catalogue.SearchFile{Header: header, Entries: []catalogue.SearchEntry{}},
+		"atlas.json":  catalogue.NewAtlas(header),
+		"notes.json":  catalogue.NotesFile{Header: header, Entries: []catalogue.NoteEntry{}},
 		"trade.json": catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(),
-			Quotes: catalogue.BuildTrade(shops.TradeQuotations, itemByID)},
+			Quotes: catalogue.BuildTrade(shops.TradeQuotations, itemByID, func(id uint32) bool { return placedNpcs[id] })},
 		"droptables.json": catalogue.BuildDropTables(monsters, itemID, header),
 		"summary.json": catalogue.Summarize(header, catalogue.SummaryInput{Items: catalogue.ItemStandings(items),
 			Skills: catalogue.SkillStandings(skills), Quests: catalogue.QuestStandings(quests), Monsters: catalogue.MonsterStandings(monsters)}),
@@ -257,6 +270,7 @@ func run(out, release, textdata string) error {
 		"alchemy.schema.json":    catalogue.Schema("alchemy.json", catalogue.AlchemyFile{}),
 		"search.schema.json":     catalogue.Schema("search.json", catalogue.SearchFile{}),
 		"atlas.schema.json":      catalogue.Schema("atlas.json", catalogue.AtlasFile{}),
+		"notes.schema.json":      catalogue.Schema("notes.json", catalogue.NotesFile{}),
 	}
 	for name, value := range files {
 		if err := writeJSON(filepath.Join(out, name), value); err != nil {

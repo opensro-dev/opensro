@@ -25,6 +25,7 @@ var schemaEnums = map[string][]string{
 	"currency":   currencyEnum,
 	"rarity":     rarityEnum,
 	"searchKind": searchKindEnum,
+	"noteArea":   noteAreaEnum,
 }
 
 /*
@@ -82,7 +83,7 @@ func schemaOf(t reflect.Type, enum string) map[string]any {
 addStructFields
 
 Embedded structs contribute their fields inline, as encoding/json does.
-A field without omitempty is required.
+A field without omitempty is required; a doc tag becomes its description.
 ================
 */
 func addStructFields(t reflect.Type, properties map[string]any, required *[]string) {
@@ -100,7 +101,11 @@ func addStructFields(t reflect.Type, properties map[string]any, required *[]stri
 		if name == "" {
 			name = field.Name
 		}
-		properties[name] = schemaOf(field.Type, field.Tag.Get("enum"))
+		property := schemaOf(field.Type, field.Tag.Get("enum"))
+		if doc := field.Tag.Get("doc"); doc != "" {
+			property["description"] = doc
+		}
+		properties[name] = property
 		if !strings.Contains(options, "omitempty") {
 			*required = append(*required, name)
 		}

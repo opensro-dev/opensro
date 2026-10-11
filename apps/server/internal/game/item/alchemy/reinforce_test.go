@@ -3,6 +3,7 @@ package alchemy
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/item/inventory"
@@ -165,5 +166,31 @@ func TestReinforceTablesReadTheAuthoredChances(t *testing.T) {
 	}
 	if elixirs[0].Chances[0] != 0x32 || elixirs[0].Chances[11] != probability(c.Items["ELIXIR"], 40) {
 		t.Fatalf("chances %v", elixirs[0].Chances)
+	}
+}
+
+/*
+================
+TestElixirKindsNameTheAcceptedFamilies
+
+The classes an elixir's first and last parameters list are the families
+Reinforce admits: weapon 6, shield 4, accessory 5/12, armor 1..3/9..11.
+================
+*/
+func TestElixirKindsNameTheAcceptedFamilies(t *testing.T) {
+	for _, tc := range []struct {
+		params [5]uint32
+		want   string
+	}{
+		{[5]uint32{0x06}, "weapon"},
+		{[5]uint32{0x04}, "shield"},
+		{[5]uint32{0x0c05}, "accessory"},
+		{[5]uint32{0x03020109, 0, 0, 0, 0x0b0a}, "armor"},
+		{[5]uint32{0x0604}, "shield,weapon"},
+		{[5]uint32{}, ""},
+	} {
+		if got := strings.Join(elixirKinds(Reference{Params: tc.params}), ","); got != tc.want {
+			t.Errorf("params %x: kinds %q, want %q", tc.params, got, tc.want)
+		}
 	}
 }
