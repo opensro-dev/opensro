@@ -2672,11 +2672,15 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		effects are decorations of the world entity and never reach it.
 		================
 		*/
-		portraitSource( gid: number ): PortraitSource | null {
-			const actor = portraitSnapshots.index.get( gid ) ?? actors.find( a => a.gid === gid ),
+		portraitSource( gid: number, withRide = false ): PortraitSource | null {
+			// A ride lives only among the world actors, never the portrait
+			// copies: the viewer's mounted doll reads the world.
+			const portrait = !withRide && portraitSnapshots.index.has( gid );
+			const actor = (portrait ? portraitSnapshots.index.get( gid ) : undefined) ??
+					actors.find( a => a.gid === gid ),
 				resource = actor && models.get( actor.model );
 			if ( !actor || !resource ) return null;
-			const candidates = portraitSnapshots.index.has( gid ) ? [ ...portraitSnapshots.index.values() ] : actors;
+			const candidates = portrait ? [ ...portraitSnapshots.index.values() ] : actors;
 			const children: PortraitPart[] = [];
 			const parents = new Set( [ gid ] );
 			// Preserve nested private-skeleton attachments without borrowing unrelated actors.
@@ -2694,6 +2698,25 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					children.push( { actor: child, model: childResource.model, images: childResource.images } );
 					parents.add( child.gid );
 				}
+			}
+			// Port-only (the viewer's riding uniques): a linked ride is the one
+			// actor that picks as its rider (presentation-auxiliary.ts). Seated
+			// (mode 0) the ride is the root and the rider keeps mountedOn, so the
+			// preview seats it on the saddle as the world does; a fixed (1) or
+			// copying (2) ride draws beside it as a child.
+			const ride = withRide ? candidates.find( a => a.pickOwner === gid && a.gid !== gid ) : undefined,
+				rideResource = ride && models.get( ride.model );
+			if ( ride && rideResource ) {
+				const ridePart = { actor: ride, model: rideResource.model, images: rideResource.images };
+				if ( actor.mountedOn === ride.gid ) {
+					return {
+						actor: ride,
+						model: rideResource.model,
+						images: rideResource.images,
+						children: [ { actor, model: resource.model, images: resource.images }, ...children ]
+					};
+				}
+				children.push( ridePart );
 			}
 			return { actor, model: resource.model, images: resource.images, children };
 		},

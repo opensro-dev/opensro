@@ -45,7 +45,8 @@
 			"functions": [
 				"knows",
 				"itemType",
-				"dressed"
+				"dressed",
+				"linkedRide"
 			]
 		},
 		{
@@ -2299,6 +2300,13 @@
 			"function": "knows",
 			"kind": "callback",
 			"reason": "Port-only 3D viewer query: the characters owner lends its synchronous catalogue lookup to tell a model the catalogue lacks from one still loading."
+		},
+		{
+			"file": "src/engine/runtime/characters/viewer-queries.ts",
+			"expression": "resourceFor",
+			"function": "linkedRide",
+			"kind": "callback",
+			"reason": "Port-only 3D viewer query: the characters owner lends its synchronous catalogue lookup to tell whether the entity's model rides a linked ride the viewer must wait for."
 		},
 		{
 			"file": "src/engine/runtime/assets/worker/packs/persistent.ts",

@@ -298,3 +298,25 @@ test("a retained HUD portrait keeps drawing from its own uploads after the world
 	f.preview.dispose( f.geometry, f.images );
 	assert.equal( f.handles.size, 0 );
 });
+
+test("the viewer's mounted doll draws a linked ride; portraits never do", () => {
+	const f = fixture();
+	f.characters.borrowModel( "body", f.source.model, f.source.images );
+	f.characters.borrowModel( "ride", f.source.model, f.source.images );
+	const rider = { ...f.source.actor, mountedOn: 3 };
+	const ride = { ...f.source.actor, gid: 3, model: "ride", pickOwner: 1 };
+	// Seated (mode 0): the ride is the root and the rider stays on its saddle.
+	f.characters.actors( [ rider, ride ] );
+	const seated = f.characters.portraitSource( 1, true );
+	assert.equal( seated?.actor.gid, 3 );
+	assert.deepEqual( seated?.children?.map( child => [ child.actor.gid, child.actor.mountedOn ] ), [ [ 1, 3 ] ] );
+	const portrait = f.characters.portraitSource( 1 );
+	assert.equal( portrait?.actor.gid, 1 );
+	assert.deepEqual( portrait?.children, [] );
+	// Fixed or copying (modes 1 and 2): the rider stays the root, the ride beside it.
+	f.characters.actors( [ f.source.actor, ride ] );
+	const beside = f.characters.portraitSource( 1, true );
+	assert.equal( beside?.actor.gid, 1 );
+	assert.deepEqual( beside?.children?.map( child => child.actor.gid ), [ 3 ] );
+	f.preview.dispose( f.geometry, f.images );
+});

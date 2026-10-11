@@ -27,6 +27,7 @@ export interface ViewerQuerySources {
 		readonly manifest: number;
 		readonly manifests: readonly string[];
 		readonly items: Readonly<Record<string, ItemPresentation>>;
+		readonly ridesByRider: ReadonlyMap<string, unknown>;
 	};
 	readonly appearances: ReadonlyMap<number, { readonly parts: readonly unknown[]; readonly model: string; }>;
 	// The frame's published results: read live, since a frame replaces its map.
@@ -80,6 +81,23 @@ export function createViewerQueries(
 		dressed( gid: number ): boolean {
 			const appearance = appearances.get( gid );
 			return !appearance?.parts.length || output.displayed.get( gid )?.model === appearance.model;
+		},
+		/*
+		================
+		linkedRide
+
+		The drawn actor of the entity's linked ride (the four riding uniques,
+		presentation-auxiliary.ts): undefined when it has none, null while its
+		ride is not drawn yet. The ride is the actor that picks as its rider.
+		================
+		*/
+		linkedRide( entity: EntityState ): number | null | undefined {
+			const resource = resourceFor( entity );
+			if ( !resource || !published.ridesByRider.has( resource.codename ) ) return undefined;
+			for ( const actor of output.displayed.values() ) {
+				if ( actor.pickOwner === entity.gid && actor.gid !== entity.gid ) return actor.gid;
+			}
+			return null;
 		}
 	};
 }

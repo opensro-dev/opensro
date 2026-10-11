@@ -76,6 +76,9 @@ export interface UiQuad {
 		// Port-only: the 3D viewer's framing camera (viewer-camera.ts). Absent,
 		// the doll keeps the inventory's fixed camera.
 		readonly camera?: import("./scene").WorldCamera;
+		// Port-only: draw the actor's linked ride with it (the viewer's
+		// riding uniques). The inventory and party portraits never show one.
+		readonly mount?: boolean;
 	};
 	readonly worldAnchor?: Omit<import("./gameplay").Pose, "angle">;
 	readonly portraitGid?: number;

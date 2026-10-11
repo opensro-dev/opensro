@@ -634,7 +634,7 @@ export function createRenderer(
 				const height = Math.max( 1, Math.ceil( dollRect?.[3] ?? INVENTORY_DOLL_HEIGHT ) );
 				const dollDraws = dollInput ?
 					doll.prepare(
-						characters.portraitSource( dollInput.gid ),
+						characters.portraitSource( dollInput.gid, dollInput.mount === true ),
 						device.geometry()!,
 						device.images()!,
 						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height, camera: dollInput.camera }

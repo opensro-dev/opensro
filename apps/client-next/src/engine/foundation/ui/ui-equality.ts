@@ -82,7 +82,7 @@ export function sameUiQuad( x: UiQuad, y: UiQuad ): boolean {
 	if (
 		x.doll !== y.doll &&
 		(!x.doll || !y.doll || x.doll.gid !== y.doll.gid || !Object.is( x.doll.yaw, y.doll.yaw ) ||
-			!sameDollCamera( x.doll.camera, y.doll.camera ))
+			!sameDollCamera( x.doll.camera, y.doll.camera ) || x.doll.mount !== y.doll.mount)
 	) return false;
 	if (
 		x.worldAnchor !== y.worldAnchor &&

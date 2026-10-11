@@ -109,3 +109,8 @@ test("a doll quad whose camera moved is a new quad (the 3D viewer's zoom)", () =
 	const plain = { ...quad(), doll: { gid: 1, yaw: 0 } };
 	assert.equal( sameUiQuads( [ doll ], [ plain ] ), false );
 });
+
+test("a doll quad that gains the viewer's ride is a new quad", () => {
+	const plain = { ...quad(), doll: { gid: 1, yaw: 0 } };
+	assert.equal( sameUiQuads( [ plain ], [ { ...plain, doll: { gid: 1, yaw: 0, mount: true } } ] ), false );
+});

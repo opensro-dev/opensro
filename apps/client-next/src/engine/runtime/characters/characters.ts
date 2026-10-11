@@ -939,6 +939,7 @@ export function createCharacterPresentation(
 		knows: viewerQueries.knows,
 		itemType: viewerQueries.itemType,
 		dressed: viewerQueries.dressed,
+		linkedRide: viewerQueries.linkedRide,
 		/*
 		================
 		entryReady

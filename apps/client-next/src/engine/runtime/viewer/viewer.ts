@@ -85,6 +85,7 @@ export interface ViewerCharacters {
 	knows( entity: EntityState ): boolean | undefined;
 	itemType( refObjId: number ): number | undefined;
 	dressed( gid: number ): boolean;
+	linkedRide( entity: EntityState ): number | null | undefined;
 	error(): string | null | undefined;
 }
 
@@ -202,6 +203,29 @@ function zoomed( camera: WorldCamera, zoom: number ): WorldCamera {
 		near: camera.near! * zoom,
 		far: camera.far! * zoom
 	};
+}
+
+/*
+================
+mountedBounds
+
+A first framing for a rider drawn with its ride: both boxes, with room for
+the rider seated on top of the ride. It errs large; the readback refit
+(refitCamera) then frames what was actually drawn.
+================
+*/
+function mountedBounds(
+	rider: readonly [number, number, number, number, number, number],
+	mount: readonly [number, number, number, number, number, number]
+): readonly [number, number, number, number, number, number] {
+	return [
+		Math.min( rider[0], mount[0] ),
+		Math.min( rider[1], mount[1] ),
+		Math.min( rider[2], mount[2] ),
+		Math.max( rider[3], mount[3] ),
+		Math.max( rider[4], mount[4] + rider[4] - rider[1] ),
+		Math.max( rider[5], mount[5] )
+	];
 }
 
 /*
@@ -436,8 +460,15 @@ export function createViewer( host: ViewerHost ) {
 			}
 			const seconds = elapsed / 1000;
 			host.characters.step( entities, null, seconds );
-			if ( !camera && dressed && host.characters.ready( VIEWER_GID ) && host.characters.dressed( VIEWER_GID ) ) {
-				const bounds = host.renderer.characterBounds?.( VIEWER_GID );
+			// A riding unique waits for its ride, which the doll draws with it.
+			const ride = host.characters.linkedRide( entity );
+			if (
+				!camera && dressed && ride !== null && host.characters.ready( VIEWER_GID ) &&
+				host.characters.dressed( VIEWER_GID )
+			) {
+				const rider = host.renderer.characterBounds?.( VIEWER_GID ),
+					mount = ride === undefined ? null : host.renderer.characterBounds?.( ride ) ?? null;
+				const bounds = rider && (ride === undefined ? rider : mount && mountedBounds( rider, mount ));
 				// The doll turns the model by pi about y (portrait.ts previewYaw of
 				// yaw 0), so model x and z change sign in the doll's space.
 				if ( bounds ) {
@@ -450,7 +481,8 @@ export function createViewer( host: ViewerHost ) {
 					dollScene( ++revision, viewport.width, viewport.height, {
 						gid: VIEWER_GID,
 						yaw,
-						camera: zoomed( camera, zoom )
+						camera: zoomed( camera, zoom ),
+						mount: true
 					} )
 				);
 			}

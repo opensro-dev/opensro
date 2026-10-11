@@ -137,7 +137,8 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 					doll: {
 						gid: quad.doll.gid,
 						yaw: quad.doll.yaw,
-						...(quad.doll.camera ? { camera: quad.doll.camera } : {})
+						...(quad.doll.camera ? { camera: quad.doll.camera } : {}),
+						...(quad.doll.mount ? { mount: true } : {})
 					}
 				} :
 				{}),

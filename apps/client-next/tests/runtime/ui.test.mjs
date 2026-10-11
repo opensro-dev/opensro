@@ -92,6 +92,12 @@ test("admitted UI retains unique label membership and first portrait/doll withou
 	assert.equal( empty.worldAnchors, false );
 	assert.equal( empty.portraitGid, undefined );
 	assert.equal( empty.doll, undefined );
+	const mounted = prepareUi( {
+		...source,
+		revision: 3,
+		quads: [ { ...q, doll: { gid: 7, yaw: 0, mount: true } } ]
+	} );
+	assert.deepEqual( mounted.doll, { gid: 7, yaw: 0, mount: true } );
 	assert.throws( () => prepareUi( { ...source, width: 0 } ), /Invalid UI/ );
 	assert.equal( product.portraitGid, 9 );
 });
