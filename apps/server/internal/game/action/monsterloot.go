@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/loot"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -437,6 +438,10 @@ func (rt *Runtime) prepareEquipmentDropKind(monster monster.Instance, at simulat
 	return rt.prepareSelectedDrop(loot.DropItem{Codename: chosen.Codename, Count: 1, Plus: plus}, at, droppedBy, now)
 }
 
+// consumableMixNames are the drop mix's names for the planner's seven
+// consumable categories (loot.ConsumableFamilies order).
+var consumableMixNames = [7]string{"potion", "cure", "scroll", "elixir", "ammo", "stone", "tablet"}
+
 // planMonsterKillLoot resolves and rolls the drop before entering the commit
 // door. The caller commits this value together with progression, so a crash
 // cannot persist only one half of a kill reward.
@@ -470,14 +475,23 @@ func (rt *Runtime) planMonsterKillLoot(
 	// already drops 5-8 items (a Roc 50-80), and twenty rounds of that would
 	// put over a thousand items on the ground in one burst.
 	rate := max(1, rt.DropPassRate)
+	// Port-only, not native: the beta drop mix (progression/dropmix.go)
+	// gives named families their own rate; every family runs its native
+	// passes times its rate, so a family at rate 1 drops as often as native.
+	// Nil mix: every family at the uniform rate, the same draws as before.
+	familyRate := func(family string) int { return rt.DropMix.Rate(family, rate) }
+	widest := rate
+	for _, family := range progression.DropMixFamilies {
+		widest = max(widest, familyRate(family))
+	}
 	// Gold keeps its native heap count: the beta gold rate already scales
 	// each heap, and a heap per scaled pass would only litter the ground.
-	goldPasses := passes
-	passes *= rate
+	nativePasses := passes
+	passes *= widest
 	capacity *= rate
 	prepared := rt.prepareUniqueDrops(uniqueDropContext{mob: monster, at: at, owner: snapshot.Name, now: now})
 	uniqueRound := len(prepared)
-	for round := 0; round < rate && len(prepared) < capacity; round++ {
+	for round := 0; round < familyRate("assigned") && len(prepared) < capacity; round++ {
 		for _, chosen := range loot.AssignedDrops(monster.Ref.Codename, capacity-len(prepared), rt.DropRoll) {
 			if item, ok := rt.prepareSelectedDrop(chosen, at, snapshot.Name, now); ok {
 				prepared = append(prepared, item)
@@ -486,7 +500,7 @@ func (rt *Runtime) planMonsterKillLoot(
 	}
 	items := rt.deps.ItemReferences()
 	for pass := 0; pass < passes && len(prepared) < capacity; pass++ {
-		if pass < goldPasses && items != nil {
+		if pass < nativePasses && items != nil {
 			if heap, ok := rt.prepareGoldHeap(items, monster, at, snapshot.Name, now); ok {
 				prepared = append(prepared, heap)
 			}
@@ -494,10 +508,15 @@ func (rt *Runtime) planMonsterKillLoot(
 		if len(prepared) >= capacity {
 			break
 		}
-		if equipment, ok := rt.prepareEquipmentDrop(monster, at, snapshot.Name, now); ok {
-			prepared = append(prepared, equipment)
+		if pass < nativePasses*familyRate("equipment") {
+			if equipment, ok := rt.prepareEquipmentDrop(monster, at, snapshot.Name, now); ok {
+				prepared = append(prepared, equipment)
+			}
 		}
 		for category := 0; category < 7 && len(prepared) < capacity; category++ {
+			if pass >= nativePasses*familyRate(consumableMixNames[category]) {
+				continue
+			}
 			family := [...]int{2, 3, 6, 10, 4, 8, 7}[category]
 			// Reconstruction: family 7 follows the native categories so its
 			// authored speed-tablet table is reachable in v1.150.

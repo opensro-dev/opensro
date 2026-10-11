@@ -214,6 +214,18 @@ variable "beta_drop_rate" {
   default = "20"
 }
 
+# beta_drop_mix gives item families their own beta drop rate (port-only, not
+# native; owner decision 2026-10-11). "on" keeps potions, cures, scrolls,
+# ammo, elixirs, stones and tablets at the native rate while equipment and a
+# monster's assigned rewards keep beta_drop_rate; "family=rate,..." tunes it
+# (families: equipment, assigned, potion, cure, scroll, elixir, ammo, stone,
+# tablet); "off" is the one uniform beta rate. A malformed value stops
+# GameWorld at boot.
+variable "beta_drop_mix" {
+  type    = string
+  default = "on"
+}
+
 variable "beta_drop_cap" {
   type    = string
   default = "16"
@@ -407,6 +419,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_INSTANT_INVENTORY_EXPANSION    = var.instant_inventory_expansion
         SRO_BETA_RARE_RATE                 = var.beta_rare_rate
         SRO_BETA_DROP_CAP                  = var.beta_drop_cap
+        SRO_BETA_DROP_MIX                  = var.beta_drop_mix
         SRO_STACK_SIZES                    = var.stack_sizes
         SRO_PUBLIC_API_ADDR                = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"

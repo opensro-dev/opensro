@@ -504,6 +504,15 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d (at most %d ordinary items a kill, 0 = no cap), gold x%d, rare (SoX) x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.DropCap, stats.Growth.GoldRate, stats.Growth.RareRate)
 		game.items.DropPassRate = stats.Growth.DropRate
 		game.items.DropCap = stats.Growth.DropCap
+		// Port-only, not native: per-family rates inside the beta rate.
+		mix, err := progression.BetaDropMixFromEnv()
+		if err != nil {
+			return err
+		}
+		game.items.DropMix = mix
+		if mix != nil {
+			log.Infof("progression: beta drop mix ON (%s): %v, other families x%d", progression.EnvBetaDropMix, mix, stats.Growth.DropRate)
+		}
 		game.items.GoldRate = stats.Growth.GoldRate
 		game.items.RareRate = stats.Growth.RareRate
 		// Attack pets grow at their owner's level pace (owner decision 2026-10-11).

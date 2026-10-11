@@ -39,6 +39,9 @@ random subset of DropCap survives, so no item family is favoured. Gold heaps
 (native count, value-scaled) and a unique's own prepass (one native round)
 are never cut. 0 leaves every planned item.
 
+Drop mix: SRO_BETA_DROP_MIX gives named item families their own rate in
+place of DropRate (dropmix.go).
+
 ===========================================================================
 */
 package progression

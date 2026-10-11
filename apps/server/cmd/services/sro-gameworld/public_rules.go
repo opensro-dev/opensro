@@ -36,12 +36,17 @@ func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
+	dropMix, _ := progression.BetaDropMixFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
 				Native: "Retail experience, skill point and drop rates.",
 				Now:    "Raised beta rates for experience, skill points and drops.",
 				Why:    "A beta lasts weeks, not years; testers need to reach the content."},
+			{Flag: progression.EnvBetaDropMix, On: progression.BetaGrowthFromEnv().Enabled && dropMix != nil,
+				Native: "Every kind of item drops at the retail rate.",
+				Now:    "Each item kind has its own beta drop rate; by default equipment keeps the raised rate while potions, pills, scrolls, arrows and alchemy materials drop at the retail rate.",
+				Why:    "So raised drops bring gear rather than a floor of potions."},
 			{Flag: action.EnvBetaSilk, On: silkRate > 0,
 				Native: "Silk is bought for the account.",
 				Now:    "Every full hour in the world earns silk, up to a cap.",

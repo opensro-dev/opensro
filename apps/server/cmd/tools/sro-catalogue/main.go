@@ -235,6 +235,9 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return err
 	}
+	if _, err := progression.BetaDropMixFromEnv(); err != nil {
+		return err
+	}
 	skillData := enterworld.NewTextdataSkills(dir)
 	skillList := skillRows(skillData)
 	skills := catalogue.BuildSkills(catalogue.SkillSource{Rows: skillList,

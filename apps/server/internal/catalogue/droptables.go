@@ -79,6 +79,9 @@ type BetaRates struct {
 	GoldRate int `json:"goldRate"`
 	// RareChance replaces the native rareChance.
 	RareChance float64 `json:"rareChance"`
+	// Mix gives the named families their own rate in place of dropRate
+	// (progression.DropMix); absent, every family runs at dropRate.
+	Mix map[string]int `json:"mix,omitempty" doc:"Family name (equipment, assigned, potion, cure, scroll, elixir, ammo, stone, tablet) to that family's rate; a family not named runs at dropRate."`
 }
 
 /*
@@ -142,6 +145,11 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 	if beta := progression.BetaGrowthFromEnv(); beta.Enabled {
 		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate,
 			RareChance: action.RareEquipmentChance(beta.RareRate)}
+		// A malformed mix stops the GameWorld at boot, and sro-catalogue
+		// refuses it before building, so an error here is never published.
+		if mix, err := progression.BetaDropMixFromEnv(); err == nil {
+			file.Beta.Mix = mix
+		}
 	}
 	return file
 }

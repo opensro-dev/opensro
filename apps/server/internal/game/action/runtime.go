@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
@@ -274,6 +275,11 @@ type Runtime struct {
 	// unique's prepass are never cut. 0 leaves every planned item (port-only,
 	// not native; the closed-beta growth switch sets it).
 	DropCap int
+
+	// DropMix gives named item families their own beta drop rate in place
+	// of DropPassRate; nil runs every family at DropPassRate (port-only,
+	// not native; progression/dropmix.go).
+	DropMix progression.DropMix
 
 	// GoldRate multiplies every monster gold heap after the native rarity
 	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
