@@ -64,13 +64,41 @@ test("the previous walk's stop at the new walk's start keeps its progress", () =
 		after >= before && after - before < RUN_SPEED * STEP_MS / 1000 * 2,
 		`no snap back (${before} -> ${after})`
 	);
-	for ( let t = now + STEP_MS; t <= now + 1000; t += STEP_MS ) m.step( t );
+	// Within a round trip (the receipt's time) it walks on at run speed.
+	for ( let t = now + STEP_MS; t <= now + 500; t += STEP_MS ) m.step( t );
 	const walked = defined( m.state().pose ).x - after;
-	assert.ok( Math.abs( walked - RUN_SPEED ) < 2, `walks on at run speed (${walked} in 1 s)` );
+	assert.ok( Math.abs( walked - RUN_SPEED / 2 ) < 2, `walks on at run speed (${walked} in 0.5 s)` );
 });
 
 test("a correction anywhere else still moves the player", () => {
 	const { m, now } = crossed();
 	m.correct( { ...start, x: 150, z: 100 }, now );
 	assert.ok( Math.abs( defined( m.state().pose ).x - 150 ) < 0.5, "the correction is authoritative" );
+});
+
+test("a stop at a walk's start that is no arrival is not kept", () => {
+	// The walk did not leave from an earlier walk's goal, so a stop there is
+	// the server holding the player (a root, a stun, a refusal).
+	const m = createMovement( () => {} ), navigation = product();
+	navigation.objects = [];
+	m.seed( start );
+	m.navigation( 257, navigation );
+	m.speeds( 20, RUN_SPEED, 0 );
+	m.request( { ...start, x: 400 }, 0 );
+	let now = 0;
+	for ( ; now <= CROSSED_MS; now += STEP_MS ) m.step( now );
+	m.correct( { ...start }, now );
+	assert.ok( Math.abs( defined( m.state().pose ).x - start.x ) < 0.5, "the stop holds the player" );
+});
+
+test("a kept walk the server never walks returns to the stop", () => {
+	const { m, now } = crossed();
+	m.correct( { ...start, x: 200, z: 100 }, now );
+	// No receipt for the kept walk arrives: past a round trip and the grace
+	// the player walks back to the stop the server sent.
+	for ( let t = now + STEP_MS; t <= now + 3000; t += STEP_MS ) m.step( t );
+	assert.ok(
+		Math.abs( defined( m.state().pose ).x - 200 ) < 1,
+		`back at the stop (x ${defined( m.state().pose ).x})`
+	);
 });
