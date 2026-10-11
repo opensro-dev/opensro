@@ -206,7 +206,9 @@ receive
 					code: "resume_expired",
 					message: "Your session ended while the connection was gone. Please log in again."
 				} );
-				return;
+				// false stops the drain, as the old throw did: no later frame of
+				// this batch reaches an ended session.
+				return false;
 			}
 			resumedTransport = resumed && hasWorld;
 			resume = frame.payload.slice( 11 );
