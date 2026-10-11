@@ -58,31 +58,26 @@ held it rather than only this hook.
 */
 func (rt *Runtime) TickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
-		step := rt.Steps.Time
+		timed := rt.Steps.Time
 		var out []simulation.DivisionFrames
-		// Every step commits inside character doors and routes its private
-		// tail later. The publication gate orders that commit and the
-		// capture of its recipients against entry bootstraps (#713):
-		// without it a resumed entry's snapshot could land between them and
-		// the client would apply a grant twice, or a fresh entry would miss
-		// one. Pending pickups take the gate themselves, so it is released
-		// around that step and each span seals its own private batches.
-		// A panicking step is recovered by the ticker; the deferred release
-		// keeps a held gate from blocking every request after it.
-		unlock := rt.lockTickPublication()
-		defer func() {
-			if unlock != nil {
-				unlock()
-			}
-		}()
-		release := func() {
-			unlock()
-			unlock = nil
-		}
 		sealed := 0
-		seal := func() {
-			out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
-			sealed = len(out)
+		// Every step commits inside character doors and routes its private
+		// tail later. Each step holds the publication gate over its commit
+		// and the capture of its recipients (sealTickPrivate), ordering
+		// them against entry bootstraps (#713): without it a resumed
+		// entry's snapshot could land between them and the client would
+		// apply a grant twice, or a fresh entry would miss one. The gate is
+		// per step, so a request or bootstrap waits at most one step, and
+		// between steps they interleave exactly as before. The deferred
+		// release also covers a step panic the ticker recovers.
+		step := func(name string, run func()) {
+			timed(name, func() {
+				unlock := rt.lockTickPublication()
+				defer unlock()
+				run()
+				out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
+				sealed = len(out)
+			})
 		}
 		frames := func(name string, advance func(int64) []simulation.DivisionFrames) {
 			step(name, func() { out = append(out, advance(nowMs)...) })
@@ -159,19 +154,17 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceParamJobs", func() { rt.advanceParamJobs(nowMs) })
 		step("advancePKRecords", rt.advancePKRecords)
 		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
-		seal()
-		release()
-		frames("advancePendingPickups", rt.advancePendingPickups)
-		out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
-		sealed = len(out)
-		unlock = rt.lockTickPublication()
+		// Pending pickups take the gate themselves (publishPendingPickup).
+		timed("advancePendingPickups", func() {
+			out = append(out, rt.advancePendingPickups(nowMs)...)
+			out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
+			sealed = len(out)
+		})
 		step("advanceBodyRestores", func() { rt.advanceBodyRestores(nowMs) })
 		step("advanceCompoundJobs", func() { rt.advanceCompoundJobs(nowMs) })
 		frames("ReleaseExpiredOwnership", rt.ReleaseExpiredOwnership)
 		frames("SweepExpired", rt.SweepExpired)
 		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
-		seal()
-		release()
 		return out
 	}
 }
