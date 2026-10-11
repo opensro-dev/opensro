@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -30,73 +31,193 @@ registerPredictedMovement
 ================
 */
 func (rt *Runtime) registerPredictedMovement(hub *transport.Hub) {
-	var mu sync.Mutex
-	last := make(map[uint64]uint32)
-	hub.OnSessionClose(func(s *transport.Session, _ error) { mu.Lock(); delete(last, s.ID); mu.Unlock() })
+	ledger := newPredictionLedger()
+	hub.OnSessionClose(func(s *transport.Session, _ error) { ledger.forget(s.ID) })
 	hub.Handle(transport.OpPredictedMove, func(s *transport.Session, _ uint16, p []byte) {
-		if len(p) < 5 || (p[0] != 1 && p[0] != 2) {
-			return
-		}
-		id := binary.LittleEndian.Uint32(p[1:5])
 		character, division, bound := enterworld.SessionCharacter(rt.deps, s)
-		if !bound || id == 0 {
-			return
+		if !bound {
+			character = nil
 		}
-		mu.Lock()
-		previous := last[s.ID]
-		if id > previous {
-			last[s.ID] = id
-		}
-		mu.Unlock()
-		if id <= previous {
-			return
-		} // Reliable transport does not need client retransmit.
-		if p[0] == 1 && rt.AdvanceResidentRegion != nil {
-			rt.AdvanceResidentRegion(division, character.Name, rt.Now().UnixMilli())
-		}
-		unlock := rt.lockCharacter(division, character.Name)
-		var result MoveOutcome
-		retireEffects := false
-		defer func() {
-			unlock()
-			if retireEffects {
-				rt.RetireMoveEffects(division, character.Name, result.ServerTimeMs)
-			}
-		}()
-		if p[0] == 2 {
-			command, err := wire.DecodeCosCommand(p[5:])
-			if err != nil || command.Tag != wire.CosCommandMovementTag || command.CosGid == 0 {
-				result = rt.handleMoveLocked(division, character, []byte{99}, 0)
-			} else {
-				result = rt.handleMoveLocked(division, character, command.Movement, command.CosGid)
-			}
-		} else {
-			result = rt.handleMoveLocked(division, character, p[5:], 0)
-			// 4B0EA0: the accepted move's event retires the mover's
-			// move-cancelled effects (the rider's own move only; a mount
-			// move moves the vehicle).
-			if result.Refusal == nil && result.Result != nil && rt.RetireMoveEffects != nil {
-				retireEffects = true
-			}
-		}
-		for _, frame := range predictionFeedback(result) {
-			if s.Send(frame.Opcode, frame.Payload) != nil {
-				return
-			}
-		}
-		body, err := json.Marshal(struct {
-			Version      int         `json:"v"`
-			ID           uint32      `json:"id"`
-			GID          uint32      `json:"gid"`
-			Accepted     bool        `json:"accepted"`
-			Error        string      `json:"error,omitempty"`
-			ServerTimeMs int64       `json:"serverTimeMs"`
-			World        interface{} `json:"world"`
-		}{1, id, enterworld.ObjectIDForCharacter(character), result.Refusal == nil, predictionError(result), result.ServerTimeMs, result.Authority})
-		if err == nil {
-			_ = s.Send(transport.OpPredictedMoveResult, body)
-		}
+		rt.predictedMove(ledger, s.ID, division, character, p, s.Send)
 	})
+}
+
+// Why a predicted move got no ordinary execution. Every drop is counted and
+// logged: a command left without a receipt stalls the client's prediction
+// until its receipt watchdog reconnects the session.
+const (
+	predictionDropMalformed = "malformed"
+	predictionDropZeroID    = "zero-id"
+	predictionDropUnbound   = "unbound"
+	predictionDropStale     = "stale"
+)
+
+// predictionStaleReason is the refusal a stale or repeated id answers with.
+const predictionStaleReason = "staleCommand"
+
+/*
+================
+predictionLedger
+
+Each session's id high-water mark, and the drop counts by reason.
+================
+*/
+type predictionLedger struct {
+	mu    sync.Mutex
+	last  map[uint64]uint32
+	drops map[string]uint64
+}
+
+/*
+================
+newPredictionLedger
+================
+*/
+func newPredictionLedger() *predictionLedger {
+	return &predictionLedger{last: make(map[uint64]uint32), drops: make(map[string]uint64)}
+}
+
+/*
+================
+predictionLedger.forget
+================
+*/
+func (ledger *predictionLedger) forget(session uint64) {
+	ledger.mu.Lock()
+	delete(ledger.last, session)
+	ledger.mu.Unlock()
+}
+
+/*
+================
+predictionLedger.admit
+
+Advances the session's high-water mark; false for an id at or below it.
+================
+*/
+func (ledger *predictionLedger) admit(session uint64, id uint32) bool {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if id <= ledger.last[session] {
+		return false
+	}
+	ledger.last[session] = id
+	return true
+}
+
+/*
+================
+predictionLedger.drop
+
+Counts and logs one drop.
+================
+*/
+func (ledger *predictionLedger) drop(reason string, session uint64, id uint32) {
+	ledger.mu.Lock()
+	ledger.drops[reason]++
+	count := ledger.drops[reason]
+	ledger.mu.Unlock()
+	log.WithFields(log.Fields{"reason": reason, "session": session, "id": id, "count": count}).
+		Info("movement: predicted move not executed")
+}
+
+/*
+================
+predictedMove
+
+One 0x7F extension command. send is the session's reliable enqueue; it
+runs under the actor movement lock, so the terminal correction cannot
+overtake the receipt. A stale or repeated id is answered with a refusal
+receipt carrying the current authority instead of silence: the command was
+already settled (its receipt may have died with a transport), and the
+client resynchronizes from the authority rather than waiting for its
+receipt watchdog to drop the session. Commands without an id or a bound
+character cannot be answered; they are counted and logged.
+================
+*/
+func (rt *Runtime) predictedMove(ledger *predictionLedger, session uint64, division string, character *enterworld.Character, p []byte, send func(uint16, []byte) error) {
+	if len(p) < 5 || (p[0] != 1 && p[0] != 2) {
+		ledger.drop(predictionDropMalformed, session, 0)
+		return
+	}
+	id := binary.LittleEndian.Uint32(p[1:5])
+	if id == 0 {
+		ledger.drop(predictionDropZeroID, session, id)
+		return
+	}
+	if character == nil {
+		ledger.drop(predictionDropUnbound, session, id)
+		return
+	}
+	if !ledger.admit(session, id) {
+		ledger.drop(predictionDropStale, session, id)
+		unlock := rt.lockCharacter(division, character.Name)
+		defer unlock()
+		result := MoveOutcome{Refusal: &simulation.MoveError{Reason: predictionStaleReason}}
+		rt.deps.Read(division, func() {
+			result.Authority = rt.Worlds.Snapshot(simulation.WorldKey(division, character.Name),
+				func() simulation.WorldState { return simulation.SeedWorldState(character) })
+		})
+		result.ServerTimeMs = rt.Now().UnixMilli()
+		sendPredictionReceipt(send, id, character, result)
+		return
+	}
+	if p[0] == 1 && rt.AdvanceResidentRegion != nil {
+		rt.AdvanceResidentRegion(division, character.Name, rt.Now().UnixMilli())
+	}
+	unlock := rt.lockCharacter(division, character.Name)
+	var result MoveOutcome
+	retireEffects := false
+	defer func() {
+		unlock()
+		if retireEffects {
+			rt.RetireMoveEffects(division, character.Name, result.ServerTimeMs)
+		}
+	}()
+	if p[0] == 2 {
+		command, err := wire.DecodeCosCommand(p[5:])
+		if err != nil || command.Tag != wire.CosCommandMovementTag || command.CosGid == 0 {
+			result = rt.handleMoveLocked(division, character, []byte{99}, 0)
+		} else {
+			result = rt.handleMoveLocked(division, character, command.Movement, command.CosGid)
+		}
+	} else {
+		result = rt.handleMoveLocked(division, character, p[5:], 0)
+		// 4B0EA0: the accepted move's event retires the mover's
+		// move-cancelled effects (the rider's own move only; a mount
+		// move moves the vehicle).
+		if result.Refusal == nil && result.Result != nil && rt.RetireMoveEffects != nil {
+			retireEffects = true
+		}
+	}
+	for _, frame := range predictionFeedback(result) {
+		if send(frame.Opcode, frame.Payload) != nil {
+			return
+		}
+	}
+	sendPredictionReceipt(send, id, character, result)
+}
+
+/*
+================
+sendPredictionReceipt
+
+The ID-bearing receipt (OpPredictedMoveResult, JSON v1).
+================
+*/
+func sendPredictionReceipt(send func(uint16, []byte) error, id uint32, character *enterworld.Character, result MoveOutcome) {
+	body, err := json.Marshal(struct {
+		Version      int         `json:"v"`
+		ID           uint32      `json:"id"`
+		GID          uint32      `json:"gid"`
+		Accepted     bool        `json:"accepted"`
+		Error        string      `json:"error,omitempty"`
+		ServerTimeMs int64       `json:"serverTimeMs"`
+		World        interface{} `json:"world"`
+	}{1, id, enterworld.ObjectIDForCharacter(character), result.Refusal == nil, predictionError(result), result.ServerTimeMs, result.Authority})
+	if err == nil {
+		_ = send(transport.OpPredictedMoveResult, body)
+	}
 }
 
 // Prediction has one movement authority: the ID-bearing receipt below. Sending
