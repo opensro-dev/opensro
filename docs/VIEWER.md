@@ -6,11 +6,9 @@ with no game session and no login. It serves the community website
 (opensro-web `docs/COMMUNITY.md`, V1): profile pages, unique cards and the
 catalogue's monster portraits.
 
-Status: in progress on `feat/viewer-v1`. Done: the request parser and fixed
-reasons (`foundation/ui/viewer-request.ts`), and the framing camera
-(`foundation/rendering/viewer-camera.ts`), both tested. Next: the runtime
-owner and the renderer output. The order of work is monster + still first
-(the catalogue's portraits), then `look` characters, then drag and zoom.
+Status: in progress on `feat/viewer-v1`. Monster stills work: `viewer.html?monster=<refObjId>&still=1`
+draws the model through the game's renderer into a transparent PNG. Still to do: `look` characters,
+then the interactive iframe (drag and zoom), then a static-build check.
 
 ## Contract
 
@@ -34,88 +32,49 @@ P6 `look` object: `bodyRefObjId`, `worn[]`, `avatar[]`).
 
 ## Design
 
-The client has one page entry (`index.html` → `src/bootstrap.ts` → the sealed
-`runtime.ts`), and drawing goes through the world/session pipeline. The
-viewer is a second entry that shares the renderer and the asset owners but
-none of the session:
+The client has one ownership root (`src/engine/ownership.json`): one page entry,
+`src/bootstrap.ts`, owns `runtime.ts`, and every runtime owner (assets, renderer,
+characters) has exactly one owner. A second page entry could not reach those owners,
+so the viewer is a second start-up path inside the same tree:
 
-- `viewer.html` → `src/viewer.ts` (entry; side effects live here, as
-  `bootstrap.ts` holds the game's). Listed beside `index.html` in the vite
-  build inputs.
-- `foundation/ui/viewer-request.ts` (pure): parses and validates the query
-  into a request, and owns the reason enum. Tested without a browser.
-- `foundation/rendering/viewer-camera.ts` (pure): the fixed three-quarter
-  camera from a model's bounds and the output aspect.
-- `runtime/viewer/viewer.ts` (owner): creates the asset owner and the
-  renderer, resolves the request to a presentation resource (the same
-  presentation catalogue the game uses:
-  `characters/presentation-catalog.ts`, keyed by `refObjId`), installs that
-  one model and its idle clip (`setCharacterModel`, `setCharacterAnimation`),
-  publishes one actor (`setCharacterActors`) and the camera
-  (`setCharacterPreview`), and drives frames until the model is drawn.
-- **Renderer option, transparent output:** `createRenderer` gains an explicit
-  `{ transparent: true }` option. It configures the canvas `alphaMode:
-  "premultiplied"`, clears the scene target to alpha 0, and skips the sky,
-  terrain, fog and post passes that would write alpha 1. The game never sets
-  it, so its frame is unchanged; a test pins that.
-- **Still readback:** after the first frame with the model drawn, the viewer
-  copies the canvas texture to a buffer (no `preserveDrawingBuffer` in
-  WebGPU) and encodes the PNG.
+- `viewer.html` loads the same `src/bootstrap.ts` and marks its root
+  `data-page="viewer"`. Bootstrap then calls `runtime.ts` `startViewerRuntime`
+  instead of `startRuntime`. `viewer.html` is a vite build input beside `index.html`.
+- `runtime.ts` `startViewerRuntime` creates only the owners one model needs (assets,
+  renderer, character presentation, built as `startRuntime` builds them), runs the
+  animation-frame loop (only `runtime.ts` may call `requestAnimationFrame`), and disposes
+  the owners when the viewer is done. It is appended after `startRuntime`; the sealed frame
+  is byte-identical, and the frame barrier is re-sealed with that proof.
+- `runtime/viewer/viewer.ts` (owned by `runtime.ts`) decides each frame. It feeds one
+  monster entity through the character presentation, so the model resolves and loads
+  exactly as in the world. It frames the model, draws it as the inventory doll, reads the
+  doll back, encodes the PNG and reports to the embedding page. It is a declared async and
+  `OffscreenCanvas` owner (`tools/verify-capabilities.mjs`), and its calls into the
+  renderer and the presentation are declared in `execution-contract.json`.
+- Pure helpers: `foundation/ui/viewer-request.ts` (query and reasons),
+  `foundation/rendering/viewer-camera.ts` (the camera that fits a box's eight corners to
+  the square view from the fixed angle), `foundation/rendering/texel-readback.ts`
+  (unpacking padded GPU rows).
 
-### Next step: the portrait path (found 2026-10-11)
+### The doll route
 
-`renderer/frame/frame.ts` already has a portrait branch: an offscreen
-character render with a transparent clear (`clearValue` alpha 0), which the
-HUD portraits use (`renderer/characters/portrait.ts`, `createPortrait`).
-Try that first for the still, since it is transparent by construction and
-needs no new main-pass mode. Check two things:
-- whether its output texture can be copied to a buffer for the PNG;
-- whether it takes an arbitrary camera (portrait.ts fixes yaw, pitch and
-  distance for the HUD).
-
-If both hold, the `{ transparent: true }` canvas option above is needed only
-for the interactive iframe, not for stills.
-
-Checked 2026-10-11:
-- The portrait target is a fixed 128-pixel texture ("portrait-128" in
-  frame.ts), and the equipment doll is its own target.
-- The portrait camera is hard-coded to the head: `PORTRAIT_DISTANCE` 6.5,
-  `PORTRAIT_PITCH` 0.2, field of view pi/6.
-- The doll's camera takes only `{ yaw, seconds, aspect }` (portrait.ts
-  `prepare`, line ~200).
-
-Route found (2026-10-11): the inventory doll is the right path, not the HUD
-portrait. The UI scene names it (`UiScene.doll = { gid, yaw }` plus a quad
-with `doll: true`). The renderer then prepares `characters.portraitSource(gid)`
-through the doll's `createPortrait` into a `__doll` texture of the quad's size,
-with a transparent clear (renderer.ts ~605..625, frame.ts "equipment-doll").
-The monster still needs four additive changes:
-1. `UiScene.doll.camera?: WorldCamera`, passed through to `prepare`'s doll
-   branch in place of its fixed `eye [0, 9, -40]` camera. Models face -z at
-   the doll's yaw, so `viewerCamera(bounds, [0, -1])`.
-2. A renderer method that copies the `__doll` texture to a buffer and
-   resolves RGBA. This is the still's readback, transparent by construction.
-3. The viewer feeds one monster entity at the origin through the runtime
-   character owner (runtime/characters/characters.ts), which already
-   resolves the presentation resource, loads the model into the renderer
-   and produces `portraitSource(gid)`. No new model loader.
-4. A UI scene holding one full-size doll quad, no other UI.
-Progress:
-- Step 1 is done (c9cfc496): the doll input's `camera`, with no change for the inventory.
-- Step 2 is done (fedb40fd): `Renderer.readDoll()` → `device.readPortrait("__doll")` → `copyTextureToBuffer` + `mapAsync` → `texel-readback.ts` `unpackRgba8`. The staging buffer retires through the device, and portrait targets carry `COPY_SRC`. The unpacker is unit-tested; the GPU path is untested until step 4 draws.
-- Next is step 3: feed one monster entity through `runtime/characters/characters.ts`. Read its construction in `runtime.ts` (`createCharacters` and its owners), and give the viewer the smallest set of them.
-Step 2 details:
-- The portrait and doll targets come from `device/ui.ts` `portraitTarget(id, width, height)`, with usage `TEXTURE_BINDING | RENDER_ATTACHMENT`. The readback needs `COPY_SRC` added, harmless for the HUD.
-- The format is the scene format (`sceneFormat()`), which is a float format with the HDR stage on, so the readback converts to 8-bit RGBA, keeping alpha.
-- Copy with `copyTextureToBuffer` (rows padded to 256 bytes) and `mapAsync`, as `device/timing.ts` does for its queries.
-
-The main canvas pass stays opaque. The PNG comes from the doll texture, so
-stills need no transparent canvas mode at all.
-
-Earlier plan, superseded by the route above: give `prepare` an optional explicit camera (`viewer-camera.ts`
-output) and the renderer an optional still target of the request's size,
-leaving the HUD calls' arguments and results unchanged (pin that with a
-test). Then read the still target back into the PNG.
+- The UI scene's doll quad carries an optional `camera` (contracts `UiQuad.doll`). The
+  sanitizer (`foundation/ui/ui.ts`) and the renderer pass it to `portrait.ts`, in place of
+  the inventory's fixed camera. The inventory never sets it.
+- The doll draws the model at scale 1, turned by pi (`previewYaw(0)`), in its `stand`
+  clip's first frame. `Renderer.characterBounds(gid)` answers that pose's bounds
+  (`characterBindBounds(model, clip)`), in model space. The viewer flips x and z into the
+  doll's space before framing.
+- `Renderer.readDoll()` → `device/ui.ts` `readPortrait` → `device/portrait-readback.ts`:
+  one `copyTextureToBuffer` and `mapAsync`. The staging buffer retires through the
+  device. Portrait targets carry `COPY_SRC`. The still is transparent by construction,
+  and the main canvas stays opaque.
+- Readiness: the character owner's `ready(gid)` says the model is displayed, and its
+  `knows(entity)` says whether the admitted catalogue has the model at all. That is how
+  an unknown id fails at once with `unknown-monster`, not after the timeout.
+- A hidden page gets no animation frames, so the viewer draws only when visible. An
+  embedding iframe must be on screen, and a headless capture runs with background
+  throttling off (`launchProbeBrowser`).
 
 ## Serving
 
@@ -125,8 +84,10 @@ before the PR merges and written here.
 
 ## Tests
 
-- `viewer-request` parsing: every reason, size bounds, base64url `look`.
-- `viewer-camera`: framing for a tall, a wide and a tiny model.
-- The renderer option: off is byte-identical to today's frame setup.
-- One browser test (run alone, never with the full browser suite) drawing
-  one shipped monster in still mode.
+- `tests/runtime/viewer-request.test.mjs`: every reason, size bounds, base64url `look`.
+- `tests/runtime/viewer-camera.test.mjs`: a tall, a wide and a tiny box fill the view
+  without leaving it, from the fixed angle.
+- `tests/runtime/texel-readback.test.mjs`: padded rows in the three portrait formats.
+- `tests/browser/viewer-still.test.mjs`, run alone against a dev server, never with the
+  whole browser suite: Tiger Girl (1954) as a 256-pixel transparent still that spans
+  most of the frame, and an unknown id failing `unknown-monster`.

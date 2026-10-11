@@ -77,7 +77,17 @@ export default defineConfig( ( { mode } ) => {
 					}
 				}
 			} :
-			{ outDir: "temp/artifacts/dist" },
+			{
+				outDir: "temp/artifacts/dist",
+				// viewer.html is the embeddable 3D viewer (docs/VIEWER.md), a second
+				// page beside the game's.
+				rolldownOptions: {
+					input: {
+						index: fileURLToPath( new URL( "./index.html", import.meta.url ) ),
+						viewer: fileURLToPath( new URL( "./viewer.html", import.meta.url ) )
+					}
+				}
+			},
 		plugins: [ devUpdates(), publishedAssets(), ...(https && !certificate ? [ basicSsl() ] : []) ],
 		resolve: {
 			alias: { "@": fileURLToPath( new URL( "./src", import.meta.url ) ) }

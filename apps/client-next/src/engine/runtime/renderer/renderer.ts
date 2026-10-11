@@ -214,11 +214,6 @@ export function createRenderer(
 		},
 		/*
 		================
-		setCharacterPreview
-		================
-		*/
-		/*
-		================
 		readDoll
 
 		The doll target's last rendered frame (port-only: the 3D viewer's
@@ -228,6 +223,21 @@ export function createRenderer(
 		readDoll() {
 			return device.readPortrait( "__doll" );
 		},
+		/*
+		================
+		characterBounds
+
+		Port-only (the 3D viewer's framing): an actor's scaled bind-pose bounds.
+		================
+		*/
+		characterBounds( gid ) {
+			return characters.bindBounds( gid );
+		},
+		/*
+		================
+		setCharacterPreview
+		================
+		*/
 		setCharacterPreview( camera ) {
 			preview = camera ? structuredClone( camera ) : null;
 		},

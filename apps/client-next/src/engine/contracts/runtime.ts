@@ -257,6 +257,8 @@ export interface Renderer extends Disposable {
 	setCharacterPreview( camera: import("./scene").WorldCamera | null ): void;
 	/** Port-only: the doll target's last frame as packed RGBA (the 3D viewer's still). */
 	readDoll?(): Promise<{ readonly width: number; readonly height: number; readonly rgba: Uint8ClampedArray; }>;
+	/** Port-only: an actor's scaled bind-pose bounds [minX, minY, minZ, maxX, maxY, maxZ] (the 3D viewer's framing). */
+	characterBounds?( gid: number ): readonly [number, number, number, number, number, number] | null;
 	characterParticleSnapshot( gid: number ): { readonly matrix: Float32Array; readonly regionId: number; } | null;
 	characterParticleTime( gid: number ): number | undefined;
 	presentationNight(): boolean;

@@ -2699,6 +2699,22 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		},
 		/*
 		================
+		bindBounds
+
+		Port-only (the 3D viewer's framing): the actor model's bounds in the
+		first frame of the clip the doll plays (portrait.ts: the preview
+		clip, else "stand"), in model space and unscaled as the doll draws
+		it; null before the model is resident. Evaluates a pose: call once.
+		================
+		*/
+		bindBounds( gid: number ): PickBounds | null {
+			const actor = actors.find( a => a.gid === gid ), resource = actor && models.get( actor.model );
+			if ( !actor || !resource ) return null;
+			const clip = actor.previewClip ?? resource.model.clips.find( c => c.name === "stand" )?.name ?? actor.clip;
+			return characterBindBounds( resource.model, clip ?? "" );
+		},
+		/*
+		================
 		hasModel
 
 		Whether a source with this id is resident (owned or borrowed).

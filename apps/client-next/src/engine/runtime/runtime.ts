@@ -40,6 +40,7 @@ import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
 import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
+import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 
@@ -1076,4 +1077,44 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 		}
 		throw error;
 	}
+}
+
+/*
+================
+startViewerRuntime
+
+Port-only, not native (docs/VIEWER.md): the embeddable 3D viewer page. It
+creates only the owners one drawn model needs (assets, renderer and the
+character presentation, as startRuntime builds them) and drives
+viewer/viewer.ts once per animation frame, disposing the owners when the
+viewer is done. No session, input, audio or UI.
+================
+*/
+export function startViewerRuntime( canvas: HTMLCanvasElement, search: string ): void {
+	const random = createPresentationRandom( 1 );
+	const assets = createAssets();
+	const renderer = createRenderer( canvas, random );
+	const characters = createCharacterPresentation(
+		assets,
+		renderer,
+		new URL( "/", import.meta.url ).href,
+		() => {},
+		random
+	);
+	const viewer = createViewer( { canvas, search, renderer, characters } );
+	/*
+	================
+	viewerFrame
+	================
+	*/
+	const viewerFrame = ( now: number ) => {
+		if ( viewer.frame( now ) ) {
+			requestAnimationFrame( viewerFrame );
+			return;
+		}
+		characters.dispose();
+		renderer.dispose();
+		assets.dispose();
+	};
+	requestAnimationFrame( viewerFrame );
 }

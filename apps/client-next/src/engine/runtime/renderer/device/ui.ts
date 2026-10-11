@@ -12,7 +12,7 @@ import type { UiScene, UiQuad } from "@/engine/contracts/ui";
 import type { UiDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 import { uiRecordCount, UI_RECORD_LIMIT } from "@/engine/foundation/rendering/text-run";
 import { destroyNow, type Retire } from "./retirement";
-import { paddedRowBytes, unpackRgba8 } from "@/engine/foundation/rendering/texel-readback";
+import { readPortraitPixels, type PortraitPixels } from "./portrait-readback";
 import type { UiTexture } from "@/engine/contracts/texture";
 import {
 	decodeNativeTextureLevel,
@@ -335,34 +335,17 @@ fs
 		readPortrait
 
 		The portrait target's last rendered pixels as packed 8-bit RGBA, for
-		the 3D viewer's still (port-only). Submits its own copy after the
-		frames already queued, so it reads what they drew. The staging buffer
-		retires through the device's retirement, never destroyed directly.
+		the 3D viewer's still (port-only, portrait-readback.ts).
 		================
 		*/
-		async readPortrait( id: string ): Promise<{ width: number; height: number; rgba: Uint8ClampedArray; }> {
+		readPortrait( id: string ): Promise<PortraitPixels> {
 			const slot = textures.get( id );
-			if ( !slot?.portrait ) throw Error( "No portrait target " + id );
-			const { width, height } = slot, stride = paddedRowBytes( width, slot.format );
-			const buffer = device.createBuffer( {
-				label: id + "-readback",
-				size: stride * height,
-				usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-			} );
-			try {
-				const encoder = device.createCommandEncoder( { label: id + "-readback" } );
-				encoder.copyTextureToBuffer( { texture: slot.texture }, { buffer, bytesPerRow: stride }, [
-					width,
-					height
-				] );
-				device.queue.submit( [ encoder.finish() ] );
-				await buffer.mapAsync( GPUMapMode.READ );
-				const rgba = unpackRgba8( new Uint8Array( buffer.getMappedRange() ), width, height, slot.format );
-				buffer.unmap();
-				return { width, height, rgba };
-			} finally {
-				retire( buffer );
-			}
+			if ( !slot?.portrait ) return Promise.reject( Error( "No portrait target " + id ) );
+			return readPortraitPixels(
+				device,
+				{ label: id, texture: slot.texture, width: slot.width, height: slot.height, format: slot.format },
+				retire
+			);
 		},
 		/*
 		================
