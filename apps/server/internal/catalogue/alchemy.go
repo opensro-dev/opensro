@@ -40,12 +40,13 @@ ReinforceRules
 ================
 */
 type ReinforceRules struct {
-	LuckBonus      int `json:"luckBonus" doc:"Added when the running chance is below maxChance and the item has a Luck charge (MATTR_LUCK, a magic option on the item put on by a Luck stone); the attempt spends one charge."`
-	MinChance      int `json:"minChance" doc:"The attempt chance is c = elixir.chances[plus]; + powder.chances[plus] if a powder is staged and c < maxChance; + luckBonus if c < maxChance and the item has a Luck charge; + every bonusSources value active; then clamped to [minChance, maxChance]."`
-	MaxChance      int `json:"maxChance" doc:"The ceiling of the clamp; the powder and luck are skipped (not capped) when the running chance has already reached it."`
-	RiskPlus       int `json:"riskPlus" doc:"From this plus up, a failure destroys the item destroyPercent of the time (an Immortal charge, MATTR_ATHANASIA, saves it; some items are indestructible) and otherwise curses a random option (a Steady charge, MATTR_SOLID, prevents it)."`
-	DestroyPercent int `json:"destroyPercent" doc:"The share of failures at riskPlus and above that try to destroy the item."`
-	AstralFloor    int `json:"astralFloor" doc:"Every failure the item survives resets the plus to 0, or to astralFloor when the plus was at least astralFloor and an Astral charge (MATTR_ASTRAL) is spent. The elixir (and a staged powder) is always used."`
+	LuckBonus      int   `json:"luckBonus" doc:"Added when the running chance is below maxChance and the item has a Luck charge (MATTR_LUCK, a magic option on the item put on by a Luck stone); the attempt spends one charge."`
+	MinChance      int   `json:"minChance" doc:"The attempt chance is c = elixir.chances[plus]; + powder.chances[plus] if a powder is staged and c < maxChance; + luckBonus if c < maxChance and the item has a Luck charge; + every bonusSources value active; then clamped to [minChance, maxChance]."`
+	MaxChance      int   `json:"maxChance" doc:"The ceiling of the clamp; the powder and luck are skipped (not capped) when the running chance has already reached it."`
+	RiskPlus       int   `json:"riskPlus" doc:"From this plus up, a failure destroys the item destroyPercent of the time (an Immortal charge, MATTR_ATHANASIA, saves it; some items are indestructible) and otherwise curses a random option (a Steady charge, MATTR_SOLID, prevents it)."`
+	DestroyPercent int   `json:"destroyPercent" doc:"The share of failures at riskPlus and above that try to destroy the item."`
+	AstralFloor    int   `json:"astralFloor" doc:"Every failure the item survives resets the plus to 0, or to astralFloor when the plus was at least astralFloor and an Astral charge (MATTR_ASTRAL) is spent. The elixir (and a staged powder) is always used."`
+	ShardRates     []int `json:"shardRates,omitempty" doc:"Port-only, not native: when present this shard replaces elixir.chances[plus] with shardRates[plus] (the last entry holds above the table) and drops the minChance floor; the powder, luckBonus and bonusSources still add. Absent is the original game's rule."`
 }
 
 /*
@@ -102,6 +103,9 @@ func BuildAlchemy(header Header, source AlchemySource) AlchemyFile {
 		Rules: ReinforceRules{LuckBonus: alchemy.ReinforceLuckBonus, MinChance: alchemy.ReinforceMinChance,
 			MaxChance: alchemy.ReinforceMaxChance, RiskPlus: alchemy.ReinforceRiskPlus,
 			DestroyPercent: alchemy.ReinforceDestroyPercent, AstralFloor: alchemy.ReinforceAstralFloor}}
+	if catalog.Rates != nil {
+		file.Rules.ShardRates = append([]int(nil), catalog.Rates...)
+	}
 	elixirs, powders := catalog.ReinforceTables()
 	rows := func(tables []alchemy.ReinforceTable) []ReinforceRow {
 		out := []ReinforceRow{}

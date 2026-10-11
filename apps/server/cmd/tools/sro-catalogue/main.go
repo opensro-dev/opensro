@@ -220,6 +220,11 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return fmt.Errorf("alchemy: %w", err)
 	}
+	// The export describes the shard it is built for, so it reads the same
+	// port-only setting the GameWorld does.
+	if alchemyCatalog.Rates, err = alchemy.ReinforceRatesFromEnv(); err != nil {
+		return err
+	}
 	npcs := catalogue.BuildNpcs(catalogue.NpcSource{Roster: simulation.LoadNpcWorldRoster(dir), Shops: shops})
 	placedNpcs := map[uint32]bool{}
 	for _, npc := range npcs {

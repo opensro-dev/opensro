@@ -392,7 +392,12 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	if !slices.Contains(elixirClasses(recipe), item.TypeFlags>>7&15) {
 		return zero, Refusal(9)
 	}
-	chance := probability(recipe, item.Plus)
+	chance, floor := probability(recipe, item.Plus), ReinforceMinChance
+	if c.Rates != nil {
+		// Port-only, not native: the shard's table (rates.go) replaces the
+		// elixir's authored chance and is its own floor.
+		chance, floor = c.Rates.chance(item.Plus), 0
+	}
 	if powder >= 0 {
 		p := c.Items[out[powder].Codename]
 		if int(p.Params[0]) != ref.Degree() {
@@ -406,8 +411,8 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 		chance += ReinforceLuckBonus
 	}
 	chance += bonus
-	if chance < ReinforceMinChance {
-		chance = ReinforceMinChance
+	if chance < floor {
+		chance = floor
 	}
 	if chance > ReinforceMaxChance {
 		chance = ReinforceMaxChance

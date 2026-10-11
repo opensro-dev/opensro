@@ -182,6 +182,15 @@ variable "reverse_return_map" {
   default = ""
 }
 
+# alchemy_rates replaces each elixir's authored reinforcement chance with one
+# table by plus (port-only, not native; owner decision 2026-10-11): "on" is
+# +1 100% ... +11 5%, a comma list such as "100,80,70" is custom, "off" is
+# the original game. A malformed value stops GameWorld at boot.
+variable "alchemy_rates" {
+  type    = string
+  default = "on"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
@@ -390,6 +399,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PARTY_MASTERIES                = var.party_masteries
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
+        SRO_ALCHEMY_RATES                  = var.alchemy_rates
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate

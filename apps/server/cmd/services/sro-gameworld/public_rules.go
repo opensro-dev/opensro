@@ -17,6 +17,7 @@ import (
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/party"
@@ -34,6 +35,7 @@ so the list cannot change while the GameWorld runs.
 func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
+	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
@@ -68,6 +70,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Retail stack sizes.",
 				Now:    "Larger stacks for some item kinds.",
 				Why:    "Less bag management during testing."},
+			{Flag: alchemy.EnvReinforceRates, On: alchemyRates != nil,
+				Native: "Each elixir has its own success chance per plus, at least 10%.",
+				Now:    "One gentler table: +1 always succeeds, falling to 5% for +11.",
+				Why:    "Players asked for it; the original rates return with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",
