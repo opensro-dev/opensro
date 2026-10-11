@@ -128,6 +128,8 @@ type Monster struct {
 	// Europe, 3 either at random.
 	Country uint8  `json:"country"`
 	Model   string `json:"model,omitempty"`
+	// Portrait is filled by the Node stage's portrait pass.
+	Portrait string `json:"portrait,omitempty" doc:"The monster's portrait, portraits/<id>.webp beside this file: a transparent still of its model from the game's own renderer (the viewer). Absent when the build drew none."`
 	// Regions are the world regions with a nest of this monster.
 	Regions  []uint16         `json:"regions"`
 	Variants []MonsterVariant `json:"variants"`

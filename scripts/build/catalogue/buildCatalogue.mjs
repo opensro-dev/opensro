@@ -10,9 +10,12 @@ itemTooltip, and the web icons, encoded to WebP from the client's published
 PNGs. Output: <generated>/catalogue/<release>/ and catalogue/latest.json.
 
 usage: node scripts/build/catalogue/buildCatalogue.mjs [--release <id>] [--out <dir>] [--since <commit>]
+       [--portraits <viewer base url>]
 (--out writes the catalogue somewhere else, for a trial run; the inputs
 always come from the generated tree. --since is the previous release's
-commit: notes.json lists the player notes of the merges after it.)
+commit: notes.json lists the player notes of the merges after it.
+--portraits draws each monster's portrait through the client's viewer,
+which must already be served at that URL, e.g. http://127.0.0.1:5173/.)
 
 ===========================================================================
 */
@@ -27,6 +30,7 @@ import { fileURLToPath } from "node:url";
 import { clientPublicPath, generatedPath } from "../../lib/generatedRoot.mjs";
 import { runPython } from "../shared/pythonRun.mjs";
 import { playerNotes } from "./playerNotes.mjs";
+import { renderPortraits } from "./renderPortraits.mjs";
 
 const { itemTooltip } = await import( "../../../apps/client-next/src/engine/foundation/ui/item-tooltip.ts" );
 const { itemMaxDurability } = await import(
@@ -55,16 +59,20 @@ parseArguments
 ================
 */
 function parseArguments( argv ) {
-	const options = { release: "dev", out: "", since: "" };
+	const options = { release: "dev", out: "", since: "", portraits: "" };
 	for ( let i = 0; i < argv.length; i++ ) {
 		if ( argv[i] === "--release" ) options.release = argv[++i] ?? "";
 		else if ( argv[i] === "--out" ) options.out = path.resolve( argv[++i] ?? "" );
 		else if ( argv[i] === "--since" ) options.since = argv[++i] ?? "";
+		else if ( argv[i] === "--portraits" ) options.portraits = argv[++i] ?? "";
 		else throw Error( "unknown argument " + argv[i] );
 	}
 	if ( !/^[A-Za-z0-9._-]{1,64}$/.test( options.release ) ) throw Error( "invalid --release " + options.release );
 	if ( options.since && !/^[0-9a-f]{7,40}$/i.test( options.since ) ) {
 		throw Error( "invalid --since " + options.since );
+	}
+	if ( options.portraits && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test( options.portraits ) ) {
+		throw Error( "--portraits must be the loopback viewer's base URL, e.g. http://127.0.0.1:5173/" );
 	}
 	return options;
 }
@@ -406,6 +414,27 @@ async function main() {
 		notes.since = options.since;
 		notes.entries = playerNotes( repositoryRoot, options.since );
 		writeFileSync( path.join( out, "notes.json" ), JSON.stringify( notes ) + "\n" );
+		const monsters = readJSON( path.join( work, "monsters.json" ) );
+		const portraitPairs = [];
+		if ( options.portraits ) {
+			const { drawn, failed } = await renderPortraits( {
+				viewerBase: options.portraits,
+				monsters: monsters.monsters,
+				workDir: path.join( work, "portraits" )
+			} );
+			for ( const monster of monsters.monsters ) {
+				const png = drawn.get( monster.id );
+				if ( !png ) continue;
+				monster.portrait = "portraits/" + monster.id + ".webp";
+				portraitPairs.push( [ png, path.join( out, "portraits", monster.id + ".webp" ) ] );
+			}
+			for ( const failure of failed ) {
+				console.log(
+					`portrait ${failure.id}: ${failure.reason}${failure.stage ? " at " + failure.stage : ""}`
+				);
+			}
+		}
+		writeFileSync( path.join( out, "monsters.json" ), JSON.stringify( monsters ) + "\n" );
 		const atlas = readJSON( path.join( work, "atlas.json" ) );
 		const tiles = atlasTiles( out );
 		atlas.tiles = tiles.map( ( [key] ) => key.split( "x" ).map( Number ) );
@@ -414,7 +443,16 @@ async function main() {
 		for ( const name of readdirSync( work ) ) {
 			if (
 				name.endsWith( ".json" ) &&
-				![ "items.json", "skills.json", "regions.json", "npcs.json", "search.json", "atlas.json", "notes.json" ]
+				![
+					"items.json",
+					"skills.json",
+					"regions.json",
+					"npcs.json",
+					"search.json",
+					"atlas.json",
+					"notes.json",
+					"monsters.json"
+				]
 					.includes(
 						name
 					)
@@ -435,6 +473,13 @@ async function main() {
 		await runPython( [ fileURLToPath( new URL( "./encode_tiles.py", import.meta.url ) ), tileList ], {
 			task: "catalogue atlas tiles"
 		} );
+		if ( portraitPairs.length ) {
+			const portraitList = path.join( work, "portraits.json" );
+			writeFileSync( portraitList, JSON.stringify( portraitPairs ) );
+			await runPython( [ fileURLToPath( new URL( "./encode_icons.py", import.meta.url ) ), portraitList ], {
+				task: "catalogue portraits"
+			} );
+		}
 		writeFileSync(
 			path.join( root, "latest.json" ),
 			JSON.stringify( { release: options.release, generatedAt: items.generatedAt } ) + "\n"
