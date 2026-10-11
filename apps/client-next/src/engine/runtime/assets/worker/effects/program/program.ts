@@ -17,6 +17,7 @@ import type { ParticleEmitter } from "@/engine/foundation/animation/particle-gra
 import { particleProgram } from "@/engine/foundation/animation/particle-program";
 import { particleRotation } from "@/engine/foundation/animation/particle-rotation";
 import { particleBirthFrames } from "@/engine/foundation/animation/particle-emission";
+import { effectLinks, type EffectLinks } from "@/engine/foundation/animation/effect-link-mode";
 import {
 	CHARACTER_PARTICLE_BIRTHS,
 	CHARACTER_MODEL_BYTES,
@@ -51,6 +52,7 @@ type Node = {
 	int3?: number;
 	name: string;
 	children: Node[];
+	controllers?: { name: string; value?: unknown; }[];
 	globalData: {
 		totalFrames: number;
 		parameters?: { kind: string; value: unknown; }[];
@@ -454,12 +456,9 @@ export function createEffectPrograms() {
 					matrix: combinedMatrix ?? undefined,
 					localMotion: !!node.byte2,
 					shapeMotion: !!node.byte3,
-					keepMatrix: !!node.byte0,
-					keepOrigin: !!node.byte1,
-					positionDepth: node.int0 ?? 0,
-					matrixDepth: node.int1 ?? 0,
-					velocityDepth: node.int2 ?? 0,
-					followDepth: node.int3 ?? 0,
+					// The header's links as the element's LinkMode overrides them
+					// (effect-link-mode.ts, B298F0 then B1F6F0).
+					...links.get( node )!,
 					scales,
 					positions: banPositions,
 					rotations: banRotations
@@ -660,6 +659,7 @@ export function createEffectPrograms() {
 				rotation: [ 0, 0, 0, 1 ],
 				scale: [ effectScale, effectScale, effectScale ]
 			};
+			const links: Map<object, EffectLinks> = effectLinks( effect.root );
 			nodes.push( root );
 			walk( effect.root, 0, false );
 			particleGraph.length = 0;

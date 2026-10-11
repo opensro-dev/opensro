@@ -45,3 +45,27 @@ test("every published effect decodes with native fog exclusion", () => {
 	}
 	assert.deepEqual( failures, [] );
 });
+test("element links come from the LinkMode controller, not only the header (B1F6F0)", () => {
+	const path = "skill/europe/wizard_fire_trap_creation.efp";
+	const catalog = JSON.parse( new TextDecoder().decode( bytes ) ), effect = structuredClone( catalog.effects[path] );
+	// Clear every header link field; the LinkMode controllers still carry them.
+	const stack = [ effect.root ];
+	while ( stack.length ) {
+		const element = stack.pop();
+		Object.assign( element, { int0: 0, int1: 0, int2: 0, int3: 0, byte0: 0, byte1: 0 } );
+		stack.push( ...element.children );
+	}
+	const stripped = new TextEncoder().encode( JSON.stringify( { ...catalog, effects: { [path]: effect } } ) );
+	const links = model =>
+		model.particleGraph.map( e => [
+			e.positionDepth,
+			e.matrixDepth,
+			e.velocityDepth,
+			e.followDepth,
+			e.keepMatrix,
+			e.keepOrigin
+		] );
+	const shipped = links( createEffectPrograms().decode( bytes, path ).model );
+	assert.ok( shipped.some( row => row[3] > 0 ), "the trap's elements follow their parents" );
+	assert.deepEqual( links( createEffectPrograms().decode( stripped, path ).model ), shipped );
+});
