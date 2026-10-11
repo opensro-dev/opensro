@@ -256,3 +256,34 @@ test("repeated receipts preserve the progress and velocity of the existing corre
 		assert.ok( Math.abs( shown.x - expected.x ) < 1e-9, "revisions must not restart or accelerate recovery" );
 	}
 });
+
+test("a candidate past the certified path's end never draws behind the previous frame", () => {
+	// The walk's leg reaches x 200, but the certified chain (a hill) ends at
+	// x 110; extrapolation between samples runs the candidate past that end.
+	const presentation = createPosePresentation(), path = [ pose( 100, 0 ), pose( 105, 2 ), pose( 110, 4 ) ];
+	presentation.origin( 0 );
+	const input = atMs => ({
+		atMs,
+		revision: 1,
+		moving: true,
+		from: pose( 100, 0 ),
+		to: pose( 200, 4 ),
+		durationMs: 2000,
+		walkingPath: path,
+		ownLeg: true
+	});
+	publish( presentation, input( 0 ) );
+	presentation.pose( 7, pose( 100, 0 ), 0 );
+	publish( presentation, input( 160 ) );
+	let previous = presentation.pose( 7, pose( 108, 3.2 ), .16 );
+	for ( let frame = 1; frame <= 30; frame++ ) {
+		const shown = presentation.pose( 7, pose( 108, 3.2 ), .16 + frame / 60 );
+		assert.ok( shown.x >= previous.x - 1e-9, `no step back at frame ${frame} (${previous.x} -> ${shown.x})` );
+		assert.ok( shown.x <= 110 + 1e-9, `stays on the certified chain (x ${shown.x})` );
+		assert.ok(
+			path.slice( 1 ).some( ( to, i ) => onSegment( shown, defined( path[i] ), to ) ),
+			JSON.stringify( shown )
+		);
+		previous = shown;
+	}
+});

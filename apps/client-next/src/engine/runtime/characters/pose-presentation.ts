@@ -215,6 +215,31 @@ function walkingLocation( pose: Pose, path: readonly Pose[], latest = false ) {
 
 /*
 ================
+nearestWalkingPose
+
+The certified path's point nearest a pose in the plane, its height from the
+accepted samples: the path's end for a pose that ran past it. Null only for
+a path that crosses into another navigation space.
+================
+*/
+function nearestWalkingPose( pose: Pose, path: readonly Pose[] ): Pose | null {
+	let best: { miss: number; pose: Pose; } | null = null;
+	for ( let i = 1; i < path.length; i++ ) {
+		const from = path[i - 1]!, to = path[i]!;
+		const span = worldVector( to, from ), point = worldVector( pose, from );
+		if ( !span || !point ) return null;
+		const planar2 = span[0] ** 2 + span[2] ** 2;
+		const fraction = planar2 ?
+			Math.max( 0, Math.min( 1, (point[0] * span[0] + point[2] * span[2]) / planar2 ) ) :
+			0;
+		const miss = hypot2( point[0] - span[0] * fraction, point[2] - span[2] * fraction );
+		if ( !best || miss < best.miss ) best = { miss, pose: interpolateMovement( from, to, fraction ) };
+	}
+	return best?.pose ?? null;
+}
+
+/*
+================
 walkingPose
 
 Spend distance along certified edges. Crossing a corner visits that corner;
@@ -385,7 +410,11 @@ within a leg this is exact; the leg end bounds it.
 function sampledModel( row: SampleTrack, now: number, confirmedAt = row.latest.at ): Pose {
 	const candidate = sampledLinearModel( row, now, confirmedAt );
 	if ( !row.walkingPath || candidate === row.latest.pose ) return candidate;
-	return walkingLocation( candidate, row.walkingPath, true )?.pose ?? row.latest.pose;
+	// A candidate off the certified chain (one that ran past its end) takes
+	// the chain's nearest point, never the stale sample: falling back to the
+	// latest sample drew a step back in X, Z and height.
+	return walkingLocation( candidate, row.walkingPath, true )?.pose ??
+		nearestWalkingPose( candidate, row.walkingPath ) ?? row.latest.pose;
 }
 
 /*
