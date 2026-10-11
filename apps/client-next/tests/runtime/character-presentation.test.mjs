@@ -1089,6 +1089,89 @@ test("a WAIT hold released by the next walk recovers continuously instead of jum
 	f.dispose();
 });
 
+test("a WAIT hold released while standing decays instead of jumping", () => {
+	// The hold released by a revision with no walk to pace it (a correction
+	// or a receipt while standing): the carried pose decays as a correction.
+	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
+	// state (native stops the walk there); the logical walk can still move
+	// on. The next revision released the hold in one frame, and on a slope
+	// that step read as the camera height snapping (owner, F4).
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
+	const to = { ...from, x: 110 };
+	// The walk after the release: 100 units in 2 s.
+	const NEXT_SPEED = 50;
+	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+	let travelling = true;
+	const frame = ( x, seconds, casting, moving ) => {
+		const path = {
+			from: travelling ? from : { ...to, x },
+			to: travelling ? to : { ...to, x: 210 },
+			durationMs: travelling ? 200 : (210 - x) / NEXT_SPEED * 1000
+		};
+		const player = entity( 1, {
+			kind: "local-player",
+			x,
+			moving,
+			movementMode: 3,
+			movementRevision: travelling ? 1 : 2,
+			movementPath: moving ? path : undefined,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player ], seconds, {
+			localGid: 1,
+			pose: { ...from, x },
+			moving,
+			movementRevision: travelling ? 1 : 2,
+			movementPath: moving ? path : undefined,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: casting ? [ { ...cast, token: 1 } ] : []
+		} );
+		assert.equal( f.presentation.error(), null );
+		return { ...f.actors.find( actor => actor.gid === 1 ).pose };
+	};
+	frame( 10, 1, false, true );
+	const held = frame( 20, 1.02, true, true );
+	frame( 60, 1.1, true, true );
+	frame( 110, 1.3, false, false );
+	assert.equal( frame( 110, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
+	travelling = false;
+	// CORRECTION_FREQUENCY (30/s) over a 60 fps frame: the most one frame closes.
+	const perFrame = 1 - Math.exp( -30 / 60 );
+	let previous = held, gap = 110 - held.x;
+	for ( let step = 1; step <= 30; step++ ) {
+		const shown = frame( 110, 3 + step / 60, false, false );
+		const closed = shown.x - previous.x;
+		assert.ok( closed >= -1e-9, `no step back at frame ${step}` );
+		// The last hundredth of a unit (MIN_CORRECTION_DISTANCE) is closed at once.
+		assert.ok(
+			closed <= perFrame * gap + 0.01,
+			`frame ${step} closes ${closed.toFixed( 2 )} of ${gap.toFixed( 2 )}`
+		);
+		gap = 110 - shown.x;
+		previous = shown;
+	}
+	assert.ok( Math.abs( previous.x - 110 ) < 0.01, `settles on the standing pose (${previous.x})` );
+	f.dispose();
+});
+
 test("gecko starts the walk immediately, fades out over 200ms at its end and resets behind the dock gate", () => {
 	const f = fixture();
 	f.warm();

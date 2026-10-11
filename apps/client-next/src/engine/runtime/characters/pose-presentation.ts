@@ -766,17 +766,25 @@ export function createPosePresentation() {
 		if ( row.carried ) {
 			// A carried pose (a released WAIT hold, carry) walks to the model at
 			// MAX_WALK_RECOVERY_SPEED_FACTOR times the walk's speed, height
-			// included; a teleport-sized gap is not recovered.
+			// included. Released while standing (a correction or a receipt, no
+			// walk to pace it), it decays at CORRECTION_FREQUENCY as any
+			// correction does. A teleport-sized gap is not recovered.
 			const delta = worldVector( model, row.displayed );
 			const distance = delta ? hypot3( ...delta ) : 0;
-			const speed = row.recoverySpeed || (row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0);
-			if ( !delta || distance > MAX_CORRECTION_DISTANCE || !speed ) {
+			// Only a walk paces it: a standing track keeps its last walk's
+			// recovery speed, which would glide a stop at walking pace.
+			const speed = row.moving ?
+				row.recoverySpeed || (row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0) :
+				0;
+			if ( !delta || distance > MAX_CORRECTION_DISTANCE ) {
 				row.carried = undefined;
 			} else {
 				const elapsed = previousFrameAt === undefined ? 0 : Math.max( 0, now - previousFrameAt );
-				const fraction = distance ?
+				const fraction = distance <= MIN_CORRECTION_DISTANCE ?
+					1 :
+					speed ?
 					Math.min( 1, MAX_WALK_RECOVERY_SPEED_FACTOR * speed * elapsed / distance ) :
-					1;
+					1 - Math.exp( -CORRECTION_FREQUENCY * Math.min( MAX_RECOVERY_STEP_SECONDS, elapsed ) );
 				drawn = {
 					...displace( row.displayed, [ delta[0] * fraction, delta[1] * fraction, delta[2] * fraction ] ),
 					angle: drawn.angle
