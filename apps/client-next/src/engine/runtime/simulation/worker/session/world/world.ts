@@ -198,7 +198,15 @@ receive
 			// Network owner has already checked the exact v2 WELCOME layout.
 			const resumed = frame.payload[1] === 1;
 			if ( hasWorld && !resumed ) {
-				throw new Error( "Server could not resume the previous world session" );
+				// The server's resume grace ended before this client came back
+				// (a background tab can wake too late). The session is over:
+				// an expected end the player is told about, not a game error.
+				onNetworkFailure( "Server could not resume the previous world session", undefined, {
+					category: "expected",
+					code: "resume_expired",
+					message: "Your session ended while the connection was gone. Please log in again."
+				} );
+				return;
 			}
 			resumedTransport = resumed && hasWorld;
 			resume = frame.payload.slice( 11 );

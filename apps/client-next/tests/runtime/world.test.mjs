@@ -636,14 +636,14 @@ test("logout/disposal rejects a late token and opens no socket", async t => {
 	assert.equal( sockets.length, 0 );
 });
 test("unexpected close retries with a new ticket and rejects a lost resume", async t => {
-	const sockets = socketHarness( t ), mints = [];
+	const sockets = socketHarness( t ), mints = [], incidents = [];
 	const world = createWorldSession(
 		async kind => {
 			mints.push( kind );
 			return "ticket";
 		},
 		undefined,
-		ignoreIncident
+		incident => incidents.push( incident )
 	);
 	world.enter( "fixture", "shard", "http://localhost:9000" );
 	await settle();
@@ -675,6 +675,10 @@ test("unexpected close retries with a new ticket and rejects a lost resume", asy
 	world.step( 258 );
 	assert.equal( world.status().phase, "disconnected" );
 	assert.match( world.status().error, /could not resume/ );
+	// An expired resume is an expected end: the player is told to log in
+	// again, and no game-error incident is filed (only the close itself).
+	assert.match( world.status().disconnectMessage, /log in again/ );
+	assert.deepEqual( incidents.map( incident => incident.message ), [ "Transport connection closed" ] );
 	world.dispose();
 });
 
