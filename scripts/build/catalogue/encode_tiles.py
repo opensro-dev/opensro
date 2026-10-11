@@ -9,7 +9,8 @@
 # reads block compression through its DDS decoder, so an NTX1 tile is
 # rewrapped as a DDS of the same fourcc. Reads a JSON list of [source,
 # target_webp] pairs from argv[1]; tiles are photographic, so they are
-# written lossy at TILE_QUALITY.
+# written lossy at TILE_QUALITY. argv[2], when given, is the content cache
+# (webp_pool.py).
 #
 # ===========================================================================
 #
@@ -17,9 +18,13 @@ import io, json, os, struct, sys
 
 from PIL import Image
 
+from webp_pool import encode_pairs
+
 NTX_MAGIC = b"NTX1"
 NTX_HEADER_BYTES = 20
 TILE_QUALITY = 82
+# TILE_SETTINGS names the encode for the cache: a change here re-encodes.
+TILE_SETTINGS = "tile rgb quality=%d method=4" % TILE_QUALITY
 DDS_HEADER_BYTES = 124
 DDSD_CAPS_HEIGHT_WIDTH_PIXELFORMAT_LINEARSIZE = 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000
 DDPF_FOURCC = 0x4
@@ -60,15 +65,19 @@ def ntx_image( payload ):
 def main():
 	with open( sys.argv[1], encoding="utf-8" ) as listing:
 		pairs = json.load( listing )
-	written = 0
-	for source, target in pairs:
-		os.makedirs( os.path.dirname( target ), exist_ok=True )
-		with open( source, "rb" ) as tile:
-			payload = tile.read()
-		image = ntx_image( payload ) if payload[:4] == NTX_MAGIC else Image.open( io.BytesIO( payload ) )
-		image.convert( "RGB" ).save( target, "WEBP", quality=TILE_QUALITY, method=4 )
-		written += 1
-	print( json.dumps( { "written": written } ) )
+	cache = sys.argv[2] if len( sys.argv ) > 2 else None
+	print( json.dumps( encode_pairs( pairs, encode_tile, TILE_SETTINGS, cache ) ) )
+
+#
+# ================
+# encode_tile
+#
+# One tile: an NTX1 texture through its DDS wrapper, any other image as is.
+# ================
+#
+def encode_tile( payload, target ):
+	image = ntx_image( payload ) if payload[:4] == NTX_MAGIC else Image.open( io.BytesIO( payload ) )
+	image.convert( "RGB" ).save( target, "WEBP", quality=TILE_QUALITY, method=4 )
 
 if __name__ == "__main__":
 	main()

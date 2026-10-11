@@ -46,6 +46,9 @@ const { createTooltipSkillDecoder } = await import(
 
 const repositoryRoot = fileURLToPath( new URL( "../../../", import.meta.url ) );
 const serverRoot = path.join( repositoryRoot, "apps", "server" );
+// The WebP encoders' content cache (webp_pool.py): an image unchanged since
+// any earlier build is copied, not encoded again.
+const WEBP_CACHE = path.join( repositoryRoot, ".state", "catalogue-webp-cache" );
 // The bag's first slot: the tooltip reads an item instance, and a catalogue
 // row is the item as it drops (no plus, no options, lowest variance).
 const CATALOGUE_SLOT = 13;
@@ -465,18 +468,22 @@ async function main() {
 		}
 		const list = path.join( work, "icons.json" );
 		writeFileSync( list, JSON.stringify( pairs.map( ( [, pair] ) => pair ) ) );
-		await runPython( [ fileURLToPath( new URL( "./encode_icons.py", import.meta.url ) ), list ], {
+		await runPython( [ fileURLToPath( new URL( "./encode_icons.py", import.meta.url ) ), list, WEBP_CACHE ], {
 			task: "catalogue icons"
 		} );
 		const tileList = path.join( work, "tiles.json" );
 		writeFileSync( tileList, JSON.stringify( tiles.map( ( [, pair] ) => pair ) ) );
-		await runPython( [ fileURLToPath( new URL( "./encode_tiles.py", import.meta.url ) ), tileList ], {
+		await runPython( [ fileURLToPath( new URL( "./encode_tiles.py", import.meta.url ) ), tileList, WEBP_CACHE ], {
 			task: "catalogue atlas tiles"
 		} );
 		if ( portraitPairs.length ) {
 			const portraitList = path.join( work, "portraits.json" );
 			writeFileSync( portraitList, JSON.stringify( portraitPairs ) );
-			await runPython( [ fileURLToPath( new URL( "./encode_icons.py", import.meta.url ) ), portraitList ], {
+			await runPython( [
+				fileURLToPath( new URL( "./encode_icons.py", import.meta.url ) ),
+				portraitList,
+				WEBP_CACHE
+			], {
 				task: "catalogue portraits"
 			} );
 		}

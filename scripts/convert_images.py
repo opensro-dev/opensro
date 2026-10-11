@@ -27,6 +27,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from build_parallelism import build_jobs
 from rebuild_lock import generated_assets_lock
 from sro_paths import EXTRACTED_ROOT, GAME_ROOT, GENERATED_ROOT
 
@@ -132,21 +133,6 @@ def main() -> int:
     print(f"Converted {ok} image assets ({skipped} already fresh) in {elapsed:.1f}s.")
     print(f"Manifest: {MANIFEST_PATH}")
     return 0
-
-
-# ================
-# build_jobs
-#
-# SRO_BUILD_JOBS (scripts/build/shared/buildParallelism.mjs owns the rule):
-# a positive integer, else every core but one.
-# ================
-def build_jobs() -> int:
-    raw = os.environ.get("SRO_BUILD_JOBS", "")
-    if not raw:
-        return max(1, (os.cpu_count() or 2) - 1)
-    if not raw.isdigit() or int(raw) < 1:
-        raise SystemExit(f"SRO_BUILD_JOBS must be a positive integer; got {raw!r}")
-    return int(raw)
 
 
 # ================
