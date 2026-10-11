@@ -66,6 +66,7 @@ export function createPresentationSamples( entities: readonly EntityState[], gam
 	const sample = ( gid: number, source: Sampled ) => {
 		if ( source.poseAtMs === undefined ) return;
 		samples.set( gid, {
+			...(localMover( gid ) ? { ownLeg: true } : {}),
 			atMs: source.poseAtMs,
 			revision: source.movementRevision ?? 0,
 			moving: !!source.moving && source.movementTransition?.pathEligible !== false,

@@ -38,7 +38,9 @@ const TICK_SECONDS = SIMULATION_STEP_MS / 1000;
 const DISCONTINUITY_DISTANCE = 192;
 // Samples further apart than this do not define a velocity.
 const MAX_SAMPLE_GAP_SECONDS = 0.25;
-// Bounded extrapolation: a stalled worker parks a walker, never runs it on.
+// Bounded extrapolation of a sample with no admitted leg: a stalled worker
+// parks such a walker, never runs it on. A sample that carries its admitted
+// walking leg instead keeps walking it to the leg's end (sampledLinearModel).
 const MAX_EXTRAPOLATION_SECONDS = 0.1;
 // Correction offsets decay with this time constant (about 95% gone in 0.2 s).
 const CORRECTION_FREQUENCY = 30;
@@ -93,6 +95,8 @@ A character drawn on the frame clock from its timed samples.
 ================
 */
 interface SampleTrack {
+	// The local mover's own leg (SampleInput.ownLeg, walksLeg).
+	ownLeg: boolean;
 	paths: { from: Pose; to: Pose; }[];
 	walkingPath?: readonly Pose[];
 	previous?: Sample;
@@ -386,17 +390,43 @@ function sampledModel( row: SampleTrack, now: number, confirmedAt = row.latest.a
 
 /*
 ================
+walksLeg
+
+Whether the track walks the local mover's own admitted ground leg: one
+with its end and its velocity, not a skill displacement (which keeps its
+own clock). A peer's leg is the server's, which a stop or a knockback can
+cut, so a peer keeps the bounded extrapolation.
+================
+*/
+function walksLeg( row: SampleTrack ): boolean {
+	return row.ownLeg && !!row.to && !!row.pathVelocity && row.displacementAtMs === undefined;
+}
+
+/*
+================
 sampledLinearModel
 
 Native time and the checked endpoint bound horizontal extrapolation. The
 wrapper resolves its height on certified walking samples when available.
+
+A walk on its admitted leg (a ground walk, not a skill displacement, which
+keeps its own clock) is advanced every frame, as native dead reckoning
+(CNavigationDeadreckon) advances it, and the leg's end bounds it. A worker
+or main-thread stall used to park it MAX_EXTRAPOLATION_SECONDS past the
+last sample, and the display then caught up at 1.5 times walking speed:
+under a 4x CPU throttle the bench drew 29 frames at 1.47 times speed after
+one stall (2026-10-12). Without a leg the bound stays.
 ================
 */
 function sampledLinearModel( row: SampleTrack, now: number, confirmedAt: number ): Pose {
 	const latest = row.latest, previous = row.previous;
-	const maximumAhead = MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
+	const legged = walksLeg( row );
+	const maximumAhead = legged ? Infinity : MAX_EXTRAPOLATION_SECONDS + Math.max( 0, confirmedAt - latest.at );
 	if ( !row.moving ) return latest.pose;
-	if ( !previous && row.pathVelocity ) {
+	// Two samples further apart than MAX_SAMPLE_GAP_SECONDS define no
+	// velocity; the admitted leg still does.
+	const sampledGap = previous ? latest.at - previous.at : 0;
+	if ( row.pathVelocity && (!previous || legged && (sampledGap <= 0 || sampledGap > MAX_SAMPLE_GAP_SECONDS)) ) {
 		const [vx, vz] = row.pathVelocity, speed = hypot2( vx, vz );
 		if ( !speed ) return latest.pose;
 		let ahead = Math.min( maximumAhead, Math.max( 0, now - latest.at ) );
@@ -506,6 +536,7 @@ export function createPosePresentation() {
 				moving: input.moving,
 				to: input.to,
 				pathVelocity: pathVelocity( input ),
+				ownLeg: input.ownLeg === true,
 				recoverySpeed: 0,
 				durationMs: input.durationMs,
 				displacementAtMs: input.displacement ? input.startedAtMs : undefined,
@@ -581,7 +612,11 @@ export function createPosePresentation() {
 			// the preceding display creates a correction that never happened.
 			const retainedWalk = row.moving && input.moving && input.transition?.reason === "receipt" &&
 				input.transition.logicalDistance === 0 && input.transition.pathEligible === true;
-			const preserveDisplay = stalled || revisionChanged && input.transition?.reason !== "input" && !retainedWalk;
+			// A stalled frame of a walk on its admitted leg draws where the leg
+			// puts it now, as native dead reckoning does after a hitch; holding
+			// the frozen display made it sprint to catch up afterwards.
+			const preserveDisplay = stalled && !walksLeg( row ) ||
+				revisionChanged && input.transition?.reason !== "input" && !retainedWalk;
 			// A fresh publication after a main-frame gap confirms the intervening
 			// leg. Do not manufacture a parked interval inside that unseen gap.
 			// If an earlier displayed frame already reached the prediction bound,
@@ -625,6 +660,7 @@ export function createPosePresentation() {
 			row.durationMs = input.durationMs;
 			row.displacementAtMs = displacementAtMs;
 			row.pathVelocity = pathVelocity( input );
+			row.ownLeg = input.ownLeg === true;
 			// A stop may omit its leg, but outstanding display recovery still
 			// belongs to the speed of the admitted walk that reached it.
 			const walkSpeed = !input.displacement && row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0;

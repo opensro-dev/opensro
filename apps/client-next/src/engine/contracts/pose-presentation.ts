@@ -34,6 +34,8 @@ export interface SampleInput {
 	readonly durationMs?: number;
 	readonly startedAtMs?: number;
 	readonly displacement?: boolean;
+	/** The local mover's own predicted leg: presentation walks it through stalls. */
+	readonly ownLeg?: boolean;
 	/** Navigation-certified connected ground samples; never a skill trajectory. */
 	readonly walkingPath?: readonly Pose[];
 	readonly transition?: import("@/engine/contracts/gameplay").MovementTransition;

@@ -153,9 +153,10 @@ for ( const frameMs of [ 4, 1000 / 60 ] ) {
 sample
 ================
 */
-function sample( presentation, atMs, nowMs, durationMs = 2000 ) {
+function sample( presentation, atMs, nowMs, durationMs = 2000, ownLeg = true ) {
 	presentation.samples(
 		new Map( [ [ 1, {
+			ownLeg,
 			atMs,
 			revision: 1,
 			moving: true,
@@ -176,17 +177,58 @@ test("a fresh sample bridges an unseen main-frame gap without manufacturing a wo
 	assert.ok( Math.abs( drawn.x - 107.5 ) < 1e-9 );
 });
 
-test("a worker pause displayed on screen still parks at the prediction bound and recovers continuously", () => {
+test("a worker pause keeps the walker on its admitted leg at walking speed", () => {
+	// Native dead reckoning advances a walk every frame; the leg's end, not
+	// the last worker sample, bounds it. Parking it 0.1 s past the sample
+	// made the display sprint at 1.5x speed when the worker resumed.
 	const p = createPosePresentation();
 	p.origin( 0 );
 	sample( p, 0, 0 );
 	sample( p, 16, 90 );
-	const parked = sample( p, 16, 130 );
-	assert.ok( Math.abs( parked.x - 105.8 ) < 1e-9 );
+	const paused = sample( p, 16, 130 );
+	assert.ok(
+		Math.abs( paused.x - (START.x + 130 * SPEED / 1000) ) < 1e-9,
+		`walking through the pause (x ${paused.x})`
+	);
 	const resumed = sample( p, 112, 150 );
-	assert.ok( Math.abs( resumed.x - parked.x ) < 1e-9 );
+	assert.ok( Math.abs( resumed.x - (START.x + 150 * SPEED / 1000) ) < 1e-9 );
 	const next = sample( p, 128, 166 );
-	assert.ok( next.x > resumed.x && next.x < 108.3 );
+	assert.ok( Math.abs( next.x - resumed.x - 16 * SPEED / 1000 ) < 1e-9, "no catch-up after it" );
+});
+
+test("a peer's pause still parks at the prediction bound", () => {
+	// A peer's leg is the server's, which a stop or a knockback can cut.
+	const p = createPosePresentation();
+	p.origin( 0 );
+	sample( p, 0, 0, 2000, false );
+	sample( p, 16, 90, 2000, false );
+	const parked = sample( p, 16, 130, 2000, false );
+	assert.ok( Math.abs( parked.x - 105.8 ) < 1e-9, `parked (x ${parked.x})` );
+});
+
+test("a lag replay never draws the walker faster than it walks, backwards or past its leg", () => {
+	// Frame hitches (a stalled main thread) and publication gaps (a stalled
+	// worker, a round-trip spike), as the owner's 400 ms ping with CPU lag.
+	const p = createPosePresentation();
+	p.origin( 0 );
+	const frames = [ 4, 16, 33, 61, 250, 9, 16, 48, 3, 25, 70, 400, 16, 16 ];
+	const publishEvery = [ 16, 16, 16, 300, 16, 32, 48, 16, 450, 16 ];
+	let now = 0, worker = 0, publish = 0, previous;
+	for ( let frame = 0; now < 2400; frame++ ) {
+		now += frames[frame % frames.length];
+		while ( worker + publishEvery[publish % publishEvery.length] <= now ) {
+			worker += publishEvery[publish++ % publishEvery.length];
+		}
+		const drawn = sample( p, Math.min( worker, 2000 ), now );
+		if ( previous ) {
+			const step = drawn.x - previous.x, budget = SPEED * (now - previous.at) / 1000;
+			assert.ok( step >= -1e-9, `no backward step at ${now} ms (${step})` );
+			assert.ok( step <= budget + 1e-6, `no faster than walking at ${now} ms (${step} > ${budget})` );
+		}
+		assert.ok( drawn.x <= END.x + 1e-9, `never past the leg's end (x ${drawn.x})` );
+		previous = { x: drawn.x, at: now };
+	}
+	assert.ok( previous && Math.abs( previous.x - END.x ) < 1e-9, "arrives at the leg's end" );
 });
 
 for ( const durationMs of [ 1000, 4000, Infinity ] ) {
