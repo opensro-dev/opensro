@@ -120,6 +120,13 @@ SetGameTimeGM
 to that hour, and every player in the world gets the 0x31AD clock push,
 since a client keeps its own clock after entry. The clock is one per
 process, as SR_GameServer's is, so every division's players hear it.
+
+The push holds every division's publication gate (lockTickPublication, the
+tick's own order). An entry binds its session and sends its EnterWorld
+result under that gate: a push inside the span would reach a client that
+has no world yet ("Native packet before EnterWorld") and drop it. Under the
+gate the push lands before the bind (the entry's bootstrap reads the moved
+clock) or after the result.
 ================
 */
 func (rt *Runtime) SetGameTimeGM(hour uint8) {
@@ -130,6 +137,8 @@ func (rt *Runtime) SetGameTimeGM(hour uint8) {
 	if rt.PushCharacterFrames == nil {
 		return
 	}
+	unlock := rt.lockTickPublication()
+	defer unlock()
 	rt.characterAdmissions.Range(func(_, value any) bool {
 		admission := value.(populationAdmission)
 		rt.PushCharacterFrames(admission.division, admission.name,

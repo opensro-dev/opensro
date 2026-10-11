@@ -8,10 +8,13 @@ gmadmin_test.go - /WORLDSTATUS counts and /RECALLGUILD
 package action
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -111,5 +114,67 @@ func TestSetGameTimeTellsEveryPlayerInTheWorld(t *testing.T) {
 		if len(frames) != 1 || frames[0].Opcode != simulation.OpGameTime || string(frames[0].Payload) != string(want) {
 			t.Fatalf("%s got %+v", name, frames)
 		}
+	}
+}
+
+/*
+================
+TestSetGameTimeWaitsForAnEntryPublication
+
+An entry holds its division's publication gate from binding its session
+until its EnterWorld result is out. A clock push inside that span would
+reach a client with no world yet and drop it, so the push waits for the
+gate; the clock itself moves at once.
+================
+*/
+func TestSetGameTimeWaitsForAnEntryPublication(t *testing.T) {
+	f := newGMTeleportFixture(t)
+	moved := make(chan struct{}, 1)
+	f.rt.SetWorldHour = func(hour uint8) calendar.Value {
+		moved <- struct{}{}
+		return calendar.Value{Day: 7, Hour: hour}
+	}
+	var mu sync.Mutex
+	pushed := 0
+	f.rt.PushCharacterFrames = func(_, _ string, _ []wire.Frame) {
+		mu.Lock()
+		pushed++
+		mu.Unlock()
+	}
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return pushed
+	}
+	unlock := f.rt.LockPublication(testDivision)
+	done := make(chan struct{})
+	go func() {
+		f.rt.SetGameTimeGM(21)
+		close(done)
+	}()
+	select {
+	case <-moved:
+	case <-time.After(5 * time.Second):
+		unlock()
+		t.Fatal("the clock did not move while an entry held the publication gate")
+	}
+	select {
+	case <-done:
+		unlock()
+		t.Fatal("the clock push went out while an entry held the publication gate")
+	case <-time.After(200 * time.Millisecond):
+	}
+	if n := count(); n != 0 {
+		unlock()
+		t.Fatalf("%d clock push(es) under a held gate", n)
+	}
+	unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the clock push never went out after the gate was released")
+	}
+	if count() != 2 {
+		t.Fatalf("pushed %d, want one to each player", count())
 	}
 }
