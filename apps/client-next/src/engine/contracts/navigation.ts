@@ -4,7 +4,7 @@ export interface NavPlacement {readonly terrainCells?:readonly (readonly [number
 export interface NavigationProduct {readonly regionId:number;readonly navmesh?:unknown;readonly objects:readonly NavPlacement[];readonly complete:boolean}
 
 export interface ObjectNavWire {sourcePath:string;byteLength:number;headerOffsets:number[];nativePayloads?:{kind:string;byteOffset:number;byteLength:number;rawBase64:string}[]}
-export interface NavBsr {objectId:number;sourcePath:string;renderMeshSection?:{paths:string[]};meshPaths?:string[]}
+export interface NavBsr {objectId:number;sourcePath:string;primaryMeshPath?:string|null;renderMeshSection?:{paths:string[]};meshPaths?:string[]}
 export interface NavResources {bsr:NavBsr[];meshes?:ObjectNavWire[];meshFiles?:{sourcePath:string;publicPath:string}[]}
 export interface NavRegion {dx:number;dz:number;blockedTiles:string;tileCellIds:string;heightMap:string;planeType?:string;planeHeight?:string;cells:{count:number;minX?:string;minZ?:string;maxX?:string;maxZ?:string;objectIndexOffsets?:string;objectIndices?:string};objects?:{assetId:number;x:number;y:number;z:number;yaw:number;linkEdgeCount?:number;linkEdges?:string}[]}
 export interface NavBundle {source:{sectorX:number;sectorY:number};navmesh:{regions:NavRegion[]};objects:{resources?:NavResources;resourceIndexPublicPath:string}}

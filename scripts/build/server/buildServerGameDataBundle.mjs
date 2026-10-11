@@ -403,11 +403,7 @@ async function buildObjectNavProjection(
 		if ( !usedObjectIds.has( row.objectId ) ) {
 			continue;
 		}
-		const sourcePaths = row.renderMeshSection?.paths?.length ?
-			row.renderMeshSection.paths :
-			(row.meshPaths ?? []);
-		const resolved = sourcePaths
-			.map( normalizeGamePath )
+		const resolved = navMeshSourcePaths( row )
 			.filter( ( sourcePath ) => meshBySource.has( sourcePath ) );
 		if ( resolved.length === 0 ) {
 			continue;
@@ -473,12 +469,7 @@ async function buildReferencedObjectNavProjection(
 	const sourceIndex = await readJson( path.join( worldRoot, relativeIndexPath ) );
 	const referencedMeshSources = new Set();
 	for ( const row of sourceIndex.bsr ?? [] ) {
-		const paths = row.renderMeshSection?.paths?.length ?
-			row.renderMeshSection.paths :
-			(row.meshPaths ?? []);
-		for ( const sourcePath of paths ) {
-			referencedMeshSources.add( normalizeGamePath( sourcePath ) );
-		}
+		for ( const sourcePath of navMeshSourcePaths( row ) ) referencedMeshSources.add( sourcePath );
 	}
 
 	const meshPathBySource = new Map();
@@ -514,10 +505,7 @@ async function buildReferencedObjectNavProjection(
 
 	const bsr = [];
 	for ( const row of sourceIndex.bsr ?? [] ) {
-		const sourcePaths = (row.renderMeshSection?.paths?.length ?
-			row.renderMeshSection.paths :
-			(row.meshPaths ?? [])).map( normalizeGamePath );
-		const resolved = sourcePaths.filter( ( sourcePath ) => meshPathBySource.has( sourcePath ) );
+		const resolved = navMeshSourcePaths( row ).filter( ( sourcePath ) => meshPathBySource.has( sourcePath ) );
 		if ( resolved.length === 0 ) {
 			continue;
 		}
@@ -542,6 +530,21 @@ async function buildReferencedObjectNavProjection(
 	} );
 	cache.set( relativeIndexPath, projectedIndexPath );
 	return projectedIndexPath;
+}
+
+/*
+================
+navMeshSourcePaths
+
+The mesh an object's navigation comes from: 441E40 loads it from the one
+path the BSR header names at offset slot 7 (primaryMeshPath); the render
+meshes carry none, and a BSR without that path has no object navigation.
+The projection keeps its renderMeshSection/meshPaths fields, now holding
+that one path, so every server reading this index still decodes it.
+================
+*/
+function navMeshSourcePaths( row ) {
+	return row.primaryMeshPath ? [ normalizeGamePath( row.primaryMeshPath ) ] : [];
 }
 
 /*

@@ -30,14 +30,17 @@ export function createNavigationResources(){return {
    const index=source.objects.resources??parse<NavResources>(await read(path));loaded.add(path);indices.push(index);
    for(const row of index.bsr)if(ids.has(row.objectId))bsr.set(row.objectId,row);
   }
-  const wanted=new Set<string>([...bsr.values()].flatMap(r=>(r.renderMeshSection?.paths??r.meshPaths??[]).map((s:string)=>s.toLowerCase())));
+  // 441E40 loads an object's navigation from the one mesh its BSR header
+  // names (offset slot 7, primaryMeshPath); its render meshes carry none.
+  const navMeshPaths=(r:NavBsr)=>r.primaryMeshPath?[r.primaryMeshPath]:[];
+  const wanted=new Set<string>([...bsr.values()].flatMap(r=>navMeshPaths(r).map((s:string)=>s.toLowerCase())));
   const meshes=new Map<string,NavMesh[]>();
   for(const index of indices){
    if(index.meshes){for(const mesh of index.meshes)if(wanted.has(mesh.sourcePath.toLowerCase())&&!meshes.has(mesh.sourcePath.toLowerCase()))meshes.set(mesh.sourcePath.toLowerCase(),objectNavigation(mesh));}
    else {for(const file of index.meshFiles??[])if(wanted.has(file.sourcePath.toLowerCase())&&!meshes.has(file.sourcePath.toLowerCase())){const value=parse<{mesh:ObjectNavWire}>(await read(file.publicPath));meshes.set(file.sourcePath.toLowerCase(),objectNavigation(value.mesh));}}
   }
   const objects:NavPlacement[]=[],sourcePlacements:number[][]=[];
-  for(const p of placements){sourcePlacements.push([]);const r=bsr.get(p.assetId);if(!r)throw new Error('Missing navigation BSR '+p.assetId);for(const path of r.renderMeshSection?.paths??r.meshPaths??[]){const rows=meshes.get(path.toLowerCase());if(!rows)throw new Error('Missing navigation mesh '+path);for(const mesh of rows){sourcePlacements[sourcePlacements.length-1]!.push(objects.length);objects.push({x:p.x,y:p.y,z:p.z,yaw:p.yaw,mesh,terrainCells:p.terrainCells});}}}
+  for(const p of placements){sourcePlacements.push([]);const r=bsr.get(p.assetId);if(!r)throw new Error('Missing navigation BSR '+p.assetId);for(const path of navMeshPaths(r)){const rows=meshes.get(path.toLowerCase());if(!rows)throw new Error('Missing navigation mesh '+path);for(const mesh of rows){sourcePlacements[sourcePlacements.length-1]!.push(objects.length);objects.push({x:p.x,y:p.y,z:p.z,yaw:p.yaw,mesh,terrainCells:p.terrainCells});}}}
   const identity=new Map(placements.map((p,i)=>[p.region+':'+p.ordinal,i]));
   for(let i=0;i<placements.length;i++){const p=placements[i]!,links=objectLinks(p.linkEdgeCount,p.linkEdges);for(const at of sourcePlacements[i]!){const linked=[];for(const link of links){if(link.target===65535)continue;const target=identity.get(p.region+':'+link.target);if(target===undefined)throw new Error('Missing object link placement');const targets=sourcePlacements[target]!;if(targets.length!==1||sourcePlacements[i]!.length!==1)throw new Error('Ambiguous object link mesh');linked.push({...link,target:targets[0]!});}objects[at]={...objects[at]!,links:linked};}}
   validateLinks(objects);
