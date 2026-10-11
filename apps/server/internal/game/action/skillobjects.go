@@ -128,21 +128,18 @@ AdvanceSkillObjects
 Tick after ordinary action updates so death and travel retire the owner
 before a trap can dispatch a new capture. Each viewer receives spawn, result
 and retirement in one ordered batch, including first-tick detonations.
+
+A trap's kill commits its planter's EXP here, so the pass is a tick step
+like TickHook's (#713): it holds the publication gate over its commits and
+seals their private tails to the recipients captured at commit time. The
+tick's own session list holds only world-ready sessions; without the seal
+a planter whose client is loading lost its 0x30D2 while the server kept
+the EXP, and the client's next level crossing failed its length check.
 ================
 */
 func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionView) []simulation.DivisionFrames {
-	var out []simulation.DivisionFrames
-	before := rt.SkillObjects.Snapshot()
-	var results []simulation.DivisionFrames
-	for _, object := range before {
-		for _, batch := range rt.advanceSkillObject(object, nowMs) {
-			if batch.SourceGID == object.Spawn.GID {
-				results = append(results, batch)
-			} else {
-				out = append(out, batch)
-			}
-		}
-	}
+	var out, results []simulation.DivisionFrames
+	before := rt.advanceSkillObjectCommits(nowMs, &out, &results)
 	after := rt.SkillObjects.Snapshot()
 	for _, session := range sessions {
 		if session.PublishedObjects == nil {
@@ -177,6 +174,34 @@ func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.Sessio
 		}
 	}
 	return out
+}
+
+/*
+================
+advanceSkillObjectCommits
+
+Runs every live object's pulse under the publication gate and returns the
+objects as they stood before it. A batch sourced by its own object is a
+viewer row (results); every other batch is the pulse's routed output, whose
+private tails are sealed before the gate is released.
+================
+*/
+func (rt *Runtime) advanceSkillObjectCommits(nowMs int64, out, results *[]simulation.DivisionFrames) []skillobject.Object {
+	unlock := rt.lockTickPublication()
+	defer unlock()
+	before := rt.SkillObjects.Snapshot()
+	var routed []simulation.DivisionFrames
+	for _, object := range before {
+		for _, batch := range rt.advanceSkillObject(object, nowMs) {
+			if batch.SourceGID == object.Spawn.GID {
+				*results = append(*results, batch)
+			} else {
+				routed = append(routed, batch)
+			}
+		}
+	}
+	*out = append(*out, rt.sealTickPrivate(routed)...)
+	return before
 }
 
 /*

@@ -43,7 +43,19 @@ first authored kind.
 */
 func plantedTrapFixture(t *testing.T, code string) (*Runtime, *fakeClock, *enterworld.Character, enterworld.SkillRow, uint32) {
 	t.Helper()
-	rt, clock, c, target := newCombatTestRuntime(t, 1000000)
+	return plantedTrapFixtureHP(t, code, 1000000)
+}
+
+/*
+================
+plantedTrapFixtureHP
+
+plantedTrapFixture over a monster of the given HP (1 dies to the trap).
+================
+*/
+func plantedTrapFixtureHP(t *testing.T, code string, monsterHP uint32) (*Runtime, *fakeClock, *enterworld.Character, enterworld.SkillRow, uint32) {
+	t.Helper()
+	rt, clock, c, target := newCombatTestRuntime(t, monsterHP)
 	skill := shippedOffense(t, code)
 	if !skill.CombatTrap.Pinned && !skill.TrapField.Pinned {
 		t.Fatalf("%s not admitted as a planted trap", code)
