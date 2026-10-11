@@ -211,6 +211,11 @@ than laundering the private tail through a future-tick queue.
 
 ExceptSessionID and OnlyCharacterID are mutually exclusive. Invalid mixed
 routes fail closed in runHooks.
+
+Deliver, when set, replaces routing: the producer already captured its
+recipients (with their scene revisions) at commit time, and the ticker only
+runs the send in this batch's place, so it keeps its order among the hook's
+other batches.
 ==================
 */
 type DivisionFrames struct {
@@ -221,6 +226,7 @@ type DivisionFrames struct {
 	Frames          []Frame
 	ExceptSessionID string
 	OnlyCharacterID int64
+	Deliver         func()
 }
 
 /*
@@ -724,6 +730,10 @@ Delivers one hook's routed frames to sessions or divisions.
 */
 func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionTickWork) {
 	for _, routed := range routedFrames {
+		if routed.Deliver != nil {
+			routed.Deliver()
+			continue
+		}
 		if len(routed.Frames) == 0 {
 			continue
 		}

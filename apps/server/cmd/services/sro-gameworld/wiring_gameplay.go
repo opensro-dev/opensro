@@ -104,6 +104,9 @@ func newGameplayPlane(
 	items.CaptureCharacterFrames = func(division, name string) func([]wire.Frame) {
 		return captureCharacterFrames(ts.Hub, division, name)
 	}
+	items.CaptureObjectFrames = func(division string, gid uint32) func([]wire.Frame) {
+		return captureObjectFrames(ts.Hub, division, gid)
+	}
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
@@ -709,17 +712,45 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 ================
 captureCharacterFrames
 
+The sessions bound to one character name (captureSessionFrames).
+================
+*/
+func captureCharacterFrames(hub *transport.Hub, division, name string) func([]wire.Frame) {
+	return captureSessionFrames(hub.CharacterSessions(division, name))
+}
+
+/*
+================
+captureObjectFrames
+
+The sessions bound to one player object id (captureSessionFrames).
+================
+*/
+func captureObjectFrames(hub *transport.Hub, division string, gid uint32) func([]wire.Frame) {
+	var sessions []*transport.Session
+	for _, session := range hub.SessionsInDivision(division) {
+		if bound, ok := session.CharacterObjectID(); ok && bound == gid {
+			sessions = append(sessions, session)
+		}
+	}
+	return captureSessionFrames(sessions)
+}
+
+/*
+================
+captureSessionFrames
+
 Capture is read-only under the action division lock. The returned delivery
 runs outside that lock so queue failure can synchronously retire gameplay.
 ================
 */
-func captureCharacterFrames(hub *transport.Hub, division, name string) func([]wire.Frame) {
+func captureSessionFrames(sessions []*transport.Session) func([]wire.Frame) {
 	type recipient struct {
 		session  *transport.Session
 		revision uint64
 	}
 	var recipients []recipient
-	for _, session := range hub.CharacterSessions(division, name) {
+	for _, session := range sessions {
 		revision, valid := session.SceneReceiptRevision()
 		if valid {
 			recipients = append(recipients, recipient{session: session, revision: revision})

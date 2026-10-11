@@ -32,12 +32,16 @@ with a stale pending cast. Player action ordering remains in TickHook.
 */
 func (rt *Runtime) MonsterActionTickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
+		// Monster casts and skill finalizes commit deaths and EXP; their
+		// private tails are captured under the gate (sealTickPrivate).
+		unlock := rt.lockTickPublication()
+		defer unlock()
 		if rt.Monsters != nil {
 			rt.Monsters.AdvanceSummons(nowMs)
 		}
 		out := rt.retireMonsterSelfEffects(nowMs)
 		out = append(out, rt.advanceMonsterCasts(nowMs)...)
-		return append(out, rt.drainSelectedSkillFinalizes(nowMs, true)...)
+		return rt.sealTickPrivate(append(out, rt.drainSelectedSkillFinalizes(nowMs, true)...))
 	}
 }
 
@@ -56,6 +60,30 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 	return func(nowMs int64) []simulation.DivisionFrames {
 		step := rt.Steps.Time
 		var out []simulation.DivisionFrames
+		// Every step commits inside character doors and routes its private
+		// tail later. The publication gate orders that commit and the
+		// capture of its recipients against entry bootstraps (#713):
+		// without it a resumed entry's snapshot could land between them and
+		// the client would apply a grant twice, or a fresh entry would miss
+		// one. Pending pickups take the gate themselves, so it is released
+		// around that step and each span seals its own private batches.
+		// A panicking step is recovered by the ticker; the deferred release
+		// keeps a held gate from blocking every request after it.
+		unlock := rt.lockTickPublication()
+		defer func() {
+			if unlock != nil {
+				unlock()
+			}
+		}()
+		release := func() {
+			unlock()
+			unlock = nil
+		}
+		sealed := 0
+		seal := func() {
+			out = append(out[:sealed], rt.sealTickPrivate(out[sealed:])...)
+			sealed = len(out)
+		}
 		frames := func(name string, advance func(int64) []simulation.DivisionFrames) {
 			step(name, func() { out = append(out, advance(nowMs)...) })
 		}
@@ -131,13 +159,20 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 		step("advanceParamJobs", func() { rt.advanceParamJobs(nowMs) })
 		step("advancePKRecords", rt.advancePKRecords)
 		step("advanceMercenaryCooldowns", func() { rt.advanceMercenaryCooldowns(nowMs) })
+		seal()
+		release()
 		frames("advancePendingPickups", rt.advancePendingPickups)
+		out = append(out[:sealed], coalesceDivisionFrames(out[sealed:])...)
+		sealed = len(out)
+		unlock = rt.lockTickPublication()
 		step("advanceBodyRestores", func() { rt.advanceBodyRestores(nowMs) })
 		step("advanceCompoundJobs", func() { rt.advanceCompoundJobs(nowMs) })
 		frames("ReleaseExpiredOwnership", rt.ReleaseExpiredOwnership)
 		frames("SweepExpired", rt.SweepExpired)
 		step("retireActionSessions", func() { out = append(out, rt.retireActionSessions()...) })
-		return coalesceDivisionFrames(out)
+		seal()
+		release()
+		return out
 	}
 }
 
@@ -316,9 +351,14 @@ the native causal boundary this helper was meant to preserve.
 func coalesceDivisionFrames(in []simulation.DivisionFrames) []simulation.DivisionFrames {
 	out := make([]simulation.DivisionFrames, 0, len(in))
 	for _, routed := range in {
+		if routed.Deliver != nil {
+			// A captured send keeps its own slot.
+			out = append(out, routed)
+			continue
+		}
 		if len(out) > 0 {
 			last := &out[len(out)-1]
-			if last.DivisionID == routed.DivisionID &&
+			if last.Deliver == nil && last.DivisionID == routed.DivisionID &&
 				last.SourceGID == routed.SourceGID &&
 				last.ExceptSessionID == routed.ExceptSessionID &&
 				last.OnlyCharacterID == routed.OnlyCharacterID {
@@ -332,6 +372,61 @@ func coalesceDivisionFrames(in []simulation.DivisionFrames) []simulation.Divisio
 		out = append(out, routed)
 	}
 	return out
+}
+
+/*
+================
+sealTickPrivate
+
+Coalesces a span of tick batches, then turns each character-private batch
+into a captured send while the caller still holds the publication gate
+(lockTickPublication): the recipients and their scene revisions are fixed
+now, in the same gated span as the commit. A capture taken before an entry
+bootstrap is refused once that bootstrap begins, because its snapshot
+already holds the commit; one taken after reaches the entering session too,
+which the tick-start world-ready list did not. Batches that carry object
+scope keep the ticker's routing.
+================
+*/
+func (rt *Runtime) sealTickPrivate(in []simulation.DivisionFrames) []simulation.DivisionFrames {
+	out := coalesceDivisionFrames(in)
+	if rt.CaptureObjectFrames == nil {
+		return out
+	}
+	for i, routed := range out {
+		if routed.Deliver != nil || routed.OnlyCharacterID == 0 || routed.ExceptSessionID != "" ||
+			routed.SourceGID != 0 || scopedFrames(routed.Frames) {
+			continue
+		}
+		publish := rt.CaptureObjectFrames(routed.DivisionID, simulation.PlayerObjectID(routed.OnlyCharacterID))
+		frames := make([]wire.Frame, len(routed.Frames))
+		for j, frame := range routed.Frames {
+			frames[j] = wire.Frame{Opcode: frame.Opcode, Payload: frame.Payload, Current: frame.Current, Scope: frame.Scope}
+		}
+		out[i] = simulation.DivisionFrames{DivisionID: routed.DivisionID, Deliver: func() {
+			if publish != nil {
+				publish(frames)
+			}
+		}}
+	}
+	return out
+}
+
+/*
+================
+scopedFrames
+
+Whether a batch publishes a single-object scope change, which only the
+ticker's routing records.
+================
+*/
+func scopedFrames(frames []simulation.Frame) bool {
+	for _, frame := range frames {
+		if frame.ScopeGID != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ---- Session-close cleanup ----

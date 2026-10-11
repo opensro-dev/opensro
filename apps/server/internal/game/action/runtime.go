@@ -426,6 +426,11 @@ type Runtime struct {
 	// the division lock; a nil handle means no recipient was captured.
 	CaptureCharacterFrames func(divisionID, characterName string) func([]wire.Frame)
 
+	// CaptureObjectFrames is CaptureCharacterFrames keyed by the player's
+	// object id, for tick batches that carry only a character id
+	// (sealTickPrivate). The same capture rules apply.
+	CaptureObjectFrames func(divisionID string, gid uint32) func([]wire.Frame)
+
 	// PushDivisionPeerFrames delivers public presentation frames to every
 	// same-division session except the acting character: pickup animation/world
 	// changes and the gid-only level-up effect. The actor receives its full
