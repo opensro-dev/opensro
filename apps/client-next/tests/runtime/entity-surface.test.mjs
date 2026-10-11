@@ -182,3 +182,25 @@ test("spawn initialization selects a raised nav floor and excludes teleport prop
 	assert.equal( flush( e ), null );
 	e.dispose();
 });
+
+/*
+================
+a second spawn of a held gid replaces it
+
+CIGIDObject_RegisterGid (852CA0) only debug-asserts a gid it already holds
+and keeps the newer object, so the native client never drops the session on
+a duplicate 0x30D7. The port retires the old entity, then spawns the new.
+================
+*/
+test("a second spawn of a held gid replaces it instead of ending the session", () => {
+	const e = owner( createNavigation() );
+	e.receive( spawn( 30, 40 ), 0 );
+	flush( e );
+	assert.doesNotThrow( () => e.receive( spawn( 50, 60 ), 0 ) );
+	const order = defined( flush( e ) ).events
+		.filter( event => event.gid === 7 || event.entity?.gid === 7 )
+		.map( event => event.kind );
+	assert.deepEqual( order, [ "despawn", "spawn" ] );
+	assert.equal( defined( e.read( 7 ) ).x, 50 );
+	e.dispose();
+});

@@ -200,6 +200,21 @@ export function createEntities(
 	}
 	/*
 	================
+	retire
+
+	Removes the entity a duplicate spawn replaces: the despawn the world sees
+	for a departure, without releasing its riders.
+	================
+	*/
+	function retire( gid: number ) {
+		const event: Extract<WorldEvent, { kind: "despawn"; }> = { kind: "despawn", gid };
+		entities.delete( gid );
+		motion.remove( gid );
+		append( event );
+		lifecycle?.( event );
+	}
+	/*
+	================
 	apply
 	================
 	*/
@@ -210,9 +225,12 @@ export function createEntities(
 			const refresh = e.kind === "player" || e.kind === "local-player" || isNameColorGuard( e ) ||
 				e.kind === "cos" && e.pvpState !== undefined;
 			if ( c && refresh ) event = { ...event, entity: { ...e, nameColor: refreshNameColor( e, c ) } };
-			if ( entities.has( event.entity.gid ) ) {
-				throw new Error( "Duplicate entity spawn" );
-			}
+			// CIGIDObject_RegisterGid (852CA0) only debug-asserts a gid it
+			// already holds, then g_sHashGID keeps the newer object: a second
+			// spawn replaces the first and never ends the session. The old
+			// entity is retired so its visual and motion do not linger; riders
+			// keep mountedOn because the same gid returns at once.
+			if ( entities.has( event.entity.gid ) ) retire( event.entity.gid );
 			if ( entities.size >= 16384 ) {
 				throw new Error( "Entity limit exceeded" );
 			}
