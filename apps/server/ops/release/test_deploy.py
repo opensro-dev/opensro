@@ -6,6 +6,7 @@ test_deploy.py - failed preflight cannot restart the fleet or retain its token
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -629,6 +630,49 @@ class RehearsalTests(unittest.TestCase):
 			self.assertFalse(copies[0].exists())
 			after = {path: path.read_bytes() for path in module.rglob("*") if path.is_file()}
 			self.assertEqual(after, before)
+
+	# ================
+	# test_rehearsal_validates_against_the_production_shard_authorities
+	#
+	# F5's staging refusal (2026-10-12): sro-nomad validate requires each
+	# shard's authority database under the module it runs in, and the copy
+	# had none. The rehearsal links the production shards in, without copying
+	# player data, and its cleanup leaves them in place.
+	# ================
+	@unittest.skipIf(os.name == "nt", "the rehearsal links shards with a POSIX directory symlink")
+	def test_rehearsal_validates_against_the_production_shard_authorities(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			staging, module, config, manifest = self.fixture(root)
+			database = module / ".state/shards/global-official/authority/state.db"
+			database.parent.mkdir(parents=True)
+			database.write_bytes(b"production players")
+			copies = []
+
+			# ================
+			# execute
+			# ================
+			def execute(arguments, **options):
+				if arguments[:2] == ["nomad", "version"]:
+					return SimpleNamespace(stdout="Nomad v2.0.7\n")
+				if arguments[:4] == ["nomad", "acl", "token", "create"]:
+					return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+				if arguments[0].endswith("sro-nomad"):
+					copy = Path(options["cwd"])
+					copies.append(copy)
+					# As deployment.go: the authority must be a regular file under the cwd's module.
+					required = copy / ".state/shards/global-official/authority/state.db"
+					if not required.is_file():
+						raise subprocess.CalledProcessError(1, arguments,
+							stderr="sro-nomad validate: required file " + str(required) + ": no such file or directory")
+					return SimpleNamespace(stdout="Validated 2 Nomad Variable input(s) without mutation\n")
+				return SimpleNamespace(stdout="")
+
+			with patch.object(deploy, "run", side_effect=execute):
+				self.assertEqual(deploy.rehearse(config, staging, manifest), [])
+			self.assertEqual(len(copies), 1)
+			self.assertFalse(copies[0].exists())
+			self.assertEqual(database.read_bytes(), b"production players")
 
 	# ================
 	# test_a_refused_rehearsal_fails_staging_masked_and_cleans_up

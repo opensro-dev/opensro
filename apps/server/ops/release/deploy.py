@@ -44,6 +44,8 @@ LEGACY_VALIDATE = None
 # Cluster state a rehearsal copy leaves out: Nomad's immutable release tree
 # (binaries validate never reads) and the maintenance gate.
 REHEARSAL_SKIPPED_STATE = ("releases", "maintenance-gate.json")
+# The shard authorities a rehearsal validates against, linked, never copied.
+REHEARSAL_SHARDS = ".state/shards"
 # How much of a refused rehearsal's output reaches the staging log.
 REHEARSAL_REASON_CHARS = 800
 SECRET_LIKE = re.compile(r"[A-Za-z0-9+/_=-]{32,}")
@@ -539,6 +541,14 @@ def rehearse(config, staging, manifest):
 			shutil.copytree(module / "config", copy / "config", symlinks=True)
 		shutil.copytree(module / ".state/cluster", copy / ".state/cluster", symlinks=True,
 			ignore=shutil.ignore_patterns(*REHEARSAL_SKIPPED_STATE))
+		# sro-nomad validate requires each shard's authority database under the
+		# module it runs in, and only stats it (deployment.go requireRegularFile).
+		# Link the production shards into the copy instead of copying them: no
+		# player data is duplicated, and the rmtree below unlinks the link,
+		# never its target.
+		shards = module / REHEARSAL_SHARDS
+		if shards.is_dir():
+			os.symlink(shards, copy / REHEARSAL_SHARDS, target_is_directory=True)
 		copy_inputs(staging, copy, names)
 		run([str(copy / "sro-provision-identity"), "-state-dir", str(copy / ".state/cluster")], cwd=copy, env=CLEAN_ENV)
 		management, token, environment, arguments = deployer(config, stack_sizes)
