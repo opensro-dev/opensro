@@ -15,8 +15,8 @@
 // (*(arg1+0x634))(actionCode) could not be resolved, so no privilege LEVELS
 // are invented - the boolean GMPrivilege is the sole gate.
 //
-// Server-side, FINDUSER, MAKEITEM, coordinate warp and the action-owned body toggles are
-// implemented. Commands without a production authority remain refused.
+// Server-side, FINDUSER, MAKEITEM, coordinate warp, the town and player
+// teleports and the action-owned body toggles are implemented. Commands without a production authority remain refused.
 package gmcommand
 
 import (
@@ -51,6 +51,16 @@ const (
 	// u8 count, u8 type (CHAMP 1, GIANT 4, NORMAL 0, else the record's +0xA0).
 	SubLoadMonster uint8 = 0x06
 	SubWarp        uint8 = 0x10
+	// SubGoTown: /GOTOWN - subcmd alone. The server answers it in
+	// CGObjPC_MsgHandler_SpecialCommand (v1.188 51DE90) case 1.
+	SubGoTown uint8 = 0x02
+	// SubToTown: /TOTOWN - subcmd + ANSI name (51DE90 case 2).
+	SubToTown uint8 = 0x03
+	// SubMoveToUser: /MOVETOUSER - subcmd + ANSI name (51DE90 case 7).
+	SubMoveToUser uint8 = 0x08
+	// SubRecallUser: /RECALLUSER - subcmd + ANSI name (51DE90 case 0xD,
+	// relayed to CGame_ProcessGMCommand 4154D0).
+	SubRecallUser uint8 = 0x11
 	// SubFindUser: /FINDUSER (@0x00509ee5 var_4bc = 1) - subcmd + ANSI name.
 	SubFindUser uint8 = 0x01
 	// SubLieName: /LIENAME (@0x0050bcf3 var_4bc = 0x19) - subcmd + ANSI name.
@@ -99,14 +109,14 @@ type Request struct {
 // name (subcmd byte then sub_4fd5b0 u16 len + bytes). This lane decodes the
 // name for exactly these; MAKEITEM is decoded independently below.
 var nameSubcommands = map[uint8]bool{
-	SubFindUser: true,
-	0x03:        true, // /TOTOWN
-	0x08:        true, // /MOVETOUSER
-	0x0D:        true, // /BAN
-	0x11:        true, // /RECALLUSER
-	0x12:        true, // /RECALLGUILD
-	SubLieName:  true,
-	SubRealName: true,
+	SubFindUser:   true,
+	SubToTown:     true,
+	SubMoveToUser: true,
+	0x0D:          true, // /BAN
+	SubRecallUser: true,
+	0x12:          true, // /RECALLGUILD
+	SubLieName:    true,
+	SubRealName:   true,
 	// SubGrantSilk's name is followed by the u32 amount.
 	SubGrantSilk: true,
 }

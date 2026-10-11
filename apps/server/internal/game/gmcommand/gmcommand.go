@@ -109,6 +109,17 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		}
 		// 751EC0: both subcommands select case 5 (no success tail).
 		return Outcome{Ack: []byte{AckResultOK, request.Subcmd}}
+	case SubGoTown:
+		if len(status) > 0 {
+			if owner, ok := status[0].(interface {
+				GoTownGM(string, string) bool
+			}); ok && len(payload) == 1 && owner.GoTownGM(divisionID, sender.Name) {
+				return Outcome{Ack: []byte{AckResultOK, SubGoTown}}
+			}
+		}
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "gotown-refused"}
+	case SubToTown, SubMoveToUser, SubRecallUser:
+		return handlePlayerTeleport(divisionID, sender, request, status)
 	case SubFindUser:
 		return handleFindUser(deps, presence, divisionID, sender, request)
 	case SubGrantSilk:
@@ -132,6 +143,41 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 			Ack:     EncodeRequestFailure(request),
 		}
 	}
+}
+
+// PlayerTeleports is the action-owned port for the commands that move a
+// named player or move the GM to one (action/gmteleport.go).
+type PlayerTeleports interface {
+	SendToTownGM(division, name, target string) bool
+	MoveToUserGM(division, name, target string) bool
+	RecallUserGM(division, name, target string) bool
+}
+
+// handlePlayerTeleport honors /TOTOWN, /MOVETOUSER and /RECALLUSER. 51DE90
+// acks the teleport it performed with [1, subcmd]; an empty name, a target
+// not in the world or a refused move is the result-2 ack.
+func handlePlayerTeleport(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
+	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: fmt.Sprintf("gmcommand: teleport 0x%02X refused", request.Subcmd)}
+	if !request.HasName || request.Name == "" || len(status) == 0 {
+		return refusal
+	}
+	owner, ok := status[0].(PlayerTeleports)
+	if !ok {
+		return refusal
+	}
+	var moved bool
+	switch request.Subcmd {
+	case SubToTown:
+		moved = owner.SendToTownGM(divisionID, sender.Name, request.Name)
+	case SubMoveToUser:
+		moved = owner.MoveToUserGM(divisionID, sender.Name, request.Name)
+	case SubRecallUser:
+		moved = owner.RecallUserGM(divisionID, sender.Name, request.Name)
+	}
+	if !moved {
+		return refusal
+	}
+	return Outcome{Ack: []byte{AckResultOK, request.Subcmd}}
 }
 
 // BodyStatusCommands is the action-owner mutation port. The dispatcher owns no

@@ -168,7 +168,10 @@ func TestPrivilegedUnhonoredCommandsRefuseWithResult2(t *testing.T) {
 		name  string
 		frame []byte
 	}{
-		{"/GOTOWN", []byte{0x02}},
+		{"/GOTOWN without an owner", []byte{0x02}},
+		{"/TOTOWN without an owner", nameFrame(0x03, "Remo")},
+		{"/MOVETOUSER without an owner", nameFrame(0x08, "Remo")},
+		{"/RECALLUSER without an owner", nameFrame(0x11, "Remo")},
 		{"/WORLDSTATUS", []byte{0x04}},
 		{"/BAN", nameFrame(0x0D, "Remo")},
 		{"/INVISIBLE", []byte{0x0E}},
