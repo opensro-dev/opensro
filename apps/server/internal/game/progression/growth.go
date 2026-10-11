@@ -39,6 +39,9 @@ random subset of DropCap survives, so no item family is favoured. Gold heaps
 (native count, value-scaled) and a unique's own prepass (one native round)
 are never cut. 0 leaves every planned item.
 
+Drop mix: SRO_BETA_DROP_MIX gives named item families their own rate in
+place of DropRate (dropmix.go).
+
 ===========================================================================
 */
 package progression
@@ -203,6 +206,22 @@ func levelPace(levels enterworld.LevelDataSource, level int64) float64 {
 		return 1
 	}
 	return kills / reference
+}
+
+/*
+================
+ExpPace
+
+The multiplier a positive EXP gain at this level gets: levelPace with the
+beta on, 1 (native) with it off. The attack pets' beta EXP reads it at the
+owner's level (action.Runtime.PetExpPace).
+================
+*/
+func (g GrowthRates) ExpPace(levels enterworld.LevelDataSource, level int64) float64 {
+	if !g.Enabled {
+		return 1
+	}
+	return levelPace(levels, level)
 }
 
 /*

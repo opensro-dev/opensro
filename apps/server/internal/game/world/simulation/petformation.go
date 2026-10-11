@@ -35,6 +35,32 @@ type PetFormationStep struct {
 
 /*
 ================
+PetRouteFromMonster
+
+The monster AI's detour planner (PlanMonsterRoute) as a pet's: a ready
+route of two or more points becomes the pet's waypoints. A direct route
+(one point) or an unresolved one is no detour.
+================
+*/
+func PetRouteFromMonster(plan func(from, goal monster.Pose) *monster.NavigationRoute) PetRoutePlanner {
+	if plan == nil {
+		return nil
+	}
+	return func(from, goal Spawn) []Spawn {
+		route := plan(spawnToPose(from), spawnToPose(goal))
+		if route == nil || route.Status() != monster.NavigationRouteReady || route.Len() < 2 {
+			return nil
+		}
+		points := make([]Spawn, route.Len())
+		for i := range points {
+			points[i] = poseToSpawn(route.Point(i))
+		}
+		return points
+	}
+}
+
+/*
+================
 FollowFormation
 
 549F80 / 55E090 / 540F70. Completion releases the slot; it does not replace

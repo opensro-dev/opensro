@@ -83,10 +83,11 @@ test("overflow cleanup retains bounded admission and its deadline", async t => {
 		}
 	} );
 	const store = createPersistentAssets();
-	for ( let i = 0; i < 20; i++ ) {
-		assert.equal( await store.read( "https://example.test", String( i ), 3 ), null );
-		await store.flush();
-	}
+	const reads = Array.from( { length: 20 }, ( _, i ) => store.read( "https://example.test", String( i ), 3 ) );
+	await settle();
+	t.mock.timers.tick( 2000 );
+	assert.ok( (await Promise.all( reads )).every( value => value === null ) );
+	await store.flush();
 	assert.ok( cancels > 0 && cancels <= 8, `cleanup admission exceeded: ${cancels}` );
 	const before = matches;
 	t.mock.timers.tick( 2000 );
@@ -191,9 +192,11 @@ test("presence checks never wait for body cancellation and bound abandoned clean
 	} );
 	const store = createPersistentAssets();
 	assert.equal( await store.has( "https://example.test", "a" ), true );
-	for ( let i = 0; i < 100; i++ ) await store.has( "https://example.test", String( i ) );
+	const checks = Array.from( { length: 100 }, ( _, i ) => store.has( "https://example.test", String( i ) ) );
+	await settle();
 	assert.ok( matches <= 8 );
 	t.mock.timers.tick( 2000 );
+	await Promise.all( checks );
 	await settle();
 });
 
@@ -322,7 +325,7 @@ test("healthy cache remains usable after cancellation and a saturated burst", as
 	blocked = false;
 	assert.ok( release );
 	release();
-	await Promise.all( burst );
+	for ( const bytes of await Promise.all( burst ) ) assert.deepEqual( bytes, Uint8Array.of( 1, 2, 3 ) );
 	const before = matches;
 	assert.deepEqual( await store.read( "https://example.test", "healthy", 3 ), Uint8Array.of( 1, 2, 3 ) );
 	assert.equal( matches, before + 1 );
@@ -350,7 +353,7 @@ for ( const phase of [ "keys", "put", "delete" ] ) {
 		await settle();
 		assert.equal( calls, 1 );
 		assert.equal( flushed, false );
-		t.mock.timers.tick( 2000 );
+		t.mock.timers.tick( phase === "keys" ? 30000 : 2000 );
 		await settle();
 		await flush;
 		assert.equal( flushed, true );
@@ -601,4 +604,78 @@ test("abandoned match cleanup has finite admission even when every cancel hangs"
 	assert.equal( cancels, 8 );
 	t.mock.timers.tick( 2000 );
 	await settle();
+});
+
+/*
+================
+Presence, scan admission and the scan deadline (#613 follow-ups)
+================
+*/
+test("a presence check answers null, not absent, when the store cannot tell", async t => {
+	let first = true;
+	backend( t, {
+		match: () => {
+			if ( first ) {
+				first = false;
+				return never();
+			}
+			return Promise.resolve( undefined );
+		}
+	} );
+	const store = createPersistentAssets();
+	const stalled = store.has( "https://example.test", "slow" );
+	await settle();
+	t.mock.timers.tick( 2000 );
+	// Timed out, and suspended while that match is unsettled: unknown, not absent.
+	assert.equal( await stalled, null );
+	assert.equal( await store.has( "https://example.test", "other" ), null );
+});
+
+test("a healthy store still answers absent", async t => {
+	backend( t );
+	assert.equal( await createPersistentAssets().has( "https://example.test", "none" ), false );
+});
+
+test("the inventory scan's bodies hold admission before the next scan match starts", async t => {
+	let matches = 0;
+	backend( t, {
+		keys: async () =>
+			Array.from( { length: 20 }, ( _, i ) => new Request( "https://example.test/assets/.verified/" + i ) ),
+		match: async () => {
+			matches++;
+			return new Response( new ReadableStream( { cancel: never } ), { headers: { "content-length": "3" } } );
+		}
+	} );
+	const store = createPersistentAssets();
+	void store.write( "https://example.test", "new", Uint8Array.of( 1, 2, 3 ) );
+	// Queued presence checks race the scan for every slot its matches free.
+	const checks = Array.from( { length: 50 }, ( _, i ) => store.has( "https://example.test", "q" + i ) );
+	for ( let i = 0; i < 20; i++ ) await settle();
+	// Each scan body's cleanup never settles; it must be counted before its slot
+	// frees, so no more than the native limit of matches can ever start.
+	assert.ok( matches <= 8, `scan started ${matches} matches past the native limit` );
+	t.mock.timers.tick( 2000 );
+	await Promise.all( checks );
+});
+
+test("an inventory scan slower than two seconds does not make foreground reads miss", async t => {
+	let open = () => {};
+	const gate = {
+		promise: new Promise( resolve => {
+			open = () => resolve( undefined );
+		} ),
+		resolve: () => open()
+	};
+	backend( t, {
+		keys: () => gate.promise.then( () => [] ),
+		match: async () => new Response( Uint8Array.of( 1, 2, 3 ), { headers: { "content-length": "3" } } )
+	} );
+	const store = createPersistentAssets();
+	const write = store.write( "https://example.test", "new", Uint8Array.of( 1, 2, 3 ) );
+	await settle();
+	t.mock.timers.tick( 5000 );
+	await settle();
+	assert.deepEqual( await store.read( "https://example.test", "a", 3 ), Uint8Array.of( 1, 2, 3 ) );
+	gate.resolve();
+	await write;
 });

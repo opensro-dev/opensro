@@ -345,8 +345,14 @@ step
 				blockError = "Block acknowledgement timed out. Reconnect before sending again.";
 				changed = true;
 			}
-			if ( pending && now >= pending.deadline && error === null ) {
-				error = "Chat acknowledgement timed out. Reconnect before sending again.";
+			// Port-only, not native: the original client has no chat deadline.
+			// An unanswered line releases the slot instead of locking chat for
+			// the session. Acknowledgements carry no line identity, so a late one
+			// can at worst echo the next line early; a player who could never
+			// chat again until a reload was the worse failure.
+			if ( pending && now >= pending.deadline ) {
+				pending = null;
+				error = "Your last chat message was not confirmed and may not have been sent.";
 				changed = true;
 			}
 			return changed;

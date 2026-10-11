@@ -46,6 +46,7 @@ import {
 	type JobRanks,
 	jobWithdrawRequest,
 	noJob,
+	NO_JOB_CLASS,
 	type LocalJob
 } from "@/engine/foundation/gameplay/job-guild";
 import { recallAppointmentRequest, recallAppointmentNotice } from "@/engine/foundation/gameplay/recall-appointment";
@@ -79,7 +80,6 @@ import {
 	STALL_ALCHEMY_CATEGORY,
 	STALL_ALCHEMY_CODE,
 	STALL_JOB_SUIT_CODE,
-	STALL_NO_JOB_CLASS,
 	STALL_NOTICE_CATEGORY,
 	type StallCommand
 } from "@/engine/foundation/gameplay/stall";
@@ -95,6 +95,7 @@ import { itemCooldown } from "@/engine/foundation/gameplay/item-cooldowns";
 import { skillCooldown } from "@/engine/foundation/gameplay/skill-cooldowns";
 import { uniqueNotice, uniqueReferences } from "@/engine/foundation/gameplay/unique-notices";
 import { inventoryNotice } from "@/engine/foundation/gameplay/inventory-notices";
+import { alchemyNotice } from "@/engine/foundation/gameplay/alchemy-notices";
 import {
 	emptyPartyMatching,
 	partyMatchPacket,
@@ -103,6 +104,7 @@ import {
 	partyPurposeAllowed
 } from "@/engine/foundation/gameplay/party-matching";
 import { gmRequest, gmReply, gmItemReferences, type GmReply } from "@/engine/foundation/gameplay/gm-command";
+import { decodeReverseMapPoints, type ReverseMapPoint } from "@/engine/foundation/gameplay/reverse-return-map";
 import {
 	fortressBootstrap,
 	advanceFortressCountdowns,
@@ -203,6 +205,7 @@ import {
 	type SocialCommand
 } from "@/engine/foundation/gameplay/social";
 import { partyLootNotice } from "@/engine/foundation/gameplay/party-loot";
+import { COS_DISTANCE_ERROR, cosDistanceNotice } from "@/engine/foundation/gameplay/cos-distance-notice";
 import { pickupNotice } from "@/engine/foundation/gameplay/pickup-notice";
 import {
 	skillAdmitsPredictedTarget,
@@ -283,6 +286,10 @@ const PICKUP_EXECUTE_RANGE = 10;
 // How long past two round trips a sent skill press's cooldown stand-in waits
 // for its answer.
 const SKILL_ANSWER_SLACK_MS = 500;
+// A skill run-up is predicted only this far beyond the authored range: the
+// server's reach adds both bodies to it, so a target nearer than that may be
+// in its reach already and the server casts without walking.
+const SKILL_RUN_UP_MARGIN = 20;
 // Movement mode 4 is seated (motion 4, which 58E0BF refuses ao/pw from).
 const MOVEMENT_SEATED = 4;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
@@ -343,6 +350,10 @@ export function createGameplay(
 	> = {};
 	let partyMatching = emptyPartyMatching();
 	let gmItems = gmItemReferences( {} );
+	// The server's port-only storage auto-stack rule (storageAutoStack).
+	let storageAutoStack = false;
+	// The port-only reverse return map table (reverse-return-map.ts).
+	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
 	let options = initialGameOptions();
 	let eligibility = { gm: false, pcRoomEvent: false };
@@ -471,6 +482,43 @@ range: unknown, so not within.
 		const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
 			dz = target.z - pose.z + ((target.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
 		return Math.hypot( dx, dz ) <= metadata.range;
+	}
+	/*
+================
+skillRunUpGoal
+
+Port-only presentation: where an admitted press on a target beyond reach
+walks the caster before its cast. Native 58D8F0 walks the caster into
+reach on the server; predicting that run-up (movement.predictApproach)
+starts the walk at the press instead of one delivery later, which left
+the caster behind the server and snapped it forward when the cast began.
+The goal stands at the authored range on the line to the target; the
+server's own walk (combat spacing) is adopted when it arrives. Only from
+rest, on foot, alive, with no cast in flight, and within one region.
+================
+	*/
+	function skillRunUpGoal(
+		metadata: SkillMetadata | undefined,
+		target: EntityState,
+		local: EntityState | undefined,
+		now: number
+	): import("@/engine/contracts/gameplay").Pose | null {
+		const walking = movement.state(), pose = walking.pose;
+		if (
+			!metadata?.range || !pose || walking.moving || !local || local.mountedOn ||
+			local.appearanceState?.[0] === 2 || localCastHolds( now ) || target.regionId !== pose.regionId ||
+			target.kind === "monster" && target.appearanceState?.[0] === 2
+		) return null;
+		const dx = target.x - pose.x, dz = target.z - pose.z, distance = Math.hypot( dx, dz );
+		if ( distance <= metadata.range + SKILL_RUN_UP_MARGIN ) return null;
+		const walk = (distance - metadata.range) / distance;
+		return {
+			regionId: pose.regionId,
+			x: pose.x + dx * walk,
+			y: target.y,
+			z: pose.z + dz * walk,
+			angle: pose.angle
+		};
 	}
 	/*
 ================
@@ -648,6 +696,8 @@ fails; retry persistence without restoring stale slot occupancy.
 	let worldClock: GameplayState["worldClock"];
 	let environment = entryEnvironment( {} ).state;
 	let cosError: string | null = null;
+	// The skill a predicted run-up was pressed for (skillRunUpGoal).
+	let runUpSkill = 0;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -993,6 +1043,10 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			bindingRepairs.clear();
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
+			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
+			reverseMapPoints = decodeReverseMapPoints(
+				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
+			);
 			unlimitedItems = unlimitedItemIds( value );
 			const entryEvents = entryEnvironment( value );
 			warnings = [ false, false ];
@@ -2013,7 +2067,9 @@ state here before a command can claim a native wire conversation.
 				// 695420 case 9: a job suit (active class +4F5 other than 4)
 				// refuses first, then an open alchemy window; else the title
 				// prompt opens.
-				const refusal = partyActiveJob( inventory.state().inventory ) !== STALL_NO_JOB_CLASS ?
+				// 695420 case 9: only a character outside job mode opens a stall; any
+				// other class refuses 0x0A/0x3B, an open alchemy window 0x12/0x16.
+				const refusal = partyActiveJob( inventory.state().inventory ) !== NO_JOB_CLASS ?
 					{ category: STALL_NOTICE_CATEGORY, code: STALL_JOB_SUIT_CODE } :
 					command.alchemy ?
 					{ category: STALL_ALCHEMY_CATEGORY, code: STALL_ALCHEMY_CODE } :
@@ -2234,7 +2290,8 @@ state here before a command can claim a native wire conversation.
 					summonerSlot: command.summonerSlot,
 					skin: command.skin,
 					targetSlot: command.targetSlot,
-					reverseChoice: command.reverseChoice
+					reverseChoice: command.reverseChoice,
+					reverseMapPoint: command.reverseMapPoint
 				};
 				const refusal = inventory.useNotice( command.slot, context );
 				if ( refusal ) {
@@ -2439,7 +2496,17 @@ state here before a command can claim a native wire conversation.
 			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
 			// Admission precedes the server's movement-to-cast handoff. A refused
 			// or unknown press must not stop a walk while its answer is in flight.
-			if ( admitted && pressAdmitted( pressedMetadata, local ) ) movement.holdForCast( now );
+			if ( admitted && pressAdmitted( pressedMetadata, local ) ) {
+				// A repeated press during a predicted run-up keeps it walking:
+				// holding a client-led run-up would park it until the server's
+				// walk arrived, the very lag the prediction removes.
+				const runUp = entity.gid !== localGid ? skillRunUpGoal( pressedMetadata, entity, local, now ) : null;
+				if ( movement.approachPredictedSince() !== undefined ) {
+					// The repeated press now owns the run-up's cast.
+					runUpSkill = pressedSkill;
+				} else if ( runUp && movement.predictApproach( runUp, now, true ) ) runUpSkill = pressedSkill;
+				else movement.holdForCast( now );
+			}
 			predictCast( pressedMetadata, entity, local, now );
 			// Only a target the row admits stands a cooldown in: any other is the
 			// server's to refuse, and its stand-in showed a cooldown that vanished.
@@ -2517,6 +2584,13 @@ Packet handling must not depend on which HUD panel is currently open.
 				movement.castRefused( now );
 			}
 			try {
+				// The pet's scoop ends a manual pet pickup the party handed to
+				// another member (cosPickupShown); entities still animate it.
+				if ( frame.opcode === 0x35c7 && frame.payload.length >= 4 ) {
+					inventory.cosPickupShown(
+						new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true )
+					);
+				}
 				if ( betaMap.receive( frame ) ) {
 					dirty = true;
 					return true;
@@ -2542,6 +2616,13 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					return true;
 				}
+				if ( frame.opcode === COS_DISTANCE_ERROR ) {
+					// The server stopped this player at its COS's tether.
+					const notice = cosDistanceNotice( frame.payload );
+					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0x317d ) {
 					const notice = partyLootNotice( frame.payload, {
 						item: worldReferences.item,
@@ -2552,7 +2633,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				if ( storage.receive( frame, cosItemRefs ) && frame.opcode !== 0xb338 ) {
+				if ( storage.receive( frame, cosItemRefs, inventory.objectRefs() ) && frame.opcode !== 0xb338 ) {
 					dirty = true;
 					return true;
 				}
@@ -2952,7 +3033,11 @@ Packet handling must not depend on which HUD panel is currently open.
 					}
 					if ( ![ 0xb095, 0xb34a, 0xb2db ].includes( frame.opcode ) ) return true;
 				}
-				const nextSocial = socialPacket( social, frame, { country: localCountry, now } );
+				const nextSocial = socialPacket( social, frame, {
+					country: localCountry,
+					now,
+					localJob: partyActiveJob( inventory.state().inventory )
+				} );
 				if ( nextSocial ) {
 					if ( nextSocial.members.length && !social.members.length ) guide = queueGuide( guide, [ 10 ] );
 					if ( nextSocial.notice ) {
@@ -3287,6 +3372,18 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( frame.payload[1] !== 0x11 || !cosPickup.receipt( gid ) ) {
 						inventory.cosGrounded( frame.payload );
 					}
+					// 74EF50 resolves a pet pickup (0x11) to the pet bag (0x7A) and
+					// 756CF0's pet branch prints the bag's item line for a ground
+					// source (7571C0 / 757145 / 757007); it has no gold line.
+					if ( frame.payload[1] === 0x11 && frame.payload[6] !== 254 ) {
+						const slot = frame.payload[6]!,
+							after = next.inventory?.find( row => row.slot === slot ),
+							notice = pickupNotice(
+								record.inventory?.find( row => row.slot === slot ),
+								after && { ...after, name: after.name ?? inventory.reference( after.refObjId ).name }
+							);
+						if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					cosRecords.set( gid, next );
 					dirty = true;
 					return true;
@@ -3529,6 +3626,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					targetNotice( frame.opcode, frame.payload ) ?? portalNotice( frame.opcode, frame.payload ) ??
 					repairNotice( frame.opcode, frame.payload ) ??
 					inventoryNotice( frame.opcode, frame.payload, localCountry, mallRequest ) ??
+					alchemyNotice( frame.opcode, frame.payload ) ??
 					skillNotice( frame.opcode, frame.payload, localCountry, fortressActive( fortress ) );
 				if ( refusal ) notices = [ ...notices.slice( -99 ), { ...refusal, sequence: ++noticeSequence } ];
 				if ( target ) {
@@ -3734,6 +3832,18 @@ before take assembles the presentation snapshot.
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 
+			// A predicted skill run-up the server did not walk: it cast the
+			// pressed skill where the caster stood (the target was within its
+			// reach after all), or never answered. Walk back to the start the
+			// server kept. Another cast meanwhile (an imbue) is not that answer.
+			const runUpSince = movement.approachPredictedSince();
+			if (
+				runUpSince !== undefined &&
+				(combat.state().casts.some( c =>
+					c.caster === localGid && c.skill === runUpSkill && c.receivedAtMs !== undefined &&
+					c.receivedAtMs >= runUpSince && c.cancelledAtMs === undefined
+				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
+			) movement.endPrediction( now );
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );
 			const trained = training.step( now ), moved = movement.step( now ), targeted = targeting.step( now );
 			dirty = combatChanged || inventoryChanged || trained || chat.step( now ) || moved || targeted || dirty;
@@ -3854,6 +3964,8 @@ The published plane when something changed since the last take, else null.
 				paramJobs: paramJobs.state(),
 				countJobs: countJobs.state(),
 				reverseReturnChoice: countJobs.choosing() !== null,
+				...(storageAutoStack ? { storageAutoStack } : {}),
+				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),
 				job,

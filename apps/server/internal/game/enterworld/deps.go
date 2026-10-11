@@ -58,6 +58,9 @@ type Deps struct {
 	StarterKit []WireItem
 	// MasteryTotalOverride is shared with progression; zero means native.
 	MasteryTotalOverride int64
+	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
+	// (action/storageautostack.go); false is native.
+	StorageAutoStack bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill
@@ -145,7 +148,11 @@ type Deps struct {
 	)
 	// Immutable references consumed by scene-local client owners must be
 	// republished after every bootstrap, including same-session travel.
-	SceneReferenceFrames   func() []wire.Frame
+	SceneReferenceFrames func() []wire.Frame
+	// ReconcileSceneObjects runs once a loading scene goes live. Removals
+	// committed while it loaded reached no viewer (scope routing skips a
+	// loading scene), so the owner retires bootstrap objects that are gone.
+	ReconcileSceneObjects  func(session *transport.Session, divisionID string, character *Character)
 	CommunitySeedFramesFor func(
 		divisionID string,
 		character *Character,
@@ -487,6 +494,7 @@ func (d *Deps) Validate() error {
 	require("OnWorldBound", d.OnWorldBound == nil)
 	require("EntryCompanionSpawn", d.EntryCompanionSpawn == nil)
 	require("SceneReferenceFrames", d.SceneReferenceFrames == nil)
+	require("ReconcileSceneObjects", d.ReconcileSceneObjects == nil)
 
 	if len(missing) > 0 {
 		return fmt.Errorf(

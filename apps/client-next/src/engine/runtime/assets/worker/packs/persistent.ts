@@ -34,6 +34,12 @@ const QUOTA_SHARE = 0.5;
 // Optional disk reads must yield well before the network's 15-second stall window.
 const CACHE_OPERATION_MS = 2000;
 const MAX_CACHE_OPERATIONS = 8;
+// The inventory scan's keys() walks every stored entry, thousands for a player
+// who has explored: background bookkeeping, so it may take this long before
+// its timeout suspends the store and foreground reads start missing.
+const CACHE_SCAN_MS = 30000;
+// Match the bounded publication backlog; waiting callers own no native work.
+const MAX_CACHE_WAITERS = 64;
 
 /*
 ================
@@ -60,66 +66,137 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	let startup = new Set<string>();
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
 	const pending = new Set<string>(), touched = new Set<string>();
-	const disabled = new AbortController();
-	let outstanding = 0, cleanups = 0;
+	// Operations past their deadline that have not settled yet. While any is
+	// open the store takes no new work: a stuck backend stays suspended, a
+	// slow one resumes when its late operation settles. A timeout fails only
+	// its own caller; later reads may still use the verified disk entries.
+	let stalled = 0;
+	let outstanding = 0, cleanups = 0, openingWaiters = 0;
+	const queue: { start: () => void; fail: ( error: Error ) => void; }[] = [];
 	const removals = new Map<string, Promise<void>>();
+	/*
+	================
+	drain
+
+	FIFO admission counts native work, including abandoned response cleanup.
+	Suspension rejects waiting callers without starting their operations.
+	================
+	*/
+	function drain() {
+		if ( stalled > 0 ) {
+			for ( const entry of queue.splice( 0 ) ) entry.fail( Error( "Cache suspended" ) );
+			return;
+		}
+		while ( queue.length && outstanding + cleanups < MAX_CACHE_OPERATIONS ) queue.shift()!.start();
+	}
 	/*
 	================
 	storage
 
-	Cache Storage cannot abort its native operations. Cancellation releases only
-	this caller; its native work retains its slot and deadline until settlement.
-	Saturation bypasses optional storage. Only a real timeout disables this owner,
-	preventing a stuck backend from accumulating abandoned native operations.
+	A bounded FIFO gives healthy bursts a turn. Queue wait and native execution
+	each have a deadline. Cancellation removes unstarted work, but native work
+	keeps its slot until settlement. A timeout suspends admission until that
+	work (including body cancellation) settles; it never disables the owner.
+
+	dispose runs at settlement while the operation still holds its slot, before
+	the queue drains: a result handed to cleanup there (a presence check's
+	body) is counted in the same step its slot frees, so queued work can never
+	run beside it past MAX_CACHE_OPERATIONS, and cleanup admission is never
+	already full when it is handed over.
 	================
 	*/
 	function storage<T>(
-		operation: () => Promise<T>,
+		operation: ( deadline: AbortSignal ) => Promise<T>,
 		signal?: AbortSignal,
-		abandoned?: ( value: T ) => void
+		abandoned?: ( value: T ) => void,
+		dispose?: ( value: T ) => void,
+		deadlineMs = CACHE_OPERATION_MS
 	): Promise<T> {
 		signal?.throwIfAborted();
-		if ( disabled.signal.aborted ) return Promise.reject( disabled.signal.reason );
-		if ( outstanding + cleanups >= MAX_CACHE_OPERATIONS ) {
-			return Promise.reject( Error( "Cache busy" ) );
-		}
+		if ( stalled > 0 ) return Promise.reject( Error( "Cache suspended" ) );
+		if ( queue.length >= MAX_CACHE_WAITERS ) return Promise.reject( Error( "Cache queue full" ) );
 		return new Promise<T>( ( resolve, reject ) => {
-			let waiting = true;
-			const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
-			const clearWaiter = () => {
-				clearTimeout( timer );
-				disabled.signal.removeEventListener( "abort", abort );
-				signal?.removeEventListener( "abort", cancel );
-			};
-			const cancel = () => {
+			let waiting = true, overdue = false, started = false;
+			const deadline = new AbortController();
+			/*
+			================
+			fail
+			================
+			*/
+			const fail = ( error: unknown ) => {
 				waiting = false;
 				signal?.removeEventListener( "abort", cancel );
-				reject( signal!.reason );
-			};
-			const abort = () => {
-				waiting = false;
-				clearWaiter();
-				reject( disabled.signal.reason );
-			};
-			disabled.signal.addEventListener( "abort", abort, { once: true } );
-			signal?.addEventListener( "abort", cancel, { once: true } );
-			outstanding++;
-			let work: Promise<T>;
-			try {
-				work = operation();
-			} catch ( error ) {
-				work = Promise.reject( error );
-			}
-			work.then( value => {
-				outstanding--;
-				clearWaiter();
-				if ( waiting ) resolve( value );
-				else abandoned?.( value );
-			}, error => {
-				outstanding--;
-				clearWaiter();
+				if ( !started ) {
+					clearTimeout( timer );
+					const index = queue.indexOf( entry );
+					if ( index >= 0 ) queue.splice( index, 1 );
+				}
 				reject( error );
-			} );
+			};
+			/*
+			================
+			cancel
+			================
+			*/
+			const cancel = () => fail( signal!.reason );
+			/*
+			================
+			expire
+			================
+			*/
+			const expire = () => {
+				if ( started ) {
+					overdue = true;
+					stalled++;
+				}
+				deadline.abort( Error( "Cache operation timed out" ) );
+				fail( deadline.signal.reason );
+				drain();
+			};
+			let timer = setTimeout( expire, deadlineMs );
+			/*
+			================
+			start
+			================
+			*/
+			const start = () => {
+				started = true;
+				clearTimeout( timer );
+				timer = setTimeout( expire, deadlineMs );
+				outstanding++;
+				let work: Promise<T>;
+				try {
+					work = operation( deadline.signal );
+				} catch ( error ) {
+					work = Promise.reject( error );
+				}
+				/*
+				================
+				settle
+				================
+				*/
+				const settle = () => {
+					outstanding--;
+					clearTimeout( timer );
+					signal?.removeEventListener( "abort", cancel );
+					if ( overdue ) stalled--;
+				};
+				work.then( value => {
+					dispose?.( value );
+					settle();
+					if ( waiting ) resolve( value );
+					else abandoned?.( value );
+					drain();
+				}, error => {
+					settle();
+					fail( error );
+					drain();
+				} );
+			};
+			const entry = { start, fail };
+			signal?.addEventListener( "abort", cancel, { once: true } );
+			queue.push( entry );
+			drain();
 		} );
 	}
 	/*
@@ -129,19 +206,28 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	Retain cancellation admission until native settlement, even after a read fails.
 	================
 	*/
-	function trackCleanup( completion: Promise<void> ) {
+	function trackCleanup( completion: Promise<void>, overdue = false ) {
 		cleanups++;
-		const timer = setTimeout( () => disabled.abort(), CACHE_OPERATION_MS );
+		if ( overdue ) stalled++;
+		const timer = setTimeout( () => {
+			if ( !overdue ) {
+				overdue = true;
+				stalled++;
+			}
+			drain();
+		}, CACHE_OPERATION_MS );
 		void completion.catch( () => {} ).finally( () => {
 			cleanups--;
 			clearTimeout( timer );
+			if ( overdue ) stalled--;
+			drain();
 		} );
 	}
 	/*
 	================
 	release
 
-	Late matches still own a body after timeout disables new lookups. Cleanup
+	Late matches still own a body after timeout suspends new lookups. Cleanup
 	keeps finite admission and never delays the foreground caller.
 	================
 	*/
@@ -156,17 +242,32 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	================
 	*/
 	function open( signal?: AbortSignal ) {
-		if ( disabled.signal.aborted ) return Promise.resolve( null );
+		if ( stalled > 0 ) return Promise.resolve( null );
+		// A failed or late open is retried by the next caller, never kept for
+		// the session.
 		opened ??= storage( () =>
 			typeof caches === "undefined" ?
 				Promise.resolve( null ) :
 				caches.open( "sro-next-verified-v1" )
 		).catch( () => {
 			errors++;
+			opened = null;
 			return null;
 		} );
-		// Each caller owns cancellation even while sharing the initial open.
-		return storage( () => opened!, signal );
+		// Waiting on the shared promise is not another native storage operation.
+		// Retain the waiter count until settlement, even if its caller cancels.
+		signal?.throwIfAborted();
+		if ( openingWaiters >= MAX_CACHE_WAITERS ) return Promise.resolve( null );
+		openingWaiters++;
+		const opening = opened;
+		return new Promise<Cache | null>( ( resolve, reject ) => {
+			const cancel = () => reject( signal!.reason );
+			signal?.addEventListener( "abort", cancel, { once: true } );
+			void opening.then( resolve, reject ).finally( () => {
+				openingWaiters--;
+				signal?.removeEventListener( "abort", cancel );
+			} );
+		} );
 	}
 
 	/*
@@ -203,13 +304,14 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	*/
 	function remove( origin: string, digest: string ) {
 		const url = key( origin, digest );
-		if ( disabled.signal.aborted ) return Promise.resolve();
+		if ( stalled > 0 ) return Promise.resolve();
 		if ( removals.has( url ) ) return removals.get( url )!;
 		if ( removals.size >= MAX_CACHE_OPERATIONS ) return Promise.resolve();
 		const operation = tail.then( async () => {
 			try {
 				const cache = await open();
-				if ( cache ) await storage( () => cache.delete( url ) );
+				if ( !cache ) return;
+				await storage( () => cache.delete( url ) );
 				if ( inventory?.has( url ) ) {
 					total -= inventory.get( url )!;
 					inventory.delete( url );
@@ -217,6 +319,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				touched.delete( url );
 			} catch {
 				errors++;
+				// A timed-out delete may still commit before admission resumes.
+				inventory = null;
 			}
 		} ).finally( () => removals.delete( url ) );
 		removals.set( url, operation );
@@ -243,10 +347,12 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			if ( !inventory ) {
 				inventory = new Map();
 				total = 0;
-				for ( const request of await storage( () => cache.keys() ) ) {
-					const response = await storage( () => cache.match( request ), undefined, release ),
+				const requests = await storage( () => cache.keys(), undefined, undefined, undefined, CACHE_SCAN_MS );
+				for ( const request of requests ) {
+					// Only the size header is read: dispose cancels the body at
+					// settlement, before the slot frees (storage).
+					const response = await storage( () => cache.match( request ), undefined, undefined, release ),
 						size = Number( response?.headers.get( "content-length" ) ) || 0;
-					release( response );
 					total += size;
 					inventory.set( request.url, size );
 				}
@@ -326,28 +432,34 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		return tail;
 	}
 	return {
-		// Whether verified bytes are stored, without reading them. A storage
-		// failure reads as absent: the caller simply fetches again.
+		// Whether verified bytes are stored, without reading them: null when the
+		// store cannot answer (suspended, saturated, failed). Absent and unknown
+		// differ: the background installer must not fetch what it cannot store.
 		/*
 		================
 		has
 		================
 		*/
-		async has( origin: string, digest: string, signal?: AbortSignal ) {
+		async has( origin: string, digest: string, signal?: AbortSignal ): Promise<boolean | null> {
 			try {
 				signal?.throwIfAborted();
 				const cache = await open( signal );
-				const response = cache ?
-					await storage( () => cache.match( key( origin, digest ) ), signal, release ) :
-					undefined;
+				if ( !cache ) return null;
+				// Presence needs no body: dispose hands it to cleanup at settlement,
+				// before the slot frees (storage), whether or not this caller waits.
+				const response = await storage(
+					() => cache.match( key( origin, digest ) ),
+					signal,
+					undefined,
+					release
+				);
 				if ( !response ) return false;
-				release( response );
 				touch( key( origin, digest ) );
 				return true;
 			} catch {
 				errors++;
 				signal?.throwIfAborted();
-				return false;
+				return null;
 			}
 		},
 		/*
@@ -362,7 +474,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				const url = key( origin, digest );
 				if ( removals.has( url ) ) return null;
 				const cache = await open( signal );
-				const response = cache ? await storage( () => cache.match( url ), signal, release ) : undefined;
+				if ( !cache ) return null;
+				const response = await storage( () => cache.match( url ), signal, release );
 				unclaimed = response;
 				if ( !response ) {
 					if ( inventory?.has( url ) ) {
@@ -381,13 +494,17 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 				// A backend read rejection is not evidence that the stored entry is
 				// corrupt. Only observed metadata or completed bytes justify removal.
 				const bytes = await storage(
-					() => {
+					deadline => {
 						// Transfer body ownership only after storage admits the read.
 						unclaimed = undefined;
-						return readBytes( response.body!, length, { signal: disabled.signal, onCancel: trackCleanup } )
+						return readBytes( response.body!, length, {
+							signal: deadline,
+							// Carry the expired read into cancellation with no admission gap.
+							onCancel: completion => trackCleanup( completion, deadline.aborted )
+						} )
 							.catch( error => {
 								if (
-									isResponseByteLimitError( error ) && !signal?.aborted && !disabled.signal.aborted
+									isResponseByteLimitError( error ) && !signal?.aborted && !deadline.aborted
 								) {
 									void remove( origin, digest );
 								}
@@ -423,7 +540,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 		*/
 		enqueue( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
 			const id = key( origin, digest );
-			if ( disabled.signal.aborted || pending.has( id ) ) return;
+			if ( stalled > 0 || pending.has( id ) ) return;
 			if ( pending.size >= 64 || queuedBytes + bytes.length > (32 << 20) ) {
 				skipped++;
 				return;

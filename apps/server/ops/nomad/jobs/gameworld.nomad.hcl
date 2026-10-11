@@ -167,6 +167,30 @@ variable "party_masteries" {
   default = "on"
 }
 
+# storage_auto_stack lets a storage quick move (right-click, Ctrl+click) land
+# on a matching stack (port-only, not native; owner decision 2026-10-11).
+# "off" restores the native empty-slot rule.
+variable "storage_auto_stack" {
+  type    = string
+  default = "on"
+}
+
+# reverse_return_map adds map destinations to the reverse return scroll
+# (port-only, not native). Anything but "on" keeps the native two points.
+variable "reverse_return_map" {
+  type    = string
+  default = ""
+}
+
+# alchemy_rates replaces each elixir's authored reinforcement chance with one
+# table by plus (port-only, not native; owner decision 2026-10-11): "on" is
+# +1 100% ... +11 5%, a comma list such as "100,80,70" is custom, "off" is
+# the original game. A malformed value stops GameWorld at boot.
+variable "alchemy_rates" {
+  type    = string
+  default = "on"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
@@ -190,6 +214,28 @@ variable "beta_drop_rate" {
   default = "20"
 }
 
+# beta_drop_mix gives item families their own beta drop rate (port-only, not
+# native; owner decision 2026-10-11). "on" keeps potions, cures, scrolls,
+# ammo, elixirs, stones and tablets at the native rate while equipment and a
+# monster's assigned rewards keep beta_drop_rate; "family=rate,..." tunes it
+# (families: equipment, assigned, potion, cure, scroll, elixir, ammo, stone,
+# tablet); "off" is the one uniform beta rate. A malformed value stops
+# GameWorld at boot.
+variable "beta_drop_mix" {
+  type    = string
+  default = "on"
+}
+
+# shop_extra_goods adds NPC shop goods beyond the v1.150 stock (port-only,
+# not native; owner decision 2026-10-11). "on" sells the elixirs at 1M and
+# the Luck and Steady stones of degrees 1-3 at 5M in Jangan's smith (third
+# tab); "tab:item:price,..." is an operator list; "off" is the v1.150 stock.
+# A malformed value stops GameWorld at boot.
+variable "shop_extra_goods" {
+  type    = string
+  default = "on"
+}
+
 variable "beta_drop_cap" {
   type    = string
   default = "16"
@@ -200,6 +246,14 @@ variable "beta_drop_cap" {
 variable "beta_gold_rate" {
   type    = string
   default = "250"
+}
+
+# instant_inventory_expansion makes quest bag slots usable at the turn-in
+# (port-only, not native: v1.150 learns its bag size at world entry). The
+# owner approved it on for the beta; "off" restores the native wait.
+variable "instant_inventory_expansion" {
+  type    = string
+  default = "on"
 }
 
 variable "beta_rare_rate" {
@@ -215,6 +269,14 @@ variable "beta_rare_rate" {
 variable "stack_sizes" {
   type    = string
   default = ""
+}
+
+# The community site's public read API listener (internal/agent/publicstats):
+# a loopback address, or "off". sro-nomad gives the first shard the default
+# and every other shard "off".
+variable "public_api_addr" {
+  type    = string
+  default = "127.0.0.1:8790"
 }
 
 variable "cpu" {
@@ -357,13 +419,21 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SILK                      = var.beta_silk
         SRO_MAINTENANCE_GATE_PATH          = var.maintenance_gate_path
         SRO_PARTY_MASTERIES                = var.party_masteries
+        SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
+        SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
+        SRO_ALCHEMY_RATES                  = var.alchemy_rates
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate
         SRO_BETA_GOLD_RATE                 = var.beta_gold_rate
+        SRO_INSTANT_INVENTORY_EXPANSION    = var.instant_inventory_expansion
         SRO_BETA_RARE_RATE                 = var.beta_rare_rate
         SRO_BETA_DROP_CAP                  = var.beta_drop_cap
+        SRO_BETA_DROP_MIX                  = var.beta_drop_mix
+        SRO_SHOP_EXTRA_GOODS               = var.shop_extra_goods
         SRO_STACK_SIZES                    = var.stack_sizes
+        SRO_PUBLIC_API_ADDR                = var.public_api_addr
+        SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_WS_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
         TRANSPORT_CERT_DIR                 = var.cert_dir
@@ -383,6 +453,22 @@ job "sro-gameworld-__SHARD_ID__" {
 EOH
 
         destination = "secrets/agent-session-public-keys.json"
+        change_mode = "noop"
+        perms       = "0600"
+        uid         = var.task_uid
+        gid         = var.task_gid
+      }
+
+      # The privacy-write token. index, not .public_api_token: a missing map
+      # key must render empty, never the template's "<no value>". An empty
+      # or short file leaves the write unserved. The GameWorld reads it once at boot, so a
+      # rotated token applies at the next restart rather than kicking players.
+      template {
+        data = <<EOH
+{{ with nomadVar "nomad/jobs/sro-gameworld-__SHARD_ID__/gameworld/gameworld" }}{{ index . "public_api_token" }}{{ end }}
+EOH
+
+        destination = "secrets/public-api-token"
         change_mode = "noop"
         perms       = "0600"
         uid         = var.task_uid

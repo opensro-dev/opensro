@@ -2,6 +2,64 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/viewer/viewer.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"wake"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/effects/effects.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createCharacterPresentation:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/orbs/orbs.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createCharacterPresentation:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/characters/sounds/sounds.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [
+				"callback:createCharacterPresentation:3"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/viewer/viewer.ts",
+			"provider": "src/engine/runtime/characters/characters.ts",
+			"functions": [
+				"receiveLifecycle",
+				"step",
+				"ready",
+				"error"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/viewer/viewer.ts",
+			"provider": "src/engine/runtime/characters/viewer-queries.ts",
+			"functions": [
+				"knows",
+				"itemType",
+				"dressed"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/viewer/viewer.ts",
+			"provider": "src/engine/runtime/renderer/renderer.ts",
+			"functions": [
+				"phase",
+				"characterBounds",
+				"setUi",
+				"frame",
+				"readDoll"
+			]
+		},
+		{
 			"consumer": "src/engine/foundation/ui/alchemy-result.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
@@ -1446,6 +1504,7 @@
 				"callback:textLines:2",
 				"callback:textBoxLines:2",
 				"callback:textBoardLines:2",
+				"callback:textBoxLines:2",
 				"callback:messageBoxLines:1",
 				"measure",
 				"callback:systemMessageLayout:10"
@@ -1580,6 +1639,13 @@
 		},
 		{
 			"consumer": "src/engine/foundation/gameplay/count-job.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [
+				"hudCopy"
+			]
+		},
+		{
+			"consumer": "src/engine/foundation/gameplay/party-chat-command.ts",
 			"provider": "src/engine/runtime/ui/ui.ts",
 			"functions": [
 				"hudCopy"
@@ -1954,6 +2020,7 @@
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
 				"context",
+				"network",
 				"state"
 			]
 		},
@@ -2164,6 +2231,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/party-invite.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/entities/entities.ts",
+			"functions": [
+				"read",
+				"rider"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/hdr.ts",
 			"functions": [
@@ -2218,6 +2293,27 @@
 		}
 	],
 	"boundaries": [
+		{
+			"file": "src/engine/runtime/characters/viewer-queries.ts",
+			"expression": "resourceFor",
+			"function": "knows",
+			"kind": "callback",
+			"reason": "Port-only 3D viewer query: the characters owner lends its synchronous catalogue lookup to tell a model the catalogue lacks from one still loading."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/persistent.ts",
+			"expression": "entry.fail",
+			"function": "drain",
+			"kind": "callback",
+			"reason": "Queued cache operation rejection: each waiting entry carries its own caller's fail closure (storage)."
+		},
+		{
+			"file": "src/engine/runtime/assets/worker/packs/persistent.ts",
+			"expression": "queue.shift()!.start",
+			"function": "drain",
+			"kind": "callback",
+			"reason": "Queued cache operation admission: drain starts the next waiting entry's own start closure (storage)."
+		},
 		{
 			"file": "src/engine/foundation/animation/particle-commands.ts",
 			"expression": "random",
@@ -3675,7 +3771,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "5ff0714e43a2d0cc6ba5f7c82a4c734bbd7e784ba35e2ec53c521ef2efbccfc7",
+			"sourceSha256": "d4409c4c86718f48c6536f61d8fad6852848bb531de4d94e461d2241ba646f94",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

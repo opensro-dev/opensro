@@ -21,6 +21,10 @@ const (
 	partyFailureTimeout        byte = 0x10
 	partyFailureFormRefused    byte = 0x0c
 	partyFailureJoinRefused    byte = 0x17
+	// partyFailureJobMismatch is ShardManager 44ED70/44F130's 0x2C23 for
+	// two players whose job classes may not party (44ED20); v1.150 shows
+	// UIIT_MSG_PARTY_USER_MISSMATCH.
+	partyFailureJobMismatch byte = 0x23
 )
 
 /*
@@ -112,6 +116,11 @@ under its lock, then both sessions get the 0xB0D5 + 0x35D6 seed.
 func (r *Runtime) commitFormConsent(consent partyConsent) byte {
 	targetSession, inviterSession := consent.targetSession, consent.inviterSession
 	divisionID, inviter, target, optionBits := consent.invite.divisionID, consent.inviter, consent.target, consent.invite.OptionBits
+	// 44ED70 refuses the pair after its own partyless checks; the registry
+	// repeats those under its lock when it forms the party.
+	if !enterworld.JobsMayParty(enterworld.PartyJobClass(inviter), enterworld.PartyJobClass(target)) {
+		return partyFailureJobMismatch
+	}
 	leader := Member{MemberID: enterworld.ObjectIDForCharacter(inviter), Name: inviter.Name}
 	second := Member{MemberID: enterworld.ObjectIDForCharacter(target), Name: target.Name}
 	snapshot, refusal := r.registry.Form(divisionID, leader, second, optionBits)
@@ -150,6 +159,12 @@ func (r *Runtime) commitJoinConsent(consent partyConsent) byte {
 	if snapshot.LeaderID != inviterID && snapshot.OptionBits&PartyOptionJoinAnyone == 0 {
 		return partyFailureUnknown
 	}
+	// 44F130 compares the joiner with the party's job class. Members cannot
+	// change suits inside a party (0xA0), so the leader's class is the
+	// party's.
+	if !enterworld.JobsMayParty(r.partyJobClass(divisionID, snapshot, inviter), enterworld.PartyJobClass(target)) {
+		return partyFailureJobMismatch
+	}
 	joiner := Member{MemberID: enterworld.ObjectIDForCharacter(target), Name: target.Name}
 	joined, refusal := r.registry.Join(divisionID, inviter.Name, joiner)
 	if refusal != "" {
@@ -168,4 +183,24 @@ func (r *Runtime) commitJoinConsent(consent partyConsent) byte {
 	}
 	sendPartySeed(targetSession, joiner.MemberID, joined, r.rosterRows(divisionID, joined))
 	return 0
+}
+
+/*
+================
+partyJobClass
+
+The party's job class: its leader's. A leader that cannot be resolved
+falls back to the inviting member, who shares it.
+================
+*/
+func (r *Runtime) partyJobClass(divisionID string, snapshot Snapshot, inviter *enterworld.Character) uint8 {
+	for _, member := range snapshot.Members {
+		if member.MemberID != snapshot.LeaderID {
+			continue
+		}
+		if leader := findCharacterByName(r.deps, divisionID, member.Name); leader != nil {
+			return enterworld.PartyJobClass(leader)
+		}
+	}
+	return enterworld.PartyJobClass(inviter)
 }

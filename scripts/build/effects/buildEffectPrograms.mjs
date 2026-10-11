@@ -13,7 +13,7 @@ must match the committed archive evidence
 ===========================================================================
 */
 import { loadCharacterActionEffectRows } from "../data/buildSkillDataAsset.mjs";
-import { equipmentParticleCatalog } from "../char/equipmentParticles.mjs";
+import { equipmentAmbientParticles, equipmentParticleCatalog } from "../char/equipmentParticles.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 /*
  * Build the authored v1.150 EasyFX data plane used by the browser renderer.
@@ -194,6 +194,9 @@ export function collectEffectReferences() {
 
 	for ( const row of loadCharacterActionEffectRows() ) for ( const resource of row.bloodEffects ) add( resource );
 	for ( const rows of Object.values( equipmentParticleCatalog() ) ) for ( const row of rows ) add( row.effectPath );
+	for ( const modifiers of equipmentAmbientParticles().values() ) {
+		for ( const modifier of modifiers ) for ( const entry of modifier.entries ) add( entry.effectPath );
+	}
 	const nativeExecutableReferences = collectNativeExecutableEffectReferences();
 	const modelParticleReferences = collectModelParticleReferences( { ...table, ...namedTable } );
 	const sceneryParticleReferences = collectSceneryParticleReferences();

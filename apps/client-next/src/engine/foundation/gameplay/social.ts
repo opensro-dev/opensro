@@ -12,6 +12,7 @@ is decoded completely before any state is published.
 import { GUILD_WAR_PROPOSAL, guildWarProposalReply } from "./guild-war";
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
+import { NO_JOB_CLASS } from "./job-guild";
 import type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 // The 0x3393 type a resurrection skill proposes to a dead player.
@@ -73,7 +74,7 @@ server-emitted arms enter this projection.
 export function socialPacket(
 	state: SocialState,
 	frame: WireFrame,
-	noticeContext: NativeNoticeContext & { readonly now?: number; } = {}
+	noticeContext: NativeNoticeContext & { readonly now?: number; readonly localJob?: number; } = {}
 ): SocialState | null {
 	const op = frame.opcode, p = frame.payload;
 	if (
@@ -401,7 +402,15 @@ export function socialPacket(
 			throw Error( "Invalid party flags" );
 		}
 		if ( flags & 1 ) {
-			next = { ...next, leader: u32(), options: u8(), members: [] };
+			// 81B710: the settings also latch whether the local player is in job
+			// mode (class 4 is none), the party window's job-party flag.
+			next = {
+				...next,
+				leader: u32(),
+				options: u8(),
+				members: [],
+				jobParty: (noticeContext.localJob ?? NO_JOB_CLASS) !== NO_JOB_CLASS
+			};
 		}
 		if ( next.options & ~7 ) {
 			throw Error( "Invalid party options" );

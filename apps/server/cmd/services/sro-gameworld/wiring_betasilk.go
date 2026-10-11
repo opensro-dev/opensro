@@ -24,8 +24,8 @@ before returning; no store or division operation lock is held while pushing.
 func (game *gameplayPlane) betaSilkTick(ticker *simulation.Ticker, nowMs int64) []simulation.DivisionFrames {
 	unlock := game.items.LockPublication(game.divisionID)
 	defer unlock()
-	snapshot := ticker.Source.SnapshotSessions()
-	sessions := make([]simulation.SessionSnapshot, 0, len(snapshot))
+	snapshot := sessionViews(ticker.Source)
+	sessions := make([]simulation.SessionView, 0, len(snapshot))
 	for _, session := range snapshot {
 		if session.DivisionID == game.divisionID {
 			sessions = append(sessions, session)

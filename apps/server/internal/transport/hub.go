@@ -41,6 +41,9 @@ type Hub struct {
 	History HistoryObserver
 	cfg     Config
 
+	// emptyFrames throttles the opcode-0 refusal warning (emptyframe.go).
+	emptyFrames emptyFrameLog
+
 	mu       sync.RWMutex
 	sessions map[uint64]*Session
 	byToken  map[[ResumeTokenLen]byte]*Session
@@ -88,6 +91,9 @@ type Hub struct {
 	// Transport observability, including simulation-tick duration, has its own
 	// synchronization and lifecycle.
 	metrics hubMetrics
+	// navigationMetrics reads the world's monster navigation counters
+	// (SetNavigationMetrics); nil publishes no block.
+	navigationMetrics atomic.Pointer[func() map[string]uint64]
 }
 
 // AdmissionIdentity is the authenticated account/shard identity carried by a

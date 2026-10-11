@@ -32,10 +32,12 @@ type SkillGroupResolver func(id uint32) (group uint32, ok bool)
 const BenchmarkFixtureResetPath = "/development/benchmark-fixture/reset"
 
 const (
-	// benchmarkFixtureMaxIntellect bounds intellect to what a character can
-	// reach; benchmarkFixtureMaxSkills bounds the list one request may teach.
-	// The level bound is the game's own cap, injected as Config.LevelCap.
+	// benchmarkFixtureMaxIntellect and benchmarkFixtureMaxStrength bound
+	// the stats to what a character can reach; benchmarkFixtureMaxSkills
+	// bounds the list one request may teach. The level bound is the game's
+	// own cap, injected as Config.LevelCap.
 	benchmarkFixtureMaxIntellect = 2000
+	benchmarkFixtureMaxStrength  = 2000
 	benchmarkFixtureMaxSkills    = 64
 )
 
@@ -58,12 +60,16 @@ benchmarkFixtureLoadout
 
 What a scenario needs its probe character to be able to do: a level and
 intellect high enough to pay a skill's MP, and the skills themselves.
-Stored MP and HP are cleared so the next login derives them full.
+Strength, when set, gives a crowd scenario level-appropriate HP so its
+peers survive the monsters they draw (server-tick-bench.mjs); zero keeps
+the character's own. Stored MP and HP are cleared so the next login
+derives them full.
 ================
 */
 type benchmarkFixtureLoadout struct {
 	Level     int64    `json:"level"`
 	Intellect int64    `json:"intellect"`
+	Strength  int64    `json:"strength,omitempty"`
 	Skills    []uint32 `json:"skills"`
 }
 
@@ -183,6 +189,7 @@ func validBenchmarkFixtureLoadout(loadout *benchmarkFixtureLoadout, levelCap int
 	}
 	if loadout.Level < 1 || loadout.Level > levelCap ||
 		loadout.Intellect < 1 || loadout.Intellect > benchmarkFixtureMaxIntellect ||
+		loadout.Strength < 0 || loadout.Strength > benchmarkFixtureMaxStrength ||
 		len(loadout.Skills) > benchmarkFixtureMaxSkills {
 		return false
 	}
@@ -236,6 +243,9 @@ func benchmarkFixtureLoadoutMatches(character *domain.Character, loadout *benchm
 		character.MaxLevel == nil || *character.MaxLevel < loadout.Level {
 		return false
 	}
+	if loadout.Strength != 0 && (character.Strength == nil || *character.Strength != loadout.Strength) {
+		return false
+	}
 	want := mergeBenchmarkFixtureSkills(character.Skills, loadout.Skills, group)
 	if len(want) != len(character.Skills) {
 		return false
@@ -264,6 +274,10 @@ func applyBenchmarkFixtureLoadout(character *domain.Character, loadout *benchmar
 	level, intellect := loadout.Level, loadout.Intellect
 	character.Level = &level
 	character.Intellect = &intellect
+	if loadout.Strength != 0 {
+		strength := loadout.Strength
+		character.Strength = &strength
+	}
 	// The highest level reached never sits below the current one.
 	if character.MaxLevel == nil || *character.MaxLevel < level {
 		maxLevel := level

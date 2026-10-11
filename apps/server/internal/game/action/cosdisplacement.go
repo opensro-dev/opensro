@@ -45,7 +45,7 @@ func (rt *Runtime) commitCOSDisplacement(owner *cosAbnormalOwner, d *playerDispl
 	}
 	state.displacement = d
 	rt.cancelPetCombat(petOwnerKey{division: owner.division, name: strings.ToLower(owner.c.Name), gid: owner.pet.GID}, state, owner.now)
-	state.pickup = nil
+	expireCosPickup(state)
 	return point, true
 }
 

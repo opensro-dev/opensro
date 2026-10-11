@@ -283,3 +283,15 @@ func petSkillWindowHasCapacity(character *enterworld.Character, ref *enterworld.
 	}
 	return false
 }
+
+/*
+================
+ItemUseSupported
+
+Whether the server has a use handler for ref's family: the catalogue
+export reads this registry instead of keeping its own list.
+================
+*/
+func ItemUseSupported(ref *enterworld.ItemRef) bool {
+	return admittedItemUseFamily(ref) != itemUseUnsupported
+}

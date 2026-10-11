@@ -65,6 +65,24 @@ func isAttackPetRef(ref *enterworld.CharacterRef) bool {
 
 /*
 ================
+summonedAttackPet
+
+The owner's live attack (growth) pet: summoned, alive and still resolving
+to its reference. Nil when none is out.
+================
+*/
+func (rt *Runtime) summonedAttackPet(c *enterworld.Character) *enterworld.CharacterCOS {
+	for _, pet := range c.Companions() {
+		ref, ok := rt.cosReference(pet)
+		if pet.Summoned && pet.CurrentHP != 0 && ok && isAttackPetRef(ref) {
+			return pet
+		}
+	}
+	return nil
+}
+
+/*
+================
 attackPetKillExperience
 
 410110's COS arm for a pet of the given level: base, grade and damage
@@ -219,6 +237,13 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 	if delta <= 0 || levels == nil || !ok {
 		return nil, nil
 	}
+	// Port-only, not native: the closed beta's growth pace. A pet's gain is
+	// worth what a gain at its OWNER's level is (owner decision 2026-10-11),
+	// so a pet catches up to its owner fast; it still never passes the owner
+	// (the bank below). Nil, the default, is the native rate.
+	if rt.PetExpPace != nil {
+		delta = int64(min(float64(delta)*max(rt.PetExpPace(rewardLevel(c)), 1), float64(1<<62)))
+	}
 	required, known := levels.ExpRequired(int64(ref.Level))
 	if !known || required <= 0 {
 		return nil, nil
@@ -233,8 +258,16 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 		return []wire.Frame{petExperienceFrame(pet.GID, banked-before, source)}, nil
 	}
 	exp := before + delta
-	form := ref
-	for int64(form.Level) < petMaxLevel && exp >= required {
+	form, consumed := ref, int64(0)
+	// 4D65F1's loop has no owner check: native gains never cross more than a
+	// level. Port-only, not native: the beta pace above can, so with the pace
+	// on the loop stops at the owner's level and banks there as 4D6418 does
+	// on entry. With it off the loop is native.
+	ceiling := int64(petMaxLevel)
+	if rt.PetExpPace != nil {
+		ceiling = min(ceiling, rewardLevel(c))
+	}
+	for int64(form.Level) < petMaxLevel && int64(form.Level) < ceiling && exp >= required {
 		next, found := refs.CharacterRefByCodename(form.NextCodename)
 		if !found || next == nil || next.TidWord != form.TidWord {
 			break
@@ -244,7 +277,11 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 			break
 		}
 		exp -= required
+		consumed += required
 		form, required = next, following
+	}
+	if rt.PetExpPace != nil && int64(form.Level) >= rewardLevel(c) && exp >= required {
+		exp = required - 1
 	}
 	pet.Experience = uint64(exp)
 	if form != ref {
@@ -256,7 +293,9 @@ func (rt *Runtime) applyAttackPetExperience(c *enterworld.Character, pet *enterw
 			wire.Frame{Opcode: simulation.OpVitalsUpdate, Payload: simulation.VitalsRefreshPayload(pet.GID,
 				simulation.Vitals{CurrentHP: pet.CurrentHP, CurrentMP: pet.CurrentMP})})
 	}
-	return []wire.Frame{petExperienceFrame(pet.GID, delta, source)}, area
+	// The owner sees the EXP the pet was credited: all of it unless the
+	// owner's level banked the rest (as the entry bank reports banked-before).
+	return []wire.Frame{petExperienceFrame(pet.GID, consumed+exp-before, source)}, area
 }
 
 /*

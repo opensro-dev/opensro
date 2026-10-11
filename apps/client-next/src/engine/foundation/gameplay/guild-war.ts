@@ -10,6 +10,7 @@ the surrender question. The score selector indexes the native table.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import type { SocialState } from "./social";
+import { guildSelf } from "./social-roster";
 
 export const GUILD_WAR_PROPOSAL = 10;
 export const WAR_UNLIMITED = 0x7fffffff;
@@ -106,7 +107,7 @@ guildWarRequest
 ================
 */
 export function guildWarRequest( state: SocialState, command: GuildWarCommand ): WireFrame {
-	if ( state.guild?.members.find( m => m.id === state.self )?.grade !== 0 ) throw Error( "Guild master required" );
+	if ( !state.guild || guildSelf( state )?.grade !== 0 ) throw Error( "Guild master required" );
 	if ( command.kind === "guild-war-surrender" ) {
 		if ( !state.wars?.some( war => war.id === command.id && !war.ending ) ) throw Error( "Guild war unavailable" );
 		const payload = new Uint8Array( 4 );

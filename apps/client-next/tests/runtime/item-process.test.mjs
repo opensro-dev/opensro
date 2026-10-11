@@ -321,6 +321,9 @@ test("62B0B0 words the outcome and plays its effect once", () => {
 	] );
 	assert.deepEqual( result.alchemyResultLines( { ...outcome( 0x21 ), plus: 0 }, copy ), [ "level gone" ] );
 	assert.deepEqual( result.alchemyResultLines( outcome( 0x40 ), copy ), [ "destroyed" ] );
+	// 62B0B0's 0x80 arm: a stone's failed roll says the alchemy failed.
+	assert.deepEqual( result.alchemyResultLines( outcome( 0x80 ), copy ), [ "fail" ] );
+	assert.equal( result.alchemyEffectTexture( 0x80 ), "interface/alchemy/alcm_effect_fail_1" );
 	assert.equal( result.alchemyEffectTexture( 0x10 ), "interface/alchemy/alcm_effect_success" );
 	assert.equal( result.alchemyEffectTexture( 0x40 ), "interface/alchemy/alcm_effect_fail_1" );
 	// Sixteen 64 px cells of a 4x4 atlas, 50 ms each, then nothing.

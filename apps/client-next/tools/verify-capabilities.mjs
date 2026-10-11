@@ -39,7 +39,11 @@ const ASYNC_OWNERS = [
 	runtime + "bug-report/trimmer.ts",
 	runtime + "bug-report/transcode.ts",
 	runtime + "bug-report/archive.ts",
-	runtime + "bug-report/journal.ts"
+	runtime + "bug-report/journal.ts",
+	// The 3D viewer's still: one GPU copy mapped back, then encoded to a
+	// PNG and posted to the embedding page (docs/VIEWER.md).
+	runtime + "renderer/device/portrait-readback.ts",
+	runtime + "viewer/viewer.ts"
 ];
 const device = runtime + "renderer/device/device.ts",
 	frame = runtime + "renderer/frame/frame.ts",
@@ -66,6 +70,8 @@ const sunShadow = runtime + "renderer/device/sun-shadow.ts";
 const hdr = runtime + "renderer/device/hdr.ts";
 const animation = runtime + "renderer/device/animation.ts";
 const particleQuery = runtime + "renderer/device/particle-query.ts";
+// Port-only: the 3D viewer's still readback (docs/VIEWER.md).
+const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
 const deviceInternals = [
@@ -83,6 +89,7 @@ const deviceInternals = [
 	timing,
 	animation,
 	particleQuery,
+	portraitReadback,
 	particles,
 	shadows,
 	sunShadow,
@@ -103,7 +110,8 @@ export const rules = {
 		bugTrimmer
 	],
 	// The picking mask readback, shared by the renderer and the asset worker.
-	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder ],
+	// The viewer encodes its still to a PNG (docs/VIEWER.md).
+	OffscreenCanvas: [ "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder, runtime + "viewer/viewer.ts" ],
 	AudioContext: [ runtime + "audio/audio.ts" ],
 	decodeAudioData: [ runtime + "audio/audio.ts" ],
 	createPanner: [ runtime + "audio/audio.ts" ],
@@ -139,7 +147,13 @@ export const rules = {
 	submit: [ frame, device ],
 	createImageBitmap: [ runtime + "assets/worker/loader.ts" ],
 	createSampler: [ device ],
-	getContext: [ surface, "src/engine/foundation/rendering/pick-alpha.ts", bugRecorder, bugTrimmer ],
+	getContext: [
+		surface,
+		"src/engine/foundation/rendering/pick-alpha.ts",
+		bugRecorder,
+		bugTrimmer,
+		runtime + "viewer/viewer.ts"
+	],
 	createBuffer: [ device ],
 	createTexture: [ device ],
 	createBindGroup: [ device ],
@@ -173,7 +187,9 @@ export const rules = {
 		bugDialog,
 		bugTrimmer,
 		bugTranscode,
-		bugJournal
+		bugJournal,
+		// The 3D viewer's drag and wheel on its picture canvas (docs/VIEWER.md).
+		runtime + "viewer/viewer.ts"
 	],
 	fetch: [
 		runtime + "simulation/worker/session/http/http.ts",
@@ -364,6 +380,9 @@ for (
 		"getMappedRange"
 	]
 ) rules[name].push( particleQuery );
+for ( const name of [ "createBuffer", "createCommandEncoder", "submit", "finish", "mapAsync", "getMappedRange" ] ) {
+	rules[name].push( portraitReadback );
+}
 /*
 ================
 verifyCapabilities

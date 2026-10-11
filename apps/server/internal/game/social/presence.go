@@ -36,6 +36,18 @@ func (directory *Directory) SessionByName(
 	return directory.hub.BoundSession(BindKey(divisionID, characterName))
 }
 
+// EndSessionByName ends the session driving a character the way a logout
+// does (ByeReasonNormal: the departure owner saves and removes them).
+// Reports whether a session was found.
+func (directory *Directory) EndSessionByName(divisionID, characterName string) bool {
+	session, ok := directory.SessionByName(divisionID, characterName)
+	if !ok {
+		return false
+	}
+	session.CloseWhenDrained(transport.ByeReasonNormal)
+	return true
+}
+
 // OnlineByName reports whether a character has a live exclusive binding.
 func (directory *Directory) OnlineByName(divisionID, characterName string) bool {
 	_, online := directory.SessionByName(divisionID, characterName)

@@ -30,6 +30,7 @@ import {
 } from "@/engine/foundation/animation/model-animation";
 import type { AnimationParticleSet } from "@/engine/foundation/animation/animation-emission";
 import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
+import { modelAmbientParticles } from "@/engine/foundation/animation/model-emission";
 import type {
 	Resource,
 	LinkedRide,
@@ -107,6 +108,7 @@ interface AuxiliaryFrame {
 	readonly gameplay: GameplayState | null;
 	readonly localMover: ( gid: number ) => boolean;
 	readonly castByActor: ReadonlyMap<number, unknown>;
+	readonly particleHolders: { actor: CharacterActor; particles: readonly ModelParticle[]; }[];
 }
 
 /*
@@ -185,6 +187,8 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		number,
 		Map<number, { gid: number; model: string; motion: LocomotionBlend; }>
 	>();
+	// Each published auxiliary entry's ambient set, read once per entry.
+	const auxiliaryParticles = new WeakMap<object, readonly ModelParticle[]>();
 	return {
 		linkedRides,
 		auxiliaryActors,
@@ -378,7 +382,7 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		================
 		*/
 		step( frame: AuxiliaryFrame, bindings: AuxiliaryBindings ) {
-			const { entities, seconds, next, gameplay, localMover, castByActor } = frame;
+			const { entities, seconds, next, gameplay, localMover, castByActor, particleHolders } = frame;
 			const { resourceFor, dress, resources, ridesByRider, riderModes, committedAuxiliary } = bindings;
 			const hairOwners = new Set<number>();
 			for ( const entity of entities ) {
@@ -512,6 +516,14 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 						pickable: false,
 						attachment: { gid: entity.gid, bone: entry.bone, offset: [ 0, 0, 0 ], basis: "compound" }
 					} );
+					// The resource's own ambient set rides its animated bones
+					// (the EU shoulder crystals' glow).
+					let particles = auxiliaryParticles.get( entry );
+					if ( !particles ) {
+						particles = modelAmbientParticles( entry.particleModifiers );
+						auxiliaryParticles.set( entry, particles );
+					}
+					if ( particles.length ) particleHolders.push( { actor: next.get( child.gid )!, particles } );
 				}
 				for ( const id of children.keys() ) if ( !alive.has( id ) ) children.delete( id );
 			}

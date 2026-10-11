@@ -13,10 +13,12 @@ once and writes the outcome to the chat. The worker records the outcome
 import type { AlchemyOutcome } from "@/engine/contracts/item-process";
 
 // 62B0B0's flag bits: 0x10 success, 0x20 failure (with 1 the enhancement
-// level fell and 2 the durability fell), 0x40 the item was destroyed.
+// level fell and 2 the durability fell), 0x40 the item was destroyed, 0x80
+// a stone's roll failed (0xB651 [2, 0x23]; the stone is spent).
 export const ALCHEMY_SUCCESS = 0x10;
 export const ALCHEMY_FAILURE = 0x20;
 export const ALCHEMY_DESTROYED = 0x40;
+export const ALCHEMY_STONE_FAILED = 0x80;
 const FAILURE_LEVEL = 0x01;
 const FAILURE_DURABILITY = 0x02;
 const FAILURE_DETAIL = 0x0f;
@@ -62,7 +64,8 @@ alchemyResultLines
 62B0B0's chat lines, in its order. Success names the new enhancement
 level. A failure without detail says it failed; a fallen level names the
 new level (or says it is gone) and the drop; a fallen durability names the
-new value and the drop. A destroyed item says so.
+new value and the drop. A destroyed item says so, and a stone whose roll
+failed says the alchemy failed (its 0x80 arm).
 INFERENCE: native reports the item's maximum durability; the port's item
 rows carry the current durability, which a failed reinforcement lowers
 with it, so the drop is read from that.
@@ -77,6 +80,7 @@ export function alchemyResultLines( outcome: AlchemyOutcome, copy: ( key: string
 	const { flags } = outcome;
 	if ( flags & ALCHEMY_SUCCESS ) return [ format( "UIIT_MSG_REINFORCERR_SUCCESS", outcome.plus ) ];
 	if ( flags & ALCHEMY_DESTROYED ) return [ copy( "UIIT_MSG_REINFORCERR_BREAKDOWN" ) ];
+	if ( flags & ALCHEMY_STONE_FAILED ) return [ copy( "UIIT_MSG_REINFORCERR_FAIL" ) ];
 	if ( !(flags & ALCHEMY_FAILURE) ) return [];
 	if ( !(flags & FAILURE_DETAIL) ) return [ copy( "UIIT_MSG_REINFORCERR_FAIL" ) ];
 	const lines: string[] = [];

@@ -103,6 +103,7 @@ var strictRecords = []struct {
 	{"trade-reward-pool", reflect.TypeOf(domain.TradeRewardPool{})},
 	{"job-rankings", reflect.TypeOf(domain.JobRankings{})},
 	{"account-storage", reflect.TypeOf(domain.AccountStorage{})},
+	{"unique-kill", reflect.TypeOf(domain.UniqueKill{})},
 }
 
 /*

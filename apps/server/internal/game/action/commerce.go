@@ -33,15 +33,22 @@ const opShopInventory uint16 = 12
 /*
 ================
 ConfigureCommerce
+
+The shipped catalogue plus the operator's extra goods (port-only, not
+native; commerce.AddExtraGoods). Nil extra is the v1.150 stock.
 ================
 */
-func (rt *Runtime) ConfigureCommerce(dir string) error {
+func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) error {
 	c, e := commerce.Load(dir, rt.deps.ItemReferences())
-	if e == nil {
-		rt.Commerce = c
-		rt.prepareCommerceReferences()
+	if e != nil {
+		return e
 	}
-	return e
+	if e := c.AddExtraGoods(extra, rt.deps.ItemReferences()); e != nil {
+		return e
+	}
+	rt.Commerce = c
+	rt.prepareCommerceReferences()
+	return nil
 }
 
 /*

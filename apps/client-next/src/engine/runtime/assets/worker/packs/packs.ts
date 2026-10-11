@@ -320,16 +320,21 @@ export function createPacks(
 	installed
 
 	True when a read of this entry would be served from the persistent store:
-	its own verified bytes, or, for a small pack read whole, the pack's.
+	its own verified bytes, or, for a small pack read whole, the pack's. null
+	when the store cannot answer.
 	================
 	*/
-	async function installed( origin: string, registry: Awaited<Index>, entry: PackEntry, signal: AbortSignal ) {
-		if ( await persistent.has( origin, entry.sha256, signal ) ) return true;
+	async function installed(
+		origin: string,
+		registry: Awaited<Index>,
+		entry: PackEntry,
+		signal: AbortSignal
+	): Promise<boolean | null> {
+		const own = await persistent.has( origin, entry.sha256, signal );
+		if ( own !== false ) return own;
 		const descriptor = registry.packs.get( entry.packPath );
-		return Boolean(
-			descriptor && descriptor.bytes <= SMALL_PACK_BYTES &&
-				await persistent.has( origin, descriptor.sha256, signal )
-		);
+		if ( !descriptor || descriptor.bytes > SMALL_PACK_BYTES ) return false;
+		return persistent.has( origin, descriptor.sha256, signal );
 	}
 
 	/*
@@ -346,7 +351,9 @@ export function createPacks(
 		if ( disposed || signal.aborted ) return false;
 		const registry = await manifest( url.origin );
 		const entry = registry.assets.get( decodeURIComponent( url.pathname ).toLowerCase() );
-		if ( !entry || await installed( url.origin, registry, entry, signal ) ) return false;
+		// An unanswerable store (suspended, saturated) skips the file: a fetch
+		// could not be stored, and its first play fetches it on demand anyway.
+		if ( !entry || await installed( url.origin, registry, entry, signal ) !== false ) return false;
 		await readVerified( url, entry.length, signal, false );
 		await persistent.flush();
 		return true;

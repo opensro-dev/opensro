@@ -80,8 +80,15 @@ import {
 import { equipDurabilityWarning } from "@/engine/foundation/audio/item-sounds";
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { MALL_BALANCE_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
+import { MAX_INVENTORY_SLOT_COUNT } from "@/engine/foundation/gameplay/quickslots";
 
 const NPC_SHOP_CAPABILITY = 0x1;
+// v1.188 capacity announce 0x3092 [kind][capacity] (server 4E73D0 case 0x11);
+// kind 1 is the bag. Port-only, not native: v1.150 has no handler and learns
+// its bag size at world entry. The server sends it only with
+// SRO_INSTANT_INVENTORY_EXPANSION on, after a quest pays bag slots.
+const STORAGE_CAPACITY_OPCODE = 0x3092;
+const STORAGE_CAPACITY_INVENTORY = 1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
 /*
 ================
@@ -124,7 +131,10 @@ export function createInventory(
 	// The street stall the player keeps or stands at, and the stall network
 	// window (stall.ts); a purchase lands on this owner's slots.
 	let stall: StallState = emptyStall();
-	let timedOut = false;
+	// Set when a request went unanswered past its deadline; only a world
+	// bootstrap (a fresh entry, or a resumed transport's EnterWorld) clears it.
+	// timedOutRequest names that request for the incident report.
+	let timedOut = false, timedOutRequest = "";
 	let bindingMoves: import("@/engine/foundation/gameplay/quickslot-inventory").QuickslotInventoryMove[] = [];
 	let shop: import("@/engine/foundation/gameplay/commerce").ShopState | undefined;
 	let shopCompletionRevision = 0;
@@ -319,6 +329,29 @@ applyShopItems
 	}
 	/*
 ================
+describeRequest
+
+The unanswered request in the timeout report: its answer opcode, and the
+movement type of an item move.
+================
+	*/
+	function describeRequest( request: NonNullable<typeof pending> ): string {
+		const opcode = "0x" + request.opcode.toString( 16 ).toUpperCase().padStart( 4, "0" );
+		return "movementType" in request && request.movementType !== undefined ?
+			opcode + " move " + request.movementType :
+			opcode;
+	}
+	/*
+================
+timeoutMessage
+================
+	*/
+	function timeoutMessage(): string {
+		const request = timedOutRequest ? " (" + timedOutRequest + ")" : "";
+		return "Inventory transaction timed out" + request + "; reconnect to resynchronize";
+	}
+	/*
+================
 busy
 ================
 	*/
@@ -451,6 +484,17 @@ useCooldown
 		present,
 		/*
 ================
+objectRefs
+
+The summonable character references (refObjSnapshot) a summoner's
+pet record names, for decoders of rows held elsewhere (the storage room).
+================
+		*/
+		objectRefs(): ReadonlyMap<number, number> {
+			return objRefs;
+		},
+		/*
+================
 reference
 
 A reference's name and icon by id, for rows that are no item (the forge).
@@ -553,6 +597,7 @@ bootstrap
 			pending = null;
 			shop = undefined;
 			timedOut = false;
+			timedOutRequest = "";
 			error = null;
 			for ( const r of b.refItemSnapshot ?? [] ) {
 				const tooltip = itemTooltipReference( r.nativeFields, r.descriptionSymbol );
@@ -996,7 +1041,8 @@ cosTransferred
 			p: Uint8Array,
 			caps: ReadonlyMap<number, number>
 		) {
-			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			// Set aside like receive: the resynchronizing bootstrap rebuilds it.
+			if ( timedOut ) return record;
 			if ( p.length !== 8 || p[0] !== 1 || (p[1] !== 0x1a && p[1] !== 0x1b) ) {
 				throw Error( "Invalid COS transfer result" );
 			}
@@ -1044,15 +1090,35 @@ cosGround
 		},
 		/*
 ================
+cosPickupShown
+
+A pet's pickup that the party's item share hands to another member is
+answered to that member alone: 525DC0 rewrites the record to a type-6
+pickup addressed to the recipient (+0x28/+0x2C), so the owner sees only the
+pet's 0x35C7 scoop. The pet's own grant answers before its scoop in the same
+burst, so a scoop that finds the request still pending ends it.
+================
+		*/
+		cosPickupShown( gid: number ) {
+			if ( pending?.opcode === 0xb06d && pending.movementType === 0x11 && pending.cosGid === gid ) {
+				pending = null;
+				error = null;
+			}
+		},
+		/*
+================
 cosGrounded
 ================
 		*/
 		cosGrounded( p: Uint8Array ) {
 			const gid = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
-			if (
-				!pending || pending.cosGid !== gid || pending.movementType !== p[1] ||
-				p[1] === 0x12 && pending.source !== p[6]
-			) throw Error( "Unmatched COS ground result" );
+			const matched = !!pending && pending.cosGid === gid && pending.movementType === p[1] &&
+				(p[1] !== 0x12 || pending.source === p[6]);
+			// A pet's pickup holds no lock in the original client: a receipt
+			// whose request another scoop already ended (cosPickupShown) still
+			// applies to the pet's bag. A drop answers only its own request.
+			if ( !matched && p[1] === 0x11 ) return;
+			if ( !matched ) throw Error( "Unmatched COS ground result" );
 			pending = null;
 			error = null;
 		},
@@ -1123,7 +1189,7 @@ move
 ================
 		*/
 		move( source: number, destination: number, quantity: number, now = 0 ) {
-			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			if ( timedOut ) throw Error( timeoutMessage() );
 			slot( source );
 			slot( destination );
 			if (
@@ -1151,7 +1217,7 @@ drop
 ================
 		*/
 		drop( n: number, now = 0 ) {
-			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			if ( timedOut ) throw Error( timeoutMessage() );
 			const item = slots.get( slot( n ) );
 			if ( busy() || !item || n < (equipmentSlotCount ?? 13) ) throw Error( "Item drop unavailable" );
 			const frame = { opcode: 0x706d, payload: Uint8Array.of( 7, n ) };
@@ -1166,7 +1232,7 @@ dropGold
 ================
 		*/
 		dropGold( amount: number, now = 0 ) {
-			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			if ( timedOut ) throw Error( timeoutMessage() );
 			if ( busy() || !Number.isInteger( amount ) || amount < 1 || amount > 100000000 ) {
 				throw Error( "Gold drop unavailable" );
 			}
@@ -1300,7 +1366,7 @@ use
 ================
 		*/
 		use( n: number, now = 0, context?: CosItemUseContext, message?: string ) {
-			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			if ( timedOut ) throw Error( timeoutMessage() );
 			const item = slots.get( slot( n ) );
 			if ( !item || busy() ) {
 				throw new Error( "Item use unavailable" );
@@ -1347,7 +1413,11 @@ receive
 			now = 0,
 			recovery?: { country: number | undefined; abnormal: number; unlimitedItems?: readonly number[]; }
 		) {
-			if ( timedOut ) throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+			// After a timeout the inventory waits for the bootstrap that
+			// resynchronizes it. Frames before it (a resumed transport replays
+			// what it queued while detached, ahead of EnterWorld) are set aside,
+			// never applied: a late answer could settle the wrong request.
+			if ( timedOut ) return false;
 			// 766E30: owner timed job (2, 4) restores the soldier-scroll lane.
 			// A successful receipt alone does not create this category timer.
 			if ( op === 0x3792 && p[0] === 2 && p[1] === 4 ) {
@@ -1361,6 +1431,18 @@ receive
 					} ];
 					published = null;
 				}
+				return true;
+			}
+			if ( op === STORAGE_CAPACITY_OPCODE ) {
+				// A bag only grows: the slots the player holds stay addressable.
+				const capacity = p[1]!;
+				if (
+					p.length !== 2 || p[0] !== STORAGE_CAPACITY_INVENTORY || inventorySlotCount === undefined ||
+					capacity < inventorySlotCount || capacity > MAX_INVENTORY_SLOT_COUNT
+				) {
+					throw Error( "Invalid inventory capacity" );
+				}
+				inventorySlotCount = capacity;
 				return true;
 			}
 			if ( op === MALL_BALANCE_CONTROL ) {
@@ -1919,8 +2001,9 @@ step
 			// Native replies have no transaction ID. After timeout a late response
 			// could acknowledge a new request, so reconnect instead of reopening it.
 			if ( timedOut || pending && now >= pending.deadline ) {
+				if ( !timedOut && pending ) timedOutRequest = describeRequest( pending );
 				timedOut = true;
-				throw Error( "Inventory transaction timed out; reconnect to resynchronize" );
+				throw Error( timeoutMessage() );
 			}
 			return unlocked || expired || rentalUpdates.length > 0;
 		},
@@ -1985,6 +2068,7 @@ clear
 			mallDelivery = null;
 			shop = undefined;
 			timedOut = false;
+			timedOutRequest = "";
 			objRefs.clear();
 			names.clear();
 			icons.clear();

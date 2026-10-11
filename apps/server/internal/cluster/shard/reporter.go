@@ -43,6 +43,10 @@ type Reporter struct {
 	instanceID string
 	mu         sync.Mutex
 	sequence   uint64
+	admitting  bool
+	// kick asks Run for one heartbeat now (MarkAdmitting), so the title
+	// learns of admission without a second, racing publisher.
+	kick chan struct{}
 }
 
 func NewReporter(
@@ -75,18 +79,42 @@ func NewReporter(
 		HTTPClient:   &http.Client{Timeout: 5 * time.Second},
 		Interval:     DefaultHeartbeatInterval,
 		instanceID:   hex.EncodeToString(instanceBytes),
+		kick:         make(chan struct{}, 1),
 	}, nil
+}
+
+/*
+================
+MarkAdmitting
+
+Called once GameWorld readiness opens: every later heartbeat says
+PhaseAdmitting for the rest of this process, and Run publishes one now.
+================
+*/
+func (reporter *Reporter) MarkAdmitting() {
+	reporter.mu.Lock()
+	reporter.admitting = true
+	reporter.mu.Unlock()
+	select {
+	case reporter.kick <- struct{}{}:
+	default:
+	}
 }
 
 // Publish sends one heartbeat. It is also the startup lease acquisition.
 func (reporter *Reporter) Publish(ctx context.Context) error {
 	reporter.mu.Lock()
 	reporter.sequence++
+	phase := PhaseStarting
+	if reporter.admitting {
+		phase = PhaseAdmitting
+	}
 	heartbeat := Heartbeat{
 		ShardID:       reporter.ShardID,
 		InstanceID:    reporter.instanceID,
 		Sequence:      reporter.sequence,
 		OnlinePlayers: reporter.Population(),
+		Phase:         phase,
 	}
 	reporter.mu.Unlock()
 
@@ -294,6 +322,11 @@ func (reporter *Reporter) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-reporter.kick:
+			// A missed admission kick only waits for the next tick.
+			if err := reporter.Publish(ctx); err == nil {
+				failures = 0
+			}
 		case <-ticker.C:
 			if err := reporter.Publish(ctx); err != nil {
 				failures++

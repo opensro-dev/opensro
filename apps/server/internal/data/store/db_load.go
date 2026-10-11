@@ -69,6 +69,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, fmt.Errorf("validating fortress production: %w", err)
 		}
 	}
+	if currentLayout >= 9 {
+		if err := validateUniqueKills(db); err != nil {
+			return nil, fmt.Errorf("validating unique kills: %w", err)
+		}
+	}
 	out := &loadedDB{
 		characters:   map[string][]*domain.Character{},
 		deleted:      map[string][]json.RawMessage{},

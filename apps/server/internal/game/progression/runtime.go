@@ -24,6 +24,8 @@ atomic against any other lane touching the same record.
 package progression
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
@@ -64,6 +66,9 @@ const (
 	// the European 2-levels-per-character-level multiplier. It never
 	// binds below level 120; the live low-level bound is 2 x level.
 	TotalMasteryCapEuropeCeiling int64 = 240
+	// TotalMasteryEuropePerLevel is the European allowance per character
+	// level, clamped to TotalMasteryCapEuropeCeiling.
+	TotalMasteryEuropePerLevel int64 = 2
 )
 
 /*
@@ -82,11 +87,31 @@ func totalMasteryCap(c *enterworld.Character) int64 {
 	if enterworld.NativeCountryByte9C(c) == 0 {
 		return TotalMasteryCapChina
 	}
-	allowance := 2 * characterLevel(c)
+	allowance := TotalMasteryEuropePerLevel * characterLevel(c)
 	if allowance > TotalMasteryCapEuropeCeiling {
 		allowance = TotalMasteryCapEuropeCeiling
 	}
 	return allowance
+}
+
+/*
+==================
+MasteryLevelUpCost
+
+The SP to train a mastery from current to current+1: free from 0 (the
+first level is learned with the mastery), else the level table's cost of
+current. False when the table has no row for it, which refuses training.
+The website's catalogue reads the same rule.
+==================
+*/
+func MasteryLevelUpCost(levels enterworld.LevelDataSource, current int64) (int64, bool) {
+	if current == 0 {
+		return 0, true
+	}
+	if levels == nil {
+		return 0, false
+	}
+	return levels.SkillPointCost(current)
 }
 
 /*
@@ -141,6 +166,9 @@ type Runtime struct {
 	BaseStats          func(*enterworld.Character) (wire.BaseStats, error)
 	RecoverLevelVitals func(*enterworld.Character) error
 	Withdrawal         WithdrawalHooks
+	// NowMs stamps the milestone levels a character reaches for the
+	// community site (Character.RecordLevelReached); nil reads the wall clock.
+	NowMs func() int64
 	// Growth is the closed-beta rate switch (growth.go); zero is native.
 	Growth GrowthRates
 	// MasteryTotalOverride is the beta budget; zero keeps native race rules.
@@ -530,17 +558,14 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 			return false
 		}
 
-		cost := int64(0)
+		// A priced level answers SkillPoints from here on; training from 0
+		// is free and keeps the earlier refusal.
 		if current > 0 {
 			refusal = wire.ErrCodeMasterySkillPoints
-			if rt.deps.LevelData() == nil {
-				return false
-			}
-			var priced bool
-			cost, priced = rt.deps.LevelData().SkillPointCost(current)
-			if !priced {
-				return false
-			}
+		}
+		cost, priced := MasteryLevelUpCost(rt.deps.LevelData(), current)
+		if !priced {
+			return false
 		}
 		available := coercePoints(character.SkillPoints)
 		if available < cost {
@@ -880,4 +905,18 @@ func clampSkillPoints(value int64) int64 {
 		return 0x7fffffff
 	}
 	return value
+}
+
+/*
+================
+nowMs
+
+The runtime's clock in Unix milliseconds.
+================
+*/
+func (rt *Runtime) nowMs() int64 {
+	if rt.NowMs != nil {
+		return rt.NowMs()
+	}
+	return time.Now().UnixMilli()
 }

@@ -11,6 +11,7 @@ session's release outdated, which the page shows as the update notice.
 ===========================================================================
 */
 import { readBytes } from "@/engine/foundation/assets/read-bytes";
+import { decodeReverseMapPoints } from "@/engine/foundation/gameplay/reverse-return-map";
 import {
 	RELEASE_OUTDATED_STATUS,
 	REFERENCES_CONTRACT,
@@ -32,7 +33,7 @@ const BROWSER_AUTH_ROUTES = new Set( [
 	"/auth/enterworld-token"
 ] );
 
-type SessionResponse = { httpOk: boolean; body: unknown; };
+type SessionResponse = { httpOk: boolean; status: number; body: unknown; };
 
 type RequestOptions = {
 	base: string;
@@ -76,10 +77,17 @@ export function createSessionHttp() {
 		if ( response.status === RELEASE_OUTDATED_STATUS ) outdated = true;
 		if ( !response.body ) throw new Error( "Session response has no body" );
 		const bytes = await readBytes( response.body, limit );
-		return {
-			httpOk: response.ok,
-			body: JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) ) as unknown
-		};
+		const text = new TextDecoder( "utf-8", { fatal: true } ).decode( bytes );
+		// A refusal can be plain text (the Agent proxy's "shard unavailable"
+		// 503); its status still tells the session what happened. An accepted
+		// answer must be JSON.
+		let parsed: unknown = null;
+		try {
+			parsed = JSON.parse( text ) as unknown;
+		} catch ( error ) {
+			if ( response.ok ) throw error;
+		}
+		return { httpOk: response.ok, status: response.status, body: parsed };
 	}
 
 	return {
@@ -158,6 +166,7 @@ async function loadWorldReferences(
 	refItemSnapshot: unknown[];
 	refObjSnapshot: unknown[];
 	itemCommandReferences?: unknown[];
+	reverseMapPoints?: unknown[];
 }> {
 	const ref = value as { path?: unknown; sha256?: unknown; bytes?: unknown; };
 	if (
@@ -189,12 +198,15 @@ async function loadWorldReferences(
 		refItemSnapshot?: unknown;
 		refObjSnapshot?: unknown;
 		itemCommandReferences?: unknown;
+		// Port-only: present only when the server's SRO_REVERSE_RETURN_MAP is on.
+		reverseMapPoints?: unknown;
 	};
 	if (
 		!parsed ||
 		Object.keys( parsed ).some( key =>
 			key !== "referencesVersion" && key !== "skillLifecycleVersion" && key !== "refSkillSnapshot" &&
-			key !== "refItemSnapshot" && key !== "refObjSnapshot" && key !== "itemCommandReferences"
+			key !== "refItemSnapshot" && key !== "refObjSnapshot" && key !== "itemCommandReferences" &&
+			key !== "reverseMapPoints"
 		) ||
 		!Array.isArray( parsed.refSkillSnapshot ) || parsed.refSkillSnapshot.length > REFERENCE_ROWS_LIMIT
 	) throw Error( "Invalid world references" );
@@ -216,12 +228,14 @@ async function loadWorldReferences(
 		parsed.itemCommandReferences !== undefined &&
 		(!Array.isArray( parsed.itemCommandReferences ) || parsed.itemCommandReferences.length > REFERENCE_ROWS_LIMIT)
 	) throw Error( "Invalid item command references" );
+	const reverseMapPoints = decodeReverseMapPoints( parsed.reverseMapPoints );
 	return {
 		refSkillSnapshot: parsed.refSkillSnapshot,
 		refItemSnapshot: parsed.refItemSnapshot,
 		refObjSnapshot: parsed.refObjSnapshot,
 		...(parsed.itemCommandReferences === undefined ?
 			{} :
-			{ itemCommandReferences: parsed.itemCommandReferences as unknown[] })
+			{ itemCommandReferences: parsed.itemCommandReferences as unknown[] }),
+		...(reverseMapPoints.length ? { reverseMapPoints: [ ...reverseMapPoints ] } : {})
 	};
 }

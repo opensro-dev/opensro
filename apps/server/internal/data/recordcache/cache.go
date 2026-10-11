@@ -1,4 +1,17 @@
-// Package recordcache owns immutable process-local catalogue backing files.
+/*
+===========================================================================
+
+cache.go - immutable process-local catalogue backing files
+
+A Cache keeps verified catalogue records in an anonymous temp file and
+only a bounded LRU of decoded rows in memory. The file belongs to the
+process alone: on Linux it is unlinked the moment it is created, so the
+kernel frees it when the process ends, however it ends. Production once
+kept every GameWorld start's files in /tmp (200-420 MB each) because only
+Close removed them, and a killed or restarted process never closes.
+
+===========================================================================
+*/
 package recordcache
 
 import (
@@ -19,8 +32,11 @@ type entry[T any] struct {
 	value T
 }
 type Cache[T any] struct {
-	mu    sync.Mutex
-	file  *os.File
+	mu   sync.Mutex
+	file *os.File
+	// name is the backing file's path while it still has one: only where
+	// the OS refuses to unlink an open file (Windows). Close removes it.
+	name  string
 	next  int64
 	limit int
 	index map[uint32]location
@@ -36,7 +52,13 @@ func New[T any](capacity int) (*Cache[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Cache[T]{file: f, limit: capacity, index: make(map[uint32]location), pages: make(map[uint32]*list.Element)}, nil
+	c := &Cache[T]{file: f, limit: capacity, index: make(map[uint32]location), pages: make(map[uint32]*list.Element)}
+	// The open descriptor keeps the bytes after the unlink. Windows refuses
+	// to remove an open file; there the name stays until Close.
+	if os.Remove(f.Name()) != nil {
+		c.name = f.Name()
+	}
+	return c, nil
 }
 
 // Put runs only before publication. Verify semantic round trips before dropping
@@ -113,8 +135,11 @@ func (c *Cache[T]) Close() error {
 	c.pages = nil
 	c.lru.Init()
 	err := f.Close()
-	if removeErr := os.Remove(f.Name()); err == nil {
-		err = removeErr
+	if c.name != "" {
+		if removeErr := os.Remove(c.name); err == nil {
+			err = removeErr
+		}
+		c.name = ""
 	}
 	return err
 }

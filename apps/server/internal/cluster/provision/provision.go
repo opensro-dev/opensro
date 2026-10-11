@@ -79,10 +79,21 @@ func EnsureIdentity(stateDir string) (FileResult, error) {
 // provisioning API: 32 random bytes, hex encoded. An existing token is
 // validated and preserved, since the website holds a copy of it.
 func EnsureProvisioningToken(stateDir string) (FileResult, error) {
-	path := filepath.Join(stateDir, auth.AgentProvisioningTokenFile)
+	return ensureBearerToken(filepath.Join(stateDir, auth.AgentProvisioningTokenFile), "provisioning token")
+}
+
+// EnsurePublicAPIToken creates the GameWorld public API's privacy-write
+// token the same way; the website holds a copy of it too.
+func EnsurePublicAPIToken(stateDir string) (FileResult, error) {
+	return ensureBearerToken(filepath.Join(stateDir, auth.PublicAPITokenFile), "public API token")
+}
+
+// ensureBearerToken creates a 32-byte hex token at path, or validates and
+// preserves the one already there.
+func ensureBearerToken(path, label string) (FileResult, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if !info.Mode().IsRegular() {
-			return FileResult{}, fmt.Errorf("existing provisioning token is not a regular file")
+			return FileResult{}, fmt.Errorf("existing %s is not a regular file", label)
 		}
 		payload, err := os.ReadFile(path)
 		if err != nil {
@@ -90,12 +101,13 @@ func EnsureProvisioningToken(stateDir string) (FileResult, error) {
 		}
 		if len(strings.TrimSpace(string(payload))) < auth.MinProvisioningTokenBytes {
 			return FileResult{}, fmt.Errorf(
-				"existing provisioning token is shorter than %d bytes",
+				"existing %s is shorter than %d bytes",
+				label,
 				auth.MinProvisioningTokenBytes,
 			)
 		}
 		if err := privatepath.ProtectFile(path); err != nil {
-			return FileResult{}, fmt.Errorf("protect existing provisioning token: %w", err)
+			return FileResult{}, fmt.Errorf("protect existing %s: %w", label, err)
 		}
 		return FileResult{Path: path}, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -109,7 +121,7 @@ func EnsureProvisioningToken(stateDir string) (FileResult, error) {
 		return FileResult{}, err
 	}
 	if err := privatepath.ProtectFile(path); err != nil {
-		return FileResult{}, fmt.Errorf("protect provisioning token: %w", err)
+		return FileResult{}, fmt.Errorf("protect %s: %w", label, err)
 	}
 	return FileResult{Path: path, Created: true}, nil
 }

@@ -60,13 +60,22 @@ const (
 // the client knows (row 0x27, SN_TALK_CH_GACHA_MACHINE_2) is the binding.
 var npcGachaMachines = map[string]bool{"NPC_CH_GACHA_MACHINE": true}
 
+// npcTownSpecialTraders are v1.150's first specialty traders: npcpos spawns
+// them in Jangan, Donwhang and Hotan and refshopgroup binds each to its
+// GROUP_STORE_<town>_SPECIAL of trade goods. INFERENCE: the v1.188 4C6350
+// chains no longer name them (the later trade rework moved the trade to the
+// SPECIAL2 traders), so the v1.150 server, whose data still sells goods
+// through them, classified them as special traders like their successors.
+// Exact names: a substring would also catch the SPECIAL2 rows.
+var npcTownSpecialTraders = map[string]bool{"NPC_CH_SPECIAL": true, "NPC_WC_SPECIAL": true, "NPC_KT_SPECIAL": true}
+
 /*
 ================
 ResolveNpcServices
 
 The service set of a roster row: 4C6350's codename chains, the shop a
-refshopgroup association grants, the talk row of npcchat speech and the
-Magic POP binding. INFERENCE: v1.188 registers option 2 nowhere in 4C6350;
+refshopgroup association grants, the talk row of npcchat speech, the
+Magic POP binding and v1.150's town specialty traders. INFERENCE: v1.188 registers option 2 nowhere in 4C6350;
 the quest and Lua plane adds conversation, which npcchat speech stands for.
 ================
 */
@@ -80,6 +89,9 @@ func ResolveNpcServices(npc NpcDef) NpcServices {
 	}
 	if npcGachaMachines[npc.Codename] {
 		services = services.With(NpcServiceGachaMachine)
+	}
+	if npcTownSpecialTraders[npc.Codename] {
+		services = services.With(NpcServiceSpecialTrade)
 	}
 	return services
 }

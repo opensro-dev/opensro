@@ -18,6 +18,10 @@ let selectedName = "";
 let inspectedInput = "";
 let enabled = false, mutating = false, inspecting = false, inspection = 0;
 const MIN_REASON_LENGTH = 5, MAX_REASON_LENGTH = 500;
+// One grant's bounds (the server enforces the same: action.MaxSilkGrant).
+const MIN_SILK_GRANT = 1, MAX_SILK_GRANT = 1000000;
+// The silk grant reviewed in the page, armed until any input changes.
+let silkReview = null;
 const townNames = {
 	GATE_CH: "Jangan",
 	GATE_KT: "Hotan",
@@ -37,7 +41,7 @@ function syncControls() {
 	byID( "inspect-button" ).disabled = !enabled || mutating || inspecting;
 	byID( "shard" ).disabled = mutating;
 	byID( "character" ).disabled = mutating;
-	for ( const form of [ "rescue", "clear-pk", "reset-stats" ] ) {
+	for ( const form of [ "rescue", "clear-pk", "reset-stats", "grant-silk" ] ) {
 		for ( const control of byID( form ).elements ) control.disabled = !enabled || mutating || !snapshot;
 	}
 	byID( "clear-pk-button" ).disabled ||= !snapshot?.player || !("pk" in snapshot.player);
@@ -56,6 +60,7 @@ function invalidateSelection() {
 	snapshot = null;
 	selectedName = selectedShard = "";
 	inspectedInput = "";
+	disarmSilkReview();
 	byID( "result" ).hidden = true;
 	for (
 		const id of [ "confirmation", "pk-confirmation", "stats-confirmation", "reason", "pk-reason", "stats-reason" ]
@@ -187,8 +192,8 @@ mutatePlayer
 async function mutatePlayer( event, action ) {
 	event.preventDefault();
 	if ( !enabled || mutating || inspecting ) return;
-	const clearPK = action === "clear-pk", resetStats = action === "reset-stats";
-	const prefix = clearPK ? "pk-" : resetStats ? "stats-" : "";
+	const clearPK = action === "clear-pk", resetStats = action === "reset-stats", grantSilk = action === "grant-silk";
+	const prefix = clearPK ? "pk-" : resetStats ? "stats-" : grantSilk ? "silk-" : "";
 	if ( !snapshot || byID( "shard" ).value !== selectedShard || byID( "character" ).value.trim() !== inspectedInput ) {
 		invalidateSelection();
 		return;
@@ -210,12 +215,36 @@ async function mutatePlayer( event, action ) {
 		status.textContent = "Stats are unavailable. This shard must support stat inspection before resetting them.";
 		return;
 	}
+	let silk = 0;
+	if ( grantSilk ) {
+		const text = byID( "silk-amount" ).value.trim();
+		silk = Number( text );
+		if ( !/^[0-9]+$/.test( text ) || silk < MIN_SILK_GRANT || silk > MAX_SILK_GRANT ) {
+			status.textContent = "Enter a whole silk amount from 1 to 1,000,000.";
+			return;
+		}
+		// The in-page confirmation: the first submit shows exactly what will
+		// be granted; only a second submit of the same review sends it.
+		const review = `${selectedShard}:${selectedName}:${silk}:${reason}`;
+		if ( silkReview !== review ) {
+			silkReview = review;
+			byID( "silk-review" ).hidden = false;
+			byID( "silk-review" ).textContent =
+				`Grant ${silk.toLocaleString()} silk to ${selectedName} on ${selectedShard}?`;
+			byID( "grant-silk-button" ).textContent = "Confirm silk grant";
+			status.textContent = "Review the silk grant, then confirm.";
+			return;
+		}
+		disarmSilkReview();
+	}
 	const originalPK = pkSummary( snapshot.player ), originalStats = statSummary( snapshot.player );
 	const characterID = snapshot.player.id, current = inspection;
 	mutating = true;
 	syncControls();
 	const character = selectedName, shard = selectedShard;
-	status.textContent = clearPK ?
+	status.textContent = grantSilk ?
+		"Granting silk..." :
+		clearPK ?
 		"Closing this player's session and clearing active PK..." :
 		resetStats ?
 		"Closing this player's session and resetting STR and INT..." :
@@ -227,7 +256,11 @@ async function mutatePlayer( event, action ) {
 			body: JSON.stringify( {
 				id: crypto.randomUUID(),
 				character,
-				...(clearPK || resetStats ? { action } : { town: Number( byID( "town" ).value ) }),
+				...(grantSilk ?
+					{ action, silk } :
+					clearPK || resetStats ?
+					{ action } :
+					{ town: Number( byID( "town" ).value ) }),
 				reason
 			} )
 		} );
@@ -236,7 +269,11 @@ async function mutatePlayer( event, action ) {
 			throw Error( "Operation returned a different character" );
 		}
 		showPlayer( result, shard );
-		status.textContent = clearPK ?
+		status.textContent = grantSilk ?
+			`${character} received ${silk.toLocaleString()} silk on ${shard}. Their wallet now holds ${
+				Number( result.silkBalance ).toLocaleString()
+			} silk.` :
+			clearPK ?
 			`${character} active PK cleared on ${shard}. Before: ${originalPK}. After: ${
 				pkSummary( result.player )
 			}. Daily and total kill history are retained. Ask the player to log in again.` :
@@ -253,6 +290,18 @@ async function mutatePlayer( event, action ) {
 		mutating = false;
 		syncControls();
 	}
+}
+/*
+================
+disarmSilkReview
+
+Any change to the grant retires a shown review; the next submit reviews again.
+================
+*/
+function disarmSilkReview() {
+	silkReview = null;
+	byID( "silk-review" ).hidden = true;
+	byID( "grant-silk-button" ).textContent = "Review silk grant";
 }
 /*
 ================
@@ -297,6 +346,8 @@ byID( "inspect" ).addEventListener( "submit", inspectPlayer );
 byID( "rescue" ).addEventListener( "submit", event => void mutatePlayer( event, "rescue" ) );
 byID( "clear-pk" ).addEventListener( "submit", event => void mutatePlayer( event, "clear-pk" ) );
 byID( "reset-stats" ).addEventListener( "submit", event => void mutatePlayer( event, "reset-stats" ) );
+byID( "grant-silk" ).addEventListener( "submit", event => void mutatePlayer( event, "grant-silk" ) );
+byID( "grant-silk" ).addEventListener( "input", disarmSilkReview );
 byID( "shard" ).addEventListener( "change", invalidateSelection );
 byID( "character" ).addEventListener( "input", invalidateSelection );
 byID( "download" ).addEventListener( "click", downloadSnapshot );

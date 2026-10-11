@@ -14,6 +14,7 @@ open-ended set of locks.
 package action
 
 import (
+	"sort"
 	"sync"
 
 	"opensro.online/server/internal/game/world/simulation"
@@ -110,4 +111,35 @@ func (rt *Runtime) LockPublication(divisionID string) func() {
 	lane := rt.operations.lane(divisionID, &rt.maintenance)
 	lane.publication.Lock()
 	return lane.releasePublication
+}
+
+/*
+================
+lockTickPublication
+
+Takes every known division's publication gate, in division order, for a
+span of tick work that commits and then captures private frames
+(sealTickPrivate). Request handlers and entry bootstraps hold one gate at a
+time, so the fixed order cannot deadlock against them. A lane created after
+this snapshot belongs to a division whose first world entry is still in
+progress, so no character of it has tick work yet.
+================
+*/
+func (rt *Runtime) lockTickPublication() func() {
+	rt.operations.mu.Lock()
+	ids := make([]string, 0, len(rt.operations.division))
+	for id := range rt.operations.division {
+		ids = append(ids, id)
+	}
+	rt.operations.mu.Unlock()
+	sort.Strings(ids)
+	releases := make([]func(), 0, len(ids))
+	for _, id := range ids {
+		releases = append(releases, rt.LockPublication(id))
+	}
+	return func() {
+		for i := len(releases) - 1; i >= 0; i-- {
+			releases[i]()
+		}
+	}
 }

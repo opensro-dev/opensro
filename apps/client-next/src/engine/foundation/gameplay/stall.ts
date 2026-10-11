@@ -40,9 +40,6 @@ export const STALL_NETWORK_PAGE_ROWS = 15;
 // CGInterface_ShowSystemNotification categories of the stall refusals.
 export const STALL_NOTICE_CATEGORY = 0x0a;
 const STALL_NETWORK_SUPPLIER_CATEGORY = 0x1b;
-// 695420 case 9: partyActiveJob's class without a job suit (856920 +4F5);
-// any other refuses 0x0A/0x3B, an open alchemy window 0x12/0x16.
-export const STALL_NO_JOB_CLASS = 4;
 export const STALL_JOB_SUIT_CODE = 0x3b;
 export const STALL_ALCHEMY_CATEGORY = 0x12;
 export const STALL_ALCHEMY_CODE = 0x16;

@@ -53,6 +53,9 @@ type Runtime struct {
 	// quest-reward authority transaction. It opens no door itself, allowing
 	// quest completion, gold, and experience to commit atomically.
 	ApplyExperience func(character *enterworld.Character, expDelta, skillExpDelta int64, sourceGid uint32) ([]wire.Frame, bool)
+	// InstantInventoryExpansion presents quest bag slots at the turn-in
+	// (port-only, not native; instant_expansion.go).
+	InstantInventoryExpansion bool
 }
 
 /*
@@ -719,6 +722,7 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 	}
 	var refusal error
 	var goldFrame *wire.Frame
+	var capacityFrame *wire.Frame
 	var experienceFrames []wire.Frame
 	var inventoryFrames []wire.Frame
 	var objectiveFrames []wire.Frame
@@ -858,7 +862,12 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 		// Slots follow the items and gold, as 924CF0 pays them. A grant past
 		// the capacity limit is refused and the quest still completes: 4E19D0's
 		// refusal is ignored by its caller.
-		character.GrantInventoryExpansion(def.RewardInventorySlots)
+		if character.GrantInventoryExpansion(def.RewardInventorySlots) && rt.InstantInventoryExpansion {
+			// Port-only: the slots are usable now, not at the next entry.
+			character.PresentInventoryExpansion()
+			capacity := storageCapacityFrame(character.InventoryCapacity())
+			capacityFrame = &capacity
+		}
 		return true
 	})
 	if refusal != nil {
@@ -881,6 +890,9 @@ func (rt *Runtime) completeRewardChoice(character *enterworld.Character, def *De
 	}
 	if goldFrame != nil {
 		frames = append(frames, *goldFrame)
+	}
+	if capacityFrame != nil {
+		frames = append(frames, *capacityFrame)
 	}
 	frames = append(inventoryFrames, frames...)
 	frames = append(frames, objectiveFrames...)

@@ -10,6 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { defined } from "../helpers/defined.mjs";
 const { emptySocial, socialPacket, socialRequest } = await import( "../../src/engine/foundation/gameplay/social.ts" );
+const { guildSelf } = await import( "../../src/engine/foundation/gameplay/social-roster.ts" );
 const { packWarPeriod, advanceGuildWarClock, WAR_UNLIMITED } = await import(
 	"../../src/engine/foundation/gameplay/guild-war.ts"
 );
@@ -174,9 +175,21 @@ test("money input uses carried gold and losing master status retires the modal",
 	hud.type( "war-money", "1200", 900 );
 	hud.command( "war-money-ok", social );
 	assert.equal( hud.state().draft.stake, 900 );
-	hud.reconcile( { ...social, self: 20 } );
+	// The mastership passes on: the local member's grade is no longer 0.
+	hud.reconcile( { ...social, guild: { ...social.guild, members: [ { ...social.guild.members[0], grade: 1 } ] } } );
 	assert.equal( hud.state().mode, "closed" );
 	assert.equal( hud.state().money, null );
+});
+
+test("a guild master outside any party is still the master", () => {
+	// social.self is the PARTY id (0 outside a party); the guild finds the
+	// local player by name, or a lone master could manage nothing.
+	const social = { ...masterState(), self: 0 }, hud = createGuildWarHud();
+	assert.equal( guildSelf( social )?.name, "Alice" );
+	hud.command( "war-declare", social );
+	hud.reconcile( social );
+	assert.notEqual( hud.state().mode, "closed" );
+	assert.equal( guildSelf( { ...social, localName: "Bob" } ), undefined );
 });
 
 test("contribution headers use native fixed ordering and dense ranks", () => {

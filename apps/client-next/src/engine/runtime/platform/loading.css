@@ -199,32 +199,39 @@ body,
 }
 
 /*
-FPS chip for index.html. The collapsed toggle stays out of the way in the top
-right corner; expanding it reveals the frame owner's published sample. Above
-the boot overlay so start-up frames remain measurable.
+Port-only report/telemetry tools for index.html. The platform follows the HUD's
+reserved row beside the map. Compact translucent controls brighten on hover
+or focus; only their own hit targets intercept the game. Above the boot
+overlay so startup frames remain measurable.
 */
 
 .sro-fps-chip {
+	--hud-tools-height: 18px;
 	position: fixed;
 	z-index: 1001;
 	top: 8px;
 	right: 8px;
 	display: flex;
 	flex-direction: row;
-	align-items: flex-start;
+	align-items: center;
+	max-width: calc(100vw - var(--telemetry-right, 8px) - 8px);
 	gap: 4px;
+	pointer-events: none;
 	color: #d7e8ed;
 	font: 10px/1.35 ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
 .sro-fps-chip__toggle {
-	width: 18px;
-	height: 18px;
+	flex-shrink: 0;
+	width: var(--hud-tools-height);
+	height: var(--hud-tools-height);
 	padding: 0;
 	border: 1px solid rgba(202, 165, 82, 0.38);
 	border-radius: 3px;
 	background: rgba(6, 10, 14, 0.62);
 	color: #cba85e;
+	pointer-events: auto;
+	cursor: pointer;
 	font: inherit;
 	font-weight: 700;
 	line-height: 16px;
@@ -241,10 +248,15 @@ the boot overlay so start-up frames remain measurable.
 	opacity: 1;
 }
 
+.sro-fps-chip__toggle:focus-visible {
+	outline: 2px solid #f0dca8;
+	outline-offset: 2px;
+}
+
 .sro-fps-chip__readout {
 	position: absolute;
 	right: 0;
-	top: 22px;
+	top: calc(100% + 4px);
 	min-width: 116px;
 	padding: 5px 7px;
 	border: 1px solid rgba(202, 165, 82, 0.28);
@@ -252,6 +264,7 @@ the boot overlay so start-up frames remain measurable.
 	background: rgba(6, 10, 14, 0.78);
 	text-align: right;
 	white-space: pre-line;
+	pointer-events: auto;
 }
 
 /* One transfer readout accompanies boot and the native scene artwork. */
@@ -508,7 +521,7 @@ occupies its own full-width row below it instead of shrinking beside it.
 .sro-developer-readout {
 	width: max-content;
 	max-width: min(280px, calc(100vw - var(--telemetry-right, 8px) - 8px));
-	max-height: min(480px, calc(100vh - var(--telemetry-top, 8px) - 32px));
+	max-height: min(480px, calc(100vh - var(--telemetry-top, 8px) - var(--hud-tools-height) - 12px));
 	overflow: auto;
 	box-sizing: border-box;
 	text-align: left;

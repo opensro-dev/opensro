@@ -76,7 +76,7 @@ func TestMemberUpdatesRepublishWhenAMasteryChanges(t *testing.T) {
 		t.Fatal(refusal)
 	}
 	world := simulation.DefaultWorldState(simulation.ChinaStartProfile())
-	sessions := []simulation.SessionSnapshot{
+	sessions := []simulation.SessionView{
 		{DivisionID: testDivision, CharacterID: 1, World: world, WorldInstance: domain.DefaultWorldInstance},
 		{DivisionID: testDivision, CharacterID: 2, World: world, WorldInstance: domain.DefaultWorldInstance},
 	}

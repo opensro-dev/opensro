@@ -86,6 +86,32 @@
       "guildGrantName": "Vanguard",
       "crestParamA": 7,
       "payloadHex": "7307000004000000000000cc860100a8610000cb440000a04100c0ce44002000000000200000000000a041000048420000c8420005005065657243000000000000000008004e696e6553756e7303000000080056616e67756172640700000000000000000000000000ff01"
+    },
+    {
+      "name": "job-suit-peer",
+      "characterName": "ty4_goods",
+      "modelRefObjId": 1907,
+      "modelTidWord": 38,
+      "countryByte9c": 0,
+      "sexSelector1ac": 0,
+      "bodyShapeByte": 4,
+      "gid": 100045,
+      "regionId": 25000,
+      "x": 1628,
+      "y": 20,
+      "z": 1656,
+      "heading": 0,
+      "equipment": [
+        {
+          "refObjId": 2163,
+          "typeFlags": 5036,
+          "optLevel": 0,
+          "codename": "ITEM_CH_M_TRADE_THIEF_02"
+        }
+      ],
+      "jobType": 2,
+      "jobGrade": 1,
+      "payloadHex": "73070000040000017308000000000000cd860100a8610080cb440000a0410000cf44000000000000000000000000a041000048420000c8420009007479345f676f6f64730201000000000000000000ff01"
     }
   ]
 }

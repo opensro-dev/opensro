@@ -48,9 +48,17 @@ FAMILY_TABLES = {2: "Recover", 3: "Cure", 4: "Ammo", 5: "Ammo", 6: "Scroll", 7: 
 # The potion a potion tablet manufactures (process.go's potion product).
 POTION_PRODUCT_TYPE = [3, 3, 13, 1]
 # Client TypeID3/TypeID4 of each ordinary consumable family; the committed
-# vSRO projection held exactly these pairs.
+# vSRO projection held exactly these pairs. Inference (#704): the Luck and
+# Steady stones (11/7) are magic stones that carry no assimilation value;
+# vSRO assigns them live weight (300 per degree) but no class table of
+# their own, so they join the magic-stone family (Alchemy_MagicStone) at
+# their degree. Without it they were never placed and never dropped.
 FAMILY_BY_TYPE = {(1, 1): 2, (1, 2): 2, (1, 3): 2, (2, 6): 3, (3, 1): 6, (4, 1): 4, (4, 2): 5, (10, 1): 10,
-	(11, 1): 8, (11, 2): 9, (11, 3): 7}
+	(11, 1): 8, (11, 2): 9, (11, 3): 7, (11, 7): 8}
+# Type 11/7 also holds the Astral, Immortal (ATHANASIA) and repair stones,
+# which v1.150 sells in the Item Mall; only these two join the drop table,
+# so a future source that weights the others can never make them drop.
+DROPPED_SPECIAL_STONES = ("ITEM_ETC_ARCHEMY_MAGICSTONE_LUCK_", "ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_")
 
 
 # ================
@@ -194,6 +202,9 @@ def project_assignments(chosen, items, audit):
 		family = FAMILY_BY_TYPE.get(tuple(ref["type"][2:])) if kind == 3 else None
 		if kind != 1 and family is None:
 			audit["unplacedAssignments"].append({"item": codename, "source": source, "reason": "no-ordinary-class-table"})
+			continue
+		if tuple(ref["type"][2:]) == (11, 7) and not codename.startswith(DROPPED_SPECIAL_STONES):
+			audit["unplacedAssignments"].append({"item": codename, "source": source, "reason": "mall-only-stone"})
 			continue
 		for row in rows:
 			rare = ref["rarity"] > 0

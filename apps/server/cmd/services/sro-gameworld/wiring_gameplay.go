@@ -23,6 +23,7 @@ import (
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
@@ -104,6 +105,9 @@ func newGameplayPlane(
 	items.CaptureCharacterFrames = func(division, name string) func([]wire.Frame) {
 		return captureCharacterFrames(ts.Hub, division, name)
 	}
+	items.CaptureObjectFrames = func(division string, gid uint32) func([]wire.Frame) {
+		return captureObjectFrames(ts.Hub, division, gid)
+	}
 	items.PetPolicies = companion.PoliciesFromEnv()
 	items.Guilds = deps.Guilds
 	items.UnlimitedItems = enterworld.StarterKitCodenames(deps.StarterKit)
@@ -115,6 +119,12 @@ func newGameplayPlane(
 	}
 	if err := items.ConfigurePortals(devPaths.TextdataDir); err != nil {
 		return nil, fmt.Errorf("portal catalogue: %w", err)
+	}
+	// Port-only, not native: the reverse return scroll's map destinations.
+	if action.ReverseReturnMapFromEnv() {
+		items.ConfigureReverseReturnMap(true)
+		log.Infof("reverse return: map destinations ON (%s), %d points", action.EnvReverseReturnMap,
+			len(items.ReverseReturnMapPoints()))
 	}
 	// One clock for the bootstrap and the tick sweep, read through the runtime
 	// so a swapped clock reaches both; world entry hands re-raised pet-skill
@@ -140,7 +150,16 @@ func newGameplayPlane(
 	if err := items.ConfigureStallNetwork(devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
-	if err := items.ConfigureCommerce(devPaths.TextdataDir); err != nil {
+	// SRO_SHOP_EXTRA_GOODS (port-only, not native): operator NPC shop goods;
+	// "off" is the v1.150 stock (commerce/extragoods.go).
+	extraGoods, err := commerce.ExtraGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if len(extraGoods) > 0 {
+		log.Infof("commerce: %d extra NPC shop goods from %s", len(extraGoods), commerce.EnvShopExtraGoods)
+	}
+	if err := items.ConfigureCommerce(devPaths.TextdataDir, extraGoods); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
 	items.ConfigureStorage(authorityStore)
@@ -161,6 +180,7 @@ func newGameplayPlane(
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed
+	deps.ReconcileSceneObjects = items.ReconcileGroundScope
 	deps.ExtraRefItemCodenames = items.GroundRefItemCodenames
 	deps.StaticRefItemCodenames = items.StaticRefItemCodenames
 	deps.ExtraMagicOptionIDs = items.AlchemyMagicOptionIDs
@@ -201,12 +221,15 @@ func newGameplayPlane(
 	movementRuntime.CanEnterRegion = func(character *enterworld.Character, regionID uint16) bool {
 		return authoredAreas.CanEnterRegion(regionID, character.GMPrivilege)
 	}
+	// A thief in job mode may not bring its transport into a town (#721).
+	movementRuntime.TownEntryBlocked = items.ThiefCargoTownBlocked
 	movementRuntime.EnableGroundWalk()
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
 	items.SpawnRegionAvailable = water.SpawnRegionAvailable
 	items.ConstrainCompanionSpawn = water.ConstrainCompanionSpawn
 	items.CompanionSurfaceHeight = water.WalkableSpawnHeightAt
 	items.ConstrainWalk = movementRuntime.ConstrainMovementFrom
+	items.PlanCompanionRoute = simulation.PetRouteFromMonster(water.PlanMonsterRoute)
 	items.AdmitGroundWalk = movementRuntime.AdmitGroundWalk
 	items.LineOfSight = movementRuntime.LineOfSight
 	items.ResolveNavOwner = water.ResolveNavOwner
@@ -481,6 +504,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return err
 	}
 	game.deps.MasteryTotalOverride = masteryOverride
+	// Port-only, not native: storage quick moves prefer a matching stack.
+	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
+	if game.deps.StorageAutoStack {
+		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)
+	}
 	stats := progression.NewRuntime(game.deps)
 	stats.MasteryTotalOverride = masteryOverride
 	if masteryOverride != 0 {
@@ -491,8 +519,20 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("progression: beta growth ON (%s): every level at the level-%d kill pace, skill EXP at that pace x%d, drop passes x%d (at most %d ordinary items a kill, 0 = no cap), gold x%d, rare (SoX) x%d", progression.EnvBetaGrowth, progression.BetaReferenceLevel, stats.Growth.SkillExpRate, stats.Growth.DropRate, stats.Growth.DropCap, stats.Growth.GoldRate, stats.Growth.RareRate)
 		game.items.DropPassRate = stats.Growth.DropRate
 		game.items.DropCap = stats.Growth.DropCap
+		// Port-only, not native: per-family rates inside the beta rate.
+		mix, err := progression.BetaDropMixFromEnv()
+		if err != nil {
+			return err
+		}
+		game.items.DropMix = mix
+		if mix != nil {
+			log.Infof("progression: beta drop mix ON (%s): %v, other families x%d", progression.EnvBetaDropMix, mix, stats.Growth.DropRate)
+		}
 		game.items.GoldRate = stats.Growth.GoldRate
 		game.items.RareRate = stats.Growth.RareRate
+		// Attack pets grow at their owner's level pace (owner decision 2026-10-11).
+		growth, deps := stats.Growth, game.deps
+		game.items.PetExpPace = func(ownerLevel int64) float64 { return growth.ExpPace(deps.LevelData(), ownerLevel) }
 		game.items.PartyShareFloor = true
 	}
 	stats.Withdrawal = game.items.WithdrawalHooks()
@@ -509,6 +549,9 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		return fmt.Errorf("quest runtime: %w", err)
 	}
 	game.quests = quests
+	if quests.InstantInventoryExpansion = quest.InstantInventoryExpansionFromEnv(); quests.InstantInventoryExpansion {
+		log.Infof("quest: instant inventory expansion ON (%s, port-only): reward slots are usable at the turn-in", quest.EnvInstantInventoryExpansion)
+	}
 	game.deps.NormalizeEntryQuests = quests.NormalizeEntryRecords
 	if err := game.validateQuestMarkerRoster(); err != nil {
 		return err
@@ -681,17 +724,45 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 ================
 captureCharacterFrames
 
+The sessions bound to one character name (captureSessionFrames).
+================
+*/
+func captureCharacterFrames(hub *transport.Hub, division, name string) func([]wire.Frame) {
+	return captureSessionFrames(hub.CharacterSessions(division, name))
+}
+
+/*
+================
+captureObjectFrames
+
+The sessions bound to one player object id (captureSessionFrames).
+================
+*/
+func captureObjectFrames(hub *transport.Hub, division string, gid uint32) func([]wire.Frame) {
+	var sessions []*transport.Session
+	for _, session := range hub.SessionsInDivision(division) {
+		if bound, ok := session.CharacterObjectID(); ok && bound == gid {
+			sessions = append(sessions, session)
+		}
+	}
+	return captureSessionFrames(sessions)
+}
+
+/*
+================
+captureSessionFrames
+
 Capture is read-only under the action division lock. The returned delivery
 runs outside that lock so queue failure can synchronously retire gameplay.
 ================
 */
-func captureCharacterFrames(hub *transport.Hub, division, name string) func([]wire.Frame) {
+func captureSessionFrames(sessions []*transport.Session) func([]wire.Frame) {
 	type recipient struct {
 		session  *transport.Session
 		revision uint64
 	}
 	var recipients []recipient
-	for _, session := range hub.CharacterSessions(division, name) {
+	for _, session := range sessions {
 		revision, valid := session.SceneReceiptRevision()
 		if valid {
 			recipients = append(recipients, recipient{session: session, revision: revision})

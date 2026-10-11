@@ -35,6 +35,7 @@ type WorldStore struct {
 	states        map[string]*WorldState
 	groundConfig  GroundWalkConfig
 	groundUpdates map[string]GroundUpdate
+	tethers       map[string]Tether
 }
 
 /*

@@ -8,7 +8,9 @@ import (
 )
 
 // Terrain cells own outside-object candidate admission, native 404510/428300.
-func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement) error {
+// objectCount is the region's raw nvm entry count, the bound of a cell's
+// object index.
+func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement, objectCount int) error {
 	c := region.Cells
 	if c.ObjectIndexOffsets == "" {
 		return nil
@@ -43,9 +45,14 @@ func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement) er
 			return e
 		}
 	}
-	cells := make([][][4]float32, len(rows))
+	// Cells name placements by their original ordinal in the nvm entry
+	// list, which CRTNavMeshTerrain_Load (4033E0) keeps whole. A row the
+	// port dropped (malformed) owns no cells; the others keep theirs.
+	sets := make([]terrainCellSet, len(rows))
+	byOrdinal := make(map[int]*terrainCellSet, len(rows))
 	for i := range rows {
-		rows[i].terrainCells = &cells[i]
+		rows[i].terrainCells = &sets[i]
+		byOrdinal[rows[i].ordinal] = &sets[i]
 	}
 	for i := 0; i < count; i++ {
 		a, b := int(binary.LittleEndian.Uint32(offsets[i*4:])), int(binary.LittleEndian.Uint32(offsets[(i+1)*4:]))
@@ -64,13 +71,74 @@ func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement) er
 		}
 		for j := a; j < b; j++ {
 			id := int(binary.LittleEndian.Uint16(ids[j*2:]))
-			if id >= len(rows) {
+			if id >= objectCount {
 				return fmt.Errorf("invalid terrain object reference")
 			}
-			cells[id] = append(cells[id], r)
+			if set := byOrdinal[id]; set != nil {
+				set.cells = append(set.cells, r)
+			}
 		}
 	}
+	for i := range sets {
+		sets[i].bound()
+	}
 	return nil
+}
+
+/*
+==================
+terrainCellSet
+
+The terrain cells one placement is registered in, and the union box of
+those cells: a chord whose own box misses the union enters none of them,
+so terrainVisitKey answers it without clipping against every cell.
+==================
+*/
+type terrainCellSet struct {
+	cells [][4]float32
+	box   [4]float32
+}
+
+/*
+==================
+newTerrainCellSet
+==================
+*/
+func newTerrainCellSet(cells [][4]float32) *terrainCellSet {
+	set := &terrainCellSet{cells: cells}
+	set.bound()
+	return set
+}
+
+/*
+==================
+terrainCellSet.bound
+
+Union of the cell rectangles (minX, minZ, maxX, maxZ), the cells' own frame.
+==================
+*/
+func (s *terrainCellSet) bound() {
+	for i, r := range s.cells {
+		if i == 0 {
+			s.box = r
+			continue
+		}
+		s.box = [4]float32{min(s.box[0], r[0]), min(s.box[1], r[1]), max(s.box[2], r[2]), max(s.box[3], r[3])}
+	}
+}
+
+/*
+==================
+terrainCellSet.missedBy
+
+Whether the chord's box lies strictly outside the union box. Strict, so a
+chord touching the union's edge still reaches chordRectEntry's closed test.
+==================
+*/
+func (s *terrainCellSet) missedBy(x0, z0, x1, z1 float64) bool {
+	minX, maxX := math.Min(x0, x1), math.Max(x0, x1)
+	minZ, maxZ := math.Min(z0, z1), math.Max(z0, z1)
+	return maxX < float64(s.box[0]) || minX > float64(s.box[2]) || maxZ < float64(s.box[1]) || minZ > float64(s.box[3])
 }
 
 /*
@@ -86,12 +154,15 @@ enters a registered cell; 0 for a placement without registration data (every
 object is then visited from the start, the pre-registration behaviour).
 ==================
 */
-func terrainVisitKey(cells *[][4]float32, x0, z0, x1, z1 float64) float64 {
+func terrainVisitKey(cells *terrainCellSet, x0, z0, x1, z1 float64) float64 {
 	if cells == nil {
 		return 0
 	}
 	best := math.Inf(1)
-	for _, r := range *cells {
+	if len(cells.cells) == 0 || cells.missedBy(x0, z0, x1, z1) {
+		return best
+	}
+	for _, r := range cells.cells {
 		if t, ok := chordRectEntry(x0, z0, x1, z1, float64(r[0]), float64(r[1]), float64(r[2]), float64(r[3])); ok && t < best {
 			best = t
 		}

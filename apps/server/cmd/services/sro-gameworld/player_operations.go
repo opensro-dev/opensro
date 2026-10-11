@@ -149,6 +149,22 @@ func installPlayerOperations(api *agentapi.API, game *gameplayPlane, hub *transp
 			}
 			return read(request.Character)
 		},
+		GrantSilk: func(request agentapi.PlayerOperation) (any, error) {
+			if authority.Health().LastError != "" {
+				return nil, fmt.Errorf("storage is unhealthy; silk grant refused")
+			}
+			balance, err := game.items.GrantSilk(shard, request.Operator, "operator", request.Character, request.Silk)
+			if err != nil {
+				return nil, err
+			}
+			result, err := read(request.Character)
+			if err != nil {
+				return nil, err
+			}
+			// The dashboard reports the wallet the grant left.
+			result.(map[string]any)["silkBalance"] = balance.Silk
+			return result, nil
+		},
 		Rescue: func(request agentapi.PlayerOperation) (any, error) {
 			valid := false
 			for _, town := range game.items.OperatorTowns() {

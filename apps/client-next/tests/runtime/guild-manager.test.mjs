@@ -12,7 +12,9 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { guildManagerRows, guildLevelUpPrice } = await import( "../../src/engine/foundation/gameplay/guild-manager.ts" );
+const { guildManagerRows, guildLevelUpPrice, guildTransferRefusal } = await import(
+	"../../src/engine/foundation/gameplay/guild-manager.ts"
+);
 const { socialPacket, socialRequest, emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 const { createStorageRoom, storageMoveRequest, STORAGE_GOLD_DEPOSIT, STORAGE_MOVE_DEPOSIT } = await import(
 	"../../src/engine/foundation/gameplay/storage-room.ts"
@@ -40,6 +42,34 @@ const guild = {
 	contents: "",
 	members: [ member( 1, "Master", 0 ), member( 2, "Member", 10 ) ]
 };
+
+/*
+================
+The native transfer preflight checks registered and owned fortress wars only.
+================
+*/
+test("master transfer refuses its registered or owned active fortress, not unrelated wars", () => {
+	const fortress = {
+		worldId: 0,
+		worlds: [],
+		fortresses: [],
+		registered: [],
+		listId: 1,
+		wars: [ { id: 1, name: "Other", flags: 1 }, { id: 2, name: "Lanterns", flags: 0 } ]
+	};
+	const refusal = "UIIT_MSG_FORT_POSITION_GRANT_FAIL_07";
+	assert.equal( guildTransferRefusal( fortress, guild.name ), refusal );
+	assert.equal( guildTransferRefusal( { ...fortress, listId: 0 }, guild.name ), null );
+	assert.equal(
+		guildTransferRefusal( { ...fortress, listId: 0, wars: [ { id: 2, name: guild.name, flags: 1 } ] }, guild.name ),
+		refusal
+	);
+	assert.equal(
+		guildTransferRefusal( { ...fortress, wars: fortress.wars.map( row => ({ ...row, flags: 6 }) ) }, guild.name ),
+		null
+	);
+	assert.equal( guildTransferRefusal( undefined, guild.name ), null );
+});
 
 /*
 ================

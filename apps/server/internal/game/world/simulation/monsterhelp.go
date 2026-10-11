@@ -64,7 +64,7 @@ func (ops *MonsterMoverOps) handleHelp(division string, expected monster.Instanc
 		// 28 into bit 0, or use clipped distance as an invented sight gate.
 		accepted = false
 		if ops.hasPlanner() {
-			path := ops.planPath(live, mover.LiveNavOwner(now), monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z})
+			path := ops.planPath(navSight, live, mover.LiveNavOwner(now), monster.Pose{RegionID: target.Pose.RegionID, X: target.Pose.X, Y: target.Pose.Y, Z: target.Pose.Z})
 			accepted = path != nil && path.Result()&monster.NavResultClipped == 0
 		}
 	}

@@ -67,7 +67,11 @@ func isVersionMismatch(err error) bool {
 // layout 8: _SiegeFortressItemForge). The offline upgrade adds the empty
 // table and makes each guild master the sole commander fortress role holder
 // (guild_leader_role.go), the one record it rewrites.
-const CurrentVersion = 21
+// Version 22 adds the community site's optional character fields (port-only):
+// publicHidden, the player's privacy choice, levelReachedAt, the time each
+// milestone level was first reached, and lastLoginAtMs, the latest world entry. Layout 9 adds the unique_kills
+// table. The offline upgrade adds the empty table and rewrites no record.
+const CurrentVersion = 22
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

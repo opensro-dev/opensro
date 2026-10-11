@@ -289,6 +289,9 @@ func exchangeMoveCode(err error) uint8 {
 publishExchangeOffer
 
 The owner's side to both players: the owner's list carries bag slots.
+The partner first gets the offered items' references: the client decodes a
+listed item through its own reference table, which holds only items the
+server has described to it ("Unknown inventory reference" on 0x3569).
 ================
 */
 func (rt *Runtime) publishExchangeOffer(division string, owner *enterworld.Character) {
@@ -298,17 +301,20 @@ func (rt *Runtime) publishExchangeOffer(division string, owner *enterworld.Chara
 	}
 	bag := bagOf(owner)
 	var rows []wire.ExchangeOfferRow
+	var offered []inventory.Item
 	for slot, offer := range own.Offers {
 		if offer == nil {
 			continue
 		}
 		if item, ok := bag.At(offer.BagSlot); ok {
 			rows = append(rows, wire.ExchangeOfferRow{BagSlot: offer.BagSlot, ExchangeSlot: uint8(slot), Item: item.Body()})
+			offered = append(offered, item)
 		}
 	}
 	gid := enterworld.ObjectIDForCharacter(owner)
 	rt.PushCharacterFrames(division, owner.Name, []wire.Frame{{Opcode: wire.OpExchangeOffer, Payload: wire.EncodeExchangeOffer3569(gid, rows, true)}})
-	rt.PushCharacterFrames(division, partner.Name, []wire.Frame{{Opcode: wire.OpExchangeOffer, Payload: wire.EncodeExchangeOffer3569(gid, rows, false)}})
+	frames := append(rt.itemReferenceFrames(offered), wire.Frame{Opcode: wire.OpExchangeOffer, Payload: wire.EncodeExchangeOffer3569(gid, rows, false)})
+	rt.PushCharacterFrames(division, partner.Name, frames)
 }
 
 //============================================================================

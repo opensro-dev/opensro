@@ -133,3 +133,17 @@ test("banner waits for assets, replaces rather than queues, fades and resets acr
 	b.step( [ n ], 24000, true );
 	assert.equal( b.alpha(), 1 );
 });
+test("other 0x3058 kinds show their category 0x11 notice; kinds 7 and 10 stay unpresented", () => {
+	// 7508C0: kind 1 is the thief's stolen-goods rule (#721).
+	assert.equal(
+		defined( uniqueNotice( 0x3058, Uint8Array.of( 1 ), refs ) ).key,
+		"UIIT_MSG_JSERR_ROBBER_CANT_ENTER_TOWN_WITH_CART"
+	);
+	// The kind is the whole notice: native reads nothing after it.
+	assert.equal(
+		defined( uniqueNotice( 0x3058, Uint8Array.of( 1, 9, 9 ), refs ) ).key,
+		"UIIT_MSG_JSERR_ROBBER_CANT_ENTER_TOWN_WITH_CART"
+	);
+	assert.equal( uniqueNotice( 0x3058, Uint8Array.of( 7 ), refs ), null );
+	assert.equal( uniqueNotice( 0x3058, Uint8Array.of( 10 ), refs ), null );
+});

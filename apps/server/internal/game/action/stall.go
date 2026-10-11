@@ -202,7 +202,8 @@ func (rt *Runtime) HandleStallVisit(division string, c *enterworld.Character, pa
 	came := wire.Frame{Opcode: wire.OpStallEvent, Payload: wire.EncodeStallVisitor(wire.StallEventCame, enterworld.ObjectIDForCharacter(c))}
 	rt.pushStall(division, s, c.Name, came)
 	body := wire.EncodeStallVisit(gid, s.Greeting, s.Open, s.Mode, rt.stallOffers(division, owner, s), visitors)
-	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpStallVisitResult, Payload: body}}}
+	frames := append(rt.stallItemReferences(division, owner, s), wire.Frame{Opcode: wire.OpStallVisitResult, Payload: body})
+	return OpResult{Frames: frames}
 }
 
 /*
@@ -260,11 +261,48 @@ One frame to the owner and every visitor but except.
 ================
 */
 func (rt *Runtime) pushStall(division string, s stall.Stall, except string, frame wire.Frame) {
+	rt.pushStallFrames(division, s, except, []wire.Frame{frame})
+}
+
+/*
+================
+pushStallFrames
+================
+*/
+func (rt *Runtime) pushStallFrames(division string, s stall.Stall, except string, frames []wire.Frame) {
 	for _, name := range append([]string{s.Owner}, s.Visitors...) {
 		if name != except {
-			rt.PushCharacterFrames(division, name, []wire.Frame{frame})
+			rt.PushCharacterFrames(division, name, frames)
 		}
 	}
+}
+
+/*
+================
+stallItemReferences
+
+The references of every item the stall offers, sent ahead of a list that
+names them: a visitor's client decodes each listed item through its own
+reference table, which holds only items the server has described to it
+("Unknown inventory reference" on 0xB1A8).
+================
+*/
+func (rt *Runtime) stallItemReferences(division string, owner *enterworld.Character, s stall.Stall) []wire.Frame {
+	snapshot := rt.characterSnapshot(division, owner)
+	if snapshot == nil {
+		return nil
+	}
+	bag := bagOf(snapshot)
+	var items []inventory.Item
+	for _, slot := range s.Slots {
+		if slot == nil {
+			continue
+		}
+		if item, ok := bag.At(slot.BagSlot); ok {
+			items = append(items, item)
+		}
+	}
+	return rt.itemReferenceFrames(items)
 }
 
 /*
@@ -329,7 +367,7 @@ func (rt *Runtime) HandleStallEdit(division string, c *enterworld.Character, pay
 	}
 	s, _ := rt.Stalls.Get(division, c.Name)
 	answer := wire.Frame{Opcode: wire.OpStallEditResult, Payload: wire.EncodeStallEdit(kind, body)}
-	rt.pushStall(division, s, c.Name, answer)
+	rt.pushStallFrames(division, s, c.Name, append(rt.stallItemReferences(division, c, s), answer))
 	if kind == wire.StallEditTitle {
 		rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{{Opcode: wire.OpStallRenamed, Payload: wire.EncodeStallRenamed(enterworld.ObjectIDForCharacter(c), s.Title)}})
 	}

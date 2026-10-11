@@ -312,3 +312,50 @@ func TestCaptureCharacterFramesDoesNotAdoptLaterRecipients(t *testing.T) {
 		t.Fatalf("capture adopted a later bound recipient: %v", frames)
 	}
 }
+
+/*
+================
+TestCaptureObjectFramesSelectsTheBoundPlayer
+
+The tick's capture keys recipients by player object id: only the session
+bound to that object is captured.
+================
+*/
+func TestCaptureObjectFramesSelectsTheBoundPlayer(t *testing.T) {
+	server := wiringPublicationServer(t)
+	session, conn := wiringPublicationSession(t, server, "original")
+	if publish := captureObjectFrames(server.Hub, wiringPublicationDivision, 2); publish != nil {
+		t.Fatal("captured a session bound to another object")
+	}
+	publish := captureObjectFrames(server.Hub, wiringPublicationDivision, 1)
+	if publish == nil {
+		t.Fatal("bound object was not captured")
+	}
+	publish([]wire.Frame{{Opcode: wire.OpExpUpdate, Payload: []byte{1}}})
+	frames := wiringPublicationFlush(t, session, conn)
+	if len(frames) != 1 || frames[0].Opcode != wire.OpExpUpdate {
+		t.Fatalf("object capture delivered %v", frames)
+	}
+}
+
+/*
+================
+TestCaptureObjectFramesRefusesAGrantFromBeforeReentry
+
+#713: a grant captured before a resumed entry's bootstrap is already in
+that bootstrap's snapshot, so its 0x30D2 must not follow the bootstrap.
+================
+*/
+func TestCaptureObjectFramesRefusesAGrantFromBeforeReentry(t *testing.T) {
+	server := wiringPublicationServer(t)
+	session, conn := wiringPublicationSession(t, server, "original")
+	publish := captureObjectFrames(server.Hub, wiringPublicationDivision, 1)
+	if err := session.SendSceneReset([]transport.Frame{{Opcode: transport.OpEnterWorldResult}}); err != nil {
+		t.Fatal(err)
+	}
+	publish([]wire.Frame{{Opcode: wire.OpExpUpdate, Payload: []byte{1}}})
+	frames := wiringPublicationFlush(t, session, conn)
+	if len(frames) != 1 || frames[0].Opcode != transport.OpEnterWorldResult {
+		t.Fatalf("a pre-snapshot grant followed the bootstrap: %v", frames)
+	}
+}

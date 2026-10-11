@@ -255,6 +255,10 @@ export interface Renderer extends Disposable {
 	pickFrontendRace( x: number, y: number ): 0 | 1 | null;
 	frontendRaceCenters(): readonly (readonly [number, number, number] | null)[];
 	setCharacterPreview( camera: import("./scene").WorldCamera | null ): void;
+	/** Port-only: the doll target's last frame as packed RGBA (the 3D viewer's still). */
+	readDoll?(): Promise<{ readonly width: number; readonly height: number; readonly rgba: Uint8ClampedArray; }>;
+	/** Port-only: an actor's scaled bind-pose bounds [minX, minY, minZ, maxX, maxY, maxZ] (the 3D viewer's framing). */
+	characterBounds?( gid: number ): readonly [number, number, number, number, number, number] | null;
 	characterParticleSnapshot( gid: number ): { readonly matrix: Float32Array; readonly regionId: number; } | null;
 	characterParticleTime( gid: number ): number | undefined;
 	presentationNight(): boolean;
@@ -343,6 +347,8 @@ The simulation worker capability owns its message channel and lifecycle.
 */
 export interface SimulationHost extends Disposable {
 	pollWorld(): import("./world").WorldBatch | null;
+	/** The transport's recent frame journal, oldest first (network.ts NET_JOURNAL_FIELDS per frame). */
+	netJournal(): Float64Array;
 	/** Resolves on the next worker message; paces frames while the tab is hidden. */
 	delivery(): Promise<void>;
 	ackWorld( sequence: number ): void;

@@ -33,6 +33,7 @@ import {
 	loadSpawnableNpcRoster
 } from "../../build/char/npcModelRoster.mjs";
 import { loadCharacterDataRows } from "../../build/char/resolveCharRoster.mjs";
+import { loadBoothModelRoster } from "../../build/char/boothModelRoster.mjs";
 import { parseCharacterBsr, parseSkinnedBms } from "../../build/char/formats.mjs";
 import { loadDataAsset } from "../../build/shared/jmxAssetIO.mjs";
 import { sha256Hex } from "../../build/shared/hash.mjs";
@@ -438,10 +439,18 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 	const structureNames = new Set( loadFortressStructureRoster().map( ( ref ) => ref.codename ) );
 	const structureRows = Object.values( manifest.models ).filter( ( entry ) => entry.kind === "structure" );
 	for ( const entry of structureRows ) assert.ok( structureNames.has( entry.codename ), entry.codename );
+	// Stall booths (#490): every booth model the item table names, and only
+	// those (boothModelRoster.mjs).
+	const boothRows = Object.values( manifest.models ).filter( ( entry ) => entry.kind === "booth" );
+	assert.deepEqual(
+		boothRows.map( ( entry ) => entry.bsr ).sort(),
+		loadBoothModelRoster( textdataDir ).map( ( ref ) => ref.bsrPath ).sort(),
+		"every stall booth model, and only those, is published as kind booth"
+	);
 	assert.equal(
 		manifest.count,
-		roster.length + structureRows.length + 4 + 10,
-		"the rosters and structures plus four packetless CICRide resources and ten characterInfo death models"
+		roster.length + structureRows.length + boothRows.length + 4 + 10,
+		"the rosters, structures and booths plus four packetless CICRide resources and ten characterInfo death models"
 	);
 	assert.equal(
 		Object.values( manifest.models ).filter( ( entry ) => entry.kind === "cos" ).length,

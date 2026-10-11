@@ -190,3 +190,23 @@ func TestBetaGrowthLeavesAResurrectionRefundNative(t *testing.T) {
 		t.Fatalf("refund landed as %d (ok %v), want %d", *character.Experience, ok, refund)
 	}
 }
+
+/*
+================
+TestExpPaceIsTheBetaMultiplier
+
+The pace an attack pet's gain reads at its owner's level: the same as a
+character's at that level with the beta on, 1 with it off.
+================
+*/
+func TestExpPaceIsTheBetaMultiplier(t *testing.T) {
+	if pace := (GrowthRates{}).ExpPace(growthLevels{}, 50); pace != 1 {
+		t.Fatalf("native pace %v", pace)
+	}
+	beta := GrowthRates{Enabled: true}
+	for level, want := range map[int64]float64{50: 80, 3: 2, 1: 1, 99: 1} {
+		if pace := beta.ExpPace(growthLevels{}, level); pace != want {
+			t.Fatalf("level %d pace %v, want %v", level, pace, want)
+		}
+	}
+}

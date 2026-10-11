@@ -659,6 +659,8 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	// 529B10: the ridden vehicle is released with its rider's death.
 	released, owned := rt.releaseRiddenVehicleInDoor(division, c, now)
 	effects = append(effects, released...)
+	// 529B10 -> 513EA0: a pending return or reverse-return cast is cancelled.
+	effects = append(effects, rt.cancelReturnOnDeathInDoor(division, c)...)
 	// CGObjPC_ProcessNormalDeath leaves battle (529C93) before the life change.
 	effects = append(effects, rt.leaveBattleState(division, c, now)...)
 	// The death's cost (pkdeath.go) commits in the fatal HP closure, so the

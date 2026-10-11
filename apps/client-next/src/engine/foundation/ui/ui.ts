@@ -132,7 +132,15 @@ function copyUiProduct( scene: UiScene, previous: UiScene | undefined, validated
 			texture: quad.texture,
 			...(quad.sampling !== undefined ? { sampling: quad.sampling } : {}),
 			...(quad.depth !== undefined ? { depth: quad.depth } : {}),
-			...(quad.doll ? { doll: { gid: quad.doll.gid, yaw: quad.doll.yaw } } : {}),
+			...(quad.doll ?
+				{
+					doll: {
+						gid: quad.doll.gid,
+						yaw: quad.doll.yaw,
+						...(quad.doll.camera ? { camera: quad.doll.camera } : {})
+					}
+				} :
+				{}),
 			...(worldAnchor ? { worldAnchor } : {}),
 			...(quad.portraitGid !== undefined ? { portraitGid: quad.portraitGid } : {}),
 			...(quad.rotation !== undefined ? { rotation: quad.rotation } : {}),

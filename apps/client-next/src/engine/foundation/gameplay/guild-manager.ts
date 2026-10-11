@@ -15,6 +15,7 @@ GP (0xBE4C58) and gold (0xBE4C6C) tables by the current level.
 ===========================================================================
 */
 import type { Guild } from "./social";
+import type { FortressState } from "./fortress";
 
 // The guild set's capability bit.
 export const GUILD_CAPABILITY = 0x4000;
@@ -22,6 +23,23 @@ export const GUILD_CAPABILITY = 0x4000;
 export const MASTER_RELEASE_VOTE = 0;
 // The last level the window offers (5EF9A0 clamps the next level at 5).
 export const GUILD_MAX_LEVEL = 5;
+
+/*
+================
+guildTransferRefusal
+
+5F1D60 checks 7E1AE0 for the Guild's registered fortress (818890), then
+for its owned fortress (7E24B0). That predicate reads war flags bit 0.
+This is presentation preflight; the server's GuildInWar remains authoritative.
+================
+*/
+export function guildTransferRefusal( fortress: FortressState | undefined, guildName: string ): string | null {
+	if ( !fortress || !guildName ) return null;
+	const owned = fortress.wars.find( row => row.name === guildName )?.id;
+	return fortress.wars.some( row => (row.id === fortress.listId || row.id === owned) && (row.flags & 1) !== 0 ) ?
+		"UIIT_MSG_FORT_POSITION_GRANT_FAIL_07" :
+		null;
+}
 
 export type GuildManagerRow =
 	| "create"

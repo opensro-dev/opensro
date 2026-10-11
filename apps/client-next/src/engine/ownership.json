@@ -33,6 +33,7 @@
     "src/engine/runtime/ui/hud/grant-power-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/composite-item-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/guild-manager-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/guild-notice-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/magic-option-hud.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/ui/hud/slot-effects.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/simulation/worker/session/world/departure.ts": "src/engine/runtime/simulation/worker/session/world/world.ts",
@@ -150,6 +151,7 @@
     "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/gacha/gacha.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/magic-option/magic-option.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts",
     "src/engine/runtime/random/random.ts": "src/engine/runtime/runtime.ts",
+    "src/engine/runtime/viewer/viewer.ts": "src/engine/runtime/runtime.ts",
     "src/engine/runtime/renderer/weather/weather.ts": "src/engine/runtime/renderer/world/world.ts",
     "src/engine/runtime/ui/guide/resources.ts": "src/engine/runtime/ui/ui.ts",
     "src/engine/runtime/characters/pose-presentation.ts": "src/engine/runtime/characters/characters.ts",
@@ -172,6 +174,7 @@
     "src/engine/runtime/characters/presentation-auxiliary.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/spawn-fades.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/appearance-lookup.ts": "src/engine/runtime/characters/characters.ts",
+    "src/engine/runtime/characters/viewer-queries.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/ui/hud/compact-hud.ts": "src/engine/runtime/ui/ui.ts"
   },
   "internals": {
@@ -183,6 +186,7 @@
     "src/engine/runtime/renderer/device/geometry.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/geometry-uploads.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/ui.ts": "src/engine/runtime/renderer/device/device.ts",
+    "src/engine/runtime/renderer/device/portrait-readback.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/ui/title/creation.ts": "src/engine/runtime/ui/title/title.ts",
     "src/engine/runtime/renderer/device/bloom.ts": "src/engine/runtime/renderer/device/device.ts",
     "src/engine/runtime/renderer/device/finish.ts": "src/engine/runtime/renderer/device/device.ts",

@@ -15,7 +15,9 @@ written by the entry parser (8675F0), the sole direct caller of the inventory
 rebuild (59DF10), which holds at most two 32-slot tabs. The port therefore
 stops at 77. Inference for the v1.150 wire contract: a paid expansion waits
 for the next world entry (login, teleport or resurrection), where the client
-learns it; the v1.188 immediate-capacity message is not added to this client.
+learns it. Port-only, not native: SRO_INSTANT_INVENTORY_EXPANSION presents
+the slots at the turn-in and sends the v1.188 0x3092 announce, which the port
+client applies (quest/instant_expansion.go).
 
 ===========================================================================
 */

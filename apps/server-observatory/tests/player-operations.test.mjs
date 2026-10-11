@@ -128,3 +128,31 @@ test("reset-stats forwards the authenticated audit envelope unchanged", async ()
 	assert.equal( calls[0].options.headers.Authorization, "Bearer test-token" );
 	assert.deepEqual( JSON.parse( calls[0].options.body ), command );
 });
+
+test("grant-silk forwards the authenticated audit envelope and the amount unchanged", async () => {
+	const calls = [];
+	const command = {
+		id: "request-44",
+		operator: "audited-operator",
+		character: "Tester",
+		reason: "Tester asked for silk to keep testing",
+		action: "grant-silk",
+		silk: 100000
+	};
+	const after = { shard: "realm", player: { name: "Tester" }, silkBalance: 100300 };
+	const owner = createPlayerOperations(
+		[ { id: "realm", url: "http://127.0.0.1:8791" } ],
+		"test-token",
+		async ( url, options ) => {
+			calls.push( { url, options } );
+			return Response.json( after );
+		}
+	);
+	assert.deepEqual( await owner.request( "realm", null, command ), { status: 200, body: after } );
+	assert.equal( calls.length, 1 );
+	assert.equal( calls[0].options.method, "POST" );
+	assert.equal( calls[0].options.headers.Authorization, "Bearer test-token" );
+	assert.deepEqual( JSON.parse( calls[0].options.body ), command );
+	const disabled = createPlayerOperations( [], "", () => assert.fail( "disabled gateway must not contact a shard" ) );
+	assert.equal( (await disabled.request( "realm", null, command )).status, 503 );
+});

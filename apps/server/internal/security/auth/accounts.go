@@ -55,6 +55,12 @@ const (
 	AgentProvisioningTokenFile = "agent-provisioning-token"
 	MinProvisioningTokenBytes  = 32
 
+	// PublicAPITokenFile is the cluster-state file holding the GameWorld
+	// public API's privacy-write bearer token (internal/agent/publicstats).
+	// It is its own secret, never the provisioning token, so a leak of one
+	// does not open the other.
+	PublicAPITokenFile = "public-api-token"
+
 	accountsSchemaVersion = 1
 	accountsBusyTimeoutMS = 5000
 )

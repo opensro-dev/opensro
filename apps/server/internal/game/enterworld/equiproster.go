@@ -148,6 +148,8 @@ type ItemRef struct {
 
 // TypeFlags packs TypeID1..4 exactly as the native RefItemData word the
 // parser gates on: TID1<<2 | TID2<<5 | TID3<<7 | TID4<<11.
+// scripts/build/data/buildMissionPresentationAsset.mjs itemTypeFlags packs
+// the browser's copy the same way; change both together.
 /*
 ================
 TypeFlags

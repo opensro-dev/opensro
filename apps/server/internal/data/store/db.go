@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS mall_accounts (
 ) WITHOUT ROWID;
 `
 
-const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + `
+const dbSchema = mallAccountsSchema + accountStorageSchema + fortressSchema + allianceSchema + guildWarSchema + fortressItemForgeSchema + uniqueKillsSchema + `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -157,8 +157,9 @@ const (
 // layout-4 records while adding the empty mall currency and warehouse tables
 // for layout 5, the empty fortress and union tables for layout 6, the
 // guild-war tables for layout 7 and the fortress production table for
-// layout 8 (authority_upgrade.go). The release receiver runs it.
-const CurrentLayoutVersion = 8
+// layout 8 and the unique-kill record for layout 9 (authority_upgrade.go).
+// The release receiver runs it.
+const CurrentLayoutVersion = 9
 
 /*
 ==================

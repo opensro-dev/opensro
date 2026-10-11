@@ -416,7 +416,9 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		} else if len(frames) > 0 {
 			out.others = append(out.others, RecipientFrames{a.character.ID, frames})
 		}
-		rt.Monsters.RecordUniqueKiller(division, impact.Instance.Gid, a.character.Name)
+		if ref, announced := rt.Monsters.RecordUniqueKiller(division, impact.Instance.Gid, a.character.Name); announced && rt.RecordUniqueKill != nil {
+			rt.RecordUniqueKill(division, domain.UniqueKill{AtMs: now, RefObjID: ref, KillerCharID: a.character.ID, KillerName: a.character.Name})
+		}
 	}
 	rt.Monsters.ArmNestFromReward(division, impact.Instance.Gid, count)
 	return out

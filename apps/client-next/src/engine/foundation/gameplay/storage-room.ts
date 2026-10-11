@@ -190,10 +190,16 @@ export function storageMoveRequest( npc: number, move: StorageMove, guild?: bool
 ================
 decodeStorageList
 
-[u8 capacity][u8 count] count x {[u8 slot][CSOItem]}.
+[u8 capacity][u8 count] count x {[u8 slot][CSOItem]}. objRefs resolves a
+stored summoner's pet (BR-261010-1435-63E3: without it a pickup pet left in
+storage failed every list and dropped the session).
 ================
 */
-export function decodeStorageList( p: Uint8Array, refs: ReadonlyMap<number, number> ) {
+export function decodeStorageList(
+	p: Uint8Array,
+	refs: ReadonlyMap<number, number>,
+	objRefs: ReadonlyMap<number, number> = new Map()
+) {
 	if ( p.length < 2 ) throw Error( "Invalid storage list" );
 	const capacity = p[0]!, count = p[1]!, items: InventoryItem[] = [];
 	if ( capacity < 1 ) throw Error( "Invalid storage capacity" );
@@ -201,7 +207,7 @@ export function decodeStorageList( p: Uint8Array, refs: ReadonlyMap<number, numb
 	for ( let i = 0; i < count; i++ ) {
 		if ( o >= p.length ) throw Error( "Truncated storage list" );
 		const slot = p[o]!;
-		const decoded = decodeInventoryItem( p, o + 1, refs );
+		const decoded = decodeInventoryItem( p, o + 1, refs, objRefs );
 		if ( !decoded.item || slot >= capacity || items.some( row => row.slot === slot ) ) {
 			throw Error( "Invalid storage row" );
 		}
@@ -349,7 +355,11 @@ receive
 True when the frame belonged to the warehouse.
 ================
 		*/
-		receive( frame: WireFrame, refs: ReadonlyMap<number, number> ): boolean {
+		receive(
+			frame: WireFrame,
+			refs: ReadonlyMap<number, number>,
+			objRefs: ReadonlyMap<number, number> = new Map()
+		): boolean {
 			const p = frame.payload;
 			if ( room?.guild ) {
 				const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -383,7 +393,7 @@ True when the frame belonged to the warehouse.
 					return true;
 				}
 				if ( frame.opcode === OP_GUILD_STORAGE_LIST ) {
-					room = { ...room, ...decodeStorageList( p, refs ) };
+					room = { ...room, ...decodeStorageList( p, refs, objRefs ) };
 					return true;
 				}
 				if ( frame.opcode === OP_GUILD_STORAGE_LISTED ) {
@@ -401,7 +411,7 @@ True when the frame belonged to the warehouse.
 				return true;
 			}
 			if ( frame.opcode === OP_STORAGE_LIST ) {
-				const list = decodeStorageList( frame.payload, refs );
+				const list = decodeStorageList( frame.payload, refs, objRefs );
 				loaded = { ...list, gold };
 				if ( room?.phase === "listing" ) {
 					room = { ...room, phase: "opening", ...loaded };

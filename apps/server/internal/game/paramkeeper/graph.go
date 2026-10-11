@@ -109,6 +109,16 @@ func (g *Graph) Link(source, target uint16, channel Channel) error {
 	return nil
 }
 
+// Linked reports whether any parameter feeds id through a Link.
+func (g *Graph) Linked(id uint16) bool {
+	for _, n := range g.nodes {
+		if _, ok := n.dependents[id]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *Graph) Value(id uint16) (float32, error) {
 	n, ok := g.nodes[id]
 	if !ok {

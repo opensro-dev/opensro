@@ -427,6 +427,23 @@ test("F10 opens the Item Mall and a world transfer closes it, as the native rese
 	}
 });
 
+test("the underbar's up arrow selects the next quickslot bar, as native control 13 does", () => {
+	// CIFUnderBar's message map (BB2C90): control 13, GDR_BTN_QUICKSLOTUP, runs
+	// 572760 (page + 1); control 12, GDR_BTN_QUICKSLOTDOWN, runs 572750 (page - 1).
+	const f = uiFixture();
+	try {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null | undefined} */
+		let last;
+		for ( let i = 0; i < 20; i++ ) last = f.ui.step( f.state, 1100 + i * 50 ) ?? last;
+		const next = last?.controls.find( control => control.id === "hotbar-next" );
+		const prev = last?.controls.find( control => control.id === "hotbar-prev" );
+		assert.ok( next && prev, "both quickslot arrows publish" );
+		assert.ok( next.rect[1] < prev.rect[1], "the upper arrow (QUICKSLOTUP) is next, the lower previous" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("the underbar mall button is a clickable button and F10 toggles the mall", () => {
 	const f = uiFixture();
 	try {
@@ -2213,6 +2230,51 @@ test("GPU inventory uses one native gold confirmation with numeric clamp and mod
 	}
 });
 
+test("storage gold withdraws with an empty bag and clamps to the room's gold (BR-261010-1655-2B68)", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventoryPending: false,
+			progression: { gold: "0", masteries: [] },
+			storage: { npc: 7, phase: "open", capacity: 150, gold: "500", items: [] }
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		const click = id => {
+			f.ui.event( { kind: "activate", id } );
+			f.ui.step( state, ++now );
+		};
+		const edit = value => {
+			f.ui.event( {
+				kind: "edit",
+				id: "gold-amount",
+				value,
+				start: value.length,
+				end: value.length,
+				composing: false
+			} );
+			f.ui.step( state, ++now );
+		};
+		const withdraw = gold => ({
+			kind: "gameplay",
+			command: { kind: "storage-move", move: { type: 0x0b, source: 0, destination: 0, quantity: 0, gold } }
+		});
+		f.ui.step( state, now );
+		// The bag holds no gold: the withdraw draft follows the room, not the bag.
+		click( "storage-gold" );
+		edit( "300" );
+		click( "drop-gold" );
+		assert.deepEqual( sent.pop(), withdraw( 300 ) );
+		click( "storage-gold" );
+		edit( "900" );
+		click( "drop-gold" );
+		assert.deepEqual( sent.pop(), withdraw( 500 ) );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("GPU shop gates merchant capability, affordability and exact sale confirmation", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
@@ -2488,6 +2550,52 @@ test("GPU COS bag leaves a quick transfer's slot to the worker in either directi
 		f.ui.step( { ...f.state, gameplay: game }, 4 );
 		f.ui.event( { kind: "activate", id: "from-cos" } );
 		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: false, source: 0 } );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("Ctrl+click moves an item across the open pet bag in either direction", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: false,
+			inventory: [ { slot: 13, refObjId: 8, quantity: 30 } ],
+			cosRecords: [ {
+				gid: 7,
+				refObjId: 102,
+				name: "Pet",
+				hp: 100,
+				dead: false,
+				status: 4,
+				inventory: [ { slot: 0, refObjId: 8, quantity: 40 } ]
+			} ]
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		f.ui.step( state, now );
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "cos-bag" } );
+		f.ui.step( state, ++now );
+		// Pet to bag, as From Pet does with no slot chosen.
+		f.ui.event( { kind: "activate", id: "cos-slot:0", ctrl: true } );
+		f.ui.step( state, ++now );
+		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: false, source: 0 } );
+		// Bag to pet, as To Pet does with no slot chosen.
+		f.ui.event( { kind: "activate", id: "slot:13", ctrl: true } );
+		f.ui.step( state, ++now );
+		assert.deepEqual( sent.at( -1 ), { kind: "cos-transfer", gid: 7, toCos: true, source: 13 } );
+		// An empty slot and an equipment slot send nothing.
+		const count = sent.length;
+		f.ui.event( { kind: "activate", id: "cos-slot:3", ctrl: true } );
+		f.ui.step( state, ++now );
+		f.ui.event( { kind: "activate", id: "slot:5", ctrl: true } );
+		f.ui.step( state, ++now );
+		assert.equal( sent.length, count );
 	} finally {
 		f.dispose();
 	}
@@ -3249,6 +3357,51 @@ test("a pending item move keeps inventory slots enabled and drops further moves"
 	}
 });
 
+test("pressing the hovered item keeps its tooltip; a press elsewhere hides it (BUG-072)", () => {
+	const f = uiFixture();
+	try {
+		const game = {
+			...f.state.gameplay,
+			inventory: [ {
+				slot: 14,
+				refObjId: 1,
+				typeFlags: 0x6c,
+				quantity: 10,
+				name: "Tooltip Stack",
+				magic: [],
+				tooltip: { fields: {} }
+			} ],
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventoryPending: false
+		};
+		const state = { ...f.state, gameplay: game };
+		let now = 0;
+		const step = () => f.ui.step( state, ++now );
+		// The tooltip title may use the plain or the emphasized face.
+		const shown = () => [ 0, 2 ].some( style => f.hasText( "Tooltip Stack", "0", style ) );
+		step();
+		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
+		step();
+		f.ui.event( { kind: "hover", id: "slot:14" } );
+		step();
+		assert.ok( shown(), "hover shows the item tooltip" );
+		// A click (press then release) on the same slot, as a Ctrl+click sell.
+		f.ui.event( { kind: "press", id: "slot:14" } );
+		step();
+		assert.ok( shown(), "pressing the hovered slot keeps its tooltip" );
+		f.ui.event( { kind: "press", id: null } );
+		step();
+		assert.ok( shown() );
+		// A press held on another control still hides it.
+		f.ui.event( { kind: "press", id: "open-window:Inventory" } );
+		step();
+		assert.equal( shown(), false, "a press elsewhere hides the tooltip" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("an edit normalized back to the published value still republishes the field", () => {
 	// 521A85: the edit replaces an oversized draft with its limit. When that
 	// limit is already the field's value the semantics compare equal; the UI
@@ -3805,6 +3958,76 @@ test("NPC portal destination menu uses native talk controls and sends the select
 	}
 });
 
+test("the pet portrait selects and targets on right release only, as CIFCOSStatus does", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		f.state.gameplay.cosRecords = [ { gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false } ];
+		f.ui.step( f.state, 0 );
+		// CIFCOSStatus maps no left-click message: the portrait's 0x27 has no
+		// handler (6A9BC0 map), so a left click does nothing.
+		f.ui.event( { kind: "activate", id: "cos-status:7" } );
+		f.ui.step( f.state, 1 );
+		assert.deepEqual( sent, [] );
+		// 6A9E40, the right-button release (vtable +0x80), selects the
+		// companion (6F21F0) and makes it the target (6813E0).
+		f.ui.event( { kind: "right-activate", id: "cos-status:7" } );
+		f.ui.step( f.state, 2 );
+		assert.deepEqual( sent, [ { kind: "cos-select", gid: 7 }, { kind: "select", gid: 7 } ] );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("R replies to the last whisper partner (UIIT_CTL_REPLY_TT, BUG-075)", () => {
+	const f = uiFixture();
+	try {
+		let now = 0;
+		const press = () => {
+			f.ui.event( { kind: "key", code: "KeyR" } );
+			return f.ui.step( f.state, ++now );
+		};
+		f.state.session = { phase: "world", revision: 1, character: "Player" };
+		f.ui.step( f.state, now );
+		// No whisper yet: nothing to answer.
+		assert.equal( press()?.focusRequest?.id === "chat-text" && f.hasText( "$" ), false );
+		const whisper = ( name, outgoing, history = false ) => ({ channel: 2, name, text: "x", outgoing, history });
+		f.state.gameplay.chat = {
+			lines: [
+				whisper( "Alice", false ),
+				whisper( "Old", false, true ),
+				whisper( "Carol", false ),
+				// A whisper sent to Bob makes Bob the reply target (6AEBD0).
+				whisper( "Bob", true ),
+				{ channel: 1, name: "Dave", text: "public", outgoing: false }
+			]
+		};
+		assert.equal( press()?.focusRequest?.id, "chat-text" );
+		assert.ok( f.hasText( "$Bob" ), "the draft names the newest whisper partner, sent or received" );
+		assert.equal( f.hasText( "$Carol" ) || f.hasText( "$Old" ) || f.hasText( "$Dave" ), false );
+	} finally {
+		f.dispose();
+	}
+	// 6AC230 never stores this character's own name, nor is the replayed
+	// transcript a partner of this session: Bob stays the target.
+	const g = uiFixture();
+	try {
+		g.state.session = { phase: "world", revision: 1, character: "Player" };
+		g.state.gameplay.chat = {
+			lines: [
+				{ channel: 2, name: "Bob", text: "x", outgoing: true },
+				{ channel: 2, name: "Player", text: "x", outgoing: false },
+				{ channel: 2, name: "Eve", text: "x", outgoing: false, history: true }
+			]
+		};
+		g.ui.step( g.state, 0 );
+		g.ui.event( { kind: "key", code: "KeyR" } );
+		g.ui.step( g.state, 1 );
+		assert.ok( g.hasText( "$Bob" ) && !g.hasText( "$Player" ) && !g.hasText( "$Eve" ) );
+	} finally {
+		g.dispose();
+	}
+});
+
 test("GPU merchant menu branches retain all tabs, sparse pages and native purchase identities", () => {
 	const sent = [], f = uiFixture( c => sent.push( c.command ) );
 	try {
@@ -4067,6 +4290,36 @@ test("cold service windows cannot republish the companion inventory as their ret
 		held = false;
 		for ( let i = 35; i < 50; i++ ) semantics = f.ui.step( f.state, i * 100 ) ?? semantics;
 		assert.ok( semantics.controls.some( c => c.id === "window-drag:Alchemy" ) );
+	} finally {
+		f.dispose();
+	}
+});
+
+// 620180 gives the alchemy box alcm_window_2 (376x148) as its own texture and
+// 53F4B0 stretches it over the authored GDR_ALCHEMYBOX extent (376x152). At
+// the old 172 the scroll's dark rolled edge (image rows 82..90) slid under the
+// first line of the description, which then read as garbled text.
+test("the alchemy frame keeps its authored height, so the description sits on the parchment", () => {
+	const f = uiFixture();
+	try {
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "activate", id: "open-window:Alchemy" } );
+		for ( let i = 1; i < 20; i++ ) f.ui.step( f.state, i * 100 );
+		const quads = f.scenes.at( -1 ).quads;
+		const frame = quads.find( q => q.texture?.endsWith( "/alcm_window_2.png" ) );
+		assert.ok( frame, "the alchemy frame is drawn" );
+		assert.deepEqual( frame.rect.slice( 2 ), [ 376, 152 ] );
+		// The parchment spans image rows 92..138 of 148: 94.5..141.7 once stretched.
+		const parchmentTop = frame.rect[1] + 92 * 152 / 148;
+		const description = quads.filter( q =>
+			q.rect[1] >= frame.rect[1] + 90 && q.rect[1] < frame.rect[1] + 150 && q.rect[0] >= frame.rect[0] + 38 &&
+			q.texture?.includes( "font" )
+		);
+		assert.ok( description.length > 0, "the description glyphs are drawn" );
+		assert.ok(
+			description.every( q => q.rect[1] >= parchmentTop ),
+			"no description glyph starts on the rolled edge"
+		);
 	} finally {
 		f.dispose();
 	}
@@ -5272,6 +5525,106 @@ test("the player panel draws native siege rank and guild status and removes them
 			!semantics.controls.some( c => [ "GDR_PMI_BATTLE_GRADE", "GDR_PMI_FORTRESS_INFO" ].includes( c.id ) ),
 			JSON.stringify( semantics.controls.filter( c => c.id.includes( "PMI" ) ) )
 		);
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
+Grass of Life revives a pet through the same item-target cursor
+================
+*/
+test("right-clicking Grass of Life arms the target cursor and confirms the clicked pet", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		// ETC group 1, subtype 6: 561D50 arms cursor A6 for it (5621C9).
+		const grass = {
+			slot: 13,
+			refObjId: 2128,
+			typeFlags: 0x30ec,
+			quantity: 3,
+			plus: 0,
+			durability: 0,
+			variance: "0",
+			magic: []
+		};
+		const wolf = {
+			...grass,
+			slot: 14,
+			refObjId: 901,
+			typeFlags: 0x08cc,
+			quantity: 1,
+			summon: { state: 4, rentals: [] }
+		};
+		f.state.gameplay.inventory = [ grass, wolf ];
+		f.state.gameplay.inventorySlotCount = 45;
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		let scene;
+		for ( let t = 100; t <= 2000; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		assert.equal( f.ui.cursor(), 0xa6 );
+		assert.equal( sent.length, 0, "arming never spends the grass" );
+		f.ui.event( { kind: "activate", id: "slot:14" } );
+		assert.equal( f.ui.cursor(), null );
+		for ( let t = 2100; t <= 2500; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
+		assert.ok( defined( scene ).controls.some( row => row.id === "cos-revive-confirm" ) );
+		assert.equal( sent.length, 0, "choosing the pet waits for confirmation" );
+		f.ui.event( { kind: "activate", id: "cos-revive-confirm" } );
+		// The same use a drop of the grass on the whistle sends.
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 13, revivalSlot: 14 }
+		} );
+	} finally {
+		f.dispose();
+	}
+});
+
+/*
+================
+The revival and renewal boxes own distinct control ids
+================
+*/
+test("the grass and clock confirmations never publish the same control id", () => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	try {
+		const base = { quantity: 1, plus: 0, durability: 0, variance: "0", magic: [] };
+		const grass = { ...base, slot: 13, refObjId: 2128, typeFlags: 0x30ec, quantity: 3 };
+		const clock = { ...base, slot: 15, refObjId: 8985, typeFlags: 0x66ec };
+		const wolf = { ...base, slot: 14, refObjId: 901, typeFlags: 0x08cc, summon: { state: 4, rentals: [] } };
+		f.state.gameplay.inventory = [ grass, wolf, clock ];
+		f.state.gameplay.inventorySlotCount = 45;
+		f.ui.step( f.state, 0 );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		let scene, t = 100;
+		const settle = () => {
+			for ( const end = t + 400; t <= end; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
+			return defined( scene ).controls.map( row => row.id );
+		};
+		settle();
+		// The grass box is pending; the clock's right-click cannot open a second.
+		f.ui.event( { kind: "right-activate", id: "slot:13" } );
+		f.ui.event( { kind: "activate", id: "slot:14" } );
+		f.ui.event( { kind: "right-activate", id: "slot:15" } );
+		let ids = settle();
+		assert.equal( new Set( ids ).size, ids.length, "every control id is unique" );
+		assert.ok( ids.includes( "cos-revive-confirm" ) && !ids.includes( "cos-renew-confirm" ) );
+		// Answered, the clock opens its own box under its own ids.
+		f.ui.event( { kind: "activate", id: "cos-revive-cancel" } );
+		settle();
+		f.ui.event( { kind: "right-activate", id: "slot:15" } );
+		settle();
+		f.ui.event( { kind: "activate", id: "slot:14" } );
+		ids = settle();
+		assert.equal( new Set( ids ).size, ids.length, "every control id is unique" );
+		assert.ok( ids.includes( "cos-renew-confirm" ) && !ids.includes( "cos-revive-confirm" ) );
+		f.ui.event( { kind: "activate", id: "cos-renew-confirm" } );
+		assert.deepEqual( sent.at( -1 ), {
+			kind: "gameplay",
+			command: { kind: "item-use", slot: 15, summonerSlot: 14 }
+		} );
 	} finally {
 		f.dispose();
 	}

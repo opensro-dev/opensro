@@ -109,8 +109,9 @@ func (rt *Runtime) armApproach(divisionID, worldKey, pendingKey string, characte
 grantPickup
 
 grantPickup executes the pickup: gold credits the balance, items merge or
-occupy a bag slot with the over-cap remainder left on the ground. The
-despawn rides the SAME burst as the scoop (bug B, verified native).
+occupy a bag slot with the over-cap remainder left on the ground, and trade
+goods go to the transport. The despawn rides the SAME burst as the scoop
+(bug B, verified native).
 ==================
 */
 func (rt *Runtime) grantPickup(
@@ -118,6 +119,12 @@ func (rt *Runtime) grantPickup(
 	character, characterSnapshot *enterworld.Character,
 	groundItem grounditem.Item,
 ) OpResult {
+	// 525DC0: trade goods leave the party's item share for the picker's
+	// transport (tradepickup.go).
+	if isPickupTradeGoods(groundItem.TypeFlags) {
+		return rt.grantTradeGoodsPickup(pickupGrant{division: divisionID, worldKey: worldKey, picker: character,
+			recipient: character, snapshot: characterSnapshot, item: groundItem})
+	}
 	recipient := rt.partyPickupRecipient(divisionID, character, groundItem, rt.Now().UnixMilli())
 	return rt.grantPickupTo(pickupGrant{division: divisionID, worldKey: worldKey, picker: character,
 		recipient: recipient, snapshot: characterSnapshot, item: groundItem})

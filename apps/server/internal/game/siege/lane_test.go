@@ -110,3 +110,36 @@ func TestFortressListMatchesTheClientReadOrder(t *testing.T) {
 		t.Fatalf("empty war guild registry %x", got)
 	}
 }
+
+/*
+================
+TestWindowsFollowTheWarSchedule
+
+The calendar's windows come from the schedules that drive the war: on war
+Wednesday morning registration is running and the war is next, starting
+where WarStart says; during the war it is running.
+================
+*/
+func TestWindowsFollowTheWarSchedule(t *testing.T) {
+	lane, _, loc := laneFixture(t)
+	morning := time.Date(2026, 10, 7, 9, 0, 0, 0, loc).UnixMilli()
+	byName := func(nowMs int64) map[string]Window {
+		out := map[string]Window{}
+		for _, window := range lane.Windows(nowMs) {
+			out[window.Name] = window
+		}
+		return out
+	}
+	windows := byName(morning)
+	request, war := windows["AllowSiegeRequest"], windows["SiegeProgressing"]
+	if !request.Running || war.Running || !war.Start.Equal(lane.WarStart(morning)) || !war.End.After(war.Start) {
+		t.Fatalf("morning windows %+v", windows)
+	}
+	during := war.Start.Add(30 * time.Minute).UnixMilli()
+	if !byName(during)["SiegeProgressing"].Running {
+		t.Fatalf("the war is not running at %v: %+v", time.UnixMilli(during).In(loc), byName(during))
+	}
+	if (*Lane)(nil).Windows(morning) != nil {
+		t.Fatal("a nil lane listed windows")
+	}
+}

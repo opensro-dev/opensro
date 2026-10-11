@@ -52,10 +52,10 @@ func findMonsterRoute(from, goal monster.Pose, probe func(monster.Pose, monster.
 	goal = routeNormalize(goal)
 	first := probe(from, goal)
 	if first == nil {
-		return monster.UnresolvedNavigationRoute(goal, monster.NavigationGeometryUnavailable)
+		return monster.UnresolvedNavigationRoute(goal, monster.NavigationGeometryUnavailable).WithProbes(1)
 	} // unavailable geometry is not an obstacle to guess around
 	if routeClear(first, goal) {
-		return monster.NewNavigationRoute(goal, []monster.Pose{goal})
+		return monster.NewNavigationRoute(goal, []monster.Pose{goal}).WithProbes(1)
 	}
 	// Fixed work budget and deterministic tie order bound crowded-server cost.
 	// Retried requests are paced and cached by the mover, not by this adapter.
@@ -80,7 +80,7 @@ func findMonsterRoute(from, goal monster.Pose, probe func(monster.Pose, monster.
 				for i, j := 0, len(points)-1; i < j; i, j = i+1, j-1 {
 					points[i], points[j] = points[j], points[i]
 				}
-				return monster.NewNavigationRoute(goal, points)
+				return monster.NewNavigationRoute(goal, points).WithProbes(count)
 			}
 		}
 		for _, d := range directions {
@@ -112,5 +112,5 @@ func findMonsterRoute(from, goal monster.Pose, probe func(monster.Pose, monster.
 	if count >= monsterRouteProbeBudget {
 		status = monster.NavigationSearchExhausted
 	}
-	return monster.UnresolvedNavigationRoute(goal, status)
+	return monster.UnresolvedNavigationRoute(goal, status).WithProbes(count)
 }

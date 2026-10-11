@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -83,8 +84,9 @@ func (rt *Runtime) groundStep(from simulation.Spawn, owner simulation.NavOwner, 
 GroundTickHook
 
 Snapshot publication already advances connected actors. This drain commits
-only accepted poses and publishes native B2F5 stops. Revision fencing drops
-a stop superseded by a later input, teleport or life transition.
+only accepted poses and publishes native B2F5 stops, after the 0x342F
+notice of a tether refusal. Revision fencing drops a stop superseded by a
+later input, teleport or life transition.
 ================
 */
 func (rt *Runtime) GroundTickHook() simulation.TickHook {
@@ -120,6 +122,11 @@ func (rt *Runtime) GroundTickHook() simulation.TickHook {
 			})
 			walk, directional := rt.directions.get(update.Key)
 			continuing := directional && !walk.blocked && walk.current(state)
+			if committed && update.Tether != 0 {
+				// 4F1230 answers the refused step before it stops the player.
+				frames = append(frames, simulation.DivisionFrames{DivisionID: division, OnlyCharacterID: character.ID,
+					Frames: []simulation.Frame{{Opcode: wire.OpCosDistanceError, Payload: []byte{update.Tether}}}})
+			}
 			if committed && (update.Stopped || update.Arrived && !continuing) {
 				if update.Stopped {
 					rt.directions.clear(update.Key)

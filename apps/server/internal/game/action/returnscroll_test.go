@@ -167,29 +167,94 @@ func TestReturnCancelReplacementStaleTimerAndDisconnect(t *testing.T) {
 
 /*
 ================
-TestReturnDeathDefersAndEntryFailureRollsBack
+TestReturnDeathCancelsTheCast
+
+#bug-reports: a character died during a return scroll, revived where it
+fell, and was then teleported to town. Native death cancels the cast
+(529B10 -> 513EA0): the job is gone, the mode is 0 for every observer, the
+scroll stays spent, and nothing teleports after the revival.
 ================
 */
-func TestReturnDeathDefersAndEntryFailureRollsBack(t *testing.T) {
-	rt, c, clock, _ := returnFixture(t, 5000)
+func TestReturnDeathCancelsTheCast(t *testing.T) {
+	rt, c, clock, ref := returnFixture(t, 5000)
 	useReturn(rt, c)
 	key := simulation.WorldKey(testDivision, c.Name)
-	zero := int64(0)
-	c.CurrentHP = &zero
-	clock.Advance(5 * time.Second)
-	rt.advanceReturnScrolls(clock.NowMs())
-	v, ok := rt.returnCasts.Load(key)
-	if !ok || v.(pendingReturn).due != clock.NowMs()+1000 || c.NativeTeleportMode != 1 {
-		t.Fatal("native dead timer not deferred")
+	before := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
+	effects, _ := rt.settlePlayerDeathInDoor(testDivision, c, deathKiller{}, clock.NowMs())
+	if _, pending := rt.returnCasts.Load(key); pending || c.NativeTeleportMode != 0 {
+		t.Fatalf("death left the cast pending (mode %d)", c.NativeTeleportMode)
+	}
+	cleared := false
+	for _, f := range effects {
+		if f.Opcode == wire.OpObjectStateRefresh && len(f.Payload) == 6 && f.Payload[4] == wire.StateChannelScroll && f.Payload[5] == 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatalf("observers never saw the teleport mode cleared: %+v", effects)
+	}
+	// The fixture holds 4; the use spent one.
+	if bagRowByCodename(c, ref.Codename).StackCount != 3 {
+		t.Fatal("the cancelled scroll was refunded; native keeps it spent")
 	}
 	hp := int64(100)
 	c.CurrentHP = &hp
+	clock.Advance(10 * time.Second)
+	rt.advanceReturnScrolls(clock.NowMs())
+	if got := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}); got != before {
+		t.Fatalf("the revived character was teleported to %+v", got)
+	}
+}
+
+/*
+================
+TestReturnBerserkDefersAndEntryFailureRollsBack
+
+40614E postpones the channel-11 teleport by a second while the body mode is
+berserk (1); once it ends the cast completes, and a failed world entry
+leaves the actor where it stood.
+================
+*/
+func TestReturnBerserkDefersAndEntryFailureRollsBack(t *testing.T) {
+	rt, c, clock, _ := returnFixture(t, 5000)
+	useReturn(rt, c)
+	key := simulation.WorldKey(testDivision, c.Name)
+	c.NativeBodyStatus = berserkBodyMode
+	clock.Advance(5 * time.Second)
+	rt.advanceReturnScrolls(clock.NowMs())
+	v, ok := rt.returnCasts.Load(key)
+	if !ok || v.(pendingReturn).due != clock.NowMs()+returnPostponeMs || c.NativeTeleportMode != 1 {
+		t.Fatal("berserk did not defer the teleport")
+	}
+	c.NativeBodyStatus = 0
 	before := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
 	rt.deps = &failedWarpEntry{rt.deps.(*enterworld.Deps)}
 	clock.Advance(time.Second)
 	rt.advanceReturnScrolls(clock.NowMs())
 	if c.NativeTeleportMode != 0 || missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before {
 		t.Fatal("failed entry stranded actor")
+	}
+}
+
+/*
+================
+TestReturnCorpseIsNeverTeleported
+
+A corpse whose death did not pass through the settler (a timer racing a
+lethal hit) is cancelled at completion, never moved.
+================
+*/
+func TestReturnCorpseIsNeverTeleported(t *testing.T) {
+	rt, c, clock, _ := returnFixture(t, 5000)
+	useReturn(rt, c)
+	before := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
+	zero := int64(0)
+	c.CurrentHP = &zero
+	clock.Advance(5 * time.Second)
+	rt.advanceReturnScrolls(clock.NowMs())
+	if _, pending := rt.returnCasts.Load(simulation.WorldKey(testDivision, c.Name)); pending || c.NativeTeleportMode != 0 ||
+		missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before {
+		t.Fatal("a corpse was teleported or left pending")
 	}
 }
 

@@ -293,11 +293,11 @@ func (v *WaterValidator) buildSurface(bundlePublicPath string, index *regionInde
 func buildObjectPlacements(bundle *regionBundle) (map[int64][]objectNavPlacement, error) {
 	placements := make(map[int64][]objectNavPlacement)
 	for _, region := range bundle.Navmesh.Regions {
-		rows := decodeObjectPlacements(region.Objects)
+		rows, entries := decodeObjectPlacements(region.Objects)
 		if len(rows) == 0 {
 			continue
 		}
-		if err := admitTerrainObjectCells(region, rows); err != nil {
+		if err := admitTerrainObjectCells(region, rows, entries); err != nil {
 			return nil, err
 		}
 		dx, _ := jsonInt(region.Dx)

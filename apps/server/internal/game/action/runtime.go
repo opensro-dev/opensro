@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/pk"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
@@ -151,6 +152,9 @@ type Runtime struct {
 	// another runtime or bootstrap's object list.
 	NpcRoster []simulation.NpcDef
 	portals   *portalCatalog
+	// reverseMapPoints is the reverse return scroll's map table, empty
+	// unless SRO_REVERSE_RETURN_MAP is on (ConfigureReverseReturnMap).
+	reverseMapPoints []enterworld.ReverseMapPoint
 	// gatePulleys maps a gate pulley's RefObjID to its gate's event zone
 	// (ConfigurePortals, fortress_gates.go).
 	gatePulleys map[uint32]uint32
@@ -202,7 +206,9 @@ type Runtime struct {
 	// storageAuthority owns the account warehouse (storage.go).
 	storageAuthority domain.StorageAuthority
 	petMu            sync.Mutex
-	petSessions      map[petOwnerKey]*petSession
+	// petDiag throttles the attack pet fight log (petdiagnostics.go).
+	petDiag     petDiagnostics
+	petSessions map[petOwnerKey]*petSession
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission
@@ -270,6 +276,11 @@ type Runtime struct {
 	// not native; the closed-beta growth switch sets it).
 	DropCap int
 
+	// DropMix gives named item families their own beta drop rate in place
+	// of DropPassRate; nil runs every family at DropPassRate (port-only,
+	// not native; progression/dropmix.go).
+	DropMix progression.DropMix
+
 	// GoldRate multiplies every monster gold heap after the native rarity
 	// multipliers. 0 or 1 is native; the closed-beta growth switch raises it.
 	GoldRate int
@@ -277,6 +288,11 @@ type Runtime struct {
 	// RareRate multiplies the chance that an equipment drop is rare (SoX).
 	// 0 or 1 is native; the closed-beta growth switch raises it.
 	RareRate int
+
+	// PetExpPace is the closed-beta growth multiplier for an attack pet's
+	// EXP gain, read at the owner's level (progression GrowthRates.ExpPace,
+	// petgrowth.go). Nil is native; the growth switch sets it (port-only).
+	PetExpPace func(ownerLevel int64) float64
 
 	// PartyShareFloor raises every party member's EXP share to at least an
 	// even split (partyRewardFactors). Off is native; the closed-beta growth
@@ -320,6 +336,11 @@ type Runtime struct {
 		characterName string,
 		from, to simulation.Spawn,
 	) (simulation.Spawn, *simulation.MoveError)
+
+	// PlanCompanionRoute routes a pet around what its straight path cannot
+	// cross: the monster AI's detour (movement.PlanMonsterRoute). Nil keeps
+	// pets on their straight, clipped segment.
+	PlanCompanionRoute simulation.PetRoutePlanner
 
 	// ConstrainWalk is ConstrainMovement for a character walking from its
 	// retained surface owner (movement.Runtime.ConstrainMovementFrom). Every
@@ -390,12 +411,25 @@ type Runtime struct {
 	// burst after the authority door closes. Pending pickups use captured
 	// delivery when configured; detached runtimes retain this actor fallback.
 	PushCharacterFrames func(divisionID, characterName string, frames []wire.Frame)
+	// SilkWallet credits operator and GM silk grants (operator_silk.go);
+	// RecordSilkGrant journals each committed grant.
+	SilkWallet      SilkWallet
+	RecordSilkGrant func(SilkGrant)
+	// RecordUniqueKill queues each announced unique kill for the community
+	// site's record (port-only). It runs inside the character door, so it
+	// must only enqueue: the store write happens on its own goroutine.
+	RecordUniqueKill func(division string, kill domain.UniqueKill)
 
 	// CaptureCharacterFrames snapshots recipient sessions and their scene
 	// revisions under the division lock, after the character door closes.
 	// Capture must not send. Invoke the returned handle only after releasing
 	// the division lock; a nil handle means no recipient was captured.
 	CaptureCharacterFrames func(divisionID, characterName string) func([]wire.Frame)
+
+	// CaptureObjectFrames is CaptureCharacterFrames keyed by the player's
+	// object id, for tick batches that carry only a character id
+	// (sealTickPrivate). The same capture rules apply.
+	CaptureObjectFrames func(divisionID string, gid uint32) func([]wire.Frame)
 
 	// PushDivisionPeerFrames delivers public presentation frames to every
 	// same-division session except the acting character: pickup animation/world

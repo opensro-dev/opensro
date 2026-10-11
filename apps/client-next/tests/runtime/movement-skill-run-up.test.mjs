@@ -1,0 +1,198 @@
+/*
+===========================================================================
+
+movement-skill-run-up.test.mjs - a skill press's predicted run-up
+
+An admitted press on a target beyond reach walks the caster into reach on
+the server (58D8F0). The client starts that walk at the press
+(predictApproach with approach) so it is not one delivery behind the
+server when the cast begins. The server's walk stops at its own combat
+spacing, short of the predicted goal, and is adopted by heading; a refused
+press walks back to the start the server kept.
+
+===========================================================================
+*/
+import "../helpers/native-source-loader.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { defined } from "../helpers/defined.mjs";
+import { product } from "../helpers/navigation-fixture.mjs";
+const { createMovement } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/movement/movement.ts"
+);
+const start = { regionId: 257, x: 100, y: 0, z: 100, angle: 0 };
+const GID = 7;
+// The run speed (units/s), the worker step and the one-way delivery.
+const RUN_SPEED = 50;
+const STEP_MS = 16;
+const LATENCY_MS = 150;
+
+/*
+================
+walkTo
+
+The server's unsourced walk of the local player toward x along z = 100.
+================
+*/
+function walkTo( x ) {
+	const p = Buffer.alloc( 14 );
+	p.writeUInt32LE( GID );
+	p[4] = 1;
+	p.writeUInt16LE( 257, 5 );
+	p.writeInt16LE( x, 7 );
+	p.writeInt16LE( 0, 9 );
+	p.writeInt16LE( 100, 11 );
+	return p;
+}
+
+/*
+================
+pressed
+
+A caster at rest that pressed a skill on a target 300 units east at time 0
+and ran its predicted run-up until the server's answer, one round trip on.
+================
+*/
+function pressed() {
+	const m = createMovement( () => {} ), navigation = product();
+	navigation.objects = [];
+	m.seed( start );
+	m.navigation( 257, navigation );
+	m.speeds( 20, RUN_SPEED, 0 );
+	assert.ok( m.predictApproach( { ...start, x: 400 }, 0, true ) );
+	for ( let now = STEP_MS; now <= 2 * LATENCY_MS; now += STEP_MS ) m.step( now );
+	return m;
+}
+
+/*
+================
+x
+================
+*/
+function x( m ) {
+	return defined( m.state().pose ).x;
+}
+
+test("the server's shorter run-up is adopted without stepping back", () => {
+	const m = pressed(), progressed = x( m );
+	assert.ok( progressed > start.x + RUN_SPEED * 0.25, `run-up began at the press (x ${progressed})` );
+	assert.equal( m.approachPredictedSince(), 0 );
+	// The server stops at its combat spacing, short of the predicted goal.
+	m.native( walkTo( 380 ), 2 * LATENCY_MS, GID );
+	assert.equal( m.approachPredictedSince(), undefined );
+	assert.ok( Math.abs( x( m ) - progressed ) < 1, "adoption kept the progress made in flight" );
+	for ( let now = 2 * LATENCY_MS + STEP_MS; now <= 8000; now += STEP_MS ) m.step( now );
+	assert.ok( Math.abs( x( m ) - 380 ) < 1, `ends at the server's goal (x ${x( m )})` );
+});
+
+test("a server walk the other way is not the run-up", () => {
+	const m = pressed();
+	m.native( walkTo( 20 ), 2 * LATENCY_MS, GID );
+	assert.equal( m.approachPredictedSince(), undefined );
+	for ( let now = 2 * LATENCY_MS + STEP_MS; now <= 8000; now += STEP_MS ) m.step( now );
+	assert.ok( Math.abs( x( m ) - 20 ) < 1, `follows the server's walk (x ${x( m )})` );
+});
+
+test("a refused press walks the run-up back to the start", () => {
+	const m = pressed();
+	m.castRefused( 2 * LATENCY_MS );
+	assert.equal( m.approachPredictedSince(), undefined );
+	for ( let now = 2 * LATENCY_MS + STEP_MS; now <= 4000; now += STEP_MS ) m.step( now );
+	assert.ok( Math.abs( x( m ) - start.x ) < 1, `back at the start (x ${x( m )})` );
+});
+
+test("a cast without a walk ends the run-up at the start", () => {
+	const m = pressed();
+	m.endPrediction( 2 * LATENCY_MS );
+	for ( let now = 2 * LATENCY_MS + STEP_MS; now <= 4000; now += STEP_MS ) m.step( now );
+	assert.ok( Math.abs( x( m ) - start.x ) < 1, `back at the start (x ${x( m )})` );
+});
+
+test("a pickup prediction is not a skill run-up", () => {
+	const m = createMovement( () => {} ), navigation = product();
+	navigation.objects = [];
+	m.seed( start );
+	m.navigation( 257, navigation );
+	assert.ok( m.predictApproach( { ...start, x: 400 }, 0 ) );
+	assert.equal( m.approachPredictedSince(), undefined );
+});
+
+// ============================================================================
+// gameplay: the press that starts the run-up, and a repeated press
+
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
+
+/*
+================
+gameplayPress
+
+A caster at rest with skill 30 (range 60, an enemy action) pressed at a
+monster 300 units east at time 0, over flat navigation.
+================
+*/
+function gameplayPress() {
+	const local = {
+		gid: GID,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "caster",
+		regionId: 257,
+		x: 100,
+		y: 0,
+		z: 100,
+		heading: 0
+	};
+	const game = createGameplay( () => {} );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ 30 ] },
+		refSkillSnapshot: [ {
+			id: 30,
+			group: 30,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "SKILL_30",
+				trainable: true,
+				spCost: 1,
+				targetRequired: true,
+				targets: 6,
+				cooldownMs: 0,
+				actionMs: 1000,
+				range: 60,
+				admit: { weaponKinds: [ 255, 255 ] },
+				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+			}
+		} ]
+	} );
+	game.seed( local );
+	const navigation = product();
+	navigation.objects = [];
+	game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0, undefined );
+	const monster = { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + 300 };
+	game.command( { kind: "skill", skillId: 30, gid: 9 }, 0, monster, local );
+	return { game, local, monster };
+}
+
+test("a press beyond reach starts the run-up at once", () => {
+	const { game, local } = gameplayPress();
+	game.step( 200, local );
+	const pose = defined( game.take()?.pose );
+	game.dispose();
+	assert.ok( pose.x > local.x + 1, `walking at the press (x ${pose.x})` );
+});
+
+test("a repeated press during the run-up keeps it walking", () => {
+	const { game, local, monster } = gameplayPress();
+	game.step( 200, local );
+	const before = defined( game.take()?.pose ).x;
+	game.command( { kind: "skill", skillId: 30, gid: 9 }, 200, monster, local );
+	game.step( 400, local );
+	const after = defined( game.take()?.pose ).x;
+	game.dispose();
+	assert.ok( after > before + 1, `still walking after the second press (${before} -> ${after})` );
+});

@@ -18,6 +18,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { GameOptions } from "@/engine/foundation/gameplay/game-options";
 import { REGION_SIZE } from "@/engine/foundation/gameplay/native-movement";
 import { hasMonsterPartyMark } from "@/engine/foundation/ui/monster-nameplate";
+import { NO_JOB_CLASS } from "@/engine/foundation/gameplay/job-guild";
 
 // Squared world distance past which a name board is hidden (300 units).
 const NAME_RANGE_SQUARED = 90000;
@@ -107,6 +108,44 @@ export function beginnerMarkShown( entity: EntityState, options: GameOptions ): 
 
 /*
 ================
+boardText
+
+CICharactor_SetName (85ABF0): a user whose active job class (vtable +0xA8)
+is not 4, that is one dressed in a job suit, shows "*" before the name on
+its board (L"*" at BE833C). Other entities show the name as given.
+================
+*/
+export function boardText( entity: Pick<EntityState, "kind" | "activeJob">, name: string ): string {
+	const user = entity.kind === "local-player" || entity.kind === "player";
+	return user && name && entity.activeJob !== undefined && entity.activeJob !== NO_JOB_CLASS ? "*" + name : name;
+}
+
+/*
+================
+jobMark
+
+CICUser_RenderOverheadBoardPass (86B350) draws com_job_merchant, _thief or
+_hunter for a player whose active job class (vtable +0xA8, +0x4F5) is 1..3,
+in the same option +0x0C block as the beginner mark. Returns the image's
+base name, or null when no mark shows.
+================
+*/
+export function jobMark( entity: EntityState, options: GameOptions ): string | null {
+	if ( !options.ownName || (entity.kind !== "local-player" && entity.kind !== "player") ) return null;
+	// 86B350 picks the texture by class: 1 merchant, 2 thief, 3 hunter.
+	switch ( entity.activeJob ) {
+		case 1:
+			return "com_job_merchant";
+		case 2:
+			return "com_job_thief";
+		case 3:
+			return "com_job_hunter";
+	}
+	return null;
+}
+
+/*
+================
 overheadBoardVisible
 
 The one overhead decision: the native name decision, widened so that a
@@ -123,7 +162,8 @@ export function overheadBoardVisible(
 	overlayShown: boolean,
 	rideLinked = false
 ): boolean {
-	return overlayShown || beginnerMarkShown( entity, options ) || hasMonsterPartyMark( entity ) ||
+	return overlayShown || beginnerMarkShown( entity, options ) || jobMark( entity, options ) !== null ||
+		hasMonsterPartyMark( entity ) ||
 		nameVisible( entity, local, hovered, options, pose, rideLinked );
 }
 

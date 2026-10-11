@@ -156,6 +156,8 @@ func startPartyServer(t *testing.T, dir string, createCharacters bool) e2eServer
 				ModelCodename: "CHAR_CH_MAN_ADVENTURER",
 				RaceIndex:     e2eInt64(enterworld.RaceChina),
 				Gender:        e2eInt64(enterworld.GenderMale),
+				// 513F90 refuses a proposer below level 5.
+				Level: e2eInt64(5),
 			}
 			if err := authority.CreateCharacter(e2eDivision, "test-account", seed); err != nil {
 				t.Fatalf("CreateCharacter(%s): %v", name, err)
@@ -432,7 +434,7 @@ func chinaMaleRow(gid uint32, name string) party.MemberRow {
 		MemberID:      gid,
 		Name:          name,
 		ModelRefID:    1907,
-		Level:         1,
+		Level:         5,
 		StatusNibbles: 0xAA,
 		War:           domain.DefaultWorldInstance,
 		Region:        0x62A8,

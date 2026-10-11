@@ -187,7 +187,9 @@ func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResu
 	})}
 	// Viewers meet the pet through the peer COS lane alone: a spawn sent from
 	// here as well reached each of them twice (see the vehicle summon).
-	*result = OpResult{Frames: []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)}, {Opcode: wire.OpCosRecordCreate, Payload: record}, spawn}}
+	frames := []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)}}
+	frames = append(frames, rt.cosContainerReferenceFrames(pet)...)
+	*result = OpResult{Frames: append(frames, wire.Frame{Opcode: wire.OpCosRecordCreate, Payload: record}, spawn)}
 	result.Frames = append(result.Frames, companionItemStateFrames(c, pet)...)
 	return true
 }

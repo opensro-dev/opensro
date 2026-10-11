@@ -198,7 +198,17 @@ receive
 			// Network owner has already checked the exact v2 WELCOME layout.
 			const resumed = frame.payload[1] === 1;
 			if ( hasWorld && !resumed ) {
-				throw new Error( "Server could not resume the previous world session" );
+				// The server's resume grace ended before this client came back
+				// (a background tab can wake too late). The session is over:
+				// an expected end the player is told about, not a game error.
+				onNetworkFailure( "Server could not resume the previous world session", undefined, {
+					category: "expected",
+					code: "resume_expired",
+					message: "Your session ended while the connection was gone. Please log in again."
+				} );
+				// false stops the drain, as the old throw did: no later frame of
+				// this batch reaches an ended session.
+				return false;
 			}
 			resumedTransport = resumed && hasWorld;
 			resume = frame.payload.slice( 11 );
@@ -275,7 +285,11 @@ receive
 			return;
 		}
 		if ( isWorldControl( frame.opcode ) ) {
-			if ( !boundThisTransport ) throw Error( "World control packet before EnterWorld" );
+			// A resumed transport replays the frames the old one lost, which
+			// can precede its EnterWorld result (a purchase's item reference
+			// delta). Native packets are admitted there too; the world they
+			// apply to is the one the resume keeps.
+			if ( !boundThisTransport && !resumedTransport ) throw Error( "World control packet before EnterWorld" );
 			core.receive( frame, now );
 			return;
 		}
@@ -572,6 +586,16 @@ step
 				failure = null;
 				lastError = error;
 			}
+		},
+		/*
+================
+takeNetJournal
+
+The network owner's frame journal since the last take (network.ts).
+================
+		*/
+		takeNetJournal() {
+			return network.takeJournal();
 		},
 		/*
 ================

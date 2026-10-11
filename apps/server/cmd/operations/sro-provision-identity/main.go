@@ -1,5 +1,6 @@
 // Command sro-provision-identity creates Agent's missing Ed25519 session
-// signing key ring and account provisioning token without printing
+// signing key ring, account provisioning token and public API token
+// without printing
 // private material. Existing identity is
 // validated and preserved.
 package main
@@ -26,6 +27,7 @@ func main() {
 	for _, ensure := range []func(string) (clusterprovision.FileResult, error){
 		clusterprovision.EnsureIdentity,
 		clusterprovision.EnsureProvisioningToken,
+		clusterprovision.EnsurePublicAPIToken,
 	} {
 		result, err := ensure(*stateDir)
 		if err != nil {

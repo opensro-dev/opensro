@@ -130,7 +130,7 @@ before a trap can dispatch a new capture. Each viewer receives spawn, result
 and retirement in one ordered batch, including first-tick detonations.
 ================
 */
-func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionSnapshot) []simulation.DivisionFrames {
+func (rt *Runtime) AdvanceSkillObjects(nowMs int64, sessions []simulation.SessionView) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	before := rt.SkillObjects.Snapshot()
 	var results []simulation.DivisionFrames

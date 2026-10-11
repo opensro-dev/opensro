@@ -295,3 +295,27 @@ func TestPlayersListsEachCharacterNewestFirst(t *testing.T) {
 		t.Fatalf("wizard = %+v", wizard)
 	}
 }
+
+/*
+================
+TestSkippedInsertNamesItsProducer
+
+#716: an insert the database skips although no event holds its id fails
+with the event's kind and the probe's findings, so the operator log says
+which producer lost a record instead of "sql: no rows in result set". A
+trigger stands in for whatever skipped the row.
+================
+*/
+func TestSkippedInsertNamesItsProducer(t *testing.T) {
+	j := testJournal(t)
+	if _, err := j.db.Exec(`CREATE TRIGGER skip_probe BEFORE INSERT ON events WHEN NEW.kind='probe' BEGIN SELECT RAISE(IGNORE); END`); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := NewID()
+	err := j.write(Event{ID: id, Kind: "probe", Account: "a"})
+	if err == nil || !strings.Contains(err.Error(), "probe event") || !strings.Contains(err.Error(), "loose matches 0") ||
+		strings.Contains(err.Error(), "no rows in result set") {
+		t.Fatalf("skipped insert error = %v", err)
+	}
+	put(t, j, Event{Kind: "log", Account: "a"})
+}

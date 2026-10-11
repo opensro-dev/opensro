@@ -70,7 +70,13 @@ export interface UiQuad {
 	readonly sampling?: "linear" | "nearest";
 	readonly depth?: number;
 	readonly occlusion?: "scene" | "none";
-	readonly doll?: { readonly gid: number; readonly yaw: number; };
+	readonly doll?: {
+		readonly gid: number;
+		readonly yaw: number;
+		// Port-only: the 3D viewer's framing camera (viewer-camera.ts). Absent,
+		// the doll keeps the inventory's fixed camera.
+		readonly camera?: import("./scene").WorldCamera;
+	};
 	readonly worldAnchor?: Omit<import("./gameplay").Pose, "angle">;
 	readonly portraitGid?: number;
 	readonly rotation?: number;
@@ -129,6 +135,7 @@ UiControl
 ================
 */
 export interface UiControl {
+	readonly multiline?: boolean;
 	readonly valueText?: string;
 	readonly whisperTarget?: string;
 	readonly textAlign?: "left" | "center" | "right";
@@ -160,6 +167,8 @@ UiSemantics
 export interface UiSemantics {
 	readonly loadingVisible?: boolean;
 	readonly hudCorner?: UiRect;
+	/** Top of the port-only tool row, clear of native player, target and companion chrome. */
+	readonly hudToolsTop?: number;
 	readonly focusRequest?: {
 		readonly id: string | null;
 		readonly revision: number;

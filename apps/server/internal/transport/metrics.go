@@ -44,6 +44,7 @@ type hubMetrics struct {
 	writeErrors           atomic.Uint64
 	enterWorldAuthRefused atomic.Uint64
 	unhandledFrames       atomic.Uint64
+	emptyFramesRefused    atomic.Uint64
 	queueHighWater        atomic.Uint64
 	queueByteHighWater    atomic.Uint64
 	byeNormal             atomic.Uint64
@@ -106,15 +107,18 @@ type Metrics struct {
 
 	// FramesIn counts every inbound frame accepted by a session read loop,
 	// including frames later dropped by rate limiting.
-	FramesIn                   uint64 `json:"frames_in"`
-	BytesIn                    uint64 `json:"bytes_in"`
-	FramesOut                  uint64 `json:"frames_out"`
-	BytesOut                   uint64 `json:"bytes_out"`
-	DatagramsOut               uint64 `json:"datagrams_out"`
-	DatagramBytesOut           uint64 `json:"datagram_bytes_out"`
-	WriteErrors                uint64 `json:"write_errors"`
-	EnterWorldAuthRefused      uint64 `json:"enter_world_auth_refused"`
-	UnhandledOpcodeFrames      uint64 `json:"unhandled_opcode_frames"`
+	FramesIn              uint64 `json:"frames_in"`
+	BytesIn               uint64 `json:"bytes_in"`
+	FramesOut             uint64 `json:"frames_out"`
+	BytesOut              uint64 `json:"bytes_out"`
+	DatagramsOut          uint64 `json:"datagrams_out"`
+	DatagramBytesOut      uint64 `json:"datagram_bytes_out"`
+	WriteErrors           uint64 `json:"write_errors"`
+	EnterWorldAuthRefused uint64 `json:"enter_world_auth_refused"`
+	UnhandledOpcodeFrames uint64 `json:"unhandled_opcode_frames"`
+	// EmptyFramesRefused counts outbound opcode-0 frames the queue refused
+	// (emptyframe.go); any non-zero value is a producer bug to fix.
+	EmptyFramesRefused         uint64 `json:"empty_frames_refused"`
 	OutboundQueueBytes         int    `json:"outbound_queue_bytes"`
 	OutboundQueueByteHighWater uint64 `json:"outbound_queue_byte_high_water"`
 	ByeNormal                  uint64 `json:"bye_normal"`
@@ -127,12 +131,29 @@ type Metrics struct {
 	TickMeanMs   float64 `json:"tick_mean_ms"`
 	TickMaxMs    float64 `json:"tick_max_ms"`
 	TickOverruns uint64  `json:"tick_overruns"`
+	// TickHistogram is the whole-tick distribution (tick_histogram.go).
+	TickHistogram TickHistogram `json:"tick_ms_histogram"`
 	// Request handler and tick phase histograms (timing.go).
 	HandlerMs   map[string]Histogram     `json:"handler_ms"`
 	TickPhaseMs map[string]Histogram     `json:"tick_phase_ms"`
 	SlowHooks   map[string]SlowHookStats `json:"slow_hooks"`
 	// Divisions whose own work in a tick ran >= 100 ms, by division ID.
 	SlowDivisions map[string]SlowHookStats `json:"slow_divisions"`
+	// MonsterNavigation is the world's route-plan and path-clip counters
+	// (simulation.NavigationMetrics), when the GameWorld installed them.
+	MonsterNavigation map[string]uint64 `json:"monster_navigation,omitempty"`
+}
+
+/*
+==================
+SetNavigationMetrics
+
+Installs the provider of the monster_navigation block. The transport only
+reads its counters; it never imports the world that counts them.
+==================
+*/
+func (h *Hub) SetNavigationMetrics(read func() map[string]uint64) {
+	h.navigationMetrics.Store(&read)
 }
 
 // Metrics snapshots the counters and the current live-session count.
@@ -201,6 +222,7 @@ func (h *Hub) Metrics() Metrics {
 		WriteErrors:                h.metrics.writeErrors.Load(),
 		EnterWorldAuthRefused:      h.metrics.enterWorldAuthRefused.Load(),
 		UnhandledOpcodeFrames:      h.metrics.unhandledFrames.Load(),
+		EmptyFramesRefused:         h.metrics.emptyFramesRefused.Load(),
 		OutboundQueueBytes:         queueBytes,
 		OutboundQueueByteHighWater: h.metrics.queueByteHighWater.Load(),
 		ByeNormal:                  h.metrics.byeNormal.Load(),
@@ -211,6 +233,9 @@ func (h *Hub) Metrics() Metrics {
 	h.metrics.handshakes.snapshotHandshakeInto(&metrics)
 	h.metrics.ticks.snapshotInto(&metrics)
 	h.metrics.timing.snapshotInto(&metrics)
+	if read := h.navigationMetrics.Load(); read != nil && *read != nil {
+		metrics.MonsterNavigation = (*read)()
+	}
 	return metrics
 }
 
@@ -296,6 +321,7 @@ type tickStats struct {
 	sum      time.Duration
 	max      time.Duration
 	overruns uint64
+	buckets  [tickHistogramBuckets]uint64
 }
 
 // durationStats is shared by low-frequency lifecycle duration aggregates.
@@ -352,6 +378,7 @@ func (h *Hub) RecordTickDuration(elapsed, interval time.Duration) {
 	if interval > 0 && elapsed > interval {
 		t.overruns++
 	}
+	t.buckets[tickBucket(elapsed)]++
 	t.mu.Unlock()
 }
 
@@ -363,6 +390,7 @@ func (t *tickStats) snapshotInto(m *Metrics) {
 	m.TickLastMs = float64(t.last) / float64(time.Millisecond)
 	m.TickMaxMs = float64(t.max) / float64(time.Millisecond)
 	m.TickOverruns = t.overruns
+	m.TickHistogram = tickHistogramSnapshot(&t.buckets, t.count, t.max)
 	if t.count > 0 {
 		m.TickMeanMs = float64(t.sum) / float64(time.Millisecond) / float64(t.count)
 	}

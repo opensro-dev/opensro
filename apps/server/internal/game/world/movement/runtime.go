@@ -70,6 +70,11 @@ type Runtime struct {
 	// rules and may use authoritative character privileges. Nil is accepted
 	// only by narrow tests with no restricted-area catalog.
 	CanEnterRegion func(character *enterworld.Character, regionID uint16) bool
+	// TownEntryBlocked is the thief's stolen-goods rule (#721): a thief in
+	// job mode with a summoned transport may not enter a town. Checked at
+	// the same boundaries as CanEnterRegion; a refusal carries the native
+	// 0x3058 notice. Nil allows every entry.
+	TownEntryBlocked func(character *enterworld.Character, regionID uint16) bool
 	// ClearPendingPickup, when set, clears the character's pickup-approach
 	// latch before a ground move applies (the reference clears
 	// missionPendingPickups on every accepted move; the tracker itself
@@ -240,6 +245,30 @@ refusedMove
 */
 func refusedMove(err *simulation.MoveError) MoveOutcome {
 	return MoveOutcome{Refusal: err}
+}
+
+// The v1.150 event notice 0x3058 (7508C0): a kind outside 5..10 shows the
+// category 0x11 notice of that code; kind 1 is
+// UIIT_MSG_JSERR_ROBBER_CANT_ENTER_TOWN_WITH_CART ("in thief state you
+// cannot enter a town with a transport summoned").
+const (
+	opEventNotice             uint16 = 0x3058
+	eventNoticeThiefCargoTown uint8  = 1
+)
+
+/*
+==================
+thiefCargoTownRefusal
+
+A thief's move into a town with its transport: refused, with the native
+notice. The move itself stays silent on the wire, as every refusal.
+==================
+*/
+func thiefCargoTownRefusal() MoveOutcome {
+	return MoveOutcome{
+		Refusal: &simulation.MoveError{NativeErrorCode: simulation.NativeErrorInvalidRequest, Reason: "thiefCargoInTown"},
+		Frames:  []wire.Frame{{Opcode: opEventNotice, Payload: []byte{eventNoticeThiefCargoTown}}},
+	}
 }
 
 /*
@@ -420,6 +449,9 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				Reason:          "areaAccessDenied",
 			})
 		}
+		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, goal.RegionID) {
+			return thiefCargoTownRefusal()
+		}
 		committed, committedWalk, refusal := rt.AdmitGroundWalk(character.Name, live, state.LiveOwnerAt(nowMs), goal)
 		if refusal != nil {
 			return refusedMove(refusal)
@@ -434,6 +466,9 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				NativeErrorCode: simulation.NativeErrorInvalidRequest,
 				Reason:          "areaAccessDenied",
 			})
+		}
+		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, committed.RegionID) {
+			return thiefCargoTownRefusal()
 		}
 		request.RegionID = committed.RegionID
 		request.X, request.Y, request.Z = committed.X, committed.Y, committed.Z

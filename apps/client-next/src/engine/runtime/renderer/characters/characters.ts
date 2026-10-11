@@ -6,6 +6,7 @@ characters.ts - admitted character models, world batches and separate portrait s
 ===========================================================================
 */
 import { createClothVertices } from "@/engine/foundation/animation/cloth-vertices";
+import { characterLabelHeight } from "@/engine/foundation/ui/character-labels";
 import type { WorldTexture } from "@/engine/contracts/texture";
 import { shadowProjection, SHADOW_LIMIT, SHADOW_DISTANCE } from "@/engine/foundation/rendering/character-shadow";
 import { appendEquipmentSockets } from "@/engine/foundation/animation/equipment-sockets";
@@ -2451,9 +2452,13 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				const bounds = bindBoundsOf( resource.model );
 				const matrix = transformFor( body, rows, origin, transforms );
 				if ( !matrix || !Number.isFinite( bounds[4] ) ) continue;
-				const lift = rideResource ? 7 : 2;
 				const x = matrix[12]!,
-					y = matrix[13]! + (actor.groundItem ? 5 : bounds[4] * body.scale + lift),
+					y = matrix[13]! +
+						characterLabelHeight(
+							{ height: body.height, scale: body.scale, groundItem: actor.groundItem },
+							bounds[4],
+							!!rideResource
+						),
 					z = matrix[14]!;
 				const clip = [ 0, 0, 0, 0 ];
 				for ( let n = 0; n < 4; n++ ) {
@@ -2691,6 +2696,22 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 				}
 			}
 			return { actor, model: resource.model, images: resource.images, children };
+		},
+		/*
+		================
+		bindBounds
+
+		Port-only (the 3D viewer's framing): the actor model's bounds in the
+		first frame of the clip the doll plays (portrait.ts: the preview
+		clip, else "stand"), in model space and unscaled as the doll draws
+		it; null before the model is resident. Evaluates a pose: call once.
+		================
+		*/
+		bindBounds( gid: number ): PickBounds | null {
+			const actor = actors.find( a => a.gid === gid ), resource = actor && models.get( actor.model );
+			if ( !actor || !resource ) return null;
+			const clip = actor.previewClip ?? resource.model.clips.find( c => c.name === "stand" )?.name ?? actor.clip;
+			return characterBindBounds( resource.model, clip ?? "" );
 		},
 		/*
 		================

@@ -376,7 +376,6 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		return supportCastResult(
 			control,
 			vitals,
-			skill.Recovery.SelfFlatPinned || vitals.Opcode != 0,
 			cureActor,
 			curePublic,
 			cureRecipients,
@@ -401,7 +400,6 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	return supportCastResult(
 		open,
 		vitals,
-		skill.Recovery.SelfFlatPinned || vitals.Opcode != 0,
 		cureActor,
 		curePublic,
 		cureRecipients,
@@ -616,16 +614,20 @@ release publishes Broadcast through the caster's observed scope, which
 reaches the caster too (projectilecast.go), and a public frame in both
 reached the caster twice. Live, a released Healing Orbit sent its caster
 every 0xB419 twice and the client failed on the repeated buff identity.
+
+An empty vitals frame (a heal that changed nothing and charged nothing) is
+left out: a zero frame is opcode 0 on the wire, which the client refuses
+and drops the session on. A flat self heal cast at full HP did exactly
+that.
 ==================
 */
 func supportCastResult(
 	control, vitals wire.Frame,
-	heal bool,
 	actor, public []wire.Frame,
 	recipients []RecipientFrames,
 ) OpResult {
 	var private []wire.Frame
-	if heal {
+	if vitals.Opcode != 0 {
 		private = append(private, vitals)
 	}
 	private = append(private, actor...)

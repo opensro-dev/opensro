@@ -1,0 +1,168 @@
+/*
+===========================================================================
+
+admin.go - the GM's lookup, kick, status and guild recall commands
+
+/WORLDSTATUS, /BAN, /RECALLGUILD, /LIENAME and /REALNAME: arms of the
+v1.188 per-player GM handler CGObjPC_MsgHandler_SpecialCommand (51DE90).
+Lookups and the kick are answered here from the character records and
+the presence directory; world counts and the guild recall belong to the
+action owner and come through its ports.
+
+===========================================================================
+*/
+package gmcommand
+
+import (
+	"strings"
+
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
+)
+
+// noNickname is CGObjPC_OnCommandWho's (521050) answer for a character
+// whose account name reads empty.
+const noNickname = "##DONT_HAVE_NICKNAME##"
+
+/*
+================
+WorldStatus
+
+The action-owned counts /WORLDSTATUS reports.
+================
+*/
+type WorldStatus interface {
+	WorldStatusGM(division string) (players, others, items uint32)
+}
+
+/*
+================
+GuildRecall
+
+The action-owned /RECALLGUILD.
+================
+*/
+type GuildRecall interface {
+	RecallGuildGM(division, name, guild string) bool
+}
+
+/*
+================
+SessionEnder
+
+The presence directory's logout of a character, which a kick needs.
+================
+*/
+type SessionEnder interface {
+	EndSessionByName(divisionID, characterName string) bool
+}
+
+/*
+================
+handleWorldStatus
+
+51DE90 case 3: [1, 4, i32 players, i32 other objects, i32 ground items],
+the layout 751EC0 prints as "Player:%d, NPC_Mob:%d, DroppedItem:%d".
+================
+*/
+func handleWorldStatus(divisionID string, request Request, status []BodyStatusCommands) Outcome {
+	if len(status) == 0 {
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "world-status-unavailable"}
+	}
+	owner, ok := status[0].(WorldStatus)
+	if !ok {
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "world-status-unavailable"}
+	}
+	players, others, items := owner.WorldStatusGM(divisionID)
+	return Outcome{Ack: wire.NewWriter(14).U8(AckResultOK).U8(SubWorldStatus).U32(players).U32(others).U32(items).Payload()}
+}
+
+/*
+================
+handleBan
+
+51DE90 case 0xA: the named player in the world is logged out
+(CGObjPC_HandleExitReason, reason 4: the ordinary save-and-leave path)
+and the GM gets [1, sub]. Despite its name /BAN bars nothing; the account
+stays able to log in. The port ends the target's session normally, so the
+departure owner saves and removes them exactly as on a logout.
+================
+*/
+func handleBan(deps Dependencies, presence PresenceView, divisionID string, request Request) Outcome {
+	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: "ban-refused"}
+	if !request.HasName || request.Name == "" {
+		return refusal
+	}
+	directory, ok := presence.(SessionEnder)
+	if !ok {
+		return refusal
+	}
+	target := characterSnapshot(deps, divisionID, findCharacterByName(deps, divisionID, request.Name))
+	if target == nil || target.DeletePending || !directory.EndSessionByName(divisionID, target.Name) {
+		return refusal
+	}
+	return Outcome{Ack: []byte{AckResultOK, SubBan}}
+}
+
+/*
+================
+handleRecallGuild
+
+51DE90 case 0xE, through the action owner. A missing guild is the
+result-2 refusal.
+================
+*/
+func handleRecallGuild(divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
+	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: "recall-guild-refused"}
+	if !request.HasName || request.Name == "" || len(status) == 0 {
+		return refusal
+	}
+	owner, ok := status[0].(GuildRecall)
+	if !ok || !owner.RecallGuildGM(divisionID, sender.Name, request.Name) {
+		return refusal
+	}
+	return Outcome{Ack: []byte{AckResultOK, SubRecallGuild}}
+}
+
+/*
+================
+handleWho
+
+CGObjPC_OnCommandWho (521050):
+  - /LIENAME (0x19) takes an account name and answers the name of that
+    account's character in the world (ObjMgr_FindByAccountName);
+  - /REALNAME (0x1A) takes a character name and answers its account name,
+    or noNickname when that reads empty.
+
+Either one finds only a player in the world; a miss is the result-2
+answer that repeats the name asked for.
+================
+*/
+func handleWho(deps Dependencies, presence PresenceView, divisionID string, request Request) Outcome {
+	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: "who-not-found"}
+	if !request.HasName || request.Name == "" || presence == nil {
+		return refusal
+	}
+	if request.Subcmd == SubLieName {
+		for _, candidate := range deps.CharactersForDivision(divisionID) {
+			c := characterSnapshot(deps, divisionID, candidate)
+			// 521050: the account lookup is an exact match.
+			if c == nil || c.DeletePending || c.AccountID != request.Name {
+				continue
+			}
+			if presence.OnlineByName(divisionID, c.Name) {
+				return Outcome{Ack: EncodeAckGuide(SubLieName, c.Name)}
+			}
+		}
+		return refusal
+	}
+	target := characterSnapshot(deps, divisionID, findCharacterByName(deps, divisionID, request.Name))
+	if target == nil || target.DeletePending || !presence.OnlineByName(divisionID, target.Name) {
+		return refusal
+	}
+	account := target.AccountID
+	if strings.TrimSpace(account) == "" {
+		account = noNickname
+	}
+	return Outcome{Ack: EncodeAckGuide(SubRealName, account)}
+}

@@ -295,6 +295,9 @@ timeline.json     what happened during that minute, on replay.mp4's clock (t, se
                   error      JavaScript and runtime failures
                   long-frame main-thread hitches, with the scripts the browser blamed
                   sample     once a second: phase, region and position, HP/MP, target, heap
+network.json      every transport frame of that window, on the timeline's clock:
+                  [t, "in" | "out", opcode, bytes] (no payloads); a "gap" row
+                  counts frames the journal dropped
 movement.json     up to two minutes of movement commands, server receipts, corrections
                   and frame hitches; clock domains are explicit in the header/events.
 state.json        the game's state when the report was sent (large catalogs omitted).
@@ -443,6 +446,25 @@ async function diagnosticZip( documents: Record<string, unknown> ): Promise<{ bl
 
 /*
 ================
+sharedNetwork
+
+network.json's rows, rebuilt from their number, direction, opcode and size
+fields alone, so nothing else can ride along into the shared archive.
+================
+*/
+function sharedNetwork( value: Record<string, unknown> ): Record<string, unknown> {
+	const rows = Array.isArray( value.events ) ? value.events : [];
+	const events = rows.filter( ( row ): row is [number, string, string, number] =>
+		Array.isArray( row ) && row.length === 4 && typeof row[0] === "number" &&
+		(row[1] === "in" || row[1] === "out" || row[1] === "gap") && typeof row[2] === "string" &&
+		/^0x[0-9A-F]{4}$/.test( row[2] ) &&
+		typeof row[3] === "number"
+	).map( ( [t, direction, opcode, bytes] ) => [ t, direction, opcode, bytes ] );
+	return { note: typeof value.note === "string" ? value.note : "", events };
+}
+
+/*
+================
 createDiagnosticUpload
 
 Capture all documents before transcoding the video. Prefer complete compressed
@@ -487,13 +509,15 @@ export async function createDiagnosticUpload(
 		},
 		"movement.json": selectedFields( read( "movement.json" ), SHARED_MOVEMENT_FIELDS ),
 		"timeline.json": sharedTimeline,
+		// Opcode, direction, size and time only: technical by construction.
+		"network.json": sharedNetwork( read( "network.json" ) ),
 		"state.json": { session: selectedFields( state.session, [ "phase" ] ), entities: state.entities, gameplay },
 		"environment.json": environment
 	};
 	for ( ;; ) {
 		const zip = await diagnosticZip( documents );
 		if ( zip.blob.size <= limit && zip.unpackedBytes <= MAX_DIAGNOSTIC_UNPACKED_BYTES ) return zip.blob;
-		const candidates = [ "timeline.json", "movement.json" ].map( name => ({
+		const candidates = [ "timeline.json", "movement.json", "network.json" ].map( name => ({
 			name,
 			document: documents[name] as Record<string, unknown>
 		}) ).filter( entry => Array.isArray( entry.document.events ) && entry.document.events.length > 0 )

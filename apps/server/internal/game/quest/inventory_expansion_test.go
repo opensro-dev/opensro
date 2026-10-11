@@ -12,6 +12,7 @@ line's second quest (list 0x114) and takes a 10,000 gold fee (8CF8F0).
 package quest
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
@@ -165,6 +166,97 @@ func TestHotanExpansionFollowsEitherLine(t *testing.T) {
 		c.CompletedQuestIds = []uint32{line.RefID}
 		if !prerequisitesMet(c, def) {
 			t.Fatalf("not offered after %s alone", code)
+		}
+	}
+}
+
+/*
+================
+turnInFrames
+
+Turns QSP_CH_EXINVENTORY_1 in with the port-only flag set as given and
+returns the character and every 0x3092 frame the turn-in sent.
+================
+*/
+func turnInFrames(t *testing.T, instant bool) (*enterworld.Character, []wire.Frame) {
+	t.Helper()
+	rt := expansionRuntime(t)
+	rt.InstantInventoryExpansion = instant
+	c, def := readyToTurnIn(t, rt, "QSP_CH_EXINVENTORY_1", 0)
+	result, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename)
+	if err != nil {
+		t.Fatalf("turn-in: %v", err)
+	}
+	var announced []wire.Frame
+	for _, frame := range result.Frames {
+		if frame.Opcode == OpStorageCapacity {
+			announced = append(announced, frame)
+		}
+	}
+	return c, announced
+}
+
+/*
+================
+TestInstantExpansionGrowsTheBagAtTurnIn
+
+Port-only: with the flag on the slots are usable at once and 0x3092
+[1][capacity] tells the client; off, nothing is announced and they wait.
+================
+*/
+func TestInstantExpansionGrowsTheBagAtTurnIn(t *testing.T) {
+	c, announced := turnInFrames(t, true)
+	if c.InventoryCapacity() != 55 || c.InventoryExpansion != 0 {
+		t.Fatalf("capacity %d (+%d), want 55 (+0) at the turn-in", c.InventoryCapacity(), c.InventoryExpansion)
+	}
+	if len(announced) != 1 || !bytes.Equal(announced[0].Payload, []byte{1, 55}) {
+		t.Fatalf("0x3092 frames = %v, want one [01 37]", announced)
+	}
+
+	c, announced = turnInFrames(t, false)
+	if c.InventoryCapacity() != 45 || c.InventoryExpansion != 10 || len(announced) != 0 {
+		t.Fatalf("native: capacity %d (+%d), %d announces; want 45 (+10), none", c.InventoryCapacity(), c.InventoryExpansion, len(announced))
+	}
+}
+
+/*
+================
+TestInstantExpansionPastTheLimitAnnouncesNothing
+
+A refused grant changes no capacity, so no 0x3092 follows it.
+================
+*/
+func TestInstantExpansionPastTheLimitAnnouncesNothing(t *testing.T) {
+	rt := expansionRuntime(t)
+	rt.InstantInventoryExpansion = true
+	c, def := readyToTurnIn(t, rt, "QSP_CH_EXINVENTORY_1", 0)
+	c.InventorySize = 70
+	result, err := rt.AdvanceNpcQuest(c, def.Codename, def.EndNpcCodename)
+	if err != nil {
+		t.Fatalf("turn-in: %v", err)
+	}
+	for _, frame := range result.Frames {
+		if frame.Opcode == OpStorageCapacity {
+			t.Fatalf("a refused grant announced % X", frame.Payload)
+		}
+	}
+	if c.InventorySize != 70 || c.InventoryExpansion != 0 {
+		t.Fatalf("capacity %d (+%d), want 70 (+0)", c.InventorySize, c.InventoryExpansion)
+	}
+}
+
+/*
+================
+TestInstantInventoryExpansionFromEnv
+
+Only an explicit on enables the port-only rule.
+================
+*/
+func TestInstantInventoryExpansionFromEnv(t *testing.T) {
+	for value, want := range map[string]bool{"": false, "off": false, "0": false, "yes": false, "on": true, "1": true, " TRUE ": true} {
+		t.Setenv(EnvInstantInventoryExpansion, value)
+		if got := InstantInventoryExpansionFromEnv(); got != want {
+			t.Errorf("%q = %v, want %v", value, got, want)
 		}
 	}
 }

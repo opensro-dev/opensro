@@ -551,10 +551,37 @@ test("unrelated pickup cannot acknowledge a move and timed-out transactions cann
 	inv.receive( 0xb5bd, Uint8Array.of( 1, 14, 9, 0, 0x6c, 0 ) );
 	assert.equal( inv.state().inventoryPending, false );
 	inv.use( 14, 12000 );
-	assert.throws( () => inv.step( 22000 ), /reconnect/ );
+	// The report names the request that went unanswered (an item use, 0xB5BD).
+	assert.throws( () => inv.step( 22000 ), /timed out \(0xB5BD\); reconnect/ );
 	assert.equal( inv.state().inventoryPending, true );
-	assert.throws( () => inv.receive( 0xb5bd, Uint8Array.of( 1, 14, 8, 0, 0x6c, 0 ) ), /reconnect/ );
+	// A late answer is set aside, never applied: it could settle the wrong request.
+	assert.equal( inv.receive( 0xb5bd, Uint8Array.of( 1, 14, 8, 0, 0x6c, 0 ) ), false );
+	assert.equal( inv.state().inventory.find( row => row.slot === 14 )?.quantity, 9 );
 	assert.throws( () => inv.use( 14, 22001 ), /reconnect/ );
+	assert.throws( () => inv.step( 22002 ), /reconnect/ );
+});
+test("a timed-out inventory recovers on the resumed transport's EnterWorld bootstrap", () => {
+	// Production incident: after "Inventory transaction timed out", the
+	// resumed transport replayed queued frames (0xB245, 0x3122, 0xB505)
+	// ahead of EnterWorld, and each one ended the session again.
+	const inv = createInventory( () => {} );
+	const snapshot = {
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, nativeFields: { maxStack: 50 } } ],
+		equipItems: [ { refObjId: 1, slot: 13, body: item( 1, 10 ) } ]
+	};
+	inv.bootstrap( snapshot );
+	inv.move( 13, 14, 10, 100 );
+	assert.throws( () => inv.step( 10101 ), /timed out \(0xB06D move 0\)/ );
+	// Queued frames before EnterWorld are set aside, not thrown.
+	assert.doesNotThrow( () => inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) ) );
+	// The resume's bootstrap resynchronizes: requests and steps work again.
+	inv.bootstrap( snapshot );
+	assert.equal( inv.state().inventoryPending, false );
+	assert.doesNotThrow( () => inv.step( 20000 ) );
+	inv.move( 13, 14, 10, 20001 );
+	assert.equal( inv.state().inventoryPending, true );
+	inv.receive( 0xb06d, Uint8Array.of( 1, 0, 13, 14, 10, 0, 0 ) );
+	assert.equal( inv.state().inventoryPending, false );
 });
 test("an item use answer sets the stack the server reports, as 755E40, even after another change", () => {
 	// Production incident: 0xB5BD 01 19 1f00 ec10 (slot 25, 31 left, an HP

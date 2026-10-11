@@ -23,6 +23,7 @@ per second. The replayDefault field older Agents still send is ignored.
 
 ===========================================================================
 */
+import { NET_JOURNAL_FIELDS, NET_JOURNAL_GAP, NET_JOURNAL_OUT } from "@/engine/contracts/network";
 import type { BugReportControl, BugReportField, ReplayState } from "@/engine/contracts/bug-report";
 import { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } from "@/engine/foundation/release/protocol";
 import { muxMp4, type Mp4Track } from "@/engine/foundation/media/mp4";
@@ -101,6 +102,8 @@ export interface BugReportOptions {
 	readonly sound: () => MediaStream | null;
 	/** The session and game state, for the timeline's samples and state.json. */
 	readonly state: () => DiagnosticState;
+	/** The transport's frame journal (SimulationHost.netJournal), for network.json. */
+	readonly network?: () => Float64Array;
 }
 
 /*
@@ -498,6 +501,33 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 
 	/*
 	================
+	networkJournal
+
+	network.json: every transport frame of the journal window on the
+	timeline's clock, as [t, "in" | "out", opcode, bytes]. Opcodes and sizes
+	only: the journal never holds a payload.
+	================
+	*/
+	function networkJournal( zeroMs: number, fromMs: number ) {
+		const records = options.network?.() ?? new Float64Array( 0 ), events: [number, string, string, number][] = [];
+		for ( let at = 0; at + NET_JOURNAL_FIELDS <= records.length; at += NET_JOURNAL_FIELDS ) {
+			const atMs = records[at]! - performance.timeOrigin;
+			if ( atMs < fromMs ) continue;
+			events.push( [
+				+((atMs - zeroMs) / 1000).toFixed( 3 ),
+				records[at + 1] === NET_JOURNAL_GAP ? "gap" : records[at + 1] === NET_JOURNAL_OUT ? "out" : "in",
+				"0x" + records[at + 2]!.toString( 16 ).toUpperCase().padStart( 4, "0" ),
+				records[at + 3]!
+			] );
+		}
+		return {
+			note: "t is seconds on timeline.json's clock; each event is [t, direction, opcode, bytes]. " +
+				'A "gap" row stands for frames the journal dropped: its last field is how many.',
+			events
+		};
+	}
+	/*
+	================
 	diagnostics
 
 	The .zip's JSON files, frozen when the report is sent. Times in the
@@ -534,6 +564,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 		};
 		return {
 			"timeline.json": json( timeline ),
+			"network.json": json( networkJournal( zeroMs, fromMs ) ),
 			"movement.json": json( dumpMovement() ),
 			"state.json": json( state ),
 			"environment.json": json( environment() )

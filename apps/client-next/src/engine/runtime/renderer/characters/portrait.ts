@@ -197,7 +197,12 @@ export function createPortrait(
 			value: PortraitSource | null,
 			geometry: GeometryCommands,
 			images: ImageCommands,
-			frame: { readonly yaw?: number; readonly seconds?: number; readonly aspect?: number; } = {}
+			frame: {
+				readonly yaw?: number;
+				readonly seconds?: number;
+				readonly aspect?: number;
+				readonly camera?: import("@/engine/contracts/scene").WorldCamera;
+			} = {}
 		) {
 			const dollYaw = frame.yaw, seconds = frame.seconds ?? 0;
 			if ( !value ) {
@@ -298,13 +303,16 @@ export function createPortrait(
 					geometry,
 					images,
 					0,
-					viewProjection( {
-						eye: [ 0, 9, -40 ],
-						target: [ 0, 9, 0 ],
-						fov: Math.PI / 6,
-						near: PREVIEW_NEAR,
-						far: PREVIEW_FAR
-					}, frame.aspect ?? DOLL_ASPECT ),
+					viewProjection(
+						frame.camera ?? {
+							eye: [ 0, 9, -40 ],
+							target: [ 0, 9, 0 ],
+							fov: Math.PI / 6,
+							near: PREVIEW_NEAR,
+							far: PREVIEW_FAR
+						},
+						frame.aspect ?? DOLL_ASPECT
+					),
 					true
 				);
 			}

@@ -106,6 +106,37 @@ type SessionSnapshot struct {
 
 /*
 ==================
+SessionView
+
+The part of a SessionSnapshot that tick hooks read: identity, population,
+publication set and world. It has no peer presentation (Appearance, COS,
+Companions), so it is cheap to build, and a consumer that needs the
+presentation cannot be handed one: monster acquisition, peer interest and
+the player map keep taking the full SessionSnapshot.
+==================
+*/
+type SessionView struct {
+	SessionID        string
+	DivisionID       string
+	CharacterID      int64
+	WorldInstance    uint32
+	Population       instance.Lease
+	PublishedObjects []uint32
+	World            WorldState
+}
+
+/*
+==================
+SessionSnapshot.View
+==================
+*/
+func (s SessionSnapshot) View() SessionView {
+	return SessionView{SessionID: s.SessionID, DivisionID: s.DivisionID, CharacterID: s.CharacterID,
+		WorldInstance: s.WorldInstance, Population: s.Population, PublishedObjects: s.PublishedObjects, World: s.World}
+}
+
+/*
+==================
 CloneWorldState
 
 CloneWorldState deep-copies a WorldState for a SessionSnapshot: the
@@ -180,6 +211,11 @@ than laundering the private tail through a future-tick queue.
 
 ExceptSessionID and OnlyCharacterID are mutually exclusive. Invalid mixed
 routes fail closed in runHooks.
+
+Deliver, when set, replaces routing: the producer already captured its
+recipients (with their scene revisions) at commit time, and the ticker only
+runs the send in this batch's place, so it keeps its order among the hook's
+other batches.
 ==================
 */
 type DivisionFrames struct {
@@ -190,6 +226,7 @@ type DivisionFrames struct {
 	Frames          []Frame
 	ExceptSessionID string
 	OnlyCharacterID int64
+	Deliver         func()
 }
 
 /*
@@ -693,6 +730,10 @@ Delivers one hook's routed frames to sessions or divisions.
 */
 func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionTickWork) {
 	for _, routed := range routedFrames {
+		if routed.Deliver != nil {
+			routed.Deliver()
+			continue
+		}
 		if len(routed.Frames) == 0 {
 			continue
 		}

@@ -10,6 +10,7 @@ responses cannot disagree about which request is still answerable.
 */
 import type { WireFrame } from "@/engine/contracts/network";
 import { readPartyMember, type PartyMember } from "./social";
+import { NO_JOB_CLASS } from "./job-guild";
 const PARTY_JOIN_TIMEOUT_MS = 10000;
 const PARTY_JOIN_NO_REPLY = 2;
 
@@ -394,6 +395,8 @@ export function partyCharacterCountries( value: unknown ): Readonly<Record<numbe
 	return out;
 }
 
+// JOB_SUIT_SLOT is the equipment socket of the job suit.
+export const JOB_SUIT_SLOT = 8;
 // 856920 reads active class +4F5; 868D00 derives it from the job suit.
 // CICUser+782 job membership is a different field and must not gate this form.
 /*
@@ -402,8 +405,8 @@ partyActiveJob
 ================
 */
 export function partyActiveJob( inventory: readonly { readonly slot: number; readonly typeFlags: number; }[] ): number {
-	const flags = inventory.find( row => row.slot === 8 )?.typeFlags ?? 0, job = flags >>> 11;
-	return (flags & 0x7fe) === 0x3ac && job >= 1 && job <= 3 ? job : 4;
+	const flags = inventory.find( row => row.slot === JOB_SUIT_SLOT )?.typeFlags ?? 0, job = flags >>> 11;
+	return (flags & 0x7fe) === 0x3ac && job >= 1 && job <= 3 ? job : NO_JOB_CLASS;
 }
 // 63C010 / server 5BF240: only registration and modification use this matrix.
 /*

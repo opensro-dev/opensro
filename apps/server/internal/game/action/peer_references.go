@@ -22,6 +22,7 @@ and the commerce deltas carry, so a repeat is harmless (#340).
 package action
 
 import (
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
@@ -52,6 +53,23 @@ func (rt *Runtime) itemReferenceFrames(items []inventory.Item) []wire.Frame {
 		rows = rows[n:]
 	}
 	return frames
+}
+
+/*
+================
+cosContainerReferenceFrames
+
+The reference deltas for a COS's own inventory, sent ahead of its 0x3158
+record. A pickup pet taken out of storage (or a transport's cargo) can hold
+items this client has never been told about, and the record's container
+rows refuse an unknown reference ("Unknown inventory reference").
+================
+*/
+func (rt *Runtime) cosContainerReferenceFrames(pet *enterworld.CharacterCOS) []wire.Frame {
+	if pet == nil || pet.Container == nil {
+		return nil
+	}
+	return rt.itemReferenceFrames(invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity)))
 }
 
 /*

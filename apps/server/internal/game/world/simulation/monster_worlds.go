@@ -317,7 +317,7 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 		if !state.instances.contains(gid) {
 			continue
 		}
-		pose := state.movers.get(gid).LivePoseAt(nowMs, nil)
+		pose, _ := state.movers.livePoseAt(gid, nowMs, nil)
 		if worldgeom.InterestVisible(viewer, worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}) {
 			out = append(out, gid)
 		}
@@ -325,7 +325,7 @@ func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.Region
 	// Static entries without a mover still use their immutable spawn position.
 	for _, region := range RegionScopeRing(viewer.RegionID) {
 		for _, gid := range state.byRegion[region] {
-			if _, exists := state.movers.lookup(gid); exists {
+			if state.movers.has(gid) {
 				continue
 			}
 			actor := state.instances.get(gid)

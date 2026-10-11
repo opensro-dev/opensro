@@ -24,6 +24,7 @@ import { avatarToGlb } from "./exportGlb.mjs";
 import { parseJmxResourceBsr } from "../world/objects/formats.mjs";
 import { parseAttachPartLink, parseBsk, parseCharacterBsr } from "./formats.mjs";
 import { loadDataAsset } from "../shared/jmxAssetIO.mjs";
+import { AMBIENT_MODIFIER_KIND } from "./equipmentParticles.mjs";
 import { publicAssetsRoot } from "../world/paths.mjs";
 
 const publicAssets = publicAssetsRoot;
@@ -279,35 +280,52 @@ export async function buildItemSetGlb(
 
 /*
 ================
+buildAuxiliarySet
+
+One resource drawn as its own animated handle: its private skeleton and
+BANs stay its own, attached under its .bsr skeleton socket. Rebinding these
+bones into the body would lose their motion. The entry carries the
+resource's ambient particle set, which rides the animated bones.
+================
+*/
+export async function buildAuxiliarySet( bsrPath, glb, part ) {
+	const buffer = await loadDataAsset( bsrPath ),
+		bsr = parseCharacterBsr( buffer, bsrPath ),
+		link = parseAttachPartLink( buffer );
+	if ( !bsr.skeletonAttachBone ) throw Error( `Missing auxiliary socket ${bsrPath}` );
+	const avatar = await assembleAvatar( bsrPath, { slotForMesh: () => `part:${part}` } );
+	const clips = avatar.clips.map( c => c.role );
+	if ( !clips.includes( "stand" ) ) throw Error( `Missing auxiliary initial track ${bsrPath}` );
+	writeIntoPublicTreeSync( path.join( publicAssets, glb.slice( "/assets/".length ) ), avatarToGlb( avatar ) );
+	const ambient = bsr.particleModifiers.filter( m => m.kind === AMBIENT_MODIFIER_KIND );
+	return {
+		glb,
+		parts: [ part ],
+		covers: { [part]: link?.c === 1 ? link.pairs.map( p => p.key ) : [] },
+		sources: { [part]: { bsr: bsrPath } },
+		bone: bsr.skeletonAttachBone,
+		clips,
+		environmentModifiers: bsr.environmentModifiers,
+		...(ambient.length ? { particleModifiers: ambient } : {})
+	};
+}
+
+/*
+================
 buildAuxiliaryAvatarSets
 
 8E9DD0 installs the override's auxiliary resource as its second handle.
-Keep its own skeleton/BANs; rebinding these bones into the body loses motion.
 ================
 */
 export async function buildAuxiliaryAvatarSets( overrides ) {
 	const entries = {};
 	for ( const [id, row] of Object.entries( overrides ) ) {
 		if ( !row.additionalBsr ) continue;
-		const buffer = await loadDataAsset( row.additionalBsr ),
-			bsr = parseCharacterBsr( buffer, row.additionalBsr ),
-			link = parseAttachPartLink( buffer );
-		if ( !bsr.skeletonAttachBone ) throw Error( `Missing auxiliary avatar socket ${id}` );
-		const avatar = await assembleAvatar( row.additionalBsr, { slotForMesh: () => "part:AVATAR_AUX" } );
-		const clips = avatar.clips.map( c => c.role );
-		if ( !clips.includes( "stand" ) ) throw Error( `Missing auxiliary initial track ${id}` );
-		const glb = `/assets/char/equipment/avatar_aux_${id}.glb`,
-			diskPath = path.join( publicAssets, glb.slice( "/assets/".length ) );
-		writeIntoPublicTreeSync( diskPath, avatarToGlb( avatar ) );
-		entries[id] = {
-			glb,
-			parts: [ "AVATAR_AUX" ],
-			covers: { AVATAR_AUX: link?.c === 1 ? link.pairs.map( p => p.key ) : [] },
-			sources: { AVATAR_AUX: { bsr: row.additionalBsr } },
-			bone: bsr.skeletonAttachBone,
-			clips,
-			environmentModifiers: bsr.environmentModifiers
-		};
+		entries[id] = await buildAuxiliarySet(
+			row.additionalBsr,
+			`/assets/char/equipment/avatar_aux_${id}.glb`,
+			"AVATAR_AUX"
+		);
 	}
 	return entries;
 }

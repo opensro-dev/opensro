@@ -27,6 +27,7 @@ import (
 
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
@@ -95,7 +96,14 @@ func Check() (Result, error) {
 		{"alchemy catalogue", items.ConfigureAlchemy},
 		{"gacha catalogue", items.ConfigureGacha},
 		{"stall network", items.ConfigureStallNetwork},
-		{"commerce catalogue", items.ConfigureCommerce},
+		// The owner's default extra goods must resolve against the data.
+		{"commerce catalogue", func(dir string) error {
+			goods, err := commerce.ParseExtraGoods("on")
+			if err != nil {
+				return err
+			}
+			return items.ConfigureCommerce(dir, goods)
+		}},
 	} {
 		if err := step.configure(devPaths.TextdataDir); err != nil {
 			return result, fmt.Errorf("%s: %w", step.name, err)

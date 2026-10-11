@@ -252,6 +252,9 @@ Reporting rules:
   command exited 0 in this session.
 - Check native claims against the disassembly, not against a function name in
   a Binary Ninja database. Names there have been wrong.
+- A PR that relies on native behaviour lists each claim in the native-claims
+  table ([CONTRIBUTING.md](CONTRIBUTING.md) section 6): claim, evidence, how
+  it was checked, status.
 - Another agent may be working in the tree at the same time. Before rewriting
   a shared file (task definitions, CI, manifests), check whether it changed in
   the last few minutes and keep your edit small.

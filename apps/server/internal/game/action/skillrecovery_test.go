@@ -932,3 +932,63 @@ func TestFaithRaisesHealPercents(t *testing.T) {
 		}
 	}
 }
+
+/*
+==================
+assertNoEmptyFrames
+
+A zero frame is opcode 0 on the wire, which no client control admits: the
+browser fails the packet and drops the session.
+==================
+*/
+func assertNoEmptyFrames(t *testing.T, where string, frames []wire.Frame) {
+	t.Helper()
+	for i, f := range frames {
+		if f.Opcode == 0 {
+			t.Fatalf("%s frame %d is empty (opcode 0)", where, i)
+		}
+	}
+}
+
+/*
+==================
+TestSelfRecoveryAtFullHealthPublishesNoEmptyVitals
+
+The flat self heal costs MP only, so at full HP its recovery changes
+nothing and applySkillRecovery returns an empty frame. That frame must not
+reach the caster, on the prepared release or the immediate cast.
+==================
+*/
+func TestSelfRecoveryAtFullHealthPublishesNoEmptyVitals(t *testing.T) {
+	for _, immediate := range []bool{false, true} {
+		rt, clock, c, _ := newCombatTestRuntime(t, 100000)
+		skill := shippedOffense(t, "SKILL_CH_WATER_SELFHEAL_A_01")
+		if immediate {
+			skill.ActionCastingTimeMs = 0
+		}
+		rt.deps.SkillData().(staticSkillSource)[skill.ID] = skill
+		c.Skills = append(c.Skills, skill.ID)
+		c.CurrentHP = testInt64(enterworld.DerivedMaxHP(c))
+		c.CurrentMP = testInt64(1000)
+
+		result := rt.HandleTargetInteract(testDivision, c, wire.SkillAction{ActionId: skill.ID}.Encode())
+		result = assertAndSeparateActionSession(t, result)
+		assertNoEmptyFrames(t, "cast", result.Frames)
+		assertNoEmptyFrames(t, "cast private", result.ActorPrivate)
+		assertNoEmptyFrames(t, "cast broadcast", result.Broadcast)
+		if immediate {
+			assertOpcodes(t, result.Frames, wire.OpSkillCastResult)
+			continue
+		}
+		for _, routed := range rt.advanceProjectileCasts(clock.NowMs() + int64(skill.ActionCastingTimeMs) + 1) {
+			for i, f := range routed.Frames {
+				if f.Opcode == 0 {
+					t.Fatalf("release frame %d to %d is empty (opcode 0)", i, routed.OnlyCharacterID)
+				}
+			}
+		}
+		if *c.CurrentHP != enterworld.DerivedMaxHP(c) || *c.CurrentMP >= 1000 {
+			t.Fatalf("HP/MP=%d/%d: full HP must stay full and the cast must still charge MP", *c.CurrentHP, *c.CurrentMP)
+		}
+	}
+}

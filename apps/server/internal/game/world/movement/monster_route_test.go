@@ -47,6 +47,9 @@ func TestMonsterRouteDetoursUsingValidatedEdges(t *testing.T) {
 	if route == nil || route.Len() < 2 || calls > monsterRouteProbeBudget {
 		t.Fatalf("detour missing or over budget: %v calls=%d", route, calls)
 	}
+	if route.Probes() != calls {
+		t.Fatalf("the route reports %d probes, the search made %d", route.Probes(), calls)
+	}
 	last := from
 	for i := 0; i < route.Len(); i++ {
 		p := route.Point(i)
@@ -101,6 +104,9 @@ func TestMonsterRouteDirectAndUnavailableWorkBudgets(t *testing.T) {
 			}
 			if mode == "barrier" && calls != monsterRouteProbeBudget {
 				t.Fatalf("budget not exercised: %d", calls)
+			}
+			if route.Probes() != calls {
+				t.Fatalf("the route reports %d probes, the search made %d", route.Probes(), calls)
 			}
 		})
 	}

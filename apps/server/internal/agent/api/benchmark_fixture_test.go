@@ -206,6 +206,61 @@ func TestBenchmarkFixtureLoadoutTeachesSkillsAndDerivesVitals(t *testing.T) {
 
 /*
 ================
+TestBenchmarkFixtureLoadoutSetsStrength
+
+A crowd scenario's strength reaches the character so its derived HP lets the
+peer survive the monsters it draws; zero keeps the character's own, a
+changed strength is not "already reset", and an out-of-range one is refused.
+================
+*/
+func TestBenchmarkFixtureLoadoutSetsStrength(t *testing.T) {
+	api, authority := newTestAPI(t)
+	api.benchmarkFixtureControl = true
+	api.skillGroup = testSkillGroups
+	api.levelCap = testLevelCap
+	handler := authenticatedHandler(t, api, testAccount)
+	postJSON(t, handler, "/character/create", createBody("FixtureTank"))
+	character := authority.Characters().CharactersForDivision(testDivision)[0]
+	var before int64
+	authority.ReadCharacters(testDivision, func([]*domain.Character) {
+		if character.Strength != nil {
+			before = *character.Strength
+		}
+	})
+	body := benchmarkFixtureRequest("FixtureTank")
+	body["loadout"] = map[string]any{"level": 90, "intellect": 109, "skills": []uint32{114}}
+	if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK {
+		t.Fatalf("strength-less loadout = %d", recorder.Code)
+	}
+	authority.ReadCharacters(testDivision, func([]*domain.Character) {
+		if character.Strength == nil || *character.Strength != before {
+			t.Fatalf("a loadout without strength changed it to %v (was %d)", character.Strength, before)
+		}
+	})
+
+	body["loadout"] = map[string]any{"level": 90, "intellect": 109, "strength": 450, "skills": []uint32{114}}
+	recorder, response := postBenchmarkFixtureReset(t, handler, body)
+	if recorder.Code != http.StatusOK || response["outcome"] != "reset" {
+		t.Fatalf("strength loadout = %d %#v, want a reset (strength differs)", recorder.Code, response)
+	}
+	authority.ReadCharacters(testDivision, func([]*domain.Character) {
+		if character.Strength == nil || *character.Strength != 450 || character.CurrentHP != nil {
+			t.Fatalf("strength %v hp %v; want 450 and HP derived at login", character.Strength, character.CurrentHP)
+		}
+	})
+	if recorder, response = postBenchmarkFixtureReset(t, handler, body); response["outcome"] != "already-reset" {
+		t.Fatalf("repeat = %d %#v, want already-reset", recorder.Code, response)
+	}
+	for _, strength := range []int{-1, 2001} {
+		body["loadout"] = map[string]any{"level": 90, "intellect": 109, "strength": strength, "skills": []uint32{114}}
+		if recorder, _ := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusBadRequest {
+			t.Fatalf("strength %d = %d, want 400", strength, recorder.Code)
+		}
+	}
+}
+
+/*
+================
 testSkillGroups
 
 The real groups of the skills these tests teach: Ghost Walk Phantom ranks

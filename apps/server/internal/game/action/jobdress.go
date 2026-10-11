@@ -93,6 +93,10 @@ type jobDress struct {
 // errCodeCantActivateCart is UIIT_MSG_STRGERR_YOU_CANT_ACTIVATE_CART.
 const errCodeCantActivateCart uint8 = 0x49
 
+// errCodeThiefCartInTown is UIIT_MSG_STRGERR_ROBBER_CANT_SUMMON_CART_IN_TOWN
+// (category 1, code 149): "a thief cannot summon a transport in a town".
+const errCodeThiefCartInTown uint8 = 0x95
+
 /*
 ================
 transportJob
@@ -254,6 +258,33 @@ func (rt *Runtime) jobStripRefusal(division string, c *enterworld.Character, des
 		return jobWearErrBagFull
 	}
 	return 0
+}
+
+/*
+================
+townRegion
+
+A town is a region where players may not fight (the safe zones).
+================
+*/
+func townRegion(regionID uint16) bool {
+	allowed, known := worldgeom.RegionPlayerCombat(regionID)
+	return known && !allowed
+}
+
+/*
+================
+ThiefCargoTownBlocked
+
+#721, from the v1.150 client's own messages: "in thief state you cannot
+enter a town with a transport summoned" (category 0x11 code 1). Neither
+binary's site was found; this is the inferred rule the text states: a
+thief in job mode whose transport is summoned may not move into a town.
+Movement checks it at its destination boundaries (TownEntryBlocked).
+================
+*/
+func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, regionID uint16) bool {
+	return enterworld.DressedJob(c) == domain.JobThief && rt.summonedVehicle(c) && townRegion(regionID)
 }
 
 /*

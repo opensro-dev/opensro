@@ -435,7 +435,10 @@ export async function resetMissionMovementFixture(options) {
     characterName: options.characterName,
     fixtureId: fixture.id,
     movementMode: fixture.movementMode,
-    spawn: { ...fixture.start, angle }
+    spawn: { ...fixture.start, angle },
+    // A load scenario's level, intellect and learned skills
+    // (benchmark_fixture.go benchmarkFixtureLoadout).
+    ...(fixture.loadout ? { loadout: fixture.loadout } : {})
   });
   let response;
   for (;;) {

@@ -69,6 +69,8 @@ function sourceGates() {
 		...architecture,
 		"tests/runtime/beta-release.test.mjs",
 		"tests/runtime/runtime-text-admission.test.mjs",
+		"tests/runtime/persistent-recovery.test.mjs",
+		"tests/runtime/persistent-settlement.test.mjs",
 		"tests/runtime/application-release.test.mjs",
 		"tests/runtime/cos-item-use.test.mjs",
 		"tests/runtime/cos-hud.test.mjs",

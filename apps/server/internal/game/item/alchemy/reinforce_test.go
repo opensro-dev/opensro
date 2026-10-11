@@ -3,6 +3,7 @@ package alchemy
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/item/inventory"
@@ -135,6 +136,61 @@ func TestPackedProbabilityAndPowderBoundary(t *testing.T) {
 			if item.Slot == 15 {
 				t.Fatal("last powder not consumed")
 			}
+		}
+	}
+}
+
+/*
+================
+TestReinforceTablesReadTheAuthoredChances
+
+The published tables are probability itself at each plus, the last level
+standing for every higher plus, and a powder carries its degree.
+================
+*/
+func TestReinforceTablesReadTheAuthoredChances(t *testing.T) {
+	packed := [5]uint32{0, 0x32281e14, 0x0f0c0a08, 0x07060504}
+	c := &Catalog{Items: map[string]Reference{
+		"ELIXIR": {Flags: wire.PackTypeFlags(3, 3, 10, 1), Params: packed},
+		"POWDER": {Flags: wire.PackTypeFlags(3, 3, 10, 2), Params: [5]uint32{3, 0x0a090807}},
+		"OTHER":  {Flags: wire.PackTypeFlags(3, 3, 1, 1)},
+	}}
+	elixirs, powders := c.ReinforceTables()
+	if len(elixirs) != 1 || len(powders) != 1 || powders[0].Degree != 3 {
+		t.Fatalf("tables %+v %+v", elixirs, powders)
+	}
+	for plus, chance := range elixirs[0].Chances {
+		if chance != probability(c.Items["ELIXIR"], uint8(plus)) {
+			t.Fatalf("+%d chance %d", plus, chance)
+		}
+	}
+	if elixirs[0].Chances[0] != 0x32 || elixirs[0].Chances[11] != probability(c.Items["ELIXIR"], 40) {
+		t.Fatalf("chances %v", elixirs[0].Chances)
+	}
+}
+
+/*
+================
+TestElixirKindsNameTheAcceptedFamilies
+
+The classes an elixir's first and last parameters list are the families
+Reinforce admits: weapon 6, shield 4, accessory 5/12, armor 1..3/9..11.
+================
+*/
+func TestElixirKindsNameTheAcceptedFamilies(t *testing.T) {
+	for _, tc := range []struct {
+		params [5]uint32
+		want   string
+	}{
+		{[5]uint32{0x06}, "weapon"},
+		{[5]uint32{0x04}, "shield"},
+		{[5]uint32{0x0c05}, "accessory"},
+		{[5]uint32{0x03020109, 0, 0, 0, 0x0b0a}, "armor"},
+		{[5]uint32{0x0604}, "shield,weapon"},
+		{[5]uint32{}, ""},
+	} {
+		if got := strings.Join(elixirKinds(Reference{Params: tc.params}), ","); got != tc.want {
+			t.Errorf("params %x: kinds %q, want %q", tc.params, got, tc.want)
 		}
 	}
 }

@@ -309,7 +309,7 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 		if option.Tag == 0x726570 && oldIndex < 0 {
 			return zero, Refusal(0x25)
 		}
-		if option.Tag == 0x61737472 {
+		if option.Tag == MagicTagAstral {
 			_, immortal := c.findMagic(*item, 0x61746861)
 			if immortal <= oldValue {
 				return zero, Refusal(0x24)

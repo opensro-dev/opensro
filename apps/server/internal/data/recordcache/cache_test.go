@@ -2,6 +2,7 @@ package recordcache
 
 import (
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -36,5 +37,40 @@ func TestRecordEvictionAndCleanup(t *testing.T) {
 	}
 	if _, err := os.Stat(name); !os.IsNotExist(err) {
 		t.Fatal("backing file remains")
+	}
+}
+
+/*
+================
+TestBackingFileNeverOutlivesTheProcess
+
+Where the OS can unlink an open file, the backing file has no name once
+New returns, so a process that is killed before Close leaks nothing. The
+records stay readable through the open descriptor.
+================
+*/
+func TestBackingFileNeverOutlivesTheProcess(t *testing.T) {
+	c, err := New[string](1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	path := c.file.Name()
+	if err := c.Put(1, "A"); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := c.Get(1); !ok || got != "A" {
+		t.Fatalf("record after unlink = %q, %v", got, ok)
+	}
+	_, statErr := os.Stat(path)
+	if runtime.GOOS == "windows" {
+		// Windows keeps the name until Close removes it.
+		if statErr != nil || c.name != path {
+			t.Fatalf("windows backing file %v, name %q", statErr, c.name)
+		}
+		return
+	}
+	if !os.IsNotExist(statErr) || c.name != "" {
+		t.Fatalf("backing file still named after New: %v, name %q", statErr, c.name)
 	}
 }

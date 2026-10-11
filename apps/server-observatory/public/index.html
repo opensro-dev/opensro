@@ -345,6 +345,18 @@
      <p class="recovery-hint">The original state and result are recorded in the private audit log. This operation does not move the character or grant items.</p>
     </div>
    </form>
+   <form id="recovery-grant-silk" class="panel recovery-form">
+    <div class="panel-heading"><div><span class="eyebrow">AUDITED OPERATION</span><h2>Grant silk</h2></div><span class="tag">NO DISCONNECT</span></div>
+    <div class="recovery-form-body">
+     <p class="recovery-note">Adds Item Mall silk to the inspected character's account on the displayed server, from 1 to 1,000,000 per grant. The player stays online; an open mall shows the new balance at once. Offline players receive it in their stored wallet.</p>
+     <label>Silk<input id="recovery-silk-amount" type="number" required min="1" max="1000000" step="1" inputmode="numeric" autocomplete="off"></label>
+     <label>Reason<textarea id="recovery-silk-reason" required minlength="5" maxlength="500" rows="3" placeholder="Why is this player receiving silk?"></textarea></label>
+     <label>Confirm character name<input id="recovery-silk-confirmation" required autocomplete="off" placeholder="Type the exact inspected name"></label>
+     <p id="recovery-silk-review" class="recovery-hint" hidden></p>
+     <button id="recovery-grant-silk-button" class="button rescue-submit" type="submit">Review silk grant</button>
+     <p class="recovery-hint">The grant, its grantor and the resulting balance are recorded in the private audit log and the shard's history.</p>
+    </div>
+   </form>
    </div>
   </div>
  </section>

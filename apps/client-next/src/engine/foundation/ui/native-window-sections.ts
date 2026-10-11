@@ -60,8 +60,14 @@ export function nativeWindowSections( name: string ): readonly string[] | undefi
 			return [ "Create", "Message", "Condition" ]; // 617B10 / 617C30.
 		case "ifhostileguild":
 			return [ "Create", "GuildDetail", "HostileList", "CommandButton" ]; // 600120.
+		case "ifallianceguild":
+			// Keep the authored inset frames above Create's stone tiles, as for
+			// the sibling Hostility page. Inferred constructor order from resinfo.
+			return [ "Create", "AllianceInfo", "GuildDetail", "AllianceList", "CommandButton" ];
 		case "ifguild":
 			return [ "Create", "GuildInfo", "NotifySubBox", "MemberView", "Command", "SortBtn" ]; // 5EA9D0.
+		case "ifguildmasterelection":
+			return [ "Create", "ListWnd" ]; // 5F0940.
 		case "ifpartymatch":
 			// 637400 creates the background before the inset search controls.
 			return [ "Create", "SearchInfo", "SlotListButton", "SlotList" ];

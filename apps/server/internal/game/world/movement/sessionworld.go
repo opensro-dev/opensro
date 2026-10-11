@@ -73,6 +73,31 @@ type sessionWorld struct {
 
 /*
 ==================
+WorldView
+
+WorldSnapshot without the peer presentation: the world, its instance and
+the character's identity, read under the same door. Tick hooks that never
+spawn this player for a viewer take this (worldsession.ViewProvider), so
+action speed, spawn skills, guild, stall and companions are built once per
+tick, by the coordinator's full snapshot, not once per hook.
+==================
+*/
+func (p *sessionWorld) WorldView() simulation.SessionView {
+	key := simulation.WorldKey(p.divisionID, p.character.Name)
+	var view simulation.SessionView
+	p.rt.deps.Read(p.divisionID, func() {
+		view = simulation.SessionView{
+			DivisionID:    p.divisionID,
+			CharacterID:   p.character.ID,
+			WorldInstance: domain.CharacterWorldInstance(p.character),
+			World:         p.rt.Worlds.Snapshot(key, func() simulation.WorldState { return simulation.SeedWorldState(p.character) }),
+		}
+	})
+	return view
+}
+
+/*
+==================
 WorldSnapshot
 
 WorldSnapshot yields the session's tick snapshot: the SHARED live
@@ -240,9 +265,10 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 	// players see the job alias in place of the name: v1.188's spawn tail
 	// (4E5B00, 4E5B55) writes vfunc +0xF0 (the alias, CInstancePC +0x48)
 	// unless the job state is 4, and the name (+0xEC) only then. The
-	// v1.150 client reads that one string as the peer's name (869E77); it
-	// never swaps its own name board to the alias (+0x1898 is read only by
-	// the job windows), so the player keeps seeing their real name.
+	// v1.150 client reads that one string as the peer's name (869E77). Its
+	// own board takes the alias only at world entry (8675F0 calls vtable
+	// +0x74 with +0x1898 when the entry's slot-8 suit sets a job class);
+	// the overhead job mark comes from that suit (868D00), not from here.
 	// Wearing a suit requires an alias (0x9F), so it is never empty here.
 	if job := enterworld.DressedJob(character); job != 0 {
 		captured.jobType, captured.jobGrade = job, character.Job.Grade

@@ -75,6 +75,9 @@ type Catalog struct {
 	// AvatarOptions are the option codenames magicoptionassign.txt gives
 	// each avatar part, keyed by TID4 (avatar.go).
 	AvatarOptions map[uint8][]string
+	// Rates is the shard's port-only reinforcement table (rates.go); nil
+	// keeps every elixir's authored chance.
+	Rates ReinforceRates
 }
 
 /*

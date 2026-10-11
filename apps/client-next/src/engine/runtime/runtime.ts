@@ -40,6 +40,7 @@ import { frameProbe } from "./frame-probes";
 import { createFrameWork } from "./frame-work";
 import { createFramePacing } from "./frame-pacing";
 import { createRenderer } from "./renderer/renderer";
+import { createViewer } from "./viewer/viewer";
 import { createSimulationHost } from "./simulation/host";
 import type { RuntimeControl } from "@/engine/contracts/runtime";
 
@@ -268,6 +269,7 @@ export function startRuntime(
 			createBugReport( {
 				canvas,
 				apiBase,
+				network: () => simulation.netJournal(),
 				context: (): readonly BugReportField[] => {
 					const game = presentation.gameplay();
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
@@ -1076,4 +1078,58 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 		}
 		throw error;
 	}
+}
+
+/*
+================
+startViewerRuntime
+
+Port-only, not native (docs/VIEWER.md): the embeddable 3D viewer page. It
+creates only the owners one drawn model needs (assets, renderer and the
+character presentation, as startRuntime builds them) and drives
+viewer/viewer.ts by animation frames only while it asks for them: an idle
+interactive view costs nothing until input wakes it. The owners are
+disposed when the viewer is done. No session, input, audio or UI.
+================
+*/
+export function startViewerRuntime( canvas: HTMLCanvasElement, picture: HTMLCanvasElement, search: string ): void {
+	const random = createPresentationRandom( 1 );
+	const assets = createAssets();
+	const renderer = createRenderer( canvas, random );
+	const characters = createCharacterPresentation(
+		assets,
+		renderer,
+		new URL( "/", import.meta.url ).href,
+		() => {},
+		random
+	);
+	let scheduled = false, disposed = false;
+	/*
+	================
+	viewerFrame
+	================
+	*/
+	const viewerFrame = ( now: number ) => {
+		scheduled = false;
+		const next = viewer.frame( now );
+		if ( next === "draw" ) wake();
+		else if ( next === "done" ) {
+			disposed = true;
+			characters.dispose();
+			renderer.dispose();
+			assets.dispose();
+		}
+	};
+	/*
+	================
+	wake
+	================
+	*/
+	const wake = () => {
+		if ( scheduled || disposed ) return;
+		scheduled = true;
+		requestAnimationFrame( viewerFrame );
+	};
+	const viewer = createViewer( { canvas, picture, search, renderer, characters, wake } );
+	wake();
 }

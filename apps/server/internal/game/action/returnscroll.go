@@ -24,6 +24,14 @@ const (
 	teleportModeFree     uint8 = 2
 )
 
+// berserkBodyMode is body mode 1. AJStateChanger_Advance (405F70) case 0xB
+// postpones a teleport job by returnPostponeMs while the actor's body
+// channel ([[actor+0x30]+4], GetBodyMode) holds it.
+const berserkBodyMode uint8 = 1
+
+// returnPostponeMs is that postponement.
+const returnPostponeMs = 1000
+
 // errCodeThievesOnly is 4A0380's 0x186A (UIIT_MSG_STRGERR_ONLY_ROBBER_CAN_USE_THIS_ITEM).
 const errCodeThievesOnly uint8 = 0x6a
 
@@ -317,9 +325,33 @@ func (rt *Runtime) HandleReturnCancel(division string, c *enterworld.Character, 
 	return OpResult{Frames: []wire.Frame{f}, Broadcast: []wire.Frame{f}}
 }
 
-// The existing simulation action tick advances the native channel-11 timer.
-// A dead actor postpones completion by 1s (405F70/40614E), rather than
-// teleporting a corpse or inventing a refund/reset on death.
+/*
+================
+cancelReturnOnDeathInDoor
+
+CGObjPC_ProcessNormalDeath (529B10) calls CGObjPC_RefreshJobStateJob
+(513EA0) while the teleport mode is set: it removes the queued channel-11
+job and resets the mode to 0, the same cancel a 0x705B request runs. Only a
+job of destination kind 6 survives, and no scroll queues one (the return
+scroll 0 or 1, the reverse return 2, 3 or 7), so a death during a return or
+reverse-return cast cancels it and the scroll stays spent. Returns the
+mode-0 frame every observer sees, or nil when nothing was pending. The
+caller holds the character's door and the division lock.
+================
+*/
+func (rt *Runtime) cancelReturnOnDeathInDoor(division string, c *enterworld.Character) []wire.Frame {
+	key := simulation.WorldKey(division, c.Name)
+	if _, ok := rt.returnCasts.Load(key); !ok {
+		return nil
+	}
+	rt.returnCasts.Delete(key)
+	if c.NativeTeleportMode == 0 || c.NativeTeleportMode == skinTeleportMode {
+		return nil
+	}
+	c.NativeTeleportMode = 0
+	return []wire.Frame{teleportState(c, 0)}
+}
+
 /*
 ================
 advanceReturnScrolls
@@ -367,6 +399,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	var previousWorld *enterworld.CharacterWorld
 	var destination simulation.Spawn
 	var arrival travelPoint
+	cancelled := false
 	currentWorld := instance.ID(domain.CharacterWorldInstance(c))
 	rt.bindResidentRegion(key, now)
 	if !rt.deps.Update(c, "return-scroll-complete", func() bool {
@@ -374,8 +407,16 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			rt.returnCasts.Delete(key)
 			return false
 		}
+		// Death cancels the job (cancelReturnOnDeathInDoor); a corpse that
+		// reached here by another path is never teleported.
 		if !enterworld.CharacterAlive(c) {
-			job.due = now + 1000
+			rt.returnCasts.Delete(key)
+			c.NativeTeleportMode, cancelled = 0, true
+			return true
+		}
+		// 40614E: the body channel at berserk postpones the teleport.
+		if c.NativeBodyStatus == berserkBodyMode {
+			job.due = now + returnPostponeMs
 			rt.returnCasts.Store(key, job)
 			return false
 		}
@@ -401,6 +442,10 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 		return true
 	}) {
 		return nil, nil
+	}
+	if cancelled {
+		clear := teleportState(c, 0)
+		return []wire.Frame{clear}, []wire.Frame{clear}
 	}
 	rt.returnCasts.Delete(key)
 	clearMode := teleportState(c, 0)

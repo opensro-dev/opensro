@@ -60,6 +60,16 @@ export const BUILD_TASKS = [
 		args: [ "apps/server-observatory/tools/item-catalog.mjs" ]
 	} ),
 	commandTask( {
+		name: "build:catalogue",
+		description: "Export the website's game catalogue (items, skills, quests, monsters, NPCs, atlas)",
+		kind: "build",
+		ci: false,
+		requires: [ "server-data", "generated-assets" ],
+		timeoutClass: "medium",
+		command: "node",
+		args: [ "scripts/build/catalogue/buildCatalogue.mjs" ]
+	} ),
+	commandTask( {
 		name: "release",
 		description: "Prepare a clean release workspace using the repository release tool",
 		kind: "release",

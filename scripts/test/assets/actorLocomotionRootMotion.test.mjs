@@ -259,14 +259,26 @@ test("published Baroi locomotion is horizontally in-place", () => {
 	}
 });
 
-// Reviewed 2026-10-02. COS: the 39 models of every COS band (riding horses,
-// transports, pets, quest companions) whose own or base BSR ships in the
-// client (npcModelRoster.mjs enabledCosReferences). Each has walk and run
-// except COS_T_LIZARD, whose t_lizard.bsr authors only run. Actors: 148, including MOB_DH_SOLDIEREARTHGHOST, which the
-// v1.150 client places and a quest needs; the server keeps it spawnable
-// despite the v1.188 shard's all-zero caps (monster laterDisabledCodenames).
-const COS_LOCOMOTION_RESOURCES = 39;
-const COS_LOCOMOTION_ROLES = 77;
+// Reviewed 2026-10-11. A GLB that any COS reference uses is counted as COS,
+// whatever other rows share it; labelling by the first manifest row made the
+// buckets depend on row order.
+//
+// COS: the 39 models of every COS band (riding horses, transports, pets,
+// quest companions) whose own or base BSR ships in the client
+// (npcModelRoster.mjs enabledCosReferences), plus four monster GLBs a COS
+// band reuses (europe/dowb, europe/ladon, europe/siren, roc/antelope_qt; the
+// *_CLON quest companions). Each has walk and run except COS_T_LIZARD, whose
+// t_lizard.bsr authors only run. The event monsters added with the creatable
+// roster (#418: MOB_EV_* and MOV_EV_*) reuse eleven pet GLBs (cos/p_wolf_01,
+// p_wolf_02, p_raven02, p_penguin01, p_penguin02, p_kangaroo01, p_kangaroo02,
+// p_jinn, p_jinn_02, p_bear01, p_bear02), which stay COS.
+//
+// Actors: 145, including MOB_DH_SOLDIEREARTHGHOST, which the v1.150 client
+// places and a quest needs (the server keeps it spawnable despite the v1.188
+// shard's all-zero caps, monster laterDisabledCodenames), and
+// common/automob.glb (MOB_AUTOMOB, creatable since #418).
+const COS_LOCOMOTION_RESOURCES = 43;
+const COS_LOCOMOTION_ROLES = 85;
 
 test("every holder-driven actor resource exports in-place locomotion", () => {
 	const npcManifest = JSON.parse(
@@ -279,7 +291,12 @@ test("every holder-driven actor resource exports in-place locomotion", () => {
 	// avatars, so each census still flags a new or removed resource.
 	const resources = new Map();
 	for ( const entry of Object.values( npcManifestModels( npcManifest ) ) ) {
-		if ( !entry.glb || resources.has( entry.glb ) ) continue;
+		if ( !entry.glb ) continue;
+		const known = resources.get( entry.glb );
+		if ( known ) {
+			known.cos ||= entry.kind === "cos";
+			continue;
+		}
 		resources.set( entry.glb, { label: `NPC resource ${entry.glb}`, cos: entry.kind === "cos" } );
 	}
 	for ( const entry of avatarRoster.models ) {
@@ -298,7 +315,7 @@ test("every holder-driven actor resource exports in-place locomotion", () => {
 	}
 	assert.deepEqual(
 		census.actor,
-		{ resources: 148, roles: 296 },
+		{ resources: 145, roles: 290 },
 		"the holder-driven actor census changed; review every new or removed locomotion resource"
 	);
 	assert.deepEqual(

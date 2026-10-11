@@ -20,6 +20,10 @@ func (rt *Runtime) ConfigureAlchemy(dir string) error {
 	if err != nil {
 		return err
 	}
+	// Port-only, not native: unset or "off" keeps every authored chance.
+	if c.Rates, err = alchemy.ReinforceRatesFromEnv(); err != nil {
+		return err
+	}
 	rt.Alchemy = c
 	return nil
 }

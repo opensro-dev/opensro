@@ -109,6 +109,25 @@ func (rt *Runtime) handleCosPickupCommand(division string, c *enterworld.Charact
 
 /*
 ================
+expireCosPickup
+
+The pet left PICKITEM (battle, displacement, relocation to its owner) with
+a pickup still pending. CAIState_PICKITEM_OnExit (55AD60) answers the owner
+then: a pending target sends its failure (55ADF0) before the state clears.
+Expiring the deadline lets the pet's next tick retire it through
+finishPendingCosPickup, which answers the 0xB06D (and the command, when one
+asked). Clearing the slot instead left the request unanswered, and the
+browser drops the session when a pending 0xB06D outlives its 10 s wait.
+================
+*/
+func expireCosPickup(state *petSession) {
+	if state.pickup != nil {
+		state.pickupDeadline = 0
+	}
+}
+
+/*
+================
 finishPendingCosPickup
 
 Retire the pending protocol before publishing, including death, despawn,

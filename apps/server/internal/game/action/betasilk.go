@@ -265,7 +265,7 @@ resolves a session's character. Returns the balance pushes for the
 sessions whose wallet changed.
 ================
 */
-func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionSnapshot, lookup func(division string, id int64) *domain.Character) []simulation.DivisionFrames {
+func (b *BetaSilk) Tick(nowMs int64, sessions []simulation.SessionView, lookup func(division string, id int64) *domain.Character) []simulation.DivisionFrames {
 	if b == nil || lookup == nil {
 		return nil
 	}

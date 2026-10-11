@@ -108,7 +108,7 @@ func TestBetaSilkEarnsPerInWorldHourUpToTheCap(t *testing.T) {
 	if wallet.starters != 1 || wallet.silk != betaSilkStarter {
 		t.Fatalf("starter: %d grants, silk %d", wallet.starters, wallet.silk)
 	}
-	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: character.ID}}
+	online := []simulation.SessionView{{DivisionID: "d", CharacterID: character.ID}}
 	now := int64(0)
 	tick := func( /* one minute */ ) []simulation.DivisionFrames {
 		now += 60 * 1000
@@ -168,7 +168,7 @@ func TestBetaSilkStallNeverCreditsIdleTime(t *testing.T) {
 	wallet := &fakeSilkWallet{exists: true}
 	beta := NewBetaSilk(wallet, 50)
 	character := &domain.Character{ID: 1, AccountID: "acct"}
-	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}}
+	online := []simulation.SessionView{{DivisionID: "d", CharacterID: 1}}
 	lookup := func(string, int64) *domain.Character { return character }
 	beta.Tick(0, online, lookup)
 	beta.Tick(betaSilkHourMs, online, lookup)
@@ -211,7 +211,7 @@ func TestBetaSilkStartsAtFirstObservationAndRetriesCredit(t *testing.T) {
 	wallet := &fakeSilkWallet{exists: true}
 	beta := NewBetaSilk(wallet, 1)
 	character := &domain.Character{ID: 1, AccountID: "acct"}
-	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}}
+	online := []simulation.SessionView{{DivisionID: "d", CharacterID: 1}}
 	lookup := func(string, int64) *domain.Character { return character }
 	start := int64(10 * betaSilkHourMs)
 	beta.Tick(start, online, lookup)
@@ -238,7 +238,7 @@ func TestBetaSilkCapPausesTimeUntilPurchase(t *testing.T) {
 	wallet := &fakeSilkWallet{exists: true, silk: betaSilkBankCap}
 	beta := NewBetaSilk(wallet, 50)
 	character := &domain.Character{ID: 1, AccountID: "acct"}
-	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}}
+	online := []simulation.SessionView{{DivisionID: "d", CharacterID: 1}}
 	lookup := func(string, int64) *domain.Character { return character }
 	for minute := int64(0); minute <= 59; minute++ {
 		beta.Tick(minute*betaSilkMaxStepMs, online, lookup)
@@ -265,7 +265,7 @@ TestBetaSilkAccountCountsOnceAndPushesEverySession
 func TestBetaSilkAccountCountsOnceAndPushesEverySession(t *testing.T) {
 	wallet := &fakeSilkWallet{exists: true}
 	beta := NewBetaSilk(wallet, 50)
-	online := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}, {DivisionID: "d", CharacterID: 2}}
+	online := []simulation.SessionView{{DivisionID: "d", CharacterID: 1}, {DivisionID: "d", CharacterID: 2}}
 	lookup := func(_ string, id int64) *domain.Character { return &domain.Character{ID: id, AccountID: "acct"} }
 	for minute := int64(0); minute < 60; minute++ {
 		beta.Tick(minute*betaSilkMaxStepMs, online, lookup)
@@ -291,7 +291,7 @@ func TestBetaSilkForgetsAccountsAwayForADay(t *testing.T) {
 	lookup := func(_ string, id int64) *domain.Character {
 		return &domain.Character{ID: id, AccountID: "account-" + string(rune('0'+id))}
 	}
-	both := []simulation.SessionSnapshot{{DivisionID: "d", CharacterID: 1}, {DivisionID: "d", CharacterID: 2}}
+	both := []simulation.SessionView{{DivisionID: "d", CharacterID: 1}, {DivisionID: "d", CharacterID: 2}}
 	b.Tick(0, both, lookup)
 	b.Tick(betaSilkMaxStepMs, both, lookup)
 	b.Tick(2*betaSilkMaxStepMs, both[:1], lookup)

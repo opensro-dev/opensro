@@ -67,6 +67,8 @@ type Catalog struct {
 	TradeQuests     map[string]uint32
 	Tabs            map[int32][]Offer
 	Magic           enterworld.MagicOptionSource
+	// tabIDs maps an authored tab name to its id (AddExtraGoods).
+	tabIDs map[string]int32
 }
 
 /*
@@ -110,8 +112,8 @@ func Load(dir string, refs enterworld.ItemRefSource) (*Catalog, error) {
 		}
 		tables[name] = rows
 	}
-	c := &Catalog{Tabs: map[int32][]Offer{}, Magic: enterworld.NewTextdataMagicOptions(dir)}
 	tabIDs := map[string]int32{}
+	c := &Catalog{Tabs: map[int32][]Offer{}, Magic: enterworld.NewTextdataMagicOptions(dir), tabIDs: tabIDs}
 	for _, r := range tables["refshoptab"] {
 		if len(r) >= 6 && r[0] == "1" {
 			n, e := strconv.ParseInt(r[2], 10, 32)

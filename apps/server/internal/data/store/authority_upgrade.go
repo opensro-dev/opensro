@@ -3,11 +3,12 @@
 
 authority_upgrade.go - the offline, preserving authority upgrade
 
-Brings schemas 13 through 21 to schema 21, layout 8. Takes the same exclusive authority lock as the game
+Brings schemas 13 through 22 to schema 22, layout 9. Takes the same exclusive authority lock as the game
 server, validates every existing record and keeps an independent backup.
 Schema 13 also gains the two account tables from layout 5; every layout 5
 source gains the empty fortress tables of layout 6, and every layout 7
-source the empty fortress production table of layout 8. Existing tables and
+source the empty fortress production table of layout 8, and every layout 8
+source the empty unique-kill table of layout 9. Existing tables and
 their records survive unchanged; the new record fields are optional. The
 role repair makes each guild master the sole commander
 (guild_leader_role.go); it also runs on a current store that needs it.
@@ -40,6 +41,8 @@ const preEndedQuestVersion = 17
 const preJobRewardVersion = 18
 const preStallDecorationVersion = 19
 const preItemForgeVersion = 20
+const preCommunityVersion = 21
+const preUniqueKillLayoutVersion = 8
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -138,6 +141,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
+	case preCommunityVersion:
+		// Schema 21 ran at layouts 5 through 8 and has no site fields or
+		// unique-kill table; its records read unchanged.
+		if layout < preFortressLayoutVersion || layout > preUniqueKillLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
 	case CurrentVersion:
 		// A current store still upgrades when commander roles disagree with
 		// member grades (guild_leader_role.go): the repair is its only change.
@@ -158,8 +168,11 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if sourceLayout < preItemForgeLayoutVersion {
 		added = append(added, "guild_wars")
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout < preUniqueKillLayoutVersion {
 		added = append(added, "fortress_item_forges")
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		added = append(added, "unique_kills")
 	}
 	if sourceLayout == preMallLayoutVersion {
 		added = append(added, "mall_accounts", "account_storage")
@@ -226,8 +239,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return backupPath, err
 		}
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout < preUniqueKillLayoutVersion {
 		if _, err := tx.Exec(fortressItemForgeSchema); err != nil {
+			return backupPath, err
+		}
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		if _, err := tx.Exec(uniqueKillsSchema); err != nil {
 			return backupPath, err
 		}
 	}

@@ -16,6 +16,10 @@ import type { WireFrame } from "@/engine/contracts/network";
 const OP_GM_COMMAND = 0x75b6;
 const MAX_ITEM_REFERENCES = 65536;
 const MAX_GM_NAME_BYTES = 128;
+// The port's /SILK name amount (operator tooling, not native): subcommand
+// 0xF0, past the native table's last command (0x30).
+const GM_GRANT_SILK = 0xf0;
+const MAX_SILK_GRANT = 1_000_000;
 
 /*
 ================
@@ -104,6 +108,16 @@ export function gmReply( p: Uint8Array ): GmReply | null {
 		return { console: true, text: (result === 1 ? "-> " : "Failed. -> ") + (marked ? "*" : "") + value };
 	}
 	if ( result === 1 && code === 1 ) return { console: false, text: string() };
+	if ( code === GM_GRANT_SILK ) {
+		// The port's /SILK answer: the recipient's new balance, or a refusal.
+		if ( result === 2 ) {
+			if ( p.length !== 2 ) throw Error( "Trailing GM silk refusal bytes" );
+			return { console: true, text: "Failed. -> silk grant refused" };
+		}
+		if ( p.length !== 6 ) throw Error( "Invalid GM silk reply" );
+		const balance = new DataView( p.buffer, p.byteOffset, p.byteLength ).getUint32( 2, true );
+		return { console: true, text: "-> silk granted, balance " + balance };
+	}
 	if ( result === 1 && code === 4 ) {
 		if ( p.length !== 14 ) throw Error( "Invalid GM world status" );
 		const v = new DataView( p.buffer, p.byteOffset, p.byteLength );
@@ -192,6 +206,20 @@ export function gmRequest(
 			0;
 		const payload = Uint8Array.of( 6, 0, 0, 0, 0, count, type );
 		new DataView( payload.buffer ).setUint32( 1, ref.refObjId, true );
+		return { opcode: OP_GM_COMMAND, payload };
+	}
+	if ( name === "/SILK" ) {
+		if ( tokens.length !== 3 || !/^[0-9]+$/.test( tokens[2]! ) ) return null;
+		const amount = Number( tokens[2] ), bytes = new TextEncoder().encode( arg );
+		if ( amount < 1 || amount > MAX_SILK_GRANT ) return null;
+		if ( !bytes.length || bytes.length >= MAX_GM_NAME_BYTES || arg.includes( " " ) ) {
+			throw Error( "Invalid GM name" );
+		}
+		const payload = new Uint8Array( 3 + bytes.length + 4 ), view = new DataView( payload.buffer );
+		payload[0] = GM_GRANT_SILK;
+		view.setUint16( 1, bytes.length, true );
+		payload.set( bytes, 3 );
+		view.setUint32( 3 + bytes.length, amount, true );
 		return { opcode: OP_GM_COMMAND, payload };
 	}
 	const named = ({

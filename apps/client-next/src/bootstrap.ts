@@ -12,7 +12,7 @@ the modules under engine/.
 */
 
 import { requestPersistentStorage } from "./engine/foundation/assets/persistent-storage";
-import { startRuntime } from "./engine/runtime/runtime";
+import { startRuntime, startViewerRuntime } from "./engine/runtime/runtime";
 
 /*
 ================
@@ -35,12 +35,40 @@ function diagnosticsFromQuery() {
 	};
 }
 
-const canvas = document.querySelector( "canvas" );
-const status = document.querySelector( "output" );
-if ( !(canvas instanceof HTMLCanvasElement) || !status ) {
-	throw new Error( "Missing runtime surface" );
+/*
+================
+startGame
+================
+*/
+function startGame() {
+	const canvas = document.querySelector( "canvas" );
+	const status = document.querySelector( "output" );
+	if ( !(canvas instanceof HTMLCanvasElement) || !status ) {
+		throw new Error( "Missing runtime surface" );
+	}
+	const started = startRuntime( canvas, status, undefined, diagnosticsFromQuery() );
+	// Keep the verified game files through disk pressure, asked once per page
+	// load (persistent-storage.ts); the runtime's frame never runs async work.
+	void requestPersistentStorage();
+	return started;
 }
-export const runtime = startRuntime( canvas, status, undefined, diagnosticsFromQuery() );
-// Keep the verified game files through disk pressure, asked once per page
-// load (persistent-storage.ts); the runtime's frame never runs async work.
-void requestPersistentStorage();
+
+/*
+================
+startViewer
+
+viewer.html (docs/VIEWER.md) marks its root data-page="viewer": the same
+entry starts the 3D viewer instead of the game. Port-only, not native.
+================
+*/
+function startViewer() {
+	const canvas = document.querySelector( "canvas[data-viewer=render]" ),
+		picture = document.querySelector( "canvas[data-viewer=picture]" );
+	if ( !(canvas instanceof HTMLCanvasElement) || !(picture instanceof HTMLCanvasElement) ) {
+		throw new Error( "Missing viewer canvas" );
+	}
+	startViewerRuntime( canvas, picture, location.search );
+	return null;
+}
+
+export const runtime = document.documentElement.dataset.page === "viewer" ? startViewer() : startGame();

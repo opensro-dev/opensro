@@ -83,13 +83,20 @@ func TestStallSellsToAVisitor(t *testing.T) {
 		t.Fatal("an open stall took a new offer")
 	}
 	visit := rt.HandleStallVisit(testDivision, buyer, wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(owner)).Payload())
-	if len(visit.Frames) != 1 || visit.Frames[0].Payload[0] != 1 {
+	// The visitor's client decodes the listed potion through its own
+	// reference table, so the potion's reference comes first.
+	if len(visit.Frames) != 2 || !referencesName(visit.Frames[0], stallSlotItem(t, owner, 13)) ||
+		visit.Frames[1].Opcode != wire.OpStallVisitResult || visit.Frames[1].Payload[0] != 1 {
 		t.Fatalf("visit %+v", visit.Frames)
 	}
 	lastFrame(t, pushed[owner.Name], wire.OpStallEvent)
 
 	listed := rt.HandleStallNetworkSearch(testDivision, buyer, []byte{0, 0, 40, 0, 0, 0, 0})
-	if p := listed.Frames[0].Payload; p[0] != 1 || p[1] != 1 || p[2] != 1 {
+	// The page lists another player's potion: its reference comes first.
+	if len(listed.Frames) != 2 || !referencesName(listed.Frames[0], stallSlotItem(t, owner, 13)) {
+		t.Fatalf("network search frames %+v", listed.Frames)
+	}
+	if p := listed.Frames[1].Payload; p[0] != 1 || p[1] != 1 || p[2] != 1 {
 		t.Fatalf("network search % X", p)
 	}
 	// A potion has no degree: a third-degree search does not list it.

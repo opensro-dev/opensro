@@ -38,12 +38,13 @@ export function characterPickVolume( model: CharacterModel ): PickBounds {
 characterBindBounds
 
 Bounds of every non-emitter primitive in the clip-less rest pose, in model
-space. Build once per admitted assembly.
+space, or in a clip's first frame when one is named (the 3D viewer frames
+the pose it draws). Build once per admitted assembly.
 ================
 */
-export function characterBindBounds( model: CharacterModel ): PickBounds {
+export function characterBindBounds( model: CharacterModel, clip = "" ): PickBounds {
 	const pose = createCharacterPose( model );
-	pose.evaluate( "", 0 );
+	pose.evaluate( clip, 0 );
 	const bounds = [ Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity ], matrix = identity();
 	for ( const primitive of model.primitives ) {
 		if ( primitive.emission ) continue;

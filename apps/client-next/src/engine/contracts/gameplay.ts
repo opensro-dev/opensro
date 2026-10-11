@@ -319,6 +319,9 @@ export type GameplayCommand =
 	| { readonly kind: "action-command"; readonly id: number; }
 	| { readonly kind: "cos-attack"; readonly gid: number; }
 	| import("@/engine/foundation/gameplay/social").SocialCommand
+	// "/Invite to party name" (party-chat-command.ts): the world core turns
+	// the name into a party-invite at the visible player of that name.
+	| { readonly kind: "party-invite-named"; readonly name: string; readonly options: number; }
 	| { readonly kind: "skill-train"; readonly id: number; }
 	| { readonly kind: "mastery-train"; readonly id: number; }
 	| { readonly kind: "quickslot-bind"; readonly slot: number; readonly skillId: number; }
@@ -385,6 +388,8 @@ export type GameplayCommand =
 		readonly message?: string;
 		// The reverse return scroll's point (6971B0 message box 0x1E).
 		readonly reverseChoice?: number;
+		// The port-only map choice's point id (reverse-return-map.ts).
+		readonly reverseMapPoint?: number;
 	}
 	| {
 		readonly kind: "navigation";
@@ -616,6 +621,12 @@ export interface GameplayState {
 		readonly itemName?: string;
 	})[];
 	readonly reverseReturnChoice?: boolean;
+	// The server's port-only SRO_STORAGE_AUTO_STACK rule, published at world
+	// entry: storage quick moves prefer a matching stack (storage-panel.ts).
+	readonly storageAutoStack?: boolean;
+	// The reverse return scroll's map table: empty unless the server's
+	// port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
+	readonly reverseMapPoints?: readonly import("@/engine/foundation/gameplay/reverse-return-map").ReverseMapPoint[];
 	readonly abnormalRecords?: readonly import("@/engine/foundation/gameplay/abnormal-snapshot").AbnormalRecord[];
 	readonly selectionDecal?: SelectionDecal | null;
 	readonly notices?: readonly import("@/engine/foundation/gameplay/system-notices").SystemNotice[];

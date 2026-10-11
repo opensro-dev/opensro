@@ -46,7 +46,9 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 1, 8, 2, 0, 0, 0, 10, 0, 0, 0 ) }, 2 );
 	gameplay.receive( { opcode: 0xb06d, payload: Uint8Array.of( 2, 1 ) }, 2 );
 	assert.equal( gameplay.take()?.inventoryPending, false );
-	assert.throws( () => gameplay.receive( receipt, 2 ), /Unmatched COS ground result/ );
+	// A pet pickup holds no lock: a stray receipt applies and arms nothing.
+	gameplay.receive( receipt, 2 );
+	assert.equal( gameplay.take()?.inventoryPending ?? false, false );
 	gameplay.step( 2, f.frame.local );
 	assert.deepEqual( sent[2], cosPickupRequest( 2, 11 ) );
 	gameplay.receive( { opcode: 0xb69e, payload: Uint8Array.of( 2, 8, 0xb4, 2, 0, 0, 0, 11, 0, 0, 0 ) }, 3 );

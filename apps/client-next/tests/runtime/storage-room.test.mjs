@@ -129,3 +129,35 @@ test("a listed room row is named and drawn like the bag's (BUG-069)", () => {
 	assert.equal( shown?.name, "HP Recovery Potion (Small)" );
 	assert.equal( shown?.quantity, 30 );
 });
+
+test("a stored pickup pet's summoner lists with its pet (BR-261010-1435-63E3)", () => {
+	// The incident's last row: slot 14, summoner 0x1D41, state 3, pet 0x1D45
+	// (a time-limited pickup pet, TypeID 1/2/... TID4 4), empty name, the
+	// remaining seconds and no rentals.
+	const SUMMONER = 0x1d41, PET = 0x1d45;
+	const row = new Uint8Array( 17 ), v = new DataView( row.buffer );
+	row[0] = 14;
+	v.setUint32( 1, SUMMONER, true );
+	row[5] = 3;
+	v.setUint32( 6, PET, true );
+	v.setUint16( 10, 0, true );
+	v.setInt32( 12, 2401324, true );
+	row[16] = 0;
+	const list = Uint8Array.from( [ 150, 1, ...row ] );
+	const itemRefs = new Map( [ [ SUMMONER, 0xcc | (2 << 11) ] ] ), objRefs = new Map( [ [ PET, 0x1c6 | (4 << 11) ] ] );
+	// Before the fix the room decoded without the pet references and threw,
+	// failing every list while the pet stayed stored.
+	assert.throws( () => room.decodeStorageList( list, itemRefs ), /Unknown summoned object reference/ );
+	const listed = defined( room.decodeStorageList( list, itemRefs, objRefs ).items[0] );
+	assert.deepEqual( [ listed.slot, listed.refObjId, listed.summon?.state, listed.summon?.refObjId ], [
+		14,
+		SUMMONER,
+		3,
+		PET
+	] );
+	assert.equal( listed.summon?.remainingSeconds, 2401324 );
+	// The room owner passes them through its receive path too.
+	const sent = [], owner = room.createStorageRoom( frame => sent.push( frame ) );
+	owner.open( 7 );
+	assert.equal( owner.receive( { opcode: room.OP_STORAGE_LIST, payload: list }, itemRefs, objRefs ), true );
+});

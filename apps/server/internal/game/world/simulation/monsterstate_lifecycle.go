@@ -564,6 +564,7 @@ func (s *MonsterState) attemptNestSpawn(state *divisionMonsterState, index int, 
 	armLifetimeLocked(state, instance, nowMs)
 	if instance.Rarity()&15 == 3 {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(5, ref.RefObjID, ""))
+		state.markUniqueSpawn(ref.RefObjID, spawn.RegionID, nowMs)
 	}
 	if state.movers == nil {
 		state.movers = newMoverStorage(nil)
@@ -672,6 +673,9 @@ func (s *MonsterState) Defeat(divisionID string, gid uint32, at time.Time) bool 
 	}
 	if instance.Rarity()&15 == 3 && !state.uniqueDeaths[gid] {
 		state.uniqueNotices = append(state.uniqueNotices, uniqueNotice(6, instance.Ref.RefObjID, "???"))
+	}
+	if instance.Rarity()&15 == 3 {
+		state.markUniqueDeath(instance.Ref.RefObjID, at.UnixMilli())
 	}
 	delete(state.uniqueDeaths, gid)
 	delete(state.lifetimes, gid)

@@ -13,6 +13,7 @@ package action
 
 import (
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -68,6 +69,9 @@ EntryActionSpeed
 
 Local bootstrap and remote scope entry read the same keeper as admission.
 No live record fields are read outside the character snapshot boundary.
+Every session's entry snapshot reads it every tick, so it evaluates the one
+unlinked parameter (combat.PlayerUnlinkedParameter) from the owners
+playerCombatStats reads, instead of the whole projection.
 ================
 */
 func (rt *Runtime) EntryActionSpeed(division, name string) float32 {
@@ -75,11 +79,15 @@ func (rt *Runtime) EntryActionSpeed(division, name string) float32 {
 	if character == nil {
 		return 100
 	}
-	stats, _, err := rt.playerCombatStats(division, character)
+	percent, err := combat.PlayerUnlinkedParameter(
+		character,
+		rt.effects.ModifierWrites(division, character.Name),
+		rt.playerAbnormal(division, character.Name),
+		actionSpeedParameter,
+	)
 	if err != nil {
 		log.WithError(err).Error("entry action-speed keeper projection failed")
 		return 100
 	}
-	percent, _ := stats.Param(actionSpeedParameter)
 	return percent
 }

@@ -214,6 +214,27 @@ export function createRenderer(
 		},
 		/*
 		================
+		readDoll
+
+		The doll target's last rendered frame (port-only: the 3D viewer's
+		still). Rejects when no doll has been drawn.
+		================
+		*/
+		readDoll() {
+			return device.readPortrait( "__doll" );
+		},
+		/*
+		================
+		characterBounds
+
+		Port-only (the 3D viewer's framing): an actor's scaled bind-pose bounds.
+		================
+		*/
+		characterBounds( gid ) {
+			return characters.bindBounds( gid );
+		},
+		/*
+		================
 		setCharacterPreview
 		================
 		*/
@@ -616,7 +637,7 @@ export function createRenderer(
 						characters.portraitSource( dollInput.gid ),
 						device.geometry()!,
 						device.images()!,
-						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height }
+						{ yaw: dollInput.yaw, seconds: timeSeconds, aspect: width / height, camera: dollInput.camera }
 					) :
 					[];
 				const dollTarget = dollInput ? device.portraitTarget( "__doll", width, height ) : undefined;

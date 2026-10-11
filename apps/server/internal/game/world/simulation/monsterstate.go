@@ -48,6 +48,9 @@ type divisionMonsterState struct {
 	instances        monsterStorage
 	uniqueNotices    []Frame
 	uniqueDeaths     map[uint32]bool
+	// uniqueTimes is the public tracker's spawn and death record
+	// (unique_states.go, port-only).
+	uniqueTimes map[uint32]*uniqueTimeline
 	// lifetimes holds the CGObjMob tick timers (monsterlifetime.go).
 	lifetimes map[uint32]monsterLifetime
 	// byRegion indexes generated spawn regions for nest/lifecycle queries
@@ -539,4 +542,26 @@ func normalizeGeneratedMonsterSpawn(spawn monster.SpawnPoint) monster.SpawnPoint
 	spawn.X = position.X
 	spawn.Z = position.Z
 	return spawn
+}
+
+/*
+================
+UniqueReturnAnchors
+
+The field nests of unique monsters (monster type 3), from the static
+template rather than live spawn timing. Port-only, not native: they are
+the reverse return scroll's map destinations (action/reversemap.go).
+================
+*/
+func (s *MonsterState) UniqueReturnAnchors() []monster.SpawnPoint {
+	var points []monster.SpawnPoint
+	for _, nest := range s.template.Nests {
+		ref, ok := s.template.Refs[nest.RefObjID]
+		if !ok || !nestIsUnique(nest, ref) || (nest.WorldCode != "" && nest.WorldCode != "INS_DEFAULT") ||
+			IsDungeonRegion(nest.RegionID) {
+			continue
+		}
+		points = append(points, nest.SpawnPoint)
+	}
+	return points
 }

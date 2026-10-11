@@ -12,6 +12,7 @@ Each family commits its effect and inventory consumption through one update.
 package action
 
 import (
+	"encoding/binary"
 	"math"
 	"slices"
 
@@ -235,11 +236,18 @@ func (rt *Runtime) HandleItemUse(
 			return rt.beginReturnScroll(divisionID, character, ref, rowIndex, request, nowMs, &result)
 		}
 		if family == itemUseReverseReturn {
-			// The tail is the u8 point the client's choice box picked (6971B0).
-			if len(tail) != 1 {
+			// The tail is the u8 point the client's choice box picked (6971B0),
+			// or the port-only map choice 7 with its u32 point id (reversemap.go).
+			target := reverseReturnTarget{}
+			switch {
+			case len(tail) == 1:
+				target.choice = tail[0]
+			case len(tail) == reverseMapTailBytes && tail[0] == reverseReturnMapChoice:
+				target.choice, target.point = tail[0], binary.LittleEndian.Uint32(tail[1:])
+			default:
 				return false
 			}
-			return rt.beginReverseReturnScroll(divisionID, character, ref, rowIndex, tail[0], nowMs, &result)
+			return rt.beginReverseReturnScroll(divisionID, character, ref, rowIndex, target, nowMs, &result)
 		}
 		if family == itemUseRepairHammer {
 			if len(tail) != 0 {
@@ -351,21 +359,11 @@ func (rt *Runtime) HandleItemUse(
 
 		if family == itemUsePetSkill {
 			// The window is a pet skill's usage time, so it needs the pet it
-			// applies to. Without a live COS there is nothing to skill and no
-			// row to raise.
+			// applies to: "Can only be used on growth pets" (the item's
+			// TT_DESC). A summoned growth pet lives on its summoner row, not
+			// in ActiveCOS (the transport), so look among the companions.
 			seconds := itemParam1Seconds(ref)
-			if seconds <= 0 || nowMs > math.MaxInt64-seconds*1000 || character.ActiveCOS == nil ||
-				!character.ActiveCOS.Summoned || character.ActiveCOS.CurrentHP == 0 {
-				return false
-			}
-			pet := character.ActiveCOS
-			characters, hasCharacters := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
-			gid, gidOK := enterworld.CosObjectIDForCharacter(character)
-			if !hasCharacters || !gidOK || pet.GID != gid {
-				return false
-			}
-			petRef, exists := characters.CharacterRefByCodename(pet.Codename)
-			if !exists || petRef == nil || petRef.RefObjID != pet.RefObjID || petRef.Codename != pet.Codename {
+			if seconds <= 0 || nowMs > math.MaxInt64-seconds*1000 || rt.summonedAttackPet(character) == nil {
 				return false
 			}
 			if !petSkillWindowHasCapacity(character, ref) {
@@ -438,6 +436,13 @@ func (rt *Runtime) HandleItemUse(
 				result = itemUseFailure(errCodeCantActivateCart)
 				return false
 			}
+			// #721: "a thief cannot summon a transport in a town" (the
+			// client's own error 149), the summon side of the stolen-goods rule.
+			if cosRef.TidWord>>11 == cosBandTransport && enterworld.DressedJob(character) == domain.JobThief &&
+				townRegion(rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli()).RegionID) {
+				result = itemUseFailure(errCodeThiefCartInTown)
+				return false
+			}
 			gid, gidOK := enterworld.CosObjectIDForCharacter(character)
 			if !gidOK {
 				return false
@@ -498,13 +503,14 @@ func (rt *Runtime) HandleItemUse(
 			// it, binds the ride and keeps its own record of what each viewer
 			// holds; a second spawn from this door reached every viewer
 			// twice, and the client drops the session on a duplicate gid.
+			frames := []wire.Frame{{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)}}
+			frames = append(frames, rt.cosContainerReferenceFrames(pet)...)
 			result = OpResult{
-				Frames: []wire.Frame{
-					{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(request.Slot, remaining, request.TypeWord)},
-					{Opcode: wire.OpCosRecordCreate, Payload: record},
-					{Opcode: wire.OpSingleObjectSpawn, Payload: spawn},
-					{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, gid)},
-				},
+				Frames: append(frames,
+					wire.Frame{Opcode: wire.OpCosRecordCreate, Payload: record},
+					wire.Frame{Opcode: wire.OpSingleObjectSpawn, Payload: spawn},
+					wire.Frame{Opcode: wire.OpCosRideState, Payload: wire.EncodeCosRideState(enterworld.ObjectIDForCharacter(character), true, gid)},
+				),
 			}
 			result.Frames = append(result.Frames, rt.refreshCosAbnormalSpeed(rt.newCosAbnormalOwner(divisionID, character, nowMs))...)
 			result.Frames = append(result.Frames, rt.updateQuestInventory(character)...)
