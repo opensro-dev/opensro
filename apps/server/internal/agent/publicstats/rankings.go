@@ -95,7 +95,10 @@ func (s *Service) rankings(r *http.Request) (any, error) {
 	if race != "" {
 		out.Race = &race
 	}
-	if start := (page - 1) * rankingPageSize; start < len(rows) {
+	// Past the last page is empty; the bound comes first, so a huge page
+	// number never reaches the multiplication.
+	if page <= out.Pages {
+		start := (page - 1) * rankingPageSize
 		out.Rows = append(out.Rows, rows[start:min(start+rankingPageSize, len(rows))]...)
 	}
 	return out, nil

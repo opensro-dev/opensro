@@ -247,23 +247,37 @@ repeating it) and stores it for maxAge. Errors are cached too, so a burst of
 */
 func (s *Service) cached(maxAge time.Duration, build func(r *http.Request) (any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		key := r.URL.Path + "?" + r.URL.RawQuery
-		now := s.now()
-		s.mu.Lock()
-		entry, fresh := s.cache[key]
-		if !fresh || !now.Before(entry.until) {
-			entry = s.build(build, r, now.Add(maxAge))
-			if len(s.cache) > 4096 {
-				s.cache = map[string]cacheEntry{}
-			}
-			s.cache[key] = entry
-		}
-		s.mu.Unlock()
+		entry := s.cachedEntry(r, maxAge, build)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "max-age="+strconv.Itoa(int(maxAge/time.Second)))
 		w.WriteHeader(entry.status)
 		_, _ = w.Write(entry.body)
 	}
+}
+
+/*
+================
+cachedEntry
+
+The fresh entry for the request, building it under s.mu. The lock is
+released by defer: a builder that panics must never leave every later
+request waiting on it.
+================
+*/
+func (s *Service) cachedEntry(r *http.Request, maxAge time.Duration, build func(r *http.Request) (any, error)) cacheEntry {
+	key := r.URL.Path + "?" + r.URL.RawQuery
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, fresh := s.cache[key]
+	if !fresh || !now.Before(entry.until) {
+		entry = s.build(build, r, now.Add(maxAge))
+		if len(s.cache) > 4096 {
+			s.cache = map[string]cacheEntry{}
+		}
+		s.cache[key] = entry
+	}
+	return entry
 }
 
 /*

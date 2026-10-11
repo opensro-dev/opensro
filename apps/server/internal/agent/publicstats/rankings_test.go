@@ -80,6 +80,13 @@ func TestRankingsOrderEveryVisiblePlayer(t *testing.T) {
 	if past := rankingNames(t, s, "/public/v1/rankings?page=2"); len(past.Rows) != 0 || past.Pages != 1 {
 		t.Fatalf("page past the end %+v", past)
 	}
+	// The largest page Atoi accepts must not overflow the slice bound.
+	if huge := rankingNames(t, s, "/public/v1/rankings?page=9223372036854775807"); len(huge.Rows) != 0 {
+		t.Fatalf("a huge page listed %d rows", len(huge.Rows))
+	}
+	if after := rankingNames(t, s, "/public/v1/rankings"); len(after.Rows) == 0 {
+		t.Fatal("the API stopped answering after a huge page")
+	}
 	for _, path := range []string{"/public/v1/rankings?by=gold", "/public/v1/rankings?race=martian", "/public/v1/rankings?page=0"} {
 		if code := get(t, s, path, nil); code != http.StatusBadRequest {
 			t.Errorf("%s answered %d, want 400", path, code)
