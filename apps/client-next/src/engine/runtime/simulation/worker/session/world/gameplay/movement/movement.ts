@@ -235,8 +235,11 @@ export function createMovement(
 	} | null = null;
 	let reanchorReports = 0;
 	const recentReanchors: { revision: number; source: string; distance: number; before: Pose; after: Pose; }[] = [];
+	// from: where the walk left when it was sent (correct keeps a walk the
+	// server will start from the same point).
 	const pending = new Map<number, {
 		to: Pose;
+		from: Pose;
 		sent: number;
 		direction?: number;
 	}>();
@@ -313,6 +316,25 @@ units, so compare within one unit on the same region.
 	function samePredictedGoal( goal: Pose, to: Pose | undefined ): boolean {
 		return !!to && to.regionId === goal.regionId && Math.abs( to.x - goal.x ) <= 1 &&
 			Math.abs( to.z - goal.z ) <= 1;
+	}
+	/*
+================
+correctsWalkStart
+
+Whether a correction lands where the latest pending request's client-led
+walk left from. The server answers in order, so a stop it sent before
+reading the request (the previous walk's arrival) stands at that walk's
+start, and the server will walk from there. A predicted run-up is not
+kept: a settle at its start may be the server casting in place. Restarting the walk from
+the correction threw the progress away: a 27-unit snap back, after which a
+skill press held the caster behind the server and the cast's settle jumped
+it 30 units forward (report BR-261010-2006-9E09).
+================
+	*/
+	function correctsWalkStart( to: Pose ): boolean {
+		if ( !segment || segment.lead !== "client" || segment.fixedTiming || walk ) return false;
+		const latest = pending.get( nextId );
+		return !!latest && latest.direction === undefined && !predicted && samePredictedGoal( latest.from, to );
 	}
 	/*
 ================
@@ -1181,6 +1203,13 @@ correct
 			const wasDisplacing = segment?.fixedTiming;
 			const publishedHistory = segment?.presentationHistory ?? transition.walkingPath;
 			if ( now !== undefined ) advanceTo( now );
+			if ( now !== undefined && correctsWalkStart( admitPose( value ) ) ) {
+				// The server stopped (an arrival, a settle) where the walk in
+				// flight left from, before it read that walk. It starts the walk
+				// from this same point, so the progress made since stands.
+				authoritative = reconcile( admitPose( value ) );
+				return;
+			}
 			// The display can already occupy the checked lookahead. Advance
 			// retires that cache, so retain its proven return edges beforehand.
 			const previousHistory = wasDisplacing || segment?.fixedTiming ?
@@ -1292,7 +1321,7 @@ request
 			record( { kind: "movement-diagnostic", event: "request", simulationAtMs: now, requestId: id, target: to } );
 			nextId = id;
 			beginTransition( "input" );
-			pending.set( id, { to, sent: now } );
+			pending.set( id, { to, from: pose, sent: now } );
 			error = null;
 			walk = null;
 			predicted = null;
@@ -1423,6 +1452,7 @@ over complete navigation coverage; otherwise the receipt starts the walk.
 			const leg = directionSegment( pose, heading, now, "client", 1, true );
 			pending.set( id, {
 				to: leg?.to ?? directionLegEnd( pose, heading ),
+				from: pose,
 				sent: now,
 				direction: heading
 			} );
