@@ -359,21 +359,11 @@ func (rt *Runtime) HandleItemUse(
 
 		if family == itemUsePetSkill {
 			// The window is a pet skill's usage time, so it needs the pet it
-			// applies to. Without a live COS there is nothing to skill and no
-			// row to raise.
+			// applies to: "Can only be used on growth pets" (the item's
+			// TT_DESC). A summoned growth pet lives on its summoner row, not
+			// in ActiveCOS (the transport), so look among the companions.
 			seconds := itemParam1Seconds(ref)
-			if seconds <= 0 || nowMs > math.MaxInt64-seconds*1000 || character.ActiveCOS == nil ||
-				!character.ActiveCOS.Summoned || character.ActiveCOS.CurrentHP == 0 {
-				return false
-			}
-			pet := character.ActiveCOS
-			characters, hasCharacters := rt.deps.ItemReferences().(enterworld.CharacterRefSource)
-			gid, gidOK := enterworld.CosObjectIDForCharacter(character)
-			if !hasCharacters || !gidOK || pet.GID != gid {
-				return false
-			}
-			petRef, exists := characters.CharacterRefByCodename(pet.Codename)
-			if !exists || petRef == nil || petRef.RefObjID != pet.RefObjID || petRef.Codename != pet.Codename {
+			if seconds <= 0 || nowMs > math.MaxInt64-seconds*1000 || rt.summonedAttackPet(character) == nil {
 				return false
 			}
 			if !petSkillWindowHasCapacity(character, ref) {

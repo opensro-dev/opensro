@@ -65,6 +65,24 @@ func isAttackPetRef(ref *enterworld.CharacterRef) bool {
 
 /*
 ================
+summonedAttackPet
+
+The owner's live attack (growth) pet: summoned, alive and still resolving
+to its reference. Nil when none is out.
+================
+*/
+func (rt *Runtime) summonedAttackPet(c *enterworld.Character) *enterworld.CharacterCOS {
+	for _, pet := range c.Companions() {
+		ref, ok := rt.cosReference(pet)
+		if pet.Summoned && pet.CurrentHP != 0 && ok && isAttackPetRef(ref) {
+			return pet
+		}
+	}
+	return nil
+}
+
+/*
+================
 attackPetKillExperience
 
 410110's COS arm for a pet of the given level: base, grade and damage
