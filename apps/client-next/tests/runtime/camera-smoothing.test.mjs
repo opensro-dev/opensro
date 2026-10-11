@@ -71,7 +71,7 @@ test("walking up a slope is followed with a bounded, constant lag and no stair s
 	// 0.5 units of climb a frame: a steep slope at run speed.
 	const input = Array.from( { length: 120 }, ( _, i ) => 50 + i * 0.5 );
 	const out = run( input );
-	const lag = input.at( -1 ) - out.at( -1 );
+	const lag = input[input.length - 1] - out[out.length - 1];
 	assert.ok( lag > 0 && lag < 4, `steady lag ${lag}` );
 	for ( let i = 60; i < out.length; i++ ) {
 		assert.ok( Math.abs( out[i] - out[i - 1] - 0.5 ) < 0.01, `frame ${i} step ${out[i] - out[i - 1]}` );
@@ -155,7 +155,7 @@ test("an obstruction pulls the camera in at once; its release eases back out wit
 	for ( let i = 3; i < 63; i++ ) out.push( smoothCameraDistance( state, 150, frame( i ) ) );
 	assert.ok( out[0] < 80, `first release frame ${out[0]}` );
 	for ( let i = 1; i < out.length; i++ ) assert.ok( out[i] >= out[i - 1] && out[i] <= 150 );
-	assert.ok( 150 - out.at( -1 ) < 1, `released to ${out.at( -1 )}` );
+	assert.ok( 150 - out[out.length - 1] < 1, `released to ${out[out.length - 1]}` );
 	assert.equal(
 		smoothCameraDistance( state, 40, frame( 63 ) ),
 		40,
