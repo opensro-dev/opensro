@@ -57,6 +57,9 @@ const ENDPOINT_EPSILON = .01;
 const PRESENTATION_LOOKAHEAD_MS = 100;
 const NAVIGATION_STOP = 1;
 const NAVIGATION_REJECT = 0x10000000;
+// A skill run-up's server goal lies within this heading of the predicted
+// one, seen from the predicted start (sameApproachWalk).
+const APPROACH_HEADING_TOLERANCE = Math.PI / 8;
 const MOVEMENT_RECEIPT_TIMEOUT_MS = 10000;
 
 // Opcode of the replacement client's predicted-movement envelope
@@ -219,7 +222,9 @@ export function createMovement(
 	let life: "alive" | "dead" = "alive";
 	// A server-driven walk started locally before its acknowledgement (a
 	// pickup run-up): where it leaves from and the goal the server will walk.
-	let predicted: { from: Pose; to: Pose; } | null = null;
+	// approach: a skill press's run-up, whose goal the server derives from
+	// combat spacing and navigation (sameApproachWalk); since: its start.
+	let predicted: { from: Pose; to: Pose; approach: boolean; since: number; } | null = null;
 	// A walk stopped where a cast command left it (holdForCast): the held
 	// pose, when the hold lapses, and the server walk to follow if it does.
 	let castHold: {
@@ -308,6 +313,24 @@ units, so compare within one unit on the same region.
 	function samePredictedGoal( goal: Pose, to: Pose | undefined ): boolean {
 		return !!to && to.regionId === goal.regionId && Math.abs( to.x - goal.x ) <= 1 &&
 			Math.abs( to.z - goal.z ) <= 1;
+	}
+	/*
+================
+sameApproachWalk
+
+A skill run-up's server walk cannot repeat the predicted goal: the server
+stops at its combat spacing (the authored range plus both bodies) after
+navigation admission. Its acknowledgement seldom carries a source (only a
+mover's first walk does), so the walk is recognised by its goal: on the
+predicted start's region, along the predicted heading from that start.
+================
+	*/
+	function sameApproachWalk( predicted: { from: Pose; to: Pose; }, to: Pose | undefined ): boolean {
+		if ( !to || to.regionId !== predicted.from.regionId ) return false;
+		const server = Math.atan2( to.z - predicted.from.z, to.x - predicted.from.x ),
+			client = Math.atan2( predicted.to.z - predicted.from.z, predicted.to.x - predicted.from.x );
+		return Math.abs( Math.atan2( Math.sin( server - client ), Math.cos( server - client ) ) ) <=
+			APPROACH_HEADING_TOLERANCE;
 	}
 	/*
 ================
@@ -485,6 +508,30 @@ CATCHUP_SPEED_FACTOR, so it reads as walking and not as a slide or a jump.
 				duration: refused ? movementDuration( remaining, speed ) : Math.max( arrival - now, fastest )
 			} ) :
 			null;
+	}
+	/*
+================
+endPrediction
+
+The server refused the walk it was predicted to drive, or cast without
+it: it never left the start, so walk back there.
+================
+	*/
+	function endPrediction( now: number ) {
+		if ( !predicted || !pose ) return;
+		advanceTo( now );
+		const from = predicted.from, current = pose;
+		predicted = null;
+		beginTransition( "cast" );
+		pose = current;
+		segment = bindOwners( {
+			from: current,
+			to: { ...from, angle: movementHeading( current, from ) },
+			start: now,
+			timing: "speed",
+			lead: "server",
+			duration: movementDuration( poseDistance( current, from ), speed )
+		} );
 	}
 	/*
 ================
@@ -869,6 +916,8 @@ went on: rejoin it now rather than when the hold lapses.
 ================
 		*/
 		castRefused( now: number ) {
+			// A refused press never walked: its predicted run-up walks back.
+			if ( predicted?.approach ) endPrediction( now );
 			rejoinServerWalk( now, true );
 		},
 		/*
@@ -1004,7 +1053,9 @@ native
 			castHold = null;
 			beginTransition( "native" );
 			const adopt = predicted !== null && decoded.kind !== "direction" &&
-				samePredictedGoal( predicted.to, decoded.to );
+				(predicted.approach ?
+					sameApproachWalk( predicted, decoded.to ) :
+					samePredictedGoal( predicted.to, decoded.to ));
 			predicted = null;
 			authoritative = reconcile( decoded.from );
 			if ( adopt ) {
@@ -1277,7 +1328,7 @@ complete navigation coverage, like request. The acknowledgement adopts the
 walk (native); a refusal ends it (endPrediction).
 ================
 		*/
-		predictApproach( value: Pose, now: number ): boolean {
+		predictApproach( value: Pose, now: number, approach = false ): boolean {
 			if ( !pose || life === "dead" || walk || pending.size || predicted ) return false;
 			advanceTo( now );
 			const current = pose,
@@ -1289,7 +1340,7 @@ walk (native); a refusal ends it (endPrediction).
 			const clipped = navigation.available( current ) ? to : null;
 			if ( !clipped || poseDistance( clipped, to ) >= ENDPOINT_EPSILON ) return false;
 			beginTransition( "input" );
-			predicted = { from: current, to };
+			predicted = { from: current, to, approach, since: now };
 			pose = current;
 			segment = {
 				from: current,
@@ -1312,20 +1363,7 @@ start, so walk back there.
 ================
 		*/
 		endPrediction( now: number ) {
-			if ( !predicted || !pose ) return;
-			advanceTo( now );
-			const from = predicted.from, current = pose;
-			predicted = null;
-			beginTransition( "cast" );
-			pose = current;
-			segment = bindOwners( {
-				from: current,
-				to: { ...from, angle: movementHeading( current, from ) },
-				start: now,
-				timing: "speed",
-				lead: "server",
-				duration: movementDuration( poseDistance( current, from ), speed )
-			} );
+			endPrediction( now );
 		},
 		/*
 ================
@@ -1334,6 +1372,16 @@ predicting
 		*/
 		predicting(): boolean {
 			return predicted !== null;
+		},
+		/*
+================
+approachPredictedSince
+
+When an unacknowledged skill run-up began, or undefined.
+================
+		*/
+		approachPredictedSince(): number | undefined {
+			return predicted?.approach ? predicted.since : undefined;
 		},
 		/*
 ================

@@ -286,6 +286,10 @@ const PICKUP_EXECUTE_RANGE = 10;
 // How long past two round trips a sent skill press's cooldown stand-in waits
 // for its answer.
 const SKILL_ANSWER_SLACK_MS = 500;
+// A skill run-up is predicted only this far beyond the authored range: the
+// server's reach adds both bodies to it, so a target nearer than that may be
+// in its reach already and the server casts without walking.
+const SKILL_RUN_UP_MARGIN = 20;
 // Movement mode 4 is seated (motion 4, which 58E0BF refuses ao/pw from).
 const MOVEMENT_SEATED = 4;
 // B2CD kind 1 admits a command (75BAA0); count 2 queues it behind an open one.
@@ -478,6 +482,43 @@ range: unknown, so not within.
 		const dx = target.x - pose.x + ((target.regionId & 255) - (pose.regionId & 255)) * 1920,
 			dz = target.z - pose.z + ((target.regionId >>> 8) - (pose.regionId >>> 8)) * 1920;
 		return Math.hypot( dx, dz ) <= metadata.range;
+	}
+	/*
+================
+skillRunUpGoal
+
+Port-only presentation: where an admitted press on a target beyond reach
+walks the caster before its cast. Native 58D8F0 walks the caster into
+reach on the server; predicting that run-up (movement.predictApproach)
+starts the walk at the press instead of one delivery later, which left
+the caster behind the server and snapped it forward when the cast began.
+The goal stands at the authored range on the line to the target; the
+server's own walk (combat spacing) is adopted when it arrives. Only from
+rest, on foot, alive, with no cast in flight, and within one region.
+================
+	*/
+	function skillRunUpGoal(
+		metadata: SkillMetadata | undefined,
+		target: EntityState,
+		local: EntityState | undefined,
+		now: number
+	): import("@/engine/contracts/gameplay").Pose | null {
+		const walking = movement.state(), pose = walking.pose;
+		if (
+			!metadata?.range || !pose || walking.moving || !local || local.mountedOn ||
+			local.appearanceState?.[0] === 2 || localCastHolds( now ) || target.regionId !== pose.regionId ||
+			target.kind === "monster" && target.appearanceState?.[0] === 2
+		) return null;
+		const dx = target.x - pose.x, dz = target.z - pose.z, distance = Math.hypot( dx, dz );
+		if ( distance <= metadata.range + SKILL_RUN_UP_MARGIN ) return null;
+		const walk = (distance - metadata.range) / distance;
+		return {
+			regionId: pose.regionId,
+			x: pose.x + dx * walk,
+			y: target.y,
+			z: pose.z + dz * walk,
+			angle: pose.angle
+		};
 	}
 	/*
 ================
@@ -2453,7 +2494,10 @@ state here before a command can claim a native wire conversation.
 			const admitted = !!pressedMetadata && skillAdmitsPredictedTarget( pressedMetadata, entity, localGid );
 			// Admission precedes the server's movement-to-cast handoff. A refused
 			// or unknown press must not stop a walk while its answer is in flight.
-			if ( admitted && pressAdmitted( pressedMetadata, local ) ) movement.holdForCast( now );
+			if ( admitted && pressAdmitted( pressedMetadata, local ) ) {
+				const runUp = entity.gid !== localGid ? skillRunUpGoal( pressedMetadata, entity, local, now ) : null;
+				if ( !runUp || !movement.predictApproach( runUp, now, true ) ) movement.holdForCast( now );
+			}
 			predictCast( pressedMetadata, entity, local, now );
 			// Only a target the row admits stands a cooldown in: any other is the
 			// server's to refuse, and its stand-in showed a cooldown that vanished.
@@ -3779,6 +3823,17 @@ before take assembles the presentation snapshot.
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 
+			// A predicted skill run-up the server did not walk: it cast where
+			// the caster stood (the target was within its reach after all), or
+			// never answered. Walk back to the start the server kept.
+			const runUpSince = movement.approachPredictedSince();
+			if (
+				runUpSince !== undefined &&
+				(combat.state().casts.some( c =>
+					c.caster === localGid && c.receivedAtMs !== undefined && c.receivedAtMs >= runUpSince &&
+					c.cancelledAtMs === undefined
+				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
+			) movement.endPrediction( now );
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );
 			const trained = training.step( now ), moved = movement.step( now ), targeted = targeting.step( now );
 			dirty = combatChanged || inventoryChanged || trained || chat.step( now ) || moved || targeted || dirty;
