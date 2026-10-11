@@ -312,6 +312,12 @@ func (j *Journal) write(e Event) error {
 	if inserted == 0 {
 		var account string
 		if err := tx.QueryRow(`SELECT account FROM events WHERE id=?`, e.ID).Scan(&account); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// #716: the insert was skipped although no event holds this
+				// id, so a constraint other than the id refused it. Name the
+				// producer, not the id, so the message repeats only per kind.
+				return fmt.Errorf("%s event (preset id %t) skipped by a constraint other than its id", e.Kind, e.receipt != nil)
+			}
 			return err
 		}
 		if account != e.Account {
