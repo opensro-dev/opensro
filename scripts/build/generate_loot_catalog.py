@@ -48,9 +48,13 @@ FAMILY_TABLES = {2: "Recover", 3: "Cure", 4: "Ammo", 5: "Ammo", 6: "Scroll", 7: 
 # The potion a potion tablet manufactures (process.go's potion product).
 POTION_PRODUCT_TYPE = [3, 3, 13, 1]
 # Client TypeID3/TypeID4 of each ordinary consumable family; the committed
-# vSRO projection held exactly these pairs.
+# vSRO projection held exactly these pairs. Inference (#704): the Luck and
+# Steady stones (11/7) are magic stones that carry no assimilation value;
+# vSRO assigns them live weight (300 per degree) but no class table of
+# their own, so they join the magic-stone family (Alchemy_MagicStone) at
+# their degree. Without it they were never placed and never dropped.
 FAMILY_BY_TYPE = {(1, 1): 2, (1, 2): 2, (1, 3): 2, (2, 6): 3, (3, 1): 6, (4, 1): 4, (4, 2): 5, (10, 1): 10,
-	(11, 1): 8, (11, 2): 9, (11, 3): 7}
+	(11, 1): 8, (11, 2): 9, (11, 3): 7, (11, 7): 8}
 
 
 # ================
