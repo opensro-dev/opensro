@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
@@ -225,6 +226,10 @@ func run(out, release, textdata string) error {
 		placedNpcs[npc.ID] = true
 	}
 	text := englishText(dir)
+	betaMastery, err := progression.BetaMasteryFromEnv()
+	if err != nil {
+		return err
+	}
 	skillData := enterworld.NewTextdataSkills(dir)
 	skillList := skillRows(skillData)
 	skills := catalogue.BuildSkills(catalogue.SkillSource{Rows: skillList,
@@ -251,6 +256,7 @@ func run(out, release, textdata string) error {
 		"search.json": catalogue.SearchFile{Header: header, Entries: []catalogue.SearchEntry{}},
 		"atlas.json":  catalogue.NewAtlas(header),
 		"notes.json":  catalogue.NotesFile{Header: header, Entries: []catalogue.NoteEntry{}},
+		"levels.json": catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery),
 		"trade.json": catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(),
 			Quotes: catalogue.BuildTrade(shops.TradeQuotations, itemByID, func(id uint32) bool { return placedNpcs[id] })},
 		"droptables.json": catalogue.BuildDropTables(monsters, itemID, header),
@@ -271,6 +277,7 @@ func run(out, release, textdata string) error {
 		"search.schema.json":     catalogue.Schema("search.json", catalogue.SearchFile{}),
 		"atlas.schema.json":      catalogue.Schema("atlas.json", catalogue.AtlasFile{}),
 		"notes.schema.json":      catalogue.Schema("notes.json", catalogue.NotesFile{}),
+		"levels.schema.json":     catalogue.Schema("levels.json", catalogue.LevelsFile{}),
 	}
 	for name, value := range files {
 		if err := writeJSON(filepath.Join(out, name), value); err != nil {
