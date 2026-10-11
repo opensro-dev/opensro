@@ -162,6 +162,19 @@ func (rt *Runtime) storageSession(divisionID, characterName string) (uint32, boo
 
 /*
 ================
+endStorageInteraction
+
+Another interaction took the player's one native interaction state (a
+shop, an exchange, a stall, death): the open warehouse ends, as 526CE0 and
+the item handlers then refuse it.
+================
+*/
+func (rt *Runtime) endStorageInteraction(divisionID, characterName string) {
+	rt.closeStorageSession(divisionID, characterName)
+}
+
+/*
+================
 closeStorageSession
 
 Ends a character's warehouse session: the window's close (its target
@@ -318,6 +331,16 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 	}
 	if !rt.openStorageNpc(divisionID, character, gid) {
 		return failureResult(wire.ErrCodeInvalidRequest)
+	}
+	// _StorageRoomMove 523EC0, _StorageDeposit 524160 and _StorageWithdraw
+	// 524090 run CGObjPC_CheckNpcFunctionTargetInRange (4E72A0 -> 4A8E10)
+	// on the packet's keeper and answer its code: 4 beyond the range. Gold
+	// (526CE0) has no range test. A ticket's room has no keeper to reach.
+	if gid != enterworld.ObjectIDForCharacter(character) && (q.MovementType == wire.MoveTypeStorage ||
+		q.MovementType == wire.MoveTypeStorageDeposit || q.MovementType == wire.MoveTypeStorageWithdraw) {
+		if npc, live := rt.npcForCurrentViewer(divisionID, character, gid); !live || !rt.npcWithinHitRange(divisionID, character, npc) {
+			return failureResult(hitRangeTooFar)
+		}
 	}
 	var questFrames []wire.Frame
 	_, err := rt.storageAuthority.TransactStorage(character, rt.storageMutation(q.MovementType, q))

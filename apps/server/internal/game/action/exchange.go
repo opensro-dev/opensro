@@ -182,6 +182,10 @@ func (c *ExchangeConsent) ApplyConsent(_ *transport.Session, division string, ac
 		return
 	}
 	rt.Exchanges.Open(division, requester.Name, actor.Name)
+	// An exchange takes the interaction state (ExchangeMgr_CloseSession
+	// 48078C writes it back to 0): neither side's warehouse survives it.
+	rt.endStorageInteraction(division, requester.Name)
+	rt.endStorageInteraction(division, actor.Name)
 	answer(0, wire.EncodeExchangeGid(enterworld.ObjectIDForCharacter(actor))...)
 	rt.PushCharacterFrames(division, actor.Name, []wire.Frame{{
 		Opcode:  wire.OpExchangeOpened,

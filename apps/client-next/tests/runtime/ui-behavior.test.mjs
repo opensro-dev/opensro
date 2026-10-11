@@ -2028,13 +2028,12 @@ test("displayed changes redraw without a dependency list and unchanged output st
 		f.dispose();
 	}
 });
-test("Clear hides the granted target immediately and retains its server release barrier", () => {
-	let blocked = false;
+test("Clear hides the granted target and sends nothing, as the native target window's X", () => {
+	// CIFTargetWindow_OnClose (582020) forgets the window's target only; the
+	// release (0x74B3) goes out when an NPC window closes (693790). Sending
+	// it here ended an open warehouse behind its window (BR-261011-1342-EE58).
 	const sent = [],
-		game = createGameplay( frame => {
-			if ( blocked ) throw Error( "backpressure" );
-			sent.push( frame );
-		} );
+		game = createGameplay( frame => sent.push( frame ) );
 	const f = uiFixture( command => game.command( command.command, 0, undefined ) );
 	try {
 		game.bootstrap( {} );
@@ -2048,22 +2047,14 @@ test("Clear hides the granted target immediately and retains its server release 
 		f.state.gameplay = game.take();
 		f.state.entities.push( target );
 		f.ui.step( f.state, 0 );
-		blocked = true;
-		assert.throws( () => f.ui.event( { kind: "activate", id: "clear-target" } ), /backpressure/ );
-		assert.equal( game.take().targetPending, 0 );
-		blocked = false;
-		f.ui.event( { kind: "activate", id: "clear-target" } );
-		assert.equal( sent.at( -1 ).opcode, 0x74b3 );
-		assert.deepEqual( [ ...sent.at( -1 ).payload ], [ 9, 0, 0, 0 ] );
-		const waiting = game.take();
-		assert.equal( waiting.target, 0 );
-		assert.equal( waiting.targetPending, 9 );
-		assert.throws( () => game.command( { kind: "select", gid: 9 }, 0, target ), /pending/ );
-		game.receive( { opcode: 0xb4b3, payload: Uint8Array.of( 1 ) }, 0 );
-		assert.equal( game.take().target, 0 );
 		const count = sent.length;
-		game.command( { kind: "release-target" }, 0, undefined );
-		assert.equal( sent.length, count );
+		f.ui.event( { kind: "activate", id: "clear-target" } );
+		assert.equal( sent.length, count, "the X sends no release" );
+		const hidden = game.take();
+		assert.equal( hidden.target, 0 );
+		assert.equal( hidden.targetPending, 0 );
+		// Choosing the NPC again asks the server for it again.
+		assert.equal( game.command( { kind: "select", gid: 9 }, 0, target )?.opcode, 0x745a );
 	} finally {
 		f.dispose();
 		game.dispose();

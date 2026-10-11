@@ -106,6 +106,8 @@ func (rt *Runtime) HandleStallCreate(division string, c *enterworld.Character, p
 	if err := rt.Stalls.Open(division, c.Name, title, decoration); err != nil {
 		return refuse(wire.StallErrHasStall)
 	}
+	// CGObjPC_SetStallState (515EAA) writes the interaction state 4.
+	rt.endStorageInteraction(division, c.Name)
 	opened := wire.Frame{Opcode: wire.OpStallOpened, Payload: wire.EncodeStallOpened(enterworld.ObjectIDForCharacter(c), title, decoration)}
 	rt.PushDivisionPeerFrames(division, c.Name, []wire.Frame{opened})
 	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpStallCreateResult, Payload: wire.EncodeStallResult(0)}, opened}}

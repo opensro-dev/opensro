@@ -2338,10 +2338,14 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 			if ( command.kind === "release-target" ) {
+				// The target window's X (582020) sends no release (0x74B3 goes
+				// out only when an NPC window closes, 693790): the server keeps
+				// the selection, so an open warehouse stays usable.
 				if ( skillPress.cancel() ) dirty = true;
-				const frame = targeting.release( now );
+				targeting.dismiss();
 				npcConversation.clear();
-				return frame;
+				dirty = true;
+				return null;
 			}
 			if ( command.kind === "skill" ) {
 				const skillId = command.skillId;

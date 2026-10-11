@@ -200,6 +200,23 @@ remove
 		},
 		/*
 ================
+dismiss
+
+The target window's close (CIFTargetWindow_OnClose 582020): the window
+forgets its target and sends nothing, so the server's selection and any
+NPC function opened through it (an open warehouse) stay as they are.
+================
+		*/
+		dismiss() {
+			if ( pending ) return;
+			target = 0;
+			localSelection = false;
+			capabilities = 0;
+			taxRate = 0;
+			error = null;
+		},
+		/*
+================
 clear
 ================
 		*/

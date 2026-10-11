@@ -313,12 +313,27 @@ test("an open alchemy window blocks world-click movement until it closes", () =>
 });
 
 test("close and release barrier retire a conversation before the same NPC opens again", () => {
-	for ( const close of [ "npc-close", "release-target" ] ) {
+	// The NPC window's close sends the release (693790). The target window's
+	// X sends nothing (582020): it retires the conversation and no barrier.
+	{
 		const f = fixture();
 		try {
 			f.select();
 			f.grant();
-			f.game.command( { kind: close === "npc-close" ? "npc-close" : "release-target" }, 2, undefined );
+			const before = f.sent.length;
+			f.game.command( { kind: "release-target" }, 2, undefined );
+			assert.equal( f.snapshot().npcConversation.phase, "closed" );
+			assert.equal( f.sent.length, before, "the target window's X sends no release" );
+		} finally {
+			f.game.dispose();
+		}
+	}
+	{
+		const f = fixture();
+		try {
+			f.select();
+			f.grant();
+			f.game.command( { kind: "npc-close" }, 2, undefined );
 			assert.equal( f.snapshot().npcConversation.phase, "closed" );
 			assert.throws( () => f.select( 3 ), /pending/ );
 			f.grant();

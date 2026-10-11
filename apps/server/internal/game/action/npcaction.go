@@ -144,6 +144,9 @@ func (rt *Runtime) HandleNpcAction(divisionID string, character *enterworld.Char
 			ack = append(ack, 0)
 		}
 		frames := []wire.Frame{{Opcode: wire.OpNpcInteractionAck, Payload: ack}}
+		// 7046 writes interaction state 5 for a shop over the warehouse's 6:
+		// one slot, so an open warehouse ends (526CE0 refuses 0x1834).
+		rt.endStorageInteraction(divisionID, character.Name)
 		if rt.Commerce != nil {
 			// 510250 sets the shop function state (5); trades check it.
 			rt.Selected.OpenFunction(divisionID, character.Name, gid)
