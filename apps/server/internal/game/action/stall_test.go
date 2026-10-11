@@ -92,7 +92,11 @@ func TestStallSellsToAVisitor(t *testing.T) {
 	lastFrame(t, pushed[owner.Name], wire.OpStallEvent)
 
 	listed := rt.HandleStallNetworkSearch(testDivision, buyer, []byte{0, 0, 40, 0, 0, 0, 0})
-	if p := listed.Frames[0].Payload; p[0] != 1 || p[1] != 1 || p[2] != 1 {
+	// The page lists another player's potion: its reference comes first.
+	if len(listed.Frames) != 2 || !referencesName(listed.Frames[0], stallSlotItem(t, owner, 13)) {
+		t.Fatalf("network search frames %+v", listed.Frames)
+	}
+	if p := listed.Frames[1].Payload; p[0] != 1 || p[1] != 1 || p[2] != 1 {
 		t.Fatalf("network search % X", p)
 	}
 	// A potion has no degree: a third-degree search does not list it.

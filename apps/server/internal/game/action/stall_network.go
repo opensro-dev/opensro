@@ -155,6 +155,8 @@ func (rt *Runtime) HandleStallNetworkSearch(division string, c *enterworld.Chara
 		return stallAnswer(wire.OpStallNetworkResult, wire.StallErrNetworkTown)
 	}
 	var found []wire.StallListing
+	// The bag item behind each row, for the page's references.
+	var items []inventory.Item
 	for _, listing := range rt.Stalls.Network(division, category) {
 		owner := rt.findCharacter(division, listing.Owner)
 		if owner == nil {
@@ -175,11 +177,16 @@ func (rt *Runtime) HandleStallNetworkSearch(division string, c *enterworld.Chara
 			Price:    uint64(listing.Slot.Price),
 			Serial:   listing.Slot.Serial,
 		})
+		items = append(items, item)
 	}
 	pages := (len(found) + stallNetworkPageRows - 1) / stallNetworkPageRows
 	start := min(int(page)*stallNetworkPageRows, len(found))
-	rows := found[start:min(start+stallNetworkPageRows, len(found))]
-	return OpResult{Frames: []wire.Frame{{Opcode: wire.OpStallNetworkResult, Payload: wire.EncodeStallNetworkResult(rows, uint8(min(pages, 0xFF)))}}}
+	end := min(start+stallNetworkPageRows, len(found))
+	rows := found[start:end]
+	// The page lists other players' items: the reader's client decodes each
+	// through its own reference table, so the references come first.
+	frames := append(rt.itemReferenceFrames(items[start:end]), wire.Frame{Opcode: wire.OpStallNetworkResult, Payload: wire.EncodeStallNetworkResult(rows, uint8(min(pages, 0xFF)))})
+	return OpResult{Frames: frames}
 }
 
 /*
