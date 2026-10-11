@@ -146,11 +146,25 @@ type Stats struct {
 	MP  int64 `json:"mp"`
 }
 
-// WornItem is one equipment or avatar socket.
+// WornItem is one equipment or avatar socket, with what the in-game item
+// tooltip prints from the item itself (CIFItemTooltip, 78C5B0 -> 78BD00 ->
+// 555720): the reference's ranges come from the catalogue, the roll from
+// here.
 type WornItem struct {
 	Slot      int64  `json:"slot"`
 	RefItemID uint32 `json:"refItemId"`
 	Plus      int64  `json:"plus,omitempty"`
+	// Variance is the item's packed white-stat roll as a decimal u64 (five
+	// bits a stat, 0..31, in the order of its equipment family), as the
+	// CSOItem wire carries it; absent for an item without one.
+	Variance string `json:"variance,omitempty"`
+	// Durability is the item's current durability.
+	Durability int64 `json:"durability,omitempty"`
+	// MagicOptions are the item's blue stats in the item's own order, each
+	// the encoded u64 the CSOItem wire carries (low u16 the magicoption.txt
+	// param id, high u32 the value; domain.InventoryRow) as a decimal
+	// string, so the client's own tooltip code reads them unchanged.
+	MagicOptions []string `json:"magicOptions,omitempty"`
 }
 
 // Look is what the 3D viewer (V1) needs to draw the character.

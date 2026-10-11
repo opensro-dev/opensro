@@ -48,7 +48,7 @@ func newFixture() *fixture {
 			{ID: 1, Name: "Kekw", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(54), Strength: &str,
 				LevelReachedAt: map[uint8]int64{20: 1000, 30: 5000}, LastLoginAtMs: 9000,
 				Masteries:        []domain.CharacterMastery{{ID: 257, Level: 54}},
-				MissionInventory: []domain.InventoryRow{{Slot: 6, RefObjID: 3801, Plus: 7}, {Slot: 20, RefObjID: 99}}},
+				MissionInventory: []domain.InventoryRow{{Slot: 6, RefObjID: 3801, Plus: 7, VarianceBits: "1094795585", Durability: 48, MagicOptions: []uint64{7<<32 | 33, 20<<32 | 41}}, {Slot: 20, RefObjID: 99}}},
 			{ID: 2, Name: "Lune", ModelCodename: "CHAR_EU_WOMAN_WARRIOR", Level: lvl(40), LevelReachedAt: map[uint8]int64{20: 800}},
 			{ID: 3, Name: "Shy", ModelCodename: "CHAR_CH_WOMAN_ADVENTURER", Level: lvl(60), PublicHidden: true,
 				LevelReachedAt: map[uint8]int64{20: 500, 30: 600}},
@@ -259,6 +259,11 @@ func TestProfileCarriesLookStatsAndCounts(t *testing.T) {
 	}
 	if len(p.Look.Worn) != 1 || p.Look.Worn[0].RefItemID != 3801 || p.Look.Worn[0].Plus != 7 || p.Look.BodyCodename != "CHAR_CH_MAN_ADVENTURER" {
 		t.Fatalf("look %+v", p.Look)
+	}
+	// The tooltip's own inputs: the white-stat roll, durability and blue stats.
+	if w := p.Look.Worn[0]; w.Variance != "1094795585" || w.Durability != 48 ||
+		len(w.MagicOptions) != 2 || w.MagicOptions[0] != "30064771105" || w.MagicOptions[1] != "85899345961" {
+		t.Fatalf("worn item %+v", w)
 	}
 	if code := get(t, newFixture().service(), "/public/v1/characters/nobody", nil); code != http.StatusNotFound {
 		t.Fatalf("unknown profile %d", code)
