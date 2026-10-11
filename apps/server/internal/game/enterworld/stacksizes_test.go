@@ -65,7 +65,7 @@ TestStackSizesRaiseOnlyTheirGroups
 ================
 */
 func TestStackSizesRaiseOnlyTheirGroups(t *testing.T) {
-	sizes := StackSizes{"potion": 2000, "petpotion": 500, "elixir": 50, "luckypowder": 100, "magicstone": 40, "attrstone": 30}
+	sizes := StackSizes{"potion": 2000, "petpotion": 500, "universalpill": 500, "elixir": 50, "luckypowder": 100, "magicstone": 40, "attrstone": 30}
 	for _, c := range []struct {
 		name   string
 		ref    *ItemRef
@@ -78,6 +78,9 @@ func TestStackSizesRaiseOnlyTheirGroups(t *testing.T) {
 		{"vigor potion", stackRef(1, 3, 50), true, 2000, 50},
 		{"pet hp potion", stackRef(1, 4, 50), true, 500, 50},
 		{"pet hunger potion", stackRef(1, 9, 50), true, 500, 50},
+		{"universal pill", stackRef(2, 6, 50), true, 500, 50},
+		// Other cures (purification pills, 3/3/2/1) are not universal pills.
+		{"purification pill", stackRef(2, 1, 50), false, 50, 50},
 		{"elixir", stackRef(10, 1, 1), true, 50, 1},
 		{"lucky powder", stackRef(10, 2, 50), true, 100, 50},
 		// A single item in a potion family keeps its cap.
@@ -125,7 +128,7 @@ potion refill still tops up to the native 50.
 func TestShippedStackSizesReachEveryReader(t *testing.T) {
 	licensed.RequireGameData(t)
 	items := NewTextdataItems(gamedatatest.TextdataDir(t))
-	raised, err := items.ApplyStackSizes(StackSizes{"potion": 2000, "elixir": 50})
+	raised, err := items.ApplyStackSizes(StackSizes{"potion": 2000, "elixir": 50, "universalpill": 500})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,6 +154,8 @@ func TestShippedStackSizesReachEveryReader(t *testing.T) {
 		{"ITEM_ETC_GNGWC_ALL_POTION_100", 1, 1},
 		{"ITEM_ETC_ARCHEMY_MAGICSTONE_STR_01", 1, 1},
 		{"ITEM_ETC_COS_HP_POTION_01", 50, 50},
+		{"ITEM_ETC_CURE_ALL_01", 500, 50},
+		{"ITEM_ETC_CURE_ALL_04", 500, 50},
 	} {
 		ref, ok := items.ItemRefByCodename(c.codename)
 		if !ok {

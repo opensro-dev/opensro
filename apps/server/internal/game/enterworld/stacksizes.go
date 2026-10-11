@@ -63,6 +63,8 @@ type stackGroup struct {
 var stackGroups = []stackGroup{
 	{name: "potion", typeID3: 1, typeID4s: []int64{1, 2, 3}},
 	{name: "petpotion", typeID3: 1, typeID4s: []int64{4, 9}},
+	// Universal pills (ITEM_ETC_CURE_ALL_01..04, 3/3/2/6): native cap 50.
+	{name: "universalpill", typeID3: 2, typeID4s: []int64{6}},
 	{name: "elixir", typeID3: 10, typeID4s: []int64{1}, raisesSingles: true},
 	{name: "luckypowder", typeID3: 10, typeID4s: []int64{2}},
 	{name: "magicstone", typeID3: 11, typeID4s: []int64{1, 7}, raisesSingles: true},
