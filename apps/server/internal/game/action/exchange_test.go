@@ -9,6 +9,7 @@ package action
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -92,6 +93,11 @@ func TestExchangeSwapsOffers(t *testing.T) {
 	if offer := lastFrame(t, pushed[b.Name], wire.OpExchangeOffer); offer.Payload[4] != 1 {
 		t.Fatalf("partner's list % X", offer.Payload)
 	}
+	// The partner's client decodes the listed sword through its own
+	// reference table, so the sword's reference arrives before the list.
+	if frames := pushed[b.Name]; len(frames) < 2 || !referencesName(frames[len(frames)-2], stallSlotItem(t, a, 20)) {
+		t.Fatalf("partner heard no sword reference before the list: %+v", frames)
+	}
 	gold := rt.HandleItemMove(testDivision, b, wire.NewWriter(5).U8(wire.MoveTypeExchangeGold).U32(1000).Payload())
 	if len(gold.Frames) != 1 || !bytes.Equal(lastFrame(t, pushed[a.Name], wire.OpExchangePartnerGold).Payload, []byte{2, 0xe8, 3, 0, 0}) {
 		t.Fatalf("gold answered %+v", gold.Frames)
@@ -155,4 +161,34 @@ func TestExchangeRefusals(t *testing.T) {
 	if failed := lastFrame(t, pushed[b.Name], wire.OpExchangeFailed); !bytes.Equal(failed.Payload, []byte{wire.ExchangeErrCancelledByPeer}) {
 		t.Fatalf("partner heard % X", failed.Payload)
 	}
+}
+
+/*
+================
+stallSlotItem
+
+The RefObjID a character holds in a bag slot.
+================
+*/
+func stallSlotItem(t *testing.T, c *enterworld.Character, slot int) uint32 {
+	t.Helper()
+	for _, row := range c.MissionInventory {
+		if int(row.Slot) == slot {
+			return row.RefObjID
+		}
+	}
+	t.Fatalf("%s holds nothing in slot %d", c.Name, slot)
+	return 0
+}
+
+/*
+================
+referencesName
+
+Whether a frame is an item reference delta that describes refObjID.
+================
+*/
+func referencesName(frame wire.Frame, refObjID uint32) bool {
+	return frame.Opcode == opCommerceItemReferences &&
+		bytes.Contains(frame.Payload, []byte(fmt.Sprintf(`"refObjId":%d,`, refObjID)))
 }

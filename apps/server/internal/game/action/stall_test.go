@@ -83,7 +83,10 @@ func TestStallSellsToAVisitor(t *testing.T) {
 		t.Fatal("an open stall took a new offer")
 	}
 	visit := rt.HandleStallVisit(testDivision, buyer, wire.NewWriter(4).U32(enterworld.ObjectIDForCharacter(owner)).Payload())
-	if len(visit.Frames) != 1 || visit.Frames[0].Payload[0] != 1 {
+	// The visitor's client decodes the listed potion through its own
+	// reference table, so the potion's reference comes first.
+	if len(visit.Frames) != 2 || !referencesName(visit.Frames[0], stallSlotItem(t, owner, 13)) ||
+		visit.Frames[1].Opcode != wire.OpStallVisitResult || visit.Frames[1].Payload[0] != 1 {
 		t.Fatalf("visit %+v", visit.Frames)
 	}
 	lastFrame(t, pushed[owner.Name], wire.OpStallEvent)
