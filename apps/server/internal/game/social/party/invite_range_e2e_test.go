@@ -102,3 +102,60 @@ func TestPartyInviteRangeGate(t *testing.T) {
 	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
 	expectPartyPrompt(t, connB, gidA, "in range", 2, 3)
 }
+
+/*
+================
+setCharacter
+
+Changes one stored character through the authority, as gameplay would.
+================
+*/
+func setCharacter(t *testing.T, server e2eServer, name string, fn func(*enterworld.Character)) {
+	t.Helper()
+	for _, c := range server.authority.Characters().CharactersForDivision(e2eDivision) {
+		if c.Name == name {
+			server.authority.MutateCharacter(c, "test", func() { fn(c) })
+			return
+		}
+	}
+	t.Fatalf("no character %s", name)
+}
+
+/*
+================
+TestPartyProposerGate
+
+CGObjPC_ValidatePartyFormation (513F90) runs before the target is read: a
+proposer below level 5 answers 0x0A (the client's "too low creator level")
+and a dead one 0x09; neither reaches the target.
+================
+*/
+func TestPartyProposerGate(t *testing.T) {
+	server := startPartyServer(t, filepath.Join(t.TempDir(), "authority"), true)
+	connA := dialWS(t, server.srv)
+	helloWS(t, connA)
+	enterWorld(t, connA, e2eNameA)
+	connB := dialWS(t, server.srv)
+	helloWS(t, connB)
+	enterWorld(t, connB, e2eNameB)
+
+	setCharacter(t, server, e2eNameA, func(c *enterworld.Character) { level := int64(4); c.Level = &level })
+	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
+	expectExactFrame(t, connA, party.OpCreatePartyAck, []byte{2, 0x0A}, "level 4 proposer")
+
+	setCharacter(t, server, e2eNameA, func(c *enterworld.Character) {
+		level, hp := int64(5), int64(0)
+		c.Level, c.CurrentHP = &level, &hp
+	})
+	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
+	expectExactFrame(t, connA, party.OpCreatePartyAck, []byte{2, 0x09}, "dead proposer")
+
+	gameReadyBarrier(t, connB, "B saw no prompt")
+	if got := server.runtime.Registry().PendingInviteCount(); got != 0 {
+		t.Fatalf("pending invites after proposer refusals = %d, want 0", got)
+	}
+
+	setCharacter(t, server, e2eNameA, func(c *enterworld.Character) { hp := int64(100); c.CurrentHP = &hp })
+	sendFrame(t, connA, party.OpPartyInviteRequest, inviteFrame(gidB, 0x03))
+	expectPartyPrompt(t, connB, gidA, "level 5 and alive", 2, 3)
+}

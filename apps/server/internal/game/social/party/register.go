@@ -79,6 +79,13 @@ const (
 	// error ack; the client shows 0x200+code: 515 invalid target, 516 too far.
 	inviteWrongTarget uint8 = 3
 	inviteTooFar      uint8 = 4
+	// proposerUnable and proposerTooLow are CGObjPC_ValidatePartyFormation's
+	// (513F90) 0x2C09 (the proposer is not alive) and 0x2C0A (level below
+	// minCreatorLevel); the client shows 0x200+code, 0x20A being
+	// UIIT_MSG_PARTYERR_TOO_LOW_CREATOR_LEVEL. 0x209 has no notice.
+	proposerUnable  uint8 = 0x09
+	proposerTooLow  uint8 = 0x0A
+	minCreatorLevel       = 5
 )
 
 /*
@@ -430,6 +437,11 @@ func (r *Runtime) handleInvite(s *transport.Session, opcode uint16, payload []by
 		log.Debugf("party: 0x70D5 (invite) refused for %s: already in a party", actor.Name)
 		return
 	}
+	if code := proposerRefusal(actor); code != 0 {
+		log.Debugf("party: 0x70D5 (invite) refused for %s: proposer cannot form (0x%02X)", actor.Name, code)
+		_ = s.Send(OpCreatePartyAck, []byte{2, code})
+		return
+	}
 	target, targetSession, refusal := r.resolveInviteTarget(divisionID, actor, request.TargetRef)
 	if refusal != "" {
 		log.Debugf("party: 0x70D5 (invite) refused for %s: %s", actor.Name, refusal)
@@ -457,6 +469,32 @@ func (r *Runtime) handleInvite(s *transport.Session, opcode uint16, payload []by
 	})
 	_ = targetSession.Send(OpInvitationProposal, EncodeInvitationPrompt3393(InvitationTypeParty, enterworld.ObjectIDForCharacter(actor), request.OptionBits))
 	log.Debugf("party: %s proposed a party to %s (options 0x%02X) - prompt sent", actor.Name, target.Name, request.OptionBits)
+}
+
+/*
+==================
+proposerRefusal
+
+CGObjPC_ValidatePartyFormation (513F90), which CGObjPC_OnPartyFormRequest
+(5143B0) runs before it reads the target: a proposer that is not alive
+(life state, CGObjChar_GetLifeStateByte 485EE0, other than 1) or below
+level 5 (CGObjChar_GetLevel 4A6870) cannot form a party. 0 admits.
+
+Its other gates do not reach the port. INFERENCE: the operation mask
+0x1000 (CGObjPC_HasOperationMask 4DDD30, 0x2C19) is a quest operation
+bit, and no v1.150 quest sets it (quest definitions admit only 0x60000).
+The body state bytes +4/+6/+7 (0x2C09) have no proven meaning yet; the
+port leaves them open rather than guess a refusal.
+==================
+*/
+func proposerRefusal(actor *enterworld.Character) uint8 {
+	if !enterworld.CharacterAlive(actor) {
+		return proposerUnable
+	}
+	if actor.Level == nil || *actor.Level < minCreatorLevel {
+		return proposerTooLow
+	}
+	return 0
 }
 
 /*
