@@ -74,7 +74,8 @@ func TestHunterKillingAThiefEarnsJobAndCharacterExp(t *testing.T) {
 	}
 	kill := playerKill{kind: rt.playerKillKind(testDivision, thief, hunter)}.withVictim(hunter, thief)
 	rt.payPlayerKillInDoor(testDivision, hunter, thief, kill, 0)
-	if want := jobKillExperience(levels, hunter, 30); job != want || want <= 0 {
+	// The shipped table's level-30 withdrawal-gold basis gives 162.
+	if want := int64(162); job != want || jobKillExperience(levels, hunter, 30) != want {
 		t.Fatalf("job EXP %d, want %d", job, want)
 	}
 	if exp != basis*jobKillExpMultiplier {
@@ -98,12 +99,18 @@ func TestTraderSaleSharesWithPartyHunters(t *testing.T) {
 	plain.ID, plain.Name = 99, "plain"
 	roster := tradeRoster{members: []*enterworld.Character{trader, hunter, plain}, party: true}
 	payouts := rt.tradeRewards(testDivision, trader, roster, commerce.TradeRewardInput{Credit: 100000, Profit: 40000})
-	paid := map[string]bool{}
+	paid := map[string]commerce.TradeReward{}
 	for _, payout := range payouts {
-		paid[payout.character.Name] = true
+		paid[payout.character.Name] = payout.TradeReward
 	}
-	if !paid[trader.Name] || !paid[hunter.Name] || paid[plain.Name] {
-		t.Fatalf("payouts went to %v", paid)
+	if _, ok := paid[trader.Name]; !ok {
+		t.Fatalf("the trader was not paid: %v", paid)
+	}
+	if share, ok := paid[hunter.Name]; !ok || share.Gold <= 0 || share.Experience <= 0 {
+		t.Fatalf("the party hunter's share %+v (paid %v)", share, ok)
+	}
+	if _, ok := paid[plain.Name]; ok {
+		t.Fatal("a member without a job suit was paid")
 	}
 	if enterworld.DressedJob(hunter) != domain.JobHunter {
 		t.Fatal("the hunter is not dressed")
