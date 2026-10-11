@@ -30,14 +30,27 @@ test("a monster request names its id; still and size have their defaults", () =>
 		kind: "monster",
 		refObjId: 1933,
 		still: false,
-		size: VIEWER_STILL_SIZE
+		size: VIEWER_STILL_SIZE,
+		batch: false
 	} );
 	assert.deepEqual( parseViewerRequest( "?monster=1933&still=1&size=256" ), {
 		kind: "monster",
 		refObjId: 1933,
 		still: true,
-		size: 256
+		size: 256,
+		batch: false
 	} );
+});
+
+test("batch=1 keeps a monster still's page for the next monster, and nothing else", () => {
+	assert.equal( parseViewerRequest( "?monster=1933&still=1&batch=1" ).batch, true );
+	for (
+		const query of [ "?monster=1933&batch=1", "?monster=1933&still=0&batch=1", "?monster=1933&still=1&batch=0" ]
+	) {
+		assert.throws( () => parseViewerRequest( query ), /bad-request/, query );
+	}
+	const look = lookParam( { bodyRefObjId: 1907, worn: [] } );
+	assert.throws( () => parseViewerRequest( "?look=" + look + "&still=1&batch=1" ), /bad-request/ );
 });
 
 test("a look request decodes the public API's look object", () => {
@@ -50,7 +63,8 @@ test("a look request decodes the public API's look object", () => {
 		kind: "look",
 		look,
 		still: false,
-		size: VIEWER_STILL_SIZE
+		size: VIEWER_STILL_SIZE,
+		batch: false
 	} );
 	// worn plus defaults to zero; empty lists are allowed.
 	assert.deepEqual(

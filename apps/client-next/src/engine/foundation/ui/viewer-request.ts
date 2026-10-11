@@ -68,7 +68,7 @@ ViewerRequest
 */
 export type ViewerRequest =
 	& ({ readonly kind: "monster"; readonly refObjId: number; } | { readonly kind: "look"; readonly look: ViewerLook; })
-	& { readonly still: boolean; readonly size: number; };
+	& { readonly still: boolean; readonly size: number; readonly batch: boolean; };
 
 /*
 ================
@@ -175,22 +175,25 @@ function parseLook( text: string ): ViewerLook | null {
 parseViewerRequest
 
 The request a query string names. Exactly one of monster and look; any
-malformed value throws viewerError("bad-request").
+malformed value throws viewerError("bad-request"). batch=1 (a monster
+still only) keeps the page's owners after the still, so the catalogue
+draws its next monster without reloading the page (viewer.ts).
 ================
 */
 export function parseViewerRequest( search: string ): ViewerRequest {
 	const query = new URLSearchParams( search );
 	const monster = query.get( "monster" ), look = query.get( "look" );
-	const still = query.get( "still" ), sizeText = query.get( "size" );
+	const still = query.get( "still" ), sizeText = query.get( "size" ), batch = query.get( "batch" );
 	if ( (monster === null) === (look === null) || (still !== null && still !== "1" && still !== "0") ) {
 		throw viewerError( "bad-request" );
 	}
+	if ( batch !== null && (batch !== "1" || still !== "1" || monster === null) ) throw viewerError( "bad-request" );
 	let size = VIEWER_STILL_SIZE;
 	if ( sizeText !== null ) {
 		size = /^[0-9]{2,4}$/.test( sizeText ) ? Number( sizeText ) : NaN;
 		if ( !(size >= MIN_STILL_SIZE && size <= MAX_STILL_SIZE) ) throw viewerError( "bad-request" );
 	}
-	const common = { still: still === "1", size };
+	const common = { still: still === "1", size, batch: batch === "1" };
 	if ( monster !== null ) {
 		const id = refId( monster );
 		if ( id === null ) throw viewerError( "bad-request" );

@@ -18,6 +18,12 @@ P6 `look` object: `bodyRefObjId`, `worn[]` of `{slot, refItemId, plus}`,
 - `&still=1` draws one picture and stops. `&size=` sets the square still in
   pixels: 64..1024, default 384. A still fits the whole model (92% of its
   longer axis).
+- `&batch=1` (a monster still only, for the catalogue's portraits) keeps the
+  page after its still, or after its failure. `window.__viewerNext(refObjId)`
+  then draws the next monster in its place and returns that monster's still
+  promise, so the renderer and shared assets load once for a whole batch. Each
+  monster gets a new entity gid, since the character owner keeps per-gid state.
+  A batch page that fails to render or answers nothing is reloaded by its caller.
 - Without `still`, the view is interactive. The picture takes the iframe's own box
   at device pixels (longer side at most 1024) and fills 88% of its height,
   centred. A long weapon may leave the sides. Drag turns the model, and the wheel
