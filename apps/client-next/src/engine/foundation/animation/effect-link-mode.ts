@@ -92,10 +92,13 @@ function linkModeWords( node: EffectLinkNode ): number[] | null {
 ================
 walkUp
 
-B1F6F0's ancestor walk for one word: a positive count climbs that many
-parents (stopping at the root, while the count still advances), and the
-element reached is the one marked; the count is the stored depth. A
-negative word marks the element itself and stores 0; zero marks nothing.
+B1F6F0's ancestor walk for one word: a positive word climbs that many
+parents and marks the element reached; the steps taken are the stored
+depth. Each step counts before it tests for a parent (B1F713 add, then
+B1F718 test), so a walk past the root stops there with one step more
+than the parents it climbed: from [root, a, self], a word of 5 stores 3
+and marks the root. A negative word marks the element itself and stores
+0; zero marks nothing.
 ================
 */
 function walkUp(
