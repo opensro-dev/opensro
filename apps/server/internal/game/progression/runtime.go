@@ -558,7 +558,11 @@ func (rt *Runtime) HandleMasteryLevelUp(divisionID string, character *enterworld
 			return false
 		}
 
-		refusal = wire.ErrCodeMasterySkillPoints
+		// A priced level answers SkillPoints from here on; training from 0
+		// is free and keeps the earlier refusal.
+		if current > 0 {
+			refusal = wire.ErrCodeMasterySkillPoints
+		}
 		cost, priced := MasteryLevelUpCost(rt.deps.LevelData(), current)
 		if !priced {
 			return false
