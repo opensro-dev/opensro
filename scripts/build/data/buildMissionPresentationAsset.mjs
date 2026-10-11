@@ -32,26 +32,24 @@ const COL_SERVICE = 0, COL_REF_OBJ_ID = 1, COL_CODENAME = 2, COL_COUNTRY = 14, C
 const COUNTRY_CHINA = 0, COUNTRY_EUROPE = 1;
 // The native sex selector (+0x1ac): 0 female, 1 male.
 const SEX_FEMALE = 0, SEX_MALE = 1;
-// itemdata columns of the packed type word: the char bit (8), TypeID1..4 (9..12).
-const COL_ITEM_CHAR_BIT = 8, COL_ITEM_TYPE_ID1 = 9;
+// itemdata columns of TypeID1..4, the packed type word's fields.
+const COL_ITEM_TYPE_ID1 = 9;
 
 /*
 ================
 itemTypeFlags
 
-The item's packed type word as the server packs it (enterworld/itemrefs.go
-characterTidWord): TypeID1..4 in bits 2..15 and the char bit as 0x2. A
-look's weapon picks its idle stance from bits 11..15 (weaponAnimationSet).
-Undefined for a row whose fields are not integers in range.
+The item's packed type word exactly as the server packs it (enterworld
+ItemRef.TypeFlags, the native RefItemData word): TID1<<2 | TID2<<5 |
+TID3<<7 | TID4<<11, kept to 16 bits; change both together. A look's weapon
+picks its idle stance from bits 11..15 (weaponAnimationSet). Undefined for
+a row whose TypeIDs are not whole numbers.
 ================
 */
 function itemTypeFlags( columns ) {
-	const [charBit, tid1, tid2, tid3, tid4] = [ COL_ITEM_CHAR_BIT, ...[ 0, 1, 2, 3 ].map( i => COL_ITEM_TYPE_ID1 + i ) ]
-		.map( column => Number( columns[column]?.trim() ) );
-	if ( ![ charBit, tid1, tid2, tid3, tid4 ].every( v => Number.isInteger( v ) && v >= 0 ) || tid4 > 0x1f ) {
-		return undefined;
-	}
-	return ((tid1 & 7) << 2 | (tid2 & 3) << 5 | (tid3 & 0xf) << 7 | tid4 << 11 | (charBit !== 0 ? 0x0002 : 0)) & 0xffff;
+	const [tid1, tid2, tid3, tid4] = [ 0, 1, 2, 3 ].map( i => Number( columns[COL_ITEM_TYPE_ID1 + i]?.trim() ) );
+	if ( ![ tid1, tid2, tid3, tid4 ].every( v => Number.isInteger( v ) && v >= 0 ) ) return undefined;
+	return (tid1 << 2 | tid2 << 5 | tid3 << 7 | tid4 << 11) & 0xffff;
 }
 
 /*
