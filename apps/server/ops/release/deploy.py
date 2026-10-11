@@ -306,6 +306,25 @@ def upgrade_backup(authority, output, shard):
 
 
 # ================
+# verify_restore
+#
+# Every journaled backup a restore needs, checked against its sha256 before
+# anything stops: a refused restore leaves the running fleet untouched.
+# ================
+def verify_restore(module, authorities):
+	backups = {}
+	for shard, row in sorted(authorities.items()):
+		if row is None:
+			raise RuntimeError("shard " + shard + " has no journaled upgrade backup; restore it by hand")
+		authority = authority_directory(module, shard)
+		backup = authority / Path(row["backup"]).name
+		if not backup.is_file() or file_sha256(backup) != row["sha256"]:
+			raise RuntimeError("shard " + shard + " upgrade backup is missing or changed; restore refused")
+		backups[shard] = backup
+	return backups
+
+
+# ================
 # restore_authorities
 #
 # The revert of a maintenance release: with the fleet stopped, every shard
@@ -316,15 +335,7 @@ def upgrade_backup(authority, output, shard):
 # database (and any WAL beside it) is kept as state.failed-<time>.db.
 # ================
 def restore_authorities(module, executable, arguments, environment, authorities):
-	backups = {}
-	for shard, row in sorted(authorities.items()):
-		if row is None:
-			raise RuntimeError("shard " + shard + " has no journaled upgrade backup; restore it by hand")
-		authority = authority_directory(module, shard)
-		backup = authority / Path(row["backup"]).name
-		if not backup.is_file() or file_sha256(backup) != row["sha256"]:
-			raise RuntimeError("shard " + shard + " upgrade backup is missing or changed; restore refused")
-		backups[shard] = backup
+	backups = verify_restore(module, authorities)
 	run([executable, "stop", *arguments], cwd=module, env=environment)
 	stamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
 	for shard, backup in backups.items():
@@ -465,8 +476,12 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 			if config.get("bootstrap_notice", False):
 				warning(config, module, executable)
 		if maintenance:
-			# The upgrade and the restore stop again; a second stop finds no
-			# job and does nothing (sro-nomad stopJob checks jobExists).
+			# A restore's backups are checked before this stop, so a refused
+			# restore still leaves the fleet running. The upgrade and the
+			# restore stop again; a second stop finds no job and does nothing
+			# (sro-nomad stopJob checks jobExists).
+			if restore:
+				verify_restore(module, restore)
 			run([executable, "stop", *arguments], cwd=module, env=environment)
 			materialize(config, module, executable, arguments, environment)
 		if upgrade:

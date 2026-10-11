@@ -162,6 +162,53 @@ class DeployTests(unittest.TestCase):
 				self.assertEqual(verbs[-2:], ["deploy", "status"])
 
 	# ================
+	# test_a_refused_restore_stops_nothing
+	#
+	# A maintenance revert checks its journaled backups before the stop that
+	# now precedes validation: a missing backup refuses with the fleet still
+	# running, and the scoped token is still revoked.
+	# ================
+	def test_a_refused_restore_stops_nothing(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			staging, module = root / "staging", root / "module"
+			(module / ".state/cluster").mkdir(parents=True)
+			for name in FILES:
+				path = staging / name
+				path.parent.mkdir(parents=True, exist_ok=True)
+				path.write_text("fixture")
+			bootstrap = root / "bootstrap.json"
+			bootstrap.write_text(json.dumps({"SecretID": "management-fixture"}))
+			config = {
+				"module": str(module), "game_data": str(root / "server.srogz"),
+				"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
+				"origin": "https://example.test", "agent_memory_mb": 256,
+				"gameworld_memory_mb": 1024, "public_webhook": "public-fixture",
+			}
+			manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
+			calls = []
+
+			# ================
+			# execute
+			# ================
+			def execute(arguments, **_options):
+				calls.append(arguments)
+				if arguments[:2] == ["nomad", "version"]:
+					return SimpleNamespace(stdout="Nomad v2.0.7\n")
+				if arguments[:4] == ["nomad", "acl", "token", "create"]:
+					return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+				return SimpleNamespace(stdout="")
+
+			with patch.object(deploy, "run", side_effect=execute), patch.object(deploy.shutil, "chown"), \
+				patch.object(deploy.server_data, "choose", return_value=None), \
+				patch.object(deploy, "warning", return_value=False):
+				with self.assertRaisesRegex(RuntimeError, "no journaled upgrade backup"):
+					deploy.deploy(config, staging, manifest, notice=False, restore={"global-official": None})
+			verbs = [call[1] for call in calls if call[0].endswith("sro-nomad")]
+			self.assertNotIn("stop", verbs)
+			self.assertEqual(calls[-1], ["nomad", "acl", "token", "delete", "accessor"])
+
+	# ================
 	# test_invalid_stack_sizes_type_changes_nothing
 	# ================
 	def test_invalid_stack_sizes_type_changes_nothing(self):
