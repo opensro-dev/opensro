@@ -74,6 +74,16 @@ test("creating keys sends the console secret, the operator and the request", asy
 	} );
 });
 
+test("creating refuses a malformed Discord user id before calling the site", async () => {
+	const { calls, fetcher } = recording( 200, {} );
+	const keys = createInviteKeys( SITE, SECRET, fetcher );
+	for ( const bad of [ "12", "12345678901234567x", "1".repeat( 23 ) ] ) {
+		const answer = await keys.create( "operator", { count: 1, maxUses: 1, expiresInDays: 1, discordUserId: bad } );
+		assert.equal( answer.status, 400, bad );
+	}
+	assert.equal( calls.length, 0 );
+});
+
 test("listing filters by a Discord member and refuses a malformed id", async () => {
 	const { calls, fetcher } = recording( 200, { invites: [] } );
 	const keys = createInviteKeys( SITE, SECRET, fetcher );

@@ -91,6 +91,9 @@ export function createInviteKeys( base, token, fetcher = fetch ) {
 			);
 		},
 		create( operator, request ) {
+			if ( request.discordUserId && !DISCORD_SNOWFLAKE.test( String( request.discordUserId ) ) ) {
+				return { status: 400, body: { error: "A Discord user ID is 15 to 22 digits" } };
+			}
 			const body = {
 				count: Number( request.count ),
 				maxUses: Number( request.maxUses ),

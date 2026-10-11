@@ -39,10 +39,8 @@ const history = createHistory( historySources );
 // The website's invite keys (opensro-web /internal/admin/invites), with the
 // console's own secret; absent, the Invite keys page says it is off.
 const siteAdmin = config.siteAdmin ?? null;
-const inviteKeys = createInviteKeys(
-	siteAdmin ? siteAdminURL( siteAdmin.url ) : null,
-	siteAdmin?.tokenFile ? (await readFile( siteAdmin.tokenFile, "utf8" )).trim() : ""
-);
+const siteAdminToken = siteAdmin?.tokenFile ? (await readFile( siteAdmin.tokenFile, "utf8" )).trim() : "";
+const inviteKeys = createInviteKeys( siteAdmin ? siteAdminURL( siteAdmin.url ) : null, siteAdminToken );
 const INVITE_REVOKE = /^\/api\/invites\/([0-9a-f-]{36})\/revoke$/;
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
 // Banner art from the client's published images: the Dunhuang and Jangan loading screens.
@@ -189,7 +187,7 @@ async function handleRequest( req, res ) {
 			respondJSON( res, 200, {
 				operator: edge?.operator ?? "local-operator",
 				enabled: Boolean( token ),
-				invites: Boolean( siteAdmin?.tokenFile ),
+				invites: Boolean( siteAdminToken ),
 				historySources: historySources.map( ( { id, name } ) => ({ id, name }) ),
 				shards: shards.map( ( { id, name } ) => ({ id, name }) )
 			} );

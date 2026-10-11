@@ -58,10 +58,10 @@ function rowHTML( key ) {
 		<td><span class="tag invites-tag" data-state="${escape( key.status )}">${
 		STATUS_TAG[key.status] ?? escape( key.status )
 	}</span></td>
-		<td>${key.uses}/${key.maxUses}</td>
+		<td>${escape( key.uses )}/${escape( key.maxUses )}</td>
 		<td>${escape( key.redeemedBy.join( ", " ) ) || NONE}</td>
-		<td>${day( key.createdAt )}<br><span class="muted">${escape( key.createdBy )}</span></td>
-		<td>${day( key.expiresAt )}</td>
+		<td>${escape( day( key.createdAt ) )}<br><span class="muted">${escape( key.createdBy )}</span></td>
+		<td>${escape( day( key.expiresAt ) )}</td>
 		<td>${revoke}</td>
 	</tr>`;
 }
