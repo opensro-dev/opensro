@@ -696,6 +696,8 @@ fails; retry persistence without restoring stale slot occupancy.
 	let worldClock: GameplayState["worldClock"];
 	let environment = entryEnvironment( {} ).state;
 	let cosError: string | null = null;
+	// The skill a predicted run-up was pressed for (skillRunUpGoal).
+	let runUpSkill = 0;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -2495,8 +2497,15 @@ state here before a command can claim a native wire conversation.
 			// Admission precedes the server's movement-to-cast handoff. A refused
 			// or unknown press must not stop a walk while its answer is in flight.
 			if ( admitted && pressAdmitted( pressedMetadata, local ) ) {
+				// A repeated press during a predicted run-up keeps it walking:
+				// holding a client-led run-up would park it until the server's
+				// walk arrived, the very lag the prediction removes.
 				const runUp = entity.gid !== localGid ? skillRunUpGoal( pressedMetadata, entity, local, now ) : null;
-				if ( !runUp || !movement.predictApproach( runUp, now, true ) ) movement.holdForCast( now );
+				if ( movement.approachPredictedSince() !== undefined ) {
+					// The repeated press now owns the run-up's cast.
+					runUpSkill = pressedSkill;
+				} else if ( runUp && movement.predictApproach( runUp, now, true ) ) runUpSkill = pressedSkill;
+				else movement.holdForCast( now );
 			}
 			predictCast( pressedMetadata, entity, local, now );
 			// Only a target the row admits stands a cooldown in: any other is the
@@ -3823,15 +3832,16 @@ before take assembles the presentation snapshot.
 			}
 			for ( const kind of [ 0, 1, 2 ] as const ) checkAutomaticPotion( kind, now, "timer" );
 
-			// A predicted skill run-up the server did not walk: it cast where
-			// the caster stood (the target was within its reach after all), or
-			// never answered. Walk back to the start the server kept.
+			// A predicted skill run-up the server did not walk: it cast the
+			// pressed skill where the caster stood (the target was within its
+			// reach after all), or never answered. Walk back to the start the
+			// server kept. Another cast meanwhile (an imbue) is not that answer.
 			const runUpSince = movement.approachPredictedSince();
 			if (
 				runUpSince !== undefined &&
 				(combat.state().casts.some( c =>
-					c.caster === localGid && c.receivedAtMs !== undefined && c.receivedAtMs >= runUpSince &&
-					c.cancelledAtMs === undefined
+					c.caster === localGid && c.skill === runUpSkill && c.receivedAtMs !== undefined &&
+					c.receivedAtMs >= runUpSince && c.cancelledAtMs === undefined
 				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
 			) movement.endPrediction( now );
 			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );

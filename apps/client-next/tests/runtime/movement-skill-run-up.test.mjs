@@ -116,3 +116,83 @@ test("a pickup prediction is not a skill run-up", () => {
 	assert.ok( m.predictApproach( { ...start, x: 400 }, 0 ) );
 	assert.equal( m.approachPredictedSince(), undefined );
 });
+
+// ============================================================================
+// gameplay: the press that starts the run-up, and a repeated press
+
+const { createGameplay } = await import(
+	"../../src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts"
+);
+
+/*
+================
+gameplayPress
+
+A caster at rest with skill 30 (range 60, an enemy action) pressed at a
+monster 300 units east at time 0, over flat navigation.
+================
+*/
+function gameplayPress() {
+	const local = {
+		gid: GID,
+		refObjId: 1907,
+		kind: "local-player",
+		name: "caster",
+		regionId: 257,
+		x: 100,
+		y: 0,
+		z: 100,
+		heading: 0
+	};
+	const game = createGameplay( () => {} );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		character: { skills: [ 30 ] },
+		refSkillSnapshot: [ {
+			id: 30,
+			group: 30,
+			level: 1,
+			status: false,
+			effectRider: false,
+			ui: {
+				name: "SKILL_30",
+				trainable: true,
+				spCost: 1,
+				targetRequired: true,
+				targets: 6,
+				cooldownMs: 0,
+				actionMs: 1000,
+				range: 60,
+				admit: { weaponKinds: [ 255, 255 ] },
+				masteries: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ],
+				prerequisites: [ { ID: 0, Level: 0 }, { ID: 0, Level: 0 }, { ID: 0, Level: 0 } ]
+			}
+		} ]
+	} );
+	game.seed( local );
+	const navigation = product();
+	navigation.objects = [];
+	game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0, undefined );
+	const monster = { ...local, gid: 9, kind: "monster", name: "mob", x: local.x + 300 };
+	game.command( { kind: "skill", skillId: 30, gid: 9 }, 0, monster, local );
+	return { game, local, monster };
+}
+
+test("a press beyond reach starts the run-up at once", () => {
+	const { game, local } = gameplayPress();
+	game.step( 200, local );
+	const pose = defined( game.take()?.pose );
+	game.dispose();
+	assert.ok( pose.x > local.x + 1, `walking at the press (x ${pose.x})` );
+});
+
+test("a repeated press during the run-up keeps it walking", () => {
+	const { game, local, monster } = gameplayPress();
+	game.step( 200, local );
+	const before = defined( game.take()?.pose ).x;
+	game.command( { kind: "skill", skillId: 30, gid: 9 }, 200, monster, local );
+	game.step( 400, local );
+	const after = defined( game.take()?.pose ).x;
+	game.dispose();
+	assert.ok( after > before + 1, `still walking after the second press (${before} -> ${after})` );
+});
