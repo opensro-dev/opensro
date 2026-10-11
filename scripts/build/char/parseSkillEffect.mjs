@@ -554,6 +554,25 @@ export function loadSkillDataRows( textdataDir ) {
 
 /*
 ================
+assertOneStepRemaps
+
+917240 follows a skill's Basic_Original once. An alias that names another
+alias would be a two-step remap the client refuses (effect-record-alias.ts
+throws on it and rejects the whole table), so the build fails here first.
+v1.150 has none: every Basic_Original is a root.
+================
+*/
+export function assertOneStepRemaps( table ) {
+	for ( const [id, entry] of Object.entries( table ) ) {
+		if ( entry?.remapOf === undefined ) continue;
+		if ( table[entry.remapOf]?.remapOf !== undefined ) {
+			throw Error( `skill ${id}'s Basic_Original ${entry.remapOf} is itself remapped` );
+		}
+	}
+}
+
+/*
+================
 buildEffectRecordTable
 
  * Build the f0902c effect-record table: skilldata numeric id -> the
@@ -700,6 +719,7 @@ export function buildEffectRecordTable(
 		table[row.id] = { remapOf: row.originalId };
 		remapped++;
 	}
+	assertOneStepRemaps( table );
 	// 917340 has a distinct name-keyed map, including externally used items.
 	const namedTable = {};
 	for ( const [name, ani] of aniSets ) addRecord( name, ani, namedTable );

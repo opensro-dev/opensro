@@ -40,6 +40,7 @@ export default {
 		"scripts/test/world/worldMapImageReferences.test.mjs",
 		"scripts/test/mission/effectProgramClosure.test.mjs",
 		"scripts/test/assets/skillSpineAim.test.mjs",
+		"scripts/test/assets/effectRemapGuard.test.mjs",
 		"scripts/test/assets/characterModelAssetContracts.test.mjs",
 		"scripts/test/assets/actorLocomotionRootMotion.test.mjs",
 		"scripts/test/assets/banTimeline.test.mjs",
