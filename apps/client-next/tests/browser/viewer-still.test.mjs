@@ -6,7 +6,8 @@ viewer-still.test.mjs - the 3D viewer draws one shipped monster as a still
 Port-only, not native (docs/VIEWER.md). viewer.html draws Tiger Girl
 (refObjId 1954) through the game's renderer into a transparent PNG of the
 requested size: its corners are clear and its middle holds the model. An
-id no catalogue knows fails with the fixed reason, not a timeout.
+id no catalogue knows fails with the fixed reason and the stage it
+stopped at, not a timeout.
 Run alone, never with the whole browser suite.
 
 ===========================================================================
@@ -35,7 +36,8 @@ async function viewerOutcome( page, query ) {
 		try {
 			png = await /** @type {Promise<string>} */ (Reflect.get( window, "__viewerStill" ));
 		} catch ( error ) {
-			return { reason: /** @type {Error} */ (error).message };
+			const failure = /** @type {Error & { cause?: { stage?: string } }} */ (error);
+			return { reason: failure.message, stage: failure.cause?.stage };
 		}
 		const image = new Image();
 		image.src = png;
@@ -83,7 +85,9 @@ test( "an unknown monster fails with its reason", { timeout: 90000 }, async () =
 	const { browser, page } = await launchProbeBrowser();
 	try {
 		assert.deepEqual( await viewerOutcome( page, `monster=${UNKNOWN_MONSTER}&still=1` ), {
-			reason: "unknown-monster"
+			reason: "unknown-monster",
+			// The catalogue was read and lacks the id: it stopped at the model.
+			stage: "model"
 		} );
 	} finally {
 		await browser.close();

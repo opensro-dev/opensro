@@ -19,6 +19,10 @@ The only failure reasons the viewer reports (viewerReasons lists them).
 ================
 */
 export type ViewerReason = "no-webgpu" | "bad-request" | "unknown-monster" | "asset-load" | "render" | "timeout";
+// Where a failed draw stopped (the error's cause.stage and the message's stage):
+// the request itself, the catalogue loading, the model loading, the first
+// framed frames, or the still's readback.
+export type ViewerStage = "request" | "catalogue" | "model" | "first-frame" | "readback";
 
 /*
 ================

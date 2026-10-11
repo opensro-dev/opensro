@@ -24,14 +24,18 @@ import {
 	viewerError,
 	viewerReason,
 	type ViewerReason,
-	type ViewerRequest
+	type ViewerRequest,
+	type ViewerStage
 } from "@/engine/foundation/ui/viewer-request";
 import { viewerCamera } from "@/engine/foundation/rendering/viewer-camera";
 
 // The one entity's gid; nothing else exists on the page.
 const VIEWER_GID = 1;
-// A model that has not drawn within this many milliseconds fails "timeout".
+// A model that has not drawn within this many milliseconds of drawing time
+// fails "timeout". One frame counts at most MAX_FRAME_STEP_MS, so a page that
+// sat hidden (no animation frames) does not time out the moment it shows.
 const VIEWER_TIMEOUT_MS = 30000;
+const MAX_FRAME_STEP_MS = 100;
 // Frames drawn after the model is resident before the readback: the first
 // frame admits the doll's draws, the next one has them in the target.
 const SETTLE_FRAMES = 2;
@@ -149,9 +153,12 @@ owners. Only the monster form draws so far: a look request is refused
 */
 export function createViewer( host: ViewerHost ) {
 	// settle is the one way out of the still promise: a PNG or a reason.
-	let settle: ( outcome: { png: string; } | { reason: ViewerReason; } ) => void = () => {};
+	let settle: ( outcome: { png: string; } | { reason: ViewerReason; stage: ViewerStage; } ) => void = () => {};
 	window.__viewerStill = new Promise<string>( ( resolve, reject ) => {
-		settle = outcome => "png" in outcome ? resolve( outcome.png ) : reject( Error( outcome.reason ) );
+		settle = outcome =>
+			"png" in outcome ?
+				resolve( outcome.png ) :
+				reject( Error( outcome.reason, { cause: { stage: outcome.stage } } ) );
 	} );
 	// An unawaited rejection is still reported through the message.
 	window.__viewerStill.catch( () => {} );
@@ -165,7 +172,7 @@ export function createViewer( host: ViewerHost ) {
 	if ( !failure && request?.kind !== "monster" ) failure = "bad-request";
 	const size = request?.size ?? 1, entity = viewerEntity( request?.kind === "monster" ? request.refObjId : 0 );
 	const entities = [ entity ], viewport = { width: size, height: size };
-	let started = -1, revision = 0, settled = 0, reading = false, finished = false;
+	let last = -1, elapsed = 0, revision = 0, settled = 0, reading = false, finished = false;
 	let camera: import("@/engine/contracts/scene").WorldCamera | null = null;
 	/*
 	================
@@ -175,8 +182,23 @@ export function createViewer( host: ViewerHost ) {
 	const fail = ( reason: ViewerReason ) => {
 		if ( finished ) return;
 		finished = true;
-		post( { type: "viewer-error", reason } );
-		settle( { reason } );
+		const at = stage();
+		post( { type: "viewer-error", reason, stage: at } );
+		settle( { reason, stage: at } );
+	};
+	/*
+	================
+	stage
+
+	How far the draw got, for a failure report: the catalogue still loading,
+	the model not yet displayed, the first framed frames, or the readback.
+	================
+	*/
+	const stage = (): ViewerStage => {
+		if ( failure ) return "request";
+		if ( reading ) return "readback";
+		if ( camera ) return "first-frame";
+		return host.characters.knows( entity ) === undefined ? "catalogue" : "model";
 	};
 	/*
 	================
@@ -207,12 +229,13 @@ export function createViewer( host: ViewerHost ) {
 		*/
 		frame( now: number ): boolean {
 			if ( finished ) return false;
-			if ( reading ) return true;
-			if ( started < 0 ) started = now;
-			if ( now - started > VIEWER_TIMEOUT_MS ) {
+			elapsed += last < 0 ? 0 : Math.min( Math.max( now - last, 0 ), MAX_FRAME_STEP_MS );
+			last = now;
+			if ( elapsed > VIEWER_TIMEOUT_MS ) {
 				fail( "timeout" );
 				return false;
 			}
+			if ( reading ) return true;
 			if ( host.renderer.phase() === "failed" ) {
 				fail( "render" );
 				return false;
@@ -225,7 +248,7 @@ export function createViewer( host: ViewerHost ) {
 				fail( "asset-load" );
 				return false;
 			}
-			const seconds = (now - started) / 1000;
+			const seconds = elapsed / 1000;
 			host.characters.step( entities, null, seconds );
 			if ( !camera && host.characters.ready( VIEWER_GID ) ) {
 				const bounds = host.renderer.characterBounds?.( VIEWER_GID );

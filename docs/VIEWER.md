@@ -24,11 +24,17 @@ P6 `look` object: `bodyRefObjId`, `worn[]`, `avatar[]`).
 - When the model is drawn, the page posts `{ type: "viewer-ready" }` to its
   parent or opener. A still also posts `{ type: "viewer-still", png }` (a PNG
   data URL) and resolves `window.__viewerStill` with the same data URL.
-- On failure the page posts `{ type: "viewer-error", reason }` and rejects
-  `window.__viewerStill` with `Error(reason)`. `reason` is one of a fixed
-  set, exported from `viewer-request.ts`:
-  `no-webgpu`, `bad-request`, `unknown-monster`, `asset-load`, `render`,
-  `timeout` (not drawn within 30 s).
+- On failure the page posts `{ type: "viewer-error", reason, stage }` and rejects
+  `window.__viewerStill` with `Error(reason)`, whose `cause.stage` is the same stage.
+  `reason` is one of a fixed set, exported from `viewer-request.ts`:
+  `no-webgpu`, `bad-request`, `unknown-monster`, `asset-load`, `render`, `timeout`.
+  `stage` says how far the draw got: `request`, `catalogue` (the presentation
+  catalogue loading), `model` (the model loading), `first-frame` (framed, not yet
+  read), or `readback`.
+- `timeout` means not drawn within 30 s of drawing time. A hidden page gets no
+  animation frames, so its time does not count, and each frame counts at most 100 ms.
+  A page that never becomes visible never finishes: draw it on screen, or headless
+  with background throttling off.
 
 ## Design
 
