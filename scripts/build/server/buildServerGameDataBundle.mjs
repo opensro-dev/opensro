@@ -383,7 +383,9 @@ async function buildObjectNavProjection(
 	const usedObjectIds = new Set();
 	for ( const region of sourceBundle.navmesh?.regions ?? [] ) {
 		for ( const object of region.objects ?? [] ) {
-			if ( Number.isInteger( object.assetId ) && object.assetId > 0 ) {
+			// Object 0 is a real object (4413B0 bounds only the top): the
+			// Jangan ferry's own pieces are object 0 in their bundles.
+			if ( Number.isInteger( object.assetId ) && object.assetId >= 0 ) {
 				usedObjectIds.add( object.assetId );
 			}
 		}

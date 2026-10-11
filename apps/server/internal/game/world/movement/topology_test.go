@@ -73,7 +73,7 @@ func TestPortalToleranceAndOriginalObjectOrdinals(t *testing.T) {
 	if !portalMatches(p, a, 0, q, b, 0) {
 		t.Fatal("Sub-five rejected")
 	}
-	rows := decodeObjectPlacements(json.RawMessage(`[{"assetId":0},{"assetId":1,"x":0,"y":0,"z":0,"yaw":0,"linkEdgeCount":1,"linkEdges":"AgAAAAAA"},{"assetId":2,"x":100,"y":0,"z":0,"yaw":0}]`))
+	rows, _ := decodeObjectPlacements(json.RawMessage(`[{"assetId":0},{"assetId":1,"x":0,"y":0,"z":0,"yaw":0,"linkEdgeCount":1,"linkEdges":"AgAAAAAA"},{"assetId":2,"x":100,"y":0,"z":0,"yaw":0}]`))
 	if len(rows) != 2 || rows[0].ordinal != 1 || rows[1].ordinal != 2 || rows[0].links[0].target != 2 {
 		t.Fatalf("Placement identity lost: %+v", rows)
 	}

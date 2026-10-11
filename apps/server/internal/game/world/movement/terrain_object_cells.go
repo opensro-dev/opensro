@@ -8,7 +8,9 @@ import (
 )
 
 // Terrain cells own outside-object candidate admission, native 404510/428300.
-func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement) error {
+// objectCount is the region's raw nvm entry count, the bound of a cell's
+// object index.
+func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement, objectCount int) error {
 	c := region.Cells
 	if c.ObjectIndexOffsets == "" {
 		return nil
@@ -43,9 +45,14 @@ func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement) er
 			return e
 		}
 	}
+	// Cells name placements by their original ordinal in the nvm entry
+	// list, which CRTNavMeshTerrain_Load (4033E0) keeps whole. A row the
+	// port dropped (malformed) owns no cells; the others keep theirs.
 	sets := make([]terrainCellSet, len(rows))
+	byOrdinal := make(map[int]*terrainCellSet, len(rows))
 	for i := range rows {
 		rows[i].terrainCells = &sets[i]
+		byOrdinal[rows[i].ordinal] = &sets[i]
 	}
 	for i := 0; i < count; i++ {
 		a, b := int(binary.LittleEndian.Uint32(offsets[i*4:])), int(binary.LittleEndian.Uint32(offsets[(i+1)*4:]))
@@ -64,10 +71,12 @@ func admitTerrainObjectCells(region navmeshRegion, rows []objectNavPlacement) er
 		}
 		for j := a; j < b; j++ {
 			id := int(binary.LittleEndian.Uint16(ids[j*2:]))
-			if id >= len(rows) {
+			if id >= objectCount {
 				return fmt.Errorf("invalid terrain object reference")
 			}
-			sets[id].cells = append(sets[id].cells, r)
+			if set := byOrdinal[id]; set != nil {
+				set.cells = append(set.cells, r)
+			}
 		}
 	}
 	for i := range sets {
