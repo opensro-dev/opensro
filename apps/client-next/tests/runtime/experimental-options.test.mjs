@@ -28,8 +28,6 @@ const OFF = Object.freeze( {
 	anisotropicFiltering: false,
 	heightFog: false,
 	dynamicSun: false,
-	terrainRelief: false,
-	texturedHorizon: false,
 	floatBloom: false,
 	hdrToneMap: false,
 	sunShadow: false,
@@ -107,8 +105,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		anisotropicFiltering: false,
 		heightFog: false,
 		dynamicSun: false,
-		terrainRelief: false,
-		texturedHorizon: false,
 		floatBloom: false,
 		hdrToneMap: false,
 		sunShadow: false,
@@ -120,8 +116,6 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"anisotropicFiltering",
 			"heightFog",
 			"dynamicSun",
-			"terrainRelief",
-			"texturedHorizon",
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",
@@ -135,12 +129,23 @@ test("every video stage defaults off and only an explicit true enables it", () =
 	}
 });
 
+test("a saved preference holding the retired relief and horizon rows loads cleanly and ignores them", () => {
+	// Both rows were removed at the owner's request (2026-10-11): a browser
+	// that saved them on still loads, the keys are dropped, and the other
+	// stages keep their saved values.
+	const saved = { terrainRelief: true, texturedHorizon: true, heightFog: true, renderScale: 75 };
+	const options = experimentalOptions( saved );
+	assert.deepEqual( options, { ...OFF, heightFog: true, renderScale: 75 } );
+	assert.equal( "terrainRelief" in options, false );
+	assert.equal( "texturedHorizon" in experimentalVideo( options ), false );
+	const ids = /** @type {string[]} */ (EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).map( row => row.key ));
+	assert.ok( !ids.includes( "terrainRelief" ) && !ids.includes( "texturedHorizon" ) );
+});
+
 test("new environment preferences persist only on Confirm and Default remains a draft", () => {
 	for (
 		const key of /** @type {const} */ ([
 			"dynamicSun",
-			"terrainRelief",
-			"texturedHorizon",
 			"floatBloom",
 			"hdrToneMap",
 			"sunShadow",

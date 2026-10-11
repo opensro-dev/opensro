@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
-import { prepareEnvironmentFixture, captureEnvironment, captureFlatRelief } from "../helpers/environment-gpu.mjs";
+import { prepareEnvironmentFixture, captureEnvironment } from "../helpers/environment-gpu.mjs";
 
 test(
 	"each environment option changes the retail frame and disabling it restores every channel",
@@ -29,9 +29,6 @@ test(
 					);
 				} else assert.notDeepEqual( row.rgba, native, `${row.mode} must independently affect the frame` );
 			}
-			const flat = await page.evaluate( captureFlatRelief );
-			assert.deepEqual( flat[1], flat[0], "Flat terrain with zero ambient and diffuse must retain albedo" );
-			assert.ok( flat[0].some( ( value, i ) => i % 4 !== 3 && value > 32 ), "Witness must draw visible terrain" );
 			assert.deepEqual( errors, [] );
 		} finally {
 			await browser.close();
@@ -69,8 +66,6 @@ test( "the float bloom chain composites, resizes and hands quality back", { time
 							anisotropicFiltering: false,
 							heightFog: false,
 							dynamicSun: false,
-							terrainRelief: false,
-							texturedHorizon: false,
 							floatBloom,
 							hdrToneMap: false,
 							sunShadow: false,

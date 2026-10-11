@@ -27,8 +27,6 @@ export interface ExperimentalOptions {
 	readonly anisotropicFiltering: boolean;
 	readonly heightFog: boolean;
 	readonly dynamicSun: boolean;
-	readonly terrainRelief: boolean;
-	readonly texturedHorizon: boolean;
 	readonly floatBloom: boolean;
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
@@ -70,7 +68,10 @@ export function renderScales(): readonly RenderScale[] {
 experimentalOptions
 
 Only an explicit true enables a toggle. Missing or invalid render scales
-restore full resolution; legacy Video settings cannot enable scaling.
+restore full resolution; legacy Video settings cannot enable scaling. Keys
+of retired rows (terrainRelief and texturedHorizon, removed at the owner's
+request on 2026-10-11) are never read, so a saved preference holding them
+loads cleanly.
 ================
 */
 export function experimentalOptions( value: unknown = null ): ExperimentalOptions {
@@ -86,8 +87,6 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		anisotropicFiltering: enabled( "anisotropicFiltering" ),
 		heightFog: enabled( "heightFog" ),
 		dynamicSun: enabled( "dynamicSun" ),
-		terrainRelief: enabled( "terrainRelief" ),
-		texturedHorizon: enabled( "texturedHorizon" ),
 		floatBloom: enabled( "floatBloom" ),
 		hdrToneMap: enabled( "hdrToneMap" ),
 		sunShadow: enabled( "sunShadow" ),
@@ -109,8 +108,6 @@ export interface ExperimentalVideo {
 	readonly anisotropicFiltering: boolean;
 	readonly heightFog: boolean;
 	readonly dynamicSun: boolean;
-	readonly terrainRelief: boolean;
-	readonly texturedHorizon: boolean;
 	readonly floatBloom: boolean;
 	readonly hdrToneMap: boolean;
 	readonly sunShadow: boolean;
@@ -129,8 +126,6 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		anisotropicFiltering: options.anisotropicFiltering,
 		heightFog: options.heightFog,
 		dynamicSun: options.dynamicSun,
-		terrainRelief: options.terrainRelief,
-		texturedHorizon: options.texturedHorizon,
 		floatBloom: options.floatBloom,
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,

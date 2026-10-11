@@ -48,7 +48,6 @@ export function createFrontend(
 	// Native CPSTitle 0x748630 disables terrain LOD; 0x741B80 restores it on release.
 	stage.install( "/assets/title/constantinople/manifest.json", "full" );
 	return {
-		setTerrainNormals: stage.setTerrainNormals,
 		/*
 		================
 		reveal

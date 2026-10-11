@@ -283,8 +283,6 @@ test(
 					anisotropicFiltering: false,
 					heightFog: false,
 					dynamicSun: false,
-					terrainRelief: false,
-					texturedHorizon: false,
 					floatBloom: false,
 					hdrToneMap: false,
 					sunShadow: false,
@@ -325,8 +323,6 @@ test(
 					anisotropicFiltering: false,
 					heightFog: false,
 					dynamicSun: false,
-					terrainRelief: false,
-					texturedHorizon: false,
 					floatBloom: false,
 					hdrToneMap: false,
 					sunShadow: false,
@@ -341,8 +337,6 @@ test(
 			const environmentControls = [
 				{ key: "floatBloom", id: "experimental-float-bloom", tab: 0 },
 				{ key: "dynamicSun", id: "experimental-dynamic-sun", tab: 1 },
-				{ key: "terrainRelief", id: "experimental-terrain-relief", tab: 1 },
-				{ key: "texturedHorizon", id: "experimental-textured-horizon", tab: 1 },
 				{ key: "hdrToneMap", id: "experimental-hdr-tone-map", tab: 0 },
 				{ key: "sunShadow", id: "experimental-sun-shadow", tab: 2 },
 				{ key: "perPixelLighting", id: "experimental-per-pixel-lighting", tab: 2 }

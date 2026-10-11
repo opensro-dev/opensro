@@ -242,8 +242,7 @@ export function createAssets(): AssetOwner {
 					url,
 					limit,
 					decode,
-					...(options?.pickAlpha ? { pickAlpha: true } : {}),
-					...(options?.terrainNormals ? { terrainNormals: true } : {})
+					...(options?.pickAlpha ? { pickAlpha: true } : {})
 				} );
 			} catch ( error ) {
 				jobs.delete( id );

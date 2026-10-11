@@ -473,8 +473,6 @@ test("the experimental presentation pass publishes the offscreen frame and retir
 			anisotropicFiltering: false,
 			heightFog: false,
 			dynamicSun: false,
-			terrainRelief: false,
-			texturedHorizon: false,
 			floatBloom: false,
 			hdrToneMap: false,
 			sunShadow: false,

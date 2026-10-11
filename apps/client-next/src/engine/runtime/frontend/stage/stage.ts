@@ -18,7 +18,6 @@ createFrontendStage
 */
 export function createFrontendStage( assets: AssetOwner, renderer: Renderer, base: string ) {
 	const preload = createStagePreload( assets, base );
-	let terrainNormals = false;
 	let manifest: StageManifest | null = null,
 		error: string | null = null,
 		worldRequested = false,
@@ -42,8 +41,7 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 				"frontend-world" :
 				kind === "texture" ?
 				(path.endsWith( ".texture" ) ? undefined : path.endsWith( ".dds" ) ? "dds" : "png") :
-				undefined,
-			kind === "world" && terrainNormals ? { terrainNormals: true } : undefined
+				undefined
 		);
 		jobs.set( id, { kind, path } );
 	}
@@ -84,17 +82,6 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		error = null;
 	}
 	return {
-		/*
-		================
-		setTerrainNormals
-		================
-		*/
-		setTerrainNormals( value: boolean ) {
-			if ( disposed || terrainNormals === value ) return;
-			terrainNormals = value;
-			preload.setTerrainNormals( value );
-			clear();
-		},
 		/*
 		================
 		preload

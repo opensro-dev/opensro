@@ -57,8 +57,6 @@ test( "presentation finish preserves flat colours and gates FXAA off hard edges"
 					anisotropicFiltering: false,
 					heightFog: false,
 					dynamicSun: false,
-					terrainRelief: false,
-					texturedHorizon: false,
 					floatBloom: false,
 					hdrToneMap: false,
 					sunShadow: false,

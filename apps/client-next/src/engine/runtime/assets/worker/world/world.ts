@@ -10,12 +10,7 @@ once per resource, since a town places the same meshes hundreds of times.
 
 ===========================================================================
 */
-import {
-	passes,
-	heightRange,
-	terrainBlockNormals,
-	tileUvScale
-} from "@/engine/foundation/rendering/terrain-associations";
+import { passes, heightRange, tileUvScale } from "@/engine/foundation/rendering/terrain-associations";
 import { clothData } from "@/engine/foundation/animation/cloth";
 
 import { decodeSoundTerrain } from "@/engine/foundation/audio/terrain-sounds";
@@ -66,10 +61,6 @@ export type WorldDecodePart = "all" | "objects" | "terrain";
 export interface WorldDecodeOptions {
 	readonly origin?: number;
 	readonly part?: WorldDecodePart;
-	/** Compute heightfield normals for the terrain-relief stage; off, the
-	 * terrain emits the retail flat (0,1,0) normals and the load skips the
-	 * per-block differencing entirely. */
-	readonly terrainNormals?: boolean;
 }
 
 /*
@@ -117,7 +108,6 @@ reserve
 			const region = b.source.sectorX | (b.source.sectorY << 8),
 				origin = options.origin ?? region,
 				part = options.part ?? "all",
-				terrainNormals = options.terrainNormals === true,
 				groups: WorldGroup[] = [],
 				warnings: string[] = [];
 			// A dungeon is its own coordinate space; only outdoor scenes share an anchor.
@@ -610,14 +600,9 @@ noteMaterial
 								}
 							>(),
 							step = 1 << lod;
-						// Heightfield normals (shared by every LOD and pass of the
-						// block): central differences on the 17x17 grid with the
-						// 20-unit cell spacing, one-sided at the borders. The
-						// terrain-relief stage reads them; off, terrain stays
-						// flat-lit and the values are unused.
-						const blockNormals = terrainNormals ?
-							terrainBlockNormals( block.heights ) :
-							FLAT_BLOCK_NORMALS;
+						// Retail terrain is NOLIGHT: every vertex carries the flat
+						// (0,1,0) normal, shared by every LOD and pass of the block.
+						const blockNormals = FLAT_BLOCK_NORMALS;
 						for ( const p of passes( block.textureData, step ) ) {
 							reserve( 4 * 224 + 6 * 16 );
 							const id = p.key * 2 + (p.mask === 15 ? 0 : 1);

@@ -22,7 +22,7 @@ createStagePreload
 ================
 */
 export function createStagePreload( assets: AssetOwner, base: string ) {
-	let state: State = { kind: "idle" }, disposed = false, terrainNormals = false;
+	let state: State = { kind: "idle" }, disposed = false;
 	/*
 	================
 	clear
@@ -34,16 +34,6 @@ export function createStagePreload( assets: AssetOwner, base: string ) {
 		state = { kind: "idle" };
 	}
 	return {
-		/*
-		================
-		setTerrainNormals
-		================
-		*/
-		setTerrainNormals( value: boolean ) {
-			if ( disposed || terrainNormals === value ) return;
-			clear();
-			terrainNormals = value;
-		},
 		/*
 		================
 		step
@@ -76,8 +66,7 @@ export function createStagePreload( assets: AssetOwner, base: string ) {
 						job: assets.request(
 							new URL( manifest.regionBundlePublicPath + new URL( path, base ).hash, base ).href,
 							128 << 20,
-							"frontend-world",
-							terrainNormals ? { terrainNormals: true } : undefined
+							"frontend-world"
 						)
 					};
 				} catch {

@@ -99,18 +99,6 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-dynamic-sun",
 				label: "Moving sunlight",
 				description: "Lighting follows the time of day."
-			},
-			{
-				key: "terrainRelief",
-				id: "experimental-terrain-relief",
-				label: "Terrain relief",
-				description: "Shades slopes. Reloads the current area."
-			},
-			{
-				key: "texturedHorizon",
-				id: "experimental-textured-horizon",
-				label: "Textured horizon",
-				description: "Shows distant ground textures; may shimmer."
 			}
 		]
 	},

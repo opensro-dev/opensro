@@ -39,8 +39,6 @@ const VIDEO = Object.freeze( {
 	anisotropicFiltering: true,
 	heightFog: false,
 	dynamicSun: false,
-	terrainRelief: false,
-	texturedHorizon: false,
 	floatBloom: false,
 	hdrToneMap: false,
 	sunShadow: false,

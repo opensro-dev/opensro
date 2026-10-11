@@ -85,8 +85,6 @@ export async function captureEnvironment( { bundle, camera, features = false } )
 		anisotropicFiltering: false,
 		heightFog: false,
 		dynamicSun: false,
-		terrainRelief: false,
-		texturedHorizon: false,
 		floatBloom: false,
 		hdrToneMap: false,
 		sunShadow: false,
@@ -100,16 +98,13 @@ export async function captureEnvironment( { bundle, camera, features = false } )
 		if ( renderer.phase() !== "running" ) throw Error( renderer.error() ?? "GPU startup deadline" );
 		const decoder = createWorldDecoder();
 		const native = { ...decoder.decode( bundle, true ), terrainDetail: "full" };
-		const relief = features ?
-			{ ...decoder.decode( bundle, true, { terrainNormals: true } ), terrainDetail: "full" } :
-			native;
 		renderer.videoOptions( changeVideo( defaultVideoOptions(), 11, 1 ) );
 		const cases = features ?
-			[ "off", "dynamicSun", "off", "terrainRelief", "off", "texturedHorizon", "off", "floatBloom", "off" ] :
+			[ "off", "dynamicSun", "off", "floatBloom", "off" ] :
 			[ "off", "off" ];
 		for ( const mode of cases ) {
 			renderer.experimentalVideo( { ...options, ...(mode === "off" ? {} : { [mode]: true }) } );
-			renderer.setWorld( { ...(mode === "terrainRelief" ? relief : native), id: `environment:${rows.length}` } );
+			renderer.setWorld( { ...native, id: `environment:${rows.length}` } );
 			renderer.setWorldCamera( frontendCameraView( sampleFrontendCamera( camera, .7 ) ) );
 			for ( const path of renderer.neededWorldTextures() ) {
 				if ( !textures.has( path ) ) {
@@ -156,94 +151,5 @@ export async function captureEnvironment( { bundle, camera, features = false } )
 	} finally {
 		renderer.dispose();
 		for ( const texture of textures.values() ) if ( !("kind" in texture) ) texture.close();
-	}
-}
-
-/*
-================
-captureFlatRelief
-
-Zero-light channels cannot divide by an artificial epsilon and blacken flat
-NOLIGHT ground. This fixture observes the rendered result, not shader text.
-================
-*/
-export async function captureFlatRelief() {
-	const { createRenderer } = await import( "/src/engine/runtime/renderer/renderer.ts" );
-	const { defaultVideoOptions, changeVideo } = await import( "/src/engine/foundation/rendering/video-options.ts" );
-	const canvas = document.createElement( "canvas" );
-	const output = document.createElement( "canvas" );
-	output.width = output.height = 64;
-	const context = output.getContext( "2d", { willReadFrequently: true } );
-	if ( !context ) throw Error( "No capture context" );
-	const renderer = createRenderer( canvas );
-	const identity = Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
-	try {
-		const deadline = performance.now() + 15000;
-		while ( renderer.phase() === "starting" && performance.now() < deadline ) {
-			await new Promise( requestAnimationFrame );
-		}
-		if ( renderer.phase() !== "running" ) throw Error( renderer.error() ?? "GPU startup deadline" );
-		renderer.videoOptions( changeVideo( defaultVideoOptions(), 11, 0 ) );
-		renderer.setWorldCamera( { eye: [ 0, 100, -50 ], target: [ 0, 0, 0 ], fov: 1, near: 1, far: 1000 } );
-		renderer.setWorld( {
-			id: "flat-relief",
-			originRegion: 257,
-			warnings: [],
-			environment: {
-				startTimeOfDay: .5,
-				ratePerSecond: 0,
-				tracks: {
-					color0xf0: [ { t: 0, r: 0, g: 0, b: 0 } ],
-					color0x124: [ { t: 0, r: 0, g: 0, b: 0 } ]
-				}
-			},
-			groups: [ {
-				id: "ground",
-				center: [ 0, 0, 0 ],
-				radius: 200,
-				material: {
-					color: [ .7, .5, .3, 1 ],
-					unlit: true,
-					terrain: true,
-					alphaCutoff: 0,
-					blend: false,
-					doubleSided: true
-				},
-				geometry: {
-					world: true,
-					positions: Float32Array.of( -100, 0, -100, 100, 0, -100, 100, 0, 100, -100, 0, 100 ),
-					normals: Float32Array.of( 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0 ),
-					uvs: Float32Array.of( 0, 0, 1, 0, 1, 1, 0, 1 ),
-					indices: Uint32Array.of( 0, 1, 2, 0, 2, 3 ),
-					instances: identity,
-					transform: identity
-				}
-			} ]
-		} );
-		const result = [];
-		for ( const terrainRelief of [ false, true ] ) {
-			renderer.experimentalVideo( {
-				renderScale: 100,
-				postProcessing: false,
-				anisotropicFiltering: false,
-				heightFog: false,
-				dynamicSun: false,
-				terrainRelief,
-				texturedHorizon: false,
-				floatBloom: false,
-				hdrToneMap: false,
-				sunShadow: false,
-				perPixelLighting: false
-			} );
-			for ( let frame = 0; frame < 4; frame++ ) await renderer.frame( { width: 64, height: 64 }, .16 );
-			if ( renderer.error() ) throw Error( renderer.error() );
-			const image = await createImageBitmap( canvas );
-			context.drawImage( image, 0, 0 );
-			image.close();
-			result.push( [ ...context.getImageData( 16, 16, 32, 32 ).data ] );
-		}
-		return result;
-	} finally {
-		renderer.dispose();
 	}
 }

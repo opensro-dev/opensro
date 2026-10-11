@@ -96,31 +96,6 @@ export function createWorldStream(
 	// admitted when every region of its terrain is resident.
 	let outdoor: Outdoor | null = null, waiting: WorldResult | null = null;
 	let previous: Pose | null = null, failedFuture: number | null = null;
-	// The terrain-relief preference at decode time: regions streamed while it
-	// is on carry heightfield normals; off, the retail flat normals load and
-	// the differencing is skipped entirely.
-	let terrainNormals = false;
-	/*
-	================
-	setTerrainNormals
-
-	Port-only relief changes decoded geometry. Keep the displayed scene until
-	its replacement is ready, but invalidate every old-mode scene and part so
-	admission cannot combine cached flat normals with relief normals.
-	================
-	*/
-	function setTerrainNormals( value: boolean ) {
-		if ( disposed || terrainNormals === value ) return;
-		terrainNormals = value;
-		cancelTransaction();
-		clearFuture();
-		terrain.setTerrainNormals( value );
-		recovery.reset();
-		failedFuture = null;
-		displayedRegion = null;
-		transaction = { phase: "idle" };
-	}
-
 	/*
 	================
 	clearFuture
@@ -184,7 +159,7 @@ export function createWorldStream(
 				(path.endsWith( ".texture" ) ? undefined : path.toLowerCase().endsWith( ".dds" ) ? "dds" : "png") :
 				undefined,
 			// The worker returns a DDS texture's picking mask with it (pick-alpha.ts).
-			kind === "texture" ? { pickAlpha: true } : terrainNormals ? { terrainNormals: true } : undefined
+			kind === "texture" ? { pickAlpha: true } : undefined
 		);
 		jobs.set( id, { kind, path, ...(scene ? { outdoor: scene } : {}) } );
 	}
@@ -415,7 +390,6 @@ export function createWorldStream(
 		}
 	}
 	return {
-		setTerrainNormals,
 		/*
 		================
 		pumpCameraScripts

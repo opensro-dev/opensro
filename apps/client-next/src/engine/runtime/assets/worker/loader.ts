@@ -416,8 +416,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						const prepared = prepareWorldScene(
 							worlds.decode( terrain, false, {
 								origin,
-								part,
-								terrainNormals: request.terrainNormals === true
+								part
 							} )
 						);
 						send( { kind: "world", id: request.id, prepared }, worldSceneTransfers( prepared.scene ) );
@@ -471,8 +470,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 					resolved.animated = [ ...animated.values() ];
 					let scene = worlds.decode( resolved, request.decode === "frontend-world", {
 						origin,
-						part,
-						terrainNormals: request.terrainNormals === true
+						part
 					} );
 					const propsPath = new URLSearchParams( url.hash.slice( 1 ) ).get( "props" );
 					if ( propsPath && request.decode === "frontend-world" ) {

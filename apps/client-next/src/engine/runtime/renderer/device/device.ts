@@ -536,8 +536,10 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			stages.set( [
 				value.heightFog ? 1 : 0,
 				value.dynamicSun ? 1 : 0,
-				value.terrainRelief ? 1 : 0,
-				value.texturedHorizon ? 1 : 0,
+				// z and w were terrain relief and textured horizon, removed at the
+				// owner's request (2026-10-11); the shaders no longer read them.
+				0,
+				0,
 				value.hdrToneMap ? 1 : 0,
 				value.sunShadow ? 1 : 0,
 				value.perPixelLighting ? 1 : 0,

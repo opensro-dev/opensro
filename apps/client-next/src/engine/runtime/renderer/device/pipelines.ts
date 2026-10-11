@@ -37,7 +37,7 @@ export const DEFAULT_BLEND: BlendPair = Object.freeze( {
 
 // Experimental video stages (Experimental > Image / World). Each is off by
 // default, which is the native frame; env.stages carries the switches
-// (x height fog; y sun direction; z terrain relief; w textured horizon).
+// (x height fog; y sun direction; z and w retired, always 0).
 // Water reflection and equipment shine are native options (Video slots 4
 // and 6), not experimental stages.
 //
@@ -54,15 +54,6 @@ const FOG_SKY_TINT = 0.3; // global fog colour blended toward the horizon colour
 // (0.707, 0.707, 0) for every surface and every hour; only its colour
 // animates. The deviation rides the sky's sun arc (env.sunDirection,
 // world-environment.ts packs it) so dawn and dusk rake across geometry.
-//
-// Port-only, not native: Terrain relief shades retail NOLIGHT ground.
-// The deviation shades terrain slopes against the light
-// direction using the heightfield normals the worker now computes,
-// normalized against the flat-ground term so level ground keeps its
-// retail brightness and only slopes move. The strength is the whole
-// tuning surface.
-const TERRAIN_RELIEF = 0.45;
-const TERRAIN_RELIEF_MIN_LIGHT = 0.0001;
 
 // Port-only, not native: Textured horizon changes the flat fog applied to
 // terrain past the detail band (8ABFD0): 2005 minification aliased there.
@@ -456,10 +447,8 @@ fn shadeGeometry(input:Out)->vec4f {
  }
 var light=vec4f(1);if(material.skin.y>0.5){light=textureSampleBias(albedo,textureSampler,input.uv,0,-0.5);}
  // Retail 8ABFD0: cells outside the detailed band use untextured linear fog.
- // The textured-horizon stage keeps the textured fog blend instead;
- // authored single-level textures can alias at grazing angles.
  let cellDelta=floor(input.worldXZ/320.0)-env.terrainBand.xy;
- let distant=env.terrainBand.w>0.5&&dot(cellDelta,cellDelta)>env.terrainBand.z&&env.stages.w<0.5;
+ let distant=env.terrainBand.w>0.5&&dot(cellDelta,cellDelta)>env.terrainBand.z;
  if(distant&&material.skin.y>0.5){discard;}
  if(distant&&material.options.z>0.5){return vec4f(env.fog.rgb,1);}
 let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,input.color.w,input.maskUV.x),input.maskUV.y);var color=vec4f(tex.rgb,select(tex.a,1.0,material.policy.z>0.5))*material.color*select(input.color,vec4f(1,1,1,mask),material.options.z>0.5);
@@ -516,21 +505,6 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
  let unlitColor=select(color.rgb,tex.rgb*input.color.rgb,material.lighting.y>0.5);
  // A native stage is the whole colour: its op already carries any 2X/4X.
  var lit=select(clamp(select(tex.rgb*input.color.rgb*surfaceLight,unlitColor,material.options.y>0.5)*material.options.w,vec3f(0),vec3f(1)),color.rgb,material.stage.x>0.0);
- // Terrain relief (experimental): retail ground is NOLIGHT - flat albedo the
- // lightmap then multiplies. The stage shades slopes against the light
- // direction through the heightfield normals the worker computes, levelled
- // against the flat-ground term so level terrain keeps its retail brightness.
- if(env.stages.z>0.5&&material.options.z>0.5){
-  // The flat-ground term follows the SAME light as the slope term: level
-  // ground's response is dot((0,1,0), L), which is 0.707 under the retail
-  // diagonal and the sun's height under the arc - level terrain keeps its
-  // brightness at every hour.
-  let reliefBase=env.ambient.rgb+env.diffuse.rgb*max(0.0,lightDirection().y);
-  let reliefSlope=env.ambient.rgb+env.diffuse.rgb*max(0.0,dot(normalize(input.normal),lightDirection()));
-  // With no light in a channel there is no slope contrast to apply.
-  let reliefRatio=select(vec3f(1),reliefSlope/max(reliefBase,vec3f(${TERRAIN_RELIEF_MIN_LIGHT})),reliefBase>vec3f(${TERRAIN_RELIEF_MIN_LIGHT}));
-  lit*=mix(vec3f(1),clamp(reliefRatio,vec3f(0),vec3f(2)),${TERRAIN_RELIEF});
- }
  // AEE6D0: stage0 sphere*TFACTOR; stage1 base+base.a*current;
  // stage2 MODULATE2X with saturated vertex diffuse. Opacity gates RGB only.
  if(material.reflection.x>0.5&&env.reflection.w>0.5&&input.opacity==1.0){
