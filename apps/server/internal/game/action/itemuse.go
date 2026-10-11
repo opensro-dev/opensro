@@ -436,6 +436,13 @@ func (rt *Runtime) HandleItemUse(
 				result = itemUseFailure(errCodeCantActivateCart)
 				return false
 			}
+			// #721: "a thief cannot summon a transport in a town" (the
+			// client's own error 149), the summon side of the stolen-goods rule.
+			if cosRef.TidWord>>11 == cosBandTransport && enterworld.DressedJob(character) == domain.JobThief &&
+				townRegion(rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli()).RegionID) {
+				result = itemUseFailure(errCodeThiefCartInTown)
+				return false
+			}
 			gid, gidOK := enterworld.CosObjectIDForCharacter(character)
 			if !gidOK {
 				return false

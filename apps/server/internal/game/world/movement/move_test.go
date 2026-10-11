@@ -206,6 +206,34 @@ func TestHandleMoveChecksAccessAfterCanonicalizingDestination(t *testing.T) {
 
 /*
 ================
+TestHandleMoveRefusesAThiefCargoInTownWithItsNotice
+
+#721: TownEntryBlocked refuses the canonical goal like the area gate, and
+the refusal carries the native 0x3058 kind 1 notice (category 0x11 code 1,
+"you cannot enter a town with a transport summoned").
+================
+*/
+func TestHandleMoveRefusesAThiefCargoInTownWithItsNotice(t *testing.T) {
+	character := testCharacter()
+	rt := testRuntime(character)
+	blocked := true
+	rt.TownEntryBlocked = func(_ *enterworld.Character, regionID uint16) bool {
+		return blocked && regionID == 0x7e7e
+	}
+	body := encodeMoveBody(1, 0x7e7d, 2000, 0, 920)
+	refused := rt.HandleMove("0", character, body)
+	if refused.Refusal == nil || refused.Refusal.Reason != "thiefCargoInTown" || len(refused.Frames) != 1 ||
+		refused.Frames[0].Opcode != 0x3058 || !bytes.Equal(refused.Frames[0].Payload, []byte{1}) {
+		t.Fatalf("outcome = %+v, want thiefCargoInTown with the 0x3058 [01] notice", refused)
+	}
+	blocked = false
+	if accepted := rt.HandleMove("0", character, body); accepted.Refusal != nil {
+		t.Fatalf("an allowed move was refused: %+v", accepted.Refusal)
+	}
+}
+
+/*
+================
 TestHandleMoveClearsPickupLatchBeforeCoercion
 
 TestHandleMoveClearsPickupLatchBeforeCoercion pins the reference order:

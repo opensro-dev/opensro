@@ -211,6 +211,8 @@ func newGameplayPlane(
 	movementRuntime.CanEnterRegion = func(character *enterworld.Character, regionID uint16) bool {
 		return authoredAreas.CanEnterRegion(regionID, character.GMPrivilege)
 	}
+	// A thief in job mode may not bring its transport into a town (#721).
+	movementRuntime.TownEntryBlocked = items.ThiefCargoTownBlocked
 	movementRuntime.EnableGroundWalk()
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
 	items.SpawnRegionAvailable = water.SpawnRegionAvailable
