@@ -12,6 +12,7 @@ ordinary sockets retain the sampled bone orientation.
 import type { CharacterNode } from "@/engine/contracts/character";
 import { compose, multiply } from "@/engine/foundation/math/pose-math";
 import { identity } from "@/engine/foundation/rendering/world-math";
+import { ambientModelParticles } from "./model-particles";
 /*
 ================
 EquipmentBranch
@@ -21,6 +22,8 @@ export interface EquipmentBranch {
 	readonly part: string;
 	readonly attachBone: string;
 	readonly nodes: readonly CharacterNode[];
+	// The resource's ambient ModDataParticle sets, bound to these nodes.
+	readonly particleModifiers?: unknown;
 }
 /*
 ================
@@ -54,6 +57,11 @@ export function validateEquipmentBranches( branches: readonly EquipmentBranch[] 
 				[ ...n.scale ].some( ( v: number ) => v !== 1 ) || n.matrix
 			) throw Error( "Invalid private socket node" );
 			names.add( n.name );
+		}
+		for ( const particle of ambientModelParticles( b.particleModifiers ) ) {
+			if ( particle.root || !names.has( particle.bone ) ) {
+				throw Error( "Invalid equipment ambient particle socket" );
+			}
 		}
 	}
 }

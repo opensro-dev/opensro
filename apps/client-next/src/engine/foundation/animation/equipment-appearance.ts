@@ -21,7 +21,7 @@ import type { CharacterAttachment } from "@/engine/contracts/character";
 import type { CharacterItem } from "@/engine/contracts/session";
 import type { EquipmentBranch } from "@/engine/foundation/animation/equipment-sockets";
 import { equipmentSocket } from "@/engine/foundation/animation/equipment-sockets";
-import type { ModelParticle } from "@/engine/foundation/animation/model-particles";
+import { ambientModelParticles, type ModelParticle } from "@/engine/foundation/animation/model-particles";
 import { refreshDefaultWear } from "@/engine/foundation/animation/default-wear-policy";
 import {
 	selectDefaultWear,
@@ -95,7 +95,8 @@ export interface AppearanceInput {
 export interface AppearanceAssembly {
 	readonly parts: CharacterAttachment[];
 	readonly auxiliary: { id: number; entry: AuxiliaryEntry; }[];
-	// Enhancement glows only; the caller adds the model's own ambient particles.
+	// Equipment particles: enhancement glows and the items' own ambient sets.
+	// The caller adds the body model's ambient particles.
 	readonly particles: ModelParticle[];
 	readonly defaultWear: readonly string[];
 	readonly avatarIds: readonly number[];
@@ -261,6 +262,17 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 			...(armament ? { equipment: { refObjId: item.refObjId, plus: item.plus } } : {}),
 			covers: coverIndices( entry, resource )
 		} );
+		// The resource's own ambient set (the shoulder garments' orbs and
+		// crystals) on its private bones: equipmentAmbientParticles.
+		for ( const branch of entry.branches ?? [] ) {
+			for ( const particle of ambientModelParticles( branch.particleModifiers ) ) {
+				particles.push( {
+					...particle,
+					source: "equipment",
+					bone: equipmentSocket( item.slot, branch.part, particle.bone )
+				} );
+			}
+		}
 		if ( !armament ) continue;
 		for ( const effect of dress.specialGlows?.[item.refObjId] ?? [] ) {
 			for ( const part of entry.parts ) {

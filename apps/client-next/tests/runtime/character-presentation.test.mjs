@@ -35,12 +35,18 @@ const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0
 model
 
 A minimal decoded character source; positionFloats sizes its geometry so a
-test can charge the residency byte budget.
+test can charge the residency byte budget. It carries Bip01 Neck and
+Bip01 Neck1, the wearer sockets shoulder garments' private branches link
+under.
 ================
 */
 function model( positionFloats = 9 ) {
 	return {
-		nodes: [ { name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] } ],
+		nodes: [
+			{ name: "root", parent: -1, translation: [ 0, 0, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] },
+			{ name: "Bip01 Neck", parent: 0, translation: [ 0, 140, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] },
+			{ name: "Bip01 Neck1", parent: 1, translation: [ 0, 10, 0 ], rotation: [ 0, 0, 0, 1 ], scale: [ 1, 1, 1 ] }
+		],
 		clips: [ "stand", "walk", "run", "pick", "death" ].map( name => ({ name, duration: 1, channels: [] }) ),
 		images: [],
 		primitives: [ {
