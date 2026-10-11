@@ -61,6 +61,10 @@ const NAVIGATION_REJECT = 0x10000000;
 // one, seen from the predicted start (sameApproachWalk).
 const APPROACH_HEADING_TOLERANCE = Math.PI / 8;
 const MOVEMENT_RECEIPT_TIMEOUT_MS = 10000;
+// What reconcile does when the walk to a server position is blocked
+// (86D9D0's fourth argument): keep the nav cell, or find it at the point.
+const KEEP_CELL = "keep-cell";
+const RESOLVE_CELL = "resolve-cell";
 // A walk kept across a stop at its start (correctsWalkStart) waits this long
 // past one measured round trip for its receipt, then walks back to the stop.
 const KEPT_WALK_GRACE_MS = 250;
@@ -373,10 +377,23 @@ predicted start's region, along the predicted heading from that start.
 	/*
 ================
 reconcile
+
+A server position, taken as native CNavigationController_ReseedSourcePosition
+(86D9D0) takes it: walk from the current nav cell to it (IRegionManager
++0x30), and a walk that reaches it keeps the cell's surface, whatever Y the
+wire carried. When the walk is blocked the two callers part (86D9D0's
+fourth argument): a movement answer (B738, KEEP_CELL) keeps the cell and
+the position it has; a server correction (B2F5, 30E3, RESOLVE_CELL) finds
+the cell at the corrected point (+0x2c, nearest by |deltaY|), which its
+exact float Y makes safe. A movement answer's destination Y is int16, so
+re-guessing the surface from it dropped a walker off a bridge or deck.
+A correction walks only from an owned cell: without one the pose may be
+the entity table's stale terrain (Lord's arena), and the correction's own
+float Y is the better witness.
 ================
 	*/
-	function reconcile( from: Pose ): Pose {
-		if ( pose && owner ) {
+	function reconcile( from: Pose, blocked: "keep-cell" | "resolve-cell" ): Pose {
+		if ( pose && (owner || blocked === KEEP_CELL) ) {
 			const query: { slide: boolean; sourceOwner?: NavOwner; owner?: NavOwner; } = {
 				slide: false,
 				sourceOwner: owner
@@ -386,6 +403,9 @@ reconcile
 				owner = query.owner;
 				return { ...from, y: resolved.y };
 			}
+			// A walk that stopped short is blocked; no answer (navigation not
+			// loaded there) is no evidence, and the server's point stands.
+			if ( resolved && blocked === KEEP_CELL ) return pose;
 		}
 		owner = undefined;
 		return navigation.surface( from );
@@ -1097,7 +1117,7 @@ native
 					sameApproachWalk( predicted, decoded.to ) :
 					samePredictedGoal( predicted.to, decoded.to ));
 			predicted = null;
-			authoritative = reconcile( decoded.from );
+			authoritative = reconcile( decoded.from, KEEP_CELL );
 			if ( adopt ) {
 				// The predicted run-up is the walk the server just started from
 				// the same place: keep the progress made while the request was in
@@ -1227,7 +1247,7 @@ correct
 				// The server stopped (an arrival, a settle) where the walk in
 				// flight left from, before it read that walk. It starts the walk
 				// from this same point, so the progress made since stands.
-				authoritative = reconcile( admitPose( value ) );
+				authoritative = reconcile( admitPose( value ), RESOLVE_CELL );
 				keptWalk = { id: nextId, since: now };
 				return;
 			}
@@ -1242,7 +1262,7 @@ correct
 			// A live source correction ends motion, but is not a new spawn.
 			// Resolve its surface through the existing navigation owner before
 			// retiring the segment; server endpoint Y can be below a hill/deck.
-			pose = authoritative = reconcile( admitPose( value ) );
+			pose = authoritative = reconcile( admitPose( value ), RESOLVE_CELL );
 			if ( before ) {
 				noteReanchor( "server correction", before, pose, {
 					atMs: now ?? poseAtMs,
@@ -1579,7 +1599,7 @@ receive
 					limit: blocked ? poseDistance( start, to ) : Infinity
 				};
 				const walkingOwner = owner;
-				authoritative = reconcile( start );
+				authoritative = reconcile( start, KEEP_CELL );
 				if ( segment?.direction && !blocked ) owner = walkingOwner;
 				else {
 					// Nothing was predicted: follow the server's leg.
@@ -1605,7 +1625,7 @@ receive
 			if ( command.direction !== undefined ) walk = null;
 			beginTransition( "receipt" );
 			const predictedOwner = owner;
-			authoritative = reconcile( replacement?.from ?? to );
+			authoritative = reconcile( replacement?.from ?? to, KEEP_CELL );
 			// A receipt confirms an endpoint, not the client's old frame. The
 			// server's endpoint is the one that counts, and it is accepted from
 			// wherever the prediction has walked to as long as that walk can
@@ -1629,7 +1649,7 @@ receive
 			} else if ( reconciled.kind === "settle" ) {
 				// The prediction already passed the server's stop: settle on the
 				// stop, never back at the server's start.
-				pose = authoritative = reconcile( to );
+				pose = authoritative = reconcile( to, KEEP_CELL );
 				replacement = null;
 			} else pose = authoritative;
 			segment = replacement ? bindOwners( { ...replacement, from: pose } ) : null;
