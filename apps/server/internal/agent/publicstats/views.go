@@ -454,7 +454,7 @@ func (s *Service) profile(req *http.Request) (any, error) {
 			if row.RefObjID != 0 {
 				item := wornItem(row)
 				// An avatar socket has no plus or durability in the tooltip.
-				item.Plus, item.Durability = 0, 0
+				item.Plus, item.Durability = 0, nil
 				p.Look.Avatar = append(p.Look.Avatar, item)
 			}
 		}
@@ -524,7 +524,8 @@ the item tooltip prints from the item itself.
 ================
 */
 func wornItem(row domain.InventoryRow) WornItem {
-	item := WornItem{Slot: row.Slot, RefItemID: row.RefObjID, Plus: row.Plus, Durability: row.Durability}
+	durability := row.Durability
+	item := WornItem{Slot: row.Slot, RefItemID: row.RefObjID, Plus: row.Plus, Durability: &durability}
 	if row.VarianceBits != "" && row.VarianceBits != "0" {
 		item.Variance = row.VarianceBits
 	}
