@@ -96,8 +96,13 @@ export async function buildNpcVatAssets( options = {} ) {
 		settings: NPC_VAT_SETTINGS,
 		logTag: "npc-vat",
 		// One VAT per baked model: the resources keyed by BSR (npcManifest.mjs)
-		// hold each GLB once, and every reference of it joins the VAT.
-		getModels: ( npcManifest ) => Object.values( npcManifest.resources ?? {} ),
+		// hold each GLB once, and every reference of it joins the VAT. Stall
+		// booth monsters (boothModels, #490) animate their stand loop like any
+		// other animated model, so they get theirs too.
+		getModels: ( npcManifest ) => [
+			...Object.values( npcManifest.resources ?? {} ),
+			...Object.values( npcManifest.boothModels ?? {} )
+		],
 		classifyModel: ( model ) => {
 			if ( !model?.glb ) return "ignore";
 			return Array.isArray( model.clips ) &&
