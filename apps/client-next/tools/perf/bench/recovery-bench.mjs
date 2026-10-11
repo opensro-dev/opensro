@@ -418,6 +418,7 @@ run
 */
 async function run( options ) {
 	assert.ok( Number.isInteger( options.peers ) && options.peers >= 0, "peers must be a nonnegative integer" );
+	assert.ok( Number.isInteger( options.delay ) && options.delay >= 0, "delay must be a nonnegative integer" );
 	assert.ok( options.scene === "field" || options.scene === "town", "scene must be field or town" );
 	if ( options.scene === "town" ) {
 		assert.ok(
@@ -490,7 +491,7 @@ async function run( options ) {
 			await worker.evaluate( delay => {
 				globalThis.__recoveryLink.delay = delay;
 				globalThis.__recoveryLink.jitter = 25;
-			}, lane === "transport" ? 100 : 0 );
+			}, lane === "transport" ? options.delay : 0 );
 			const captures = await createCaptures( page, {
 				dir: options.out,
 				cpu: options.cpu,
@@ -705,6 +706,8 @@ await run( parseOptions(
 	process.argv.slice( 2 ),
 	{
 		cpuRate: 1,
+		// The transport lane's one-way delay (ms); 200 replays a 400 ms ping.
+		delay: 100,
 		cpu: false,
 		spans: false,
 		scene: "field",
@@ -716,6 +719,6 @@ await run( parseOptions(
 		provisioningUrl: "",
 		only: [ "main", "worker", "transport", ...STALL_LANES ]
 	},
-	"recovery-bench.mjs [--cpu-rate 4] [--out DIR] [--only main,worker,transport,network-delay,bidirectional-delay] " +
+	"recovery-bench.mjs [--cpu-rate 4] [--delay MS] [--out DIR] [--only main,worker,transport,network-delay,bidirectional-delay] " +
 		"[--cpu] [--spans] [--trace] [--video] [--scene field|town] [--peers N --provisioning-url URL --token-path PATH]"
 ) );

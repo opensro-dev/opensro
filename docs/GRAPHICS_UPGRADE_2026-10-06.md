@@ -1,6 +1,6 @@
 # Optional environment graphics stages
 
-These four stages are **port-only, not native**. Each is off by default in
+These stages are **port-only, not native**. Each is off by default in
 Experimental. Turning them off preserves the existing palette, fixed light,
 terrain shading, distant fog band, and native bloom chain.
 
@@ -16,29 +16,16 @@ lighting use the same `lightDirection()` helper in `pipelines.ts`.
 `world-environment.ts` preserves the original 336-byte prefix and appends
 `sunDirection` at byte 336. The resulting environment block is 352 bytes.
 The device appends `stages` at byte 352, for a 368-byte uniform:
-x height fog, y sun direction, z terrain relief, w textured horizon.
+x height fog, y sun direction; z and w are retired and always 0.
 
-## Terrain relief
+## Terrain relief and textured horizon (retired)
 
-The World tab switch shades terrain slopes using heightfield normals.
-`terrainBlockNormals` computes normals from the 17-by-17 height grid with
-20-unit spacing, using one-sided differences at block edges. Asset loading
-requests these normals when relief is enabled; native decoding retains flat
-normals. Toggling invalidates pending requests, cached terrain parts, and
-frontend preloads; the displayed scene remains until replacement geometry
-is ready.
-
-The shader divides slope lighting by the response on level ground, using
-`TERRAIN_RELIEF` (0.45) as its strength. Channels with effectively zero base
-lighting retain a multiplier of one instead of darkening otherwise flat
-ground. The existing lightmap still multiplies the result.
-
-## Textured horizon
-
-The World tab switch keeps terrain textures and their fog blend beyond the
-native detail band instead of the flat fog return. Texture mip levels remain
-exactly those authored in the source assets. Single-level textures can alias
-at grazing angles; this feature does not generate extra levels.
+Both World tab switches were removed at the owner's request on 2026-10-11:
+the change was too small to see (#764). `terrainBlockNormals` and the
+`TERRAIN_RELIEF` shading are gone, terrain always carries the retail flat
+(0,1,0) normals, and the retail distant-cell rule (8ABFD0: untextured
+linear fog outside the detailed band) always applies. The `stages` z and w
+lanes stay in the uniform layout and are written as 0.
 
 ## Smooth bloom
 
