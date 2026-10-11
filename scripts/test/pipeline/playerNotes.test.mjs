@@ -3,9 +3,10 @@
 
 playerNotes.test.mjs - the "Player-note:" trailers a merge carries
 
-Only "Player-note: Area: sentence" lines in the bug forum's areas count;
-a repeated note counts once, and a line in any other form adds nothing to
-the catalogue's notes.json.
+"Player-note: Area: sentence" lines in the bug forum's areas keep their
+area; a note under any other label, or none, is filed under Other rather
+than dropped. A repeated note counts once, and a line that is not a
+Player-note trailer adds nothing to the catalogue's notes.json.
 
 ===========================================================================
 */
@@ -21,7 +22,6 @@ test("player-note trailers yield one entry per distinct note", () => {
 		"",
 		"Player-note: Party: A suited member shows as their job alias in the party window.",
 		"Party: a bare area line is not a note.",
-		"Player-note: Server: an unknown area is skipped.",
 		"",
 		"* party: review fix",
 		"",
@@ -32,6 +32,22 @@ test("player-note trailers yield one entry per distinct note", () => {
 		{ area: "Party", text: "A suited member shows as their job alias in the party window." },
 		{ area: "UI", text: "Job users' names read *name above them." }
 	] );
+});
+
+test("a note under an area the forum has no tag for is filed under Other", () => {
+	// #751's shape: the storage gold fix named an area outside the tags.
+	assert.deepEqual(
+		parsePlayerNotes( "Player-note: Storage: Gold goes into and out of the warehouse again." ),
+		[ { area: "Other", text: "Gold goes into and out of the warehouse again." } ]
+	);
+});
+
+test("a note that names no area is filed under Other with its whole sentence", () => {
+	// #757's shape: the sentence itself, no label.
+	assert.deepEqual(
+		parsePlayerNotes( 'Player-note: Fixed a disconnect ("Invalid experience update") after a trap kill.' ),
+		[ { area: "Other", text: 'Fixed a disconnect ("Invalid experience update") after a trap kill.' } ]
+	);
 });
 
 test("a message without a trailer yields nothing", () => {
