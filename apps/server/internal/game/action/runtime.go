@@ -84,11 +84,15 @@ type Runtime struct {
 	// guildStorageUsers is each guild warehouse's single user
 	// (npcguildstorage.go): guildStorageKey -> character name.
 	guildStorageUsers sync.Map
-	criticals         criticalHistory
-	deps              Dependencies
-	Ground            *grounditem.Registry
-	Pending           *grounditem.PendingTracker
-	Worlds            *simulation.WorldStore
+	// storageSessions is each character's open warehouse (storage.go):
+	// world key -> the NPC, the character's own gid for a ticket, or the
+	// guild manager. Memory only, as native's pc+0x1D88 record is.
+	storageSessions sync.Map
+	criticals       criticalHistory
+	deps            Dependencies
+	Ground          *grounditem.Registry
+	Pending         *grounditem.PendingTracker
+	Worlds          *simulation.WorldStore
 	// Steps names TickHook's slow sub-steps (wired to the transport metrics).
 	Steps             simulation.StepTimer
 	SkillObjects      skillobject.Registry

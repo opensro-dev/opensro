@@ -106,6 +106,8 @@ func (rt *Runtime) HandleTargetRelease(
 
 	rt.Selected.Clear(divisionID, character.Name)
 	rt.NpcDialogs.Clear(divisionID, character.Name)
+	// The client closes the warehouse window through this release.
+	rt.closeStorageSession(divisionID, character.Name)
 	return TargetReleaseOutcome{
 		Released: gid,
 		Frames: []wire.Frame{{

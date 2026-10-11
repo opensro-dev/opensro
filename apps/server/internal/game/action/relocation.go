@@ -103,6 +103,7 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 	rt.PushCharacterFrames(division, name, frames)
 	rt.Pending.Clear(grounditem.PendingKey(division, name))
 	rt.Selected.Clear(division, name)
+	rt.closeStorageSession(division, name)
 	rt.NpcDialogs.Clear(division, name)
 	rt.ClearCombatIntent(division, name)
 	rt.clearSkillFinalizes(division, name)

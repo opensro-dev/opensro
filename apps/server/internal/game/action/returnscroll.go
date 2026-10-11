@@ -477,6 +477,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	}
 	rt.bindResidentRegion(key, now)
 	rt.Selected.Clear(job.division, job.name)
+	rt.closeStorageSession(job.division, job.name)
 	rt.NpcDialogs.Clear(job.division, job.name)
 	rt.ClearCombatIntent(job.division, job.name)
 	rt.clearSkillFinalizes(job.division, job.name)

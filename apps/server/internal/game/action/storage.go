@@ -112,14 +112,64 @@ func (rt *Runtime) storageNpc(divisionID string, character *enterworld.Character
 ================
 openStorageNpc
 
-The warehouse a move may use: the one whose storage function an in-range
-request opened (npcaction.go). As with trades, moves check that function
-state, not distance.
+The warehouse a move may use: the one the character's warehouse session
+names, while its keeper is still live (a ticket names the character's own
+gid). Native warehouse moves read the player's own warehouse-open record
+(pc+0x1D88: CGObjPC_ItemMove_StorageGold 526CE0, _StorageDeposit 524160),
+never the selection, so selecting the keeper again, or anything else,
+while the window is open leaves the room usable.
 ================
 */
 func (rt *Runtime) openStorageNpc(divisionID string, character *enterworld.Character, gid uint32) bool {
-	_, ok := rt.storageNpc(divisionID, character, gid)
-	return ok && rt.Selected.FunctionOpen(divisionID, character.Name, gid)
+	open, ok := rt.storageSession(divisionID, character.Name)
+	if !ok || open != gid {
+		return false
+	}
+	if gid == enterworld.ObjectIDForCharacter(character) {
+		return true
+	}
+	npc, live := rt.npcForCurrentViewer(divisionID, character, gid)
+	return live && npc.TalkFlags&simulation.NpcTalkFlagStorage != 0
+}
+
+/*
+================
+openStorageSession
+
+Records the warehouse a character just opened: a keeper's storage
+function, a ticket, or a claimed guild warehouse. A later opening replaces
+it.
+================
+*/
+func (rt *Runtime) openStorageSession(divisionID, characterName string, gid uint32) {
+	rt.storageSessions.Store(simulation.WorldKey(divisionID, characterName), gid)
+}
+
+/*
+================
+storageSession
+
+The warehouse a character has open, if any.
+================
+*/
+func (rt *Runtime) storageSession(divisionID, characterName string) (uint32, bool) {
+	value, ok := rt.storageSessions.Load(simulation.WorldKey(divisionID, characterName))
+	if !ok {
+		return 0, false
+	}
+	return value.(uint32), true
+}
+
+/*
+================
+closeStorageSession
+
+Ends a character's warehouse session: the window's close (its target
+release), a relocation, or leaving the world.
+================
+*/
+func (rt *Runtime) closeStorageSession(divisionID, characterName string) {
+	rt.storageSessions.Delete(simulation.WorldKey(divisionID, characterName))
 }
 
 /*
@@ -134,6 +184,7 @@ func (rt *Runtime) openRemoteStorage(divisionID string, character *enterworld.Ch
 	self := enterworld.ObjectIDForCharacter(character)
 	rt.Selected.Set(divisionID, character.Name, self)
 	rt.Selected.OpenFunction(divisionID, character.Name, self)
+	rt.openStorageSession(divisionID, character.Name, self)
 }
 
 /*
@@ -259,10 +310,11 @@ func (rt *Runtime) applyStorageMove(divisionID string, character *enterworld.Cha
 	if rt.storageAuthority == nil {
 		return failureResult(wire.ErrCodeInvalidRequest)
 	}
-	// Item moves name the NPC; gold moves use the selection.
+	// Item moves name the NPC; gold moves name none and use the open
+	// warehouse (526CE0 reads the open record, not the selection).
 	gid := q.NpcGID
 	if q.MovementType != wire.MoveTypeStorage && q.MovementType != wire.MoveTypeStorageDeposit && q.MovementType != wire.MoveTypeStorageWithdraw {
-		gid, _ = rt.Selected.Get(divisionID, character.Name)
+		gid, _ = rt.storageSession(divisionID, character.Name)
 	}
 	if !rt.openStorageNpc(divisionID, character, gid) {
 		return failureResult(wire.ErrCodeInvalidRequest)

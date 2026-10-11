@@ -136,6 +136,7 @@ func (rt *Runtime) HandleGuildStorageOpen(division string, c *enterworld.Charact
 		return OpResult{Frames: []wire.Frame{{Opcode: opGuildStorageOpened, Payload: w.Payload()}}}
 	}
 	rt.guildStorageUsers.Store(key, c.Name)
+	rt.openStorageSession(division, c.Name, gid)
 	return guildNpcAnswer(opGuildStorageOpened, 0)
 }
 
@@ -148,7 +149,13 @@ The caller holds the division lock.
 ================
 */
 func (rt *Runtime) holdsGuildStorage(division string, c *enterworld.Character, gid uint32) bool {
-	if !rt.guildManagerNpc(division, c, gid) {
+	// The manager the warehouse was opened at, not the current selection:
+	// re-selecting it, or anything else, leaves the held room usable.
+	if open, ok := rt.storageSession(division, c.Name); !ok || open != gid {
+		return false
+	}
+	npc, live := rt.npcForCurrentViewer(division, c, gid)
+	if !live || !rt.npcWithinHitRange(division, c, npc) || !npc.Services.Has(simulation.NpcServiceGuild) {
 		return false
 	}
 	guildID, code := rt.guildStorageMember(division, c)
@@ -219,6 +226,7 @@ Every warehouse a character holds in the division.
 ================
 */
 func (rt *Runtime) releaseGuildStorage(division, name string) {
+	rt.closeStorageSession(division, name)
 	rt.guildStorageUsers.Range(func(key, value any) bool {
 		if key.(guildStorageKey).division == division && value.(string) == name {
 			rt.guildStorageUsers.CompareAndDelete(key, value)
@@ -240,7 +248,7 @@ func (rt *Runtime) applyGuildStorageMove(division string, c *enterworld.Characte
 	personal, _ := wire.PersonalStorageMove(q.MovementType)
 	gid := q.NpcGID
 	if personal == wire.MoveTypeStorageGoldDeposit || personal == wire.MoveTypeStorageGoldWithdraw {
-		gid, _ = rt.Selected.Get(division, c.Name)
+		gid, _ = rt.storageSession(division, c.Name)
 	}
 	if store == nil || !rt.holdsGuildStorage(division, c, gid) {
 		return failureResult(wire.ErrCodeInvalidRequest)

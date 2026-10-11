@@ -482,6 +482,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 	}
 	rt.bindResidentRegion(key, rt.Now().UnixMilli())
 	rt.Selected.Clear(division, c.Name)
+	rt.closeStorageSession(division, c.Name)
 	rt.NpcDialogs.Clear(division, c.Name)
 	rt.ClearCombatIntent(division, c.Name)
 	rt.clearSkillFinalizes(division, c.Name)

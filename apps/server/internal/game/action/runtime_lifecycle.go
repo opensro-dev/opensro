@@ -545,6 +545,7 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	rt.groundApproachStops.Delete(simulation.WorldKey(divisionID, characterName))
 	rt.Pending.Clear(grounditem.PendingKey(divisionID, characterName))
 	rt.Selected.Clear(divisionID, characterName)
+	rt.closeStorageSession(divisionID, characterName)
 	rt.NpcDialogs.Clear(divisionID, characterName)
 	rt.ClearCombatIntent(divisionID, characterName)
 	rt.clearSkillFinalizes(divisionID, characterName)

@@ -66,7 +66,8 @@ func potionRow(t *testing.T, c *enterworld.Character) enterworld.InventoryRow {
 ================
 storageFixture
 
-The merchant fixture's NPC turned into a warehouse keeper; the potion is
+The merchant fixture's NPC turned into a warehouse keeper, with the room
+opened through the client's own request (0x7338 storage); the potion is
 storable with a one-gold keeping fee.
 ================
 */
@@ -80,7 +81,25 @@ func storageFixture(t *testing.T) (*Runtime, *enterworld.Character, *memoryStora
 		Codename: "ITEM_ETC_HP_POTION_01", TypeFlags: wire.PackTypeFlags(3, 3, 1, 1), StackCount: 30, VarianceBits: "0"})
 	authority := &memoryStorage{room: domain.NewAccountStorage()}
 	rt.ConfigureStorage(authority)
+	openStorageRoom(t, rt, c, 17)
 	return rt, c, authority
+}
+
+/*
+================
+openStorageRoom
+
+The keeper's storage function, opened as the talk menu's warehouse row
+does.
+================
+*/
+func openStorageRoom(t *testing.T, rt *Runtime, c *enterworld.Character, gid uint32) {
+	t.Helper()
+	rt.Selected.Set(testDivision, c.Name, gid)
+	open, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(gid).U32(wire.StorageFunctionMask).Payload())
+	if refusal != "" || len(open) != 1 || open[0].Opcode != wire.OpNpcInteractionAck {
+		t.Fatalf("storage open = %+v / %q", open, refusal)
+	}
 }
 
 func TestStorageListAndOpenAnswerTheNativeShapes(t *testing.T) {
@@ -152,7 +171,8 @@ the storage function an in-range request opened, as trades do.
 func TestStorageFollowsTheNpcRangeAndFunctionState(t *testing.T) {
 	rt, c, authority := storageFixture(t)
 	slot := uint8(potionRow(t, c).Slot)
-	// A fresh selection has no function open: the deposit is refused.
+	// No warehouse open (the window's close ended it): the deposit is refused.
+	rt.closeStorageSession(testDivision, c.Name)
 	rt.Selected.Set(testDivision, c.Name, 17)
 	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageDeposit, SourceSlot: slot, DestSlot: 0, NpcGID: 17})
 	if r.Frames[0].Payload[0] != 2 || len(authority.room.Rows) != 0 {
@@ -202,10 +222,66 @@ func TestWarehouseTicketOpensTheRoomAnywhere(t *testing.T) {
 	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 1 {
 		t.Fatalf("remote deposit = %+v", r)
 	}
+	// A new selection leaves the ticket's room open (native reads the
+	// warehouse-open record, 524090); the window's close ends it.
 	rt.Selected.Set(testDivision, c.Name, 17)
 	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageWithdraw, SourceSlot: 0, DestSlot: slot, NpcGID: self})
+	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 0 {
+		t.Fatalf("withdraw after a new selection = %+v", r)
+	}
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageDeposit, SourceSlot: slot, DestSlot: 0, NpcGID: self})
+	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 1 {
+		t.Fatalf("deposit back = %+v", r)
+	}
+	if out := rt.HandleTargetRelease(testDivision, c, wire.NewWriter(4).U32(17).Payload()); len(out.Frames) == 0 {
+		t.Fatalf("release = %+v", out)
+	}
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageWithdraw, SourceSlot: 0, DestSlot: slot, NpcGID: self})
 	if r.Frames[0].Payload[0] != 2 || len(authority.room.Rows) != 1 {
-		t.Fatalf("withdraw after the session ended = %+v", r)
+		t.Fatalf("withdraw after the window closed = %+v", r)
+	}
+}
+
+/*
+================
+TestStorageStaysOpenAcrossANewSelection
+
+BR-261011-1342-EE58 ("can not put gold in storage"): the client selects
+the keeper again (0x745A) when it is clicked with the window open, which
+ended the port's selection-held function state, so every gold move was
+refused. Native warehouse moves read the player's own warehouse-open
+record (526CE0 gold, 524160 deposit), never the selection.
+================
+*/
+func TestStorageStaysOpenAcrossANewSelection(t *testing.T) {
+	rt, c, authority := storageFixture(t)
+	gold := goldOf(c)
+	// The keeper is clicked again, then something else is selected.
+	rt.Selected.Set(testDivision, c.Name, 17)
+	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: 250})
+	if r.Frames[0].Payload[0] != 1 || authority.room.Gold != 250 || goldOf(c) != gold-250 {
+		t.Fatalf("gold deposit after the keeper was clicked again = %+v room %d", r, authority.room.Gold)
+	}
+	rt.Selected.Set(testDivision, c.Name, 99)
+	slot := uint8(potionRow(t, c).Slot)
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageDeposit, SourceSlot: slot, DestSlot: 4, NpcGID: 17})
+	if r.Frames[0].Payload[0] != 1 || len(authority.room.Rows) != 1 {
+		t.Fatalf("item deposit with another selection = %+v", r)
+	}
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldWithdraw, GoldAmount: 50})
+	if r.Frames[0].Payload[0] != 1 || authority.room.Gold != 200 {
+		t.Fatalf("gold withdraw with another selection = %+v room %d", r, authority.room.Gold)
+	}
+	// An item move still names its keeper: another NPC's gid is refused.
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageWithdraw, SourceSlot: 4, DestSlot: slot, NpcGID: 99})
+	if r.Frames[0].Payload[0] != 2 || len(authority.room.Rows) != 1 {
+		t.Fatalf("withdraw naming another NPC = %+v", r)
+	}
+	// Leaving the world ends the session.
+	rt.closeStorageSession(testDivision, c.Name)
+	r = trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeStorageGoldDeposit, GoldAmount: 1})
+	if r.Frames[0].Payload[0] != 2 || authority.room.Gold != 200 {
+		t.Fatalf("gold deposit with no warehouse open = %+v", r)
 	}
 }
 

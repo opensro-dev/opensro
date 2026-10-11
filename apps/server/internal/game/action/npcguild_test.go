@@ -234,7 +234,7 @@ func TestMemberCallsAReleaseVoteOnALongGoneMaster(t *testing.T) {
 TestGuildWarehouseOpensAtLevelTwoForOneMember
 
 5C7440: level 1 refuses with 0x4A; at level 2 the master holds the room,
-lists 30 slots and deposits gold into it.
+lists 30 slots and deposits gold into it, whatever is selected meanwhile.
 ================
 */
 func TestGuildWarehouseOpensAtLevelTwoForOneMember(t *testing.T) {
@@ -265,7 +265,9 @@ func TestGuildWarehouseOpensAtLevelTwoForOneMember(t *testing.T) {
 	if !d.authority.UpdateCharacters([]*enterworld.Character{c}, "fixture-gold", func() bool { c.Gold = &gold; return true }) {
 		t.Fatal("fixture gold refused")
 	}
-	d.rt.Selected.Set(testDivision, c.Name, guildManagerGid)
+	// Another selection leaves the held room usable (the session, not the
+	// selection, names the manager; BR-261011-1342-EE58).
+	d.rt.Selected.Set(testDivision, c.Name, guildManagerGid+1)
 	out := d.rt.applyGuildStorageMove(testDivision, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeGuildStorageGoldDeposit, GoldAmount: 1200})
 	if out.Frames[0].Payload[0] != 1 || goldOf(c) != 3800 {
 		t.Fatalf("deposit %+v gold %d", out.Frames, goldOf(c))
