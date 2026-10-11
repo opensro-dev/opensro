@@ -34,7 +34,9 @@ import {
 } from "@/engine/foundation/ui/viewer-request";
 import {
 	refitCamera,
+	touchesEdge,
 	viewerCamera,
+	widenCamera,
 	type ViewerBounds,
 	type ViewerFill
 } from "@/engine/foundation/rendering/viewer-camera";
@@ -50,6 +52,11 @@ const MAX_FRAME_STEP_MS = 100;
 // Frames drawn after the model is resident before the readback: the first
 // frame admits the doll's draws, the next one has them in the target.
 const SETTLE_FRAMES = 2;
+// The refit can only frame what was drawn: a measuring picture whose model
+// reaches the border is drawn again from WIDEN_FACTOR times as far, up to
+// MAX_WIDENS times, before the refit measures it.
+const WIDEN_FACTOR = 2;
+const MAX_WIDENS = 4;
 // The interactive view: radians of turn per dragged pixel, the zoom factor
 // per wheel pixel, and the zoom range around the framed distance.
 const YAW_PER_PIXEL = 0.01;
@@ -291,8 +298,9 @@ export function createViewer( host: ViewerHost ) {
 	// The interactive view: the model's turn and the camera's zoom, whether
 	// they changed since the last picture, and the drag in progress.
 	let yaw = 0, zoom = 1, changed = false, dragX: number | null = null, shown = false;
-	// Whether the camera was refit to the first drawn picture (refitCamera).
-	let refitted = false;
+	// Whether the camera was refit to the measured picture (refitCamera), and
+	// how often that picture was widened first (widenCamera).
+	let refitted = false, widened = 0;
 	/*
 	================
 	fail
@@ -379,6 +387,7 @@ export function createViewer( host: ViewerHost ) {
 		if ( box ) {
 			camera = viewerCamera( box, MODEL_FRONT, viewport.width / viewport.height );
 			refitted = false;
+			widened = 0;
 		}
 	}
 	if ( failure ) fail( failure );
@@ -492,7 +501,16 @@ export function createViewer( host: ViewerHost ) {
 			reading = true;
 			host.renderer.readDoll!().then( still => {
 				// The first picture only measures: frame what was drawn, draw again.
+				// One that ran past the border is drawn wider and measured again.
 				const drawn = refitted ? null : opaqueBox( still.rgba, still.width, still.height );
+				if ( drawn && camera && widened < MAX_WIDENS && touchesEdge( drawn, still.width, still.height ) ) {
+					camera = widenCamera( camera, WIDEN_FACTOR );
+					widened++;
+					reading = false;
+					settled = SETTLE_FRAMES - 1;
+					host.wake();
+					return;
+				}
 				refitted = true;
 				if ( drawn && camera ) {
 					camera = refitCamera(

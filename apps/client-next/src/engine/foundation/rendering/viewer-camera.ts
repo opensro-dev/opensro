@@ -12,6 +12,7 @@ aspect (width / height). Pure.
 ===========================================================================
 */
 import type { WorldCamera } from "@/engine/contracts/scene";
+import { cameraBasis } from "./world-math";
 
 // The camera's turn off the model's front (35 degrees), and its downward
 // look (12 degrees), in radians.
@@ -123,14 +124,10 @@ export function refitCamera(
 	const fov = camera.fov ?? VIEWER_FOV;
 	const back = camera.eye.map( ( v, i ) => v - camera.target[i]! ), distance = Math.hypot( ...back );
 	const unit = back.map( v => v / distance );
-	// The view's right and up axes, as viewerCamera builds them (no roll).
-	const flat = Math.hypot( unit[0]!, unit[2]! );
-	const right = [ unit[2]! / flat, 0, -unit[0]! / flat ];
-	const up = [
-		unit[1]! * right[2]! - unit[2]! * right[1]!,
-		unit[2]! * right[0]! - unit[0]! * right[2]!,
-		unit[0]! * right[1]! - unit[1]! * right[0]!
-	];
+	// The picture's right and up axes, from the basis the projection draws
+	// with (world-math.ts, left-handed): a right-handed cross here mirrored
+	// every horizontal correction, so an off-centre model moved further off.
+	const { right, up } = cameraBasis( camera );
 	// World units per pixel at the target's depth.
 	const perPixel = 2 * distance * Math.tan( fov / 2 ) / height;
 	// The box centre's offset from the picture's centre: x right, y up.
@@ -145,5 +142,35 @@ export function refitCamera(
 		eye: [ target[0]! + unit[0]! * next, target[1]! + unit[1]! * next, target[2]! + unit[2]! * next ],
 		near: Math.max( MIN_NEAR, (camera.near ?? MIN_NEAR) * scale ),
 		far: (camera.far ?? next * 2) * scale
+	};
+}
+
+/*
+================
+touchesEdge
+
+Whether a drawn picture's opaque box reaches the picture's border: the
+model may run past the frame, so the box measures only what fitted.
+================
+*/
+export function touchesEdge( box: readonly [number, number, number, number], width: number, height: number ): boolean {
+	return box[0] <= 0 || box[1] <= 0 || box[2] >= width || box[3] >= height;
+}
+
+/*
+================
+widenCamera
+
+The same view from factor times as far, the near and far planes moved
+with it, so a model the first framing clipped can be measured whole.
+================
+*/
+export function widenCamera( camera: WorldCamera, factor: number ): WorldCamera {
+	const eye = camera.eye.map( ( v, i ) => camera.target[i]! + (v - camera.target[i]!) * factor );
+	return {
+		...camera,
+		eye: [ eye[0]!, eye[1]!, eye[2]! ],
+		near: Math.max( MIN_NEAR, (camera.near ?? MIN_NEAR) * factor ),
+		far: (camera.far ?? Math.hypot( ...camera.eye.map( ( v, i ) => v - camera.target[i]! ) ) * 2) * factor
 	};
 }
