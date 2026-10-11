@@ -109,3 +109,58 @@ test("a single still still disposes its owners when it ends", () =>
 		await assert.rejects( scope.window.__viewerStill, /unknown-monster/ );
 		assert.equal( scope.window.__viewerNext, undefined );
 	} ));
+
+/*
+================
+framingHost
+
+A viewer host whose known monsters load at once and frame, and whose
+character owner reports a glow (8EA960) on the gids in glowing, never yet
+drawn. Counts the still readbacks, which never answer.
+================
+*/
+function framingHost( search, known, glowing ) {
+	let reads = 0;
+	const host = {
+		canvas: { width: 100, height: 100 },
+		picture: { clientWidth: 100, clientHeight: 100, addEventListener() {} },
+		search,
+		wake: () => {},
+		renderer: {
+			setViewerLight() {},
+			phase: () => "ready",
+			setUi() {},
+			frame() {},
+			characterBounds: () => [ -1, 0, -1, 1, 2, 1 ],
+			readDoll: () => {
+				reads++;
+				return new Promise( () => {} );
+			}
+		},
+		characters: {
+			receiveLifecycle() {},
+			step() {},
+			ready: () => true,
+			knows: entity => known.includes( entity.refObjId ),
+			itemType: () => undefined,
+			dressed: () => true,
+			glows: gid => glowing.includes( gid ),
+			glowing: () => false,
+			linkedRide: () => undefined,
+			error: () => null
+		}
+	};
+	return { host: /** @type {any} */ (host), reads: () => reads };
+}
+
+test("a batch page's next monster waits for its own glow", () =>
+	withBrowserGlobals( async () => {
+		// The first monster (gid 1) is unknown; the next (gid 2) glows.
+		const { host, reads } = framingHost( "?monster=99&still=1&batch=1", [ 1933 ], [ 2 ] );
+		const viewer = createViewer( host );
+		assert.equal( viewer.frame( 0 ), "idle" );
+		await assert.rejects( scope.window.__viewerStill, /unknown-monster/ );
+		scope.window.__viewerNext( 1933 ).catch( () => {} );
+		for ( let t = 16; t <= 1000; t += 16 ) assert.equal( viewer.frame( t ), "draw" );
+		assert.equal( reads(), 0, "no still is read before the glow draws" );
+	} ));

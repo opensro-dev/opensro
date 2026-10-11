@@ -395,6 +395,9 @@ export function createViewer( host: ViewerHost ) {
 		last = -1;
 		elapsed = 0;
 		settled = 0;
+		// The glow wait is the new monster's own (8EA960's glows are per doll).
+		glowWaitAt = -1;
+		glowingAt = -1;
 		reading = false;
 		finished = false;
 		camera = null;
@@ -577,9 +580,9 @@ export function createViewer( host: ViewerHost ) {
 			if ( !camera ) return "draw";
 			// A doll with effect particles (a SoX glow, 8EA960) settles once they
 			// draw and have run GLOW_WARMUP_MS, or after GLOW_WAIT_MS without them.
-			if ( host.characters.glows( VIEWER_GID ) ) {
+			if ( host.characters.glows( entity.gid ) ) {
 				if ( glowWaitAt < 0 ) glowWaitAt = elapsed;
-				if ( glowingAt < 0 && host.characters.glowing( VIEWER_GID ) ) glowingAt = elapsed;
+				if ( glowingAt < 0 && host.characters.glowing( entity.gid ) ) glowingAt = elapsed;
 				const warmed = glowingAt >= 0 && elapsed - glowingAt >= GLOW_WARMUP_MS;
 				if ( !warmed && elapsed - glowWaitAt < GLOW_WAIT_MS ) return "draw";
 			}
@@ -619,7 +622,7 @@ export function createViewer( host: ViewerHost ) {
 				}
 				// A change while the readback ran draws again, and a doll with
 				// effect particles keeps animating them.
-				if ( changed || host.characters.glows( VIEWER_GID ) ) host.wake();
+				if ( changed || host.characters.glows( entity.gid ) ) host.wake();
 			} ).catch( () => fail( "render" ) );
 			return request?.still ? "draw" : "idle";
 		}
