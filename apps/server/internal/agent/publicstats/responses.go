@@ -108,10 +108,11 @@ type CharacterSummary struct {
 
 // OwnCharacter is one of an account's characters with its privacy flag.
 type OwnCharacter struct {
-	Name   string `json:"name"`
-	Level  int64  `json:"level"`
-	Race   string `json:"race"`
-	Hidden bool   `json:"hidden"`
+	Name       string `json:"name"`
+	Level      int64  `json:"level"`
+	Race       string `json:"race"`
+	Hidden     bool   `json:"hidden"`
+	GearHidden bool   `json:"gearHidden"`
 }
 
 // OwnCharactersResponse is the website's authenticated
@@ -179,19 +180,23 @@ type Look struct {
 
 // Profile is P6 GET /public/v1/characters/{name}.
 type Profile struct {
-	Name        string    `json:"name"`
-	Race        string    `json:"race"`
-	Gender      string    `json:"gender"`
-	Level       int64     `json:"level"`
-	Guild       *Guild    `json:"guild"`
-	Job         string    `json:"job"`
-	JobLevel    uint8     `json:"jobLevel"`
-	Masteries   []Mastery `json:"masteries"`
-	Stats       Stats     `json:"stats"`
-	Look        Look      `json:"look"`
-	UniqueKills int       `json:"uniqueKills"`
-	LastLogin   *string   `json:"lastLogin"`
-	Online      bool      `json:"online"`
+	Name      string    `json:"name"`
+	Race      string    `json:"race"`
+	Gender    string    `json:"gender"`
+	Level     int64     `json:"level"`
+	Guild     *Guild    `json:"guild"`
+	Job       string    `json:"job"`
+	JobLevel  uint8     `json:"jobLevel"`
+	Masteries []Mastery `json:"masteries"`
+	Stats     Stats     `json:"stats"`
+	Look      Look      `json:"look"`
+	// GearHidden is the player's "hide my gear" choice: look keeps the
+	// items, plus and sockets (the 3D view draws them) but no rolls, blue
+	// stats or durability.
+	GearHidden  bool    `json:"gearHidden,omitempty"`
+	UniqueKills int     `json:"uniqueKills"`
+	LastLogin   *string `json:"lastLogin"`
+	Online      bool    `json:"online"`
 }
 
 // Rule is one port-only switch and its live value.

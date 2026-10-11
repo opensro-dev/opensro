@@ -52,6 +52,10 @@ func TestSetPublicHiddenChecksTheOwnerAndPersists(t *testing.T) {
 		}
 	}
 	authority.MutateCharacter(gone, "test-delete", func() { gone.DeletePending = true })
+	setPublicHidden := func(authority *store.Store, shard, account, name string, hidden bool) error {
+		return setPrivacyFlag(authority, shard, account, name, "public-hidden", hidden,
+			func(c *domain.Character) *bool { return &c.PublicHidden })
+	}
 
 	if err := setPublicHidden(authority, shard, "beta", "Kekw", true); !errors.Is(err, publicstats.ErrNotOwned) {
 		t.Fatalf("another account's write = %v, want ErrNotOwned", err)
@@ -69,6 +73,14 @@ func TestSetPublicHiddenChecksTheOwnerAndPersists(t *testing.T) {
 	if err := setPublicHidden(authority, shard, "alpha", "Kekw", true); err != nil {
 		t.Fatal(err)
 	}
+	// The gear flag is its own field through the same owner-checked write.
+	gear := func(c *domain.Character) *bool { return &c.PublicGearHidden }
+	if err := setPrivacyFlag(authority, shard, "beta", "Kekw", "public-gear-hidden", true, gear); !errors.Is(err, publicstats.ErrNotOwned) {
+		t.Fatalf("another account's gear write = %v, want ErrNotOwned", err)
+	}
+	if err := setPrivacyFlag(authority, shard, "alpha", "Kekw", "public-gear-hidden", true, gear); err != nil {
+		t.Fatal(err)
+	}
 	authority.Close()
 	open = false
 
@@ -77,16 +89,16 @@ func TestSetPublicHiddenChecksTheOwnerAndPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(reopened.Close)
-	hidden := false
+	hidden, gearHidden := false, false
 	reopened.ReadCharacters(shard, func(characters []*domain.Character) {
 		for _, c := range characters {
 			if c.Name == "Kekw" {
-				hidden = c.PublicHidden
+				hidden, gearHidden = c.PublicHidden, c.PublicGearHidden
 			}
 		}
 	})
-	if !hidden {
-		t.Fatal("the privacy flag did not survive a reopen")
+	if !hidden || !gearHidden {
+		t.Fatalf("the privacy flags did not survive a reopen: hidden %v, gear %v", hidden, gearHidden)
 	}
 }
 

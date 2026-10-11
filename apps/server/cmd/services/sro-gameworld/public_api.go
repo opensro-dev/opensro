@@ -135,7 +135,12 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 		Rules: publicRules(),
 		Shard: "beta",
 		SetHidden: func(account, name string, hidden bool) error {
-			return setPublicHidden(authority, shard, account, name, hidden)
+			return setPrivacyFlag(authority, shard, account, name, "public-hidden", hidden,
+				func(c *domain.Character) *bool { return &c.PublicHidden })
+		},
+		SetGearHidden: func(account, name string, hidden bool) error {
+			return setPrivacyFlag(authority, shard, account, name, "public-gear-hidden", hidden,
+				func(c *domain.Character) *bool { return &c.PublicGearHidden })
 		},
 		WriteToken: readPublicWriteToken(),
 		Sample: func() (int, transport.Metrics) {
@@ -203,13 +208,19 @@ func publicSchedule(lane *siege.Lane, now time.Time) []publicstats.ScheduledEven
 
 /*
 ================
-setPublicHidden
+setPrivacyFlag
 
-The privacy write. The owner check and the write share one store door, so
-a character deleted or transferred meanwhile is refused, not written.
+A privacy write (the profile's hidden flag, or its gear's). The owner
+check and the write share one store door, so a character deleted or
+transferred meanwhile is refused, not written.
 ================
 */
-func setPublicHidden(authority *store.Store, shard, account, name string, hidden bool) error {
+func setPrivacyFlag(
+	authority *store.Store,
+	shard, account, name, reason string,
+	hidden bool,
+	flag func(*domain.Character) *bool,
+) error {
 	var target *domain.Character
 	authority.ReadCharacters(shard, func(characters []*domain.Character) {
 		for _, c := range characters {
@@ -223,15 +234,15 @@ func setPublicHidden(authority *store.Store, shard, account, name string, hidden
 		return publicstats.ErrNotOwned
 	}
 	owned := false
-	authority.UpdateCharacter(target, "public-hidden", func() bool {
+	authority.UpdateCharacter(target, reason, func() bool {
 		if target.AccountID != account || target.DeletePending {
 			return false
 		}
 		owned = true
-		if target.PublicHidden == hidden {
+		if *flag(target) == hidden {
 			return false
 		}
-		target.PublicHidden = hidden
+		*flag(target) = hidden
 		return true
 	})
 	if !owned {

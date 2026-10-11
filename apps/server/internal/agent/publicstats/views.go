@@ -459,6 +459,16 @@ func (s *Service) profile(req *http.Request) (any, error) {
 			}
 		}
 	}
+	if c.PublicGearHidden {
+		// The items stay (the 3D view draws them); their own stats do not.
+		p.GearHidden = true
+		for i := range p.Look.Worn {
+			p.Look.Worn[i].Variance, p.Look.Worn[i].Durability, p.Look.Worn[i].MagicOptions = "", nil, nil
+		}
+		for i := range p.Look.Avatar {
+			p.Look.Avatar[i].Variance, p.Look.Avatar[i].MagicOptions = "", nil
+		}
+	}
 	sort.Slice(p.Look.Worn, func(i, j int) bool { return p.Look.Worn[i].Slot < p.Look.Worn[j].Slot })
 	sort.Slice(p.Look.Avatar, func(i, j int) bool { return p.Look.Avatar[i].Slot < p.Look.Avatar[j].Slot })
 	kills, err := s.allKills(0)

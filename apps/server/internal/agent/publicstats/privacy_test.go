@@ -39,6 +39,15 @@ func privacyService(f *fixture, token string) *Service {
 		}
 		return ErrNotOwned
 	}
+	s.src.SetGearHidden = func(account, name string, hidden bool) error {
+		for _, c := range f.chars {
+			if strings.EqualFold(c.Name, name) && c.AccountID == account {
+				c.PublicGearHidden = hidden
+				return nil
+			}
+		}
+		return ErrNotOwned
+	}
 	return s
 }
 
@@ -197,5 +206,49 @@ func TestOwnCharactersListTheAccountWithItsFlags(t *testing.T) {
 	unserved := privacyService(newFixture(), "")
 	if code, _ := authorizedGet(unserved, "/v1/accounts/alpha/characters", ""); code != http.StatusNotFound {
 		t.Fatalf("no token configured = %d, want 404", code)
+	}
+}
+
+/*
+================
+TestGearPrivacyHidesTheRollsAtOnce
+
+"Hide my gear" keeps the profile and its items (the 3D view draws them)
+but drops each item's rolls, blue stats and durability on the next read;
+the owner's list shows the choice; another account cannot set it.
+================
+*/
+func TestGearPrivacyHidesTheRollsAtOnce(t *testing.T) {
+	f := newFixture()
+	s := privacyService(f, testWriteToken)
+	var before Profile
+	get(t, s, "/public/v1/characters/Kekw", &before)
+	if before.GearHidden || before.Look.Worn[0].Variance == "" || len(before.Look.Worn[0].MagicOptions) == 0 {
+		t.Fatalf("profile before hiding gear %+v", before)
+	}
+	if code := put(s, "/v1/accounts/beta/characters/kekw/gear-hidden", testWriteToken, `{"hidden":true}`); code != http.StatusNotFound {
+		t.Fatalf("another account's write = %d, want 404", code)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/kekw/gear-hidden", testWriteToken, `{"hidden":true}`); code != http.StatusNoContent {
+		t.Fatalf("hide gear = %d", code)
+	}
+	var after Profile
+	if code := get(t, s, "/public/v1/characters/Kekw", &after); code != http.StatusOK {
+		t.Fatalf("profile after hiding gear = %d, want it still shown", code)
+	}
+	w := after.Look.Worn[0]
+	if !after.GearHidden || w.RefItemID != 3801 || w.Plus != 7 || w.Variance != "" || w.Durability != nil || w.MagicOptions != nil {
+		t.Fatalf("profile after hiding gear %+v", after)
+	}
+	rec := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/v1/accounts/alpha/characters", nil)
+	request.Header.Set("Authorization", "Bearer "+testWriteToken)
+	s.Handler().ServeHTTP(rec, request)
+	var own OwnCharactersResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &own); err != nil || len(own.Characters) != 1 || !own.Characters[0].GearHidden {
+		t.Fatalf("own characters %s %v", rec.Body.String(), err)
+	}
+	if code := put(s, "/v1/accounts/alpha/characters/Kekw/gear-hidden", "", `{"hidden":false}`); code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated write = %d", code)
 	}
 }

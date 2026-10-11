@@ -71,7 +71,9 @@ func isVersionMismatch(err error) bool {
 // publicHidden, the player's privacy choice, levelReachedAt, the time each
 // milestone level was first reached, and lastLoginAtMs, the latest world entry. Layout 9 adds the unique_kills
 // table. The offline upgrade adds the empty table and rewrites no record.
-const CurrentVersion = 22
+// Version 23 adds publicGearHidden, the player's "hide my gear" choice for
+// the community site (port-only); the upgrade rewrites no record.
+const CurrentVersion = 23
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

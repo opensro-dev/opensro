@@ -295,6 +295,11 @@ type Character struct {
 	// API (port-only, not native: the opensro.online privacy choice). Its
 	// kills read as "a hunter" there and its profile answers 404.
 	PublicHidden bool `json:"publicHidden,omitempty"`
+	// PublicGearHidden keeps the character's worn gear details (white-stat
+	// rolls, blue stats, durability) off its public profile while the
+	// profile itself stays visible (port-only, not native: the
+	// opensro.online "hide my gear" choice, schema 23).
+	PublicGearHidden bool `json:"publicGearHidden,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).

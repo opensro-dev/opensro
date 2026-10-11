@@ -4,7 +4,8 @@
 privacy.go - the website's privacy setting (port-only)
 
 	GET /v1/accounts/{id}/characters                 -> 200 own characters
-	PUT /v1/accounts/{id}/characters/{name}/hidden  {"hidden": bool} -> 204
+	PUT /v1/accounts/{id}/characters/{name}/hidden       {"hidden": bool} -> 204
+	PUT /v1/accounts/{id}/characters/{name}/gear-hidden  {"hidden": bool} -> 204
 
 The /account page lists the signed-in player's own characters with their
 current flag and sets it. Both are served on the same loopback listener as
@@ -68,38 +69,57 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 		s.ownCharacters(w, r.PathValue("id"))
 	})
 	mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/hidden", func(w http.ResponseWriter, r *http.Request) {
-		if !authorized(w, r, digest) {
-			return
-		}
-		var body struct {
-			Hidden *bool `json:"hidden"`
-		}
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPrivacyBody))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&body); err != nil || body.Hidden == nil {
-			writeStatus(w, http.StatusBadRequest, "body must be {\"hidden\": true|false}")
-			return
-		}
-		account, name := r.PathValue("id"), r.PathValue("name")
-		if account == "" || name == "" || len(name) > maxNameLength {
+		s.putFlag(w, r, digest, s.src.SetHidden)
+	})
+	if s.src.SetGearHidden != nil {
+		mux.HandleFunc("PUT /v1/accounts/{id}/characters/{name}/gear-hidden", func(w http.ResponseWriter, r *http.Request) {
+			s.putFlag(w, r, digest, s.src.SetGearHidden)
+		})
+	}
+}
+
+/*
+================
+putFlag
+
+One privacy write, {"hidden": bool}, through set: 204, 404 for a character
+the account does not own (as for an unknown one), 503 when the store did
+not take it. A success drops the cached answers and the roster, so every
+read shows the change at once.
+================
+*/
+func (s *Service) putFlag(w http.ResponseWriter, r *http.Request, digest [sha256.Size]byte, set func(accountID, name string, hidden bool) error) {
+	if !authorized(w, r, digest) {
+		return
+	}
+	var body struct {
+		Hidden *bool `json:"hidden"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPrivacyBody))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil || body.Hidden == nil {
+		writeStatus(w, http.StatusBadRequest, "body must be {\"hidden\": true|false}")
+		return
+	}
+	account, name := r.PathValue("id"), r.PathValue("name")
+	if account == "" || name == "" || len(name) > maxNameLength {
+		writeStatus(w, http.StatusNotFound, "not found")
+		return
+	}
+	if err := set(account, name, *body.Hidden); err != nil {
+		if errors.Is(err, ErrNotOwned) {
 			writeStatus(w, http.StatusNotFound, "not found")
 			return
 		}
-		if err := s.src.SetHidden(account, name, *body.Hidden); err != nil {
-			if errors.Is(err, ErrNotOwned) {
-				writeStatus(w, http.StatusNotFound, "not found")
-				return
-			}
-			writeStatus(w, http.StatusServiceUnavailable, "unavailable")
-			return
-		}
-		s.mu.Lock()
-		s.cache = map[string]cacheEntry{}
-		// The roster holds the flag; the kill list does not and stays.
-		s.snap.roster, s.snap.rosterUntil, s.snap.rankings = roster{}, time.Time{}, nil
-		s.mu.Unlock()
-		w.WriteHeader(http.StatusNoContent)
-	})
+		writeStatus(w, http.StatusServiceUnavailable, "unavailable")
+		return
+	}
+	s.mu.Lock()
+	s.cache = map[string]cacheEntry{}
+	// The roster holds the flags; the kill list does not and stays.
+	s.snap.roster, s.snap.rosterUntil, s.snap.rankings = roster{}, time.Time{}, nil
+	s.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 /*
@@ -141,7 +161,7 @@ func (s *Service) ownCharacters(w http.ResponseWriter, account string) {
 			continue
 		}
 		race, _ := raceGender(c.ModelCodename)
-		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden})
+		out.Characters = append(out.Characters, OwnCharacter{Name: c.Name, Level: level(c), Race: race, Hidden: c.PublicHidden, GearHidden: c.PublicGearHidden})
 	}
 	s.mu.Unlock()
 	sort.Slice(out.Characters, func(i, j int) bool { return out.Characters[i].Name < out.Characters[j].Name })
