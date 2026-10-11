@@ -73,3 +73,24 @@ func TestGMSetSpeedScalesTheGMsOwnSpeedUntilTheyLeave(t *testing.T) {
 		t.Fatal("a non-GM changed their speed")
 	}
 }
+
+/*
+================
+TestGMSetSpeedScalesATransformedGM
+
+A transform replaces walk and run with the monster's speeds; /SETSPEED
+applies after it, so a masked GM moves at the percent of the mask's speed.
+================
+*/
+func TestGMSetSpeedScalesATransformedGM(t *testing.T) {
+	rt, _, c, _ := maskFixture(t, 1, 0)
+	c.GMPrivilege = true
+	c.TransformMode, c.TransformRefObjID = 1, maskMonsterRef
+	rt.GMSetSpeed = true
+	if !rt.SetGMSpeed(testDivision, c.Name, 200) {
+		t.Fatal("/SETSPEED 200 refused")
+	}
+	if walk, run := worldSpeeds(rt, c); walk != 2*maskWalk || run != 2*maskRun {
+		t.Fatalf("masked GM speeds %v/%v, want %v/%v", walk, run, 2*maskWalk, 2*maskRun)
+	}
+}

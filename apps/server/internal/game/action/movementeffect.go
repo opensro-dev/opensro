@@ -65,8 +65,6 @@ func (rt *Runtime) refreshMovementEffects(division string, c *enterworld.Charact
 	if c.NativeBodyStatus == 1 {
 		factor *= 2
 	}
-	// Port-only: a GM's /SETSPEED multiplies the result last (gmspeed.go).
-	factor *= rt.gmSpeedFactor(division, c.Name)
 	walk, run := float32(simulation.WalkSpeed)*factor, float32(simulation.RunSpeed)*factor
 	if tw, tr, ok := rt.transformSpeeds(c); ok {
 		walk, run = tw, tr
@@ -86,6 +84,11 @@ func (rt *Runtime) refreshMovementEffects(division string, c *enterworld.Charact
 			return nil
 		}
 	}
+	// Port-only: a GM's /SETSPEED scales the committed speeds last
+	// (gmspeed.go), after a transform's replacement speeds and the abnormal
+	// projection, so a transformed GM is scaled too and a root stays 0.
+	gm := rt.gmSpeedFactor(division, c.Name)
+	walk, run = walk*gm, run*gm
 	changed := false
 	rt.Worlds.Update(simulation.WorldKey(division, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(world *simulation.WorldState) { changed = world.UpdateMovementSpeeds(walk, run, now) })
 	if !changed {
