@@ -222,10 +222,14 @@ test("failed or timed out transfers cannot consume items or cross the inventory 
 	assert.equal( state.inventoryPending, false );
 	const f = owner.command( { kind: "cos-transfer", gid: 7, toCos: false, source: 0, destination: 13 }, 2, entity );
 	assert.throws( () => owner.step( 10002 ), /reconnect/ );
-	assert.throws(
-		() => owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, ...f.payload ] ) }, 10003 ),
-		/reconnect/
-	);
+	// A late answer after the timeout is set aside until the resynchronizing
+	// bootstrap: it never moves the item out of the pet (inventory.ts
+	// cosTransferred), and the timeout still stands.
+	owner.receive( { opcode: 0xb06d, payload: Uint8Array.from( [ 1, ...f.payload ] ) }, 10003 );
+	state = owner.take();
+	assert.deepEqual( state.inventory, [] );
+	assert.equal( state.cosRecords[0].inventory[0].quantity, 30 );
+	assert.throws( () => owner.step( 10004 ), /reconnect/ );
 });
 
 for (
