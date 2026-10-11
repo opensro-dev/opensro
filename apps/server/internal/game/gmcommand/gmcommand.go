@@ -123,7 +123,7 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 	case SubWorldStatus:
 		return handleWorldStatus(divisionID, request, status)
 	case SubBan:
-		return handleBan(deps, presence, divisionID, request)
+		return handleBan(deps, presence, divisionID, sender, request)
 	case SubRecallGuild:
 		return handleRecallGuild(divisionID, sender, request, status)
 	case SubLieName, SubRealName:

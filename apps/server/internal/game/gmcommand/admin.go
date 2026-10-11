@@ -16,6 +16,8 @@ package gmcommand
 import (
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -85,10 +87,11 @@ handleBan
 (CGObjPC_HandleExitReason, reason 4: the ordinary save-and-leave path)
 and the GM gets [1, sub]. Despite its name /BAN bars nothing; the account
 stays able to log in. The port ends the target's session normally, so the
-departure owner saves and removes them exactly as on a logout.
+departure owner saves and removes them exactly as on a logout, and leaves
+an operator log line naming the GM and the player.
 ================
 */
-func handleBan(deps Dependencies, presence PresenceView, divisionID string, request Request) Outcome {
+func handleBan(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, request Request) Outcome {
 	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: "ban-refused"}
 	if !request.HasName || request.Name == "" {
 		return refusal
@@ -101,6 +104,10 @@ func handleBan(deps Dependencies, presence PresenceView, divisionID string, requ
 	if target == nil || target.DeletePending || !directory.EndSessionByName(divisionID, target.Name) {
 		return refusal
 	}
+	// The operator trail (#681), as a silk grant leaves one: who removed
+	// whom from the world; the log line carries when.
+	log.WithFields(log.Fields{"gm": sender.Name, "division": divisionID, "character": target.Name,
+		"account": target.AccountID}).Info("gmcommand: /BAN logged a player out")
 	return Outcome{Ack: []byte{AckResultOK, SubBan}}
 }
 

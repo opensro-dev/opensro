@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	logtest "github.com/sirupsen/logrus/hooks/test"
 	"opensro.online/server/internal/game/enterworld"
 )
 
@@ -180,5 +181,34 @@ func TestLieNameAndRealNameLookUpPlayersInTheWorld(t *testing.T) {
 	out := HandleGmCommand(deps, presence, testDivision, gm, nameFrame(SubLieName, "remo_account"), &adminOwner{})
 	if !bytes.Equal(out.Ack, EncodeRequestFailure(Request{Subcmd: SubLieName, Name: "remo_account"})) {
 		t.Fatalf("offline lie-name ack % X", out.Ack)
+	}
+}
+
+/*
+================
+TestBanLeavesAnOperatorTrail
+
+#681: a ban names the GM, the player and the account in the operator log;
+a refused one leaves nothing.
+================
+*/
+func TestBanLeavesAnOperatorTrail(t *testing.T) {
+	hook := logtest.NewGlobal()
+	t.Cleanup(hook.Reset)
+	gm, player, _ := adminCharacters()
+	presence := &adminPresence{online: map[string]bool{"gm": true, "remo": true}}
+	HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Ghost"), &adminOwner{})
+	if len(hook.AllEntries()) != 0 {
+		t.Fatalf("a refused ban logged %v", hook.AllEntries())
+	}
+	HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Remo"), &adminOwner{})
+	var trail map[string]any
+	for _, entry := range hook.AllEntries() {
+		if entry.Data["gm"] != nil {
+			trail = entry.Data
+		}
+	}
+	if trail["gm"] != "Gm" || trail["character"] != "Remo" || trail["account"] != "remo_account" || trail["division"] != testDivision {
+		t.Fatalf("ban trail %v", trail)
 	}
 }
