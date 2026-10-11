@@ -271,9 +271,9 @@ func (t *TextdataItems) load() {
 ================
 characterTidWord
 
-The packed type word of a characterdata or itemdata row (columns 8..12).
-scripts/build/data/buildMissionPresentationAsset.mjs itemTypeFlags packs
-items the same way for the browser; change both together.
+The packed type word of a characterdata row: TypeID1..4 (columns 9..12)
+and its char bit (column 8) as 0x2. Items pack without the char bit
+(ItemRef.TypeFlags).
 ================
 */
 func characterTidWord(fields []string) (uint16, bool) {
