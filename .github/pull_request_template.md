@@ -5,11 +5,14 @@
 ## Player note
 
 <!--
-One line per change a player notices, as "Area: one plain sentence".
-Areas: UI, Party, Combat, Items, Animation, Audio, World, Other.
-Write "None" when players see no difference. These lines become the
-release's patch notes (catalogue notes.json) word for word: public,
-plain words, no security details, no reporter names.
+Put each change a player notices in a commit message of this branch as a
+trailer line, "Player-note: Area: one plain sentence" (areas: UI, Party,
+Combat, Items, Animation, Audio, World, Other). The squash merge keeps the
+branch's commit messages, and the release's patch notes (catalogue
+notes.json) are read from there word for word, so the note is reviewed
+with the code and cannot change after the merge. Public, plain words: no
+security details, no reporter names. Repeat the line here for reviewers,
+or write "None".
 -->
 
 ## Native claims

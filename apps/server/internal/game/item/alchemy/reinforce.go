@@ -14,6 +14,7 @@ package alchemy
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 
 	"opensro.online/server/internal/game/item/inventory"
@@ -92,25 +93,42 @@ const equipmentFlagsBase = 0x2c
 
 /*
 ================
+elixirClasses
+
+The item classes (TID3) an elixir admits: the non-zero bytes of its first
+and last parameters. Reinforce refuses any other item (0x09); the
+catalogue names the families from the same list.
+================
+*/
+func elixirClasses(recipe Reference) []uint16 {
+	var classes []uint16
+	for _, p := range []uint32{recipe.Params[0], recipe.Params[4]} {
+		for shift := uint(0); shift < 32; shift += 8 {
+			if class := uint16(p >> shift & 255); class != 0 {
+				classes = append(classes, class)
+			}
+		}
+	}
+	return classes
+}
+
+/*
+================
 elixirKinds
 
-The families an elixir's parameters admit: each non-zero byte of its first
-and last parameters is an item class (TID3), compared in Reinforce.
+The equipment families of an elixir's classes (elixirClasses), sorted.
 ================
 */
 func elixirKinds(recipe Reference) []string {
 	var kinds []string
 	seen := map[string]bool{}
-	for _, p := range []uint32{recipe.Params[0], recipe.Params[4]} {
-		for shift := uint(0); shift < 32; shift += 8 {
-			class := uint16(p >> shift & 255)
-			kind := category(equipmentFlagsBase | class<<7)
-			if class == 0 || kind == "" || seen[kind] {
-				continue
-			}
-			seen[kind] = true
-			kinds = append(kinds, kind)
+	for _, class := range elixirClasses(recipe) {
+		kind := category(equipmentFlagsBase | class<<7)
+		if kind == "" || seen[kind] {
+			continue
 		}
+		seen[kind] = true
+		kinds = append(kinds, kind)
 	}
 	sort.Strings(kinds)
 	return kinds
@@ -371,15 +389,7 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	if item.Plus >= 250 {
 		return zero, Refusal(0x0f)
 	}
-	compatible := false
-	for _, p := range []uint32{recipe.Params[0], recipe.Params[4]} {
-		for shift := uint(0); shift < 32; shift += 8 {
-			if uint16(p>>shift&255) == item.TypeFlags>>7&15 {
-				compatible = true
-			}
-		}
-	}
-	if !compatible {
+	if !slices.Contains(elixirClasses(recipe), item.TypeFlags>>7&15) {
 		return zero, Refusal(9)
 	}
 	chance := probability(recipe, item.Plus)
