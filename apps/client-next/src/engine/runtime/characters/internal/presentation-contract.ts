@@ -382,6 +382,7 @@ export interface ActorOwner {
 	readonly posePresentation: {
 		moving( gid: number ): boolean;
 		pose( gid: number, target: Pose, now: number, settledTranslation?: boolean ): Pose;
+		carry( gid: number, displayed: Pose ): void;
 	};
 	readonly published: {
 		readonly animationStates: ReadonlyMap<string, Record<string, AnimationMetadata>>;

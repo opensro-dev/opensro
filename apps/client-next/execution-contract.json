@@ -3327,6 +3327,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-motion.ts",
+			"expression": "posePresentation.carry",
+			"function": "present",
+			"kind": "callback",
+			"reason": "Characters pose owner takes back the drawn pose a released WAIT hold showed, so its track recovers from it instead of jumping."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-motion.ts",
 			"expression": "footContact",
 			"function": "present",
 			"kind": "callback",

@@ -233,7 +233,25 @@ export function createActorMotion( owner: ActorOwner ) {
 			if (
 				state.navigationHold &&
 				(state.navigationHold.revision !== movementRevision || displaced || dead || entity.mountedOn)
-			) state.navigationHold = undefined;
+			) {
+				// Native stops the walk at WAIT and has one pose; the port's logical
+				// walk may have moved on under the hold. A new walk releases it from
+				// the held pose at walking speed (posePresentation.carry): jumping
+				// there in one frame read as the camera height snapping on a slope.
+				// Skill travel, death and a ride own the position themselves.
+				if ( !displaced && !dead && !entity.mountedOn ) {
+					posePresentation.carry( entity.gid, state.navigationHold.pose );
+					renderPose = posePresentation.pose(
+						entity.gid,
+						state.castFacing ?
+							{ ...nativePose, angle: Math.round( state.castFacing.angle ) % 65536 } :
+							nativePose,
+						seconds,
+						false
+					);
+				}
+				state.navigationHold = undefined;
+			}
 			if ( state.navigationHold ) {
 				renderPose = state.navigationHold.pose;
 				moving = false;

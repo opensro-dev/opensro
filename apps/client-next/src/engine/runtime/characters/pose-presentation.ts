@@ -97,6 +97,9 @@ A character drawn on the frame clock from its timed samples.
 interface SampleTrack {
 	// The local mover's own leg (SampleInput.ownLeg, walksLeg).
 	ownLeg: boolean;
+	// A drawn pose handed back by its owner (carry): recovered toward the
+	// model at walking speed instead of in one frame.
+	carried?: boolean;
 	paths: { from: Pose; to: Pose; }[];
 	walkingPath?: readonly Pose[];
 	previous?: Sample;
@@ -760,6 +763,31 @@ export function createPosePresentation() {
 				row.offset = worldVector( drawn, model )!;
 			}
 		}
+		if ( row.carried ) {
+			// A carried pose (a released WAIT hold, carry) walks to the model at
+			// MAX_WALK_RECOVERY_SPEED_FACTOR times the walk's speed, height
+			// included; a teleport-sized gap is not recovered.
+			const delta = worldVector( model, row.displayed );
+			const distance = delta ? hypot3( ...delta ) : 0;
+			const speed = row.recoverySpeed || (row.pathVelocity ? hypot2( ...row.pathVelocity ) : 0);
+			if ( !delta || distance > MAX_CORRECTION_DISTANCE || !speed ) {
+				row.carried = undefined;
+			} else {
+				const elapsed = previousFrameAt === undefined ? 0 : Math.max( 0, now - previousFrameAt );
+				const fraction = distance ?
+					Math.min( 1, MAX_WALK_RECOVERY_SPEED_FACTOR * speed * elapsed / distance ) :
+					1;
+				drawn = {
+					...displace( row.displayed, [ delta[0] * fraction, delta[1] * fraction, delta[2] * fraction ] ),
+					angle: drawn.angle
+				};
+				row.offset = worldVector( drawn, model ) ?? [ 0, 0, 0 ];
+				if ( fraction >= 1 ) {
+					row.carried = undefined;
+					row.offset = [ 0, 0, 0 ];
+				}
+			}
+		}
 		// Retain the path behind a rebased receipt only while it still carries
 		// visible recovery. This cannot grow with a long session or cut a turn.
 		if ( hypot3( ...row.offset ) === 0 && row.paths.length > 1 ) row.paths.splice( 0, row.paths.length - 1 );
@@ -864,6 +892,21 @@ export function createPosePresentation() {
 			row.displayed = { ...output };
 			if ( now - row.at >= row.duration && row.angle === target.angle ) row.settled = { ...output };
 			return output;
+		},
+		/*
+		================
+		carry
+
+		Hand a drawn pose back to the sampled track: its owner showed this pose
+		instead of the presented one (actor-motion's WAIT hold). The track then
+		recovers from it at walking speed rather than jumping to the model.
+		================
+		*/
+		carry( gid: number, displayed: Pose ) {
+			const track = tracks.get( gid );
+			if ( !track ) return;
+			track.displayed = { ...displayed };
+			track.carried = true;
 		},
 		/*
 		================

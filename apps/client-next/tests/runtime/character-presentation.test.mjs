@@ -1000,6 +1000,95 @@ for ( const local of [ false, true ] ) {
 	}
 }
 
+test("a WAIT hold released by the next walk recovers continuously instead of jumping", () => {
+	// actor-motion holds the drawn pose when a cast's WAIT leaves the walk
+	// state (native stops the walk there); the logical walk can still move
+	// on. The next revision released the hold in one frame, and on a slope
+	// that step read as the camera height snapping (owner, F4).
+	const f = fixture(
+		{ 7: { clips: [ "stand" ], phaseClips: [ [], [ "stand" ], [] ], stages: [] } },
+		2,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		false,
+		undefined,
+		{ states: { stand: { durationMs: 1000, loop: true, trackEvents: [] } }, rules: [] }
+	);
+	f.warm();
+	f.presentation.simulationOrigin( 0 );
+	const from = { regionId: 1, x: 10, y: 20, z: 30, angle: 16384 };
+	const to = { ...from, x: 110 };
+	// The walk after the release: 100 units in 2 s.
+	const NEXT_SPEED = 50;
+	const cast = { token: 1, caster: 1, target: 0, skill: 7, damage: 0, fatal: false };
+	let travelling = true;
+	const frame = ( x, seconds, casting, moving ) => {
+		const path = {
+			from: travelling ? from : { ...to, x },
+			to: travelling ? to : { ...to, x: 210 },
+			durationMs: travelling ? 200 : (210 - x) / NEXT_SPEED * 1000
+		};
+		const player = entity( 1, {
+			kind: "local-player",
+			x,
+			moving,
+			movementMode: 3,
+			movementRevision: travelling ? 1 : 2,
+			movementPath: moving ? path : undefined,
+			poseAtMs: seconds * 1000
+		} );
+		f.step( [ player ], seconds, {
+			localGid: 1,
+			pose: { ...from, x },
+			moving,
+			movementRevision: travelling ? 1 : 2,
+			movementPath: moving ? path : undefined,
+			poseAtMs: seconds * 1000,
+			inventory: [],
+			vitals: [],
+			casts: casting ? [ { ...cast, token: 1 } ] : []
+		} );
+		assert.equal( f.presentation.error(), null );
+		return { ...f.actors.find( actor => actor.gid === 1 ).pose };
+	};
+	frame( 10, 1, false, true );
+	const held = frame( 20, 1.02, true, true );
+	frame( 60, 1.1, true, true );
+	frame( 110, 1.3, false, false );
+	assert.equal( frame( 110, 3, false, false ).x, held.x, "the WAIT hold stands until the next walk" );
+	travelling = false;
+	let previous = held, at = 3, steady = 0;
+	for ( let step = 1; step <= 300; step++ ) {
+		const seconds = 3 + step / 60, x = 110 + (seconds - 3) * NEXT_SPEED;
+		const shown = frame( x, seconds, false, true );
+		const budget = 1.5 * NEXT_SPEED * (seconds - at) + 1e-6;
+		assert.ok(
+			Math.abs( shown.x - previous.x ) <= budget,
+			`release step ${(shown.x - previous.x).toFixed( 2 )} > ${budget.toFixed( 2 )} at ${seconds.toFixed( 3 )} s`
+		);
+		if ( step > 270 ) {
+			steady = Math.max( steady, Math.abs( shown.x - previous.x - NEXT_SPEED * (seconds - at) ) );
+		}
+		previous = shown;
+		at = seconds;
+	}
+	// Recovered: the last half second walks at exactly the walk's speed, at
+	// the fixture's own presentation lag behind the logical walk (3.75 units,
+	// the same without any hold).
+	assert.ok( steady < 1e-6, `walks at the walk's speed after recovery (${steady})` );
+	const logical = 110 + 5 * NEXT_SPEED;
+	assert.ok(
+		logical - previous.x >= 0 && logical - previous.x < 4,
+		`converges to the walk (${previous.x} vs ${logical})`
+	);
+	f.dispose();
+});
+
 test("gecko starts the walk immediately, fades out over 200ms at its end and resets behind the dock gate", () => {
 	const f = fixture();
 	f.warm();
