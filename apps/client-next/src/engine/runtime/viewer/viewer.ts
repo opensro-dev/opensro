@@ -52,6 +52,12 @@ const MAX_FRAME_STEP_MS = 100;
 // Frames drawn after the model is resident before the readback: the first
 // frame admits the doll's draws, the next one has them in the target.
 const SETTLE_FRAMES = 2;
+// Drawing time a doll's effect particles (a SoX glow) run before the picture
+// settles, so a still shows them emitted rather than at their first frame.
+const GLOW_WARMUP_MS = 600;
+// How long a framed doll waits for its effect programs before it settles
+// without them (an effect that cannot load must not fail the picture).
+const GLOW_WAIT_MS = 8000;
 // The interactive view: radians of turn per dragged pixel, the zoom factor
 // per wheel pixel, and the zoom range around the framed distance.
 const YAW_PER_PIXEL = 0.01;
@@ -98,6 +104,8 @@ export interface ViewerCharacters {
 	knows( entity: EntityState ): boolean | undefined;
 	itemType( refObjId: number ): number | undefined;
 	dressed( gid: number ): boolean;
+	glows( gid: number ): boolean;
+	glowing( gid: number ): boolean;
 	linkedRide( entity: EntityState ): number | null | undefined;
 	error(): string | null | undefined;
 }
@@ -300,6 +308,8 @@ export function createViewer( host: ViewerHost ) {
 	// dresses it once the catalogue can type the items.
 	let entity = viewerEntity( request ), entities = [ entity ], dressed = request?.kind !== "look";
 	let last = -1, elapsed = 0, revision = 0, settled = 0, reading = false, finished = false;
+	// When the framed doll began waiting for its glows, and when they all drew.
+	let glowWaitAt = -1, glowingAt = -1;
 	let camera: WorldCamera | null = null;
 	// The interactive view: the model's turn and the camera's zoom, whether
 	// they changed since the last picture, and the drag in progress.
@@ -503,7 +513,16 @@ export function createViewer( host: ViewerHost ) {
 				);
 			}
 			host.renderer.frame( viewport, seconds );
-			if ( !camera || ++settled < SETTLE_FRAMES ) return "draw";
+			if ( !camera ) return "draw";
+			// A doll with effect particles (a SoX glow, 8EA960) settles once they
+			// draw and have run GLOW_WARMUP_MS, or after GLOW_WAIT_MS without them.
+			if ( host.characters.glows( VIEWER_GID ) ) {
+				if ( glowWaitAt < 0 ) glowWaitAt = elapsed;
+				if ( glowingAt < 0 && host.characters.glowing( VIEWER_GID ) ) glowingAt = elapsed;
+				const warmed = glowingAt >= 0 && elapsed - glowingAt >= GLOW_WARMUP_MS;
+				if ( !warmed && elapsed - glowWaitAt < GLOW_WAIT_MS ) return "draw";
+			}
+			if ( ++settled < SETTLE_FRAMES ) return "draw";
 			changed = false;
 			reading = true;
 			host.renderer.readDoll!().then( still => {
@@ -537,8 +556,9 @@ export function createViewer( host: ViewerHost ) {
 					shown = true;
 					void encodePng( still ).then( succeed );
 				}
-				// A change while the readback ran draws again.
-				if ( changed ) host.wake();
+				// A change while the readback ran draws again, and a doll with
+				// effect particles keeps animating them.
+				if ( changed || host.characters.glows( VIEWER_GID ) ) host.wake();
 			} ).catch( () => fail( "render" ) );
 			return request?.still ? "draw" : "idle";
 		}

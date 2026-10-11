@@ -320,3 +320,35 @@ test("the viewer's mounted doll draws a linked ride; portraits never do", () => 
 	assert.deepEqual( beside?.children?.map( child => child.actor.gid ), [ 3 ] );
 	f.preview.dispose( f.geometry, f.images );
 });
+
+test("a doll wears its items' glows, never the world's skill and buff effects", () => {
+	// Native dolls run RebuildCompositeModel (8EADC0) -> RefreshVisualAttachments
+	// (8EAA90) -> ApplyWeaponGlow (8EA960): a rare weapon's itemrare effects
+	// draw on the inventory doll and the viewer. Buff effects stay world-only.
+	const f = fixture();
+	const glowModel = "/assets/effects/programs.json#" + encodeURIComponent( "system/system_raretype_a_step1.efp" );
+	const buffModel = "/assets/effects/programs.json#" + encodeURIComponent( "skill/buff_aura.efp" );
+	for ( const model of [ "body", glowModel, buffModel ] ) {
+		f.characters.borrowModel( model, f.source.model, f.source.images );
+	}
+	const attach = bone => ({ gid: 1, bone, root: false, offset: [ 0, 0, 0 ], basis: "bsr", modelScale: 1 });
+	const glow = {
+		...f.source.actor,
+		gid: 9,
+		model: glowModel,
+		clip: "effect",
+		attachment: attach( "equipment:6:EQ0:ai_end" ),
+		deferredParticle: { offset: 0, lodHidden: false }
+	};
+	const buff = { ...f.source.actor, gid: 10, model: buffModel, clip: "effect", attachment: attach( "Bip01 Spine" ) };
+	f.characters.actors( [ f.source.actor, glow, buff ] );
+	const doll = f.characters.portraitSource( 1, true );
+	assert.deepEqual( doll?.children?.map( child => child.actor.gid ), [ 9 ], "only the item glow follows the doll" );
+	assert.equal(
+		doll?.children?.[0]?.actor.deferredParticle,
+		undefined,
+		"the doll draws it without an occlusion query"
+	);
+	assert.equal( doll?.children?.[0]?.actor.attachment?.bone, "equipment:6:EQ0:ai_end" );
+	f.preview.dispose( f.geometry, f.images );
+});

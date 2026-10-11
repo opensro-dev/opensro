@@ -15,6 +15,9 @@ import type { EntityState } from "@/engine/contracts/world";
 import type { CharacterActor } from "@/engine/contracts/character";
 import type { ItemPresentation, Resource } from "./internal/presentation-contract";
 
+// An effect actor's model names its program in the effect bundle.
+const EFFECT_PROGRAMS = "/effects/programs.json#";
+
 /*
 ================
 ViewerQuerySources
@@ -29,7 +32,10 @@ export interface ViewerQuerySources {
 		readonly items: Readonly<Record<string, ItemPresentation>>;
 		readonly ridesByRider: ReadonlyMap<string, unknown>;
 	};
-	readonly appearances: ReadonlyMap<number, { readonly parts: readonly unknown[]; readonly model: string; }>;
+	readonly appearances: ReadonlyMap<
+		number,
+		{ readonly parts: readonly unknown[]; readonly model: string; readonly particles: readonly unknown[]; }
+	>;
 	// The frame's published results: read live, since a frame replaces its map.
 	readonly output: { readonly displayed: ReadonlyMap<number, CharacterActor>; };
 }
@@ -81,6 +87,36 @@ export function createViewerQueries(
 		dressed( gid: number ): boolean {
 			const appearance = appearances.get( gid );
 			return !appearance?.parts.length || output.displayed.get( gid )?.model === appearance.model;
+		},
+		/*
+		================
+		glows
+
+		Whether the dressed actor carries effect particles: a rare (SoX) weapon
+		or shield's glow (itemrare.txt, native 8EA960) and the model's own
+		ambient set. The viewer keeps animating such a doll.
+		================
+		*/
+		glows( gid: number ): boolean {
+			return (appearances.get( gid )?.particles.length ?? 0) > 0;
+		},
+		/*
+		================
+		glowing
+
+		Every one of the actor's particles is drawn: as many effect actors
+		attached to it as its appearance carries (model-emission.ts emits one
+		for each once its effect program is resident).
+		================
+		*/
+		glowing( gid: number ): boolean {
+			const wanted = appearances.get( gid )?.particles.length ?? 0;
+			if ( !wanted ) return true;
+			let drawn = 0;
+			for ( const actor of output.displayed.values() ) {
+				if ( actor.attachment?.gid === gid && actor.model.includes( EFFECT_PROGRAMS ) ) drawn++;
+			}
+			return drawn >= wanted;
 		},
 		/*
 		================

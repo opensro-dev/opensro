@@ -206,6 +206,10 @@ interface RibbonBuffers {
 	readonly indices: Uint32Array;
 }
 const MAX_ATTACHMENT_DEPTH = 8;
+// An equipment socket's name (equipment-sockets.ts) and an effect actor's
+// model, which names its program in the effect bundle.
+const EQUIPMENT_SOCKET_PREFIX = "equipment:";
+const EFFECT_PROGRAMS = "/effects/programs.json#";
 
 /*
 ================
@@ -2681,10 +2685,14 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 		portraitSource
 
 		Borrow the same retained model and textures used by the world actor.
-		Only the character's own model parts (compound attachments: hair and
-		equipment) follow it. Native portraits and the inventory doll own a
-		separate CCObjCharacter built from the appearance
-		(CIFQuickPartySlot_SetPortraitModel 5B9DF0, +0x3E0); skill and buff
+		The character's own model parts (compound attachments: hair and
+		equipment) follow it, and so do its worn items' glows. Native portraits
+		and the inventory doll own a separate CCObjCharacter built from the
+		appearance (CIFQuickPartySlot_SetPortraitModel 5B9DF0, +0x3E0), and its
+		RebuildCompositeModel (8EADC0, vtable slot 7 of CCObjCharacter,
+		CIFCharacterWnd and CPSCharacterSelect::SCharacterInfo) runs
+		RefreshVisualAttachments 8EAA90, whose ApplyWeaponGlow 8EA960 attaches
+		a rare item's itemrare.txt effects: the doll shows them. Skill and buff
 		effects are decorations of the world entity and never reach it.
 		================
 		*/
@@ -2714,6 +2722,26 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					children.push( { actor: child, model: childResource.model, images: childResource.images } );
 					parents.add( child.gid );
 				}
+			}
+			// The worn items' effect glows (a rare weapon's itemrare rows, a
+			// garment's ambient set): effect actors on an equipment socket of
+			// the character. The doll runs no occlusion query, so they draw
+			// without the world's deferred-particle gate.
+			for ( const child of candidates ) {
+				if (
+					!child.attachment || !parents.has( child.attachment.gid ) ||
+					!child.attachment.bone?.startsWith( EQUIPMENT_SOCKET_PREFIX ) ||
+					!child.model.includes( EFFECT_PROGRAMS )
+				) {
+					continue;
+				}
+				const childResource = models.get( child.model );
+				if ( !childResource ) continue;
+				children.push( {
+					actor: { ...child, deferredParticle: undefined },
+					model: childResource.model,
+					images: childResource.images
+				} );
 			}
 			// Port-only (the viewer's riding uniques): a linked ride is the one
 			// actor that picks as its rider (presentation-auxiliary.ts). Seated

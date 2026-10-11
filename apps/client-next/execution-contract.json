@@ -46,6 +46,8 @@
 				"knows",
 				"itemType",
 				"dressed",
+				"glows",
+				"glowing",
 				"linkedRide"
 			]
 		},
