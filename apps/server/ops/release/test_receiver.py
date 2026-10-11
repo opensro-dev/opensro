@@ -53,6 +53,50 @@ class ReceiverTests(unittest.TestCase):
 				receiver.stage_server(config, archive, root / "corrupt")
 
 	# ================
+	# test_staging_refuses_a_release_that_needs_a_stop_it_will_not_make
+	#
+	# The rehearsal names credential variables that need the fleet stopped.
+	# Only a maintenance pair whose store upgrades stops before it validates
+	# (deploy.py), so any other release with such a change is refused at
+	# staging instead of failing inside its window.
+	# ================
+	def test_staging_refuses_a_release_that_needs_a_stop_it_will_not_make(self):
+		stops = [("sro-gameworld-1", "nomad/jobs/sro-gameworld-1/gameworld/gameworld")]
+		for needed, upgrades, refused in ((False, False, False), (True, False, True), (True, True, False)):
+			with self.subTest(needed=needed, upgrades=upgrades), tempfile.TemporaryDirectory() as directory:
+				root = Path(directory)
+				module = root / "module"
+				for name, source in FILES.items():
+					path = module / source
+					path.parent.mkdir(parents=True, exist_ok=True)
+					path.write_bytes(("fixture: " + name).encode())
+				plan = candidate("server")
+				plan["release"] = plan["commit"]
+				archive = root / "server.tar"
+				bundle(module, archive, plan["commit"], plan)
+				config = {"production_state": str(root / "production.json"), "candidate_records": str(root / "records")}
+				(root / "records").mkdir()
+				write_state(config["production_state"], production())
+				with patch.object(receiver, "rehearse", return_value=stops if needed else []), \
+					patch.object(receiver, "stops_before_validate", return_value=upgrades):
+					if refused:
+						with self.assertRaisesRegex(ValueError, "would fail inside its window"):
+							receiver.stage_server(config, archive, root / "scratch")
+						self.assertEqual(list((root / "records").iterdir()), [])
+					else:
+						self.assertIn("candidate", receiver.stage_server(config, archive, root / "scratch"))
+
+	# ================
+	# test_only_an_upgrading_maintenance_pair_stops_before_validating
+	# ================
+	def test_only_an_upgrading_maintenance_pair_stops_before_validating(self):
+		for maintenance, upgrade, expected in ((False, True, False), (True, False, False), (True, True, True)):
+			with self.subTest(maintenance=maintenance, upgrade=upgrade), \
+				patch.object(receiver, "store_upgrade_required", return_value=upgrade):
+				plan = {"maintenance": True} if maintenance else {}
+				self.assertEqual(receiver.stops_before_validate({}, plan), expected)
+
+	# ================
 	# test_staging_cannot_dispatch_publication
 	# ================
 	def test_staging_cannot_dispatch_publication(self):

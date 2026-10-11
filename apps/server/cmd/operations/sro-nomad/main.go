@@ -107,7 +107,7 @@ func runValidate(ctx context.Context, arguments []string) error {
 	if err := deployment.validateJobs(ctx, client); err != nil {
 		return err
 	}
-	return deployment.validateVariables(ctx, client)
+	return deployment.validateVariables(ctx, client, options.AssumeStopped)
 }
 
 /*
@@ -248,11 +248,14 @@ type commandOptions struct {
 	PrivateNet            bool
 	Build                 bool
 	Pprof                 bool
-	TaskUser              string
-	AgentCPU              int
-	AgentMemoryMB         int
-	GameCPU               int
-	GameMemoryMB          int
+	// AssumeStopped is validate's staging rehearsal (variables.go
+	// variableStops): plan as if the fleet were stopped.
+	AssumeStopped bool
+	TaskUser      string
+	AgentCPU      int
+	AgentMemoryMB int
+	GameCPU       int
+	GameMemoryMB  int
 }
 
 /*
@@ -334,6 +337,12 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 	)
 	flags.BoolVar(&options.Build, "build", false, "build the agent and gameworld binaries before deploy")
 	flags.BoolVar(
+		&options.AssumeStopped,
+		"assume-stopped",
+		false,
+		"validate only: report credential variables that need the fleet stopped instead of refusing",
+	)
+	flags.BoolVar(
 		&options.Pprof,
 		"pprof",
 		false,
@@ -349,6 +358,11 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 	}
 	if flags.NArg() != 0 {
 		return commandOptions{}, fmt.Errorf("positional arguments are not accepted")
+	}
+	// Only a validation may plan past a registered job: a deploy that did
+	// would replace credentials a running job never rereads.
+	if options.AssumeStopped && name != "validate" {
+		return commandOptions{}, fmt.Errorf("-assume-stopped is accepted only by validate")
 	}
 	namespace, err := configuredNomadNamespace(options.Namespace)
 	if err != nil {

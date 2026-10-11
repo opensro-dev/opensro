@@ -463,3 +463,124 @@ class MaintenanceDeployTests(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+# ================
+# RehearsalTests
+#
+# The staging-time rehearsal (2026-10-11: F2's maintenance publish failed
+# inside its window): the staged sro-nomad validates against production as
+# if the fleet were stopped, from a throwaway module copy. Production is
+# never written, the token is always revoked, the copy always removed.
+# ================
+class RehearsalTests(unittest.TestCase):
+	# ================
+	# fixture
+	# ================
+	def fixture(self, root):
+		staging, module = root / "staging", root / "production" / "module"
+		(module / ".state/cluster/releases").mkdir(parents=True)
+		(module / ".state/cluster/accounts.json").write_text("production-accounts")
+		(module / ".state/cluster/releases/binary").write_text("released")
+		(module / "config").mkdir()
+		(module / "config/shards.json").write_text("{}")
+		(module / "sro-nomad").write_text("production sro-nomad")
+		for name in FILES:
+			path = staging / name
+			path.parent.mkdir(parents=True, exist_ok=True)
+			path.write_text("staged " + name)
+		bootstrap = root / "bootstrap.json"
+		bootstrap.write_text(json.dumps({"SecretID": "management-fixture"}))
+		config = {
+			"module": str(module), "game_data": str(root / "server.srogz"),
+			"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
+			"origin": "https://example.test", "agent_memory_mb": 256, "gameworld_memory_mb": 1024,
+		}
+		manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
+		return staging, module, config, manifest
+
+	# ================
+	# test_rehearsal_validates_a_copy_assuming_a_stopped_fleet
+	# ================
+	def test_rehearsal_validates_a_copy_assuming_a_stopped_fleet(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			staging, module, config, manifest = self.fixture(root)
+			before = {path: path.read_bytes() for path in module.rglob("*") if path.is_file()}
+			calls, copies = [], []
+
+			# ================
+			# execute
+			# ================
+			def execute(arguments, **options):
+				calls.append(arguments)
+				if arguments[:2] == ["nomad", "version"]:
+					return SimpleNamespace(stdout="Nomad v2.0.7\n")
+				if arguments[:4] == ["nomad", "acl", "token", "create"]:
+					return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+				if arguments[0].endswith("sro-provision-identity"):
+					copy = Path(options["cwd"])
+					copies.append(copy)
+					# The provisioner writes into the copy, as at a deployment.
+					(copy / ".state/cluster/public-api-token").write_text("new token")
+				if arguments[0].endswith("sro-nomad"):
+					copy = Path(options["cwd"])
+					self.assertEqual(arguments[1:3], ["validate", "-assume-stopped"])
+					self.assertEqual(options["env"]["NOMAD_TOKEN"], "scoped")
+					# The staged binary runs over the production state, without its releases.
+					self.assertEqual((copy / "sro-nomad").read_text(), "staged sro-nomad")
+					self.assertEqual((copy / ".state/cluster/accounts.json").read_text(), "production-accounts")
+					self.assertFalse((copy / ".state/cluster/releases").exists())
+					return SimpleNamespace(stdout="Validated 2 Nomad Variable input(s) without mutation\n"
+						"requires-stop sro-gameworld-1 nomad/jobs/sro-gameworld-1/gameworld/gameworld\n")
+				return SimpleNamespace(stdout="")
+
+			with patch.object(deploy, "run", side_effect=execute):
+				stops = deploy.rehearse(config, staging, manifest)
+			self.assertEqual(stops, [("sro-gameworld-1", "nomad/jobs/sro-gameworld-1/gameworld/gameworld")])
+			self.assertEqual(calls[-1], ["nomad", "acl", "token", "delete", "accessor"])
+			self.assertEqual(len(copies), 1)
+			self.assertFalse(copies[0].exists())
+			after = {path: path.read_bytes() for path in module.rglob("*") if path.is_file()}
+			self.assertEqual(after, before)
+
+	# ================
+	# test_a_refused_rehearsal_fails_staging_masked_and_cleans_up
+	# ================
+	def test_a_refused_rehearsal_fails_staging_masked_and_cleans_up(self):
+		with tempfile.TemporaryDirectory() as directory:
+			root = Path(directory)
+			staging, module, config, manifest = self.fixture(root)
+			calls, copies = [], []
+			secret = "s" * 40
+
+			# ================
+			# execute
+			# ================
+			def execute(arguments, **options):
+				calls.append(arguments)
+				if arguments[:2] == ["nomad", "version"]:
+					return SimpleNamespace(stdout="Nomad v2.0.7\n")
+				if arguments[:4] == ["nomad", "acl", "token", "create"]:
+					return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+				if arguments[0].endswith("sro-provision-identity"):
+					copies.append(Path(options["cwd"]))
+				if arguments[0].endswith("sro-nomad"):
+					raise subprocess.CalledProcessError(1, arguments, stderr="sro-nomad validate: bad origin " + secret)
+				return SimpleNamespace(stdout="")
+
+			with patch.object(deploy, "run", side_effect=execute):
+				with self.assertRaisesRegex(RuntimeError, "staging rehearsal: .*bad origin <masked>") as raised:
+					deploy.rehearse(config, staging, manifest)
+			self.assertNotIn(secret, str(raised.exception))
+			self.assertEqual(calls[-1], ["nomad", "acl", "token", "delete", "accessor"])
+			self.assertFalse(copies[0].exists())
+
+	# ================
+	# test_no_production_module_has_nothing_to_rehearse
+	# ================
+	def test_no_production_module_has_nothing_to_rehearse(self):
+		with patch.object(deploy, "run") as execute:
+			self.assertEqual(deploy.rehearse({}, Path("unused"), {"files": {}}), [])
+			self.assertEqual(deploy.rehearse({"module": "/nonexistent-module"}, Path("unused"), {"files": {}}), [])
+			execute.assert_not_called()

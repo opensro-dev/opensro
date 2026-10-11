@@ -261,6 +261,16 @@ ACL identity: production validation intentionally uses the same short-lived
 `deploy` repeats the complete preflight while holding the fleet lock, then
 relies on modify indexes for the actual writes.
 
+`validate -assume-stopped` plans as if the fleet were already stopped: a
+credential variable that differs while its job is registered is reported as
+one `requires-stop <job> <path>` line instead of refused. The release
+receiver runs it at staging time (`ops/release/deploy.py` `rehearse`), with
+the staged server's own `sro-nomad` over a throwaway copy of production's
+module, so a release that would fail inside its window is refused at
+staging. A release that replaces a credential variable can only deploy as
+a maintenance pair whose store upgrades: only that deployment stops the
+fleet before it validates. Only `validate` accepts the flag.
+
 The job release identity hashes both the executable and the HCL jobspec. A
 binary is atomically staged under its content-addressed identity and the
 absolute immutable path is submitted to `raw_exec`. A binary or policy change

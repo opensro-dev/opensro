@@ -15,6 +15,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -35,6 +36,8 @@ const (
 	publicAPITokenItem      = "public_api_token"
 	nomadVariablePathBytes  = 128
 	nomadVariableItemsBytes = 64 << 10
+	// requiresStopPrefix opens validate -assume-stopped's report line.
+	requiresStopPrefix = "requires-stop"
 )
 
 /*
@@ -57,6 +60,67 @@ type variablePlan struct {
 	desired            []desiredVariable
 	current            map[string]*nomad.Variable
 	staleAccountChunks []*nomad.VariableMetadata
+	// requiresStop lists the credential variables that differ while their
+	// job is registered; only a plan made with assumeStopped holds any.
+	requiresStop []stopRequirement
+}
+
+/*
+================
+stopRequirement
+
+One credential variable a deployment would replace, and the registered job
+that has to stop first.
+================
+*/
+type stopRequirement struct {
+	jobID string
+	path  string
+}
+
+/*
+================
+variableStops
+
+Decides what the changed credential variables need. Nomad renders a job's
+variables only when it starts, so a variable differing while its job is
+registered refuses (the operator stops the fleet first). assumeStopped is
+the staging rehearsal (validate -assume-stopped): it plans as if the fleet
+were already stopped, as a maintenance release's validate after its stop
+will, and returns each such variable instead of refusing.
+================
+*/
+func variableStops(
+	changedJobs map[string]string,
+	registered func(jobID string) (bool, error),
+	assumeStopped bool,
+) ([]stopRequirement, error) {
+	jobIDs := make([]string, 0, len(changedJobs))
+	for jobID := range changedJobs {
+		jobIDs = append(jobIDs, jobID)
+	}
+	sort.Strings(jobIDs)
+	var stops []stopRequirement
+	for _, jobID := range jobIDs {
+		live, err := registered(jobID)
+		if err != nil {
+			return nil, err
+		}
+		if !live {
+			continue
+		}
+		if !assumeStopped {
+			return nil, fmt.Errorf(
+				"nomad variable %s differs while job %s is registered; "+
+					"run `sro-nomad stop`, replace the operator-owned "+
+					"credential input, then run `sro-nomad deploy`",
+				changedJobs[jobID],
+				jobID,
+			)
+		}
+		stops = append(stops, stopRequirement{jobID: jobID, path: changedJobs[jobID]})
+	}
+	return stops, nil
 }
 
 /*
@@ -68,7 +132,7 @@ func (deployment *deployment) putVariables(
 	ctx context.Context,
 	client *nomadClient,
 ) error {
-	plan, err := deployment.planVariables(ctx, client)
+	plan, err := deployment.planVariables(ctx, client, false)
 	if err != nil {
 		return err
 	}
@@ -137,10 +201,16 @@ validateVariables
 func (deployment *deployment) validateVariables(
 	ctx context.Context,
 	client *nomadClient,
+	assumeStopped bool,
 ) error {
-	plan, err := deployment.planVariables(ctx, client)
+	plan, err := deployment.planVariables(ctx, client, assumeStopped)
 	if err != nil {
 		return err
+	}
+	// One parseable line per variable that needs the fleet stopped: the
+	// release receiver's staging rehearsal refuses a plain release with any.
+	for _, stop := range plan.requiresStop {
+		fmt.Printf("%s %s %s\n", requiresStopPrefix, stop.jobID, stop.path)
 	}
 	fmt.Printf(
 		"Validated %d Nomad Variable input(s) without mutation\n",
@@ -157,6 +227,7 @@ planVariables
 func (deployment *deployment) planVariables(
 	ctx context.Context,
 	client *nomadClient,
+	assumeStopped bool,
 ) (variablePlan, error) {
 	desired, err := deployment.desiredVariables()
 	if err != nil {
@@ -203,26 +274,18 @@ func (deployment *deployment) planVariables(
 	if len(staleAccountChunks) != 0 {
 		changedJobs[agentJobName] = staleAccountChunks[0].Path
 	}
-	for jobID, changedPath := range changedJobs {
-		live, err := client.jobExists(ctx, jobID)
-		if err != nil {
-			return variablePlan{}, err
-		}
-		if live {
-			return variablePlan{}, fmt.Errorf(
-				"nomad variable %s differs while job %s is registered; "+
-					"run `sro-nomad stop`, replace the operator-owned "+
-					"credential input, then run `sro-nomad deploy`",
-				changedPath,
-				jobID,
-			)
-		}
+	stops, err := variableStops(changedJobs, func(jobID string) (bool, error) {
+		return client.jobExists(ctx, jobID)
+	}, assumeStopped)
+	if err != nil {
+		return variablePlan{}, err
 	}
 
 	return variablePlan{
 		desired:            desired,
 		current:            current,
 		staleAccountChunks: staleAccountChunks,
+		requiresStop:       stops,
 	}, nil
 }
 

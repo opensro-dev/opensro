@@ -19,10 +19,12 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.parse import urlsplit
 
@@ -32,6 +34,17 @@ from retention import preserve
 import server_data
 
 CONFIG = Path("/etc/opensro-release/config.json")
+# Every deployer command runs with only this environment (plus its own).
+CLEAN_ENV = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
+# validate -assume-stopped opens each line naming a credential variable that
+# needs the fleet stopped with this word (sro-nomad variables.go).
+REQUIRES_STOP = "requires-stop"
+# Cluster state a rehearsal copy leaves out: Nomad's immutable release tree
+# (binaries validate never reads) and the maintenance gate.
+REHEARSAL_SKIPPED_STATE = ("releases", "maintenance-gate.json")
+# How much of a refused rehearsal's output reaches the staging log.
+REHEARSAL_REASON_CHARS = 800
+SECRET_LIKE = re.compile(r"[A-Za-z0-9+/_=-]{32,}")
 CHUNK_BYTES = 1 << 20
 HTTP_TIMEOUT = 20
 NOTICE_SECONDS = 120
@@ -410,6 +423,109 @@ def lift_gate(config):
 
 
 # ================
+# masked
+#
+# Text bound for a log outside the host (the staging log, the journal) with
+# anything that could be a token replaced: any run of 32 or more hex or
+# base64url characters.
+# ================
+def masked(text):
+	return SECRET_LIKE.sub("<masked>", text)
+
+
+# ================
+# check_nomad_version
+#
+# The host's Nomad must be the version the configuration approved.
+# ================
+def check_nomad_version(config):
+	version = run(["nomad", "version"], capture=True).stdout.splitlines()[0]
+	if version != "Nomad v" + config["nomad_version"]:
+		raise RuntimeError("Nomad version does not match the approved host configuration")
+
+
+# ================
+# deployer
+#
+# A one-hour client token under the sro-deployer policy, and the clean
+# environment and arguments sro-nomad runs with. The caller revokes the
+# token (revoke) whatever happens.
+# ================
+def deployer(config, stack_sizes):
+	management = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646",
+		NOMAD_TOKEN=json.loads(Path(config["nomad_bootstrap"]).read_text())["SecretID"])
+	issued = run(["nomad", "acl", "token", "create", "-name", "github-server-release", "-type", "client",
+		"-global=false", "-policy", "sro-deployer", "-ttl", "1h", "-json"], env=management, capture=True)
+	token = json.loads(issued.stdout)
+	environment = dict(CLEAN_ENV, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
+		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
+		SRO_STACK_SIZES=stack_sizes,
+		**bug_report_environment(config))
+	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
+		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"])]
+	return management, token, environment, arguments
+
+
+# ================
+# revoke
+# ================
+def revoke(management, token):
+	run(["nomad", "acl", "token", "delete", token["AccessorID"]], env=management, capture=True)
+
+
+# ================
+# rehearse
+#
+# The staging-time rehearsal (2026-10-11: the F2 maintenance publish failed
+# inside its window). The staged server's own sro-nomad validates against
+# production as if the fleet were stopped (validate -assume-stopped), from
+# a throwaway copy of the module: production's config and cluster state
+# with the staged inputs over them, and the staged identity provisioner run
+# on that copy as a deployment would run it. Any refusal fails the staging,
+# long before a window. Returns the credential variables that need the
+# fleet stopped, as (job, path) pairs; the caller decides whether this
+# release's deployment will stop before it validates. Production is never
+# written: the copy is removed and the scoped token revoked.
+# ================
+def rehearse(config, staging, manifest):
+	# Nothing to rehearse against before the first installation.
+	if not config.get("module") or not (Path(config["module"]) / ".state/cluster").is_dir():
+		return []
+	module = Path(config["module"])
+	stack_sizes = config.get("stack_sizes", "")
+	if not isinstance(stack_sizes, str):
+		raise ValueError("stack_sizes must be a string")
+	names = release_files(manifest["files"])
+	check_nomad_version(config)
+	copy = Path(tempfile.mkdtemp(prefix=".rehearsal-", dir=module.parent))
+	try:
+		copy.chmod(0o700)
+		if (module / "config").is_dir():
+			shutil.copytree(module / "config", copy / "config", symlinks=True)
+		shutil.copytree(module / ".state/cluster", copy / ".state/cluster", symlinks=True,
+			ignore=shutil.ignore_patterns(*REHEARSAL_SKIPPED_STATE))
+		copy_inputs(staging, copy, names)
+		run([str(copy / "sro-provision-identity"), "-state-dir", str(copy / ".state/cluster")], cwd=copy, env=CLEAN_ENV)
+		management, token, environment, arguments = deployer(config, stack_sizes)
+		try:
+			output = run([str(copy / "sro-nomad"), "validate", "-assume-stopped", *arguments],
+				cwd=copy, env=environment, capture=True).stdout
+		except subprocess.CalledProcessError as error:
+			reason = masked((error.stderr or error.stdout or "").strip())[-REHEARSAL_REASON_CHARS:]
+			raise RuntimeError("staging rehearsal: sro-nomad validate refused this release: " + reason) from None
+		finally:
+			revoke(management, token)
+	finally:
+		shutil.rmtree(copy, ignore_errors=True)
+	stops = []
+	for line in output.splitlines():
+		words = line.split()
+		if len(words) == 3 and words[0] == REQUIRES_STOP:
+			stops.append((words[1], words[2]))
+	return stops
+
+
+# ================
 # deploy
 #
 # Back up durable state and validate scoped credentials before the announced
@@ -430,30 +546,17 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 		raise ValueError("a store upgrade release must carry sro-authority-upgrade")
 	if upgrade and restore:
 		raise ValueError("a deployment upgrades or restores, never both")
-	clean_env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root"}
-	version = run(["nomad", "version"], capture=True).stdout.splitlines()[0]
-	if version != "Nomad v" + config["nomad_version"]:
-		raise RuntimeError("Nomad version does not match the approved host configuration")
+	check_nomad_version(config)
 	# The release's own verdict on the game data it will open, before any
 	# backup, notice or stop: a refusal leaves the running server untouched.
 	game_data = server_data.choose(config, staging)
 	# Complete a verified remote backup before touching deployment inputs.
-	run(["/usr/local/sbin/opensro-backup", "run"], env=clean_env)
-	management = dict(clean_env, NOMAD_ADDR="http://127.0.0.1:4646",
-		NOMAD_TOKEN=json.loads(Path(config["nomad_bootstrap"]).read_text())["SecretID"])
-	issued = run(["nomad", "acl", "token", "create", "-name", "github-server-release", "-type", "client",
-		"-global=false", "-policy", "sro-deployer", "-ttl", "1h", "-json"], env=management, capture=True)
-	token = json.loads(issued.stdout)
-	environment = dict(clean_env, NOMAD_ADDR="http://127.0.0.1:4646", NOMAD_NAMESPACE="sro",
-		NOMAD_TOKEN=token["SecretID"], SRO_SERVER_GAME_DATA_ROOT=config["game_data"],
-		SRO_STACK_SIZES=stack_sizes,
-		**bug_report_environment(config))
-	arguments = ["-namespace", "sro", "-task-user", "sro", "-allowed-origins", config["origin"],
-		"-agent-memory-mb", str(config["agent_memory_mb"]), "-gameworld-memory-mb", str(config["gameworld_memory_mb"])]
+	run(["/usr/local/sbin/opensro-backup", "run"], env=CLEAN_ENV)
+	management, token, environment, arguments = deployer(config, stack_sizes)
 	executable = str(module / "sro-nomad")
 	try:
 		copy_inputs(staging, module, names)
-		run([str(module / "sro-provision-identity"), "-state-dir", str(module / ".state/cluster")], cwd=module, env=clean_env)
+		run([str(module / "sro-provision-identity"), "-state-dir", str(module / ".state/cluster")], cwd=module, env=CLEAN_ENV)
 		cluster = module / ".state/cluster"
 		shutil.chown(cluster, user="root", group="sro")
 		cluster.chmod(0o710)
@@ -503,7 +606,7 @@ def deploy(config, staging, manifest, notice=True, upgrade=False, on_upgrade=Non
 		# Discord availability cannot turn a healthy rollout into a failed one.
 		print("Server release " + manifest["commit"] + " passed Nomad deployment health checks.", flush=True)
 	finally:
-		run(["nomad", "acl", "token", "delete", token["AccessorID"]], env=management, capture=True)
+		revoke(management, token)
 
 
 # ================

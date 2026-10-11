@@ -16,7 +16,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import sys
 import tarfile
@@ -28,8 +27,8 @@ from client_deploy import promote, record_smoke, stage
 import client_data
 import server_data
 import coordinated
-from deploy import publish_server, receive
-from release_state import admit, identity, read_state, write_state
+from deploy import masked, publish_server, receive, rehearse
+from release_state import admit, identity, read_state, store_upgrade_required, write_state
 from rollback import prepare as prepare_rollback
 
 try:
@@ -43,7 +42,6 @@ MAX_REQUEST_BYTES = 1 << 20
 # A failure's reason kept in the host journal is bounded and masks anything
 # that could be a token (any run of 32 or more hex or base64url characters).
 MAX_FAILURE_LOG_CHARS = 800
-SECRET_LIKE = re.compile(r"[A-Za-z0-9+/_=-]{32,}")
 
 
 # ================
@@ -110,7 +108,13 @@ def candidate_status(config):
 # ================
 def stage_server(config, archive, scratch):
 	manifest = unpack_server(archive, scratch / "server")
-	admit(read_state(config["production_state"]), manifest["plan"])
+	state = read_state(config["production_state"])
+	admit(state, manifest["plan"])
+	stops = rehearse(config, scratch / "server", manifest)
+	if stops and not stops_before_validate(state, manifest["plan"]):
+		raise ValueError("release replaces credential variable(s) " + ", ".join(path for _, path in stops) +
+			" while their jobs run; only a maintenance release that upgrades the store stops the fleet before it"
+			" validates, so this release would fail inside its window")
 	with archive.open("rb") as stream:
 		candidate_id = hashlib.file_digest(stream, "sha256").hexdigest()
 	record = Path(config["candidate_records"]) / candidate_id
@@ -130,6 +134,19 @@ def stage_server(config, archive, scratch):
 	(record / "server.tar").chmod(0o600)
 	write_state(record / "candidate.json", metadata)
 	return result
+
+
+# ================
+# stops_before_validate
+#
+# Whether this release's deployment stops the fleet before sro-nomad
+# validates (deploy.py deploy): only a maintenance pair whose store needs an
+# upgrade does (coordinated.py publish passes upgrade only then). Any other
+# release validates with the fleet running, so a credential variable it
+# replaces would refuse it.
+# ================
+def stops_before_validate(state, plan):
+	return bool(plan.get("maintenance")) and store_upgrade_required(state, plan)
 
 
 # ================
@@ -213,7 +230,7 @@ def request(config, role, value, scratch):
 def record_failure(role, error):
 	if syslog is None:
 		return
-	reason = SECRET_LIKE.sub("<masked>", type(error).__name__ + ": " + str(error))[:MAX_FAILURE_LOG_CHARS]
+	reason = masked(type(error).__name__ + ": " + str(error))[:MAX_FAILURE_LOG_CHARS]
 	syslog.openlog("opensro-release")
 	syslog.syslog(syslog.LOG_ERR, role + " request failed: " + reason)
 
