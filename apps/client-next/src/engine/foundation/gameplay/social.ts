@@ -15,6 +15,18 @@ import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
 import { NO_JOB_CLASS } from "./job-guild";
 import type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
 export type { SocialState, PartyMember, GuildMember, GuildVote, Guild, GuildWar } from "./social-roster";
+
+/*
+================
+unknownPartyMember
+
+The base a 0x3E58 type-6 row decodes over when the roster does not hold
+its member: the row is consumed and dropped (761870's setters skip it).
+================
+*/
+function unknownPartyMember( id: number ): PartyMember {
+	return { id, name: "", model: 0, level: 0, status: 0, region: 0, x: 0, y: 0, z: 0, war: 0 };
+}
 // The 0x3393 type a resurrection skill proposes to a dead player.
 export const RESURRECTION_PROPOSAL = 4;
 // The 0x3393 type a revival with an rmut skill proposes (7644E0 case 7).
@@ -442,15 +454,19 @@ export function socialPacket(
 		} else if ( type === 9 ) {
 			next = { ...next, leader: u32() };
 		} else if ( type === 6 ) {
+			// 761870 type 6 reads the whole masked row (75DB30), then applies
+			// only its level (2, 821F60), status (4, 821FD0), position (0x20,
+			// 822110), guild (0x40, 822090) and masteries (8, 8221D0) to the
+			// member the header names. Each setter walks the roster and skips
+			// an id it does not hold, so a row for an unknown member changes
+			// nothing; the row's own id, name, model and 0x80 byte are read
+			// and dropped.
 			const id = u32(), old = next.members.find( m => m.id === id );
-			if ( !old ) {
-				throw Error( "Unknown party delta member" );
+			const row = partyMember( old ?? unknownPartyMember( id ) );
+			if ( old ) {
+				const member = { ...row, id: old.id, name: old.name, model: old.model, native41: old.native41 };
+				next = { ...next, members: next.members.map( m => m.id === id ? member : m ) };
 			}
-			const member = partyMember( old );
-			if ( member.id !== id ) {
-				throw Error( "Party delta identity changed" );
-			}
-			next = { ...next, members: next.members.map( m => m.id === id ? member : m ) };
 		} else {
 			throw Error( "Unsupported party update" );
 		}

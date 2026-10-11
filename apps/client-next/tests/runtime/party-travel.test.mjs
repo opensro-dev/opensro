@@ -128,7 +128,10 @@ test("a cleared session or another character starts with no party", () => {
 	cleared.clear();
 	cleared.bootstrap( entry( "Me" ) );
 	assert.deepEqual( social( cleared, presentation ).members, [] );
-	assert.throws( () => cleared.receive( memberUpdate( PEER_ID, 21 ), 1 ), /Unknown party delta member/ );
+	// 761870's setters skip an id the roster does not hold: a stray delta
+	// is read and dropped, never a disconnect.
+	cleared.receive( memberUpdate( PEER_ID, 21 ), 1 );
+	assert.deepEqual( social( cleared, presentation ).members, [] );
 	cleared.dispose();
 
 	const switched = partied(), other = createPresentation();
@@ -174,4 +177,50 @@ test("a resumed transport keeps the party the server kept, after loading complet
 		core.dispose();
 		presentation.dispose();
 	}
+});
+
+test("a member delta for someone the roster does not hold is dropped, and the next one still applies", () => {
+	const core = partied(), presentation = createPresentation();
+	// A member the roster has never seen (joined while this client loaded).
+	core.receive( memberUpdate( 33, 40 ), 1 );
+	core.receive( memberUpdate( PEER_ID, 21 ), 2 );
+	const after = social( core, presentation );
+	assert.deepEqual( after.members.map( m => m.id ), [ SELF_ID, PEER_ID ] );
+	assert.equal( after.members[1].level, 21 );
+	core.dispose();
+	presentation.dispose();
+});
+
+test("a member delta applies only the native fields: the row's own id, name and model are dropped", () => {
+	const core = partied(), presentation = createPresentation();
+	// Mask 0x37: id 99, name "Renamed", model 2000, level 30, status, position.
+	core.receive(
+		frame( 0x3e58, [
+			6,
+			...u32( PEER_ID ),
+			0x37,
+			...u32( 99 ),
+			...str( "Renamed" ),
+			...u32( 2000 ),
+			30,
+			0x9a,
+			1,
+			1,
+			12,
+			0,
+			0,
+			0,
+			20,
+			0,
+			...u32( 0 )
+		] ),
+		1
+	);
+	const peer = social( core, presentation ).members[1];
+	assert.equal( peer.id, PEER_ID );
+	assert.equal( peer.name, "Other" );
+	assert.equal( peer.model, 1907 );
+	assert.equal( peer.level, 30 );
+	core.dispose();
+	presentation.dispose();
 });
