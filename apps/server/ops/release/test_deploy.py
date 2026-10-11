@@ -102,6 +102,66 @@ class DeployTests(unittest.TestCase):
 					self.assertEqual((module / "release.json").exists(), failure is None)
 
 	# ================
+	# test_a_maintenance_release_validates_its_new_credentials_after_the_stop
+	#
+	# sro-nomad refuses to replace a credential variable while its job is
+	# registered (2026-10-11: a release's new public-api-token failed every
+	# maintenance publish). The fake refuses the same way: validate fails
+	# until stop has run. A maintenance deployment must stop first; a plain
+	# release still validates before anything stops and never stops.
+	# ================
+	def test_a_maintenance_release_validates_its_new_credentials_after_the_stop(self):
+		for maintenance in (True, False):
+			with self.subTest(maintenance=maintenance), tempfile.TemporaryDirectory() as directory:
+				root = Path(directory)
+				staging, module = root / "staging", root / "module"
+				(module / ".state/cluster").mkdir(parents=True)
+				for name in FILES:
+					path = staging / name
+					path.parent.mkdir(parents=True, exist_ok=True)
+					path.write_text("fixture")
+				bootstrap = root / "bootstrap.json"
+				bootstrap.write_text(json.dumps({"SecretID": "management-fixture"}))
+				config = {
+					"module": str(module), "game_data": str(root / "server.srogz"),
+					"nomad_version": "2.0.7", "nomad_bootstrap": str(bootstrap),
+					"origin": "https://example.test", "agent_memory_mb": 256,
+					"gameworld_memory_mb": 1024, "public_webhook": "public-fixture",
+				}
+				manifest = {"commit": "a" * 40, "files": {name: "digest" for name in FILES}}
+				calls, registered = [], [True]
+
+				# ================
+				# execute
+				# ================
+				def execute(arguments, **_options):
+					calls.append(arguments)
+					if arguments[:2] == ["nomad", "version"]:
+						return SimpleNamespace(stdout="Nomad v2.0.7\n")
+					if arguments[:4] == ["nomad", "acl", "token", "create"]:
+						return SimpleNamespace(stdout=json.dumps({"SecretID": "scoped", "AccessorID": "accessor"}))
+					if arguments[0].endswith("sro-nomad") and arguments[1] == "stop":
+						registered[0] = False
+					# A maintenance release brings a new credential; a plain one does not.
+					if arguments[0].endswith("sro-nomad") and arguments[1] == "validate" and maintenance and registered[0]:
+						raise subprocess.CalledProcessError(1, arguments)
+					return SimpleNamespace(stdout="")
+
+				with patch.object(deploy, "run", side_effect=execute), patch.object(deploy.shutil, "chown"), \
+					patch.object(deploy.server_data, "choose", return_value=None), \
+					patch.object(deploy, "warning", return_value=False), \
+					patch.object(deploy, "upgrade_authorities") as upgrade:
+					deploy.deploy(config, staging, manifest, notice=False, upgrade=maintenance)
+				verbs = [call[1] for call in calls if call[0].endswith("sro-nomad")]
+				if maintenance:
+					self.assertLess(verbs.index("stop"), verbs.index("validate"))
+					upgrade.assert_called_once()
+				else:
+					self.assertNotIn("stop", verbs)
+					self.assertLess(verbs.index("validate"), verbs.index("deploy"))
+				self.assertEqual(verbs[-2:], ["deploy", "status"])
+
+	# ================
 	# test_invalid_stack_sizes_type_changes_nothing
 	# ================
 	def test_invalid_stack_sizes_type_changes_nothing(self):

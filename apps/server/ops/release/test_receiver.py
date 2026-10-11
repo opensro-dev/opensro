@@ -11,6 +11,7 @@ reach either live component, even when they otherwise have a valid identity.
 
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -81,6 +82,30 @@ class ReceiverTests(unittest.TestCase):
 			result = receiver.request({}, "publish", {"operation": "publish-client", "candidate": "b" * 64}, Path("unused"))
 			self.assertEqual(result, {"published": True})
 			client.assert_called_once_with({}, "b" * 64)
+
+
+	# ================
+	# test_a_failed_request_leaves_its_reason_on_the_host
+	#
+	# The publisher may discard the receiver's stderr (2026-10-11): main()
+	# records the reason in the host journal, masked and bounded, and still
+	# raises so the exit status and the SSH output are unchanged.
+	# ================
+	def test_a_failed_request_leaves_its_reason_on_the_host(self):
+		logged = []
+		token = "f" * 64
+		failure = RuntimeError("sro-nomad validate refused; token " + token + " " + "x" * 2000)
+		with patch.object(receiver, "serve", side_effect=failure), 			patch.object(receiver, "CONFIG", Path(__file__)), 			patch.object(receiver.json, "loads", return_value={}), 			patch.object(receiver.os, "geteuid", return_value=0, create=True), 			patch.object(receiver.sys, "argv", ["receiver.py", "publish"]), 			patch.object(receiver, "syslog", SimpleNamespace(LOG_ERR=3, openlog=lambda name: None,
+				syslog=lambda level, text: logged.append((level, text)))):
+			with self.assertRaises(RuntimeError):
+				receiver.main()
+		self.assertEqual(len(logged), 1)
+		level, text = logged[0]
+		self.assertEqual(level, 3)
+		self.assertTrue(text.startswith("publish request failed: RuntimeError: sro-nomad validate refused"))
+		self.assertNotIn(token, text)
+		self.assertIn("<masked>", text)
+		self.assertLessEqual(len(text), len("publish request failed: ") + receiver.MAX_FAILURE_LOG_CHARS)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 import tarfile
@@ -31,8 +32,18 @@ from deploy import publish_server, receive
 from release_state import admit, identity, read_state, write_state
 from rollback import prepare as prepare_rollback
 
+try:
+	import syslog
+except ImportError:
+	# The receiver runs on Linux; its tests also run on Windows.
+	syslog = None
+
 CONFIG = Path("/etc/opensro-release/config.json")
 MAX_REQUEST_BYTES = 1 << 20
+# A failure's reason kept in the host journal is bounded and masks anything
+# that could be a token (any run of 32 or more hex or base64url characters).
+MAX_FAILURE_LOG_CHARS = 800
+SECRET_LIKE = re.compile(r"[A-Za-z0-9+/_=-]{32,}")
 
 
 # ================
@@ -191,8 +202,23 @@ def request(config, role, value, scratch):
 # One host lock covers both components. No shell command from SSH is executed,
 # and stage uploads have no path to the production publication functions.
 # ================
+# ================
+# record_failure
+#
+# The receiver's own stderr reaches only the operator's SSH session, which a
+# publisher may discard: a failed publication on 2026-10-11 left no reason on
+# the host at all. The reason now also goes to the host journal (identifier
+# opensro-release), bounded and with secret-like runs masked.
+# ================
+def record_failure(role, error):
+	if syslog is None:
+		return
+	reason = SECRET_LIKE.sub("<masked>", type(error).__name__ + ": " + str(error))[:MAX_FAILURE_LOG_CHARS]
+	syslog.openlog("opensro-release")
+	syslog.syslog(syslog.LOG_ERR, role + " request failed: " + reason)
+
+
 def main():
-	import fcntl
 	parser = argparse.ArgumentParser()
 	parser.add_argument("role", choices=("stage", "publish"))
 	arguments = parser.parse_args()
@@ -200,6 +226,20 @@ def main():
 		raise RuntimeError("release receiver requires its root-owned forced command")
 	os.umask(0o077)
 	config = json.loads(CONFIG.read_text())
+	try:
+		serve(config, arguments.role)
+	except Exception as error:
+		record_failure(arguments.role, error)
+		raise
+
+
+# ================
+# serve
+#
+# One request or upload under the release lock.
+# ================
+def serve(config, role):
+	import fcntl
 	with Path("/run/lock/opensro-release.lock").open("w") as lock:
 		# A simultaneous upload is not a deployment failure. The kernel queues
 		# this owner; admission runs after the previous operation releases it.
@@ -213,9 +253,9 @@ def main():
 			if is_request:
 				if archive.stat().st_size > MAX_REQUEST_BYTES:
 					raise ValueError("release request exceeds limit")
-				result = request(config, arguments.role, json.loads(archive.read_bytes()), scratch)
+				result = request(config, role, json.loads(archive.read_bytes()), scratch)
 			else:
-				if arguments.role != "stage":
+				if role != "stage":
 					raise ValueError("production key accepts only an approved candidate identity")
 				result = stage_upload(config, archive, scratch)
 			candidate_status(config)
