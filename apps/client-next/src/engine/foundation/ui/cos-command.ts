@@ -32,6 +32,8 @@ export const COS_COMMAND_STANCE = 6;
 const STATUS_RIGHT_MARGIN = 172;
 const STATUS_STEP = 48;
 const STATUS_TOP = 2;
+// The selected icon's outline image hangs this far above and left of it.
+export const COS_STATUS_OUTLINE_MARGIN = 11;
 // CIFCOSCommand row geometry (CIFCOSCommand_LayoutRows 6A34F0), relative to
 // the under bar's origin.
 const COMMAND_ORIGIN_X = 653;
@@ -284,6 +286,25 @@ its class's frame.
 export function cosStatusRect( screenWidth: number, index: number, cls: number ): UiRect {
 	const [width, height] = cosStatusChrome( cls ).size;
 	return [ screenWidth - STATUS_RIGHT_MARGIN - STATUS_STEP * index, STATUS_TOP, width, height ];
+}
+
+/*
+================
+cosStatusRowBottom
+
+The lowest edge the status row can reach: any class's selection outline,
+which hangs COS_STATUS_OUTLINE_MARGIN above and left of its icon. It does
+not depend on which companions are out, so chrome placed below it (the
+port-only tool row) stays put while pets and mounts come and go.
+================
+*/
+export function cosStatusRowBottom(): number {
+	const tallest = Math.max(
+		...[ COS_CLASS_RIDING, COS_CLASS_TRANSPORT, COS_CLASS_PICKUP, COS_CLASS_ATTACK, COS_CLASS_GUILD ].map( cls =>
+			cosStatusChrome( cls ).outlineSize[1]
+		)
+	);
+	return STATUS_TOP - COS_STATUS_OUTLINE_MARGIN + tallest;
 }
 
 /*

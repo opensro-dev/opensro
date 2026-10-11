@@ -126,6 +126,21 @@ test("status chrome and gauges follow 6AA290 and 6A9C50", () => {
 	assert.deepEqual( cos.cosStatusRatios( HORSE, undefined ), { hp: null, hgp: null } );
 });
 
+test("the status row's reach covers every class's selected outline", () => {
+	// The port-only tool row sits below this edge whether or not companions are
+	// out, so summoning a pet or mounting never moves it.
+	const bottom = cos.cosStatusRowBottom();
+	for ( const cls of [ 0, 1, 2, 3, 4 ] ) {
+		for ( const index of [ 0, 1, 2 ] ) {
+			const [, y] = cos.cosStatusRect( 1920, index, cls );
+			const outlineBottom = y - cos.COS_STATUS_OUTLINE_MARGIN + cos.cosStatusChrome( cls ).outlineSize[1];
+			assert.ok( outlineBottom <= bottom, `class ${cls} slot ${index}: ${outlineBottom} > ${bottom}` );
+		}
+	}
+	// The attack pet's tall outline is the reach: 2 - 11 + 86.
+	assert.equal( bottom, 77 );
+});
+
 test("the command row lays out leftward from the under bar", () => {
 	const layout = cos.cosCommandLayout( 100, 700, 3 );
 	assert.deepEqual( layout.rows.map( r => r.at ), [ [ 660, 666 ], [ 691, 666 ], [ 722, 666 ] ] );

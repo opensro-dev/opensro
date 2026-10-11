@@ -308,7 +308,9 @@ import {
 	cosStanceToggle,
 	cosStatusChrome,
 	cosStatusRatios,
-	cosStatusRect
+	cosStatusRect,
+	cosStatusRowBottom,
+	COS_STATUS_OUTLINE_MARGIN
 } from "@/engine/foundation/ui/cos-command";
 import { questObjectivePresentation } from "@/engine/foundation/ui/quest-presentation";
 import { uniqueBannerQuads } from "@/engine/foundation/ui/unique-banner";
@@ -595,7 +597,6 @@ const BUG_REPORTS_UNAVAILABLE = "Connecting to the bug reporter; the report wind
 // Port-only report/diagnostic tools: paired with --hud-tools-height in loading.css.
 const HUD_TOOLS_HEIGHT = 18;
 const HUD_TOOLS_GAP = 8;
-const COS_STATUS_OUTLINE_MARGIN = 11;
 // The skin change scroll's window (CIFChangePlayerModel).
 const SKIN_PANEL = "Skin change";
 // CIFWholeChat, the Global Chatting item's window, and its line's edit box.
@@ -7502,7 +7503,7 @@ export function createUi(
 			if ( fontPath ) paths.push( fontPath );
 			const w = next.width, h = next.height, full: UiRect = [ 0, 0, w, h ];
 			const compact = compactHud.layout( w, h );
-			let targetBottom = 0, compactTelemetryTop = 4, companionToolsTop = 0;
+			let targetBottom = 0, compactTelemetryTop = 4;
 			if ( berserkActor ) {
 				const alpha = berserkEntryFlash( now - berserkStarted );
 				if ( alpha > 0 ) {
@@ -7784,13 +7785,6 @@ export function createUi(
 						nativeRect;
 					const [x, y] = r;
 					statusBottom = Math.max( statusBottom, y + r[3] );
-					if ( !compact ) {
-						// Reserve the selected outline too, without moving native companion controls.
-						companionToolsTop = Math.max(
-							companionToolsTop,
-							y - COS_STATUS_OUTLINE_MARGIN + chrome.outlineSize[1] + HUD_TOOLS_GAP
-						);
-					}
 					if ( record.gid === cosHud.selected() ) {
 						image(
 							[
@@ -21549,7 +21543,9 @@ export function createUi(
 				hudCorner: compact ?
 					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
 					hudCorner,
-				hudToolsTop: compact ? undefined : Math.max( companionToolsTop, targetBottom ),
+				// A fixed row below the companion icons' reach: following the icons
+				// moved the tools whenever a pet or mount came or went.
+				hudToolsTop: compact ? undefined : Math.max( cosStatusRowBottom() + HUD_TOOLS_GAP, targetBottom ),
 				focusRequest: worldVisible && phase === "world" ? focusRequest : undefined,
 				loadingProgress: loading?.progress,
 				loadingStatus: loading?.status,
