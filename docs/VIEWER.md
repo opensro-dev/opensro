@@ -6,8 +6,8 @@ with no game session and no login. It serves the community website
 (opensro-web `docs/COMMUNITY.md`, V1): profile pages, unique cards and the
 catalogue's monster portraits.
 
-Status: on `feat/viewer-v1`. Monster stills, `look` characters, and the interactive view
-(drag to turn, wheel to zoom) work. Still to do: a static-build check.
+Status: monster stills, `look` characters and the interactive view (drag to turn, wheel to
+zoom) work in the dev server and in a production build.
 
 ## Contract
 
@@ -112,9 +112,11 @@ so the viewer is a second start-up path inside the same tree:
 
 ## Serving
 
-The vite dev server already serves the generated asset tree, so the viewer
-works there first. A static build (`vite preview` of `dist`) is confirmed
-before the PR merges and written here.
+`viewer.html` is a build input beside `index.html`. Both load the one `bootstrap`
+bundle, which branches on `data-page`. Checked 2026-10-11: `vite build` emits
+`dist/viewer.html`, and `vite preview` of that build draws the same look still as
+the dev server. The beta package builder (`pnpm build:beta`) does not list the page
+yet. Adding it there is the step that puts the viewer on the live site.
 
 ## Tests
 
