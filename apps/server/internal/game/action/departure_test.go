@@ -8,6 +8,8 @@ departure_test.go - the logout/restart countdown on the production transport
 package action
 
 import (
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/testsupport/wait"
 	"opensro.online/server/internal/transport"
 	"testing"
@@ -186,5 +188,59 @@ func TestDepartureCancelEndsTheCountdown(t *testing.T) {
 	defer rt.departureMu.Unlock()
 	if len(rt.departures) != 0 {
 		t.Fatal("cancelled countdown retained")
+	}
+}
+
+/*
+================
+TestDepartureFollowsTheNativeBattleRules
+
+CGObjPC_OnLogoutRequest (50EFF0): ordinary battle still logs out; in battle
+a PvP state or a ride refuses with code 1, and a teleport in progress
+refuses with code 2. A PvP state outside battle does not refuse.
+================
+*/
+func TestDepartureFollowsTheNativeBattleRules(t *testing.T) {
+	const now = 1000
+	cases := []struct {
+		name  string
+		setup func(c *enterworld.Character)
+		want  []byte
+	}{
+		{"battle only", func(c *enterworld.Character) { c.BattleUntilMs = now + 5000 }, []byte{1, 5, 1}},
+		{"battle and aggression", func(c *enterworld.Character) {
+			c.BattleUntilMs = now + 5000
+			c.Aggressions = map[uint32]uint32{100: 5}
+		}, []byte{2, departureRefusedInBattle}},
+		{"battle and murderer", func(c *enterworld.Character) {
+			c.BattleUntilMs = now + 5000
+			c.PK = &domain.PKRecord{Penalty: 10}
+		}, []byte{2, departureRefusedInBattle}},
+		{"battle and riding", func(c *enterworld.Character) {
+			c.BattleUntilMs = now + 5000
+			c.ActiveCOS = &enterworld.CharacterCOS{GID: 77, Summoned: true, Mounted: true}
+		}, []byte{2, departureRefusedInBattle}},
+		{"aggression out of battle", func(c *enterworld.Character) { c.Aggressions = map[uint32]uint32{100: 5} }, []byte{1, 5, 1}},
+		{"teleporting", func(c *enterworld.Character) { c.NativeTeleportMode = 1 }, []byte{2, departureRefusedTeleporting}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := testCharacter()
+			tc.setup(c)
+			rt, _ := newTestRuntime(c, testItems())
+			rt.Now = func() time.Time { return time.UnixMilli(now) }
+			srv := wireStartServer(t, rt)
+			client := wireConnect(t, srv, testDivision, c.Name)
+			session, _ := srv.Hub.Session(client.sessionID)
+			session.TryMarkWorldReady()
+			client.send(t, 0x70b7, []byte{1})
+			client.expectFrame(t, 0xb0b7, tc.want)
+			rt.departureMu.Lock()
+			pending := len(rt.departures)
+			rt.departureMu.Unlock()
+			if (pending == 1) != (tc.want[0] == 1) {
+				t.Fatalf("countdown scheduled = %v for answer %v", pending == 1, tc.want)
+			}
+		})
 	}
 }

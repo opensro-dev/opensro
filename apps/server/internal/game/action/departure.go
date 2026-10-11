@@ -34,6 +34,11 @@ const (
 	opDepartureCancelResponse uint16 = 0xB31F
 	departureResultOK         uint8  = 1
 	departureResultError      uint8  = 2
+	// departureRefusedInBattle and departureRefusedTeleporting are the low
+	// bytes of 50EFF0's 0x801 / 0x802 (UIIT_MSG_LOGOUT_ERR_CANT_LOGOUT_IN_
+	// BATTLE_STATE / _WHILE_TELEPORT_WORKING, client category 0xF 1 / 2).
+	departureRefusedInBattle    uint8 = 1
+	departureRefusedTeleporting uint8 = 2
 	// departureCancelNotPending is v1.188 CGObjPC_OnLogoutCancelRequest's
 	// error code (0x50F13D push 0) when no countdown runs.
 	departureCancelNotPending uint8 = 0
@@ -76,6 +81,11 @@ func (rt *Runtime) registerDeparture(hub *transport.Hub) {
 			_ = s.Send(opDepartureResponse, []byte{departureResultError, 2})
 			return
 		}
+		if code := rt.departureRefusal(division, c); code != 0 {
+			unlock()
+			_ = s.Send(opDepartureResponse, []byte{departureResultError, code})
+			return
+		}
 		// 50EF70 first cancels the actor's current action through vtable +6A8.
 		rt.ClearCombatIntent(division, c.Name)
 		rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
@@ -95,6 +105,40 @@ func (rt *Runtime) registerDeparture(hub *transport.Hub) {
 		delete(rt.departures, s.ID)
 		rt.departureMu.Unlock()
 	})
+}
+
+/*
+================
+departureRefusal
+
+CGObjPC_OnLogoutRequest (v1.188 50EFF0). Ordinary battle does not stop a
+logout: in battle (state+0xD) it is refused only for a PvP state of 1 or
+2 (state+0xC), job mode (job class, vtable +0x11C, not 4), a siege world
+while its war runs, or a ride. Out of battle, or in battle with none of
+those, a teleport in progress (vtable +0x120) refuses. 0 admits.
+
+INFERENCE: 50EFF0 also refuses in battle while the actor's byte at +0x21EC
+(arg1[0x87B]) is set; no port state carries it, so that arm never refuses.
+================
+*/
+func (rt *Runtime) departureRefusal(division string, c *enterworld.Character) uint8 {
+	code := uint8(0)
+	now := rt.Now().UnixMilli()
+	rt.deps.Read(division, func() {
+		if inBattleState(c, now) {
+			_, siegeWorld := rt.activeBattleFortress(division, c)
+			ride := c.ActiveCOS
+			riding := ride != nil && ride.Summoned && ride.Mounted
+			if pvp := c.PVPState(); pvp == 1 || pvp == 2 || enterworld.PartyJobClass(c) != enterworld.NoJobClass || siegeWorld || riding {
+				code = departureRefusedInBattle
+				return
+			}
+		}
+		if c.NativeTeleportMode != 0 {
+			code = departureRefusedTeleporting
+		}
+	})
+	return code
 }
 
 /*

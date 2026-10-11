@@ -51,6 +51,10 @@ func DressedJob(c *Character) uint8 {
 	return 0
 }
 
+// NoJobClass is the job class of a character outside job mode (856920;
+// v1.188 GetJobState, vtable +0x11C).
+const NoJobClass uint8 = 4
+
 /*
 ================
 PartyJobClass
@@ -63,7 +67,7 @@ func PartyJobClass(c *Character) uint8 {
 	if job := DressedJob(c); job != 0 {
 		return job
 	}
-	return 4
+	return NoJobClass
 }
 
 /*
