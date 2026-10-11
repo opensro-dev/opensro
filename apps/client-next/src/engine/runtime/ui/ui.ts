@@ -2309,6 +2309,10 @@ export function createUi(
 	================
 	*/
 	function activate( id: string ) {
+		// A party chat command (6AD990), parsed once from the line being sent.
+		const partyLine = id === "chat-send" ?
+			partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
+			null;
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
 			const row = EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
 			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
@@ -3581,12 +3585,9 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 			dirty = true;
 			return;
-		} else if (
-			id === "chat-send" && partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )
-		) {
+		} else if ( partyLine ) {
 			// 6AD990: the party commands act on the party; they are never sent as chat.
-			const command = partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy )!;
-			const order = partyChatOrder( command, view.gameplay?.social, partyOptions );
+			const order = partyChatOrder( partyLine, view.gameplay?.social, partyOptions );
 			if ( order ) sendGameplay( order );
 			chatText = chatTabPrefix( chatTab );
 			selection = [ chatText.length, chatText.length ];
