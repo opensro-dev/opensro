@@ -12,6 +12,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/calendar"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -83,4 +84,32 @@ func TestRecallGuildBringsItsMembersToTheGM(t *testing.T) {
 		t.Fatal("recall refused")
 	}
 	f.movedOnly(t, f.target, f.gm, gmAt, standing)
+}
+
+/*
+================
+TestSetGameTimeTellsEveryPlayerInTheWorld
+
+The clock moves once and every admitted player gets the 0x31AD push with
+the new time.
+================
+*/
+func TestSetGameTimeTellsEveryPlayerInTheWorld(t *testing.T) {
+	f := newGMTeleportFixture(t)
+	var asked []uint8
+	f.rt.SetWorldHour = func(hour uint8) calendar.Value {
+		asked = append(asked, hour)
+		return calendar.Value{Day: 7, Hour: hour}
+	}
+	f.rt.SetGameTimeGM(21)
+	want := calendar.Value{Day: 7, Hour: 21}.Payload()
+	if len(asked) != 1 || asked[0] != 21 {
+		t.Fatalf("clock asked %v", asked)
+	}
+	for _, name := range []string{f.gm.Name, f.target.Name} {
+		frames := f.sent[name]
+		if len(frames) != 1 || frames[0].Opcode != simulation.OpGameTime || string(frames[0].Payload) != string(want) {
+			t.Fatalf("%s got %+v", name, frames)
+		}
+	}
 }

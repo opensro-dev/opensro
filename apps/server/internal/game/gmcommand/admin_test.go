@@ -50,6 +50,7 @@ The action-owned ports, recording what they were asked.
 ================
 */
 type adminOwner struct {
+	hours    []uint8
 	recalled []string
 	guilds   map[string]bool
 }
@@ -57,6 +58,8 @@ type adminOwner struct {
 func (*adminOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
 
 func (*adminOwner) WorldStatusGM(string) (uint32, uint32, uint32) { return 3, 250, 17 }
+
+func (o *adminOwner) SetGameTimeGM(hour uint8) { o.hours = append(o.hours, hour) }
 
 func (o *adminOwner) RecallGuildGM(_, name, guild string) bool {
 	o.recalled = append(o.recalled, name+">"+guild)
@@ -210,5 +213,30 @@ func TestBanLeavesAnOperatorTrail(t *testing.T) {
 	}
 	if trail["gm"] != "Gm" || trail["character"] != "Remo" || trail["account"] != "remo_account" || trail["division"] != testDivision {
 		t.Fatalf("ban trail %v", trail)
+	}
+}
+
+/*
+================
+TestSetTimeMovesTheClockByTheGivenHour
+
+509CF0 sends [0x0A, hour 0..23]; the owner moves the clock and the GM gets
+[1, 0x0A]. A malformed frame is the silent decode refusal.
+================
+*/
+func TestSetTimeMovesTheClockByTheGivenHour(t *testing.T) {
+	gm, _, _ := adminCharacters()
+	owner := &adminOwner{}
+	out := HandleGmCommand(testDeps(gm), &adminPresence{}, testDivision, gm, []byte{SubSetTime, 13}, owner)
+	if !bytes.Equal(out.Ack, []byte{1, SubSetTime}) || len(owner.hours) != 1 || owner.hours[0] != 13 {
+		t.Fatalf("settime ack % X, hours %v", out.Ack, owner.hours)
+	}
+	for _, frame := range [][]byte{{SubSetTime}, {SubSetTime, 24}, {SubSetTime, 1, 2}} {
+		if out := HandleGmCommand(testDeps(gm), &adminPresence{}, testDivision, gm, frame, owner); out.Ack != nil {
+			t.Fatalf("malformed % X answered % X", frame, out.Ack)
+		}
+	}
+	if len(owner.hours) != 1 {
+		t.Fatalf("a malformed frame moved the clock: %v", owner.hours)
 	}
 }

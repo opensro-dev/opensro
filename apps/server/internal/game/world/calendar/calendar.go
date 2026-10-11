@@ -3,6 +3,7 @@ package calendar
 
 import (
 	"encoding/binary"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,6 +17,11 @@ const MillisecondsPerGameSecond int64 = 20
 // time.Since retains Go's monotonic component, matching GetTickCount's role.
 var startedAt = time.Now()
 
+// shiftMilli moves the world clock against that epoch: a GM's /SETTIME
+// (SetHour). Every reader goes through elapsedMilli, so logins, the
+// world-ready push and quest periods all follow one moved clock.
+var shiftMilli atomic.Int64
+
 type Value struct {
 	Day          uint16
 	Hour, Minute uint8
@@ -28,7 +34,29 @@ func AtElapsedMilli(elapsed int64) Value {
 	seconds := elapsed / MillisecondsPerGameSecond
 	return Value{Day: uint16(seconds / 86400), Hour: uint8(seconds / 3600 % 24), Minute: uint8(seconds / 60 % 60)}
 }
-func Current() Value { return AtElapsedMilli(time.Since(startedAt).Milliseconds()) }
+func Current() Value { return AtElapsedMilli(elapsedMilli()) }
+
+// elapsedMilli is the world clock's age: process time plus any GM shift.
+func elapsedMilli() int64 { return time.Since(startedAt).Milliseconds() + shiftMilli.Load() }
+
+// SetHour moves the world clock to minute 0 of hour on the current game day
+// and returns the new time. SR_GameServer relays /SETTIME to the shard
+// manager ("SetGameTime to %d", 51F09B); INFERENCE: the day is kept and the
+// minutes restart, since only the hour is sent. Hours past 23 wrap to 0, as
+// the client composer sends none.
+func SetHour(hour uint8) Value {
+	if hour >= 24 {
+		hour = 0
+	}
+	now := elapsedMilli()
+	if now < 0 {
+		now = 0
+	}
+	seconds := now / MillisecondsPerGameSecond
+	target := seconds - seconds%86400 + int64(hour)*3600
+	shiftMilli.Add(target*MillisecondsPerGameSecond - now)
+	return AtElapsedMilli(target * MillisecondsPerGameSecond)
+}
 func (v Value) Payload() []byte {
 	payload := make([]byte, 4)
 	binary.LittleEndian.PutUint16(payload, v.Day)

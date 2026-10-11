@@ -11,6 +11,7 @@ package action
 import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/caravan"
+	"opensro.online/server/internal/game/world/calendar"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -314,9 +315,12 @@ type Runtime struct {
 	PartyShareFloor bool
 
 	// Now abstracts the clock for deterministic tests.
-	Now         func() time.Time
-	departureMu sync.Mutex
-	departures  map[uint64]pendingDeparture
+	Now func() time.Time
+	// SetWorldHour moves the process world clock (/SETTIME); tests inject
+	// it so the shared calendar stays put.
+	SetWorldHour func(hour uint8) calendar.Value
+	departureMu  sync.Mutex
+	departures   map[uint64]pendingDeparture
 
 	// UpdateQuestInventory is the quest lane's collect-objective updater. It
 	// runs inside the item authority transaction so inventory and derived
@@ -578,6 +582,7 @@ func NewRuntime(deps Dependencies, monsters *simulation.MonsterState) *Runtime {
 		CaravanRoll:        combat.SecureRoll32767,
 		caravans:           caravan.NewRegistry(),
 		Now:                time.Now,
+		SetWorldHour:       calendar.SetHour,
 		basicAttackIntents: make(map[string]basicAttackIntent),
 		resurrections:      resurrectionOffers{byTarget: make(map[string]resurrectionOffer)},
 		Exchanges:          exchange.New(),

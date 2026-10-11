@@ -51,6 +51,9 @@ const (
 	// u8 count, u8 type (CHAMP 1, GIANT 4, NORMAL 0, else the record's +0xA0).
 	SubLoadMonster uint8 = 0x06
 	SubWarp        uint8 = 0x10
+	// SubSetTime: /SETTIME hour - subcmd + u8 hour 0..23 (509CF0 clamps;
+	// 51DE90 case 8 relays it to the shard manager as SetGameTime).
+	SubSetTime uint8 = 0x0A
 	// SubWorldStatus: /WORLDSTATUS - subcmd alone (51DE90 case 3).
 	SubWorldStatus uint8 = 0x04
 	// SubBan: /BAN - subcmd + ANSI name (51DE90 case 0xA).
@@ -172,6 +175,13 @@ func DecodeGmCommand(payload []byte) (Request, error) {
 		}
 		request.Amount, err = reader.U8()
 		return request, err
+	}
+	if subcmd == SubSetTime {
+		if len(payload) != 2 || payload[1] >= 24 {
+			return Request{}, fmt.Errorf("gmcommand: SETTIME requires one hour byte below 24")
+		}
+		request.Amount = payload[1]
+		return request, nil
 	}
 	if subcmd == SubLoadMonster {
 		// 50A53E..50A57E: subcmd, u32 refObjID, u8 count, u8 type.

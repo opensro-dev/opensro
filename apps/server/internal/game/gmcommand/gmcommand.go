@@ -120,6 +120,8 @@ func HandleGmCommand(deps Dependencies, presence PresenceView, divisionID string
 		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "gotown-refused"}
 	case SubToTown, SubMoveToUser, SubRecallUser:
 		return handlePlayerTeleport(divisionID, sender, request, status)
+	case SubSetTime:
+		return handleSetTime(request, status)
 	case SubWorldStatus:
 		return handleWorldStatus(divisionID, request, status)
 	case SubBan:

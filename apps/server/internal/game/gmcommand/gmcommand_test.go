@@ -176,7 +176,7 @@ func TestPrivilegedUnhonoredCommandsRefuseWithResult2(t *testing.T) {
 		{"/BAN without a session directory", nameFrame(0x0D, "Remo")},
 		{"/INVISIBLE", []byte{0x0E}},
 		{"/INVINCIBLE", []byte{0x0F}},
-		{"/SETTIME", []byte{0x0A, 0x0D}},
+		{"/SETTIME without an owner", []byte{0x0A, 0x0D}},
 		{"/LOADMONSTER", []byte{0x06, 0x34, 0x12, 0x00, 0x00, 0x03, 0x01}},
 	}
 	for _, tc := range cases {

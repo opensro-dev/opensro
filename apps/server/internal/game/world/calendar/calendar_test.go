@@ -37,3 +37,17 @@ func TestLoginDoesNotResetWorldEpoch(t *testing.T) {
 		t.Fatal("calendar derived from login instead of world lifetime")
 	}
 }
+
+func TestSetHourMovesTheSharedClockWithinTheDay(t *testing.T) {
+	t.Cleanup(func() { shiftMilli.Store(0) })
+	before := Current()
+	for _, hour := range []uint8{22, 3} {
+		set := SetHour(hour)
+		if set.Hour != hour || set.Minute != 0 || set.Day != before.Day {
+			t.Fatalf("SetHour(%d) = %+v from %+v", hour, set, before)
+		}
+		if now := Current(); now.Day != set.Day || now.Hour != hour || now.Minute > 1 {
+			t.Fatalf("clock after SetHour(%d) reads %+v", hour, now)
+		}
+	}
+}

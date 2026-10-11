@@ -3,7 +3,7 @@
 
 gmadmin.go - the GM's world status and guild recall
 
-/WORLDSTATUS (sub 4) and /RECALLGUILD (sub 0x12), two arms of the v1.188
+/WORLDSTATUS (sub 4), /RECALLGUILD (sub 0x12) and /SETTIME (sub 0xA), arms of the v1.188
 per-player GM handler CGObjPC_MsgHandler_SpecialCommand (51DE90). The
 gmcommand dispatcher decodes the request and answers on the wire; this
 file reads the world and moves characters.
@@ -12,7 +12,12 @@ file reads the world and moves characters.
 */
 package action
 
-import "strings"
+import (
+	"strings"
+
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
+)
 
 /*
 ================
@@ -105,4 +110,30 @@ func (rt *Runtime) guildMembersByName(division, name string) ([]string, bool) {
 		return names, true
 	}
 	return nil, false
+}
+
+/*
+================
+SetGameTimeGM
+
+/SETTIME hour (51DE90 case 8, "SetGameTime to %d"): the world clock moves
+to that hour, and every player in the world gets the 0x31AD clock push,
+since a client keeps its own clock after entry. The clock is one per
+process, as SR_GameServer's is, so every division's players hear it.
+================
+*/
+func (rt *Runtime) SetGameTimeGM(hour uint8) {
+	if rt == nil || rt.SetWorldHour == nil {
+		return
+	}
+	payload := rt.SetWorldHour(hour).Payload()
+	if rt.PushCharacterFrames == nil {
+		return
+	}
+	rt.characterAdmissions.Range(func(_, value any) bool {
+		admission := value.(populationAdmission)
+		rt.PushCharacterFrames(admission.division, admission.name,
+			[]wire.Frame{{Opcode: simulation.OpGameTime, Payload: payload}})
+		return true
+	})
 }

@@ -39,6 +39,17 @@ type WorldStatus interface {
 
 /*
 ================
+GameClock
+
+The action-owned /SETTIME.
+================
+*/
+type GameClock interface {
+	SetGameTimeGM(hour uint8)
+}
+
+/*
+================
 GuildRecall
 
 The action-owned /RECALLGUILD.
@@ -172,4 +183,27 @@ func handleWho(deps Dependencies, presence PresenceView, divisionID string, requ
 		account = noNickname
 	}
 	return Outcome{Ack: EncodeAckGuide(SubRealName, account)}
+}
+
+/*
+================
+handleSetTime
+
+51DE90 case 8 relays the hour to the shard manager, which sets the world
+clock for every GameWorld and answers the GM itself. The port's one
+GameWorld sets it through the action owner. INFERENCE: the GM's ack is
+[1, sub], which 751EC0 shows nothing for, as for every result-1 code it
+has no text for.
+================
+*/
+func handleSetTime(request Request, status []BodyStatusCommands) Outcome {
+	if len(status) == 0 {
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "set-time-unavailable"}
+	}
+	owner, ok := status[0].(GameClock)
+	if !ok {
+		return Outcome{Ack: EncodeRequestFailure(request), Refusal: "set-time-unavailable"}
+	}
+	owner.SetGameTimeGM(request.Amount)
+	return Outcome{Ack: []byte{AckResultOK, SubSetTime}}
 }
