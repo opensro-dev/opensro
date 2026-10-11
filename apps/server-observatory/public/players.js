@@ -3,6 +3,7 @@
 players.js - explicit inspection, evidence export, and audited recovery forms
 ===========================================================================
 */
+import { requestJSON } from "./request.js";
 /*
 ================
 byID
@@ -90,23 +91,6 @@ function statSummary( player ) {
 	return `STR ${player.strength}; INT ${player.intellect}; free points ${player.statPoints ?? 0}`;
 }
 
-/*
-================
-requestJSON
-================
-*/
-async function requestJSON( url, options = {} ) {
-	const response = await fetch( url, { cache: "no-store", signal: AbortSignal.timeout( 20000 ), ...options } );
-	const text = await response.text();
-	let result;
-	try {
-		result = JSON.parse( text );
-	} catch {
-		throw Error( text || "Console returned an empty response" );
-	}
-	if ( !response.ok ) throw Error( result.error ?? "Console request failed" );
-	return result;
-}
 /*
 ================
 showPlayer

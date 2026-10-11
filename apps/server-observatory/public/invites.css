@@ -1,0 +1,148 @@
+/*
+===========================================================================
+invites.css - the Invite keys page, in the recovery page's style
+===========================================================================
+*/
+.invites-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 24px;
+	align-items: start;
+	margin-bottom: 24px;
+}
+.invites-form-body {
+	display: grid;
+	gap: 14px;
+	padding: 0 24px 24px;
+}
+.invites-row {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 12px;
+}
+#invites label {
+	display: grid;
+	align-content: start;
+	gap: 9px;
+	color: var(--muted);
+	font-size: 12px;
+}
+#invites label small {
+	color: var(--faint);
+	font-size: 11px;
+}
+#invites input {
+	width: 100%;
+	min-height: 36px;
+	padding: 7px 10px;
+	font: inherit;
+	color: var(--text);
+	border: 1px solid var(--bronze);
+	border-radius: 6px;
+	background: var(--wood);
+}
+#invites input:focus {
+	outline: 2px solid var(--gold);
+	outline-offset: 2px;
+}
+#invites input::placeholder {
+	color: var(--faint);
+}
+#invites .primary {
+	background: var(--lacquer);
+	border-color: var(--lacquer-deep);
+	color: #fff4dc;
+	justify-self: start;
+	padding-inline: 24px;
+}
+.invites-discord {
+	display: grid;
+	gap: 10px;
+	padding: 12px 14px 14px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+.invites-discord legend {
+	padding: 0 6px;
+	color: var(--gold);
+	font-size: 12px;
+}
+.invites-made-list,
+.invites-linked ul {
+	list-style: none;
+	margin: 0;
+	padding: 0 24px 18px;
+	display: grid;
+	gap: 10px;
+}
+.invites-made-list li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+.invites-made-list code {
+	font-size: 14px;
+	color: var(--gold);
+	letter-spacing: 1px;
+}
+.invites-linked {
+	border-top: 1px solid var(--line);
+	padding-top: 14px;
+}
+.invites-linked h3 {
+	margin: 0 24px 10px;
+	font-size: 13px;
+}
+.invites-linked li {
+	color: var(--muted);
+	font-size: 12px;
+}
+.invites-filter {
+	display: flex;
+	align-items: end;
+	gap: 10px;
+}
+.invites-table-wrap {
+	overflow-x: auto;
+	padding: 0 24px 18px;
+}
+.invites-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+.invites-table th {
+	text-align: left;
+	color: var(--muted);
+	font-weight: 500;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--line);
+}
+.invites-table td {
+	padding: 9px 10px;
+	border-bottom: 1px solid var(--line);
+	vertical-align: top;
+}
+.invites-hint {
+	font-family: ui-monospace, monospace;
+	white-space: nowrap;
+}
+.invites-tag[data-state="used"],
+.invites-tag[data-state="expired"] {
+	color: var(--muted);
+	border-color: var(--line);
+}
+.invites-tag[data-state="revoked"] {
+	color: var(--lacquer);
+	border-color: var(--lacquer-deep);
+}
+.invites-table tr[data-state="revoked"] td,
+.invites-table tr[data-state="expired"] td {
+	opacity: 0.6;
+}
+@media (max-width: 900px) {
+	.invites-grid {
+		grid-template-columns: 1fr;
+	}
+}

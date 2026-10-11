@@ -555,20 +555,24 @@ footer {
 	color: var(--gold-bright);
 }
 
-#recovery {
+#recovery,
+#invites {
 	padding-top: 5px;
 }
 
-#recovery .recovery-heading h2 {
+#recovery .recovery-heading h2,
+#invites .recovery-heading h2 {
 	color: var(--gold-pale);
 }
 
 #recovery .recovery-heading p,
+#invites .recovery-heading p,
 #recovery .recovery-steps {
 	color: #d9c8a4;
 }
 
-#recovery .recovery-heading .eyebrow {
+#recovery .recovery-heading .eyebrow,
+#invites .recovery-heading .eyebrow {
 	color: #8fd1c0;
 }
 
@@ -577,7 +581,8 @@ footer {
 	border-color: var(--gold-soft);
 }
 
-#recovery .operator-badge {
+#recovery .operator-badge,
+#invites .operator-badge {
 	border-color: var(--gold-soft);
 	background: var(--surface);
 }

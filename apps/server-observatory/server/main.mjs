@@ -1,6 +1,6 @@
 /*
 ===========================================================================
-main.mjs - loopback observatory and authenticated player recovery gateway
+main.mjs - loopback observatory, authenticated player recovery and invite keys
 ===========================================================================
 */
 import { createServer } from "node:http";
@@ -10,6 +10,7 @@ import { allowedRequest, allowedMutation } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
 import { createHistory } from "./history.mjs";
+import { createInviteKeys, siteAdminURL } from "./invite-keys.mjs";
 import { clientPublicPath } from "../../../scripts/lib/generatedRoot.mjs";
 const port = Number( process.env.SRO_OBSERVATORY_PORT ?? 5190 );
 if ( !Number.isInteger( port ) || port < 1024 || port > 65535 ) throw Error( "Invalid dashboard port" );
@@ -35,6 +36,14 @@ const historySources = [ {
 	token: agentToken
 }, ...shards.map( row => ({ ...row, token }) ) ];
 const history = createHistory( historySources );
+// The website's invite keys (opensro-web /internal/admin/invites), with the
+// console's own secret; absent, the Invite keys page says it is off.
+const siteAdmin = config.siteAdmin ?? null;
+const inviteKeys = createInviteKeys(
+	siteAdmin ? siteAdminURL( siteAdmin.url ) : null,
+	siteAdmin?.tokenFile ? (await readFile( siteAdmin.tokenFile, "utf8" )).trim() : ""
+);
+const INVITE_REVOKE = /^\/api\/invites\/([0-9a-f-]{36})\/revoke$/;
 const publicRoot = new URL( "../public/", import.meta.url ), files = new Map( [ [ "/", "index.html" ] ] );
 // Banner art from the client's published images: the Dunhuang and Jangan loading screens.
 // Fixed paths only; a checkout without built client assets answers 404 and
@@ -63,7 +72,10 @@ for (
 		"history.html",
 		"history.js",
 		"history-view.js",
-		"history.css"
+		"history.css",
+		"invites.js",
+		"invites.css",
+		"request.js"
 	]
 ) files.set( "/" + file, file );
 /*
@@ -123,6 +135,51 @@ async function handleRequest( req, res ) {
 			respondJSON( res, result.status, result.body );
 			return;
 		}
+		if ( url.pathname === "/api/invites" || INVITE_REVOKE.test( url.pathname ) ) {
+			const operator = edge?.operator ?? "local-operator";
+			let result;
+			if ( req.method === "GET" && url.pathname === "/api/invites" ) {
+				try {
+					result = await inviteKeys.list( operator, url.searchParams.get( "discordUserId" ) ?? "" );
+				} catch {
+					result = { status: 502, body: { error: "The website did not answer" } };
+				}
+			} else if ( req.method === "POST" ) {
+				if ( !allowedMutation( req, port, edge ) ) {
+					res.writeHead( 403 );
+					res.end( "Same-origin console request required" );
+					return;
+				}
+				let body;
+				try {
+					body = await readBody( req );
+				} catch {
+					body = null;
+				}
+				if ( !body || Array.isArray( body ) || typeof body !== "object" ) {
+					respondJSON( res, 400, { error: "Invalid request body" } );
+					return;
+				}
+				const revoke = url.pathname.match( INVITE_REVOKE );
+				try {
+					result = revoke ?
+						await inviteKeys.revoke( operator, revoke[1] ) :
+						await inviteKeys.create( operator, body );
+				} catch {
+					// A key may or may not have been made: list before trying again.
+					result = {
+						status: 502,
+						body: { error: "The website did not answer; check the key list before retrying" }
+					};
+				}
+			} else {
+				res.writeHead( 405 );
+				res.end();
+				return;
+			}
+			respondJSON( res, result.status, result.body );
+			return;
+		}
 		if ( req.method !== "GET" ) {
 			res.writeHead( 405 );
 			res.end( "Method not allowed" );
@@ -132,6 +189,7 @@ async function handleRequest( req, res ) {
 			respondJSON( res, 200, {
 				operator: edge?.operator ?? "local-operator",
 				enabled: Boolean( token ),
+				invites: Boolean( siteAdmin?.tokenFile ),
 				historySources: historySources.map( ( { id, name } ) => ({ id, name }) ),
 				shards: shards.map( ( { id, name } ) => ({ id, name }) )
 			} );

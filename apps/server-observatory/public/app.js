@@ -211,7 +211,8 @@ function selectView( tab ) {
 		world: "World census",
 		health: "Runtime health",
 		items: "Item archive",
-		recovery: "Player recovery"
+		recovery: "Player recovery",
+		invites: "Invite keys"
 	};
 	if ( !Object.hasOwn( titles, tab ) ) tab = "overview";
 	state.tab = tab;
@@ -221,9 +222,11 @@ function selectView( tab ) {
 		n.setAttribute( "aria-current", n.dataset.view === tab ? "page" : "false" );
 	} );
 	$( "view-title" ).textContent = titles[tab];
-	$( "metrics" ).hidden = tab === "recovery";
-	$( "realm-strip" ).hidden = tab === "recovery";
-	document.querySelector( ".heading-actions" ).hidden = tab === "recovery";
+	// Operator pages, not world views: no live metrics or shard picker.
+	const operatorPage = tab === "recovery" || tab === "invites";
+	$( "metrics" ).hidden = operatorPage;
+	$( "realm-strip" ).hidden = operatorPage;
+	document.querySelector( ".heading-actions" ).hidden = operatorPage;
 	render();
 }
 document.querySelector( "nav" ).addEventListener( "click", event => {

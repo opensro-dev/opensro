@@ -12,9 +12,11 @@
 <link rel="stylesheet" href="/theme-fit.css">
 <link rel="stylesheet" href="/items.css">
 <link rel="stylesheet" href="/players.css">
+<link rel="stylesheet" href="/invites.css">
 <script type="module" src="/app.js">
 </script>
 <script type="module" src="/players.js"></script>
+<script type="module" src="/invites.js"></script>
 <script type="module" src="/items.js">
 </script>
 </head>
@@ -28,6 +30,7 @@
 <button data-view="health">Runtime</button>
 <button data-view="items">Items</button>
 <button data-view="recovery">Player recovery</button>
+<button data-view="invites">Invite keys</button>
 <a href="/history.html">Session history</a>
 </nav>
 <div class="rail-foot"><span class="rail-label">SILKROAD CONNECTS THE WORLD</span><span class="rail-bottom">v 1.150</span></div>
@@ -360,6 +363,53 @@
    </div>
   </div>
  </section>
+</section>
+<section id="invites" class="view" hidden>
+ <div class="recovery-heading">
+  <div><span class="eyebrow">CLOSED BETA ACCESS</span><h2>Invite keys</h2>
+  <p>Make keys for new players, give a Discord member a further key, and revoke keys that should not be used. Keys live in the website; every action is recorded in its audit log under your name.</p></div>
+  <span class="operator-badge" id="invites-operator">Authenticating...</span>
+ </div>
+ <p id="invites-status" class="recovery-notice" role="status" aria-live="polite">Loading keys...</p>
+ <div class="invites-grid">
+  <form id="invites-create" class="panel invites-form">
+   <div class="panel-heading"><div><span class="eyebrow">NEW KEYS</span><h2>Make invite keys</h2></div><span class="tag">SHOWN ONCE</span></div>
+   <div class="invites-form-body">
+    <div class="invites-row">
+     <label>How many<input id="invites-count" type="number" required min="1" max="50" value="1"></label>
+     <label>Uses per key<input id="invites-uses" type="number" required min="1" max="100" value="1"></label>
+     <label>Expires after (days)<input id="invites-days" type="number" required min="0" max="365" value="14"><small>0 = never</small></label>
+    </div>
+    <label>Note<input id="invites-note" maxlength="200" autocomplete="off" placeholder="Who is it for? e.g. tester from the forum"></label>
+    <fieldset class="invites-discord">
+     <legend>Give a Discord member another key (optional)</legend>
+     <p class="recovery-hint">The Discord bot gives each member one key. Link a further key to the member here; the bot never replaces it.</p>
+     <div class="invites-row">
+      <label>Discord user ID<input id="invites-discord-id" inputmode="numeric" pattern="[0-9]{15,22}" autocomplete="off" placeholder="e.g. 123456789012345678"></label>
+      <label>Discord name<input id="invites-discord-name" maxlength="64" autocomplete="off" placeholder="e.g. caravan_fan"></label>
+     </div>
+    </fieldset>
+    <button id="invites-create-button" class="button primary" type="submit">Make keys</button>
+   </div>
+  </form>
+  <article id="invites-made" class="panel invites-made" hidden>
+   <div class="panel-heading"><div><span class="eyebrow">COPY THESE NOW</span><h2>New keys</h2></div><span class="tag">NOT SHOWN AGAIN</span></div>
+   <ul id="invites-made-list" class="invites-made-list"></ul>
+   <div id="invites-linked" class="invites-linked" hidden></div>
+  </article>
+ </div>
+ <article class="panel invites-list">
+  <div class="panel-heading"><div><span class="eyebrow">ALL KEYS</span><h2>Keys</h2></div>
+   <form id="invites-filter" class="invites-filter">
+    <label>Discord user ID<input id="invites-filter-id" type="search" inputmode="numeric" pattern="[0-9]{15,22}" autocomplete="off" placeholder="Show one member's keys"></label>
+    <button class="button" type="submit">Filter</button>
+   </form>
+  </div>
+  <div class="invites-table-wrap"><table class="invites-table">
+   <thead><tr><th>Key</th><th>Note</th><th>Status</th><th>Uses</th><th>Redeemed by</th><th>Made</th><th>Expires</th><th></th></tr></thead>
+   <tbody id="invites-rows"></tbody>
+  </table></div>
+ </article>
 </section>
 <footer>
 <span>
