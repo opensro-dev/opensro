@@ -2222,6 +2222,14 @@
 			]
 		},
 		{
+			"consumer": "src/engine/foundation/gameplay/party-invite.ts",
+			"provider": "src/engine/runtime/simulation/worker/session/world/entities/entities.ts",
+			"functions": [
+				"read",
+				"rider"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/renderer/frame/frame.ts",
 			"provider": "src/engine/runtime/renderer/device/hdr.ts",
 			"functions": [
