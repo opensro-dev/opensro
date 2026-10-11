@@ -202,16 +202,16 @@ export function createEntities(
 	================
 	retire
 
-	Removes the entity a duplicate spawn replaces: the despawn the world sees
-	for a departure, without releasing its riders.
+	Removes the entity a duplicate spawn replaces. Presentation sees the
+	despawn so the old actor fades; gameplay does not, because native only
+	overwrites the gid's slot: a selected target, a queued skill, an open NPC
+	dialog and the HP record all survive, and riders keep mountedOn.
 	================
 	*/
 	function retire( gid: number ) {
-		const event: Extract<WorldEvent, { kind: "despawn"; }> = { kind: "despawn", gid };
 		entities.delete( gid );
 		motion.remove( gid );
-		append( event );
-		lifecycle?.( event );
+		append( { kind: "despawn", gid } );
 	}
 	/*
 	================
