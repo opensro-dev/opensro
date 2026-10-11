@@ -13,7 +13,9 @@ SRO_ALCHEMY_RATES replaces the elixir's authored chance with one table
 indexed by the item's current plus: "on" is the requested table
 (+1 100% ... +11 5%), a comma list such as "100,80,70" is a custom one
 whose last entry holds for every higher plus (as native +11 does), and
-unset or "off" is native. Everything else around the chance is unchanged:
+unset or "off" is native. The table holds for every elixir, so A and B
+grade elixirs give the same chance while it is set (natively A is about
+half of B). Everything else around the chance is unchanged:
 a lucky powder, a Luck charge and the premium bonuses still add, the item
 still breaks or curses from +5, and Immortal, Steady and Astral still
 protect it. Only the native 10% floor is dropped while a table is set: the

@@ -72,7 +72,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Less bag management during testing."},
 			{Flag: alchemy.EnvReinforceRates, On: alchemyRates != nil,
 				Native: "Each elixir has its own success chance per plus, at least 10%.",
-				Now:    "One gentler table: +1 always succeeds, falling to 5% for +11.",
+				Now:    "One gentler table for every elixir: +1 always succeeds, falling to 5% for +11; powders, Luck and premium bonuses still add.",
 				Why:    "Players asked for it; the original rates return with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
