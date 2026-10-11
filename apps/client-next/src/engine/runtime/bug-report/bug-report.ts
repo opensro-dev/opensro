@@ -23,7 +23,7 @@ per second. The replayDefault field older Agents still send is ignored.
 
 ===========================================================================
 */
-import { NET_JOURNAL_FIELDS, NET_JOURNAL_OUT } from "@/engine/contracts/network";
+import { NET_JOURNAL_FIELDS, NET_JOURNAL_GAP, NET_JOURNAL_OUT } from "@/engine/contracts/network";
 import type { BugReportControl, BugReportField, ReplayState } from "@/engine/contracts/bug-report";
 import { RELEASE_PROTOCOL, RELEASE_PROTOCOL_HEADER } from "@/engine/foundation/release/protocol";
 import { muxMp4, type Mp4Track } from "@/engine/foundation/media/mp4";
@@ -515,12 +515,16 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 			if ( atMs < fromMs ) continue;
 			events.push( [
 				+((atMs - zeroMs) / 1000).toFixed( 3 ),
-				records[at + 1] === NET_JOURNAL_OUT ? "out" : "in",
+				records[at + 1] === NET_JOURNAL_GAP ? "gap" : records[at + 1] === NET_JOURNAL_OUT ? "out" : "in",
 				"0x" + records[at + 2]!.toString( 16 ).toUpperCase().padStart( 4, "0" ),
 				records[at + 3]!
 			] );
 		}
-		return { note: "t is seconds on timeline.json's clock; each event is [t, direction, opcode, bytes].", events };
+		return {
+			note: "t is seconds on timeline.json's clock; each event is [t, direction, opcode, bytes]. " +
+				'A "gap" row stands for frames the journal dropped: its last field is how many.',
+			events
+		};
 	}
 	/*
 	================

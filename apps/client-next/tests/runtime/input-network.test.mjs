@@ -430,3 +430,26 @@ test("the transport journals each frame's direction, opcode and size, never its 
 	assert.equal( network.takeJournal(), null, "a take empties the journal" );
 	network.dispose();
 });
+
+test("a journal overflow leaves a gap row that counts every dropped frame", t => {
+	const sockets = socketHarness( t );
+	const network = createNetwork( () => {} );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	// hello and welcome, then enough sends to overflow the ring twice.
+	const sends = 9000;
+	for ( let i = 0; i < sends; i++ ) network.send( { opcode: 0x7021, payload: Uint8Array.of( 1 ) } );
+	const records = network.takeJournal();
+	assert.ok( records );
+	assert.equal( records[1], 2, "the oldest row is a gap" );
+	let frames = records[3], gaps = 0;
+	for ( let at = 4; at < records.length; at += 4 ) {
+		if ( records[at + 1] === 2 ) gaps++;
+		else frames++;
+	}
+	assert.equal( gaps, 0, "one gap row carries every drop" );
+	assert.equal( frames, sends + 2, "kept frames plus the gap count account for every frame" );
+	network.dispose();
+});

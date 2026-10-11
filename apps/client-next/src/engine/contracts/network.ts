@@ -19,6 +19,8 @@ export interface WireFrame {
 export const NET_JOURNAL_FIELDS = 4;
 export const NET_JOURNAL_IN = 0;
 export const NET_JOURNAL_OUT = 1;
+// A gap: frames the journal dropped (bytes = how many), timed at the last.
+export const NET_JOURNAL_GAP = 2;
 /*
 ================
 NetworkOwner

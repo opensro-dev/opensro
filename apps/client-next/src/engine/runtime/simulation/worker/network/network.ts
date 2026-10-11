@@ -11,7 +11,7 @@ failure names that frame so it can be reported (session.ts).
 ===========================================================================
 */
 import { createCodec } from "./codec/codec";
-import { NET_JOURNAL_FIELDS, NET_JOURNAL_IN, NET_JOURNAL_OUT } from "@/engine/contracts/network";
+import { NET_JOURNAL_FIELDS, NET_JOURNAL_GAP, NET_JOURNAL_IN, NET_JOURNAL_OUT } from "@/engine/contracts/network";
 import type { NetworkOwner, WireFrame, NetworkFailure } from "@/engine/contracts/network";
 
 const PING_INTERVAL_MS = 5000;
@@ -43,14 +43,22 @@ export function createNetwork(
 	note
 
 	Journals one frame. A full journal drops its older half: takes happen
-	about once a second, so this only bounds a stalled consumer.
+	about once a second, so this only bounds a stalled consumer. The drop is
+	never silent: a gap record (NET_JOURNAL_GAP) stands in for the dropped
+	frames with their count, so a hole cannot read as "nothing was sent".
 	================
 	*/
 	function note( direction: number, opcode: number, bytes: number ) {
 		if ( journalCount === NET_JOURNAL_RECORDS ) {
-			const keep = NET_JOURNAL_RECORDS >> 1;
-			journal.copyWithin( 0, (NET_JOURNAL_RECORDS - keep) * NET_JOURNAL_FIELDS );
-			journalCount = keep;
+			const keep = (NET_JOURNAL_RECORDS >> 1) - 1, dropped = NET_JOURNAL_RECORDS - keep;
+			const earlierGap = journal[1] === NET_JOURNAL_GAP ? journal[3]! - 1 : 0;
+			const lastDroppedAt = journal[(dropped - 1) * NET_JOURNAL_FIELDS]!;
+			journal.copyWithin( NET_JOURNAL_FIELDS, dropped * NET_JOURNAL_FIELDS );
+			journal[0] = lastDroppedAt;
+			journal[1] = NET_JOURNAL_GAP;
+			journal[2] = 0;
+			journal[3] = dropped + earlierGap;
+			journalCount = keep + 1;
 		}
 		const at = journalCount++ * NET_JOURNAL_FIELDS;
 		journal[at] = performance.timeOrigin + performance.now();
