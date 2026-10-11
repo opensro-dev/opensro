@@ -373,9 +373,13 @@ export function createViewer( host: ViewerHost ) {
 			dragX = event.clientX;
 			change();
 		} );
-		host.picture.addEventListener( "pointerup", () => {
-			dragX = null;
-		} );
+		// A cancelled touch or a lost capture ends the drag as a release does,
+		// so the next move does not turn the model.
+		for ( const end of [ "pointerup", "pointercancel", "lostpointercapture" ] as const ) {
+			host.picture.addEventListener( end, () => {
+				dragX = null;
+			} );
+		}
 		host.picture.addEventListener( "wheel", event => {
 			if ( !camera ) return;
 			event.preventDefault();

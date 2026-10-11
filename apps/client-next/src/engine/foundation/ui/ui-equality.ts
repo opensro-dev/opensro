@@ -32,6 +32,8 @@ sameDollCamera
 The 3D viewer's doll camera (port-only): equal when absent on both or the
 same framing. A zoom or re-framing changes only the camera, so it must
 not compare equal to the previous one.
+Compares only the fields a doll camera sets (eye, target, fov, near,
+far); the viewer never sets WorldCamera's follow or dungeon fields.
 ================
 */
 function sameDollCamera( a: WorldCamera | undefined, b: WorldCamera | undefined ): boolean {
