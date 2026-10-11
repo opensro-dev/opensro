@@ -229,6 +229,25 @@ class DeployTests(unittest.TestCase):
 					self.assertEqual(verbs, ["validate", "validate", "deploy", "status"])
 
 	# ================
+	# test_a_validate_refusal_keeps_its_reason
+	#
+	# materialize captures validate's output, so a refusal's reason must be
+	# carried in the raised error (masked) or it is lost, as on 2026-10-11.
+	# ================
+	def test_a_validate_refusal_keeps_its_reason(self):
+		token = "f" * 64
+		refusal = subprocess.CalledProcessError(1, ["sro-nomad", "validate"],
+			stderr="sro-nomad validate: job sro-agent spec invalid near token " + token)
+		with tempfile.TemporaryDirectory() as directory, patch.object(deploy, "run", side_effect=refusal):
+			config = {"game_data": str(Path(directory) / "server.srogz")}
+			for assume_stopped in (True, False):
+				with self.subTest(assume_stopped=assume_stopped):
+					with self.assertRaises(RuntimeError) as raised:
+						deploy.materialize(config, Path(directory), "sro-nomad", [], {}, assume_stopped=assume_stopped)
+					self.assertIn("job sro-agent spec invalid", str(raised.exception))
+					self.assertNotIn(token, str(raised.exception))
+
+	# ================
 	# test_a_refused_restore_stops_nothing
 	#
 	# A maintenance revert checks its journaled backups before the stop that

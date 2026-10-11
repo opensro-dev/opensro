@@ -251,7 +251,12 @@ def materialize(config, module, executable, arguments, environment, assume_stopp
 		# #760) refuses the flag: the caller falls back (LEGACY_VALIDATE).
 		if assume_stopped and "assume-stopped" in (error.stderr or "") and "not defined" in (error.stderr or ""):
 			return LEGACY_VALIDATE
-		raise
+		# The output was captured: carry the refusal's reason (masked, bounded)
+		# to the SSH stream and the journal (record_failure), or it is lost as
+		# on 2026-10-11.
+		reason = masked((error.stderr or error.stdout or "").strip())[-REHEARSAL_REASON_CHARS:]
+		print(reason, file=sys.stderr, flush=True)
+		raise RuntimeError("sro-nomad validate refused this release: " + reason) from None
 	print(output, end="", flush=True)
 	cache = Path(config["game_data"]).parent / ".game-data-cache"
 	if cache.is_dir():
