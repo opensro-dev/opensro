@@ -94,8 +94,13 @@ class ReceiverTests(unittest.TestCase):
 	def test_a_failed_request_leaves_its_reason_on_the_host(self):
 		logged = []
 		token = "f" * 64
-		failure = RuntimeError("sro-nomad validate refused; token " + token + " " + "x" * 2000)
-		with patch.object(receiver, "serve", side_effect=failure), 			patch.object(receiver, "CONFIG", Path(__file__)), 			patch.object(receiver.json, "loads", return_value={}), 			patch.object(receiver.os, "geteuid", return_value=0, create=True), 			patch.object(receiver.sys, "argv", ["receiver.py", "publish"]), 			patch.object(receiver, "syslog", SimpleNamespace(LOG_ERR=3, openlog=lambda name: None,
+		failure = RuntimeError("sro-nomad validate refused; token " + token + " " + "word " * 600)
+		with patch.object(receiver, "serve", side_effect=failure), \
+			patch.object(receiver, "CONFIG", Path(__file__)), \
+			patch.object(receiver.json, "loads", return_value={}), \
+			patch.object(receiver.os, "geteuid", return_value=0, create=True), \
+			patch.object(receiver.sys, "argv", ["receiver.py", "publish"]), \
+			patch.object(receiver, "syslog", SimpleNamespace(LOG_ERR=3, openlog=lambda name: None,
 				syslog=lambda level, text: logged.append((level, text)))):
 			with self.assertRaises(RuntimeError):
 				receiver.main()
@@ -105,7 +110,7 @@ class ReceiverTests(unittest.TestCase):
 		self.assertTrue(text.startswith("publish request failed: RuntimeError: sro-nomad validate refused"))
 		self.assertNotIn(token, text)
 		self.assertIn("<masked>", text)
-		self.assertLessEqual(len(text), len("publish request failed: ") + receiver.MAX_FAILURE_LOG_CHARS)
+		self.assertEqual(len(text), len("publish request failed: ") + receiver.MAX_FAILURE_LOG_CHARS)
 
 
 if __name__ == "__main__":
