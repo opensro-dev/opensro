@@ -554,21 +554,36 @@ export function loadSkillDataRows( textdataDir ) {
 
 /*
 ================
-assertOneStepRemaps
+aliasBasicOriginals
 
-917240 follows a skill's Basic_Original once. An alias that names another
-alias would be a two-step remap the client refuses (effect-record-alias.ts
-throws on it and rejects the whole table), so the build fails here first.
-v1.150 has none: every Basic_Original is a root.
+917240 remaps a positive skill id to its Basic_Original before the record
+lookup, once and ahead of any record of its own: a pet's levelled attacks
+(PSKILL_P_WOLF_002_ATTACK_01 -> PSKILL_P_WOLF_01_ATTACK01) have no
+skillaniset row and draw through the original. Each such row becomes
+{ remapOf: original } in table; the alias keeps the asset to one copy of
+each record. A remap to an id with no record keeps the row's own (native
+would assert there). The remap is followed once, so an alias that names
+another alias would be a two-step remap the client refuses
+(effect-record-alias.ts rejects the whole table); the build fails here
+first. v1.150 has none: every Basic_Original is a root. Returns how many
+rows were aliased.
 ================
 */
-export function assertOneStepRemaps( table ) {
+export function aliasBasicOriginals( table, rows ) {
+	const authored = new Set( Object.keys( table ) );
+	let remapped = 0;
+	for ( const row of rows ) {
+		if ( !row.originalId || row.originalId === row.id || !authored.has( String( row.originalId ) ) ) continue;
+		table[row.id] = { remapOf: row.originalId };
+		remapped++;
+	}
 	for ( const [id, entry] of Object.entries( table ) ) {
 		if ( entry?.remapOf === undefined ) continue;
 		if ( table[entry.remapOf]?.remapOf !== undefined ) {
 			throw Error( `skill ${id}'s Basic_Original ${entry.remapOf} is itself remapped` );
 		}
 	}
+	return remapped;
 }
 
 /*
@@ -706,20 +721,7 @@ export function buildEffectRecordTable(
 		addRecord( id, ani );
 		builtinRegistered++;
 	}
-	// 917240 remaps a positive skill id to its Basic_Original before the
-	// record lookup, once and ahead of any record of its own: a pet's levelled
-	// attacks (PSKILL_P_WOLF_002_ATTACK_01 -> PSKILL_P_WOLF_01_ATTACK01) have
-	// no skillaniset row and draw through the original. The alias keeps the
-	// asset to one copy of each record; a remap to an id with no record keeps
-	// the row's own (native would assert there).
-	const authored = new Set( Object.keys( table ) );
-	let remapped = 0;
-	for ( const row of rows ) {
-		if ( !row.originalId || row.originalId === row.id || !authored.has( String( row.originalId ) ) ) continue;
-		table[row.id] = { remapOf: row.originalId };
-		remapped++;
-	}
-	assertOneStepRemaps( table );
+	const remapped = aliasBasicOriginals( table, rows );
 	// 917340 has a distinct name-keyed map, including externally used items.
 	const namedTable = {};
 	for ( const [name, ani] of aniSets ) addRecord( name, ani, namedTable );
