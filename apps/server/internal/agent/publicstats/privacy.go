@@ -96,7 +96,7 @@ func (s *Service) installPrivacy(mux *http.ServeMux) {
 		s.mu.Lock()
 		s.cache = map[string]cacheEntry{}
 		// The roster holds the flag; the kill list does not and stays.
-		s.snap.roster, s.snap.rosterUntil = roster{}, time.Time{}
+		s.snap.roster, s.snap.rosterUntil, s.snap.rankings = roster{}, time.Time{}, nil
 		s.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})

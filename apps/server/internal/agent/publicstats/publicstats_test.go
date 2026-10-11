@@ -300,6 +300,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/v1/accounts/{id}/characters":    "/v1/accounts/alpha/characters",
 		"/public/v1/status":               "/public/v1/status",
 		"/public/v1/schedule":             "/public/v1/schedule",
+		"/public/v1/rankings":             "/public/v1/rankings?by=gear",
 	}
 	if len(endpoints) != len(samples) {
 		t.Fatalf("schema lists %d endpoints, want %d", len(endpoints), len(samples))

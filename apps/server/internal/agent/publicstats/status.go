@@ -170,7 +170,7 @@ P7: up, online, uptime, the recent tick window and the hourly history.
 */
 func (s *Service) serverStatus(*http.Request) (any, error) {
 	now := s.now()
-	out := StatusResponse{Up: true, History: []StatusPoint{}}
+	out := StatusResponse{Up: true, History: []StatusPoint{}, MasteryTotalOverride: s.src.MasteryTotalOverride}
 	if !s.src.StartedAt.IsZero() {
 		out.UptimeSeconds = int64(now.Sub(s.src.StartedAt) / time.Second)
 	}

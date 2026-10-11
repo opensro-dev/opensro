@@ -63,6 +63,16 @@ func TestStatusReadsTheRecentTickWindow(t *testing.T) {
 	if code := get(t, s, "/public/v1/status", &status); code != http.StatusOK {
 		t.Fatalf("status answered %d", code)
 	}
+	if status.MasteryTotalOverride != 0 {
+		t.Fatalf("a native shard published a mastery override %d", status.MasteryTotalOverride)
+	}
+	s.src.MasteryTotalOverride = 5000
+	s.mu.Lock()
+	s.cache = map[string]cacheEntry{}
+	s.mu.Unlock()
+	if get(t, s, "/public/v1/status", &status); status.MasteryTotalOverride != 5000 {
+		t.Fatalf("the beta mastery allowance is %d, want 5000", status.MasteryTotalOverride)
+	}
 	if !status.Up || status.Online != 66 || status.UptimeSeconds != int64((150*time.Minute+statusSampleEvery)/time.Second) {
 		t.Fatalf("status %+v", status)
 	}

@@ -123,6 +123,11 @@ type Sources struct {
 	Sample func() (online int, metrics transport.Metrics)
 	// StartedAt is when the GameWorld started (P7 uptime).
 	StartedAt time.Time
+	// MasteryTotalOverride is the beta total mastery allowance, 0 when
+	// native (P7 status).
+	MasteryTotalOverride int
+	// ExpRequired is the level table's EXP to pass level (rankings).
+	ExpRequired func(level int64) (int64, bool)
 	// Schedule lists the events this server runs at now (P8).
 	Schedule func(now time.Time) []ScheduledEvent
 }
@@ -144,6 +149,8 @@ type snapshot struct {
 	kills       []domain.UniqueKill
 	killsUntil  time.Time
 	lastSeq     int64
+	// rankings are the orderings built from this roster and kill list.
+	rankings map[rankingKey]rankingSet
 }
 
 /*
@@ -214,6 +221,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/characters", s.cached(charactersMaxAge, s.search))
 	mux.HandleFunc("GET /public/v1/characters/{name}", s.cached(charactersMaxAge, s.profile))
 	mux.HandleFunc("GET /public/v1/rules", s.cached(rulesMaxAge, s.rules))
+	mux.HandleFunc("GET /public/v1/rankings", s.cached(charactersMaxAge, s.rankings))
 	mux.HandleFunc("GET /public/v1/schema", s.cached(rulesMaxAge, s.schema))
 	mux.HandleFunc("GET /public/v1/status", s.cached(uniquesMaxAge, s.serverStatus))
 	mux.HandleFunc("GET /public/v1/schedule", s.cached(boardsMaxAge, s.schedule))

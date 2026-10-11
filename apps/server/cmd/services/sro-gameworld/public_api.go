@@ -147,8 +147,16 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 			}
 			return online, hub.Metrics()
 		},
-		StartedAt: startedAt,
-		Schedule:  func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
+		StartedAt:            startedAt,
+		MasteryTotalOverride: int(gameplay.deps.MasteryTotalOverride),
+		ExpRequired: func(level int64) (int64, bool) {
+			levels := gameplay.deps.LevelData()
+			if levels == nil {
+				return 0, false
+			}
+			return levels.ExpRequired(level)
+		},
+		Schedule: func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
 	})
 	if err := service.Start(addr); err != nil {
 		log.WithError(err).Warn("public api: listener not started; the community site reads its cache")
