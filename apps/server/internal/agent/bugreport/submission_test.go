@@ -283,9 +283,12 @@ func TestReadSubmissionChecksDiagnosticsShape(t *testing.T) {
 			testPart{name: "diagnostics", contentType: "application/zip", data: data}), testMaxBytes)
 		return err
 	}
+	// Every journal the client's archive writes (bug-report.ts), network.json
+	// included: a member the client sends but this list lacks refuses every
+	// report that carries diagnostics.
 	if err := read(zipOf(t, map[string]string{"manifest.json": "{}", "movement.json": `{"events":[]}`, "timeline.json": "[]",
-		"state.json": "{}", "environment.json": "{}"})); err != nil {
-		t.Fatalf("the five journals: %v", err)
+		"network.json": `{"frames":[]}`, "state.json": "{}", "environment.json": "{}"})); err != nil {
+		t.Fatalf("the six journals: %v", err)
 	}
 	for name, members := range map[string]map[string]string{
 		"extra file":   {"movement.json": "{}", "chat.txt": "hello"},

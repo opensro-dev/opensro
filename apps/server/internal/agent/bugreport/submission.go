@@ -290,10 +290,13 @@ func readDiagnostics(part *multipart.Part, maxBytes int64) (*Attachment, error) 
 	return &Attachment{FileName: "diagnostics.zip", ContentType: "application/zip", Data: data}, nil
 }
 
-// diagnosticsMembers are the journals a client may send, and nothing else.
+// diagnosticsMembers are the journals a client may send, and nothing else:
+// the client's archive (bug-report.ts) names exactly these. network.json is
+// the transport's frame journal (#729); without it here every report that
+// carried diagnostics was refused as invalid.
 var diagnosticsMembers = map[string]bool{
 	"manifest.json": true, "movement.json": true, "timeline.json": true,
-	"state.json": true, "environment.json": true,
+	"network.json": true, "state.json": true, "environment.json": true,
 }
 
 /*

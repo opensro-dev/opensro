@@ -103,6 +103,10 @@ func (server *Server) submitBugReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		// The refusal's reason names only the submission's shape (a part, a
+		// journal, a bound), never its content; without it a client/server
+		// mismatch refuses every report silently.
+		log.Warnf("agent: bug report from %s refused: %v", identity.accountID, err)
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "code": "INVALID_REPORT"})
 		return
 	}
