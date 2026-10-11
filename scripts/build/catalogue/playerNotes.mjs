@@ -7,12 +7,12 @@ A release's notes are the "Player-note:" trailers of the changes merged
 since the previous release. Each trailer is "Player-note: Area: one plain
 sentence"; a change with none is not one a player notices. A note whose
 area is not one of the forum's tags, or that names none, is filed under
-Other: a fix players should hear about is never dropped over its label.
-The notes are
-read from main's first-parent squash commits, whose message GitHub builds
-from the pull request's reviewed commits and which cannot change after the
-merge: a pull request description stays editable after review, so it is
-never the source of public text. No network is involved.
+Other with its text whole: a fix players should hear about is never
+dropped, nor a word cut, over its label. The notes are read from main's
+first-parent squash commits, whose message GitHub builds from the pull
+request's reviewed commits and which cannot change after the merge: a
+pull request description stays editable after review, so it is never the
+source of public text. No network is involved.
 
 ===========================================================================
 */
@@ -22,9 +22,9 @@ import { execFileSync } from "node:child_process";
 export const NOTE_AREAS = [ "UI", "Party", "Combat", "Items", "Animation", "Audio", "World", "Other" ];
 
 // NOTE_TRAILER is one note line of a commit message; NOTE_LABEL is the
-// optional "Area:" that opens its body.
+// optional "Area:" that opens its body (its sentence may be empty).
 const NOTE_TRAILER = /^\s*\*?\s*Player-note:\s*(.+)$/i;
-const NOTE_LABEL = /^([A-Za-z]+)\s*:\s*(.+)$/;
+const NOTE_LABEL = /^([A-Za-z]+)\s*:\s*(.*)$/;
 
 // NOTE_FALLBACK_AREA files a note with an unknown area or none.
 const NOTE_FALLBACK_AREA = "Other";
@@ -40,9 +40,11 @@ const RECORD = "\x1e", FIELD = "\x1f";
 parsePlayerNotes
 
 The notes of one commit message: every "Player-note:" line. An "Area:"
-label in the forum's tags names the area; any other label, or none, files
-the note under Other (the label itself is dropped, the sentence kept).
-Duplicate lines (a note repeated in two branch commits) count once.
+label in the forum's tags names the area and is taken off the sentence;
+any other label, or none, files the note under Other with its text whole,
+since "Storage:" and "Warning:" read alike and the word may be the
+sentence's own. A label with no sentence after it is no note. Duplicate
+lines (a note repeated in two branch commits) count once.
 ================
 */
 export function parsePlayerNotes( message ) {
@@ -53,8 +55,10 @@ export function parsePlayerNotes( message ) {
 		const body = match[1].trim(), label = NOTE_LABEL.exec( body );
 		const known = label && NOTE_AREAS.find( a => a.toLowerCase() === label[1].toLowerCase() );
 		const area = known || NOTE_FALLBACK_AREA;
-		const text = (label ? label[2] : body).trim();
-		if ( !text || text.length > NOTE_MAX_LENGTH || seen.has( area + "\n" + text ) ) continue;
+		const text = (known ? label[2] : body).trim();
+		if ( !text || (label && !label[2].trim()) || text.length > NOTE_MAX_LENGTH || seen.has( area + "\n" + text ) ) {
+			continue;
+		}
 		seen.add( area + "\n" + text );
 		notes.push( { area, text } );
 	}

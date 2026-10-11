@@ -5,8 +5,9 @@ playerNotes.test.mjs - the "Player-note:" trailers a merge carries
 
 "Player-note: Area: sentence" lines in the bug forum's areas keep their
 area; a note under any other label, or none, is filed under Other rather
-than dropped. A repeated note counts once, and a line that is not a
-Player-note trailer adds nothing to the catalogue's notes.json.
+than dropped, with its text whole; a label with no sentence is no note.
+A repeated note counts once, and a line that is not a Player-note trailer
+adds nothing to the catalogue's notes.json.
 
 ===========================================================================
 */
@@ -34,12 +35,21 @@ test("player-note trailers yield one entry per distinct note", () => {
 	] );
 });
 
-test("a note under an area the forum has no tag for is filed under Other", () => {
+test("a note under an area the forum has no tag for is filed under Other, word kept", () => {
 	// #751's shape: the storage gold fix named an area outside the tags.
 	assert.deepEqual(
 		parsePlayerNotes( "Player-note: Storage: Gold goes into and out of the warehouse again." ),
-		[ { area: "Other", text: "Gold goes into and out of the warehouse again." } ]
+		[ { area: "Other", text: "Storage: Gold goes into and out of the warehouse again." } ]
 	);
+	// A sentence that opens with a word and a colon is not cut either.
+	assert.deepEqual(
+		parsePlayerNotes( "Player-note: Warning: the trade window no longer closes itself." ),
+		[ { area: "Other", text: "Warning: the trade window no longer closes itself." } ]
+	);
+});
+
+test("a label with no sentence is no note", () => {
+	assert.deepEqual( parsePlayerNotes( [ "Player-note: Storage:", "Player-note: Party:  " ].join( "\n" ) ), [] );
 });
 
 test("a note that names no area is filed under Other with its whole sentence", () => {
