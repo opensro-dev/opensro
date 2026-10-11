@@ -10,6 +10,7 @@ unrelated regions and unlearned skills do not delay world entry.
 
 ===========================================================================
 */
+import { effectRecordAlias, resolveEffectRecordAliases } from "@/engine/foundation/animation/effect-record-alias";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
@@ -164,16 +165,23 @@ export function createSoundPreparation( assets: AssetOwner, origin: string ) {
 			}
 			skills = skillSoundRoots( source.skillAudioRows );
 		} else {
-			effects = Object.fromEntries(
-				Object.entries( value ).map( ( [id, row] ) => {
-					const source = row as EffectRow;
-					return [ id, {
-						stages: (source.stages ?? []).map( stage => ({
-							sound: stage.sound,
-							soundEnd: stage.soundEnd
-						}) )
-					} ];
-				} )
+			// A Basic_Original alias sounds as its original (917240).
+			const records = value as Record<string, unknown>;
+			effects = resolveEffectRecordAliases(
+				records,
+				Object.fromEntries(
+					Object.entries( records ).filter( ( [, row] ) => effectRecordAlias( row ) === undefined ).map( (
+						[id, row]
+					) => {
+						const source = row as EffectRow;
+						return [ id, {
+							stages: (source.stages ?? []).map( stage => ({
+								sound: stage.sound,
+								soundEnd: stage.soundEnd
+							}) )
+						} ];
+					} )
+				)
 			);
 		}
 	}

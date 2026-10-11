@@ -47,6 +47,8 @@ test("published stage decoding retains lifecycle controls and negative fade sent
 		decoded = createEffectDecoder().decode( bytes );
 	let negative = 0, kills = 0;
 	for ( const [id, record] of Object.entries( raw ) ) {
+		// A Basic_Original alias carries no stages of its own (917240).
+		if ( record.remapOf !== undefined ) continue;
 		record.authoredStages.forEach( ( stage, index ) => {
 			const control = decoded[id].stages[index].native;
 			assert.equal( control.slot, stage.id );

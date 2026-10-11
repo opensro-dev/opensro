@@ -289,7 +289,8 @@ test("published 88 plain splash and 96 radial stages admit; arrow scripts admit"
 	const raw = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/skill/effectRecords.json", "utf8" ) ),
 		catalog = createEffectDecoder().decode( new TextEncoder().encode( JSON.stringify( raw ) ) );
 	let splash = 0, option = 0;
-	for ( const record of Object.values( catalog ) ) {
+	// Aliases share their original's record: count each record once.
+	for ( const record of new Set( Object.values( catalog ) ) ) {
 		for ( const row of record.stages ) {
 			if ( ![ "AT_MOV_SPLASH", "AT_MOV_OPTION" ].includes( row.action ) || row.scripts.length ) continue;
 			const f = fixture( [ { ...row, phase: "SHOT", startEvent: 1 } ], {

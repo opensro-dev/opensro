@@ -41,7 +41,9 @@ The shared native join still owns aliases and version-local skill identities.
 export function collectSkillObjectResources( textdataDir = retailTextdataRoot, sourcePath = skillEffectPath ) {
 	const { table } = buildEffectRecordTable( textdataDir, sourcePath );
 	const objects = {};
-	for ( const [id, record] of Object.entries( table ) ) {
+	for ( const [id, entry] of Object.entries( table ) ) {
+		// A Basic_Original alias (917240) draws its original's record.
+		const record = entry.remapOf ? table[entry.remapOf] : entry;
 		if ( record.objectResource ) objects[id] = record.objectResource;
 	}
 	return objects;

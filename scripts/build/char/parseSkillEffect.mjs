@@ -66,6 +66,11 @@ import {
 const SKILLDATA_COL_ID = 1;
 const SKILLDATA_COL_LEVEL_NAME = 3;
 const SKILLDATA_COL_ANIMSET_BASE = 5;
+// Basic_Original: CGlobalDataManager_LoadTextDataFile consumes Service, so
+// CSkillData_ParseTextRow stores this column at extended record +0x5C, the
+// motion-metadata remap GlobalEffectManager_FindSkillMotionMetadata
+// (917240) follows.
+const SKILLDATA_COL_ORIGINAL = 6;
 
 /**
  * Native data_ccdca8: the built-in effect-name/id pairs registered into the
@@ -535,10 +540,12 @@ export function loadSkillDataRows( textdataDir ) {
 			if ( !name ) continue;
 			const id = Number( c[SKILLDATA_COL_ID] );
 			if ( !Number.isInteger( id ) || id <= 0 ) continue;
+			const original = Number( c[SKILLDATA_COL_ORIGINAL] );
 			rows.push( {
 				id,
 				levelName: name,
-				animBaseName: c[SKILLDATA_COL_ANIMSET_BASE] ?? ""
+				animBaseName: c[SKILLDATA_COL_ANIMSET_BASE] ?? "",
+				originalId: Number.isInteger( original ) && original > 0 ? original : 0
 			} );
 		}
 	}
@@ -552,7 +559,8 @@ buildEffectRecordTable
  * Build the f0902c effect-record table: skilldata numeric id -> the
  * WipSkillEffectRecord-shaped record referenced by the row's base anim-set
  * name or, for directly-authored monster/pet rows, its exact level name.
- * Rows with no authored skillaniset record remain absent.
+ * A row with a Basic_Original that has a record is { remapOf: original }
+ * (917240). Rows with no authored skillaniset record remain absent.
 ================
 */
 export function buildEffectRecordTable(
@@ -679,6 +687,19 @@ export function buildEffectRecordTable(
 		addRecord( id, ani );
 		builtinRegistered++;
 	}
+	// 917240 remaps a positive skill id to its Basic_Original before the
+	// record lookup, once and ahead of any record of its own: a pet's levelled
+	// attacks (PSKILL_P_WOLF_002_ATTACK_01 -> PSKILL_P_WOLF_01_ATTACK01) have
+	// no skillaniset row and draw through the original. The alias keeps the
+	// asset to one copy of each record; a remap to an id with no record keeps
+	// the row's own (native would assert there).
+	const authored = new Set( Object.keys( table ) );
+	let remapped = 0;
+	for ( const row of rows ) {
+		if ( !row.originalId || row.originalId === row.id || !authored.has( String( row.originalId ) ) ) continue;
+		table[row.id] = { remapOf: row.originalId };
+		remapped++;
+	}
 	// 917340 has a distinct name-keyed map, including externally used items.
 	const namedTable = {};
 	for ( const [name, ani] of aniSets ) addRecord( name, ani, namedTable );
@@ -689,6 +710,7 @@ export function buildEffectRecordTable(
 		aniSets: aniSets.size,
 		effectSets: effectSets.size,
 		matched,
-		builtinRegistered
+		builtinRegistered,
+		remapped
 	};
 }

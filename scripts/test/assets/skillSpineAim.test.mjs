@@ -43,6 +43,8 @@ test("bows aim their spine from the right hand at the target, released at the sh
 	for ( const row of Object.values( table ) ) {
 		if ( row.spineAim ) axes[row.spineAim.axis] = (axes[row.spineAim.axis] ?? 0) + 1;
 	}
-	assert.deepEqual( axes, { 1: 373, 2: 240, 4: 11 }, "Roll, Yaw and RollR rows of the shipped data" );
+	// Rows with a record of their own: PSKILL_P_WOLF_01_ATTACK01_SMALL draws
+	// its Basic_Original's (917240), a { remapOf } alias with no spine aim.
+	assert.deepEqual( axes, { 1: 373, 2: 239, 4: 11 }, "Roll, Yaw and RollR rows of the shipped data" );
 	assert.equal( Object.values( table ).find( row => row.animBaseName === "SKILL_CH_SWORD_BASE" )?.spineAim, null );
 });

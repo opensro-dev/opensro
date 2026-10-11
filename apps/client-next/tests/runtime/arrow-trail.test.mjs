@@ -124,6 +124,8 @@ function fixture( stages = [ stage ], record = {}, detail = 2 ) {
 test("arrow catalog exposes the two retail resources and never uses the trail as a projectile fallback", () => {
 	let arrows = 0, weapons = 0;
 	for ( const [id, r] of Object.entries( catalog ) ) {
+		// A Basic_Original alias lends its original's record (917240).
+		if ( raw[id].remapOf !== undefined ) continue;
 		assert.deepEqual( r.arrowEffects, [ raw[id].arrowTrailEffectPath, raw[id].arrowForceEffectPath ] );
 		for ( const s of r.stages ) {
 			if ( s.scripts[0] === "SCT_ARROW" ) {
@@ -157,7 +159,8 @@ test("arrow catalog exposes the two retail resources and never uses the trail as
 });
 test("all 666 published arrow stages admit, including held arrows, splash and equipped weapon copies", () => {
 	let count = 0;
-	for ( const record of Object.values( catalog ) ) {
+	// Aliases share their original's record: count each record once.
+	for ( const record of new Set( Object.values( catalog ) ) ) {
 		for ( const s of record.stages ) {
 			if ( defined( s.script ).kind === "arrow" ) {
 				const f = fixture( [ { ...s, phase: "SHOT", startEvent: 1 } ], {

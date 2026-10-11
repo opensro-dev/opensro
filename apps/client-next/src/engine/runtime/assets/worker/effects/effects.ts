@@ -15,6 +15,10 @@ import { createEffectPrograms } from "./program/program";
 import { skillMotionRole } from "@/engine/foundation/animation/skill-motion";
 import { effectScript } from "@/engine/foundation/animation/effect-script";
 import type { EffectCatalog, EffectRecord, EffectStage } from "@/engine/contracts/effects";
+import { effectRecordAlias, resolveEffectRecordAliases } from "@/engine/foundation/animation/effect-record-alias";
+
+// Authored records plus their Basic_Original aliases (about 25,700 in v1.150).
+const MAX_EFFECT_CATALOG_ENTRIES = 32768;
 /*
 ================
 spineAimBinding
@@ -84,12 +88,15 @@ export function createEffectDecoder() {
 		decode( bytes: Uint8Array ): EffectCatalog {
 			const value = JSON.parse( new TextDecoder( "utf-8", { fatal: true } ).decode( bytes ) );
 			if (
-				!value || typeof value !== "object" || Array.isArray( value ) || Object.keys( value ).length > 10000
+				!value || typeof value !== "object" || Array.isArray( value ) ||
+				Object.keys( value ).length > MAX_EFFECT_CATALOG_ENTRIES
 			) {
 				throw new Error( "Invalid effect catalog" );
 			}
 			const result: Record<string, EffectRecord> = {};
 			for ( const [id, record] of Object.entries( value ) ) {
+				// Aliases draw their original's decoded record (below).
+				if ( effectRecordAlias( record ) !== undefined ) continue;
 				const row = record as {
 					animSlotKey?: number;
 					hitLight?: EffectRecord["hitLight"];
@@ -334,7 +341,7 @@ export function createEffectDecoder() {
 					} )
 				};
 			}
-			return result;
+			return resolveEffectRecordAliases( value, result );
 		}
 	};
 }
