@@ -106,6 +106,8 @@ export interface SessionOwner {
 	command( command: SessionCommand, now?: number ): void;
 	step( now?: number ): SessionState | null;
 	takeWorld(): import("./world").WorldBatch | null;
+	// The transport's frame journal since the last take (NetworkOwner.takeJournal).
+	takeNetJournal(): Float64Array | null;
 	ackWorld( sequence: number ): void;
 	dispose(): void;
 }

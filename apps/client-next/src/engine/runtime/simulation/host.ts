@@ -13,6 +13,10 @@ import type { SessionState } from "@/engine/contracts/session";
 import { PROTOCOL_VERSION, readSnapshot } from "@/engine/contracts/simulation";
 import type { WorkerMessage, HostMessage } from "@/engine/contracts/simulation";
 import type { SimulationHost, SimulationObservation } from "@/engine/contracts/runtime";
+import { NET_JOURNAL_FIELDS } from "@/engine/contracts/network";
+// The bug report's frame journal keeps at least this many recent frames.
+const NET_JOURNAL_KEPT = 8192;
+
 /*
 ================
 createSimulationHost
@@ -29,6 +33,8 @@ export function createSimulationHost(): SimulationHost {
 	let lastInputSent = 0, lastInputAccepted = 0;
 	let receivedAtMs = 0, clock: import("@/engine/contracts/runtime").ClockSample | undefined;
 	let deliveryWaiters: (() => void)[] = [];
+	// The transport's frame journal (network.ts), oldest first, for bug reports.
+	let journal: Float64Array[] = [], journalRecords = 0;
 	/*
 ================
 wake
@@ -64,6 +70,16 @@ tab; worker messages do not.
 			sessionState = event.data.state;
 			return;
 		}
+		if ( event.data.kind === "net-journal" ) {
+			journal.push( event.data.records );
+			journalRecords += event.data.records.length / NET_JOURNAL_FIELDS;
+			while (
+				journal.length > 1 && journalRecords - journal[0]!.length / NET_JOURNAL_FIELDS >= NET_JOURNAL_KEPT
+			) {
+				journalRecords -= journal.shift()!.length / NET_JOURNAL_FIELDS;
+			}
+			return;
+		}
 		if ( pending ) {
 			recycle( pending );
 		}
@@ -80,6 +96,23 @@ tab; worker messages do not.
 	send( { kind: "start", version: PROTOCOL_VERSION } );
 	return {
 		pollWorld: () => worldBatch,
+		/*
+================
+netJournal
+
+The frames journaled so far (at least the last NET_JOURNAL_KEPT), oldest
+first: epoch ms, direction, opcode and bytes per frame.
+================
+		*/
+		netJournal() {
+			const out = new Float64Array( journalRecords * NET_JOURNAL_FIELDS );
+			let at = 0;
+			for ( const chunk of journal ) {
+				out.set( chunk, at );
+				at += chunk.length;
+			}
+			return out;
+		},
 		/*
 ================
 delivery

@@ -16,6 +16,9 @@ import { PROTOCOL_VERSION, SNAPSHOT_BYTES, SIMULATION_STEP_MS, writeSnapshot } f
 import type { HostMessage, WorkerMessage } from "@/engine/contracts/simulation";
 const MAX_SNAPSHOTS = 3;
 
+// How often the transport's frame journal goes to the host (simulation ms).
+const NET_JOURNAL_PUSH_MS = 1000;
+
 /*
 ================
 createSimulation
@@ -29,7 +32,7 @@ export function createSimulation( send: ( message: WorkerMessage, transfer: Tran
 		new ArrayBuffer( SNAPSHOT_BYTES ),
 		new ArrayBuffer( SNAPSHOT_BYTES )
 	];
-	let sequence = 0, timeMs = 0, started = false, stopped = false;
+	let sequence = 0, timeMs = 0, started = false, stopped = false, journalSentAtMs = 0;
 	/*
 	================
 	fail
@@ -53,6 +56,12 @@ export function createSimulation( send: ( message: WorkerMessage, transfer: Tran
 		const sessionState = session.step( timeMs );
 		const batch = session.takeWorld();
 		if ( batch ) send( { kind: "world", batch }, [] );
+		// Bug-report frame journal: one transfer a second, not one per frame.
+		if ( timeMs - journalSentAtMs >= NET_JOURNAL_PUSH_MS ) {
+			journalSentAtMs = timeMs;
+			const records = session.takeNetJournal();
+			if ( records ) send( { kind: "net-journal", records }, [ records.buffer ] );
+		}
 		if ( sessionState ) {
 			send( { kind: "session", state: sessionState }, [] );
 		}

@@ -905,6 +905,7 @@ baseUrl
 			return state;
 		},
 		takeWorld: () => world.take(),
+		takeNetJournal: () => world.takeNetJournal(),
 		ackWorld: sequence => world.ack( sequence ),
 		dispose() {
 			if ( !disposed ) {

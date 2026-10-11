@@ -347,6 +347,8 @@ The simulation worker capability owns its message channel and lifecycle.
 */
 export interface SimulationHost extends Disposable {
 	pollWorld(): import("./world").WorldBatch | null;
+	/** The transport's recent frame journal, oldest first (network.ts NET_JOURNAL_FIELDS per frame). */
+	netJournal(): Float64Array;
 	/** Resolves on the next worker message; paces frames while the tab is hidden. */
 	delivery(): Promise<void>;
 	ackWorld( sequence: number ): void;

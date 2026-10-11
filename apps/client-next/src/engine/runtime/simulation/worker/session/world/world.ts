@@ -579,6 +579,16 @@ step
 		},
 		/*
 ================
+takeNetJournal
+
+The network owner's frame journal since the last take (network.ts).
+================
+		*/
+		takeNetJournal() {
+			return network.takeJournal();
+		},
+		/*
+================
 status
 ================
 		*/

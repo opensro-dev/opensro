@@ -189,3 +189,24 @@ test("highly compressible diagnostics respect the Agent expanded-byte limit too"
 	assert.equal( documents["movement.json"].events[0].token, 9 );
 	assert.ok( documents["manifest.json"].omissions.some( text => text.includes( "inventory" ) ) );
 });
+
+test("the shared network.json keeps only time, direction, opcode and size", async () => {
+	const files = {
+		...fixture(),
+		"network.json": JSON.stringify( {
+			note: "rows",
+			events: [ [ 1.25, "in", "0xB070", 40 ], [ 1.5, "out", "0x7074", 12, "EXTRA" ], [
+				2,
+				"sideways",
+				"0x7074",
+				1
+			], {
+				t: 3,
+				text: "PRIVATE_CHAT"
+			} ]
+		} )
+	};
+	const { documents } = await readZip( await createDiagnosticUpload( files, OPTIONS ) );
+	assert.deepEqual( documents["network.json"].events, [ [ 1.25, "in", "0xB070", 40 ] ] );
+	assert.doesNotMatch( JSON.stringify( documents ), /PRIVATE_CHAT|EXTRA/ );
+});

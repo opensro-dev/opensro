@@ -14,6 +14,11 @@ export interface WireFrame {
 	readonly opcode: number;
 	readonly payload: Uint8Array;
 }
+// The transport frame journal (NetworkOwner.takeJournal): per frame, these
+// many numbers: epoch ms, direction (NET_JOURNAL_IN or _OUT), opcode, bytes.
+export const NET_JOURNAL_FIELDS = 4;
+export const NET_JOURNAL_IN = 0;
+export const NET_JOURNAL_OUT = 1;
 /*
 ================
 NetworkOwner
@@ -27,6 +32,9 @@ export interface NetworkOwner {
 	drain( consume: ( frame: WireFrame ) => boolean | void ): void;
 	disconnect(): void;
 	enterWorld( division: string, character: string, token: string ): void;
+	// Frames journaled since the last take (epoch ms, direction, opcode,
+	// bytes per frame), or null; the bug report's network.json.
+	takeJournal(): Float64Array | null;
 	dispose(): void;
 }
 /*

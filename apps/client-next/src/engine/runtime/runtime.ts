@@ -269,6 +269,7 @@ export function startRuntime(
 			createBugReport( {
 				canvas,
 				apiBase,
+				network: () => simulation.netJournal(),
 				context: (): readonly BugReportField[] => {
 					const game = presentation.gameplay();
 					const local = game?.localGid ? presentation.read( game.localGid ) : undefined;
