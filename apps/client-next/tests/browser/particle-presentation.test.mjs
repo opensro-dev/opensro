@@ -171,6 +171,12 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 						particles.actors[at + records.ACTOR_FRACTION] = random() * 1.2 - .1;
 						particles.actors.set( rotation( random() * 6, .5 + random() ), at + records.ACTOR_PALETTE );
 						particles.actors[at + records.ACTOR_PALETTE + 12] = spread( 10 );
+						// A holder follow (particle-holder-link.ts): a turn, a move, a pivot.
+						particles.actors.set( rotation( spread( 1 ) ), at + records.ACTOR_FOLLOW );
+						for ( let axis = 0; axis < 3; axis++ ) {
+							particles.actors[at + records.ACTOR_FOLLOW + 12 + axis] = spread( 5 );
+							particles.actors[at + records.ACTOR_FOLLOW + 16 + axis] = spread( 10 );
+						}
 					}
 					const write = slot => {
 						const row = Math.floor( slot / slots ), time = particles.actors[row * records.PARTICLE_ACTOR];
@@ -188,6 +194,9 @@ for ( const storageBudget of [ undefined, 65536 ] ) {
 							};
 							if ( state.previous ) state.previous.matrix.set( ticked( matrix, -spread( .8 ) ) );
 							records.writeGraphRecord( particles.records, slot, element, work );
+							// Any mix of holder links (LINK_TRANSLATE 4, LINK_TURN 8, LINK_MATRIX 16).
+							particles.records[slot * records.PARTICLE_RECORD + records.RECORD_FLAGS] +=
+								Math.floor( random() * 8 ) * 4;
 						} else {
 							const matrices = rotation( random() * 6, .5 + random() );
 							matrices[12] = spread( 50 );

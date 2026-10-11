@@ -18,7 +18,7 @@ only when drawn and only to their whole tick.
 */
 
 import type { CharacterActor, CharacterModel, CharacterPrimitive } from "@/engine/contracts/character";
-import type { ParticleGraphState } from "@/engine/foundation/animation/particle-graph";
+import type { ParticleGraphState, ParticleLink } from "@/engine/foundation/animation/particle-graph";
 import { advanceParticle, type ParticleInstance } from "@/engine/foundation/animation/particle-program";
 import {
 	PARTICLE_TICKS_PER_SECOND,
@@ -26,6 +26,7 @@ import {
 	snapshotParticleTick
 } from "@/engine/foundation/animation/particle-presentation";
 import {
+	ACTOR_FOLLOW,
 	ACTOR_FRACTION,
 	ACTOR_OPACITY,
 	ACTOR_PALETTE,
@@ -52,6 +53,8 @@ lifetime): its graph, or its primitives' birth matrices and programs.
 */
 export interface ParticleHistory {
 	readonly graph?: ParticleGraphState;
+	// The graph's holder follow this frame (particle-holder-link.ts).
+	readonly link?: ParticleLink;
 	readonly matrices: readonly (Float32Array | undefined)[];
 	readonly programs: readonly (ParticleInstance | undefined)[][];
 }
@@ -201,7 +204,7 @@ function writeGraphRow( stream: ParticleStream, index: number, history: Particle
 	for ( let b = 0; b < extent; b++ ) {
 		const element = elements[b];
 		if ( element?.alive ) {
-			writeGraphRecord( stream.records, base + b, element, stream.work );
+			writeGraphRecord( stream.records, base + b, element, stream.work, history.link );
 			live++;
 		} else hideRecord( stream.records, base + b );
 	}
@@ -298,6 +301,7 @@ export function writeParticleRow(
 		if ( !graph ) throw Error( "Graph particle stream without its graph" );
 		actors[at + ACTOR_FRACTION] = actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame;
 		actors.set( stream.graphPalette, at + ACTOR_PALETTE );
+		if ( history.link ) actors.set( history.link.follow, at + ACTOR_FOLLOW );
 		writeGraphRow( stream, index, history, row.origin );
 		return;
 	}

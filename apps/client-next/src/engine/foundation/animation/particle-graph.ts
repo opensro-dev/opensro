@@ -21,6 +21,12 @@ import {
 	type ParticleEmitter as EmissionParameters
 } from "@/engine/foundation/animation/particle-emission";
 import { identity } from "@/engine/foundation/rendering/world-math";
+import {
+	followMatrix,
+	LINK_MATRIX,
+	rootLinkFlags,
+	rootTickShift
+} from "@/engine/foundation/animation/particle-holder-link";
 import { multiply } from "@/engine/foundation/math/pose-math";
 import {
 	initializeParticle,
@@ -101,6 +107,8 @@ export interface ParticleElement {
 	children: number;
 	released: boolean;
 	group?: ParticleGroup;
+	// The holder links the element carries (particle-holder-link.ts).
+	rootLink: number;
 	readonly previousPosition: number[];
 	readonly state: ParticleInstance;
 	readonly matrix: Float32Array;
@@ -523,6 +531,7 @@ export function createParticleGraph( graph: readonly ParticleEmitter[], index: n
 		alive: true,
 		children: 0,
 		released: false,
+		rootLink: 0,
 		state: { position: [ 0, 0, 0 ], velocity: [ 0, 0, 0 ], scale: [ 1, 1, 1 ], rotation: identity(), frame: 0 },
 		matrix: identity(),
 		delta: identity(),
@@ -740,6 +749,7 @@ export function advanceParticleGraph(
 						alive: true,
 						children: 0,
 						released: false,
+						rootLink: 0,
 						group: def.emission ? history.groups[n]!.get( parent ) : undefined,
 						state,
 						matrix: parent.matrix.slice(),
@@ -828,6 +838,13 @@ export function advanceParticleGraph(
 					}
 				}
 				if ( age < def.frames ) {
+					// Parents tick first, so each sees its ancestors' links.
+					element.rootLink = rootLinkFlags(
+						ancestor( element, def.positionDepth ),
+						ancestor( element, def.followDepth ),
+						def.matrixDepth > 0 ? ancestor( element, def.matrixDepth ) : undefined,
+						root
+					);
 					commands( element, def, age, history, table, sibling );
 					const program = def.commands ? undefined : def.program;
 					if ( program?.rVelocity && (program.rotationFrames ?? [ 0 ]).includes( age ) ) {
@@ -872,12 +889,31 @@ export function advanceParticleGraph(
 
 /*
 ================
+ParticleLink
+
+The holder follow a drawn element rides (particle-holder-link.ts): the
+graph's root, the follow holderFollow wrote this frame, and the caller's
+scratch.
+================
+*/
+export interface ParticleLink {
+	readonly root: ParticleElement;
+	readonly follow: Float32Array;
+	readonly turned: Float32Array;
+	readonly shift: number[];
+}
+
+/*
+================
 particleElementMatrix
 
 Presentation-only bounded prediction: exact tick poses are unchanged. No
 random draws, command execution, births or retirement occur here. The
 element frame continues its last tick rotation the same way
-(particle-presentation.ts, deliberate smoothing deviation).
+(particle-presentation.ts, deliberate smoothing deviation). With a link,
+an element that rides its holder continues only its own motion and is
+then carried by the holder's motion since the tick, as native B153A0
+carries it every draw.
 ================
 */
 export function particleElementMatrix(
@@ -885,22 +921,35 @@ export function particleElementMatrix(
 	out: Float32Array,
 	offset: number,
 	fraction = 0,
-	work?: Float64Array
+	work?: Float64Array,
+	link?: ParticleLink
 ): void {
 	const blend = Math.max( 0, Math.min( 1, fraction ) ), previous = element.state.previous;
+	const flags = link ? element.rootLink : 0;
 	if ( previous && blend > 0 ) {
-		continueRotation(
-			previous.matrix,
-			element.matrix,
-			blend,
-			out,
-			offset,
-			work,
-			previous.matrixStep ??= createStepCache()
-		);
+		// The holder's own last tick turn is carried by the follow; continue
+		// only the element frame's turn relative to it.
+		let from = previous.matrix;
+		if ( flags & LINK_MATRIX ) {
+			multiply( link!.root.delta, previous.matrix, link!.turned );
+			from = link!.turned;
+		}
+		continueRotation( from, element.matrix, blend, out, offset, work, previous.matrixStep ??= createStepCache() );
 	} else out.set( element.matrix, offset );
+	const shift = link?.shift;
+	if ( shift ) {
+		rootTickShift(
+			flags,
+			element.previousPosition,
+			link!.root.delta,
+			link!.root.origin,
+			link!.root.state.position,
+			shift
+		);
+	}
 	for ( let axis = 0; axis < 3; axis++ ) {
 		out[offset + 12 + axis] = element.state.position[axis]! +
-			(element.state.position[axis]! - element.previousPosition[axis]!) * blend;
+			(element.state.position[axis]! - element.previousPosition[axis]! - (shift?.[axis] ?? 0)) * blend;
 	}
+	if ( flags ) followMatrix( flags, link!.follow, 0, out, offset );
 }

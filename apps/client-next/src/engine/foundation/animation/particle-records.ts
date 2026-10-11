@@ -22,7 +22,9 @@ scalar, so every group fills 16 bytes.
 ===========================================================================
 */
 
-import type { ParticleElement } from "@/engine/foundation/animation/particle-graph";
+import type { ParticleElement, ParticleLink } from "@/engine/foundation/animation/particle-graph";
+import { LINK_MATRIX, rootTickShift } from "@/engine/foundation/animation/particle-holder-link";
+import { multiply } from "@/engine/foundation/math/pose-math";
 import type { ParticleInstance } from "@/engine/foundation/animation/particle-program";
 import { PARTICLE_TICKS_PER_SECOND, tickRotationStep } from "@/engine/foundation/animation/particle-presentation";
 
@@ -48,17 +50,22 @@ export const RECORD_ROTATION_STEP = 56;
 export const RECORD_VELOCITY = 60;
 
 // RECORD_FLAGS bits. LIVE: the slot holds a particle. PRESENTED: it has a
-// program pose (a plain emitted mesh has none and keeps its palette).
+// program pose (a plain emitted mesh has none and keeps its palette). The
+// holder links (particle-holder-link.ts LINK_*) take bits 4, 8 and 16.
 export const RECORD_LIVE = 1;
 export const RECORD_PRESENTED = 2;
 
 // Floats in one actor row: time, opacity, graph tick fraction, padding,
-// then the palette every particle of the actor starts from.
-export const PARTICLE_ACTOR = 20;
+// the palette every particle of the actor starts from, then a graph's
+// holder follow (holderFollow) its linked elements ride this frame.
 export const ACTOR_TIME = 0;
 export const ACTOR_OPACITY = 1;
 export const ACTOR_FRACTION = 2;
 export const ACTOR_PALETTE = 4;
+export const ACTOR_FOLLOW = 20;
+// ACTOR_FOLLOW + HOLDER_FOLLOW (particle-holder-link.ts); the shader's ACTOR_ROW
+// is this in vec4s.
+export const PARTICLE_ACTOR = 40;
 
 // The EFP view modes (effect-billboard.ts) as the pass numbers them.
 export const PARTICLE_VIEW_NONE = 0;
@@ -111,27 +118,47 @@ writeGraphRecord
 
 A live particle graph element. Its instance matrix continues the element
 frame's last tick rotation and moves its position by its last tick motion
-(particleElementMatrix). work is ROTATION_WORK scratch.
+(particleElementMatrix). With the graph's link, an element that rides its
+holder records only its own motion and its links in the flags; the pass
+carries it by the actor's holder follow. work is ROTATION_WORK scratch.
 ================
 */
 export function writeGraphRecord(
 	records: Float32Array,
 	slot: number,
 	element: ParticleElement,
-	work: Float64Array
+	work: Float64Array,
+	link?: ParticleLink
 ): void {
 	const at = slot * PARTICLE_RECORD, state = element.state, previous = state.previous;
+	const flags = link ? element.rootLink : 0, shift = link?.shift;
+	if ( shift ) {
+		rootTickShift(
+			flags,
+			element.previousPosition,
+			link!.root.delta,
+			link!.root.origin,
+			link!.root.state.position,
+			shift
+		);
+	}
 	records.set( element.matrix, at + RECORD_MATRIX );
 	for ( let axis = 0; axis < 3; axis++ ) {
 		const position = state.position[axis]!;
 		records[at + RECORD_MATRIX + 12 + axis] = position;
-		records[at + RECORD_MOTION + axis] = position - element.previousPosition[axis]!;
+		records[at + RECORD_MOTION + axis] = position - element.previousPosition[axis]! - (shift?.[axis] ?? 0);
 	}
-	if ( previous ) tickRotationStep( previous.matrix, element.matrix, records, at + RECORD_MATRIX_STEP, work );
-	else records.fill( 0, at + RECORD_MATRIX_STEP, at + RECORD_MATRIX_STEP + 4 );
+	if ( previous ) {
+		let from = previous.matrix;
+		if ( flags & LINK_MATRIX ) {
+			multiply( link!.root.delta, previous.matrix, link!.turned );
+			from = link!.turned;
+		}
+		tickRotationStep( from, element.matrix, records, at + RECORD_MATRIX_STEP, work );
+	} else records.fill( 0, at + RECORD_MATRIX_STEP, at + RECORD_MATRIX_STEP + 4 );
 	writeTickPose( records, at, state, work );
 	records[at + RECORD_BIRTH] = element.clockBirth / PARTICLE_TICKS_PER_SECOND;
-	records[at + RECORD_FLAGS] = RECORD_LIVE | RECORD_PRESENTED;
+	records[at + RECORD_FLAGS] = RECORD_LIVE | RECORD_PRESENTED | flags;
 }
 
 /*

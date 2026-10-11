@@ -21,6 +21,7 @@ const records = await import( "../../src/engine/foundation/animation/particle-re
 const { turnByStep, ROTATION_WORK } = await import( "../../src/engine/foundation/animation/particle-presentation.ts" );
 const { faceEffectMesh } = await import( "../../src/engine/foundation/rendering/effect-billboard.ts" );
 const { multiply } = await import( "../../src/engine/foundation/math/pose-math.ts" );
+const { followMatrix } = await import( "../../src/engine/foundation/animation/particle-holder-link.ts" );
 
 const {
 	PARTICLE_RECORD,
@@ -44,6 +45,7 @@ const {
 	ACTOR_OPACITY,
 	ACTOR_FRACTION,
 	ACTOR_PALETTE,
+	ACTOR_FOLLOW,
 	PARTICLE_VIEW_NONE,
 	PARTICLE_VIEW_V
 } = records;
@@ -110,6 +112,8 @@ export function presentSlot( particles, data, slot ) {
 	for ( let axis = 0; axis < 3; axis++ ) {
 		matrix[12 + axis] = data[at + RECORD_MATRIX + 12 + axis] + data[at + RECORD_MOTION + axis] * fraction;
 	}
+	// The pass carries a holder-linked record by the actor's holder follow.
+	followMatrix( flags, actors, row + ACTOR_FOLLOW, matrix, 0 );
 	const presented = (flags & RECORD_PRESENTED) !== 0;
 	const palette = actors.slice( row + ACTOR_PALETTE, row + ACTOR_PALETTE + 16 );
 	if ( presented ) {

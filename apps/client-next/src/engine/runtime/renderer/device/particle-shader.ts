@@ -11,7 +11,9 @@ the next one (particle-presentation.ts, a deliberate smoothing
 deviation). The steps follow the CPU order they replace:
 
   instance  the tick matrix, turned by its rotation step and moved by its
-            motion (particleElementMatrix);
+            motion (particleElementMatrix), then carried by the actor's
+            holder follow when its links ride the holder
+            (particle-holder-link.ts followMatrix, native B153A0);
   palette   the actor palette; columns scaled by the presented scale and,
             for a primitive's own program, moved to the presented
             position; faced by the view mode (faceEffectMesh); then
@@ -42,6 +44,8 @@ struct Record {
 struct Actor {
 	clock: vec4f,		// time, opacity, graph tick fraction
 	palette: mat4x4f,
+	follow: mat4x4f,	// the holder's turn and move since the graph's tick
+	pivot: vec4f,		// the holder's position at that tick
 }
 struct Params {
 	shape: vec4u,		// slots per actor, slots, graph, view mode
@@ -67,6 +71,12 @@ struct Instance {
 
 const RECORD_LIVE = 1u;
 const RECORD_PRESENTED = 2u;
+// particle-holder-link.ts LINK_TRANSLATE, LINK_TURN, LINK_MATRIX.
+const LINK_TRANSLATE = 4u;
+const LINK_TURN = 8u;
+const LINK_MATRIX = 16u;
+// vec4s in one actor row (particle-records.ts PARTICLE_ACTOR / 4).
+const ACTOR_ROW = 10u;
 const VIEW_NONE = 0u;
 const VIEW_V = 3u;
 const TICKS_PER_SECOND = 20.0;
@@ -167,10 +177,12 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 	}
 	let output = descriptor.z + slot;
 	let record = records[descriptor.y + slot];
-	let row = at + 6u + ( slot / params.shape.x ) * 5u;
+	let row = at + 6u + ( slot / params.shape.x ) * ACTOR_ROW;
 	let actor = Actor( bitcast<vec4f>( frame[row] ), mat4x4f(
 		bitcast<vec4f>( frame[row + 1u] ), bitcast<vec4f>( frame[row + 2u] ),
-		bitcast<vec4f>( frame[row + 3u] ), bitcast<vec4f>( frame[row + 4u] ) ) );
+		bitcast<vec4f>( frame[row + 3u] ), bitcast<vec4f>( frame[row + 4u] ) ), mat4x4f(
+		bitcast<vec4f>( frame[row + 5u] ), bitcast<vec4f>( frame[row + 6u] ),
+		bitcast<vec4f>( frame[row + 7u] ), bitcast<vec4f>( frame[row + 8u] ) ), bitcast<vec4f>( frame[row + 9u] ) );
 	let lifetime = params.timing.x;
 	var age = actor.clock.x - record.birth;
 	if ( params.timing.y > 0.5 && age >= 0.0 ) {
@@ -189,6 +201,19 @@ fn face( palette: mat4x4f, instance: mat4x4f, mode: u32, velocity: vec3f, params
 	}
 	var instance = turn( record.matrix, record.matrixStep, fraction );
 	instance[3] = vec4f( record.matrix[3].xyz + record.motion * fraction, record.matrix[3].w );
+	// followMatrix: turn about the holder's tick position, move, turn the frame.
+	let turn3 = mat3x3f( actor.follow[0].xyz, actor.follow[1].xyz, actor.follow[2].xyz );
+	if ( ( flags & LINK_TURN ) != 0u ) {
+		instance[3] = vec4f( turn3 * ( instance[3].xyz - actor.pivot.xyz ) + actor.pivot.xyz, instance[3].w );
+	}
+	if ( ( flags & LINK_TRANSLATE ) != 0u ) {
+		instance[3] = vec4f( instance[3].xyz + actor.follow[3].xyz, instance[3].w );
+	}
+	if ( ( flags & LINK_MATRIX ) != 0u ) {
+		instance[0] = vec4f( turn3 * instance[0].xyz, instance[0].w );
+		instance[1] = vec4f( turn3 * instance[1].xyz, instance[1].w );
+		instance[2] = vec4f( turn3 * instance[2].xyz, instance[2].w );
+	}
 	let presented = ( flags & RECORD_PRESENTED ) != 0u;
 	var palette = actor.palette;
 	if ( presented ) {

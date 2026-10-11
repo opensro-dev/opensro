@@ -21,6 +21,7 @@ import {
 	type ParticleGraphState
 } from "@/engine/foundation/animation/particle-graph";
 import { bindNativeClip, type NativeClip } from "@/engine/foundation/animation/native-clip";
+import { HOLDER_FOLLOW, holderFollow } from "@/engine/foundation/animation/particle-holder-link";
 import { createActorSnapshots } from "./actor-snapshots";
 import type { PortraitPart, PortraitSource } from "@/engine/contracts/portrait";
 import { bsrParticleAttachment } from "@/engine/foundation/animation/bsr-particle-transform";
@@ -1241,14 +1242,23 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			!history || history.model !== actor.model || actor.time < history.time ||
 			history.cycle !== (frame.cycles.get( actor.gid ) ?? 0)
 		) {
+			const graph = model.particleGraph ?
+				createParticleGraph( model.particleGraph, particleRandom.index ) :
+				undefined;
 			history = {
 				model: actor.model,
 				time: actor.time,
 				cycle: frame.cycles.get( actor.gid ) ?? 0,
 				origin: frame.origin,
 				bytes: storage,
-				graph: model.particleGraph ?
-					createParticleGraph( model.particleGraph, particleRandom.index ) :
+				graph,
+				link: graph ?
+					{
+						root: graph.root,
+						follow: new Float32Array( HOLDER_FOLLOW ),
+						turned: new Float32Array( 16 ),
+						shift: [ 0, 0, 0 ]
+					} :
 					undefined,
 				programs: model.primitives.map( () => [] ),
 				matrices: model.primitives.map( p =>
@@ -1289,6 +1299,11 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 			actor.loop
 		);
 		particleRandom.index = graph.index;
+		// B153A0 carries linked elements by the holder every draw: this
+		// frame's holder against the graph's last tick (particle-holder-link.ts).
+		if ( history.link ) {
+			holderFollow( graph.root.matrix, graph.root.state.position, transform, history.link.follow );
+		}
 		// Graph ribbons are strips through their elements' drawn
 		// frames; other graph primitives are drawn from their tick
 		// records by the GPU pass (particle-streams.ts).
@@ -1305,7 +1320,8 @@ export function createCharacters( random?: import("@/engine/contracts/presentati
 					matrices,
 					b * 16,
 					actor.time * PARTICLE_TICKS_PER_SECOND - graph.frame,
-					rotationWork
+					rotationWork,
+					history.link
 				);
 			}
 		}
