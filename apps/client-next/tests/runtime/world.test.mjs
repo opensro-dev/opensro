@@ -1970,6 +1970,47 @@ test("travel waits for presentation but a later incomplete travel gets a fresh n
 	assert.equal( world.status().error, "World connection timed out" );
 });
 
+/*
+================
+a fatal packet incident carries its frame journal
+
+B1 ("Unmatched COS transfer result") ended sessions with no evidence of the
+frames before it: the report now carries them, the failing frame last.
+================
+*/
+test("a fatal packet incident carries the frames before it", async t => {
+	const sockets = socketHarness( t ), incidents = [];
+	const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome() );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered() );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	socket.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+	world.step( 4 );
+	flush( world );
+	world.step( 5 );
+	world.ready();
+	assert.equal( world.status().phase, "world" );
+	socket.receive( 0x3314, Uint8Array.of( 1, 2, 3 ) );
+	world.step( 6 );
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].kind, "packet" );
+	const journal = incidents[0].journal;
+	assert.ok( journal && journal.length >= 8 && journal.length % 4 === 0, "rows of four numbers" );
+	// Sizes are on the wire: the 3-byte payload and its 2-byte opcode.
+	assert.deepEqual( journal.slice( -3 ), [ 0, 0x3314, 5 ], "the failing frame, inbound, comes last" );
+	assert.ok( journal.some( ( value, at ) => at % 4 === 2 && value === 7 ), "the EnterWorld result before it" );
+	for ( let at = 0; at < journal.length; at += 4 ) assert.ok( journal[at] <= 0 );
+});
+
 for ( const queuedReceipt of [ true, false ] ) {
 	test(`movement after a CPU stall: queued receipt ${queuedReceipt}`, async t => {
 		const sockets = socketHarness( t ), incidents = [];

@@ -70,6 +70,59 @@ func TestClientIncidentIsLoggedWithTheFailingFrame(t *testing.T) {
 
 /*
 ================
+TestClientIncidentCarriesItsFrameJournal
+
+A fatal report brings the frames before the failure (B1, "Unmatched COS
+transfer result", had no other evidence): the log line a reader scans and
+the history event both carry them, payloads never.
+================
+*/
+func TestClientIncidentCarriesItsFrameJournal(t *testing.T) {
+	fixture, token := incidentSession(t)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	body := `{"kind":"packet","message":"Packet application failed: Error: Unmatched COS transfer result",` +
+		`"opcode":45165,"payload":"011a270040020013","payloadSize":8,"phase":"world",` +
+		`"journal":[-2048,2,0,12,-1520,1,28781,7,-1448,0,45165,8,0,0,45165,8]}`
+	response := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token)
+	if response.Code != http.StatusOK {
+		t.Fatalf("incident = %d %s", response.Code, response.Body.String())
+	}
+	entry := hook.LastEntry()
+	want := "-2048:g:0000:12 -1520:o:706D:7 -1448:i:B06D:8 0:i:B06D:8"
+	if entry == nil || entry.Data["journal"] != want {
+		t.Fatalf("journal = %v, want %q", entry, want)
+	}
+}
+
+/*
+================
+TestClientIncidentRefusesAMalformedJournal
+
+A journal is whole rows of a time at or before the failure, a known
+direction, an opcode and a size; anything else refuses the whole report.
+================
+*/
+func TestClientIncidentRefusesAMalformedJournal(t *testing.T) {
+	fixture, token := incidentSession(t)
+	for _, journal := range []string{
+		`[-1,0,1]`,
+		`[5,0,1,1]`,
+		`[-1,3,1,1]`,
+		`[-1,0,65536,1]`,
+		`[-1.5,0,1,1]`,
+		`[-600001,0,1,1]`,
+	} {
+		body := `{"kind":"packet","message":"x","journal":` + journal + `}`
+		if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code; code != http.StatusBadRequest {
+			t.Errorf("%s = %d", journal, code)
+		}
+	}
+}
+
+/*
+================
 TestClientIncidentRefusesAnonymousAndMalformedReports
 ================
 */

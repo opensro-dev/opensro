@@ -23,6 +23,7 @@ package agentserver
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net/http"
 	"opensro.online/server/internal/platform/history"
 	"regexp"
@@ -39,7 +40,20 @@ const (
 	maxIncidentDumpBytes = 512
 	maxIncidentName      = 64
 	maxIncidentPhase     = 32
+	// The frame journal a fatal report carries (contracts/network.ts
+	// INCIDENT_JOURNAL_ROWS): per row ms before the failure, direction,
+	// opcode and size, never a payload. A row older than the window is
+	// not evidence of this failure.
+	maxIncidentJournalRows = 200
+	incidentJournalFields  = 4
+	maxIncidentJournalAge  = 10 * 60 * 1000
+	// A gap row's size is the count of frames the journal dropped.
+	maxIncidentJournalBytes = 1 << 20
 )
+
+// incidentJournalDirections are the journal's row kinds, in the client's
+// NET_JOURNAL_IN / OUT / GAP order.
+var incidentJournalDirections = [...]string{"i", "o", "g"}
 
 // incidentKind names the failures a client may report.
 var incidentKinds = map[string]bool{"packet": true, "transport": true, "runtime": true, "asset": true, "unsupported": true}
@@ -70,6 +84,9 @@ type clientIncident struct {
 	Character   string `json:"character,omitempty"`
 	Region      int    `json:"region,omitempty"`
 	Build       string `json:"build,omitempty"`
+	// Journal is the last frames before the failure, flattened rows of
+	// incidentJournalFields numbers.
+	Journal []float64 `json:"journal,omitempty"`
 }
 
 /*
@@ -112,7 +129,54 @@ func (incident clientIncident) valid() bool {
 			return false
 		}
 	}
-	return len(incident.Phase) <= maxIncidentPhase
+	return len(incident.Phase) <= maxIncidentPhase && validIncidentJournal(incident.Journal)
+}
+
+/*
+================
+validIncidentJournal
+
+Whole rows only, at most maxIncidentJournalRows, each a time at or before
+the failure within the window, a known direction, an opcode and a size.
+================
+*/
+func validIncidentJournal(journal []float64) bool {
+	if len(journal)%incidentJournalFields != 0 || len(journal) > maxIncidentJournalRows*incidentJournalFields {
+		return false
+	}
+	for at := 0; at < len(journal); at += incidentJournalFields {
+		age, direction, opcode, size := journal[at], journal[at+1], journal[at+2], journal[at+3]
+		if age != math.Trunc(age) || age > 0 || age < -maxIncidentJournalAge {
+			return false
+		}
+		if direction != math.Trunc(direction) || direction < 0 || int(direction) >= len(incidentJournalDirections) {
+			return false
+		}
+		if opcode != math.Trunc(opcode) || opcode < 0 || opcode > 0xFFFF {
+			return false
+		}
+		if size != math.Trunc(size) || size < 0 || size > maxIncidentJournalBytes {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+================
+renderIncidentJournal
+
+One line a log reader can scan: "age:dir:OPCD:size" per frame, oldest
+first, e.g. "-1520:o:706D:7 -1448:i:B06D:8".
+================
+*/
+func renderIncidentJournal(journal []float64) string {
+	rows := make([]string, 0, len(journal)/incidentJournalFields)
+	for at := 0; at < len(journal); at += incidentJournalFields {
+		rows = append(rows, fmt.Sprintf("%d:%s:%04X:%d", int64(journal[at]), incidentJournalDirections[int(journal[at+1])],
+			int(journal[at+2]), int64(journal[at+3])))
+	}
+	return strings.Join(rows, " ")
 }
 
 /*
@@ -158,6 +222,12 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		fields["payload"] = incident.Payload
 		fields["payloadSize"] = incident.PayloadSize
 	}
+	eventFields := map[string]string{"phase": incident.Phase, "region": fmt.Sprint(incident.Region)}
+	if len(incident.Journal) != 0 {
+		journal := renderIncidentJournal(incident.Journal)
+		fields["journal"] = journal
+		eventFields["journal"] = journal
+	}
 	id := incident.ID
 	if id == "" {
 		var err error
@@ -180,7 +250,7 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 	}
 	event := history.Event{ID: id, Kind: "client_incident", Account: claims.AccountID, Shard: definition.ID,
 		Character: incident.Character, Session: incident.Session, Category: category, Code: code, Message: incident.Message,
-		Build: incident.Build, Evidence: "client_reported", Stack: incident.Stack, Fields: map[string]string{"phase": incident.Phase, "region": fmt.Sprint(incident.Region)}}
+		Build: incident.Build, Evidence: "client_reported", Stack: incident.Stack, Fields: eventFields}
 	if incident.Opcode != nil {
 		event.Opcode = fmt.Sprintf("0x%04X", *incident.Opcode)
 	}

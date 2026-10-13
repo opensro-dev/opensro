@@ -91,7 +91,8 @@ onNetworkFailure
 				} :
 				{}),
 			phase,
-			character
+			character,
+			journal: network.recentJournal()
 		} );
 	}
 	const network = createNetwork( onNetworkFailure );

@@ -431,6 +431,28 @@ test("the transport journals each frame's direction, opcode and size, never its 
 	network.dispose();
 });
 
+test("a fatal incident's journal keeps the last frames whatever the report drain took", t => {
+	const sockets = socketHarness( t );
+	const network = createNetwork( () => {} );
+	network.connect( "ws://localhost/transport", "abc" );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( welcome() );
+	for ( let i = 0; i < 250; i++ ) network.send( { opcode: 0x7000 + i, payload: Uint8Array.of( 1 ) } );
+	// The bug-report drain empties its journal once a second; the incident's
+	// rows must still be there when the failure comes.
+	assert.ok( network.takeJournal() );
+	const rows = network.recentJournal();
+	assert.equal( rows.length, 200 * 4, "the last 200 frames, no more" );
+	for ( let at = 0; at < rows.length; at += 4 ) {
+		assert.ok( Number.isInteger( rows[at] ) && rows[at] <= 0, "whole milliseconds before now" );
+		assert.equal( rows[at + 1], 1 );
+		assert.equal( rows[at + 2], 0x7000 + 50 + at / 4, "oldest first, the newest frame last" );
+		assert.equal( rows[at + 3], 3 );
+	}
+	network.dispose();
+});
+
 test("a journal overflow leaves a gap row that counts every dropped frame", t => {
 	const sockets = socketHarness( t );
 	const network = createNetwork( () => {} );

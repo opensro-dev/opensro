@@ -11,7 +11,14 @@ failure names that frame so it can be reported (session.ts).
 ===========================================================================
 */
 import { createCodec } from "./codec/codec";
-import { NET_JOURNAL_FIELDS, NET_JOURNAL_GAP, NET_JOURNAL_IN, NET_JOURNAL_OUT } from "@/engine/contracts/network";
+import {
+	INCIDENT_JOURNAL_AGE_MS,
+	INCIDENT_JOURNAL_ROWS,
+	NET_JOURNAL_FIELDS,
+	NET_JOURNAL_GAP,
+	NET_JOURNAL_IN,
+	NET_JOURNAL_OUT
+} from "@/engine/contracts/network";
 import type { NetworkOwner, WireFrame, NetworkFailure } from "@/engine/contracts/network";
 
 const PING_INTERVAL_MS = 5000;
@@ -37,6 +44,10 @@ export function createNetwork(
 	let measuredPing: number | null = null;
 	const inbox: WireFrame[] = [];
 	let journal = new Float64Array( NET_JOURNAL_RECORDS * NET_JOURNAL_FIELDS ), journalCount = 0;
+	// The incident ring: the bug-report journal above is drained every second,
+	// so a failure would find at most one second in it.
+	const recent = new Float64Array( INCIDENT_JOURNAL_ROWS * NET_JOURNAL_FIELDS );
+	let recentNext = 0, recentCount = 0;
 	let ended: string | null = null;
 	/*
 	================
@@ -65,6 +76,9 @@ export function createNetwork(
 		journal[at + 1] = direction;
 		journal[at + 2] = opcode;
 		journal[at + 3] = bytes;
+		recent.set( journal.subarray( at, at + NET_JOURNAL_FIELDS ), recentNext * NET_JOURNAL_FIELDS );
+		recentNext = (recentNext + 1) % INCIDENT_JOURNAL_ROWS;
+		recentCount = Math.min( recentCount + 1, INCIDENT_JOURNAL_ROWS );
 	}
 	let endReason: NetworkFailure | undefined;
 	/*
@@ -311,6 +325,17 @@ export function createNetwork(
 		The frames journaled since the last take, or null when there are none.
 		================
 		*/
+		recentJournal() {
+			const now = performance.timeOrigin + performance.now(), rows: number[] = [];
+			for ( let i = 0; i < recentCount; i++ ) {
+				const at = ((recentNext - recentCount + i + INCIDENT_JOURNAL_ROWS) % INCIDENT_JOURNAL_ROWS) *
+					NET_JOURNAL_FIELDS;
+				const age = Math.min( 0, Math.round( recent[at]! - now ) );
+				if ( age < -INCIDENT_JOURNAL_AGE_MS ) continue;
+				rows.push( age, recent[at + 1]!, recent[at + 2]!, recent[at + 3]! );
+			}
+			return rows;
+		},
 		takeJournal() {
 			if ( !journalCount ) return null;
 			const taken = journal.slice( 0, journalCount * NET_JOURNAL_FIELDS );
