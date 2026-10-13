@@ -3986,6 +3986,86 @@ test("the pet portrait selects and targets on right release only, as CIFCOSStatu
 	}
 });
 
+test("the pet keys act on the active companion and a switch re-binds the window, as 6A2350 and 6F21F0 do", () => {
+	const sent = [], f = uiFixture( c => sent.push( c.command ) );
+	try {
+		// A pickup rabbit with a bag and an attack wolf without one: the bag
+		// tab is enabled only while the window shows the rabbit.
+		f.state.gameplay.cosRecords = [
+			{ gid: 7, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false, name: "Bunny", inventory: [] },
+			{ gid: 8, refObjId: 100, band: 3, hp: 100, mp: 0, status: 0, dead: false, name: "Fang", satiety: 10000 }
+		];
+		f.state.gameplay.selectedCosGid = 7;
+		let now = 1000;
+		/*
+		================
+		settle
+		================
+		*/
+		const settle = () => {
+			let semantics;
+			for ( let i = 0; i < 20; i++ ) semantics = f.ui.step( f.state, ++now ) ?? semantics;
+			return semantics;
+		};
+		/*
+		================
+		bagTab
+
+		The bag tab's control, or undefined while the pet window is closed.
+		================
+		*/
+		const bagTab = () => settle()?.controls.find( c => c.id === "cos-tab:1" );
+		/*
+		================
+		select
+
+		The worker's selection, as it publishes a portrait release or a summon.
+		================
+		*/
+		const select = gid => {
+			f.state.gameplay = { ...f.state.gameplay, selectedCosGid: gid };
+		};
+		/*
+		================
+		press
+
+		One key, then the worker's answer to any cos-select it sent.
+		================
+		*/
+		const press = code => {
+			const before = sent.length;
+			f.ui.event( { kind: "key", code } );
+			const chosen = sent.slice( before ).find( c => c.kind === "cos-select" );
+			if ( chosen ) select( chosen.gid );
+		};
+		settle();
+		// Game_OnKeyDown 680CE9 -> 6F2520 -> 6A2350: Insert opens the active rabbit.
+		press( "Insert" );
+		assert.equal( bagTab()?.disabled, false, "Insert opens the active rabbit's window" );
+		// Case 0x57 (680EB5) -> 6F2410 -> 6F21F0: W selects the wolf and the
+		// open window follows it.
+		press( "KeyW" );
+		assert.equal( bagTab()?.disabled, true, "W selects the wolf and the window shows it" );
+		press( "KeyW" );
+		assert.equal( bagTab()?.disabled, false, "W wraps back to the rabbit" );
+		// A portrait release re-binds too.
+		f.ui.event( { kind: "right-activate", id: "cos-status:8" } );
+		select( 8 );
+		assert.equal( bagTab()?.disabled, true, "selecting the wolf by its portrait shows the wolf" );
+		// 6A2350 closes an open window; W opens none.
+		press( "Insert" );
+		assert.equal( bagTab(), undefined, "Insert closes the window" );
+		press( "KeyW" );
+		assert.equal( bagTab(), undefined, "W opens no window" );
+		// The report: closed on one pet, switched to the other, the window key
+		// showed the old pet.
+		press( "Insert" );
+		assert.equal( bagTab()?.disabled, false, "Insert opens the pet W selected" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("R replies to the last whisper partner (UIIT_CTL_REPLY_TT, BUG-075)", () => {
 	const f = uiFixture();
 	try {

@@ -269,13 +269,14 @@ test("pet window rejects empty and dead rosters and closes when its last pet dis
 	const controls = () => f.step()?.controls ?? [];
 	const opened = () => controls().some( c => c.id.startsWith( "cos-tab:" ) || c.id.startsWith( "cos-slot:" ) );
 	try {
-		f.ui.event( { kind: "key", code: "KeyW" } );
+		// The pet window key is Insert (680CE9 -> 6A2350); W selects the next pet.
+		f.ui.event( { kind: "key", code: "Insert" } );
 		assert.equal( opened(), false );
 		f.setGame( { cosRecords: [ { ...pet, dead: true } ] } );
 		f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
 		assert.equal( opened(), false );
 		f.setGame( { cosRecords: [ pet ] } );
-		f.ui.event( { kind: "key", code: "KeyW" } );
+		f.ui.event( { kind: "key", code: "Insert" } );
 		assert.equal( opened(), true );
 		f.setGame( { cosRecords: [ pet, { ...pet, gid: 8 } ] } );
 		f.setGame( { cosRecords: [ { ...pet, gid: 8 } ] } );

@@ -2297,6 +2297,42 @@ export function createUi(
 	}
 	/*
 	================
+	bindCosWindow
+
+	CIFCOSManager_SelectCompanion (6F21F0) re-binds an open pet window to the
+	newly selected companion (CIFCosInventory_BindCompanion 6A1920, tab 3:
+	keep the current tab; the render drops a tab the companion lacks). The
+	shop's cargo view is bound to its transport, not to the selection.
+	================
+	*/
+	function bindCosWindow() {
+		const gid = cosHud.selected(), record = view?.gameplay?.cosRecords?.find( r => r.gid === gid );
+		if ( panel !== "COS inventory" || !record || gid === cosGid ) return;
+		cosGid = gid;
+		cosSlot = -1;
+		cosPage = 0;
+		cosDraft = record.commandMode ?? 0;
+	}
+	/*
+	================
+	selectNextCompanion
+
+	CGInterface_CosSelectNextCompanion (6F2410): with more than one companion,
+	the status tab after the active one (wrapping) becomes active through
+	6F21F0. It opens no window and changes no target.
+	================
+	*/
+	function selectNextCompanion() {
+		const tabs = view?.gameplay?.cosStatusRecords ?? view?.gameplay?.cosRecords ?? [],
+			index = tabs.findIndex( r => r.gid === cosHud.selected() );
+		if ( tabs.length < 2 || index < 0 ) return;
+		const gid = tabs[(index + 1) % tabs.length]!.gid;
+		cosHud.select( gid );
+		bindCosWindow();
+		sendGameplay( { kind: "cos-select", gid } );
+	}
+	/*
+	================
 	executeCosCommand
 
 	CICCos_ExecuteActionCommand (6A2350). Info opens even while the owner is
@@ -6428,6 +6464,7 @@ export function createUi(
 				if ( event.id.startsWith( "cos-status:" ) ) {
 					const gid = Number( event.id.slice( 11 ) );
 					cosHud.select( gid );
+					bindCosWindow();
 					sendGameplay( { kind: "cos-select", gid } );
 					sendGameplay( { kind: "select", gid } );
 					dirty = true;
@@ -6669,8 +6706,10 @@ export function createUi(
 						return;
 					}
 					if ( binding === 16 || binding === 17 ) {
+						// 6F2520 dispatches every pet key on the active companion, not
+						// on whichever one the pet window last showed.
 						const record = view.gameplay?.cosRecords?.find( r =>
-							r.gid === cosGid && (binding === 16 || !r.dead && r.hp > 0) &&
+							r.gid === cosHud.selected() && (binding === 16 || !r.dead && r.hp > 0) &&
 							(r.band === 3 || r.band === 4)
 						) ?? view.gameplay?.cosRecords?.find( r =>
 							(binding === 16 || !r.dead && r.hp > 0) && (r.band === 3 || r.band === 4)
@@ -6714,16 +6753,23 @@ export function createUi(
 						6: "Guild",
 						7: "Map",
 						9: "Game Guide",
-						14: "COS inventory",
 						21: "Auto Potion",
-						22: "COS inventory",
 						23: "Party Matching",
 						24: "Alchemy",
 						25: "Stall network"
 					};
 					if ( binding === 11 ) activate( "hotbar:0" );
 					else if ( binding === 31 ) activate( "academy-open" );
-					else if ( binding >= 0 && names[binding] ) {
+					// Game_OnKeyDown: the pet window key (Insert, 680CE9) runs the active
+					// companion's Info command through 6F2520 -> 6A2350, as the command
+					// bar's button does; W (case 0x57, 680EB5) selects the next one.
+					else if ( binding === 14 ) {
+						executeCosCommand( COS_COMMAND_INFO );
+						dirty = true;
+					} else if ( binding === 22 ) {
+						selectNextCompanion();
+						dirty = true;
+					} else if ( binding >= 0 && names[binding] ) {
 						setPanel( names[binding]!, "toggle" );
 						dirty = true;
 					} else if ( binding === 13 && view.gameplay ) {
@@ -7354,7 +7400,10 @@ export function createUi(
 					next.gameplay?.cosStatusRecords ?? next.gameplay?.cosRecords ?? [],
 					next.gameplay?.selectedCosGid
 				)
-			) dirty = true;
+			) {
+				bindCosWindow();
+				dirty = true;
+			}
 			if ( phase !== lastPhase ) {
 				if ( retainedWorld ) {
 					hover = null;
