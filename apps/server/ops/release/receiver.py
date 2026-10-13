@@ -54,6 +54,7 @@ MAX_REQUEST_BYTES = 1 << 20
 # that could be a token (any run of 32 or more hex or base64url characters).
 MAX_FAILURE_LOG_CHARS = 800
 LOCK = Path("/run/lock/opensro-release.lock")
+REQUESTS = Path("/var/lib/opensro-release/requests")
 UNIT_PREFIX = "opensro-release-"
 JOB_PATTERN = re.compile(r"[0-9a-f]{32}")
 FOLLOW_POLL_SECONDS = 2
@@ -270,9 +271,21 @@ def main():
 			serve_detached(config)
 		else:
 			serve(config, arguments.role)
+	except UnitFailure:
+		# The unit already journaled this reason; the follower only relays it.
+		raise
 	except Exception as error:
 		record_failure(arguments.role, error)
 		raise
+
+
+# ================
+# UnitFailure
+#
+# A detached job's own failure, relayed to the SSH session by its follower.
+# ================
+class UnitFailure(RuntimeError):
+	pass
 
 
 # ================
@@ -293,6 +306,20 @@ def locked(blocking=True):
 
 
 # ================
+# requests_directory
+#
+# Where publication requests are filed. The receiver owns this default: a
+# host whose controls were installed without install.main (every release
+# since F3) has no "requests" key and no directory, and must still publish.
+# ================
+def requests_directory(config):
+	directory = Path(config.get("requests", REQUESTS))
+	directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+	directory.chmod(0o700)
+	return directory
+
+
+# ================
 # job_paths
 #
 # A filed publication request and its result, by the receiver's own job id.
@@ -300,7 +327,7 @@ def locked(blocking=True):
 def job_paths(config, job):
 	if not isinstance(job, str) or not JOB_PATTERN.fullmatch(job):
 		raise ValueError("invalid release job")
-	directory = Path(config["requests"])
+	directory = requests_directory(config)
 	return directory / (job + ".json"), directory / (job + ".result.json")
 
 
@@ -355,7 +382,7 @@ def serve_detached(config, launch=launch_unit, running=unit_running, poll=FOLLOW
 		time.sleep(poll)
 	result = json.loads(result_path.read_text())
 	if not result["ok"]:
-		raise RuntimeError(result["error"])
+		raise UnitFailure(result["error"])
 	print(json.dumps(result["result"], sort_keys=True))
 	return result["result"]
 
@@ -364,20 +391,27 @@ def serve_detached(config, launch=launch_unit, running=unit_running, poll=FOLLOW
 # run_job
 #
 # The unit's body: one filed publication request under the host lock. The
-# result, or the failure's masked reason, is recorded for the follower.
+# result, or the failure's masked reason, is recorded for the follower. The
+# filed copy then drops the operation's nonce: the week it is kept for an
+# operator needs what was asked, not the proof of ownership.
 # ================
 def run_job(config, job, lock=locked):
 	request_path, result_path = job_paths(config, job)
 	value = json.loads(request_path.read_text())
-	with lock(), tempfile.TemporaryDirectory(prefix="opensro-candidate-", dir=config.get("scratch", "/var/tmp")) as directory:
-		try:
-			result = request(config, "publish", value, Path(directory))
-			candidate_status(config)
-		except Exception as error:
-			reason = masked(type(error).__name__ + ": " + str(error))[:MAX_FAILURE_LOG_CHARS]
-			write_state(result_path, {"ok": False, "error": reason})
-			raise
-		write_state(result_path, {"ok": True, "result": result})
+	try:
+		with lock(), tempfile.TemporaryDirectory(prefix="opensro-candidate-", dir=config.get("scratch", "/var/tmp")) as directory:
+			try:
+				result = request(config, "publish", value, Path(directory))
+				candidate_status(config)
+			except Exception as error:
+				reason = masked(type(error).__name__ + ": " + str(error))[:MAX_FAILURE_LOG_CHARS]
+				write_state(result_path, {"ok": False, "error": reason})
+				raise
+			write_state(result_path, {"ok": True, "result": result})
+	finally:
+		if "nonce" in value:
+			write_state(request_path, {key: item for key, item in value.items() if key != "nonce"})
+			request_path.chmod(0o600)
 	return result
 
 
@@ -395,7 +429,7 @@ def deadman(config, lock=locked, now=time.time):
 		outcome = coordinated.expire(config, now())
 		if outcome:
 			candidate_status(config)
-		for path in Path(config["requests"]).glob("*.json"):
+		for path in requests_directory(config).glob("*.json"):
 			if now() - path.stat().st_mtime > JOB_RETENTION_SECONDS:
 				path.unlink()
 	return outcome

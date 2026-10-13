@@ -176,8 +176,14 @@ class DetachedPublicationTests(unittest.TestCase):
 		directory = tempfile.TemporaryDirectory()
 		self.addCleanup(directory.cleanup)
 		self.root = Path(directory.name)
-		(self.root / "requests").mkdir()
-		self.config = {"requests": str(self.root / "requests"), "scratch": str(self.root)}
+		# The host's config has no "requests" key (its controls were never
+		# installed by install.main): the receiver's own default is used and
+		# created on first use.
+		self.config = {"scratch": str(self.root)}
+		self.requests = self.root / "var-lib-requests"
+		patcher = patch.object(receiver, "REQUESTS", self.requests)
+		patcher.start()
+		self.addCleanup(patcher.stop)
 		self.jobs = []
 		self.handled = []
 		self.printed = []
@@ -231,7 +237,9 @@ class DetachedPublicationTests(unittest.TestCase):
 		job = self.jobs[0]
 		self.assertRegex(job, "^[0-9a-f]{32}$")
 		filed, recorded = receiver.job_paths(self.config, job)
-		self.assertEqual(json.loads(filed.read_text()), request)
+		self.assertEqual(filed.parent, self.requests)
+		# The finished job keeps what was asked, without the nonce.
+		self.assertEqual(json.loads(filed.read_text()), {"operation": "confirm-coordinated"})
 		self.assertEqual(json.loads(recorded.read_text()), {"ok": True, "result": {"phase": "verifying"}})
 
 	# ================
@@ -266,6 +274,25 @@ class DetachedPublicationTests(unittest.TestCase):
 		self.assertNotIn("f" * 64, recorded.read_text())
 
 	# ================
+	# test_the_follower_relays_a_unit_failure_without_logging_it_again
+	#
+	# The unit journaled the reason itself; the publish role's follower only
+	# relays it to the SSH session, so the host journal holds it once.
+	# ================
+	def test_the_follower_relays_a_unit_failure_without_logging_it_again(self):
+		logged = []
+		with patch.object(receiver, "serve_detached", side_effect=receiver.UnitFailure("Nomad refused")), \
+			patch.object(receiver, "CONFIG", Path(__file__)), \
+			patch.object(receiver.json, "loads", return_value={}), \
+			patch.object(receiver.os, "geteuid", return_value=0, create=True), \
+			patch.object(receiver.sys, "argv", ["receiver.py", "publish"]), \
+			patch.object(receiver, "syslog", SimpleNamespace(LOG_ERR=3, openlog=lambda name: None,
+				syslog=lambda level, text: logged.append(text))):
+			with self.assertRaisesRegex(RuntimeError, "Nomad refused"):
+				receiver.main()
+		self.assertEqual(logged, [])
+
+	# ================
 	# test_a_unit_that_ends_without_a_result_is_reported
 	# ================
 	def test_a_unit_that_ends_without_a_result_is_reported(self):
@@ -297,8 +324,9 @@ class DetachedPublicationTests(unittest.TestCase):
 	# lock free it expires the journal and prunes week-old filed jobs.
 	# ================
 	def test_the_deadman_never_waits_for_a_release_step(self):
-		old = self.root / "requests" / ("a" * 32 + ".json")
-		recent = self.root / "requests" / ("b" * 32 + ".result.json")
+		self.requests.mkdir()
+		old = self.requests / ("a" * 32 + ".json")
+		recent = self.requests / ("b" * 32 + ".result.json")
 		for path in (old, recent):
 			path.write_text("{}")
 		now = 2e9

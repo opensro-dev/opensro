@@ -173,7 +173,10 @@ runner that splits them across jobs or machines carries the nonce itself.
 opened it, so one opened before the nonce existed never needs a takeover.
 
 **Publication runs on the host, not in the SSH session.** The publication
-key's request is filed under `requests/` and run as its own transient unit
+key's request is filed under `/var/lib/opensro-release/requests` (the
+receiver's default; created 0700 on first use, so a host whose controls
+were installed without `install.py` still publishes) and run as its own
+transient unit
 (`opensro-release-<job>`, log: `journalctl -u opensro-release-<job>`). The SSH
 session only follows it and prints its result. A dropped session (the
 publisher's PC asleep, a proxy restart) loses the printed result, never the
@@ -181,6 +184,8 @@ work. The unit records the result beside the request for an operator; the
 dead-man prunes both after a week.
 
 **Dead-man.** `opensro-release-deadman.timer` runs every five minutes as root.
+`install.py` installs it, as does the release runner's control install; a
+host without it still publishes, but nothing expires a left operation.
 It never waits for the host lock: while any release step holds it, the timer
 does nothing. Otherwise, a coordinated operation left in `deploying`,
 `verifying`, `failed` or `reverting` for longer than 30 minutes is reverted on
