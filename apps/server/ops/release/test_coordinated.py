@@ -448,7 +448,7 @@ class OwnershipTests(PairFixture, unittest.TestCase):
 				with self.assertRaisesRegex(ValueError, "another publisher"):
 					coordinated.revert_request(self.config, {"reason": "smoke failed", **claim}, self.edge)
 		self.assertEqual(read_state(self.config["production_state"]), before)
-		self.assertEqual(self.rollouts, [(NEW_COMMIT, True, b"next server agent")])
+		self.assertEqual(self.rollouts, [(NEW_COMMIT, True, go_binary("agent", NEW_COMMIT))])
 		self.assertIsNone(self.confirm()["operation"])
 
 	# ================
