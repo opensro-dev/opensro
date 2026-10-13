@@ -190,3 +190,46 @@ func TestJobSuitActivationHoldsTheSuit(t *testing.T) {
 		t.Fatal("a hit did not end the activation")
 	}
 }
+
+/*
+================
+TestJobSuitStripOutsideTownAnswersAtOnce
+
+CGItemEquip_CanUnequip (497340): a worn suit comes off only where players
+may not fight. Outside a town the move is refused at once with 0xA2,
+which the client words as UIIT_MSG_JOBITEM_WEAR_ERR_NOPOSITION; in a town
+the dress bar starts. Region 0x5F76 is the report's (thread "trader flag
+cant out"), 0x61A8 is Zangan.
+================
+*/
+func TestJobSuitStripOutsideTownAnswersAtOnce(t *testing.T) {
+	const field, town = uint16(0x5F76), uint16(0x61A8)
+	for _, region := range []uint16{field, town} {
+		rt, _, c := jobFixture(t)
+		c.Job = domain.CharacterJob{Type: domain.JobTrader, Grade: 1, Alias: "Merchant"}
+		for i := range c.MissionInventory {
+			if c.MissionInventory[i].Slot == int64(jobTestSuitSlot) {
+				c.MissionInventory[i].Slot = int64(jobSuitSlot)
+			}
+		}
+		rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(world *simulation.WorldState) {
+			world.Spawn = simulation.Spawn{RegionID: region, X: 960, Y: 20, Z: 960}
+		})
+		strip := encodeMove(t, wire.ItemMoveRequest{MovementType: wire.MoveTypeInventory, SourceSlot: jobSuitSlot, DestSlot: jobTestSuitSlot, Quantity: 1})
+		out := rt.HandleItemMove(testDivision, c, strip)
+		if len(out.Frames) != 1 {
+			t.Fatalf("region %#x: frames %+v", region, out.Frames)
+		}
+		frame := out.Frames[0]
+		switch region {
+		case field:
+			if frame.Opcode != wire.OpItemMoveResponse || len(frame.Payload) != 2 || frame.Payload[0] != wire.ResultError || frame.Payload[1] != jobWearErrNoPosition {
+				t.Fatalf("outside a town: %#x % x, want the 0xA2 refusal", frame.Opcode, frame.Payload)
+			}
+		case town:
+			if frame.Opcode != opJobDressBar {
+				t.Fatalf("in a town: %#x % x, want the dress bar", frame.Opcode, frame.Payload)
+			}
+		}
+	}
+}

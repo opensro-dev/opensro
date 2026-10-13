@@ -15,6 +15,7 @@ import "../helpers/native-source-loader.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { defined } from "../helpers/defined.mjs";
 
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
@@ -594,6 +595,54 @@ test("merchant offers and buyback use their item instances for rare sparkle", ()
 			}
 		} );
 		assert.equal( f.scene()?.quads.filter( q => q.texture === sparkle ).length, 0 );
+	} finally {
+		f.ui.dispose();
+	}
+});
+
+/*
+================
+job suit drag
+
+A worn job suit (slot 8) dragged onto the bag sends the move, and the
+server's refusal line then shows in the status box: the drag never
+cancels itself in the UI. Thread "trader flag cant out".
+================
+*/
+// The Low Level White Flag's TypeID (3,1,7,1): CGItem 3, equipment, job suit, trader.
+const TRADER_SUIT_FLAGS = 3 << 2 | 1 << 5 | 7 << 7 | 1 << 11;
+test("a worn job suit dragged to the bag sends the move and shows the server's refusal", () => {
+	const f = createFixture();
+	try {
+		const suit = {
+			slot: 8,
+			refObjId: 1,
+			typeFlags: TRADER_SUIT_FLAGS,
+			quantity: 1,
+			name: "Low Level White Flag - Str",
+			plus: 0,
+			durability: 0,
+			variance: "0",
+			magic: []
+		};
+		f.setGame( { inventorySlotCount: 45, equipmentSlotCount: 13, inventory: [ suit ] } );
+		f.ui.event( { kind: "key", code: "KeyI" } );
+		const bag = defined( f.step()?.controls.find( c => c.id === "slot:14" ) );
+		f.ui.event( { kind: "drag", id: "slot:8", dx: 50, dy: 50 } );
+		f.ui.event( { kind: "drag-end", id: "slot:8", x: bag.rect[0] + 5, y: bag.rect[1] + 5 } );
+		f.step();
+		assert.deepEqual( f.commands, [ {
+			kind: "gameplay",
+			command: { kind: "inventory-move", source: 8, destination: 14, quantity: 1 }
+		} ] );
+		f.setGame( {
+			inventorySlotCount: 45,
+			equipmentSlotCount: 13,
+			inventory: [ suit ],
+			notices: [ { key: "UIIT_MSG_JOBITEM_WEAR_ERR_NOPOSITION", value: 0, nativeType: 5, sequence: 1 } ]
+		} );
+		f.step();
+		assert.ok( hasText( f.scene(), "Can equip/unequip job item only in towns." ) );
 	} finally {
 		f.ui.dispose();
 	}

@@ -545,3 +545,32 @@ test("every item-use and inventory refusal byte reaches its native route without
 	assert.equal( defined( lines.at( -1 ) ).category, "game" );
 	assert.equal( defined( lines.at( -1 ) ).value, copy[defined( reuse ).key] );
 });
+
+/*
+================
+job suit refusals
+
+Every refusal the server sends for wearing or taking off a job suit
+(jobdress.go jobWearErr*, the category 1 notices) reaches the player as
+its v1.150 line through production gameplay: the swap, activation wait,
+battle, cart, no job, no alias, party, outside a town, grade and riding
+codes, and a full bag. Thread "trader flag cant out": 0xA2 outside a town.
+================
+*/
+const JOB_DRESS_REFUSALS = [ 0x07, 0x46, 0x47, 0x48, 0x5a, 0x9e, 0x9f, 0xa0, 0xa2, 0xa3, 0xca ];
+test("every job suit refusal publishes its v1.150 line", () => {
+	for ( const code of JOB_DRESS_REFUSALS ) {
+		const g = createGameplay( () => {} );
+		g.bootstrap( {} );
+		g.seed( { gid: 1, regionId: 0x5f76, x: 0, y: 0, z: 0, heading: 0, countryByte9c: 0 } );
+		g.take();
+		g.receive( { opcode: 0xb06d, payload: Uint8Array.of( 2, code ) }, 0 );
+		const notice = defined( defined( g.take() ).notices ).at( -1 );
+		assert.ok( notice, `0x${code.toString( 16 )} publishes a notice` );
+		assert.ok( typeof copy[notice.key] === "string" && copy[notice.key].length, `${notice.key} has text` );
+	}
+	assert.equal(
+		copy[defined( inventoryNotice( 0xb06d, Uint8Array.of( 2, 0xa2 ), 0 ) ).key],
+		"Can equip/unequip job item only in towns."
+	);
+});
