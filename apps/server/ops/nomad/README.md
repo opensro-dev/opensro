@@ -85,8 +85,9 @@ cluster.
 `SRO_DEV_PORT_OFFSET` (a whole number, default 0) moves every port of the
 checkout's local stack by the same amount: the development Nomad agent's
 HTTP, RPC and Serf ports and its workload-identity issuer (4646-4648), the
-Agent (8787), its provisioning API (8789) and the first shard's public API
-(8790). Set it in the environment of both `dev-agent` and the `sro-nomad`
+Agent (8787), its provisioning API (8789), the first shard's public API
+(8790) and the client dev-server origins the Agent admits by default (5180,
+4180, 4173, 5174; an explicit `-allowed-origins` still wins). Set it in the environment of both `dev-agent` and the `sro-nomad`
 commands; without `NOMAD_ADDR` they talk to the moved agent. The second
 stack runs from its own checkout or worktree (its own `.state`), under its
 own Nomad agent and workload identity, with a shard catalogue whose
@@ -97,6 +98,15 @@ $env:SRO_DEV_PORT_OFFSET = "100"
 go run ./cmd/operations/sro-nomad dev-agent
 go run ./cmd/operations/sro-bootstrap-development
 go run ./cmd/operations/sro-nomad deploy -build -catalog <catalogue>
+```
+
+Serve the second stack's client on its moved port, pointed at its Agent and
+catalogue:
+
+```powershell
+$env:SRO_AGENT_PROXY_TARGET = "http://127.0.0.1:8887"
+$env:SRO_SHARD_CATALOG = "<catalogue>"
+pnpm --filter @sro/client-next exec vite --host 127.0.0.1 --port 5280 --strictPort
 ```
 
 Unset or `0` is the single stack exactly as before.
