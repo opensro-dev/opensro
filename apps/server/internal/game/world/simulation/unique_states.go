@@ -147,3 +147,20 @@ func (s *MonsterState) UniqueStates(division string) []UniqueState {
 	sort.Slice(out, func(i, j int) bool { return out[i].RefObjID < out[j].RefObjID })
 	return out
 }
+
+/*
+================
+MonsterName
+
+The retail display name of any monster reference, unique or not, or "" for
+an id the template does not hold. The template never changes after boot,
+so no lock is taken.
+================
+*/
+func (s *MonsterState) MonsterName(refObjID uint32) string {
+	ref, ok := s.template.Refs[refObjID]
+	if !ok {
+		return ""
+	}
+	return ref.DisplayName()
+}

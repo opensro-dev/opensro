@@ -107,6 +107,7 @@ func installPublicAPI(gameplay *gameplayPlane, hub *transport.Hub, authority *st
 			}
 			return monsters.UniqueStates(shard)
 		},
+		UniqueName: uniqueNameSource(monsters),
 		GuildOf: func(c *domain.Character) (string, string) {
 			if c.GuildID == nil {
 				return "", ""
@@ -346,4 +347,22 @@ func (api *publicAPI) Close() error {
 		<-api.done
 	})
 	return err
+}
+
+/*
+================
+uniqueNameSource
+
+Every unique name the API prints (the board, the kill feed, world-firsts)
+goes through this: the monster's retail display name. Unwired, each fell
+back to its codename (MOB_OA_URUCHI) on the site.
+================
+*/
+func uniqueNameSource(monsters *simulation.MonsterState) func(uint32) string {
+	return func(refObjID uint32) string {
+		if monsters == nil {
+			return ""
+		}
+		return monsters.MonsterName(refObjID)
+	}
 }
