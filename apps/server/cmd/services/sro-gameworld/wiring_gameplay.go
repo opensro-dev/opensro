@@ -584,6 +584,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		game.items.PetExpPace = func(ownerLevel int64) float64 { return growth.ExpPace(deps.LevelData(), ownerLevel) }
 		game.items.PartyShareFloor = true
 	}
+	// Port-only, not native, beta balance (owner 2026-10-13): degree-9
+	// alchemy goods only from the shop.
+	game.items.ShopOnly = progression.BetaShopOnlyDegree9FromEnv()
+	if game.items.ShopOnly.Enabled() {
+		log.Infof("progression: degree-9 Lucky Powder, magic and attribute stones no longer drop (%s)", progression.EnvBetaShopOnlyDegree9)
+	}
 	// Port-only, not native, beta balance (owner 2026-10-13): per-seal rare
 	// rates on top of RareRate. Off is today's rates.
 	game.items.SealRates = progression.BetaSealRatesFromEnv()
