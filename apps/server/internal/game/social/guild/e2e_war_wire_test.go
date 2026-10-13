@@ -157,3 +157,42 @@ func guildEnterWorldWithWar(t *testing.T, c *websocket.Conn, name string) {
 	wiretest.ActivateWorld(t, c, "enter world "+name)
 	wiretest.AssertQueueDrained(t, c, "war entry tail "+name)
 }
+
+/*
+================
+TestGuildWarRefusesOnlyInsideAFlagWarWorld
+
+CGuildMgr_ProposeGuildWar (5C6EA1, 5C6EC7) refuses 0x79 when both masters
+stand in a timed event world (the flag war). The port has no flag war, so
+production leaves the hook unset and two masters anywhere else, a fortress
+included, may declare.
+================
+*/
+func TestGuildWarRefusesOnlyInsideAFlagWarWorld(t *testing.T) {
+	var seeds []*enterworld.Character
+	for _, name := range []string{"FlagMasterA", "FlagMasterB"} {
+		gold, race, gender := int64(1000), int64(enterworld.RaceChina), int64(enterworld.GenderMale)
+		seeds = append(seeds, &enterworld.Character{Name: name, ModelCodename: "CHAR_CH_MAN_ADVENTURER", RaceIndex: &race, Gender: &gender, Gold: &gold})
+	}
+	srv, authority, _, lane := startUnionServer(t, t.TempDir(), seeds)
+	lane.Now = func() time.Time { return time.UnixMilli(10000) }
+	first, second := guildE2ECharacter(t, authority, seeds[0].Name), guildE2ECharacter(t, authority, seeds[1].Name)
+	unionE2EGuild(t, authority, "FlagRed", first)
+	unionE2EGuild(t, authority, "FlagBlue", second)
+	ca, cb := guildDialWS(t, srv), guildDialWS(t, srv)
+	guildHelloWS(t, ca)
+	guildEnterWorldWithWar(t, ca, first.Name)
+	guildHelloWS(t, cb)
+	guildEnterWorldWithWar(t, cb, second.Name)
+	declaration := wire.NewWriter(32).Str("FlagBlue").U8(0).U32(guildwar.UnlimitedPeriod).U8(1).U32(400).Payload()
+
+	lane.InFlagWarWorld = func(string, *enterworld.Character) bool { return true }
+	guildSendFrame(t, ca, guild.OpGuildWarDeclare, declaration)
+	if got := guildExpectFrame(t, ca, guild.OpGuildWarDeclareResult, "flag-war refusal"); !bytes.Equal(got, []byte{2, 0x79}) {
+		t.Fatalf("both masters in a flag-war world: % X, want 02 79", got)
+	}
+
+	lane.InFlagWarWorld = nil
+	guildSendFrame(t, ca, guild.OpGuildWarDeclare, declaration)
+	guildExpectFrame(t, cb, guild.OpInvitationProposal, "proposal outside a flag-war world")
+}

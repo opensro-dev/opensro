@@ -66,8 +66,11 @@ type WarRuntime struct {
 	ending      []pendingWarEnd
 	PeerPending func(division, name string) bool
 	Near        func(division string, first, second *enterworld.Character) bool
-	InFortress  func(division string, character *enterworld.Character) bool
-	Now         func() time.Time
+	// InFlagWarWorld reports whether a master stands in a timed event world
+	// (the flag war; TimedWorldEventMgr_HasWorldRecord 648220). The port has
+	// no flag war yet (#826), so production leaves it nil.
+	InFlagWarWorld func(division string, character *enterworld.Character) bool
+	Now            func() time.Time
 }
 
 /*
@@ -197,8 +200,11 @@ func (r *WarRuntime) warAdmission(division string, actor, target *enterworld.Cha
 			return proposal, 0x41
 		}
 	}
-	// 648220 tests the current world's fortress record, not guild enrolment.
-	if r.InFortress != nil && r.InFortress(division, actor) && r.InFortress(division, target) {
+	// CGuildMgr_ProposeGuildWar (5C6EA1, 5C6EC7): both masters in a timed
+	// event world (the flag war) refuse with 0x4C79. 648220 looks up the
+	// TimedWorldEventMgr's record (its callers are CFlagWorld_*), not a
+	// fortress: two masters in a fortress world may declare war.
+	if r.InFlagWarWorld != nil && r.InFlagWarWorld(division, actor) && r.InFlagWarWorld(division, target) {
 		return proposal, 0x79
 	}
 	proposal = pendingWar{inviter: actor.Name, masters: [2]int64{actor.ID, target.ID}, guilds: [2]int64{first.ID, second.ID}, terms: terms}

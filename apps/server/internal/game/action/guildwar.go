@@ -15,30 +15,9 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/social/guildwar"
-	"opensro.online/server/internal/game/world/instance"
 )
 
 const guildWarMasterReach = 300
-
-/*
-================
-GuildWarMasterInFortress
-
-648220 finds the current fortress world. The later slot-1E refusal is
-BattleArena-only (5ECFD0); that class is outside the v1.150 feature set.
-================
-*/
-func (rt *Runtime) GuildWarMasterInFortress(_ string, c *enterworld.Character) bool {
-	if c == nil || rt.Fortresses == nil {
-		return false
-	}
-	world, ok := instance.Lookup(instance.ID(domain.CharacterWorldInstance(c)).Definition())
-	if !ok {
-		return false
-	}
-	_, ok = rt.Fortresses.ForWorld(world)
-	return ok
-}
 
 /*
 ================

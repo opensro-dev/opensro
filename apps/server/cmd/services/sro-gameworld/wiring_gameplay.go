@@ -296,7 +296,6 @@ func newGameplayPlane(
 	items.GuildWars = warAuthority
 	items.GuildWarKill = guildWars.RecordKill
 	guildWars.Near = items.GuildWarMastersNear
-	guildWars.InFortress = items.GuildWarMasterInFortress
 	unions.GuildWars = warAuthority
 
 	communitySeeds := community.SeedFramesFunc(presence, deps.Letters)
