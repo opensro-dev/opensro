@@ -214,7 +214,8 @@ func (rt *Runtime) togglePersistentCompanion(use persistentSummonUse, pet *domai
 	pet.StateFlags &^= cosStateSummoned
 	frames := rt.retireCosRuntime(use.division, use.character, pet.GID)
 	despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()}
-	frames = append(frames, wire.Frame{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)}, despawn)
+	frames = append(frames, wire.Frame{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, 1, use.request.TypeWord)},
+		cosRemovalNotice(pet.GID), despawn)
 	*result = OpResult{Frames: append(frames, companionItemStateFrames(use.character, pet)...), Broadcast: []wire.Frame{despawn}}
 	return true
 }

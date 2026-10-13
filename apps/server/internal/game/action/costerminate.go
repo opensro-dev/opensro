@@ -159,7 +159,7 @@ func (rt *Runtime) HandleCosTerminate(division string, c *enterworld.Character, 
 	}
 	frames = append(frames, rt.retireCosRuntime(division, c, gid)...)
 	despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()}
-	frames = append(frames, despawn)
+	frames = append(frames, cosRemovalNotice(gid), despawn)
 	public = append(public, despawn)
 	result := cosTerminateResult(cosTerminateOK)
 	return OpResult{Frames: append(frames, result.Frames...), Broadcast: public}

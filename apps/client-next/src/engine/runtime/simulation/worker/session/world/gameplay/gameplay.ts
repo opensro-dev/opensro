@@ -3401,18 +3401,34 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
-				// A despawn leaves kind-3 windows alone: retail erases one only on the
-				// 0x3691 zero pair or the 0x3369/0x366A reset sweep (6E6270).
+				// 77A570 case 1 (CPSMission_OnCosPetExpUpdate0x3508): the server's
+				// detach notice (v1.188 0x30C9 type 1, 4D2140, sent on every release
+				// and COS death) is the only thing that drops an owned companion:
+				// CIFCOSManager_RemoveCompanion (6F2900) takes its status icon, its
+				// command panel and its record, and its open bag window closes.
+				if ( frame.opcode === 0x3508 && frame.payload[4] === 1 ) {
+					if ( frame.payload.length !== 5 ) throw Error( "Invalid COS removal" );
+					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true );
+					if ( cosRecords.has( gid ) ) {
+						cosSelection.remove( gid, cosRecords );
+						cosRecords.delete( gid );
+						if ( activeCos?.gid === gid ) {
+							activeCos = undefined;
+							cosResult = undefined;
+							cosError = null;
+						}
+						dirty = true;
+					}
+					return true;
+				}
+				// A despawn only takes the object out of view. An owned companion that
+				// leaves view (or relocates to its owner, despawn then spawn) keeps its
+				// record and status icon, as native: only the 0x3508 removal above
+				// drops it. Kind-3 windows likewise stay: retail erases one only on
+				// the 0x3691 zero pair or the 0x3369/0x366A reset sweep (6E6270).
 				if ( frame.opcode === 0x36ab && frame.payload.length === 4 ) {
 					const gid = new DataView( frame.payload.buffer, frame.payload.byteOffset, 4 ).getUint32( 0, true );
-					cosSelection.remove( gid, cosRecords );
-					cosRecords.delete( gid );
 					if ( selectionDecal?.kind === "target" && selectionDecal.gid === gid ) selectionDecal = null;
-					if ( activeCos?.gid === gid ) {
-						activeCos = undefined;
-						cosResult = undefined;
-						cosError = null;
-					}
 					targeting.remove( gid );
 					combat.remove( gid );
 					if ( skillPress.queued()?.command.gid === gid ) skillPress.cancel();

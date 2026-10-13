@@ -81,7 +81,8 @@ func TestMercenarySummonAndDismissPreserveCooldown(t *testing.T) {
 		t.Fatalf("duplicate: %+v", got)
 	}
 	out := d.rt.HandleMercenaryDismiss(testDivision, c, nil)
-	if len(out.Frames) != 6 || len(out.Broadcast) != 6 || len(c.Mercenaries) != 0 || c.MercenarySummonUntilMs != 2200000 {
+	// Each released mercenary: the owner's removal notice (4D2140), then the despawn.
+	if len(out.Frames) != 12 || len(out.Broadcast) != 6 || len(c.Mercenaries) != 0 || c.MercenarySummonUntilMs != 2200000 {
 		t.Fatalf("dismiss: %+v", out)
 	}
 	if got := d.rt.HandleItemUse(testDivision, c, request); !bytes.Equal(got.Frames[0].Payload, itemUseFailure(mercenaryCooldownActive).Frames[0].Payload) {

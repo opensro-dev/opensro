@@ -481,6 +481,8 @@ remove
 	function remove( gid ) {
 		const payload = new Uint8Array( 4 );
 		new DataView( payload.buffer ).setUint32( 0, gid, true );
+		// The server's removal notice (0x3508 case 1, 4D2140) precedes the despawn.
+		gameplay.receive( { opcode: 0x3508, payload: Uint8Array.of( ...payload, 1 ) }, 1 );
 		gameplay.receive( { opcode: 0x36ab, payload }, 1 );
 		return gameplay.take()?.selectedCosGid;
 	}

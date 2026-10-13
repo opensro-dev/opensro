@@ -23,6 +23,8 @@ const (
 	cosFeedingFullError        uint8  = 0xb3
 	cosPetUpdateOpcode         uint16 = 0x3508
 	cosSatietyUpdateKind       uint8  = 4
+	// 0x3508 case 1: the owner's companion record is gone (cosRemovalNotice).
+	cosRemovalKind uint8 = 1
 )
 
 /*

@@ -199,7 +199,7 @@ func (rt *Runtime) HandleMercenaryDismiss(division string, c *enterworld.Charact
 	for _, pet := range removed {
 		result.Frames = append(result.Frames, rt.retireCosRuntime(division, c, pet.GID)...)
 		frame := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()}
-		result.Frames = append(result.Frames, frame)
+		result.Frames = append(result.Frames, cosRemovalNotice(pet.GID), frame)
 		result.Broadcast = append(result.Broadcast, frame)
 	}
 	return result

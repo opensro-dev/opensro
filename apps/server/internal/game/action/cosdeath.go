@@ -32,6 +32,8 @@ Called inside the owner's character door when a companion first dies.
 ================
 */
 func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
+	// Every COS death tells its owner first (52A000 -> 4D2140).
+	o.private = append(o.private, cosRemovalNotice(o.pet.GID))
 	ref := o.ref
 	if ref == nil {
 		found := false

@@ -58,7 +58,8 @@ func TestCosCancellationPreservesDurablePetAndRetiresPickup(t *testing.T) {
 		w.Spawn = initial
 	})
 	result = rt.HandleCosCancel(testDivision, c, payload)
-	assertOpcodes(t, result.Frames, opCosCancelResponse, wire.OpCosCommandResult, wire.OpObjectDespawn)
+	// The owner hears the removal (4D2140) ahead of the despawn; peers only the despawn.
+	assertOpcodes(t, result.Frames, opCosCancelResponse, wire.OpCosCommandResult, cosPetUpdateOpcode, wire.OpObjectDespawn)
 	assertOpcodes(t, result.Broadcast, wire.OpObjectDespawn)
 	want := *before.ActiveCOS
 	want.Summoned = false
@@ -78,7 +79,7 @@ func TestCosCancellationPreservesDurablePetAndRetiresPickup(t *testing.T) {
 	c.ActiveCOS.CurrentHP = 0
 	c.ActiveCOS.StateFlags = cosStateSummoned
 	result = rt.HandleCosCancel(testDivision, c, payload)
-	assertOpcodes(t, result.Frames, opCosCancelResponse, wire.OpObjectDespawn)
+	assertOpcodes(t, result.Frames, opCosCancelResponse, cosPetUpdateOpcode, wire.OpObjectDespawn)
 	if c.ActiveCOS.Summoned || c.ActiveCOS.CurrentHP != 0 || c.ActiveCOS.StateFlags != 0 {
 		t.Fatal("dead-pet cancellation revived or retained the actor")
 	}

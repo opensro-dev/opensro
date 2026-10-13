@@ -218,6 +218,7 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 	public := append([]wire.Frame(nil), frames...)
 	if !mounted && ref.TidWord>>11 == 1 {
 		frames = append(frames, rt.retireCosRuntime(division, c, pet.GID)...)
+		frames = append(frames, cosRemovalNotice(pet.GID))
 	}
 	return OpResult{Frames: frames, Broadcast: public}
 }

@@ -42,6 +42,8 @@ test("native companion creation, cancellation, death and revival preserve the su
 		assert.equal( item?.summon?.name, "Wolf" );
 		assert.equal( item?.quantity, 1 );
 	}
+	// The server's removal notice (0x3508 case 1, 4D2140) precedes the despawn.
+	game.receive( { opcode: 0x3508, payload: Uint8Array.of( 41, 35, 0, 0, 1 ) }, 2 );
 	game.receive( { opcode: 0x36ab, payload: Uint8Array.of( 41, 35, 0, 0 ) }, 2 );
 	state = game.take();
 	assert.equal( state?.cosRecords?.length, 0 );

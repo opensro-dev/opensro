@@ -91,3 +91,26 @@ test("malformed and wrong-family behavior results cannot mutate a pet", () => {
 	assert.equal( owner.take(), null );
 	owner.dispose();
 });
+
+/*
+================
+companion removal
+
+Thread "Wolf cub UI is gone, but Wolf is alive": a walled-in pet that
+relocates to its owner is despawned and spawned again (cosformation.go),
+and the despawn took its record and status icon with it. Natively only
+the owner's 0x3508 case 1 (77A570 -> CIFCOSManager_RemoveCompanion
+6F2900, server 4D2140) drops a companion; a despawn takes it out of view.
+================
+*/
+test("a despawn keeps the owned companion; only its removal notice drops it", () => {
+	const owner = fixture();
+	owner.receive( { opcode: 0x36ab, payload: Uint8Array.of( 7, 0, 0, 0 ) }, 1 );
+	const kept = owner.take();
+	assert.deepEqual( (kept?.cosRecords ?? []).map( r => r.gid ), [ 7 ], "a despawn keeps the record" );
+	// Another owner's removal names no record of ours.
+	owner.receive( { opcode: 0x3508, payload: Uint8Array.of( 9, 0, 0, 0, 1 ) }, 2 );
+	owner.receive( { opcode: 0x3508, payload: Uint8Array.of( 7, 0, 0, 0, 1 ) }, 3 );
+	assert.deepEqual( owner.take().cosRecords, [], "the removal notice drops it" );
+	assert.throws( () => owner.receive( { opcode: 0x3508, payload: Uint8Array.of( 7, 0, 0, 0, 1, 0 ) }, 4 ) );
+});

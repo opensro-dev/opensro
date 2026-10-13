@@ -109,7 +109,7 @@ test("a pet pickup waits out the pet's approach before it times out", () => {
 	);
 });
 
-test("pet cancellation retains the record until despawn and rejects foreign ownership", () => {
+test("pet cancellation retains the record until its removal notice and rejects foreign ownership", () => {
 	const f = fixture();
 	const sent = [];
 	const gameplay = createGameplay( frame => sent.push( frame ) );
@@ -133,6 +133,8 @@ test("pet cancellation retains the record until despawn and rejects foreign owne
 		gameplay.command( { kind: "cos-cancel", gid: 2 }, 4, { ...f.pet, ownerGid: 99 }, f.frame.local )
 	);
 	assert.equal( sent.length, 1 );
+	// The server's removal notice (0x3508 case 1, 4D2140) precedes the despawn.
+	gameplay.receive( { opcode: 0x3508, payload: Uint8Array.of( 2, 0, 0, 0, 1 ) }, 5 );
 	gameplay.receive( { opcode: 0x36ab, payload: Uint8Array.of( 2, 0, 0, 0 ) }, 5 );
 	assert.equal( gameplay.take()?.cosRecords?.length, 0 );
 	view.setUint32( 8, 0, true );
@@ -303,6 +305,8 @@ test("ordinary riding horse uses its private record without a public owner tail"
 	gameplay.command( { kind: "cos-ride", gid: 2, mounted: false }, 1, horse, { ...f.frame.local, mountedOn: 2 } );
 	assert.deepEqual( sent, [ { opcode: 0x74b5, payload: Uint8Array.of( 0, 2, 0, 0, 0 ) } ] );
 	assert.equal( gameplay.take()?.activeCos?.gid, 2 );
+	// The server's removal notice (0x3508 case 1, 4D2140) precedes the despawn.
+	gameplay.receive( { opcode: 0x3508, payload: Uint8Array.of( 2, 0, 0, 0, 1 ) }, 2 );
 	gameplay.receive( { opcode: 0x36ab, payload: Uint8Array.of( 2, 0, 0, 0 ) }, 2 );
 	assert.equal( gameplay.take()?.cosRecords?.length, 0 );
 	assert.throws( () => gameplay.command( { kind: "cos-ride", gid: 2, mounted: true }, 3, horse, f.frame.local ) );

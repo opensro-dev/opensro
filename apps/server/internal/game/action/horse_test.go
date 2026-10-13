@@ -69,7 +69,9 @@ func TestRidingHorseSummonMovesAndRetiresOnDismount(t *testing.T) {
 			despawned = true
 		}
 	}
-	if !despawned || !reflect.DeepEqual(result.Frames, result.Broadcast) {
+	// Peers see what the owner sees, less the owner's removal notice (4D2140).
+	removal := cosRemovalNotice(gid)
+	if !despawned || !reflect.DeepEqual(result.Frames, append(append([]wire.Frame(nil), result.Broadcast...), removal)) {
 		t.Fatal("riding retirement was not visible to owner and peers", result)
 	}
 	if retry := rt.HandleCosRide(testDivision, c, wire.NewWriter(5).U8(1).U32(gid).Payload()); !reflect.DeepEqual(retry.Frames, cosRideFailure(cosRideUnknownActor).Frames) {

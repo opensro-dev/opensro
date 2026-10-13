@@ -93,7 +93,7 @@ func (rt *Runtime) HandleCosCancel(division string, c *enterworld.Character, pay
 	result := cosCancelResult(1)
 	result.Frames = append(result.Frames, rt.retireCosRuntime(division, c, gid)...)
 	despawn := wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()}
-	result.Frames = append(result.Frames, despawn)
+	result.Frames = append(result.Frames, cosRemovalNotice(gid), despawn)
 	result.Broadcast = []wire.Frame{despawn}
 	result.Frames = append(result.Frames, companionItemStateFrames(c, cancelled)...)
 	return result
@@ -128,7 +128,7 @@ func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Cha
 	public = append(public, rt.refreshMovementEffects(division, c, now)...)
 	public = append(public, rt.retireCosRuntime(division, c, gid)...)
 	public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: gid}.Encode()})
-	private = companionItemStateFrames(c, ride)
+	private = append([]wire.Frame{cosRemovalNotice(gid)}, companionItemStateFrames(c, ride)...)
 	c.ActiveCOS = nil
 	return public, private
 }
@@ -164,10 +164,27 @@ func (rt *Runtime) retireCompanionCorpses(division string, c *enterworld.Charact
 	})
 	for _, pet := range corpses {
 		owner = append(owner, rt.retireCosRuntime(division, c, pet.GID)...)
+		owner = append(owner, cosRemovalNotice(pet.GID))
 		owner = append(owner, companionItemStateFrames(c, pet)...)
 		public = append(public, wire.Frame{Opcode: wire.OpObjectDespawn, Payload: wire.ObjectDespawn{Gid: pet.GID}.Encode()})
 	}
 	return owner, public
+}
+
+/*
+================
+cosRemovalNotice
+
+CGObjCOS_SendOwnerDetachNotice30C9 (v1.188 4D2140): [u32 cos][u8 1] to the
+owner alone, ahead of the despawn, on every release (4D20C0) and every COS
+death (52A000 and its Summoned, Pet and siege variants). The v1.150
+client's 0x3508 case 1 (77A570 -> CIFCOSManager_RemoveCompanion 6F2900)
+is the only thing that drops its record and status icon; a despawn only
+takes the companion out of view, as when it relocates to its owner.
+================
+*/
+func cosRemovalNotice(gid uint32) wire.Frame {
+	return wire.Frame{Opcode: cosPetUpdateOpcode, Payload: wire.NewWriter(5).U32(gid).U8(cosRemovalKind).Payload()}
 }
 
 /*

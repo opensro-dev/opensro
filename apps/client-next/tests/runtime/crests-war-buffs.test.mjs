@@ -367,6 +367,8 @@ test("a region reset drops kind-3 windows, a pet despawn does not, and the re-ra
 		payload: Uint8Array.from( [ ...u32( 8 ), ...u32( 3914 ), ...u32( 87829 ), ...new Array( 9 ).fill( 0 ) ] )
 	}, 1 );
 	assert.equal( game.take().activeCos?.gid, 8 );
+	// The server's removal notice (0x3508 case 1, 4D2140) precedes the despawn.
+	game.receive( { opcode: 0x3508, payload: Uint8Array.of( ...Uint8Array.from( u32( 8 ) ), 1 ) }, 2 );
 	game.receive( { opcode: 0x36ab, payload: Uint8Array.from( u32( 8 ) ) }, 2 );
 	const dismissed = game.take();
 	assert.equal( dismissed.activeCos, undefined );

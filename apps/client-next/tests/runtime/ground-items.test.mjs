@@ -310,7 +310,7 @@ test("an item pickup prints the native gain line: the stack it lands as, then on
 	core.dispose();
 });
 
-test("COS record gates mounting; result feedback never invents a ride and despawn clears capability", () => {
+test("COS record gates mounting; result feedback never invents a ride and the release clears capability", () => {
 	const frames = [], core = createWorldCore( f => frames.push( f ) );
 	const flush = () => {
 		core.step( 0, false );
@@ -365,6 +365,8 @@ test("COS record gates mounting; result feedback never invents a ride and despaw
 	assert.equal( defined( defined( flush() ).events.find( e => e.kind === "state" ) ).entity.mountedOn, 8 );
 	core.receive( { opcode: 0x35c7, payload: Buffer.from( [ 7, 0, 0, 0, 64 ] ) }, 0 );
 	assert.equal( flush(), null, "mounted pickup does not change rider pose" );
+	// The server's removal notice (0x3508 case 1, 4D2140) precedes the despawn.
+	core.receive( { opcode: 0x3508, payload: Uint8Array.of( ...Buffer.from( [ 8, 0, 0, 0 ] ), 1 ) }, 0 );
 	core.receive( { opcode: 0x36ab, payload: Buffer.from( [ 8, 0, 0, 0 ] ) }, 0 );
 	b = flush();
 	assert.equal( defined( defined( b ).events.find( e => e.kind === "gameplay" ) ).state.activeCos, undefined );
