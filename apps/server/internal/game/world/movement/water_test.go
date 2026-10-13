@@ -545,7 +545,7 @@ func TestConcurrentColdRegionLoadsDoNotSerialize(t *testing.T) {
 // by GameWorld. The shipped development artifact is compressed, so reaching
 // into the pre-compression directory would silently skip every real-asset
 // regression after packaging moved to server.srogz.
-func realAuthorityValidator(t *testing.T) *WaterValidator {
+func realAuthorityValidator(t testing.TB) *WaterValidator {
 	t.Helper()
 	paths := gamedatatest.Paths(t)
 	return NewAuthorityValidator(paths.WorldAuthorityDir)

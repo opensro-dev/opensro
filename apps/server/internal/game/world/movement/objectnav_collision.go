@@ -406,7 +406,7 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 			return
 		}
 		checked = append(checked, key)
-		set := v.objectNavSetForOffset(surface, dx, dz)
+		set, setReach := v.objectNavSetReach(surface, dx, dz)
 		if len(set) == 0 {
 			return
 		}
@@ -414,8 +414,20 @@ func (v *WaterValidator) objectChordFirstContact(fromWX, fromWZ, fromY, toWX, to
 		lz0 := fromWZ - float64(anchorZ)*simulation.NativeRegionSize
 		lx1 := toWX - float64(anchorX)*simulation.NativeRegionSize
 		lz1 := toWZ - float64(anchorZ)*simulation.NativeRegionSize
+		// A chord that misses every placement of the set contacts none of them,
+		// unless the walk stands on one (the placement test below, set-wide).
+		if setReach.missedBy(lx0, lz0, lx1, lz1) && !walk.ownsInSet(surface, dx, dz) {
+			return
+		}
 		passages := resolveObjectPassages(set, lx0, fromY, lz0, lx1, toY, lz1)
+		anchorWX, anchorWZ := float64(anchorX)*simulation.NativeRegionSize, float64(anchorZ)*simulation.NativeRegionSize
 		for i := range set {
+			// A chord that misses everything this placement holds cannot
+			// contact it (objectnav_reach.go), unless the walk owns one of
+			// its meshes: that walk is scanned whatever the box says.
+			if set[i].reach.missedBy(lx0, lz0, lx1, lz1) && !walk.ownsAnyMesh(&set[i], anchorWX, anchorWZ) {
+				continue
+			}
 			placement := set[i].placement
 			cosYaw, sinYaw := set[i].cosYaw, set[i].sinYaw
 			ox0 := cosYaw*(lx0-placement.x) + sinYaw*(lz0-placement.z)

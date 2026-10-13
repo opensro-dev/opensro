@@ -152,7 +152,7 @@ func resolveSurfacePassages(set []resolvedObjectNav, from, to [3]float64, owned 
 	// Built at the first link: most placements have none, and building it
 	// for every monster step allocated about 60 MB a minute.
 	var indices map[int]int
-	crossing := func(obj resolvedObjectNav, edge int, leaving bool) (float64, bool) {
+	crossing := func(obj *resolvedObjectNav, edge int, leaving bool) (float64, bool) {
 		if len(obj.meshes) != 1 {
 			return 0, false
 		}
@@ -189,7 +189,7 @@ func resolveSurfacePassages(set []resolvedObjectNav, from, to [3]float64, owned 
 		side, approach := sx*(cz-a[2])-sz*(cx-a[0]), sx*(startZ-a[2])-sz*(startX-a[0])
 		return t, (approach*side > 0) == leaving
 	}
-	inside := func(obj resolvedObjectNav, edge int, t float64) bool {
+	inside := func(obj *resolvedObjectNav, edge int, t float64) bool {
 		if len(obj.meshes) != 1 {
 			return false
 		}
@@ -203,12 +203,19 @@ func resolveSurfacePassages(set []resolvedObjectNav, from, to [3]float64, owned 
 		h, ok := objectCellPlaneYAt(m, int(m.outline.srcCell[edge]), c*x+s*z, -s*x+c*z)
 		return ok && (owned || math.Abs(h+p.y-(y0+(y1-y0)*t)) <= 2)
 	}
-	for i, p := range set {
+	for i := range set {
+		p := &set[i]
+		// A passage needs the chord to cross this placement's outline edge or
+		// stand in one of its cells (crossing, inside): both lie within its
+		// reach (objectnav_reach.go), in the anchor frame both callers use.
+		if len(p.placement.links) == 0 || p.reach.missedBy(x0, z0, x1, z1) {
+			continue
+		}
 		for _, link := range p.placement.links {
 			if indices == nil {
 				indices = make(map[int]int, len(set))
-				for k, q := range set {
-					indices[q.placement.ordinal] = k
+				for k := range set {
+					indices[set[k].placement.ordinal] = k
 				}
 			}
 			j, ok := indices[link.target]
@@ -216,8 +223,8 @@ func resolveSurfacePassages(set []resolvedObjectNav, from, to [3]float64, owned 
 				continue
 			}
 			a, oka := crossing(p, link.edge, true)
-			b, okb := crossing(set[j], link.targetEdge, false)
-			if oka && !okb && inside(set[j], link.targetEdge, a) {
+			b, okb := crossing(&set[j], link.targetEdge, false)
+			if oka && !okb && inside(&set[j], link.targetEdge, a) {
 				b = a
 				okb = true
 			} else if okb && !oka && inside(p, link.edge, b) {

@@ -51,6 +51,11 @@ type WaterValidator struct {
 	// validation and terrain lookup server-wide behind a disk read. Losers
 	// of a load race discard their copy and adopt the published one.
 	mu sync.Mutex
+	// scanEveryPlacement builds every placement with an unknown reach, so
+	// no scan skips it (objectnav_reach.go): tests compare the skipping
+	// scans against this brute-force reference. Set before first use;
+	// production never sets it.
+	scanEveryPlacement bool
 	// catalogLoaded marks the one-shot catalog load, success OR failure, so
 	// a missing catalog is a cached negative rather than a re-read per cold
 	// region (all caches here treat nil as a known-unloadable negative).
@@ -77,6 +82,10 @@ type WaterValidator struct {
 	// per-move object queries iterate (objectnav.go); nil/empty =
 	// negative.
 	objectNavSets map[objectNavSetKey][]resolvedObjectNav
+	// objectNavReaches holds each cached set's union reach
+	// (objectnav_reach.go), filled with the set: a chord that misses it
+	// can skip the whole set.
+	objectNavReaches map[objectNavSetKey]objectReach
 	// dungeonSpawnOnce owns the separately packaged DOF resident-nav
 	// plane. Dungeon coordinates are not outdoor sector-local frames and
 	// must never enter surfaceByRegion/grid tile math.
@@ -117,6 +126,7 @@ func newWaterValidator(root, catalogPath, dungeonResourcesPath string) *WaterVal
 		objectIndexes:        make(map[string]*objectResourceIndex),
 		objectNavMeshes:      make(map[string][]*objectNavMesh),
 		objectNavSets:        make(map[objectNavSetKey][]resolvedObjectNav),
+		objectNavReaches:     make(map[objectNavSetKey]objectReach),
 	}
 	if _, err := os.Stat(v.assetPath(catalogPath)); err != nil {
 		log.Warnf("movement: world-region catalog unreadable under %s (%v); deep-water gate degrades to accept-all", root, err)
