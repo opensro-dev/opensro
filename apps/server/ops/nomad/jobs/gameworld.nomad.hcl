@@ -288,6 +288,15 @@ variable "caravan_bandit_cap" {
   default = "16"
 }
 
+# elixir_drops_off keeps every elixir out of monster drops (port-only, not
+# native, beta balance; owner 2026-10-13): the blacksmith's shop_extra_goods
+# sells them instead, so "on" with a shop list lacking any of the eight
+# elixirs stops GameWorld at boot. "off" is the original game's drops.
+variable "elixir_drops_off" {
+  type    = string
+  default = "on"
+}
+
 variable "beta_drop_cap" {
   type    = string
   default = "16"
@@ -500,6 +509,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MALL_EXTRA_GOODS               = var.mall_extra_goods
         SRO_ALCHEMY_NO_ASSIMILATION        = var.alchemy_no_assimilation
         SRO_CARAVAN_BANDIT_CAP             = var.caravan_bandit_cap
+        SRO_ELIXIR_DROPS_OFF               = var.elixir_drops_off
         SRO_STACK_SIZES                    = var.stack_sizes
         SRO_PUBLIC_API_ADDR                = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"

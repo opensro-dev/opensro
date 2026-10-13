@@ -35,6 +35,10 @@ parses it; the GameWorld's own unset value is always native.
   - SRO_CARAVAN_BANDIT_CAP (caravan_bandit_cap): the bandits per caravan
     ambush (caravan/banditcap.go). The deployment default is 16, as the
     owner decided on 2026-10-13; "off" is the original game's uncapped count.
+  - SRO_ELIXIR_DROPS_OFF (elixir_drops_off): no monster drops an elixir;
+    the blacksmith sells them (progression/elixirdrops.go). The deployment
+    default is on, as the owner decided on 2026-10-13; "off" is the
+    original game's drops.
 
 ===========================================================================
 */
@@ -69,6 +73,9 @@ const alchemyNoAssimilationDefault = "on"
 // caravanBanditCapDefault is the owner-approved deployment default.
 const caravanBanditCapDefault = "16"
 
+// elixirDropsOffDefault is the owner-approved deployment default.
+const elixirDropsOffDefault = "on"
+
 /*
 ================
 portOnlySettings
@@ -86,6 +93,8 @@ type portOnlySettings struct {
 	AlchemyNoAssimilation string
 	// CaravanBanditCap is SRO_CARAVAN_BANDIT_CAP.
 	CaravanBanditCap string
+	// ElixirDropsOff is SRO_ELIXIR_DROPS_OFF.
+	ElixirDropsOff string
 }
 
 /*
@@ -94,7 +103,8 @@ portOnlySettingsFromEnv
 
 The deployer's values as written; storage auto-stack, the alchemy rates,
 /SETSPEED, the enhancement cap, the team-death revive, the mall goods, stone
-assimilation and the bandit cap take their defaults when unset.
+assimilation, the bandit cap and the elixir drops take their defaults when
+unset.
 ================
 */
 func portOnlySettingsFromEnv() portOnlySettings {
@@ -108,6 +118,7 @@ func portOnlySettingsFromEnv() portOnlySettings {
 		MallExtraGoods:        strings.TrimSpace(os.Getenv("SRO_MALL_EXTRA_GOODS")),
 		AlchemyNoAssimilation: strings.TrimSpace(os.Getenv("SRO_ALCHEMY_NO_ASSIMILATION")),
 		CaravanBanditCap:      strings.TrimSpace(os.Getenv("SRO_CARAVAN_BANDIT_CAP")),
+		ElixirDropsOff:        strings.TrimSpace(os.Getenv("SRO_ELIXIR_DROPS_OFF")),
 	}
 	if settings.StorageAutoStack == "" {
 		settings.StorageAutoStack = storageAutoStackDefault
@@ -133,6 +144,9 @@ func portOnlySettingsFromEnv() portOnlySettings {
 	if settings.CaravanBanditCap == "" {
 		settings.CaravanBanditCap = caravanBanditCapDefault
 	}
+	if settings.ElixirDropsOff == "" {
+		settings.ElixirDropsOff = elixirDropsOffDefault
+	}
 	return settings
 }
 
@@ -153,5 +167,6 @@ func (settings portOnlySettings) jobVariables(variables map[string]any) map[stri
 	variables["mall_extra_goods"] = settings.MallExtraGoods
 	variables["alchemy_no_assimilation"] = settings.AlchemyNoAssimilation
 	variables["caravan_bandit_cap"] = settings.CaravanBanditCap
+	variables["elixir_drops_off"] = settings.ElixirDropsOff
 	return variables
 }

@@ -160,6 +160,22 @@ func newGameplayPlane(
 	if len(extraGoods) > 0 {
 		log.Infof("commerce: %d extra NPC shop goods from %s", len(extraGoods), commerce.EnvShopExtraGoods)
 	}
+	// SRO_ELIXIR_DROPS_OFF (port-only, not native): elixirs leave every
+	// monster drop; the shop's extra goods must then sell all eight.
+	items.ElixirDrops = progression.ElixirDropsFromEnv()
+	if err := items.ElixirDrops.CheckSource(func(codename string) bool {
+		for _, good := range extraGoods {
+			if good.Codename == codename {
+				return true
+			}
+		}
+		return false
+	}, commerce.EnvShopExtraGoods); err != nil {
+		return nil, err
+	}
+	if items.ElixirDrops.Off() {
+		log.Infof("loot: elixir drops OFF (%s): the shop sells them", progression.EnvElixirDropsOff)
+	}
 	if err := items.ConfigureCommerce(devPaths.TextdataDir, extraGoods); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}

@@ -88,6 +88,9 @@ type BetaRates struct {
 	// Mix gives the named families their own rate in place of dropRate
 	// (progression.DropMix); absent, every family runs at dropRate.
 	Mix map[string]int `json:"mix,omitempty" doc:"Family name (equipment, assigned, potion, cure, scroll, elixir, ammo, stone, tablet) to that family's rate; a family not named runs at dropRate."`
+	// ElixirDropsOff removes every elixir from every drop
+	// (progression.ElixirDrops).
+	ElixirDropsOff bool `json:"elixirDropsOff,omitempty" doc:"Port-only beta balance: no monster drops an elixir (type 3/3/10/1); the Jangan blacksmith sells them. Their chances in these tables then drop nothing."`
 }
 
 /*
@@ -150,7 +153,8 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 	}
 	if beta := progression.BetaGrowthFromEnv(); beta.Enabled {
 		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate,
-			RareChance: action.RareEquipmentChance(beta.RareRate), Seals: progression.BetaSealRatesFromEnv().Table()}
+			RareChance: action.RareEquipmentChance(beta.RareRate), Seals: progression.BetaSealRatesFromEnv().Table(),
+			ElixirDropsOff: progression.ElixirDropsFromEnv().Off()}
 		if progression.BetaSealRatesFromEnv().Enabled() {
 			for _, m := range monsters {
 				level := uint8(m.Level)
