@@ -319,3 +319,31 @@ func TestSkippedInsertNamesItsProducer(t *testing.T) {
 	}
 	put(t, j, Event{Kind: "log", Account: "a"})
 }
+
+/*
+================
+TestFirstLifecycleEventOfASessionIsKept
+
+#716: a session's first lifecycle event that is not an in-world entry
+(here a connection before character selection) kept updateSession's
+tolerated "no session yet" lookup error, so write rolled the event and the
+new session back and logged "sql: no rows in result set".
+================
+*/
+func TestFirstLifecycleEventOfASessionIsKept(t *testing.T) {
+	j := testJournal(t)
+	id, _ := NewID()
+	if err := j.write(Event{ID: id, Session: "fresh", Account: "player", Kind: "connected", At: 1000, Lifecycle: true}); err != nil {
+		t.Fatalf("first lifecycle event refused: %v", err)
+	}
+	var events, sessions int
+	if err := j.db.QueryRow(`SELECT count(*) FROM events WHERE id=?`, id).Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.db.QueryRow(`SELECT count(*) FROM sessions WHERE id='fresh'`).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if events != 1 || sessions != 1 {
+		t.Fatalf("stored %d events and %d sessions, want 1 and 1", events, sessions)
+	}
+}

@@ -370,6 +370,10 @@ func updateSession(tx *sql.Tx, e Event) error {
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
+	// A session seen for the first time has no row yet. That is no error,
+	// and it must not survive to the return below (#716: it rolled back a
+	// new session's first lifecycle event).
+	err = nil
 	if ended != 0 || e.At < seen {
 		return nil
 	}
