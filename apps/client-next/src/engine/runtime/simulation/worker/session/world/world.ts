@@ -16,6 +16,7 @@ import { createDeparture } from "./departure";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
 import {
 	type ClientIncident,
+	DEGRADED_CODES_PER_SESSION,
 	INVENTORY_TRANSACTION_TIMEOUT,
 	MOVEMENT_RECEIPT_TIMEOUT,
 	TARGET_RELEASE_TIMEOUT,
@@ -66,6 +67,49 @@ export function createWorldSession(
 ) {
 	let failure: string | null = null, epoch = 0, disposed = false, controller: AbortController | null = null;
 	let diagnosticSession = "", disconnectMessage = "", incidentID = "", failureCode = "";
+	// Degraded codes reported, keyed "<diagnostic session>|<code>" (reportDegradations).
+	const reportedDegradations = new Set<string>();
+	/*
+================
+reportDegradations
+
+The owners' skipped cosmetic steps as non-fatal "degraded" reports, with the
+same evidence as a fatal one (the frame and the #800 journal). Each code is
+reported once per diagnostic session, and at most DEGRADED_CODES_PER_SESSION
+codes: one bad item cannot flood the Agent.
+================
+	*/
+	function reportDegradations() {
+		for ( const degradation of core.takeDegradations() ) {
+			const key = diagnosticSession + "|" + degradation.code;
+			if ( reportedDegradations.has( key ) ) continue;
+			let codes = 0;
+			for ( const reported of reportedDegradations ) {
+				if ( reported.startsWith( diagnosticSession + "|" ) ) codes++;
+			}
+			if ( codes >= DEGRADED_CODES_PER_SESSION ) continue;
+			reportedDegradations.add( key );
+			const frame = degradation.frame, dump = frame?.payload.subarray( 0, INCIDENT_DUMP_BYTES );
+			reportIncident( {
+				id: crypto.randomUUID().replaceAll( "-", "" ),
+				category: "degraded",
+				session: diagnosticSession || undefined,
+				code: degradation.code,
+				kind: "degraded",
+				message: degradation.message.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+				...(frame ?
+					{
+						opcode: frame.opcode,
+						payload: Array.from( dump!, byte => byte.toString( 16 ).padStart( 2, "0" ) ).join( "" ),
+						payloadSize: frame.payload.byteLength
+					} :
+					{}),
+				phase,
+				character,
+				journal: network.recentJournal()
+			} );
+		}
+	}
 	/*
 ================
 onNetworkFailure
@@ -562,6 +606,7 @@ step
 					} );
 				}
 			}
+			reportDegradations();
 			if ( phase !== "world" || failure ) {
 				try {
 					core.step( now, false );

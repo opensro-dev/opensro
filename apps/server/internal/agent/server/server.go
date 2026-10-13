@@ -100,8 +100,11 @@ type Server struct {
 	dummyHash               []byte
 	passwordSlots           chan struct{}
 	loginAttempts           *loginLimiter
-	// incidentReports paces /client/incident per account.
+	// incidentReports paces /client/incident per account; degradedReports
+	// paces its non-fatal "degraded" reports apart, so they never use up the
+	// allowance a session-ending failure needs.
 	incidentReports  *loginLimiter
+	degradedReports  *loginLimiter
 	passwordFailures passwordFailures
 	readiness        *readiness.Gate
 	bugReports       *bugreport.Service
@@ -173,6 +176,7 @@ func New(config Config) (*Server, error) {
 		passwordSlots:           make(chan struct{}, 16),
 		loginAttempts:           newLoginLimiter(now),
 		incidentReports:         newLoginLimiter(now),
+		degradedReports:         newLoginLimiter(now),
 		readiness:               config.Readiness,
 		bugReports:              config.BugReports,
 		startedAt:               now(),

@@ -62,9 +62,10 @@ export interface ClientIncident {
 	readonly id?: string;
 	readonly session?: string;
 	readonly code?: string;
-	readonly category?: NetworkFailure["category"];
+	readonly category?: NetworkFailure["category"] | "degraded";
 	readonly stack?: string;
-	readonly kind: "packet" | "transport" | "runtime" | "asset" | "unsupported";
+	// "degraded" alone is non-fatal: a cosmetic step was skipped (Degradation).
+	readonly kind: "packet" | "transport" | "runtime" | "asset" | "unsupported" | "degraded";
 	readonly message: string;
 	readonly opcode?: number;
 	readonly payload?: string;
@@ -88,6 +89,26 @@ export interface NetworkFailure {
 	readonly code: string;
 	readonly message: string;
 }
+/*
+================
+Degradation
+
+A cosmetic step the client skipped instead of ending the session: an effect
+whose item it cannot resolve, a visual with nothing to draw. Only a frame
+whose rest still parses may degrade; one that leaves the stream unreadable
+stays fatal. code names the site, stable across builds, so the console
+groups by it and an agent finds the code from it (apps/client-next
+AGENTS.md "Degraded reports").
+================
+*/
+export interface Degradation {
+	readonly code: string;
+	readonly message: string;
+	readonly frame?: WireFrame;
+}
+// One diagnostic session reports each degraded code once, and at most this
+// many codes: a bad item or effect cannot flood the Agent.
+export const DEGRADED_CODES_PER_SESSION = 16;
 // The Agent's bound on the dumped frame bytes (client_incident.go).
 export const INCIDENT_DUMP_BYTES = 512;
 // The Agent's bound on the message length.

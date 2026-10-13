@@ -183,6 +183,42 @@ test("3449 snapshots the existing character and ignores missing targets", () => 
 	e.dispose();
 });
 
+test("3449 with an item the client does not know skips the sparkle and reports it, never ending the session", () => {
+	const e = createEntities();
+	e.bootstrap( {
+		protocolVersion: 2,
+		nativeResult: 1,
+		refObjSnapshot: [],
+		refItemSnapshot: [],
+		localPlayerEntry: {
+			modelRef: 1933,
+			startProfile: { regionId: source.regionId, x: 100, y: 20, z: 30, angle: 0 }
+		}
+	} );
+	const latch = Buffer.alloc( 8 );
+	latch.writeUInt32LE( 17 );
+	e.receive( { opcode: 0x32a6, payload: latch } );
+	const flush = () => {
+		const b = e.take();
+		if ( b ) e.ack( b.sequence );
+		return b?.events ?? [];
+	};
+	flush();
+	// The prod incident's payload: source 0x186CB is local here as 17, item 3787.
+	const packet = Buffer.alloc( 8 );
+	packet.writeUInt32LE( 17 );
+	packet.writeUInt32LE( 3787, 4 );
+	assert.doesNotThrow( () => e.receive( { opcode: 0x3449, payload: packet } ) );
+	assert.ok( !flush().some( event => event.kind === "item-effect" ), "no sparkle without its item" );
+	const [degraded, ...rest] = e.takeDegradations();
+	assert.equal( rest.length, 0 );
+	assert.equal( degraded?.code, "item-use-visual-unknown-ref" );
+	assert.match( degraded?.message ?? "", /3787/ );
+	assert.equal( degraded?.frame?.opcode, 0x3449 );
+	assert.deepEqual( e.takeDegradations(), [], "a take empties the queue" );
+	e.dispose();
+});
+
 test("cold fireworks finish loading after the source leaves and low detail preserves sound cadence", () => {
 	const h = harness( 69 );
 	for ( let i = 0; i < 40; i++ ) {

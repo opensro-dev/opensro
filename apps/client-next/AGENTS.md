@@ -24,6 +24,30 @@ root).
   frame order and disposal order. The resolved graph is a derived artifact
   (`temp/artifacts/execution/execution-map.json`); never commit it.
 
+## Degraded reports
+
+A packet failure ends the session, so the client throws only when the
+stream cannot be read on. A **cosmetic** step whose frame still parses, such
+as an effect naming an item the client does not hold, is skipped instead and
+reported as a non-fatal `degraded` incident:
+
+- **Raise one:** in the owner, record a `Degradation` with a stable, kebab-case
+  site code naming the place (for example `item-use-visual-unknown-ref` in
+  `entities.ts` 0x3449), its message, and the frame. Return without
+  applying it. The world owner (`world.ts` `reportDegradations`) reports each
+  code once per diagnostic session, at most `DEGRADED_CODES_PER_SESSION`
+  codes, with the frame dump and the frame journal. Never degrade a frame
+  whose rest depends on the missing data (a type word that decides the parse,
+  an optional tail): that stays fatal.
+- **Find them:** the operations console's history page has a **Degraded**
+  section, grouped by site code, with counts, players, first and last seen,
+  builds and the newest frame. The Agent logs each as `agent: client degraded`
+  with `code`. These are staff-only and never on the public site.
+- **Fix one:** search the code in `apps/client-next/src`; it names the site.
+  Fix the cause, usually on the server: the reference or packet the client
+  was not sent. Keep the degrade path as the fallback, and add a test that
+  pins the producer.
+
 ## Tests
 
 Tests load TypeScript sources through the shared loader, which uses Node's

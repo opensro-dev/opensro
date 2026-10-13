@@ -86,3 +86,46 @@ func TestQueryRefusedLoginAccountIsLiteralAndCaseInsensitive(t *testing.T) {
 		t.Fatalf("claimed account filter widened or lost case folding: %+v", events)
 	}
 }
+
+/*
+================
+TestDegradedReportsGroupBySiteApartFromFailures
+
+The client's non-fatal reports group by their site code with the newest
+as the example, and never count among the failure groups.
+================
+*/
+func TestDegradedReportsGroupBySiteApartFromFailures(t *testing.T) {
+	j := testJournal(t)
+	for _, e := range []Event{
+		{ID: "d1", At: 1000, Account: "a", Kind: "client_incident", Category: "degraded", Code: "item-use-visual-unknown-ref",
+			Message: "older", Opcode: "0x3449", Build: "b1", Fields: map[string]string{"payload": "aa"}},
+		{ID: "d2", At: 2000, Account: "b", Kind: "client_incident", Category: "degraded", Code: "item-use-visual-unknown-ref",
+			Message: "newest", Opcode: "0x3449", Build: "b1", Fields: map[string]string{"payload": "cb860100cb0e0000"}},
+		{ID: "d3", At: 1500, Account: "a", Kind: "client_incident", Category: "degraded", Code: "other-site", Message: "x"},
+		{ID: "f1", At: 1200, Account: "a", Kind: "client_incident", Category: "software", Code: "packet_application_failed", Message: "fatal"},
+	} {
+		if err := j.write(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := j.Query(Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	degraded := data["degraded"].([]map[string]any)
+	if len(degraded) != 2 || degraded[0]["code"] != "item-use-visual-unknown-ref" {
+		t.Fatalf("degraded groups = %+v", degraded)
+	}
+	row := degraded[0]
+	example := row["example"].(map[string]any)
+	if row["count"] != int64(2) || row["players"] != int64(2) || row["first"] != int64(1000) || row["last"] != int64(2000) ||
+		example["message"] != "newest" || example["opcode"] != "0x3449" || example["payload"] != "cb860100cb0e0000" {
+		t.Fatalf("degraded row = %+v", row)
+	}
+	for _, group := range data["groups"].([]map[string]any) {
+		if group["code"] == "item-use-visual-unknown-ref" || group["code"] == "other-site" {
+			t.Fatalf("a degraded report counted as a failure: %+v", group)
+		}
+	}
+}

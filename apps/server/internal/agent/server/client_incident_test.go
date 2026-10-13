@@ -9,8 +9,12 @@ package agentserver
 
 import (
 	"net/http"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"opensro.online/server/internal/platform/history"
 
 	log "github.com/sirupsen/logrus"
 	logtest "github.com/sirupsen/logrus/hooks/test"
@@ -258,5 +262,83 @@ func TestClientIncidentRefusesADeletedAccountsSession(t *testing.T) {
 		if entry.Message == "agent: client incident" {
 			t.Fatalf("a deleted account's report was logged: %+v", entry.Data)
 		}
+	}
+}
+
+/*
+================
+TestClientDegradedReportIsKeptLoggedAndGrouped
+
+A non-fatal "degraded" report (the client skipped a cosmetic step) is kept,
+logged as "agent: client degraded" with its site code, and recorded in the
+degraded category the console groups by code. It must name its site; a
+fatal kind cannot claim the category.
+================
+*/
+func TestClientDegradedReportIsKeptLoggedAndGrouped(t *testing.T) {
+	journal, err := history.Open(filepath.Join(t.TempDir(), "history.sqlite"), "agent", "", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = journal.Close() })
+	fixture, token := incidentSession(t, func(config *Config) { config.History = journal })
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+
+	body := `{"kind":"degraded","category":"degraded","code":"item-use-visual-unknown-ref",` +
+		`"message":"Missing external item reference 3787","opcode":13385,"payload":"cb860100cb0e0000","payloadSize":8}`
+	if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code; code != http.StatusOK {
+		t.Fatalf("degraded report = %d", code)
+	}
+	entry := hook.LastEntry()
+	if entry == nil || entry.Message != "agent: client degraded" || entry.Data["code"] != "item-use-visual-unknown-ref" {
+		t.Fatalf("logged %+v", entry)
+	}
+	data, err := journal.Query(history.Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups := data["degraded"].([]map[string]any)
+	if len(groups) != 1 || groups[0]["code"] != "item-use-visual-unknown-ref" || groups[0]["count"] != int64(1) {
+		t.Fatalf("degraded groups = %+v", groups)
+	}
+	example := groups[0]["example"].(map[string]any)
+	if example["opcode"] != "0x3449" || example["payload"] != "cb860100cb0e0000" {
+		t.Fatalf("example = %+v", example)
+	}
+	for body, reason := range map[string]string{
+		`{"kind":"degraded","message":"x"}`:                                "degraded report without a code",
+		`{"kind":"packet","category":"degraded","message":"x","code":"y"}`: "degraded category on a fatal report",
+	} {
+		if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code; code != http.StatusBadRequest {
+			t.Errorf("%s = %d", body, code)
+		}
+		if got, _ := hook.LastEntry().Data["reason"].(string); got != reason {
+			t.Errorf("%s refused for %q, want %q", body, got, reason)
+		}
+	}
+}
+
+/*
+================
+TestClientDegradedReportsNeverStarveAFatalOne
+
+Degraded reports draw on their own allowance: once they use it up, the
+account's session-ending failure is still accepted.
+================
+*/
+func TestClientDegradedReportsNeverStarveAFatalOne(t *testing.T) {
+	fixture, token := incidentSession(t)
+	limited := false
+	for i := 0; i < 40 && !limited; i++ {
+		body := `{"kind":"degraded","code":"site-` + strconv.Itoa(i) + `","message":"x"}`
+		limited = performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code == http.StatusTooManyRequests
+	}
+	if !limited {
+		t.Fatal("degraded reports were never paced")
+	}
+	fatal := `{"kind":"packet","message":"Packet application failed: Error: x"}`
+	if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, fatal, token).Code; code != http.StatusOK {
+		t.Fatalf("a fatal report after the degraded allowance ran out = %d, want accepted", code)
 	}
 }

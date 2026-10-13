@@ -180,6 +180,10 @@ func (j *Journal) Query(f Filter) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	degraded, err := j.degradedGroups(f)
+	if err != nil {
+		return nil, err
+	}
 	summary, err := j.summary(f, time.Now())
 	if err != nil {
 		return nil, err
@@ -188,7 +192,7 @@ func (j *Journal) Query(f Filter) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"events": events, "next": next, "sessions": sessions, "groups": groups, "summary": summary, "players": players, "health": j.Health()}, nil
+	return map[string]any{"events": events, "next": next, "sessions": sessions, "groups": groups, "degraded": degraded, "summary": summary, "players": players, "health": j.Health()}, nil
 }
 
 /*
@@ -351,6 +355,43 @@ func (j *Journal) groups(f Filter) ([]map[string]any, error) {
 		group["buildCounts"] = counts[group["id"].(string)]
 	}
 	return result, buildRows.Err()
+}
+
+/*
+================
+degradedGroups
+
+The client's non-fatal reports (category "degraded": a cosmetic step it
+skipped instead of ending the session), one row per site code with its
+counts and the newest event as the example. Failures stay in groups; these
+are flavour bugs an agent picks up from the console (apps/client-next
+AGENTS.md).
+================
+*/
+func (j *Journal) degradedGroups(f Filter) ([]map[string]any, error) {
+	f.Before = 0
+	clause, args := where(f)
+	// SQLite takes the bare columns from the row MAX(at) picked: the newest.
+	rows, err := j.db.Query(`SELECT json_extract(data,'$.code'),MIN(at),MAX(at),COUNT(*),COUNT(DISTINCT NULLIF(account,'')),
+ COALESCE(json_extract(data,'$.message'),''),COALESCE(json_extract(data,'$.opcode'),''),COALESCE(json_extract(data,'$.fields.payload'),''),
+ COALESCE(GROUP_CONCAT(DISTINCT json_extract(data,'$.build')),'')
+ FROM events WHERE (`+clause+`) AND category='degraded'
+ GROUP BY json_extract(data,'$.code') ORDER BY MAX(at) DESC LIMIT 100`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []map[string]any{}
+	for rows.Next() {
+		var code, message, opcode, payload, builds string
+		var first, last, count, players int64
+		if err := rows.Scan(&code, &first, &last, &count, &players, &message, &opcode, &payload, &builds); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{"code": code, "first": first, "last": last, "count": count, "players": players,
+			"example": map[string]any{"message": message, "opcode": opcode, "payload": payload}, "builds": builds})
+	}
+	return result, rows.Err()
 }
 
 /*

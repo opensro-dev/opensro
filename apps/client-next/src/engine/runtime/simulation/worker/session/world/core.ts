@@ -467,6 +467,8 @@ Advances entities and gameplay, then publishes the changed gameplay state.
 				publishedSocial = social;
 			}
 		},
+		// The owners' skipped cosmetic steps, for the world's degraded reports.
+		takeDegradations: () => entities.takeDegradations(),
 		readyRevision: () => pendingTravel?.revision ?? 0,
 		/*
 ================

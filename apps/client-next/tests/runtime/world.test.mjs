@@ -2011,6 +2011,43 @@ test("a fatal packet incident carries the frames before it", async t => {
 	for ( let at = 0; at < journal.length; at += 4 ) assert.ok( journal[at] <= 0 );
 });
 
+/*
+================
+a cosmetic failure degrades instead of ending the session
+
+The owner's rule (2026-10-13): an effect the client cannot resolve is
+skipped, and reported once per code with the same evidence as a fatal
+incident, never silently.
+================
+*/
+test("a cosmetic failure is reported once as degraded and the session stays in the world", async t => {
+	const { world, sockets, incidents } = await lostAnswerWorld( t );
+	const sparkle = Buffer.alloc( 8 );
+	sparkle.writeUInt32LE( 123 );
+	sparkle.writeUInt32LE( 3787, 4 );
+	sockets[0].receive( 0x3449, sparkle );
+	world.step( 100 );
+	sockets[0].receive( 0x3449, sparkle );
+	world.step( 200 );
+	assert.equal( world.status().phase, "world", "a cosmetic failure keeps the session" );
+	assert.equal( incidents.length, 1, "one report per code per session" );
+	const report = incidents[0];
+	assert.equal( report.kind, "degraded" );
+	assert.equal( report.category, "degraded" );
+	assert.equal( report.code, "item-use-visual-unknown-ref" );
+	assert.equal( report.opcode, 0x3449 );
+	assert.equal( report.payload, "7b000000cb0e0000" );
+	// The journal carries the inbound sparkle (direction 0, wire size 10); a
+	// ping may follow it.
+	const journal = report.journal ?? [];
+	assert.ok(
+		journal.some( ( value, at ) =>
+			at % 4 === 2 && value === 0x3449 && journal[at - 1] === 0 && journal[at + 1] === 10
+		),
+		"the frame journal holds the sparkle"
+	);
+});
+
 for ( const queuedReceipt of [ true, false ] ) {
 	test(`movement after a CPU stall: queued receipt ${queuedReceipt}`, async t => {
 		const sockets = socketHarness( t ), incidents = [];

@@ -27,7 +27,10 @@ const CATEGORY_LABELS = {
 	expected: "Normal",
 	connection: "Connection",
 	software: "Error",
-	unknown: "Unclear"
+	unknown: "Unclear",
+	// The client skipped a cosmetic step and kept the session (a "degraded"
+	// report): not an error the player saw, but a flavour bug to fix.
+	degraded: "Degraded"
 };
 
 // Codes worth a sentence; any other code is shown with its underscores as spaces.
@@ -36,6 +39,7 @@ const CODE_LABELS = {
 	invalid_credentials: "wrong id or password",
 	logout: "logged out",
 	connection_closed: "the connection closed without a reason",
+	"item-use-visual-unknown-ref": "an item-use sparkle named an item the client did not know",
 	socket_closed: "the connection dropped",
 	world_entered: "entered the world",
 	packet_application_failed: "a server message could not be applied",
@@ -164,4 +168,29 @@ export function playerSentence( who, summary, now = Date.now() ) {
 	return `${played} Last signed in ${ago( summary.lastAuthentication, now )}; last in the world ${
 		ago( summary.lastSeen, now )
 	}.`;
+}
+
+/*
+================
+degradedCells
+
+One degraded group as its table cells: what the client skipped (the site's
+label, its raw code kept beside it), how often and for how many players,
+first and last seen, the builds, and the newest example frame. The code is
+what an agent searches for in apps/client-next (AGENTS.md).
+================
+*/
+export function degradedCells( row ) {
+	const example = row.example ?? {};
+	const frame = [ example.opcode, example.payload ].filter( Boolean ).join( " " );
+	return {
+		what: codeLabel( row.code ) || row.code,
+		code: row.code,
+		count: row.count,
+		players: row.players,
+		first: row.first,
+		last: row.last,
+		builds: row.builds || "",
+		example: [ example.message, frame ].filter( Boolean ).join( " · " )
+	};
 }

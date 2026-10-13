@@ -9,6 +9,7 @@ import {
 	ago,
 	categoryLabel,
 	codeLabel,
+	degradedCells,
 	duration,
 	kindLabel,
 	playerSentence,
@@ -389,6 +390,24 @@ function render( data, append ) {
 				Object.entries( row.buildCounts ?? {} ).map( ( [build, count] ) => `${build}: ${count}` ).join( ", " )
 			]
 		)
+	);
+	table(
+		"#degraded",
+		[ "What the client skipped", "Times", "Players", "First", "Last", "Builds", "Newest example" ],
+		(data.degraded ?? []).map( row => {
+			const cells = degradedCells( row ), what = element( "div" ), raw = element( "small", cells.code );
+			raw.className = "raw-code";
+			what.append( element( "strong", cells.what ), raw );
+			return [
+				what,
+				cells.count,
+				cells.players,
+				date( cells.first ),
+				date( cells.last ),
+				cells.builds,
+				cells.example
+			];
+		} )
 	);
 	renderEvents( data.events, append );
 	cursor = data.next;
