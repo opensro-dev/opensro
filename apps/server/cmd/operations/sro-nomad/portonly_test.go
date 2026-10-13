@@ -70,3 +70,20 @@ func TestTeamDeathReviveJobVariable(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestAlchemyNoAssimilationJobVariable
+
+Unset deploys the owner's default (on); "off" and "on" pass through.
+================
+*/
+func TestAlchemyNoAssimilationJobVariable(t *testing.T) {
+	for env, want := range map[string]string{"": "on", "off": "off", "on": "on"} {
+		t.Setenv("SRO_ALCHEMY_NO_ASSIMILATION", env)
+		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
+		if variables["alchemy_no_assimilation"] != want {
+			t.Fatalf("env %q: alchemy_no_assimilation %v, want %s", env, variables["alchemy_no_assimilation"], want)
+		}
+	}
+}

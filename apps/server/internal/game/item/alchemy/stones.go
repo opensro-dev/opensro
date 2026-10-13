@@ -387,8 +387,12 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 			}
 			setVariance(item, attrIndex, v)
 		}
-		if e = c.assimilate(item, stone, attrIndex, magic, oldCount, roll); e != nil {
-			return zero, e
+		// Port-only, not native (noassimilation.go): with the setting on a
+		// stone changes only its own stat.
+		if !c.NoAssimilation {
+			if e = c.assimilate(item, stone, attrIndex, magic, oldCount, roll); e != nil {
+				return zero, e
+			}
 		}
 	}
 	out[material].Quantity--

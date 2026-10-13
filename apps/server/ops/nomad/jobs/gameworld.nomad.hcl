@@ -271,6 +271,15 @@ variable "mall_extra_goods" {
   default = "on"
 }
 
+# alchemy_no_assimilation removes stone assimilation (port-only, not native;
+# owner decision 2026-10-13): "on" makes a successful attribute or magic
+# stone change only its own stat; "off" is the original game. A malformed
+# value stops GameWorld at boot.
+variable "alchemy_no_assimilation" {
+  type    = string
+  default = "on"
+}
+
 variable "beta_drop_cap" {
   type    = string
   default = "16"
@@ -481,6 +490,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_DROP_MIX                  = var.beta_drop_mix
         SRO_SHOP_EXTRA_GOODS               = var.shop_extra_goods
         SRO_MALL_EXTRA_GOODS               = var.mall_extra_goods
+        SRO_ALCHEMY_NO_ASSIMILATION        = var.alchemy_no_assimilation
         SRO_STACK_SIZES                    = var.stack_sizes
         SRO_PUBLIC_API_ADDR                = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"

@@ -40,6 +40,7 @@ func publicRules() publicstats.RulesResponse {
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
 	teamDeathRevive, _ := action.TeamDeathReviveFromEnv()
+	noAssimilation, _ := alchemy.NoAssimilationFromEnv()
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
@@ -95,6 +96,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A death in a free battle or the arena revives on the spot, at any level.",
 				Now:    "A free-battle or arena death revives in town above level 10, like any other death.",
 				Why:    "A shard setting; the original rule returns with one setting."},
+			{Flag: alchemy.EnvNoAssimilation, On: noAssimilation,
+				Native: "A successful attribute or magic stone can also reroll a white stat or a magic option (assimilation).",
+				Now:    "A successful attribute or magic stone changes only its own stat.",
+				Why:    "Players asked for it; the original rule returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

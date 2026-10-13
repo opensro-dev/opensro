@@ -29,6 +29,9 @@ parses it; the GameWorld's own unset value is always native.
     the v1.150 mall does not list (commerce/mallextra.go). The deployment
     default is on, as the owner decided on 2026-10-13; "off" is the
     shipped mall.
+  - SRO_ALCHEMY_NO_ASSIMILATION (alchemy_no_assimilation): stones without
+    assimilation (alchemy/noassimilation.go). The deployment default is on,
+    as the owner decided on 2026-10-13; "off" is the original game.
 
 ===========================================================================
 */
@@ -57,6 +60,9 @@ const teamDeathReviveDefault = "on"
 // mallExtraGoodsDefault is the owner-approved deployment default.
 const mallExtraGoodsDefault = "on"
 
+// alchemyNoAssimilationDefault is the owner-approved deployment default.
+const alchemyNoAssimilationDefault = "on"
+
 /*
 ================
 portOnlySettings
@@ -70,6 +76,8 @@ type portOnlySettings struct {
 	AlchemyMaxPlus   string
 	TeamDeathRevive  string
 	MallExtraGoods   string
+	// AlchemyNoAssimilation is SRO_ALCHEMY_NO_ASSIMILATION.
+	AlchemyNoAssimilation string
 }
 
 /*
@@ -83,13 +91,14 @@ goods take their defaults when unset.
 */
 func portOnlySettingsFromEnv() portOnlySettings {
 	settings := portOnlySettings{
-		StorageAutoStack: strings.TrimSpace(os.Getenv("SRO_STORAGE_AUTO_STACK")),
-		ReverseReturnMap: strings.TrimSpace(os.Getenv("SRO_REVERSE_RETURN_MAP")),
-		AlchemyRates:     strings.TrimSpace(os.Getenv("SRO_ALCHEMY_RATES")),
-		GMSetSpeed:       strings.TrimSpace(os.Getenv("SRO_GM_SETSPEED")),
-		AlchemyMaxPlus:   strings.TrimSpace(os.Getenv("SRO_ALCHEMY_MAX_PLUS")),
-		TeamDeathRevive:  strings.TrimSpace(os.Getenv("SRO_TEAM_DEATH_REVIVE")),
-		MallExtraGoods:   strings.TrimSpace(os.Getenv("SRO_MALL_EXTRA_GOODS")),
+		StorageAutoStack:      strings.TrimSpace(os.Getenv("SRO_STORAGE_AUTO_STACK")),
+		ReverseReturnMap:      strings.TrimSpace(os.Getenv("SRO_REVERSE_RETURN_MAP")),
+		AlchemyRates:          strings.TrimSpace(os.Getenv("SRO_ALCHEMY_RATES")),
+		GMSetSpeed:            strings.TrimSpace(os.Getenv("SRO_GM_SETSPEED")),
+		AlchemyMaxPlus:        strings.TrimSpace(os.Getenv("SRO_ALCHEMY_MAX_PLUS")),
+		TeamDeathRevive:       strings.TrimSpace(os.Getenv("SRO_TEAM_DEATH_REVIVE")),
+		MallExtraGoods:        strings.TrimSpace(os.Getenv("SRO_MALL_EXTRA_GOODS")),
+		AlchemyNoAssimilation: strings.TrimSpace(os.Getenv("SRO_ALCHEMY_NO_ASSIMILATION")),
 	}
 	if settings.StorageAutoStack == "" {
 		settings.StorageAutoStack = storageAutoStackDefault
@@ -109,6 +118,9 @@ func portOnlySettingsFromEnv() portOnlySettings {
 	if settings.MallExtraGoods == "" {
 		settings.MallExtraGoods = mallExtraGoodsDefault
 	}
+	if settings.AlchemyNoAssimilation == "" {
+		settings.AlchemyNoAssimilation = alchemyNoAssimilationDefault
+	}
 	return settings
 }
 
@@ -127,5 +139,6 @@ func (settings portOnlySettings) jobVariables(variables map[string]any) map[stri
 	variables["alchemy_max_plus"] = settings.AlchemyMaxPlus
 	variables["team_death_revive"] = settings.TeamDeathRevive
 	variables["mall_extra_goods"] = settings.MallExtraGoods
+	variables["alchemy_no_assimilation"] = settings.AlchemyNoAssimilation
 	return variables
 }

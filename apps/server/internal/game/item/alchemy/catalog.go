@@ -80,6 +80,9 @@ type Catalog struct {
 	Rates ReinforceRates
 	// MaxPlus is the shard's enhancement cap (maxplus.go); 0 is native.
 	MaxPlus uint8
+	// NoAssimilation removes stone assimilation (noassimilation.go);
+	// false is native.
+	NoAssimilation bool
 }
 
 /*
