@@ -135,6 +135,8 @@ func (rt *Runtime) orderPetAttack(division string, character, snapshot *enterwor
 	}
 	rt.cancelPetCombat(petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: cosGID}, state, nowMs)
 	state.combat = intent
+	// Entering BATTLE is a state change (53FF30).
+	resetPetStuck(state)
 	// Entering BATTLE leaves PICKITEM, which answers a pending pickup.
 	expireCosPickup(state)
 	return OpResult{}

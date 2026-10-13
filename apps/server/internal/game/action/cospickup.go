@@ -140,6 +140,8 @@ func finishPendingCosPickup(state *petSession, result OpResult) OpResult {
 	}
 	request := *state.pickup
 	state.pickup = nil
+	// Leaving PICKITEM is a state change (53FF30).
+	resetPetStuck(state)
 	if state.pickupCommand {
 		result = finishCosPickupCommand(result, wire.CosCommand{CosGid: request.CosGID, TargetGid: request.GroundGID})
 	}

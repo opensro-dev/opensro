@@ -59,4 +59,6 @@ func (rt *Runtime) cancelPetCombat(key petOwnerKey, state *petSession, now int64
 		rt.queueSkillFinalize(key.division, fmt.Sprintf("@pet:%d", key.gid), key.gid, now, wire.SkillCastFinalizeFrame(token))
 	}
 	state.combat = nil
+	// Leaving BATTLE is a state change (53FF30).
+	resetPetStuck(state)
 }

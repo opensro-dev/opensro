@@ -8,7 +8,8 @@ out. The v1.188 server's follow tick (CAITactics_FollowOwnerFormation
 549F80) warps a COS to its owner (CAITactics_RequestPositionRelocation
 541110, message 0x7022) once the owner is no longer in its plane and
 adjacent sectors (Pos_AreSamePlaneAndAdjacentSectors 430CE0). Within those
-sectors it only walks; nothing else teleports it.
+sectors it walks, and a pet whose walks keep stalling warps after its tenth
+stalled stop (the stuck rule, petstuck.go).
 
 ===========================================================================
 */
@@ -32,7 +33,19 @@ ownerAt. Returns the tick key and the pet's session.
 */
 func strandedWolf(t *testing.T, ownerAt simulation.Spawn) (*Runtime, petOwnerKey, *petSession) {
 	t.Helper()
-	rt, _, c, _ := newPetCombatRuntime(t, 1_000_000, attackPetBand)
+	return strandedPet(t, attackPetBand, ownerAt)
+}
+
+/*
+================
+strandedPet
+
+strandedWolf for a COS of any band.
+================
+*/
+func strandedPet(t *testing.T, band uint16, ownerAt simulation.Spawn) (*Runtime, petOwnerKey, *petSession) {
+	t.Helper()
+	rt, _, c, _ := newPetCombatRuntime(t, 1_000_000, band)
 	rt.ConstrainMovement = func(_ string, from, _ simulation.Spawn) (simulation.Spawn, *simulation.MoveError) {
 		return from, &simulation.MoveError{Reason: "walled in"}
 	}
@@ -75,18 +88,39 @@ func TestStrandedPetWarpsToAnOwnerTwoSectorsAway(t *testing.T) {
 
 /*
 ================
-TestStrandedPetWalksWhileItsOwnerIsInAnAdjacentSector
+TestWalledInPetWarpsToAnAdjacentOwnerAfterTenStalledStops
 
-430CE0 holds one sector either way: there the pet only walks, so a walled-in
-pet stays put, as natively.
+430CE0 holds one sector either way, so the sector warp never fires there;
+the stuck rule does. Every refused step is a stalled stop (4A9430 event 8,
+559010); the tenth relocates the pet onto its owner (5599C0 -> 541110). The
+port's earlier test had the walled-in pet stay put, which is not native.
 ================
 */
-func TestStrandedPetWalksWhileItsOwnerIsInAnAdjacentSector(t *testing.T) {
-	rt, key, state := strandedWolf(t, simulation.Spawn{RegionID: 0x62a9, X: 300, Z: 500})
-	for now := int64(2_000_000); now < 2_005_000; now += 100 {
-		rt.advancePet(key, now)
+func TestWalledInPetWarpsToAnAdjacentOwnerAfterTenStalledStops(t *testing.T) {
+	owner := simulation.Spawn{RegionID: 0x62a9, X: 300, Z: 500}
+	rt, key, state := strandedWolf(t, owner)
+	warpedAt := -1
+	var frames []simulation.Frame
+	for now := int64(2_000_000); now < 2_005_000 && warpedAt < 0; now += 100 {
+		frames = append(frames, rt.advancePet(key, now)...)
+		if at := state.follower.Position(now); at.RegionID == owner.RegionID && at.X == owner.X {
+			warpedAt = int(now-2_000_000) / 100
+		}
 	}
-	if at := state.follower.Position(2_005_000); at.RegionID != 0x62a8 || at.X != 500 {
-		t.Fatalf("a pet with its owner one sector away moved to %+v without a path", at)
+	if warpedAt < 0 {
+		t.Fatalf("the walled-in pet never warped to its adjacent owner; it is at %+v", state.follower.Position(2_005_000))
+	}
+	// One follow evaluation per 100 ms tick, each a refused step: the warp
+	// cannot come before the tenth.
+	if warpedAt < 9 {
+		t.Fatalf("the pet warped on tick %d, before its tenth stalled stop", warpedAt)
+	}
+	despawn, spawn := false, false
+	for _, frame := range frames {
+		despawn = despawn || frame.Opcode == wire.OpObjectDespawn
+		spawn = spawn || frame.Opcode == wire.OpSingleObjectSpawn
+	}
+	if !despawn || !spawn {
+		t.Fatalf("the warp was not shown to observers: %+v", frames)
 	}
 }

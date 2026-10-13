@@ -123,6 +123,8 @@ func (rt *Runtime) applyCosGroundAt(division string, c *enterworld.Character, q 
 			if allowApproach {
 				copy := q
 				session.pickup = &copy
+				// Entering PICKITEM is a state change (53FF30).
+				resetPetStuck(session)
 				session.pickupDeadline = now.UnixMilli() + cosPickupApproachTimeoutMs
 				result = OpResult{}
 			}

@@ -72,6 +72,7 @@ func (p *PetFollower) FollowFormation(in PetFormationStep) []Frame {
 		return nil
 	}
 	p.clockStarted, p.lastTick = true, in.Now
+	p.settleArrival(in.Now)
 	from, owner := p.Position(in.Now), in.Owner.LiveSpawnAt(in.Now)
 	if !finitePetSpawn(from) || !finitePetSpawn(owner) || in.Speed <= 0 || in.Constrain == nil || in.Surface == nil {
 		in.Slots.Release(p.gid)
@@ -84,12 +85,12 @@ func (p *PetFollower) FollowFormation(in PetFormationStep) []Frame {
 		if from.RegionID&0x8000 == 0 && owner.RegionID&0x8000 != 0 {
 			return p.Stop(in.Now)
 		}
-		y, valid := in.Surface(owner.RegionID, owner.X, owner.Y, owner.Z)
-		if !valid {
+		if !p.RelocateTo(owner, in.Now, in.Surface) {
 			return p.Stop(in.Now)
 		}
-		owner.Y = y
-		p.Displace(owner, in.Now)
+		// 549F80 returns 2: FOLLOW_OnTick (55A960) raises 0x24 and 5599A0
+		// changes state, clearing the stuck count.
+		p.ResetStuck()
 		if in.Relocated != nil {
 			*in.Relocated = true
 		}
@@ -98,7 +99,12 @@ func (p *PetFollower) FollowFormation(in PetFormationStep) []Frame {
 	live, leader := spawnToPose(from), spawnToPose(owner)
 	if monster.NativeOwnerFollowMotion(monster.OwnerFollowInput{Live: live, Owner: leader}).Satisfied {
 		in.Slots.Release(p.gid)
-		return p.Stop(in.Now)
+		frames := p.Stop(in.Now)
+		// In formation, 549F80 returns 2 and FOLLOW changes state (55A960 ->
+		// event 0x24 -> 5599A0 -> 53FF30), which clears the stuck count: only
+		// a pet that never reaches its owner accumulates stalled stops.
+		p.ResetStuck()
+		return frames
 	}
 	*in.Slot = in.Slots.AssignOwnerFollow(p.gid, *in.Slot, live, leader)
 	goal := monster.NativeOwnerFollowGoal(monster.OwnerFormationGoal{Owner: leader, Slot: *in.Slot, BodyRadius: in.BodyRadius,

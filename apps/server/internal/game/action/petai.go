@@ -248,6 +248,14 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 			}
 		}
 	}()
+	// Registered last, so it runs first: the stuck event a step raised is
+	// answered before the formation and pickup cleanups above (petstuck.go).
+	var answerStuck func() []simulation.Frame
+	defer func() {
+		if answerStuck != nil {
+			output = append(output, answerStuck()...)
+		}
+	}()
 	// The session binds the canonical character pointer. Avoid searching the
 	// division's entire saved-character population on every pet tick.
 	var snapshot *enterworld.Character
@@ -294,6 +302,9 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 	// Relocation and summons build new followers; every tick installs the one
 	// planner they all route with.
 	state.follower.SetRoutePlanner(rt.PlanCompanionRoute)
+	answerStuck = func() []simulation.Frame {
+		return rt.answerPetStuck(key, state, snapshot, cos, ref.TidWord, nowMs)
+	}
 	if state.displacement != nil {
 		if nowMs < state.displacement.untilMs {
 			return state.follower.Stop(nowMs)

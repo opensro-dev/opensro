@@ -75,6 +75,8 @@ func (rt *Runtime) acquireMercenaryTarget(step petCombatStep) {
 	}
 	if gid != 0 {
 		step.state.combat = &petCombatIntent{target: gid, nextAttackMs: step.nowMs}
+		// Entering BATTLE is a state change (53FF30).
+		resetPetStuck(step.state)
 	}
 }
 

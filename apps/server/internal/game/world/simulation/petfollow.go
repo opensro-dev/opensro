@@ -13,6 +13,7 @@ import (
 
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 // PetFollower owns the unmounted COS motion plane. It is stepped only by the
@@ -32,6 +33,14 @@ type PetFollower struct {
 	revision     uint64
 	planRoute    PetRoutePlanner
 	detour       petDetour
+	// progress is the native stuck count (CTactics +184/+19C/+148): each
+	// stop that left the pet within 20 of where its move began counts, and
+	// from the tenth the stuck event is raised (559010 -> 5599C0).
+	// stopCounted marks the current segment's stop as already counted; stuck
+	// holds the event for the action owner (TakeStuck).
+	progress    monster.MovementProgress
+	stopCounted bool
+	stuck       bool
 }
 
 // PetRoutePlanner plans a pet's way around what its straight path cannot
@@ -176,13 +185,18 @@ func (p *PetFollower) Approach(owner Spawn, speed float64, nowMs int64, stopDist
 		return nil
 	}
 	p.clockStarted, p.lastTick = true, nowMs
+	p.settleArrival(nowMs)
 	from := p.Position(nowMs)
 	if !finitePetSpawn(from) || !finitePetSpawn(owner) || !petSamePlane(from.RegionID, owner.RegionID) || !(speed > 0) || math.IsInf(speed, 0) || constrain == nil {
 		return p.Stop(nowMs)
 	}
 	distance := WorldDistance2D(from, owner)
 	if distance <= stopDistance {
-		return p.Stop(nowMs)
+		// In reach: the move is done and the AI leaves its moving state
+		// (ChangeState 53FF30 clears the stuck count).
+		frames := p.Stop(nowMs)
+		p.ResetStuck()
+		return frames
 	}
 	// Reuse the shared region conversion. A pet approaches the owner's live
 	// position; it never teleports to an unvalidated owner destination.
@@ -212,6 +226,12 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 	// A refused leg ends its route; the next plan waits out the retry pace,
 	// as a failed plan does, rather than searching again every tick.
 	refuse := func() []Frame {
+		// 541730 records the command before the mover refuses it; the
+		// refusal is a stop (4A9430 event 8) where the pet stands.
+		p.noteIssued(from, nowMs)
+		if !p.world.MoveSegment.Valid() {
+			p.noteStopped(from)
+		}
 		frames := p.Stop(nowMs)
 		if detouring {
 			p.detour.retryAt = nowMs + petDetourRetryMs
@@ -244,6 +264,7 @@ func (p *PetFollower) moveTo(goal Spawn, speed float64, nowMs int64, constrain f
 	if duration > float64(math.MaxInt64-nowMs) || duration < 1 {
 		return refuse()
 	}
+	p.noteIssued(from, nowMs)
 	p.world.Spawn = goal
 	p.world.MoveSegment = &MoveSegment{From: from, StartedAtMs: nowMs, ArrivesAtMs: nowMs + int64(duration)}
 	p.revision++
@@ -316,10 +337,102 @@ func (p *PetFollower) Stop(nowMs int64) []Frame {
 		return nil
 	}
 	pose := p.Position(nowMs)
+	if !p.stopCounted {
+		p.noteStopped(pose)
+	}
 	p.world.Spawn, p.world.MoveSegment = pose, nil
 	p.revision++
 	correction := wire.ObjectSourceCorrection{Gid: p.gid, Position: wire.Position{RegionID: pose.RegionID, X: float32(pose.X), Y: float32(pose.Y), Z: float32(pose.Z), Heading: pose.Angle}}
 	return []Frame{{Opcode: wire.OpObjectSourceCorrection, Payload: correction.Encode()}}
+}
+
+/*
+================
+noteIssued
+
+AI_CTactics_StepDestination (541730): every admitted move command records
+where it was issued, and a command issued while the pet stands still also
+starts a new move sequence (monster.MovementProgress.Issued).
+================
+*/
+func (p *PetFollower) noteIssued(from Spawn, nowMs int64) {
+	p.progress.Issued(spawnToPose(from), p.Moving(nowMs))
+	p.stopCounted = false
+}
+
+/*
+================
+noteStopped
+
+CGObjChar_StopMove (4A9430) raises AI event 8 whenever a non-player's move
+stops, arrived or blocked. CAIState_OnMoveStopped_CountStuck (559010)
+counts the stop when it is within 20 of the sequence origin; from the tenth
+such stop the stuck event is raised (5597B0, event 0x28).
+================
+*/
+func (p *PetFollower) noteStopped(at Spawn) {
+	p.stopCounted = true
+	if p.progress.Arrived(spawnToPose(at)) {
+		p.stuck = true
+	}
+}
+
+/*
+================
+settleArrival
+
+The port's segment arrives silently when its time runs out; count that
+arrival as the stop native's mover reports.
+================
+*/
+func (p *PetFollower) settleArrival(nowMs int64) {
+	if p.world.MoveSegment.Valid() && nowMs >= p.world.MoveSegment.ArrivesAtMs && !p.stopCounted {
+		p.noteStopped(p.world.Spawn)
+	}
+}
+
+/*
+================
+TakeStuck
+
+Whether the stuck event fired since the last call; each call consumes it.
+================
+*/
+func (p *PetFollower) TakeStuck() bool {
+	stuck := p.stuck
+	p.stuck = false
+	return stuck
+}
+
+/*
+================
+ResetStuck
+
+AI_CTactics_ChangeState (53FF30) and AI_CTactics_ResetAndStart (53F4D0)
+clear the count on every state change; the origins stay.
+================
+*/
+func (p *PetFollower) ResetStuck() {
+	p.progress.ResetFailures()
+	p.stuck = false
+}
+
+/*
+================
+RelocateTo
+
+CAITactics_RequestPositionRelocation (541110): place the pet on the given
+point at its surface height. False when that point has no surface.
+================
+*/
+func (p *PetFollower) RelocateTo(point Spawn, now int64, surface func(region uint16, x, y, z float64) (float64, bool)) bool {
+	y, valid := surface(point.RegionID, point.X, point.Y, point.Z)
+	if !valid {
+		return false
+	}
+	point.Y = y
+	p.Displace(point, now)
+	return true
 }
 
 /*
