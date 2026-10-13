@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // MaxLines is how many lines the feed keeps per division.
@@ -73,14 +74,40 @@ func New() *Feed {
 
 /*
 ================
+printable
+
+The text without control characters or bidirectional formatting (U+200E,
+U+200F, U+202A-U+202E, U+2066-U+2069): a reversed or embedded run would
+let one line restyle the site's rendering of the lines around it. The site
+renders text only; this keeps the API's answer safe for any reader.
+================
+*/
+func printable(text string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case unicode.IsControl(r), r == 0x200E, r == 0x200F,
+			r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069:
+			return -1
+		}
+		return r
+	}, text)
+}
+
+/*
+================
 Record
 
-Appends a line, dropping the oldest past MaxLines. An empty text is not a
-line. A nil feed records nothing, so wiring may leave it out.
+Appends a line, dropping the oldest past MaxLines. Text is made printable
+first; nothing left is not a line. A nil feed records nothing, so wiring
+may leave it out.
 ================
 */
 func (f *Feed) Record(division, kind, character, text string) {
-	if f == nil || strings.TrimSpace(text) == "" {
+	if f == nil {
+		return
+	}
+	text = printable(text)
+	if strings.TrimSpace(text) == "" {
 		return
 	}
 	f.mu.Lock()

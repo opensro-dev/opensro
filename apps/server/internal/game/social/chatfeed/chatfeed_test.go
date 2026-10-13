@@ -89,3 +89,18 @@ func TestNilFeedIsInert(t *testing.T) {
 		t.Fatalf("nil feed lines %+v", lines)
 	}
 }
+
+/*
+================
+TestRecordDropsControlAndBidiRuns
+================
+*/
+func TestRecordDropsControlAndBidiRuns(t *testing.T) {
+	f := New()
+	f.Record("shard", KindChat, "Kekw", "wts\u202e ssalg\u202c\x00 blade\t\u2067x\u2069")
+	f.Record("shard", KindChat, "Kekw", "\u202e\u202c\n")
+	lines := f.Lines("shard", nil)
+	if len(lines) != 1 || lines[0].Text != "wts ssalg bladex" {
+		t.Fatalf("lines %+v", lines)
+	}
+}

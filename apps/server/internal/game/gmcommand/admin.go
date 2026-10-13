@@ -124,19 +124,26 @@ func handleBan(deps Dependencies, presence PresenceView, divisionID string, send
 		return refusal
 	}
 	target := characterSnapshot(deps, divisionID, findCharacterByName(deps, divisionID, request.Name))
-	if target == nil || target.DeletePending || !directory.EndSessionByName(divisionID, target.Name) {
+	if target == nil || target.DeletePending {
+		return refusal
+	}
+	// Port-only: the website's chat feed drops the named player's lines
+	// whether or not they are still in the world. Natively /BAN of an
+	// offline player is refused and does nothing; the GM's intent to remove
+	// them is plain, and a player who spoke and logged off would otherwise
+	// stay on the site until newer lines pushed them out.
+	if len(status) > 0 {
+		if owner, ok := status[0].(BanObserver); ok {
+			owner.PlayerBannedGM(divisionID, target.Name)
+		}
+	}
+	if !directory.EndSessionByName(divisionID, target.Name) {
 		return refusal
 	}
 	// The operator trail (#681), as a silk grant leaves one: who removed
 	// whom from the world; the log line carries when.
 	log.WithFields(log.Fields{"gm": sender.Name, "division": divisionID, "character": target.Name,
 		"account": target.AccountID}).Info("gmcommand: /BAN logged a player out")
-	// Port-only: the website's chat feed drops the banned player's lines.
-	if len(status) > 0 {
-		if owner, ok := status[0].(BanObserver); ok {
-			owner.PlayerBannedGM(divisionID, target.Name)
-		}
-	}
 	return Outcome{Ack: []byte{AckResultOK, SubBan}}
 }
 

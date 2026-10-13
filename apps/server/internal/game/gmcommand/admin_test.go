@@ -117,12 +117,14 @@ func TestBanLogsOutAPlayerInTheWorld(t *testing.T) {
 	presence.ended = nil
 	owner.banned = nil
 	out = HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Remo"), owner)
-	if !bytes.Equal(out.Ack, EncodeAckFail(SubBan)) || len(presence.ended) != 0 || len(owner.banned) != 0 {
+	// Natively refused offline; the website feed still drops the player.
+	if !bytes.Equal(out.Ack, EncodeAckFail(SubBan)) || len(presence.ended) != 0 || len(owner.banned) != 1 || owner.banned[0] != "Remo" {
 		t.Fatalf("offline ban ack % X, ended %v, observed %v", out.Ack, presence.ended, owner.banned)
 	}
-	out = HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Ghost"), &adminOwner{})
-	if !bytes.Equal(out.Ack, EncodeAckFail(SubBan)) {
-		t.Fatalf("unknown ban ack % X", out.Ack)
+	owner.banned = nil
+	out = HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Ghost"), owner)
+	if !bytes.Equal(out.Ack, EncodeAckFail(SubBan)) || len(owner.banned) != 0 {
+		t.Fatalf("unknown ban ack % X, observed %v", out.Ack, owner.banned)
 	}
 }
 
