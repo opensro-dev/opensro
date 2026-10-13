@@ -301,6 +301,8 @@ const ITEM_INTERACTION_REFUSAL = 0x35;
 // 6FCD50's skill-use notices: category 4, code 0x21 refuses a rider.
 const SKILL_NOTICE_CATEGORY = 4;
 const SKILL_RIDING_REFUSAL = 0x21;
+// Server 0x3011 (529D6D), the victim's death kind; CPSMission 74FE50 here.
+const DEATH_NOTICE = 0x37ce;
 
 /*
 ================
@@ -722,6 +724,10 @@ fails; retry persistence without restoring stale slot occupancy.
 		}
 	}
 	let worldClock: GameplayState["worldClock"];
+	// CGInterface+0x640: the death kind the 0x37CE notice carries (74FE50 ->
+	// 67B2E0). The death box labels its first button from it; every death
+	// sends a fresh one, so a revival leaves it alone, as natively.
+	let rebirthMode = 0;
 	let environment = entryEnvironment( {} ).state;
 	let cosError: string | null = null;
 	// The skill a predicted run-up was pressed for (skillRunUpGoal), and
@@ -1080,6 +1086,8 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 		bootstrap( value: unknown, continued = false, receivedAtMs = 0 ) {
 			live = false;
 			deferredSends = [];
+			// A new login builds a new CGInterface, whose +0x640 starts at zero.
+			if ( !continued ) rebirthMode = 0;
 			pickup.clear();
 			cosPickup.clear();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
@@ -2653,6 +2661,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					dirty = true;
 					return true;
 				}
+				if ( frame.opcode === DEATH_NOTICE ) {
+					if ( frame.payload.length !== 1 ) throw Error( "Invalid death notice" );
+					rebirthMode = frame.payload[0]!;
+					dirty = true;
+					return true;
+				}
 				if ( actionSession.receive( frame ) ) {
 					pickup.receive( frame );
 					// B2CD releases the action queue, not a movement prediction. The
@@ -4079,6 +4093,7 @@ The published plane when something changed since the last take, else null.
 					};
 				} ),
 				worldClock,
+				rebirthMode,
 				weather: environment.effective,
 				eventGroups: environment.groups,
 				...quests.state(),

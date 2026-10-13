@@ -21,6 +21,8 @@ const ACTION_STALL_NETWORK = 1013;
 // 5A2890: a title CStringCheck_IsTextAllowed refuses raises 0x0A/0x38.
 const STALL_TITLE_REFUSED = "UIIT_MSG_FLEAMARKET_ERR_NOT_ALLOWED_FMARKETNAME";
 const STALL_PROMPT_TEXT = "stall-prompt-text";
+// pk.DeathTeam, the 0x37CE mode that labels the death box "standing" (52FF33).
+const TEAM_DEATH_MODE = 2;
 // The overhead job mark sits 4 px past the name board, which reaches 1.5 px
 // past the text (the beginner mark mirrors it at -21.5 = -20 - 1.5).
 const JOB_MARK_GAP = 5.5;
@@ -19931,8 +19933,16 @@ export function createUi(
 				}
 				if ( resources.has( art ) ) rect( layout.art, white, art );
 				const low = game?.progression?.level !== undefined && game.progression.level <= 10;
+				// 52FF33: a team death (mode 2, the 0x37CE notice) revives where it
+				// fell, so the first button reads "standing"; the server's
+				// rebirth (50FEE0) revives it there whatever the choice.
+				const team = game?.rebirthMode === TEAM_DEATH_MODE;
 				for (
-					const [id, key, r] of [ [ "rebirth-point", "UIIT_MSG_MSGBOX_REBIRTH_POINT_BUTTON", layout.point ], [
+					const [id, key, r] of [ [
+						"rebirth-point",
+						team ? "UIIT_MSG_MSGBOX_REBIRTH_STANDING_BUTTON" : "UIIT_MSG_MSGBOX_REBIRTH_POINT_BUTTON",
+						layout.point
+					], [
 						"rebirth-alternate",
 						low ? "UIIT_MSG_MSGBOX_REBIRTH_STANDING_BUTTON" : "UIIT_MSG_MSGBOX_REBIRTH_HELP_BUTTON",
 						layout.alternate

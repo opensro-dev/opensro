@@ -16,6 +16,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -256,7 +257,13 @@ func (rt *Runtime) HandleLocalRebirth(
 	if before.DeletePending || enterworld.CharacterAlive(before) || corpse.MoveSegment != nil {
 		return OpResult{DiagnosticRefusal: "rebirth-requires-settled-corpse"}
 	}
-	if choice == wire.RebirthAtPresentPoint && before.Level != nil && *before.Level > 10 {
+	// 50FEE0 (5100D6): a team death (free-battle capes, arena) revives where
+	// it fell at any level, whatever the choice; otherwise the present point
+	// is a beginner's (level 10 or below, 51017F).
+	if before.DeathKind == uint8(pk.DeathTeam) {
+		choice = wire.RebirthAtPresentPoint
+	}
+	if choice == wire.RebirthAtPresentPoint && before.DeathKind != uint8(pk.DeathTeam) && before.Level != nil && *before.Level > 10 {
 		return OpResult{}
 	}
 	destination := corpse.Spawn
@@ -323,6 +330,7 @@ func (rt *Runtime) HandleLocalRebirth(
 		setCharacterWorld(character, arrivalWorld)
 		character.CurrentHP, character.CurrentMP = &restoredHP, &restoredMP
 		character.LastExpLoss = 0 // CGObjPC_TeleportToTown 4DF2E8
+		character.DeathKind = 0   // CGObjPC_TeleportToTown 4DF2EE
 		// The re-entry presents any waiting inventory expansion; the record
 		// adopts the capacity those packets carry (zero for a present-point
 		// rebirth, which builds no entry).

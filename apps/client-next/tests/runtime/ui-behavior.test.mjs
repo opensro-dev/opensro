@@ -1339,6 +1339,11 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 			"rebirth-point",
 			"rebirth-alternate"
 		] );
+		// 52FF33: the first button reads "point" unless the death notice
+		// (0x37CE) said team death; level 10 labels the second "standing".
+		const labelOf = id => defined( latest ).controls.find( c => c.id === id )?.label;
+		const pointLabel = labelOf( "rebirth-point" ), standingLabel = labelOf( "rebirth-alternate" );
+		assert.notEqual( pointLabel, standingLabel );
 		assert.ok( defined( scene ).controls.some( c => c.id === "chat-text" ) );
 		assert.equal( f.ui.blocks( 500, 300 ), false, "camera gestures outside the dialog remain available" );
 		assert.equal( f.ui.blocks( 610, 400 ), true, "the dialog itself consumes pointer input" );
@@ -1378,6 +1383,14 @@ test("death prompt opens 3 s after the death state, never at LIFE ingress, and r
 		vitals( true );
 		assert.equal( prompt( 5300 ), false );
 		assert.equal( prompt( 8300 ), true );
+		assert.equal( labelOf( "rebirth-point" ), pointLabel, "a level 11 monster death returns to the point" );
+		// A fresh view, as presentation publishes one per change.
+		f.state = { ...f.state, gameplay: { ...f.state.gameplay, rebirthMode: 2 } };
+		step( 8310 );
+		assert.equal( labelOf( "rebirth-point" ), standingLabel, "a team death stands up where it fell" );
+		f.state = { ...f.state, gameplay: { ...f.state.gameplay, rebirthMode: 4 } };
+		step( 8320 );
+		assert.equal( labelOf( "rebirth-point" ), pointLabel );
 		f.ui.event( { kind: "activate", id: "rebirth-alternate" } );
 		scene = step( 8400 );
 		assert.equal( sent.length, 2, "high-level alternate waits for rescue without sending choice 2" );

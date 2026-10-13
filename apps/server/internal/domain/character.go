@@ -212,7 +212,12 @@ type Character struct {
 	// LastExpLoss is CGObjPC+0x1CE0, the size of the last negative EXP
 	// change (CGObjPC_ApplyExpDelta 4E5710). Resurrection returns a percent
 	// of it; every revival clears it.
-	LastExpLoss      int64  `json:"-"`
+	LastExpLoss int64 `json:"-"`
+	// DeathKind is CGObjPC+0x1CB4, the last death's kind (pk.DeathKind):
+	// 4E6EC0 records it, the 0x37CE notice carries it, and the rebirth
+	// (50FEE0) revives a team death where it fell. Every revival clears it
+	// (CGObjPC_TeleportToTown 4DF2EE). Runtime-only, as natively.
+	DeathKind        uint8  `json:"-"`
 	NativeBodyStatus uint8  `json:"-"`
 	BodyStatusOwner  uint64 `json:"-"`
 	// TransformRefObjID is the transform block (CGObjPC+0x21A0): the monster

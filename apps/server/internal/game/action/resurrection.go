@@ -405,6 +405,7 @@ func (rt *Runtime) reviveWhereDead(division string, character *enterworld.Charac
 	revived := int64(1)
 	character.CurrentHP = &revived
 	character.LastExpLoss = 0
+	character.DeathKind = 0
 	// 46CB30 revives through 4DF290 before applying the offered recovery.
 	// Use the same protection owner as self-rebirth so expiry and replacement
 	// cannot leave the player permanently protected or immediately vulnerable.

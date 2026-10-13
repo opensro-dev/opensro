@@ -29,7 +29,9 @@ func TestPreparingMonsterFatalityCommitsOnlyAtRelease(t *testing.T) {
 		t.Fatalf("release is strictly after casting time: %+v", packets)
 	}
 	packets := rt.advanceMonsterCasts(clock.NowMs() + 1001)
-	if enterworld.CurrentHP(c) != 0 || len(packets) != 1 || len(packets[0].Frames) != 3 {
+	// The release, then the victim's private death notice (529D6D).
+	if enterworld.CurrentHP(c) != 0 || len(packets) != 2 || len(packets[0].Frames) != 3 ||
+		len(packets[1].Frames) != 1 || packets[1].Frames[0].Opcode != wire.OpDeathNotice {
 		t.Fatalf("missing fatal release transaction: %+v", packets)
 	}
 	frames := packets[0].Frames
