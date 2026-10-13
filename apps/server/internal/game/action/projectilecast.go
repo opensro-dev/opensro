@@ -222,6 +222,7 @@ func (rt *Runtime) advanceProjectileCasts(now int64) []simulation.DivisionFrames
 			}
 			out = append(out, batch)
 		}
+		out = append(out, observedDivisionFrames(p.divisionID, result.Around)...)
 		if len(result.ActorPrivate) > 0 && c != nil {
 			batch := simulation.DivisionFrames{DivisionID: p.divisionID, OnlyCharacterID: c.ID}
 			for _, f := range result.ActorPrivate {

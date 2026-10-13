@@ -253,23 +253,42 @@ export function oneShotEffect( effect: AttachedEffect ) {
 
 /*
 ================
-roomForAttachedEffect
+createAttachedEffectRoom
 
-The rows kept when one more arrives at nowMs. One-shots past their delivery
-window leave; a full list gives up its oldest one-shot before it refuses, so
-only live instances count against the bound. No server instance-token ends a
-one-shot (B6A0 skips token 0), so without this a healer's adds would fill the
-list.
+One session's capacity owner for its attached-effect rows. The returned
+roomFor gives the rows kept when incoming more arrive at nowMs. One-shots
+past their delivery window always leave (no server instance token ever ends
+one: B6A0 skips token 0). If the list is still full, the oldest one-shot
+goes first, then the oldest live instance.
+
+Port-only guard, not native: the client's decoration list is unbounded.
+The bound protects the worker; a throw here ended the session, the worse
+failure, so a full list drops presentation rows and warns once per session.
 ================
 */
-export function roomForAttachedEffect( rows: readonly AttachedEffect[], nowMs: number ): readonly AttachedEffect[] {
-	let kept = rows.filter( row =>
-		!oneShotEffect( row ) || nowMs - (row.receivedAtMs ?? nowMs) < ONE_SHOT_DELIVERY_MS
-	);
-	if ( kept.length >= MAX_ATTACHED_EFFECTS ) {
-		const oldest = kept.findIndex( oneShotEffect );
-		if ( oldest >= 0 ) kept = kept.filter( ( _row, index ) => index !== oldest );
-	}
-	if ( kept.length >= MAX_ATTACHED_EFFECTS ) throw Error( "Attached effect capacity exceeded" );
-	return kept;
+export function createAttachedEffectRoom( warn: ( message: string ) => void = message => console.warn( message ) ) {
+	let warned = false;
+	return function roomFor(
+		rows: readonly AttachedEffect[],
+		nowMs: number,
+		incoming = 1
+	): readonly AttachedEffect[] {
+		if ( !Number.isInteger( incoming ) || incoming < 0 || incoming > MAX_ATTACHED_EFFECTS ) {
+			throw Error( "Invalid attached effect batch" );
+		}
+		const kept = rows.filter( row =>
+			!oneShotEffect( row ) || nowMs - (row.receivedAtMs ?? nowMs) < ONE_SHOT_DELIVERY_MS
+		);
+		let evicted = 0;
+		while ( kept.length > MAX_ATTACHED_EFFECTS - incoming ) {
+			const oldest = kept.findIndex( oneShotEffect );
+			kept.splice( oldest >= 0 ? oldest : 0, 1 );
+			evicted++;
+		}
+		if ( evicted && !warned ) {
+			warned = true;
+			warn( `[SRO effects] attached effect list full: dropped ${evicted} oldest row(s); later drops are silent` );
+		}
+		return kept;
+	};
 }

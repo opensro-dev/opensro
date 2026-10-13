@@ -47,24 +47,30 @@ Otherwise every entry gets one: a living one (vfunc F8 == 1), or for a
 resurrection a dead one (59494E). The dtnt skip (+0x3D0) is on no support
 row either.
 
-A heal whose efr is shape 6 (Mana Wind) leaves through 5946C5 before the
-tail and sends nothing at all.
+A heal whose efr is shape 6 (Mana Wind, Healing Division) reads efr word 1
+at 594315 and, with a non-empty vector, leaves its loop through 59434C
+(`je 5946C1`), past the tail: it sends nothing. Its vector is 58BEF0's
+party list (select 4 or 5), not skillCureVector's, which keeps shape 6 out
+of the cure; only an empty party list reaches the caster rule above.
 
 A companion in the vector (a cured pet) exists only while it lives, so a
 resolved one counts as living; a resurrection never selects one.
 ==================
 */
-func (rt *Runtime) recoveryEffectRecipients(division string, caster *enterworld.Character, skill enterworld.SkillRow, vector []uint32) []uint32 {
+func (rt *Runtime) recoveryEffectRecipients(division string, caster *enterworld.Character, skill enterworld.SkillRow, vector []uint32, now int64) []uint32 {
 	resu := skill.Abnormal.AdmitDeadParty
 	area := skill.Abnormal.EffectArea
+	if skill.Heal.Present && area.Present && area.Shape == healSecondaryShape {
+		vector = rt.partyCureTargets(division, caster, area.Radius, area.Select&1 != 0, resu, now)
+		if len(vector) != 0 {
+			return nil
+		}
+	}
 	if len(vector) == 0 {
 		if skill.TargetRequired || resu {
 			return nil
 		}
 		return []uint32{enterworld.ObjectIDForCharacter(caster)}
-	}
-	if skill.Heal.Present && area.Present && area.Shape == healSecondaryShape {
-		return nil
 	}
 
 	var out []uint32
@@ -85,15 +91,16 @@ func (rt *Runtime) recoveryEffectRecipients(division string, caster *enterworld.
 
 /*
 ==================
-recoveryEffectFrames
+recoveryEffectRoutes
 
-One token-0 add per recipient, in vector order. The status byte is written
-only for a row whose layout carries it, defaulting to 2 as 776450 does;
-the RPBU / STDU / DTDR word only for a row that has one, and it is zero.
+One token-0 add per recipient, in vector order, each published around its
+recipient (59AF00 -> 484D90). The status byte is written only for a row
+whose layout carries it, defaulting to 2 as 776450 does; the RPBU / STDU /
+DTDR word only for a row that has one, and it is zero.
 ==================
 */
-func recoveryEffectFrames(skill enterworld.SkillRow, recipients []uint32) []wire.Frame {
-	var out []wire.Frame
+func recoveryEffectRoutes(skill enterworld.SkillRow, recipients []uint32) []ObservedFrames {
+	var out []ObservedFrames
 	for _, gid := range recipients {
 		payload, err := (wire.AttachedEffect{
 			GID:           gid,
@@ -104,7 +111,7 @@ func recoveryEffectFrames(skill enterworld.SkillRow, recipients []uint32) []wire
 		if err != nil {
 			continue
 		}
-		out = append(out, wire.Frame{Opcode: wire.OpAttachedEffect, Payload: payload})
+		out = append(out, ObservedFrames{SourceGID: gid, Frames: []wire.Frame{{Opcode: wire.OpAttachedEffect, Payload: payload}}})
 	}
 	return out
 }

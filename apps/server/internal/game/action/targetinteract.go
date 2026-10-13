@@ -501,7 +501,7 @@ func commandRefused(result OpResult) bool {
 	if result.DiagnosticRefusal != "" {
 		return true
 	}
-	if len(result.Broadcast) != 0 || len(result.Recipients) != 0 || result.Pending != nil {
+	if len(result.Broadcast) != 0 || len(result.Recipients) != 0 || len(result.Around) != 0 || result.Pending != nil {
 		return false
 	}
 	for _, frame := range result.Frames {

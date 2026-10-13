@@ -782,6 +782,7 @@ func prependOpResult(prefix, tail OpResult) OpResult {
 		Broadcast:    append(append([]wire.Frame{}, prefix.Broadcast...), tail.Broadcast...),
 		ActorPrivate: append(append([]wire.Frame{}, prefix.ActorPrivate...), tail.ActorPrivate...),
 		Recipients:   append(append([]RecipientFrames{}, prefix.Recipients...), tail.Recipients...),
+		Around:       append(append([]ObservedFrames{}, prefix.Around...), tail.Around...),
 		Pending:      tail.Pending,
 	}
 }
@@ -842,6 +843,7 @@ func (rt *Runtime) advanceBasicAttackIntents(nowMs int64, openActionOwners map[s
 			}
 			out = append(out, routed)
 		}
+		out = append(out, observedDivisionFrames(intent.DivisionID, result.Around)...)
 		out = append(out, recipientDivisionFrames(intent.DivisionID, result.Recipients)...)
 		if character != nil && len(result.ActorPrivate) > 0 {
 			private := simulation.DivisionFrames{

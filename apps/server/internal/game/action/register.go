@@ -181,6 +181,10 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 		sendFrames(s, result.Frames)
 
 		BroadcastObservedFrames(hub, divisionID, s.ID, enterworld.ObjectIDForCharacter(character), result.Broadcast)
+		for _, route := range result.Around {
+			// No session is excepted: the actor watches its own recipients.
+			BroadcastObservedFrames(hub, divisionID, 0, route.SourceGID, route.Frames)
+		}
 		for _, recipient := range result.Recipients {
 			for _, peer := range hub.SessionsInDivision(divisionID) {
 				c, d, ok := enterworld.SessionCharacter(rt.deps, peer)

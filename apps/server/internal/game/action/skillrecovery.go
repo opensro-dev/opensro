@@ -351,11 +351,10 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			share = share * (fullHealPercent - skill.Abnormal.EffectArea.Reduction) / fullHealPercent
 		}
 	}
+	// 59466F sends each recipient's effect add, around that recipient.
+	var around []ObservedFrames
 	if !overTime {
-		// 59466F sends the effect add after the heals and before the cure
-		// at 5946C5 publishes its states.
-		effects := recoveryEffectFrames(skill, rt.recoveryEffectRecipients(division, snapshot, skill, vector))
-		curePublic = append(effects, curePublic...)
+		around = recoveryEffectRoutes(skill, rt.recoveryEffectRecipients(division, snapshot, skill, vector, now))
 	}
 
 	var token uint32
@@ -383,13 +382,15 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		)
 
 		control := wire.SkillCastReleaseFrame(token, enterworld.ObjectIDForCharacter(snapshot))
-		return supportCastResult(
+		result := supportCastResult(
 			control,
 			vitals,
 			cureActor,
 			curePublic,
 			cureRecipients,
-		), skillCastAccepted
+		)
+		result.Around = around
+		return result, skillCastAccepted
 	}
 
 	rt.queueSkillFinalize(
@@ -407,13 +408,15 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		wire.SkillCastFinalizeFrame(token),
 	)
 
-	return supportCastResult(
+	result := supportCastResult(
 		open,
 		vitals,
 		cureActor,
 		curePublic,
 		cureRecipients,
-	), skillCastAccepted
+	)
+	result.Around = around
+	return result, skillCastAccepted
 }
 
 /*

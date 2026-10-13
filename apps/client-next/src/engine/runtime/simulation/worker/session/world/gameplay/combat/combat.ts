@@ -24,8 +24,7 @@ import {
 	attachedEffect,
 	attachedEffectReferences,
 	endedEffectTokens,
-	MAX_ATTACHED_EFFECTS,
-	roomForAttachedEffect,
+	createAttachedEffectRoom,
 	hawkCommand,
 	hawkResult,
 	type AttachedEffect,
@@ -64,6 +63,7 @@ export function createCombat(
 	const wireHp = new Map<number, number>();
 	let effectRefs: ReadonlyMap<number, AttachedEffectReference> = new Map();
 	let attachedEffects: readonly AttachedEffect[] = [];
+	const roomForEffects = createAttachedEffectRoom();
 	let hawkRevision = 0, temporaryToken = 0, instanceSerial = 0;
 	const castOrder = new Map<number, number>();
 	let effectOrder = new WeakMap<AttachedEffect, number>();
@@ -362,10 +362,7 @@ export function createCombat(
 						{ restored: true })
 				})
 				),
-				retained = attachedEffects.filter( row => row.gid !== gid );
-			if ( retained.length + next.length > MAX_ATTACHED_EFFECTS ) {
-				throw Error( "Attached effect capacity exceeded" );
-			}
+				retained = roomForEffects( attachedEffects.filter( row => row.gid !== gid ), now, next.length );
 			attachedEffects = [ ...retained, ...next ];
 			buffSlots = buffSlots.filter( row => row.effect.gid !== gid );
 			for ( const effect of next ) admitBuff( effect, true );
@@ -528,7 +525,7 @@ export function createCombat(
 			if ( op === 0xb5ed ) {
 				const effect = detectionEffect( p, effectRefs );
 				if ( !localGid ) throw Error( "Detection effect without local character" );
-				attachedEffects = roomForAttachedEffect( attachedEffects, now );
+				attachedEffects = roomForEffects( attachedEffects, now );
 				// 7766E6 retains the subject even without hunting (+250).
 				// 6E5E26 adds the optional rider to the authored duration;
 				// absence of RPBU/STDU does not mean a zero-length effect.
@@ -597,7 +594,7 @@ export function createCombat(
 							} :
 							{})
 					},
-					kept = roomForAttachedEffect(
+					kept = roomForEffects(
 						effect.token ? attachedEffects.filter( row => row.token !== effect.token ) : attachedEffects,
 						now
 					);

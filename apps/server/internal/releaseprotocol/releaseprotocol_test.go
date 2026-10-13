@@ -95,7 +95,7 @@ TestEveryReleasedProtocolNamesDistinctContracts
 */
 func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
-	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract}) {
+	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract, Effects: EffectsContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}
@@ -129,5 +129,36 @@ func TestAPreUncappedCompanionClientIsRefused(t *testing.T) {
 	}
 	if CompanionsContract < uncappedBags {
 		t.Fatalf("CompanionsContract = %d; this build encodes uncapped COS bags", CompanionsContract)
+	}
+}
+
+/*
+================
+TestAClientWithoutOneShotRetirementIsRefused
+
+A protocol-7 browser keeps every token-0 attached effect the server now
+sends for a heal, cure or revival (no B6A0 ever ends one) and throws at
+2048 rows, ending its session mid-play. It must be refused with 426 and
+told to reload before it can reach that stream.
+================
+*/
+func TestAClientWithoutOneShotRetirementIsRefused(t *testing.T) {
+	const retiresOneShots = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Effects >= retiresOneShots {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (effects %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Effects, reached, recorder.Code)
+		}
+		refused++
+	}
+	if _, ok := history[7]; !ok || refused == 0 {
+		t.Fatal("the protocol-7 client is not in the history this test refuses")
+	}
+	if EffectsContract < retiresOneShots {
+		t.Fatalf("EffectsContract = %d; this build sends token-0 one-shots", EffectsContract)
 	}
 }

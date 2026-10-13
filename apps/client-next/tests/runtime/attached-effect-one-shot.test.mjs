@@ -70,8 +70,24 @@ test("a one-shot leaves after its delivery window, live instances stay", () => {
 		[ [ 10, 77 ], [ 12, 0 ], [ 13, 0 ] ]
 	);
 });
-test("a list full of live instances still refuses one more", () => {
-	const f = fixture();
-	for ( let token = 1; token <= MAX_ATTACHED_EFFECTS; token++ ) f.add( 10, BUFF, token, 0 );
-	assert.throws( () => f.add( 11, HEAL, 0, 1 ), /Attached effect capacity exceeded/ );
+test("a full list drops its oldest row and warns once instead of ending the session", () => {
+	const f = fixture(), warnings = [], warn = console.warn;
+	console.warn = message => warnings.push( message );
+	try {
+		for ( let token = 1; token <= MAX_ATTACHED_EFFECTS; token++ ) f.add( 10, BUFF, token, 0 );
+		f.add( 11, HEAL, 0, 1 );
+		f.add( 12, BUFF, MAX_ATTACHED_EFFECTS + 1, 2 );
+	} finally {
+		console.warn = warn;
+	}
+	const rows = f.rows();
+	assert.equal( rows.length, MAX_ATTACHED_EFFECTS );
+	// The heal found no one-shot to drop, so the oldest instance (token 1)
+	// went; the next instance then dropped the heal, the oldest one-shot,
+	// before touching token 2.
+	assert.ok( !rows.some( row => row.token === 1 ), "the oldest instance stayed" );
+	assert.ok( rows.some( row => row.token === 2 ), "an instance went before the one-shot" );
+	assert.ok( !rows.some( row => row.gid === 11 ), "the one-shot outlived an instance" );
+	assert.ok( rows.some( row => row.token === MAX_ATTACHED_EFFECTS + 1 ) );
+	assert.equal( warnings.length, 1 );
 });

@@ -59,19 +59,21 @@ func TestSelfRecoveryCommitsHealingCostAndCompleteBracket(t *testing.T) {
 		t.Fatal("release restarted cooldown")
 	}
 
-	// The public batch carries the release and the token-0 effect add
-	// (skillrecoveryeffect.go); the vitals go to the caster alone.
-	if len(released) != 2 ||
-		len(released[0].Frames) != 2 ||
+	// Release around the caster, effect add around its recipient (the caster), vitals to it alone.
+	casterGID := enterworld.ObjectIDForCharacter(c)
+	if len(released) != 3 ||
+		len(released[0].Frames) != 1 ||
 		released[0].Frames[0].Opcode != wire.OpSkillEffectControl ||
-		released[0].Frames[1].Opcode != wire.OpAttachedEffect ||
-		released[1].OnlyCharacterID != c.ID ||
+		released[1].SourceGID != casterGID ||
 		len(released[1].Frames) != 1 ||
-		released[1].Frames[0].Opcode != simulation.OpVitalsUpdate {
+		released[1].Frames[0].Opcode != wire.OpAttachedEffect ||
+		released[2].OnlyCharacterID != c.ID ||
+		len(released[2].Frames) != 1 ||
+		released[2].Frames[0].Opcode != simulation.OpVitalsUpdate {
 		t.Fatal("release routing", released)
 	}
 
-	if binary.LittleEndian.Uint16(released[1].Frames[0].Payload[4:]) != 0x40 {
+	if binary.LittleEndian.Uint16(released[2].Frames[0].Payload[4:]) != 0x40 {
 		t.Fatal("recovery source flag lost")
 	}
 
@@ -300,7 +302,7 @@ func TestZeroCastingRecoveryRemainsImmediate(t *testing.T) {
 		wire.SkillAction{ActionId: skill.ID}.Encode(),
 	)
 	result = assertAndSeparateActionSession(t, result)
-	assertOpcodes(t, result.Frames, wire.OpSkillCastResult, simulation.OpVitalsUpdate, wire.OpAttachedEffect)
+	assertOpcodes(t, result.Frames, wire.OpSkillCastResult, simulation.OpVitalsUpdate)
 	if *c.CurrentHP != 90 || *c.CurrentMP != 0 || len(rt.pendingProjectileCasts) != 0 {
 		t.Fatal("zero cast acquired a preparation wait")
 	}
@@ -980,8 +982,7 @@ func TestSelfRecoveryAtFullHealthPublishesNoEmptyVitals(t *testing.T) {
 		assertNoEmptyFrames(t, "cast private", result.ActorPrivate)
 		assertNoEmptyFrames(t, "cast broadcast", result.Broadcast)
 		if immediate {
-			// 59466F sends the effect add whatever the heal changed.
-			assertOpcodes(t, result.Frames, wire.OpSkillCastResult, wire.OpAttachedEffect)
+			assertOpcodes(t, result.Frames, wire.OpSkillCastResult)
 			continue
 		}
 		for _, routed := range rt.advanceProjectileCasts(clock.NowMs() + int64(skill.ActionCastingTimeMs) + 1) {

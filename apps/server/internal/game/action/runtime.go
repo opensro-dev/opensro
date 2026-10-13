@@ -645,11 +645,50 @@ type OpResult struct {
 	Frames       []wire.Frame
 	Broadcast    []wire.Frame
 	ActorPrivate []wire.Frame
-	Pending      *PendingPickup
+	// Around is published around other objects than the actor, each to
+	// every session observing it (the recipient's own included).
+	Around  []ObservedFrames
+	Pending *PendingPickup
 
 	// DiagnosticRefusal is an internal, non-wire reason for a silent native
 	// refusal. The hub logs it at debug level; protocol behavior stays exact.
 	DiagnosticRefusal string
+}
+
+/*
+================
+ObservedFrames
+
+Public frames for the sessions that observe one object, as native
+CGObj_SendPacketToNearbySessions (484D90) sends around its argument: a
+heal's effect add goes around each recipient, not around the caster.
+================
+*/
+type ObservedFrames struct {
+	SourceGID uint32
+	Frames    []wire.Frame
+}
+
+/*
+================
+observedDivisionFrames
+
+The Around routes of a result as tick batches, one per object.
+================
+*/
+func observedDivisionFrames(division string, around []ObservedFrames) []simulation.DivisionFrames {
+	var out []simulation.DivisionFrames
+	for _, route := range around {
+		if len(route.Frames) == 0 {
+			continue
+		}
+		batch := simulation.DivisionFrames{DivisionID: division, SourceGID: route.SourceGID}
+		for _, f := range route.Frames {
+			batch.Frames = append(batch.Frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
+		}
+		out = append(out, batch)
+	}
+	return out
 }
 
 /*

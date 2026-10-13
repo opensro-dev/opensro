@@ -568,5 +568,6 @@ func mergeOpResults(a, b OpResult) OpResult {
 	a.Broadcast = append(a.Broadcast, b.Broadcast...)
 	a.ActorPrivate = append(a.ActorPrivate, b.ActorPrivate...)
 	a.Recipients = append(a.Recipients, b.Recipients...)
+	a.Around = append(a.Around, b.Around...)
 	return a
 }

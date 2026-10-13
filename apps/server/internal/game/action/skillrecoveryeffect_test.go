@@ -26,34 +26,48 @@ import (
 ================
 effectAdds
 
-The gids named by token-0 attached-effect adds of skill in the public
-frames of a cast: the immediate broadcast and the release batches every
-observer gets.
+The gids named by token-0 attached-effect adds of skill, each read from the
+route that publishes it: the immediate result's Around and the release's
+object-scoped batches. Every add must go around the object it names (the
+recipient, 484D90), never around the caster's own broadcast.
 ================
 */
 func effectAdds(t *testing.T, skill enterworld.SkillRow, r OpResult, batches []simulation.DivisionFrames) []uint32 {
 	t.Helper()
-	frames := slices.Clone(r.Broadcast)
+	routes := slices.Clone(r.Around)
 	for _, batch := range batches {
 		if batch.OnlyCharacterID != 0 {
 			continue
 		}
+		route := ObservedFrames{SourceGID: batch.SourceGID}
 		for _, f := range batch.Frames {
-			frames = append(frames, wire.Frame{Opcode: f.Opcode, Payload: f.Payload})
+			route.Frames = append(route.Frames, wire.Frame{Opcode: f.Opcode, Payload: f.Payload})
+		}
+		routes = append(routes, route)
+	}
+	for _, f := range r.Broadcast {
+		if f.Opcode == wire.OpAttachedEffect && binary.LittleEndian.Uint32(f.Payload[attachedEffectTokenOffset:]) == recoveryEffectToken {
+			t.Fatal("a token-0 add rides the caster's broadcast")
 		}
 	}
 	var gids []uint32
-	for _, f := range frames {
-		if f.Opcode != wire.OpAttachedEffect || len(f.Payload) < attachedEffectTokenOffset+4 {
-			continue
+	for _, route := range routes {
+		for _, f := range route.Frames {
+			if f.Opcode != wire.OpAttachedEffect || len(f.Payload) < attachedEffectTokenOffset+4 {
+				continue
+			}
+			if binary.LittleEndian.Uint32(f.Payload[attachedEffectTokenOffset:]) != recoveryEffectToken {
+				continue
+			}
+			gid := binary.LittleEndian.Uint32(f.Payload)
+			if binary.LittleEndian.Uint32(f.Payload[4:]) != skill.ID {
+				t.Fatalf("token-0 add names skill %d, want %d", binary.LittleEndian.Uint32(f.Payload[4:]), skill.ID)
+			}
+			if route.SourceGID != gid {
+				t.Fatalf("the add for %d is published around %d", gid, route.SourceGID)
+			}
+			gids = append(gids, gid)
 		}
-		if binary.LittleEndian.Uint32(f.Payload[attachedEffectTokenOffset:]) != recoveryEffectToken {
-			continue
-		}
-		if binary.LittleEndian.Uint32(f.Payload[4:]) != skill.ID {
-			t.Fatalf("token-0 add names skill %d, want %d", binary.LittleEndian.Uint32(f.Payload[4:]), skill.ID)
-		}
-		gids = append(gids, binary.LittleEndian.Uint32(f.Payload))
 	}
 	return gids
 }
@@ -150,7 +164,8 @@ func TestGroupReverseShowsItsEffectOnlyOnTheDead(t *testing.T) {
 ==================
 TestShapeSixHealAndHealOverTimeSendNoOneShot
 
-Mana Wind (efr shape 6) leaves 593F50 through 5946C5 before the add.
+Mana Wind and Healing Division (efr shape 6) leave 593F50 through 59434C
+before the add whenever their party vector holds anyone.
 Healing Orbit runs the timed handler, never 593F50: it installs its own
 effect with a real token and sends no token-0 add.
 ==================
@@ -165,11 +180,47 @@ func TestShapeSixHealAndHealOverTimeSendNoOneShot(t *testing.T) {
 		t.Fatalf("mana wind effect adds %v", got)
 	}
 
+	// Healing Division is an untargeted shape-6 heal: its vector is the
+	// party list, and with members in range 59434C skips the tail, so the
+	// caster gets no add either.
+	division := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_DIVIDE_A_01")
+	if area := division.Abnormal.EffectArea; division.TargetRequired || !area.Present || area.Shape != healSecondaryShape {
+		t.Fatalf("healing division area %+v targeted %v", area, division.TargetRequired)
+	}
+	affordable(&division)
+	d := newSupportParty(t, division, 50, 80)
+	r, batches = d.castReleased(t, division, wire.SkillAction{ActionId: division.ID})
+	if got := effectAdds(t, division, r, batches); len(got) != 0 {
+		t.Fatalf("healing division effect adds %v", got)
+	}
+
 	orbit := shippedOffense(t, "SKILL_EU_CLERIC_HEALA_CYCLE_B_01")
 	affordable(&orbit)
 	q := newSupportParty(t, orbit)
 	r, batches = q.castReleased(t, orbit, wire.SkillAction{ActionId: orbit.ID})
 	if got := effectAdds(t, orbit, r, batches); len(got) != 0 {
 		t.Fatalf("healing orbit token-0 adds %v", got)
+	}
+}
+
+/*
+==================
+TestAnInstantSelfHealAtFullHealthStillShowsItsEffect
+
+59466F sends the add whatever the heal changed: a zero-cast self heal at
+full HP returns it in the immediate result, around the caster, while the
+caster's own burst stays the cast result alone.
+==================
+*/
+func TestAnInstantSelfHealAtFullHealthStillShowsItsEffect(t *testing.T) {
+	skill := shippedOffense(t, "SKILL_CH_WATER_SELFHEAL_A_01")
+	skill.ActionCastingTimeMs = 0
+	p := newSupportPair(t, skill)
+	p.c.CurrentHP = testInt64(enterworld.DerivedMaxHP(p.c))
+	r := assertAndSeparateActionSession(t, p.rt.HandleTargetInteract(testDivision, p.c, wire.SkillAction{ActionId: skill.ID}.Encode()))
+	assertOpcodes(t, r.Frames, wire.OpSkillCastResult)
+	casterGID := enterworld.ObjectIDForCharacter(p.c)
+	if got := effectAdds(t, skill, r, nil); !slices.Equal(got, []uint32{casterGID}) {
+		t.Fatalf("effect adds %v, want the caster %d once", got, casterGID)
 	}
 }

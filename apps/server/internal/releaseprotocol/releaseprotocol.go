@@ -43,12 +43,19 @@ type Contracts struct {
 	Bootstrap  int // the EnterWorld DTO
 	Roster     int // the character list
 	References int // the public reference file beside the transport
+	Effects    int // the attached-effect stream the transport sends
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current = 7
+	Current = 8
+	// The attached-effect contract: 1 sends every heal, cure and revival
+	// recipient a token-0 0xB419 (593F50 -> 59AF00). No B6A0 ever ends one,
+	// so a client must retire it itself; a protocol-7 client keeps every
+	// one and ends its session at 2048 rows. It decodes the packet but
+	// cannot sustain the stream, which is a protocol change all the same.
+	EffectsContract = 1
 	// The companion contract: 2 lifts the COS bag capacity bound to its
 	// one wire byte (#801), so an item-mall transport's 141 to 177 slots
 	// decode; 1 added populated summoners and concurrent COS lifetimes and
@@ -70,7 +77,8 @@ var history = map[int]Contracts{
 	4:       {Bootstrap: 2, Roster: 2, References: 2},
 	5:       {Bootstrap: 2, Roster: 2, References: 2, Companions: 1},
 	6:       {Bootstrap: 2, Roster: 2, References: 3, Companions: 1},
-	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract},
+	7:       {Bootstrap: 2, Roster: 2, References: 3, Companions: 2},
+	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract, Effects: EffectsContract},
 }
 
 /*

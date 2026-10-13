@@ -143,10 +143,15 @@ neither can be published alone. After approval:
    restores the retained client and redeploys the retained server without a
    notice.
 
-A new protocol is any change the live counterpart cannot decode, including
-new bytes in an existing packet: a field added, a length changed, a layout
-version raised. Those need a protocol bump and a coordinated release. A new
-opcode or a new JSON key is not one; the browser client ignores both. Before
+A new protocol is any change the live counterpart cannot decode or cannot
+sustain. Cannot decode: new bytes in an existing packet, a field added, a
+length changed, a layout version raised. Cannot sustain: a stream the old
+counterpart decodes but cannot live with, such as a message it keeps and
+never retires until it fails (protocol 8: the token-0 effect adds every
+heal sends, which a protocol-7 client kept until it threw at 2048 rows).
+Either needs a protocol bump and a coordinated release. A new opcode or a
+new JSON key is not one when the old side ignores it; the browser client
+ignores both. Before
 publishing one component alone, diff the other component's decoders between
 its live commit and the candidate, and pair every changed decoder with the
 encoder that forced it.
