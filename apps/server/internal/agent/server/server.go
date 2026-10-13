@@ -111,6 +111,7 @@ type Server struct {
 	// refusal log lines one client can cause (refusal_log.go).
 	anonymousIncidents *loginLimiter
 	refusalLines       *loginLimiter
+	refusalCeiling     refusalCeiling
 	// clientKey keys the client tags in refusal lines (clientTag). It is
 	// drawn at start and never stored, so a tag cannot be reversed from the
 	// log by hashing every address.

@@ -147,10 +147,10 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// the history event it already recorded.
 	logLogin := func(code string, status int) {
 		server.logRefusal(r, refusal{Route: loginPath, Code: code, Status: status,
-			Account: boundedLoginName(request.ID), Shard: boundedLoginName(request.ServerID)})
+			Account: server.loggableAccount(request.ID), Shard: server.loggableShard(request.ServerID)})
 	}
 	refuse := func(nativeStatus int, code, message string) {
-		server.history.Record(history.Event{Kind: "login_refused", Code: code, Category: "expected", Message: message, Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		server.history.Record(history.Event{Kind: "login_refused", Code: code, Category: "expected", Message: message, Fields: map[string]string{"claimedAccount": server.loggableAccount(request.ID)}})
 		logLogin(code, http.StatusOK)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": false, "nativeTitleStatus": nativeStatus,
@@ -158,7 +158,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	passwordRefusal := func(failed bool) {
-		server.history.Record(history.Event{Kind: "login_refused", Code: "invalid_credentials", Category: "expected", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		server.history.Record(history.Event{Kind: "login_refused", Code: "invalid_credentials", Category: "expected", Fields: map[string]string{"claimedAccount": server.loggableAccount(request.ID)}})
 		argument, admitted := server.passwordFailures.update(clientIP(r), request.ID, server.now(), failed, false)
 		if !admitted {
 			refuse(5, "RATE_LIMITED", "Credential failure tracking is at capacity.")
@@ -189,7 +189,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !server.loginAttempts.Allow(clientIP(r)) {
-		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "rate_limited", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "rate_limited", Fields: map[string]string{"claimedAccount": server.loggableAccount(request.ID)}})
 		logLogin("RATE_LIMITED", http.StatusTooManyRequests)
 		w.Header().Set("Retry-After", "6")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
@@ -237,7 +237,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	case server.passwordSlots <- struct{}{}:
 		defer func() { <-server.passwordSlots }()
 	default:
-		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "authentication_busy", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "authentication_busy", Fields: map[string]string{"claimedAccount": server.loggableAccount(request.ID)}})
 		logLogin("AUTHENTICATION_BUSY", http.StatusTooManyRequests)
 		w.Header().Set("Retry-After", "6")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{

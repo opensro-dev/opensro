@@ -77,6 +77,8 @@ func TestLoginRefusalsAreLoggedWithTheirCode(t *testing.T) {
 	}{
 		{"wrong password", `{"id":"tester","password":"wrongpass9","serverId":"alpha"}`, "INVALID_CREDENTIALS"},
 		{"unknown account", `{"id":"nobody","password":"wrongpass9","serverId":"alpha"}`, "INVALID_CREDENTIALS"},
+		// A password typed into the id box names no account: never logged.
+		{"password in the id box", `{"id":"hunter2-secret","password":"wrongpass9","serverId":"alpha"}`, "INVALID_CREDENTIALS"},
 		{"unknown server", `{"id":"tester","password":"wrongpass9","serverId":"zeta"}`, "UNKNOWN_SHARD"},
 		{"malformed", `{"id":`, "BAD_REQUEST"},
 	} {
@@ -96,7 +98,11 @@ func TestLoginRefusalsAreLoggedWithTheirCode(t *testing.T) {
 				line.Data["source"] != "agent" || line.Data["client"] == "" {
 				t.Fatalf("line = %+v", line.Data)
 			}
-			requireNoSecret(t, hook, "wrongpass9")
+			requireNoSecret(t, hook, "wrongpass9", "hunter2-secret", "nobody")
+			if want := map[bool]string{true: "tester", false: notAnAccount}[c.name == "wrong password"]; c.code != "BAD_REQUEST" &&
+				c.name != "unknown server" && line.Data["account"] != want {
+				t.Fatalf("account = %v, want %q", line.Data["account"], want)
+			}
 		})
 	}
 }
@@ -293,5 +299,49 @@ func TestClientIncidentBeforeLoginKeepsTheReleaseProtocol(t *testing.T) {
 		if entry.Message == "agent: client incident" {
 			t.Fatalf("a wrong-protocol report was logged: %+v", entry.Data)
 		}
+	}
+}
+
+/*
+================
+TestRefusalLinesHaveAShardWideCeiling
+
+Rotating addresses each get the per-address allowance, so the Agent also
+bounds the lines it writes per window. Past the ceiling the lines are
+counted, and the next window opens with one summary naming the count.
+================
+*/
+func TestRefusalLinesHaveAShardWideCeiling(t *testing.T) {
+	worker := http.NotFoundHandler()
+	fixture := newAgentFixture(t, worker, worker)
+	publishFixtureLease(t, fixture, "alpha", "worker-alpha", 1, 0)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+	const extra = 30
+	for i := range refusalLinesPerWindow + extra {
+		request := httptest.NewRequest(http.MethodPost, loginPath,
+			strings.NewReader(`{"id":"tester","password":"wrongpass9","serverId":"zeta"}`))
+		request.Header.Set("Content-Type", "application/json")
+		declareBrowser(request)
+		// A distinct address per attempt: the per-address pacer never trips.
+		request.RemoteAddr = fmt.Sprintf("198.51.%d.%d:4242", i/250, i%250+1)
+		fixture.handler.ServeHTTP(httptest.NewRecorder(), request)
+	}
+	if lines := len(refusalLines(hook)); lines != refusalLinesPerWindow {
+		t.Fatalf("%d refusal lines, want the ceiling %d", lines, refusalLinesPerWindow)
+	}
+	*fixture.now = fixture.now.Add(refusalWindow)
+	performJSON(t, fixture.handler, http.MethodPost, loginPath, `{"id":"tester","password":"x","serverId":"zeta"}`, "")
+	summaries := 0
+	for _, entry := range hook.AllEntries() {
+		if entry.Message == "agent: request refusal lines suppressed" {
+			summaries++
+			if entry.Data["suppressed"] != extra {
+				t.Fatalf("summary = %+v, want %d suppressed", entry.Data, extra)
+			}
+		}
+	}
+	if summaries != 1 {
+		t.Fatalf("%d summary lines, want 1", summaries)
 	}
 }
