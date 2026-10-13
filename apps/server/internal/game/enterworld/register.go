@@ -318,7 +318,14 @@ func RegisterEnterWorld(hub *transport.Hub, deps *Deps) {
 			// invalidate the previous scene's visibility just like town return.
 			send = s.SendSceneReset
 		}
-		if err := send(frames); err != nil {
+		publish := func() error { return send(frames) }
+		if outcome.OK && deps.PublishEntry != nil {
+			character := outcome.Result.Character
+			publish = func() error {
+				return deps.PublishEntry(s, outcome.DivisionID, character, func() error { return send(frames) })
+			}
+		}
+		if err := publish(); err != nil {
 			log.WithFields(log.Fields{
 				"character": outcome.CharacterName,
 				"division":  outcome.DivisionID,

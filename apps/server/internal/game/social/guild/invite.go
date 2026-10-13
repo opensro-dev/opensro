@@ -365,14 +365,15 @@ func (r *InviteRuntime) ApplyConsent(s *transport.Session, divisionID string, ac
 	online := func(name string) bool {
 		return r.presence != nil && r.presence.OnlineByName(divisionID, name)
 	}
-	_ = s.Send(OpGuildInfo, EncodeGuildInfo32C4(guild, joined, online, r.Now().UnixMilli()))
+	seed := EncodeGuildInfo32C4(guild, joined, online, r.Now().UnixMilli())
+	_ = SendBaseline(s, invite.GuildID, func() error { return s.Send(OpGuildInfo, seed) })
 	joinPush := EncodeMemberJoin3B29(row, online)
 	for _, member := range joined {
 		if member.CharID == actor.ID {
 			continue
 		}
 		if peer, live := r.presence.SessionByName(divisionID, member.Name); live {
-			_ = peer.Send(OpGuildUpdatePush, joinPush)
+			SendDelta(peer, invite.GuildID, func() error { return peer.Send(OpGuildUpdatePush, joinPush) })
 		}
 	}
 	r.Unions.GuildMembersChanged(divisionID, invite.GuildID)

@@ -69,15 +69,20 @@ func (rt *Runtime) memberLastSeen(division string, nowMs int64) func(int64) int6
 ================
 pushGuildMembers
 
-One frame list to every member of a snapshot except the named actor.
+One frame list to every member of guildID's snapshot except the named
+actor. This is the action lane's one guild publication: its 0x3B29 deltas
+reach a member only while that member's session holds the guild's block
+(PushGuildFrames, guild/baseline.go).
 ================
 */
-func (rt *Runtime) pushGuildMembers(division string, members []domain.GuildMemberRecord, skip int64, frames []wire.Frame) {
-	if rt.PushCharacterFrames == nil {
-		return
-	}
+func (rt *Runtime) pushGuildMembers(division string, guildID int64, members []domain.GuildMemberRecord, skip int64, frames []wire.Frame) {
 	for _, member := range members {
-		if member.CharID != skip {
+		if member.CharID == skip {
+			continue
+		}
+		if rt.PushGuildFrames != nil {
+			rt.PushGuildFrames(division, member.Name, guildID, frames)
+		} else if rt.PushCharacterFrames != nil {
 			rt.PushCharacterFrames(division, member.Name, frames)
 		}
 	}
@@ -116,7 +121,7 @@ func (rt *Runtime) HandleGuildMasterRelease(division string, c *enterworld.Chara
 		return guildNpcAnswer(opGuildMasterReleaseDone, guildRefusalCode(refusal))
 	}
 	push := wire.Frame{Opcode: opGuildVotePush, Payload: guild.EncodeVoteOpened3A6C(snapshot.Guild.Vote, now)}
-	rt.pushGuildMembers(division, snapshot.Members, c.ID, []wire.Frame{push})
+	rt.pushGuildMembers(division, snapshot.Guild.ID, snapshot.Members, c.ID, []wire.Frame{push})
 	result := guildNpcAnswer(opGuildMasterReleaseDone, 0)
 	result.Frames = append(result.Frames, push)
 	return result
@@ -155,7 +160,7 @@ func (rt *Runtime) HandleGuildBallot(division string, c *enterworld.Character, p
 	}
 	push := wire.Frame{Opcode: opGuildVotePush,
 		Payload: guild.EncodeVoteBallot3A6C(ballot.VoteID, ballot.Previous, ballot.Option, ballot.Count)}
-	rt.pushGuildMembers(division, ballot.Snapshot.Members, c.ID, []wire.Frame{push})
+	rt.pushGuildMembers(division, ballot.Snapshot.Guild.ID, ballot.Snapshot.Members, c.ID, []wire.Frame{push})
 	result := guildNpcAnswer(opGuildBallotDone, 0)
 	result.Frames = append(result.Frames, push)
 	return result
@@ -192,7 +197,7 @@ func (rt *Runtime) advanceGuildVotes(nowMs int64) {
 					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(outcome.Former.JID, outcome.Former.FortressRole)},
 					wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(outcome.Heir.JID, outcome.Heir.FortressRole)})
 			}
-			rt.pushGuildMembers(division, outcome.Snapshot.Members, 0, frames)
+			rt.pushGuildMembers(division, outcome.Snapshot.Guild.ID, outcome.Snapshot.Members, 0, frames)
 		}
 	}
 }

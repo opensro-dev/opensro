@@ -11,6 +11,8 @@ Close hooks release transient state without deleting durable authority.
 package main
 
 import (
+	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/social/guild"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -36,8 +38,12 @@ func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authority
 	) {
 		game.worldBound(hub, authorityStore, session, divisionID, character)
 	}
+	// The entry batch carries the 0x32C4 seed: the guild lane records the
+	// block in the same order as the send (guild/baseline.go).
+	game.deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return game.deps.Guilds })
 	hub.OnSessionClose(func(session *transport.Session, _ error) {
 		game.sessionClosed(session)
+		guild.ForgetSession(session)
 	})
 }
 

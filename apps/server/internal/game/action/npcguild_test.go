@@ -281,3 +281,47 @@ func TestGuildWarehouseOpensAtLevelTwoForOneMember(t *testing.T) {
 		t.Fatal("a closed room paid out")
 	}
 }
+
+/*
+================
+TestGuildDeltasGoThroughTheGuildPublication
+
+The master's handover publishes its four 0x3B29 deltas to the heir through
+PushGuildFrames, naming the guild, so a session without that guild's block
+never receives them (guild/baseline.go); none goes out as plain character
+frames.
+================
+*/
+func TestGuildDeltasGoThroughTheGuildPublication(t *testing.T) {
+	d := guildManagerFixture(t)
+	c := d.character
+	heir := testCharacter()
+	heir.Name = "Heir"
+	if err := d.authority.CreateCharacter(testDivision, "heir-account", heir); err != nil {
+		t.Fatal(err)
+	}
+	guilds := d.authority.Guilds()
+	guildID, _ := guilds.GuildOfCharacter(testDivision, c.ID)
+	if _, refusal := guilds.AddGuildMemberAs(testDivision, guildID, c.ID, 0, enterworld.GuildMemberRecord{
+		CharID: heir.ID, JID: 2, Name: heir.Name, Grade: guild.JoinerGrade, FortressRole: guild.FortressRoleGuard}); refusal.Refused() {
+		t.Fatalf("fixture join %v", refusal)
+	}
+	d.rt.PushCharacterFrames = func(_, _ string, frames []wire.Frame) {
+		for _, frame := range frames {
+			if frame.Opcode == guild.OpGuildUpdatePush {
+				t.Fatal("a guild delta bypassed the guild publication")
+			}
+		}
+	}
+	var published []int64
+	d.rt.PushGuildFrames = func(division, name string, id int64, frames []wire.Frame) {
+		if division != testDivision || name != heir.Name {
+			t.Fatalf("delta recipient %s/%s", division, name)
+		}
+		published = append(published, id)
+	}
+	out := d.rt.HandleGuildMasterLeave(testDivision, c, wire.NewWriter(8).U32(guildManagerGid).U32(2).Payload())
+	if out.Frames[0].Opcode != opGuildMasterLeaveDone || len(published) != 1 || published[0] != guildID {
+		t.Fatalf("handover published %v for guild %d", published, guildID)
+	}
+}

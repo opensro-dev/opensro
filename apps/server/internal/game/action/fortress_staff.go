@@ -94,11 +94,7 @@ func (rt *Runtime) fortressStaffService(division string, c *enterworld.Character
 	if rt.Guilds != nil {
 		if row, members, exists := rt.Guilds.Guild(division, record.Holder()); exists {
 			updates = []wire.Frame{{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeGuildGp3B29(row.GP)}}
-			for _, member := range members {
-				if member.CharID != c.ID && rt.PushCharacterFrames != nil {
-					rt.PushCharacterFrames(division, member.Name, append(append([]wire.Frame{}, updates...), state))
-				}
-			}
+			rt.pushGuildMembers(division, record.Holder(), members, c.ID, append(append([]wire.Frame{}, updates...), state))
 		}
 	}
 	return OpResult{Frames: append(updates, goldFrame(c), wire.Frame{Opcode: opFortressInteractionResult, Payload: []byte{request.Action, 1, record.StaffFlags}}, state)}

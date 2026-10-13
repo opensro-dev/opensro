@@ -146,6 +146,16 @@ type Deps struct {
 		divisionID string,
 		character *Character,
 	)
+	// PublishEntry, when set, runs the successful entry batch's send: the
+	// guild lane records which guild block (the 0x32C4 seed) the session
+	// now holds in the same order as the send (guild/baseline.go). Nil
+	// sends directly.
+	PublishEntry func(
+		session *transport.Session,
+		divisionID string,
+		character *Character,
+		send func() error,
+	) error
 	// Immutable references consumed by scene-local client owners must be
 	// republished after every bootstrap, including same-session travel.
 	SceneReferenceFrames func() []wire.Frame

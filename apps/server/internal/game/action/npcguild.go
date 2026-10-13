@@ -131,11 +131,7 @@ func (rt *Runtime) HandleGuildLevelUp(division string, c *enterworld.Character, 
 		return guildNpcAnswer(opGuildLevelUpResponse, guildRefusalCode(refusal))
 	}
 	push := wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeGuildLevel3B29(snapshot.Guild.Level, snapshot.Guild.GP)}
-	for _, member := range snapshot.Members {
-		if member.CharID != c.ID && rt.PushCharacterFrames != nil {
-			rt.PushCharacterFrames(division, member.Name, []wire.Frame{push})
-		}
-	}
+	rt.pushGuildMembers(division, snapshot.Guild.ID, snapshot.Members, c.ID, []wire.Frame{push})
 	result := guildNpcAnswer(opGuildLevelUpResponse, 0)
 	result.Frames = append(result.Frames, push, goldFrame(c))
 	return result
@@ -225,11 +221,7 @@ func (rt *Runtime) HandleGuildMasterLeave(division string, c *enterworld.Charact
 		{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(master.JID, master.FortressRole)},
 		{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeMemberFortressRole3B29(heir.JID, heir.FortressRole)},
 	}
-	for _, member := range snapshot.Members {
-		if member.CharID != c.ID && rt.PushCharacterFrames != nil {
-			rt.PushCharacterFrames(division, member.Name, pushes)
-		}
-	}
+	rt.pushGuildMembers(division, snapshot.Guild.ID, snapshot.Members, c.ID, pushes)
 	result := guildNpcAnswer(opGuildMasterLeaveDone, 0)
 	result.Frames = append(result.Frames, pushes...)
 	return result

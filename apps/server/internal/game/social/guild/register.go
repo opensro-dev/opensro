@@ -85,7 +85,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			log.Debugf("guild: 0x7663 (create) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
 		}
-		_ = s.Send(OpGuildCreateAck, outcome.AckPayload)
+		_ = SendBaseline(s, outcome.GuildID, func() error { return s.Send(OpGuildCreateAck, outcome.AckPayload) })
 		log.Debugf("guild: %s created guild %d at manager %d", actor.Name, outcome.GuildID, outcome.SelectedTargetGid)
 	})
 	hub.Handle(OpGuildNoticeEditRequest, func(s *transport.Session, opcode uint16, payload []byte) {
@@ -98,6 +98,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 		if restriction.Report(s, transport.CommandRestrictionChat) {
 			return
 		}
+		guildID := characterGuild(actor)
 		outcome := HandleNoticeEdit(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			if outcome.ErrorPayload != nil {
@@ -107,7 +108,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		_ = s.Send(OpGuildNoticeEditAck, outcome.AckPayload)
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.PushPayload)
 		log.Debugf("guild: %s edited the guild notice (%d member(s) named for the subOp-5 fan-out)", actor.Name, len(outcome.MemberNames))
 	})
 	hub.Handle(OpGuildKickRequest, func(s *transport.Session, opcode uint16, payload []byte) {
@@ -125,7 +126,8 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			log.Debugf("guild: 0x74B1 (kick) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
 		}
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.PushPayload)
+		retireOnline(presence, divisionID, guildID, []string{outcome.KickedName})
 		unions.GuildMembersChanged(divisionID, guildID)
 		log.Debugf("guild: %s kicked %s (subOp-3 fanned to the online members)", actor.Name, outcome.KickedName)
 	})
@@ -145,7 +147,8 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		_ = s.Send(OpGuildLeaveAck, outcome.AckPayload)
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.PushPayload)
+		RetireBaseline(s, guildID)
 		unions.GuildMembersChanged(divisionID, guildID)
 		log.Debugf("guild: %s left their guild (selectedTargetGid=%d decoded, not validated; subOp-3 kind-1 fanned to %d named member(s))", actor.Name, outcome.SelectedTargetGid, len(outcome.MemberNames))
 	})
@@ -165,7 +168,8 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		_ = s.Send(OpGuildBreakAck, outcome.AckPayload)
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.PushPayload)
+		retireOnline(presence, divisionID, guildID, outcome.MemberNames)
 		unions.GuildBroken(divisionID, guildID)
 		log.Debugf("guild: %s dissolved their guild (selectedTargetGid=%d decoded, not validated; subOp-1 fanned to %d named member(s))", actor.Name, outcome.SelectedTargetGid, len(outcome.MemberNames))
 	})
@@ -190,13 +194,14 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			log.Debugf("guild: 0x%04X (position-grant) from unbound session %d discarded", opcode, s.ID)
 			return
 		}
+		guildID := characterGuild(actor)
 		outcome := HandlePositionGrant(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x765F (position-grant) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
 		}
 		_ = s.Send(OpGuildPositionGrantAck, outcome.AckPayload)
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.PushPayload)
 		log.Debugf("guild: %s granted a fortress position to %s (0xB65F acked; subOp-6 &0x40 fanned to %d named member(s))", actor.Name, outcome.TargetName, len(outcome.MemberNames))
 	})
 	hub.Handle(OpGuildPermissionRequest, func(s *transport.Session, opcode uint16, payload []byte) {
@@ -205,6 +210,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			log.Debugf("guild: 0x%04X (permission) from unbound session %d discarded", opcode, s.ID)
 			return
 		}
+		guildID := characterGuild(actor)
 		outcome := HandlePermissionUpdate(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			if outcome.ErrorPayload != nil {
@@ -213,7 +219,7 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			log.Debugf("guild: 0x744E (permission) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
 		}
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.PushPayload)
 	})
 	hub.Handle(OpGuildGpDonateRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
@@ -221,32 +227,54 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			log.Debugf("guild: 0x%04X (gp-donate) from unbound session %d discarded", opcode, s.ID)
 			return
 		}
+		guildID := characterGuild(actor)
 		outcome := HandleGpDonate(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			log.Debugf("guild: 0x740F (gp-donate) refused for %s: %s", actor.Name, outcome.Refusal)
 			return
 		}
 		_ = s.Send(OpGuildGpDonateAck, outcome.AckPayload)
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.GuildGpPushPayload)
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.DonorGpPushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.GuildGpPushPayload)
+		sendToOnlineMembers(presence, divisionID, guildID, outcome.MemberNames, outcome.DonorGpPushPayload)
 		log.Debugf("guild: %s donated GP (0xB40F acked; subOp-5 &0x08 + subOp-6 &0x08 fanned to %d named member(s) including the donor)", actor.Name, len(outcome.MemberNames))
 	})
 }
 
-// sendToOnlineMembers pushes one prebuilt frame to the live session of
-// every named member (presence-targeted; offline names simply miss).
 /*
 ================
 sendToOnlineMembers
+
+Pushes one prebuilt 0x3B29 delta of guildID to the live session of every
+named member that holds guildID's block (baseline.go); offline names and
+sessions without the block simply miss.
 ================
 */
-func sendToOnlineMembers(presence Presence, divisionID string, names []string, payload []byte) {
+func sendToOnlineMembers(presence Presence, divisionID string, guildID int64, names []string, payload []byte) {
 	if presence == nil {
 		return
 	}
 	for _, name := range names {
 		if peer, online := presence.SessionByName(divisionID, name); online {
-			_ = peer.Send(OpGuildUpdatePush, payload)
+			SendDelta(peer, guildID, func() error { return peer.Send(OpGuildUpdatePush, payload) })
+		}
+	}
+}
+
+/*
+================
+retireOnline
+
+The named members' sessions no longer hold guildID's block: their removal
+or the guild's break has been queued to them.
+================
+*/
+func retireOnline(presence Presence, divisionID string, guildID int64, names []string) {
+	if presence == nil {
+		return
+	}
+	for _, name := range names {
+		if peer, online := presence.SessionByName(divisionID, name); online {
+			RetireBaseline(peer, guildID)
 		}
 	}
 }
@@ -267,7 +295,7 @@ func reseedOnlineMembers(presence Presence, divisionID string, outcome grantOutc
 	seed := EncodeGuildInfo32C4(outcome.Guild, outcome.Members, online, time.Now().UnixMilli())
 	for _, name := range outcome.MemberNames {
 		if peer, ok := presence.SessionByName(divisionID, name); ok {
-			_ = peer.Send(OpGuildInfo, seed)
+			_ = SendBaseline(peer, outcome.Guild.ID, func() error { return peer.Send(OpGuildInfo, seed) })
 		}
 	}
 }

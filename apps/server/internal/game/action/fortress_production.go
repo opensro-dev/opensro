@@ -325,11 +325,7 @@ func (rt *Runtime) withHolderGP(division string, c *enterworld.Character, holder
 		return out
 	}
 	update := wire.Frame{Opcode: guild.OpGuildUpdatePush, Payload: guild.EncodeGuildGp3B29(row.GP)}
-	for _, member := range members {
-		if member.CharID != c.ID && rt.PushCharacterFrames != nil {
-			rt.PushCharacterFrames(division, member.Name, []wire.Frame{update})
-		}
-	}
+	rt.pushGuildMembers(division, holder, members, c.ID, []wire.Frame{update})
 	out.Frames = append([]wire.Frame{update, goldFrame(c)}, out.Frames...)
 	return out
 }

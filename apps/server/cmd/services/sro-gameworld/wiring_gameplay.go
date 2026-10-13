@@ -644,6 +644,18 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 			action.SendFrames(session, frames)
 		}
 	}
+	// A member's guild frames: 0x3B29 deltas only while the session holds
+	// that guild's block (guild/baseline.go), every other frame as is, in
+	// one enqueue.
+	game.items.PushGuildFrames = func(divisionID, characterName string, guildID int64, frames []wire.Frame) {
+		for _, session := range hub.CharacterSessions(divisionID, characterName) {
+			guild.WithBlock(session, guildID, func(holds bool) {
+				if kept := guild.FilterDeltas(holds, frames); len(kept) > 0 {
+					action.SendFrames(session, kept)
+				}
+			})
+		}
+	}
 	game.items.PushDivisionPeerFrames = func(divisionID, exceptCharacterName string, frames []wire.Frame) {
 		if exceptCharacterName != "" {
 			// A character without a bound session is not in the world, so

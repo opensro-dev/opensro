@@ -49,10 +49,6 @@ func (rt *Runtime) HandleMercenaryAttribute(division string, c *enterworld.Chara
 	}
 	push := wire.Frame{Opcode: guild.OpGuildUpdatePush,
 		Payload: wire.NewWriter(7).U8(5).U8(0x48).U32(snapshot.Guild.GP).U8(attribute).Payload()}
-	for _, member := range snapshot.Members {
-		if member.CharID != c.ID && rt.PushCharacterFrames != nil {
-			rt.PushCharacterFrames(division, member.Name, []wire.Frame{push})
-		}
-	}
+	rt.pushGuildMembers(division, snapshot.Guild.ID, snapshot.Members, c.ID, []wire.Frame{push})
 	return OpResult{Frames: []wire.Frame{{Opcode: opMercenaryAttributeReply, Payload: []byte{1, attribute}}, push, goldFrame(c)}}
 }

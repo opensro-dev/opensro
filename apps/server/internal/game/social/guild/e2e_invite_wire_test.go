@@ -40,6 +40,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"opensro.online/server/internal/domain"
 	"path/filepath"
 	"testing"
 	"time"
@@ -168,6 +169,8 @@ func startInviteServer(t *testing.T, dir string, seeds []*enterworld.Character) 
 		invites.SessionClosed(s)
 	})
 
+	// The entry seed records its guild block as the GameWorld does.
+	deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return deps.Guilds })
 	enterworld.Register(srv.Hub, deps)
 	partyRt.Register(srv.Hub)
 	guild.Register(srv.Hub, deps, directory, nil, nil)

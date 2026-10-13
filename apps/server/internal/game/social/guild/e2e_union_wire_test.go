@@ -14,6 +14,7 @@ package guild_test
 
 import (
 	"bytes"
+	"opensro.online/server/internal/domain"
 	"path/filepath"
 	"testing"
 	"time"
@@ -120,6 +121,8 @@ func startUnionServer(t *testing.T, dir string, seeds []*enterworld.Character) (
 		lane.SessionClosed(s)
 		wars.SessionClosed(s)
 	})
+	// The entry seed records its guild block as the GameWorld does.
+	deps.PublishEntry = guild.EntryPublisher(func() domain.GuildStore { return deps.Guilds })
 	enterworld.Register(srv.Hub, deps)
 	parties.Register(srv.Hub)
 	guild.Register(srv.Hub, deps, directory, nil, lane)

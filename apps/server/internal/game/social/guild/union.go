@@ -601,7 +601,12 @@ func (r *UnionRuntime) sendToGuild(divisionID string, guildID int64, opcode uint
 	}
 	for _, member := range members {
 		if peer, online := r.presence.SessionByName(divisionID, member.Name); online {
-			_ = peer.Send(opcode, payload)
+			if opcode != OpGuildUpdatePush {
+				_ = peer.Send(opcode, payload)
+				continue
+			}
+			// A 0x3B29 union or war delta applies to the guild block.
+			SendDelta(peer, guildID, func() error { return peer.Send(opcode, payload) })
 		}
 	}
 }
