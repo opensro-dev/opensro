@@ -97,7 +97,23 @@ func playerParameterGraph(level uint8) (*paramkeeper.Graph, []paramkeeper.Write,
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, link := range [][3]uint16{
+	for _, link := range playerParameterLinks() {
+		if err = g.Link(link[0], link[1], paramkeeper.Channel(link[2])); err != nil {
+			return nil, nil, err
+		}
+	}
+	return g, playerBaseWrites(level), nil
+}
+
+/*
+==================
+playerParameterLinks
+
+The closure's links in 4E3200's order, the same for every level.
+==================
+*/
+func playerParameterLinks() [][3]uint16 {
+	links := [][3]uint16{
 		// 4E3294..4E330A: max HP 3 <- 54 <- 52 <- STR, max MP 4 <- 55 <- 53 <- INT.
 		{54, 3, 0}, {55, 4, 0}, {52, 54, 0}, {53, 55, 0}, {1, 52, 0}, {2, 53, 0},
 		{21, 5, 0}, {22, 6, 0}, {1, 21, 0}, {2, 22, 0},
@@ -106,30 +122,41 @@ func playerParameterGraph(level uint8) (*paramkeeper.Graph, []paramkeeper.Write,
 		{34, 17, 3}, {36, 18, 3}, {35, 19, 3}, {37, 20, 3},
 		{50, 21, 3}, {51, 22, 3}, {58, 50, 0}, {59, 51, 0},
 		{0, 11, 0}, {0, 9, 0},
-	} {
-		if err = g.Link(link[0], link[1], paramkeeper.Channel(link[2])); err != nil {
-			return nil, nil, err
+	}
+	// 4E346F..4E34B6: each authored coefficient feeds 50 or 51 (Flat).
+	for i := range playerCoefficients {
+		for axis := 0; axis < 2; axis++ {
+			links = append(links, [3]uint16{uint16(38 + i + axis*6), uint16(50 + axis), uint16(paramkeeper.Flat)})
 		}
 	}
+	return links
+}
+
+// playerCoefficients are 4E346F..4E34B6's authored float32 coefficients,
+// multiplied by double 100 and stored to float32 before insertion. Do not
+// collapse the six entries to 0.19/0.305.
+var playerCoefficients = [6][2]float32{{.032, .052}, {.027, .043}, {.042, .067}, {.034, .055}, {.025, .039}, {.030, .049}}
+
+/*
+==================
+playerBaseWrites
+
+The closure's built-in writes for one level, in 4E3200's order.
+==================
+*/
+func playerBaseWrites(level uint8) []paramkeeper.Write {
 	// 4E32CA..4E32F0: STR/INT feed the gauges at 1000% (x10).
 	writes := []paramkeeper.Write{
 		{Parameter: 52, Channel: paramkeeper.FactorProduct, Value: 1000},
 		{Parameter: 53, Channel: paramkeeper.FactorProduct, Value: 1000},
 		{Parameter: 58}, {Parameter: 59}}
-	// 4E346F..4E34B6: authored float32 coefficient * double 100, stored
-	// to float32 before insertion. Do not collapse the six entries to 0.19/0.305.
-	coefficients := [6][2]float32{{.032, .052}, {.027, .043}, {.042, .067}, {.034, .055}, {.025, .039}, {.030, .049}}
-	for i, pair := range coefficients {
+	for i, pair := range playerCoefficients {
 		for axis := 0; axis < 2; axis++ {
-			id := uint16(38 + i + axis*6)
-			if err = g.Link(id, uint16(50+axis), paramkeeper.Flat); err != nil {
-				return nil, nil, err
-			}
-			writes = append(writes, paramkeeper.Write{Parameter: id, Value: float32(float64(pair[axis]) * 100)})
+			writes = append(writes, paramkeeper.Write{Parameter: uint16(38 + i + axis*6), Value: float32(float64(pair[axis]) * 100)})
 		}
 	}
 	growth := levelGrowthPercent(level)
-	writes = append(writes,
+	return append(writes,
 		paramkeeper.Write{Parameter: 34, Value: float32(30.5999985)},
 		paramkeeper.Write{Parameter: 36, Value: float32(34.2000008)},
 		paramkeeper.Write{Parameter: 35, Value: 49},
@@ -142,7 +169,6 @@ func playerParameterGraph(level uint8) (*paramkeeper.Graph, []paramkeeper.Write,
 		// 4E36AC: the MP consumption rate every player cost is scaled by
 		// (58E25F, 583232); dcmp lowers it.
 		paramkeeper.Write{Parameter: paramMPConsumptionRate, Value: 100})
-	return g, writes, nil
 }
 
 /*

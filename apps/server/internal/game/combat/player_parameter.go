@@ -8,8 +8,15 @@ write to answer all of a player's parameters. Some callers need one
 parameter every tick: the entry snapshot of every session reads action
 speed (0x8C), and that walk was most of the tick (2026-10-11 chase bench:
 25.5% of CPU). A parameter no other parameter feeds is fixed by the writes
-that name it alone, so it is evaluated from those, through the same graph,
-validation and abnormal application as the full projection.
+that name it alone, so it is evaluated on one keeper element from those:
+its base write, the effect writes and the abnormal writes that name it, in
+the full projection's order. The abnormal block writes stored constants
+only (applyAbnormalModifiers), so no other parameter's value reaches it.
+Every write the full projection would refuse for its shape (an undefined
+parameter, a reserved or source-0 source, a bad channel, a non-finite
+value) is refused here too. One case differs: an evaluation error on
+another parameter, downstream of an abnormal write to it, fails the full
+projection but not this one, which does not depend on it.
 
 ===========================================================================
 */
@@ -17,6 +24,8 @@ package combat
 
 import (
 	"fmt"
+	"math"
+	"sync"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
@@ -110,15 +119,18 @@ func PlayerUnlinkedParameter(
 	if err != nil {
 		return 0, err
 	}
-	graph, base, err := playerParameterGraph(level)
+	shape, err := playerParameterShape()
 	if err != nil {
 		return 0, err
 	}
-	if graph.Linked(id) {
+	if _, defined := shape.definitions[id]; !defined {
+		return 0, fmt.Errorf("paramkeeper: undefined parameter %d", id)
+	}
+	if shape.linked[id] {
 		return 0, fmt.Errorf("combat: parameter %d is fed by another parameter", id)
 	}
 	var writes []paramkeeper.Write
-	for _, w := range base {
+	for _, w := range playerBaseWrites(level) {
 		if w.Parameter == id {
 			writes = append(writes, w)
 		}
@@ -132,11 +144,131 @@ func PlayerUnlinkedParameter(
 			writes = append(writes, w)
 		}
 	}
-	if err = graph.ApplyBatch(writes); err != nil {
+	for _, w := range writes {
+		if shape.reserved[w.Source] {
+			return 0, fmt.Errorf("paramkeeper: external source %d collides with parameter identity", w.Source)
+		}
+	}
+	element, err := paramkeeper.New(shape.definitions[id])
+	if err != nil {
 		return 0, err
 	}
-	if err = applyAbnormalModifiers(graph, block); err != nil {
-		return 0, err
+	for _, w := range writes {
+		if err = applyElementWrite(element, w.Channel, w.Source, w.Value); err != nil {
+			return 0, err
+		}
 	}
-	return graph.Value(id)
+	if block != nil {
+		// The full projection applies every abnormal write; one it would
+		// refuse for its shape fails this call too, whichever parameter it
+		// names.
+		for _, m := range block.Modifiers {
+			if m.Used {
+				if err = shape.checkAbnormalWrite(m); err != nil {
+					return 0, fmt.Errorf("combat: abnormal write to parameter %d: %w", m.Param, err)
+				}
+			}
+		}
+		for _, m := range block.Modifiers {
+			if !m.Used || m.Param != id {
+				continue
+			}
+			if err = applyElementWrite(element, paramkeeper.Channel(m.Channel), m.Source, m.Value); err != nil {
+				return 0, fmt.Errorf("combat: abnormal write to parameter %d: %w", m.Param, err)
+			}
+		}
+	}
+	return element.Value()
+}
+
+/*
+==================
+applyElementWrite
+
+One write as the graph applies it: a write that changes the element is
+evaluated at once (the graph's propagate, 4B3130), so a value that
+overflows on the way fails the read even when a later write would bring it
+back.
+==================
+*/
+func applyElementWrite(element *paramkeeper.Element, channel paramkeeper.Channel, source uint32, value float32) error {
+	changed, err := element.Apply(channel, source, value)
+	if err != nil || !changed {
+		return err
+	}
+	_, err = element.Value()
+	return err
+}
+
+/*
+==================
+playerShape
+
+The closure's static shape, from the same definitions and link table the
+graph is built with: each parameter's definition, the source identities
+reserved for parameter nodes, and the parameters a link feeds.
+==================
+*/
+type playerShape struct {
+	definitions map[uint16]paramkeeper.Definition
+	reserved    map[uint32]bool
+	linked      map[uint16]bool
+}
+
+var (
+	playerShapeOnce  sync.Once
+	playerShapeValue playerShape
+	playerShapeErr   error
+)
+
+/*
+==================
+playerParameterShape
+
+Built once: the definitions (paramkeeper.NativeDefinition, a compiled
+table) and the link table are boot-static, so the shape never changes
+while the process runs.
+==================
+*/
+func playerParameterShape() (playerShape, error) {
+	playerShapeOnce.Do(func() {
+		definitions, err := playerParameterDefinitions()
+		if err != nil {
+			playerShapeErr = err
+			return
+		}
+		shape := playerShape{definitions: map[uint16]paramkeeper.Definition{}, reserved: map[uint32]bool{},
+			linked: map[uint16]bool{}}
+		for _, d := range definitions {
+			shape.definitions[d.ID] = d.Definition
+			shape.reserved[d.SourceKey] = true
+		}
+		for _, link := range playerParameterLinks() {
+			shape.linked[link[1]] = true
+		}
+		playerShapeValue = shape
+	})
+	return playerShapeValue, playerShapeErr
+}
+
+/*
+==================
+playerShape.checkAbnormalWrite
+
+What the graph would refuse in one abnormal write before evaluating
+anything: an undefined parameter, a reserved source, a bad channel or a
+non-finite value.
+==================
+*/
+func (shape playerShape) checkAbnormalWrite(m abnormal.Modifier) error {
+	if _, defined := shape.definitions[m.Param]; !defined {
+		return fmt.Errorf("paramkeeper: undefined parameter %d", m.Param)
+	}
+	if shape.reserved[m.Source] {
+		return fmt.Errorf("paramkeeper: external source %d collides with parameter identity", m.Source)
+	}
+	if paramkeeper.Channel(m.Channel) > paramkeeper.FactorProduct || math.IsNaN(float64(m.Value)) || math.IsInf(float64(m.Value), 0) {
+		return fmt.Errorf("paramkeeper: invalid channel %d or non-finite modifier", m.Channel)
+	}
+	return nil
 }
