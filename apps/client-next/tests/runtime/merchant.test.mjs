@@ -189,3 +189,28 @@ test("cargo quotes use whole-quantity rounding and bind owner and transport", ()
 	const purchase = merchantSelection( "buy", 0, shop, [ item ] );
 	assert.deepEqual( merchantCommand( purchase, 3 ), { kind: "cos-shop-buy", gid: 42, slot: 2, tab: 0, quantity: 3 } );
 });
+
+/*
+================
+packages priced twice
+
+Issue #593: the client holds gold, not honor or the guild's points, so a
+package priced in gold and another currency is admitted on its gold row
+alone; the server refuses a short honor or guild point balance. Gold is the
+lowest payment bit, so it is the list's first row and the offer's own price.
+================
+*/
+test("a package priced in gold and honor or guild points checks only its gold row", () => {
+	const shop = fixture();
+	shop.offers[0] = {
+		...shop.offers[0],
+		price: "100",
+		currency: 1,
+		prices: [ { currency: 1, amount: "100" }, { currency: 8, amount: "1000000" } ]
+	};
+	const selection = merchantSelection( "buy", 0, shop, inventory );
+	const quote = merchantQuote( selection, shop, inventory, "2", "200" );
+	assert.equal( quote.total, 200n, "the total is the gold row times the quantity" );
+	assert.equal( quote.valid, true, "a million guild points are not the client's to check" );
+	assert.equal( merchantQuote( selection, shop, inventory, "2", "199" ).valid, false, "gold short" );
+});

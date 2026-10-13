@@ -15,7 +15,14 @@ import test from "node:test";
 const { commerceTooltip } = await import( "../../src/engine/foundation/ui/commerce-tooltip.ts" );
 
 // Independent translated labels catch accidental raw-symbol output.
-const copy = { price: "Price", gold: "Gold", honor: "Honor point", point: " point(s)" };
+const copy = {
+	price: "Price",
+	gold: "Gold",
+	honor: "Honor point",
+	point: " point(s)",
+	guildPoint: "Guild point (GP)",
+	guildPointUnit: "GP"
+};
 
 /*
 ================
@@ -74,4 +81,49 @@ test("an honor package prints its points in the native honor row", () => {
 	const game = fixture();
 	game.shop = { ...game.shop, offers: [ { ...game.shop.offers[0], price: "1500", currency: 32 } ] };
 	assert.equal( commerceTooltip( "shop-offer:0", game, copy ).at( -1 )?.value, "Honor point : 1500 point(s)" );
+});
+
+/*
+================
+packages priced twice
+
+Issue #593: an honor or guild store good costs gold and honor, or gold and
+guild points. 559AF6 walks the payment indexes 0..5 and prints one line for
+each the package has: gold (0), guild points (3), honor (5).
+================
+*/
+test("a package priced in two currencies prints every price row in payment order", () => {
+	const game = fixture(), base = game.shop.offers[0];
+	game.shop = {
+		...game.shop,
+		offers: [
+			{
+				...base,
+				price: "2700000",
+				currency: 1,
+				prices: [ { currency: 1, amount: "2700000" }, { currency: 32, amount: "1000" } ]
+			},
+			{
+				...base,
+				slot: 1,
+				price: "1000000",
+				currency: 1,
+				prices: [ { currency: 1, amount: "1000000" }, { currency: 8, amount: "20000" } ]
+			}
+		]
+	};
+	assert.deepEqual(
+		commerceTooltip( "shop-offer:0", game, copy ).filter( row => row.value.trim() ).map( row => row.value ),
+		[
+			"Price : 2700000 Gold",
+			"Honor point : 1000 point(s)"
+		]
+	);
+	assert.deepEqual(
+		commerceTooltip( "shop-offer:1", game, copy ).filter( row => row.value.trim() ).map( row => row.value ),
+		[
+			"Price : 1000000 Gold",
+			"Guild point (GP) : 20000GP"
+		]
+	);
 });

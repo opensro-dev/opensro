@@ -21540,7 +21540,9 @@ export function createUi(
 									price: lookup( "UIIT_STT_PRICE" ),
 									gold: lookup( "UIIT_STT_GOLD" ),
 									honor: lookup( "UIIT_STT_TC_HONOR_POINT" ),
-									point: lookup( "UIIT_STT_SILKMALL_P_POINT" )
+									point: lookup( "UIIT_STT_SILKMALL_P_POINT" ),
+									guildPoint: lookup( "UIIT_STT_GUILD_POINT" ),
+									guildPointUnit: lookup( "UIIT_STT_GUILD_POINT_GP" )
 								} )
 							];
 						}

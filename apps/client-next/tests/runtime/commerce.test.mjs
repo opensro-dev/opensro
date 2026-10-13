@@ -94,3 +94,39 @@ test("cargo quotations preserve container identity and reject incomplete total t
 		assert.throws( () => decode( [ { ...quote, totals } ] ) );
 	}
 });
+
+/*
+================
+shop price lists
+
+Issue #593: a package's price rows, two or more known currencies, each
+once, ascending by payment bit, the first repeating the offer's own price.
+================
+*/
+test("a package's price list is admitted only in payment order and matching its first row", () => {
+	const base = { tab: 0, slot: 0, refObjId: 1, name: "item", maxStack: 1, price: "100000", currency: 1 };
+	const encode = offer =>
+		new TextEncoder().encode(
+			JSON.stringify( { version: 1, npc: 1, name: "shop", offers: [ { ...base, ...offer } ] } )
+		);
+	const rows = [ { currency: 1, amount: "100000" }, { currency: 8, amount: "1000" } ];
+	assert.deepEqual( shopCatalog( encode( { prices: rows } ) ).offers[0].prices, rows );
+	assert.deepEqual(
+		shopCatalog( encode( { prices: [ rows[0], { currency: 32, amount: "10" } ] } ) ).offers[0].prices[1],
+		{
+			currency: 32,
+			amount: "10"
+		}
+	);
+	for (
+		const prices of [
+			[ rows[0] ], // a single row is the offer's own price
+			[ rows[1], rows[0] ], // out of payment order
+			[ rows[0], rows[0] ], // a currency twice
+			[ rows[0], { currency: 2, amount: "5" } ], // silk is the Item Mall's
+			[ { currency: 1, amount: "99" }, rows[1] ], // first row differs from price
+			[ rows[0], { currency: 8, amount: "-1" } ],
+			"100000"
+		]
+	) assert.throws( () => shopCatalog( encode( { prices } ) ), Error, JSON.stringify( prices ) );
+});

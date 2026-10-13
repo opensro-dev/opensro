@@ -58,10 +58,29 @@ export interface CommercePreview {
 	readonly name: string;
 	readonly body: readonly number[];
 }
-// refpricepolicyofitem payment types an NPC shop takes: gold and Training
-// Camp honor.
+// refpricepolicyofitem payment types an NPC shop takes: gold, the guild
+// store's guild points and Training Camp honor. Each is the bit 1 << index
+// of the native payment index 5592B0 walks (0 gold, 3 GP, 5 honor).
 export const SHOP_CURRENCY_GOLD = 1;
+export const SHOP_CURRENCY_GUILD_POINT = 8;
 export const SHOP_CURRENCY_HONOR = 32;
+// The most price rows a package can carry: one per currency above.
+const SHOP_PRICE_ROWS_MAX = 3;
+
+/*
+================
+ShopPrice
+
+One price row of a package: its payment bit and amount. A package priced in
+two currencies (an honor store or guild store good: gold and honor, or gold
+and guild points) carries every row, in payment order, and the purchase
+charges them all (v1.188 CShopApp_CheckPurchasePayment 617360).
+================
+*/
+export interface ShopPrice {
+	readonly currency: number;
+	readonly amount: string;
+}
 export interface ShopOffer {
 	readonly purchaseLimit?: number;
 	readonly previews?: readonly CommercePreview[];
@@ -79,6 +98,9 @@ export interface ShopOffer {
 	readonly name: string;
 	readonly price: string;
 	readonly currency?: number;
+	// Every price row when the package has more than one; price and currency
+	// then repeat its first row.
+	readonly prices?: readonly ShopPrice[];
 	readonly maxStack: number;
 }
 export interface BuybackOffer {
@@ -149,6 +171,38 @@ function commerceGold( value: unknown ): boolean {
 
 /*
 ================
+shopCurrency
+================
+*/
+function shopCurrency( value: unknown ) {
+	return value === SHOP_CURRENCY_GOLD || value === SHOP_CURRENCY_GUILD_POINT || value === SHOP_CURRENCY_HONOR;
+}
+
+/*
+================
+shopPrices
+
+A package's price rows: two or more known currencies, each once, in payment
+order, the first matching the offer's own price and currency.
+================
+*/
+function shopPrices( value: unknown, currency: number, price: string ) {
+	if ( !Array.isArray( value ) || value.length < 2 || value.length > SHOP_PRICE_ROWS_MAX ) {
+		throw Error( "Invalid shop price list" );
+	}
+	let previous = 0;
+	for ( const row of value ) {
+		if (
+			!row || typeof row !== "object" || !shopCurrency( row.currency ) || row.currency <= previous ||
+			!commerceGold( row.amount )
+		) throw Error( "Invalid shop price row" );
+		previous = row.currency;
+	}
+	if ( value[0].currency !== currency || value[0].amount !== price ) throw Error( "Mismatched shop price list" );
+}
+
+/*
+================
 shopCatalog
 ================
 */
@@ -174,6 +228,7 @@ export function shopCatalog( p: Uint8Array ): ShopState {
 		if (
 			row.currency !== undefined && row.currency !== SHOP_CURRENCY_GOLD && row.currency !== SHOP_CURRENCY_HONOR
 		) throw Error( "Invalid shop currency" );
+		if ( row.prices !== undefined ) shopPrices( row.prices, row.currency ?? SHOP_CURRENCY_GOLD, row.price );
 		if ( row.contents !== undefined ) {
 			if ( !Array.isArray( row.contents ) || row.contents.length > 96 ) throw Error( "Invalid package contents" );
 			for ( const item of row.contents ) {
