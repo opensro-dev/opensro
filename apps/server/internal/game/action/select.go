@@ -214,7 +214,8 @@ func (rt *Runtime) registerObjectSelect(hub *transport.Hub) {
 		}
 		outcome := rt.HandleObjectSelect(divisionID, character, payload)
 		if outcome.Refusal != "" {
-			// A typed refusal (out of range) answers the client; the rest stay silent.
+			// A typed refusal (out of range, no such object) answers the
+			// client; a malformed or delete-pending request stays silent.
 			log.Debugf("action: 0x745A refused for %s: %s", character.Name, outcome.Refusal)
 			sendFrames(s, outcome.Frames)
 			return
@@ -239,9 +240,10 @@ to an object this division's world actually contains:
     per-character, simulation.NpcObjectID), only while the NPC roster is
     enabled - with spawns off those gids exist on no client and accepting
     them would widen the domain;
-  - a live monster from the shared division registry, only while its
-    generated region is inside the acting character's current visibility
-    ring;
+  - a live monster from the shared division registry, only while the
+    region it stands in now (its mover's live pose; the generated home
+    point only for a monster without a mover) is inside the acting
+    character's current visibility ring;
   - a live ground drop in the division registry.
 
 Anything else refuses: an object-interaction acceptor on a live server
@@ -296,7 +298,16 @@ func (rt *Runtime) HandleObjectSelect(divisionID string, character *enterworld.C
 		return refusedSelect("deletePending")
 	}
 	if !live {
-		return refusedSelect(fmt.Sprintf("gid %d resolves to no live object in division %s", gid, divisionID))
+		// 50FE50: an object the server cannot resolve still gets an answer,
+		// SendErrorResponse(0xB045, 3); a silent refusal left the client's
+		// selection pending until its reply timeout, its window closed.
+		return SelectOutcome{
+			Refusal: fmt.Sprintf("gid %d resolves to no live object in division %s", gid, divisionID),
+			Frames: []wire.Frame{{
+				Opcode:  wire.OpObjectSelectResult,
+				Payload: wire.EncodeObjectSelectRefusal(selectObjectNotFound),
+			}},
+		}
 	}
 	if tooFar {
 		return SelectOutcome{
@@ -401,11 +412,19 @@ func (rt *Runtime) resolveLiveObject(
 		}
 	}
 	// Shared monsters are selectable only while they are live and inside
-	// the same ring that made them visible to this character.
+	// the same ring that made them visible to this character: where the
+	// monster stands now, as the interest scan sees it. Its generated home
+	// point (Spawn) is only its position while it has no mover; a roaming
+	// or chasing monster left it behind.
 	if rt.Monsters != nil {
-		if instance, ok := rt.characterMonster(divisionID, character, gid); ok &&
-			regionInScope(instance.Spawn.RegionID, simulation.RegionScopeRing(viewerRegion)) {
-			return selectedObject{monster: &instance}, true
+		if instance, ok := rt.characterMonster(divisionID, character, gid); ok {
+			region := instance.Spawn.RegionID
+			if live := rt.monsterSpawn(divisionID, gid, rt.Now().UnixMilli()); live.RegionID != 0 {
+				region = live.RegionID
+			}
+			if regionInScope(region, simulation.RegionScopeRing(viewerRegion)) {
+				return selectedObject{monster: &instance}, true
+			}
 		}
 	}
 	// Summoned companions, every owner's (52B040 takes any character in

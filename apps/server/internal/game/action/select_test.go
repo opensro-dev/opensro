@@ -223,10 +223,14 @@ func TestObjectSelectMonsterGrantCarriesCurrentHPAndEnforcesViewerScope(t *testi
 
 /*
 ================
-TestObjectSelectRefusesUnknownAndMalformedSilently
+TestObjectSelectRefusesMalformedSilentlyAndAnswersUnknown
+
+A malformed body stays silent. A well-formed gid that resolves to nothing
+gets 50FE50's answer, [2][3]: without it the client held its selection
+pending until the reply timeout, with no target window and a dead X.
 ================
 */
-func TestObjectSelectRefusesUnknownAndMalformedSilently(t *testing.T) {
+func TestObjectSelectRefusesMalformedSilentlyAndAnswersUnknown(t *testing.T) {
 	character := testCharacter()
 	rt := selectTestRuntime(character)
 
@@ -234,13 +238,17 @@ func TestObjectSelectRefusesUnknownAndMalformedSilently(t *testing.T) {
 		{},                          // empty
 		{0x41, 0x0D, 0x03},          // short
 		{0x41, 0x0D, 0x03, 0x00, 0}, // over-long
-		selectBody(0xDEADBEEF),      // well-formed, resolves to nothing
 	}
 	for _, payload := range cases {
 		outcome := rt.HandleObjectSelect(testDivision, character, payload)
-		if outcome.Refusal == "" {
-			t.Errorf("payload % X accepted, want refusal", payload)
+		if outcome.Refusal == "" || len(outcome.Frames) != 0 {
+			t.Errorf("payload % X: refusal %q frames %d, want a silent refusal", payload, outcome.Refusal, len(outcome.Frames))
 		}
+	}
+	unknown := rt.HandleObjectSelect(testDivision, character, selectBody(0xDEADBEEF))
+	if unknown.Refusal == "" || len(unknown.Frames) != 1 || unknown.Frames[0].Opcode != wire.OpObjectSelectResult ||
+		!bytes.Equal(unknown.Frames[0].Payload, []byte{2, 3}) {
+		t.Errorf("unknown gid: refusal %q frames %+v, want the 0xB45A [2][3] answer", unknown.Refusal, unknown.Frames)
 	}
 	if _, ok := rt.Selected.Get(testDivision, character.Name); ok {
 		t.Error("a refusal recorded a selection")
@@ -261,6 +269,67 @@ func TestObjectSelectRefusesUnknownAndMalformedSilently(t *testing.T) {
 	setSelectCharacters(t, rt, enterworld.StaticCharacterSource{testDivision: {character, ghost}})
 	if outcome := rt.HandleObjectSelect(testDivision, character, selectBody(enterworld.ObjectIDForCharacter(ghost))); outcome.Refusal == "" {
 		t.Error("delete-pending peer gid accepted")
+	}
+}
+
+/*
+================
+TestObjectSelectFollowsWhereAMonsterStandsNotItsHome
+
+The reported Giant/Elite case: a monster that roamed or chased out of its
+generated home region stays visible, so its select must follow the live
+pose the interest scan uses, not the home point.
+================
+*/
+func TestObjectSelectFollowsWhereAMonsterStandsNotItsHome(t *testing.T) {
+	character := testCharacter()
+	const (
+		viewerRegion = 0x62a8
+		farRegion    = 0x62ac
+	)
+	registry := simulation.NewMonsterState(monster.TemplateFromParts(
+		map[uint32]monster.MonsterRef{1933: {RefObjID: 1933, TidWord: 0x00c6, Codename: "MOB_CH_MANGNYANG", MaxHP: 54}},
+		[]monster.NestRow{
+			{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: farRegion, X: 900, Y: 20, Z: 450}},
+			{SpawnPoint: monster.SpawnPoint{RefObjID: 1933, RegionID: viewerRegion, X: 900, Y: 20, Z: 450}},
+		},
+	))
+	rt := selectTestRuntime(character)
+	rt.Monsters = registry
+	setSelectCharacters(t, rt, enterworld.StaticCharacterSource{testDivision: {character}})
+	registry.StartDivision(testDivision)
+	registry.AdvancePopulation(registry.CurrentTimeMillis())
+	roamer := registry.InstancesInRegions(testDivision, []uint16{farRegion})
+	homebody := registry.InstancesInRegions(testDivision, []uint16{viewerRegion})
+	if len(roamer) != 1 || len(homebody) != 1 {
+		t.Fatalf("fixture: %d far and %d near monsters", len(roamer), len(homebody))
+	}
+	move := func(gid uint32, region uint16) {
+		t.Helper()
+		mover, ok := registry.Mover(testDivision, gid)
+		if !ok {
+			t.Fatalf("fixture: monster %d has no mover", gid)
+		}
+		mover.Pose = monster.Pose{RegionID: region, X: 900, Y: 20, Z: 450}
+		if !registry.CommitMover(testDivision, gid, mover) {
+			t.Fatal("fixture movement rejected")
+		}
+	}
+
+	if refused := rt.HandleObjectSelect(testDivision, character, selectBody(roamer[0].Gid)); refused.Refusal == "" {
+		t.Fatal("a monster standing out of scope was selectable")
+	}
+	move(roamer[0].Gid, viewerRegion)
+	if outcome := rt.HandleObjectSelect(testDivision, character, selectBody(roamer[0].Gid)); outcome.Refusal != "" {
+		t.Fatalf("a monster that walked into scope from a far home was refused: %s", outcome.Refusal)
+	}
+	move(homebody[0].Gid, farRegion)
+	outcome := rt.HandleObjectSelect(testDivision, character, selectBody(homebody[0].Gid))
+	if outcome.Refusal == "" {
+		t.Fatal("a monster that walked out of scope stayed selectable by its home")
+	}
+	if len(outcome.Frames) != 1 || !bytes.Equal(outcome.Frames[0].Payload, []byte{2, 3}) {
+		t.Fatalf("out-of-scope select frames %+v, want the [2][3] answer", outcome.Frames)
 	}
 }
 

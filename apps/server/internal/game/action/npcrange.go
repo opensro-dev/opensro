@@ -34,6 +34,9 @@ const (
 	// hitRangeTooFar is 4A8E10's out-of-range result. The client shows it as
 	// category 13 code 4, UIIT_MSG_INTERACTION_FAIL_TOO_FAR (75AE50 -> 689420).
 	hitRangeTooFar uint8 = 4
+	// selectObjectNotFound is 50FE93's code when ObjMgr_FindByID finds no
+	// object; v1.150's 7651F1 reads it as one byte and shows text only for 7.
+	selectObjectNotFound uint8 = 3
 )
 
 /*
