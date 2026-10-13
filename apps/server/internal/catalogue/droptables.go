@@ -77,6 +77,9 @@ type BetaRates struct {
 	DropCap int `json:"dropCap"`
 	// GoldRate multiplies each gold heap.
 	GoldRate int `json:"goldRate"`
+	// SkillExpRate multiplies skill EXP on top of the beta growth pace
+	// (progression.GrowthRates.SkillExpRate, SRO_BETA_SKILL_EXP_RATE).
+	SkillExpRate int64 `json:"skillExpRate" doc:"Port-only beta balance: skill EXP is multiplied by this on top of the beta growth, which holds every level's EXP and skill EXP to the level-1 kill pace. Without the beta object the original rates apply (x1)."`
 	// RareChance replaces the native rareChance.
 	RareChance float64 `json:"rareChance"`
 	// Seals multiply each rare seal's chance on top of rareChance
@@ -155,7 +158,7 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 		}
 	}
 	if beta := progression.BetaGrowthFromEnv(); beta.Enabled {
-		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate,
+		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate, SkillExpRate: beta.SkillExpRate,
 			RareChance: action.RareEquipmentChance(beta.RareRate), Seals: progression.BetaSealRatesFromEnv().Table(),
 			ElixirDropsOff: progression.ElixirDropsFromEnv().Off(), ShopOnlyDegree9: progression.BetaShopOnlyDegree9FromEnv().Enabled()}
 		if progression.BetaSealRatesFromEnv().Enabled() {
