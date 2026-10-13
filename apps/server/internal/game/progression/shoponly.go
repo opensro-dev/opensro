@@ -5,7 +5,8 @@ shoponly.go - degree-9 alchemy goods only from the shop (port-only, not native)
 
 Port-only, not native, beta balance (owner 2026-10-13). With
 SRO_BETA_SHOP_ONLY_DEGREE9 on, degree-9 alchemy goods no longer drop from
-monsters; players buy them from the Jangan shops. Degrees 1-8 and every
+monsters; players buy the stones from Jangan's smith and grocer and the
+Lucky Powder from every town's grocer (SRO_SHOP_EXTRA_GOODS). Degrees 1-8 and every
 other drop are unchanged. Off, every drop rolls exactly as before.
 
 "Degree 9" is the item's own itemdata degree, the ItemClass column (61)
