@@ -60,7 +60,7 @@ func publicRules() publicstats.RulesResponse {
 				Why:    "Beta balance, so testers can try seal gear."},
 			{Flag: progression.EnvBetaShopOnlyDegree9, On: progression.BetaShopOnlyDegree9FromEnv().Enabled(),
 				Native: "Monsters drop Lucky Powder, magic stones and attribute stones of every degree.",
-				Now:    "Degree-9 Lucky Powder, magic stones and attribute stones no longer drop; the Jangan shops sell them.",
+				Now:    "Degree-9 Lucky Powder, magic stones and attribute stones no longer drop; every town's grocer sells the Lucky Powder, and Jangan's smith and grocer sell the stones.",
 				Why:    "Beta balance: the top alchemy degree is bought with gold."},
 			{Flag: progression.EnvElixirDropsOff, On: progression.ElixirDropsFromEnv().Off(),
 				Native: "Monsters drop elixirs.",

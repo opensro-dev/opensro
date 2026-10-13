@@ -11,7 +11,8 @@ Astral, Athanasia and Repair magic stones of degree 9 at Jangan's smith for
 5,000,000 (the degree 1-3 Luck and Steady stones it sold before are gone),
 the other degree 9 magic stones and every degree 9 attribute stone at
 Jangan's grocer for 2,000,000, and the vigor potions at every herbalist for
-their native price.
+their native price. F7: degree 9 Lucky Powder at every grocer for A_09's
+native price.
 "off" restores the shipped v1.150 stock exactly.
 
 An entry is "shop tab : item codename : gold price". Each entry takes the
@@ -114,7 +115,22 @@ const shopExtraGoodsDefault = "" +
 	"STORE_CA_POTION_TAB1:ITEM_ETC_ALL_POTION_02:180," +
 	"STORE_CA_POTION_TAB1:ITEM_ETC_ALL_POTION_03:320," +
 	"STORE_CA_POTION_TAB1:ITEM_ETC_ALL_POTION_04:600," +
-	"STORE_CA_POTION_TAB1:ITEM_ETC_ALL_POTION_05:900"
+	"STORE_CA_POTION_TAB1:ITEM_ETC_ALL_POTION_05:900," +
+	// Owner, 2026-10-13 (F7, Lucky Powder option 1): degree 9 Lucky Powder
+	// at every grocer's alchemy tab (NPC_*_ACCESSORY, SN_TAB_ALCHEMY) for
+	// A_09's native price, 54,469 (refpricepolicyofitem, its Hotan package),
+	// B_09 too since it has no native shop. Hotan's two grocer tabs already
+	// sell A_09 natively, so they gain only B_09.
+	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
+	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
+	"STORE_KT_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
+	"STORE_KT_ACCESSORY_EU_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
+	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469"
 
 // maxShopSlot is the last slot a tab can address: the offer slot is a byte.
 const maxShopSlot = math.MaxUint8

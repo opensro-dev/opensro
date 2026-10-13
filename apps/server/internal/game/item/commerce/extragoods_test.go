@@ -4,7 +4,7 @@
 extragoods_test.go - operator NPC shop goods (port-only, not native)
 
 The setting parses strictly, "off" leaves the shipped stock untouched, and
-the owner's default list lands in Jangan's smith after its authored goods.
+the owner's default list lands after each shop's authored goods.
 
 ===========================================================================
 */
@@ -51,7 +51,7 @@ func TestParseExtraGoods(t *testing.T) {
 		}
 	}
 	on, err := ParseExtraGoods("on")
-	if err != nil || len(on) != 13+28+25 {
+	if err != nil || len(on) != 13+28+25+10 {
 		t.Fatalf("on = %d goods, %v", len(on), err)
 	}
 	list, err := ParseExtraGoods(" STORE_CH_POTION_TAB1 : ITEM_ETC_ALL_SPOTION_01 : 1000 ")
@@ -145,7 +145,12 @@ func TestDefaultExtraGoodsBetaBalance(t *testing.T) {
 	if err := c.AddExtraGoods(goods, refs); err != nil {
 		t.Fatal(err)
 	}
-	stones := c.Tabs[grocer][authored:]
+	var stones []Offer
+	for _, offer := range c.Tabs[grocer][authored:] {
+		if !strings.Contains(offer.Ref.Codename, "_PROB_UP_") {
+			stones = append(stones, offer)
+		}
+	}
 	if authored != 7 || len(stones) != 28 {
 		t.Fatalf("grocer tab: %d authored, %d stones; want 7 and 28", authored, len(stones))
 	}
@@ -187,6 +192,62 @@ func TestDefaultExtraGoodsBetaBalance(t *testing.T) {
 		}
 		if found != len(vigor) {
 			t.Fatalf("%s herbalist sells %d vigor potions, want %d", town, found, len(vigor))
+		}
+	}
+}
+
+/*
+================
+TestDefaultExtraGoodsLuckyPowderAtEveryGrocer
+
+F7, owner 2026-10-13 (Lucky Powder option 1): every grocer's alchemy tab
+sells degree 9 Lucky Powder A and B, each once, for A_09's native Hotan
+price of 54,469 gold. Hotan's two grocer tabs keep their native A_09 and
+gain only B_09. The authored goods keep their slots: the extras follow.
+================
+*/
+func TestDefaultExtraGoodsLuckyPowderAtEveryGrocer(t *testing.T) {
+	const a09, b09, price = "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09", 54469
+	c, refs := shippedCatalog(t)
+	grocers := []string{"STORE_CH_ACCESSORY_TAB3", "STORE_WC_ACCESSORY_TAB3", "STORE_KT_ACCESSORY_TAB3",
+		"STORE_KT_ACCESSORY_EU_TAB3", "STORE_EU_ACCESSORY_TAB3", "STORE_CA_ACCESSORY_TAB3"}
+	shipped := map[string][]Offer{}
+	for _, tab := range grocers {
+		shipped[tab] = append([]Offer(nil), c.Tabs[c.tabIDs[tab]]...)
+	}
+	// Native: only Hotan sells A_09, at the price its package names.
+	native := 0
+	for _, offer := range shipped["STORE_KT_ACCESSORY_TAB3"] {
+		if offer.Ref.Codename == a09 {
+			native++
+			if offer.Price != price || offer.Currency != PaymentGold {
+				t.Fatalf("Hotan's native A_09 = %+v; want %d gold each", offer, price)
+			}
+		}
+	}
+	if native != 1 {
+		t.Fatalf("Hotan sells A_09 %d time(s) natively", native)
+	}
+	goods, _ := ParseExtraGoods("on")
+	if err := c.AddExtraGoods(goods, refs); err != nil {
+		t.Fatal(err)
+	}
+	for _, tab := range grocers {
+		offers := c.Tabs[c.tabIDs[tab]]
+		if !reflect.DeepEqual(offers[:len(shipped[tab])], shipped[tab]) {
+			t.Fatalf("%s: the authored goods moved", tab)
+		}
+		sold := map[string]int{}
+		for _, offer := range offers {
+			if code := offer.Ref.Codename; code == a09 || code == b09 {
+				sold[code]++
+				if offer.Price != price || offer.Currency != PaymentGold || len(offer.Contents) != 1 {
+					t.Fatalf("%s sells %s as %+v", tab, code, offer)
+				}
+			}
+		}
+		if sold[a09] != 1 || sold[b09] != 1 {
+			t.Fatalf("%s sells A_09 %d time(s), B_09 %d time(s); want once each", tab, sold[a09], sold[b09])
 		}
 	}
 }

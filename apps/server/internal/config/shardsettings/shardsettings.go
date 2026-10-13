@@ -75,7 +75,8 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_RARE_RATE", NomadVar: "beta_rare_rate", Default: "5", Catalogue: true},
 	{Env: "SRO_BETA_SHOP_ONLY_DEGREE9", NomadVar: "beta_shop_only_degree9", Default: "on", Catalogue: true},
 	{Env: "SRO_BETA_SEAL_RATES", NomadVar: "beta_seal_rates", Default: "on", Catalogue: true},
-	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "", Source: Built},
+	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; "off" is native.
+	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "luckypowder=500", Source: Built},
 }
 
 // NotSettings are the job's other SRO_ variables: what a deployment
@@ -111,6 +112,23 @@ func (s Setting) Value(getenv func(string) string) string {
 		return v
 	}
 	return s.Default
+}
+
+/*
+================
+Lookup
+
+The setting named by its environment variable. A name outside the table
+is a programming error.
+================
+*/
+func Lookup(env string) Setting {
+	for _, s := range Settings {
+		if s.Env == env {
+			return s
+		}
+	}
+	panic("shardsettings: no setting " + env)
 }
 
 /*

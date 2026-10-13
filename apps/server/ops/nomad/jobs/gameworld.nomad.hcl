@@ -344,11 +344,12 @@ variable "beta_seal_rates" {
 # "potion=2000,elixir=50". Groups: potion, petpotion, universalpill, elixir,
 # luckypowder, magicstone, attrstone (stones merge only with an equal
 # assimilation value).
-# Empty keeps every itemdata cap; an unknown group or a cap outside 1..65535
-# stops GameWorld at boot.
+# The deployment default raises Lucky Powder to 500 (owner, 2026-10-13).
+# Empty or "off" keeps every itemdata cap; an unknown group or a cap outside
+# 1..65535 stops GameWorld at boot.
 variable "stack_sizes" {
   type    = string
-  default = ""
+  default = "luckypowder=500"
 }
 
 # The community site's public read API listener (internal/agent/publicstats):

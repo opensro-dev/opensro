@@ -84,7 +84,9 @@ type StackSizes map[string]uint16
 ================
 ParseStackSizes
 
-"group=cap" pairs separated by commas. An unknown group, a repeated
+"group=cap" pairs separated by commas; "" and "off" are native (the
+deployment default fills an empty operator value, so "off" is how an
+operator asks for native). An unknown group, a repeated
 group or a cap outside 1..65535 is an error: a typo must stop the boot,
 not silently run native.
 ================
@@ -92,7 +94,7 @@ not silently run native.
 func ParseStackSizes(text string) (StackSizes, error) {
 	sizes := StackSizes{}
 	text = strings.TrimSpace(text)
-	if text == "" {
+	if text == "" || strings.EqualFold(text, "off") {
 		return sizes, nil
 	}
 	for _, pair := range strings.Split(text, ",") {

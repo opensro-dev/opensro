@@ -3,8 +3,9 @@
 
 stacksizes_test.go - port-only stack caps reach the deployed GameWorld
 
-The deployer's environment must survive job materialization, with native
-defaults and invalid settings refused before any Nomad mutation.
+The deployer's environment must survive job materialization: unset is the
+deployment default (Lucky Powder 500), "off" is native, and an invalid
+setting is refused before any Nomad mutation.
 
 ===========================================================================
 */
@@ -28,7 +29,9 @@ func TestStackSizesDeployment(t *testing.T) {
 		name, value, want string
 		invalid           bool
 	}{
-		{name: "native"},
+		// The deployment default (shardsettings, owner 2026-10-13).
+		{name: "default", want: "luckypowder=500"},
+		{name: "native", value: "off"},
 		{name: "raised", value: " Potion=2000 ,elixir=50", want: "elixir=50,potion=2000"},
 		{name: "invalid", value: "potion=65536", invalid: true},
 	} {

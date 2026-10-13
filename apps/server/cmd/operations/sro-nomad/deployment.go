@@ -28,6 +28,7 @@ import (
 	agentserver "opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
+	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/social/party"
@@ -289,7 +290,8 @@ func resolveDeployment(
 	if err != nil {
 		return nil, err
 	}
-	stackSizes, err := enterworld.StackSizesFromEnv()
+	// The operator's value, else the deployment default (shardsettings).
+	stackSizes, err := enterworld.ParseStackSizes(shardsettings.Lookup(enterworld.EnvStackSizes).Value(os.Getenv))
 	if err != nil {
 		return nil, err
 	}

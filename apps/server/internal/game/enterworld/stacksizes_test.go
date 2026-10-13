@@ -20,9 +20,11 @@ TestParseStackSizes
 ================
 */
 func TestParseStackSizes(t *testing.T) {
-	native, err := ParseStackSizes("  ")
-	if err != nil || len(native) != 0 {
-		t.Fatalf("empty setting = %v, %v; want native", native, err)
+	for _, text := range []string{"  ", "off", " OFF "} {
+		native, err := ParseStackSizes(text)
+		if err != nil || len(native) != 0 {
+			t.Fatalf("setting %q = %v, %v; want native", text, native, err)
+		}
 	}
 	sizes, err := ParseStackSizes(" Potion=2000 , elixir=50,petpotion=100,luckypowder=65535")
 	if err != nil {
@@ -182,5 +184,47 @@ func TestShippedStackSizesReachEveryReader(t *testing.T) {
 				t.Fatalf("refill stack %d; the beta refill must keep the native 50", stack)
 			}
 		}
+	}
+}
+
+/*
+================
+TestShippedLuckyPowderStacksTo500
+
+The F7 deployment default (luckypowder=500, owner 2026-10-13) on the
+shipped itemdata: every Lucky Powder row (3/3/10/2) that stacks rises to
+500, degree 9 A and B included; a row already above 500 keeps its own cap,
+so no stored stack or mall bag exceeds its row; nothing else changes.
+================
+*/
+func TestShippedLuckyPowderStacksTo500(t *testing.T) {
+	licensed.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	native := NewTextdataItems(dir)
+	items := NewTextdataItems(dir)
+	if _, err := items.ApplyStackSizes(StackSizes{"luckypowder": 500}); err != nil {
+		t.Fatal(err)
+	}
+	powders := 0
+	for _, row := range items.ItemCommandReferences() {
+		ref, _ := items.ItemRefByCodename(row.Codename)
+		before, _ := native.ItemRefByCodename(row.Codename)
+		was := before.NativeFields.Get("maxStack")
+		want := was
+		if ref.TypeIDs == [4]int64{3, 3, 10, 2} && was > 1 && was < 500 {
+			want = 500
+			powders++
+		}
+		if got := ref.NativeFields.Get("maxStack"); got != want {
+			t.Errorf("%s: cap %v, want %v (native %v)", row.Codename, got, want, was)
+		}
+	}
+	for _, codename := range []string{"ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09", "ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09"} {
+		if ref, ok := items.ItemRefByCodename(codename); !ok || ref.NativeFields.Get("maxStack") != 500 {
+			t.Fatalf("%s does not stack to 500", codename)
+		}
+	}
+	if powders < 2 {
+		t.Fatalf("raised %d Lucky Powder rows", powders)
 	}
 }
