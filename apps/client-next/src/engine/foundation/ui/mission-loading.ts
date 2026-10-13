@@ -37,6 +37,83 @@ export function missionLoadingAssets() {
 }
 /*
 ================
+LoadingArtState
+
+What the next loading screen can be: whether the session is in the world,
+whether the local player is dead (a rebirth teleport follows), whether a
+restart, exit or logout was asked for (character select or the title
+follows), and the europe variant the next plain load will draw.
+================
+*/
+export interface LoadingArtState {
+	readonly inWorld: boolean;
+	readonly dead: boolean;
+	readonly leaving: boolean;
+	readonly nextVariant: number;
+}
+
+/*
+================
+loadingArtDemand
+
+The loading art to keep decoded now: only what the next loading screen can
+show. Each 1024x768 background holds 3 MiB decoded, and keeping all of
+them warm cost 18 MiB for screens that cannot appear. The others stay in
+the persistent store and are decoded with seconds of lead: the rebirth
+prompt comes 3 s after death, and restart, exit and logout wait out the
+server's countdown (departure.ts). loading_thief2 (travel mode 4) is never
+selected: no path sets that mode.
+================
+*/
+export function loadingArtDemand( state: LoadingArtState ): string[] {
+	const paths = [
+		"loading_form",
+		"gauge_loading",
+		"nowloading",
+		`loading_europe_${state.nextVariant === 2 ? 2 : 1}`
+	];
+	if ( state.inWorld && state.dead ) paths.push( "loading_rebirth" );
+	if ( !state.inWorld || state.leaving ) paths.push( "loading_charactercustom", "loading_charactercustom_europe" );
+	return paths.map( name => root + name + ".png" );
+}
+
+// The longest a loading screen waits for its art before it draws without it,
+// so an image that never arrives (absent from a publication) cannot freeze it.
+export const LOADING_ART_HOLD_MS = 2000;
+
+/*
+================
+LoadingArtHold
+================
+*/
+export interface LoadingArtHold {
+	readonly background: string | null;
+	readonly startup: boolean;
+	readonly resident: boolean;
+	readonly worldShown: boolean;
+	readonly heldForMs: number;
+}
+
+/*
+================
+loadingArtHeld
+
+Whether a loading screen waits for its background instead of drawing an
+empty one. The native client loads the art synchronously before the screen
+appears, so the last frame stays up meanwhile; the port holds the retained
+world frame the same way, until the art is decoded or LOADING_ART_HOLD_MS
+passes. Art demanded only on use (a destination region, a travel mode a
+lead time did not foresee) therefore never shows an empty background. With
+no world to hold (the title, the dock) the screen draws as before.
+================
+*/
+export function loadingArtHeld( hold: LoadingArtHold ): boolean {
+	return !hold.startup && hold.background !== null && !hold.resident && hold.worldShown &&
+		hold.heldForMs < LOADING_ART_HOLD_MS;
+}
+
+/*
+================
 missionLoadingQuads
 
 CPSMission 7292E0 supplies the authored 1600x1200 rectangles. Desktop keeps

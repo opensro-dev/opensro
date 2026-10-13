@@ -499,7 +499,8 @@ import { academyLayout } from "@/engine/foundation/ui/academy-layout";
 import { createGuideResources } from "./guide/resources";
 import { automaticGuide } from "@/engine/foundation/gameplay/guide";
 import {
-	missionLoadingAssets,
+	loadingArtDemand,
+	loadingArtHeld,
 	missionLoadingQuads,
 	loadingScreenQuads,
 	regionLoadingBackground,
@@ -848,6 +849,27 @@ export function createUi(
 	let buffDismiss: { skillId: number; instance: number; } | null = null;
 	let loading: LoadingPresentation | null = null;
 	let loadingGeneration = 0, loadingTravelRevision: number | undefined;
+	// The europe variant the next plain load draws, chosen a load ahead so
+	// only that background is kept decoded (mission-loading.ts loadingArtDemand).
+	let nextLoadingVariant = loadingVariant();
+	// A restart, exit or logout was asked for: character select or the title
+	// follows after the server's countdown, so their loading art is warmed.
+	let leaveRequested = false;
+	// The loading screen whose art is being waited for, and since when.
+	let loadingHoldKey: string | null = null, loadingHoldSince = 0;
+	/*
+	================
+	takeLoadingVariant
+
+	The variant this load shows; the next one is drawn now, from the same
+	distribution native draws at the load itself.
+	================
+	*/
+	const takeLoadingVariant = () => {
+		const variant = nextLoadingVariant;
+		nextLoadingVariant = loadingVariant();
+		return variant;
+	};
 	const levels = feedbackLevels();
 	const notificationBanner = createNoticeBanner( "notificationBanner" ),
 		uniqueBanner = createUniqueBanner(),
@@ -3732,6 +3754,7 @@ export function createUi(
 			pending = true;
 			commands( { kind: "enter-world", character: selectedCharacter } );
 		} else if ( id === "logout" || id === "disconnect-confirm" ) {
+			leaveRequested = true;
 			commands( { kind: "logout" } );
 			password = "";
 			roster = [];
@@ -3743,9 +3766,11 @@ export function createUi(
 		} else if ( id === "disconnect" ) commands( { kind: "disconnect" } );
 		else if ( id === "system-restart" ) {
 			setPanel( "" );
+			leaveRequested = true;
 			commands( { kind: "restart" } );
 		} else if ( id === "system-exit" ) {
 			setPanel( "" );
+			leaveRequested = true;
 			commands( { kind: "exit" } );
 		} else if ( closedPanel( id ) !== undefined || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
@@ -8785,9 +8810,9 @@ export function createUi(
 				const background = loading?.key === key ?
 					loading.background :
 					next.travel ?
-					travelLoadingBackground( next.travel, loadingVariant() ) :
+					travelLoadingBackground( next.travel, takeLoadingVariant() ) :
 					(next.frontend?.phase === "loading-world" || next.worldTransitionRegion === undefined) ?
-					missionLoadingQuads( w, h, loadingVariant(), 0 )[1]!.texture :
+					missionLoadingQuads( w, h, takeLoadingVariant(), 0 )[1]!.texture :
 					regionLoadingBackground( next.worldTransitionRegion! );
 				request = {
 					key,
@@ -8819,7 +8844,22 @@ export function createUi(
 				now,
 				phase === "disconnected" || next.frontend?.phase === "failed"
 			);
-			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
+			if ( (loading?.key ?? null) !== loadingHoldKey ) {
+				loadingHoldKey = loading?.key ?? null;
+				loadingHoldSince = now;
+			}
+			// Art not decoded yet: hold the retained world frame, as native's
+			// synchronous load does, while the background is demanded below.
+			const artHeld = !!loading && loadingArtHeld( {
+				background: loading.background,
+				startup: loading.startup,
+				resident: loading.background !== null && resources.has( loading.background ),
+				worldShown: phase === "world" || retainedWorld,
+				heldForMs: now - loadingHoldSince
+			} );
+			if ( artHeld ) paths.push( loading!.background! );
+			const shown = artHeld ? null : loading;
+			const worldVisible = (phase === "world" || retainedWorld) && !shown && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
@@ -8848,9 +8888,9 @@ export function createUi(
 					}
 				}
 			}
-			if ( loading ) {
+			if ( shown ) {
 				blocks.push( full );
-				if ( loading.startup && next.frontend ) {
+				if ( shown.startup && next.frontend ) {
 					const output = title.render(
 						next.frontend,
 						w,
@@ -8877,11 +8917,11 @@ export function createUi(
 					);
 					paths.push( ...output.paths );
 				}
-				if ( !loading.startup ) {
-					const output = loadingScreenQuads( w, h, loading.background ?? "", loading.progress ).filter( (
+				if ( !shown.startup ) {
+					const output = loadingScreenQuads( w, h, shown.background ?? "", shown.progress ).filter( (
 						_,
 						i
-					) => i !== 1 || loading!.background !== null );
+					) => i !== 1 || shown.background !== null );
 					quads.push( ...output );
 					paths.push( ...output.map( q => q.texture ).filter( Boolean ) );
 				}
@@ -21603,7 +21643,7 @@ export function createUi(
 			probe?.detailEnd( "ui-assembly" );
 			probe?.detailBegin( "ui-finalize" );
 			const semantics = {
-				loadingVisible: !!loading && !assetFailure,
+				loadingVisible: !!shown && !assetFailure,
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
 					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
@@ -21643,7 +21683,13 @@ export function createUi(
 				controls
 			};
 			// A completion here must rebuild texture-dependent quads on the next step.
-			paths.push( ...missionLoadingAssets() );
+			if ( phase !== "world" ) leaveRequested = false;
+			paths.push( ...loadingArtDemand( {
+				inWorld: phase === "world",
+				dead: !!game?.vitals.find( v => v.gid === game.localGid )?.deathState,
+				leaving: leaveRequested,
+				nextVariant: nextLoadingVariant
+			} ) );
 			// Prewarm decoded authored artwork so hotkeys/sidebar changes stay immediate.
 			// Renderer now derives GPU residency from committed quads; this catalogue
 			// must never again be interpreted as the set of GPU-resident textures.
