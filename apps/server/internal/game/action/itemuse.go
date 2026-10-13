@@ -591,7 +591,7 @@ func (rt *Runtime) HandleItemUse(
 		if statsErr != nil {
 			return false
 		}
-		maxHP, maxMP, currentHP, currentMP := rt.playerKeeperVitals(divisionID, character)
+		maxHP, maxMP, currentHP, currentMP := keeperVitalsFrom(character, stats, nil)
 		amount, validAmount := computePotionAmount(ref, stats.Level, stats.Strength, stats.Intellect, maxHP, maxMP)
 		duration, validRecovery := recoveryCooldownDuration(character, amount.absolute)
 		if !validAmount || !validRecovery || nowMs > math.MaxInt64-duration {

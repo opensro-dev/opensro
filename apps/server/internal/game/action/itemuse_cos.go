@@ -266,7 +266,7 @@ func (rt *Runtime) applyPetPotion(
 	}
 	// 49AA70 reads the item owner's STR/INT/level (PC vfuncs), then
 	// 4A86A0 applies the COS recovery reductions and effective maxima.
-	maxHP, maxMP, _, _ := rt.playerKeeperVitals(divisionID, character)
+	maxHP, maxMP, _, _ := keeperVitalsFrom(character, stats, nil)
 	amount, valid := computePotionAmount(ref, stats.Level, stats.Strength, stats.Intellect, maxHP, maxMP)
 	if !valid {
 		return false

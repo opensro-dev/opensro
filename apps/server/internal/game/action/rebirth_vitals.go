@@ -32,10 +32,11 @@ maximum down before calculating the recovery.
 ================
 */
 func (rt *Runtime) presentRebirthVitals(division string, character *enterworld.Character) (hp, mp int64) {
-	maxHP, maxMP, _, currentMP := rt.playerKeeperVitals(division, character)
+	stats, _, err := rt.playerCombatStats(division, character)
+	maxHP, maxMP, _, currentMP := keeperVitalsFrom(character, stats, err)
 	hpMaximum, mpMaximum := float32(maxHP), float32(maxMP)
 	var hpReduction, mpReduction float32
-	if stats, _, err := rt.playerCombatStats(division, character); err == nil {
+	if err == nil {
 		if value, ok := stats.Param(3); ok && value > 0 {
 			hpMaximum = value
 		}

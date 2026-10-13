@@ -35,7 +35,7 @@ func (rt *Runtime) RecoverLevelVitals(division string, character *enterworld.Cha
 	if err != nil {
 		return err
 	}
-	maxHP, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, character)
+	maxHP, maxMP, currentHP, currentMP := keeperVitalsFrom(character, stats, nil)
 	hpReduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
 	mpReduction, _ := stats.Param(combat.MPRecoveryReductionParameter)
 	hp := combat.RecoverVital(currentHP, maxHP, maxHP-currentHP, hpReduction)

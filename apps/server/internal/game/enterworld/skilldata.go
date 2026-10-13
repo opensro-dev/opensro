@@ -547,6 +547,31 @@ func (t *TextdataSkills) SkillByID(id uint32) (SkillRow, bool) {
 }
 
 /*
+================
+SkillGroupRank
+
+The same row's group and level as SkillByID answers, without building the
+row (SkillGroupRanker).
+================
+*/
+func (t *TextdataSkills) SkillGroupRank(id uint32) (group uint32, level int64, ok bool) {
+	t.once.Do(t.load)
+	return t.rows.groupRank(id)
+}
+
+/*
+================
+SkillGroupRanker
+
+An optional SkillDataSource capability: a skill's group and level without
+its whole row. Sources that lack it are read through SkillByID.
+================
+*/
+type SkillGroupRanker interface {
+	SkillGroupRank(id uint32) (group uint32, level int64, ok bool)
+}
+
+/*
 ==================
 SkillByCodename
 

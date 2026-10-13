@@ -415,6 +415,28 @@ func (s *skillStorage) lookup(id uint32) (SkillRow, bool) {
 
 /*
 ================
+groupRank
+
+The row's skill group and level without materializing the row. value()
+builds the whole SkillRow (dozens of fields, several decoded), and the
+stats projection only needs these two for every learned skill (2026-10-13
+prod profile: residentSkill.value plus lookup were 12% of the GameWorld).
+================
+*/
+func (s *skillStorage) groupRank(id uint32) (group uint32, level int64, ok bool) {
+	if s.archive != nil {
+		row, found := s.archive.Get(id)
+		return row.Group, row.Level, found
+	}
+	r, found := s.hot[id]
+	if !found {
+		return 0, 0, false
+	}
+	return r.Group, r.Level, true
+}
+
+/*
+================
 get
 ================
 */

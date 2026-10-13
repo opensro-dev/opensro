@@ -154,7 +154,7 @@ func (rt *Runtime) planPlayerHit(in playerHitInput) (playerHit, bool) {
 	if err != nil {
 		return playerHit{}, false
 	}
-	_, _, hp, _ := rt.playerKeeperVitals(in.division, victim)
+	_, _, hp, _ := keeperVitalsFrom(victim, defender, nil)
 	h := playerHit{target: in.target, defender: defender, kill: rt.classifyPlayerKill(in.division, in.caster, victim)}
 	h.strike = playerStrike{division: in.division, victim: in.target.player, killer: deathKiller{player: in.caster},
 		skill: in.skill, impacts: in.impacts, now: in.now}

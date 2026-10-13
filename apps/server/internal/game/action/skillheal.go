@@ -59,7 +59,7 @@ func (rt *Runtime) skillHealAmounts(division string, recipient, caster *enterwor
 	if err != nil {
 		return 0, 0, false
 	}
-	maxHP, maxMP, _, _ := rt.playerKeeperVitals(division, recipient)
+	maxHP, maxMP, _, _ := keeperVitalsFrom(recipient, stats, nil)
 
 	heal := skill.Heal
 	var up uint32
@@ -289,7 +289,7 @@ func (rt *Runtime) applySkillRecovery(division string, who *enterworld.Character
 		return wire.Frame{}, true
 	}
 
-	maxHP, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, who)
+	maxHP, maxMP, currentHP, currentMP := keeperVitalsFrom(who, stats, nil)
 	hpReduction, _ := stats.Param(combat.HPRecoveryReductionParameter)
 	mpReduction, _ := stats.Param(combat.MPRecoveryReductionParameter)
 	nextHP := combat.RecoverVital(currentHP, maxHP, hp, hpReduction)

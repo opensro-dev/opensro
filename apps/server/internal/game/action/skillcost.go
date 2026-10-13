@@ -74,14 +74,14 @@ caster's keeper maximum (param 4), stored current MP and parameter 0x8D.
 ================
 */
 func (rt *Runtime) offensiveResourceCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, uint16) {
-	maxHP, maxMP, currentHP, currentMP := rt.playerKeeperVitals(division, c)
+	stats, _, err := rt.playerCombatStats(division, c)
+	maxHP, maxMP, currentHP, currentMP := keeperVitalsFrom(c, stats, err)
 	if refusal := hpCostRefusal(currentHP, maxHP, skill); refusal != 0 {
 		return 0, refusal
 	}
 	// A row that costs no MP is free at any rate; only a cost reads it.
 	rate := float32(combat.FullMPConsumptionRate)
 	if skill.Consumption.MP != 0 || skill.Consumption.MPPercent != 0 {
-		stats, _, err := rt.playerCombatStats(division, c)
 		if err != nil {
 			return 0, 0x3003
 		}
@@ -255,11 +255,11 @@ SkillActionHandler (589B50), does not. The rate is 100 until a dcmp buff
 ==================
 */
 func (rt *Runtime) preparedExecutionMPCost(division string, c *enterworld.Character, skill enterworld.SkillRow) (int64, error) {
-	_, _, _, currentMP := rt.playerKeeperVitals(division, c)
 	stats, _, err := rt.playerCombatStats(division, c)
 	if err != nil {
 		return 0, err
 	}
+	_, _, _, currentMP := keeperVitalsFrom(c, stats, nil)
 	cost := combat.PreparedCost(uint32(currentMP), skill.Consumption.MP,
 		skill.Consumption.MPPercent, skill.TimedEffect.Pinned, true, combat.MPConsumptionRate(stats))
 	if skill.ActionHandler != enterworld.SkillActionProjectile {

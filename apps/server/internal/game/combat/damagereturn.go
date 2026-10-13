@@ -78,15 +78,20 @@ func learnedDamageReturn(c *domain.Character, skills enterworld.SkillDataSource,
 	if skills == nil {
 		return enterworld.SkillDamageReturn{}, 0
 	}
-	current := learnedGroupRanks(c, skills)
-	for _, id := range c.Skills {
-		row, ok := skills.SkillByID(id)
-		if !ok {
-			continue
-		}
-		if rank, exists := current[row.Group]; !exists || rank.id != id {
-			continue
-		}
+	rows := takeRankRows(c, skills)
+	defer releaseRankRows(rows)
+	return learnedDamageReturnFrom(c, *rows, items)
+}
+
+/*
+================
+learnedDamageReturnFrom
+
+learnedDamageReturn over the selected rank rows (learnedRankRows).
+================
+*/
+func learnedDamageReturnFrom(c *domain.Character, rows []enterworld.SkillRow, items enterworld.ItemRefSource) (enterworld.SkillDamageReturn, uint32) {
+	for _, row := range rows {
 		p := row.PassiveParameters
 		if !p.Pinned || !p.DamageReturn.Present || row.ChainSub ||
 			row.Reqi.Present && ReqiRefusal(c, items, row.Reqi) != 0 {

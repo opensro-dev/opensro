@@ -87,8 +87,26 @@ func (rt *Runtime) playerKeeperVitals(division string, c *enterworld.Character) 
 	if c == nil {
 		return 0, 0, 0, 0
 	}
+	stats, _, err := rt.playerCombatStats(division, c)
+	return keeperVitalsFrom(c, stats, err)
+}
+
+/*
+==================
+keeperVitalsFrom
+
+playerKeeperVitals over a projection the caller already holds, so an
+operation that needs both the stats and the gauge builds the stats once
+(2026-10-13 prod profile: the rebuild ran twice per cast). err is that
+projection's error; on error the derived maxima stand, as before.
+==================
+*/
+func keeperVitalsFrom(c *enterworld.Character, stats combat.Stats, err error) (maxHP, maxMP, currentHP, currentMP int64) {
+	if c == nil {
+		return 0, 0, 0, 0
+	}
 	maxHP, maxMP = enterworld.DerivedMaxHP(c), enterworld.DerivedMaxMP(c)
-	if stats, _, err := rt.playerCombatStats(division, c); err == nil {
+	if err == nil {
 		if hp, ok := stats.Param(3); ok && hp > 0 {
 			maxHP = int64(hp)
 		}

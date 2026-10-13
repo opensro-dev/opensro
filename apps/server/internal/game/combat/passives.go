@@ -17,6 +17,8 @@ package combat
 
 import (
 	"fmt"
+	"sync"
+
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
 	"opensro.online/server/internal/game/enterworld"
@@ -46,15 +48,100 @@ value, and a map of rows allocated its buckets on every stats projection
 func learnedGroupRanks(c *domain.Character, skills enterworld.SkillDataSource) map[uint32]groupRank {
 	ranks := make(map[uint32]groupRank, len(c.Skills))
 	for _, id := range c.Skills {
+		group, level, ok := skillGroupRank(skills, id)
+		if !ok {
+			continue
+		}
+		if previous, exists := ranks[group]; !exists || level > previous.level {
+			ranks[group] = groupRank{id: id, level: level}
+		}
+	}
+	return ranks
+}
+
+/*
+==================
+skillGroupRank
+
+A skill's group and level, through the source's light accessor when it has
+one (enterworld.SkillGroupRanker) so no whole row is built. The row's ID is
+the id it is looked up by.
+==================
+*/
+func skillGroupRank(skills enterworld.SkillDataSource, id uint32) (uint32, int64, bool) {
+	if ranker, ok := skills.(enterworld.SkillGroupRanker); ok {
+		return ranker.SkillGroupRank(id)
+	}
+	row, ok := skills.SkillByID(id)
+	return row.Group, row.Level, ok
+}
+
+/*
+==================
+learnedRankRows
+
+The row of each learned group's highest rank, in c.Skills order: the one
+list every passive projection walks (passives, status resistance, damage
+return). Built once per stats projection, so each selected row is built
+once instead of every learned row being built four times (2026-10-13 prod
+profile: about 11% of the GameWorld). The selection is exactly the one the
+projections made each on their own: the first id in c.Skills that holds
+its group's highest rank, that group then taken. Rows are appended to
+into[:0], so a caller can hand back a scratch buffer (takeRankRows).
+==================
+*/
+func learnedRankRows(c *domain.Character, skills enterworld.SkillDataSource, into []enterworld.SkillRow) []enterworld.SkillRow {
+	current := learnedGroupRanks(c, skills)
+	rows := into[:0]
+	for _, id := range c.Skills {
+		group, _, ok := skillGroupRank(skills, id)
+		if !ok {
+			continue
+		}
+		if rank, exists := current[group]; !exists || rank.id != id {
+			continue
+		}
+		delete(current, group)
 		row, ok := skills.SkillByID(id)
 		if !ok {
 			continue
 		}
-		if previous, exists := ranks[row.Group]; !exists || row.Level > previous.level {
-			ranks[row.Group] = groupRank{id: row.ID, level: row.Level}
-		}
+		rows = append(rows, row)
 	}
-	return ranks
+	return rows
+}
+
+// rankRowScratch recycles the selected-row buffers. A SkillRow is about
+// 1.5 KB, so a fresh slice per stats projection allocated ten times what
+// the old per-row stack copies did.
+var rankRowScratch = sync.Pool{New: func() any { return new([]enterworld.SkillRow) }}
+
+/*
+==================
+takeRankRows
+
+learnedRankRows into a pooled buffer. The caller copies what it keeps out
+of the rows and returns the buffer with releaseRankRows.
+==================
+*/
+func takeRankRows(c *domain.Character, skills enterworld.SkillDataSource) *[]enterworld.SkillRow {
+	buf := rankRowScratch.Get().(*[]enterworld.SkillRow)
+	*buf = learnedRankRows(c, skills, *buf)
+	return buf
+}
+
+/*
+==================
+releaseRankRows
+
+Clears the rows so the pool holds no references into the skill table, then
+returns the buffer.
+==================
+*/
+func releaseRankRows(buf *[]enterworld.SkillRow) {
+	clear(*buf)
+	*buf = (*buf)[:0]
+	rankRowScratch.Put(buf)
 }
 
 /*
@@ -76,20 +163,23 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 	if skills == nil {
 		return nil, enterworld.SkillParameterValues{}, fmt.Errorf("combat: learned skills require skill references")
 	}
-	current := learnedGroupRanks(c, skills)
+	rows := takeRankRows(c, skills)
+	defer releaseRankRows(rows)
+	return learnedPassivesFrom(c, *rows, items, weaponKind)
+}
+
+/*
+==================
+learnedPassivesFrom
+
+learnedPassives over the selected rank rows (learnedRankRows).
+==================
+*/
+func learnedPassivesFrom(c *domain.Character, rows []enterworld.SkillRow, items enterworld.ItemRefSource, weaponKind uint8) ([]paramkeeper.Write, enterworld.SkillParameterValues, error) {
 	var writes []paramkeeper.Write
 	var source uint32 = 2048
 	var power enterworld.SkillParameterValues
-	for _, id := range c.Skills {
-		row, ok := skills.SkillByID(id)
-		if !ok {
-			continue
-		}
-		if rank, exists := current[row.Group]; !exists || rank.id != id {
-			continue
-		}
-		delete(current, row.Group)
-		selected := row
+	for _, selected := range rows {
 		source++ // distinct from parameter and equipment projection identities
 		// 59F0E0: a passive whose reqi the equipment fails contributes
 		// nothing - its setv entries, keeper writes and resistances alike.
@@ -170,22 +260,25 @@ every other passive contribution.
 ==================
 */
 func learnedStatusResistance(c *domain.Character, skills enterworld.SkillDataSource, items enterworld.ItemRefSource) [17]abnormal.Resistance {
+	if skills == nil {
+		return [17]abnormal.Resistance{}
+	}
+	rows := takeRankRows(c, skills)
+	defer releaseRankRows(rows)
+	return learnedStatusResistanceFrom(c, *rows, items)
+}
+
+/*
+==================
+learnedStatusResistanceFrom
+
+learnedStatusResistance over the selected rank rows (learnedRankRows).
+==================
+*/
+func learnedStatusResistanceFrom(c *domain.Character, rows []enterworld.SkillRow, items enterworld.ItemRefSource) [17]abnormal.Resistance {
 	var out [17]abnormal.Resistance
 	var filed [17]bool
-	if skills == nil {
-		return out
-	}
-	current := learnedGroupRanks(c, skills)
-	for _, id := range c.Skills {
-		row, ok := skills.SkillByID(id)
-		if !ok {
-			continue
-		}
-		if rank, exists := current[row.Group]; !exists || rank.id != id {
-			continue
-		}
-		delete(current, row.Group)
-		selected := row
+	for _, selected := range rows {
 		rs := selected.PassiveParameters.Real
 		if !selected.PassiveParameters.Pinned || selected.ChainSub || rs.Mask == 0 ||
 			selected.Reqi.Present && ReqiRefusal(c, items, selected.Reqi) != 0 {

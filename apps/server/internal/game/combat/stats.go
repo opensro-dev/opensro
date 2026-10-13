@@ -301,13 +301,31 @@ func PlayerStatsWithModifiers(
 		return Stats{}, Loadout{}, err
 	}
 	writes = append(writes, avatarWrites...)
-	passives, power, err := learnedPassives(character, skills, catalogs.Items, passiveWeaponKind)
-	if err != nil {
-		return Stats{}, Loadout{}, err
+	// One rank selection feeds all three passive projections (learnedRankRows).
+	// Without learned skills or skill references the wrappers answer their
+	// empty or error results exactly as before.
+	var passives []paramkeeper.Write
+	var power enterworld.SkillParameterValues
+	if len(character.Skills) == 0 || skills == nil {
+		passives, power, err = learnedPassives(character, skills, catalogs.Items, passiveWeaponKind)
+		if err != nil {
+			return Stats{}, Loadout{}, err
+		}
+		out.StatusResistance = learnedStatusResistance(character, skills, catalogs.Items)
+		out.DamageReturn, out.DamageReturnSkill = learnedDamageReturn(character, skills, catalogs.Items)
+	} else {
+		rows := takeRankRows(character, skills)
+		passives, power, err = learnedPassivesFrom(character, *rows, catalogs.Items, passiveWeaponKind)
+		if err == nil {
+			out.StatusResistance = learnedStatusResistanceFrom(character, *rows, catalogs.Items)
+			out.DamageReturn, out.DamageReturnSkill = learnedDamageReturnFrom(character, *rows, catalogs.Items)
+		}
+		releaseRankRows(rows)
+		if err != nil {
+			return Stats{}, Loadout{}, err
+		}
 	}
 	out.SkillParameters = power
-	out.StatusResistance = learnedStatusResistance(character, skills, catalogs.Items)
-	out.DamageReturn, out.DamageReturnSkill = learnedDamageReturn(character, skills, catalogs.Items)
 	writes = append(writes, passives...)
 	// Source identity belongs to an application, not a parameter number. A
 	// modifier must not alias even a different parameter of a static owner.
