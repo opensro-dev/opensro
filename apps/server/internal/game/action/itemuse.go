@@ -474,6 +474,12 @@ func (rt *Runtime) HandleItemUse(
 				Mounted:          true,
 				StateFlags:       3,
 			}
+			// 4404A1..4404DA: the creation arm keeps the reference capacity
+			// (+0x224) for everything but pets, so a transport carries a
+			// cargo bag of its authored size; a riding horse authors none.
+			if cosRef.InventoryCapacity > 0 {
+				pet.Container = &domain.COSContainer{Capacity: cosRef.InventoryCapacity}
+			}
 			// Validate the complete private record before inventory debit. Native
 			// 4FB2C0 automatically binds both riding and transport vehicles.
 			record, recordErr := enterworld.BuildCOSRecord(pet, cosRef, rt.deps.ItemReferences())
