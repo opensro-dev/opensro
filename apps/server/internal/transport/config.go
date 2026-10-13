@@ -26,6 +26,7 @@ const (
 	KeyMaxAccountSess  = "transport.max_sessions_per_account"
 	KeyMaxHandshakes   = "transport.max_pending_handshakes"
 	KeyPprof           = "transport.pprof"
+	KeyPprofAddr       = "transport.pprof_addr"
 )
 
 // Config tunes the transport server. Zero fields take the defaults below.
@@ -97,11 +98,12 @@ type Config struct {
 	// goroutine for the full HelloTimeout. 0 takes the default.
 	MaxPendingHandshakes int
 
-	// EnablePprof registers net/http/pprof on the transport's TCP mux
-	// (/debug/pprof/). OFF by default and opt-in only (transport.pprof /
-	// TRANSPORT_PPROF=1). The TCP listener is loopback-only, so profiling
-	// data never rides a public socket.
+	// EnablePprof serves net/http/pprof (/debug/pprof/) on its own
+	// listener at PprofAddr (pprof.go), never on the transport mux a proxy
+	// forwards to players. OFF unless set (transport.pprof /
+	// TRANSPORT_PPROF=1); PprofAddr must be a loopback host:port.
 	EnablePprof bool
+	PprofAddr   string
 }
 
 // DefaultMaxSessionsPerAccount allows a few browser tabs plus the sessions
@@ -195,6 +197,7 @@ func RegisterViperDefaults() {
 	viper.SetDefault(KeyMaxAccountSess, d.MaxSessionsPerAccount)
 	viper.SetDefault(KeyMaxHandshakes, d.MaxPendingHandshakes)
 	viper.SetDefault(KeyPprof, false)
+	viper.SetDefault(KeyPprofAddr, DefaultPprofAddr)
 
 	_ = viper.BindEnv(KeyEnabled, "TRANSPORT_ENABLED")
 	_ = viper.BindEnv(KeyWTAddr, "TRANSPORT_WT_ADDR")
@@ -211,6 +214,7 @@ func RegisterViperDefaults() {
 	_ = viper.BindEnv(KeyMaxAccountSess, "TRANSPORT_MAX_SESSIONS_PER_ACCOUNT")
 	_ = viper.BindEnv(KeyMaxHandshakes, "TRANSPORT_MAX_PENDING_HANDSHAKES")
 	_ = viper.BindEnv(KeyPprof, "TRANSPORT_PPROF")
+	_ = viper.BindEnv(KeyPprofAddr, "TRANSPORT_PPROF_ADDR")
 }
 
 // ConfigFromViper reads the transport config after RegisterViperDefaults.
@@ -232,6 +236,7 @@ func ConfigFromViper() Config {
 	cfg.MaxSessionsPerAccount = viper.GetInt(KeyMaxAccountSess)
 	cfg.MaxPendingHandshakes = viper.GetInt(KeyMaxHandshakes)
 	cfg.EnablePprof = viper.GetBool(KeyPprof)
+	cfg.PprofAddr = viper.GetString(KeyPprofAddr)
 	cfg.applyDefaults()
 	return cfg
 }

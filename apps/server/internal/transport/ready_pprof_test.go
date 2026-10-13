@@ -70,12 +70,13 @@ func TestPprofDisabledByDefault(t *testing.T) {
 	}
 }
 
-func TestPprofServesWhenEnabled(t *testing.T) {
+func TestPprofServesOnItsOwnLoopbackListenerOnly(t *testing.T) {
 	srv, err := transport.NewServer(transport.Config{
 		WTAddr:      "127.0.0.1:0",
 		WSAddr:      "127.0.0.1:0",
 		CertDir:     t.TempDir(),
 		EnablePprof: true,
+		PprofAddr:   "127.0.0.1:0",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -90,12 +91,37 @@ func TestPprofServesWhenEnabled(t *testing.T) {
 		srv.Shutdown(ctx)
 	})
 
-	url := fmt.Sprintf("http://%s/debug/pprof/", srv.WSAddr())
-	code, body := httpGet(t, url)
-	if code != http.StatusOK {
-		t.Fatalf("pprof on: GET /debug/pprof/ = %d, want 200", code)
+	if srv.PprofAddr() == "" || srv.PprofAddr() == srv.WSAddr() {
+		t.Fatalf("pprof listener %q must be its own, not the transport's %q", srv.PprofAddr(), srv.WSAddr())
 	}
-	if len(body) == 0 {
-		t.Fatal("pprof index answered an empty body")
+	code, body := httpGet(t, fmt.Sprintf("http://%s/debug/pprof/", srv.PprofAddr()))
+	if code != http.StatusOK || len(body) == 0 {
+		t.Fatalf("pprof on: GET /debug/pprof/ on its listener = %d (%d bytes), want 200", code, len(body))
+	}
+	// The transport mux a reverse proxy forwards to players never serves it.
+	if code, _ := httpGet(t, fmt.Sprintf("http://%s/debug/pprof/", srv.WSAddr())); code != http.StatusNotFound {
+		t.Fatalf("pprof on: GET /debug/pprof/ on the transport listener = %d, want 404", code)
+	}
+}
+
+func TestPprofRefusesANonLoopbackAddress(t *testing.T) {
+	for _, addr := range []string{"0.0.0.0:8792", "localhost:8792", "192.0.2.1:8792", ":8792"} {
+		srv, err := transport.NewServer(transport.Config{
+			WTAddr:      "127.0.0.1:0",
+			WSAddr:      "127.0.0.1:0",
+			CertDir:     t.TempDir(),
+			EnablePprof: true,
+			PprofAddr:   addr,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		installSmokeAdmissionVerifier(srv)
+		if err := srv.Start(); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			srv.Shutdown(ctx)
+			cancel()
+			t.Fatalf("pprof on %q started; a profiling listener must be loopback", addr)
+		}
 	}
 }

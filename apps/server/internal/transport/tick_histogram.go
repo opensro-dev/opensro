@@ -16,10 +16,11 @@ package transport
 import "time"
 
 // tickHistogramBoundsMs are the inclusive upper bounds of the whole-tick
-// buckets; one more bucket holds anything slower. Dense from 50 to 200 ms
-// so a percentile can be placed against the 100 ms budget.
+// buckets; one more bucket holds anything slower. Dense from 10 to 25 ms so
+// a percentile can be held to a 20 ms tick target, and from 50 to 200 ms so
+// it can be placed against the 100 ms budget.
 var tickHistogramBoundsMs = [...]float64{
-	2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 140, 160, 180, 200,
+	2, 5, 10, 12, 14, 16, 18, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 140, 160, 180, 200,
 	250, 300, 400, 500, 750, 1000, 2000,
 }
 

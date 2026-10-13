@@ -61,6 +61,9 @@ func TestDefaultDevStackIsTodaysStack(t *testing.T) {
 		if got := deployment.Shards[0].PublicAPIAddr; got != "127.0.0.1:8790" {
 			t.Fatalf("%q: public API %s", value, got)
 		}
+		if got := deployment.Shards[0].PprofAddr; got != "127.0.0.1:8792" {
+			t.Fatalf("%q: pprof %s", value, got)
+		}
 		want := []string{"agent", "-dev", "-log-level=INFO", "-config=" + options.config, "-data-dir=" + options.dataDir}
 		if options.platformConfig != "" {
 			want = append(want, "-config="+options.platformConfig)
@@ -91,6 +94,9 @@ func TestDevPortOffsetMovesTheWholeStack(t *testing.T) {
 	}
 	if got := deployment.Shards[0].PublicAPIAddr; got != "127.0.0.1:8890" {
 		t.Fatalf("public API %s", got)
+	}
+	if got := deployment.Shards[0].PprofAddr; got != "127.0.0.1:8892" {
+		t.Fatalf("pprof %s", got)
 	}
 	origins := options.stack.allowedOrigins()
 	if !strings.HasPrefix(origins, "http://127.0.0.1:5280,http://localhost:5280,http://127.0.0.1:4280,") ||

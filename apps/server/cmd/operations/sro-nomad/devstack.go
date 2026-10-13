@@ -30,6 +30,7 @@ import (
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/agent/provisioning"
 	"opensro.online/server/internal/agent/publicstats"
+	"opensro.online/server/internal/transport"
 )
 
 // EnvDevPortOffset names the setting: a whole number added to every local
@@ -153,6 +154,18 @@ The first shard's public read API listener.
 func (s devStack) publicAPIAddr() string {
 	host, _, _ := net.SplitHostPort(publicstats.DefaultAddr)
 	return net.JoinHostPort(host, strconv.Itoa(loopbackPort(publicstats.DefaultAddr)+s.offset))
+}
+
+/*
+================
+devStack.pprofAddr
+
+The first shard's loopback profiling listener (transport/pprof.go).
+================
+*/
+func (s devStack) pprofAddr() string {
+	host, _, _ := net.SplitHostPort(transport.DefaultPprofAddr)
+	return net.JoinHostPort(host, strconv.Itoa(loopbackPort(transport.DefaultPprofAddr)+s.offset))
 }
 
 /*

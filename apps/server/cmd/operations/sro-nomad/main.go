@@ -352,8 +352,8 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 	flags.BoolVar(
 		&options.Pprof,
 		"pprof",
-		false,
-		"serve /debug/pprof/ on the GameWorld loopback control listener (loopback host network only)",
+		true,
+		"serve /debug/pprof/ on the first GameWorld's own loopback listener (-pprof=false turns it off)",
 	)
 	flags.StringVar(&options.TaskUser, "task-user", "", "OS account the services run as (Linux: a dedicated unprivileged user)")
 	flags.IntVar(&options.AgentCPU, "agent-cpu", 0, "Agent CPU reservation in MHz (default: the job's)")

@@ -9,6 +9,7 @@ timing_test.go - request and tick phase histograms land in their buckets
 package transport
 
 import (
+	"runtime"
 	"testing"
 	"time"
 )
@@ -30,10 +31,10 @@ func TestTimingHistogramsBucketHandlersPhasesAndSlowHooks(t *testing.T) {
 	})
 	m := hub.Metrics()
 	move := m.HandlerMs["0x7738"]
-	if move.Buckets != [6]uint64{1, 0, 0, 1, 0, 1} || move.MaxMs != 2000 {
+	if !equalCounts(move.Buckets, []uint64{0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1}) || move.MaxMs != 2000 {
 		t.Fatalf("handler histogram = %+v", move)
 	}
-	if m.TickPhaseMs["divisions"].Buckets[1] != 1 || m.TickPhaseMs["hooks"].Buckets[4] != 1 || m.TickPhaseMs["total"].MaxMs != 332 {
+	if m.TickPhaseMs["divisions"].Buckets[6] != 1 || m.TickPhaseMs["hooks"].Buckets[9] != 1 || m.TickPhaseMs["total"].MaxMs != 332 {
 		t.Fatalf("tick phases = %+v", m.TickPhaseMs)
 	}
 	if slow := m.SlowHooks["action.(*Runtime).TickHook.func1"]; slow.Count != 1 || slow.MaxMs != 300 {
@@ -89,7 +90,76 @@ func TestTickCommitsAreCounted(t *testing.T) {
 	if m.TickCommit != want {
 		t.Fatalf("tick commit = %+v, want %+v", m.TickCommit, want)
 	}
-	if m.TickPhaseMs["commit"].Buckets != [6]uint64{1, 1, 0, 0, 0, 0} {
+	if !equalCounts(m.TickPhaseMs["commit"].Buckets, []uint64{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0}) {
 		t.Fatalf("commit histogram = %+v", m.TickPhaseMs["commit"])
+	}
+}
+
+/*
+================
+equalCounts
+================
+*/
+func equalCounts(got, want []uint64) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+/*
+================
+TestTimingPercentilesReadTheirBucketBound
+
+A handler held to a few milliseconds: 990 answers at 0.8 ms and 10 at
+12 ms put p50 and p99 at the 1 ms bound and p999 in the 16 ms bucket,
+read as 12 ms because a bound never reads above the largest sample. One
+3 s answer then lands in the open bucket and stays visible as max.
+================
+*/
+func TestTimingPercentilesReadTheirBucketBound(t *testing.T) {
+	hub := newHub(testCfg())
+	for i := 0; i < 990; i++ {
+		hub.metrics.timing.recordHandler(0x72cd, 800*time.Microsecond)
+	}
+	for i := 0; i < 10; i++ {
+		hub.metrics.timing.recordHandler(0x72cd, 12*time.Millisecond)
+	}
+	h := hub.Metrics().HandlerMs["0x72CD"]
+	if h.P50Ms != 1 || h.P99Ms != 1 || h.P999Ms != 12 {
+		t.Fatalf("percentiles = p50 %v p99 %v p999 %v, want 1 1 12", h.P50Ms, h.P99Ms, h.P999Ms)
+	}
+	if len(h.BoundsMs) != len(h.Buckets)-1 {
+		t.Fatalf("bounds %v do not describe buckets %v", h.BoundsMs, h.Buckets)
+	}
+	hub.metrics.timing.recordHandler(0x72cd, 3*time.Second)
+	h = hub.Metrics().HandlerMs["0x72CD"]
+	if h.MaxMs != 3000 || h.Buckets[len(h.Buckets)-1] != 1 {
+		t.Fatalf("slow answer = %+v", h)
+	}
+}
+
+/*
+================
+TestMetricsServeTheRuntimeStats
+
+The runtime block reads live values: a running process has goroutines, a
+live heap and a heap goal, and after a forced collection at least one GC
+cycle with a measurable pause.
+================
+*/
+func TestMetricsServeTheRuntimeStats(t *testing.T) {
+	runtime.GC()
+	stats := newHub(testCfg()).Metrics().Runtime
+	if stats.Goroutines == 0 || stats.HeapLiveBytes == 0 || stats.HeapGoalBytes == 0 || stats.GCCycles == 0 {
+		t.Fatalf("runtime stats = %+v", stats)
+	}
+	if stats.GCPauseMaxMs <= 0 || stats.GCPauseP99Ms <= 0 || stats.GCPauseP99Ms > stats.GCPauseMaxMs {
+		t.Fatalf("gc pauses = p99 %v max %v", stats.GCPauseP99Ms, stats.GCPauseMaxMs)
 	}
 }

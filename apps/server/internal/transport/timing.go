@@ -7,9 +7,10 @@ A session's frames are read and dispatched on one goroutine, PING included,
 so a handler that waits on a lock delays every later frame and heartbeat of
 that client; a slow simulation tick delays every client's replies. The
 watchdog (simulation/tick_watchdog.go) names ticks longer than a second;
-these histograms show the 16-1000 ms band a player already sees as a snap
-at 60 Hz movement. Buckets are fixed and maps are bounded: handlers by the
-registered opcodes, slow hooks by hook function names.
+these histograms show the 1-1000 ms band, fine below 16 ms (a frame at
+60 Hz) so a handler or a tick phase can be held to a few milliseconds.
+Buckets are fixed and maps are bounded: handlers by the registered opcodes,
+slow hooks by hook function names.
 
 ===========================================================================
 */
@@ -24,27 +25,30 @@ import (
 	"time"
 )
 
-// Upper bounds of the histogram buckets; one more bucket holds the rest.
-const (
-	timingBucket0Ms = 16
-	timingBucket1Ms = 50
-	timingBucket2Ms = 100
-	timingBucket3Ms = 250
-	timingBucket4Ms = 1000
-	timingBuckets   = 6
-)
+// timingBoundsMs are the inclusive upper bounds of the handler and phase
+// buckets; one more bucket holds the rest. Fine below 16 ms so a handler's
+// p99 can be read against a 10 ms target, then coarse up to a second.
+var timingBoundsMs = [...]float64{1, 2, 5, 10, 16, 25, 50, 100, 250, 1000}
+
+const timingBuckets = len(timingBoundsMs) + 1
 
 /*
 ================
 Histogram
 
-Counts per bucket (<=16, <=50, <=100, <=250, <=1000, >1000 ms) and the
-largest sample; the snapshot form served on /transport/metrics.
+Counts per bucket (the last count is above the last bound), the bounds
+they use, the largest sample, and the percentiles read as their bucket's
+upper bound (the largest sample when they fall in the open last bucket);
+the snapshot form served on /transport/metrics.
 ================
 */
 type Histogram struct {
-	Buckets [timingBuckets]uint64 `json:"buckets"`
-	MaxMs   float64               `json:"max_ms"`
+	BoundsMs []float64 `json:"bounds_ms"`
+	Buckets  []uint64  `json:"buckets"`
+	MaxMs    float64   `json:"max_ms"`
+	P50Ms    float64   `json:"p50_ms"`
+	P99Ms    float64   `json:"p99_ms"`
+	P999Ms   float64   `json:"p999_ms"`
 }
 
 /*
@@ -66,17 +70,10 @@ timingBucket
 ================
 */
 func timingBucket(ms float64) int {
-	switch {
-	case ms <= timingBucket0Ms:
-		return 0
-	case ms <= timingBucket1Ms:
-		return 1
-	case ms <= timingBucket2Ms:
-		return 2
-	case ms <= timingBucket3Ms:
-		return 3
-	case ms <= timingBucket4Ms:
-		return 4
+	for i, bound := range timingBoundsMs {
+		if ms <= bound {
+			return i
+		}
 	}
 	return timingBuckets - 1
 }
@@ -103,12 +100,45 @@ liveHistogram.snapshot
 ================
 */
 func (h *liveHistogram) snapshot() Histogram {
-	var out Histogram
+	out := Histogram{BoundsMs: timingBoundsMs[:], Buckets: make([]uint64, timingBuckets)}
 	for i := range h.buckets {
 		out.Buckets[i] = h.buckets[i].Load()
 	}
 	out.MaxMs = math.Float64frombits(h.maxBits.Load())
+	out.P50Ms = timingPercentile(out, 0.5)
+	out.P99Ms = timingPercentile(out, 0.99)
+	out.P999Ms = timingPercentile(out, 0.999)
 	return out
+}
+
+/*
+================
+timingPercentile
+
+The upper bound of the bucket holding the q-th sample, or the largest
+sample when it falls in the open last bucket; 0 with no samples.
+================
+*/
+func timingPercentile(h Histogram, q float64) float64 {
+	var total uint64
+	for _, n := range h.Buckets {
+		total += n
+	}
+	if total == 0 {
+		return 0
+	}
+	rank := uint64(math.Ceil(q * float64(total)))
+	var seen uint64
+	for i, n := range h.Buckets {
+		seen += n
+		if seen >= rank {
+			if i < len(h.BoundsMs) {
+				return min(h.BoundsMs[i], h.MaxMs)
+			}
+			return h.MaxMs
+		}
+	}
+	return h.MaxMs
 }
 
 /*

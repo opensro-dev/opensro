@@ -97,11 +97,17 @@ variable "private_network" {
   default = "0"
 }
 
-# "1" serves /debug/pprof/ on the loopback control listener (sro-nomad
-# deploy -pprof, loopback clusters only).
+# "1" serves /debug/pprof/ on its own loopback listener at pprof_addr
+# (transport/pprof.go; sro-nomad deploy -pprof, on by default for the first
+# shard). The address must be a loopback IP; the GameWorld refuses any other.
 variable "transport_pprof" {
   type    = string
   default = "0"
+}
+
+variable "pprof_addr" {
+  type    = string
+  default = "127.0.0.1:8792"
 }
 
 variable "allowed_origins" {
@@ -532,6 +538,7 @@ job "sro-gameworld-__SHARD_ID__" {
         TRANSPORT_ALLOWED_ORIGINS          = var.allowed_origins
         SRO_TRANSPORT_TLS_ID               = var.transport_tls_id
         TRANSPORT_PPROF                    = var.transport_pprof
+        TRANSPORT_PPROF_ADDR               = var.pprof_addr
         SRO_RELEASE_ID                     = var.release_id
       }
 

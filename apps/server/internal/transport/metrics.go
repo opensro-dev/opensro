@@ -145,6 +145,9 @@ type Metrics struct {
 	// MonsterNavigation is the world's route-plan and path-clip counters
 	// (simulation.NavigationMetrics), when the GameWorld installed them.
 	MonsterNavigation map[string]uint64 `json:"monster_navigation,omitempty"`
+	// Runtime is the Go runtime's GC pauses, scheduling latency, heap and
+	// goroutines since start (runtime_stats.go).
+	Runtime RuntimeStats `json:"runtime"`
 }
 
 /*
@@ -239,6 +242,7 @@ func (h *Hub) Metrics() Metrics {
 	if read := h.navigationMetrics.Load(); read != nil && *read != nil {
 		metrics.MonsterNavigation = (*read)()
 	}
+	metrics.Runtime = runtimeStats()
 	return metrics
 }
 
