@@ -3,11 +3,14 @@
 invites.js - the Invite keys page: make, find and revoke the website's keys
 
 Keys are shown in full only in the answer that made them (the website
-stores hashes), so the made-keys panel is the one chance to copy them.
+stores hashes), so the made-keys panel is the one chance to copy them. A
+key for a Discord member is a grant the member collects from the bot, so
+it shows no code at all (invite-made.js).
 Revoking takes two clicks on the same button. Nothing here sees the
 console's secret: the page talks to /api/invites on this console.
 ===========================================================================
 */
+import { madeStatus } from "./invite-made.js";
 import { escape } from "./model.js";
 import { postJSON, requestJSON } from "./request.js";
 
@@ -97,13 +100,16 @@ The keys just made, with copy buttons, and for a member every key they have.
 */
 function showMade( result, member ) {
 	byID( "made" ).hidden = false;
-	byID( "made-list" ).innerHTML = result.keys.map( key =>
-		`<li>
+	// A grant has no code to copy; the bot hands it to the member.
+	byID( "made-list" ).innerHTML = result.granted ?
+		`<li>${escape( madeStatus( result ) )}</li>` :
+		result.keys.map( key =>
+			`<li>
 		<code>${escape( key.code )}</code>
 		<button class="button" type="button" data-copy="${escape( key.code )}">Copy key</button>
 		<button class="button" type="button" data-copy="${escape( key.signupUrl )}">Copy signup link</button>
 	</li>`
-	).join( "" );
+		).join( "" );
 	const linked = byID( "linked" );
 	linked.hidden = !result.linked;
 	if ( !result.linked ) return;
@@ -133,7 +139,7 @@ byID( "create" ).addEventListener( "submit", async event => {
 			...(member ? { discordUserId: member, discordName: byID( "discord-name" ).value.trim() } : {})
 		} );
 		showMade( result, member );
-		setStatus( `Made ${result.keys.length} ${result.keys.length === 1 ? "key" : "keys"}. Copy them now.` );
+		setStatus( madeStatus( result ) );
 		await load();
 	} catch ( error ) {
 		setStatus( error.message );

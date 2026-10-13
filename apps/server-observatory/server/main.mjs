@@ -72,6 +72,7 @@ for (
 		"history-view.js",
 		"history.css",
 		"invites.js",
+		"invite-made.js",
 		"invites.css",
 		"request.js"
 	]
