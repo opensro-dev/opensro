@@ -38,10 +38,14 @@ import { bootstrapSource, simulationWorkerPath, startHeadlessSimulation } from "
 
 const GATE_FORMAT = "headless-gate-v1";
 // The whole gate, and each of its waits, is bounded. A release that cannot
-// boot, log in, enter the world and act within these is not ready.
-const GATE_BUDGET_MS = 30_000;
+// boot, log in, enter the world and act within these is not ready. The
+// budgets cover a gate run from the operator's own machine: with no GitHub
+// Actions runner, each request from there is a ~1.35 s cold round trip
+// (0.93 s of it the TLS handshake), against 0.03 s from the host. F6's
+// operator runs took 25 to 28 s before the last phase (2026-10-13).
+const GATE_BUDGET_MS = 90_000;
 const BOOT_BUDGET_MS = 30_000;
-const STEP_BUDGET_MS = 15_000;
+const STEP_BUDGET_MS = 30_000;
 const MOVE_BUDGET_MS = 8_000;
 // A short, server-confirmed move and back: small enough to stay walkable in
 // the probe's town, large enough to be a real movement.
