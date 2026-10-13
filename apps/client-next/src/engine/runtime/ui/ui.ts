@@ -321,7 +321,7 @@ import {
 	isMainPopupPage,
 	type MainPopupPage
 } from "@/engine/foundation/ui/main-popup";
-import { isUiPanel, type UiPanel } from "@/engine/foundation/ui/panels";
+import { closedPanel, isUiPanel, panelCloseId, type PanelCloseId, type UiPanel } from "@/engine/foundation/ui/panels";
 import { moneyPresentation } from "@/engine/foundation/ui/money-presentation";
 import { groundItemName, groundItemNameVisible } from "@/engine/foundation/ui/ground-item-label";
 import {
@@ -574,6 +574,12 @@ import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/con
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
 import type { EntityState } from "@/engine/contracts/world";
 import type { UiTexture } from "@/engine/contracts/texture";
+
+// A window frame's close control is named after its window: a panel's own
+// panelCloseId, or a service window's "<window>-close" (a stall visitor
+// leaves). A bare "close" is not one: shared by every frame, it was unique
+// only while a single window showed.
+type CloseControlId = PanelCloseId | `${string}-close` | "stall-leave";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
@@ -3726,9 +3732,7 @@ export function createUi(
 		} else if ( id === "system-exit" ) {
 			setPanel( "" );
 			commands( { kind: "exit" } );
-		} else if (
-			id === "close" || id === "companion-close" || id === "cos-companion-close" || id === "potion-cancel"
-		) {
+		} else if ( closedPanel( id ) !== undefined || id === "companion-close" || id === "potion-cancel" ) {
 			confirmDrop = "";
 			confirmAbandon = false;
 			// Closing the shop or the warehouse, or the inventory or transport bag
@@ -7657,7 +7661,9 @@ export function createUi(
 						controls.push(
 							...admittedWindow.controls.map( c => ({
 								...c,
-								disabled: c.id === "close" || c.id.startsWith( "select-window:" ) ? c.disabled : true
+								disabled: closedPanel( c.id ) !== undefined || c.id.startsWith( "select-window:" ) ?
+									c.disabled :
+									true
 							}) )
 						);
 					}
@@ -7746,7 +7752,7 @@ export function createUi(
 			closeButton
 			================
 			*/
-			function closeButton( x: number, y: number, id = "close" ) {
+			function closeButton( x: number, y: number, id: CloseControlId ) {
 				const r: UiRect = [ x, y, 16, 16 ];
 				blocks.push( r );
 				controls.push( { id, label: "Close", rect: r, kind: "button" } );
@@ -8446,7 +8452,13 @@ export function createUi(
 			nativeFrame
 			================
 			*/
-			function nativeFrame( node: AuthoredControl, px: number, py: number, caption: string, closeId = "close" ) {
+			function nativeFrame(
+				node: AuthoredControl,
+				px: number,
+				py: number,
+				caption: string,
+				closeId: CloseControlId
+			) {
 				const r: UiRect = [ px, py, node.rect[2], node.rect[3] ];
 				blocks.push( r );
 				paths.push( ...PARTS.map( p => node.texture + p + ".png" ) );
@@ -8663,7 +8675,7 @@ export function createUi(
 				closeButton(
 					px + 362,
 					py + 10,
-					page === "Inventory" && panel !== "Inventory" ? "companion-close" : "close"
+					page === "Inventory" && panel !== "Inventory" ? "companion-close" : panelCloseId( page )
 				);
 				quads.push(
 					...text.quads( hudCopy( caption ), [ px + 10, py + 12, 367, 12 ], full, white, {
@@ -10366,7 +10378,7 @@ export function createUi(
 							);
 						authoredLabeledButton( node, mx, my, "map-follow", caption );
 					}
-					closeButton( mx + mw - 25, my + 10 );
+					closeButton( mx + mw - 25, my + 10, panelCloseId( "Map" ) );
 					endWindow( admission );
 				}
 				if ( hudData && (!compact || compact.overlay === "map") ) {
@@ -10515,7 +10527,7 @@ export function createUi(
 							vAlign: 0
 						} )
 					);
-					closeButton( sx + 188, sy + 10 );
+					closeButton( sx + 188, sy + 10, panelCloseId( "System" ) );
 					for ( const node of layout.buttons ) {
 						const id = node.id === EXPERIMENTAL_MENU_ID ? "open-window:Experimental" : node.id === 10 ?
 							"open-window:Option" :
@@ -10545,7 +10557,7 @@ export function createUi(
 						layout = hudData.windows.ifautopotion!,
 						slot = hudData.windows.ifautopotionslot!;
 					windowBox( hudCopy( "UIIT_STT_MACROPOTION" ) || "Auto Potion", px, py, 394, 520 );
-					closeButton( px + 369, py + 10 );
+					closeButton( px + 369, py + 10, panelCloseId( "Auto Potion" ) );
 					const bg = layout.GDR_AUTO_POTION_BG_1!;
 					paths.push( bg.texture );
 					quads.push(
@@ -10826,7 +10838,7 @@ export function createUi(
 					] );
 					const layout = hudData.windows.ifoption!, slot = hudData.windows.ifgameoptionslot!;
 					windowBox( "Experimental", px, py, width, height );
-					closeButton( px + width - 26, py + 10 );
+					closeButton( px + width - 26, py + 10, panelCloseId( "Experimental" ) );
 					const tabWidth = 78, tabStart = (width - (EXPERIMENTAL_TABS.length * tabWidth - 2)) / 2;
 					for ( let i = 0; i < EXPERIMENTAL_TABS.length; i++ ) {
 						nativeTab(
@@ -10958,7 +10970,7 @@ export function createUi(
 							vAlign: 0
 						} )
 					);
-					closeButton( px + 360, py + 10 );
+					closeButton( px + 360, py + 10, panelCloseId( "Option" ) );
 					const tile = { ...layout.GDR_OPTION_BGTILE!, rect: geometry.tile as unknown as UiRect };
 					authoredChrome( tile, px, py );
 					const tabs = [ "VIDEO", "AUDIO", "CAMERA", "INPUT", "GAME" ];
@@ -12113,7 +12125,7 @@ export function createUi(
 					}
 					// Beside a service window the inventory is a companion with its own close
 					// identity. It retains only its own admission: replaying the standalone
-					// window would publish a second "close" beside the service window's.
+					// window would publish its own panel close beside the service window's.
 					endWindow( admission, panel === "Inventory" ? "primary" : "companion:Inventory" );
 				}
 				if ( panel === "Actions" && hudData ) {
@@ -12944,7 +12956,7 @@ export function createUi(
 						ox = px + 19,
 						oy = py + 92;
 					windowBox( hudCopy( "UIIT_STT_BLOCKMAN_LIST" ), px, py, 477, 400 );
-					closeButton( px + 451, py + 10 );
+					closeButton( px + 451, py + 10, panelCloseId( "Blocking" ) );
 					button( "open-window:Guild", "Community", px + 16, py + 35, 110 );
 					const tabRoot = ROOT + "interface/guild/gil_subj_tab_";
 					paths.push( tabRoot + "on.png", tabRoot + "off.png" );
@@ -13204,7 +13216,7 @@ export function createUi(
 							{ hAlign: 1, vAlign: 0 }
 						)
 					);
-					closeButton( px + 759, py + 10 );
+					closeButton( px + 759, py + 10, panelCloseId( "Party Matching" ) );
 					const match = game?.partyMatching,
 						slot = hudData.windows.ifpartymatchslot!,
 						social = game?.social,
@@ -13495,7 +13507,7 @@ export function createUi(
 					const shop = game?.shop,
 						valid = !!shop && shop.npc === game?.target && !shop.error,
 						busy = !!game?.inventoryPending;
-					nativeFrame( root, px, py, shop?.name ?? "" );
+					nativeFrame( root, px, py, shop?.name ?? "", panelCloseId( "Shop" ) );
 					nativePage( page, px, py );
 					if ( compact ) {
 						controls.push( {
@@ -13594,7 +13606,14 @@ export function createUi(
 					if ( resources.has( top ) ) rect( [ px, py, root.rect[2], root.rect[3] ], white, top );
 					blocks.push( [ px, py, 376, 378 ] );
 					authoredText( frame.GDR_ALCHEMYBOX_TITLE!, px, py, hudCopy( "UIIT_CTL_ALCHEMYBOX" ) );
-					authoredButton( frame.GDR_ALCHEMYBOX_CLOSE!, px, py, "close", hudCopy( "UIIT_CTL_CLOSE" ), busy );
+					authoredButton(
+						frame.GDR_ALCHEMYBOX_CLOSE!,
+						px,
+						py,
+						panelCloseId( "Alchemy" ),
+						hudCopy( "UIIT_CTL_CLOSE" ),
+						busy
+					);
 					const pane = frame[
 						processing ?
 							"GDR_ALCHEMYBOX_ELEMENT_MANUFACTURING" :
@@ -13704,7 +13723,7 @@ export function createUi(
 						busy = !!game?.inventoryPending || room?.phase !== "open",
 						page = storagePanel.page( capacity ),
 						slotIds = Array.from( { length: STORAGE_PAGE_SLOTS }, ( _, i ) => storageSlotControlId( i ) );
-					nativeFrame( root, px, py, hudCopy( root.text ) );
+					nativeFrame( root, px, py, hudCopy( root.text ), panelCloseId( "Storage" ) );
 					// Slots, the spinner, the gold amount and the money button are live.
 					nativePage( layout, px, py, [ ...slotIds, 10, 11, 13 ] );
 					for ( let i = 0; i < STORAGE_PAGE_SLOTS; i++ ) {
@@ -14625,10 +14644,9 @@ export function createUi(
 					}
 					const record = records.find( r => r.gid === cosGid ), busy = !!game?.inventoryPending;
 					if ( cosTab === 1 && !record?.inventory || cosTab === 2 && record?.band !== 4 ) cosTab = 0;
-					// Beside a shop (trade goods loading into a transport) the bag is a
-					// companion with its own close identity, as the inventory beside a
-					// service window is: both frames publishing "close" crashed the HUD.
-					nativeFrame( root, px, py, record?.name ?? "", panel === "Shop" ? "cos-companion-close" : "close" );
+					// Beside a shop (trade goods loading into a transport) the bag keeps
+					// its own close identity; closing it ends the trade, as the shop's does.
+					nativeFrame( root, px, py, record?.name ?? "", panelCloseId( "COS inventory" ) );
 					nativePage( hudData.windows.ifcos!, px, py );
 					[
 						"UIIT_STT_COSNEWUI_TABMENU_BASICINFO",
@@ -15684,7 +15702,13 @@ export function createUi(
 							guild = social?.guild,
 							self = guildSelf( social );
 						image( [ x + 6, y + 28, width - 12, height - 34 ], at( page, 1 ).texture );
-						nativeFrame( { ...root, rect: [ 0, 0, width, height ] }, x, y, hudCopy( root.text ) );
+						nativeFrame(
+							{ ...root, rect: [ 0, 0, width, height ] },
+							x,
+							y,
+							hudCopy( root.text ),
+							panelCloseId( "Guild" )
+						);
 						/*
 						================
 						put
@@ -16222,7 +16246,7 @@ export function createUi(
 							gx = px + 13,
 							gy = py + 61,
 							guild = game?.social?.guild;
-						nativeFrame( root, px, py, hudCopy( root.text ) );
+						nativeFrame( root, px, py, hudCopy( root.text ), panelCloseId( "Guild" ) );
 						[
 							"UIIT_STT_GUILD_INFO",
 							"UIIT_CTL_GUILD_RESPECT",
@@ -16520,7 +16544,7 @@ export function createUi(
 					const admission = beginWindow();
 					const px = Math.max( 12, (w - 380) / 2 ), py = Math.max( 150, (h - 440) / 2 );
 					windowBox( panel, px, py, 380, 420 );
-					closeButton( px + 354, py + 10 );
+					closeButton( px + 354, py + 10, panelCloseId( panel === "Chat" ? "Chat" : "Magic Pop" ) );
 					if ( panel === "Magic Pop" ) {
 						const active = game?.gacha,
 							busy = !!game?.inventoryPending,
@@ -17082,7 +17106,7 @@ export function createUi(
 							{ hAlign: 1, vAlign: 1 }
 						)
 					);
-					closeButton( ax + 760, ay + 10 );
+					closeButton( ax + 760, ay + 10, panelCloseId( "Academy Matching" ) );
 					const field: Record<string, keyof import("@/engine/foundation/gameplay/academy").AcademyListing> = {
 						ID_BTN: "id",
 						LEVEL_BTN: "level",
@@ -17221,7 +17245,7 @@ export function createUi(
 						{ hAlign: 1, vAlign: 1 }
 					)
 				);
-				closeButton( gx + 399, gy + 10 );
+				closeButton( gx + 399, gy + 10, panelCloseId( "Game Guide" ) );
 				for (
 					const name of [
 						"GDR_GUIDE_FRAME_1",

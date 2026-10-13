@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
+const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 test(
 	"native guild war dialogs and hostile rows send through production UI owners",
 	{ timeout: 90000 },
@@ -431,13 +432,13 @@ test(
 			assert.equal( await page.locator( '[data-ui-id="guild-grant-ok"]' ).isDisabled(), true );
 			await page.screenshot( { path: "temp/artifacts/guild-war/authority-readonly.png" } );
 			await click( "guild-grant-cancel" );
-			await click( "close" );
+			await click( panelCloseId( "Guild" ) );
 			await page.evaluate( () => {
 				warFixture.ui.event( { kind: "activate", id: "open-window:Guild" } );
 				warFixture.draw();
 			} );
 			await draw( "guild-tab:0" );
-			await click( "close" );
+			await click( panelCloseId( "Guild" ) );
 			await page.evaluate( () => {
 				const game = warFixture.state.gameplay;
 				game.social.self = 10;

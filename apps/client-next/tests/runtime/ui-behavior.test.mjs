@@ -27,6 +27,7 @@ async function load( file ) {
 }
 const { createUiAssets } = await load( "src/engine/runtime/ui/resources/resources.ts" );
 const { topmostControlAt } = await load( "src/engine/foundation/ui/hit-test.ts" );
+const { panelCloseId } = await load( "src/engine/foundation/ui/panels.ts" );
 const { refreshNameColor } = await load( "src/engine/foundation/gameplay/name-color.ts" );
 const { createGameplay } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" );
 const { createQuests } = await load( "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts" );
@@ -792,7 +793,7 @@ test("quest objectives repaint native progress, per-node status and color after 
 			firstRect ??= run[0].rect;
 			assert.deepEqual( run[0].rect, firstRect, "Progress cannot move the authored text origin" );
 		}
-		f.ui.event( { kind: "activate", id: "close" } );
+		f.ui.event( { kind: "activate", id: panelCloseId( "Quests" ) } );
 		settle( 1800 );
 		f.ui.event( { kind: "activate", id: "open-window:Quests" } );
 		settle( 1900 );
@@ -1050,7 +1051,7 @@ test("Academy main popup and matching board have separate native entry lifecycle
 		f.ui.event( { kind: "activate", id: "open-window:Academy Matching" } );
 		f.ui.step( f.state, 1400 );
 		assert.equal( sent.filter( c => c.command?.kind === "academy-page" ).length, 1 );
-		f.ui.event( { kind: "activate", id: "close" } );
+		f.ui.event( { kind: "activate", id: panelCloseId( "Academy Matching" ) } );
 		f.state.gameplay = {
 			...f.state.gameplay,
 			academy: { ...f.state.gameplay.academy, request: { kind: "page", id: 0 } }
@@ -1133,7 +1134,7 @@ test("a new inventory icon keeps the previous popup visible and navigation avail
 		let scene = f.ui.step( f.state, 1400 );
 		assert.equal( scene.controls.find( c => c.id === "main-popup-drag" ).label, "Character" );
 		assert.ok( !scene.controls.find( c => c.id === "select-window:Character" ).disabled );
-		assert.ok( !scene.controls.find( c => c.id === "close" ).disabled );
+		assert.ok( !scene.controls.find( c => c.id === panelCloseId( "Character" ) ).disabled );
 		blocked = false;
 		for ( let t = 1500; t < 1900; t += 100 ) scene = f.ui.step( f.state, t ) ?? scene;
 		assert.equal( scene.controls.find( c => c.id === "main-popup-drag" ).label, "Inventory" );
@@ -1858,7 +1859,10 @@ test("party proposal projects native controls, blocks background input and prese
 			"UI does not fabricate server dismissal"
 		);
 		semantic = f.ui.step( { ...f.state, gameplay: { ...f.state.gameplay, social: { invitation: null } } }, 300 );
-		assert.ok( semantic.controls.some( c => c.id === "close" ), "underlying inventory remains open" );
+		assert.ok(
+			semantic.controls.some( c => c.id === panelCloseId( "Inventory" ) ),
+			"underlying inventory remains open"
+		);
 		f.ui.step( invite, 400 );
 		f.ui.event( { kind: "activate", id: "invite-refuse" } );
 		assert.deepEqual( sent.at( -1 ), { kind: "gameplay", command: { kind: "social-consent", accept: false } } );
@@ -1978,7 +1982,7 @@ test("inventory/action assignment and numeric activation share the gameplay rout
 		f.ui.event( { kind: "drag-end", id: "slot:15", x: itemBar.rect[0] + 2, y: itemBar.rect[1] + 2 } );
 		assert.deepEqual( sent.pop(), { kind: "quickslot-set", binding: { slot: 0, kind: 0x46, payload: 2 } } );
 		f.state.gameplay.quickSlots = [ { slot: 1, kind: 0x46, payload: 2 } ];
-		f.ui.event( { kind: "activate", id: "close" } );
+		f.ui.event( { kind: "activate", id: panelCloseId( "Inventory" ) } );
 		f.ui.step( f.state, 300 );
 		f.ui.event( { kind: "key", code: "Digit1" } );
 		assert.deepEqual( sent.pop(), { kind: "item-use", slot: 15 } );
@@ -1989,7 +1993,7 @@ test("inventory/action assignment and numeric activation share the gameplay rout
 		f.ui.event( { kind: "drag-end", id: "action:4001", x: actionBar.rect[0] + 2, y: actionBar.rect[1] + 2 } );
 		assert.deepEqual( sent.pop(), { kind: "quickslot-set", binding: { slot: 2, kind: 0x4a, payload: 4001 } } );
 		f.state.gameplay.quickSlots.push( { slot: 2, kind: 0x4a, payload: 4001 } );
-		f.ui.event( { kind: "activate", id: "close" } );
+		f.ui.event( { kind: "activate", id: panelCloseId( "Actions" ) } );
 		f.ui.step( f.state, 600 );
 		f.ui.event( { kind: "key", code: "Digit2" } );
 		assert.deepEqual( sent.pop(), { kind: "action-command", id: 4001 } );
@@ -4093,7 +4097,7 @@ test("GPU merchant menu branches retain all tabs, sparse pages and native purcha
 		click( "shop-offer:5" );
 		click( "shop-trade" );
 		assert.deepEqual( sent.at( -1 ), { kind: "shop-buy", tab: 5, slot: 31, quantity: 1 } );
-		click( "close" );
+		click( panelCloseId( "Shop" ) );
 		click( "shop-group:850" );
 		assert.deepEqual(
 			defined( semantics ).controls.filter( c => c.id.startsWith( "shop-tab:" ) ).map( c => c.id ),
@@ -4167,7 +4171,7 @@ test("native window sisters retain drag placement, close on ESC and reject retir
 				moved.rect.slice( 0, 2 ),
 				panel + " ignores stale capture and retains placement"
 			);
-			f.ui.event( { kind: "activate", id: "close" } );
+			f.ui.event( { kind: "activate", id: panelCloseId( panel ) } );
 			settle();
 			assert.equal( f.ui.stats().panel, "" );
 		}
@@ -5691,7 +5695,7 @@ test("right-clicking a rental clock arms the yellow cursor and confirms the clic
 		f.ui.event( { kind: "key", code: "Escape" } );
 		assert.equal( f.ui.cursor(), null );
 		assert.equal( sent.length, 1, "Escape never sends a renewal" );
-		f.ui.event( { kind: "activate", id: "close" } );
+		f.ui.event( { kind: "activate", id: panelCloseId( "Inventory" ) } );
 		f.state.gameplay.quickSlots = [ { slot: 1, kind: 0x46, payload: 0 } ];
 		f.ui.step( f.state, 3400 );
 		f.ui.event( { kind: "key", code: "Digit1" } );

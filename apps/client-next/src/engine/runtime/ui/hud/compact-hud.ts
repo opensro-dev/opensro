@@ -10,6 +10,7 @@ panels start collapsed without changing saved desktop preferences.
 ===========================================================================
 */
 import type { UiRect, UiControl } from "@/engine/contracts/ui";
+import { closedPanel } from "@/engine/foundation/ui/panels";
 
 const DESKTOP_WIDTH = 800;
 const DESKTOP_HEIGHT = 600;
@@ -118,7 +119,7 @@ The close artwork stays native; its hit area grows into the title bar.
 ================
 */
 export function compactCloseControl( control: UiControl, screen: UiRect ): UiControl {
-	if ( control.id !== "close" && !control.id.endsWith( "-close" ) ) return control;
+	if ( closedPanel( control.id ) === undefined && !control.id.endsWith( "-close" ) ) return control;
 	const [x, y, width, height] = control.rect;
 	const touchWidth = Math.min( screen[2], Math.max( width, CLOSE_TOUCH_SIZE ) );
 	const touchHeight = Math.min( screen[3], Math.max( height, CLOSE_TOUCH_SIZE ) );

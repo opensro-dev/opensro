@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
 import {bootPlayableSession} from './helpers/playable-session.mjs';
+const {panelCloseId}=await import('../../src/engine/foundation/ui/panels.ts');
 
 // Real pointer input (hit-testing, drag capture, overlap) for service-window
 // chrome. Complements the synthetic ui.event() sweep in ui-behavior.test.mjs,
@@ -65,7 +66,7 @@ test('live window chrome drags through real pointer input',{timeout:300000},asyn
   assert.deepEqual(await box('window-drag:Alchemy'),alchemyFixed,'companion has independent placement');
   await note('companion',{before:companionBefore,after:companionAfter,alchemyFixed});
 
-  await page.locator('[data-ui-id="close"]').first().click();
+  await page.locator(`[data-ui-id="${panelCloseId('Alchemy')}"]`).click();
   await page.waitForFunction(()=>globalThis.__chromeProbe.owner.stats().panel==='',null,{timeout:10000});
   // Options tabs keep the shared frame origin; the title strip drags.
   await page.keyboard.press('Escape');

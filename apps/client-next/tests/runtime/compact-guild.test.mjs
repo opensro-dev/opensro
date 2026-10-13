@@ -15,6 +15,7 @@ import { uiFixture, fontAtlas } from "../helpers/ui-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 const { topmostControlAt } = await import( "../../src/engine/foundation/ui/hit-test.ts" );
+const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 
 /*
 ================
@@ -187,7 +188,7 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 				!output.controls.some( control => control.id === "guild-tab:0" ),
 				"Blocking retains its existing separate route"
 			);
-			fixture.ui.event( { kind: "activate", id: "close" } );
+			fixture.ui.event( { kind: "activate", id: panelCloseId( "Blocking" ) } );
 			draw();
 			fixture.state.width = 1600;
 			fixture.state.height = 900;

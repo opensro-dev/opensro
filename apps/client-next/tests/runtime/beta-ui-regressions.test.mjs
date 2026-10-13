@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 
 const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
+const { closedPanel, panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 const WARM_FRAMES = 24;
 const FRAME_MS = 100;
@@ -456,6 +457,9 @@ test("a companion inventory never replays the standalone inventory's close ident
 		magic: [],
 		icon: "item/etc/all_potion_01.ddj"
 	};
+	/** @param {import('../../src/engine/contracts/ui').UiSemantics | null | undefined} semantics */
+	const panelCloses = semantics =>
+		semantics?.controls.map( c => c.id ).filter( id => closedPanel( id ) !== undefined ) ?? [];
 	/** @param {import('../../src/engine/contracts/ui').UiSemantics} semantics */
 	const unique = semantics => {
 		const ids = semantics.controls.map( c => c.id );
@@ -464,17 +468,17 @@ test("a companion inventory never replays the standalone inventory's close ident
 	try {
 		f.setGame( { cosRecords: [ pet ], inventorySlotCount: 32 } );
 		f.ui.event( { kind: "activate", id: "open-window:Inventory" } );
-		assert.equal( f.step()?.controls.filter( c => c.id === "close" ).length, 1 );
+		assert.deepEqual( panelCloses( f.step() ), [ panelCloseId( "Inventory" ) ] );
 		// The service window admits while a new item's icon is still in flight,
 		// so the companion inventory beside it is not yet admitted. Its retained
 		// fallback must be its own window, never the standalone inventory, whose
 		// close identity the service window now owns.
 		f.ui.event( { kind: "activate", id: "open-window:COS inventory" } );
 		const waiting = f.setGame( { inventory: [ potion ] }, unique );
-		assert.equal( waiting?.controls.filter( c => c.id === "close" ).length, 1 );
+		assert.deepEqual( panelCloses( waiting ), [ panelCloseId( "COS inventory" ) ] );
 		f.deliver();
 		const service = f.step( unique );
-		assert.equal( service?.controls.filter( c => c.id === "close" ).length, 1 );
+		assert.deepEqual( panelCloses( service ), [ panelCloseId( "COS inventory" ) ] );
 		assert.ok( service?.controls.some( c => c.id === "companion-close" ) );
 		assert.ok( service?.controls.some( c => c.id === "slot:13" ) );
 	} finally {

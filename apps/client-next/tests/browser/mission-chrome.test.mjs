@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
 import {CLIENT_NEXT_BASE_URL} from '../../../../scripts/lib/probeEndpoints.mjs';
+const {panelCloseId}=await import('../../src/engine/foundation/ui/panels.ts');
 
 async function createChromeFixture(page){
   await page.setViewportSize({width:1200,height:900});
@@ -94,7 +95,7 @@ test('mission shared chrome uses resident retail artwork and bitmap text',{timeo
   await page.evaluate(()=>{chromeFixture.state.gameplay={...chromeFixture.state.gameplay,social:{invitation:{type:1,gid:7}}};chromeFixture.draw();});
   await page.locator('[data-ui-id="invite-refuse"]').click();
   assert.deepEqual(await page.evaluate(()=>chromeFixture.commands.at(-1)),{kind:'gameplay',command:{kind:'social-consent',accept:false}});
-  await page.evaluate(()=>{chromeFixture.state.gameplay={...chromeFixture.state.gameplay,social:{invitation:null},pose:{regionId:0x6262,x:900,y:0,z:900,angle:0}};chromeFixture.draw();chromeFixture.ui.event({kind:'activate',id:'close'});chromeFixture.draw();});
+  await page.evaluate(close=>{chromeFixture.state.gameplay={...chromeFixture.state.gameplay,social:{invitation:null},pose:{regionId:0x6262,x:900,y:0,z:900,angle:0}};chromeFixture.draw();chromeFixture.ui.event({kind:'activate',id:close});chromeFixture.draw();},panelCloseId('System'));
   await page.waitForFunction(()=>{chromeFixture.draw();return chromeFixture.ui.stats().pending===0&&chromeFixture.scene.quads.some(q=>q.mask);});
   await page.screenshot({path:'temp/artifacts/mission-chrome/hud-1200.png'});
   assert.equal(await page.locator('[data-ui-id="logout"]').count(),0);
@@ -138,7 +139,7 @@ test('mission shared chrome uses resident retail artwork and bitmap text',{timeo
    await page.screenshot({path:'temp/artifacts/mission-chrome/guide-'+tab+'.png'});
   }
 
-  await page.locator('[data-ui-id="close"]').click();await page.evaluate(()=>chromeFixture.guideDraw());
+  await page.locator(`[data-ui-id="${panelCloseId('Game Guide')}"]`).click();await page.evaluate(()=>chromeFixture.guideDraw());
   await page.evaluate(()=>{for(let i=0;i<20;i++)chromeFixture.guideDraw();});
   assert.equal(await page.evaluate(()=>chromeFixture.guideFrames.filter(f=>f.payload[0]===1).length),1,'closing does not acknowledge or reopen welcome again');
   await page.locator('[data-ui-id="academy-open"]').click();await page.evaluate(()=>chromeFixture.guideDraw());
@@ -147,7 +148,7 @@ test('mission shared chrome uses resident retail artwork and bitmap text',{timeo
   await page.waitForFunction(()=>{chromeFixture.guideDraw();return chromeFixture.ui.stats().pending===0&&document.querySelector('[data-ui-id="academy-refresh"]');},null,{timeout:6000}).catch(async e=>{await page.screenshot({path:'temp/artifacts/mission-chrome/academy-failure.png'});throw Error(e.message+' '+JSON.stringify(await page.evaluate(()=>window.chromeFixture?{stats:chromeFixture.ui.stats(),requests:chromeFixture.requests.slice(-20),commands:chromeFixture.commands.slice(-4)}:'reloaded')));});
   await page.screenshot({path:'temp/artifacts/mission-chrome/academy-matching.png'});
   assert.deepEqual(await page.evaluate(()=>chromeFixture.ui.stats().failed),[],'academy must not request invented chrome textures');
-  await page.locator('[data-ui-id="close"]').click();await page.evaluate(()=>chromeFixture.guideDraw());
+  await page.locator(`[data-ui-id="${panelCloseId('Academy Matching')}"]`).click();await page.evaluate(()=>chromeFixture.guideDraw());
   await page.evaluate(()=>{chromeFixture.ui.event({kind:'activate',id:'open-window:Game Guide'});chromeFixture.guideDraw();});
   await page.waitForFunction(()=>{chromeFixture.guideDraw();return document.querySelector('[data-ui-id="guide-sidebar"]');});
   await page.evaluate(()=>{chromeFixture.ui.event({kind:'drag',id:'guide-drag',dx:200,dy:0});chromeFixture.guideDraw();});
@@ -156,7 +157,7 @@ test('mission shared chrome uses resident retail artwork and bitmap text',{timeo
   await page.locator('[data-ui-id="guide-group:1000"]').click();await page.evaluate(()=>chromeFixture.guideDraw());
   await page.locator('[data-ui-id="guide-article:1001"]').click();await page.evaluate(()=>chromeFixture.guideDraw());
   await page.screenshot({path:'temp/artifacts/mission-chrome/guide-index.png'});
-  await page.locator('[data-ui-id="close"]').click();await page.evaluate(()=>chromeFixture.guideDraw());
+  await page.locator(`[data-ui-id="${panelCloseId('Game Guide')}"]`).click();await page.evaluate(()=>chromeFixture.guideDraw());
   const europeanContent=await page.evaluate(async()=>{const catalog=await(await fetch('/assets/data/event-guide-catalog.json')).json();return catalog.eventRowsByState[1].englishEuropeanContent;});
   if(europeanContent===''){
    await page.evaluate(()=>{

@@ -19,7 +19,7 @@ bag, whose frames both published "close").
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
-const { uiPanels } = await import( "../../src/engine/foundation/ui/panels.ts" );
+const { uiPanels, panelCloseId, closedPanel } = await import( "../../src/engine/foundation/ui/panels.ts" );
 const { emptyStall, stallRequest } = await import( "../../src/engine/foundation/gameplay/stall.ts" );
 const { fortressPacket } = await import( "../../src/engine/foundation/gameplay/fortress.ts" );
 const { fortressProductionQuery } = await import( "../../src/engine/foundation/gameplay/fortress-production.ts" );
@@ -263,6 +263,15 @@ for ( const panel of [ ...uiPanels(), ...Object.keys( SERVICE_WINDOWS ) ] ) {
 			seen.presentation?.controls.some( control => !before.has( control.id ) ),
 			`${panel} published no new controls: the window did not open`
 		);
+		// Each frame's close is named after its own window: a shared "close"
+		// was unique only while one window showed (BUG-064, #499, #627, #791).
+		const ids = seen.presentation?.controls.map( control => control.id ) ?? [];
+		assert.ok( !ids.includes( "close" ), `${panel} publishes a bare "close"` );
+		const closes = ids.filter( id => closedPanel( id ) !== undefined );
+		if ( closes.length === 0 ) return;
+		f.ui.event( { kind: "activate", id: closes[0] } );
+		step();
+		assert.equal( f.ui.stats().panel, "", `${panel}: ${closes[0]} closes its window` );
 	});
 }
 
@@ -282,16 +291,16 @@ test("the transport bag beside a shop closes the trade through its own control",
 	tradeWithTransport( f );
 	step();
 	const ids = seen.presentation?.controls.map( control => control.id ) ?? [];
-	assert.ok( ids.includes( "close" ), "the shop has its close" );
-	assert.ok( ids.includes( "cos-companion-close" ), "the transport bag beside it has its own" );
-	f.ui.event( { kind: "activate", id: "cos-companion-close" } );
+	assert.ok( ids.includes( panelCloseId( "Shop" ) ), "the shop has its close" );
+	assert.ok( ids.includes( panelCloseId( "COS inventory" ) ), "the transport bag beside it has its own" );
+	f.ui.event( { kind: "activate", id: panelCloseId( "COS inventory" ) } );
 	step();
 	assert.ok(
-		JSON.stringify( sent ).includes( "npc-close" ),
+		sent.some( command => command.kind === "gameplay" && command.command.kind === "npc-close" ),
 		"closing the bag ends the trade, as the shop's close does"
 	);
 	assert.ok(
-		!seen.presentation?.controls.some( control => control.id === "cos-companion-close" ),
+		!seen.presentation?.controls.some( control => closedPanel( control.id ) !== undefined ),
 		"both windows closed"
 	);
 });

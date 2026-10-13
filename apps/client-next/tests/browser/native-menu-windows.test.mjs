@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {launchProbeBrowser} from '../../../../scripts/lib/probeBrowser.mjs';
 import {CLIENT_NEXT_BASE_URL} from '../../../../scripts/lib/probeEndpoints.mjs';
+const {panelCloseId}=await import('../../src/engine/foundation/ui/panels.ts');
 import {assertNativeStretchRaster} from './stretch-raster.mjs';
 
 test('native menu window audit uses real assets over a visible background',{timeout:45000},async()=>{
@@ -72,7 +73,7 @@ test('native menu window audit uses real assets over a visible background',{time
    const holes=await page.evaluate(async png=>{const image=await createImageBitmap(new Blob([Uint8Array.from(atob(png),c=>c.charCodeAt(0))],{type:'image/png'}));const canvas=new OffscreenCanvas(image.width,image.height),ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);image.close();const {data}=ctx.getImageData(0,0,canvas.width,canvas.height),sample=(300*canvas.width+500)*4;let holes=0;for(let y=498;y<815;y++)for(let x=838;x<1175;x++){const at=(y*canvas.width+x)*4;if(data[at]===data[sample]&&data[at+1]===data[sample+1]&&data[at+2]===data[sample+2])holes++;}return holes;},shot.toString('base64'));
    assert.equal(holes,0,id+' exposes world pixels inside Skills');
   }
-  await page.evaluate(()=>{inventoryFixture.event({kind:'activate',id:'close'});inventoryFixture.draw();inventoryFixture.sounds.length=0;});
+  await page.evaluate(close=>{inventoryFixture.event({kind:'activate',id:close});inventoryFixture.draw();inventoryFixture.sounds.length=0;},panelCloseId('Skills'));
   for(const key of ['c','s','i','a','p','q','q']){await page.keyboard.press(key);await page.evaluate(()=>inventoryFixture.draw());}
   assert.deepEqual(await page.evaluate(()=>inventoryFixture.sounds),['open','open','open','open','open','open','close'],'real C/S/I/A/P/Q keys must route every admitted transition sound');
   await page.evaluate(()=>inventoryFixture.dispose());

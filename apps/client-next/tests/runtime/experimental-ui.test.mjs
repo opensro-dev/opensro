@@ -14,6 +14,7 @@ import { test } from "node:test";
 import { uiFixture } from "../helpers/ui-fixture.mjs";
 import { defined } from "../helpers/defined.mjs";
 const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
+const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 
 const SCALE_PREFIX = "experimental-render-scale:";
 const SETTLE_STEPS = 12;
@@ -98,7 +99,7 @@ Cancellation paths
 ================
 */
 test("Cancel, close and Escape discard render scale edits", () => {
-	for ( const close of [ "experimental-cancel", "close", "Escape" ] ) {
+	for ( const close of [ "experimental-cancel", panelCloseId( "Experimental" ), "Escape" ] ) {
 		const f = fixture( experimentalOptions( { renderScale: 75 } ) );
 		try {
 			assertScale( f.activate( "open-window:Experimental" ), 75 );

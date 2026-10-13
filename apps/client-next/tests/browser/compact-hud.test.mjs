@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { launchProbeBrowser } from "../../../../scripts/lib/probeBrowser.mjs";
 import { CLIENT_NEXT_BASE_URL } from "../../../../scripts/lib/probeEndpoints.mjs";
+const { panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 
 const ARTIFACT_DIRECTORY = "temp/artifacts/compact-hud";
 const ADMISSION_TIMEOUT_MS = 30000;
@@ -396,7 +397,7 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 							await tap( page, "hud-menu" );
 							await admit( page, fixture, [ "select-window:Inventory" ] );
 							await tap( page, "select-window:Inventory" );
-							await admit( page, fixture, [ "slot:13", "close" ] );
+							await admit( page, fixture, [ "slot:13", panelCloseId( "Inventory" ) ] );
 						}
 						for ( const [index, viewport] of RESIZE_VIEWPORTS.entries() ) {
 							const key = `resize-${window}-${index}-${viewport.width}x${viewport.height}`;
@@ -422,7 +423,7 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 						}
 						await admit( page, fixture, HOTBAR_IDS );
 						if ( window === "inventory" ) {
-							await tap( page, "close" );
+							await tap( page, panelCloseId( "Inventory" ) );
 							await admit( page, fixture, HOTBAR_IDS );
 						}
 					}
@@ -564,11 +565,11 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 						await tap( page, "hud-menu" );
 						await admit( page, fixture, [ "select-window:Inventory" ] );
 						await tap( page, "select-window:Inventory" );
-						report = await admit( page, fixture, [ "slot:13", "slot:44", "close" ] );
+						report = await admit( page, fixture, [ "slot:13", "slot:44", panelCloseId( "Inventory" ) ] );
 						contained( report.controls, viewport );
 						reports[`${name}-inventory`] = report;
 						await page.screenshot( { path: `${artifactDirectory}/${name}-inventory.png` } );
-						await tap( page, "close" );
+						await tap( page, panelCloseId( "Inventory" ) );
 						report = await admit( page, fixture, UTILITY_IDS );
 						assert.ok(
 							!report.controls.some( row => row.id === "slot:13" ),
@@ -576,8 +577,8 @@ for ( const deviceScaleFactor of [ 1, 2 ] ) {
 						);
 						for (
 							const [open, close, required] of [
-								[ "toggle-window:System", "close", "open-window:Option" ],
-								[ "toggle-window:Guild", "close", "social-member:1" ],
+								[ "toggle-window:System", panelCloseId( "System" ), "open-window:Option" ],
+								[ "toggle-window:Guild", panelCloseId( "Guild" ), "social-member:1" ],
 								[ "item-mall", "item-mall-close", "item-mall-close" ]
 							]
 						) {
