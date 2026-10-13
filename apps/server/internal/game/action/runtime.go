@@ -64,7 +64,10 @@ type Runtime struct {
 	// TeamDeathTownRule sends a team death to the town rule (port-only,
 	// SRO_TEAM_DEATH_REVIVE off; the zero value is native, teamdeath.go).
 	TeamDeathTownRule bool
-	BerserkRoll       combat.Roll32767
+	// CaravanBanditCap caps the bandits per ambush (port-only,
+	// SRO_CARAVAN_BANDIT_CAP; 0 is native, uncapped).
+	CaravanBanditCap int
+	BerserkRoll      combat.Roll32767
 	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
 	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the

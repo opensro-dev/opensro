@@ -280,6 +280,14 @@ variable "alchemy_no_assimilation" {
   default = "on"
 }
 
+# caravan_bandit_cap caps the bandits per caravan ambush (port-only, not
+# native; owner decision 2026-10-13): a count, or "off" for the original
+# game's uncapped count. A malformed value stops GameWorld at boot.
+variable "caravan_bandit_cap" {
+  type    = string
+  default = "16"
+}
+
 variable "beta_drop_cap" {
   type    = string
   default = "16"
@@ -491,6 +499,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_SHOP_EXTRA_GOODS               = var.shop_extra_goods
         SRO_MALL_EXTRA_GOODS               = var.mall_extra_goods
         SRO_ALCHEMY_NO_ASSIMILATION        = var.alchemy_no_assimilation
+        SRO_CARAVAN_BANDIT_CAP             = var.caravan_bandit_cap
         SRO_STACK_SIZES                    = var.stack_sizes
         SRO_PUBLIC_API_ADDR                = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"

@@ -32,6 +32,9 @@ parses it; the GameWorld's own unset value is always native.
   - SRO_ALCHEMY_NO_ASSIMILATION (alchemy_no_assimilation): stones without
     assimilation (alchemy/noassimilation.go). The deployment default is on,
     as the owner decided on 2026-10-13; "off" is the original game.
+  - SRO_CARAVAN_BANDIT_CAP (caravan_bandit_cap): the bandits per caravan
+    ambush (caravan/banditcap.go). The deployment default is 16, as the
+    owner decided on 2026-10-13; "off" is the original game's uncapped count.
 
 ===========================================================================
 */
@@ -63,6 +66,9 @@ const mallExtraGoodsDefault = "on"
 // alchemyNoAssimilationDefault is the owner-approved deployment default.
 const alchemyNoAssimilationDefault = "on"
 
+// caravanBanditCapDefault is the owner-approved deployment default.
+const caravanBanditCapDefault = "16"
+
 /*
 ================
 portOnlySettings
@@ -78,6 +84,8 @@ type portOnlySettings struct {
 	MallExtraGoods   string
 	// AlchemyNoAssimilation is SRO_ALCHEMY_NO_ASSIMILATION.
 	AlchemyNoAssimilation string
+	// CaravanBanditCap is SRO_CARAVAN_BANDIT_CAP.
+	CaravanBanditCap string
 }
 
 /*
@@ -85,8 +93,8 @@ type portOnlySettings struct {
 portOnlySettingsFromEnv
 
 The deployer's values as written; storage auto-stack, the alchemy rates,
-/SETSPEED, the enhancement cap, the team-death revive and the mall
-goods take their defaults when unset.
+/SETSPEED, the enhancement cap, the team-death revive, the mall goods, stone
+assimilation and the bandit cap take their defaults when unset.
 ================
 */
 func portOnlySettingsFromEnv() portOnlySettings {
@@ -99,6 +107,7 @@ func portOnlySettingsFromEnv() portOnlySettings {
 		TeamDeathRevive:       strings.TrimSpace(os.Getenv("SRO_TEAM_DEATH_REVIVE")),
 		MallExtraGoods:        strings.TrimSpace(os.Getenv("SRO_MALL_EXTRA_GOODS")),
 		AlchemyNoAssimilation: strings.TrimSpace(os.Getenv("SRO_ALCHEMY_NO_ASSIMILATION")),
+		CaravanBanditCap:      strings.TrimSpace(os.Getenv("SRO_CARAVAN_BANDIT_CAP")),
 	}
 	if settings.StorageAutoStack == "" {
 		settings.StorageAutoStack = storageAutoStackDefault
@@ -121,6 +130,9 @@ func portOnlySettingsFromEnv() portOnlySettings {
 	if settings.AlchemyNoAssimilation == "" {
 		settings.AlchemyNoAssimilation = alchemyNoAssimilationDefault
 	}
+	if settings.CaravanBanditCap == "" {
+		settings.CaravanBanditCap = caravanBanditCapDefault
+	}
 	return settings
 }
 
@@ -140,5 +152,6 @@ func (settings portOnlySettings) jobVariables(variables map[string]any) map[stri
 	variables["team_death_revive"] = settings.TeamDeathRevive
 	variables["mall_extra_goods"] = settings.MallExtraGoods
 	variables["alchemy_no_assimilation"] = settings.AlchemyNoAssimilation
+	variables["caravan_bandit_cap"] = settings.CaravanBanditCap
 	return variables
 }

@@ -17,6 +17,7 @@ import (
 
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
@@ -41,6 +42,7 @@ func publicRules() publicstats.RulesResponse {
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
 	teamDeathRevive, _ := action.TeamDeathReviveFromEnv()
 	noAssimilation, _ := alchemy.NoAssimilationFromEnv()
+	banditCap, _ := caravan.BanditCapFromEnv()
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
@@ -100,6 +102,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A successful attribute or magic stone can also reroll a white stat or a magic option (assimilation).",
 				Now:    "A successful attribute or magic stone changes only its own stat.",
 				Why:    "Players asked for it; the original rule returns with one setting."},
+			{Flag: caravan.EnvBanditCap, On: banditCap > 0,
+				Native: "A caravan ambush has as many bandits as its cargo's value calls for, with no limit.",
+				Now:    fmt.Sprintf("At most %d bandits per ambush.", banditCap),
+				Why:    "A full load drew dozens of bandits at once; the cap keeps an ambush fightable."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

@@ -20,6 +20,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/gmcommand"
@@ -528,6 +529,15 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.items.TeamDeathTownRule = !teamDeathRevive
 	if game.items.TeamDeathTownRule {
 		log.Infof("rebirth: team deaths follow the town rule (%s off)", action.EnvTeamDeathRevive)
+	}
+	// Port-only, not native: the bandits per caravan ambush.
+	banditCap, err := caravan.BanditCapFromEnv()
+	if err != nil {
+		return err
+	}
+	game.items.CaravanBanditCap = banditCap
+	if banditCap > 0 {
+		log.Infof("caravan: at most %d bandits per ambush (%s)", banditCap, caravan.EnvBanditCap)
 	}
 	if game.deps.StorageAutoStack {
 		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)

@@ -197,3 +197,29 @@ func TestRegistryKeepsATimerAndFiresWhenDue(t *testing.T) {
 		t.Fatal("removal kept the caravan")
 	}
 }
+
+/*
+================
+TestBanditCapSetting
+
+Unset, "off" and "0" are native (no cap); a count caps; anything else is
+refused. The cap trims only a count above it.
+================
+*/
+func TestBanditCapSetting(t *testing.T) {
+	for text, want := range map[string]int{"": 0, "off": 0, "OFF": 0, "0": 0, "16": 16, " 24 ": 24} {
+		if got, err := ParseBanditCap(text); err != nil || got != want {
+			t.Fatalf("ParseBanditCap(%q) = %d, %v; want %d", text, got, err, want)
+		}
+	}
+	for _, text := range []string{"on", "-1", "1001", "16x"} {
+		if _, err := ParseBanditCap(text); err == nil {
+			t.Fatalf("ParseBanditCap(%q) accepted a malformed cap", text)
+		}
+	}
+	for _, tc := range []struct{ count, limit, want int }{{54, 16, 16}, {16, 16, 16}, {3, 16, 3}, {54, 0, 54}} {
+		if got := CappedSpawnCount(tc.count, tc.limit); got != tc.want {
+			t.Fatalf("CappedSpawnCount(%d, %d) = %d, want %d", tc.count, tc.limit, got, tc.want)
+		}
+	}
+}

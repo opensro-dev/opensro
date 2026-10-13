@@ -297,3 +297,83 @@ func TestThiefCannotRobALevelOneCaravan(t *testing.T) {
 		t.Fatalf("thief on an empty transport = %#x, want admitted", code)
 	}
 }
+
+/*
+================
+heavyCaravanAmbush
+
+The caravan fixture with a heavy cargo (20 special goods in a 40-slot
+transport over a base death EXP of 1), so 60C460 rolls far more bandits
+than the cap; it spawns them on a battlefield and returns the bandits and
+every draw the ambush made.
+================
+*/
+func heavyCaravanAmbush(t *testing.T, limit int) ([]monster.Instance, []uint32) {
+	t.Helper()
+	rt, clock, c := caravanFixture(t)
+	deps := rt.deps.(*enterworld.Deps)
+	levels := deps.Levels.(combatRewardLevels)
+	levels.gold = map[int64]int64{20: 1}
+	deps.Levels = levels
+	// A 40-slot transport: the fixture's reference leaves the capacity 0.
+	ref, ok := rt.cosCharacterRef(c)
+	if !ok {
+		t.Fatal("fixture: no transport reference")
+	}
+	capacity := ref.InventoryCapacity
+	ref.InventoryCapacity = 40
+	t.Cleanup(func() { ref.InventoryCapacity = capacity })
+	rt.CaravanBanditCap = limit
+	var draws []uint32
+	next := uint32(0)
+	rt.CaravanRoll = func() (uint32, error) {
+		// The first two draws (60C460's half and 2%) are 50, so the count
+		// is the stars; later draws spread each bandit's own values.
+		value := uint32(50)
+		if len(draws) >= 2 {
+			next = (next*1103515245 + 12345) & 0x7fff
+			value = next
+		}
+		draws = append(draws, value)
+		return value, nil
+	}
+	field := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	rideCaravanTo(rt, c, field)
+	if err := rt.spawnCaravanBandits(testDivision, c, field, clock.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	return caravanBandits(rt, caravanBattlefield), draws
+}
+
+/*
+================
+TestCaravanBanditCapTrimsTheAmbush
+
+Port-only, not native: SRO_CARAVAN_BANDIT_CAP 16 spawns 16 of the bandits
+the cargo rolls, and the capped ambush's draws are exactly the
+first draws of the native one (60BF30 draws per bandit inside the loop and
+nothing after it). A cap of 0 is native.
+================
+*/
+func TestCaravanBanditCapTrimsTheAmbush(t *testing.T) {
+	native, nativeDraws := heavyCaravanAmbush(t, 0)
+	if len(native) <= 16 {
+		t.Fatalf("fixture: the native ambush spawned %d bandits, want more than the cap", len(native))
+	}
+	capped, cappedDraws := heavyCaravanAmbush(t, 16)
+	if len(capped) != 16 {
+		t.Fatalf("capped ambush spawned %d bandits, want 16", len(capped))
+	}
+	if len(cappedDraws) >= len(nativeDraws) {
+		t.Fatalf("capped ambush drew %d of the native %d", len(cappedDraws), len(nativeDraws))
+	}
+	for i, value := range cappedDraws {
+		if nativeDraws[i] != value {
+			t.Fatalf("draw %d is %d capped, %d native: the cap shifted the roll stream", i, value, nativeDraws[i])
+		}
+	}
+	above, _ := heavyCaravanAmbush(t, len(native)+1)
+	if len(above) != len(native) {
+		t.Fatalf("a cap above the count changed it: %d bandits, native %d", len(above), len(native))
+	}
+}

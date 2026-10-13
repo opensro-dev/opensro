@@ -146,8 +146,9 @@ func (rt *Runtime) fireCaravan(entry caravan.Entry, nowMs int64) bool {
 spawnCaravanBandits
 
 Caravan_SpawnBandits (60BF30), in native draw order: the tier and star
-rating from the cargo, the bandit count, the tactics, then per bandit its
-level, reference, heading and champion roll.
+rating from the cargo, the bandit count (capped by the shard's setting),
+the tactics, then per bandit its level, reference, heading and champion
+roll.
 ================
 */
 func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character, vehicle simulation.Spawn, nowMs int64) error {
@@ -158,6 +159,11 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 	if err != nil || count == 0 {
 		return err
 	}
+	// Port-only, not native: the shard may cap an ambush (caravan/banditcap.go).
+	// 60BF30 draws each bandit's level, reference, heading and champion roll
+	// inside the loop and nothing after it, so stopping early leaves every
+	// remaining bandit's draws exactly where they fall natively.
+	count = caravan.CappedSpawnCount(count, rt.CaravanBanditCap)
 	job := c.Job.Type
 	tacticsID, err := caravan.TacticsID(job, roll)
 	if err != nil {
