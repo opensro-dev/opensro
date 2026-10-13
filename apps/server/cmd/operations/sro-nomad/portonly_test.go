@@ -4,7 +4,7 @@
 portonly_test.go - the port-only switches reach the GameWorld job
 
 Storage auto-stack and the alchemy rates default to on (owner decisions
-2026-10-11); /SETSPEED defaults to on (2026-10-12); the enhancement cap defaults to on (2026-10-13); the team-death revive defaults to on, native (2026-10-13); the reverse return map defaults to off. A deployer's value, including "off", passes
+2026-10-11); /SETSPEED defaults to on (2026-10-12); the enhancement cap and the mall goods default to on (2026-10-13); the team-death revive defaults to on, native (2026-10-13); the reverse return map defaults to off. A deployer's value, including "off", passes
 through unchanged.
 
 ===========================================================================
@@ -20,19 +20,24 @@ TestPortOnlyJobVariables
 */
 func TestPortOnlyJobVariables(t *testing.T) {
 	for _, tc := range []struct {
-		stack, reverse, rates, speed, cap                     string
-		wantStack, wantReverse, wantRates, wantSpeed, wantCap string
+		stack, reverse, rates, speed, cap, mall                         string
+		wantStack, wantReverse, wantRates, wantSpeed, wantCap, wantMall string
 	}{
-		{"", "", "", "", "", "on", "", "on", "on", "on"},
-		{"off", "on", "off", "off", "off", "off", "on", "off", "off", "off"},
-		{"on", "off", "100,50", "on", "9", "on", "off", "100,50", "on", "9"},
+		{"", "", "", "", "", "", "on", "", "on", "on", "on", "on"},
+		{"off", "on", "off", "off", "off", "off", "off", "on", "off", "off", "off", "off"},
+		{"on", "off", "100,50", "on", "9", "MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_FUR_HAT", "on", "off", "100,50", "on", "9",
+			"MALL_AVATAR_HAT:PACKAGE_ITEM_MALL_AVATAR_M_FUR_HAT"},
 	} {
 		t.Setenv("SRO_STORAGE_AUTO_STACK", tc.stack)
 		t.Setenv("SRO_REVERSE_RETURN_MAP", tc.reverse)
 		t.Setenv("SRO_ALCHEMY_RATES", tc.rates)
 		t.Setenv("SRO_GM_SETSPEED", tc.speed)
 		t.Setenv("SRO_ALCHEMY_MAX_PLUS", tc.cap)
+		t.Setenv("SRO_MALL_EXTRA_GOODS", tc.mall)
 		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
+		if variables["mall_extra_goods"] != tc.wantMall {
+			t.Fatalf("env %q: mall_extra_goods %v, want %s", tc.mall, variables["mall_extra_goods"], tc.wantMall)
+		}
 		if variables["alchemy_max_plus"] != tc.wantCap {
 			t.Fatalf("env %q: alchemy_max_plus %v, want %s", tc.cap, variables["alchemy_max_plus"], tc.wantCap)
 		}

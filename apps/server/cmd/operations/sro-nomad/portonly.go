@@ -25,6 +25,10 @@ parses it; the GameWorld's own unset value is always native.
     revives where it fell (action/teamdeath.go). Unlike the others, "on"
     is native and the deployment default (owner, 2026-10-13); "off" is the
     port-only town rule.
+  - SRO_MALL_EXTRA_GOODS (mall_extra_goods): authored Item Mall packages
+    the v1.150 mall does not list (commerce/mallextra.go). The deployment
+    default is on, as the owner decided on 2026-10-13; "off" is the
+    shipped mall.
 
 ===========================================================================
 */
@@ -50,6 +54,9 @@ const alchemyMaxPlusDefault = "on"
 // teamDeathReviveDefault is native, the owner's deployment default.
 const teamDeathReviveDefault = "on"
 
+// mallExtraGoodsDefault is the owner-approved deployment default.
+const mallExtraGoodsDefault = "on"
+
 /*
 ================
 portOnlySettings
@@ -62,6 +69,7 @@ type portOnlySettings struct {
 	GMSetSpeed       string
 	AlchemyMaxPlus   string
 	TeamDeathRevive  string
+	MallExtraGoods   string
 }
 
 /*
@@ -69,8 +77,8 @@ type portOnlySettings struct {
 portOnlySettingsFromEnv
 
 The deployer's values as written; storage auto-stack, the alchemy rates,
-/SETSPEED, the enhancement cap and the team-death revive take their
-defaults when unset.
+/SETSPEED, the enhancement cap, the team-death revive and the mall
+goods take their defaults when unset.
 ================
 */
 func portOnlySettingsFromEnv() portOnlySettings {
@@ -81,6 +89,7 @@ func portOnlySettingsFromEnv() portOnlySettings {
 		GMSetSpeed:       strings.TrimSpace(os.Getenv("SRO_GM_SETSPEED")),
 		AlchemyMaxPlus:   strings.TrimSpace(os.Getenv("SRO_ALCHEMY_MAX_PLUS")),
 		TeamDeathRevive:  strings.TrimSpace(os.Getenv("SRO_TEAM_DEATH_REVIVE")),
+		MallExtraGoods:   strings.TrimSpace(os.Getenv("SRO_MALL_EXTRA_GOODS")),
 	}
 	if settings.StorageAutoStack == "" {
 		settings.StorageAutoStack = storageAutoStackDefault
@@ -96,6 +105,9 @@ func portOnlySettingsFromEnv() portOnlySettings {
 	}
 	if settings.TeamDeathRevive == "" {
 		settings.TeamDeathRevive = teamDeathReviveDefault
+	}
+	if settings.MallExtraGoods == "" {
+		settings.MallExtraGoods = mallExtraGoodsDefault
 	}
 	return settings
 }
@@ -114,5 +126,6 @@ func (settings portOnlySettings) jobVariables(variables map[string]any) map[stri
 	variables["gm_setspeed"] = settings.GMSetSpeed
 	variables["alchemy_max_plus"] = settings.AlchemyMaxPlus
 	variables["team_death_revive"] = settings.TeamDeathRevive
+	variables["mall_extra_goods"] = settings.MallExtraGoods
 	return variables
 }

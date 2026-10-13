@@ -250,11 +250,23 @@ variable "beta_drop_mix" {
 }
 
 # shop_extra_goods adds NPC shop goods beyond the v1.150 stock (port-only,
-# not native; owner decision 2026-10-11). "on" sells the elixirs at 1M and
-# the Luck and Steady stones of degrees 1-3 at 5M in Jangan's smith (third
-# tab); "tab:item:price,..." is an operator list; "off" is the v1.150 stock.
+# not native; owner decisions 2026-10-11 and 2026-10-13). "on" sells the
+# elixirs at 1M and the degree 9 Luck, Steady, Astral, Athanasia and Repair
+# stones at 5M at Jangan's smith, the other degree 9 stones at 2M at Jangan's
+# grocer and the vigor potions at every herbalist (commerce/extragoods.go);
+# "tab:item:price,..." is an operator list; "off" is the v1.150 stock.
 # A malformed value stops GameWorld at boot.
 variable "shop_extra_goods" {
+  type    = string
+  default = "on"
+}
+
+# mall_extra_goods lists authored Item Mall packages the v1.150 mall does not
+# sell (port-only, not native; owner decision 2026-10-13). "on" adds the fur,
+# Halloween, pirate, holy knight and wing outfits at their authored prices
+# (commerce/mallextra.go); "tab:package,..." is an operator list; "off" is
+# the shipped mall. A malformed value stops GameWorld at boot.
+variable "mall_extra_goods" {
   type    = string
   default = "on"
 }
@@ -468,6 +480,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_DROP_CAP                  = var.beta_drop_cap
         SRO_BETA_DROP_MIX                  = var.beta_drop_mix
         SRO_SHOP_EXTRA_GOODS               = var.shop_extra_goods
+        SRO_MALL_EXTRA_GOODS               = var.mall_extra_goods
         SRO_STACK_SIZES                    = var.stack_sizes
         SRO_PUBLIC_API_ADDR                = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"
