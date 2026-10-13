@@ -269,9 +269,11 @@ func (rt *Runtime) HandleLocalRebirth(
 	}
 	destination := corpse.Spawn
 	candidate := before.Snapshot()
-	restoredHP, restoredMP, _, _ := rt.playerKeeperVitals(divisionID, candidate)
+	var restoredHP, restoredMP int64
 	if choice == wire.RebirthAtPresentPoint {
 		restoredHP, restoredMP = rt.presentRebirthVitals(divisionID, candidate)
+	} else {
+		restoredHP, restoredMP, _, _ = rt.playerKeeperVitals(divisionID, candidate)
 	}
 	candidate.CurrentHP, candidate.CurrentMP = &restoredHP, &restoredMP
 	var prepared enterworld.PreparedReentry
