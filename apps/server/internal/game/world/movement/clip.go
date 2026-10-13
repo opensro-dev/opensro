@@ -231,12 +231,33 @@ func (v *WaterValidator) ClipMovementPathFrom(from simulation.Spawn, fromOwner s
 		dz := f(to.Z + float64(simulation.SectorY(to.RegionID)-simulation.SectorY(start.RegionID))*1920 - start.Z)
 		dy := f(to.Y - start.Y)
 		if f(dy*dy+dx*dx+dz*dz) < 25 {
-			return report
+			return continuedReport(report)
 		}
 		start = report.Rest
 		startOwner = report.RestOwner
 	}
 	return ClipReport{Outcome: ClipBlocked, Class: ClipClassObject, Rest: from, RestOwner: fromOwner, TilesChecked: checked, TilesUncovered: uncovered, ObjectDeckOverrides: overrides, NativeResult: monster.NavResultBlocked}
+}
+
+/*
+================
+continuedReport
+
+QueryMovement (98B300) ends a continuation run once the leg's start is
+within 5 units of the destination: it breaks with the leg's own result,
+which carries a continuation bit (0x14) and no failure bit (0x10000001 broke
+earlier), and the position the leg reached. That is a completed step, not a
+block. An object outline exit to terrain (403FB0, 4044CE..4044FE) is such a
+leg, so a short step off an open deck edge stands at the exit point on the
+terrain below.
+================
+*/
+func continuedReport(report ClipReport) ClipReport {
+	report.Outcome = ClipArrived
+	report.Class = ""
+	report.BlockedTileX, report.BlockedTileZ = 0, 0
+	report.NativeResult = report.NativeResult&nativeLinkedResult | nativeContinueResult
+	return report
 }
 
 /*
@@ -794,7 +815,9 @@ func (c *ClientClip) processOwnedStep(characterName string, from simulation.Spaw
 		c.applied.Add(1)
 		return report.Rest, report.RestOwner, true
 	}
-	if c.Mode == ClipApply && report.Outcome == ClipArrived && report.NativeResult&nativeLinkedResult != 0 {
+	// A continued step (a linked cell, or an outline exit 98B300 ended
+	// within 5 units) stands where the leg reached, on that leg's owner.
+	if c.Mode == ClipApply && report.Outcome == ClipArrived && report.NativeResult&nativeContinueResult != 0 {
 		return report.Rest, report.RestOwner, false
 	}
 	return to, simulation.NavOwner{}, false
