@@ -857,6 +857,9 @@ export function createUi(
 	let leaveRequested = false;
 	// The loading screen whose art is being waited for, and since when.
 	let loadingHoldKey: string | null = null, loadingHoldSince = 0;
+	// Whether a world frame was on screen when that loading screen began: only
+	// then is there a frame to hold (a first world entry has none).
+	let loadingHoldWorld = false;
 	/*
 	================
 	takeLoadingVariant
@@ -8847,6 +8850,7 @@ export function createUi(
 			if ( (loading?.key ?? null) !== loadingHoldKey ) {
 				loadingHoldKey = loading?.key ?? null;
 				loadingHoldSince = now;
+				loadingHoldWorld = phase === "world" && next.worldReady || retainedWorld;
 			}
 			// Art not decoded yet: hold the retained world frame, as native's
 			// synchronous load does, while the background is demanded below.
@@ -8854,7 +8858,7 @@ export function createUi(
 				background: loading.background,
 				startup: loading.startup,
 				resident: loading.background !== null && resources.has( loading.background ),
-				worldShown: phase === "world" || retainedWorld,
+				worldShown: loadingHoldWorld,
 				heldForMs: now - loadingHoldSince
 			} );
 			if ( artHeld ) paths.push( loading!.background! );
