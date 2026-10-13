@@ -36,6 +36,9 @@ export interface ExperimentalOptions {
 	// Camera: ease the follow target's height and the collision release
 	// (camera-smoothing.ts); native 68F830 snaps both.
 	readonly smoothCamera: boolean;
+	// Port-only, not native: the unused enchant sparks on +8 and higher
+	// weapons and shields (equipmentEnchantSparks).
+	readonly enchantSparks: boolean;
 }
 
 /*
@@ -97,7 +100,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sunShadow: enabled( "sunShadow" ),
 		perPixelLighting: enabled( "perPixelLighting" ),
 		predictedRunUp: enabled( "predictedRunUp" ),
-		smoothCamera: enabled( "smoothCamera" )
+		smoothCamera: enabled( "smoothCamera" ),
+		enchantSparks: enabled( "enchantSparks" )
 	};
 }
 
@@ -120,6 +124,7 @@ export interface ExperimentalVideo {
 	readonly sunShadow: boolean;
 	readonly perPixelLighting: boolean;
 	readonly smoothCamera: boolean;
+	readonly enchantSparks: boolean;
 }
 
 /*
@@ -138,7 +143,8 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		hdrToneMap: options.hdrToneMap,
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting,
-		smoothCamera: options.smoothCamera
+		smoothCamera: options.smoothCamera,
+		enchantSparks: options.enchantSparks
 	};
 }
 

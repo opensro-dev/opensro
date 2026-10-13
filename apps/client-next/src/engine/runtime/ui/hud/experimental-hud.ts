@@ -117,6 +117,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-per-pixel-lighting",
 				label: "Per-pixel character light",
 				description: "Smooth lighting on characters and objects."
+			},
+			{
+				key: "enchantSparks",
+				id: "experimental-enchant-sparks",
+				label: "Enchant sparks",
+				description: "Sparks on +8 and higher weapons and shields."
 			}
 		]
 	},

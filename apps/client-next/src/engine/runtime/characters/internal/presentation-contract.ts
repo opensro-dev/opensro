@@ -406,6 +406,8 @@ export interface ActorOwner {
 	readonly referenceAppearances: { get( gid: number ): AppearanceChoice | undefined; };
 	readonly renderer: {
 		setCharacterAssembly( id: string, base: string, parts: readonly CharacterAttachment[] ): void;
+		// Port-only, not native: the Experimental enchant sparks; absent is off.
+		enchantSparks?(): boolean;
 	};
 	readonly resourceFor: ( entity: EntityState ) => Resource | undefined;
 	readonly resources: {

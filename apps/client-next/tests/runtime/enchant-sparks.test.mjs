@@ -1,0 +1,147 @@
+/*
+===========================================================================
+
+enchant-sparks.test.mjs - the Experimental enchant sparks on +8 and higher
+
+Port-only, not native (owner, 2026-10-13). v1.150 ships the
+system_enchant*_a_01.efp programs but never names them, so the original
+draws none. With the Experimental row on, a weapon or shield at +8 or
+higher wears its class's sparks on the bones and scales its rare twin
+authors; with it off (the default), or below +8, nothing changes.
+
+===========================================================================
+*/
+import "../helpers/native-source-loader.mjs";
+import { pathToFileURL as sourceFileUrl } from "node:url";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+	equipmentEnchantSparks,
+	equipmentParticleCatalog,
+	publishEquipmentParticleMetadata
+} from "../../../../scripts/build/char/equipmentParticles.mjs";
+
+/*
+================
+load
+================
+*/
+async function load( entry ) {
+	return import( sourceFileUrl( entry ).href );
+}
+const { assembleEquipmentAppearance, ENCHANT_SPARK_PLUS } = await load(
+	"src/engine/foundation/animation/equipment-appearance.ts"
+);
+const { equipmentSocket, validateEquipmentBranches } = await load(
+	"src/engine/foundation/animation/equipment-sockets.ts"
+);
+
+// ITEM_CH_SWORD_01_A, ITEM_CH_SHIELD_01_A, ITEM_CH_BOW_01_A, ITEM_EU_HARP_01_A,
+// ITEM_CH_SWORD_01_A_DEF, ITEM_CH_SWORD_01_A_RARE, ITEM_FORT_FORTRESS_HAMMER_06.
+const SWORD = 71, SHIELD = 251, BOW = 215, HARP = 10991, BEGINNER_SWORD = 3632, RARE_SWORD = 4014, HAMMER = 19227;
+const WEAPON_SLOT = 6, SHIELD_SLOT = 7;
+const SPARK = "system/system_enchant";
+
+/*
+================
+armamentDress
+
+A sword and a shield as the visuals build publishes them for a Chinese
+man, before the particle metadata adds their branches and catalogs.
+================
+*/
+function armamentDress() {
+	const record = ( slot, model, glb ) => ({
+		slot,
+		armorClass: 0,
+		thiefSuit: false,
+		visualMask: 1 << slot,
+		visualPriority: 0,
+		model,
+		source: null,
+		bodies: { CH_M: { glb, parts: [ "EQ0" ] } }
+	});
+	return {
+		equipment: {
+			[SWORD]: record( WEAPON_SLOT, "res/item/china/weapon/sword_01.bsr", "/assets/char/equipment/sword.glb" ),
+			[SHIELD]: record( SHIELD_SLOT, "res/item/china/shield/shield_01.bsr", "/assets/char/equipment/shield.glb" )
+		}
+	};
+}
+
+/*
+================
+sparksOf
+
+The spark particles of one assembly, as [effect, bone] pairs.
+================
+*/
+function sparksOf( dress, plus, enchantSparks ) {
+	const assembly = assembleEquipmentAppearance( {
+		resource: { codename: "CHAR_CH_MAN_ADVENTURER" },
+		dress,
+		equipment: [
+			{ slot: WEAPON_SLOT, refObjId: SWORD, plus },
+			{ slot: SHIELD_SLOT, refObjId: SHIELD, plus }
+		],
+		avatars: [],
+		hwanHair: false,
+		mounted: false,
+		weaponHidden: false,
+		attachmentsHidden: false,
+		fortressIndex: -1,
+		player: true,
+		ownerless: false,
+		committedWear: [],
+		freezeWear: true,
+		enchantSparks
+	} );
+	return assembly.particles.filter( p => p.effectPath.startsWith( SPARK ) ).map( p => [ p.effectPath, p.bone ] )
+		.sort();
+}
+
+test("each weapon class wears its own spark program on its rare twin's bones and scale", () => {
+	const sparks = equipmentEnchantSparks(), glows = equipmentParticleCatalog();
+	assert.deepEqual( sparks[SWORD], [ {
+		effectPath: SPARK + "_a_01.efp",
+		bone: "ai_end",
+		scale: Math.fround( 1.3 ),
+		offset: [ 0, 0, 0 ],
+		root: false
+	} ] );
+	assert.equal( sparks[SHIELD][0].effectPath, SPARK + "shield_a_01.efp" );
+	assert.equal( sparks[BOW][0].effectPath, SPARK + "bow_a_01.efp" );
+	assert.equal( sparks[HARP][0].effectPath, SPARK + "harp_a_01.efp" );
+	// A beginner item borrows its sibling's twin; it shares the model.
+	assert.deepEqual( sparks[BEGINNER_SWORD], sparks[SWORD] );
+	// The rare twin keeps its own glow, and a siege hammer is never enchanted.
+	assert.equal( sparks[RARE_SWORD], undefined );
+	assert.ok( glows[RARE_SWORD] );
+	assert.equal( sparks[HAMMER], undefined );
+	for ( const rows of Object.values( sparks ) ) {
+		for ( const row of rows ) {
+			assert.match( row.effectPath, /^system\/system_enchant(bow|harp|shield|staff)?_a_01\.efp$/ );
+			assert.ok( row.scale > 0 );
+		}
+	}
+});
+
+test("sparks show only with the row on and only at +8 or higher, on real private sockets", async () => {
+	const dress = armamentDress();
+	await publishEquipmentParticleMetadata( dress );
+	// The shield gains the private branch its sparks ride on.
+	const shieldBranches = dress.equipment[SHIELD].bodies.CH_M.branches;
+	validateEquipmentBranches( shieldBranches );
+	assert.ok( shieldBranches[0].nodes.some( n => n.name === "Bone01" ) );
+	assert.equal( ENCHANT_SPARK_PLUS, 8 );
+	const on = [
+		[ SPARK + "_a_01.efp", equipmentSocket( WEAPON_SLOT, "EQ0", "ai_end" ) ],
+		[ SPARK + "shield_a_01.efp", equipmentSocket( SHIELD_SLOT, "EQ0", "Bone01" ) ]
+	].sort();
+	assert.deepEqual( sparksOf( dress, 8, true ), on );
+	assert.deepEqual( sparksOf( dress, 12, true ), on );
+	assert.deepEqual( sparksOf( dress, 7, true ), [] );
+	// The default, and the native client: the row off draws nothing extra.
+	assert.deepEqual( sparksOf( dress, 10, false ), [] );
+	assert.deepEqual( sparksOf( dress, 10, undefined ), [] );
+});

@@ -35,6 +35,8 @@ export type { WornItem };
 const WORN_SLOT_COUNT = 9;
 const WEAPON_SLOT = 6;
 const SHIELD_SLOT = 7;
+// Port-only, not native: the lowest plus that wears the enchant sparks.
+export const ENCHANT_SPARK_PLUS = 8;
 
 export type SetEntry = {
 	branches?: readonly EquipmentBranch[];
@@ -67,6 +69,8 @@ export interface DressCatalog {
 	fortressWear?: Record<string, SetEntry>;
 	defaultWearLanguage?: number;
 	specialGlows?: Record<string, readonly ModelParticle[]>;
+	// Port-only, not native: equipmentEnchantSparks' rows, by item id.
+	enchantSparks?: Record<string, readonly ModelParticle[]>;
 	avatarVisualOverrides?: Record<string, { animation: string; priority: number; additionalBsr: string; }>;
 	avatarAuxiliary?: Record<string, AuxiliaryEntry>;
 	equipment?: Record<string, EquipmentRecord>;
@@ -94,6 +98,8 @@ export interface AppearanceInput {
 	readonly ownerless: boolean;
 	readonly committedWear: readonly string[];
 	readonly freezeWear: boolean;
+	// Port-only, not native: the Experimental enchant sparks are on.
+	readonly enchantSparks?: boolean;
 }
 
 export interface AppearanceAssembly {
@@ -285,7 +291,10 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 			}
 		}
 		if ( !armament ) continue;
-		for ( const effect of dress.specialGlows?.[item.refObjId] ?? [] ) {
+		const sparks = input.enchantSparks && item.plus >= ENCHANT_SPARK_PLUS ?
+			dress.enchantSparks?.[item.refObjId] ?? [] :
+			[];
+		for ( const effect of [ ...(dress.specialGlows?.[item.refObjId] ?? []), ...sparks ] ) {
 			for ( const part of entry.parts ) {
 				if ( !entry.branches?.find( b => b.part === part )?.nodes.some( n => n.name === effect.bone ) ) {
 					throw Error( "Missing published equipment particle socket" );

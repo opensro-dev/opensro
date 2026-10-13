@@ -3237,6 +3237,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/actor-appearance.ts",
+			"expression": "renderer.enchantSparks",
+			"function": "resolve",
+			"kind": "callback",
+			"reason": "Port-only, not native: the per-actor phase reads the renderer's Experimental enchant-sparks setting when it assembles an appearance."
+		},
+		{
+			"file": "src/engine/runtime/characters/actor-appearance.ts",
 			"expression": "wornEquipment",
 			"function": "resolve",
 			"kind": "callback",

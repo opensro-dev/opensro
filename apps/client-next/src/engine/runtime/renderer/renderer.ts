@@ -158,6 +158,16 @@ export function createRenderer(
 		},
 		/*
 		================
+		enchantSparks
+
+		Read by the character presenter when it assembles an appearance.
+		================
+		*/
+		enchantSparks() {
+			return experimental.enchantSparks;
+		},
+		/*
+		================
 		experimentalVideo
 		================
 		*/

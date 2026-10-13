@@ -243,6 +243,8 @@ export interface Renderer extends Disposable {
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
+	// Port-only, not native: whether the Experimental enchant sparks are on.
+	enchantSparks?(): boolean;
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null
 	): void;

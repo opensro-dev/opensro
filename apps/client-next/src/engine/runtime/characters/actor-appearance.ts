@@ -269,7 +269,8 @@ export function createActorAppearance( owner: ActorOwner ) {
 						-1;
 					const visualState = states.get( entity.gid );
 					if ( visualState ) visualState.fortressIndex = fortressIndex;
-					const signature = fortressIndex + ":" + Number( freezeWear ) + ":" +
+					const enchantSparks = renderer.enchantSparks?.() === true;
+					const signature = fortressIndex + ":" + Number( freezeWear ) + ":" + Number( enchantSparks ) + ":" +
 						Number( entity.mountedOn !== undefined ) + ":" + Number( hwanHair ) + ":" +
 						Number( weaponHidden ) + ":" +
 						Number( !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden ) + ":" +
@@ -295,7 +296,8 @@ export function createActorAppearance( owner: ActorOwner ) {
 							player,
 							ownerless: false,
 							committedWear: committedWear?.resource === resource ? committedWear.keys : [],
-							freezeWear
+							freezeWear,
+							enchantSparks
 						} );
 						const { parts, auxiliary, defaultWear } = assembly;
 						const particles: ModelParticle[] = [

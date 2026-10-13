@@ -500,6 +500,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 				}
 				if ( value.dress ) {
 					validateEquipmentParticles( value.dress.specialGlows );
+					validateEquipmentParticles( value.dress.enchantSparks );
 					if (
 						value.dress.defaultWearLanguage !== undefined &&
 						(!Number.isInteger( value.dress.defaultWearLanguage ) ||

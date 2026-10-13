@@ -89,7 +89,8 @@ export async function captureEnvironment( { bundle, camera, features = false } )
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
-		smoothCamera: false
+		smoothCamera: false,
+		enchantSparks: false
 	};
 	try {
 		const startupDeadline = performance.now() + 15000;

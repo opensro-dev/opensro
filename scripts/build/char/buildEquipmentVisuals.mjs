@@ -184,5 +184,6 @@ export async function buildEquipmentVisuals( dress ) {
 	const metadata = { ...dress, equipment: out };
 	await publishEquipmentParticleMetadata( metadata );
 	dress.specialGlows = metadata.specialGlows;
+	dress.enchantSparks = metadata.enchantSparks;
 	return out;
 }

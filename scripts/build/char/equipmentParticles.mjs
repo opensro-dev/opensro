@@ -6,7 +6,7 @@ equipmentParticles.mjs - native item particles and private equipment sockets
 Ordinary weapons need unweighted marker bones for skill launch points even
 when they have no rare glow, and the shoulder garments carry ambient
 particles on their own private bones. Publish all three through the
-equipment owner.
+equipment owner, with the port-only enchant sparks beside the rare glows.
 
 ===========================================================================
 */
@@ -21,18 +21,29 @@ import { parseCharacterBsr, parseBsk } from "./formats.mjs";
 const WEAPON_TYPE = 6;
 const DUAL_WEAPON_TYPES = new Set( [ 9, 13 ] );
 const HARP_TYPE = 14;
+const SHIELD_TYPE = 4;
+// Weapon TypeID4 classes that carry their own enchant spark program.
+const BOW_TYPES = new Set( [ 6, 12 ] );
+const STAFF_TYPES = new Set( [ 10, 11, 15 ] );
+// The fortress hammers are siege tools, never enchanted.
+const FORTRESS_HAMMER_TYPE = 16;
+// A beginner item names the model of its _01_A sibling.
+const BEGINNER_SUFFIX = "_DEF";
+const RARE_SUFFIX = "_RARE";
+const SPARK_ROOT = "system/system_enchant";
 // ModDataParticle set kind of the always-on ambient set (model-particles.ts).
 export const AMBIENT_MODIFIER_KIND = 2;
 
 /*
 ================
-equipmentParticleCatalog
+itemRareRows
 
-Only special-state two activates itemrare's authored particle descriptors.
+itemrare.txt's rows for the special-state-two items, by item code: the
+authored effect, its bone and its scale.
 ================
 */
-export function equipmentParticleCatalog( records = loadEquipmentRecords( retailTextdataRoot ) ) {
-	const byCode = new Map( [ ...records.values() ].map( r => [ r.code, r ] ) ), out = {};
+function itemRareRows( byCode ) {
+	const out = new Map();
 	for (
 		const line of fs.readFileSync( path.join( clientV150ResinfoRoot, "itemrare.txt" ), "utf8" ).split( /\r?\n/ )
 	) {
@@ -48,13 +59,80 @@ export function equipmentParticleCatalog( records = loadEquipmentRecords( retail
 				"Invalid special-state effect"
 			);
 		}
-		(out[item.id] ??= []).push( {
+		if ( !out.has( item.code ) ) out.set( item.code, [] );
+		out.get( item.code ).push( { effectPath, bone: c[3], scale: Math.fround( Number( c[2] ) / 100 ) } );
+	}
+	return out;
+}
+
+/*
+================
+equipmentParticleCatalog
+
+Only special-state two activates itemrare's authored particle descriptors.
+================
+*/
+export function equipmentParticleCatalog( records = loadEquipmentRecords( retailTextdataRoot ) ) {
+	const byCode = new Map( [ ...records.values() ].map( r => [ r.code, r ] ) ), out = {};
+	for ( const [code, rows] of itemRareRows( byCode ) ) {
+		out[byCode.get( code ).id] = rows.map( row => ({ ...row, offset: [ 0, 0, 0 ], root: false }) );
+	}
+	return out;
+}
+
+/*
+================
+enchantSparkEffect
+
+The spark program for one weapon or shield class, or null for an item
+that is never enchanted.
+================
+*/
+function enchantSparkEffect( record ) {
+	if ( record.tid[2] === SHIELD_TYPE ) return SPARK_ROOT + "shield_a_01.efp";
+	if ( record.tid[2] !== WEAPON_TYPE || record.tid[3] === FORTRESS_HAMMER_TYPE ) return null;
+	if ( BOW_TYPES.has( record.tid[3] ) ) return SPARK_ROOT + "bow_a_01.efp";
+	if ( record.tid[3] === HARP_TYPE ) return SPARK_ROOT + "harp_a_01.efp";
+	if ( STAFF_TYPES.has( record.tid[3] ) ) return SPARK_ROOT + "staff_a_01.efp";
+	return SPARK_ROOT + "_a_01.efp";
+}
+
+/*
+================
+equipmentEnchantSparks
+
+Port-only, not native (owner, 2026-10-13): the enchant sparks the
+Experimental window can show on a +8 or higher weapon or shield. v1.150
+ships system_enchant*_a_01.efp in Particles.pk2/system, but neither
+SRO_Client.exe nor any resinfo or textdata table names them, so the
+original never drew them. Each item wears its class's program on the
+bones and at the scales itemrare.txt authors for its rare twin (the same
+model): code_RARE, or for a beginner _DEF item its _01_A sibling's twin
+when the model matches. An item without a twin gets none.
+================
+*/
+export function equipmentEnchantSparks( records = loadEquipmentRecords( retailTextdataRoot ) ) {
+	const byCode = new Map( [ ...records.values() ].map( r => [ r.code, r ] ) ), rare = itemRareRows( byCode );
+	const out = {};
+	for ( const record of records.values() ) {
+		if ( record.specialState === 2 || record.slot === null ) continue;
+		const effectPath = enchantSparkEffect( record );
+		if ( !effectPath ) continue;
+		let twin = rare.get( record.code + RARE_SUFFIX );
+		if ( !twin && record.code.endsWith( BEGINNER_SUFFIX ) ) {
+			const base = byCode.get( record.code.slice( 0, -BEGINNER_SUFFIX.length ) );
+			if ( base && base.resolvedModel === record.resolvedModel ) twin = rare.get( base.code + RARE_SUFFIX );
+		}
+		if ( !twin ) continue;
+		const bones = new Map();
+		for ( const row of twin ) if ( !bones.has( row.bone ) ) bones.set( row.bone, row.scale );
+		out[record.id] = [ ...bones ].map( ( [bone, scale] ) => ({
 			effectPath,
-			bone: c[3],
-			scale: Math.fround( Number( c[2] ) / 100 ),
+			bone,
+			scale,
 			offset: [ 0, 0, 0 ],
 			root: false
-		} );
+		}) );
 	}
 	return out;
 }
@@ -124,11 +202,14 @@ instead and carries the set itself.
 export async function publishEquipmentParticleMetadata( dress ) {
 	const records = loadEquipmentRecords( retailTextdataRoot ),
 		particles = equipmentParticleCatalog( records ),
+		sparks = equipmentEnchantSparks( records ),
 		ambient = equipmentAmbientParticles( records ),
 		cache = new Map();
 	dress.specialGlows = particles;
+	dress.enchantSparks = sparks;
 	for ( const [id, record] of records ) {
-		const effects = particles[id] ?? [], visual = dress.equipment[id];
+		// A shield needs its private branch for its sparks' bones too.
+		const effects = [ ...(particles[id] ?? []), ...(sparks[id] ?? []) ], visual = dress.equipment[id];
 		if ( !visual ) continue;
 		for ( const [body, entry] of Object.entries( visual.bodies ) ) {
 			// An auxiliary entry carries its own ambient set on its own bones.
@@ -185,5 +266,10 @@ export async function publishEquipmentParticleMetadata( dress ) {
 			}
 		}
 	}
-	return { items: Object.keys( particles ).length, ambient: ambient.size, sources: cache.size };
+	return {
+		items: Object.keys( particles ).length,
+		sparks: Object.keys( sparks ).length,
+		ambient: ambient.size,
+		sources: cache.size
+	};
 }

@@ -33,7 +33,8 @@ const OFF = Object.freeze( {
 	sunShadow: false,
 	perPixelLighting: false,
 	predictedRunUp: false,
-	smoothCamera: false
+	smoothCamera: false,
+	enchantSparks: false
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -111,7 +112,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		hdrToneMap: false,
 		sunShadow: false,
 		perPixelLighting: false,
-		smoothCamera: false
+		smoothCamera: false,
+		enchantSparks: false
 	} );
 	for (
 		const key of [
@@ -123,7 +125,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 			"hdrToneMap",
 			"sunShadow",
 			"perPixelLighting",
-			"smoothCamera"
+			"smoothCamera",
+			"enchantSparks"
 		]
 	) {
 		assert.equal( experimentalOptions( { [key]: 1 } )[key], false );
@@ -192,7 +195,7 @@ test("the window's tabs cover every preference once and Open returns to Image", 
 	// changing the indices used to reopen the existing tabs.
 	assert.deepEqual(
 		EXPERIMENTAL_TABS[2].rows.map( row => row.key ),
-		[ "sunShadow", "perPixelLighting" ]
+		[ "sunShadow", "perPixelLighting", "enchantSparks" ]
 	);
 	for ( const tab of EXPERIMENTAL_TABS ) assert.ok( tab.rows.length <= 5, "At most five rows a tab" );
 	const keys = EXPERIMENTAL_TABS.flatMap( tab => tab.rows.map( row => row.key ) ).sort();
