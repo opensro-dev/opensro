@@ -27,6 +27,12 @@ export const REFUSED_DOMAIN = "Network.";
 const PORT_WAIT_MS = 15000;
 const PORT_POLL_MS = 100;
 const DUMP_SETTLE_MS = 300;
+// A detailed dump of a loaded tab takes a few seconds; past this the run
+// fails instead of waiting forever for a tracingComplete that never comes.
+const DUMP_DEADLINE_MS = 60000;
+// Chrome's child processes can hold profile files briefly after exit.
+const PROFILE_REMOVE_RETRIES = 10;
+const PROFILE_REMOVE_DELAY_MS = 200;
 const MIB = 1024 * 1024;
 
 // The probe launcher's headless GPU switches (scripts/lib/probeBrowser.mjs).
@@ -74,14 +80,21 @@ export function chromePath() {
 ================
 createCdpConnection
 
-One CDP connection over socket (a WebSocket or anything with send, close
-and onmessage). send( method, params, sessionId ) resolves the result or
-rejects the protocol error; on( listener ) receives every event.
+One CDP connection over socket (a WebSocket or anything with send, close,
+onmessage and onclose). send( method, params, sessionId ) resolves the
+result or rejects the protocol error; on( listener ) receives every event.
+Once the socket closes, every pending and later send rejects, so a run
+whose browser died fails instead of hanging.
 ================
 */
 export function createCdpConnection( socket ) {
-	let next = 1;
+	let next = 1, closed = false;
 	const waiting = new Map(), listeners = new Set();
+	socket.onclose = () => {
+		closed = true;
+		for ( const { reject } of waiting.values() ) reject( Error( "the CDP connection closed" ) );
+		waiting.clear();
+	};
 	socket.onmessage = event => {
 		const message = JSON.parse( typeof event === "string" ? event : event.data );
 		if ( message.id !== undefined && waiting.has( message.id ) ) {
@@ -101,6 +114,7 @@ export function createCdpConnection( socket ) {
 					Error( `${method} refused: a memory run never enables DevTools network inspection` )
 				);
 			}
+			if ( closed ) return Promise.reject( Error( `${method}: the CDP connection is closed` ) );
 			return new Promise( ( resolve, reject ) => {
 				const id = next++;
 				waiting.set( id, { resolve, reject } );
@@ -117,11 +131,40 @@ export function createCdpConnection( socket ) {
 
 /*
 ================
+removeProfile
+================
+*/
+function removeProfile( profile ) {
+	rmSync( profile, {
+		recursive: true,
+		force: true,
+		maxRetries: PROFILE_REMOVE_RETRIES,
+		retryDelay: PROFILE_REMOVE_DELAY_MS
+	} );
+}
+
+/*
+================
+stopChrome
+
+Kills Chrome and waits for it to exit, unless it already has: a crashed
+or timed-out Chrome never emits another "exit".
+================
+*/
+export async function stopChrome( chrome ) {
+	if ( chrome.exitCode !== null || chrome.signalCode !== null ) return;
+	const exited = new Promise( resolve => chrome.once( "exit", resolve ) );
+	chrome.kill();
+	await exited;
+}
+
+/*
+================
 launchRawChrome
 
 System Chrome with an isolated profile and an ephemeral debugging port,
 connected over its browser WebSocket. close() ends Chrome and removes the
-profile.
+profile. A launch that fails on the way does the same before it throws.
 ================
 */
 export async function launchRawChrome( { headed = false, extraArgs = [] } = {} ) {
@@ -134,29 +177,34 @@ export async function launchRawChrome( { headed = false, extraArgs = [] } = {} )
 		...extraArgs,
 		"about:blank"
 	], { stdio: "ignore" } );
+	const abandon = async error => {
+		await stopChrome( chrome );
+		removeProfile( profile );
+		throw error;
+	};
 	const portFile = join( profile, "DevToolsActivePort" );
 	const deadline = Date.now() + PORT_WAIT_MS;
 	while ( !existsSync( portFile ) || !readFileSync( portFile, "utf8" ).includes( "\n" ) ) {
-		if ( Date.now() > deadline ) {
-			chrome.kill();
-			throw Error( "Chrome did not open its debugging port" );
-		}
+		if ( Date.now() > deadline ) return abandon( Error( "Chrome did not open its debugging port" ) );
 		await new Promise( resolve => setTimeout( resolve, PORT_POLL_MS ) );
 	}
 	const [port, path] = readFileSync( portFile, "utf8" ).split( "\n" );
 	const socket = new WebSocket( `ws://127.0.0.1:${port}${path}` );
-	await new Promise( ( resolve, reject ) => {
-		socket.onopen = resolve;
-		socket.onerror = reject;
-	} );
+	try {
+		await new Promise( ( resolve, reject ) => {
+			socket.onopen = resolve;
+			socket.onerror = () => reject( Error( "Chrome's debugging WebSocket did not open" ) );
+		} );
+	} catch ( error ) {
+		return abandon( error );
+	}
 	const cdp = createCdpConnection( socket );
 	return {
 		cdp,
 		async close() {
 			cdp.close();
-			chrome.kill();
-			await new Promise( resolve => chrome.once( "exit", resolve ) );
-			rmSync( profile, { recursive: true, force: true } );
+			await stopChrome( chrome );
+			removeProfile( profile );
 		}
 	};
 }
@@ -208,18 +256,30 @@ export function parseMemoryDump( events, processTypes = new Map() ) {
 ================
 memoryDump
 
-One deterministic detailed dump of every Chrome process.
+One deterministic detailed dump of every Chrome process. Rejects when
+Chrome has not finished the trace within deadlineMs.
 ================
 */
-export async function memoryDump( cdp ) {
+export async function memoryDump( cdp, deadlineMs = DUMP_DEADLINE_MS ) {
 	const events = [];
-	let complete;
+	let complete, timer;
 	const done = new Promise( resolve => complete = resolve );
+	const late = new Promise( ( _, reject ) => {
+		timer = setTimeout(
+			() => reject( Error( `Chrome did not finish the memory dump within ${deadlineMs} ms` ) ),
+			deadlineMs
+		);
+	} );
 	const stop = cdp.on( message => {
 		if ( message.method === "Tracing.dataCollected" ) events.push( ...message.params.value );
 		if ( message.method === "Tracing.tracingComplete" ) complete();
 	} );
-	try {
+	/*
+	================
+	trace
+	================
+	*/
+	const trace = async () => {
 		await cdp.send( "Tracing.start", {
 			transferMode: "ReportEvents",
 			traceConfig: {
@@ -234,7 +294,11 @@ export async function memoryDump( cdp ) {
 		await new Promise( resolve => setTimeout( resolve, DUMP_SETTLE_MS ) );
 		await cdp.send( "Tracing.end" );
 		await done;
+	};
+	try {
+		await Promise.race( [ trace(), late ] );
 	} finally {
+		clearTimeout( timer );
 		stop();
 	}
 	const { processInfo } = await cdp.send( "SystemInfo.getProcessInfo" );

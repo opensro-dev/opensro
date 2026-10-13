@@ -17,6 +17,9 @@ It never uses Playwright (core/raw-cdp.mjs): Playwright's DevTools Network
 domain makes the renderer keep a copy of every response body, which a
 memory number must not include. Every Network.* method is refused.
 
+The iPhone 13 device is desktop Chrome emulating the phone's viewport and
+DPR, not WebKit on a phone: its numbers are Chrome's, not Safari's.
+
 Run it against the dev server or a bench bundle, as fps-bench:
 
   pnpm --filter @sro/client-next build:bench
