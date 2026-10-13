@@ -71,10 +71,12 @@ type Runtime struct {
 	// only by narrow tests with no restricted-area catalog.
 	CanEnterRegion func(character *enterworld.Character, regionID uint16) bool
 	// TownEntryBlocked is the thief's stolen-goods rule (#721): a thief in
-	// job mode with a summoned transport may not enter a town. Checked at
-	// the same boundaries as CanEnterRegion; a refusal carries the native
-	// 0x3058 notice. Nil allows every entry.
-	TownEntryBlocked func(character *enterworld.Character, regionID uint16) bool
+	// job mode with a summoned transport may not cross from a battlefield
+	// region into a protected one (v1.188 CGObjCOS_AdmitJobRegionTransition
+	// 4D2C20). It gets the region the move leaves and the one it reaches,
+	// checked at the same boundaries as CanEnterRegion; a refusal carries
+	// the native 0x3058 notice. Nil allows every entry.
+	TownEntryBlocked func(character *enterworld.Character, fromRegion, toRegion uint16) bool
 	// ClearPendingPickup, when set, clears the character's pickup-approach
 	// latch before a ground move applies (the reference clears
 	// missionPendingPickups on every accepted move; the tracker itself
@@ -449,7 +451,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				Reason:          "areaAccessDenied",
 			})
 		}
-		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, goal.RegionID) {
+		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, live.RegionID, goal.RegionID) {
 			return thiefCargoTownRefusal()
 		}
 		committed, committedWalk, refusal := rt.AdmitGroundWalk(character.Name, live, state.LiveOwnerAt(nowMs), goal)
@@ -467,7 +469,7 @@ func (rt *Runtime) handleMoveLocked(divisionID string, character *enterworld.Cha
 				Reason:          "areaAccessDenied",
 			})
 		}
-		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, committed.RegionID) {
+		if rt.TownEntryBlocked != nil && rt.TownEntryBlocked(character, live.RegionID, committed.RegionID) {
 			return thiefCargoTownRefusal()
 		}
 		request.RegionID = committed.RegionID

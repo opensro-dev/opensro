@@ -217,7 +217,7 @@ func TestHandleMoveRefusesAThiefCargoInTownWithItsNotice(t *testing.T) {
 	character := testCharacter()
 	rt := testRuntime(character)
 	blocked := true
-	rt.TownEntryBlocked = func(_ *enterworld.Character, regionID uint16) bool {
+	rt.TownEntryBlocked = func(_ *enterworld.Character, _, regionID uint16) bool {
 		return blocked && regionID == 0x7e7e
 	}
 	body := encodeMoveBody(1, 0x7e7d, 2000, 0, 920)

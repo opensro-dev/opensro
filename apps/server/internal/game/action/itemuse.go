@@ -436,8 +436,11 @@ func (rt *Runtime) HandleItemUse(
 				result = itemUseFailure(errCodeCantActivateCart)
 				return false
 			}
-			// #721: "a thief cannot summon a transport in a town" (the
-			// client's own error 149), the summon side of the stolen-goods rule.
+			// #721, the summon side of the stolen-goods rule: a thief (job
+			// state 2) cannot summon a transport (TID 1/2/3/2) in a protected
+			// region (IsBattleField clear), the Thieves' Den included: v1.188
+			// CGItemExpendable_UseItem 49BD8A..49BDCA answers 0x1895, the
+			// client's error 149, whose English text names the Thieves' Den.
 			if cosRef.TidWord>>11 == cosBandTransport && enterworld.DressedJob(character) == domain.JobThief &&
 				townRegion(rt.liveSpawn(simulation.WorldKey(divisionID, character.Name), character, rt.Now().UnixMilli()).RegionID) {
 				result = itemUseFailure(errCodeThiefCartInTown)

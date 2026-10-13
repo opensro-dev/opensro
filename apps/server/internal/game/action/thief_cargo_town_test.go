@@ -3,10 +3,12 @@
 
 thief_cargo_town_test.go - a thief's transport stays out of towns (#721)
 
-The v1.150 client's own messages state the rule: "in thief state you
-cannot enter a town with a transport summoned" (0x3058 kind 1, category
-0x11 code 1) and "a thief cannot summon a transport in a town" (item use
-error 149).
+A thief in job mode with a summoned transport may not cross from a
+battlefield region into a protected one (v1.188 4D2C20; 0x3058 kind 1,
+category 0x11 code 1), and may not summon a transport in a protected
+region (49BD8A..49BDCA; item use error 149, "Cannot recall transport in
+the Thieves' Den"). Thief town (region 0x60B6) is one protected region:
+walking inside it is never refused, summoning there is.
 
 ===========================================================================
 */
@@ -56,13 +58,18 @@ func dressThief(c *enterworld.Character) {
 		RefObjID: 9102, Codename: "ITEM_CH_M_TRADE_THIEF_04", TypeFlags: wire.PackTypeFlags(3, 1, 7, 2), StackCount: 1})
 }
 
+// thiefTown is the Thieves' Den's one region, where its traders stand
+// (npcpos.txt NPC_TD_THIEF_SELL/BUY).
+const thiefTown = 0x60B6
+
 /*
 ================
 TestThiefWithTransportCannotEnterATown
 
 Only the combination is refused: a thief in job mode, its transport
-summoned, a town region. A trader with a transport, a thief without one,
-or a battlefield region all pass.
+summoned, crossing from a battlefield into a protected region. A trader
+with a transport, a thief without one, a move into a battlefield, or a move
+within a protected region all pass.
 ================
 */
 func TestThiefWithTransportCannotEnterATown(t *testing.T) {
@@ -70,21 +77,29 @@ func TestThiefWithTransportCannotEnterATown(t *testing.T) {
 	thief := testCharacter()
 	dressThief(thief)
 	rt, _ := newTestRuntime(thief, testCosSource(testItems()))
-	if rt.ThiefCargoTownBlocked(thief, town) {
+	if rt.ThiefCargoTownBlocked(thief, field, town) {
 		t.Fatal("a thief without a transport was refused a town")
 	}
 	gid, _ := enterworld.CosObjectIDForCharacter(thief)
 	thief.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true}
-	if !rt.ThiefCargoTownBlocked(thief, town) {
+	if !rt.ThiefCargoTownBlocked(thief, field, town) {
 		t.Fatal("a thief with a transport entered a town")
 	}
-	if rt.ThiefCargoTownBlocked(thief, field) {
+	if rt.ThiefCargoTownBlocked(thief, town, field) || rt.ThiefCargoTownBlocked(thief, field, field) {
 		t.Fatal("a thief with a transport was refused a battlefield")
+	}
+	// Inside a protected region nothing is crossed: the thief walks the
+	// Thieves' Den (and a town it is already in) to sell its goods.
+	if townRegion(thiefTown) == false {
+		t.Fatalf("thief town %#x is not a protected region", thiefTown)
+	}
+	if rt.ThiefCargoTownBlocked(thief, thiefTown, thiefTown) || rt.ThiefCargoTownBlocked(thief, town, town) {
+		t.Fatal("a thief with a transport was refused a move within a protected region")
 	}
 	trader := testCharacter()
 	dressTrader(trader)
 	trader.ActiveCOS = thief.ActiveCOS
-	if rt.ThiefCargoTownBlocked(trader, town) {
+	if rt.ThiefCargoTownBlocked(trader, field, town) {
 		t.Fatal("a trader with a transport was refused a town")
 	}
 }

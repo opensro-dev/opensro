@@ -276,15 +276,34 @@ func townRegion(regionID uint16) bool {
 ================
 ThiefCargoTownBlocked
 
-#721, from the v1.150 client's own messages: "in thief state you cannot
-enter a town with a transport summoned" (category 0x11 code 1). Neither
-binary's site was found; this is the inferred rule the text states: a
-thief in job mode whose transport is summoned may not move into a town.
-Movement checks it at its destination boundaries (TownEntryBlocked).
+#721, the movement side of the stolen-goods rule: a thief in job mode
+whose transport is summoned may not cross from a battlefield region into a
+protected one. v1.188 CGObjCOS_AdmitJobRegionTransition (4D2C20) refuses a
+COS's region change only when its owner's job state is thief (2), the
+region it leaves has IsBattleField set and the one it enters has it clear
+(region record +2): moving within a protected region, the Thieves' Den
+included, is never refused. Thief town is one isolated protected region,
+reached through its gates, so a thief walks it freely to sell; re-testing
+the destination alone (#726) refused every step there. INFERENCE: native
+refuses the transport's own transition; the port refuses the owner's move,
+which the transport follows.
 ================
 */
-func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, regionID uint16) bool {
-	return enterworld.DressedJob(c) == domain.JobThief && rt.summonedVehicle(c) && townRegion(regionID)
+func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, fromRegion, toRegion uint16) bool {
+	return enterworld.DressedJob(c) == domain.JobThief && rt.summonedVehicle(c) &&
+		battlefieldRegion(fromRegion) && townRegion(toRegion)
+}
+
+/*
+================
+battlefieldRegion
+
+A region whose _RefRegion.IsBattleField is set: players may fight there.
+================
+*/
+func battlefieldRegion(regionID uint16) bool {
+	allowed, known := worldgeom.RegionPlayerCombat(regionID)
+	return known && allowed
 }
 
 /*
