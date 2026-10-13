@@ -209,6 +209,7 @@ type peerAppearanceCapture struct {
 	jobGrade      uint8
 	skin          wire.TransformSkin
 	worn          []wornEquipRow
+	avatars       []wornEquipRow
 }
 
 /*
@@ -292,6 +293,22 @@ func capturePeerAppearance(character *enterworld.Character, resolvedModelRef uin
 			plus:      row.Plus,
 		})
 	}
+	// The worn avatar dresses ride the spawn row's avatar loop, which the
+	// v1.150 client reads and dresses (86B0C7). INFERENCE: the server fills
+	// that loop from the avatar inventory, the only place a worn dress is
+	// kept; this server sent it empty, so other players never saw a dress.
+	if character.AvatarInventory != nil {
+		for _, row := range character.AvatarInventory.Rows {
+			if row.RefObjID == 0 {
+				continue
+			}
+			captured.avatars = append(captured.avatars, wornEquipRow{
+				slot:      row.Slot,
+				refObjID:  row.RefObjID,
+				typeFlags: row.TypeFlags,
+			})
+		}
+	}
 	return captured
 }
 
@@ -372,6 +389,11 @@ func peerAppearance(guilds enterworld.GuildStore, unions *union.Authority, divis
 			TypeFlags: row.typeFlags,
 			OptLevel:  uint8(plus),
 		})
+	}
+	avatars := captured.avatars
+	sort.Slice(avatars, func(i, j int) bool { return avatars[i].slot < avatars[j].slot })
+	for _, row := range avatars {
+		appearance.Avatars = append(appearance.Avatars, wire.PlayerEquipItem{RefObjID: row.refObjID, TypeFlags: row.typeFlags})
 	}
 	return appearance
 }

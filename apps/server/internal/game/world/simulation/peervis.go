@@ -55,6 +55,10 @@ type PeerAppearance struct {
 	// Equipment is the WORN set (equipment-band inventory slots), in slot
 	// order, for the sub_86afb0 equip loop.
 	Equipment []wire.PlayerEquipItem
+	// Avatars are the worn avatar dresses (the avatar inventory, socket
+	// order) for the @0x0086b0c7 avatar loop. Without them a peer who comes
+	// into view is drawn without its dress.
+	Avatars []wire.PlayerEquipItem
 	// GuildName/GuildID/GuildGrantName/CrestParam are the guild half of
 	// the sub_869df0 non-local tail, resolved from the store's guild door
 	// (the same rows the 0x32C4 seed encodes) for guild members and left
@@ -91,13 +95,16 @@ type PeerAppearance struct {
 ================
 ItemIDs
 
-The item ids a spawn row of this appearance names: the worn set and a
-player skin's copied equipment.
+The item ids a spawn row of this appearance names: the worn set, the
+worn avatars and a player skin's copied equipment.
 ================
 */
 func (a *PeerAppearance) ItemIDs() []uint32 {
-	ids := make([]uint32, 0, len(a.Equipment)+len(a.Skin.Equipment))
+	ids := make([]uint32, 0, len(a.Equipment)+len(a.Avatars)+len(a.Skin.Equipment))
 	for _, item := range a.Equipment {
+		ids = append(ids, item.RefObjID)
+	}
+	for _, item := range a.Avatars {
 		ids = append(ids, item.RefObjID)
 	}
 	if a.Skin.Player {
@@ -140,6 +147,7 @@ func BuildPeerSpawnRow(appearance PeerAppearance, gid uint32, pose Spawn) []byte
 		Skin:          appearance.Skin,
 		VisualFlags:   appearance.VisualFlags,
 		Equipment:     appearance.Equipment,
+		Avatars:       appearance.Avatars,
 		Gid:           gid,
 		Position: wire.Position{
 			RegionID: pose.RegionID,
