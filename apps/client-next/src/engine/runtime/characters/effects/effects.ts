@@ -82,8 +82,12 @@ type EffectGameplay = Pick<
 // TID4 6 in the COS type word: the captured quest monster.
 const CAPTURED_MONSTER_TYPE = 6 << 11;
 // 8DE74C loads [0xC14E6C], -pi/2 as a float, as the fYaw of every AT_TARGET
-// mover it hands to CIDecoSkillEffectEntity_Initialize (8D8E30).
-const TARGET_MOVER_YAW = radians( Math.fround( -Math.PI / 2 ) );
+// mover it hands to CIDecoSkillEffectEntity_Initialize (8D8E30). 8DE6C0 first
+// sets the mover's rotation axis byte +0xD4 to 0 (CIDecoStopObj's default,
+// 8E1054, is 1: yaw), so CIDecoMoveObj_OnTransformEvent (8E0E20, SetYaw's
+// event 3) turns an .efp compound by that angle about X: a pitch that stands
+// a shard's long axis upright, not a yaw.
+const TARGET_MOVER_PITCH = { axis: "x", angle: Math.fround( -Math.PI / 2 ) } as const;
 /*
 ================
 targetMoverPoint
@@ -92,7 +96,8 @@ One end of an AT_TARGET mover (CIDecoSkill_ExecuteStageCommandList case 3,
 8DE6C7..8DE748): the target's position plus the authored offset, added in
 world axes with float stores. Unlike a static stage (8D6330), native neither
 turns nor scales the offset by the target's root, and samples no bone or
-'*' height; the mover faces TARGET_MOVER_YAW whatever the target faces.
+'*' height. The point carries no yaw: the mover is turned only by
+TARGET_MOVER_PITCH, whatever the target faces.
 ================
 */
 function targetMoverPoint(
@@ -104,7 +109,7 @@ function targetMoverPoint(
 		x: Math.fround( pose.x + offset[0] ),
 		y: Math.fround( pose.y + offset[1] ),
 		z: Math.fround( pose.z + offset[2] ),
-		yaw: TARGET_MOVER_YAW
+		yaw: radians( 0 )
 	};
 }
 /*
@@ -1387,7 +1392,10 @@ export function createCharacterEffects(
 								const commandRotation = stage.native?.rotation ?
 									projectNativeCommandRotation( stage.native.rotation ) :
 									undefined;
-								const effectRotation = rotation?.rotation ?? commandRotation;
+								// A flying .bsr keeps the 8D9233 travel basis (effectBasis).
+								const effectRotation = flying && targetLocal && stage.resource?.endsWith( ".efp" ) ?
+									TARGET_MOVER_PITCH :
+									rotation?.rotation ?? commandRotation;
 								const weapon = stage.resource === "weapon" ?
 									(caster?.gid === gameplay?.localGid ? gameplay?.inventory : caster?.equipment)
 										?.find( item => item.slot === 6 ) :

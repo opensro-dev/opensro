@@ -187,14 +187,16 @@ const ICE_RAIN = {
 	offset: [ 26, 0, -14 ]
 };
 
-test("native AT_TARGET mover starts at the world-axis offset and faces -pi/2 whatever the target faces", () => {
-	// A quarter-turned target must not turn the offset or the shard (8DE6C7..8DE774).
+test("native AT_TARGET mover starts at the world-axis offset, pitched -pi/2 about X whatever the target faces", () => {
+	// A quarter-turned target must not turn the offset or the shard (8DE6C7..8DE774);
+	// axis byte 0 (8DE6C0) makes the -pi/2 a pitch about X (8E0E20), not a yaw.
 	const [shard] = movingTargetEffect( "AT_TARGET", { ...ICE_RAIN, targetHeading: 16384, firstStep: true } );
 	assert.ok( shard, "the mover is born" );
 	// Falling from (66, 105, 16) toward (66, 5, 16).
 	assert.deepEqual( [ shard.pose.x, shard.pose.z ], [ 66, 16 ] );
 	assert.ok( shard.pose.y > 5 && shard.pose.y < 105, `in flight at y ${shard.pose.y}` );
-	assert.equal( shard.pose.yaw, Math.fround( -Math.PI / 2 ) );
+	assert.equal( shard.pose.yaw, 0 );
+	assert.deepEqual( shard.effectRotation, { axis: "x", angle: Math.fround( -Math.PI / 2 ) } );
 });
 
 test("native AT_TARGET mover keeps its captured path when the target walks away", () => {
