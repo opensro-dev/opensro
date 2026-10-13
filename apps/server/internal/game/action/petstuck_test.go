@@ -14,6 +14,7 @@ formation never accumulates the count.
 package action
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -258,4 +260,133 @@ lowerName
 */
 func lowerName(c *enterworld.Character) string {
 	return strings.ToLower(c.Name)
+}
+
+/*
+================
+newPetPair
+
+An owner with an attack pet (the active COS) and a pickup pet (a summoned
+mission-inventory pet, band 4) both following on an open field.
+================
+*/
+func newPetPair(t *testing.T) (*Runtime, *enterworld.Character, []*petSession) {
+	t.Helper()
+	rt, _, c, _ := newPetCombatRuntime(t, 1_000_000, attackPetBand)
+	items := rt.deps.(*enterworld.Deps).Items.(cosTestItemSource)
+	pickup := &enterworld.CharacterRef{RefObjID: 10, Codename: "PICKPET", TidWord: 4<<11 | 0x1c6,
+		Level: 1, MaxHP: 1_000_000, MaxMP: 600, WalkSpeed: 20, RunSpeed: 80,
+		Parameters: monster.MonsterRef{CombatPinned: true, BodyRadius: 10, HitRate: 10}}
+	items.characters[pickup.Codename] = pickup
+	pet := &enterworld.CharacterCOS{GID: c.ActiveCOS.GID + 0x10000, RefObjID: pickup.RefObjID, Codename: pickup.Codename,
+		Level: 1, CurrentHP: pickup.MaxHP, CurrentMP: pickup.MaxMP, StateFlags: 1, Summoned: true,
+		Container: &domain.COSContainer{Capacity: 2}}
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 25, RefObjID: 9001, Codename: "ITEM_PICKPET",
+		StackCount: 1, Summon: pet})
+	rt.BindPetSession(testDivision, c, 2)
+	var pets []*petSession
+	for _, gid := range []uint32{c.ActiveCOS.GID, pet.GID} {
+		state := rt.petSessionFor(testDivision, c.Name, gid)
+		if state == nil {
+			t.Fatalf("fixture: no session for pet %#x", gid)
+		}
+		pets = append(pets, state)
+	}
+	return rt, c, pets
+}
+
+/*
+================
+soakPetPair
+
+Advance both pets 1000 ticks of 100 ms with the owner placed by ownerAt
+before each tick; fail on any relocation. Returns how many ticks found each
+pet standing within PetFollowDistance of its owner, so a soak that never
+follows proves nothing.
+================
+*/
+func soakPetPair(t *testing.T, rt *Runtime, c *enterworld.Character, pets []*petSession, ownerAt func(tick int) simulation.Spawn) []int {
+	t.Helper()
+	worldKey := simulation.WorldKey(testDivision, c.Name)
+	near := make([]int, len(pets))
+	for i := 0; i < 1000; i++ {
+		now := int64(2_000_000 + i*100)
+		owner := ownerAt(i)
+		rt.Worlds.Update(worldKey, func() simulation.WorldState { return simulation.SeedWorldState(c) },
+			func(w *simulation.WorldState) { w.Spawn, w.MoveSegment = owner, nil })
+		for p, state := range pets {
+			rt.advancePet(petOwnerKey{division: testDivision, name: lowerName(c), gid: state.transportCOS.GID}, now)
+			if state.relocatedAtMs != 0 {
+				t.Fatalf("pet %d was warped on tick %d (owner %+v)", p, i, owner)
+			}
+			if state.follower != nil && simulation.WorldDistance2D(state.follower.Position(now), owner) <= 2*simulation.PetFollowDistance {
+				near[p]++
+			}
+		}
+	}
+	return near
+}
+
+/*
+================
+TestPetsInFormationWithAStillOwnerNeverStuckWarp
+
+The owner stands still for 1000 ticks: once in formation an attack and a
+pickup pet issue no moves, so no stop counts and nothing warps.
+================
+*/
+func TestPetsInFormationWithAStillOwnerNeverStuckWarp(t *testing.T) {
+	rt, c, pets := newPetPair(t)
+	still := simulation.Spawn{RegionID: 0x62a8, X: 520, Z: 520}
+	near := soakPetPair(t, rt, c, pets, func(int) simulation.Spawn { return still })
+	for p, n := range near {
+		if n < 900 {
+			t.Fatalf("pet %d stood by its owner on only %d of 1000 ticks", p, n)
+		}
+	}
+}
+
+/*
+================
+TestPetsFollowingShortHopsAndACirclingOwnerNeverStuckWarp
+
+Stop-start hops under 20 make every catch-up move end within 20 of where it
+began - each such stop counts (559010) - but every arrival in formation
+changes state and clears the count (55A960 -> 5599A0). An owner circling
+the pets keeps moving their slots; the slots stay reachable, so neither pet
+warps.
+================
+*/
+func TestPetsFollowingShortHopsAndACirclingOwnerNeverStuckWarp(t *testing.T) {
+	hops := []float64{15, 19, 12, 18, 16}
+	rt, c, pets := newPetPair(t)
+	x := 300.0
+	near := soakPetPair(t, rt, c, pets, func(tick int) simulation.Spawn {
+		// Hop every half second, always onward, so every hop pulls the pets
+		// out of formation for a catch-up move shorter than 20.
+		if tick%5 == 0 {
+			if x += hops[(tick/5)%len(hops)]; x > 1800 {
+				x = 300
+			}
+		}
+		return simulation.Spawn{RegionID: 0x62a8, X: x, Z: 500}
+	})
+	for p, n := range near {
+		if n < 500 {
+			t.Fatalf("hops: pet %d kept up on only %d of 1000 ticks", p, n)
+		}
+	}
+
+	rt, c, pets = newPetPair(t)
+	centre := simulation.Spawn{RegionID: 0x62a8, X: 900, Z: 900}
+	near = soakPetPair(t, rt, c, pets, func(tick int) simulation.Spawn {
+		// A 30-unit circle, a twelfth of a turn every 300 ms.
+		angle := float64(tick/3) * math.Pi / 6
+		return simulation.Spawn{RegionID: centre.RegionID, X: centre.X + 30*math.Cos(angle), Z: centre.Z + 30*math.Sin(angle)}
+	})
+	for p, n := range near {
+		if n < 500 {
+			t.Fatalf("circle: pet %d kept up on only %d of 1000 ticks", p, n)
+		}
+	}
 }

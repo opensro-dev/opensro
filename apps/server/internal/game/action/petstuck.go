@@ -10,8 +10,8 @@ the stuck event (CAIState_DispatchExtendedEvent 5597B0, event 0x28), which
 CAIState_OnStuck_RelocateToOwner (5599C0) answers: an attack or pickup pet
 (CGObj_IsAttackOrPickupCOS 4838C0 -> 44B460) or a fellow COS
 (CGObj_IsFellowCOS 483980) is relocated onto its leader (tactics +0x14C,
-541110) and enters state 1; any other actor (a horse, a transport) only
-drops its order. BATTLE overrides that handler (55A250). Every state change
+541110) and enters state 1; any other actor (a horse, a transport) drops
+its order (53FD40) and enters state 1 where it stands. BATTLE overrides that handler (55A250). Every state change
 clears the count (AI_CTactics_ChangeState 53FF30), and FOLLOW changes state
 whenever the pet reaches its formation (55A960 -> 5599A0), so only a pet
 that never gets there - walled in - accumulates the ten stops.
@@ -51,8 +51,9 @@ func (rt *Runtime) answerPetStuck(key petOwnerKey, state *petSession, snapshot *
 	case monster.StuckWarpToControllerAndIdle:
 		return rt.relocateStuckPet(key, state, snapshot, pet, nowMs)
 	case monster.StuckDetachAndIdle:
-		// 53FD40 drops the order and the state change clears the count; the
-		// next step issues a fresh one.
+		// 5599C0's other branch: CAITactics_ReleaseCommand (53FD40) drops the
+		// order and the handler enters state 1 (ChangeState 53FF30), both
+		// clearing the count; the next step issues a fresh order.
 		frames := state.follower.Stop(nowMs)
 		state.follower.ResetStuck()
 		return frames
