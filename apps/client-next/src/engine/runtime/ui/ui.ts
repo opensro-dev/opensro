@@ -8854,7 +8854,6 @@ export function createUi(
 				setPanel( warming, "warm" );
 				if ( warming === "Skills" ) windowWarm.add( skillWindowWarmPaths() );
 				// A map drag reaches tiles outside the warm build's view.
-				if ( warming === "Map" ) windowWarm.add( worldMapImagePaths( hud.data()?.mapIcons ) );
 			}
 			if ( worldVisible && hud.data() ) {
 				if ( chatFeedbackObserved < 0 ) {

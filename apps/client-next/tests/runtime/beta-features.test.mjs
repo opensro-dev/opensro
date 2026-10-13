@@ -71,6 +71,17 @@ test("window warm builds each window once and keeps its demand", () => {
 	assert.equal( warm.begin( true ), "Inventory", "a new session warms again" );
 });
 
+test("the session's warm builds never build the world map", () => {
+	// The map's tiles stay out of the session-long demand (about 25 MiB decoded).
+	const warm = createWindowWarm(), built = [];
+	for ( let window = warm.begin( true ); window !== null; window = warm.begin( true ) ) {
+		built.push( window );
+		warm.end( [] );
+	}
+	assert.ok( built.includes( "Inventory" ) && built.includes( "Skills" ), built.join() );
+	assert.ok( !built.includes( "Map" ), "the map is not warmed" );
+});
+
 test("the skill window warm covers every owned mastery, not only the open tab", () => {
 	const mastery = ( id, icon ) => ({ id, icon, name: "", count: 0, tab: 0, tabName: "" }),
 		group = ( id, icon ) => ({ mastery: id, row: 0, name: "", icon }),

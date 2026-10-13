@@ -29,6 +29,13 @@ Windows whose opening is a pure view. Shop, COS inventory, Alchemy, Magic
 Pop and the two matching boards open server workflows (or need a live
 counterpart); Academy and Game Guide raise guide events while drawn. They
 are left out: their authored art is in the HUD and guide warm sets.
+
+The world map is left out too, for memory: its warm build kept every tile
+a drag can reveal decoded for the whole session (about 25 MiB at 128x128
+RGBA, the largest warm set). Its opening view's tiles are already held by
+other demand, so the window is admitted on its first frame without it;
+tiles a drag reveals load on demand as they always did while the map was
+open.
 ================
 */
 const WARM_WINDOWS = [
@@ -37,7 +44,6 @@ const WARM_WINDOWS = [
 	"Skills",
 	"Actions",
 	"Quests",
-	"Map",
 	"Party",
 	"Guild",
 	"Guild tools",
