@@ -180,12 +180,15 @@ package store, never through a link:
 
 - The main checkout is the hub every worktree shares (the git objects,
   `.generated`, and the local cluster's `.state` and `.tools`), not a
-  workspace. Agents never edit, pull, check out, reset or build in it. It
-  stays on the `main` branch; only the coordinator moves it, with a
-  deliberate `git pull --ff-only`, when the local stack is rebuilt. A
-  release is built from its own clean freeze checkout, never from the hub.
-  If you moved it by mistake, stop and tell the coordinator: do not try to
-  put it back yourself.
+  workspace. Agents never edit files in it, pull, check out, reset, or run
+  a build from it (a build run from a worktree still writes the shared
+  `.generated`, as below). Commands that touch only the shared `.git` stay
+  allowed there: `git fetch`, `git worktree add` and `git worktree
+  remove`. It stays on the `main` branch; only the coordinator moves it,
+  with a deliberate `git pull --ff-only`, when the local stack is rebuilt.
+  A release is built from its own clean freeze checkout, never from the
+  hub. If you moved it by mistake, stop and tell the coordinator: do not
+  try to put it back yourself.
 
 - Built assets: nothing to set. Every resolver (scripts, client, Python, Go
   tests and server) follows the worktree's `.git` file to the main checkout
