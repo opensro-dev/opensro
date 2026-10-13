@@ -267,7 +267,7 @@ func newGameWorldApplication(
 	authority.agentAPI.InstallPassiveCriticalFixture(gameplay.passiveCriticalReader())
 	installMonsterQuery(authority.agentAPI, gameplay.deps.MonsterState, ownedShard.ID)
 	installObservatory(authority.agentAPI, gameplay.deps.MonsterState, ts.Hub, authority.store, ownedShard.ID)
-	installOperatorNotices(authority.agentAPI, ts.Hub, ownedShard.ID)
+	installOperatorNotices(authority.agentAPI, ts.Hub, ownedShard.ID, gameplay.chatFeed)
 	// GM and operator silk grants (operator tooling): the account wallet, and
 	// one history event per committed grant.
 	gameplay.items.SilkWallet = authority.store

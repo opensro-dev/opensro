@@ -23,6 +23,7 @@ package publicstats
 import (
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -210,6 +211,38 @@ func (s *Service) schedule(*http.Request) (any, error) {
 			row.EndsAt = &ends
 		}
 		out.Events = append(out.Events, row)
+	}
+	return out, nil
+}
+
+/*
+================
+chat
+
+P10: the public chat transcript. A character's profile link follows the
+privacy flag the rest of the API honours (a hidden character is named, as
+the shard already showed the line, but not linked).
+================
+*/
+func (s *Service) chat(*http.Request) (any, error) {
+	out := ChatResponse{Lines: []ChatLine{}}
+	if s.src.Chat == nil {
+		return out, nil
+	}
+	lines := s.src.Chat()
+	var r roster
+	if len(lines) > 0 && s.src.Characters != nil {
+		r = s.loadRoster()
+	}
+	for _, line := range lines {
+		row := ChatLine{At: line.At.UTC().Format(time.RFC3339), Kind: line.Kind, Text: line.Text}
+		if line.Character != "" {
+			name := line.Character
+			row.Character = &name
+			c := r.byName[strings.ToLower(name)]
+			row.Profile = c != nil && !c.PublicHidden
+		}
+		out.Lines = append(out.Lines, row)
 	}
 	return out, nil
 }

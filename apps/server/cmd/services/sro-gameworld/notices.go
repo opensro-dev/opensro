@@ -13,6 +13,7 @@ package main
 import (
 	agentapi "opensro.online/server/internal/agent/api"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 	"opensro.online/server/internal/transport/worldsession"
@@ -23,10 +24,12 @@ import (
 installOperatorNotices
 ================
 */
-func installOperatorNotices(api *agentapi.API, hub *transport.Hub, shardID string) {
+func installOperatorNotices(api *agentapi.API, hub *transport.Hub, shardID string, feed *chatfeed.Feed) {
 	bridge := worldsession.New(hub)
 	api.InstallNoticePublisher(func(message string) {
 		frame := wire.NotificationFrame(message)
 		bridge.PushToDivision(shardID, []simulation.Frame{{Opcode: frame.Opcode, Payload: frame.Payload}}, "")
+		// The website's chat feed shows the announcement too (port-only).
+		feed.Record(shardID, chatfeed.KindNotice, "", message)
 	})
 }

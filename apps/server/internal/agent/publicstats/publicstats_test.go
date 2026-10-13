@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"reflect"
 	"sort"
 	"strings"
@@ -334,6 +335,11 @@ this pins the generator, not a hand-copied list.
 */
 func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 	s := privacyService(newFixture(), testWriteToken)
+	// A named line and a notice, so both forms of character meet the schema.
+	s.src.Chat = func() []chatfeed.Line {
+		return []chatfeed.Line{{At: time.UnixMilli(1000), Kind: chatfeed.KindChat, Character: "Kekw", Text: "hi"},
+			{At: time.UnixMilli(2000), Kind: chatfeed.KindNotice, Text: "Maintenance"}}
+	}
 	var doc map[string]any
 	get(t, s, "/public/v1/schema", &doc)
 	endpoints, _ := doc["endpoints"].(map[string]any)
@@ -349,6 +355,7 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 		"/public/v1/status":               "/public/v1/status",
 		"/public/v1/schedule":             "/public/v1/schedule",
 		"/public/v1/rankings":             "/public/v1/rankings?by=gear",
+		"/public/v1/chat":                 "/public/v1/chat",
 	}
 	if len(endpoints) != len(samples) {
 		t.Fatalf("schema lists %d endpoints, want %d", len(endpoints), len(samples))

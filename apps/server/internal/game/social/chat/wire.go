@@ -255,6 +255,43 @@ func EncodeChatBroadcastNamed(chatType uint8, senderName, message string) []byte
 	return writer.Payload()
 }
 
+/*
+================
+DecodeChatBroadcastNamed
+
+The inverse of EncodeChatBroadcastNamed, for the server's own payloads
+(the website feed, chatfeed). ok is false on any short or trailing frame.
+================
+*/
+func DecodeChatBroadcastNamed(payload []byte) (chatType uint8, senderName, message string, ok bool) {
+	reader := wire.NewReader(payload)
+	chatType, err := reader.U8()
+	if err != nil {
+		return 0, "", "", false
+	}
+	nameLen, err := reader.U16()
+	if err != nil {
+		return 0, "", "", false
+	}
+	name, err := reader.Bytes(int(nameLen))
+	if err != nil {
+		return 0, "", "", false
+	}
+	wideCount, err := reader.U16()
+	if err != nil {
+		return 0, "", "", false
+	}
+	text, err := reader.Bytes(int(wideCount) * 2)
+	if err != nil || reader.Done() != nil {
+		return 0, "", "", false
+	}
+	units := make([]uint16, wideCount)
+	for i := range units {
+		units[i] = uint16(text[i*2]) | uint16(text[i*2+1])<<8
+	}
+	return chatType, string(name), string(utf16.Decode(units)), true
+}
+
 // writeSizedWideString appends the sub_5e2ba0 sized-wide layout: u16
 // wide-char count + count*2 UTF-16LE bytes.
 func writeSizedWideString(writer *wire.Writer, units []uint16) {

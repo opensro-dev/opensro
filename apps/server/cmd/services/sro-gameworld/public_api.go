@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/siege"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/transport"
 	"opensro.online/server/internal/transport/worldsession"
@@ -359,6 +360,19 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return levels.ExpRequired(level)
 		},
 		Schedule: func(now time.Time) []publicstats.ScheduledEvent { return publicSchedule(gameplay.siege, now) },
+		// A muted author's lines are left out while the mute holds. The
+		// session's record is read directly: restriction.Report would also
+		// send the muted player its notice on every poll.
+		Chat: func() []chatfeed.Line {
+			return gameplay.chatFeed.Lines(shard, func(name string) bool {
+				for _, session := range hub.CharacterSessions(shard, name) {
+					if _, muted := session.CommandRestriction(transport.CommandRestrictionChat); muted {
+						return true
+					}
+				}
+				return false
+			})
+		},
 	}
 }
 

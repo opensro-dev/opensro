@@ -262,6 +262,25 @@ type ScheduleResponse struct {
 	Events     []ScheduleEvent `json:"events"`
 }
 
+// ChatLine is one public chat line. Kind is "chat" (ordinary beta chat,
+// shard-wide), "global" (the Global Chatting item) or "notice" (an
+// operator announcement, Character null). Profile is false when the
+// character hid their profile: the site shows the name without a link.
+type ChatLine struct {
+	At        string  `json:"at"`
+	Kind      string  `json:"kind"`
+	Character *string `json:"character"`
+	Profile   bool    `json:"profile"`
+	Text      string  `json:"text"`
+}
+
+// ChatResponse is P10 GET /public/v1/chat: the latest public lines,
+// oldest first, at most chatfeed.MaxLines. Whispers, party, guild and
+// union lines never enter it; a banned or muted author's lines are gone.
+type ChatResponse struct {
+	Lines []ChatLine `json:"lines"`
+}
+
 // Gear is a ranked player's worn equipment plus: the sum and the highest.
 type Gear struct {
 	PlusTotal int `json:"plusTotal"`

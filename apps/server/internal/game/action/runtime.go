@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/game/linkedpulse"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/guildwar"
 	"opensro.online/server/internal/game/social/union"
 	"opensro.online/server/internal/game/world/fortress"
@@ -480,6 +481,11 @@ type Runtime struct {
 	// chat restriction, sending its notice when it does (4F0A00). Nil means
 	// no session can be restricted.
 	ChatRestricted func(divisionID, characterName string) bool
+
+	// PublicChat is the website's public chat transcript (chatfeed,
+	// port-only): the Global Chatting line enters it, a GM ban purges the
+	// banned character's lines. Nil keeps both in-game only.
+	PublicChat *chatfeed.Feed
 
 	// PushMonsterCast publishes prepared-cast results before the division
 	// transaction ends. It must only enqueue (never perform network I/O).

@@ -72,6 +72,18 @@ type SessionEnder interface {
 
 /*
 ================
+BanObserver
+
+The owner told about a completed /BAN (the action runtime, which purges
+the website chat feed). Port-only, not native.
+================
+*/
+type BanObserver interface {
+	PlayerBannedGM(divisionID, characterName string)
+}
+
+/*
+================
 handleWorldStatus
 
 51DE90 case 3: [1, 4, i32 players, i32 other objects, i32 ground items],
@@ -102,7 +114,7 @@ departure owner saves and removes them exactly as on a logout, and leaves
 an operator log line naming the GM and the player.
 ================
 */
-func handleBan(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, request Request) Outcome {
+func handleBan(deps Dependencies, presence PresenceView, divisionID string, sender *enterworld.Character, request Request, status []BodyStatusCommands) Outcome {
 	refusal := Outcome{Ack: EncodeRequestFailure(request), Refusal: "ban-refused"}
 	if !request.HasName || request.Name == "" {
 		return refusal
@@ -119,6 +131,12 @@ func handleBan(deps Dependencies, presence PresenceView, divisionID string, send
 	// whom from the world; the log line carries when.
 	log.WithFields(log.Fields{"gm": sender.Name, "division": divisionID, "character": target.Name,
 		"account": target.AccountID}).Info("gmcommand: /BAN logged a player out")
+	// Port-only: the website's chat feed drops the banned player's lines.
+	if len(status) > 0 {
+		if owner, ok := status[0].(BanObserver); ok {
+			owner.PlayerBannedGM(divisionID, target.Name)
+		}
+	}
 	return Outcome{Ack: []byte{AckResultOK, SubBan}}
 }
 

@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/transport"
 )
 
@@ -68,6 +69,9 @@ type Runtime struct {
 	Unions UnionView
 	// Stalls answers stall chat; set by wiring before the hub serves.
 	Stalls StallView
+	// Feed receives every published public line for the website
+	// (chatfeed, port-only); nil keeps the transcript in-game only.
+	Feed *chatfeed.Feed
 }
 
 /*
@@ -128,6 +132,9 @@ func (rt *Runtime) publish(division string, payload []byte) {
 	}
 	rows = append(rows, publicLine{payload: append([]byte(nil), payload...), sentAtMs: rt.now().UnixMilli()})
 	rt.history[division] = rows
+	if _, name, text, ok := DecodeChatBroadcastNamed(payload); ok {
+		rt.Feed.Record(division, chatfeed.KindChat, name, text)
+	}
 	for _, member := range rt.members {
 		if member.division == division && member.session.WorldReady() && !member.session.Evicted() {
 			_ = member.session.Send(OpChatBroadcast, payload)

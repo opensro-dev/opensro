@@ -32,6 +32,7 @@ import (
 	"opensro.online/server/internal/game/siege"
 	livepresence "opensro.online/server/internal/game/social"
 	"opensro.online/server/internal/game/social/chat"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/social/community"
 	"opensro.online/server/internal/game/social/guild"
 	"opensro.online/server/internal/game/social/guildwar"
@@ -62,6 +63,7 @@ type gameplayPlane struct {
 	water         *movement.WaterValidator
 	presence      *livepresence.Directory
 	chat          *chat.Runtime
+	chatFeed      *chatfeed.Feed
 	parties       *party.Runtime
 	guildInvites  *guild.InviteRuntime
 	unions        *guild.UnionRuntime
@@ -779,6 +781,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	community.RegisterFriend(hub, game.deps, game.presence)
 	community.RegisterLetter(hub, game.deps, game.presence)
 	game.chat = chat.Register(hub, game.deps, game.presence, game.parties.Registry())
+	// The website's public chat feed (port-only): beta chat, the Global
+	// Chatting item and notices; a GM ban purges the player's lines.
+	game.chatFeed = chatfeed.New()
+	game.chat.Feed = game.chatFeed
+	game.items.PublicChat = game.chatFeed
 	game.chat.Unions = game.unions
 	game.chat.Stalls = game.items.Stalls
 	gmcommand.Register(hub, game.deps, game.presence, game.items)

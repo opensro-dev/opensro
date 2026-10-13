@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/social/chat"
+	"opensro.online/server/internal/game/social/chatfeed"
 )
 
 // globalChatRestricted is 49B9F0's result 2 for a restricted player; the
@@ -99,6 +100,19 @@ func (rt *Runtime) useGlobalChatting(use globalChatUse, tail []byte, result *OpR
 		if rt.PushShardPeerFrames != nil {
 			rt.PushShardPeerFrames(division, name, []wire.Frame{line})
 		}
+		rt.PublicChat.Record(division, chatfeed.KindGlobal, name, message)
 	}
 	return true
+}
+
+/*
+================
+PlayerBannedGM
+
+/BAN's consequence for the website (gmcommand handleBan): the banned
+character's lines leave the public chat feed. Port-only, not native.
+================
+*/
+func (rt *Runtime) PlayerBannedGM(division, name string) {
+	rt.PublicChat.Purge(division, name)
 }

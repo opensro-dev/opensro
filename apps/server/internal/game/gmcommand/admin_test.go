@@ -53,7 +53,10 @@ type adminOwner struct {
 	hours    []uint8
 	recalled []string
 	guilds   map[string]bool
+	banned   []string
 }
+
+func (o *adminOwner) PlayerBannedGM(_, name string) { o.banned = append(o.banned, name) }
 
 func (*adminOwner) ToggleGMBodyStatus(string, string, uint8) bool { return false }
 
@@ -101,15 +104,21 @@ TestBanLogsOutAPlayerInTheWorld
 func TestBanLogsOutAPlayerInTheWorld(t *testing.T) {
 	gm, player, _ := adminCharacters()
 	presence := &adminPresence{online: map[string]bool{"gm": true, "remo": true}}
-	out := HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "remo"), &adminOwner{})
+	owner := &adminOwner{}
+	out := HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "remo"), owner)
 	if !bytes.Equal(out.Ack, []byte{1, SubBan}) || len(presence.ended) != 1 || presence.ended[0] != "Remo" {
 		t.Fatalf("ban ack % X, ended %v", out.Ack, presence.ended)
 	}
+	// The website feed hears of the ban under the stored name (BanObserver).
+	if len(owner.banned) != 1 || owner.banned[0] != "Remo" {
+		t.Fatalf("ban observed %v", owner.banned)
+	}
 	presence.online["remo"] = false
 	presence.ended = nil
-	out = HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Remo"), &adminOwner{})
-	if !bytes.Equal(out.Ack, EncodeAckFail(SubBan)) || len(presence.ended) != 0 {
-		t.Fatalf("offline ban ack % X, ended %v", out.Ack, presence.ended)
+	owner.banned = nil
+	out = HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Remo"), owner)
+	if !bytes.Equal(out.Ack, EncodeAckFail(SubBan)) || len(presence.ended) != 0 || len(owner.banned) != 0 {
+		t.Fatalf("offline ban ack % X, ended %v, observed %v", out.Ack, presence.ended, owner.banned)
 	}
 	out = HandleGmCommand(testDeps(gm, player), presence, testDivision, gm, nameFrame(SubBan, "Ghost"), &adminOwner{})
 	if !bytes.Equal(out.Ack, EncodeAckFail(SubBan)) {

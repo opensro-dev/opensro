@@ -9,6 +9,7 @@ package publicstats
 
 import (
 	"net/http"
+	"opensro.online/server/internal/game/social/chatfeed"
 	"testing"
 	"time"
 
@@ -130,5 +131,50 @@ func TestScheduleFormatsTheServerEvents(t *testing.T) {
 	}
 	if _, err := time.Parse(time.RFC3339, schedule.ServerTime); err != nil {
 		t.Fatalf("server time %q: %v", schedule.ServerTime, err)
+	}
+}
+
+/*
+================
+TestChatNamesLinksAndNotices
+
+P10: lines come oldest first; a hidden character is named but not
+linked, an unknown one is not linked, and a notice has no character.
+================
+*/
+func TestChatNamesLinksAndNotices(t *testing.T) {
+	f := newFixture()
+	s := f.service()
+	at := time.Date(2026, 10, 13, 10, 0, 0, 0, time.FixedZone("UTC+8", 8*3600))
+	s.src.Chat = func() []chatfeed.Line {
+		return []chatfeed.Line{
+			{At: at, Kind: chatfeed.KindChat, Character: "kekw", Text: "hi"},
+			{At: at.Add(time.Second), Kind: chatfeed.KindGlobal, Character: "Shy", Text: "wts"},
+			{At: at.Add(2 * time.Second), Kind: chatfeed.KindNotice, Text: "Maintenance"},
+			{At: at.Add(3 * time.Second), Kind: chatfeed.KindChat, Character: "Gone", Text: "bye"},
+		}
+	}
+	var chat ChatResponse
+	if code := get(t, s, "/public/v1/chat", &chat); code != http.StatusOK {
+		t.Fatalf("chat answered %d", code)
+	}
+	l := chat.Lines
+	if len(l) != 4 || l[0].At != "2026-10-13T02:00:00Z" || *l[0].Character != "kekw" || !l[0].Profile ||
+		*l[1].Character != "Shy" || l[1].Profile || l[1].Kind != "global" ||
+		l[2].Character != nil || l[2].Profile || l[2].Kind != "notice" ||
+		l[3].Profile || l[3].Text != "bye" {
+		t.Fatalf("lines %+v", l)
+	}
+}
+
+/*
+================
+TestChatWithoutSourceIsEmpty
+================
+*/
+func TestChatWithoutSourceIsEmpty(t *testing.T) {
+	var chat ChatResponse
+	if code := get(t, newFixture().service(), "/public/v1/chat", &chat); code != http.StatusOK || chat.Lines == nil || len(chat.Lines) != 0 {
+		t.Fatalf("chat answered %d %+v", code, chat)
 	}
 }
