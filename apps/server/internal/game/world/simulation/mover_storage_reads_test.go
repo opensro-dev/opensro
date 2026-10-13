@@ -92,6 +92,49 @@ func TestMoverStorageVisibilityReadsMatchLookup(t *testing.T) {
 
 /*
 ================
+TestMoverStorageLivePosesMatchValues
+
+livePoses yields exactly the rows values does, each with the pose its
+expanded row would report: the population scan's cheap read is the same
+read.
+================
+*/
+func TestMoverStorageLivePosesMatchValues(t *testing.T) {
+	r := rand.New(rand.NewSource(2))
+	ground := func(region uint16, x, z float64) (float64, bool) { return x*0.5 - z + float64(region), x > 500 }
+	s := newMoverStorage(nil)
+	for step := 0; step < 2000; step++ {
+		gid := uint32(1 + r.Intn(64))
+		if r.Intn(5) == 0 {
+			s.remove(gid)
+		} else {
+			s.set(gid, readsTestRow(r))
+		}
+		for _, nowMs := range []int64{0, 1500, 2500, 6000} {
+			for _, resolver := range []monster.GroundResolver{nil, ground} {
+				want := map[uint32]monster.Pose{}
+				for gid, row := range s.values() {
+					want[gid] = row.LivePoseAt(nowMs, resolver)
+				}
+				got := map[uint32]monster.Pose{}
+				for gid, pose := range s.livePoses(nowMs, resolver) {
+					got[gid] = pose
+				}
+				if len(got) != len(want) {
+					t.Fatalf("step %d at %d: livePoses yielded %d rows, values %d", step, nowMs, len(got), len(want))
+				}
+				for gid, pose := range want {
+					if got[gid] != pose {
+						t.Fatalf("step %d gid %d at %d: livePoses = %+v, want %+v", step, gid, nowMs, got[gid], pose)
+					}
+				}
+			}
+		}
+	}
+}
+
+/*
+================
 BenchmarkMoverStorageVisibilityReads
 
 The visibility path's reads over a resting crowd (pending rows, the common
@@ -120,4 +163,38 @@ func BenchmarkMoverStorageVisibilityReads(b *testing.B) {
 			}
 		}
 	})
+}
+
+/*
+================
+BenchmarkMoverStoragePopulationPoses
+
+The area-candidate scan's read of a 3000-row population: every expanded
+row's pose (values, before) against livePoses.
+================
+*/
+func BenchmarkMoverStoragePopulationPoses(b *testing.B) {
+	r := rand.New(rand.NewSource(3))
+	s := newMoverStorage(nil)
+	for gid := uint32(1); gid <= 3000; gid++ {
+		s.set(gid, readsTestRow(r))
+	}
+	var sink float64
+	b.Run("values", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			for _, row := range s.values() {
+				sink += row.LivePoseAt(2000, nil).X
+			}
+		}
+	})
+	b.Run("livePoses", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			for _, pose := range s.livePoses(2000, nil) {
+				sink += pose.X
+			}
+		}
+	})
+	_ = sink
 }

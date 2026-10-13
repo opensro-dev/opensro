@@ -85,8 +85,9 @@ func (s *MonsterState) CombatCandidatesInPopulation(divisionID string, lease ins
 	if nearest {
 		distances = make(map[uint32]float64)
 	}
-	for gid, mover := range state.movers.values() {
-		pose := mover.LivePoseAt(nowMs, nil)
+	// Only where each mover stands: expanding every row was most of an area
+	// skill's cost (2026-10-13 prod profile, residentPendingMover.value).
+	for gid, pose := range state.movers.livePoses(nowMs, nil) {
 		// Region arithmetic masks the dungeon bit. Do not let matching low
 		// bits alias indoor and outdoor coordinates into a valid area target.
 		if IsDungeonRegion(center.RegionID) != IsDungeonRegion(pose.RegionID) {

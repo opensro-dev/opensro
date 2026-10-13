@@ -198,17 +198,50 @@ func (s *moverStorage) livePoseAt(gid uint32, nowMs int64, ground monster.Ground
 		return monster.Pose{}, false
 	}
 	r, ok := s.rows[gid]
-	switch {
-	case !ok:
+	if !ok {
 		return monster.Pose{}, false
+	}
+	return r.livePoseAt(nowMs, ground), true
+}
+
+/*
+================
+livePoses
+
+Every row's livePoseAt, in the rows' (map) order: a population scan that
+reads only where each mover stands, without expanding a single row.
+================
+*/
+func (s *moverStorage) livePoses(nowMs int64, ground monster.GroundResolver) iter.Seq2[uint32, monster.Pose] {
+	return func(yield func(uint32, monster.Pose) bool) {
+		for gid, r := range s.records() {
+			if !yield(gid, r.livePoseAt(nowMs, ground)) {
+				return
+			}
+		}
+	}
+}
+
+/*
+================
+moverRecord.livePoseAt
+
+r.value().LivePoseAt(nowMs, ground) without expanding a pending row. A
+pending row is exact as stored: PendingSnapshot admits only DepartMs ==
+ArriveMs == 0, where LivePoseAt neither interpolates nor resolves ground and
+returns Pose.
+================
+*/
+func (r moverRecord) livePoseAt(nowMs int64, ground monster.GroundResolver) monster.Pose {
+	switch {
 	case r.live != nil:
-		return r.live.LivePoseAt(nowMs, ground), true
+		return r.live.LivePoseAt(nowMs, ground)
 	case r.pending != nil:
-		return r.pending.pose, true
+		return r.pending.pose
 	}
 	// A record with neither form reads as moverRecord.value() does: the
 	// zero MoverState. set never stores one; this keeps the two reads equal.
-	return monster.MoverState{}.LivePoseAt(nowMs, ground), true
+	return monster.MoverState{}.LivePoseAt(nowMs, ground)
 }
 
 /*
