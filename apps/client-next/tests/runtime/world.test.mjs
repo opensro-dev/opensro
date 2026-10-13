@@ -2065,7 +2065,15 @@ movement receipt in the same loss resumes. Both lanes now resume, and the
 fresh bootstrap retires the lost request without replaying it.
 ================
 */
-test("an unanswered inventory transaction resumes the session without replaying it", async t => {
+/*
+================
+lostAnswerWorld
+
+A world with a bag, entered on its first socket. enter( socket, at, resumed )
+admits a socket (the resume uses it again); incidents collects reports.
+================
+*/
+async function lostAnswerWorld( t ) {
 	const sockets = socketHarness( t ), incidents = [];
 	const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
 	t.after( () => world.dispose() );
@@ -2076,6 +2084,7 @@ test("an unanswered inventory transaction resumes the session without replaying 
 		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x6c, icon: "item/etc/hp_potion_01.ddj" } ],
 		equipItems: [ { slot: 13, refObjId: 1, body: [ 1, 0, 0, 0, 3, 0 ] } ]
 	};
+	/** @param {any} socket @param {number} at @param {boolean} resumed */
 	const enter = async ( socket, at, resumed ) => {
 		socket.onopen();
 		socket.receive( 2, welcome( resumed ) );
@@ -2096,6 +2105,11 @@ test("an unanswered inventory transaction resumes the session without replaying 
 	world.step( 1 );
 	await enter( sockets[0], 2, false );
 	assert.equal( world.status().phase, "world" );
+	return { world, sockets, incidents, enter };
+}
+
+test("an unanswered inventory transaction resumes the session without replaying it", async t => {
+	const { world, sockets, incidents, enter } = await lostAnswerWorld( t );
 	world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 1 } );
 	const sent = sockets[0].sent.at( -1 ).slice();
 	world.step( 10004 );
@@ -2120,5 +2134,39 @@ test("an unanswered inventory transaction resumes the session without replaying 
 	world.command( { kind: "inventory-move", source: 13, destination: 15, quantity: 1 } );
 	world.step( 12000 );
 	assert.equal( world.status().phase, "world" );
+	assert.equal( incidents.length, 1 );
+});
+
+/*
+================
+an unanswered mall request resumes the session
+
+The purchase lane's answer is an item result: a lost one resumes as an
+inventory transaction does, and the bootstrap's mall reset retires it.
+================
+*/
+test("an unanswered mall request resumes the session without replaying it", async t => {
+	const { world, sockets, incidents, enter } = await lostAnswerWorld( t );
+	world.command( { kind: "mall-open" } );
+	const sent = sockets[0].sent.at( -1 ).slice();
+	world.step( 10004 );
+	assert.equal( world.status().phase, "world", "the answer still has time" );
+	world.step( 10010 );
+	assert.equal( world.status().phase, "reconnecting", "a lost answer resumes, it does not disconnect" );
+	assert.equal( incidents.length, 1 );
+	assert.equal( incidents[0].code, "inventory_transaction_timeout" );
+	assert.match( incidents[0].message, /Mall request timed out/ );
+	world.step( 10260 );
+	await settle();
+	world.step( 10261 );
+	await enter( sockets[1], 10262, true );
+	assert.equal( world.status().phase, "world" );
+	assert.equal(
+		sockets[1].sent.some( packet => Buffer.from( packet ).equals( Buffer.from( sent ) ) ),
+		false,
+		"resume must never replay the timed-out request"
+	);
+	world.step( 30000 );
+	assert.equal( world.status().phase, "world", "the bootstrap retired the request" );
 	assert.equal( incidents.length, 1 );
 });

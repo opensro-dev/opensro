@@ -727,6 +727,34 @@ test("target grants require matching intent and despawn clears pending selection
 	assert.equal( t.state().target, 0 );
 });
 
+/*
+================
+an unanswered target release is a lost answer
+
+B4B3 carries no identity: a release whose answer was lost across the
+transport resumes the session (world.ts lostAnswer), and the bootstrap's
+clear retires it.
+================
+*/
+test("an unanswered target release is a lost answer the bootstrap retires", () => {
+	const t = createTargeting( () => {} );
+	t.select( 9 );
+	const p = Buffer.alloc( 11 );
+	p[0] = 1;
+	p.writeUInt32LE( 9, 1 );
+	t.receive( 0xb45a, p );
+	assert.equal( t.state().target, 9 );
+	t.release( 1000 );
+	assert.equal( t.step( 1000 + 9999 ), false );
+	assert.throws(
+		() => t.step( 1000 + 10000 ),
+		/** @param {Error} error */ error =>
+			error.cause === "target_release_timeout" && /Target release timed out/.test( error.message )
+	);
+	t.clear();
+	assert.equal( t.step( 30000 ), false, "the bootstrap's clear retires the release" );
+});
+
 test("motion output contains only owned pose fields and gait retiming crosses regions continuously", () => {
 	const m = createEntityMotion( undefined, ( _from, to ) => to ),
 		entity = {

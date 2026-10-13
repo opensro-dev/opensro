@@ -9,6 +9,7 @@ receipt matches. A timed-out purchase requires resynchronization, never retry.
 ===========================================================================
 */
 import type { MallState } from "@/engine/contracts/item-mall";
+import { INVENTORY_TRANSACTION_TIMEOUT } from "@/engine/contracts/network";
 import { MALL_CATALOG_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 import { mallProjection } from "@/engine/foundation/gameplay/item-mall-catalog";
 import { mallPurchasePayload, type MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
@@ -175,7 +176,13 @@ export function createMall() {
   */
 		step( now: number ) {
 			if ( request && now >= deadline ) expired = true;
-			if ( expired ) throw Error( "Mall request timed out; reconnect to resynchronize" );
+			// The purchase lane's answer is an item result: a lost one resumes the
+			// session as an inventory transaction does (world.ts lostAnswer).
+			if ( expired ) {
+				throw Error( "Mall request timed out; reconnect to resynchronize", {
+					cause: INVENTORY_TRANSACTION_TIMEOUT
+				} );
+			}
 		},
 		/*
   ================

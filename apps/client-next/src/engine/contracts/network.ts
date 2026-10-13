@@ -89,3 +89,6 @@ export const MOVEMENT_RECEIPT_TIMEOUT = "movement_receipt_timeout";
 // transport doc.go), so the request or its answer is gone. Native replies
 // carry no transaction ID; the session resumes through fresh server state.
 export const INVENTORY_TRANSACTION_TIMEOUT = "inventory_transaction_timeout";
+// The target lane's release (B4B3) carries no identity either: an unanswered
+// one is the same loss, resumed the same way.
+export const TARGET_RELEASE_TIMEOUT = "target_release_timeout";

@@ -8,7 +8,7 @@ remains owned until acknowledgement, so latency cannot redirect a late reply.
 
 ===========================================================================
 */
-import type { WireFrame } from "@/engine/contracts/network";
+import { TARGET_RELEASE_TIMEOUT, type WireFrame } from "@/engine/contracts/network";
 
 /*
 ================
@@ -122,7 +122,11 @@ step
 			if ( !pending || now < pending.deadline ) return false;
 			// B4B3 has no identity. Reusing this channel after a missing release
 			// could apply its late reply to a newer target: reconnect to resync.
-			if ( pending.kind === "release" ) throw new Error( "Target release timed out; reconnect to resynchronize" );
+			if ( pending.kind === "release" ) {
+				throw new Error( "Target release timed out; reconnect to resynchronize", {
+					cause: TARGET_RELEASE_TIMEOUT
+				} );
+			}
 			pending = null;
 			target = 0;
 			localSelection = false;
