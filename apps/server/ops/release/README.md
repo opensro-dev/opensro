@@ -72,6 +72,13 @@ produce it, so the operator stages it with `data_release.py`:
 python data_release.py PACKAGE OUTPUT --origin https://game.example.com   --ssh-target sro-stage@host --identity ~/.ssh/operator-stage [--coordinated] [--max-batch-mib 16]
 ```
 
+The upload pins the host and ignores the operator's ssh setup (`ci.ssh_options`:
+`-F none`, no agent, only the given key). Set `RELEASE_KNOWN_HOSTS_FILE` to the
+host's verified known_hosts file; the tool refuses to run without it. Because
+`-F none` drops `~/.ssh/config`, a host reached through a local proxy also
+needs `RELEASE_SSH_PROXY_COMMAND` (an ssh `ProxyCommand`, for example a fast
+relay to the proxy; a `connect.exe` route moves only about 0.07 MB/s).
+
 On a slow link (a VPN), `--max-batch-mib` makes smaller batches. Each
 upload's time limit grows with its size (at least 32 KiB/s), and a timed-out
 upload is retried like any other transport failure.
@@ -354,6 +361,12 @@ The tool compares it with the game checkout's `origin/main` before publication.
 - `RELEASE_HOST`: your host address.
 - `RELEASE_KNOWN_HOSTS`: its verified SSH host-key entry. Do not discover
   and trust a new key during the deployment job.
+- `RELEASE_KEY_FILE` / `RELEASE_KNOWN_HOSTS_FILE`: on the operator's machine,
+  the same two as files used in place (never both the text and the file).
+  `data_release.py` reads `RELEASE_KNOWN_HOSTS_FILE` too.
+- `RELEASE_SSH_PROXY_COMMAND`: an ssh `ProxyCommand` for a host reached
+  through a local proxy. Every release connection runs with `-F none`, so
+  `~/.ssh/config` routes do not apply.
 
 Keep staging and publication credentials separate. Browser smoke also requires
 `RELEASE_ORIGIN` and `RELEASE_PROBE_ACCOUNT`. The latter secret is JSON containing

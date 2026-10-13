@@ -15,6 +15,10 @@ stage role verifies everything it receives; this tool never publishes.
 On a slow link (a VPN), smaller batches let each upload finish within its
 size-scaled timeout and a rerun resume after the last stored batch.
 
+The connection is ci.py's (ssh_options): RELEASE_KNOWN_HOSTS_FILE must name
+the host's pinned known_hosts, and a proxied operator sets
+RELEASE_SSH_PROXY_COMMAND, since -F none ignores ~/.ssh/config.
+
 --server-data PATH stages the server game-data archive too (server_data.py):
 the next server publication checks it with its own code and installs it
 inside its maintenance window. Omit PACKAGE and OUTPUT to stage it alone.
