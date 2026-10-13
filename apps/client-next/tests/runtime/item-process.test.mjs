@@ -262,18 +262,60 @@ test("Magic Pop loss, failed opening, card invalidation and reset do not invent 
 	assert.equal( b.sounds.at( -1 ), "SND_GACHA_END" );
 });
 
-test("Magic Pop rejection does not execute result presentation or replace the pending roll", () => {
-	const { owner, sounds } = setup();
+/*
+================
+Magic Pop refusal
+
+766A4E sends a refusal straight to the notice dispatcher: no result
+presentation, no cue, the bag untouched. Port-only, not native: native
+leaves its busy byte set and the window cannot close; a refused roll
+returns the window to idle, so it closes and rolls again.
+================
+*/
+test("a refused Magic Pop roll presents no result and leaves the window idle", () => {
+	for ( const flag of [ 0, 2, 255 ] ) {
+		const { owner, sounds, frames } = setup();
+		open( owner );
+		owner.process( { kind: "gacha-roll", entry: 1, slot: 14 }, 0 );
+		owner.step( 4000 );
+		assert.equal( owner.state().gacha.phase, "waiting" );
+		const before = owner.state().gacha, items = owner.state().inventory, cues = [ ...sounds ];
+		owner.receive( 0xb053, Uint8Array.of( flag, 7 ) );
+		assert.deepEqual( owner.state().gacha, { ...before, phase: "idle" } );
+		assert.deepEqual( owner.state().inventory, items );
+		assert.deepEqual( sounds, cues );
+		// It rolls again, as after a lost roll.
+		owner.process( { kind: "gacha-roll", entry: 1, slot: 14 }, 5000 );
+		owner.step( 9000 );
+		assert.equal( frames.at( -1 ).opcode, 0x7053 );
+	}
+});
+
+test("after a refused Magic Pop roll the window closes", () => {
+	const { owner } = setup();
 	open( owner );
 	owner.process( { kind: "gacha-roll", entry: 1, slot: 14 }, 0 );
 	owner.step( 4000 );
-	const before = owner.state().gacha, items = owner.state().inventory, cues = [ ...sounds ];
-	for ( const flag of [ 0, 2, 255 ] ) {
-		owner.receive( 0xb053, Uint8Array.of( flag, 7 ) );
-		assert.deepEqual( owner.state().gacha, before );
-		assert.deepEqual( owner.state().inventory, items );
-		assert.deepEqual( sounds, cues );
-	}
+	owner.process( { kind: "gacha-close" }, 4000 );
+	assert.equal( owner.state().gacha.visible, true, "a pending roll keeps the window" );
+	owner.receive( 0xb053, Uint8Array.of( 2, 7 ) );
+	owner.process( { kind: "gacha-close" }, 4100 );
+	assert.equal( owner.state().gacha.visible, false );
+	assert.equal( owner.state().gacha.phase, "closed" );
+});
+
+test("a Magic Pop roll never holds the bag, as native CIFInventory is never blocked by it", () => {
+	const { owner, frames } = setup();
+	open( owner );
+	owner.process( { kind: "gacha-roll", entry: 1, slot: 14 }, 0 );
+	assert.equal( owner.state().gacha.phase, "rolling" );
+	assert.equal( owner.state().inventoryPending, false );
+	owner.step( 4000 );
+	assert.equal( owner.state().gacha.phase, "waiting" );
+	assert.equal( owner.state().inventoryPending, false );
+	const move = owner.move( 13, 15, 1, 4000 );
+	assert.equal( move.opcode, 0x706d );
+	assert.equal( frames.at( -1 ), move );
 });
 test("a reinforcement records its outcome for the window (62B0B0)", () => {
 	const { owner } = setup();

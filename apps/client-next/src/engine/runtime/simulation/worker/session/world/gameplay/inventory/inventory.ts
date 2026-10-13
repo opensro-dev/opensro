@@ -344,11 +344,15 @@ timeoutMessage
 	/*
 ================
 busy
+
+A Magic Pop roll does not hold the bag: native reads its busy byte only
+for the Magic Pop window's own slot (CIFItemSlot_DispatchActivation
+567520..567535, message 0x8C), never for CIFInventory.
 ================
 	*/
 	function busy() {
 		return pending !== null || mall.pending() || timedOut || alchemy.state().pending ||
-			[ "rolling", "waiting" ].includes( gacha.state().phase ) || magicOption.state().phase === "waiting";
+			magicOption.state().phase === "waiting";
 	}
 	/*
 ================
