@@ -270,9 +270,9 @@ func TestClientIncidentRefusesADeletedAccountsSession(t *testing.T) {
 TestClientDegradedReportIsKeptLoggedAndGrouped
 
 A non-fatal "degraded" report (the client skipped a cosmetic step) is kept,
-logged as "agent: client degraded" with its site code, and recorded in the
-degraded category the console groups by code. It must name its site; a
-fatal kind cannot claim the category.
+logged as "agent: client degraded" with its site code (never the account),
+and recorded in the degraded category the console groups by code. It must
+name its site; a fatal kind cannot claim the category.
 ================
 */
 func TestClientDegradedReportIsKeptLoggedAndGrouped(t *testing.T) {
@@ -293,6 +293,9 @@ func TestClientDegradedReportIsKeptLoggedAndGrouped(t *testing.T) {
 	entry := hook.LastEntry()
 	if entry == nil || entry.Message != "agent: client degraded" || entry.Data["code"] != "item-use-visual-unknown-ref" {
 		t.Fatalf("logged %+v", entry)
+	}
+	if _, named := entry.Data["account"]; named {
+		t.Fatalf("degraded line names the account: %+v", entry.Data)
 	}
 	data, err := journal.Query(history.Filter{})
 	if err != nil {

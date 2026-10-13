@@ -251,7 +251,6 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	fields := log.Fields{
-		"account":   claims.AccountID,
 		"shard":     definition.ID,
 		"kind":      incident.Kind,
 		"message":   strings.ToValidUTF8(incident.Message, "?"),
@@ -316,11 +315,15 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 	fields["incident"] = id
 	fields["diagnosticSession"] = incident.Session
 	fields["code"] = code
+	// A degraded line names no account: the history event keeps it, and
+	// a cosmetic skip is triaged by site code, not by player.
 	if incident.Kind == "degraded" {
 		log.WithFields(fields).Warn("agent: client degraded")
-	} else {
-		log.WithFields(fields).Warn("agent: client incident")
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+		return
 	}
+	fields["account"] = claims.AccountID
+	log.WithFields(fields).Warn("agent: client incident")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
 
