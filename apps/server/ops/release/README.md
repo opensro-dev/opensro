@@ -31,7 +31,7 @@ manifest. Such an application candidate cannot change data files, data routes or
 asset schema; a data candidate (below) can. The staging
 key creates an immutable preview and shared hashed application files without
 changing `/play`. The release gate (`apps/client-next/tools/beta/release-gate.mjs`)
-must pass within 30 seconds using a dedicated non-GM account: a browser boots
+must pass within 90 seconds (30 s per step) using a dedicated non-GM account: a browser boots
 the staged candidate (title), and the release's own simulation worker runs
 headlessly through login, roster, world entry, a server-confirmed move
 (gameplay) and a session-restoring reload (resume). No scene is rendered, so
