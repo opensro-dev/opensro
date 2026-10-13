@@ -15,6 +15,7 @@ focus from a disabled element and never returns it.
 ===========================================================================
 */
 import type { UiBridge, UiControl, UiEvent, UiSemantics } from "@/engine/contracts/ui";
+import { createLayoutKeys } from "@/engine/foundation/ui/layout-keys";
 // The title screen's login edits, the only controls a password manager may
 // save or fill. Value is the autocomplete token that identifies the field.
 const LOGIN_AUTOCOMPLETE: Readonly<Record<string, string>> = {
@@ -236,6 +237,7 @@ export function createUiBridge(
 		composing = false;
 		emit( { kind: "focus", id: null } );
 	}, { signal: lifetime.signal } );
+	const layoutKeys = createLayoutKeys();
 	root.addEventListener( "keydown", event => {
 		event.stopPropagation();
 		if ( event.isComposing || composing || event.keyCode === 229 ) {
@@ -245,35 +247,37 @@ export function createUiBridge(
 			return;
 		}
 		imeEnter = null;
+		// A letter is the one the layout prints on the key (layout-keys.ts).
+		const code = layoutKeys.down( event.code, event.key );
 		if (
-			/^F([1-9]|1[0-2])$/.test( event.code ) && event.code !== "F5" && event.code !== "F11" &&
-			event.code !== "F12"
+			/^F([1-9]|1[0-2])$/.test( code ) && code !== "F5" && code !== "F11" &&
+			code !== "F12"
 		) event.preventDefault();
-		if ( event.code === "Backquote" && event.shiftKey ) {
+		if ( code === "Backquote" && event.shiftKey ) {
 			event.preventDefault();
-			if ( !event.repeat ) emit( { kind: "key", code: event.code, shift: true, ctrl: event.ctrlKey } );
+			if ( !event.repeat ) emit( { kind: "key", code, shift: true, ctrl: event.ctrlKey } );
 			return;
 		}
 		if (
-			current( event.target )?.value.id === "gm-input" && (event.code === "ArrowUp" || event.code === "ArrowDown")
+			current( event.target )?.value.id === "gm-input" && (code === "ArrowUp" || code === "ArrowDown")
 		) {
 			event.preventDefault();
-			emit( { kind: "key", code: event.code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+			emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
 			return;
 		}
 		if ( current( event.target )?.value.captureKeys ) {
 			event.preventDefault();
-			if ( !event.repeat ) emit( { kind: "key", code: event.code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+			if ( !event.repeat ) emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
 			return;
 		}
 		const editing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
-		if ( !editing && !event.repeat ) heldKey( event.code, true );
+		if ( !editing && !event.repeat ) heldKey( code, true );
 		if (
-			event.code !== "Escape" && event.code !== "Space" && event.key !== "Enter" &&
+			code !== "Escape" && code !== "Space" && event.key !== "Enter" &&
 			!editing && !event.repeat
-		) emit( { kind: "key", code: event.code, shift: event.shiftKey, ctrl: event.ctrlKey } );
-		if ( event.code === "Escape" && !event.repeat ) {
-			emit( { kind: "key", code: event.code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+		) emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+		if ( code === "Escape" && !event.repeat ) {
+			emit( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
 			(event.target as HTMLElement).blur();
 		}
 		if ( event.key === "Enter" && !event.repeat && event.target instanceof HTMLInputElement ) {
@@ -283,7 +287,7 @@ export function createUiBridge(
 	}, { signal: lifetime.signal } );
 	root.addEventListener( "keyup", event => {
 		event.stopPropagation();
-		heldKey( event.code, false );
+		heldKey( layoutKeys.up( event.code, event.key ), false );
 		if (
 			event.key === "Enter" && imeEnter !== null && event.target === imeEnter && !event.isComposing &&
 			event.keyCode !== 229
@@ -297,6 +301,7 @@ export function createUiBridge(
 		if ( event.button === 0 && (!drag || event.pointerId === drag.pointer) ) emit( { kind: "press", id: null } );
 	}, { signal: lifetime.signal } );
 	window.addEventListener( "blur", () => {
+		layoutKeys.clear();
 		emit( { kind: "press", id: null } );
 		emit( { kind: "hover", id: null } );
 	}, { signal: lifetime.signal } );

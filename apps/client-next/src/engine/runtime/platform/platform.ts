@@ -24,6 +24,7 @@ import {
 	type VideoOptions
 } from "@/engine/foundation/rendering/video-options";
 import { defaultInputOptions, inputOptions, virtualKey, type InputOptions } from "@/engine/foundation/ui/input-options";
+import { createLayoutKeys } from "@/engine/foundation/ui/layout-keys";
 import { cameraDragButtons, shortcutButton } from "@/engine/foundation/ui/mouse-modes";
 import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-options";
 import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
@@ -565,6 +566,7 @@ export function createPlatform(
 		uiPointer = false;
 		onInput( { kind: "release", timeMs: timeMs() } );
 	}, { signal: lifetime.signal } );
+	const layoutKeys = createLayoutKeys();
 	window.addEventListener( "keydown", event => {
 		if (
 			/^F([1-9]|1[0-2])$/.test( event.code ) && event.code !== "F5" && event.code !== "F11" &&
@@ -575,24 +577,27 @@ export function createPlatform(
 		if ( event.isComposing || event.keyCode === 229 ) return;
 		// The update prompt holds focus; Enter reaches its Refresh button.
 		if ( updateRequired ) return;
-		const vk = virtualKey( event.code );
+		// A letter is the one the layout prints on the key, as native VKs are.
+		const code = layoutKeys.down( event.code, event.key ), vk = virtualKey( code );
 		if (
 			(vk && bindings.keys.includes( vk )) ||
 			(/^F([1-9]|1[0-2])$/.test( event.code ) && event.code !== "F5" && event.code !== "F11" &&
 				event.code !== "F12")
 		) event.preventDefault();
 		if ( !event.repeat ) onGesture();
-		if ( !event.repeat ) onUi( { kind: "key", code: event.code, shift: event.shiftKey, ctrl: event.ctrlKey } );
+		if ( !event.repeat ) onUi( { kind: "key", code, shift: event.shiftKey, ctrl: event.ctrlKey } );
 		if ( !event.repeat ) {
-			onInput( { kind: "key", code: event.code, down: true, timeMs: timeMs() } );
+			onInput( { kind: "key", code, down: true, timeMs: timeMs() } );
 		}
 	}, { signal: lifetime.signal } );
 	window.addEventListener(
 		"keyup",
-		event => onInput( { kind: "key", code: event.code, down: false, timeMs: timeMs() } ),
+		event =>
+			onInput( { kind: "key", code: layoutKeys.up( event.code, event.key ), down: false, timeMs: timeMs() } ),
 		{ signal: lifetime.signal }
 	);
 	window.addEventListener( "blur", () => {
+		layoutKeys.clear();
 		uiPointer = false;
 		touchCamera.reset();
 		uiTouches.clear();
