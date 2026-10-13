@@ -289,6 +289,52 @@ func (s *moverStorage) records() iter.Seq2[uint32, moverRecord] {
 
 /*
 ================
+moverSchedule
+
+What the behaviour queue reads of a mover (scheduleBehavior, tryDormant).
+================
+*/
+type moverSchedule struct {
+	mode     monster.MoverMode
+	activity monster.ActivityCadence
+	arriveMs int64
+	regionID uint16
+}
+
+/*
+================
+schedule
+
+lookup(gid)'s mode, activity cadence, arrival and region without building
+its MoverState. A pending row expands to its stored mode (Spawning or
+Pending), pose and cadence with no segment (PendingSnapshot admits only
+ArriveMs == 0); the behaviour queue reads one per due actor per tick.
+================
+*/
+func (s *moverStorage) schedule(gid uint32) (moverSchedule, bool) {
+	if s == nil {
+		return moverSchedule{}, false
+	}
+	r, ok := s.rows[gid]
+	if !ok {
+		return moverSchedule{}, false
+	}
+	if r.live != nil {
+		return moverSchedule{mode: r.live.Mode(), activity: r.live.Activity, arriveMs: r.live.ArriveMs,
+			regionID: r.live.Pose.RegionID}, true
+	}
+	if r.pending != nil {
+		mode := monster.MoverPending
+		if r.pending.shared.Value().row.Spawning {
+			mode = monster.MoverSpawning
+		}
+		return moverSchedule{mode: mode, activity: r.pending.activity, regionID: r.pending.pose.RegionID}, true
+	}
+	return moverSchedule{}, true
+}
+
+/*
+================
 compact
 ================
 */

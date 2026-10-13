@@ -198,3 +198,38 @@ func BenchmarkMoverStoragePopulationPoses(b *testing.B) {
 	})
 	_ = sink
 }
+
+/*
+================
+TestMoverStorageScheduleMatchesLookup
+
+schedule answers what lookup's MoverState would for the behaviour queue's
+fields, for every kind of row.
+================
+*/
+func TestMoverStorageScheduleMatchesLookup(t *testing.T) {
+	r := rand.New(rand.NewSource(4))
+	s := newMoverStorage(nil)
+	sawPending, sawLive := false, false
+	for step := 0; step < 4000; step++ {
+		gid := uint32(1 + r.Intn(64))
+		if r.Intn(5) == 0 {
+			s.remove(gid)
+		} else {
+			s.set(gid, readsTestRow(r))
+		}
+		sawPending = sawPending || s.compact(gid)
+		sawLive = sawLive || s.has(gid) && !s.compact(gid)
+		for probe := uint32(0); probe <= 65; probe++ {
+			m, exists := s.lookup(probe)
+			got, ok := s.schedule(probe)
+			want := moverSchedule{mode: m.Mode(), activity: m.Activity, arriveMs: m.ArriveMs, regionID: m.Pose.RegionID}
+			if ok != exists || got != want {
+				t.Fatalf("step %d gid %d: schedule = %+v %v, want %+v %v", step, probe, got, ok, want, exists)
+			}
+		}
+	}
+	if !sawPending || !sawLive {
+		t.Fatalf("the walk never stored both kinds of row (pending %v, live %v)", sawPending, sawLive)
+	}
+}

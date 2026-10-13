@@ -90,14 +90,14 @@ func (s *MonsterState) prepareDormancy(now int64, division string, sessions []Se
 tryDormant
 ================
 */
-func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m monster.MoverState, now int64) bool {
+func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m moverSchedule, now int64) bool {
 	if !s.regionDormancy || state.keepAwakeUntil == nil {
 		return false
 	}
-	if m.Mode() != monster.MoverPending || IsDungeonRegion(m.Pose.RegionID) {
+	if m.mode != monster.MoverPending || IsDungeonRegion(m.regionID) {
 		return false
 	}
-	if now < state.keepAwakeUntil[m.Pose.RegionID] {
+	if now < state.keepAwakeUntil[m.regionID] {
 		return false
 	}
 	if !state.movers.compact(gid) {
@@ -122,7 +122,7 @@ func (s *MonsterState) tryDormant(state *divisionMonsterState, gid uint32, m mon
 		state.dormant = make(map[uint32]uint16)
 		state.dormantRegions = make(map[uint16]map[uint32]struct{})
 	}
-	region := m.Pose.RegionID
+	region := m.regionID
 	if state.dormantRegions[region] == nil {
 		state.dormantRegions[region] = make(map[uint32]struct{})
 	}
