@@ -153,6 +153,23 @@ func (rt *Runtime) acceptSkillCastAt(
 
 /*
 ================
+linkedStageTargetRefusal
+
+A linked stage (a combo's next row) beyond reach. 4AECE7 returns it to
+action state 2, which executes without measuring range (only state 1
+pursues), and 58CC70 asks of the target only the same plane and adjacent
+sectors. Returns 0 to execute, else the refusal code.
+================
+*/
+func linkedStageTargetRefusal(caster, target simulation.Spawn) uint16 {
+	if !samePlaneAdjacent(caster, target) {
+		return 0x3006
+	}
+	return 0
+}
+
+/*
+================
 acceptSkillStageAt
 
 Enter a fresh stage without a prepared execution-cost snapshot.
@@ -305,7 +322,12 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 	}
 	targetAt := simulation.Spawn{RegionID: monsterPose.RegionID, X: monsterPose.X, Y: monsterPose.Y, Z: monsterPose.Z}
 	if release == nil && !spacing.Contains(playerPose, targetAt) {
-		return OpResult{}, skillCastDeferred
+		if rootID == 0 {
+			return OpResult{}, skillCastDeferred
+		}
+		if code := linkedStageTargetRefusal(playerPose, targetAt); code != 0 {
+			return offensiveRefusal(code), skillCastRefused
+		}
 	}
 	// 4ADD44 / 4AEB6E: the attack starting here aims the caster's hawk.
 	if release == nil && rootID == 0 {

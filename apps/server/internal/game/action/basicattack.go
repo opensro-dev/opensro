@@ -505,12 +505,10 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
 		return OpResult{DiagnosticRefusal: "combat-spacing-unavailable"}
 	}
-	if !spacing.Contains(live, targetSpawn) {
-		if intent.ComboRootID != 0 {
-			// A broken combo does not pursue and resume an old attack later.
-			rt.finishCombatIntent(intent.DivisionID, intent.CharacterName)
-			return OpResult{}
-		}
+	// 4AECE7 returns a linked stage to action state 2, which executes it;
+	// only state 1 measures range and pursues. A combo stage therefore
+	// never pursues, and never waits for its target to come back in reach.
+	if !spacing.Contains(live, targetSpawn) && intent.ComboRootID == 0 {
 		// Equipment is an authority input for every continuation tick. Keep the
 		// pursuit stop distance in the same freshly-resolved loadout snapshot as
 		// the eventual strike; otherwise swapping weapon families while chasing

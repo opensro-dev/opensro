@@ -72,7 +72,7 @@ func TestComboCommitsSeparateTimedStagesWithOneRootCost(t *testing.T) {
 }
 
 func TestComboTailCannotBeRequestedOrSurviveCancellation(t *testing.T) {
-	for _, mode := range []string{"direct-tail", "cancel", "fatal", "unsupported-tail", "unequip", "unlearn", "player-death", "target-out-of-range"} {
+	for _, mode := range []string{"direct-tail", "cancel", "fatal", "unsupported-tail", "unequip", "unlearn", "player-death"} {
 		t.Run(mode, func(t *testing.T) {
 			hp := uint32(100000)
 			if mode == "fatal" {
@@ -104,11 +104,6 @@ func TestComboTailCannotBeRequestedOrSurviveCancellation(t *testing.T) {
 			}
 			if mode == "player-death" {
 				c.CurrentHP = testInt64(0)
-			}
-			if mode == "target-out-of-range" {
-				mover, _ := rt.Monsters.Mover(testDivision, target.Gid)
-				mover.Pose.X += 500
-				rt.Monsters.CommitMover(testDivision, target.Gid, mover)
 			}
 			for tick := 1; tick <= 30; tick++ {
 				rt.TickHook()(clock.At(time.Duration(tick) * 100 * time.Millisecond).UnixMilli())

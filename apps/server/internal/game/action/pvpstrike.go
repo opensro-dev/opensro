@@ -318,7 +318,12 @@ func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCa
 		return OpResult{}, skillCastDeferred
 	}
 	if st.release == nil && !spacing.Contains(casterAt, target.at) {
-		return OpResult{}, skillCastDeferred
+		if st.rootID == 0 {
+			return OpResult{}, skillCastDeferred
+		}
+		if code := linkedStageTargetRefusal(casterAt, target.at); code != 0 {
+			return offensiveRefusal(code), skillCastRefused
+		}
 	}
 	if st.release == nil && st.rootID == 0 {
 		rt.noteHawkOwnerAttack(division, snapshot, target.gid, now)
