@@ -267,7 +267,17 @@ func EquipmentGroup(level uint8, rare bool, roll uint32) (int, bool) {
 	if level == 0 || int(level) > len(equipment.classes[kind]) || roll >= 1_000_000 {
 		return 0, false
 	}
-	row := equipment.classes[kind][level-1]
+	return groupAt(equipment.classes[kind][level-1], roll)
+}
+
+/*
+================
+groupAt
+
+The class a combined roll lands in: the first threshold at or above it.
+================
+*/
+func groupAt(row []classThreshold, roll uint32) (int, bool) {
 	i := sort.Search(len(row), func(i int) bool { return row[i].threshold >= roll })
 	if i == len(row) {
 		return 0, false

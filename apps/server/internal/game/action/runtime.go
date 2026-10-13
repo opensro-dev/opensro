@@ -295,6 +295,11 @@ type Runtime struct {
 	// 0 or 1 is native; the closed-beta growth switch raises it.
 	RareRate int
 
+	// SealRates multiplies each rare seal's chance by degree and seal on top
+	// of RareRate (port-only, not native, beta balance; owner 2026-10-13).
+	// The zero value is off.
+	SealRates progression.SealRates
+
 	// PetExpPace is the closed-beta growth multiplier for an attack pet's
 	// EXP gain, read at the owner's level (progression GrowthRates.ExpPace,
 	// petgrowth.go). Nil is native; the growth switch sets it (port-only).

@@ -202,6 +202,11 @@ func (rt *Runtime) selectEquipmentGroup(level uint8, rare bool) (int, bool) {
 	if !ok {
 		return 0, false
 	}
+	if rare && rt.SealRates.Enabled() {
+		// Port-only, not native, beta balance (owner 2026-10-13): the
+		// degree-9 Star and Moon band runs to level 94 (loot/sealband.go).
+		return loot.SealBandRareGroup(level, roll)
+	}
 	return loot.EquipmentGroup(level, rare, roll)
 }
 
@@ -337,7 +342,7 @@ func (rt *Runtime) prepareEquipmentDrop(
 	if err != nil {
 		return grounditem.Item{}, false
 	}
-	rare := rareEquipmentRoll(rarityRoll, rt.RareRate)
+	rare := rareEquipmentRoll(rarityRoll, rt.rareWindow())
 	_, _, attempts := loot.MonsterDropBudget(monster.Rarity(), monster.Ref.Codename)
 	for attempt := 0; attempt < attempts; attempt++ {
 		if item, ok := rt.prepareEquipmentDropKind(monster, at, droppedBy, now, rare); ok {
@@ -349,6 +354,64 @@ func (rt *Runtime) prepareEquipmentDrop(
 
 // rareEquipmentDomain is the native rare roll's modulus: rand() % 1000 == 1.
 const rareEquipmentDomain = 1000
+
+/*
+================
+rareWindow
+
+The residues the rarity roll admits: RareRate, widened by the seal rates'
+largest multiplier when they are on (port-only, not native, beta balance;
+owner 2026-10-13). keepSeal then thins each seal back to its own
+multiplier. Off, this is RareRate itself, so the roll is unchanged.
+================
+*/
+func (rt *Runtime) rareWindow() int {
+	if !rt.SealRates.Enabled() {
+		return rt.RareRate
+	}
+	return max(rt.RareRate, 1) * rt.SealRates.Widening()
+}
+
+/*
+================
+keepSeal
+
+Whether a chosen rare item stays rare under the seal rates: with
+probability multiplier / widening, drawn exactly from DropRoll by
+rejecting its uneven top. Off, or at the largest multiplier, every rare
+stays and nothing is drawn. The seal and degree are the item's ItemClass,
+as the client names them (progression/sealrates.go). false, false is a
+failed draw.
+================
+*/
+func (rt *Runtime) keepSeal(codename string) (kept, ok bool) {
+	widening := rt.SealRates.Widening()
+	if widening <= 1 {
+		return true, true
+	}
+	itemClass := 0
+	if items := rt.deps.ItemReferences(); items != nil {
+		if ref, found := items.ItemRefByCodename(codename); found {
+			class, _ := ref.NativeFields.Lookup("itemClass")
+			itemClass = int(class)
+		}
+	}
+	multiplier := rt.SealRates.Multiplier(itemClass)
+	if multiplier >= widening {
+		return true, true
+	}
+	limit := uint32(dropRollDomain / widening * widening)
+	for range maxCapRejections {
+		roll, err := rt.DropRoll()
+		if err != nil {
+			return false, false
+		}
+		if roll < limit {
+			return int(roll)%widening < multiplier, true
+		}
+	}
+	return false, false
+}
 
 /*
 ================
@@ -430,6 +493,15 @@ func (rt *Runtime) prepareEquipmentDropKind(monster monster.Instance, at simulat
 	chosen, ok := loot.SelectEquipment(dropCountry, group, rare, monster.Ref.Level, rt.DropRoll)
 	if !ok {
 		return grounditem.Item{}, false
+	}
+	if rare {
+		kept, ok := rt.keepSeal(chosen.Codename)
+		if !ok {
+			return grounditem.Item{}, false
+		}
+		if !kept {
+			return rt.prepareEquipmentDropKind(monster, at, droppedBy, now, false)
+		}
 	}
 	plus, ok := rt.rollDroppedEquipmentPlus()
 	if !ok {

@@ -268,6 +268,15 @@ variable "beta_rare_rate" {
   default = "5"
 }
 
+# beta_seal_rates multiplies each rare seal's chance on top of beta_rare_rate
+# (port-only, not native, beta balance; owner 2026-10-13): degrees 1-8 make
+# Star, Moon and Sun three times as likely, degree 9 Star three times and
+# Moon five times, Sun as it is. "off" keeps every seal at beta_rare_rate.
+variable "beta_seal_rates" {
+  type    = string
+  default = "on"
+}
+
 # stack_sizes raises item stack caps per group (port-only, not native), e.g.
 # "potion=2000,elixir=50". Groups: potion, petpotion, universalpill, elixir,
 # luckypowder, magicstone, attrstone (stones merge only with an equal
@@ -437,6 +446,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_GOLD_RATE                 = var.beta_gold_rate
         SRO_INSTANT_INVENTORY_EXPANSION    = var.instant_inventory_expansion
         SRO_BETA_RARE_RATE                 = var.beta_rare_rate
+        SRO_BETA_SEAL_RATES                = var.beta_seal_rates
         SRO_BETA_DROP_CAP                  = var.beta_drop_cap
         SRO_BETA_DROP_MIX                  = var.beta_drop_mix
         SRO_SHOP_EXTRA_GOODS               = var.shop_extra_goods

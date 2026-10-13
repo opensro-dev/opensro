@@ -79,6 +79,12 @@ type BetaRates struct {
 	GoldRate int `json:"goldRate"`
 	// RareChance replaces the native rareChance.
 	RareChance float64 `json:"rareChance"`
+	// Seals multiply each rare seal's chance on top of rareChance
+	// (progression.SealRates); absent, every seal runs at rareChance.
+	// Rare replaces a table's native rare attempt where the beta seal band
+	// changes it (levels 86-94 also roll degree-9 Star and Moon).
+	Rare  map[string][]DropChance `json:"rare,omitempty" doc:"Port-only beta balance: monster table to its rare attempt where the beta seal band changes it (levels 86-94 roll degree-9 Star and Moon at level 85's share); a table not named keeps its rare list."`
+	Seals [][]int                 `json:"seals,omitempty" doc:"Port-only beta balance: nine rows (degree 1 first) of three multipliers (Seal of Star, Moon, Sun). A rare item's chance is its rareChance share times its degree and seal's multiplier; the seal is (ItemClass - 1) % 3 and the degree (ItemClass + 2) / 3."`
 	// Mix gives the named families their own rate in place of dropRate
 	// (progression.DropMix); absent, every family runs at dropRate.
 	Mix map[string]int `json:"mix,omitempty" doc:"Family name (equipment, assigned, potion, cure, scroll, elixir, ammo, stone, tablet) to that family's rate; a family not named runs at dropRate."`
@@ -144,7 +150,19 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 	}
 	if beta := progression.BetaGrowthFromEnv(); beta.Enabled {
 		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate,
-			RareChance: action.RareEquipmentChance(beta.RareRate)}
+			RareChance: action.RareEquipmentChance(beta.RareRate), Seals: progression.BetaSealRatesFromEnv().Table()}
+		if progression.BetaSealRatesFromEnv().Enabled() {
+			for _, m := range monsters {
+				level := uint8(m.Level)
+				if _, done := file.Beta.Rare[m.Table]; done || !loot.InSealBand(level) {
+					continue
+				}
+				if file.Beta.Rare == nil {
+					file.Beta.Rare = map[string][]DropChance{}
+				}
+				file.Beta.Rare[m.Table] = dropChances(loot.SealBandRareChances(level, m.Country), itemID)
+			}
+		}
 		// A malformed mix stops the GameWorld at boot, and sro-catalogue
 		// refuses it before building, so an error here is never published.
 		if mix, err := progression.BetaDropMixFromEnv(); err == nil {
