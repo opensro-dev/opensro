@@ -55,6 +55,42 @@ func TestTableMatchesTheJobFile(t *testing.T) {
 
 /*
 ================
+TestEveryJobSettingIsListed
+
+The reverse direction: every SRO_ variable the GameWorld task sets from a
+job variable is a table row or a named NotSettings entry, and every
+NotSettings entry is still in the job. A new job setting cannot slip past
+the table.
+================
+*/
+func TestEveryJobSettingIsListed(t *testing.T) {
+	data, err := os.ReadFile(gameWorldJob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[string]bool{}
+	for _, s := range Settings {
+		listed[s.Env] = true
+	}
+	inJob := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^\s*(SRO_\w+)\s*=\s*[^\n]*\bvar\.`).FindAllStringSubmatch(string(data), -1) {
+		inJob[m[1]] = true
+		if !listed[m[1]] && NotSettings[m[1]] == "" {
+			t.Fatalf("the job sets %s from a variable, but it is neither a shard setting nor in NotSettings", m[1])
+		}
+	}
+	for env := range NotSettings {
+		if !inJob[env] {
+			t.Fatalf("NotSettings lists %s, which the job no longer sets", env)
+		}
+		if listed[env] {
+			t.Fatalf("%s is both a setting and NotSettings", env)
+		}
+	}
+}
+
+/*
+================
 TestValuesPreferTheOperator
 
 An operator's value wins, "off" included; unset or blank is the default.

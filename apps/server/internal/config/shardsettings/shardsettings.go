@@ -78,6 +78,27 @@ var Settings = []Setting{
 	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "", Source: Built},
 }
 
+// NotSettings are the job's other SRO_ variables: what a deployment
+// derives (identity, paths, topology, release), not a rule it chooses.
+// Each says why it is not in Settings; a test keeps the job file, Settings
+// and this list in step.
+var NotSettings = map[string]string{
+	"SRO_SHARD_ID":                         "shard identity, from the catalogue",
+	"SRO_SHARD_CATALOG_PATH":               "path to the shard catalogue",
+	"SRO_AUTHORITY_STATE_DIR":              "path to the shard's authority store",
+	"SRO_SERVER_GAME_DATA_ROOT":            "path to the released server game data",
+	"SRO_SERVER_GAME_DATA_MANIFEST_DIGEST": "identity of the released server game data",
+	"SRO_GM_CHARACTERS":                    "operator GM grants, from the state directory",
+	"SRO_GAMEWORLD_PRIVATE_NETWORK":        "host topology",
+	"SRO_BENCHMARK_FIXTURE_CONTROL":        "derived from the host network and namespace",
+	"SRO_MOVE_PATH_GUARD":                  "movement enforcement mode, operational",
+	"SRO_MOVE_CLIENT_CLIP":                 "movement enforcement mode, operational",
+	"SRO_MAINTENANCE_GATE_PATH":            "release path: the maintenance gate file",
+	"SRO_PUBLIC_API_ADDR":                  "the public API listener, per shard",
+	"SRO_TRANSPORT_TLS_ID":                 "transport certificate identity",
+	"SRO_RELEASE_ID":                       "release identity",
+}
+
 /*
 ================
 Value
