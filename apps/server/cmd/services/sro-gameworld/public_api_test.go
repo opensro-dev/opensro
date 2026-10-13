@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -186,6 +187,16 @@ func TestUniqueNamesAreTheRetailNames(t *testing.T) {
 	monsters := simulation.NewMonsterState(monster.TemplateFromParts(map[uint32]monster.MonsterRef{
 		1954: {RefObjID: 1954, Codename: "MOB_OA_URUCHI", Name: "Uruchi"},
 	}, nil))
+	// The API's sources as the GameWorld builds them: the wiring itself is
+	// what went missing.
+	game := &gameplayPlane{deps: &enterworld.Deps{MonsterState: monsters}}
+	sources := publicSources(game, nil, nil, "test")
+	if sources.UniqueName == nil {
+		t.Fatal("the public API's unique names are not wired")
+	}
+	if got := sources.UniqueName(1954); got != "Uruchi" {
+		t.Fatalf("wired name(1954) = %q, want Uruchi", got)
+	}
 	name := uniqueNameSource(monsters)
 	if got := name(1954); got != "Uruchi" {
 		t.Fatalf("name(1954) = %q, want Uruchi", got)
