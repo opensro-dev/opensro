@@ -5,8 +5,9 @@ devstack.go - the local development stack's ports, from one setting
 
 A developer machine runs one checkout-owned stack: the Nomad development
 agent (4646-4648), the Agent (8787), its provisioning API (8789) and the
-first shard's public read API (8790). SRO_DEV_PORT_OFFSET moves every one of
-them by the same amount, so a second stack (another checkout or worktree,
+first shard's public read API (8790), and the client dev servers the Agent
+admits as origins (5180 and the rest of developmentAllowedOrigins).
+SRO_DEV_PORT_OFFSET moves every one of them by the same amount, so a second stack (another checkout or worktree,
 with its own .state and its own shard catalogue) runs beside the first
 under its own Nomad agent and its own workload identity. Unset or 0 is
 today's stack exactly.
@@ -22,6 +23,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -79,6 +81,36 @@ func loadDevStack(getenv func(string) string) (devStack, error) {
 		)
 	}
 	return devStack{offset: offset}, nil
+}
+
+/*
+================
+devStack.moved
+================
+*/
+func (s devStack) moved() bool {
+	return s.offset != 0
+}
+
+/*
+================
+devStack.allowedOrigins
+
+developmentAllowedOrigins with every port moved: the moved stack's client
+dev servers (5180 becomes 5280 at +100) are the origins its Agent admits.
+================
+*/
+func (s devStack) allowedOrigins() string {
+	origins := strings.Split(developmentAllowedOrigins, ",")
+	for i, origin := range origins {
+		u, err := url.Parse(origin)
+		if err != nil {
+			panic(err)
+		}
+		u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(loopbackPort(u.Host)+s.offset))
+		origins[i] = u.String()
+	}
+	return strings.Join(origins, ",")
 }
 
 /*

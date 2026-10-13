@@ -76,7 +76,7 @@ func TestDefaultDevStackIsTodaysStack(t *testing.T) {
 TestDevPortOffsetMovesTheWholeStack
 
 An offset of 100 moves Nomad (HTTP, RPC, Serf and the identity issuer), the
-Agent, its provisioning API and the public API together, and the checkout's
+Agent, its provisioning API, the public API and the client origins together, and the checkout's
 credential exemption follows the moved agent and no other listener.
 ================
 */
@@ -91,6 +91,14 @@ func TestDevPortOffsetMovesTheWholeStack(t *testing.T) {
 	}
 	if got := deployment.Shards[0].PublicAPIAddr; got != "127.0.0.1:8890" {
 		t.Fatalf("public API %s", got)
+	}
+	origins := options.stack.allowedOrigins()
+	if !strings.HasPrefix(origins, "http://127.0.0.1:5280,http://localhost:5280,http://127.0.0.1:4280,") ||
+		strings.Contains(origins, ":5180") {
+		t.Fatalf("moved origins %s", origins)
+	}
+	if got, err := normalizeAllowedOrigins(origins, "loopback"); err != nil || got == "" {
+		t.Fatalf("moved origins refused: %v", err)
 	}
 	ports := options.stack.portsConfig()
 	for _, line := range []string{"http = 4746", "rpc  = 4747", "serf = 4748", `oidc_issuer = "http://127.0.0.1:4746"`} {

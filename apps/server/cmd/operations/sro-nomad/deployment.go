@@ -263,8 +263,13 @@ func resolveDeployment(
 	}
 	allowedOrigins := ""
 	if requirePrerequisites {
+		rawOrigins := options.AllowedOrigins
+		// A moved local stack's clients serve from moved ports too.
+		if strings.TrimSpace(rawOrigins) == "" && hostNetwork == "loopback" && options.DevStack.moved() {
+			rawOrigins = options.DevStack.allowedOrigins()
+		}
 		allowedOrigins, err = normalizeAllowedOrigins(
-			options.AllowedOrigins,
+			rawOrigins,
 			hostNetwork,
 		)
 		if err != nil {
