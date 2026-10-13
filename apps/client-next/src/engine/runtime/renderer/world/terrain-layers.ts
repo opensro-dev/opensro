@@ -18,6 +18,11 @@ slot is reclaimed on the next rebuild. A member's own packed stream
 (Geometry.vertices) follows its seam stitching, so a rebuild or a re-admit
 after device loss writes its current vertices.
 
+The layer keeps no CPU copy of its vertex buffer: every byte of a member's
+slot comes from the member's own stream (streamVertices), so a mirror
+would only duplicate the members. Slots past the members are never
+indexed.
+
 ===========================================================================
 */
 import type { WorldGroup, WorldScene } from "@/engine/contracts/scene";
@@ -130,8 +135,9 @@ export function createTerrainLayers() {
 	================
 	allocate
 
-	A layer's GPU geometry for the given capacities: an empty mirror and a
-	zero index buffer, filled by writeVertices and updateIndices.
+	A layer's GPU geometry for the given capacities: an unindexed vertex
+	buffer and a zero index buffer, filled by streamVertices and
+	updateIndices. No dynamicVertices: the members hold the vertices.
 	================
 	*/
 	function allocate( geometry: GeometryCommands, layer: Omit<Layer, "draw">, vertices: number, indices: number ) {
@@ -142,9 +148,7 @@ export function createTerrainLayers() {
 				positions: new Float32Array( vertices * 3 ),
 				indices: new Uint32Array( indices ),
 				transform: IDENTITY(),
-				instances: IDENTITY(),
-				dynamicVertices: true,
-				vertices: new Float32Array( vertices * VERTEX_FLOATS )
+				instances: IDENTITY()
 			},
 			layer.image
 		);
@@ -173,7 +177,7 @@ export function createTerrainLayers() {
 		layer.top = 0;
 		for ( const [group, member] of layer.members ) {
 			member.base = layer.top;
-			geometry.writeVertices( layer.draw, member.base, group.geometry.vertices! );
+			geometry.streamVertices( layer.draw, member.base, group.geometry.vertices! );
 			layer.top += member.vertices;
 		}
 		layer.dirty = true;
@@ -231,7 +235,7 @@ export function createTerrainLayers() {
 				chosen: new Uint32Array( indices ),
 				count: 0
 			};
-			geometry.writeVertices( layer.draw, member.base, group.geometry.vertices! );
+			geometry.streamVertices( layer.draw, member.base, group.geometry.vertices! );
 			layer.top += vertices;
 			layer.members.set( group, member );
 			members.set( group, member );
@@ -313,8 +317,9 @@ export function createTerrainLayers() {
 		================
 		updatePositions
 
-		Seam stitching of a member: kept in its own packed stream and written
-		at its slot of the layer.
+		Seam stitching of a member: kept in its own packed stream and each
+		range of it streamed to its slot of the layer. Positions are checked
+		before the stream changes, as geometry's own updatePositions checks.
 		================
 		*/
 		updatePositions(
@@ -323,15 +328,30 @@ export function createTerrainLayers() {
 			positions: Float32Array,
 			ranges: readonly (readonly [number, number])[]
 		) {
-			const member = members.get( group )!, own = group.geometry.vertices!;
+			const member = members.get( group )!, own = group.geometry.vertices!, count = member.vertices;
+			if ( positions.length !== count * 3 ) throw Error( "Invalid position update" );
 			for ( const [start, length] of ranges ) {
+				if (
+					!Number.isInteger( start ) || !Number.isInteger( length ) || start < 0 || length < 0 ||
+					start + length > count
+				) throw Error( "Invalid position range" );
+				for ( let i = start * 3; i < (start + length) * 3; i++ ) {
+					if ( !Number.isFinite( positions[i]! ) ) throw Error( "Invalid position update" );
+				}
+			}
+			for ( const [start, length] of ranges ) {
+				if ( !length ) continue;
 				for ( let i = start; i < start + length; i++ ) {
 					own[i * VERTEX_FLOATS] = positions[i * 3]!;
 					own[i * VERTEX_FLOATS + 1] = positions[i * 3 + 1]!;
 					own[i * VERTEX_FLOATS + 2] = positions[i * 3 + 2]!;
 				}
+				geometry.streamVertices(
+					member.layer.draw,
+					member.base + start,
+					own.subarray( start * VERTEX_FLOATS, (start + length) * VERTEX_FLOATS )
+				);
 			}
-			geometry.updatePositions( member.layer.draw, positions, undefined, undefined, ranges, member.base );
 		},
 		/*
 		================

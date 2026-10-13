@@ -415,6 +415,9 @@ export interface GeometryCommands {
 	// Writes a packed vertex stream (14 floats a vertex) at vertex base of a
 	// dynamicVertices draw: a terrain layer member taking its slot.
 	writeVertices( draw: GeometryDraw, base: number, vertices: Float32Array ): void;
+	// Writes a packed vertex stream at vertex base of any draw, keeping no CPU
+	// copy: the caller owns the stream (a terrain layer member's vertices).
+	streamVertices( draw: GeometryDraw, base: number, vertices: Float32Array ): void;
 	updateInstances(
 		draw: GeometryDraw,
 		instances: Float32Array,

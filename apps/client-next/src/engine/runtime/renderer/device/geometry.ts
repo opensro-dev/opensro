@@ -5,7 +5,9 @@ geometry.ts - GPU geometry resources
 
 Uploads meshes to GPU buffers and bind groups and owns their updates
 (instances, bones, indices, positions) and release. Only meshes uploaded
-with dynamicVertices keep a CPU mirror for position updates.
+with dynamicVertices keep a CPU mirror for position updates. A terrain
+layer keeps none: its members own their packed streams, and streamVertices
+writes a member's stream (or a patched range of it) straight to its slot.
 
 ===========================================================================
 */
@@ -236,6 +238,9 @@ export function createGeometryResources(
 		image?: ImageDraw;
 		environmentImage?: ImageDraw;
 		vertices?: Float32Array;
+		// The vertex buffer's length in floats (14 a vertex), the bound of a
+		// streamVertices write.
+		vertexFloats: number;
 		skin: GPUBuffer;
 		bones: GPUBuffer;
 		// The bone and index buffers' sizes, read once: a GPUBuffer's size
@@ -627,6 +632,25 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		streamVertices
+
+		Writes a packed stream at vertex base with no CPU mirror: the caller
+		keeps the stream (a terrain layer member's Geometry.vertices). Bounds
+		and stride are checked as writeVertices checks them; the upload arena
+		copies the bytes at admission, so the caller may change them after.
+		================
+		*/
+		streamVertices( draw: GeometryDraw, base: number, vertices: Float32Array ) {
+			const meta = metadata.get( draw );
+			if ( !meta ) throw Error( "Stale geometry handle" );
+			if (
+				!Number.isInteger( base ) || base < 0 || vertices.length % 14 ||
+				base * 14 + vertices.length > meta.vertexFloats
+			) throw Error( "Invalid vertex write" );
+			writeStream( draw.vertices, base * 56, vertices );
+		},
+		/*
+		================
 		updateInstances
 		================
 		*/
@@ -993,6 +1017,7 @@ export function createGeometryResources(
 					image,
 					environmentImage,
 					...(data.dynamicVertices ? { vertices: interleaved } : {}),
+					vertexFloats: interleaved.length,
 					skin: skinBuffer,
 					bones: boneBuffer,
 					boneBytes: boneBuffer.size,

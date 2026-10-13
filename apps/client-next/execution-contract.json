@@ -132,9 +132,8 @@
 			"functions": [
 				"upload",
 				"release",
-				"writeVertices",
-				"updateIndices",
-				"updatePositions"
+				"streamVertices",
+				"updateIndices"
 			]
 		},
 		{

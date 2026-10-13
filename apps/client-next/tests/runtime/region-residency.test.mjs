@@ -162,12 +162,12 @@ function devices() {
 		updatePositions() {},
 		/*
 		================
-		writeVertices
+		streamVertices
 
 		A terrain layer member taking its slot (terrain-layers.ts).
 		================
 		*/
-		writeVertices( draw, base, vertices ) {
+		streamVertices( draw, base, vertices ) {
 			written.push( vertices );
 		}
 	};
@@ -272,8 +272,8 @@ function grownTerrainPart( region, vertexCount ) {
 test("a pending scene that grows a shared terrain layer never leaves its released draw in a still frame", () => {
 	const world = createWorldRenderer(), d = devices(), layerDraws = new Set();
 	// Only terrain layers write member vertices: that names the layer draws.
-	const write = d.geometry.writeVertices;
-	d.geometry.writeVertices = ( draw, base, vertices ) => {
+	const write = d.geometry.streamVertices;
+	d.geometry.streamVertices = ( draw, base, vertices ) => {
 		layerDraws.add( draw );
 		write( draw, base, vertices );
 	};
@@ -392,7 +392,7 @@ test("a terrain layer merges member indices at their slots and survives growth",
 		================
 		*/
 		upload( data ) {
-			const draw = { id: draws.length, capacity: data.vertices.length / 14 };
+			const draw = { id: draws.length, capacity: data.positions.length / 3 };
 			draws.push( draw );
 			return draw;
 		},
@@ -406,10 +406,10 @@ test("a terrain layer merges member indices at their slots and survives growth",
 		},
 		/*
 		================
-		writeVertices
+		streamVertices
 		================
 		*/
-		writeVertices( draw, base, vertices ) {
+		streamVertices( draw, base, vertices ) {
 			writes.push( { draw, base, value: vertices[0] } );
 		},
 		/*
@@ -456,11 +456,11 @@ test("a complete scene reserves each terrain layer once across incremental admis
 	/** @type {any} */
 	const geometry = {
 		upload( data ) {
-			const draw = { capacity: data.vertices.length / 14 };
+			const draw = { capacity: data.positions.length / 3 };
 			uploads.push( draw );
 			return draw;
 		},
-		writeVertices( draw, base, vertices ) {
+		streamVertices( draw, base, vertices ) {
 			writes.push( { draw, base, value: vertices[0] } );
 		},
 		release: draw => releases.push( draw )
