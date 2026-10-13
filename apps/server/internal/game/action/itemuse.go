@@ -129,6 +129,9 @@ func (rt *Runtime) HandleItemUse(
 	// rebinds the resident region, which reads the committed character).
 	var after func()
 	var used *enterworld.ItemRef
+	// The object the 0x3449 sparkle plays on: the user, unless the item
+	// names a pet (petItemVisualTarget).
+	var visualGID uint32
 	var mercenaryContext domain.MercenaryContext
 	update := func() bool {
 		if character.DeletePending || rt.deps.ItemReferences() == nil ||
@@ -521,6 +524,7 @@ func (rt *Runtime) HandleItemUse(
 		}
 
 		if family == itemUsePetPotion || family == itemUsePetCure || family == itemUsePetRevive || family == itemUsePetFeed {
+			visualGID = petItemVisualTarget(family, tail)
 			return rt.applyCosItemUse(divisionID, character, ref, family, rowIndex, request, tail, nowMs, &result)
 		}
 		if len(tail) != 0 {
@@ -691,7 +695,7 @@ func (rt *Runtime) HandleItemUse(
 		after()
 	}
 	if committed && used != nil {
-		rt.publishItemUseVisual(character, used, &result)
+		rt.publishItemUseVisual(character, used, visualGID, &result)
 	}
 	return result
 }
@@ -702,7 +706,9 @@ publishItemUseVisual
 
 CGObjPC_HandleUseItem (v1.188 510980) ends every successful use the same
 way: the 0xB04C success, then 0x305C {gid, item reference} to the nearby
-sessions, v1.150's 0x3449 (the client's external item effect, 74F540):
+sessions, v1.150's 0x3449 (the client's external item effect, 74F540).
+The gid is the user's, unless the item's handler named another object
+(petItemVisualTarget); target 0 is the user:
 the potion sparkle, the scroll glow, the firework. The native client holds
 every item record; the browser holds only the references it was sent, so
 both audiences, the user and the observers, get the item's reference right
@@ -711,7 +717,7 @@ when the used row was the last of its kind the browser knew of: a repeat
 of a known reference is harmless.
 ================
 */
-func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *enterworld.ItemRef, result *OpResult) {
+func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *enterworld.ItemRef, target uint32, result *OpResult) {
 	at := -1
 	for index, frame := range result.Frames {
 		if frame.Opcode == wire.OpItemUseResponse && len(frame.Payload) > 0 && frame.Payload[0] == wire.ResultSuccess {
@@ -723,8 +729,11 @@ func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *en
 		return
 	}
 	reference := rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags()}}, nil)
+	if target == 0 {
+		target = enterworld.ObjectIDForCharacter(character)
+	}
 	visual := wire.Frame{Opcode: wire.OpItemUseVisual,
-		Payload: wire.NewWriter(8).U32(enterworld.ObjectIDForCharacter(character)).U32(ref.RefObjID).Payload()}
+		Payload: wire.NewWriter(8).U32(target).U32(ref.RefObjID).Payload()}
 	result.Frames = append(result.Frames[:at+1], append([]wire.Frame{reference, visual}, result.Frames[at+1:]...)...)
 	result.Broadcast = append(result.Broadcast, reference, visual)
 }

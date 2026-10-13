@@ -59,6 +59,10 @@ func TestShippedPetFoodUsesAuthoredPercentAndNativeBoundary(t *testing.T) {
 			len(result.Broadcast) != 2 || result.Broadcast[1].Opcode != wire.OpItemUseVisual {
 			t.Fatal("feeding changed vitals, reuse timers or public state")
 		}
+		// 49D6E7: the HGP potion's sparkle plays on the pet it fed.
+		if gid := binary.LittleEndian.Uint32(result.Broadcast[1].Payload); gid != c.ActiveCOS.GID {
+			t.Fatalf("pet food sparkle on %d, want pet %d", gid, c.ActiveCOS.GID)
+		}
 	}
 }
 

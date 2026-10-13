@@ -232,7 +232,7 @@ func (rt *Runtime) scrollReverseReturn(division string, c *enterworld.Character,
 		return rt.beginReverseReturnScroll(division, c, ref, row, reverseReturnTarget{choice: choice}, now, &result)
 	})
 	if committed && used != nil {
-		rt.publishItemUseVisual(c, used, &result)
+		rt.publishItemUseVisual(c, used, 0, &result)
 	}
 	return result
 }

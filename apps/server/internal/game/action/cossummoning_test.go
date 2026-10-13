@@ -366,6 +366,10 @@ func TestLiveCompanionRevivalPublishesAliveAfterVitals(t *testing.T) {
 	if pet.CurrentHP != 100 || len(result.Broadcast) != 4 || result.Broadcast[0].Opcode != simulation.OpVitalsUpdate || result.Broadcast[1].Opcode != wire.OpObjectStateRefresh || result.Broadcast[3].Opcode != wire.OpItemUseVisual {
 		t.Fatal("revival omitted world life/vitals", result)
 	}
+	// 49D240 case 6 names no object, so the revival's sparkle stays on the owner.
+	if gid := binary.LittleEndian.Uint32(result.Broadcast[3].Payload); gid != enterworld.ObjectIDForCharacter(c) {
+		t.Fatalf("revival sparkle on %d, want the owner", gid)
+	}
 	life := result.Broadcast[1].Payload
 	if len(life) != 6 || binary.LittleEndian.Uint32(life) != pet.GID || life[4] != wire.StateChannelLife || life[5] != wire.LifeStateAlive {
 		t.Fatal("incorrect revival identity/state", life)

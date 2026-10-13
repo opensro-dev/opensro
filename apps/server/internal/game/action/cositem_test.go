@@ -109,6 +109,13 @@ func TestShippedPetPotionHealsThePetNotThePlayer(t *testing.T) {
 	if c.ActiveCOS.CurrentHP != petRef.MaxHP || *c.CurrentHP != playerHP {
 		t.Fatalf("pet HP %d want %d player HP %d", c.ActiveCOS.CurrentHP, petRef.MaxHP, *c.CurrentHP)
 	}
+	// 49D50F: the sparkle (0x3449) plays on the pet, not its owner (BUG-079).
+	for _, frames := range [][]wire.Frame{result.Frames, result.Broadcast} {
+		visual, ok := findFrame(frames, wire.OpItemUseVisual)
+		if !ok || binary.LittleEndian.Uint32(visual.Payload) != c.ActiveCOS.GID {
+			t.Fatalf("pet potion sparkle %+v, want it on pet %d", visual, c.ActiveCOS.GID)
+		}
+	}
 	if c.PetPotionCooldowns[0] == 0 || len(c.MissionInventory) != 0 {
 		t.Fatal("potion was not consumed onto the 1.1s lane")
 	}
