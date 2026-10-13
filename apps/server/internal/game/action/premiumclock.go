@@ -145,7 +145,11 @@ type premiumSpendLedger struct {
 premiumSpendLedger.take
 
 Advances an owner's row to nowMs and reports whether its spend is due for a
-commit: the allotment it holds would run out, or 600 seconds passed.
+commit: the allotment it holds runs out on this tick, or 600 seconds passed
+(CTJ_PremiumKeeper_Tick's state write, 652EE3 -> 652F60, which still runs
+while the period lasts with the allotment spent). A spent allotment has
+nothing left to run out: it waits for the cadence, the day's refill or the
+period's end, or it would commit the unchanged clock on every tick.
 ================
 */
 func (ledger *premiumSpendLedger) take(key petOwnerKey, clock *domain.PremiumClock, nowMs int64) (int64, bool) {
@@ -165,7 +169,8 @@ func (ledger *premiumSpendLedger) take(key petOwnerKey, clock *domain.PremiumClo
 	row.seenMs = nowMs
 	ledger.rows[key] = row
 	left := clock.CarriedMs + clock.TodayMs
-	return row.pendingMs, row.pendingMs >= left || nowMs-row.committedMs >= premiumCommitMs
+	runsOut := left > 0 && row.pendingMs >= left
+	return row.pendingMs, runsOut || nowMs-row.committedMs >= premiumCommitMs
 }
 
 /*

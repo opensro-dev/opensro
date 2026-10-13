@@ -48,14 +48,13 @@ func TestGoldTimeTicketRaisesBothPremiumKeepersOnce(t *testing.T) {
 
 /*
 ================
-TestPremiumTicketBonusLastsTheDailyAllotment
+premiumTicketInUse
 
-The bonus holds for three online hours a day (Param3). Spent, it stops
-until the next day, which refills the grant; a day left unspent carries
-its remainder into the next one, spent first.
+A character who has just used a four-week gold time ticket: three hours of
+bonus a day (Param3), its clock started at the test clock's now.
 ================
 */
-func TestPremiumTicketBonusLastsTheDailyAllotment(t *testing.T) {
+func premiumTicketInUse() (*enterworld.Character, *Runtime, *fakeClock) {
 	c := testCharacter()
 	ticket := &enterworld.ItemRef{RefObjID: 3700, Codename: "ITEM_MALL_GOLD_TIME_SERVICE_TICKET_4W", Country: 3,
 		TypeIDs: [4]int64{3, 3, 13, 4}, ReqQuadTypes: [4]int64{-1, -1, -1, -1},
@@ -67,6 +66,20 @@ func TestPremiumTicketBonusLastsTheDailyAllotment(t *testing.T) {
 		Codename: ticket.Codename, TypeFlags: ticket.TypeFlags(), StackCount: 1})
 	rt, clock := newTestRuntime(c, items)
 	rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(25).U16(ticket.TypeFlags()).Payload())
+	return c, rt, clock
+}
+
+/*
+================
+TestPremiumTicketBonusLastsTheDailyAllotment
+
+The bonus holds for three online hours a day (Param3). Spent, it stops
+until the next day, which refills the grant; a day left unspent carries
+its remainder into the next one, spent first.
+================
+*/
+func TestPremiumTicketBonusLastsTheDailyAllotment(t *testing.T) {
+	c, rt, clock := premiumTicketInUse()
 	award := func() int64 {
 		exp, _ := paramJobRewardBonus(c, 1000, 0, clock.NowMs())
 		return exp
