@@ -343,13 +343,15 @@ variable "beta_seal_rates" {
 # stack_sizes raises item stack caps per group (port-only, not native), e.g.
 # "potion=2000,elixir=50". Groups: potion, petpotion, universalpill, elixir,
 # luckypowder, magicstone, attrstone (stones merge only with an equal
-# assimilation value).
-# The deployment default raises Lucky Powder to 500 (owner, 2026-10-13).
+# assimilation value), arrow, bolt.
+# The deployment default raises Lucky Powder to 500 (owner, 2026-10-13) and
+# arrows and bolts to 2500 (owner, 2026-10-14).
 # Empty or "off" keeps every itemdata cap; an unknown group or a cap outside
-# 1..65535 stops GameWorld at boot.
+# 1..65535 stops GameWorld at boot, so a host's own stack_sizes may name a
+# group only once a release that knows it is live.
 variable "stack_sizes" {
   type    = string
-  default = "luckypowder=500"
+  default = "arrow=2500,bolt=2500,luckypowder=500"
 }
 
 # The community site's public read API listener (internal/agent/publicstats):

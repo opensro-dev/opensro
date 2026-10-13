@@ -228,3 +228,54 @@ func TestShippedLuckyPowderStacksTo500(t *testing.T) {
 		t.Fatalf("raised %d Lucky Powder rows", powders)
 	}
 }
+
+/*
+================
+TestShippedAmmunitionStacksTo2500
+
+The deployment default (owner 2026-10-14) on the shipped itemdata: every
+arrow (3/3/4/1) and bolt (3/3/4/2) row at the native 250, the starter _DEF
+rows included, rises to 2500. The Item Mall quivers (ITEM_MALL_QUIVER,
+ITEM_MALL_BOLT) already stack 10000 natively and keep it: the override
+only raises. Every other row keeps its cap.
+================
+*/
+func TestShippedAmmunitionStacksTo2500(t *testing.T) {
+	licensed.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	native := NewTextdataItems(dir)
+	items := NewTextdataItems(dir)
+	if _, err := items.ApplyStackSizes(StackSizes{"arrow": 2500, "bolt": 2500}); err != nil {
+		t.Fatal(err)
+	}
+	raised := 0
+	for _, row := range items.ItemCommandReferences() {
+		ref, _ := items.ItemRefByCodename(row.Codename)
+		before, _ := native.ItemRefByCodename(row.Codename)
+		was := before.NativeFields.Get("maxStack")
+		want := was
+		if (ref.TypeIDs == [4]int64{3, 3, 4, 1} || ref.TypeIDs == [4]int64{3, 3, 4, 2}) && was < 2500 {
+			if was != 250 {
+				t.Errorf("%s: native ammunition cap %v, want 250", row.Codename, was)
+			}
+			want = 2500
+			raised++
+		}
+		if got := ref.NativeFields.Get("maxStack"); got != want {
+			t.Errorf("%s: cap %v, want %v (native %v)", row.Codename, got, want, was)
+		}
+	}
+	for _, codename := range []string{"ITEM_ETC_AMMO_ARROW_01", "ITEM_ETC_AMMO_ARROW_01_DEF", "ITEM_ETC_AMMO_BOLT_01", "ITEM_ETC_AMMO_BOLT_01_DEF"} {
+		if ref, ok := items.ItemRefByCodename(codename); !ok || ref.NativeFields.Get("maxStack") != 2500 {
+			t.Fatalf("%s does not stack to 2500", codename)
+		}
+	}
+	if raised != 4 {
+		t.Fatalf("raised %d ammunition rows, want 4", raised)
+	}
+	for _, codename := range []string{"ITEM_MALL_QUIVER", "ITEM_MALL_BOLT"} {
+		if ref, ok := items.ItemRefByCodename(codename); !ok || ref.NativeFields.Get("maxStack") != 10000 {
+			t.Fatalf("%s lost its native 10000 cap", codename)
+		}
+	}
+}

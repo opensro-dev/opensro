@@ -69,6 +69,12 @@ var stackGroups = []stackGroup{
 	{name: "luckypowder", typeID3: 10, typeID4s: []int64{2}},
 	{name: "magicstone", typeID3: 11, typeID4s: []int64{1, 7}, raisesSingles: true},
 	{name: "attrstone", typeID3: 11, typeID4s: []int64{2}, raisesSingles: true},
+	// Arrows (ITEM_ETC_AMMO_ARROW_01 and _DEF, 3/3/4/1) and bolts
+	// (ITEM_ETC_AMMO_BOLT_01 and _DEF, 3/3/4/2): native cap 250. The
+	// quiver (equipment socket 7), its auto-reload and every shot's debit
+	// carry the count as u16 (ammunition.go, 0x3752).
+	{name: "arrow", typeID3: 4, typeID4s: []int64{1}},
+	{name: "bolt", typeID3: 4, typeID4s: []int64{2}},
 }
 
 /*

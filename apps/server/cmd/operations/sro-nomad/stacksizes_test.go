@@ -30,7 +30,7 @@ func TestStackSizesDeployment(t *testing.T) {
 		invalid           bool
 	}{
 		// The deployment default (shardsettings, owner 2026-10-13).
-		{name: "default", want: "luckypowder=500"},
+		{name: "default", want: "arrow=2500,bolt=2500,luckypowder=500"},
 		{name: "native", value: "off"},
 		{name: "raised", value: " Potion=2000 ,elixir=50", want: "elixir=50,potion=2000"},
 		{name: "invalid", value: "potion=65536", invalid: true},
