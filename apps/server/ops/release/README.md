@@ -159,6 +159,31 @@ it ships as a server release on its own. A server rollout that fails its own
 health checks leaves the journal `failed`; revert is the recovery. While the
 journal is open, every other publication is refused.
 
+**Who may end an operation.** `coordinate` names its operation with a fresh
+nonce, kept in `operation.json` before the request is sent. The public journal
+holds only its sha256. `confirm` and `revert` echo the nonce (from that file,
+or `--nonce`), so a publisher that wakes from sleep cannot end an operation it
+did not open. A publisher that lost the nonce passes `--takeover REASON`
+instead; the takeover is journaled on the operation and alerted to staff
+before it acts.
+
+**Publication runs on the host, not in the SSH session.** The publication
+key's request is filed under `requests/` and run as its own transient unit
+(`opensro-release-<job>`, log: `journalctl -u opensro-release-<job>`). The SSH
+session only follows it and prints its result. A dropped session (the
+publisher's PC asleep, a proxy restart) loses the printed result, never the
+work. The unit records the result beside the request for an operator; the
+dead-man prunes both after a week.
+
+**Dead-man.** `opensro-release-deadman.timer` runs every five minutes as root.
+It never waits for the host lock: while any release step holds it, the timer
+does nothing. Otherwise, a coordinated operation left in `deploying`,
+`verifying`, `failed` or `reverting` for longer than 30 minutes is reverted on
+the host, with the reason "dead-man: …", exactly as `revert` would. The limit
+is `deadman_seconds` in the host configuration. Two cases alert staff once and
+are left for an operator: a `revert-failed` operation, and a single-component
+operation whose receiver died (it has no host-side revert).
+
 ## Maintenance releases
 
 A maintenance release is a coordinated pair published inside a closed

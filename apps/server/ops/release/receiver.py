@@ -8,6 +8,14 @@ Forced commands choose the role; uploaded content cannot grant itself another
 role. Staging can write immutable candidates and test evidence. Only the
 production key, released after GitHub approval, can change a live component.
 
+A publication request never runs inside the SSH session: a dropped session
+(the publisher's PC asleep, a proxy restart) would hang up a deploy halfway.
+The receiver files the request, starts it as its own transient systemd unit,
+then follows the unit and prints its result; the work finishes and records
+its result whether or not anyone is still following. The roles run (that
+unit) and deadman (coordinated.expire, from a host timer) are reached only
+from root on the host: the SSH forced commands name stage or publish.
+
 ===========================================================================
 """
 
@@ -16,7 +24,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import secrets
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -42,6 +53,12 @@ MAX_REQUEST_BYTES = 1 << 20
 # A failure's reason kept in the host journal is bounded and masks anything
 # that could be a token (any run of 32 or more hex or base64url characters).
 MAX_FAILURE_LOG_CHARS = 800
+LOCK = Path("/run/lock/opensro-release.lock")
+UNIT_PREFIX = "opensro-release-"
+JOB_PATTERN = re.compile(r"[0-9a-f]{32}")
+FOLLOW_POLL_SECONDS = 2
+# Filed requests and their results stay this long for an operator to read.
+JOB_RETENTION_SECONDS = 7 * 24 * 3600
 
 
 # ================
@@ -207,9 +224,9 @@ def request(config, role, value, scratch):
 	if role == "publish" and operation == "publish-coordinated":
 		return coordinated.publish(config, value, scratch)
 	if role == "publish" and operation == "confirm-coordinated":
-		return coordinated.confirm(config)
+		return coordinated.confirm(config, value)
 	if role == "publish" and operation == "revert-coordinated":
-		return coordinated.revert(config, value.get("reason"))
+		return coordinated.revert_request(config, value)
 	raise ValueError("operation is not allowed for this release key")
 
 
@@ -237,30 +254,162 @@ def record_failure(role, error):
 
 def main():
 	parser = argparse.ArgumentParser()
-	parser.add_argument("role", choices=("stage", "publish"))
+	parser.add_argument("role", choices=("stage", "publish", "run", "deadman"))
+	parser.add_argument("job", nargs="?")
 	arguments = parser.parse_args()
 	if os.geteuid() != 0:
 		raise RuntimeError("release receiver requires its root-owned forced command")
 	os.umask(0o077)
 	config = json.loads(CONFIG.read_text())
 	try:
-		serve(config, arguments.role)
+		if arguments.role == "run":
+			run_job(config, arguments.job)
+		elif arguments.role == "deadman":
+			deadman(config)
+		elif arguments.role == "publish":
+			serve_detached(config)
+		else:
+			serve(config, arguments.role)
 	except Exception as error:
 		record_failure(arguments.role, error)
 		raise
 
 
 # ================
+# locked
+#
+# The one host lock every release step holds. Without blocking it returns
+# None while another step holds it (the dead-man never waits).
+# ================
+def locked(blocking=True):
+	import fcntl
+	stream = LOCK.open("w")
+	try:
+		fcntl.flock(stream, fcntl.LOCK_EX if blocking else fcntl.LOCK_EX | fcntl.LOCK_NB)
+	except BlockingIOError:
+		stream.close()
+		return None
+	return stream
+
+
+# ================
+# job_paths
+#
+# A filed publication request and its result, by the receiver's own job id.
+# ================
+def job_paths(config, job):
+	if not isinstance(job, str) or not JOB_PATTERN.fullmatch(job):
+		raise ValueError("invalid release job")
+	directory = Path(config["requests"])
+	return directory / (job + ".json"), directory / (job + ".result.json")
+
+
+# ================
+# launch_unit
+#
+# Start the job as a transient unit owned by systemd, not by the SSH
+# session. Its output goes to the host journal as opensro-release.
+# ================
+def launch_unit(job):
+	subprocess.run(["systemd-run", "--unit", UNIT_PREFIX + job, "--collect", "--quiet",
+		"--property=StandardOutput=journal", "--property=StandardError=journal",
+		"--property=SyslogIdentifier=opensro-release",
+		sys.executable, str(Path(__file__).resolve()), "run", job], check=True)
+
+
+# ================
+# unit_running
+# ================
+def unit_running(job):
+	state = subprocess.run(["systemctl", "is-active", UNIT_PREFIX + job], capture_output=True, text=True)
+	return state.stdout.strip() in ("active", "activating", "reloading")
+
+
+# ================
+# serve_detached
+#
+# The publication key's request: bounded, filed, run as its own unit and
+# followed. Only this follower belongs to the SSH session; losing it loses
+# the printed result, never the work.
+# ================
+def serve_detached(config, launch=launch_unit, running=unit_running, poll=FOLLOW_POLL_SECONDS):
+	with tempfile.TemporaryDirectory(prefix="opensro-request-", dir=config.get("scratch", "/var/tmp")) as directory:
+		upload = Path(directory) / "upload"
+		receive(sys.stdin.buffer, upload)
+		data = upload.read_bytes()
+	if data[:1] != b"{":
+		raise ValueError("production key accepts only an approved candidate identity")
+	if len(data) > MAX_REQUEST_BYTES:
+		raise ValueError("release request exceeds limit")
+	job = secrets.token_hex(16)
+	request_path, result_path = job_paths(config, job)
+	write_state(request_path, json.loads(data))
+	request_path.chmod(0o600)
+	launch(job)
+	print("Release work runs as unit " + UNIT_PREFIX + job + "; its log: journalctl -u " + UNIT_PREFIX + job,
+		file=sys.stderr, flush=True)
+	while not result_path.exists():
+		# The result is written before the unit exits; look once more after.
+		if not running(job) and not result_path.exists():
+			raise RuntimeError("release unit " + UNIT_PREFIX + job + " ended without a result")
+		time.sleep(poll)
+	result = json.loads(result_path.read_text())
+	if not result["ok"]:
+		raise RuntimeError(result["error"])
+	print(json.dumps(result["result"], sort_keys=True))
+	return result["result"]
+
+
+# ================
+# run_job
+#
+# The unit's body: one filed publication request under the host lock. The
+# result, or the failure's masked reason, is recorded for the follower.
+# ================
+def run_job(config, job, lock=locked):
+	request_path, result_path = job_paths(config, job)
+	value = json.loads(request_path.read_text())
+	with lock(), tempfile.TemporaryDirectory(prefix="opensro-candidate-", dir=config.get("scratch", "/var/tmp")) as directory:
+		try:
+			result = request(config, "publish", value, Path(directory))
+			candidate_status(config)
+		except Exception as error:
+			reason = masked(type(error).__name__ + ": " + str(error))[:MAX_FAILURE_LOG_CHARS]
+			write_state(result_path, {"ok": False, "error": reason})
+			raise
+		write_state(result_path, {"ok": True, "result": result})
+	return result
+
+
+# ================
+# deadman
+#
+# The host timer's tick: unless a release step holds the lock, expire a
+# coordinated release its publisher left, then prune old filed jobs.
+# ================
+def deadman(config, lock=locked, now=time.time):
+	held = lock(blocking=False)
+	if held is None:
+		return None
+	with held:
+		outcome = coordinated.expire(config, now())
+		if outcome:
+			candidate_status(config)
+		for path in Path(config["requests"]).glob("*.json"):
+			if now() - path.stat().st_mtime > JOB_RETENTION_SECONDS:
+				path.unlink()
+	return outcome
+
+
+# ================
 # serve
 #
-# One request or upload under the release lock.
+# One stage request or upload under the release lock.
 # ================
 def serve(config, role):
-	import fcntl
-	with Path("/run/lock/opensro-release.lock").open("w") as lock:
-		# A simultaneous upload is not a deployment failure. The kernel queues
-		# this owner; admission runs after the previous operation releases it.
-		fcntl.flock(lock, fcntl.LOCK_EX)
+	# A simultaneous upload is not a deployment failure. The kernel queues
+	# this owner; admission runs after the previous operation releases it.
+	with locked():
 		with tempfile.TemporaryDirectory(prefix="opensro-candidate-", dir="/var/tmp") as directory:
 			scratch = Path(directory)
 			archive = scratch / "upload"

@@ -1,0 +1,18 @@
+# ===========================================================================
+# opensro-release-deadman.service - revert a release its publisher left.
+# The installer binds this template to one immutable control version. It runs
+# as root because a revert redeploys the retained pair (coordinated.expire);
+# it never acts while a release step holds the host lock.
+# ===========================================================================
+[Unit]
+Description=Revert an OpenSRO release left unconfirmed
+After=network-online.target nomad.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 @RELEASE_MODULES@/receiver.py deadman
+SyslogIdentifier=opensro-release
+
+[Install]
+WantedBy=multi-user.target

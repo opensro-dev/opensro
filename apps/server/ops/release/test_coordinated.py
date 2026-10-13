@@ -35,6 +35,7 @@ NEXT_SERVER = {"protocolMin": NEXT_PROTOCOL, "protocolMax": NEXT_PROTOCOL,
 # A server that only opens an upgraded store (the live one writes 13).
 UPGRADING_SERVER = dict(NEXT_SERVER, storeReadMin=14, storeReadMax=14, storeWrite=14, storeUpgradeFrom=13)
 PROBE = "release-probe"
+NONCE = "c" * 32
 
 
 # ================
@@ -244,8 +245,16 @@ class PairFixture(LiveDataFixture):
 	# Each receiver invocation has its own scratch directory.
 	# ================
 	def publish(self):
-		request = {"server": self.server, "client": self.client}
+		request = {"server": self.server, "client": self.client, "nonce": NONCE}
 		return coordinated.publish(self.config, request, tempfile.mkdtemp(dir=self.root), self.edge)
+
+	# ================
+	# confirm
+	#
+	# The publisher's confirm, echoing its nonce.
+	# ================
+	def confirm(self, **claim):
+		return coordinated.confirm(self.config, claim or {"nonce": NONCE})
 
 	# ================
 	# report
@@ -291,7 +300,7 @@ class CoordinatedFlowTests(PairFixture, unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "reconciliation"):
 			admit(pending, client_plan(release=self.next["releaseId"], baseRelease=self.base["releaseId"]))
 		self.record_evidence(self.report())
-		state = coordinated.confirm(self.config)
+		state = self.confirm()
 		self.assertIsNone(state["operation"])
 		self.assertEqual((state["server"]["release"], state["server"]["generation"]), (NEW_COMMIT, 2))
 		self.assertEqual((state["client"]["release"], state["client"]["generation"]), (self.next["releaseId"], 2))
@@ -363,10 +372,10 @@ class CoordinatedFlowTests(PairFixture, unittest.TestCase):
 	# ================
 	def test_confirmation_needs_evidence_recorded_for_the_live_pair(self):
 		with self.assertRaisesRegex(ValueError, "no coordinated release"):
-			coordinated.confirm(self.config)
+			self.confirm()
 		self.publish()
 		with self.assertRaisesRegex(ValueError, "no browser evidence"):
-			coordinated.confirm(self.config)
+			self.confirm()
 		failing = self.report()
 		failing["phases"]["world"] = "FAIL"
 		with self.assertRaisesRegex(ValueError, "missing phase"):
@@ -377,10 +386,217 @@ class CoordinatedFlowTests(PairFixture, unittest.TestCase):
 		started = read_state(self.config["production_state"])["operation"]["phaseStartedAt"]
 		os.utime(evidence, (started - 60, started - 60))
 		with self.assertRaisesRegex(ValueError, "no browser evidence"):
-			coordinated.confirm(self.config)
+			self.confirm()
 		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "verifying")
 		with self.assertRaisesRegex(ValueError, "not allowed"):
 			receiver.request(self.config, "stage", {"operation": "confirm-coordinated"}, self.root / "unused")
+
+
+# ================
+# OwnershipTests
+#
+# Only the publisher that opened an operation ends it, unless an operator
+# takes it over with a reason; the public journal never holds the nonce.
+# ================
+@unittest.skipIf(os.name == "nt", "publication swaps POSIX directory symlinks")
+class OwnershipTests(PairFixture, unittest.TestCase):
+
+	# ================
+	# setUp
+	# ================
+	def setUp(self):
+		super().setUp()
+		self.alerts = []
+		deploy.alert_staff.side_effect = lambda _config, message: self.alerts.append(message)
+
+	# ================
+	# test_the_journal_keeps_only_the_nonce_digest
+	# ================
+	def test_the_journal_keeps_only_the_nonce_digest(self):
+		self.publish()
+		journal = Path(self.config["production_state"]).read_text()
+		self.assertNotIn(NONCE, journal)
+		self.assertEqual(read_state(self.config["production_state"])["operation"]["nonceSha256"],
+			hashlib.sha256(NONCE.encode()).hexdigest())
+
+	# ================
+	# test_a_publish_without_a_nonce_changes_nothing
+	# ================
+	def test_a_publish_without_a_nonce_changes_nothing(self):
+		for nonce in (None, "C" * 32, "c" * 31, 7):
+			with self.subTest(nonce=nonce):
+				request = {"server": self.server, "client": self.client, "nonce": nonce}
+				with self.assertRaisesRegex(ValueError, "nonce"):
+					coordinated.publish(self.config, request, tempfile.mkdtemp(dir=self.root), self.edge)
+		self.assertIsNone(read_state(self.config["production_state"])["operation"])
+		self.assertEqual(self.rollouts, [])
+
+	# ================
+	# test_another_publisher_cannot_confirm_or_revert
+	#
+	# A stale or missing nonce leaves the operation exactly as it was.
+	# ================
+	def test_another_publisher_cannot_confirm_or_revert(self):
+		self.publish()
+		self.record_evidence(self.report())
+		before = read_state(self.config["production_state"])
+		for claim in ({}, {"nonce": "d" * 32}):
+			with self.subTest(claim=claim):
+				with self.assertRaisesRegex(ValueError, "another publisher"):
+					coordinated.confirm(self.config, claim)
+				with self.assertRaisesRegex(ValueError, "another publisher"):
+					coordinated.revert_request(self.config, {"reason": "smoke failed", **claim}, self.edge)
+		self.assertEqual(read_state(self.config["production_state"]), before)
+		self.assertEqual(self.rollouts, [(NEW_COMMIT, True, b"next server agent")])
+		self.assertIsNone(self.confirm()["operation"])
+
+	# ================
+	# test_a_takeover_is_journaled_and_alerted_before_it_acts
+	# ================
+	def test_a_takeover_is_journaled_and_alerted_before_it_acts(self):
+		self.publish()
+		with self.assertRaisesRegex(ValueError, "bounded reason"):
+			coordinated.revert_request(self.config, {"reason": "smoke failed", "takeover": " "}, self.edge)
+		taken = []
+
+		def observed(*arguments, **options):
+			taken.append(read_state(self.config["production_state"])["operation"]["takeovers"])
+			return self.fake_deploy(*arguments, **options)
+
+		deploy.deploy.side_effect = observed
+		state = coordinated.revert_request(self.config, {"reason": "smoke failed", "takeover": "publisher PC died"},
+			self.edge)
+		self.assertEqual([[row["action"], row["reason"]] for row in taken[0]], [["revert", "publisher PC died"]])
+		self.assertIn("Coordinated release revert by takeover: publisher PC died", self.alerts)
+		self.assertIsNone(state["operation"])
+		self.assertEqual(self.live_client(), self.live.resolve())
+
+	# ================
+	# test_a_stale_publisher_cannot_end_the_next_operation
+	#
+	# The dead-man reverted a pair whose publisher slept, and a new
+	# operation opened under another nonce: the woken publisher's confirm is
+	# refused.
+	# ================
+	def test_a_stale_publisher_cannot_end_the_next_operation(self):
+		self.publish()
+		coordinated.revert(self.config, "dead-man", self.edge)
+		state = read_state(self.config["production_state"])
+		self.assertIsNone(state["operation"])
+		state["operation"] = dict(begin_pair(production(), server_plan(), client_plan(), 1.0)["operation"],
+			nonceSha256=hashlib.sha256(("e" * 32).encode()).hexdigest(), phase="verifying")
+		write_state(self.config["production_state"], state)
+		with self.assertRaisesRegex(ValueError, "another publisher"):
+			self.confirm()
+
+
+# ================
+# DeadmanTests
+#
+# coordinated.expire, the host timer's body: a pair left past the deadline
+# is reverted, anything else stale alerts once, and nothing fresh is touched.
+# ================
+@unittest.skipIf(os.name == "nt", "publication swaps POSIX directory symlinks")
+class DeadmanTests(PairFixture, unittest.TestCase):
+
+	# ================
+	# setUp
+	# ================
+	def setUp(self):
+		super().setUp()
+		self.alerts = []
+		deploy.alert_staff.side_effect = lambda _config, message: self.alerts.append(message)
+
+	# ================
+	# started
+	# ================
+	def started(self):
+		operation = read_state(self.config["production_state"])["operation"]
+		return operation.get("phaseStartedAt", operation["startedAt"])
+
+	# ================
+	# expire_in
+	#
+	# Publish, put the operation in the given phase, and run the dead-man
+	# just past its deadline.
+	# ================
+	def expire_in(self, phase):
+		self.publish()
+		state = read_state(self.config["production_state"])
+		state["operation"]["phase"] = phase
+		write_state(self.config["production_state"], state)
+		outcome = coordinated.expire(self.config, self.started() + coordinated.DEADMAN_SECONDS + 1, self.edge)
+		self.assertEqual(outcome, "reverted")
+		state = read_state(self.config["production_state"])
+		self.assertIsNone(state["operation"])
+		self.assertTrue(state["lastFailure"]["reason"].startswith("dead-man: the release sat in " + phase + " for 30 min"))
+		self.assertEqual(self.live_client(), self.live.resolve())
+		self.assertEqual(self.rollouts[-1], (self.state["server"]["commit"], False, b"live server agent"))
+
+	# ================
+	# test_a_fresh_operation_is_left_alone
+	# ================
+	def test_a_fresh_operation_is_left_alone(self):
+		self.assertIsNone(coordinated.expire(self.config, 1e12, self.edge))
+		self.publish()
+		deadline = self.started() + coordinated.DEADMAN_SECONDS
+		self.assertIsNone(coordinated.expire(self.config, deadline - 1, self.edge))
+		self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], "verifying")
+		self.assertEqual(len(self.rollouts), 1)
+
+	# ================
+	# test_an_unconfirmed_pair_is_reverted_past_the_deadline
+	# ================
+	def test_an_unconfirmed_pair_is_reverted_past_the_deadline(self):
+		self.expire_in("verifying")
+
+	# ================
+	# test_a_publish_that_died_mid_deploy_is_reverted
+	# ================
+	def test_a_publish_that_died_mid_deploy_is_reverted(self):
+		self.expire_in("deploying")
+
+	# ================
+	# test_a_failed_rollout_is_reverted
+	# ================
+	def test_a_failed_rollout_is_reverted(self):
+		self.expire_in("failed")
+
+	# ================
+	# test_an_interrupted_revert_is_reverted_again
+	# ================
+	def test_an_interrupted_revert_is_reverted_again(self):
+		self.expire_in("reverting")
+
+	# ================
+	# test_what_cannot_be_reverted_here_alerts_once
+	#
+	# A failed revert needs an operator; a single component whose receiver
+	# died has no host-side revert. Neither is touched beyond one alert.
+	# ================
+	def test_what_cannot_be_reverted_here_alerts_once(self):
+		for operation in ({"component": "release", "phase": "revert-failed", "startedAt": 1.0, "phaseStartedAt": 1.0},
+			{"component": "server", "phase": "deploying", "startedAt": 1.0}):
+			with self.subTest(operation=operation):
+				self.alerts.clear()
+				state = read_state(self.config["production_state"])
+				state["operation"] = dict(operation)
+				write_state(self.config["production_state"], state)
+				now = 1.0 + coordinated.DEADMAN_SECONDS + 1
+				self.assertEqual(coordinated.expire(self.config, now, self.edge), "alerted")
+				self.assertIsNone(coordinated.expire(self.config, now + 600, self.edge))
+				self.assertEqual(len(self.alerts), 1)
+				self.assertIn("needs an operator", self.alerts[0])
+				self.assertEqual(read_state(self.config["production_state"])["operation"]["phase"], operation["phase"])
+		self.assertEqual(self.rollouts, [])
+
+	# ================
+	# test_the_deadline_is_configurable
+	# ================
+	def test_the_deadline_is_configurable(self):
+		self.publish()
+		self.config["deadman_seconds"] = 60
+		self.assertEqual(coordinated.expire(self.config, self.started() + 61, self.edge), "reverted")
 
 
 # ================
@@ -430,7 +646,7 @@ class MaintenanceFlowTests(PairFixture, unittest.TestCase):
 		self.assertEqual(sorted(pending["operation"]["authorities"]), list(self.shards))
 		self.assertEqual(self.gate(), {"accounts": [PROBE]})
 		self.record_evidence(self.report())
-		state = coordinated.confirm(self.config)
+		state = self.confirm()
 		self.assertIsNone(state["operation"])
 		self.assertEqual(state["server"]["compatibility"]["storeWrite"], 14)
 		self.assertIsNone(self.gate())

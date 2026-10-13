@@ -32,11 +32,25 @@ every candidate: the publication key cannot write its own test receipt. The
 receiver holds the host lock around each step; between steps the open
 journal entry blocks every other publication.
 
+The publisher names its operation with a random nonce; the journal keeps only
+its sha256 (the journal is public). confirm and revert must echo the nonce, so
+a publisher that wakes from sleep cannot end an operation it did not open: a
+dead-man revert followed by a new publish leaves its stale nonce unmatched.
+Recovery from a lost nonce is an explicit takeover with a reason, which is
+journaled and alerted.
+
+A host timer (expire) is the dead-man: a pair left in deploying, verifying,
+failed or reverting past DEADMAN_SECONDS with nobody holding the host lock is
+reverted on the host, so a publisher that went away never leaves players on
+an unconfirmed pair or the journal closed to every other release.
+
 ===========================================================================
 """
 
+import hashlib
 import json
 from pathlib import Path
+import re
 import time
 
 from client_deploy import approved_client, check_entry, digest, install_client, live_directory, record_smoke, restore_client
@@ -47,6 +61,14 @@ from retention import directory, preserve
 
 VERIFYING = "verifying"
 MAX_REASON_CHARS = 512
+NONCE_PATTERN = re.compile(r"[0-9a-f]{32}")
+# A publisher that has not confirmed or reverted within this long is gone.
+# The browser gate takes minutes; a maintenance upgrade that runs longer
+# holds the host lock, and expire never acts while the lock is held.
+DEADMAN_SECONDS = 30 * 60
+# Phases a publisher or a revert left unfinished; revert-failed waits for an
+# operator, as it always has.
+EXPIRABLE_PHASES = ("deploying", VERIFYING, "failed", "reverting")
 
 
 # ================
@@ -69,6 +91,49 @@ def open_operation(state):
 	if not operation or operation["component"] != COORDINATED:
 		raise ValueError("no coordinated release is in progress")
 	return operation
+
+
+# ================
+# nonce_digest
+#
+# The journal keeps the digest of the publisher's nonce, never the nonce.
+# ================
+def nonce_digest(value):
+	if not isinstance(value, str) or not NONCE_PATTERN.fullmatch(value):
+		raise ValueError("a coordinated release needs its publisher's 32-hex-digit nonce")
+	return hashlib.sha256(value.encode()).hexdigest()
+
+
+# ================
+# bounded_reason
+# ================
+def bounded_reason(value, purpose):
+	if not isinstance(value, str) or not value.strip() or len(value) > MAX_REASON_CHARS:
+		raise ValueError(purpose + " requires a bounded reason")
+	return value.strip()
+
+
+# ================
+# authorize
+#
+# confirm and revert act only for the publisher that opened the operation:
+# the request echoes its nonce, or takes the operation over with a reason.
+# A takeover is journaled on the operation and alerted before it acts.
+# ================
+def authorize(config, request, action):
+	state = read_state(config["production_state"])
+	operation = open_operation(state)
+	nonce = request.get("nonce")
+	if nonce is not None and operation.get("nonceSha256") == nonce_digest(nonce):
+		return
+	takeover = request.get("takeover")
+	if takeover is None:
+		raise ValueError("this coordinated release belongs to another publisher: echo its nonce, or take it over"
+			" with a reason")
+	reason = bounded_reason(takeover, "a takeover")
+	operation.setdefault("takeovers", []).append({"action": action, "reason": reason, "at": time.time()})
+	write_state(config["production_state"], state)
+	deploy.alert_staff(config, "Coordinated release " + action + " by takeover: " + reason)
 
 
 # ================
@@ -96,6 +161,7 @@ def enter(config, state, phase):
 def publish(config, request, scratch, verify=check_entry):
 	server_id = identity(request.get("server"))
 	client_id = identity(request.get("client"))
+	nonce = nonce_digest(request.get("nonce"))
 	state = read_state(config["production_state"])
 	manifest = deploy.verified_server(config, server_id, scratch)
 	client = approved_client(config, client_id, state)
@@ -106,6 +172,7 @@ def publish(config, request, scratch, verify=check_entry):
 	deploy.retain_server(config, state)
 	preserve(config, "client", state["client"], client["old"], client["manifest"])
 	entry = digest(client["new"] / "index.html")
+	pending["operation"]["nonceSha256"] = nonce
 	pending["operation"]["server"]["candidate"] = server_id
 	pending["operation"]["client"].update(candidate=client_id, entrySha256=entry)
 	write_state(config["production_state"], pending)
@@ -152,9 +219,11 @@ def journal_upgrade(config, pending):
 #
 # The browser evidence the staging key recorded for the live client, taken
 # after the pair went live, completes the pair. The live bytes must still be
-# the pair this operation published.
+# the pair this operation published, and the request must be its publisher's
+# (authorize).
 # ================
-def confirm(config):
+def confirm(config, request):
+	authorize(config, request, "confirm")
 	state = read_state(config["production_state"])
 	operation = open_operation(state)
 	if operation["phase"] != VERIFYING:
@@ -198,8 +267,7 @@ def confirm(config):
 # closed until the old pair is back.
 # ================
 def revert(config, reason, verify=check_entry):
-	if not isinstance(reason, str) or not reason.strip() or len(reason) > MAX_REASON_CHARS:
-		raise ValueError("revert requires a bounded reason")
+	reason = bounded_reason(reason, "revert")
 	state = read_state(config["production_state"])
 	operation = open_operation(state)
 	enter(config, state, "reverting")
@@ -224,7 +292,51 @@ def revert(config, reason, verify=check_entry):
 		enter(config, state, "revert-failed")
 		deploy.alert_staff(config, "Coordinated release revert failed. Production needs an operator: check Nomad and the client link.")
 		raise
-	result = abandon_pair(state, time.time(), reason.strip())
+	result = abandon_pair(state, time.time(), reason)
 	write_state(config["production_state"], result)
-	deploy.alert_staff(config, "Coordinated release reverted: " + reason.strip())
+	deploy.alert_staff(config, "Coordinated release reverted: " + reason)
 	return result
+
+
+# ================
+# revert_request
+#
+# The publication key's revert: only for the operation's publisher, or by
+# takeover. publish's own revert (a client the edge does not serve) and the
+# dead-man act on the host and call revert directly.
+# ================
+def revert_request(config, request, verify=check_entry):
+	reason = bounded_reason(request.get("reason"), "revert")
+	authorize(config, request, "revert")
+	return revert(config, reason, verify)
+
+
+# ================
+# expire
+#
+# The dead-man, run by a host timer with the host lock held (so no publish,
+# confirm or revert is in flight). A pair unfinished past the deadline is
+# reverted; any other stale operation (a single component whose receiver
+# died, a failed revert) cannot be undone here and alerts staff once.
+# Returns what it did, or None.
+# ================
+def expire(config, now, verify=check_entry):
+	state = read_state(config["production_state"])
+	operation = state.get("operation")
+	if not operation:
+		return None
+	phase = operation["phase"]
+	age = now - operation.get("phaseStartedAt", operation["startedAt"])
+	if age < config.get("deadman_seconds", DEADMAN_SECONDS):
+		return None
+	if operation["component"] == COORDINATED and phase in EXPIRABLE_PHASES:
+		revert(config, "dead-man: the release sat in " + phase + " for " + str(int(age // 60)) +
+			" min with no publisher", verify)
+		return "reverted"
+	if operation.get("deadmanAlertedAt"):
+		return None
+	operation["deadmanAlertedAt"] = now
+	write_state(config["production_state"], state)
+	deploy.alert_staff(config, "Release operation " + operation["component"] + " has been in " + phase + " for " +
+		str(int(age // 60)) + " min and needs an operator.")
+	return "alerted"

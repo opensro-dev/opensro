@@ -70,20 +70,55 @@ class CiTests(unittest.TestCase):
 			current = self.run_command("coordinate", SERVER, CLIENT, "--commit", COMMIT)
 		staged.assert_called_once_with(CLIENT, False, SERVER)
 		self.assertEqual([call.args for call in current.call_args_list], [("server", COMMIT), ("client", "6" * 40)])
-		self.assertEqual(self.sent, [("publish", {"operation": "publish-coordinated", "server": SERVER, "client": CLIENT})])
+		nonce = json.loads(Path("operation.json").read_text())["nonce"]
+		self.assertRegex(nonce, "^[0-9a-f]{32}$")
+		self.assertEqual(self.sent, [("publish", {"operation": "publish-coordinated", "server": SERVER, "client": CLIENT,
+			"nonce": nonce})])
 		self.assertEqual(json.loads(Path("candidate.json").read_text()), client)
+
+	# ================
+	# test_the_nonce_is_kept_before_the_request_is_sent
+	#
+	# A publisher whose connection drops after the host opened the operation
+	# still holds the nonce that confirms or reverts it.
+	# ================
+	def test_the_nonce_is_kept_before_the_request_is_sent(self):
+		def lost(request, role):
+			self.sent.append(json.loads(Path("operation.json").read_text())["nonce"])
+			raise RuntimeError("connection dropped")
+
+		with patch.object(sys, "argv", ["ci.py", "coordinate", SERVER, CLIENT, "--commit", COMMIT]), \
+			patch.object(ci, "send", side_effect=lost), patch.object(ci, "require_current"), \
+			patch.object(ci, "staged_client_commit", return_value=COMMIT):
+			with self.assertRaisesRegex(RuntimeError, "dropped"):
+				ci.main()
+		self.assertEqual(self.sent, [json.loads(Path("operation.json").read_text())["nonce"]])
 
 	# ================
 	# test_confirm_and_revert_use_the_publication_key_without_evidence
 	#
 	# Evidence goes through the staging key (evidence), never with confirm.
+	# Both echo the operation's nonce, from operation.json or --nonce.
 	# ================
 	def test_confirm_and_revert_use_the_publication_key_without_evidence(self):
+		Path("operation.json").write_text(json.dumps({"nonce": "a" * 32}))
 		self.run_command("confirm")
-		self.run_command("revert", "--reason", "smoke failed")
+		self.run_command("revert", "--reason", "smoke failed", "--nonce", "b" * 32)
 		self.assertEqual(self.sent, [
-			("publish", {"operation": "confirm-coordinated"}),
-			("publish", {"operation": "revert-coordinated", "reason": "smoke failed"}),
+			("publish", {"operation": "confirm-coordinated", "nonce": "a" * 32}),
+			("publish", {"operation": "revert-coordinated", "reason": "smoke failed", "nonce": "b" * 32}),
+		])
+
+	# ================
+	# test_a_lost_nonce_needs_an_explicit_takeover
+	# ================
+	def test_a_lost_nonce_needs_an_explicit_takeover(self):
+		with self.assertRaisesRegex(ValueError, "--takeover"):
+			self.run_command("confirm")
+		self.run_command("revert", "--reason", "smoke failed", "--takeover", "publisher PC lost its nonce")
+		self.assertEqual(self.sent, [
+			("publish", {"operation": "revert-coordinated", "reason": "smoke failed",
+				"takeover": "publisher PC lost its nonce"}),
 		])
 
 	# ================

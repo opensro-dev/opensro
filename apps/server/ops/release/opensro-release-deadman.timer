@@ -1,0 +1,10 @@
+[Unit]
+Description=Check every five minutes for a release its publisher left
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=5min
+Unit=opensro-release-deadman.service
+
+[Install]
+WantedBy=timers.target

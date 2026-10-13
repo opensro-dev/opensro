@@ -19,6 +19,11 @@ the operation. coordinate --maintenance publishes a maintenance pair (both
 candidates built with --maintenance); the flag only asserts what the plans
 already declare, so a workflow cannot publish one by mistake.
 
+coordinate names the operation with a fresh nonce and keeps it in
+operation.json; confirm and revert send it back (--nonce, or that file), so
+only the publisher that opened an operation ends it. A publisher that lost
+the nonce takes the operation over with --takeover REASON instead.
+
 ===========================================================================
 """
 
@@ -26,6 +31,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import secrets
 import subprocess
 import tempfile
 import urllib.request
@@ -34,6 +40,24 @@ from plan import require_current
 from release_state import identity
 
 FETCH_TIMEOUT_SECONDS = 60
+OPERATION_FILE = Path("operation.json")
+
+
+# ================
+# owner_claim
+#
+# How confirm or revert proves it is the operation's publisher: its nonce
+# (given, or kept by coordinate), or an explicit takeover with a reason.
+# ================
+def owner_claim(nonce=None, takeover=None, kept=OPERATION_FILE):
+	if takeover is not None:
+		return {"takeover": takeover}
+	if nonce is None and kept.is_file():
+		nonce = json.loads(kept.read_text(encoding="utf-8"))["nonce"]
+	if nonce is None:
+		raise ValueError("no nonce for this operation: pass --nonce, run from coordinate's directory,"
+			" or take it over with --takeover REASON")
+	return {"nonce": nonce}
 
 
 # ================
@@ -217,9 +241,13 @@ def main():
 	command.add_argument("client")
 	command.add_argument("--commit", required=True, help="Public source commit of the server candidate")
 	command.add_argument("--maintenance", action="store_true", help="a maintenance pair: closed window and store upgrade")
-	command = commands.add_parser("confirm")
-	command = commands.add_parser("revert")
-	command.add_argument("--reason", required=True)
+	for name in ("confirm", "revert"):
+		command = commands.add_parser(name)
+		claim = command.add_mutually_exclusive_group()
+		claim.add_argument("--nonce", help="the nonce coordinate printed (default: operation.json)")
+		claim.add_argument("--takeover", metavar="REASON", help="end an operation whose nonce is lost; alerted")
+		if name == "revert":
+			command.add_argument("--reason", required=True)
 	arguments = parser.parse_args()
 	if arguments.role == "stage":
 		result = stage(arguments.component, arguments.source)
@@ -234,14 +262,20 @@ def main():
 		require_current("server", arguments.commit)
 		require_current("client", staged_client_commit(identity(arguments.client), arguments.maintenance,
 			identity(arguments.server)))
+		nonce = secrets.token_hex(16)
+		# Kept before sending: a publisher that loses the answer still owns
+		# the operation the host may have opened.
+		OPERATION_FILE.write_text(json.dumps({"nonce": nonce}) + "\n", encoding="utf-8")
+		OPERATION_FILE.chmod(0o600)
 		result = send({"operation": "publish-coordinated", "server": identity(arguments.server),
-			"client": identity(arguments.client)}, "publish")
+			"client": identity(arguments.client), "nonce": nonce}, "publish")
 		# The browser smoke loads the live client by its candidate identity.
 		Path("candidate.json").write_text(json.dumps(result["client"], indent=2) + "\n", encoding="utf-8")
 	elif arguments.role == "confirm":
-		result = send({"operation": "confirm-coordinated"}, "publish")
+		result = send({"operation": "confirm-coordinated", **owner_claim(arguments.nonce, arguments.takeover)}, "publish")
 	else:
-		result = send({"operation": "revert-coordinated", "reason": arguments.reason}, "publish")
+		result = send({"operation": "revert-coordinated", "reason": arguments.reason,
+			**owner_claim(arguments.nonce, arguments.takeover)}, "publish")
 	print(json.dumps(result))
 
 

@@ -31,7 +31,8 @@ MODULES = ("release_state.py", "plan.py", "bundle.py", "client_bundle.py", "rete
 	"client_deploy.py", "client_data.py", "server_data.py", "coordinated.py", "deploy.py", "rollback.py", "monitor.py",
 	"receiver.py")
 CONTROL_FILES = (*MODULES, "install.py", "compatibility.json", "overview.html", "routes.caddy",
-	"opensro-monitor.service", "opensro-monitor.timer")
+	"opensro-monitor.service", "opensro-monitor.timer", "opensro-release-deadman.service",
+	"opensro-release-deadman.timer")
 
 
 # ================
@@ -190,6 +191,20 @@ def monitor(version, config):
 
 
 # ================
+# deadman
+#
+# The root timer that reverts a coordinated release its publisher left
+# (coordinated.expire). It shares the receiver's lock and configuration.
+# ================
+def deadman(version):
+	for name in ("opensro-release-deadman.service", "opensro-release-deadman.timer"):
+		body = (version / name).read_text().replace("@RELEASE_MODULES@", str(version))
+		install_file(Path("/etc/systemd/system") / name, body.encode())
+	subprocess.run(["systemctl", "daemon-reload"], check=True)
+	subprocess.run(["systemctl", "enable", "--now", "opensro-release-deadman.timer"], check=True)
+
+
+# ================
 # main
 #
 # Reinstallation updates controls but never resets generations. Caddy's route
@@ -219,10 +234,10 @@ def main():
 	for directory in (ROOT / "public", ROOT / "public/health", Path("/var/www/opensro/candidates"), Path("/var/www/opensro/application-assets")):
 		directory.mkdir(parents=True, exist_ok=True)
 		directory.chmod(0o755)
-	for private in (ROOT / "records", ROOT / "payloads"):
+	for private in (ROOT / "records", ROOT / "payloads", ROOT / "requests"):
 		private.mkdir(exist_ok=True)
 		private.chmod(0o700)
-	config.update(production_state=str(state_path), client_link="/var/www/opensro/client",
+	config.update(production_state=str(state_path), requests=str(ROOT / "requests"), client_link="/var/www/opensro/client",
 		client_releases="/var/www/opensro/releases", client_candidates="/var/www/opensro/candidates",
 		candidate_records=str(ROOT / "records"), application_assets="/var/www/opensro/application-assets",
 		client_manifest=str(ROOT / "public/client.json"), payload_store=str(ROOT / "payloads"))
@@ -236,6 +251,7 @@ def main():
 	account("sro-stage", "stage", Path(arguments.stage_key).read_text(), version)
 	account("sro-release", "publish", Path(arguments.publish_key).read_text(), version)
 	monitor(version, config)
+	deadman(version)
 	write_state(ROOT / "installed-controls.json", json.loads((version / "installed.json").read_text()))
 	print("Release controls installed; live client and server were not published.")
 
