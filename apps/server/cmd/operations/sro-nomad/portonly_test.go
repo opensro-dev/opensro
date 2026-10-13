@@ -32,12 +32,7 @@ func TestPortOnlyJobVariables(t *testing.T) {
 		t.Setenv("SRO_ALCHEMY_RATES", tc.rates)
 		t.Setenv("SRO_GM_SETSPEED", tc.speed)
 		t.Setenv("SRO_ALCHEMY_MAX_PLUS", tc.cap)
-		t.Setenv("SRO_TEAM_DEATH_REVIVE", tc.cap)
 		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
-		// The team-death revive passes the same values: "" defaults to on.
-		if variables["team_death_revive"] != tc.wantCap {
-			t.Fatalf("env %q: team_death_revive %v, want %s", tc.cap, variables["team_death_revive"], tc.wantCap)
-		}
 		if variables["alchemy_max_plus"] != tc.wantCap {
 			t.Fatalf("env %q: alchemy_max_plus %v, want %s", tc.cap, variables["alchemy_max_plus"], tc.wantCap)
 		}
@@ -49,6 +44,24 @@ func TestPortOnlyJobVariables(t *testing.T) {
 			t.Fatalf("env %q/%q/%q: job variables %v/%v/%v, want %s/%s/%s", tc.stack, tc.reverse, tc.rates,
 				variables["storage_auto_stack"], variables["reverse_return_map"], variables["alchemy_rates"],
 				tc.wantStack, tc.wantReverse, tc.wantRates)
+		}
+	}
+}
+
+/*
+================
+TestTeamDeathReviveJobVariable
+
+team_death_revive defaults to on, native; "off" (the port-only town rule)
+and "on" pass through as written.
+================
+*/
+func TestTeamDeathReviveJobVariable(t *testing.T) {
+	for env, want := range map[string]string{"": "on", "on": "on", "off": "off"} {
+		t.Setenv("SRO_TEAM_DEATH_REVIVE", env)
+		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
+		if variables["team_death_revive"] != want {
+			t.Fatalf("env %q: team_death_revive %v, want %s", env, variables["team_death_revive"], want)
 		}
 	}
 }
