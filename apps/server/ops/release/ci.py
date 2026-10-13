@@ -4,9 +4,13 @@
 
 ci.py - transfer immutable candidates through role-limited release keys.
 
-GitHub owns approval and credential availability. This module writes temporary
-SSH credentials, pins the host key and streams one bounded request. It never
-chooses a newer artifact after approval or runs a remote shell command.
+The caller owns approval and credential availability: a workflow passes the
+key and pinned host keys as text (RELEASE_KEY, RELEASE_KNOWN_HOSTS), the
+operator's machine passes files it already holds (RELEASE_KEY_FILE,
+RELEASE_KNOWN_HOSTS_FILE) and, where the host is reached through a local
+proxy, the ssh ProxyCommand (RELEASE_SSH_PROXY_COMMAND). Either way the host
+key is pinned and one bounded request is streamed. It never chooses a newer
+artifact after approval or runs a remote shell command.
 
 A coordinated release (coordinated.py) takes three publication requests:
 coordinate puts the pair live, the workflow runs the browser smoke against
@@ -33,6 +37,52 @@ FETCH_TIMEOUT_SECONDS = 60
 
 
 # ================
+# credential_file
+#
+# One credential as a file ssh can read: the operator's own file when
+# FILE_VARIABLE names one, else the workflow secret TEXT_VARIABLE written to
+# a private file in directory (removed with it). Naming both is refused: one
+# run must not silently prefer one source over the other.
+# ================
+def credential_file(directory, text_variable, file_variable, mode):
+	text, path = os.environ.get(text_variable, ""), os.environ.get(file_variable, "")
+	if text.strip() and path:
+		raise ValueError(text_variable + " and " + file_variable + " are both set")
+	if path:
+		path = Path(path).expanduser()
+		if not path.is_file():
+			raise ValueError(file_variable + " names no file")
+		return path
+	if not text.strip():
+		raise ValueError(text_variable + " or " + file_variable + " is required")
+	target = Path(directory) / text_variable.lower()
+	target.write_text(text.strip() + "\n", encoding="utf-8")
+	target.chmod(mode)
+	return target
+
+
+# ================
+# ssh_command
+#
+# The argv for one role's forced command: the host key is always pinned
+# (StrictHostKeyChecking=yes against the given known_hosts), and a proxy is
+# a ProxyCommand option, never a shell string around ssh itself.
+# ================
+def ssh_command(role, key, known):
+	host = os.environ["RELEASE_HOST"]
+	if not host or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-" for character in host):
+		raise ValueError("invalid configured release host")
+	account = "sro-stage" if role == "stage" else "sro-release"
+	command = ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+		"-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4",
+		"-o", "UserKnownHostsFile=" + str(known)]
+	proxy = os.environ.get("RELEASE_SSH_PROXY_COMMAND", "").strip()
+	if proxy:
+		command += ["-o", "ProxyCommand=" + proxy]
+	return command + ["-i", str(key), account + "@" + host]
+
+
+# ================
 # transfer
 #
 # The account's root-owned forced command determines the capability. Secrets
@@ -40,22 +90,11 @@ FETCH_TIMEOUT_SECONDS = 60
 # ================
 def transfer(source, role):
 	with tempfile.TemporaryDirectory(prefix="release-ssh-") as directory:
-		root = Path(directory)
-		key = root / "key"
-		known = root / "known_hosts"
-		key.write_text(os.environ["RELEASE_KEY"].strip() + "\n", encoding="utf-8")
-		key.chmod(0o600)
-		known.write_text(os.environ["RELEASE_KNOWN_HOSTS"].strip() + "\n", encoding="utf-8")
-		host = os.environ["RELEASE_HOST"]
-		if not host or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-" for character in host):
-			raise ValueError("invalid configured release host")
-		account = "sro-stage" if role == "stage" else "sro-release"
+		key = credential_file(directory, "RELEASE_KEY", "RELEASE_KEY_FILE", 0o600)
+		known = credential_file(directory, "RELEASE_KNOWN_HOSTS", "RELEASE_KNOWN_HOSTS_FILE", 0o644)
 		with Path(source).open("rb") as stream:
-			result = subprocess.run([
-				"ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-				"-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4",
-				"-o", "UserKnownHostsFile=" + str(known), "-i", str(key), account + "@" + host,
-			], stdin=stream, stdout=subprocess.PIPE, text=True, check=True, timeout=1500)
+			result = subprocess.run(ssh_command(role, key, known), stdin=stream, stdout=subprocess.PIPE, text=True,
+				check=True, timeout=1500)
 		lines = result.stdout.strip().splitlines()
 		if not lines:
 			raise RuntimeError("release receiver returned no result")
@@ -118,8 +157,11 @@ def stage(component, source, reason=None):
 		result = send({"operation": "prepare-rollback", "component": component,
 			"release": identity(source), "reason": reason}, "stage")
 	Path("candidate.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-	with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-		output.write("candidate=" + identity(result["candidate"]) + "\n")
+	# A workflow step publishes the identity as a job output; run by hand,
+	# candidate.json and the printed result carry it.
+	if os.environ.get("GITHUB_OUTPUT"):
+		with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+			output.write("candidate=" + identity(result["candidate"]) + "\n")
 	if component != "server":
 		return result
 	proof = {"verification": "retained-production"} if reason is not None else {"linuxTests": True}

@@ -145,5 +145,124 @@ class CiTests(unittest.TestCase):
 		self.assertEqual(ci.staged_client_commit(CLIENT, False, SERVER, [client, server]), COMMIT)
 
 
+
+# ================
+# TransportTests
+#
+# The same transport from a workflow (secrets as text) and from the
+# operator's machine (key files and a local proxy); ssh itself is injected.
+# ================
+class TransportTests(unittest.TestCase):
+	# ================
+	# setUp
+	# ================
+	def setUp(self):
+		directory = tempfile.TemporaryDirectory()
+		self.addCleanup(directory.cleanup)
+		self.root = Path(directory.name)
+		self.request = self.root / "request.json"
+		self.request.write_text("{}")
+		for name in ("RELEASE_KEY", "RELEASE_KEY_FILE", "RELEASE_KNOWN_HOSTS", "RELEASE_KNOWN_HOSTS_FILE",
+			"RELEASE_SSH_PROXY_COMMAND", "GITHUB_OUTPUT"):
+			patcher = patch.dict(os.environ, {name: ""})
+			patcher.start()
+			self.addCleanup(patcher.stop)
+		patcher = patch.dict(os.environ, {"RELEASE_HOST": "release.example"})
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
+	# ================
+	# transfer
+	#
+	# Run one transfer and return the ssh argv with what each named file held
+	# while ssh ran (the temporary ones are gone afterwards).
+	# ================
+	def transfer(self, role="stage"):
+		seen = {}
+
+		# ================
+		# fake_run
+		# ================
+		def fake_run(argv, **options):
+			seen["argv"] = argv
+			seen["key"] = Path(argv[argv.index("-i") + 1]).read_text()
+			known = next(value for value in argv if value.startswith("UserKnownHostsFile="))
+			seen["known"] = Path(known.split("=", 1)[1]).read_text()
+			return ci.subprocess.CompletedProcess(argv, 0, stdout='noise\n{"candidate": "x"}\n')
+
+		with patch.object(ci.subprocess, "run", side_effect=fake_run):
+			self.assertEqual(ci.transfer(self.request, role), {"candidate": "x"})
+		return seen
+
+	# ================
+	# test_workflow_secrets_are_written_privately
+	# ================
+	def test_workflow_secrets_are_written_privately(self):
+		with patch.dict(os.environ, {"RELEASE_KEY": "key text", "RELEASE_KNOWN_HOSTS": "host key"}):
+			seen = self.transfer("publish")
+		self.assertEqual((seen["key"], seen["known"]), ("key text\n", "host key\n"))
+		self.assertEqual(seen["argv"][-1], "sro-release@release.example")
+		self.assertIn("StrictHostKeyChecking=yes", seen["argv"])
+		self.assertFalse(any(value.startswith("ProxyCommand=") for value in seen["argv"]))
+
+	# ================
+	# test_operator_files_and_proxy
+	#
+	# The operator's own key file is used in place, never copied, and the
+	# proxy is one ProxyCommand option with the host key still pinned.
+	# ================
+	def test_operator_files_and_proxy(self):
+		key, known = self.root / "stage_key", self.root / "known_hosts"
+		key.write_text("operator key\n")
+		known.write_text("pinned host\n")
+		proxy = "python relay.py 127.0.0.1 7890 %h %p"
+		with patch.dict(os.environ, {"RELEASE_KEY_FILE": str(key), "RELEASE_KNOWN_HOSTS_FILE": str(known),
+			"RELEASE_SSH_PROXY_COMMAND": proxy}):
+			seen = self.transfer()
+		argv = seen["argv"]
+		self.assertEqual(argv[argv.index("-i") + 1], str(key))
+		self.assertIn("UserKnownHostsFile=" + str(known), argv)
+		self.assertIn("StrictHostKeyChecking=yes", argv)
+		self.assertEqual(argv[argv.index("ProxyCommand=" + proxy) - 1], "-o")
+		self.assertEqual(argv[-1], "sro-stage@release.example")
+
+	# ================
+	# test_missing_or_ambiguous_credentials_are_refused
+	# ================
+	def test_missing_or_ambiguous_credentials_are_refused(self):
+		key = self.root / "key"
+		key.write_text("operator key\n")
+		cases = (
+			({}, "RELEASE_KEY or RELEASE_KEY_FILE"),
+			({"RELEASE_KEY": "text", "RELEASE_KEY_FILE": str(key), "RELEASE_KNOWN_HOSTS": "host"}, "both set"),
+			({"RELEASE_KEY_FILE": str(self.root / "absent"), "RELEASE_KNOWN_HOSTS": "host"}, "names no file"),
+			({"RELEASE_KEY_FILE": str(key)}, "RELEASE_KNOWN_HOSTS or RELEASE_KNOWN_HOSTS_FILE"),
+		)
+		for values, message in cases:
+			with self.subTest(message=message), patch.dict(os.environ, values), \
+				patch.object(ci.subprocess, "run", side_effect=AssertionError("ssh ran")):
+				with self.assertRaisesRegex(ValueError, message):
+					ci.transfer(self.request, "stage")
+
+	# ================
+	# test_stage_by_hand_needs_no_job_output
+	#
+	# Outside a workflow there is no GITHUB_OUTPUT; candidate.json carries
+	# the identity. Inside one the job output is still written.
+	# ================
+	def test_stage_by_hand_needs_no_job_output(self):
+		previous = os.getcwd()
+		os.chdir(self.root)
+		self.addCleanup(os.chdir, previous)
+		staged = {"candidate": CLIENT, "release": "4" * 64}
+		with patch.object(ci, "transfer", return_value=staged):
+			self.assertEqual(ci.stage("client", "candidate.tar"), staged)
+			self.assertEqual(json.loads(Path("candidate.json").read_text()), staged)
+			output = self.root / "output"
+			with patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}):
+				ci.stage("client", "candidate.tar")
+			self.assertEqual(output.read_text(), "candidate=" + CLIENT + "\n")
+
+
 if __name__ == "__main__":
 	unittest.main()

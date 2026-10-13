@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -78,8 +79,13 @@ def upload_timeout(size):
 # a refusal is not retried.
 # ================
 def send(archive, target, identity, run=subprocess.run):
-	command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15",
-		"-i", str(identity), target]
+	command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15"]
+	# The operator's local proxy, as ci.py takes it (ci.ssh_command): one
+	# ProxyCommand option, never a shell string around ssh.
+	proxy = os.environ.get("RELEASE_SSH_PROXY_COMMAND", "").strip()
+	if proxy:
+		command += ["-o", "ProxyCommand=" + proxy]
+	command += ["-i", str(identity), target]
 	timeout = upload_timeout(Path(archive).stat().st_size)
 	for attempt in range(1, ATTEMPTS + 1):
 		try:
