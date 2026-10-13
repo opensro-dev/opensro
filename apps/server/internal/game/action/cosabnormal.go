@@ -569,7 +569,7 @@ func (rt *Runtime) advanceOneCosAbnormal(entry cosAbnormalEntry, now int64) []si
 	}
 	owner := rt.newCosAbnormalOwnerForPet(entry.division, c, c.CompanionByGID(entry.gid), now)
 	owner.sources = rt.captureAbnormalSources(entry.division, owner.block, nil)
-	committed := rt.deps.Update(c, "cos-abnormal", func() bool {
+	committed := rt.deps.UpdateDeferred(c, "cos-abnormal", func() bool {
 		if owner.pet.CurrentHP == 0 {
 			owner.changed = owner.block.ClearAll(owner)
 			owner.fatal = true

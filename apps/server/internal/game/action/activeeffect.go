@@ -451,7 +451,7 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 	for _, batch := range rt.effects.DrainStopRequested() {
 		var statusFrames []wire.Frame
 		if c := rt.findCharacter(batch.DivisionID, batch.CharacterName); c != nil {
-			rt.deps.Update(c, "retire-character-effect", func() bool {
+			rt.deps.UpdateDeferred(c, "retire-character-effect", func() bool {
 				var changed bool
 				statusFrames, changed = rt.finishCharacterEffectRetirement(batch.DivisionID, c, batch.Effects, rt.Now().UnixMilli())
 				return changed
@@ -464,7 +464,7 @@ func (rt *Runtime) drainStoppedCharacterEffects() []simulation.DivisionFrames {
 			}
 			if changedParameters {
 				var drop []wire.Frame
-				rt.deps.Update(c, "clamp-gauge-after-effect", func() bool {
+				rt.deps.UpdateDeferred(c, "clamp-gauge-after-effect", func() bool {
 					hp, mp := rt.clampStoredGaugeToKeeper(batch.DivisionID, c)
 					drop = rt.gaugeDropFrames(batch.DivisionID, c, hp, mp, false)
 					return hp || mp

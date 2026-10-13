@@ -94,7 +94,7 @@ func (s *Store) RenameCharacterOffline(division, before, after string) error {
 			ground[division][i].DroppedBy = after
 		}
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return err
 	}

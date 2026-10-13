@@ -49,6 +49,8 @@ type TickTiming struct {
 	// Divisions whose own work ran >= SlowHookThreshold; scheduled ticks run
 	// divisions in parallel shards, so the phase alone cannot name them.
 	SlowDivisions []SlowHookTiming
+	// Commit is the tick's batched authority commit (tick_commit.go).
+	Commit TickCommitStats
 }
 
 /*
@@ -108,6 +110,7 @@ type tickClock struct {
 	// Shard workers report divisions concurrently.
 	divisionsMu   sync.Mutex
 	slowDivisions []SlowHookTiming
+	commit        TickCommitStats
 }
 
 /*
@@ -118,6 +121,7 @@ tickClock.begin
 func (c *tickClock) begin(now time.Time) {
 	c.start = now
 	c.inDivisions, c.inHooks = false, false
+	c.commit = TickCommitStats{}
 	c.slow = c.slow[:0]
 	c.divisionsMu.Lock()
 	c.slowDivisions = c.slowDivisions[:0]
@@ -201,6 +205,7 @@ func (c *tickClock) timing(end time.Time) TickTiming {
 		Divisions:   hooksStart.Sub(divisionsStart),
 		Hooks:       end.Sub(hooksStart),
 		Total:       end.Sub(c.start),
+		Commit:      c.commit,
 	}
 	if len(c.slow) > 0 {
 		timing.SlowHooks = append([]SlowHookTiming(nil), c.slow...)

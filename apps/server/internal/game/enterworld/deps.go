@@ -128,6 +128,13 @@ type Deps struct {
 	UpdateCharacter  func(character *Character, label string, update func() bool) bool
 	UpdateCharacters func(characters []*Character, label string, update func() bool) bool
 	UpdateTrade      func(characters []*Character, label string, update func(*domain.TradeRewardPool) bool) bool
+	// The deferred doors (store tickbatch.go) leave their rows to the
+	// tick's one batched commit. Only tick-only paths use them; nil falls
+	// back to the immediate door.
+	MutateCharacterDeferred  func(character *Character, label string, mutate func())
+	MutateCharactersDeferred func(characters []*Character, label string, mutate func())
+	UpdateCharacterDeferred  func(character *Character, label string, update func() bool) bool
+	UpdateCharactersDeferred func(characters []*Character, label string, update func() bool) bool
 	// CloseJobWeek and JobRankings own the job guilds' weekly close and its
 	// ranking snapshot (store jobweek.go).
 	CloseJobWeek func(divisionID string, week int64, label string) bool
@@ -270,6 +277,66 @@ func (d *Deps) UpdateMany(characters []*Character, label string, update func() b
 		return changed
 	}
 	return update()
+}
+
+/*
+================
+MutateDeferred
+
+Mutate for a path only the simulation tick reaches: its commit joins the
+tick's batch (store tickbatch.go). A handler never calls it, since its
+answer must follow the commit.
+================
+*/
+func (d *Deps) MutateDeferred(character *Character, label string, mutate func()) {
+	if d.MutateCharacterDeferred != nil {
+		d.MutateCharacterDeferred(character, label, mutate)
+		return
+	}
+	d.Mutate(character, label, mutate)
+}
+
+/*
+================
+UpdateDeferred
+
+Update for a path only the simulation tick reaches (see MutateDeferred).
+================
+*/
+func (d *Deps) UpdateDeferred(character *Character, label string, update func() bool) bool {
+	if d.UpdateCharacterDeferred != nil {
+		return d.UpdateCharacterDeferred(character, label, update)
+	}
+	return d.Update(character, label, update)
+}
+
+/*
+================
+MutateManyDeferred
+
+MutateMany for a path only the simulation tick reaches (see MutateDeferred).
+================
+*/
+func (d *Deps) MutateManyDeferred(characters []*Character, label string, mutate func()) {
+	if d.MutateCharactersDeferred != nil {
+		d.MutateCharactersDeferred(characters, label, mutate)
+		return
+	}
+	d.MutateMany(characters, label, mutate)
+}
+
+/*
+================
+UpdateManyDeferred
+
+UpdateMany for a path only the simulation tick reaches (see MutateDeferred).
+================
+*/
+func (d *Deps) UpdateManyDeferred(characters []*Character, label string, update func() bool) bool {
+	if d.UpdateCharactersDeferred != nil {
+		return d.UpdateCharactersDeferred(characters, label, update)
+	}
+	return d.UpdateMany(characters, label, update)
 }
 
 /*

@@ -260,7 +260,7 @@ func (rt *Runtime) advanceCompositeJobs(character *enterworld.Character, nowMs i
 		return nil
 	}
 	var frames []wire.Frame
-	rt.deps.Update(character, "composite-job-tick", func() bool {
+	rt.deps.UpdateDeferred(character, "composite-job-tick", func() bool {
 		frames = nil
 		kept := make([]domain.CompositeJob, 0, len(character.CompositeJobs))
 		for _, job := range character.CompositeJobs {

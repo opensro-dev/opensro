@@ -262,6 +262,7 @@ func newGameWorldApplication(
 		return nil, fmt.Errorf("peer item references: %w", err)
 	}
 	application.ticker = gameplay.newMissionTicker(peerReferences)
+	application.ticker.Commit = tickCommit(authority.store)
 	configureReadiness(ts, authority.store, application.readiness, application.ticker)
 	gameplay.installFollowFixture(authority.agentAPI, application.ticker)
 	authority.agentAPI.InstallPassiveCriticalFixture(gameplay.passiveCriticalReader())

@@ -59,7 +59,7 @@ func (s *Store) CreditBetaSilk(accountID string, amount, bankCap uint32) (domain
 	if accountID == "" || s.db == nil {
 		return domain.MallBalance{}, false, fmt.Errorf("beta silk: account unavailable")
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return domain.MallBalance{}, false, err
 	}

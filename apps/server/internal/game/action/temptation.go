@@ -156,7 +156,7 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 	if len(roster.characters) == 0 {
 		ok = commit()
 	} else {
-		ok = rt.deps.UpdateMany(roster.characters, "monster-fight", commit)
+		ok = rt.deps.UpdateManyDeferred(roster.characters, "monster-fight", commit)
 	}
 	if !ok {
 		return simulation.MonsterAttackResult{}

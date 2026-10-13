@@ -70,7 +70,7 @@ func (s *Store) CloseJobWeek(division string, week int64, label string) bool {
 		s.meta.TradeRewards[division] = pool
 		s.meta.JobRankings[division] = next
 		return true
-	})
+	}, false)
 }
 
 /*

@@ -370,7 +370,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 	if len(plan.Effects.Hits) == 0 || len(roster.characters) == 0 {
 		committed = commit()
 	} else {
-		committed = rt.deps.UpdateMany(roster.characters, "monster-abnormal", commit)
+		committed = rt.deps.UpdateManyDeferred(roster.characters, "monster-abnormal", commit)
 	}
 	if !committed {
 		return nil

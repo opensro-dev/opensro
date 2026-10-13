@@ -22,6 +22,7 @@ import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
+	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -263,6 +264,20 @@ func newBootstrapDependencies(
 		return authorityStore.UpdateCharacter(character, label, update)
 	}
 	deps.UpdateCharacters = authorityStore.UpdateCharacters
+	deps.MutateCharacterDeferred = func(character *enterworld.Character, label string, mutate func()) {
+		if character != nil {
+			label += " " + character.Name
+		}
+		authorityStore.MutateCharacterDeferred(character, label, mutate)
+	}
+	deps.MutateCharactersDeferred = authorityStore.MutateCharactersDeferred
+	deps.UpdateCharacterDeferred = func(character *enterworld.Character, label string, update func() bool) bool {
+		if character != nil {
+			label += " " + character.Name
+		}
+		return authorityStore.UpdateCharacterDeferred(character, label, update)
+	}
+	deps.UpdateCharactersDeferred = authorityStore.UpdateCharactersDeferred
 	deps.UpdateTrade = authorityStore.UpdateTrade
 	deps.CloseJobWeek = authorityStore.CloseJobWeek
 	deps.JobRankings = authorityStore.JobRankings
@@ -308,6 +323,26 @@ func configureReadiness(
 	progress readinessProgress,
 ) {
 	ts.SetReadyCheck(readyCheck(authorityStore, ready, progress))
+}
+
+/*
+================
+tickCommit
+
+The store's batch as the ticker drives it: one transaction per tick for the
+tick-only doors (store tickbatch.go). A failed flush is already loud: the
+store logs PERSIST FAILING and readiness fails on its health.
+================
+*/
+func tickCommit(authorityStore *store.Store) simulation.TickCommit {
+	return simulation.TickCommit{
+		Begin: authorityStore.BeginTickBatch,
+		Flush: func() simulation.TickCommitStats {
+			stats := authorityStore.FlushTickBatch()
+			return simulation.TickCommitStats{Deferred: stats.Deferred, Rows: stats.Rows, Elapsed: stats.Duration,
+				Flushed: stats.Flushed, Failed: stats.Err != nil}
+		},
+	}
 }
 
 /*

@@ -333,7 +333,9 @@ type Ticker struct {
 	// PhaseObserver receives each tick's phase durations and slow hooks
 	// (tick_timing.go); nil records nothing.
 	PhaseObserver func(TickTiming)
-	clock         tickClock
+	// Commit is the authority's per-tick batch (tick_commit.go).
+	Commit TickCommit
+	clock  tickClock
 
 	// tickIndex is the coordinator-owned server-clock tick counter fed to
 	// the patrol function.
@@ -517,6 +519,8 @@ func (t *Ticker) RunTick(nowMs int64) {
 	defer func() { t.watch.end(time.Now()) }()
 	t.clock.begin(t.timingNow())
 	defer t.observePhases()
+	t.beginCommit()
+	defer t.flushCommit()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)
@@ -541,6 +545,8 @@ func (t *Ticker) runScheduledTick(ctx context.Context, nowMs int64, inboxes []ch
 	defer func() { t.watch.end(time.Now()) }()
 	t.clock.begin(t.timingNow())
 	defer t.observePhases()
+	t.beginCommit()
+	defer t.flushCommit()
 
 	tick, work := t.prepareTick()
 	t.runHookList(t.BeforeHooks, nowMs, work)

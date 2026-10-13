@@ -72,7 +72,7 @@ func (rt *Runtime) advanceMercenaryCooldowns(now int64) {
 		}
 		clock.elapsed -= mercenaryPenaltyPollSeconds
 		if deadline <= now {
-			rt.deps.Update(state.character, "mercenary-cooldown-expire", func() bool {
+			rt.deps.UpdateDeferred(state.character, "mercenary-cooldown-expire", func() bool {
 				if state.character.MercenarySummonUntilMs != deadline {
 					return false
 				}

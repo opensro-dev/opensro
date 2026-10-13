@@ -262,7 +262,7 @@ func (rt *Runtime) retireFortressBattleRank(division string, c *enterworld.Chara
 		return
 	}
 	var public, private []wire.Frame
-	rt.deps.Update(c, "fortress-battle-end", func() bool {
+	rt.deps.UpdateDeferred(c, "fortress-battle-end", func() bool {
 		public, private = rt.retireFortressRankInDoor(division, c, skillID, now)
 		return len(public) != 0 || len(private) != 0
 	})

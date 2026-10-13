@@ -121,7 +121,7 @@ func (rt *Runtime) advanceBattleStates(nowMs int64) []simulation.DivisionFrames 
 		unlock := rt.lockDivision(job.division)
 		var frames []wire.Frame
 		if c := rt.findCharacter(job.division, job.name); c != nil {
-			rt.deps.Update(c, "battle-state-expire", func() bool {
+			rt.deps.UpdateDeferred(c, "battle-state-expire", func() bool {
 				if c.BattleUntilMs != job.until || nowMs < c.BattleUntilMs {
 					return false
 				}

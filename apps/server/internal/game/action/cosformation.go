@@ -124,7 +124,7 @@ func (rt *Runtime) setCompanionFollowSpeed(step petCombatStep, factor float32) [
 		return nil
 	}
 	var frames []simulation.Frame
-	rt.deps.Mutate(step.state.character, "mercenary-follow-speed", func() {
+	rt.deps.MutateDeferred(step.state.character, "mercenary-follow-speed", func() {
 		pet := step.state.character.CompanionByGID(step.pet.GID)
 		if pet == nil || !pet.Summoned {
 			return

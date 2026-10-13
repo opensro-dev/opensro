@@ -197,7 +197,7 @@ func (s *Store) archiveTxLocked(victims []reapVictim, friendUpdates []reapFriend
 		}
 		s.db = db
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return err
 	}

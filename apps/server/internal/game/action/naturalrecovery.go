@@ -245,7 +245,7 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 		return nil
 	}
 	var frames []simulation.DivisionFrames
-	committed := rt.deps.Update(c, "natural-recovery", func() bool {
+	committed := rt.deps.UpdateDeferred(c, "natural-recovery", func() bool {
 		if c.DeletePending || !enterworld.CharacterAlive(c) {
 			return false
 		}

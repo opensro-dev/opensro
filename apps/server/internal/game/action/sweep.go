@@ -39,7 +39,7 @@ func (rt *Runtime) SweepExpired(nowMs int64) []simulation.DivisionFrames {
 	var out []simulation.DivisionFrames
 	// The whole sweep is ONE character-less commit (ADR-1 "ttl-sweep"; the
 	// registry's own write-through hook retires with the door cutover).
-	rt.deps.Mutate(nil, "ttl-sweep", func() {
+	rt.deps.MutateDeferred(nil, "ttl-sweep", func() {
 		for _, divisionID := range rt.Ground.DivisionIDs() {
 			expired := rt.Ground.ExpireItems(divisionID, now, grounditem.FixtureLifetime)
 			if len(expired) == 0 {

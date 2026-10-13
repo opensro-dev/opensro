@@ -71,7 +71,7 @@ func (door storeFortressDoor) HireFortressStaff(division string, record domain.F
 	if err != nil {
 		return 2, err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return 2, err
 	}

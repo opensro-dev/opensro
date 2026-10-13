@@ -6,4 +6,6 @@ import "opensro.online/server/internal/domain"
 type Dependencies interface {
 	domain.CharacterSource
 	Update(character *domain.Character, label string, update func() bool) bool
+	// UpdateDeferred joins the tick's batched commit; tick-only paths only.
+	UpdateDeferred(character *domain.Character, label string, update func() bool) bool
 }

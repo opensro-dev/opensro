@@ -150,7 +150,7 @@ func (rt *Runtime) advanceBodyRestores(nowMs int64) {
 		character := rt.findCharacter(restore.division, restore.name)
 		var frames []wire.Frame
 		if character != nil {
-			rt.deps.Update(character, "body-mode-restore", func() bool {
+			rt.deps.UpdateDeferred(character, "body-mode-restore", func() bool {
 				if !character.TransitionBodyStatus(domain.BodyStatusTransition{RetireOwner: restore.owner}) {
 					return false
 				}

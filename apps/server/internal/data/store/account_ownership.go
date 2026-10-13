@@ -95,6 +95,11 @@ func (s *Store) TransferCharacterOwnership(fromAccountID, toAccountID string) ([
 		return nil, fmt.Errorf("no live characters belong to source account %q", fromAccountID)
 	}
 
+	// The failure path below drops the dirty set, so the rows the tick's
+	// batch deferred are written first.
+	if err := s.flushDeferredLocked(); err != nil {
+		return nil, fmt.Errorf("commit deferred rows before ownership transfer: %w", err)
+	}
 	for _, owner := range changed {
 		owner.character.AccountID = toAccountID
 		s.changes.characters[owner.character] = true

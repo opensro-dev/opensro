@@ -43,7 +43,7 @@ the actor and preserves remaining minutes instead of spending offline time.
 */
 func (rt *Runtime) AdvanceMinute(c *enterworld.Character) []wire.Frame {
 	var out []wire.Frame
-	committed := rt.deps.Update(c, "quest-minute", func() bool {
+	committed := rt.deps.UpdateDeferred(c, "quest-minute", func() bool {
 		if c == nil || c.DeletePending {
 			return false
 		}

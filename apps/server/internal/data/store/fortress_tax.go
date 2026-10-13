@@ -71,7 +71,7 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 	if err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}

@@ -176,7 +176,7 @@ func (rt *Runtime) checkpointOnlineSkillJobs(now int64) {
 	defer rt.maintenance.Unlock()
 	for _, batch := range rt.effects.TakeJobCheckpoints(now) {
 		if c := rt.findCharacter(batch.DivisionID, batch.CharacterName); c != nil {
-			rt.deps.Update(c, "checkpoint-skill-jobs", func() bool {
+			rt.deps.UpdateDeferred(c, "checkpoint-skill-jobs", func() bool {
 				return rt.checkpointSkillJobs(c, batch.Effects, now)
 			})
 		}

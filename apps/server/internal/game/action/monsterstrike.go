@@ -138,7 +138,7 @@ func (rt *Runtime) monsterStrikePlayer(in monsterStrikeInput, character, snapsho
 		return out
 	}
 	var struck playerStruck
-	committed := rt.deps.Update(character, "monster-basic-attack", func() bool {
+	committed := rt.deps.UpdateDeferred(character, "monster-basic-attack", func() bool {
 		// The detached admission snapshot can predate a status transition.
 		// Revalidate under the same mutation door that commits HP. Do not
 		// turn a living but ineligible target into a synthetic death result.
@@ -238,7 +238,7 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 	var battleFrames []wire.Frame
 	var remaining uint32
 	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
-	committed := rt.deps.Update(owner, "monster-cos-hit", func() bool {
+	committed := rt.deps.UpdateDeferred(owner, "monster-cos-hit", func() bool {
 		live := owner.CompanionByGID(pet.GID)
 		if live == nil || live.GID != pet.GID || live.CurrentHP == 0 {
 			return false

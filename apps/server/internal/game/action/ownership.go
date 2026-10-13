@@ -21,7 +21,7 @@ func (rt *Runtime) ReleaseExpiredOwnership(nowMs int64) []simulation.DivisionFra
 	defer rt.maintenance.Unlock()
 
 	var out []simulation.DivisionFrames
-	rt.deps.Mutate(nil, "ground-owner-release", func() {
+	rt.deps.MutateDeferred(nil, "ground-owner-release", func() {
 		for _, divisionID := range rt.Ground.DivisionIDs() {
 			released := rt.Ground.ReleaseExpiredOwners(divisionID, now, grounditem.OwnerLifetime)
 			if len(released) == 0 {

@@ -152,7 +152,7 @@ func (door storeFortressDoor) SaveFortressItemForge(divisionID string, forge dom
 	if s.db == nil || divisionID == "" || forge.FortressID == 0 || forge.ItemRefID == 0 {
 		return errFortressUnavailable
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (door storeFortressDoor) StartFortressItemForge(division string, start doma
 	gold -= start.Gold
 	next.Gold = &gold
 	guild.GP -= start.GP
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
@@ -283,7 +283,7 @@ func (door storeFortressDoor) CollectFortressItemForge(division string, collect 
 	}
 	next := *actor
 	next.MissionInventory = append(append([]domain.InventoryRow(nil), actor.MissionInventory...), collect.Item)
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return domain.FortressForgeErrFailure, err
 	}

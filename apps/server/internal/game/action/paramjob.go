@@ -216,7 +216,7 @@ func (rt *Runtime) advanceParamJobs(nowMs int64) {
 		}
 		var frames []wire.Frame
 		empty := false
-		rt.deps.Update(character, "param-job-expiry", func() bool {
+		rt.deps.UpdateDeferred(character, "param-job-expiry", func() bool {
 			kept := make([]domain.ParamJob, 0, len(character.ParamJobs))
 			owner := enterworld.ObjectIDForCharacter(character)
 			ended := map[uint32]bool{}

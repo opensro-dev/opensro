@@ -137,7 +137,7 @@ func (rt *Runtime) advancePlayerAggressions(now int64) []simulation.DivisionFram
 		c := rt.findCharacter(job.division, job.name)
 		if c != nil {
 			party := rt.auraParty(job.division, c)
-			rt.deps.Update(c, "player-aggression-tick", func() bool {
+			rt.deps.UpdateDeferred(c, "player-aggression-tick", func() bool {
 				before := c.PVPState()
 				ticks := uint64((now-job.next)/playerAggressionTickMs + 1)
 				for gid, remaining := range c.Aggressions {

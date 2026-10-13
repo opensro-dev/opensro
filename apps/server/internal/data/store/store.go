@@ -104,6 +104,8 @@ type Health struct {
 	FailedWrites  int
 	LastCommitAt  time.Time
 	LoadedFromBak bool
+	// Commits counts the successful transactions since Open.
+	Commits uint64
 }
 
 // MetaView is a copy of the counters for boot logs and tests.
@@ -206,6 +208,8 @@ type Store struct {
 	charDivision map[*domain.Character]string
 	changes      changeSet
 	ground       groundState
+	// batch is the simulation tick's deferred commit (tickbatch.go).
+	batch tickBatch
 
 	// defaultSkills is Options.DefaultSkills and serves current-schema
 	// character creation.

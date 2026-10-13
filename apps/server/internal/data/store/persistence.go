@@ -25,12 +25,24 @@ commitLocked
 ================
 */
 func (s *Store) commitLocked(label string) {
+	_ = s.commitCheckedLocked(label)
+}
+
+/*
+================
+commitCheckedLocked
+
+commitLocked for a caller that acts on the outcome.
+================
+*/
+func (s *Store) commitCheckedLocked(label string) error {
 	if err := s.commitOnceLocked(); err != nil {
 		s.recordWriteFailureLocked(label, err)
-		return
+		return err
 	}
 	s.changes = newChangeSet()
 	s.recordWriteSuccessLocked()
+	return nil
 }
 
 // commitOnceLocked performs one transactional commit attempt.
@@ -207,6 +219,8 @@ func (s *Store) commitOnceLocked() error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	// The whole dirty set is written: rows a deferred door left are on disk.
+	s.batch.pending = false
 
 	if groundSnapshot != nil {
 		s.ground.loadedGidCounter = groundSnapshot.GidCounter
@@ -252,6 +266,7 @@ func (s *Store) recordWriteSuccessLocked() {
 	s.health.LastError = ""
 	s.health.FailingSince = time.Time{}
 	s.health.LastCommitAt = s.now()
+	s.health.Commits++
 	s.publishHealthLocked()
 }
 
@@ -306,6 +321,9 @@ func (s *Store) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db != nil {
+		// A graceful stop never drops a tick: rows a deferred door left
+		// (tickbatch.go) are written before the final checkpoint.
+		_ = s.flushDeferredLocked()
 		if _, err := s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 			log.Warnf("store: wal_checkpoint at close failed: %v", err)
 		}

@@ -105,7 +105,7 @@ func (rt *Runtime) advanceBerserk(now int64) []simulation.DivisionFrames {
 		c := rt.findCharacter(job.division, job.name)
 		var frames []wire.Frame
 		if c != nil {
-			rt.deps.Update(c, "berserk-expire", func() bool {
+			rt.deps.UpdateDeferred(c, "berserk-expire", func() bool {
 				if c.BerserkUntilMs != job.until || now < c.BerserkUntilMs {
 					return false
 				}

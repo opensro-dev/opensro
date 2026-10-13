@@ -108,7 +108,7 @@ func (s *Store) commitStorageLocked(division string, character *domain.Character
 	if err != nil {
 		return err
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return err
 	}

@@ -134,6 +134,39 @@ One tick's phase durations as the simulation ticker measured them.
 type TickPhases struct {
 	BeforeHooks, Divisions, Hooks, Total time.Duration
 	SlowHooks, SlowDivisions             []SlowHook
+	Commit                               TickCommit
+}
+
+/*
+================
+TickCommit
+
+One tick's batched authority commit: the deferred door calls, whether a
+flush transaction ran, the rows it wrote, its duration and whether it
+failed.
+================
+*/
+type TickCommit struct {
+	Deferred, Rows  int
+	Elapsed         time.Duration
+	Flushed, Failed bool
+}
+
+/*
+================
+TickCommitStats
+
+The batched commits since start, served on /transport/metrics: flushes that
+ran a transaction, the rows and deferred door calls they covered, the
+largest batch, and failed flushes.
+================
+*/
+type TickCommitStats struct {
+	Flushes  uint64 `json:"flushes"`
+	Rows     uint64 `json:"rows"`
+	Deferred uint64 `json:"deferred"`
+	MaxRows  int    `json:"max_rows"`
+	Failures uint64 `json:"failures"`
 }
 
 /*
@@ -168,7 +201,9 @@ are rare and take the mutex.
 type timingStats struct {
 	handlers sync.Map // uint16 -> *liveHistogram
 	phases   [4]liveHistogram
+	commitMs liveHistogram
 	mu       sync.Mutex
+	commit   TickCommitStats
 	slow     map[string]*SlowHookStats
 	slowDiv  map[string]*SlowHookStats
 }
@@ -218,6 +253,7 @@ func (h *Hub) RecordTickPhases(phases TickPhases) {
 	for i, elapsed := range [4]time.Duration{phases.BeforeHooks, phases.Divisions, phases.Hooks, phases.Total} {
 		t.phases[i].add(elapsed)
 	}
+	t.recordCommit(phases.Commit)
 	if len(phases.SlowHooks) == 0 && len(phases.SlowDivisions) == 0 {
 		return
 	}
@@ -227,6 +263,34 @@ func (h *Hub) RecordTickPhases(phases TickPhases) {
 	t.ensureSlow()
 	countSlow(t.slow, phases.SlowHooks, at, tick)
 	countSlow(t.slowDiv, phases.SlowDivisions, at, tick)
+}
+
+/*
+================
+timingStats.recordCommit
+
+A tick that deferred nothing ran no flush and is not counted.
+================
+*/
+func (t *timingStats) recordCommit(commit TickCommit) {
+	if commit.Deferred == 0 && !commit.Flushed {
+		return
+	}
+	if commit.Flushed {
+		t.commitMs.add(commit.Elapsed)
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.commit.Deferred += uint64(commit.Deferred)
+	if !commit.Flushed {
+		return
+	}
+	t.commit.Flushes++
+	t.commit.Rows += uint64(commit.Rows)
+	t.commit.MaxRows = max(t.commit.MaxRows, commit.Rows)
+	if commit.Failed {
+		t.commit.Failures++
+	}
 }
 
 /*
@@ -285,9 +349,11 @@ func (t *timingStats) snapshotInto(m *Metrics) {
 	m.TickPhaseMs = map[string]Histogram{
 		"before_hooks": t.phases[0].snapshot(), "divisions": t.phases[1].snapshot(),
 		"hooks": t.phases[2].snapshot(), "total": t.phases[3].snapshot(),
+		"commit": t.commitMs.snapshot(),
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	m.TickCommit = t.commit
 	m.SlowHooks = make(map[string]SlowHookStats, len(t.slow))
 	for name, stats := range t.slow {
 		m.SlowHooks[name] = *stats

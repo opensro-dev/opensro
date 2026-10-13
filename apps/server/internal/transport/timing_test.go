@@ -69,3 +69,27 @@ func TestSlowStepsRecordWhenTheyHappened(t *testing.T) {
 		t.Fatalf("slow step times = %v .. %v", slow.FirstAt, slow.LastAt)
 	}
 }
+
+/*
+================
+TestTickCommitsAreCounted
+
+Only ticks that deferred or flushed count; a flush adds its rows and its
+time, and a failed one counts as a failure.
+================
+*/
+func TestTickCommitsAreCounted(t *testing.T) {
+	hub := newHub(testCfg())
+	hub.RecordTickPhases(TickPhases{})
+	hub.RecordTickPhases(TickPhases{Commit: TickCommit{Deferred: 5, Rows: 3, Elapsed: 20 * time.Millisecond, Flushed: true}})
+	hub.RecordTickPhases(TickPhases{Commit: TickCommit{Deferred: 2}})
+	hub.RecordTickPhases(TickPhases{Commit: TickCommit{Deferred: 1, Rows: 7, Elapsed: 2 * time.Millisecond, Flushed: true, Failed: true}})
+	m := hub.Metrics()
+	want := TickCommitStats{Flushes: 2, Rows: 10, Deferred: 8, MaxRows: 7, Failures: 1}
+	if m.TickCommit != want {
+		t.Fatalf("tick commit = %+v, want %+v", m.TickCommit, want)
+	}
+	if m.TickPhaseMs["commit"].Buckets != [6]uint64{1, 1, 0, 0, 0, 0} {
+		t.Fatalf("commit histogram = %+v", m.TickPhaseMs["commit"])
+	}
+}

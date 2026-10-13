@@ -265,7 +265,7 @@ func (rt *Runtime) strikeFromObject(s objectStrike, now int64) []simulation.Divi
 	}
 	var commit areaCommit
 	roster := rt.monsterRewardRoster(division, s.c, now)
-	if !rt.deps.UpdateMany(roster.characters, "planted-object-strike", func() bool {
+	if !rt.deps.UpdateManyDeferred(roster.characters, "planted-object-strike", func() bool {
 		var ok bool
 		commit, ok = rt.commitAreaInDoor(division, s.c, roster, &plan, now)
 		return ok

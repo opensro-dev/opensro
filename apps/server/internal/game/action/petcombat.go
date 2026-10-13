@@ -402,7 +402,7 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	roster := rt.monsterRewardRoster(division, owner, step.nowMs)
 	var committed []simulation.MonsterDamageResult
 	var settlement monsterSettlement
-	if !rt.deps.UpdateMany(roster.characters, "pet-attack", func() bool {
+	if !rt.deps.UpdateManyDeferred(roster.characters, "pet-attack", func() bool {
 		committed = rt.Monsters.ApplyDamageSequence(division, target.Gid, target.CurrentHP, plans)
 		if len(committed) == 0 {
 			return false
@@ -481,7 +481,7 @@ func (rt *Runtime) petStrikePlayer(step petCombatStep, target combatTarget, skil
 		return petStrikeResult{}, false
 	}
 	var commit playerHitCommit
-	if !rt.deps.UpdateMany([]*enterworld.Character{owner, target.player}, "pet-attack-player", func() bool {
+	if !rt.deps.UpdateManyDeferred([]*enterworld.Character{owner, target.player}, "pet-attack-player", func() bool {
 		commit = rt.commitPlayerHitInDoor(division, owner, &hit, step.nowMs)
 		return len(hit.struck.impacts) > 0
 	}) {

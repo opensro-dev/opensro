@@ -250,7 +250,7 @@ func (rt *Runtime) retireWall(w *standingWall) {
 		return true
 	}
 	if caster := rt.findCharacter(w.division, w.name); caster != nil {
-		rt.deps.Update(caster, "wall-retire", request)
+		rt.deps.UpdateDeferred(caster, "wall-retire", request)
 		return
 	}
 	request()

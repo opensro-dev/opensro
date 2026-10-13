@@ -281,7 +281,7 @@ func (rt *Runtime) advanceSkillObject(object skillobject.Object, nowMs int64) []
 	if !available {
 		return nil
 	}
-	rt.deps.Update(c, "quest-trap-capture", func() bool {
+	rt.deps.UpdateDeferred(c, "quest-trap-capture", func() bool {
 		if !enterworld.CharacterAlive(c) || c.NativeTeleportMode != 0 {
 			return false
 		}

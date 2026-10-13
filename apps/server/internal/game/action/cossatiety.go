@@ -32,7 +32,7 @@ func (rt *Runtime) advancePetSatiety(key petOwnerKey, nowMs int64) []simulation.
 		return nil
 	}
 	var frames []simulation.Frame
-	rt.deps.Update(state.character, "cos-satiety", func() bool {
+	rt.deps.UpdateDeferred(state.character, "cos-satiety", func() bool {
 		c := state.character
 		pet := c.CompanionByGID(key.gid)
 		ref, valid := rt.cosReference(pet)

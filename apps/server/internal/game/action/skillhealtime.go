@@ -187,7 +187,7 @@ func (rt *Runtime) pulseHealOverTime(heal healOverTime, now int64) []simulation.
 
 	var frame wire.Frame
 	healingThreat := makeSkillHealingThreat(heal.division, heal.caster, who, skill)
-	healed := rt.deps.Update(who, "heal-over-time-pulse", func() bool {
+	healed := rt.deps.UpdateDeferred(who, "heal-over-time-pulse", func() bool {
 		hp, mp, ok := rt.skillHealAmounts(heal.division, who, heal.caster, skill, healCast)
 		if !ok {
 			return false

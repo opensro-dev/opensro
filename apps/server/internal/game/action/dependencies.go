@@ -26,6 +26,11 @@ type Dependencies interface {
 	Mutate(character *domain.Character, label string, fn func())
 	Update(character *domain.Character, label string, update func() bool) bool
 	UpdateMany(characters []*domain.Character, label string, update func() bool) bool
+	// The deferred doors join the tick's batched commit (enterworld
+	// Deps.MutateDeferred); only tick-only paths call them.
+	MutateDeferred(character *domain.Character, label string, fn func())
+	UpdateDeferred(character *domain.Character, label string, update func() bool) bool
+	UpdateManyDeferred(characters []*domain.Character, label string, update func() bool) bool
 	SettleTrade(characters []*domain.Character, label string, update func(*domain.TradeRewardPool) bool) bool
 	CloseWeek(divisionID string, week int64, label string) bool
 	WeekRankings(divisionID string) domain.JobRankings

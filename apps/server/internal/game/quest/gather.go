@@ -648,7 +648,7 @@ func (rt *Runtime) AdvanceItemUse(c *enterworld.Character, nowMs int64) []wire.F
 	delete(rt.gatherJobs, c.ID)
 	rt.gatherMu.Unlock()
 	var frames []wire.Frame
-	rt.deps.Update(c, "quest-gather", func() bool {
+	rt.deps.UpdateDeferred(c, "quest-gather", func() bool {
 		at := activeQuestIndex(c, job.quest)
 		if c.DeletePending || at < 0 || !enterworld.CharacterAlive(c) {
 			return false

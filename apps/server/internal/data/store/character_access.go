@@ -201,6 +201,15 @@ MutateCharacter
 func (s *Store) MutateCharacter(c *domain.Character, label string, fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.mutateCharacterLocked(c, label, fn, false)
+}
+
+/*
+================
+mutateCharacterLocked
+================
+*/
+func (s *Store) mutateCharacterLocked(c *domain.Character, label string, fn func(), deferred bool) {
 	if fn != nil {
 		fn()
 	}
@@ -215,7 +224,7 @@ func (s *Store) MutateCharacter(c *domain.Character, label string, fn func()) {
 			log.Warnf("store: MutateCharacter(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
 		}
 	}
-	s.commitLocked(label)
+	s.finishDoorLocked(label, deferred)
 }
 
 // UpdateCharacter is the conditional character commit door. The update runs
@@ -235,7 +244,15 @@ UpdateCharacter
 func (s *Store) UpdateCharacter(c *domain.Character, label string, update func() bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.updateCharacterLocked(c, label, update, false)
+}
 
+/*
+================
+updateCharacterLocked
+================
+*/
+func (s *Store) updateCharacterLocked(c *domain.Character, label string, update func() bool, deferred bool) bool {
 	if c == nil || update == nil {
 		return false
 	}
@@ -247,7 +264,7 @@ func (s *Store) UpdateCharacter(c *domain.Character, label string, update func()
 		return false
 	}
 	s.changes.characters[c] = true
-	s.commitLocked(label)
+	s.finishDoorLocked(label, deferred)
 	return true
 }
 
@@ -280,6 +297,15 @@ MutateCharacters
 func (s *Store) MutateCharacters(cs []*domain.Character, label string, fn func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.mutateCharactersLocked(cs, label, fn, false)
+}
+
+/*
+================
+mutateCharactersLocked
+================
+*/
+func (s *Store) mutateCharactersLocked(cs []*domain.Character, label string, fn func(), deferred bool) {
 	if fn != nil {
 		fn()
 	}
@@ -298,7 +324,7 @@ func (s *Store) MutateCharacters(cs []*domain.Character, label string, fn func()
 			log.Warnf("store: MutateCharacters(%q) received an unknown character record %q; persisting the whole world for this commit", label, c.Name)
 		}
 	}
-	s.commitLocked(label)
+	s.finishDoorLocked(label, deferred)
 }
 
 // UpdateCharacters is the conditional multi-record door. Every declared
@@ -312,7 +338,7 @@ UpdateCharacters
 func (s *Store) UpdateCharacters(cs []*domain.Character, label string, update func() bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.updateCharactersLocked(cs, label, update)
+	return s.updateCharactersLocked(cs, label, update, false)
 }
 
 /*
@@ -320,7 +346,7 @@ func (s *Store) UpdateCharacters(cs []*domain.Character, label string, update fu
 updateCharactersLocked
 ================
 */
-func (s *Store) updateCharactersLocked(cs []*domain.Character, label string, update func() bool) bool {
+func (s *Store) updateCharactersLocked(cs []*domain.Character, label string, update func() bool, deferred bool) bool {
 	if len(cs) == 0 || update == nil {
 		return false
 	}
@@ -339,7 +365,7 @@ func (s *Store) updateCharactersLocked(cs []*domain.Character, label string, upd
 	for _, character := range cs {
 		s.changes.characters[character] = true
 	}
-	s.commitLocked(label)
+	s.finishDoorLocked(label, deferred)
 	return true
 }
 

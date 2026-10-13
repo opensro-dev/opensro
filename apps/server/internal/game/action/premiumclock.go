@@ -226,7 +226,7 @@ func (rt *Runtime) advancePremiumClock(key petOwnerKey, character *enterworld.Ch
 	if !due && !rolled && !ended {
 		return false
 	}
-	committed := rt.deps.Update(character, "premium-clock", func() bool {
+	committed := rt.deps.UpdateDeferred(character, "premium-clock", func() bool {
 		if character.PremiumClock == nil {
 			return false
 		}

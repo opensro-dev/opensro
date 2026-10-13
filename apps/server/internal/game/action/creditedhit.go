@@ -67,7 +67,7 @@ func (rt *Runtime) commitCreditedMonsterHit(division string, c, snapshot *enterw
 	}
 	committed := false
 	if plans[0].Damage >= target.CurrentHP {
-		committed = rt.deps.UpdateMany(roster.characters, reason, commit)
+		committed = rt.deps.UpdateManyDeferred(roster.characters, reason, commit)
 	} else {
 		committed = commit()
 	}

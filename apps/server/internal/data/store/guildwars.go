@@ -220,7 +220,7 @@ func (door storeGuildWarDoor) BeginGuildWar(division string, start domain.GuildW
 		gold := *actor.Gold - int64(war.Stake/2)
 		next[side].Gold = &gold
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return record, 2, err
 	}
@@ -303,7 +303,7 @@ func (door storeGuildWarDoor) AccountGuildWarCombat(division string, combat doma
 		side = 1
 	}
 	record.Scores[side] += uint32(combat.Score)
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return record, 2, err
 	}
@@ -374,7 +374,7 @@ func (door storeGuildWarDoor) EndGuildWar(division string, id uint32, winner int
 		return 2, nil
 	}
 	guild.WarCompensation += int64(war.Stake)
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return 2, err
 	}

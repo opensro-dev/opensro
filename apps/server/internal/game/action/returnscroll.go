@@ -402,7 +402,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	cancelled := false
 	currentWorld := instance.ID(domain.CharacterWorldInstance(c))
 	rt.bindResidentRegion(key, now)
-	if !rt.deps.Update(c, "return-scroll-complete", func() bool {
+	if !rt.deps.UpdateDeferred(c, "return-scroll-complete", func() bool {
 		if c.DeletePending || c.NativeTeleportMode == 0 {
 			rt.returnCasts.Delete(key)
 			return false
@@ -451,7 +451,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 	clearMode := teleportState(c, 0)
 	membership, moved := rt.moveWorldMembership(job.division, c, currentWorld, arrival.world)
 	if !moved {
-		rt.deps.Update(c, "return-scroll-world-rollback", func() bool {
+		rt.deps.UpdateDeferred(c, "return-scroll-world-rollback", func() bool {
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
 			c.World = previousWorld
 			return true
@@ -468,7 +468,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			rt.restorePopulationSession(membership)
 		}
 		rt.restoreCompanionRelocation(previousPets)
-		rt.deps.Update(c, "return-scroll-entry-rollback", func() bool {
+		rt.deps.UpdateDeferred(c, "return-scroll-entry-rollback", func() bool {
 			rt.Worlds.Update(key, func() simulation.WorldState { return previous }, func(w *simulation.WorldState) { *w = previous })
 			c.World = previousWorld
 			return true

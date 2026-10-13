@@ -96,7 +96,7 @@ func (s *Store) RecordUniqueKill(division string, kill domain.UniqueKill) (domai
 	if s.db == nil {
 		return kill, fmt.Errorf("unique kill: store unavailable")
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return kill, err
 	}

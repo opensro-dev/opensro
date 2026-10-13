@@ -35,7 +35,7 @@ func (s *Store) GrantSilk(accountID string, amount uint32) (domain.MallBalance, 
 	if accountID == "" || s.db == nil {
 		return domain.MallBalance{}, fmt.Errorf("silk grant: account unavailable")
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginTxLocked()
 	if err != nil {
 		return domain.MallBalance{}, err
 	}

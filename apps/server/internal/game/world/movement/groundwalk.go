@@ -109,7 +109,7 @@ func (rt *Runtime) GroundTickHook() simulation.TickHook {
 			}
 			unlock := rt.lockCharacter(division, character.Name)
 			var state simulation.WorldState
-			committed := rt.deps.Update(character, "ground-step", func() bool {
+			committed := rt.deps.UpdateDeferred(character, "ground-step", func() bool {
 				if character.DeletePending {
 					return false
 				}

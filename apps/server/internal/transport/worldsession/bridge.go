@@ -149,6 +149,8 @@ func tickPhaseObserver(hub *transport.Hub) func(simulation.TickTiming) {
 	return func(timing simulation.TickTiming) {
 		phases := transport.TickPhases{
 			BeforeHooks: timing.BeforeHooks, Divisions: timing.Divisions, Hooks: timing.Hooks, Total: timing.Total,
+			Commit: transport.TickCommit{Deferred: timing.Commit.Deferred, Rows: timing.Commit.Rows,
+				Elapsed: timing.Commit.Elapsed, Flushed: timing.Commit.Flushed, Failed: timing.Commit.Failed},
 		}
 		for _, hook := range timing.SlowHooks {
 			phases.SlowHooks = append(phases.SlowHooks, transport.SlowHook{Name: hook.Name, Elapsed: hook.Elapsed})

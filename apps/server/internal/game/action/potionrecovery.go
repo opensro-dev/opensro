@@ -90,7 +90,7 @@ func (rt *Runtime) recoverPotionResident(key recoveryKey, now int64) []simulatio
 	}
 	c := state.character
 	var frames []simulation.DivisionFrames
-	committed := rt.deps.Update(c, "potion-recovery", func() bool {
+	committed := rt.deps.UpdateDeferred(c, "potion-recovery", func() bool {
 		if c.DeletePending || !enterworld.CharacterAlive(c) {
 			rt.clearPotionRecovery(key.division, c.Name)
 			return false

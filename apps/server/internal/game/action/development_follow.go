@@ -155,7 +155,7 @@ func (rt *Runtime) DevelopmentObserverProtection(division, name string, enable b
 	if enable {
 		value, expected = 3, 0
 	}
-	changed := rt.deps.Update(c, "development-follow-observer", func() bool {
+	changed := rt.deps.UpdateDeferred(c, "development-follow-observer", func() bool {
 		if c.NativeBodyStatus != expected || c.DeletePending {
 			return false
 		}
@@ -193,7 +193,7 @@ func (rt *Runtime) DevelopmentRestoreViewer(division string, character *enterwor
 		return result
 	}
 	var frames []wire.Frame
-	ok := rt.deps.Update(character, "development-restore-viewer", func() bool {
+	ok := rt.deps.UpdateDeferred(character, "development-restore-viewer", func() bool {
 		if !enterworld.CharacterAlive(character) || character.DeletePending {
 			return false
 		}

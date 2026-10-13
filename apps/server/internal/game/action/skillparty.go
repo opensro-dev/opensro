@@ -408,7 +408,7 @@ func (rt *Runtime) pulseAura(division string, caster *enterworld.Character, skil
 
 	gid := enterworld.ObjectIDForCharacter(caster)
 	var vitals []simulation.Frame
-	paid := rt.deps.Update(caster, "aura-pulse", func() bool {
+	paid := rt.deps.UpdateDeferred(caster, "aura-pulse", func() bool {
 		rt.commitOffensiveResources(division, caster, skillCharge{mp: cost})
 		payload := simulation.VitalsRefreshWithSourcePayload(gid, simulation.VitalsSourceCombatDamage, rt.publishedVitals(division, caster))
 		vitals = []simulation.Frame{{Opcode: simulation.OpVitalsUpdate, Payload: payload}}
@@ -472,7 +472,7 @@ func (rt *Runtime) endAuraInstance(u *auraUpdate, aura partyAura, name string, t
 	}
 	var public, actor []wire.Frame
 	stats := false
-	rt.deps.Update(owner, "aura-retire", func() bool {
+	rt.deps.UpdateDeferred(owner, "aura-retire", func() bool {
 		ended := rt.effects.RetireInstances(aura.division, name, []uint32{token})
 		for _, e := range ended {
 			stats = stats || e.Modifiers.HasWrites()
@@ -608,7 +608,7 @@ func (rt *Runtime) joinAura(u *auraUpdate, aura *partyAura, caster *enterworld.C
 
 		child := atomic.AddUint32(&rt.castTokenCounter, 1)
 		var installed []wire.Frame
-		joined := rt.deps.Update(member, "aura-join", func() bool {
+		joined := rt.deps.UpdateDeferred(member, "aura-join", func() bool {
 			var ok bool
 			// 5850C3/5850CE: recipient mode 2 retains the same source link.
 			presentation := EffectPresentation{
@@ -770,7 +770,7 @@ func (rt *Runtime) healAura(aura *partyAura, caster *enterworld.Character, skill
 
 	var frame wire.Frame
 	healingThreat := makeSkillHealingThreat(aura.division, caster, who, skill)
-	healed := rt.deps.Update(who, "aura-heal", func() bool {
+	healed := rt.deps.UpdateDeferred(who, "aura-heal", func() bool {
 		hp, mp, ok := rt.skillHealAmounts(aura.division, who, caster, skill, healAura)
 		if !ok {
 			return false
