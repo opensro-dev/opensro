@@ -12,10 +12,15 @@ integrity and isolation between versions. Account and systemd setup are excluded
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
+import install
 from install import CONTROL_FILES, authorized_keys, install_version
+from release_state import write_state
+from test_release_state import production
 
 
 # ================
@@ -142,3 +147,31 @@ class InstalledModuleTests(unittest.TestCase):
 				for module in imported:
 					if module in local:
 						self.assertIn(module, installed, f"{name}.py imports {module}, which is not installed")
+
+	# ================
+	# test_controls_install_only_between_releases
+	#
+	# An operation opened by older controls (no nonce digest) could be ended
+	# by the new ones only by takeover, so installation refuses before it
+	# changes anything; a first install and a closed journal proceed.
+	# ================
+	def test_controls_install_only_between_releases(self):
+		directory = tempfile.TemporaryDirectory()
+		self.addCleanup(directory.cleanup)
+		root = Path(directory.name) / "release"
+		state_path = root / "public/production.json"
+		state_path.parent.mkdir(parents=True)
+		install.require_closed_journal(state_path)
+		write_state(state_path, production())
+		install.require_closed_journal(state_path)
+		state = production()
+		state["operation"] = {"component": "release", "phase": "verifying", "startedAt": 1.0}
+		write_state(state_path, state)
+		arguments = ["install.py", "--client-manifest", "m", "--client-commit", "c", "--stage-key", "s",
+			"--publish-key", "p", "--source-commit", "x"]
+		with patch.object(install, "ROOT", root), patch.object(install, "install_version") as version, \
+			patch.object(install.os, "geteuid", return_value=0, create=True), \
+			patch.object(sys, "argv", arguments):
+			with self.assertRaisesRegex(RuntimeError, r"operation is open \(release, verifying\)"):
+				install.main()
+		version.assert_not_called()

@@ -22,7 +22,7 @@ import tempfile
 
 from bundle import release_files
 from client_bundle import application_files
-from release_state import STATE_FORMAT, identity, write_state
+from release_state import STATE_FORMAT, identity, read_state, write_state
 
 INSTALL = Path("/usr/local/lib/opensro-release-controls")
 ROOT = Path("/var/lib/opensro-release")
@@ -191,6 +191,23 @@ def monitor(version, config):
 
 
 # ================
+# require_closed_journal
+#
+# Controls are replaced only between releases. An operation opened by older
+# controls carries what they wrote (before 2026-10-13, no nonce digest), so
+# the new controls could end it only by takeover; it is finished or reverted
+# with the controls that opened it first. Nothing is installed on refusal.
+# ================
+def require_closed_journal(state_path):
+	if not Path(state_path).exists():
+		return
+	operation = read_state(state_path).get("operation")
+	if operation:
+		raise RuntimeError("a release operation is open (" + operation["component"] + ", " + operation["phase"] +
+			"): confirm or revert it with the installed controls, then install")
+
+
+# ================
 # deadman
 #
 # The root timer that reverts a coordinated release its publisher left
@@ -220,6 +237,7 @@ def main():
 	arguments = parser.parse_args()
 	if os.geteuid() != 0:
 		raise RuntimeError("installation requires root")
+	require_closed_journal(ROOT / "public/production.json")
 	source = Path(__file__).resolve().parent
 	version = install_version(source, INSTALL, arguments.source_commit)
 	config = json.loads(CONFIG.read_text())

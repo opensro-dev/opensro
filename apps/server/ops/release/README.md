@@ -165,7 +165,12 @@ holds only its sha256. `confirm` and `revert` echo the nonce (from that file,
 or `--nonce`), so a publisher that wakes from sleep cannot end an operation it
 did not open. A publisher that lost the nonce passes `--takeover REASON`
 instead; the takeover is journaled on the operation and alerted to staff
-before it acts.
+before it acts. A publisher that runs these commands must run `coordinate`,
+`confirm` and `revert` from one operation directory, or pass `--nonce`: a
+runner that splits them across jobs or machines carries the nonce itself.
+`install.py` refuses to replace the controls while an operation is open
+(naming its component and phase). An operation is ended by the controls that
+opened it, so one opened before the nonce existed never needs a takeover.
 
 **Publication runs on the host, not in the SSH session.** The publication
 key's request is filed under `requests/` and run as its own transient unit
