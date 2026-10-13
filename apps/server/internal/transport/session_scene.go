@@ -20,6 +20,11 @@ import (
 /*
 ================
 PublishedObjects
+
+Every tick reads each session's set several times (the scene snapshot and
+the view hooks) while it changes far less often, so the sorted order is
+kept and rebuilt only after a change. The caller gets its own copy, never
+nil while current: readers take nil as "not current".
 ================
 */
 func (s *Session) PublishedObjects(revision uint64) ([]uint32, bool) {
@@ -28,12 +33,27 @@ func (s *Session) PublishedObjects(revision uint64) ([]uint32, bool) {
 	if s.closed || s.sceneLoading || s.sceneRevision != revision {
 		return nil, false
 	}
-	gids := make([]uint32, 0, len(s.observedObjects))
-	for gid := range s.observedObjects {
-		gids = append(gids, gid)
+	if s.publishedStale {
+		s.publishedSorted = s.publishedSorted[:0]
+		for gid := range s.observedObjects {
+			s.publishedSorted = append(s.publishedSorted, gid)
+		}
+		sort.Slice(s.publishedSorted, func(i, j int) bool { return s.publishedSorted[i] < s.publishedSorted[j] })
+		s.publishedStale = false
 	}
-	sort.Slice(gids, func(i, j int) bool { return gids[i] < gids[j] })
-	return gids, true
+	return append(make([]uint32, 0, len(s.publishedSorted)), s.publishedSorted...), true
+}
+
+/*
+================
+clearObservedLocked
+
+A scene reset forgets every published object. Caller holds s.mu.
+================
+*/
+func (s *Session) clearObservedLocked() {
+	clear(s.observedObjects)
+	s.publishedStale = true
 }
 
 // A transport survives scene replacement. Its visibility producers must not.
@@ -77,7 +97,7 @@ func (s *Session) BeginSceneAdmission() {
 	defer s.mu.Unlock()
 	s.sceneRevision++
 	s.sceneLoading = true
-	clear(s.observedObjects)
+	s.clearObservedLocked()
 }
 
 // ObjectScopeChange accompanies the object's complete creation or removal

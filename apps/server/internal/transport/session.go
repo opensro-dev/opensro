@@ -66,6 +66,10 @@ type Session struct {
 	sceneRevision   uint64
 	sceneLoading    bool
 	observedObjects map[uint32]struct{}
+	// publishedSorted is observedObjects in ascending order, rebuilt on the
+	// first PublishedObjects read after any change marks it stale.
+	publishedSorted []uint32
+	publishedStale  bool
 
 	queue       []Frame
 	queueBytes  int
@@ -358,7 +362,7 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 	if options.reset {
 		s.sceneRevision++
 		s.sceneLoading = true
-		clear(s.observedObjects)
+		s.clearObservedLocked()
 		clear(s.lossy)
 		s.lossyKeys = nil
 		s.lossyBytes = 0
@@ -375,8 +379,10 @@ func (s *Session) sendSceneObjectBatch(frames []Frame, options sceneBatchOptions
 				s.observedObjects = make(map[uint32]struct{})
 			}
 			s.observedObjects[change.GID] = struct{}{}
+			s.publishedStale = true
 		} else {
 			delete(s.observedObjects, change.GID)
+			s.publishedStale = true
 			// Reliable removal takes priority over queued loss-tolerant motion.
 			// Retire that motion here so it cannot follow the despawn on WS.
 			kept := s.lossyKeys[:0]
