@@ -41,6 +41,12 @@ const ANY_WEAPON = 0xff, BARE_HAND = 1, FORTRESS_WEAPON = 16;
 const DISABLED = 0x3009, BERSERK_HIDE = 0x3031, NOT_LOW_HP = 0x3036, NOT_STEALTHED = 0x3034;
 const WRONG_WEAPON = 0x300d, FORTRESS_ONLY = 0x3047, BROKEN = 0x300f;
 const NO_HP = 0x3013, NO_MP = 0x3004, NO_AMMUNITION = 0x300e;
+// 58E2BC -> 59D870: the buff-replacement check's refusal.
+const REPLACE_REFUSED = 0x300c;
+// The buff category 59D870 compares; CheckCastingStateConflict skips these
+// state bytes (statuseffect replacement.go Conflicts).
+const BUFF_CATEGORY = 3;
+const NO_STATE = 0, IGNORED_STATE_A = 0x1d, IGNORED_STATE_B = 0x23;
 const INT32_MIN = -0x80000000, INT32_LIMIT = 0x80000000;
 
 /*
@@ -62,6 +68,26 @@ export interface PressAdmit {
 	readonly hp?: number;
 	readonly hpPercent?: number;
 	readonly ammunition?: boolean;
+	readonly replace?: PressReplace;
+}
+
+/*
+================
+PressReplace
+
+A row's published buff-replacement descriptor (SkillUiReplace): the 59D870
+inputs statuseffect.DecideReplacement decides from. undecided marks a row
+whose outcome hangs on state the client cannot see.
+================
+*/
+export interface PressReplace {
+	readonly category: number;
+	readonly group: number;
+	readonly rank: number;
+	readonly states: number;
+	readonly ovl2: number;
+	readonly cbuf: boolean;
+	readonly undecided: boolean;
 }
 
 /*
@@ -110,6 +136,12 @@ export interface PressCaster {
 	readonly mounted: boolean;
 	readonly seated: boolean;
 	readonly equipped: readonly EquippedItem[];
+	// The descriptors of the effects on the caster, in list order; undefined
+	// for an effect whose row publishes none. Absent: not known.
+	readonly effects?: readonly (PressReplace | undefined)[];
+	// A cast of the caster's own is still running: its states join the
+	// server's conflict set (the current command), which the client does not track.
+	readonly casting?: boolean;
 }
 
 type Equipped = PressCaster["equipped"];
@@ -175,8 +207,89 @@ export function parsePressAdmit( value: unknown ): PressAdmit {
 		...(reqi ? { reqi } : {}),
 		hp: count( v.hp, 0xffffffff, true ),
 		hpPercent: count( v.hpPercent, 0xffff, true ),
-		ammunition: flag( "ammunition" )
+		ammunition: flag( "ammunition" ),
+		...(v.replace === undefined ? {} : { replace: parsePressReplace( v.replace ) })
 	};
+}
+
+/*
+================
+parsePressReplace
+
+Strict parse of a published SkillUiReplace.
+================
+*/
+export function parsePressReplace( value: unknown ): PressReplace {
+	const v = value as Record<string, unknown>;
+	if ( !v || typeof v !== "object" ) throw Error( "Invalid replacement descriptor" );
+	const word = ( key: string, max: number, optional = false ) => {
+		const n = v[key];
+		if ( n === undefined && optional ) return 0;
+		if ( typeof n !== "number" || !Number.isInteger( n ) || n < 0 || n > max ) {
+			throw Error( `Invalid replacement ${key}` );
+		}
+		return n;
+	};
+	const flag = ( key: string ) => {
+		if ( v[key] !== undefined && typeof v[key] !== "boolean" ) throw Error( `Invalid replacement ${key}` );
+		return v[key] === true;
+	};
+	return {
+		category: word( "category", 0xffffffff ),
+		group: word( "group", 0xffffffff ),
+		rank: word( "rank", 0xff ),
+		states: word( "states", 0xffffffff, true ),
+		ovl2: word( "ovl2", 0xffffffff, true ),
+		cbuf: flag( "cbuf" ),
+		undecided: flag( "undecided" )
+	};
+}
+
+/*
+================
+decideReplacement
+
+statuseffect.DecideReplacement (59D870) for the caster's own press, from
+the published descriptors: the first same-group buff decides by rank (a
+replacement admits and skips the state check); otherwise any state the
+press installs that an active effect already holds refuses 0x300C.
+Anything the replay cannot decide is unknown: an undecided descriptor, an
+effect without one, the caster's own running cast, or more than one
+same-group buff. The press is always sent; only its prediction waits.
+================
+*/
+export function decideReplacement(
+	press: PressReplace,
+	effects: readonly (PressReplace | undefined)[] | undefined,
+	casting = false
+): PressAdmission {
+	if ( press.undecided ) return { kind: "unknown", gate: "undecided replacement" };
+	if ( !effects ) return { kind: "unknown", gate: "unknown effects" };
+	if ( casting ) return { kind: "unknown", gate: "own cast running" };
+	let decided: PressAdmission | null = null;
+	for ( const old of effects ) {
+		if ( !old || old.undecided ) return { kind: "unknown", gate: "undecided effect" };
+		if ( press.category !== BUFF_CATEGORY || old.category !== BUFF_CATEGORY || old.cbuf ) continue;
+		if ( press.group === 0 || press.group !== old.group ) continue;
+		if ( decided ) return { kind: "unknown", gate: "several same-group effects" };
+		decided = press.rank < old.rank ? { kind: "refuse", code: REPLACE_REFUSED } : { kind: "admit" };
+	}
+	if ( decided ) return decided;
+	const active = new Set<number>();
+	for ( const old of effects ) {
+		for ( const word of [ old!.states, old!.ovl2 ] ) {
+			for ( let shift = 0; shift < 24; shift += 8 ) active.add( (word >>> shift) & 0xff );
+		}
+	}
+	for ( const word of [ press.ovl2, press.states ] ) {
+		for ( let shift = 0; shift < 24; shift += 8 ) {
+			const state = (word >>> shift) & 0xff;
+			if ( state !== NO_STATE && state !== IGNORED_STATE_A && state !== IGNORED_STATE_B && active.has( state ) ) {
+				return { kind: "refuse", code: REPLACE_REFUSED };
+			}
+		}
+	}
+	return { kind: "admit" };
 }
 
 /*
@@ -223,6 +336,11 @@ export function pressAdmission( skill: PressSkill, caster: PressCaster ): PressA
 	if ( hpCost > 0 && caster.hp < hpCost ) return { kind: "refuse", code: NO_HP };
 	if ( caster.maxMp === 0 && skill.mpCost > 0 ) return { kind: "unknown", gate: "unknown MP" };
 	if ( skill.mpCost > caster.mp ) return { kind: "refuse", code: NO_MP };
+	// 58E2BC -> 59D870: the buff-replacement check (decideReplacement).
+	if ( admit.replace ) {
+		const replaced = decideReplacement( admit.replace, caster.effects, caster.casting );
+		if ( replaced.kind !== "admit" ) return replaced;
+	}
 	// 58E32D: a stack of the weapon's ammunition in the shield socket.
 	if ( admit.ammunition && !ammunitionReady( caster.equipped ) ) return { kind: "refuse", code: NO_AMMUNITION };
 	return { kind: "admit" };

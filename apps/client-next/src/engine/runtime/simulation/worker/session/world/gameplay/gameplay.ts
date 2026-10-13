@@ -486,7 +486,12 @@ sent. A cost whose vital inputs are unknown waits for the server's answer.
 			body: local.appearanceState?.[2] ?? 0,
 			mounted: !!local.mountedOn,
 			seated: local.movementMode === MOVEMENT_SEATED,
-			equipped: inventory.state().inventory
+			equipped: inventory.state().inventory,
+			// 59D870 reads the effects on the caster and its running cast.
+			effects: combat.state().attachedEffects.filter( effect => effect.gid === localGid ).map( effect =>
+				catalog.find( row => row.id === effect.skill )?.admit?.replace
+			),
+			casting: combat.state().casts.some( cast => cast.caster === localGid && cast.cancelledAtMs === undefined )
 		} );
 		return admission.kind === "admit";
 	}

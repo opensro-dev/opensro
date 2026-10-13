@@ -1,0 +1,101 @@
+{
+	"source": "statuseffect.DecideReplacement (59D870) truth table, shared by the server's DecideReplacement and the client's press-admission replay. Concentration 2nd is group 267 and 3rd is group 336, both with packed state 13 (SKILL_CH_LIGHTNING_JIPJUNG_B/C).",
+	"cases": [
+		{
+			"name": "a higher level of the same tier replaces it",
+			"press": { "category": 3, "group": 336, "rank": 3, "states": 13 },
+			"effects": [ { "category": 3, "group": 336, "rank": 2, "states": 13 } ],
+			"expect": "admit"
+		},
+		{
+			"name": "the same level of the same tier replaces it",
+			"press": { "category": 3, "group": 336, "rank": 2, "states": 13 },
+			"effects": [ { "category": 3, "group": 336, "rank": 2, "states": 13 } ],
+			"expect": "admit"
+		},
+		{
+			"name": "a lower level of the same tier is refused",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13 },
+			"effects": [ { "category": 3, "group": 336, "rank": 2, "states": 13 } ],
+			"expect": "refuse"
+		},
+		{
+			"name": "Concentration 3rd over an active 2nd is refused (same state, different tier)",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13 },
+			"effects": [ { "category": 3, "group": 267, "rank": 6, "states": 13 } ],
+			"expect": "refuse"
+		},
+		{
+			"name": "Concentration 2nd over an active 3rd is refused too",
+			"press": { "category": 3, "group": 267, "rank": 6, "states": 13 },
+			"effects": [ { "category": 3, "group": 336, "rank": 1, "states": 13 } ],
+			"expect": "refuse"
+		},
+		{
+			"name": "an unrelated buff with another state is admitted",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13 },
+			"effects": [ { "category": 3, "group": 500, "rank": 1, "states": 32 } ],
+			"expect": "admit"
+		},
+		{
+			"name": "no active effect admits",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13 },
+			"effects": [],
+			"expect": "admit"
+		},
+		{
+			"name": "a cbuf row is skipped by group but its state still conflicts",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13 },
+			"effects": [ { "category": 3, "group": 336, "rank": 5, "states": 13, "cbuf": true } ],
+			"expect": "refuse"
+		},
+		{
+			"name": "a non-buff press skips the group rule but not the state check",
+			"press": { "category": 1, "group": 336, "rank": 9, "states": 13 },
+			"effects": [ { "category": 3, "group": 336, "rank": 1, "states": 13 } ],
+			"expect": "refuse"
+		},
+		{
+			"name": "group 0 never replaces, so a shared state refuses",
+			"press": { "category": 3, "group": 0, "rank": 9, "states": 13 },
+			"effects": [ { "category": 3, "group": 0, "rank": 1, "states": 13 } ],
+			"expect": "refuse"
+		},
+		{
+			"name": "the ignored state 0x1D never conflicts",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 29 },
+			"effects": [ { "category": 3, "group": 500, "rank": 1, "states": 29 } ],
+			"expect": "admit"
+		},
+		{
+			"name": "an Ovl2 state an effect already holds refuses",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13, "ovl2": 64 },
+			"effects": [ { "category": 3, "group": 500, "rank": 1, "states": 64 } ],
+			"expect": "refuse"
+		},
+		{
+			"name": "an undecided press is not predicted",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13, "undecided": true },
+			"effects": [],
+			"expect": "unknown"
+		},
+		{
+			"name": "an undecided active effect is not predicted",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13 },
+			"effects": [ { "category": 3, "group": 500, "rank": 1, "states": 32, "undecided": true } ],
+			"expect": "unknown"
+		},
+		{
+			"name": "an active effect without a descriptor is not predicted",
+			"press": { "category": 3, "group": 336, "rank": 1, "states": 13 },
+			"effects": [ null ],
+			"expect": "unknown"
+		},
+		{
+			"name": "two same-group effects are not predicted",
+			"press": { "category": 3, "group": 336, "rank": 3, "states": 13 },
+			"effects": [ { "category": 3, "group": 336, "rank": 2, "states": 13 }, { "category": 3, "group": 336, "rank": 4, "states": 13 } ],
+			"expect": "unknown"
+		}
+	]
+}

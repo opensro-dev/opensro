@@ -46,6 +46,10 @@ const SHARED_FIXTURES = [
 	{
 		canonical: `${CLIENT_NATIVE}/native-mover-step-reference.json`,
 		copy: "apps/server/internal/game/world/simulation/testdata/native-mover-step-reference.json"
+	},
+	{
+		canonical: `${CLIENT_NATIVE}/buff-replacement-cases.json`,
+		copy: "apps/server/internal/game/item/statuseffect/testdata/buff-replacement-cases.json"
 	}
 ];
 

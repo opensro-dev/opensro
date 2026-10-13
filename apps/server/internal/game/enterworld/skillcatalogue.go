@@ -135,6 +135,50 @@ type SkillUiAdmit struct {
 	// Ammunition needs a stack of the weapon's ammunition in socket 7
 	// (58E32D, 0x300E).
 	Ammunition bool `json:"ammunition,omitempty"`
+	// Replace is the row's buff-replacement descriptor (58E2BC -> 59D870,
+	// 0x300C): the client replays statuseffect.DecideReplacement from it
+	// and never derives it from data. Absent for a row without one.
+	Replace *SkillUiReplace `json:"replace,omitempty"`
+}
+
+/*
+================
+SkillUiReplace
+
+The 59D870 inputs the client's replay decides from: the category, group,
+rank, the packed state words and the old row's cbuf skip. Undecided marks
+a descriptor whose outcome hangs on what the client cannot see (Dttp, an
+Efr2 area link, Lnks/Lks2, an Msch mode): no prediction, on either side.
+================
+*/
+type SkillUiReplace struct {
+	Category  uint32 `json:"category"`
+	Group     uint32 `json:"group"`
+	Rank      uint8  `json:"rank"`
+	States    uint32 `json:"states,omitempty"`
+	Ovl2      uint32 `json:"ovl2,omitempty"`
+	Cbuf      bool   `json:"cbuf,omitempty"`
+	Undecided bool   `json:"undecided,omitempty"`
+}
+
+/*
+================
+skillUiReplace
+
+The row's replacement descriptor for the client, or nil without one.
+================
+*/
+func skillUiReplace(row SkillRow) *SkillUiReplace {
+	if !row.ReplacementPinned {
+		return nil
+	}
+	d := row.Replacement
+	replace := &SkillUiReplace{Category: d.Category, Group: d.Group, Rank: d.Rank, States: d.PackedStates, Cbuf: d.Cbuf,
+		Undecided: d.DttpPresent || d.Efr2 || d.Lnks || d.Lks2 || d.MschPresent}
+	if d.Ovl2Present {
+		replace.Ovl2 = d.Ovl2
+	}
+	return replace
 }
 
 /*
@@ -176,6 +220,7 @@ func skillUiAdmit(row SkillRow) *SkillUiAdmit {
 	if row.Consumption.Pinned {
 		admit.HP, admit.HPPercent = row.Consumption.HP, row.Consumption.HPPercent
 	}
+	admit.Replace = skillUiReplace(row)
 	return admit
 }
 

@@ -71,8 +71,11 @@ func TestSkillUiAdmitMirrorsTheServerGates(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s published no admission inputs", codename)
 		}
-		if !reflect.DeepEqual(*got, want) {
-			t.Fatalf("%s admission inputs = %+v (reqi %+v), want %+v (reqi %+v)", codename, *got, got.Reqi, want, want.Reqi)
+		// The replacement descriptor has its own tests (skilluireplace_test.go).
+		gates := *got
+		gates.Replace = nil
+		if !reflect.DeepEqual(gates, want) {
+			t.Fatalf("%s admission inputs = %+v (reqi %+v), want %+v (reqi %+v)", codename, gates, gates.Reqi, want, want.Reqi)
 		}
 	}
 }
