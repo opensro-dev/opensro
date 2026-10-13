@@ -40,10 +40,13 @@ P6 `look` object: `bodyRefObjId`, `worn[]` of `{slot, refItemId, plus}`,
   the fill is refit and measured again, until it is framed (a few passes at most;
   a ride or a wing far off the target's depth needs more than one). The model
   stands in its idle pose (a dressed look holds its weapon's armed idle).
-- Light: a studio light of the viewer's own (`VIEWER_LIGHT`, viewer.ts): a warm
-  key from in front of the model and above, over a cooler, lower fill. Without
-  it the page, which draws no world, would light the model with the empty
-  environment's white ambient. The renderer applies it only for the viewer page
+- Light: the game's noon light (`VIEWER_LIGHT`, viewer.ts): the shipped
+  environment's midday diffuse (0.285) and ambient (0.78), as the inventory
+  doll is lit at noon, with the key turned to come from in front of the model
+  and above (the viewer's only liberty). Without it the page, which draws no
+  world, would light the model with the empty environment's white ambient. A
+  brighter invented key once turned pale armour white through the equipment
+  reflection stage. The renderer applies it only for the viewer page
   (`setViewerLight`); the game's inventory and party portraits keep the native
   light.
 - When the model is drawn, the page posts `{ type: "viewer-ready" }` to its

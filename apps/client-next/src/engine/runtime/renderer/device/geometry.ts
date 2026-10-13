@@ -937,9 +937,10 @@ export function createGeometryResources(
 						0,
 						0,
 						...packTextureStage( mat?.textureStage ),
-						// The stage policy: x, DIFFUSE is the BSR shader's oD0.
+						// The stage policy: x, DIFFUSE is the BSR shader's oD0; y, the
+						// draw blends nothing, so its surviving pixels are opaque.
 						mat?.shaderDiffuse ? 1 : 0,
-						0,
+						geometryPipelineState( mat ).blend ? 0 : 1,
 						0,
 						0,
 						// D3DRS_TEXTUREFACTOR, read by a stage's TFACTOR argument.

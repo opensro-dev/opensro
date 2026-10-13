@@ -546,7 +546,12 @@ let mask=mix(mix(input.color.x,input.color.y,input.maskUV.x),mix(input.color.z,i
   return vec4f(mix(litTerrain,terrainFogColor,fog),1);
  }
  if(animated&&waterPass.plane.z>0.5&&waterPass.plane.w<0.5){lit=waterColor;}
- return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5));
+ // An unblended draw's surviving pixel is opaque: the retail back buffer
+ // (X8R8G8B8) keeps no alpha. Its texture alpha (an alpha test's, or a gloss
+ // mask's) must not reach a transparent target such as the viewer's doll,
+ // where it showed the page through alpha-tested armour.
+ let surfaceAlpha=select(select(color.a,clamp(input.color.a,0,1),animated),select(select(1.0,color.a,material.ambient.w>0.5),fadeAlpha,fading),material.lighting.z>0.5);
+ return vec4f(mix(lit*select(vec3f(1),waterShading,animated),select(fogColor,terrainFogColor,material.options.z>0.5),fog),select(surfaceAlpha,1.0,material.stagePolicy.y>0.5));
 }
 @fragment fn fs(input:Out)->@location(0) vec4f {return shadeGeometry(input);}
 // Port-only, not native: an accepted unblended/cutout fragment covers the

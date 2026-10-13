@@ -78,15 +78,19 @@ const MAX_PICTURE_SIDE = 1024;
 // Models face -z at the doll's yaw 0 (portrait.ts), so that is their front.
 const MODEL_FRONT: readonly [number, number] = [ 0, -1 ];
 const WHITE: readonly [number, number, number, number] = [ 1, 1, 1, 1 ];
-// The viewer's studio light (port-only, docs/VIEWER.md). Without a world the
-// environment falls back to a white ambient of 1 under a 0.6 diffuse, which
-// washes every model flat, and the retail light comes from the model's side.
-// A warm key from in front of the model and above, over a cooler, lower
-// fill, gives it its shading back. Models face -z (MODEL_FRONT); the
-// direction points toward the light.
+// The viewer's light: the game's own noon, as the inventory doll is lit at
+// midday. Without a world the environment falls back to a white ambient of
+// 1, which washes every model flat. The shipped environment tracks at noon
+// give diffuse 0.6 x color0xf0 = 0.285 and ambient color0x124 = 0.78
+// (world-environment.ts, renderer slots 8 and 12); native light never
+// exceeds that 0.6 diffuse scale. An invented brighter key (1.15) doubled
+// through the equipment env-map stage (AEE6D0, MODULATE2X) and turned pale
+// armour white. Only the direction is the viewer's (port-only,
+// docs/VIEWER.md): from in front of the model and above, since the retail
+// sun would light it from the side. Models face -z (MODEL_FRONT).
 const VIEWER_LIGHT: ViewerLight = {
-	diffuse: [ 1.15, 1.08, 0.98 ],
-	ambient: [ 0.38, 0.4, 0.47 ],
+	diffuse: [ 0.285, 0.285, 0.285 ],
+	ambient: [ 0.78, 0.78, 0.78 ],
 	direction: [ 0, 0.67, -0.74 ]
 };
 
