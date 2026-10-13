@@ -133,7 +133,7 @@ export function createSessionHttp() {
 		servers( base: string, signal: AbortSignal ) {
 			return request( { base, route: "/title/servers", signal, limit: LIST_RESPONSE_BYTES } );
 		},
-		incident( base: string, token: string, body: unknown, signal: AbortSignal ) {
+		incident( base: string, token: string | undefined, body: unknown, signal: AbortSignal ) {
 			return request( { base, route: "/client/incident", signal, body, token } );
 		},
 		roster( base: string, token: string, signal: AbortSignal ) {

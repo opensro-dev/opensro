@@ -14,6 +14,7 @@ package agentserver
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -103,8 +104,17 @@ type Server struct {
 	// incidentReports paces /client/incident per account; degradedReports
 	// paces its non-fatal "degraded" reports apart, so they never use up the
 	// allowance a session-ending failure needs.
-	incidentReports  *loginLimiter
-	degradedReports  *loginLimiter
+	incidentReports *loginLimiter
+	degradedReports *loginLimiter
+	// anonymousIncidents paces reports sent before login, per client
+	// address, apart from every account's allowance. refusalLines paces the
+	// refusal log lines one client can cause (refusal_log.go).
+	anonymousIncidents *loginLimiter
+	refusalLines       *loginLimiter
+	// clientKey keys the client tags in refusal lines (clientTag). It is
+	// drawn at start and never stored, so a tag cannot be reversed from the
+	// log by hashing every address.
+	clientKey        []byte
 	passwordFailures passwordFailures
 	readiness        *readiness.Gate
 	bugReports       *bugreport.Service
@@ -160,6 +170,10 @@ func New(config Config) (*Server, error) {
 		}
 		origins[origin] = true
 	}
+	clientKey := make([]byte, clientKeyBytes)
+	if _, err := rand.Read(clientKey); err != nil {
+		return nil, fmt.Errorf("agent server: client tag key: %w", err)
+	}
 	return &Server{
 		history:                 config.History,
 		historyHandler:          config.HistoryHandler,
@@ -177,6 +191,9 @@ func New(config Config) (*Server, error) {
 		loginAttempts:           newLoginLimiter(now),
 		incidentReports:         newLoginLimiter(now),
 		degradedReports:         newLoginLimiter(now),
+		anonymousIncidents:      newLoginLimiter(now),
+		refusalLines:            newLoginLimiter(now),
+		clientKey:               clientKey,
 		readiness:               config.Readiness,
 		bugReports:              config.BugReports,
 		startedAt:               now(),
@@ -204,7 +221,7 @@ func (server *Server) Handler() http.Handler {
 		browser(server.requireRunning(http.HandlerFunc(server.handleServers))),
 	)
 	mux.Handle(
-		"/title/login",
+		loginPath,
 		browser(server.requireRunning(http.HandlerFunc(server.handleLogin))),
 	)
 	mux.HandleFunc("/marks/", server.handleMark)

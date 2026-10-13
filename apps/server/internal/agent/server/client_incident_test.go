@@ -163,17 +163,19 @@ func TestClientIncidentRefusalIsLoggedWithItsReason(t *testing.T) {
 
 /*
 ================
-TestClientIncidentRefusesAnonymousAndMalformedReports
+TestClientIncidentRefusesForgedAndMalformedReports
 ================
 */
-func TestClientIncidentRefusesAnonymousAndMalformedReports(t *testing.T) {
+func TestClientIncidentRefusesForgedAndMalformedReports(t *testing.T) {
 	fixture, token := incidentSession(t)
 	hook := logtest.NewGlobal()
 	defer hook.Reset()
 
+	// No session at all is a pre-login report (refusal_log_test.go); a
+	// session that does not verify is still refused.
 	valid := `{"kind":"packet","message":"x"}`
-	if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, valid, "").Code; code != http.StatusUnauthorized {
-		t.Fatalf("anonymous = %d", code)
+	if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, valid, "forged").Code; code != http.StatusUnauthorized {
+		t.Fatalf("forged session = %d", code)
 	}
 	for _, body := range []string{
 		`{"kind":"other","message":"x"}`,

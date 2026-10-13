@@ -143,8 +143,15 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		DivisionID string `json:"divisionId"`
 		ChannelID  string `json:"channelId"`
 	}
+	// Every refusal below writes one paced log line (refusal_log.go) beside
+	// the history event it already recorded.
+	logLogin := func(code string, status int) {
+		server.logRefusal(r, refusal{Route: loginPath, Code: code, Status: status,
+			Account: boundedLoginName(request.ID), Shard: boundedLoginName(request.ServerID)})
+	}
 	refuse := func(nativeStatus int, code, message string) {
 		server.history.Record(history.Event{Kind: "login_refused", Code: code, Category: "expected", Message: message, Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		logLogin(code, http.StatusOK)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": false, "nativeTitleStatus": nativeStatus,
 			"code": code, "message": message,
@@ -157,6 +164,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			refuse(5, "RATE_LIMITED", "Credential failure tracking is at capacity.")
 			return
 		}
+		logLogin("INVALID_CREDENTIALS", http.StatusOK)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "nativeTitleStatus": 2, "nativeTitleArgument": argument, "code": "INVALID_CREDENTIALS", "message": "The id or password is incorrect."})
 	}
 	if err := decodeJSON(r, &request); err != nil {
@@ -168,8 +176,10 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// per-address login budget: it tests no credential, so players sharing an
 	// address cannot drain the budget while the shard starts.
 	// It writes no history: it is not a credential refusal, and an
-	// unthrottled answer must not become an unbounded history writer.
+	// unthrottled answer must not become an unbounded history writer. Its
+	// log line is paced like every refusal line.
 	if server.shardStarting(request.ServerID) {
+		logLogin(readiness.CodeStarting, http.StatusServiceUnavailable)
 		w.Header().Set("Retry-After", strconv.Itoa(loginStartingRetrySeconds))
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"ok": false, "nativeTitleStatus": 5,
@@ -180,6 +190,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !server.loginAttempts.Allow(clientIP(r)) {
 		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "rate_limited", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		logLogin("RATE_LIMITED", http.StatusTooManyRequests)
 		w.Header().Set("Retry-After", "6")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"ok": false, "nativeTitleStatus": 5,
@@ -227,6 +238,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		defer func() { <-server.passwordSlots }()
 	default:
 		server.history.Record(history.Event{Kind: "login_refused", Category: "expected", Code: "authentication_busy", Fields: map[string]string{"claimedAccount": boundedLoginName(request.ID)}})
+		logLogin("AUTHENTICATION_BUSY", http.StatusTooManyRequests)
 		w.Header().Set("Retry-After", "6")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{
 			"ok": false, "nativeTitleStatus": 5,
@@ -369,14 +381,23 @@ handleShardRequest
 ================
 */
 func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request) {
+	// Each local refusal and each refusal the GameWorld answers writes one
+	// line (refusal_log.go); the account is the verified session's.
+	account, shardID := "", ""
+	refuse := func(status int, code, message string) {
+		server.logRefusal(r, refusal{Route: r.URL.Path, Code: code, Status: status, Account: account,
+			Shard: shardID, Kind: requestRefusedKind})
+		http.Error(w, message, status)
+	}
 	claims, ok := server.bearerClaims(r)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		refuse(http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
 		return
 	}
+	account, shardID = claims.AccountID, claims.ShardID
 	definition, ok := server.catalog.Resolve(claims.ShardID)
 	if !ok || !definition.Enabled {
-		http.Error(w, "shard unavailable", http.StatusServiceUnavailable)
+		refuse(http.StatusServiceUnavailable, "SHARD_UNAVAILABLE", "shard unavailable")
 		return
 	}
 	operating := false
@@ -387,18 +408,18 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if !operating {
-		http.Error(w, "shard unavailable", http.StatusServiceUnavailable)
+		refuse(http.StatusServiceUnavailable, "SHARD_OFFLINE", "shard unavailable")
 		return
 	}
 
 	target, err := shardRequestURL(definition.ControlURL, r)
 	if err != nil {
-		http.Error(w, "shard route invalid", http.StatusBadGateway)
+		refuse(http.StatusBadGateway, "SHARD_ROUTE_INVALID", "shard route invalid")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBytes+1))
 	if err != nil || int64(len(body)) > maxRequestBytes {
-		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		refuse(http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE", "request too large")
 		return
 	}
 	request, err := http.NewRequestWithContext(
@@ -408,7 +429,7 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		http.Error(w, "shard request failed", http.StatusBadGateway)
+		refuse(http.StatusBadGateway, "SHARD_FAILED", "shard request failed")
 		return
 	}
 	request.Header.Set("Authorization", r.Header.Get("Authorization"))
@@ -419,14 +440,18 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 	}
 	response, err := server.client.Do(request)
 	if err != nil {
-		http.Error(w, "shard unavailable", http.StatusBadGateway)
+		refuse(http.StatusBadGateway, "SHARD_UNREACHABLE", "shard unavailable")
 		return
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil || int64(len(responseBody)) > maxResponseBytes {
-		http.Error(w, "invalid shard response", http.StatusBadGateway)
+		refuse(http.StatusBadGateway, "SHARD_RESPONSE_INVALID", "invalid shard response")
 		return
+	}
+	if code, refused := relayedRefusalCode(response.StatusCode, responseBody); refused {
+		server.logRefusal(r, refusal{Route: r.URL.Path, Code: code, Status: response.StatusCode, Account: account,
+			Shard: shardID, Kind: requestRefusedKind, Source: "gameworld"})
 	}
 	if contentType := response.Header.Get("Content-Type"); contentType != "" {
 		w.Header().Set("Content-Type", contentType)

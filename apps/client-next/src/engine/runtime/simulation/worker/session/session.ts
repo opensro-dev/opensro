@@ -96,7 +96,7 @@ mintWorldToken
 		);
 	}
 	const incidentQueue: Array<
-		{ body: ClientIncident; apiBase: string; token: string; attempts: number; next: number; }
+		{ body: ClientIncident; apiBase: string; token: string | undefined; attempts: number; next: number; }
 	> = [];
 	let incidentSending = false;
 	const incidentDelivery = new Map<string, "pending" | "sent" | "failed">();
@@ -105,16 +105,20 @@ mintWorldToken
 reportIncident
 
 Bounded retries retain the reporting identity. Reports never block gameplay.
+Before login there is no identity: the report goes to the Agent the title
+listed servers from, with no bearer, and the Agent keeps it as a pre-login
+report (client_incident.go) instead of it being lost.
 ================
 	*/
 	function reportIncident( incident: ClientIncident ) {
-		if ( !identity ) return;
+		const apiBase = identity?.apiBase ?? browserBase;
+		if ( !apiBase ) return;
 		if ( incidentQueue.length >= INCIDENT_QUEUE_LIMIT ) return;
 		const build = new URL( import.meta.url ).pathname.split( "/" ).at( -1 )?.slice( 0, 64 ) ?? "development";
 		incidentQueue.push( {
 			body: { ...incident, build },
-			apiBase: identity.apiBase,
-			token: identity.token,
+			apiBase,
+			token: identity?.token,
 			attempts: 0,
 			next: 0
 		} );

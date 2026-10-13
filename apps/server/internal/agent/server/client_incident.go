@@ -25,7 +25,9 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/platform/history"
+	"opensro.online/server/internal/security/auth"
 	"regexp"
 	"strings"
 
@@ -34,6 +36,9 @@ import (
 
 const (
 	clientIncidentPath = "/client/incident"
+	// anonymousIncidentAccount names the account of a report sent before
+	// login in its log line.
+	anonymousIncidentAccount = "(before login)"
 	// Bounds on what one report may carry. A frame larger than the dump
 	// bound is cut there; the client reports its full length separately.
 	maxIncidentMessage   = 500
@@ -216,11 +221,19 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	// A report with no Authorization header comes from before login (the
+	// title, server list or login screen): it is kept as anonymous and
+	// paced per client address. A report that presents a session must
+	// present a live one; it is never downgraded to anonymous.
+	anonymous := r.Header.Get("Authorization") == ""
 	claims, ok := server.bearerClaims(r)
 	definition, live := server.liveSession(claims)
-	if !ok || !live {
+	if !anonymous && (!ok || !live) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"ok": false, "code": "UNAUTHORIZED"})
 		return
+	}
+	if anonymous {
+		claims, definition = auth.AgentSessionClaims{}, shard.Definition{}
 	}
 	// The body is bounded (decodeJSON), so it is read before pacing: a
 	// degraded report draws on its own allowance, and the cosmetic reports
@@ -232,11 +245,14 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 	} else {
 		reason = incident.problem()
 	}
-	pace := server.incidentReports
+	pace, paceKey := server.incidentReports, "account/"+claims.AccountID
 	if reason == "" && incident.Kind == "degraded" {
 		pace = server.degradedReports
 	}
-	if !pace.Allow("account/" + claims.AccountID) {
+	if anonymous {
+		pace, paceKey = server.anonymousIncidents, "anonymous/"+clientIP(r)
+	}
+	if !pace.Allow(paceKey) {
 		w.Header().Set("Retry-After", "6")
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "code": "RATE_LIMITED"})
 		return
@@ -323,6 +339,12 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	fields["account"] = claims.AccountID
+	if anonymous {
+		// No account exists yet; the keyed client tag tells one player's
+		// repeated pre-login failures apart without naming an address.
+		fields["account"] = anonymousIncidentAccount
+		fields["client"] = server.clientTag(r)
+	}
 	log.WithFields(fields).Warn("agent: client incident")
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
 }
