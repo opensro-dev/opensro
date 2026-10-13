@@ -80,7 +80,7 @@ class PinnedUploadTests(unittest.TestCase):
 				data_release.send(archive, "sro-stage@release.example", Path("key"), run)
 			command = seen[0]
 			self.assertEqual(command[:3], ["ssh", "-F", "none"])
-			for option in ("UserKnownHostsFile=" + str(known), "GlobalKnownHostsFile=none", "StrictHostKeyChecking=yes",
+			for option in ('UserKnownHostsFile="' + str(known) + '"', "GlobalKnownHostsFile=none", "StrictHostKeyChecking=yes",
 				"IdentityAgent=none", "IdentitiesOnly=yes", "ProxyCommand=relay %h %p"):
 				self.assertIn(option, command)
 			self.assertEqual(command[-1], "sro-stage@release.example")

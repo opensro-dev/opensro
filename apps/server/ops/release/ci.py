@@ -72,10 +72,14 @@ def credential_file(directory, text_variable, file_variable, mode):
 # shell string around ssh itself.
 # ================
 def ssh_options(key, known):
+	# UserKnownHostsFile takes a space-separated list: a path with spaces (the
+	# operator's checkout) must be quoted, and a quote in it is refused.
+	if '"' in str(known):
+		raise ValueError("the known_hosts path cannot contain a double quote")
 	options = ["-F", "none", "-T",
 		"-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none",
 		"-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
-		"-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + str(known),
+		"-o", "StrictHostKeyChecking=yes", "-o", 'UserKnownHostsFile="' + str(known) + '"',
 		"-o", "GlobalKnownHostsFile=none", "-o", "UpdateHostKeys=no",
 		"-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
 	proxy = os.environ.get("RELEASE_SSH_PROXY_COMMAND", "").strip()

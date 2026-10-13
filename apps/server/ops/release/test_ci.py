@@ -187,7 +187,7 @@ class TransportTests(unittest.TestCase):
 			seen["argv"] = argv
 			seen["key"] = Path(argv[argv.index("-i") + 1]).read_text()
 			known = next(value for value in argv if value.startswith("UserKnownHostsFile="))
-			seen["known"] = Path(known.split("=", 1)[1]).read_text()
+			seen["known"] = Path(known.split("=", 1)[1].strip('"')).read_text()
 			return ci.subprocess.CompletedProcess(argv, 0, stdout='noise\n{"candidate": "x"}\n')
 
 		with patch.object(ci.subprocess, "run", side_effect=fake_run):
@@ -221,7 +221,7 @@ class TransportTests(unittest.TestCase):
 			seen = self.transfer()
 		argv = seen["argv"]
 		self.assertEqual(argv[argv.index("-i") + 1], str(key))
-		self.assertIn("UserKnownHostsFile=" + str(known), argv)
+		self.assertIn('UserKnownHostsFile="' + str(known) + '"', argv)
 		self.assertIn("StrictHostKeyChecking=yes", argv)
 		self.assertEqual(argv[argv.index("ProxyCommand=" + proxy) - 1], "-o")
 		self.assertEqual(argv[-1], "sro-stage@release.example")
