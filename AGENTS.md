@@ -178,6 +178,15 @@ is mechanical (reverse it and reproduce the old hash) before re-freezing.
 Agents work in git worktrees. A worktree shares the built tree and the
 package store, never through a link:
 
+- The main checkout is the hub every worktree shares (the git objects,
+  `.generated`, and the local cluster's `.state` and `.tools`), not a
+  workspace. Agents never edit, pull, check out, reset or build in it. It
+  stays on the `main` branch; only the coordinator moves it, with a
+  deliberate `git pull --ff-only`, when the local stack is rebuilt. A
+  release is built from its own clean freeze checkout, never from the hub.
+  If you moved it by mistake, stop and tell the coordinator: do not try to
+  put it back yourself.
+
 - Built assets: nothing to set. Every resolver (scripts, client, Python, Go
   tests and server) follows the worktree's `.git` file to the main checkout
   and reads its `.generated` and `apps/server/.generated/game-data`. A build
