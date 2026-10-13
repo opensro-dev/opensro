@@ -637,32 +637,6 @@ func EncodePositionGrantAckB65F(jid uint32, role uint8) []byte {
 	return writer.Payload()
 }
 
-// EncodeMemberGrantName3B29 composes the 0x3B29 subOp-6 member delta
-// carrying ONLY the &0x20 string leg:
-// {u8 6}{u32 jid}{u8 0x20}{u16-len ANSI grantName}. Frame layout pinned
-// by the case-6 dispatcher (fold sub_762040 @0x007626e3: u32 jid, u8
-// mask, masked fields in bit order) and the sub_5e9d20 applicator's
-// &0x20 arm (sized read sub_4b1710 @0x005ea0d0). NOTE the applicator's
-// DESTINATION is member+0x04 - the member NAME wstring
-// (sub_4b67f0(src, dst) @0x005ea0e9; the dst-second argument order is
-// proven by sub_768690's use of the same helper @0x0076875b into a
-// local later assigned to +0x40) - NOT the +0x40 grantName slot the
-// actor's ack writes. That asymmetry is the NATIVE contract; receiving
-// rosters render the granted title in the name column until the next
-// full 0x32C4 seed re-converges them. Sent to every online member
-// EXCEPT the granting actor (DECISION: the actor's answer is the ack,
-// whose handler deliberately leaves member+0x04 alone - double-serving
-// the actor would rename their own roster row where native's ack does
-// not).
-func EncodeMemberGrantName3B29(jid uint32, grantName string) []byte {
-	writer := wire.NewWriter(10 + len(grantName))
-	writer.U8(6)
-	writer.U32(jid)
-	writer.U8(0x20)
-	writeGuildString(writer, grantName)
-	return writer.Payload()
-}
-
 // EncodeGpDonateAckB40F composes the 0xB40F success body for the
 // donating actor: {u8 1}{u32 amount}. The u32 is the donated amount -
 // the client handler (sub_766ad0, second host) reads it @0x00766b0b
@@ -741,8 +715,8 @@ func EncodeMemberGrade3B29(jid uint32, grade uint8, permMask uint32) []byte {
 // The applicator's &0x40 arm writes member+0x5c and resolves the
 // UIIT_STT_FORT_GUILD_* title into member+0x60 (fold sub_5e9d20
 // @0x005ea128..; role 0 clears the text) - the same writes the actor's
-// 0xB65F ack performs, so the actor is excluded from this fan-out too
-// (the EncodeMemberGrantName3B29 decision, symmetric). The exclusive
+// 0xB65F ack performs, so the actor is excluded from this fan-out (the
+// ack already wrote its own roster). The exclusive
 // single-bit mask matches the v1.188 emitter posture (sub_5c57c0
 // composes {6, jid, 0x40, role}).
 func EncodeMemberFortressRole3B29(jid uint32, role uint8) []byte {

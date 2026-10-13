@@ -142,21 +142,12 @@ func nameGrantAckOracle(jid uint32, name string) []byte {
 	return p.buf.Bytes()
 }
 
-// nameGrantPushOracle hand-rolls the subOp-6 &0x20 delta:
-// {u8 6}{u32 jid}{u8 0x20}{u16-len ANSI}.
-func nameGrantPushOracle(jid uint32, name string) []byte {
-	p := &mutatorPayload{}
-	p.buf.WriteByte(0x06)
-	p.u32(jid)
-	p.buf.WriteByte(0x20)
-	p.str(name)
-	return p.buf.Bytes()
-}
-
 // TestHandleNameGrantPersistsAndAnswers pins the leader's success path
-// on a level-4 guild: the 0xB2BC ack and the subOp-6 &0x20 delta match
-// the hand-rolled oracles, the fan-out names EXCLUDE the acting
-// granter, and the store's member row carries the granted title.
+// on a level-4 guild: the 0xB2BC ack matches the hand-rolled oracle, the
+// other members are re-seeded with the guild block (never the subOp-6
+// &0x20 delta, which the v1.150 client applies to the member NAME), the
+// fan-out names EXCLUDE the acting granter, and the store's member row
+// carries the granted title under its unchanged name.
 func TestHandleNameGrantPersistsAndAnswers(t *testing.T) {
 	t.Parallel()
 	deps, _, alfa, _, guildID := newTwoMemberGuildFixture(t)
@@ -169,8 +160,12 @@ func TestHandleNameGrantPersistsAndAnswers(t *testing.T) {
 	if want := nameGrantAckOracle(mutatorBerkJID, "Warden"); !bytes.Equal(outcome.AckPayload, want) {
 		t.Errorf("0xB2BC = % X, want % X", outcome.AckPayload, want)
 	}
-	if want := nameGrantPushOracle(mutatorBerkJID, "Warden"); !bytes.Equal(outcome.PushPayload, want) {
-		t.Errorf("subOp-6 &0x20 = % X, want % X", outcome.PushPayload, want)
+	if outcome.PushPayload != nil || !outcome.Reseed {
+		t.Errorf("push = % X, reseed = %v; want no member delta and a 0x32C4 re-seed", outcome.PushPayload, outcome.Reseed)
+	}
+	seeded, ok := memberRowByJID(outcome.Members, mutatorBerkJID)
+	if !ok || seeded.GrantName != "Warden" || seeded.Name != "Berk" {
+		t.Errorf("re-seeded row = %+v (found=%v), want Berk granted Warden", seeded, ok)
 	}
 	if len(outcome.MemberNames) != 1 || outcome.MemberNames[0] != "Berk" {
 		t.Errorf("MemberNames = %v, want [Berk] (the actor is excluded)", outcome.MemberNames)

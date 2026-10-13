@@ -157,19 +157,21 @@ func TestGuildBreakAndGrantsEndToEndOverWire(t *testing.T) {
 	if got := guildExpectFrame(t, connGolf, guild.OpGuildNameGrantAck, "granter's 0xB2BC"); !bytes.Equal(got, wantB2BC.Bytes()) {
 		t.Fatalf("0xB2BC = % X, want % X", got, wantB2BC.Bytes())
 	}
-	wantNameDelta := &bytes.Buffer{}
-	wantNameDelta.WriteByte(0x06)
-	binary.Write(wantNameDelta, binary.LittleEndian, hotelJID)
-	wantNameDelta.WriteByte(0x20)
-	mutE2ESized(wantNameDelta, "Warden")
-	if got := guildExpectFrame(t, connHotel, guild.OpGuildUpdatePush, "target's subOp-6 &0x20"); !bytes.Equal(got, wantNameDelta.Bytes()) {
-		t.Fatalf("target's 0x3B29 = % X, want % X", got, wantNameDelta.Bytes())
+	// The target is re-seeded with the guild block, which carries its
+	// own name and the new title side by side; a subOp-6 &0x20 delta
+	// would have renamed it to the title in the v1.150 roster.
+	grantedRow := &bytes.Buffer{}
+	mutE2ESized(grantedRow, "Warden")
+	ownName := &bytes.Buffer{}
+	mutE2ESized(ownName, grantE2ENameH)
+	if got := guildExpectFrame(t, connHotel, guild.OpGuildInfo, "target's 0x32C4 re-seed"); !bytes.Contains(got, grantedRow.Bytes()) || !bytes.Contains(got, ownName.Bytes()) {
+		t.Fatalf("target's 0x32C4 = % X, want its name and the Warden title", got)
 	}
 
 	guildSendFrame(t, connGolf, guild.OpGuildPositionGrantRequest, grantE2EPositionGrantPayload(hotelJID, 0x10))
 	// The actor-exclusion witness: G's very NEXT frame is the 0xB65F
-	// ack - guildExpectFrame fails loud had the &0x20 delta landed on
-	// the granter too.
+	// ack - guildExpectFrame fails loud had the re-seed landed on the
+	// granter too.
 	wantB65F := &bytes.Buffer{}
 	wantB65F.WriteByte(0x01)
 	binary.Write(wantB65F, binary.LittleEndian, hotelJID)

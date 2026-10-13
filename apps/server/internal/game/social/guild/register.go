@@ -8,6 +8,8 @@ register.go - register
 package guild
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/restriction"
@@ -179,8 +181,8 @@ func Register(hub *transport.Hub, deps Dependencies, presence Presence, managers
 			return
 		}
 		_ = s.Send(OpGuildNameGrantAck, outcome.AckPayload)
-		sendToOnlineMembers(presence, divisionID, outcome.MemberNames, outcome.PushPayload)
-		log.Debugf("guild: %s granted a title to %s (0xB2BC acked; subOp-6 &0x20 fanned to %d named member(s))", actor.Name, outcome.TargetName, len(outcome.MemberNames))
+		reseedOnlineMembers(presence, divisionID, outcome)
+		log.Debugf("guild: %s granted a title to %s (0xB2BC acked; 0x32C4 re-seeded %d named member(s))", actor.Name, outcome.TargetName, len(outcome.MemberNames))
 	})
 	hub.Handle(OpGuildPositionGrantRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
@@ -245,6 +247,27 @@ func sendToOnlineMembers(presence Presence, divisionID string, names []string, p
 	for _, name := range names {
 		if peer, online := presence.SessionByName(divisionID, name); online {
 			_ = peer.Send(OpGuildUpdatePush, payload)
+		}
+	}
+}
+
+/*
+================
+reseedOnlineMembers
+
+Sends the grant outcome's full 0x32C4 guild block to each named online
+member. The block's offline flags are read at encode time, once for all.
+================
+*/
+func reseedOnlineMembers(presence Presence, divisionID string, outcome grantOutcome) {
+	if presence == nil || !outcome.Reseed {
+		return
+	}
+	online := func(name string) bool { return presence.OnlineByName(divisionID, name) }
+	seed := EncodeGuildInfo32C4(outcome.Guild, outcome.Members, online, time.Now().UnixMilli())
+	for _, name := range outcome.MemberNames {
+		if peer, ok := presence.SessionByName(divisionID, name); ok {
+			_ = peer.Send(OpGuildInfo, seed)
 		}
 	}
 }

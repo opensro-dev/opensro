@@ -194,11 +194,6 @@ func TestEncodeGrantFrames(t *testing.T) {
 		t.Errorf("0xB65F = % X, want % X", got, wantB65F)
 	}
 
-	wantName := append(append([]byte{0x06}, jidLE...), 0x20, 0x04, 0x00, 'W', 'a', 'r', 'd')
-	if got := EncodeMemberGrantName3B29(jid, "Ward"); !bytesEqual(got, wantName) {
-		t.Errorf("subOp-6 &0x20 = % X, want % X", got, wantName)
-	}
-
 	wantRole := append(append([]byte{0x06}, jidLE...), 0x40, 0x10)
 	if got := EncodeMemberFortressRole3B29(jid, 0x10); !bytesEqual(got, wantRole) {
 		t.Errorf("subOp-6 &0x40 = % X, want % X", got, wantRole)

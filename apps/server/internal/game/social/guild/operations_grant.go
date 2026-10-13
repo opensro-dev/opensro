@@ -26,16 +26,19 @@ const (
 
 // grantOutcome is one handled grant request (0x72BC / 0x765F share the
 // shape). AckPayload is the second-host answer for the GRANTING ACTOR
-// ONLY (0xB2BC / 0xB65F); PushPayload is the 0x3B29 subOp-6 delta for
-// every ONLINE member named in MemberNames - the member list EXCLUDING
-// the actor (the actor's answer is the ack; the wire.go encoder
-// comments carry the exclusion decision). EVERY refusal stays fully
+// ONLY (0xB2BC / 0xB65F). The other ONLINE members named in MemberNames
+// (the member list EXCLUDING the actor, whose answer is the ack) get
+// PushPayload, a 0x3B29 subOp-6 delta, or - when Reseed is set - the
+// full 0x32C4 guild block of Guild and Members. EVERY refusal stays fully
 // silent - deliberately no ErrorPayload slot: the pinned grant codes
 // (0x4D/0x52, 0x58-0x5D) live at client-LOCAL call sites, so a server
 // trigger->code mapping onto result=2 would be invented.
 type grantOutcome struct {
 	AckPayload  []byte
 	PushPayload []byte
+	Reseed      bool
+	Guild       enterworld.GuildRecord
+	Members     []enterworld.GuildMemberRecord
 	MemberNames []string
 	TargetName  string
 	Refusal     string
@@ -48,8 +51,18 @@ func refusedGrant(reason string) grantOutcome {
 // HandleNameGrant applies one decoded 0x72BC request through
 // UpdateGuildAs (single-plane member-row update - no FK moves, the
 // notice-edit atomic unit): persist the granted title on the target's
-// GrantName field, answer 0xB2BC to the actor, fan the subOp-6 &0x20
-// delta to the other online members. Beyond the shared leader gate the
+// GrantName field, answer 0xB2BC to the actor, and re-seed the other
+// online members with the full 0x32C4 guild block.
+//
+// The v1.150 member delta has no grant-name arm: CIFGuildMember_
+// OnMemberUpdated (5E9D20) reads mask 0x20 as an ASCII string into the
+// member NAME (+0x04), and 0x40 is the fortress role. Sending the title
+// there renamed the grantee in every roster ("why is my name Bubu?") and
+// broke their own [Guild * title] board, which finds the member by name.
+// 0x32C4 carries each member's grant name (+0x40) and the client already
+// takes it mid-session (a guild join re-seeds the joiner). Characters in
+// view keep the title their spawn row carried (ICUser +0x78C is written
+// only by the 0x30D7 parse) until they next come into view, as native. Beyond the shared leader gate the
 // guild must be level GuildNameGrantMinLevel+ (the pinned client arm),
 // and the title must be non-empty and within GrantNameMaxBytes (the
 // documented DECISION cap - the native charset walk 0x4D is a
@@ -117,7 +130,9 @@ func HandleNameGrant(deps Dependencies, divisionID string, actor *enterworld.Cha
 	}
 	return grantOutcome{
 		AckPayload:  EncodeNameGrantAckB2BC(target.JID, request.GrantName),
-		PushPayload: EncodeMemberGrantName3B29(target.JID, request.GrantName),
+		Reseed:      true,
+		Guild:       snapshot.Guild,
+		Members:     snapshot.Members,
 		MemberNames: memberNamesExcept(snapshot.Members, actor.ID),
 		TargetName:  target.Name,
 	}
