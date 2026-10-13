@@ -500,7 +500,6 @@ import { createGuideResources } from "./guide/resources";
 import { automaticGuide } from "@/engine/foundation/gameplay/guide";
 import {
 	loadingArtDemand,
-	loadingArtHeld,
 	missionLoadingQuads,
 	loadingScreenQuads,
 	regionLoadingBackground,
@@ -855,11 +854,6 @@ export function createUi(
 	// A restart, exit or logout was asked for: character select or the title
 	// follows after the server's countdown, so their loading art is warmed.
 	let leaveRequested = false;
-	// The loading screen whose art is being waited for, and since when.
-	let loadingHoldKey: string | null = null, loadingHoldSince = 0;
-	// Whether a world frame was on screen when that loading screen began: only
-	// then is there a frame to hold (a first world entry has none).
-	let loadingHoldWorld = false;
 	/*
 	================
 	takeLoadingVariant
@@ -8847,23 +8841,7 @@ export function createUi(
 				now,
 				phase === "disconnected" || next.frontend?.phase === "failed"
 			);
-			if ( (loading?.key ?? null) !== loadingHoldKey ) {
-				loadingHoldKey = loading?.key ?? null;
-				loadingHoldSince = now;
-				loadingHoldWorld = phase === "world" && next.worldReady || retainedWorld;
-			}
-			// Art not decoded yet: hold the retained world frame, as native's
-			// synchronous load does, while the background is demanded below.
-			const artHeld = !!loading && loadingArtHeld( {
-				background: loading.background,
-				startup: loading.startup,
-				resident: loading.background !== null && resources.has( loading.background ),
-				worldShown: loadingHoldWorld,
-				heldForMs: now - loadingHoldSince
-			} );
-			if ( artHeld ) paths.push( loading!.background! );
-			const shown = artHeld ? null : loading;
-			const worldVisible = (phase === "world" || retainedWorld) && !shown && next.worldReady &&
+			const worldVisible = (phase === "world" || retainedWorld) && !loading && next.worldReady &&
 				(!next.frontend || next.frontend.phase === "world");
 			if ( !(phase === "world" || retainedWorld) ) windowWarm.reset();
 			// One unseen window build per idle frame; see window-warm.ts.
@@ -8892,9 +8870,9 @@ export function createUi(
 					}
 				}
 			}
-			if ( shown ) {
+			if ( loading ) {
 				blocks.push( full );
-				if ( shown.startup && next.frontend ) {
+				if ( loading.startup && next.frontend ) {
 					const output = title.render(
 						next.frontend,
 						w,
@@ -8921,11 +8899,11 @@ export function createUi(
 					);
 					paths.push( ...output.paths );
 				}
-				if ( !shown.startup ) {
-					const output = loadingScreenQuads( w, h, shown.background ?? "", shown.progress ).filter( (
+				if ( !loading.startup ) {
+					const output = loadingScreenQuads( w, h, loading.background ?? "", loading.progress ).filter( (
 						_,
 						i
-					) => i !== 1 || shown.background !== null );
+					) => i !== 1 || loading!.background !== null );
 					quads.push( ...output );
 					paths.push( ...output.map( q => q.texture ).filter( Boolean ) );
 				}
@@ -21647,7 +21625,7 @@ export function createUi(
 			probe?.detailEnd( "ui-assembly" );
 			probe?.detailBegin( "ui-finalize" );
 			const semantics = {
-				loadingVisible: !!shown && !assetFailure,
+				loadingVisible: !!loading && !assetFailure,
 				// The DOM tools keep their own row beside the map, below combat chrome.
 				hudCorner: compact ?
 					[ w, itemMall.read().visible ? 52 : compactTelemetryTop, 0, 0 ] as UiRect :
