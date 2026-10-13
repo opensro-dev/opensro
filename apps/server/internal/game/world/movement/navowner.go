@@ -461,13 +461,8 @@ terrainOutlineEntry
 */
 func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*objectDeckStand, float64, float64) {
 	const eps = 1e-9
-	start := globalTile{x: int(math.Floor(ax / simulation.NativeRegionSize)), z: int(math.Floor(az / simulation.NativeRegionSize))}
-	end := globalTile{x: int(math.Floor(bx / simulation.NativeRegionSize)), z: int(math.Floor(bz / simulation.NativeRegionSize))}
-	sectors := map[globalTile]struct{}{start: {}, end: {}}
-	v.walkChord(ax, az, bx, bz, simulation.NativeRegionSize, start, end, func(sector globalTile, _ float64) bool {
-		sectors[sector] = struct{}{}
-		return false
-	})
+	var sectorBuf [8]globalTile
+	sectors := v.chordSectors(sectorBuf[:], ax, az, bx, bz)
 	// A few sets per crossed sector: a scan of a stack array, not a map
 	// that allocated its buckets on every chord.
 	var checkedBuf [32]objectNavSetKey
@@ -540,7 +535,7 @@ func (v *WaterValidator) terrainOutlineEntry(ax, az, bx, bz, tMin float64) (*obj
 			}
 		}
 	}
-	for sector := range sectors {
+	for _, sector := range sectors {
 		if sector.x < 0 || sector.z < 0 || sector.x > 0xff || sector.z > 0xff {
 			continue
 		}
