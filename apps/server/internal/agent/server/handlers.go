@@ -394,7 +394,9 @@ func (server *Server) handleShardRequest(w http.ResponseWriter, r *http.Request)
 		refuse(http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
 		return
 	}
-	account, shardID = claims.AccountID, claims.ShardID
+	// The line names the stored account the verified session resolves to
+	// (loggableAccount), never anything read from the header itself.
+	account, shardID = server.loggableAccount(claims.AccountID), server.loggableShard(claims.ShardID)
 	definition, ok := server.catalog.Resolve(claims.ShardID)
 	if !ok || !definition.Enabled {
 		refuse(http.StatusServiceUnavailable, "SHARD_UNAVAILABLE", "shard unavailable")
