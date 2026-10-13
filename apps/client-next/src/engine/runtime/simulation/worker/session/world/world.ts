@@ -583,7 +583,12 @@ step
 				pingMs = nextPing;
 				revision++;
 			}
-			if ( phase === "world" && !failure ) {
+			// The world advances only once the scene is ready (0x3012 sent). On
+			// the loading screen the native loop is frozen, so nothing automatic
+			// (an auto-potion, a skill queue, a pet order) can send a request
+			// the server, still loading the scene, would discard unanswered.
+			const live = phase === "world" && ready && !failure;
+			if ( live ) {
 				try {
 					departure.step( now );
 					core.step( now );
@@ -607,7 +612,7 @@ step
 				}
 			}
 			reportDegradations();
-			if ( phase !== "world" || failure ) {
+			if ( !live || failure ) {
 				try {
 					core.step( now, false );
 				} catch ( error ) {

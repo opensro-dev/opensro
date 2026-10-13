@@ -187,6 +187,7 @@ function automatic() {
 			quickSlots: [ { slot: 1, kind: 0x46, payload: 2 } ]
 		}
 	} );
+	game.worldReady();
 	game.seed( local );
 	return { game, sent, local };
 }

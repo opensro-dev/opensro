@@ -231,6 +231,7 @@ test("gameplay commits a downgrade once and ignores a duplicate ambiguous receip
 			ui: row
 		}) )
 	} );
+	owner.worldReady();
 	owner.seed( {
 		gid: 1,
 		refObjId: 1,

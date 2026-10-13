@@ -391,6 +391,8 @@ func TestItemUseResumePublishesCommittedReceiptBeforeBootstrap(t *testing.T) {
 			if got := publicationBootstrapQuantity(t, h.enter(t, old)); got != 50 {
 				t.Fatalf("initial = %d", got)
 			}
+			// A client uses an item only once its scene is ready (0x3012).
+			h.ready(t, old)
 			armed.Store(true)
 			old.in <- transport.Frame{Opcode: wire.OpItemUseRequest, Payload: h.request}
 			select {
@@ -431,6 +433,7 @@ func TestItemUseResumePublishesCommittedReceiptBeforeBootstrap(t *testing.T) {
 			if local != want {
 				t.Fatalf("bootstrap = %d, want %d", local, want)
 			}
+			h.ready(t, current)
 			h.clock.Advance(time.Minute)
 			current.in <- transport.Frame{Opcode: wire.OpItemUseRequest, Payload: h.request}
 			current.in <- transport.Frame{Opcode: publicationFence}
@@ -458,6 +461,8 @@ func TestItemUsePublishedBeforeResumeRemainsConsistent(t *testing.T) {
 			h.rt.Register(h.server.Hub)
 			old, first := h.connect(t, nil)
 			local := publicationBootstrapQuantity(t, h.enter(t, old))
+			// A client uses an item only once its scene is ready (0x3012).
+			h.ready(t, old)
 			old.in <- transport.Frame{Opcode: wire.OpItemUseRequest, Payload: h.request}
 			old.in <- transport.Frame{Opcode: publicationFence}
 			used := publicationReceipt(t, publicationThrough(t, old, publicationFence), 49)
@@ -476,6 +481,7 @@ func TestItemUsePublishedBeforeResumeRemainsConsistent(t *testing.T) {
 			if local != expected {
 				t.Fatalf("bootstrap = %d, want %d", local, expected)
 			}
+			h.ready(t, current)
 			h.clock.Advance(time.Minute)
 			current.in <- transport.Frame{Opcode: wire.OpItemUseRequest, Payload: h.request}
 			current.in <- transport.Frame{Opcode: publicationFence}

@@ -143,6 +143,7 @@ test("gameplay publishes receipt timers and automatic use observes the same owne
 			quickSlots: [ { slot: 1, kind: 0x46, payload: 1 } ]
 		}
 	} );
+	g.worldReady();
 	g.seed( local );
 	g.receive( { opcode: 0x33a6, payload: Uint8Array.of( 1, 0, 0, 0, 0, 0, 2, 10, 0, 0, 0 ) }, 0 );
 	g.step( 0, local );

@@ -403,6 +403,28 @@ sendFrame
 		}
 		return frame;
 	}
+	// Off from a bootstrap until the world is ready (0x3012): the loading
+	// screen, where native runs no game loop. The server discards requests
+	// sent then (hubHandler), so a request a received packet triggers on its
+	// own waits here and leaves on the first tick after loading.
+	let live = false;
+	let deferredSends: { frame: WireFrame; tracked: boolean; }[] = [];
+	/*
+================
+sendWhenLive
+
+A request no command asked for: sent now in the world, held while loading.
+tracked routes it through sendFrame's pickup and press bookkeeping.
+================
+	*/
+	function sendWhenLive( frame: WireFrame, tracked = false ) {
+		if ( !live ) {
+			deferredSends.push( { frame, tracked } );
+			return;
+		}
+		if ( tracked ) sendFrame( frame );
+		else send( frame );
+	}
 	/*
 ================
 sendSkillPress
@@ -731,6 +753,10 @@ reuse gate as manual activation. Recovery completion is server-owned.
 ================
 	*/
 	function checkAutomaticPotion( kind: 0 | 1 | 2, now: number, event: "vitals" | "timer" ) {
+		// An item use opens an inventory transaction with a deadline: none
+		// starts on the loading screen. The server pushes vitals at game-ready,
+		// which re-evaluates every channel once the world is live.
+		if ( !live ) return;
 		const result = checkAutoPotionTimer( potionTimers[kind], {
 			kind,
 			settings: autoPotion,
@@ -1052,6 +1078,8 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 ================
 		*/
 		bootstrap( value: unknown, continued = false, receivedAtMs = 0 ) {
+			live = false;
+			deferredSends = [];
 			pickup.clear();
 			cosPickup.clear();
 			approach = interactionApproachTransition( approach, { kind: "cancel" } );
@@ -2733,7 +2761,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							kind: "party-match-join",
 							id: id!
 						}, now );
-						if ( continuation.frame ) send( continuation.frame );
+						if ( continuation.frame ) sendWhenLive( continuation.frame );
 						partyMatching = continuation.state;
 					} else partyMatching = matched;
 					dirty = true;
@@ -3081,7 +3109,9 @@ Packet handling must not depend on which HUD panel is currently open.
 						((social.invitation.type === 1 && !options.exchangeRequests) ||
 							([ 2, 3 ].includes( social.invitation.type ) && !options.partyInvites))
 					) {
-						send( socialRequest( social, { kind: "social-consent", accept: false, automatic: true } ) );
+						sendWhenLive(
+							socialRequest( social, { kind: "social-consent", accept: false, automatic: true } )
+						);
 						social = { ...social, invitation: null };
 					}
 					dirty = true;
@@ -3119,7 +3149,7 @@ Packet handling must not depend on which HUD panel is currently open.
 							for ( const slot of nextBindings.quickSlots ) {
 								const previous = bindings.quickSlots.find( row => row.slot === slot.slot );
 								if ( previous?.kind !== slot.kind || previous.payload !== slot.payload ) {
-									send( quickSlotPacket( slot ) );
+									sendWhenLive( quickSlotPacket( slot ) );
 								}
 							}
 							bindings = nextBindings;
@@ -3190,7 +3220,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					// affected slot, including the extended bar, through 7541.
 					for ( const row of bindings.quickSlots ) {
 						if ( row.kind === 0x49 && replaced.has( row.payload ) ) {
-							send( quickSlotPacket( { ...row, payload: id } ) );
+							sendWhenLive( quickSlotPacket( { ...row, payload: id } ) );
 						}
 					}
 					bindings = {
@@ -3321,7 +3351,7 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( cosPickup.result( cosResult, now ) ) {
 						const record = cosRecords.get( cosResult.gid );
 						if ( record && !record.dead && record.hp && record.commandMode !== undefined ) {
-							sendFrame( cosBehaviorRequest( record, record.commandMode & ~0x80 ) );
+							sendWhenLive( cosBehaviorRequest( record, record.commandMode & ~0x80 ), true );
 						}
 					}
 					dirty = true;
@@ -3528,7 +3558,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						}) );
 						const assist = petAssistOrders( cast.target, pets, petAssists );
 						petAssists = assist.assisting;
-						for ( const order of assist.orders ) sendFrame( order );
+						for ( const order of assist.orders ) sendWhenLive( order, true );
 					}
 				}
 				if (
@@ -4080,6 +4110,8 @@ World transfer retires spatial work while retaining character/session data.
 ================
 		*/
 		resetWorld() {
+			live = false;
+			deferredSends = [];
 			actionSession.clear();
 			pickup.clear();
 			cosPickup.clear();
@@ -4131,8 +4163,24 @@ reset
 ================
 		*/
 		reset() {
+			live = false;
+			deferredSends = [];
 			clearState();
 			dirty = true;
+		},
+		/*
+================
+worldReady
+
+The loading screen retired (0x3012 sent): requests held while loading
+leave in the order their packets raised them.
+================
+		*/
+		worldReady() {
+			live = true;
+			const held = deferredSends;
+			deferredSends = [];
+			for ( const row of held ) sendWhenLive( row.frame, row.tracked );
 		},
 		/*
 ================

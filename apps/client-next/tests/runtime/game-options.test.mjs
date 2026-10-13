@@ -96,6 +96,7 @@ test("warnings use strict float threshold, no zero-health warning", () => {
 	assert.equal( vitalWarning( 1, 0 ), false );
 	const sounds = [], g = createGameplay( () => {}, ( key, at ) => sounds.push( [ key, at ] ) );
 	g.bootstrap( { character: { hp: 29, mp: 20, maxHp: 100, maxMp: 100 } } );
+	g.worldReady();
 	g.seed( local );
 	g.options( options );
 	g.step( 1, local );
@@ -114,6 +115,7 @@ test("warnings use strict float threshold, no zero-health warning", () => {
 test("party and exchange options dispatch different native refusal packets", () => {
 	const sent = [], g = createGameplay( f => sent.push( f ) );
 	g.bootstrap( {} );
+	g.worldReady();
 	g.seed( local );
 	g.options( { ...options, partyInvites: false, exchangeRequests: false } );
 	for ( const [type, extra, want] of [ [ 1, [], [ 1, 0 ] ], [ 2, [ 3 ], [ 2, 12 ] ], [ 3, [ 4 ], [ 2, 23 ] ] ] ) {
@@ -133,6 +135,7 @@ test("party and exchange options dispatch different native refusal packets", () 
 test("GM eligibility resets and beginner gate uses maximum attained level", () => {
 	const sent = [], g = createGameplay( f => sent.push( f ) );
 	g.bootstrap( { character: { gmPrivilege: true, pcRoomEvent: true, level: 18, maxLevel: 20 } } );
+	g.worldReady();
 	g.seed( local );
 	assert.equal( g.take().eligibility.gm, true );
 	assert.equal( g.command( { kind: "beginner-mark", enabled: true }, 0, undefined, local ), null );
@@ -147,6 +150,7 @@ test("GM eligibility resets and beginner gate uses maximum attained level", () =
 test("Helper status toggles the helper mark and keeps the beginner mark", () => {
 	const sent = [], g = createGameplay( f => sent.push( f ) );
 	g.bootstrap( { character: { level: 30 } } );
+	g.worldReady();
 	g.seed( local );
 	// 695420 action 1011: flip +0x779 bit 1, send the whole byte in 0x7683.
 	g.command( { kind: "helper-mark" }, 0, undefined, { ...local, visualFlags: 1 } );
@@ -178,6 +182,7 @@ test("startup disables warnings and every overhead status category; Reset remain
 	assert.equal( quickStatus( other, local, game, initial ), null );
 	const sounds = [], g = createGameplay( () => {}, key => sounds.push( key ) );
 	g.bootstrap( { character: { hp: 29, mp: 20, maxHp: 100, maxMp: 100 } } );
+	g.worldReady();
 	g.seed( local );
 	g.step( 1, local );
 	assert.deepEqual( sounds, [] );
@@ -217,4 +222,33 @@ test("a peer rider's board range follows its ride, not where it mounted", () => 
 	// 85F58E: with no resolvable ride the rider's own row places the board.
 	assert.equal( riderBoardPosition( rider, undefined ), rider );
 	assert.equal( riderBoardPosition( { ...rider, mountedOn: undefined }, ride ).x, 1000 );
+});
+/*
+================
+loading screen holds automatic requests
+
+A request a packet raises on its own while the loading screen is up (here
+the options' automatic refusal) leaves on the first tick of the live world,
+not while the server still loads the scene and would discard it unanswered.
+================
+*/
+test("the loading screen holds an automatic refusal until the world is ready", () => {
+	const sent = [], g = createGameplay( f => sent.push( f ) );
+	g.bootstrap( {} );
+	g.seed( local );
+	g.options( { ...options, partyInvites: false, exchangeRequests: false } );
+	assert.equal( g.receive( packet( 1, [] ), 0 ), true );
+	assert.equal( g.take().social.invitation, null, "the invitation is refused at once" );
+	assert.equal( sent.length, 0, "but its refusal waits for the live world" );
+	g.worldReady();
+	assert.deepEqual( sent.map( f => [ ...f.payload ] ), [ [ 1, 0 ] ] );
+	g.worldReady();
+	assert.equal( sent.length, 1, "a held request leaves once" );
+	g.bootstrap( {} );
+	g.receive( packet( 1, [] ), 1 );
+	assert.equal( g.take().social.invitation, null, "the new scene refuses it too" );
+	g.reset();
+	g.worldReady();
+	assert.equal( sent.length, 1, "a reset drops what the old scene held" );
+	g.dispose();
 });

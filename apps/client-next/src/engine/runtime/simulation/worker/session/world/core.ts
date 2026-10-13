@@ -481,6 +481,7 @@ Retail 0x72902a restores destination mode after the loading UI retires.
 			pendingTravel = null;
 			loadingMode = 2;
 			gameplay.enterMusic();
+			gameplay.worldReady();
 		},
 		/*
 ================

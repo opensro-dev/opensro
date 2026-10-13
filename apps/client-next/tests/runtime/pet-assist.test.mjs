@@ -53,6 +53,7 @@ function withPet( mode ) {
 			{ id: BUFF_SKILL, group: 2, level: 1, status: false, effectRider: false }
 		]
 	} );
+	gameplay.worldReady();
 	gameplay.seed( LOCAL );
 	const record = new Uint8Array( 39 ), view = new DataView( record.buffer );
 	view.setUint32( 0, PET, true );

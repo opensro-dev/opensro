@@ -160,6 +160,7 @@ test("learned upgrades migrate hotbar once and self-target metadata overrides se
 		},
 		refSkillSnapshot: [ row( 7, 1 ), row( 8, 2 ) ]
 	} );
+	g.worldReady();
 	g.seed( { gid: 1, regionId: 257, x: 0, y: 0, z: 0, heading: 0 } );
 	g.command( { kind: "skill-train", id: 8 }, 0 );
 	assert.deepEqual( defined( g.take() ).skills, [ 7 ] );

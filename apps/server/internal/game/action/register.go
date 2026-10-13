@@ -131,13 +131,23 @@ opFunc
 */
 type opFunc func(divisionID string, character *enterworld.Character, payload []byte) OpResult
 
-// hubHandler adapts a runtime operation onto the hub: resolve the bound
-// character (never trust client-supplied names on later frames), run the op,
-// answer the acting session, and fan the broadcast frames to source observers
-// - the origin excluded, it already holds its own burst.
 /*
 ================
 hubHandler
+
+Adapts a runtime operation onto the hub: resolve the bound character
+(never trust client-supplied names on later frames), run the op, answer
+the acting session, and fan the broadcast frames to source observers -
+the origin excluded, it already holds its own burst.
+
+A request that arrives while the session's scene is loading is discarded
+unanswered. Every scene reset (entry, relocation, recall, a return) begins
+loading, and only the client's game-ready (0x3012) ends it; the client
+sends nothing while it loads. Such a request was sent before the client saw
+the reset, so its answer would land in a world that never asked (a mall
+projection after the bootstrap reset the mall: "Unexpected mall
+projection"). A loading PC answers nothing; the client retired the
+request with its bootstrap.
 ================
 */
 func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFunc {
@@ -148,6 +158,11 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 			// a bound actor it cannot fabricate an inventory B06D reply
 			// for those unrelated conversations. Reject before dispatch.
 			log.Debugf("action: 0x%04X from unbound session %d discarded", opcode, s.ID)
+			return
+		}
+		if _, live := s.SceneRevision(); !live {
+			// Info, not debug: a client that sends while loading is a bug to see.
+			log.Infof("action: 0x%04X from %s discarded: the scene is loading", opcode, character.Name)
 			return
 		}
 

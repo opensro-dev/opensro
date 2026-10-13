@@ -72,6 +72,7 @@ test("settings commit only after successful enqueue; bootstrap replaces configur
 			frames.push( f );
 		} );
 	g.bootstrap( {} );
+	g.worldReady();
 	g.seed( { gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 } );
 	const settings = { hp: 0xb211, mp: 0x3212, cure: 0x13, timing: 0x8a };
 	assert.throws( () => g.command( { kind: "auto-potion-save", settings }, 0 ), /closed/ );
@@ -81,6 +82,7 @@ test("settings commit only after successful enqueue; bootstrap replaces configur
 	assert.deepEqual( g.take().autoPotion, settings );
 	assert.equal( frames.length, 1 );
 	g.bootstrap( { character: { autoPotion: { hp: 0, mp: 0, cure: 0, timing: 0 } } } );
+	g.worldReady();
 	assert.deepEqual( g.take().autoPotion, p.defaultAutoPotion() );
 	g.dispose();
 });
@@ -110,6 +112,7 @@ function automatic( options = {} ) {
 		} ],
 		equipItems: [ { slot: 13, refObjId: 1, body: [ 1, 0, 0, 0, 10, 0 ] } ]
 	} );
+	g.worldReady();
 	g.seed( local );
 	return { sent, g, local };
 }

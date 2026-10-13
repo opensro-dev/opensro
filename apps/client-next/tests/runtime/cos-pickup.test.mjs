@@ -24,6 +24,7 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 		equipmentSlotCount: 13,
 		refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ]
 	} );
+	gameplay.worldReady();
 	gameplay.seed( f.frame.local );
 	const record = new Uint8Array( 29 );
 	const view = new DataView( record.buffer );
@@ -87,6 +88,7 @@ test("a pet pickup waits out the pet's approach before it times out", () => {
 		equipmentSlotCount: 13,
 		refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ]
 	} );
+	gameplay.worldReady();
 	gameplay.seed( f.frame.local );
 	const record = new Uint8Array( 29 );
 	const view = new DataView( record.buffer );
@@ -112,6 +114,7 @@ test("pet cancellation retains the record until despawn and rejects foreign owne
 	const sent = [];
 	const gameplay = createGameplay( frame => sent.push( frame ) );
 	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ] } );
+	gameplay.worldReady();
 	gameplay.seed( f.frame.local );
 	const record = new Uint8Array( 28 );
 	const view = new DataView( record.buffer );
@@ -147,6 +150,7 @@ test("ride toggle keeps native state-byte ordering and waits for server authorit
 	const sent = [];
 	const gameplay = createGameplay( frame => sent.push( frame ) );
 	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x11c6 } ] } );
+	gameplay.worldReady();
 	gameplay.seed( f.frame.local );
 	const record = new Uint8Array( 21 );
 	const view = new DataView( record.buffer );
@@ -284,6 +288,7 @@ test("ordinary riding horse uses its private record without a public owner tail"
 	const sent = [];
 	const gameplay = createGameplay( frame => sent.push( frame ) );
 	gameplay.bootstrap( { refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x9c6 } ] } );
+	gameplay.worldReady();
 	gameplay.seed( f.frame.local );
 	const horse = { ...f.pet, ownerGid: undefined };
 	const record = new Uint8Array( 17 );

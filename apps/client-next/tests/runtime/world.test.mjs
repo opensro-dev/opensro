@@ -2248,3 +2248,61 @@ test("an unanswered mall request resumes the session without replaying it", asyn
 	assert.equal( world.status().phase, "world", "the bootstrap retired the request" );
 	assert.equal( incidents.length, 1 );
 });
+/*
+================
+loading screen sends nothing
+
+Between the bootstrap and game-ready (0x3012) the server discards every
+action request, so the client sends none: a command is refused, and the
+world does not advance, so nothing automatic leaves and no request clock
+runs out into a resume. Ready sends 0x3012 and the world advances again.
+================
+*/
+test("the loading screen sends no request and runs no request clock", async t => {
+	const sockets = socketHarness( t ), incidents = [];
+	const world = createWorldSession( async () => "ticket", undefined, incident => incidents.push( incident ) );
+	t.after( () => world.dispose() );
+	world.enter( "fixture", "shard", "http://localhost:9000" );
+	await settle();
+	world.step( 1 );
+	const socket = sockets[0];
+	socket.onopen();
+	socket.receive( 2, welcome( false ) );
+	world.step( 2 );
+	await settle();
+	world.step( 3 );
+	socket.receive( 7, entered( bootstrap ) );
+	for ( const row of rows ) socket.receive( row.opcode, row.payload );
+	socket.receive( 0x32a6, Uint8Array.of( 123, 0, 0, 0, 0, 0, 0, 0 ) );
+	world.step( 4 );
+	let batch;
+	while ( (batch = world.take()) ) world.ack( batch.sequence );
+	world.step( 5 );
+	assert.equal( world.status().phase, "world" );
+	assert.throws(
+		() => world.command( { kind: "inventory-move", source: 13, destination: 14, quantity: 1 } ),
+		/not ready/
+	);
+	// A party join request lands on the loading screen: its 10 s answer
+	// clock is a step-driven sender (the refusal at expiry).
+	const join = new Uint8Array( 26 ), view = new DataView( join.buffer );
+	view.setUint32( 0, 123, true );
+	view.setUint32( 4, 42, true );
+	join[21] = 16;
+	view.setUint32( 22, 77, true );
+	socket.receive( 0x75bf, join );
+	world.step( 6 );
+	const before = socket.sent.length;
+	world.step( 60000 );
+	// Transport controls (the keepalive, opcode 3) still flow; no game request does.
+	const requests = socket.sent.slice( before ).filter( bytes => (bytes[0] | bytes[1] << 8) > 0xff );
+	assert.deepEqual( requests, [], "nothing leaves while loading" );
+	assert.equal( world.status().phase, "world" );
+	assert.equal( incidents.length, 0 );
+	world.ready();
+	assert.equal( new DataView( socket.sent.at( -1 ).buffer ).getUint16( 0, true ), 0x3012 );
+	const ready = socket.sent.length;
+	world.step( 60001 );
+	const answers = socket.sent.slice( ready ).filter( bytes => (bytes[0] | bytes[1] << 8) > 0xff );
+	assert.equal( answers.length, 1, "the live world answers the expired join request" );
+});
