@@ -1565,7 +1565,11 @@ receive
 					plus: next?.plus ?? 0,
 					previousPlus: old.plus,
 					durability: next?.durability ?? 0,
-					previousDurability: old.durability
+					previousDurability: old.durability,
+					// 0xB651 is a magic or attribute stone's answer.
+					...(op === 0xb651 && flags & 0x10 && next ?
+						{ stone: { before: present( old ), after: present( { ...next, slot: n } ) } } :
+						{})
 				};
 				for ( const cue of alchemy.result( n, flags, null, detail ) ) play( cue );
 				return true;

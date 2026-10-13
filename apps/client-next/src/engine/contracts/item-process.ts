@@ -9,6 +9,8 @@ state it publishes back.
 
 ===========================================================================
 */
+import type { InventoryItem } from "./gameplay";
+
 export type AlchemyMode = "reinforce" | "attribute" | "magic" | "compound" | "advanced" | "dissolve";
 export type ItemProcessCommand =
 	| { readonly kind: "alchemy-open"; }
@@ -55,7 +57,9 @@ export interface AlchemyState {
 AlchemyOutcome
 
 One reinforcement's result as 62B0B0 reads it: the flag bits and the
-item's enhancement level and durability before and after.
+item's enhancement level and durability before and after. A successful
+magic or attribute stone also carries the item before and after, so the
+window can say what the stone changed (alchemy-result.ts).
 ================
 */
 export interface AlchemyOutcome {
@@ -65,6 +69,7 @@ export interface AlchemyOutcome {
 	readonly previousPlus: number;
 	readonly durability: number;
 	readonly previousDurability: number;
+	readonly stone?: { readonly before: InventoryItem; readonly after: InventoryItem; };
 }
 
 /*

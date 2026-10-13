@@ -125,6 +125,9 @@ func publicRules() publicstats.RulesResponse {
 			{Title: "Skill press while seated",
 				Native: "A skill pressed while seated casts from the seat.",
 				Now:    "The character stands up, then casts."},
+			{Title: "Alchemy stone result",
+				Native: "A successful magic or attribute stone says the item's enhancement level.",
+				Now:    "It says which stat the stone changed, from the old value to the new."},
 		},
 	}
 }

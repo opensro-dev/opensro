@@ -8,9 +8,16 @@ answers) swaps its effect sprite to the success or failure atlas, plays it
 once and writes the outcome to the chat. The worker records the outcome
 (AlchemyOutcome); the window draws and words it from here.
 
+A successful magic or attribute stone is worded by what it changed, not by
+the native enhancement-level line (stoneResultLines): port-only, not
+native; owner-approved deviation (2026-10-13).
+
 ===========================================================================
 */
+import type { InventoryItem } from "@/engine/contracts/gameplay";
 import type { AlchemyOutcome } from "@/engine/contracts/item-process";
+import { itemTooltipMagic } from "./item-tooltip-magic";
+import { itemTooltipStats } from "./item-tooltip-stats";
 
 // 62B0B0's flag bits: 0x10 success, 0x20 failure (with 1 the enhancement
 // level fell and 2 the durability fell), 0x40 the item was destroyed, 0x80
@@ -78,7 +85,10 @@ export function alchemyResultLines( outcome: AlchemyOutcome, copy: ( key: string
 		return text;
 	};
 	const { flags } = outcome;
-	if ( flags & ALCHEMY_SUCCESS ) return [ format( "UIIT_MSG_REINFORCERR_SUCCESS", outcome.plus ) ];
+	if ( flags & ALCHEMY_SUCCESS ) {
+		const stone = outcome.stone ? stoneResultLines( outcome.stone.before, outcome.stone.after, copy ) : [];
+		return stone.length ? stone : [ format( "UIIT_MSG_REINFORCERR_SUCCESS", outcome.plus ) ];
+	}
 	if ( flags & ALCHEMY_DESTROYED ) return [ copy( "UIIT_MSG_REINFORCERR_BREAKDOWN" ) ];
 	if ( flags & ALCHEMY_STONE_FAILED ) return [ copy( "UIIT_MSG_REINFORCERR_FAIL" ) ];
 	if ( !(flags & ALCHEMY_FAILURE) ) return [];
@@ -103,6 +113,45 @@ export function alchemyResultLines( outcome: AlchemyOutcome, copy: ( key: string
 				outcome.previousDurability - outcome.durability
 			)
 		);
+	}
+	return lines;
+}
+
+/*
+================
+stoneResultLines
+
+Port-only, not native; owner-approved deviation (2026-10-13). Natively
+62B0B0 answers every successful reinforcement with the enhancement-level
+line, which for a stone names the item's plus rather than what the stone
+did. A magic or attribute stone instead names each stat it changed, from
+the old value to the new, in the item tooltip's own words: the white stats
+(55B540's variance rows) and the magic options are compared separately,
+as both lists can name the same stat. A stat the item did not have before
+changed from 0.
+================
+*/
+export function stoneResultLines(
+	before: InventoryItem,
+	after: InventoryItem,
+	copy: ( key: string ) => string
+): string[] {
+	// A tooltip row is the stat's name, then its value: the value starts at
+	// the first number or bracket ("Str 3 Increase (+50%)", "Luck(2 times)").
+	const statRow = /^(.*?)\s*((?:[+-]?\d|\().*)$/;
+	const lines: string[] = [];
+	for ( const rows of [ itemTooltipStats, itemTooltipMagic ] ) {
+		const previous = new Map<string, string>();
+		for ( const row of rows( before, copy ) ) {
+			const match = statRow.exec( row.value );
+			if ( match ) previous.set( match[1]!, match[2]! );
+		}
+		for ( const row of rows( after, copy ) ) {
+			const match = statRow.exec( row.value );
+			if ( !match ) continue;
+			const old = previous.get( match[1]! ) ?? "0";
+			if ( old !== match[2] ) lines.push( `${match[1]} changed from ${old} to ${match[2]}` );
+		}
 	}
 	return lines;
 }

@@ -244,6 +244,10 @@
 			"before": "Cannot put the item because the same one already exsists.",
 			"after": "Cannot put the item because the same one already exists."
 		},
+		"UIIT_MSG_REINFORCERR_SUCCESS": {
+			"before": "The endurability has been changed to [%d]because the alchemy of enhancement is a success.",
+			"after": "The enhancement level has been changed to [%d] because the alchemy of enhancement is a success."
+		},
 		"UIIT_MSG_REINFORCERR_TARGETEQUIP_CANT_BE_REINFORCED": {
 			"before": "The selected equiptment cannot be reinforced.",
 			"after": "The selected equipment cannot be reinforced."
