@@ -283,7 +283,7 @@ class CoordinatedFlowTests(PairFixture, unittest.TestCase):
 	def test_the_pair_goes_live_and_confirms_together(self):
 		result = self.publish()
 		self.assertEqual(result["phase"], "verifying")
-		self.assertEqual(self.rollouts, [(NEW_COMMIT, True, b"next server agent")])
+		self.assertEqual(self.rollouts, [(NEW_COMMIT, True, go_binary("agent", NEW_COMMIT))])
 		self.assertEqual(self.deployments, [{"upgrade": False, "restore": None, "maintenance": False}])
 		self.assertEqual(self.live_client(), self.tree.resolve())
 		pending = read_state(self.config["production_state"])
