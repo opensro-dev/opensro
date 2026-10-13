@@ -9,6 +9,7 @@ package inventory
 
 import (
 	"fmt"
+	"math"
 	"opensro.online/server/internal/domain"
 
 	"opensro.online/server/internal/game/item/wire"
@@ -161,8 +162,11 @@ func NewContainer(items []Item, capacity uint8) (*Inventory, *Fault) {
 	return newBoundedContainer(items, capacity, cosContainerMaxSlots)
 }
 
-// cosContainerMaxSlots bounds a COS bag.
-const cosContainerMaxSlots = 140
+// cosContainerMaxSlots bounds a COS bag: 0x3158 carries its capacity in one
+// byte, and v1.150's characterdata authors transport bags up to 177 slots
+// (the item-mall COS_T_BUFFALO/RHINOCEROS/WHITEELEPHANT_120). No native site
+// bounds it below the byte; an earlier 140 dropped those rows (#B).
+const cosContainerMaxSlots = math.MaxUint8
 
 /*
 ================

@@ -43,7 +43,7 @@ func BuildCOSRecord(cos *CharacterCOS, ref *CharacterRef, items ItemRefSource) (
 		w.U8(0)
 	} else {
 		bag := cos.Container
-		if bag.Capacity == 0 || bag.Capacity > 140 || len(bag.Rows) > int(bag.Capacity) {
+		if bag.Capacity == 0 || len(bag.Rows) > int(bag.Capacity) {
 			return nil, fmt.Errorf("invalid COS container capacity")
 		}
 		w.U8(bag.Capacity).U8(uint8(len(bag.Rows)))

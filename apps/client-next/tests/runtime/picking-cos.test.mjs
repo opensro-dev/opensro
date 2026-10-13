@@ -220,3 +220,11 @@ test("dock selection uses the aggregate box in roster order, including empty sil
 	assert.equal( c.pickFrontend( near, [ 3 ] ), null );
 	c.dispose( gpu, null );
 });
+
+test("a transport bag of more than 140 slots decodes, as v1.150 authors up to 177", () => {
+	// The item mall's level 120 transports (COS_T_*_120) carry 177 slots; the
+	// capacity is one wire byte, so a 140 cap refused their records.
+	const transport = new Map( [ [ 102, (2 << 11) | 0x1c6 ] ] );
+	const row = decodeCosRecord( record( 2, 177 ), transport );
+	assert.equal( defined( row ).status, 177 );
+});

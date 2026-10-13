@@ -51,6 +51,10 @@ type TextdataItems struct {
 	byID                 map[uint32]*ItemRef
 	charactersByCodename map[string]*CharacterRef
 	summonableCharacters []CharacterRef
+	// refusedSummonRows names service characterdata rows a summon item
+	// reaches that buildCharacterRef refused: authored data the port cannot
+	// read, which would fail a player's summon (RefusedSummonRows).
+	refusedSummonRows []string
 }
 
 // NewTextdataItems returns a lazy loader over dir (itemdata*.txt +
@@ -160,6 +164,20 @@ func (t *TextdataItems) SummonableCharacterRefs() []CharacterRef {
 	return append([]CharacterRef(nil), t.summonableCharacters...)
 }
 
+/*
+================
+RefusedSummonRows
+
+Characterdata rows a summon item reaches that are authored as in service
+but failed buildCharacterRef. Empty on readable data; the shipped-data test
+fails the build on any.
+================
+*/
+func (t *TextdataItems) RefusedSummonRows() []string {
+	t.once.Do(t.load)
+	return append([]string(nil), t.refusedSummonRows...)
+}
+
 // Len reports how many itemdata rows loaded (0 = textdata absent).
 /*
 ================
@@ -221,6 +239,7 @@ func (t *TextdataItems) load() {
 	}
 
 	characterRows := 0
+	refused := map[string]bool{}
 	for _, entry := range entries {
 		lower := strings.ToLower(entry.Name())
 		if entry.IsDir() || !strings.HasPrefix(lower, "characterdata") || !strings.HasSuffix(lower, ".txt") {
@@ -229,6 +248,9 @@ func (t *TextdataItems) load() {
 		for _, fields := range readTextdataFile(filepath.Join(t.dir, entry.Name())) {
 			ref := buildCharacterRef(fields, names)
 			if ref == nil {
+				if len(fields) > 2 && strings.TrimSpace(fields[0]) == "1" && strings.TrimSpace(fields[2]) != "" {
+					refused[strings.TrimSpace(fields[2])] = true
+				}
 				continue
 			}
 			t.charactersByCodename[ref.Codename] = ref
@@ -260,7 +282,15 @@ func (t *TextdataItems) load() {
 	for _, codename := range keys {
 		if ref := t.charactersByCodename[codename]; ref != nil {
 			t.summonableCharacters = append(t.summonableCharacters, *ref)
+		} else if refused[codename] {
+			// The row is authored but unreadable: a player's summon at this
+			// level fails. RefusedSummonRows lets the shipped-data test fail
+			// the build on it.
+			t.refusedSummonRows = append(t.refusedSummonRows, codename)
+			log.Errorf("bootstrap: summon item reaches characterdata row %q, which failed validation", codename)
 		} else {
+			// A threshold with no authored row (the 1 every map starts at,
+			// below a family's first form): 49BBC1 refuses that summon too.
 			log.Warnf("bootstrap: summon item references missing characterdata row %q", codename)
 		}
 	}
@@ -342,7 +372,9 @@ func buildCharacterRef(fields []string, names map[string]string) *CharacterRef {
 	// Keep it on the character reference so every summon/restoration agrees.
 	const inventoryCapacityColumn = 67
 	capacity, capacityOK := textdataInt(fields[inventoryCapacityColumn])
-	if !capacityOK || capacity < 0 || capacity > 140 {
+	// The 0x3158 capacity is one byte; v1.150 authors transport bags up to
+	// 177 slots (the item-mall transports' level 90/105/120 rows).
+	if !capacityOK || capacity < 0 || capacity > math.MaxUint8 {
 		return nil
 	}
 	nameStrID := strings.TrimSpace(fields[5])

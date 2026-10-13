@@ -23,9 +23,18 @@ func TestCOSPetRestorationIncludesBehaviorAndSummonSlot(t *testing.T) {
 		if !bytes.Equal(got, want.Payload()) {
 			t.Fatalf("band %d: %x", band, got)
 		}
-		cos.Container = &domain.COSContainer{Capacity: 141}
-		if _, e = BuildCOSRecord(cos, ref, nil); e == nil {
-			t.Fatal("overruns native five-page COS storage")
+		// The capacity is one wire byte: v1.150 authors transport bags up to
+		// 177 slots (the item mall's level 120 transports). A bag with no
+		// capacity, or more rows than slots, is refused.
+		cos.Container = &domain.COSContainer{Capacity: 177}
+		if _, e = BuildCOSRecord(cos, ref, nil); e != nil {
+			t.Fatalf("a 177-slot transport bag was refused: %v", e)
+		}
+		for _, bag := range []*domain.COSContainer{{Capacity: 0}, {Capacity: 1, Rows: make([]domain.InventoryRow, 2)}} {
+			cos.Container = bag
+			if _, e = BuildCOSRecord(cos, ref, nil); e == nil {
+				t.Fatalf("an invalid bag %+v was admitted", bag)
+			}
 		}
 	}
 }
