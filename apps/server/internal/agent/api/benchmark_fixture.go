@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/domain/charactervitals"
 )
 
 // SkillGroupResolver names a skill's group (all ranks of one skill share
@@ -127,11 +128,20 @@ func (api *API) handleBenchmarkFixtureReset(w http.ResponseWriter, r *http.Reque
 			refusal = "CHARACTER_UNAVAILABLE"
 			return false
 		}
-		if benchmarkFixtureWorldMatches(character.World, request) && benchmarkFixtureLoadoutMatches(character, request.Loadout, api.skillGroup) {
+		// A corpse is never a fixture's known state: a scenario starts alive.
+		dead := !charactervitals.Alive(character)
+		if !dead && benchmarkFixtureWorldMatches(character.World, request) &&
+			benchmarkFixtureLoadoutMatches(character, request.Loadout, api.skillGroup) {
 			outcome = "already-reset"
 			return false
 		}
 		applyBenchmarkFixtureLoadout(character, request.Loadout, api.skillGroup)
+		if dead {
+			// Unset vitals are full at the derived maximum (charactervitals),
+			// the same reset the loadout applies.
+			character.CurrentHP = nil
+			character.CurrentMP = nil
+		}
 		world := domain.CharacterWorld{}
 		if character.World != nil {
 			world = *character.World

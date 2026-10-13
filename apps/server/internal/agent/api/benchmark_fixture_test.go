@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/domain/charactervitals"
 )
 
 func benchmarkFixtureRequest(characterName string) map[string]any {
@@ -319,3 +320,41 @@ func TestBenchmarkFixtureLoadoutReplacesRankAndRefusesUnknownSkills(t *testing.T
 // testLevelCap stands in for progression.LevelCap, which the API receives
 // through its Config rather than importing.
 const testLevelCap = 90
+
+/*
+================
+TestBenchmarkFixtureResetRevivesACorpse
+
+A scratch character a test left dead at the fixture's own spot is reset,
+not "already reset": it comes back at full derived vitals, and the next
+reset is idempotent again.
+================
+*/
+func TestBenchmarkFixtureResetRevivesACorpse(t *testing.T) {
+	api, authority := newTestAPI(t)
+	api.benchmarkFixtureControl = true
+	handler := authenticatedHandler(t, api, testAccount)
+	postJSON(t, handler, "/character/create", createBody("FixtureDead"))
+	character := authority.Characters().CharactersForDivision(testDivision)[0]
+	body := benchmarkFixtureRequest("FixtureDead")
+	if recorder, response := postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK || response["outcome"] != "reset" {
+		t.Fatalf("first reset = %d %#v", recorder.Code, response)
+	}
+	zero, mp := int64(0), int64(12)
+	authority.MutateCharacter(character, "die at the fixture", func() {
+		character.CurrentHP, character.CurrentMP = &zero, &mp
+	})
+
+	recorder, response := postBenchmarkFixtureReset(t, handler, body)
+	if recorder.Code != http.StatusOK || response["outcome"] != "reset" {
+		t.Fatalf("corpse reset = %d %#v, want reset", recorder.Code, response)
+	}
+	authority.ReadCharacters(testDivision, func([]*domain.Character) {
+		if character.CurrentHP != nil || character.CurrentMP != nil || !charactervitals.Alive(character) {
+			t.Fatalf("corpse kept hp %v mp %v", character.CurrentHP, character.CurrentMP)
+		}
+	})
+	if recorder, response = postBenchmarkFixtureReset(t, handler, body); recorder.Code != http.StatusOK || response["outcome"] != "already-reset" {
+		t.Fatalf("repeat = %d %#v, want already-reset", recorder.Code, response)
+	}
+}
