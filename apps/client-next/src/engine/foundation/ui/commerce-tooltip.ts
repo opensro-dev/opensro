@@ -18,6 +18,22 @@ const PRICE_COLOR = 0xffffffff;
 
 /*
 ================
+CommerceLabels
+
+The localized words of a price line.
+================
+*/
+export interface CommerceLabels {
+	readonly price: string;
+	readonly gold: string;
+	readonly honor: string;
+	readonly point: string;
+	readonly guildPoint: string;
+	readonly guildPointUnit: string;
+}
+
+/*
+================
 commerceTooltip
 
 Native 5592B0 appends the active slot's transaction price after item details.
@@ -34,14 +50,7 @@ UIIT_STT_GUILD_POINT_GP), then honor.
 export function commerceTooltip(
 	id: string,
 	game: Pick<GameplayState, "shop">,
-	labels: {
-		readonly price: string;
-		readonly gold: string;
-		readonly honor: string;
-		readonly point: string;
-		readonly guildPoint: string;
-		readonly guildPointUnit: string;
-	}
+	labels: CommerceLabels
 ): readonly TooltipRow[] {
 	const shop = game.shop;
 	if ( !shop || shop.error ) return [];
@@ -67,14 +76,7 @@ priceLine
 */
 function priceLine(
 	row: ShopPrice,
-	labels: {
-		readonly price: string;
-		readonly gold: string;
-		readonly honor: string;
-		readonly point: string;
-		readonly guildPoint: string;
-		readonly guildPointUnit: string;
-	}
+	labels: CommerceLabels
 ) {
 	if ( row.currency === SHOP_CURRENCY_HONOR ) return `${labels.honor} : ${row.amount}${labels.point}`;
 	if ( row.currency === SHOP_CURRENCY_GUILD_POINT ) {
