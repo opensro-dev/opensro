@@ -160,14 +160,17 @@ func (rt *Runtime) hubHandler(hub *transport.Hub, op opFunc) transport.HandlerFu
 			log.Debugf("action: 0x%04X from unbound session %d discarded", opcode, s.ID)
 			return
 		}
+
+		unlockPublication := rt.LockPublication(divisionID)
+		defer unlockPublication()
+		// Checked under the publication gate: a reset another handler pushes
+		// (a recall, a relocation) holds the same gate, so a request that
+		// waited on it sees that reset here instead of answering into it.
 		if _, live := s.SceneRevision(); !live {
 			// Info, not debug: a client that sends while loading is a bug to see.
 			log.Infof("action: 0x%04X from %s discarded: the scene is loading", opcode, character.Name)
 			return
 		}
-
-		unlockPublication := rt.LockPublication(divisionID)
-		defer unlockPublication()
 		result := op(divisionID, character, payload)
 		if result.DiagnosticRefusal != "" {
 			log.Debugf(
