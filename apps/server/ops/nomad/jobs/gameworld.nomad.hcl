@@ -206,6 +206,14 @@ variable "alchemy_max_plus" {
   default = "on"
 }
 
+# team_death_revive: "on" (native, the default; owner decision 2026-10-13)
+# revives a free-battle or arena death where it fell at any level; "off" is
+# port-only, the town rule. A malformed value stops GameWorld at boot.
+variable "team_death_revive" {
+  type    = string
+  default = "on"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
@@ -449,6 +457,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates
         SRO_ALCHEMY_MAX_PLUS               = var.alchemy_max_plus
+        SRO_TEAM_DEATH_REVIVE              = var.team_death_revive
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate

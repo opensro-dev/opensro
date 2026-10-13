@@ -16,7 +16,6 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -259,11 +258,13 @@ func (rt *Runtime) HandleLocalRebirth(
 	}
 	// 50FEE0 (5100D6): a team death (free-battle capes, arena) revives where
 	// it fell at any level, whatever the choice; otherwise the present point
-	// is a beginner's (level 10 or below, 51017F).
-	if before.DeathKind == uint8(pk.DeathTeam) {
+	// is a beginner's (level 10 or below, 51017F). The shard may set the town
+	// rule for team deaths too (teamdeath.go).
+	inPlace := rt.revivesInPlace(before.DeathKind)
+	if inPlace {
 		choice = wire.RebirthAtPresentPoint
 	}
-	if choice == wire.RebirthAtPresentPoint && before.DeathKind != uint8(pk.DeathTeam) && before.Level != nil && *before.Level > 10 {
+	if choice == wire.RebirthAtPresentPoint && !inPlace && before.Level != nil && *before.Level > 10 {
 		return OpResult{}
 	}
 	destination := corpse.Spawn

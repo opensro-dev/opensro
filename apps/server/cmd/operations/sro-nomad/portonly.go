@@ -21,6 +21,10 @@ parses it; the GameWorld's own unset value is always native.
   - SRO_ALCHEMY_MAX_PLUS (alchemy_max_plus): the enhancement cap
     (alchemy/maxplus.go). The deployment default is on (+11), as the owner
     decided on 2026-10-13; "off" is the original game's ceiling.
+  - SRO_TEAM_DEATH_REVIVE (team_death_revive): whether a team death
+    revives where it fell (action/teamdeath.go). Unlike the others, "on"
+    is native and the deployment default (owner, 2026-10-13); "off" is the
+    port-only town rule.
 
 ===========================================================================
 */
@@ -43,6 +47,9 @@ const gmSetSpeedDefault = "on"
 // alchemyMaxPlusDefault is the owner-approved deployment default.
 const alchemyMaxPlusDefault = "on"
 
+// teamDeathReviveDefault is native, the owner's deployment default.
+const teamDeathReviveDefault = "on"
+
 /*
 ================
 portOnlySettings
@@ -54,6 +61,7 @@ type portOnlySettings struct {
 	AlchemyRates     string
 	GMSetSpeed       string
 	AlchemyMaxPlus   string
+	TeamDeathRevive  string
 }
 
 /*
@@ -61,7 +69,8 @@ type portOnlySettings struct {
 portOnlySettingsFromEnv
 
 The deployer's values as written; storage auto-stack, the alchemy rates,
-/SETSPEED and the enhancement cap take their defaults when unset.
+/SETSPEED, the enhancement cap and the team-death revive take their
+defaults when unset.
 ================
 */
 func portOnlySettingsFromEnv() portOnlySettings {
@@ -71,6 +80,7 @@ func portOnlySettingsFromEnv() portOnlySettings {
 		AlchemyRates:     strings.TrimSpace(os.Getenv("SRO_ALCHEMY_RATES")),
 		GMSetSpeed:       strings.TrimSpace(os.Getenv("SRO_GM_SETSPEED")),
 		AlchemyMaxPlus:   strings.TrimSpace(os.Getenv("SRO_ALCHEMY_MAX_PLUS")),
+		TeamDeathRevive:  strings.TrimSpace(os.Getenv("SRO_TEAM_DEATH_REVIVE")),
 	}
 	if settings.StorageAutoStack == "" {
 		settings.StorageAutoStack = storageAutoStackDefault
@@ -83,6 +93,9 @@ func portOnlySettingsFromEnv() portOnlySettings {
 	}
 	if settings.AlchemyMaxPlus == "" {
 		settings.AlchemyMaxPlus = alchemyMaxPlusDefault
+	}
+	if settings.TeamDeathRevive == "" {
+		settings.TeamDeathRevive = teamDeathReviveDefault
 	}
 	return settings
 }
@@ -100,5 +113,6 @@ func (settings portOnlySettings) jobVariables(variables map[string]any) map[stri
 	variables["alchemy_rates"] = settings.AlchemyRates
 	variables["gm_setspeed"] = settings.GMSetSpeed
 	variables["alchemy_max_plus"] = settings.AlchemyMaxPlus
+	variables["team_death_revive"] = settings.TeamDeathRevive
 	return variables
 }

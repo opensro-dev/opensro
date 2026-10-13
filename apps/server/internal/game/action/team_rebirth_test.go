@@ -87,3 +87,62 @@ func TestTeamDeathRevivesInPlaceAtAnyLevel(t *testing.T) {
 		t.Fatalf("level 80 monster death took the present point: %+v", opcodesOf(result.Frames))
 	}
 }
+
+/*
+================
+TestTeamDeathTownRuleSetting
+
+SRO_TEAM_DEATH_REVIVE off (port-only): a team death keeps its recorded kind
+but its notice carries none, so the box reads "point", and at level 80 it
+cannot take the present point. Unset and "on" are native; anything else is
+refused.
+================
+*/
+func TestTeamDeathTownRuleSetting(t *testing.T) {
+	for text, want := range map[string]bool{"": true, "on": true, " ON ": true, "off": false, "false": false} {
+		if got, err := ParseTeamDeathRevive(text); err != nil || got != want {
+			t.Fatalf("ParseTeamDeathRevive(%q) = %v, %v; want %v", text, got, err, want)
+		}
+	}
+	if _, err := ParseTeamDeathRevive("maybe"); err == nil {
+		t.Fatal("a malformed setting was accepted")
+	}
+
+	p := scornOpponentPair(t, shippedOffense(t, "SKILL_EU_ROG_STEALTHA_CHANGE_A_01"))
+	p.rt.TeamDeathTownRule = true
+	_, progression := p.rt.settlePlayerDeathInDoor(testDivision, p.m, deathKiller{player: p.c}, p.rt.Now().UnixMilli())
+	last := progression[len(progression)-1]
+	if p.m.DeathKind != uint8(pk.DeathTeam) || last.Opcode != wire.OpDeathNotice || last.Payload[0] != uint8(pk.DeathNone) {
+		t.Fatalf("town rule: kind %d notice %#x %v, want kind 2 and 0x37CE {0}", p.m.DeathKind, last.Opcode, last.Payload)
+	}
+
+	team := rebirthTestCharacter(80, 0)
+	team.DeathKind = uint8(pk.DeathTeam)
+	rt, _ := newTestRuntime(team, testItems())
+	rt.TeamDeathTownRule = true
+	if result := rt.HandleLocalRebirth(testDivision, team, []byte{wire.RebirthAtPresentPoint}); len(result.Frames) != 0 || enterworld.CharacterAlive(team) {
+		t.Fatalf("town rule: a level 80 team death took the present point: %+v", opcodesOf(result.Frames))
+	}
+}
+
+/*
+================
+TestSessionEndForgetsTheDeathKind
+
+CGObjPC_ResetRuntimeState (4DE9ED, 4DEA23) zeroes the death kind and the
+last EXP loss with the actor, so a corpse that relogs takes the town rule
+and refunds no earlier loss.
+================
+*/
+func TestSessionEndForgetsTheDeathKind(t *testing.T) {
+	c := rebirthTestCharacter(80, 0)
+	c.DeathKind, c.LastExpLoss = uint8(pk.DeathTeam), 5000
+	rt, _ := newTestRuntime(c, testItems())
+	rt.ForgetCharacter(testDivision, c.Name)
+	if c.DeathKind != 0 || c.LastExpLoss != 0 {
+		t.Fatalf("after the session: kind %d loss %d", c.DeathKind, c.LastExpLoss)
+	}
+	if result := rt.HandleLocalRebirth(testDivision, c, []byte{wire.RebirthAtPresentPoint}); len(result.Frames) != 0 || enterworld.CharacterAlive(c) {
+		t.Fatalf("a relogged corpse revived in place: %+v", opcodesOf(result.Frames))
+	}
+}

@@ -511,6 +511,15 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.GMSetSpeed {
 		log.Infof("gm: /SETSPEED ON (%s)", action.EnvGMSetSpeed)
 	}
+	// A team death revives in place natively; "off" is the port-only town rule.
+	teamDeathRevive, err := action.TeamDeathReviveFromEnv()
+	if err != nil {
+		return err
+	}
+	game.items.TeamDeathTownRule = !teamDeathRevive
+	if game.items.TeamDeathTownRule {
+		log.Infof("rebirth: team deaths follow the town rule (%s off)", action.EnvTeamDeathRevive)
+	}
 	if game.deps.StorageAutoStack {
 		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)
 	}

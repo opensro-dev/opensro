@@ -679,7 +679,7 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	// 529D6D: the death ends with the victim's private notice of its kind,
 	// which labels the death box's rebirth button (wire/deathnotice.go).
 	progression = append(progression, owned...)
-	return effects, append(progression, wire.DeathNoticeFrame(c.DeathKind))
+	return effects, append(progression, wire.DeathNoticeFrame(rt.deathNoticeKind(c.DeathKind)))
 }
 
 /*

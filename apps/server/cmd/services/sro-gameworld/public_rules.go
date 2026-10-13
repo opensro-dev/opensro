@@ -39,6 +39,7 @@ func publicRules() publicstats.RulesResponse {
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
 	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
+	teamDeathRevive, _ := action.TeamDeathReviveFromEnv()
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
@@ -90,6 +91,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Items can be reinforced far beyond +11.",
 				Now:    fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus),
 				Why:    "The success table ends at +11; the cap keeps gear in the balanced range."},
+			{Flag: action.EnvTeamDeathRevive, On: !teamDeathRevive,
+				Native: "A death in a free battle or the arena revives on the spot, at any level.",
+				Now:    "A free-battle or arena death revives in town above level 10, like any other death.",
+				Why:    "A shard setting; the original rule returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

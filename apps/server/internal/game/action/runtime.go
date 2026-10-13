@@ -60,8 +60,11 @@ type Runtime struct {
 	// gmSpeeds holds each GM's /SETSPEED percent (gmspeed.go), session only.
 	gmSpeeds sync.Map
 	// GMSetSpeed admits /SETSPEED (port-only, SRO_GM_SETSPEED; off is native).
-	GMSetSpeed  bool
-	BerserkRoll combat.Roll32767
+	GMSetSpeed bool
+	// TeamDeathTownRule sends a team death to the town rule (port-only,
+	// SRO_TEAM_DEATH_REVIVE off; the zero value is native, teamdeath.go).
+	TeamDeathTownRule bool
+	BerserkRoll       combat.Roll32767
 	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
 	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the
