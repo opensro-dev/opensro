@@ -173,6 +173,24 @@ func skillRows(source *enterworld.TextdataSkills) []enterworld.SkillRow {
 
 /*
 ================
+shardShops
+
+The shops the shard sells from: the same setting (SRO_SHOP_EXTRA_GOODS,
+port-only) and the same loader the GameWorld uses, so the published shop
+tabs list the extra goods the shard sells. Unset or "off" is the v1.150
+stock.
+================
+*/
+func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, error) {
+	extra, err := commerce.ExtraGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return commerce.LoadWithExtraGoods(dir, items, extra)
+}
+
+/*
+================
 run
 ================
 */
@@ -212,7 +230,7 @@ func run(out, release, textdata string) error {
 	if err != nil {
 		return fmt.Errorf("monsters: %w", err)
 	}
-	shops, err := commerce.Load(dir, itemSource)
+	shops, err := shardShops(dir, itemSource)
 	if err != nil {
 		return fmt.Errorf("shops: %w", err)
 	}

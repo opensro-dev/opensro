@@ -39,11 +39,8 @@ native; commerce.AddExtraGoods). Nil extra is the v1.150 stock.
 ================
 */
 func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) error {
-	c, e := commerce.Load(dir, rt.deps.ItemReferences())
+	c, e := commerce.LoadWithExtraGoods(dir, rt.deps.ItemReferences(), extra)
 	if e != nil {
-		return e
-	}
-	if e := c.AddExtraGoods(extra, rt.deps.ItemReferences()); e != nil {
 		return e
 	}
 	rt.Commerce = c

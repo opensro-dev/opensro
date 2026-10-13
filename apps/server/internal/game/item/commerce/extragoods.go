@@ -174,6 +174,27 @@ func ExtraGoodsFromEnv() ([]ExtraGood, error) {
 
 /*
 ================
+LoadWithExtraGoods
+
+The shard's shop catalogue: the shipped stock (Load) plus the operator's
+extra goods (AddExtraGoods). The GameWorld sells from it and sro-catalogue
+publishes it, so the site lists exactly what the shard sells. Nil extra is
+the v1.150 stock.
+================
+*/
+func LoadWithExtraGoods(dir string, refs enterworld.ItemRefSource, extra []ExtraGood) (*Catalog, error) {
+	c, err := Load(dir, refs)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.AddExtraGoods(extra, refs); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+/*
+================
 AddExtraGoods
 
 Appends each good to its tab at the tab's next free slot. Every check
