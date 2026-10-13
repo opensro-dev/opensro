@@ -239,9 +239,11 @@ Test identity without reconstructing a catalog-backed actor.
 ================
 */
 func (s *monsterStorage) contains(gid uint32) bool {
-	_, hot := s.hot[gid]
+	if _, hot := s.hot[gid]; hot {
+		return true
+	}
 	_, cold := s.cold[gid]
-	return hot || cold
+	return cold
 }
 
 /*

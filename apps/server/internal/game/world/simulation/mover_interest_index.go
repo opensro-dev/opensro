@@ -50,7 +50,10 @@ type moverInterestBounds struct {
 moverInterestIndex
 ================
 */
-type moverInterestIndex map[moverInterestRegion]map[uint32]struct{}
+//
+// Each entry records whether its mover is listed in more than one region
+// (a segment that crosses a boundary): only those can reach a scan twice.
+type moverInterestIndex map[moverInterestRegion]map[uint32]bool
 
 /*
 ================
@@ -134,11 +137,15 @@ func (index *moverInterestIndex) add(gid uint32, bounds moverInterestBounds) {
 	if *index == nil {
 		*index = make(moverInterestIndex)
 	}
+	regions := 0
+	for range bounds.regions() {
+		regions++
+	}
 	for region := range bounds.regions() {
 		if (*index)[region] == nil {
-			(*index)[region] = make(map[uint32]struct{})
+			(*index)[region] = make(map[uint32]bool)
 		}
-		(*index)[region][gid] = struct{}{}
+		(*index)[region][gid] = regions > 1
 	}
 }
 
@@ -158,6 +165,26 @@ func (index moverInterestIndex) remove(gid uint32, bounds moverInterestBounds) {
 
 /*
 ================
+moverCandidateRegions
+
+The viewer's region and, outdoors, its eight neighbours: the regions whose
+movers candidates and the population interest scan visit.
+================
+*/
+func moverCandidateRegions(viewer worldgeom.RegionXZ) moverInterestBounds {
+	region := moverInterestRegionAt(viewer)
+	bounds := moverInterestBounds{pose: region, low: region, high: region}
+	if region.dungeon == 0 {
+		bounds.low.x--
+		bounds.low.z--
+		bounds.high.x++
+		bounds.high.z++
+	}
+	return bounds
+}
+
+/*
+================
 candidates
 
 Visit only the viewer region and its immediate neighbours. Membership is a
@@ -172,16 +199,8 @@ func (s *moverStorage) candidates(viewer worldgeom.RegionXZ) iter.Seq[uint32] {
 		if s == nil {
 			return
 		}
-		region := moverInterestRegionAt(viewer)
-		bounds := moverInterestBounds{pose: region, low: region, high: region}
-		if region.dungeon == 0 {
-			bounds.low.x--
-			bounds.low.z--
-			bounds.high.x++
-			bounds.high.z++
-		}
 		seen := make(map[uint32]struct{})
-		for candidateRegion := range bounds.regions() {
+		for candidateRegion := range moverCandidateRegions(viewer).regions() {
 			for gid := range s.spatial[candidateRegion] {
 				if gid == 0 {
 					continue

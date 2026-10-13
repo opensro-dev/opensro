@@ -309,17 +309,38 @@ The spawn index owns nest/lifecycle queries. Visibility instead queries the
 mover's live region bounds: a pursuing actor can leave its spawn region ring.
 Filter exact live blocks before any archived actor read (native 53AC20).
 Caller holds MonsterState.mu.
+
+A mover whose segment spans regions is listed in each; the index marks
+those, and only they go through a seen set, made on the first one. A mover
+in one region is visited once without it. Static entries are unchanged.
 ================
 */
 func populationInterestGIDs(state *divisionMonsterState, viewer worldgeom.RegionXZ, nowMs int64) []uint32 {
 	var out []uint32
-	for gid := range state.movers.candidates(viewer) {
-		if !state.instances.contains(gid) {
-			continue
-		}
-		pose, _ := state.movers.livePoseAt(gid, nowMs, nil)
-		if worldgeom.InterestVisible(viewer, worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}) {
-			out = append(out, gid)
+	if state.movers != nil {
+		var seen map[uint32]struct{}
+		for region := range moverCandidateRegions(viewer).regions() {
+			for gid, spans := range state.movers.spatial[region] {
+				if gid == 0 {
+					continue
+				}
+				if spans {
+					if _, duplicate := seen[gid]; duplicate {
+						continue
+					}
+					if seen == nil {
+						seen = make(map[uint32]struct{})
+					}
+					seen[gid] = struct{}{}
+				}
+				if !state.instances.contains(gid) {
+					continue
+				}
+				pose, _ := state.movers.livePoseAt(gid, nowMs, nil)
+				if worldgeom.InterestVisible(viewer, worldgeom.RegionXZ{RegionID: pose.RegionID, X: pose.X, Z: pose.Z}) {
+					out = append(out, gid)
+				}
+			}
 		}
 	}
 	// Static entries without a mover still use their immutable spawn position.
