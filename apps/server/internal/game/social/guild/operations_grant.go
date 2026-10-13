@@ -62,7 +62,13 @@ func refusedGrant(reason string) grantOutcome {
 // 0x32C4 carries each member's grant name (+0x40) and the client already
 // takes it mid-session (a guild join re-seeds the joiner). Characters in
 // view keep the title their spawn row carried (ICUser +0x78C is written
-// only by the 0x30D7 parse) until they next come into view, as native. Beyond the shared leader gate the
+// only by the 0x30D7 parse) until they next come into view, as native.
+//
+// Port-only, not native: v1.188 hands the grant to the shard manager
+// (CGObjPC_HandleGuildUpdateNickname7256, 517B70) and its push to the other
+// members was not found; the earlier port sent subOp-6 &0x20, which v1.150
+// applies to the member name. Whatever native sent, the v1.150 delta cannot
+// carry a title, so this re-seed is a deliberate deviation that fixes it. Beyond the shared leader gate the
 // guild must be level GuildNameGrantMinLevel+ (the pinned client arm),
 // and the title must be non-empty and within GrantNameMaxBytes (the
 // documented DECISION cap - the native charset walk 0x4D is a
