@@ -16,6 +16,11 @@ const { createCharacterEffects } = await import( "../../src/engine/runtime/chara
 /*
 ================
 movingTargetEffect
+
+Casts one stage of the given action from a caster at the origin onto a
+target at (40, 5, 30), then moves the target. options.firstStep returns the
+actors of the first frame that draws any (once the stage's assets load)
+instead of the moved ones.
 ================
 */
 function movingTargetEffect( action, options = {} ) {
@@ -43,8 +48,9 @@ function movingTargetEffect( action, options = {} ) {
 									startEvent: 1,
 									action,
 									move: options.move ?? "MOV_NONE",
+									...(options.movement ? { movement: options.movement } : {}),
 									bone: null,
-									offset: [ 0, 0, 0 ],
+									offset: options.startOffset ?? [ 0, 0, 0 ],
 									targetBone: options.bone ?? null,
 									targetOffset: options.offset ?? [ 0, 0, 0 ],
 									life: 0,
@@ -78,7 +84,17 @@ function movingTargetEffect( action, options = {} ) {
 		() => {},
 		createPresentationRandom( 1 )
 	);
-	const caster = { gid: 1, refObjId: 1, kind: "player", name: "caster", regionId: 257, x: 0, y: 0, z: 0, heading: 0 };
+	const caster = {
+		gid: 1,
+		refObjId: 1,
+		kind: "player",
+		name: "caster",
+		regionId: 257,
+		x: 0,
+		y: 0,
+		z: 0,
+		heading: options.casterHeading ?? 0
+	};
 	const target = {
 		gid: 2,
 		refObjId: 1,
@@ -88,7 +104,7 @@ function movingTargetEffect( action, options = {} ) {
 		x: 40,
 		y: 5,
 		z: 30,
-		heading: 0
+		heading: options.targetHeading ?? 0
 	};
 	const cast = { token: 1, caster: 1, target: 2, skill: 1, damage: 0, fatal: false };
 	const gameplay = {
@@ -107,12 +123,17 @@ function movingTargetEffect( action, options = {} ) {
 		error: null
 	};
 	for ( const time of [ 0, 0.1, 0.2, 0.3 ] ) {
-		effect.step( [ caster, target ], gameplay, time, () => true, () => 0.5, [ {
+		const born = effect.step( [ caster, target ], gameplay, time, () => true, () => 0.5, [ {
 			cast,
 			phase: "SHOT",
 			event: 1,
 			at: time
 		} ] );
+		if ( options.firstStep && born.length ) {
+			assert.equal( effect.error(), null );
+			effect.dispose();
+			return born;
+		}
 	}
 	target.x = 80;
 	if ( options.close ) gameplay.casts = [];
@@ -155,4 +176,46 @@ test("target decoration retires with the target", () => {
 test("target follow accepts only EFP and does not create a mover", () => {
 	assert.equal( movingTargetEffect( "AT_TARGET_F", { resource: "hit.bsr" } ).length, 0 );
 	assert.equal( movingTargetEffect( "AT_TARGET_F", { move: "MOV_STRAIGHT" } )[0].pose.x, 80 );
+});
+
+// Snow storm - Ice rain's shards: MOV_STRAIGHT at start speed 200 from 100
+// units above a point beside the target down to that point.
+const ICE_RAIN = {
+	move: "MOV_STRAIGHT",
+	movement: { delayMs: 0, startSpeed: 200, endSpeed: 300 },
+	startOffset: [ 26, 100, -14 ],
+	offset: [ 26, 0, -14 ]
+};
+
+test("native AT_TARGET mover starts at the world-axis offset and faces -pi/2 whatever the target faces", () => {
+	// A quarter-turned target must not turn the offset or the shard (8DE6C7..8DE774).
+	const [shard] = movingTargetEffect( "AT_TARGET", { ...ICE_RAIN, targetHeading: 16384, firstStep: true } );
+	assert.ok( shard, "the mover is born" );
+	// Falling from (66, 105, 16) toward (66, 5, 16).
+	assert.deepEqual( [ shard.pose.x, shard.pose.z ], [ 66, 16 ] );
+	assert.ok( shard.pose.y > 5 && shard.pose.y < 105, `in flight at y ${shard.pose.y}` );
+	assert.equal( shard.pose.yaw, Math.fround( -Math.PI / 2 ) );
+});
+
+test("native AT_TARGET mover keeps its captured path when the target walks away", () => {
+	// Every shard still falls straight down beside where the target stood.
+	const actors = movingTargetEffect( "AT_TARGET", { ...ICE_RAIN, targetHeading: 16384 } );
+	assert.ok( actors.length > 0 );
+	for ( const shard of actors ) assert.deepEqual( [ shard.pose.x, shard.pose.z ], [ 66, 16 ] );
+});
+
+test("native AT_TARGET at start speed 0 is a static effect facing the caster's yaw", () => {
+	for ( const move of [ "MOV_NONE", "MOV_STRAIGHT" ] ) {
+		const [effect] = movingTargetEffect( "AT_TARGET", {
+			move,
+			movement: { delayMs: 0, startSpeed: 0, endSpeed: 0 },
+			casterHeading: 16384,
+			targetHeading: 0,
+			firstStep: true
+		} );
+		assert.ok( effect, `${move} at speed 0 draws on the target` );
+		assert.deepEqual( [ effect.pose.x, effect.pose.y, effect.pose.z ], [ 40, 5, 30 ], move );
+		// 8DE67A: [caster+0x88], the caster's model yaw, not the target's.
+		assert.equal( effect.pose.yaw, (16384 / 65535 * 2 * Math.PI + Math.PI / 2) % (2 * Math.PI), move );
+	}
 });
