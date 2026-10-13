@@ -7,7 +7,8 @@ BUG report thread 1559029656391393347: "I put items yet I can't see them",
 the items vanishing and coming back on hover. A window waited for every
 image it drew before it published, replaying its earlier contents until
 then; a deposited item whose icon was still loading (or absent) kept the
-storage on its contents before the deposit.
+storage on its contents before the deposit. Report BR-261013-1135-AD39:
+hovering a stored item showed no information at all.
 
 ===========================================================================
 */
@@ -76,4 +77,35 @@ test("a deposited item shows in storage while its icon still loads", t => {
 	held = false;
 	step();
 	assert.deepEqual( shown(), [ "Potion", "Sword" ] );
+});
+
+test("hovering a stored item shows its tooltip, as hovering it in the bag does", t => {
+	const f = uiFixture();
+	t.after( () => f.dispose() );
+	let now = 0;
+	const step = () => {
+		for ( let i = 0; i < 16; i++ ) f.ui.step( f.state, now += 100 );
+	};
+	// The tooltip title may use the plain or the emphasized face.
+	const shown = name => [ 0, 2 ].some( style => f.hasText( name, "0", style ) );
+	step();
+	const stored = { ...row( 0, 1, "Stored Stack", "item/etc/hp_potion_01.ddj" ), quantity: 10, magic: [] };
+	f.state.gameplay = {
+		...f.state.gameplay,
+		// The fixture types its bag as empty; this case needs one row.
+		inventory: /** @type {any} */ ([ { ...stored, slot: 14, name: "Bag Stack" } ]),
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		inventoryPending: false,
+		storage: { npc: 17, phase: "open", capacity: 150, gold: "0", items: [ stored ] }
+	};
+	f.ui.event( { kind: "activate", id: "open-window:Storage" } );
+	step();
+	f.ui.event( { kind: "hover", id: "storage-slot:0" } );
+	step();
+	assert.ok( shown( "Stored Stack" ), "the stored item's tooltip" );
+	f.ui.event( { kind: "hover", id: "slot:14" } );
+	step();
+	assert.ok( shown( "Bag Stack" ), "the bag item's tooltip" );
+	assert.equal( shown( "Stored Stack" ), false, "only the hovered item's" );
 });

@@ -30,6 +30,10 @@ export function tooltipItems( id: string, game: GameplayState, cosGid: number ):
 		item = game.inventory.find( row => row.slot === Number( id.slice( 11 ) ) );
 	} else if ( id.startsWith( "alchemy-slot:" ) ) {
 		item = game.inventory.find( row => row.slot === Number( id.slice( 13 ) ) );
+	} else if ( id.startsWith( "storage-slot:" ) ) {
+		// CIFStorageRoom binds each room item to its slot (5B10A0, 5B17F0
+		// CIFSlot_SetBoundItem) as the bag does, so it shows the same help.
+		item = game.storage?.items.find( row => row.slot === Number( id.slice( 13 ) ) );
 	} else if ( id.startsWith( "cos-slot:" ) ) {
 		item = game.cosRecords?.find( row => row.gid === cosGid )?.inventory?.find( row =>
 			row.slot === Number( id.slice( 9 ) )
