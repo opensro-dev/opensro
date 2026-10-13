@@ -21,7 +21,6 @@ import (
 	"sync"
 	"unicode/utf16"
 
-	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/monster"
 
 	log "github.com/sirupsen/logrus"
@@ -164,20 +163,6 @@ func (t *TextdataItems) SummonableCharacterRefs() []CharacterRef {
 	return append([]CharacterRef(nil), t.summonableCharacters...)
 }
 
-/*
-================
-RefusedSummonRows
-
-Characterdata rows a summon item reaches that are authored as in service
-but failed buildCharacterRef. Empty on readable data; the shipped-data test
-fails the build on any.
-================
-*/
-func (t *TextdataItems) RefusedSummonRows() []string {
-	t.once.Do(t.load)
-	return append([]string(nil), t.refusedSummonRows...)
-}
-
 // Len reports how many itemdata rows loaded (0 = textdata absent).
 /*
 ================
@@ -258,42 +243,7 @@ func (t *TextdataItems) load() {
 		}
 	}
 
-	summonable := make(map[string]struct{})
-	for _, item := range t.byCodename {
-		if item == nil || (item.TypeIDs != [4]int64{3, 3, 3, 2} && !wire.IsCosSummoner(item.TypeFlags())) || item.AssociatedCharacterCodename == "" {
-			continue
-		}
-		for _, code := range summonCharacterCodenames(item) {
-			summonable[code] = struct{}{}
-		}
-	}
-	// Retained pets advance to later characterdata rows. Their item still
-	// names the initial row, so publish the whole supported pet family.
-	for code, ref := range t.charactersByCodename {
-		if ref.TidWord&0x7fe == 0x1c6 && (ref.TidWord>>11 == 3 || ref.TidWord>>11 == 4 || ref.TidWord>>11 == 5) {
-			summonable[code] = struct{}{}
-		}
-	}
-	keys := make([]string, 0, len(summonable))
-	for codename := range summonable {
-		keys = append(keys, codename)
-	}
-	sort.Strings(keys)
-	for _, codename := range keys {
-		if ref := t.charactersByCodename[codename]; ref != nil {
-			t.summonableCharacters = append(t.summonableCharacters, *ref)
-		} else if refused[codename] {
-			// The row is authored but unreadable: a player's summon at this
-			// level fails. RefusedSummonRows lets the shipped-data test fail
-			// the build on it.
-			t.refusedSummonRows = append(t.refusedSummonRows, codename)
-			log.Errorf("bootstrap: summon item reaches characterdata row %q, which failed validation", codename)
-		} else {
-			// A threshold with no authored row (the 1 every map starts at,
-			// below a family's first form): 49BBC1 refuses that summon too.
-			log.Warnf("bootstrap: summon item references missing characterdata row %q", codename)
-		}
-	}
+	t.collectSummonable(refused)
 	log.Infof("bootstrap: textdata loaded from %s (%d item row(s), %d character row(s), %d summonable COS row(s))", t.dir, rows, characterRows, len(t.summonableCharacters))
 }
 
