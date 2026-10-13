@@ -9,14 +9,26 @@ per-request deadlines and byte budgets, and fails every handle when the
 worker dies. install() starts the worker's background install without
 using a slot.
 
+A cancelled request keeps its slot until the worker releases it, and the
+release can lag: a member read waits for its whole shared pack fetch
+(packs.ts pack()). A slow release is abandoned, not fatal: its slot stays
+reserved and the fault is reported as a degraded incident. Only a worker
+holding every slot in unacknowledged cancellations is treated as dead.
+
 ===========================================================================
 */
 
 import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
 import { createWorldLease } from "./world-lease";
 import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
+import type { Degradation } from "@/engine/contracts/network";
 const REQUEST_CAPACITY = 4;
 const REQUEST_DEADLINE_MS = 120000;
+// A cancellation's own acknowledgement window, from the cancel: a request
+// cancelled late in its deadline still gets this long to be released.
+const CANCEL_ACK_MS = 30000;
+// The degraded code an unacknowledged cancellation reports (client AGENTS.md).
+const CANCEL_UNACKNOWLEDGED = "asset-cancel-unacknowledged";
 /*
 ================
 createAssets
@@ -30,13 +42,17 @@ export function createAssets(): AssetOwner {
 		name: "sro-assets"
 	} );
 	const jobs = new Map<number, {
+		startedAt: number;
 		deadline: number;
 		url: string;
 		limit: number;
 		decode?: Extract<AssetRequest, { kind: "load"; }>["decode"];
 		result: AssetResult | null;
 		cancelled?: boolean;
+		// Its release is overdue: the slot stays reserved, nothing waits on it.
+		abandoned?: boolean;
 	}>();
+	const degradations: Degradation[] = [];
 	let progress: import("@/engine/contracts/assets").AssetProgress | null = null;
 	let releaseStale = false;
 	let nextId = 0, disposed = false, failure: string | null = null;
@@ -95,7 +111,10 @@ export function createAssets(): AssetOwner {
 	================
 	checkDeadline
 
-	Enforce one deadline for both active loads and cancellation acknowledgements.
+	Enforce the deadline of active loads and of cancellation acknowledgements.
+	An overdue acknowledgement abandons its job: the slot stays reserved (the
+	worker may still be running it) and a degraded fault is recorded. Only when
+	every slot is abandoned has the worker stopped answering.
 	A stalled network read never reaches it: the loader abandons a download
 	after its no-progress window and retries (about 91 s for headers that
 	arrive late and a body that then stalls), then answers with a transient
@@ -108,13 +127,24 @@ export function createAssets(): AssetOwner {
 		if ( disposed || failure ) return;
 		const now = performance.now();
 		for ( const job of jobs.values() ) {
-			if ( !job.result && now >= job.deadline ) {
-				fail(
-					"Asset worker timed out while " + (job.cancelled ? "cancelling " : "loading ") +
-						new URL( job.url ).pathname
-				);
+			if ( job.result || job.abandoned || now < job.deadline ) continue;
+			const path = new URL( job.url ).pathname;
+			if ( !job.cancelled ) {
+				fail( "Asset worker timed out while loading " + path );
 				return;
 			}
+			job.abandoned = true;
+			degradations.push( {
+				code: CANCEL_UNACKNOWLEDGED,
+				message: `Asset worker did not acknowledge cancelling ${path} within ${CANCEL_ACK_MS / 1000} s`
+			} );
+		}
+		const abandoned = [ ...jobs.values() ].filter( job => job.abandoned );
+		if ( abandoned.length >= REQUEST_CAPACITY ) {
+			fail(
+				"Asset worker stopped acknowledging cancellations: " +
+					abandoned.map( job => new URL( job.url ).pathname ).join( ", " )
+			);
 		}
 	}
 	worker.onmessage = ( event: MessageEvent<AssetWorkerMessage> ) => {
@@ -188,7 +218,7 @@ export function createAssets(): AssetOwner {
 					id,
 					path: new URL( job.url ).pathname,
 					decode: job.decode ?? "bytes",
-					ageMs: Math.max( 0, now - (job.deadline - REQUEST_DEADLINE_MS) ),
+					ageMs: Math.max( 0, now - job.startedAt ),
 					state: job.cancelled ?
 						"cancelling" as const :
 						job.result ?
@@ -213,6 +243,7 @@ export function createAssets(): AssetOwner {
 			releaseStale = false;
 			return stale;
 		},
+		takeDegradations: () => degradations.splice( 0 ),
 
 		/*
 		================
@@ -233,7 +264,8 @@ export function createAssets(): AssetOwner {
 				throw new Error( "Asset request exceeds budget" );
 			}
 			const id = ++nextId;
-			jobs.set( id, { deadline: performance.now() + REQUEST_DEADLINE_MS, url, limit, decode, result: null } );
+			const startedAt = performance.now();
+			jobs.set( id, { startedAt, deadline: startedAt + REQUEST_DEADLINE_MS, url, limit, decode, result: null } );
 
 			try {
 				send( {
@@ -285,6 +317,8 @@ export function createAssets(): AssetOwner {
 				return;
 			}
 			job.cancelled = true;
+			// The acknowledgement gets its own window, whatever the request had left.
+			job.deadline = performance.now() + CANCEL_ACK_MS;
 			send( { kind: "cancel", id } );
 		},
 

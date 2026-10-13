@@ -1918,6 +1918,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/frontend/frontend.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"takeDegradations"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/release/release-watch.ts",
 			"provider": "src/engine/runtime/assets/assets.ts",
 			"functions": [

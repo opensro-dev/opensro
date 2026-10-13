@@ -58,6 +58,15 @@ export type SessionCommand =
 	| { readonly kind: "restart"; }
 	| { readonly kind: "reconnect"; }
 	| { readonly kind: "world-ready"; readonly travelRevision?: number; }
+	// A main-thread fault the session reports to the Agent: a non-fatal
+	// degradation (an asset cancellation never acknowledged) or a refused
+	// world entry the player sees as "(S2)".
+	| {
+		readonly kind: "client-report";
+		readonly incidentKind: "degraded" | "runtime";
+		readonly code: string;
+		readonly message: string;
+	}
 	| LoginCommand
 	| {
 		readonly kind: "logout";

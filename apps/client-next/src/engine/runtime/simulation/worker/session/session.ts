@@ -15,8 +15,8 @@ carries releaseOutdated so the page offers the newer release.
 import { createWorldSession } from "./world/world";
 import { createSessionDecoder } from "./decode/decode";
 import { createSessionHttp } from "./http/http";
-import type { SessionOwner, SessionState } from "@/engine/contracts/session";
-import type { ClientIncident } from "@/engine/contracts/network";
+import type { SessionCommand, SessionOwner, SessionState } from "@/engine/contracts/session";
+import { type ClientIncident, INCIDENT_MESSAGE_LENGTH } from "@/engine/contracts/network";
 import {
 	MAX_STARTING_WAIT_MS,
 	rosterStarting,
@@ -27,6 +27,9 @@ import {
 // How long a failure report may take; it never holds up the session ending.
 const INCIDENT_TIMEOUT_MS = 5000;
 const INCIDENT_QUEUE_LIMIT = 8;
+// One client report per code per session owner, and at most this many codes:
+// a repeating fault cannot flood the Agent (as DEGRADED_CODES_PER_SESSION).
+const CLIENT_REPORT_CODES = 16;
 const INCIDENT_MAX_ATTEMPTS = 4;
 const INCIDENT_RETRY_MS = 6000;
 const RELEASE_OUTDATED_MESSAGE = "A newer version of the game is available. Refresh the page to continue.";
@@ -117,6 +120,29 @@ Bounded retries retain the reporting identity. Reports never block gameplay.
 		} );
 		if ( incident.id ) incidentDelivery.set( incident.id, "pending" );
 		flushIncidents();
+	}
+	const clientReports = new Set<string>();
+	/*
+================
+reportClient
+
+A main-thread fault (client-report) as an incident: degraded reports file
+apart from failures; a refused entry files as a software failure with the
+stage it happened in. Each code reports once.
+================
+	*/
+	function reportClient( command: Extract<SessionCommand, { kind: "client-report"; }> ) {
+		if ( clientReports.has( command.code ) || clientReports.size >= CLIENT_REPORT_CODES ) return;
+		clientReports.add( command.code );
+		reportIncident( {
+			id: crypto.randomUUID().replaceAll( "-", "" ),
+			category: command.incidentKind === "degraded" ? "degraded" : "software",
+			code: command.code,
+			kind: command.incidentKind,
+			message: command.message.slice( 0, INCIDENT_MESSAGE_LENGTH ),
+			phase: state.phase,
+			...(state.character ? { character: state.character } : {})
+		} );
 	}
 	/*
 ================
@@ -386,6 +412,10 @@ baseUrl
 				} catch ( error ) {
 					publish( { ...state, error: String( error ) } );
 				}
+				return;
+			}
+			if ( command.kind === "client-report" ) {
+				reportClient( command );
 				return;
 			}
 			if ( command.kind === "gameplay" ) {

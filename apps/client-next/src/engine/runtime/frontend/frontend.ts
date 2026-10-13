@@ -14,7 +14,7 @@ import { characterStatus } from "@/engine/foundation/ui/character-status";
 import { selectedDockCamera } from "@/engine/foundation/rendering/dock-camera";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { Renderer } from "@/engine/contracts/runtime";
-import type { SessionState, CharacterOperationCommand } from "@/engine/contracts/session";
+import type { SessionState, CharacterOperationCommand, SessionCommand } from "@/engine/contracts/session";
 /*
 ================
 createFrontend
@@ -24,7 +24,9 @@ export function createFrontend(
 	assets: AssetOwner,
 	renderer: Renderer,
 	base: string,
-	send: ( command: CharacterOperationCommand | { kind: "logout"; } ) => void = () => {},
+	send: (
+		command: CharacterOperationCommand | { kind: "logout"; } | Extract<SessionCommand, { kind: "client-report"; }>
+	) => void = () => {},
 	messageSound: () => void = () => {}
 ) {
 	const flow = createFrontendFlow(),
@@ -190,6 +192,17 @@ export function createFrontend(
 		*/
 		step( session: SessionState | null, now: number, dockReady = true, creationReady = true ) {
 			if ( disposed ) return flow.snapshot();
+			// Non-fatal asset faults (an unacknowledged cancellation) reach the
+			// Agent as degraded reports instead of passing unseen. The frontend
+			// steps every frame and owns the session sender; runtime.ts is sealed.
+			for ( const degradation of assets.takeDegradations?.() ?? [] ) {
+				send( {
+					kind: "client-report",
+					incidentKind: "degraded",
+					code: degradation.code,
+					message: degradation.message
+				} );
+			}
 			const delta = last ? Math.max( 0, (now - last) / 1000 ) : 0;
 			last = now;
 			if ( authenticated && session?.phase === "signed-out" ) {
@@ -252,6 +265,16 @@ export function createFrontend(
 				(entering || entryPending || flow.snapshot().phase === "loading-world") && session?.error &&
 				session.revision > entryRevision && session.phase === "character-select"
 			) {
+				// The player sees only "(S2)": report the stage and the session's
+				// reason, so a refused entry is never silent (client-report).
+				send( {
+					kind: "client-report",
+					incidentKind: "runtime",
+					code: "world_entry_rejected",
+					message: `Entry rejected (S2) at ${flow.snapshot().phase}/${
+						entryPending ? "pending" : entering ? "entering" : "loading"
+					}: ${session.error}`
+				} );
 				entryPending = false;
 				entering = false;
 				flow.entryRejected();

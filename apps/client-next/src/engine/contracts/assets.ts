@@ -161,6 +161,10 @@ export interface AssetOwner {
 	// Whether a listed file came back 404 (an error's stale flag) since the
 	// last call; each call consumes it.
 	takeReleaseStale?(): boolean;
+	// Non-fatal faults since the last call (a cancellation the worker never
+	// acknowledged); each call consumes them. The runtime reports each as a
+	// degraded incident.
+	takeDegradations?(): readonly import("./network").Degradation[];
 	request(
 		url: string,
 		limit?: number,

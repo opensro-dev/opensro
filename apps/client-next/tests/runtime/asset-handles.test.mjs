@@ -193,19 +193,50 @@ test("progress messages do not complete handles or release download capacity", t
 	assert.equal( assets.available(), 4 );
 });
 
-test("stalled asset jobs and cancellation acknowledgements fail the shared owner visibly", t => {
+test("a stalled load fails the shared owner visibly", t => {
 	let now = 0;
 	t.mock.method( performance, "now", () => now );
 	const { assets } = fixture( t );
 	const first = assets.request( "https://assets.test/stalled" ),
 		second = assets.request( "https://assets.test/other" );
-	assets.cancel( first );
 	now = 119999;
 	assert.equal( assets.health().phase, "running" );
 	now = 120000;
 	assert.equal( assets.health().phase, "failed" );
-	assert.match( assets.health().error, /cancelling \/stalled/ );
+	assert.match( assets.health().error, /loading \/stalled/ );
 	assert.equal( assets.available(), 0 );
 	assert.match( assets.take( second ).error, /timed out/ );
+	assert.equal( assets.take( first ).kind, "error" );
 	assert.throws( () => assets.request( "https://assets.test/retry" ), /timed out/ );
+});
+test("an unacknowledged cancellation is abandoned, keeps its slot and reports once", t => {
+	let now = 0;
+	t.mock.method( performance, "now", () => now );
+	const { assets, worker } = fixture( t );
+	const first = assets.request( "https://assets.test/stalled" );
+	assets.cancel( first );
+	now = 29999;
+	assert.equal( assets.health().phase, "running" );
+	assert.deepEqual( assets.takeDegradations(), [] );
+	now = 30000;
+	assert.equal( assets.health().phase, "running" );
+	assert.equal( assets.available(), 3 );
+	const reported = assets.takeDegradations();
+	assert.equal( reported.length, 1 );
+	assert.equal( reported[0].code, "asset-cancel-unacknowledged" );
+	assert.match( reported[0].message, /\/stalled/ );
+	now = 90000;
+	assets.health();
+	assert.deepEqual( assets.takeDegradations(), [] );
+	defined( worker ).onmessage( { data: { kind: "released", id: first } } );
+	assert.equal( assets.available(), 4 );
+});
+test("every slot held by abandoned cancellations fails the owner with a named reason", t => {
+	let now = 0;
+	t.mock.method( performance, "now", () => now );
+	const { assets } = fixture( t );
+	for ( const name of [ "a", "b", "c", "d" ] ) assets.cancel( assets.request( "https://assets.test/" + name ) );
+	now = 30000;
+	assert.equal( assets.health().phase, "failed" );
+	assert.match( assets.health().error, /stopped acknowledging cancellations: \/a, \/b, \/c, \/d/ );
 });

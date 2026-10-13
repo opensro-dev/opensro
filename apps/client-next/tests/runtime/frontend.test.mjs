@@ -659,7 +659,8 @@ test("entry admission retains the dock through connecting and rejection, and lea
 		setWorldCamera() {},
 		characterStats: () => ({ actors: 1 })
 	};
-	const frontend = createFrontend( assets, renderer, "http://fixture.invalid" );
+	const sent = [];
+	const frontend = createFrontend( assets, renderer, "http://fixture.invalid", command => sent.push( command ) );
 	let now = 0, session = { phase: "signed-out", revision: 1, characters: [] };
 	const step = () => frontend.step( session, now += 100 );
 	for ( let i = 0; i < 20 && frontend.snapshot().phase !== "intro"; i++ ) step();
@@ -686,6 +687,12 @@ test("entry admission retains the dock through connecting and rejection, and lea
 	assert.equal( refused.entryPending, false );
 	assert.ok( refused.status );
 	assert.equal( clears, before );
+	// The player sees only "(S2)"; the reason and stage reach the Agent.
+	const reports = sent.filter( command => command.kind === "client-report" );
+	assert.equal( reports.length, 1 );
+	assert.equal( reports[0].incidentKind, "runtime" );
+	assert.equal( reports[0].code, "world_entry_rejected" );
+	assert.match( reports[0].message, /\(S2\) at dock\/pending: offline$/ );
 	assert.equal( frontend.start(), true );
 	session = { ...session, phase: "entering-world", revision: 5, error: undefined };
 	assert.equal( step().phase, "dock" );
