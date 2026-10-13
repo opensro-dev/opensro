@@ -43,7 +43,7 @@ func runRotateSessionKey(ctx context.Context, arguments []string) error {
 	if len(deployment.Shards) == 0 {
 		return fmt.Errorf("shard catalog has no enabled shards")
 	}
-	client, err := newNomadClient(options.Namespace)
+	client, err := newNomadClient(options.Namespace, options.DevStack)
 	if err != nil {
 		return err
 	}

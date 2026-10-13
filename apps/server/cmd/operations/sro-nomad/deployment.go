@@ -25,8 +25,6 @@ import (
 	"unicode/utf8"
 
 	"opensro.online/server/internal/agent/bugreport"
-	"opensro.online/server/internal/agent/provisioning"
-	"opensro.online/server/internal/agent/publicstats"
 	agentserver "opensro.online/server/internal/agent/server"
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/config"
@@ -122,7 +120,8 @@ type shardDeployment struct {
 	TransportPort int
 	AuthorityDir  string
 	// PublicAPIAddr is the community site's read API listener: the first
-	// shard serves it on publicstats.DefaultAddr, every other shard "off"
+	// shard serves it on publicstats.DefaultAddr (moved by
+	// SRO_DEV_PORT_OFFSET, devstack.go), every other shard "off"
 	// (one host, one loopback port, one site).
 	PublicAPIAddr string
 }
@@ -224,7 +223,7 @@ func resolveDeployment(
 	}
 	// Unset (options built without flags) is the documented default.
 	if options.AgentProvisioningPort == 0 {
-		options.AgentProvisioningPort = provisioning.DefaultPort
+		options.AgentProvisioningPort = options.DevStack.provisioningPort()
 	}
 	if options.AgentProvisioningPort < 1 || options.AgentProvisioningPort > 65535 ||
 		options.AgentProvisioningPort == options.AgentPort {
@@ -299,7 +298,7 @@ func resolveDeployment(
 	identityJWKSURL := strings.TrimSpace(options.IdentityJWKSURL)
 	if requirePrerequisites {
 		if identityIssuer == "" && hostNetwork == "loopback" {
-			identityIssuer = developmentNomadAddress
+			identityIssuer = options.DevStack.nomadAddress()
 		}
 		if identityIssuer == "" {
 			return nil, fmt.Errorf(
@@ -359,7 +358,7 @@ func resolveDeployment(
 		}
 		publicAPIAddr := "off"
 		if len(shards) == 0 {
-			publicAPIAddr = publicstats.DefaultAddr
+			publicAPIAddr = options.DevStack.publicAPIAddr()
 		}
 		shards = append(shards, shardDeployment{
 			Definition:    definition,

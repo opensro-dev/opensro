@@ -19,12 +19,12 @@ func TestValidateCheckoutDevelopmentAgentRequiresExactListenerIdentity(
 	expectation := devAgentExpectation{
 		configPath: configPath,
 		dataDir:    dataDir,
-		oidcIssuer: developmentNomadAddress,
+		oidcIssuer: devStack{}.nomadAddress(),
 	}
 	self := compatibleDevAgentSelf(configPath, dataDir)
 
 	if err := validateCheckoutDevelopmentAgent(
-		developmentNomadAddress+"/",
+		devStack{}.nomadAddress()+"/",
 		self,
 		expectation,
 	); err != nil {
@@ -42,7 +42,7 @@ func TestValidateCheckoutDevelopmentAgentRequiresExactListenerIdentity(
 		filepath.Join("C:", "other", "dev-agent"),
 	)
 	if err := validateCheckoutDevelopmentAgent(
-		developmentNomadAddress,
+		devStack{}.nomadAddress(),
 		other,
 		expectation,
 	); err == nil {

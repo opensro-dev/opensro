@@ -80,6 +80,27 @@ different or forwarded cluster never grants the development exemption. Use
 the production namespace and credential contract below for every other
 cluster.
 
+### A second local stack
+
+`SRO_DEV_PORT_OFFSET` (a whole number, default 0) moves every port of the
+checkout's local stack by the same amount: the development Nomad agent's
+HTTP, RPC and Serf ports and its workload-identity issuer (4646-4648), the
+Agent (8787), its provisioning API (8789) and the first shard's public API
+(8790). Set it in the environment of both `dev-agent` and the `sro-nomad`
+commands; without `NOMAD_ADDR` they talk to the moved agent. The second
+stack runs from its own checkout or worktree (its own `.state`), under its
+own Nomad agent and workload identity, with a shard catalogue whose
+transport and control ports are free (`deploy -catalog <file>`):
+
+```powershell
+$env:SRO_DEV_PORT_OFFSET = "100"
+go run ./cmd/operations/sro-nomad dev-agent
+go run ./cmd/operations/sro-bootstrap-development
+go run ./cmd/operations/sro-nomad deploy -build -catalog <catalogue>
+```
+
+Unset or `0` is the single stack exactly as before.
+
 ## Production
 
 GM grants can be stored in `<state-dir>/gm-characters.txt` (by default

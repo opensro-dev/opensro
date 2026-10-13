@@ -87,7 +87,7 @@ func requireCheckoutDevelopmentAgent(
 			"nomad",
 			"dev-agent",
 		),
-		oidcIssuer: developmentNomadAddress,
+		oidcIssuer: options.DevStack.nomadAddress(),
 	}
 
 	self, err := client.api.Agent().Self()
@@ -115,11 +115,13 @@ func validateCheckoutDevelopmentAgent(
 	self *nomad.AgentSelf,
 	expectation devAgentExpectation,
 ) error {
-	if strings.TrimRight(address, "/") != developmentNomadAddress {
+	// The development agent's API address is its identity issuer
+	// (dev-windows.hcl; devStack.portsConfig when the stack is moved).
+	if strings.TrimRight(address, "/") != expectation.oidcIssuer {
 		return fmt.Errorf(
 			"nomad API is %q, want checkout development address %q",
 			address,
-			developmentNomadAddress,
+			expectation.oidcIssuer,
 		)
 	}
 	return validateDevAgentIdentity(self, expectation)

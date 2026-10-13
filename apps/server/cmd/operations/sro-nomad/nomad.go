@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -30,8 +31,13 @@ type nomadClient struct {
 	namespace string
 }
 
-func newNomadClient(namespace string) (*nomadClient, error) {
+func newNomadClient(namespace string, stack devStack) (*nomadClient, error) {
 	config := nomad.DefaultConfig()
+	// NOMAD_ADDR names any cluster; without it the client talks to this
+	// checkout's development agent, wherever SRO_DEV_PORT_OFFSET put it.
+	if strings.TrimSpace(os.Getenv("NOMAD_ADDR")) == "" {
+		config.Address = stack.nomadAddress()
+	}
 	config.Namespace = namespace
 	client, err := nomad.NewClient(config)
 	if err != nil {

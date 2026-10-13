@@ -18,8 +18,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-
-	"opensro.online/server/internal/agent/provisioning"
 )
 
 /*
@@ -96,7 +94,7 @@ func runValidate(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	client, err := newNomadClient(options.Namespace)
+	client, err := newNomadClient(options.Namespace, options.DevStack)
 	if err != nil {
 		return err
 	}
@@ -120,7 +118,7 @@ func runDeploy(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	client, err := newNomadClient(options.Namespace)
+	client, err := newNomadClient(options.Namespace, options.DevStack)
 	if err != nil {
 		return err
 	}
@@ -183,7 +181,7 @@ func runStop(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	client, err := newNomadClient(options.Namespace)
+	client, err := newNomadClient(options.Namespace, options.DevStack)
 	if err != nil {
 		return err
 	}
@@ -214,7 +212,7 @@ func runStatus(ctx context.Context, arguments []string) error {
 	if err != nil {
 		return err
 	}
-	client, err := newNomadClient(options.Namespace)
+	client, err := newNomadClient(options.Namespace, options.DevStack)
 	if err != nil {
 		return err
 	}
@@ -242,7 +240,11 @@ type commandOptions struct {
 	IdentityIssuer  string
 	IdentityJWKSURL string
 	AgentURL        string
-	AgentPort       int
+	// DevStack is the local development stack (devstack.go,
+	// SRO_DEV_PORT_OFFSET): the default Nomad address and the Agent and
+	// public API ports a loopback deployment uses.
+	DevStack  devStack
+	AgentPort int
 	// AgentProvisioningPort is the Agent's loopback account provisioning port.
 	AgentProvisioningPort int
 	PrivateNet            bool
@@ -268,6 +270,11 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 	flags.SetOutput(os.Stderr)
 
 	var options commandOptions
+	stack, err := loadDevStack(os.Getenv)
+	if err != nil {
+		return commandOptions{}, err
+	}
+	options.DevStack = stack
 	flags.StringVar(&options.ModuleRoot, "module-root", "", "server module root (default: auto-detect)")
 	flags.StringVar(&options.Catalog, "catalog", "", "shard catalog (default: <module>/config/shards.json)")
 	flags.StringVar(&options.StateDir, "state-dir", "", "cluster credential state (default: <module>/.state/cluster)")
@@ -322,11 +329,11 @@ func parseOptions(name string, arguments []string) (commandOptions, error) {
 		"",
 		"production WebTransport TLS private key readable on every GameWorld node",
 	)
-	flags.IntVar(&options.AgentPort, "agent-port", 8787, "Agent HTTP port")
+	flags.IntVar(&options.AgentPort, "agent-port", stack.agentPort(), "Agent HTTP port")
 	flags.IntVar(
 		&options.AgentProvisioningPort,
 		"agent-provisioning-port",
-		provisioning.DefaultPort,
+		stack.provisioningPort(),
 		"Agent loopback account provisioning port (a second Agent on one host needs its own)",
 	)
 	flags.BoolVar(

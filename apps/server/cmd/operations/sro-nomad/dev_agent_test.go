@@ -17,7 +17,7 @@ func TestValidateDevAgentIdentityAcceptsExactCheckout(t *testing.T) {
 	err := validateDevAgentIdentity(self, devAgentExpectation{
 		configPath: configPath,
 		dataDir:    dataDir,
-		oidcIssuer: developmentNomadAddress,
+		oidcIssuer: devStack{}.nomadAddress(),
 	})
 	if err != nil {
 		t.Fatalf("validate identity: %v", err)
@@ -36,7 +36,7 @@ func TestValidateDevAgentIdentityRefusesAnotherDataDirectory(t *testing.T) {
 	err := validateDevAgentIdentity(self, devAgentExpectation{
 		configPath: configPath,
 		dataDir:    filepath.Join("C:", "checkout", "dev-agent"),
-		oidcIssuer: developmentNomadAddress,
+		oidcIssuer: devStack{}.nomadAddress(),
 	})
 	if err == nil {
 		t.Fatal("expected data directory mismatch")
@@ -54,7 +54,7 @@ func TestValidateDevAgentIdentityRefusesStaleWorkloadIssuer(t *testing.T) {
 	err := validateDevAgentIdentity(self, devAgentExpectation{
 		configPath: configPath,
 		dataDir:    dataDir,
-		oidcIssuer: developmentNomadAddress,
+		oidcIssuer: devStack{}.nomadAddress(),
 	})
 	if err == nil {
 		t.Fatal("expected stale workload issuer refusal")
@@ -72,7 +72,7 @@ func TestValidateDevAgentIdentityRefusesACLEnabledAgent(t *testing.T) {
 	err := validateDevAgentIdentity(self, devAgentExpectation{
 		configPath: configPath,
 		dataDir:    dataDir,
-		oidcIssuer: developmentNomadAddress,
+		oidcIssuer: devStack{}.nomadAddress(),
 	})
 	if err == nil {
 		t.Fatal("expected ACL-enabled agent refusal")
@@ -136,7 +136,7 @@ func compatibleDevAgentSelf(configPath string, dataDir string) *nomad.AgentSelf 
 		"ConfigPaths": configPath,
 		"Server": map[string]interface{}{
 			"Enabled":    true,
-			"OIDCIssuer": developmentNomadAddress,
+			"OIDCIssuer": devStack{}.nomadAddress(),
 		},
 		"Client": map[string]interface{}{
 			"Enabled": true,

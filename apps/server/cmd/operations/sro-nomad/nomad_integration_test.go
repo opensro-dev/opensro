@@ -22,7 +22,7 @@ func TestNomadAutoRevertAndGracefulStopIntegration(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	client, err := newNomadClient(defaultNomadNamespace)
+	client, err := newNomadClient(defaultNomadNamespace, devStack{})
 	if err != nil {
 		t.Fatal(err)
 	}

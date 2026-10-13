@@ -36,7 +36,6 @@ import (
 )
 
 const (
-	developmentNomadAddress = "http://127.0.0.1:4646"
 	developmentNomadVersion = "2.0.7"
 	// arm64CoreMHz is the per-core compute declared on arm64 hosts whose CPU
 	// fingerprint is unusable. Apple Silicon cores are read at their GHz
@@ -56,7 +55,11 @@ type devAgentOptions struct {
 	// platformConfig is merged after config on hosts whose fingerprint
 	// needs a correction (arm64 CPU compute); empty elsewhere.
 	platformConfig string
-	dataDir        string
+	// portsConfig is merged last when SRO_DEV_PORT_OFFSET moves the stack
+	// (devStack.portsConfig); empty for the default stack.
+	portsConfig string
+	dataDir     string
+	stack       devStack
 }
 
 type devAgentExpectation struct {
@@ -80,8 +83,9 @@ func runDevAgent(arguments []string) error {
 		return err
 	}
 
+	address := options.stack.nomadAddress()
 	present, err := reuseCompatibleDevAgent(
-		developmentNomadAddress,
+		address,
 		expectation,
 	)
 	if err != nil {
@@ -91,7 +95,7 @@ func runDevAgent(arguments []string) error {
 		fmt.Printf(
 			"Compatible Nomad %s development agent is already ready at %s; reusing it\n",
 			developmentNomadVersion,
-			developmentNomadAddress,
+			address,
 		)
 		return nil
 	}
@@ -102,19 +106,9 @@ func runDevAgent(arguments []string) error {
 	fmt.Printf(
 		"Starting Nomad %s development agent at %s\n",
 		developmentNomadVersion,
-		developmentNomadAddress,
+		address,
 	)
-	command := exec.Command(
-		options.binary,
-		"agent",
-		"-dev",
-		"-log-level=INFO",
-		"-config="+expectation.configPath,
-		"-data-dir="+expectation.dataDir,
-	)
-	if expectation.platformConfigPath != "" {
-		command.Args = append(command.Args, "-config="+expectation.platformConfigPath)
-	}
+	command := exec.Command(options.binary, devAgentArgs(options)...)
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
@@ -123,13 +117,13 @@ func runDevAgent(arguments []string) error {
 		// owns the agent; the loser succeeds only if that agent proves it has
 		// the exact identity expected by this checkout.
 		present, probeErr := reuseCompatibleDevAgent(
-			developmentNomadAddress,
+			address,
 			expectation,
 		)
 		if probeErr == nil && present {
 			fmt.Printf(
 				"Compatible Nomad development agent won the startup race at %s; reusing it\n",
-				developmentNomadAddress,
+				address,
 			)
 			return nil
 		}
@@ -149,6 +143,11 @@ func parseDevAgentOptions(arguments []string) (devAgentOptions, error) {
 	flags.SetOutput(os.Stderr)
 
 	var options devAgentOptions
+	stack, err := loadDevStack(os.Getenv)
+	if err != nil {
+		return devAgentOptions{}, err
+	}
+	options.stack = stack
 	flags.StringVar(
 		&options.moduleRoot,
 		"module-root",
@@ -250,6 +249,13 @@ func parseDevAgentOptions(arguments []string) (devAgentOptions, error) {
 			"dev-agent-platform.hcl",
 		)
 	}
+	if stack.portsConfig() != "" {
+		// Written by prepareDevAgentStart next to the data directory.
+		options.portsConfig = filepath.Join(
+			filepath.Dir(options.dataDir),
+			"dev-agent-ports.hcl",
+		)
+	}
 	options.binary = cleanAbsolute(options.binary)
 	options.config = cleanAbsolute(options.config)
 	options.dataDir = cleanAbsolute(options.dataDir)
@@ -259,6 +265,9 @@ func parseDevAgentOptions(arguments []string) (devAgentOptions, error) {
 	}
 	if options.platformConfig != "" {
 		options.platformConfig = cleanAbsolute(options.platformConfig)
+	}
+	if options.portsConfig != "" {
+		options.portsConfig = cleanAbsolute(options.portsConfig)
 	}
 	return options, nil
 }
@@ -282,9 +291,41 @@ func prepareDevAgentStart(options devAgentOptions) error {
 		)
 	}
 	if options.platformConfig != "" {
-		return writeDevAgentPlatformConfig(options.platformConfig, runtime.NumCPU())
+		if err := writeDevAgentPlatformConfig(options.platformConfig, runtime.NumCPU()); err != nil {
+			return err
+		}
+	}
+	if options.portsConfig != "" {
+		if err := os.WriteFile(options.portsConfig, []byte(options.stack.portsConfig()), 0o600); err != nil {
+			return fmt.Errorf("write Nomad ports config %s: %w", options.portsConfig, err)
+		}
 	}
 	return nil
+}
+
+/*
+================
+devAgentArgs
+
+The development agent's command line. The ports config comes last, so its
+issuer replaces the shared config's.
+================
+*/
+func devAgentArgs(options devAgentOptions) []string {
+	args := []string{
+		"agent",
+		"-dev",
+		"-log-level=INFO",
+		"-config=" + options.config,
+		"-data-dir=" + options.dataDir,
+	}
+	if options.platformConfig != "" {
+		args = append(args, "-config="+options.platformConfig)
+	}
+	if options.portsConfig != "" {
+		args = append(args, "-config="+options.portsConfig)
+	}
+	return args
 }
 
 /*
@@ -367,7 +408,7 @@ func resolveDevAgentExpectation(
 		configPath:         options.config,
 		platformConfigPath: options.platformConfig,
 		dataDir:            options.dataDir,
-		oidcIssuer:         developmentNomadAddress,
+		oidcIssuer:         options.stack.nomadAddress(),
 		shards:             shards,
 	}, nil
 }
