@@ -3726,11 +3726,13 @@ export function createUi(
 		} else if ( id === "system-exit" ) {
 			setPanel( "" );
 			commands( { kind: "exit" } );
-		} else if ( id === "close" || id === "companion-close" || id === "potion-cancel" ) {
+		} else if (
+			id === "close" || id === "companion-close" || id === "cos-companion-close" || id === "potion-cancel"
+		) {
 			confirmDrop = "";
 			confirmAbandon = false;
-			// Closing the shop or the warehouse, or the inventory beside either,
-			// ends the NPC interaction: CIFWnd_OnInventoryOrStorageClose (5B0D20) and the
+			// Closing the shop or the warehouse, or the inventory or transport bag
+			// beside either, ends the NPC interaction: CIFWnd_OnInventoryOrStorageClose (5B0D20) and the
 			// store's own close (53D4BC) call CGInterface_SetNpcShopVisible( 0 ),
 			// which hides the talk menus and releases the NPC target (69FB95).
 			if ( panel === "Shop" || panel === "Storage" ) sendGameplay( { kind: "npc-close" } );
@@ -14623,7 +14625,10 @@ export function createUi(
 					}
 					const record = records.find( r => r.gid === cosGid ), busy = !!game?.inventoryPending;
 					if ( cosTab === 1 && !record?.inventory || cosTab === 2 && record?.band !== 4 ) cosTab = 0;
-					nativeFrame( root, px, py, record?.name ?? "" );
+					// Beside a shop (trade goods loading into a transport) the bag is a
+					// companion with its own close identity, as the inventory beside a
+					// service window is: both frames publishing "close" crashed the HUD.
+					nativeFrame( root, px, py, record?.name ?? "", panel === "Shop" ? "cos-companion-close" : "close" );
 					nativePage( hudData.windows.ifcos!, px, py );
 					[
 						"UIIT_STT_COSNEWUI_TABMENU_BASICINFO",

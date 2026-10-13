@@ -10,7 +10,9 @@ proves the whole class. A window must actually open (new controls appear).
 Most open from their window id; service windows open through the flow that
 opens them in game (a storage room, an official's answer, a used scroll).
 SERVICE_WINDOWS adds the windows no registered panel opens (Global chat
-crashed with a frame close and Cancel sharing "wholechat-exit").
+crashed with a frame close and Cancel sharing "wholechat-exit"), and the
+pairs a game state opens together (a trade-goods shop beside its transport
+bag, whose frames both published "close").
 
 ===========================================================================
 */
@@ -26,6 +28,9 @@ const OFFICIAL = 17;
 // A type word isGlobalChatItem accepts (global-chat.ts): TID 3/3/5/2.
 const GLOBAL_CHAT_TYPE = 0x29ec;
 const BAG_SLOT = 13;
+// A trader beside the player and the transport the trade goods load into.
+const TRADER = 18;
+const TRANSPORT = 7;
 
 /** @typedef {{ state: any, ui: { event: ( event: any ) => void } }} Fixture */
 
@@ -208,8 +213,32 @@ const SERVICE_WINDOWS = {
 	},
 	"Stall"( f ) {
 		f.state.gameplay.stall = { ...emptyStall(), phase: "owner", title: "Stall" };
+	},
+	"Shop with a transport out"( f ) {
+		tradeWithTransport( f );
 	}
 };
+
+/*
+================
+tradeWithTransport
+
+A trade-goods shop opened with a transport out: the shop names the
+transport, and its bag opens beside the shop.
+================
+*/
+/** @param {Fixture} f */
+function tradeWithTransport( f ) {
+	f.state.entities.push( { ...f.state.entities[0], gid: TRADER, refObjId: 2011, kind: "npc", name: "Trader" } );
+	f.state.gameplay.cosRecords = [
+		{ gid: TRANSPORT, refObjId: 100, band: 4, hp: 100, mp: 0, status: 0, dead: false, inventory: [] }
+	];
+	Object.assign( f.state.gameplay, {
+		target: TRADER,
+		shop: { npc: TRADER, name: "Trader", offers: [], cosGid: TRANSPORT }
+	} );
+	f.ui.event( { kind: "activate", id: "open-window:Shop" } );
+}
 
 for ( const panel of [ ...uiPanels(), ...Object.keys( SERVICE_WINDOWS ) ] ) {
 	test(`${panel} opens with unique control ids`, t => {
@@ -236,3 +265,33 @@ for ( const panel of [ ...uiPanels(), ...Object.keys( SERVICE_WINDOWS ) ] ) {
 		);
 	});
 }
+
+test("the transport bag beside a shop closes the trade through its own control", t => {
+	const sent = [], f = uiFixture( command => sent.push( command ) );
+	t.after( () => f.dispose() );
+	let now = 0;
+	// A property, not a local, as in the sweep above: a closure-assigned
+	// local narrows to never at the assertions.
+	const seen = {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null} */ presentation: null
+	};
+	const step = () => {
+		for ( let i = 0; i < 16; i++ ) seen.presentation = f.ui.step( f.state, now += 100 ) ?? seen.presentation;
+	};
+	step();
+	tradeWithTransport( f );
+	step();
+	const ids = seen.presentation?.controls.map( control => control.id ) ?? [];
+	assert.ok( ids.includes( "close" ), "the shop has its close" );
+	assert.ok( ids.includes( "cos-companion-close" ), "the transport bag beside it has its own" );
+	f.ui.event( { kind: "activate", id: "cos-companion-close" } );
+	step();
+	assert.ok(
+		JSON.stringify( sent ).includes( "npc-close" ),
+		"closing the bag ends the trade, as the shop's close does"
+	);
+	assert.ok(
+		!seen.presentation?.controls.some( control => control.id === "cos-companion-close" ),
+		"both windows closed"
+	);
+});
