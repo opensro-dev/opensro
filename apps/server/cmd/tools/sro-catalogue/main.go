@@ -225,6 +225,9 @@ func run(out, release, textdata string) error {
 	if alchemyCatalog.Rates, err = alchemy.ReinforceRatesFromEnv(); err != nil {
 		return err
 	}
+	if alchemyCatalog.MaxPlus, err = alchemy.ReinforceMaxPlusFromEnv(); err != nil {
+		return err
+	}
 	npcs := catalogue.BuildNpcs(catalogue.NpcSource{Roster: simulation.LoadNpcWorldRoster(dir), Shops: shops})
 	placedNpcs := map[uint32]bool{}
 	for _, npc := range npcs {

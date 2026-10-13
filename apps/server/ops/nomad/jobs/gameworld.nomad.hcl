@@ -198,6 +198,14 @@ variable "alchemy_rates" {
   default = "on"
 }
 
+# alchemy_max_plus caps reinforcement (port-only, not native; owner decision
+# 2026-10-13): "on" is +11, a number is that plus, "off" is the original
+# game's own ceiling. A malformed value stops GameWorld at boot.
+variable "alchemy_max_plus" {
+  type    = string
+  default = "on"
+}
+
 # beta_growth holds every level's EXP and skill EXP to the level-1 kill pace,
 # multiplies skill EXP by beta_skill_exp_rate on top, makes a kill's assigned
 # rewards and ordinary drop passes beta_drop_rate times over (the unique
@@ -431,6 +439,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates
+        SRO_ALCHEMY_MAX_PLUS               = var.alchemy_max_plus
         SRO_BETA_GROWTH                    = var.beta_growth
         SRO_BETA_SKILL_EXP_RATE            = var.beta_skill_exp_rate
         SRO_BETA_DROP_RATE                 = var.beta_drop_rate

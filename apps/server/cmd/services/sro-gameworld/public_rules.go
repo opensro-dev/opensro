@@ -13,6 +13,8 @@ clip telemetry, data paths) are not player-facing and are left out.
 package main
 
 import (
+	"fmt"
+
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/companion"
@@ -36,6 +38,7 @@ func publicRules() publicstats.RulesResponse {
 	silkRate, _ := action.BetaSilkFromEnv()
 	stackSizes, _ := enterworld.StackSizesFromEnv()
 	alchemyRates, _ := alchemy.ReinforceRatesFromEnv()
+	alchemyMaxPlus, _ := alchemy.ReinforceMaxPlusFromEnv()
 	dropMix, _ := progression.BetaDropMixFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
@@ -79,6 +82,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Each elixir has its own success chance per plus, at least 10%.",
 				Now:    "One gentler table for every elixir: +1 always succeeds, falling to 5% for +11; powders, Luck and premium bonuses still add.",
 				Why:    "Players asked for it; the original rates return with one setting."},
+			{Flag: alchemy.EnvReinforceMaxPlus, On: alchemyMaxPlus > 0,
+				Native: "Items can be reinforced far beyond +11.",
+				Now:    fmt.Sprintf("Reinforcement stops at +%d.", alchemyMaxPlus),
+				Why:    "The success table ends at +11; the cap keeps gear in the balanced range."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

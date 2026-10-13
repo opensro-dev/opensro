@@ -46,6 +46,7 @@ type ReinforceRules struct {
 	RiskPlus       int   `json:"riskPlus" doc:"From this plus up, a failure destroys the item destroyPercent of the time (an Immortal charge, MATTR_ATHANASIA, saves it; some items are indestructible) and otherwise curses a random option (a Steady charge, MATTR_SOLID, prevents it)."`
 	DestroyPercent int   `json:"destroyPercent" doc:"The share of failures at riskPlus and above that try to destroy the item."`
 	AstralFloor    int   `json:"astralFloor" doc:"Every failure the item survives resets the plus to 0, or to astralFloor when the plus was at least astralFloor and an Astral charge (MATTR_ASTRAL) is spent. The elixir (and a staged powder) is always used."`
+	MaxPlus        int   `json:"maxPlus,omitempty" doc:"Port-only, not native: when present this shard refuses reinforcing an item whose plus is already maxPlus or more. Absent is the original game's rule."`
 	ShardRates     []int `json:"shardRates,omitempty" doc:"Port-only, not native: when present this shard replaces elixir.chances[plus] with shardRates[plus] (the last entry holds above the table) and drops the minChance floor; the powder, luckBonus and bonusSources still add. Absent is the original game's rule."`
 }
 
@@ -106,6 +107,7 @@ func BuildAlchemy(header Header, source AlchemySource) AlchemyFile {
 	if catalog.Rates != nil {
 		file.Rules.ShardRates = append([]int(nil), catalog.Rates...)
 	}
+	file.Rules.MaxPlus = int(catalog.MaxPlus)
 	elixirs, powders := catalog.ReinforceTables()
 	rows := func(tables []alchemy.ReinforceTable) []ReinforceRow {
 		out := []ReinforceRow{}

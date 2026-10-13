@@ -386,7 +386,12 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 	item := &out[target]
 	ref := c.Items[item.Codename]
 	recipe := c.Items[out[elixir].Codename]
-	if item.Plus >= 250 {
+	if item.Plus >= nativeReinforceCeiling {
+		return zero, Refusal(0x0f)
+	}
+	// Port-only, not native: the shard's cap (maxplus.go) refuses with the
+	// native ceiling's own code.
+	if c.MaxPlus > 0 && item.Plus >= c.MaxPlus {
 		return zero, Refusal(0x0f)
 	}
 	if !slices.Contains(elixirClasses(recipe), item.TypeFlags>>7&15) {

@@ -18,6 +18,9 @@ parses it; the GameWorld's own unset value is always native.
   - SRO_GM_SETSPEED (gm_setspeed): a GM's /SETSPEED (action/gmspeed.go).
     The deployment default is on, as the owner decided on 2026-10-12;
     "off" refuses the command, which v1.150 does not have.
+  - SRO_ALCHEMY_MAX_PLUS (alchemy_max_plus): the enhancement cap
+    (alchemy/maxplus.go). The deployment default is on (+11), as the owner
+    decided on 2026-10-13; "off" is the original game's ceiling.
 
 ===========================================================================
 */
@@ -37,6 +40,9 @@ const alchemyRatesDefault = "on"
 // gmSetSpeedDefault is the owner-approved deployment default.
 const gmSetSpeedDefault = "on"
 
+// alchemyMaxPlusDefault is the owner-approved deployment default.
+const alchemyMaxPlusDefault = "on"
+
 /*
 ================
 portOnlySettings
@@ -47,14 +53,15 @@ type portOnlySettings struct {
 	ReverseReturnMap string
 	AlchemyRates     string
 	GMSetSpeed       string
+	AlchemyMaxPlus   string
 }
 
 /*
 ================
 portOnlySettingsFromEnv
 
-The deployer's values as written; storage auto-stack and the alchemy
-rates take their defaults when unset.
+The deployer's values as written; storage auto-stack, the alchemy rates,
+/SETSPEED and the enhancement cap take their defaults when unset.
 ================
 */
 func portOnlySettingsFromEnv() portOnlySettings {
@@ -63,6 +70,7 @@ func portOnlySettingsFromEnv() portOnlySettings {
 		ReverseReturnMap: strings.TrimSpace(os.Getenv("SRO_REVERSE_RETURN_MAP")),
 		AlchemyRates:     strings.TrimSpace(os.Getenv("SRO_ALCHEMY_RATES")),
 		GMSetSpeed:       strings.TrimSpace(os.Getenv("SRO_GM_SETSPEED")),
+		AlchemyMaxPlus:   strings.TrimSpace(os.Getenv("SRO_ALCHEMY_MAX_PLUS")),
 	}
 	if settings.StorageAutoStack == "" {
 		settings.StorageAutoStack = storageAutoStackDefault
@@ -72,6 +80,9 @@ func portOnlySettingsFromEnv() portOnlySettings {
 	}
 	if settings.GMSetSpeed == "" {
 		settings.GMSetSpeed = gmSetSpeedDefault
+	}
+	if settings.AlchemyMaxPlus == "" {
+		settings.AlchemyMaxPlus = alchemyMaxPlusDefault
 	}
 	return settings
 }
@@ -88,5 +99,6 @@ func (settings portOnlySettings) jobVariables(variables map[string]any) map[stri
 	variables["reverse_return_map"] = settings.ReverseReturnMap
 	variables["alchemy_rates"] = settings.AlchemyRates
 	variables["gm_setspeed"] = settings.GMSetSpeed
+	variables["alchemy_max_plus"] = settings.AlchemyMaxPlus
 	return variables
 }

@@ -24,6 +24,9 @@ func (rt *Runtime) ConfigureAlchemy(dir string) error {
 	if c.Rates, err = alchemy.ReinforceRatesFromEnv(); err != nil {
 		return err
 	}
+	if c.MaxPlus, err = alchemy.ReinforceMaxPlusFromEnv(); err != nil {
+		return err
+	}
 	rt.Alchemy = c
 	return nil
 }
