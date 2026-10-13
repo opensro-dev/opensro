@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/catalogue"
+	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
@@ -179,6 +180,9 @@ The shops the shard sells from: the same setting (SRO_SHOP_EXTRA_GOODS,
 port-only) and the same loader the GameWorld uses, so the published shop
 tabs list the extra goods the shard sells. Unset or "off" is the v1.150
 stock.
+=========}
+
+/*
 ================
 */
 func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, error) {
@@ -191,10 +195,34 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 
 /*
 ================
+resolveShardSettings
+
+The catalogue describes the shard a default deploy runs: every setting it
+reads that the operator left unset takes its deployment default from the
+shard settings table (the one sro-nomad deploys from), before any reader
+looks. An explicit value, "off" included, still wins.
+================
+*/
+func resolveShardSettings() error {
+	filled, err := shardsettings.ApplyCatalogueDefaults(os.Getenv, os.Setenv)
+	if err != nil {
+		return fmt.Errorf("shard settings: %w", err)
+	}
+	if len(filled) > 0 {
+		fmt.Fprintf(os.Stderr, "shard settings at their deployment defaults: %s\n", strings.Join(filled, ", "))
+	}
+	return nil
+}
+
+/*
+================
 run
 ================
 */
 func run(out, release, textdata string) error {
+	if err := resolveShardSettings(); err != nil {
+		return err
+	}
 	dir, err := textdataDir(textdata)
 	if err != nil {
 		return err
