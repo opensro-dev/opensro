@@ -62,24 +62,39 @@ def credential_file(directory, text_variable, file_variable, mode):
 
 
 # ================
+# ssh_options
+#
+# The options every release connection uses, from a workflow or from the
+# operator's machine. The operator's ssh config, agent and forwardings stay
+# out of a role-limited connection (-F none, no agent, only this key); only
+# the given known_hosts pins the host (no global file, no key updates); a
+# proxy is one ProxyCommand option (RELEASE_SSH_PROXY_COMMAND), never a
+# shell string around ssh itself.
+# ================
+def ssh_options(key, known):
+	options = ["-F", "none", "-T",
+		"-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none",
+		"-o", "ForwardAgent=no", "-o", "ClearAllForwardings=yes",
+		"-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + str(known),
+		"-o", "GlobalKnownHostsFile=none", "-o", "UpdateHostKeys=no",
+		"-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
+	proxy = os.environ.get("RELEASE_SSH_PROXY_COMMAND", "").strip()
+	if proxy:
+		options += ["-o", "ProxyCommand=" + proxy]
+	return options + ["-i", str(key)]
+
+
+# ================
 # ssh_command
 #
-# The argv for one role's forced command: the host key is always pinned
-# (StrictHostKeyChecking=yes against the given known_hosts), and a proxy is
-# a ProxyCommand option, never a shell string around ssh itself.
+# The argv for one role's forced command on the configured release host.
 # ================
 def ssh_command(role, key, known):
 	host = os.environ["RELEASE_HOST"]
 	if not host or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-" for character in host):
 		raise ValueError("invalid configured release host")
 	account = "sro-stage" if role == "stage" else "sro-release"
-	command = ["ssh", "-T", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-		"-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4",
-		"-o", "UserKnownHostsFile=" + str(known)]
-	proxy = os.environ.get("RELEASE_SSH_PROXY_COMMAND", "").strip()
-	if proxy:
-		command += ["-o", "ProxyCommand=" + proxy]
-	return command + ["-i", str(key), account + "@" + host]
+	return ["ssh", *ssh_options(key, known), account + "@" + host]
 
 
 # ================

@@ -28,12 +28,14 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tarfile
 import tempfile
 import time
 import urllib.request
 
+from ci import ssh_options
 import client_data
 import server_data
 from plan import build_plan
@@ -71,6 +73,10 @@ def upload_timeout(size):
 	return max(UPLOAD_TIMEOUT_SECONDS, size // MIN_UPLOAD_BYTES_PER_SECOND)
 
 
+# The stage account and host: never an option, never a shell word.
+TARGET_PATTERN = re.compile(r"[a-z_][a-z0-9_-]*@[A-Za-z0-9][A-Za-z0-9.-]*")
+
+
 # ================
 # send
 #
@@ -79,13 +85,15 @@ def upload_timeout(size):
 # a refusal is not retried.
 # ================
 def send(archive, target, identity, run=subprocess.run):
-	command = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15"]
-	# The operator's local proxy, as ci.py takes it (ci.ssh_command): one
-	# ProxyCommand option, never a shell string around ssh.
-	proxy = os.environ.get("RELEASE_SSH_PROXY_COMMAND", "").strip()
-	if proxy:
-		command += ["-o", "ProxyCommand=" + proxy]
-	command += ["-i", str(identity), target]
+	# The same pinned, isolated connection as ci.py (ssh_options): the host key
+	# comes only from RELEASE_KNOWN_HOSTS_FILE, and the target can never be
+	# read as an ssh option.
+	if not TARGET_PATTERN.fullmatch(target):
+		raise ValueError("--ssh-target must be account@host")
+	known = os.environ.get("RELEASE_KNOWN_HOSTS_FILE", "")
+	if not known or not Path(known).expanduser().is_file():
+		raise ValueError("RELEASE_KNOWN_HOSTS_FILE must name the pinned known_hosts file")
+	command = ["ssh", *ssh_options(identity, Path(known).expanduser()), target]
 	timeout = upload_timeout(Path(archive).stat().st_size)
 	for attempt in range(1, ATTEMPTS + 1):
 		try:

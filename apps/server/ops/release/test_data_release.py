@@ -9,6 +9,7 @@ transport failure that is retried, never a crash that loses the run.
 ===========================================================================
 """
 import json
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -46,9 +47,47 @@ class UploadTests(unittest.TestCase):
 					raise subprocess.TimeoutExpired(command, timeout)
 				return subprocess.CompletedProcess(command, 0, stdout=b'{"stored": 1}\n', stderr=b"")
 
-			with mock.patch.object(data_release.time, "sleep"):
+			known = Path(directory) / "known_hosts"
+			known.write_text("pinned host\n")
+			with mock.patch.object(data_release.time, "sleep"), mock.patch.dict(os.environ, {"RELEASE_KNOWN_HOSTS_FILE": str(known)}):
 				self.assertEqual(data_release.send(archive, "stage@host", Path("key"), run), {"stored": 1})
 		self.assertEqual(calls, [data_release.UPLOAD_TIMEOUT_SECONDS] * 2)
+
+
+# ================
+# PinnedUploadTests
+#
+# The upload uses ci.py's isolated, pinned connection and refuses a target
+# that ssh could read as an option.
+# ================
+class PinnedUploadTests(unittest.TestCase):
+	# ================
+	# test_the_upload_is_pinned_and_isolated
+	# ================
+	def test_the_upload_is_pinned_and_isolated(self):
+		with tempfile.TemporaryDirectory() as directory:
+			archive = Path(directory) / "candidate.tar"
+			archive.write_bytes(b"x")
+			known = Path(directory) / "known_hosts"
+			known.write_text("pinned host\n")
+			seen = []
+
+			def run(command, stdin, capture_output, timeout):
+				seen.append(command)
+				return subprocess.CompletedProcess(command, 0, stdout=b'{"candidate": "x"}\n', stderr=b"")
+
+			with mock.patch.dict(os.environ, {"RELEASE_KNOWN_HOSTS_FILE": str(known), "RELEASE_SSH_PROXY_COMMAND": "relay %h %p"}):
+				data_release.send(archive, "sro-stage@release.example", Path("key"), run)
+			command = seen[0]
+			self.assertEqual(command[:3], ["ssh", "-F", "none"])
+			for option in ("UserKnownHostsFile=" + str(known), "GlobalKnownHostsFile=none", "StrictHostKeyChecking=yes",
+				"IdentityAgent=none", "IdentitiesOnly=yes", "ProxyCommand=relay %h %p"):
+				self.assertIn(option, command)
+			self.assertEqual(command[-1], "sro-stage@release.example")
+			for target, known_file in (("-oProxyCommand=evil@host", str(known)), ("stage@host", ""), ("stage@host", str(Path(directory) / "absent"))):
+				with self.subTest(target=target, known=known_file), mock.patch.dict(os.environ, {"RELEASE_KNOWN_HOSTS_FILE": known_file}):
+					with self.assertRaises(ValueError):
+						data_release.send(archive, target, Path("key"), lambda *a, **k: self.fail("ssh ran"))
 
 
 # ================

@@ -225,6 +225,11 @@ class TransportTests(unittest.TestCase):
 		self.assertIn("StrictHostKeyChecking=yes", argv)
 		self.assertEqual(argv[argv.index("ProxyCommand=" + proxy) - 1], "-o")
 		self.assertEqual(argv[-1], "sro-stage@release.example")
+		# The operator's ssh config, agent and other known_hosts stay out.
+		self.assertEqual(argv[:3], ["ssh", "-F", "none"])
+		for option in ("IdentitiesOnly=yes", "IdentityAgent=none", "ForwardAgent=no", "ClearAllForwardings=yes",
+			"GlobalKnownHostsFile=none", "UpdateHostKeys=no"):
+			self.assertEqual(argv[argv.index(option) - 1], "-o")
 
 	# ================
 	# test_missing_or_ambiguous_credentials_are_refused
