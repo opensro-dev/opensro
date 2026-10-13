@@ -473,13 +473,24 @@ func (v *WaterValidator) clipObjectRest(report ClipReport, walk *navWalk, from, 
 		return report
 	}
 	if point.outside || point.continuation && point.outline {
-		// Native outline reflection returns no object cell (428930 bit
-		// 0x10); the terrain continuation must not repair itself back INTO
-		// the cell it just exited. That loops forever at open outlines.
-		if owner, y, ok := v.ResolveNavOwner(report.Rest, simulation.TerrainOwner()); ok {
-			report.RestOwner, report.Rest.Y = owner, y
+		tile, blocked := v.exitTileBlocked(from.RegionID, point.x, point.z)
+		if !blocked {
+			// Native outline reflection returns no object cell (428930 bit
+			// 0x10); the terrain continuation must not repair itself back
+			// INTO the cell it just exited. That loops forever at open
+			// outlines.
+			if owner, y, ok := v.ResolveNavOwner(report.Rest, simulation.TerrainOwner()); ok {
+				report.RestOwner, report.Rest.Y = owner, y
+			}
+			return report
 		}
-		return report
+		// 403FB0 tests the terrain tile under the exit point before it hands
+		// the walker to the terrain (4038D0, 4044D9 test al,1) and fails the
+		// leg on a blocked one (404194: 0x10000000). Nothing continues; the
+		// walker stays on the deck at the rim (the object owner below).
+		report.continuation = false
+		report.NativeResult = monster.NavResultBlocked
+		report.BlockedTileX, report.BlockedTileZ = tile.x, tile.z
 	}
 	// A cell-directed contact point already lies on an object plane (its Y is
 	// a surface height, not the request's). Keep the walk's object owner when
@@ -493,6 +504,27 @@ func (v *WaterValidator) clipObjectRest(report ClipReport, walk *navWalk, from, 
 		report.RestOwner, report.Rest.Y = owner, y
 	}
 	return report
+}
+
+/*
+================
+exitTileBlocked
+
+Whether the terrain tile under an object exit point (world grid x, z) is
+blocked: the bit-0 tile flag 403FB0 reads through 4038D0 before an outline
+exit continues on the terrain. Missing coverage is never a block (the
+package's fail-open policy).
+================
+*/
+func (v *WaterValidator) exitTileBlocked(regionID uint16, wx, wz float64) (globalTile, bool) {
+	tilesPerAxis, tileSize, ok := v.gridParamsForRegion(regionID)
+	if !ok {
+		return globalTile{}, false
+	}
+	tile := globalTile{x: int(math.Floor(wx / tileSize)), z: int(math.Floor(wz / tileSize))}
+	querier := &tileQuerier{v: v, tilesPerAxis: tilesPerAxis, grids: make(map[int64]*blockedGrid, 1)}
+	walkable, known := querier.walkable(tile)
+	return tile, known && !walkable
 }
 
 /*
