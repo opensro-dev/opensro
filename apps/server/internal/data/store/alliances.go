@@ -175,6 +175,10 @@ func (door storeAllianceDoor) SaveAlliance(divisionID string, record domain.Alli
 	if s.db == nil || divisionID == "" || record.AllianceID <= 0 {
 		return errAllianceUnavailable
 	}
+	// A direct write lands only after the tick's deferred rows (tickbatch.go).
+	if err := s.flushDeferredLocked(); err != nil {
+		return err
+	}
 	var err error
 	if present {
 		if err = checkAllianceRecord(record); err != nil {

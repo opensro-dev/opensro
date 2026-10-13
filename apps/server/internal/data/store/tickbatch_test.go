@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 )
@@ -218,24 +219,56 @@ func TestTickBatchPickupLandsBothOrNeither(t *testing.T) {
 
 /*
 ================
-TestTickBatchFlushesBeforeASeparateTransaction
+TestTickBatchFlushesBeforeEveryWriteOutsideTheDirtySet
 
-A path with its own transaction (here the silk grant) lands the deferred
-rows first, so its commit is never ahead of them.
+Every path that writes outside the dirty set, in its own transaction or
+with a direct statement, lands the deferred rows first: a fortress war's
+end retires a battle rank (deferred) and then saves the fortress, and the
+disk must never hold the fortress without the rank.
 ================
 */
-func TestTickBatchFlushesBeforeASeparateTransaction(t *testing.T) {
-	s, a, _ := batchFixture(t)
-	disk := diskOpen(t, s)
-	s.BeginTickBatch()
-	s.UpdateCharacterDeferred(a, "tick", setGold(a, 42))
-	if _, err := s.GrantSilk("batch-account", 5); err != nil {
-		t.Fatal(err)
+func TestTickBatchFlushesBeforeEveryWriteOutsideTheDirtySet(t *testing.T) {
+	writes := []struct {
+		name  string
+		write func(s *Store) error
+	}{
+		{"silk grant (own transaction)", func(s *Store) error {
+			_, err := s.GrantSilk("batch-account", 5)
+			return err
+		}},
+		{"fortress", func(s *Store) error {
+			return s.Fortresses().SaveFortress(testDivision, domain.FortressRecord{FortressID: 1, GuildID: 7})
+		}},
+		{"fortress request", func(s *Store) error {
+			return s.Fortresses().SaveFortressRequest(testDivision, domain.FortressRequestRecord{FortressID: 1, GuildID: 9}, true)
+		}},
+		{"fortress structure", func(s *Store) error {
+			return s.Fortresses().SaveFortressStructure(testDivision, domain.FortressStructureRecord{FortressID: 1,
+				EventStructID: 85, RefObjID: 19536, OwnerGuildID: 7, HP: 120, State: 1}, true)
+		}},
+		{"alliance", func(s *Store) error {
+			return s.Alliances().SaveAlliance(testDivision, domain.AllianceRecord{AllianceID: 7, Guilds: [domain.AllianceSlots]int64{7, 9}}, true)
+		}},
+		{"beta silk starter", func(s *Store) error {
+			_, err := s.GrantBetaSilkStarter("batch-account", 10)
+			return err
+		}},
 	}
-	if diskGold(t, disk, "BatchA") != 42 {
-		t.Fatal("a separate transaction committed ahead of the batch's deferred row")
+	for _, w := range writes {
+		t.Run(w.name, func(t *testing.T) {
+			s, a, _ := batchFixture(t)
+			disk := diskOpen(t, s)
+			s.BeginTickBatch()
+			s.UpdateCharacterDeferred(a, "tick", setGold(a, 42))
+			if err := w.write(s); err != nil {
+				t.Fatal(err)
+			}
+			if diskGold(t, disk, "BatchA") != 42 {
+				t.Fatal("a write outside the dirty set landed ahead of the batch's deferred row")
+			}
+			s.FlushTickBatch()
+		})
 	}
-	s.FlushTickBatch()
 }
 
 /*

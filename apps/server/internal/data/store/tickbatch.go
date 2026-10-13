@@ -15,10 +15,13 @@ The disk stays one consistent image of memory, because:
     immediate door during the tick also commits the rows deferred before
     it, and a later in-tick update to a row wins: the commit writes the
     live record as it stands.
-  - Paths that open their own transaction (storage, mall, silk, rename,
-    deletion, fortress, guild war, unique kills, ownership transfer)
-    commit the deferred rows first, so their transaction never lands a
-    row whose deferred partner is still in memory.
+  - Paths that write outside the dirty set commit the deferred rows
+    first, so their write never lands ahead of a deferred row: those that
+    open their own transaction (storage, mall, silk, rename, deletion,
+    fortress forge/staff/tax, guild war, unique kills, ownership
+    transfer) through beginTxLocked, and the direct writes (fortress,
+    fortress request and structure, alliance, beta silk starter) through
+    flushDeferredLocked.
   - A failed commit keeps the dirty set (the fail-open-loud rule in
     persistence.go). The next flush or immediate commit retries it, and
     health and readiness carry the failure meanwhile.

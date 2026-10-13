@@ -35,6 +35,10 @@ func (s *Store) GrantBetaSilkStarter(accountID string, starter uint32) (bool, er
 	if accountID == "" || s.db == nil {
 		return false, fmt.Errorf("beta silk: account unavailable")
 	}
+	// A direct write lands only after the tick's deferred rows (tickbatch.go).
+	if err := s.flushDeferredLocked(); err != nil {
+		return false, err
+	}
 	result, err := s.db.Exec(`INSERT INTO mall_accounts (account_id, silk, gift_silk, points) VALUES (?, ?, 0, 0)
 ON CONFLICT(account_id) DO NOTHING`, accountID, starter)
 	if err != nil {

@@ -192,6 +192,10 @@ func (door storeFortressDoor) SaveFortress(divisionID string, record domain.Fort
 	if s.db == nil || divisionID == "" || record.FortressID == 0 {
 		return errFortressUnavailable
 	}
+	// A direct write lands only after the tick's deferred rows (tickbatch.go).
+	if err := s.flushDeferredLocked(); err != nil {
+		return err
+	}
 	raw, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -219,6 +223,10 @@ func (door storeFortressDoor) SaveFortressRequest(divisionID string, request dom
 	defer s.mu.Unlock()
 	if s.db == nil || divisionID == "" || request.FortressID == 0 || request.GuildID <= 0 || request.Kind > 1 {
 		return errFortressUnavailable
+	}
+	// A direct write lands only after the tick's deferred rows (tickbatch.go).
+	if err := s.flushDeferredLocked(); err != nil {
+		return err
 	}
 	var err error
 	if present {
@@ -296,6 +304,10 @@ func (door storeFortressDoor) SaveFortressStructure(divisionID string, structure
 	defer s.mu.Unlock()
 	if s.db == nil || divisionID == "" || structure.FortressID == 0 || structure.EventStructID == 0 {
 		return errFortressUnavailable
+	}
+	// A direct write lands only after the tick's deferred rows (tickbatch.go).
+	if err := s.flushDeferredLocked(); err != nil {
+		return err
 	}
 	var err error
 	if present {
