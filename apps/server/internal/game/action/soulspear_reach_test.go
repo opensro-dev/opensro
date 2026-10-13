@@ -22,7 +22,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
-	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/game/world/monster"
 )
 
 // chainStageGap separates caster and target well beyond a spear's reach,
@@ -33,12 +33,12 @@ const chainStageGap = 120
 ================
 soulSpearStageAfter
 
-Presses the root, applies move to the caster's spawn once it lands, and
+Presses the root, applies move to the target's pose once it lands, and
 returns D2's cast result code: 1 when it ran, the refusal code when it was
 refused, 0 when it never answered.
 ================
 */
-func soulSpearStageAfter(t *testing.T, move func(*simulation.Spawn)) uint16 {
+func soulSpearStageAfter(t *testing.T, move func(*monster.Pose)) uint16 {
 	t.Helper()
 	rt, targets := areaFixture(t, 1000000)
 	ch := rt.findCharacter(testDivision, "asd2")
@@ -61,12 +61,10 @@ func soulSpearStageAfter(t *testing.T, move func(*simulation.Spawn)) uint16 {
 	if len(start.Frames) == 0 || start.Frames[0].Opcode != wire.OpSkillCastResult || start.Frames[0].Payload[0] != 1 {
 		t.Fatalf("root refused %s %+v", start.DiagnosticRefusal, start.Frames)
 	}
-	// Moving the caster's spawn gives the separation without driving the
-	// monster's AI.
-	key := simulation.WorldKey(testDivision, ch.Name)
-	rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(ch) }, func(w *simulation.WorldState) {
-		move(&w.Spawn)
-	})
+	// The target steps away mid-combo.
+	mover, _ := rt.Monsters.Mover(testDivision, targets[0].Gid)
+	move(&mover.Pose)
+	rt.Monsters.CommitMover(testDivision, targets[0].Gid, mover)
 	base := rt.Now()
 	for tick := 1; tick <= 60; tick++ {
 		now := base.Add(time.Duration(tick) * 100 * time.Millisecond).UnixMilli()
@@ -78,8 +76,10 @@ func soulSpearStageAfter(t *testing.T, move func(*simulation.Spawn)) uint16 {
 				if frame.Payload[0] == 1 && len(frame.Payload) >= 6 && binary.LittleEndian.Uint32(frame.Payload[2:6]) == second.ID {
 					return 1
 				}
-				if frame.Payload[0] == 2 && len(frame.Payload) >= 3 {
-					return binary.LittleEndian.Uint16(frame.Payload[1:3])
+				// A refusal carries the low byte of its 0x30xx code
+				// (offensiveRefusal).
+				if frame.Payload[0] == 2 {
+					return 0x3000 | uint16(frame.Payload[1])
 				}
 			}
 		}
@@ -95,7 +95,7 @@ A target beyond reach in the same sector still takes D2.
 ================
 */
 func TestSoulSpearSecondStageBeyondReach(t *testing.T) {
-	if got := soulSpearStageAfter(t, func(at *simulation.Spawn) { at.X += chainStageGap }); got != 1 {
+	if got := soulSpearStageAfter(t, func(at *monster.Pose) { at.X += chainStageGap }); got != 1 {
 		t.Fatalf("D2 beyond reach answered %#x, want it executed", got)
 	}
 }
@@ -104,12 +104,12 @@ func TestSoulSpearSecondStageBeyondReach(t *testing.T) {
 ================
 TestSoulSpearSecondStageTwoSectorsAway
 
-58CC70 never admits a target more than one sector away, so dropping the
-range test does not let D2 strike across the world.
+58CC70 refuses a target outside the same plane and adjacent sectors with
+0x3006, so dropping the range test does not let D2 strike across the world.
 ================
 */
 func TestSoulSpearSecondStageTwoSectorsAway(t *testing.T) {
-	if got := soulSpearStageAfter(t, func(at *simulation.Spawn) { at.RegionID += 2 }); got == 1 {
-		t.Fatal("D2 struck a target two sectors away")
+	if got := soulSpearStageAfter(t, func(at *monster.Pose) { at.RegionID += 2 }); got != 0x3006 {
+		t.Fatalf("D2 two sectors away answered %#x, want 0x3006", got)
 	}
 }

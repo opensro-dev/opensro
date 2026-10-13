@@ -520,7 +520,8 @@ func (rt *Runtime) advanceBasicAttackIntent(character *enterworld.Character, int
 		}
 		return rt.approachIntentTarget(character, snapshot, intent, spacing, live, targetSpawn, nowMs)
 	}
-	// Entering action range transfers ownership from movement to combat.
+	// Entering action range (or, for a combo stage, its turn, in reach or
+	// not) transfers ownership from movement to combat.
 	// Native B245 enters motion state 2 and stops local path following; commit
 	// the same live point on the authority plane so later range checks and
 	// peer corrections cannot continue an obsolete approach behind the attack.
