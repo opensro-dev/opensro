@@ -176,7 +176,16 @@ func newGameplayPlane(
 		deps.EntryBetaSilk = betaSilk.Starter
 		log.Infof("item mall: beta silk ON (%s): %d silk per in-world hour", action.EnvBetaSilk, betaSilkRate)
 	}
-	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority); err != nil {
+	// SRO_MALL_EXTRA_GOODS (port-only, not native): authored packages the
+	// v1.150 mall does not list; "off" is the shipped mall (commerce/mallextra.go).
+	mallExtra, err := commerce.MallExtraGoodsFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if len(mallExtra) > 0 {
+		log.Infof("mall: %d extra Item Mall goods from %s", len(mallExtra), commerce.EnvMallExtraGoods)
+	}
+	if err := items.ConfigureMall(devPaths.TextdataDir, mallAuthority, mallExtra); err != nil {
 		return nil, fmt.Errorf("mall catalogue: %w", err)
 	}
 	deps.SceneReferenceFrames = items.CommerceReferenceSeed

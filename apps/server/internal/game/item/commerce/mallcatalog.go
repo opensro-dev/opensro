@@ -109,10 +109,12 @@ LoadMall
 
 Prices are resolved by package codename; the wire package ID is checked again
 at purchase time to reject stale slot mappings. All active mall rows must have
-a package and a price, so a partial catalogue cannot silently ship.
+a package and a price, so a partial catalogue cannot silently ship. extra
+lists further authored packages (SRO_MALL_EXTRA_GOODS, mallextra.go); nil is
+the shipped mall.
 ================
 */
-func LoadMall(dir string) (*MallCatalog, error) {
+func LoadMall(dir string, extra []MallExtraGood) (*MallCatalog, error) {
 	tables := map[string][][]string{}
 	for _, name := range []string{
 		"refshopgroup", "refmappingshopgroup", "refmappingshopwithtab", "refshoptab",
@@ -128,6 +130,9 @@ func LoadMall(dir string) (*MallCatalog, error) {
 				tables[name] = append(tables[name], row)
 			}
 		}
+	}
+	if err := addMallExtraRows(tables, extra); err != nil {
+		return nil, err
 	}
 	return buildMallCatalog(tables)
 }

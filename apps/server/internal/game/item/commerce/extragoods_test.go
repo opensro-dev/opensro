@@ -51,7 +51,7 @@ func TestParseExtraGoods(t *testing.T) {
 		}
 	}
 	on, err := ParseExtraGoods("on")
-	if err != nil || len(on) != 14 {
+	if err != nil || len(on) != 13+28+25 {
 		t.Fatalf("on = %d goods, %v", len(on), err)
 	}
 	list, err := ParseExtraGoods(" STORE_CH_POTION_TAB1 : ITEM_ETC_ALL_SPOTION_01 : 1000 ")
@@ -99,9 +99,15 @@ func TestDefaultExtraGoodsFollowTheSmithsStock(t *testing.T) {
 	if len(c.Tabs[tab]) != 1 || c.Tabs[tab][0].Slot != 0 {
 		t.Fatalf("shipped smith tab 3 = %+v, want its arrows alone", c.Tabs[tab])
 	}
-	goods, _ := ParseExtraGoods("on")
-	if err := c.AddExtraGoods(goods, refs); err != nil {
+	all, _ := ParseExtraGoods("on")
+	if err := c.AddExtraGoods(all, refs); err != nil {
 		t.Fatal(err)
+	}
+	var goods []ExtraGood
+	for _, good := range all {
+		if good.Tab == "STORE_CH_SMITH_TAB3" {
+			goods = append(goods, good)
+		}
 	}
 	offers := c.Tabs[tab]
 	if len(offers) != 1+len(goods) {
@@ -114,9 +120,74 @@ func TestDefaultExtraGoodsFollowTheSmithsStock(t *testing.T) {
 			t.Fatalf("offer %d = %+v", i, offer)
 		}
 	}
-	if offers[1].Price != 1000000 || offers[len(offers)-1].Ref.Codename != "ITEM_ETC_ARCHEMY_MAGICSTONE_SOLID_03" ||
+	if offers[1].Price != 1000000 || offers[len(offers)-1].Ref.Codename != "ITEM_ETC_ARCHEMY_MAGICSTONE_REPAIR_09" ||
 		offers[len(offers)-1].Price != 5000000 {
 		t.Fatalf("default prices: first %d, last %s %d", offers[1].Price, offers[len(offers)-1].Ref.Codename, offers[len(offers)-1].Price)
+	}
+}
+
+/*
+================
+TestDefaultExtraGoodsBetaBalance
+
+Owner, 2026-10-13: the Luck, Steady, Astral, Athanasia and Repair stones are
+the smith's, degree 9 only, at 5,000,000; the other degree 9 magic stones and
+every degree 9 attribute stone at Jangan's grocer (her alchemy tab, after its
+seven authored goods) for 2,000,000, so no stone is sold in two shops; and
+the five vigor potions at every town's herbalist for their itemdata price.
+================
+*/
+func TestDefaultExtraGoodsBetaBalance(t *testing.T) {
+	c, refs := shippedCatalog(t)
+	grocer := c.tabIDs["STORE_CH_ACCESSORY_TAB3"]
+	authored := len(c.Tabs[grocer])
+	goods, _ := ParseExtraGoods("on")
+	if err := c.AddExtraGoods(goods, refs); err != nil {
+		t.Fatal(err)
+	}
+	stones := c.Tabs[grocer][authored:]
+	if authored != 7 || len(stones) != 28 {
+		t.Fatalf("grocer tab: %d authored, %d stones; want 7 and 28", authored, len(stones))
+	}
+	smith := map[string]bool{}
+	for _, offer := range c.Tabs[c.tabIDs["STORE_CH_SMITH_TAB3"]] {
+		code := offer.Ref.Codename
+		if strings.Contains(code, "_MAGICSTONE_") {
+			if !strings.HasSuffix(code, "_09") || offer.Price != 5000000 {
+				t.Fatalf("smith sells %s at %d; want degree 9 at 5,000,000", code, offer.Price)
+			}
+			smith[code] = true
+		}
+	}
+	if len(smith) != 5 {
+		t.Fatalf("smith sells %d stones, want Luck, Steady, Astral, Athanasia and Repair", len(smith))
+	}
+	for _, offer := range stones {
+		code := offer.Ref.Codename
+		if smith[code] {
+			t.Fatalf("%s is sold by both the smith and the grocer", code)
+		}
+		if offer.Price != 2000000 || offer.Currency != PaymentGold || !strings.HasSuffix(code, "_09") ||
+			!(strings.Contains(code, "_MAGICSTONE_") || strings.Contains(code, "_ATTRSTONE_")) {
+			t.Fatalf("grocer offer %s = %+v", code, offer)
+		}
+	}
+	vigor := map[string]uint64{"ITEM_ETC_ALL_POTION_01": 100, "ITEM_ETC_ALL_POTION_02": 180,
+		"ITEM_ETC_ALL_POTION_03": 320, "ITEM_ETC_ALL_POTION_04": 600, "ITEM_ETC_ALL_POTION_05": 900}
+	for _, town := range []string{"CH", "WC", "KT", "EU", "CA"} {
+		offers := c.Tabs[c.tabIDs["STORE_"+town+"_POTION_TAB1"]]
+		found := 0
+		for _, offer := range offers {
+			if price, ok := vigor[offer.Ref.Codename]; ok {
+				found++
+				if offer.Price != price {
+					t.Fatalf("%s %s costs %d, want its itemdata %d", town, offer.Ref.Codename, offer.Price, price)
+				}
+			}
+		}
+		if found != len(vigor) {
+			t.Fatalf("%s herbalist sells %d vigor potions, want %d", town, found, len(vigor))
+		}
 	}
 }
 
