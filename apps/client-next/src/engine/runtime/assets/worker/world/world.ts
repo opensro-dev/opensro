@@ -18,6 +18,13 @@ import { decodeSoundTerrain } from "@/engine/foundation/audio/terrain-sounds";
 // The retail terrain normal table: every sample (0,1,0). Shared by all
 // blocks when the relief stage is off.
 const FLAT_BLOCK_NORMALS = new Float32Array( 17 * 17 * 3 );
+// Special water (block type 1 with a wave type: Karakoram's ice) draws with
+// TEXTUREFACTOR 0xC8000000 and stage 0 ALPHAOP SELECTARG1(TFACTOR) under
+// SRCALPHA/INVSRCALPHA (SWorld_RenderWaterWithReflection 8BA130, the push at
+// 8BADC2 before the type test at 8BAFB3): a constant 200/255, so the ground
+// and ruins under the ice show through. Its texture (water201) is opaque, so
+// the vertex alpha alone carries it.
+const SPECIAL_WATER_ALPHA = 0xc8 / 255;
 for ( let i = 1; i < FLAT_BLOCK_NORMALS.length; i += 3 ) FLAT_BLOCK_NORMALS[i] = 1;
 import { dungeonWaterGroup } from "@/engine/foundation/rendering/dungeon-water";
 import { createCharacterPose } from "@/engine/foundation/animation/animation-pose";
@@ -764,7 +771,9 @@ noteMaterial
 						for ( let z = 0; z < axis; z++ ) {
 							for ( let x = 0; x < axis; x++ ) {
 								const depth = Math.fround( (y - Math.fround( block.heights[z * 17 + x]! )) * 0.5 ),
-									alpha = axis === 2 ? 1 : Math.max( 0, Math.min( 15, Math.trunc( depth ) ) ) / 15;
+									alpha = axis === 2 ?
+										SPECIAL_WATER_ALPHA :
+										Math.max( 0, Math.min( 15, Math.trunc( depth ) ) ) / 15;
 								wet ||= alpha > 0;
 								positions.push( cx * 320 + x / (axis - 1) * 320, y, cz * 320 + z / (axis - 1) * 320 );
 								uvs.push( x / (axis - 1) * 4, z / (axis - 1) * 4 );
@@ -794,6 +803,10 @@ noteMaterial
 									frames: block.water.type === 1 ? undefined : b.water.normalFramePublicPaths,
 									alphaCutoff: 0,
 									blend: true,
+									// Native water draws with ZWRITE on (8B1050 sets it before the
+									// water pass), so what draws later stays behind the ice. Normal
+									// water keeps the blended default until its own pass is ported.
+									depthWrite: block.water.type === 1 ? true : undefined,
 									doubleSided: true,
 									unlit: true
 								},

@@ -317,7 +317,7 @@ test("terrain decoding refuses expansion beyond its budget before building outpu
 	assert.ok( createWorldDecoder().decode( bytes ).groups.length > 0 );
 });
 
-test("normal water follows native block admission, depth mask and authored UVs", () => {
+test("normal water follows native block admission, depth mask and authored UVs; special water is 200/255 opaque", () => {
 	const block = {
 		blockX: 0,
 		blockZ: 0,
@@ -339,6 +339,7 @@ test("normal water follows native block admission, depth mask and authored UVs",
 	const draw = water();
 	assert.equal( draw.geometry.positions.length, 289 * 3 );
 	assert.ok( Math.abs( draw.geometry.colors[3] - 10 / 15 ) < 1e-6 );
+	assert.equal( draw.material.depthWrite, undefined );
 	assert.equal( Math.max( ...draw.geometry.uvs ), 4 );
 	block.water.height = -1;
 	assert.equal( water(), undefined );
@@ -352,6 +353,16 @@ test("normal water follows native block admission, depth mask and authored UVs",
 	assert.equal( special.geometry.positions.length, 12 );
 	assert.equal( special.material.frames, undefined );
 	assert.equal( special.material.water, false );
+	// The ice is 200/255 opaque (TFACTOR 0xC8000000, 8BADC2), blended over
+	// what lies beneath it, not a solid sheet.
+	assert.equal( special.material.blend, true );
+	assert.equal( special.material.depthWrite, true );
+	for ( let i = 3; i < special.geometry.colors.length; i += 4 ) {
+		assert.ok(
+			Math.abs( special.geometry.colors[i] - 200 / 255 ) < 1e-6,
+			`vertex alpha ${special.geometry.colors[i]}`
+		);
+	}
 	bundle.source.sectorY = 128;
 	assert.ok(
 		!createWorldDecoder().decode( new TextEncoder().encode( JSON.stringify( bundle ) ) ).groups.some( g =>
