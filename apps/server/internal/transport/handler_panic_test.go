@@ -15,11 +15,47 @@ package transport
 import (
 	"bytes"
 	"strings"
+	"sync"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/platform/logging"
 )
+
+/*
+================
+lockedLog
+
+The captured log output. logrus locks its own writes but not a reader, and
+a goroutine of another test may still be logging while this one reads.
+================
+*/
+type lockedLog struct {
+	mu  sync.Mutex
+	out bytes.Buffer
+}
+
+/*
+================
+lockedLog.Write
+================
+*/
+func (l *lockedLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.out.Write(p)
+}
+
+/*
+================
+lockedLog.String
+================
+*/
+func (l *lockedLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.out.String()
+}
 
 // panicProbe is the type whose nil method the probe handler calls.
 type panicProbe struct{ value int }
@@ -40,7 +76,7 @@ TestHandlerPanicLogsItsStack
 ================
 */
 func TestHandlerPanicLogsItsStack(t *testing.T) {
-	var out bytes.Buffer
+	var out lockedLog
 	log.SetOutput(&out)
 	log.SetFormatter(logging.Formatter())
 	t.Cleanup(logging.InstallFormat)

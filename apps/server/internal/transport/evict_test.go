@@ -307,6 +307,11 @@ func TestSingleBindEvictionStressRace(t *testing.T) {
 		for _, s := range all {
 			hub.closeSession(s, nil)
 		}
+		// A drained session's own writeLoop may win the close and still be
+		// logging "session closed" when this returns; that line then landed
+		// in a later test's captured log (a -race report). Each close's hook
+		// completion follows its log line, so wait for all of them.
+		hub.closeHooks.Wait()
 	}()
 
 	bound, ok := hub.BoundSession("d1:cg")
