@@ -229,3 +229,47 @@ export function effectRemainingMs( effect: AttachedEffect, nowMs: number ): numb
 		null :
 		Math.max( 0, effect.remainingMs - Math.max( 0, nowMs - (effect.receivedAtMs ?? nowMs) ) );
 }
+
+// Every attached-effect row one session holds.
+export const MAX_ATTACHED_EFFECTS = 2048;
+// 8DD6F0 plays a token-0 add's ACT_S / ACT_L once and 8DD110 extinguishes
+// its decoration in the same call: the native client holds nothing. Here the
+// row only carries that one-shot to the renderer (effects.ts plays it
+// stopped), which may first wait for its models; past this window the row
+// leaves, played or not.
+export const ONE_SHOT_DELIVERY_MS = 10000;
+
+/*
+================
+oneShotEffect
+
+A token-0 add (a heal, cure or resurrection landing): no instance to retire.
+A restored row is spawn state, not a one-shot.
+================
+*/
+export function oneShotEffect( effect: AttachedEffect ) {
+	return !effect.token && !effect.restored;
+}
+
+/*
+================
+roomForAttachedEffect
+
+The rows kept when one more arrives at nowMs. One-shots past their delivery
+window leave; a full list gives up its oldest one-shot before it refuses, so
+only live instances count against the bound. No server instance-token ends a
+one-shot (B6A0 skips token 0), so without this a healer's adds would fill the
+list.
+================
+*/
+export function roomForAttachedEffect( rows: readonly AttachedEffect[], nowMs: number ): readonly AttachedEffect[] {
+	let kept = rows.filter( row =>
+		!oneShotEffect( row ) || nowMs - (row.receivedAtMs ?? nowMs) < ONE_SHOT_DELIVERY_MS
+	);
+	if ( kept.length >= MAX_ATTACHED_EFFECTS ) {
+		const oldest = kept.findIndex( oneShotEffect );
+		if ( oldest >= 0 ) kept = kept.filter( ( _row, index ) => index !== oldest );
+	}
+	if ( kept.length >= MAX_ATTACHED_EFFECTS ) throw Error( "Attached effect capacity exceeded" );
+	return kept;
+}

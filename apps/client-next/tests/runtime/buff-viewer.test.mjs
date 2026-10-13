@@ -207,3 +207,12 @@ test("6E64A0 local board takes per-skill flags then the speed rule over board or
 	};
 	assert.equal( buffBoard( game, 0, new Set( [ 3 ] ) )[0].suppressed, true );
 });
+
+test("a token-0 heal landing on the target lists no viewer slot", () => {
+	const rows = collectActiveBuffs(
+		[ effect( 10, 0 ), effect( 11, 4 ), { ...effect( 20, 0 ), restored: true } ],
+		7,
+		skill
+	);
+	assert.deepEqual( rows.map( row => [ row.skill, row.effect.token ] ), [ [ 11, 4 ], [ 20, 0 ] ] );
+});

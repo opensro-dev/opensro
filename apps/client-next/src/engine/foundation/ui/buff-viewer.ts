@@ -9,7 +9,7 @@ it must not acquire the private power and duration rows of the local HUD.
 
 ===========================================================================
 */
-import type { AttachedEffect } from "../gameplay/attached-effects";
+import { oneShotEffect, type AttachedEffect } from "../gameplay/attached-effects";
 import type { SkillMetadata } from "../gameplay/skill-catalog";
 import type { UiHelpSource } from "@/engine/contracts/ui";
 import { abnormalIcon, buffTimerRoot } from "./buff-board";
@@ -157,7 +157,10 @@ export function collectActiveBuffs(
 	gid: number,
 	skill: SkillLookup
 ): readonly BuffViewerEntry[] {
-	const owned = effects.filter( effect => effect.gid === gid ), detection = detectionLevels( owned, skill );
+	// A token-0 add's decoration is extinguished in the call that made it
+	// (8DD6F0 -> 8DD110), so 8608A0 never lists it: a heal shows no icon.
+	const owned = effects.filter( effect => effect.gid === gid && !oneShotEffect( effect ) ),
+		detection = detectionLevels( owned, skill );
 	return owned.filter( effect => effect.skill > 0 && effect.skill <= MAX_SKILL_ID ).map( effect => ({
 		skill: effect.skill,
 		named: !!effect.subject,

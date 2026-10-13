@@ -186,10 +186,14 @@ func (rt *Runtime) acceptSupportSkillPhase(
 		return rt.prepareSupportCast(division, snapshot, cast, skill, now), skillCastAccepted
 	}
 
-	var party []uint32
-	if partyHeal || partyResu || partyOverTime {
-		party = rt.skillCureVector(division, snapshot, skill, cast, now)
+	// 593F50's action vector: the party selections walk it, and so does the
+	// effect add every instant row sends (skillrecoveryeffect.go). It reads
+	// the store, so it is resolved before the caster's door.
+	var vector []uint32
+	if partyOverTime || !overTime {
+		vector = rt.skillCureVector(division, snapshot, skill, cast, now)
 	}
+	party := vector
 	// The cure vector reads the store; resolve it before the caster's door.
 	var cureTargets []cureTarget
 	if cure {
@@ -346,6 +350,12 @@ func (rt *Runtime) acceptSupportSkillPhase(
 				division: division, caster: character, skill: skill, targets: []uint32{gid}, percent: share, now: now})...)
 			share = share * (fullHealPercent - skill.Abnormal.EffectArea.Reduction) / fullHealPercent
 		}
+	}
+	if !overTime {
+		// 59466F sends the effect add after the heals and before the cure
+		// at 5946C5 publishes its states.
+		effects := recoveryEffectFrames(skill, rt.recoveryEffectRecipients(division, snapshot, skill, vector))
+		curePublic = append(effects, curePublic...)
 	}
 
 	var token uint32
