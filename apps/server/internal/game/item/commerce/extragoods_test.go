@@ -51,7 +51,7 @@ func TestParseExtraGoods(t *testing.T) {
 		}
 	}
 	on, err := ParseExtraGoods("on")
-	if err != nil || len(on) != 13+28+25+10 {
+	if err != nil || len(on) != 13+28+25+4 {
 		t.Fatalf("on = %d goods, %v", len(on), err)
 	}
 	list, err := ParseExtraGoods(" STORE_CH_POTION_TAB1 : ITEM_ETC_ALL_SPOTION_01 : 1000 ")
@@ -201,9 +201,10 @@ func TestDefaultExtraGoodsBetaBalance(t *testing.T) {
 TestDefaultExtraGoodsLuckyPowderAtEveryGrocer
 
 F7, owner 2026-10-13 (Lucky Powder option 1): every grocer's alchemy tab
-sells degree 9 Lucky Powder A and B, each once, for A_09's native Hotan
-price of 54,469 gold. Hotan's two grocer tabs keep their native A_09 and
-gain only B_09. The authored goods keep their slots: the extras follow.
+sells degree 9 Lucky Powder (A_09) once, for its native Hotan price of
+54,469 gold. Hotan's two grocer tabs keep their native A_09 and gain
+nothing; the large powder (B_09) is not sold until F8 (owner, 2026-10-14).
+The authored goods keep their slots: the extras follow.
 ================
 */
 func TestDefaultExtraGoodsLuckyPowderAtEveryGrocer(t *testing.T) {
@@ -246,8 +247,8 @@ func TestDefaultExtraGoodsLuckyPowderAtEveryGrocer(t *testing.T) {
 				}
 			}
 		}
-		if sold[a09] != 1 || sold[b09] != 1 {
-			t.Fatalf("%s sells A_09 %d time(s), B_09 %d time(s); want once each", tab, sold[a09], sold[b09])
+		if sold[a09] != 1 || sold[b09] != 0 {
+			t.Fatalf("%s sells A_09 %d time(s), B_09 %d time(s); want 1 and 0", tab, sold[a09], sold[b09])
 		}
 	}
 }

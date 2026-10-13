@@ -118,19 +118,13 @@ const shopExtraGoodsDefault = "" +
 	"STORE_CA_POTION_TAB1:ITEM_ETC_ALL_POTION_05:900," +
 	// Owner, 2026-10-13 (F7, Lucky Powder option 1): degree 9 Lucky Powder
 	// at every grocer's alchemy tab (NPC_*_ACCESSORY, SN_TAB_ALCHEMY) for
-	// A_09's native price, 54,469 (refpricepolicyofitem, its Hotan package),
-	// B_09 too since it has no native shop. Hotan's two grocer tabs already
-	// sell A_09 natively, so they gain only B_09.
+	// A_09's native price, 54,469 (refpricepolicyofitem, its Hotan package).
+	// Hotan's two grocer tabs already sell it natively. The large powder
+	// (B_09) waits for F8 (owner, 2026-10-14).
 	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
-	"STORE_CH_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
 	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
-	"STORE_WC_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
-	"STORE_KT_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
-	"STORE_KT_ACCESSORY_EU_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
 	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
-	"STORE_EU_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469," +
-	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469," +
-	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_B_09:54469"
+	"STORE_CA_ACCESSORY_TAB3:ITEM_ETC_ARCHEMY_REINFORCE_PROB_UP_A_09:54469"
 
 // maxShopSlot is the last slot a tab can address: the offer slot is a byte.
 const maxShopSlot = math.MaxUint8
