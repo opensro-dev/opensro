@@ -226,3 +226,66 @@ func BenchmarkPopulationInterestScan(b *testing.B) {
 		})
 	}
 }
+
+/*
+================
+interestScanRow
+
+A random mover row: resting, or travelling across up to four regions.
+================
+*/
+func interestScanRow(r *rand.Rand) monster.MoverState {
+	pose := interestScanPose(r)
+	row := monster.MoverState{Pose: pose}
+	if r.Intn(2) == 0 {
+		to := pose
+		to.X += float64(r.Intn(4)-1) * 1920 * r.Float64()
+		to.Z += float64(r.Intn(4)-1) * 1920 * r.Float64()
+		row.From, row.To = pose, to
+		row.DepartMs = 1000
+		row.ArriveMs = 1000 + int64(r.Intn(8000))
+	}
+	return row
+}
+
+/*
+================
+TestPopulationInterestScanFollowsResetMovers
+
+Movers are re-set between scans, flipping between one region and several,
+and removed and re-added: the index's multi-region marks must follow every
+change, so the scan still equals the reference after each step.
+================
+*/
+func TestPopulationInterestScanFollowsResetMovers(t *testing.T) {
+	r := rand.New(rand.NewSource(17))
+	state := interestScanPopulation(r, 600)
+	flips := 0
+	for step := 0; step < 4000; step++ {
+		gid := uint32(1 + r.Intn(700))
+		switch r.Intn(5) {
+		case 0:
+			state.movers.remove(gid)
+		default:
+			before := state.movers.has(gid) && len(slices.Collect(moverInterestBoundsFor(state.movers.get(gid)).regions())) > 1
+			row := interestScanRow(r)
+			state.movers.set(gid, row)
+			if !state.instances.contains(gid) && r.Intn(2) == 0 {
+				state.instances.set(gid, monster.Instance{Gid: gid, CurrentHP: 1})
+			}
+			if after := len(slices.Collect(moverInterestBoundsFor(row).regions())) > 1; after != before {
+				flips++
+			}
+		}
+		for v := 0; v < 3; v++ {
+			viewer, nowMs := interestScanViewer(r), int64(r.Intn(10000))
+			want := referenceInterestGIDs(state, viewer, nowMs)
+			if got := populationInterestGIDs(state, viewer, nowMs); !slices.Equal(got, want) {
+				t.Fatalf("step %d gid %d viewer %+v at %d:\n got  %v\n want %v", step, gid, viewer, nowMs, got, want)
+			}
+		}
+	}
+	if flips < 500 {
+		t.Fatalf("only %d single/multi-region flips", flips)
+	}
+}
