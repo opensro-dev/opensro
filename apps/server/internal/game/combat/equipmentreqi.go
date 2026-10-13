@@ -29,6 +29,15 @@ const (
 	reqiNothing                       // falls through to 58D638
 )
 
+// The secondary slot and the type a shield carries there (TID1 3 item,
+// TID2 1 equipment, TID3 4 shield); ammunition shares the slot as 3.3.4.
+const (
+	reqiShieldSlot = 7
+	reqiShieldTID1 = 3
+	reqiShieldTID2 = 1
+	reqiShieldTID3 = 4
+)
+
 // reqiArmourSlots is data_C63F44: armour index 1..6 to equipment slot.
 var reqiArmourSlots = [7]int64{-1, 0, 2, 1, 4, 3, 5}
 
@@ -132,7 +141,7 @@ func (e ReqiEquipment) testPair(pair enterworld.SkillReqiPair, code uint16) (boo
 		}
 		return e.testArmourSet(pair.Kind, code)
 	case reqiSecondary:
-		return e.testWeapon(7, pair.Value, code)
+		return e.testShield(pair.Value, code)
 	case reqiPrimary:
 		return e.testWeapon(6, pair.Value, code)
 	case reqiAvatarSocket:
@@ -184,6 +193,29 @@ func (e ReqiEquipment) testWeapon(slot int64, value uint32, code uint16) (bool, 
 		return false, 0x300f
 	}
 	return true, 0
+}
+
+/*
+==================
+testShield
+
+Kind 4 tests the secondary slot. Native 58D542 compares only the TID4 of
+whatever 4EAD80 returns from slot 7, and ammunition sits there too: a
+Chinese arrow stack (3.3.4.1) passes a Chinese shield's 4,1 and a European
+bolt stack (3.3.4.2) a European shield's 4,2. Every shipped kind-4 pair is a
+shield line (SKILL_CH_*_SHIELD*, SKILL_CH_SWORD_PASSIVE_A's shield block,
+SKILL_EU_WARRIOR_ONEHANDA_SHIELD_*), so a bow user wearing arrows blocked
+like a shield bearer (#bug-reports, "blocking without a shield"). Port-only,
+not native: the slot must hold a shield (TID1 3, TID2 1, TID3 4) before its
+TID4 is compared. press-admission.ts testPair mirrors this.
+==================
+*/
+func (e ReqiEquipment) testShield(value uint32, code uint16) (bool, uint16) {
+	tid := e.WeaponTID(reqiShieldSlot)
+	if tid>>2&7 != reqiShieldTID1 || tid>>5&3 != reqiShieldTID2 || tid>>7&0xf != reqiShieldTID3 {
+		return false, code
+	}
+	return e.testWeapon(reqiShieldSlot, value, code)
 }
 
 // item returns the equipped row's reference in one slot and whether it

@@ -105,7 +105,8 @@ TestChineseSwordPassiveFollowsTheShield
 
 SKILL_CH_SWORD_PASSIVE_A_01 is the same br program (15 2) under reqi 4 1,
 the secondary-slot walk for a Chinese shield (TID4 1) in slot 7: the same
-compiler admits it, and it contributes only while the shield is worn.
+compiler admits it, and it contributes only while the shield is worn -
+never for the arrows a bow user keeps in the same slot.
 ================
 */
 func TestChineseSwordPassiveFollowsTheShield(t *testing.T) {
@@ -116,6 +117,15 @@ func TestChineseSwordPassiveFollowsTheShield(t *testing.T) {
 	c := &domain.Character{Skills: []uint32{row.ID}}
 	if writes, _, _ := learnedPassives(c, skills, items, 0); len(blockLaneWrites(writes)) != 0 {
 		t.Fatalf("contributed without a shield: %+v", writes)
+	}
+	// Port-only, not native: arrows share the Chinese shield's TID4 1 in
+	// slot 7 (equipmentreqi.go testShield); a bow user gains no block. A mall
+	// quiver keeps its package data (10000) as durability, so it is live.
+	quiver := &enterworld.ItemRef{Codename: "ITEM_MALL_QUIVER", TypeIDs: [4]int64{3, 3, 4, 1}}
+	items[quiver.Codename] = quiver
+	c.MissionInventory = []domain.InventoryRow{{Slot: 7, Codename: quiver.Codename, TypeFlags: quiver.TypeFlags(), Durability: 10000}}
+	if writes, _, _ := learnedPassives(c, skills, items, 0); len(blockLaneWrites(writes)) != 0 {
+		t.Fatalf("contributed with arrows: %+v", writes)
 	}
 	c.MissionInventory = []domain.InventoryRow{{Slot: 7, Codename: shield.Codename, TypeFlags: shield.TypeFlags(), Durability: 10}}
 	writes, _, err := learnedPassives(c, skills, items, 0)

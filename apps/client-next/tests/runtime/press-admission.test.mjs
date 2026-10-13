@@ -101,6 +101,23 @@ const GATES = [
 		caster( {}, { 6: sword, 7: shield } ),
 		0x300d
 	],
+	// Port-only, not native: arrows share the Chinese shield's TID4 1 and
+	// bolts the European shield's 2; neither is a shield. A mall quiver's
+	// package data (10000) is its durability, so it never reads as broken.
+	[
+		"reqi shield, mall quiver worn",
+		press( { reqi: { all: false, pairs: [ [ 4, SHIELD_KIND ] ] } } ),
+		caster( {}, { 6: bow, 7: { ...arrows, durability: 10000 } } ),
+		caster( {}, { 6: sword, 7: shield } ),
+		0x300d
+	],
+	[
+		"reqi European shield, bolts worn",
+		press( { reqi: { all: false, pairs: [ [ 4, 2 ] ] } } ),
+		caster( {}, { 7: { ...bolts, durability: 10000 } } ),
+		caster( {}, { 7: { ...shield, typeFlags: tid( 3, 1, 4, 2 ) } } ),
+		0x300d
+	],
 	[
 		"reqi broken shield",
 		press( { reqi: { all: false, pairs: [ [ 4, SHIELD_KIND ] ] } } ),

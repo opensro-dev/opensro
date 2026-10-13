@@ -337,11 +337,27 @@ function testPair(
 	if ( kase === "primary" || kase === "secondary" ) {
 		// 58D513 / 58D542: the socket's TID4 must equal value; broken is 0x300F.
 		const socket = kase === "primary" ? PRIMARY_SOCKET : SHIELD_SOCKET;
+		// Port-only, not native: 58D542 compares the TID4 alone, so arrows
+		// (3.3.4.1) and bolts (3.3.4.2) passed a shield's pair. The socket must
+		// hold a shield first, as the server's equipmentreqi.go testShield.
+		if ( kase === "secondary" && !isShield( weaponTid( equipped, socket ) ) ) return [ false, code ];
 		if ( weaponTid( equipped, socket ) >> 11 !== value ) return [ false, code ];
 		return socketUsable( equipped, socket ) ? [ true, 0 ] : [ false, BROKEN ];
 	}
 	// The avatar socket 4 does not exist in v1.150; other kinds test nothing.
 	return [ false, code ];
+}
+
+/*
+================
+isShield
+
+TID1 3 item, TID2 1 equipment, TID3 4 shield: the type a reqi kind-4 pair
+names. Ammunition shares the socket as 3.3.4.
+================
+*/
+function isShield( typeFlags: number ): boolean {
+	return (typeFlags >> 2 & 7) === 3 && (typeFlags >> 5 & 3) === 1 && (typeFlags >> 7 & 0xf) === 4;
 }
 
 /*

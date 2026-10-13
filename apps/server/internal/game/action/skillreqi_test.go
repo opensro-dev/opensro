@@ -94,6 +94,30 @@ func TestReqiSecondarySlot(t *testing.T) {
 	}
 }
 
+/*
+==================
+TestReqiSecondarySlotWantsAShield
+
+Port-only, not native: ammunition in slot 7 shares the shield's TID4
+(Chinese arrows 3.3.4.1, European bolts 3.3.4.2), and native 58D542
+compares only that. The port admits a shield pair for a shield alone.
+==================
+*/
+func TestReqiSecondarySlotWantsAShield(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value uint32
+		ammo  [4]int64
+	}{{"arrows for a Chinese shield", 1, [4]int64{3, 3, 4, 1}}, {"bolts for a European shield", 2, [4]int64{3, 3, 4, 2}}} {
+		k := newReqiKit()
+		k.equip(6, weapon(6), 10)
+		k.equip(7, tc.ammo, 10)
+		if got := k.refusal(reqi(false, pair(4, tc.value))); got != 0x300d {
+			t.Errorf("%s: %#x want 0x300d", tc.name, got)
+		}
+	}
+}
+
 // Shipped shape (10,0 6,15) with reqn: armour family 10 on the set AND a
 // TID4 15 weapon.
 func TestReqiArmourSetWithReqn(t *testing.T) {
