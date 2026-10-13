@@ -250,6 +250,14 @@ class TransportTests(unittest.TestCase):
 					ci.transfer(self.request, "stage")
 
 	# ================
+	# test_paths_ssh_would_reinterpret_are_refused
+	# ================
+	def test_paths_ssh_would_reinterpret_are_refused(self):
+		for key, known in (("key%h", "known"), ("key", 'known"x'), ("key", "known%d")):
+			with self.subTest(key=key, known=known), self.assertRaises(ValueError):
+				ci.ssh_options(key, known)
+
+	# ================
 	# test_stage_by_hand_needs_no_job_output
 	#
 	# Outside a workflow there is no GITHUB_OUTPUT; candidate.json carries
