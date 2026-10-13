@@ -1512,6 +1512,14 @@ export function createUi(
 				if ( questDetails && (owner === "quest-details" || owner === "quest-abandon") ) continue;
 				admittedWindows.delete( owner );
 			}
+		} else if ( !(isMainPopupPage( panel ) && isMainPopupPage( next )) ) {
+			// The primary window's replay (endWindow) bridges a main popup page
+			// to the next page of the same frame while its art loads. Any other
+			// switch leaves that window: replaying it under the new panel showed
+			// it beside what now draws in its place (the Chat window's input
+			// beside the chat bar, a duplicate "chat-text", when an exchange
+			// opened the inventory before its icons had loaded).
+			admittedWindows.delete( "primary" );
 		}
 		const wasOpen = !!panel;
 		panel = next;
