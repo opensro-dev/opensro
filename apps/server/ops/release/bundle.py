@@ -4,6 +4,12 @@
 bundle.py - freeze Linux server binaries and their jobs into one verified tar
 
 No state, account catalogs, game data or host configuration enters a release.
+
+Every server binary of a forward release must carry Go's own build stamp for
+the release commit from a clean checkout (vcs.revision, vcs.modified=false).
+A hosted runner used to vouch for that; a release built on the operator's
+machine is checked by its bytes instead, when it is bundled and again when
+the host unpacks it.
 ===========================================================================
 """
 
@@ -34,6 +40,16 @@ FILES = {
 # Files added to FILES after the first release. A release built before one was
 # added does not carry it; every other name is required. FILES only grows.
 ADDED_FILES = frozenset({"sro-authority-upgrade", "sro-game-data-check"})
+# Go's build information blob (debug/buildinfo): a 16-byte-aligned header
+# that opens with this magic, its pointer size and flags at 14 and 15, and
+# with the inline flag the version and module strings as uvarint-prefixed
+# bytes from offset 32. The module text sits between two 16-byte sentinels.
+GO_BUILDINFO_MAGIC = b"\xff Go buildinf:"
+GO_BUILDINFO_ALIGN = 16
+GO_BUILDINFO_HEADER = 32
+GO_BUILDINFO_INLINE = 0x2
+GO_MODINFO_SENTINEL = 16
+GO_STRING_LIMIT = 1 << 20
 MAX_ARCHIVE_BYTES = 256 << 20
 MAX_MANIFEST_BYTES = 256 << 10
 COPY_CHUNK_BYTES = 1 << 20
@@ -55,6 +71,8 @@ def bundle(module, destination, commit, plan):
 	with tarfile.open(destination, "w") as archive:
 		for name, source in FILES.items():
 			data = (module / source).read_bytes()
+			if source.startswith("bin/"):
+				require_clean_build(name, data, commit)
 			manifest["files"][name] = hashlib.sha256(data).hexdigest()
 			entry = tarfile.TarInfo(name)
 			entry.size = len(data)
@@ -68,6 +86,63 @@ def bundle(module, destination, commit, plan):
 		archive.addfile(entry, io.BytesIO(data))
 	if destination.stat().st_size > MAX_ARCHIVE_BYTES:
 		raise ValueError("release exceeds the upload limit")
+
+
+# ================
+# go_build_settings
+#
+# The version and "build" settings Go stamped into one binary, read from its
+# bytes the way debug/buildinfo does for an inline (Go 1.18+) blob. Anything
+# else is refused rather than guessed at.
+# ================
+def go_build_settings(data):
+	position = data.find(GO_BUILDINFO_MAGIC)
+	while position >= 0 and position % GO_BUILDINFO_ALIGN:
+		position = data.find(GO_BUILDINFO_MAGIC, position + 1)
+	if position < 0 or len(data) < position + GO_BUILDINFO_HEADER:
+		raise ValueError("binary carries no Go build information")
+	if not data[position + 15] & GO_BUILDINFO_INLINE:
+		raise ValueError("binary carries an unsupported Go build information layout")
+	cursor = position + GO_BUILDINFO_HEADER
+	strings = []
+	for _ in range(2):
+		length, shift = 0, 0
+		while True:
+			if cursor >= len(data) or shift > 63:
+				raise ValueError("truncated Go build information")
+			byte = data[cursor]
+			cursor += 1
+			length |= (byte & 0x7f) << shift
+			shift += 7
+			if not byte & 0x80:
+				break
+		if length > GO_STRING_LIMIT or cursor + length > len(data):
+			raise ValueError("truncated Go build information")
+		strings.append(data[cursor:cursor + length])
+		cursor += length
+	version, modules = strings
+	# The sentinels are binary bytes: strip them before decoding the text.
+	if len(modules) >= 2 * GO_MODINFO_SENTINEL + 1 and modules[-GO_MODINFO_SENTINEL - 1] == ord("\n"):
+		modules = modules[GO_MODINFO_SENTINEL:-GO_MODINFO_SENTINEL]
+	version, modules = version.decode("utf-8"), modules.decode("utf-8")
+	settings = {}
+	for line in modules.split("\n"):
+		if line.startswith("build\t"):
+			key, _, value = line[len("build\t"):].partition("=")
+			settings[key] = value
+	return version, settings
+
+
+# ================
+# require_clean_build
+#
+# A forward release's binary must be stamped with the release commit and an
+# unmodified tree: the stamp, not the machine that built it, is the evidence.
+# ================
+def require_clean_build(name, data, commit):
+	_, settings = go_build_settings(data)
+	if settings.get("vcs.revision") != commit or settings.get("vcs.modified") != "false":
+		raise ValueError(name + " is not built from a clean checkout of the release commit")
 
 
 # ================
@@ -126,6 +201,12 @@ def unpack(source, destination):
 		for name, digest in manifest["files"].items():
 			if hashlib.file_digest(archive.extractfile(name), "sha256").hexdigest() != digest:
 				raise ValueError("release digest mismatch: " + name)
+		# A rollback restores bytes production already ran; only a new build
+		# must prove its own provenance.
+		if manifest["plan"]["mode"] == "forward":
+			for name in names:
+				if FILES[name].startswith("bin/"):
+					require_clean_build(name, archive.extractfile(name).read(), manifest["commit"])
 		for name in names:
 			path = destination / name
 			path.parent.mkdir(parents=True, exist_ok=True)

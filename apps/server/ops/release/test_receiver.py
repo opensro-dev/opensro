@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 import receiver
 from bundle import FILES, bundle
+from test_bundle import fixture_file
 from release_state import write_state
 from test_release_state import candidate, production
 
@@ -37,7 +38,7 @@ class ReceiverTests(unittest.TestCase):
 			for name, source in FILES.items():
 				path = module / source
 				path.parent.mkdir(parents=True, exist_ok=True)
-				path.write_bytes(("fixture: " + name).encode())
+				path.write_bytes(fixture_file(name, source, candidate("server")["commit"]))
 			plan = candidate("server")
 			plan["release"] = plan["commit"]
 			archive = root / "server.tar"
@@ -69,7 +70,7 @@ class ReceiverTests(unittest.TestCase):
 				for name, source in FILES.items():
 					path = module / source
 					path.parent.mkdir(parents=True, exist_ok=True)
-					path.write_bytes(("fixture: " + name).encode())
+					path.write_bytes(fixture_file(name, source, candidate("server")["commit"]))
 				plan = candidate("server")
 				plan["release"] = plan["commit"]
 				archive = root / "server.tar"

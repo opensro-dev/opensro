@@ -22,6 +22,7 @@ import unittest
 from unittest.mock import patch
 
 from bundle import FILES, bundle
+from test_bundle import go_binary
 import coordinated
 import deploy
 from release_state import admit, admit_maintenance, admit_pair, begin, begin_pair, read_state, write_state
@@ -188,7 +189,7 @@ class PairFixture(LiveDataFixture):
 			(self.module / name).write_bytes(b"live server " + name.encode())
 			live["files"][name] = hashlib.sha256((self.module / name).read_bytes()).hexdigest()
 			(build / source).parent.mkdir(parents=True, exist_ok=True)
-			(build / source).write_bytes(b"next server " + name.encode())
+			(build / source).write_bytes(go_binary(name, NEW_COMMIT) if source.startswith("bin/") else b"next server " + name.encode())
 		write_state(self.module / "release.json", live)
 		self.config.update(module=str(self.module), staff_webhook="unused")
 		archive = self.root / "server.tar"

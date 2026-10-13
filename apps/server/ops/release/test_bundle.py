@@ -4,6 +4,7 @@ test_bundle.py - artifact integrity and extraction boundaries
 ===========================================================================
 """
 
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -11,9 +12,47 @@ import tarfile
 import tempfile
 import unittest
 
-from bundle import FILES, bundle, unpack
+from bundle import FILES, GO_BUILDINFO_MAGIC, bundle, go_build_settings, unpack
 from deploy import receive
 from test_release_state import candidate
+
+
+# ================
+# uvarint
+# ================
+def uvarint(value):
+	out = bytearray()
+	while True:
+		byte = value & 0x7f
+		value >>= 7
+		out.append(byte | (0x80 if value else 0))
+		if not value:
+			return bytes(out)
+
+
+# ================
+# go_binary
+#
+# A stand-in server binary carrying Go's inline build information blob, laid
+# out as the linker writes it (aligned header, uvarint strings, binary
+# sentinels around the module text), stamped for commit.
+# ================
+def go_binary(name, commit, modified="false", version="go1.27.2"):
+	text = ("path\topensro.online/server/cmd/" + name + "\nbuild\t-trimpath=true\nbuild\tvcs=git\n" +
+		"build\tvcs.revision=" + commit + "\nbuild\tvcs.modified=" + modified + "\n").encode()
+	modules = bytes.fromhex("3077af0c9274080241e1c107e6d618e6") + text + bytes.fromhex("f932433186182072008242104116d8f2")
+	header = GO_BUILDINFO_MAGIC + bytes([8, 2]) + bytes(16)
+	return (("fixture: " + name).encode().ljust(48, b"\0") + header + uvarint(len(version)) + version.encode() +
+		uvarint(len(modules)) + modules)
+
+
+# ================
+# fixture_file
+#
+# One bundled file's bytes: a stamped binary for bin/, plain text otherwise.
+# ================
+def fixture_file(name, source, commit):
+	return go_binary(name, commit) if source.startswith("bin/") else ("fixture: " + name).encode()
 
 
 # ================
@@ -36,7 +75,7 @@ class BundleTests(unittest.TestCase):
 		for name, source in FILES.items():
 			path = self.module / source
 			path.parent.mkdir(parents=True, exist_ok=True)
-			path.write_bytes(("fixture: " + name).encode())
+			path.write_bytes(fixture_file(name, source, "a" * 40))
 		self.archive = self.root / "server.tar"
 		plan = candidate("server")
 		plan.update(commit="a" * 40, release="a" * 40)
@@ -54,6 +93,79 @@ class BundleTests(unittest.TestCase):
 		with tarfile.open(self.archive, "w") as archive:
 			for member, data in entries:
 				archive.addfile(member, io.BytesIO(data))
+
+	# ================
+	# replace_binary
+	#
+	# Swap one binary's bytes and re-seal its digest, as a careless or hostile
+	# builder would: only the build stamp can tell.
+	# ================
+	def replace_binary(self, name, data):
+		def change(entries):
+			for index, (member, content) in enumerate(entries):
+				if member.name == name:
+					member.size = len(data)
+					entries[index] = (member, data)
+			for index, (member, content) in enumerate(entries):
+				if member.name == "release.json":
+					manifest = json.loads(content)
+					manifest["files"][name] = hashlib.sha256(data).hexdigest()
+					content = json.dumps(manifest, sort_keys=True).encode()
+					member.size = len(content)
+					entries[index] = (member, content)
+		self.rewrite(change)
+
+	# ================
+	# test_build_settings_are_read_from_the_bytes
+	# ================
+	def test_build_settings_are_read_from_the_bytes(self):
+		version, settings = go_build_settings(go_binary("agent", "b" * 40, "true"))
+		self.assertEqual(version, "go1.27.2")
+		self.assertEqual((settings["vcs.revision"], settings["vcs.modified"], settings["-trimpath"]), ("b" * 40, "true", "true"))
+		for data in (b"no build information here", GO_BUILDINFO_MAGIC + bytes([8, 0]) + bytes(64), go_binary("agent", "b" * 40)[:80]):
+			with self.subTest(data=data[:20]), self.assertRaises(ValueError):
+				go_build_settings(data)
+
+	# ================
+	# test_unstamped_or_dirty_binaries_are_refused
+	#
+	# Both ends refuse: bundle before packing, unpack (the host) before
+	# writing anything.
+	# ================
+	def test_unstamped_or_dirty_binaries_are_refused(self):
+		for data in (go_binary("gameworld", "b" * 40), go_binary("gameworld", "a" * 40, "true"), b"fixture: gameworld"):
+			with self.subTest(data=data[-40:]):
+				self.replace_binary("gameworld", data)
+				with self.assertRaisesRegex(ValueError, "build information|clean checkout"):
+					unpack(self.archive, self.root / "unpacked")
+				self.assertFalse((self.root / "unpacked").exists())
+				module = self.root / "dirty"
+				for name, source in FILES.items():
+					(module / source).parent.mkdir(parents=True, exist_ok=True)
+					(module / source).write_bytes(data if name == "gameworld" else fixture_file(name, source, "a" * 40))
+				plan = candidate("server")
+				plan.update(commit="a" * 40, release="a" * 40)
+				with self.assertRaisesRegex(ValueError, "build information|clean checkout"):
+					bundle(module, self.root / "dirty.tar", "a" * 40, plan)
+
+	# ================
+	# test_a_rollback_restores_bytes_without_a_new_stamp
+	#
+	# A rollback re-stages bytes production already ran; it is not a build.
+	# ================
+	def test_a_rollback_restores_bytes_without_a_new_stamp(self):
+		self.replace_binary("gameworld", b"retained older build")
+		def rollback(entries):
+			for index, (member, content) in enumerate(entries):
+				if member.name == "release.json":
+					manifest = json.loads(content)
+					manifest["plan"].update(mode="rollback", reason="fixture")
+					content = json.dumps(manifest, sort_keys=True).encode()
+					member.size = len(content)
+					entries[index] = (member, content)
+		self.rewrite(rollback)
+		unpack(self.archive, self.root / "unpacked")
+		self.assertEqual((self.root / "unpacked" / "gameworld").read_bytes(), b"retained older build")
 
 	# ================
 	# test_round_trip
