@@ -37,6 +37,7 @@ test( "an AZERTY A reaches the HUD and the held keys as KeyA", { timeout: 45000 
 					controls: [ { id: "probe-key", kind: "button", label: "Probe", rect: [ 20, 20, 100, 24 ] } ]
 				} );
 				const button = document.querySelector( '[data-ui-id="probe-key"]' );
+				if ( !button ) throw new Error( "the bridge drew no probe button" );
 				button.dispatchEvent( new KeyboardEvent( "keydown", { bubbles: true, code: "KeyQ", key: "a" } ) );
 				// Shift released before the key: the up reports "q".
 				button.dispatchEvent( new KeyboardEvent( "keyup", { bubbles: true, code: "KeyQ", key: "q" } ) );
