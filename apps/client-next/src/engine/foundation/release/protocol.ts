@@ -18,9 +18,11 @@ checks) reads the same numbers the client ships.
 ===========================================================================
 */
 
-// Protocol 6 publishes every creatable monster's row in the reference file
-// (#369); 5 added populated persistent summoners and concurrent COS lifetimes.
-export const RELEASE_PROTOCOL = 6;
+// Protocol 7 decodes a COS bag of any one-byte capacity (#801: item-mall
+// transports hold 141 to 177 slots, which 6 refused); 6 publishes every
+// creatable monster's row in the reference file (#369); 5 added populated
+// persistent summoners and concurrent COS lifetimes.
+export const RELEASE_PROTOCOL = 7;
 // The public reference file's contract (releaseprotocol.ReferencesContract).
 export const REFERENCES_CONTRACT = 3;
 export const RELEASE_PROTOCOL_HEADER = "X-OpenSRO-Protocol";

@@ -48,8 +48,12 @@ type Contracts struct {
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current            = 6
-	CompanionsContract = 1
+	Current = 7
+	// The companion contract: 2 lifts the COS bag capacity bound to its
+	// one wire byte (#801), so an item-mall transport's 141 to 177 slots
+	// decode; 1 added populated summoners and concurrent COS lifetimes and
+	// refused a bag over 140.
+	CompanionsContract = 2
 	BootstrapContract  = 2 // the EnterWorld DTO
 	RosterContract     = 2 // the character list: worn items as (RefItemID, plus)
 	// The reference file: 3 adds every creatable monster's row
@@ -65,6 +69,7 @@ var history = map[int]Contracts{
 	3:       {Bootstrap: 2, Roster: 2, References: 1},
 	4:       {Bootstrap: 2, Roster: 2, References: 2},
 	5:       {Bootstrap: 2, Roster: 2, References: 2, Companions: 1},
+	6:       {Bootstrap: 2, Roster: 2, References: 3, Companions: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract},
 }
 

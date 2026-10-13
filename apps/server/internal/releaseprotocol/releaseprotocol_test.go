@@ -106,3 +106,28 @@ func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 		seen[contracts] = protocol
 	}
 }
+
+/*
+================
+TestAPreUncappedCompanionClientIsRefused
+
+A protocol-6 browser refuses a COS bag over 140 slots inside its decoder
+(#801 lifted that bound on the server). It must be refused with 426 and
+told to reload before it can reach a decoder that would end its session.
+================
+*/
+func TestAPreUncappedCompanionClientIsRefused(t *testing.T) {
+	const uncappedBags = 2
+	for protocol, contracts := range history {
+		if contracts.Companions >= uncappedBags {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (companions %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Companions, reached, recorder.Code)
+		}
+	}
+	if CompanionsContract < uncappedBags {
+		t.Fatalf("CompanionsContract = %d; this build encodes uncapped COS bags", CompanionsContract)
+	}
+}
