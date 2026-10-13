@@ -91,75 +91,86 @@ type clientIncident struct {
 
 /*
 ================
-valid
+problem
 
-Rejects a report whose fields the log line could not carry faithfully.
+Why the log line could not carry a report faithfully, or "" for one it can.
+The journal is not judged here: a bad journal never costs its incident
+(incidentJournalProblem).
 ================
 */
-func (incident clientIncident) valid() bool {
+func (incident clientIncident) problem() string {
 	if incident.Category != "" && incident.Category != "expected" && incident.Category != "connection" && incident.Category != "software" && incident.Category != "unknown" {
-		return false
+		return "unknown category"
 	}
 	if incident.ID != "" && !incidentIdentifier.MatchString(incident.ID) {
-		return false
+		return "malformed id"
 	}
 	if incident.Session != "" && !incidentSessionIdentifier.MatchString(incident.Session) {
-		return false
+		return "malformed session"
 	}
 	if len(incident.Code) > 64 || (incident.Code != "" && !incidentNamePattern.MatchString(incident.Code)) || len(incident.Stack) > 8192 {
-		return false
+		return "malformed code or stack"
 	}
 	if !incidentKinds[incident.Kind] || incident.Message == "" || len(incident.Message) > maxIncidentMessage {
-		return false
+		return "unknown kind or bad message"
 	}
 	if incident.Opcode != nil && (*incident.Opcode < 0 || *incident.Opcode > 0xFFFF) {
-		return false
+		return "opcode out of range"
 	}
 	if len(incident.Payload) > 2*maxIncidentDumpBytes || len(incident.Payload)%2 != 0 {
-		return false
+		return "payload dump too long or odd"
 	}
 	if _, err := hex.DecodeString(incident.Payload); err != nil {
-		return false
+		return "payload dump not hex"
 	}
 	if incident.PayloadSize < 0 || incident.PayloadSize > 1<<20 || incident.Region < 0 || incident.Region > 0xFFFF {
-		return false
+		return "payload size or region out of range"
 	}
 	for _, text := range []string{incident.Phase, incident.Character, incident.Build} {
 		if len(text) > maxIncidentName || !incidentNamePattern.MatchString(text) {
-			return false
+			return "malformed phase, character or build"
 		}
 	}
-	return len(incident.Phase) <= maxIncidentPhase && validIncidentJournal(incident.Journal)
+	if len(incident.Phase) > maxIncidentPhase {
+		return "phase too long"
+	}
+	return ""
 }
 
 /*
 ================
-validIncidentJournal
+incidentJournalProblem
 
-Whole rows only, at most maxIncidentJournalRows, each a time at or before
+Why a journal cannot be rendered faithfully, or "" for one that can:
+whole rows only, at most maxIncidentJournalRows, each a time at or before
 the failure within the window, a known direction, an opcode and a size.
+The caller drops a bad journal and keeps the incident (#788: a strict check
+on a new client field must not discard the evidence it exists to collect).
 ================
 */
-func validIncidentJournal(journal []float64) bool {
-	if len(journal)%incidentJournalFields != 0 || len(journal) > maxIncidentJournalRows*incidentJournalFields {
-		return false
+func incidentJournalProblem(journal []float64) string {
+	if len(journal)%incidentJournalFields != 0 {
+		return "partial row"
+	}
+	if len(journal) > maxIncidentJournalRows*incidentJournalFields {
+		return "too many rows"
 	}
 	for at := 0; at < len(journal); at += incidentJournalFields {
 		age, direction, opcode, size := journal[at], journal[at+1], journal[at+2], journal[at+3]
 		if age != math.Trunc(age) || age > 0 || age < -maxIncidentJournalAge {
-			return false
+			return fmt.Sprintf("row %d: age %v", at/incidentJournalFields, age)
 		}
 		if direction != math.Trunc(direction) || direction < 0 || int(direction) >= len(incidentJournalDirections) {
-			return false
+			return fmt.Sprintf("row %d: direction %v", at/incidentJournalFields, direction)
 		}
 		if opcode != math.Trunc(opcode) || opcode < 0 || opcode > 0xFFFF {
-			return false
+			return fmt.Sprintf("row %d: opcode %v", at/incidentJournalFields, opcode)
 		}
 		if size != math.Trunc(size) || size < 0 || size > maxIncidentJournalBytes {
-			return false
+			return fmt.Sprintf("row %d: size %v", at/incidentJournalFields, size)
 		}
 	}
-	return true
+	return ""
 }
 
 /*
@@ -203,7 +214,16 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var incident clientIncident
-	if err := decodeJSON(r, &incident); err != nil || !incident.valid() {
+	reason := ""
+	if err := decodeJSON(r, &incident); err != nil {
+		reason = "malformed body: " + err.Error()
+	} else {
+		reason = incident.problem()
+	}
+	if reason != "" {
+		// A refused report is evidence lost: name why, so a client change that
+		// trips it shows in the log instead of vanishing (#788).
+		log.WithFields(log.Fields{"account": claims.AccountID, "reason": reason}).Warn("agent: client incident refused")
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "code": "INVALID_INCIDENT"})
 		return
 	}
@@ -223,7 +243,10 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		fields["payloadSize"] = incident.PayloadSize
 	}
 	eventFields := map[string]string{"phase": incident.Phase, "region": fmt.Sprint(incident.Region)}
-	if len(incident.Journal) != 0 {
+	if problem := incidentJournalProblem(incident.Journal); problem != "" {
+		fields["journalInvalid"] = problem
+		eventFields["journalInvalid"] = problem
+	} else if len(incident.Journal) != 0 {
 		journal := renderIncidentJournal(incident.Journal)
 		fields["journal"] = journal
 		eventFields["journal"] = journal

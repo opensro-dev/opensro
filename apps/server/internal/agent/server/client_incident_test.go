@@ -9,6 +9,7 @@ package agentserver
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -98,25 +99,60 @@ func TestClientIncidentCarriesItsFrameJournal(t *testing.T) {
 
 /*
 ================
-TestClientIncidentRefusesAMalformedJournal
+TestClientIncidentKeepsItsReportWhenTheJournalIsMalformed
 
 A journal is whole rows of a time at or before the failure, a known
-direction, an opcode and a size; anything else refuses the whole report.
+direction, an opcode and a size. A bad one is dropped and named; the
+incident it came with is still recorded (#788: a strict check on a new
+client field must not discard the evidence it exists to collect).
 ================
 */
-func TestClientIncidentRefusesAMalformedJournal(t *testing.T) {
-	fixture, token := incidentSession(t)
-	for _, journal := range []string{
-		`[-1,0,1]`,
-		`[5,0,1,1]`,
-		`[-1,3,1,1]`,
-		`[-1,0,65536,1]`,
-		`[-1.5,0,1,1]`,
-		`[-600001,0,1,1]`,
+func TestClientIncidentKeepsItsReportWhenTheJournalIsMalformed(t *testing.T) {
+	for journal, reason := range map[string]string{
+		`[-1,0,1]`:        "partial row",
+		`[5,0,1,1]`:       "row 0: age 5",
+		`[-1,3,1,1]`:      "row 0: direction 3",
+		`[-1,0,65536,1]`:  "row 0: opcode 65536",
+		`[-1.5,0,1,1]`:    "row 0: age -1.5",
+		`[-600001,0,1,1]`: "row 0: age -600001",
 	} {
+		fixture, token := incidentSession(t)
+		hook := logtest.NewGlobal()
 		body := `{"kind":"packet","message":"x","journal":` + journal + `}`
+		if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code; code != http.StatusOK {
+			t.Errorf("%s = %d, want the incident kept", journal, code)
+		}
+		entry := hook.LastEntry()
+		if entry == nil || entry.Message != "agent: client incident" || entry.Data["journalInvalid"] != reason || entry.Data["journal"] != nil {
+			t.Errorf("%s: logged %+v, want journalInvalid %q and no journal", journal, entry, reason)
+		}
+		hook.Reset()
+	}
+}
+
+/*
+================
+TestClientIncidentRefusalIsLoggedWithItsReason
+
+A refused report is evidence lost: the Agent names why instead of
+dropping it silently.
+================
+*/
+func TestClientIncidentRefusalIsLoggedWithItsReason(t *testing.T) {
+	fixture, token := incidentSession(t)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+	for body, reason := range map[string]string{
+		`{"kind":"other","message":"x"}`:            "unknown kind or bad message",
+		`{"kind":"packet","message":"x","extra":1}`: "malformed body: ",
+	} {
 		if code := performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, body, token).Code; code != http.StatusBadRequest {
-			t.Errorf("%s = %d", journal, code)
+			t.Fatalf("%s = %d", body, code)
+		}
+		entry := hook.LastEntry()
+		got, _ := entry.Data["reason"].(string)
+		if entry == nil || entry.Message != "agent: client incident refused" || !strings.HasPrefix(got, reason) {
+			t.Errorf("%s: logged %+v, want reason %q", body, entry, reason)
 		}
 	}
 }
