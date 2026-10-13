@@ -254,7 +254,9 @@ func run(out, release, textdata string) error {
 	}
 	quests := catalogue.BuildQuests(catalogue.QuestSource{Catalog: questCatalog, Definitions: definitions,
 		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID})
-	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: monster.LoadTemplate(dir), ItemID: itemID})
+	skillData := enterworld.NewTextdataSkills(dir)
+	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: monster.LoadTemplate(dir), ItemID: itemID,
+		Skills: skillData})
 	if err != nil {
 		return fmt.Errorf("monsters: %w", err)
 	}
@@ -287,7 +289,6 @@ func run(out, release, textdata string) error {
 	if _, err := progression.BetaDropMixFromEnv(); err != nil {
 		return err
 	}
-	skillData := enterworld.NewTextdataSkills(dir)
 	skillList := skillRows(skillData)
 	skills := catalogue.BuildSkills(catalogue.SkillSource{Rows: skillList,
 		Handled: func(row enterworld.SkillRow) bool { return action.SkillPressHandled(skillData, row) },

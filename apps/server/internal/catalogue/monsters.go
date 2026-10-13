@@ -29,7 +29,9 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/action"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/loot"
+	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -159,20 +161,33 @@ MonsterSource
 type MonsterSource struct {
 	Template monster.Template
 	ItemID   func(codename string) uint32
+	// Skills resolves the default skills whose summons a placed unique
+	// brings into the world (enterworld.MonsterSummonClosure).
+	Skills enterworld.SkillDataSource
 }
 
 /*
 ================
 BuildMonsters
 
-Every monster with a nest, and every unique (a grade that rolls the unique
-prepass, action.RollsUniqueDrops), in id order.
+Every monster the shard can put into the world (producibleMonsters), in id
+order. A retail row nothing spawns (a unique's other incarnations, the
+_L2/_L3 rows the client mirror carries only so it could draw them) is not
+listed: the site describes this shard, not the reference tables.
 ================
 */
 func BuildMonsters(source MonsterSource) ([]Monster, error) {
+	produced, err := producibleMonsters(source)
+	if err != nil {
+		return nil, err
+	}
 	regions := map[uint32]map[uint16]bool{}
 	promotes := map[uint32]bool{}
 	for _, nest := range source.Template.Nests {
+		// A nest with no instance cap never spawns (Template.SpawnableRefs).
+		if nest.InstanceLimit() == 0 {
+			continue
+		}
 		if regions[nest.RefObjID] == nil {
 			regions[nest.RefObjID] = map[uint16]bool{}
 		}
@@ -183,7 +198,7 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 	}
 	var monsters []Monster
 	for id, ref := range source.Template.Refs {
-		if ref.Structure || regions[id] == nil && !action.RollsUniqueDrops(ref.MonsterType) {
+		if ref.Structure || produced[id] == "" {
 			continue
 		}
 		m := Monster{ID: id, Codename: ref.Codename, Name: ref.Name, Level: int(ref.Level), HP: ref.MaxHP,
@@ -198,8 +213,7 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 		}
 		m.Drops = drops
 		m.Unique = uniqueBonus(ref)
-		m.Standing = monsterStanding(len(m.Regions) > 0)
-		m.Standing = applyGaps("monster", id, m.Standing)
+		m.Standing = applyGaps("monster", id, Standing{Status: StatusImplemented})
 		monsters = append(monsters, m)
 	}
 	sort.Slice(monsters, func(i, j int) bool { return monsters[i].ID < monsters[j].ID })
@@ -208,22 +222,69 @@ func BuildMonsters(source MonsterSource) ([]Monster, error) {
 
 /*
 ================
-monsterStanding
+producibleMonsters
 
-A monster with a nest spawns, fights and drops through the server's
-population and loot planner. One with no nest (a unique's later
-incarnation) is not placed in the world.
+The world monsters the server itself creates, from its own spawn sources:
+  - a nest with an instance cap (the population's nests, 560D00);
+  - a quest script's monster (quest.ScriptMonsterCodenames);
+  - a summon child of a placed unique's default skills, transitively, as the
+    unique encounter roster resolves it (enterworld.MonsterSummonClosure),
+    seeded only with uniques one of the sources above produces.
+
+Two creators are left out on purpose. A GM's LOADMONSTER can create any row
+and is not a player-facing source. Caravan bandits (60BF30) are the four
+job families MOB_THIEF_NPC, MOB_HUNTER_NPC and their EU kin, 1250 level
+rows each: real, but a list of them is a site design question, not a
+monster page per row, and the catalogue never listed them.
+Each reference maps to the first source that admits it, in that order.
 ================
 */
-func monsterStanding(placed bool) Standing {
-	if placed {
-		return Standing{Status: StatusImplemented}
+func producibleMonsters(source MonsterSource) (map[uint32]string, error) {
+	template := source.Template
+	produced := map[uint32]string{}
+	admit := func(id uint32, from string) {
+		if produced[id] == "" {
+			produced[id] = from
+		}
 	}
-	return Standing{Status: StatusMissing, Gaps: []string{"It doesn't appear in the world yet."}, Issue: monsterIssue}
+	for _, nest := range template.Nests {
+		if nest.InstanceLimit() > 0 {
+			admit(nest.RefObjID, SourceNest)
+		}
+	}
+	byCodename := map[string]uint32{}
+	for id, ref := range template.Refs {
+		byCodename[ref.Codename] = id
+	}
+	for _, codename := range quest.ScriptMonsterCodenames() {
+		id, ok := byCodename[codename]
+		if !ok {
+			return nil, fmt.Errorf("quest script monster %s has no reference", codename)
+		}
+		admit(id, SourceQuest)
+	}
+	var summoners []uint32
+	for id := range produced {
+		if monster.UniqueSummonPolicy(template.Refs[id].Codename) != monster.NoSummonPolicy {
+			summoners = append(summoners, id)
+		}
+	}
+	summoned, err := enterworld.MonsterSummonClosure(template, source.Skills, summoners)
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range summoned {
+		admit(id, SourceSummon)
+	}
+	return produced, nil
 }
 
-// monsterIssue is where monster gaps are tracked.
-const monsterIssue = "https://github.com/opensro-dev/opensro/issues?q=is%3Aissue+label%3Amonsters"
+// The spawn sources producibleMonsters reads, as its result names them.
+const (
+	SourceNest   = "nest"
+	SourceQuest  = "quest"
+	SourceSummon = "summon"
+)
 
 /*
 ================

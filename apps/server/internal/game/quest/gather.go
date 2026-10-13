@@ -98,6 +98,20 @@ const (
 
 /*
 ================
+ScriptMonsterCodenames
+
+Every monster a quest script creates (SpawnQuestMonster): the Ivy
+guardian, the Cerberus lure, the adventurer's crab and the treasure
+guardian. None has a nest; a reader that lists what the shard can spawn
+(the catalogue) admits them from here.
+================
+*/
+func ScriptMonsterCodenames() []string {
+	return []string{ivyGuardian, cerberusLadon, adventurerCrab, treasureGuardian}
+}
+
+/*
+================
 gatherRoll
 
 How a countdown's end is rolled: never (Cerberus), failing below 50 of

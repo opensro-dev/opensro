@@ -11,6 +11,8 @@ import (
 	"math"
 	"testing"
 
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/world/monster"
 )
 
@@ -55,28 +57,73 @@ func TestMonsterVariantsFollowTheSpawnRoll(t *testing.T) {
 
 /*
 ================
-TestUnplacedMonsterIsMissingWithAnIssue
+fakeSummonSkills
+
+Default skill 900 summons reference 20; anything else is a plain skill.
 ================
 */
-func TestUnplacedMonsterIsMissingWithAnIssue(t *testing.T) {
-	refs := map[uint32]monster.MonsterRef{
-		1: {RefObjID: 1, Codename: "MOB_PLACED", Name: "Placed", Level: 5, TypeID4: 1},
-		2: {RefObjID: 2, Codename: "MOB_UNIQUE_L2", Name: "Unique", Level: 20, TypeID4: 1, MonsterType: gradeUnique},
-		3: {RefObjID: 3, Codename: "MOB_UNUSED", Name: "Unused", Level: 5, TypeID4: 1},
+type fakeSummonSkills struct{ enterworld.SkillDataSource }
+
+func (fakeSummonSkills) SkillByID(id uint32) (enterworld.SkillRow, bool) {
+	row := enterworld.SkillRow{ID: id}
+	if id == 900 {
+		row.Summon = monster.SummonSkill{Present: true}
+		row.Summon.Entries[0] = monster.SummonEntry{RefObjID: 20}
 	}
-	nests := []monster.NestRow{{SpawnPoint: monster.SpawnPoint{RefObjID: 1, RegionID: 24230}}}
-	monsters, err := BuildMonsters(MonsterSource{Template: monster.TemplateFromParts(refs, nests), ItemID: func(string) uint32 { return 0 }})
+	return row, true
+}
+
+/*
+================
+TestOnlyProducibleMonstersAreListed
+
+A nest with a cap places its monster; a nest pinned to zero places
+nothing; a unique's other incarnation with no nest (the _L2 row) is not
+listed; a placed unique's summon and a quest script's monster are.
+================
+*/
+func TestOnlyProducibleMonstersAreListed(t *testing.T) {
+	refs := map[uint32]monster.MonsterRef{
+		1:  {RefObjID: 1, Codename: "MOB_PLACED", Name: "Placed", Level: 5, TypeID4: 1},
+		2:  {RefObjID: 2, Codename: "MOB_CH_TIGERWOMAN", Name: "Tiger Girl", Level: 20, TypeID4: 1, MonsterType: gradeUnique, DefaultSkillIDs: [10]uint32{900}},
+		3:  {RefObjID: 3, Codename: "MOB_CH_TIGERWOMAN_L2", Name: "Tiger Girl", Level: 60, TypeID4: 1, MonsterType: gradeUnique, DefaultSkillIDs: [10]uint32{900}},
+		4:  {RefObjID: 4, Codename: "MOB_PINNED_EMPTY", Name: "Empty", Level: 5, TypeID4: 1},
+		20: {RefObjID: 20, Codename: "MOB_SUMMONED", Name: "Summoned", Level: 20, TypeID4: 1},
+	}
+	next := uint32(100)
+	for _, codename := range quest.ScriptMonsterCodenames() {
+		refs[next] = monster.MonsterRef{RefObjID: next, Codename: codename, Name: codename, Level: 10, TypeID4: 1}
+		next++
+	}
+	nests := []monster.NestRow{
+		{SpawnPoint: monster.SpawnPoint{RefObjID: 1, RegionID: 24230}},
+		{SpawnPoint: monster.SpawnPoint{RefObjID: 2, RegionID: 24231}},
+		{SpawnPoint: monster.SpawnPoint{RefObjID: 4, RegionID: 24232}, PolicyPinned: true, MaxCount: 0},
+	}
+	monsters, err := BuildMonsters(MonsterSource{Template: monster.TemplateFromParts(refs, nests),
+		ItemID: func(string) uint32 { return 0 }, Skills: fakeSummonSkills{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(monsters) != 2 || monsters[0].ID != 1 || monsters[1].ID != 2 {
-		t.Fatalf("exported %+v, want the placed monster and the unique", monsters)
+	listed := map[uint32]Monster{}
+	for _, m := range monsters {
+		listed[m.ID] = m
+		if m.Status != StatusImplemented {
+			t.Errorf("%s listed as %s", m.Codename, m.Status)
+		}
 	}
-	if monsters[0].Status != StatusImplemented || len(monsters[0].Regions) != 1 {
-		t.Errorf("placed monster %+v", monsters[0])
+	for _, id := range []uint32{1, 2, 20, 100, 101, 102, 103} {
+		if _, ok := listed[id]; !ok {
+			t.Errorf("reference %d is producible but not listed", id)
+		}
 	}
-	if monsters[1].Status != StatusMissing || monsters[1].Issue == "" || monsters[1].Unique == nil {
-		t.Errorf("unplaced unique %+v", monsters[1])
+	for _, id := range []uint32{3, 4} {
+		if m, ok := listed[id]; ok {
+			t.Errorf("%s is listed, but nothing spawns it", m.Codename)
+		}
+	}
+	if len(listed[1].Regions) != 1 || listed[2].Unique == nil || len(listed[20].Regions) != 0 {
+		t.Errorf("placed %+v, unique %+v, summoned %+v", listed[1], listed[2], listed[20])
 	}
 }
 
