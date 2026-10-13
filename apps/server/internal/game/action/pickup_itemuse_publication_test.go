@@ -199,8 +199,11 @@ func TestPickupItemUsePublicationOrder(t *testing.T) {
 TestPickupItemUsePublicationOverflowClosesOutsideDivision
 
 A detached authenticated session retains its bounded reliable queue. Fill it
-exactly, then publish through each production boundary. The synchronous close
-hook uses the same commerce cleanup as production, which reacquires the lane.
+exactly, then publish through each production boundary. The close hook uses
+the same commerce cleanup as production, which reacquires the lane. An
+overflow retires the session inline but runs its hooks on their own goroutine
+(closeSessionFromSend: inline hooks deadlocked a store door), so the test
+waits for the hook rather than expecting it done when the publisher returns.
 ================
 */
 func TestPickupItemUsePublicationOverflowClosesOutsideDivision(t *testing.T) {
@@ -271,8 +274,8 @@ func TestPickupItemUsePublicationOverflowClosesOutsideDivision(t *testing.T) {
 				if cause == nil || !strings.Contains(cause.Error(), "outbound queue overflow") {
 					t.Fatalf("close cause = %v, want queue overflow", cause)
 				}
-			default:
-				t.Fatal("overflow did not finish synchronous close hook")
+			case <-time.After(publicationTimeout):
+				t.Fatal("overflow did not run the session's close hook")
 			}
 			if h.character.BuybackSession != 0 {
 				t.Fatal("commerce close hook did not clear session")
