@@ -788,8 +788,11 @@ notice symbol of a refusal the client makes itself.
 		): string | null {
 			if ( command.kind === "magic-option-take" ) return magicOption.take( slots.get( command.slot ) );
 			if ( busy() ) throw Error( "Inventory process unavailable" );
-			const item = slots.get( magicOption.state().item ?? -1 ),
-				result = magicOption.grant( command.codename, item );
+			// The free-slot check reads the reference's option capacity
+			// (maxMagicOptions51c), which only the presented item carries; the
+			// bare slot row read as 0 and refused every grant without a request.
+			const row = slots.get( magicOption.state().item ?? -1 ),
+				result = magicOption.grant( command.codename, row && present( row ) );
 			if ( result.frame ) send( result.frame );
 			return result.notice ?? null;
 		},

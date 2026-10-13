@@ -123,3 +123,50 @@ test("a hat with no free option slot is refused before any request", () => {
 	assert.deepEqual( grant.grant( "MATTR_AVATAR_STR", full ), { notice: "UIIT_MSG_AVATAR_MAGICOPTION_ADD_ERORR" } );
 	assert.equal( grant.state().phase, "idle" );
 });
+
+/*
+================
+inventoryWithDress
+
+The inventory owner as the enter payload seeds it: one avatar dress in
+bag slot 19, its reference carrying the option capacity (itemdata column
+158), the dress row of magicoptionassign and that option's definition.
+================
+*/
+async function inventoryWithDress( sent ) {
+	const { createInventory } = await import(
+		"../../src/engine/runtime/simulation/worker/session/world/gameplay/inventory/inventory.ts"
+	);
+	const DRESS = 23295;
+	const owner = createInventory( frame => sent.push( frame ) );
+	owner.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refItemSnapshot: [ {
+			refObjId: DRESS,
+			typeFlags: flags( 3, 1, 13, 2 ),
+			nativeFields: { maxMagicOptions51c: 4 }
+		} ],
+		magicOptionSnapshot: [ ...references.values() ],
+		avatarMagicOptions: parts,
+		// u32 id, u8 plus, u64 variance, u32 durability, u8 option count.
+		equipItems: [ {
+			slot: 19,
+			refObjId: DRESS,
+			body: [ ...u32( DRESS ), 0, ...Array( 8 ).fill( 0 ), ...u32( 0 ), 0 ]
+		} ]
+	} );
+	return owner;
+}
+
+test("BR-261012-1909: a dropped dress, a chosen option and Confirm send the grant", async () => {
+	const sent = [];
+	const owner = await inventoryWithDress( sent );
+	owner.process( { kind: "magic-option-open", gid: 300 }, 0 );
+	assert.equal( owner.receive( 0xb338, Uint8Array.of( 1, ...u32( 0x80000000 ) ) ), true );
+	assert.equal( owner.magicOptionItem( { kind: "magic-option-take", slot: 19 } ), null );
+	assert.equal( owner.magicOptionItem( { kind: "magic-option-grant", codename: "MATTR_AVATAR_HP" } ), null );
+	const grant = sent.at( -1 );
+	assert.equal( grant.opcode, 0x361a );
+	assert.deepEqual( [ ...grant.payload.subarray( 0, 3 ) ], [ 19, 15, 0 ] );
+});
