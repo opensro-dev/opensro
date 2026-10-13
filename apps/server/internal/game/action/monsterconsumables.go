@@ -61,6 +61,12 @@ func (rt *Runtime) prepareSelectedDrop(chosen loot.DropItem, at simulation.Spawn
 	if rt.ElixirDrops.Excludes(ref.TypeIDs) {
 		return grounditem.Item{}, false
 	}
+	// Port-only, not native, beta balance (owner 2026-10-14): alchemy
+	// materials piled up as junk on every hunting ground, so their pick
+	// drops nothing (progression/materialdrops.go).
+	if rt.MaterialDrops.Excludes(ref.TypeIDs) {
+		return grounditem.Item{}, false
+	}
 	// Port-only, not native, beta balance (owner 2026-10-13): degree-9
 	// alchemy goods come only from the shop, so their pick drops nothing.
 	if itemClass, _ := ref.NativeFields.Lookup("itemClass"); rt.ShopOnly.Excludes(ref.TypeIDs, int(itemClass)) {

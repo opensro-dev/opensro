@@ -306,6 +306,15 @@ variable "elixir_drops_off" {
   default = "on"
 }
 
+# alchemy_material_drops_off keeps every alchemy material (type 3/3/11/4,
+# the grey bags of monster parts) out of monster drops (port-only, not
+# native, beta balance; owner 2026-10-14). "off" is the original game's
+# drops.
+variable "alchemy_material_drops_off" {
+  type    = string
+  default = "on"
+}
+
 variable "beta_drop_cap" {
   type    = string
   default = "16"
@@ -520,6 +529,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALCHEMY_NO_ASSIMILATION        = var.alchemy_no_assimilation
         SRO_CARAVAN_BANDIT_CAP             = var.caravan_bandit_cap
         SRO_ELIXIR_DROPS_OFF               = var.elixir_drops_off
+        SRO_ALCHEMY_MATERIAL_DROPS_OFF     = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9         = var.beta_shop_only_degree9
         SRO_STACK_SIZES                    = var.stack_sizes
         SRO_PUBLIC_API_ADDR                = var.public_api_addr

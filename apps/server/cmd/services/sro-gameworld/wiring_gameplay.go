@@ -178,6 +178,12 @@ func newGameplayPlane(
 	if items.ElixirDrops.Off() {
 		log.Infof("loot: elixir drops OFF (%s): the shop sells them", progression.EnvElixirDropsOff)
 	}
+	// SRO_ALCHEMY_MATERIAL_DROPS_OFF (port-only, not native): alchemy
+	// materials leave every monster drop. Nothing needs them on the beta.
+	items.MaterialDrops = progression.MaterialDropsFromEnv()
+	if items.MaterialDrops.Off() {
+		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
+	}
 	if err := items.ConfigureCommerce(devPaths.TextdataDir, extraGoods); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}

@@ -96,7 +96,10 @@ type BetaRates struct {
 	ElixirDropsOff bool `json:"elixirDropsOff,omitempty" doc:"Port-only beta balance: no monster drops an elixir (type 3/3/10/1); the Jangan blacksmith sells them. Their chances in these tables then drop nothing."`
 	// ShopOnlyDegree9 removes degree-9 alchemy goods from every drop
 	// (progression.ShopOnlyDegree9).
-	ShopOnlyDegree9 bool `json:"shopOnlyDegree9,omitempty" doc:"Port-only beta balance: degree-9 Lucky Powder (type 3/3/10/2), stat magic stones (3/3/11/1), attribute stones (3/3/11/2) and Luck, Steady, Astral, Athanasia and Repair stones (3/3/11/7), degree being the item's ItemClass, no longer drop; every town's grocer sells the Lucky Powder and Jangan's smith and grocer sell the stones (SRO_SHOP_EXTRA_GOODS). Their chances in these tables then drop nothing."`
+	// MaterialDropsOff removes every alchemy material from every drop
+	// (progression.MaterialDrops).
+	MaterialDropsOff bool `json:"materialDropsOff,omitempty" doc:"Port-only beta balance: no monster drops an alchemy material (type 3/3/11/4, monster parts). Their chances in these tables then drop nothing."`
+	ShopOnlyDegree9  bool `json:"shopOnlyDegree9,omitempty" doc:"Port-only beta balance: degree-9 Lucky Powder (type 3/3/10/2), stat magic stones (3/3/11/1), attribute stones (3/3/11/2) and Luck, Steady, Astral, Athanasia and Repair stones (3/3/11/7), degree being the item's ItemClass, no longer drop; every town's grocer sells the Lucky Powder and Jangan's smith and grocer sell the stones (SRO_SHOP_EXTRA_GOODS). Their chances in these tables then drop nothing."`
 }
 
 /*
@@ -160,7 +163,8 @@ func BuildDropTables(monsters []Monster, itemID func(string) uint32, header Head
 	if beta := progression.BetaGrowthFromEnv(); beta.Enabled {
 		file.Beta = &BetaRates{DropRate: beta.DropRate, DropCap: beta.DropCap, GoldRate: beta.GoldRate, SkillExpRate: beta.SkillExpRate,
 			RareChance: action.RareEquipmentChance(beta.RareRate), Seals: progression.BetaSealRatesFromEnv().Table(),
-			ElixirDropsOff: progression.ElixirDropsFromEnv().Off(), ShopOnlyDegree9: progression.BetaShopOnlyDegree9FromEnv().Enabled()}
+			ElixirDropsOff: progression.ElixirDropsFromEnv().Off(), ShopOnlyDegree9: progression.BetaShopOnlyDegree9FromEnv().Enabled(),
+			MaterialDropsOff: progression.MaterialDropsFromEnv().Off()}
 		if progression.BetaSealRatesFromEnv().Enabled() {
 			for _, m := range monsters {
 				level := uint8(m.Level)

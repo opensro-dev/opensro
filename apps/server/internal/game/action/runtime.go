@@ -312,6 +312,11 @@ type Runtime struct {
 	// native, beta balance; owner 2026-10-13). The zero value is native.
 	ElixirDrops progression.ElixirDrops
 
+	// MaterialDrops keeps every alchemy material out of monster drops
+	// (port-only, not native, beta balance; owner 2026-10-14). The zero
+	// value is native.
+	MaterialDrops progression.MaterialDrops
+
 	// ShopOnly keeps degree-9 alchemy goods out of every drop (port-only,
 	// not native, beta balance; owner 2026-10-13). The zero value is off.
 	ShopOnly progression.ShopOnlyDegree9

@@ -123,3 +123,21 @@ func TestElixirDropsOffJobVariable(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestAlchemyMaterialDropsOffJobVariable
+
+alchemy_material_drops_off defaults to on (owner, 2026-10-14); "off"
+(native drops) and "on" pass through as written.
+================
+*/
+func TestAlchemyMaterialDropsOffJobVariable(t *testing.T) {
+	for env, want := range map[string]string{"": "on", "on": "on", "off": "off"} {
+		t.Setenv("SRO_ALCHEMY_MATERIAL_DROPS_OFF", env)
+		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
+		if variables["alchemy_material_drops_off"] != want {
+			t.Fatalf("env %q: alchemy_material_drops_off %v, want %s", env, variables["alchemy_material_drops_off"], want)
+		}
+	}
+}
