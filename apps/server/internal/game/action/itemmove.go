@@ -231,6 +231,12 @@ func (rt *Runtime) applyInventoryMove(
 			changes = append(changes, inv.EquipVisualChanges(move.SourceSlot, move.DestSlot)...)
 		}
 		visuals := FramesFromSocketVisuals(enterworld.ObjectIDForCharacter(character), changes)
+		// 777800 resolves the worn item for any gid, the owner's included.
+		// Every audience gets the references right before the visuals
+		// (peer_references.go): prod showed an owner's browser without the
+		// reference of an item it wore, and the visual ended its session.
+		references := rt.socketVisualReferences(changes)
+		shown := append(append([]wire.Frame(nil), references...), visuals...)
 
 		result = OpResult{
 			Frames: append([]wire.Frame{
@@ -243,12 +249,11 @@ func (rt *Runtime) applyInventoryMove(
 						subMoves,
 					),
 				},
-			}, visuals...),
+			}, shown...),
 			// The spawn row is the only other carrier of worn equipment, so a
 			// viewer that already sees this character needs the same pushes:
-			// 777800/777980 resolve any gid, not just the local player's. The
-			// owner holds its own references; a viewer gets them first.
-			Broadcast: append(rt.socketVisualReferences(changes), visuals...),
+			// 777800/777980 resolve any gid, not just the local player's.
+			Broadcast: append([]wire.Frame(nil), shown...),
 		}
 
 		if statFrame != nil {

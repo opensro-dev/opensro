@@ -130,15 +130,17 @@ func (rt *Runtime) applyAvatarTransfer(divisionID string, c *enterworld.Characte
 		if attachment != nil {
 			result.Frames = append(result.Frames, wire.UnequipVisualFrame(wire.UnequipVisual{Gid: enterworld.ObjectIDForCharacter(c), Slot: attachment.Slot, RefObjID: attachment.RefObjID}))
 		}
+		// Every audience, the owner included, gets a worn avatar's reference
+		// right before the visual names it (peer_references.go): 777800
+		// resolves the item for any gid, and a browser that lacks it ends
+		// the session ("Unknown peer equipment reference").
+		if equip {
+			result.Frames = append(result.Frames, rt.itemReferenceFrames([]inventory.Item{item})...)
+		}
 		result.Frames = append(result.Frames, visual)
-		// Viewers see the dress change as the owner does (applyInventoryMove),
-		// after the reference for an avatar they may never have been sent.
+		// Viewers see the dress change as the owner does (applyInventoryMove).
 		// A copy: the owner's stats frame is appended to Frames below.
 		result.Broadcast = append([]wire.Frame(nil), result.Frames[1:]...)
-		if equip {
-			references := rt.itemReferenceFrames([]inventory.Item{item})
-			result.Broadcast = append(references, result.Broadcast...)
-		}
 		// The stats are the owner's alone, after the move and visuals.
 		hp, mp := rt.clampStoredGaugeToKeeper(divisionID, c)
 		result.Frames = append(result.Frames, statFrame)

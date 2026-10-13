@@ -101,7 +101,7 @@ func TestReturnScrollCommitsConsumptionAndServerTimedReentry(t *testing.T) {
 				rt.portals = &portalCatalog{sources: map[uint32]uint32{2094: 1}, destinations: map[uint32]portalDestination{1: {recall: true, world: 1, spawn: want}}}
 			}
 			out := useReturn(rt, c)
-			assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, 0x3449)
+			assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, opCommerceItemReferences, 0x3449)
 			if out.Frames[1].Payload[0] != 1 || binary.LittleEndian.Uint16(out.Frames[1].Payload[2:]) != 3 || c.NativeTeleportMode != 1 || before.NativeTeleportMode != 0 {
 				t.Fatal("authority/snapshot not committed")
 			}
@@ -347,7 +347,7 @@ func TestReturnMovingCorrectionPrecedesStateAndConsumption(t *testing.T) {
 	rt, c, clock, _ := returnFixture(t, 5000)
 	installMidMove(rt, c, clock)
 	out := useReturn(rt, c)
-	assertOpcodes(t, out.Frames, wire.OpObjectSourceCorrection, 0x3122, wire.OpItemUseResponse, 0x3449)
+	assertOpcodes(t, out.Frames, wire.OpObjectSourceCorrection, 0x3122, wire.OpItemUseResponse, opCommerceItemReferences, 0x3449)
 	if rt.Worlds.Snapshot(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }).MoveSegment.Valid() {
 		t.Fatal("movement remained active")
 	}

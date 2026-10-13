@@ -245,8 +245,8 @@ func TestCompanionLeaseRenewalPreservesRecordAndRemainingTime(t *testing.T) {
 						}
 					}
 				}
-				// Frames[1] is the item's visual (publishItemUseVisual).
-				if len(result.Frames) < 3 || result.Frames[2].Opcode != 0x3645 || len(result.Frames[2].Payload) != 7 || binary.LittleEndian.Uint32(result.Frames[2].Payload[3:]) != uint32(pet.RentalRemainingSeconds) {
+				// Frames[1..2] are the item's reference and visual (publishItemUseVisual).
+				if len(result.Frames) < 4 || result.Frames[3].Opcode != 0x3645 || len(result.Frames[3].Payload) != 7 || binary.LittleEndian.Uint32(result.Frames[3].Payload[3:]) != uint32(pet.RentalRemainingSeconds) {
 					t.Fatal("renewal omitted native state/time delta", result)
 				}
 				assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(4).U8(25).U16(ref.TypeFlags()).U8(23).Payload(), companionLeaseWrongTarget)

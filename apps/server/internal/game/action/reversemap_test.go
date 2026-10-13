@@ -98,7 +98,7 @@ func TestReverseMapOnTravelsToAPublishedPoint(t *testing.T) {
 		t.Fatalf("published points %+v, want the field town only", points)
 	}
 	out := useReverseScroll(rt, c, reverseMapTail(points[0].ID)...)
-	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, wire.OpItemUseVisual)
+	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual)
 	if c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
 		t.Fatalf("the map choice did not spend one scroll and start the cast: %+v", out.Frames)
 	}

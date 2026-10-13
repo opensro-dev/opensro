@@ -193,7 +193,7 @@ func TestReverseReturnTakesThePlayerToWhereItDied(t *testing.T) {
 	died := simulation.Spawn{RegionID: 25000, X: 812, Y: 30, Z: 1204, Angle: 0}
 	c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(died)}
 	out := reverseReturn(rt, c, reverseReturnLastDeath)
-	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, wire.OpItemUseVisual)
+	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual)
 	if out.Frames[1].Payload[1] != 23 || c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
 		t.Fatalf("the reverse return did not spend one scroll and start the cast: %+v", out.Frames)
 	}
@@ -338,7 +338,7 @@ func TestReverseScrollFromTheBagTakesThePlayerToWhereItDied(t *testing.T) {
 	died := simulation.Spawn{RegionID: 25000, X: 812, Y: 30, Z: 1204, Angle: 0}
 	c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(died)}
 	out := useReverseScroll(rt, c, reverseReturnLastDeath)
-	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, wire.OpItemUseVisual)
+	assertOpcodes(t, out.Frames, 0x3122, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual)
 	if out.Frames[1].Payload[1] != 23 || c.MissionInventory[len(c.MissionInventory)-1].StackCount != 1 || c.NativeTeleportMode != 1 {
 		t.Fatalf("the bag use did not spend one scroll and start the cast: %+v", out.Frames)
 	}

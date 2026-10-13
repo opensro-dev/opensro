@@ -142,9 +142,9 @@ func TestFireworkPublishesItsVisualToEveryone(t *testing.T) {
 	})
 	rt, _ := newTestRuntime(c, items)
 	result := rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(21).U16(ref.TypeFlags()).Payload())
-	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual)
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual)
 	assertOpcodes(t, result.Broadcast, opCommerceItemReferences, wire.OpItemUseVisual)
-	visual := result.Frames[1].Payload
+	visual := result.Frames[2].Payload
 	if binary.LittleEndian.Uint32(visual) != enterworld.ObjectIDForCharacter(c) ||
 		binary.LittleEndian.Uint32(visual[4:]) != ref.RefObjID {
 		t.Fatalf("visual %x does not name the user and the firework", visual)

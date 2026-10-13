@@ -700,8 +700,12 @@ publishItemUseVisual
 CGObjPC_HandleUseItem (v1.188 510980) ends every successful use the same
 way: the 0xB04C success, then 0x305C {gid, item reference} to the nearby
 sessions, v1.150's 0x3449 (the client's external item effect, 74F540):
-the potion sparkle, the scroll glow, the firework. Observers resolve the
-reference before the visual names it.
+the potion sparkle, the scroll glow, the firework. The native client holds
+every item record; the browser holds only the references it was sent, so
+both audiences, the user and the observers, get the item's reference right
+before the visual names it (peer_references.go). The user's copy matters
+when the used row was the last of its kind the browser knew of: a repeat
+of a known reference is harmless.
 ================
 */
 func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *enterworld.ItemRef, result *OpResult) {
@@ -715,10 +719,9 @@ func (rt *Runtime) publishItemUseVisual(character *enterworld.Character, ref *en
 	if at < 0 {
 		return
 	}
+	reference := rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags()}}, nil)
 	visual := wire.Frame{Opcode: wire.OpItemUseVisual,
 		Payload: wire.NewWriter(8).U32(enterworld.ObjectIDForCharacter(character)).U32(ref.RefObjID).Payload()}
-	result.Frames = append(result.Frames[:at+1], append([]wire.Frame{visual}, result.Frames[at+1:]...)...)
-	result.Broadcast = append(result.Broadcast,
-		rt.commerceReferences([]inventory.Item{{RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags()}}, nil),
-		visual)
+	result.Frames = append(result.Frames[:at+1], append([]wire.Frame{reference, visual}, result.Frames[at+1:]...)...)
+	result.Broadcast = append(result.Broadcast, reference, visual)
 }

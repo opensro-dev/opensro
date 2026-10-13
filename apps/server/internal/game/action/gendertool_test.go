@@ -11,6 +11,7 @@ package action
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -83,4 +84,76 @@ func TestGenderToolRefusesAHighDegreeOrAWeapon(t *testing.T) {
 	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(4).U8(25).U16(tool.TypeFlags()).U8(21).Payload(), genderErrDegree)
 	c.MissionInventory[0].Slot = 22
 	assertItemUseRefusedUnchanged(t, rt, c, wire.NewWriter(4).U8(25).U16(tool.TypeFlags()).U8(22).Payload(), genderErrTarget)
+}
+
+/*
+================
+assertReferencedBeforeNamed
+
+frames is what one audience receives, in order. Every frame that names an
+item - the 0x3449 use effect, the 0x3314 equip visual, the 0x3645 ref
+change - must follow a 0x000E reference row for that id in the same
+stream: the browser has no item table, and an unknown id ends its session
+(client incidents 0x3314 "Unknown peer equipment reference" and 0x3449
+"Missing external item reference 3787").
+================
+*/
+func assertReferencedBeforeNamed(t *testing.T, audience string, frames []wire.Frame) {
+	t.Helper()
+	known := map[uint32]bool{}
+	for index, frame := range frames {
+		named := uint32(0)
+		switch frame.Opcode {
+		case opCommerceItemReferences:
+			var delta struct {
+				Items []struct {
+					ID uint32 `json:"refObjId"`
+				} `json:"items"`
+			}
+			if err := json.Unmarshal(frame.Payload, &delta); err != nil {
+				t.Fatalf("%s frame %d: reference payload: %v", audience, index, err)
+			}
+			for _, row := range delta.Items {
+				known[row.ID] = true
+			}
+			continue
+		case wire.OpItemUseVisual:
+			named = binary.LittleEndian.Uint32(frame.Payload[4:])
+		case wire.OpEquipVisual:
+			named = binary.LittleEndian.Uint32(frame.Payload[5:])
+		case cosItemStateOpcode:
+			if frame.Payload[1] == itemStateRefFlag {
+				named = binary.LittleEndian.Uint32(frame.Payload[2:])
+			}
+		}
+		if named != 0 && !known[named] {
+			t.Fatalf("%s frame %d (0x%04X) names item %d before its reference", audience, index, frame.Opcode, named)
+		}
+	}
+}
+
+/*
+================
+TestGenderToolReferencesEveryItemItNames
+
+The owner sees the tool's use effect and the swapped item's new reference;
+nearby players see the effect. Each audience gets every named item's
+reference first, the owner included: an owner's browser may not hold the
+tool's row (prod 0x3449 incident, ref 3787).
+================
+*/
+func TestGenderToolReferencesEveryItemItNames(t *testing.T) {
+	rt, c, tool := genderFixture(t, 1)
+	out := rt.HandleItemUse(testDivision, c, wire.NewWriter(4).U8(25).U16(tool.TypeFlags()).U8(21).Payload())
+	if len(out.Frames) == 0 || out.Frames[0].Payload[0] != wire.ResultSuccess {
+		t.Fatalf("use = %+v / %q", out.Frames, out.DiagnosticRefusal)
+	}
+	if _, ok := findFrame(out.Frames, wire.OpItemUseVisual); !ok {
+		t.Fatal("the owner saw no use effect")
+	}
+	if _, ok := findFrame(out.Broadcast, wire.OpItemUseVisual); !ok {
+		t.Fatal("nearby players saw no use effect")
+	}
+	assertReferencedBeforeNamed(t, "owner", out.Frames)
+	assertReferencedBeforeNamed(t, "observers", out.Broadcast)
 }

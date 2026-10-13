@@ -72,10 +72,10 @@ func TestGlobalChattingSendsTheLineToTheWholeShard(t *testing.T) {
 	rt.PushShardPeerFrames = func(_, name string, frames []wire.Frame) { except, shard = name, frames }
 	result := rt.HandleItemUse(testDivision, c, globalChatRequest(ref, "Hello, Silk Road"))
 	// 510980: the success and the item visual, then the shard's relayed line.
-	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, chat.OpChatBroadcast)
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual, chat.OpChatBroadcast)
 	want := chat.EncodeChatBroadcastNamed(chat.ChatTypeGlobal, c.Name, "Hello, Silk Road")
-	if !bytes.Equal(result.Frames[2].Payload, want) {
-		t.Fatalf("author line %x, want %x", result.Frames[2].Payload, want)
+	if !bytes.Equal(result.Frames[3].Payload, want) {
+		t.Fatalf("author line %x, want %x", result.Frames[3].Payload, want)
 	}
 	if except != c.Name || len(shard) != 1 || shard[0].Opcode != chat.OpChatBroadcast || !bytes.Equal(shard[0].Payload, want) {
 		t.Fatalf("shard push to all but %q: %+v", except, shard)

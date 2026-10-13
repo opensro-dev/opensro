@@ -496,13 +496,16 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 		result := rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
 			MovementType: wire.MoveTypeInventory, SourceSlot: 20, DestSlot: 6, Quantity: 1,
 		}))
-		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpEquipVisual, wire.OpBaseStats)
-		// A viewer may lack the worn item's reference (#340): it leads.
+		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, opCommerceItemReferences, wire.OpEquipVisual, wire.OpBaseStats)
+		// Owner and viewers may lack the worn item's reference (#340): it
+		// leads for both, and both get the same visual.
 		assertOpcodes(t, result.Broadcast, opCommerceItemReferences, wire.OpEquipVisual)
-		if !bytes.Equal(result.Broadcast[1].Payload, result.Frames[1].Payload) {
+		if !bytes.Equal(result.Broadcast[1].Payload, result.Frames[2].Payload) {
 			t.Fatal("viewers were sent a different equip visual than the owner")
 		}
-		stats := result.Frames[2].Payload
+		assertReferencedBeforeNamed(t, "owner", result.Frames)
+		assertReferencedBeforeNamed(t, "viewers", result.Broadcast)
+		stats := result.Frames[3].Payload
 		if got := binary.LittleEndian.Uint32(stats[0x00:]); got != 33 {
 			t.Fatalf("equipped physical attack minimum = %d, want base+weapon projection 33", got)
 		}
@@ -510,7 +513,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 			t.Fatalf("equipped hit ratio = %d, want base+weapon projection 35", got)
 		}
 
-		visual, err := wire.DecodeEquipVisual(result.Frames[1].Payload, equipWord)
+		visual, err := wire.DecodeEquipVisual(result.Frames[2].Payload, equipWord)
 		if err != nil {
 			t.Fatalf("equip visual did not decode: %v", err)
 		}
@@ -555,7 +558,7 @@ func TestM1VisualsAlwaysRideBehindSocketTransfers(t *testing.T) {
 		result := rt.HandleItemMove(testDivision, character, encodeMove(t, wire.ItemMoveRequest{
 			MovementType: wire.MoveTypeInventory, SourceSlot: 6, DestSlot: 20, Quantity: 1,
 		}))
-		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, wire.OpEquipVisual, wire.OpBaseStats)
+		assertOpcodes(t, result.Frames, wire.OpItemMoveResponse, opCommerceItemReferences, wire.OpEquipVisual, wire.OpBaseStats)
 		assertOpcodes(t, result.Broadcast, opCommerceItemReferences, wire.OpEquipVisual)
 
 		visual, _ := wire.DecodeEquipVisual(result.Broadcast[1].Payload, equipWord)

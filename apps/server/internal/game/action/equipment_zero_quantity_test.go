@@ -34,6 +34,7 @@ func TestNativeBagToEquipmentZeroQuantity(t *testing.T) {
 		t,
 		result.Frames,
 		wire.OpItemMoveResponse,
+		opCommerceItemReferences,
 		wire.OpEquipVisual,
 		wire.OpBaseStats,
 	)

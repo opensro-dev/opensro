@@ -34,7 +34,7 @@ func TestShippedOstrichSummonKeepsSelectedIdentityAcrossRestore(t *testing.T) {
 	rt, _ := newTestRuntime(c, items)
 	rt.BindPetSession(testDivision, c, 1)
 	result := rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(22).U16(item.TypeFlags()).Payload())
-	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, wire.OpItemUseVisual, wire.OpCosRecordCreate, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
+	assertOpcodes(t, result.Frames, wire.OpItemUseResponse, opCommerceItemReferences, wire.OpItemUseVisual, wire.OpCosRecordCreate, wire.OpSingleObjectSpawn, wire.OpCosRideState, movementSpeedOpcode)
 	if c.ActiveCOS == nil || c.ActiveCOS.Codename != ref.Codename || c.ActiveCOS.RefObjID != ref.RefObjID || !c.ActiveCOS.Mounted || c.ActiveCOS.CurrentHP != ref.MaxHP {
 		t.Fatalf("summon did not install chosen variant: %+v", c.ActiveCOS)
 	}

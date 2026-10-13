@@ -17,17 +17,20 @@ func TestAvatarTransferRoundtripPreservesBodyAndVisualOrder(t *testing.T) {
 	items := staticItemSource{"AVATAR_HAT": {RefObjID: 90001, Codename: "AVATAR_HAT", TypeIDs: [4]int64{3, 1, 13, 1}, Country: 3, RequiredSex: 2, ReqQuadTypes: [4]int64{-1, -1, -1, -1}}}
 	rt, _ := newTestRuntime(c, items)
 	equip := rt.HandleItemMove(testDivision, c, []byte{0x24, 20, 0})
-	// The move, the visual, then the owner's refreshed stats (50F1F0): a
-	// worn avatar's options count only while it is worn.
-	if len(equip.Frames) != 3 || equip.Frames[0].Opcode != wire.OpItemMoveResponse || equip.Frames[1].Opcode != 0x3314 ||
-		equip.Frames[2].Opcode != wire.OpBaseStats {
+	// The move, the avatar's reference and visual, then the owner's
+	// refreshed stats (50F1F0): a worn avatar's options count only while it
+	// is worn. The owner's browser needs the reference as a viewer's does.
+	if len(equip.Frames) != 4 || equip.Frames[0].Opcode != wire.OpItemMoveResponse ||
+		equip.Frames[1].Opcode != opCommerceItemReferences || equip.Frames[2].Opcode != 0x3314 ||
+		equip.Frames[3].Opcode != wire.OpBaseStats {
 		t.Fatalf("equip: %+v", equip)
 	}
-	// Viewers get the avatar's reference first (#340), then the owner's visual,
-	// never the owner's stats.
-	if len(equip.Broadcast) != 2 || equip.Broadcast[0].Opcode != opCommerceItemReferences || !reflect.DeepEqual(equip.Broadcast[1:], equip.Frames[1:2]) {
+	// Viewers get the same reference and visual (#340), never the owner's stats.
+	if len(equip.Broadcast) != 2 || !reflect.DeepEqual(equip.Broadcast, equip.Frames[1:3]) {
 		t.Fatalf("viewers: %+v", equip.Broadcast)
 	}
+	assertReferencedBeforeNamed(t, "owner", equip.Frames)
+	assertReferencedBeforeNamed(t, "viewers", equip.Broadcast)
 	if len(c.MissionInventory) != 0 || c.AvatarInventory == nil || len(c.AvatarInventory.Rows) != 1 {
 		t.Fatal("not committed")
 	}
