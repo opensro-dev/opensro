@@ -281,3 +281,32 @@ test("a type-5 knockback decorates its target with SYSTEM_KNOCKBACK", () => {
 		assert.equal( c.takeDisplacements()[0].kind, type );
 	}
 });
+/*
+================
+castOpen
+
+A B245 success opening cast token for skill from caster onto target 2.
+================
+*/
+function castOpen( skill, caster, token ) {
+	const p = new Uint8Array( 34 ), v = new DataView( p.buffer );
+	p[0] = 1;
+	v.setUint32( 2, skill, true );
+	v.setUint32( 6, caster, true );
+	v.setUint32( 10, token, true );
+	v.setUint32( 14, 2, true );
+	p[18] = 1;
+	p[19] = p[20] = 1;
+	v.setUint32( 21, 2, true );
+	return p;
+}
+test("a full open-cast table names the skill whose casts never closed", () => {
+	const combat = createCombat();
+	combat.receive( 0xb245, castOpen( 10495, 0x77f8b, 1 ), 1000 );
+	for ( let token = 2; token <= 2048; token++ ) combat.receive( 0xb245, castOpen( 7, 3, token ), 5000 );
+	assert.equal( combat.state().casts.length, 2048 );
+	assert.throws(
+		() => combat.receive( 0xb245, castOpen( 7, 3, 2049 ), 61000 ),
+		/capacity exceeded: skill 7 holds 2047; oldest skill 10495 from 491403, 60 s open/
+	);
+});

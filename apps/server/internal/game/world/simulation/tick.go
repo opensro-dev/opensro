@@ -106,6 +106,25 @@ type SessionSnapshot struct {
 
 /*
 ==================
+SessionSnapshot.ownsCompanion
+
+Whether gid is one of this session's own summoned companions.
+==================
+*/
+func (s *SessionSnapshot) ownsCompanion(gid uint32) bool {
+	if s.COS != nil && s.COS.Row.Gid == gid {
+		return true
+	}
+	for _, pet := range s.Companions {
+		if pet != nil && pet.Row.Gid == gid {
+			return true
+		}
+	}
+	return false
+}
+
+/*
+==================
 SessionView
 
 The part of a SessionSnapshot that tick hooks read: identity, population,
@@ -774,7 +793,11 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 							}
 						}
 					}
+					// A pet is never shown to its own owner by the peer lane
+					// (runPeerCOSVisibility skips it), yet the owner sees it:
+					// its own cast closes must reach it as they reach peers.
 					_, cos := division.state.shownCOS[viewer.SessionID][routed.SourceGID]
+					cos = cos || viewer.ownsCompanion(routed.SourceGID)
 					monster := false
 					if ops := division.state.monsters; ops != nil {
 						monster = ops.shownMonsters[viewer.SessionID][routed.SourceGID]

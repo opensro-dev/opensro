@@ -175,3 +175,56 @@ func TestConditionalChildBuffCasterDeathCancels(t *testing.T) {
 		t.Fatal("dead caster received buff")
 	}
 }
+
+/*
+================
+TestMonsterSelfBuffClosesItsCast
+
+The buff attaches under its own token, so only a mode-2 B505 on the cast's
+token retires the cast in an observer's client. It is due when the action
+ends, prepared or instant.
+================
+*/
+func TestMonsterSelfBuffClosesItsCast(t *testing.T) {
+	licensed.RequireGameData(t)
+	skills := enterworld.NewTextdataSkills(gamedatatest.TextdataDir(t))
+	for _, id := range []uint32{10495, 10510} {
+		t.Run(strconv.Itoa(int(id)), func(t *testing.T) {
+			rt, clock, c, m, skill := childBuffFixture(t, id, skills)
+			now := clock.NowMs()
+			result := rt.MonsterBasicAttack(testDivision, m, enterworld.ObjectIDForCharacter(c), id, now)
+			if !result.Accepted || len(result.Frames) == 0 || result.Frames[0].Opcode != wire.OpSkillCastResult {
+				t.Fatalf("cast refused: %+v", result)
+			}
+			token := binary.LittleEndian.Uint32(result.Frames[0].Payload[10:])
+			released := now
+			if skill.ActionCastingTimeMs > 0 {
+				released = now + int64(skill.ActionCastingTimeMs) + 1
+				if got := rt.advanceMonsterCasts(released); len(got) != 1 {
+					t.Fatal("missing release", got)
+				}
+			}
+			closes := func(at int64) int {
+				n := 0
+				for _, batch := range rt.drainSkillFinalizes(at) {
+					for _, f := range batch.Frames {
+						if f.Opcode == wire.OpSkillEffectControl && f.Payload[0] == 2 {
+							if binary.LittleEndian.Uint32(f.Payload[2:]) != token || batch.SourceGID != m.Gid {
+								t.Fatalf("close names %x from %d", f.Payload, batch.SourceGID)
+							}
+							n++
+						}
+					}
+				}
+				return n
+			}
+			end := released + int64(skill.ActionDurationMs)
+			if n := closes(end - 1); n != 0 {
+				t.Fatal("closed before the action ended")
+			}
+			if n := closes(end); n != 1 {
+				t.Fatal("cast never closed", n)
+			}
+		})
+	}
+}

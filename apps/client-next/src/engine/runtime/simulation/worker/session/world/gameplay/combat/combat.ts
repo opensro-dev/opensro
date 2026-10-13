@@ -31,6 +31,7 @@ import {
 } from "@/engine/foundation/gameplay/attached-effects";
 import type { CastState } from "@/engine/contracts/gameplay";
 import { castPhase, skillPulse } from "@/engine/foundation/gameplay/combat-result";
+import { MAX_OPEN_CASTS, openCastOverflow } from "@/engine/foundation/gameplay/open-casts";
 /*
 ================
 createCombat
@@ -738,7 +739,7 @@ export function createCombat(
 			} else {
 				if ( !token ) throw Error( "Invalid cast token" );
 				if ( casts.has( token ) ) return true;
-				if ( casts.size >= 2048 ) throw Error( "Unfinalized cast capacity exceeded" );
+				if ( casts.size >= MAX_OPEN_CASTS ) throw openCastOverflow( casts, now );
 				const impacts = phase.results.find( row => row.target === target )?.impacts ?? [],
 					damage = impacts.reduce( ( sum, hit ) => sum + hit.damage, 0 ),
 					fatal = impacts.some( hit => hit.fatal );

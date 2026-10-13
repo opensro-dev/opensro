@@ -16,8 +16,21 @@ import (
 	"sync/atomic"
 )
 
-// Called under the division action door, after enemy contact admission or
-// owned self-cast preparation. The recipient is the caster, not the enemy.
+/*
+================
+releaseMonsterSelfEffect
+
+Called under the division action door, after enemy contact admission or
+owned self-cast preparation. The recipient is the caster, not the enemy.
+
+The buff attaches under its own token, so its expiry (B6A0) never names the
+cast. The cast closes with its own mode-2 B505 when its action ends, as a
+player's timed self effect does (acceptTimedSelfEffect). The client keeps a
+cast until it is cancelled (CIDecoSkill_Update 8DC440 returns 0 only after
++D0), so without the close every self-buff stayed in each observer's cast
+table until the monster left view.
+================
+*/
 func (rt *Runtime) releaseMonsterSelfEffect(division string, instance monster.Instance, skill enterworld.SkillRow, now int64, pending *pendingMonsterCast) simulation.MonsterAttackResult {
 	result := simulation.MonsterAttackResult{TargetAlive: true}
 	if !skill.MonsterSelfEffect.Pinned {
@@ -46,6 +59,7 @@ func (rt *Runtime) releaseMonsterSelfEffect(division string, instance monster.In
 	}
 	appendFrame(wire.SkillCastReleaseFrame(token, 0))
 	appendFrame(wire.Frame{Opcode: wire.OpAttachedEffect, Payload: payload})
+	rt.queueSkillFinalize(division, monsterCastOwner(instance.Gid), instance.Gid, now+int64(skill.ActionDurationMs), wire.SkillCastFinalizeFrame(token))
 	result.Accepted = true
 	return result
 }
