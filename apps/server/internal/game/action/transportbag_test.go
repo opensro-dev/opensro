@@ -18,6 +18,7 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // transportCargoSlots is the test reference's authored capacity.
@@ -63,5 +64,50 @@ func TestSummonedTransportPicksTradeGoodsIntoItsCargo(t *testing.T) {
 	}
 	if rows := c.ActiveCOS.Container.Rows; len(rows) != 1 || rows[0].RefObjID != 2151 {
 		t.Fatalf("transport cargo %+v", rows)
+	}
+}
+
+/*
+================
+TestTraderOpensWithABaglessVehicleOut
+
+The 0x7338 disconnect: a trader with goods in the bag opened the special
+trader while a summoned vehicle had no bag; the sale quote's caravan value
+read the missing bag and the handler panicked. A vehicle without a bag
+carries no goods.
+================
+*/
+func TestTraderOpensWithABaglessVehicleOut(t *testing.T) {
+	rt, c := traderFixture(t, false)
+	c.ActiveCOS.Container = nil
+	gold := map[int64]int64{}
+	for level := int64(1); level <= 140; level++ {
+		gold[level] = 80
+	}
+	rt.deps.(*enterworld.Deps).Levels = jobKillLevels{LevelDataSource: rt.deps.LevelData(), gold: gold}
+	frames, refusal := rt.HandleNpcAction(testDivision, c, wire.NewWriter(8).U32(17).U32(simulation.NpcTalkFlagSpecialTrade).Payload())
+	if refusal != "" || len(frames) != 2 {
+		t.Fatalf("the trader did not open: %q %+v", refusal, frames)
+	}
+}
+
+/*
+================
+TestRestoredBaglessTransportGetsItsCargo
+
+A transport saved without its bag (summoned before the fix) is restored at
+world entry with the authored one.
+================
+*/
+func TestRestoredBaglessTransportGetsItsCargo(t *testing.T) {
+	c := testCharacter()
+	gid, _ := enterworld.CosObjectIDForCharacter(c)
+	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true, StateFlags: 3}
+	refs := testCosSource(testItems())
+	refs.characters["COS_T_DHORSE3"].InventoryCapacity = transportCargoSlots
+	rt, _ := newTestRuntime(c, refs)
+	rt.restoreCharacterCOS(testDivision, c.Name)
+	if c.ActiveCOS.Container == nil || c.ActiveCOS.Container.Capacity != transportCargoSlots {
+		t.Fatalf("the restored transport's bag is %+v, want %d slots", c.ActiveCOS.Container, transportCargoSlots)
 	}
 }

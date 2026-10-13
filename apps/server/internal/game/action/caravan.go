@@ -322,6 +322,11 @@ goods row (TID 3.3.8.x) in the transport.
 ================
 */
 func cargoGoodsCount(c *enterworld.Character) uint32 {
+	// A vehicle without a bag (a riding horse) carries no goods. Reading
+	// its missing bag panicked a trader's shop open (0x7338).
+	if c.ActiveCOS == nil || c.ActiveCOS.Container == nil {
+		return 0
+	}
 	total := int64(0)
 	for _, row := range c.ActiveCOS.Container.Rows {
 		if row.TypeFlags&2 == 0 && tidMatches(row.TypeFlags, cargoGoodsWildcard) && row.StackCount > 0 {

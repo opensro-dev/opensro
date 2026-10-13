@@ -12,6 +12,7 @@ actor retains its current parked vehicle on repeated transport admission.
 package action
 
 import (
+	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 	"strings"
@@ -101,6 +102,13 @@ func (rt *Runtime) restoreCharacterCOS(division, name string) {
 		ref, found := refs.CharacterRefByCodename(pet.Codename)
 		if !found || ref == nil || ref.RefObjID != pet.RefObjID || !ref.CanRide || ref.TidWord&0x7fe != 0x1c6 || (ref.TidWord>>11 != 1 && ref.TidWord>>11 != 2) {
 			return changed
+		}
+		// A transport summoned before summons kept the reference capacity
+		// (itemuse.go, 4404A1..4404DA) was saved without its cargo bag; it
+		// comes back with the authored one.
+		if pet.Container == nil && ref.InventoryCapacity > 0 {
+			pet.Container = &domain.COSContainer{Capacity: ref.InventoryCapacity}
+			changed = true
 		}
 		changed = changed || !pet.Mounted
 		pet.Mounted = true
