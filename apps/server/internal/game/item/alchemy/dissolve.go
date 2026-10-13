@@ -5,6 +5,9 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 )
 
+// dissolveRondo is the additive every equipment dissolution consumes.
+const dissolveRondo = "ITEM_ETC_ARCHEMY_RONDO_02"
+
 type WeightedStone struct {
 	Codename string
 	Weight   uint32
@@ -23,12 +26,22 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 	if err != nil {
 		return out, err
 	}
-	// v1.150's form sends the destruction Rondo first, then equipment.
-	// The later server also admits a lone equipment selection and finds Rondo.
-	if len(r.Slots) == 2 && rows[r.Slots[0]].Codename != "ITEM_ETC_ARCHEMY_RONDO_02" {
-		return out, Refusal(0x12)
+	// v1.150's alchemy box sends its first two window slots in window order
+	// (CIFAlchemyBox_ExecuteAction 6220A0 -> 702080), and the player fills
+	// them in either order. The later server never trusts position: it sorts
+	// each named slot by kind and finds the Rondo in the bag itself (v1.188
+	// 50C160 -> 50A6F0, 50A740). So the selection is one equipment item plus,
+	// optionally, the Destroyer Rondo, in either order.
+	target := rows[r.Slots[0]]
+	if len(r.Slots) == 2 {
+		other := rows[r.Slots[1]]
+		if target.Codename == dissolveRondo {
+			target, other = other, target
+		}
+		if other.Codename != dissolveRondo {
+			return out, Refusal(0x12)
+		}
 	}
-	target := rows[r.Slots[len(r.Slots)-1]]
 	ref := c.Items[target.Codename]
 	degree := ref.Degree()
 	// 50C070/50C160: job equipment and either repair restriction refuse
@@ -56,7 +69,7 @@ func (c *Catalog) Dissolve(items []inventory.Item, r ProcessRequest, roll Roll) 
 		return out, fmt.Errorf("alchemy: no admitted dissolution assignment pools for degree %d", degree)
 	}
 	consume := map[uint8]uint32{target.Slot: 1}
-	if err = c.consumeRondo(rows, consume, "ITEM_ETC_ARCHEMY_RONDO_02", uint64(ref.Price/20000+1)); err != nil {
+	if err = c.consumeRondo(rows, consume, dissolveRondo, uint64(ref.Price/20000+1)); err != nil {
 		return out, err
 	}
 	// 50B520/50B580 constants; 50B6F9 and 50B731 choose two ordered,

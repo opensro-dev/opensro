@@ -179,6 +179,18 @@ func TestDissolveCandidateElementMathAndRondoConsumption(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(withRondo, out) {
 		t.Fatal("v1.150 Rondo/equipment form diverged", err)
 	}
+	// The port's alchemy box puts the equipment in the first window slot and
+	// the Rondo in the second (BR-261011-2200-3BAB: every such dissolve was
+	// refused). Either order is the same request.
+	equipmentFirst, err := c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{13, 14}}, func() (uint32, error) { return 0, nil })
+	if err != nil || !reflect.DeepEqual(equipmentFirst, out) {
+		t.Fatal("equipment/Rondo form diverged", err)
+	}
+	// Two items still need the Rondo as one of them.
+	items = append(items, inventory.Item{Slot: 15, RefObjID: items[0].RefObjID, Codename: items[0].Codename, TypeFlags: items[0].TypeFlags, Quantity: 1})
+	if _, err = c.Dissolve(items, ProcessRequest{BagEnd: domain.DefaultInventorySize, Mode: 3, Quantity: 1, Slots: []uint8{13, 15}}, func() (uint32, error) { return 0, nil }); !errors.Is(err, Refusal(0x12)) {
+		t.Fatal("two equipment items admitted", err)
+	}
 }
 
 func TestProcessDecoderRejectsTruncationTrailingAndDuplicateSlots(t *testing.T) {
