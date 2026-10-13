@@ -354,6 +354,7 @@ func coalesceDivisionFrames(in []simulation.DivisionFrames) []simulation.Divisio
 			if last.Deliver == nil && last.DivisionID == routed.DivisionID &&
 				last.SourceGID == routed.SourceGID &&
 				last.ExceptSessionID == routed.ExceptSessionID &&
+				last.ExceptCharacterID == routed.ExceptCharacterID &&
 				last.OnlyCharacterID == routed.OnlyCharacterID {
 				last.Frames = append(last.Frames, routed.Frames...)
 				continue

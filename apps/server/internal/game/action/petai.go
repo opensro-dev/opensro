@@ -202,8 +202,13 @@ func (rt *Runtime) advancePets(nowMs int64) []simulation.DivisionFrames {
 		for _, other := range others {
 			out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: other.CharacterID, Frames: simFrames(other.Frames)})
 		}
-		if len(public) > 0 && rt.PushDivisionPeerFrames != nil {
-			rt.PushDivisionPeerFrames(key.division, key.name, public)
+		// The pet is the source: its own viewers see what it does
+		// (CGObj_SendPacketToNearbySessions 484D90 on the COS object), the
+		// same audience its queued B505 closes reach. Routed by the owner, a
+		// viewer who saw the owner but not the pet got each cast open and
+		// never its close (#804). The owner has these in its private batch.
+		if len(public) > 0 {
+			out = append(out, simulation.DivisionFrames{DivisionID: key.division, SourceGID: key.gid, ExceptCharacterID: characterID, Frames: simFrames(public)})
 		}
 		if len(frames) != 0 && characterID != 0 {
 			out = append(out, simulation.DivisionFrames{DivisionID: key.division, OnlyCharacterID: characterID, Frames: frames})

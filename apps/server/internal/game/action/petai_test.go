@@ -44,7 +44,10 @@ func TestPetSessionDrivesIndependentMotionAndCleansUp(t *testing.T) {
 	key := simulation.WorldKey(testDivision, c.Name)
 	world := rt.Worlds.Update(key, func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(w *simulation.WorldState) { w.Spawn.X += 200 })
 	before := c.Snapshot()
-	if f := rt.TickHook()(1100); len(f) != 1 || len(f[0].Frames) != 3 || f[0].OnlyCharacterID != c.ID {
+	// The pet's viewers get its move by the pet's own scope, without the
+	// owner (#804); the owner gets it in its private batch.
+	if f := rt.TickHook()(1100); len(f) != 2 || f[0].SourceGID != gid || f[0].ExceptCharacterID != c.ID ||
+		len(f[1].Frames) != 3 || f[1].OnlyCharacterID != c.ID {
 		t.Fatal("live pet did not follow", f)
 	}
 	before.ActiveCOS.FollowRunFactor, before.ActiveCOS.FollowRunSet = c.ActiveCOS.FollowRunFactor, c.ActiveCOS.FollowRunSet

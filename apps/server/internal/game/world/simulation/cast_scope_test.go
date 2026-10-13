@@ -66,3 +66,40 @@ func TestOwnPetCastControlReachesItsOwner(t *testing.T) {
 		t.Fatal("pet cast control left its observers")
 	}
 }
+
+/*
+================
+TestPetPublicEventsFollowThePetsScope
+
+#804: a pet's public events reach the pet's viewers, the audience of its
+cast closes, and skip its owner (who has them privately). A viewer who sees
+the owner but not the pet gets neither the open nor the close.
+================
+*/
+func TestPetPublicEventsFollowThePetsScope(t *testing.T) {
+	owner := peerSession("owner", "A", 1, "Owner")
+	byOwner := peerSession("by-owner", "A", 2, "ByOwner")
+	byPet := peerSession("by-pet", "A", 3, "ByPet")
+	const petGID = 100
+	petWorld := owner.World
+	petWorld.Spawn.X += 1500
+	byPet.World.Spawn.X += 1500
+	owner.COS = &PeerCOS{Row: wire.CosSpawnBand2{Band: 4, RefObjID: 9, Gid: petGID, Name: "Pet", OwnerName: "Owner", OwnerGid: PlayerObjectID(1), Run: 100},
+		World: petWorld, Session: 1, Generation: 1}
+	source := &fakeSource{sessions: []SessionSnapshot{owner, byOwner, byPet}}
+	push := &fakePusher{}
+	ticker := newTestTicker(source, push)
+	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+		return []DivisionFrames{{DivisionID: "A", SourceGID: petGID, ExceptCharacterID: 1, Frames: []Frame{{Opcode: wire.OpSkillCastResult}}}}
+	}}
+	ticker.RunTick(100)
+	if len(peerFramesTo(push, "by-owner", wire.OpSingleObjectSpawn)) == 0 {
+		t.Fatal("fixture: the owner's neighbour must see the owner")
+	}
+	if len(peerFramesTo(push, "by-pet", wire.OpSkillCastResult)) != 1 {
+		t.Fatal("the pet's viewer missed its public event")
+	}
+	if len(peerFramesTo(push, "by-owner", wire.OpSkillCastResult)) != 0 || len(peerFramesTo(push, "owner", wire.OpSkillCastResult)) != 0 {
+		t.Fatal("a pet's public event reached a session outside its scope, or its owner twice")
+	}
+}

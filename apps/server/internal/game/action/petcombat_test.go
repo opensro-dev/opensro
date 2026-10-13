@@ -74,7 +74,10 @@ func tickPetCombat(t *testing.T, rt *Runtime, clock *fakeClock, steps int, done 
 	for range steps {
 		clock.now = clock.now.Add(100 * time.Millisecond)
 		for _, batch := range rt.TickHook()(clock.NowMs()) {
-			frames = append(frames, batch.Frames...)
+			// The owner's view: a pet's public batch skips its owner (#804).
+			if batch.ExceptCharacterID == 0 {
+				frames = append(frames, batch.Frames...)
+			}
 		}
 		if done() {
 			return frames

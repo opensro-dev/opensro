@@ -229,7 +229,9 @@ and the following private progression in the SAME coordinator turn rather
 than laundering the private tail through a future-tick queue.
 
 ExceptSessionID and OnlyCharacterID are mutually exclusive. Invalid mixed
-routes fail closed in runHooks.
+routes fail closed in runHooks. ExceptCharacterID applies to a SourceGID
+route only: a companion's public events skip its owner, who already has
+them in its private batch.
 
 Deliver, when set, replaces routing: the producer already captured its
 recipients (with their scene revisions) at commit time, and the ticker only
@@ -244,8 +246,11 @@ type DivisionFrames struct {
 	DivisionID      string
 	Frames          []Frame
 	ExceptSessionID string
-	OnlyCharacterID int64
-	Deliver         func()
+	// ExceptCharacterID leaves that character's session out of a SourceGID
+	// route.
+	ExceptCharacterID int64
+	OnlyCharacterID   int64
+	Deliver           func()
 }
 
 /*
@@ -757,7 +762,7 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 			continue
 		}
 		if routed.OnlyCharacterID != 0 {
-			if routed.ExceptSessionID != "" || routed.SourceGID != 0 {
+			if routed.ExceptSessionID != "" || routed.SourceGID != 0 || routed.ExceptCharacterID != 0 {
 				continue
 			}
 			for _, division := range work {
@@ -780,7 +785,8 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 					continue
 				}
 				for _, viewer := range division.sessions {
-					if viewer.SessionID == routed.ExceptSessionID {
+					if viewer.SessionID == routed.ExceptSessionID ||
+						routed.ExceptCharacterID != 0 && viewer.CharacterID == routed.ExceptCharacterID {
 						continue
 					}
 					peer := PlayerObjectID(viewer.CharacterID) == routed.SourceGID || division.state.shownPeers[viewer.SessionID][routed.SourceGID]
