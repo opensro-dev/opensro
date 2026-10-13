@@ -223,7 +223,9 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 	if reason != "" {
 		// A refused report is evidence lost: name why, so a client change that
 		// trips it shows in the log instead of vanishing (#788).
-		log.WithFields(log.Fields{"account": claims.AccountID, "reason": reason}).Warn("agent: client incident refused")
+		// The reason only: the caller's identity comes from its bearer header,
+		// which stays out of a refusal line (CodeQL go/clear-text-logging).
+		log.WithField("reason", reason).Warn("agent: client incident refused")
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "code": "INVALID_INCIDENT"})
 		return
 	}
