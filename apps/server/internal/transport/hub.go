@@ -916,9 +916,12 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			log.WithFields(log.Fields{"session": s.ID, "opcode": fmt.Sprintf("0x%04X", f.Opcode), "panic": r, "stack": string(debug.Stack())}).
+			stack := string(debug.Stack())
+			log.WithFields(log.Fields{"session": s.ID, "opcode": fmt.Sprintf("0x%04X", f.Opcode), "panic": r, "stack": stack}).
 				Error("transport: handler panicked, closing session")
-			h.closeSession(s, fmt.Errorf("%w on 0x%04X: %v", errHandlerPanic, f.Opcode, r))
+			// The site also rides the close cause: production once kept the
+			// "session closed" line but not this one (thread 1559546270748512288).
+			h.closeSession(s, fmt.Errorf("%w on 0x%04X: %v at %s", errHandlerPanic, f.Opcode, r, panicSite(stack)))
 		}
 	}()
 	// Deferred after the recover above, so it runs first while a panic
@@ -926,6 +929,43 @@ func (h *Hub) dispatch(s *Session, f Frame) {
 	started := time.Now()
 	defer func() { h.metrics.timing.recordHandler(f.Opcode, time.Since(started)) }()
 	fn(s, f.Opcode, f.Payload)
+}
+
+/*
+================
+panicSite
+
+The frame that panicked, from a debug.Stack() taken in the recover: the
+first frame after panic() that is not in the runtime (sigpanic, panicmem
+and the like), as "function file:line". Empty when the stack has no such
+frame.
+================
+*/
+func panicSite(stack string) string {
+	lines := strings.Split(stack, "\n")
+	unwound := false
+	for i := 0; i+1 < len(lines); i++ {
+		name := lines[i]
+		if name == "" || strings.HasPrefix(name, "\t") || strings.HasPrefix(name, "goroutine ") {
+			continue
+		}
+		if !unwound {
+			unwound = strings.HasPrefix(name, "panic(")
+			continue
+		}
+		if strings.HasPrefix(name, "runtime.") {
+			continue
+		}
+		where := strings.TrimSpace(lines[i+1])
+		if cut := strings.LastIndex(where, " +0x"); cut >= 0 {
+			where = where[:cut]
+		}
+		if cut := strings.LastIndex(name, "("); cut > 0 {
+			name = name[:cut]
+		}
+		return name + " " + where
+	}
+	return ""
 }
 
 const enterWorldUnauthorizedCode uint32 = 0x00A1

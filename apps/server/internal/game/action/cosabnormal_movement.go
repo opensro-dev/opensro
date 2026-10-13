@@ -43,22 +43,35 @@ func (rt *Runtime) companionLiveSpawn(division string, character *enterworld.Cha
 	if pet == nil {
 		return rt.liveSpawn(simulation.WorldKey(division, character.Name), character, now)
 	}
-	rt.petMu.Lock()
-	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: pet.GID}]
-	if state != nil && pet != nil && !pet.Mounted {
-		if state.follower != nil && state.follower.GID() == pet.GID {
-			pose := state.follower.Position(now)
-			rt.petMu.Unlock()
-			return pose
-		}
-		if state.transportCOS != nil && state.transportCOS.GID == pet.GID {
-			pose := state.transportWorld.LiveSpawnAt(now)
-			rt.petMu.Unlock()
-			return pose
-		}
+	if pose, ok := rt.companionOwnPose(division, character, pet, now); ok {
+		return pose
 	}
-	rt.petMu.Unlock()
 	return rt.liveSpawn(simulation.WorldKey(division, character.Name), character, now)
+}
+
+/*
+================
+companionOwnPose
+
+The companion's own movement owner, read under petMu. The unlock is
+deferred: a panic while reading a pose must not leave petMu held, which
+would stall every pet operation on the server.
+================
+*/
+func (rt *Runtime) companionOwnPose(division string, character *enterworld.Character, pet *enterworld.CharacterCOS, now int64) (simulation.Spawn, bool) {
+	rt.petMu.Lock()
+	defer rt.petMu.Unlock()
+	state := rt.petSessions[petOwnerKey{division: division, name: strings.ToLower(character.Name), gid: pet.GID}]
+	if state == nil || pet.Mounted {
+		return simulation.Spawn{}, false
+	}
+	if state.follower != nil && state.follower.GID() == pet.GID {
+		return state.follower.Position(now), true
+	}
+	if state.transportCOS != nil && state.transportCOS.GID == pet.GID {
+		return state.transportWorld.LiveSpawnAt(now), true
+	}
+	return simulation.Spawn{}, false
 }
 
 /*
