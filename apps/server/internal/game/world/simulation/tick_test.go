@@ -424,6 +424,29 @@ func TestHookTargetRouteFailsClosedWhenMixedWithExclusion(t *testing.T) {
 	}
 }
 
+/*
+================
+TestExceptCharacterRouteFailsClosedWithoutSource
+
+ExceptCharacterID applies to a SourceGID route only. A division broadcast
+cannot leave a character out, so such a batch is dropped rather than
+reaching the very character it excludes.
+================
+*/
+func TestExceptCharacterRouteFailsClosedWithoutSource(t *testing.T) {
+	push := &orderedHookPusher{}
+	ticker := newTestTicker(&fakeSource{}, push)
+	ticker.Hooks = []TickHook{func(int64) []DivisionFrames {
+		return []DivisionFrames{{DivisionID: "DIV_A", ExceptCharacterID: 7, Frames: []Frame{{Opcode: wire.OpSkillCastResult}}}}
+	}}
+	ticker.runHooks(1000, []divisionTickWork{{divisionID: "DIV_A", sessions: []SessionSnapshot{
+		{SessionID: "owner", DivisionID: "DIV_A", CharacterID: 7},
+	}}})
+	if len(push.rows) != 0 {
+		t.Fatalf("an excluding route without a source escaped: %+v", push.rows)
+	}
+}
+
 func TestNormalizeDropsInvalidSegment(t *testing.T) {
 	start := EuropeStartProfile()
 	world := DefaultWorldState(start)

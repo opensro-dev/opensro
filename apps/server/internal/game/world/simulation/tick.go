@@ -816,6 +816,11 @@ func (t *Ticker) routeHookFrames(routedFrames []DivisionFrames, work []divisionT
 			}
 			continue
 		}
+		if routed.ExceptCharacterID != 0 {
+			// ExceptCharacterID belongs to a SourceGID route only; a division
+			// broadcast cannot honour it, so the mixed route fails closed.
+			continue
+		}
 		t.Push.PushToDivision(routed.DivisionID, routed.Frames, routed.ExceptSessionID)
 	}
 }
