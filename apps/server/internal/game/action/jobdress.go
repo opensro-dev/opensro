@@ -286,7 +286,9 @@ included, is never refused. Thief town is one isolated protected region,
 reached through its gates, so a thief walks it freely to sell; re-testing
 the destination alone (#726) refused every step there. INFERENCE: native
 refuses the transport's own transition; the port refuses the owner's move,
-which the transport follows.
+which the transport follows, and tests only its start and end regions, so
+a walk from a battlefield through a protected sector and back out is not
+refused (native tests each region change the transport makes).
 ================
 */
 func (rt *Runtime) ThiefCargoTownBlocked(c *enterworld.Character, fromRegion, toRegion uint16) bool {
