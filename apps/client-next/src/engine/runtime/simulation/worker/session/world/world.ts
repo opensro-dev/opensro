@@ -16,6 +16,7 @@ import { createDeparture } from "./departure";
 import type { GameplayCommand } from "@/engine/contracts/gameplay";
 import {
 	type ClientIncident,
+	INVENTORY_TRANSACTION_TIMEOUT,
 	MOVEMENT_RECEIPT_TIMEOUT,
 	type NetworkFailure,
 	INCIDENT_DUMP_BYTES,
@@ -527,12 +528,17 @@ step
 					departure.step( now );
 					core.step( now );
 				} catch ( error ) {
-					const receiptTimeout = error instanceof Error && error.cause === MOVEMENT_RECEIPT_TIMEOUT;
+					// A lost answer, not a game error: both lanes resume through the
+					// bootstrap, which rebuilds the state the request left pending.
+					const cause = error instanceof Error ? error.cause : undefined;
+					const lost = cause === MOVEMENT_RECEIPT_TIMEOUT || cause === INVENTORY_TRANSACTION_TIMEOUT;
 					onNetworkFailure( String( error ), undefined, {
-						category: receiptTimeout ? "unknown" : "software",
-						code: receiptTimeout ? MOVEMENT_RECEIPT_TIMEOUT : "simulation_failed",
-						message: receiptTimeout ?
+						category: lost ? "unknown" : "software",
+						code: lost ? cause as string : "simulation_failed",
+						message: cause === MOVEMENT_RECEIPT_TIMEOUT ?
 							"Movement synchronization timed out. Please reconnect." :
+							lost ?
+							"Item synchronization timed out. Please reconnect." :
 							"A game error interrupted your session.",
 						stack: error instanceof Error ? error.stack?.slice( 0, 8192 ) : undefined
 					} );
@@ -570,7 +576,7 @@ step
 				// Reuse admission/resume to replace stale prediction with server state.
 				if (
 					hasWorld && resume && (attempt === 0 || now - reconnectSince < RESUME_GRACE_MS) &&
-					(failureCode === MOVEMENT_RECEIPT_TIMEOUT || [
+					(failureCode === MOVEMENT_RECEIPT_TIMEOUT || failureCode === INVENTORY_TRANSACTION_TIMEOUT || [
 						"Transport connection closed",
 						"Transport connection failed",
 						"World connection timed out",

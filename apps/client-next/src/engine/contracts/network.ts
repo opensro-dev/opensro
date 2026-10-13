@@ -84,3 +84,8 @@ export const INCIDENT_MESSAGE_LENGTH = 500;
 // A missing movement receipt invalidates prediction; the session must resume
 // through fresh server state without replaying the unacknowledged command.
 export const MOVEMENT_RECEIPT_TIMEOUT = "movement_receipt_timeout";
+// An unanswered inventory transaction is the same loss on the item lane: the
+// transport keeps no frame already written to a dying socket (server
+// transport doc.go), so the request or its answer is gone. Native replies
+// carry no transaction ID; the session resumes through fresh server state.
+export const INVENTORY_TRANSACTION_TIMEOUT = "inventory_transaction_timeout";

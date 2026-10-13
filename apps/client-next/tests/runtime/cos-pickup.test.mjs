@@ -69,6 +69,44 @@ test("gameplay frame loop sends automatic pickup and consumes native completion"
 	assert.equal( sent.length, 5 );
 });
 
+/*
+================
+a pet pickup waits out the pet's approach
+
+The server allows the approach 9000 ms (cosground.go) and answers on the
+pet's next tick; the shared 10 s inventory wait left one second for that
+tick and the network, and prod sessions ended on "(0xB06D move 17)". An
+answer that never comes still resumes the session (world.ts).
+================
+*/
+test("a pet pickup waits out the pet's approach before it times out", () => {
+	const f = fixture();
+	const gameplay = createGameplay( () => {}, undefined, undefined, f.frame.read );
+	gameplay.bootstrap( {
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		refObjSnapshot: [ { kind: "cos", refObjId: 9, tidWord: 0x21c6 } ]
+	} );
+	gameplay.seed( f.frame.local );
+	const record = new Uint8Array( 29 );
+	const view = new DataView( record.buffer );
+	view.setUint32( 0, 2, true );
+	view.setUint32( 4, 9, true );
+	view.setUint32( 8, 100, true );
+	view.setUint32( 16, 0x47, true );
+	record[22] = 28;
+	gameplay.receive( { opcode: 0x3158, payload: record }, 0 );
+	gameplay.command( { kind: "cos-pickup", gid: 2, target: 12 }, 1000, f.pet, f.frame.local );
+	assert.equal( gameplay.take()?.inventoryPending, true );
+	// The approach budget, the pet's next tick and a slow round trip.
+	assert.doesNotThrow( () => gameplay.step( 1000 + 9000 + 2500, f.frame.local ) );
+	assert.throws(
+		() => gameplay.step( 1000 + 15000, f.frame.local ),
+		/** @param {Error} error */ error =>
+			error.cause === "inventory_transaction_timeout" && /0xB06D move 17/.test( error.message )
+	);
+});
+
 test("pet cancellation retains the record until despawn and rejects foreign ownership", () => {
 	const f = fixture();
 	const sent = [];

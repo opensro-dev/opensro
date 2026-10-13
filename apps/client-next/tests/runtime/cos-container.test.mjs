@@ -56,7 +56,9 @@ test("a pet pickup the party hands to another member ends at the pet's scoop", (
 	const other = fixture().owner;
 	other.command( { kind: "cos-pickup", gid: 7, target: 123 }, 0, entity );
 	other.receive( { opcode: 0x35c7, payload: Uint8Array.from( [ ...u32( 1 ), 64 ] ) }, 1 );
-	assert.throws( () => other.step( 10002 ), /reconnect/ );
+	// A pet pickup waits out the pet's approach (COS_PICKUP_ANSWER_MS).
+	assert.doesNotThrow( () => other.step( 10002 ) );
+	assert.throws( () => other.step( 15002 ), /reconnect/ );
 });
 test("a pet pickup's receipt still applies after an earlier scoop ended its request", () => {
 	// The pet's in-flight automatic scoop arrives first and ends the manual

@@ -20,6 +20,7 @@ import {
 	sameStackIdentity,
 	stackable
 } from "@/engine/foundation/gameplay/container-transfer";
+import { INVENTORY_TRANSACTION_TIMEOUT } from "@/engine/contracts/network";
 import { createMall } from "./mall/mall";
 import { createCompanionRentals } from "./companion-rentals";
 import type { MallPurchase } from "@/engine/foundation/gameplay/item-mall-wire";
@@ -91,6 +92,11 @@ const NPC_SHOP_CAPABILITY = 0x1;
 const STORAGE_CAPACITY_OPCODE = 0x3092;
 const STORAGE_CAPACITY_INVENTORY = 1;
 const NPC_SPECIAL_TRADE_CAPABILITY = 0x800;
+// A pet pickup answers when the pet reaches the drop or gives up: the
+// server allows its approach 9000 ms (cosground.go cosPickupApproachTimeoutMs),
+// retires it on the pet's next tick, then the answer crosses the network. The
+// shared 10 s wait left one second for both, and a long walk ended sessions.
+const COS_PICKUP_ANSWER_MS = 15000;
 /*
 ================
 createInventory
@@ -1068,7 +1074,7 @@ cosGround
 				cosGid: v.getUint32( 1, true ),
 				source: p[0] === 0x12 ? p[5]! : 0,
 				movementType: p[0],
-				deadline: now + 10000
+				deadline: now + (p[0] === 0x11 ? COS_PICKUP_ANSWER_MS : 10000)
 			};
 			error = null;
 			return frame;
@@ -1988,7 +1994,7 @@ step
 			if ( timedOut || pending && now >= pending.deadline ) {
 				if ( !timedOut && pending ) timedOutRequest = describeRequest( pending );
 				timedOut = true;
-				throw Error( timeoutMessage() );
+				throw Error( timeoutMessage(), { cause: INVENTORY_TRANSACTION_TIMEOUT } );
 			}
 			return unlocked || expired || rentalUpdates.length > 0;
 		},
