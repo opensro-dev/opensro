@@ -34,20 +34,23 @@ const FULLSCREEN_VERTEX_COUNT = 6;
 ================
 gpuFacts
 
-The facts of one adapter for bug reports (foundation/rendering/gpu-facts.ts). Vendor and architecture are kept only when they
-are short lowercase tokens.
+The facts of one adapter for bug reports (foundation/rendering/gpu-facts.ts).
+Vendor and architecture are kept only when they are short lowercase tokens.
+Diagnostics never fail a device: an adapter missing a field reports 0 or
+nothing for it.
 ================
 */
 function gpuFacts( adapter: GPUAdapter ): GpuFacts {
 	const info = (adapter as GPUAdapter & { info?: { vendor?: string; architecture?: string; }; }).info;
 	const token = ( value: string | undefined ) => value && isGpuToken( value ) ? value : undefined;
 	const vendor = token( info?.vendor ), architecture = token( info?.architecture );
+	const limits = adapter.limits as Partial<GPUSupportedLimits> | undefined;
 	return {
-		features: reportedGpuFeatures().filter( name => adapter.features.has( name ) ),
+		features: reportedGpuFeatures().filter( name => adapter.features?.has( name ) === true ),
 		limits: {
-			maxBufferSize: adapter.limits.maxBufferSize,
-			maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
-			maxTextureDimension2D: adapter.limits.maxTextureDimension2D
+			maxBufferSize: limits?.maxBufferSize ?? 0,
+			maxStorageBufferBindingSize: limits?.maxStorageBufferBindingSize ?? 0,
+			maxTextureDimension2D: limits?.maxTextureDimension2D ?? 0
 		},
 		...(vendor ? { vendor } : {}),
 		...(architecture ? { architecture } : {})
