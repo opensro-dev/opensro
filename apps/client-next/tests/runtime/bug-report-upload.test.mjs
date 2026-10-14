@@ -143,6 +143,33 @@ test("unknown identity fields and free-form strings never enter shared technical
 	assert.deepEqual( event.pose, { x: 1, y: 2, z: 3 } );
 });
 
+test("a click keeps its control kind and slot, and a refusal its reason, but never a name", async () => {
+	const { uiControl, refusalReason } = await import( "../../src/engine/runtime/bug-report/journal.ts" );
+	const input = fixture();
+	const click = id => ({ kind: "ui", t: 1, id, ...uiControl( id ), button: 0 });
+	input["timeline.json"] = JSON.stringify( {
+		events: [
+			click( "slot:13" ),
+			click( "shop-repair:GDR_STORE_BTN_REPAIR" ),
+			click( "friend:PRIVATE_NAME" ),
+			click( "PRIVATE_BARE" ),
+			{ kind: "refusal", t: 2, refusal: refusalReason( "Error: Inventory is busy" ) },
+			{ kind: "refusal", t: 3, refusal: refusalReason( "PRIVATE_FREE_TEXT" ) }
+		]
+	} );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	assert.ok( !JSON.stringify( documents ).includes( "PRIVATE_" ) );
+	const events = documents["timeline.json"].events;
+	assert.deepEqual( events.slice( 0, 4 ).map( e => [ e.control, e.index ] ), [
+		[ "slot", 13 ],
+		[ "shop-repair", undefined ],
+		[ "friend", undefined ],
+		[ undefined, undefined ]
+	] );
+	assert.ok( events.every( e => e.id === undefined ), "the raw control id stays on the page" );
+	assert.deepEqual( events.slice( 4 ).map( e => e.refusal ), [ "inventory-busy", "other" ] );
+});
+
 test("a browser without raw DEFLATE still sends a bounded stored ZIP", async t => {
 	t.mock.method( globalThis, "CompressionStream", function unavailable() {
 		throw Error( "unsupported" );

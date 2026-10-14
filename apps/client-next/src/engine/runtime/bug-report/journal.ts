@@ -9,7 +9,9 @@ game said and how the page was doing:
 
 	key        a key went down or up (never while typing in a text field)
 	click      a press on the game world (normalized position, button)
-	ui         a press on a game window control (its data-ui-id)
+	ui         a press on a game window control (its data-ui-id; the shared
+	           report keeps only uiControl's prefix and slot number)
+	refusal    the game refused a command the player gave (refusalReason)
 	chat       a chat line the player saw or sent
 	error      a JavaScript or runtime failure
 	long-frame the main thread was blocked (Long Animation Frames or
@@ -37,8 +39,58 @@ JournalEvent
 */
 export interface JournalEvent {
 	readonly atMs: number;
-	readonly kind: "key" | "click" | "ui" | "chat" | "error" | "long-frame" | "sample" | "movement";
+	readonly kind: "key" | "click" | "ui" | "chat" | "error" | "long-frame" | "sample" | "movement" | "refusal";
 	readonly [field: string]: unknown;
+}
+
+// UI_CONTROL_PREFIX is a control id's own scheme word ("slot", "shop-repair",
+// "storage-slot"); UI_CONTROL_INDEX is a slot or row number. Neither can carry
+// a player's text: a character name has no hyphen, and the prefix comes from
+// the client's id scheme, never from data.
+export const UI_CONTROL_PREFIX = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const UI_CONTROL_INDEX = /^[0-9]{1,6}$/;
+
+/*
+================
+uiControl
+
+The part of a control id the shared report may carry: the prefix before its
+first ':' (or the whole id when it is a hyphenated scheme word) and a purely
+numeric suffix. "slot:13" -> { control: "slot", index: 13 }; an id that
+could hold a name ("friend:Name") keeps only "friend".
+================
+*/
+export function uiControl( id: string ): { control?: string; index?: number; } {
+	const colon = id.indexOf( ":" ),
+		prefix = colon < 0 ? id : id.slice( 0, colon ),
+		suffix = colon < 0 ? "" : id.slice( colon + 1 );
+	if ( !UI_CONTROL_PREFIX.test( prefix ) || colon < 0 && !prefix.includes( "-" ) ) return {};
+	return UI_CONTROL_INDEX.test( suffix ) ? { control: prefix, index: Number( suffix ) } : { control: prefix };
+}
+
+// REFUSAL_REASONS name the refusals the game's command owners raise, by a
+// fragment of their message; anything else is "other". The message itself
+// never leaves the page.
+export const REFUSAL_REASONS: readonly (readonly [string, string])[] = [
+	[ "Inventory is busy", "inventory-busy" ],
+	[ "Inventory command unavailable", "inventory-busy" ],
+	[ "Inventory process unavailable", "inventory-busy" ],
+	[ "Inventory transaction timed out", "inventory-timeout" ],
+	[ "Merchant selection changed", "merchant-changed" ],
+	[ "Select a merchant first", "merchant-unselected" ],
+	[ "COS shop unavailable", "pet-shop-unavailable" ],
+	[ "Unknown shop offer", "shop-offer-unknown" ],
+	[ "Local player is not initialized", "player-not-ready" ]
+];
+export const REFUSAL_OTHER = "other";
+
+/*
+================
+refusalReason
+================
+*/
+export function refusalReason( message: string ): string {
+	return REFUSAL_REASONS.find( ( [fragment] ) => message.includes( fragment ) )?.[1] ?? REFUSAL_OTHER;
 }
 
 /*
@@ -135,7 +187,7 @@ export function createJournal( canvas: HTMLCanvasElement ): Journal {
 		const target = event.target instanceof Element ? event.target : null;
 		const control = target?.closest( "[data-ui-id]" )?.getAttribute( "data-ui-id" );
 		if ( control ) {
-			record( "ui", { id: control, button: event.button } );
+			record( "ui", { id: control, ...uiControl( control ), button: event.button } );
 			return;
 		}
 		if ( target !== canvas ) return;

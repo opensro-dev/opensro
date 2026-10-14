@@ -15,6 +15,7 @@ media; saving a new report drops the oldest ones first.
 */
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
+import { REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
 
 const DATABASE = "sro-bug-reports";
 const STORE = "reports";
@@ -84,6 +85,9 @@ const TECHNICAL_FIELDS = new Set( [
 	...SHARED_ENVIRONMENT_FIELDS,
 	"events",
 	"kind",
+	"control",
+	"index",
+	"refusal",
 	"event",
 	"atMs",
 	"t",
@@ -235,6 +239,7 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 		"error",
 		"long-frame",
 		"sample",
+		"refusal",
 		"local-player",
 		"player",
 		"monster",
@@ -280,7 +285,14 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 		"F10",
 		"F11",
 		"F12"
-	]
+	],
+	// The refusal reasons journal.ts refusalReason names.
+	refusal: [ ...new Set( [ ...REFUSAL_REASONS.map( ( [, reason] ) => reason ), REFUSAL_OTHER ] ) ]
+};
+// Strings a field may carry by shape rather than by list: a UI control's
+// scheme prefix (journal.ts uiControl), never free text.
+const TECHNICAL_PATTERNS: Readonly<Record<string, RegExp>> = {
+	control: UI_CONTROL_PREFIX
 };
 const README = `OpenSRO bug report
 
@@ -290,7 +302,9 @@ replay.mp4        the last minute before the report, full quality, with sound.
 timeline.json     what happened during that minute, on replay.mp4's clock (t, seconds):
                   key        keys pressed/released (never text typed into a field)
                   click      presses on the game world (x, y from 0 to 1 across the canvas)
-                  ui         presses on game window controls (their ui id)
+                  ui         presses on game window controls (their ui id; the shared copy
+                             keeps only the control's kind and slot number)
+                  refusal    a command the game refused, by reason (inventory-busy, ...)
                   chat       chat lines seen or sent
                   error      JavaScript and runtime failures
                   long-frame main-thread hitches, with the scripts the browser blamed
@@ -386,7 +400,11 @@ tokens and entity IDs remain intact because replay needs their correlations.
 ================
 */
 function sharedValue( value: unknown, field = "" ): unknown {
-	if ( typeof value === "string" ) return TECHNICAL_STRINGS[field]?.includes( value ) ? value : undefined;
+	if ( typeof value === "string" ) {
+		return TECHNICAL_STRINGS[field]?.includes( value ) || TECHNICAL_PATTERNS[field]?.test( value ) ?
+			value :
+			undefined;
+	}
 	if ( Array.isArray( value ) ) return value.map( item => sharedValue( item, field ) );
 	if ( !value || typeof value !== "object" ) return value;
 	const out: Record<string, unknown> = {};
