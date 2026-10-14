@@ -175,7 +175,7 @@ type areaCommit struct {
 	settlements  monsterSettlement
 	playerActor  []wire.Frame
 	playerPublic []wire.Frame
-	shares       []jobKillShare
+	kills        jobKillPayout
 }
 
 /*
@@ -200,7 +200,7 @@ func (rt *Runtime) commitAreaInDoor(division string, caster *enterworld.Characte
 		commit := rt.commitPlayerHitInDoor(division, caster, &plan.players[i], now)
 		out.playerActor = append(out.playerActor, commit.actor...)
 		out.playerPublic = append(out.playerPublic, commit.public...)
-		out.shares = append(out.shares, commit.shares...)
+		out.kills.add(commit.after)
 		landed = landed || len(plan.players[i].struck.impacts) > 0
 	}
 	if !landed {
@@ -349,7 +349,7 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 	}
 	out.after = append(out.after, deaths...)
 	out.after = append(out.after, commit.playerPublic...)
-	out.recipients = append(out.recipients, rt.payJobKillShares(commit.shares)...)
+	out.recipients = append(out.recipients, rt.payJobKillShares(commit.kills)...)
 	return out
 }
 

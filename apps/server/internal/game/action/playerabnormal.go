@@ -768,14 +768,17 @@ func (rt *Runtime) playerAbnormalPublication(division string, c *enterworld.Char
 			killer := rt.findCharacterByGid(division, enterworld.ObjectIDForCharacter(o.deathKiller))
 			if killer != nil {
 				var actor, public []wire.Frame
-				var shares []jobKillShare
-				rt.deps.Update(killer, "player-abnormal-kill", func() bool {
-					actor, public, shares = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
+				var after jobKillPayout
+				if !rt.deps.Update(killer, "player-abnormal-kill", func() bool {
+					actor, public, after = rt.payPlayerKillInDoor(division, killer, c, o.deathKill, o.now)
 					return len(actor) != 0 || len(public) != 0
-				})
+				}) {
+					// Nothing of the killer's side committed: no notice.
+					after.notices = nil
+				}
 				out.sources = append(out.sources, privateFrames{killer.ID, actor})
 				out.public = append(out.public, public...)
-				for _, recipient := range rt.payJobKillShares(shares) {
+				for _, recipient := range rt.payJobKillShares(after) {
 					out.sources = append(out.sources, privateFrames{recipient.CharacterID, recipient.Frames})
 				}
 			}

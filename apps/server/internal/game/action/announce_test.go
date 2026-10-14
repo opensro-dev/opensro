@@ -14,12 +14,10 @@ import (
 	"testing"
 	"unicode/utf16"
 
-	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
-	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -156,32 +154,67 @@ func TestPlusNoticeFollowsTheFlag(t *testing.T) {
 ================
 TestJobKillNoticeFollowsTheFlag
 
-A dressed thief killing a dressed trader reads "Thief killed Trader"; the
-same pair stays quiet for jobKillRepeatMs; an undressed player is never
-announced.
+A dressed thief killing a dressed trader reads "Thief killed Trader", but
+only once the kill's door has committed: payPlayerKillInDoor carries the
+notice and payJobKillShares, run after the commit, posts it. The same pair
+stays quiet for jobKillRepeatMs; an undressed victim is never announced.
 ================
 */
 func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
-	thief, trader, plain := testCharacter(), testCharacter(), testCharacter()
-	thief.Name, trader.Name, plain.Name = "Robber", "Merchant", "Walker"
-	thief.MissionInventory = append(thief.MissionInventory, enterworld.InventoryRow{Slot: enterworld.JobSuitSlot,
-		RefObjID: 9026, Codename: "ITEM_CH_M_TRADE_THIEF_04", TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobThief), StackCount: 1})
-	dressTrader(trader)
-	rt, _ := newTestRuntime(testCharacter(), testItems())
-	rt.announceJobKill(testDivision, thief, trader, 0)
+	rt, _, thief, trader := newPvpPair(t)
+	dressForJob(rt, thief, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
+	dressForJob(rt, trader, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
+	kill := func(victim *enterworld.Character, nowMs int64) jobKillPayout {
+		k := playerKill{kind: rt.playerKillKind(testDivision, victim, thief)}.withVictim(thief, victim)
+		_, _, after := rt.payPlayerKillInDoor(testDivision, thief, victim, k, nowMs)
+		return after
+	}
+	after := kill(trader, 0)
+	if got := drainedNotices(t, rt); len(got) != 0 {
+		t.Fatalf("the kill's door posted before its commit: %q", got)
+	}
+	rt.payJobKillShares(after)
 	if got := drainedNotices(t, rt); len(got) != 0 {
 		t.Fatalf("flag off announced %q", got)
 	}
 	rt.Announce.JobKill = true
-	rt.announceJobKill(testDivision, thief, trader, 0)
-	rt.announceJobKill(testDivision, thief, trader, jobKillRepeatMs-1)
-	rt.announceJobKill(testDivision, thief, plain, 0)
+	rt.payJobKillShares(kill(trader, 0))
+	rt.payJobKillShares(kill(trader, jobKillRepeatMs-1))
 	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != "Thief killed Trader" {
 		t.Fatalf("notices %q", got)
 	}
-	rt.announceJobKill(testDivision, thief, trader, jobKillRepeatMs)
+	rt.payJobKillShares(kill(trader, jobKillRepeatMs))
 	if got := drainedNotices(t, rt); len(got) != 1 {
 		t.Fatalf("the pair did not reopen: %q", got)
+	}
+	plain := *trader
+	plain.MissionInventory = nil
+	if after := kill(&plain, 2*jobKillRepeatMs); len(after.notices) != 0 {
+		t.Fatalf("an undressed victim carried a notice: %+v", after.notices)
+	}
+}
+
+/*
+================
+TestReinforceIntoPlusEightAnnounces
+
+Through HandleAlchemyReinforce: a success from +7 into +8 posts one notice
+with the flag on, and none with it off.
+================
+*/
+func TestReinforceIntoPlusEightAnnounces(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		rt, c := alchemyRuntime()
+		c.MissionInventory[0].Plus = 7
+		rt.Announce.Plus = on
+		frames := rt.HandleAlchemyReinforce(testDivision, c, []byte{2, 20, 21})
+		if last := frames[len(frames)-1]; last.Payload[0] != 1 || last.Payload[1] != 1 {
+			t.Fatalf("on=%v: the reinforcement did not succeed: %+v", on, frames)
+		}
+		got := drainedNotices(t, rt)
+		if !on && len(got) != 0 || on && (len(got) != 1 || !strings.HasSuffix(got[0], " to +8")) {
+			t.Fatalf("on=%v: %q", on, got)
+		}
 	}
 }
 

@@ -104,7 +104,7 @@ and the job shares its party still earns.
 */
 type playerHitCommit struct {
 	actor, public []wire.Frame
-	shares        []jobKillShare
+	after         jobKillPayout
 }
 
 /*
@@ -228,10 +228,10 @@ func (rt *Runtime) commitPlayerHitInDoor(division string, caster *enterworld.Cha
 		return out
 	}
 	if h.struck.fatal {
-		actor, public, shares := rt.payPlayerKillInDoor(division, caster, victim, h.kill, now)
+		actor, public, after := rt.payPlayerKillInDoor(division, caster, victim, h.kill, now)
 		out.actor = append(out.actor, actor...)
 		out.public = append(out.public, public...)
-		out.shares = shares
+		out.after = after
 	}
 	// 4E27F4 books the kill before 4E280B registers the hostile target.
 	attack := rt.registerPlayerAttack(division, caster, &beforeDeath, now)
@@ -506,7 +506,7 @@ func (rt *Runtime) strikePlayerTarget(st offensiveStage, target combatTarget, ca
 	public = append(public, commit.public...)
 	actor = append(actor, battle...)
 	public = append(public, battle...)
-	recipients := append([]RecipientFrames{victimPrivate}, rt.payJobKillShares(commit.shares)...)
+	recipients := append([]RecipientFrames{victimPrivate}, rt.payJobKillShares(commit.after)...)
 	out := OpResult{Frames: actor, Broadcast: public, ActorPrivate: private, Recipients: recipients}
 	// 5A0C2D ran inside the hit outcome; the victim's dmgr returns its share
 	// to the attacker afterwards, as the victim's credited hit.
@@ -556,7 +556,7 @@ func (rt *Runtime) commitCreditedPlayerHit(division string, caster *enterworld.C
 	public, victim := rt.publishPlayerHit(division, hit, now)
 	out := OpResult{Broadcast: append(public, commit.public...),
 		ActorPrivate: commit.actor,
-		Recipients:   append([]RecipientFrames{victim}, rt.payJobKillShares(commit.shares)...)}
+		Recipients:   append([]RecipientFrames{victim}, rt.payJobKillShares(commit.after)...)}
 	return hit, out, true
 }
 

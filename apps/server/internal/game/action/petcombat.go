@@ -492,7 +492,7 @@ func (rt *Runtime) petStrikePlayer(step petCombatStep, target combatTarget, skil
 	public, recipient := rt.publishPlayerHit(division, hit, step.nowMs)
 	public = append(public, commit.public...)
 	step.state.others = append(step.state.others, recipient)
-	step.state.others = append(step.state.others, rt.payJobKillShares(commit.shares)...)
+	step.state.others = append(step.state.others, rt.payJobKillShares(commit.after)...)
 	return petStrikeResult{strike: monsterStrike{gid: target.gid, pose: target.at, impacts: hit.struck.impacts, absorb: hit.struck.absorb, public: public, fatal: hit.struck.fatal}, actor: commit.actor, fatal: hit.struck.fatal}, true
 }
 

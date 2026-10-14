@@ -115,9 +115,9 @@ EXP of 4E6980, then 4E1F60's bookkeeping. actor goes to the killer, public
 to every observer; shares are the job EXP its party members still earn.
 ================
 */
-func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, shares []jobKillShare) {
+func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, after jobKillPayout) {
 	if killer == nil || victim == nil {
-		return nil, nil, nil
+		return nil, nil, after
 	}
 	victimGid := enterworld.ObjectIDForCharacter(victim)
 	party := rt.rewardPartyOf(division, enterworld.ObjectIDForCharacter(killer))
@@ -151,7 +151,9 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 			public = append(public, playerPVPStateFrame(killer))
 		}
 	case pk.DeathJob:
-		rt.announceJobKill(division, killer, victim, now)
+		if notice, ok := jobKillNoticeOf(division, killer, victim, now); ok {
+			after.notices = append(after.notices, notice)
+		}
 		if party == nil {
 			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))); ok {
 				actor = append(actor, frames...)
@@ -161,7 +163,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 				at: rt.liveSpawn(simulation.WorldKey(division, victim.Name), victim, now)}
 			for _, share := range rt.jobKillShares(division, killer, fallen, party, now) {
 				if share.member != killer {
-					shares = append(shares, share)
+					after.shares = append(after.shares, share)
 					continue
 				}
 				if frames, ok := rt.addJobExperience(killer, share.exp); ok {
@@ -177,19 +179,49 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 			public = append(public, wire.ProgressionBroadcastFrames(frames)...)
 		}
 	}
-	return actor, public, shares
+	return actor, public, after
+}
+
+/*
+================
+jobKillPayout
+
+What a committed kill still owes after its door: the party's job shares
+and the port-only job-kill notice (announce.go). Nothing here runs when the
+kill's commit rolls back.
+================
+*/
+type jobKillPayout struct {
+	shares  []jobKillShare
+	notices []jobKillNotice
+}
+
+/*
+================
+jobKillPayout.add
+
+Gathers several kills' payouts (an area strike can kill several players).
+================
+*/
+func (p *jobKillPayout) add(other jobKillPayout) {
+	p.shares = append(p.shares, other.shares...)
+	p.notices = append(p.notices, other.notices...)
 }
 
 /*
 ================
 payJobKillShares
 
-5BD7F0's party members other than the killer, each in its own door.
+5BD7F0's party members other than the killer, each in its own door, then
+the kill's notice.
 ================
 */
-func (rt *Runtime) payJobKillShares(shares []jobKillShare) []RecipientFrames {
+func (rt *Runtime) payJobKillShares(after jobKillPayout) []RecipientFrames {
+	for _, notice := range after.notices {
+		rt.postJobKillNotice(notice)
+	}
 	var out []RecipientFrames
-	for _, share := range shares {
+	for _, share := range after.shares {
 		var frames []wire.Frame
 		rt.deps.Update(share.member, "job-kill-share", func() bool {
 			var ok bool

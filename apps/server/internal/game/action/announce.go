@@ -263,21 +263,46 @@ var jobNames = map[uint8]string{domain.JobTrader: "Trader", domain.JobThief: "Th
 
 /*
 ================
-Runtime.announceJobKill
+jobKillNotice
 
-Item 3: a job kill (pk.DeathJob) between two dressed players, by job only.
-The death is settled when payPlayerKillInDoor runs; the notice is queued.
+Item 3's facts, read inside the kill's door while both suits are worn.
 ================
 */
-func (rt *Runtime) announceJobKill(division string, killer, victim *enterworld.Character, nowMs int64) {
-	if !rt.Announce.JobKill {
-		return
-	}
+type jobKillNotice struct {
+	division, killer, victim string
+	killerJob, victimJob     string
+	nowMs                    int64
+}
+
+/*
+================
+jobKillNoticeOf
+
+A job kill (pk.DeathJob) between two dressed players. Read in
+payPlayerKillInDoor; posted by postJobKillNotice once the kill commits.
+================
+*/
+func jobKillNoticeOf(division string, killer, victim *enterworld.Character, nowMs int64) (jobKillNotice, bool) {
 	killerJob, victimJob := jobNames[enterworld.DressedJob(killer)], jobNames[enterworld.DressedJob(victim)]
-	if killerJob == "" || victimJob == "" || !rt.jobKillPairQuiet(killer.Name, victim.Name, nowMs) {
+	if killerJob == "" || victimJob == "" {
+		return jobKillNotice{}, false
+	}
+	return jobKillNotice{division, killer.Name, victim.Name, killerJob, victimJob, nowMs}, true
+}
+
+/*
+================
+Runtime.postJobKillNotice
+
+Item 3: queues a committed job kill's notice, by job only, unless the pair
+was announced within jobKillRepeatMs.
+================
+*/
+func (rt *Runtime) postJobKillNotice(n jobKillNotice) {
+	if !rt.Announce.JobKill || !rt.jobKillPairQuiet(n.killer, n.victim, n.nowMs) {
 		return
 	}
-	rt.announce(division, announceJobKill, killerJob+" killed "+victimJob, nowMs)
+	rt.announce(n.division, announceJobKill, n.killerJob+" killed "+n.victimJob, n.nowMs)
 }
 
 // noticeMaxUnits is wire.NotificationFrame's UTF-16 budget (753A6F).
