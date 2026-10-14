@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-ground_scene.go - settle a scene's ground drops when it goes live
+ground_scene.go - settle a scene's ground drops and trade level when it goes live
 
 A bootstrap publishes every drop in the character's population. Ground
 removals (TTL sweep, another player's pickup) route only to viewers whose
@@ -9,6 +9,10 @@ published scope holds the drop, and a loading scene publishes none, so a
 removal committed between the bootstrap and game-ready reaches nobody. The
 client keeps that drop until it is picked at, which the server refuses
 (BR alt-tab ghost drops). Game-ready closes the gap from the registry.
+
+Every loading scene also builds a new local player whose trade level
+(CICPlayer +0x4F6) starts at 0 (CICUser constructor, 86942F), so a scene
+that goes live with a loaded transport out is told its level again.
 
 ===========================================================================
 */
@@ -63,5 +67,25 @@ func (rt *Runtime) ReconcileGroundScope(s *transport.Session, divisionID string,
 	}
 	if err := s.PublishSceneObjects(revision, nil, frames); err != nil {
 		log.Debugf("action: ground scene reconcile for session %d failed: %v", s.ID, err)
+	}
+}
+
+/*
+================
+ReconcileScene
+
+The game-ready hook (enterworld.Deps.ReconcileSceneObjects): settle the
+ground drops, then repeat the transport's trade level (0x352D) when goods
+are aboard. Without goods the new player's 0 is already right.
+================
+*/
+func (rt *Runtime) ReconcileScene(s *transport.Session, divisionID string, c *enterworld.Character) {
+	rt.ReconcileGroundScope(s, divisionID, c)
+	frame, loaded := rt.sceneTradeStars(c)
+	if !loaded {
+		return
+	}
+	if err := s.Send(frame.Opcode, frame.Payload); err != nil {
+		log.Debugf("action: trade level for session %d failed: %v", s.ID, err)
 	}
 }

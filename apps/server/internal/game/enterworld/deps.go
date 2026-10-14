@@ -178,7 +178,9 @@ type Deps struct {
 	SceneReferenceFrames func() []wire.Frame
 	// ReconcileSceneObjects runs once a loading scene goes live. Removals
 	// committed while it loaded reached no viewer (scope routing skips a
-	// loading scene), so the owner retires bootstrap objects that are gone.
+	// loading scene), so the owner retires bootstrap objects that are gone,
+	// and repeats state the new local player starts without (the trade
+	// level of a loaded transport).
 	ReconcileSceneObjects  func(session *transport.Session, divisionID string, character *Character)
 	CommunitySeedFramesFor func(
 		divisionID string,

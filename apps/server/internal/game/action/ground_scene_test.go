@@ -47,7 +47,7 @@ func TestGameReadyDespawnsGroundRemovedWhileLoading(t *testing.T) {
 	h.deps.ObjectListRows = func(divisionID string, c *enterworld.Character, _ *enterworld.LocalPlayerEntry) []enterworld.Packet {
 		return enterworld.GroundObjectListRows(h.rt.CharacterGroundItems(divisionID, c))
 	}
-	h.deps.ReconcileSceneObjects = h.rt.ReconcileGroundScope
+	h.deps.ReconcileSceneObjects = h.rt.ReconcileScene
 	gold := GoldHeapRef{RefObjID: 62, Codename: "ITEM_ETC_GOLD_02", Tid1: 3, Tid2: 3, Tid3: 5, Tid4: 2}
 	at := simulation.SeedWorldState(h.character).Spawn
 	expiring := h.rt.Ground.Add(testDivision, PlanGoldDrop(gold, 100, at, "someone", h.clock.Now()))
@@ -64,7 +64,13 @@ func TestGameReadyDespawnsGroundRemovedWhileLoading(t *testing.T) {
 		t.Fatal("sweep kept the expired drop")
 	}
 
-	despawns := groundDespawns(h.ready(t, conn))
+	ready := h.ready(t, conn)
+	despawns := groundDespawns(ready)
+	for _, f := range ready {
+		if f.Opcode == wire.OpTradeStarCount {
+			t.Fatal("game-ready without a transport sent a trade level")
+		}
+	}
 	if despawns[expiring.Gid] != 1 {
 		t.Fatalf("game-ready despawned the expired drop %d times, want 1", despawns[expiring.Gid])
 	}

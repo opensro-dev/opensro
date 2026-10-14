@@ -84,3 +84,18 @@ func (rt *Runtime) withTradeStars(c *enterworld.Character, movement uint8, resul
 	}
 	return result
 }
+
+/*
+================
+sceneTradeStars
+
+The trade level a scene going live repeats: only for a summoned transport
+with goods aboard (ground_scene.go ReconcileScene).
+================
+*/
+func (rt *Runtime) sceneTradeStars(c *enterworld.Character) (wire.Frame, bool) {
+	if c == nil || !rt.transportSummoned(c) || !vehicleCarriesGoods(rt, c) {
+		return wire.Frame{}, false
+	}
+	return rt.tradeStarFrame(c), true
+}
