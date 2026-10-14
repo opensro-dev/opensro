@@ -14,6 +14,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from coordinated import DEADMAN_SECONDS
 from monitor import MAX_MAINTENANCE_SECONDS, PROTOCOL_HEADER, check, get_status, maintenance_window, poll, transition
 
 
@@ -91,6 +92,30 @@ class MonitorTests(unittest.TestCase):
 		self.assertEqual(maintenance_window(operation), 900 + MAX_MAINTENANCE_SECONDS)
 		self.assertEqual(maintenance_window({"component": "client", "phase": "deploying", "startedAt": 0}), 0)
 		self.assertEqual(maintenance_window(None), 0)
+
+	# ================
+	# test_a_maintenance_pair_stays_maintenance_until_confirm
+	#
+	# F8: a held maintenance pair sat in verifying with the gate closed while
+	# its window steps stopped and restarted the fleet; the monitor posted
+	# "online" during the smoke and "unavailable" on the planned stop.
+	# ================
+	def test_a_maintenance_pair_stays_maintenance_until_confirm(self):
+		operation = {"component": "release", "phase": "verifying", "startedAt": 0, "phaseStartedAt": 300, "maintenance": True}
+		self.assertEqual(maintenance_window(operation), 300 + DEADMAN_SECONDS)
+		bad, good = {"healthy": False, "detail": "public shard is not operating"}, {"healthy": True, "detail": "available"}
+		until = maintenance_window(operation)
+		state, event = transition({"phase": "up", "notified": "up"}, good, 400, until)
+		self.assertIsNone(event, "the held smoke announces nothing")
+		for now in (500, 530, 560):
+			state, event = transition(state, bad, now, until)
+			self.assertIsNone(event, "the planned hold stop is not an outage")
+		state, _ = transition(state, good, 900, until)
+		state, _ = transition(state, good, 930, 0)
+		_, event = transition(state, good, 960, 0)
+		self.assertEqual(event, "maintenance-complete", "online is announced once the pair is confirmed")
+		operation["maintenance"] = False
+		self.assertEqual(maintenance_window(operation), 0, "a coordinated pair verifying with both live is not maintenance")
 
 	# ================
 	# test_the_fleet_check_speaks_the_protocol_the_server_announces

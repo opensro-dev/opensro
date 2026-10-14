@@ -21,6 +21,7 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 
+from coordinated import DEADMAN_SECONDS, VERIFYING
 from deploy import announce
 from release_state import write_state
 
@@ -184,14 +185,21 @@ def transition(previous, observation, now, maintenance_until=0):
 # The end of the announced restart the release journal describes, or 0. A
 # coordinated release restarts the server while deploying and again while
 # reverting; each phase opens its own bounded window. Verification with
-# both new components live is not maintenance.
+# both new components live is not maintenance, except for a maintenance
+# pair: its gate stays closed until confirm, and a held pair stops and
+# restarts the fleet for its window steps (release_hold_steps.py), so an
+# "online" or "unavailable" then would be wrong (F8, 2026-10-14). That
+# window ends where the host's dead-man would revert the pair.
 # ================
 def maintenance_window(operation):
 	if not operation or operation["component"] not in ("server", "release"):
 		return 0
+	started = operation.get("phaseStartedAt", operation["startedAt"])
+	if operation["phase"] == VERIFYING and operation.get("maintenance") is True:
+		return started + DEADMAN_SECONDS
 	if operation["phase"] not in ("deploying", "reverting"):
 		return 0
-	return operation.get("phaseStartedAt", operation["startedAt"]) + MAX_MAINTENANCE_SECONDS
+	return started + MAX_MAINTENANCE_SECONDS
 
 
 # ================
