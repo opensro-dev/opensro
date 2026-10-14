@@ -94,6 +94,7 @@ func (rt *Runtime) creditedHitResult(division string, target monster.Instance, h
 		for _, drop := range hit.settlement.drops {
 			public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
 		}
+		rt.announceSealDrops(division, target.Ref.Name, hit.settlement.drops, now)
 		public = append(public, hit.settlement.public...)
 		rt.queueMonsterDefeat(division, target.Gid, now+monsterDeathPresentationRetention.Milliseconds())
 	}

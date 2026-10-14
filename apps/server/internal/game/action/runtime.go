@@ -325,6 +325,11 @@ type Runtime struct {
 	// countdown (denreturn.go; port-only, not native). False is native.
 	DenNoTransportSummon bool
 
+	// Announce selects the port-only shard notices (announce.go); the zero
+	// value is native: none.
+	Announce  Announcements
+	announcer announcer
+
 	// ShopOnly keeps degree-9 alchemy goods out of every drop (port-only,
 	// not native, beta balance; owner 2026-10-13). The zero value is off.
 	ShopOnly progression.ShopOnlyDegree9

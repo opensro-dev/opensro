@@ -407,6 +407,7 @@ func (rt *Runtime) advanceMonsterAbnormal(division string, gid uint32, nowMs int
 		for _, drop := range settlement.drops {
 			public = append(public, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
 		}
+		rt.announceSealDrops(division, impact.Instance.Ref.Name, settlement.drops, nowMs)
 		public = append(public, settlement.public...)
 		if character != nil {
 			send(character.ID, wire.ProgressionPrivateFrames(settlement.actorFrames)...)

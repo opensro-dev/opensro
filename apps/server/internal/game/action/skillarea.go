@@ -341,6 +341,7 @@ func (rt *Runtime) publishArea(division string, caster *enterworld.Character, sk
 			for _, drop := range commit.drops[gid] {
 				deaths = append(deaths, wire.DropBroadcastFrames(drop.SpawnRow(true))...)
 			}
+			rt.announceSealDrops(division, final.Instance.Ref.Name, commit.drops[gid], now)
 		}
 		// A fatal victim records no aggression; its damage still feeds a
 		// Mana Switch link.

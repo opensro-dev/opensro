@@ -204,6 +204,24 @@ variable "mall_transport_speed" {
   default = "on"
 }
 
+# announce_sox_drop, announce_plus and announce_job_kill send shard notices
+# for a seal drop, an item advanced to +8..+11 and a job kill (port-only,
+# not native; owner decision 2026-10-14). "off" is native: no notice.
+variable "announce_sox_drop" {
+  type    = string
+  default = "on"
+}
+
+variable "announce_plus" {
+  type    = string
+  default = "on"
+}
+
+variable "announce_job_kill" {
+  type    = string
+  default = "on"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 variable "reverse_return_map" {
@@ -546,6 +564,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FAST_DEN_RETURN                = var.fast_den_return
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed
+        SRO_ANNOUNCE_SOX_DROP              = var.announce_sox_drop
+        SRO_ANNOUNCE_PLUS                  = var.announce_plus
+        SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates

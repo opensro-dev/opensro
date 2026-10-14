@@ -546,6 +546,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.FastDenReturn {
 		log.Infof("return: Bandit Den scroll countdown halved (%s)", action.EnvFastDenReturn)
 	}
+	// Port-only, not native: shard notices for seal drops, high plus and job
+	// kills (announce.go).
+	game.items.Announce = action.AnnouncementsFromEnv()
+	if a := game.items.Announce; a.SoxDrop || a.Plus || a.JobKill {
+		log.Infof("announce: seal drops %v, plus %v, job kills %v", a.SoxDrop, a.Plus, a.JobKill)
+	}
 	// Port-only, not native: no transport comes out during the Den countdown.
 	game.items.DenNoTransportSummon = action.DenNoTransportSummonFromEnv()
 	if game.items.DenNoTransportSummon {

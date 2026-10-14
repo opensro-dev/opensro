@@ -83,6 +83,7 @@ func (rt *Runtime) TickHook() simulation.TickHook {
 			step(name, func() { out = append(out, advance(nowMs)...) })
 		}
 		step("retireGroundApproaches", rt.retireGroundApproaches)
+		frames("drainAnnouncements", rt.drainAnnouncements)
 		step("advanceResidentRegions", func() { rt.advanceResidentRegions(nowMs) })
 		if rt.AdvanceQuestCalendar != nil {
 			step("AdvanceQuestCalendar", func() { rt.AdvanceQuestCalendar(nowMs) })

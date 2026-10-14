@@ -151,6 +151,7 @@ func (rt *Runtime) payPlayerKillInDoor(division string, killer, victim *enterwor
 			public = append(public, playerPVPStateFrame(killer))
 		}
 	case pk.DeathJob:
+		rt.announceJobKill(division, killer, victim, now)
 		if party == nil {
 			if frames, ok := rt.addJobExperience(killer, jobKillExperience(rt.deps.LevelData(), killer, rewardLevel(victim))); ok {
 				actor = append(actor, frames...)

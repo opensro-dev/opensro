@@ -133,6 +133,7 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	defer unlock()
 	var frames []wire.Frame
 	var err error
+	var outcome alchemy.Outcome
 	committed := rt.deps.Update(character, "alchemy", func() bool {
 		// Reinforcement and stones share the same living-character admission
 		// as compound/dissolve. Keep this inside the inventory transaction so
@@ -152,6 +153,7 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 			return false
 		}
 		frames = alchemy.ResultFrames(op, before, result)
+		outcome = result
 		character.MissionInventory = alchemyRows(character.MissionInventory, before, result.Items)
 		if rt.UpdateQuestInventory != nil {
 			quest, _ := rt.UpdateQuestInventory(character)
@@ -161,6 +163,9 @@ func (rt *Runtime) applyAlchemy(division string, character *enterworld.Character
 	})
 	if !committed {
 		return alchemyFailure(op, err)
+	}
+	if op == alchemy.OpReinforceResult {
+		rt.announcePlus(division, character.Name, outcome, rt.Now().UnixMilli())
 	}
 	return frames
 }
