@@ -186,8 +186,9 @@ func TestPlusNoticeFollowsTheFlag(t *testing.T) {
 ================
 TestJobKillNoticeFollowsTheFlag
 
-A dressed thief killing a dressed trader reads "Thief killed Trader", but
-only once the kill's door has committed: payPlayerKillInDoor carries the
+A dressed thief killing a dressed trader reads "[leChiffre] killed
+[ES_Tip]" (their job aliases, never their names), but only once the kill's
+door has committed: payPlayerKillInDoor carries the
 notice and payJobKillShares, run after the commit, posts it. The same pair
 stays quiet for jobKillRepeatMs; an undressed victim is never announced.
 ================
@@ -196,6 +197,7 @@ func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
 	rt, _, thief, trader := newPvpPair(t)
 	dressForJob(rt, thief, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
 	dressForJob(rt, trader, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
+	thief.Job.Alias, trader.Job.Alias = "leChiffre", "ES_Tip"
 	kill := func(victim *enterworld.Character, nowMs int64) jobKillPayout {
 		k := playerKill{kind: rt.playerKillKind(testDivision, victim, thief)}.withVictim(thief, victim)
 		_, _, after := rt.payPlayerKillInDoor(testDivision, thief, victim, k, nowMs)
@@ -212,12 +214,24 @@ func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
 	rt.Announce.JobKill = true
 	rt.payJobKillShares(kill(trader, 0))
 	rt.payJobKillShares(kill(trader, jobKillRepeatMs-1))
-	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != "Thief killed Trader" {
+	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != "[leChiffre] killed [ES_Tip]" {
 		t.Fatalf("notices %q", got)
+	}
+	for _, got := range []string{thief.Name, trader.Name} {
+		if strings.Contains("[leChiffre] killed [ES_Tip]", got) {
+			t.Fatalf("the notice names the character %q", got)
+		}
 	}
 	rt.payJobKillShares(kill(trader, jobKillRepeatMs))
 	if got := drainedNotices(t, rt); len(got) != 1 {
 		t.Fatalf("the pair did not reopen: %q", got)
+	}
+	// A wearer without a job alias shows the job's name, still never the
+	// character's.
+	trader.Job.Alias = ""
+	rt.payJobKillShares(kill(trader, 3*jobKillRepeatMs))
+	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != "[leChiffre] killed [Trader]" {
+		t.Fatalf("no-alias notice %q", got)
 	}
 	plain := *trader
 	plain.MissionInventory = nil

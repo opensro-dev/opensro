@@ -9,7 +9,7 @@ GameWorld's Nomad job turns them on:
 
 	SRO_ANNOUNCE_SOX_DROP  "<player> dropped <item> (<seal>) from <monster>"
 	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N 8..11)
-	SRO_ANNOUNCE_JOB_KILL  "<Thief> killed <Trader>" (job names only)
+	SRO_ANNOUNCE_JOB_KILL  "[<killer alias>] killed [<victim alias>]" (job aliases, never character names)
 
 A notice is the native notification packet the operator notices use
 (wire.NotificationFrame), sent to every session of the division and kept
@@ -278,13 +278,31 @@ var jobNames = map[uint8]string{domain.JobTrader: "Trader", domain.JobThief: "Th
 ================
 jobKillNotice
 
-Item 3's facts, read inside the kill's door while both suits are worn.
+Item 3's facts, read inside the kill's door while both suits are worn:
+the pair's character names key the repeat window, the job aliases are
+what the notice shows.
 ================
 */
 type jobKillNotice struct {
 	division, killer, victim string
-	killerJob, victimJob     string
+	killerAlias, victimAlias string
 	nowMs                    int64
+}
+
+/*
+================
+jobKillAlias
+
+The name a dressed player shows in a job-kill notice: the job alias
+(owner decision 2026-10-15), never the character's name. A wearer without
+an alias shows the job's name.
+================
+*/
+func jobKillAlias(c *enterworld.Character, job uint8) string {
+	if alias := strings.TrimSpace(c.Job.Alias); alias != "" {
+		return alias
+	}
+	return jobNames[job]
 }
 
 /*
@@ -296,26 +314,28 @@ payPlayerKillInDoor; posted by postJobKillNotice once the kill commits.
 ================
 */
 func jobKillNoticeOf(division string, killer, victim *enterworld.Character, nowMs int64) (jobKillNotice, bool) {
-	killerJob, victimJob := jobNames[enterworld.DressedJob(killer)], jobNames[enterworld.DressedJob(victim)]
-	if killerJob == "" || victimJob == "" {
+	killerJob, victimJob := enterworld.DressedJob(killer), enterworld.DressedJob(victim)
+	if jobNames[killerJob] == "" || jobNames[victimJob] == "" {
 		return jobKillNotice{}, false
 	}
-	return jobKillNotice{division, killer.Name, victim.Name, killerJob, victimJob, nowMs}, true
+	return jobKillNotice{division, killer.Name, victim.Name,
+		jobKillAlias(killer, killerJob), jobKillAlias(victim, victimJob), nowMs}, true
 }
 
 /*
 ================
 Runtime.postJobKillNotice
 
-Item 3: queues a committed job kill's notice, by job only, unless the pair
-was announced within jobKillRepeatMs.
+Item 3: queues a committed job kill's notice by the pair's job aliases,
+in the client's bracketed style (UIIT_MSG_ANYONE_DEAD_UNIC "[%s]has killed
+[%s]."), unless the pair was announced within jobKillRepeatMs.
 ================
 */
 func (rt *Runtime) postJobKillNotice(n jobKillNotice) {
 	if !rt.Announce.JobKill || !rt.jobKillPairQuiet(n.killer, n.victim, n.nowMs) {
 		return
 	}
-	rt.announce(n.division, announceJobKill, n.killerJob+" killed "+n.victimJob, n.nowMs)
+	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", n.nowMs)
 }
 
 // noticeMaxUnits is wire.NotificationFrame's UTF-16 budget (753A6F).
