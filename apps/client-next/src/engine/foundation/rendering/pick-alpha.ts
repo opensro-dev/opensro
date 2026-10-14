@@ -10,13 +10,14 @@ The asset worker now takes it from the pixels it decodes for DDS world
 textures, and reads its own PNG bitmaps back (bitmapPickAlpha); the main
 thread reads a bitmap back (readback.ts) only for a texture that arrives
 without one. A native block texture (.texture) has no bitmap: its mask is
-its first level decoded (nativePickAlpha).
+its first level decoded (nativePickAlpha); a port-only variant (ASTC,
+ETC2) cannot be decoded and carries its source's mask instead.
 
 ===========================================================================
 */
 
 import type { NativeTexture } from "@/engine/contracts/texture";
-import { decodeNativeTextureLevel } from "@/engine/foundation/assets/native-texture";
+import { decodeNativeTextureLevel, nativeTextureDecodable } from "@/engine/foundation/assets/native-texture";
 import type { PickAlpha } from "@/engine/foundation/rendering/picking";
 
 /*
@@ -40,10 +41,19 @@ The alpha of a native block texture's first level: DXT1 punch-through and
 DXT3/DXT5 alpha cut the same outlines the converted PNGs did (the decoder
 is bit-exact against them, minimapTextureParity.test.mjs). Without it a
 cutout object (leaves, fences) picked as a solid quad.
+
+A variant reads the mask the build took from the same BC texels, so it
+picks exactly as the original does; one without a mask had an opaque
+source, which picks as a one-texel opaque mask (every sample 1).
 ================
 */
 export function nativePickAlpha( texture: NativeTexture ): PickAlpha {
-	return rgbaPickAlpha( texture.width, texture.height, decodeNativeTextureLevel( texture, 0 ) );
+	if ( nativeTextureDecodable( texture.format ) ) {
+		return rgbaPickAlpha( texture.width, texture.height, decodeNativeTextureLevel( texture, 0 ) );
+	}
+	if ( texture.pickAlpha ) return { width: texture.width, height: texture.height, pixels: texture.pickAlpha };
+	// One texel sampled as 1 everywhere; the caller keeps it per texture.
+	return { width: 1, height: 1, pixels: new Uint8Array( [ 255 ] ) };
 }
 
 /*

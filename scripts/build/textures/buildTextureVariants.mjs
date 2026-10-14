@@ -10,6 +10,14 @@ keeps one owning pack group. Every level is decoded with the client's own
 NTX decoder and encoded by the pinned astcenc (encoders.mjs) at the
 -medium preset; results are cached by the source's SHA-256.
 
+A variant has no CPU decoder, so picking cannot read its alpha back. Each
+one whose source has any alpha below 255 carries that alpha (level 0, one
+byte a texel, decoded bit-exactly from the BC blocks) after its levels,
+so a variant picks exactly as the original; an opaque source carries none
+(native-texture.ts NTX_PICK_ALPHA). The mask is taken from the source at
+every run, outside the encoder cache. WebGPU requires a block-compressed
+level 0 to be whole blocks, so a texture under 4x4 keeps its original.
+
 	node scripts/build/textures/buildTextureVariants.mjs
 		[--jobs N] [--only /assets/prefix] [--limit N]
 		[--out DIR] [--roundtrip DIR]
@@ -44,6 +52,8 @@ const run = promisify( execFile );
 const NTX_MAGIC = 0x3158544e;
 const NTX_HEADER_BYTES = 20;
 const NTX_ASTC_4X4 = 0x34345341; // "AS44", native-texture.ts
+const NTX_PICK_ALPHA = 0x38414b50; // "PKA8", native-texture.ts
+const ASTC_BLOCK = 4;
 const D3DFMT_A8R8G8B8 = 21;
 const ASTC_HEADER_BYTES = 16;
 const ASTC_MAGIC = 0x5ca1ab13;
@@ -204,6 +214,27 @@ function ntx( width, height, code, levels ) {
 
 /*
 ================
+pickAlphaSection
+
+The source's level-0 alpha as a trailing NTX section, or an empty buffer
+when every texel is opaque.
+================
+*/
+export function pickAlphaSection( texture ) {
+	const rgba = decodeNativeTextureLevel( texture, 0 ), alpha = Buffer.alloc( texture.width * texture.height );
+	let opaque = true;
+	for ( let i = 0; i < alpha.length; i++ ) {
+		alpha[i] = rgba[i * 4 + 3];
+		if ( alpha[i] !== 255 ) opaque = false;
+	}
+	if ( opaque ) return Buffer.alloc( 0 );
+	const tag = Buffer.alloc( 4 );
+	tag.writeUInt32LE( NTX_PICK_ALPHA, 0 );
+	return Buffer.concat( [ tag, alpha ] );
+}
+
+/*
+================
 encodeTexture
 
 One native texture to its ASTC 4x4 NTX and, when asked, its decoded BGRA NTX.
@@ -266,7 +297,7 @@ export async function buildTextureVariants( flags = {} ) {
 	const outputRoot = flags.out ? path.join( flags.out, "client-public" ) : CLIENT_PUBLIC_ROOT;
 	mkdirSync( cacheRoot, { recursive: true } );
 	const textures = nativeTextures( CLIENT_PUBLIC_ROOT, flags.only ).slice( 0, flags.limit );
-	let next = 0, encoded = 0, cached = 0, sourceBytes = 0, variantBytes = 0;
+	let next = 0, encoded = 0, cached = 0, unaligned = 0, masked = 0, sourceBytes = 0, variantBytes = 0;
 	const startedAt = performance.now();
 	/*
 	================
@@ -279,6 +310,11 @@ export async function buildTextureVariants( flags = {} ) {
 			while ( next < textures.length ) {
 				const [file, publicPath] = textures[next++];
 				const source = readFileSync( file ), digest = createHash( "sha256" ).update( source ).digest( "hex" );
+				const texture = decodeNativeTexture( new Uint8Array( source ) );
+				if ( texture.width % ASTC_BLOCK || texture.height % ASTC_BLOCK ) {
+					unaligned++;
+					continue;
+				}
 				const cachedVariant = path.join( cacheRoot, `${digest}.ntx` ),
 					cachedBack = path.join( cacheRoot, `${digest}.back.ntx` );
 				let variant, back = null;
@@ -294,6 +330,9 @@ export async function buildTextureVariants( flags = {} ) {
 					if ( back ) writeFileSync( cachedBack, back );
 					encoded++;
 				}
+				const mask = pickAlphaSection( texture );
+				if ( mask.length ) masked++;
+				variant = Buffer.concat( [ variant, mask ] );
 				const target = path.join( outputRoot, ...textureVariantPath( publicPath, VARIANT ).split( "/" ) );
 				mkdirSync( path.dirname( target ), { recursive: true } );
 				writeFileSync( target, variant );
@@ -317,10 +356,11 @@ export async function buildTextureVariants( flags = {} ) {
 	const mb = bytes => (bytes / 1048576).toFixed( 1 );
 	console.log(
 		`texture variants (astc 4x4 ${PRESET}): ${textures.length} textures, ${encoded} encoded, ${cached} cached, ` +
+			`${unaligned} under one block kept their original, ${masked} carry a picking mask, ` +
 			`${mb( sourceBytes )} MB BC -> ${mb( variantBytes )} MB ASTC, ` +
 			`${((performance.now() - startedAt) / 1000).toFixed( 1 )} s`
 	);
-	return { textures: textures.length, encoded, cached, sourceBytes, variantBytes };
+	return { textures: textures.length, encoded, cached, unaligned, masked, sourceBytes, variantBytes };
 }
 
 if ( process.argv[1] && path.resolve( process.argv[1] ) === fileURLToPath( import.meta.url ) ) {

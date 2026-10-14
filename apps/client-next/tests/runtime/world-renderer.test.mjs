@@ -25,6 +25,9 @@ const { createWorldRenderer } = await import(
 const { createPresentationRandom } = await import(
 	sourceFileUrl( path.join( root, "src/engine/runtime/random/random.ts" ) ).href
 );
+const { decodeNativeTexture } = await import(
+	sourceFileUrl( path.join( root, "src/engine/foundation/assets/native-texture.ts" ) ).href
+);
 const identity = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 test("retail object visibility advances offscreen and with a stationary camera, and survives GPU loss", () => {
 	const world = createWorldRenderer( undefined, undefined, createPresentationRandom( 1 ) ), uploads = [];
@@ -187,6 +190,55 @@ test("a native block texture's transparent texels do not pick", () => {
 	};
 	assert.equal( depthThrough( native( new Uint8Array( [ 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff ] ) ) ), null );
 	assert.notEqual( depthThrough( native( new Uint8Array( [ 0, 0xf8, 0, 0, 0, 0, 0, 0 ] ) ) ), null );
+});
+
+/*
+================
+astcVariant
+
+A 4x4 ASTC variant container (one block) as the asset build writes it,
+with its source's picking mask when one is given.
+================
+*/
+function astcVariant( alpha ) {
+	const header = new Uint8Array( 20 ), view = new DataView( header.buffer );
+	view.setUint32( 0, 0x3158544e, true );
+	view.setUint32( 4, 4, true );
+	view.setUint32( 8, 4, true );
+	view.setUint32( 12, 0x34345341, true );
+	view.setUint32( 16, 1, true );
+	const parts = [ header, new Uint8Array( 16 ).fill( 0x5a ) ];
+	if ( alpha !== undefined ) {
+		parts.push( Uint8Array.of( 0x50, 0x4b, 0x41, 0x38 ), new Uint8Array( 16 ).fill( alpha ) );
+	}
+	const out = new Uint8Array( parts.reduce( ( sum, part ) => sum + part.length, 0 ) );
+	let at = 0;
+	for ( const part of parts ) {
+		out.set( part, at );
+		at += part.length;
+	}
+	return decodeNativeTexture( out );
+}
+
+test("an ASTC variant is admitted and picks by its source's mask, without a CPU decoder", () => {
+	const geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw },
+		textures = { upload: () => ({}), release() {} },
+		ray = { start: [ .25, .25, 1 ], delta: [ 0, 0, -2 ] };
+	const depthThrough = texture => {
+		const world = createWorldRenderer();
+		world.scene( scene( "variant", "/variant.texture" ) );
+		world.texture( "/variant.texture", texture );
+		world.camera( { eye: [ .25, .25, 2 ], target: [ .25, .25, 0 ], near: .1, far: 10000, fov: Math.PI / 3 } );
+		// Admission prepares the mask: it must not reach the BC decoder.
+		world.prepare( geometry, textures, 1, 0 );
+		assert.equal( world.stats().pendingGroups, 0 );
+		const depth = world.pick( ray, 1 );
+		world.dispose( geometry, textures );
+		return depth;
+	};
+	assert.equal( depthThrough( astcVariant( 0 ) ), null, "a transparent source does not pick" );
+	assert.notEqual( depthThrough( astcVariant( 255 ) ), null );
+	assert.notEqual( depthThrough( astcVariant() ), null, "no mask: the source was opaque" );
 });
 
 test("animated instances use the pose envelope rather than an unskinned vertex box", () => {

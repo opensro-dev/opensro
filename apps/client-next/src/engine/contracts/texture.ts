@@ -33,6 +33,10 @@ export interface NativeTexture {
 		| "etc2-rgba8unorm"
 		| "astc-4x4-unorm";
 	readonly levels: readonly Uint8Array[];
+	// A variant's level-0 alpha, one byte a texel, taken by the build from the
+	// retail BC texels (decodeNativeTexture). Picking reads it because a
+	// variant has no CPU decoder; absent on a variant, the source is opaque.
+	readonly pickAlpha?: Uint8Array;
 }
 
 /*

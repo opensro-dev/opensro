@@ -28,9 +28,14 @@ async function load( file ) {
 	return import( sourceFileUrl( path.join( root, file ) ).href );
 }
 const { chooseTextureVariant, textureVariantPath } = await load( "src/engine/foundation/assets/texture-variants.ts" );
-const { decodeNativeTexture, decodeNativeSurface, nativeTextureFeature, nativeTextureLevelBytes } = await load(
-	"src/engine/foundation/assets/native-texture.ts"
-);
+const {
+	decodeNativeTexture,
+	decodeNativeSurface,
+	nativeTextureFeature,
+	nativeTextureLevelBytes,
+	validateNativeTexture
+} = await load( "src/engine/foundation/assets/native-texture.ts" );
+const { nativePickAlpha } = await load( "src/engine/foundation/rendering/pick-alpha.ts" );
 const { EXPERIMENTAL_STORAGE_KEY } = await load( "src/engine/foundation/ui/experimental-options.ts" );
 const { createAssets } = await load( "src/engine/runtime/assets/assets.ts" );
 
@@ -99,6 +104,30 @@ test("the NTX container admits the variant formats, with their features and no C
 		);
 	}
 	assert.equal( nativeTextureFeature( "bc1-rgba-unorm" ), BC );
+});
+
+test("a variant carries its source's picking mask after its levels; nothing else may trail", () => {
+	const mask = Buffer.concat( [ Buffer.from( "PKA8", "ascii" ), Buffer.alloc( 64, 9 ) ] );
+	const texture = decodeNativeTexture( Buffer.concat( [ ntx( "AS44", 16 ), mask ] ) );
+	assert.equal( texture.pickAlpha.length, 64 );
+	assert.equal( texture.pickAlpha[63], 9 );
+	assert.equal( validateNativeTexture( texture ), 4 * 16 + 3 * 16 + 64, "the mask counts toward residency" );
+	assert.deepEqual( nativePickAlpha( texture ), { width: 8, height: 8, pixels: texture.pickAlpha } );
+	const opaque = nativePickAlpha( decodeNativeTexture( ntx( "AS44", 16 ) ) );
+	assert.deepEqual( [ opaque.width, opaque.height, opaque.pixels[0] ], [ 1, 1, 255 ] );
+	assert.throws(
+		() => decodeNativeTexture( Buffer.concat( [ ntx( "DXT1", 8 ), mask ] ) ),
+		/extent/,
+		"BC reads its own alpha"
+	);
+	assert.throws(
+		() => decodeNativeTexture( Buffer.concat( [ ntx( "AS44", 16 ), mask.subarray( 0, 40 ) ] ) ),
+		/extent/
+	);
+	const wrongTag = Buffer.from( mask );
+	wrongTag.write( "JUNK", 0, "ascii" );
+	assert.throws( () => decodeNativeTexture( Buffer.concat( [ ntx( "AS44", 16 ), wrongTag ] ) ), /extent/ );
+	assert.throws( () => validateNativeTexture( { ...texture, pickAlpha: new Uint8Array( 3 ) } ), /picking mask/ );
 });
 
 /*
