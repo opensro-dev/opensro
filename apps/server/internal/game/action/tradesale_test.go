@@ -382,26 +382,38 @@ ordinary sale stay shop transactions.
 func TestCommerceDoorLabelNamesTradeSales(t *testing.T) {
 	goods := wire.PackTypeFlags(3, 3, 8, 1)
 	potion := wire.PackTypeFlags(3, 3, 1, 1)
-	c := &enterworld.Character{MissionInventory: []enterworld.InventoryRow{
-		{Slot: 13, TypeFlags: goods, StackCount: 5}, {Slot: 14, TypeFlags: potion, StackCount: 5}}}
+	const transportGID, petGID = 0x00C00010, 0x00C00011
+	c := &enterworld.Character{
+		MissionInventory: []enterworld.InventoryRow{
+			{Slot: 13, TypeFlags: goods, StackCount: 5}, {Slot: 14, TypeFlags: potion, StackCount: 5}},
+		ActiveCOS: &enterworld.CharacterCOS{GID: transportGID, Summoned: true, Container: &domain.COSContainer{
+			Capacity: 4, Rows: []enterworld.InventoryRow{{Slot: 0, TypeFlags: goods, StackCount: 5}}}},
+	}
 	if !inventory.IsTradeGoods(goods) || inventory.IsTradeGoods(potion) {
 		t.Fatal("fixture type flags do not classify as intended")
 	}
+	// A pickup pet rides on its summoner's bag row (domain Companions).
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 15, StackCount: 1,
+		Summon: &enterworld.CharacterCOS{GID: petGID, Summoned: true, Container: &domain.COSContainer{
+			Capacity: 4, Rows: []enterworld.InventoryRow{{Slot: 0, TypeFlags: potion, StackCount: 5}}}}})
 	cases := []struct {
-		move          uint8
-		slot          uint8
-		fromTransport bool
-		want          string
+		name    string
+		move    uint8
+		slot    uint8
+		cos     uint32
+		fromCOS bool
+		want    string
 	}{
-		{wire.MoveTypeShopSell, 13, false, "trade-sale"},
-		{wire.MoveTypeShopSell, 14, false, "shop-transaction"},
-		{wire.MoveTypeShopSell, 0, true, "trade-sale"},
-		{wire.MoveTypeShopBuy, 13, false, "shop-transaction"},
+		{"goods from the bag", wire.MoveTypeShopSell, 13, 0, false, "trade-sale"},
+		{"potion from the bag", wire.MoveTypeShopSell, 14, 0, false, "shop-transaction"},
+		{"goods from the transport", wire.MoveTypeShopSell, 0, transportGID, true, "trade-sale"},
+		{"potion from a pickup pet", wire.MoveTypeShopSell, 0, petGID, true, "shop-transaction"},
+		{"a purchase", wire.MoveTypeShopBuy, 13, 0, false, "shop-transaction"},
 	}
 	for _, tc := range cases {
-		q := wire.ItemMoveRequest{MovementType: tc.move, SourceSlot: tc.slot}
-		if got := commerceDoorLabel(c, q, tc.fromTransport); got != tc.want {
-			t.Fatalf("%+v = %q, want %q", tc, got, tc.want)
+		q := wire.ItemMoveRequest{MovementType: tc.move, SourceSlot: tc.slot, CosGID: tc.cos}
+		if got := commerceDoorLabel(c, q, tc.fromCOS); got != tc.want {
+			t.Fatalf("%s = %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }

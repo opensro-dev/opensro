@@ -221,21 +221,25 @@ func (rt *Runtime) shopCatalog(division string, c *enterworld.Character, gid uin
 commerceDoorLabel
 
 The door a shop transaction commits under, which names its gold rows in
-the economy ledger (port-only, domain/economy.go): a sale of trade goods
-(always so from a transport's bag, else when the sold bag row is goods)
-pays out under "trade-sale", every other purchase or sale under
-"shop-transaction". The snapshot is read before the door; the door's own
-admission still decides.
+the economy ledger (port-only, domain/economy.go): a sale whose sold row is
+trade goods (in the bag, or in the COS bag the sale names, a transport's
+or a pickup pet's) pays out under "trade-sale"; every other purchase or
+sale stays "shop-transaction". The snapshot is read before the door; the
+door's own admission still decides.
 ================
 */
-func commerceDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, fromTransport bool) string {
+func commerceDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, fromCOS bool) string {
 	if q.MovementType != wire.MoveTypeShopSell {
 		return "shop-transaction"
 	}
-	if fromTransport {
-		return "trade-sale"
+	rows := snapshot.MissionInventory
+	if fromCOS {
+		rows = nil
+		if cos := snapshot.CompanionByGID(q.CosGID); cos != nil && cos.Container != nil {
+			rows = cos.Container.Rows
+		}
 	}
-	for _, row := range snapshot.MissionInventory {
+	for _, row := range rows {
 		if row.Slot == int64(q.SourceSlot) && inventory.IsTradeGoods(row.TypeFlags) {
 			return "trade-sale"
 		}
