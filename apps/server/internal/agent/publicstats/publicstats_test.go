@@ -277,6 +277,36 @@ func TestProfileCarriesLookStatsAndCounts(t *testing.T) {
 
 /*
 ================
+TestAmmunitionIsNeverBroken
+
+Worn arrows read durability 0 (their reference has none); the profile
+leaves durability out for them, so nothing shows them as broken, while a
+weapon at 0 still says so.
+================
+*/
+func TestAmmunitionIsNeverBroken(t *testing.T) {
+	const arrowRef = 62
+	f := newFixture()
+	f.chars[0].MissionInventory = []domain.InventoryRow{{Slot: 6, RefObjID: 3801}, {Slot: 7, RefObjID: arrowRef}}
+	service := f.service()
+	service.src.HasDurability = func(refObjID uint32) bool { return refObjID != arrowRef }
+	var p Profile
+	if code := get(t, service, "/public/v1/characters/kekw", &p); code != http.StatusOK {
+		t.Fatalf("profile %d", code)
+	}
+	if len(p.Look.Worn) != 2 {
+		t.Fatalf("look %+v", p.Look)
+	}
+	if w := p.Look.Worn[0]; w.Durability == nil || *w.Durability != 0 {
+		t.Fatalf("a weapon at 0 is broken and says so: %+v", w)
+	}
+	if w := p.Look.Worn[1]; w.RefItemID != arrowRef || w.Durability != nil {
+		t.Fatalf("arrows carry no durability: %+v", w)
+	}
+}
+
+/*
+================
 TestBadQueriesAreRefused
 ================
 */

@@ -161,7 +161,8 @@ type WornItem struct {
 	Variance string `json:"variance,omitempty"`
 	// Durability is a worn item's current durability, present even at 0 (a
 	// broken item, which the tooltip prints as 0/max in red); absent on an
-	// avatar socket, which has none.
+	// avatar socket and on an item whose reference has no durability
+	// (ammunition, accessories), which can never be broken.
 	Durability *int64 `json:"durability,omitempty"`
 	// MagicOptions are the item's blue stats in the item's own order, each
 	// the encoded u64 the CSOItem wire carries (low u16 the magicoption.txt

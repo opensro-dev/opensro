@@ -103,6 +103,9 @@ type Sources struct {
 	UniqueName func(refObjID uint32) string
 	// GuildOf returns the character's guild name and rank, or "" for none.
 	GuildOf func(c *domain.Character) (name, rank string)
+	// HasDurability reports whether an item reference carries durability
+	// (itemdata Dur_U above 0); nil reports it for every item.
+	HasDurability func(refObjID uint32) bool
 	// ModelRef resolves the character's body reference id.
 	ModelRef func(c *domain.Character) uint32
 	// Vitals returns the character's maximum HP and MP.

@@ -321,6 +321,14 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			}
 			return guild.Name, rank
 		},
+		HasDurability: func(refObjID uint32) bool {
+			items := gameplay.deps.ItemReferences()
+			if items == nil {
+				return true
+			}
+			ref, ok := items.ItemRefByID(refObjID)
+			return ok && ref != nil && ref.MaxDurability > 0
+		},
 		ModelRef: gameplay.deps.CharacterModelRef,
 		Online: func(characterID int64) bool {
 			for _, view := range bridge.SnapshotSessionViews() {
