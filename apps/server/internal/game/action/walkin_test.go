@@ -151,8 +151,8 @@ func TestWalkingIntoTheCaveMouthTeleportsInside(t *testing.T) {
 TestWalkInRefusesTeleportingAndRiding
 
 4EF480's notices: a player standing in teleport mode hears its last
-teleport is still working (0x3058 kind 3), a riding one that a COS cannot
-enter (kind 4); neither moves. A teleporting player still walking is let
+teleport is still working (0x3058 kind 3), a riding one, or one with a transport
+out, that a COS cannot enter (kind 4); none moves. A teleporting player still walking is let
 through, as natively.
 ================
 */
@@ -172,6 +172,12 @@ func TestWalkInRefusesTeleportingAndRiding(t *testing.T) {
 	out, moved = rt.enterWalkIn(testDivision, c, link, false)
 	if moved || len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{walkInNoticeCOSCannotEnterGates}) {
 		t.Fatalf("rider: %+v", out)
+	}
+	// A transport out but not ridden is an active vehicle too (4FD7F0).
+	c.ActiveCOS.Mounted = false
+	out, moved = rt.enterWalkIn(testDivision, c, link, false)
+	if moved || len(out.Frames) != 1 || !bytes.Equal(out.Frames[0].Payload, []byte{walkInNoticeCOSCannotEnterGates}) {
+		t.Fatalf("summoned transport: %+v", out)
 	}
 	c.ActiveCOS = nil
 	c.NativeTeleportMode = 1

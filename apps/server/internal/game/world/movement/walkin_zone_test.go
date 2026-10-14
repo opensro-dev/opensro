@@ -146,3 +146,33 @@ func TestQinShiDoorCircleIsAZoneOfItsMesh(t *testing.T) {
 		t.Fatalf("the stair below the circle resolves %q", zone)
 	}
 }
+
+/*
+================
+BenchmarkWalkInZoneAt200
+
+One tick's zone lookups for 200 players spread over Jangan (0x61A8) and the
+Donwhang mouth (0x6A93), warm caches: the per-tick cost advanceWalkIns
+adds before any teleport.
+================
+*/
+func BenchmarkWalkInZoneAt200(b *testing.B) {
+	v := realAuthorityValidator(b)
+	points := make([]simulation.Spawn, 0, 200)
+	for i := 0; i < 200; i++ {
+		region := uint16(0x61a8)
+		if i%4 == 0 {
+			region = 0x6a93
+		}
+		points = append(points, simulation.Spawn{RegionID: region, X: float64(100 + (i*37)%1700), Y: 0, Z: float64(100 + (i*91)%1700)})
+	}
+	for _, at := range points {
+		v.WalkInZoneAt(at)
+	}
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		for _, at := range points {
+			v.WalkInZoneAt(at)
+		}
+	}
+}

@@ -13,10 +13,17 @@ runs, in order:
 
  1. only a zone of type TELEPORT moves the PC;
  2. a PC still in teleport mode and standing (4DDC90, not 4EF380) is told
-    its last teleport is still working (v1.150 0x3058 kind 3) and stays;
- 3. a riding PC, or one with an active vehicle, is told a COS cannot
-    enter (0x3058 kind 4) and stays;
- 4. the zone's teleport must have exactly one link;
+    its last teleport is still working (v1.150 0x3058 kind 3) and stays.
+    Natively a PC a skill is displacing (PC+0xC04, set by
+    SkillAction_ApplyPositionEffect 5862E0, cleared by 593540) skips this
+    notice; the port commits a displacement in one step, never leaving a
+    mover mid-push in a zone, so that case is left out;
+ 3. a riding PC (PC+0x1D18), or one with an active vehicle (4FD7F0, the
+    summoned cargo transport the caravan code reads), is told a COS
+    cannot enter (0x3058 kind 4) and stays;
+ 4. the zone's teleport must have exactly one link (a job server,
+    +0x42404 == 1, exempts GATE_TEMPLE_THIEF_GATE; the temple is not in
+    v1.150, so that case is trimmed);
  5. the link's conditions (CRefTeleportLink_CheckState 513A70: level,
     transport) refuse with the teleport answer's error byte;
  6. otherwise the PC teleports there (CGObjChar_SetTeleportModeAndSchedule
@@ -26,6 +33,11 @@ v1.188 sends 2 and 3's notice as 0x300C 0x0C03 / 0x0C04; v1.150's event
 notice 0x3058 maps its kind to category 0x11, where 3 is
 UIIT_MSG_JSERR_PREVIOUS_TELEPORT_WORKING and 4 UIIT_MSG_COS_CAN_NOT_ENTER_
 DUNGEON (native-notice-data.ts 4355/4356).
+
+Inference: natively the region manager reports a nav-cell entry along
+the walked path; the port samples each player's live pose once per tick.
+A zone is 30 x 30, so a straight walk or ride cannot step over one in a
+tick, though a path that only clips a corner may.
 
 ===========================================================================
 */
@@ -212,7 +224,7 @@ func (rt *Runtime) enterWalkIn(division string, c *enterworld.Character, link po
 	var alive, teleporting, riding bool
 	rt.deps.Read(division, func() {
 		alive = !c.DeletePending && enterworld.CharacterAlive(c)
-		teleporting, riding = c.NativeTeleportMode != 0, mountedOnCOS(c)
+		teleporting, riding = c.NativeTeleportMode != 0, mountedOnCOS(c) || rt.hasSummonedTransportCOS(c)
 	})
 	if !alive {
 		return OpResult{}, false
