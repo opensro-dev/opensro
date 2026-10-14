@@ -157,3 +157,56 @@ func TestGenderToolReferencesEveryItemItNames(t *testing.T) {
 	assertReferencedBeforeNamed(t, "owner", out.Frames)
 	assertReferencedBeforeNamed(t, "observers", out.Broadcast)
 }
+
+/*
+================
+TestGenderToolChangesOnlyItsTarget
+
+A one-use tool listed before its target leaves the bag one row shorter once
+spent; the change must still land on the target's slot, not on whatever row
+now sits at the target's old position, and a target that was the last row
+must not fall off the end.
+================
+*/
+func TestGenderToolChangesOnlyItsTarget(t *testing.T) {
+	for _, follower := range []bool{true, false} {
+		rt, c, tool := genderFixture(t, 1)
+		var helmet, spent enterworld.InventoryRow
+		var rest []enterworld.InventoryRow
+		for _, row := range c.MissionInventory {
+			switch row.Slot {
+			case 21:
+				helmet = row
+			case 25:
+				spent = row
+			default:
+				rest = append(rest, row)
+			}
+		}
+		spent.StackCount = 1
+		rows := append(append([]enterworld.InventoryRow(nil), rest...), spent, helmet)
+		neighbour := enterworld.InventoryRow{Slot: 30, RefObjID: helmet.RefObjID, Codename: helmet.Codename, TypeFlags: helmet.TypeFlags, StackCount: 1, Plus: 7}
+		if follower {
+			rows = append(rows, neighbour)
+		}
+		c.MissionInventory = rows
+		out := rt.HandleItemUse(testDivision, c, wire.NewWriter(4).U8(25).U16(tool.TypeFlags()).U8(21).Payload())
+		if len(out.Frames) < 3 || out.Frames[0].Payload[0] != wire.ResultSuccess {
+			t.Fatalf("follower=%v: use = %+v / %q", follower, out.Frames, out.DiagnosticRefusal)
+		}
+		for _, row := range c.MissionInventory {
+			switch row.Slot {
+			case 21:
+				if row.Codename != "ITEM_CH_W_HEAVY_01_HA_A" || row.Plus != 3 {
+					t.Fatalf("follower=%v: target %+v not changed", follower, row)
+				}
+			case 30:
+				if row.Codename != helmet.Codename || row.Plus != 7 {
+					t.Fatalf("follower=%v: the next row changed instead: %+v", follower, row)
+				}
+			case 25:
+				t.Fatalf("follower=%v: the spent tool survived", follower)
+			}
+		}
+	}
+}

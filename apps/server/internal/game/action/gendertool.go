@@ -105,13 +105,17 @@ func (rt *Runtime) useGenderTool(use skillItemUse, c *enterworld.Character, tail
 		*result = itemUseFailure(genderErrDegree)
 		return false
 	}
-	remaining := rt.consumeItemUseRow(c, use.row)
+	// Change the target while index still names it: spending the tool's
+	// last unit rebuilds the bag without the tool's row, which shifts every
+	// later row down one.
 	moved := &c.MissionInventory[index]
 	moved.RefObjID, moved.Codename, moved.TypeFlags = twin.RefObjID, twin.Codename, twin.TypeFlags()
+	changed := *moved
+	remaining := rt.consumeItemUseRow(c, use.row)
 	state := wire.NewWriter(6).U8(target).U8(itemStateRefFlag).U32(twin.RefObjID).Payload()
 	*result = OpResult{Frames: []wire.Frame{
 		{Opcode: wire.OpItemUseResponse, Payload: wire.EncodeItemUseSuccess(use.request.Slot, remaining, use.request.TypeWord)},
-		rt.commerceReferences(invItemsFromRowsWithin([]enterworld.InventoryRow{*moved}, int64(inventory.MaxBagEnd)), nil),
+		rt.commerceReferences(invItemsFromRowsWithin([]enterworld.InventoryRow{changed}, int64(inventory.MaxBagEnd)), nil),
 		{Opcode: cosItemStateOpcode, Payload: state},
 	}}
 	result.Frames = append(result.Frames, rt.updateQuestInventory(c)...)
