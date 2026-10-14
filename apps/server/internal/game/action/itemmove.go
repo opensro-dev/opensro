@@ -79,12 +79,12 @@ func (rt *Runtime) HandleItemMove(
 	case wire.MoveTypeCosPickup, wire.MoveTypeCosDrop:
 		result := rt.applyCosGround(divisionID, character, request)
 		rt.registerCaravanForMove(divisionID, character, request.MovementType)
-		return result
+		return rt.withTradeStars(character, request.MovementType, result)
 
 	case wire.MoveTypeCosToPlayer, wire.MoveTypePlayerToCos:
 		result := rt.applyCosTransfer(character, request)
 		rt.registerCaravanForMove(divisionID, character, request.MovementType)
-		return result
+		return rt.withTradeStars(character, request.MovementType, result)
 
 	case wire.MoveTypeCosInventory:
 		return rt.applyCosContainerMove(character, request)
@@ -93,7 +93,7 @@ func (rt *Runtime) HandleItemMove(
 		wire.MoveTypeCosShopBuy, wire.MoveTypeCosShopSell:
 		result := rt.applyCommerce(divisionID, character, request)
 		rt.registerCaravanForMove(divisionID, character, request.MovementType)
-		return result
+		return rt.withTradeStars(character, request.MovementType, result)
 
 	case wire.MoveTypeInventory:
 		if jobSuitMove(character, request) {

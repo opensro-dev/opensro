@@ -167,6 +167,19 @@ import { createReverseReturnHud } from "./hud/reverse-return-hud";
 import { createSpecialtyDealHud } from "./hud/specialty-deal-hud";
 import { socialQuestion } from "@/engine/foundation/ui/social-question";
 import {
+	cargoBuyTotal,
+	COS_TRADE_SELL_ALL,
+	COS_TRADE_STAR_FIRST,
+	COS_TRADE_STAR_LAST,
+	COS_TRADE_TOTAL,
+	cosCargoRows,
+	type SellAllRun,
+	sellAllEnabled,
+	sellAllStep,
+	tradeStarCount,
+	tradeStarTint
+} from "@/engine/foundation/gameplay/cos-trade-info";
+import {
 	dealSums,
 	isTradeGoods,
 	NATIVE_LANGUAGE_ENGLISH,
@@ -1146,6 +1159,12 @@ export function createUi(
 	let splitStack: { slot: number; refObjId: number; quantity: number; } | null = null, splitAmount = "1";
 	let shopOpenRequest: { gid: number; tab: number; revision: number; } | null = null;
 	let shopWarning: { selection: MerchantSelection; name: string; quick: boolean; } | null = null;
+	// CIFCosBag's sell-all (cos-trade-info.ts): the confirm box, then the run
+	// over the transport sellAllGid, one stack in flight.
+	let sellAllPhase: "confirm" | "selling" | null = null, sellAllGid = 0;
+	let sellAllRun: SellAllRun | null = null;
+	// 649C40: the buy-all progress box, up while a purchase past one stack deals.
+	let allBuyProgress = false;
 	let shopPage = 0, shopTab = 0, shopDialog = false, shopChoice: MerchantSelection | null = null, shopQuantity = "1";
 	let shopPosition: readonly [number, number] | null = null;
 	let cosTab = 1,
@@ -2108,7 +2127,8 @@ export function createUi(
 		const started = specialtyDealHud.confirm( specialtyStock( game ), uiNow );
 		specialtyCombo = false;
 		if ( !started ) return;
-		if ( started.progress ) hudMessages.append( hudCopy( "UIIT_MSG_SPECIALTY_ALLBUY_PROGRESS_WINDOW" ) );
+		// 64A8F0 -> 649C40: a purchase past one stack raises the progress box.
+		allBuyProgress = started.progress;
 		sendSpecialtyChunk( started.chunk );
 	}
 	/*
@@ -4218,6 +4238,14 @@ export function createUi(
 					Math.max( 1, Math.min( q.maximum, Number( shopQuantity ) + (id === "shop-quantity-up" ? 1 : -1) ) )
 				);
 			}
+		} else if ( id === "cos-allsell" ) {
+			// 6A92D0: the confirm box, only while the special trade is open.
+			const gid = view.gameplay?.shop?.cosGid;
+			if ( gid ) {
+				sellAllPhase = "confirm";
+				sellAllGid = gid;
+				sellAllRun = null;
+			}
 		} else if ( id.startsWith( "cos-tab:" ) ) {
 			cosTab = Number( id.slice( 8 ) );
 			cosDraft = view.gameplay?.cosRecords?.find( r => r.gid === cosGid )?.commandMode ?? 0;
@@ -4558,6 +4586,51 @@ export function createUi(
 				}
 				// Message box 0x1E owns input until a destination or Cancel wins.
 				return;
+			}
+			if ( allBuyProgress && specialtyDealHud.state()?.dealing ) {
+				// 649150: Cancel on the progress box closes the deal window
+				// (CIFWnd_CloseOwnedMessageBox), as a finished deal does.
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && event.id === "specialty-allbuy-cancel"
+				) {
+					allBuyProgress = false;
+					specialtyDealHud.close();
+					specialtyCombo = false;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
+					event.kind === "drag-end" || event.kind === "edit"
+				) return;
+			}
+			if ( sellAllPhase !== null ) {
+				// 6A9120: No on the confirm, or Cancel on the progress box, ends it.
+				if (
+					event.kind === "key" && event.code === "Escape" ||
+					event.kind === "activate" && (event.id === "cos-allsell-no" || event.id === "cos-allsell-cancel")
+				) {
+					sellAllPhase = null;
+					sellAllRun = null;
+					dirty = true;
+					return;
+				}
+				if (
+					sellAllPhase === "confirm" && (event.kind === "key" && event.code === "Enter" && !composing ||
+						event.kind === "activate" && event.id === "cos-allsell-yes")
+				) {
+					sellAllPhase = "selling";
+					sellAllRun = null;
+					dirty = true;
+					return;
+				}
+				if (
+					event.kind === "key" || event.kind === "activate" || event.kind === "double-activate" ||
+					event.kind === "right-activate" || event.kind === "scroll" || event.kind === "drag" ||
+					event.kind === "drag-end" || event.kind === "edit"
+				) return;
 			}
 			if ( shopWarning ) {
 				if (
@@ -6972,6 +7045,27 @@ export function createUi(
 				setPanel( "Storage" );
 				dirty = true;
 			}
+			if ( sellAllPhase === "selling" ) {
+				// 6A85E0 / 758BD5: one whole stack at a time; leaving the special
+				// trade (6A7D40) or the transport ends the run.
+				const game = next.gameplay, record = game?.cosRecords?.find( r => r.gid === sellAllGid );
+				const step = !record || game?.shop?.cosGid !== sellAllGid ?
+					{ kind: "done" as const } :
+					sellAllStep( sellAllRun, cosCargoRows( record.inventory ?? [] ), !!game.inventoryPending, now );
+				if ( step.kind === "send" ) {
+					sendGameplay( {
+						kind: "cos-shop-sell",
+						gid: sellAllGid,
+						slot: step.row.slot,
+						quantity: step.row.quantity
+					} );
+					sellAllRun = { slot: step.row.slot, quantity: step.row.quantity, sentAt: now };
+				} else if ( step.kind === "done" ) {
+					sellAllPhase = null;
+					sellAllRun = null;
+					dirty = true;
+				}
+			}
 			if ( shopOpenRequest ) {
 				const request = shopOpenRequest, game = next.gameplay;
 				if ( next.session?.phase !== "world" || game?.target !== request.gid ) shopOpenRequest = null;
@@ -8477,7 +8571,15 @@ export function createUi(
 			================
 			*/
 			function simpleMessageBox(
-				box: { title: string; lines: readonly string[]; yes: string; no: string; yesDisabled?: boolean; }
+				box: {
+					title: string;
+					lines: readonly string[];
+					yes: string;
+					no: string;
+					yesDisabled?: boolean;
+					// CIFSimpleMessageBox types 0 (Confirm, yes id) and 2 (Cancel, no id).
+					single?: "confirm" | "cancel";
+				}
 			) {
 				const lines = messageBoxLines( box.lines, value => text.run( value ).width );
 				const layout = textMessageBoxLayout( w, h, lines.map( line => text.run( line ).width ) );
@@ -8495,8 +8597,28 @@ export function createUi(
 				for ( const [i, line] of lines.entries() ) {
 					quads.push( ...text.quads( line, layout.lines[i]!, full, white, { vAlign: 0 } ) );
 				}
-				button( box.yes, hudCopy( "UIIT_CTL_YES" ), layout.accept[0], layout.accept[1], 76, !!box.yesDisabled );
-				button( box.no, hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+				if ( box.single === "confirm" ) {
+					button(
+						box.yes,
+						hudCopy( "UIIT_CTL_CONFIRM" ),
+						layout.single[0],
+						layout.single[1],
+						76,
+						!!box.yesDisabled
+					);
+				} else if ( box.single === "cancel" ) {
+					button( box.no, hudCopy( "UIIT_CTL_CANCEL" ), layout.single[0], layout.single[1], 76 );
+				} else {
+					button(
+						box.yes,
+						hudCopy( "UIIT_CTL_YES" ),
+						layout.accept[0],
+						layout.accept[1],
+						76,
+						!!box.yesDisabled
+					);
+					button( box.no, hudCopy( "UIIT_CTL_NO" ), layout.refuse[0], layout.refuse[1], 76 );
+				}
 				return layout;
 			}
 			/*
@@ -14821,7 +14943,22 @@ export function createUi(
 							[ 100 ] :
 							[ 31, 32, 42, 43, 44, 45, 60, 61, 62, 63, 65, 66, 67, 68, 71, 72, 73, 76, 77, 78 ])
 					];
-					nativePage( page, ox, oy, cosTab === 0 ? hiddenInfo : [] );
+					// 6A9420 creates TradeInfo for a transport only; its stars and the
+					// sell-all button are drawn below with their state.
+					const transport = cosClass( record?.band ?? 0 ) === COS_CLASS_TRANSPORT,
+						tradeInfo = Object.values( page ).filter( n => n.creationSection === 1 ).map( n => n.id );
+					nativePage(
+						page,
+						ox,
+						oy,
+						cosTab === 0 ?
+							hiddenInfo :
+							cosTab === 1 ?
+							(transport ?
+								[ COS_TRADE_STAR_FIRST, 27, 28, 29, COS_TRADE_STAR_LAST, COS_TRADE_SELL_ALL ] :
+								tradeInfo) :
+							[]
+					);
 					if ( cosTab === 1 ) {
 						const pages = Math.max( 1, Math.ceil( (record?.status ?? 0) / 28 ) );
 						cosPage = Math.min( cosPage, pages - 1 );
@@ -14852,6 +14989,34 @@ export function createUi(
 							cosPage,
 							pages
 						);
+						if ( transport && record ) {
+							const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
+							const rows = cosCargoRows( record.inventory ?? [] ), total = node( COS_TRADE_TOTAL );
+							// 6A8240: the cargo's cost at its buy prices.
+							if ( total ) authoredText( total, ox, oy, cargoBuyTotal( rows ) );
+							// 6A7DD0: the server's trade level, every star tinted by the count.
+							const stars = tradeStarCount( game?.tradeStars ?? 0 ), tint = tradeStarTint( stars );
+							for ( let i = 0; i < stars; i++ ) {
+								const star = node( COS_TRADE_STAR_FIRST + i );
+								if ( star ) authoredImage( star, ox, oy, star.texture, 1, tint );
+							}
+							const sell = node( COS_TRADE_SELL_ALL );
+							if ( sell ) {
+								authoredLabeledButton(
+									sell,
+									ox,
+									oy,
+									"cos-allsell",
+									hudCopy( sell.text ),
+									sellAllPhase !== null ||
+										!sellAllEnabled( {
+											busy,
+											specialTradeOpen: game?.shop?.cosGid === record.gid,
+											rows
+										} )
+								);
+							}
+						}
 					} else if ( cosTab === 0 && record ) {
 						const reference = hudData.cosReferences.get( record.refObjId );
 						const node = ( id: number ) => Object.values( page ).find( n => n.id === id );
@@ -19585,6 +19750,39 @@ export function createUi(
 					"buff-dismiss-cancel",
 					hudCopy( "UIIT_CTL_NO" ),
 					...layout.refuse.slice( 0, 3 ) as [number, number, number]
+				);
+			}
+			if ( allBuyProgress && !specialtyDealHud.state()?.dealing ) allBuyProgress = false;
+			if ( worldVisible && allBuyProgress ) {
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( "UIIT_STT_EVENTGUIDE" ),
+					lines: [ hudCopy( "UIIT_MSG_SPECIALTY_ALLBUY_PROGRESS_WINDOW" ) ],
+					yes: "specialty-allbuy-yes",
+					no: "specialty-allbuy-cancel",
+					single: "cancel"
+				} );
+			}
+			if ( worldVisible && sellAllPhase !== null ) {
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox(
+					sellAllPhase === "confirm" ?
+						{
+							title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+							lines: [ hudCopy( "UIIT_MSG_SPECIALTY_ALLSELL_WINDOW" ) ],
+							yes: "cos-allsell-yes",
+							no: "cos-allsell-no"
+						} :
+						{
+							// 6A9120: type 2, Cancel only, under the event guide title.
+							title: hudCopy( "UIIT_STT_EVENTGUIDE" ),
+							lines: [ hudCopy( "UIIT_MSG_SPECIALTY_ALLSELL_PROGRESS_WINDOW" ) ],
+							yes: "cos-allsell-yes",
+							no: "cos-allsell-cancel",
+							single: "cancel"
+						}
 				);
 			}
 			if ( worldVisible && shopWarning ) {

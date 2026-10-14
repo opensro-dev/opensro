@@ -303,6 +303,8 @@ const SKILL_NOTICE_CATEGORY = 4;
 const SKILL_RIDING_REFUSAL = 0x21;
 // Server 0x3011 (529D6D), the victim's death kind; CPSMission 74FE50 here.
 const DEATH_NOTICE = 0x37ce;
+// 75B8D0: the transport bag's trade level [u8].
+const OP_TRADE_STAR_COUNT = 0x352d;
 
 /*
 ================
@@ -665,6 +667,9 @@ attack can arrive in the same batch as the previous close and starve the walk.
 	let uniqueRefs = uniqueReferences( {} );
 	let gmReplies: readonly (GmReply & { sequence: number; })[] = [];
 	let gmSequence = 0;
+	// CICPlayer +0x4F6: the transport bag's trade level, set only by 0x352D
+	// (75B8D0, cos-trade-info.ts).
+	let tradeStars = 0;
 	let noticeSequence = 0;
 	let notices: readonly SystemNotice[] = [];
 	let progression: Progression = { masteries: [] };
@@ -968,6 +973,7 @@ selected entities, cooldowns or world-entry state.
 		uniqueRefs = uniqueReferences( {} );
 		gmItems.clear();
 		gmReplies = [];
+		tradeStars = 0;
 		notices = [];
 		guide = undefined;
 		guideSummons.clear();
@@ -1138,6 +1144,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 				abnormal: 0
 			};
 			gmReplies = [];
+			tradeStars = 0;
 			notices = entryEvents.notices.map( key => ({ key, value: 0, sequence: ++noticeSequence }) );
 			feedback.bootstrap( value );
 			const b = value as {
@@ -2734,6 +2741,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					dirty = true;
 				}
+				if ( frame.opcode === OP_TRADE_STAR_COUNT ) {
+					if ( frame.payload.length !== 1 ) throw Error( "Invalid trade level" );
+					tradeStars = frame.payload[0]!;
+					dirty = true;
+					return true;
+				}
 				if ( frame.opcode === 0xb5b6 ) {
 					const reply = gmReply( frame.payload );
 					if ( reply ) {
@@ -4073,6 +4086,7 @@ The published plane when something changed since the last take, else null.
 				returnScroll,
 				musicMode,
 				gmReplies,
+				tradeStars,
 				eligibility,
 				autoPotion,
 				selectionDecal,

@@ -42,9 +42,10 @@ func TestTraderPicksOwnGoodsIntoTheTransport(t *testing.T) {
 	rt, c := traderFixture(t, false)
 	bag := len(c.MissionInventory)
 	out, heap := pickTradeGoods(t, rt, c, "Trader")
-	if len(out.Frames) != 4 || out.Frames[0].Opcode != wire.OpPickupAnim || out.Frames[1].Opcode != wire.OpItemMoveResponse ||
-		out.Frames[2].Opcode != wire.OpObjectDespawn || out.Frames[3].Opcode != wire.OpActionState {
-		t.Fatalf("frames %+v, want scoop, receipt, despawn and the action release", out.Frames)
+	if len(out.Frames) != 5 || out.Frames[0].Opcode != wire.OpPickupAnim || out.Frames[1].Opcode != wire.OpItemMoveResponse ||
+		out.Frames[2].Opcode != wire.OpObjectDespawn || out.Frames[3].Opcode != wire.OpActionState ||
+		out.Frames[4].Opcode != wire.OpTradeStarCount || len(out.Frames[4].Payload) != 1 {
+		t.Fatalf("frames %+v, want scoop, receipt, despawn, the action release and the trade level", out.Frames)
 	}
 	p := out.Frames[1].Payload
 	if p[0] != 1 || p[1] != wire.MoveTypeCosPickup || uint32(p[2])|uint32(p[3])<<8|uint32(p[4])<<16|uint32(p[5])<<24 != c.ActiveCOS.GID {

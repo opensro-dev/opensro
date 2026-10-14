@@ -293,3 +293,78 @@ func TestTradePurchaseRequiresMerchantJobQuestAndTransport(t *testing.T) {
 		})
 	}
 }
+
+/*
+================
+TestTradeSaleJobAndQuantityRules
+
+617F70 refuses a sale in a hunter's suit or in no suit (job states 3 and
+4, code 5). Its tail answers a quantity above the held count with 0x14 and one
+above the stack cap with 0x15.
+================
+*/
+func TestTradeSaleJobAndQuantityRules(t *testing.T) {
+	cases := []struct {
+		reason   string
+		quantity uint16
+		code     uint8
+	}{
+		{"unsuited", 3, tradeErrJob},
+		{"hunter", 3, tradeErrJob},
+		{"held", 4, wire.ErrCodeInputFewerThanRemain},
+		{"cap", 41, tradeErrOverStack},
+	}
+	for _, tc := range cases {
+		t.Run(tc.reason, func(t *testing.T) {
+			rt, c := traderFixture(t, true)
+			switch tc.reason {
+			case "unsuited":
+				c.MissionInventory = c.MissionInventory[1:]
+			case "hunter":
+				c.Job.Type = domain.JobHunter
+				c.MissionInventory[0].TypeFlags = wire.PackTypeFlags(3, 1, 7, domain.JobHunter)
+			}
+			result := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopSell, NpcGID: 17, SourceSlot: 13, Quantity: tc.quantity})
+			p := result.Frames[0].Payload
+			if tc.code == 0 {
+				if p[0] != 1 {
+					t.Fatalf("an unsuited holder could not sell: % X", p)
+				}
+				return
+			}
+			if p[0] != 2 || p[1] != tc.code {
+				t.Fatalf("%s: answer % X, want code 0x%X", tc.reason, p, tc.code)
+			}
+		})
+	}
+}
+
+/*
+================
+TestTransportPurchaseSendsTradeLevel
+
+A committed purchase into the transport tells the owner its trade level
+(0x352D) after the move's answer; a refused one does not.
+================
+*/
+func TestTransportPurchaseSendsTradeLevel(t *testing.T) {
+	rt, c := traderFixture(t, false)
+	ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
+	rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
+	result := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3,
+		CosGID: c.ActiveCOS.GID})
+	last, committed := result.Frames[len(result.Frames)-1], false
+	for _, frame := range result.Frames {
+		committed = committed || frame.Opcode == wire.OpItemMoveResponse && frame.Payload[0] == 1
+	}
+	if !committed || last.Opcode != wire.OpTradeStarCount || len(last.Payload) != 1 {
+		t.Fatalf("purchase frames %+v, want the trade level last", result.Frames)
+	}
+	refused := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeCosShopBuy, NpcGID: 17, ShopSlot: 9, Quantity: 3,
+		CosGID: c.ActiveCOS.GID})
+	for _, frame := range refused.Frames {
+		if frame.Opcode == wire.OpTradeStarCount {
+			t.Fatal("a refused purchase sent a trade level")
+		}
+	}
+}

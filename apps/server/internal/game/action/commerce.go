@@ -350,7 +350,17 @@ func (rt *Runtime) applyCommerce(division string, c *enterworld.Character, q wir
 				refusal = code
 				return false
 			}
-			if q.Quantity == 0 || q.Quantity > item.Quantity {
+			// 617F70's tail: above the stack cap 0x1815, above the held count
+			// 0x1814, both after the merchant's admission.
+			if q.Quantity > rt.maxStackFor(item.TypeFlags, item.Codename) {
+				refusal = tradeErrOverStack
+				return false
+			}
+			if q.Quantity > item.Quantity {
+				refusal = wire.ErrCodeInputFewerThanRemain
+				return false
+			}
+			if q.Quantity == 0 {
 				return false
 			}
 			price, restore, priced := commerce.SalePrices(ref, item.MagicOptions, rt.Commerce.Magic, rt.commerceTax(division, npc, c))

@@ -52,7 +52,12 @@ test("constructor admission excludes dormant pages and auxiliary Guild dialogs",
 	assert.ok( Object.values( guild ).some( n => n.id === 82 ) );
 	assert.ok( !Object.values( guild ).some( n => n.id === 140 || n.id === 150 || n.id === 600 || n.id === 700 ) );
 	assert.ok( !Object.values( read( "ifcos" ) ).some( n => n.id >= 121 && n.id <= 123 ) );
-	assert.ok( !Object.values( read( "ifcosinventory" ) ).some( n => n.id === 35 ) );
+	// 6A9420 creates the transport's TradeInfo section (the total, the stars
+	// and the sell-all button 35) as a second section; the window draws it
+	// for a transport only.
+	const bag = read( "ifcosinventory" );
+	assert.equal( Object.values( bag ).find( n => n.id === 35 )?.creationSection, 1 );
+	assert.ok( Object.values( bag ).every( n => n.id < 20 ? n.creationSection === 0 : n.creationSection === 1 ) );
 });
 test("shop projection retains original tab identity and rejects ambiguous labels", () => {
 	const encode = value => new TextEncoder().encode( JSON.stringify( value ) );

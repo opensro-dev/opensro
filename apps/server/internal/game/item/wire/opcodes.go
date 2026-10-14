@@ -43,6 +43,8 @@ const (
 	OpItemUseResponse uint16 = 0xB5BD
 	// OpPickupAnim triggers the pickup scoop animation. Handler sub_7780f0.
 	OpPickupAnim uint16 = 0x35C7
+	// OpTradeStarCount is the transport bag's trade level (tradestars.go).
+	OpTradeStarCount uint16 = 0x352D
 	// OpObjectDespawn removes a single entity. Handler sub_777310.
 	OpObjectDespawn uint16 = 0x36AB
 	// OpSingleObjectSpawn spawns one entity outside an object list.

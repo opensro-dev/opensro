@@ -598,6 +598,8 @@ export interface GameplayState {
 	readonly environmentalDamage?: readonly import("./combat-feedback").EnvironmentalDamage[];
 	readonly gmReplies?:
 		readonly (import("@/engine/foundation/gameplay/gm-command").GmReply & { readonly sequence: number; })[];
+	// 0x352D: the transport bag's trade level (cos-trade-info.ts).
+	readonly tradeStars?: number;
 	readonly eventGroups?: Readonly<Record<number, number>>;
 	readonly eligibility?: { readonly gm: boolean; readonly pcRoomEvent: boolean; };
 	readonly autoPotion?: import("@/engine/foundation/gameplay/auto-potion").AutoPotionSettings;

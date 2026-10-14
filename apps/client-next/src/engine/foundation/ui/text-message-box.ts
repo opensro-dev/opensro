@@ -69,5 +69,7 @@ export function textMessageBoxLayout(
 	] );
 	const accept: UiRect = [ x + (w >> 1) + YES_OFFSET, y + h - BUTTON_BOTTOM, BUTTON_WIDTH, BUTTON_HEIGHT ],
 		refuse: UiRect = [ x + (w >> 1) + NO_OFFSET, y + h - BUTTON_BOTTOM, BUTTON_WIDTH, BUTTON_HEIGHT ];
-	return { ...box, lines, accept, refuse };
+	// CIFSimpleMessageBox_LayoutControls types 0 and 2: one button at centre - 0x26.
+	const single: UiRect = [ x + (w >> 1) - (BUTTON_WIDTH >> 1), y + h - BUTTON_BOTTOM, BUTTON_WIDTH, BUTTON_HEIGHT ];
+	return { ...box, lines, accept, refuse, single };
 }

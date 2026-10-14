@@ -25,7 +25,8 @@ func TestCOSShopUsesContainerAndSharedGoldTransaction(t *testing.T) {
 	c.ActiveCOS = &enterworld.CharacterCOS{GID: gid, RefObjID: 3914, Codename: "COS_T_DHORSE3", CurrentHP: 100, Summoned: true, Container: &domain.COSContainer{Capacity: 1, Rows: []domain.InventoryRow{}}}
 	beforeBag := c.Snapshot().MissionInventory
 	r := trade(t, rt, c, wire.ItemMoveRequest{MovementType: 19, CosGID: gid, NpcGID: 17, ShopSlot: 2, Quantity: 3})
-	if len(r.Frames) != 4 || !reflect.DeepEqual(r.Frames[2].Payload, wire.NewWriter(12).U8(1).U8(19).U32(gid).U8(0).U8(2).U8(1).U8(0).U16(3).Payload()) {
+	// The transport's trade level (0x352D) follows the answer (tradestars.go).
+	if len(r.Frames) != 5 || r.Frames[4].Opcode != wire.OpTradeStarCount || !reflect.DeepEqual(r.Frames[2].Payload, wire.NewWriter(12).U8(1).U8(19).U32(gid).U8(0).U8(2).U8(1).U8(0).U16(3).Payload()) {
 		t.Fatalf("COS purchase %v", r)
 	}
 	if len(c.ActiveCOS.Container.Rows) != 1 || c.ActiveCOS.Container.Rows[0].StackCount != 3 || goldOf(c) != 4820 || !reflect.DeepEqual(beforeBag, c.MissionInventory) {

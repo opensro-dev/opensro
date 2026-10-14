@@ -34,6 +34,9 @@ const (
 	tradeErrBuyerLevel uint8 = 0x4e
 	// minTradeBuyerLevel is 6182A0's level floor (CGObjChar_GetLevel < 0x14).
 	minTradeBuyerLevel int64 = 20
+	// tradeErrOverStack is 617F70's 0x1815: a sale above the item's stack
+	// cap (the client shows ENABLEINPUT_FEWERTHAN_REMAIN, as for 0x14).
+	tradeErrOverStack uint8 = 0x15
 	// v1.150's 47 authored goods rows have stack caps 10 or 40.
 	maxTradeGoodsStack uint16  = 40
 	tradeVehicleRange  float64 = 1000.0
@@ -52,6 +55,8 @@ func (rt *Runtime) tradeAdmission(division string, c *enterworld.Character, npc 
 		}
 		return 0
 	}
+	// 617F70 refuses job state 3 (a hunter's suit) and 4 (no job suit,
+	// 4E1120 / 4E9D96): only a suited trader or thief sells goods.
 	job := enterworld.DressedJob(c)
 	if job != domain.JobTrader && job != domain.JobThief {
 		return tradeErrJob
@@ -90,6 +95,8 @@ required trade quest (0x18B0) and the transport within 1000 (0x1865). The
 ================
 */
 func (rt *Runtime) tradePurchaseAdmission(division string, c *enterworld.Character, npc simulation.NpcDef) uint8 {
+	// INFERENCE: 6182A0 has no merchant test of its own; only special
+	// traders stock goods, so another merchant is refused as 617F70 would.
 	if npc.TalkFlags&simulation.NpcTalkFlagSpecialTrade == 0 {
 		return tradeErrWrongMerchant
 	}
