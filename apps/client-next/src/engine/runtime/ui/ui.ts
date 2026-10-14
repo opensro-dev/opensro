@@ -163,6 +163,7 @@ import { createSkinChangeHud } from "./hud/skin-change-hud";
 import { createGlobalChatHud } from "./hud/global-chat-hud";
 import { createReverseReturnHud } from "./hud/reverse-return-hud";
 import { createSpecialtyDealHud } from "./hud/specialty-deal-hud";
+import { socialQuestion } from "@/engine/foundation/ui/social-question";
 import {
 	dealSums,
 	isTradeGoods,
@@ -3087,17 +3088,26 @@ export function createUi(
 			sendGameplay( { kind: "party-leave" } );
 		} else if ( id.startsWith( "party-member-kick:" ) ) {
 			sendGameplay( { kind: "party-kick", id: Number( id.slice( 18 ) ) } );
-		} else if ( [ "party-leave", "party-kick", "guild-leave", "guild-dissolve", "guild-kick" ].includes( id ) ) {
-			if ( confirmSocial !== id ) confirmSocial = id;
-			else {
-				const gid = view.gameplay?.target ?? 0,
-					member = view.gameplay?.social?.guild?.members.find( m => m.id === socialMember );
-				if ( id === "party-leave" ) sendGameplay( { kind: id } );
-				else if ( id === "party-kick" ) sendGameplay( { kind: id, id: socialMember } );
-				else if ( id === "guild-kick" && member ) sendGameplay( { kind: id, name: member.name } );
-				else if ( id === "guild-leave" || id === "guild-dissolve" ) sendGameplay( { kind: id, gid } );
-				confirmSocial = "";
+		} else if ( id === "party-leave" ) {
+			// The social window's leave asks nothing, as the party window's does.
+			sendGameplay( { kind: id } );
+		} else if ( [ "party-kick", "guild-leave", "guild-dissolve", "guild-kick" ].includes( id ) ) {
+			// The question box below (socialQuestion) asks first; a ban needs a
+			// selected member to name.
+			const member = view.gameplay?.social?.guild?.members.find( m => m.id === socialMember );
+			if ( id !== "guild-kick" || member ) confirmSocial = id;
+		} else if ( id === "social-confirm-yes" ) {
+			const gid = view.gameplay?.target ?? 0,
+				member = view.gameplay?.social?.guild?.members.find( m => m.id === socialMember );
+			if ( confirmSocial === "party-kick" ) sendGameplay( { kind: confirmSocial, id: socialMember } );
+			else if ( confirmSocial === "guild-kick" && member ) {
+				sendGameplay( { kind: confirmSocial, name: member.name } );
+			} else if ( confirmSocial === "guild-leave" || confirmSocial === "guild-dissolve" ) {
+				sendGameplay( { kind: confirmSocial, gid } );
 			}
+			confirmSocial = "";
+		} else if ( id === "social-confirm-no" ) {
+			confirmSocial = "";
 		} else if ( id === "guild-create" ) {
 			sendGameplay( { kind: id, gid: view.gameplay?.target ?? 0, name: socialName } );
 		} else if ( id === "guild-invite" && view.gameplay?.target ) {
@@ -18640,6 +18650,20 @@ export function createUi(
 					lines: [ question ],
 					yes: "union-ask-yes",
 					no: "union-ask-no"
+				} );
+			}
+			const socialAsk = socialQuestion( confirmSocial, game?.social?.guild, socialMember, hudCopy );
+			if ( worldVisible && socialAsk ) {
+				// The guild window's Withdraw (UIIT_STT_GUILD_EXPULSION, a ban of
+				// the selected member), Secede and Disband, and the party ban,
+				// each ask their native question before anything is sent.
+				controls = [];
+				blocks = [ full ];
+				simpleMessageBox( {
+					title: hudCopy( socialAsk.title ),
+					lines: socialAsk.lines,
+					yes: "social-confirm-yes",
+					no: "social-confirm-no"
 				} );
 			}
 			if ( worldVisible && recallConfirm !== null ) {
