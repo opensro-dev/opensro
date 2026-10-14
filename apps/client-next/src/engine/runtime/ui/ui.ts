@@ -8816,9 +8816,12 @@ export function createUi(
 			================
 			nativeTab
 
-			A disabled tab refuses input and, as the original, looks like an
-			unselected one. With the Experimental row Grey disabled tabs on
-			(the default) its plate is dimmed and its label grey.
+			A disabled tab is unavailable: it refuses input and, as the original,
+			looks like an unselected one; with the Experimental row Grey disabled
+			tabs on (the default) its plate is dimmed and its label grey. A busy
+			tab is only waiting for the server (its owner's request is pending):
+			it refuses input and always keeps the original look, so a pending
+			trade never flashes grey.
 			================
 			*/
 			function nativeTab(
@@ -8826,9 +8829,9 @@ export function createUi(
 				caption: string,
 				r: UiRect,
 				selected: boolean,
-				style: { family: string; disabled?: boolean; client?: UiRect; }
+				style: { family: string; disabled?: boolean; busy?: boolean; client?: UiRect; }
 			) {
-				const { family, disabled = false, client = [ 0, 0, 0, 0 ] } = style;
+				const { family, disabled = false, busy = false, client = [ 0, 0, 0, 0 ] } = style;
 				const content: UiRect = [
 					r[0] + client[0],
 					r[1] + client[1],
@@ -8838,7 +8841,7 @@ export function createUi(
 				const path = ROOT + "interface/ifcommon/" + family + (selected ? "_on" : "_off") + ".png";
 				const grey = disabled && experimental.state().saved.greyDisabledTabs;
 				image( r, path, grey ? GREY_TAB_PLATE : white );
-				controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled } );
+				controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled: disabled || busy } );
 				quads.push(
 					...text.quads( caption, content, full, grey ? GREY_TAB_LABEL : white, {
 						hAlign: 1,
@@ -13884,8 +13887,9 @@ export function createUi(
 							),
 							[ px + 16 + i * 56, py + 38, 56, 24 ],
 							tabs[i] === shopTab,
-							// 5B22B3: shop content insets are 4, 4, 7, 4.
-							{ family: "com_short_tab", disabled: busy, client: [ 4, 4, 7, 4 ] }
+							// 5B22B3: shop content insets are 4, 4, 7, 4. A pending buy or
+							// sell only locks the tabs until the answer: busy, not greyed.
+							{ family: "com_short_tab", busy, client: [ 4, 4, 7, 4 ] }
 						);
 					}
 					for ( let i = 0; i < 30; i++ ) {
@@ -15020,6 +15024,8 @@ export function createUi(
 							{
 								family: "com_long_tab",
 								client: [ 3, 6, 6, 0 ],
+								// Unavailable, not busy: an open shop window, or a tab the
+								// record's class lacks (6A1920), holds the lock.
 								disabled: panel === "Shop" ||
 									(i === 1 ? !record?.inventory : i === 2 ? record?.band !== 4 : false)
 							}
