@@ -118,6 +118,7 @@ func (i Item) SpawnRow(withAppearTail bool) wire.GroundItemRow {
 		RefObjID:   i.RefObjID,
 		TypeFlags:  i.TypeFlags,
 		Codename:   i.Codename,
+		OwnerLabel: i.TradeOwner,
 		GoldAmount: i.GoldAmount,
 		Gid:        i.Gid,
 		Position: wire.Position{

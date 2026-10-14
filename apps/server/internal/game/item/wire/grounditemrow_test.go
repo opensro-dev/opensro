@@ -156,51 +156,41 @@ func TestEquipmentRowCarriesTheDiscardByte(t *testing.T) {
 	}
 }
 
-// The codename band EMITS an empty label: u16(0), no bytes - the measured
-// fixture emission (Node writes writer.u16(0) only). Golden from the Node
-// reference: D2 04 00 00 | 00 00 | E3 93 04 00 | ...
-func TestCodenameRowEmitsEmptyLabel(t *testing.T) {
-	row := GroundItemRow{
-		RefObjID:  1234,
-		TypeFlags: codenameTypeFlags,
-		Codename:  "ITEM_ETC_E_1", // registry bookkeeping; must NOT reach the wire
-		Gid:       300003,
-		Position:  Position{RegionID: 0x6B4F},
-	}
+/*
+================
+TestCodenameRowCarriesTheOwnerLabel
 
-	got := row.Encode()
-	want := concat(
-		[]byte{0xD2, 0x04, 0x00, 0x00}, // refObjId 1234
-		[]byte{0x00, 0x00},             // empty codename label
-		[]byte{0xE3, 0x93, 0x04, 0x00}, // gid 300003
-		[]byte{0x4F, 0x6B},
-		f32le(0), f32le(0), f32le(0),
-		[]byte{0x00, 0x00, 0x00, 0x00},
-	)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("row = % X, want % X", got, want)
-	}
-}
-
-// The DECODER still reads a length-prefixed label - the client parser
-// accepts one (it resolves even the empty string), so a foreign payload with
-// a label must round into the struct even though our encoder never emits one.
-func TestCodenameRowDecodeAcceptsForeignLabel(t *testing.T) {
-	payload := concat(
-		[]byte{0xD2, 0x04, 0x00, 0x00},
-		[]byte{12, 0},
-		[]byte("ITEM_ETC_E_1"),
-		[]byte{0xE3, 0x93, 0x04, 0x00},
-		[]byte{0x4F, 0x6B},
-		f32le(0), f32le(0), f32le(0),
-		[]byte{0x00, 0x00, 0x00, 0x00},
-	)
-	decoded, err := DecodeGroundItemRow(payload, codenameTypeFlags, false)
-	if err != nil {
-		t.Fatalf("decode failed: %v", err)
-	}
-	if decoded.Codename != "ITEM_ETC_E_1" {
-		t.Fatalf("decoded codename = %q, want the foreign label", decoded.Codename)
+The 0x400/0x480 band carries the owner label CIItem_ParseGroundSpawn
+(86E5D8) reads: empty without an owner (u16 0), the trader's alias for
+dropped trade goods. The registry's codename never reaches the wire.
+================
+*/
+func TestCodenameRowCarriesTheOwnerLabel(t *testing.T) {
+	for _, label := range []string{"", "Trader"} {
+		row := GroundItemRow{
+			RefObjID:   1234,
+			TypeFlags:  codenameTypeFlags,
+			Codename:   "ITEM_ETC_E_1",
+			OwnerLabel: label,
+			Gid:        300003,
+			Position:   Position{RegionID: 0x6B4F},
+		}
+		want := concat(
+			[]byte{0xD2, 0x04, 0x00, 0x00}, // refObjId 1234
+			[]byte{byte(len(label)), 0x00}, // owner label length
+			[]byte(label),
+			[]byte{0xE3, 0x93, 0x04, 0x00}, // gid 300003
+			[]byte{0x4F, 0x6B},
+			f32le(0), f32le(0), f32le(0),
+			[]byte{0x00, 0x00, 0x00, 0x00},
+		)
+		if got := row.Encode(); !reflect.DeepEqual(got, want) {
+			t.Fatalf("label %q: row = % X, want % X", label, got, want)
+		}
+		decoded, err := DecodeGroundItemRow(want, codenameTypeFlags, false)
+		if err != nil || decoded.OwnerLabel != label || decoded.Codename != "" {
+			t.Fatalf("label %q: decoded %+v, %v", label, decoded, err)
+		}
 	}
 }
 

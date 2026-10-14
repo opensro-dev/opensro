@@ -74,8 +74,10 @@ func EtcCarriesPlusByte(typeFlags uint16) bool {
 		(typeFlags&0xF800 == 0x0800 || typeFlags&0xF800 == 0x1000)
 }
 
-// IsCodenameBand reports whether the row carries a length-prefixed codename
-// string (the ETC 0x400/0x480 groups).
+// IsCodenameBand reports whether the row carries a length-prefixed ASCII
+// string (the ETC 0x400 trade goods and 0x480 quest item groups): the owner
+// label CIItem_ParseGroundSpawn (86E5D8) keeps at +0x288 and the name
+// plate shows as "(*owner)" for trade goods (86E84D), "(owner)" otherwise.
 func IsCodenameBand(typeFlags uint16) bool {
 	if !isItemClass(typeFlags) || typeFlags&0x60 != 0x60 {
 		return false
@@ -101,8 +103,11 @@ type GroundItemRow struct {
 	// TypeFlags is the itemdata type-flag word; it selects which conditional
 	// fields are present. See the IsXxxBand predicates.
 	TypeFlags uint16
-	// Codename is only carried by IsCodenameBand rows.
+	// Codename is the registry's own bookkeeping; it is not on the wire.
 	Codename string
+	// OwnerLabel is the IsCodenameBand string: a trade goods drop's original
+	// job alias (the goods record's owner, 490930), empty otherwise.
+	OwnerLabel string
 	// GoldAmount is only carried by IsGoldBand rows.
 	GoldAmount uint32
 	Gid        uint32
@@ -121,13 +126,10 @@ type GroundItemRow struct {
 
 // Encode returns the ground-item spawn row.
 //
-// The codename band emits u16(0) ONLY - an empty label, no bytes. That is
-// the measured fixture emission (buildV150GroundItemSpawnRow writes
-// writer.u16(0)); the client parser reads a length-prefixed string and
-// resolves even the empty one, so a non-empty label is wire-LEGAL for the
-// client but would invent an emission no capture shows. The Codename field
-// stays on the struct for the registry's own bookkeeping and for decoding
-// foreign payloads.
+// The codename band emits the owner label, empty when the drop has none.
+// The client formats a non-empty label onto the name plate only for this
+// band (86E82E..86E8AD), so the server that wrote it sent the goods' owner:
+// dropped trade goods show the trader who bought them.
 func (g GroundItemRow) Encode() []byte {
 	w := NewWriter(40).U32(g.RefObjID)
 
@@ -135,7 +137,7 @@ func (g GroundItemRow) Encode() []byte {
 	case IsEquipmentBand(g.TypeFlags):
 		w.U8(0)
 	case IsCodenameBand(g.TypeFlags):
-		w.U16(0)
+		w.Str(g.OwnerLabel)
 	case IsGoldBand(g.TypeFlags):
 		w.U32(g.GoldAmount)
 	}
@@ -187,11 +189,11 @@ func DecodeGroundItemRow(payload []byte, typeFlags uint16, withAppearTail bool) 
 		if err != nil {
 			return out, err
 		}
-		codename, err := r.Bytes(int(length))
+		label, err := r.Bytes(int(length))
 		if err != nil {
 			return out, err
 		}
-		out.Codename = string(codename)
+		out.OwnerLabel = string(label)
 	case IsGoldBand(typeFlags):
 		if out.GoldAmount, err = r.U32(); err != nil {
 			return out, err
