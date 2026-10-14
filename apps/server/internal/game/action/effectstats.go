@@ -34,7 +34,7 @@ func (rt *Runtime) playerCombatStats(division string, c *enterworld.Character) (
 		return combat.PlayerStats(c, rt.statCatalogs())
 	}
 	block := rt.playerAbnormal(division, c.Name)
-	stats, loadout, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), rt.effects.ModifierWrites(division, c.Name), block)
+	stats, loadout, err := combat.PlayerStatsWithModifiers(c, rt.statCatalogs(), rt.statModifierWrites(division, c), block)
 	if err == nil && block != nil {
 		stats.AbnormalMask = block.Mask
 	}
@@ -62,7 +62,7 @@ func (rt *Runtime) playerAttackStats(division string, c *enterworld.Character, s
 	}
 	block := rt.playerAbnormal(division, c.Name)
 	engaged := enterworld.SkillBuffModifiers{Hr: true, HrFlat: skill.BuffModifiers.HrFlat, HrRate: skill.BuffModifiers.HrRate}
-	writes := rt.effects.ModifierWrites(division, c.Name)
+	writes := rt.statModifierWrites(division, c)
 	for _, w := range buffModifierWrites(engaged, false) {
 		w.Source = engagedSkillModifierSource
 		writes = append(writes, w)
@@ -209,5 +209,5 @@ func (rt *Runtime) PlayerBaseStats(division string, c *enterworld.Character) (wi
 	if c == nil {
 		return combat.PlayerBaseStats(c, rt.statCatalogs())
 	}
-	return combat.PlayerBaseStatsWithModifiers(c, rt.statCatalogs(), rt.effects.ModifierWrites(division, c.Name), rt.playerAbnormal(division, c.Name))
+	return combat.PlayerBaseStatsWithModifiers(c, rt.statCatalogs(), rt.statModifierWrites(division, c), rt.playerAbnormal(division, c.Name))
 }

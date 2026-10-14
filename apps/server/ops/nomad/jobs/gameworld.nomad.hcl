@@ -188,6 +188,14 @@ variable "fast_den_return" {
   default = "on"
 }
 
+# most_wanted counts a suited player's job kills into a wanted level
+# (bonuses per level, a bounty on their head) (port-only, not native;
+# owner decision 2026-10-14). "off" is native.
+variable "most_wanted" {
+  type    = string
+  default = "on"
+}
+
 # den_no_transport_summon refuses a transport summon during the Bandit Den
 # Return Scroll's countdown (port-only, not native; owner decision
 # 2026-10-14). "off" restores the native rule, which allows it.
@@ -586,6 +594,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PARTY_MASTERIES                = var.party_masteries
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                = var.fast_den_return
+        SRO_MOST_WANTED                    = var.most_wanted
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed
         SRO_ANNOUNCE_SOX_DROP              = var.announce_sox_drop

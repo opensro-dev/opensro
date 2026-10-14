@@ -305,6 +305,9 @@ type Character struct {
 	// profile itself stays visible (port-only, not native: the
 	// opensro.online "hide my gear" choice, schema 23).
 	PublicGearHidden bool `json:"publicGearHidden,omitempty"`
+	// MostWanted is the character's job-kill streak (port-only, not native:
+	// SRO_MOST_WANTED, action/mostwanted.go; schema 24). Nil is no streak.
+	MostWanted *MostWanted `json:"mostWanted,omitempty"`
 	// LevelReachedAt is when the character first reached each milestone level
 	// (PublicLevelMilestones), in Unix milliseconds, for the site's
 	// world-firsts (port-only, not native).
@@ -723,4 +726,16 @@ type TimedSkillJob struct {
 	SkillID     uint32 `json:"skillId"`
 	Token       uint32 `json:"token"`
 	RemainingMs uint32 `json:"remainingMs"`
+}
+
+/*
+================
+MostWanted
+
+A suited player's streak of counted job kills (port-only, not native;
+action/mostwanted.go). Death or taking the suit off clears it.
+================
+*/
+type MostWanted struct {
+	Streak int64 `json:"streak"`
 }

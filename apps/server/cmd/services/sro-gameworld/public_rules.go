@@ -122,6 +122,12 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A caravan ambush has as many bandits as its cargo's value calls for, with no limit.",
 				Now:    fmt.Sprintf("At most %d bandits per ambush.", banditCap),
 				Why:    "A full load drew dozens of bandits at once; the cap keeps an ambush fightable."},
+			{Flag: action.EnvMostWanted, On: action.MostWantedFromEnv(),
+				Native: "Job kills earn job EXP only.",
+				Now: "Each job kill while suited adds to a streak; every 10 is a wanted level (up to 10), worth +1 STR, +1 INT and +1% move speed each, " +
+					"and 1%/2%/3% more damage dealt and less taken at levels 3/5/10. Killing a wanted player pays 100,000,000 gold per level. " +
+					"Kills of your own account, party, guild or union never count, and one victim counts at most 3 times an hour. Death or taking the suit off ends the streak.",
+				Why: "Requested for the beta, to reward job-war streaks and put a price on them; the original returns with one setting."},
 			{Flag: action.EnvFastDenReturn, On: action.FastDenReturnFromEnv(),
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
 				Now:    "It counts down 2 minutes 30 seconds.",

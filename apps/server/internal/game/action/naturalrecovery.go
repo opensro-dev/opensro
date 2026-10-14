@@ -259,7 +259,7 @@ func (rt *Runtime) recoverResident(key recoveryKey, nowMs int64) []simulation.Di
 		}
 		// 4A9D00 writes source 2 to the flat channel. Keeping the base in
 		// the common graph also admits equipment recovery magic options.
-		writes := rt.effects.ModifierWrites(key.division, c.Name)
+		writes := rt.statModifierWrites(key.division, c)
 		writes = append(writes,
 			paramkeeper.Write{Parameter: itemParamHPRecovery, Source: recoveryPostureSource, Value: rate},
 			paramkeeper.Write{Parameter: itemParamMPRecovery, Source: recoveryPostureSource, Value: rate},

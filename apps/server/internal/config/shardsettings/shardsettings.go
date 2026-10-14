@@ -57,6 +57,8 @@ var Settings = []Setting{
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
+	// Owner, 2026-10-14: the job-kill streak, its bonuses and bounty.
+	{Env: "SRO_MOST_WANTED", NomadVar: "most_wanted", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
 	// Owner, 2026-10-14: Item Mall transports move 1.5 times as fast.

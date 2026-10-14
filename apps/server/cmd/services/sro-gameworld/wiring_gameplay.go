@@ -547,6 +547,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
 	// Port-only, not native: the Bandit Den scroll counts down half as long,
 	// and the client's delay bar learns it at world entry.
+	// Port-only, not native: the job-kill streak, its bonuses and bounty.
+	game.items.MostWanted = action.MostWantedFromEnv()
+	if game.items.MostWanted {
+		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
+	}
 	game.items.FastDenReturn = action.FastDenReturnFromEnv()
 	game.deps.FastDenReturn = game.items.FastDenReturn
 	if game.items.FastDenReturn {

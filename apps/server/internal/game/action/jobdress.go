@@ -478,6 +478,16 @@ func (rt *Runtime) advanceJobDresses(now int64) {
 			if rt.jobDressed(c) != dressed {
 				rt.reloadJobDress(dress.division, c, now, &result)
 			}
+			// Port-only, not native: taking the suit off clears the streak.
+			if dressed && !rt.jobDressed(c) && c.MostWanted != nil {
+				var private, public []wire.Frame
+				rt.deps.Update(c, "most-wanted-undress", func() bool {
+					private, public = rt.clearMostWantedInDoor(dress.division, c, "suit removed", now)
+					return true
+				})
+				result.Frames = append(result.Frames, private...)
+				result.Broadcast = append(result.Broadcast, public...)
+			}
 		}
 		unlock()
 		if rt.PushCharacterFrames != nil {

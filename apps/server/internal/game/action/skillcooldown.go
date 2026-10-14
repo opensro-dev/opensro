@@ -81,7 +81,7 @@ func (rt *Runtime) EntryActionSpeed(division, name string) float32 {
 	}
 	percent, err := combat.PlayerUnlinkedParameter(
 		character,
-		rt.effects.ModifierWrites(division, character.Name),
+		rt.statModifierWrites(division, character),
 		rt.playerAbnormal(division, character.Name),
 		actionSpeedParameter,
 	)

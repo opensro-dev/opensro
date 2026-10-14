@@ -340,6 +340,11 @@ type Runtime struct {
 
 	// ShopOnly keeps degree-9 alchemy goods out of every drop (port-only,
 	// not native, beta balance; owner 2026-10-13). The zero value is off.
+	// MostWanted turns on the job-kill streak, its bonuses and bounty
+	// (mostwanted.go; port-only, not native). False is native.
+	MostWanted      bool
+	mostWantedPairs mostWantedPairs
+
 	ShopOnly progression.ShopOnlyDegree9
 	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC
 	// shops (port-only, not native; action/sunevent.go).

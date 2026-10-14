@@ -336,7 +336,7 @@ Project the live character with the working block's own modifier writes.
 ================
 */
 func (o *playerAbnormalOwner) Param(id uint16) float32 {
-	stats, _, err := combat.PlayerStatsWithModifiers(o.c, o.rt.statCatalogs(), o.rt.effects.ModifierWrites(o.division, o.c.Name), o.block)
+	stats, _, err := combat.PlayerStatsWithModifiers(o.c, o.rt.statCatalogs(), o.rt.statModifierWrites(o.division, o.c), o.block)
 	if err != nil {
 		log.WithError(err).WithFields(log.Fields{"division": o.division, "character": o.c.Name, "param": id}).Error("abnormal parameter projection failed")
 		return 0
@@ -672,6 +672,10 @@ func (rt *Runtime) settlePlayerDeathInDoor(division string, c *enterworld.Charac
 	cost := rt.settleDeathCostInDoor(division, c, killer, now)
 	effects = append(effects, cost.public...)
 	progression = cost.actor
+	// Port-only, not native: any death clears the streak (mostwanted.go).
+	wantedPrivate, wantedPublic := rt.clearMostWantedInDoor(division, c, "death", now)
+	effects = append(effects, wantedPublic...)
+	progression = append(progression, wantedPrivate...)
 	if rt.ReleaseQuestCapturesOnDeath != nil {
 		frames, _ := rt.ReleaseQuestCapturesOnDeath(c)
 		progression = append(progression, frames...)
