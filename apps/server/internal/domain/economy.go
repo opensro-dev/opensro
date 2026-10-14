@@ -39,6 +39,8 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"shop-transaction": {gain: "npc_sale", loss: "shop_buy"},
 	"shop-buyback":     {loss: "buyback"},
 	"pickup-gold":      {gain: "monster_gold"},
+	// A pickup pet looting gold (cosground.go) is monster gold too.
+	"cos-ground-item":  {gain: "monster_gold"},
 	"gold-drop":        {loss: "gold_drop"},
 	"quest-reward":     {gain: "quest_reward"},
 	"quest-start":      {loss: "quest_fee"},
