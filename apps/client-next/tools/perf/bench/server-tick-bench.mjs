@@ -31,7 +31,7 @@ import { MISSION_MOVEMENT_FIXTURES } from "../../../../../scripts/lib/missionMov
 import { serverGameDataRoot } from "../../../../../scripts/build/world/paths.mjs";
 
 const USAGE = "server-tick-bench.mjs [--count 20] [--warmup 30] [--seconds 120] [--skills 64] " +
-	"[--scenario idle|chase] [--move-ms 2000] [--metrics URL] [--out FILE.json]";
+	"[--scenario idle|chase|return] [--move-ms 2000] [--recall-ms 35000] [--metrics URL] [--out FILE.json]";
 // The fixture reset bounds (benchmark_fixture.go): one request teaches at
 // most 64 skills, at most the v1.150 level cap (progression.LevelCap 90);
 // intellect 500 pays any of them.
@@ -55,6 +55,18 @@ const MOVE_OPCODE = 0x7738, MOVE_DESTINATION_MODE = 1;
 // targets: the RunMonsterLeg / route-planning path.
 const CHASE_START = Object.freeze( { regionId: 0x5eac, x: 704, y: 195, z: 438 } );
 const CHASE_WANDER = 30;
+// --scenario return has every peer read its beta-kit return scroll
+// (ITEM_ETC_SCROLL_RETURN_01, enterworld/starterkit.go) every recallMs: the
+// 0x75BD body is [u8 wire slot][u16 type word] (item/wire/itemuse.go). The
+// kit row lands in the first free bag slot, so each peer offers the scroll's
+// type word at the first few bag slots; a slot holding anything else is
+// refused. TID 3/3/3/1 packs to 0x09EC (travel.ts isReturnScroll). The
+// 30 s cast then completes in the tick (action advanceReturnScrolls).
+const ITEM_USE_OPCODE = 0x75bd, RETURN_SCROLL_TYPE_WORD = 0x09ec;
+const FIRST_BAG_WIRE_SLOT = 13, KIT_SLOT_SPAN = 4;
+// A completed return re-enters the world: its packets open with the native
+// reset (enterworld OpcodeResetClient 0x3369).
+const RESET_CLIENT_OPCODE = 0x3369;
 
 const options = parseOptions( process.argv.slice( 2 ), {
 	count: 20,
@@ -65,6 +77,7 @@ const options = parseOptions( process.argv.slice( 2 ), {
 	out: "",
 	scenario: "idle",
 	moveMs: 2000,
+	recallMs: 35000,
 	provisioning: "http://127.0.0.1:8789",
 	token: path.join( process.cwd(), "../server/.state/cluster/agent-provisioning-token" ),
 	journal: path.join( process.cwd(), "../../.state/server-tick-bench/crowd-cleanup.json" )
@@ -162,6 +175,34 @@ function startWandering( crowd, fixture, count, moveMs ) {
 
 /*
 ================
+startRecalls
+
+Every recallMs, each peer reads its return scroll (see ITEM_USE_OPCODE),
+staggered across the interval so completions spread over ticks. Returns the
+stop function.
+================
+*/
+function startRecalls( crowd, count, recallMs ) {
+	const timers = [];
+	for ( let index = 0; index < count; index++ ) {
+		const recall = () => {
+			for ( let slot = FIRST_BAG_WIRE_SLOT; slot < FIRST_BAG_WIRE_SLOT + KIT_SLOT_SPAN; slot++ ) {
+				const payload = new Uint8Array( 3 );
+				payload[0] = slot;
+				new DataView( payload.buffer ).setUint16( 1, RETURN_SCROLL_TYPE_WORD, true );
+				crowd.send( index, ITEM_USE_OPCODE, payload );
+			}
+		};
+		timers.push( setTimeout( () => {
+			recall();
+			timers.push( setInterval( recall, recallMs ) );
+		}, Math.floor( recallMs * index / count ) ) );
+	}
+	return () => timers.forEach( timer => clearTimeout( timer ) );
+}
+
+/*
+================
 readMetrics
 ================
 */
@@ -241,10 +282,17 @@ function windowReport( before, after ) {
 			] )
 		);
 	}
+	// slow_hooks: hooks and named steps that ran >= 100 ms in the window.
+	if ( a.slow_hooks && b.slow_hooks ) {
+		report.slowHooks = Object.fromEntries(
+			Object.entries( b.slow_hooks ).map( ( [name, h] ) => [ name, h.count - (a.slow_hooks[name]?.count ?? 0) ] )
+				.filter( ( [, n] ) => n !== 0 )
+		);
+	}
 	return report;
 }
 
-if ( options.scenario !== "idle" && options.scenario !== "chase" ) {
+if ( ![ "idle", "chase", "return" ].includes( options.scenario ) ) {
 	throw Error( `unknown --scenario
 usage: ${USAGE}` );
 }
@@ -268,6 +316,7 @@ const crowd = await createCrowd( {
 let report, stopWandering = () => {};
 try {
 	if ( options.scenario === "chase" ) stopWandering = startWandering( crowd, fixture, options.count, options.moveMs );
+	if ( options.scenario === "return" ) stopWandering = startRecalls( crowd, options.count, options.recallMs );
 	console.log( `[tick-bench] crowd admitted; warming up ${options.warmup} s` );
 	await delay( options.warmup * 1000 );
 	const before = await readMetrics();
@@ -283,6 +332,8 @@ try {
 		// Any peer that died measured a corpse: the run does not count.
 		deadPeers: new Set( crowd.peers.flatMap( peer => [ ...peer.dead ] ) ).size
 	};
+	// Re-entries every peer received since admission (return scenario).
+	report.resets = crowd.peers.reduce( ( n, peer ) => n + (peer.opcodes?.get( RESET_CLIENT_OPCODE ) ?? 0), 0 );
 	report.valid = report.deadPeers === 0;
 } finally {
 	stopWandering();

@@ -600,10 +600,10 @@ test("every published dungeon portal crosses its linked seam through the movemen
 			}
 		}
 	}
-	(await import( "node:fs" )).writeFileSync(
-		"temp/artifacts/topology-corpus-failures.json",
-		JSON.stringify( failures )
-	);
+	// A fresh checkout or worktree has no temp/artifacts yet.
+	const fs = await import( "node:fs" );
+	fs.mkdirSync( "temp/artifacts", { recursive: true } );
+	fs.writeFileSync( "temp/artifacts/topology-corpus-failures.json", JSON.stringify( failures ) );
 	assert.equal( total, 308 );
 	assert.deepEqual( failures, [] );
 });

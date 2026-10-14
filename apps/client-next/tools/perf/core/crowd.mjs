@@ -45,7 +45,9 @@ async function connectPeer( session, character ) {
 	socket.binaryType = "arraybuffer";
 	// dead: gids seen dying (0x3122 life channel 0 = dead 2); a crowd that
 	// draws no kills of its own sees only peers die (server-tick-bench.mjs).
-	const evidence = { character, frames: 0, ready: false, closed: false, dead: new Set() };
+	// opcodes: frames received per opcode, so a scenario can count what the
+	// server answered (server-tick-bench.mjs --scenario return: 0x3369 resets).
+	const evidence = { character, frames: 0, ready: false, closed: false, dead: new Set(), opcodes: new Map() };
 	try {
 		await new Promise( ( resolve, reject ) => {
 			const timer = setTimeout( () => reject( Error( "Crowd peer admission timed out" ) ), ADMISSION_TIMEOUT_MS );
@@ -63,6 +65,7 @@ async function connectPeer( session, character ) {
 				try {
 					const frame = codec.decode( new Uint8Array( event.data ) );
 					evidence.frames++;
+					evidence.opcodes.set( frame.opcode, (evidence.opcodes.get( frame.opcode ) ?? 0) + 1 );
 					if (
 						frame.opcode === 0x3122 && frame.payload.length === 6 && frame.payload[4] === 0 &&
 						frame.payload[5] === 2
