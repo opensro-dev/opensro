@@ -13,6 +13,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { root } from "../../tools/project.mjs";
+// How long a worker answer may take on a loaded machine before the test
+// calls it stranded. Generous: a correct loader answers in milliseconds.
+const ANSWER_TIMEOUT_MS = 10000;
 const result = await build( {
 	stdin: {
 		resolveDir: root,
@@ -335,10 +338,17 @@ export const createPacks=()=>({worldAnimationManifests:async()=>[],textureVarian
 		"data:text/javascript;base64," + Buffer.from( compiled.outputFiles[0].contents ).toString( "base64" )
 	);
 	const results = [];
+	// The load chain (fetch, decode, the failing transfer) is asynchronous;
+	// a fixed count of event-loop turns ran out under machine load. Wait
+	// for the answer itself, bounded so a stranded request still fails.
+	let answered;
+	const answer = new Promise( resolve => answered = resolve );
 	const loader = createLoader( result => {
 		if ( result.kind === "world" ) throw Error( "fixture transfer failed" );
 		results.push( result );
+		answered();
 	} );
+	let timer;
 	try {
 		loader.receive( {
 			kind: "load",
@@ -347,11 +357,15 @@ export const createPacks=()=>({worldAnimationManifests:async()=>[],textureVarian
 			limit: 1024 * 1024,
 			decode: "world"
 		} );
-		for ( let i = 0; i < 20 && !results.length; i++ ) await new Promise( setImmediate );
+		await Promise.race( [
+			answer,
+			new Promise( resolve => timer = setTimeout( resolve, ANSWER_TIMEOUT_MS ) )
+		] );
 		assert.equal( results.length, 1 );
 		assert.equal( results[0].kind, "error" );
 		assert.match( results[0].error, /fixture transfer failed/ );
 	} finally {
+		clearTimeout( timer );
 		loader.dispose();
 	}
 });
