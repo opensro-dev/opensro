@@ -269,6 +269,7 @@ test("stage readiness requires its own committed scene, independently of camera 
 	let stats = { sceneId: "previous", pendingGroups: 0, pendingTextures: 0, visibleGroups: 100 };
 	const renderer = {
 		cancelWorldUpdate() {},
+		settleWorld: () => false,
 		adoptWorld() {},
 		setWorldTexture() {},
 		neededWorldTextures: () => [],
@@ -322,6 +323,7 @@ test("stage terrain policy changes with title/dock ownership, without mutating d
 	};
 	const renderer = {
 		cancelWorldUpdate() {},
+		settleWorld: () => false,
 		adoptWorld: ( world, detail ) => admitted.push( { id: world.sceneId, terrainDetail: detail } ),
 		setWorldTexture() {},
 		neededWorldTextures: () => [],
@@ -384,6 +386,7 @@ test("dock Cancel emits logout once per departure while waiting for the session 
 	};
 	const renderer = {
 		cancelWorldUpdate() {},
+		settleWorld: () => false,
 		adoptWorld( world ) {
 			sceneId = world.sceneId;
 		},
@@ -454,6 +457,7 @@ test("full roster Create emits a timed native refusal and permits another attemp
 	};
 	const renderer = {
 		cancelWorldUpdate() {},
+		settleWorld: () => false,
 		adoptWorld( world ) {
 			sceneId = world.sceneId;
 		},
@@ -554,6 +558,7 @@ test("startup texture status describes queued work, not the changing request con
 	};
 	const renderer = {
 		cancelWorldUpdate() {},
+		settleWorld: () => false,
 		adoptWorld() {
 			needed = [ "/assets/a.png", "/assets/b.png", "/assets/c.png", "/assets/d.png" ];
 		},
@@ -649,6 +654,7 @@ test("entry admission retains the dock through connecting and rejection, and lea
 		cancelWorldUpdate() {
 			clears++;
 		},
+		settleWorld: () => false,
 		setWorld() {},
 		adoptWorld( world ) {
 			sceneId = world.sceneId;

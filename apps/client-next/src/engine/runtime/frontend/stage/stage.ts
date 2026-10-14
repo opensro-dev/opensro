@@ -3,6 +3,11 @@
 
 stage.ts - frontend scene admission and experimental terrain replacement
 
+A stage installed to settle (the title: no actors, full terrain detail)
+asks the renderer to drop its CPU geometry once it is ready, and requests
+its bundle again if a device loss then drops the scene (renderer
+world/settle.ts).
+
 ===========================================================================
 */
 import { decodeNativeTexture } from "@/engine/foundation/assets/native-texture";
@@ -46,6 +51,8 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		jobs.set( id, { kind, path } );
 	}
 	let wanted: string | null = null, terrainDetail: WorldScene["terrainDetail"] = "distance";
+	// Whether the installed stage settles once ready, and whether it asked.
+	let settles = false, settleAsked = false;
 	/*
 	================
 	admit
@@ -69,6 +76,17 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 	}
 	/*
 	================
+	ready
+
+	The scene is drawn whole: admitted, current, every group and texture in.
+	================
+	*/
+	function ready() {
+		const stats = renderer.worldStats();
+		return admitted && !error && stats.sceneId === sceneId && !stats.pendingGroups && !stats.pendingTextures;
+	}
+	/*
+	================
 	clear
 	================
 	*/
@@ -79,6 +97,7 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		manifest = null;
 		worldRequested = false;
 		admitted = false;
+		settleAsked = false;
 		error = null;
 	}
 	return {
@@ -93,12 +112,20 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 		/*
 		================
 		install
+
+		after "settle" lets the ready scene give up its CPU geometry: only for
+		a stage without actors (their shadows read the terrain) at full detail.
 		================
 		*/
-		install( path: string, detail: NonNullable<WorldScene["terrainDetail"]> = "distance" ) {
+		install(
+			path: string,
+			detail: NonNullable<WorldScene["terrainDetail"]> = "distance",
+			after: "keep" | "settle" = "keep"
+		) {
 			clear();
 			wanted = path;
 			terrainDetail = detail;
+			settles = after === "settle";
 			const prepared = preload.take( path );
 			if ( prepared ) {
 				if ( prepared.kind === "manifest" ) jobs.set( prepared.job, { kind: "manifest", path } );
@@ -134,10 +161,21 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 						renderer.setWorldTexture( job.path, result.image );
 					} else throw new Error( "Unexpected frontend resource completion" );
 				}
+				// A settled scene lost with the device is loaded again (settle.ts);
+				// only a settled scene can be lost.
+				if ( settleAsked && sceneId !== null && renderer.worldStats().lostSceneId === sceneId ) {
+					admitted = false;
+					worldRequested = false;
+					settleAsked = false;
+					sceneId = null;
+				}
 				if ( !manifest && !jobs.size && assets.available() > 0 ) request( wanted, "manifest" );
 				if ( manifest && !worldRequested && assets.available() > 0 ) {
 					request( manifest.regionBundlePublicPath + new URL( wanted, base ).hash, "world" );
 					worldRequested = true;
+				}
+				if ( settles && !settleAsked && sceneId !== null && ready() ) {
+					settleAsked = renderer.settleWorld( sceneId );
 				}
 				if ( admitted ) {
 					for ( const path of renderer.neededWorldTextures() ) {
@@ -185,15 +223,7 @@ export function createFrontendStage( assets: AssetOwner, renderer: Renderer, bas
 					Math.max( 1, stats.residentGroups + stats.pendingGroups + stats.pendingTextures ) :
 					0)) / 3;
 		},
-		/*
-		================
-		ready
-		================
-		*/
-		ready() {
-			const stats = renderer.worldStats();
-			return admitted && !error && stats.sceneId === sceneId && !stats.pendingGroups && !stats.pendingTextures;
-		},
+		ready,
 		manifest: () => manifest,
 		error: () => error,
 		/*

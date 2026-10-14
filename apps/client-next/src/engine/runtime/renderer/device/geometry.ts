@@ -705,6 +705,19 @@ export function createGeometryResources(
 		},
 		/*
 		================
+		dropMirror
+
+		The mirror is the stream the draw was uploaded from: a settled scene's
+		terrain gives it up so the scene's packed arena can be collected.
+		================
+		*/
+		dropMirror( draw: GeometryDraw ) {
+			const meta = metadata.get( draw );
+			if ( !meta ) throw Error( "Stale geometry handle" );
+			meta.vertices = undefined;
+		},
+		/*
+		================
 		streamVertices
 
 		Writes a packed stream at vertex base with no CPU mirror: the caller

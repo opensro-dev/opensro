@@ -385,6 +385,7 @@ export function createRenderer(
 		setCharacterActors: characters.actors,
 		characterActors: characters.currentActors,
 		cancelWorldUpdate: () => world.cancelPending(),
+		settleWorld: sceneId => world.settle( sceneId ),
 		setWorld: scene => world.scene( scene ),
 		adoptWorld: ( lease, detail, terrain ) => world.adopt( lease, detail, terrain ),
 		setWorldCamera: camera => world.camera( camera ),

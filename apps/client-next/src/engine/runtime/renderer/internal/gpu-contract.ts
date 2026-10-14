@@ -422,6 +422,9 @@ export interface GeometryCommands {
 	// Writes a packed vertex stream at vertex base of any draw, keeping no CPU
 	// copy: the caller owns the stream (a terrain layer member's vertices).
 	streamVertices( draw: GeometryDraw, base: number, vertices: Float32Array ): void;
+	// Forgets a dynamicVertices draw's CPU mirror once its positions are final
+	// (a settled frontend scene); a later position or vertex write throws.
+	dropMirror( draw: GeometryDraw ): void;
 	updateInstances(
 		draw: GeometryDraw,
 		instances: Float32Array,

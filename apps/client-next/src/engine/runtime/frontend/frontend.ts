@@ -48,7 +48,7 @@ export function createFrontend(
 	let roster: NonNullable<SessionState["characters"]> = [];
 	let pointer: readonly [number, number] | null = null;
 	// Native CPSTitle 0x748630 disables terrain LOD; 0x741B80 restores it on release.
-	stage.install( "/assets/title/constantinople/manifest.json", "full" );
+	stage.install( "/assets/title/constantinople/manifest.json", "full", "settle" );
 	return {
 		/*
 		================
@@ -219,7 +219,7 @@ export function createFrontend(
 				stageName = "title";
 				manifestInstalled = false;
 				lastPhase = "";
-				stage.install( "/assets/title/constantinople/manifest.json", "full" );
+				stage.install( "/assets/title/constantinople/manifest.json", "full", "settle" );
 			}
 			if ( session?.phase === "character-select" ) {
 				if ( flow.snapshot().phase === "world" ) {

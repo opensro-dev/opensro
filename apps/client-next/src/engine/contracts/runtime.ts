@@ -313,6 +313,10 @@ export interface Renderer extends Disposable {
 		terrain?: readonly import("./world-admission").WorldTerrainPart[]
 	): void;
 	cancelWorldUpdate(): void;
+	// The drawn frontend scene sceneId gives up its CPU geometry; after a
+	// device loss it is reported in worldStats().lostSceneId. False when it
+	// is not the drawn scene or not at full terrain detail.
+	settleWorld( sceneId: string ): boolean;
 	setWorldCamera( camera: import("./scene").WorldCamera ): void;
 	setWorldTexture(
 		path: string,

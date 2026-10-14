@@ -37,6 +37,7 @@ import { createMaterialTimeline } from "@/engine/foundation/rendering/material-t
 import { createTextureFactorPulse } from "@/engine/foundation/rendering/texture-factor-pulse";
 import { createTextureAtlas } from "@/engine/foundation/rendering/texture-atlas";
 import { createWorldResidency } from "./residency";
+import { settleReady, settleScene } from "./settle";
 import { createTerrainLayers, type TerrainLayer } from "./terrain-layers";
 import {
 	terrainInteractionCells,
@@ -441,6 +442,11 @@ export function createWorldRenderer(
 		};
 	const images = new Map<string, { source: import("@/engine/contracts/texture").WorldTexture; }>(),
 		draws = new Map<WorldGroup, GeometryDraw>();
+	// The frontend scene its owner asked to settle (settle.ts), the scenes
+	// that settled, and the id of a settled scene a device loss dropped:
+	// its owner requests it again.
+	let settling: WorldScene | null = null, lostSceneId: string | null = null;
+	const settled = new WeakSet<WorldScene>();
 	// Decoded pixels are shared by path; GPU arrays are shared by their ordered
 	// layers, keyed by imageDrawKey. A single path is its own key, so the
 	// per-frame lookups (footprints, decal, flares, weather) allocate nothing.
@@ -1225,6 +1231,24 @@ export function createWorldRenderer(
 		cancelPending
 		================
 		*/
+		/*
+		================
+		settle
+
+		Asks the drawn frontend scene sceneId to give up its CPU geometry
+		(settle.ts). Only a scene at full terrain detail settles: one at
+		distance detail re-chooses its ranges as the camera moves. False
+		when the scene is not the drawn one or cannot settle.
+		================
+		*/
+		settle( sceneId: string ): boolean {
+			if (
+				disposed || !current || current.id !== sceneId || pending || current.residency !== "frontend" ||
+				current.terrainDetail !== "full"
+			) return false;
+			if ( !settled.has( current ) ) settling = current;
+			return true;
+		},
 		cancelPending() {
 			if ( disposed ) return;
 			if ( pending ) retired.push( pending );
@@ -1284,6 +1308,7 @@ export function createWorldRenderer(
 					})`
 				);
 			}
+			lostSceneId = null;
 			if ( pending ) retired.push( pending );
 			residency.hold( replacement, size, terrain );
 			pending = replacement;
@@ -1321,6 +1346,7 @@ export function createWorldRenderer(
 			const replacement = scene ?
 				copyWorldScene( scene ) :
 				{ id: "empty", originRegion: 0, groups: [], warnings: [] };
+			lostSceneId = null;
 			if ( pending ) retired.push( pending );
 			residency.hold( replacement, size );
 			pending = replacement;
@@ -1416,6 +1442,20 @@ export function createWorldRenderer(
 			dynamicAnimation = enableDynamicAnimation;
 			probe?.worldBegin?.();
 			while ( retired.length ) release( retired.pop()!, geometry );
+			// A settling scene gives up its CPU geometry once every terrain group
+			// has chosen its ranges, which the previous frame's walk did.
+			if ( settling && settling === current && !pending ) {
+				const state = { geometry, draws, selections, pickBounds };
+				if ( settleReady( current, state ) ) {
+					settleScene( current, state );
+					// Shadow rows view terrain streams; a frontend scene has no
+					// receivers to build from them (its owner settles only an actorless stage).
+					shadowSurfaces.reset();
+					shadowSurfaces.commit();
+					settled.add( current );
+					settling = null;
+				}
+			}
 			let budget = 8, uploadBytes = UPLOAD_BYTES_PER_FRAME;
 			if ( pending ) {
 				if ( camera.follow && !preparedCollision ) {
@@ -2257,6 +2297,13 @@ export function createWorldRenderer(
 			retired.length = 0;
 			imageDraws.clear();
 			pending = pending ?? current;
+			// A settled scene has no CPU geometry to upload again: drop it and
+			// report it, and its owner requests it again (stats().lostSceneId).
+			if ( pending && settled.has( pending ) ) {
+				lostSceneId = pending.id;
+				pending = null;
+			}
+			settling = null;
 			residency.keepOnly( pending );
 			current = null;
 			selected = [];
@@ -2272,6 +2319,7 @@ export function createWorldRenderer(
 		stats(): WorldRenderStats {
 			return {
 				sceneId: current?.id ?? null,
+				lostSceneId,
 				pendingGroups: Math.max( pendingGroupCount, collisionPreparation ? 1 : 0 ),
 				residentGroups: draws.size,
 				visibleGroups: selected.length,

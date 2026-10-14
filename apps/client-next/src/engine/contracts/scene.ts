@@ -210,6 +210,9 @@ WorldRenderStats
 export interface WorldRenderStats {
 	readonly pendingGroups: number;
 	readonly sceneId: string | null;
+	// A settled frontend scene a device loss dropped (renderer settle.ts):
+	// its owner requests it again. Null once a scene is admitted.
+	readonly lostSceneId?: string | null;
 	readonly residentGroups: number;
 	readonly visibleGroups: number;
 	readonly triangles: number;
