@@ -69,11 +69,22 @@ test("a count change on a slot that stays occupied is a change, recorded as pres
 	const after = inventorySignatures( [ { slot: 13, refObjId: 1, quantity: 9, plus: 0 } ] );
 	const journal = journalInventoryFrame(
 		[],
-		{ atMs: 1, opcode: 0xb5bd, payload: Uint8Array.of( 1, 13 ) },
+		{ atMs: 1, opcode: 0x3645, payload: Uint8Array.of( 13, 8 ) },
 		before,
 		after
 	);
-	assert.deepEqual( rows( journal ), [ [ 1, 0xb5bd, 1, 13, 13, 1 ] ] );
+	assert.deepEqual( rows( journal ), [ [ 1, 0x3645, 13, 8, 13, 1 ] ] );
+});
+
+test("an item use keeps only the slots it emptied, so auto-potion cannot flood the journal", () => {
+	const full = inventorySignatures( [ { slot: 13, refObjId: 1, quantity: 10, plus: 0 } ] );
+	const spent = inventorySignatures( [ { slot: 13, refObjId: 1, quantity: 9, plus: 0 } ] );
+	const use = { atMs: 1, opcode: 0xb5bd, payload: Uint8Array.of( 1, 13 ) };
+	assert.deepEqual( journalInventoryFrame( [], use, full, spent ), [], "a spent count records nothing" );
+	const emptied = journalInventoryFrame( [], use, spent, new Map() );
+	assert.deepEqual( rows( emptied ), [ [ 1, 0xb5bd, 1, 13, 13, 0 ] ], "the last potion's slot is recorded" );
+	const refused = journalInventoryFrame( [], { ...use, payload: Uint8Array.of( 2, 0x10 ) }, full, full );
+	assert.deepEqual( rows( refused ), [ [ 1, 0xb5bd, 2, 0x10, -1, -1 ] ], "a refused use stays visible" );
 });
 
 test("live inventory answers reach the published journal with slots and codes only", () => {
@@ -105,5 +116,8 @@ test("live inventory answers reach the published journal with slots and codes on
 	assert.deepEqual( state?.inventory.map( row => row.slot ), [ 20 ] );
 	const moved = [ [ 7, 0xb06d, 1, 0, 13, 0 ], [ 7, 0xb06d, 1, 0, 20, 1 ] ];
 	assert.deepEqual( rows( state?.inventoryJournal ?? [] ), moved );
+	// A character switch resets the session: the next report starts empty.
+	game.reset();
+	assert.deepEqual( game.take()?.inventoryJournal ?? [], [] );
 	game.dispose();
 });

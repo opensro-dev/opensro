@@ -968,6 +968,8 @@ selected entities, cooldowns or world-entry state.
 	*/
 	function clearState() {
 		actionSession.clear();
+		// The next character's report must not carry this one's bag rows.
+		inventoryJournal = [];
 		moveReservation.clear();
 		betaMap.clear();
 		partyMatching = emptyPartyMatching();

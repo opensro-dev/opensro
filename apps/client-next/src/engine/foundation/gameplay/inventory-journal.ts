@@ -12,7 +12,8 @@ and whether each still holds an item afterwards.
 
 Slots and codes only: a row is [atMs, opcode, payload byte 0, payload
 byte 1, slot, present after (1, 0)]; a frame that changed no slot keeps one
-row with slot -1 and present -1, so refusals are visible too. No item
+row with slot -1 and present -1, so refusals are visible too. An item
+use (0xB5BD) that only spent a count records nothing. No item
 reference, name or count is recorded. The newest INVENTORY_JOURNAL_ROWS
 rows are kept.
 
@@ -73,9 +74,16 @@ export function journalInventoryFrame(
 	for ( const [slot, key] of after ) if ( before.get( slot ) !== key ) changed.add( slot );
 	const rows: number[] = [];
 	for ( const slot of [ ...changed ].sort( ( a, b ) => a - b ) ) {
+		// Auto-potion answers about twice a second; a use that only spends
+		// a count would push the moves that matter out of the window, so an
+		// item use keeps only the slots it emptied or filled.
+		if ( frame.opcode === OP_ITEM_USE_RESPONSE && before.has( slot ) === after.has( slot ) ) continue;
 		rows.push( ...head, slot, after.has( slot ) ? 1 : 0 );
 	}
-	if ( rows.length === 0 ) rows.push( ...head, -1, -1 );
+	if ( rows.length === 0 ) {
+		if ( changed.size ) return [ ...journal ];
+		rows.push( ...head, -1, -1 );
+	}
 	const next = [ ...journal, ...rows ];
 	const keep = INVENTORY_JOURNAL_ROWS * INVENTORY_JOURNAL_FIELDS;
 	return next.length > keep ? next.slice( next.length - keep ) : next;
