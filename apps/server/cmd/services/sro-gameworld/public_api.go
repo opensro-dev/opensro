@@ -322,6 +322,9 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return guild.Name, rank
 		},
 		HasDurability: func(refObjID uint32) bool {
+			// Without item references nothing can be told apart, so every
+			// item keeps its durability as before; with them, a reference the
+			// itemdata does not know has no Dur_U and so no durability.
 			items := gameplay.deps.ItemReferences()
 			if items == nil {
 				return true
