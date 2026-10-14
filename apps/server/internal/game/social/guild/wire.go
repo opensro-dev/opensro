@@ -81,8 +81,9 @@ package guild
 
 import (
 	"errors"
-	"opensro.online/server/internal/game/item/wire"
 	"unicode/utf8"
+
+	"opensro.online/server/internal/game/item/wire"
 )
 
 // C->S opcodes, pinned from the v1.150 client composers.
