@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -124,4 +125,48 @@ func TestPprofRefusesANonLoopbackAddress(t *testing.T) {
 			t.Fatalf("pprof on %q started; a profiling listener must be loopback", addr)
 		}
 	}
+}
+
+/*
+================
+TestFailedStartReleasesThePprofListener
+
+A Start that fails after binding pprof (here the UDP port is taken) must
+not keep holding the pprof port: a restarted GameWorld could never bind it.
+================
+*/
+func TestFailedStartReleasesThePprofListener(t *testing.T) {
+	busy, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	probe, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pprofAddr := probe.Addr().String()
+	probe.Close()
+	srv, err := transport.NewServer(transport.Config{
+		WTAddr:      busy.LocalAddr().String(),
+		WSAddr:      "127.0.0.1:0",
+		CertDir:     t.TempDir(),
+		EnablePprof: true,
+		PprofAddr:   pprofAddr,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	installSmokeAdmissionVerifier(srv)
+	if err := srv.Start(); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		srv.Shutdown(ctx)
+		cancel()
+		t.Fatal("Start succeeded on a taken UDP port")
+	}
+	again, err := net.Listen("tcp", pprofAddr)
+	if err != nil {
+		t.Fatalf("the failed Start still holds the pprof port: %v", err)
+	}
+	again.Close()
 }

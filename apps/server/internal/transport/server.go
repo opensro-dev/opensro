@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -450,6 +451,15 @@ func (s *Server) Start() error {
 		return fmt.Errorf("transport: EnterWorld authentication verifier is not installed")
 	}
 
+	// Each listener bound so far closes when a later bind fails, so a failed
+	// Start leaves no port held.
+	var bound []io.Closer
+	fail := func(err error) error {
+		for _, closer := range bound {
+			closer.Close()
+		}
+		return err
+	}
 	var pprofLn net.Listener
 	if s.cfg.EnablePprof {
 		addr := s.cfg.PprofAddr
@@ -463,24 +473,21 @@ func (s *Server) Start() error {
 		if pprofLn, err = net.Listen("tcp", addr); err != nil {
 			return fmt.Errorf("transport: binding pprof %s: %w", addr, err)
 		}
+		bound = append(bound, pprofLn)
 		s.pprofServer = server
 	}
 	tcpLn, err := net.Listen("tcp", s.cfg.WSAddr)
 	if err != nil {
-		if pprofLn != nil {
-			pprofLn.Close()
-		}
-		return fmt.Errorf("transport: binding TCP %s: %w", s.cfg.WSAddr, err)
+		return fail(fmt.Errorf("transport: binding TCP %s: %w", s.cfg.WSAddr, err))
 	}
+	bound = append(bound, tcpLn)
 	udpAddr, err := net.ResolveUDPAddr("udp", s.cfg.WTAddr)
 	if err != nil {
-		tcpLn.Close()
-		return fmt.Errorf("transport: resolving UDP %s: %w", s.cfg.WTAddr, err)
+		return fail(fmt.Errorf("transport: resolving UDP %s: %w", s.cfg.WTAddr, err))
 	}
 	udpConn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		tcpLn.Close()
-		return fmt.Errorf("transport: binding UDP %s: %w", s.cfg.WTAddr, err)
+		return fail(fmt.Errorf("transport: binding UDP %s: %w", s.cfg.WTAddr, err))
 	}
 	s.tcpLn = tcpLn
 	s.udpConn = udpConn
