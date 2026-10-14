@@ -7,7 +7,7 @@ Port-only, not native (owner decision 2026-10-14, for the balance advisor).
 Each kind has its own flag, off by default here (native: no notice); the
 GameWorld's Nomad job turns them on:
 
-	SRO_ANNOUNCE_SOX_DROP  "<player> dropped <item> from <monster>"
+	SRO_ANNOUNCE_SOX_DROP  "<player> dropped <item> (<seal>) from <monster>"
 	SRO_ANNOUNCE_PLUS      "<player> advanced <item> to +N" (N 8..11)
 	SRO_ANNOUNCE_JOB_KILL  "<Thief> killed <Trader>" (job names only)
 
@@ -60,6 +60,16 @@ const (
 
 // sealCodenameSuffix marks a v1.150 rare (Seal of Star/Moon/Sun) item.
 const sealCodenameSuffix = "_RARE"
+
+// sealNoticeNames name a sealed item's tier in the drop notice with the
+// client's own words: the English PARAM_RARE_FIRST/SECOND/THIRD rows of
+// textuisystem that ItemTooltip_AppendRareGrade (558FF0) shows, indexed by
+// enterworld.EquipmentSeal's tier ((ItemClass - 1) % 3).
+var sealNoticeNames = [enterworld.SealTiers]string{
+	enterworld.SealStar: "Seal Of Star",
+	enterworld.SealMoon: "Seal Of Moon",
+	enterworld.SealSun:  "Seal Of Sun",
+}
 
 // announceKind indexes the three notices.
 type announceKind uint8
@@ -210,7 +220,7 @@ func (rt *Runtime) jobKillPairQuiet(killer, victim string, nowMs int64) bool {
 Runtime.announceSealDrops
 
 Item 1: one notice per seal (rare) item a monster's committed death dropped,
-naming the drop's owner. Called after the kill's commit.
+naming the drop's owner and the item's seal. Called after the kill's commit.
 ================
 */
 func (rt *Runtime) announceSealDrops(division, monsterName string, drops []grounditem.Item, nowMs int64) {
@@ -226,6 +236,9 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 		if items != nil {
 			if ref, found := items.ItemRefByCodename(drop.Codename); found && ref.Name != "" {
 				name = ref.Name
+				if tier, sealed := enterworld.EquipmentSeal(ref); sealed {
+					name += " (" + sealNoticeNames[tier] + ")"
+				}
 			}
 		}
 		rt.announce(division, announceSoxDrop, drop.DroppedBy+" dropped "+name+" from "+monsterName, nowMs)

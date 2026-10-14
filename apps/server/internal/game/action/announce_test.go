@@ -19,6 +19,8 @@ import (
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/world/simulation"
+	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/licensed"
 )
 
 /*
@@ -109,6 +111,36 @@ func TestSealDropNoticeFollowsTheFlag(t *testing.T) {
 		if !on && len(got) != 0 || on && (len(got) != 1 || !strings.HasPrefix(got[0], "Looter dropped ") ||
 			!strings.HasSuffix(got[0], " from Tiger Girl")) {
 			t.Fatalf("on=%v: %q", on, got)
+		}
+	}
+}
+
+/*
+================
+TestSealDropNoticeNamesTheSeal
+
+With the shipped items, a drop notice names the item's seal with the
+client's own words (PARAM_RARE_*): A Star, B Moon, C Sun.
+================
+*/
+func TestSealDropNoticeNamesTheSeal(t *testing.T) {
+	licensed.RequireGameData(t)
+	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
+	for codename, seal := range map[string]string{
+		"ITEM_CH_BLADE_08_A_RARE": "Seal Of Star",
+		"ITEM_CH_BLADE_08_B_RARE": "Seal Of Moon",
+		"ITEM_CH_BLADE_08_C_RARE": "Seal Of Sun",
+	} {
+		ref, ok := items.ItemRefByCodename(codename)
+		if !ok || ref.Name == "" {
+			t.Fatalf("missing shipped item %s", codename)
+		}
+		rt, _ := newTestRuntime(testCharacter(), items)
+		rt.Announce.SoxDrop = true
+		rt.announceSealDrops(testDivision, "Tiger Girl", []grounditem.Item{{Codename: codename, DroppedBy: "Looter"}}, 0)
+		want := "Looter dropped " + ref.Name + " (" + seal + ") from Tiger Girl"
+		if got := drainedNotices(t, rt); len(got) != 1 || got[0] != want {
+			t.Fatalf("%s: %q, want %q", codename, got, want)
 		}
 	}
 }
