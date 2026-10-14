@@ -455,10 +455,11 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 		// Terrain is most of a scene's upload; packing it here keeps the
 		// interleave off the main thread, which keeps it as the seam mirror.
 		if ( geometry.dynamicVertices ) geometry.vertices = packGeometryVertices( geometry );
-		// A frontend stage never picks, occludes or rains on its terrain (only
-		// world picking reads uvs and colors for alpha), and the interleave
-		// already carries every other attribute: the split copies stay here.
-		if ( geometry.vertices && scene.residency === "frontend" ) {
+		// The interleave already carries every attribute but positions, which
+		// seam stitching, collision and shadows read split: the split copies
+		// of the rest stay here. Picking reads its uv and colour alpha from
+		// the packed stream (picking.ts).
+		if ( geometry.vertices ) {
 			dropped += [ geometry.normals, geometry.uvs, geometry.colors, geometry.maskUVs ].reduce(
 				( sum, stream ) => sum + (stream?.byteLength ?? 0),
 				0

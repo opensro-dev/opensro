@@ -153,18 +153,27 @@ function terrainScene( residency ) {
 	return source;
 }
 
-test("a frontend stage's terrain transfers only the packed stream it draws, world terrain keeps every split stream", () => {
-	const world = transfer( terrainScene() ).scene.groups[0].geometry;
-	const stage = prepareWorldScene( terrainScene( "frontend" ) ),
-		full = worldSceneBytes( terrainScene( "frontend" ) ),
-		received = structuredClone( stage, { transfer: worldSceneTransfers( stage.scene ) } ).scene.groups[0].geometry;
-	for ( const name of [ "normals", "uvs", "colors", "maskUVs" ] ) {
-		assert.ok( world[name] instanceof Float32Array, `world terrain keeps ${name} for picking` );
-		assert.equal( received[name], undefined, `the stage drops ${name}` );
+test("terrain transfers only the packed stream it draws and its positions, world and frontend alike", () => {
+	for ( const residency of [ undefined, "frontend" ] ) {
+		const source = terrainScene( residency ), split = source.groups[0].geometry;
+		const prepared = prepareWorldScene( terrainScene( residency ) ),
+			full = worldSceneBytes( terrainScene( residency ) ),
+			received = structuredClone( prepared, { transfer: worldSceneTransfers( prepared.scene ) } ).scene.groups[0]
+				.geometry;
+		for ( const name of [ "normals", "uvs", "colors", "maskUVs" ] ) {
+			assert.equal( received[name], undefined, `${residency ?? "world"} terrain drops split ${name}` );
+		}
+		// The interleave carries every dropped stream: picking reads uv and
+		// colour alpha there (picking.ts).
+		for ( let v = 0; v < split.positions.length / 3; v++ ) {
+			assert.deepEqual( [ ...received.vertices.subarray( v * 14 + 6, v * 14 + 8 ) ], [
+				...split.uvs.subarray( v * 2, v * 2 + 2 )
+			] );
+			assert.equal( received.vertices[v * 14 + 11], split.colors[v * 4 + 3] );
+		}
+		assert.deepEqual( [ ...received.positions ], [ ...split.positions ], "seam stitching keeps its positions" );
+		assert.equal( prepared.bytes, full - (9 + 6 + 12 + 6) * 4, "residency is charged for what is held" );
 	}
-	assert.deepEqual( [ ...received.vertices ], [ ...world.vertices ], "the drawn interleave is unchanged" );
-	assert.deepEqual( [ ...received.positions ], [ ...world.positions ], "seam stitching keeps its positions" );
-	assert.equal( stage.bytes, full - (9 + 6 + 12 + 6) * 4, "residency is charged for what is held" );
 });
 
 // Preparation moves every group stream into one arena: the receiving clone pays per buffer.

@@ -10,6 +10,12 @@ bare block culling (pickGeometryBlocks).
 ===========================================================================
 */
 import type { Geometry } from "@/engine/contracts/geometry";
+
+// The packed vertex stream (geometry-vertices.ts packGeometryVertices): 14
+// floats a vertex, uvs at 6 and the colour's alpha at 11.
+const PACKED_FLOATS = 14;
+const PACKED_UV = 6;
+const PACKED_ALPHA = 11;
 type Point = readonly number[];
 export type PickRay = { readonly start: Point; readonly delta: Point; };
 export interface PickAlpha {
@@ -341,15 +347,28 @@ function intersectGeometry(
 			if ( geometry.material?.doubleSided === false && det < 0 ) continue;
 			const weights = [ 1 - u - v, u, v ];
 			let alpha = (geometry.material?.color[3] ?? 1) * (surface.opacity ?? 1);
+			// Terrain keeps its colours and uvs only in the packed stream
+			// (world-scene.ts prepareWorldScene); read them there.
+			const packed = geometry.colors || geometry.uvs ? undefined : geometry.vertices;
 			if ( geometry.colors ) {
 				alpha *= weights.reduce(
 					( n, w, k ) => n + w * geometry.colors![geometry.indices[i + k]! * 4 + 3]!,
 					0
 				);
+			} else if ( packed ) {
+				alpha *= weights.reduce(
+					( n, w, k ) => n + w * packed[geometry.indices[i + k]! * PACKED_FLOATS + PACKED_ALPHA]!,
+					0
+				);
 			}
-			if ( surface.alpha && geometry.uvs ) {
+			if ( surface.alpha && (geometry.uvs || packed) ) {
 				const uv = [ 0, 1 ].map( a =>
-					weights.reduce( ( n, w, k ) => n + w * geometry.uvs![geometry.indices[i + k]! * 2 + a]!, 0 )
+					weights.reduce( ( n, w, k ) => {
+						const vertex = geometry.indices[i + k]!;
+						return n + w * (geometry.uvs ?
+									geometry.uvs[vertex * 2 + a]! :
+									packed![vertex * PACKED_FLOATS + PACKED_UV + a]!);
+					}, 0 )
 				);
 				alpha *= samplePickAlpha( surface.alpha, uv[0]!, uv[1]! );
 			}

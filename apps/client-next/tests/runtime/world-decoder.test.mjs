@@ -408,5 +408,14 @@ test("complete mission Constantinople fits unchanged admission with shared cell 
 	}
 	assert.equal( grids.size, 324 );
 	assert.equal( worldSceneBytes( copy ), worldSceneBytes( scene ) );
-	assert.equal( prepareWorldScene( scene ).bytes, worldSceneBytes( scene ) );
+	// Terrain is held as its packed stream and positions; the split copies of
+	// the other attributes are left behind (world-scene.ts prepareWorldScene).
+	let split = 0;
+	for ( const group of scene.groups ) {
+		if ( !group.ranges ) continue;
+		const g = group.geometry;
+		split += [ g.normals, g.uvs, g.colors, g.maskUVs ].reduce( ( sum, s ) => sum + (s?.byteLength ?? 0), 0 );
+	}
+	assert.ok( split > 0 );
+	assert.equal( prepareWorldScene( scene ).bytes, worldSceneBytes( scene ) - split );
 });
