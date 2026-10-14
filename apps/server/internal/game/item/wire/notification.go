@@ -11,6 +11,12 @@ import "unicode/utf16"
 // client without the row drops it (decodeChatBroadcast returns null).
 const JobKillNoticeChannel = 0x80
 
+// DropPlusNoticeChannel is the 0x3667 channel of the seal-drop and +8..+11
+// announcements. Port-only, not native, like JobKillNoticeChannel: the
+// browser client shows it as channel 7 unless the Experimental "Drop & plus
+// notices" row is off.
+const DropPlusNoticeChannel = 0x81
+
 // noticeChannel is v1.150's server notification channel (753A6F).
 const noticeChannel = 7
 
@@ -24,6 +30,11 @@ func NotificationFrame(message string) Frame {
 // JobKillNotificationFrame is NotificationFrame on JobKillNoticeChannel.
 func JobKillNotificationFrame(message string) Frame {
 	return notificationFrameOn(JobKillNoticeChannel, message)
+}
+
+// DropPlusNotificationFrame is NotificationFrame on DropPlusNoticeChannel.
+func DropPlusNotificationFrame(message string) Frame {
+	return notificationFrameOn(DropPlusNoticeChannel, message)
 }
 
 // notificationFrameOn writes one notification on a channel.

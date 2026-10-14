@@ -73,12 +73,38 @@ test("a job-kill notice (port-only channel 0x80) shows like channel 7 unless the
 	assert.equal( chatLineText( line, () => "Notify" ), "(Notify):" + text );
 	// Off: neither the banner nor the chat log sees it; a plain notice still shows.
 	const hidden = createGameplay( () => {} );
-	hidden.experimental( { predictedRunUp: false, jobKillNotices: false } );
+	hidden.experimental( { predictedRunUp: false, jobKillNotices: false, dropPlusNotices: true } );
 	hidden.receive( { opcode: 0x3667, payload }, 100 );
 	const quiet = hidden.take();
 	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
 	assert.equal( quiet?.chat?.lines.some( l => l.text === text ) ?? false, false );
 	const plain = Buffer.concat( [ Buffer.from( [ 7, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] );
 	hidden.receive( { opcode: 0x3667, payload: plain }, 200 );
+	assert.equal( defined( defined( hidden.take() ).notices ).at( -1 )?.text, "Hello" );
+});
+
+test("a drop or plus notice (port-only channel 0x81) shows like channel 7 unless its own row is off", () => {
+	const text = "Looter advanced Blade to +9",
+		payload = Buffer.concat( [ Buffer.from( [ 0x81, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );
+	const notice = defined( serverNotification( 0x3667, payload ) );
+	assert.equal( notice.dropPlus, true );
+	assert.equal( notice.jobKill, undefined );
+	// On by default: the banner notice and a (Notify): chat line, colored as channel 7.
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload }, 100 );
+	const state = defined( shown.take() ),
+		line = defined( defined( state.chat ).lines.at( -1 ) );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
+	assert.equal( line.channel, 7 );
+	assert.equal( chatLineText( line, () => "Notify" ), "(Notify):" + text );
+	// Off: neither the banner nor the chat log sees it; a job-kill notice still shows.
+	const hidden = createGameplay( () => {} );
+	hidden.experimental( { predictedRunUp: false, jobKillNotices: true, dropPlusNotices: false } );
+	hidden.receive( { opcode: 0x3667, payload }, 100 );
+	const quiet = hidden.take();
+	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
+	assert.equal( quiet?.chat?.lines.some( l => l.text === text ) ?? false, false );
+	const kill = Buffer.concat( [ Buffer.from( [ 0x80, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] );
+	hidden.receive( { opcode: 0x3667, payload: kill }, 200 );
 	assert.equal( defined( defined( hidden.take() ).notices ).at( -1 )?.text, "Hello" );
 });

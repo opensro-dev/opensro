@@ -195,7 +195,7 @@ function gameplayPress( predicted = true ) {
 		} ]
 	} );
 	game.seed( local );
-	game.experimental( { predictedRunUp: predicted, jobKillNotices: true } );
+	game.experimental( { predictedRunUp: predicted, jobKillNotices: true, dropPlusNotices: true } );
 	const navigation = product();
 	navigation.objects = [];
 	game.command( { kind: "navigation", regionId: 257, bundle: navigation }, 0, undefined );

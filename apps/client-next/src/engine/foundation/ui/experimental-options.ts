@@ -61,6 +61,11 @@ export interface ExperimentalOptions {
 	// (the owner's choice, 2026-10-15); off hides them from the banner and
 	// the chat log.
 	readonly jobKillNotices: boolean;
+	// Port-only, not native: the shard's seal-drop and +8..+11 announcements
+	// (their own 0x3667 channel, server wire.DropPlusNoticeChannel). On unless
+	// turned off (the owner's choice, 2026-10-15); off hides them from the
+	// banner and the chat log.
+	readonly dropPlusNotices: boolean;
 }
 
 /*
@@ -98,8 +103,8 @@ export function renderScales(): readonly RenderScale[] {
 experimentalOptions
 
 Only an explicit true enables a toggle, except compressedTextures,
-sharedActorRoom, greyDisabledTabs and jobKillNotices, which only an explicit
-false turns off. Missing or invalid render scales
+sharedActorRoom, greyDisabledTabs, jobKillNotices and dropPlusNotices, which
+only an explicit false turns off. Missing or invalid render scales
 restore full resolution; legacy Video settings cannot enable scaling. Keys
 of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -129,7 +134,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,
-		jobKillNotices: record.jobKillNotices !== false
+		jobKillNotices: record.jobKillNotices !== false,
+		dropPlusNotices: record.dropPlusNotices !== false
 	};
 }
 
@@ -212,6 +218,7 @@ native client.
 export interface ExperimentalGameplay {
 	readonly predictedRunUp: boolean;
 	readonly jobKillNotices: boolean;
+	readonly dropPlusNotices: boolean;
 }
 
 /*
@@ -220,5 +227,9 @@ experimentalGameplay
 ================
 */
 export function experimentalGameplay( options: ExperimentalOptions ): ExperimentalGameplay {
-	return { predictedRunUp: options.predictedRunUp, jobKillNotices: options.jobKillNotices };
+	return {
+		predictedRunUp: options.predictedRunUp,
+		jobKillNotices: options.jobKillNotices,
+		dropPlusNotices: options.dropPlusNotices
+	};
 }

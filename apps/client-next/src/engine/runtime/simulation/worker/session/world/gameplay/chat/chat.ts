@@ -15,7 +15,7 @@ import { chatRejectionKey, type ChatFeedback } from "@/engine/foundation/gamepla
 import type { ChatLine } from "@/engine/contracts/gameplay";
 import type { WireFrame } from "@/engine/contracts/network";
 import { STALL_CHAT_CHANNEL } from "@/engine/foundation/gameplay/stall";
-import { JOB_KILL_NOTICE_CHANNEL } from "@/engine/foundation/gameplay/system-notices";
+import { isServerNoticeChannel } from "@/engine/foundation/gameplay/system-notices";
 import { CHAT_HISTORY_CONTROL } from "@/engine/foundation/gameplay/commerce-controls";
 const CHAT_LINE_LIMIT = 128;
 const CHAT_FEEDBACK_LIMIT = 100;
@@ -52,8 +52,8 @@ decodeChatBroadcast
 
 One 0x3667 line (sub_753760): channels 1 and 3 carry the speaker's gid,
 2, 4, 5, 6, 11 and the stall's a sized sender name, 7 neither. The
-port-only job-kill channel (JOB_KILL_NOTICE_CHANNEL) is laid out and shown
-as channel 7. Null for a channel this owner does not present.
+port-only job-kill and drop/plus channels (isServerNoticeChannel) are laid
+out and shown as channel 7. Null for a channel this owner does not present.
 ================
 */
 function decodeChatBroadcast(
@@ -73,7 +73,7 @@ function decodeChatBroadcast(
 		return at;
 	}
 	const wireChannel = v.getUint8( take( 1 ) ),
-		channel = wireChannel === JOB_KILL_NOTICE_CHANNEL ? 7 : wireChannel;
+		channel = isServerNoticeChannel( wireChannel ) ? 7 : wireChannel;
 	let sender = "", gid: number | undefined;
 	if ( channel === 1 || channel === 3 ) gid = v.getUint32( take( 4 ), true );
 	else if ( [ 2, 4, 5, 6, 11, STALL_CHAT_CHANNEL ].includes( channel ) ) {

@@ -161,17 +161,22 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-grey-disabled-tabs",
 			label: "Grey disabled tabs",
 			description: "Dim a window tab you cannot use."
-		}, {
+		} ]
+	},
+	{
+		title: "Other",
+		section: "Notices and diagnostics",
+		rows: [ {
 			key: "jobKillNotices",
 			id: "experimental-job-kill-notices",
 			label: "Job kill notices",
 			description: "Show the shard's job kill announcements."
-		} ]
-	},
-	{
-		title: "Developer",
-		section: "Diagnostics",
-		rows: [ {
+		}, {
+			key: "dropPlusNotices",
+			id: "experimental-drop-plus-notices",
+			label: "Drop & plus notices",
+			description: "Show the shard's seal drop and +8 to +11 announcements."
+		}, {
 			key: "developerDiagnostics",
 			id: "experimental-developer-diagnostics",
 			label: "Developer diagnostics",

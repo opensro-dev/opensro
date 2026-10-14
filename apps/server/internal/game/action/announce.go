@@ -159,10 +159,10 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, now
 	}
 	a.windows[key] = append(recent, nowMs)
 	text = clampNotice(text)
-	frame := wire.NotificationFrame(text)
+	// Port-only: each kind has its own channel, so a player can hide it
+	// (wire.JobKillNoticeChannel, wire.DropPlusNoticeChannel).
+	frame := wire.DropPlusNotificationFrame(text)
 	if kind == announceJobKill {
-		// Port-only: its own channel, so a player can hide job-kill
-		// notices (wire.JobKillNoticeChannel).
 		frame = wire.JobKillNotificationFrame(text)
 	}
 	a.queued = append(a.queued, simulation.DivisionFrames{DivisionID: division,

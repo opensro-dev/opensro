@@ -43,7 +43,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): a disabled tab is dimmed.
 	greyDisabledTabs: true,
 	// On by default (owner 2026-10-15): the shard's job-kill notices show.
-	jobKillNotices: true
+	jobKillNotices: true,
+	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
+	dropPlusNotices: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -200,7 +202,7 @@ Tabs
 test("the window's tabs cover every preference once and Open returns to Image", () => {
 	assert.deepEqual(
 		EXPERIMENTAL_TABS.map( tab => tab.title ),
-		[ "Image", "World", "Lighting", "Game", "Developer" ]
+		[ "Image", "World", "Lighting", "Game", "Other" ]
 	);
 	// Lighting keeps the direct-light stages; render scale joins Image without
 	// changing the indices used to reopen the existing tabs.
@@ -313,12 +315,20 @@ Gameplay rows
 */
 test("the predicted run-up defaults off and reaches only the worker's slice", () => {
 	// The native press (6FCD50) never walks before the server answers.
-	assert.deepEqual( experimentalGameplay( experimentalOptions() ), { predictedRunUp: false, jobKillNotices: true } );
+	assert.deepEqual( experimentalGameplay( experimentalOptions() ), {
+		predictedRunUp: false,
+		jobKillNotices: true,
+		dropPlusNotices: true
+	} );
 	for ( const value of [ 1, "true", null, {} ] ) {
 		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, false );
 	}
 	const on = experimentalOptions( { predictedRunUp: true } );
-	assert.deepEqual( experimentalGameplay( on ), { predictedRunUp: true, jobKillNotices: true } );
+	assert.deepEqual( experimentalGameplay( on ), {
+		predictedRunUp: true,
+		jobKillNotices: true,
+		dropPlusNotices: true
+	} );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
 });
 
@@ -362,4 +372,15 @@ test("job kill notices are on unless explicitly false and reach the worker's gam
 	assert.equal( off.jobKillNotices, false );
 	assert.equal( experimentalGameplay( off ).jobKillNotices, false );
 	assert.equal( "jobKillNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
+});
+
+test("drop and plus notices are on unless explicitly false and reach the worker's gameplay slice", () => {
+	for ( const value of [ undefined, null, {}, { dropPlusNotices: 1 }, { dropPlusNotices: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).dropPlusNotices, true );
+	}
+	const off = experimentalOptions( { dropPlusNotices: false } );
+	assert.equal( off.dropPlusNotices, false );
+	assert.equal( off.jobKillNotices, true );
+	assert.equal( experimentalGameplay( off ).dropPlusNotices, false );
+	assert.equal( "dropPlusNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
 });

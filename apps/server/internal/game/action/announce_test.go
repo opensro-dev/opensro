@@ -29,7 +29,8 @@ import (
 drainedNotices
 
 The texts of the queued notices, decoded from their 0x3667 frames: a job
-kill's on wire.JobKillNoticeChannel, every other on channel 7.
+kill's on wire.JobKillNoticeChannel, a seal drop's and a plus's on
+wire.DropPlusNoticeChannel.
 ================
 */
 func drainedNotices(t *testing.T, rt *Runtime) []string {
@@ -67,7 +68,7 @@ func drainedNoticeLines(t *testing.T, rt *Runtime) []noticeLine {
 		}
 		for _, frame := range routed.Frames {
 			p := frame.Payload
-			if frame.Opcode != 0x3667 || len(p) < 3 || (p[0] != 7 && p[0] != wire.JobKillNoticeChannel) {
+			if frame.Opcode != 0x3667 || len(p) < 3 || (p[0] != wire.DropPlusNoticeChannel && p[0] != wire.JobKillNoticeChannel) {
 				t.Fatalf("not a notification frame: %#x % x", frame.Opcode, p)
 			}
 			n := int(p[1]) | int(p[2])<<8
@@ -295,6 +296,28 @@ func TestReinforceIntoPlusEightAnnounces(t *testing.T) {
 
 /*
 ================
+TestEachNoticeKindTravelsOnItsChannel
+
+A seal drop and a plus go out on the drop/plus channel, a job kill on its
+own, so the client's Experimental rows can hide each group.
+================
+*/
+func TestEachNoticeKindTravelsOnItsChannel(t *testing.T) {
+	for kind, want := range map[announceKind]uint8{
+		announceSoxDrop: wire.DropPlusNoticeChannel,
+		announcePlus:    wire.DropPlusNoticeChannel,
+		announceJobKill: wire.JobKillNoticeChannel,
+	} {
+		rt, clock := newTestRuntime(testCharacter(), testItems())
+		rt.announce(testDivision, kind, "notice", clock.NowMs())
+		if got := drainedNoticeLines(t, rt); len(got) != 1 || got[0].channel != want {
+			t.Fatalf("kind %d: %+v, want one on channel %#x", kind, got, want)
+		}
+	}
+}
+
+/*
+================
 TestTickSendsQueuedNotices
 
 The runtime tick drains the queue: a notice posted from a door reaches the
@@ -308,7 +331,8 @@ func TestTickSendsQueuedNotices(t *testing.T) {
 		n := 0
 		for _, routed := range out {
 			for _, frame := range routed.Frames {
-				if routed.DivisionID == testDivision && frame.Opcode == 0x3667 && len(frame.Payload) > 0 && frame.Payload[0] == 7 {
+				if routed.DivisionID == testDivision && frame.Opcode == 0x3667 && len(frame.Payload) > 0 &&
+					frame.Payload[0] == wire.DropPlusNoticeChannel {
 					n++
 				}
 			}
