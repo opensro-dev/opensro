@@ -93,7 +93,8 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	// An eshp aura (the Cleric's recovery aura) picks its own recipient each
 	// pulse; a targeted row that merely carries eshp (Mysterious Hand,
 	// SKILL_CH_WATER_HEAL_D: efr(1,6,300,2,50,7) eshp heal) heals its target
-	// and orders its chain by HP ratio (secondaryHealTargets).
+	// and chains in distance order, since it has a primary target
+	// (secondaryHealTargets).
 	targeted := ((skill.Heal.Present && !(skill.Aura.Present && skill.Aura.Eshp)) || resu) && skill.TargetRequired
 	partyHeal := skill.Recovery.PartyHealPinned
 	lowestHeal := skill.Recovery.LowestHealPinned
@@ -205,7 +206,8 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	}
 	var secondary []uint32
 	if targeted && !resu && !overTime {
-		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, skill.Aura.Eshp, now)
+		// A primary target skips the eshp ratio sort (58C640).
+		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, false, now)
 	}
 	// Healing Division: the lowest HP ratio of the party around the caster
 	// takes the whole heal, the members nearest it the reduction's share.
@@ -557,10 +559,12 @@ without a shape-6 party efr return nothing.
 multiplies it by (100 - reduction) / 100 with truncation for the next.
 Select bit 0 includes the caster in the chain candidates (58C5E0).
 
-lowestFirst is the row's eshp (+0x298): TargetSelection_Chain (58C170)
-sorts the candidates by TargetSelection_CompareHPRatioAscending (58C0E0)
-before the chain when it is set (58C633), so the member with the lowest HP
-ratio is healed first; distance then breaks ties.
+lowestFirst is the row's eshp (+0x298) when there is no primary target:
+TargetSelection_Chain (58C170) sorts the candidates by
+TargetSelection_CompareHPRatioAscending (58C0E0) only when eshp is set
+(58C633) and its primary-target argument is null (58C640 jne 58C7EB skips
+the sort), so a targeted row such as Mysterious Hand chains in distance
+order and Healing Division in HP-ratio order; distance breaks ties.
 ==================
 */
 func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterworld.Character, center simulation.Spawn, area abnormal.EffectArea, lowestFirst bool, now int64) []uint32 {

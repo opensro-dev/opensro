@@ -6,9 +6,9 @@ skillrecovery_mysterioushand_test.go - Mysterious Hand heals its target
 Mysterious Hand (SKILL_CH_WATER_HEAL_D, efr(1,6,300,2,50,7) eshp heal) is
 a targeted force heal whose chain carries eshp. It was refused as if it
 were the Cleric's eshp aura, so the skill never cast. Natively it heals its
-target and then, at half the heal, the party member around the target with
-the lowest HP ratio (TargetSelection_Chain 58C170 sorts by
-TargetSelection_CompareHPRatioAscending when eshp is set, 58C633).
+target and then, at half the heal, the party member nearest it: its
+primary target skips the eshp HP-ratio sort (TargetSelection_Chain 58C170,
+58C640), which only Healing Division's targetless chain takes.
 
 ===========================================================================
 */
@@ -81,16 +81,17 @@ func TestMysteriousHandHealsItsTarget(t *testing.T) {
 
 /*
 ================
-TestMysteriousHandChainsTheLowestRatioFirst
+TestMysteriousHandChainsTheNearestFirst
 
 The target, then one more (MaxTargets 2): of two members in range, the
-farther one at 20 % takes the half share before the nearer one at 50 %.
+nearer one at 50 % takes the half share, not the farther one at 20 %
+(the caster, select bit 0, stands 20 away from the target: no tie).
 ================
 */
-func TestMysteriousHandChainsTheLowestRatioFirst(t *testing.T) {
+func TestMysteriousHandChainsTheNearestFirst(t *testing.T) {
 	rt, c, cast := mysteriousHandFixture(t)
 	target := nearbyCharacter(rt, c, 12, "target", 20)
-	nearer := nearbyCharacter(rt, c, 13, "nearer", 40)
+	nearer := nearbyCharacter(rt, c, 13, "nearer", 30)
 	lower := nearbyCharacter(rt, c, 14, "lower", 150)
 	rt.RewardParties = func(string) []RewardParty {
 		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(target),
@@ -108,10 +109,10 @@ func TestMysteriousHandChainsTheLowestRatioFirst(t *testing.T) {
 	if enterworld.CurrentHP(target) <= targetBefore {
 		t.Fatal("the target was not healed")
 	}
-	if enterworld.CurrentHP(lower) <= lowerBefore {
-		t.Fatal("the lowest-ratio member did not take the chain share")
+	if enterworld.CurrentHP(nearer) <= nearerBefore {
+		t.Fatal("the nearest member did not take the chain share")
 	}
-	if enterworld.CurrentHP(nearer) != nearerBefore {
-		t.Fatalf("the nearer, healthier member was healed %d -> %d", nearerBefore, enterworld.CurrentHP(nearer))
+	if enterworld.CurrentHP(lower) != lowerBefore {
+		t.Fatalf("the farther, lower-ratio member was healed %d -> %d", lowerBefore, enterworld.CurrentHP(lower))
 	}
 }

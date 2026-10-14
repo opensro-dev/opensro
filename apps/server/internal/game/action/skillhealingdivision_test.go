@@ -5,7 +5,8 @@ skillhealingdivision_test.go - Healing Division heals the lowest HP ratio
 
 Healing Division (efr(1,6,300,2,50,5) eshp heal mwhh): the party member
 around the caster with the lowest HP ratio takes the whole heal, and the
-member nearest it half of it.
+next lowest ratio around it half of it: with no primary target, eshp sorts
+the chain by HP ratio (TargetSelection_Chain 58C170, 58C633/58C640).
 
 ===========================================================================
 */
@@ -115,5 +116,45 @@ func TestHealingDivisionIncludesCasterAsSecondary(t *testing.T) {
 	want := min(maxCaster, before+amount*50/100)
 	if got := enterworld.CurrentHP(caster); got != want || got == before {
 		t.Fatalf("caster HP %d, want %d after secondary heal", got, want)
+	}
+}
+
+/*
+================
+TestHealingDivisionChainsByRatioNotDistance
+
+The share follows the HP ratio, not the distance: beside the 10 % member,
+a nearer one at 60 % gets nothing and a farther one at 30 % the half share.
+================
+*/
+func TestHealingDivisionChainsByRatioNotDistance(t *testing.T) {
+	rt, _, c := concealmentFixture(t, healingDivisionA1)
+	row := rt.deps.SkillData().(staticSkillSource)[healingDivisionA1]
+	row.Consumption.MP = 10
+	rt.deps.SkillData().(staticSkillSource)[healingDivisionA1] = row
+	low := nearbyCharacter(rt, c, 12, "low", 20)
+	nearer := nearbyCharacter(rt, c, 13, "nearer", 40)
+	lower := nearbyCharacter(rt, c, 14, "lower", 150)
+	rt.RewardParties = func(string) []RewardParty {
+		return []RewardParty{{Members: []uint32{enterworld.ObjectIDForCharacter(c), enterworld.ObjectIDForCharacter(low),
+			enterworld.ObjectIDForCharacter(nearer), enterworld.ObjectIDForCharacter(lower)}}}
+	}
+	set := func(m *enterworld.Character, percent int64) int64 {
+		maxHP, _, _, _ := rt.playerKeeperVitals(testDivision, m)
+		m.CurrentHP = testInt64(maxHP * percent / 100)
+		return enterworld.CurrentHP(m)
+	}
+	lowBefore, nearerBefore, lowerBefore := set(low, 10), set(nearer, 60), set(lower, 30)
+	if r := castSelf(rt, c, healingDivisionA1); len(r.Frames) == 0 || r.Frames[0].Payload[0] != 1 {
+		t.Fatalf("Healing Division cast: %+v", r)
+	}
+	if enterworld.CurrentHP(low) <= lowBefore {
+		t.Fatal("the lowest member was not healed")
+	}
+	if enterworld.CurrentHP(lower) <= lowerBefore {
+		t.Fatal("the next lowest ratio did not take the chain share")
+	}
+	if enterworld.CurrentHP(nearer) != nearerBefore {
+		t.Fatalf("the nearer, healthier member was healed %d -> %d", nearerBefore, enterworld.CurrentHP(nearer))
 	}
 }
