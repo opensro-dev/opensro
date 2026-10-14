@@ -280,7 +280,8 @@ func (r *Runtime) handlePartyDelete(s *transport.Session, opcode uint16, payload
 	log.Debugf("match: party entry %d deleted by %s", entryID, character.Name)
 }
 
-// handlePartyPage answers 0x7588 with the 0xB588 listing page.
+// handlePartyPage answers 0x7588 with the 0xB588 listing page, each row's
+// member count read live from the party registry.
 func (r *Runtime) handlePartyPage(s *transport.Session, opcode uint16, payload []byte) {
 	character, divisionID, ok := r.sessionIdentity(s, opcode)
 	if !ok {
@@ -293,6 +294,13 @@ func (r *Runtime) handlePartyPage(s *transport.Session, opcode uint16, payload [
 		return
 	}
 	curPage, pageCount, rows := r.board.PartyPage(divisionID, ownerKey(divisionID, character.Name), page)
+	// A listing names its party (v1.188 CPartyMatch_SubmitShardJob 5BF2A0
+	// stores the party ID, not a count), so the count is the party's size
+	// as each page is asked for. The registration snapshot went stale as
+	// soon as anyone joined or left. rows is the page's own copy.
+	for i := range rows {
+		rows[i].MemberCount = r.partyMemberCount(divisionID, rows[i].MasterName)
+	}
 	_ = s.Send(OpPartyListingPage, EncodePartyListingB588(curPage, pageCount, rows))
 }
 

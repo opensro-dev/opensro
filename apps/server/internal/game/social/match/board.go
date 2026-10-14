@@ -15,7 +15,8 @@ const PageRows = 12
 // character (identity is never client-supplied); MemberCount comes from
 // the party registry seam when the owner is partied, 1 otherwise (the
 // client's own ack writer uses the same no-active-party fallback,
-// sub_80e6b0).
+// sub_80e6b0). The stored count is only the registration's; every page
+// re-reads it live (handlePartyPage).
 type PartyEntry struct {
 	EntryID     uint32
 	PartyNumber uint32
