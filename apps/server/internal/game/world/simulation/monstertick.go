@@ -371,12 +371,7 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 			if session.DivisionID != divisionID || session.Population != batch.key.lease || !session.CombatEligible {
 				continue
 			}
-			player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus}
-			// The native job state: the worn suit's job, else 4 (4E1120).
-			player.JobState = jobStateSpecial
-			if session.Appearance != nil && session.Appearance.JobType != 0 {
-				player.JobState = session.Appearance.JobType
-			}
+			player := sessionPlayerPose(session, nowMs)
 			if ops.FirstAttackGuard != nil {
 				player.Guard = ops.FirstAttackGuard(divisionID, player.Gid, nowMs)
 			}
@@ -968,4 +963,23 @@ idleDelayMs
 */
 func (ops *MonsterMoverOps) idleDelayMs() int64 {
 	return monster.NativeIdleDelayMs(func() uint32 { return monster.SummonRandomWord(ops.rand()) })
+}
+
+/*
+================
+sessionPlayerPose
+
+One combat-eligible session as the monster tick weighs it. Its job state
+is the native one (CGObjPC_GetJobState 4DDC80): the worn suit's job, else
+4, the state CGObjPC_InitPvpAndJobStateOnLoad (4E1120) sets first.
+================
+*/
+func sessionPlayerPose(session SessionSnapshot, nowMs int64) playerPose {
+	player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs),
+		MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius,
+		NativeBodyStatus: session.NativeBodyStatus, JobState: jobStateSpecial}
+	if session.Appearance != nil && session.Appearance.JobType != 0 {
+		player.JobState = session.Appearance.JobType
+	}
+	return player
 }

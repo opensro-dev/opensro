@@ -81,3 +81,28 @@ func TestJobMonsterAreaSparesItsOwnSide(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestSessionJobStateIsNative
+
+The monster tick builds each player from its session: no appearance or no
+worn suit is job state 4 (4E1120), a suit is its job.
+================
+*/
+func TestSessionJobStateIsNative(t *testing.T) {
+	for _, c := range []struct {
+		appearance *PeerAppearance
+		want       uint8
+	}{
+		{nil, jobStateSpecial},
+		{&PeerAppearance{}, jobStateSpecial},
+		{&PeerAppearance{JobType: jobStateThief}, jobStateThief},
+		{&PeerAppearance{JobType: jobStateTrader}, jobStateTrader},
+	} {
+		got := sessionPlayerPose(SessionSnapshot{CharacterID: 5, Appearance: c.appearance}, 0)
+		if got.JobState != c.want {
+			t.Errorf("appearance %+v: job state %d, want %d", c.appearance, got.JobState, c.want)
+		}
+	}
+}
