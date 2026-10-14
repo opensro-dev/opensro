@@ -5,7 +5,8 @@ denreturn_test.go - the Bandit Den scroll's countdown and the pet summon
 it leaves free
 
 The scroll counts down in teleport mode 2. Natively a pet may be summoned
-then (493100 refuses only mode 1), and SRO_FAST_DEN_RETURN halves the
+then (493100 refuses only mode 1), and so may a transport (49B9F0) unless
+SRO_DEN_NO_TRANSPORT_SUMMON is on. SRO_FAST_DEN_RETURN halves the
 countdown; off, the countdown is the scroll's Param1.
 
 ===========================================================================
@@ -13,6 +14,7 @@ countdown; off, the countdown is the scroll's Param1.
 package action
 
 import (
+	"reflect"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -121,6 +123,58 @@ func TestFastDenReturnFromEnv(t *testing.T) {
 		t.Setenv(EnvFastDenReturn, env)
 		if got := FastDenReturnFromEnv(); got != want {
 			t.Errorf("%s=%q: %v, want %v", EnvFastDenReturn, env, got, want)
+		}
+	}
+}
+
+/*
+================
+TestDenCountdownTransportSummonFollowsTheFlag
+
+Natively 49B9F0 summons a transport during the Den countdown (teleport
+mode 2). With SRO_DEN_NO_TRANSPORT_SUMMON (port-only, not native) it is
+refused 0x69 and nothing changes; mode 1 is refused either way.
+================
+*/
+func TestDenCountdownTransportSummonFollowsTheFlag(t *testing.T) {
+	for _, tc := range []struct {
+		rule    bool
+		mode    uint8
+		summons bool
+	}{{false, teleportModeFree, true}, {true, teleportModeFree, false}, {false, teleportModeBlocking, false}, {true, teleportModeBlocking, false}} {
+		c := testCharacter()
+		dressTrader(c)
+		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 22, RefObjID: 3905,
+			Codename: "ITEM_COS_T_DHORSE3", TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1})
+		rt, _ := newTestRuntime(c, testCosSource(testItems()))
+		rt.BindPetSession(testDivision, c, 101)
+		rt.DenNoTransportSummon = tc.rule
+		c.NativeTeleportMode = tc.mode
+		before := c.Snapshot()
+		result := rt.HandleItemUse(testDivision, c, []byte{22, 0xec, 0x11})
+		summoned := len(result.Frames) > 0 && result.Frames[0].Payload[0] == 1 && c.ActiveCOS != nil
+		if summoned != tc.summons {
+			t.Fatalf("rule=%v mode=%d: summoned %v, want %v (%+v)", tc.rule, tc.mode, summoned, tc.summons, result.Frames)
+		}
+		if !tc.summons && (len(result.Frames) == 0 || result.Frames[0].Payload[1] != 0x69 || !reflect.DeepEqual(before, c.Snapshot())) {
+			t.Fatalf("rule=%v mode=%d: refusal %+v changed state or code", tc.rule, tc.mode, result.Frames)
+		}
+	}
+	if denTransportRefused(teleportModeFree, false, true) {
+		t.Fatal("the rule refused a riding horse")
+	}
+}
+
+/*
+================
+TestDenNoTransportSummonFromEnv
+================
+*/
+func TestDenNoTransportSummonFromEnv(t *testing.T) {
+	for env, want := range map[string]bool{"": false, "off": false, "on": true, "1": true, " TRUE ": true} {
+		t.Setenv(EnvDenNoTransportSummon, env)
+		if got := DenNoTransportSummonFromEnv(); got != want {
+			t.Errorf("%s=%q: %v, want %v", EnvDenNoTransportSummon, env, got, want)
 		}
 	}
 }

@@ -188,6 +188,14 @@ variable "fast_den_return" {
   default = "on"
 }
 
+# den_no_transport_summon refuses a transport summon during the Bandit Den
+# Return Scroll's countdown (port-only, not native; owner decision
+# 2026-10-14). "off" restores the native rule, which allows it.
+variable "den_no_transport_summon" {
+  type    = string
+  default = "on"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 variable "reverse_return_map" {
@@ -526,6 +534,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PARTY_MASTERIES                = var.party_masteries
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                = var.fast_den_return
+        SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates

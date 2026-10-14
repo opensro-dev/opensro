@@ -546,6 +546,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.FastDenReturn {
 		log.Infof("return: Bandit Den scroll countdown halved (%s)", action.EnvFastDenReturn)
 	}
+	// Port-only, not native: no transport comes out during the Den countdown.
+	game.items.DenNoTransportSummon = action.DenNoTransportSummonFromEnv()
+	if game.items.DenNoTransportSummon {
+		log.Infof("return: no transport summon during the Bandit Den countdown (%s)", action.EnvDenNoTransportSummon)
+	}
 	// Port-only, not native: a GM's /SETSPEED.
 	game.items.GMSetSpeed = action.GMSetSpeedFromEnv()
 	if game.items.GMSetSpeed {

@@ -439,6 +439,12 @@ func (rt *Runtime) HandleItemUse(
 				result = itemUseFailure(errCodeCantActivateCart)
 				return false
 			}
+			// Port-only, not native (denreturn.go): no transport during the
+			// Bandit Den countdown; the same 0x69 as the native mode-1 refusal.
+			if denTransportRefused(character.NativeTeleportMode, cosRef.TidWord>>11 == cosBandTransport, rt.DenNoTransportSummon) {
+				result = itemUseFailure(0x69)
+				return false
+			}
 			// #721, the summon side of the stolen-goods rule: a thief (job
 			// state 2) cannot summon a transport (TID 1/2/3/2) in a protected
 			// region (IsBattleField clear), the Thieves' Den included: v1.188

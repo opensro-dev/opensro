@@ -122,6 +122,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
 				Now:    "It counts down 2 minutes 30 seconds.",
 				Why:    "Owner-approved for the beta; the original countdown returns with one setting."},
+			{Flag: action.EnvDenNoTransportSummon, On: action.DenNoTransportSummonFromEnv(),
+				Native: "A transport can be summoned while the Bandit Den Return Scroll counts down.",
+				Now:    "No transport can be summoned during that countdown.",
+				Why:    "Thieves left stolen goods on the ground and loaded them just before arriving; the original rule returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",
