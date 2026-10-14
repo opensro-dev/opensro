@@ -55,6 +55,8 @@ import {
 	LETTER_BODY_LIMIT,
 	LETTER_MAILBOX_LIMIT,
 	LETTER_RECEIVER_LIMIT,
+	clampLetterText,
+	letterSend,
 	letterTime,
 	letterTimeKey,
 	type LetterRow
@@ -855,8 +857,9 @@ export function createUi(
 		} else if ( id === "letter-read-close" ) sendGameplay( { kind: "letter-close" } );
 		else if ( id === "letter-write-send" && letterDraft ) {
 			sendGameplay( { kind: "letter-send", receiver: letterDraft.receiver, body: letterDraft.body } );
-			// A refused draft stays open with its notice (60D270); a sent one closes.
-			if ( letterDraft.receiver.trim() && letterDraft.body ) {
+			// A refused draft stays open with its notice (60D270); only a draft
+			// that leaves as a frame closes.
+			if ( letterSend( letterDraft.receiver, letterDraft.body ) ) {
 				letterDraft = null;
 				focus = null;
 				focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
@@ -7062,9 +7065,9 @@ export function createUi(
 				} else if ( event.id === "friend-name" && friendDialog === "add" ) {
 					friendInput = event.value.slice( 0, FRIEND_NAME_LIMIT );
 				} else if ( event.id === "letter-receiver" && letterDraft ) {
-					letterDraft = { ...letterDraft, receiver: event.value.slice( 0, LETTER_RECEIVER_LIMIT ) };
+					letterDraft = { ...letterDraft, receiver: clampLetterText( event.value, LETTER_RECEIVER_LIMIT ) };
 				} else if ( event.id === LETTER_BODY_EDIT && letterDraft ) {
-					letterDraft = { ...letterDraft, body: event.value.slice( 0, LETTER_BODY_LIMIT ) };
+					letterDraft = { ...letterDraft, body: clampLetterText( event.value, LETTER_BODY_LIMIT ) };
 				} else if ( event.id === "academy-name" ) academyName = event.value;
 				else if ( event.id === "alchemy-quantity" ) alchemyQuantity = event.value;
 				else if ( event.id === FORTRESS_TAX_RATE && panel === FORTRESS_TAX_PANEL ) {

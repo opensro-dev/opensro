@@ -258,3 +258,15 @@ test("a mailbox seed with invalid UTF-8 in a sender or body is read with replace
 	g.receive( { opcode: 0xb3f2, payload: Uint8Array.from( [ 1, 0, 2, 0, 0xc3, 0x28 ] ) }, 0 );
 	assert.equal( lettersOf( g.take() ).rows[0].body, "�(" );
 });
+
+test("the write window's caps count UTF-8 bytes and never split a character", () => {
+	assert.equal( letters.clampLetterText( "abc", 2 ), "ab" );
+	// "é" is two bytes: 200 of them fit 128 in 256 bytes, and the result sends.
+	const body = letters.clampLetterText( "é".repeat( 200 ), letters.LETTER_BODY_LIMIT );
+	assert.equal( body.length, 128 );
+	assert.ok( letters.letterSend( "Berk", body ), "a clamped body is always sendable" );
+	assert.equal( letters.letterSend( "Berk", "é".repeat( 200 ) ), null, "an unclamped one is not" );
+	// A three-byte character that would cross the cap is left out whole.
+	assert.equal( letters.clampLetterText( "ab한", 4 ), "ab" );
+	assert.equal( new TextEncoder().encode( letters.clampLetterText( "한".repeat( 10 ), 12 ) ).length, 12 );
+});

@@ -365,3 +365,24 @@ export function letterTimeKey( packed: number ): number {
 	const time = letterTime( packed ), hour = (packed >>> 15) & 0x1f;
 	return ((((time.year * 16 + time.month) * 32 + time.day) * 32 + hour) * 64) + time.minute;
 }
+
+/*
+================
+clampLetterText
+
+value cut to at most limit UTF-8 bytes on a code-point boundary: the
+write window's edit caps count bytes (CIFEdit 0xC / 0x100), as letterSend
+checks them.
+================
+*/
+export function clampLetterText( value: string, limit: number ): string {
+	const encoder = new TextEncoder();
+	let out = "", bytes = 0;
+	for ( const glyph of value ) {
+		const size = encoder.encode( glyph ).length;
+		if ( bytes + size > limit ) break;
+		out += glyph;
+		bytes += size;
+	}
+	return out;
+}
