@@ -146,3 +146,17 @@ func isWearArmorFamily(tid uint16) bool {
 		return false
 	}
 }
+
+/*
+================
+ItemWhiteStats
+
+An equipment row's white stats: its reference's ranges at the row's
+variance word and plus, as combat reads them. The operator's Sun-to-Moon
+swap prints them before and after.
+================
+*/
+func ItemWhiteStats(ref *enterworld.ItemRef, varianceBits uint64, plus uint8) (Stats, error) {
+	stats, _, err := deriveItemStats(ref, varianceBits, plus)
+	return stats, err
+}

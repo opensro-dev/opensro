@@ -104,24 +104,36 @@ func (s *Store) commitStorageLocked(division string, character *domain.Character
 	if s.commitFail != nil {
 		return s.commitFail
 	}
-	record, err := json.Marshal(storage)
-	if err != nil {
-		return err
-	}
 	tx, err := s.beginTxLocked()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	_, err = tx.Exec(`INSERT INTO account_storage (account_id, record) VALUES (?, ?)
-ON CONFLICT(account_id) DO UPDATE SET record = excluded.record`, character.AccountID, string(record))
-	if err != nil {
+	if err := writeAccountStorageTx(tx, character.AccountID, storage); err != nil {
 		return err
 	}
 	if err := upsertCharacterTx(tx, division, character); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// accountStorageUpsert writes one account's warehouse record.
+const accountStorageUpsert = `INSERT INTO account_storage (account_id, record) VALUES (?, ?)
+ON CONFLICT(account_id) DO UPDATE SET record = excluded.record`
+
+/*
+================
+writeAccountStorageTx
+================
+*/
+func writeAccountStorageTx(tx *sql.Tx, account string, storage domain.AccountStorage) error {
+	record, err := json.Marshal(storage)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(accountStorageUpsert, account, string(record))
+	return err
 }
 
 /*

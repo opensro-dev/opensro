@@ -78,8 +78,40 @@ or be sold.
 ================
 */
 func (s SunEventOnly) Excludes(typeIDs [4]int64, rarity, itemClass int) bool {
-	return s.enabled && typeIDs[0] == 3 && typeIDs[1] == itemTypeEquipment && rarity == itemRaritySealed &&
-		itemClass == sealItemClass(sunEventOnlyDegree, SealSun)
+	return s.enabled && IsEventOnlySun(typeIDs, rarity, itemClass)
+}
+
+/*
+================
+IsEventOnlySun
+
+Whether an item is the Sun gear the rule covers, whatever the flag says
+(the operator's Sun-to-Moon swap reads it too).
+================
+*/
+func IsEventOnlySun(typeIDs [4]int64, rarity, itemClass int) bool {
+	return isSealedEquipment(typeIDs, rarity) && itemClass == sealItemClass(sunEventOnlyDegree, SealSun)
+}
+
+/*
+================
+IsEventOnlyMoon
+
+Whether an item is the Moon gear of the rule's degree: what the operator's
+swap trades a Sun item for.
+================
+*/
+func IsEventOnlyMoon(typeIDs [4]int64, rarity, itemClass int) bool {
+	return isSealedEquipment(typeIDs, rarity) && itemClass == sealItemClass(sunEventOnlyDegree, SealMoon)
+}
+
+/*
+================
+isSealedEquipment
+================
+*/
+func isSealedEquipment(typeIDs [4]int64, rarity int) bool {
+	return typeIDs[0] == 3 && typeIDs[1] == itemTypeEquipment && rarity == itemRaritySealed
 }
 
 /*
