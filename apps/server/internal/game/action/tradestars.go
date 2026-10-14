@@ -21,7 +21,6 @@ or unloads the transport.
 package action
 
 import (
-	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -37,7 +36,9 @@ transport or no goods.
 func (rt *Runtime) tradeStarFrame(c *enterworld.Character) wire.Frame {
 	tier := uint8(0)
 	if c != nil && vehicleCarriesGoods(rt, c) {
-		tier = caravan.DifficultyTier(rt.caravanCargoValue(c))
+		// Native from cargo units; the gold tier under SRO_TRADE_TIERS
+		// (tradetiers.go), the same tier the bandits read.
+		tier, _ = rt.caravanTier(c)
 	}
 	return wire.Frame{Opcode: wire.OpTradeStarCount, Payload: []byte{tier}}
 }
