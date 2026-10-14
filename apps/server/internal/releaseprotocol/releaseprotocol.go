@@ -45,12 +45,21 @@ type Contracts struct {
 	References int // the public reference file beside the transport
 	Effects    int // the attached-effect stream the transport sends
 	Friends    int // the friend request's prompt and consent
+	Notices    int // the port-only 0x3667 notice channels
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current = 9
+	Current = 10
+	// The notice contract: 1 carries the job-kill announcement on 0x3667
+	// channel 0x80 (#1011) and the seal-drop and +8..+11 announcements on
+	// 0x81 (#1019), laid out like channel 7 so a player can hide them. A
+	// protocol-9 client decodes the packet but drops both channels
+	// (decodeChatBroadcast returns null), so its player never sees them;
+	// the bump (F9) sends every open tab the 426 that reloads it onto a
+	// client that shows them.
+	NoticesContract = 1
 	// The friend contract: 1 asks the target first, as the original does
 	// (#965/#966): S->C 0x7164 prompts the target, its C->S 0x3012 {jid,
 	// serial, accept} answers, and 0xB164/0xB5DB carry the results. A
@@ -88,8 +97,9 @@ var history = map[int]Contracts{
 	6: {Bootstrap: 2, Roster: 2, References: 3, Companions: 1},
 	7: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2},
 	8: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1},
+	9: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1, Friends: 1},
 	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
-		Effects: EffectsContract, Friends: FriendsContract},
+		Effects: EffectsContract, Friends: FriendsContract, Notices: NoticesContract},
 }
 
 /*
