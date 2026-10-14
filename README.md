@@ -4,18 +4,18 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/opensro)
 
-**Silkroad Online v1.150 (Legend III), rebuilt end to end: play it in your browser.**
+**Silkroad Online v1.150 (Legend III), rebuilt end to end as open-source software for the browser.**
 
 OpenSRO is a complete game stack, not just an emulator:
 
 - 🎮 **A full browser client:** TypeScript and WebGPU, no install and no plugin. The original interface, world, characters, effects and sound, drawn natively in the browser.
 - ⚔️ **A full game server:** Go, with an Agent (login, accounts, characters) and GameWorld shards (combat, skills, monsters, quests, guilds, fortresses, PK, trade).
 - 🧰 **An asset pipeline:** turns your own v1.150 client installation into compact browser- and server-ready game data.
-- 🛰️ **Operations tooling:** Nomad jobs, a release pipeline, and an observatory dashboard for running a live server.
+- 🛰️ **Operations tooling:** Nomad jobs, a release pipeline, and an observatory dashboard for running your own server.
 
 Behaviour is ported from the original game, not guessed: the v1.150 client defines what exists, and server rules follow the original server's instructions. Reverse-engineering evidence (function addresses) sits right next to the code that ports it.
 
-> 🎯 **Join the beta** on [opensro.online](https://opensro.online) and our [Discord](https://discord.gg/RUua9HY657).
+> 💬 **Questions about the code?** Join our [Discord](https://discord.gg/RUua9HY657).
 
 ---
 
@@ -85,12 +85,11 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 
 ## ❤️ Support the project
 
-**OpenSRO is and will always be open source and free to play, so everyone can enjoy it, learn from it and build on it.** If you want to help, you can support it on **[Ko-fi](https://ko-fi.com/opensro)**.
+**OpenSRO is open-source software and will always stay open source, so anyone can learn from it and build on it.** If the code is useful to you, you can support its development on **[Ko-fi](https://ko-fi.com/opensro)**.
 
-- 💸 **Where it goes:** strictly to the project's development: the server bill, dev tools and assets. Nothing else.
-- 🎭 **What supporters get:** cosmetic thanks only: a Supporter role on Discord, an in-game title and a site badge (being set up). **No pay-to-win, ever:** donating never changes stats, drops, EXP, gold, alchemy, PvP, queues or trading.
-- 🎮 **Never required:** every player gets the same game, whether they donate or not.
-- 💬 **After donating:** DM a staff member on [Discord](https://discord.gg/RUua9HY657) with your Ko-fi name. Staff never ask for passwords or payment details.
+- 💸 **Where it goes:** development of this repository: dev tools, CI and documentation.
+- 🎁 **A thank-you, nothing more:** a donation buys no access, items, perks or advantages of any kind.
+- 🙅 **Never required:** the code is the same for everyone, under the [AGPL](LICENSE).
 
 The full promise is in [SUPPORT.md](SUPPORT.md).
 
@@ -101,5 +100,5 @@ The full promise is in [SUPPORT.md](SUPPORT.md).
 - 📖 [docs/README.md](docs/README.md): the documentation index (architecture, asset pipeline, profiling, design notes)
 - 🚢 [RELEASE.md](RELEASE.md): the release checklist
 - 🔒 [SECURITY.md](SECURITY.md): how to report a vulnerability
-- ❤️ [SUPPORT.md](SUPPORT.md): getting help, and how donations are used
+- ❤️ [SUPPORT.md](SUPPORT.md): getting help, and supporting development
 - ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)
