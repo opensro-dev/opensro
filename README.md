@@ -88,7 +88,7 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 **OpenSRO is and will always be open source and free to play, so everyone can enjoy it, learn from it and build on it.** If you want to help, you can support it on **[Ko-fi](https://ko-fi.com/opensro)**.
 
 - 💸 **Where it goes:** strictly to the project's development: the server bill, dev tools and assets. Nothing else.
-- 🎭 **What supporters get:** cosmetic thanks only: a Supporter role on Discord now, with an in-game title and a site badge coming. **No pay-to-win, ever:** donating never changes stats, drops, EXP, gold, alchemy, PvP, queues or trading.
+- 🎭 **What supporters get:** cosmetic thanks only: a Supporter role on Discord, an in-game title and a site badge (being set up). **No pay-to-win, ever:** donating never changes stats, drops, EXP, gold, alchemy, PvP, queues or trading.
 - 🎮 **Never required:** every player gets the same game, whether they donate or not.
 - 💬 **After donating:** DM a staff member on [Discord](https://discord.gg/RUua9HY657) with your Ko-fi name. Staff never ask for passwords or payment details.
 

@@ -15,7 +15,7 @@ Our promise:
 1. **Open source forever:** OpenSRO is and will always be open source and free to play, so everyone can enjoy it, learn from it and build on it.
 2. **Donations go strictly to development:** the server bill, dev tools and assets for the project.
 3. **No pay-to-win, ever.** A donation never changes stats, drops, EXP, gold, alchemy, PvP, queue position or trading.
-4. **Supporters get cosmetic thanks only:** a Supporter role on Discord now, with an in-game title and a site badge coming. Every supporter gets the same set; there are no tiers.
+4. **Supporters get cosmetic thanks only:** a Supporter role on Discord, an in-game title and a site badge (being set up). Every supporter gets the same set; there are no tiers.
 5. **Never required:** every player gets the same game, whether they donate or not.
 
 After donating, DM a staff member on Discord with your Ko-fi name. Staff never ask for passwords or payment details.
