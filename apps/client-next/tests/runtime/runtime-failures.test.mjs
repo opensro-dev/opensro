@@ -75,6 +75,18 @@ const { startRuntime } = await import(
 );
 /*
 ================
+noTextureFeatures
+
+Every fake owner's texture-features hook: the renderer's resolves empty
+(no variant), the asset owner's ignores what it is given.
+================
+*/
+function noTextureFeatures() {
+	return Promise.resolve( [] );
+}
+
+/*
+================
 frameOwners
 
 Owners whose first frame reaches characters.step; failure selects which
@@ -84,6 +96,7 @@ owner fails it ("assets" dies idle, "characters" throws from its step).
 function frameOwners( failure, closed, reports, sounds ) {
 	const owners = Object.fromEntries(
 		Object.keys( factories ).map( key => [ key, {
+			textureFeatures: noTextureFeatures,
 			/*
 ================
 step
@@ -274,6 +287,7 @@ test("startup rolls back every acquired owner in reverse order at every construc
 	let failure = null;
 	globalThis.__runtimeOwners = Object.fromEntries(
 		Object.keys( factories ).map( name => [ name, {
+			textureFeatures: noTextureFeatures,
 			/*
 ================
 dispose
@@ -339,6 +353,7 @@ test("cleanup drains remaining owners when a disposer throws and never runs twic
 	const closed = [],
 		owners = Object.fromEntries(
 			Object.keys( factories ).map( name => [ name, {
+				textureFeatures: noTextureFeatures,
 				/*
 ================
 dispose

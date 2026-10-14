@@ -50,10 +50,15 @@ const VIDEO = Object.freeze( {
 diagnosticDevices
 
 Install a fake device factory that records each device's flag, its
-replacement and the Experimental video values it receives.
+replacement and the Experimental video values it receives. features(i)
+gives the i-th device's texture features (none, at once, by default).
 ================
 */
-function diagnosticDevices( t ) {
+/**
+ * @param {import("node:test").TestContext} t
+ * @param {( index: number ) => Promise<readonly string[]>} [features]
+ */
+function diagnosticDevices( t, features = () => Promise.resolve( [] ) ) {
 	const original = Object.getOwnPropertyDescriptor( globalThis, "__diagnosticDevice" );
 	t.after( () => {
 		if ( original ) Object.defineProperty( globalThis, "__diagnosticDevice", original );
@@ -62,6 +67,7 @@ function diagnosticDevices( t ) {
 	const devices = [];
 	globalThis.__diagnosticDevice = flag => {
 		const row = { flag, phase: "starting", disposed: false, video: /** @type {unknown[]} */ ([]) };
+		const rowFeatures = features( devices.length );
 		devices.push( row );
 		return {
 			phase: () => row.phase,
@@ -72,7 +78,7 @@ function diagnosticDevices( t ) {
 				row.video.push( value );
 			},
 			gpuTiming: () => null,
-			textureFeatures: async () => [],
+			textureFeatures: () => rowFeatures,
 			geometry: () => null,
 			images: () => null,
 			dispose() {
@@ -98,6 +104,34 @@ test("diagnostic selection reaches initial and replacement device owners", t => 
 		renderer.dispose();
 		assert.ok( devices.every( d => d.disposed ) );
 	}
+});
+
+test("texture features come from the replacement of a device lost before it learned them", async t => {
+	/** @type {((features: readonly string[]) => void)[]} */
+	const known = [];
+	const devices = diagnosticDevices(
+		t,
+		() => /** @type {Promise<readonly string[]>} */ (new Promise( resolve => known.push( resolve ) ))
+	);
+	const renderer = createRenderer( {}, undefined, undefined, {} );
+	devices[0].phase = "failed";
+	renderer.frame( { width: 1024, height: 768 } );
+	assert.equal( devices.length, 2 );
+	known[1]( [ "texture-compression-astc" ] );
+	assert.deepEqual( await renderer.textureFeatures(), [ "texture-compression-astc" ] );
+	renderer.dispose();
+});
+
+test("texture features are empty once no device will learn them, so texture reads never wait", async t => {
+	const devices = diagnosticDevices( t, () => new Promise( () => {} ) );
+	const renderer = createRenderer( {}, undefined, undefined, {} );
+	for ( let i = 0; i < 4; i++ ) {
+		devices[i].phase = "failed";
+		renderer.frame( { width: 1024, height: 768 } );
+	}
+	assert.equal( devices.length, 4, "three recoveries, then the renderer gives up" );
+	assert.deepEqual( await renderer.textureFeatures(), [] );
+	renderer.dispose();
 });
 
 test("the Experimental video preference reaches the device and every replacement", t => {

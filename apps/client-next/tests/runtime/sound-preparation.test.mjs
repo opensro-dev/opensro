@@ -52,6 +52,7 @@ function fixture() {
 		progress: () => null,
 		health: () => ({ phase: "running" }),
 		install() {},
+		textureFeatures() {},
 		dispose() {},
 		available: () => 4 - pending.size,
 		/*

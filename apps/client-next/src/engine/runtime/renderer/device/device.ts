@@ -104,13 +104,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	================
 	*/
 	// The texture compression features this device samples, once it exists;
-	// empty when it never does (texture-variants.ts reads them).
+	// empty when it fails for good. A recoverable failure leaves them to the
+	// renderer's replacement device (renderer.ts followFeatures).
 	let texturesKnown: ( features: readonly string[] ) => void = () => {};
 	const textureFeatures = new Promise<readonly string[]>( resolve => {
 		texturesKnown = resolve;
 	} );
 	const fail = ( error: unknown, canRecover = false ) => {
-		texturesKnown( [] );
+		if ( !canRecover ) texturesKnown( [] );
 		if ( generation !== epoch ) {
 			return;
 		}

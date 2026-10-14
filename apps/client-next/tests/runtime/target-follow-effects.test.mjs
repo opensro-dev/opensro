@@ -32,6 +32,7 @@ function movingTargetEffect( action, options = {} ) {
 			progress: () => null,
 			health: () => ({ phase: "running" }),
 			install() {},
+			textureFeatures() {},
 			dispose() {
 				jobs.clear();
 			},

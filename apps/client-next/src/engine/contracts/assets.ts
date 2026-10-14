@@ -190,7 +190,7 @@ export interface AssetOwner {
 	take( id: number ): AssetResult | null;
 	// Port-only: the device's texture features, given once when known
 	// (foundation/assets/texture-variants.ts).
-	textureFeatures?( features: readonly string[] ): void;
+	textureFeatures( features: readonly string[] ): void;
 	cancel( id: number ): void;
 	// Starts the worker's background install once; uses no request slot.
 	install( listUrl: string ): void;

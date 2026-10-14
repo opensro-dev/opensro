@@ -34,6 +34,7 @@ cancel
 ================
 		*/
 		cancel() {},
+		textureFeatures() {},
 		/*
 ================
 install

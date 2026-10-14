@@ -140,7 +140,7 @@ export function startRuntime(
 		);
 		// Port-only: the asset owner learns the device's texture features once,
 		// to serve re-encoded textures where BC is missing (texture-variants.ts).
-		void renderer.textureFeatures?.().then( features => assets.textureFeatures?.( features ) );
+		void renderer.textureFeatures().then( features => assets.textureFeatures( features ) );
 		const frontend = own(
 			createFrontend(
 				assets,

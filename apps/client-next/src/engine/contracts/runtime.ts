@@ -317,7 +317,7 @@ export interface Renderer extends Disposable {
 	cancelWorldUpdate(): void;
 	// Port-only: the texture compression features of the GPU device once it
 	// exists, empty when it never does (foundation/assets/texture-variants.ts).
-	textureFeatures?(): Promise<readonly string[]>;
+	textureFeatures(): Promise<readonly string[]>;
 	// The drawn frontend scene sceneId gives up its CPU geometry; after a
 	// device loss it is reported in worldStats().lostSceneId. False when it
 	// is not the drawn scene or not at full terrain detail.

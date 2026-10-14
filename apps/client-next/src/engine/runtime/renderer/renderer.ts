@@ -84,9 +84,17 @@ export function createRenderer(
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
 		characters = createCharacters( random );
 	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
-	// The first device's texture features: a recreated device on the same
-	// adapter has the same ones, and the variant is chosen once per page.
-	const textureFeatures = device.textureFeatures();
+	// The texture features of the first device that learns them; the variant
+	// is chosen once per page. A device lost before it learned them hands over
+	// to its replacement (followFeatures); once no device will, they are empty,
+	// so native texture reads never wait on a renderer that gave up.
+	let settleFeatures: ( features: readonly string[] ) => void = () => {};
+	const textureFeatures = new Promise<readonly string[]>( resolve => {
+		settleFeatures = resolve;
+	} );
+	const followFeatures = ( owner: ReturnType<typeof createDevice> ) =>
+		void owner.textureFeatures().then( settleFeatures );
+	followFeatures( device );
 	let surface: SurfaceOwner | null = null, frame: FrameOwner | null = null;
 	let transformDirty = false, instancesDirty = false;
 	let mesh: Geometry | null = null, meshDraw: GeometryDraw | null = null;
@@ -509,10 +517,12 @@ export function createRenderer(
 					residentUi.clear();
 					residentUiProduct = null;
 					device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false );
+					followFeatures( device );
 					device.textureOptions( video.records[video.active][8] === 1, video.records[video.active][9]! );
 					device.experimentalVideo( experimental );
 					for ( const id of uiTextures.keys() ) dirtyUi.add( id );
 				}
+				if ( device.phase() === "failed" ) settleFeatures( [] );
 				if ( device.phase() !== "running" ) {
 					return;
 				}
