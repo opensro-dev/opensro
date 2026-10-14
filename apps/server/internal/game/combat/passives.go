@@ -17,7 +17,6 @@ package combat
 
 import (
 	"fmt"
-	"sync"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/abnormal"
@@ -87,7 +86,7 @@ once instead of every learned row being built four times (2026-10-13 prod
 profile: about 11% of the GameWorld). The selection is exactly the one the
 projections made each on their own: the first id in c.Skills that holds
 its group's highest rank, that group then taken. Rows are appended to
-into[:0], so a caller can hand back a scratch buffer (takeRankRows).
+into[:0]. Callers take them through learnedRankRowsCached (rankcache.go).
 ==================
 */
 func learnedRankRows(c *domain.Character, skills enterworld.SkillDataSource, into []enterworld.SkillRow) []enterworld.SkillRow {
@@ -111,39 +110,6 @@ func learnedRankRows(c *domain.Character, skills enterworld.SkillDataSource, int
 	return rows
 }
 
-// rankRowScratch recycles the selected-row buffers. A SkillRow is about
-// 1.5 KB, so a fresh slice per stats projection allocated ten times what
-// the old per-row stack copies did.
-var rankRowScratch = sync.Pool{New: func() any { return new([]enterworld.SkillRow) }}
-
-/*
-==================
-takeRankRows
-
-learnedRankRows into a pooled buffer. The caller copies what it keeps out
-of the rows and returns the buffer with releaseRankRows.
-==================
-*/
-func takeRankRows(c *domain.Character, skills enterworld.SkillDataSource) *[]enterworld.SkillRow {
-	buf := rankRowScratch.Get().(*[]enterworld.SkillRow)
-	*buf = learnedRankRows(c, skills, *buf)
-	return buf
-}
-
-/*
-==================
-releaseRankRows
-
-Clears the rows so the pool holds no references into the skill table, then
-returns the buffer.
-==================
-*/
-func releaseRankRows(buf *[]enterworld.SkillRow) {
-	clear(*buf)
-	*buf = (*buf)[:0]
-	rankRowScratch.Put(buf)
-}
-
 /*
 ==================
 learnedPassives
@@ -163,9 +129,7 @@ func learnedPassives(c *domain.Character, skills enterworld.SkillDataSource, ite
 	if skills == nil {
 		return nil, enterworld.SkillParameterValues{}, fmt.Errorf("combat: learned skills require skill references")
 	}
-	rows := takeRankRows(c, skills)
-	defer releaseRankRows(rows)
-	return learnedPassivesFrom(c, *rows, items, weaponKind)
+	return learnedPassivesFrom(c, learnedRankRowsCached(c, skills), items, weaponKind)
 }
 
 /*
@@ -263,9 +227,7 @@ func learnedStatusResistance(c *domain.Character, skills enterworld.SkillDataSou
 	if skills == nil {
 		return [17]abnormal.Resistance{}
 	}
-	rows := takeRankRows(c, skills)
-	defer releaseRankRows(rows)
-	return learnedStatusResistanceFrom(c, *rows, items)
+	return learnedStatusResistanceFrom(c, learnedRankRowsCached(c, skills), items)
 }
 
 /*

@@ -78,9 +78,7 @@ func learnedDamageReturn(c *domain.Character, skills enterworld.SkillDataSource,
 	if skills == nil {
 		return enterworld.SkillDamageReturn{}, 0
 	}
-	rows := takeRankRows(c, skills)
-	defer releaseRankRows(rows)
-	return learnedDamageReturnFrom(c, *rows, items)
+	return learnedDamageReturnFrom(c, learnedRankRowsCached(c, skills), items)
 }
 
 /*

@@ -314,13 +314,12 @@ func PlayerStatsWithModifiers(
 		out.StatusResistance = learnedStatusResistance(character, skills, catalogs.Items)
 		out.DamageReturn, out.DamageReturnSkill = learnedDamageReturn(character, skills, catalogs.Items)
 	} else {
-		rows := takeRankRows(character, skills)
-		passives, power, err = learnedPassivesFrom(character, *rows, catalogs.Items, passiveWeaponKind)
+		rows := learnedRankRowsCached(character, skills)
+		passives, power, err = learnedPassivesFrom(character, rows, catalogs.Items, passiveWeaponKind)
 		if err == nil {
-			out.StatusResistance = learnedStatusResistanceFrom(character, *rows, catalogs.Items)
-			out.DamageReturn, out.DamageReturnSkill = learnedDamageReturnFrom(character, *rows, catalogs.Items)
+			out.StatusResistance = learnedStatusResistanceFrom(character, rows, catalogs.Items)
+			out.DamageReturn, out.DamageReturnSkill = learnedDamageReturnFrom(character, rows, catalogs.Items)
 		}
-		releaseRankRows(rows)
 		if err != nil {
 			return Stats{}, Loadout{}, err
 		}

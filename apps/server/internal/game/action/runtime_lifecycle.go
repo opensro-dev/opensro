@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/loot"
@@ -502,6 +503,8 @@ func (rt *Runtime) forgetCharacterLocked(divisionID, characterName string) {
 	if c := rt.findCharacter(divisionID, characterName); c != nil {
 		departedGID = enterworld.ObjectIDForCharacter(c)
 		rt.noteLastSeen(c)
+		// The learned rank rows are content-keyed; dropping them only frees memory.
+		combat.ForgetRankRows(c.ID)
 		rt.releaseGuildStorage(divisionID, c.Name)
 		rt.retirePremiumSpend(divisionID, c, rt.Now().UnixMilli())
 	}

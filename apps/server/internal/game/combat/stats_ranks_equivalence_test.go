@@ -303,11 +303,21 @@ func BenchmarkPlayerPassiveProjection(b *testing.B) {
 	})
 	b.Run("rank-rows", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			rows := takeRankRows(c, skills)
-			learnedPassivesFrom(c, *rows, nil, 0)
-			learnedStatusResistanceFrom(c, *rows, nil)
-			learnedDamageReturnFrom(c, *rows, nil)
-			releaseRankRows(rows)
+			rows := learnedRankRows(c, skills, nil)
+			learnedPassivesFrom(c, rows, nil, 0)
+			learnedStatusResistanceFrom(c, rows, nil)
+			learnedDamageReturnFrom(c, rows, nil)
+		}
+	})
+	// The production path: a character with an ID hits rankcache.go.
+	cached := *c
+	cached.ID = 1
+	b.Run("rank-rows-cached", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			rows := learnedRankRowsCached(&cached, skills)
+			learnedPassivesFrom(&cached, rows, nil, 0)
+			learnedStatusResistanceFrom(&cached, rows, nil)
+			learnedDamageReturnFrom(&cached, rows, nil)
 		}
 	})
 }
