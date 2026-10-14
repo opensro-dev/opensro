@@ -1,3 +1,13 @@
+/*
+===========================================================================
+
+catalog_test.go - the alchemy catalogue against the shipped tables
+
+Read through licensed.RequireGameData: a clean checkout skips, the full
+check (SRO_REQUIRE_GAME_DATA=1) fails when the data is missing.
+
+===========================================================================
+*/
 package alchemy
 
 import (
@@ -5,18 +15,26 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/inventory"
-	"os"
-	"path/filepath"
+	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/licensed"
 	"sort"
 	"testing"
 )
 
+/*
+================
+TestPublishedCatalog
+
+The shipped item and magic tables load, and every category and grade's
+dissolution profile admits its real reference rows.
+================
+*/
 func TestPublishedCatalog(t *testing.T) {
-	dir := os.Getenv("SRO_ALCHEMY_TEXTDATA")
-	if dir == "" {
-		t.Skip("set SRO_ALCHEMY_TEXTDATA to validate the published media")
-	}
-	c, err := LoadCatalog(filepath.Clean(dir), enterworld.NewTextdataItems(dir))
+	// The shipped tables, as every licensed test reads them: a clean
+	// checkout skips, the full check (SRO_REQUIRE_GAME_DATA=1) fails.
+	licensed.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
+	c, err := LoadCatalog(dir, enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
 	}

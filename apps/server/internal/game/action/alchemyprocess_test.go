@@ -1,20 +1,39 @@
+/*
+===========================================================================
+
+alchemyprocess_test.go - alchemy compound and dissolve through the action handler
+
+The published-dissolution case reads the shipped tables through
+licensed.RequireGameData, so a clean checkout skips it and the full check
+runs it.
+
+===========================================================================
+*/
 package action
 
 import (
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/wire"
-	"os"
+	"opensro.online/server/internal/testsupport/gamedatatest"
+	"opensro.online/server/internal/testsupport/licensed"
 	"reflect"
 	"sync"
 	"testing"
 )
 
+/*
+================
+TestAlchemyPublishedDissolveCommitsOnceThroughHandler
+
+Two concurrent dissolutions of one published weapon commit exactly once.
+================
+*/
 func TestAlchemyPublishedDissolveCommitsOnceThroughHandler(t *testing.T) {
-	dir := os.Getenv("SRO_ALCHEMY_TEXTDATA")
-	if dir == "" {
-		t.Skip("set SRO_ALCHEMY_TEXTDATA for published dissolution acceptance")
-	}
+	// The shipped tables, as every licensed test reads them: a clean
+	// checkout skips, the full check (SRO_REQUIRE_GAME_DATA=1) fails.
+	licensed.RequireGameData(t)
+	dir := gamedatatest.TextdataDir(t)
 	catalog, err := alchemy.LoadCatalog(dir, enterworld.NewTextdataItems(dir))
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +100,11 @@ func TestAlchemyPublishedDissolveCommitsOnceThroughHandler(t *testing.T) {
 	}
 }
 
+/*
+================
+TestAlchemyCompoundConcurrentCommitAddsNewRowsOnce
+================
+*/
 func TestAlchemyCompoundConcurrentCommitAddsNewRowsOnce(t *testing.T) {
 	rt, c := alchemyRuntime()
 	rt.Alchemy.Items = map[string]alchemy.Reference{
