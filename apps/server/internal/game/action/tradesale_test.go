@@ -9,6 +9,7 @@ package action
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -230,7 +231,7 @@ func TestTraderPartySettlementFiltersRecipientsAndCommitsTogether(t *testing.T) 
 	calls := 0
 	deps.UpdateCharacters = func(members []*enterworld.Character, label string, update func() bool) bool {
 		calls++
-		if len(members) != 3 || label != "trade-sale" {
+		if len(members) != 3 || label != fmt.Sprintf("trade-sale %d", c.ID) {
 			t.Fatalf("transaction roster %+v %q", members, label)
 		}
 		return update()
@@ -429,7 +430,7 @@ func TestCommerceDoorLabelNamesTradeSales(t *testing.T) {
 	goods := wire.PackTypeFlags(3, 3, 8, 1)
 	potion := wire.PackTypeFlags(3, 3, 1, 1)
 	const transportGID, petGID = 0x00C00010, 0x00C00011
-	c := &enterworld.Character{
+	c := &enterworld.Character{ID: 42,
 		MissionInventory: []enterworld.InventoryRow{
 			{Slot: 13, TypeFlags: goods, StackCount: 5}, {Slot: 14, TypeFlags: potion, StackCount: 5}},
 		ActiveCOS: &enterworld.CharacterCOS{GID: transportGID, Summoned: true, Container: &domain.COSContainer{
@@ -438,6 +439,7 @@ func TestCommerceDoorLabelNamesTradeSales(t *testing.T) {
 	if !inventory.IsTradeGoods(goods) || inventory.IsTradeGoods(potion) {
 		t.Fatal("fixture type flags do not classify as intended")
 	}
+	sale := fmt.Sprintf("trade-sale %d", c.ID)
 	// A pickup pet rides on its summoner's bag row (domain Companions).
 	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 15, StackCount: 1,
 		Summon: &enterworld.CharacterCOS{GID: petGID, Summoned: true, Container: &domain.COSContainer{
@@ -450,9 +452,9 @@ func TestCommerceDoorLabelNamesTradeSales(t *testing.T) {
 		fromCOS bool
 		want    string
 	}{
-		{"goods from the bag", wire.MoveTypeShopSell, 13, 0, false, "trade-sale"},
+		{"goods from the bag", wire.MoveTypeShopSell, 13, 0, false, sale},
 		{"potion from the bag", wire.MoveTypeShopSell, 14, 0, false, "shop-transaction"},
-		{"goods from the transport", wire.MoveTypeShopSell, 0, transportGID, true, "trade-sale"},
+		{"goods from the transport", wire.MoveTypeShopSell, 0, transportGID, true, sale},
 		{"potion from a pickup pet", wire.MoveTypeShopSell, 0, petGID, true, "shop-transaction"},
 		{"a purchase", wire.MoveTypeShopBuy, 13, 0, false, "shop-transaction"},
 	}
@@ -461,5 +463,12 @@ func TestCommerceDoorLabelNamesTradeSales(t *testing.T) {
 		if got := commerceDoorLabel(c, q, tc.fromCOS); got != tc.want {
 			t.Fatalf("%s = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+	// A thief's goods sale names its own door; the seller is still named.
+	c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: enterworld.JobSuitSlot,
+		TypeFlags: wire.PackTypeFlags(3, 1, 7, domain.JobThief), StackCount: 1})
+	q := wire.ItemMoveRequest{MovementType: wire.MoveTypeShopSell, SourceSlot: 13}
+	if got, want := commerceDoorLabel(c, q, false), fmt.Sprintf("thief-sale %d", c.ID); got != want {
+		t.Fatalf("thief goods sale = %q, want %q", got, want)
 	}
 }

@@ -257,9 +257,11 @@ commerceDoorLabel
 The door a shop transaction commits under, which names its gold rows in
 the economy ledger (port-only, domain/economy.go): a sale whose sold row is
 trade goods (in the bag, or in the COS bag the sale names, a transport's
-or a pickup pet's) pays out under "trade-sale"; every other purchase or
-sale stays "shop-transaction". The snapshot is read before the door; the
-door's own admission still decides.
+or a pickup pet's) pays out under "trade-sale <seller id>", or under
+"thief-sale <seller id>" when a thief sells stolen goods at the den; the
+id lets the ledger tell the seller's credit from the party's shares. Every
+other purchase or sale stays "shop-transaction". The snapshot is read
+before the door; the door's own admission still decides.
 ================
 */
 func commerceDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, fromCOS bool) string {
@@ -274,9 +276,13 @@ func commerceDoorLabel(snapshot *enterworld.Character, q wire.ItemMoveRequest, f
 		}
 	}
 	for _, row := range rows {
-		if row.Slot == int64(q.SourceSlot) && inventory.IsTradeGoods(row.TypeFlags) {
-			return "trade-sale"
+		if row.Slot != int64(q.SourceSlot) || !inventory.IsTradeGoods(row.TypeFlags) {
+			continue
 		}
+		if enterworld.DressedJob(snapshot) == domain.JobThief {
+			return fmt.Sprintf("thief-sale %d", snapshot.ID)
+		}
+		return fmt.Sprintf("trade-sale %d", snapshot.ID)
 	}
 	return "shop-transaction"
 }

@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-economy_test.go - every reason the door table produces has a kind
+economy_test.go - every reason the door tables produce has a kind
 
 ===========================================================================
 */
@@ -22,6 +22,13 @@ func TestEveryDoorReasonHasAKind(t *testing.T) {
 		for _, reason := range []string{reasons.gain, reasons.loss} {
 			if reason != "" && EconomyReasonKind(reason) == EconomyKindUnknown {
 				t.Fatalf("door %s reason %s has no kind", door, reason)
+			}
+		}
+	}
+	for door, reasons := range economyMemberReasons {
+		for _, reason := range []string{reasons.subject, reasons.member} {
+			if EconomyReasonKind(reason) == EconomyKindUnknown {
+				t.Fatalf("settlement door %s reason %s has no kind", door, reason)
 			}
 		}
 	}

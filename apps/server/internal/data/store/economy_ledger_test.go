@@ -13,6 +13,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -185,6 +186,43 @@ func TestTransferWritesBothSides(t *testing.T) {
 	}
 	if sides[a.ID] != -200 || sides[b.ID] != 200 {
 		t.Fatalf("exchange sides %v", sides)
+	}
+}
+
+/*
+================
+TestTradeSettlementNamesSellerAndShares
+
+A trade-goods sale pays the seller and the party in one settlement; the
+door names the seller, so the seller's row is its credit and the others'
+are party shares. A thief's sale at the den is its own reason.
+================
+*/
+func TestTradeSettlementNamesSellerAndShares(t *testing.T) {
+	s := openTest(t, t.TempDir(), newTestClock())
+	seller := newLedgerCharacter(t, s, "LedgerSeller", 100)
+	share := newLedgerCharacter(t, s, "LedgerShare", 100)
+	pay := func(door string) map[int64]string {
+		before := len(ledgerRows(t, s))
+		s.UpdateTrade([]*domain.Character{seller, share}, fmt.Sprintf("%s %d", door, seller.ID), func(*domain.TradeRewardPool) bool {
+			sg, hg := *seller.Gold+500, *share.Gold+50
+			seller.Gold, share.Gold = &sg, &hg
+			return true
+		})
+		reasons := map[int64]string{}
+		for _, row := range ledgerRows(t, s)[before:] {
+			if row.door != door {
+				t.Fatalf("%s row %+v names door %q", door, row, row.door)
+			}
+			reasons[row.charID] = row.reason
+		}
+		return reasons
+	}
+	if got := pay("trade-sale"); got[seller.ID] != "trade_sale_credit" || got[share.ID] != "trade_party_share" || len(got) != 2 {
+		t.Fatalf("trade sale reasons %v", got)
+	}
+	if got := pay("thief-sale"); got[seller.ID] != "thief_den_sale" || got[share.ID] != "trade_party_share" || len(got) != 2 {
+		t.Fatalf("thief sale reasons %v", got)
 	}
 }
 

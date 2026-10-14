@@ -15,6 +15,7 @@ package domain
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -45,9 +46,6 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"create-character": {gain: "starting_gold"},
 	"bootstrap-seed":   {gain: "starting_gold"},
 	"shop-buyback":     {loss: "buyback"},
-	// A trade-goods sale's payouts: the seller's credit and every party
-	// share commit in one settlement (commerce.go commerceDoorLabel).
-	"trade-sale": {gain: "trade_payout"},
 	// A portal or guide's fee, and its refund when the travel rolls back.
 	"portal-travel":         {loss: "teleport_fee"},
 	"guide-reverse-return":  {loss: "teleport_fee"},
@@ -94,6 +92,16 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"operator-grant-items":      {gain: "gm_grant", loss: "gm_grant"},
 }
 
+// economyMemberReasons maps a settlement door whose label names its subject
+// ("trade-sale 42") to the subject's reason and every other member's. A
+// trade-goods sale pays the seller and the party's shares in one commit
+// (action/commerce.go commerceDoorLabel); a thief's sale at the den is told
+// apart from a trader's by its door.
+var economyMemberReasons = map[string]struct{ subject, member string }{
+	"trade-sale": {subject: "trade_sale_credit", member: "trade_party_share"},
+	"thief-sale": {subject: "thief_den_sale", member: "trade_party_share"},
+}
+
 /*
 ================
 EconomyDoor
@@ -126,6 +134,28 @@ func EconomyReason(door string, gain bool) string {
 	return name
 }
 
+/*
+================
+EconomyRowReason
+
+The reason of one character's gold change in a door's commit. A settlement
+door names its subject's id after the door word; its subject and the other
+members gain under different reasons. Every other door goes through
+EconomyReason.
+================
+*/
+func EconomyRowReason(label string, charID int64, gain bool) string {
+	door, rest, _ := strings.Cut(strings.TrimSpace(label), " ")
+	reasons, settlement := economyMemberReasons[door]
+	if !settlement || !gain {
+		return EconomyReason(door, gain)
+	}
+	if subject, err := strconv.ParseInt(rest, 10, 64); err == nil && subject == charID {
+		return reasons.subject
+	}
+	return reasons.member
+}
+
 //============================================================================
 
 // The economy kinds of a reason (contract v1 meta): a mint adds gold to the
@@ -140,7 +170,8 @@ const (
 
 // economyReasonKinds names every reason the door table produces. A gold
 // drop is a burn: what nobody picks up expires, and what someone picks up
-// comes back through pickup-gold as monster_gold.
+// comes back through pickup-gold as monster_gold. trade_payout is no longer
+// produced (economyMemberReasons split it); rows written before keep a kind.
 var economyReasonKinds = map[string]string{
 	"npc_sale":               EconomyKindMint,
 	"monster_gold":           EconomyKindMint,
@@ -151,6 +182,9 @@ var economyReasonKinds = map[string]string{
 	"fortress_withdraw":      EconomyKindMint,
 	"guild_war_compensation": EconomyKindMint,
 	"trade_payout":           EconomyKindMint,
+	"trade_sale_credit":      EconomyKindMint,
+	"trade_party_share":      EconomyKindMint,
+	"thief_den_sale":         EconomyKindMint,
 	"teleport_refund":        EconomyKindMint,
 	"starting_gold":          EconomyKindMint,
 	"gm_grant":               EconomyKindMint,

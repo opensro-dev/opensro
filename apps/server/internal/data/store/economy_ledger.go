@@ -207,7 +207,7 @@ func (s *Store) goldRowLocked(label, division string, c *domain.Character, balan
 		return ledgerRow{}, false
 	}
 	door := domain.EconomyDoor(label)
-	reason := domain.EconomyReason(door, balance > before)
+	reason := domain.EconomyRowReason(label, c.ID, balance > before)
 	if reason == domain.EconomyReasonUnattributed && !s.ledger.warned[door] {
 		// A door the reason table does not name moved gold: the row keeps
 		// the door, and the log names it once so the table can learn it.
