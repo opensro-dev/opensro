@@ -143,6 +143,20 @@ def server_data_upload(archive, directory):
 
 
 # ================
+# server_data_directory
+#
+# Where server-data.tar is written. Beside the archive when it is staged
+# alone; with a package, beside OUTPUT and never inside it, because
+# client_data.bundle creates OUTPUT itself and refuses one that exists (the
+# F8 combined run stopped there after the server data had been sent).
+# ================
+def server_data_directory(output, archive):
+	if output is None:
+		return archive.parent
+	return output.with_name(output.name + "-server-data")
+
+
+# ================
 # stored_payloads
 #
 # Asks the host which needed payloads it already stores (receiver
@@ -192,7 +206,7 @@ def main():
 	if arguments.package is None and not arguments.server_data:
 		parser.error("nothing to stage: give PACKAGE OUTPUT and/or --server-data")
 	if arguments.server_data:
-		upload = server_data_upload(arguments.server_data, arguments.output or arguments.server_data.parent)
+		upload = server_data_upload(arguments.server_data, server_data_directory(arguments.output, arguments.server_data))
 		print("server data", json.dumps(send(upload, arguments.ssh_target, arguments.identity), sort_keys=True),
 			flush=True)
 		if arguments.package is None:
