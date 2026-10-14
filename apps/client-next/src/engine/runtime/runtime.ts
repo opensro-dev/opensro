@@ -421,6 +421,14 @@ export function startRuntime(
 				if ( entity.kind !== "ground-item" && !game.targetPending ) {
 					simulation.session( { kind: "gameplay", command: { kind: "select", gid: entity.gid } } );
 				}
+				// 67CCA0 -> 6935F0: a double click on another player's pet may
+				// attack it; the worker applies the pet's admission (player-attack.ts).
+				if ( doubleClick && entity.kind === "cos" && entity.appearanceState?.[0] !== 2 ) {
+					simulation.session( {
+						kind: "gameplay",
+						command: { kind: "cos-interact", gid: entity.gid, alt: click.alt ?? false }
+					} );
+				}
 				if ( doubleClick || attack ) {
 					if ( attackable && attack ) {
 						simulation.session( {

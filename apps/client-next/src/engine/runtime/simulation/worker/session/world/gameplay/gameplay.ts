@@ -2549,7 +2549,11 @@ state here before a command can claim a native wire conversation.
 				return sendFrame( { opcode: 0x769e, payload } );
 			}
 			if ( command.kind === "cos-attack" ) {
-				if ( !activeCos || activeCos.dead || entity.kind !== "monster" || local?.mountedOn !== activeCos.gid ) {
+				// 692CB0: a ride attacks a monster or another player's pet alike.
+				if (
+					!activeCos || activeCos.dead || (entity.kind !== "monster" && entity.kind !== "cos") ||
+					local?.mountedOn !== activeCos.gid
+				) {
 					throw Error( "No living active COS or attackable target" );
 				}
 				const payload = new Uint8Array( 9 ), v = new DataView( payload.buffer );
@@ -2599,7 +2603,11 @@ state here before a command can claim a native wire conversation.
 				return selectEntity( entity, now );
 			}
 			// A player arrives here only through player-attack.ts's admission.
-			if ( command.kind === "attack" && entity.kind !== "monster" && entity.kind !== "player" ) {
+			// 692CB0 sends the same 0x72CD attack at a monster, a player or a pet.
+			if (
+				command.kind === "attack" && entity.kind !== "monster" && entity.kind !== "player" &&
+				entity.kind !== "cos"
+			) {
 				throw new Error( "Target is not attackable" );
 			}
 			// A targeted command settles the server's walk where it finds it: stop the

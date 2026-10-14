@@ -10,8 +10,15 @@ admits, it is no party member and the attacker meets the level rule
 import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-const { canAttackCos, canAttackPlayer, hoverAttack, petPlayerAttack, playerInteraction, skillTargetAdmission } =
-	await import( "../../src/engine/foundation/gameplay/player-attack.ts" );
+const {
+	canAttackCos,
+	canAttackPlayer,
+	cosInteraction,
+	hoverAttack,
+	petPlayerAttack,
+	playerInteraction,
+	skillTargetAdmission
+} = await import( "../../src/engine/foundation/gameplay/player-attack.ts" );
 
 /** @param {object} [fields] */
 const player = ( fields = {} ) => ({
@@ -159,4 +166,21 @@ test("6875F0: the hover verdict judges both Alt states; party members and own pe
 	assert.equal( hoverAttack( pet( { ownerGid: 1 } ), context(), none ), 0, "the local player's own pet" );
 	assert.equal( hoverAttack( pet( { tidWord: cosWord( 4 ) } ), context(), lookup( [ player() ] ) ), 0 );
 	assert.equal( hoverAttack( { ...player(), kind: "monster" }, context(), none ), 0 );
+});
+
+test("6935F0: a double click attacks another player's transport unless it is ours, a party member's, refused or too low", () => {
+	const transport = pet( { tidWord: cosWord( 2 ), ownerGid: 9 } ), owner = lookup( [ player() ] );
+	assert.equal( cosInteraction( transport, context(), false, owner ), false, "a neutral transport needs Alt" );
+	assert.equal( cosInteraction( transport, context(), true, owner ), true );
+	assert.equal(
+		cosInteraction( pet( { tidWord: cosWord( 2 ), ownerGid: 1 } ), context(), true, none ),
+		false,
+		"our own"
+	);
+	const social = { leader: 1, members: [ { name: "other" } ] };
+	assert.equal( cosInteraction( transport, context( { social } ), true, owner ), false, "a party member's" );
+	const low = context();
+	low.local = { ...low.local, level: 10 };
+	assert.equal( cosInteraction( transport, low, true, owner ), false, "below level 20 without a PvP cape" );
+	assert.equal( cosInteraction( player( { pvpState: 2 } ), context(), true, none ), false, "not a pet" );
 });

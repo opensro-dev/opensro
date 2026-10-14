@@ -348,6 +348,7 @@ export type GameplayCommand =
 	// A click on another player: the worker decides whether it attacks
 	// (player-attack.ts). Sent before the click's select.
 	| { readonly kind: "player-interact"; readonly gid: number; readonly alt: boolean; }
+	| { readonly kind: "cos-interact"; readonly gid: number; readonly alt: boolean; }
 	| {
 		readonly kind: "release-target";
 	}

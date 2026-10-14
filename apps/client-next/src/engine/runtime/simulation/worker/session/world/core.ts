@@ -21,6 +21,7 @@ import type { EntityState } from "@/engine/contracts/world";
 import { travelMode, resetTravelRegion, gateRequest, isReturnScroll } from "@/engine/foundation/gameplay/travel";
 import { commerceReferences } from "@/engine/foundation/gameplay/commerce";
 import {
+	cosInteraction,
 	hoverAttack,
 	petPlayerAttack,
 	playerInteraction,
@@ -92,6 +93,22 @@ A mounted player issues no attack on a player.
 			return undefined;
 		}
 		return decision.kind === "attack" ? { kind: "attack", gid } : undefined;
+	}
+	/*
+================
+cosAttack
+
+6935F0 for a double click on a pet: the attack to issue (from the ride
+when the local player is mounted, as a monster attack is), or nothing.
+================
+	*/
+	function cosAttack( gid: number, alt: boolean ): GameplayCommand | undefined {
+		const target = entities.read( gid ), context = nameContext(), local = entities.read( gameplay.localIdentity() );
+		if ( !target || !context || !local ) return undefined;
+		if ( !cosInteraction( target, context, alt, { entity: entities.read, rider: entities.rider } ) ) {
+			return undefined;
+		}
+		return { kind: local.mountedOn ? "cos-attack" : "attack", gid };
 	}
 	/*
 ================
@@ -377,6 +394,11 @@ UI and quickslot commands. A skill aims at the newest selection intent
 			}
 			if ( command.kind === "player-interact" ) {
 				const attack = playerAttack( command.gid, command.alt );
+				if ( !attack ) return;
+				command = attack;
+			}
+			if ( command.kind === "cos-interact" ) {
+				const attack = cosAttack( command.gid, command.alt );
 				if ( !attack ) return;
 				command = attack;
 			}

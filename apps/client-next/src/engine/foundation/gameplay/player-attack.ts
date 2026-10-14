@@ -170,6 +170,27 @@ export function canAttackCos( target: EntityState, c: NameColorContext, alt: boo
 
 /*
 ================
+cosInteraction
+
+CGInterface_InteractWithEntity (6935F0), the double click on a pet: one of
+the local player's own pets, or one whose owner is in the party
+(Entity_IsPartyOrAllyMember 854540), is left alone; then CICCos_CanAttack
+(vtable +0xA4) with the Alt state must admit it, and an attacker below
+level 20 needs a PvP cape. Every refusal is silent: unlike 693E50 for a
+player, this branch raises no notice and has no guild-war exception.
+================
+*/
+export function cosInteraction( target: EntityState, c: NameColorContext, alt: boolean, r: CosRelations ): boolean {
+	if ( target.kind !== "cos" || target.ownerGid === c.local.gid ) return false;
+	const owner = target.ownerGid === undefined ? undefined : r.entity( target.ownerGid );
+	if ( owner?.kind === "player" && partyName( c.social, owner.name ) ) return false;
+	if ( !canAttackCos( target, c, alt, r ) ) return false;
+	const caped = c.localItem !== undefined && jobItemType( c.localItem.typeFlags ) === PVP_CAPE_ITEM;
+	return caped || (c.local.level ?? 0) >= PLAYER_ATTACK_MIN_LEVEL;
+}
+
+/*
+================
 SkillTargetAdmission
 ================
 */
