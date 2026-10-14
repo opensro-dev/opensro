@@ -345,3 +345,55 @@ func TestRefusalLinesHaveAShardWideCeiling(t *testing.T) {
 		t.Fatalf("%d summary lines, want 1", summaries)
 	}
 }
+
+/*
+================
+TestAnonymousIncidentsHaveAnAgentWideCeiling
+
+Pre-login reports from rotating addresses each pass the per-address pacer;
+the Agent keeps at most its own budget per window, answers the rest 429, and
+opens the next window with one summary naming the count.
+================
+*/
+func TestAnonymousIncidentsHaveAnAgentWideCeiling(t *testing.T) {
+	fixture, _ := incidentSession(t)
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+	const extra = 15
+	refused := 0
+	for i := range anonymousIncidentsPerWindow + extra {
+		request := httptest.NewRequest(http.MethodPost, clientIncidentPath,
+			strings.NewReader(`{"kind":"runtime","message":"Runtime failed","phase":"title"}`))
+		request.Header.Set("Content-Type", "application/json")
+		declareBrowser(request)
+		request.RemoteAddr = fmt.Sprintf("203.0.%d.%d:4242", i/250, i%250+1)
+		response := httptest.NewRecorder()
+		fixture.handler.ServeHTTP(response, request)
+		if response.Code == http.StatusTooManyRequests {
+			refused++
+		}
+	}
+	kept := 0
+	for _, entry := range hook.AllEntries() {
+		if entry.Message == "agent: client incident" {
+			kept++
+		}
+	}
+	if kept != anonymousIncidentsPerWindow || refused != extra {
+		t.Fatalf("kept %d, refused %d; want %d and %d", kept, refused, anonymousIncidentsPerWindow, extra)
+	}
+	*fixture.now = fixture.now.Add(refusalWindow)
+	performJSON(t, fixture.handler, http.MethodPost, clientIncidentPath, `{"kind":"runtime","message":"x","phase":"title"}`, "")
+	summaries := 0
+	for _, entry := range hook.AllEntries() {
+		if entry.Message == "agent: anonymous client incidents suppressed" {
+			summaries++
+			if entry.Data["suppressed"] != extra {
+				t.Fatalf("summary = %+v, want %d suppressed", entry.Data, extra)
+			}
+		}
+	}
+	if summaries != 1 {
+		t.Fatalf("%d summary lines, want 1", summaries)
+	}
+}

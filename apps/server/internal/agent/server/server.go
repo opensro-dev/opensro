@@ -112,6 +112,7 @@ type Server struct {
 	anonymousIncidents *loginLimiter
 	refusalLines       *loginLimiter
 	refusalCeiling     refusalCeiling
+	anonymousCeiling   refusalCeiling
 	// clientKey keys the client tags in refusal lines (clientTag). It is
 	// drawn at start and never stored, so a tag cannot be reversed from the
 	// log by hashing every address.

@@ -56,14 +56,19 @@ const (
 	// pacer alone lets rotating addresses write without bound.
 	refusalLinesPerWindow = 120
 	refusalWindow         = time.Minute
+	// anonymousIncidentsPerWindow bounds the pre-login incident reports the
+	// whole Agent keeps per refusalWindow (client_incident.go), apart from
+	// the refusal lines' budget.
+	anonymousIncidentsPerWindow = 60
 )
 
 /*
 ================
 refusalCeiling
 
-The shard-wide bound on refusal lines. Past the ceiling a window's lines are
-counted, not written, and the next window opens with one summary line.
+An Agent-wide bound on a kind of line (refusals, pre-login incidents). Past
+the ceiling a window's lines are counted, not written, and the next window
+opens with one summary line.
 ================
 */
 type refusalCeiling struct {
@@ -77,18 +82,18 @@ type refusalCeiling struct {
 ================
 refusalCeiling.admit
 
-Whether one more line may be written now; suppressed is the count the
-previous window dropped, reported once when a new window opens.
+Whether one more of limit lines may be written now; suppressed is the count
+the previous window dropped, reported once when a new window opens.
 ================
 */
-func (c *refusalCeiling) admit(now time.Time) (allowed bool, suppressed int) {
+func (c *refusalCeiling) admit(now time.Time, limit int) (allowed bool, suppressed int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.start.IsZero() || now.Sub(c.start) >= refusalWindow {
 		suppressed = c.suppressed
 		c.start, c.written, c.suppressed = now, 0, 0
 	}
-	if c.written >= refusalLinesPerWindow {
+	if c.written >= limit {
 		c.suppressed++
 		return false, suppressed
 	}
@@ -169,7 +174,7 @@ func (server *Server) logRefusal(r *http.Request, entry refusal) {
 	if server.refusalLines != nil && !server.refusalLines.Allow("refusal/"+clientIP(r)) {
 		return
 	}
-	allowed, suppressed := server.refusalCeiling.admit(server.now())
+	allowed, suppressed := server.refusalCeiling.admit(server.now(), refusalLinesPerWindow)
 	if suppressed > 0 {
 		log.WithFields(log.Fields{"suppressed": suppressed, "window": refusalWindow.String()}).
 			Warn("agent: request refusal lines suppressed")

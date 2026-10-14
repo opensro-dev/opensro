@@ -257,6 +257,20 @@ func (server *Server) handleClientIncident(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "code": "RATE_LIMITED"})
 		return
 	}
+	// Pre-login reports also share an Agent-wide budget: rotating
+	// addresses each pass the per-address pacer.
+	if anonymous {
+		allowed, suppressed := server.anonymousCeiling.admit(server.now(), anonymousIncidentsPerWindow)
+		if suppressed > 0 {
+			log.WithFields(log.Fields{"suppressed": suppressed, "window": refusalWindow.String()}).
+				Warn("agent: anonymous client incidents suppressed")
+		}
+		if !allowed {
+			w.Header().Set("Retry-After", "6")
+			writeJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "code": "RATE_LIMITED"})
+			return
+		}
+	}
 	if reason != "" {
 		// A refused report is evidence lost: name why, so a client change that
 		// trips it shows in the log instead of vanishing (#788).
