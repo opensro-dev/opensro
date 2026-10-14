@@ -22,7 +22,16 @@ export interface NativeTexture {
 	readonly kind: "native-texture";
 	readonly width: number;
 	readonly height: number;
-	readonly format: "bgra8unorm" | "bc1-rgba-unorm" | "bc2-rgba-unorm" | "bc3-rgba-unorm";
+	// BC formats are the retail textures; ETC2 and ASTC are port-only
+	// variants for devices without BC (texture-variants.ts).
+	readonly format:
+		| "bgra8unorm"
+		| "bc1-rgba-unorm"
+		| "bc2-rgba-unorm"
+		| "bc3-rgba-unorm"
+		| "etc2-rgb8a1unorm"
+		| "etc2-rgba8unorm"
+		| "astc-4x4-unorm";
 	readonly levels: readonly Uint8Array[];
 }
 

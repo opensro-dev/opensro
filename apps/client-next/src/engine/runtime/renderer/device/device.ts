@@ -103,7 +103,14 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 	Record a terminal error only for the generation that created this callback.
 	================
 	*/
+	// The texture compression features this device samples, once it exists;
+	// empty when it never does (texture-variants.ts reads them).
+	let texturesKnown: ( features: readonly string[] ) => void = () => {};
+	const textureFeatures = new Promise<readonly string[]>( resolve => {
+		texturesKnown = resolve;
+	} );
 	const fail = ( error: unknown, canRecover = false ) => {
+		texturesKnown( [] );
 		if ( generation !== epoch ) {
 			return;
 		}
@@ -130,6 +137,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 			facts = gpuFacts( adapter );
 			const requiredFeatures: GPUFeatureName[] = [];
 			if ( adapter.features.has( "texture-compression-bc" ) ) requiredFeatures.push( "texture-compression-bc" );
+			// The port-only variant formats (texture-variants.ts) a device without
+			// BC may be served: asked for whenever offered, used only when served.
+			for ( const name of [ "texture-compression-etc2", "texture-compression-astc" ] as const ) {
+				if ( adapter.features.has( name ) ) requiredFeatures.push( name );
+			}
 			if ( timingEnabled && adapter.features.has( "timestamp-query" ) ) {
 				requiredFeatures.push( "timestamp-query" );
 			}
@@ -143,6 +155,11 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 				return;
 			}
 			device = created;
+			texturesKnown(
+				[ "texture-compression-bc", "texture-compression-etc2", "texture-compression-astc" ].filter( name =>
+					created.features?.has( name ) === true
+				)
+			);
 			if ( timingEnabled && created.features.has( "timestamp-query" ) ) timing = createGpuTiming( created );
 			created.lost.then( info => {
 				// This owner destroys a device only from dispose(), which leaves
@@ -742,6 +759,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		================
 		*/
 		gpuTiming: () => timing?.stats() ?? null,
+		textureFeatures: () => textureFeatures,
 		/*
 		================
 		adapterFacts

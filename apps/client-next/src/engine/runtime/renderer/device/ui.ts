@@ -17,6 +17,7 @@ import type { UiTexture } from "@/engine/contracts/texture";
 import {
 	decodeNativeTextureLevel,
 	nativeTextureBlockBytes,
+	nativeTextureFeature,
 	nativeTextureLevelBytes,
 	validateNativeTexture
 } from "@/engine/foundation/assets/native-texture";
@@ -230,7 +231,8 @@ fs
 		const native = "kind" in image ? image : null;
 		if ( native ) validateNativeTexture( native );
 		const blockBytes = native ? nativeTextureBlockBytes( native.format ) : 0;
-		const compressed = native !== null && blockBytes > 0 && device.features.has( "texture-compression-bc" ) &&
+		const compressed = native !== null && blockBytes > 0 &&
+			device.features.has( nativeTextureFeature( native.format )! ) &&
 			native.width % BLOCK_SIDE === 0 && native.height % BLOCK_SIDE === 0;
 		const format: GPUTextureFormat = compressed ? native.format : "rgba8unorm";
 		const bytes = compressed ?

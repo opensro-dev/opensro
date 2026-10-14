@@ -13,9 +13,10 @@ import "../helpers/native-source-loader.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { experimentalGameplay, experimentalOptions, experimentalVideo, renderScales } = await import(
+const experimentalModule = await import(
 	"../../src/engine/foundation/ui/experimental-options.ts"
 );
+const { experimentalGameplay, experimentalOptions, experimentalVideo, renderScales } = experimentalModule;
 const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
 	"../../src/engine/runtime/ui/hud/experimental-hud.ts"
 );
@@ -34,7 +35,8 @@ const OFF = Object.freeze( {
 	perPixelLighting: false,
 	predictedRunUp: false,
 	smoothCamera: false,
-	enchantSparks: false
+	enchantSparks: false,
+	compressedTextures: false
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -309,4 +311,18 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 	const on = experimentalOptions( { predictedRunUp: true } );
 	assert.deepEqual( experimentalGameplay( on ), { predictedRunUp: true } );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
+});
+
+test("compressed textures stay off unless explicitly true, and the stored reader parses the saved key", () => {
+	const { storedExperimentalOptions, EXPERIMENTAL_STORAGE_KEY } = experimentalModule;
+	for ( const value of [ undefined, null, {}, { compressedTextures: 1 }, { compressedTextures: "true" } ] ) {
+		assert.equal( experimentalOptions( value ).compressedTextures, false );
+	}
+	assert.equal( experimentalOptions( { compressedTextures: true } ).compressedTextures, true );
+	const saved = new Map( [ [ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { compressedTextures: true } ) ] ] );
+	const storage = { getItem: key => saved.get( key ) ?? null };
+	assert.equal( storedExperimentalOptions( storage ).options.compressedTextures, true );
+	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, false );
+	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, false );
+	assert.throws( () => storedExperimentalOptions( { getItem: () => "{" } ) );
 });

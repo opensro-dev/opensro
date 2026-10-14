@@ -325,7 +325,7 @@ test("failed worker world transfer publishes an error instead of stranding the r
 					{ filter: /.*/, namespace: "fixture" },
 					() => ({
 						contents: `export class AssetAbsentError extends Error {}
-export const createPacks=()=>({worldAnimationManifests:async()=>[],dispose(){}});`
+export const createPacks=()=>({worldAnimationManifests:async()=>[],textureVariant(){},dispose(){}});`
 					})
 				);
 			}

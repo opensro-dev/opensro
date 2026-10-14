@@ -34,6 +34,7 @@ import { readBytes } from "@/engine/foundation/assets/read-bytes";
 import { assetFailure, transientAssetFailure } from "@/engine/foundation/assets/asset-recovery";
 import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets";
 import { rgbaPickAlpha, bitmapPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+import type { TextureVariant } from "@/engine/foundation/assets/texture-variants";
 type ResolvedWorld = Awaited<ReturnType<ReturnType<typeof createWorldDecoder>["resolve"]>>;
 // Loading-screen progress publications are coalesced to this interval.
 const PROGRESS_INTERVAL_MS = 150;
@@ -314,6 +315,15 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 		return bytes;
 	}
 	const packs = createPacks( download, activity );
+	// The texture variant this device is served (texture-variants.ts): the
+	// page answers once its device knows its features; native texture reads
+	// wait for the answer.
+	let textureVariant: ( variant: TextureVariant | null ) => void = () => {};
+	packs.textureVariant(
+		new Promise( resolve => {
+			textureVariant = resolve;
+		} )
+	);
 	// Background work runs only while no foreground load holds capacity. The
 	// last foreground load to settle wakes it: an event, not a poll.
 	let idleWaiters: (() => void)[] = [];
@@ -718,6 +728,10 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			}
 			if ( request.kind === "install" ) {
 				installer.start( request.url );
+				return;
+			}
+			if ( request.kind === "texture-variant" ) {
+				textureVariant( request.variant );
 				return;
 			}
 			if (

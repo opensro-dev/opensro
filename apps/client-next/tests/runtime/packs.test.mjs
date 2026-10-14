@@ -918,3 +918,76 @@ test("a stored member that inflates past its declared length is refused", async 
 	);
 	packs.dispose();
 });
+
+/*
+================
+variantFixture
+
+A pack holding a native texture and its published ETC2 variant
+(foundation/assets/texture-variants.ts), with distinct bytes.
+================
+*/
+function variantFixture() {
+	const original = Uint8Array.of( 1, 2, 3 ), variant = Uint8Array.of( 7, 8, 9 );
+	const entries = [ {
+		path: "/assets/world/t.texture",
+		offset: 0,
+		length: 3,
+		mime: "application/octet-stream",
+		sha256: sha( original )
+	}, {
+		path: "/assets/texture-variants/etc2/world/t.texture",
+		offset: 3,
+		length: 3,
+		mime: "application/octet-stream",
+		sha256: sha( variant )
+	} ];
+	const header = Buffer.from( JSON.stringify( { format: "sro-asset-pack", version: 2, files: entries } ) );
+	const bytes = new Uint8Array( 12 + header.length + 6 );
+	bytes.set( Buffer.from( "SROPACK2" ) );
+	new DataView( bytes.buffer ).setUint32( 8, header.length, true );
+	bytes.set( header, 12 );
+	bytes.set( original, 12 + header.length );
+	bytes.set( variant, 15 + header.length );
+	const pack = { path: "/assets/packs/variant.bin", bytes: bytes.length, sha256: sha( bytes ), assetCount: 2 };
+	const manifest = {
+		version: 2,
+		groups: [ { name: "test", assetCount: 2, packs: [ pack ] } ],
+		assets: entries.map( e => ({ ...e, packPath: pack.path }) )
+	};
+	return createPacks( async url =>
+		url.endsWith( "manifest.json" ) ? new TextEncoder().encode( JSON.stringify( manifest ) ) : bytes
+	);
+}
+
+test("a device served a texture variant reads the variant's bytes, and the original otherwise", async () => {
+	const signal = new AbortController().signal, url = new URL( "http://localhost/assets/world/t.texture" );
+	for (
+		const [decision, want] of [ [ "etc2", [ 7, 8, 9 ] ], [ null, [ 1, 2, 3 ] ], [ "astc", [ 1, 2, 3 ] ] ]
+	) {
+		const packs = variantFixture();
+		packs.textureVariant( Promise.resolve( decision ) );
+		assert.deepEqual( [ ...await packs.read( url, 100, signal ) ], want, `decision ${decision}` );
+		packs.dispose();
+	}
+});
+
+test("native texture reads wait for the variant decision", async () => {
+	const signal = new AbortController().signal, packs = variantFixture();
+	let decide;
+	packs.textureVariant(
+		new Promise( resolve => {
+			decide = resolve;
+		} )
+	);
+	let done = false;
+	const texture = packs.read( new URL( "http://localhost/assets/world/t.texture" ), 100, signal ).then( bytes => {
+		done = true;
+		return bytes;
+	} );
+	await new Promise( resolve => setTimeout( resolve, 20 ) );
+	assert.equal( done, false, "no texture resolves before the decision" );
+	decide( "etc2" );
+	assert.deepEqual( [ ...await texture ], [ 7, 8, 9 ] );
+	packs.dispose();
+});

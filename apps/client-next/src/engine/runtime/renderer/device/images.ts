@@ -20,6 +20,7 @@ import type { WorldTexture } from "@/engine/contracts/texture";
 import {
 	decodeNativeTextureLevel,
 	nativeTextureBlockBytes,
+	nativeTextureFeature,
 	validateNativeTexture
 } from "@/engine/foundation/assets/native-texture";
 import { destroyNow, type Retire } from "./retirement";
@@ -160,10 +161,12 @@ export function createImages( device: ImageDevice ) {
 					throw Error( "Mixed native and bitmap texture array" );
 				}
 			}
-			const blockBytes = native ? nativeTextureBlockBytes( native.format ) : 0;
+			const blockBytes = native ? nativeTextureBlockBytes( native.format ) : 0,
+				feature = native ? nativeTextureFeature( native.format ) : null;
 			// WebGPU requires block-aligned base dimensions. Tiny authored textures
-			// therefore use the same fallback as adapters without BC support.
-			const decompress = !!blockBytes && (!gpu.features.has( "texture-compression-bc" ) ||
+			// therefore use the same fallback as adapters without the format's
+			// feature (only BC has one: decodeNativeSurface).
+			const decompress = !!blockBytes && (!gpu.features.has( feature! ) ||
 				image.width % BLOCK_SIDE !== 0 || image.height % BLOCK_SIDE !== 0);
 			const levels = native ? native.levels.length : mipmaps ?
 				1 + Math.floor( Math.log2( Math.max( image.width, image.height ) ) ) :

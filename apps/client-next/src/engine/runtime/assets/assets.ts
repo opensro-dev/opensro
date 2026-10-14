@@ -22,6 +22,8 @@ import { assetRequestBudget } from "@/engine/foundation/assets/asset-budget";
 import { createWorldLease } from "./world-lease";
 import type { AssetOwner, AssetRequest, AssetResult, AssetWorkerMessage } from "@/engine/contracts/assets";
 import type { Degradation } from "@/engine/contracts/network";
+import { storedExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
+import { chooseTextureVariant } from "@/engine/foundation/assets/texture-variants";
 const REQUEST_CAPACITY = 4;
 const REQUEST_DEADLINE_MS = 120000;
 // A cancellation's own acknowledgement window, from the cancel: a request
@@ -199,7 +201,32 @@ export function createAssets(): AssetOwner {
 	};
 	worker.onerror = () => fail( "Asset worker failed" );
 	worker.onmessageerror = () => fail( "Asset worker message could not be decoded" );
+	// Port-only: whether a device without BC is served re-encoded textures
+	// (texture-variants.ts). The switch is read here because the worker
+	// starts before the platform; native texture reads wait for the answer,
+	// so with the switch off it is given at once, else when the device knows
+	// its features (textureFeatures).
+	let compressedTextures = false, variantSent = false;
+	try {
+		compressedTextures = storedExperimentalOptions( globalThis.localStorage ).options.compressedTextures;
+	} catch {}
+	if ( !compressedTextures ) {
+		send( { kind: "texture-variant", variant: null } );
+		variantSent = true;
+	}
 	return {
+		/*
+		================
+		textureFeatures
+
+		The device's texture features, once: the variant it is served.
+		================
+		*/
+		textureFeatures( features: readonly string[] ) {
+			if ( disposed || variantSent ) return;
+			variantSent = true;
+			send( { kind: "texture-variant", variant: chooseTextureVariant( new Set( features ), true ) } );
+		},
 		/*
 		================
 		snapshot

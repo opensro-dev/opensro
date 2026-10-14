@@ -39,6 +39,10 @@ export interface ExperimentalOptions {
 	// Port-only, not native: the unused enchant sparks on +8 and higher
 	// weapons and shields (equipmentEnchantSparks).
 	readonly enchantSparks: boolean;
+	// Port-only, not native: a device without BC is served re-encoded
+	// textures (texture-variants.ts) instead of decoding them to RGBA.
+	// Read when the asset worker starts, so it applies from the next load.
+	readonly compressedTextures: boolean;
 }
 
 /*
@@ -101,8 +105,32 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		perPixelLighting: enabled( "perPixelLighting" ),
 		predictedRunUp: enabled( "predictedRunUp" ),
 		smoothCamera: enabled( "smoothCamera" ),
-		enchantSparks: enabled( "enchantSparks" )
+		enchantSparks: enabled( "enchantSparks" ),
+		compressedTextures: enabled( "compressedTextures" )
 	};
+}
+
+// Where the preferences are kept (the platform saves them).
+export const EXPERIMENTAL_STORAGE_KEY = "sro:v1150:experimental-options:1";
+
+/*
+================
+storedExperimentalOptions
+
+The saved preferences from storage, or the defaults when there are none or
+they cannot be read. The platform owns saving them; an owner that must act
+before the platform starts (the asset worker's texture variant) reads them
+here. Throws only for a stored value that is not JSON, which the platform
+reports.
+================
+*/
+export function storedExperimentalOptions( storage: Pick<Storage, "getItem"> | undefined ): {
+	readonly options: ExperimentalOptions;
+	readonly raw: unknown;
+} {
+	const stored = storage?.getItem( EXPERIMENTAL_STORAGE_KEY ) ?? null;
+	const raw = stored === null ? null : JSON.parse( stored );
+	return { options: experimentalOptions( raw ), raw };
 }
 
 /*

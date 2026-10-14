@@ -59,7 +59,8 @@ function fixture( t ) {
 		================
 		*/
 		postMessage( message ) {
-			messages.push( message );
+			// The texture variant answer is a control message, not a load.
+			if ( message.kind !== "texture-variant" ) messages.push( message );
 		}
 		/*
 		================

@@ -21,6 +21,7 @@ import { createPackIndex, PACK_MAGIC } from "./index/index";
 import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-contract";
 import { gunzipBytes } from "@/engine/foundation/assets/read-bytes";
 import { createPackBlocks } from "./blocks";
+import { textureVariantPath, type TextureVariant } from "@/engine/foundation/assets/texture-variants";
 export type { PackRange } from "./internal/pack-contract";
 
 /*
@@ -67,6 +68,8 @@ export function createPacks(
 	const unpacked = new Set<string>();
 	const loading = new Map<string, Promise<Loaded>>(), cache = new Map<string, Loaded>();
 	let storedBytes = 0, decodedBytes = 0, hashCalls = 0, hashBytes = 0;
+	// The texture variant this device is served, decided once (textureVariant).
+	let variant: Promise<TextureVariant | null> = Promise.resolve( null );
 	const headers = new Map<string, Promise<number>>();
 	/*
 	================
@@ -251,7 +254,7 @@ export function createPacks(
 			const registry = await manifest( url.origin );
 			// Manifest paths are filenames; URL pathname preserves percent escapes.
 			const pathname = decodeURIComponent( url.pathname ).toLowerCase();
-			let entry = registry.assets.get( pathname ), gzip = false;
+			let entry = await servedEntry( registry, pathname ), gzip = false;
 			if ( !entry && pathname.endsWith( ".json" ) ) {
 				entry = registry.assets.get( pathname + ".gz" );
 				gzip = Boolean( entry );
@@ -343,6 +346,20 @@ export function createPacks(
 
 	/*
 	================
+	servedEntry
+
+	The manifest entry a path is served from: a native texture's published
+	variant when this device is served one and the build made it
+	(texture-variants.ts), else the path's own entry.
+	================
+	*/
+	async function servedEntry( registry: Index, pathname: string ) {
+		const served = pathname.endsWith( ".texture" ) ? await variant : null;
+		const variantPath = served ? textureVariantPath( pathname, served ) : null;
+		return (variantPath && registry.assets.get( variantPath )) || registry.assets.get( pathname );
+	}
+	/*
+	================
 	install
 
 	Makes one published file local without delivering it: skipped when it is
@@ -354,7 +371,7 @@ export function createPacks(
 	async function install( url: URL, signal: AbortSignal ): Promise<boolean> {
 		if ( disposed || signal.aborted ) return false;
 		const registry = await manifest( url.origin );
-		const entry = registry.assets.get( decodeURIComponent( url.pathname ).toLowerCase() );
+		const entry = await servedEntry( registry, decodeURIComponent( url.pathname ).toLowerCase() );
 		// An unanswerable store (suspended, saturated) skips the file: a fetch
 		// could not be stored, and its first play fetches it on demand anyway.
 		if ( !entry || await installed( url.origin, registry, entry, signal ) !== false ) return false;
@@ -364,6 +381,17 @@ export function createPacks(
 	}
 
 	return {
+		/*
+		================
+		textureVariant
+
+		Sets the variant this device is served. Reads of native textures wait
+		for it, so none resolves before the decision.
+		================
+		*/
+		textureVariant( decision: Promise<TextureVariant | null> ) {
+			variant = decision;
+		},
 		stats: () => ({
 			...persistent.stats(),
 			...blocks.stats(),

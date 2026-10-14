@@ -84,6 +84,9 @@ export function createRenderer(
 	const world = createWorldRenderer( undefined, readPickAlpha, random, sound ),
 		characters = createCharacters( random );
 	let device = createDevice( diagnostics.gpuTiming, diagnostics.gpuAnimation !== false ), recoveries = 0;
+	// The first device's texture features: a recreated device on the same
+	// adapter has the same ones, and the variant is chosen once per page.
+	const textureFeatures = device.textureFeatures();
 	let surface: SurfaceOwner | null = null, frame: FrameOwner | null = null;
 	let transformDirty = false, instancesDirty = false;
 	let mesh: Geometry | null = null, meshDraw: GeometryDraw | null = null;
@@ -385,6 +388,7 @@ export function createRenderer(
 		setCharacterActors: characters.actors,
 		characterActors: characters.currentActors,
 		cancelWorldUpdate: () => world.cancelPending(),
+		textureFeatures: () => textureFeatures,
 		settleWorld: sceneId => world.settle( sceneId ),
 		setWorld: scene => world.scene( scene ),
 		adoptWorld: ( lease, detail, terrain ) => world.adopt( lease, detail, terrain ),

@@ -72,6 +72,7 @@ function diagnosticDevices( t ) {
 				row.video.push( value );
 			},
 			gpuTiming: () => null,
+			textureFeatures: async () => [],
 			geometry: () => null,
 			images: () => null,
 			dispose() {

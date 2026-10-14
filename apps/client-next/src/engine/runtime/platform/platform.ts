@@ -30,7 +30,12 @@ import { sightMode, type SightMode } from "@/engine/foundation/rendering/camera-
 import { initialAudioOptions, audioOptions, type AudioOptions } from "@/engine/foundation/audio/options";
 import { cameraWheelDelta } from "@/engine/foundation/rendering/camera-wheel";
 import { createTouchCamera, type TouchCameraOutput } from "@/engine/foundation/rendering/touch-camera";
-import { experimentalOptions, type ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
+import {
+	EXPERIMENTAL_STORAGE_KEY,
+	experimentalOptions,
+	storedExperimentalOptions,
+	type ExperimentalOptions
+} from "@/engine/foundation/ui/experimental-options";
 import { gameOptions, initialGameOptions, type GameOptions } from "@/engine/foundation/gameplay/game-options";
 import { windowPositions, type WindowPositions } from "@/engine/foundation/ui/window-positions";
 import { createUiBridge } from "./ui/ui";
@@ -104,12 +109,11 @@ export function createPlatform(
 		status.value = "Chatting blocks could not be restored: " + String( error );
 	}
 	onUi( { kind: "chat-blocks", value: localBlocks } );
-	const experimentalKey = "sro:v1150:experimental-options:1";
+	const experimentalKey = EXPERIMENTAL_STORAGE_KEY;
 	let experimental = experimentalOptions();
 	try {
-		const stored = localStorage.getItem( experimentalKey );
-		const value = stored === null ? null : JSON.parse( stored );
-		experimental = experimentalOptions( value );
+		const { options, raw: value } = storedExperimentalOptions( localStorage );
+		experimental = options;
 		// Preserve a prior explicit console opt-in until the unified preference is saved.
 		if (
 			(value === null ||

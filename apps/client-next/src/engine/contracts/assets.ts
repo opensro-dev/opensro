@@ -81,6 +81,11 @@ export type AssetRequest = {
 	// Background install of the build's ordered list (worker/install.ts).
 	kind: "install";
 	url: string;
+} | {
+	// Port-only: the re-encoded texture set this device is served, or null
+	// for the originals (foundation/assets/texture-variants.ts). Sent once.
+	kind: "texture-variant";
+	variant: import("@/engine/foundation/assets/texture-variants").TextureVariant | null;
 };
 /*
 ================
@@ -183,6 +188,9 @@ export interface AssetOwner {
 		options?: { readonly pickAlpha?: boolean; }
 	): number;
 	take( id: number ): AssetResult | null;
+	// Port-only: the device's texture features, given once when known
+	// (foundation/assets/texture-variants.ts).
+	textureFeatures?( features: readonly string[] ): void;
 	cancel( id: number ): void;
 	// Starts the worker's background install once; uses no request slot.
 	install( listUrl: string ): void;

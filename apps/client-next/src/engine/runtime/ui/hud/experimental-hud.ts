@@ -99,6 +99,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-dynamic-sun",
 				label: "Moving sunlight",
 				description: "Lighting follows the time of day."
+			},
+			{
+				key: "compressedTextures",
+				id: "experimental-compressed-textures",
+				label: "Compressed textures",
+				description: "Phones and tablets: less memory. After reload."
 			}
 		]
 	},

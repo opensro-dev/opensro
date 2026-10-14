@@ -142,6 +142,9 @@ DeviceOwner
 export interface DeviceOwner extends Disposable {
 	/** The adapter's features and limits once acquired (device.ts gpuFacts). */
 	adapterFacts(): import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
+	// The texture compression features of this device once it exists, empty
+	// when it never does (foundation/assets/texture-variants.ts).
+	textureFeatures(): Promise<readonly string[]>;
 	upscale(): {
 		encodeUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;
 		encodeDepthUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;
