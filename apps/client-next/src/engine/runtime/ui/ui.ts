@@ -677,6 +677,27 @@ const FORTRESS_TAX_TRAVEL = 234;
 const JOB_RANK_PANEL = "Job ranking";
 // The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
 const GRANT_PANEL = "Magic option";
+// The panels that show the bag in the main popup beside their own window, and
+// every main popup page. One list each: the popup is drawn, takes its slots'
+// input and moves by its title bar for exactly these panels (a hand-copied
+// drag list once left the bag unmovable beside the warehouse).
+const INVENTORY_POPUP_PANELS: readonly string[] = [
+	"Inventory",
+	"Shop",
+	"Alchemy",
+	GRANT_PANEL,
+	"COS inventory",
+	"Storage"
+];
+const MAIN_POPUP_PANELS: readonly string[] = [
+	"Character",
+	"Party",
+	"Skills",
+	"Quests",
+	"Actions",
+	"Academy",
+	...INVENTORY_POPUP_PANELS
+];
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
 // CIFStall_OnCreate (5A2D60): the "Sell goods" tab's rect in the window.
@@ -5901,7 +5922,7 @@ export function createUi(
 				if (
 					carried &&
 					(carried.avatar ? event.id.startsWith( "avatar:" ) : event.id === "slot:" + carried.slot) &&
-					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
+					INVENTORY_POPUP_PANELS.includes( panel ) &&
 					view?.session?.phase === "world" && !view.gameplay?.inventoryPending && controls.some( c =>
 						c.id === event.id && c.draggable && !c.disabled
 					)
@@ -6178,7 +6199,7 @@ export function createUi(
 			}
 			if (
 				event.kind === "drag" && ITEM_SLOT_PREFIXES.some( prefix => event.id.startsWith( prefix ) ) &&
-				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
+				INVENTORY_POPUP_PANELS.includes( panel )
 			) {
 				const node = controls.find( c => c.id === event.id && !c.disabled && c.draggable );
 				if ( !node ) return;
@@ -6263,19 +6284,8 @@ export function createUi(
 				return;
 			}
 			if (
-				event.kind === "drag" && event.id === "main-popup-drag" &&
-				[
-					"Character",
-					"Inventory",
-					"Party",
-					"Skills",
-					"Quests",
-					"Actions",
-					"Academy",
-					"Shop",
-					"Alchemy",
-					"COS inventory"
-				].includes( panel ) && view
+				event.kind === "drag" && event.id === "main-popup-drag" && MAIN_POPUP_PANELS.includes( panel ) &&
+				view
 			) {
 				const x = popupPosition?.[0] ?? Math.max( 42, view.width - 388 ),
 					y = popupPosition?.[1] ?? Math.max( 0, view.height - 478 );
@@ -12260,7 +12270,7 @@ export function createUi(
 					}
 				}
 				if (
-					[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel ) &&
+					INVENTORY_POPUP_PANELS.includes( panel ) &&
 					!(panel === "Shop" && game?.shop?.cosGid) && hudData
 				) {
 					const admission = beginWindow();
@@ -20600,7 +20610,7 @@ export function createUi(
 			}
 			if (
 				worldVisible && carriedItem &&
-				[ "Inventory", "Shop", "Alchemy", GRANT_PANEL, "COS inventory", "Storage" ].includes( panel )
+				INVENTORY_POPUP_PANELS.includes( panel )
 			) {
 				const item = carriedRow( carriedItem, game ), path = iconPath( item?.icon );
 				if ( path ) {
