@@ -7,7 +7,9 @@ Caravan_SpawnBandits (60BF30) spawns as many bandits as the cargo's star
 rating gives (Caravan_CalculateBanditSpawnCount 60C460): one per 306 of
 cargo value, one more on half the draws, doubled on 2%, with no ceiling.
 A full load at high level draws dozens. The owner approved a cap as a
-server setting (2026-10-13).
+server setting (2026-10-13, 16; 2026-10-14, 8). The same function spawns
+the thieves sent at a trader and the hunters sent at a thief (TacticsID),
+so the cap holds for both.
 
 SRO_CARAVAN_BANDIT_CAP is a number 1..maxBanditCap, or unset/"off"/"0"
 (native, uncapped). The cap trims the native count after it is rolled; the

@@ -92,12 +92,12 @@ func TestAlchemyNoAssimilationJobVariable(t *testing.T) {
 ================
 TestCaravanBanditCapJobVariable
 
-caravan_bandit_cap defaults to 16 (owner, 2026-10-13); "off" and other
-counts pass through as written.
+caravan_bandit_cap defaults to 8 (owner, 2026-10-14; 16 before); "off"
+and other counts pass through as written.
 ================
 */
 func TestCaravanBanditCapJobVariable(t *testing.T) {
-	for env, want := range map[string]string{"": "16", "off": "off", "24": "24"} {
+	for env, want := range map[string]string{"": "8", "off": "off", "24": "24"} {
 		t.Setenv("SRO_CARAVAN_BANDIT_CAP", env)
 		variables := (&deployment{PortOnly: portOnlySettingsFromEnv()}).gameVariables(shardDeployment{})
 		if variables["caravan_bandit_cap"] != want {

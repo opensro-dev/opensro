@@ -69,7 +69,8 @@ var Settings = []Setting{
 	{Env: "SRO_SHOP_EXTRA_GOODS", NomadVar: "shop_extra_goods", Default: "on", Catalogue: true},
 	{Env: "SRO_MALL_EXTRA_GOODS", NomadVar: "mall_extra_goods", Default: "on"},
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
-	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "16"},
+	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
+	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: alchemy materials no longer drop; "off" is native.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "on", Catalogue: true},

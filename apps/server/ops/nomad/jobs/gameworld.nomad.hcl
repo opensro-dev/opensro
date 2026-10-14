@@ -293,12 +293,14 @@ variable "alchemy_no_assimilation" {
   default = "on"
 }
 
-# caravan_bandit_cap caps the bandits per caravan ambush (port-only, not
-# native; owner decision 2026-10-13): a count, or "off" for the original
-# game's uncapped count. A malformed value stops GameWorld at boot.
+# caravan_bandit_cap caps the bandits per caravan ambush, the thieves sent
+# at a trader and the hunters sent at a thief alike (port-only, not native;
+# owner decisions 2026-10-13 and 2026-10-14, 16 then 8): a count, or "off"
+# for the original game's uncapped count. A malformed value stops GameWorld
+# at boot.
 variable "caravan_bandit_cap" {
   type    = string
-  default = "16"
+  default = "8"
 }
 
 # beta_shop_only_degree9 keeps degree-9 Lucky Powder, magic stones and
