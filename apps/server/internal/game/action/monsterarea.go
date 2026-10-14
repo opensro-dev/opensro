@@ -155,10 +155,11 @@ func (rt *Runtime) monsterAreaCandidates(in monsterStrikeInput) []monsterAreaVic
 			continue
 		}
 		gid := enterworld.ObjectIDForCharacter(snapshot)
+		job := enterworld.DressedJob(snapshot)
 		player := monsterAreaVictim{owner: character, gid: gid, radius: radius,
 			pose: rt.liveSpawn(simulation.WorldKey(in.division, snapshot.Name), snapshot, in.now),
 			hostility: simulation.MonsterAreaCandidate{Gid: gid, NativeBodyStatus: snapshot.NativeBodyStatus,
-				Guard: rt.FirstAttackGuard(in.division, gid, in.now)}}
+				Guard: rt.FirstAttackGuard(in.division, gid, in.now), JobState: job}}
 		if ride := ridingCOS(snapshot); ride != 0 {
 			player.gid, player.companion = ride, true
 		}
@@ -166,7 +167,7 @@ func (rt *Runtime) monsterAreaCandidates(in monsterStrikeInput) []monsterAreaVic
 		for _, pet := range rt.companionTargets(in.division, gid, in.now) {
 			out = append(out, monsterAreaVictim{owner: character, gid: pet.Gid, companion: true, pose: pet.Pose,
 				radius: float64(pet.BodyRadius), hostility: simulation.MonsterAreaCandidate{Gid: pet.Gid, OwnerGid: gid,
-					Band: pet.Band, NativeBodyStatus: pet.NativeBodyStatus, Guard: player.hostility.Guard}})
+					Band: pet.Band, NativeBodyStatus: pet.NativeBodyStatus, Guard: player.hostility.Guard, JobState: job}})
 		}
 	}
 	return out

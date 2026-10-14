@@ -28,6 +28,9 @@ type MonsterAreaCandidate struct {
 	Band             uint8
 	NativeBodyStatus uint8
 	Guard            monster.FirstAttackGuard
+	// JobState is the player's job state, or a companion's owner's
+	// (JobTargetRefused).
+	JobState uint8
 }
 
 /*
@@ -43,7 +46,8 @@ source exclusion, the fellow band, the first-attack protection).
 func MonsterAreaStrikes(actor monster.Instance, candidate MonsterAreaCandidate) bool {
 	pose := playerPose{Gid: candidate.Gid, OwnerGid: candidate.OwnerGid, Band: candidate.Band,
 		NativeBodyStatus: candidate.NativeBodyStatus, Guard: candidate.Guard}
-	if !monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, pose.NativeBodyStatus) {
+	if actor.JobTargetRefused(candidate.JobState) ||
+		!monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, pose.NativeBodyStatus) {
 		return false
 	}
 	if pose.OwnerGid != 0 {

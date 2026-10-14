@@ -113,7 +113,7 @@ func jobQueryAcquisition(actor monster.Instance, from monster.Pose, players []pl
 		} else if !ordinaryPlayerHostility(actor, p) {
 			continue
 		}
-		if !query.admits(job) {
+		if !query.admits(job) || actor.JobTargetRefused(job) {
 			continue
 		}
 		ordered = append(ordered, candidate{player: p, block: order, companion: companion, job: job})

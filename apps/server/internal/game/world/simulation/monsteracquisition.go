@@ -49,7 +49,13 @@ func ordinaryPlayerAcquisition(actor monster.Instance, from monster.Pose, player
 		block := worldgeom.InterestBlockAt(worldgeom.RegionXZ{
 			RegionID: player.Pose.RegionID, X: float64(float32(player.Pose.X)), Z: float64(float32(player.Pose.Z)),
 		})
+		// A job monster's own side is skipped with its companions (a COS
+		// answers with its owner's job): 529110 refuses every strike on them.
+		// Inference, not a native branch: native acquisition has no job test,
+		// but a monster that kept choosing a target it may never strike would
+		// stand at it forever; passing it over is the visible native result.
 		if order, exists := blocks.order(block); exists && player.Gid != 0 &&
+			!actor.JobTargetRefused(player.JobState) &&
 			monster.AllowsTargetStatus(actor.Ref.TidWord, actor.Nest.NativeTacticsFlags, player.NativeBodyStatus) &&
 			ordinaryPlayerHostility(actor, player) {
 			ordered = append(ordered, candidate{player: player, block: order})

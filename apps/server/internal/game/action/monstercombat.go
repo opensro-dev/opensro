@@ -225,6 +225,10 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		// status roll. CGObjMob_EvaluateHostility (529929) only credits the
 		// hostility to the owner (COS+0x1CD8); it never moves the damage.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
+			// 529110: a COS answers the job test with its owner's state.
+			if release == nil && instance.JobTargetRefused(enterworld.DressedJob(rt.characterSnapshot(divisionID, owner))) {
+				return result
+			}
 			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
 		}
 		// A Temptation fight: a tempted monster, or the monster answering
@@ -236,6 +240,12 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	}
 	snapshot := rt.characterSnapshot(divisionID, character)
 	if snapshot == nil || snapshot.DeletePending || !enterworld.CharacterAlive(snapshot) {
+		return result
+	}
+	// 529110: a job monster refuses its own side at admission, before the
+	// ride swap (a ride answers with its rider's job). The zero result sends
+	// the monster home rather than retrying a strike it may never make.
+	if release == nil && instance.JobTargetRefused(enterworld.DressedJob(snapshot)) {
 		return result
 	}
 	// Only hostile-target skills swap (59B5F3 tests the target flag); summons
