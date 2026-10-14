@@ -100,6 +100,9 @@ export function createEntities(
 	// directly are its own (the server's per-victim publication order).
 	let dropSource = 0;
 	let epoch = 0, sequence = 0, inflight: WorldBatch | null = null, bytes = 0;
+	// When the batch awaiting its acknowledgement was taken: a backlog failure
+	// reports the wait, telling a stalled main thread from a burst of events.
+	let inflightAt = 0;
 	let events: WorldEvent[] = [], staged: WorldEvent[] | null = null, remaining = 0, stagedBytes = 0;
 	// Cosmetic steps skipped since the world owner last took them (Degradation).
 	let degradations: Degradation[] = [];
@@ -108,6 +111,11 @@ export function createEntities(
 	const pendingPoses = new Map<number, { index: number; size: number; }>();
 	// The queued gameplay snapshot a newer one merges into (supersedeGameplay).
 	let pendingGameplay: { index: number; size: number; } | undefined;
+	// Arrays the queued batch has already counted (journal-cost.ts): the batch
+	// is one structured clone, so a walking path shared by many state events
+	// travels once. Replaceable events (poses, the gameplay snapshot) are
+	// costed in full instead, so replacing one never uncounts a shared array.
+	let sharedArrays = new WeakSet<object>();
 	let stagedMode = 1, removalTail = new Uint8Array( 0 );
 	let synchronized = false, localName = "", localActiveJob = 4;
 	let localSkills: readonly import("@/engine/foundation/gameplay/spawn-skills").SpawnSkill[] = [];
@@ -120,6 +128,17 @@ export function createEntities(
 	*/
 	function cost( event: WorldEvent ) {
 		return event.kind === "native" ? event.payload.byteLength : journalCost( event );
+	}
+	/*
+	================
+	batchCost
+
+	A reliable event's cost within the queued batch: arrays an earlier event
+	of the batch carries count once (sharedArrays).
+	================
+	*/
+	function batchCost( event: WorldEvent ) {
+		return event.kind === "native" ? event.payload.byteLength : journalCost( event, sharedArrays );
 	}
 	/*
 	================
@@ -137,7 +156,7 @@ export function createEntities(
 	function degrade( degradation: Degradation ) {
 		if ( degradations.length < MAX_PENDING_DEGRADATIONS ) degradations.push( degradation );
 	}
-	function append( event: WorldEvent, size = cost( event ) ) {
+	function append( event: WorldEvent, size = batchCost( event ) ) {
 		if ( events.length + (staged?.length ?? 0) >= 8192 || bytes + stagedBytes + size > journalByteLimit ) {
 			// Failure-only census distinguishes a stalled consumer from an
 			// unsupported packet stream without adding a per-frame telemetry walk.
@@ -149,8 +168,8 @@ export function createEntities(
 			throw new Error(
 				`Reliable world journal backlog exceeded: ${event.kind} adds ${size} bytes to ${bytes + stagedBytes}; ${
 					events.length + (staged?.length ?? 0)
-				} events queued; awaiting batch ${
-					inflight?.sequence ?? "none"
+				} events queued; awaiting batch ${inflight?.sequence ?? "none"}${
+					inflight ? ` for ${Math.round( performance.now() - inflightAt )} ms` : ""
 				}; ${pendingPoses.size} replaceable poses; ${JSON.stringify( kinds )}`
 			);
 		}
@@ -519,6 +538,7 @@ export function createEntities(
 			stagedBytes = 0;
 			events = [];
 			pendingGameplay = undefined;
+			sharedArrays = new WeakSet();
 			inflight = null;
 			bytes = 0;
 		},
@@ -1308,9 +1328,11 @@ export function createEntities(
 				return null;
 			}
 			inflight = { sequence: ++sequence, events };
+			inflightAt = performance.now();
 			events = [];
 			pendingPoses.clear();
 			pendingGameplay = undefined;
+			sharedArrays = new WeakSet();
 			bytes = 0;
 			return inflight;
 		},

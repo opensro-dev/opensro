@@ -14,11 +14,21 @@ nothing.
 The figure is a budget, not a wire size: strings are not scanned for
 escapes and a non-integer number counts as its widest JSON form.
 
+One batch is one postMessage, and structured clone sends an array that
+several events share once. An entity's walking path is such an array: every
+state event spread from the entity carries the same reference, and a burst
+of HP or LIFE changes on walking monsters charged the full path to each one
+(a 62 KB state each, 33 MB with 616 queued; the backlog failure of
+2026-10-14). Given the batch's `shared` set, an array already counted costs
+only a reference.
+
 ===========================================================================
 */
 
 // "-1.2345678901234567e-123" is the widest a double prints in JSON.
 const WIDEST_NUMBER_CHARS = 24;
+// A repeated array within one structured clone: a back-reference, not a copy.
+const SHARED_REFERENCE_CHARS = 4;
 const MAX_DEPTH = 64;
 
 /*
@@ -26,10 +36,12 @@ const MAX_DEPTH = 64;
 journalCost
 
 UTF-16 bytes of the JSON a value would serialise to, as estimated above.
+With `shared`, an array already in it costs a reference, and every array
+counted is added to it.
 ================
 */
-export function journalCost( value: unknown ): number {
-	return jsonChars( value, 0 ) * 2;
+export function journalCost( value: unknown, shared?: WeakSet<object> ): number {
+	return jsonChars( value, 0, shared ) * 2;
 }
 
 /*
@@ -37,7 +49,7 @@ export function journalCost( value: unknown ): number {
 jsonChars
 ================
 */
-function jsonChars( value: unknown, depth: number ): number {
+function jsonChars( value: unknown, depth: number, shared?: WeakSet<object> ): number {
 	switch ( typeof value ) {
 		case "string":
 			return value.length + 2;
@@ -60,24 +72,28 @@ function jsonChars( value: unknown, depth: number ): number {
 		return 2 + length * (WIDEST_NUMBER_CHARS + 8);
 	}
 	if ( Array.isArray( value ) ) {
+		if ( shared ) {
+			if ( shared.has( value ) ) return SHARED_REFERENCE_CHARS;
+			shared.add( value );
+		}
 		let chars = 2 + Math.max( 0, value.length - 1 );
 		for ( let i = 0; i < value.length; i++ ) {
 			const item = value[i];
 			// JSON writes null for array holes and unserialisable items.
 			chars += item === undefined || typeof item === "function" || typeof item === "symbol" ?
 				4 :
-				jsonChars( item, depth + 1 );
+				jsonChars( item, depth + 1, shared );
 		}
 		return chars;
 	}
 	const toJSON = (value as { toJSON?: unknown; }).toJSON;
-	if ( typeof toJSON === "function" ) return jsonChars( toJSON.call( value ), depth + 1 );
+	if ( typeof toJSON === "function" ) return jsonChars( toJSON.call( value ), depth + 1, shared );
 	let chars = 2, members = 0;
 	for ( const key in value as object ) {
 		if ( !Object.prototype.hasOwnProperty.call( value, key ) ) continue;
 		const item = (value as Record<string, unknown>)[key];
 		if ( item === undefined || typeof item === "function" || typeof item === "symbol" ) continue;
-		chars += key.length + 3 + jsonChars( item, depth + 1 );
+		chars += key.length + 3 + jsonChars( item, depth + 1, shared );
 		members++;
 	}
 	return chars + Math.max( 0, members - 1 );
