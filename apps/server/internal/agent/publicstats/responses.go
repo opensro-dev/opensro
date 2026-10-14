@@ -325,3 +325,24 @@ type RulesResponse struct {
 	Rules      []Rule      `json:"rules"`
 	Deviations []Deviation `json:"deviations"`
 }
+
+// GuildsResponse is GET /public/v1/guilds: one page of 50 (guilds.go).
+type GuildsResponse struct {
+	Page        int        `json:"page" doc:"1-based page number."`
+	Pages       int        `json:"pages" doc:"Pages in the full list (at least 1)."`
+	Total       int        `json:"total" doc:"Guilds matching the query."`
+	Query       *string    `json:"query,omitempty" doc:"The lower-cased name prefix searched for, when given."`
+	GeneratedAt string     `json:"generatedAt" doc:"When this answer was built (RFC 3339, UTC)."`
+	Rows        []GuildRow `json:"rows"`
+}
+
+// GuildRow is one guild on the list.
+type GuildRow struct {
+	Rank     int      `json:"rank" doc:"Place on the full list: level, then members, then name."`
+	Name     string   `json:"name"`
+	Level    int      `json:"level" doc:"Guild level, 1 to 5."`
+	Members  int      `json:"members"`
+	Master   string   `json:"master" doc:"The master's name, \"a hunter\" for a master who hides, \"\" if unknown."`
+	Union    []string `json:"union" doc:"The other guilds of its union, by name; empty when it has none."`
+	Fortress *string  `json:"fortress,omitempty" doc:"The fortress it holds, by town in lower case (\"jangan\")."`
+}

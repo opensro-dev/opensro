@@ -103,6 +103,9 @@ type Sources struct {
 	UniqueName func(refObjID uint32) string
 	// GuildOf returns the character's guild name and rank, or "" for none.
 	GuildOf func(c *domain.Character) (name, rank string)
+	// Guilds returns every guild of the shard's division (guilds.go); nil
+	// serves an empty list.
+	Guilds func() []GuildEntry
 	// ItemGrade returns an equipment reference's degree and, when sealed,
 	// its seal tier (enterworld.EquipmentDegree / EquipmentSeal: 0 Star,
 	// 1 Moon, 2 Sun). Nil grades every piece degree 0, unsealed.
@@ -236,6 +239,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /public/v1/characters/{name}", s.cached(charactersMaxAge, s.profile))
 	mux.HandleFunc("GET /public/v1/rules", s.cached(rulesMaxAge, s.rules))
 	mux.HandleFunc("GET /public/v1/rankings", s.cached(charactersMaxAge, s.rankings))
+	mux.HandleFunc("GET /public/v1/guilds", s.cached(charactersMaxAge, s.guilds))
 	mux.HandleFunc("GET /public/v1/schema", s.cached(rulesMaxAge, s.schema))
 	mux.HandleFunc("GET /public/v1/status", s.cached(uniquesMaxAge, s.serverStatus))
 	mux.HandleFunc("GET /public/v1/schedule", s.cached(boardsMaxAge, s.schedule))

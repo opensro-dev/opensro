@@ -275,6 +275,65 @@ func (api *publicAPI) Close() error {
 
 /*
 ================
+publicGuildEntries
+
+Every guild of the division for the public guild list: the guild ids the
+characters carry, each guild read through its door (as GuildOf does), the
+other guilds of its union from the union door and the fortress it holds.
+A failed union or fortress read leaves those fields empty, not the list.
+================
+*/
+func publicGuildEntries(authority *store.Store, shard string) []publicstats.GuildEntry {
+	ids := map[int64]bool{}
+	authority.ReadCharacters(shard, func(characters []*domain.Character) {
+		for _, c := range characters {
+			if c.GuildID != nil {
+				ids[*c.GuildID] = true
+			}
+		}
+	})
+	unions := map[int64][]int64{}
+	if alliances, err := authority.Alliances().Alliances(shard); err == nil {
+		for _, alliance := range alliances {
+			for _, guild := range alliance.Guilds {
+				for _, other := range alliance.Guilds {
+					if guild != 0 && other != 0 && other != guild {
+						unions[guild] = append(unions[guild], other)
+					}
+				}
+			}
+		}
+	}
+	fortresses := map[int64]string{}
+	if records, _, err := authority.Fortresses().FortressState(shard); err == nil {
+		towns := map[uint32]string{}
+		for _, row := range enterworld.DefaultSiegeFortressDataRows() {
+			towns[row.FortressID] = strings.ToLower(strings.TrimPrefix(row.CodeName, "FORTRESS_"))
+		}
+		for _, record := range records {
+			if record.GuildID != 0 {
+				fortresses[record.GuildID] = towns[record.FortressID]
+			}
+		}
+	}
+	out := make([]publicstats.GuildEntry, 0, len(ids))
+	for id := range ids {
+		guild, members, ok := authority.Guilds().Guild(shard, id)
+		if !ok {
+			continue
+		}
+		entry := publicstats.GuildEntry{ID: id, Name: guild.Name, Level: guild.Level, Union: unions[id],
+			Fortress: fortresses[id]}
+		for _, member := range members {
+			entry.Members = append(entry.Members, publicstats.GuildEntryMember{CharID: member.CharID, Grade: member.Grade})
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+/*
+================
 publicSources
 
 Everything the public API reads, wired to this GameWorld's authorities.
@@ -306,6 +365,7 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			return monsters.UniqueStates(shard)
 		},
 		UniqueName: uniqueNameSource(monsters),
+		Guilds:     func() []publicstats.GuildEntry { return publicGuildEntries(authority, shard) },
 		GuildOf: func(c *domain.Character) (string, string) {
 			if c.GuildID == nil {
 				return "", ""
