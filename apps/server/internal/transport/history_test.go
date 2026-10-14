@@ -59,3 +59,30 @@ func TestDrainClosePreservesReasonForHooksAndMetrics(t *testing.T) {
 		t.Fatal("expected shutdown counted as unknown")
 	}
 }
+
+/*
+================
+TestShutdownClose
+
+Only the hub's shutdown goodbye is a shutdown: a logout, a replaced
+session, a dropped socket and a wrapped goodbye are told apart.
+================
+*/
+func TestShutdownClose(t *testing.T) {
+	cases := []struct {
+		cause error
+		want  bool
+	}{
+		{CloseReason{Reason: ByeReasonShutdown}, true},
+		{fmt.Errorf("closing: %w", CloseReason{Reason: ByeReasonShutdown}), true},
+		{CloseReason{Reason: ByeReasonNormal}, false},
+		{CloseReason{Reason: ByeReasonReplaced}, false},
+		{errors.New("read: connection reset"), false},
+		{nil, false},
+	}
+	for _, tc := range cases {
+		if got := ShutdownClose(tc.cause); got != tc.want {
+			t.Fatalf("ShutdownClose(%v) = %v", tc.cause, got)
+		}
+	}
+}

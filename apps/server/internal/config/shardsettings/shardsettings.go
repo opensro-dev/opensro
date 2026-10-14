@@ -64,6 +64,8 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED", NomadVar: "most_wanted", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
+	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
+	{Env: "SRO_TRADER_CARGO_DROP", NomadVar: "trader_cargo_drop", Default: "on"},
 	// Owner, 2026-10-14: Item Mall transports move 1.5 times as fast.
 	{Env: "SRO_MALL_TRANSPORT_SPEED", NomadVar: "mall_transport_speed", Default: "on"},
 	// Owner, 2026-10-14: shard notices for seal drops, +8..+11 and job kills.

@@ -56,6 +56,19 @@ func (r CloseReason) Error() string { return fmt.Sprintf("transport: explicit go
 
 /*
 ================
+ShutdownClose
+
+Whether a session's close cause is the hub's shutdown (Hub.shutdown closes
+every session with ByeReasonShutdown), not anything the player did.
+================
+*/
+func ShutdownClose(cause error) bool {
+	var bye CloseReason
+	return errors.As(cause, &bye) && bye.Reason == ByeReasonShutdown
+}
+
+/*
+================
 classifyClose
 ================
 */

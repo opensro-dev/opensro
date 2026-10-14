@@ -552,6 +552,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWanted {
 		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
 	}
+	// Port-only, not native: a trader's goods stay in the world when the
+	// trader dies riding or disconnects in the field.
+	game.items.TraderCargoDrop = action.TraderCargoDropFromEnv()
+	if game.items.TraderCargoDrop {
+		log.Infof("trade: transport cargo drops on rider death and field disconnect (%s)", action.EnvTraderCargoDrop)
+	}
 	game.items.FastDenReturn = action.FastDenReturnFromEnv()
 	game.deps.FastDenReturn = game.items.FastDenReturn
 	if game.items.FastDenReturn {

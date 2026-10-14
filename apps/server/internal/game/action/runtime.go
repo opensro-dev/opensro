@@ -345,6 +345,11 @@ type Runtime struct {
 	MostWanted      bool
 	mostWantedPairs mostWantedPairs
 
+	// TraderCargoDrop keeps a loaded transport's goods in the world when
+	// its trader dies riding or disconnects in the field
+	// (tradercargodrop.go; port-only, not native). False is native.
+	TraderCargoDrop bool
+
 	ShopOnly progression.ShopOnlyDegree9
 	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC
 	// shops (port-only, not native; action/sunevent.go).

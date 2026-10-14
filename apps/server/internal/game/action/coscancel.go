@@ -109,7 +109,8 @@ through ReleaseCOSOrExit: a rider who dies loses the horse or transport it
 sat on. Its kind-1 release (CCOSManager_RetireOwnedActorAndPersist 4FA8B0,
 database operation 1, _DeleteCharCOS) deletes the vehicle's record; the
 cargo goes with it, since only the vehicle's own death reaches
-DropTransportCargo (cosdeath.go). The caller holds c's door. public
+DropTransportCargo (cosdeath.go); the port-only SRO_TRADER_CARGO_DROP
+drops it first (tradercargodrop.go). The caller holds c's door. public
 carries the dismount, the speed refresh and the despawn; private the
 owner's item state.
 ================
@@ -119,6 +120,8 @@ func (rt *Runtime) releaseRiddenVehicleInDoor(division string, c *enterworld.Cha
 	if ride == nil || !ride.Summoned || !ride.Mounted {
 		return nil, nil
 	}
+	// Port-only, not native: a loaded transport's goods stay in the world.
+	public = rt.dropRiddenCargoInDoor(division, c, now)
 	gid := ride.GID
 	ride.Mounted = false
 	ride.Summoned = false

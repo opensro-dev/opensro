@@ -211,6 +211,14 @@ variable "den_no_transport_summon" {
   default = "on"
 }
 
+# trader_cargo_drop keeps a loaded transport's goods in the world when its
+# trader dies riding it or logs out outside a town (port-only, not native;
+# owner decision 2026-10-14). "off" is native.
+variable "trader_cargo_drop" {
+  type    = string
+  default = "on"
+}
+
 # mall_transport_speed makes the Item Mall transports (buffalo, rhinoceros,
 # white elephant) walk and run 1.5 times as fast (port-only, not native;
 # owner decision 2026-10-14). "off" is native.
@@ -604,6 +612,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FAST_DEN_RETURN                = var.fast_den_return
         SRO_MOST_WANTED                    = var.most_wanted
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
+        SRO_TRADER_CARGO_DROP              = var.trader_cargo_drop
         SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed
         SRO_ANNOUNCE_SOX_DROP              = var.announce_sox_drop
         SRO_ANNOUNCE_PLUS                  = var.announce_plus

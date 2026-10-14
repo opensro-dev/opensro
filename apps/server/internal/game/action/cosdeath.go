@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/wire"
 )
@@ -68,26 +69,39 @@ func (rt *Runtime) settleCompanionDeath(o *cosAbnormalOwner) {
 dropTransportCargo
 
 4D1FD0: the cargo scatters around the dead transport, owned by no one.
-A row the ground owner refuses stays lost with the vehicle.
 ================
 */
 func (rt *Runtime) dropTransportCargo(o *cosAbnormalOwner) {
-	at := rt.companionLiveSpawn(o.division, o.c, o.pet, o.now)
-	now := time.UnixMilli(o.now)
+	o.public = append(o.public, rt.scatterTransportCargo(o.division, o.c, o.pet, o.now)...)
+}
+
+/*
+================
+scatterTransportCargo
+
+4D1FD0's drop, shared with the port-only trader rule (tradercargodrop.go):
+every row of pet's container lands unowned around the transport, and the
+container empties. A row the ground owner refuses stays lost with the
+vehicle. The caller holds c's door; returns the drops' public frames.
+================
+*/
+func (rt *Runtime) scatterTransportCargo(division string, c *enterworld.Character, pet *enterworld.CharacterCOS, nowMs int64) []wire.Frame {
+	at := rt.companionLiveSpawn(division, c, pet, nowMs)
+	now := time.UnixMilli(nowMs)
 	var dropped []grounditem.Item
-	for _, item := range invItemsFromRowsWithin(o.pet.Container.Rows, int64(o.pet.Container.Capacity)) {
+	for _, item := range invItemsFromRowsWithin(pet.Container.Rows, int64(pet.Container.Capacity)) {
 		planned := rt.scatterMonsterDrop(PlanItemDrop(item, item.Quantity, at, "", now), at, cosCargoRarity)
-		if added := rt.addCharacterGround(o.division, o.c, planned); added.Gid != 0 {
+		if added := rt.addCharacterGround(division, c, planned); added.Gid != 0 {
 			dropped = append(dropped, added)
 		}
 	}
-	o.pet.Container.Rows = nil
+	pet.Container.Rows = nil
 	if len(dropped) == 0 {
-		return
+		return nil
 	}
 	cargo := rt.groundReferences(dropped)
 	for _, item := range dropped {
 		cargo = append(cargo, wire.DropBroadcastFrames(item.SpawnRow(true))...)
 	}
-	o.public = append(o.public, cargo...)
+	return cargo
 }
