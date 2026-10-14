@@ -5,6 +5,7 @@ entities.ts - The entity journal owns wire admission and ordered lifecycle publi
 
 ===========================================================================
 */
+import { petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import { animationRate, decodeAnimationSpeed } from "@/engine/foundation/animation/animation-rate";
 import {
 	refreshNameColor,
@@ -784,6 +785,13 @@ export function createEntities(
 						entity: { ...entity, groundItem: { ...entity.groundItem, ownerJid: undefined } }
 					} );
 				}
+				return;
+			}
+			// 77A570 case 5: a pet's new name, on its nameplate for every viewer.
+			const named = petNameUpdate( frame );
+			if ( named ) {
+				const entity = entities.get( named.gid );
+				if ( entity ) apply( { kind: "state", entity: { ...entity, name: named.name } } );
 				return;
 			}
 			if ( frame.opcode === 0x3508 && p[4] === 7 ) {

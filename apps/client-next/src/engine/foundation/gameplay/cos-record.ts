@@ -37,7 +37,8 @@ export function decodeCosRecord(
 	if ( band === 3 || band === 4 ) {
 		commandMode = u32();
 		const n = u16(), at = take( n );
-		name = new TextDecoder( "utf-8", { fatal: true } ).decode( p.subarray( at, at + n ) );
+		// A pet's name is player text: lenient, so it never fails a session.
+		name = new TextDecoder( "utf-8" ).decode( p.subarray( at, at + n ) );
 	}
 	// The bag capacity is one byte: v1.150 authors transport bags up to 177
 	// slots (the item mall's level 120 transports), so no lower cap applies.

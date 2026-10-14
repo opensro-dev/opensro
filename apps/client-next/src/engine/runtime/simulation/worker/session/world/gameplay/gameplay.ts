@@ -157,6 +157,7 @@ import {
 	type AutoPotionFacts
 } from "@/engine/foundation/gameplay/auto-potion";
 import { playerStats } from "@/engine/foundation/gameplay/player-stats";
+import { petNameRefusal, petNameRequest, petNameUpdate } from "@/engine/foundation/gameplay/pet-name";
 import {
 	fortressNotice,
 	isServerNoticeChannel,
@@ -1866,6 +1867,13 @@ state here before a command can claim a native wire conversation.
 				academy = next.state;
 				return next.frame;
 			}
+			// 6A5570: an unnamed pet's one name (pet-name.ts); the client's own
+			// checks ran in the name box.
+			if ( command.kind === "cos-name" ) {
+				const record = cosRecords.get( command.gid );
+				if ( !record || record.dead || (record.band !== 3 && record.band !== 4) || record.name ) return null;
+				return sendFrame( petNameRequest( command.gid, command.name ) );
+			}
 			if ( command.kind === "stat-increase" ) {
 				if ( command.stat !== "str" && command.stat !== "int" ) throw Error( "Invalid stat allocation" );
 				if ( !localGid || !local || (progression.statPoints ?? 0) < 1 ) return null;
@@ -3097,6 +3105,23 @@ Packet handling must not depend on which HUD panel is currently open.
 							refObjId,
 							...(record.band === 3 ? { satiety: 10000 } : {})
 						} );
+						dirty = true;
+					}
+					return false;
+				}
+				// 0xB571: the server refused a pet name (a notice); 0x3508 case 5:
+				// the pet's new name, also for the entities lane's nameplate.
+				const nameRefusal = petNameRefusal( frame );
+				if ( nameRefusal ) {
+					notices = [ ...notices.slice( -99 ), { key: nameRefusal, value: 0, sequence: ++noticeSequence } ];
+					dirty = true;
+					return true;
+				}
+				const named = petNameUpdate( frame );
+				if ( named ) {
+					const record = cosRecords.get( named.gid );
+					if ( record ) {
+						cosRecords.set( named.gid, { ...record, name: named.name } );
 						dirty = true;
 					}
 					return false;

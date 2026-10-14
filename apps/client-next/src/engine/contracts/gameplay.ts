@@ -207,6 +207,7 @@ export type GameplayCommand =
 	| import("@/engine/foundation/gameplay/party-matching").PartyMatchCommand
 	| { readonly kind: "gm-command"; readonly line: string; }
 	| { readonly kind: "whisper-block"; readonly name: string; readonly blocked: boolean; }
+	| { readonly kind: "cos-name"; readonly gid: number; readonly name: string; }
 	| { readonly kind: "friend-request"; readonly name: string; }
 	| { readonly kind: "friend-answer"; readonly accept: boolean; }
 	| { readonly kind: "friend-delete"; readonly jid: number; }

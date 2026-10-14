@@ -17,6 +17,8 @@ const ACTION_EXCHANGE = 1006;
 // A label closer than this to its window's left edge has left its window
 // (the frame's border is about this wide; the Experimental "Fit window labels").
 const WINDOW_LABEL_MARGIN = 6;
+// GDR_COS_INFO_NAME_BTN in ifcosinfo.txt: the pet's Name button.
+const COS_INFO_NAME_BUTTON = 26;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
 // gil_bar02 rows and a scrollbar between its 16-pixel arrows.
 const FRIEND_VISIBLE_ROWS = 11;
@@ -507,6 +509,7 @@ import {
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
+import { PET_NAME_MAX, petNameError } from "@/engine/foundation/gameplay/pet-name";
 import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
@@ -874,6 +877,10 @@ export function createUi(
 			letterDeleting = -1;
 		} else if ( id === "letter-delete-cancel" ) letterDeleting = -1;
 	}
+	// 6A5990: the pet being named, and whether its name box or its
+	// "can not change" confirm (6A59E0) is up.
+	let petNameDialog: { readonly gid: number; readonly phase: "input" | "confirm"; } | null = null,
+		petNameInput = "";
 	let options = initialGameOptions(), optionDraft = options;
 	let optionTab = 0;
 	let optionScroll = [ 0, 0 ];
@@ -1709,6 +1716,7 @@ export function createUi(
 		friendDialog = null;
 		letterDraft = null;
 		letterDeleting = -1;
+		petNameDialog = null;
 		if ( shopDialog || shopWarning ) closeShopDialog();
 		guildDialog = "";
 		guildNoticeHud.close();
@@ -1883,6 +1891,8 @@ export function createUi(
 		letterOffset = 0;
 		letterDraft = null;
 		letterDeleting = -1;
+		petNameDialog = null;
+		petNameInput = "";
 		blockOffset = 0;
 		panel = "";
 		admittedWindows.clear();
@@ -3002,6 +3012,10 @@ export function createUi(
 		// Enter in the write window's receiver field sends nothing: the original
 		// sends only from its Send button (607B80).
 		if ( id === "submit" && letterDraft && panel === "Guild" && guildTab === 5 ) return;
+		if ( petNameDialog ) {
+			if ( id === "submit" ) id = "pet-name-ok";
+			if ( ![ "pet-name-ok", "pet-name-cancel" ].includes( id ) ) return;
+		}
 		if ( id === "submit" && consolePhase !== 0 && view.gameplay?.eligibility?.gm ) {
 			if ( consoleText && !composing ) {
 				appendConsoleLine( consoleText );
@@ -3057,6 +3071,39 @@ export function createUi(
 			focus = friendDialog === "add" ? "friend-name" : null;
 			selection = [ 0, 0 ];
 			focusRequest = { id: focus, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "cos-name" ) {
+			// 6A5990: the name box for the shown, still unnamed pet.
+			const record = view.gameplay?.cosRecords?.find( r => r.gid === cosGid );
+			if ( !record || record.name || (record.band !== 3 && record.band !== 4) ) return;
+			petNameDialog = { gid: record.gid, phase: "input" };
+			petNameInput = "";
+			focus = "pet-name";
+			selection = [ 0, 0 ];
+			focusRequest = { id: focus, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "pet-name-cancel" ) {
+			petNameDialog = null;
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "pet-name-ok" && petNameDialog ) {
+			if ( petNameDialog.phase === "input" ) {
+				// 6A59E0: 2..12 characters under the name rules (12:14), then the
+				// one-time confirm.
+				const rules = hud.data()?.nameRules;
+				if ( !rules ) return;
+				const key = petNameError( petNameInput, rules );
+				if ( key ) {
+					hudMessages.append( hudCopy( key ) );
+					dirty = true;
+					return;
+				}
+				petNameDialog = { ...petNameDialog, phase: "confirm" };
+				focus = null;
+				focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			} else {
+				// 6A5570: Yes sends 0x7571.
+				sendGameplay( { kind: "cos-name", gid: petNameDialog.gid, name: petNameInput } );
+				petNameDialog = null;
+			}
 		} else if ( id === "friend-cancel" ) {
 			friendDialog = null;
 			focus = null;
@@ -5714,6 +5761,21 @@ export function createUi(
 					![ "blocking-ok", "blocking-cancel", "blocking-name", "submit" ].includes( event.id )
 				) return;
 			}
+			if ( petNameDialog ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "pet-name-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "pet-name-ok" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if (
+					"id" in event && event.id !== null &&
+					![ "pet-name-ok", "pet-name-cancel", "pet-name", "submit" ].includes( event.id )
+				) return;
+			}
 			if ( friendDialog ) {
 				if ( event.kind === "key" ) {
 					if ( event.code === "Escape" ) activate( "friend-cancel" );
@@ -7064,6 +7126,8 @@ export function createUi(
 					}
 				} else if ( event.id === "blocking-name" && blockDialog === "add" ) {
 					blockInput = event.value.slice( 0, 13 );
+				} else if ( event.id === "pet-name" && petNameDialog?.phase === "input" ) {
+					petNameInput = event.value.slice( 0, PET_NAME_MAX );
 				} else if ( event.id === "friend-name" && friendDialog === "add" ) {
 					friendInput = event.value.slice( 0, FRIEND_NAME_LIMIT );
 				} else if ( event.id === "letter-receiver" && letterDraft ) {
@@ -15398,6 +15462,8 @@ export function createUi(
 					// class; the gauges (35..37) fill from the record below.
 					const sections = cosInfoSections( cosClass( record?.band ?? 0 ) ?? -1 );
 					const hiddenInfo = [
+						// GDR_COS_INFO_NAME_BTN: drawn below, only for an unnamed pet (6A5990).
+						COS_INFO_NAME_BUTTON,
 						35,
 						36,
 						37,
@@ -15488,6 +15554,11 @@ export function createUi(
 							// CIFCosInfo_RefreshName (6A5320): an unnamed companion reads "No name".
 							[ 27, record.name || hudCopy( "UIIT_STT_COSNEWUI_TITLE" ) ]
 						];
+						// CIFCOSInfo +0x38C: the Name button shows while a pet has no name.
+						const nameButton = node( COS_INFO_NAME_BUTTON );
+						if ( nameButton && !record.name && (record.band === 3 || record.band === 4) ) {
+							authoredLabeledButton( nameButton, ox, oy, "cos-name", hudCopy( nameButton.text ), busy );
+						}
 						if ( sections.hp ) {
 							const ratio = cosStatusRatios( record, reference ).hp ?? 1;
 							texts.push( [ 41, cosHpText( record, reference ) ] );
@@ -15628,6 +15699,101 @@ export function createUi(
 						}
 					}
 					endWindow( admission, "service:COS inventory" );
+					if ( petNameDialog ) petNameDialogBox( petNameDialog );
+					/*
+					================
+					petNameDialogBox
+
+					6A57E0's name box (mode 0x3E8, input mode 6, UIIT_STT_COSPET_MAKENAME),
+					then 6A59E0's confirm (mode 0x3E9): the name can not change later.
+					================
+					*/
+					function petNameDialogBox( dialog: { readonly phase: "input" | "confirm"; } ) {
+						const mark = beginWindow();
+						controls = [];
+						blocks.push( full );
+						if ( dialog.phase === "confirm" ) {
+							simpleMessageBox( {
+								title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+								lines: [
+									petNameInput,
+									hudCopy( "UIIT_MSG_COSPET_NOTREVISION_NAME" ),
+									hudCopy( "UIIT_MSG_COSPET_CHOOSE_NAME" )
+								],
+								yes: "pet-name-ok",
+								no: "pet-name-cancel"
+							} );
+							endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:pet-name" );
+							blocks.push( full );
+							return;
+						}
+						const dx = Math.max( 0, Math.floor( (w - 306) / 2 ) ),
+							dy = Math.max( 0, Math.floor( (h - 151) / 2 ) );
+						paths.push( ...partyProposalAssets() );
+						quads.push(
+							...frameRing(
+								[ dx, dy, 306, 151 ],
+								MESSAGE_FRAME,
+								PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+								full
+							)
+						);
+						quads.push(
+							...normalTile(
+								[ dx + 16, dy + 40, 274, 95 ],
+								MESSAGE_TILE,
+								resources.size( MESSAGE_TILE ),
+								full
+							)
+						);
+						quads.push(
+							...text.quads(
+								hudCopy( "UIIT_STT_INPUT_BOX" ),
+								[ dx + 10, dy + 11, 285, 12 ],
+								full,
+								white,
+								{
+									hAlign: 1,
+									vAlign: 0
+								}
+							)
+						);
+						const copy = hudCopy( "UIIT_STT_COSPET_MAKENAME" );
+						quads.push(
+							...text.quads( copy, [ dx + 1, dy + 49, 305, 12 ], full, gold, { hAlign: 1, vAlign: 0 } )
+						);
+						const r: UiRect = [ dx + 19, dy + 73, 266, 20 ];
+						rect( [ dx + 12, dy + 71, 281, 25 ], [ 0, 0, 0, 1 ] );
+						controls.push( {
+							id: "pet-name",
+							label: copy,
+							kind: "text",
+							value: petNameInput,
+							rect: r,
+							maxLength: PET_NAME_MAX
+						} );
+						const start = Math.min( petNameInput.length, selection[0] ?? 0 ),
+							end = Math.min( petNameInput.length, selection[1] ?? start ),
+							before = text.run( petNameInput.slice( 0, start ) ).width,
+							through = text.run( petNameInput.slice( 0, end ) ).width;
+						if ( focus === "pet-name" && end > start ) {
+							rect(
+								[ r[0] + before, r[1], through - before, 20 ],
+								[ .2, .4, .7, .6 ],
+								"",
+								[ 0, 0, 1, 1 ],
+								r
+							);
+						}
+						quads.push( ...text.quads( petNameInput, r, r, white, { overflow: "clip" } ) );
+						if ( focus === "pet-name" && caretVisible ) {
+							rect( [ r[0] + through, r[1], 1, text.height() + 2 ], white, "", [ 0, 0, 1, 1 ], r );
+						}
+						button( "pet-name-ok", hudCopy( "UIIT_STT_OK" ) || "OK", dx + 72, dy + 114, 76 );
+						button( "pet-name-cancel", hudCopy( "UIIT_STT_CANCEL" ) || "Cancel", dx + 160, dy + 114, 76 );
+						endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:pet-name" );
+						blocks.push( full );
+					}
 				}
 				/*
 				================
