@@ -194,6 +194,10 @@ func publicRules() publicstats.RulesResponse {
 					"and 1%/2%/3% more damage dealt and less taken at levels 3/5/10. Killing a wanted player pays 100,000,000 gold per level. " +
 					"Kills of your own account, party, guild or union never count, and one victim counts at most 3 times an hour. Death or taking the suit off ends the streak.",
 				Why: "Requested for the beta, to reward job-war streaks and put a price on them; the original returns with one setting."},
+			{Flag: action.EnvMostWantedBountyTransfer, On: action.MostWantedFromEnv() && action.MostWantedBountyTransferFromEnv(),
+				Native: "There is no bounty; a kill moves no gold.",
+				Now:    "A wanted player's bounty comes out of their own gold: the killer takes up to 100,000,000 per wanted level, never more than the wanted player carries. No new gold enters the game.",
+				Why:    "Requested for the beta so a bounty puts the wanted player's own gold at stake; the original returns with one setting."},
 			{Flag: action.EnvTradeTiers, On: action.TradeTiersFromEnv(),
 				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
 				Now: "Trade goods are worth 21 times as much (7,308 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 21 times larger too. " +

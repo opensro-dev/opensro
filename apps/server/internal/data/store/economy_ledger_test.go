@@ -328,3 +328,31 @@ func TestLedgerUpgradeAddsTheTable(t *testing.T) {
 	}
 	reopened.Close()
 }
+
+/*
+================
+TestMostWantedBountyIsATransfer
+
+The bounty taken from a wanted victim (door most-wanted-bounty) is a
+transfer on both sides: the ledger mints nothing for it.
+================
+*/
+func TestMostWantedBountyIsATransfer(t *testing.T) {
+	s := openTest(t, t.TempDir(), newTestClock())
+	killer := newLedgerCharacter(t, s, "LedgerKiller", 100)
+	victim := newLedgerCharacter(t, s, "LedgerVictim", 500)
+	s.UpdateCharacters([]*domain.Character{killer, victim}, "most-wanted-bounty", func() bool {
+		kg, vg := int64(400), int64(200)
+		killer.Gold, victim.Gold = &kg, &vg
+		return true
+	})
+	got := doorRows(t, s)
+	if len(got) != 2 {
+		t.Fatalf("bounty rows %+v", got)
+	}
+	for _, row := range got {
+		if row.reason != "most_wanted_transfer" || domain.EconomyReasonKind(row.reason) != domain.EconomyKindTransfer {
+			t.Fatalf("bounty row %+v", row)
+		}
+	}
+}

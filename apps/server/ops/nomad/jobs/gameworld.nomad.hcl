@@ -203,6 +203,14 @@ variable "most_wanted" {
   default = "on"
 }
 
+# most_wanted_bounty_transfer pays a wanted player's bounty out of that
+# player's own gold, at most what they carry, instead of minting it
+# (port-only, not native; owner decision 2026-10-15). "off" mints it.
+variable "most_wanted_bounty_transfer" {
+  type    = string
+  default = "on"
+}
+
 # trade_tiers rates a caravan's stars by its cargo's gold value (5M, 10M,
 # 20M, 35M, 50M) and raises trade profit between Jangan and Donwhang +50%,
 # Hotan +100%, Samarkand +200%, Constantinople +300% (port-only, not
@@ -646,6 +654,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                = var.fast_den_return
         SRO_MOST_WANTED                    = var.most_wanted
+        SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer
         SRO_TRADE_TIERS                    = var.trade_tiers
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_TRADER_CARGO_DROP              = var.trader_cargo_drop

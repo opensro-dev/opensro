@@ -354,6 +354,9 @@ type Runtime struct {
 	// (mostwanted.go; port-only, not native). False is native.
 	MostWanted      bool
 	mostWantedPairs mostWantedPairs
+	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
+	// new gold (mostwanted.go; port-only, not native). False mints it.
+	MostWantedBountyTransfer bool
 
 	// TraderCargoDrop keeps a loaded transport's goods in the world when
 	// its trader dies riding or disconnects in the field

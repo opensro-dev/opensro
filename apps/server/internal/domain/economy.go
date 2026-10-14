@@ -75,9 +75,11 @@ var economyDoorReasons = map[string]economyDoorReason{
 	"job-join":         {loss: "job_fee"},
 	"job-outcome":      {gain: "weekly_reward_paid"},
 	// A kill pays gold only as a most-wanted bounty (port-only).
-	"player-abnormal-kill":      {gain: "most_wanted_bounty"},
-	"player-strike-player":      {gain: "most_wanted_bounty"},
-	"player-credited-hit":       {gain: "most_wanted_bounty"},
+	"player-abnormal-kill": {gain: "most_wanted_bounty"},
+	"player-strike-player": {gain: "most_wanted_bounty"},
+	"player-credited-hit":  {gain: "most_wanted_bounty"},
+	// The bounty taken from the victim instead (SRO_MOST_WANTED_BOUNTY_TRANSFER).
+	"most-wanted-bounty":        {gain: "most_wanted_transfer", loss: "most_wanted_transfer"},
 	"fortress-tax":              {gain: "fortress_withdraw"},
 	"fortress-staff":            {loss: "fortress_fee"},
 	"fortress-item-forge":       {loss: "fortress_fee"},
@@ -168,6 +170,7 @@ var economyReasonKinds = map[string]string{
 	"storage_withdraw":       EconomyKindTransfer,
 	"storage_deposit":        EconomyKindTransfer,
 	"guild_storage":          EconomyKindTransfer,
+	"most_wanted_transfer":   EconomyKindTransfer,
 }
 
 /*

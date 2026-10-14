@@ -557,6 +557,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWanted {
 		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
 	}
+	// Port-only, not native: the bounty comes out of the victim's gold.
+	game.items.MostWantedBountyTransfer = action.MostWantedBountyTransferFromEnv()
+	if game.items.MostWantedBountyTransfer {
+		log.Infof("job: most wanted bounties paid from the victim's gold (%s)", action.EnvMostWantedBountyTransfer)
+	}
 	// Port-only, not native: a trader's goods stay in the world when the
 	// trader dies riding or disconnects in the field.
 	game.items.TraderCargoDrop = action.TraderCargoDropFromEnv()

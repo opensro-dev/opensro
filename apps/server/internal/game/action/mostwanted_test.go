@@ -11,6 +11,7 @@ Port-only, not native: every rule is checked with SRO_MOST_WANTED off
 package action
 
 import (
+	"math"
 	"testing"
 
 	"opensro.online/server/internal/domain"
@@ -218,5 +219,88 @@ func TestMostWantedFromEnv(t *testing.T) {
 		if got := MostWantedFromEnv(); got != want {
 			t.Fatalf("%q: %v, want %v", value, got, want)
 		}
+	}
+}
+
+/*
+================
+TestMostWantedBountyIsTakenFromTheVictim
+
+With the transfer on, the kill's door moves no gold and owes the bounty;
+paying it takes min(bounty, the victim's gold) from the victim, never
+passes the killer's cap, and keeps the pair's total. A victim with
+nothing pays nothing and the door writes nothing.
+================
+*/
+func TestMostWantedBountyIsTakenFromTheVictim(t *testing.T) {
+	const bounty = 2 * mostWantedBountyPerLevel
+	for _, tc := range []struct {
+		name               string
+		killerGold, victim int64
+		paid               int64
+	}{
+		{"carries more", 1_000, 500_000_000, bounty},
+		{"carries less", 1_000, 50_000_000, 50_000_000},
+		{"carries nothing", 1_000, 0, 0},
+		{"killer at the cap", math.MaxInt64 - 10, 500_000_000, 10},
+	} {
+		rt, _, killer, victim := newPvpPair(t)
+		rt.MostWanted, rt.MostWantedBountyTransfer = true, true
+		killer.Gold, victim.Gold = testInt64(tc.killerGold), testInt64(tc.victim)
+		victim.MostWanted = &domain.MostWanted{Streak: 25}
+		kill := playerKill{kind: pk.DeathPlayer, mostWantedStrangers: true}.withVictim(killer, victim)
+		_, _, after := rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0)
+		if *killer.Gold != tc.killerGold || *victim.Gold != tc.victim || len(after.bounties) != 1 {
+			t.Fatalf("%s: the kill's door moved gold or owed %+v", tc.name, after.bounties)
+		}
+		recipients := rt.payJobKillShares(after)
+		if *killer.Gold-tc.killerGold != tc.paid || tc.victim-*victim.Gold != tc.paid {
+			t.Fatalf("%s: killer +%d victim -%d, want %d", tc.name, *killer.Gold-tc.killerGold, tc.victim-*victim.Gold, tc.paid)
+		}
+		if want := 2; tc.paid == 0 && len(recipients) != 0 || tc.paid != 0 && len(recipients) != want {
+			t.Fatalf("%s: recipients %+v", tc.name, recipients)
+		}
+	}
+}
+
+/*
+================
+TestMostWantedBountyTransferNeedsAStranger
+
+A related victim owes nothing with the transfer on, as it is paid nothing
+with it off.
+================
+*/
+func TestMostWantedBountyTransferNeedsAStranger(t *testing.T) {
+	rt, _, killer, victim := newPvpPair(t)
+	rt.MostWanted, rt.MostWantedBountyTransfer = true, true
+	victim.MostWanted = &domain.MostWanted{Streak: 25}
+	kill := playerKill{kind: pk.DeathPlayer}.withVictim(killer, victim)
+	if _, _, after := rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0); len(after.bounties) != 0 {
+		t.Fatalf("a related kill owed %+v", after.bounties)
+	}
+}
+
+/*
+================
+TestKillingAWantedPlayerPaysTheBountyFromTheirGold
+
+End to end through a fatal basic attack: the wanted victim's gold pays
+the killer, and the two balances keep their sum.
+================
+*/
+func TestKillingAWantedPlayerPaysTheBountyFromTheirGold(t *testing.T) {
+	rt, _, killer, victim := newPvpPair(t)
+	rt.MostWanted, rt.MostWantedBountyTransfer = true, true
+	killer.AccountID, victim.AccountID = "a", "b"
+	killer.Gold, victim.Gold = testInt64(1_000), testInt64(300_000_000)
+	victim.MostWanted = &domain.MostWanted{Streak: 25}
+	victim.CurrentHP = testInt64(1)
+	rt.HandleTargetInteract(testDivision, killer, wire.BasicAttackEngage{TargetGid: enterworld.ObjectIDForCharacter(victim)}.Encode())
+	if enterworld.CharacterAlive(victim) {
+		t.Fatal("victim survived a one-HP hit")
+	}
+	if *killer.Gold != 1_000+2*mostWantedBountyPerLevel || *victim.Gold != 300_000_000-2*mostWantedBountyPerLevel {
+		t.Fatalf("killer %d victim %d", *killer.Gold, *victim.Gold)
 	}
 }

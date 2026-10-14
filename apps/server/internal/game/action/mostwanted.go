@@ -26,6 +26,14 @@ Bounty. Killing a wanted player in PvP pays the killer 100,000,000 gold per
 wanted level (1,000,000,000 at 10), under the same stranger test as a count. The gold is new: the owner accepted the
 supply. Every count and every bounty writes an audit log line.
 
+Bounty from the victim (SRO_MOST_WANTED_BOUNTY_TRANSFER, owner and the
+balance advisor 2026-10-15). On, the bounty is no longer minted: once the
+kill has committed, one door over the killer and the victim moves
+min(bounty, the victim's gold) from the victim to the killer, recorded as
+a transfer on both sides of the economy ledger. A victim who carries
+nothing pays nothing; the killer's balance never passes its cap, so no
+gold is burned either. Off, the bounty is new gold as above.
+
 Off, the default here, nothing counts, no bonus applies and no bounty is
 paid; a saved streak waits untouched. The GameWorld's Nomad job turns it on.
 
@@ -34,6 +42,7 @@ paid; a saved streak waits untouched. The GameWorld's Nomad job turns it on.
 package action
 
 import (
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -49,6 +58,14 @@ import (
 
 // EnvMostWanted turns the rule on ("on", "1", "true").
 const EnvMostWanted = "SRO_MOST_WANTED"
+
+// EnvMostWantedBountyTransfer pays the bounty from the victim's gold ("on",
+// "1", "true"); off, the bounty is minted.
+const EnvMostWantedBountyTransfer = "SRO_MOST_WANTED_BOUNTY_TRANSFER"
+
+// mostWantedBountyDoor is the bounty transfer's door label; the economy
+// ledger records both of its sides as a transfer.
+const mostWantedBountyDoor = "most-wanted-bounty"
 
 const (
 	// mostWantedKillsPerLevel counted kills make one wanted level.
@@ -88,6 +105,36 @@ func MostWantedFromEnv() bool {
 		return true
 	}
 	return false
+}
+
+/*
+================
+MostWantedBountyTransferFromEnv
+================
+*/
+func MostWantedBountyTransferFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvMostWantedBountyTransfer))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+mostWantedBounty
+
+A bounty a committed kill still owes, paid from the victim's gold after
+the kill's door (payMostWantedBounty). gold is the full bounty; the victim
+pays what it carries of it.
+================
+*/
+type mostWantedBounty struct {
+	division string
+	killer   *enterworld.Character
+	victim   *enterworld.Character
+	wanted   int64
+	gold     uint64
 }
 
 /*
@@ -265,14 +312,19 @@ Runtime.mostWantedKillInDoor
 
 A job kill's streak count and every PvP kill's bounty, in the killer's
 door after the victim's death settled. victimLevel is the wanted level the
-victim held before its death cleared it. actor goes to the killer.
+victim held before its death cleared it. actor goes to the killer. With
+the bounty transfer on, the bounty is not paid here but returned, owed
+once the door commits.
 ================
 */
-func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame) {
+func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterworld.Character, kill playerKill, now int64) (actor, public []wire.Frame, owed []mostWantedBounty) {
 	if !rt.MostWanted || killer == nil || victim == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
-	if kill.victimWanted > 0 && kill.mostWantedStrangers {
+	if kill.victimWanted > 0 && kill.mostWantedStrangers && rt.MostWantedBountyTransfer {
+		owed = append(owed, mostWantedBounty{division: division, killer: killer, victim: victim, wanted: kill.victimWanted,
+			gold: uint64(kill.victimWanted) * mostWantedBountyPerLevel})
+	} else if kill.victimWanted > 0 && kill.mostWantedStrangers {
 		bounty := uint64(kill.victimWanted) * mostWantedBountyPerLevel
 		setGold(killer, goldOf(killer)+bounty)
 		actor = append(actor, goldFrame(killer))
@@ -281,7 +333,7 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	}
 	if kill.kind != pk.DeathJob || !kill.mostWantedStrangers || !enterworld.CharacterAlive(killer) ||
 		!rt.countMostWantedPair(division, killer.Name, victim.Name, now) {
-		return actor, nil
+		return actor, nil, owed
 	}
 	before := mostWantedLevel(killer)
 	if killer.MostWanted == nil {
@@ -294,7 +346,46 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 		stats, speed := rt.mostWantedRefresh(division, killer, now)
 		actor, public = append(actor, stats...), speed
 	}
-	return actor, public
+	return actor, public, owed
+}
+
+/*
+================
+Runtime.payMostWantedBounty
+
+One door over the killer and the victim, after the kill committed: the
+victim pays min(bounty, its gold), capped by what the killer can still
+hold, so the shard's gold supply is unchanged. Either character gone, or
+nothing to move, refuses the door before any write. The frames are each
+side's new balance.
+================
+*/
+func (rt *Runtime) payMostWantedBounty(owed mostWantedBounty) []RecipientFrames {
+	killer, victim := owed.killer, owed.victim
+	if killer == nil || victim == nil || killer == victim {
+		return nil
+	}
+	var paid uint64
+	if !rt.deps.UpdateMany([]*enterworld.Character{killer, victim}, mostWantedBountyDoor, func() bool {
+		if killer.DeletePending || victim.DeletePending {
+			return false
+		}
+		paid = min(owed.gold, goldOf(victim), uint64(math.MaxInt64)-goldOf(killer))
+		if paid == 0 {
+			return false
+		}
+		setGold(victim, goldOf(victim)-paid)
+		setGold(killer, goldOf(killer)+paid)
+		return true
+	}) {
+		return nil
+	}
+	log.WithFields(log.Fields{"division": owed.division, "killer": killer.Name, "victim": victim.Name,
+		"wanted": owed.wanted, "bounty": owed.gold, "gold": paid}).Info("most wanted: bounty paid from the victim")
+	return []RecipientFrames{
+		{CharacterID: killer.ID, Frames: []wire.Frame{goldFrame(killer)}},
+		{CharacterID: victim.ID, Frames: []wire.Frame{goldFrame(victim)}},
+	}
 }
 
 /*
