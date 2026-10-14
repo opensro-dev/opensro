@@ -3677,7 +3677,8 @@ Packet handling must not depend on which HUD panel is currently open.
 					// 77A080 processes HP, MP, then abnormal state. Inactive
 					// channels can attempt use here; armed channels wait for Tick.
 					if ( frame.payload[6]! & 1 ) {
-						potionFacts = { ...potionFacts, hp: vital.hp ?? potionFacts.hp };
+						// 70C550 compares the wire HP (+0x440), never a hit-predicted one.
+						potionFacts = { ...potionFacts, hp: combat.wireHp( localGid ) ?? vital.hp ?? potionFacts.hp };
 						checkAutomaticPotion( 0, now, "vitals" );
 					}
 					if ( frame.payload[6]! & 2 ) {
@@ -3995,7 +3996,9 @@ before take assembles the presentation snapshot.
 			potionFacts = {
 				...potionFacts,
 				alive: !!local && ((local.appearanceState?.[0] ?? 1) & 1) !== 0,
-				hp: vital?.hp ?? potionFacts.hp,
+				// The wire HP, as 70C550: a hit result predicted after an absolute
+				// that already held it would otherwise drink early (BR-261014-1051-49A0).
+				hp: combat.wireHp( localGid ) ?? vital?.hp ?? potionFacts.hp,
 				mp: vital?.mp ?? potionFacts.mp,
 				abnormal: vital?.abnormal ?? potionFacts.abnormal
 			};

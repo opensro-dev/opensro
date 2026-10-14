@@ -504,3 +504,48 @@ test("the separate stall network does not refuse automatic potion use", () => {
 	assert.equal( sent[0].opcode, 0x75bd );
 	g.dispose();
 });
+
+/*
+================
+monsterHit
+
+B245 [1][0] skill 7, caster 5, token, target 1, one result row on the
+local gid: one impact of damage, not fatal.
+================
+*/
+function monsterHit( token, damage ) {
+	const payload = new Uint8Array( 34 ), view = new DataView( payload.buffer );
+	payload[0] = 1;
+	view.setUint32( 2, 7, true );
+	view.setUint32( 6, 5, true );
+	view.setUint32( 10, token, true );
+	view.setUint32( 14, 1, true );
+	payload[18] = 1;
+	payload[19] = 1;
+	payload[20] = 1;
+	view.setUint32( 21, 1, true );
+	view.setUint32( 26, damage << 8, true );
+	return { opcode: 0xb245, payload };
+}
+
+test("an armed retry reads the wire HP, as 70C550, never a hit-predicted one", () => {
+	// BR-261014-1051-49A0: an absolute 0x33A6 that already held a hit can
+	// arrive before that hit's result, so the predicted HP falls below the
+	// server's. Natively the retry timer compares +0x440, the wire HP only.
+	const { sent, g, local } = automatic( { timing: 0x9e, typeFlags: 0x8ec } );
+	g.receive( vitals( 40 ), 0 );
+	g.step( 0, local );
+	assert.equal( sent.length, 1, "below the threshold: drink and arm the retry" );
+	g.receive( { opcode: 0xb5bd, payload: Uint8Array.of( 1, 13, 9, 0, 0xec, 8 ) }, 1 );
+	g.receive( vitals( 80 ), 1400 );
+	g.step( 1400, local );
+	g.receive( monsterHit( 9, 75 ), 1450 );
+	g.step( 1450, local );
+	g.step( 3000, local );
+	assert.equal( sent.length, 1, "the retry sees the server's 80%, not a predicted 5%" );
+	g.receive( vitals( 40 ), 3001 );
+	g.step( 3001, local );
+	g.step( 4500, local );
+	assert.ok( sent.length > 1, "the server's own HP below the threshold still drinks" );
+	g.dispose();
+});
