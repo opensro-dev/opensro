@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	// testing.Testing() alone gates the audit: production binaries report
+	// false and run every callback untouched.
 	"testing"
 )
 
@@ -43,7 +45,9 @@ func refusalAudited(label string, characters []*Character, update func() bool) f
 		after := persistedForms(characters)
 		for i := range before {
 			if !bytes.Equal(before[i], after[i]) {
-				panic(fmt.Sprintf("door %q refused after changing character %d: before %s after %s", label, i, before[i], after[i]))
+				panic(fmt.Sprintf("door %q refused after changing character %d (mutate a copy and assign it only on success; "+
+					"a change made outside the door, such as by another goroutine, also shows here): before %s after %s",
+					label, i, before[i], after[i]))
 			}
 		}
 		return false
