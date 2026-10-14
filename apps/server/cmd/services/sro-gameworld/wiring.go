@@ -30,6 +30,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/game/world/worldarea"
 	"opensro.online/server/internal/gamedata"
+	"opensro.online/server/internal/platform/economy"
 	"opensro.online/server/internal/platform/history"
 	"opensro.online/server/internal/platform/readiness"
 	"opensro.online/server/internal/security/auth"
@@ -62,7 +63,9 @@ writer, releases the lease, and closes durable authority last.
 */
 
 type gameWorldApplication struct {
-	history         *history.Journal
+	history *history.Journal
+	// economy is the staff economy view's aggregates (port-only); nil off.
+	economy         *economy.Service
 	skillCache      io.Closer
 	itemCache       io.Closer
 	populationCache io.Closer
@@ -188,6 +191,9 @@ func newGameWorldApplication(
 		return nil, err
 	}
 	authority.agentAPI.InstallHistory(historyHandler)
+	if err := installEconomy(application, &authority, ownedShard.ID); err != nil {
+		return nil, err
+	}
 	if err := configureCatalogues(authority.textdata.Skills, authority.textdata.Items, boundedCataloguesFromEnv()); err != nil {
 		return nil, err
 	}
@@ -435,6 +441,12 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 		application.ticker.Run(groupContext)
 		return nil
 	})
+	if application.economy != nil {
+		group.Go(func() error {
+			application.economy.Run(groupContext)
+			return nil
+		})
+	}
 	// Shutdown joins admission before it closes readiness and drains, so a
 	// late admit can never start the transport behind the drain.
 	admitted := make(chan struct{})
@@ -486,6 +498,9 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	log.Info("shutdown: complete")
 	if application.history != nil {
 		drainErr = errors.Join(drainErr, application.history.Close())
+	}
+	if application.economy != nil {
+		drainErr = errors.Join(drainErr, application.economy.Close())
 	}
 
 	return errors.Join(runErr, drainErr)
@@ -603,6 +618,9 @@ func (application *gameWorldApplication) rollback() {
 	application.leaseOwned = false
 	if application.history != nil {
 		_ = application.history.Close()
+	}
+	if application.economy != nil {
+		_ = application.economy.Close()
 	}
 }
 

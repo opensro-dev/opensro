@@ -12,18 +12,13 @@ package history
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
-	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"os"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"opensro.online/server/internal/platform/operatorauth"
 )
 
 const Path = "/internal/operations/history"
@@ -101,33 +96,15 @@ An absent token leaves collection enabled but the read endpoint inaccessible.
 ================
 */
 func OperatorHandler(j *Journal, tokenPath string) (http.Handler, error) {
-	bytes, err := os.ReadFile(tokenPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return http.NotFoundHandler(), nil
-	}
+	guard, found, err := operatorauth.Load(tokenPath, "history")
 	if err != nil {
 		return nil, err
 	}
-	token := strings.TrimSpace(string(bytes))
-	if len(token) < 32 {
-		return nil, fmt.Errorf("history: operator token must have at least 32 characters")
+	if !found {
+		return http.NotFoundHandler(), nil
 	}
-	want := sha256.Sum256([]byte("Bearer " + token))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		remote, _, _ := net.SplitHostPort(r.RemoteAddr)
-		host := r.Host
-		if value, _, err := net.SplitHostPort(host); err == nil {
-			host = value
-		}
-		a, b := net.ParseIP(remote), net.ParseIP(strings.Trim(host, "[]"))
-		got := sha256.Sum256([]byte(r.Header.Get("Authorization")))
-		forbidden := a == nil || !a.IsLoopback() || b == nil || !b.IsLoopback() || r.Header.Get("X-SRO-Local-Diagnostics") != "1" || r.Header.Get("Origin") != "" || subtle.ConstantTimeCompare(want[:], got[:]) != 1
-		for key := range r.Header {
-			if strings.EqualFold(key, "Forwarded") || strings.HasPrefix(strings.ToLower(key), "x-forwarded-") {
-				forbidden = true
-			}
-		}
-		if forbidden {
+		if !guard.Allows(r) {
 			http.Error(w, "operator authentication required", http.StatusForbidden)
 			return
 		}

@@ -13,7 +13,10 @@ changes meaning; new names may be added.
 */
 package domain
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // EconomyReasonUnattributed names a change whose door the table below does
 // not know; its row keeps the door label so the table can learn it.
@@ -117,4 +120,79 @@ func EconomyReason(door string, gain bool) string {
 		return EconomyReasonUnattributed
 	}
 	return name
+}
+
+//============================================================================
+
+// The economy kinds of a reason (contract v1 meta): a mint adds gold to the
+// shard, a burn removes it, a transfer only moves it between holders, and
+// an unknown change is a door the table above does not name yet.
+const (
+	EconomyKindMint     = "mint"
+	EconomyKindBurn     = "burn"
+	EconomyKindTransfer = "transfer"
+	EconomyKindUnknown  = "unknown"
+)
+
+// economyReasonKinds names every reason the door table produces. A gold
+// drop is a burn: what nobody picks up expires, and what someone picks up
+// comes back through pickup-gold as monster_gold.
+var economyReasonKinds = map[string]string{
+	"npc_sale":               EconomyKindMint,
+	"monster_gold":           EconomyKindMint,
+	"quest_reward":           EconomyKindMint,
+	"quest_refund":           EconomyKindMint,
+	"weekly_reward_paid":     EconomyKindMint,
+	"most_wanted_bounty":     EconomyKindMint,
+	"fortress_withdraw":      EconomyKindMint,
+	"guild_war_compensation": EconomyKindMint,
+	"gm_grant":               EconomyKindMint,
+	"shop_buy":               EconomyKindBurn,
+	"buyback":                EconomyKindBurn,
+	"gold_drop":              EconomyKindBurn,
+	"repair":                 EconomyKindBurn,
+	"alchemy":                EconomyKindBurn,
+	"skill_learn":            EconomyKindBurn,
+	"skill_untrain":          EconomyKindBurn,
+	"quest_fee":              EconomyKindBurn,
+	"job_fee":                EconomyKindBurn,
+	"fortress_fee":           EconomyKindBurn,
+	"guild_fee":              EconomyKindBurn,
+	"guild_war_stake":        EconomyKindBurn,
+	"exchange":               EconomyKindTransfer,
+	"stall_sale":             EconomyKindTransfer,
+	"storage_withdraw":       EconomyKindTransfer,
+	"storage_deposit":        EconomyKindTransfer,
+	"guild_storage":          EconomyKindTransfer,
+}
+
+/*
+================
+EconomyReasonKind
+
+The kind of a ledger reason; unattributed and unknown names are unknown.
+================
+*/
+func EconomyReasonKind(reason string) string {
+	if kind, known := economyReasonKinds[reason]; known {
+		return kind
+	}
+	return EconomyKindUnknown
+}
+
+/*
+================
+EconomyReasons
+
+Every named reason, sorted, for the endpoint's meta.
+================
+*/
+func EconomyReasons() []string {
+	names := make([]string, 0, len(economyReasonKinds)+1)
+	for name := range economyReasonKinds {
+		names = append(names, name)
+	}
+	names = append(names, EconomyReasonUnattributed)
+	slices.Sort(names)
+	return names
 }
