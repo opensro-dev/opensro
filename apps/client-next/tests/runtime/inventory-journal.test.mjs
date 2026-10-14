@@ -3,9 +3,10 @@
 
 inventory-journal.test.mjs - the bug report's record of bag slot changes
 
-Port-only diagnostics (foundation/gameplay/inventory-journal.ts): each
-0xB06D, 0xB5BD and 0x3645 answer leaves the slots it changed and whether
-each still holds an item, with no reference, name or count.
+Port-only diagnostics (foundation/gameplay/inventory-journal.ts): every
+change to the bag, by any frame, a world entry or the tick, leaves the slots
+it changed and whether each still holds an item, with no reference, name or
+count; the 0xB06D, 0xB5BD and 0x3645 answers leave a row even unchanged.
 
 ===========================================================================
 */
@@ -114,10 +115,58 @@ test("live inventory answers reach the published journal with slots and codes on
 	game.receive( { opcode: 0xb06d, payload: Uint8Array.of( 1, 0, 13, 20, 20, 0, 0 ) }, 7 );
 	const state = game.take();
 	assert.deepEqual( state?.inventory.map( row => row.slot ), [ 20 ] );
-	const moved = [ [ 7, 0xb06d, 1, 0, 13, 0 ], [ 7, 0xb06d, 1, 0, 20, 1 ] ];
+	// The entry leaves one marker row (opcode 0), not the whole bag.
+	const moved = [ [ 0, 0, -1, -1, -1, -1 ], [ 7, 0xb06d, 1, 0, 13, 0 ], [ 7, 0xb06d, 1, 0, 20, 1 ] ];
 	assert.deepEqual( rows( state?.inventoryJournal ?? [] ), moved );
 	// A character switch resets the session: the next report starts empty.
 	game.reset();
 	assert.deepEqual( game.take()?.inventoryJournal ?? [], [] );
+	game.dispose();
+});
+
+/*
+================
+journalGame
+
+A world-entered gameplay whose bag holds an arrow stack in socket 7 and a
+potion in slot 13.
+================
+*/
+function journalGame() {
+	const game = createGameplay( () => {} );
+	const entry = {
+		inventorySlotCount: 77,
+		equipmentSlotCount: 13,
+		character: { hp: 100, mp: 100, maxHp: 100, maxMp: 100 },
+		refItemSnapshot: [ { refObjId: 1, typeFlags: 0x8ec, nativeFields: { maxStack: 50 } } ],
+		equipItems: [
+			{ slot: 7, refObjId: 1, body: [ 1, 0, 0, 0, 200, 0 ] },
+			{ slot: 13, refObjId: 1, body: [ 1, 0, 0, 0, 20, 0 ] }
+		]
+	};
+	game.bootstrap( entry, false, 1 );
+	return { game, entry };
+}
+
+test("a bag writer outside the move answers is journaled under its own opcode", () => {
+	const { game } = journalGame();
+	game.take();
+	// 0x3752 empties the ammunition socket: no 0xB06D, 0xB5BD or 0x3645.
+	game.receive( { opcode: 0x3752, payload: Uint8Array.of( 0, 0 ) }, 9 );
+	const emptied = rows( game.take()?.inventoryJournal ?? [] );
+	assert.deepEqual( emptied.at( -1 ), [ 9, 0x3752, 0, 0, 7, 0 ] );
+	// The socket is already empty: the same update changes nothing and adds no row.
+	game.receive( { opcode: 0x3752, payload: Uint8Array.of( 5, 0 ) }, 10 );
+	const quiet = game.take();
+	assert.equal( quiet === null ? emptied.length : rows( quiet.inventoryJournal ?? [] ).length, emptied.length );
+	game.dispose();
+});
+
+test("a world re-entry records the bag it brought against the bag before it", () => {
+	const { game, entry } = journalGame();
+	// The re-entered bag lost slot 13 and gained slot 20.
+	game.bootstrap( { ...entry, equipItems: [ entry.equipItems[0], { ...entry.equipItems[1], slot: 20 } ] }, true, 50 );
+	const journal = rows( game.take()?.inventoryJournal ?? [] );
+	assert.deepEqual( journal, [ [ 1, 0, -1, -1, -1, -1 ], [ 50, 0, -1, -1, 13, 0 ], [ 50, 0, -1, -1, 20, 1 ] ] );
 	game.dispose();
 });

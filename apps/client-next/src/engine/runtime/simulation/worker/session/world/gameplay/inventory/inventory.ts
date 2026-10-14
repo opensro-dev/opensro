@@ -253,6 +253,17 @@ present
 		gachaRows = { iconCount: icons.size, rows };
 		return rows;
 	}
+	/*
+================
+bag
+
+The presented bag rows, rebuilt only after a writer cleared them: every
+change to the bag yields a new array (gameplay's journal compares it).
+================
+	*/
+	function bag(): readonly InventoryItem[] {
+		return published ?? (published = [ ...slots.values() ].map( present ));
+	}
 	let inventorySlotCount: number | undefined, equipmentSlotCount: number | undefined;
 	/*
 ================
@@ -2077,6 +2088,7 @@ step
 			}
 			return unlocked || expired || rentalUpdates.length > 0;
 		},
+		bag,
 		/*
 ================
 state
@@ -2111,7 +2123,7 @@ state
 				shopCompletionRevision,
 				inventorySlotCount,
 				equipmentSlotCount,
-				inventory: published ?? (published = [ ...slots.values() ].map( present )),
+				inventory: bag(),
 				itemFlashes,
 				inventoryPending: busy(),
 				error

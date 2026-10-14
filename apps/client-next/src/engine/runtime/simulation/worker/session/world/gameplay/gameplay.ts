@@ -245,6 +245,9 @@ import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
 import {
+	INVENTORY_JOURNAL_ENTRY,
+	INVENTORY_JOURNAL_LOCAL,
+	inventoryChanged,
 	inventoryJournaled,
 	inventorySignatures,
 	journalInventoryFrame
@@ -291,6 +294,8 @@ const JOB_DRESS_ANSWER_GRACE_MS = 5000;
 // grounditem.ExecuteRange: a pickup closer than this is granted in place;
 // farther away the server walks the player to the item first.
 const PICKUP_EXECUTE_RANGE = 10;
+// The payload of a journal row no frame carried (a world entry, the tick).
+const NO_PAYLOAD = new Uint8Array( 0 );
 // How long past two round trips a sent skill press's cooldown stand-in waits
 // for its answer.
 const SKILL_ANSWER_SLACK_MS = 500;
@@ -390,6 +395,11 @@ export function createGameplay(
 	let unlimitedItems: readonly number[] = [];
 	// Port-only diagnostics: the bag slots each inventory answer changed.
 	let inventoryJournal: readonly number[] = [];
+	// The bag the journal last saw: its rows (inventory.bag(), a new array
+	// after every change) and their signatures; null rows before an entry.
+	let journalRows: readonly import("@/engine/contracts/gameplay").InventoryItem[] | null = null,
+		journalBag: ReadonlyMap<number, string> = new Map(),
+		journalClock = 0;
 	let soundClock = 0;
 	const feedback = createFeedback();
 	const pickup = createPickup();
@@ -966,6 +976,29 @@ stands at one (the server would refuse it).
 	}
 	/*
 ================
+journalBagChange
+
+The diagnostics journal's one entry point (inventory-journal.ts): the bag
+against the last bag it saw, after a frame, a world entry, the tick or a
+publication. Every bag writer clears inventory.bag(), so an unchanged array
+is an unchanged bag and costs nothing. The 0xB06D, 0xB5BD and 0x3645
+answers are journaled even unchanged (a refusal); a world entry before any
+bag keeps one marker row, not the whole bag.
+================
+	*/
+	function journalBagChange( atMs: number, opcode: number, payload: Uint8Array ) {
+		const rows = inventory.bag(), answer = inventoryJournaled( opcode );
+		if ( rows === journalRows && !answer ) return;
+		const after = rows === journalRows ? journalBag : inventorySignatures( rows ),
+			before = journalRows === null ? after : journalBag;
+		journalRows = rows;
+		if ( !answer && opcode !== INVENTORY_JOURNAL_ENTRY && !inventoryChanged( before, after ) ) return;
+		inventoryJournal = journalInventoryFrame( inventoryJournal, { atMs, opcode, payload }, before, after );
+		journalBag = after;
+		dirty = true;
+	}
+	/*
+================
 clearState
 
 Retire session facts together so a later character cannot inherit bindings,
@@ -976,6 +1009,8 @@ selected entities, cooldowns or world-entry state.
 		actionSession.clear();
 		// The next character's report must not carry this one's bag rows.
 		inventoryJournal = [];
+		journalRows = null;
+		journalBag = new Map();
 		moveReservation.clear();
 		betaMap.clear();
 		partyMatching = emptyPartyMatching();
@@ -1294,6 +1329,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			combat.restoreCooldowns( value, nextCatalog, receivedAtMs );
 			combat.references( b.refSkillSnapshot ?? [] );
 			inventory.bootstrap( value );
+			journalBagChange( receivedAtMs, INVENTORY_JOURNAL_ENTRY, NO_PAYLOAD );
 			guide = queueGuide( guide, [
 				...guideInventoryEvents(
 					inventory.state().inventory,
@@ -3634,26 +3670,12 @@ Packet handling must not depend on which HUD panel is currently open.
 					undefined :
 					inventory.state().inventory.find( i => i.slot === pickupSlot );
 				const mallRequest = inventory.state().itemMall?.pending === true;
-				// The bag before an answer the diagnostics journal follows.
-				const journaled = inventoryJournaled( frame.opcode ) ?
-					inventorySignatures( inventory.state().inventory ) :
-					null;
-				const journal = () => {
-					if ( !journaled ) return;
-					inventoryJournal = journalInventoryFrame(
-						inventoryJournal,
-						{ atMs: now, opcode: frame.opcode, payload: frame.payload },
-						journaled,
-						inventorySignatures( inventory.state().inventory )
-					);
-				};
 				// A warehouse move answered after its window closed still settles.
 				const room = storage.settling();
 				if ( frame.opcode === 0xb06d && room ) {
 					const next = inventory.storageSettle( room, frame.payload, cosItemCaps );
 					if ( next ) {
 						storage.apply( next );
-						journal();
 						dirty = true;
 						return true;
 					}
@@ -3665,10 +3687,6 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
-				if ( journaled ) {
-					journal();
-					dirty = true;
-				}
 				if ( fight && frame.opcode === 0xb245 ) {
 					// 776830: the local player's own cast of a skill that assists,
 					// at a target in the world, sends its attack pets in.
@@ -4053,9 +4071,11 @@ before take assembles the presentation snapshot.
 					c.receivedAtMs >= runUpSince && c.cancelledAtMs === undefined
 				) || now - runUpSince > 4 * skillPress.oneWayMs() + SKILL_ANSWER_SLACK_MS)
 			) movement.endPrediction( now );
-			const combatChanged = combat.step( now ), inventoryChanged = inventory.step( now );
+			const combatChanged = combat.step( now ), inventoryStepped = inventory.step( now );
+			journalClock = now;
+			journalBagChange( now, INVENTORY_JOURNAL_LOCAL, NO_PAYLOAD );
 			const trained = training.step( now ), moved = movement.step( now ), targeted = targeting.step( now );
-			dirty = combatChanged || inventoryChanged || trained || chat.step( now ) || moved || targeted || dirty;
+			dirty = combatChanged || inventoryStepped || trained || chat.step( now ) || moved || targeted || dirty;
 		},
 		/*
 ================
@@ -4138,6 +4158,8 @@ The published plane when something changed since the last take, else null.
 ================
 		*/
 		take(): GameplayState | null {
+			// A bag change no frame or tick made (a local command) is still a change.
+			journalBagChange( journalClock, INVENTORY_JOURNAL_LOCAL, NO_PAYLOAD );
 			if ( !dirty ) {
 				return null;
 			}
@@ -4325,6 +4347,15 @@ dispose
 			cosRefs.clear();
 			dirty = false;
 		}
+	};
+	// Every frame, whichever owner answers it, leaves the bag it changed in
+	// the journal: the receive path has many exits, so the check follows it.
+	const receiveFrame = api.receive;
+	api.receive = ( frame, now, chatSender, stallReceipt ) => {
+		const handled = receiveFrame( frame, now, chatSender, stallReceipt );
+		journalClock = now;
+		journalBagChange( now, frame.opcode, frame.payload );
+		return handled;
 	};
 	return api;
 }

@@ -7,8 +7,13 @@ Port-only diagnostics (owner decision 2026-10-14), not native. A bug report
 carries the bag as it stands when the report is sent (state.json), but not
 how it got there: a row the client dropped while the server kept it (an
 item that turns invisible until a relog) leaves no trace. This journal
-keeps, for each 0xB06D, 0xB5BD and 0x3645 frame, the bag slots it changed
-and whether each still holds an item afterwards.
+keeps the bag slots every change touched and whether each still holds an
+item afterwards: any frame that changed the bag (moves, use and state
+answers, and every other writer: trades, shop snapshots, ammunition,
+alchemy, rentals), a world entry (INVENTORY_JOURNAL_ENTRY) and a change
+outside any frame (INVENTORY_JOURNAL_LOCAL: the tick's rentals, a local
+command). The 0xB06D, 0xB5BD and 0x3645 answers are journaled even when
+they changed nothing, so refusals are visible.
 
 Slots and codes only: a row is [atMs, opcode, payload byte 0, payload
 byte 1, slot, present after (1, 0)]; a frame that changed no slot keeps one
@@ -25,6 +30,10 @@ import type { InventoryItem } from "@/engine/contracts/gameplay";
 const OP_ITEM_MOVE_RESPONSE = 0xb06d;
 const OP_ITEM_USE_RESPONSE = 0xb5bd;
 const OP_ITEM_STATE = 0x3645;
+// The opcode column of a world entry's rows (the bag as entered, against
+// the bag before it) and of a change no frame made.
+export const INVENTORY_JOURNAL_ENTRY = 0;
+export const INVENTORY_JOURNAL_LOCAL = -1;
 // How many rows the journal keeps, and the numbers in each row.
 export const INVENTORY_JOURNAL_ROWS = 48;
 export const INVENTORY_JOURNAL_FIELDS = 6;
@@ -52,6 +61,19 @@ export function inventorySignatures(
 	items: readonly Pick<InventoryItem, "slot" | "refObjId" | "quantity" | "plus">[]
 ): Map<number, string> {
 	return new Map( items.map( item => [ item.slot, `${item.refObjId}:${item.quantity}:${item.plus}` ] ) );
+}
+
+/*
+================
+inventoryChanged
+
+Whether any slot's key differs between two signature maps.
+================
+*/
+export function inventoryChanged( before: ReadonlyMap<number, string>, after: ReadonlyMap<number, string> ): boolean {
+	if ( before.size !== after.size ) return true;
+	for ( const [slot, key] of after ) if ( before.get( slot ) !== key ) return true;
+	return false;
 }
 
 /*
