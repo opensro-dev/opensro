@@ -202,7 +202,9 @@ func (t *TextdataItems) collectSummonable(refused map[string]bool) {
 	for _, start := range starts {
 		// The 1 every threshold map starts at, below the family's first
 		// form: 49BBC1 refuses that summon too, and the item's own ReqLevel
-		// matches the first form, so no player meets it.
+		// matches the first form, so no player meets it (checked in the
+		// shipped itemdata 2026-10-15: the T_ families' ReqLevel 20 = _20,
+		// the C_ families' ReqLevel 5 = _5).
 		log.Debugf("bootstrap: summon family %s has no rows %v", start.family, start.missing)
 		log.Infof("bootstrap: summon family %s starts at level %d", start.family, start.level)
 	}
