@@ -1237,14 +1237,17 @@ export function createWorldRenderer(
 
 		Asks the drawn frontend scene sceneId to give up its CPU geometry
 		(settle.ts). Only a scene at full terrain detail settles: one at
-		distance detail re-chooses its ranges as the camera moves. False
-		when the scene is not the drawn one or cannot settle.
+		distance detail re-chooses its ranges as the camera moves. Nor does a
+		scene whose terrain draws through a layer: a layer rebuild re-streams
+		every member from its own vertices, which a settled member no longer
+		has (terrain-layers.ts). False when the scene is not the drawn one or
+		cannot settle.
 		================
 		*/
 		settle( sceneId: string ): boolean {
 			if (
 				disposed || !current || current.id !== sceneId || pending || current.residency !== "frontend" ||
-				current.terrainDetail !== "full"
+				current.terrainDetail !== "full" || current.groups.some( group => layers.member( group ) )
 			) return false;
 			if ( !settled.has( current ) ) settling = current;
 			return true;

@@ -158,13 +158,34 @@ function frontendScene( id, terrainDetail = "full" ) {
 }
 
 test("the renderer settles only the drawn frontend scene at full detail, and a loss reports it", () => {
-	const geometry = { upload: () => ({}), release() {}, updateInstances: draw => draw, dropMirror() {} };
+	const geometry = {
+		upload: () => ({}),
+		release() {},
+		updateInstances: draw => draw,
+		updateIndices() {},
+		streamVertices() {},
+		dropMirror() {}
+	};
 	const textures = { upload: () => ({}), release() {} };
 	const world = createWorldRenderer();
 	world.camera( { eye: [ 0, 0, 0 ], target: [ 0, 0, -1 ], near: 1, far: 1000, fov: Math.PI / 3 } );
 	world.scene( { ...frontendScene( "distance" ), terrainDetail: "distance" } );
 	world.prepare( geometry, textures, 1, 0 );
 	assert.equal( world.settle( "distance" ), false, "a distance-detail scene re-chooses its terrain" );
+	// Terrain drawn through a layer is re-streamed from its own vertices on a
+	// rebuild, so it keeps them.
+	const layered = frontendScene( "layered" );
+	layered.groups[0] = {
+		...layered.groups[0],
+		terrainSector: 1,
+		ranges: [],
+		material: { ...layered.groups[0].material, terrain: true },
+		geometry: { ...layered.groups[0].geometry, vertices: new Float32Array( 42 ), dynamicVertices: true }
+	};
+	world.scene( layered );
+	world.prepare( geometry, textures, 1, 0 );
+	assert.equal( world.stats().sceneId, "layered" );
+	assert.equal( world.settle( "layered" ), false, "a layered scene keeps its terrain streams" );
 	world.scene( frontendScene( "title" ) );
 	assert.equal( world.settle( "title" ), false, "a scene still loading is not drawn yet" );
 	world.prepare( geometry, textures, 1, 0 );
