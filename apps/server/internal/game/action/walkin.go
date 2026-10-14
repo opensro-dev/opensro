@@ -195,10 +195,15 @@ func (rt *Runtime) stepWalkIn(key string, owner populationAdmission, nowMs int64
 		return OpResult{}
 	}
 	zone := rt.WalkInZoneAt(pose)
-	if previous, _ := rt.walkInZones.Load(key); previous == zone {
+	previous, sampled := rt.walkInZones.Load(key)
+	rt.walkInZones.Store(key, zone)
+	// The first sample after admission only seeds the zone. Inference: a PC
+	// inserted into the world inside a zone (a login on the cave's mouth)
+	// was placed there, not walked in, and the region manager reports
+	// entries, so it is not moved until it leaves and walks back in.
+	if !sampled || previous == zone {
 		return OpResult{}
 	}
-	rt.walkInZones.Store(key, zone)
 	link, ok := rt.portals.walkIns[zone]
 	if !ok {
 		return OpResult{}

@@ -148,12 +148,39 @@ func TestWalkingIntoTheCaveMouthTeleportsInside(t *testing.T) {
 
 /*
 ================
+TestAPlayerAdmittedInsideAZoneIsNotMoved
+
+A player first sampled inside the mouth's zone (a login there) was placed,
+not walked in: nothing happens until it leaves and walks back in.
+================
+*/
+func TestAPlayerAdmittedInsideAZoneIsNotMoved(t *testing.T) {
+	rt, c, pushed := walkInFixture(t)
+	level := int64(60)
+	c.Level = &level
+	placeWalker(rt, c, 600)
+	rt.advanceWalkIns(1000)
+	rt.advanceWalkIns(1100)
+	if len(*pushed) != 0 || uint16(*c.World.Spawn.RegionID) == caveRegion {
+		t.Fatalf("a player first seen inside the mouth was moved: %+v", *pushed)
+	}
+	placeWalker(rt, c, 100)
+	rt.advanceWalkIns(1200)
+	placeWalker(rt, c, 600)
+	rt.advanceWalkIns(1300)
+	if uint16(*c.World.Spawn.RegionID) != caveRegion {
+		t.Fatal("walking back in did not enter the cave")
+	}
+}
+
+/*
+================
 TestWalkInRefusesTeleportingAndRiding
 
 4EF480's notices: a player standing in teleport mode hears its last
-teleport is still working (0x3058 kind 3), a riding one, or one with a transport
-out, that a COS cannot enter (kind 4); none moves. A teleporting player still walking is let
-through, as natively.
+teleport is still working (0x3058 kind 3), a riding one, or one with a
+transport out, that a COS cannot enter (kind 4); none moves. A teleporting
+player still walking is let through, as natively.
 ================
 */
 func TestWalkInRefusesTeleportingAndRiding(t *testing.T) {
