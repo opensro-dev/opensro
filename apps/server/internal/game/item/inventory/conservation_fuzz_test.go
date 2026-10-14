@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	fuzzBagEnd   uint8 = 45
-	fuzzRoomSize uint8 = 20
+	fuzzBagEnd   uint8  = 45
+	fuzzRoomSize uint8  = 20
 	potionRef    uint32 = 1
 	swordRef     uint32 = 2
 	elixirRef    uint32 = 3
