@@ -414,6 +414,14 @@ variable "beta_seal_rates" {
   default = "on"
 }
 
+# sun_event_only keeps degree-9 Seal of Sun gear out of every monster drop
+# and NPC shop; it returns only as an event reward, and gear players own
+# is kept (port-only, not native; owner decision 2026-10-14). "off" is native.
+variable "sun_event_only" {
+  type    = string
+  default = "on"
+}
+
 # stack_sizes raises item stack caps per group (port-only, not native), e.g.
 # "potion=2000,elixir=50". Groups: potion, petpotion, universalpill, elixir,
 # luckypowder, magicstone, attrstone (stones merge only with an equal
@@ -597,6 +605,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_INSTANT_INVENTORY_EXPANSION    = var.instant_inventory_expansion
         SRO_BETA_RARE_RATE                 = var.beta_rare_rate
         SRO_BETA_SEAL_RATES                = var.beta_seal_rates
+        SRO_SUN_EVENT_ONLY                 = var.sun_event_only
         SRO_BETA_DROP_CAP                  = var.beta_drop_cap
         SRO_BETA_DROP_MIX                  = var.beta_drop_mix
         SRO_SHOP_EXTRA_GOODS               = var.shop_extra_goods

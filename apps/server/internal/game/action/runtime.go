@@ -341,6 +341,9 @@ type Runtime struct {
 	// ShopOnly keeps degree-9 alchemy goods out of every drop (port-only,
 	// not native, beta balance; owner 2026-10-13). The zero value is off.
 	ShopOnly progression.ShopOnlyDegree9
+	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC
+	// shops (port-only, not native; action/sunevent.go).
+	SunEventOnly progression.SunEventOnly
 
 	// PetExpPace is the closed-beta growth multiplier for an attack pet's
 	// EXP gain, read at the owner's level (progression GrowthRates.ExpPace,

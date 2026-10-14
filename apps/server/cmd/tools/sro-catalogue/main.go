@@ -190,7 +190,15 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 	if err != nil {
 		return nil, err
 	}
-	return commerce.LoadWithExtraGoods(dir, items, extra)
+	shops, err := commerce.LoadWithExtraGoods(dir, items, extra)
+	if err != nil {
+		return nil, err
+	}
+	// The GameWorld withholds the same goods (action.ConfigureCommerce).
+	if sun := progression.SunEventOnlyFromEnv(); sun.Enabled() {
+		shops.WithholdGoods(func(ref *enterworld.ItemRef) bool { return action.SunExcludes(sun, ref) })
+	}
+	return shops, nil
 }
 
 /*
@@ -252,10 +260,20 @@ func run(out, release, textdata string) error {
 		}
 		return nil
 	}
+	// SRO_SUN_EVENT_ONLY (port-only, not native): a Sun pick drops nothing
+	// on the shard, so its chances leave the published drop lists; every
+	// other item keeps its own chance (action/sunevent.go).
+	sun := progression.SunEventOnlyFromEnv()
+	dropItemID := func(codename string) uint32 {
+		if ref, ok := itemSource.ItemRefByCodename(codename); ok && action.SunExcludes(sun, ref) {
+			return 0
+		}
+		return itemID(codename)
+	}
 	quests := catalogue.BuildQuests(catalogue.QuestSource{Catalog: questCatalog, Definitions: definitions,
 		Text: englishText(dir), Listed: listedQuests(dir), ItemID: itemID})
 	skillData := enterworld.NewTextdataSkills(dir)
-	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: monster.LoadTemplate(dir), ItemID: itemID,
+	monsters, err := catalogue.BuildMonsters(catalogue.MonsterSource{Template: monster.LoadTemplate(dir), ItemID: dropItemID,
 		Skills: skillData})
 	if err != nil {
 		return fmt.Errorf("monsters: %w", err)
@@ -324,7 +342,7 @@ func run(out, release, textdata string) error {
 		"levels.json": catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery),
 		"trade.json": catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(),
 			Quotes: catalogue.BuildTrade(shops.TradeQuotations, itemByID, func(id uint32) bool { return placedNpcs[id] })},
-		"droptables.json": catalogue.BuildDropTables(monsters, itemID, header),
+		"droptables.json": catalogue.BuildDropTables(monsters, dropItemID, header),
 		"summary.json": catalogue.Summarize(header, catalogue.SummaryInput{Items: catalogue.ItemStandings(items),
 			Skills: catalogue.SkillStandings(skills), Quests: catalogue.QuestStandings(quests), Monsters: catalogue.MonsterStandings(monsters)}),
 	}

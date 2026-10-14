@@ -43,6 +43,10 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 	if e != nil {
 		return e
 	}
+	if rt.SunEventOnly.Enabled() {
+		// Port-only, not native: no NPC sells Sun gear (action/sunevent.go).
+		c.WithholdGoods(func(ref *enterworld.ItemRef) bool { return SunExcludes(rt.SunEventOnly, ref) })
+	}
 	rt.Commerce = c
 	rt.prepareCommerceReferences()
 	return nil

@@ -184,6 +184,12 @@ func newGameplayPlane(
 	if items.MaterialDrops.Off() {
 		log.Infof("loot: alchemy material drops OFF (%s)", progression.EnvAlchemyMaterialDropsOff)
 	}
+	// SRO_SUN_EVENT_ONLY (port-only, not native): degree-9 Seal of Sun gear
+	// leaves monster drops and NPC shops; it returns only as an event reward.
+	items.SunEventOnly = progression.SunEventOnlyFromEnv()
+	if items.SunEventOnly.Enabled() {
+		log.Infof("loot: degree-9 Seal of Sun gear neither drops nor is sold (%s)", progression.EnvSunEventOnly)
+	}
 	if err := items.ConfigureCommerce(devPaths.TextdataDir, extraGoods); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
