@@ -34,8 +34,15 @@ const mallTransportSpeedup = 1.5
 // mallTransportFamilies are the COS_T_ codename families MALL_PET_D_CART sells.
 var mallTransportFamilies = []string{"COS_T_BUFFALO", "COS_T_RHINOCEROS", "COS_T_WHITEELEPHANT"}
 
-// transportBand is a COS's TypeID4 band for a trade transport.
-const transportBand = 2
+const (
+	// tidKindMask keeps a characterdata TID word's TypeID1-3 bits (the
+	// same mask cossummoning.go and cosrecord.go test inline).
+	tidKindMask = 0x7fe
+	// tidKindCOS is the masked TID word of a COS (TypeID1-3 1/2/3).
+	tidKindCOS = 0x1c6
+	// transportBand is a COS's TypeID4 band for a trade transport.
+	transportBand = 2
+)
 
 /*
 ================
@@ -56,7 +63,7 @@ isMallTransport
 ================
 */
 func isMallTransport(ref *CharacterRef) bool {
-	if ref == nil || ref.TidWord&0x7fe != 0x1c6 || ref.TidWord>>11 != transportBand {
+	if ref == nil || ref.TidWord&tidKindMask != tidKindCOS || ref.TidWord>>11 != transportBand {
 		return false
 	}
 	for _, family := range mallTransportFamilies {
