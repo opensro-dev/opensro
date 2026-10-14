@@ -17,6 +17,12 @@ import (
 	"opensro.online/server/internal/game/item/wire"
 )
 
+// The degree refusals, the low bytes of v1.188's 0x5421 and 0x540F.
+const (
+	stoneErrAttributeDegree = 0x21
+	stoneErrMagicDegree     = 0x0f
+)
+
 /*
 ================
 attributes
@@ -279,7 +285,14 @@ func (c *Catalog) Stone(items []inventory.Item, slots []uint8, magic bool, bonus
 	stone := out[material]
 	r := c.Items[stone.Codename]
 	if c.Items[item.Codename].Degree() != int(r.Params[0]) {
-		return zero, Refusal(0x21)
+		// v1.188 answers each stone with its own code: 0x5421 for an
+		// attribute stone (CEnchant_EnchantAttrStone_CanTarget 502A40) and
+		// 0x540F for a magic stone (ApplyMagicParam 503810); the client names
+		// each in category 0x12 (7503D0).
+		if magic {
+			return zero, Refusal(stoneErrMagicDegree)
+		}
+		return zero, Refusal(stoneErrAttributeDegree)
 	}
 	if len(item.MagicOptions) > c.magicLimit(*item) {
 		return zero, Refusal(0x22)

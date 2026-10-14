@@ -141,3 +141,27 @@ func TestStackedStoneSpendsOneAndKeepsItsValue(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestStoneOfAnotherDegreeIsRefusedWithItsOwnCode
+
+v1.188 refuses an attribute stone of another degree with 0x5421 (502A40)
+and a magic stone with 0x540F (503810); both keep the stone.
+================
+*/
+func TestStoneOfAnotherDegreeIsRefusedWithItsOwnCode(t *testing.T) {
+	for _, want := range []struct {
+		magic bool
+		code  uint8
+	}{{false, 0x21}, {true, 0x0f}} {
+		c, items := stoneFixture(want.magic)
+		r := c.Items["stone"]
+		r.Params[0] = 2
+		c.Items["stone"] = r
+		_, e := c.Stone(items, []uint8{13, 14}, want.magic, 0, sequence(t))
+		if !errors.Is(e, Refusal(want.code)) {
+			t.Fatalf("magic %v: %v, want refusal %#x", want.magic, e, want.code)
+		}
+	}
+}
