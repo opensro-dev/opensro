@@ -159,7 +159,9 @@ func (rt *Runtime) advanceHawk(h summonedHawk, now int64) []simulation.DivisionF
 		return nil
 	}
 	target, exists := rt.resolveCombatTarget(h.division, snapshot, h.target, now)
-	if !exists {
+	// A hawk strikes monsters and players only (playerstrike_cos.go covers a
+	// player's own single-target hit on a COS).
+	if !exists || target.cos != nil {
 		rt.updateHawk(key, h.token, func(live *summonedHawk) { live.target = 0 })
 		return nil
 	}

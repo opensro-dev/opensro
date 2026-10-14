@@ -233,69 +233,125 @@ func (rt *Runtime) monsterStrikeCOS(in monsterStrikeInput, owner *enterworld.Cha
 		}
 		records = append(records, rolled...)
 	}
-	ownerBlock.sources = rt.captureAbnormalSources(divisionID, ownerBlock.block, records)
-	strike := monsterStrike{gid: pet.GID, owner: owner, pose: pose}
-	var battleFrames []wire.Frame
-	var remaining uint32
-	hitContext := abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}
-	committed := rt.deps.UpdateDeferred(owner, "monster-cos-hit", func() bool {
-		live := owner.CompanionByGID(pet.GID)
-		if live == nil || live.GID != pet.GID || live.CurrentHP == 0 {
-			return false
-		}
-		// CGObjCOS_ProcessNormalHit (52A1E0): the owner (COS+0x1CD8) enters
-		// battle (4E1DF0) before the pet takes the hit, fatal or not.
-		if enterworld.CharacterAlive(owner) {
-			battleFrames = rt.enterBattleState(divisionID, owner, nowMs)
-		}
-		for _, formula := range formulas {
-			hitContext.Magical = hitContext.Magical || formula.MagicalDamage != 0
-			live.CurrentHP -= vitals.HitDebit(live.CurrentHP, formula.Damage)
-			strike.fatal = live.CurrentHP == 0
-			strike.impacts = append(strike.impacts, wire.SkillCastTargetImpact{Damage: formula.Damage,
-				Fatal: strike.fatal, Blocked: formula.Blocked, ResultFlags: formula.ResultFlags})
-			if strike.fatal {
-				break
-			}
-		}
-		if !strike.fatal && displacement != nil && displaceAt < len(strike.impacts) {
-			if point, ok := rt.commitCOSDisplacement(ownerBlock, displacement); ok {
-				if displacement.down {
-					strike.impacts[displaceAt].Knockdown = point
-				} else {
-					strike.impacts[displaceAt].Knockback = point
-				}
-			}
-		}
-		remaining = live.CurrentHP
-		if strike.fatal {
-			ownerBlock.changed = ownerBlock.block.ClearAll(ownerBlock)
-			ownerBlock.fatal = true
-		} else {
-			if ownerBlock.block.Mask != 0 {
-				ownerBlock.changed = ownerBlock.block.BreakOnHit(ownerBlock, hitContext) || ownerBlock.changed
-			}
-			for _, record := range records {
-				if ownerBlock.block.Apply(ownerBlock, record, nowMs) {
-					ownerBlock.changed = true
-				}
-			}
-		}
-		ownerBlock.commit()
-		return true
-	})
-	if !committed {
+	hit := cosHit{owner: owner, pet: pet, ref: ref, pose: pose, block: ownerBlock, formulas: formulas, records: records,
+		displacement: displacement, displaceAt: displaceAt,
+		context: abnormal.HitContext{Attack: skill.ReplacementPinned && skill.Replacement.MatchesExecutionSelector}}
+	hit.block.sources = rt.captureAbnormalSources(divisionID, hit.block.block, records)
+	if !rt.deps.UpdateDeferred(owner, "monster-cos-hit", func() bool {
+		return rt.applyCOSHitInDoor(divisionID, &hit, nowMs)
+	}) {
 		return out
 	}
+	out.strike, out.committed, out.alive = rt.publishCOSHit(&hit), true, !hit.strike.fatal
+	return out
+}
+
+/*
+================
+cosHit
+
+One planned hit on a companion: its formulas, status records and
+displacement, judged on the COS's own reference and abnormal block, then
+applied inside a door that holds the owner (applyCOSHitInDoor). A monster's
+strike and a player's share it.
+================
+*/
+type cosHit struct {
+	owner        *enterworld.Character
+	pet          *enterworld.CharacterCOS
+	ref          *enterworld.CharacterRef
+	pose         simulation.Spawn
+	block        *cosAbnormalOwner
+	formulas     []combat.Result
+	records      []abnormal.Record
+	displacement *playerDisplacement
+	displaceAt   int
+	context      abnormal.HitContext
+	// Filled by applyCOSHitInDoor.
+	strike    monsterStrike
+	remaining uint32
+	battle    []wire.Frame
+}
+
+/*
+================
+applyCOSHitInDoor
+
+Inside a door holding the owner: the hit lands on the live companion, the
+owner enters battle (CGObjCOS_ProcessNormalHit 52A1E0 calls
+CGObjPC_EnterBattleOnAttacked 4E1DF0 on COS+0x1CD8 before the pet takes the
+hit, fatal or not), then the displacement and the status records. False
+leaves everything unchanged: the companion left or died first.
+================
+*/
+func (rt *Runtime) applyCOSHitInDoor(divisionID string, hit *cosHit, nowMs int64) bool {
+	owner, pet := hit.owner, hit.pet
+	live := owner.CompanionByGID(pet.GID)
+	if live == nil || live.GID != pet.GID || live.CurrentHP == 0 {
+		return false
+	}
+	strike := monsterStrike{gid: pet.GID, owner: owner, pose: hit.pose}
+	if enterworld.CharacterAlive(owner) {
+		hit.battle = rt.enterBattleState(divisionID, owner, nowMs)
+	}
+	for _, formula := range hit.formulas {
+		hit.context.Magical = hit.context.Magical || formula.MagicalDamage != 0
+		live.CurrentHP -= vitals.HitDebit(live.CurrentHP, formula.Damage)
+		strike.fatal = live.CurrentHP == 0
+		strike.impacts = append(strike.impacts, wire.SkillCastTargetImpact{Damage: formula.Damage,
+			Fatal: strike.fatal, Blocked: formula.Blocked, ResultFlags: formula.ResultFlags})
+		if strike.fatal {
+			break
+		}
+	}
+	block := hit.block
+	if !strike.fatal && hit.displacement != nil && hit.displaceAt < len(strike.impacts) {
+		if point, ok := rt.commitCOSDisplacement(block, hit.displacement); ok {
+			if hit.displacement.down {
+				strike.impacts[hit.displaceAt].Knockdown = point
+			} else {
+				strike.impacts[hit.displaceAt].Knockback = point
+			}
+		}
+	}
+	hit.remaining = live.CurrentHP
+	if strike.fatal {
+		block.changed = block.block.ClearAll(block)
+		block.fatal = true
+	} else {
+		if block.block.Mask != 0 {
+			block.changed = block.block.BreakOnHit(block, hit.context) || block.changed
+		}
+		for _, record := range hit.records {
+			if block.block.Apply(block, record, nowMs) {
+				block.changed = true
+			}
+		}
+	}
+	block.commit()
+	hit.strike = strike
+	return true
+}
+
+/*
+================
+publishCOSHit
+
+A committed companion hit's frames: the pet's HP, its abnormal changes and
+the owner's battle entry for everyone, the owner's private frames for the
+owner.
+================
+*/
+func (rt *Runtime) publishCOSHit(hit *cosHit) monsterStrike {
+	strike := hit.strike
 	strike.public = append(strike.public, wire.Frame{
 		Opcode:  simulation.OpVitalsUpdate,
-		Payload: simulation.HPRefreshPayload(pet.GID, 0, remaining),
+		Payload: simulation.HPRefreshPayload(hit.pet.GID, 0, hit.remaining),
 	})
-	strike.public = append(strike.public, rt.cosAbnormalPublication(pet.GID, ownerBlock)...)
-	strike.public = append(strike.public, battleFrames...)
-	strike.private = append(strike.private, ownerBlock.private...)
-	out.strike, out.committed, out.alive = strike, true, !strike.fatal
-	return out
+	strike.public = append(strike.public, rt.cosAbnormalPublication(hit.pet.GID, hit.block)...)
+	strike.public = append(strike.public, hit.battle...)
+	strike.private = append(strike.private, hit.block.private...)
+	return strike
 }
 
 /*

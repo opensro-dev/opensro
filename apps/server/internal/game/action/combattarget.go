@@ -5,10 +5,12 @@ combattarget.go - the object an attack command pursues and strikes
 
 CGCharAutoCommandActor keeps a target object ID; the object behind it may
 be a monster or, once PvP admits it (CGObjPC_CanAttackTarget 52BF90), a
-player. The attack intents and the prepared-cast release resolve their
+player or a player's COS (a transport, horse or pet), which 5293A0 judges
+through its owner (cosTargetRefusal). The attack intents and the prepared-cast release resolve their
 target here so the walk into reach, the range test and the life test read
-one rule for both kinds. The cast itself splits by kind: monsters take
-acceptSkillStagePhaseAt's monster commit, players pvpstrike.go.
+one rule for every kind. The cast itself splits by kind: monsters take
+acceptSkillStagePhaseAt's monster commit, players pvpstrike.go, a COS
+playerstrike_cos.go.
 
 ===========================================================================
 */
@@ -27,7 +29,9 @@ import (
 combatTarget
 
 A live target: exactly one of monster and player is set. player is the
-authoritative record; snapshot is its detached copy for reads.
+authoritative record; snapshot is its detached copy for reads. For a COS
+target (cos set) player and snapshot are its owner, and gid and at are the
+COS's own.
 ================
 */
 type combatTarget struct {
@@ -36,6 +40,8 @@ type combatTarget struct {
 	player   *enterworld.Character
 	snapshot *enterworld.Character
 	at       simulation.Spawn
+	cos      *enterworld.CharacterCOS
+	cosRef   *enterworld.CharacterRef
 }
 
 /*
@@ -63,7 +69,10 @@ func (rt *Runtime) resolveCombatTarget(division string, attacker *enterworld.Cha
 			at: simulation.Spawn{RegionID: pose.RegionID, X: pose.X, Y: pose.Y, Z: pose.Z}}, true
 	}
 	player := rt.findCharacterByGid(division, gid)
-	if player == nil || player.ID == attacker.ID {
+	if player == nil {
+		return rt.resolveCOSTarget(division, attacker, gid, now)
+	}
+	if player.ID == attacker.ID {
 		return combatTarget{}, false
 	}
 	snapshot := rt.characterSnapshot(division, player)
@@ -77,14 +86,54 @@ func (rt *Runtime) resolveCombatTarget(division string, attacker *enterworld.Cha
 
 /*
 ================
+resolveCOSTarget
+
+A living, summoned COS of another character in the attacker's world
+instance, with its owner. 5291D0 refuses a dead COS and a pickup pet
+(+0x43C) whoever attacks it; a ridden COS stays a target (the mounted
+trader's transport). The owner need not be alive: 5293A0 judges the owner's
+relations, not its life.
+================
+*/
+func (rt *Runtime) resolveCOSTarget(division string, attacker *enterworld.Character, gid uint32, now int64) (combatTarget, bool) {
+	owner := rt.characterByCosGID(division, gid)
+	snapshot := rt.characterSnapshot(division, owner)
+	if snapshot == nil || snapshot.ID == attacker.ID || snapshot.DeletePending ||
+		domain.CharacterWorldInstance(snapshot) != domain.CharacterWorldInstance(attacker) {
+		return combatTarget{}, false
+	}
+	pet := snapshot.CompanionByGID(gid)
+	if pet == nil || !pet.Summoned || pet.CurrentHP == 0 || !mercenaryBodyVisible(pet.NativeBodyStatus) {
+		return combatTarget{}, false
+	}
+	ref, found := rt.cosReference(pet)
+	if !found || ref.TidWord>>11 == domain.PickupPetBand {
+		return combatTarget{}, false
+	}
+	at := rt.companionLiveSpawn(division, snapshot, pet, now)
+	return combatTarget{gid: gid, player: owner, snapshot: snapshot, at: at, cos: pet, cosRef: ref}, true
+}
+
+/*
+================
 combatTargetSpacing
 
-Both body radii plus the action reach, for either kind of target.
+Both body radii plus the action reach, for any kind of target. A COS's
+body is its own reference's (BodyRadius), never its owner's.
 ================
 */
 func (rt *Runtime) combatTargetSpacing(attacker *enterworld.Character, target combatTarget, reach simulation.ActionReach) (simulation.CombatSpacing, bool) {
 	if target.monster != nil {
 		return rt.playerToMonsterCombatSpacing(attacker, *target.monster, reach)
+	}
+	if target.cos != nil {
+		radius, ok := rt.deps.CharacterBodyRadius(attacker)
+		if !ok {
+			return simulation.CombatSpacing{}, false
+		}
+		spacing := simulation.CombatSpacing{ActorBodyRadius: simulation.BodyRadius(radius),
+			TargetBodyRadius: simulation.BodyRadius(target.cosRef.Parameters.BodyRadius), ActionReach: reach}
+		return spacing, spacing.Valid()
 	}
 	return rt.playerToPlayerCombatSpacing(attacker, target.snapshot, reach)
 }

@@ -377,9 +377,14 @@ func (rt *Runtime) beginBasicAttack(divisionID string, character *enterworld.Cha
 	if !ok {
 		return OpResult{DiagnosticRefusal: "target-unavailable"}
 	}
-	// CGObjPC_CanAttackTarget (52BF90 -> 5293A0): a player the attacker may
-	// not fight is refused at the command, before any walk.
-	if target.player != nil {
+	// CGObjPC_CanAttackTarget (52BF90 -> 5293A0): a player (or a COS through
+	// its owner) the attacker may not fight is refused at the command, before
+	// any walk.
+	if target.cos != nil {
+		if code := rt.cosTargetRefusal(divisionID, snapshot, target, nowMs); code != 0 {
+			return offensiveRefusal(code)
+		}
+	} else if target.player != nil {
 		if code := rt.playerAttackTargetRefusal(divisionID, snapshot, target.snapshot, nowMs); code != 0 {
 			return offensiveRefusal(code)
 		}

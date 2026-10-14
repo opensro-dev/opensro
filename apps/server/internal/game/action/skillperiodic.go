@@ -213,7 +213,8 @@ func (rt *Runtime) advancePeriodicEffects(now int64) []simulation.DivisionFrames
 			live = live && ok && owner.(populationAdmission).session == effect.SourceSession
 		}
 		target, exists := rt.resolveCombatTarget(effect.Division, snapshot, effect.TargetGID, now)
-		live = live && exists
+		// A periodic row is never installed on a COS (cosStrikeUnsupported).
+		live = live && exists && target.cos == nil
 		var result OpResult
 		if live && step.Pulse {
 			if target.monster != nil {

@@ -290,6 +290,10 @@ only; their rows target monsters and 58D7A0 refuses them here.
 func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCastDecision) {
 	division, character, snapshot, skill, now := st.division, st.character, st.snapshot, st.skill, st.now
 	target, ok := rt.resolveCombatTarget(division, snapshot, st.cast.TargetGid, now)
+	if ok && target.cos != nil {
+		// A COS is judged through its owner and struck on its own body.
+		return rt.acceptCOSTargetStage(st, target)
+	}
 	if !ok || target.player == nil {
 		return OpResult{}, skillCastRefused
 	}
