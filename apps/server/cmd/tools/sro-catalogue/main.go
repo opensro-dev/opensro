@@ -198,7 +198,29 @@ func shardShops(dir string, items enterworld.ItemRefSource) (*commerce.Catalog, 
 	if sun := progression.SunEventOnlyFromEnv(); sun.Enabled() {
 		shops.WithholdGoods(func(ref *enterworld.ItemRef) bool { return action.SunExcludes(sun, ref) })
 	}
+	// And prices trade goods the same way (SRO_TRADE_TIERS).
+	if action.TradeTiersFromEnv() {
+		shops.ScaleTradeGoodsPrices(enterworld.TradeGoodsPriceFactor)
+	}
 	return shops, nil
+}
+
+/*
+================
+shardItems
+
+The item references as the GameWorld holds them: SRO_TRADE_TIERS prices
+trade goods at TradeGoodsPriceFactor times their v1.150 price.
+================
+*/
+func shardItems(dir string) (*enterworld.TextdataItems, error) {
+	items := enterworld.NewTextdataItems(dir)
+	if action.TradeTiersFromEnv() {
+		if _, err := items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor); err != nil {
+			return nil, err
+		}
+	}
+	return items, nil
 }
 
 /*
@@ -237,12 +259,19 @@ func run(out, release, textdata string) error {
 	}
 	header := catalogue.Header{SchemaVersion: catalogue.SchemaVersion, Release: release,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
-	refs := itemRefs(enterworld.NewTextdataItems(dir))
+	refItems, err := shardItems(dir)
+	if err != nil {
+		return err
+	}
+	refs := itemRefs(refItems)
 	if len(refs) == 0 {
 		return fmt.Errorf("no item references loaded from %s", dir)
 	}
 	items := catalogue.BuildItems(catalogue.ItemSource{Refs: refs, Usable: action.ItemUseSupported})
-	itemSource := enterworld.NewTextdataItems(dir)
+	itemSource, err := shardItems(dir)
+	if err != nil {
+		return err
+	}
 	questCatalog := quest.NewCatalog(dir)
 	definitions, err := quest.LoadDefinitions(questCatalog, itemSource)
 	if err != nil {

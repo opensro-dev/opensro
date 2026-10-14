@@ -149,3 +149,27 @@ test("the server's SRO_TRADE_TIERS rule reaches the HUD snapshot and clears on a
 	assert.equal( game.take()?.tradeTiers, undefined );
 	game.dispose();
 });
+
+test("SRO_TRADE_TIERS cargo line: a full horse of scaled goods is 28,118,400 gold and three stars", () => {
+	// 101 stacks of 40 at the published (scaled) reference price 6,960; the
+	// tooltip fields are the server's refItemSnapshot, so no client factor.
+	const goods = { typeFlags: 0x46c, quantity: 40, tooltip: { fields: { price: 6960 } } };
+	const rows = Array.from( { length: 101 }, () => goods );
+	assert.deepEqual( deal.cargoLoad( rows ), { gold: 28_118_400n, stars: 3 } );
+	// Unscaled 348: about 1.4M, one star; other items count nothing.
+	const native = rows.map( r => ({ ...r, tooltip: { fields: { price: 348 } } }) );
+	assert.deepEqual(
+		deal.cargoLoad( [ ...native, { typeFlags: 0x08ec, quantity: 50, tooltip: { fields: { price: 9 } } } ] ),
+		{
+			gold: 1_405_920n,
+			stars: 1
+		}
+	);
+	assert.deepEqual( deal.cargoLoad( [] ), { gold: 0n, stars: 0 } );
+});
+
+test("the sale window's purchase sum is the published price times the quantity", () => {
+	// ui.ts openSpecialtySale passes item.tooltip.fields.price (the published
+	// reference, 6,960 with SRO_TRADE_TIERS) as unitBuy; dealSums multiplies it.
+	assert.deepEqual( deal.dealSums( 40, 6960, 306_240n ), { buy: 278_400n, sell: 306_240n, profit: 27_840n } );
+});

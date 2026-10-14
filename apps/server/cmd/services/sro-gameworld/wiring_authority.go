@@ -19,6 +19,7 @@ import (
 	"opensro.online/server/internal/cluster/shard"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/action"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
@@ -129,6 +130,15 @@ func openAuthorityPlane(
 	}
 	if len(stackSizes) > 0 {
 		log.Infof("items: %s=%s raised %d item cap(s) (port-only, not native)", enterworld.EnvStackSizes, stackSizes, raised)
+	}
+	// Port-only, not native: trade goods are worth TradeGoodsPriceFactor times
+	// their v1.150 price (SRO_TRADE_TIERS, enterworld/tradegoodsprice.go).
+	if action.TradeTiersFromEnv() {
+		scaled, err := textdata.Items.ApplyTradeGoodsPriceFactor(enterworld.TradeGoodsPriceFactor)
+		if err != nil {
+			return authorityPlane{}, err
+		}
+		log.Infof("trade: %s priced %d trade goods x%d (port-only, not native)", action.EnvTradeTiers, scaled, enterworld.TradeGoodsPriceFactor)
 	}
 	// Port-only, not native: the Item Mall transports move 1.5 times as fast.
 	if enterworld.MallTransportSpeedFromEnv() {

@@ -195,7 +195,8 @@ import {
 	tradeScaleRow,
 	tradeScaleRows,
 	tradeTierQuantity,
-	tradeTierScale
+	tradeTierScale,
+	cargoLoad
 } from "@/engine/foundation/gameplay/specialty-deal";
 import { GLOBAL_CHAT_MAX_LENGTH, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
 import { createJobHud } from "./hud/job-hud";
@@ -671,6 +672,8 @@ const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
+// A trade transport is COS band 2 (the cargo line, SRO_TRADE_TIERS).
+const COS_TRANSPORT_BAND = 2;
 const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
@@ -15065,6 +15068,21 @@ export function createUi(
 							oy,
 							record?.name ?? ""
 						);
+						if ( game?.tradeTiers === true && record?.band === COS_TRANSPORT_BAND ) {
+							// Port-only, not native (SRO_TRADE_TIERS): the cargo's gold at
+							// its reference prices and the stars it earns, under the grid.
+							const load = cargoLoad( record.inventory ?? [] );
+							quads.push(
+								...text.quads(
+									"Cargo: " + load.gold.toLocaleString( "en-US" ) + " gold (" + load.stars + " star" +
+										(load.stars === 1 ? "" : "s") + ")",
+									[ ox + 41, oy + 59 + 4 * 36 + 2, 7 * 36 - 4, 16 ],
+									full,
+									white,
+									{ hAlign: 1 }
+								)
+							);
+						}
 						nativeSpin(
 							Object.values( page ).find( n => n.id === 17 )!,
 							ox,

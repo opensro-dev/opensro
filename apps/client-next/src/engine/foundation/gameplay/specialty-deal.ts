@@ -168,6 +168,40 @@ export function tradeTierQuantity( input: TradeScaleQuantityInput ): number {
 
 /*
 ================
+CargoRow
+
+What the cargo line reads of a transport's row: its type word, quantity
+and the published reference price (the server's, scaled by SRO_TRADE_TIERS).
+================
+*/
+export interface CargoRow {
+	readonly typeFlags: number;
+	readonly quantity: number;
+	readonly tooltip?: { readonly fields: Readonly<Record<string, number>>; };
+}
+
+/*
+================
+cargoLoad
+
+Port-only, not native (SRO_TRADE_TIERS): a transport's trade goods valued
+at their reference prices, and the stars that gold earns, as the server
+rates the caravan (action/tradetiers.go cargoGoldValue, TradeTierForGold).
+================
+*/
+export function cargoLoad( rows: readonly CargoRow[] ): { readonly gold: bigint; readonly stars: number; } {
+	let gold = 0n;
+	for ( const row of rows ) {
+		const price = row.tooltip?.fields.price ?? 0;
+		if ( isTradeGoods( row.typeFlags ) && row.quantity > 0 && price >= 1 ) {
+			gold += BigInt( Math.trunc( price ) ) * BigInt( row.quantity );
+		}
+	}
+	return { gold, stars: tradeTierScale( gold ) };
+}
+
+/*
+================
 tradeScaleRows
 
 How many TRADESCALE rows the combo lists.

@@ -191,6 +191,9 @@ func newGameplayPlane(
 	if items.SunEventOnly.Enabled() {
 		log.Infof("loot: degree-9 Seal of Sun gear neither drops nor is sold (%s)", progression.EnvSunEventOnly)
 	}
+	// SRO_TRADE_TIERS (port-only, not native) prices the shops' trade goods
+	// as ConfigureCommerce loads them, so it is set first.
+	items.TradeTiers = action.TradeTiersFromEnv()
 	if err := items.ConfigureCommerce(devPaths.TextdataDir, extraGoods); err != nil {
 		return nil, fmt.Errorf("commerce catalogue: %w", err)
 	}
@@ -560,7 +563,6 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 		log.Infof("trade: transport cargo drops on rider death and field disconnect (%s)", action.EnvTraderCargoDrop)
 	}
 	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
-	game.items.TradeTiers = action.TradeTiersFromEnv()
 	game.deps.TradeTiers = game.items.TradeTiers
 	if game.items.TradeTiers {
 		log.Infof("trade: stars by cargo gold and Jangan route profit (%s)", action.EnvTradeTiers)

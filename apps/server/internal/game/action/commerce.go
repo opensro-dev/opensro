@@ -47,6 +47,11 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 		// Port-only, not native: no NPC sells Sun gear (action/sunevent.go).
 		c.WithholdGoods(func(ref *enterworld.ItemRef) bool { return SunExcludes(rt.SunEventOnly, ref) })
 	}
+	if rt.TradeTiers {
+		// Port-only, not native: the shops price trade goods with their
+		// scaled references (SRO_TRADE_TIERS).
+		c.ScaleTradeGoodsPrices(enterworld.TradeGoodsPriceFactor)
+	}
 	rt.Commerce = c
 	rt.tradeOrigins = tradeOriginTowns(c)
 	rt.prepareCommerceReferences()

@@ -182,9 +182,10 @@ func publicRules() publicstats.RulesResponse {
 					"Kills of your own account, party, guild or union never count, and one victim counts at most 3 times an hour. Death or taking the suit off ends the streak.",
 				Why: "Requested for the beta, to reward job-war streaks and put a price on them; the original returns with one setting."},
 			{Flag: action.EnvTradeTiers, On: action.TradeTiersFromEnv(),
-				Native: "A caravan's stars count its goods against the trader's level, and every route pays its listed price.",
-				Now: "Stars follow the cargo's gold value at its reference prices: 1 star below 10M, 2 from 10M, 3 from 20M, 4 from 35M, 5 from 50M (bandits and the trade-scale menu follow them). " +
-					"Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +50%, Hotan +100%, Samarkand +200%, Constantinople +300%. Profit, not the whole sale, so the long road pays more without multiplying the goods' own cost; job EXP and hunter shares follow the profit.",
+				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
+				Now: "Trade goods are worth 20 times as much (6,960 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares and the weekly pool are 20 times larger too. " +
+					"Stars follow the cargo's gold value: 1 star below 10M, 2 from 10M, 3 from 20M, 4 from 35M, 5 from 50M (bandits and the trade-scale menu follow them; the transport's bag shows its load). " +
+					"Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +50%, Hotan +100%, Samarkand +200%, Constantinople +300%.",
 				Why: "Requested for the beta so bigger loads and longer roads pay; the original returns with one setting."},
 			{Flag: action.EnvFastDenReturn, On: action.FastDenReturnFromEnv(),
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",

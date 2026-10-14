@@ -125,22 +125,34 @@ func TestJanganRouteRaisesTheSaleProfit(t *testing.T) {
 ================
 TestCaravanTierFollowsCargoGold
 
-With the flag on, 40 goods of reference price 300,000 (12M) are two stars
-whatever the trader's level; off, the native units rule applies.
+A full horse (101 stacks of 40 goods) at the shipped reference price 348 is
+about 1.4M, one star; at SRO_TRADE_TIERS' scaled 6,960 it is about 28.1M,
+three stars. Off, the native units rule applies.
 ================
 */
 func TestCaravanTierFollowsCargoGold(t *testing.T) {
 	rt, c := traderFixture(t, false)
 	ref, _ := rt.deps.ItemReferences().ItemRefByCodename("ITEM_ETC_TRADE_WC_01")
-	ref.NativeFields = enterworld.NewNativeFields(map[string]float64{"price": 300_000, "maxStack": 40})
-	c.ActiveCOS.Container.Rows = []domain.InventoryRow{{Slot: 0, RefObjID: ref.RefObjID, Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 40}}
+	full := func(price float64) {
+		ref.NativeFields = enterworld.NewNativeFields(map[string]float64{"price": price, "maxStack": 40})
+		c.ActiveCOS.Container.Rows = nil
+		for slot := int64(0); slot < 101; slot++ {
+			c.ActiveCOS.Container.Rows = append(c.ActiveCOS.Container.Rows, domain.InventoryRow{Slot: slot, RefObjID: ref.RefObjID,
+				Codename: ref.Codename, TypeFlags: ref.TypeFlags(), StackCount: 40})
+		}
+	}
+	full(348)
 	nativeTier, nativeStars := rt.caravanTier(c)
 	value := rt.caravanCargoValue(c)
 	if nativeTier != caravan.DifficultyTier(value) || nativeStars != caravan.StarRating(value, false) {
 		t.Fatalf("off: tier %d stars %d", nativeTier, nativeStars)
 	}
 	rt.TradeTiers = true
-	if tier, stars := rt.caravanTier(c); tier != 2 || stars != 2 || rt.cargoGoldValue(c) != 12_000_000 {
-		t.Fatalf("on: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
+	if tier, stars := rt.caravanTier(c); tier != 1 || stars != 1 || rt.cargoGoldValue(c) != 101*40*348 {
+		t.Fatalf("on, unscaled: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
+	}
+	full(348 * enterworld.TradeGoodsPriceFactor)
+	if tier, stars := rt.caravanTier(c); tier != 3 || stars != 3 || rt.cargoGoldValue(c) != 101*40*348*enterworld.TradeGoodsPriceFactor {
+		t.Fatalf("on, scaled: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
 	}
 }
