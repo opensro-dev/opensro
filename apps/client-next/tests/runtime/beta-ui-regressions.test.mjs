@@ -21,6 +21,7 @@ const { createUi } = await import( "../../src/engine/runtime/ui/ui.ts" );
 const { expandTextRuns } = await import( "../../src/engine/foundation/rendering/text-run.ts" );
 const { closedPanel, panelCloseId } = await import( "../../src/engine/foundation/ui/panels.ts" );
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
+const { experimentalOptions } = await import( "../../src/engine/foundation/ui/experimental-options.ts" );
 const WARM_FRAMES = 24;
 const FRAME_MS = 100;
 const fontAtlas = JSON.parse(
@@ -285,6 +286,44 @@ test("pet window rejects empty and dead rosters and closes when its last pet dis
 		assert.equal( opened(), false );
 	} finally {
 		f.ui.dispose();
+	}
+});
+
+test("a pet's disabled setting tab is dimmed with the Experimental row and looks native without it", () => {
+	for ( const grey of [ true, false ] ) {
+		const f = createFixture();
+		try {
+			f.ui.event( {
+				kind: "experimental-preferences",
+				value: experimentalOptions( { greyDisabledTabs: grey } )
+			} );
+			// band 3 is an attack pet: 6A1920 disables Setting (class 2 only).
+			f.setGame( { cosRecords: [ { gid: 7, refObjId: 100, band: 3, hp: 100, mp: 0, status: 0, dead: false } ] } );
+			f.ui.event( { kind: "key", code: "Insert" } );
+			const semantics = f.step();
+			const quads = f.scene()?.quads ?? [];
+			const tabLook = id => {
+				const tab = semantics?.controls.find( c => c.id === id );
+				assert.ok( tab, id );
+				const inside = q =>
+					q.rect[0] >= tab.rect[0] && q.rect[1] >= tab.rect[1] &&
+					q.rect[0] < tab.rect[0] + tab.rect[2] && q.rect[1] < tab.rect[1] + tab.rect[3];
+				const plate = quads.find( q => q.texture.includes( "/com_long_tab_" ) && inside( q ) );
+				const label = quads.filter( q => q.texture.endsWith( "/native-ui-font-atlas.png" ) && inside( q ) );
+				assert.ok( plate, id + " plate" );
+				assert.ok( label.length, id + " label" );
+				return { tab, plateAlpha: plate.color[3], labelRed: label[0].color[0] };
+			};
+			const setting = tabLook( "cos-tab:2" ), info = tabLook( "cos-tab:0" );
+			assert.equal( setting.tab.disabled, true );
+			// The original draws the off plate in white (5376A0 at 53784F).
+			assert.equal( setting.plateAlpha, grey ? 0x80 / 255 : 1, "plate alpha, grey " + grey );
+			assert.equal( setting.labelRed, grey ? 0x99 / 255 : 1, "label colour, grey " + grey );
+			assert.equal( info.plateAlpha, 1, "an enabled tab is never dimmed" );
+			assert.equal( info.labelRed, 1, "an enabled tab's label stays white" );
+		} finally {
+			f.ui.dispose();
+		}
 	}
 });
 

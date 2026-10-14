@@ -156,6 +156,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-smooth-camera",
 			label: "Smooth camera",
 			description: "Ease small camera height jumps and the return after a wall."
+		}, {
+			key: "greyDisabledTabs",
+			id: "experimental-grey-disabled-tabs",
+			label: "Grey disabled tabs",
+			description: "Dim a window tab you cannot use."
 		} ]
 	},
 	{

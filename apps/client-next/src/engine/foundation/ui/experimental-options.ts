@@ -52,6 +52,10 @@ export interface ExperimentalOptions {
 	// On unless turned off (the owner's choice, 2026-10-14); off is the
 	// previous rule, characters first.
 	readonly sharedActorRoom: boolean;
+	// Port-only, not native: a disabled tab is dimmed with a grey label (the
+	// original draws it like an unselected tab, 5376A0). On unless turned
+	// off (the owner's choice, 2026-10-15); off is the original look.
+	readonly greyDisabledTabs: boolean;
 }
 
 /*
@@ -88,8 +92,8 @@ export function renderScales(): readonly RenderScale[] {
 ================
 experimentalOptions
 
-Only an explicit true enables a toggle, except compressedTextures, which
-only an explicit false turns off. Missing or invalid render scales
+Only an explicit true enables a toggle, except compressedTextures,
+sharedActorRoom and greyDisabledTabs, which only an explicit false turns off. Missing or invalid render scales
 restore full resolution; legacy Video settings cannot enable scaling. Keys
 of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -117,7 +121,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		smoothCamera: enabled( "smoothCamera" ),
 		enchantSparks: enabled( "enchantSparks" ),
 		compressedTextures: record.compressedTextures !== false,
-		sharedActorRoom: record.sharedActorRoom !== false
+		sharedActorRoom: record.sharedActorRoom !== false,
+		greyDisabledTabs: record.greyDisabledTabs !== false
 	};
 }
 

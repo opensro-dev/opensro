@@ -609,6 +609,13 @@ type CloseControlId = PanelCloseId | `${string}-close` | "stall-leave";
 
 // CIFCosInfo_RefreshSatietyDependentStats (6A4600) font colour 0xFF999999.
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
+// Port-only, not native (owner 2026-10-15, Experimental "Grey disabled
+// tabs"): a disabled tab's dimmed look. Natively a disabled tab draws like an
+// unselected one (SetStateTextures 5376A0 falls back to the off texture at
+// 53784F). The dim borrows the original's own disabled-face alpha 0x80
+// (CIFButton_SetEnabledWithFaceAlpha 541640) and grey label 0xFF999999.
+const GREY_TAB_PLATE = [ 1, 1, 1, 0x80 / 255 ] as const;
+const GREY_TAB_LABEL = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // No video option combo is open (slot -1 is the screen-size combo).
 const VIDEO_COMBO_CLOSED = -99;
 const WORLD_MAP_WIDTH = 652;
@@ -8808,6 +8815,10 @@ export function createUi(
 			/*
 			================
 			nativeTab
+
+			A disabled tab refuses input and, as the original, looks like an
+			unselected one. With the Experimental row Grey disabled tabs on
+			(the default) its plate is dimmed and its label grey.
 			================
 			*/
 			function nativeTab(
@@ -8825,10 +8836,11 @@ export function createUi(
 					r[3] - client[1] - client[3]
 				];
 				const path = ROOT + "interface/ifcommon/" + family + (selected ? "_on" : "_off") + ".png";
-				image( r, path );
+				const grey = disabled && experimental.state().saved.greyDisabledTabs;
+				image( r, path, grey ? GREY_TAB_PLATE : white );
 				controls.push( { id, label: caption, rect: r, kind: "button", selected, disabled } );
 				quads.push(
-					...text.quads( caption, content, full, white, {
+					...text.quads( caption, content, full, grey ? GREY_TAB_LABEL : white, {
 						hAlign: 1,
 						vAlign: 1,
 						fontStyle: selected ? 2 : 0
