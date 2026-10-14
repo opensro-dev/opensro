@@ -57,6 +57,11 @@ const TELEMETRY_SAMPLES = 120, TELEMETRY_INTERVAL_MS = 500;
 // while minimized; this port keeps consuming the world journal (which fails
 // the session when unacknowledged) at this pace, driven by worker messages.
 const HIDDEN_FRAME_MS = 100;
+// A visible window the compositor stopped drawing (occluded, off-screen)
+// gets no animation frames either, without being reported hidden. A frame
+// this long overdue after the last one finished is starved, not slow: even a
+// throttled display callback arrives several times a second.
+const STARVED_FRAME_MS = 250;
 const MOVEMENT_FRAME_SPIKE_MS = 25;
 /*
 ================
@@ -432,6 +437,8 @@ export function startRuntime(
 		}
 		let worldPointer: readonly [number, number] | null = null, hoveredEntity: number | null = null;
 		let readySent = false;
+		// The display stopped asking for frames while the document stays visible.
+		let starved = false;
 		const world = own( createWorldStream( assets, renderer, new URL( "/", import.meta.url ).href, random ) );
 		const navigation = own(
 			createNavigationStream(
@@ -527,13 +534,17 @@ export function startRuntime(
 		displayFrame
 
 		Deliver input on each display opportunity, then admit presentation work.
+		A maintenance frame (hiddenFrame's, run by a worker delivery instead of
+		RAF) is paced and budgeted as hidden whatever the document reports: no
+		display asked for it.
 		================
 		*/
-		function displayFrame( now: number ): void {
+		function displayFrame( now: number, maintenance = false ): void {
 			if ( disposed ) {
 				return;
 			}
-			const visible = globalThis.document?.visibilityState !== "hidden";
+			if ( !maintenance ) starved = false;
+			const visible = !maintenance && globalThis.document?.visibilityState !== "hidden";
 			try {
 				// Input is delivered even when this display refresh needs no new draw.
 				const commands = input.drain();
@@ -547,20 +558,19 @@ export function startRuntime(
 				dispose();
 				return;
 			}
-			void frame( now );
+			void frame( now, visible );
 		}
 		/*
 		================
 		frame
 		================
 		*/
-		async function frame( now: number ): Promise<void> {
+		async function frame( now: number, visible: boolean ): Promise<void> {
 			if ( disposed ) return;
-			const visible = globalThis.document?.visibilityState !== "hidden";
 			// Whichever of RAF and a hidden delivery ran this frame, retire the other.
 			frameToken++;
 			const cpuStart = performance.now();
-			frameWork.begin( now, globalThis.document?.visibilityState !== "hidden" );
+			frameWork.begin( now, visible );
 			renderer.setFrameWork?.( frameWork );
 			characters.frameWork( frameWork );
 			let waitMs = 0;
@@ -1038,20 +1048,29 @@ World admission: ${renderer.worldStats().sceneId ?? "none"}; ${renderer.worldSta
 
 		A hidden document gets no animation frames. While hidden, a worker
 		delivery at least HIDDEN_FRAME_MS after the last frame runs the next
-		one instead; a visible document keeps waiting for its RAF. The frame
+		one instead. A visible document waits for its RAF unless none came
+		STARVED_FRAME_MS after the last frame finished: a window the browser
+		stopped drawing without hiding it, which then runs at the hidden pace
+		until a RAF arrives again. The native client keeps updating while it
+		draws nothing (A0F430), so loading finishes either way. The frame
 		token retires this waiter once either path has run a frame.
 		================
 		*/
-		function hiddenFrame( token: number, lastFrameAt: number ): void {
+		function hiddenFrame( token: number, lastFrameAt: number, finishedAt = performance.now() ): void {
 			simulation.delivery().then( () => {
 				if ( disposed || token !== frameToken ) return;
 				const now = performance.now();
-				if ( globalThis.document?.visibilityState !== "hidden" || now - lastFrameAt < HIDDEN_FRAME_MS ) {
-					hiddenFrame( token, lastFrameAt );
+				const hidden = globalThis.document?.visibilityState === "hidden";
+				const due = hidden || starved ?
+					now - lastFrameAt >= HIDDEN_FRAME_MS :
+					now - finishedAt >= STARVED_FRAME_MS;
+				if ( !due ) {
+					hiddenFrame( token, lastFrameAt, finishedAt );
 					return;
 				}
+				if ( !hidden ) starved = true;
 				cancelAnimationFrame( raf );
-				displayFrame( now );
+				displayFrame( now, true );
 			} );
 		}
 		raf = requestAnimationFrame( displayFrame );
