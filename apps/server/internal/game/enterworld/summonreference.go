@@ -186,6 +186,8 @@ func (t *TextdataItems) collectSummonable(refused map[string]bool) {
 		keys = append(keys, codename)
 	}
 	sort.Strings(keys)
+	authored := func(codename string) bool { return t.charactersByCodename[codename] != nil || refused[codename] }
+	starts, gaps := summonFamilyStarts(t.byCodename, authored)
 	for _, codename := range keys {
 		if ref := t.charactersByCodename[codename]; ref != nil {
 			t.summonableCharacters = append(t.summonableCharacters, *ref)
@@ -195,12 +197,92 @@ func (t *TextdataItems) collectSummonable(refused map[string]bool) {
 			// the build on it.
 			t.refusedSummonRows = append(t.refusedSummonRows, codename)
 			log.Errorf("bootstrap: summon item reaches characterdata row %q, which failed validation", codename)
-		} else {
-			// A threshold with no authored row (the 1 every map starts at,
-			// below a family's first form): 49BBC1 refuses that summon too.
-			log.Warnf("bootstrap: summon item references missing characterdata row %q", codename)
 		}
 	}
+	for _, start := range starts {
+		// The 1 every threshold map starts at, below the family's first
+		// form: 49BBC1 refuses that summon too, and the item's own ReqLevel
+		// matches the first form, so no player meets it.
+		log.Debugf("bootstrap: summon family %s has no rows %v", start.family, start.missing)
+		log.Infof("bootstrap: summon family %s starts at level %d", start.family, start.level)
+	}
+	for _, codename := range gaps {
+		// A missing row above a family's first form, or a family with no
+		// authored row at all: a player at that level cannot summon.
+		log.Warnf("bootstrap: summon item references missing characterdata row %q", codename)
+	}
+}
+
+/*
+================
+summonFamilyStart
+
+A summon family whose threshold map begins below its first authored form.
+================
+*/
+type summonFamilyStart struct {
+	family  string
+	level   uint8
+	missing []string
+}
+
+/*
+================
+summonFamilyStarts
+
+Splits the missing rows of every leveled summon family into the expected
+ones (thresholds below the family's first authored form) and real gaps (a
+missing threshold above it, or a family with no authored form). authored
+reports whether characterdata authors a codename, readable or not. Both
+results are sorted by family, then codename, so boot logs are stable.
+================
+*/
+func summonFamilyStarts(items map[string]*ItemRef, authored func(string) bool) ([]summonFamilyStart, []string) {
+	thresholds := make(map[string][]uint8)
+	for _, item := range items {
+		if item == nil || item.AssociatedCharacterCodename == "" || len(item.SummonLevelThresholds) == 0 {
+			continue
+		}
+		if item.TypeIDs != [4]int64{3, 3, 3, 2} && !wire.IsCosSummoner(item.TypeFlags()) {
+			continue
+		}
+		thresholds[item.AssociatedCharacterCodename] = item.SummonLevelThresholds
+	}
+	families := make([]string, 0, len(thresholds))
+	for family := range thresholds {
+		families = append(families, family)
+	}
+	sort.Strings(families)
+	var starts []summonFamilyStart
+	gaps := []string{}
+	for _, family := range families {
+		var below []string
+		first := uint8(0)
+		for _, level := range thresholds[family] {
+			if level == summonLevelEnd {
+				continue
+			}
+			codename := family + "_" + strconv.Itoa(int(level))
+			switch {
+			case authored(codename):
+				if first == 0 {
+					first = level
+				}
+			case first == 0:
+				below = append(below, codename)
+			default:
+				gaps = append(gaps, codename)
+			}
+		}
+		if first == 0 {
+			gaps = append(gaps, below...)
+			continue
+		}
+		if len(below) > 0 {
+			starts = append(starts, summonFamilyStart{family: family, level: first, missing: below})
+		}
+	}
+	return starts, gaps
 }
 
 /*

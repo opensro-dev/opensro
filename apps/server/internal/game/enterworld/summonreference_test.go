@@ -158,3 +158,69 @@ func TestShippedSummonLevelFamiliesPublishEveryReachableVariant(t *testing.T) {
 		t.Fatalf("level families=%d, want all eight shipped families", families)
 	}
 }
+
+/*
+================
+TestSummonFamilyStartsSeparatesTheFirstFormFromGaps
+
+The rows below a family's first authored form are expected (the threshold
+map always begins at 1); a missing row above it, or a family with no
+authored form, is a real gap that stays a warning.
+================
+*/
+func TestSummonFamilyStartsSeparatesTheFirstFormFromGaps(t *testing.T) {
+	summoner := func(family string, levels ...uint8) *ItemRef {
+		return &ItemRef{TypeIDs: [4]int64{3, 3, 3, 2}, AssociatedCharacterCodename: family, SummonLevelThresholds: levels}
+	}
+	items := map[string]*ItemRef{
+		"ITEM_HORSE":  summoner("COS_T_HORSE", 1, 20, 40, 255),
+		"ITEM_PIG":    summoner("COS_C_PIG", 1, 5, 255),
+		"ITEM_HOLE":   summoner("COS_T_HOLE", 1, 10, 20, 30, 255),
+		"ITEM_GHOST":  summoner("COS_T_GHOST", 1, 10, 255),
+		"ITEM_PLAIN":  {TypeIDs: [4]int64{3, 3, 3, 2}, AssociatedCharacterCodename: "COS_PLAIN"},
+		"ITEM_WHOLE":  summoner("COS_T_WHOLE", 1, 20, 255),
+		"ITEM_POTION": {TypeIDs: [4]int64{3, 3, 1, 1}, AssociatedCharacterCodename: "COS_T_NOTSUMMON", SummonLevelThresholds: []uint8{1, 5, 255}},
+	}
+	authored := map[string]bool{
+		"COS_T_HORSE_20": true, "COS_T_HORSE_40": true, "COS_C_PIG_5": true,
+		"COS_T_HOLE_10": true, "COS_T_HOLE_30": true, "COS_T_WHOLE_1": true, "COS_T_WHOLE_20": true,
+	}
+	starts, gaps := summonFamilyStarts(items, func(code string) bool { return authored[code] })
+	want := []summonFamilyStart{
+		{family: "COS_C_PIG", level: 5, missing: []string{"COS_C_PIG_1"}},
+		{family: "COS_T_HOLE", level: 10, missing: []string{"COS_T_HOLE_1"}},
+		{family: "COS_T_HORSE", level: 20, missing: []string{"COS_T_HORSE_1"}},
+	}
+	if !reflect.DeepEqual(starts, want) {
+		t.Fatalf("starts = %+v, want %+v", starts, want)
+	}
+	if wantGaps := []string{"COS_T_GHOST_1", "COS_T_GHOST_10", "COS_T_HOLE_20"}; !reflect.DeepEqual(gaps, wantGaps) {
+		t.Fatalf("gaps = %v, want %v", gaps, wantGaps)
+	}
+}
+
+/*
+================
+TestShippedSummonFamiliesHaveNoGaps
+
+Every shipped leveled summon family reaches an authored row at each
+threshold from its first form up; only the rows below the first form are
+missing, and those are the boot log's "starts at level N" lines.
+================
+*/
+func TestShippedSummonFamiliesHaveNoGaps(t *testing.T) {
+	items := NewTextdataItems(gamedatatest.TextdataDir(t))
+	items.Len()
+	starts, gaps := summonFamilyStarts(items.byCodename, func(code string) bool {
+		_, found := items.CharacterRefByCodename(code)
+		return found
+	})
+	if len(gaps) != 0 {
+		t.Fatalf("summon thresholds above a family's first form have no row: %v", gaps)
+	}
+	for _, start := range starts {
+		if len(start.missing) != 1 || start.missing[0] != start.family+"_1" {
+			t.Fatalf("%s is missing more than its level-1 threshold: %v", start.family, start.missing)
+		}
+	}
+}
