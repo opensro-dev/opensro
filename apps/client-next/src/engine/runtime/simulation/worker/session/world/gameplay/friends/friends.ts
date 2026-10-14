@@ -114,13 +114,15 @@ export function createFriends( send: ( frame: WireFrame ) => void ) {
 		================
 		request
 
-		Asks the server to befriend name. One request at a time, as the
-		original's panel state 1 allows; a name the original would not send
-		sends nothing.
+		Asks the server to befriend name. Nothing gates a second request (the
+		original reads panel state 1 only in 760AF0's cancel branch; the
+		server answers 0x0E). The original's add box (602180) drops the
+		player's own name silently (56E110, an exact compare), as it drops a
+		name it would not send.
 		================
 		*/
-		request( name: string ) {
-			if ( pending ) return;
+		request( name: string, localName: string ) {
+			if ( name.trim() === localName ) return;
 			const frame = friendRequest( name );
 			if ( !frame ) return;
 			send( frame );
@@ -185,9 +187,10 @@ export function createFriends( send: ( frame: WireFrame ) => void ) {
 			if ( frame.opcode === FRIEND_REQUEST_RESULT_OPCODE ) {
 				const result = decodeFriendRequestResult( p );
 				if ( result.kind === "cancelled" ) {
-					// 760AF0: an open prompt is retired silently; a waiting request
-					// is told it was cancelled.
-					if ( prompt && prompt.name === result.name ) {
+					// 760AF0 branches on the panel state, not the name: an open
+					// prompt (state 2) is retired silently, a waiting request
+					// (state 1) is told it was cancelled.
+					if ( prompt ) {
 						prompt = null;
 						return { handled: true, notices: [] };
 					}

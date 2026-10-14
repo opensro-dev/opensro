@@ -2127,7 +2127,7 @@ state here before a command can claim a native wire conversation.
 				return null;
 			}
 			if ( command.kind === "friend-request" ) {
-				friends.request( command.name );
+				friends.request( command.name, social.localName );
 				dirty = true;
 				return null;
 			}

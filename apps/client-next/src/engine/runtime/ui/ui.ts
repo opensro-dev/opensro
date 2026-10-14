@@ -2864,7 +2864,6 @@ export function createUi(
 			const row = view.gameplay?.friends?.rows.find( r => r.jid === friendSelected );
 			if ( row ) beginWhisper( row.name );
 		} else if ( id === "friend-add" || id === "friend-remove" ) {
-			if ( id === "friend-add" && view.gameplay?.friends?.pending ) return;
 			if ( id === "friend-remove" && !view.gameplay?.friends?.rows.some( r => r.jid === friendSelected ) ) return;
 			friendDialog = id === "friend-add" ? "add" : "remove";
 			friendInput = "";
@@ -15699,7 +15698,7 @@ export function createUi(
 						hudCopy( at( 41 ).text ),
 						!selected?.online
 					);
-					authoredLabeledButton( at( 42 ), gx, gy, "friend-add", hudCopy( at( 42 ).text ), !!state?.pending );
+					authoredLabeledButton( at( 42 ), gx, gy, "friend-add", hudCopy( at( 42 ).text ) );
 					authoredLabeledButton( at( 43 ), gx, gy, "friend-remove", hudCopy( at( 43 ).text ), !selected );
 				}
 				/*
@@ -16477,8 +16476,7 @@ export function createUi(
 								hudCopy( "UIIT_CTL_FRIENDADD" ),
 								left + third,
 								actionY + 28,
-								third - 2,
-								!!game?.friends?.pending
+								third - 2
 							);
 							button(
 								"friend-remove",

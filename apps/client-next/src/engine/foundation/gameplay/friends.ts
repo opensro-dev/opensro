@@ -168,7 +168,7 @@ function friendReader( bytes: Uint8Array, what: string ): FriendReader {
 			const length = view.getUint16( at, true );
 			at += 2;
 			need( length );
-			const value = new TextDecoder().decode( bytes.subarray( at, at + length ) );
+			const value = new TextDecoder( "utf-8", { fatal: true } ).decode( bytes.subarray( at, at + length ) );
 			at += length;
 			return value;
 		},

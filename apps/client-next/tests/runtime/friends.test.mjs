@@ -50,7 +50,7 @@ A gameplay owner with its sends captured, entered as "Alfa".
 */
 function lane() {
 	const sent = [], g = createGameplay( f => sent.push( f ) );
-	g.bootstrap( {} );
+	g.bootstrap( { character: { name: "Alfa" } } );
 	g.seed( /** @type {any} */ ({ gid: 1, regionId: 1, x: 0, y: 0, z: 0, heading: 0 }) );
 	g.take();
 	return { sent, g };
@@ -86,6 +86,10 @@ test("the wire decoders read the native layouts and refuse malformed frames", ()
 	assert.throws( () => friends.decodeFriendRoster( roster.slice( 0, -1 ) ), /Truncated/ );
 	assert.throws( () => friends.decodeFriendRoster( Uint8Array.from( [ ...roster, 0 ] ) ), /Trailing/ );
 	assert.throws( () => friends.decodeFriendRoster( bytes( 21 ) ), /list limit/ );
+	assert.throws(
+		() => friends.decodeFriendPrompt( Uint8Array.from( [ 1, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0xff ] ) ),
+		"a name that is not UTF-8 is refused"
+	);
 	assert.deepEqual( friends.decodeFriendEvent( bytes( 2, u32( 7 ), "Berk", u32( 1907 ) ) ), {
 		kind: "added",
 		row: { jid: 7, name: "Berk", modelRefId: 1907, online: true }
@@ -165,22 +169,25 @@ test("a prompt waits for this player's answer, which is sent as the 9-byte 0x301
 	const count = sent.length;
 	g.command( { kind: "friend-answer", accept: false }, 0, undefined );
 	assert.equal( sent.length, count, "no prompt, nothing to answer" );
-	// A cancel from the server closes an open prompt without a notice.
+	// A cancel from the server closes an open prompt without a notice,
+	// whatever name it carries (760AF0 reads the panel state).
 	g.receive( { opcode: 0x7164, payload: bytes( u32( 2 ), u32( 6 ), "Berk" ) }, 0 );
 	g.take();
-	g.receive( { opcode: 0xb164, payload: bytes( 2, 0x0b, 2, "Berk" ) }, 0 );
+	g.receive( { opcode: 0xb164, payload: bytes( 2, 0x0b, 2, "Somebody" ) }, 0 );
 	const state = defined( g.take() );
 	assert.equal( friendsOf( state ).prompt, null );
 	assert.equal( (state.notices ?? []).some( notice => notice.key === "UIIT_MSG_FRIEND_SYSCANCEL" ), false );
 });
 
-test("this player's request waits for one answer and shows the original's notices", () => {
+test("a request is sent whenever asked, except for this player's own name, and shows the original's notices", () => {
 	const { sent, g } = lane();
 	g.command( { kind: "friend-request", name: "Berk" }, 0, undefined );
 	assert.deepEqual( sent.at( -1 ), { opcode: 0x7164, payload: bytes( "Berk" ) } );
 	assert.equal( friendsOf( g.take() ).pending, true );
+	g.command( { kind: "friend-request", name: "Alfa" }, 0, undefined );
+	assert.equal( sent.length, 1, "602180 drops the player's own name (56E110)" );
 	g.command( { kind: "friend-request", name: "Cale" }, 0, undefined );
-	assert.equal( sent.length, 1, "one request at a time" );
+	assert.equal( sent.length, 2, "nothing gates a second request; the server answers 0x0E" );
 	g.receive( { opcode: 0xb164, payload: bytes( 2, 0x0b, 0, "Berk" ) }, 0 );
 	let state = g.take();
 	assert.equal( friendsOf( state ).pending, false );
