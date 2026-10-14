@@ -218,6 +218,8 @@ func (rt *Runtime) tradeSaleValue(division string, c *enterworld.Character, npc 
 		}
 		credit = int64(unit * uint32(item.Quantity))
 		profit = credit - int64(uint32(base)*uint32(item.Quantity))
+		// Port-only, not native: Jangan route profit (tradetiers.go).
+		credit, profit = RaiseRouteProfit(credit, profit, rt.routeProfitPercent(npc, item))
 	}
 	taxed, valid := commerce.AdjustPrice(uint64(max(credit, 0)), rt.commerceTax(division, npc, c), false)
 	return taxed, max(profit, 0), int64(uint64(max(credit, 0)) - taxed), valid

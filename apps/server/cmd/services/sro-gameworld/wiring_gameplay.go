@@ -559,6 +559,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.TraderCargoDrop {
 		log.Infof("trade: transport cargo drops on rider death and field disconnect (%s)", action.EnvTraderCargoDrop)
 	}
+	// Port-only, not native: caravans rated by cargo gold, Jangan route profit.
+	game.items.TradeTiers = action.TradeTiersFromEnv()
+	game.deps.TradeTiers = game.items.TradeTiers
+	if game.items.TradeTiers {
+		log.Infof("trade: stars by cargo gold and Jangan route profit (%s)", action.EnvTradeTiers)
+	}
 	game.items.FastDenReturn = action.FastDenReturnFromEnv()
 	game.deps.FastDenReturn = game.items.FastDenReturn
 	if game.items.FastDenReturn {

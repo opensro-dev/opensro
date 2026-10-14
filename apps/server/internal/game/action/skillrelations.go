@@ -13,7 +13,6 @@ package action
 
 import (
 	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/combat"
 	"opensro.online/server/internal/game/enterworld"
 	worldgeom "opensro.online/server/internal/game/world"
@@ -341,5 +340,6 @@ vtable +0x2E8) whose cargo is difficulty tier 1 or below
 ================
 */
 func (rt *Runtime) levelOneCaravan(c *enterworld.Character) bool {
-	return vehicleCarriesGoods(rt, c) && caravan.DifficultyTier(rt.caravanCargoValue(c)) <= 1
+	tier, _ := rt.caravanTier(c)
+	return vehicleCarriesGoods(rt, c) && tier <= 1
 }

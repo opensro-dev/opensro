@@ -12,7 +12,6 @@ package action
 
 import (
 	"opensro.online/server/internal/domain"
-	"opensro.online/server/internal/game/caravan"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/world/simulation"
@@ -75,7 +74,8 @@ func (rt *Runtime) tradeRewards(division string, c *enterworld.Character, roster
 	eligible := make([]*enterworld.Character, 0, len(roster.members))
 	value.Job = enterworld.DressedJob(c)
 	value.Party = roster.party
-	value.OneStar = caravan.DifficultyTier(rt.caravanCargoValue(c)) == 1
+	tier, _ := rt.caravanTier(c)
+	value.OneStar = tier == 1
 	for _, member := range roster.members {
 		if member.ID == c.ID {
 			member = c

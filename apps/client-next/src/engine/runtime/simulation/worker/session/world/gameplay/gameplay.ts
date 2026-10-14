@@ -360,6 +360,8 @@ export function createGameplay(
 	let storageAutoStack = false;
 	// The server's port-only Bandit Den countdown rule (fastDenReturn).
 	let fastDenReturn = false;
+	// The server's port-only trade-scale rule (tradeTiers).
+	let tradeTiers = false;
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
@@ -1114,6 +1116,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			gmItems = gmItemReferences( value );
 			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
+			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
 			);
@@ -4123,6 +4126,7 @@ The published plane when something changed since the last take, else null.
 				countJobs: countJobs.state(),
 				reverseReturnChoice: countJobs.choosing() !== null,
 				...(storageAutoStack ? { storageAutoStack } : {}),
+				...(tradeTiers ? { tradeTiers } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),

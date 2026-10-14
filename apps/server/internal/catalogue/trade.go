@@ -33,6 +33,8 @@ type TradeQuote struct {
 	BasePrice uint32 `json:"basePrice" doc:"The good's own reference price (the quotation formula's input), not the price at its origin shop (that is the good's price in the origin trader's tab in npcs.json)."`
 	SellPrice uint32 `json:"sellPrice" doc:"What this trader pays for one, before the fortress tax."`
 	Profit    int64  `json:"profit" doc:"sellPrice minus basePrice."`
+	// RouteBonus is the shard's route profit percent (action/tradetiers.go).
+	RouteBonus int64 `json:"routeBonus,omitempty" doc:"Port-only (SRO_TRADE_TIERS): the percent this route adds to the profit, Jangan to or from Donwhang 50, Hotan 100, Samarkand 200, Constantinople 300. sellPrice and profit already include it."`
 }
 
 /*
@@ -82,6 +84,25 @@ func BuildTrade(quotations map[[2]uint32]commerce.TradeQuotation, item func(id u
 		return quotes[i].ItemID < quotes[j].ItemID
 	})
 	return quotes
+}
+
+/*
+================
+ApplyTradeRoutes
+
+Raises each quote by its route's profit percent (SRO_TRADE_TIERS); raise
+is the GameWorld's own arithmetic, so the site shows what the shard pays.
+================
+*/
+func ApplyTradeRoutes(quotes []TradeQuote, percent func(npcID, itemID uint32) int64, raise func(credit, profit, percent int64) (int64, int64)) {
+	for i := range quotes {
+		bonus := percent(quotes[i].NpcID, quotes[i].ItemID)
+		if bonus <= 0 {
+			continue
+		}
+		credit, profit := raise(int64(quotes[i].SellPrice), quotes[i].Profit, bonus)
+		quotes[i].SellPrice, quotes[i].Profit, quotes[i].RouteBonus = uint32(min(credit, int64(^uint32(0)))), profit, bonus
+	}
 }
 
 /*

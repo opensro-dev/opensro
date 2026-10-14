@@ -322,6 +322,15 @@ func run(out, release, textdata string) error {
 		enterworld.NewTextdataMagicOptions(dir).AllMagicOptions()); err != nil {
 		return err
 	}
+	tradeQuotes := catalogue.BuildTrade(shops.TradeQuotations, itemByID, func(id uint32) bool { return placedNpcs[id] })
+	// SRO_TRADE_TIERS (port-only, not native): the shard's route profit.
+	if action.TradeTiersFromEnv() {
+		route, codenames := action.TradeRouteProfit(shops), map[uint32]string{}
+		for _, npc := range npcs {
+			codenames[npc.ID] = npc.Codename
+		}
+		catalogue.ApplyTradeRoutes(tradeQuotes, func(npcID, itemID uint32) int64 { return route(codenames[npcID], itemID) }, action.RaiseRouteProfit)
+	}
 	files := map[string]any{
 		"items.json":    catalogue.ItemsFile{Header: header, Items: items},
 		"quests.json":   catalogue.QuestsFile{Header: header, Quests: quests},
@@ -336,12 +345,11 @@ func run(out, release, textdata string) error {
 				}
 				return row.Codename
 			}}),
-		"search.json": catalogue.SearchFile{Header: header, Entries: []catalogue.SearchEntry{}},
-		"atlas.json":  catalogue.NewAtlas(header),
-		"notes.json":  catalogue.NotesFile{Header: header, Entries: []catalogue.NoteEntry{}},
-		"levels.json": catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery),
-		"trade.json": catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(),
-			Quotes: catalogue.BuildTrade(shops.TradeQuotations, itemByID, func(id uint32) bool { return placedNpcs[id] })},
+		"search.json":     catalogue.SearchFile{Header: header, Entries: []catalogue.SearchEntry{}},
+		"atlas.json":      catalogue.NewAtlas(header),
+		"notes.json":      catalogue.NotesFile{Header: header, Entries: []catalogue.NoteEntry{}},
+		"levels.json":     catalogue.BuildLevels(header, enterworld.NewTextdataLevels(dir), betaMastery),
+		"trade.json":      catalogue.TradeFile{Header: header, ThiefRate: catalogue.ThiefRate(), Quotes: tradeQuotes},
 		"droptables.json": catalogue.BuildDropTables(monsters, dropItemID, header),
 		"summary.json": catalogue.Summarize(header, catalogue.SummaryInput{Items: catalogue.ItemStandings(items),
 			Skills: catalogue.SkillStandings(skills), Quests: catalogue.QuestStandings(quests), Monsters: catalogue.MonsterStandings(monsters)}),

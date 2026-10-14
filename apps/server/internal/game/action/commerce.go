@@ -48,6 +48,7 @@ func (rt *Runtime) ConfigureCommerce(dir string, extra []commerce.ExtraGood) err
 		c.WithholdGoods(func(ref *enterworld.ItemRef) bool { return SunExcludes(rt.SunEventOnly, ref) })
 	}
 	rt.Commerce = c
+	rt.tradeOrigins = tradeOriginTowns(c)
 	rt.prepareCommerceReferences()
 	return nil
 }

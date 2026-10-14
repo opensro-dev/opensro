@@ -203,6 +203,15 @@ variable "most_wanted" {
   default = "on"
 }
 
+# trade_tiers rates a caravan's stars by its cargo's gold value (5M, 10M,
+# 20M, 35M, 50M) and raises trade profit between Jangan and Donwhang +50%,
+# Hotan +100%, Samarkand +200%, Constantinople +300% (port-only, not
+# native; owner decision 2026-10-14). "off" is native.
+variable "trade_tiers" {
+  type    = string
+  default = "on"
+}
+
 # den_no_transport_summon refuses a transport summon during the Bandit Den
 # Return Scroll's countdown (port-only, not native; owner decision
 # 2026-10-14). "off" restores the native rule, which allows it.
@@ -611,6 +620,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                = var.fast_den_return
         SRO_MOST_WANTED                    = var.most_wanted
+        SRO_TRADE_TIERS                    = var.trade_tiers
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_TRADER_CARGO_DROP              = var.trader_cargo_drop
         SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed

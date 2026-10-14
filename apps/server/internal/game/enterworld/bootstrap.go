@@ -301,6 +301,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		MasteryTotalOverride: deps.MasteryTotalOverride,
 		StorageAutoStack:     deps.StorageAutoStack,
 		FastDenReturn:        deps.FastDenReturn,
+		TradeTiers:           deps.TradeTiers,
 	}
 }
 

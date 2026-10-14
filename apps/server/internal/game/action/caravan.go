@@ -153,9 +153,10 @@ roll.
 */
 func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character, vehicle simulation.Spawn, nowMs int64) error {
 	roll := rt.caravanRoll()
-	value := rt.caravanCargoValue(c)
-	tier := caravan.DifficultyTier(value)
-	count, err := caravan.SpawnCount(caravan.StarRating(value, cargoHolds(c, cargoSpecialGoods)), roll)
+	// Port-only, not native with SRO_TRADE_TIERS: both from cargo gold
+	// (tradetiers.go).
+	tier, stars := rt.caravanTier(c)
+	count, err := caravan.SpawnCount(stars, roll)
 	if err != nil || count == 0 {
 		return err
 	}

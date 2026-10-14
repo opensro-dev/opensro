@@ -62,6 +62,8 @@ var Settings = []Setting{
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	// Owner, 2026-10-14: the job-kill streak, its bonuses and bounty.
 	{Env: "SRO_MOST_WANTED", NomadVar: "most_wanted", Default: "on"},
+	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
+	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.

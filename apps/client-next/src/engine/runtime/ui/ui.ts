@@ -193,7 +193,9 @@ import {
 	tradeScale,
 	tradeScaleQuantity,
 	tradeScaleRow,
-	tradeScaleRows
+	tradeScaleRows,
+	tradeTierQuantity,
+	tradeTierScale
 } from "@/engine/foundation/gameplay/specialty-deal";
 import { GLOBAL_CHAT_MAX_LENGTH, isGlobalChatItem } from "@/engine/foundation/gameplay/global-chat";
 import { createJobHud } from "./hud/job-hud";
@@ -2103,7 +2105,8 @@ export function createUi(
 		specialtyCombo = false;
 		if ( !deal || deal.mode !== "buy" || deal.dealing ) return;
 		const inputs = specialtyInputs( game );
-		const quantity = tradeScaleQuantity( {
+		// Port-only, not native: the shard's SRO_TRADE_TIERS gold scale.
+		const quantity = (game?.tradeTiers === true ? tradeTierQuantity : tradeScaleQuantity)( {
 			row,
 			basis: inputs.basis,
 			speed2: inputs.speed2,
@@ -14886,7 +14889,12 @@ export function createUi(
 						grouped = ( value: bigint | undefined ) =>
 							value === undefined ? "" : value.toLocaleString( "en-US" ),
 						grey: AuthoredControl["color"] = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ],
-						scaleRow = tradeScaleRow( tradeScale( sums.buy, inputs.basis, inputs.speed2 ), inputs.rows );
+						scaleRow = tradeScaleRow(
+							game?.tradeTiers === true ?
+								tradeTierScale( sums.buy ) :
+								tradeScale( sums.buy, inputs.basis, inputs.speed2 ),
+							inputs.rows
+						);
 					nativeFrame( root, px, py, hudCopy( root.text ), "specialty-deal-close" );
 					// 6492C0 greys the sale and profit labels while buying; 6496E0 greys
 					// the scale label while selling.

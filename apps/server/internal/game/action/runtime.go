@@ -349,6 +349,11 @@ type Runtime struct {
 	// its trader dies riding or disconnects in the field
 	// (tradercargodrop.go; port-only, not native). False is native.
 	TraderCargoDrop bool
+	// TradeTiers rates caravans by cargo gold and raises Jangan route profit
+	// (tradetiers.go; port-only, not native). False is native.
+	TradeTiers bool
+	// tradeOrigins is each trade good's home town, from the shops.
+	tradeOrigins map[uint32]tradeTown
 
 	ShopOnly progression.ShopOnlyDegree9
 	// SunEventOnly keeps degree-9 Seal of Sun gear out of drops and NPC

@@ -64,6 +64,9 @@ type Deps struct {
 	// FastDenReturn publishes the port-only SRO_FAST_DEN_RETURN rule
 	// (action/denreturn.go); false is native.
 	FastDenReturn bool
+	// TradeTiers publishes the port-only SRO_TRADE_TIERS rule
+	// (action/tradetiers.go); false is native.
+	TradeTiers bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

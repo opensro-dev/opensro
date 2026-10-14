@@ -259,6 +259,9 @@ type BootstrapResult struct {
 	// FastDenReturn tells the client's delay bar that the Bandit Den scroll
 	// counts down half its Param1 (port-only, not native; false is native).
 	FastDenReturn bool
+	// TradeTiers tells the client's TRADESCALE combo to rate a purchase by
+	// gold against the shard's tiers (port-only, not native; false is native).
+	TradeTiers bool
 }
 
 /*
@@ -311,6 +314,7 @@ type bootstrapSuccessView struct {
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
+	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 }
 
 /*
@@ -388,6 +392,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		StorageAutoStack:          r.StorageAutoStack,
 		FastDenReturn:             r.FastDenReturn,
+		TradeTiers:                r.TradeTiers,
 	})
 }
 
