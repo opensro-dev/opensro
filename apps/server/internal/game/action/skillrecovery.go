@@ -90,7 +90,11 @@ func (rt *Runtime) acceptSupportSkillPhase(
 ) (OpResult, skillCastDecision) {
 	cure := skill.Abnormal.CurePresent()
 	resu := skill.Abnormal.AdmitDeadParty
-	targeted := ((skill.Heal.Present && !skill.Aura.Eshp) || resu) && skill.TargetRequired
+	// An eshp aura (the Cleric's recovery aura) picks its own recipient each
+	// pulse; a targeted row that merely carries eshp (Mysterious Hand,
+	// SKILL_CH_WATER_HEAL_D: efr(1,6,300,2,50,7) eshp heal) heals its target
+	// and orders its chain by HP ratio (secondaryHealTargets).
+	targeted := ((skill.Heal.Present && !(skill.Aura.Present && skill.Aura.Eshp)) || resu) && skill.TargetRequired
 	partyHeal := skill.Recovery.PartyHealPinned
 	lowestHeal := skill.Recovery.LowestHealPinned
 	partyResu := skill.Recovery.PartyResurrectPinned
@@ -201,7 +205,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 	}
 	var secondary []uint32
 	if targeted && !resu && !overTime {
-		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, now)
+		secondary = rt.secondaryHealTargets(division, snapshot, recipientView, primaryAt, skill.Abnormal.EffectArea, skill.Aura.Eshp, now)
 	}
 	// Healing Division: the lowest HP ratio of the party around the caster
 	// takes the whole heal, the members nearest it the reduction's share.
@@ -218,7 +222,7 @@ func (rt *Runtime) acceptSupportSkillPhase(
 			return OpResult{DiagnosticRefusal: "recovery-admission-refused"}, skillCastRefused
 		}
 		at := rt.liveSpawn(simulation.WorldKey(division, lowest.Name), lowest, now)
-		secondary = rt.secondaryHealTargets(division, snapshot, lowest, at, area, now)
+		secondary = rt.secondaryHealTargets(division, snapshot, lowest, at, area, skill.Aura.Eshp, now)
 	}
 	casterGID := enterworld.ObjectIDForCharacter(snapshot)
 	healCaster := !overTime && (skill.Recovery.SelfFlatPinned ||
@@ -552,9 +556,14 @@ without a shape-6 party efr return nothing.
 58C9C2..58CA28 assigns the current percentage to the recipient, then
 multiplies it by (100 - reduction) / 100 with truncation for the next.
 Select bit 0 includes the caster in the chain candidates (58C5E0).
+
+lowestFirst is the row's eshp (+0x298): TargetSelection_Chain (58C170)
+sorts the candidates by TargetSelection_CompareHPRatioAscending (58C0E0)
+before the chain when it is set (58C633), so the member with the lowest HP
+ratio is healed first; distance then breaks ties.
 ==================
 */
-func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterworld.Character, center simulation.Spawn, area abnormal.EffectArea, now int64) []uint32 {
+func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterworld.Character, center simulation.Spawn, area abnormal.EffectArea, lowestFirst bool, now int64) []uint32 {
 	if !area.Present || area.Kind != healAreaKind || area.Shape != healSecondaryShape ||
 		area.Select&enterworld.SelectParty == 0 || area.MaxTargets < 2 || area.Reduction >= fullHealPercent {
 		return nil
@@ -563,12 +572,20 @@ func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterw
 	type candidate struct {
 		gid      uint32
 		distance float64
+		ratio    float64
+	}
+	ratio := func(c *enterworld.Character) float64 {
+		maxHP, _, currentHP, _ := rt.playerKeeperVitals(division, c)
+		if maxHP <= 0 {
+			return 0
+		}
+		return float64(currentHP) / float64(maxHP) * 100
 	}
 	var near []candidate
 	if area.Select&1 != 0 && caster.ID != primary.ID {
 		at := rt.liveSpawn(simulation.WorldKey(division, caster.Name), caster, now)
 		if partyAreaReach(center, at, area.Radius) {
-			near = append(near, candidate{gid: enterworld.ObjectIDForCharacter(caster), distance: distance3D(center, at)})
+			near = append(near, candidate{gid: enterworld.ObjectIDForCharacter(caster), distance: distance3D(center, at), ratio: ratio(caster)})
 		}
 	}
 	for _, gid := range rt.partyMembersAround(division, caster, center, area.Radius, false, now) {
@@ -577,9 +594,14 @@ func (rt *Runtime) secondaryHealTargets(division string, caster, primary *enterw
 			continue
 		}
 		at := rt.liveSpawn(simulation.WorldKey(division, other.Name), other, now)
-		near = append(near, candidate{gid: gid, distance: distance3D(center, at)})
+		near = append(near, candidate{gid: gid, distance: distance3D(center, at), ratio: ratio(other)})
 	}
-	sort.SliceStable(near, func(i, j int) bool { return near[i].distance < near[j].distance })
+	sort.SliceStable(near, func(i, j int) bool {
+		if lowestFirst && near[i].ratio != near[j].ratio {
+			return near[i].ratio < near[j].ratio
+		}
+		return near[i].distance < near[j].distance
+	})
 
 	out := make([]uint32, 0, len(near))
 	for _, one := range near {
