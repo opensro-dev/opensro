@@ -1,0 +1,74 @@
+/*
+===========================================================================
+
+refusal_audit.go - a refused door must leave its characters as it found them
+
+A conditional door (Update, UpdateMany and their deferred forms) treats a
+false callback result as a refusal: no dirty mark, no transaction. It does
+not undo what the callback already changed on the live record, so a
+callback that edits the character and then refuses leaves the edit in
+memory for the next committed door to persist. Under tests every such
+door is audited: the persisted form of each character is captured before
+the callback and compared after a refusal, and a difference fails at the
+door that made it. Production runs the callback untouched.
+
+===========================================================================
+*/
+package enterworld
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"testing"
+)
+
+/*
+================
+refusalAudited
+
+update, checked under tests: a false result with any character's persisted
+form changed panics with the door's label.
+================
+*/
+func refusalAudited(label string, characters []*Character, update func() bool) func() bool {
+	if update == nil || !testing.Testing() {
+		return update
+	}
+	return func() bool {
+		before := persistedForms(characters)
+		if update() {
+			return true
+		}
+		after := persistedForms(characters)
+		for i := range before {
+			if !bytes.Equal(before[i], after[i]) {
+				panic(fmt.Sprintf("door %q refused after changing character %d: before %s after %s", label, i, before[i], after[i]))
+			}
+		}
+		return false
+	}
+}
+
+/*
+================
+persistedForms
+
+Each character's JSON encoding, the form the store persists; nil for a
+nil character.
+================
+*/
+func persistedForms(characters []*Character) [][]byte {
+	forms := make([][]byte, len(characters))
+	for i, c := range characters {
+		if c == nil {
+			continue
+		}
+		encoded, err := json.Marshal(c)
+		if err != nil {
+			panic(fmt.Sprintf("refusal audit: character %d does not encode: %v", i, err))
+		}
+		forms[i] = encoded
+	}
+	return forms
+}

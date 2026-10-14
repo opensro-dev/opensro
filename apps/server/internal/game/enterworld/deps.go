@@ -236,6 +236,7 @@ bool
 ================
 */
 func (d *Deps) Update(character *Character, label string, update func() bool) bool {
+	update = refusalAudited(label, []*Character{character}, update)
 	if d.UpdateCharacter != nil {
 		return d.UpdateCharacter(character, label, update)
 	}
@@ -275,6 +276,7 @@ bool
 ================
 */
 func (d *Deps) UpdateMany(characters []*Character, label string, update func() bool) bool {
+	update = refusalAudited(label, characters, update)
 	if d.UpdateCharacters != nil {
 		return d.UpdateCharacters(characters, label, update)
 	}
@@ -317,7 +319,7 @@ Update for a path only the simulation tick reaches (see MutateDeferred).
 */
 func (d *Deps) UpdateDeferred(character *Character, label string, update func() bool) bool {
 	if d.UpdateCharacterDeferred != nil {
-		return d.UpdateCharacterDeferred(character, label, update)
+		return d.UpdateCharacterDeferred(character, label, refusalAudited(label, []*Character{character}, update))
 	}
 	return d.Update(character, label, update)
 }
@@ -346,7 +348,7 @@ UpdateMany for a path only the simulation tick reaches (see MutateDeferred).
 */
 func (d *Deps) UpdateManyDeferred(characters []*Character, label string, update func() bool) bool {
 	if d.UpdateCharactersDeferred != nil {
-		return d.UpdateCharactersDeferred(characters, label, update)
+		return d.UpdateCharactersDeferred(characters, label, refusalAudited(label, characters, update))
 	}
 	return d.UpdateMany(characters, label, update)
 }
