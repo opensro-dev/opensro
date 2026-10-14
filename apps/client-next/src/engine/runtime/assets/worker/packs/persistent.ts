@@ -16,6 +16,11 @@ members of the startup groups every session needs before the first frame -
 are never evicted; the rest leave least recently used first, and a write
 that cannot fit after eviction is skipped, never stored over budget.
 
+A put the origin refuses for quota with nothing left to evict means the
+quota itself cannot hold a pack (a private window, a full device): every
+later put would be refused too, and a browser may keep each refused body
+in memory, so the store stops writing for the session (writesStopped).
+
 Which entries are startup entries comes from the manifest the asset worker
 admitted (setStartup), never from what an earlier release stored: a warm
 entry the manifest names is protected at once, and one only an older
@@ -65,6 +70,8 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	// Keys of the current manifest's startup packs and members (setStartup).
 	let startup = new Set<string>();
 	let hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0, queuedBytes = 0, skipped = 0;
+	// Set once the origin's quota cannot hold a pack (the header above).
+	let writesStopped = false;
 	const pending = new Set<string>(), touched = new Set<string>();
 	// Operations past their deadline that have not settled yet. While any is
 	// open the store takes no new work: a stuck backend stays suspended, a
@@ -333,6 +340,10 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 	================
 	*/
 	async function publish( origin: string, digest: string, bytes: Uint8Array<ArrayBuffer> ) {
+		if ( writesStopped ) {
+			skipped++;
+			return;
+		}
 		const cache = await open();
 		if ( !cache ) return;
 		try {
@@ -408,7 +419,16 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			} catch ( error ) {
 				if ( !(error instanceof DOMException) || error.name !== "QuotaExceededError" ) throw error;
 				const count = Math.max( 1, Math.ceil( inventory.size / 4 ) );
-				for ( let i = 0; i < count; i++ ) if ( !await evict() ) break;
+				let freed = 0;
+				for ( let i = 0; i < count; i++ ) {
+					if ( !await evict() ) break;
+					freed++;
+				}
+				if ( !freed ) {
+					writesStopped = true;
+					skipped++;
+					return;
+				}
 				await storage( put );
 			}
 			inventory.set( target, bytes.length );
@@ -572,6 +592,7 @@ export function createPersistentAssets( budgetOf: ( quota: number | undefined ) 
 			evictions,
 			queuedBytes,
 			skipped,
+			writesStopped,
 			budget,
 			pinned: inventory ? [ ...inventory.keys() ].filter( url => startup.has( url ) ).length : 0
 		})

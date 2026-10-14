@@ -367,6 +367,38 @@ test("denied persistence and quota pressure do not turn valid downloads into loa
 	}
 });
 
+test("a quota refusal with nothing to evict stops writes for the session", async t => {
+	const d = disk( t );
+	let puts = 0;
+	const put = d.cache.put;
+	d.cache.put = async ( url, response ) => {
+		puts++;
+		throw new DOMException( "full", "QuotaExceededError" );
+	};
+	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" ),
+		owner = createPersistentAssets();
+	await owner.write( "http://localhost", "a", Uint8Array.of( 1, 2, 3 ) );
+	assert.equal( puts, 1, "the refused put is not retried: there was nothing to evict" );
+	assert.equal( owner.stats().writesStopped, true );
+	for ( const key of [ "b", "c", "d" ] ) await owner.write( "http://localhost", key, Uint8Array.of( 4, 5, 6 ) );
+	assert.equal( puts, 1, "no further put is attempted this session" );
+	assert.equal( d.rows.size, 0 );
+	d.cache.put = put;
+});
+
+test("a quota refusal that eviction can relieve keeps the store writing", async t => {
+	const d = disk( t );
+	const { createPersistentAssets } = await load( "src/engine/runtime/assets/worker/packs/persistent.ts" ),
+		owner = createPersistentAssets();
+	await owner.write( "http://localhost", "a", Uint8Array.of( 1, 2, 3 ) );
+	d.quota();
+	await owner.write( "http://localhost", "b", Uint8Array.of( 4, 5, 6 ) );
+	assert.equal( owner.stats().writesStopped, false, "an evicted entry made room" );
+	assert.deepEqual( [ ...d.rows.keys() ].length, 1 );
+	await owner.write( "http://localhost", "c", Uint8Array.of( 7, 8, 9 ) );
+	assert.equal( d.rows.size, 2, "later writes still land" );
+});
+
 test("persistent payload eviction obeys the quota-derived budget without clearing unrelated caches", async t => {
 	const d = disk( t ), old = Object.getOwnPropertyDescriptor( globalThis, "navigator" );
 	Object.defineProperty( globalThis, "navigator", {
