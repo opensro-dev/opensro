@@ -350,6 +350,10 @@ func (rt *Runtime) advancePet(key petOwnerKey, nowMs int64) (output []simulation
 		result := rt.applyCosGroundAt(key.division, state.character, q, cosGroundAttempt{now: time.UnixMilli(nowMs)})
 		result = finishPendingCosPickup(state, result)
 		state.public = append(state.public, result.Broadcast...)
+		// A shared pickup's receipt and the party loot notices belong to other
+		// members (routeSharedPickup, partyLootNotice); advancePets drains
+		// them beside the kill-settlement frames.
+		state.others = append(state.others, result.Recipients...)
 		for _, f := range result.Frames {
 			frames = append(frames, simulation.Frame{Opcode: f.Opcode, Payload: f.Payload, Current: f.Current, Scope: f.Scope})
 		}

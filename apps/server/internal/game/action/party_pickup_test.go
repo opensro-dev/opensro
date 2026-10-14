@@ -334,6 +334,50 @@ func TestPetPickupRunsThePartyItemShare(t *testing.T) {
 
 /*
 ================
+TestPetPickupShareDeliversThePeerReceiptAfterTheApproach
+
+A pickup pet walks to a drop beyond reach (grounditem.ExecuteRange) and
+picks it up in its own tick. When the rotation hands the item to another
+member, that member's inventory receipt must leave the pet tick: it was
+dropped there, so the member owned the item on the server and never saw it.
+================
+*/
+func TestPetPickupShareDeliversThePeerReceiptAfterTheApproach(t *testing.T) {
+	rt, picker, peer, gid, _ := sharedPetFixture(t)
+	rt.ConstrainMovement = func(_ string, _, to simulation.Spawn) (simulation.Spawn, *simulation.MoveError) { return to, nil }
+	rt.NextPartyLootMember(testDivision, picker.Name) // the peer is next
+	pose := rt.PetPresentation(testDivision, picker.Name).World.LiveSpawnAt(1000)
+	potion := grounditem.Item{RefObjID: picker.MissionInventory[0].RefObjID, Codename: picker.MissionInventory[0].Codename,
+		TypeFlags: picker.MissionInventory[0].TypeFlags, StackCount: 1, Y: float32(pose.Y),
+		Position: grounditem.Point{RegionID: pose.RegionID, X: float32(pose.X) + 30, Z: float32(pose.Z)}}
+	item := rt.Ground.Add(testDivision, potion)
+	body := wire.NewWriter(9).U32(gid).U8(wire.CosCommandPickupTag).U32(item.Gid).Payload()
+	if result := rt.HandleCosCommand(testDivision, picker, body); len(result.Frames) != 0 {
+		t.Fatal("the pet did not start its approach", result)
+	}
+	peerBag := len(peer.MissionInventory)
+	delivered := false
+	for now := int64(1100); now <= 6000 && len(rt.Ground.All(testDivision)) != 0; now += 100 {
+		rt.Now = func() time.Time { return time.UnixMilli(now) }
+		for _, batch := range rt.TickHook()(now) {
+			if batch.OnlyCharacterID == peer.ID {
+				delivered = true
+			}
+		}
+	}
+	if len(rt.Ground.All(testDivision)) != 0 {
+		t.Fatal("the pet never picked the drop up")
+	}
+	if len(peer.MissionInventory)-peerBag != 1 {
+		t.Fatalf("the rotation did not hand the drop to the peer: %d new rows", len(peer.MissionInventory)-peerBag)
+	}
+	if !delivered {
+		t.Fatal("the peer's receipt never left the pet tick")
+	}
+}
+
+/*
+================
 TestPetPickupShareKeepsThePetAdmissions
 
 The share runs only after the pet path's own admissions. Another player's
