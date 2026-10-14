@@ -188,6 +188,11 @@ The target of a friend request and 0, or the native refusal code, in the
 native order: GameServer 5D7620 (name, self, listed, own cap), then the
 ShardManager's 447650 (target absent or offline, target cap, listed from
 the target's side).
+
+5D7620 also answers 3 for a name CShardDB_FindRejectedText matches (the
+forbidden-name table). It is skipped here: a request resolves only to an
+existing character, whose name already passed character creation, so a
+rejected name can only ever answer UNKNOWNUSER, as an unknown name does.
 ================
 */
 func CheckFriendAdd(deps Dependencies, divisionID string, actor *enterworld.Character, name string, online func(string) bool) (*enterworld.Character, uint8) {
