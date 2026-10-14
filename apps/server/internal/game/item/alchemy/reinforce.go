@@ -436,7 +436,12 @@ func (c *Catalog) Reinforce(items []inventory.Item, slots []uint8, bonus int, ro
 				return zero, err
 			}
 			if n < ReinforceDestroyPercent {
-				result.Destroyed = item.TypeFlags&1 == 0
+				// CEnchant_Reinforce_ApplyFailure (v1.188 506CE0) destroys only
+				// when CGObj_IsCashItem (483890) is false: !(w&2), TID1 3 and
+				// bit 0, CashItem. A reinforce target is always equipment, so
+				// only the cash flag decides; the port's word leaves bit 0
+				// clear, so the reference's Cash is read instead.
+				result.Destroyed = !ref.Cash
 				if result.Destroyed && c.charge(item, MagicTagImmortal) {
 					result.Destroyed = false
 				}

@@ -32,9 +32,12 @@ One itemdata row as alchemy reads it.
 ================
 */
 type Reference struct {
-	ID           uint32
-	Name         string
-	Flags        uint16
+	ID    uint32
+	Name  string
+	Flags uint16
+	// Cash is itemdata column 7 (CashItem), natively bit 0 of the type
+	// word; Flags leaves that bit clear (enterworld ItemRef.TypeFlags).
+	Cash         bool
 	Class        int
 	Rarity       int
 	MaxMagic     int
@@ -106,7 +109,7 @@ func LoadCatalog(dir string, source enterworld.ItemRefSource) (*Catalog, error) 
 			if !ok || ref == nil {
 				return nil, fmt.Errorf("alchemy: missing item reference %s", a[2])
 			}
-			r := Reference{ID: ref.RefObjID, Name: a[2], Flags: ref.TypeFlags()}
+			r := Reference{ID: ref.RefObjID, Name: a[2], Flags: ref.TypeFlags(), Cash: ref.CashItem}
 			price, pe := strconv.ParseInt(a[26], 10, 64)
 			stack, se := strconv.ParseInt(a[57], 10, 64)
 			if pe != nil || se != nil || price < -1 || price > 0x7fffffff || stack < -1 || stack > 65535 {

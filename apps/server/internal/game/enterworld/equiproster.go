@@ -146,10 +146,14 @@ type ItemRef struct {
 	FortressRoleMask int64
 }
 
-// TypeFlags packs TypeID1..4 exactly as the native RefItemData word the
-// parser gates on: TID1<<2 | TID2<<5 | TID3<<7 | TID4<<11.
-// scripts/build/data/buildMissionPresentationAsset.mjs itemTypeFlags packs
-// the browser's copy the same way; change both together.
+// TypeFlags packs TypeID1..4 as the native RefItemData word does: TID1<<2 |
+// TID2<<5 | TID3<<7 | TID4<<11. The stored word differs from native in its
+// low two bits: natively bit 0 is CashItem (column 7) and bit 1 Bionic
+// (column 8) (SRO_Client CRefObjCommon_ParseTextRow 808AD0); the port
+// keeps both clear, because the word is saved on every inventory row and
+// compared exactly, and a cash rule reads CashItem from the reference
+// instead (issue #933). scripts/build/data/buildMissionPresentationAsset.mjs
+// itemTypeFlags packs the browser's copy the same way; change both together.
 /*
 ================
 TypeFlags

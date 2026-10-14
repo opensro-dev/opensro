@@ -97,6 +97,43 @@ func TestReinforceNativeBranches(t *testing.T) {
 	}
 }
 
+/*
+================
+TestReinforceNeverDestroysACashItem
+
+The destroy draw that ruins ordinary gear (+5, second draw under 50) only
+resets a cash item, as 506CE0 tests CGObj_IsCashItem before destroying.
+================
+*/
+func TestReinforceNeverDestroysACashItem(t *testing.T) {
+	for _, cash := range []bool{false, true} {
+		c, items := fixture()
+		weapon := c.Items["weapon"]
+		weapon.Cash = cash
+		c.Items["weapon"] = weapon
+		items[0].Plus = 5
+		r, err := c.Reinforce(items, []uint8{13, 14}, 0, sequence(t, 99, 49))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Success || r.Destroyed == cash {
+			t.Fatalf("cash=%v: outcome %+v", cash, r)
+		}
+		kept := false
+		for _, item := range r.Items {
+			if item.Slot == 13 {
+				kept = true
+				if item.Plus != 0 {
+					t.Fatalf("cash=%v: kept item at +%d, want reset to +0", cash, item.Plus)
+				}
+			}
+		}
+		if kept == !cash {
+			t.Fatalf("cash=%v: target kept=%v", cash, kept)
+		}
+	}
+}
+
 func TestReinforceNoPartialPlanOnRefusalOrRandomFailure(t *testing.T) {
 	c, items := fixture()
 	before := clone(items)
