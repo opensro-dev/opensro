@@ -9,7 +9,7 @@ ETC2 or ASTC instead decides the fix. A report therefore carries the
 adapter's texture-compression and related features, the limits that bound
 the client's buffers, and its vendor and architecture tokens: enums and
 numbers only (bug-report archive.ts admits nothing else). The device owner
-reads them (renderer/device/adapter-facts.ts); this is only their shape.
+reads them (gpuFacts in renderer/device/device.ts); this is only their shape.
 
 ===========================================================================
 */

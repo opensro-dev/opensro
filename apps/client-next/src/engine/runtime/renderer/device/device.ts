@@ -115,7 +115,7 @@ export function createDevice( timingEnabled = false, gpuAnimationEnabled = true 
 		failure = String( error );
 		phase = "failed";
 	};
-	// The adapter's features and limits for bug reports (adapter-facts.ts).
+	// The adapter's features and limits for bug reports (gpuFacts above).
 	let facts: GpuFacts | null = null;
 	if ( !navigator.gpu ) {
 		fail( "WebGPU is unavailable" );
