@@ -22,7 +22,8 @@ way the original client reads them:
 
 Sized strings are u16 length + bytes. A letter is named by its index in
 the mailbox, which the server and the client keep aligned move for move.
-Every decoder refuses a malformed frame rather than guessing.
+Every decoder refuses a malformed frame rather than guessing; only the
+player-written text inside is decoded leniently.
 
 ===========================================================================
 */
@@ -160,7 +161,9 @@ function letterReader( bytes: Uint8Array, what: string ): LetterReader {
 			const length = view.getUint16( at, true );
 			at += 2;
 			need( length );
-			const value = new TextDecoder( "utf-8", { fatal: true } ).decode( bytes.subarray( at, at + length ) );
+			// Player text decodes leniently (U+FFFD): a stored letter must never
+			// fail its reader's session. Lengths and counts stay strict.
+			const value = new TextDecoder( "utf-8" ).decode( bytes.subarray( at, at + length ) );
 			at += length;
 			return value;
 		},

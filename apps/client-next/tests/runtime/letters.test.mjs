@@ -110,6 +110,10 @@ test("the wire decoders read the native layouts and refuse malformed frames", ()
 	assert.throws( () => letters.decodeLetterList( bytes( 1, 21 ) ), /mailbox limit/ );
 	assert.throws( () => letters.decodeLetterList( bytes( 1, 1, "Berk", u32( 1 ), u32( 0 ), 2 ) ), /read flag/ );
 	assert.throws( () => letters.decodeLetterList( bytes( 3 ) ) );
+	// Player text is decoded leniently: a stored bad byte reads as U+FFFD.
+	const bad = Uint8Array.from( [ 1, 0, 3, 0, 0x48, 0xff, 0x69 ] );
+	assert.deepEqual( letters.decodeLetterReadResult( bad ), { kind: "ok", index: 0, body: "H�i" } );
+	assert.throws( () => letters.decodeLetterReadResult( bad.slice( 0, -1 ) ), /Truncated/ );
 	assert.deepEqual( letters.decodeLetterEvent( bytes( 8, "Dora", u32( 1909 ), u32( 5 ) ) ), {
 		kind: "arrived",
 		row: { sender: "Dora", modelRefId: 1909, received: 5, read: false, body: null }
@@ -242,4 +246,15 @@ test("a delete is sent only for a letter in the mailbox", () => {
 	assert.equal( sent.length, 0 );
 	g.command( { kind: "letter-delete", index: 1 }, 0, undefined );
 	assert.deepEqual( sent.at( -1 ), { opcode: 0x70cc, payload: Uint8Array.of( 1 ) } );
+});
+
+test("a mailbox seed with invalid UTF-8 in a sender or body is read with replacement characters", () => {
+	const { g } = lane();
+	// {1, 1 letter: sender "B\xffk", model, time, unread}: a stored bad byte
+	// must never fail the session at world entry.
+	const seed = Uint8Array.from( [ 1, 1, 3, 0, 0x42, 0xff, 0x6b, 1, 0, 0, 0, 0, 0, 0, 0, 0 ] );
+	assert.equal( g.receive( { opcode: 0xb3cd, payload: seed }, 0 ), true );
+	assert.equal( lettersOf( g.take() ).rows[0].sender, "B�k" );
+	g.receive( { opcode: 0xb3f2, payload: Uint8Array.from( [ 1, 0, 2, 0, 0xc3, 0x28 ] ) }, 0 );
+	assert.equal( lettersOf( g.take() ).rows[0].body, "�(" );
 });
