@@ -670,9 +670,9 @@ const JOB_RANK_PANEL = "Job ranking";
 const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
-// Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 // CIFStall_OnCreate (5A2D60): the "Sell goods" tab's rect in the window.
 const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 0x18;
+// Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
 const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
