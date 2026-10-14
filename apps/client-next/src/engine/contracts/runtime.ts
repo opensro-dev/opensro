@@ -247,6 +247,9 @@ export interface Renderer extends Disposable {
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	// Port-only, not native: whether the Experimental enchant sparks are on.
 	enchantSparks?(): boolean;
+	// Port-only, not native: whether characters and effects share one
+	// nearest-first actor room (Experimental; the original has no cap).
+	sharedActorRoom?(): boolean;
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null
 	): void;

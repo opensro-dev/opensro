@@ -50,7 +50,8 @@ export async function captureSunShadowPlacement() {
 		sunShadow: false,
 		perPixelLighting: false,
 		smoothCamera: false,
-		enchantSparks: false
+		enchantSparks: false,
+		sharedActorRoom: false
 	};
 	const lit = shade => ({
 		color: shade,

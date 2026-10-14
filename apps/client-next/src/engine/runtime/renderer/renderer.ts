@@ -179,6 +179,16 @@ export function createRenderer(
 		},
 		/*
 		================
+		sharedActorRoom
+
+		Read by the character presenter each frame.
+		================
+		*/
+		sharedActorRoom() {
+			return experimental.sharedActorRoom;
+		},
+		/*
+		================
 		experimentalVideo
 		================
 		*/

@@ -2304,6 +2304,14 @@
 			"functions": [
 				"callback:setAssetDump:0"
 			]
+		},
+		{
+			"consumer": "src/engine/foundation/animation/character-selection.ts",
+			"provider": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"functions": [
+				"effectDistances"
+			],
+			"reason": "The Experimental shared actor room: the selection reads the previous frame's effect distances, which the auxiliary presentation records in presentStages, through a getter injected at construction."
 		}
 	],
 	"boundaries": [
@@ -3153,6 +3161,13 @@
 			"function": "presentStages",
 			"kind": "callback",
 			"reason": "Optional runtime-owned frame observer, passed with the frame; counts effects that gave way to either bound. Production supplies none."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "renderer.sharedActorRoom",
+			"function": "presentStages",
+			"kind": "callback",
+			"reason": "The parent renderer reports whether the Experimental shared actor room is on; it changes nothing."
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",

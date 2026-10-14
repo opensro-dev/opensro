@@ -16,7 +16,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 const { createPresentationRandom } = await import( "../../src/engine/runtime/random/random.ts" );
 const { createCharacterEffects } = await import( "../../src/engine/runtime/characters/effects/effects.ts" );
-const { trimToEffectBudget } = await import( "../../src/engine/foundation/animation/effect-room.ts" );
+const { trimToEffectBudget, sharedCharacterRoom } = await import(
+	"../../src/engine/foundation/animation/effect-room.ts"
+);
+const { createCharacterSelection } = await import( "../../src/engine/foundation/animation/character-selection.ts" );
 
 /*
 ================
@@ -196,4 +199,33 @@ test("past the actor room the nearest effects draw, and the probe hears how many
 	assert.equal( next.size, CHARACTER_ACTORS );
 	assert.ok( next.has( -2 ) && next.has( -4 ), "the two nearest effects draw" );
 	assert.ok( !next.has( -1 ) && !next.has( -3 ), "the two farthest give way" );
+});
+
+test("in the shared actor room a near effect takes a far character's place; the player always stays", () => {
+	const ranked = [ { priority: 0, distance: 900 }, { priority: 2, distance: 1 }, { priority: 2, distance: 25 } ];
+	// Room 3: the player (always first), the character at 1, then the
+	// effect at 4 beats the character at 25.
+	assert.equal( sharedCharacterRoom( ranked, [ 4 ], 3 ), 2 );
+	assert.equal( sharedCharacterRoom( ranked, [ 100 ], 3 ), 3, "a far effect leaves every character" );
+	assert.equal( sharedCharacterRoom( ranked, [], 3 ), 3 );
+	assert.equal( sharedCharacterRoom( ranked, [ 0, 0, 0 ], 3 ), 1, "the player keeps its slot" );
+	/** @type {( gid: number, x: number ) => any} */
+	const at = ( gid, x ) => ({ gid, regionId: 257, x, y: 0, z: 0 });
+	const entities = [ at( 1, 0 ), at( 2, 1 ), at( 3, 5 ) ];
+	let effects;
+	const selection = createCharacterSelection( 3, () => effects );
+	const anchor = { regionId: 257, x: 0, y: 0, z: 0, angle: 0 };
+	assert.deepEqual( selection.select( entities, anchor, 1, undefined ).map( e => e.gid ), [ 1, 2, 3 ] );
+	effects = [ 4 ];
+	assert.deepEqual(
+		selection.select( entities, anchor, 1, undefined ).map( e => e.gid ),
+		[ 1, 2 ],
+		"the effect at distance 2 outranks the character at distance 5"
+	);
+	effects = undefined;
+	assert.deepEqual(
+		selection.select( entities, anchor, 1, undefined ).map( e => e.gid ),
+		[ 1, 2, 3 ],
+		"off is the old rule"
+	);
 });

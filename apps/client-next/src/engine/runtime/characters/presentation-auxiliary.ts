@@ -14,7 +14,7 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { DressCatalog } from "@/engine/foundation/animation/equipment-appearance";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
-import { trimToEffectBudget } from "@/engine/foundation/animation/effect-room";
+import { effectDistanceSq, trimToEffectBudget } from "@/engine/foundation/animation/effect-room";
 import {
 	changeLocomotion,
 	locomotionLayers,
@@ -147,7 +147,7 @@ StageBindings
 ================
 */
 interface StageBindings {
-	readonly renderer: Pick<Renderer, "setCharacterAssembly">;
+	readonly renderer: Pick<Renderer, "setCharacterAssembly" | "sharedActorRoom">;
 	readonly resources: { duration( path: string, clip: string ): number; };
 	readonly effects: {
 		animationModel( path: string ): {
@@ -168,6 +168,9 @@ createAuxiliaryPresentation
 ================
 */
 export function createAuxiliaryPresentation( allocateActor: () => number ) {
+	// The previous frame's effect actors' squared distances to the player,
+	// ascending, while the shared actor room is on (presentStages).
+	let effectDistances: number[] | undefined;
 	const booths = new Map<number, {
 		gid: number;
 		resource: SecondaryModel;
@@ -329,6 +332,12 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		presentStages( frame: StageFrame, bindings: StageBindings ) {
 			const { orbActors, effectActors, next, seconds, animationHolders, player } = frame;
 			const { renderer, resources, effects, probe } = bindings;
+			// The Experimental shared actor room: next frame's selection ranks
+			// these effects with the characters (character-selection.ts).
+			effectDistances = renderer.sharedActorRoom?.() === true && player ?
+				effectActors.map( actor => effectDistanceSq( actor.pose, player ) ).filter( Number.isFinite )
+					.sort( ( a, b ) => a - b ) :
+				undefined;
 			const stageAlive = new Set<number>();
 			// The original draws every decoration (85C020 appends to an
 			// unbounded list); the port's renderer holds CHARACTER_ACTORS in
@@ -401,7 +410,16 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		resetStages() {
 			stageAnimations.clear();
 			booths.clear();
+			effectDistances = undefined;
 		},
+		/*
+		================
+		effectDistances
+
+		The shared actor room's effect distances, or undefined when it is off.
+		================
+		*/
+		effectDistances: () => effectDistances,
 		/*
 		================
 		step

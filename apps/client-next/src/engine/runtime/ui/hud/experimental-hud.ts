@@ -105,6 +105,12 @@ export const EXPERIMENTAL_TABS: readonly {
 				id: "experimental-compressed-textures",
 				label: "Compressed textures",
 				description: "Phones and tablets: less memory. After reload."
+			},
+			{
+				key: "sharedActorRoom",
+				id: "experimental-shared-actor-room",
+				label: "Effects in crowds",
+				description: "In a crowd, near skill effects draw before far characters."
 			}
 		]
 	},

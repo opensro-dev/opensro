@@ -46,6 +46,12 @@ export interface ExperimentalOptions {
 	// without BC are affected, where RGBA ends the tab; off is the native
 	// texture content.
 	readonly compressedTextures: boolean;
+	// Port-only, not native: characters and effects share one nearest-first
+	// order under the renderer's CHARACTER_ACTORS (the original keeps every
+	// decoration, 85C020), so a far character gives way to a near effect.
+	// On unless turned off (the owner's choice, 2026-10-14); off is the
+	// previous rule, characters first.
+	readonly sharedActorRoom: boolean;
 }
 
 /*
@@ -110,7 +116,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		predictedRunUp: enabled( "predictedRunUp" ),
 		smoothCamera: enabled( "smoothCamera" ),
 		enchantSparks: enabled( "enchantSparks" ),
-		compressedTextures: record.compressedTextures !== false
+		compressedTextures: record.compressedTextures !== false,
+		sharedActorRoom: record.sharedActorRoom !== false
 	};
 }
 
@@ -157,6 +164,7 @@ export interface ExperimentalVideo {
 	readonly perPixelLighting: boolean;
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
+	readonly sharedActorRoom: boolean;
 }
 
 /*
@@ -176,7 +184,8 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		sunShadow: options.sunShadow,
 		perPixelLighting: options.perPixelLighting,
 		smoothCamera: options.smoothCamera,
-		enchantSparks: options.enchantSparks
+		enchantSparks: options.enchantSparks,
+		sharedActorRoom: options.sharedActorRoom
 	};
 }
 

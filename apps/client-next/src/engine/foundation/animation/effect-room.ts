@@ -24,7 +24,7 @@ The squared ground distance between two poses; outdoor regions are laid
 out EFFECT_REGION_SIZE apart, dungeon regions only compare with themselves.
 ================
 */
-function effectDistanceSq(
+export function effectDistanceSq(
 	a: { readonly regionId: number; readonly x: number; readonly z: number; },
 	b: { readonly regionId: number; readonly x: number; readonly z: number; }
 ): number {
@@ -64,4 +64,31 @@ export function trimToEffectBudget(
 	for ( let i = 0; i < actors.length; i++ ) if ( !drop.has( i ) ) actors[kept++] = actors[i]!;
 	actors.length = kept;
 	return overflow;
+}
+
+/*
+================
+sharedCharacterRoom
+
+How many of the ranked characters take room when they share it with
+effect actors in one nearest-first order (the Experimental shared actor
+room, the owner's choice of 2026-10-14): the local player and its mount
+(priority below 2) always come first, then each slot goes to whichever is
+nearer, the next character or the next effect. effects is the squared
+distance of each effect actor to the player, ascending; the characters
+are already ranked nearest first.
+================
+*/
+export function sharedCharacterRoom(
+	characters: readonly { readonly priority: number; readonly distance: number; }[],
+	effects: readonly number[],
+	room: number
+): number {
+	let admitted = 0, effect = 0;
+	for ( let taken = 0; taken < room && admitted < characters.length; taken++ ) {
+		const character = characters[admitted]!;
+		if ( character.priority < 2 || effect >= effects.length || character.distance <= effects[effect]! ) admitted++;
+		else effect++;
+	}
+	return admitted;
 }

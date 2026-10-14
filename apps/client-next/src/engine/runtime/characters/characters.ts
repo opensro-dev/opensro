@@ -191,7 +191,7 @@ export function createCharacterPresentation(
 		statusOwner
 	);
 	const posePresentation = createPosePresentation();
-	const selection = createCharacterSelection( CHARACTER_ACTORS );
+	const selection = createCharacterSelection( CHARACTER_ACTORS, auxiliary.effectDistances );
 	const stateIndex = createCharacterStateIndex();
 	const presentationActions = createPresentationActions();
 	const { appearanceRef, activeSkin, wornEquipment, resourceFor } = createAppearanceLookup(
