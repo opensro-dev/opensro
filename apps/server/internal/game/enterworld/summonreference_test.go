@@ -178,12 +178,14 @@ func TestSummonFamilyStartsSeparatesTheFirstFormFromGaps(t *testing.T) {
 		"ITEM_HOLE":   summoner("COS_T_HOLE", 1, 10, 20, 30, 255),
 		"ITEM_GHOST":  summoner("COS_T_GHOST", 1, 10, 255),
 		"ITEM_PLAIN":  {TypeIDs: [4]int64{3, 3, 3, 2}, AssociatedCharacterCodename: "COS_PLAIN"},
+		"ITEM_LOST":   {TypeIDs: [4]int64{3, 3, 3, 2}, AssociatedCharacterCodename: "COS_LOST"},
 		"ITEM_WHOLE":  summoner("COS_T_WHOLE", 1, 20, 255),
 		"ITEM_POTION": {TypeIDs: [4]int64{3, 3, 1, 1}, AssociatedCharacterCodename: "COS_T_NOTSUMMON", SummonLevelThresholds: []uint8{1, 5, 255}},
 	}
 	authored := map[string]bool{
 		"COS_T_HORSE_20": true, "COS_T_HORSE_40": true, "COS_C_PIG_5": true,
 		"COS_T_HOLE_10": true, "COS_T_HOLE_30": true, "COS_T_WHOLE_1": true, "COS_T_WHOLE_20": true,
+		"COS_PLAIN": true,
 	}
 	starts, gaps := summonFamilyStarts(items, func(code string) bool { return authored[code] })
 	want := []summonFamilyStart{
@@ -194,7 +196,8 @@ func TestSummonFamilyStartsSeparatesTheFirstFormFromGaps(t *testing.T) {
 	if !reflect.DeepEqual(starts, want) {
 		t.Fatalf("starts = %+v, want %+v", starts, want)
 	}
-	if wantGaps := []string{"COS_T_GHOST_1", "COS_T_GHOST_10", "COS_T_HOLE_20"}; !reflect.DeepEqual(gaps, wantGaps) {
+	// A thresholdless item's missing row (COS_LOST) is a gap too: its summon fails.
+	if wantGaps := []string{"COS_LOST", "COS_T_GHOST_1", "COS_T_GHOST_10", "COS_T_HOLE_20"}; !reflect.DeepEqual(gaps, wantGaps) {
 		t.Fatalf("gaps = %v, want %v", gaps, wantGaps)
 	}
 }

@@ -230,20 +230,27 @@ type summonFamilyStart struct {
 ================
 summonFamilyStarts
 
-Splits the missing rows of every leveled summon family into the expected
-ones (thresholds below the family's first authored form) and real gaps (a
-missing threshold above it, or a family with no authored form). authored
-reports whether characterdata authors a codename, readable or not. Both
-results are sorted by family, then codename, so boot logs are stable.
+Splits the missing rows of every summon item into the expected ones
+(thresholds below a leveled family's first authored form) and real gaps (a
+missing threshold above it, a leveled family with no authored form, or a
+thresholdless item whose own row is missing). authored reports whether
+characterdata authors a codename, readable or not. Both results are sorted
+by family, then codename, so boot logs are stable.
 ================
 */
 func summonFamilyStarts(items map[string]*ItemRef, authored func(string) bool) ([]summonFamilyStart, []string) {
 	thresholds := make(map[string][]uint8)
+	direct := make(map[string]bool)
 	for _, item := range items {
-		if item == nil || item.AssociatedCharacterCodename == "" || len(item.SummonLevelThresholds) == 0 {
+		if item == nil || item.AssociatedCharacterCodename == "" {
 			continue
 		}
 		if item.TypeIDs != [4]int64{3, 3, 3, 2} && !wire.IsCosSummoner(item.TypeFlags()) {
+			continue
+		}
+		if len(item.SummonLevelThresholds) == 0 {
+			// The item summons its own row directly (summonCharacterCodenames).
+			direct[item.AssociatedCharacterCodename] = true
 			continue
 		}
 		thresholds[item.AssociatedCharacterCodename] = item.SummonLevelThresholds
@@ -255,6 +262,12 @@ func summonFamilyStarts(items map[string]*ItemRef, authored func(string) bool) (
 	sort.Strings(families)
 	var starts []summonFamilyStart
 	gaps := []string{}
+	for codename := range direct {
+		if !authored(codename) {
+			gaps = append(gaps, codename)
+		}
+	}
+	sort.Strings(gaps)
 	for _, family := range families {
 		var below []string
 		first := uint8(0)
