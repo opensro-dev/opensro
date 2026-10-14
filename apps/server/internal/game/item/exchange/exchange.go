@@ -53,6 +53,9 @@ type Offer struct {
 	BagSlot  uint8
 	RefObjID uint32
 	Quantity uint16
+	// Body is the item's encoded body when offered (plus, options,
+	// durability); an item rewritten in place no longer matches it.
+	Body []byte
 }
 
 /*

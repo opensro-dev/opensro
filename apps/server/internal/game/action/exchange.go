@@ -30,6 +30,7 @@ handlers, so three rules follow the client and the v1.188 texts:
 package action
 
 import (
+	"bytes"
 	"errors"
 
 	log "github.com/sirupsen/logrus"
@@ -215,7 +216,7 @@ func (rt *Runtime) applyExchangeMove(division string, c *enterworld.Character, r
 		if code != 0 {
 			return failureResult(code)
 		}
-		slot, err := rt.Exchanges.AddItem(division, c.Name, exchange.Offer{BagSlot: request.SourceSlot, RefObjID: item.RefObjID, Quantity: item.Quantity})
+		slot, err := rt.Exchanges.AddItem(division, c.Name, exchange.Offer{BagSlot: request.SourceSlot, RefObjID: item.RefObjID, Quantity: item.Quantity, Body: offeredBody(item)})
 		if err != nil {
 			return failureResult(exchangeMoveCode(err))
 		}
@@ -501,7 +502,8 @@ func (rt *Runtime) commitExchange(division string, c *enterworld.Character) {
 takeOffered
 
 Copies of the offered rows in exchange-slot order; false when an offered
-slot no longer holds what was offered.
+slot no longer holds what was offered, including an item rewritten in place
+since (offeredBody).
 ================
 */
 func takeOffered(bag *inventory.Inventory, side exchange.Side) ([]inventory.Item, bool) {
@@ -511,12 +513,27 @@ func takeOffered(bag *inventory.Inventory, side exchange.Side) ([]inventory.Item
 			continue
 		}
 		item, ok := bag.At(offer.BagSlot)
-		if !ok || item.RefObjID != offer.RefObjID || item.Quantity != offer.Quantity {
+		if !ok || item.RefObjID != offer.RefObjID || item.Quantity != offer.Quantity || !bytes.Equal(offeredBody(item), offer.Body) {
 			return nil, false
 		}
 		out = append(out, item)
 	}
 	return out, true
+}
+
+/*
+================
+offeredBody
+
+The identity an exchange or stall offer holds its item to: the encoded
+body at a count of one, so a stall's partial count still matches. An alchemy
+result rewrites plus and options in place without moving the item, and
+the other player agreed only to the item as it was shown.
+================
+*/
+func offeredBody(item inventory.Item) []byte {
+	item.Quantity = 1
+	return item.Body().Encode()
 }
 
 /*

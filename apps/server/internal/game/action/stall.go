@@ -32,6 +32,7 @@ have none:
 package action
 
 import (
+	"bytes"
 	"errors"
 	"unicode/utf8"
 
@@ -434,7 +435,8 @@ func (rt *Runtime) applyStallEdit(division string, c *enterworld.Character, kind
 		if code != 0 {
 			return nil, code
 		}
-		offer := stall.Slot{BagSlot: bagSlot, RefObjID: item.RefObjID, Quantity: count, Price: price, Category: rt.stallCategory(item), Serial: rt.Stalls.NextSerial()}
+		offer := stall.Slot{BagSlot: bagSlot, RefObjID: item.RefObjID, Quantity: count, Price: price, Category: rt.stallCategory(item),
+			Body: offeredBody(item), Serial: rt.Stalls.NextSerial()}
 		_, err := rt.Stalls.Edit(division, c.Name, func(s *stall.Stall) error {
 			for _, other := range s.Slots {
 				if other != nil && other.BagSlot == bagSlot {
@@ -717,7 +719,7 @@ func (rt *Runtime) sellStallSlot(division, ownerName string, slot uint8, buyer *
 			return false
 		}
 		item, present := ownerBag.At(offer.BagSlot)
-		if !present || item.RefObjID != offer.RefObjID {
+		if !present || item.RefObjID != offer.RefObjID || !bytes.Equal(offeredBody(item), offer.Body) {
 			code = wire.StallErrBadSlot
 			return false
 		}

@@ -58,6 +58,9 @@ type Slot struct {
 	Quantity uint16
 	Price    uint32
 	Category uint32
+	// Body is the item's encoded body when listed, at a count of one: an
+	// item rewritten in place (plus, options) no longer matches it.
+	Body []byte
 	// Serial identifies this offer on the stall network (a network buy
 	// names it; a changed offer gets a new one).
 	Serial uint64
