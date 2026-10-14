@@ -25,6 +25,7 @@ func TestSnapshotCopiesTheCommittedGeneration(t *testing.T) {
 	s := openTest(t, dir, newTestClock())
 	c := newLedgerCharacter(t, s, "SnapOne", 250)
 	path := filepath.Join(t.TempDir(), "snapshot.db")
+	committed := len(ledgerRows(t, s))
 	if err := s.SnapshotTo(path); err != nil {
 		t.Fatal(err)
 	}
@@ -41,10 +42,10 @@ func TestSnapshotCopiesTheCommittedGeneration(t *testing.T) {
 	if err := copyDB.QueryRow("SELECT count(*) FROM characters").Scan(&characters); err != nil {
 		t.Fatal(err)
 	}
-	if rows != 1 || characters != 1 {
-		t.Fatalf("snapshot holds %d ledger rows and %d characters, want 1 and 1", rows, characters)
+	if rows != committed || characters != 1 {
+		t.Fatalf("snapshot holds %d ledger rows and %d characters, want %d and 1", rows, characters, committed)
 	}
-	if live := ledgerRows(t, s); len(live) != 2 {
+	if live := ledgerRows(t, s); len(live) != committed+1 {
 		t.Fatalf("live ledger %+v", live)
 	}
 	// A second snapshot replaces the first with the newer generation.
@@ -57,7 +58,7 @@ func TestSnapshotCopiesTheCommittedGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer again.Close()
-	if err := again.QueryRow("SELECT count(*) FROM economy_ledger").Scan(&rows); err != nil || rows != 2 {
+	if err := again.QueryRow("SELECT count(*) FROM economy_ledger").Scan(&rows); err != nil || rows != committed+1 {
 		t.Fatalf("second snapshot holds %d rows (%v)", rows, err)
 	}
 }
