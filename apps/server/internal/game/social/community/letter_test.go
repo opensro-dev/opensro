@@ -51,6 +51,17 @@ func TestDecodeLetterSendRequest(t *testing.T) {
 	if _, err := DecodeLetterSendRequest(nil); err == nil {
 		t.Error("empty payload accepted")
 	}
+	// A letter replays to its reader at every world entry: only valid UTF-8
+	// is stored. Valid multi-byte text still passes.
+	if _, err := DecodeLetterSendRequest([]byte{0x04, 0x00, 'B', 'e', 'r', 'k', 0x02, 0x00, 0xc3, 0x28}); err == nil {
+		t.Error("invalid UTF-8 body accepted")
+	}
+	if _, err := DecodeLetterSendRequest([]byte{0x02, 0x00, 0xff, 0xfe, 0x01, 0x00, 'x'}); err == nil {
+		t.Error("invalid UTF-8 receiver accepted")
+	}
+	if got, err := DecodeLetterSendRequest([]byte{0x04, 0x00, 'B', 'e', 'r', 'k', 0x02, 0x00, 0xc3, 0xa9}); err != nil || got.Body != "é" {
+		t.Errorf("valid UTF-8 body = %+v, %v", got, err)
+	}
 }
 
 func TestLetterAnswerEncoders(t *testing.T) {

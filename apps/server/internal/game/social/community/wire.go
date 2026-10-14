@@ -14,7 +14,9 @@
 package community
 
 import (
+	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/item/wire"
@@ -337,6 +339,9 @@ func writeSizedString(writer *wire.Writer, value string) {
 	writer.Bytes(bytes)
 }
 
+// errInvalidText refuses player text that is not valid UTF-8.
+var errInvalidText = errors.New("text is not valid UTF-8")
+
 // readSizedString reads the sub_4b1710 sized-ANSI layout: u16 byte
 // length + the bytes.
 func readSizedString(reader *wire.Reader) (string, error) {
@@ -347,6 +352,11 @@ func readSizedString(reader *wire.Reader) (string, error) {
 	bytes, err := reader.Bytes(int(length))
 	if err != nil {
 		return "", err
+	}
+	// Player text is stored and replayed to other players at world entry:
+	// only valid UTF-8 is admitted, so no stored text can fail a reader.
+	if !utf8.Valid(bytes) {
+		return "", errInvalidText
 	}
 	return string(bytes), nil
 }

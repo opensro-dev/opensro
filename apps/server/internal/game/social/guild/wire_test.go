@@ -275,11 +275,17 @@ func TestDecodeNoticeEditRequest(t *testing.T) {
 	if err != nil || ok.Subject != "Subject" || ok.Contents != "Contents" {
 		t.Fatalf("notice decode = %+v (%v), want Subject/Contents", ok, err)
 	}
+	if wide, err := DecodeNoticeEditRequest(noticeEditPayload("Ünïcode", "é")); err != nil || wide.Subject != "Ünïcode" {
+		t.Fatalf("valid UTF-8 notice = %+v (%v)", wide, err)
+	}
 	for name, malformed := range map[string][]byte{
 		"nil":              nil,
 		"missing contents": kickPayload("Subject"),
 		"short contents":   append(kickPayload("Subject"), 0x08, 0x00, 'C'),
 		"trailing":         append(noticeEditPayload("S", "C"), 0x00),
+		// Notices replay to every member at entry: only valid UTF-8 is stored.
+		"invalid subject":  {0x02, 0x00, 'S', 0xff, 0x01, 0x00, 'C'},
+		"invalid contents": {0x01, 0x00, 'S', 0x02, 0x00, 0xc3, 0x28},
 	} {
 		if _, err := DecodeNoticeEditRequest(malformed); err == nil {
 			t.Errorf("%s: malformed notice body % X decoded without error", name, malformed)
