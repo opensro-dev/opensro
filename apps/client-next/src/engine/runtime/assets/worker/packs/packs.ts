@@ -404,8 +404,11 @@ export function createPacks(
 	*/
 	async function install( url: URL, signal: AbortSignal ): Promise<boolean> {
 		if ( disposed || signal.aborted ) return false;
-		const registry = await manifest( url.origin );
-		const entry = await servedEntry( registry, decodeURIComponent( url.pathname ).toLowerCase() );
+		const registry = await untilCancelled( manifest( url.origin ), signal );
+		const entry = await untilCancelled(
+			servedEntry( registry, decodeURIComponent( url.pathname ).toLowerCase() ),
+			signal
+		);
 		// An unanswerable store (suspended, saturated) skips the file: a fetch
 		// could not be stored, and its first play fetches it on demand anyway.
 		if ( !entry || await installed( url.origin, registry, entry, signal ) !== false ) return false;
