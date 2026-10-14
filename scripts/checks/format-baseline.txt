@@ -368,7 +368,6 @@ apps/server-observatory/public/item-model.js
 apps/server-observatory/public/items.js
 apps/server-observatory/public/model.js
 apps/server-observatory/server/source.mjs
-apps/server-observatory/tests/items.test.mjs
 apps/server-observatory/tests/model.test.mjs
 apps/server-observatory/tests/operations.test.mjs
 apps/server-observatory/tests/security.test.mjs

@@ -320,6 +320,8 @@ export const CHECK_PIPELINES = Object.freeze( {
 		// The Go tests and the package checks read the server projection.
 		{ id: "server", task: "check:server", after: [ "server-game-data" ] },
 		{ id: "typecheck-packages", task: "workspace:check", after: [ "server-game-data" ] },
+		// The console's item test reads the observatory catalog that build writes.
+		{ id: "console", task: "check:console", after: [ "server-game-data" ] },
 		{ id: "test-assets", task: "test:assets", after: [ "build-resources" ] },
 		{ id: "asset-pack-integrity", task: "assets:check:integrity", after: [ "build-resources" ] },
 		{ id: "test-cif", task: "test:cif", after: [ "build-resources" ] },
