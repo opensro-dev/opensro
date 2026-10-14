@@ -27,6 +27,8 @@ traderFixture
 func traderFixture(t *testing.T, thief bool) (*Runtime, *enterworld.Character) {
 	t.Helper()
 	c := testCharacter()
+	level := minTradeBuyerLevel
+	c.Level = &level
 	role := domain.JobTrader
 	if thief {
 		role = domain.JobThief
@@ -245,28 +247,48 @@ func TestTradeTransactionRefusalDoesNotPublishOrRemoveCargo(t *testing.T) {
 /*
 ================
 TestTradePurchaseRequiresMerchantJobQuestAndTransport
+
+6182A0's order and codes: a non-special merchant, then 4EC860 (a suited
+trader with a transport, else 0x60 even for a suited thief), level 20
+(0x4E), the required quest (0xB0) and the transport's distance.
 ================
 */
 func TestTradePurchaseRequiresMerchantJobQuestAndTransport(t *testing.T) {
-	for _, reason := range []string{"merchant", "job", "quest", "vehicle"} {
-		t.Run(reason, func(t *testing.T) {
-			rt, c := traderFixture(t, false)
+	cases := []struct {
+		reason string
+		thief  bool
+		code   uint8
+	}{
+		{"merchant", false, tradeErrWrongMerchant},
+		{"unsuited", false, tradeErrOnlyTrader},
+		{"thief", true, tradeErrOnlyTrader},
+		{"vehicle", false, tradeErrOnlyTrader},
+		{"level", false, tradeErrBuyerLevel},
+		{"quest", false, tradeErrQuest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.reason, func(t *testing.T) {
+			rt, c := traderFixture(t, tc.thief)
 			ref, _ := rt.deps.ItemReferences().ItemRefByCodename(c.MissionInventory[1].Codename)
 			rt.Commerce.Tabs[1] = []commerce.Offer{{Slot: 2, Ref: ref, Price: 60, Stack: 40}}
-			switch reason {
+			switch tc.reason {
 			case "merchant":
 				rt.NpcRoster[0].TalkFlags = simulation.NpcTalkFlagShop
-			case "job":
+			case "unsuited":
 				c.MissionInventory = c.MissionInventory[1:]
-			case "quest":
-				rt.NpcRoster[0].Codename = "NPC_CH_SPECIAL2"
 			case "vehicle":
 				c.ActiveCOS = nil
+			case "level":
+				level := minTradeBuyerLevel - 1
+				c.Level = &level
+			case "quest":
+				rt.NpcRoster[0].Codename = "NPC_CH_SPECIAL2"
 			}
 			before := c.Snapshot()
 			result := trade(t, rt, c, wire.ItemMoveRequest{MovementType: wire.MoveTypeShopBuy, NpcGID: 17, ShopSlot: 2, Quantity: 3})
-			if !reflect.DeepEqual(before, c.Snapshot()) || len(result.Frames) != 1 || result.Frames[0].Payload[0] != 2 {
-				t.Fatalf("purchase bypassed %s: %+v", reason, result)
+			if !reflect.DeepEqual(before, c.Snapshot()) || len(result.Frames) != 1 || result.Frames[0].Payload[0] != 2 ||
+				result.Frames[0].Payload[1] != tc.code {
+				t.Fatalf("purchase bypassed %s (want code 0x%X): %+v", tc.reason, tc.code, result)
 			}
 		})
 	}

@@ -3,7 +3,7 @@
 
 tradesale.go - special and thief merchant admission and cargo valuation
 
-617F70 admits the sale; 4C8D10 values the complete quantity before tax.
+617F70 admits the sale and 6182A0 a purchase; 4C8D10 values the complete quantity before tax.
 Quotation calls are read-only. Inventory and rewards commit in commerce.go.
 
 ===========================================================================
@@ -27,6 +27,13 @@ const (
 	tradeErrVehicleDistance uint8 = 0x65
 	tradeErrQuest           uint8 = 0xb0
 	tradeErrJob             uint8 = 5
+	// tradeErrOnlyTrader is 6182A0's 0x1860 (UIIT_MSG_STRGERR_ONLY_TRADER_
+	// CAN_BUY_SPECIALTY); tradeErrBuyerLevel its 0x184E, which the v1.150
+	// client shows no text for.
+	tradeErrOnlyTrader uint8 = 0x60
+	tradeErrBuyerLevel uint8 = 0x4e
+	// minTradeBuyerLevel is 6182A0's level floor (CGObjChar_GetLevel < 0x14).
+	minTradeBuyerLevel int64 = 20
 	// v1.150's 47 authored goods rows have stack caps 10 or 40.
 	maxTradeGoodsStack uint16  = 40
 	tradeVehicleRange  float64 = 1000.0
@@ -61,17 +68,63 @@ func (rt *Runtime) tradeAdmission(division string, c *enterworld.Character, npc 
 	if item.TradeOwner != c.Job.Alias && npc.TalkFlags&simulation.NpcTalkFlagThiefBuy == 0 {
 		return tradeErrOwner
 	}
-	if c.ActiveCOS == nil || !c.ActiveCOS.Summoned || c.ActiveCOS.CurrentHP <= 0 {
-		return tradeErrVehicleDistance
-	}
-	ref, valid := rt.cosReference(c.ActiveCOS)
-	if !valid || !isVehicleCOS(ref.TidWord) {
+	if !rt.transportSummoned(c) {
 		return tradeErrVehicleDistance
 	}
 	if rt.transportBeyond(division, c, tradeVehicleRange) {
 		return tradeErrVehicleDistance
 	}
 	return 0
+}
+
+/*
+================
+tradePurchaseAdmission
+
+6182A0, the trade goods arm of a shop purchase (CShopApp_CreatePurchasedPackageItems
+619123), in its order: 4EC860 admits only a player whose job state
+(CGObjPC_GetJobState, the worn suit's kind) is the trader's 1 and whose first
+COS is a transport, else 0x1860; then level 20 (0x184E), the merchant's
+required trade quest (0x18B0) and the transport within 1000 (0x1865). The
+0x404 branch refuses only the TID4 2 goods v1.150 never sells.
+================
+*/
+func (rt *Runtime) tradePurchaseAdmission(division string, c *enterworld.Character, npc simulation.NpcDef) uint8 {
+	if npc.TalkFlags&simulation.NpcTalkFlagSpecialTrade == 0 {
+		return tradeErrWrongMerchant
+	}
+	if enterworld.DressedJob(c) != domain.JobTrader || !rt.transportSummoned(c) {
+		return tradeErrOnlyTrader
+	}
+	if c.Level == nil || *c.Level < minTradeBuyerLevel {
+		return tradeErrBuyerLevel
+	}
+	if quest := commerce.RequiredTradeQuest(npc.Codename); quest != "" {
+		id := rt.Commerce.TradeQuests[quest]
+		if id == 0 || !slices.Contains(c.CompletedQuestIds, id) {
+			return tradeErrQuest
+		}
+	}
+	if rt.transportBeyond(division, c, tradeVehicleRange) {
+		return tradeErrVehicleDistance
+	}
+	return 0
+}
+
+/*
+================
+transportSummoned
+
+Whether the player's live COS is a summoned transport (4EC8A0,
+CGObjPC_FirstCOSIsTransport).
+================
+*/
+func (rt *Runtime) transportSummoned(c *enterworld.Character) bool {
+	if c.ActiveCOS == nil || !c.ActiveCOS.Summoned || c.ActiveCOS.CurrentHP <= 0 {
+		return false
+	}
+	ref, valid := rt.cosReference(c.ActiveCOS)
+	return valid && isVehicleCOS(ref.TidWord)
 }
 
 /*
