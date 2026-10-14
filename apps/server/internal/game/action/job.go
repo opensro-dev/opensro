@@ -251,7 +251,8 @@ func (rt *Runtime) HandleJobAlias(division string, c *enterworld.Character, payl
 		return jobAliasRefusal(jobErrWearing, mode, alias)
 	}
 	n := len(alias)
-	if !jobAliasShape.MatchString(alias) || n < domain.CharacterNameMinBytes || n > domain.CharacterNameMaxBytes {
+	if !jobAliasShape.MatchString(alias) || n < domain.CharacterNameMinBytes || n > domain.CharacterNameMaxBytes ||
+		!rt.nameAllowed(alias) {
 		return jobAliasRefusal(jobErrAliasRule, mode, alias)
 	}
 	if rt.jobAliasTaken(division, c, alias) {

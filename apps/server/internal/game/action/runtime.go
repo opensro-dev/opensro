@@ -29,6 +29,7 @@ import (
 	"opensro.online/server/internal/game/item/statuseffect"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/linkedpulse"
+	"opensro.online/server/internal/game/namefilter"
 	"opensro.online/server/internal/game/pk"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/social/chatfeed"
@@ -614,6 +615,9 @@ type Runtime struct {
 	// (stall_network.go, ConfigureStallNetwork).
 	Stalls          *stall.Registry
 	StallCategories map[[4]int64]uint32
+	// NameFilter is the native name filter (AbuseFilter.txt) player-chosen
+	// names pass (namefilter.go); ConfigureNameFilter loads it.
+	NameFilter *namefilter.Filter
 	// resurrections holds the unanswered resurrection proposals, one per
 	// dead player (resurrection.go).
 	resurrections resurrectionOffers

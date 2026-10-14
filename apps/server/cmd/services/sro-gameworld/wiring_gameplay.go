@@ -154,6 +154,9 @@ func newGameplayPlane(
 	if err := items.ConfigureStallNetwork(devPaths.TextdataDir); err != nil {
 		return nil, err
 	}
+	if err := items.ConfigureNameFilter(devPaths.TextdataDir); err != nil {
+		return nil, err
+	}
 	// SRO_SHOP_EXTRA_GOODS (port-only, not native): operator NPC shop goods;
 	// "off" is the v1.150 stock (commerce/extragoods.go).
 	extraGoods, err := commerce.ExtraGoodsFromEnv()
