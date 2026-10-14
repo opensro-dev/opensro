@@ -1,0 +1,421 @@
+/*
+===========================================================================
+
+economy.css - the treasury ledger page, on the Jangan theme's tokens
+
+Colours, frames and type come from theme.css. The two chart tones are
+fixed by job: minted gold is sky, burned gold is ochre (checked apart for
+normal, deutan, protan and tritan vision on the parchment surface, OKLab
+dE >= 19); a single-series level uses teal. Text never wears a series
+colour. Below 760px the tables become cards and the flags stack, so staff
+can triage from a phone.
+
+===========================================================================
+*/
+
+:root {
+	--economy-mint: var(--sky);
+	--economy-burn: var(--amber);
+	--economy-level: var(--teal);
+}
+
+.economy {
+	padding-bottom: 32px;
+}
+
+/* ----- Controls and tabs ----- */
+
+.economy-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 12px 16px;
+	padding: 14px 18px;
+	margin-bottom: 10px;
+}
+
+.economy-controls label {
+	display: grid;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--muted);
+}
+
+.economy-controls select {
+	min-width: 160px;
+}
+
+.economy-home {
+	margin-left: auto;
+	align-self: center;
+	color: var(--heading);
+}
+
+.economy-status {
+	margin: 0 0 12px;
+	color: var(--cream);
+	font-size: 13px;
+}
+
+.economy-tabs {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 12px;
+	overflow-x: auto;
+}
+
+.economy-tabs button {
+	padding: 9px 16px;
+	border: 1px solid var(--gold-soft);
+	border-radius: 4px;
+	background: var(--navy);
+	color: var(--cream);
+	font: 600 14px var(--serif);
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.economy-tabs button[aria-selected="true"] {
+	background: linear-gradient(180deg, var(--gold-bright), var(--roof));
+	color: var(--text);
+}
+
+.economy-count {
+	display: inline-block;
+	min-width: 20px;
+	margin-left: 4px;
+	padding: 0 6px;
+	border-radius: 10px;
+	background: var(--lacquer);
+	color: #fff1d2;
+	font-size: 12px;
+	text-align: center;
+}
+
+/* ----- Tiles ----- */
+
+.economy-tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.economy-tile {
+	display: grid;
+	gap: 4px;
+	padding: 14px 16px;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	background: var(--surface);
+	box-shadow: var(--shadow);
+}
+
+.economy-tile-label {
+	color: var(--muted);
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: .06em;
+}
+
+.economy-tile strong {
+	color: var(--heading);
+	font: 700 26px var(--serif);
+}
+
+.economy-tile small {
+	color: var(--faint);
+	font-size: 12px;
+}
+
+/* ----- Sections, charts, tables ----- */
+
+.economy-section {
+	margin-bottom: 12px;
+}
+
+.economy-note {
+	margin: 0;
+	padding: 0 18px 8px;
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.economy-figure,
+.economy-table {
+	padding: 6px 18px 16px;
+	overflow-x: auto;
+}
+
+.economy-empty {
+	margin: 0;
+	padding: 12px 0;
+	color: var(--muted);
+	font-style: italic;
+}
+
+.economy-chart {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.economy-chart .grid {
+	stroke: var(--line);
+	stroke-width: 1;
+}
+
+.economy-chart .zero {
+	stroke: var(--muted);
+	stroke-width: 1;
+}
+
+.economy-chart .axis {
+	fill: var(--muted);
+	font-size: 11px;
+}
+
+.economy-chart .line {
+	fill: none;
+	stroke-width: 2;
+	stroke-linejoin: round;
+	vector-effect: non-scaling-stroke;
+}
+
+.economy-chart .line.tone-mint,
+.economy-chart .dot.tone-mint {
+	stroke: var(--economy-mint);
+}
+
+.economy-chart .line.tone-burn,
+.economy-chart .dot.tone-burn {
+	stroke: var(--economy-burn);
+}
+
+.economy-chart .line.tone-level,
+.economy-chart .dot.tone-level {
+	stroke: var(--economy-level);
+}
+
+.economy-chart .dot {
+	fill: var(--surface);
+	stroke-width: 2;
+}
+
+.economy-chart .bar {
+	fill: var(--economy-level);
+}
+
+.economy-chart .hit {
+	fill: transparent;
+}
+
+.economy-chart .hit:hover {
+	fill: #8c5f1214;
+}
+
+.economy-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	margin: 0 0 6px;
+	padding: 0;
+	list-style: none;
+	color: var(--text);
+	font-size: 13px;
+}
+
+.economy-legend .swatch {
+	display: inline-block;
+	width: 14px;
+	height: 3px;
+	margin-right: 6px;
+	vertical-align: middle;
+	border-radius: 2px;
+}
+
+.swatch.tone-mint {
+	background: var(--economy-mint);
+}
+
+.swatch.tone-burn {
+	background: var(--economy-burn);
+}
+
+.economy-table table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+}
+
+.economy-table th,
+.economy-table td {
+	padding: 7px 10px;
+	border-bottom: 1px solid var(--line);
+	text-align: left;
+}
+
+.economy-table th {
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: .04em;
+}
+
+.economy-table .num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.economy-spark {
+	display: block;
+	width: 120px;
+	height: 24px;
+}
+
+.economy-spark path {
+	fill: none;
+	stroke: var(--economy-level);
+	stroke-width: 1.5;
+	vector-effect: non-scaling-stroke;
+}
+
+/* ----- Flags ----- */
+
+.economy-flags {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: 10px;
+	padding: 6px 18px 16px;
+}
+
+.economy-flag {
+	display: grid;
+	gap: 8px;
+	padding: 12px 14px;
+	border: 1px solid var(--line);
+	border-left: 4px solid var(--lacquer);
+	border-radius: 4px;
+	background: var(--wood);
+}
+
+.economy-flag-head {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 4px 10px;
+}
+
+.economy-flag-head strong {
+	color: var(--heading);
+}
+
+.economy-flag-head time {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.economy-flag dl {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 2px 12px;
+	margin: 0;
+	font-size: 13px;
+}
+
+.economy-flag dt {
+	color: var(--muted);
+}
+
+.economy-flag dd {
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+
+.economy-flag .button {
+	justify-self: start;
+	text-align: center;
+}
+
+/* ----- Narrow screens: cards, not wide tables ----- */
+
+@media (max-width: 760px) {
+	.economy-controls {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		padding: 12px;
+	}
+	.economy-controls label:first-child {
+		grid-column: 1 / -1;
+	}
+	.economy-controls select {
+		min-width: 0;
+		width: 100%;
+	}
+	.economy-home {
+		grid-column: 1 / -1;
+		margin-left: 0;
+	}
+	.economy-tiles {
+		grid-template-columns: 1fr 1fr;
+	}
+	.economy-tile strong {
+		font-size: 22px;
+	}
+	.economy-figure,
+	.economy-table,
+	.economy-flags {
+		padding-left: 12px;
+		padding-right: 12px;
+	}
+	.economy-flags {
+		grid-template-columns: 1fr;
+	}
+	.economy-flag .button {
+		justify-self: stretch;
+	}
+	.economy-cards,
+	.economy-cards tbody,
+	.economy-cards tr,
+	.economy-cards td {
+		display: block;
+		min-width: 0;
+	}
+	.economy-table table {
+		min-width: 0;
+	}
+	.economy-cards thead {
+		display: none;
+	}
+	.economy-cards tr {
+		padding: 8px 0;
+		border-bottom: 1px solid var(--line);
+	}
+	.economy-cards td {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+		padding: 2px 0;
+		border: 0;
+	}
+	.economy-cards td::before {
+		content: attr(data-label);
+		color: var(--muted);
+		font-size: 12px;
+	}
+	.economy-cards td:first-child {
+		color: var(--heading);
+		font-weight: 700;
+	}
+	.economy-cards td:first-child::before {
+		content: none;
+	}
+	.economy-pairs th,
+	.economy-pairs td {
+		padding-left: 4px;
+		padding-right: 4px;
+	}
+}

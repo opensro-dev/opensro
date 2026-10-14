@@ -1,6 +1,6 @@
 /*
 ===========================================================================
-main.mjs - loopback observatory, authenticated player recovery and invite keys
+main.mjs - loopback observatory, authenticated player recovery, invite keys and economy reads
 ===========================================================================
 */
 import { createServer } from "node:http";
@@ -10,6 +10,7 @@ import { allowedRequest, allowedMutation } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
 import { createHistory } from "./history.mjs";
+import { createEconomy } from "./economy.mjs";
 import { createInviteKeys, siteAdminURL } from "./invite-keys.mjs";
 import { clientPublicPath } from "../../../scripts/lib/generatedRoot.mjs";
 const port = Number( process.env.SRO_OBSERVATORY_PORT ?? 5190 );
@@ -36,6 +37,10 @@ const historySources = [ {
 	token: agentToken
 }, ...shards.map( row => ({ ...row, token }) ) ];
 const history = createHistory( historySources );
+// Each GameWorld's economy aggregates (economy.mjs), read with their own
+// token; absent, the Economy page says it is off.
+const economyToken = config.economyTokenFile ? (await readFile( config.economyTokenFile, "utf8" )).trim() : "";
+const economy = createEconomy( shards, economyToken );
 // The website's invite keys (opensro-web /internal/admin/invites), with the
 // console's own secret; absent, the Invite keys page says it is off.
 const siteAdmin = config.siteAdmin ?? null;
@@ -74,7 +79,11 @@ for (
 		"invites.js",
 		"invite-made.js",
 		"invites.css",
-		"request.js"
+		"request.js",
+		"economy.html",
+		"economy.js",
+		"economy-view.js",
+		"economy.css"
 	]
 ) files.set( "/" + file, file );
 /*
@@ -189,6 +198,7 @@ async function handleRequest( req, res ) {
 				operator: edge?.operator ?? "local-operator",
 				enabled: Boolean( token ),
 				invites: Boolean( siteAdminToken ),
+				economy: economy.enabled,
 				historySources: historySources.map( ( { id, name } ) => ({ id, name }) ),
 				shards: shards.map( ( { id, name } ) => ({ id, name }) )
 			} );
@@ -196,6 +206,11 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/history" ) {
 			const result = await history.request( url.searchParams );
+			respondJSON( res, result.status, result.body );
+			return;
+		}
+		if ( url.pathname.startsWith( "/api/economy/" ) ) {
+			const result = await economy.request( url.pathname, url.searchParams );
 			respondJSON( res, result.status, result.body );
 			return;
 		}

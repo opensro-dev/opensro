@@ -1,0 +1,109 @@
+<!doctype html>
+<!-- economy.html - read-only economy monitor: gold sources and sinks, item flows, concentration, anomaly flags. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3d0d09">
+<title>Economy · Silkroad Observatory</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/theme-boards.css">
+<link rel="stylesheet" href="/theme-fit.css">
+<link rel="stylesheet" href="/economy.css">
+<script type="module" src="/economy.js"></script>
+</head>
+<body>
+<aside class="rail">
+<a class="brand" href="/" aria-label="Silkroad Observatory home"><span class="seal" aria-hidden="true">長</span><span class="brand-text"><strong>SILKROAD</strong><em>ONLINE</em></span><b>OBSERVATORY</b><small>World operations</small></a>
+<nav aria-label="Dashboard views">
+<a href="/#overview">Overview</a>
+<a href="/#players">Players</a>
+<a href="/#world">World census</a>
+<a href="/#health">Runtime</a>
+<a href="/#items">Items</a>
+<a href="/#recovery">Player recovery</a>
+<a href="/history.html">Session history</a>
+<a href="/economy.html" class="active" aria-current="page">Economy</a>
+</nav>
+<div class="rail-foot"><span class="rail-label">SILKROAD CONNECTS THE WORLD</span><span class="rail-bottom">v 1.150</span></div>
+</aside>
+<div class="shell">
+<main class="economy art-jangan">
+<div class="page-heading">
+<div>
+<div class="eyebrow">TREASURY LEDGER</div>
+<h1>Economy</h1>
+<p>Where gold comes from and where it goes, who holds it, and what looks wrong. Read-only: nothing on this page changes the game.</p>
+</div>
+</div>
+
+<form id="economy-controls" class="panel economy-controls" aria-label="Economy filters">
+<label>Server<select id="economy-shard"></select></label>
+<label>Range<select id="economy-range"></select></label>
+<label>Division<select id="economy-division"><option value="">All divisions</option></select></label>
+<a class="economy-home" href="/">Console home</a>
+</form>
+<p id="economy-status" class="economy-status" role="status" aria-live="polite">Loading…</p>
+
+<div class="economy-tabs" role="tablist" aria-label="Economy views">
+<button role="tab" id="tab-overview" aria-controls="panel-overview" data-tab="overview" aria-selected="true">Overview</button>
+<button role="tab" id="tab-flows" aria-controls="panel-flows" data-tab="flows" aria-selected="false">Flows</button>
+<button role="tab" id="tab-trade" aria-controls="panel-trade" data-tab="trade" aria-selected="false">Trade</button>
+<button role="tab" id="tab-flags" aria-controls="panel-flags" data-tab="flags" aria-selected="false">Flags <span id="flag-count" class="economy-count" hidden></span></button>
+</div>
+
+<section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" class="economy-panel">
+<div id="overview-tiles" class="economy-tiles"></div>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">SOURCES AND SINKS</div><h2>Gold minted and burned</h2></div></div>
+<p class="economy-note">Per bucket. Transfers between players move gold without minting or burning it and are not counted here.</p>
+<div id="chart-flow" class="economy-figure"></div>
+</section>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">MONEY SUPPLY</div><h2>Gold held by characters</h2></div></div>
+<p class="economy-note">From the periodic store snapshot, so it moves in steps.</p>
+<div id="chart-supply" class="economy-figure"></div>
+</section>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">CONCENTRATION</div><h2>Who holds the gold</h2></div><span id="snapshot-at" class="tag">—</span></div>
+<div id="distribution" class="economy-table"></div>
+</section>
+</section>
+
+<section id="panel-flows" role="tabpanel" aria-labelledby="tab-flows" class="economy-panel" hidden>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">LEDGER REASONS</div><h2>Every source and sink</h2></div></div>
+<p class="economy-note">Totals for the range, largest first within mints, burns and transfers. Reasons the console does not know yet are shown by their ledger name.</p>
+<div id="flows" class="economy-table"></div>
+</section>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">ITEMS</div><h2>Equipment by plus</h2></div></div>
+<div id="chart-plus" class="economy-figure"></div>
+</section>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">ITEMS</div><h2>Seal items by degree</h2></div></div>
+<div id="sox" class="economy-table"></div>
+</section>
+</section>
+
+<section id="panel-trade" role="tabpanel" aria-labelledby="tab-trade" class="economy-panel" hidden>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">CARAVANS</div><h2>Trade</h2></div></div>
+<div id="trade" class="economy-table"></div>
+</section>
+</section>
+
+<section id="panel-flags" role="tabpanel" aria-labelledby="tab-flags" class="economy-panel" hidden>
+<section class="panel economy-section">
+<div class="panel-heading"><div><div class="eyebrow">FOR A HUMAN TO CHECK</div><h2>Anomaly flags</h2></div></div>
+<p class="economy-note">A flag is a reason to look, not a verdict. Open the character in Player recovery to inspect them; this page takes no action.</p>
+<div id="flags" class="economy-flags"></div>
+</section>
+</section>
+
+<footer><span><span class="tiny-star">◆</span>SILKROAD OBSERVATORY / TREASURY LEDGER</span></footer>
+</main>
+</div>
+</body>
+</html>

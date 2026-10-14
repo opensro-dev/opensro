@@ -316,6 +316,13 @@ async function init() {
 			option.textContent = shard.name;
 			return option;
 		} ) );
+		// The Economy page's flag links arrive as /?shard=&character=#recovery;
+		// they only fill the search, the operator still chooses to inspect.
+		const linked = new URLSearchParams( location.search );
+		if ( config.shards.some( shard => shard.id === linked.get( "shard" ) ) ) {
+			byID( "shard" ).value = linked.get( "shard" );
+		}
+		if ( linked.get( "character" ) ) byID( "character" ).value = linked.get( "character" ).slice( 0, 64 );
 		if ( !config.enabled ) {
 			status.textContent = "Player operations are not configured on this console.";
 		}
