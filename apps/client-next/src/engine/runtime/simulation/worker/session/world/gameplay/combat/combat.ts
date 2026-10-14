@@ -935,10 +935,8 @@ export function createCombat(
 		/*
 		================
 		wireHp
-		The last HP the server sent for gid (0x33A6, the entry seed): native
-		+0x440, the value CAutoPotion_CheckAndUseHP (70C550) compares. Hit
-		results never lower it; the displayed HP is the vitals prediction
-		and, on the main thread, the effective HP (+0x450).
+		The server's last HP for gid (0x33A6, entry seed): native +0x440, as
+		70C550 compares. Hit results never lower it (display: vitals.hp).
 		================
 		*/
 		wireHp( gid: number ): number | undefined {
