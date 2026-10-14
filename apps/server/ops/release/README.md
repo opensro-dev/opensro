@@ -149,7 +149,10 @@ length changed, a layout version raised. Cannot sustain: a stream the old
 counterpart decodes but cannot live with, such as a message it keeps and
 never retires until it fails (protocol 8: the token-0 effect adds every
 heal sends, which a protocol-7 client kept until it threw at 2048 rows).
-Either needs a protocol bump and a coordinated release. A new opcode or a
+Either needs a protocol bump and a coordinated release. An owner may also
+bump for an exchange the old client cannot take part in (protocol 9, F8: a
+protocol-8 tab ignores the friend request's prompt, so every request to it
+cancels), so the 426 reloads every open tab. A new opcode or a
 new JSON key is not one when the old side ignores it; the browser client
 ignores both. Before
 publishing one component alone, diff the other component's decoders between

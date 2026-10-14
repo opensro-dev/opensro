@@ -44,12 +44,21 @@ type Contracts struct {
 	Roster     int // the character list
 	References int // the public reference file beside the transport
 	Effects    int // the attached-effect stream the transport sends
+	Friends    int // the friend request's prompt and consent
 }
 
 // Current is the release protocol this build speaks, and the contract
 // versions it fixes. Encoders version their payloads from these.
 const (
-	Current = 8
+	Current = 9
+	// The friend contract: 1 asks the target first, as the original does
+	// (#965/#966): S->C 0x7164 prompts the target, its C->S 0x3012 {jid,
+	// serial, accept} answers, and 0xB164/0xB5DB carry the results. A
+	// protocol-8 client decodes nothing wrong but ignores the prompt, so
+	// every request to it waits out the 30 s window and cancels. The owner
+	// made that a protocol change (2026-10-14, F8): the bump sends every
+	// open tab the 426 that reloads it onto a client that can answer.
+	FriendsContract = 1
 	// The attached-effect contract: 1 sends every heal, cure and revival
 	// recipient a token-0 0xB419 (593F50 -> 59AF00). No B6A0 ever ends one,
 	// so a client must retire it itself; a protocol-7 client keeps every
@@ -72,13 +81,15 @@ const (
 // history names every protocol a release has shipped. A browser and a
 // server agree only when they speak the same one.
 var history = map[int]Contracts{
-	2:       {Bootstrap: 2, Roster: 1, References: 1},
-	3:       {Bootstrap: 2, Roster: 2, References: 1},
-	4:       {Bootstrap: 2, Roster: 2, References: 2},
-	5:       {Bootstrap: 2, Roster: 2, References: 2, Companions: 1},
-	6:       {Bootstrap: 2, Roster: 2, References: 3, Companions: 1},
-	7:       {Bootstrap: 2, Roster: 2, References: 3, Companions: 2},
-	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract, Effects: EffectsContract},
+	2: {Bootstrap: 2, Roster: 1, References: 1},
+	3: {Bootstrap: 2, Roster: 2, References: 1},
+	4: {Bootstrap: 2, Roster: 2, References: 2},
+	5: {Bootstrap: 2, Roster: 2, References: 2, Companions: 1},
+	6: {Bootstrap: 2, Roster: 2, References: 3, Companions: 1},
+	7: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2},
+	8: {Bootstrap: 2, Roster: 2, References: 3, Companions: 2, Effects: 1},
+	Current: {Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
+		Effects: EffectsContract, Friends: FriendsContract},
 }
 
 /*

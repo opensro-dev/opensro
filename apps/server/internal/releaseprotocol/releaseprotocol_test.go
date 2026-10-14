@@ -95,7 +95,8 @@ TestEveryReleasedProtocolNamesDistinctContracts
 */
 func TestEveryReleasedProtocolNamesDistinctContracts(t *testing.T) {
 	current, ok := ContractsOf(Current)
-	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract, Effects: EffectsContract}) {
+	if !ok || current != (Contracts{Bootstrap: BootstrapContract, Roster: RosterContract, References: ReferencesContract, Companions: CompanionsContract,
+		Effects: EffectsContract, Friends: FriendsContract}) {
 		t.Fatalf("protocol %d names %+v, want the current contract constants", Current, current)
 	}
 	seen := map[Contracts]int{}
@@ -160,5 +161,35 @@ func TestAClientWithoutOneShotRetirementIsRefused(t *testing.T) {
 	}
 	if EffectsContract < retiresOneShots {
 		t.Fatalf("EffectsContract = %d; this build sends token-0 one-shots", EffectsContract)
+	}
+}
+
+/*
+================
+TestAClientThatCannotAnswerAFriendRequestIsRefused
+
+A protocol-8 browser ignores the target's friend prompt (S->C 0x7164) and
+never sends the 0x3012 consent, so every request to it waits out the
+window and cancels. It must be refused with 426 and told to reload.
+================
+*/
+func TestAClientThatCannotAnswerAFriendRequestIsRefused(t *testing.T) {
+	const answersPrompts = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Friends >= answersPrompts {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (friends %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Friends, reached, recorder.Code)
+		}
+		refused++
+	}
+	if _, ok := history[8]; !ok || refused == 0 {
+		t.Fatal("the protocol-8 client is not in the history this test refuses")
+	}
+	if FriendsContract < answersPrompts {
+		t.Fatalf("FriendsContract = %d; this build prompts friend request targets", FriendsContract)
 	}
 }
