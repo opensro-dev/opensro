@@ -2,7 +2,7 @@
 
 [![Discord](https://img.shields.io/discord/1521398829260210337?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/RUua9HY657)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/skillman1337)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/opensro)
 
 **Silkroad Online v1.150 (Legend III), rebuilt end to end: play it in your browser.**
 
@@ -83,9 +83,23 @@ New here? Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**: setup, the native-f
 
 ---
 
+## ❤️ Support the project
+
+**OpenSRO is and will always be open source and free to play, so everyone can enjoy it, learn from it and build on it.** If you want to help, you can support it on **[Ko-fi](https://ko-fi.com/opensro)**.
+
+- 💸 **Where it goes:** strictly to the project's development: the server bill, dev tools and assets. Nothing else.
+- 🎭 **What supporters get:** cosmetic thanks only: a Supporter role on Discord now, with an in-game title and a site badge coming. **No pay-to-win, ever:** donating never changes stats, drops, EXP, gold, alchemy, PvP, queues or trading.
+- 🎮 **Never required:** every player gets the same game, whether they donate or not.
+- 💬 **After donating:** DM a staff member on [Discord](https://discord.gg/RUua9HY657) with your Ko-fi name. Staff never ask for passwords or payment details.
+
+The full promise is in [SUPPORT.md](SUPPORT.md).
+
+---
+
 ## 📚 More
 
 - 📖 [docs/README.md](docs/README.md): the documentation index (architecture, asset pipeline, profiling, design notes)
 - 🚢 [RELEASE.md](RELEASE.md): the release checklist
 - 🔒 [SECURITY.md](SECURITY.md): how to report a vulnerability
+- ❤️ [SUPPORT.md](SUPPORT.md): getting help, and how donations are used
 - ⚖️ [AGPL-3.0-or-later](LICENSE); origin, trademark and asset scope are in [NOTICE.md](NOTICE.md)
