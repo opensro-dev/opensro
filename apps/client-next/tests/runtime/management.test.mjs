@@ -228,6 +228,19 @@ test("guild baseline and deltas commit only after complete validated frames", ()
 	state = socialPacket( state, frame( 0x3b29, [ 3, ...u32( 1 ), 2 ] ) );
 	assert.equal( defined( state ).guild, null );
 });
+test("a guild update before the guild record is consumed, as native, not a disconnect", () => {
+	// A prod incident (packet_application_failed, 0x3B29 "Guild update without
+	// baseline"): a delta reached a character before its 0x32C4 record. 762040
+	// writes through CCharacterDependentData_GetGuildData, which always
+	// exists, and the later record overwrites it.
+	const initial = emptySocial( "Me" );
+	const update = frame( 0x3b29, [ 5, 0x18, ...u32( 900 ), ...str( "New" ), ...str( "Body" ) ] );
+	const after = socialPacket( initial, update );
+	assert.equal( defined( after ).guild, null );
+	const state = socialPacket( after, frame( 0x32c4, guildBody ) );
+	assert.equal( defined( defined( state ).guild ).name, "Guild" );
+	assert.equal( defined( defined( state ).guild ).gp, 100, "the record, not the early delta, is the truth" );
+});
 test("guild and party consent share accept bytes but have different decline bytes", () => {
 	const state = socialPacket( emptySocial(), frame( 0x3393, [ 5, ...u32( 2 ) ] ) );
 	assert.deepEqual( [ ...socialRequest( state, { kind: "social-consent", accept: true } ).payload ], [ 1, 1 ] );

@@ -544,10 +544,15 @@ export function socialPacket(
 				warCountdown: undefined,
 				warResult: undefined
 			};
+		} else if ( !next.guild ) {
+			// 762040 never asks whether the player is in a guild: every arm
+			// writes through CCharacterDependentData_GetGuildData, a member of
+			// the character data that always exists, and the full guild record
+			// that arrives later overwrites it. An update before that record
+			// (a member joining while this character enters) is consumed and
+			// changes nothing here, instead of failing the session.
+			o = p.length;
 		} else {
-			if ( !next.guild ) {
-				throw Error( "Guild update without baseline" );
-			}
 			let guild = next.guild;
 			if ( type === 0x0d ) {
 				const row = { id: u32(), name: str(), level: u8(), master: str(), model: u32(), flags: u8() };
