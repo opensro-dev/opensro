@@ -70,7 +70,8 @@ func TestRankingsOrderEveryVisiblePlayer(t *testing.T) {
 		t.Fatalf("by uniques %+v", byUniques.Rows[0])
 	}
 	byGear := rankingNames(t, s, "/public/v1/rankings?by=gear")
-	if byGear.Rows[0].Name != "Kekw" || byGear.Rows[0].Gear != (Gear{PlusTotal: 7, BestPlus: 7}) {
+	// Without item grades every piece is degree 0 and unsealed: points are the plus.
+	if g := byGear.Rows[0].Gear; byGear.Rows[0].Name != "Kekw" || g.PlusTotal != 7 || g.BestPlus != 7 || g.Points != 7 {
 		t.Fatalf("by gear %+v", byGear.Rows[0])
 	}
 	european := rankingNames(t, s, "/public/v1/rankings?race=european")
@@ -108,4 +109,97 @@ func join(names []string) string {
 		out += n
 	}
 	return out
+}
+
+/*
+================
+TestGearPointsRankDegreeSealAndPlus
+
+The owner's formula (BUG-082): 10 x degree + seal bonus (Star 10, Moon 15,
+Sun 20) + plus per worn piece, summed; ties go to the strongest piece.
+================
+*/
+func TestGearPointsRankDegreeSealAndPlus(t *testing.T) {
+	// The three worked examples.
+	if got := gearPoints(10, SealSun, 3); got != 123 {
+		t.Errorf("10th-degree +3 Sun = %d, want 123", got)
+	}
+	if got := gearPoints(11, SealNone, 0); got != 110 {
+		t.Errorf("11th-degree +0 = %d, want 110", got)
+	}
+	if got := gearPoints(8, SealStar, 12); got != 102 {
+		t.Errorf("8th-degree +12 Star = %d, want 102", got)
+	}
+	if got := gearPoints(8, SealMoon, 0); got != 95 {
+		t.Errorf("8th-degree Moon = %d, want 95", got)
+	}
+
+	// Grades by reference: 1 low +7 normal, 2 a 10th-degree Sun, 3 an
+	// 11th-degree normal piece.
+	grades := map[uint32][2]int{1: {1, SealNone}, 2: {10, SealSun}, 3: {11, SealNone}}
+	f := newFixture()
+	lvl := func(n int64) *int64 { return &n }
+	worn := func(ref uint32, plus int64) domain.InventoryRow {
+		return domain.InventoryRow{Slot: 0, RefObjID: ref, Plus: plus}
+	}
+	f.chars = []*domain.Character{
+		{ID: 10, Name: "PlusFarmer", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(20),
+			MissionInventory: []domain.InventoryRow{worn(1, 7)}},
+		{ID: 11, Name: "SunHolder", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(90),
+			MissionInventory: []domain.InventoryRow{worn(2, 3)}},
+		{ID: 12, Name: "Plain", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(95),
+			MissionInventory: []domain.InventoryRow{worn(3, 0)}},
+	}
+	s := f.service()
+	s.src.ItemGrade = func(ref uint32) (int, int, bool) {
+		g, ok := grades[ref]
+		return g[0], g[1], ok
+	}
+	out := rankingNames(t, s, "/public/v1/rankings?by=gear")
+	names := []string{}
+	for _, row := range out.Rows {
+		names = append(names, row.Name)
+	}
+	if want := "SunHolder,Plain,PlusFarmer"; join(names) != want {
+		t.Fatalf("by gear %s, want %s (a high plus on low gear no longer leads)", join(names), want)
+	}
+	if out.Rows[0].Gear.Points != 123 || out.Rows[0].Gear.PlusTotal != 3 {
+		t.Fatalf("SunHolder gear %+v, want 123 points and plus 3", out.Rows[0].Gear)
+	}
+}
+
+/*
+================
+TestEquipmentGradeReadsClassAndRarity
+
+itemdata rows seen in the 1.150 data: ITEM_CH_SWORD_08_A_RARE is class 22,
+rarity 2 (8th degree, Star); B and C are 23 and 24.
+================
+*/
+func TestEquipmentGradeReadsClassAndRarity(t *testing.T) {
+	sword := [4]int64{3, 1, 6, 2}
+	cases := []struct {
+		class        int
+		rarity       int64
+		degree, seal int
+	}{
+		{22, 2, 8, SealStar},
+		{23, 2, 8, SealMoon},
+		{24, 2, 8, SealSun},
+		{22, 0, 8, SealNone},
+		{1, 0, 1, SealNone},
+		{33, 2, 11, SealSun},
+	}
+	for _, c := range cases {
+		degree, seal, ok := EquipmentGrade(sword, c.class, c.rarity)
+		if !ok || degree != c.degree || seal != c.seal {
+			t.Errorf("class %d rarity %d = %d/%d/%v, want %d/%d", c.class, c.rarity, degree, seal, ok, c.degree, c.seal)
+		}
+	}
+	if _, _, ok := EquipmentGrade([4]int64{3, 3, 1, 1}, 5, 0); ok {
+		t.Error("an expendable is not equipment")
+	}
+	if _, _, ok := EquipmentGrade(sword, 0, 0); ok {
+		t.Error("a class-0 row has no degree")
+	}
 }

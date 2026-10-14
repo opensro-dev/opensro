@@ -137,7 +137,7 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 			continue
 		}
 		row := RankingRow{Name: c.Name, Race: race, Gender: gender, Level: level(c), UniqueKills: killsBy[c.ID],
-			ExpPercent: s.expPercent(c), Gear: gearScore(c)}
+			ExpPercent: s.expPercent(c), Gear: s.gearScore(c)}
 		if job := jobName(c.Job.Type); job != "none" {
 			row.Job = job
 		}
@@ -182,11 +182,11 @@ func rankedBefore(by string, a, b RankingRow, reached map[string]int64) bool {
 			return a.Level > b.Level
 		}
 	case rankByGear:
-		if a.Gear.PlusTotal != b.Gear.PlusTotal {
-			return a.Gear.PlusTotal > b.Gear.PlusTotal
+		if a.Gear.Points != b.Gear.Points {
+			return a.Gear.Points > b.Gear.Points
 		}
-		if a.Gear.BestPlus != b.Gear.BestPlus {
-			return a.Gear.BestPlus > b.Gear.BestPlus
+		if a.Gear.best != b.Gear.best {
+			return a.Gear.best > b.Gear.best
 		}
 		if a.Level != b.Level {
 			return a.Level > b.Level
@@ -230,21 +230,95 @@ func (s *Service) expPercent(c *domain.Character) float64 {
 	return math.Round(min(max(percent, 0), 100)*10) / 10
 }
 
+// Seal tiers, as ItemGrade reports them.
+const (
+	SealNone = iota
+	SealStar
+	SealMoon
+	SealSun
+)
+
+// Gear points (owner decision 2026-10-14, BUG-082; website only): each
+// degree is worth gearPointsPerDegree, a seal adds its tier's bonus (a Star
+// about one degree, as players value it), and each plus one point, so a
+// +10 is worth a degree too.
+const gearPointsPerDegree = 10
+
+var gearSealBonus = [...]int{SealNone: 0, SealStar: 10, SealMoon: 15, SealSun: 20}
+
+// Item data facts EquipmentGrade reads: equipment type ids (3, 1, ...),
+// the sealed rarity, and the three grades (A, B, C) per degree.
+const (
+	equipmentTypeID1 = 3
+	equipmentTypeID2 = 1
+	sealedRarity     = 2
+	gradesPerDegree  = 3
+)
+
 /*
 ================
-gearScore
+EquipmentGrade
 
-The plus of every worn piece (equipment sockets 0..12): their sum and the
-highest.
+An item reference's degree and seal tier from its itemdata row: equipment
+is type 3/1; its itemClass counts three grades per degree (A, B, C: a
+degree-8 sword is class 22, 23 or 24), so degree = (class - 1) / 3 + 1;
+on a sealed piece (rarity 2, the _A/_B/_C_RARE and _RARE_HONOR rows) the
+grade is the seal: A Star, B Moon, C Sun. ok is false for anything else.
 ================
 */
-func gearScore(c *domain.Character) Gear {
+func EquipmentGrade(typeIDs [4]int64, itemClass int, rarity int64) (degree, seal int, ok bool) {
+	if typeIDs[0] != equipmentTypeID1 || typeIDs[1] != equipmentTypeID2 || itemClass <= 0 {
+		return 0, SealNone, false
+	}
+	degree = (itemClass-1)/gradesPerDegree + 1
+	if rarity == sealedRarity {
+		seal = (itemClass-1)%gradesPerDegree + SealStar
+	}
+	return degree, seal, true
+}
+
+/*
+================
+gearPoints
+
+One worn piece's points: 10 x degree + seal bonus + plus.
+================
+*/
+func gearPoints(degree, seal, plus int) int {
+	bonus := 0
+	if seal > SealNone && seal < len(gearSealBonus) {
+		bonus = gearSealBonus[seal]
+	}
+	return gearPointsPerDegree*max(degree, 0) + bonus + plus
+}
+
+/*
+================
+Service.gearScore
+
+Every worn piece (equipment sockets 0..12): the plus sum and highest, and
+the gear points the ranking orders by, with the strongest piece's points
+as its first tie-break.
+================
+*/
+func (s *Service) gearScore(c *domain.Character) Gear {
 	var g Gear
 	for _, row := range c.MissionInventory {
-		if row.Slot >= 0 && row.Slot < equipmentSlots && row.RefObjID != 0 {
-			g.PlusTotal += int(row.Plus)
-			g.BestPlus = max(g.BestPlus, int(row.Plus))
+		if row.Slot < 0 || row.Slot >= equipmentSlots || row.RefObjID == 0 {
+			continue
 		}
+		plus := int(row.Plus)
+		g.PlusTotal += plus
+		g.BestPlus = max(g.BestPlus, plus)
+		degree, seal := 0, SealNone
+		if s.src.ItemGrade != nil {
+			if d, sl, ok := s.src.ItemGrade(row.RefObjID); ok {
+				degree, seal = d, sl
+			}
+		}
+		points := gearPoints(degree, seal, plus)
+		g.Points += points
+		g.best = max(g.best, points)
 	}
 	return g
 }

@@ -282,10 +282,14 @@ type ChatResponse struct {
 	Lines []ChatLine `json:"lines"`
 }
 
-// Gear is a ranked player's worn equipment plus: the sum and the highest.
+// Gear is a ranked player's worn equipment: the plus sum and highest, and
+// the gear points the ranking orders by (rankings.go gearPoints).
 type Gear struct {
 	PlusTotal int `json:"plusTotal"`
 	BestPlus  int `json:"bestPlus"`
+	Points    int `json:"points"`
+	// best is the strongest single piece's points, the first tie-break.
+	best int
 }
 
 // RankingRow is one visible player in a ranking. ReachedAt is when the

@@ -103,6 +103,10 @@ type Sources struct {
 	UniqueName func(refObjID uint32) string
 	// GuildOf returns the character's guild name and rank, or "" for none.
 	GuildOf func(c *domain.Character) (name, rank string)
+	// ItemGrade returns an equipment reference's degree and seal tier
+	// (SealNone, SealStar, SealMoon, SealSun); ok is false for a reference
+	// that is not equipment. Nil grades every piece degree 0, unsealed.
+	ItemGrade func(refObjID uint32) (degree, seal int, ok bool)
 	// HasDurability reports whether an item reference carries durability
 	// (itemdata Dur_U above 0); nil reports it for every item.
 	HasDurability func(refObjID uint32) bool

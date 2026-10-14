@@ -332,6 +332,21 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 			ref, ok := items.ItemRefByID(refObjID)
 			return ok && ref != nil && ref.MaxDurability > 0
 		},
+		ItemGrade: func(refObjID uint32) (int, int, bool) {
+			items := gameplay.deps.ItemReferences()
+			if items == nil {
+				return 0, publicstats.SealNone, false
+			}
+			ref, ok := items.ItemRefByID(refObjID)
+			if !ok || ref == nil {
+				return 0, publicstats.SealNone, false
+			}
+			class, ok := ref.NativeFields.Lookup("itemClass")
+			if !ok {
+				return 0, publicstats.SealNone, false
+			}
+			return publicstats.EquipmentGrade(ref.TypeIDs, int(class), ref.Rarity)
+		},
 		ModelRef: gameplay.deps.CharacterModelRef,
 		Online: func(characterID int64) bool {
 			for _, view := range bridge.SnapshotSessionViews() {
