@@ -100,3 +100,30 @@ func TestRelocateStrandedSpawnLeavesTheReportedTree(t *testing.T) {
 		t.Fatal("open ground beside the tree must pass through")
 	}
 }
+
+/*
+================
+TestInsideClosedObjectIgnoresAPoseFarAboveIt
+
+A pose over the trunk's footprint but far above its cells (a bridge or a
+deck over it) is not enclosed; one at the trunk's own height is.
+================
+*/
+func TestInsideClosedObjectIgnoresAPoseFarAboveIt(t *testing.T) {
+	v := realAuthorityValidator(t)
+	ground, ok := v.TerrainHeightAt(0x5F6A, 1765, 1358)
+	if !ok {
+		t.Fatal("no terrain height under the reported tree")
+	}
+	at := func(y float64) simulation.Spawn {
+		return simulation.Spawn{RegionID: 0x5F6A, X: 1765, Y: y, Z: 1358}
+	}
+	if _, inside := v.InsideClosedObject(at(ground)); !inside {
+		t.Fatal("the trunk's own height must be enclosed")
+	}
+	for _, y := range []float64{ground + 40, ground - 40} {
+		if asset, inside := v.InsideClosedObject(at(y)); inside {
+			t.Fatalf("y %.1f (ground %.1f) reported inside asset %d", y, ground, asset)
+		}
+	}
+}

@@ -26,13 +26,21 @@ import (
 // (objectnav_collision.go).
 const outlineBlocks = 0x03
 
+// closedObjectYSlack is how far above or below a closed mesh's height range
+// a pose still counts as inside it. Inferred, not native: a stand on the
+// object's footprint sits within a step of its cells (the reported trunk's
+// cells are 1 unit above the terrain), while a bridge or deck over the
+// footprint is tens of units higher and is not enclosed.
+const closedObjectYSlack = 10
+
 /*
 ================
 InsideClosedObject
 
 The asset of a closed object (no link edges, every outline edge blocking)
-whose nav cells contain the pose in x/z, or false. Only the pose's own
-region entry is consulted.
+whose nav cells contain the pose in x/z, with the pose's height within
+closedObjectYSlack of the mesh's height range, or false. Only the pose's
+own region entry is consulted.
 ================
 */
 func (v *WaterValidator) InsideClosedObject(pose simulation.Spawn) (int, bool) {
@@ -53,6 +61,9 @@ func (v *WaterValidator) InsideClosedObject(pose simulation.Spawn) (int, bool) {
 		lz := -dx*object.sinYaw + dz*object.cosYaw
 		for _, mesh := range object.meshes {
 			if lx < mesh.minX || lx > mesh.maxX || lz < mesh.minZ || lz > mesh.maxZ {
+				continue
+			}
+			if ly := pose.Y - object.placement.y; ly < mesh.minY-closedObjectYSlack || ly > mesh.maxY+closedObjectYSlack {
 				continue
 			}
 			if closedMesh(mesh) && meshCellContains(mesh, lx, lz) {
