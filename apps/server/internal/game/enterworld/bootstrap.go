@@ -303,6 +303,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		FastDenReturn:        deps.FastDenReturn,
 		TradeTiers:           deps.TradeTiers,
 		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
+		MoonlitThiefSuit:     deps.MoonlitThiefSuit,
 	}
 }
 

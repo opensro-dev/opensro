@@ -28,6 +28,7 @@ import { publicRoot } from "../world/paths.mjs";
 import { readPublishedAssetBytesSync } from "../../lib/publishedAsset.mjs";
 import { publishBytesAtomically } from "../shared/atomicPublish.mjs";
 import { writeIntoPublicTreeSync } from "../shared/publicWrite.mjs";
+import { MOONLIT_MESHES, moonlitGlb, moonlitModelPath } from "./moonlitThiefSuit.mjs";
 
 // The equipment slots equipmentGlowModelIds reads glows for.
 const GLOW_SLOT_WEAPON = 6;
@@ -73,6 +74,46 @@ async function animatedEquipmentEntry( row, paths, cache ) {
 	}
 	cache.set( key, entry );
 	return entry;
+}
+
+/*
+================
+publishMoonlitVariants
+
+Port-only, not native: each level-20 thief suit's body entry gains a
+moonlit entry, the higher suit's retail mesh with the Moonlit Ash texture
+(moonlitThiefSuit.mjs). The higher suit's own entry is untouched, so its
+wearers keep the retail look. One variant model per mesh and body.
+================
+*/
+async function publishMoonlitVariants( records ) {
+	const meshes = new Map(), variants = new Map();
+	for ( const record of Object.values( records ) ) {
+		for ( const [body, entry] of Object.entries( record.bodies ) ) {
+			if ( entry ) meshes.set( record.model + "|" + body, entry );
+		}
+	}
+	for ( const record of Object.values( records ) ) {
+		const moonlit = MOONLIT_MESHES.get( record.model );
+		if ( !moonlit ) continue;
+		for ( const [body, entry] of Object.entries( record.bodies ) ) {
+			if ( !entry ) continue;
+			const target = meshes.get( moonlit.mesh + "|" + body );
+			if ( !target || target.auxiliary ) throw Error( `Moonlit: no static ${moonlit.mesh} model for ${body}` );
+			let variant = variants.get( target.glb );
+			if ( !variant ) {
+				variant = { ...target, glb: moonlitModelPath( target.glb ) };
+				await publishBytesAtomically(
+					path.join( publicRoot, variant.glb ),
+					moonlitGlb( readPublishedAssetBytesSync( target.glb, publicRoot ), moonlit.warmCloth )
+				);
+				variants.set( target.glb, variant );
+			}
+			entry.moonlit = variant;
+		}
+	}
+	if ( variants.size !== MOONLIT_MESHES.size ) throw Error( "Moonlit: expected one model per level-20 thief mesh" );
+	console.log( `[equipment] ${variants.size} Moonlit Ash thief suit models` );
 }
 
 /*
@@ -181,6 +222,7 @@ export async function buildEquipmentVisuals( dress ) {
 			equipmentGlowGlb( readPublishedAssetBytesSync( asset, publicRoot ), ids, glows )
 		);
 	}
+	await publishMoonlitVariants( out );
 	const metadata = { ...dress, equipment: out };
 	await publishEquipmentParticleMetadata( metadata );
 	dress.specialGlows = metadata.specialGlows;

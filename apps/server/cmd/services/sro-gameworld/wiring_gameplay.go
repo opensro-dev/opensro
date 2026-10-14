@@ -582,6 +582,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.deps.JobSuitHidesArmor {
 		log.Infof("job: trader and hunter suits hide worn armour (%s)", action.EnvJobSuitHidesArmor)
 	}
+	// Port-only, not native: level-20 thief suits wear the Moonlit Ash look
+	// (presentation, published to the client).
+	game.deps.MoonlitThiefSuit = action.MoonlitThiefSuitFromEnv()
+	if game.deps.MoonlitThiefSuit {
+		log.Infof("job: level-20 thief suits wear Moonlit Ash (%s)", action.EnvMoonlitThiefSuit)
+	}
 	game.items.FastDenReturn = action.FastDenReturnFromEnv()
 	game.deps.FastDenReturn = game.items.FastDenReturn
 	if game.items.FastDenReturn {

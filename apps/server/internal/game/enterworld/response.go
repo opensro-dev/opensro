@@ -265,6 +265,9 @@ type BootstrapResult struct {
 	// JobSuitHidesArmor tells the client that trader and hunter suits hide
 	// worn armour as thief suits do (port-only, not native; false is native).
 	JobSuitHidesArmor bool
+	// MoonlitThiefSuit tells the client to draw the level-20 thief suits as
+	// Moonlit Ash (port-only, not native; false is native).
+	MoonlitThiefSuit bool
 }
 
 /*
@@ -319,6 +322,7 @@ type bootstrapSuccessView struct {
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
 	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
+	MoonlitThiefSuit          bool                     `json:"moonlitThiefSuit,omitempty"`
 }
 
 /*
@@ -398,6 +402,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
 		JobSuitHidesArmor:         r.JobSuitHidesArmor,
+		MoonlitThiefSuit:          r.MoonlitThiefSuit,
 	})
 }
 

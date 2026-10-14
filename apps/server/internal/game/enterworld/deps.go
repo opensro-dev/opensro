@@ -70,6 +70,9 @@ type Deps struct {
 	// JobSuitHidesArmor publishes the port-only SRO_JOB_SUIT_HIDES_ARMOR
 	// rule (action/jobsuitarmor.go); false is native.
 	JobSuitHidesArmor bool
+	// MoonlitThiefSuit publishes the port-only SRO_MOONLIT_THIEF_SUIT rule
+	// (action/moonlitthiefsuit.go); false is native.
+	MoonlitThiefSuit bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

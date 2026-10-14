@@ -636,6 +636,9 @@ export interface GameplayState {
 	// The server's port-only SRO_JOB_SUIT_HIDES_ARMOR rule, published at world
 	// entry: trader and hunter suits hide worn armour (equipment-visuals.ts).
 	readonly jobSuitHidesArmor?: boolean;
+	// The server's port-only SRO_MOONLIT_THIEF_SUIT rule, published at world
+	// entry: level-20 thief suits draw the Moonlit Ash model (equipment-appearance.ts).
+	readonly moonlitThiefSuit?: boolean;
 	// The reverse return scroll's map table: empty unless the server's
 	// port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
 	readonly reverseMapPoints?: readonly import("@/engine/foundation/gameplay/reverse-return-map").ReverseMapPoint[];

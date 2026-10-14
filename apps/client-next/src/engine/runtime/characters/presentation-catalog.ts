@@ -564,6 +564,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 						for ( const [body, entry] of Object.entries( row.bodies ) ) {
 							if ( entry === null ) continue;
 							equipmentEntries[id + body] = entry;
+							if ( entry.moonlit ) equipmentEntries[id + body + ":moonlit"] = entry.moonlit;
 							if ( entry.auxiliary ) auxiliaryEntries[id + body] = entry.auxiliary;
 						}
 					}

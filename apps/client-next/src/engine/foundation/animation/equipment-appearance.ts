@@ -46,6 +46,9 @@ export type SetEntry = {
 	// An animated worn resource drawn as its own handle (the EU shoulder
 	// garments): the body entry reserves it and draws nothing itself.
 	auxiliary?: AuxiliaryEntry;
+	// Port-only, not native: the Moonlit Ash model a level-20 thief suit
+	// draws while the server's SRO_MOONLIT_THIEF_SUIT is on.
+	moonlit?: SetEntry;
 };
 
 // particleModifiers: the resource's ambient sets, on its own animated bones.
@@ -102,6 +105,8 @@ export interface AppearanceInput {
 	readonly enchantSparks?: boolean;
 	// Port-only, not native: the server's SRO_JOB_SUIT_HIDES_ARMOR rule.
 	readonly jobSuitHidesArmor?: boolean;
+	// Port-only, not native: the server's SRO_MOONLIT_THIEF_SUIT.
+	readonly moonlitThiefSuit?: boolean;
 }
 
 export interface AppearanceAssembly {
@@ -263,11 +268,13 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 		const visual = dress.equipment![String( item.refObjId )]!;
 		// Inventory-only categories (jewelry/ammunition) have no compound slot.
 		if ( visual.slot === null ) continue;
-		const entry = visual.bodies[prefix];
+		const published = visual.bodies[prefix];
 		// Explicit null means BOTH native resource sources are empty. A
 		// missing conversion remains an error, never a fabricated helmet.
-		if ( entry === undefined ) throw Error( `Equipment visual body mismatch ${item.refObjId}: ${prefix}` );
-		if ( entry === null ) continue;
+		if ( published === undefined ) throw Error( `Equipment visual body mismatch ${item.refObjId}: ${prefix}` );
+		if ( published === null ) continue;
+		// Port-only, not native: the level-20 thief suit's Moonlit Ash model.
+		const entry = input.moonlitThiefSuit && published.moonlit ? published.moonlit : published;
 		if ( entry.auxiliary ) {
 			// Reserve resource/coverage with the body transaction; the animated
 			// geometry is a private-skeleton socket child, as for avatars.

@@ -228,6 +228,13 @@ variable "job_suit_hides_armor" {
   default = "on"
 }
 
+# moonlit_thief_suit draws the level-20 thief suits in the Moonlit Ash
+# look (port-only, not native; owner decision 2026-10-15). "off" is native.
+variable "moonlit_thief_suit" {
+  type    = string
+  default = "on"
+}
+
 # den_no_transport_summon refuses a transport summon during the Bandit Den
 # Return Scroll's countdown (port-only, not native; owner decision
 # 2026-10-14). "off" restores the native rule, which allows it.
@@ -665,6 +672,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer
         SRO_TRADE_TIERS                    = var.trade_tiers
         SRO_JOB_SUIT_HIDES_ARMOR           = var.job_suit_hides_armor
+        SRO_MOONLIT_THIEF_SUIT             = var.moonlit_thief_suit
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_TRADER_CARGO_DROP              = var.trader_cargo_drop
         SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed

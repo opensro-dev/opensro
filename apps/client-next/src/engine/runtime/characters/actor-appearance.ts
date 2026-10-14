@@ -272,8 +272,10 @@ export function createActorAppearance( owner: ActorOwner ) {
 					const enchantSparks = renderer.enchantSparks?.() === true;
 					// Port-only, not native: the server's SRO_JOB_SUIT_HIDES_ARMOR.
 					const jobSuitHidesArmor = gameplay?.jobSuitHidesArmor === true;
+					// Port-only, not native: the server's SRO_MOONLIT_THIEF_SUIT.
+					const moonlitThiefSuit = gameplay?.moonlitThiefSuit === true;
 					const signature = fortressIndex + ":" + Number( freezeWear ) + ":" + Number( enchantSparks ) + ":" +
-						Number( jobSuitHidesArmor ) + ":" +
+						Number( jobSuitHidesArmor ) + ":" + Number( moonlitThiefSuit ) + ":" +
 						Number( entity.mountedOn !== undefined ) + ":" + Number( hwanHair ) + ":" +
 						Number( weaponHidden ) + ":" +
 						Number( !!presentationState.idleStates.get( entity.gid )?.attachmentsHidden ) + ":" +
@@ -301,7 +303,8 @@ export function createActorAppearance( owner: ActorOwner ) {
 							committedWear: committedWear?.resource === resource ? committedWear.keys : [],
 							freezeWear,
 							enchantSparks,
-							jobSuitHidesArmor
+							jobSuitHidesArmor,
+							moonlitThiefSuit
 						} );
 						const { parts, auxiliary, defaultWear } = assembly;
 						const particles: ModelParticle[] = [

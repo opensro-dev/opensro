@@ -68,6 +68,8 @@ var Settings = []Setting{
 	{Env: "SRO_TRADE_TIERS", NomadVar: "trade_tiers", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: trader and hunter suits hide worn armour.
 	{Env: "SRO_JOB_SUIT_HIDES_ARMOR", NomadVar: "job_suit_hides_armor", Default: "on"},
+	// Owner, 2026-10-15: level-20 thief suits wear the Moonlit Ash look.
+	{Env: "SRO_MOONLIT_THIEF_SUIT", NomadVar: "moonlit_thief_suit", Default: "on"},
 	// Owner, 2026-10-14: no transport summon during the Bandit Den countdown.
 	{Env: "SRO_DEN_NO_TRANSPORT_SUMMON", NomadVar: "den_no_transport_summon", Default: "on"},
 	// Owner, 2026-10-14: a trader's goods drop on rider death and field logout.
