@@ -135,6 +135,9 @@ for ( const owner of [ true, false ] ) {
 			assertStallBackgrounds( quads, [ drag.rect[0] - 10, drag.rect[1] ] );
 			const origin = [ drag.rect[0] - 10, drag.rect[1] ];
 			assert.deepEqual( control( "stall-slot:0" )?.rect, [ origin[0] + 31, origin[1] + 117, 32, 32 ] );
+			// 5A2D60's one runtime tab: "Sell goods", selected, owner and visitor alike.
+			assert.deepEqual( control( "stall-tab-sell" )?.rect, [ origin[0] + 28, origin[1] + 86, 80, 24 ] );
+			assert.equal( control( "stall-tab-sell" )?.selected, true );
 			assert.deepEqual( control( "stall-slot:9" )?.rect, [ origin[0] + 237, origin[1] + 281, 32, 32 ] );
 			assert.deepEqual( control( "stall-chat-text" )?.rect, [ origin[0] + 31, origin[1] + 443, 270, 20 ] );
 			const messageClip = [ origin[0] + 31, origin[1] + 365, 270, 75 ];

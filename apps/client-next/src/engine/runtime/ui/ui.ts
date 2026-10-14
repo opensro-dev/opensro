@@ -671,6 +671,8 @@ const GRANT_PANEL = "Magic option";
 // The slider's thumb travel inside GDR_SLIDER_CTRL (prev 2..22, next at 125).
 const SKIN_SLIDER_TRAVEL = 85;
 // Item slot controls a carry can leave: inventory, avatar, storage, pet bag.
+// CIFStall_OnCreate (5A2D60): the "Sell goods" tab's rect in the window.
+const STALL_TAB_X = 0x1c, STALL_TAB_Y = 0x56, STALL_TAB_W = 0x50, STALL_TAB_H = 0x18;
 const ITEM_SLOT_PREFIXES = [ "slot:", "avatar:", "storage-slot:", "cos-slot:" ] as const;
 const BUTTON_FOCUS = BUTTON.replace( ".png", "_focus.png" ),
 	BUTTON_PRESS = BUTTON.replace( ".png", "_press.png" ),
@@ -15374,6 +15376,16 @@ export function createUi(
 					nativeFrame( root, px, py, hudCopy( root.text ), owner ? "stall-close" : "stall-leave" );
 					// 0x5A2277/0x5A23F7 replace the invalid authored icon; never request it.
 					nativePage( page, px, py, [ 3, 4, 5, 6, 14, 15 ] );
+					// CIFStall_OnCreate (5A2D60) adds one runtime tab, id 0x32: "Sell goods",
+					// selected, com_long_tab, its rect and content insets literal there.
+					// The loop stops before the "Buy goods" branch, so v1.150 shows only this.
+					nativeTab(
+						"stall-tab-sell",
+						hudCopy( "UIIT_STT_SELL_GOODS" ),
+						[ px + STALL_TAB_X, py + STALL_TAB_Y, STALL_TAB_W, STALL_TAB_H ],
+						true,
+						{ family: "com_long_tab", client: [ 0, 10, 0, 5 ] }
+					);
 					authoredImage( at( 15 ), px, py, presentation.icon );
 					authoredImage( at( 14 ), px, py );
 					// The chat module (3) owns separate message and input controls in the left pane.
