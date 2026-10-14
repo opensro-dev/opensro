@@ -19,3 +19,8 @@ allowBuilds:
   dprint: false
   esbuild: true
 
+
+# A transitive dependency pinned to its fixed release (PostCSS's
+# source-map-js); drop the override once postcss requires it.
+overrides:
+  source-map-js: 1.2.2
