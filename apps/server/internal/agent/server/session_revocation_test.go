@@ -98,6 +98,7 @@ type rehashingAccounts struct {
 	hash      []byte
 	rehashed  []string
 	passwords []string
+	verified  [][]byte
 }
 
 /*
@@ -115,21 +116,23 @@ func (accounts *rehashingAccounts) Credential(typedID string) (string, []byte, b
 
 /*
 ================
-rehashingAccounts.SetPassword
+rehashingAccounts.UpgradePasswordHash
 ================
 */
-func (accounts *rehashingAccounts) SetPassword(_ context.Context, accountID, password string) error {
+func (accounts *rehashingAccounts) UpgradePasswordHash(_ context.Context, accountID string, verified []byte, password string) (bool, error) {
 	accounts.rehashed = append(accounts.rehashed, accountID)
 	accounts.passwords = append(accounts.passwords, password)
-	return nil
+	accounts.verified = append(accounts.verified, verified)
+	return true, nil
 }
 
 /*
 ================
 TestLoginRaisesALowCostHash
 
-The seed hash is bcrypt's default cost: a correct login rewrites it at the
-store's cost; a wrong password and an already-current hash do not.
+The seed hash is bcrypt's default cost: a correct login swaps it, from the
+hash it verified, for one at the store's cost; a wrong password and an
+already-current hash do not.
 ================
 */
 func TestLoginRaisesALowCostHash(t *testing.T) {
@@ -150,6 +153,10 @@ func TestLoginRaisesALowCostHash(t *testing.T) {
 	login("123123")
 	if len(accounts.rehashed) != 1 || accounts.rehashed[0] != "tester" || accounts.passwords[0] != "123123" {
 		t.Fatalf("low-cost login rehashed %v", accounts.rehashed)
+	}
+	// The swap is conditioned on the hash the login verified.
+	if _, seed, _ := accounts.AccountAuthority.Credential("tester"); string(accounts.verified[0]) != string(seed) {
+		t.Fatal("the upgrade was not conditioned on the verified hash")
 	}
 	current, err := bcrypt.GenerateFromPassword([]byte("123123"), auth.AccountBcryptCost)
 	if err != nil {

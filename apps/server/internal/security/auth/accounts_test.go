@@ -263,3 +263,51 @@ func TestAccountsCredentialIgnoresCaseAndReturnsStoredID(t *testing.T) {
 		t.Fatal("disabled account resolved")
 	}
 }
+
+/*
+================
+TestAccountsUpgradePasswordHashIsACompareAndSwap
+
+A login verified the cost-4 hash; the upgrade raises it to the store's
+cost. A password reset that lands between the verify and the upgrade is
+kept: the stale swap matches nothing and the new password still works.
+================
+*/
+func TestAccountsUpgradePasswordHashIsACompareAndSwap(t *testing.T) {
+	ctx := context.Background()
+	accounts, _ := openTestAccounts(t)
+	if _, err := accounts.Create(ctx, "erin", "password1"); err != nil {
+		t.Fatal(err)
+	}
+	low, err := bcrypt.GenerateFromPassword([]byte("password1"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := accounts.db.ExecContext(ctx, `UPDATE accounts SET password_hash = ? WHERE id = ?`, low, "erin"); err != nil {
+		t.Fatal(err)
+	}
+	if upgraded, err := accounts.UpgradePasswordHash(ctx, "erin", low, "password1"); err != nil || !upgraded {
+		t.Fatalf("upgrade = %v, %v", upgraded, err)
+	}
+	stored, _ := accounts.PasswordHash("erin")
+	if cost, _ := bcrypt.Cost(stored); cost != AccountBcryptCost {
+		t.Fatalf("upgraded cost %d, want %d", cost, AccountBcryptCost)
+	}
+	if ok, _ := accounts.Verify(ctx, "erin", "password1"); !ok {
+		t.Fatal("upgraded password refused")
+	}
+
+	// The race: a login verified stored, then a reset lands.
+	if err := accounts.SetPassword(ctx, "erin", "password2"); err != nil {
+		t.Fatal(err)
+	}
+	if upgraded, err := accounts.UpgradePasswordHash(ctx, "erin", stored, "password1"); err != nil || upgraded {
+		t.Fatalf("stale upgrade = %v, %v", upgraded, err)
+	}
+	if ok, _ := accounts.Verify(ctx, "erin", "password1"); ok {
+		t.Fatal("a stale upgrade restored the old password")
+	}
+	if ok, _ := accounts.Verify(ctx, "erin", "password2"); !ok {
+		t.Fatal("the reset password was overwritten")
+	}
+}

@@ -459,10 +459,10 @@ func (server *Server) authorizedControlShard(
 	return definition.ID, true
 }
 
-// passwordRehasher is the account store's password writer (auth.Accounts);
-// a fixed catalog has none.
+// passwordRehasher is the account store's compare-and-swap hash upgrade
+// (auth.Accounts); a fixed catalog has none.
 type passwordRehasher interface {
-	SetPassword(ctx context.Context, accountID, password string) error
+	UpgradePasswordHash(ctx context.Context, accountID string, verified []byte, password string) (bool, error)
 }
 
 /*
@@ -471,8 +471,10 @@ upgradePasswordCost
 
 After a successful login, rewrites a hash made at a lower bcrypt cost at
 auth.AccountBcryptCost, so every stored hash, the seeded and provisioned
-ones included, costs the same as the unknown-account refusal. A failure
-only leaves the old hash; the login has already succeeded.
+ones included, costs the same as the unknown-account refusal. The swap is
+conditional on the hash this login verified, so a password change or staff
+reset that lands meanwhile is never overwritten by the old password. A
+failure only leaves the old hash; the login has already succeeded.
 ================
 */
 func (server *Server) upgradePasswordCost(ctx context.Context, accountID string, hash []byte, password string) {
@@ -486,7 +488,7 @@ func (server *Server) upgradePasswordCost(ctx context.Context, accountID string,
 	}
 	// A seeded password outside today's length bounds cannot be rehashed; it
 	// keeps its old hash rather than warning on every login.
-	if err := rehasher.SetPassword(ctx, accountID, password); err != nil && !errors.Is(err, auth.ErrPasswordInvalid) {
+	if _, err := rehasher.UpgradePasswordHash(ctx, accountID, hash, password); err != nil && !errors.Is(err, auth.ErrPasswordInvalid) {
 		log.Warnf("agent: upgrading the password hash cost failed: %v", err)
 	}
 }

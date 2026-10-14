@@ -423,6 +423,32 @@ func (accounts *Accounts) SetPassword(ctx context.Context, accountID, password s
 
 /*
 ================
+UpgradePasswordHash
+
+Rehashes password at AccountBcryptCost only while the stored hash is still
+verified, the one the caller checked password against. A password change
+that landed in between wins: the swap matches no row and reports false.
+================
+*/
+func (accounts *Accounts) UpgradePasswordHash(ctx context.Context, accountID string, verified []byte, password string) (bool, error) {
+	hash, err := accounts.hash(ctx, password)
+	if err != nil {
+		return false, err
+	}
+	result, err := accounts.db.ExecContext(
+		ctx,
+		`UPDATE accounts SET password_hash = ? WHERE id = ? AND password_hash = ?`,
+		hash, accountID, verified,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows == 1, err
+}
+
+/*
+================
 SetDisabled
 ================
 */
