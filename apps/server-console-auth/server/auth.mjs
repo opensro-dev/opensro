@@ -7,7 +7,8 @@ The console (apps/server-observatory) trusts only who Caddy says the
 operator is. Caddy asks this owner on every console request
 (forward_auth to /auth/verify) and copies the identity headers it answers
 with: X-SRO-Operator (discord:<user id>, what audits store),
-X-SRO-Operator-Name (display only) and X-SRO-Role (operator or approver). Caddy deletes client copies of those headers first and adds
+X-SRO-Operator-Name (display only) and X-SRO-Role (operator or
+approver). Caddy deletes client copies of those headers first and adds
 the console's edge secret itself; this owner never knows that secret.
 
 Sessions live in memory: a restart signs everyone out, and no Discord
