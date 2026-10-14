@@ -37,6 +37,9 @@ const (
 // index or bundle degrades to ACCEPT (`.catch(() => null)`), never to a
 // refusal or a fault.
 type WaterValidator struct {
+	// closedObjectRescue: RelocateStrandedSpawn also frees a spawn inside a
+	// closed object (placementguard.go, SRO_CLOSED_OBJECT_RESCUE).
+	closedObjectRescue   bool
 	root                 string
 	catalogPath          string
 	dungeonResourcesPath string

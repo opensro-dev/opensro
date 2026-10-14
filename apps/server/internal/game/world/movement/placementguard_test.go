@@ -69,7 +69,8 @@ TestRelocateStrandedSpawnLeavesTheReportedTree
 The relog rescue for BR-261014-1425-CE1E: a spawn inside asset 1160 at
 ground height (the stand the sealed-deck test lets through, as it sits on
 the terrain under the object's surface) is stranded and moves to a nearby
-point outside every closed object, which is itself not stranded.
+point outside every closed object, which is itself not stranded. With
+SRO_CLOSED_OBJECT_RESCUE off the pose passes through, as before the rule.
 ================
 */
 func TestRelocateStrandedSpawnLeavesTheReportedTree(t *testing.T) {
@@ -79,6 +80,10 @@ func TestRelocateStrandedSpawnLeavesTheReportedTree(t *testing.T) {
 		t.Fatal("no terrain height under the reported tree")
 	}
 	trunk := simulation.Spawn{RegionID: 0x5F6A, X: 1765, Y: ground, Z: 1358, Angle: 9}
+	if _, stranded, _ := v.RelocateStrandedSpawn(trunk); stranded {
+		t.Fatal("with the rule off, the trunk pose must pass through")
+	}
+	v.SetClosedObjectRescue(true)
 	rescued, stranded, found := v.RelocateStrandedSpawn(trunk)
 	if !stranded || !found {
 		t.Fatalf("inside the trunk: stranded=%v found=%v, want both", stranded, found)
@@ -125,5 +130,38 @@ func TestInsideClosedObjectIgnoresAPoseFarAboveIt(t *testing.T) {
 		if asset, inside := v.InsideClosedObject(at(y)); inside {
 			t.Fatalf("y %.1f (ground %.1f) reported inside asset %d", y, ground, asset)
 		}
+	}
+}
+
+/*
+================
+TestRelocateStrandedSpawnSkipsAnEnclosedTileCentre
+
+The tile centre (1050, 410) of region 0x5F6A lies inside a closed trunk
+(asset 1160), so for a spawn inside that trunk the nearest candidate, its
+own tile, is enclosed at terrain height. The rescue must pass over it to a
+centre outside every closed object.
+================
+*/
+func TestRelocateStrandedSpawnSkipsAnEnclosedTileCentre(t *testing.T) {
+	v := realAuthorityValidator(t)
+	v.SetClosedObjectRescue(true)
+	ground, ok := v.TerrainHeightAt(0x5F6A, 1050, 410)
+	if !ok {
+		t.Fatal("no terrain height at the enclosed tile centre")
+	}
+	trunk := simulation.Spawn{RegionID: 0x5F6A, X: 1050, Y: ground, Z: 410}
+	if asset, inside := v.InsideClosedObject(trunk); !inside || asset != 1160 {
+		t.Fatalf("the tile centre is not inside asset 1160: asset %d inside %v", asset, inside)
+	}
+	rescued, stranded, found := v.RelocateStrandedSpawn(trunk)
+	if !stranded || !found {
+		t.Fatalf("stranded=%v found=%v, want both", stranded, found)
+	}
+	if asset, inside := v.InsideClosedObject(rescued); inside {
+		t.Fatalf("rescued into asset %d at %+v", asset, rescued)
+	}
+	if _, again, _ := v.RelocateStrandedSpawn(rescued); again {
+		t.Fatalf("the rescue point is itself stranded: %+v", rescued)
 	}
 }

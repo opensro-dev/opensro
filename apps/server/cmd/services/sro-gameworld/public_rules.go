@@ -28,6 +28,7 @@ import (
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/world/monster"
+	"opensro.online/server/internal/game/world/movement"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -216,6 +217,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
 				Now:    "It counts down 2 minutes 30 seconds.",
 				Why:    "Owner-approved for the beta; the original countdown returns with one setting."},
+			{Flag: movement.EnvClosedObjectRescue, On: movement.ClosedObjectRescueFromEnv(),
+				Native: "A character that logs in inside a tree trunk or a rock stays there and cannot walk out.",
+				Now:    "Logging in inside one moves the character to the nearest open ground.",
+				Why:    "A player was stuck inside a tree with every move refused; the original returns with one setting."},
 			{Flag: action.EnvDenNoTransportSummon, On: action.DenNoTransportSummonFromEnv(),
 				Native: "A transport can be summoned while the Bandit Den Return Scroll counts down.",
 				Now:    "No transport can be summoned during that countdown.",

@@ -195,6 +195,15 @@ variable "fast_den_return" {
   default = "on"
 }
 
+# closed_object_rescue moves a character that logs in inside a closed object
+# (a tree trunk or rock no walk can leave) to the nearest open ground
+# (port-only, not native; owner decision 2026-10-15). "off" keeps the login
+# rescue to blocked tiles, islands and sealed decks.
+variable "closed_object_rescue" {
+  type    = string
+  default = "on"
+}
+
 # most_wanted counts a suited player's job kills into a wanted level
 # (bonuses per level, a bounty on their head) (port-only, not native;
 # owner decision 2026-10-14). "off" is native.
@@ -668,6 +677,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_PET_PACING                     = var.pet_pacing
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                = var.fast_den_return
+        SRO_CLOSED_OBJECT_RESCUE           = var.closed_object_rescue
         SRO_MOST_WANTED                    = var.most_wanted
         SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer
         SRO_TRADE_TIERS                    = var.trade_tiers

@@ -125,7 +125,8 @@ func (v *WaterValidator) tileOnMainland(start globalTile, tilesPerAxis int, cach
 // lands inside one. Port-only, not native: an extension of the login rescue
 // above for BR-261014-1425-CE1E, where a player relogged into a trunk
 // forever. The origin tile is a candidate, so the rescue is the nearest
-// tile centre outside the object.
+// tile centre outside the object, tested at the height the rescue would
+// stand at. Only while SRO_CLOSED_OBJECT_RESCUE is on (SetClosedObjectRescue).
 //
 // Returns (result, stranded, rescueFound):
 //   - on the mainland or no walkability data -> (input, false, false);
@@ -170,7 +171,10 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 		// bridge span - must not strand it.
 		return spawn, false, false
 	}
-	closedAsset, enclosed := v.InsideClosedObject(spawn)
+	closedAsset, enclosed := 0, false
+	if v.closedObjectRescue {
+		closedAsset, enclosed = v.InsideClosedObject(spawn)
+	}
 	verdicts := map[uint64]bool{}
 	if !enclosed && deckVerdict == objectDeckNone && walkable && v.tileOnMainland(origin, tilesPerAxis, verdicts) {
 		return spawn, false, false
@@ -205,7 +209,7 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 				if !v.tileOnMainland(candidate, tilesPerAxis, verdicts) {
 					continue
 				}
-				if _, inside := v.InsideClosedObject(tileCenter(candidate, tilesPerAxis, tileSize)); inside {
+				if v.closedObjectRescue && v.rescueEnclosed(tileCenter(candidate, tilesPerAxis, tileSize), spawn.Y) {
 					continue
 				}
 				distSq := float64(dx*dx + dz*dz)
@@ -221,12 +225,38 @@ func (v *WaterValidator) RelocateStrandedSpawn(spawn simulation.Spawn) (simulati
 		return spawn, true, false
 	}
 
-	rescued := tileCenter(best, tilesPerAxis, tileSize)
-	rescued.Y, rescued.Angle = spawn.Y, spawn.Angle
-	if terrainY, ok := v.TerrainHeightAt(rescued.RegionID, rescued.X, rescued.Z); ok {
-		rescued.Y = terrainY
-	}
+	rescued := v.rescueStand(tileCenter(best, tilesPerAxis, tileSize), spawn.Y)
+	rescued.Angle = spawn.Angle
 	return rescued, true, true
+}
+
+/*
+================
+rescueStand
+
+A rescue tile centre at the height it is placed at: the terrain there, or
+the stranded spawn's own height when the terrain has none.
+================
+*/
+func (v *WaterValidator) rescueStand(center simulation.Spawn, spawnY float64) simulation.Spawn {
+	center.Y = spawnY
+	if terrainY, ok := v.TerrainHeightAt(center.RegionID, center.X, center.Z); ok {
+		center.Y = terrainY
+	}
+	return center
+}
+
+/*
+================
+rescueEnclosed
+
+Whether a candidate tile centre, at the height rescueStand would place the
+player, is inside a closed object.
+================
+*/
+func (v *WaterValidator) rescueEnclosed(center simulation.Spawn, spawnY float64) bool {
+	_, inside := v.InsideClosedObject(v.rescueStand(center, spawnY))
+	return inside
 }
 
 /*

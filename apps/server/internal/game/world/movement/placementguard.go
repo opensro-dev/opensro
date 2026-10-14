@@ -19,8 +19,15 @@ only; it changes nobody's position.
 package movement
 
 import (
+	"os"
+	"strings"
+
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+// EnvClosedObjectRescue turns the closed-object relog rescue on ("on", "1",
+// "true"). Port-only, not native: off keeps the login rescue as it was.
+const EnvClosedObjectRescue = "SRO_CLOSED_OBJECT_RESCUE"
 
 // outlineBlocks are the outline flag bits the chord clip treats as a wall
 // (objectnav_collision.go).
@@ -72,6 +79,31 @@ func (v *WaterValidator) InsideClosedObject(pose simulation.Spawn) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+/*
+================
+ClosedObjectRescueFromEnv
+================
+*/
+func ClosedObjectRescueFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvClosedObjectRescue))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+WaterValidator.SetClosedObjectRescue
+
+Turns the closed-object rescue in RelocateStrandedSpawn on or off
+(EnvClosedObjectRescue). Set once at boot, before the first entry.
+================
+*/
+func (v *WaterValidator) SetClosedObjectRescue(on bool) {
+	v.closedObjectRescue = on
 }
 
 /*

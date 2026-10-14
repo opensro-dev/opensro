@@ -242,6 +242,7 @@ func newGameplayPlane(
 	if err := water.ValidateSecurityAssets(); err != nil {
 		return nil, err
 	}
+	water.SetClosedObjectRescue(movement.ClosedObjectRescueFromEnv())
 	navigationStarted := time.Now()
 	navigationRegions, err := water.PreloadOutdoorNavigation()
 	if err != nil {
