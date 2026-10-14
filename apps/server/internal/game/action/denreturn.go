@@ -24,6 +24,9 @@ package action
 import (
 	"os"
 	"strings"
+
+	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // EnvFastDenReturn turns the halved countdown on ("on", "1", "true").
@@ -54,12 +57,17 @@ func DenNoTransportSummonFromEnv() bool {
 denTransportRefused
 
 Whether the port-only rule refuses a transport summon: only a transport,
-only in the Den countdown's teleport mode 2 (the one free countdown). The
-native modes 1 and 3 are refused before this (teleportBlocks, 49B9F0).
+only while the character's pending return cast is the Bandit Den scroll's
+(keyed on the scroll, not on its teleport mode). The native modes 1 and 3
+are refused before this (teleportBlocks, 49B9F0).
 ================
 */
-func denTransportRefused(mode uint8, transport, rule bool) bool {
-	return rule && transport && mode == teleportModeFree
+func (rt *Runtime) denTransportRefused(division string, c *enterworld.Character, transport bool) bool {
+	if !rt.DenNoTransportSummon || !transport {
+		return false
+	}
+	pending, ok := rt.returnCasts.Load(simulation.WorldKey(division, c.Name))
+	return ok && pending.(pendingReturn).thiefDen
 }
 
 /*

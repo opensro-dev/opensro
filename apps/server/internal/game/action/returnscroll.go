@@ -48,6 +48,9 @@ type pendingReturn struct {
 	// destination is a reverse return's chosen point; nil returns to the
 	// appointed rebirth point.
 	destination *travelPoint
+	// thiefDen marks the Bandit Den scroll's cast (denreturn.go keys its
+	// port-only transport rule on it).
+	thiefDen bool
 }
 
 /*
@@ -208,7 +211,8 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 	}
 	at := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
 	if !rt.startReturnCast(returnCast{division: division, character: c, row: row, slot: request.Slot,
-		typeWord: request.TypeWord, duration: duration, destination: destination, now: now, mode: mode}, result) {
+		typeWord: request.TypeWord, duration: duration, destination: destination, now: now, mode: mode,
+		thiefDen: ref.ReturnDestination == "THIEFDEN"}, result) {
 		return false
 	}
 	if point, ok := recordedPoint(c, at); ok {
@@ -239,6 +243,8 @@ type returnCast struct {
 	// mode is the channel-11 teleport mode; zero is a return's 1. The skin
 	// change reloads in place under mode 3 (4EFFC0).
 	mode uint8
+	// thiefDen marks the Bandit Den scroll's cast.
+	thiefDen bool
 }
 
 /*
@@ -273,7 +279,7 @@ func (rt *Runtime) startReturnCast(cast returnCast, result *OpResult) bool {
 	rt.ClearCombatIntent(division, c.Name)
 	rt.Pending.Clear(grounditem.PendingKey(division, c.Name))
 	rt.returnCasts.Store(key, pendingReturn{division: division, name: c.Name, character: c, due: now + cast.duration,
-		generation: rt.returnGeneration.Add(1), destination: cast.destination})
+		generation: rt.returnGeneration.Add(1), destination: cast.destination, thiefDen: cast.thiefDen})
 	status := teleportState(c, mode)
 	stop := wire.Frame{Opcode: wire.OpObjectSourceCorrection, Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{RegionID: spawn.RegionID, X: float32(spawn.X), Y: float32(spawn.Y), Z: float32(spawn.Z), Heading: spawn.Angle}}.Encode()}
 	// HandleItemUse publishes the item's visual after the success.

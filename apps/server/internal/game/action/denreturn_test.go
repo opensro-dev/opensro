@@ -26,6 +26,9 @@ import (
 // denScrollMs is the shipped Bandit Den scroll's Param1 (itemdata 2128).
 const denScrollMs = 300000
 
+// denTestFieldRegion is a field region outside every town.
+const denTestFieldRegion uint16 = 0x5F76
+
 /*
 ================
 TestPetSummonRefusesOnlyTeleportModeOne
@@ -133,35 +136,52 @@ TestDenCountdownTransportSummonFollowsTheFlag
 
 Natively 49B9F0 summons a transport during the Den countdown (teleport
 mode 2). With SRO_DEN_NO_TRANSPORT_SUMMON (port-only, not native) it is
-refused 0x69 and nothing changes; mode 1 is refused either way.
+refused 0x69 and nothing changes. The rule keys on the Den scroll's cast:
+another mode-2 countdown still summons, and mode 1 is refused either way.
 ================
 */
 func TestDenCountdownTransportSummonFollowsTheFlag(t *testing.T) {
 	for _, tc := range []struct {
+		name    string
 		rule    bool
+		den     bool
 		mode    uint8
 		summons bool
-	}{{false, teleportModeFree, true}, {true, teleportModeFree, false}, {false, teleportModeBlocking, false}, {true, teleportModeBlocking, false}} {
-		c := testCharacter()
-		dressTrader(c)
+	}{
+		{"Den countdown, native", false, true, 0, true},
+		{"Den countdown, rule on", true, true, 0, false},
+		{"another mode-2 countdown, rule on", true, false, teleportModeFree, true},
+		{"mode 1, native", false, false, teleportModeBlocking, false},
+		{"mode 1, rule on", true, false, teleportModeBlocking, false},
+	} {
+		rt, _, c, scroll := denScrollFixture(t, false)
+		deps := rt.deps.(*enterworld.Deps)
+		deps.Items = testCosSource(deps.Items.(staticItemSource))
 		c.MissionInventory = append(c.MissionInventory, enterworld.InventoryRow{Slot: 22, RefObjID: 3905,
 			Codename: "ITEM_COS_T_DHORSE3", TypeFlags: wire.PackTypeFlags(3, 3, 3, 2), StackCount: 1})
-		rt, _ := newTestRuntime(c, testCosSource(testItems()))
 		rt.BindPetSession(testDivision, c, 101)
+		// 49BD8A: a thief summons no transport in a town; stand in the field.
+		rt.Worlds.Update(simulation.WorldKey(testDivision, c.Name), func() simulation.WorldState { return simulation.SeedWorldState(c) }, func(world *simulation.WorldState) {
+			world.Spawn = simulation.Spawn{RegionID: denTestFieldRegion, X: 960, Y: 20, Z: 960}
+		})
 		rt.DenNoTransportSummon = tc.rule
-		c.NativeTeleportMode = tc.mode
+		if tc.den {
+			rt.HandleItemUse(testDivision, c, wire.NewWriter(3).U8(26).U16(scroll.TypeFlags()).Payload())
+			if c.NativeTeleportMode != teleportModeFree {
+				t.Fatalf("%s: the Den scroll did not start", tc.name)
+			}
+		} else {
+			c.NativeTeleportMode = tc.mode
+		}
 		before := c.Snapshot()
 		result := rt.HandleItemUse(testDivision, c, []byte{22, 0xec, 0x11})
 		summoned := len(result.Frames) > 0 && result.Frames[0].Payload[0] == 1 && c.ActiveCOS != nil
 		if summoned != tc.summons {
-			t.Fatalf("rule=%v mode=%d: summoned %v, want %v (%+v)", tc.rule, tc.mode, summoned, tc.summons, result.Frames)
+			t.Fatalf("%s: summoned %v, want %v (%+v)", tc.name, summoned, tc.summons, result.Frames)
 		}
 		if !tc.summons && (len(result.Frames) == 0 || result.Frames[0].Payload[1] != 0x69 || !reflect.DeepEqual(before, c.Snapshot())) {
-			t.Fatalf("rule=%v mode=%d: refusal %+v changed state or code", tc.rule, tc.mode, result.Frames)
+			t.Fatalf("%s: refusal %+v changed state or code", tc.name, result.Frames)
 		}
-	}
-	if denTransportRefused(teleportModeFree, false, true) {
-		t.Fatal("the rule refused a riding horse")
 	}
 }
 

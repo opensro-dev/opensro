@@ -441,7 +441,7 @@ func (rt *Runtime) HandleItemUse(
 			}
 			// Port-only, not native (denreturn.go): no transport during the
 			// Bandit Den countdown; the same 0x69 as the native mode-1 refusal.
-			if denTransportRefused(character.NativeTeleportMode, cosRef.TidWord>>11 == cosBandTransport, rt.DenNoTransportSummon) {
+			if rt.denTransportRefused(divisionID, character, cosRef.TidWord>>11 == cosBandTransport) {
 				result = itemUseFailure(0x69)
 				return false
 			}
