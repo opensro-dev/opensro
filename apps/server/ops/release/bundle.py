@@ -33,13 +33,17 @@ FILES = {
 	"sro-authority-upgrade": "bin/sro-authority-upgrade",
 	# The release's verdict on the host's server game data (server_data.py).
 	"sro-game-data-check": "bin/sro-game-data-check",
+	# The F8 window's offline Sun-to-Moon swap (owner decision 2026-10-14):
+	# run by the operator during a held maintenance pair, with the fleet
+	# stopped and the gate closed.
+	"sro-swap-sun": "bin/sro-swap-sun",
 	"go.mod": "go.mod",
 	"ops/nomad/jobs/agent.nomad.hcl": "ops/nomad/jobs/agent.nomad.hcl",
 	"ops/nomad/jobs/gameworld.nomad.hcl": "ops/nomad/jobs/gameworld.nomad.hcl",
 }
 # Files added to FILES after the first release. A release built before one was
 # added does not carry it; every other name is required. FILES only grows.
-ADDED_FILES = frozenset({"sro-authority-upgrade", "sro-game-data-check"})
+ADDED_FILES = frozenset({"sro-authority-upgrade", "sro-game-data-check", "sro-swap-sun"})
 # Go's build information blob (debug/buildinfo): a 16-byte-aligned header
 # that opens with this magic, its pointer size and flags at 14 and 15, and
 # with the inline flag the version and module strings as uvarint-prefixed

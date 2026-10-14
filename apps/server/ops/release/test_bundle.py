@@ -183,6 +183,24 @@ class BundleTests(unittest.TestCase):
 		self.assertEqual(self.archive.read_bytes(), (self.root / "received.tar").read_bytes())
 
 	# ================
+	# test_the_swap_tool_ships_with_its_digest
+	#
+	# The F8 window runs sro-swap-sun on the host, so the server bundle carries
+	# it as an executable and its manifest pins its sha256.
+	# ================
+	def test_the_swap_tool_ships_with_its_digest(self):
+		with tarfile.open(self.archive, "r:") as archive:
+			member = archive.getmember("sro-swap-sun")
+			data = archive.extractfile(member).read()
+			manifest = json.loads(archive.extractfile("release.json").read())
+		self.assertEqual(member.mode, 0o755)
+		self.assertEqual(manifest["files"]["sro-swap-sun"], hashlib.sha256(data).hexdigest())
+		self.assertEqual(data, (self.module / "bin/sro-swap-sun").read_bytes())
+		destination = self.root / "unpacked"
+		unpack(self.archive, destination)
+		self.assertEqual((destination / "sro-swap-sun").read_bytes(), data)
+
+	# ================
 	# test_tampering_writes_nothing
 	#
 	# A digest mismatch must leave the extraction destination absent.
