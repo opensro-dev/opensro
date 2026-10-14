@@ -174,7 +174,9 @@ test("a layer draw keeps no mirror and stream writes are bounded", () => {
 		() => geometry.updatePositions( draw, new Float32Array( 3 ), undefined, undefined, [ [ 0, 1 ] ], 0 ),
 		/without dynamicVertices/
 	);
-	const capacity = draw.vertices.bytes.byteLength / (VERTEX_FLOATS * 4);
+	// A small layer gets the minimum capacity, 1024 vertices (terrain-layers.ts);
+	// its range is part of a shared slab, so the buffer's size no longer tells.
+	const capacity = 1024;
 	assert.throws(
 		() => geometry.streamVertices( draw, capacity, new Float32Array( VERTEX_FLOATS ) ),
 		/Invalid vertex write/

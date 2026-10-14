@@ -26,8 +26,8 @@ Borrowed resources; identity changes invalidate the slot's binding cache.
 ================
 */
 export interface ShadowBinding {
-	readonly instances: GPUBuffer;
-	readonly material: GPUBuffer;
+	readonly instances: GPUBufferBinding;
+	readonly material: GPUBufferBinding;
 	readonly skin: GPUBuffer;
 	readonly bones: GPUBuffer;
 }
@@ -294,8 +294,8 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 									layout: silhouette.getBindGroupLayout( 0 ),
 									entries: [
 										{ binding: 0, resource: { buffer: s.projection } },
-										{ binding: 1, resource: { buffer: b.instances } },
-										{ binding: 2, resource: { buffer: b.material } },
+										{ binding: 1, resource: b.instances },
+										{ binding: 2, resource: b.material },
 										{ binding: 3, resource: { buffer: b.skin } },
 										{ binding: 4, resource: { buffer: b.bones } }
 									]
@@ -366,7 +366,13 @@ struct Out {@builtin(position) p:vec4f,@location(0) uv:vec2f};
 					p.setBindGroup( 0, part.binding );
 					p.setVertexBuffer( 0, part.draw.vertices );
 					p.setIndexBuffer( part.draw.indices, "uint32" );
-					p.drawIndexed( part.draw.indexCount, 1, 0, 0, part.instance );
+					p.drawIndexed(
+						part.draw.indexCount,
+						1,
+						part.draw.firstIndex ?? 0,
+						part.draw.baseVertex ?? 0,
+						part.instance
+					);
 				}
 				p.end();
 				const f = encoder.beginRenderPass( {

@@ -39,8 +39,8 @@ Borrowed resources; identity changes invalidate the caster's binding cache.
 ================
 */
 export interface ShadowBinding {
-	readonly instances: GPUBuffer;
-	readonly material: GPUBuffer;
+	readonly instances: GPUBufferBinding;
+	readonly material: GPUBufferBinding;
 	readonly skin: GPUBuffer;
 	readonly bones: GPUBuffer;
 	// The draw's bound albedo, already resolved to its GPU texture; the
@@ -271,8 +271,8 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 							layout: shadowPipeline!.getBindGroupLayout( 0 ),
 							entries: [
 								{ binding: 0, resource: { buffer: projection! } },
-								{ binding: 1, resource: { buffer: source.instances } },
-								{ binding: 2, resource: { buffer: source.material } },
+								{ binding: 1, resource: source.instances },
+								{ binding: 2, resource: source.material },
 								{ binding: 3, resource: sampler! },
 								{
 									binding: 4,
@@ -291,7 +291,7 @@ struct Out {@builtin(position) position:vec4f,@location(0) uv:vec2f}
 				pass.setBindGroup( 0, cached.binding );
 				pass.setVertexBuffer( 0, draw.vertices );
 				pass.setIndexBuffer( draw.indices, "uint32" );
-				pass.drawIndexed( draw.indexCount, draw.instanceCount );
+				pass.drawIndexed( draw.indexCount, draw.instanceCount, draw.firstIndex ?? 0, draw.baseVertex ?? 0 );
 			}
 			pass.end();
 		},

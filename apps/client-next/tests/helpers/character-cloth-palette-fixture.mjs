@@ -123,7 +123,7 @@ function deviceFixture() {
 			bytes.set( buffer, target );
 		}
 		target.set( source.subarray( byteStart, byteStart + byteLength ), offset );
-		writes.push( { buffer, length: byteLength } );
+		writes.push( { buffer, offset, length: byteLength } );
 	};
 	// The strict fake implements the operations this resource owner uses;
 	// browser-only GPUDevice brand and adapter metadata are irrelevant here.
@@ -275,12 +275,17 @@ function captureGeometry( tags, gpuAvailable ) {
 		================
 		*/
 		clothPlacementWrites( draws ) {
-			const buffers = new Set(
-				draws.filter( draw => draw.tag.startsWith( "cloth" ) ).map( draw =>
-					draw.deviceDraw.binding.entries.find( entry => entry.binding === 1 ).resource.buffer
-				)
+			// Instance tables are slab ranges (buffer-slabs.ts): a write is a
+			// cloth placement write when it lands inside a cloth draw's range.
+			const ranges = draws.filter( draw => draw.tag.startsWith( "cloth" ) ).map( draw =>
+				draw.deviceDraw.binding.entries.find( entry => entry.binding === 1 ).resource
 			);
-			return device.writes.filter( write => buffers.has( write.buffer ) ).length;
+			return device.writes.filter( write =>
+				ranges.some( range =>
+					write.buffer === range.buffer && write.offset >= range.offset &&
+					write.offset < range.offset + range.size
+				)
+			).length;
 		},
 		/*
 		================
@@ -294,8 +299,12 @@ function captureGeometry( tags, gpuAvailable ) {
 			const buffers = new Set();
 			for ( const draw of draws ) {
 				const entries = draw.deviceDraw.binding.entries;
-				const storage = entries.find( entry => entry.binding === 1 ).resource.buffer;
-				const packed = new Float32Array( device.bytes.get( storage ).buffer );
+				const storage = entries.find( entry => entry.binding === 1 ).resource;
+				const packed = new Float32Array(
+					device.bytes.get( storage.buffer ).buffer,
+					storage.offset,
+					storage.size / 4
+				);
 				assert.equal( draw.deviceDraw.instanceCount, draw.instances.length / 16 );
 				for ( let row = 0; row < draw.deviceDraw.instanceCount; row++ ) {
 					assert.deepEqual(

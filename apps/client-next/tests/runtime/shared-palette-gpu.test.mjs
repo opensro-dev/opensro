@@ -88,6 +88,15 @@ function fixture() {
 	return { resources, buffers, writes };
 }
 const binding = ( draw, n ) => draw.binding.find( e => e.binding === n ).resource.buffer;
+// The floats a binding exposes: slab ranges bind at an offset (buffer-slabs.ts).
+const bound = ( draw, n ) => {
+	const resource = draw.binding.find( e => e.binding === n ).resource;
+	return new Float32Array(
+		resource.buffer.bytes.buffer,
+		resource.offset ?? 0,
+		(resource.size ?? resource.buffer.size) / 4
+	);
+};
 const geometry = () => ({
 	positions: Float32Array.of( -1, -1, 0, 1, -1, 0, 0, 1, 0 ),
 	indices: Uint32Array.of( 0, 1, 2 ),
@@ -117,7 +126,7 @@ test("shared GPU palette has one upload per revision and one lifetime across dra
 		Uint32Array.of( 0, 1 )
 	);
 	assert.equal( binding( grown, 7 ), buffer );
-	const packed = new Float32Array( binding( grown, 1 ).bytes.buffer );
+	const packed = bound( grown, 1 );
 	assert.equal( packed[17], 0 );
 	assert.equal( packed[18], 1 );
 	assert.equal( packed[57], 1 );
@@ -177,7 +186,7 @@ test("shader-addressed shared palettes equal expanded poses through merge, split
 		const draws = owner.prepare( f.resources.commands, {}, 257 );
 		assert.equal( binding( draws[0], 7 ), binding( draws[1], 7 ) );
 		for ( const draw of draws ) {
-			const packed = new Float32Array( binding( draw, 1 ).bytes.buffer ),
+			const packed = bound( draw, 1 ),
 				bones = new Float32Array( binding( draw, 7 ).bytes.buffer );
 			for ( let i = 0; i < rows.length; i++ ) {
 				const offset = packed[i * 40 + 17] * 16, expected = I();

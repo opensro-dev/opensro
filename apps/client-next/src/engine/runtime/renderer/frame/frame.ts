@@ -187,7 +187,13 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 							encoder.setIndexBuffer( draw.indices, "uint32" );
 							indices = draw.indices;
 						}
-						encoder.drawIndexed( draw.indexCount, draw.instanceCount, 0, 0, 0 );
+						encoder.drawIndexed(
+							draw.indexCount,
+							draw.instanceCount,
+							draw.firstIndex ?? 0,
+							draw.baseVertex ?? 0,
+							0
+						);
 					}
 					cached = { draws, counts, bindings: draws.map( draw => draw.binding ), bundle: encoder.finish() };
 					geometryBundles.set( first, cached );
@@ -244,7 +250,12 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						pass.setBindGroup( 0, draw.binding );
 						pass.setVertexBuffer( 0, draw.vertices );
 						pass.setIndexBuffer( draw.indices, "uint32" );
-						pass.drawIndexed( draw.indexCount, draw.instanceCount );
+						pass.drawIndexed(
+							draw.indexCount,
+							draw.instanceCount,
+							draw.firstIndex ?? 0,
+							draw.baseVertex ?? 0
+						);
 					}
 					pass.end();
 				}
@@ -323,7 +334,13 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 					overlay.setBindGroup( 0, draw.binding );
 					overlay.setVertexBuffer( 0, draw.vertices );
 					overlay.setIndexBuffer( draw.indices, "uint32" );
-					overlay.drawIndexed( draw.indexCount, draw.instanceCount, 0, 0, 0 );
+					overlay.drawIndexed(
+						draw.indexCount,
+						draw.instanceCount,
+						draw.firstIndex ?? 0,
+						draw.baseVertex ?? 0,
+						0
+					);
 				}
 				if ( !hdrScene && uiBundle ) overlay.executeBundles( [ uiBundle ] );
 				overlay.end();
@@ -359,7 +376,12 @@ export function createFrame( commands: FrameCommands ): FrameOwner {
 						tail.setBindGroup( 0, draw.binding );
 						tail.setVertexBuffer( 0, draw.vertices );
 						tail.setIndexBuffer( draw.indices, "uint32" );
-						tail.drawIndexed( draw.indexCount, draw.instanceCount );
+						tail.drawIndexed(
+							draw.indexCount,
+							draw.instanceCount,
+							draw.firstIndex ?? 0,
+							draw.baseVertex ?? 0
+						);
 					}
 					if ( !bloom && !hdrScene && !sceneScale && worldUiBundle ) tail.executeBundles( [ worldUiBundle ] );
 					if ( !bloom && !hdrScene && !sceneScale && !flares && !thunder && backgroundBundle ) {

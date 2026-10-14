@@ -74,6 +74,8 @@ const particleQuery = runtime + "renderer/device/particle-query.ts";
 const portraitReadback = runtime + "renderer/device/portrait-readback.ts";
 const particles = runtime + "renderer/device/particles.ts";
 const geometryUploads = runtime + "renderer/device/geometry-uploads.ts";
+// Slabs of geometry's small buffers (uniforms, instances, vertex and index ranges).
+const bufferSlabs = runtime + "renderer/device/buffer-slabs.ts";
 const deviceInternals = [
 	waterReflection,
 	bloom,
@@ -83,6 +85,7 @@ const deviceInternals = [
 	images,
 	geometry,
 	geometryUploads,
+	bufferSlabs,
 	ui,
 	flares,
 	thunder,
@@ -234,6 +237,7 @@ rules.createSampler.push( geometry );
 for ( const name of [ "createBuffer", "writeBuffer", "createCommandEncoder", "finish", "submit" ] ) {
 	rules[name].push( geometryUploads );
 }
+rules.createBuffer.push( bufferSlabs );
 for (
 	const name of [
 		"createShaderModule",

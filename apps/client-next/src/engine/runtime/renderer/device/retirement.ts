@@ -23,10 +23,23 @@ nothing is recorded, and it is destroyed at once.
 ================
 Retired
 
-What a frame's command buffers can name and an owner can destroy.
+What a frame's command buffers can name and an owner can destroy: a
+buffer, a texture, or a slab range (buffer-slabs.ts), whose destroy
+returns its bytes to the slab.
 ================
 */
-export type Retired = GPUBuffer | GPUTexture;
+export type Retired = GPUBuffer | GPUTexture | RetiredRange;
+
+/*
+================
+RetiredRange
+
+A slab range (buffer-slabs.ts BufferSlice): destroy returns its bytes.
+================
+*/
+export interface RetiredRange {
+	destroy(): void;
+}
 
 /*
 ================

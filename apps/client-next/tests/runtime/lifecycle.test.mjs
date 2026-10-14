@@ -646,8 +646,8 @@ test("instance growth retains vertex/index buffers and releases replaced storage
 				destroy() {}
 			};
 		},
-		createBindGroup() {
-			return {};
+		createBindGroup( descriptor ) {
+			return { entries: descriptor.entries };
 		},
 		pushErrorScope() {},
 		async popErrorScope() {
@@ -694,20 +694,33 @@ test("instance growth retains vertex/index buffers and releases replaced storage
 	assert.throws( () => {
 		draw.indexCount = 0;
 	}, TypeError );
-	const allocated = buffers.length;
-	const storage = buffers.find( buffer => !sharedBuffers.includes( buffer ) && (buffer.usage & usages.STORAGE) ),
+	// Instance tables are slab ranges (buffer-slabs.ts): growth takes a larger
+	// range, and the replaced one returns to its slab for the next upload.
+	const allocated = buffers.length,
+		instanceRange = drawn => drawn.binding.entries.find( entry => entry.binding === 1 ).resource;
+	const storage = instanceRange( draw ),
 		vertices = draw.vertices,
 		indices = draw.indices;
+	assert.ok( !sharedBuffers.includes( storage.buffer ) && (storage.buffer.usage & usages.STORAGE) );
 	draw = commands.updateInstances( draw, new Float32Array( [ ...identity, ...identity ] ) );
-	assert.equal( buffers.length, allocated + 1 );
-	assert.ok( storage.destroyed );
+	const grown = instanceRange( draw );
+	assert.ok( grown.size > storage.size, "two instances need the larger table" );
+	assert.notEqual( grown.offset, storage.offset );
+	assert.equal( buffers.length, allocated, "the slab has room: no buffer is created" );
+	const reused = commands.upload( {
+		positions: new Float32Array( 9 ),
+		indices: Uint32Array.of( 0, 1, 2 ),
+		transform: identity
+	} );
+	assert.equal( instanceRange( reused ).offset, storage.offset, "the replaced range was released" );
+	commands.release( reused );
 	assert.equal( draw.vertices, vertices );
 	assert.equal( draw.indices, indices );
 	assert.deepEqual( [ draw.indexCount, draw.instanceCount ], [ 3, 2 ] );
 	commands.updateIndices( draw, new Uint32Array() );
 	assert.deepEqual( [ draw.indexCount, draw.instanceCount ], [ 0, 1 ] );
 	assert.equal( commands.updateInstances( draw, new Float32Array() ), draw );
-	assert.equal( buffers.length, allocated + 1 );
+	assert.equal( buffers.length, allocated );
 	assert.deepEqual( [ draw.indexCount, draw.instanceCount ], [ 3, 0 ] );
 	const matrices = new Float32Array( [ ...identity, ...identity ] ),
 		opacity = new Float32Array( [ .25, .75 ] ),
@@ -745,8 +758,23 @@ test("instance growth retains vertex/index buffers and releases replaced storage
 			);
 		}
 	}
+	const released = instanceRange( draw );
 	commands.release( draw );
-	assert.ok( buffers.filter( buffer => !sharedBuffers.includes( buffer ) ).every( buffer => buffer.destroyed ) );
+	// Its ranges return to the slabs, which live until the device goes.
+	const slab = buffer => buffer.size === 4 << 20;
+	assert.ok(
+		buffers.filter( buffer => !sharedBuffers.includes( buffer ) && !slab( buffer ) ).every( buffer =>
+			buffer.destroyed
+		)
+	);
+	assert.ok( buffers.filter( slab ).every( buffer => !buffer.destroyed ) );
+	const next = commands.upload( {
+		positions: new Float32Array( 9 ),
+		indices: Uint32Array.of( 0, 1, 2 ),
+		transform: identity
+	} );
+	assert.ok( instanceRange( next ).offset <= released.offset, "the released table is free again" );
+	commands.release( next );
 	assert.ok( sharedBuffers.every( buffer => !buffer.destroyed ) );
 	owner.dispose();
 	assert.ok( buffers.every( buffer => buffer.destroyed ) );

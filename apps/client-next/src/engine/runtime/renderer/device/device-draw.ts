@@ -26,6 +26,8 @@ export class DeviceDraw implements GeometryDraw {
 	readonly blended: boolean;
 	readonly vertices: GPUBuffer;
 	readonly indices: GPUBuffer;
+	readonly firstIndex: number;
+	readonly baseVertex: number;
 	readonly count: number;
 	#pipeline: GPURenderPipeline;
 	#binding: GPUBindGroup;
@@ -34,7 +36,10 @@ export class DeviceDraw implements GeometryDraw {
 	#instanceCount: number;
 
 	constructor(
-		fixed: Pick<GeometryDraw, "deferredParticle" | "blended" | "pipeline" | "vertices" | "indices" | "count">,
+		fixed: Pick<
+			GeometryDraw,
+			"deferredParticle" | "blended" | "pipeline" | "vertices" | "indices" | "firstIndex" | "baseVertex" | "count"
+		>,
 		binding: GPUBindGroup,
 		instanceCapacity: number,
 		instanceCount: number
@@ -44,6 +49,8 @@ export class DeviceDraw implements GeometryDraw {
 		this.#pipeline = fixed.pipeline;
 		this.vertices = fixed.vertices;
 		this.indices = fixed.indices;
+		this.firstIndex = fixed.firstIndex ?? 0;
+		this.baseVertex = fixed.baseVertex ?? 0;
 		this.count = fixed.count;
 		this.#binding = binding;
 		this.#instanceCapacity = instanceCapacity;

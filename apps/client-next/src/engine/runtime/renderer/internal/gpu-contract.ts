@@ -283,6 +283,10 @@ export interface GeometryDraw {
 	readonly binding: GPUBindGroup;
 	readonly vertices: GPUBuffer;
 	readonly indices: GPUBuffer;
+	// Where the draw's streams start in shared slab buffers (buffer-slabs.ts),
+	// in indices and in vertices; absent is 0.
+	readonly firstIndex?: number;
+	readonly baseVertex?: number;
 	readonly count: number;
 	readonly indexCount: number;
 	readonly instanceCount: number;

@@ -97,8 +97,10 @@ async function deviceHarness( t, initial = {} ) {
 	const writeBuffer = device.queue.writeBuffer;
 	t.mock.method( device.queue, "writeBuffer", ( buffer, offset, data, start = 0, size = data.byteLength ) => {
 		writeBuffer( buffer );
-		if ( buffer.label === "geometry-material" && offset === 0 && data instanceof ArrayBuffer ) {
-			materials.set( buffer, new Float32Array( data.slice( start, start + size ) ) );
+		// Material uniforms are slab ranges: one table per buffer, keyed by offset.
+		if ( buffer.label === "geometry-material" && data instanceof ArrayBuffer ) {
+			if ( !materials.has( buffer ) ) materials.set( buffer, new Map() );
+			materials.get( buffer ).set( offset, new Float32Array( data.slice( start, start + size ) ) );
 		}
 		if ( buffer.label === "environment" && offset === ENVIRONMENT_STAGES_OFFSET ) {
 			stages.push( Array.from( data ) );
@@ -147,8 +149,8 @@ async function deviceHarness( t, initial = {} ) {
 	================
 	*/
 	function shadowReceiver( draw ) {
-		const buffer = bindings.get( draw.binding ).entries.find( entry => entry.binding === 2 ).resource.buffer;
-		return materials.get( buffer )[MATERIAL_SHADOW_RECEIVER_FLOAT];
+		const resource = bindings.get( draw.binding ).entries.find( entry => entry.binding === 2 ).resource;
+		return materials.get( resource.buffer ).get( resource.offset )[MATERIAL_SHADOW_RECEIVER_FLOAT];
 	}
 	/*
 	================

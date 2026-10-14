@@ -18,6 +18,7 @@ import { createCharacterShadows } from "./character-shadows";
 import { createSunShadow } from "./sun-shadow";
 import { ENVIRONMENT_SHADOW_MATRIX_OFFSET } from "./environment-block";
 import { destroyNow, type Retire } from "./retirement";
+import { createBufferSlabs, type BufferSlice } from "./buffer-slabs";
 import { DeviceDraw } from "./device-draw";
 import { createGeometryUploads } from "./geometry-uploads";
 import type { createParticlePresentation } from "./particles";
@@ -28,6 +29,12 @@ import type { Geometry } from "@/engine/contracts/geometry";
 import { packGeometryVertices } from "@/engine/foundation/rendering/geometry-vertices";
 import type { GeometryCommands, GeometryDraw, ImageDraw } from "@/engine/runtime/renderer/internal/gpu-contract";
 import type { ImageLeases } from "./images";
+
+// A bound slab range: buffer, offset and size are all set.
+type Binding = BufferSlice["binding"];
+// The packed vertex (14 floats) and a uint32 index, in bytes.
+const VERTEX_BYTES = 56;
+const INDEX_BYTES = 4;
 /*
 ================
 geometryPipelineState
@@ -127,6 +134,51 @@ export function createGeometryResources(
 	const shadowDummyView = shadowDummy.createView();
 	const uploads = createGeometryUploads( created, retire );
 	const packInstances = createInstancePacking();
+	// Per-draw uniforms and instance tables are slab ranges (buffer-slabs.ts):
+	// thousands of small buffers each cost the GPU process an allocation.
+	const instanceUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
+		uniformUsage = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
+	const transformSlabs = createBufferSlabs( created, "geometry-transform", uniformUsage, retire ),
+		materialSlabs = createBufferSlabs( created, "geometry-material", uniformUsage, retire ),
+		instanceSlabs = createBufferSlabs( created, "geometry-instances", instanceUsage, retire );
+	// Vertex and index ranges align to their element: a draw addresses them
+	// by baseVertex and firstIndex (VERTEX_BYTES is the packed 14-float vertex).
+	const vertexSlabs = createBufferSlabs(
+			created,
+			"geometry-vertices",
+			GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+			retire,
+			VERTEX_BYTES
+		),
+		indexSlabs = createBufferSlabs(
+			created,
+			"geometry-indices",
+			GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+			retire,
+			INDEX_BYTES
+		);
+	// World draws bind the shared world uniform, not a transform of their own.
+	const worldBinding: Binding = Object.freeze( { buffer: worldUniform, offset: 0, size: 64 } );
+	// A particle presentation copies whole instance tables (particles.ts), so
+	// a draw that may present one keeps a buffer of its own.
+	const ownedInstances = new Set<GPUBuffer>();
+	/*
+	================
+	instanceStore
+	================
+	*/
+	function instanceStore( bytes: number, owned: boolean ): BufferSlice {
+		if ( !owned ) return instanceSlabs.allocate( bytes );
+		const buffer = created.createBuffer( { label: "geometry-instances", size: bytes, usage: instanceUsage } );
+		ownedInstances.add( buffer );
+		return {
+			binding: Object.freeze( { buffer, offset: 0, size: bytes } ),
+			destroy() {
+				ownedInstances.delete( buffer );
+				buffer.destroy();
+			}
+		};
+	}
 	const defaultSkin = created.createBuffer( {
 			label: "geometry-default-skin",
 			size: 32,
@@ -186,9 +238,9 @@ export function createGeometryResources(
 	================
 	*/
 	const geometryBinding = (
-		uniform: GPUBuffer,
-		storage: GPUBuffer,
-		material: GPUBuffer,
+		uniform: Binding,
+		storage: Binding,
+		material: Binding,
 		pipeline: GPURenderPipeline,
 		clampedSampling: boolean,
 		image?: ImageDraw,
@@ -207,9 +259,9 @@ export function createGeometryResources(
 				{ binding: 12, resource: waterSampler },
 				{ binding: 13, resource: cascade },
 				{ binding: 14, resource: shadowCompare },
-				{ binding: 0, resource: { buffer: uniform } },
-				{ binding: 1, resource: { buffer: storage } },
-				{ binding: 2, resource: { buffer: material } },
+				{ binding: 0, resource: uniform },
+				{ binding: 1, resource: storage },
+				{ binding: 2, resource: material },
 				{
 					binding: 3,
 					resource: clampedSampling ? lightmapSampler : worldSampler
@@ -233,8 +285,20 @@ export function createGeometryResources(
 	const metadata = new Map<GeometryDraw, {
 		water: boolean;
 		state: GeometryPipelineState;
-		uniform: GPUBuffer;
-		material: GPUBuffer;
+		uniform: Binding;
+		material: Binding;
+		instances: Binding;
+		// The slab ranges behind the three bindings (no transform for a world
+		// draw); owned marks an instance table with a buffer of its own.
+		stores: {
+			transform?: BufferSlice;
+			material: BufferSlice;
+			instances: BufferSlice;
+			owned: boolean;
+			// Absent for a skinned draw, whose streams are buffers of its own.
+			vertices?: BufferSlice;
+			indices?: BufferSlice;
+		};
 		image?: ImageDraw;
 		environmentImage?: ImageDraw;
 		vertices?: Float32Array;
@@ -272,7 +336,7 @@ export function createGeometryResources(
 				const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
 				return meta && buffers ?
 					{
-						instances: buffers[3]!,
+						instances: meta.instances,
 						material: meta.material,
 						skin: meta.skin,
 						bones: meta.bones,
@@ -308,7 +372,7 @@ export function createGeometryResources(
 							pipeline,
 							binding: geometryBinding(
 								meta.uniform,
-								buffers[3]!,
+								meta.instances,
 								meta.material,
 								pipeline,
 								meta.clampedSampling,
@@ -355,7 +419,7 @@ export function createGeometryResources(
 						meta.selection,
 						geometryBinding(
 							meta.uniform,
-							geometryBuffers.get( draw )![3]!,
+							meta.instances,
 							meta.material,
 							draw.pipeline,
 							meta.clampedSampling,
@@ -377,7 +441,7 @@ export function createGeometryResources(
 					const pipeline = pipelines( meta.state, floatScene );
 					const binding = geometryBinding(
 						meta.uniform,
-						geometryBuffers.get( draw )![3]!,
+						meta.instances,
 						meta.material,
 						pipeline,
 						meta.clampedSampling,
@@ -428,7 +492,7 @@ export function createGeometryResources(
 				draw => {
 					const meta = metadata.get( draw ), buffers = geometryBuffers.get( draw );
 					return meta && buffers ?
-						{ instances: buffers[3]!, material: meta.material, skin: meta.skin, bones: meta.bones } :
+						{ instances: meta.instances, material: meta.material, skin: meta.skin, bones: meta.bones } :
 						undefined;
 				},
 				// The receiver draws land in the scene target: the getter
@@ -497,7 +561,8 @@ export function createGeometryResources(
 			if ( meta.selection.instanceCount !== presentation.rows * presentation.slots ) {
 				throw Error( "Particle presentation must draw one instance a slot" );
 			}
-			particles.present( draw, buffers[3]!, meta.bones, presentation );
+			if ( !meta.stores.owned ) throw Error( "Particle presentation requires owned instances" );
+			particles.present( draw, meta.instances.buffer, meta.bones, presentation );
 		},
 		/*
 		================
@@ -534,8 +599,8 @@ export function createGeometryResources(
 			}
 			if ( indices.byteLength ) {
 				gpu.queue.writeBuffer(
-					buffers[1]!,
-					0,
+					draw.indices,
+					(draw.firstIndex ?? 0) * INDEX_BYTES,
 					indices.buffer as ArrayBuffer,
 					indices.byteOffset,
 					indices.byteLength
@@ -612,7 +677,11 @@ export function createGeometryResources(
 					if ( uvs ) { for ( let c = 0; c < 2; c++ ) vertices[i * 14 + 6 + c] = uvs[i * 2 + c]!; }
 				}
 				const offset = start * 56;
-				writeStream( draw.vertices, base * 56 + offset, vertices.subarray( start * 14, end * 14 ) );
+				writeStream(
+					draw.vertices,
+					((draw.baseVertex ?? 0) + base) * VERTEX_BYTES + offset,
+					vertices.subarray( start * 14, end * 14 )
+				);
 			}
 		},
 		/*
@@ -628,7 +697,11 @@ export function createGeometryResources(
 				base * 14 + vertices.length > mirror.length
 			) throw Error( "Invalid vertex write" );
 			mirror.set( vertices, base * 14 );
-			writeStream( draw.vertices, base * 56, mirror.subarray( base * 14, base * 14 + vertices.length ) );
+			writeStream(
+				draw.vertices,
+				((draw.baseVertex ?? 0) + base) * VERTEX_BYTES,
+				mirror.subarray( base * 14, base * 14 + vertices.length )
+			);
 		},
 		/*
 		================
@@ -647,7 +720,7 @@ export function createGeometryResources(
 				!Number.isInteger( base ) || base < 0 || vertices.length % 14 ||
 				base * 14 + vertices.length > meta.vertexFloats
 			) throw Error( "Invalid vertex write" );
-			writeStream( draw.vertices, base * 56, vertices );
+			writeStream( draw.vertices, ((draw.baseVertex ?? 0) + base) * VERTEX_BYTES, vertices );
 		},
 		/*
 		================
@@ -675,7 +748,7 @@ export function createGeometryResources(
 				// As with position/index/bone writes, the device's uncaptured
 				// error listener owns write failures. Scopes are for allocation.
 				if ( packed.byteLength ) {
-					writeStream( buffers[3]!, 0, packed, meta.cpuUploads );
+					writeStream( meta.instances.buffer, meta.instances.offset, packed, meta.cpuUploads );
 				}
 				DeviceDraw.select( meta.selection, draw.count, count );
 				return draw;
@@ -684,18 +757,14 @@ export function createGeometryResources(
 			try {
 				if ( count > draw.instanceCapacity ) {
 					const capacity = instanceCapacity( count ),
-						storage = gpu.createBuffer( {
-							label: "geometry-instances",
-							size: capacity * 160,
-							usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
-						} );
+						storage = instanceStore( capacity * 160, meta.stores.owned );
 					try {
-						writeStream( storage, 0, packed, meta.cpuUploads );
+						writeStream( storage.binding.buffer, storage.binding.offset, packed, meta.cpuUploads );
 						DeviceDraw.rebind(
 							meta.selection,
 							geometryBinding(
 								meta.uniform,
-								storage,
+								storage.binding,
 								meta.material,
 								draw.pipeline,
 								meta.clampedSampling,
@@ -709,8 +778,9 @@ export function createGeometryResources(
 						shadows?.forget( draw );
 						sunShadows?.forget( draw );
 						// The frame's recorded passes may still read the old storage.
-						retire( buffers[3]! );
-						buffers[3] = storage;
+						retire( meta.stores.instances );
+						meta.stores.instances = storage;
+						meta.instances = storage.binding;
 					} catch ( error ) {
 						retire( storage );
 						throw error;
@@ -740,7 +810,11 @@ export function createGeometryResources(
 			if ( rgba.length !== 4 || !rgba.every( v => Number.isFinite( v ) && v >= 0 && v <= 1 ) ) {
 				throw Error( "Invalid texture factor" );
 			}
-			current().queue.writeBuffer( meta.material, meta.textureFactorOffset, rgba as Float32Array<ArrayBuffer> );
+			current().queue.writeBuffer(
+				meta.material.buffer,
+				meta.material.offset + meta.textureFactorOffset,
+				rgba as Float32Array<ArrayBuffer>
+			);
 		},
 		/*
 		================
@@ -751,8 +825,9 @@ export function createGeometryResources(
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
 			if ( rgb.length !== 3 || !rgb.every( Number.isFinite ) ) throw Error( "Invalid material colors" );
-			if ( flags & 2 ) current().queue.writeBuffer( meta.material, 0, rgb as Float32Array<ArrayBuffer> );
-			if ( flags & 1 ) current().queue.writeBuffer( meta.material, 128, rgb as Float32Array<ArrayBuffer> );
+			const { buffer, offset } = meta.material;
+			if ( flags & 2 ) current().queue.writeBuffer( buffer, offset, rgb as Float32Array<ArrayBuffer> );
+			if ( flags & 1 ) current().queue.writeBuffer( buffer, offset + 128, rgb as Float32Array<ArrayBuffer> );
 		},
 		updateEquipmentGlow(
 			draw: GeometryDraw,
@@ -769,8 +844,8 @@ export function createGeometryResources(
 				![ 1, 2 ].includes( gain )
 			) throw Error( "Invalid equipment glow uniforms" );
 			current().queue.writeBuffer(
-				meta.material,
-				192,
+				meta.material.buffer,
+				meta.material.offset + 192,
 				Float32Array.of( ...color, enabled ? gain : 0, ...uv, alphaTest ? 1 : 0, 0 )
 			);
 		},
@@ -783,7 +858,11 @@ export function createGeometryResources(
 			const meta = metadata.get( draw );
 			if ( !meta ) throw Error( "Unknown geometry draw" );
 			if ( matrix.length !== 8 || !matrix.every( Number.isFinite ) ) throw Error( "Invalid texture transform" );
-			current().queue.writeBuffer( meta.material, 144, matrix as Float32Array<ArrayBuffer> );
+			current().queue.writeBuffer(
+				meta.material.buffer,
+				meta.material.offset + 144,
+				matrix as Float32Array<ArrayBuffer>
+			);
 		},
 		/*
 		================
@@ -791,13 +870,16 @@ export function createGeometryResources(
 		================
 		*/
 		updateTransform( draw: GeometryDraw, transform: Float32Array ) {
-			const gpu = current(), buffers = geometryBuffers.get( draw );
-			if ( !buffers ) {
+			const gpu = current(), meta = metadata.get( draw );
+			if ( !meta ) {
 				throw new Error( "Stale geometry handle" );
 			}
+			// A world draw binds the shared world uniform: it has no transform
+			// of its own, and a write to one was never read.
+			if ( !meta.stores.transform ) return;
 			gpu.queue.writeBuffer(
-				buffers[2]!,
-				0,
+				meta.uniform.buffer,
+				meta.uniform.offset,
 				transform.buffer as ArrayBuffer,
 				transform.byteOffset,
 				transform.byteLength
@@ -809,9 +891,27 @@ export function createGeometryResources(
 		================
 		*/
 		upload( data: Geometry, image?: ImageDraw, paletteOffsets?: Uint32Array, environmentImage?: ImageDraw ) {
-			const gpu = current(), buffers: GPUBuffer[] = [];
+			const gpu = current(), buffers: GPUBuffer[] = [], slices: BufferSlice[] = [];
 			let palette: SharedPalette | undefined;
 			gpu.pushErrorScope( "validation" );
+			/*
+			================
+			slice
+
+			A slab range holding data, written in place.
+			================
+			*/
+			const slice = ( store: BufferSlice, data: Float32Array | Uint32Array ) => {
+				slices.push( store );
+				gpu.queue.writeBuffer(
+					store.binding.buffer,
+					store.binding.offset,
+					data.buffer as ArrayBuffer,
+					data.byteOffset,
+					data.byteLength
+				);
+				return store;
+			};
 			/*
 			================
 			buffer
@@ -832,24 +932,34 @@ export function createGeometryResources(
 				const interleaved = data.vertices?.length === data.positions.length / 3 * 14 ?
 					data.vertices :
 					packGeometryVertices( data );
-				const vertices = buffer( "geometry-vertices", interleaved, GPUBufferUsage.VERTEX ),
-					indices = buffer( "geometry-indices", data.indices, GPUBufferUsage.INDEX ),
-					uniform = buffer( "geometry-transform", data.transform, GPUBufferUsage.UNIFORM );
+				// A skinned shader reads its per-vertex skin table by vertex_index,
+				// which a baseVertex would shift: skinned streams keep own buffers.
+				const skinned = !!(data.joints && data.weights && data.bones),
+					vertexStore = skinned ?
+						undefined :
+						slice( vertexSlabs.allocate( interleaved.byteLength ), interleaved ),
+					indexStore = skinned ?
+						undefined :
+						slice( indexSlabs.allocate( data.indices.byteLength ), data.indices ),
+					vertices = vertexStore?.binding.buffer ??
+						buffer( "geometry-vertices", interleaved, GPUBufferUsage.VERTEX ),
+					indices = indexStore?.binding.buffer ??
+						buffer( "geometry-indices", data.indices, GPUBufferUsage.INDEX ),
+					transform = data.world ? undefined : slice( transformSlabs.allocate( 64 ), data.transform ),
+					uniform = transform?.binding ?? worldBinding;
 				const instances = data.instances ??
 						new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] ),
 					count = instances.length / 16,
 					capacity = instanceCapacity( count ),
-					packed = packInstances( instances, undefined, undefined, undefined, paletteOffsets );
-				const storage = gpu.createBuffer( {
-					label: "geometry-instances",
-					size: capacity * 160,
-					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
-				} );
-				buffers.push( storage );
+					packed = packInstances( instances, undefined, undefined, undefined, paletteOffsets ),
+					// Only owned (unshared) bone palettes can present particles.
+					owned = !!(data.joints && data.weights && data.bones && !paletteOffsets);
+				const storage = instanceStore( capacity * 160, owned );
+				slices.push( storage );
 				if ( instances.byteLength ) {
 					gpu.queue.writeBuffer(
-						storage,
-						0,
+						storage.binding.buffer,
+						storage.binding.offset,
 						packed.buffer as ArrayBuffer,
 						packed.byteOffset,
 						packed.byteLength
@@ -970,13 +1080,13 @@ export function createGeometryResources(
 						// D3DRS_TEXTUREFACTOR, read by a stage's TFACTOR argument.
 						...(mat?.textureFactor ?? [ 1, 1, 1, 1 ])
 					] ),
-					material = buffer( "geometry-material", materialData, GPUBufferUsage.UNIFORM );
+					material = slice( materialSlabs.allocate( materialData.byteLength ), materialData );
 				const selected = pipelines( geometryPipelineState( mat ), floatScene ),
 					clampedSampling = !!(mat?.lightmap || mat?.decal) && !mat?.groundDecal;
 				const binding = geometryBinding(
-					data.world ? worldUniform! : uniform,
-					storage,
-					material,
+					uniform,
+					storage.binding,
+					material.binding,
 					selected,
 					clampedSampling,
 					image,
@@ -991,6 +1101,8 @@ export function createGeometryResources(
 						pipeline: selected,
 						vertices,
 						indices,
+						baseVertex: (vertexStore?.binding.offset ?? 0) / VERTEX_BYTES,
+						firstIndex: (indexStore?.binding.offset ?? 0) / INDEX_BYTES,
 						count: data.indices.length
 					},
 					binding,
@@ -1012,8 +1124,17 @@ export function createGeometryResources(
 				metadata.set( draw, {
 					water: !!mat?.water,
 					state: geometryPipelineState( mat ),
-					uniform: data.world ? worldUniform! : uniform,
-					material,
+					uniform,
+					material: material.binding,
+					instances: storage.binding,
+					stores: {
+						transform,
+						material,
+						instances: storage,
+						owned,
+						vertices: vertexStore,
+						indices: indexStore
+					},
 					image,
 					environmentImage,
 					...(data.dynamicVertices ? { vertices: interleaved } : {}),
@@ -1022,7 +1143,7 @@ export function createGeometryResources(
 					bones: boneBuffer,
 					boneBytes: boneBuffer.size,
 					cpuUploads: !particles || boneBuffer === defaultBones || !!palette,
-					indexBytes: indices.size,
+					indexBytes: data.indices.byteLength,
 					palette,
 					jointMaximum,
 					clampedSampling,
@@ -1035,6 +1156,7 @@ export function createGeometryResources(
 				for ( const item of buffers ) {
 					item.destroy();
 				}
+				for ( const item of slices ) retire( item );
 				throw error;
 			} finally {
 				gpu.popErrorScope().then( error => {
@@ -1075,6 +1197,13 @@ export function createGeometryResources(
 				retire( buffer );
 			}
 			const meta = metadata.get( draw );
+			if ( meta ) {
+				if ( meta.stores.transform ) retire( meta.stores.transform );
+				if ( meta.stores.vertices ) retire( meta.stores.vertices );
+				if ( meta.stores.indices ) retire( meta.stores.indices );
+				retire( meta.stores.material );
+				retire( meta.stores.instances );
+			}
 			releasePalette( meta?.palette );
 			if ( meta?.image ) images.drop( meta.image );
 			if ( meta?.environmentImage ) images.drop( meta.environmentImage );
@@ -1141,7 +1270,7 @@ export function createGeometryResources(
 					meta.selection,
 					geometryBinding(
 						meta.uniform,
-						geometryBuffers.get( draw )![3]!,
+						meta.instances,
 						meta.material,
 						draw.pipeline,
 						meta.clampedSampling,
@@ -1193,7 +1322,7 @@ export function createGeometryResources(
 					pipeline,
 					geometryBinding(
 						meta.uniform,
-						geometryBuffers.get( draw )![3]!,
+						meta.instances,
 						meta.material,
 						pipeline,
 						meta.clampedSampling,
@@ -1222,7 +1351,7 @@ export function createGeometryResources(
 					meta.selection,
 					geometryBinding(
 						meta.uniform,
-						geometryBuffers.get( draw )![3]!,
+						meta.instances,
 						meta.material,
 						draw.pipeline,
 						meta.clampedSampling,
@@ -1253,6 +1382,13 @@ export function createGeometryResources(
 			}
 			for ( const palette of sharedPalettes.values() ) palette.buffer.destroy();
 			sharedPalettes.clear();
+			transformSlabs.dispose();
+			materialSlabs.dispose();
+			instanceSlabs.dispose();
+			vertexSlabs.dispose();
+			indexSlabs.dispose();
+			for ( const buffer of ownedInstances ) buffer.destroy();
+			ownedInstances.clear();
 			geometryBuffers.clear();
 			metadata.clear();
 			worldUniform.destroy();

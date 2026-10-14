@@ -375,7 +375,12 @@ test("shadow frames reuse bindings and views while still rendering each current 
 			borrowed[field] = {};
 			owner.prepare( [ request ] );
 			assert.equal( bindings.length, before + 1 );
-			assert.ok( bindings.at( -1 ).entries.some( entry => entry.resource.buffer === borrowed[field] ) );
+			// Instances and material bind as slab ranges, skin and bones as buffers.
+			assert.ok(
+				bindings.at( -1 ).entries.some( entry =>
+					entry.resource === borrowed[field] || entry.resource.buffer === borrowed[field]
+				)
+			);
 		}
 		owner.dispose();
 	} finally {

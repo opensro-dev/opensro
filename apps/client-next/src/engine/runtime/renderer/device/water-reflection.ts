@@ -141,7 +141,7 @@ export function createWaterReflection( device: GPUDevice, initialFormat: GPUText
 				pass.setBindGroup( 0, draw.binding );
 				pass.setVertexBuffer( 0, draw.vertices );
 				pass.setIndexBuffer( draw.indices, "uint32" );
-				pass.drawIndexed( draw.indexCount, draw.instanceCount );
+				pass.drawIndexed( draw.indexCount, draw.instanceCount, draw.firstIndex ?? 0, draw.baseVertex ?? 0 );
 			}
 			pass.end();
 		},

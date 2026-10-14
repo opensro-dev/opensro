@@ -38,7 +38,6 @@ const { createStaleDrawGuard } = await load( "src/engine/runtime/renderer/frame/
 const { createRenderer } = await load( "src/engine/runtime/renderer/renderer.ts" );
 const { PARTICLE_ACTOR, PARTICLE_RECORD } = await load( "src/engine/foundation/animation/particle-records.ts" );
 
-const DESTROYED = /used in submit while destroyed/;
 const identity = () => Float32Array.of( 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 );
 
 test("empty particle streams clear once and retain pending work until encoding", async () => {
@@ -283,7 +282,20 @@ function releaseAfterRecord( gpu, retire ) {
 	commands.release( draws[1] );
 	// Two instances outgrow the single slot the draw was uploaded with.
 	commands.updateInstances( draws[2], new Float32Array( 32 ) );
-	return () => gpu.device.queue.submit( [ encoder.finish() ] );
+	return { commands, draws, submit: () => gpu.device.queue.submit( [ encoder.finish() ] ) };
+}
+
+/*
+================
+triangle
+================
+*/
+function triangle() {
+	return {
+		positions: Float32Array.of( -1, -1, 0, 1, -1, 0, 0, 1, 0 ),
+		indices: Uint32Array.of( 0, 1, 2 ),
+		transform: identity()
+	};
 }
 
 /*
@@ -322,14 +334,9 @@ function geometryOwner( gpu, retire ) {
 		retire
 	);
 	const commands = resources.commands;
-	const geometry = () => ({
-		positions: Float32Array.of( -1, -1, 0, 1, -1, 0, 0, 1, 0 ),
-		indices: Uint32Array.of( 0, 1, 2 ),
-		transform: identity()
-	});
 	return {
 		commands,
-		draws: [ commands.upload( geometry() ), commands.upload( geometry() ), commands.upload( geometry() ) ]
+		draws: [ commands.upload( triangle() ), commands.upload( triangle() ), commands.upload( triangle() ) ]
 	};
 }
 
@@ -362,10 +369,12 @@ test("a draw an owner still lists after its release frame never reaches a later 
 	retirement.open();
 	commands.release( draws[1] );
 	retirement.close();
-	// Frame 2: an owner hands the frame its stale list.
-	const unguarded = gpu.device.createCommandEncoder( { label: "unguarded" } );
-	record( unguarded, draws );
-	assert.throws( () => gpu.device.queue.submit( [ unguarded.finish() ] ), DESTROYED );
+	// Its streams were slab ranges: after the frame they belong to the next
+	// upload, so a stale list would draw another draw's geometry.
+	const next = commands.upload( triangle() );
+	assert.equal( next.indices, draws[1].indices );
+	assert.equal( next.firstIndex, draws[1].firstIndex );
+	assert.equal( next.baseVertex, draws[1].baseVertex );
 	const reports = [], guard = createStaleDrawGuard( draw => commands.releasedDraw( draw ), r => reports.push( r ) );
 	const guarded = gpu.device.createCommandEncoder( { label: "guarded" } );
 	const live = guard.live( "characters", draws );
@@ -383,23 +392,25 @@ test("a draw an owner still lists after its release frame never reaches a later 
 });
 
 test("a draw released or regrown after it is recorded outlives that frame's submit", () => {
-	const unguarded = createStrictGpu();
-	assert.throws( releaseAfterRecord( unguarded, destroyNow ), DESTROYED );
+	// Without a frame a released range is free at once: the next upload takes
+	// it, though the recorded frame still names it.
+	const bare = releaseAfterRecord( createStrictGpu(), destroyNow );
+	assert.equal( bare.commands.upload( triangle() ).firstIndex, bare.draws[1].firstIndex );
 
 	const gpu = createStrictGpu(), retirement = createRetirement();
 	retirement.open();
-	releaseAfterRecord( gpu, retirement.retire )();
+	const frame = releaseAfterRecord( gpu, retirement.retire );
+	const during = frame.commands.upload( triangle() );
+	assert.notEqual( during.firstIndex, frame.draws[1].firstIndex, "the open frame keeps the released range" );
+	frame.submit();
 	assert.deepEqual( gpu.log, [ "submit frame" ], "nothing was destroyed before the submit" );
 	retirement.close();
-	const destroyed = gpu.log.slice( 1 ).map( entry => entry.replace( "destroy ", "" ) ).sort();
-	assert.deepEqual( destroyed, [
-		"geometry-indices",
-		"geometry-instances",
-		"geometry-instances",
-		"geometry-material",
-		"geometry-transform",
-		"geometry-vertices"
-	] );
+	assert.deepEqual( gpu.log, [ "submit frame" ], "slab ranges return to their slabs; no buffer dies" );
+	assert.equal(
+		frame.commands.upload( triangle() ).firstIndex,
+		frame.draws[1].firstIndex,
+		"after the submit the range is free again"
+	);
 });
 
 /*
