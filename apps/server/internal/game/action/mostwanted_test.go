@@ -39,10 +39,16 @@ func TestMostWantedLevelAndBonuses(t *testing.T) {
 		}
 	}
 	c.MostWanted = &domain.MostWanted{Streak: 50}
+	dressThief(c)
 	if rt.mostWantedWrites(c) != nil || rt.mostWantedSpeedFactor(c) != 1 {
 		t.Fatal("flag off applied a bonus")
 	}
 	rt.MostWanted = true
+	unsuited := *c
+	unsuited.MissionInventory = nil
+	if rt.mostWantedWrites(&unsuited) != nil || rt.mostWantedSpeedFactor(&unsuited) != 1 {
+		t.Fatal("an unsuited player was buffed")
+	}
 	writes := rt.mostWantedWrites(c)
 	// STR, INT, four damage-dealt rates and four incoming reductions.
 	if len(writes) != 10 || writes[0].Parameter != 1 || writes[0].Value != 5 || writes[1].Parameter != 2 || writes[2].Value != 2 {
@@ -67,6 +73,11 @@ func TestMostWantedRaisesTheProjectedStrength(t *testing.T) {
 		t.Fatal(err)
 	}
 	actor.MostWanted = &domain.MostWanted{Streak: 30}
+	dressForJob(rt, actor, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
+	native, err = rt.PlayerBaseStats(testDivision, actor)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if off, _ := rt.PlayerBaseStats(testDivision, actor); off != native {
 		t.Fatal("flag off changed the stat block")
 	}
@@ -106,33 +117,33 @@ func TestMostWantedPairLimit(t *testing.T) {
 ================
 TestMostWantedEligibility
 
-The killer's own account, party and guild never count; a stranger does.
+The killer's own account, party and guild are never strangers; a stranger is.
 ================
 */
 func TestMostWantedEligibility(t *testing.T) {
 	rt, _, killer, victim := newPvpPair(t)
 	killer.AccountID, victim.AccountID = "a", "b"
-	if rt.mostWantedEligible(testDivision, killer, victim) {
+	if rt.mostWantedStrangers(testDivision, killer, victim) {
 		t.Fatal("flag off counted")
 	}
 	rt.MostWanted = true
-	if !rt.mostWantedEligible(testDivision, killer, victim) {
+	if !rt.mostWantedStrangers(testDivision, killer, victim) {
 		t.Fatal("a stranger did not count")
 	}
 	victim.AccountID = "a"
-	if rt.mostWantedEligible(testDivision, killer, victim) {
+	if rt.mostWantedStrangers(testDivision, killer, victim) {
 		t.Fatal("the same account counted")
 	}
 	victim.AccountID = "b"
 	guild := int64(7)
 	killer.GuildID, victim.GuildID = &guild, &guild
-	if rt.mostWantedEligible(testDivision, killer, victim) {
+	if rt.mostWantedStrangers(testDivision, killer, victim) {
 		t.Fatal("the same guild counted")
 	}
 	victim.GuildID = nil
 	gids := []uint32{enterworld.ObjectIDForCharacter(killer), enterworld.ObjectIDForCharacter(victim)}
 	rt.RewardParties = func(string) []RewardParty { return []RewardParty{{Members: gids}} }
-	if rt.mostWantedEligible(testDivision, killer, victim) {
+	if rt.mostWantedStrangers(testDivision, killer, victim) {
 		t.Fatal("the same party counted")
 	}
 }
@@ -153,7 +164,7 @@ func TestMostWantedKillCountsAndPaysTheBounty(t *testing.T) {
 		killer.MostWanted = &domain.MostWanted{Streak: 9}
 		victim.MostWanted = &domain.MostWanted{Streak: 25}
 		gold := goldOf(killer)
-		kill := playerKill{kind: pk.DeathJob, mostWantedEligible: true}.withVictim(killer, victim)
+		kill := playerKill{kind: pk.DeathJob, mostWantedStrangers: true}.withVictim(killer, victim)
 		actor, _, _ := rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 0)
 		stats := false
 		for _, f := range actor {
@@ -171,12 +182,12 @@ func TestMostWantedKillCountsAndPaysTheBounty(t *testing.T) {
 		if goldOf(killer)-gold != 2*mostWantedBountyPerLevel {
 			t.Fatalf("on: bounty %d", goldOf(killer)-gold)
 		}
-		// An ineligible kill pays a bounty but never counts.
-		before := killer.MostWanted.Streak
-		kill.mostWantedEligible = false
+		// A related victim (alt, partymate, guildmate) neither counts nor pays.
+		before, paid := killer.MostWanted.Streak, goldOf(killer)
+		kill.mostWantedStrangers = false
 		rt.payPlayerKillInDoor(testDivision, killer, victim, kill, 1)
-		if killer.MostWanted.Streak != before {
-			t.Fatal("an ineligible kill counted")
+		if killer.MostWanted.Streak != before || goldOf(killer) != paid {
+			t.Fatalf("a related kill counted or paid: streak %d gold %d", killer.MostWanted.Streak-before, goldOf(killer)-paid)
 		}
 	}
 }

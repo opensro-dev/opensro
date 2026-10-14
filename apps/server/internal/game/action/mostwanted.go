@@ -17,12 +17,13 @@ saved on the character (domain.MostWanted, store schema 24).
 Reset. Death of any kind, or taking the job suit off, clears the streak.
 
 Bonuses, per wanted level: +1 STR, +1 INT and +1% movement speed on foot;
-damage dealt +1% and taken -1% from level 3, 2% from 5, 3% at 10. They are
+damage dealt +1% and taken -1% from level 3, 2% from 5, 3% at 10, while
+the suit is worn. They are
 parameter writes in the same projection as every effect (statModifierWrites),
 so stats, damage and the client's stat window agree.
 
 Bounty. Killing a wanted player in PvP pays the killer 100,000,000 gold per
-wanted level (1,000,000,000 at 10). The gold is new: the owner accepted the
+wanted level (1,000,000,000 at 10), under the same stranger test as a count. The gold is new: the owner accepted the
 supply. Every count and every bounty writes an audit log line.
 
 Off, the default here, nothing counts, no bonus applies and no bounty is
@@ -132,7 +133,9 @@ The streak's parameter writes, nil without the rule or a wanted level.
 */
 func (rt *Runtime) mostWantedWrites(c *enterworld.Character) []paramkeeper.Write {
 	level := mostWantedLevel(c)
-	if !rt.MostWanted || level == 0 {
+	// Only a suited player is wanted: a streak saved while the rule was off
+	// (when undressing does not clear it) never buffs an unsuited one.
+	if !rt.MostWanted || level == 0 || enterworld.DressedJob(c) == 0 {
 		return nil
 	}
 	writes := []paramkeeper.Write{
@@ -169,7 +172,7 @@ The streak's movement factor on foot: +1% per wanted level.
 ================
 */
 func (rt *Runtime) mostWantedSpeedFactor(c *enterworld.Character) float32 {
-	if !rt.MostWanted {
+	if !rt.MostWanted || enterworld.DressedJob(c) == 0 {
 		return 1
 	}
 	return 1 + float32(mostWantedLevel(c))/100
@@ -177,14 +180,15 @@ func (rt *Runtime) mostWantedSpeedFactor(c *enterworld.Character) float32 {
 
 /*
 ================
-mostWantedEligible
+mostWantedStrangers
 
-Whether a job kill may count toward the killer's streak: the victim shares
-neither the killer's account, party, guild nor guild union. Called before
-any character door (the union authority takes its own lock).
+Whether a kill may count toward the killer's streak or pay a bounty: the
+victim shares neither the killer's account, party, guild nor guild union,
+so an alt or a guildmate can never cash a streak. Called before any
+character door (the union authority takes its own lock).
 ================
 */
-func (rt *Runtime) mostWantedEligible(division string, killer, victim *enterworld.Character) bool {
+func (rt *Runtime) mostWantedStrangers(division string, killer, victim *enterworld.Character) bool {
 	if !rt.MostWanted || killer == nil || victim == nil {
 		return false
 	}
@@ -268,14 +272,14 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	if !rt.MostWanted || killer == nil || victim == nil {
 		return nil, nil
 	}
-	if kill.victimWanted > 0 {
+	if kill.victimWanted > 0 && kill.mostWantedStrangers {
 		bounty := uint64(kill.victimWanted) * mostWantedBountyPerLevel
 		setGold(killer, goldOf(killer)+bounty)
 		actor = append(actor, goldFrame(killer))
 		log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
 			"wanted": kill.victimWanted, "gold": bounty}).Info("most wanted: bounty paid")
 	}
-	if kill.kind != pk.DeathJob || !kill.mostWantedEligible || !enterworld.CharacterAlive(killer) ||
+	if kill.kind != pk.DeathJob || !kill.mostWantedStrangers || !enterworld.CharacterAlive(killer) ||
 		!rt.countMostWantedPair(division, killer.Name, victim.Name, now) {
 		return actor, nil
 	}

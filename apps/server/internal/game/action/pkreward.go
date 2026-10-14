@@ -64,11 +64,12 @@ type playerKill struct {
 	legalEnemy  bool
 	enemyRules  playerEnemyRules
 	victimLevel int64
-	// Port-only, not native (mostwanted.go): whether the kill may count
-	// toward the killer's streak, and the victim's wanted level before its
-	// death cleared it.
-	mostWantedEligible bool
-	victimWanted       int64
+	// Port-only, not native (mostwanted.go): whether killer and victim are
+	// strangers (no shared account, party, guild or union), which both the
+	// streak count and the bounty require, and the victim's wanted level
+	// before its death cleared it.
+	mostWantedStrangers bool
+	victimWanted        int64
 }
 
 /*
@@ -94,7 +95,7 @@ can persist while holding their own mutex. withVictim refreshes local facts.
 func (rt *Runtime) classifyPlayerKill(division string, killer, victim *enterworld.Character) playerKill {
 	kind := rt.deathKind(division, victim, rt.prepareDeathKiller(division, victim, deathKiller{player: killer}))
 	kill := playerKill{kind: kind, enemyRules: rt.worldPlayerEnemyRules(division, killer, victim)}
-	kill.mostWantedEligible = kind == pk.DeathJob && rt.mostWantedEligible(division, killer, victim)
+	kill.mostWantedStrangers = rt.mostWantedStrangers(division, killer, victim)
 	return kill.withVictim(killer, victim)
 }
 
