@@ -6,7 +6,9 @@ caravanbandit.go - bandits generated around a trade caravan
 Caravan_SpawnBandits (60BF30) hands CMonster_SpawnInstance the vehicle's
 position, the bandit reference, its numbered tactics, a random heading and
 a 150-unit spawn radius. The actor joins the trader's population like any
-other generated monster but belongs to no nest and never respawns.
+other generated monster but belongs to no nest and never respawns; like
+every monster it leaves 20 s after its spawn or its last attack
+(monsterlifetime.go).
 
 ===========================================================================
 */
@@ -117,5 +119,8 @@ func (s *MonsterState) SpawnCaravanBandit(request CaravanBanditSpawn) bool {
 	state.movers.set(actor.Gid, mover)
 	state.behavior.set(actor.Gid, 0)
 	state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], actor.Gid)
+	// CGObjMob_SpawnBase (4C10C0) arms a bandit's timers like any monster's:
+	// a thief or hunter leaves 20 s after its spawn or its last attack.
+	armLifetimeLocked(state, actor, request.NowMs)
 	return true
 }

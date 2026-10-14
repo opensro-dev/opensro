@@ -140,6 +140,8 @@ func (s *MonsterState) SpawnGMMonsters(request GMMonsterSpawn) int {
 		state.movers.set(actor.Gid, mover)
 		state.behavior.set(actor.Gid, 0)
 		state.byRegion[spawn.RegionID] = append(state.byRegion[spawn.RegionID], actor.Gid)
+		// 4C10C0 arms every spawned monster's timers, a GM's included.
+		armLifetimeLocked(state, actor, request.NowMs)
 	}
 	return created
 }

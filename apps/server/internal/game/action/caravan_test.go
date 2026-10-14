@@ -406,3 +406,35 @@ func TestStarAmbushFixesTheCountPerStar(t *testing.T) {
 		t.Fatalf("off: %d bandits, want the capped 8", len(native))
 	}
 }
+
+/*
+================
+TestIdleCaravanBanditsLeave
+
+CGObjMob_SpawnBase (4C10C0) gives a bandit the job monster's idle timer:
+an ambush that never strikes leaves 20 s after it spawned, as every other
+thief or hunter monster does.
+================
+*/
+func TestIdleCaravanBanditsLeave(t *testing.T) {
+	rt, clock, c := caravanFixture(t)
+	vehicle := simulation.Spawn{RegionID: caravanBattlefield, X: 960, Y: 20, Z: 960}
+	rideCaravanTo(rt, c, vehicle)
+	spawnedAt := clock.Now().UnixMilli()
+	if err := rt.spawnCaravanBandits(testDivision, c, vehicle, spawnedAt); err != nil {
+		t.Fatal(err)
+	}
+	ambush := len(caravanBandits(rt, vehicle.RegionID))
+	if ambush == 0 {
+		t.Fatal("no bandits spawned")
+	}
+	if left := rt.Monsters.ExpireMonsterLifetimes(spawnedAt + 19999); left != 0 {
+		t.Fatalf("%d bandits left before their idle timer", left)
+	}
+	if left := rt.Monsters.ExpireMonsterLifetimes(spawnedAt + 20000); left != ambush {
+		t.Fatalf("%d of %d idle bandits left at 20 s", left, ambush)
+	}
+	if len(caravanBandits(rt, vehicle.RegionID)) != 0 {
+		t.Fatal("an idle bandit stayed in the world")
+	}
+}
