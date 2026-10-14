@@ -71,10 +71,6 @@ func TestSolidPlaneHeightAdmissionAndMask(t *testing.T) {
 
 func TestKarakoramSolidPlaneLoginMonsterAndMovement(t *testing.T) {
 	v := realAuthorityValidator(t)
-	defer v.Close()
-	if err := v.EnableBoundedHeightCache(1024); err != nil {
-		t.Fatal(err)
-	}
 	from := simulation.Spawn{RegionID: 0x5c81, X: 750, Y: 690, Z: 410}
 	to := from
 	to.X = 800

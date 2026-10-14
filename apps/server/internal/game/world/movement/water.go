@@ -37,7 +37,6 @@ const (
 // index or bundle degrades to ACCEPT (`.catch(() => null)`), never to a
 // refusal or a fault.
 type WaterValidator struct {
-	heightCache          *heightCache
 	root                 string
 	catalogPath          string
 	dungeonResourcesPath string

@@ -15,9 +15,11 @@ type waterSector struct {
 
 // heightGrid is one region's navmesh height map: axisVertices^2 vertices at
 // vertexStep spacing (the exported JMXVNVM grid, 97x97 every 20 units).
+// Every grid stays in memory (about 79 MB for the shipped world): population
+// spawns sample heights at nests across the whole world in one tick, so a
+// paged cache missed on nearly every lookup and stalled the tick on disk
+// reads.
 type heightGrid struct {
-	cache        *heightCache
-	offset       int64
 	axisVertices int
 	vertexStep   float64
 	heights      []float32
@@ -115,4 +117,16 @@ func (s *groundSurface) waterSurfaceHeightAt(baseX, baseZ float64) (float64, boo
 
 func offsetKey(dx, dz int) int64 {
 	return int64(dx)*sectorOffsetStride + int64(dz)
+}
+
+/*
+================
+heightGrid.quad
+
+The four heights of the grid cell whose low corner is vertex (x, z).
+================
+*/
+func (g *heightGrid) quad(x, z int) (float64, float64, float64, float64) {
+	i := z*g.axisVertices + x
+	return float64(g.heights[i]), float64(g.heights[i+1]), float64(g.heights[i+g.axisVertices]), float64(g.heights[i+g.axisVertices+1])
 }

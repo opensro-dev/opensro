@@ -269,13 +269,6 @@ func (v *WaterValidator) buildSurface(bundlePublicPath string, index *regionInde
 		return nil
 	}
 	heights := buildHeightGrids(bundle)
-	if v.heightCache != nil {
-		for _, grid := range heights {
-			grid.offset = v.heightCache.store(grid.heights)
-			grid.cache = v.heightCache
-			grid.heights = nil
-		}
-	}
 	return &groundSurface{
 		seedRegionID:                  seedRegionID,
 		regionSize:                    regionSize,

@@ -66,7 +66,6 @@ type gameWorldApplication struct {
 	skillCache      io.Closer
 	itemCache       io.Closer
 	populationCache io.Closer
-	heightCache     io.Closer
 	transport       *transport.Server
 	authority       *store.Store
 	controlAPI      *agentapi.API
@@ -216,10 +215,6 @@ func newGameWorldApplication(
 		application.populationCache = gameplay.deps.MonsterState
 		application.population = gameplay.deps.MonsterState
 	}
-	if err := gameplay.water.EnableBoundedHeightCache(2 << 20); err != nil {
-		return nil, fmt.Errorf("terrain height cache: %w", err)
-	}
-	application.heightCache = gameplay.water
 	// Built after gameplay construction: the static item rows name the
 	// alchemy and Magic Pop catalogues it configures.
 	references, err := enterworld.NewBrowserReferences(enterworld.BrowserReferenceSources{
@@ -482,9 +477,6 @@ func (application *gameWorldApplication) Run(ctx context.Context) error {
 	if application.populationCache != nil {
 		drainErr = errors.Join(drainErr, application.populationCache.Close())
 	}
-	if application.heightCache != nil {
-		drainErr = errors.Join(drainErr, application.heightCache.Close())
-	}
 	application.releaseLease()
 	if application.authority != nil {
 		log.Info("shutdown: closing the authority store")
@@ -602,11 +594,6 @@ func (application *gameWorldApplication) rollback() {
 	if application.populationCache != nil {
 		if err := application.populationCache.Close(); err != nil {
 			log.Warnf("startup rollback population cache: %v", err)
-		}
-	}
-	if application.heightCache != nil {
-		if err := application.heightCache.Close(); err != nil {
-			log.Warnf("startup rollback height cache: %v", err)
 		}
 	}
 	if application.authority != nil {
