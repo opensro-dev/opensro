@@ -15,6 +15,7 @@ import (
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/commerce"
+	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
@@ -183,7 +184,7 @@ func TestTraderPartySettlementFiltersRecipientsAndCommitsTogether(t *testing.T) 
 	calls := 0
 	deps.UpdateCharacters = func(members []*enterworld.Character, label string, update func() bool) bool {
 		calls++
-		if len(members) != 3 || label != "shop-transaction" {
+		if len(members) != 3 || label != "trade-sale" {
 			t.Fatalf("transaction roster %+v %q", members, label)
 		}
 		return update()
@@ -365,6 +366,42 @@ func TestTransportPurchaseSendsTradeLevel(t *testing.T) {
 	for _, frame := range refused.Frames {
 		if frame.Opcode == wire.OpTradeStarCount {
 			t.Fatal("a refused purchase sent a trade level")
+		}
+	}
+}
+
+/*
+================
+TestCommerceDoorLabelNamesTradeSales
+
+A sale of goods (from the bag or from a transport) commits under the
+trade door the economy ledger reads as a trade payout; a purchase and an
+ordinary sale stay shop transactions.
+================
+*/
+func TestCommerceDoorLabelNamesTradeSales(t *testing.T) {
+	goods := wire.PackTypeFlags(3, 3, 8, 1)
+	potion := wire.PackTypeFlags(3, 3, 1, 1)
+	c := &enterworld.Character{MissionInventory: []enterworld.InventoryRow{
+		{Slot: 13, TypeFlags: goods, StackCount: 5}, {Slot: 14, TypeFlags: potion, StackCount: 5}}}
+	if !inventory.IsTradeGoods(goods) || inventory.IsTradeGoods(potion) {
+		t.Fatal("fixture type flags do not classify as intended")
+	}
+	cases := []struct {
+		move          uint8
+		slot          uint8
+		fromTransport bool
+		want          string
+	}{
+		{wire.MoveTypeShopSell, 13, false, "trade-sale"},
+		{wire.MoveTypeShopSell, 14, false, "shop-transaction"},
+		{wire.MoveTypeShopSell, 0, true, "trade-sale"},
+		{wire.MoveTypeShopBuy, 13, false, "shop-transaction"},
+	}
+	for _, tc := range cases {
+		q := wire.ItemMoveRequest{MovementType: tc.move, SourceSlot: tc.slot}
+		if got := commerceDoorLabel(c, q, tc.fromTransport); got != tc.want {
+			t.Fatalf("%+v = %q, want %q", tc, got, tc.want)
 		}
 	}
 }

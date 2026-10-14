@@ -59,6 +59,24 @@ func ledgerRows(t *testing.T, s *Store) []storedLedgerRow {
 
 /*
 ================
+doorRows
+
+The rows after every fixture's creation and seed rows.
+================
+*/
+func doorRows(t *testing.T, s *Store) []storedLedgerRow {
+	t.Helper()
+	var out []storedLedgerRow
+	for _, row := range ledgerRows(t, s) {
+		if row.door != "create-character" && row.door != "test-seed-gold" {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+/*
+================
 newLedgerCharacter
 
 A stored character holding gold, given through a door the ledger does not
@@ -118,10 +136,12 @@ func TestDoorGoldChangesBecomeLedgerRows(t *testing.T) {
 		{c.ID, "monster_gold", "pickup-gold", 50, 800},
 	}
 	got := ledgerRows(t, s)
-	if len(got) == 0 || got[0].reason != domain.EconomyReasonUnattributed || got[0].door != "test-seed-gold" || got[0].balance != 1000 {
-		t.Fatalf("seed row %+v", got)
+	starting := *seededCharacter().Gold
+	if len(got) < 2 || got[0].reason != "starting_gold" || got[0].door != "create-character" || got[0].gold != starting ||
+		got[1].reason != domain.EconomyReasonUnattributed || got[1].door != "test-seed-gold" || got[1].balance != 1000 {
+		t.Fatalf("creation and seed rows %+v", got)
 	}
-	got = got[1:]
+	got = got[2:]
 	if len(got) != len(want) {
 		t.Fatalf("rows %+v, want %+v", got, want)
 	}
@@ -152,7 +172,7 @@ func TestTransferWritesBothSides(t *testing.T) {
 		a.Gold, b.Gold = &ag, &bg
 		return true
 	})
-	got := ledgerRows(t, s)[2:]
+	got := doorRows(t, s)
 	if len(got) != 2 {
 		t.Fatalf("exchange rows %+v", got)
 	}
@@ -190,13 +210,13 @@ func TestTickBatchKeepsEachDoorsLabel(t *testing.T) {
 		c.Gold = &gold
 		return true
 	})
-	if rows := ledgerRows(t, s); len(rows) != 1 {
+	if rows := doorRows(t, s); len(rows) != 0 {
 		t.Fatalf("rows before the flush: %+v", rows)
 	}
 	if stats := s.FlushTickBatch(); !stats.Flushed || stats.Err != nil {
 		t.Fatalf("flush %+v", stats)
 	}
-	rows := ledgerRows(t, s)[1:]
+	rows := doorRows(t, s)
 	if len(rows) != 2 || rows[0].reason != "monster_gold" || rows[0].gold != 60 ||
 		rows[1].reason != "repair" || rows[1].gold != -10 || rows[1].balance != 150 {
 		t.Fatalf("batched rows %+v", rows)
@@ -216,7 +236,7 @@ func TestFailedCommitKeepsTheRowPending(t *testing.T) {
 	c := newLedgerCharacter(t, s, "LedgerFail", 100)
 	s.FailCommits(errors.New("disk failure"))
 	setGoldIn(s, c, "npc-repair", 90)
-	if rows := ledgerRows(t, s); len(rows) != 1 || s.EconomyCounters()["gold.repair.loss"] != 0 {
+	if rows := doorRows(t, s); len(rows) != 0 || s.EconomyCounters()["gold.repair.loss"] != 0 {
 		t.Fatalf("a failed commit wrote %+v", rows)
 	}
 	s.FailCommits(nil)
@@ -229,7 +249,7 @@ func TestFailedCommitKeepsTheRowPending(t *testing.T) {
 		c.Level = &level
 		return true
 	})
-	rows := ledgerRows(t, s)[1:]
+	rows := doorRows(t, s)
 	if len(rows) != 1 || rows[0].door != "npc-repair" || rows[0].gold != -10 || s.EconomyCounters()["gold.repair.loss"] != 10 {
 		t.Fatalf("after recovery %+v", rows)
 	}
@@ -258,7 +278,7 @@ func TestOwnTransactionDoorWritesItsRow(t *testing.T) {
 		c.Level = new(int64)
 		return true
 	})
-	rows := ledgerRows(t, s)[1:]
+	rows := doorRows(t, s)
 	if len(rows) != 1 || rows[0].reason != "storage_deposit" || rows[0].gold != -120 || rows[0].balance != 380 {
 		t.Fatalf("warehouse rows %+v", rows)
 	}

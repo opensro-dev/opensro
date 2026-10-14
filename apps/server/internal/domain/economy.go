@@ -37,8 +37,20 @@ type economyDoorReason struct {
 // sell are both "shop-transaction"), so the direction picks the reason.
 var economyDoorReasons = map[string]economyDoorReason{
 	"shop-transaction": {gain: "npc_sale", loss: "shop_buy"},
+	// A new character's starting gold, at creation or (for a record made
+	// before the creation seed existed) at its first world entry.
+	"create-character": {gain: "starting_gold"},
+	"bootstrap-seed":   {gain: "starting_gold"},
 	"shop-buyback":     {loss: "buyback"},
-	"pickup-gold":      {gain: "monster_gold"},
+	// A trade-goods sale's payouts: the seller's credit and every party
+	// share commit in one settlement (commerce.go commerceDoorLabel).
+	"trade-sale": {gain: "trade_payout"},
+	// A portal or guide's fee, and its refund when the travel rolls back.
+	"portal-travel":         {loss: "teleport_fee"},
+	"guide-reverse-return":  {loss: "teleport_fee"},
+	"portal-world-rollback": {gain: "teleport_refund"},
+	"portal-entry-rollback": {gain: "teleport_refund"},
+	"pickup-gold":           {gain: "monster_gold"},
 	// A pickup pet looting gold (cosground.go) is monster gold too.
 	"cos-ground-item":  {gain: "monster_gold"},
 	"gold-drop":        {loss: "gold_drop"},

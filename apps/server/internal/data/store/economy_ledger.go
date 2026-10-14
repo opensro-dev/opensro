@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/domain"
 )
 
@@ -77,8 +78,10 @@ gold per reason and direction, for the metrics endpoint.
 type economyLedger struct {
 	seen    map[*domain.Character]int64
 	pending []ledgerRow
-	mu      sync.Mutex
-	totals  map[string]uint64
+	// warned names the unattributed doors already logged, once each.
+	warned map[string]bool
+	mu     sync.Mutex
+	totals map[string]uint64
 }
 
 /*
@@ -101,10 +104,22 @@ A character the store starts to own: its balance is where its rows begin.
 ================
 */
 func (s *Store) seedLedgerLocked(c *domain.Character) {
+	s.seedLedgerAtLocked(c, ledgerGold(c))
+}
+
+/*
+================
+seedLedgerAtLocked
+
+Starts c's rows at balance: its loaded gold, or nothing for a character
+whose creation mints its starting gold.
+================
+*/
+func (s *Store) seedLedgerAtLocked(c *domain.Character, balance int64) {
 	if s.ledger.seen == nil {
 		s.ledger.seen = map[*domain.Character]int64{}
 	}
-	s.ledger.seen[c] = ledgerGold(c)
+	s.ledger.seen[c] = balance
 }
 
 /*
@@ -192,11 +207,21 @@ func (s *Store) goldRowLocked(label, division string, c *domain.Character, balan
 		return ledgerRow{}, false
 	}
 	door := domain.EconomyDoor(label)
+	reason := domain.EconomyReason(door, balance > before)
+	if reason == domain.EconomyReasonUnattributed && !s.ledger.warned[door] {
+		// A door the reason table does not name moved gold: the row keeps
+		// the door, and the log names it once so the table can learn it.
+		if s.ledger.warned == nil {
+			s.ledger.warned = map[string]bool{}
+		}
+		s.ledger.warned[door] = true
+		log.WithFields(log.Fields{"door": door, "gain": balance > before}).Warn("economy ledger: a door with no reason moved gold")
+	}
 	return ledgerRow{
 		atMs:     s.now().UnixMilli(),
 		division: division,
 		charID:   c.ID,
-		reason:   domain.EconomyReason(door, balance > before),
+		reason:   reason,
 		door:     door,
 		gold:     balance - before,
 		balance:  balance,

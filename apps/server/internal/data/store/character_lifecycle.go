@@ -179,7 +179,9 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	s.characters[divisionID] = append(s.characters[divisionID], c)
 	s.rebuildCharacterLookupLocked(divisionID)
 	s.charDivision[c] = divisionID
-	s.seedLedgerLocked(c)
+	// A new character's gold is minted by its creation: the ledger starts
+	// it at nothing, so the creation commit records the starting gold.
+	s.seedLedgerAtLocked(c, 0)
 	s.changes.characters[c] = true
 	s.changes.nextCharID[divisionID] = true
 	s.commitLocked("create-character " + c.Name)
