@@ -33,6 +33,10 @@ const (
 	tradePickupErrNoJob uint8 = 0x64
 	// tradePickupErrOwnGoods is 0x186F, UIIT_MSG_STRGERR_ROBBER_CANT_PICK_HIS_ITEM.
 	tradePickupErrOwnGoods uint8 = 0x6F
+	// tradePickupErrTeleporting is 0x186E, UIIT_MSG_STRGERR_CANT_PICK_ITEM_
+	// WHILE_TELEPORT_WORK: a player picking goods while a teleport is
+	// pending (526090: the picker's GetTeleportState 4DDC90 is not zero).
+	tradePickupErrTeleporting uint8 = 0x6E
 )
 
 // 525DC0 also compares a vector's length with 1000.0 (refusal 4), but builds
@@ -85,13 +89,19 @@ func tradePickupRefusal(c *enterworld.Character, owner string) uint8 {
 ================
 grantTradeGoodsPickup
 
-The trade goods arm of the player's pickup: the job test, then the
-transport, then the grant into its cargo with the 0x11 receipt the client
+The trade goods arm of the player's pickup: no pending teleport, the job
+test, then the transport, then the grant into its cargo with the 0x11 receipt the client
 applies to the transport's bag. The picker's own animation plays it.
 ================
 */
 func (rt *Runtime) grantTradeGoodsPickup(g pickupGrant) OpResult {
 	c, item, division := g.picker, g.item, g.division
+	// 526090 refuses a player's goods pickup while any teleport is pending,
+	// before the job test: the Thief Den scroll's mode 2 cast leaves the
+	// thief free to move, but not to load goods.
+	if c.NativeTeleportMode != 0 {
+		return pickupRefusal(tradePickupErrTeleporting)
+	}
 	if code := tradePickupRefusal(c, item.TradeOwner); code != 0 {
 		return pickupRefusal(code)
 	}
