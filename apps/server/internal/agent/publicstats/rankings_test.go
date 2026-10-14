@@ -41,12 +41,14 @@ func TestRankingsOrderEveryVisiblePlayer(t *testing.T) {
 	lvl := func(n int64) *int64 { return &n }
 	exp := func(n int64) *int64 { return &n }
 	f.chars[0].Experience = exp(50)
-	// Two level-30 players with equal progress: the earlier to reach 30 ranks first.
+	// Three level-30 players: the latest login ranks first, ahead of more EXP
+	// and an earlier milestone; one never logged in since tracking, last.
 	f.chars = append(f.chars,
-		&domain.Character{ID: 4, Name: "Late", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(30), Experience: exp(10),
-			LevelReachedAt: map[uint8]int64{30: 9000}},
-		&domain.Character{ID: 5, Name: "Early", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(30), Experience: exp(10),
-			LevelReachedAt: map[uint8]int64{30: 1000}})
+		&domain.Character{ID: 4, Name: "Idle", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(30), Experience: exp(90),
+			LevelReachedAt: map[uint8]int64{30: 1000}, LastLoginAtMs: 2000},
+		&domain.Character{ID: 5, Name: "Active", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(30), Experience: exp(10),
+			LevelReachedAt: map[uint8]int64{30: 9000}, LastLoginAtMs: 8000},
+		&domain.Character{ID: 6, Name: "Absent", ModelCodename: "CHAR_CH_MAN_ADVENTURER", Level: lvl(30), Experience: exp(99)})
 	s := f.service()
 	s.src.ExpRequired = func(level int64) (int64, bool) { return 100, true }
 
@@ -55,10 +57,10 @@ func TestRankingsOrderEveryVisiblePlayer(t *testing.T) {
 	for _, row := range byLevel.Rows {
 		names = append(names, row.Name)
 	}
-	if want := "Kekw,Lune,Early,Late"; join(names) != want {
+	if want := "Kekw,Lune,Active,Idle,Absent"; join(names) != want {
 		t.Fatalf("by level %s, want %s (Shy hidden)", join(names), want)
 	}
-	if byLevel.Total != 4 || byLevel.Pages != 1 || byLevel.Rows[0].Rank != 1 || byLevel.Rows[0].ExpPercent != 50 {
+	if byLevel.Total != 5 || byLevel.Pages != 1 || byLevel.Rows[0].Rank != 1 || byLevel.Rows[0].ExpPercent != 50 {
 		t.Fatalf("by level header %+v", byLevel)
 	}
 	if byLevel.Rows[2].ReachedAt == nil || byLevel.Rows[0].ReachedAt != nil {

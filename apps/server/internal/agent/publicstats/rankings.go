@@ -127,7 +127,7 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		killsBy[kill.KillerCharID]++
 	}
 	rows := make([]RankingRow, 0, len(r.all))
-	reached := map[string]int64{}
+	lastLogin := map[string]int64{}
 	for _, c := range r.all {
 		if c.PublicHidden {
 			continue
@@ -147,12 +147,12 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 		if lvl := row.Level; lvl > 0 && lvl <= math.MaxUint8 {
 			if at, ok := c.LevelReachedAt[uint8(lvl)]; ok {
 				row.ReachedAt = optionalTime(at)
-				reached[c.Name] = at
 			}
 		}
+		lastLogin[c.Name] = c.LastLoginAtMs
 		rows = append(rows, row)
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return rankedBefore(key.by, rows[i], rows[j], reached) })
+	sort.SliceStable(rows, func(i, j int) bool { return rankedBefore(key.by, rows[i], rows[j], lastLogin) })
 	for i := range rows {
 		rows[i].Rank = i + 1
 	}
@@ -168,11 +168,14 @@ func (s *Service) rankedRows(key rankingKey) ([]RankingRow, error) {
 rankedBefore
 
 The orderings the site asked for, each ending on the name so equal rows
-keep one order between snapshots. A level reached earlier ranks first; a
-level with no recorded time (reached before tracking) ranks after.
+keep one order between snapshots. By level, players of one level rank by
+their latest login, the most recent first (owner 2026-10-15: the board
+shows who is active at the top, not who got there first); a character
+that never logged in since tracking (0) ranks after. The login time only
+orders: it is not in the response.
 ================
 */
-func rankedBefore(by string, a, b RankingRow, reached map[string]int64) bool {
+func rankedBefore(by string, a, b RankingRow, lastLogin map[string]int64) bool {
 	switch by {
 	case rankByUniques:
 		if a.UniqueKills != b.UniqueKills {
@@ -195,16 +198,8 @@ func rankedBefore(by string, a, b RankingRow, reached map[string]int64) bool {
 		if a.Level != b.Level {
 			return a.Level > b.Level
 		}
-		if a.ExpPercent != b.ExpPercent {
-			return a.ExpPercent > b.ExpPercent
-		}
-		at, aok := reached[a.Name]
-		bt, bok := reached[b.Name]
-		if aok != bok {
-			return aok
-		}
-		if aok && at != bt {
-			return at < bt
+		if at, bt := lastLogin[a.Name], lastLogin[b.Name]; at != bt {
+			return at > bt
 		}
 	}
 	return a.Name < b.Name
