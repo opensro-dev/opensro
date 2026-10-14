@@ -142,6 +142,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Job kills are not announced.",
 				Now:    "Everyone sees which job killed which (\"Thief killed Trader\"), no names.",
 				Why:    "Requested for the beta; the original returns with one setting."},
+			{Flag: action.EnvThiefPartyBonus, On: action.ThiefPartyBonusFromEnv(),
+				Native: "A party's thieves change nothing about its monster rewards.",
+				Now:    "Each party member dressed as a thief adds 10% monster EXP and gold for the party, up to 50%.",
+				Why:    "Requested for the beta, to make thieves welcome in hunting parties; the original returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

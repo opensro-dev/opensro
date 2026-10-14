@@ -379,6 +379,8 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		for i, a := range members {
 			exp, sexp := monsterContributionReward(a.character, impact.Instance, rt.deps.LevelData(), g.damage, factors[i], a.party != nil && a.party.Options&1 != 0)
 			exp, sexp = paramJobRewardBonus(a.character, exp, sexp, now)
+			// Port-only, not native (thiefparty.go): the member's party's thieves.
+			exp = thiefPartyExp(exp, rt.thiefPartyPercent(division, a.party))
 			var frames []wire.Frame
 			if rt.UpdateExperience != nil && (exp != 0 || sexp != 0) {
 				frames, _ = rt.UpdateExperience(a.character, exp, sexp, impact.Instance.Gid)
@@ -408,6 +410,7 @@ func (rt *Runtime) settleMonsterInsideDoor(division string, actor *enterworld.Ch
 		// selected representative, never the actor who supplied the fatal hit.
 		planned := rt.planMonsterKillLoot(a.character, impact.Instance, pose, now)
 		rt.applyMonsterGoldBonus(division, a.character, planned)
+		rt.applyThiefPartyGold(division, a.character, planned)
 		planned = append(planned, rt.planQuestKillDrops(a.character, impact.Instance, pose, now)...)
 		frames, drops, _ := rt.applyMonsterKillInsideDoor(division, a.character, 0, 0, impact.Instance.Gid, planned)
 		out.drops = drops

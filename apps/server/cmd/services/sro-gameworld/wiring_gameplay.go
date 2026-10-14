@@ -552,6 +552,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if a := game.items.Announce; a.SoxDrop || a.Plus || a.JobKill {
 		log.Infof("announce: seal drops %v, plus %v, job kills %v", a.SoxDrop, a.Plus, a.JobKill)
 	}
+	// Port-only, not native: a party's thieves raise its EXP and gold.
+	game.items.ThiefPartyBonus = action.ThiefPartyBonusFromEnv()
+	if game.items.ThiefPartyBonus {
+		log.Infof("party: +10%% EXP and gold per thief (%s)", action.EnvThiefPartyBonus)
+	}
 	// Port-only, not native: no transport comes out during the Den countdown.
 	game.items.DenNoTransportSummon = action.DenNoTransportSummonFromEnv()
 	if game.items.DenNoTransportSummon {

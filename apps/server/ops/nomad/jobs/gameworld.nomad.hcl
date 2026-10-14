@@ -222,6 +222,14 @@ variable "announce_job_kill" {
   default = "on"
 }
 
+# thief_party_bonus gives a party +10% monster EXP and gold per member
+# dressed as a thief, up to +50% (port-only, not native; owner decision
+# 2026-10-14). "off" is native.
+variable "thief_party_bonus" {
+  type    = string
+  default = "on"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 variable "reverse_return_map" {
@@ -567,6 +575,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ANNOUNCE_SOX_DROP              = var.announce_sox_drop
         SRO_ANNOUNCE_PLUS                  = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
+        SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates

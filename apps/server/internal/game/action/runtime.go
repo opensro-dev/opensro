@@ -330,6 +330,10 @@ type Runtime struct {
 	Announce  Announcements
 	announcer announcer
 
+	// ThiefPartyBonus raises a party's monster EXP and gold for each thief
+	// in it (thiefparty.go; port-only, not native). False is native.
+	ThiefPartyBonus bool
+
 	// ShopOnly keeps degree-9 alchemy goods out of every drop (port-only,
 	// not native, beta balance; owner 2026-10-13). The zero value is off.
 	ShopOnly progression.ShopOnlyDegree9
