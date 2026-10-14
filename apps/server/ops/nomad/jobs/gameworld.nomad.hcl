@@ -196,6 +196,14 @@ variable "den_no_transport_summon" {
   default = "on"
 }
 
+# mall_transport_speed makes the Item Mall transports (buffalo, rhinoceros,
+# white elephant) walk and run 1.5 times as fast (port-only, not native;
+# owner decision 2026-10-14). "off" is native.
+variable "mall_transport_speed" {
+  type    = string
+  default = "on"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 variable "reverse_return_map" {
@@ -537,6 +545,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                = var.fast_den_return
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
+        SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates

@@ -130,6 +130,14 @@ func openAuthorityPlane(
 	if len(stackSizes) > 0 {
 		log.Infof("items: %s=%s raised %d item cap(s) (port-only, not native)", enterworld.EnvStackSizes, stackSizes, raised)
 	}
+	// Port-only, not native: the Item Mall transports move 1.5 times as fast.
+	if enterworld.MallTransportSpeedFromEnv() {
+		scaled, err := textdata.Items.ApplyMallTransportSpeed()
+		if err != nil {
+			return authorityPlane{}, err
+		}
+		log.Infof("cos: %s scaled %d mall transport(s) (port-only, not native)", enterworld.EnvMallTransportSpeed, scaled)
+	}
 	options := store.OptionsFromEnv()
 	options.DefaultSkills = enterworld.DefaultSkillSeeder(textdata.Skills)
 	options.DefaultInventory = enterworld.StarterInventorySeeder(

@@ -126,6 +126,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A transport can be summoned while the Bandit Den Return Scroll counts down.",
 				Now:    "No transport can be summoned during that countdown.",
 				Why:    "Thieves left stolen goods on the ground and loaded them just before arriving; the original rule returns with one setting."},
+			{Flag: enterworld.EnvMallTransportSpeed, On: enterworld.MallTransportSpeedFromEnv(),
+				Native: "Item Mall transports (buffalo, rhinoceros, white elephant) move at their listed speed.",
+				Now:    "They move 50% faster.",
+				Why:    "Requested for the beta; the original speed returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",
