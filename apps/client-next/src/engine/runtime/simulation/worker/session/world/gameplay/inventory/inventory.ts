@@ -193,6 +193,8 @@ presentShop
 		}
 		return shopPresentation;
 	}
+	// The presented bag (bag()). Every writer of slots clears it: the next
+	// read builds a new array, which is how gameplay's journal sees a change.
 	let published: readonly InventoryItem[] | null = null;
 	// One-shot slot flashes the 0x3645 item-state (7654B0) and 0x31E8 durability
 	// (77C300) updates raised; each lasts under 1.3 s, so older entries are
