@@ -45,6 +45,22 @@ const CHARACTER_KINDS = new Set( [ "player", "local-player", "npc", "monster", "
 const STALL_TITLE_SLOT = 6;
 // Skipped cosmetic steps held between world takes (degrade).
 const MAX_PENDING_DEGRADATIONS = 64;
+
+/*
+================
+localAppearanceRow
+
+The local latch has no peer appearance row, so it starts from the alive,
+idle defaults of one. LIFE (0x3122 channel 0) is then the local player's
+only death authority, as natively (777B60 sets +263 and the dead flag;
+8E64F0 plays the death from LIFE and the fatal impact, never from HP).
+Without a row, presentation fell back to the predicted vitals HP and could
+play a death, with its cry, that the next HP update stood back up.
+================
+*/
+function localAppearanceRow( pvpState: number ): number[] {
+	return [ 1, 0, 0, pvpState, 0, 0, 0, 0, 0 ];
+}
 // Wire authorities: server enterworld/{register,bootstrap,wire}.go,
 // world/simulation/{npc,monster}.go and item/wire/objectmove.go.
 /*
@@ -711,11 +727,9 @@ export function createEntities(
 				// 751520 renames it, 74F8F0 takes it down (CICharactor_SetStallState).
 				const entity = entities.get( v.getUint32( 0, true ) );
 				if ( !entity ) return;
-				// The local latch has no peer appearance row. Supply its alive,
-				// idle defaults so the owner's booth reaches presentation too.
-				const appearanceState = [
-					...(entity.appearanceState ?? [ 1, 0, 0, entity.pvpState ?? 0, 0, 0, 0, 0, 0 ])
-				];
+				// The local latch has no peer appearance row (localAppearanceRow),
+				// so the owner's booth reaches presentation too.
+				const appearanceState = [ ...(entity.appearanceState ?? localAppearanceRow( entity.pvpState ?? 0 )) ];
 				if ( frame.opcode === 0x33d1 ) {
 					appearanceState[STALL_TITLE_SLOT] = 0;
 					apply( {
@@ -913,6 +927,7 @@ export function createEntities(
 						avatars: localAvatars,
 						arenaTeam: Number( local.arenaTeam ?? 255 ),
 						pvpState: Number( local.pvpState ?? 0 ),
+						appearanceState: Object.freeze( localAppearanceRow( Number( local.pvpState ?? 0 ) ) ),
 						...(local.visualFlags !== undefined ? { visualFlags: Number( local.visualFlags ) } : {}),
 						...(local.bodyShape !== undefined ? { bodyShape: Number( local.bodyShape ) } : {}),
 						localJob: {

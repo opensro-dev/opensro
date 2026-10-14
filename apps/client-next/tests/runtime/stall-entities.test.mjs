@@ -133,9 +133,10 @@ function peerSpawn( title, decoration ) {
 	return { opcode: 0x30d7, payload: Buffer.concat( [ raw.subarray( 0, -3 ), tail, raw.subarray( -3 ) ] ) };
 }
 
-test("local owner open, rename and close publish title mode without a peer appearance row", () => {
+test("local owner open, rename and close publish title mode over the local alive row", () => {
 	const owner = world();
-	assert.equal( defined( owner.read( LOCAL_GID ) ).appearanceState, undefined );
+	// The latch spawns with the alive, idle defaults of a peer row (localAppearanceRow).
+	assert.deepEqual( defined( owner.read( LOCAL_GID ) ).appearanceState, [ 1, 0, 0, 3, 0, 0, 0, 0, 0 ] );
 	owner.receive( { opcode: 0xb049, payload: Buffer.from( [ 1 ] ) } );
 	owner.receive( stallFrame( 0x30df, LOCAL_GID, "王者 shop", 1234 ) );
 	const opened = defined( owner.read( LOCAL_GID ) );
