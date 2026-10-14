@@ -1,0 +1,5 @@
+atMs
+killerCharId
+killerName
+refObjId
+seq

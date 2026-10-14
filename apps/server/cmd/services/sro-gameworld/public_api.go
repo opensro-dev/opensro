@@ -323,7 +323,7 @@ func publicGuildEntries(authority *store.Store, shard string) []publicstats.Guil
 			continue
 		}
 		entry := publicstats.GuildEntry{ID: id, Name: guild.Name, Level: guild.Level, Union: unions[id],
-			Fortress: fortresses[id]}
+			Fortress: fortresses[id], FoundedAtMs: guild.FoundedAtMs}
 		for _, member := range members {
 			entry.Members = append(entry.Members, publicstats.GuildEntryMember{CharID: member.CharID, Grade: member.Grade})
 		}

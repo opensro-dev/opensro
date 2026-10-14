@@ -212,6 +212,9 @@ func (door storeGuildDoor) CreateGuild(divisionID string, guild domain.GuildReco
 		return 0, fmt.Errorf("guild id space exhausted for division %s (next %d, maximum %d)", divisionID, id, domain.MaxGuildID)
 	}
 	guild.ID = id
+	// The store stamps the founding time itself, as the native procedure
+	// does in the database (GuildRecord.FoundedAtMs).
+	guild.FoundedAtMs = s.now().UnixMilli()
 	if err := validateGuildRecord(guild); err != nil {
 		return 0, err
 	}

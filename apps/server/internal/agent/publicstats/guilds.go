@@ -46,6 +46,9 @@ type GuildEntry struct {
 	Members  []GuildEntryMember
 	Union    []int64
 	Fortress string
+	// FoundedAtMs is when the guild was created (unix ms); 0 for a guild
+	// founded before the store kept it.
+	FoundedAtMs int64
 }
 
 /*
@@ -161,6 +164,10 @@ func (s *Service) rankGuilds() []GuildRow {
 			}
 		}
 		sort.Strings(row.Union)
+		if entry.FoundedAtMs > 0 {
+			founded := time.UnixMilli(entry.FoundedAtMs).UTC().Format(time.RFC3339)
+			row.Founded = &founded
+		}
 		if entry.Fortress != "" {
 			fortress := entry.Fortress
 			row.Fortress = &fortress

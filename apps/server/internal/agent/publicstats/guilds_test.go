@@ -33,7 +33,8 @@ func TestGuildListRanksAndKeepsMastersPrivate(t *testing.T) {
 			{ID: 11, Name: "Tea", Level: 3,
 				Members: []GuildEntryMember{{CharID: 3, Grade: 0}, {CharID: 7, Grade: 2}, {CharID: 8, Grade: 2}},
 				Union:   []int64{10}},
-			{ID: 12, Name: "Ash", Level: 5, Members: []GuildEntryMember{{CharID: 9, Grade: 0}}, Fortress: "jangan"},
+			{ID: 12, Name: "Ash", Level: 5, Members: []GuildEntryMember{{CharID: 9, Grade: 0}}, Fortress: "jangan",
+				FoundedAtMs: 1760000000000},
 		}
 	}
 	var out GuildsResponse
@@ -49,6 +50,10 @@ func TestGuildListRanksAndKeepsMastersPrivate(t *testing.T) {
 	}
 	if ash.Fortress == nil || *ash.Fortress != "jangan" || ash.Master != "" || len(ash.Union) != 0 {
 		t.Fatalf("Ash %+v", ash)
+	}
+	// A guild founded before the store kept the time has none.
+	if ash.Founded == nil || *ash.Founded != "2025-10-09T08:53:20Z" || tea.Founded != nil {
+		t.Fatalf("founded %v / %v", ash.Founded, tea.Founded)
 	}
 	if tea.Master != HiddenName || tea.Members != 3 || len(tea.Union) != 1 || tea.Union[0] != "Silk" {
 		t.Fatalf("Tea %+v", tea)

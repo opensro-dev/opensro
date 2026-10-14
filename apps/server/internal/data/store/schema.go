@@ -79,7 +79,10 @@ func isVersionMismatch(err error) bool {
 // (port-only, economy_ledger.go), and the schema stamp is what makes a release
 // run the offline upgrade that adds it (release_state.store_upgrade_required
 // compares schemas only). The upgrade rewrites no record.
-const CurrentVersion = 25
+// Version 26 adds the optional guild founding time (foundedAtMs, native
+// _Guild.FoundationDate), stamped at creation. Guilds founded earlier keep
+// none and show as unknown; the upgrade rewrites no record.
+const CurrentVersion = 26
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

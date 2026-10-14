@@ -33,6 +33,13 @@ type GuildRecord struct {
 	// Storage is the guild warehouse's gold and rows; its capacity follows
 	// the level (GuildStorageCapacity), never the record.
 	Storage *AccountStorage `json:"storage,omitempty"`
+	// FoundedAtMs is when the guild was created (unix ms), the native
+	// _Guild.FoundationDate column (v1.188 CInstanceGuild_RegisterSchema_84B050
+	// registers it; SRO_VT_SHARD keeps it as smalldatetime, and _AllianceCreate
+	// stamps a union's with GetDate()). The guild-create procedure is not in
+	// the shard backup; that it stamps creation time as the union one does
+	// is an INFERENCE. Zero for a guild created before store schema 26.
+	FoundedAtMs int64 `json:"foundedAtMs,omitempty"`
 }
 
 // GuildMemberRecord is one guild membership row plus the read-model fields

@@ -100,6 +100,8 @@ func seedTestGuild(t *testing.T, s *Store, leader, member *enterworld.Character)
 		t.Fatal("fixture member join refused")
 	}
 	guild.ID = guildID
+	// The store stamps the founding time from its own clock.
+	guild.FoundedAtMs = s.now().UnixMilli()
 	return guildID, guild, members
 }
 

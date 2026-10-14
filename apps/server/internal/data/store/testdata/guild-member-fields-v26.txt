@@ -1,0 +1,15 @@
+# guild-member record fields owned by store schema 22 (persisted_shape_test.go).
+# Never edit after it ships: a new persisted field takes schema 23, its upgrade
+# step and guild-member-fields-v23.txt.
+charId
+donatedGp
+dword30
+dword34
+dword38
+fortressRole
+grade
+grantName
+jid
+name
+permMask
+refObjId

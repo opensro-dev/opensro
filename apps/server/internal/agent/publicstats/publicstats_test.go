@@ -372,7 +372,8 @@ func TestSchemaDescribesEveryEncodedAnswer(t *testing.T) {
 	}
 	// A guild with a union partner and a fortress, so every optional field meets the schema.
 	s.src.Guilds = func() []GuildEntry {
-		return []GuildEntry{{ID: 1, Name: "Silk", Level: 2, Members: []GuildEntryMember{{CharID: 1}}, Union: []int64{2}, Fortress: "jangan"},
+		return []GuildEntry{{ID: 1, Name: "Silk", Level: 2, Members: []GuildEntryMember{{CharID: 1}}, Union: []int64{2}, Fortress: "jangan",
+			FoundedAtMs: 1760000000000},
 			{ID: 2, Name: "Tea", Level: 1, Members: []GuildEntryMember{{CharID: 2}}, Union: []int64{1}}}
 	}
 	var doc map[string]any

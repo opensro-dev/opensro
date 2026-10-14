@@ -345,4 +345,5 @@ type GuildRow struct {
 	Master   string   `json:"master" doc:"The master's name, \"a hunter\" for a master who hides, \"\" if unknown."`
 	Union    []string `json:"union" doc:"The other guilds of its union, by name; empty when it has none."`
 	Fortress *string  `json:"fortress,omitempty" doc:"The fortress it holds, by town in lower case (\"jangan\")."`
+	Founded  *string  `json:"founded,omitempty" doc:"When the guild was founded (RFC 3339, UTC); absent when it predates the record."`
 }
