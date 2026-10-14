@@ -109,3 +109,58 @@ test("hovering a stored item shows its tooltip, as hovering it in the bag does",
 	assert.ok( shown( "Bag Stack" ), "the bag item's tooltip" );
 	assert.equal( shown( "Stored Stack" ), false, "only the hovered item's" );
 });
+
+/*
+================
+potionRow
+================
+*/
+function potionRow( slot, quantity ) {
+	return {
+		...row( slot, 3630, "Potion", "item/etc/hp_potion_01.ddj" ),
+		typeFlags: 0x6c | 0x80,
+		quantity,
+		plus: 0,
+		durability: 0,
+		variance: "0",
+		magic: [],
+		tooltip: { fields: { maxStack: 50 } }
+	};
+}
+
+test("a Ctrl+click deposit that stacks on another page turns the storage to it", t => {
+	// Thread 1559743886681972759: items "going invisible" in storage. With the
+	// port-only auto-stack the deposit landed on a stack on a page the player
+	// was not viewing.
+	const sent = [];
+	const f = uiFixture( command => sent.push( command ) );
+	t.after( () => f.dispose() );
+	let now = 0;
+	const seen = {
+		/** @type {import("../../src/engine/contracts/ui.ts").UiSemantics | null} */ presentation: null
+	};
+	const step = () => {
+		for ( let i = 0; i < 16; i++ ) seen.presentation = f.ui.step( f.state, now += 100 ) ?? seen.presentation;
+	};
+	const slots = () =>
+		(seen.presentation?.controls ?? []).filter( c => c.id.startsWith( "storage-slot:" ) ).map( c => c.id );
+	step();
+	f.state.gameplay = {
+		...f.state.gameplay,
+		inventory: /** @type {any} */ ([ potionRow( 13, 20 ) ]),
+		inventorySlotCount: 45,
+		equipmentSlotCount: 13,
+		inventoryPending: false,
+		storageAutoStack: true,
+		storage: { npc: 17, phase: "open", capacity: 60, gold: "0", items: [ potionRow( 31, 10 ) ] }
+	};
+	f.ui.event( { kind: "activate", id: "open-window:Storage" } );
+	step();
+	assert.ok( slots().includes( "storage-slot:0" ), "the room opens on its first page" );
+	f.ui.event( { kind: "activate", id: "slot:13", ctrl: true } );
+	step();
+	const move = sent.find( c => c.kind === "gameplay" && c.command.kind === "storage-move" )?.command.move;
+	assert.equal( move?.destination, 31, "the deposit stacks on slot 31, page 2" );
+	assert.ok( slots().includes( "storage-slot:31" ), "the window turned to the page the item landed on" );
+	assert.ok( !slots().includes( "storage-slot:0" ) );
+});

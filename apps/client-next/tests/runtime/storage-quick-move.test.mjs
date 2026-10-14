@@ -15,7 +15,9 @@ import { pathToFileURL as sourceFileUrl } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { storageQuickMove } = await import( sourceFileUrl( "src/engine/foundation/ui/storage-panel.ts" ).href );
+const { createStoragePanel, storageMovePages, storageQuickMove } = await import(
+	sourceFileUrl( "src/engine/foundation/ui/storage-panel.ts" ).href
+);
 const { createGameplay } = await import(
 	sourceFileUrl( "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts" ).href
 );
@@ -168,6 +170,44 @@ test("auto-stack withdraws onto a matching bag stack, else the first free slot",
 		storage: { ...game().storage, items: [ potion( 1, 10 ) ] }
 	} );
 	assert.equal( storageQuickMove( "storage-slot:1", full, { page: 0, autoStack: true } )?.destination, 14 );
+});
+
+test("a quick move that lands on another page turns that window to it", () => {
+	// A thread reported deposited items "going invisible": the port-only
+	// cross-page placement put them on a page the player was not viewing.
+	const room = [ potion( 2, 45 ), potion( 31, 10 ) ];
+	const state = game( {
+		inventory: [ potion( 13, 20 ) ],
+		storage: { ...game().storage, capacity: 60, items: room }
+	} );
+	const move = storageQuickMove( "slot:13", state, { page: 0, autoStack: true } );
+	assert.equal( move?.destination, 31 );
+	assert.deepEqual( storageMovePages( move, state, { storagePage: 0, bagPage: 0 } ), { storagePage: 1 } );
+	// A deposit on the open page leaves it there.
+	const here = storageQuickMove( "slot:13", state, { page: 1, autoStack: true } );
+	assert.deepEqual( storageMovePages( here, state, { storagePage: 1, bagPage: 0 } ), {} );
+	// The panel clamps the page it is told to show.
+	const panel = createStoragePanel();
+	panel.show( 9, 60 );
+	assert.equal( panel.page( 60 ), 1 );
+});
+
+test("a withdrawal turns the bag only for a port-only stack on another page", () => {
+	// Bag slots 13..44 are page 0, 45..76 page 1.
+	const bag = [ potion( 13, 10 ), potion( 50, 10 ) ];
+	const state = game( {
+		inventory: bag,
+		inventorySlotCount: 77,
+		storage: { ...game().storage, items: [ potion( 1, 10 ) ] }
+	} );
+	// Auto-stack lands on slot 13 (page 0): the bag on page 1 turns to 0.
+	const stacked = storageQuickMove( "storage-slot:1", state, { page: 0, autoStack: true } );
+	assert.equal( stacked?.destination, 13 );
+	assert.deepEqual( storageMovePages( stacked, state, { storagePage: 0, bagPage: 1 } ), { bagPage: 0 } );
+	// The native first-free-slot withdrawal (5B0BA0) keeps the bag's page.
+	const free = storageQuickMove( "storage-slot:1", state, { page: 0, autoStack: false } );
+	assert.equal( free?.destination, 14 );
+	assert.deepEqual( storageMovePages( free, state, { storagePage: 0, bagPage: 1 } ), {} );
 });
 
 test("the server's auto-stack rule reaches the HUD snapshot and clears on a native reentry", () => {

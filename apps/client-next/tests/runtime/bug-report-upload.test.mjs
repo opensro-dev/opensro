@@ -189,6 +189,39 @@ test("a report names the adapter's compression features and limits, never free t
 	} );
 });
 
+test("a report marks bag and storage rows drawn with no icon, never their names or paths", async () => {
+	// Threads 1559577119187673109 and 1559743886681972759: items "going
+	// invisible" in the bag and in storage, and the report could not say
+	// which slot had a row with nothing to draw.
+	const input = fixture();
+	input["state.json"] = JSON.stringify( {
+		gameplay: {
+			inventory: [
+				{ slot: 13, refObjId: 61, quantity: 20, name: "PRIVATE_NAME", icon: "item/etc/PRIVATE.ddj" },
+				{ slot: 14, refObjId: 24198, quantity: 1 }
+			],
+			storage: {
+				npc: 17,
+				phase: "open",
+				capacity: 150,
+				gold: "999",
+				items: [ { slot: 31, refObjId: 3630, quantity: 10, name: "PRIVATE_NAME" } ]
+			}
+		}
+	} );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	assert.ok( !JSON.stringify( documents ).includes( "PRIVATE" ) );
+	const gameplay = documents["state.json"].gameplay;
+	assert.deepEqual( gameplay.inventory, [
+		{ slot: 13, refObjId: 61, quantity: 20 },
+		{ slot: 14, refObjId: 24198, quantity: 1, iconless: true }
+	] );
+	assert.deepEqual( gameplay.storage, {
+		capacity: 150,
+		items: [ { slot: 31, refObjId: 3630, quantity: 10, iconless: true } ]
+	} );
+});
+
 test("a browser without raw DEFLATE still sends a bounded stored ZIP", async t => {
 	t.mock.method( globalThis, "CompressionStream", function unavailable() {
 		throw Error( "unsupported" );

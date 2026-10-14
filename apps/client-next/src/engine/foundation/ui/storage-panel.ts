@@ -161,6 +161,53 @@ export function storageQuickMove(
 	return null;
 }
 
+// The bag window's slots per page (inventory-layout.ts inventorySlots).
+const BAG_PAGE_SLOTS = 32;
+
+/*
+================
+StorageMovePages
+
+The page each window turns to after a quick move, or undefined to stay.
+================
+*/
+export interface StorageMovePages {
+	readonly storagePage?: number;
+	readonly bagPage?: number;
+}
+
+/*
+================
+storageMovePages
+
+A quick move's destination can sit on a page the player is not looking at,
+and then the item seems to vanish (a thread reported items "going
+invisible" in storage). Every such placement is port-only (storageQuickMove:
+a deposit past the open page, an auto-stack onto any stack), so the window
+turns to the destination's page, as the drag the move stands for would show.
+A withdrawal into the bag's first free slot is native (5B0BA0) and keeps
+the bag on its page; only a withdrawal onto an existing stack (auto-stack)
+follows it.
+================
+*/
+export function storageMovePages(
+	move: StorageMove,
+	game: Pick<GameplayState, "inventory" | "equipmentSlotCount">,
+	place: { readonly storagePage: number; readonly bagPage: number; }
+): StorageMovePages {
+	if ( move.type === STORAGE_MOVE_DEPOSIT ) {
+		const page = Math.floor( move.destination / STORAGE_PAGE_SLOTS );
+		return page === place.storagePage ? {} : { storagePage: page };
+	}
+	if ( move.type === STORAGE_MOVE_WITHDRAW ) {
+		const stacked = game.inventory.some( row => row.slot === move.destination );
+		const equipmentSlots = game.equipmentSlotCount ?? DEFAULT_EQUIPMENT_SLOTS;
+		const page = Math.floor( (move.destination - equipmentSlots) / BAG_PAGE_SLOTS );
+		return stacked && page !== place.bagPage ? { bagPage: page } : {};
+	}
+	return {};
+}
+
 /*
 ================
 createStoragePanel
@@ -185,6 +232,16 @@ turn
 		*/
 		turn( delta: number, capacity: number ) {
 			page = Math.max( 0, Math.min( storagePages( capacity ) - 1, page + delta ) );
+		},
+		/*
+================
+show
+
+Turns to a page (storageMovePages), clamped to the room's pages.
+================
+		*/
+		show( target: number, capacity: number ) {
+			page = Math.max( 0, Math.min( storagePages( capacity ) - 1, target ) );
 		},
 		/*
 ================

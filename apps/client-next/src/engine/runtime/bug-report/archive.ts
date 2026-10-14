@@ -60,7 +60,8 @@ const SHARED_GAMEPLAY_FIELDS = [
 	"navigationRequestId",
 	"navigationRegion",
 	"navigationBlock",
-	"activeCos"
+	"activeCos",
+	"storage"
 ] as const;
 const SHARED_ENVIRONMENT_FIELDS = [
 	"userAgent",
@@ -97,6 +98,9 @@ const TECHNICAL_FIELDS = new Set( [
 	"control",
 	"index",
 	"refusal",
+	"iconless",
+	"capacity",
+	"items",
 	"event",
 	"atMs",
 	"t",
@@ -437,6 +441,44 @@ function sharedValue( value: unknown, field = "" ): unknown {
 
 /*
 ================
+iconlessRows
+
+A row drawn with no icon (it carries no icon path) is marked iconless: the
+shared copy drops every path, and threads reported items "going invisible"
+in the bag and in storage with nothing in the report to say which slot.
+================
+*/
+function iconlessRows( rows: unknown ): unknown {
+	if ( !Array.isArray( rows ) ) return rows;
+	return rows.map( row =>
+		row && typeof row === "object" && !(row as { icon?: unknown; }).icon ? { ...row, iconless: true } : row
+	);
+}
+
+/*
+================
+markIconless
+
+The gameplay snapshot with iconlessRows applied to the bag, the avatar
+sockets and the open storage.
+================
+*/
+function markIconless( value: unknown ): unknown {
+	if ( !value || typeof value !== "object" ) return value;
+	const gameplay = value as Record<string, unknown>;
+	const storage = gameplay.storage && typeof gameplay.storage === "object" ?
+		gameplay.storage as Record<string, unknown> :
+		undefined;
+	return {
+		...gameplay,
+		inventory: iconlessRows( gameplay.inventory ),
+		avatarInventory: iconlessRows( gameplay.avatarInventory ),
+		...(storage ? { storage: { capacity: storage.capacity, items: iconlessRows( storage.items ) } } : {})
+	};
+}
+
+/*
+================
 selectedFields
 ================
 */
@@ -525,7 +567,7 @@ export async function createDiagnosticUpload(
 		events: events.filter( event => event.kind !== "chat" )
 	} ) as Record<string, unknown>;
 	const state = read( "state.json" );
-	const gameplay = selectedFields( state.gameplay, SHARED_GAMEPLAY_FIELDS );
+	const gameplay = selectedFields( markIconless( state.gameplay ), SHARED_GAMEPLAY_FIELDS );
 	const sourceEnvironment = read( "environment.json" );
 	const environment = selectedFields( sourceEnvironment, SHARED_ENVIRONMENT_FIELDS );
 	// Browser identification is an explicit environmental field, not game text.

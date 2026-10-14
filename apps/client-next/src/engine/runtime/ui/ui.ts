@@ -41,6 +41,7 @@ import {
 import {
 	createStoragePanel,
 	firstFreeSlot,
+	storageMovePages,
 	storageQuickMove,
 	storagePages,
 	storageSlotControlId
@@ -51,7 +52,8 @@ import {
 	STORAGE_MOVE_DEPOSIT,
 	STORAGE_MOVE_ROOM,
 	STORAGE_MOVE_WITHDRAW,
-	STORAGE_PAGE_SLOTS
+	STORAGE_PAGE_SLOTS,
+	type StorageMove
 } from "@/engine/foundation/gameplay/storage-room";
 import { berserkHud, berserkEntryFlash } from "@/engine/foundation/ui/berserk-hud";
 import { resolveTextOverlaps } from "@/engine/foundation/rendering/ui-glyphs";
@@ -1062,6 +1064,24 @@ export function createUi(
 	let carriedItem: { source: string; slot: number; x: number; y: number; avatar?: boolean; } | null = null;
 	// The structure target window's delete question (517750 -> 517CA0).
 	let structureRemoval: { gid: number; action: number; fortress: number; name: string; } | null = null;
+	/*
+	================
+	followStorageMove
+
+	Turns the warehouse or the bag to the page a quick move lands on
+	(storageMovePages), so a port-only cross-page placement never looks like
+	the item vanished.
+	================
+	*/
+	function followStorageMove( move: StorageMove, game: NonNullable<UiView["gameplay"]> ) {
+		const capacity = game.storage?.capacity ?? 0;
+		const pages = storageMovePages( move, game, {
+			storagePage: storagePanel.page( capacity ),
+			bagPage: inventoryPage
+		} );
+		if ( pages.storagePage !== undefined ) storagePanel.show( pages.storagePage, capacity );
+		if ( pages.bagPage !== undefined ) inventoryPage = pages.bagPage;
+	}
 	/*
 	================
 	carriedRow
@@ -6381,7 +6401,10 @@ export function createUi(
 							autoStack: view.gameplay.storageAutoStack === true
 						}
 					);
-					if ( move ) sendGameplay( { kind: "storage-move", move } );
+					if ( move ) {
+						sendGameplay( { kind: "storage-move", move } );
+						followStorageMove( move, view.gameplay );
+					}
 					carriedItem = null;
 					inventorySlot = -1;
 					dirty = true;
@@ -6503,7 +6526,10 @@ export function createUi(
 							autoStack: view.gameplay.storageAutoStack === true
 						}
 					);
-					if ( move ) sendGameplay( { kind: "storage-move", move } );
+					if ( move ) {
+						sendGameplay( { kind: "storage-move", move } );
+						followStorageMove( move, view.gameplay );
+					}
 					return;
 				}
 				if ( event.id.startsWith( "slot:" ) ) {
