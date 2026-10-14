@@ -290,6 +290,19 @@ only; their rows target monsters and 58D7A0 refuses them here.
 func (rt *Runtime) acceptPlayerTargetStage(st offensiveStage) (OpResult, skillCastDecision) {
 	division, character, snapshot, skill, now := st.division, st.character, st.snapshot, st.skill, st.now
 	target, ok := rt.resolveCombatTarget(division, snapshot, st.cast.TargetGid, now)
+	if ok && target.cos == nil && target.player != nil && st.release == nil && skill.TargetRequired {
+		// CSkillManager_InitiateSkillCast (59B5F3..59B67D): a single-target
+		// hostile skill aimed at a player mounted on a vehicle, riding horse
+		// or attack COS strikes the ride (PC+0x1D18) instead, for every
+		// caster but the skill system's AutoMob, which no player is. The
+		// swap happens once, at admission: the cast carries the ride's gid
+		// from here on, so a prepared cast releases on it.
+		if ride := ridingCOS(target.snapshot); ride != 0 {
+			if mount, found := rt.resolveCOSTarget(division, snapshot, ride, now); found {
+				target, st.cast.TargetGid = mount, ride
+			}
+		}
+	}
 	if ok && target.cos != nil {
 		// A COS is judged through its owner and struck on its own body.
 		return rt.acceptCOSTargetStage(st, target)

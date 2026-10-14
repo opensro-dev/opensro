@@ -201,3 +201,28 @@ func TestPlayerKillOfACOSEasesTheKillersPenalty(t *testing.T) {
 		t.Fatal("no 0x30F2 for the killer")
 	}
 }
+
+/*
+================
+TestPlayerAttackOnAMountedPlayerStrikesTheRide
+
+59B5F3: a player's single-target attack aimed at a player riding a
+transport lands on the transport; the rider keeps every HP.
+================
+*/
+func TestPlayerAttackOnAMountedPlayerStrikesTheRide(t *testing.T) {
+	rt, _, attacker, owner := newPvpPair(t)
+	ref := equipStrikeTestCOS(t, rt, owner)
+	ride := owner.ActiveCOS
+	ride.Mounted = true
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: enterworld.ObjectIDForCharacter(owner)}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	if ride.CurrentHP >= ref.MaxHP {
+		t.Fatalf("ride HP %d, want below %d: the mounted rider's hit lands on the ride", ride.CurrentHP, ref.MaxHP)
+	}
+	if *owner.CurrentHP != 100 {
+		t.Fatalf("rider HP %d, want the untouched 100", *owner.CurrentHP)
+	}
+}
