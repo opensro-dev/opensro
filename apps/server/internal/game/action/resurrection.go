@@ -399,6 +399,7 @@ func (rt *Runtime) reviveWhereDead(division string, character *enterworld.Charac
 			world.PostureTransitionUntilMs = 0
 		})
 	writeBackWorld(character, state)
+	rt.notePlacement(character, "revive-where-dead")
 	character.World.MoveSegment = nil
 	done.at = state.Spawn
 

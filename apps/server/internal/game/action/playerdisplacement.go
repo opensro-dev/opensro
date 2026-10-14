@@ -201,6 +201,7 @@ func (rt *Runtime) commitPlayerDisplacementInDoor(division string, victim *enter
 		w.MovementSourceSeeded = true
 	})
 	writeBackWorld(victim, state)
+	rt.notePlacement(victim, "knockback")
 	victim.World.MoveSegment = nil
 	rt.ClearCombatIntent(division, victim.Name)
 	withdrawn := rt.cancelPreparingProjectile(division, victim.Name)

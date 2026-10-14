@@ -229,7 +229,10 @@ type Runtime struct {
 	storageAuthority domain.StorageAuthority
 	petMu            sync.Mutex
 	// petDiag throttles the attack pet fight log (petdiagnostics.go).
-	petDiag     petDiagnostics
+	petDiag petDiagnostics
+	// placements counts non-walk placements inside a closed object
+	// (placementguard.go).
+	placements  placementGuard
 	petSessions map[petOwnerKey]*petSession
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
@@ -420,6 +423,11 @@ type Runtime struct {
 	// FortressGuildRole supplies the optional fortress membership role used
 	// by siege-weapon equip requirements. Nil means no member record.
 	FortressGuildRole FortressGuildRoleResolver
+
+	// InsideClosedObject reports a pose inside an object no walk can enter
+	// (movement.WaterValidator.InsideClosedObject); nil disables the
+	// placement guard (placementguard.go).
+	InsideClosedObject func(pose simulation.Spawn) (int, bool)
 
 	// ConstrainMovement applies the shared server-authoritative geometry
 	// policy to system-generated movement. A nil seam is supported only by

@@ -152,6 +152,9 @@ type Metrics struct {
 	// departed target, which the pet log no longer reports
 	// (action/petdiagnostics.go).
 	PetCombat map[string]uint64 `json:"pet_combat,omitempty"`
+	// PlacementInsideObject counts players a non-walk path placed inside an
+	// object no walk can enter, by the path (action/placementguard.go).
+	PlacementInsideObject map[string]uint64 `json:"placement_inside_object,omitempty"`
 	// Runtime is the Go runtime's GC pauses, scheduling latency, heap and
 	// goroutines since start (runtime_stats.go).
 	Runtime RuntimeStats `json:"runtime"`
@@ -191,6 +194,18 @@ does: the transport never imports the action runtime that counts.
 */
 func (h *Hub) SetPetCombatMetrics(read func() map[string]uint64) {
 	h.petCombatMetrics.Store(&read)
+}
+
+/*
+==================
+SetPlacementMetrics
+
+Installs the provider of the placement_inside_object block, as
+SetNavigationMetrics does.
+==================
+*/
+func (h *Hub) SetPlacementMetrics(read func() map[string]uint64) {
+	h.placementMetrics.Store(&read)
 }
 
 // Metrics snapshots the counters and the current live-session count.
@@ -278,6 +293,11 @@ func (h *Hub) Metrics() Metrics {
 	}
 	if read := h.petCombatMetrics.Load(); read != nil && *read != nil {
 		metrics.PetCombat = (*read)()
+	}
+	if read := h.placementMetrics.Load(); read != nil && *read != nil {
+		if counts := (*read)(); len(counts) > 0 {
+			metrics.PlacementInsideObject = counts
+		}
 	}
 	metrics.Runtime = runtimeStats()
 	return metrics

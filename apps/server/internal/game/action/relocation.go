@@ -60,6 +60,7 @@ func (rt *Runtime) relocateCharacter(division string, c *enterworld.Character, l
 			w.MovementSourceSeeded = true
 		})
 		writeBackWorld(c, state)
+		rt.notePlacement(c, "relocation")
 		c.World.MoveSegment = nil
 		setCharacterWorld(c, arrival.world)
 		return true
@@ -145,6 +146,7 @@ func (rt *Runtime) AdoptEntrySpawn(division, name string, spawn simulation.Spawn
 			w.MovementSourceSeeded = true
 		})
 		writeBackWorld(c, state)
+		rt.notePlacement(c, "entry-spawn")
 		c.World.MoveSegment = nil
 		return true
 	})

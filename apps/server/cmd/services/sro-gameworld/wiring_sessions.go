@@ -34,6 +34,8 @@ func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authority
 	hub.SetEconomyMetrics(authorityStore.EconomyCounters)
 	// Attack pet fights that ended on a dead or departed target (petdiagnostics.go).
 	hub.SetPetCombatMetrics(game.items.PetCombatCounters)
+	// Players a non-walk path placed inside a closed object (placementguard.go).
+	hub.SetPlacementMetrics(game.items.PlacementCounters)
 	game.deps.LockPublication = game.items.LockPublication
 	game.deps.OnWorldBound = func(
 		session *transport.Session,

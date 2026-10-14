@@ -479,6 +479,7 @@ func (rt *Runtime) commitGateTravel(travel gateTravel, admit func() (int64, OpRe
 			w.PostureTransitionUntilMs = 0
 		})
 		writeBackWorld(c, state)
+		rt.notePlacement(c, "gate-travel")
 		c.World.MoveSegment = nil
 		setCharacterWorld(c, destinationWorld)
 		gold := int64(0)

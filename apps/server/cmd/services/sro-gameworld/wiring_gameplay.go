@@ -274,6 +274,7 @@ func newGameplayPlane(
 	items.ConstrainMovement = movementRuntime.ConstrainMovement
 	items.SpawnRegionAvailable = water.SpawnRegionAvailable
 	items.ConstrainCompanionSpawn = water.ConstrainCompanionSpawn
+	items.InsideClosedObject = water.InsideClosedObject
 	items.CompanionSurfaceHeight = water.WalkableSpawnHeightAt
 	items.ConstrainWalk = movementRuntime.ConstrainMovementFrom
 	items.PlanCompanionRoute = simulation.PetRouteFromMonster(water.PlanMonsterRoute)

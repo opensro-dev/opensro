@@ -82,6 +82,7 @@ func (rt *Runtime) commitSkillTravel(key string, character *enterworld.Character
 		w.LifeRevision++
 	})
 	writeBackWorld(character, state)
+	rt.notePlacement(character, "skill-travel")
 	character.World.MoveSegment = nil
 }
 

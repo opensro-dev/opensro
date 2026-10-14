@@ -188,6 +188,7 @@ func (rt *Runtime) changeCosRide(division string, c, snapshot *enterworld.Charac
 					state.MovementSourceSeeded = true
 				})
 			writeBackWorld(c, world)
+			rt.notePlacement(c, "mount")
 			frames = append(frames, wire.Frame{Opcode: wire.OpObjectSourceCorrection,
 				Payload: wire.ObjectSourceCorrection{Gid: enterworld.ObjectIDForCharacter(c), Position: wire.Position{
 					RegionID: vehicle.RegionID, X: float32(vehicle.X), Y: float32(vehicle.Y),

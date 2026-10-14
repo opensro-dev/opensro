@@ -329,6 +329,7 @@ func (rt *Runtime) HandleLocalRebirth(
 			world.MovementSourceSeeded = true
 		})
 		writeBackWorld(character, state)
+		rt.notePlacement(character, "rebirth")
 		character.World.MoveSegment = nil
 		setCharacterWorld(character, arrivalWorld)
 		character.CurrentHP, character.CurrentMP = &restoredHP, &restoredMP

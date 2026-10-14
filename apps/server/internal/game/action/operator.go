@@ -219,6 +219,7 @@ func (rt *Runtime) OperatorRescue(division, name string, townID uint32) error {
 		world.SpawnSet = true
 		world.MovementSourceSeeded = true
 		writeBackWorld(c, world)
+		rt.notePlacement(c, "operator-rescue")
 		c.World.MoveSegment = nil
 		c.World.AuthoredAreaReturn = nil
 		c.World.DungeonFloorIndex = nil

@@ -99,6 +99,9 @@ type Hub struct {
 	// petCombatMetrics reads the attack pets' ended-target counters
 	// (SetPetCombatMetrics); nil publishes no block.
 	petCombatMetrics atomic.Pointer[func() map[string]uint64]
+	// placementMetrics reads the placement guard's counters
+	// (SetPlacementMetrics); nil publishes no block.
+	placementMetrics atomic.Pointer[func() map[string]uint64]
 }
 
 // AdmissionIdentity is the authenticated account/shard identity carried by a

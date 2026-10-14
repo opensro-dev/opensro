@@ -270,6 +270,7 @@ func (rt *Runtime) startReturnCast(cast returnCast, result *OpResult) bool {
 		w.MovementSourceSeeded = true
 	})
 	writeBackWorld(c, state)
+	rt.notePlacement(c, "return-scroll-start")
 	c.World.MoveSegment = nil
 	mode := cast.mode
 	if mode == 0 {
@@ -443,6 +444,7 @@ func (rt *Runtime) completeReturnScroll(job pendingReturn, now int64) ([]wire.Fr
 			w.MovementSourceSeeded = true
 		})
 		writeBackWorld(c, state)
+		rt.notePlacement(c, "return-scroll")
 		c.World.MoveSegment = nil
 		setCharacterWorld(c, arrival.world)
 		c.NativeTeleportMode = 0
