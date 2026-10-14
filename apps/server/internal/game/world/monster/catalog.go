@@ -236,7 +236,7 @@ func LoadTemplate(textdataDir string) Template {
 		}
 		nests = append(nests, nest)
 	}
-	restoreZeroCapNests(refs, nests)
+	restoreZeroCapNests(refs, nests, loadZeroCapCaps(zeroCapCapsTSV))
 	template := TemplateFromParts(refs, nests)
 	template.EvidenceMatches = evidenceMatches
 	return template
@@ -246,76 +246,34 @@ func LoadTemplate(textdataDir string) Template {
 ==================
 restoreZeroCapNests
 
-Gives a standalone nest capped at zero the cap its monster's live nests
-carry.
+Gives a standalone nest capped at zero its live cap from ISRO-R.
 
-INFERENCE: the v1.188 evidence is one operator's shard backup. Beside the
-monsters it disables everywhere (laterDisabledCodenames), it zeroes single
-nests of monsters that keep live nests right beside them: the Bandit
-Stronghold building's bandits and archers (regions 0x5BA0, 0x5CA0) next to
-their cap-10 nests, the Stone Cave's Nachal and Work Earth Ghost (0x8001)
-next to cap-11 and cap-5 nests, three KT Ong. The v1.150 client still
+The v1.188 evidence is one operator's shard backup. Beside the monsters it
+disables everywhere (laterDisabledCodenames), it zeroes single nests of
+monsters that keep live nests right beside them: the Bandit Stronghold
+building's bandits and archers (regions 0x5BA0, 0x5CA0), the Stone Cave's
+Nachal and Work Earth Ghost (0x8001), three KT Ong. The v1.150 client still
 places every one of them, and native 55EA90 spawns nothing while the live
-count is not below dwMaxTotalCount, so a zero cap is a disabled nest, not
-the v1.150 population. A hive member (dwOverwriteMaxTotalCount above zero)
-is left alone: 55EC10 caps it with the hive's own limit.
-
-The restored cap is the most common cap among the monster's live nests in
-the same region, else across every region, the larger on a tie.
+count is not below dwMaxTotalCount. ISRO-R's active Tab_RefNest keeps the
+same nests, by region and anchor, with live caps (isror_zero_cap_caps.tsv,
+scripts/build/import_isror_zero_caps.py); the dungeon layer matches by its
+own region id. A hive member (dwOverwriteMaxTotalCount above zero) is left
+alone: 55EC10 caps it with the hive's own limit.
 ==================
 */
-func restoreZeroCapNests(refs map[uint32]MonsterRef, nests []NestRow) {
-	type place struct {
-		codename string
-		region   uint16
-	}
-	local := make(map[place]map[int]int)
-	anywhere := make(map[string]map[int]int)
-	count := func(m map[int]int, cap int) map[int]int {
-		if m == nil {
-			m = make(map[int]int)
-		}
-		m[cap]++
-		return m
-	}
-	for _, nest := range nests {
-		if !nest.RetailEvidence || nest.MaxCount <= 0 {
-			continue
-		}
-		codename := refs[nest.RefObjID].Codename
-		key := place{codename, nest.RegionID}
-		local[key] = count(local[key], nest.MaxCount)
-		anywhere[codename] = count(anywhere[codename], nest.MaxCount)
-	}
+func restoreZeroCapNests(refs map[uint32]MonsterRef, nests []NestRow, caps map[populationEvidenceKey]int) {
 	for i := range nests {
 		nest := &nests[i]
 		if !nest.RetailEvidence || nest.MaxCount != 0 || nest.HiveMaxCount > 0 {
 			continue
 		}
-		codename := refs[nest.RefObjID].Codename
-		caps := local[place{codename, nest.RegionID}]
-		if len(caps) == 0 {
-			caps = anywhere[codename]
+		key := evidenceKey(refs[nest.RefObjID].Codename, nest.RegionID, nest.X, nest.Y, nest.Z)
+		cap, ok := caps[key]
+		if !ok {
+			panic("monster: no ISRO-R cap for zero-cap nest " + key.Codename)
 		}
-		nest.MaxCount = mostCommonCap(caps)
+		nest.MaxCount = cap
 	}
-}
-
-/*
-==================
-mostCommonCap
-
-The cap that occurs most often, the larger on a tie; 0 when there is none.
-==================
-*/
-func mostCommonCap(caps map[int]int) int {
-	best, seen := 0, 0
-	for cap, n := range caps {
-		if n > seen || n == seen && cap > best {
-			best, seen = cap, n
-		}
-	}
-	return best
 }
 
 /*
