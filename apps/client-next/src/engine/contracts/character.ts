@@ -194,6 +194,8 @@ export interface CharacterActor {
 	};
 	/** Retail CICMonster/CICUser class membership; retained through corpse departure. */
 	readonly blindable?: boolean;
+	/** Another player's COS, which the Experimental V row also hides (port-only). */
+	readonly blindableCompanion?: boolean;
 	/** CIItem labels anchor five world units above the ground, independent of model bounds. */
 	readonly groundItem?: boolean;
 	readonly pointLight?: CharacterPointLight;

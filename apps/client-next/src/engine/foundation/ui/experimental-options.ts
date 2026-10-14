@@ -66,6 +66,12 @@ export interface ExperimentalOptions {
 	// turned off (the owner's choice, 2026-10-15); off hides them from the
 	// banner and the chat log.
 	readonly dropPlusNotices: boolean;
+	// Port-only, not native: holding V (UIIT_STT_USER_MOSTER_BLIND) also
+	// hides other players' pets and transports. The original hides only
+	// monsters and players (8602C0, 85E550): a COS draws through its owner
+	// (CICCos_ResolveDrawOwner 854680), which ignores the key. Off unless
+	// turned on (the balance advisor's ask, owner-approved 2026-10-15).
+	readonly vHidesCompanions: boolean;
 }
 
 /*
@@ -135,7 +141,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		sharedActorRoom: record.sharedActorRoom !== false,
 		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
-		dropPlusNotices: record.dropPlusNotices !== false
+		dropPlusNotices: record.dropPlusNotices !== false,
+		vHidesCompanions: enabled( "vHidesCompanions" )
 	};
 }
 
@@ -183,6 +190,7 @@ export interface ExperimentalVideo {
 	readonly smoothCamera: boolean;
 	readonly enchantSparks: boolean;
 	readonly sharedActorRoom: boolean;
+	readonly vHidesCompanions: boolean;
 }
 
 /*
@@ -203,7 +211,8 @@ export function experimentalVideo( options: ExperimentalOptions ): ExperimentalV
 		perPixelLighting: options.perPixelLighting,
 		smoothCamera: options.smoothCamera,
 		enchantSparks: options.enchantSparks,
-		sharedActorRoom: options.sharedActorRoom
+		sharedActorRoom: options.sharedActorRoom,
+		vHidesCompanions: options.vHidesCompanions
 	};
 }
 

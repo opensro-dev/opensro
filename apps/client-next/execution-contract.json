@@ -2842,6 +2842,13 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-finalize.ts",
+			"expression": "renderer.vHidesCompanions",
+			"function": "publishCharacters",
+			"kind": "callback",
+			"reason": "The parent renderer reports whether the Experimental V row also hides companions; it changes nothing."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-finalize.ts",
 			"expression": "resources.duration",
 			"function": "callback:step:2",
 			"kind": "callback",

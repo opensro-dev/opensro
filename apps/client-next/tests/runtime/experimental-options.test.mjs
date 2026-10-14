@@ -45,7 +45,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): the shard's job-kill notices show.
 	jobKillNotices: true,
 	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
-	dropPlusNotices: true
+	dropPlusNotices: true,
+	// Off by default: V hides only monsters and players, as the original does.
+	vHidesCompanions: false
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -126,7 +128,8 @@ test("every video stage defaults off and only an explicit true enables it", () =
 		smoothCamera: false,
 		enchantSparks: false,
 		// The shared actor room is on by default (owner 2026-10-14).
-		sharedActorRoom: true
+		sharedActorRoom: true,
+		vHidesCompanions: false
 	} );
 	for (
 		const key of [
@@ -383,4 +386,14 @@ test("drop and plus notices are on unless explicitly false and reach the worker'
 	assert.equal( off.jobKillNotices, true );
 	assert.equal( experimentalGameplay( off ).dropPlusNotices, false );
 	assert.equal( "dropPlusNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
+});
+
+test("V hides pets and transports only when explicitly on, and reaches the renderer's slice", () => {
+	for ( const value of [ undefined, null, {}, { vHidesCompanions: 1 }, { vHidesCompanions: "true" } ] ) {
+		assert.equal( experimentalOptions( value ).vHidesCompanions, false );
+	}
+	const on = experimentalOptions( { vHidesCompanions: true } );
+	assert.equal( on.vHidesCompanions, true );
+	assert.equal( experimentalVideo( on ).vHidesCompanions, true );
+	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "vHidesCompanions" ) ) );
 });

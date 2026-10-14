@@ -458,6 +458,7 @@ import {
 	boardText,
 	jobMark,
 	blindableCharacter,
+	blindableCompanion,
 	hiddenSilkCos,
 	nameInRange,
 	riderBoardPosition,
@@ -17634,7 +17635,9 @@ export function createUi(
 					for ( const entity of next.entities ) {
 						if (
 							hiddenSilkCos( entity, options.hideSilkCos ) ||
-							next.blindHeld && blindableCharacter( entity, game?.localGid )
+							next.blindHeld && (blindableCharacter( entity, game?.localGid ) ||
+									experimental.state().saved.vHidesCompanions &&
+										blindableCompanion( entity, game?.localGid ))
 						) continue;
 						const overlay = overheads.get( entity.gid );
 						if (
@@ -17799,7 +17802,9 @@ export function createUi(
 					}
 					if (
 						![ "local-player", "player", "monster", "npc", "cos" ].includes( entity.kind ) ||
-						next.blindHeld && blindableCharacter( entity, game?.localGid )
+						next.blindHeld && (blindableCharacter( entity, game?.localGid ) ||
+								experimental.state().saved.vHidesCompanions &&
+									blindableCompanion( entity, game?.localGid ))
 					) continue;
 					// 86AB90: the dress bar under the head, 4.8 px a second, shrinking
 					// 0.48 px every 100 ms, in ARGB FFFFEE1F, whether or not the name shows.

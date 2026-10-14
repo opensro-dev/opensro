@@ -369,7 +369,7 @@ Borrow only the mall mannequin operations this publication phase consumes.
 ================
 */
 interface PortraitBindings {
-	readonly renderer: Pick<Renderer, "setCharacterAssembly" | "setCharacterActors">;
+	readonly renderer: Pick<Renderer, "setCharacterAssembly" | "setCharacterActors" | "vHidesCompanions">;
 	readonly resources: PortraitResources;
 	readonly mallPreview: {
 		skin(): { model: number; shape: number; } | null;
@@ -446,10 +446,10 @@ export function publishCharacters(
 	// One pass builds both the published actors and the wanted models, in the
 	// same order the spread-and-map version produced, without temporaries.
 	const presentedActors: CharacterActor[] = [], wanted: string[] = [];
+	const companionsBlind = blindHeld && renderer.vHidesCompanions?.() === true;
 	for ( const actor of next.values() ) {
-		presentedActors.push(
-			blindHeld && actor.blindable ? { ...actor, opacity: 0, pickable: false } : actor
-		);
+		const hidden = blindHeld && actor.blindable || companionsBlind && actor.blindableCompanion;
+		presentedActors.push( hidden ? { ...actor, opacity: 0, pickable: false } : actor );
 		wanted.push( actor.model );
 	}
 	for ( const actor of portraits ) wanted.push( actor.model );

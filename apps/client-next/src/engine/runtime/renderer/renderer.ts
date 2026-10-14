@@ -189,6 +189,16 @@ export function createRenderer(
 		},
 		/*
 		================
+		vHidesCompanions
+
+		Read by the character presenter when V is held.
+		================
+		*/
+		vHidesCompanions() {
+			return experimental.vHidesCompanions;
+		},
+		/*
+		================
 		experimentalVideo
 		================
 		*/

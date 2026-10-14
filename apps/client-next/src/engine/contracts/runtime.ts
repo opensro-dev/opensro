@@ -250,6 +250,9 @@ export interface Renderer extends Disposable {
 	// Port-only, not native: whether characters and effects share one
 	// nearest-first actor room (Experimental; the original has no cap).
 	sharedActorRoom?(): boolean;
+	// Port-only, not native: whether holding V also hides other players'
+	// companions (Experimental, off by default).
+	vHidesCompanions?(): boolean;
 	setSelectionDecal(
 		value: { readonly pose: import("./gameplay").Pose; readonly slot: 0 | 1 | 2 | 3; } | null
 	): void;

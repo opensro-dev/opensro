@@ -15,7 +15,7 @@ import { selectAvatarOverride } from "@/engine/foundation/animation/avatar-overr
 import { createModelAnimation } from "@/engine/foundation/animation/model-animation";
 import { type AnimationDispatch, createAnimationDispatch } from "@/engine/foundation/animation/animation-dispatch";
 import { animationActivation, type AnimationActivation } from "@/engine/foundation/animation/animation-activation";
-import { blindableCharacter } from "@/engine/foundation/ui/name-visibility";
+import { blindableCharacter, blindableCompanion } from "@/engine/foundation/ui/name-visibility";
 import { cosScale, monsterScale } from "@/engine/foundation/rendering/monster-scale";
 import { postureLayers } from "@/engine/foundation/animation/posture";
 import { oneShotLayers } from "@/engine/foundation/animation/one-shot-layers";
@@ -821,6 +821,7 @@ export function createActorMotion( owner: ActorOwner ) {
 						!gameplay?.casts.some( cast => cast.target === entity.gid )
 				},
 				blindable: blindableCharacter( entity, gameplay?.localGid ),
+				blindableCompanion: blindableCompanion( entity, gameplay?.localGid ),
 				groundItem: !!entity.groundItem,
 				previewClip: resource.clips.includes( armedIdle ) ? armedIdle : "stand",
 				materialTint: appearance.materialTint,

@@ -180,6 +180,22 @@ export function blindableCharacter( entity: Pick<EntityState, "kind" | "gid">, l
 
 /*
 ================
+blindableCompanion
+
+The port-only Experimental addition to V: another player's COS (a pet or
+a transport). The local player's own companions stay, as the local
+character does.
+================
+*/
+export function blindableCompanion(
+	entity: Pick<EntityState, "kind" | "gid" | "ownerGid">,
+	localGid?: number
+): boolean {
+	return entity.kind === "cos" && entity.gid !== localGid && entity.ownerGid !== localGid;
+}
+
+/*
+================
 hiddenSilkCos
 
 854680 -> 5500F0: mall pickup COS, not every pet bought with Silk.

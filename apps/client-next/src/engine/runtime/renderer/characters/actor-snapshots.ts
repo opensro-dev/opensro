@@ -98,6 +98,7 @@ export function createActorSnapshots() {
 		target.shadowSize = source.shadowSize;
 		target.shadowAttachment = source.shadowAttachment;
 		target.blindable = source.blindable;
+		target.blindableCompanion = source.blindableCompanion;
 		target.drawGeometry = source.drawGeometry;
 		target.height = source.height;
 		target.pickable = source.pickable;

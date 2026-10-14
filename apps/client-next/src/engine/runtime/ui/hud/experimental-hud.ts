@@ -161,6 +161,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-grey-disabled-tabs",
 			label: "Grey disabled tabs",
 			description: "Dim a window tab you cannot use."
+		}, {
+			key: "vHidesCompanions",
+			id: "experimental-v-hides-companions",
+			label: "V hides pets and transports",
+			description: "Holding V also hides other players' pets and transports."
 		} ]
 	},
 	{
