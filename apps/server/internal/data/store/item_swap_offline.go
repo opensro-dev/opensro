@@ -9,7 +9,8 @@ running GameWorld) and closes it afterwards. It rewrites the rows a swap
 function picks in every container the named characters reach: the bag and
 equipped sockets, worn avatars, every companion's container (active,
 dormant scroll records, mercenaries), the account's storage and the
-character's guild storage. One transaction commits every change, so a
+character's guild storage (items on the ground or in a stall are not
+covered). One transaction commits every change, so a
 failure leaves the store as it was. A row the swap refuses fails the whole
 run before anything is written.
 

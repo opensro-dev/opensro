@@ -13,6 +13,7 @@ backed up: store.Open takes the authority's writer lock, so a running
 GameWorld makes it refuse. It previews by default and writes only with
 -apply. Every container the named characters reach is covered (bag and
 equipped, avatars, companions, account storage, their guild's storage).
+Items on the ground or in a stall are not: a stopped shard keeps neither.
 
 A Sun row keeps its slot, plus, variance word (the white-stat rolls),
 magic options, stack and record id; only its reference changes, to the
@@ -170,6 +171,27 @@ func (w *swapper) swap(row domain.InventoryRow) (domain.InventoryRow, bool, erro
 
 /*
 ================
+characterNames
+
+The -characters list, trimmed; an empty or repeated name refuses the run.
+================
+*/
+func characterNames(list string) ([]string, error) {
+	var names []string
+	seen := map[string]bool{}
+	for _, name := range strings.Split(list, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return nil, fmt.Errorf("-characters: empty or repeated name in %q", list)
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+/*
+================
 main
 ================
 */
@@ -200,7 +222,11 @@ func main() {
 	}
 	defer s.Close()
 	w := &swapper{items: enterworld.NewTextdataItems(*textdata), magic: enterworld.NewTextdataMagicOptions(*textdata)}
-	swaps, err := s.SwapItemsOffline(*shard, strings.Split(*names, ","), w.swap, *apply)
+	characters, err := characterNames(*names)
+	if err != nil {
+		fail("%v", err)
+	}
+	swaps, err := s.SwapItemsOffline(*shard, characters, w.swap, *apply)
 	if err != nil {
 		fail("refused, nothing written: %v", err)
 	}

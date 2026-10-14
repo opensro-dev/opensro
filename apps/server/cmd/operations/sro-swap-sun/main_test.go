@@ -63,3 +63,19 @@ func TestSunRowsBecomeTheirMoon(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestCharacterNamesRefuseEmptyAndRepeated
+================
+*/
+func TestCharacterNamesRefuseEmptyAndRepeated(t *testing.T) {
+	if names, err := characterNames(" killmepls , OpenAI"); err != nil || len(names) != 2 || names[0] != "killmepls" || names[1] != "OpenAI" {
+		t.Fatalf("%v %q", err, names)
+	}
+	for _, bad := range []string{"", "a,,b", "a,a", "a, a"} {
+		if _, err := characterNames(bad); err == nil {
+			t.Fatalf("%q accepted", bad)
+		}
+	}
+}
