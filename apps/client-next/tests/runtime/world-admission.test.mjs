@@ -123,6 +123,50 @@ test("terrain seam plans are rebuilt at admission and transferred with exclusive
 	world.dispose( geometry, images );
 });
 
+/*
+================
+terrainScene
+
+One terrain cell with every vertex attribute, residency as given.
+================
+*/
+function terrainScene( residency ) {
+	const source = scene(), g = source.groups[0].geometry;
+	if ( residency ) source.residency = residency;
+	g.positions = new Float32Array( [ 0, 1, 0, 20, 2, 0, 0, 3, 20 ] );
+	g.normals = new Float32Array( [ 0, 1, 0, .6, .8, 0, 0, .8, .6 ] );
+	g.uvs = new Float32Array( [ 0, 0, 1, 0, 0, 1 ] );
+	g.colors = new Float32Array( [ 1, .5, .25, 1, .5, .25, 1, .75, .25, 1, .5, .5 ] );
+	g.maskUVs = new Float32Array( [ .1, .2, .3, .4, .5, .6 ] );
+	source.groups[0].ranges = [ {
+		cell: [ 0, 0 ],
+		lod: 0,
+		indexStart: 0,
+		indexCount: 3,
+		vertexStart: 0,
+		vertexCount: 3,
+		center: [ 160, 0, 160 ],
+		radius: 300,
+		heights: Array( 289 ).fill( 0 ),
+		seamVertices: new Uint32Array( 0 )
+	} ];
+	return source;
+}
+
+test("a frontend stage's terrain transfers only the packed stream it draws, world terrain keeps every split stream", () => {
+	const world = transfer( terrainScene() ).scene.groups[0].geometry;
+	const stage = prepareWorldScene( terrainScene( "frontend" ) ),
+		full = worldSceneBytes( terrainScene( "frontend" ) ),
+		received = structuredClone( stage, { transfer: worldSceneTransfers( stage.scene ) } ).scene.groups[0].geometry;
+	for ( const name of [ "normals", "uvs", "colors", "maskUVs" ] ) {
+		assert.ok( world[name] instanceof Float32Array, `world terrain keeps ${name} for picking` );
+		assert.equal( received[name], undefined, `the stage drops ${name}` );
+	}
+	assert.deepEqual( [ ...received.vertices ], [ ...world.vertices ], "the drawn interleave is unchanged" );
+	assert.deepEqual( [ ...received.positions ], [ ...world.positions ], "seam stitching keeps its positions" );
+	assert.equal( stage.bytes, full - (9 + 6 + 12 + 6) * 4, "residency is charged for what is held" );
+});
+
 // Preparation moves every group stream into one arena: the receiving clone pays per buffer.
 test("worker admission keeps every guard and transfers all skin buffers in one arena", () => {
 	const source = scene(), g = source.groups[0].geometry;

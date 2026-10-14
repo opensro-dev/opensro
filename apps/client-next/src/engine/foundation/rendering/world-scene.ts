@@ -428,6 +428,7 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 	// Unique buffers and all immutable streams can move without copying.
 	const mutable = ( value: Float32Array ) =>
 		references.get( value.buffer )! > 1 || modelBuffers.has( value.buffer as ArrayBuffer ) ? value.slice() : value;
+	let dropped = 0;
 	const groups = scene.groups.map( group => {
 		const g = group.geometry;
 		validateGeometry( g, limit, Infinity );
@@ -454,6 +455,20 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 		// Terrain is most of a scene's upload; packing it here keeps the
 		// interleave off the main thread, which keeps it as the seam mirror.
 		if ( geometry.dynamicVertices ) geometry.vertices = packGeometryVertices( geometry );
+		// A frontend stage never picks, occludes or rains on its terrain (only
+		// world picking reads uvs and colors for alpha), and the interleave
+		// already carries every other attribute: the split copies stay here.
+		if ( geometry.vertices && scene.residency === "frontend" ) {
+			dropped += [ geometry.normals, geometry.uvs, geometry.colors, geometry.maskUVs ].reduce(
+				( sum, stream ) => sum + (stream?.byteLength ?? 0),
+				0
+			);
+			geometry.normals =
+				geometry.uvs =
+				geometry.colors =
+				geometry.maskUVs =
+					undefined;
+		}
 		return {
 			...group,
 			ranges: group.ranges && sharedSeamVertices( group.ranges, geometry.positions ),
@@ -470,7 +485,7 @@ export function prepareWorldScene( scene: WorldScene ): PreparedWorldScene {
 			dungeonVisibility: scene.dungeonVisibility?.map( row => row.slice() ),
 			groups: packGroupStreams( groups )
 		},
-		bytes,
+		bytes: bytes - dropped,
 		starBytes
 	};
 }

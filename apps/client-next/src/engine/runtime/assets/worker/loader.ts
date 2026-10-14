@@ -34,6 +34,7 @@ import { readBytes } from "@/engine/foundation/assets/read-bytes";
 import { assetFailure, transientAssetFailure } from "@/engine/foundation/assets/asset-recovery";
 import type { AssetRequest, AssetWorkerMessage } from "@/engine/contracts/assets";
 import { rgbaPickAlpha, bitmapPickAlpha } from "@/engine/foundation/rendering/pick-alpha";
+type ResolvedWorld = Awaited<ReturnType<ReturnType<typeof createWorldDecoder>["resolve"]>>;
 // Loading-screen progress publications are coalesced to this interval.
 const PROGRESS_INTERVAL_MS = 150;
 const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
@@ -48,6 +49,10 @@ const DOWNLOAD_RETRY_DELAYS_MS = [ 250, 1000 ] as const;
 // watchdog.
 const DOWNLOAD_NO_PROGRESS_MS = 15000;
 const TRANSIENT_HTTP_STATUS = new Set( [ 408, 429, 500, 502, 503, 504 ] );
+// Stands in for the effect catalog's bytes once the decoder holds it parsed.
+const PARSED_EFFECT_CATALOG = new Uint8Array( 0 );
+// Stands in for a world bundle's bytes once they are parsed.
+const RELEASED_WORLD_BYTES = new Uint8Array( 0 );
 /*
 ================
 listedFileGone
@@ -83,7 +88,9 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 	// promise settles, including native decodes that AbortSignal cannot stop.
 	const pending = new Map<number, AbortController>();
 	const active = new Set<AbortController>();
-	let disposed = false, effectBytes: Uint8Array<ArrayBuffer> | null = null;
+	// The effect program catalog is parsed once and kept parsed (program.ts);
+	// its 40 MB of source bytes are needed only for that first parse.
+	let disposed = false, effectCatalogParsed = false;
 	const files = new Map<string, number>(), readyFiles = new Set<string>();
 	let bytesRead = 0;
 	let received = 0, lastReceived = 0, lastProgress = performance.now(), speed = 0;
@@ -358,8 +365,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			if ( ![ "http:", "https:" ].includes( url.protocol ) || url.username || url.password ) {
 				throw new Error( "Invalid asset URL" );
 			}
-			const bytes = request.decode === "effect" && effectBytes ?
-				effectBytes :
+			let bytes = request.decode === "effect" && effectCatalogParsed ?
+				PARSED_EFFECT_CATALOG :
 				url.pathname.startsWith( "/assets/" ) ?
 				await packs.read( url, request.limit, controller.signal ) :
 				await download( url.href, request.limit, controller.signal );
@@ -423,7 +430,11 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 						pending.delete( request.id );
 						return;
 					}
-					const resolved = await worlds.resolve( bytes, readWorldResource, url.pathname );
+					let resolved: ResolvedWorld | null = await worlds.resolve( bytes, readWorldResource, url.pathname );
+					// The source bytes and, below, the parsed bundle die before the
+					// scene is packed: a frontend stage holds them at several hundred
+					// MB, which otherwise all coexist with the packed arena.
+					bytes = RELEASED_WORLD_BYTES;
 					if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					const placedIds = new Set( resolved.objects.placements.map( row => row.objectId ) );
 					const refs = new Set(
@@ -431,7 +442,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 							(row.branches ?? [ row ]).map( branch => branch.sourcePath?.toLowerCase() )
 						)
 					);
-					const animated = new Map<string, NonNullable<typeof resolved.animated>[number]>();
+					const animated = new Map<string, NonNullable<ResolvedWorld["animated"]>[number]>();
 					for ( const path of await packs.worldAnimationManifests( url.origin, refs ) ) {
 						let manifest = animationCatalogs.get( path );
 						if ( !manifest ) {
@@ -440,7 +451,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 							) as {
 								objects: Record<
 									string,
-									Omit<NonNullable<typeof resolved.animated>[number], "sourcePath">
+									Omit<NonNullable<ResolvedWorld["animated"]>[number], "sourcePath">
 								>;
 							};
 							manifest = {
@@ -484,7 +495,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 								yaw: number;
 								scale: number;
 							}[];
-							resources: typeof resolved.objects.resources;
+							resources: ResolvedWorld["objects"]["resources"];
 						};
 						const added = [], addedScenery: NonNullable<typeof scene.scenery>[number][] = [];
 						for ( const prop of manifest.props ) {
@@ -522,6 +533,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 							scenery: [ ...(scene.scenery ?? []), ...addedScenery ]
 						};
 					}
+					resolved = null;
 					if ( disposed || controller.signal.aborted || pending.get( request.id ) !== controller ) return;
 					const prepared = prepareWorldScene( scene ), transfer = worldSceneTransfers( prepared.scene );
 					send( { kind: "world", id: request.id, prepared }, transfer );
@@ -529,8 +541,8 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 				} else if ( request.decode === "character" || request.decode === "effect" ) {
 					let model: import("@/engine/contracts/character").CharacterSource;
 					if ( request.decode === "effect" ) {
-						effectBytes = bytes;
 						const decoded = effects.model( bytes, decodeURIComponent( url.hash.slice( 1 ) ) ), raw = [];
+						effectCatalogParsed = true;
 						let size = 0;
 						for ( const path of decoded.imagePaths ) {
 							if ( !path.startsWith( "/assets/" ) || path.includes( ".." ) ) {
@@ -735,7 +747,7 @@ export function createLoader( send: ( result: AssetWorkerMessage, transfer: Tran
 			if ( progressTimer !== null ) clearTimeout( progressTimer );
 			progressTimer = null;
 			animationCatalogs.clear();
-			effectBytes = null;
+			effectCatalogParsed = false;
 			effects.dispose();
 			installer.dispose();
 			wakeIdleWaiters();
