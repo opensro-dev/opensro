@@ -18,6 +18,7 @@ import (
 	"opensro.online/server/internal/game/item/alchemy"
 	"opensro.online/server/internal/game/item/grounditem"
 	"opensro.online/server/internal/game/item/inventory"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
@@ -27,19 +28,46 @@ import (
 ================
 drainedNotices
 
-The texts of the queued notices, decoded from their 0x3667 type-7 frames.
+The texts of the queued notices, decoded from their 0x3667 frames: a job
+kill's on wire.JobKillNoticeChannel, every other on channel 7.
 ================
 */
 func drainedNotices(t *testing.T, rt *Runtime) []string {
 	t.Helper()
 	var texts []string
+	for _, line := range drainedNoticeLines(t, rt) {
+		texts = append(texts, line.text)
+	}
+	return texts
+}
+
+/*
+================
+noticeLine
+================
+*/
+type noticeLine struct {
+	channel uint8
+	text    string
+}
+
+/*
+================
+drainedNoticeLines
+
+drainedNotices with each notice's channel.
+================
+*/
+func drainedNoticeLines(t *testing.T, rt *Runtime) []noticeLine {
+	t.Helper()
+	var lines []noticeLine
 	for _, routed := range rt.drainAnnouncements(0) {
 		if routed.DivisionID != testDivision || routed.SourceGID != 0 || routed.OnlyCharacterID != 0 {
 			t.Fatalf("a notice is not a division broadcast: %+v", routed)
 		}
 		for _, frame := range routed.Frames {
 			p := frame.Payload
-			if frame.Opcode != 0x3667 || len(p) < 3 || p[0] != 7 {
+			if frame.Opcode != 0x3667 || len(p) < 3 || (p[0] != 7 && p[0] != wire.JobKillNoticeChannel) {
 				t.Fatalf("not a notification frame: %#x % x", frame.Opcode, p)
 			}
 			n := int(p[1]) | int(p[2])<<8
@@ -47,10 +75,10 @@ func drainedNotices(t *testing.T, rt *Runtime) []string {
 			for i := range units {
 				units[i] = uint16(p[3+2*i]) | uint16(p[4+2*i])<<8
 			}
-			texts = append(texts, string(utf16.Decode(units)))
+			lines = append(lines, noticeLine{p[0], string(utf16.Decode(units))})
 		}
 	}
-	return texts
+	return lines
 }
 
 /*
@@ -214,8 +242,9 @@ func TestJobKillNoticeFollowsTheFlag(t *testing.T) {
 	rt.Announce.JobKill = true
 	rt.payJobKillShares(kill(trader, 0))
 	rt.payJobKillShares(kill(trader, jobKillRepeatMs-1))
-	if got := drainedNotices(t, rt); len(got) != 1 || got[0] != "[leChiffre] killed [ES_Tip]" {
-		t.Fatalf("notices %q", got)
+	if got := drainedNoticeLines(t, rt); len(got) != 1 || got[0].text != "[leChiffre] killed [ES_Tip]" ||
+		got[0].channel != wire.JobKillNoticeChannel {
+		t.Fatalf("notices %+v, want one on the job-kill channel", got)
 	}
 	for _, got := range []string{thief.Name, trader.Name} {
 		if strings.Contains("[leChiffre] killed [ES_Tip]", got) {
@@ -274,7 +303,7 @@ division on the next tick, once.
 */
 func TestTickSendsQueuedNotices(t *testing.T) {
 	rt, clock := newTestRuntime(testCharacter(), testItems())
-	rt.announce(testDivision, announceJobKill, "Thief killed Trader", clock.NowMs())
+	rt.announce(testDivision, announcePlus, "Looter advanced Blade to +8", clock.NowMs())
 	count := func(out []simulation.DivisionFrames) int {
 		n := 0
 		for _, routed := range out {

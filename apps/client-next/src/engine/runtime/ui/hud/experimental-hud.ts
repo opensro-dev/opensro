@@ -161,6 +161,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-grey-disabled-tabs",
 			label: "Grey disabled tabs",
 			description: "Dim a window tab you cannot use."
+		}, {
+			key: "jobKillNotices",
+			id: "experimental-job-kill-notices",
+			label: "Job kill notices",
+			description: "Show the shard's job kill announcements."
 		} ]
 	},
 	{

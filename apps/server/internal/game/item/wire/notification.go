@@ -2,15 +2,36 @@ package wire
 
 import "unicode/utf16"
 
+// JobKillNoticeChannel is the 0x3667 channel of the job-kill announcement.
+// Port-only, not native: v1.150 (753760) routes channels 1..16 through its
+// lookup table and nothing outside it, so a channel of its own lets the
+// browser client hide these notices (the Experimental "Job kill notices"
+// row) while showing them exactly like channel 7. A client without the
+// row drops the unknown channel.
+const JobKillNoticeChannel = 0x80
+
+// noticeChannel is v1.150's server notification channel (753A6F).
+const noticeChannel = 7
+
 // v1.150 753A6F: chat type 7 contains only a sized UTF-16 string.
 // 752ABD sends it to the notification banner and the chat log. This is a
 // server-authored message, not an invented B245 skill-error number.
 func NotificationFrame(message string) Frame {
+	return notificationFrameOn(noticeChannel, message)
+}
+
+// JobKillNotificationFrame is NotificationFrame on JobKillNoticeChannel.
+func JobKillNotificationFrame(message string) Frame {
+	return notificationFrameOn(JobKillNoticeChannel, message)
+}
+
+// notificationFrameOn writes one notification on a channel.
+func notificationFrameOn(channel uint8, message string) Frame {
 	text := utf16.Encode([]rune(message))
 	if len(text) > 100 {
 		panic("notification exceeds text budget")
 	}
-	w := NewWriter(3 + 2*len(text)).U8(7).U16(uint16(len(text)))
+	w := NewWriter(3 + 2*len(text)).U8(channel).U16(uint16(len(text)))
 	for _, ch := range text {
 		w.U16(ch)
 	}

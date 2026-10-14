@@ -11,3 +11,10 @@ func TestNotificationFrameNativeTextOnly(t *testing.T) {
 		t.Fatalf("notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
 	}
 }
+
+func TestJobKillNotificationFrameUsesItsOwnChannel(t *testing.T) {
+	f := JobKillNotificationFrame("A")
+	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, []byte{JobKillNoticeChannel, 1, 0, 65, 0}) {
+		t.Fatalf("job-kill notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
+	}
+}

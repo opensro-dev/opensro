@@ -56,6 +56,11 @@ export interface ExperimentalOptions {
 	// original draws it like an unselected tab, 5376A0). On unless turned
 	// off (the owner's choice, 2026-10-15); off is the original look.
 	readonly greyDisabledTabs: boolean;
+	// Port-only, not native: the shard's job-kill announcements (their own
+	// 0x3667 channel, server wire.JobKillNoticeChannel). On unless turned off
+	// (the owner's choice, 2026-10-15); off hides them from the banner and
+	// the chat log.
+	readonly jobKillNotices: boolean;
 }
 
 /*
@@ -93,7 +98,8 @@ export function renderScales(): readonly RenderScale[] {
 experimentalOptions
 
 Only an explicit true enables a toggle, except compressedTextures,
-sharedActorRoom and greyDisabledTabs, which only an explicit false turns off. Missing or invalid render scales
+sharedActorRoom, greyDisabledTabs and jobKillNotices, which only an explicit
+false turns off. Missing or invalid render scales
 restore full resolution; legacy Video settings cannot enable scaling. Keys
 of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -122,7 +128,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		enchantSparks: enabled( "enchantSparks" ),
 		compressedTextures: record.compressedTextures !== false,
 		sharedActorRoom: record.sharedActorRoom !== false,
-		greyDisabledTabs: record.greyDisabledTabs !== false
+		greyDisabledTabs: record.greyDisabledTabs !== false,
+		jobKillNotices: record.jobKillNotices !== false
 	};
 }
 
@@ -204,6 +211,7 @@ native client.
 */
 export interface ExperimentalGameplay {
 	readonly predictedRunUp: boolean;
+	readonly jobKillNotices: boolean;
 }
 
 /*
@@ -212,5 +220,5 @@ experimentalGameplay
 ================
 */
 export function experimentalGameplay( options: ExperimentalOptions ): ExperimentalGameplay {
-	return { predictedRunUp: options.predictedRunUp };
+	return { predictedRunUp: options.predictedRunUp, jobKillNotices: options.jobKillNotices };
 }

@@ -159,6 +159,7 @@ import {
 import { playerStats } from "@/engine/foundation/gameplay/player-stats";
 import {
 	fortressNotice,
+	JOB_KILL_NOTICE_CHANNEL,
 	serverNotification,
 	restrictionNotice,
 	type SystemNotice
@@ -755,6 +756,9 @@ fails; retry persistence without restoring stale slot occupancy.
 	// The skill a predicted run-up was pressed for (skillRunUpGoal), and
 	// whether the Experimental row predicts run-ups at all.
 	let runUpSkill = 0, predictedRunUp = false;
+	// The Experimental "Job kill notices" row: on unless the window turns it
+	// off (experimentalGameplay).
+	let jobKillNotices = true;
 	let approach: InteractionApproachState = { phase: "idle" };
 	let returnScroll: ReturnScrollCast | undefined, teleportMode = 0;
 	const cosSelection = createCosSelection();
@@ -1091,6 +1095,7 @@ The Experimental window's gameplay rows (experimentalGameplay).
 		*/
 		experimental( value: import("@/engine/foundation/ui/experimental-options").ExperimentalGameplay ) {
 			predictedRunUp = value.predictedRunUp === true;
+			jobKillNotices = value.jobKillNotices !== false;
 		},
 		/*
 ================
@@ -2980,9 +2985,13 @@ Packet handling must not depend on which HUD panel is currently open.
 						readEntity( fortressStructureState( frame )?.gid ?? 0 )?.name
 					) ??
 					serverNotification( frame.opcode, frame.payload );
+				if ( notice?.jobKill && !jobKillNotices ) return false;
 				if ( notice ) {
 					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
-					if ( frame.opcode === 0x3667 && frame.payload[0] === 7 ) chat.receive( frame, localGid );
+					if (
+						frame.opcode === 0x3667 &&
+						(frame.payload[0] === 7 || frame.payload[0] === JOB_KILL_NOTICE_CHANNEL)
+					) chat.receive( frame, localGid );
 					dirty = true;
 					return false;
 				}

@@ -52,3 +52,33 @@ test("server refusal reaches the independent native red notice and pink chat log
 	}
 	assert.throws( () => serverNotification( 0x3667, Buffer.concat( [ payload, Buffer.from( [ 0 ] ) ] ) ) );
 });
+
+test("a job-kill notice (port-only channel 0x80) shows like channel 7 unless the Experimental row is off", () => {
+	const text = "[leChiffre] killed [ES_Tip]",
+		payload = Buffer.concat( [ Buffer.from( [ 0x80, text.length, 0 ] ), Buffer.from( text, "utf16le" ) ] );
+	const notice = defined( serverNotification( 0x3667, payload ) );
+	assert.equal( notice.jobKill, true );
+	assert.equal( notice.text, text );
+	assert.equal(
+		serverNotification( 0x3667, Buffer.concat( [ Buffer.from( [ 7 ] ), payload.subarray( 1 ) ] ) )?.jobKill,
+		undefined
+	);
+	// On by default: the banner notice and a (Notify): chat line, colored as channel 7.
+	const shown = createGameplay( () => {} );
+	shown.receive( { opcode: 0x3667, payload }, 100 );
+	const state = defined( shown.take() ),
+		line = defined( defined( state.chat ).lines.at( -1 ) );
+	assert.equal( defined( defined( state.notices ).at( -1 ) ).text, text );
+	assert.equal( line.channel, 7 );
+	assert.equal( chatLineText( line, () => "Notify" ), "(Notify):" + text );
+	// Off: neither the banner nor the chat log sees it; a plain notice still shows.
+	const hidden = createGameplay( () => {} );
+	hidden.experimental( { predictedRunUp: false, jobKillNotices: false } );
+	hidden.receive( { opcode: 0x3667, payload }, 100 );
+	const quiet = hidden.take();
+	assert.equal( quiet?.notices?.some( n => n.text === text ) ?? false, false );
+	assert.equal( quiet?.chat?.lines.some( l => l.text === text ) ?? false, false );
+	const plain = Buffer.concat( [ Buffer.from( [ 7, 5, 0 ] ), Buffer.from( "Hello", "utf16le" ) ] );
+	hidden.receive( { opcode: 0x3667, payload: plain }, 200 );
+	assert.equal( defined( defined( hidden.take() ).notices ).at( -1 )?.text, "Hello" );
+});

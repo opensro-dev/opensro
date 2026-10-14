@@ -41,7 +41,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-14): near effects outrank far characters.
 	sharedActorRoom: true,
 	// On by default (owner 2026-10-15): a disabled tab is dimmed.
-	greyDisabledTabs: true
+	greyDisabledTabs: true,
+	// On by default (owner 2026-10-15): the shard's job-kill notices show.
+	jobKillNotices: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -311,12 +313,12 @@ Gameplay rows
 */
 test("the predicted run-up defaults off and reaches only the worker's slice", () => {
 	// The native press (6FCD50) never walks before the server answers.
-	assert.deepEqual( experimentalGameplay( experimentalOptions() ), { predictedRunUp: false } );
+	assert.deepEqual( experimentalGameplay( experimentalOptions() ), { predictedRunUp: false, jobKillNotices: true } );
 	for ( const value of [ 1, "true", null, {} ] ) {
 		assert.equal( experimentalOptions( { predictedRunUp: value } ).predictedRunUp, false );
 	}
 	const on = experimentalOptions( { predictedRunUp: true } );
-	assert.deepEqual( experimentalGameplay( on ), { predictedRunUp: true } );
+	assert.deepEqual( experimentalGameplay( on ), { predictedRunUp: true, jobKillNotices: true } );
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
 });
 
@@ -350,4 +352,14 @@ test("grey disabled tabs is on unless explicitly false and stays out of the rend
 	}
 	assert.equal( experimentalOptions( { greyDisabledTabs: false } ).greyDisabledTabs, false );
 	assert.equal( "greyDisabledTabs" in experimentalVideo( experimentalOptions( {} ) ), false );
+});
+
+test("job kill notices are on unless explicitly false and reach the worker's gameplay slice", () => {
+	for ( const value of [ undefined, null, {}, { jobKillNotices: 1 }, { jobKillNotices: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).jobKillNotices, true );
+	}
+	const off = experimentalOptions( { jobKillNotices: false } );
+	assert.equal( off.jobKillNotices, false );
+	assert.equal( experimentalGameplay( off ).jobKillNotices, false );
+	assert.equal( "jobKillNotices" in experimentalVideo( experimentalOptions( {} ) ), false );
 });
