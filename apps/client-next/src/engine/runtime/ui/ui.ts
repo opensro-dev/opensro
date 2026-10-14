@@ -69,14 +69,9 @@ import { containsPoint, topmostControlAt } from "@/engine/foundation/ui/hit-test
 import { minimapZoomTarget, advanceMinimapZoom } from "@/engine/foundation/ui/minimap-zoom";
 import { minimapTiles } from "@/engine/foundation/ui/minimap-tiles";
 import { minimapFloorQueries, minimapPoseKey, minimapSameFloor } from "@/engine/foundation/ui/minimap-floor";
-import {
-	minimapMarkers,
-	minimapOffset,
-	minimapEdge,
-	minimapHunting,
-	rosterPositions
-} from "@/engine/foundation/ui/minimap-markers";
+import { minimapMarkers, minimapOffset, minimapEdge, minimapHunting } from "@/engine/foundation/ui/minimap-markers";
 import { createMinimapResources } from "./hud/minimap";
+import { createWorldMapHud } from "./hud/world-map";
 import { createSkillTrainingCache } from "./hud/skill-training";
 import {
 	createWithdrawalDialog,
@@ -153,7 +148,7 @@ import { createAutoPotionInput } from "./hud/auto-potion-input";
 import { createCosHud } from "./hud/cos-hud";
 import { createCompactHud, compactHudLayout, compactWindowDrag, compactCloseControl } from "./hud/compact-hud";
 import { fitUiGroup } from "@/engine/foundation/ui/layout";
-import { createExperimentalHud, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
+import { createExperimentalHud, experimentalTabs, EXPERIMENTAL_TABS } from "./hud/experimental-hud";
 import { renderScales, type ExperimentalOptions } from "@/engine/foundation/ui/experimental-options";
 import {
 	rememberedWindows,
@@ -478,18 +473,7 @@ import { comboBoxChrome } from "@/engine/foundation/ui/combo-box";
 import { verticalSpinChrome } from "@/engine/foundation/ui/vertical-spin";
 import { stretchRing } from "@/engine/foundation/ui/stretch-ring";
 import { chatLayout } from "@/engine/foundation/ui/chat-layout";
-import {
-	worldMapImagePaths,
-	worldMapDemand,
-	MAP_LOCAL_MARKER,
-	worldMapPageAt,
-	worldMapPages,
-	worldMapPresentation,
-	worldMapPointMarkers,
-	REVERSE_MAP_MARKER,
-	type MapMarker,
-	mapLabelVisible
-} from "@/engine/foundation/ui/world-map";
+import { worldMapImagePaths } from "@/engine/foundation/ui/world-map";
 import {
 	experienceReadout,
 	minimapCoordinates,
@@ -590,8 +574,6 @@ type CloseControlId = PanelCloseId | `${string}-close` | "stall-leave";
 const COS_LOW_SATIETY = [ 0x99 / 255, 0x99 / 255, 0x99 / 255, 1 ] as const;
 // No video option combo is open (slot -1 is the screen-size combo).
 const VIDEO_COMBO_CLOSED = -99;
-const WORLD_MAP_WIDTH = 652;
-const WORLD_MAP_HEIGHT = 424;
 const VIDEO_FRAME_LIMIT_SLOT = -3;
 const VIDEO_VISIBLE_ROWS = 6;
 const VIDEO_SCROLL_MAX = videoRows().length + 1 - VIDEO_VISIBLE_ROWS;
@@ -910,6 +892,7 @@ export function createUi(
 	const skillTraining = createSkillTrainingCache();
 	const withdrawal = createWithdrawalDialog();
 	const mapTeleport = createMapTeleport();
+	const mapHud = createWorldMapHud( { assets, base, experimental, saveExperimental: extensions.saveExperimental } );
 	const gauges = createGaugePresentation();
 	const regionBanner = createRegionBanner();
 	const hudMessages = createHudMessages( chooseTip );
@@ -958,15 +941,7 @@ export function createUi(
 	const statusFilters = new Set<string>( [ "gain", "fight", "status", "party", "game" ] );
 	let chatRows = 2, chatTab = 0, statusRows = 2;
 	let minimapZoom = 160, minimapTarget = 160, minimapLast: number | null = null;
-	let abilityDetails = false,
-		mapSmall = false,
-		mapFollow = true,
-		mapPage = 0,
-		mapX = 100,
-		mapY = 100,
-		mapPan: [number, number] = [ 0, 0 ],
-		mapCenter: import("@/engine/contracts/gameplay").Pose | null = null,
-		mapWorldLoading = false;
+	let abilityDetails = false, mapWorldLoading = false;
 	const title = createTitleUi( assets, base );
 	let serverList = false,
 		serverDraft = "",
@@ -1244,7 +1219,7 @@ export function createUi(
 			Record<RememberedWindow, readonly [number, number]>
 		> = {
 			mainPopup: [ popup[0], popup[1] ],
-			worldMap: [ mapX, mapY ],
+			worldMap: mapHud.position(),
 			...(guideX !== null && guideY !== null ? { gameGuide: [ guideX, guideY ] as const } : {}),
 			...(extPosition ? { extendedQuickslot: extPosition } : {})
 		};
@@ -2416,12 +2391,18 @@ export function createUi(
 	================
 	*/
 	function activate( id: string ) {
+		if ( panel === "Map" && mapHud.shortcut( id ) ) {
+			dirty = true;
+			return;
+		}
 		// A party chat command (6AD990), parsed once from the line being sent.
 		const partyLine = id === "chat-send" ?
 			partyChatCommand( chatText.slice( chatTabPrefix( chatTab ).length ), hudCopy ) :
 			null;
 		if ( panel === "Experimental" && id.startsWith( "experimental-" ) ) {
-			const row = EXPERIMENTAL_TABS.flatMap( tab => tab.rows ).find( candidate => candidate.id === id );
+			const row = experimentalTabs( view?.session ).flatMap( tab => tab.rows ).find( candidate =>
+				candidate.id === id
+			);
 			if ( id.startsWith( "experimental-tab:" ) ) experimental.selectTab( Number( id.slice( 17 ) ) );
 			else if ( id.startsWith( "experimental-render-scale:" ) ) {
 				experimental.selectRenderScale( Number( id.slice( "experimental-render-scale:".length ) ) );
@@ -3274,18 +3255,8 @@ export function createUi(
 		} else if ( id === "guild-donate" ) sendGameplay( { kind: id, amount: Number( socialAmount ) } );
 		else if ( id === "guild-title" ) sendGameplay( { kind: id, id: socialMember, name: socialName } );
 		else if ( id === "guild-role" ) sendGameplay( { kind: id, id: socialMember, role: Number( socialAmount ) } );
-		// In retail, CIFWorldMap 57F43D swallows map button messages while AUTO MOVE is on.
-		// By design, client-next allows clicking into a city even in Automatic Movement State,
-		// and automatically switches to Manual Movement State (mapFollow = false).
-		else if ( id.startsWith( "map-town:" ) ) {
-			const page = Number( id.slice( 9 ) );
-			if ( worldMapPages().some( p => p.id === page ) ) {
-				mapPage = page;
-				mapFollow = false;
-				mapPan = [ 0, 0 ];
-				mapCenter = view.gameplay?.pose ? { ...view.gameplay.pose } : null;
-			}
-		} else if ( id.startsWith( "party-match-row:" ) ) partyMatchSelection = Number( id.slice( 16 ) );
+		else if ( mapHud.activate( id, view.gameplay?.pose ) ) {}
+		else if ( id.startsWith( "party-match-row:" ) ) partyMatchSelection = Number( id.slice( 16 ) );
 		else if ( id === "party-match:56" || id === "party-match-prev" || id === "party-match-next" ) {
 			const state = view.gameplay?.partyMatching;
 			if ( state && !state.pending ) {
@@ -3552,23 +3523,6 @@ export function createUi(
 			chatText = selectChatTab( chatText, chatTab );
 			chatScroll.reset();
 			focusAtEnd( "chat-text", chatText );
-		} // 57AEA0 resizes, then 57A570 recentres on the player in either mode.
-		else if ( id === "map-size" ) {
-			mapSmall = !mapSmall;
-			mapPan = [ 0, 0 ];
-			mapCenter = mapFollow ? null : view.gameplay?.pose ? { ...view.gameplay.pose } : null;
-		} // 575E90 flips AUTO MOVE only; the view stays where AUTO last centred it.
-		else if ( id === "map-follow" ) {
-			mapFollow = !mapFollow;
-			mapCenter = view.gameplay?.pose ? { ...view.gameplay.pose } : null;
-			mapPan = [ 0, 0 ];
-		} // 57F410 is 57F0B0(world) + 57A570. By design, clicking World map switches
-		// to Manual Movement State (mapFollow = false) so the continent view is preserved.
-		else if ( id === "map-world" ) {
-			mapPage = 0;
-			mapFollow = false;
-			mapCenter = view.gameplay?.pose ? { ...view.gameplay.pose } : null;
-			mapPan = [ 0, 0 ];
 		} else if ( id === "berserk" ) {
 			if ( view?.berserkGauge?.displayed === 5 ) {
 				sendGameplay( { kind: "berserk" } );
@@ -5121,7 +5075,8 @@ export function createUi(
 				if ( event.kind !== "hover" ) return;
 			}
 			if (
-				event.kind === "region-double" && event.id === "map-pan" &&
+				event.kind === "region-double" &&
+				mapHud.surface( event.id ) &&
 				view?.session?.phase === "world" && view.gameplay?.eligibility?.gm
 			) {
 				if ( mapTeleport.pick( event.x, event.y ) ) dirty = true;
@@ -6213,12 +6168,7 @@ export function createUi(
 			}
 			if ( event.kind === "drag" ) {
 				if ( panel === "Map" ) {
-					if ( event.id === "map-drag" ) {
-						mapX = Math.max( 0, mapX + event.dx );
-						mapY = Math.max( 0, mapY + event.dy );
-					} else if ( (event.id === "map-pan" || event.id.startsWith( "map-town:" )) && !mapFollow ) {
-						mapPan = [ mapPan[0] + event.dx, mapPan[1] + event.dy ];
-					}
+					mapHud.drag( event );
 					dirty = true;
 					return;
 				}
@@ -7078,6 +7028,7 @@ export function createUi(
 				dirty = true;
 			}
 			if ( minimapResources.step( trackedQuest !== 0, next.session?.phase === "world" ) ) dirty = true;
+			if ( mapHud.step( next, panel ) ) dirty = true;
 			const questPositions = (next.gameplay?.quests?.find( q => q.refId === trackedQuest )?.targetIds ?? [])
 				.flatMap( id => {
 					const p = minimapResources.positions()?.get( id );
@@ -7471,11 +7422,7 @@ export function createUi(
 					const remembered = windowPlacement.enter( next.width, next.height );
 					if ( remembered ) {
 						popupPosition = remembered.mainPopup ?? null;
-						[mapX, mapY] = remembered.worldMap ??
-							[
-								Math.trunc( next.width / 2 ) - WORLD_MAP_WIDTH / 2,
-								Math.trunc( next.height / 2 ) - WORLD_MAP_HEIGHT / 2
-							];
+						mapHud.restorePosition( remembered.worldMap, next );
 						guideX = guideY = null;
 						extPosition = null;
 					}
@@ -7504,10 +7451,7 @@ export function createUi(
 					chatRows = 2;
 					chatTab = 0;
 					statusRows = 2;
-					mapFollow = true;
-					mapSmall = false;
-					mapPan = [ 0, 0 ];
-					mapCenter = null;
+					mapHud.reset();
 					guideObserved = 0;
 					guideRequested = 0;
 					guidePending = 0;
@@ -8861,9 +8805,7 @@ export function createUi(
 			if ( missionLoading ) mapWorldLoading = true;
 			else if ( mapWorldLoading && phase === "world" && next.worldReady ) {
 				mapWorldLoading = false;
-				mapFollow = true;
-				mapPan = [ 0, 0 ];
-				mapCenter = null;
+				mapHud.follow();
 			}
 			const frontendLoading = next.frontend &&
 				[ "loading-title", "loading-create", "loading-race", "loading-dock" ].includes( next.frontend.phase );
@@ -10284,236 +10226,34 @@ export function createUi(
 						clearHotbar
 					);
 				}
-				// The current map is a world-lifetime resource, not a popup-lifetime
-				// resource. Closing M must not release the image and flash on the next open.
-				if ( mapFollow && pose ) {
-					mapPage = worldMapPageAt( pose );
-					mapPan = [ 0, 0 ];
-					mapCenter = null;
-				}
-				const mapWidth = mapSmall ? 268 : WORLD_MAP_WIDTH, mapHeight = mapSmall ? 296 : WORLD_MAP_HEIGHT;
-				const mapLeft = Math.min( mapX, Math.max( 0, w - mapWidth ) ),
-					mapTop = Math.min( mapY, Math.max( 0, h - mapHeight ) );
-				mapX = mapLeft;
-				mapY = mapTop;
-				const mapHits: UiControl[] = [];
-				// 57FE60's marker passes, in its order: quest NPCs (57B1C0), hunting points
-				// (57B550), then the apprenticeship and party rosters (57CE80). Each is a
-				// 16x16 quad centred on the projected world position; the world map has no
-				// 47px ring, so unlike the minimap there is no edge clamp and no arrow
-				// sprite swap, and off-page members are simply clipped by the window.
-				const mapMarkers: MapMarker[] = [];
-				if ( pose ) {
-					for ( const id of game?.quests?.find( q => q.refId === trackedQuest )?.targetIds ?? [] ) {
-						const target = minimapResources.positions()?.get( id );
-						if ( target && minimapSameFloor( pose, target, game ?? null ) ) {
-							mapMarkers.push( {
-								regionId: target.regionId,
-								x: target.x,
-								z: target.z,
-								rotation: 0,
-								path: ROOT + "interface/worldmap/wmap_sign_questnpc.png"
-							} );
-						}
-					}
-					for ( const point of game?.huntingPoints ?? [] ) {
-						const live = next.entities.find( e => e.gid === point.gid ) ?? point;
-						mapMarkers.push( {
-							regionId: live.regionId,
-							x: live.x,
-							z: live.z,
-							rotation: -point.angle * Math.PI * 2 / 65536,
-							path: ROOT + "interface/worldmap/wmap_sign_huntingpoint.png"
-						} );
-					}
-					// Beta operator roster (port-only, beta-map.ts): every other online
-					// player, drawn before the party pass so party signs stay on top.
-					for ( const player of game?.betaPlayers ?? [] ) {
-						if ( player.gid === game?.localGid ) continue;
-						mapMarkers.push( {
-							regionId: player.regionId,
-							x: player.x,
-							z: player.z,
-							rotation: 0,
-							path: ROOT + "interface/minimap/mm_sign_otherplayer.png"
-						} );
-					}
-					for ( const row of rosterPositions( pose, game ?? null, next.entities ) ) {
-						mapMarkers.push( {
-							regionId: row.regionId,
-							x: row.x,
-							z: row.z,
-							rotation: 0,
-							path: ROOT + "interface/worldmap/wmap_sign_" + row.kind + ".png"
-						} );
-					}
-				}
-				// A closed map only demands its images, so opening it is instant: the
-				// demand is computed without the projection (worldMapDemand). Its label
-				// glyphs (the largest allocation of a HUD step) and click hits are built
-				// while it is open. The font atlas is demanded either way.
-				const mapOpen = panel === "Map";
-				// The teleport's inverse pick must track the painted projection: it
-				// is only valid while the map is open and a pose exists, so record the
-				// frame under the same condition that builds the projection.
-				if ( mapOpen && pose ) {
-					mapTeleport.view(
-						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
-						mapPan,
-						mapCenter ?? pose
-					);
-				}
-				const mapProjection = pose && mapOpen ?
-					worldMapPresentation(
-						pose,
-						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
-						mapPan,
-						mapCenter ?? pose,
-						hudData?.mapLabels,
-						hudData?.mapIcons,
-						mapMarkers
-					) :
-					null;
-				// MANUAL drags (AUTO swallows them, 57F43D) move the stored position by the
-				// clamped delta (579920); keep the displayed pan so reversing never has to
-				// unwind an overshoot first.
-				if ( mapProjection && !mapFollow ) mapPan = mapProjection.pan;
-				// 57E9A0 builds the 6200 overlay in ascending record id, so the SN_ labels
-				// (11xxx-14xxx) enter before the kind-2 icons (92xxx) and the icons paint
-				// over them; 57FE60 then runs every marker pass after that whole overlay.
-				// Paint background, label glyphs, icons, markers - the arrow is last and
-				// can never be hidden by a shop icon or a zone label.
-				// 57BBB0 traverses icons first, then labels. 57ED01 centres each label by
-				// its own font extent, subtracting the integer half-width from the anchor.
-				const fontPath = text.path();
-				if ( !mapOpen && fontPath ) paths.push( fontPath );
-				const mapImages = mapProjection ?
-					[
-						...mapProjection.background,
-						...mapProjection.overlay,
-						...(mapOpen ? mapProjection.labels : []).flatMap( ( { label: entry, x, y, clip } ) => {
-							const width = text.run( entry.text, 0, entry.font ).width,
-								height = text.extentHeight( entry.font ),
-								left = x - Math.floor( width / 2 );
-							if ( !mapLabelVisible( [ left, y, width, height ], clip ) ) return [];
-							return text.quads(
-								entry.text,
-								[ left, y, width, height ],
-								clip,
-								entry.color,
-								{ fontIndex: entry.font, hAlign: 0, vAlign: 0 }
-							);
-						} ),
-						...mapProjection.markers
-					] :
-					[];
-				for ( const { icon, rect: r } of mapOpen ? mapProjection?.hits ?? [] : [] ) {
-					const page = worldMapPages().find( p => p.id === icon.destination );
-					if ( page ) {
-						mapHits.push( {
-							id: "map-town:" + page.id,
-							label: hudCopy( "UIIT_STT_" + page.name ),
-							rect: r,
-							kind: "button",
-							draggable: true
-						} );
-					}
-				}
-				// Port-only: the reverse return map points while the map holds a scroll.
-				if ( mapOpen && pose && reverseScrollHud.mapping() ) {
-					const clip: UiRect = [ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ];
-					for (
-						const { point, rect } of worldMapPointMarkers( {
-							page: mapPage,
-							clip,
-							pan: mapPan,
-							center: mapCenter ?? pose,
-							points: game?.reverseMapPoints ?? []
-						} )
-					) {
-						mapImages.push( {
-							rect,
-							texture: REVERSE_MAP_MARKER,
-							uv: [ 0, 0, 1, 1 ],
-							color: [ 1, 1, 1, 1 ],
-							clip
-						} );
-						mapHits.push( {
-							id: "reverse-map-point:" + point.id,
-							label: point.name,
-							rect,
-							kind: "button"
-						} );
-					}
-				}
-				if ( mapOpen ) paths.push( ...mapImages.map( q => q.texture ) );
-				else if ( pose ) {
-					worldMapDemand(
-						mapPage,
-						[ mapLeft + 6, mapTop + 34, mapWidth - 12, mapHeight - 40 ],
-						mapPan,
-						mapCenter ?? pose,
-						hudData?.mapIcons ?? [],
-						paths
-					);
-					for ( const row of mapMarkers ) paths.push( row.path );
-					paths.push( MAP_LOCAL_MARKER );
-				}
-				if ( panel === "Map" && hudData ) {
-					// Map tiles and icons stream in as a pan reveals them (demanded above, and
-					// absent textures simply do not draw). Gating admission on them disabled
-					// map-pan mid-drag, which cancelled the drag. Chrome stays gated.
-					const admission = beginWindow();
-					const mw = mapWidth, mh = mapHeight, mx = mapLeft, my = mapTop;
-					if ( mapFollow && pose ) {
-						mapPage = worldMapPageAt( pose );
-						mapPan = [ 0, 0 ];
-						mapCenter = null;
-					}
-					const page = worldMapPages().find( row => row.id === mapPage ),
-						caption = hudCopy( page ? "UIIT_STT_" + page.name : "UIIT_PAG_WORLDMAP" ) || "World Map";
-					windowBox( caption, mx, my, mw, mh );
-					const inner: UiRect = [ mx + 6, my + 34, mw - 12, mh - 40 ];
-					// The map surface is CIFWorldMap itself, not a CIFButton: pressing or
-					// dragging it never activates or plays SND_BUTTON_CLICK.
-					controls.push( { id: "map-pan", label: "Pan map", kind: "region", draggable: true, rect: inner }, {
-						id: "map-drag",
-						label: "Move map",
-						kind: "button",
-						draggable: true,
-						rect: [ mx + 20, my + 4, mw - 96, 24 ]
-					} );
-					quads.push( ...mapImages );
-					controls.push( ...mapHits );
-					const nodes = hudData.map;
-					authoredButton(
-						{ ...nodes.GDR_WM_BTN_WNDSIZE!, rect: [ mw - 44, 10, 16, 16 ] },
-						mx,
-						my,
-						"map-size",
-						"Change map size"
-					);
-					if ( mapPage !== 0 ) {
-						authoredButton(
-							{ ...nodes.GDR_WM_BTN_TO_WMAP!, rect: [ mw - 62, 10, 16, 16 ] },
-							mx,
-							my,
-							"map-world",
-							"World map"
-						);
-					}
-					if ( !mapSmall ) {
-						const node = nodes.GDR_WM_BTN_AUTO_MOVE!,
-							caption = hudCopy(
-								mapFollow ? "UIIT_STT_WORLDMAP_AUTO_MOVE" : "UIIT_STT_WORLDMAP_MANUAL_MOVE"
-							);
-						authoredLabeledButton( node, mx, my, "map-follow", caption );
-					}
-					closeButton( mx + mw - 25, my + 10, panelCloseId( "Map" ) );
-					endWindow( admission );
-				}
+				hover = mapHud.present( {
+					next,
+					game,
+					pose,
+					panel,
+					w,
+					h,
+					full,
+					hover,
+					hudData,
+					trackedQuest,
+					minimapResources,
+					mapTeleport,
+					reverseScrollHud,
+					text,
+					resources,
+					paths,
+					quads,
+					controls,
+					hudCopy,
+					beginWindow,
+					endWindow,
+					windowBox,
+					authoredButton,
+					authoredLabeledButton,
+					closeButton,
+					image
+				} );
 				if ( hudData && (!compact || compact.overlay === "map") ) {
 					const mapMark = [ quads.length, controls.length, blocks.length ] as const;
 					const root = hudData.root.GDR_MINIMAP!,
@@ -10960,7 +10700,7 @@ export function createUi(
 					// Options-style tabs over one framed list: a header naming the tab,
 					// then a checkbox or numeric selection with its help line below it.
 					// The window grows with the selected tab, as CIFOption::OnTab does.
-					const { tab, draft } = experimental.state(), page = EXPERIMENTAL_TABS[tab]!;
+					const { tab, draft } = experimental.state(), page = experimentalTabs( next.session )[tab]!;
 					const rowPitch = 46, listTop = 98, width = 386;
 					const listHeight = page.rows.length * rowPitch + 12, height = listTop + listHeight + 50;
 					const [px, py] = windowOrigin( "Experimental", [
@@ -21674,6 +21414,7 @@ export function createUi(
 					}
 				}
 			}
+			mapHud.details( { worldVisible, panel, pressed, hover, full, paths, quads, text, resources, rect } );
 			if ( worldVisible && consolePhase !== 0 && game?.eligibility?.gm ) {
 				const r: UiRect = [ 0, consoleY, 600, 112 ];
 				blocks.push( r );
@@ -21855,6 +21596,7 @@ export function createUi(
 					hud,
 					guideResources,
 					minimapResources,
+					mapHud,
 					stallCategories,
 					localization,
 					title,

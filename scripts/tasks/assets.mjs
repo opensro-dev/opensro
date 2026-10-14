@@ -58,6 +58,7 @@ export const REFRESH_FAMILIES = [
 // The publish rows of the same table (kind: "publish"), run by the same runner.
 // Monster material variants are published by the full build (group game-models).
 export const PUBLISH_FAMILIES = [
+	"hunting-portraits",
 	"dungeon-worlds",
 	"flares",
 	"minimap-coverage",

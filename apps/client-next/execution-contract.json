@@ -2,6 +2,46 @@
 	"version": 1,
 	"capabilities": [
 		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/experimental-hud.ts",
+			"functions": [ "state", "restore" ]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/runtime.ts",
+			"functions": [ "saveExperimental" ]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/minimap.ts",
+			"functions": [ "positions" ]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/map-teleport.ts",
+			"functions": [ "view" ]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/text/text.ts",
+			"functions": [ "path", "quads", "run", "extentHeight" ]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/resources/resources.ts",
+			"functions": [ "has", "size" ]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/hud/reverse-return-hud.ts",
+			"functions": [ "mapping" ]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/world-map.ts",
+			"provider": "src/engine/runtime/ui/ui.ts",
+			"functions": [ "hudCopy", "beginWindow", "windowBox", "image", "authoredButton", "authoredLabeledButton", "closeButton", "endWindow", "rect" ]
+		},
+		{
 			"consumer": "src/engine/runtime/viewer/viewer.ts",
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
@@ -2296,6 +2336,16 @@
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
 				"callback:setAssetDump:0"
+			]
+		},
+		{
+			"consumer": "src/engine/runtime/ui/hud/hunting-guide.ts",
+			"provider": "src/engine/runtime/assets/assets.ts",
+			"functions": [
+				"available",
+				"cancel",
+				"request",
+				"take"
 			]
 		}
 	],

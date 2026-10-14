@@ -26,15 +26,22 @@ import (
 	"opensro.online/server/internal/releaseprotocol"
 )
 
-// BrowserReferences is immutable process-owned public data, compiled once from
-// the same authority used by combat. Never put character/session fields here.
-// Content identity, rather than a manually maintained asset list or version,
-// invalidates the browser cache when any source row or projection changes.
+/*
+================
+BrowserReferences
+
+Immutable process-owned public data, compiled once from the same authority
+used by combat. Content identity invalidates the cache when a row changes.
+Never put character/session fields here.
+================
+*/
 type BrowserReferences struct {
-	Path     string `json:"path"`
-	SHA256   string `json:"sha256"`
-	Bytes    int    `json:"bytes"`
-	gzipData []byte
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Bytes  int    `json:"bytes"`
+	// Port-only, not native: a separately loaded, static beginner atlas.
+	HuntingGuide *BrowserReferences `json:"huntingGuide,omitempty"`
+	gzipData     []byte
 	// itemIDs and objectIDs are the published item and object rows; a
 	// login skips them.
 	itemIDs   map[uint32]bool
@@ -49,7 +56,13 @@ const (
 	maxPublicReferenceBytes = 32 << 20
 )
 
-// BrowserReferenceSources are the immutable tables one reference file holds.
+/*
+================
+BrowserReferenceSources
+
+The immutable tables one reference file holds.
+================
+*/
 type BrowserReferenceSources struct {
 	Skills SkillDataSource
 	// ItemCommands may be nil.
@@ -59,6 +72,8 @@ type BrowserReferenceSources struct {
 	// Monsters are the monster rows every viewer needs
 	// (PublicMonsterRefObjRows).
 	Monsters []RefObjRow
+	// Port-only, not native. Read only when SRO_HUNTING_GUIDE is enabled.
+	HuntingGuide HuntingGuideSource
 	// ReverseMapPoints is the reverse return scroll's map table: empty
 	// unless the port-only SRO_REVERSE_RETURN_MAP option is on.
 	ReverseMapPoints []ReverseMapPoint
@@ -150,27 +165,51 @@ func NewBrowserReferences(sources BrowserReferenceSources) (*BrowserReferences, 
 	if len(data) > maxPublicReferenceBytes {
 		return nil, fmt.Errorf("public references exceed decoded resource budget: %d", len(data))
 	}
+	result, err := newBrowserReferenceFile(data)
+	if err != nil {
+		return nil, err
+	}
+	result.itemIDs, result.objectIDs = itemIDs, objectIDs
+	result.HuntingGuide, err = newHuntingGuideReference(sources.HuntingGuide)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+/*
+================
+newBrowserReferenceFile
+
+One immutable HTTP resource owner for reference tables and the optional atlas.
+================
+*/
+func newBrowserReferenceFile(data []byte) (*BrowserReferences, error) {
 	digest := sha256.Sum256(data)
 	hash := hex.EncodeToString(digest[:])
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
-	if _, err = writer.Write(data); err != nil {
+	if _, err := writer.Write(data); err != nil {
 		return nil, err
 	}
-	if err = writer.Close(); err != nil {
+	if err := writer.Close(); err != nil {
 		return nil, err
 	}
-	return &BrowserReferences{
-		Path:      "/transport/references/" + hash + ".json",
-		SHA256:    hash,
-		Bytes:     len(data),
-		gzipData:  compressed.Bytes(),
-		itemIDs:   itemIDs,
-		objectIDs: objectIDs,
-	}, nil
+	return &BrowserReferences{Path: "/transport/references/" + hash + ".json", SHA256: hash,
+		Bytes: len(data), gzipData: compressed.Bytes()}, nil
 }
 
+/*
+================
+ServeHTTP
+================
+*/
+
 func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {
+	if r.HuntingGuide != nil && q.URL.Path == r.HuntingGuide.Path {
+		r.HuntingGuide.ServeHTTP(w, q)
+		return
+	}
 	if q.URL.Path != r.Path {
 		http.NotFound(w, q)
 		return
@@ -215,8 +254,14 @@ func (r *BrowserReferences) ServeHTTP(w http.ResponseWriter, q *http.Request) {
 	}
 }
 
-// The wire envelope carries only the immutable identity. The existing full
-// BootstrapResult remains available for detached fixtures/legacy consumers.
+/*
+================
+referenceEnterWorldBlob
+
+The wire envelope carries only the immutable identity. The full
+BootstrapResult remains available for detached fixtures/legacy consumers.
+================
+*/
 func referenceEnterWorldBlob(result *BootstrapResult, refs *BrowserReferences) ([]byte, error) {
 	copy := *result
 	copy.RefSkillSnapshot = nil

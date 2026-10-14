@@ -176,7 +176,9 @@
     "src/engine/runtime/characters/spawn-fades.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/appearance-lookup.ts": "src/engine/runtime/characters/characters.ts",
     "src/engine/runtime/characters/viewer-queries.ts": "src/engine/runtime/characters/characters.ts",
-    "src/engine/runtime/ui/hud/compact-hud.ts": "src/engine/runtime/ui/ui.ts"
+    "src/engine/runtime/ui/hud/compact-hud.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/world-map.ts": "src/engine/runtime/ui/ui.ts",
+    "src/engine/runtime/ui/hud/hunting-guide.ts": "src/engine/runtime/ui/hud/world-map.ts"
   },
   "internals": {
     "src/engine/runtime/platform/telemetry.ts": "src/engine/runtime/platform/platform.ts",

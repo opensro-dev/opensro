@@ -256,6 +256,7 @@ publishWorld
 			restoringWorld,
 			crestPrefix,
 			marksBase: identity?.apiBase,
+			huntingGuide: value.huntingGuide,
 			phase: value.phase,
 			character: value.character,
 			entityCount: value.entities,

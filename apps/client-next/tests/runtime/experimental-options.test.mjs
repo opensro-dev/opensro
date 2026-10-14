@@ -23,6 +23,7 @@ const { createExperimentalHud, EXPERIMENTAL_TABS } = await import(
 const OFF = Object.freeze( {
 	renderScale: 100,
 	chatTimestamps: false,
+	monsterGuide: false,
 	developerDiagnostics: false,
 	postProcessing: false,
 	anisotropicFiltering: false,

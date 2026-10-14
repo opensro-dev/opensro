@@ -268,6 +268,13 @@ variable "reverse_return_map" {
   default = ""
 }
 
+# hunting_guide publishes the optional static atlas (port-only, not native).
+# Unset or off builds and publishes nothing extra.
+variable "hunting_guide" {
+  type    = string
+  default = ""
+}
+
 # gm_setspeed admits a GM's /SETSPEED (port-only, not native; owner decision
 # 2026-10-12). Anything but "on" refuses it, as v1.150 has no such command.
 variable "gm_setspeed" {
@@ -620,6 +627,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
         SRO_TRADE_JOB_BONUS                = var.trade_job_bonus
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
+        SRO_HUNTING_GUIDE                  = var.hunting_guide
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates
         SRO_ALCHEMY_MAX_PLUS               = var.alchemy_max_plus
