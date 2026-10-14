@@ -114,8 +114,20 @@ Applies one random operation and reports whether it succeeded.
 ================
 */
 func fuzzStep(r *rand.Rand, bag, room *Inventory) bool {
-	bagSlot := func() uint8 { return 13 + uint8(r.Intn(int(fuzzBagEnd-13)+2)) - 1 }
-	roomSlot := func() uint8 { return uint8(r.Intn(int(fuzzRoomSize) + 2)) }
+	// Mostly an occupied slot, so most operations have something to move;
+	// otherwise any slot, one past either end included.
+	occupied := func(inv *Inventory, wild func() uint8) uint8 {
+		if len(inv.items) > 0 && r.Intn(4) != 0 {
+			return inv.items[r.Intn(len(inv.items))].Slot
+		}
+		return wild()
+	}
+	bagSlot := func() uint8 {
+		return occupied(bag, func() uint8 { return 13 + uint8(r.Intn(int(fuzzBagEnd-13)+2)) - 1 })
+	}
+	roomSlot := func() uint8 { return occupied(room, func() uint8 { return uint8(r.Intn(int(fuzzRoomSize) + 2)) }) }
+	freeBagSlot := func() uint8 { return 13 + uint8(r.Intn(int(fuzzBagEnd-13))) }
+	freeRoomSlot := func() uint8 { return uint8(r.Intn(int(fuzzRoomSize))) }
 	quantity := func() uint16 {
 		switch r.Intn(4) {
 		case 0:
@@ -135,26 +147,40 @@ func fuzzStep(r *rand.Rand, bag, room *Inventory) bool {
 	}
 	switch r.Intn(6) {
 	case 0:
-		src, dst := bagSlot(), bagSlot()
+		src, dst := bagSlot(), pick(r, bagSlot, freeBagSlot)
 		_, fault := bag.Transfer(src, dst, quantity(), capOf(bag, src))
 		return fault == nil
 	case 1:
-		src, dst := roomSlot(), roomSlot()
+		src, dst := roomSlot(), pick(r, roomSlot, freeRoomSlot)
 		_, fault := room.Transfer(src, dst, quantity(), capOf(room, src))
 		return fault == nil
 	case 2:
-		src, dst := bagSlot(), roomSlot()
+		src, dst := bagSlot(), pick(r, roomSlot, freeRoomSlot)
 		return bag.TransferWholeTo(room, src, dst, capOf(bag, src)) == nil
 	case 3:
-		src, dst := roomSlot(), bagSlot()
+		src, dst := roomSlot(), pick(r, bagSlot, freeBagSlot)
 		return room.TransferWholeTo(bag, src, dst, capOf(room, src)) == nil
 	case 4:
-		_, fault := bag.Move(bagSlot(), bagSlot())
+		_, fault := bag.Move(bagSlot(), pick(r, bagSlot, freeBagSlot))
 		return fault == nil
 	default:
-		_, fault := bag.SplitItem(bagSlot(), bagSlot(), quantity(), nil)
+		_, fault := bag.SplitItem(bagSlot(), freeBagSlot(), quantity(), nil)
 		return fault == nil
 	}
+}
+
+/*
+================
+pick
+
+Either slot chooser, at even odds.
+================
+*/
+func pick(r *rand.Rand, a, b func() uint8) uint8 {
+	if r.Intn(2) == 0 {
+		return a()
+	}
+	return b()
 }
 
 /*
@@ -163,6 +189,7 @@ TestBagAndRoomOperationsConserveItems
 ================
 */
 func TestBagAndRoomOperationsConserveItems(t *testing.T) {
+	succeeded, attempted := 0, 0
 	for seed := int64(1); seed <= 400; seed++ {
 		r := rand.New(rand.NewSource(seed))
 		bag, room := fuzzStart()
@@ -173,6 +200,10 @@ func TestBagAndRoomOperationsConserveItems(t *testing.T) {
 		for step := 0; step < 300; step++ {
 			beforeBag, beforeRoom := bag.Items(), room.Items()
 			ok := fuzzStep(r, bag, room)
+			attempted++
+			if ok {
+				succeeded++
+			}
 			got, problem := fuzzCensus(bag, room)
 			if problem != "" {
 				t.Fatalf("seed %d step %d: %s\nbag %+v\nroom %+v", seed, step, problem, bag.items, room.items)
@@ -185,5 +216,9 @@ func TestBagAndRoomOperationsConserveItems(t *testing.T) {
 				t.Fatalf("seed %d step %d: a refused operation changed the containers", seed, step)
 			}
 		}
+	}
+	// A run where nearly everything refuses would conserve trivially.
+	if succeeded*10 < attempted {
+		t.Fatalf("only %d of %d operations succeeded; the fuzz no longer exercises the moves", succeeded, attempted)
 	}
 }
