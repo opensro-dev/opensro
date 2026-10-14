@@ -10,6 +10,11 @@ sends a ballot (CIFGuildMasterElection 5EFF00):
 	0x76DC [u32 npc]                     release  -> 0xB6DC [1] | [2][code]
 	0x7330 [u32 npc][u32 vote][u8 opt]   ballot   -> 0xB330 [1] | [2][code]
 
+Opening the vote window, the vote row first asks for the candidates
+(5DA1B0 case 0x1A, NetClient_Send7332 700FF0):
+
+	0x7332 [u32 vote]                    candidates -> 0xB332 [1][body] | [2][code]
+
 and every member online follows the vote on 0x3A6C (7603D0): type 1 when
 it opens, 4 for each ballot, 3 when it closes. The rules and their
 inferences are domain/guildvote.go's; the store commits each step.
@@ -32,6 +37,8 @@ const (
 	opGuildMasterReleaseDone uint16 = 0xb6dc
 	opGuildBallot            uint16 = 0x7330
 	opGuildBallotDone        uint16 = 0xb330
+	opGuildVoteJoin          uint16 = 0x7332
+	opGuildVoteJoinDone      uint16 = 0xb332
 	opGuildVotePush          uint16 = 0x3a6c
 
 	// The ballot refusals the client reads in category 0x15 (75CC50).
@@ -164,6 +171,40 @@ func (rt *Runtime) HandleGuildBallot(division string, c *enterworld.Character, p
 	result := guildNpcAnswer(opGuildBallotDone, 0)
 	result.Frames = append(result.Frames, push)
 	return result
+}
+
+/*
+================
+HandleGuildVoteParticipate
+
+0x7332 [u32 vote] from the vote row while the client holds no candidates
+for it: the open vote's candidates and their ballots, the body of v1.188's
+VoteMgr_SendParticipation (5E7F00). A member of no guild, or a vote that
+is not the guild's open one, is refused [2][0x06], the low byte of its
+0x5006. INFERENCE: a vote past its end that the tick has not closed yet is
+already over for the client's countdown, so it is refused the same way.
+================
+*/
+func (rt *Runtime) HandleGuildVoteParticipate(division string, c *enterworld.Character, payload []byte) OpResult {
+	r := wire.NewReader(payload)
+	voteID, err := r.U32()
+	store := rt.deps.GuildAuthority()
+	if c == nil || err != nil || r.Done() != nil || store == nil {
+		return guildNpcAnswer(opGuildVoteJoinDone, guildNpcRefused)
+	}
+	unlock := rt.lockDivision(division)
+	defer unlock()
+	now := rt.Now().UnixMilli()
+	guildID, ok := store.GuildOfCharacter(division, c.ID)
+	if !ok {
+		return guildNpcAnswer(opGuildVoteJoinDone, ballotErrNoVote)
+	}
+	record, _, ok := store.Guild(division, guildID)
+	if !ok || record.Vote == nil || record.Vote.ID != voteID || record.Vote.EndsAtUnixMs <= now {
+		return guildNpcAnswer(opGuildVoteJoinDone, ballotErrNoVote)
+	}
+	return OpResult{Frames: []wire.Frame{{Opcode: opGuildVoteJoinDone,
+		Payload: guild.EncodeVoteParticipationB332(record.Vote, now)}}}
 }
 
 /*

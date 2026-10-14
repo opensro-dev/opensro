@@ -2708,8 +2708,15 @@ export function createUi(
 			else if ( row === "dissolve" || row === "secede" || row === "release" ) guildManagerHud.ask( row, npc );
 			else if ( row === "compensation" ) sendGameplay( { kind: "guild-compensation", gid: npc } );
 			else if ( row === "vote" ) {
+				// 5DA1B0 case 0x1A: a vote whose candidates the client holds opens
+				// at once; otherwise the row asks for them (0x7332) and 0xB332
+				// opens the window (75CBD0).
 				const vote = social?.guild?.votes?.find( v => v.kind === MASTER_RELEASE_VOTE );
-				if ( vote ) guildManagerHud.showVote( vote.id, vote.remainingMs );
+				if ( vote?.candidates ) guildManagerHud.showVote( vote.id, vote.remainingMs, npc );
+				else if ( vote ) {
+					guildManagerHud.awaitVote( vote.id, npc );
+					sendGameplay( { kind: "guild-vote-join", vote: vote.id } );
+				}
 			} else if ( row === "warehouse" ) {
 				if ( !canLeavePanel() ) return;
 				sendGameplay( { kind: "storage-open-guild", gid: npc } );
@@ -4891,6 +4898,34 @@ export function createUi(
 					dirty = true;
 					return;
 				}
+				const election = guildManagerHud.vote();
+				if ( election ) {
+					const candidates = view?.gameplay?.social?.guild?.votes?.find( v =>
+						v.id === election.id
+					)?.candidates ?? [];
+					if ( event.kind === "activate" && event.id.startsWith( "guild-election-pick:" ) ) {
+						guildManagerHud.pickCandidate( Number( event.id.slice( 20 ) ) );
+						dirty = true;
+						return;
+					}
+					if (
+						event.kind === "scroll" ||
+						event.kind === "activate" &&
+							[ "guild-election-up", "guild-election-down" ].includes( event.id ) ||
+						event.kind === "drag" && event.id === "guild-election-thumb"
+					) {
+						const delta = event.kind === "scroll" ?
+							Math.sign( event.delta ) :
+							event.kind === "drag" ?
+							event.dy * Math.max( 0, candidates.length - 7 ) / 116 :
+							event.id.endsWith( "-up" ) ?
+							-1 :
+							1;
+						guildManagerHud.electionPosition( candidates.length, delta );
+						dirty = true;
+						return;
+					}
+				}
 				if ( guildManagerHud.field()?.kind === "master-leave" && !guildManagerHud.field()?.confirmed ) {
 					const members = view?.gameplay?.social?.guild?.members.filter( m => m.grade !== 0 ) ?? [];
 					if ( event.kind === "activate" && event.id.startsWith( "guild-transfer-member:" ) ) {
@@ -4922,9 +4957,18 @@ export function createUi(
 					event.kind === "activate" && event.id === "guild-manager-yes"
 				) {
 					dirty = true;
-					if ( guildManagerHud.vote() ) {
-						// 5EFF00 leaves the election open until a candidate is selected.
-						// v1.150's decoded vote state supplies no candidate list.
+					const election = guildManagerHud.vote();
+					if ( election ) {
+						// 5EFF00 sends the ticked candidate's option as the 0x7330 ballot;
+						// with none ticked the window stays open.
+						if ( election.option === null || view?.session?.phase !== "world" ) return;
+						sendGameplay( {
+							kind: "guild-vote",
+							gid: election.npc,
+							vote: election.id,
+							option: election.option
+						} );
+						guildManagerHud.reset();
 						return;
 					}
 					if ( view?.session?.phase !== "world" ) return;
@@ -19603,10 +19647,14 @@ export function createUi(
 					transferSlot = hud.data()?.windows.ifguildmasterleaveslot;
 				const transferRoot = hud.data()?.root.GDR_GUILDMASTER_LEAVE;
 				const electionPage = hud.data()?.windows.ifguildmasterelection,
+					electionSlot = hud.data()?.windows.ifguildmasterelectionslot,
 					electionRoot = hud.data()?.root.GDR_GUILDMASTER_ELECTION;
-				if ( guildVote && electionPage && electionRoot ) {
-					// 5F0940: Create then ListWnd, seven empty rows, Confirm initially
-					// disabled. Candidate type 2 asserts in v1.150; do not invent rows.
+				if ( guildVote && electionPage && electionSlot && electionRoot ) {
+					// 5F0940: Create then ListWnd with seven rows; 5F0F30 fills one
+					// slot per candidate 0xB332 brought (name, ballots), and Confirm
+					// waits for a ticked candidate (5EFF00).
+					const candidates = game?.social?.guild?.votes?.find( v => v.id === guildVote.id )?.candidates ?? [];
+					const members = game?.social?.guild?.members ?? [];
 					const x = Math.max( 0, (w - electionRoot.rect[2]) / 2 ),
 						y = Math.max( 0, (h - electionRoot.rect[3]) / 2 );
 					const at = ( id: number ) => Object.values( electionPage ).find( n => n.id === id )!;
@@ -19646,12 +19694,32 @@ export function createUi(
 						rect: authoredRect( at( 14 ), x, y ),
 						kind: "region"
 					} );
+					const offset = guildManagerHud.electionPosition( candidates.length );
+					const slotNode = ( id: number ) => Object.values( electionSlot ).find( n => n.id === id )!;
+					candidates.slice( offset, offset + 7 ).forEach( ( candidate, i ) => {
+						const option = offset + i, row = at( 31 + i ), rx = x + row.rect[0], ry = y + row.rect[1];
+						const name = members.find( m => m.id === candidate.id )?.name ?? "";
+						nativePage( electionSlot, rx, ry );
+						authoredImage( slotNode( 10 ), rx, ry );
+						if ( option === guildVote.option ) {
+							image( [ rx + 14, ry + 7, 16, 16 ], ROOT + "interface/ifcommon/com_checkbutton_on.png" );
+						}
+						authoredText( slotNode( 11 ), rx, ry, name, true );
+						authoredText( slotNode( 12 ), rx, ry, String( candidate.ballots ), true );
+						controls.push( {
+							id: "guild-election-pick:" + option,
+							label: name,
+							rect: [ rx, ry, 221, 23 ],
+							kind: "button",
+							selected: option === guildVote.option
+						} );
+					} );
 					const scroll = chatScrollbar(
 						"guild-election",
 						[ x + 239, y + 80, 16, 116 ],
-						0,
+						candidates.length,
 						7,
-						0,
+						Math.max( 0, candidates.length - 7 - offset ),
 						resources.size,
 						full,
 						hover,
@@ -19659,8 +19727,15 @@ export function createUi(
 					);
 					paths.push( ...scroll.paths );
 					quads.push( ...scroll.quads );
-					controls.push( ...scroll.controls.map( c => ({ ...c, disabled: true }) ) );
-					authoredLabeledButton( at( 11 ), x, y, "guild-manager-yes", hudCopy( at( 11 ).text ), true );
+					controls.push( ...scroll.controls.map( c => ({ ...c, disabled: candidates.length <= 7 }) ) );
+					authoredLabeledButton(
+						at( 11 ),
+						x,
+						y,
+						"guild-manager-yes",
+						hudCopy( at( 11 ).text ),
+						guildVote.option === null
+					);
 					authoredLabeledButton( at( 12 ), x, y, "guild-manager-no", hudCopy( at( 12 ).text ) );
 				} else if (
 					guildField?.kind === "master-leave" && !guildField.confirmed && transferPage && transferSlot &&

@@ -10,6 +10,7 @@ is decoded completely before any state is published.
 ===========================================================================
 */
 import { GUILD_WAR_PROPOSAL, guildWarProposalReply } from "./guild-war";
+import { withVoteBallot, withVoteCandidates } from "./guild-vote";
 import type { WireFrame } from "@/engine/contracts/network";
 import { resolveNativeNotice, type NativeNoticeContext } from "./native-notice";
 import { NO_JOB_CLASS } from "./job-guild";
@@ -129,6 +130,7 @@ export function socialPacket(
 			0xb3f7,
 			0xb6dc,
 			0xb330,
+			0xb332,
 			0xb515,
 			0x3a6c
 		].includes( op )
@@ -505,11 +507,12 @@ export function socialPacket(
 			}
 			if ( guild ) next = { ...next, guild: { ...guild, votes: votes.filter( row => row.id !== id ) } };
 		} else if ( type === 4 ) {
-			// The window keeps no candidate list in v1.150, so a ballot only
-			// moves counts the client cannot show.
-			u8();
-			u8();
-			u8();
+			// 82D0B0: the ballot leaves its previous option (0xFF: none) and
+			// its new option now holds the pushed count.
+			const previous = u8(), option = u8(), count = u8();
+			if ( guild ) {
+				next = { ...next, guild: { ...guild, votes: withVoteBallot( votes, id, previous, option, count ) } };
+			}
 		} else if ( type === 5 ) {
 			const remainingMs = u32();
 			if ( guild ) {
@@ -778,6 +781,21 @@ export function socialPacket(
 				next = { ...next, guild };
 			}
 		}
+	} else if ( op === 0xb332 && p[0] === 1 ) {
+		// 75CBD0 -> 82CEE0: the candidates the vote row asked for (0x7332),
+		// each with its ballots, as v1.188 writes them (5E79C0).
+		u8();
+		const id = u32(), remainingMs = u32(), count = u8(), guild = next.guild;
+		const candidates = Array.from( { length: count }, () => {
+			const candidate = u32();
+			return { id: candidate, ballots: u8() };
+		} );
+		if ( guild?.votes?.some( row => row.id === id ) ) {
+			next = {
+				...next,
+				guild: { ...guild, votes: withVoteCandidates( guild.votes, id, remainingMs, candidates ) }
+			};
+		}
 	} else {
 		const result = u8();
 		if ( result === 2 ) {
@@ -813,8 +831,9 @@ export function socialPacket(
 					notice: { key: "UIIT_MSG_MRELEASEERR_NOTVOTETIME", value: 0, nativeType: 0 }
 				};
 			} else {
-				// 75CC50 reads the ballot's refusal in category 0x15.
-				const resolution = resolveNativeNotice( op === 0xb330 ? 0x15 : 16, code );
+				// 75CC50 reads the ballot's and the candidate request's refusals
+				// in category 0x15.
+				const resolution = resolveNativeNotice( op === 0xb330 || op === 0xb332 ? 0x15 : 16, code );
 				next = {
 					...next,
 					error: null,

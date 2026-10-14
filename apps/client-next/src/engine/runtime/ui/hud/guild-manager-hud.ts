@@ -7,8 +7,10 @@ The guild set's rows (guild-manager.ts) raise native boxes: questions for
 the level-up window (CIFGuildLevelUp), disband (box 0x13), leave (box
 0x14), release (UIIT_MSG_MRELEASE_CONFIRM) and the war compensation claim
 (5D4050); the create input (5D2540), master-transfer selection (5F2390)
-and subsequent confirmation (5D3EB0); and the vote state, which a v1.150 client
-can only read: it never receives the candidates (0x3A6C type 2 asserts).
+and subsequent confirmation (5D3EB0); and the election window (5F0940): the
+vote row asks for the candidates first (0x7332, 5DA1B0 case 0x1A) and the
+window opens when 0xB332 brings them (75CBD0), one row per candidate with
+its ballots (5F0F30); a ticked candidate and Confirm cast the 0x7330 ballot.
 The UI draws from this owner every frame.
 
 ===========================================================================
@@ -46,15 +48,31 @@ export interface GuildManagerField {
 
 /*
 ================
+GuildElection
+
+The open election window: its vote, time left, the guild manager it was
+opened at (the ballot names it) and the ticked candidate's option.
+================
+*/
+export interface GuildElection {
+	readonly id: number;
+	readonly remainingMs: number;
+	readonly npc: number;
+	readonly option: number | null;
+}
+
+/*
+================
 createGuildManagerHud
 ================
 */
 export function createGuildManagerHud() {
 	let soldierNpc: number | undefined, soldierSequence = 0;
-	let transferOffset = 0;
+	let transferOffset = 0, electionOffset = 0;
 	let ask: GuildManagerAsk | null = null,
 		field: GuildManagerField | null = null,
-		vote: { readonly id: number; readonly remainingMs: number; } | null = null;
+		vote: GuildElection | null = null,
+		awaiting: { readonly id: number; readonly npc: number; } | null = null;
 	return {
 		/*
         ================
@@ -86,6 +104,7 @@ export function createGuildManagerHud() {
 		ask( kind: GuildManagerAsk["kind"], npc: number, value = 0 ) {
 			field = null;
 			vote = null;
+			awaiting = null;
 			ask = { kind, npc, value };
 		},
 		/*
@@ -115,6 +134,7 @@ export function createGuildManagerHud() {
 			transferOffset = 0;
 			ask = null;
 			vote = null;
+			awaiting = null;
 			field = { kind, npc, text: "" };
 		},
 		/*
@@ -177,24 +197,72 @@ export function createGuildManagerHud() {
 		showVote
 		================
 		*/
-		showVote( id: number, remainingMs: number ) {
+		showVote( id: number, remainingMs: number, npc: number ) {
 			ask = null;
 			field = null;
-			vote = { id, remainingMs };
+			awaiting = null;
+			electionOffset = 0;
+			vote = { id, remainingMs, npc, option: null };
+		},
+		/*
+		================
+		awaitVote
+
+		The vote row sent 0x7332; the window opens when 0xB332 brings the
+		candidates (observeVote).
+		================
+		*/
+		awaitVote( id: number, npc: number ) {
+			ask = null;
+			field = null;
+			vote = null;
+			awaiting = { id, npc };
 		},
 		/*
 		================
 		observeVote
 
 		7603D0 type 5 refreshes the displayed time; type 3 closes the vote.
+		0xB332's candidates open the window the vote row asked for.
 		================
 		*/
 		observeVote( votes: readonly GuildVote[] ) {
+			if ( awaiting ) {
+				const asked = votes.find( row => row.id === awaiting?.id );
+				if ( !asked ) {
+					awaiting = null;
+					return true;
+				}
+				if ( !asked.candidates ) return false;
+				electionOffset = 0;
+				vote = { id: asked.id, remainingMs: asked.remainingMs, npc: awaiting.npc, option: null };
+				awaiting = null;
+				return true;
+			}
 			if ( !vote ) return false;
 			const current = votes.find( row => row.id === vote?.id );
 			if ( current?.remainingMs === vote.remainingMs ) return false;
-			vote = current ? { id: current.id, remainingMs: current.remainingMs } : null;
+			vote = current ? { ...vote, remainingMs: current.remainingMs } : null;
 			return true;
+		},
+		/*
+		================
+		pickCandidate
+
+		5EFF00's check boxes hold one candidate at a time.
+		================
+		*/
+		pickCandidate( option: number ) {
+			if ( vote ) vote = { ...vote, option: vote.option === option ? null : option };
+		},
+		/*
+		================
+		electionPosition
+		================
+		*/
+		electionPosition( count: number, delta = 0 ) {
+			electionOffset = Math.max( 0, Math.min( Math.max( 0, count - 7 ), electionOffset + delta ) );
+			return Math.floor( electionOffset );
 		},
 		/*
 		================
@@ -213,6 +281,7 @@ export function createGuildManagerHud() {
 			ask = null;
 			field = null;
 			vote = null;
+			awaiting = null;
 		}
 	};
 }

@@ -91,6 +91,7 @@ export type SocialCommand =
 		vote: number;
 		option: number;
 	}
+	| { kind: "guild-vote-join"; vote: number; }
 	| { kind: "guild-soldier-attribute"; gid: number; attribute: number; }
 	| UnionCommand
 	| GuildWarCommand;
@@ -287,6 +288,12 @@ export function socialRequest( state: SocialState, c: SocialCommand ): WireFrame
 			u32( c.vote );
 			u8( c.option );
 			opcode = 0x7330;
+			break;
+		// The vote row asks for the candidates it holds none of (5DA1B0 case
+		// 0x1A, NetClient_Send7332 700FF0): no NPC, only the vote.
+		case "guild-vote-join":
+			u32( c.vote );
+			opcode = 0x7332;
 			break;
 		// The union's requests and the rights grant (guild-union.ts).
 		case "guild-union-invite":

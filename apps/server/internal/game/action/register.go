@@ -66,6 +66,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opGuildCompensationPay, rt.hubHandler(hub, rt.HandleGuildCompensationClaim))
 	hub.Handle(opGuildMasterRelease, rt.hubHandler(hub, rt.HandleGuildMasterRelease))
 	hub.Handle(opGuildBallot, rt.hubHandler(hub, rt.HandleGuildBallot))
+	hub.Handle(opGuildVoteJoin, rt.hubHandler(hub, rt.HandleGuildVoteParticipate))
 	hub.Handle(opGuildStorageOpen, rt.hubHandler(hub, rt.HandleGuildStorageOpen))
 	hub.Handle(opGuildStorageList, rt.hubHandler(hub, rt.HandleGuildStorageList))
 	hub.Handle(opGuildStorageClose, rt.hubHandler(hub, rt.HandleGuildStorageClose))

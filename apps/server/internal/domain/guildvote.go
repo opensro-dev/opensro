@@ -15,9 +15,10 @@ INFERENCE (the ShardManager is not in the research binaries): the
 candidates are the members seen within three days other than the master,
 in roster order; a vote with one candidate strictly ahead and at least one
 ballot elects them, any other closes broken (UIIT_MSG_MRELEASE_BROKEN).
-The v1.150 client never receives a candidate list (0x3A6C type 2 is an
-assert in 7603D0), so its window offers nothing to vote for and a vote it
-calls closes broken unless a ballot arrives by another client.
+The v1.150 client learns the candidates by asking: its vote row sends
+0x7332 and the 0xB332 answer carries them with their ballots (5DA1B0 case
+0x1A, 82CEE0; v1.188 writes the same body, 5E7F00 / 5E79C0). The 0x3A6C
+push never carries them (type 2 is an assert in 7603D0).
 
 ===========================================================================
 */

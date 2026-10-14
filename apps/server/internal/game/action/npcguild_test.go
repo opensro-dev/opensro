@@ -188,6 +188,80 @@ TestMemberCallsAReleaseVoteOnALongGoneMaster
 func TestMemberCallsAReleaseVoteOnALongGoneMaster(t *testing.T) {
 	d := guildManagerFixture(t)
 	c := d.character
+	guilds, guildID, now, release := longGoneMasterFixture(t, d)
+	out := d.rt.HandleGuildMasterRelease(testDivision, c, release)
+	assertOpcodes(t, out.Frames, opGuildMasterReleaseDone, opGuildVotePush)
+	record, _, _ := guilds.Guild(testDivision, guildID)
+	if record.Vote == nil || !bytes.Equal(out.Frames[1].Payload, guild.EncodeVoteOpened3A6C(record.Vote, now)) {
+		t.Fatalf("vote %+v push %x", record.Vote, out.Frames[1].Payload)
+	}
+	ballot := wire.NewWriter(9).U32(guildManagerGid).U32(record.Vote.ID).U8(0).Payload()
+	out = d.rt.HandleGuildBallot(testDivision, c, ballot)
+	if !bytes.Equal(out.Frames[1].Payload, guild.EncodeVoteBallot3A6C(record.Vote.ID, 0xff, 0, 1)) {
+		t.Fatalf("ballot push %x", out.Frames[1].Payload)
+	}
+	wrong := wire.NewWriter(9).U32(guildManagerGid).U32(record.Vote.ID + 1).U8(0).Payload()
+	if out := d.rt.HandleGuildBallot(testDivision, c, wrong); !bytes.Equal(out.Frames[0].Payload, []byte{2, ballotErrNoVote}) {
+		t.Fatalf("a stale vote answered %x", out.Frames[0].Payload)
+	}
+}
+
+/*
+================
+TestTheVoteRowLearnsTheCandidates
+
+0x7332 from the vote row (5DA1B0 case 0x1A): with no open vote it is
+refused [2][0x06] (v1.188 0x5006); with one, 0xB332 carries the vote's
+id, time left and every candidate with its ballots, as 5E79C0 writes them,
+and a ballot is counted in the next answer.
+================
+*/
+func TestTheVoteRowLearnsTheCandidates(t *testing.T) {
+	d := guildManagerFixture(t)
+	c := d.character
+	guilds, guildID, now, release := longGoneMasterFixture(t, d)
+	ask := func(voteID uint32) []byte {
+		out := d.rt.HandleGuildVoteParticipate(testDivision, c, wire.NewWriter(4).U32(voteID).Payload())
+		assertOpcodes(t, out.Frames, opGuildVoteJoinDone)
+		return out.Frames[0].Payload
+	}
+	if got := ask(1); !bytes.Equal(got, []byte{2, ballotErrNoVote}) {
+		t.Fatalf("no open vote answered %x", got)
+	}
+	d.rt.HandleGuildMasterRelease(testDivision, c, release)
+	record, _, _ := guilds.Guild(testDivision, guildID)
+	vote := record.Vote
+	if vote == nil || len(vote.Candidates) == 0 {
+		t.Fatalf("fixture vote %+v has no candidates", vote)
+	}
+	want := wire.NewWriter(16).U8(1).U32(vote.ID).U32(uint32(vote.EndsAtUnixMs - now)).U8(uint8(len(vote.Candidates)))
+	for _, candidate := range vote.Candidates {
+		want.U32(candidate).U8(0)
+	}
+	if got := ask(vote.ID); !bytes.Equal(got, want.Payload()) {
+		t.Fatalf("candidates %x, want %x", got, want.Payload())
+	}
+	d.rt.HandleGuildBallot(testDivision, c, wire.NewWriter(9).U32(guildManagerGid).U32(vote.ID).U8(0).Payload())
+	if got := ask(vote.ID); got[len(got)-1-5*(len(vote.Candidates)-1)] != 1 {
+		t.Fatalf("the first candidate's ballot is not counted: %x", got)
+	}
+	if got := ask(vote.ID + 1); !bytes.Equal(got, []byte{2, ballotErrNoVote}) {
+		t.Fatalf("another vote id answered %x", got)
+	}
+}
+
+/*
+================
+longGoneMasterFixture
+
+A guild whose master has been gone 46 days, with the fixture character a
+member seen now: what a release vote needs. Returns the guild door, the
+guild, the clock and the release request.
+================
+*/
+func longGoneMasterFixture(t *testing.T, d *doorRuntime) (enterworld.GuildStore, int64, int64, []byte) {
+	t.Helper()
+	c := d.character
 	master := testCharacter()
 	master.Name = "Gone"
 	if err := d.authority.CreateCharacter(testDivision, "gone-account", master); err != nil {
@@ -212,21 +286,7 @@ func TestMemberCallsAReleaseVoteOnALongGoneMaster(t *testing.T) {
 	}) {
 		t.Fatal("fixture last-seen refused")
 	}
-	out := d.rt.HandleGuildMasterRelease(testDivision, c, release)
-	assertOpcodes(t, out.Frames, opGuildMasterReleaseDone, opGuildVotePush)
-	record, _, _ := guilds.Guild(testDivision, guildID)
-	if record.Vote == nil || !bytes.Equal(out.Frames[1].Payload, guild.EncodeVoteOpened3A6C(record.Vote, now)) {
-		t.Fatalf("vote %+v push %x", record.Vote, out.Frames[1].Payload)
-	}
-	ballot := wire.NewWriter(9).U32(guildManagerGid).U32(record.Vote.ID).U8(0).Payload()
-	out = d.rt.HandleGuildBallot(testDivision, c, ballot)
-	if !bytes.Equal(out.Frames[1].Payload, guild.EncodeVoteBallot3A6C(record.Vote.ID, 0xff, 0, 1)) {
-		t.Fatalf("ballot push %x", out.Frames[1].Payload)
-	}
-	wrong := wire.NewWriter(9).U32(guildManagerGid).U32(record.Vote.ID + 1).U8(0).Payload()
-	if out := d.rt.HandleGuildBallot(testDivision, c, wrong); !bytes.Equal(out.Frames[0].Payload, []byte{2, ballotErrNoVote}) {
-		t.Fatalf("a stale vote answered %x", out.Frames[0].Payload)
-	}
+	return guilds, guildID, now, release
 }
 
 /*

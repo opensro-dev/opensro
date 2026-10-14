@@ -55,7 +55,8 @@ export interface GuildMember {
 	readonly offline: number;
 }
 // One open guild vote (826610's vote tail, 0x3A6C type 1): the master
-// release vote is kind 0. remainingMs is as of its arrival.
+// release vote is kind 0. remainingMs is as of its arrival. candidates
+// arrive once the vote row asks for them (0x7332 -> 0xB332, 82CEE0).
 /*
 ================
 GuildVote
@@ -65,6 +66,18 @@ export interface GuildVote {
 	readonly id: number;
 	readonly kind: number;
 	readonly remainingMs: number;
+	readonly candidates?: readonly GuildVoteCandidate[];
+}
+
+// One candidate by option index: the member's jid and the ballots it holds.
+/*
+================
+GuildVoteCandidate
+================
+*/
+export interface GuildVoteCandidate {
+	readonly id: number;
+	readonly ballots: number;
 }
 /*
 ================
