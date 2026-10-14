@@ -303,6 +303,31 @@ test("sign-in attempts are limited per client address, which must come from Cadd
 	assert.equal( clientAddress( { "x-forwarded-for": "2001:db8::1, 10.0.0.1" } ), "2001:db8::1" );
 });
 
+test("a flood of sign-ins delays others but never refuses them: an address keeps three", async () => {
+	const w = world( { 5: [ "100" ] }, { limits: { attemptsPerMinute: 100000 } } );
+	const flooded = await w.auth.handle( request( "GET", "/auth/login" ) );
+	for ( let i = 0; i < 3; i++ ) await w.auth.handle( request( "GET", "/auth/login" ) );
+	const replayed = await w.auth.handle(
+		request(
+			"GET",
+			`/auth/callback?code=5&state=${new URL( flooded.headers.Location ).searchParams.get( "state" )}`,
+			{
+				cookie: `${LOGIN_COOKIE}=${cookieValue( flooded, LOGIN_COOKIE )}`
+			}
+		)
+	);
+	assert.equal( replayed.status, 400, "the address's oldest pending sign-in gave way" );
+	assert.equal( w.auth.stats().pendingLogins, 3 );
+	for ( let i = 0; i < 12000; i++ ) {
+		const ip = `10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}`;
+		await w.auth.handle( request( "GET", "/auth/login", { "x-forwarded-for": ip } ) );
+	}
+	assert.ok( w.auth.stats().pendingLogins <= 10000 );
+	const staff = await signIn( w, "5" );
+	assert.equal( staff.answer.status, 302, "a full pool still admits a new sign-in" );
+	assert.ok( staff.session );
+});
+
 test("a user holds at most five sessions; the oldest gives way", async () => {
 	const w = world( { 5: [ "100" ] } );
 	const sessions = [];

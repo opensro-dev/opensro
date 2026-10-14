@@ -31,7 +31,11 @@ export const SESSION_COOKIE = "__Host-sro_console";
 export const LOGIN_COOKIE = "__Host-sro_login";
 const SECRET_BYTES = 32;
 const MAX_NEXT_LENGTH = 512;
+// Pending sign-ins are a shared pool: one address keeps at most a few, and
+// a full pool gives way oldest first, so a flood delays sign-ins it cannot
+// block (a refusal at the cap would let ~500 addresses lock staff out).
 const MAX_PENDING_LOGINS = 10000;
+const PENDING_LOGINS_PER_ADDRESS = 3;
 const MAX_RATE_ENTRIES = 10000;
 const RATE_WINDOW_MS = 60000;
 // Refresh an access token this long before Discord says it expires.
@@ -349,12 +353,17 @@ export function createAuth( deps ) {
 			return page( 429, "Too many attempts", "Wait a minute, then sign in again." );
 		}
 		const now = clock();
-		if ( logins.size >= MAX_PENDING_LOGINS ) {
-			for ( const [key, row] of logins ) if ( row.expires <= now ) logins.delete( key );
-			if ( logins.size >= MAX_PENDING_LOGINS ) return page( 503, "Sign-in busy", "Try again in a few minutes." );
+		// Maps keep insertion order, so the first rows are the oldest.
+		const own = [];
+		for ( const [key, row] of logins ) {
+			if ( row.expires <= now ) logins.delete( key );
+			else if ( row.address === address ) own.push( key );
 		}
+		while ( own.length >= PENDING_LOGINS_PER_ADDRESS ) logins.delete( own.shift() );
+		if ( logins.size >= MAX_PENDING_LOGINS ) logins.delete( logins.keys().next().value );
 		const loginId = secret(), state = secret(), verifier = secret();
 		logins.set( digest( loginId ), {
+			address,
 			state,
 			verifier,
 			next: safeNext( query.get( "next" ) ),
