@@ -4,8 +4,15 @@ import type { PackDescriptor, PackEntry, PackDownload } from "./internal/pack-co
 // Owner: one pack reader. Inputs: origin, pack digest, byte offset and length.
 // Invalidation: LRU pressure, failed download, disposal. Rebuilt on next demand.
 // Only demanded, verified members enter persistent storage in the pack reader.
+
+// The ranges kept in memory after their read. A block only serves the
+// members beside the one that fetched it (a scene's textures arrive close
+// together), and every demanded member is verified into the persistent store, so
+// a phone pays for this cache in RAM it does not have: 16 blocks.
+const BLOCK_CACHE_BYTES = 16 << 20;
+
 export function createPackBlocks( download: PackDownload, signal: AbortSignal ) {
-	const blockBytes = 1 << 20, budget = 64 << 20, capacity = 4;
+	const blockBytes = 1 << 20, budget = BLOCK_CACHE_BYTES, capacity = 4;
 	const cache = new Map<string, Uint8Array<ArrayBuffer>>(),
 		pending = new Map<string, Promise<Uint8Array<ArrayBuffer>>>();
 	const plans = new Map<string, Map<string, { start: number; end: number; }>>();

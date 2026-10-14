@@ -41,6 +41,10 @@ export class AssetAbsentError extends Error {
 
 // Packs up to this size are fetched and persisted whole; larger ones by member.
 const SMALL_PACK_BYTES = 4 << 20;
+// Whole small packs kept in memory after their read: eight of them. A
+// small pack is persisted whole when it is fetched (pack below), so one
+// pushed out is reread from the persistent store, not downloaded again.
+const RESIDENT_PACK_BYTES = 32 << 20;
 
 /*
 ================
@@ -200,7 +204,7 @@ export function createPacks(
 			const loaded = { bytes, start: parser.header( bytes, descriptor ) };
 			if ( disposed ) throw new Error( "Pack owner disposed" );
 			if ( missing ) persistent.enqueue( base, descriptor.sha256, bytes );
-			while ( residentBytes + bytes.length > (128 << 20) && cache.size ) {
+			while ( residentBytes + bytes.length > RESIDENT_PACK_BYTES && cache.size ) {
 				const key = cache.keys().next().value!;
 				residentBytes -= cache.get( key )!.bytes.length;
 				cache.delete( key );
