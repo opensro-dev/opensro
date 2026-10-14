@@ -142,7 +142,12 @@ func TestCaravanTierFollowsCargoGold(t *testing.T) {
 		}
 	}
 	full(348)
+	// The bag's trade level (0x352D) carries the same tier, off and on.
+	level := func() uint8 { return rt.tradeStarFrame(c).Payload[0] }
 	nativeTier, nativeStars := rt.caravanTier(c)
+	if level() != nativeTier {
+		t.Fatalf("off: trade level %d, tier %d", level(), nativeTier)
+	}
 	value := rt.caravanCargoValue(c)
 	if nativeTier != caravan.DifficultyTier(value) || nativeStars != caravan.StarRating(value, false) {
 		t.Fatalf("off: tier %d stars %d", nativeTier, nativeStars)
@@ -154,5 +159,8 @@ func TestCaravanTierFollowsCargoGold(t *testing.T) {
 	full(348 * enterworld.TradeGoodsPriceFactor)
 	if tier, stars := rt.caravanTier(c); tier != 3 || stars != 3 || rt.cargoGoldValue(c) != 101*40*348*enterworld.TradeGoodsPriceFactor {
 		t.Fatalf("on, scaled: tier %d stars %d gold %d", tier, stars, rt.cargoGoldValue(c))
+	}
+	if level() != 3 {
+		t.Fatalf("on, scaled: trade level %d, want the gold tier 3", level())
 	}
 }
