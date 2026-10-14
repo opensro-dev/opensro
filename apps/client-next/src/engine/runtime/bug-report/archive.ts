@@ -48,6 +48,7 @@ const SHARED_GAMEPLAY_FIELDS = [
 	"vitals",
 	"inventory",
 	"inventoryPending",
+	"inventoryJournal",
 	"avatarInventory",
 	"equipmentSlotCount",
 	"inventorySlotCount",

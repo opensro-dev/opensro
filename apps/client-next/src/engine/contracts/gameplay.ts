@@ -749,6 +749,9 @@ export interface GameplayState {
 	readonly avatarInventory?: readonly InventoryItem[];
 	readonly inventory: readonly InventoryItem[];
 	readonly inventoryPending: boolean;
+	// Port-only diagnostics: the bag slots each inventory answer changed,
+	// flattened rows (foundation/gameplay/inventory-journal.ts).
+	readonly inventoryJournal?: readonly number[];
 	// Slot flashes raised by the 0x3645 item-state and 0x31E8 durability updates
 	// (item-slot-effects.ts).
 	readonly itemFlashes?: readonly {

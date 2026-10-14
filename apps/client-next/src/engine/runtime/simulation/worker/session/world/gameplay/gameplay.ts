@@ -243,6 +243,11 @@ import { createBetaPlayerMap } from "./beta-map/beta-map";
 import type { GameplayCommand, GameplayState } from "@/engine/contracts/gameplay";
 import type { EntityState } from "@/engine/contracts/world";
 import { nearestPickable } from "@/engine/foundation/gameplay/pickup-nearest";
+import {
+	inventoryJournaled,
+	inventorySignatures,
+	journalInventoryFrame
+} from "@/engine/foundation/gameplay/inventory-journal";
 import type { WireFrame } from "@/engine/contracts/network";
 /*
 ================
@@ -382,6 +387,8 @@ export function createGameplay(
 	let selectionDecal: GameplayState["selectionDecal"] = null;
 	// The bootstrap's unlimited-item ids (beta starter kit); empty without one.
 	let unlimitedItems: readonly number[] = [];
+	// Port-only diagnostics: the bag slots each inventory answer changed.
+	let inventoryJournal: readonly number[] = [];
 	let soundClock = 0;
 	const feedback = createFeedback();
 	const pickup = createPickup();
@@ -3608,12 +3615,26 @@ Packet handling must not depend on which HUD panel is currently open.
 					undefined :
 					inventory.state().inventory.find( i => i.slot === pickupSlot );
 				const mallRequest = inventory.state().itemMall?.pending === true;
+				// The bag before an answer the diagnostics journal follows.
+				const journaled = inventoryJournaled( frame.opcode ) ?
+					inventorySignatures( inventory.state().inventory ) :
+					null;
+				const journal = () => {
+					if ( !journaled ) return;
+					inventoryJournal = journalInventoryFrame(
+						inventoryJournal,
+						{ atMs: now, opcode: frame.opcode, payload: frame.payload },
+						journaled,
+						inventorySignatures( inventory.state().inventory )
+					);
+				};
 				// A warehouse move answered after its window closed still settles.
 				const room = storage.settling();
 				if ( frame.opcode === 0xb06d && room ) {
 					const next = inventory.storageSettle( room, frame.payload, cosItemCaps );
 					if ( next ) {
 						storage.apply( next );
+						journal();
 						dirty = true;
 						return true;
 					}
@@ -3625,6 +3646,10 @@ Packet handling must not depend on which HUD panel is currently open.
 					} ),
 					target = targeting.receive( frame.opcode, frame.payload ),
 					fight = combat.receive( frame.opcode, frame.payload, now );
+				if ( journaled ) {
+					journal();
+					dirty = true;
+				}
 				if ( fight && frame.opcode === 0xb245 ) {
 					// 776830: the local player's own cast of a skill that assists,
 					// at a target in the world, sends its attack pets in.
@@ -4171,6 +4196,7 @@ The published plane when something changed since the last take, else null.
 				localGid,
 				...m,
 				...i,
+				inventoryJournal,
 				...c,
 				...targeting.state(),
 				...skillPress.state(),

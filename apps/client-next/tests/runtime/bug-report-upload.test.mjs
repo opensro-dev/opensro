@@ -222,6 +222,15 @@ test("a report marks bag and storage rows drawn with no icon, never their names 
 	} );
 });
 
+test("a report keeps the inventory journal's slot rows", async () => {
+	// The same threads: the journal says which slots each bag answer changed.
+	const input = fixture();
+	const journal = [ 7, 0xb06d, 1, 0, 13, 0, 7, 0xb06d, 1, 0, 20, 1 ];
+	input["state.json"] = JSON.stringify( { gameplay: { inventory: [], inventoryJournal: journal } } );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	assert.deepEqual( documents["state.json"].gameplay.inventoryJournal, journal );
+});
+
 test("a browser without raw DEFLATE still sends a bounded stored ZIP", async t => {
 	t.mock.method( globalThis, "CompressionStream", function unavailable() {
 		throw Error( "unsupported" );
