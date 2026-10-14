@@ -6,7 +6,7 @@ main.mjs - loopback observatory, authenticated player recovery, invite keys and 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { loadShards, createSource } from "./source.mjs";
-import { allowedRequest, allowedMutation } from "./security.mjs";
+import { allowedRequest, allowedMutation, edgeIdentity, LOCAL_OPERATOR, requestOperator } from "./security.mjs";
 import { createItems } from "./items.mjs";
 import { createPlayerOperations, readBody } from "./player-operations.mjs";
 import { createHistory } from "./history.mjs";
@@ -22,7 +22,7 @@ const edge = config.edge ?? null;
 if (
 	edge &&
 	(new URL( edge.origin ).protocol !== "https:" || typeof edge.secret !== "string" || edge.secret.length < 32 ||
-		!edge.operator)
+		(edge.identity !== "discord" && !edge.operator))
 ) throw Error( "Invalid console edge configuration" );
 const token = config.operatorTokenFile ? (await readFile( config.operatorTokenFile, "utf8" )).trim() : "";
 const shards = await loadShards( config.shards ?? new URL( "../../server/config/shards.json", import.meta.url ) );
@@ -129,7 +129,7 @@ async function handleRequest( req, res ) {
 				}
 				rescue = await readBody( req );
 				if ( !rescue || Array.isArray( rescue ) || typeof rescue !== "object" ) throw Error( "Invalid body" );
-				rescue.operator = edge?.operator ?? "local-operator";
+				rescue.operator = requestOperator( req, edge );
 			} else if ( req.method !== "GET" ) {
 				res.writeHead( 405 );
 				res.end();
@@ -144,7 +144,7 @@ async function handleRequest( req, res ) {
 			return;
 		}
 		if ( url.pathname === "/api/invites" || INVITE_REVOKE.test( url.pathname ) ) {
-			const operator = edge?.operator ?? "local-operator";
+			const operator = requestOperator( req, edge );
 			let result;
 			if ( req.method === "GET" && url.pathname === "/api/invites" ) {
 				try {
@@ -195,7 +195,8 @@ async function handleRequest( req, res ) {
 		}
 		if ( url.pathname === "/api/console" ) {
 			respondJSON( res, 200, {
-				operator: edge?.operator ?? "local-operator",
+				operator: edge ? edgeIdentity( req, edge )?.name : LOCAL_OPERATOR,
+				role: edge ? edgeIdentity( req, edge )?.role : "operator",
 				enabled: Boolean( token ),
 				invites: Boolean( siteAdminToken ),
 				economy: economy.enabled,

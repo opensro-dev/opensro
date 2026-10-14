@@ -135,6 +135,13 @@ requires an exact matching Origin, JSON content type and `X-SRO-Console: 1`.
 The edge secret and upstream token are independent, private credentials.
 Never expose either value in browser JavaScript or commit the configuration.
 
+With per-person sign-in (`apps/server-console-auth`), replace `"operator"`
+with `"identity": "discord"`. Every request must then carry the person and
+the role console-auth answered Caddy's `forward_auth` with:
+`X-SRO-Operator: discord:<user id>`, `X-SRO-Operator-Name` and `X-SRO-Role`
+(`operator` or `approver`). The proxy must delete client copies of all three
+before asking console-auth. Audit rows record the `discord:<user id>`.
+
 Install the same upstream token (at least 32 characters) in the GameWorld
 shard authority directory as `operator-token` before starting that GameWorld.
 The endpoint is absent when this file is absent. Keep this directory private;
