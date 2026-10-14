@@ -232,6 +232,7 @@ import { decodeWorldClock } from "@/engine/foundation/gameplay/world-clock";
 import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
+import { createFriends } from "./friends/friends";
 import { createMovement } from "./movement/movement";
 import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
@@ -752,7 +753,7 @@ fails; retry persistence without restoring stale slot occupancy.
 	const countJobs = createCountJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
-	const chat = createChat( send ), quests = createQuests( send );
+	const chat = createChat( send ), quests = createQuests( send ), friends = createFriends( send );
 	const npcConversation = createNpcConversation( send );
 	// The NPC warehouse (storage-room.ts).
 	const storage = createStorageRoom( send );
@@ -973,6 +974,7 @@ selected entities, cooldowns or world-entry state.
 		guideSummons.clear();
 		academy = undefined;
 		pkStatus = undefined;
+		friends.reset();
 		feedback.reset();
 		training.reset();
 		social = emptySocial();
@@ -2124,6 +2126,20 @@ state here before a command can claim a native wire conversation.
 				chat.block( command.name, command.blocked, now );
 				return null;
 			}
+			if ( command.kind === "friend-request" ) {
+				friends.request( command.name );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "friend-answer" ) {
+				friends.answer( command.accept );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "friend-delete" ) {
+				friends.remove( command.jid );
+				return null;
+			}
 			if ( command.kind === "chat" ) {
 				chat.request(
 					command.channel === 1 && eligibility.gm ? 3 : command.channel,
@@ -2685,6 +2701,14 @@ Packet handling must not depend on which HUD panel is currently open.
 					if ( notice ) notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					// A refused command leaves the server's walk running.
 					if ( frame.payload[0] === 3 ) movement.castRefused( now );
+					dirty = true;
+					return true;
+				}
+				const friendReceipt = friends.receive( frame, social.localName );
+				if ( friendReceipt.handled ) {
+					for ( const notice of friendReceipt.notices ) {
+						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					}
 					dirty = true;
 					return true;
 				}
@@ -4122,6 +4146,7 @@ The published plane when something changed since the last take, else null.
 				eventGroups: environment.groups,
 				...quests.state(),
 				chat: chat.state(),
+				friends: friends.state(),
 				activeCos: cos,
 				cosResult,
 				revision: ++revision,

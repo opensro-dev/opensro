@@ -1040,6 +1040,13 @@
 			]
 		},
 		{
+			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/friends/friends.ts",
+			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
+			"functions": [
+				"send"
+			]
+		},
+		{
 			"consumer": "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts",
 			"provider": "src/engine/runtime/simulation/worker/network/network.ts",
 			"functions": [

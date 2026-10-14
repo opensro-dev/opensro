@@ -93,7 +93,7 @@ contained
 */
 function contained( output, width, height ) {
 	for ( const control of output.controls ) {
-		if ( !/^(guild-|social-|union-|war-|close$)/.test( control.id ) ) continue;
+		if ( !/^(guild-|social-|union-|war-|friend-|close$)/.test( control.id ) ) continue;
 		const [x, y, w, h] = control.rect;
 		assert.ok(
 			w > 0 && h > 0 && x >= 0 && y >= 0 && x + w <= width + .01 && y + h <= height + .01,
@@ -131,6 +131,7 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 				"guild-tab:0",
 				"guild-tab:1",
 				"guild-tab:2",
+				"guild-tab:3",
 				"guild-tab:4"
 			] );
 			assert.equal( new Set( tabs.map( control => control.rect[1] ) ).size, width < 477 ? 2 : 1 );
@@ -321,3 +322,102 @@ test("a guild master outside any party can donate and open the authority panel w
 		fixture.dispose();
 	}
 });
+
+/*
+================
+friendRows
+
+A roster longer than one page: Berk online, the rest offline.
+================
+*/
+function friendRows() {
+	return Array.from( { length: 14 }, ( _, i ) => ({
+		jid: 100 + i,
+		name: i === 0 ? "Berk" : "Friend" + i,
+		modelRefId: 1907,
+		online: i === 0
+	}) );
+}
+
+for ( const [width, height] of [ [ 1600, 900 ], [ 375, 667 ] ] ) {
+	test(`the Friends tab lists the roster and drives add, delete, whisper and the request prompt at ${width}x${height}`, () => {
+		const sent = [], fixture = uiFixture( command => sent.push( command ) );
+		let time = 0, published;
+		/*
+		================
+		draw
+		================
+		*/
+		function draw() {
+			published = fixture.ui.step( fixture.state, ++time * 100 ) ?? published;
+			assert.equal( fixture.ui.stats().error, null );
+			const output = defined( published );
+			contained( output, fixture.state.width, fixture.state.height );
+			return output;
+		}
+		/*
+		================
+		gameplay
+		================
+		*/
+		const gameplay = () => sent.filter( c => c.kind === "gameplay" ).map( c => c.command );
+		try {
+			Object.assign( fixture.state.gameplay, {
+				social: guildState(),
+				friends: { rows: friendRows(), prompt: null, pending: false }
+			} );
+			fixture.state.width = width;
+			fixture.state.height = height;
+			draw();
+			fixture.ui.event( { kind: "activate", id: "open-window:Guild" } );
+			draw();
+			fixture.ui.event( { kind: "activate", id: "guild-tab:3" } );
+			let output = draw();
+			const rows = output.controls.filter( control => control.id.startsWith( "friend-row:" ) );
+			assert.ok( rows.length >= 5 && rows.length < 14, "one page of the roster: " + rows.length );
+			assert.equal( rows[0].label, "Berk" );
+			const whisper = defined( output.controls.find( control => control.id === "friend-whisper" ) );
+			const remove = defined( output.controls.find( control => control.id === "friend-remove" ) );
+			assert.equal( whisper.disabled, true, "nothing selected" );
+			assert.equal( remove.disabled, true );
+			fixture.ui.event( { kind: "activate", id: "friend-down" } );
+			output = draw();
+			assert.notEqual(
+				output.controls.find( control => control.id.startsWith( "friend-row:" ) )?.id,
+				rows[0].id,
+				"the list scrolls"
+			);
+			fixture.ui.event( { kind: "activate", id: "friend-up" } );
+			output = draw();
+			fixture.ui.event( { kind: "activate", id: "friend-row:100" } );
+			output = draw();
+			assert.equal( output.controls.find( control => control.id === "friend-whisper" )?.disabled, false );
+			fixture.ui.event( { kind: "activate", id: "friend-remove" } );
+			output = draw();
+			assert.ok( output.controls.some( control => control.id === "friend-ok" ), "the delete question" );
+			fixture.ui.event( { kind: "activate", id: "friend-ok" } );
+			draw();
+			assert.deepEqual( gameplay().at( -1 ), { kind: "friend-delete", jid: 100 } );
+			fixture.ui.event( { kind: "activate", id: "friend-add" } );
+			output = draw();
+			assert.ok( output.controls.some( control => control.id === "friend-name" ), "the name box" );
+			fixture.ui.event( { kind: "edit", id: "friend-name", value: "Cale", start: 4, end: 4, composing: false } );
+			fixture.ui.event( { kind: "activate", id: "friend-ok" } );
+			draw();
+			assert.deepEqual( gameplay().at( -1 ), { kind: "friend-request", name: "Cale" } );
+			fixture.state.gameplay.friends = {
+				rows: friendRows(),
+				prompt: { jid: 7, serial: 3, name: "Dora" },
+				pending: false
+			};
+			output = draw();
+			assert.ok( output.controls.some( control => control.id === "friend-accept" ), "the request prompt" );
+			assert.ok( output.controls.some( control => control.id === "friend-refuse" ) );
+			fixture.ui.event( { kind: "activate", id: "friend-refuse" } );
+			draw();
+			assert.deepEqual( gameplay().at( -1 ), { kind: "friend-answer", accept: false } );
+		} finally {
+			fixture.dispose();
+		}
+	});
+}

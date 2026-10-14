@@ -14,6 +14,11 @@ Visibility gates new requests, never collection of outstanding work.
 // CGInterface_ExecuteActionCommand 695420 case 1006: trade with the
 // selected player.
 const ACTION_EXCHANGE = 1006;
+// The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
+// gil_bar02 rows and a scrollbar between its 16-pixel arrows.
+const FRIEND_VISIBLE_ROWS = 11;
+const FRIEND_ROW_STEP = 23;
+const FRIEND_SCROLL_TRACK = 224;
 // 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
 // stall network window (CGInterface_ToggleStallNetworkWindow 69DB80).
 const ACTION_STALL = 1009;
@@ -33,6 +38,7 @@ const STALL_CHAT_TEXT = "stall-chat-text";
 const STALL_CHAT_ROW = 15;
 const EDIT_CARET_WIDTH = 1;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
+import { FRIEND_LIST_LIMIT, FRIEND_NAME_LIMIT } from "@/engine/foundation/gameplay/friends";
 import {
 	companionItemTargetCommand,
 	armsItemTargetCursor,
@@ -724,6 +730,10 @@ export function createUi(
 	let localBlocks: readonly string[] = [];
 	let blockTab: 0 | 1 = 0, blockOffset = 0, blockSelected = "", blockInput = "";
 	let blockDialog: "add" | "remove" | null = null;
+	// The Friends tab (CIFFriend, community panel member +0x7DC): the selected
+	// row's jid, the list scroll and the add/delete dialog.
+	let friendSelected = 0, friendOffset = 0, friendInput = "", friendSortDescending = false;
+	let friendDialog: "add" | "remove" | null = null;
 	let options = initialGameOptions(), optionDraft = options;
 	let optionTab = 0;
 	let optionScroll = [ 0, 0 ];
@@ -1531,6 +1541,7 @@ export function createUi(
 		blockDialog = null;
 		blockSelected = "";
 		blockOffset = 0;
+		friendDialog = null;
 		if ( shopDialog || shopWarning ) closeShopDialog();
 		guildDialog = "";
 		guildNoticeHud.close();
@@ -1697,6 +1708,10 @@ export function createUi(
 		blockDialog = null;
 		blockSelected = "";
 		blockInput = "";
+		friendDialog = null;
+		friendSelected = 0;
+		friendOffset = 0;
+		friendInput = "";
 		blockOffset = 0;
 		panel = "";
 		admittedWindows.clear();
@@ -2796,6 +2811,10 @@ export function createUi(
 			if ( id === "submit" ) id = "blocking-ok";
 			if ( ![ "blocking-ok", "blocking-cancel" ].includes( id ) ) return;
 		}
+		if ( friendDialog ) {
+			if ( id === "submit" ) id = "friend-ok";
+			if ( ![ "friend-ok", "friend-cancel" ].includes( id ) ) return;
+		}
 		if ( id === "submit" && consolePhase !== 0 && view.gameplay?.eligibility?.gm ) {
 			if ( consoleText && !composing ) {
 				appendConsoleLine( consoleText );
@@ -2837,7 +2856,35 @@ export function createUi(
 			dirty = true;
 			return;
 		}
-		if ( id.startsWith( "blocking-tab:" ) ) {
+		if ( id.startsWith( "friend-row:" ) ) friendSelected = Number( id.slice( 11 ) );
+		else if ( id === "friend-sort" ) friendSortDescending = !friendSortDescending;
+		else if ( id === "friend-up" ) friendOffset = Math.max( 0, friendOffset - 1 );
+		else if ( id === "friend-down" ) friendOffset++;
+		else if ( id === "friend-whisper" ) {
+			const row = view.gameplay?.friends?.rows.find( r => r.jid === friendSelected );
+			if ( row ) beginWhisper( row.name );
+		} else if ( id === "friend-add" || id === "friend-remove" ) {
+			if ( id === "friend-add" && view.gameplay?.friends?.pending ) return;
+			if ( id === "friend-remove" && !view.gameplay?.friends?.rows.some( r => r.jid === friendSelected ) ) return;
+			friendDialog = id === "friend-add" ? "add" : "remove";
+			friendInput = "";
+			focus = friendDialog === "add" ? "friend-name" : null;
+			selection = [ 0, 0 ];
+			focusRequest = { id: focus, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "friend-cancel" ) {
+			friendDialog = null;
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "friend-ok" && friendDialog ) {
+			if ( friendDialog === "add" ) {
+				if ( friendInput.trim() ) sendGameplay( { kind: "friend-request", name: friendInput.trim() } );
+			} else if ( friendSelected ) sendGameplay( { kind: "friend-delete", jid: friendSelected } );
+			friendDialog = null;
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "friend-accept" || id === "friend-refuse" ) {
+			sendGameplay( { kind: "friend-answer", accept: id === "friend-accept" } );
+		} else if ( id.startsWith( "blocking-tab:" ) ) {
 			blockTab = id === "blocking-tab:1" ? 1 : 0;
 			blockSelected = "";
 			blockOffset = 0;
@@ -5379,6 +5426,35 @@ export function createUi(
 					![ "blocking-ok", "blocking-cancel", "blocking-name", "submit" ].includes( event.id )
 				) return;
 			}
+			if ( friendDialog ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "friend-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "friend-ok" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if (
+					"id" in event && event.id !== null &&
+					![ "friend-ok", "friend-cancel", "friend-name", "submit" ].includes( event.id )
+				) return;
+			}
+			if ( event.kind === "drag" && event.id === "friend-thumb" && panel === "Guild" ) {
+				const extra = Math.max( 0, (view?.gameplay?.friends?.rows.length ?? 0) - FRIEND_VISIBLE_ROWS );
+				friendOffset = Math.max( 0, Math.min( extra, friendOffset + event.dy * extra / FRIEND_SCROLL_TRACK ) );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "scroll" && panel === "Guild" && guildTab === 3 ) {
+				const area = controls.find( c => c.id === "friend-list" );
+				if ( area && containsPoint( area.rect, event.x, event.y ) ) {
+					friendOffset = Math.max( 0, friendOffset + Math.sign( event.delta ) );
+					dirty = true;
+					return;
+				}
+			}
 			if ( event.kind === "drag" && event.id === "blocking-thumb" && panel === "Blocking" ) {
 				const rows = blockTab === 0 ? view?.gameplay?.chat?.blocked ?? [] : localBlocks;
 				blockOffset = Math.max(
@@ -6623,6 +6699,8 @@ export function createUi(
 					}
 				} else if ( event.id === "blocking-name" && blockDialog === "add" ) {
 					blockInput = event.value.slice( 0, 13 );
+				} else if ( event.id === "friend-name" && friendDialog === "add" ) {
+					friendInput = event.value.slice( 0, FRIEND_NAME_LIMIT );
 				} else if ( event.id === "academy-name" ) academyName = event.value;
 				else if ( event.id === "alchemy-quantity" ) alchemyQuantity = event.value;
 				else if ( event.id === FORTRESS_TAX_RATE && panel === FORTRESS_TAX_PANEL ) {
@@ -15540,6 +15618,174 @@ export function createUi(
 				CIFAllianceGuild_RefreshButtons (5F6880) arms.
 				================
 				*/
+				/*
+				================
+				friendPage
+
+				CIFFriend (iffriend.txt, OnCreate 6054D0) and its CIFFriendSlot rows
+				(iffriendslot.txt): the roster with its online mark (605880 binds
+				gil_contact_on for state 0), race mark and name, the ": n / 20" count
+				(600F80), and Whisper / Add / Delete. Unused rows keep the
+				gil_bar02_deselect filler (604830).
+				================
+				*/
+				function friendPage( page: AuthoredLayout, slot: AuthoredLayout, gx: number, gy: number ) {
+					const state = game?.friends,
+						// The FriendList header (id 22) sorts by name, each press reversing.
+						rows = [ ...state?.rows ?? [] ].sort( ( a, b ) =>
+							(friendSortDescending ? -1 : 1) * a.name.localeCompare( b.name )
+						),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						slotAt = ( id: number ) => Object.values( slot ).find( n => n.id === id )!;
+					if ( friendSelected && !rows.some( row => row.jid === friendSelected ) ) friendSelected = 0;
+					friendOffset = Math.max(
+						0,
+						Math.min( Math.max( 0, rows.length - FRIEND_VISIBLE_ROWS ), friendOffset )
+					);
+					const first = Math.round( friendOffset ), selected = rows.find( row => row.jid === friendSelected );
+					nativePage( page, gx, gy, [ 12, 22, 41, 42, 43 ] );
+					authoredText( at( 12 ), gx, gy, ": " + rows.length + " / " + FRIEND_LIST_LIMIT );
+					authoredLabeledButton( at( 22 ), gx, gy, "friend-sort", hudCopy( at( 22 ).text ) );
+					const list = at( 30 ), lx = gx + list.rect[0], ly = gy + list.rect[1];
+					const select = ROOT + "interface/guild/gil_bar02_select.png",
+						deselect = ROOT + "interface/guild/gil_bar02_deselect.png",
+						contactOn = ROOT + "interface/guild/gil_contact_on.png";
+					paths.push( select, deselect, contactOn );
+					controls.push( {
+						id: "friend-list",
+						label: hudCopy( "UIIT_STT_FRIENDLIST" ),
+						rect: [ lx, ly, list.rect[2], list.rect[3] ],
+						kind: "button"
+					} );
+					for ( let i = 0; i < FRIEND_VISIBLE_ROWS; i++ ) {
+						const row = rows[first + i], r: UiRect = [ lx, ly + i * FRIEND_ROW_STEP, 312, 24 ];
+						if ( resources.has( select ) && resources.has( deselect ) ) {
+							rect( r, white, row && row.jid === friendSelected ? select : deselect );
+						}
+						if ( !row ) continue;
+						if ( row.online ) authoredImage( slotAt( 10 ), lx, r[1], contactOn );
+						else authoredImage( slotAt( 10 ), lx, r[1] );
+						authoredImage(
+							slotAt( 11 ),
+							lx,
+							r[1],
+							slotAt( 11 ).texture.replace(
+								"china",
+								hudData!.countries[row.modelRefId] === 1 ? "europe" : "china"
+							)
+						);
+						authoredText( slotAt( 12 ), lx, r[1], row.name );
+						controls.push( { id: "friend-row:" + row.jid, label: row.name, rect: r, kind: "button" } );
+					}
+					const scroll = chatScrollbar(
+						"friend",
+						[ lx + list.rect[2] - 16, ly + 16, 16, FRIEND_SCROLL_TRACK ],
+						Math.max( FRIEND_VISIBLE_ROWS, rows.length ),
+						FRIEND_VISIBLE_ROWS,
+						Math.max( 0, rows.length - FRIEND_VISIBLE_ROWS ) - friendOffset,
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...scroll.paths );
+					quads.push( ...scroll.quads );
+					controls.push( ...scroll.controls );
+					authoredLabeledButton(
+						at( 41 ),
+						gx,
+						gy,
+						"friend-whisper",
+						hudCopy( at( 41 ).text ),
+						!selected?.online
+					);
+					authoredLabeledButton( at( 42 ), gx, gy, "friend-add", hudCopy( at( 42 ).text ), !!state?.pending );
+					authoredLabeledButton( at( 43 ), gx, gy, "friend-remove", hudCopy( at( 43 ).text ), !selected );
+				}
+				/*
+				================
+				friendDialogBox
+
+				The add box (UIIT_MSG_FRIEND_IDINPUT, a CIFMessageBox input, 52C870)
+				and the delete question (UIIT_MSG_FRIEND_IDDELET, Yes/No).
+				================
+				*/
+				function friendDialogBox() {
+					const mark = beginWindow();
+					controls = [];
+					blocks.push( full );
+					if ( friendDialog === "remove" ) {
+						simpleMessageBox( {
+							title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+							lines: [ hudCopy( "UIIT_MSG_FRIEND_IDDELET" ) ],
+							yes: "friend-ok",
+							no: "friend-cancel"
+						} );
+						endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:friend" );
+						blocks.push( full );
+						return;
+					}
+					const dx = Math.max( 0, Math.floor( (w - 306) / 2 ) ),
+						dy = Math.max( 0, Math.floor( (h - 151) / 2 ) );
+					paths.push( ...partyProposalAssets() );
+					quads.push(
+						...frameRing(
+							[ dx, dy, 306, 151 ],
+							MESSAGE_FRAME,
+							PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					quads.push(
+						...normalTile(
+							[ dx + 16, dy + 40, 274, 95 ],
+							MESSAGE_TILE,
+							resources.size( MESSAGE_TILE ),
+							full
+						)
+					);
+					quads.push(
+						...text.quads( hudCopy( "UIIT_STT_INPUT_BOX" ), [ dx + 10, dy + 11, 285, 12 ], full, white, {
+							hAlign: 1,
+							vAlign: 0
+						} )
+					);
+					const copy = hudCopy( "UIIT_MSG_FRIEND_IDINPUT" );
+					quads.push(
+						...text.quads( copy, [ dx + 1, dy + 49, 305, 12 ], full, gold, { hAlign: 1, vAlign: 0 } )
+					);
+					const r: UiRect = [ dx + 19, dy + 73, 266, 20 ];
+					rect( [ dx + 12, dy + 71, 281, 25 ], [ 0, 0, 0, 1 ] );
+					controls.push( {
+						id: "friend-name",
+						label: copy,
+						kind: "text",
+						value: friendInput,
+						rect: r,
+						maxLength: FRIEND_NAME_LIMIT
+					} );
+					const start = Math.min( friendInput.length, selection[0] ?? 0 ),
+						end = Math.min( friendInput.length, selection[1] ?? start ),
+						before = text.run( friendInput.slice( 0, start ) ).width,
+						through = text.run( friendInput.slice( 0, end ) ).width;
+					if ( focus === "friend-name" && end > start ) {
+						rect(
+							[ r[0] + before, r[1], through - before, 20 ],
+							[ .2, .4, .7, .6 ],
+							"",
+							[ 0, 0, 1, 1 ],
+							r
+						);
+					}
+					quads.push( ...text.quads( friendInput, r, r, white, { overflow: "clip" } ) );
+					if ( focus === "friend-name" && caretVisible ) {
+						rect( [ r[0] + through, r[1], 1, text.height() + 2 ], white, "", [ 0, 0, 1, 1 ], r );
+					}
+					button( "friend-ok", hudCopy( "UIIT_STT_OK" ) || "OK", dx + 72, dy + 114, 76 );
+					button( "friend-cancel", hudCopy( "UIIT_STT_CANCEL" ) || "Cancel", dx + 160, dy + 114, 76 );
+					endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:friend" );
+					blocks.push( full );
+				}
 				function unionPage( page: AuthoredLayout, slot: AuthoredLayout, gx: number, gy: number ) {
 					const social = game?.social,
 						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
@@ -15921,7 +16167,7 @@ export function createUi(
 								{
 									family: "com_long_tab",
 									client: [ 6, 5, 6, 0 ],
-									disabled: ![ 0, 1, 2, 4 ].includes( i )
+									disabled: ![ 0, 1, 2, 3, 4 ].includes( i )
 								}
 							)
 						);
@@ -16173,6 +16419,77 @@ export function createUi(
 							} );
 							return;
 						}
+						if ( guildTab === 3 ) {
+							// The Friends page reflowed: the same rows, marks and actions.
+							const rows = game?.friends?.rows ?? [];
+							if ( friendSelected && !rows.some( row => row.jid === friendSelected ) ) friendSelected = 0;
+							const selected = rows.find( row => row.jid === friendSelected ),
+								listTop = top + LINE_HEIGHT + 4,
+								visible = Math.max( 1, Math.floor( (bottom - 60 - listTop) / ROW_HEIGHT ) );
+							friendOffset = Math.max(
+								0,
+								Math.min( Math.max( 0, rows.length - visible ), friendOffset )
+							);
+							const first = Math.round( friendOffset );
+							put( hudCopy( "UIIT_CTL_FRIEND" ) + ": " + rows.length + " / " + FRIEND_LIST_LIMIT, [
+								left,
+								top,
+								inner,
+								LINE_HEIGHT
+							] );
+							controls.push( {
+								id: "friend-list",
+								label: hudCopy( "UIIT_STT_FRIENDLIST" ),
+								rect: [ left, listTop, inner, visible * ROW_HEIGHT ],
+								kind: "button"
+							} );
+							rows.slice( first, first + visible ).forEach( ( row, i ) => {
+								const r: UiRect = [ left, listTop + i * ROW_HEIGHT, inner, ROW_HEIGHT - 1 ];
+								memberRow( "friend-row:" + row.jid, row.name, r, row.jid === friendSelected );
+								image(
+									[ r[0] + 6, r[1] + 5, 12, 12 ],
+									ROOT + "interface/guild/gil_contact_" + (row.online ? "on" : "off") + ".png"
+								);
+								put( row.name, [ r[0] + 24, r[1], r[2] - 30, r[3] ] );
+							} );
+							const actionY = bottom - 54, third = Math.floor( inner / 3 );
+							if ( rows.length > visible ) {
+								button( "friend-up", "<", left, actionY, 40, first === 0 );
+								button(
+									"friend-down",
+									">",
+									left + inner - 40,
+									actionY,
+									40,
+									first + visible >= rows.length
+								);
+							}
+							button(
+								"friend-whisper",
+								hudCopy( "UIIT_STT_GET_WHISPER" ),
+								left,
+								actionY + 28,
+								third - 2,
+								!selected?.online
+							);
+							button(
+								"friend-add",
+								hudCopy( "UIIT_CTL_FRIENDADD" ),
+								left + third,
+								actionY + 28,
+								third - 2,
+								!!game?.friends?.pending
+							);
+							button(
+								"friend-remove",
+								hudCopy( "UIIT_CTL_FRIENDDEL" ),
+								left + third * 2,
+								actionY + 28,
+								third - 2,
+								!selected
+							);
+							return;
+						}
 						const contentTop = top + 30;
 						if ( guildTab === 1 ) {
 							[ "UIIT_STT_GUILD_RESPECT_ALLY", "UIIT_STT_GUILD_RESPECT_WAR" ].forEach( ( key, i ) =>
@@ -16370,6 +16687,7 @@ export function createUi(
 						const admission = beginWindow();
 						appendCompactGuild();
 						endWindow( admission );
+						if ( friendDialog ) friendDialogBox();
 					} else {
 						const admission = beginWindow(),
 							root = hudData.root.GDR_COMMUNITY!,
@@ -16401,7 +16719,7 @@ export function createUi(
 								{
 									family: "com_long_tab",
 									client: [ 6, 5, 6, 0 ],
-									disabled: ![ 0, 1, 2, 4 ].includes( i )
+									disabled: ![ 0, 1, 2, 3, 4 ].includes( i )
 								}
 							)
 						);
@@ -16446,6 +16764,8 @@ export function createUi(
 						} else if ( guildTab === 2 ) {
 							nativePage( hudData.windows.ifwarstate!, gx, gy );
 							guildWarPage( true, gx + 6, gy + 29 );
+						} else if ( guildTab === 3 && hudData.windows.iffriend && hudData.windows.iffriendslot ) {
+							friendPage( hudData.windows.iffriend, hudData.windows.iffriendslot, gx, gy );
 						} else {
 							// 5EA9D0 creates Create before the subsequent resource sections. Their
 							// insertion lists reverse within a section, not across constructor calls.
@@ -16675,6 +16995,7 @@ export function createUi(
 							}
 						}
 						endWindow( admission );
+						if ( friendDialog ) friendDialogBox();
 					}
 				}
 				if ( [ "Magic Pop", "Chat" ].includes( panel ) ) {
@@ -17792,6 +18113,58 @@ export function createUi(
 				button(
 					"invite-refuse",
 					copy( guild ? "UIIT_CTL_NO" : "UIIT_STT_REFUSE", "Refuse" ),
+					layout.refuse[0],
+					layout.refuse[1],
+					76,
+					false,
+					false,
+					6
+				);
+			}
+			const friendPrompt = game?.friends?.prompt;
+			if ( friendPrompt && worldVisible && !game?.social?.invitation ) {
+				// 760C90 opens confirm box 0x23 (52F460): "'name' proposed to make
+				// friends with you." over "Will you accept it?", answered Yes / No.
+				controls = [];
+				blocks = [ full ];
+				if ( focus !== "friend-accept" && focus !== "friend-refuse" ) {
+					focus = null;
+					composing = false;
+				}
+				paths.push( ...partyProposalAssets() );
+				const layout = proposalLayout( 5, w, h, undefined, null );
+				quads.push( ...normalTile( layout.background, MESSAGE_TILE, resources.size( MESSAGE_TILE ), full ) );
+				quads.push(
+					...frameRing(
+						layout.frame,
+						MESSAGE_FRAME,
+						PARTS.map( p => resources.size( MESSAGE_FRAME + p + ".png" ) ),
+						full
+					)
+				);
+				/*
+				================
+				line
+				================
+				*/
+				const line = ( value: string, r: UiRect ) =>
+					quads.push( ...text.quads( value, r, full, white, { hAlign: 1, vAlign: 0 } ) );
+				line( hudCopy( "UIIT_STT_CONFIRM_BOX" ), layout.title );
+				line( "'" + friendPrompt.name + "' " + hudCopy( "UIIT_MSG_FRIEND_REQUEST_01" ), layout.name );
+				line( hudCopy( "UIIT_MSG_FRIEND_REQUEST_02" ), layout.question );
+				button(
+					"friend-accept",
+					hudCopy( "UIIT_CTL_YES" ) || "Yes",
+					layout.accept[0],
+					layout.accept[1],
+					76,
+					false,
+					false,
+					6
+				);
+				button(
+					"friend-refuse",
+					hudCopy( "UIIT_CTL_NO" ) || "No",
 					layout.refuse[0],
 					layout.refuse[1],
 					76,

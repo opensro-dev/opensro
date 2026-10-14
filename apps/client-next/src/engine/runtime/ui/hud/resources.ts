@@ -136,6 +136,8 @@ export function createHudResources(
 		"ifitemmallconfirmslot",
 		"ifmessagebox",
 		"ifcommunity",
+		"iffriend",
+		"iffriendslot",
 		"ifguild",
 		"ifguildmemberslot",
 		"ifguildnotifywrite",
