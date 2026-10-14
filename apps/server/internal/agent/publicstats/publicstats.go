@@ -168,6 +168,10 @@ type snapshot struct {
 	lastSeq     int64
 	// rankings are the orderings built from this roster and kill list.
 	rankings map[rankingKey]rankingSet
+	// guilds is the ranked guild list (guilds.go loadGuilds); it names
+	// masters, so it goes with the roster when a flag changes.
+	guilds      []GuildRow
+	guildsUntil time.Time
 }
 
 /*

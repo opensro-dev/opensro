@@ -70,3 +70,36 @@ func TestGuildListRanksAndKeepsMastersPrivate(t *testing.T) {
 		t.Fatalf("page 0 answered %d", code)
 	}
 }
+
+/*
+================
+TestGuildBurstCopiesGuildsOnce
+
+Every distinct search and page misses the answer cache, but the guild
+list behind them is read once per snapshotMaxAge: a public endpoint must
+not walk the shard per request.
+================
+*/
+func TestGuildBurstCopiesGuildsOnce(t *testing.T) {
+	f := newFixture()
+	s := f.service()
+	reads := 0
+	s.src.Guilds = func() []GuildEntry {
+		reads++
+		return []GuildEntry{{ID: 1, Name: "Silk", Level: 1, Members: []GuildEntryMember{{CharID: 1}}}}
+	}
+	for _, path := range []string{
+		"/public/v1/guilds", "/public/v1/guilds?q=a", "/public/v1/guilds?q=b", "/public/v1/guilds?q=si",
+		"/public/v1/guilds?page=2", "/public/v1/guilds?q=c&page=3",
+	} {
+		get(t, s, path, nil)
+	}
+	if reads != 1 {
+		t.Fatalf("burst read the guilds %d times, want 1", reads)
+	}
+	f.now = f.now.Add(snapshotMaxAge)
+	get(t, s, "/public/v1/guilds?q=d", nil)
+	if reads != 2 {
+		t.Fatalf("after the snapshot age the guilds were read %d times, want 2", reads)
+	}
+}

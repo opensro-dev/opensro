@@ -116,8 +116,9 @@ func (s *Service) putFlag(w http.ResponseWriter, r *http.Request, digest [sha256
 	}
 	s.mu.Lock()
 	s.cache = map[string]cacheEntry{}
-	// The roster holds the flags; the kill list does not and stays.
+	// The roster and the guild list hold the flags; the kill list does not and stays.
 	s.snap.roster, s.snap.rosterUntil, s.snap.rankings = roster{}, time.Time{}, nil
+	s.snap.guilds, s.snap.guildsUntil = nil, time.Time{}
 	s.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }

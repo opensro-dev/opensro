@@ -77,7 +77,12 @@ func (s *Service) guilds(r *http.Request) (any, error) {
 		}
 		page = n
 	}
-	rows := s.guildRows(prefix)
+	rows := []GuildRow{}
+	for _, row := range s.loadGuilds() {
+		if prefix == "" || strings.HasPrefix(strings.ToLower(row.Name), prefix) {
+			rows = append(rows, row)
+		}
+	}
 	out := GuildsResponse{Page: page, Total: len(rows), Pages: max(1, (len(rows)+guildPageSize-1)/guildPageSize),
 		GeneratedAt: s.now().UTC().Format(time.RFC3339), Rows: []GuildRow{}}
 	if prefix != "" {
@@ -92,13 +97,30 @@ func (s *Service) guilds(r *http.Request) (any, error) {
 
 /*
 ================
-Service.guildRows
+Service.loadGuilds
 
-Every guild, ranked, with its rank fixed before the name filter so a
-search shows each guild's place on the full list.
+The shared guild list: every guild, ranked, built at most once per
+snapshotMaxAge from one Guilds() copy (a walk of every character and a
+read per guild), whatever searches and pages the visitors ask for. The
+rank is fixed here, before any name filter, so a search shows each guild's
+place on the full list. Called only while cached holds s.mu.
 ================
 */
-func (s *Service) guildRows(prefix string) []GuildRow {
+func (s *Service) loadGuilds() []GuildRow {
+	now := s.now()
+	if s.snap.guildsUntil.IsZero() || !now.Before(s.snap.guildsUntil) {
+		s.snap.guilds = s.rankGuilds()
+		s.snap.guildsUntil = now.Add(snapshotMaxAge)
+	}
+	return s.snap.guilds
+}
+
+/*
+================
+Service.rankGuilds
+================
+*/
+func (s *Service) rankGuilds() []GuildRow {
 	if s.src.Guilds == nil {
 		return nil
 	}
@@ -120,9 +142,6 @@ func (s *Service) guildRows(prefix string) []GuildRow {
 	r := s.loadRoster()
 	rows := []GuildRow{}
 	for i, entry := range entries {
-		if prefix != "" && !strings.HasPrefix(strings.ToLower(entry.Name), prefix) {
-			continue
-		}
 		row := GuildRow{Rank: i + 1, Name: entry.Name, Level: int(entry.Level), Members: len(entry.Members),
 			Union: []string{}}
 		for _, member := range entry.Members {
