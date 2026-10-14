@@ -373,7 +373,9 @@ func (rt *Runtime) HandlePortal(division string, c *enterworld.Character, payloa
 		}
 		collected = int64(fee) - link.fee
 		link.fee = int64(fee)
-		if failure := portalAdmission(c, source, link, mask, rt.hasSummonedTransportCOS(c)); failure != 0 {
+		transport := rt.hasSummonedTransportCOS(c)
+		traveller := portalTraveller{questMask: mask, transportCOS: transport, transportFar: transport && rt.transportBeyond(division, c, gateTransportRange)}
+		if failure := portalAdmission(c, source, link, traveller); failure != 0 {
 			return 0, portalFailure(failure), false
 		}
 		if c.NativeTeleportMode != 0 || rt.hasOpenSkillCast(division, c.Name) {
@@ -535,20 +537,47 @@ func (rt *Runtime) portalSourceNpc(division string, c *enterworld.Character, gid
 	return npc, sourceID, 0
 }
 
+// gateTransportRange is how far a summoned transport may stand from its
+// owner and still travel through a gate (4F2B50 case 2: Vec3_Length of the
+// relative position against 1000.0, else 0x1C13).
+const gateTransportRange = 1000.0
+
+/*
+================
+portalTraveller
+
+What portalAdmission needs to know of the traveller beyond the character:
+the quest travel mask, whether a transport is summoned, and whether it
+stands beyond gateTransportRange.
+================
+*/
+type portalTraveller struct {
+	questMask    uint32
+	transportCOS bool
+	transportFar bool
+}
+
 // 4F2D05: the quest bit blocks buildings and the special GATE_TD route;
 // it does not turn ordinary ferries into town gates. 513A70 separately checks
 // the authored transport-COS restriction on ferry links.
 /*
 ================
 portalAdmission
+
+In 4F2B50 case 2's order: the quest bit, then a summoned transport beyond
+gateTransportRange (0x1C13: it would be left behind), then the link's
+conditions (513A70), then the fee.
 ================
 */
-func portalAdmission(c *enterworld.Character, source portalDestination, link portalLink, questMask uint32, transportCOS bool) byte {
+func portalAdmission(c *enterworld.Character, source portalDestination, link portalLink, traveller portalTraveller) byte {
 	if !enterworld.CharacterAlive(c) || c.DeletePending {
 		return 2
 	}
-	if questMask&0x40000 != 0 && (source.building || source.code == "GATE_TD") {
+	if traveller.questMask&0x40000 != 0 && (source.building || source.code == "GATE_TD") {
 		return 0x17
+	}
+	if traveller.transportCOS && traveller.transportFar {
+		return 0x13
 	}
 	for _, condition := range link.conditions {
 		switch condition.kind {
@@ -561,7 +590,7 @@ func portalAdmission(c *enterworld.Character, source portalDestination, link por
 				return 0x15
 			}
 		case 2:
-			if transportCOS {
+			if traveller.transportCOS {
 				return 0x10
 			}
 		}

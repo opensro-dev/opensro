@@ -68,13 +68,27 @@ func (rt *Runtime) tradeAdmission(division string, c *enterworld.Character, npc 
 	if !valid || !isVehicleCOS(ref.TidWord) {
 		return tradeErrVehicleDistance
 	}
-	now := rt.Now().UnixMilli()
-	a := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
-	b := rt.cosLiveSpawn(division, c, now)
-	if !(math.Hypot(simulation.WorldDistance2D(a, b), a.Y-b.Y) <= tradeVehicleRange) {
+	if rt.transportBeyond(division, c, tradeVehicleRange) {
 		return tradeErrVehicleDistance
 	}
 	return 0
+}
+
+/*
+================
+transportBeyond
+
+Whether the owner's summoned transport stands farther than limit from its
+owner, measured in 3D between their live positions (the relative vector's
+length, as 617F70 and 4F2B50 measure it). A position that is not finite
+counts as beyond.
+================
+*/
+func (rt *Runtime) transportBeyond(division string, c *enterworld.Character, limit float64) bool {
+	now := rt.Now().UnixMilli()
+	a := rt.liveSpawn(simulation.WorldKey(division, c.Name), c, now)
+	b := rt.cosLiveSpawn(division, c, now)
+	return !(math.Hypot(simulation.WorldDistance2D(a, b), a.Y-b.Y) <= limit)
 }
 
 /*

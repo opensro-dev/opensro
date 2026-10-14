@@ -29,26 +29,26 @@ func TestPortalPrimaryCatalogAndQuestAdmission(t *testing.T) {
 	if !source.building {
 		t.Fatal("town gate lacks authored building classification")
 	}
-	if got := portalAdmission(c, source, catalog.links[[2]uint32{1, 2}], 0x40000, false); got != 0x17 {
+	if got := portalAdmission(c, source, catalog.links[[2]uint32{1, 2}], portalTraveller{questMask: 0x40000}); got != 0x17 {
 		t.Fatalf("quest gate refusal %x", got)
 	}
 	source = catalog.destinations[3]
 	if source.building {
 		t.Fatal("ferry misclassified as building")
 	}
-	if got := portalAdmission(c, source, catalog.links[[2]uint32{3, 9}], 0x40000, false); got != 0 {
+	if got := portalAdmission(c, source, catalog.links[[2]uint32{3, 9}], portalTraveller{questMask: 0x40000}); got != 0 {
 		t.Fatalf("quest flag blocked ferry %x", got)
 	}
 	link := portalLink{conditions: []portalCondition{{kind: 2}}}
-	if got := portalAdmission(c, source, link, 0, true); got != 0x10 {
+	if got := portalAdmission(c, source, link, portalTraveller{transportCOS: true}); got != 0x10 {
 		t.Fatalf("unmounted transport admitted: %x", got)
 	}
 	c.Gold = nil
-	if got := portalAdmission(c, source, link, 0, false); got != 0 {
+	if got := portalAdmission(c, source, link, portalTraveller{}); got != 0 {
 		t.Fatalf("free link required gold: %x", got)
 	}
 	link.fee = 1
-	if got := portalAdmission(c, source, link, 0, false); got != 7 {
+	if got := portalAdmission(c, source, link, portalTraveller{}); got != 7 {
 		t.Fatalf("paid link admitted without gold: %x", got)
 	}
 }
@@ -163,5 +163,41 @@ func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
 	record, _ := rt.Fortresses.Get(testDivision, 1)
 	if *c.Gold != before-int64(fee) || record.TaxGold != int64(fee-base) {
 		t.Fatalf("fee %d of base %d: gold %d -> %d, treasury %d", fee, base, before, *c.Gold, record.TaxGold)
+	}
+}
+
+/*
+================
+TestGateRefusesAFarTransport
+
+4F2B50 case 2: a summoned transport standing beyond gateTransportRange is
+refused 0x1C13 on any gate, after the quest bit and before the link's own
+conditions; a near transport passes a town gate (no transport condition),
+and nothing changes without a transport.
+================
+*/
+func TestGateRefusesAFarTransport(t *testing.T) {
+	c := &enterworld.Character{}
+	hp, gold := int64(100), int64(50000)
+	c.CurrentHP, c.Gold = &hp, &gold
+	town := portalDestination{building: true}
+	ferry := portalLink{conditions: []portalCondition{{kind: 2}}}
+	for _, tc := range []struct {
+		name      string
+		source    portalDestination
+		link      portalLink
+		traveller portalTraveller
+		want      byte
+	}{
+		{"near transport through a town gate", town, portalLink{}, portalTraveller{transportCOS: true}, 0},
+		{"far transport through a town gate", town, portalLink{}, portalTraveller{transportCOS: true, transportFar: true}, 0x13},
+		{"far transport on a ferry", portalDestination{}, ferry, portalTraveller{transportCOS: true, transportFar: true}, 0x13},
+		{"near transport on a ferry", portalDestination{}, ferry, portalTraveller{transportCOS: true}, 0x10},
+		{"quest bit before range", town, portalLink{}, portalTraveller{questMask: 0x40000, transportCOS: true, transportFar: true}, 0x17},
+		{"no transport", town, portalLink{}, portalTraveller{transportFar: true}, 0},
+	} {
+		if got := portalAdmission(c, tc.source, tc.link, tc.traveller); got != tc.want {
+			t.Errorf("%s: %#x, want %#x", tc.name, got, tc.want)
+		}
 	}
 }
