@@ -1,22 +1,30 @@
 """
 ===========================================================================
 
-test_data_release.py - the operator upload survives a slow link
+test_data_release.py - isolated packaging and uploads through the operator CLI
 
 The upload limit scales with the archive, and a timed-out upload is a
 transport failure that is retried, never a crash that loses the run.
+Combined server and client staging keeps each packager's directory ownership.
 
 ===========================================================================
 """
+
+import hashlib
 import json
 import os
 import subprocess
+import sys
+import tarfile
 import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
 
 import data_release
+from plan import git
+from test_client_data import release
+from test_release_state import production
 
 
 # ================
@@ -41,6 +49,9 @@ class UploadTests(unittest.TestCase):
 			archive.write_bytes(b"x" * 1024)
 			calls = []
 
+			# ================
+			# run
+			# ================
 			def run(command, stdin, capture_output, timeout):
 				calls.append(timeout)
 				if len(calls) == 1:
@@ -102,6 +113,9 @@ class InventoryTests(unittest.TestCase):
 		needed = [{"sha256": f"{index:064x}", "length": 1} for index in range(limit + 3)]
 		requests = []
 
+		# ================
+		# send
+		# ================
 		def send(request, target, identity):
 			body = json.loads(Path(request).read_text(encoding="utf-8"))
 			requests.append(len(body["files"]))
@@ -121,17 +135,194 @@ class InventoryTests(unittest.TestCase):
 	def test_a_host_without_the_inventory_stops_the_release(self):
 		needed = [{"sha256": "a" * 64, "length": 1}]
 
+		# ================
+		# refused
+		# ================
 		def refused(request, target, identity):
 			raise RuntimeError(f"host refused inventory-request.json: ValueError: {data_release.OPERATION_REFUSED}")
 
 		with self.assertRaisesRegex(RuntimeError, "predate it.*Reinstall the controls"):
 			data_release.stored_payloads(needed, "stage@host", Path("key"), refused)
 
+		# ================
+		# lost
+		# ================
 		def lost(request, target, identity):
 			raise RuntimeError("inventory-request.json was not delivered after 5 attempts")
 
 		with self.assertRaisesRegex(RuntimeError, "not delivered"):
 			data_release.stored_payloads(needed, "stage@host", Path("key"), lost)
+
+
+# ================
+# StagingCLITests
+#
+# Real plans, inventory and packaging, with only origin reads and uploads
+# replaced. Every artifact and the simulated payload store is private.
+# ================
+class StagingCLITests(unittest.TestCase):
+	# ================
+	# setUp
+	# ================
+	def setUp(self):
+		directory = tempfile.TemporaryDirectory()
+		self.addCleanup(directory.cleanup)
+		self.root = Path(directory.name)
+		contracts = json.loads((Path(__file__).parent / "compatibility.json").read_bytes())
+		self.base = release(self.root / "base", b"old", b"shared pack", b"old publication", contracts["client"])
+		self.next = release(self.root / "next", b"new", b"shared pack", b"new publication", contracts["client"])
+		self.state = production()
+		commit = git(["rev-parse", "HEAD"])
+		for component in ("client", "server"):
+			self.state[component].update(commit=commit, compatibility=contracts[component])
+		self.state["client"]["release"] = self.base["releaseId"]
+		self.archive = self.root / "server.srogz"
+		self.archive.write_bytes(b"server game data")
+		self.output = self.root / "out"
+		self.config = {"payload_store": str(self.root / "store")}
+		self.sent = []
+		self.fetched = []
+		self.fail_server = False
+
+	# ================
+	# fetch
+	# ================
+	def fetch(self, origin, path):
+		self.assertEqual(origin, "https://example.test")
+		self.fetched.append(path)
+		return {"/releases/production.json": self.state, "/releases/client.json": self.base}[path]
+
+	# ================
+	# send
+	#
+	# Validate the bytes at the upload boundary before acknowledging them.
+	# ================
+	def send(self, archive, target, identity):
+		archive = Path(archive)
+		self.assertEqual((target, identity), ("stage@example.test", Path("key")))
+		self.sent.append(archive)
+		if archive.name == "inventory-request.json":
+			return data_release.client_data.payload_inventory(self.config, json.loads(archive.read_bytes()))
+		if archive.name == "server-data.tar":
+			self.assertEqual(archive.parent.parent, self.archive.parent)
+			with tarfile.open(archive) as package:
+				self.assertEqual(package.getnames(),
+					[data_release.server_data.DECLARATION, data_release.server_data.ARCHIVE])
+				declaration = json.load(package.extractfile(data_release.server_data.DECLARATION))
+				data = package.extractfile(data_release.server_data.ARCHIVE).read()
+			self.assertEqual(data, self.archive.read_bytes())
+			self.assertEqual(declaration, {"format": data_release.server_data.FORMAT,
+				"sha256": hashlib.sha256(data).hexdigest(), "length": len(data)})
+			if self.fail_server:
+				raise RuntimeError("server upload refused")
+			return {"staged": declaration["sha256"]}
+		if archive.name.startswith("payload-"):
+			return data_release.client_data.store_payload(self.config, archive)
+		candidate, manifest, _, payloads = data_release.client_data.unpack(archive)
+		self.assertEqual(manifest, self.next)
+		self.assertEqual(candidate["plan"]["baseRelease"], self.base["releaseId"])
+		self.assertEqual(payloads["application/index.html"], b"new")
+		for row in data_release.client_data.needed_payloads(self.root / "next", self.base):
+			self.assertEqual((Path(self.config["payload_store"]) / row["sha256"]).stat().st_size, row["length"])
+		return {"candidate": hashlib.sha256(archive.read_bytes()).hexdigest()}
+
+	# ================
+	# run_cli
+	#
+	# stored_payloads captures its default sender at import; route that real
+	# inventory helper through the same injected upload boundary as main.
+	# ================
+	def run_cli(self, client=True, server=True):
+		arguments = ["data_release.py"]
+		if client:
+			arguments += [str(self.root / "next"), str(self.output)]
+		if server:
+			arguments += ["--server-data", str(self.archive)]
+		arguments += ["--origin", "https://example.test", "--ssh-target", "stage@example.test", "--identity", "key"]
+		inventory = data_release.stored_payloads
+		with mock.patch.object(sys, "argv", arguments), \
+			mock.patch.object(data_release, "fetch_json", side_effect=self.fetch), \
+			mock.patch.object(data_release, "send", side_effect=self.send), \
+			mock.patch.object(data_release, "stored_payloads",
+				side_effect=lambda needed, target, identity: inventory(needed, target, identity, self.send)):
+			data_release.main()
+
+	# ================
+	# test_combined_cli_sends_both_packages_and_cleans_server_staging
+	# ================
+	def test_combined_cli_sends_both_packages_and_cleans_server_staging(self):
+		self.run_cli()
+		self.assertEqual([path.name for path in self.sent],
+			["server-data.tar", "inventory-request.json", "payload-000.tar", "candidate.tar"])
+		self.assertNotEqual(self.sent[0].parent, self.output)
+		self.assertFalse(self.sent[0].parent.exists())
+		self.assertEqual(sorted(path.name for path in self.output.iterdir()), ["candidate.tar", "payload-000.tar"])
+		self.assertEqual(self.archive.read_bytes(), b"server game data")
+
+	# ================
+	# test_client_only_cli_still_sends_payload_and_candidate
+	# ================
+	def test_client_only_cli_still_sends_payload_and_candidate(self):
+		self.run_cli(server=False)
+		self.assertEqual([path.name for path in self.sent],
+			["inventory-request.json", "payload-000.tar", "candidate.tar"])
+
+	# ================
+	# test_server_only_cli_cleans_staging_and_keeps_adjacent_files
+	# ================
+	def test_server_only_cli_cleans_staging_and_keeps_adjacent_files(self):
+		adjacent = self.root / "server-data.tar"
+		adjacent.write_bytes(b"keep")
+		self.run_cli(client=False)
+		self.assertEqual([path.name for path in self.sent], ["server-data.tar"])
+		self.assertFalse(self.sent[0].parent.exists())
+		self.assertFalse(self.output.exists())
+		self.assertEqual(adjacent.read_bytes(), b"keep")
+
+	# ================
+	# test_combined_cli_keeps_the_client_fresh_output_guard
+	# ================
+	def test_combined_cli_keeps_the_client_fresh_output_guard(self):
+		self.output.mkdir()
+		sentinel = self.output / "keep.txt"
+		sentinel.write_bytes(b"keep")
+		for server in (True, False):
+			with self.subTest(server=server):
+				with self.assertRaises(SystemExit) as error:
+					self.run_cli(server=server)
+				self.assertEqual(error.exception.code, 2)
+		self.assertEqual(self.sent, [])
+		self.assertEqual(self.fetched, [])
+		self.assertEqual(list(self.output.iterdir()), [sentinel])
+		self.assertEqual(sentinel.read_bytes(), b"keep")
+
+	# ================
+	# test_server_upload_failure_cleans_staging_and_stops_before_client
+	# ================
+	def test_server_upload_failure_cleans_staging_and_stops_before_client(self):
+		adjacent = self.root / "server-data.tar"
+		adjacent.write_bytes(b"keep")
+		self.fail_server = True
+		with self.assertRaisesRegex(RuntimeError, "server upload refused"):
+			self.run_cli()
+		self.assertEqual(self.fetched, [])
+		self.assertEqual([path.name for path in self.sent], ["server-data.tar"])
+		self.assertFalse(self.sent[0].parent.exists())
+		self.assertFalse(self.output.exists())
+		self.assertEqual(adjacent.read_bytes(), b"keep")
+
+	# ================
+	# test_server_packaging_failure_cleans_private_staging
+	# ================
+	def test_server_packaging_failure_cleans_private_staging(self):
+		self.archive.unlink()
+		before = sorted(self.root.iterdir())
+		with self.assertRaises(FileNotFoundError):
+			self.run_cli()
+		self.assertEqual(self.sent, [])
+		self.assertEqual(self.fetched, [])
+		self.assertFalse(self.output.exists())
+		self.assertEqual(sorted(self.root.iterdir()), before)
 
 
 if __name__ == "__main__":
