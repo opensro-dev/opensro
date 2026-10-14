@@ -150,3 +150,30 @@ func TestStallNetworkSaleTakesCommission(t *testing.T) {
 		t.Fatalf("gold %d / %d", goldOf(buyer), goldOf(owner))
 	}
 }
+
+/*
+================
+TestStallNetworkDegreeIsTheItemsDegree
+
+A non-equipment item's degree is its class (4775A0): a class-3 expendable
+lists under a third-degree search, not a first-degree one.
+================
+*/
+func TestStallNetworkDegreeIsTheItemsDegree(t *testing.T) {
+	rt, owner, buyer, _ := stallFixture(t)
+	items := rt.deps.(*enterworld.Deps).Items.(staticItemSource)
+	stone := *items["ITEM_ETC_HP_POTION_01"]
+	stone.NativeFields = stone.NativeFields.With("itemClass", 3)
+	items["ITEM_ETC_HP_POTION_01"] = &stone
+	rt.HandleStallCreate(testDivision, owner, wire.NewWriter(16).WStr("Stones").Payload())
+	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditAdd, 0, 13, 5, 0, 0x2c, 1, 0, 0, 0, 0, 0, 0, 0))
+	rt.HandleStallEdit(testDivision, owner, stallEdit(wire.StallEditOpen, 1, 1))
+	for _, c := range []struct {
+		degree, rows byte
+	}{{3, 1}, {1, 0}} {
+		p := rt.HandleStallNetworkSearch(testDivision, buyer, []byte{0, 0, 40, 0, 0, 0, c.degree})
+		if got := p.Frames[len(p.Frames)-1].Payload; got[1] != c.rows {
+			t.Errorf("degree %d search % X, want %d rows", c.degree, got, c.rows)
+		}
+	}
+}

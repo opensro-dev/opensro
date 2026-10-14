@@ -51,3 +51,26 @@ func TestEquipmentDegreeAndSeal(t *testing.T) {
 		t.Error("a class-0 row and a nil reference have no degree")
 	}
 }
+
+/*
+================
+TestItemDegree
+
+CGItem_GetDegree (4775A0): equipment counts three classes a degree,
+anything else's class is its degree.
+================
+*/
+func TestItemDegree(t *testing.T) {
+	ref := func(typeIDs [4]int64, class float64) *ItemRef {
+		return &ItemRef{TypeIDs: typeIDs, NativeFields: NewNativeFields(map[string]float64{"itemClass": class})}
+	}
+	if d := ItemDegree(ref([4]int64{3, 1, 6, 2}, 22)); d != 8 {
+		t.Errorf("class-22 sword is degree %d, want 8", d)
+	}
+	if d := ItemDegree(ref([4]int64{3, 3, 10, 2}, 5)); d != 5 {
+		t.Errorf("class-5 alchemy stone is degree %d, want 5", d)
+	}
+	if ItemDegree(ref([4]int64{3, 3, 1, 1}, 0)) != 0 || ItemDegree(nil) != 0 {
+		t.Error("a class-0 row and a nil reference have no degree")
+	}
+}

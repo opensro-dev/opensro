@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-itemgrade.go - an equipment item's degree and seal tier
+itemgrade.go - an item's degree and an equipment item's seal tier
 
 One owner for the itemClass rule every reader shares: the catalogue's item
 pages, the beta seal rates and the website's gear points. Equipment
@@ -70,6 +70,26 @@ func EquipmentDegree(ref *ItemRef) int {
 		return 0
 	}
 	return (class-1)/SealTiers + 1
+}
+
+/*
+================
+ItemDegree
+
+Any item's degree, the server's CGItem_GetDegree (v1.188 4775A0): 0
+without a class, the equipment rule for equipment, and the class itself
+for anything else (an elixir or alchemy stone's class is its degree).
+================
+*/
+func ItemDegree(ref *ItemRef) int {
+	class := itemClass(ref)
+	if class <= 0 {
+		return 0
+	}
+	if IsEquipment(ref) {
+		return EquipmentDegree(ref)
+	}
+	return class
 }
 
 /*
