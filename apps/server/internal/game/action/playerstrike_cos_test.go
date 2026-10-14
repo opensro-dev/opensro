@@ -173,3 +173,31 @@ func TestPlayerKillOfATransportScattersItsCargo(t *testing.T) {
 		t.Fatalf("owner HP %d, want 100", *owner.CurrentHP)
 	}
 }
+
+/*
+================
+TestPlayerKillOfACOSEasesTheKillersPenalty
+
+4C42F0 -> 4EB6B0 for a player's killing blow on a COS: a caster with a
+murder penalty eases it by the gap to the companion's level and hears its
+0x30F2; a blow that does not kill eases nothing.
+================
+*/
+func TestPlayerKillOfACOSEasesTheKillersPenalty(t *testing.T) {
+	rt, _, attacker, owner := newPvpPair(t)
+	equipStrikeTestCOS(t, rt, owner)
+	transport := owner.ActiveCOS
+	transport.Level = uint8(rewardLevel(attacker)) + 4
+	attacker.PK = &domain.PKRecord{Penalty: 100}
+	transport.CurrentHP = 1
+	out := rt.HandleTargetInteract(testDivision, attacker, wire.BasicAttackEngage{TargetGid: transport.GID}.Encode())
+	if _, ok := findFrame(out.Frames, wire.OpSkillCastResult); !ok {
+		t.Fatalf("no cast result: %+v (%s)", out.Frames, out.DiagnosticRefusal)
+	}
+	if attacker.PK.Penalty != 90 {
+		t.Fatalf("penalty %d after the kill, want 90", attacker.PK.Penalty)
+	}
+	if _, ok := findFrame(out.Frames, wire.OpPKPenalty); !ok {
+		t.Fatal("no 0x30F2 for the killer")
+	}
+}

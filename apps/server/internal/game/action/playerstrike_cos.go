@@ -210,7 +210,7 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 	}
 	owner := target.player
 	var ammo ammunitionResult
-	var battle, attacked, attack []wire.Frame
+	var battle, attacked, attack, killCredit, killPublic []wire.Frame
 	var refusal uint16
 	if !rt.deps.UpdateMany([]*enterworld.Character{character, owner}, "player-strike-cos", func() bool {
 		var cost skillCharge
@@ -231,7 +231,11 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		if !rt.applyCOSHitInDoor(division, &hit, now) {
 			return false
 		}
-		// #1004: creditPlayerCOSKill here, when hit.strike.fatal.
+		if hit.strike.fatal {
+			// 4C42F0 -> 4EB6B0: the killing blow eases the caster's murder
+			// penalty by the gap to the companion's level (cosplayerkill.go).
+			killCredit, killPublic = rt.creditPlayerCOSKill(division, character, hit.pet.Level)
+		}
 		if st.release == nil {
 			rt.startSkillCast(division, character, skill, now)
 		}
@@ -296,6 +300,9 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 		private = append(private, vitals)
 	}
 	public = append(public, attacked...)
+	actor = append(actor, killCredit...)
+	private = append(private, killCredit...)
+	public = append(public, killPublic...)
 	actor = append(actor, attack...)
 	public = append(public, attack...)
 	actor = append(actor, battle...)
