@@ -19,8 +19,9 @@ TestJobMonsterStrikesOnlyTheOpposingSide
 
 CGObjChar_ValidateAttackTarget (529110) at the monster's attack admission:
 a thief monster strikes a trader or hunter but never a thief, a hunter
-monster strikes a thief but never a trader or hunter, and an ordinary
-monster strikes everyone. A refused target ends admission with the zero
+monster strikes a thief but never a trader or hunter, neither strikes a
+player without a suit (job state 4), and an ordinary monster strikes
+everyone. A refused target ends admission with the zero
 result (not accepted: the monster goes home).
 ================
 */
@@ -38,6 +39,9 @@ func TestJobMonsterStrikesOnlyTheOpposingSide(t *testing.T) {
 		{"hunter monster, hunter", 3, 3, false},
 		{"hunter monster, thief", 3, 2, true},
 		{"ordinary monster, thief", 1, 2, true},
+		{"thief monster, no suit", 2, 0, false},
+		{"hunter monster, no suit", 3, 0, false},
+		{"ordinary monster, no suit", 1, 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rt, clock, c, mob := newCombatTestRuntime(t, 100000)
@@ -48,7 +52,9 @@ func TestJobMonsterStrikesOnlyTheOpposingSide(t *testing.T) {
 			attack := skills[2]
 			attack.Attack.Min, attack.Attack.Max, attack.Attack.Percent = 60, 60, 100
 			skills[2] = attack
-			dressForJob(rt, c, 9310, "TEST_JOB_SUIT", tc.job)
+			if tc.job != 0 {
+				dressForJob(rt, c, 9310, "TEST_JOB_SUIT", tc.job)
+			}
 			mob.Ref.TidWord, mob.Ref.TypeID4 = 0x00c6, tc.typeID4
 			result := rt.MonsterBasicAttack(testDivision, mob, enterworld.ObjectIDForCharacter(c), 2, clock.NowMs())
 			if result.Accepted != tc.wantStruck {

@@ -155,7 +155,7 @@ func (rt *Runtime) monsterAreaCandidates(in monsterStrikeInput) []monsterAreaVic
 			continue
 		}
 		gid := enterworld.ObjectIDForCharacter(snapshot)
-		job := enterworld.DressedJob(snapshot)
+		job := enterworld.PartyJobClass(snapshot)
 		player := monsterAreaVictim{owner: character, gid: gid, radius: radius,
 			pose: rt.liveSpawn(simulation.WorldKey(in.division, snapshot.Name), snapshot, in.now),
 			hostility: simulation.MonsterAreaCandidate{Gid: gid, NativeBodyStatus: snapshot.NativeBodyStatus,

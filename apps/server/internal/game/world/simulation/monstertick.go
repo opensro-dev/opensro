@@ -267,7 +267,7 @@ type playerPose struct {
 	// Band is a companion's COS band (TypeID 4).
 	Band uint8
 	// JobState is a player's job state (CGObjPC_GetJobState 4DDC80, +0x30
-	// +0xF): the dressed job, zero outside job mode.
+	// +0xF): the dressed job, 4 outside job mode (4E1120).
 	JobState uint8
 }
 
@@ -372,7 +372,9 @@ func (ops *MonsterMoverOps) RunMonsterLeg(nowMs int64, sessions []SessionSnapsho
 				continue
 			}
 			player := playerPose{Gid: PlayerObjectID(session.CharacterID), Pose: session.World.LiveSpawnAt(nowMs), MovementIntent: capturePlayerMovementIntent(session.World, nowMs), BodyRadius: session.BodyRadius, NativeBodyStatus: session.NativeBodyStatus}
-			if session.Appearance != nil {
+			// The native job state: the worn suit's job, else 4 (4E1120).
+			player.JobState = jobStateSpecial
+			if session.Appearance != nil && session.Appearance.JobType != 0 {
 				player.JobState = session.Appearance.JobType
 			}
 			if ops.FirstAttackGuard != nil {

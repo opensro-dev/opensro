@@ -226,7 +226,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 		// hostility to the owner (COS+0x1CD8); it never moves the damage.
 		if owner := rt.characterByCosGID(divisionID, targetGid); owner != nil {
 			// 529110: a COS answers the job test with its owner's state.
-			if release == nil && instance.JobTargetRefused(enterworld.DressedJob(rt.characterSnapshot(divisionID, owner))) {
+			if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(rt.characterSnapshot(divisionID, owner))) {
 				return result
 			}
 			return rt.monsterHitSummonedCOS(divisionID, instance, monsterCastRecipient{owner, targetGid}, skillID, nowMs, release)
@@ -245,7 +245,7 @@ func (rt *Runtime) monsterAttackStage(divisionID string, instance monster.Instan
 	// 529110: a job monster refuses its own side at admission, before the
 	// ride swap (a ride answers with its rider's job). The zero result sends
 	// the monster home rather than retrying a strike it may never make.
-	if release == nil && instance.JobTargetRefused(enterworld.DressedJob(snapshot)) {
+	if release == nil && instance.JobTargetRefused(enterworld.PartyJobClass(snapshot)) {
 		return result
 	}
 	// Only hostile-target skills swap (59B5F3 tests the target flag); summons

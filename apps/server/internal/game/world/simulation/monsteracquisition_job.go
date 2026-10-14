@@ -27,7 +27,7 @@ const (
 	jobStateTrader  = 1
 	jobStateThief   = 2
 	jobStateHunter  = 3
-	jobStateSpecial = 4 // a state the v1.188 predicates name; v1.150 jobs are 1..3
+	jobStateSpecial = 4 // outside job mode (4E1120 sets it unless a suit is worn)
 )
 
 /*

@@ -22,9 +22,9 @@ const (
 	hunterMonsterTypeWord = 0x18c6
 )
 
-// The job states CGObjPC_GetJobState (4DDC80) returns: the dressed job,
-// zero outside job mode. State 4 is named by the v1.188 predicates below;
-// v1.150 never sets it.
+// The job states CGObjPC_GetJobState (4DDC80) returns: the dressed job, or
+// 4 outside job mode (CGObjPC_InitPvpAndJobStateOnLoad 4E1120 sets 4 first,
+// then 1..3 only for a worn suit; enterworld.NoJobClass).
 const (
 	jobStateTrader  = 1
 	jobStateThief   = 2
@@ -74,10 +74,11 @@ CGObjChar_ValidateAttackTarget (529110), which every attack reaches through
 the world context's CheckAttackPermission (604E2A, 6052A2): a hunter monster
 refuses a target whose job state is 1, 3 or 4 (CGObjPC_IsJobStateIn134
 4E59C0, vtable +0x544), a thief monster one in 2 or 4
-(CGObjPC_IsJobStateIn24 4E59E0, +0x548). Every other monster, and every
-target outside job mode, passes. A COS answers both with its owner's state
+(CGObjPC_IsJobStateIn24 4E59E0, +0x548). State 4 is a player outside job
+mode, so neither job monster strikes an ordinary player. Every other
+monster passes. A COS answers both with its owner's state
 (CGObjCOS_ForwardOwnerVf544/548), so a companion is tested with its
-owner's job.
+owner's. job is the native state: callers map "no suit" to 4.
 ================
 */
 func (i Instance) JobTargetRefused(job uint8) bool {
