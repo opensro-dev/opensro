@@ -230,6 +230,14 @@ variable "thief_party_bonus" {
   default = "on"
 }
 
+# trade_job_bonus pays a trader +10% profit per party hunter (up to 20%)
+# and each hunter +10% gold per party trader (up to 60%) on a trade sale
+# (port-only, not native; owner decision 2026-10-14). "off" is native.
+variable "trade_job_bonus" {
+  type    = string
+  default = "on"
+}
+
 # reverse_return_map adds map destinations to the reverse return scroll
 # (port-only, not native). Anything but "on" keeps the native two points.
 variable "reverse_return_map" {
@@ -576,6 +584,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ANNOUNCE_PLUS                  = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
         SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
+        SRO_TRADE_JOB_BONUS                = var.trade_job_bonus
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
         SRO_GM_SETSPEED                    = var.gm_setspeed
         SRO_ALCHEMY_RATES                  = var.alchemy_rates

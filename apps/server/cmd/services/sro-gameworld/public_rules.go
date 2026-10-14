@@ -146,6 +146,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A party's thieves change nothing about its monster rewards.",
 				Now:    "Each party member dressed as a thief adds 10% monster EXP and gold for the party, up to 50%.",
 				Why:    "Requested for the beta, to make thieves welcome in hunting parties; the original returns with one setting."},
+			{Flag: action.EnvTradeJobBonus, On: action.TradeJobBonusFromEnv(),
+				Native: "A trade sale's party hunters take their usual share and the trader its usual profit.",
+				Now:    "The trader earns 10% more profit per party hunter nearby (up to 20%), and each hunter 10% more gold per party trader (up to 60%).",
+				Why:    "Requested for the beta, so traders and hunters gain from escorting each other; the original returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

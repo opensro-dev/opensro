@@ -99,6 +99,10 @@ func (rt *Runtime) tradeRewards(division string, c *enterworld.Character, roster
 		eligible = append(eligible, member)
 	}
 	distribution := commerce.DistributeTradeReward(value)
+	if rt.TradeJobBonus {
+		// Port-only, not native (tradejobbonus.go).
+		applyTradeJobBonus(&distribution, value)
+	}
 	out := []tradePayout{{c, distribution.Actor}}
 	if !roster.party || value.Profit <= 0 {
 		return out

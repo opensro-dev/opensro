@@ -557,6 +557,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.ThiefPartyBonus {
 		log.Infof("party: +10%% EXP and gold per thief (%s)", action.EnvThiefPartyBonus)
 	}
+	// Port-only, not native: traders and their hunters earn more together.
+	game.items.TradeJobBonus = action.TradeJobBonusFromEnv()
+	if game.items.TradeJobBonus {
+		log.Infof("trade: party traders and hunters share a gold bonus (%s)", action.EnvTradeJobBonus)
+	}
 	// Port-only, not native: no transport comes out during the Den countdown.
 	game.items.DenNoTransportSummon = action.DenNoTransportSummonFromEnv()
 	if game.items.DenNoTransportSummon {
