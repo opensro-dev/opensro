@@ -11,7 +11,7 @@ client keeps that drop until it is picked at, which the server refuses
 (BR alt-tab ghost drops). Game-ready closes the gap from the registry.
 
 Every loading scene also builds a new local player whose trade level
-(CICPlayer +0x4F6) starts at 0 (CICUser constructor, 86942F), so a scene
+(CICPlayer +0x4F6) starts at 0 (CICUser constructor, 86945B), so a scene
 that goes live with a loaded transport out is told its level again.
 
 ===========================================================================
