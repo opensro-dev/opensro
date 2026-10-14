@@ -733,6 +733,11 @@ func (door storeGuildDoor) validGuildUpdateLocked(
 		len(nextMembers) != len(liveMembers) {
 		return false
 	}
+	// The founding time is the store's, stamped once at creation: no
+	// update may move it.
+	if nextGuild.FoundedAtMs != door.s.guilds[divisionID][guildID].FoundedAtMs {
+		return false
+	}
 	for otherID, other := range door.s.guilds[divisionID] {
 		if otherID != guildID && strings.EqualFold(other.Name, nextGuild.Name) {
 			return false

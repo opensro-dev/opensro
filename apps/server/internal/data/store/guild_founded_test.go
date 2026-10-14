@@ -21,7 +21,7 @@ import (
 TestCreateGuildStampsFoundingTime
 
 The store stamps a new guild with its own clock, whatever the caller put
-in the record, and the time survives a reopen.
+in the record; no update may move it, and it survives a reopen.
 ================
 */
 func TestCreateGuildStampsFoundingTime(t *testing.T) {
@@ -41,6 +41,15 @@ func TestCreateGuildStampsFoundingTime(t *testing.T) {
 	want := clock.Now().UnixMilli()
 	if guild, _, ok := s.Guilds().Guild(testDivision, id); !ok || guild.FoundedAtMs != want {
 		t.Fatalf("founded %d, want %d", guild.FoundedAtMs, want)
+	}
+	// No update may move it.
+	_, refusal := s.Guilds().UpdateGuildAs(testDivision, c.ID, "refounded", domain.GuildAuthorization{},
+		func(g domain.GuildRecord, m []domain.GuildMemberRecord) (domain.GuildRecord, []domain.GuildMemberRecord, bool) {
+			g.FoundedAtMs = 1
+			return g, m, true
+		})
+	if refusal != domain.GuildRefusalUpdateRejected {
+		t.Fatalf("an update moving the founding time = %v, want rejected", refusal)
 	}
 	s.Close()
 	reopened := openTest(t, dir, clock)
