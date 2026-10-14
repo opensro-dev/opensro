@@ -22,7 +22,10 @@ const TRADE_SCALE_4 = 2142;
 export const TRADE_SCALE_MAX = 5;
 // Port-only, not native (SRO_TRADE_TIERS, server action/tradetiers.go): the
 // purchase gold that reaches scales 2..5; anything below the first is 1.
-const TRADE_TIER_GOLD = [ 10_000_000n, 20_000_000n, 35_000_000n, 50_000_000n ];
+const TRADE_TIER_GOLD_2 = 10_000_000n;
+const TRADE_TIER_GOLD_3 = 20_000_000n;
+const TRADE_TIER_GOLD_4 = 35_000_000n;
+const TRADE_TIER_GOLD_5 = 50_000_000n;
 // 0xBCF3C8: the run speed the trade scale is normalized against.
 const TRADE_SCALE_SPEED = 40;
 // 6492C0 / 6496E0: TRADESCALE1..5, or the first three on a Korean client's
@@ -108,6 +111,28 @@ export function tradeScale( sum: bigint, basis: number, speed2: number ): number
 
 /*
 ================
+tradeTierMark
+
+The purchase gold that reaches scale index + 2, or none past the last.
+================
+*/
+function tradeTierMark( index: number ): bigint | undefined {
+	switch ( index ) {
+		case 0:
+			return TRADE_TIER_GOLD_2;
+		case 1:
+			return TRADE_TIER_GOLD_3;
+		case 2:
+			return TRADE_TIER_GOLD_4;
+		case 3:
+			return TRADE_TIER_GOLD_5;
+		default:
+			return undefined;
+	}
+}
+
+/*
+================
 tradeTierScale
 
 Port-only, not native (the server's SRO_TRADE_TIERS, published at world
@@ -118,8 +143,8 @@ server rates the caravan's cargo. 0 for nothing bought, then 1..5.
 export function tradeTierScale( sum: bigint ): number {
 	if ( sum <= 0n ) return 0;
 	let scale = 1;
-	for ( const mark of TRADE_TIER_GOLD ) {
-		if ( sum >= mark ) scale++;
+	for ( let mark = tradeTierMark( 0 ); mark !== undefined && sum >= mark; mark = tradeTierMark( scale - 1 ) ) {
+		scale++;
 	}
 	return scale;
 }
@@ -137,7 +162,8 @@ export function tradeTierQuantity( input: TradeScaleQuantityInput ): number {
 	const { row, unitBuy, maxStack, capacity } = input;
 	if ( row + 1 === TRADE_SCALE_MAX ) return Math.max( 0, maxStack * capacity );
 	if ( unitBuy <= 0 ) return 0;
-	return Math.max( 0, Number( (TRADE_TIER_GOLD[row]! - 1n) / BigInt( unitBuy ) ) );
+	const mark = tradeTierMark( row );
+	return mark === undefined ? 0 : Math.max( 0, Number( (mark - 1n) / BigInt( unitBuy ) ) );
 }
 
 /*
