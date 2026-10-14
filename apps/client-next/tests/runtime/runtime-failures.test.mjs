@@ -238,19 +238,23 @@ test("a hidden tab runs frames from worker deliveries; a visible one waits for i
 		globalThis.requestAnimationFrame = () => ++rafs;
 		globalThis.cancelAnimationFrame = () => cancelled++;
 		const runtime = startRuntime( {}, {} );
-		// Past the hidden pace (100 ms), short of starvation (250 ms).
-		await new Promise( resolve => setTimeout( resolve, 150 ) );
-		if ( visibilityState === "visible" ) {
-			assert.equal( reports.length, 0, "a visible tab waits for its RAF" );
+		// A failed assertion must not leak a running runtime: it keeps node alive.
+		try {
+			// Past the hidden pace (100 ms), short of starvation (250 ms).
+			await new Promise( resolve => setTimeout( resolve, 150 ) );
+			if ( visibilityState === "visible" ) {
+				assert.equal( reports.length, 0, "a visible tab waits for its RAF" );
+			}
+			// A visible window that never gets its RAF is starved: it frames off a
+			// delivery too, as a window the browser stopped drawing must.
+			await new Promise( resolve => setTimeout( resolve, 250 ) );
+			// The frame ran (and hit the injected failure) with no RAF callback.
+			assert.equal( reports.length, 1, `${visibilityState} frames off a delivery` );
+			assert.match( reports[0], /injected presentation failure/ );
+			assert.equal( cancelled >= 1, true, "the pending RAF is retired" );
+		} finally {
+			runtime.dispose();
 		}
-		// A visible window that never gets its RAF is starved: it frames off a
-		// delivery too, as a window the browser stopped drawing must.
-		await new Promise( resolve => setTimeout( resolve, 250 ) );
-		// The frame ran (and hit the injected failure) with no RAF callback.
-		assert.equal( reports.length, 1, `${visibilityState} frames off a delivery` );
-		assert.match( reports[0], /injected presentation failure/ );
-		assert.equal( cancelled >= 1, true, "the pending RAF is retired" );
-		runtime.dispose();
 	}
 });
 
