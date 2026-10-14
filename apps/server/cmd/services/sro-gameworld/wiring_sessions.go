@@ -30,6 +30,8 @@ installSessionLifecycle
 ================
 */
 func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authorityStore *store.Store) {
+	// Port-only: the economy ledger's committed gold per reason.
+	hub.SetEconomyMetrics(authorityStore.EconomyCounters)
 	game.deps.LockPublication = game.items.LockPublication
 	game.deps.OnWorldBound = func(
 		session *transport.Session,

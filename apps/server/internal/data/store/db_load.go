@@ -74,6 +74,11 @@ func loadDB(db *sql.DB, current int, currentLayout int) (*loadedDB, error) {
 			return nil, fmt.Errorf("validating unique kills: %w", err)
 		}
 	}
+	if currentLayout >= 10 {
+		if err := validateEconomyLedger(db); err != nil {
+			return nil, fmt.Errorf("validating economy ledger: %w", err)
+		}
+	}
 	out := &loadedDB{
 		characters:   map[string][]*domain.Character{},
 		deleted:      map[string][]json.RawMessage{},

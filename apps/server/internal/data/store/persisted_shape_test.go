@@ -144,15 +144,28 @@ func TestRecordFieldsBelongToTheCurrentSchema(t *testing.T) {
 	}
 }
 
+// tableOnlySchemaSteps are the schema versions whose record fields equal the
+// previous version's, each with the table its layout adds.
+var tableOnlySchemaSteps = map[int]string{
+	25: "layout 10 adds economy_ledger (economy_ledger.go)",
+}
+
 /*
 ================
 TestSchemaStepCarriesAFieldChange
 
 A version step lists different fields from the one before it for at
-least one record; a step with every list unchanged is not a schema change.
+least one record; a step with every list unchanged is not a schema change,
+unless it is a table-only step: the release tooling compares schemas only
+(release_state.store_upgrade_required), so a layout that adds a table needs
+a schema step to make the receiver run its offline upgrade.
 ================
 */
 func TestSchemaStepCarriesAFieldChange(t *testing.T) {
+	if reason, tableOnly := tableOnlySchemaSteps[CurrentVersion]; tableOnly {
+		t.Logf("schema %d is a table-only step: %s", CurrentVersion, reason)
+		return
+	}
 	compared := false
 	for _, record := range strictRecords {
 		current, err := os.ReadFile(filepath.FromSlash(fmt.Sprintf(recordFieldsGolden, record.name, CurrentVersion)))

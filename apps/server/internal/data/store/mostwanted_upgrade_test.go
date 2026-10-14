@@ -32,6 +32,7 @@ func TestMostWantedUpgradeRewritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+	downgradeToLayout9(t, dir)
 	rewriteDatabaseMeta(t, dir, metaKeySchemaVersion, preMostWantedVersion)
 	if backup, err := UpgradeAuthority(dir, true); err != nil || backup == "" {
 		t.Fatalf("upgrade %q: %v", backup, err)

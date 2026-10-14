@@ -75,7 +75,11 @@ func isVersionMismatch(err error) bool {
 // the community site (port-only); the upgrade rewrites no record.
 // Version 24 adds mostWanted, a suited player's job-kill streak (port-only,
 // SRO_MOST_WANTED); the upgrade rewrites no record.
-const CurrentVersion = 24
+// Version 25 changes no record: layout 10 adds the economy_ledger table
+// (port-only, economy_ledger.go), and the schema stamp is what makes a release
+// run the offline upgrade that adds it (release_state.store_upgrade_required
+// compares schemas only). The upgrade rewrites no record.
+const CurrentVersion = 25
 
 // SkillSeedFunc resolves the current racial base-skill set while preserving
 // any already learned skill identifiers.

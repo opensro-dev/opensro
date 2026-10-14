@@ -45,6 +45,8 @@ const preCommunityVersion = 21
 const preUniqueKillLayoutVersion = 8
 const preGearPrivacyVersion = 22
 const preMostWantedVersion = 23
+const preLedgerVersion = 24
+const preLedgerLayoutVersion = 9
 
 // ErrAuthorityCurrent reports an authority already in the current format: a
 // release retried after a committed upgrade has nothing left to do.
@@ -153,14 +155,21 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	case preGearPrivacyVersion:
 		// Schema 22 ran at layouts 5 through 9 and has no gear privacy field;
 		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
+		if layout < preFortressLayoutVersion || layout > preLedgerLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
 	case preMostWantedVersion:
 		// Schema 23 ran at layouts 5 through 9 and has no most-wanted streak;
 		// its records read unchanged.
-		if layout < preFortressLayoutVersion || layout > CurrentLayoutVersion {
+		if layout < preFortressLayoutVersion || layout > preLedgerLayoutVersion {
+			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
+		}
+		sourceLayout = layout
+	case preLedgerVersion:
+		// Schema 24 ran at layouts 5 through 9 and has no economy ledger;
+		// its records read unchanged.
+		if layout < preFortressLayoutVersion || layout > preLedgerLayoutVersion {
 			return "", fmt.Errorf("authority upgrade: unsupported layout %d for schema %d", layout, schema)
 		}
 		sourceLayout = layout
@@ -187,8 +196,11 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 	if sourceLayout < preUniqueKillLayoutVersion {
 		added = append(added, "fortress_item_forges")
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout < preLedgerLayoutVersion {
 		added = append(added, "unique_kills")
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		added = append(added, "economy_ledger")
 	}
 	if sourceLayout == preMallLayoutVersion {
 		added = append(added, "mall_accounts", "account_storage")
@@ -260,8 +272,13 @@ func UpgradeAuthority(dir string, commit bool) (string, error) {
 			return backupPath, err
 		}
 	}
-	if sourceLayout < CurrentLayoutVersion {
+	if sourceLayout < preLedgerLayoutVersion {
 		if _, err := tx.Exec(uniqueKillsSchema); err != nil {
+			return backupPath, err
+		}
+	}
+	if sourceLayout < CurrentLayoutVersion {
+		if _, err := tx.Exec(economyLedgerSchema); err != nil {
 			return backupPath, err
 		}
 	}

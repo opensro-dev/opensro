@@ -237,6 +237,10 @@ func (door storeFortressDoor) StartFortressItemForge(division string, start doma
 	if err = upsertCharacterTx(tx, division, &next); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
+	settle, err := s.ledgerOwnTxLocked(tx, "fortress-item-forge", division, actor, gold)
+	if err != nil {
+		return domain.FortressForgeErrFailure, err
+	}
 	if err = replaceGuildTx(tx, division, guildID, guild, s.guildMembers[division][guildID]); err != nil {
 		return domain.FortressForgeErrFailure, err
 	}
@@ -247,6 +251,7 @@ func (door storeFortressDoor) StartFortressItemForge(division string, start doma
 		return domain.FortressForgeErrFailure, err
 	}
 	actor.Gold = &gold
+	settle()
 	s.guilds[division][guildID] = guild
 	s.recordWriteSuccessLocked()
 	return 0, nil

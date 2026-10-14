@@ -75,9 +75,32 @@ Removes the fortress, union, guild-war, production and unique-kill tables
 */
 func dropFortressTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances; DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills"); err != nil {
+	if _, err := db.Exec("DROP TABLE fortresses; DROP TABLE fortress_requests; DROP TABLE fortress_structures; DROP TABLE alliances; DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills; DROP TABLE economy_ledger"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+/*
+================
+downgradeToLayout9
+
+Turns a closed current test authority into the layout 9 a schema 24 (and
+22 or 23) server ran: layout 10's economy ledger is gone.
+================
+*/
+func downgradeToLayout9(t *testing.T, dir string) {
+	t.Helper()
+	db, err := connectDB(filepath.Join(dir, DBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DROP TABLE economy_ledger"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	rewriteDatabaseMeta(t, dir, metaKeyLayoutVersion, preLedgerLayoutVersion)
 }
 
 /*
@@ -95,7 +118,7 @@ func downgradeToLayout7(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("DROP TABLE fortress_item_forges; DROP TABLE unique_kills"); err != nil {
+	if _, err := db.Exec("DROP TABLE fortress_item_forges; DROP TABLE unique_kills; DROP TABLE economy_ledger"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -417,7 +440,7 @@ func TestGuildWarUpgradePreservesLayoutSixAuthority(t *testing.T) {
 	if err := s.db.QueryRow("SELECT record FROM characters WHERE division=? AND id=?", testDivision, c.ID).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.db.Exec("DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills"); err != nil {
+	if _, err := s.db.Exec("DROP TABLE guild_wars; DROP TABLE fortress_item_forges; DROP TABLE unique_kills; DROP TABLE economy_ledger"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.db.Exec("UPDATE meta SET value=? WHERE key=?", preGuildWarLayoutVersion, metaKeyLayoutVersion); err != nil {

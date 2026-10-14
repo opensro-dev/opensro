@@ -179,6 +179,7 @@ func (s *Store) CreateCharacter(divisionID, accountID string, c *domain.Characte
 	s.characters[divisionID] = append(s.characters[divisionID], c)
 	s.rebuildCharacterLookupLocked(divisionID)
 	s.charDivision[c] = divisionID
+	s.seedLedgerLocked(c)
 	s.changes.characters[c] = true
 	s.changes.nextCharID[divisionID] = true
 	s.commitLocked("create-character " + c.Name)

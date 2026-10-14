@@ -36,6 +36,7 @@ commitLocked for a caller that acts on the outcome.
 ================
 */
 func (s *Store) commitCheckedLocked(label string) error {
+	s.noteGoldLocked(label)
 	if err := s.commitOnceLocked(); err != nil {
 		s.recordWriteFailureLocked(label, err)
 		return err
@@ -216,11 +217,16 @@ func (s *Store) commitOnceLocked() error {
 		}
 	}
 
+	if err := insertLedgerRowsTx(tx, s.ledger.pending); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	// The whole dirty set is written: rows a deferred door left are on disk.
 	s.batch.pending = false
+	s.countLedgerRows(s.ledger.pending)
+	s.ledger.pending = nil
 
 	if groundSnapshot != nil {
 		s.ground.loadedGidCounter = groundSnapshot.GidCounter

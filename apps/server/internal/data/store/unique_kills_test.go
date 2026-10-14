@@ -39,7 +39,7 @@ func TestCommunityUpgradeAddsTheUniqueKillTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("DROP TABLE unique_kills"); err != nil {
+	if _, err := db.Exec("DROP TABLE unique_kills; DROP TABLE economy_ledger"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {

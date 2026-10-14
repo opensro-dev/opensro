@@ -95,6 +95,7 @@ func (s *Store) ReapMaturedDeletions() []string {
 		byDivision[victim.divisionID][victim.c] = true
 		s.deleted[victim.divisionID] = append(s.deleted[victim.divisionID], victim.raw)
 		delete(s.charDivision, victim.c)
+		s.forgetLedgerLocked(victim.c)
 		delete(s.changes.characters, victim.c)
 		// The archived record's mailbox dies with it (the archive keeps
 		// the character's final bytes, not its mail).

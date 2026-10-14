@@ -240,8 +240,12 @@ func (door storeGuildWarDoor) BeginGuildWar(division string, start domain.GuildW
 	if err = writeGuildWarTx(tx, division, war); err != nil {
 		return record, 2, err
 	}
+	var settles [2]func()
 	for i := range next {
 		if err = upsertCharacterTx(tx, division, &next[i]); err != nil {
+			return record, 2, err
+		}
+		if settles[i], err = s.ledgerOwnTxLocked(tx, "guild-war-begin", division, actors[i], *next[i].Gold); err != nil {
 			return record, 2, err
 		}
 	}
@@ -250,6 +254,7 @@ func (door storeGuildWarDoor) BeginGuildWar(division string, start domain.GuildW
 	}
 	for i, actor := range actors {
 		actor.Gold = next[i].Gold
+		settles[i]()
 	}
 	s.recordWriteSuccessLocked()
 	return war, 0, nil

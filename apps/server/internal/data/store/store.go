@@ -210,6 +210,8 @@ type Store struct {
 	ground       groundState
 	// batch is the simulation tick's deferred commit (tickbatch.go).
 	batch tickBatch
+	// ledger attributes every committed gold change (economy_ledger.go).
+	ledger economyLedger
 
 	// defaultSkills is Options.DefaultSkills and serves current-schema
 	// character creation.
@@ -473,9 +475,11 @@ func (s *Store) adoptDB(db *sql.DB, loaded *loadedDB) {
 	}
 	s.ground.loadedGidCounter = loaded.meta.GidCounter
 	s.charDivision = map[*domain.Character]string{}
+	s.ledger.seen = map[*domain.Character]int64{}
 	for divisionID, records := range s.characters {
 		for _, c := range records {
 			s.charDivision[c] = divisionID
+			s.seedLedgerLocked(c)
 		}
 	}
 }

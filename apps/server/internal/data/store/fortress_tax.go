@@ -79,6 +79,10 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 	if err = upsertCharacterTx(tx, division, &next); err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
+	settle, err := s.ledgerOwnTxLocked(tx, "fortress-tax", division, actor, gold)
+	if err != nil {
+		return 0, domain.FortressTaxErrFailure, err
+	}
 	if _, err = tx.Exec("INSERT INTO fortresses (division, fortress_id, record) VALUES (?, ?, ?) ON CONFLICT(division, fortress_id) DO UPDATE SET record = excluded.record", division, record.FortressID, string(raw)); err != nil {
 		return 0, domain.FortressTaxErrFailure, err
 	}
@@ -86,6 +90,7 @@ func (door storeFortressDoor) CollectFortressTax(division string, record domain.
 		return 0, domain.FortressTaxErrFailure, err
 	}
 	actor.Gold = &gold
+	settle()
 	s.recordWriteSuccessLocked()
 	return amount, 0, nil
 }
