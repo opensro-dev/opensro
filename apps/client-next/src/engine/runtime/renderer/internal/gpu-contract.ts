@@ -140,6 +140,8 @@ DeviceOwner
 ================
 */
 export interface DeviceOwner extends Disposable {
+	/** The adapter's features and limits once acquired (adapter-facts.ts). */
+	adapterFacts(): import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
 	upscale(): {
 		encodeUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;
 		encodeDepthUpscale( encoder: GPUCommandEncoder, source: GPUTextureView, target: GPUTextureView ): void;

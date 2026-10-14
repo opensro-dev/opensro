@@ -2026,6 +2026,7 @@
 			"provider": "src/engine/runtime/runtime.ts",
 			"functions": [
 				"context",
+				"gpu",
 				"network",
 				"state"
 			]
@@ -3798,7 +3799,7 @@
 		{
 			"file": "src/engine/runtime/runtime.ts",
 			"function": "frame",
-			"sourceSha256": "6a63b45e5ee87f2438842bc9d56e5697cdc1451d308723879f4ad6ad0eae082d",
+			"sourceSha256": "58ec00623532ab500029e919e15ee130f327f069b90e78412752cf97caca04b6",
 			"reason": "AEBD90 synchronously waits for visibility before AEC180 advances EFP ticks. The browser yields at the GPU readback barrier; the runtime retains the current frame and schedules the next RAF only after completion. Ordinary frames do not await a readback. A hidden frame renders only while a world entry awaits game-ready, under the same barrier: native keeps updating while inactive (A0F430 OnUpdate; A11650 skips drawing) and finishes loading in CPSMission_OnUpdate (728E10). A visible window that gets no RAF for STARVED_FRAME_MS runs the same delivery-paced maintenance frames. Device disposal cancels pending mapping.",
 			"evidence": "tests/fixtures/native/bsr-query-native.json",
 			"nativeFunction": 11451792,

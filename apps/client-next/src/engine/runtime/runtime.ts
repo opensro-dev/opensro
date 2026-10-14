@@ -273,6 +273,7 @@ export function startRuntime(
 			createBugReport( {
 				canvas,
 				apiBase,
+				gpu: () => renderer.adapterFacts(),
 				network: () => simulation.netJournal(),
 				context: (): readonly BugReportField[] => {
 					const game = presentation.gameplay();

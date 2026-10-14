@@ -16,6 +16,7 @@ media; saving a new report drops the oldest ones first.
 import type { BugReportField } from "@/engine/contracts/bug-report";
 import { zipStore, type ZipFile } from "@/engine/foundation/archive/zip";
 import { REFUSAL_OTHER, REFUSAL_REASONS, UI_CONTROL_PREFIX } from "./journal";
+import { GPU_TOKEN_PATTERN, reportedGpuFeatures } from "@/engine/foundation/rendering/gpu-facts";
 
 const DATABASE = "sro-bug-reports";
 const STORE = "reports";
@@ -69,7 +70,8 @@ const SHARED_ENVIRONMENT_FIELDS = [
 	"window",
 	"canvas",
 	"network",
-	"replay"
+	"replay",
+	"gpu"
 ] as const;
 const SHARED_MOVEMENT_FIELDS = [
 	"version",
@@ -85,6 +87,13 @@ const TECHNICAL_FIELDS = new Set( [
 	...SHARED_ENVIRONMENT_FIELDS,
 	"events",
 	"kind",
+	"features",
+	"limits",
+	"maxBufferSize",
+	"maxStorageBufferBindingSize",
+	"maxTextureDimension2D",
+	"vendor",
+	"architecture",
 	"control",
 	"index",
 	"refusal",
@@ -287,12 +296,16 @@ const TECHNICAL_STRINGS: Readonly<Record<string, readonly string[]>> = {
 		"F12"
 	],
 	// The refusal reasons journal.ts refusalReason names.
-	refusal: [ ...new Set( [ ...REFUSAL_REASONS.map( ( [, reason] ) => reason ), REFUSAL_OTHER ] ) ]
+	refusal: [ ...new Set( [ ...REFUSAL_REASONS.map( ( [, reason] ) => reason ), REFUSAL_OTHER ] ) ],
+	// The adapter features gpu-facts.ts names.
+	features: reportedGpuFeatures()
 };
 // Strings a field may carry by shape rather than by list: a UI control's
 // scheme prefix (journal.ts uiControl), never free text.
 const TECHNICAL_PATTERNS: Readonly<Record<string, RegExp>> = {
-	control: UI_CONTROL_PREFIX
+	control: UI_CONTROL_PREFIX,
+	vendor: new RegExp( GPU_TOKEN_PATTERN ),
+	architecture: new RegExp( GPU_TOKEN_PATTERN )
 };
 const README = `OpenSRO bug report
 
@@ -315,8 +328,9 @@ network.json      every transport frame of that window, on the timeline's clock:
 movement.json     up to two minutes of movement commands, server receipts, corrections
                   and frame hitches; clock domains are explicit in the header/events.
 state.json        the game's state when the report was sent (large catalogs omitted).
-environment.json  browser, screen, CPU, memory, network, the player's options, and
-                  every resource loaded during the last minute (time, size, status).
+environment.json  browser, screen, CPU, memory, network, the WebGPU adapter's features,
+                  limits, vendor and architecture, the player's options, and every
+                  resource loaded during the last minute (time, size, status).
 screenshot.jpg    only when no replay was attached.
 `;
 
@@ -405,7 +419,12 @@ function sharedValue( value: unknown, field = "" ): unknown {
 			value :
 			undefined;
 	}
-	if ( Array.isArray( value ) ) return value.map( item => sharedValue( item, field ) );
+	if ( Array.isArray( value ) ) {
+		// An enumerated list (an adapter's features) drops what it does not
+		// name; any other array keeps its positions.
+		const items = value.map( item => sharedValue( item, field ) );
+		return TECHNICAL_STRINGS[field] ? items.filter( item => item !== undefined ) : items;
+	}
 	if ( !value || typeof value !== "object" ) return value;
 	const out: Record<string, unknown> = {};
 	for ( const [key, item] of Object.entries( value ) ) {

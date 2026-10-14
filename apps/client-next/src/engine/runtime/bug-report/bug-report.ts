@@ -96,6 +96,8 @@ BugReportOptions
 export interface BugReportOptions {
 	readonly canvas: HTMLCanvasElement;
 	readonly apiBase: string;
+	/** The WebGPU adapter's facts, read by the device owner (foundation/rendering/gpu-facts.ts). */
+	readonly gpu?: () => import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
 	/** Game context at the moment the window opens (character, place…). */
 	readonly context: () => readonly BugReportField[];
 	/** The game's sound for the replay, or null until there is any. */
@@ -621,6 +623,7 @@ export function createBugReport( options: BugReportOptions ): BugReportOwner {
 				{ type: connection.effectiveType, rttMs: connection.rtt, downlinkMbps: connection.downlink } :
 				null,
 			replay: { phase: recording.phase(), droppedFrames: recorder.dropped(), lastError: recorder.lastError() },
+			gpu: options.gpu?.() ?? null,
 			preferences,
 			resources
 		};

@@ -170,6 +170,25 @@ test("a click keeps its control kind and slot, and a refusal its reason, but nev
 	assert.deepEqual( events.slice( 4 ).map( e => e.refusal ), [ "inventory-busy", "other" ] );
 });
 
+test("a report names the adapter's compression features and limits, never free text", async () => {
+	const input = fixture();
+	input["environment.json"] = JSON.stringify( {
+		gpu: {
+			features: [ "texture-compression-etc2", "texture-compression-astc", "PRIVATE_FEATURE" ],
+			limits: { maxBufferSize: 268435456, maxStorageBufferBindingSize: 134217728, maxTextureDimension2D: 8192 },
+			vendor: "apple",
+			architecture: "PRIVATE Architecture"
+		}
+	} );
+	const { documents } = await readZip( await createDiagnosticUpload( input, OPTIONS ) );
+	assert.ok( !JSON.stringify( documents ).includes( "PRIVATE" ) );
+	assert.deepEqual( documents["environment.json"].gpu, {
+		features: [ "texture-compression-etc2", "texture-compression-astc" ],
+		limits: { maxBufferSize: 268435456, maxStorageBufferBindingSize: 134217728, maxTextureDimension2D: 8192 },
+		vendor: "apple"
+	} );
+});
+
 test("a browser without raw DEFLATE still sends a bounded stored ZIP", async t => {
 	t.mock.method( globalThis, "CompressionStream", function unavailable() {
 		throw Error( "unsupported" );

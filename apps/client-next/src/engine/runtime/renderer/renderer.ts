@@ -458,6 +458,7 @@ export function createRenderer(
 			source?.close();
 			source = image;
 		},
+		adapterFacts: () => device.adapterFacts(),
 		gpuTiming: () => ({
 			enabled: diagnostics.gpuTiming === true,
 			...(device.gpuTiming() ??

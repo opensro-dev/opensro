@@ -241,6 +241,8 @@ export interface Renderer extends Disposable {
 	readbackWaitMs?(): number;
 	scenery(): import("./scenery").SceneryPresentation | null;
 	gpuTiming(): GpuTimingStats & { readonly enabled: boolean; };
+	/** The current device's adapter facts for bug reports, null before one. */
+	adapterFacts(): import("@/engine/foundation/rendering/gpu-facts").GpuFacts | null;
 	videoOptions( value: import("@/engine/foundation/rendering/video-options").VideoOptions ): void;
 	experimentalVideo( value: import("@/engine/foundation/ui/experimental-options").ExperimentalVideo ): void;
 	// Port-only, not native: whether the Experimental enchant sparks are on.
