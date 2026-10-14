@@ -121,22 +121,24 @@ Sun 20) + plus per worn piece, summed; ties go to the strongest piece.
 */
 func TestGearPointsRankDegreeSealAndPlus(t *testing.T) {
 	// The three worked examples.
-	if got := gearPoints(10, SealSun, 3); got != 123 {
+	// Tiers in ItemGrade's order (enterworld.EquipmentSeal): 0 Star, 1 Moon, 2 Sun.
+	const star, moon, sun = 0, 1, 2
+	if got := gearPoints(10, sun, true, 3); got != 123 {
 		t.Errorf("10th-degree +3 Sun = %d, want 123", got)
 	}
-	if got := gearPoints(11, SealNone, 0); got != 110 {
+	if got := gearPoints(11, 0, false, 0); got != 110 {
 		t.Errorf("11th-degree +0 = %d, want 110", got)
 	}
-	if got := gearPoints(8, SealStar, 12); got != 102 {
+	if got := gearPoints(8, star, true, 12); got != 102 {
 		t.Errorf("8th-degree +12 Star = %d, want 102", got)
 	}
-	if got := gearPoints(8, SealMoon, 0); got != 95 {
+	if got := gearPoints(8, moon, true, 0); got != 95 {
 		t.Errorf("8th-degree Moon = %d, want 95", got)
 	}
 
 	// Grades by reference: 1 low +7 normal, 2 a 10th-degree Sun, 3 an
 	// 11th-degree normal piece.
-	grades := map[uint32][2]int{1: {1, SealNone}, 2: {10, SealSun}, 3: {11, SealNone}}
+	grades := map[uint32][3]int{1: {1, 0, 0}, 2: {10, sun, 1}, 3: {11, 0, 0}}
 	f := newFixture()
 	lvl := func(n int64) *int64 { return &n }
 	worn := func(ref uint32, plus int64) domain.InventoryRow {
@@ -152,8 +154,8 @@ func TestGearPointsRankDegreeSealAndPlus(t *testing.T) {
 	}
 	s := f.service()
 	s.src.ItemGrade = func(ref uint32) (int, int, bool) {
-		g, ok := grades[ref]
-		return g[0], g[1], ok
+		g := grades[ref]
+		return g[0], g[1], g[2] == 1
 	}
 	out := rankingNames(t, s, "/public/v1/rankings?by=gear")
 	names := []string{}
@@ -165,41 +167,5 @@ func TestGearPointsRankDegreeSealAndPlus(t *testing.T) {
 	}
 	if out.Rows[0].Gear.Points != 123 || out.Rows[0].Gear.PlusTotal != 3 {
 		t.Fatalf("SunHolder gear %+v, want 123 points and plus 3", out.Rows[0].Gear)
-	}
-}
-
-/*
-================
-TestEquipmentGradeReadsClassAndRarity
-
-itemdata rows seen in the 1.150 data: ITEM_CH_SWORD_08_A_RARE is class 22,
-rarity 2 (8th degree, Star); B and C are 23 and 24.
-================
-*/
-func TestEquipmentGradeReadsClassAndRarity(t *testing.T) {
-	sword := [4]int64{3, 1, 6, 2}
-	cases := []struct {
-		class        int
-		rarity       int64
-		degree, seal int
-	}{
-		{22, 2, 8, SealStar},
-		{23, 2, 8, SealMoon},
-		{24, 2, 8, SealSun},
-		{22, 0, 8, SealNone},
-		{1, 0, 1, SealNone},
-		{33, 2, 11, SealSun},
-	}
-	for _, c := range cases {
-		degree, seal, ok := EquipmentGrade(sword, c.class, c.rarity)
-		if !ok || degree != c.degree || seal != c.seal {
-			t.Errorf("class %d rarity %d = %d/%d/%v, want %d/%d", c.class, c.rarity, degree, seal, ok, c.degree, c.seal)
-		}
-	}
-	if _, _, ok := EquipmentGrade([4]int64{3, 3, 1, 1}, 5, 0); ok {
-		t.Error("an expendable is not equipment")
-	}
-	if _, _, ok := EquipmentGrade(sword, 0, 0); ok {
-		t.Error("a class-0 row has no degree")
 	}
 }

@@ -81,13 +81,13 @@ var raceEnum = []string{"chinese", "european", "any"}
 var genderEnum = []string{"female", "male"}
 var rarityEnum = []string{"normal", "star", "moon", "sun"}
 
-// itemRaritySeal is RefObjCommon rarity 2, a sealed item (client
-// item-tooltip.ts: rarity === 2 names the seal).
-const itemRaritySeal = 2
-
-// sealNames are the seal of each item class within its degree, as the
-// tooltip's PARAM_RARE_FIRST/SECOND/THIRD rows name them.
-var sealNames = [3]string{"star", "moon", "sun"}
+// sealNames name each seal tier (enterworld.EquipmentSeal), as the
+// tooltip's PARAM_RARE_FIRST/SECOND/THIRD rows do.
+var sealNames = [enterworld.SealTiers]string{
+	enterworld.SealStar: "star",
+	enterworld.SealMoon: "moon",
+	enterworld.SealSun:  "sun",
+}
 
 /*
 ================
@@ -230,7 +230,7 @@ func itemDegree(ref *enterworld.ItemRef) int {
 		return 0
 	}
 	if ref.TypeIDs[1] == itemTypeEquipment {
-		return int((class-1)/3 + 1)
+		return enterworld.EquipmentDegree(ref)
 	}
 	if ref.TypeIDs[1] == itemTypeExpendable && (ref.TypeIDs[2] == etcReinforce || ref.TypeIDs[2] == etcAlchemy) {
 		return int(class)
@@ -250,11 +250,11 @@ func itemRarity(ref *enterworld.ItemRef) string {
 	if ref.TypeIDs[1] != itemTypeEquipment {
 		return ""
 	}
-	class := nativeInt(ref, "itemClass")
-	if nativeInt(ref, "rarity") != itemRaritySeal || class <= 0 {
+	tier, sealed := enterworld.EquipmentSeal(ref)
+	if !sealed {
 		return "normal"
 	}
-	return sealNames[(class-1)%3]
+	return sealNames[tier]
 }
 
 /*

@@ -27,20 +27,21 @@ package progression
 import (
 	"os"
 	"strings"
+
+	"opensro.online/server/internal/game/enterworld"
 )
 
 // EnvBetaSealRates turns the beta seal rates on ("on", "1", "true").
 const EnvBetaSealRates = "SRO_BETA_SEAL_RATES"
 
-// Seal tiers, CSOItem_CalculateTierGroup's (ItemClass - 1) % 3.
+// Seal tiers and the itemClass span of one degree: the shared owner's
+// (enterworld/itemgrade.go, CSOItem_CalculateTierGroup's (ItemClass - 1) % 3).
 const (
-	SealStar = 0
-	SealMoon = 1
-	SealSun  = 2
+	SealStar             = enterworld.SealStar
+	SealMoon             = enterworld.SealMoon
+	SealSun              = enterworld.SealSun
+	sealClassesPerDegree = enterworld.SealTiers
 )
-
-// sealClassesPerDegree is the ItemClass span of one degree (Star, Moon, Sun).
-const sealClassesPerDegree = 3
 
 // maxSealDegree is the highest degree a v1.150 rare item has.
 const maxSealDegree = 9

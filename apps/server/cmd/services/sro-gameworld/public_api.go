@@ -31,6 +31,7 @@ import (
 	"opensro.online/server/internal/agent/publicstats"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/domain"
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/siege"
 	"opensro.online/server/internal/game/social/chatfeed"
 	"opensro.online/server/internal/game/world/simulation"
@@ -335,17 +336,14 @@ func publicSources(gameplay *gameplayPlane, hub *transport.Hub, authority *store
 		ItemGrade: func(refObjID uint32) (int, int, bool) {
 			items := gameplay.deps.ItemReferences()
 			if items == nil {
-				return 0, publicstats.SealNone, false
+				return 0, 0, false
 			}
 			ref, ok := items.ItemRefByID(refObjID)
 			if !ok || ref == nil {
-				return 0, publicstats.SealNone, false
+				return 0, 0, false
 			}
-			class, ok := ref.NativeFields.Lookup("itemClass")
-			if !ok {
-				return 0, publicstats.SealNone, false
-			}
-			return publicstats.EquipmentGrade(ref.TypeIDs, int(class), ref.Rarity)
+			tier, sealed := enterworld.EquipmentSeal(ref)
+			return enterworld.EquipmentDegree(ref), tier, sealed
 		},
 		ModelRef: gameplay.deps.CharacterModelRef,
 		Online: func(characterID int64) bool {
