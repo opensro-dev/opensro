@@ -20,6 +20,15 @@ const WINDOW_LABEL_MARGIN = 6;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
 // gil_bar02 rows and a scrollbar between its 16-pixel arrows.
 const FRIEND_VISIBLE_ROWS = 11;
+// The letter list shares the Friends list's scroll manager (ifletter.txt id
+// 30, 328 x 256): eleven 23-pixel rows. The write window's contents edit is
+// the one multiline letter control.
+const LETTER_VISIBLE_ROWS = 11;
+const LETTER_BODY_EDIT = "letter-body";
+// The read and write windows (ifletter.txt ids 51 and 55) cover the letter
+// page from its origin.
+const LETTER_CHILD_WIDTH = 439;
+const LETTER_CHILD_HEIGHT = 271;
 const FRIEND_ROW_STEP = 23;
 const FRIEND_SCROLL_TRACK = 224;
 // 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
@@ -42,6 +51,14 @@ const STALL_CHAT_ROW = 15;
 const EDIT_CARET_WIDTH = 1;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
 import { FRIEND_LIST_LIMIT, FRIEND_NAME_LIMIT } from "@/engine/foundation/gameplay/friends";
+import {
+	LETTER_BODY_LIMIT,
+	LETTER_MAILBOX_LIMIT,
+	LETTER_RECEIVER_LIMIT,
+	letterTime,
+	letterTimeKey,
+	type LetterRow
+} from "@/engine/foundation/gameplay/letters";
 import {
 	companionItemTargetCommand,
 	armsItemTargetCursor,
@@ -799,6 +816,60 @@ export function createUi(
 	// row's jid, the list scroll and the add/delete dialog.
 	let friendSelected = 0, friendOffset = 0, friendInput = "", friendSortDescending = false;
 	let friendDialog: "add" | "remove" | null = null;
+	// The Letter tab (CIFLetter, 605B80): the selected letter's mailbox index,
+	// the list scroll and sort, the write window's draft, and the letter the
+	// delete box asks about (-1 when none).
+	let letterSelected = -1, letterOffset = 0, letterSortByTime = false, letterSortDescending = false;
+	let letterDraft: { receiver: string; body: string; } | null = null, letterDeleting = -1;
+	/*
+	================
+	letterActivate
+
+	The Letter tab's buttons: the list (605B80), the read window (609BC0:
+	reply, delete), the write window (607B80) and the delete box (605C50).
+	A letter is named by its mailbox index throughout.
+	================
+	*/
+	function letterActivate( id: string ) {
+		const letters = view?.gameplay?.letters, rows = letters?.rows ?? [];
+		if ( id.startsWith( "letter-row:" ) ) letterSelected = Number( id.slice( 11 ) );
+		else if ( id === "letter-sort-sender" || id === "letter-sort-time" ) {
+			const byTime = id === "letter-sort-time";
+			letterSortDescending = letterSortByTime === byTime ? !letterSortDescending : false;
+			letterSortByTime = byTime;
+		} else if ( id === "letter-up" ) letterOffset = Math.max( 0, letterOffset - 1 );
+		else if ( id === "letter-down" ) letterOffset++;
+		else if ( id === "letter-write" || id === "letter-read-reply" ) {
+			const reading = letters && letters.reading >= 0 ? rows[letters.reading] : undefined;
+			letterDraft = { receiver: id === "letter-read-reply" ? reading?.sender ?? "" : "", body: "" };
+			if ( id === "letter-read-reply" ) sendGameplay( { kind: "letter-close" } );
+			focus = id === "letter-read-reply" ? LETTER_BODY_EDIT : "letter-receiver";
+			selection = [ 0, 0 ];
+			focusRequest = { id: focus, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "letter-read" ) {
+			if ( rows[letterSelected] ) sendGameplay( { kind: "letter-read", index: letterSelected } );
+		} else if ( id === "letter-delete" ) {
+			if ( rows[letterSelected] ) letterDeleting = letterSelected;
+		} else if ( id === "letter-read-delete" ) {
+			if ( letters && rows[letters.reading] ) letterDeleting = letters.reading;
+		} else if ( id === "letter-read-close" ) sendGameplay( { kind: "letter-close" } );
+		else if ( id === "letter-write-send" && letterDraft ) {
+			sendGameplay( { kind: "letter-send", receiver: letterDraft.receiver, body: letterDraft.body } );
+			// A refused draft stays open with its notice (60D270); a sent one closes.
+			if ( letterDraft.receiver.trim() && letterDraft.body ) {
+				letterDraft = null;
+				focus = null;
+				focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+			}
+		} else if ( id === "letter-write-cancel" ) {
+			letterDraft = null;
+			focus = null;
+			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
+		} else if ( id === "letter-delete-ok" && letterDeleting >= 0 ) {
+			sendGameplay( { kind: "letter-delete", index: letterDeleting } );
+			letterDeleting = -1;
+		} else if ( id === "letter-delete-cancel" ) letterDeleting = -1;
+	}
 	let options = initialGameOptions(), optionDraft = options;
 	let optionTab = 0;
 	let optionScroll = [ 0, 0 ];
@@ -1632,6 +1703,8 @@ export function createUi(
 		blockSelected = "";
 		blockOffset = 0;
 		friendDialog = null;
+		letterDraft = null;
+		letterDeleting = -1;
 		if ( shopDialog || shopWarning ) closeShopDialog();
 		guildDialog = "";
 		guildNoticeHud.close();
@@ -1802,6 +1875,10 @@ export function createUi(
 		friendSelected = 0;
 		friendOffset = 0;
 		friendInput = "";
+		letterSelected = -1;
+		letterOffset = 0;
+		letterDraft = null;
+		letterDeleting = -1;
 		blockOffset = 0;
 		panel = "";
 		admittedWindows.clear();
@@ -2914,6 +2991,13 @@ export function createUi(
 			if ( id === "submit" ) id = "friend-ok";
 			if ( ![ "friend-ok", "friend-cancel" ].includes( id ) ) return;
 		}
+		if ( letterDeleting >= 0 ) {
+			if ( id === "submit" ) id = "letter-delete-ok";
+			if ( ![ "letter-delete-ok", "letter-delete-cancel" ].includes( id ) ) return;
+		}
+		// Enter in the write window's receiver field sends nothing: the original
+		// sends only from its Send button (607B80).
+		if ( id === "submit" && letterDraft && panel === "Guild" && guildTab === 5 ) return;
 		if ( id === "submit" && consolePhase !== 0 && view.gameplay?.eligibility?.gm ) {
 			if ( consoleText && !composing ) {
 				appendConsoleLine( consoleText );
@@ -2982,6 +3066,8 @@ export function createUi(
 			focusRequest = { id: null, revision: ++focusRevision, caret: 0 };
 		} else if ( id === "friend-accept" || id === "friend-refuse" ) {
 			sendGameplay( { kind: "friend-answer", accept: id === "friend-accept" } );
+		} else if ( id.startsWith( "letter-" ) ) {
+			letterActivate( id );
 		} else if ( id.startsWith( "blocking-tab:" ) ) {
 			blockTab = id === "blocking-tab:1" ? 1 : 0;
 			blockSelected = "";
@@ -5638,6 +5724,35 @@ export function createUi(
 					![ "friend-ok", "friend-cancel", "friend-name", "submit" ].includes( event.id )
 				) return;
 			}
+			if ( letterDeleting >= 0 ) {
+				if ( event.kind === "key" ) {
+					if ( event.code === "Escape" ) activate( "letter-delete-cancel" );
+					else if ( event.code === "Enter" && !composing ) activate( "letter-delete-ok" );
+					return;
+				}
+				if (
+					event.kind === "scroll" || event.kind === "drag" || event.kind === "drag-end" ||
+					event.kind === "double-activate"
+				) return;
+				if (
+					"id" in event && event.id !== null &&
+					![ "letter-delete-ok", "letter-delete-cancel", "submit" ].includes( event.id )
+				) return;
+			}
+			if ( event.kind === "drag" && event.id === "letter-thumb" && panel === "Guild" ) {
+				const extra = Math.max( 0, (view?.gameplay?.letters?.rows.length ?? 0) - LETTER_VISIBLE_ROWS );
+				letterOffset = Math.max( 0, Math.min( extra, letterOffset + event.dy * extra / FRIEND_SCROLL_TRACK ) );
+				dirty = true;
+				return;
+			}
+			if ( event.kind === "scroll" && panel === "Guild" && guildTab === 5 ) {
+				const area = controls.find( c => c.id === "letter-list" );
+				if ( area && containsPoint( area.rect, event.x, event.y ) ) {
+					letterOffset = Math.max( 0, letterOffset + Math.sign( event.delta ) );
+					dirty = true;
+					return;
+				}
+			}
 			if ( event.kind === "drag" && event.id === "friend-thumb" && panel === "Guild" ) {
 				const extra = Math.max( 0, (view?.gameplay?.friends?.rows.length ?? 0) - FRIEND_VISIBLE_ROWS );
 				friendOffset = Math.max( 0, Math.min( extra, friendOffset + event.dy * extra / FRIEND_SCROLL_TRACK ) );
@@ -6946,6 +7061,10 @@ export function createUi(
 					blockInput = event.value.slice( 0, 13 );
 				} else if ( event.id === "friend-name" && friendDialog === "add" ) {
 					friendInput = event.value.slice( 0, FRIEND_NAME_LIMIT );
+				} else if ( event.id === "letter-receiver" && letterDraft ) {
+					letterDraft = { ...letterDraft, receiver: event.value.slice( 0, LETTER_RECEIVER_LIMIT ) };
+				} else if ( event.id === LETTER_BODY_EDIT && letterDraft ) {
+					letterDraft = { ...letterDraft, body: event.value.slice( 0, LETTER_BODY_LIMIT ) };
 				} else if ( event.id === "academy-name" ) academyName = event.value;
 				else if ( event.id === "alchemy-quantity" ) alchemyQuantity = event.value;
 				else if ( event.id === FORTRESS_TAX_RATE && panel === FORTRESS_TAX_PANEL ) {
@@ -8743,7 +8862,7 @@ export function createUi(
 				maxLength: number,
 				native = false
 			) {
-				const multiline = id === "social-contents";
+				const multiline = id === "social-contents" || id === LETTER_BODY_EDIT;
 				if ( multiline ) {
 					// The guild notice editor (#710): a left-aligned multiline board.
 					const r = authoredRect( node, ox, oy );
@@ -16372,6 +16491,231 @@ export function createUi(
 					endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:friend" );
 					blocks.push( full );
 				}
+				/*
+				================
+				letterOrder
+
+				The mailbox in the list's order, each row with its mailbox index:
+				the header buttons sort by sender (21) or by time (22), a second
+				press of the same header reversing.
+				================
+				*/
+				function letterOrder( rows: readonly LetterRow[] ) {
+					const entries = rows.map( ( row, index ) => ({ row, index }) );
+					if ( !letterSortByTime && !letterSortDescending ) {
+						return entries.sort( ( a, b ) =>
+							a.row.sender.localeCompare( b.row.sender ) || a.index - b.index
+						);
+					}
+					const sign = letterSortDescending ? -1 : 1;
+					return entries.sort( ( a, b ) =>
+						sign * (letterSortByTime ?
+								letterTimeKey( a.row.received ) - letterTimeKey( b.row.received ) :
+								a.row.sender.localeCompare( b.row.sender )) || a.index - b.index
+					);
+				}
+				/*
+				================
+				letterTimeText
+
+				60C9B0's "%0.2d-%0.2d-%0.2d %s %0.2d:%0.2d".
+				================
+				*/
+				function letterTimeText( packed: number ): string {
+					const time = letterTime( packed ), two = ( n: number ) => String( n ).padStart( 2, "0" );
+					return two( time.year ) + "-" + two( time.month ) + "-" + two( time.day ) + " " +
+						hudCopy( time.meridiem ) + " " + two( time.hour ) + ":" + two( time.minute );
+				}
+				/*
+				================
+				letterPage
+
+				CIFLetter (ifletter.txt) and its CIFLetterSlot rows (ifletterslot.txt,
+				60C9B0): race mark, sender and receive time, an unread letter's text
+				drawn heavier (60C7E0's style bit), the ": n / 20" count and the five
+				commands. Guild and union letters (44, 45) need a server lane the
+				port does not have, so they stay disabled (inference: v1.150 arms
+				them only for a guild or union master, CIFLetterBox 607D60).
+				================
+				*/
+				function letterPage( page: AuthoredLayout, slot: AuthoredLayout, gx: number, gy: number ) {
+					const rows = letterOrder( game?.letters?.rows ?? [] ),
+						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
+						slotAt = ( id: number ) => Object.values( slot ).find( n => n.id === id )!;
+					if ( !rows.some( entry => entry.index === letterSelected ) ) letterSelected = -1;
+					letterOffset = Math.max(
+						0,
+						Math.min( Math.max( 0, rows.length - LETTER_VISIBLE_ROWS ), letterOffset )
+					);
+					const first = Math.round( letterOffset );
+					nativePage( page, gx, gy, [ 12, 21, 22, 41, 42, 43, 44, 45, 51, 55, 60 ] );
+					authoredText( at( 12 ), gx, gy, ": " + rows.length + " / " + LETTER_MAILBOX_LIMIT );
+					authoredLabeledButton( at( 21 ), gx, gy, "letter-sort-sender", hudCopy( at( 21 ).text ) );
+					authoredLabeledButton( at( 22 ), gx, gy, "letter-sort-time", hudCopy( at( 22 ).text ) );
+					const list = at( 30 ), lx = gx + list.rect[0], ly = gy + list.rect[1];
+					const select = ROOT + "interface/guild/gil_bar02_select.png",
+						deselect = ROOT + "interface/guild/gil_bar02_deselect.png";
+					paths.push( select, deselect );
+					controls.push( {
+						id: "letter-list",
+						label: hudCopy( "UIIT_STT_LETTER" ),
+						rect: [ lx, ly, list.rect[2], list.rect[3] ],
+						kind: "button"
+					} );
+					for ( let i = 0; i < LETTER_VISIBLE_ROWS; i++ ) {
+						const entry = rows[first + i], r: UiRect = [ lx, ly + i * FRIEND_ROW_STEP, 312, 24 ];
+						if ( resources.has( select ) && resources.has( deselect ) ) {
+							rect( r, white, entry && entry.index === letterSelected ? select : deselect );
+						}
+						if ( !entry ) continue;
+						authoredImage(
+							slotAt( 9 ),
+							lx,
+							r[1],
+							slotAt( 9 ).texture.replace(
+								"china",
+								hudData!.countries[entry.row.modelRefId] === 1 ? "europe" : "china"
+							)
+						);
+						const time = letterTimeText( entry.row.received );
+						// 60C7E0: an unread letter's sender and time carry the heavier
+						// style; one extra pixel of the same text stands in for it.
+						for ( const dx of entry.row.read ? [ 0 ] : [ 0, 1 ] ) {
+							authoredText( slotAt( 10 ), lx + dx, r[1], entry.row.sender );
+							authoredText( slotAt( 11 ), lx + dx, r[1], time );
+						}
+						controls.push( {
+							id: "letter-row:" + entry.index,
+							label: entry.row.sender + " " + time,
+							rect: r,
+							kind: "button"
+						} );
+					}
+					const scroll = chatScrollbar(
+						"letter",
+						[ lx + list.rect[2] - 16, ly + 16, 16, FRIEND_SCROLL_TRACK ],
+						Math.max( LETTER_VISIBLE_ROWS, rows.length ),
+						LETTER_VISIBLE_ROWS,
+						Math.max( 0, rows.length - LETTER_VISIBLE_ROWS ) - letterOffset,
+						resources.size,
+						full,
+						hover,
+						pressed
+					);
+					paths.push( ...scroll.paths );
+					quads.push( ...scroll.quads );
+					controls.push( ...scroll.controls );
+					authoredLabeledButton( at( 41 ), gx, gy, "letter-write", hudCopy( at( 41 ).text ) );
+					authoredLabeledButton(
+						at( 42 ),
+						gx,
+						gy,
+						"letter-read",
+						hudCopy( at( 42 ).text ),
+						letterSelected < 0
+					);
+					authoredLabeledButton(
+						at( 43 ),
+						gx,
+						gy,
+						"letter-delete",
+						hudCopy( at( 43 ).text ),
+						letterSelected < 0
+					);
+					authoredLabeledButton( at( 44 ), gx, gy, "letter-guild", hudCopy( at( 44 ).text ), true );
+					authoredLabeledButton( at( 45 ), gx, gy, "letter-union", hudCopy( at( 45 ).text ), true );
+					letterChildWindow( gx, gy );
+				}
+				/*
+				================
+				letterChildWindow
+
+				The read window (CIFLetterRead, ifletterread.txt, opened by 607830)
+				or the write window (CIFLetterWrite, ifletterwrite.txt) over the
+				letter page; nothing when neither is open.
+				================
+				*/
+				function letterChildWindow( ox: number, oy: number, width = LETTER_CHILD_WIDTH ) {
+					const letters = game?.letters, windows = hudData?.windows;
+					const reading = letters && letters.reading >= 0 ? letters.rows[letters.reading] : undefined;
+					const native = reading ? windows?.ifletterread : letterDraft ? windows?.ifletterwrite : undefined;
+					if ( !native ) return;
+					// A narrow screen narrows the window's columns, never its text.
+					const sx = Math.min( 1, width / LETTER_CHILD_WIDTH );
+					const layout: AuthoredLayout = sx === 1 ? native : Object.fromEntries(
+						Object.entries( native ).map( ( [key, node] ) => [ key, {
+							...node,
+							rect: [
+								Math.round( node.rect[0] * sx ),
+								node.rect[1],
+								Math.round( node.rect[2] * sx ),
+								node.rect[3]
+							] as UiRect
+						} ] )
+					);
+					const at = ( id: number ) => Object.values( layout ).find( n => n.id === id )!;
+					const area: UiRect = [ ox, oy, Math.round( LETTER_CHILD_WIDTH * sx ), LETTER_CHILD_HEIGHT ];
+					rect( area, [ 0, 0, 0, .92 ] );
+					// The child covers the list: its controls alone answer the pointer.
+					controls.push( { id: "letter-child", label: "", rect: area, kind: "region" } );
+					if ( reading ) {
+						nativePage( layout, ox, oy, [ 11, 12, 13, 20, 21 ] );
+						authoredText( at( 20 ), ox, oy, reading.sender );
+						const body = authoredRect( at( 21 ), ox, oy ), LINE_HEIGHT = 16;
+						const lines = textBoxLines( reading.body ?? "", body[2], value => text.run( value ).width );
+						controls.push( {
+							id: "letter-read-body",
+							label: reading.body ?? "",
+							rect: body,
+							kind: "region"
+						} );
+						lines.slice( 0, Math.max( 1, Math.floor( body[3] / LINE_HEIGHT ) ) ).forEach( ( line, i ) => {
+							quads.push(
+								...text.quads(
+									line,
+									[ body[0], body[1] + i * LINE_HEIGHT, body[2], LINE_HEIGHT ],
+									body,
+									white,
+									{
+										vAlign: 0,
+										overflow: "clip"
+									}
+								)
+							);
+						} );
+						authoredLabeledButton( at( 11 ), ox, oy, "letter-read-reply", hudCopy( at( 11 ).text ) );
+						authoredLabeledButton( at( 12 ), ox, oy, "letter-read-delete", hudCopy( at( 12 ).text ) );
+						authoredLabeledButton( at( 13 ), ox, oy, "letter-read-close", hudCopy( at( 13 ).text ) );
+						return;
+					}
+					if ( !letterDraft ) return;
+					nativePage( layout, ox, oy, [ 11, 12, 20, 21 ] );
+					partyEdit( at( 20 ), ox, oy, "letter-receiver", letterDraft.receiver, LETTER_RECEIVER_LIMIT );
+					partyEdit( at( 21 ), ox, oy, LETTER_BODY_EDIT, letterDraft.body, LETTER_BODY_LIMIT );
+					authoredLabeledButton( at( 11 ), ox, oy, "letter-write-send", hudCopy( at( 11 ).text ) );
+					authoredLabeledButton( at( 12 ), ox, oy, "letter-write-cancel", hudCopy( at( 12 ).text ) );
+				}
+				/*
+				================
+				letterDialogBox
+
+				607920's question (UIIT_MSG_LETTER_LETTERDELETE, Yes/No) before a
+				delete from the list or the read window.
+				================
+				*/
+				function letterDialogBox() {
+					const mark = beginWindow();
+					controls = [];
+					blocks.push( full );
+					simpleMessageBox( {
+						title: hudCopy( "UIIT_STT_CONFIRM_BOX" ),
+						lines: [ hudCopy( "UIIT_MSG_LETTER_LETTERDELETE" ) ],
+						yes: "letter-delete-ok",
+						no: "letter-delete-cancel"
+					} );
+					endWindow( [ mark[0], 0, mark[2], mark[3] ], "modal:letter" );
+					blocks.push( full );
+				}
 				function unionPage( page: AuthoredLayout, slot: AuthoredLayout, gx: number, gy: number ) {
 					const social = game?.social,
 						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
@@ -16753,7 +17097,7 @@ export function createUi(
 								{
 									family: "com_long_tab",
 									client: [ 6, 5, 6, 0 ],
-									disabled: ![ 0, 1, 2, 3, 4 ].includes( i )
+									disabled: ![ 0, 1, 2, 3, 4, 5 ].includes( i )
 								}
 							)
 						);
@@ -17075,6 +17419,83 @@ export function createUi(
 							);
 							return;
 						}
+						if ( guildTab === 5 ) {
+							// The Letter page reflowed: the same rows, order and actions; the
+							// read and write windows open at the screen's centre.
+							const rows = letterOrder( game?.letters?.rows ?? [] ),
+								listTop = top + LINE_HEIGHT + 4,
+								visible = Math.max( 1, Math.floor( (bottom - 60 - listTop) / ROW_HEIGHT ) );
+							if ( !rows.some( entry => entry.index === letterSelected ) ) letterSelected = -1;
+							letterOffset = Math.max(
+								0,
+								Math.min( Math.max( 0, rows.length - visible ), letterOffset )
+							);
+							const first = Math.round( letterOffset );
+							put( hudCopy( "UIIT_STT_LETTER" ) + ": " + rows.length + " / " + LETTER_MAILBOX_LIMIT, [
+								left,
+								top,
+								inner,
+								LINE_HEIGHT
+							] );
+							controls.push( {
+								id: "letter-list",
+								label: hudCopy( "UIIT_STT_LETTER" ),
+								rect: [ left, listTop, inner, visible * ROW_HEIGHT ],
+								kind: "button"
+							} );
+							rows.slice( first, first + visible ).forEach( ( entry, i ) => {
+								const r: UiRect = [ left, listTop + i * ROW_HEIGHT, inner, ROW_HEIGHT - 1 ];
+								memberRow(
+									"letter-row:" + entry.index,
+									entry.row.sender,
+									r,
+									entry.index === letterSelected
+								);
+								put( entry.row.sender, [ r[0] + 6, r[1], Math.floor( r[2] / 2 ) - 8, r[3] ] );
+								put( letterTimeText( entry.row.received ), [
+									r[0] + Math.floor( r[2] / 2 ),
+									r[1],
+									r[2] / 2 - 4,
+									r[3]
+								] );
+							} );
+							const actionY = bottom - 54, third = Math.floor( inner / 3 );
+							if ( rows.length > visible ) {
+								button( "letter-up", "<", left, actionY, 40, first === 0 );
+								button(
+									"letter-down",
+									">",
+									left + inner - 40,
+									actionY,
+									40,
+									first + visible >= rows.length
+								);
+							}
+							button( "letter-write", hudCopy( "UIIT_CTL_LETTER_SEND" ), left, actionY + 28, third - 2 );
+							button(
+								"letter-read",
+								hudCopy( "UIIT_STT_LETTER_READ" ),
+								left + third,
+								actionY + 28,
+								third - 2,
+								letterSelected < 0
+							);
+							button(
+								"letter-delete",
+								hudCopy( "UIIT_CTL_LETTER_DELETE" ),
+								left + third * 2,
+								actionY + 28,
+								third - 2,
+								letterSelected < 0
+							);
+							const childWidth = Math.min( w, LETTER_CHILD_WIDTH );
+							letterChildWindow(
+								Math.floor( (w - childWidth) / 2 ),
+								Math.max( 0, Math.floor( (h - LETTER_CHILD_HEIGHT) / 2 ) ),
+								childWidth
+							);
+							return;
+						}
 						const contentTop = top + 30;
 						if ( guildTab === 1 ) {
 							[ "UIIT_STT_GUILD_RESPECT_ALLY", "UIIT_STT_GUILD_RESPECT_WAR" ].forEach( ( key, i ) =>
@@ -17273,6 +17694,7 @@ export function createUi(
 						appendCompactGuild();
 						endWindow( admission );
 						if ( friendDialog ) friendDialogBox();
+						if ( letterDeleting >= 0 ) letterDialogBox();
 					} else {
 						const admission = beginWindow(),
 							root = hudData.root.GDR_COMMUNITY!,
@@ -17304,7 +17726,7 @@ export function createUi(
 								{
 									family: "com_long_tab",
 									client: [ 6, 5, 6, 0 ],
-									disabled: ![ 0, 1, 2, 3, 4 ].includes( i )
+									disabled: ![ 0, 1, 2, 3, 4, 5 ].includes( i )
 								}
 							)
 						);
@@ -17351,6 +17773,8 @@ export function createUi(
 							guildWarPage( true, gx + 6, gy + 29 );
 						} else if ( guildTab === 3 && hudData.windows.iffriend && hudData.windows.iffriendslot ) {
 							friendPage( hudData.windows.iffriend, hudData.windows.iffriendslot, gx, gy );
+						} else if ( guildTab === 5 && hudData.windows.ifletter && hudData.windows.ifletterslot ) {
+							letterPage( hudData.windows.ifletter, hudData.windows.ifletterslot, gx, gy );
 						} else {
 							// 5EA9D0 creates Create before the subsequent resource sections. Their
 							// insertion lists reverse within a section, not across constructor calls.
@@ -17581,6 +18005,7 @@ export function createUi(
 						}
 						endWindow( admission );
 						if ( friendDialog ) friendDialogBox();
+						if ( letterDeleting >= 0 ) letterDialogBox();
 					}
 				}
 				if ( panel === "Magic Pang" ) gachaWindow();

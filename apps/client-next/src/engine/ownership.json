@@ -139,6 +139,7 @@
     "src/engine/runtime/audio/music/music.ts": "src/engine/runtime/audio/audio.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/chat/chat.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/friends/friends.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
+    "src/engine/runtime/simulation/worker/session/world/gameplay/letters/letters.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/quests/quests.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/simulation/worker/session/world/gameplay/npc/npc.ts": "src/engine/runtime/simulation/worker/session/world/gameplay/gameplay.ts",
     "src/engine/runtime/ui/hud/npc-panel.ts": "src/engine/runtime/ui/ui.ts",

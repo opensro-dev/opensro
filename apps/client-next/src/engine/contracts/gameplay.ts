@@ -207,6 +207,10 @@ export type GameplayCommand =
 	| { readonly kind: "friend-request"; readonly name: string; }
 	| { readonly kind: "friend-answer"; readonly accept: boolean; }
 	| { readonly kind: "friend-delete"; readonly jid: number; }
+	| { readonly kind: "letter-send"; readonly receiver: string; readonly body: string; }
+	| { readonly kind: "letter-read"; readonly index: number; }
+	| { readonly kind: "letter-close"; }
+	| { readonly kind: "letter-delete"; readonly index: number; }
 	| { readonly kind: "stat-increase"; readonly stat: "str" | "int"; }
 	| { readonly kind: "beginner-mark"; readonly enabled: boolean; }
 	| { readonly kind: "helper-mark"; }
@@ -648,6 +652,7 @@ export interface GameplayState {
 	readonly partyMatching?: import("@/engine/foundation/gameplay/party-matching").PartyMatching;
 	readonly academy?: import("@/engine/foundation/gameplay/academy").AcademyState;
 	readonly friends?: import("@/engine/foundation/gameplay/friends").FriendsState;
+	readonly letters?: import("@/engine/foundation/gameplay/letters").LettersState;
 	readonly pkStatus?: import("@/engine/foundation/gameplay/pk-status").PkStatus;
 	readonly guide?: import("@/engine/foundation/gameplay/guide").GuideState;
 	readonly weather?: import("@/engine/foundation/gameplay/weather").WeatherOptions;

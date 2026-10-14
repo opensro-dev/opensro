@@ -234,6 +234,7 @@ import { createQuests } from "./quests/quests";
 import { createNpcConversation } from "./npc/npc";
 import { createChat } from "./chat/chat";
 import { createFriends } from "./friends/friends";
+import { createLetters } from "./letters/letters";
 import { createMovement } from "./movement/movement";
 import { logoutCancelRequest, worldPointAction } from "@/engine/foundation/gameplay/direction-movement";
 import { createInventory } from "./inventory/inventory";
@@ -787,7 +788,10 @@ fails; retry persistence without restoring stale slot occupancy.
 	const countJobs = createCountJobs();
 	let abnormalRecords: readonly AbnormalRecord[] = [];
 	let abnormalMask = 0;
-	const chat = createChat( send ), quests = createQuests( send ), friends = createFriends( send );
+	const chat = createChat( send ),
+		quests = createQuests( send ),
+		friends = createFriends( send ),
+		letters = createLetters( send );
 	const npcConversation = createNpcConversation( send );
 	// The NPC warehouse (storage-room.ts).
 	const storage = createStorageRoom( send );
@@ -1037,6 +1041,7 @@ selected entities, cooldowns or world-entry state.
 		academy = undefined;
 		pkStatus = undefined;
 		friends.reset();
+		letters.reset();
 		feedback.reset();
 		training.reset();
 		social = emptySocial();
@@ -2214,6 +2219,27 @@ state here before a command can claim a native wire conversation.
 				friends.remove( command.jid );
 				return null;
 			}
+			if ( command.kind === "letter-send" ) {
+				for ( const notice of letters.send( command.receiver, command.body ) ) {
+					notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
+					dirty = true;
+				}
+				return null;
+			}
+			if ( command.kind === "letter-read" ) {
+				letters.read( command.index );
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "letter-close" ) {
+				letters.close();
+				dirty = true;
+				return null;
+			}
+			if ( command.kind === "letter-delete" ) {
+				letters.remove( command.index );
+				return null;
+			}
 			if ( command.kind === "chat" ) {
 				chat.request(
 					command.channel === 1 && eligibility.gm ? 3 : command.channel,
@@ -2787,8 +2813,9 @@ Packet handling must not depend on which HUD panel is currently open.
 					return true;
 				}
 				const friendReceipt = friends.receive( frame, social.localName );
-				if ( friendReceipt.handled ) {
-					for ( const notice of friendReceipt.notices ) {
+				const socialReceipt = friendReceipt.handled ? friendReceipt : letters.receive( frame );
+				if ( socialReceipt.handled ) {
+					for ( const notice of socialReceipt.notices ) {
 						notices = [ ...notices.slice( -99 ), { ...notice, sequence: ++noticeSequence } ];
 					}
 					dirty = true;
@@ -4252,6 +4279,7 @@ The published plane when something changed since the last take, else null.
 				...quests.state(),
 				chat: chat.state(),
 				friends: friends.state(),
+				letters: letters.state(),
 				activeCos: cos,
 				cosResult,
 				revision: ++revision,

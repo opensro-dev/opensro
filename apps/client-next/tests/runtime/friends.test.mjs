@@ -153,10 +153,11 @@ test("the roster seeds at world entry and follows add, delete and presence event
 	g.receive( { opcode: 0x3f9a, payload: bytes( 3, u32( 7 ) ) }, 0 );
 	assert.deepEqual( friendsOf( g.take() ).rows.map( row => row.name ), [ "Cale" ] );
 	assert.equal(
-		g.receive( { opcode: 0x3f9a, payload: bytes( 8, 0 ) }, 0 ),
-		false,
-		"a letter event is left to the letter lane"
+		g.receive( { opcode: 0x3f9a, payload: bytes( 8, "Dora", u32( 1909 ), u32( 0 ) ) }, 0 ),
+		true,
+		"a letter event goes on to the letter lane"
 	);
+	assert.deepEqual( friendsOf( g.take() ).rows.map( row => row.name ), [ "Cale" ], "and leaves the roster alone" );
 });
 
 test("a prompt waits for this player's answer, which is sent as the 9-byte 0x3012", () => {

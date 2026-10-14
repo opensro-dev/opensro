@@ -93,7 +93,7 @@ contained
 */
 function contained( output, width, height ) {
 	for ( const control of output.controls ) {
-		if ( !/^(guild-|social-|union-|war-|friend-|close$)/.test( control.id ) ) continue;
+		if ( !/^(guild-|social-|union-|war-|friend-|letter-|close$)/.test( control.id ) ) continue;
 		const [x, y, w, h] = control.rect;
 		assert.ok(
 			w > 0 && h > 0 && x >= 0 && y >= 0 && x + w <= width + .01 && y + h <= height + .01,
@@ -132,7 +132,8 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 				"guild-tab:1",
 				"guild-tab:2",
 				"guild-tab:3",
-				"guild-tab:4"
+				"guild-tab:4",
+				"guild-tab:5"
 			] );
 			assert.equal( new Set( tabs.map( control => control.rect[1] ) ).size, width < 477 ? 2 : 1 );
 			const firstMembers = output.controls.filter( control => control.id.startsWith( "social-member:" ) ).map(
@@ -183,6 +184,25 @@ for ( const [width, height] of [ [ 375, 667 ], [ 667, 375 ] ] ) {
 			assert.equal( output.controls.filter( control => control.id.startsWith( "war-select:" ) ).length, 6 );
 			assert.ok( output.controls.some( control => control.id === "war-members-down" ) );
 			nativeGlyphs( fixture );
+			// The Letter page reflowed: its rows and commands, then the write and
+			// read windows narrowed into the viewport.
+			const row = { sender: "Berk", modelRefId: 1907, received: 0, read: false, body: "Hello" };
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1 } } );
+			fixture.ui.event( { kind: "activate", id: "guild-tab:5" } );
+			output = draw();
+			assert.ok( output.controls.some( control => control.id === "letter-row:0" ) );
+			assert.ok( output.controls.some( control => control.id === "letter-write" && !control.disabled ) );
+			fixture.ui.event( { kind: "activate", id: "letter-write" } );
+			output = draw();
+			assert.ok( output.controls.some( control => control.id === "letter-receiver" ) );
+			assert.ok( output.controls.some( control => control.id === "letter-body" ) );
+			fixture.ui.event( { kind: "activate", id: "letter-write-cancel" } );
+			draw();
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: 0 } } );
+			output = draw();
+			assert.ok( output.controls.some( control => control.id === "letter-read-close" ) );
+			Object.assign( fixture.state.gameplay, { letters: { rows: [ row ], reading: -1 } } );
+			draw();
 			fixture.ui.event( { kind: "activate", id: "guild-tab:4" } );
 			output = draw();
 			assert.ok(
