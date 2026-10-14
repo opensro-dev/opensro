@@ -64,6 +64,7 @@ const audiences = {
 	"map-tiles": "public",
 	"ui-icons": "public",
 	"particle-textures": "public",
+	"texture-variants-astc": "public",
 	"game-models": "public",
 	"mission-minimap": "public",
 	"mission-npc-vat": "public",

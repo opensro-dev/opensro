@@ -47,6 +47,7 @@ function packGroupName( group: string ): string {
 		case "map-tiles":
 			return "map pages";
 		case "world-textures":
+		case "texture-variants-astc":
 			return "world textures";
 		case "game-models":
 			return "character models";

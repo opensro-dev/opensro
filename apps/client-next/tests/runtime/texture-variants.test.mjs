@@ -4,7 +4,7 @@
 texture-variants.test.mjs - re-encoded textures for devices without BC
 
 Port-only. A device that samples BC keeps the retail textures; one without
-BC, with the Experimental switch on, is served the build's ETC2 or ASTC
+BC, with the Experimental switch on, is served the build's ASTC
 re-encoding (foundation/assets/texture-variants.ts). The NTX container
 admits the variant formats, which have no CPU fallback, and the asset
 owner tells its worker the variant once: at once with the switch off,
@@ -36,10 +36,11 @@ const { createAssets } = await load( "src/engine/runtime/assets/assets.ts" );
 
 const BC = "texture-compression-bc", ETC2 = "texture-compression-etc2", ASTC = "texture-compression-astc";
 
-test("only a device without BC, with the switch on, is served a variant: ETC2 first, then ASTC", () => {
+test("only a device without BC, with the switch on, is served a variant, and only the published ASTC set", () => {
 	assert.equal( chooseTextureVariant( new Set( [ BC, ETC2, ASTC ] ), true ), null, "BC keeps the retail textures" );
 	assert.equal( chooseTextureVariant( new Set( [ ETC2, ASTC ] ), false ), null, "the switch off is native" );
-	assert.equal( chooseTextureVariant( new Set( [ ETC2, ASTC ] ), true ), "etc2" );
+	assert.equal( chooseTextureVariant( new Set( [ ETC2, ASTC ] ), true ), "astc", "an iPhone samples both" );
+	assert.equal( chooseTextureVariant( new Set( [ ETC2 ] ), true ), null, "no ETC2 set is published" );
 	assert.equal( chooseTextureVariant( new Set( [ ASTC ] ), true ), "astc" );
 	assert.equal( chooseTextureVariant( new Set(), true ), null, "no sampled format: the RGBA fallback" );
 });
@@ -148,5 +149,11 @@ test("with the switch off the worker is told at once; with it on, when the devic
 	assert.deepEqual( on.variants(), [], "the worker waits for the device" );
 	on.assets.textureFeatures( [ ETC2, ASTC ] );
 	on.assets.textureFeatures( [ ASTC ] );
-	assert.deepEqual( on.variants(), [ { kind: "texture-variant", variant: "etc2" } ] );
+	assert.deepEqual( on.variants(), [ { kind: "texture-variant", variant: "astc" } ] );
+});
+
+test("a device that samples BC is never served a variant, even with the switch on and ASTC present", t => {
+	const pc = owner( t, true );
+	pc.assets.textureFeatures( [ BC, ETC2, ASTC ] );
+	assert.deepEqual( pc.variants(), [ { kind: "texture-variant", variant: null } ] );
 });

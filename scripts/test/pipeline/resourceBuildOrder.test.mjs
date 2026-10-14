@@ -150,7 +150,13 @@ test("a failed source-image conversion stops the build before any lane", async (
 });
 
 // Steps that consume the families' output, or run after the tree is complete.
-const AFTER_FAMILIES = [ "buildUiImagePreloadManifest", "buildBackgroundInstallAsset", "packTree" ];
+// The texture variants re-encode every native texture, the families' included.
+const AFTER_FAMILIES = [
+	"buildTextureVariants",
+	"buildUiImagePreloadManifest",
+	"buildBackgroundInstallAsset",
+	"packTree"
+];
 
 for ( const laneCount of [ 1, 8 ] ) {
 	test(`the families run after every producer and before the image sweep and background install (${laneCount} lane(s))`, async () => {

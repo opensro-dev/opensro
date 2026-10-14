@@ -161,6 +161,7 @@ export async function collectAssetPackGroups( {
 	const mapTileImages = allGameImages.filter( file => imagePackGroup( file ) === "map-tiles" );
 	const uiIconImages = allGameImages.filter( file => imagePackGroup( file ) === "ui-icons" );
 	const particleTextureImages = allGameImages.filter( file => imagePackGroup( file ) === "particle-textures" );
+	const astcTextureVariants = allGameImages.filter( file => imagePackGroup( file ) === "texture-variants-astc" );
 
 	const compressedJson = (
 		await listPublicAssetFiles( {
@@ -253,6 +254,9 @@ export async function collectAssetPackGroups( {
 		{ name: "map-tiles", load: "startup", files: mapTileImages },
 		{ name: "ui-icons", load: "startup", files: uiIconImages },
 		{ name: "particle-textures", load: "startup", files: particleTextureImages },
+		// Read only by a device served the ASTC variants (client
+		// foundation/assets/texture-variants.ts); never installed or pinned.
+		{ name: "texture-variants-astc", load: "lazy", files: astcTextureVariants },
 		{
 			name: "game-data",
 			load: "startup",

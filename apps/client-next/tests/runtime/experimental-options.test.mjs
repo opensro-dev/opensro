@@ -36,7 +36,8 @@ const OFF = Object.freeze( {
 	predictedRunUp: false,
 	smoothCamera: false,
 	enchantSparks: false,
-	compressedTextures: false
+	// On by default (owner 2026-10-14); it changes only devices without BC.
+	compressedTextures: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -313,16 +314,16 @@ test("the predicted run-up defaults off and reaches only the worker's slice", ()
 	assert.equal( "predictedRunUp" in experimentalVideo( on ), false );
 });
 
-test("compressed textures stay off unless explicitly true, and the stored reader parses the saved key", () => {
+test("compressed textures are on unless explicitly false, and the stored reader parses the saved key", () => {
 	const { storedExperimentalOptions, EXPERIMENTAL_STORAGE_KEY } = experimentalModule;
-	for ( const value of [ undefined, null, {}, { compressedTextures: 1 }, { compressedTextures: "true" } ] ) {
-		assert.equal( experimentalOptions( value ).compressedTextures, false );
+	for ( const value of [ undefined, null, {}, { compressedTextures: 1 }, { compressedTextures: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).compressedTextures, true );
 	}
-	assert.equal( experimentalOptions( { compressedTextures: true } ).compressedTextures, true );
-	const saved = new Map( [ [ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { compressedTextures: true } ) ] ] );
+	assert.equal( experimentalOptions( { compressedTextures: false } ).compressedTextures, false );
+	const saved = new Map( [ [ EXPERIMENTAL_STORAGE_KEY, JSON.stringify( { compressedTextures: false } ) ] ] );
 	const storage = { getItem: key => saved.get( key ) ?? null };
-	assert.equal( storedExperimentalOptions( storage ).options.compressedTextures, true );
-	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, false );
-	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, false );
+	assert.equal( storedExperimentalOptions( storage ).options.compressedTextures, false );
+	assert.equal( storedExperimentalOptions( { getItem: () => null } ).options.compressedTextures, true );
+	assert.equal( storedExperimentalOptions( undefined ).options.compressedTextures, true );
 	assert.throws( () => storedExperimentalOptions( { getItem: () => "{" } ) );
 });

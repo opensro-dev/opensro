@@ -9,7 +9,7 @@ BC (iPhone, iPad, most Android) otherwise decodes every level to RGBA8:
 four to eight times the memory, which is what ends a phone tab. With the
 Experimental "Compressed textures" row on, such a device is served the
 asset build's re-encoding of each texture in a format it does sample
-(ETC2 or ASTC 4x4), published beside the original under
+(ASTC 4x4; ETC2 is defined, not built), published beside the original under
 TEXTURE_VARIANT_ROOT so every path keeps one owning pack group.
 
 The asset build (scripts) and the asset worker read the same rules here.
@@ -38,11 +38,14 @@ export type TextureFeature = "texture-compression-bc" | "texture-compression-etc
 ================
 textureVariantOrder
 
-The order a device that samples both is served in.
+The sets the asset build publishes, in the order a device is served them.
+Only ASTC 4x4 is built (scripts/build/textures): it is what iPhone and
+iPad sample. ETC2 joins this list when its set is built; a set listed here
+but not published would send such a device to paths that do not exist.
 ================
 */
 export function textureVariantOrder(): readonly TextureVariant[] {
-	return [ "etc2", "astc" ];
+	return [ "astc" ];
 }
 
 /*

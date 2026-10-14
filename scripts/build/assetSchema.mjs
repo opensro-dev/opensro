@@ -15,6 +15,10 @@ History:
   3  character GLBs can embed original BC1/BC2/BC3 mip resources
   4  SROPACK2 packs: members stored gzip-compressed when that saves a tenth;
      no gzip transports or delivery.json (pack index version 2)
+     Later additive, without a bump: the lazy texture-variants-astc group
+     (ASTC re-encodings at /assets/texture-variants/astc/, NTX code "AS44").
+     Older clients never ask for those paths; newer ones read the original
+     when a variant is absent.
 
 ===========================================================================
 */

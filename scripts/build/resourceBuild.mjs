@@ -16,6 +16,7 @@ summary it prints from formatResourceBuildSummary.
 */
 
 import { produceAllFamilies } from "./families/looseFamilies.mjs";
+import { buildTextureVariants } from "./textures/buildTextureVariants.mjs";
 import { buildAudioResources } from "./audio.mjs";
 import { buildCifResources } from "./cif.mjs";
 import { buildConfigResources } from "./config.mjs";
@@ -179,6 +180,7 @@ export const RESOURCE_BUILD_STEPS = Object.freeze( {
 	loadOutdoorWorldRegionResourceGroup,
 	extractRetailCursors,
 	produceAllFamilies,
+	buildTextureVariants,
 	packTree: packPublicTree
 } );
 
@@ -516,6 +518,10 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 	// they run after all of them, each as its own ledger owner. One full build
 	// therefore makes a complete tree (families/looseFamilies.mjs).
 	const families = await timed( "families", () => steps.produceAllFamilies() );
+	// Port-only: every native texture is published, so its ASTC variant for
+	// devices without BC is encoded now, before the packs are listed
+	// (textures/buildTextureVariants.mjs; cached by source digest).
+	const textureVariants = await timed( "textureVariants", () => steps.buildTextureVariants() );
 	// The native-interface preload sweep over assets/images/** runs once every
 	// producer, the families included, has published (their code-selected UI
 	// art belongs in the startup set).
@@ -589,6 +595,7 @@ export async function buildSroResources( steps = RESOURCE_BUILD_STEPS, options =
 		skillStageModels,
 		backgroundInstall,
 		families,
+		textureVariants,
 		packGroups,
 		claimAudit,
 		jsonOptimization,

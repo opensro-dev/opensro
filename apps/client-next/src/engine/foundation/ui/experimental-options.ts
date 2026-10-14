@@ -42,6 +42,9 @@ export interface ExperimentalOptions {
 	// Port-only, not native: a device without BC is served re-encoded
 	// textures (texture-variants.ts) instead of decoding them to RGBA.
 	// Read when the asset worker starts, so it applies from the next load.
+	// On unless turned off (the owner's choice, 2026-10-14): only devices
+	// without BC are affected, where RGBA ends the tab; off is the native
+	// texture content.
 	readonly compressedTextures: boolean;
 }
 
@@ -79,7 +82,8 @@ export function renderScales(): readonly RenderScale[] {
 ================
 experimentalOptions
 
-Only an explicit true enables a toggle. Missing or invalid render scales
+Only an explicit true enables a toggle, except compressedTextures, which
+only an explicit false turns off. Missing or invalid render scales
 restore full resolution; legacy Video settings cannot enable scaling. Keys
 of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -106,7 +110,7 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		predictedRunUp: enabled( "predictedRunUp" ),
 		smoothCamera: enabled( "smoothCamera" ),
 		enchantSparks: enabled( "enchantSparks" ),
-		compressedTextures: enabled( "compressedTextures" )
+		compressedTextures: record.compressedTextures !== false
 	};
 }
 
