@@ -226,10 +226,13 @@ type Runtime struct {
 
 	// Admission precedes game-ready/pet binding; teardown follows this owner.
 	characterAdmissions sync.Map // simulation.WorldKey -> populationAdmission
-	recoveryMu          sync.Mutex
-	recoverySessions    map[recoveryKey]*recoverySession
-	petSkillWindows     petSkillWindowIndex
-	paramJobOwners      petSkillWindowIndex
+	// walkInZones is the walk-in zone each admitted player stood in at the
+	// last tick (walkin.go): only entering one teleports.
+	walkInZones      sync.Map // simulation.WorldKey -> zone codename
+	recoveryMu       sync.Mutex
+	recoverySessions map[recoveryKey]*recoverySession
+	petSkillWindows  petSkillWindowIndex
+	paramJobOwners   petSkillWindowIndex
 	// premiumSpend is the online premium clocks' uncommitted spend
 	// (premiumclock.go).
 	premiumSpend premiumSpendLedger
@@ -393,7 +396,11 @@ type Runtime struct {
 	ReleaseQuestCapturesOnDeath func(*enterworld.Character) ([]wire.Frame, bool)
 	QuestMonsterDrops           func(*enterworld.Character, string, uint8, func() (uint32, error)) []inventory.ItemAmount
 	QuestTravelBlocks           func(*enterworld.Character) uint32
-	UpdateQuestKill             func(
+	// WalkInZoneAt names the walk-in event zone a live point stands in, or
+	// "" (movement.WaterValidator.WalkInZoneAt; walkin.go). Nil disables
+	// walk-in gates.
+	WalkInZoneAt    func(simulation.Spawn) string
+	UpdateQuestKill func(
 		character *enterworld.Character,
 		monsterCodename string,
 		rarity uint8,

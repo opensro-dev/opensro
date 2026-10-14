@@ -98,6 +98,9 @@ type portalCatalog struct {
 	links        map[[2]uint32]portalLink
 	// buildings maps a teleport building's codename to its RefObjID.
 	buildings map[string]uint32
+	// walkIns maps a TELEPORT event zone's codename to its teleport's one
+	// link (walkin.go).
+	walkIns map[string]portalLink
 }
 
 // Both tables remain server-owned. The request carries neither a price nor a
@@ -252,6 +255,11 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		}
 		c.links[key] = link
 	}
+	walkIns, err := loadWalkIns(dir, c)
+	if err != nil {
+		return nil, err
+	}
+	c.walkIns = walkIns
 	return c, nil
 }
 

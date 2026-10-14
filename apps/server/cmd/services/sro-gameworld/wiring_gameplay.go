@@ -277,6 +277,7 @@ func newGameplayPlane(
 	items.AdmitGroundWalk = movementRuntime.AdmitGroundWalk
 	items.LineOfSight = movementRuntime.LineOfSight
 	items.ResolveNavOwner = water.ResolveNavOwner
+	items.WalkInZoneAt = water.WalkInZoneAt
 	items.MoveCOS = movementRuntime.HandleCOSMove
 	items.MoveCOSPublished = movementRuntime.HandleCOSMovePublished
 	items.SteerCOS = movementRuntime.HandleCOSSteer

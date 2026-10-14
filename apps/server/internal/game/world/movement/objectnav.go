@@ -91,12 +91,15 @@ type objectNavEdges struct {
 	srcCell []uint16
 	dstCell []uint16
 	flags   []byte
+	// events is the per-edge extra byte (navFlags&1), nil without it.
+	events []byte
 }
 
 // objectNavMesh is the slice of a decoded BMS offset-7 object-nav payload
 // the movement planes need: cell triangles over object-local vertices plus
-// both edge groups. The grid tail, event names, region links and trigger
-// bytes are parsed (the payload must exact-consume) but not retained.
+// both edge groups, and the event zones its cells carry (walkin_zone.go).
+// The grid tail and region links are parsed (the payload must
+// exact-consume) but not retained.
 // min/max bound the vertex cloud (object-local) so per-move queries can
 // reject a whole mesh in a few compares.
 /*
@@ -113,6 +116,10 @@ type objectNavMesh struct {
 	cellC            []uint16
 	outline          objectNavEdges
 	internal         objectNavEdges
+	// eventNames is the payload's event-name list; cellEvents gives each
+	// cell's index into it, or noCellEvent (nil when the mesh has none).
+	eventNames []string
+	cellEvents []int8
 
 	minX, minY, minZ float64
 	maxX, maxY, maxZ float64
@@ -256,6 +263,12 @@ func decodeObjectNavEdgeGroup(c *objectNavCursor, label string, stride, vertexCo
 		edges.srcCell[i] = src
 		edges.dstCell[i] = dst
 		edges.flags[i] = c.raw[base+8]
+		if stride > objectNavEdgeWireStride {
+			if edges.events == nil {
+				edges.events = make([]byte, countInt)
+			}
+			edges.events[i] = c.raw[base+9]
+		}
 	}
 	c.off += recordBytes
 	return edges, nil
@@ -334,6 +347,14 @@ func decodeObjectNavPayload(raw []byte, navFlags int) (*objectNavMesh, error) {
 		mesh.cellA[i] = v0
 		mesh.cellB[i] = v1
 		mesh.cellC[i] = v2
+		if cellStride > objectNavCellWireStride {
+			if event, ok := cellEventIndex(c.raw[base+8]); ok {
+				if mesh.cellEvents == nil {
+					mesh.cellEvents = newCellEvents(cellCountInt)
+				}
+				mesh.cellEvents[i] = event
+			}
+		}
 	}
 	c.off += cellBytes
 
@@ -369,6 +390,7 @@ func decodeObjectNavPayload(raw []byte, navFlags int) (*objectNavMesh, error) {
 			if err := c.ensure(int(length), "event name text"); err != nil {
 				return nil, err
 			}
+			mesh.eventNames = append(mesh.eventNames, string(c.raw[c.off:c.off+int(length)]))
 			c.off += int(length)
 		}
 	}
@@ -422,6 +444,7 @@ func decodeObjectNavPayload(raw []byte, navFlags int) (*objectNavMesh, error) {
 		mesh.maxZ = math.Max(mesh.maxZ, z)
 	}
 	mesh.cellNeighbors = buildObjectCellNeighbors(mesh)
+	resolveCellEvents(mesh)
 	return mesh, nil
 }
 
