@@ -32,6 +32,7 @@
 		"apps/client-next/src/**/*.{ts,mts,cts,js,mjs,cjs}",
 		"apps/client-next/tests/**/*.{ts,mts,cts,js,mjs,cjs}",
 		"apps/client-next/tools/**/*.{ts,mts,cts,js,mjs,cjs}",
+		"apps/server-console-auth/**/*.{ts,mts,cts,js,mjs,cjs}",
 		"apps/server-observatory/**/*.{ts,mts,cts,js,mjs,cjs}",
 		"scripts/**/*.{ts,mts,cts,js,mjs,cjs}",
 		"*.{mjs,cjs}"
