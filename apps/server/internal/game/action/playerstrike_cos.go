@@ -227,10 +227,12 @@ func (rt *Runtime) strikeCOSTarget(st offensiveStage, target combatTarget, caste
 			refusal = 0x300e
 			return false
 		}
-		attacked = rt.registerPlayerAttacked(division, owner, character, now)
 		if !rt.applyCOSHitInDoor(division, &hit, now) {
 			return false
 		}
+		// After the last refusal: a refused door must leave the owner's
+		// aggression map as it found it.
+		attacked = rt.registerPlayerAttacked(division, owner, character, now)
 		if hit.strike.fatal {
 			// 4C42F0 -> 4EB6B0: the killing blow eases the caster's murder
 			// penalty by the gap to the companion's level (cosplayerkill.go).
