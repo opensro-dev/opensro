@@ -61,3 +61,42 @@ func TestClosedMeshNeedsEveryOutlineEdgeBlocking(t *testing.T) {
 		t.Fatal("an open outline edge makes the mesh walkable from outside")
 	}
 }
+
+/*
+================
+TestRelocateStrandedSpawnLeavesTheReportedTree
+
+The relog rescue for BR-261014-1425-CE1E: a spawn inside asset 1160 at
+ground height (the stand the sealed-deck test lets through, as it sits on
+the terrain under the object's surface) is stranded and moves to a nearby
+point outside every closed object, which is itself not stranded.
+================
+*/
+func TestRelocateStrandedSpawnLeavesTheReportedTree(t *testing.T) {
+	v := realAuthorityValidator(t)
+	ground, ok := v.TerrainHeightAt(0x5F6A, 1765, 1358)
+	if !ok {
+		t.Fatal("no terrain height under the reported tree")
+	}
+	trunk := simulation.Spawn{RegionID: 0x5F6A, X: 1765, Y: ground, Z: 1358, Angle: 9}
+	rescued, stranded, found := v.RelocateStrandedSpawn(trunk)
+	if !stranded || !found {
+		t.Fatalf("inside the trunk: stranded=%v found=%v, want both", stranded, found)
+	}
+	if asset, inside := v.InsideClosedObject(rescued); inside {
+		t.Fatalf("rescued into asset %d at %+v", asset, rescued)
+	}
+	if _, again, _ := v.RelocateStrandedSpawn(rescued); again {
+		t.Fatalf("the rescue point is itself stranded: %+v", rescued)
+	}
+	if dist := simulation.WorldDistance2D(trunk, rescued); dist > 40 {
+		t.Fatalf("rescue moved %.1f units, want the nearest tile outside the trunk", dist)
+	}
+	if rescued.Angle != trunk.Angle {
+		t.Fatalf("rescue must keep the facing, got %d", rescued.Angle)
+	}
+	open := simulation.Spawn{RegionID: 0x5F6A, X: 1750, Y: ground, Z: 1358}
+	if _, stranded, _ := v.RelocateStrandedSpawn(open); stranded {
+		t.Fatal("open ground beside the tree must pass through")
+	}
+}
