@@ -8,8 +8,9 @@ The COS info window's Name button sends 0x7571 [u32 cos gid][u16 len]
 511BB0). The server admits it as native:
 
   - the name is 1..12 bytes, or 0xB571 error 5;
-  - it passes the character-name rules (CGame_IsValidCharacterName), or
-    error 0x440E, the client's UIIT_MSG_COSPETERR_PETNAME_NOTPUT;
+  - it passes the character-name rules (CGame_IsValidCharacterName,
+    the name filter included: namefilter.go), or error 0x440E, the
+    client's UIIT_MSG_COSPETERR_PETNAME_NOTPUT;
   - the gid is one of the caller's summoned records, or error 3, and that
     record has no name yet, or error 5: a pet is named once and never
     renamed (CCOSManager_SubmitPetNameChange 4FAD20);
@@ -136,9 +137,10 @@ func (rt *Runtime) HandlePetName(division string, c *enterworld.Character, paylo
 	if len(name) == 0 || len(name) > petNameMaxBytes {
 		return petNameRefusal(petNameErrRefused)
 	}
-	// CGame_IsValidCharacterName: the character-name charset and its
-	// 2..12 bound, so a one-byte name fails here as 0x440E.
-	if !jobAliasShape.MatchString(name) || len(name) < domain.CharacterNameMinBytes {
+	// CGame_IsValidCharacterName: the character-name charset, its 2..12
+	// bound (a one-byte name fails here as 0x440E) and the name filter
+	// (4184A0 -> 987770).
+	if !jobAliasShape.MatchString(name) || len(name) < domain.CharacterNameMinBytes || !rt.nameAllowed(name) {
 		return petNameRefusal(petNameErrNotAllowed)
 	}
 	unlock := rt.lockDivision(division)

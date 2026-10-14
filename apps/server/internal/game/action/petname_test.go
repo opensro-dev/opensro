@@ -155,3 +155,27 @@ func TestPetNameNamesTheSummonerItemCopy(t *testing.T) {
 		t.Fatalf("summoner item pet name %q", pet.Name)
 	}
 }
+
+/*
+================
+TestPetNamePassesTheNameFilter
+
+4184A0's name filter: a pet name holding a filtered word answers 0x440E
+and names nothing; a clean one still names the pet.
+================
+*/
+func TestPetNamePassesTheNameFilter(t *testing.T) {
+	rt, owner, _ := petNamePair(t)
+	rt.NameFilter = testNameFilter(t)
+	out := rt.HandlePetName(testDivision, owner, petNameRequest(petNameTestGID, "Rudeboy"))
+	if len(out.Frames) != 1 || out.Frames[0].Opcode != 0xB571 || !bytes.Equal(out.Frames[0].Payload, []byte{2, 0x0e, 0x44}) {
+		t.Fatalf("filtered name answered %+v, want 0xB571 02 0E 44", out.Frames)
+	}
+	if owner.ActiveCOS.Name != "" {
+		t.Fatalf("a filtered name was stored: %q", owner.ActiveCOS.Name)
+	}
+	rt.HandlePetName(testDivision, owner, petNameRequest(petNameTestGID, petNameTestName))
+	if owner.ActiveCOS.Name != petNameTestName {
+		t.Fatalf("a clean name was refused: %q", owner.ActiveCOS.Name)
+	}
+}
