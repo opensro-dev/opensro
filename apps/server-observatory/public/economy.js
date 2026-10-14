@@ -254,7 +254,7 @@ function drawDistribution( distribution, failure ) {
 				rows.map( row => [ "Degree " + row.degree, ...[ row.star, row.moon, row.sun ].map( countText ) ] ),
 				[ 1, 2, 3 ]
 			);
-		const parts = [ element( "h3", "Every character", "economy-subhead" ), soxTable( sox ) ];
+		const parts = [ element( "h3", "Whole shard, warehouses included", "economy-subhead" ), soxTable( sox ) ];
 		// The same count over accounts active in 14 days: what is in play now.
 		if ( Array.isArray( distribution.soxAccounts14d ) ) {
 			parts.push(
