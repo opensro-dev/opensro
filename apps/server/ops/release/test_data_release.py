@@ -169,7 +169,16 @@ class CombinedRunTests(unittest.TestCase):
 			state = {"client": {"release": "b" * 64, "compatibility": {}}}
 			argv = ["data_release.py", str(package), str(output), "--server-data", str(archive),
 				"--origin", "https://release.example", "--ssh-target", "stage@host", "--identity", "key"]
-			with mock.patch.object(data_release, "send", send), 				mock.patch.object(data_release, "fetch_json", lambda origin, path: state if "production" in path else {"releaseId": "b" * 64}), 				mock.patch.object(data_release, "compatibility", lambda *a: None), 				mock.patch.object(data_release, "build_plan", lambda *a: {}), 				mock.patch.object(data_release, "stored_payloads", lambda *a: set()), 				mock.patch.object(data_release.client_data, "needed_payloads", lambda *a: []), 				mock.patch.object(data_release.client_data, "bundle", bundle), 				mock.patch("sys.argv", argv):
+			with (
+				mock.patch.object(data_release, "send", send),
+				mock.patch.object(data_release, "fetch_json", lambda origin, path: state if "production" in path else {"releaseId": "b" * 64}),
+				mock.patch.object(data_release, "compatibility", lambda *a: None),
+				mock.patch.object(data_release, "build_plan", lambda *a: {}),
+				mock.patch.object(data_release, "stored_payloads", lambda *a: set()),
+				mock.patch.object(data_release.client_data, "needed_payloads", lambda *a: []),
+				mock.patch.object(data_release.client_data, "bundle", bundle),
+				mock.patch("sys.argv", argv),
+			):
 				data_release.main()
 			self.assertEqual([path.name for path in sent], ["server-data.tar", "candidate.tar"])
 			self.assertNotEqual(sent[0].parent, output, "the server data is written beside OUTPUT, never inside it")

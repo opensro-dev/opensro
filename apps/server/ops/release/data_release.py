@@ -153,6 +153,7 @@ def server_data_upload(archive, directory):
 def server_data_directory(output, archive):
 	if output is None:
 		return archive.parent
+	output = output.resolve()
 	return output.with_name(output.name + "-server-data")
 
 
