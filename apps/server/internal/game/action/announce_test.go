@@ -176,6 +176,49 @@ func TestSealDropNoticeNamesTheSeal(t *testing.T) {
 
 /*
 ================
+TestPlusNoticeNamesTheSeal
+
+With the shipped items, a +8..+11 notice names a sealed item's seal as the
+drop notice does (A Star, B Moon, C Sun) and an ordinary item plainly. A
+line too long for the notice keeps its plus and gives up the seal.
+================
+*/
+func TestPlusNoticeNamesTheSeal(t *testing.T) {
+	licensed.RequireGameData(t)
+	items := enterworld.NewTextdataItems(gamedatatest.TextdataDir(t))
+	plus := func(codename string) alchemy.Outcome {
+		return alchemy.Outcome{Success: true, Target: 13,
+			Items: []inventory.Item{{Slot: 13, Codename: codename, Plus: 9}}}
+	}
+	for codename, seal := range map[string]string{
+		"ITEM_CH_BLADE_08_A_RARE": " (Seal Of Star)",
+		"ITEM_CH_BLADE_08_B_RARE": " (Seal Of Moon)",
+		"ITEM_CH_BLADE_08_C_RARE": " (Seal Of Sun)",
+		"ITEM_CH_BLADE_08_A":      "",
+	} {
+		ref, ok := items.ItemRefByCodename(codename)
+		if !ok || ref.Name == "" {
+			t.Fatalf("missing shipped item %s", codename)
+		}
+		rt, _ := newTestRuntime(testCharacter(), items)
+		rt.Announce.Plus = true
+		rt.announcePlus(testDivision, "Smith", plus(codename), 0)
+		want := "Smith advanced " + ref.Name + seal + " to +9"
+		if got := drainedNotices(t, rt); len(got) != 1 || got[0] != want {
+			t.Fatalf("%s: %q, want %q", codename, got, want)
+		}
+	}
+	rt, _ := newTestRuntime(testCharacter(), items)
+	rt.Announce.Plus = true
+	long := strings.Repeat("W", noticeMaxUnits-30)
+	rt.announcePlus(testDivision, long, plus("ITEM_CH_BLADE_08_A_RARE"), 0)
+	if got := drainedNotices(t, rt); len(got) != 1 || !strings.HasSuffix(got[0], " to +9") || strings.Contains(got[0], "Seal") {
+		t.Fatalf("an over-long line %q, want the plus kept and the seal dropped", got)
+	}
+}
+
+/*
+================
 TestPlusNoticeFollowsTheFlag
 
 Only a success into +8..+11 is announced, and only with the flag.

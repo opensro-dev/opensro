@@ -254,7 +254,8 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 ================
 Runtime.announcePlus
 
-Item 2: a reinforcement that succeeded into +8..+11, after its commit.
+Item 2: a reinforcement that succeeded into +8..+11, after its commit,
+naming a sealed item's seal as the drop notice does.
 ================
 */
 func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome, nowMs int64) {
@@ -265,13 +266,22 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 		if item.Slot != outcome.Target || item.Plus < announcePlusMin || item.Plus > announcePlusMax {
 			continue
 		}
-		name := item.Codename
+		name, seal := item.Codename, ""
 		if items := rt.deps.ItemReferences(); items != nil {
 			if ref, found := items.ItemRefByCodename(item.Codename); found && ref.Name != "" {
 				name = ref.Name
+				if tier, sealed := enterworld.EquipmentSeal(ref); sealed {
+					seal = " (" + sealNoticeNames[tier] + ")"
+				}
 			}
 		}
-		rt.announce(division, announcePlus, fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus), nowMs)
+		text := fmt.Sprintf("%s advanced %s%s to +%d", player, name, seal, item.Plus)
+		// The seal is the part to give up: clamping would cut the plus off
+		// the end instead.
+		if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
+			text = fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
+		}
+		rt.announce(division, announcePlus, text, nowMs)
 		return
 	}
 }
