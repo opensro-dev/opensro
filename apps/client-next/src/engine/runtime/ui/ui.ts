@@ -14,6 +14,9 @@ Visibility gates new requests, never collection of outstanding work.
 // CGInterface_ExecuteActionCommand 695420 case 1006: trade with the
 // selected player.
 const ACTION_EXCHANGE = 1006;
+// A label closer than this to its window's left edge has left its window
+// (the frame's border is about this wide; the Experimental "Fit window labels").
+const WINDOW_LABEL_MARGIN = 6;
 // The Friends list (iffriend.txt id 30, 328 x 256): eleven 23-pixel
 // gil_bar02 rows and a scrollbar between its 16-pixel arrows.
 const FRIEND_VISIBLE_ROWS = 11;
@@ -8439,6 +8442,40 @@ export function createUi(
 				clipToControl: boolean | "clip" = false
 			) {
 				const box = authoredClientRect( node, ox, oy );
+				// Port-only (Experimental "Fit window labels", off is the original):
+				// an English label that would run past its window's left edge (the
+				// trade window's "Purchase amount", right-aligned in 63 pixels, with
+				// a wider text face) wraps onto two lines inside its box instead.
+				if ( !clipToControl && experimental.state().saved.fitWindowLabels && value.includes( " " ) ) {
+					const measure = ( line: string ) => text.run( line, 0, node.fontIndex ).width;
+					const width = measure( value ),
+						left = node.hAlign === 2 ?
+							box[0] + box[2] - width :
+							node.hAlign === 1 ?
+							box[0] + (box[2] - width) / 2 :
+							box[0];
+					const lines = left < ox + WINDOW_LABEL_MARGIN ? textLines( value, box[2], measure ) : [];
+					if ( lines.length === 2 && lines.every( line => measure( line ) <= box[2] ) ) {
+						const lineHeight = text.extentHeight( node.fontIndex ?? 0 ),
+							top = box[1] + (box[3] - 2 * lineHeight) / 2;
+						lines.forEach( ( line, index ) =>
+							quads.push(
+								...text.quads(
+									line,
+									[ box[0], top + index * lineHeight, box[2], lineHeight ],
+									full,
+									node.color,
+									{
+										fontIndex: node.fontIndex,
+										hAlign: node.hAlign,
+										vAlign: 1
+									}
+								)
+							)
+						);
+						return;
+					}
+				}
 				quads.push(
 					...text.quads( value, box, clipToControl ? box : full, node.color, {
 						fontIndex: node.fontIndex,
@@ -15096,24 +15133,6 @@ export function createUi(
 							buying ? hudCopy( "UIIT_STT_TRADE_TRADESCALE" + (scaleRow + 1) ) : "",
 							!buying || !!specialtyDeal.dealing
 						);
-						if ( specialtyCombo && buying ) {
-							const list: UiRect = [ r[0], r[1] + r[3], r[2], inputs.rows * 18 ];
-							rect( list, [ 0, 0, 0, 1 ] );
-							blocks.push( list );
-							for ( let row = 0; row < inputs.rows; row++ ) {
-								const entry: UiRect = [ list[0], list[1] + row * 18, list[2], 18 ];
-								const label = hudCopy( "UIIT_STT_TRADE_TRADESCALE" + (row + 1) );
-								quads.push(
-									...text.quads( label, [ entry[0] + 4, entry[1], entry[2] - 8, 18 ], entry, white )
-								);
-								controls.push( {
-									id: "specialty-deal-row:" + row,
-									label,
-									rect: entry,
-									kind: "button"
-								} );
-							}
-						}
 					}
 					const ok = byId( 40 );
 					if ( ok ) {
@@ -15125,6 +15144,32 @@ export function createUi(
 							hudCopy( ok.text ),
 							count === 0 || !!specialtyDeal.dealing || !!game?.inventoryPending
 						);
+					}
+					// The open list is a popup: it draws after the window's last
+					// control (CIFComboBox's list is topmost; drawn before it, the
+					// Confirm button covered rows 2 and 3).
+					if ( combo && specialtyCombo && buying ) {
+						const r = authoredRect( combo, px, py ), height = inputs.rows * 18;
+						// Port-only (Experimental "Fit window labels"): a list that would
+						// leave the window opens upward from the box.
+						const up = experimental.state().saved.fitWindowLabels &&
+							r[1] + r[3] + height > py + root.rect[3] && r[1] - height >= py;
+						const list: UiRect = [ r[0], up ? r[1] - height : r[1] + r[3], r[2], height ];
+						rect( list, [ 0, 0, 0, 1 ] );
+						blocks.push( list );
+						for ( let row = 0; row < inputs.rows; row++ ) {
+							const entry: UiRect = [ list[0], list[1] + row * 18, list[2], 18 ];
+							const label = hudCopy( "UIIT_STT_TRADE_TRADESCALE" + (row + 1) );
+							quads.push(
+								...text.quads( label, [ entry[0] + 4, entry[1], entry[2] - 8, 18 ], entry, white )
+							);
+							controls.push( {
+								id: "specialty-deal-row:" + row,
+								label,
+								rect: entry,
+								kind: "button"
+							} );
+						}
 					}
 					endWindow( admission, "service:" + SPECIALTY_DEAL_PANEL );
 				}

@@ -72,6 +72,12 @@ export interface ExperimentalOptions {
 	// (CICCos_ResolveDrawOwner 854680), which ignores the key. Off unless
 	// turned on (the balance advisor's ask, owner-approved 2026-10-15).
 	readonly vHidesCompanions: boolean;
+	// Port-only, not native: an authored label wider than its box wraps onto
+	// two lines inside it, and an open list that would leave its window opens
+	// upward (the original runs the text past the window's edge and draws the
+	// list below the box). On unless turned off (the owner's choice,
+	// 2026-10-15); off is the original look.
+	readonly fitWindowLabels: boolean;
 }
 
 /*
@@ -109,8 +115,8 @@ export function renderScales(): readonly RenderScale[] {
 experimentalOptions
 
 Only an explicit true enables a toggle, except compressedTextures,
-sharedActorRoom, greyDisabledTabs, jobKillNotices and dropPlusNotices, which
-only an explicit false turns off. Missing or invalid render scales
+sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices and
+fitWindowLabels, which only an explicit false turns off. Missing or invalid render scales
 restore full resolution; legacy Video settings cannot enable scaling. Keys
 of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
@@ -142,7 +148,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		greyDisabledTabs: record.greyDisabledTabs !== false,
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
-		vHidesCompanions: enabled( "vHidesCompanions" )
+		vHidesCompanions: enabled( "vHidesCompanions" ),
+		fitWindowLabels: record.fitWindowLabels !== false
 	};
 }
 

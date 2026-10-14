@@ -47,7 +47,9 @@ const OFF = Object.freeze( {
 	// On by default (owner 2026-10-15): the shard's drop and plus notices show.
 	dropPlusNotices: true,
 	// Off by default: V hides only monsters and players, as the original does.
-	vHidesCompanions: false
+	vHidesCompanions: false,
+	// On by default (owner 2026-10-15): labels and lists stay inside their window.
+	fitWindowLabels: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -396,4 +398,13 @@ test("V hides pets and transports only when explicitly on, and reaches the rende
 	assert.equal( on.vHidesCompanions, true );
 	assert.equal( experimentalVideo( on ).vHidesCompanions, true );
 	assert.ok( EXPERIMENTAL_TABS.some( tab => tab.rows.some( row => row.key === "vHidesCompanions" ) ) );
+});
+
+test("fit window labels is on unless explicitly false and stays out of the worker's slices", () => {
+	for ( const value of [ undefined, null, {}, { fitWindowLabels: 1 }, { fitWindowLabels: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).fitWindowLabels, true );
+	}
+	assert.equal( experimentalOptions( { fitWindowLabels: false } ).fitWindowLabels, false );
+	assert.equal( "fitWindowLabels" in experimentalVideo( experimentalOptions( {} ) ), false );
+	assert.equal( "fitWindowLabels" in experimentalGameplay( experimentalOptions( {} ) ), false );
 });
