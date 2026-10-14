@@ -115,6 +115,19 @@ func SkillCastTravelFrame(cast SkillCastSuccess, destination SkillCastFacingPoin
 	return Frame{Opcode: OpSkillCastResult, Payload: destination.writeTo(cast.writePrefix(NewWriter(27)).U8(8)).Payload()}
 }
 
+/*
+================
+SkillCastTeleportFrame
+
+The Wizard's Teleport (tel2): the same result with bit 2 in place of bit 8
+(5862E0 sets +0x4C |= 2 for the tel2 block). The client takes bit 2 as a
+position it applies at once, not a travel it walks.
+================
+*/
+func SkillCastTeleportFrame(cast SkillCastSuccess, destination SkillCastFacingPoint) Frame {
+	return Frame{Opcode: OpSkillCastResult, Payload: destination.writeTo(cast.writePrefix(NewWriter(27)).U8(2)).Payload()}
+}
+
 const (
 	skillCastSteeringTargets = uint8(1 << 0)
 	skillCastSteeringPoint   = uint8(1 << 3)

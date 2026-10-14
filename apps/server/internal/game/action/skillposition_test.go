@@ -149,7 +149,13 @@ func TestGhostWalkShippedRanksAndAuthority(t *testing.T) {
 				if mode == "clipped" {
 					distance = 50
 				}
-				if len(p) != 27 || p[18] != 8 || to.X != before.X+distance || int16(binary.LittleEndian.Uint16(p[21:])) != int16(to.X) || c.World.MoveSegment != nil {
+				// 5862E0: tel2 (the Wizard's Teleport) publishes bit 2, an
+				// instant landing; tele (Ghost Walk) bit 8, a guided travel.
+				wantFlag := byte(8)
+				if strings.HasPrefix(skill.Codename, "SKILL_EU_WIZARD_") {
+					wantFlag = 2
+				}
+				if len(p) != 27 || p[18] != wantFlag || to.X != before.X+distance || int16(binary.LittleEndian.Uint16(p[21:])) != int16(to.X) || c.World.MoveSegment != nil {
 					t.Fatalf("wire/authority mismatch %x %+v", p, to)
 				}
 				if len(r.Broadcast) != 2 || r.Frames[1].Payload[0] != 1 || len(r.ActorPrivate) != 1 {

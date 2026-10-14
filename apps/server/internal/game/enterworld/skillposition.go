@@ -28,6 +28,10 @@ ground targeting; Charge keeps an offensive target and guided arrival.
 type SkillPositionEffect struct {
 	Pinned bool
 	Charge bool
+	// Teleport marks tel2, the Wizard's Teleport: 5862E0 publishes its
+	// destination with result bit 2, which the client applies at once,
+	// where tele (Ghost Walk) and tel3 set bit 8, a guided 500/s travel.
+	Teleport bool
 	// Parameter is argument zero, 500 in every shipped tele, tel2 and tel3
 	// row. The original reads it nowhere (#519): SkillGlobal_BuildParameterIndex
 	// binds the blocks at +2EC / +2F0 / +2F4, SkillAction_ApplyPositionEffect
@@ -87,5 +91,6 @@ func decodeSkillPosition(fields []string, row SkillRow) SkillPositionEffect {
 	if travel.Tag == 0 || travel.Count != 2 || travel.Arguments[1] == 0 || travel.Arguments[1] > 0x7fffffff {
 		return SkillPositionEffect{}
 	}
-	return SkillPositionEffect{Pinned: true, Parameter: travel.Arguments[0], Range: travel.Arguments[1]}
+	return SkillPositionEffect{Pinned: true, Teleport: travel.Tag == tagPositionTeleport,
+		Parameter: travel.Arguments[0], Range: travel.Arguments[1]}
 }

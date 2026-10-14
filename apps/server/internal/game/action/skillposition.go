@@ -116,7 +116,14 @@ func (rt *Runtime) acceptPositionSkill(division string, character, snapshot *ent
 	rt.Pending.Clear(grounditem.PendingKey(division, snapshot.Name))
 	rt.bindResidentRegion(key, now)
 	token := atomic.AddUint32(&rt.castTokenCounter, 1)
-	open := wire.SkillCastTravelFrame(wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: token}, point)
+	success := wire.SkillCastSuccess{SkillId: skill.ID, CasterGid: gid, InstanceToken: token}
+	// 5862E0: tele (Ghost Walk) travels (bit 8), tel2 (the Wizard's
+	// Teleport) lands at once (bit 2). The server's position is the
+	// destination in both, from this commit on.
+	open := wire.SkillCastTravelFrame(success, point)
+	if skill.PositionEffect.Teleport {
+		open = wire.SkillCastTeleportFrame(success, point)
+	}
 	// Instant native handler emits release (58701F); guided arrival owns the
 	// client close (8DD550). A zero-time finalize would truncate the dash.
 	release := wire.SkillCastReleaseFrame(token, gid)
