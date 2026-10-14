@@ -7,8 +7,7 @@ The console (apps/server-observatory) trusts only who Caddy says the
 operator is. Caddy asks this owner on every console request
 (forward_auth to /auth/verify) and copies the identity headers it answers
 with: X-SRO-Operator (discord:<user id>, what audits store),
-X-SRO-Operator-Name (display only) and X-SRO-Role (viewer, operator or
-approver). Caddy deletes client copies of those headers first and adds
+X-SRO-Operator-Name (display only) and X-SRO-Role (operator or approver). Caddy deletes client copies of those headers first and adds
 the console's edge secret itself; this owner never knows that secret.
 
 Sessions live in memory: a restart signs everyone out, and no Discord
@@ -61,16 +60,17 @@ export const DEFAULT_LIMITS = Object.freeze( {
 ================
 roleFor
 
-The console role of a guild member: none without the Staff role; the
-highest of operator and approver they hold, approver only when their id
-is on the allowlist.
+The console role of a guild member: Staff and Operator give operator;
+Staff, Approver and an id on the owner's allowlist give approver. Anything
+else, Staff alone included, is no access (owner, 2026-10-14: the console
+is for operators and up).
 ================
 */
 export function roleFor( config, userId, roleIds ) {
 	if ( !roleIds || !roleIds.includes( config.roles.staff ) ) return null;
 	if ( roleIds.includes( config.roles.approver ) && config.approverIds.includes( userId ) ) return "approver";
 	if ( roleIds.includes( config.roles.operator ) ) return "operator";
-	return "viewer";
+	return null;
 }
 
 /*

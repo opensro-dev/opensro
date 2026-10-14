@@ -153,12 +153,12 @@ test("roles: Staff is required, Approver also needs the owner's allowlist", () =
 	const config = { roles: ROLES, approverIds: [ "7" ] };
 	assert.equal( roleFor( config, "5", null ), null, "not a guild member" );
 	assert.equal( roleFor( config, "5", [ "200", "300" ] ), null, "no Staff role" );
-	assert.equal( roleFor( config, "5", [ "100" ] ), "viewer" );
+	assert.equal( roleFor( config, "5", [ "100" ] ), null, "Staff alone is no access" );
 	assert.equal( roleFor( config, "5", [ "100", "200" ] ), "operator" );
-	assert.equal( roleFor( config, "5", [ "100", "300" ] ), "viewer", "a self-granted Approver role is not enough" );
+	assert.equal( roleFor( config, "5", [ "100", "300" ] ), null, "a self-granted Approver role is not enough" );
 	assert.equal( roleFor( config, "5", [ "100", "200", "300" ] ), "operator" );
 	assert.equal( roleFor( config, "7", [ "100", "300" ] ), "approver" );
-	assert.equal( roleFor( config, "7", [ "100" ] ), "viewer", "the allowlist alone is not enough" );
+	assert.equal( roleFor( config, "7", [ "100" ] ), null, "the allowlist alone is not enough" );
 });
 
 test("non-staff, cancelled, forged, replayed and expired sign-ins get no session", async () => {
@@ -167,6 +167,7 @@ test("non-staff, cancelled, forged, replayed and expired sign-ins get no session
 	assert.equal( outsider.answer.status, 403 );
 	assert.equal( outsider.session, undefined );
 	assert.equal( (await signIn( w, "5" )).answer.status, 403, "Operator without Staff" );
+	assert.equal( (await signIn( w, "6" )).answer.status, 403, "Staff without Operator" );
 	const login = await w.auth.handle( request( "GET", "/auth/login" ) );
 	const loginCookie = { cookie: `${LOGIN_COOKIE}=${cookieValue( login, LOGIN_COOKIE )}` };
 	const state = new URL( login.headers.Location ).searchParams.get( "state" );
@@ -194,20 +195,23 @@ test("non-staff, cancelled, forged, replayed and expired sign-ins get no session
 });
 
 test("a removed role or any failed re-check ends the session: fail closed", async () => {
-	const members = { 5: [ "100", "200" ] };
+	const members = { 7: [ "100", "200", "300" ] };
 	const w = world( members );
-	const { session } = await signIn( w, "5" );
+	const { session } = await signIn( w, "7" );
+	assert.equal( (await verify( w, session )).headers["X-SRO-Role"], "approver" );
 	w.advance( 9 * MINUTE );
 	assert.equal( (await verify( w, session )).status, 200, "inside the re-check interval" );
-	members[5] = [ "100" ];
+	members[7] = [ "100", "200" ];
 	w.advance( 2 * MINUTE );
 	const demoted = await verify( w, session );
-	assert.equal( demoted.headers["X-SRO-Role"], "viewer" );
-	assert.ok( w.rows.some( row => row.event === "role_change" && row.from === "operator" && row.to === "viewer" ) );
-	members[5] = null;
+	assert.equal( demoted.headers["X-SRO-Role"], "operator" );
+	assert.ok( w.rows.some( row => row.event === "role_change" && row.from === "approver" && row.to === "operator" ) );
+	members[7] = [ "100" ];
 	w.advance( 11 * MINUTE );
-	assert.equal( (await verify( w, session )).status, 401, "left the guild" );
-	const down = world( { 5: [ "100" ] } );
+	assert.equal( (await verify( w, session )).status, 401, "Staff alone is no access" );
+	const left = await signIn( w, "7" );
+	assert.equal( left.answer.status, 403 );
+	const down = world( { 5: [ "100", "200" ] } );
 	const second = await signIn( down, "5" );
 	down.overrides.rolesFail = true;
 	down.advance( 11 * MINUTE );
@@ -216,13 +220,13 @@ test("a removed role or any failed re-check ends the session: fail closed", asyn
 });
 
 test("concurrent requests share one re-check, so a refresh token is never spent twice", async () => {
-	const w = world( { 5: [ "100" ] }, { limits: { recheckMs: MINUTE } } );
+	const w = world( { 5: [ "100", "200" ] }, { limits: { recheckMs: MINUTE } } );
 	const { session } = await signIn( w, "5" );
 	w.advance( 8 * 24 * 60 * MINUTE );
 	const answers = await Promise.all( [ verify( w, session ), verify( w, session ), verify( w, session ) ] );
 	assert.equal( w.calls.refresh, 0, "past the maximum age nothing is refreshed" );
 	assert.ok( answers.every( answer => answer.status === 401 ) );
-	const fresh = world( { 5: [ "100" ] }, {
+	const fresh = world( { 5: [ "100", "200" ] }, {
 		limits: { recheckMs: MINUTE, sessionMaxMs: 9 * 24 * 60 * MINUTE, idleMs: 9 * 24 * 60 * MINUTE }
 	} );
 	const second = await signIn( fresh, "5" );
@@ -233,7 +237,7 @@ test("concurrent requests share one re-check, so a refresh token is never spent 
 });
 
 test("sessions end at their maximum age and after an idle spell", async () => {
-	const w = world( { 5: [ "100" ] }, { limits: { recheckMs: 24 * 60 * MINUTE } } );
+	const w = world( { 5: [ "100", "200" ] }, { limits: { recheckMs: 24 * 60 * MINUTE } } );
 	const idle = await signIn( w, "5" );
 	w.advance( 121 * MINUTE );
 	assert.equal( (await verify( w, idle.session )).status, 401 );
@@ -276,7 +280,7 @@ test("only same-origin paths are returned to after sign-in", () => {
 });
 
 test("sign-out needs the console's own origin and ends the session", async () => {
-	const w = world( { 5: [ "100" ] } );
+	const w = world( { 5: [ "100", "200" ] } );
 	const { session } = await signIn( w, "5" );
 	const cookie = `${SESSION_COOKIE}=${session}`;
 	assert.equal(
@@ -304,7 +308,7 @@ test("sign-in attempts are limited per client address, which must come from Cadd
 });
 
 test("a flood of sign-ins delays others but never refuses them: an address keeps three", async () => {
-	const w = world( { 5: [ "100" ] }, { limits: { attemptsPerMinute: 100000 } } );
+	const w = world( { 5: [ "100", "200" ] }, { limits: { attemptsPerMinute: 100000 } } );
 	const flooded = await w.auth.handle( request( "GET", "/auth/login" ) );
 	for ( let i = 0; i < 3; i++ ) await w.auth.handle( request( "GET", "/auth/login" ) );
 	const replayed = await w.auth.handle(
@@ -329,7 +333,7 @@ test("a flood of sign-ins delays others but never refuses them: an address keeps
 });
 
 test("a user holds at most five sessions; the oldest gives way", async () => {
-	const w = world( { 5: [ "100" ] } );
+	const w = world( { 5: [ "100", "200" ] } );
 	const sessions = [];
 	for ( let i = 0; i < 6; i++ ) {
 		sessions.push( (await signIn( w, "5" )).session );
