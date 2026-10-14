@@ -165,6 +165,12 @@ func (rt *Runtime) spawnCaravanBandits(division string, c *enterworld.Character,
 	// inside the loop and nothing after it, so stopping early leaves every
 	// remaining bandit's draws exactly where they fall natively.
 	count = caravan.CappedSpawnCount(count, rt.CaravanBanditCap)
+	if rt.CaravanStarAmbush {
+		// Port-only, not native: the fixed per-star table replaces the
+		// rolled and capped count (caravan/starambush.go). The native roll
+		// above still ran, so every bandit's draws fall where natively.
+		count = caravan.StarAmbushCount(stars)
+	}
 	job := c.Job.Type
 	tacticsID, err := caravan.TacticsID(job, roll)
 	if err != nil {

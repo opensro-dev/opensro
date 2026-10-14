@@ -69,7 +69,10 @@ type Runtime struct {
 	// CaravanBanditCap caps the bandits per ambush (port-only,
 	// SRO_CARAVAN_BANDIT_CAP; 0 is native, uncapped).
 	CaravanBanditCap int
-	BerserkRoll      combat.Roll32767
+	// CaravanStarAmbush replaces an ambush's count with the fixed per-star
+	// table (port-only, SRO_CARAVAN_STAR_AMBUSH; false is native).
+	CaravanStarAmbush bool
+	BerserkRoll       combat.Roll32767
 	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
 	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the

@@ -165,6 +165,13 @@ func NewDevDepsWithRoster(paths DevPaths, textdata *TextdataCatalogs, roster *Ro
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: %w", err)
 		}
+		if monster.JobMonsterSpeedFromEnv() {
+			// Port-only, not native: thief and hunter monsters move 20%
+			// faster (monster/jobmonsterspeed.go).
+			var scaled int
+			template, scaled = template.WithJobMonsterSpeed()
+			log.Infof("bootstrap: %d job monster types move 20%% faster (%s)", scaled, monster.EnvJobMonsterSpeed)
+		}
 		monsters = simulation.NewMonsterState(template)
 		log.Infof("bootstrap: monster population ON (kill switch MISSION_SPAWN_MONSTERS=0): template %d nest rows / %d spawnable types; per-viewer native 320-unit block interest",
 			len(template.Nests), len(template.SpawnableRefs()))

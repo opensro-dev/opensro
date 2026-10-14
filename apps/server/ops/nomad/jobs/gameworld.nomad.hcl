@@ -385,6 +385,23 @@ variable "caravan_bandit_cap" {
   default = "8"
 }
 
+# caravan_star_ambush replaces the rolled ambush count with a fixed one per
+# caravan star: 1 star 2, 2 stars 3, 3 stars 4, 4 stars 7, 5 stars 10
+# (port-only, not native; owner decision 2026-10-15). "off" is the
+# original roll, capped by caravan_bandit_cap.
+variable "caravan_star_ambush" {
+  type    = string
+  default = "on"
+}
+
+# job_monster_speed makes the job system's thief and hunter monsters walk
+# and run 20% faster (port-only, not native; owner decision 2026-10-15).
+# "off" is their original speed.
+variable "job_monster_speed" {
+  type    = string
+  default = "on"
+}
+
 # beta_shop_only_degree9 keeps degree-9 Lucky Powder, magic stones and
 # attribute stones out of every monster drop (port-only, not native, beta
 # balance; owner 2026-10-13): players buy them from the Jangan shops. "off"
@@ -648,6 +665,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MALL_EXTRA_GOODS               = var.mall_extra_goods
         SRO_ALCHEMY_NO_ASSIMILATION        = var.alchemy_no_assimilation
         SRO_CARAVAN_BANDIT_CAP             = var.caravan_bandit_cap
+        SRO_CARAVAN_STAR_AMBUSH            = var.caravan_star_ambush
+        SRO_JOB_MONSTER_SPEED              = var.job_monster_speed
         SRO_ELIXIR_DROPS_OFF               = var.elixir_drops_off
         SRO_ALCHEMY_MATERIAL_DROPS_OFF     = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9         = var.beta_shop_only_degree9

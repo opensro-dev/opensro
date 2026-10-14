@@ -616,6 +616,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if banditCap > 0 {
 		log.Infof("caravan: at most %d bandits per ambush (%s)", banditCap, caravan.EnvBanditCap)
 	}
+	game.items.CaravanStarAmbush = caravan.StarAmbushFromEnv()
+	if game.items.CaravanStarAmbush {
+		log.Infof("caravan: a fixed ambush per star replaces the rolled count (%s)", caravan.EnvStarAmbush)
+	}
 	if game.deps.StorageAutoStack {
 		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)
 	}

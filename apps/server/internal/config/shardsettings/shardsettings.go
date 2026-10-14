@@ -92,6 +92,10 @@ var Settings = []Setting{
 	{Env: "SRO_ALCHEMY_NO_ASSIMILATION", NomadVar: "alchemy_no_assimilation", Default: "on"},
 	// Owner, 2026-10-14: 8 per ambush (was 16), thieves and hunters alike.
 	{Env: "SRO_CARAVAN_BANDIT_CAP", NomadVar: "caravan_bandit_cap", Default: "8"},
+	// Owner, 2026-10-15: a fixed ambush per caravan star (2/3/4/7/10).
+	{Env: "SRO_CARAVAN_STAR_AMBUSH", NomadVar: "caravan_star_ambush", Default: "on"},
+	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
+	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: alchemy materials no longer drop; "off" is native.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "on", Catalogue: true},

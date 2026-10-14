@@ -27,6 +27,7 @@ import (
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/party"
+	"opensro.online/server/internal/game/world/monster"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -175,6 +176,14 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A caravan ambush has as many bandits as its cargo's value calls for, with no limit.",
 				Now:    fmt.Sprintf("At most %d bandits per ambush.", banditCap),
 				Why:    "A full load drew dozens of bandits at once; the cap keeps an ambush fightable."},
+			{Flag: caravan.EnvStarAmbush, On: caravan.StarAmbushFromEnv(),
+				Native: "A caravan ambush has one bandit per cargo star, sometimes one more, and rarely twice as many.",
+				Now:    "An ambush is fixed by the cargo's stars: 1 star 2 bandits, 2 stars 3, 3 stars 4, 4 stars 7, 5 stars 10.",
+				Why:    "Requested for the beta so a bigger cargo draws a clearly bigger ambush; the original returns with one setting."},
+			{Flag: monster.EnvJobMonsterSpeed, On: monster.JobMonsterSpeedFromEnv(),
+				Native: "Thief and hunter monsters move at their original speed.",
+				Now:    "Thief and hunter monsters walk and run 20% faster.",
+				Why:    "Requested for the beta so job ambushes keep up with a transport; the original returns with one setting."},
 			{Flag: action.EnvMostWanted, On: action.MostWantedFromEnv(),
 				Native: "Job kills earn job EXP only.",
 				Now: "Each job kill while suited adds to a streak; every 10 is a wanted level (up to 10), worth +1 STR, +1 INT and +1% move speed each, " +
