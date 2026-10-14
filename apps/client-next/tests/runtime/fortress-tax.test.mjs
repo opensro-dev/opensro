@@ -149,6 +149,21 @@ test("the tax row queries the fortress and the answer fills the window", t => {
 	assert.ok( shown.controls.some( c => c.id === "fortress-tax-help:19" && c.helpText ) );
 });
 
+test("the seven tax target boxes are ticked from the fortress and drawn disabled at half alpha", t => {
+	const { f, step, answer } = managerFixture( t, "Holders" );
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-tax" } );
+	step();
+	answer( { action: 0, result: 1, fortress: 1, taxRate: 10, gold: "100" } );
+	const boxes = f.scenes.at( -1 ).quads.filter( q => /\/com_checkbutton_o(n|ff)\.png$/.test( q.texture ) );
+	assert.equal( boxes.length, 7 );
+	// taxTargets 63 ticks boxes 0..5; box 6 stays off.
+	assert.equal( boxes.filter( q => q.texture.endsWith( "_on.png" ) ).length, 6 );
+	// 665470 disables every box through CIFButton_SetEnabledWithFaceAlpha
+	// (541640), whose disabled face alpha is 0x80.
+	for ( const box of boxes ) assert.equal( box.color[3], 0x80 / 255 );
+});
+
 test("an unchanged rate is refused locally and a moved slider sends action 1", t => {
 	const { f, sent, step, answer } = managerFixture( t, "Holders" );
 	step();

@@ -643,6 +643,8 @@ const FORTRESS_SCHEDULE_PANEL = "Fortress war schedule";
 // CIFTaxManagement, the fortress manager's first row (fortress-tax-hud.ts).
 const FORTRESS_TAX_PANEL = "Fortress tax";
 const FORTRESS_TAX_RATE = "fortress-tax-rate";
+// CIFButton_SetEnabledWithFaceAlpha (541640): a disabled face draws at alpha 0x80.
+const DISABLED_FACE_TINT = [ 1, 1, 1, 0x80 / 255 ] as const;
 const FORTRESS_TAX_AMOUNT = "fortress-tax-amount";
 // CIFFortressMakeItemWnd, the smith's and trainer's production window
 // (fortress-production-hud.ts), and its count box's edit (MsgBoxMakeItem 116).
@@ -14351,7 +14353,9 @@ export function createUi(
 					const row = view?.gameplay?.fortress?.fortresses.find( r => r.id === context?.fortress );
 					const name = node( 27 );
 					if ( name && context ) authoredText( name, px, py, row?.nameStrId ? hudCopy( row.nameStrId ) : "" );
-					// 665470 ticks box 30 + i from siegefortress column 10 bit i, then disables it.
+					// 665470 ticks box 30 + i from siegefortress column 10 bit i, then
+					// disables it through CIFButton_SetEnabledWithFaceAlpha (541640),
+					// which draws a disabled face at alpha 0x80.
 					for ( let i = 0; i < 7; i++ ) {
 						const box = node( 30 + i );
 						if ( !box ) continue;
@@ -14360,7 +14364,9 @@ export function createUi(
 							{ ...box, rect: [ box.rect[0], box.rect[1], 16, 16 ] },
 							px,
 							py,
-							box.texture.replace( "_off", on ? "_on" : "_off" )
+							box.texture.replace( "_off", on ? "_on" : "_off" ),
+							1,
+							DISABLED_FACE_TINT
 						);
 					}
 					const rate = fortressTaxHud.draft();
