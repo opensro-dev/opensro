@@ -14,6 +14,7 @@ import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { Renderer } from "@/engine/contracts/runtime";
 import type { DressCatalog } from "@/engine/foundation/animation/equipment-appearance";
 import { CHARACTER_ACTORS } from "@/engine/foundation/animation/character-budget";
+import { trimToEffectBudget } from "@/engine/foundation/animation/effect-room";
 import {
 	changeLocomotion,
 	locomotionLayers,
@@ -136,6 +137,8 @@ interface StageFrame {
 	readonly next: Map<number, CharacterActor>;
 	readonly seconds: number;
 	readonly animationHolders: { actor: CharacterActor; sets: readonly AnimationParticleSet[]; }[];
+	// The local player's pose: past the actor room the nearest effects draw.
+	readonly player: { readonly regionId: number; readonly x: number; readonly z: number; } | undefined;
 }
 
 /*
@@ -152,7 +155,11 @@ interface StageBindings {
 			selectors: readonly ModifierSelector[];
 			particles: readonly AnimationParticleSet[];
 		} | undefined;
+		// The actors the effect owner drew and the effects its budget turned away.
+		takeBudget(): { readonly actors: number; readonly gaveWay: number; };
 	};
+	// The frame probe, when a bench installed one.
+	readonly probe: Pick<import("@/engine/contracts/runtime").RenderFrameProbe, "characterCount"> | undefined;
 }
 
 /*
@@ -314,13 +321,27 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 		/*
 		================
 		presentStages
+
+		Admits the orb and effect actors into the frame and counts, for the
+		frame probe, the effects that gave way to either bound.
 		================
 		*/
 		presentStages( frame: StageFrame, bindings: StageBindings ) {
-			const { orbActors, effectActors, next, seconds, animationHolders } = frame;
-			const { renderer, resources, effects } = bindings;
+			const { orbActors, effectActors, next, seconds, animationHolders, player } = frame;
+			const { renderer, resources, effects, probe } = bindings;
 			const stageAlive = new Set<number>();
-			for ( const actor of [ ...orbActors, ...effectActors ] ) {
+			// The original draws every decoration (85C020 appends to an
+			// unbounded list); the port's renderer holds CHARACTER_ACTORS in
+			// all. When the effects outnumber the room left, the nearest draw
+			// instead of the first listed: the same number drop, never more.
+			const room = CHARACTER_ACTORS - next.size - orbActors.length;
+			let admitted = effectActors, gaveWay = 0;
+			if ( effectActors.length > room ) {
+				const nearest = [ ...effectActors ];
+				gaveWay = trimToEffectBudget( nearest, room, player );
+				admitted = nearest;
+			}
+			for ( const actor of [ ...orbActors, ...admitted ] ) {
 				if ( next.size >= CHARACTER_ACTORS ) continue;
 				const model = `effect:${actor.gid}:${actor.model}`;
 				renderer.setCharacterAssembly( model, actor.model, [] );
@@ -366,6 +387,11 @@ export function createAuxiliaryPresentation( allocateActor: () => number ) {
 				}
 			}
 			for ( const gid of stageAnimations.keys() ) if ( !stageAlive.has( gid ) ) stageAnimations.delete( gid );
+			// The benches' evidence of which bound, if either, a scene meets.
+			const budget = effects.takeBudget();
+			probe?.characterCount( "effect-actors", budget.actors );
+			probe?.characterCount( "effect-budget-gave-way", budget.gaveWay );
+			probe?.characterCount( "effect-actor-room-gave-way", gaveWay );
 		},
 		/*
 		================

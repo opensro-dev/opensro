@@ -41,7 +41,7 @@ import { createCharacterResources } from "./resources/resources";
 import { createMallPreview } from "./mall-preview";
 import type { CharacterRecord } from "@/engine/contracts/session";
 import type { AssetOwner } from "@/engine/contracts/assets";
-import type { Renderer } from "@/engine/contracts/runtime";
+import type { RenderFrameProbe, Renderer } from "@/engine/contracts/runtime";
 import type { EntityState } from "@/engine/contracts/world";
 import type { GameplayState } from "@/engine/contracts/gameplay";
 import type { CharacterActor } from "@/engine/contracts/character";
@@ -75,7 +75,7 @@ CharacterFrameProbe
 Optional measurements supplied by the runtime; presentation never discovers globals.
 ================
 */
-export interface CharacterFrameProbe {
+export interface CharacterFrameProbe extends Pick<RenderFrameProbe, "characterCount"> {
 	detailBegin( stage: string ): void;
 	detailEnd( stage: string ): void;
 	sampleDetails(): boolean;
@@ -720,8 +720,8 @@ export function createCharacterPresentation(
 			resources.failed
 		);
 		auxiliary.presentStages(
-			{ orbActors, effectActors, next, seconds, animationHolders },
-			{ renderer, resources, effects }
+			{ orbActors, effectActors, next, seconds, animationHolders, player: gameplay?.pose ?? undefined },
+			{ renderer, resources, effects, probe }
 		);
 		auxiliary.step(
 			{ entities, seconds, next, gameplay, localMover, castByActor, particleHolders },

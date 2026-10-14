@@ -3142,6 +3142,20 @@
 		},
 		{
 			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "effects.takeBudget",
+			"function": "presentStages",
+			"kind": "callback",
+			"reason": "The parent effect owner reports the actors it drew and the effects its budget turned away, for the frame probe; it changes nothing."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
+			"expression": "probe?.characterCount",
+			"function": "presentStages",
+			"kind": "callback",
+			"reason": "Optional runtime-owned frame observer, passed with the frame; counts effects that gave way to either bound. Production supplies none."
+		},
+		{
+			"file": "src/engine/runtime/characters/presentation-auxiliary.ts",
 			"expression": "resources.duration",
 			"function": "callback:step:2",
 			"kind": "callback",
