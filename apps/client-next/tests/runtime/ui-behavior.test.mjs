@@ -2133,12 +2133,24 @@ test("GPU management controls send typed intent and preserve the selected guild 
 		f.ui.step( f.state, 200 );
 		f.ui.event( { kind: "activate", id: "party-kick" } );
 		assert.equal( sent.length, 0 );
-		f.ui.step( f.state, 300 );
-		f.ui.event( { kind: "activate", id: "party-kick" } );
+		// The ban asks its native question; Yes sends it.
+		output = f.ui.step( f.state, 300 );
+		assert.ok( output.controls.some( c => c.id === "social-confirm-yes" ) );
+		f.ui.event( { kind: "activate", id: "social-confirm-yes" } );
 		assert.deepEqual( sent.pop(), { kind: "party-kick", id: 22 } );
 		f.ui.event( { kind: "activate", id: "open-window:Guild" } );
 		f.ui.step( f.state, 400 );
 		f.ui.event( { kind: "activate", id: "social-member:22" } );
+		// Withdraw (UIIT_STT_GUILD_EXPULSION) asks before it bans; No drops it.
+		f.ui.event( { kind: "activate", id: "guild-kick" } );
+		output = f.ui.step( f.state, 410 );
+		assert.ok( output.controls.some( c => c.id === "social-confirm-no" ) );
+		f.ui.event( { kind: "activate", id: "social-confirm-no" } );
+		assert.equal( sent.length, 0 );
+		f.ui.event( { kind: "activate", id: "guild-kick" } );
+		f.ui.step( f.state, 420 );
+		f.ui.event( { kind: "activate", id: "social-confirm-yes" } );
+		assert.deepEqual( sent.pop(), { kind: "guild-kick", name: "Other" } );
 		f.ui.event( { kind: "activate", id: "guild-dialog:title" } );
 		f.ui.step( f.state, 450 );
 		f.ui.event( { kind: "edit", id: "social-name", value: "Officer", start: 7, end: 7, composing: false } );

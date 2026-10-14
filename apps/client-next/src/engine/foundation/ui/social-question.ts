@@ -25,12 +25,24 @@ export interface SocialQuestionGuild {
 
 /*
 ================
+SocialQuestionLine
+
+One line of the question: a text key, and the name its %s stands for.
+================
+*/
+export interface SocialQuestionLine {
+	readonly key: string;
+	readonly arg?: string;
+}
+
+/*
+================
 SocialQuestion
 ================
 */
 export interface SocialQuestion {
 	readonly title: string;
-	readonly lines: readonly string[];
+	readonly lines: readonly SocialQuestionLine[];
 }
 
 /*
@@ -40,36 +52,33 @@ socialQuestion
 The native question for an armed action: ban (EXPULSION_ANYONE with the
 member's name), secede (EXIT1 with the guild's, then EXIT2's 72-hour
 warning), disband (BREAK_CONFIRM) and the party ban. Null when nothing is
-asked, or a ban names no member. title is a text key; lines are resolved
-through copy.
+asked, or a ban names no member. The window resolves the text keys.
 ================
 */
 export function socialQuestion(
 	asked: string,
 	guild: SocialQuestionGuild | null | undefined,
-	member: number,
-	copy: ( key: string ) => string
+	member: number
 ): SocialQuestion | null {
 	switch ( asked ) {
 		case "guild-kick": {
 			const name = guild?.members.find( m => m.id === member )?.name;
 			return name === undefined ? null : {
 				title: "UIIT_STT_GUILD_EXPULSION",
-				lines: [ copy( "UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE" ).replace( "%s", () => name ) ]
+				lines: [ { key: "UIIT_MSG_GUILD_QUESTION_EXPULSION_ANYONE", arg: name } ]
 			};
 		}
 		case "guild-leave":
 			return {
 				title: "UIIT_STT_GUILD_EXIT",
-				lines: [
-					copy( "UIIT_MSG_GUILD_QUESTION_EXIT1" ).replace( "%s", () => guild?.name ?? "" ),
-					copy( "UIIT_MSG_GUILD_QUESTION_EXIT2" )
-				]
+				lines: [ { key: "UIIT_MSG_GUILD_QUESTION_EXIT1", arg: guild?.name ?? "" }, {
+					key: "UIIT_MSG_GUILD_QUESTION_EXIT2"
+				} ]
 			};
 		case "guild-dissolve":
-			return { title: "UIIT_CTL_GUILD_BREAK", lines: [ copy( "UIIT_MSG_GUILD_BREAK_CONFIRM" ) ] };
+			return { title: "UIIT_CTL_GUILD_BREAK", lines: [ { key: "UIIT_MSG_GUILD_BREAK_CONFIRM" } ] };
 		case "party-kick":
-			return { title: "UIIT_STT_AGREEMENT_BOX", lines: [ copy( "UIIT_MSG_PARTY_BAN_REQUEST" ) ] };
+			return { title: "UIIT_STT_AGREEMENT_BOX", lines: [ { key: "UIIT_MSG_PARTY_BAN_REQUEST" } ] };
 	}
 	return null;
 }

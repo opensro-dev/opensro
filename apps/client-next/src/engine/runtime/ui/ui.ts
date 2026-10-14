@@ -18652,7 +18652,7 @@ export function createUi(
 					no: "union-ask-no"
 				} );
 			}
-			const socialAsk = socialQuestion( confirmSocial, game?.social?.guild, socialMember, hudCopy );
+			const socialAsk = socialQuestion( confirmSocial, game?.social?.guild, socialMember );
 			if ( worldVisible && socialAsk ) {
 				// The guild window's Withdraw (UIIT_STT_GUILD_EXPULSION, a ban of
 				// the selected member), Secede and Disband, and the party ban,
@@ -18661,7 +18661,7 @@ export function createUi(
 				blocks = [ full ];
 				simpleMessageBox( {
 					title: hudCopy( socialAsk.title ),
-					lines: socialAsk.lines,
+					lines: socialAsk.lines.map( line => hudCopy( line.key ).replace( "%s", () => line.arg ?? "" ) ),
 					yes: "social-confirm-yes",
 					no: "social-confirm-no"
 				} );
