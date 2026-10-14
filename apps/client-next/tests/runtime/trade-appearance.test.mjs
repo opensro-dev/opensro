@@ -177,6 +177,7 @@ test("the appearance lookup draws a bandit spawn as its dressed body, once per s
 			catalog: new Map( [ [ 1907, body ] ] ),
 			deathModels: new Map(),
 			tradeSkinPools: { china: [ [ 1907, 1 ] ], europe: [] },
+			tradeBandits: new Map(),
 			itemIds: new Map( [ [ "ITEM_CH_SWORD_01_A", 77 ], [ "ITEM_CH_M_TRADE_THIEF_02", 2163 ] ] ),
 			dress: { equipment: { 77: { slot: 6 }, 2163: { slot: 8 } } }
 		},
@@ -211,4 +212,42 @@ test("the appearance lookup draws a bandit spawn as its dressed body, once per s
 	assert.equal( lookup.resourceFor( bandit )?.codename, "CHAR_CH_MAN_ADVENTURER" );
 	// An ordinary monster keeps its own model.
 	assert.equal( lookup.appearanceRef( { ...bandit, gid: 10, tidWord: 0xc6, tradeVariant: undefined } ), 2222 );
+});
+
+test("a bandit carries its column-89 skill's weapon: a bow bandit holds a bow and no shield", () => {
+	/** @type {any} */
+	const body = { codename: "CHAR_CH_MAN_ADVENTURER", glb: "/assets/char/a.glb", clips: [] };
+	const lookup = createAppearanceLookup( {
+		referenceAppearances: { skin: () => undefined, get: () => undefined },
+		published: {
+			catalog: new Map( [ [ 1907, body ] ] ),
+			deathModels: new Map(),
+			tradeSkinPools: { china: [ [ 1907, 1 ] ], europe: [] },
+			// MOB_HUNTER_NPC_0001: 4009 HSKILL_BOW_MAGIC_0001, route 6 (a bow).
+			tradeBandits: new Map( [ [ 7585, { route: 6, imbue: 107 } ] ] ),
+			itemIds: new Map( [
+				[ "ITEM_CH_SWORD_01_A", 77 ],
+				[ "ITEM_CH_BOW_01_A", 78 ],
+				[ "ITEM_CH_SHIELD_01_A", 79 ],
+				[ "ITEM_CH_M_TRADE_HUNTER_02", 2167 ]
+			] ),
+			dress: { equipment: { 77: { slot: 6 }, 78: { slot: 6 }, 79: { slot: 7 }, 2167: { slot: 8 } } }
+		},
+		structureVisuals: { appearance: () => undefined },
+		deathShown: () => false,
+		random: () => 0
+	} );
+	/** @type {import("../../src/engine/contracts/world.ts").EntityState} */
+	const hunter = /** @type {any} */ ({
+		gid: 11,
+		refObjId: 7585,
+		kind: "monster",
+		tidWord: 0x18c6,
+		tradeVariant: 4,
+		countryByte9c: 3,
+		level: 1
+	});
+	const worn = lookup.wornEquipment( hunter, null ).map( item => item.refObjId );
+	assert.ok( worn.includes( 78 ), "the bow" );
+	assert.ok( !worn.includes( 77 ) && !worn.includes( 79 ), "no sword or shield" );
 });

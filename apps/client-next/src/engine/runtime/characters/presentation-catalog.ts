@@ -179,6 +179,38 @@ function readTradeSkinPools( value: unknown ): TradeSkinPools {
 
 /*
 ================
+TradeBandit
+
+A thief or hunter monster's dress inputs from its column-89 skill
+(missionPresentation.json tradeBandits, 861720): the weapon route
+(skill +0xD8) and the imbue skill (+0x264), 0 for none.
+================
+*/
+export interface TradeBandit {
+	readonly route: number;
+	readonly imbue: number;
+}
+
+/*
+================
+readTradeBandits
+================
+*/
+function readTradeBandits( value: unknown ): ReadonlyMap<number, TradeBandit> {
+	if ( !Array.isArray( value ) || value.length > 0xffff ) throw Error( "Invalid trade bandit table" );
+	const bandits = new Map<number, TradeBandit>();
+	for ( const row of value ) {
+		if (
+			!Array.isArray( row ) || row.length !== 3 || !row.every( n => Number.isSafeInteger( n ) && n >= 0 ) ||
+			row[0] <= 0 || bandits.has( row[0] )
+		) throw Error( "Invalid trade bandit row" );
+		bandits.set( row[0], { route: row[1], imbue: row[2] } );
+	}
+	return bandits;
+}
+
+/*
+================
 createPresentationCatalog
 ================
 */
@@ -190,6 +222,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 		itemIds: ReadonlyMap<string, number> = new Map(),
 		// The trade bandits' bodies (missionPresentation.json, 861720).
 		tradeSkinPools: TradeSkinPools = { china: [], europe: [] },
+		tradeBandits: ReadonlyMap<number, TradeBandit> = new Map(),
 		items: Record<string, ItemPresentation> = {};
 	let dropModels: Record<string, DropModel> = {};
 	const animationStates = new Map<string, Record<string, AnimationMetadata>>(),
@@ -242,6 +275,9 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 		get tradeSkinPools() {
 			return tradeSkinPools;
 		},
+		get tradeBandits() {
+			return tradeBandits;
+		},
 		get itemIds() {
 			return itemIds;
 		},
@@ -281,6 +317,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 					skillAudioRows?: string[];
 					recoveryByCodename?: Record<string, number>;
 					tradeSkinPools?: unknown;
+					tradeBandits?: unknown;
 					models?: Resource[] | Record<string, Resource>;
 					resources?: Record<string, Partial<Resource>>;
 					boothModels?: Record<string, Partial<Resource>>;
@@ -625,6 +662,9 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 				const nextTradeSkinPools = value.tradeSkinPools === undefined ?
 					tradeSkinPools :
 					readTradeSkinPools( value.tradeSkinPools );
+				const nextTradeBandits = value.tradeBandits === undefined ?
+					tradeBandits :
+					readTradeBandits( value.tradeBandits );
 				if ( value.recoveryByCodename ) {
 					recoveryByCodename.clear();
 					for ( const [name, period] of Object.entries( value.recoveryByCodename ) ) {
@@ -632,6 +672,7 @@ export function createPresentationCatalog( owners: CatalogOwners ) {
 					}
 				}
 				tradeSkinPools = nextTradeSkinPools;
+				tradeBandits = nextTradeBandits;
 				if ( value.rules ) sounds.catalog( value.rules );
 				if ( value.effectAppearanceStores ) {
 					const pools = value.effectAppearanceStores;

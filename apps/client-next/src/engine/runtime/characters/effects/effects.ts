@@ -211,6 +211,13 @@ function stageAttachment(
 		...(binding.keepRotation ? {} : { keepRotation: false })
 	};
 }
+// A trade bandit's type word without the service bit (861B00, as
+// appearance-lookup.ts); 861720 attaches its skill's imbue as a lasting deco.
+const TRADE_THIEF_WORD = 0x10c6, TRADE_HUNTER_WORD = 0x18c6;
+// The client-side token that keys a bandit's imbue deco (server tokens are
+// positive; -1 marks the status and hwan rows).
+const TRADE_IMBUE_TOKEN = -3;
+
 /*
 ================
 createCharacterEffects
@@ -914,7 +921,9 @@ export function createCharacterEffects(
 			) => EffectVisual["actor"]["pose"] | null,
 			presented: readonly CharacterActor[] = [],
 			effectDetail = 2,
-			bloodEnabled = true
+			bloodEnabled = true,
+			// The trade bandits' published dress by RefObjID (861720).
+			banditTable: ReadonlyMap<number, { readonly imbue: number; }> = new Map()
 		) {
 			/*
 			================
@@ -2109,6 +2118,15 @@ export function createCharacterEffects(
 								phase: 0,
 								receivedAtMs: revision
 							} );
+						}
+					}
+					for ( const entity of entities ) {
+						const word = (entity.tidWord ?? 0) & 0xfffe;
+						if ( entity.kind !== "monster" || entity.tradeVariant === undefined ) continue;
+						if ( word !== TRADE_THIEF_WORD && word !== TRADE_HUNTER_WORD ) continue;
+						const skill = banditTable.get( entity.refObjId )?.imbue ?? 0;
+						if ( skill > 0 ) {
+							stateEffects.push( { gid: entity.gid, skill, token: TRADE_IMBUE_TOKEN, phase: 0 } );
 						}
 					}
 					const registrations: Attachment[] = [ ...(gameplay?.attachedEffects ?? []), ...stateEffects ];

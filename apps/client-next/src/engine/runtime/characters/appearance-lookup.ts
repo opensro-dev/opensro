@@ -49,6 +49,7 @@ export interface AppearanceSources {
 		readonly catalog: ReadonlyMap<number, Resource>;
 		readonly deathModels: ReadonlyMap<string, DeathModel>;
 		readonly tradeSkinPools: TradeSkinPools;
+		readonly tradeBandits: ReadonlyMap<number, { readonly route: number; }>;
 		readonly itemIds: ReadonlyMap<string, number>;
 		readonly dress: { readonly equipment?: Readonly<Record<string, { readonly slot?: number | null; }>>; };
 	};
@@ -89,18 +90,21 @@ export function createAppearanceLookup( sources: AppearanceSources ) {
 		const word = (entity.tidWord ?? 0) & 0xfffe;
 		if ( entity.kind !== "monster" || entity.tradeVariant === undefined ) return undefined;
 		if ( word !== THIEF_TYPE_WORD && word !== HUNTER_TYPE_WORD ) return undefined;
-		const key = entity.refObjId + ":" + entity.tradeVariant + ":" + published.tradeSkinPools.china.length;
+		// 861720 reads the weapon route (skill +0xD8) of the bandit's column-89
+		// skill (common base +0x210): a bow for HSKILL_BOW_*, a spear for
+		// HSKILL_SPEAR_*. A record the table lacks keeps 861720's default 2.
+		const route = published.tradeBandits.get( entity.refObjId )?.route ?? DEFAULT_WEAPON_TYPE;
+		const key = entity.refObjId + ":" + entity.tradeVariant + ":" + published.tradeSkinPools.china.length + ":" +
+			route;
 		const seen = tradeSkins.get( entity.gid );
 		if ( seen?.key === key ) return seen.skin;
-		// Every bandit's spawn skill (characterdata column 88, skill 3000) routes
-		// weapon 2 (skill +0xd8, column 50), the same as 861720's default.
 		const dress = tradeAppearance(
 			{
 				selector: entity.tradeVariant,
 				race: entity.countryByte9c ?? -1,
 				level: entity.level ?? 1,
 				thief: word === THIEF_TYPE_WORD,
-				weaponType: DEFAULT_WEAPON_TYPE
+				weaponType: route
 			},
 			published.tradeSkinPools,
 			codename => {

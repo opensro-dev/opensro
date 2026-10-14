@@ -54,7 +54,8 @@ interface PresentationEventEffects {
 		) => CharacterActor["pose"] | null,
 		presented: readonly CharacterActor[],
 		effectDetail: number,
-		bloodEnabled: boolean
+		bloodEnabled: boolean,
+		banditTable: ReadonlyMap<number, { readonly imbue: number; }>
 	): CharacterActor[];
 	attachedInstances(): readonly { key: string; gid: number; skill: number; stopped: boolean; }[];
 	takeActivations(): readonly { gid: number; skill: number; at: number; }[];
@@ -92,6 +93,8 @@ PresentationEventCatalog
 */
 interface PresentationEventCatalog {
 	readonly catalog: ReadonlyMap<number, Resource>;
+	// The trade bandits' dress (missionPresentation.json, 861720).
+	readonly tradeBandits: ReadonlyMap<number, { readonly imbue: number; }>;
 	readonly soundProfiles: ReadonlyMap<string, string>;
 	readonly effectAnchors: ReadonlyMap<string, NonNullable<CharacterActor["effectAnchor"]>>;
 	readonly riderModes: ReadonlyMap<string, number>;
@@ -321,7 +324,8 @@ export function createPresentationEvents() {
 				},
 				[ ...output.displayed.values() ],
 				effectDetail,
-				bloodEnabled
+				bloodEnabled,
+				published.tradeBandits
 			);
 			// 008DD6F0 calls snd_activate once after constructing the effect,
 			// including restored instances and immediate-stop instances.
