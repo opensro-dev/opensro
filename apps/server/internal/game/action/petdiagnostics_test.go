@@ -14,6 +14,7 @@ import (
 
 	logtest "github.com/sirupsen/logrus/hooks/test"
 
+	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -37,19 +38,76 @@ func petFightReasons(hook *logtest.Hook) []string {
 /*
 ================
 TestRefusedPetOrderIsLoggedOncePerInterval
+
+An order on a live target the pet may not attack (here its own owner) is a
+real failure: logged, once per quiet interval.
 ================
 */
 func TestRefusedPetOrderIsLoggedOncePerInterval(t *testing.T) {
 	hook := logtest.NewGlobal()
 	defer hook.Reset()
-	// A target that does not exist (despawned, or never in this world).
-	rt, _, c, m := newPetCombatRuntime(t, 100, attackPetBand)
-	order := petAttackOrder(c.ActiveCOS.GID, m.Gid+999)
+	rt, _, c, _ := newPetCombatRuntime(t, 100, attackPetBand)
+	order := petAttackOrder(c.ActiveCOS.GID, enterworld.ObjectIDForCharacter(c))
 	rt.HandleCosCommand(testDivision, c, order)
 	rt.HandleCosCommand(testDivision, c, order)
 	reasons := petFightReasons(hook)
 	if len(reasons) != 1 || reasons[0] != "order refused: target not found" {
 		t.Fatalf("logged %v, want one 'target not found' within the quiet interval", reasons)
+	}
+	if counters := rt.PetCombatCounters(); counters["order_refused.target_gone"] != 0 || counters["order_refused.target_died"] != 0 {
+		t.Fatalf("a live target counted as ended: %v", counters)
+	}
+}
+
+/*
+================
+TestPetOrderOnDepartedTargetIsCountedNotLogged
+
+An order on a gid nothing holds any more (a despawned monster) is the normal
+end of a fight: counted in the metrics, never logged.
+================
+*/
+func TestPetOrderOnDepartedTargetIsCountedNotLogged(t *testing.T) {
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+	rt, _, c, m := newPetCombatRuntime(t, 100, attackPetBand)
+	order := petAttackOrder(c.ActiveCOS.GID, m.Gid+999)
+	rt.HandleCosCommand(testDivision, c, order)
+	rt.HandleCosCommand(testDivision, c, order)
+	if reasons := petFightReasons(hook); len(reasons) != 0 {
+		t.Fatalf("logged %v for a departed target", reasons)
+	}
+	if got := rt.PetCombatCounters()["order_refused.target_gone"]; got != 2 {
+		t.Fatalf("order_refused.target_gone = %d, want 2", got)
+	}
+}
+
+/*
+================
+TestPetFightOnKilledTargetIsCountedNotLogged
+
+A fight whose monster dies under it ends normally: counted, not logged.
+================
+*/
+func TestPetFightOnKilledTargetIsCountedNotLogged(t *testing.T) {
+	hook := logtest.NewGlobal()
+	defer hook.Reset()
+	rt, clock, c, m := newPetCombatRuntime(t, 100000, attackPetBand)
+	rt.HandleCosCommand(testDivision, c, petAttackOrder(c.ActiveCOS.GID, m.Gid))
+	clock.now = clock.now.Add(100 * time.Millisecond)
+	rt.TickHook()(clock.NowMs())
+	live, _ := rt.Monsters.Get(testDivision, m.Gid)
+	rt.Monsters.ApplyDamage(testDivision, m.Gid, live.CurrentHP)
+	for range 5 {
+		clock.now = clock.now.Add(100 * time.Millisecond)
+		rt.TickHook()(clock.NowMs())
+	}
+	if reasons := petFightReasons(hook); len(reasons) != 0 {
+		t.Fatalf("logged %v for a killed target", reasons)
+	}
+	counters := rt.PetCombatCounters()
+	if counters["fight_ended.target_died"]+counters["fight_ended.target_gone"] != 1 {
+		t.Fatalf("fight end not counted once: %v", counters)
 	}
 }
 

@@ -148,6 +148,10 @@ type Metrics struct {
 	// Economy is the gold committed since start, per ledger reason and
 	// direction ("gold.<reason>.gain" / ".loss"; store/economy_ledger.go).
 	Economy map[string]uint64 `json:"economy,omitempty"`
+	// PetCombat counts attack pet orders and fights that ended on a dead or
+	// departed target, which the pet log no longer reports
+	// (action/petdiagnostics.go).
+	PetCombat map[string]uint64 `json:"pet_combat,omitempty"`
 	// Runtime is the Go runtime's GC pauses, scheduling latency, heap and
 	// goroutines since start (runtime_stats.go).
 	Runtime RuntimeStats `json:"runtime"`
@@ -175,6 +179,18 @@ the transport never imports the store that counts.
 */
 func (h *Hub) SetEconomyMetrics(read func() map[string]uint64) {
 	h.economyMetrics.Store(&read)
+}
+
+/*
+==================
+SetPetCombatMetrics
+
+Installs the provider of the pet_combat block, as SetNavigationMetrics
+does: the transport never imports the action runtime that counts.
+==================
+*/
+func (h *Hub) SetPetCombatMetrics(read func() map[string]uint64) {
+	h.petCombatMetrics.Store(&read)
 }
 
 // Metrics snapshots the counters and the current live-session count.
@@ -259,6 +275,9 @@ func (h *Hub) Metrics() Metrics {
 	}
 	if read := h.economyMetrics.Load(); read != nil && *read != nil {
 		metrics.Economy = (*read)()
+	}
+	if read := h.petCombatMetrics.Load(); read != nil && *read != nil {
+		metrics.PetCombat = (*read)()
 	}
 	metrics.Runtime = runtimeStats()
 	return metrics

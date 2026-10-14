@@ -32,6 +32,8 @@ installSessionLifecycle
 func (game *gameplayPlane) installSessionLifecycle(hub *transport.Hub, authorityStore *store.Store) {
 	// Port-only: the economy ledger's committed gold per reason.
 	hub.SetEconomyMetrics(authorityStore.EconomyCounters)
+	// Attack pet fights that ended on a dead or departed target (petdiagnostics.go).
+	hub.SetPetCombatMetrics(game.items.PetCombatCounters)
 	game.deps.LockPublication = game.items.LockPublication
 	game.deps.OnWorldBound = func(
 		session *transport.Session,

@@ -96,6 +96,9 @@ type Hub struct {
 	// economyMetrics reads the store's committed gold per reason
 	// (SetEconomyMetrics); nil publishes no block.
 	economyMetrics atomic.Pointer[func() map[string]uint64]
+	// petCombatMetrics reads the attack pets' ended-target counters
+	// (SetPetCombatMetrics); nil publishes no block.
+	petCombatMetrics atomic.Pointer[func() map[string]uint64]
 }
 
 // AdmissionIdentity is the authenticated account/shard identity carried by a
