@@ -64,25 +64,44 @@ func cargoMove(movement uint8) bool {
 withTradeStars
 
 A committed cargo move tells the owner its new trade level after every frame
-of the move, as the client applies them in that order.
+of the move, as the client applies them in that order. The move's door has
+returned by now, so the transport and its bag are read under the store's
+read lock: tick doors (a cargo drop) and other moves may change them.
 ================
 */
-func (rt *Runtime) withTradeStars(c *enterworld.Character, movement uint8, result OpResult) OpResult {
-	// Only a transport has a trade level; a pet's bag moves tell nothing.
-	if !cargoMove(movement) || !rt.transportSummoned(c) {
+func (rt *Runtime) withTradeStars(division string, c *enterworld.Character, movement uint8, result OpResult) OpResult {
+	if !cargoMove(movement) || !committedMove(result) {
 		return result
 	}
-	// A shop's answer may follow the references it publishes first.
-	for _, frame := range result.Frames {
-		if frame.Opcode != wire.OpItemMoveResponse {
-			continue
+	// Only a transport has a trade level; a pet's bag moves tell nothing.
+	var frame wire.Frame
+	summoned := false
+	rt.deps.Read(division, func() {
+		if summoned = rt.transportSummoned(c); summoned {
+			frame = rt.tradeStarFrame(c)
 		}
-		if len(frame.Payload) != 0 && frame.Payload[0] == 1 {
-			result.Frames = append(result.Frames, rt.tradeStarFrame(c))
-		}
-		return result
+	})
+	if summoned {
+		result.Frames = append(result.Frames, frame)
 	}
 	return result
+}
+
+/*
+================
+committedMove
+
+Whether a move's answer committed: its OpItemMoveResponse (which may follow
+the references a shop publishes first) leads with 1.
+================
+*/
+func committedMove(result OpResult) bool {
+	for _, frame := range result.Frames {
+		if frame.Opcode == wire.OpItemMoveResponse {
+			return len(frame.Payload) != 0 && frame.Payload[0] == 1
+		}
+	}
+	return false
 }
 
 /*
@@ -90,7 +109,8 @@ func (rt *Runtime) withTradeStars(c *enterworld.Character, movement uint8, resul
 sceneTradeStars
 
 The trade level a scene going live repeats: only for a summoned transport
-with goods aboard (ground_scene.go ReconcileScene).
+with goods aboard (ground_scene.go ReconcileScene). c is the game-ready's
+detached snapshot, which no door changes.
 ================
 */
 func (rt *Runtime) sceneTradeStars(c *enterworld.Character) (wire.Frame, bool) {

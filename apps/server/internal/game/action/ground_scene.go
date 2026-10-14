@@ -76,7 +76,8 @@ ReconcileScene
 
 The game-ready hook (enterworld.Deps.ReconcileSceneObjects): settle the
 ground drops, then repeat the transport's trade level (0x352D) when goods
-are aboard. Without goods the new player's 0 is already right.
+are aboard. Without goods the new player's 0 is already right. c is the
+detached snapshot enterworld takes for game-ready, so no lock is needed.
 ================
 */
 func (rt *Runtime) ReconcileScene(s *transport.Session, divisionID string, c *enterworld.Character) {
