@@ -257,6 +257,7 @@ func (server *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.passwordFailures.update(clientIP(r), request.ID, server.now(), false, true)
+	server.upgradePasswordCost(r.Context(), accountID, hash, request.Password)
 
 	token, err := server.sessionSigner.Mint(
 		accountID,
