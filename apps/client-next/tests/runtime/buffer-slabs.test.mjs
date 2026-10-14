@@ -5,8 +5,8 @@ buffer-slabs.test.mjs - tests for buffer-slabs.ts
 
 Slab ranges bind at aligned offsets with their exact size, a retired range
 returns to its slab only when the open frame closes (so no recorded pass
-reads bytes a later draw owns), freed neighbours merge, and large requests
-keep a buffer of their own.
+reads bytes a later draw owns), freed neighbours merge, large requests
+keep a buffer of their own, and emptied slabs past one are destroyed.
 
 ===========================================================================
 */
@@ -95,4 +95,21 @@ test("a large request keeps its own buffer and destroys it on release", () => {
 	slabs.allocate( 64 );
 	slabs.dispose();
 	assert.ok( device.buffers.every( buffer => buffer === large.binding.buffer || buffer.destroyed === 1 ) );
+});
+
+test("a set keeps one empty slab and destroys the others once their frame closes", () => {
+	const device = fakeDevice(), retirement = createRetirement();
+	const slabs = createBufferSlabs( device, "geometry-material", 0, retirement.retire );
+	// Three slabs' worth: a scene's high-water mark.
+	const ranges = [ 0, 1, 2 ].map( () => slabs.allocate( 1 << 20 ) );
+	const filled = [ ...ranges, ...[ 0, 1, 2 ].flatMap( () => [ 0, 1, 2 ].map( () => slabs.allocate( 1 << 20 ) ) ) ];
+	assert.equal( slabs.stats().slabs, 3 );
+	retirement.open();
+	for ( const range of filled ) slabs.free( range );
+	assert.ok( device.buffers.every( buffer => !buffer.destroyed ), "the open frame may still read every slab" );
+	retirement.close();
+	assert.equal( slabs.stats().slabs, 1, "one empty slab stays for the next scene" );
+	assert.equal( device.buffers.filter( buffer => buffer.destroyed ).length, 2 );
+	assert.equal( slabs.allocate( 64 ).binding.buffer.destroyed, 0, "the next scene reuses the kept slab" );
+	assert.equal( device.buffers.length, 3 );
 });

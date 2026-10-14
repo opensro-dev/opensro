@@ -13,8 +13,11 @@ texture, blend and association order (same material, same paint order).
 Each member owns a slot of the layer's vertex buffer; selection writes the
 member's chosen indices, offset by its slot, into the layer's one index
 buffer. Members keep their own CPU geometry, ranges, seams and collision.
-A layer grows by rebuilding with twice the capacity; a released member's
-slot is reclaimed on the next rebuild. A member's own packed stream
+A layer that runs out of room rebuilds at twice its live members' size,
+which reclaims released members' slots. A removal that leaves the members
+under a quarter of the layer rebuilds it smaller the same way: regions
+come and go as the camera moves, and a layer sized for its high-water mark
+would hold that GPU memory for good. A member's own packed stream
 (Geometry.vertices) follows its seam stitching, so a rebuild or a re-admit
 after device loss writes its current vertices.
 
@@ -32,6 +35,8 @@ import type { GeometryCommands, GeometryDraw, ImageDraw } from "../internal/gpu-
 const VERTEX_FLOATS = 14;
 const MIN_LAYER_CAPACITY = 1024;
 const LAYER_GROWTH = 2;
+// A layer whose members fill less than 1 / LAYER_SHRINK of it is rebuilt.
+const LAYER_SHRINK = 4;
 const IDENTITY = () => new Float32Array( [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
 
 type Member = { layer: Layer; base: number; vertices: number; chosen: Uint32Array; count: number; };
@@ -62,12 +67,13 @@ type Layer = {
 ================
 capacityFor
 
-Round a known requirement to a buffer capacity. A rebuild adds headroom;
-initial admission already knows every member of the incoming scene.
+Round a known requirement up to whole MIN_LAYER_CAPACITY blocks. A rebuild
+adds headroom; initial admission already knows every member of the
+incoming scene.
 ================
 */
 function capacityFor( need: number ): number {
-	return 2 ** Math.ceil( Math.log2( Math.max( MIN_LAYER_CAPACITY, need ) ) );
+	return Math.ceil( Math.max( MIN_LAYER_CAPACITY, need ) / MIN_LAYER_CAPACITY ) * MIN_LAYER_CAPACITY;
 }
 
 /*
@@ -159,7 +165,8 @@ export function createTerrainLayers() {
 	rebuild
 
 	A new draw sized for the live members plus need more vertices and
-	indices, with every member re-written at a compact slot.
+	indices, with LAYER_GROWTH headroom, and every member re-written at a
+	compact slot. It may be smaller than the draw it replaces.
 	================
 	*/
 	function rebuild( geometry: GeometryCommands, layer: Layer, vertexNeed: number, indexNeed: number ) {
@@ -168,8 +175,8 @@ export function createTerrainLayers() {
 			vertices += member.vertices;
 			indices += group.geometry.indices.length;
 		}
-		layer.vertexCapacity = Math.max( layer.vertexCapacity, capacityFor( vertices * LAYER_GROWTH ) );
-		layer.indexCapacity = Math.max( layer.indexCapacity, capacityFor( indices * LAYER_GROWTH ) );
+		layer.vertexCapacity = capacityFor( vertices * LAYER_GROWTH );
+		layer.indexCapacity = capacityFor( indices * LAYER_GROWTH );
 		geometry.release( layer.draw );
 		revision++;
 		layer.draw = allocate( geometry, layer, layer.vertexCapacity, layer.indexCapacity );
@@ -284,7 +291,8 @@ export function createTerrainLayers() {
 		================
 		remove
 
-		Releases group's slot; an empty layer releases its draw.
+		Releases group's slot; an empty layer releases its draw, and a
+		mostly empty one is rebuilt smaller.
 		================
 		*/
 		remove( geometry: GeometryCommands, group: WorldGroup ) {
@@ -298,6 +306,12 @@ export function createTerrainLayers() {
 				geometry.release( layer.draw );
 				revision++;
 				layers.delete( layer.key );
+				return;
+			}
+			let live = 0;
+			for ( const other of layer.members.values() ) live += other.vertices;
+			if ( layer.vertexCapacity > MIN_LAYER_CAPACITY && live * LAYER_SHRINK < layer.vertexCapacity ) {
+				rebuild( geometry, layer, 0, 0 );
 			}
 		},
 		/*

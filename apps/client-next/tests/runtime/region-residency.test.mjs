@@ -473,9 +473,48 @@ test("a complete scene reserves each terrain layer once across incremental admis
 			writes.slice( recovery * groups.length ).map( row => row.base ),
 			groups.map( ( _, i ) => i * 600 )
 		);
-		assert.equal( uploads[recovery].capacity, 8192, "known scene totals do not reserve another growth band" );
+		// 5400 vertices in whole 1024-vertex blocks, with no growth band.
+		assert.equal( uploads[recovery].capacity, 6144, "known scene totals do not reserve another growth band" );
 		if ( recovery === 0 ) layers.clear();
 	}
 	layers.dispose( geometry );
 	assert.deepEqual( releases, [ uploads[1] ], "device loss already owns the first allocation" );
+});
+
+test("a layer shrinks when the large regions it held move out of view", async () => {
+	const { createTerrainLayers } = await import( "../../src/engine/runtime/renderer/world/terrain-layers.ts" );
+	/** @type {any} */
+	const scene = { originRegion: ANCHOR, groups: [] };
+	const layers = createTerrainLayers(), uploads = [], releases = [];
+	/** @type {any} */
+	const geometry = {
+		upload( data ) {
+			const draw = { capacity: data.positions.length / 3 };
+			uploads.push( draw );
+			return draw;
+		},
+		streamVertices() {},
+		release: draw => releases.push( draw )
+	};
+	// Nine large regions, then the camera walks on through small ones: each
+	// crossing adds three members and drops the three it left behind.
+	const live = [];
+	for ( let i = 0; i < 9; i++ ) {
+		const group = layerMember( 6000, i + 1 );
+		layers.admit( geometry, scene, group, undefined );
+		live.push( group );
+	}
+	for ( let step = 0; step < 4; step++ ) {
+		for ( let i = 0; i < 3; i++ ) {
+			const group = layerMember( 500, 100 + step * 3 + i );
+			layers.admit( geometry, scene, group, undefined );
+			live.push( group );
+		}
+		while ( live.length > 9 ) layers.remove( geometry, live.shift() );
+	}
+	/** @type {any} */
+	const draw = layers.drawOf( live[0] );
+	assert.ok( draw.capacity <= 9 * 500 * 2 + 1024, `capacity ${draw.capacity} follows the live members` );
+	assert.ok( releases.length >= 1, "the large draw was released" );
+	layers.dispose( geometry );
 });

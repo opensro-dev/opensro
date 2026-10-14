@@ -79,8 +79,11 @@ export function createBufferSlabs( device: GPUDevice, label: string, usage: numb
 	================
 	release
 
-	Returns a range to its slab, merging it with free neighbours. A slab
-	left empty is kept: the next scene reuses it.
+	Returns a range to its slab, merging it with free neighbours. One empty
+	slab is kept for the next scene; a second empty one is destroyed, or a
+	set's high-water mark would stay allocated after every scene that set
+	it. Ranges reach here only through the retirement queue, so no recorded
+	frame still names the slab.
 	================
 	*/
 	function release( slab: Slab, offset: number, size: number ) {
@@ -99,6 +102,10 @@ export function createBufferSlabs( device: GPUDevice, label: string, usage: numb
 			free.splice( i, 1 );
 		}
 		slab.used -= size;
+		if ( !slab.used && slabs.some( other => other !== slab && !other.used ) ) {
+			slabs.splice( slabs.indexOf( slab ), 1 );
+			slab.buffer.destroy();
+		}
 	}
 	/*
 	================
