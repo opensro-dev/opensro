@@ -211,10 +211,11 @@ func removeFriendEdgeAt(owner *enterworld.Character, at int) {
 	enterworld.SwapFriends(owner, next)
 }
 
-// appendMutualFriendEdgesDoor installs both halves of a mutual edge in
-// ONE multi-record door. Both lists are re-validated before either swap,
-// so a concurrent duplicate/cap change leaves both records untouched.
-func appendMutualFriendEdgesDoor(
+// AppendMutualFriendEdges installs both halves of a mutual edge in
+// ONE multi-record door: the commit of a consented friend request
+// (FriendRequests.Answer). Both lists are re-validated before either
+// swap, so a concurrent duplicate/cap change leaves both records untouched.
+func AppendMutualFriendEdges(
 	deps Dependencies,
 	actor, target *enterworld.Character,
 ) (targetEdge, actorEdge enterworld.FriendRecord, applied bool) {
@@ -282,68 +283,6 @@ func removeMutualFriendEdgesDoor(
 	return actorRemoved, targetRemoved
 }
 
-// FriendAddOutcome is one handled 0x7164 request. Refusal carries the
-// log-only reason when nothing changed (SILENT on the wire - no
-// friend-add refusal bytes are pinned in the client folds, the
-// war-horn/COS convention). On success TargetEntry is the edge appended
-// to the actor's roster (announced to the actor as 0x3F9A case 2) and
-// ActorEntry the mutual edge appended to the target's roster (announced
-// to the target's live session).
-type FriendAddOutcome struct {
-	Refusal     string
-	TargetName  string
-	TargetEntry enterworld.FriendRecord
-	ActorEntry  enterworld.FriendRecord
-}
-
-func refusedFriendAdd(reason string) FriendAddOutcome {
-	return FriendAddOutcome{Refusal: reason}
-}
-
-// HandleFriendAdd applies one 0x7164 request: resolve the target by the
-// requested name within the actor's division, refuse the unpinned arms
-// silently (self, unknown, delete-pending, offline, duplicate, either
-// cap), then append the MUTUAL edge pair through one multi-record Mutate
-// door - retail's _Friend stores one row per owner, so an accepted add
-// writes both characters in one transaction. The target must be ONLINE
-// (targetOnline): the
-// client's case-2 insert hardcodes state 0 online (retail adds complete
-// through a live consent peer), so accepting an offline target would
-// paint a live contact icon on a player who is not there.
-//
-// The door re-validates both records inside the store lock before either
-// edge lands. The old actor-side unwind is therefore dead: no accepted
-// path exposes or commits only one half.
-func HandleFriendAdd(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte, targetOnline func(name string) bool) FriendAddOutcome {
-	if actor == nil {
-		return refusedFriendAdd("characterNotFound")
-	}
-	name, err := DecodeFriendAddRequest(payload)
-	if err != nil {
-		return refusedFriendAdd(err.Error())
-	}
-	if strings.EqualFold(name, actor.Name) {
-		return refusedFriendAdd("cannot befriend yourself")
-	}
-	target := findCharacterByName(deps, divisionID, name)
-	if target == nil {
-		return refusedFriendAdd(fmt.Sprintf("%q not found in division %s", name, divisionID))
-	}
-	if targetOnline == nil || !targetOnline(target.Name) {
-		return refusedFriendAdd(fmt.Sprintf("%q is offline (a live add needs the peer's session for the case-2 online insert)", target.Name))
-	}
-
-	targetEdge, actorEdge, applied := appendMutualFriendEdgesDoor(deps, actor, target)
-	if !applied {
-		return refusedFriendAdd("mutual append refused inside the door (delete-pending, duplicate, or cap)")
-	}
-	return FriendAddOutcome{
-		TargetName:  target.Name,
-		TargetEntry: targetEdge,
-		ActorEntry:  actorEdge,
-	}
-}
-
 // FriendDeleteOutcome is one handled 0x75DB request. On success the
 // actor's edge is gone (announce case 3 {FriendJID} to the actor);
 // TargetRemoved reports whether the mutual edge was also removed from a
@@ -351,14 +290,22 @@ func HandleFriendAdd(deps Dependencies, divisionID string, actor *enterworld.Cha
 // - guarded, because the client's erase throws on an unlisted jid).
 type FriendDeleteOutcome struct {
 	Refusal       string
+	Code          uint8
 	FriendJID     uint32
 	ActorJID      uint32
 	TargetName    string
 	TargetRemoved bool
 }
 
-func refusedFriendDelete(reason string) FriendDeleteOutcome {
-	return FriendDeleteOutcome{Refusal: reason}
+// Delete refusal codes (v1.188 CMessengerMgr delete 5D77D0, shown by the
+// v1.150 client's 0xB5DB handler 75CE90 as notice 0x13/code).
+const (
+	friendDeleteErrRequest   uint8 = 0x02
+	friendDeleteErrNotListed uint8 = 0x03
+)
+
+func refusedFriendDelete(reason string, code uint8) FriendDeleteOutcome {
+	return FriendDeleteOutcome{Refusal: reason, Code: code}
 }
 
 // HandleFriendDelete applies one 0x75DB request: remove the edge with
@@ -370,19 +317,19 @@ func refusedFriendDelete(reason string) FriendDeleteOutcome {
 // frame; no refusal bytes are pinned either way).
 func HandleFriendDelete(deps Dependencies, divisionID string, actor *enterworld.Character, payload []byte) FriendDeleteOutcome {
 	if actor == nil {
-		return refusedFriendDelete("characterNotFound")
+		return refusedFriendDelete("characterNotFound", friendDeleteErrRequest)
 	}
 	jid, err := DecodeFriendDeleteRequest(payload)
 	if err != nil {
-		return refusedFriendDelete(err.Error())
+		return refusedFriendDelete(err.Error(), friendDeleteErrRequest)
 	}
 	target := findCharacterByID(deps, divisionID, int64(jid))
 	if target == nil {
-		return refusedFriendDelete(fmt.Sprintf("friend target %d is not live in division %s", jid, divisionID))
+		return refusedFriendDelete(fmt.Sprintf("friend target %d is not live in division %s", jid, divisionID), friendDeleteErrNotListed)
 	}
 	actorRemoved, targetRemoved := removeMutualFriendEdgesDoor(deps, actor, target, int64(jid))
 	if !actorRemoved {
-		return refusedFriendDelete(fmt.Sprintf("jid %d is not a mutual live edge or the actor is delete-pending", jid))
+		return refusedFriendDelete(fmt.Sprintf("jid %d is not a mutual live edge or the actor is delete-pending", jid), friendDeleteErrNotListed)
 	}
 	outcome := FriendDeleteOutcome{
 		FriendJID:     jid,
@@ -395,35 +342,27 @@ func HandleFriendDelete(deps Dependencies, divisionID string, actor *enterworld.
 	return outcome
 }
 
-// RegisterFriend wires the friend mutators onto the hub, replacing the
-// former silent-refuse stubs: 0x7164 add and 0x75DB delete, each
-// registered here and NOWHERE else (hub registration is last-write-wins;
-// community.Register no longer touches these two). Identity comes from
-// the session bind only; every refusal stays SILENT on the wire (no
-// refusal bytes are pinned) and logs its reason; success answers with
-// the client-parsed 0x3F9A events - case 2 to both live sides on add,
-// case 3 to both on delete. Sends run AFTER the Mutate doors return
-// (never inside the store lock).
-func RegisterFriend(hub *transport.Hub, deps Dependencies, presence Presence) {
+/*
+================
+RegisterFriend
+
+Wires the friend lane onto the hub and returns its request owner, which
+the 0x3012 consent (enterworld.Deps.FriendConsent) and the session-close
+hook reach. 0x7164 asks the target (friendrequest.go); 0x75DB removes the
+mutual pair and answers 0xB5DB, success also telling both live sides with
+0x3F9A case 3. Identity comes from the session bind only. Sends run
+after the Mutate doors return, never inside the store lock.
+================
+*/
+func RegisterFriend(hub *transport.Hub, deps Dependencies, presence Presence) *FriendRequests {
+	requests := NewFriendRequests(deps, presence)
 	hub.Handle(OpFriendAddRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
 		if !bound {
 			log.Debugf("community: 0x%04X from unbound session %d discarded", opcode, s.ID)
 			return
 		}
-		online := func(name string) bool { return presenceOnline(presence, divisionID, name) }
-		outcome := HandleFriendAdd(deps, divisionID, actor, payload, online)
-		if outcome.Refusal != "" {
-			log.Debugf("community: 0x7164 (friend-add) refused for %s: %s", actor.Name, outcome.Refusal)
-			return
-		}
-		entry := outcome.TargetEntry
-		_ = s.Send(OpFriendLetterEventPush, EncodeFriendEventAdded3F9A(FriendJID(entry.ID), entry.Name, entry.ModelRefID))
-		if peer, ok := presenceSession(presence, divisionID, outcome.TargetName); ok {
-			mutual := outcome.ActorEntry
-			_ = peer.Send(OpFriendLetterEventPush, EncodeFriendEventAdded3F9A(FriendJID(mutual.ID), mutual.Name, mutual.ModelRefID))
-		}
-		log.Debugf("community: %s and %s are now friends", actor.Name, outcome.TargetName)
+		requests.Ask(s, divisionID, actor, payload)
 	})
 	hub.Handle(OpFriendDeleteRequest, func(s *transport.Session, opcode uint16, payload []byte) {
 		actor, divisionID, bound := enterworld.SessionCharacter(deps, s)
@@ -434,9 +373,11 @@ func RegisterFriend(hub *transport.Hub, deps Dependencies, presence Presence) {
 		outcome := HandleFriendDelete(deps, divisionID, actor, payload)
 		if outcome.Refusal != "" {
 			log.Debugf("community: 0x75DB (friend-delete) refused for %s: %s", actor.Name, outcome.Refusal)
+			_ = s.Send(OpFriendDeleteAnswer, EncodeFriendDeleteErrorB5DB(outcome.Code))
 			return
 		}
 		_ = s.Send(OpFriendLetterEventPush, EncodeFriendEventDeleted3F9A(outcome.FriendJID))
+		_ = s.Send(OpFriendDeleteAnswer, EncodeFriendDeleteOKB5DB(outcome.FriendJID))
 		if outcome.TargetRemoved {
 			if peer, ok := presenceSession(presence, divisionID, outcome.TargetName); ok {
 				_ = peer.Send(OpFriendLetterEventPush, EncodeFriendEventDeleted3F9A(outcome.ActorJID))
@@ -444,6 +385,22 @@ func RegisterFriend(hub *transport.Hub, deps Dependencies, presence Presence) {
 		}
 		log.Debugf("community: %s removed friend jid %d (%s)", actor.Name, outcome.FriendJID, outcome.TargetName)
 	})
+	return requests
+}
+
+/*
+================
+FriendRequests.Consent
+
+The enterworld 0x3012 hook: a consent from a bound session.
+================
+*/
+func (r *FriendRequests) Consent(s *transport.Session, payload []byte) {
+	actor, divisionID, bound := enterworld.SessionCharacter(r.deps, s)
+	if !bound {
+		return
+	}
+	r.Answer(s, divisionID, actor, payload)
 }
 
 // FriendWorldBound is the presence-online fanout, called from the

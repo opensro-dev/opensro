@@ -10,6 +10,7 @@ package community
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"opensro.online/server/internal/game/enterworld"
@@ -165,22 +166,16 @@ func friendTestPair() (*enterworld.Deps, *enterworld.Character, *enterworld.Char
 
 func alwaysOnline(string) bool { return true }
 
-func TestHandleFriendAddSuccessIsMutual(t *testing.T) {
+func TestFriendMutualAppendWritesBothRosters(t *testing.T) {
 	deps, actor, target := friendTestPair()
-	outcome := HandleFriendAdd(deps, "global-official", actor, friendAddPayload("Berk"), alwaysOnline)
-	if outcome.Refusal != "" {
-		t.Fatalf("add refused: %s", outcome.Refusal)
-	}
-	if outcome.TargetName != "Berk" {
-		t.Errorf("target name = %q, want Berk", outcome.TargetName)
+	targetEdge, actorEdge, applied := AppendMutualFriendEdges(deps, actor, target)
+	if !applied {
+		t.Fatal("mutual append refused")
 	}
 	wantTargetEdge := enterworld.FriendRecord{ID: 2, Name: "Berk", ModelRefID: 1907}
 	wantActorEdge := enterworld.FriendRecord{ID: 1, Name: "Alfa", ModelRefID: 1907}
-	if outcome.TargetEntry != wantTargetEdge {
-		t.Errorf("target entry = %+v, want %+v", outcome.TargetEntry, wantTargetEdge)
-	}
-	if outcome.ActorEntry != wantActorEdge {
-		t.Errorf("actor entry = %+v, want %+v", outcome.ActorEntry, wantActorEdge)
+	if targetEdge != wantTargetEdge || actorEdge != wantActorEdge {
+		t.Errorf("edges = %+v / %+v, want %+v / %+v", targetEdge, actorEdge, wantTargetEdge, wantActorEdge)
 	}
 	if got := enterworld.FriendsView(actor); len(got) != 1 || got[0] != wantTargetEdge {
 		t.Errorf("actor edges = %+v, want [%+v]", got, wantTargetEdge)
@@ -190,69 +185,76 @@ func TestHandleFriendAddSuccessIsMutual(t *testing.T) {
 	}
 }
 
-func TestHandleFriendAddRefusalArms(t *testing.T) {
+// TestCheckFriendAddCodes pins each refusal to its native code (v1.188
+// 5D7620 / 447650, the v1.150 client's 0x13 notice ids) and checks that
+// a check never writes a roster.
+func TestCheckFriendAddCodes(t *testing.T) {
+	fill := func(c *enterworld.Character) {
+		for i := int64(0); i < FriendMaxCount; i++ {
+			c.Friends = append(c.Friends, enterworld.FriendRecord{ID: 100 + i})
+		}
+	}
 	cases := []struct {
 		name    string
-		prepare func(deps *enterworld.Deps, actor, target *enterworld.Character)
-		payload []byte
+		prepare func(actor, target *enterworld.Character)
+		request string
 		online  func(string) bool
+		want    uint8
 	}{
-		{"malformed", nil, []byte{0xFF}, alwaysOnline},
-		{"empty name", nil, friendAddPayload(""), alwaysOnline},
-		{"self add", nil, friendAddPayload("Alfa"), alwaysOnline},
-		{"self add case-insensitive", nil, friendAddPayload("ALFA"), alwaysOnline},
-		{"unknown target", nil, friendAddPayload("Cale"), alwaysOnline},
-		{"target delete-pending", func(_ *enterworld.Deps, _, target *enterworld.Character) {
-			target.DeletePending = true
-		}, friendAddPayload("Berk"), alwaysOnline},
-		{"duplicate", func(_ *enterworld.Deps, actor, target *enterworld.Character) {
-			actor.Friends = []enterworld.FriendRecord{{ID: target.ID, Name: target.Name, ModelRefID: 1907}}
-		}, friendAddPayload("Berk"), alwaysOnline},
-		{"actor list full", func(_ *enterworld.Deps, actor, _ *enterworld.Character) {
-			for i := int64(0); i < FriendMaxCount; i++ {
-				actor.Friends = append(actor.Friends, enterworld.FriendRecord{ID: 100 + i})
-			}
-		}, friendAddPayload("Berk"), alwaysOnline},
-		{"target list full", func(_ *enterworld.Deps, _, target *enterworld.Character) {
-			for i := int64(0); i < FriendMaxCount; i++ {
-				target.Friends = append(target.Friends, enterworld.FriendRecord{ID: 100 + i})
-			}
-		}, friendAddPayload("Berk"), alwaysOnline},
-		{"target offline", nil, friendAddPayload("Berk"), func(string) bool { return false }},
-		{"nil online predicate", nil, friendAddPayload("Berk"), nil},
+		{"empty name", nil, "", alwaysOnline, FriendErrInvalidName},
+		{"name over 32", nil, strings.Repeat("x", FriendNameMaxLength+1), alwaysOnline, FriendErrInvalidName},
+		{"self", nil, "Alfa", alwaysOnline, FriendErrSelf},
+		{"self case-insensitive", nil, "ALFA", alwaysOnline, FriendErrSelf},
+		{"unknown target", nil, "Cale", alwaysOnline, FriendErrUnknownUser},
+		{"target offline", nil, "Berk", func(string) bool { return false }, FriendErrUnknownUser},
+		{"nil online predicate", nil, "Berk", nil, FriendErrUnknownUser},
+		{"target delete-pending", func(_, target *enterworld.Character) { target.DeletePending = true }, "Berk", alwaysOnline, FriendErrUnknownUser},
+		{"already listed", func(actor, target *enterworld.Character) {
+			actor.Friends = []enterworld.FriendRecord{{ID: target.ID, Name: target.Name}}
+		}, "Berk", alwaysOnline, FriendErrAlreadyFriend},
+		{"listed and full: listed first (5D6890 before the cap)", func(actor, target *enterworld.Character) {
+			fill(actor)
+			actor.Friends[0] = enterworld.FriendRecord{ID: target.ID, Name: target.Name}
+		}, "Berk", alwaysOnline, FriendErrAlreadyFriend},
+		{"own list full", func(actor, _ *enterworld.Character) { fill(actor) }, "Berk", alwaysOnline, FriendErrListFull},
+		{"target list full", func(_, target *enterworld.Character) { fill(target) }, "Berk", alwaysOnline, FriendErrTargetListFull},
+		{"listed only by the target", func(actor, target *enterworld.Character) {
+			target.Friends = []enterworld.FriendRecord{{ID: actor.ID, Name: actor.Name}}
+		}, "Berk", alwaysOnline, FriendErrAlreadyFriend},
 	}
 	for _, tc := range cases {
 		deps, actor, target := friendTestPair()
 		if tc.prepare != nil {
-			tc.prepare(deps, actor, target)
+			tc.prepare(actor, target)
 		}
-		before := len(enterworld.FriendsView(actor))
-		outcome := HandleFriendAdd(deps, "global-official", actor, tc.payload, tc.online)
-		if outcome.Refusal == "" {
-			t.Errorf("%s: add accepted, want refusal", tc.name)
-			continue
+		actorBefore, targetBefore := len(actor.Friends), len(target.Friends)
+		got, code := CheckFriendAdd(deps, "global-official", actor, tc.request, tc.online)
+		if code != tc.want || got != nil {
+			t.Errorf("%s: code 0x%02X target %v, want 0x%02X and no target", tc.name, code, got, tc.want)
 		}
-		if got := len(enterworld.FriendsView(actor)); got != before {
-			t.Errorf("%s: actor edge count changed %d -> %d on a refusal", tc.name, before, got)
+		if len(actor.Friends) != actorBefore || len(target.Friends) != targetBefore {
+			t.Errorf("%s: a check changed a roster", tc.name)
 		}
 	}
-	// The actor delete-pending arm needs its own character shape.
-	deps, actor, _ := friendTestPair()
-	actor.DeletePending = true
-	if outcome := HandleFriendAdd(deps, "global-official", actor, friendAddPayload("Berk"), alwaysOnline); outcome.Refusal == "" {
-		t.Errorf("delete-pending actor: add accepted, want refusal")
+	deps, actor, target := friendTestPair()
+	if got, code := CheckFriendAdd(deps, "global-official", actor, "berk", alwaysOnline); code != 0 || got != target {
+		t.Errorf("valid request: code 0x%02X target %v, want 0 and Berk", code, got)
+	}
+	if len(actor.Friends) != 0 || len(target.Friends) != 0 {
+		t.Error("a passing check must not add anyone: only the target's consent does")
 	}
 }
 
 func TestHandleFriendDelete(t *testing.T) {
 	deps, actor, target := friendTestPair()
-	if outcome := HandleFriendAdd(deps, "global-official", actor, friendAddPayload("Berk"), alwaysOnline); outcome.Refusal != "" {
-		t.Fatalf("seed add refused: %s", outcome.Refusal)
+	if _, _, applied := AppendMutualFriendEdges(deps, actor, target); !applied {
+		t.Fatal("seed add refused")
 	}
 
-	// A jid the actor does not list refuses and mutates nothing.
-	if outcome := HandleFriendDelete(deps, "global-official", actor, friendDeletePayload(99)); outcome.Refusal == "" {
-		t.Fatalf("unknown jid accepted, want refusal")
+	// A jid the actor does not list refuses with 5D77D0's code 3 and
+	// mutates nothing.
+	if outcome := HandleFriendDelete(deps, "global-official", actor, friendDeletePayload(99)); outcome.Refusal == "" || outcome.Code != 0x03 {
+		t.Fatalf("unknown jid: refusal %q code %d, want a refusal with code 3", outcome.Refusal, outcome.Code)
 	}
 	if got := len(enterworld.FriendsView(actor)); got != 1 {
 		t.Fatalf("actor edges after refused delete = %d, want 1", got)

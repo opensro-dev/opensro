@@ -140,6 +140,9 @@ disconnect, so the port-only trader cargo rule skips it.
 */
 func (game *gameplayPlane) sessionClosed(session *transport.Session, cause error) {
 	community.FriendSessionClosed(game.deps, game.presence, session)
+	if game.friends != nil {
+		game.friends.SessionClosed(session)
+	}
 	game.parties.SessionClosed(session)
 	game.matches.SessionClosed(session)
 	game.guildInvites.SessionClosed(session)

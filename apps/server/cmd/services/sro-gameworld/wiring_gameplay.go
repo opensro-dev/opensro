@@ -65,6 +65,7 @@ type gameplayPlane struct {
 	chat          *chat.Runtime
 	chatFeed      *chatfeed.Feed
 	parties       *party.Runtime
+	friends       *community.FriendRequests
 	guildInvites  *guild.InviteRuntime
 	unions        *guild.UnionRuntime
 	guildWars     *guild.WarRuntime
@@ -829,7 +830,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	quest.Register(hub, quests)
 
 	community.Register(hub, game.deps)
-	community.RegisterFriend(hub, game.deps, game.presence)
+	game.friends = community.RegisterFriend(hub, game.deps, game.presence)
+	// The friend request's consent shares 0x3012 with game-ready
+	// (enterworld.ConsentAnswerLength).
+	game.deps.FriendConsent = game.friends.Consent
 	community.RegisterLetter(hub, game.deps, game.presence)
 	game.chat = chat.Register(hub, game.deps, game.presence, game.parties.Registry())
 	// The website's public chat feed (port-only): beta chat, the Global

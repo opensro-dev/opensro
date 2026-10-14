@@ -43,7 +43,8 @@ import (
 //     Up release - about 6/s on top of the walk, which replaces clicking.
 //   - 0x706D item moves, 0x707B guide acks, chat, and the progression
 //     clicks (0x727A/0x7552/0x7165/0x72CB) are all user-driven at a few
-//     per second at most; EnterWorld/0x3012 arrive once per bind.
+//     per second at most; EnterWorld and the empty 0x3012 game-ready arrive
+//     once per bind, a 0x3012 friend consent once per friend prompt.
 //
 // Worst plausible legitimate aggregate is therefore ~12-19 frames/s, and
 // the default budget of 25/s sustained with a burst of 75 keeps headroom

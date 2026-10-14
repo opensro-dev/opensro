@@ -151,7 +151,11 @@ type Deps struct {
 	// LockPublication orders bootstrap snapshots with action/tick inventory
 	// receipts. The returned release runs only after the full batch is queued.
 	LockPublication func(divisionID string) func()
-	OnWorldBound    func(
+	// FriendConsent receives a ConsentAnswerLength 0x3012 body: the native
+	// client's friend-request answer shares the opcode with the port's
+	// empty game-ready (RegisterGameReady). Nil drops consents.
+	FriendConsent func(session *transport.Session, payload []byte)
+	OnWorldBound  func(
 		session *transport.Session,
 		divisionID string,
 		character *Character,

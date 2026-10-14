@@ -399,6 +399,13 @@ func HandleGameReady(character *Character, stats wire.BaseStats) []Packet {
 // OpcodeGameReady is the C->S game-ready trigger (agentGameReadyOpcode).
 const OpcodeGameReady uint16 = 0x3012
 
+// ConsentAnswerLength is the body of the native client's only 0x3012
+// send: the confirm-box answer {u32, u32, u8} (NetClient 701A50 from
+// CGInterface_OnMsgBoxResult, the friend request's prompt type 0x23). The
+// port's own client sends 0x3012 empty as game-ready, so the length tells
+// them apart.
+const ConsentAnswerLength = 9
+
 // RegisterGameReady registers the 0x3012 handler: the client announces the
 // scene is live, receives the game-time + vitals runtime push, and only then
 // becomes visible to the simulation ticker. Send() is a FIFO reliable enqueue;
@@ -410,7 +417,15 @@ RegisterGameReady
 ================
 */
 func RegisterGameReady(hub *transport.Hub, deps *Deps) {
-	hub.Handle(OpcodeGameReady, func(s *transport.Session, _ uint16, _ []byte) {
+	hub.Handle(OpcodeGameReady, func(s *transport.Session, _ uint16, payload []byte) {
+		// A consent answer is not a scene signal: it never reaches the
+		// game-ready state machine below.
+		if len(payload) == ConsentAnswerLength {
+			if deps.FriendConsent != nil && s.WorldReady() {
+				deps.FriendConsent(s, payload)
+			}
+			return
+		}
 		reentry := s.FinishSceneReentry() && s.WorldReady()
 		if !reentry && !s.TryMarkWorldReady() {
 			return

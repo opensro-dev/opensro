@@ -56,6 +56,7 @@ const (
 type e2eServer struct {
 	srv       *transport.Server
 	authority *store.Store
+	friends   *community.FriendRequests
 }
 
 // communitySkillSeeder is this package's stand-in for
@@ -362,9 +363,12 @@ func TestCommunityLaneEndToEndOverWire(t *testing.T) {
 	sendFrame(t, conn, community.OpWhisperBlockRequest, whisperBlockRequest(community.WhisperBlockModeRegister, "Cale"))
 	expectWhisperBlockAck(t, conn, []byte{0x01, 0x02}, "unknown-target ack")
 	// Friend-add refusal arm: "Cale" is not a division character, so the
-	// live handler refuses silently (no refusal bytes are pinned).
+	// requester is told UNKNOWNUSER (0xB164 {2, 0x0D}, 447650's 0x640D).
 	friendAdd := wire.NewWriter(6).U16(4).Bytes([]byte("Cale")).Payload()
 	sendFrame(t, conn, community.OpFriendAddRequest, friendAdd)
+	if got := expectFrame(t, conn, community.OpFriendInviteAnswer, "friend-add refusal"); !bytes.Equal(got, community.EncodeFriendInviteErrorB164(community.FriendErrUnknownUser)) {
+		t.Fatalf("friend-add refusal = % X, want UNKNOWNUSER", got)
+	}
 	gameReadyBarrier(t, conn, "post-refusals")
 	if got := readBlockedWhisperers(t, first.authority); len(got) != 1 || got[0] != "Berk" {
 		t.Fatalf("store block list after refusals = %v, want [Berk]", got)

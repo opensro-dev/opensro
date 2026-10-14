@@ -118,18 +118,21 @@ func startFriendServer(t *testing.T, dir string, createCharacters bool) e2eServe
 		}
 		community.FriendWorldBound(deps, presence, divisionID, character)
 	}
+	var friends *community.FriendRequests
 	srv.Hub.OnSessionClose(func(s *transport.Session, _ error) {
 		community.FriendSessionClosed(deps, presence, s)
+		friends.SessionClosed(s)
 	})
 
 	enterworld.Register(srv.Hub, deps)
 	community.Register(srv.Hub, deps)
-	community.RegisterFriend(srv.Hub, deps, presence)
+	friends = community.RegisterFriend(srv.Hub, deps, presence)
+	deps.FriendConsent = friends.Consent
 	if err := srv.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { shutdownServer(t, srv) })
-	return e2eServer{srv: srv, authority: authority}
+	return e2eServer{srv: srv, authority: authority, friends: friends}
 }
 
 // enterFriendWorld performs the 0x0006 bind for one named character,
@@ -168,6 +171,45 @@ func friendAddFrame(name string) []byte {
 	writer.U16(uint16(len(name)))
 	writer.Bytes([]byte(name))
 	return writer.Payload()
+}
+
+// friendConsentFrame is the target's 0x3012 answer {u32 jid, u32 serial,
+// u8 accept}.
+func friendConsentFrame(jid, serial uint32, accept bool) []byte {
+	writer := wire.NewWriter(community.FriendConsentLength)
+	writer.U32(jid)
+	writer.U32(serial)
+	if accept {
+		writer.U8(1)
+	} else {
+		writer.U8(0)
+	}
+	return writer.Payload()
+}
+
+// expectFrameBody asserts the next frame's opcode and exact body.
+func expectFrameBody(t *testing.T, c *websocket.Conn, opcode uint16, want []byte, what string) {
+	t.Helper()
+	if got := expectFrame(t, c, opcode, what); !bytes.Equal(got, want) {
+		t.Fatalf("%s: 0x%04X payload = % X, want % X", what, opcode, got, want)
+	}
+}
+
+// manualWindows replaces the friend answer window with timers the test
+// fires by hand; fire runs the newest one.
+type manualWindows struct {
+	fired []func()
+}
+
+func (m *manualWindows) install(friends *community.FriendRequests) {
+	friends.After = func(_ time.Duration, f func()) func() bool {
+		m.fired = append(m.fired, f)
+		return func() bool { return true }
+	}
+}
+
+func (m *manualWindows) fire() {
+	m.fired[len(m.fired)-1]()
 }
 
 func friendDeleteFrame(jid uint32) []byte {
@@ -252,9 +294,8 @@ func TestFriendPairUsesOneStoreTransaction(t *testing.T) {
 		},
 	}
 	authority.FailCommits(errors.New("injected friend-pair commit failure"))
-	outcome := community.HandleFriendAdd(deps, e2eDivision, actor, friendAddFrame(e2eFriendNameB), func(string) bool { return true })
-	if outcome.Refusal != "" {
-		t.Fatalf("friend add refused under fail-open store posture: %s", outcome.Refusal)
+	if _, _, applied := community.AppendMutualFriendEdges(deps, actor, target); !applied {
+		t.Fatal("friend add refused under fail-open store posture")
 	}
 	if failed := authority.Health().FailedWrites; failed != 1 {
 		t.Fatalf("mutual friend add attempted %d commits, want exactly 1", failed)
@@ -354,12 +395,53 @@ func TestFriendLaneEndToEndOverWire(t *testing.T) {
 		t.Fatalf("B's baseline roster seed = % X, want the empty roster [00]", roster)
 	}
 
-	// ---- A adds B: case 2 to BOTH live sides, mutual persisted edges ----
+	// ---- A asks B: B is prompted, nothing is added before B answers ----
 	// (creation order pins the jids: friendAlfa=1, friendBravo=2; the
 	// model resolves through the china-male fallback 1907 - no explicit
 	// ModelRef, empty roster catalog.)
+	var windows manualWindows
+	windows.install(first.friends)
 	sendFrame(t, connA, community.OpFriendAddRequest, friendAddFrame(e2eFriendNameB))
+	expectFrameBody(t, connB, community.OpFriendAddRequest,
+		community.EncodeFriendInvitePrompt7164(1, 1, e2eFriendNameA), "B's prompt for request 1")
+	if got := readFriends(t, first.authority, e2eFriendNameA); len(got) != 0 {
+		t.Fatalf("A's stored edges before consent = %+v, want none", got)
+	}
+
+	// B refuses: A is told who refused (0xB164 {2, 0x0B, 0, name}).
+	sendFrame(t, connB, enterworld.OpcodeGameReady, friendConsentFrame(1, 1, false))
+	expectFrameBody(t, connA, community.OpFriendInviteAnswer,
+		community.EncodeFriendConsentEndB164(0, e2eFriendNameB), "A's refused answer")
+
+	// A asks again and nobody answers: the window closes on both sides.
+	sendFrame(t, connA, community.OpFriendAddRequest, friendAddFrame(e2eFriendNameB))
+	expectFrameBody(t, connB, community.OpFriendAddRequest,
+		community.EncodeFriendInvitePrompt7164(1, 2, e2eFriendNameA), "B's prompt for request 2")
+	windows.fire()
+	expectFrameBody(t, connA, community.OpFriendInviteAnswer,
+		community.EncodeFriendConsentEndB164(2, e2eFriendNameB), "A's cancelled answer")
+	expectFrameBody(t, connB, community.OpFriendInviteAnswer,
+		community.EncodeFriendConsentEndB164(2, e2eFriendNameA), "B's prompt retired")
+	// An answer after the window is spent: nothing happens.
+	sendFrame(t, connB, enterworld.OpcodeGameReady, friendConsentFrame(1, 2, true))
+	gameReadyBarrier(t, connB, "late consent")
+	gameReadyBarrier(t, connA, "late consent")
+
+	// A third request: only B may answer it, and B consents.
+	sendFrame(t, connA, community.OpFriendAddRequest, friendAddFrame(e2eFriendNameB))
+	expectFrameBody(t, connB, community.OpFriendAddRequest,
+		community.EncodeFriendInvitePrompt7164(1, 3, e2eFriendNameA), "B's prompt for request 3")
+	sendFrame(t, connA, community.OpFriendAddRequest, friendAddFrame(e2eFriendNameB))
+	expectFrameBody(t, connA, community.OpFriendInviteAnswer,
+		community.EncodeFriendInviteErrorB164(community.FriendErrInProgress), "A's second request while one waits")
+	sendFrame(t, connA, enterworld.OpcodeGameReady, friendConsentFrame(1, 3, true))
+	gameReadyBarrier(t, connA, "forged consent from the requester")
+	if got := readFriends(t, first.authority, e2eFriendNameA); len(got) != 0 {
+		t.Fatalf("a requester's own consent added %+v", got)
+	}
+	sendFrame(t, connB, enterworld.OpcodeGameReady, friendConsentFrame(1, 3, true))
 	expectFriendEvent(t, connA, community.EncodeFriendEventAdded3F9A(2, e2eFriendNameB, 1907), "A's case-2 add event")
+	expectFrameBody(t, connA, community.OpFriendInviteAnswer, community.EncodeFriendInviteOKB164(), "A's success answer")
 	expectFriendEvent(t, connB, community.EncodeFriendEventAdded3F9A(1, e2eFriendNameA, 1907), "B's mutual case-2 add event")
 	wantEdgeB := enterworld.FriendRecord{ID: 2, Name: e2eFriendNameB, ModelRefID: 1907}
 	wantEdgeA := enterworld.FriendRecord{ID: 1, Name: e2eFriendNameA, ModelRefID: 1907}
@@ -370,11 +452,15 @@ func TestFriendLaneEndToEndOverWire(t *testing.T) {
 		t.Fatalf("B's stored edges = %+v, want [%+v]", got, wantEdgeA)
 	}
 
-	// Duplicate add: SILENT refusal (the barrier proves no frame rode).
+	// Duplicate add: ALREADYFRIEND (0xB164 {2, 9}), nothing changes.
 	sendFrame(t, connA, community.OpFriendAddRequest, friendAddFrame(e2eFriendNameB))
-	gameReadyBarrier(t, connA, "post-duplicate-add")
+	expectFrameBody(t, connA, community.OpFriendInviteAnswer,
+		community.EncodeFriendInviteErrorB164(community.FriendErrAlreadyFriend), "A's duplicate answer")
 	if got := readFriends(t, first.authority, e2eFriendNameA); len(got) != 1 {
 		t.Fatalf("A's stored edges after duplicate add = %d, want 1", len(got))
+	}
+	if first.friends.PendingCount() != 0 {
+		t.Fatalf("%d friend request(s) still waiting", first.friends.PendingCount())
 	}
 
 	// ---- B disconnects: A gets the case-4 OFFLINE flip ----
@@ -424,6 +510,7 @@ func TestFriendLaneEndToEndOverWire(t *testing.T) {
 	// ---- A deletes B: case 3 to both sides, both lists empty ----
 	sendFrame(t, connA2, community.OpFriendDeleteRequest, friendDeleteFrame(2))
 	expectFriendEvent(t, connA2, community.EncodeFriendEventDeleted3F9A(2), "A's case-3 delete event")
+	expectFrameBody(t, connA2, community.OpFriendDeleteAnswer, community.EncodeFriendDeleteOKB5DB(2), "A's delete answer")
 	expectFriendEvent(t, connB2, community.EncodeFriendEventDeleted3F9A(1), "B's mutual case-3 delete event")
 	if got := readFriends(t, second.authority, e2eFriendNameA); len(got) != 0 {
 		t.Fatalf("A's stored edges after delete = %+v, want empty", got)
@@ -432,13 +519,26 @@ func TestFriendLaneEndToEndOverWire(t *testing.T) {
 		t.Fatalf("B's stored edges after delete = %+v, want empty", got)
 	}
 
-	// A stray delete of the now-unlisted jid: SILENT refusal.
+	// A stray delete of the now-unlisted jid: 5D77D0's code 3.
 	sendFrame(t, connA2, community.OpFriendDeleteRequest, friendDeleteFrame(2))
-	gameReadyBarrier(t, connA2, "post-stray-delete")
+	expectFrameBody(t, connA2, community.OpFriendDeleteAnswer, community.EncodeFriendDeleteErrorB5DB(3), "A's stray delete answer")
+
+	// A request whose target leaves is cancelled for the requester.
+	var windows2 manualWindows
+	windows2.install(second.friends)
+	sendFrame(t, connA2, community.OpFriendAddRequest, friendAddFrame(e2eFriendNameB))
+	expectFrameBody(t, connB2, community.OpFriendAddRequest,
+		community.EncodeFriendInvitePrompt7164(1, 1, e2eFriendNameA), "B's prompt before leaving")
+	sendFrame(t, connB2, transport.OpBye, []byte{transport.ByeReasonNormal})
+	connB2.Close()
+	expectFrameBody(t, connA2, community.OpFriendInviteAnswer,
+		community.EncodeFriendConsentEndB164(2, e2eFriendNameB), "A's cancelled answer when B left")
+	if second.friends.PendingCount() != 0 {
+		t.Fatalf("%d friend request(s) still waiting after B left", second.friends.PendingCount())
+	}
 
 	if dropped := second.srv.Hub.Metrics().RateLimitedFrames; dropped != 0 {
 		t.Fatalf("rate limiter clamped %d frame(s) on the reopened server", dropped)
 	}
 	sendFrame(t, connA2, transport.OpBye, []byte{transport.ByeReasonNormal})
-	sendFrame(t, connB2, transport.OpBye, []byte{transport.ByeReasonNormal})
 }
