@@ -3786,6 +3786,38 @@ test("retail extended quickslot layouts, fixed bindings, locks and bottom-bar ac
 	}
 });
 
+test("a transparent extended bar fades its frames, not its icons", async () => {
+	// 548700 sets alpha 0x6E only on the bar's own boards and its slot proxies
+	// (ids 100-109). A proxy draws nothing: 548E70 moves the linked under-bar
+	// slot onto itself and renders it (A00F20), and that slot's alpha is its
+	// own times its real parent's, the under-bar (53CF20 via 5405D0).
+	const f = uiFixture();
+	try {
+		const game = f.state.gameplay;
+		game.skills = [ 7 ];
+		game.skillCatalog = [ { id: 7, name: "Fixture", icon: "item/etc/hp_potion_01.ddj", cooldownGroup: 0 } ];
+		game.quickSlots = [ { slot: 41, kind: 0x49, payload: 7 } ];
+		let now = 1000, output;
+		for ( let frame = 0; frame < 20; frame++ ) {
+			output = f.ui.step( { ...f.state }, now += 20 ) ?? output;
+			await new Promise( resolve => setTimeout( resolve, 5 ) );
+		}
+		const slot = defined( output ).controls.find( c => c.id === "hotbar:41" ).rect;
+		const quads = f.scenes.at( -1 ).quads;
+		const icon = quads.find( q =>
+			q.texture?.includes( "hp_potion_01" ) && q.rect[0] === slot[0] && q.rect[1] === slot[1]
+		);
+		assert.ok( icon, "the extended slot draws its icon" );
+		assert.equal( icon.color[3], 1, "the icon is opaque although the bar is transparent" );
+		const frames = quads.filter( q =>
+			q.texture?.includes( "/quick_slot/" ) && Math.abs( q.color[3] - 110 / 255 ) < 1e-6
+		);
+		assert.ok( frames.length > 0, "the bar's own frames take alpha 110" );
+	} finally {
+		f.dispose();
+	}
+});
+
 test("dragging shortcuts into the world clears either bar and respects locked slots and occupied destinations", () => {
 	const commands = [], f = uiFixture( c => commands.push( c.command ) );
 	try {

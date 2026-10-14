@@ -10021,9 +10021,9 @@ export function createUi(
 					slot: number,
 					r: UiRect,
 					label: string,
-					options: { locked?: boolean; iconAlpha?: number; } = {}
+					options: { locked?: boolean; } = {}
 				) {
-					const { locked = false, iconAlpha = 1 } = options;
+					const { locked = false } = options;
 					const binding = game?.quickSlots?.find( row => row.slot === slot ),
 						skill = binding?.kind === 0x49 ? training.skill( binding.payload ) : undefined;
 					const item = binding ?
@@ -10058,7 +10058,7 @@ export function createUi(
 					if ( icon ) {
 						paths.push( icon );
 						const ir: UiRect = feedback?.offsetX ? [ r[0] + feedback.offsetX, r[1], r[2], r[3] ] : r;
-						if ( resources.has( icon ) ) rect( ir, [ 1, 1, 1, iconAlpha ], icon );
+						if ( resources.has( icon ) ) rect( ir, [ 1, 1, 1, 1 ], icon );
 					}
 					const cooldown = skill ?
 						skillCooldown( game?.skillCooldowns ?? [], skill.id, skill.cooldownGroup ?? 0, quickslotTime ) :
@@ -10180,15 +10180,19 @@ export function createUi(
 						draggable: !extPositionLock
 					} );
 					for ( const node of authoredPaintOrder( layout ) ) {
-						// 548700 changes child CTextBoard alpha. 5405D0 resets ALPHAOP
-						// before 568420 draws cooldown/quantity overlays, so those stay independent.
+						// 548700 sets alpha 0x6E on the bar's own boards and on its slot
+						// proxies (ids 100-109), but a proxy draws nothing itself: 548E70
+						// moves the linked under-bar slot onto it and renders that slot
+						// (A00F20), whose alpha is its own times its real parent's, the
+						// opaque under-bar (5405D0 reads 53CF20). Icons stay opaque; only
+						// the frames below fade.
 						if ( node.id >= 100 ) {
 							if ( extOpen ) {
 								quickSlotCell(
 									extendedSlot( node.id - 100 ),
 									authoredRect( node, ex, ey ),
 									String( node.id - 99 ),
-									{ locked: extSlotLock, iconAlpha: alpha }
+									{ locked: extSlotLock }
 								);
 							}
 							continue;
