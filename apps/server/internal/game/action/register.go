@@ -55,6 +55,7 @@ func (rt *Runtime) Register(hub *transport.Hub) {
 	hub.Handle(opJobJoinRequest, rt.hubHandler(hub, rt.HandleJobJoin))
 	hub.Handle(opJobWithdrawRequest, rt.hubHandler(hub, rt.HandleJobWithdraw))
 	hub.Handle(opJobAliasRequest, rt.hubHandler(hub, rt.HandleJobAlias))
+	hub.Handle(opPetNameRequest, rt.hubHandler(hub, rt.HandlePetName))
 	hub.Handle(opJobRankRequest, rt.hubHandler(hub, rt.HandleJobRank))
 	hub.Handle(opJobOutcomeRequest, rt.hubHandler(hub, rt.HandleJobOutcome))
 	hub.Handle(opJobPrevInfoRequest, rt.hubHandler(hub, rt.HandleJobPrevInfo))
