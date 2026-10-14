@@ -193,3 +193,33 @@ func TestAClientThatCannotAnswerAFriendRequestIsRefused(t *testing.T) {
 		t.Fatalf("FriendsContract = %d; this build prompts friend request targets", FriendsContract)
 	}
 }
+
+/*
+================
+TestAClientThatDropsTheNoticeChannelsIsRefused
+
+A protocol-9 browser drops the port-only 0x3667 notice channels 0x80 (job
+kills) and 0x81 (seal drops, +8..+11), so its player never sees them. It
+must be refused with 426 and told to reload.
+================
+*/
+func TestAClientThatDropsTheNoticeChannelsIsRefused(t *testing.T) {
+	const showsNoticeChannels = 1
+	refused := 0
+	for protocol, contracts := range history {
+		if contracts.Notices >= showsNoticeChannels {
+			continue
+		}
+		if reached, recorder := serve(t, http.MethodPost, strconv.Itoa(protocol)); reached || recorder.Code != http.StatusUpgradeRequired {
+			t.Fatalf("protocol %d (notices %d): reached %v, status %d; want refused with 426",
+				protocol, contracts.Notices, reached, recorder.Code)
+		}
+		refused++
+	}
+	if _, ok := history[9]; !ok || refused == 0 {
+		t.Fatal("the protocol-9 client is not in the history this test refuses")
+	}
+	if NoticesContract < showsNoticeChannels {
+		t.Fatalf("NoticesContract = %d; this build sends the notice channels", NoticesContract)
+	}
+}
