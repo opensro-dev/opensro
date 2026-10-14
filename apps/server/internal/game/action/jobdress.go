@@ -42,6 +42,7 @@ import (
 	"opensro.online/server/internal/game/item/inventory"
 	"opensro.online/server/internal/game/item/wire"
 	worldgeom "opensro.online/server/internal/game/world"
+	"opensro.online/server/internal/game/world/instance"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -400,6 +401,42 @@ func (rt *Runtime) beginJobDress(division string, c *enterworld.Character, reque
 
 /*
 ================
+reloadJobDress
+
+Re-enters the wearer in place after a suit goes on or comes off, so every
+client re-reads the job class and alias.
+
+INFERENCE (no direct call site found): the v1.150 client reads a
+character's job class and alias only when it spawns. ItemRecord_GetJobSuitClass
+(868D00) has exactly two callers, CICPlayer_OnSpawnInitialize (869160) and
+CICUser_DeserializeAppearanceSpawnData (86AFB0), and the equip handler
+CharacterDependentData_ApplyEquipItemSlot (596190) only raises event-guide
+triggers for a suit. Without a re-spawn, the native wearer would keep the
+plain name until the next teleport, which is what players report and not
+what they remember from the original: a teleport right after suiting up.
+v1.188's dress path (AttachJobSuit 524950, CompleteJobSuitMove 4F0C90,
+SetStateFlag13 4E0C60) shows no teleport call, so the re-spawn sits behind
+an item virtual this audit did not reach. The server's own in-place reload
+is the skin change's: 4EFFC0 calls CGObjChar_SetTeleportModeAndScheduleRestore
+(4E0B50) in mode 3 for 1.0 s, which this reuses.
+================
+*/
+func (rt *Runtime) reloadJobDress(division string, c *enterworld.Character, now int64, result *OpResult) {
+	key := simulation.WorldKey(division, c.Name)
+	here := travelPoint{spawn: rt.liveSpawn(key, c, now), world: instance.ID(domain.CharacterWorldInstance(c))}
+	var reload OpResult
+	if !rt.deps.Update(c, "job-dress-reload", func() bool {
+		return rt.startReturnCast(returnCast{division: division, character: c, row: -1, duration: skinReloadMs,
+			destination: &here, now: now, mode: skinTeleportMode}, &reload)
+	}) {
+		return
+	}
+	result.Frames = append(result.Frames, reload.Frames...)
+	result.Broadcast = append(result.Broadcast, reload.Broadcast...)
+}
+
+/*
+================
 advanceJobDresses
 
 Carries out every suit move whose timer ran out: 4F0C90 validates the
@@ -433,9 +470,13 @@ func (rt *Runtime) advanceJobDresses(now int64) {
 		}
 		result := failureResult(code)
 		if code == 0 {
+			dressed := rt.jobDressed(c)
 			result = rt.applyInventoryMove(dress.division, c, dress.request)
 			if dress.request.DestSlot == jobSuitSlot && rt.jobDressed(c) {
 				rt.startJobActivation(dress.division, c, now)
+			}
+			if rt.jobDressed(c) != dressed {
+				rt.reloadJobDress(dress.division, c, now, &result)
 			}
 		}
 		unlock()

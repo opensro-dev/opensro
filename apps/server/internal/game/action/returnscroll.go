@@ -519,7 +519,12 @@ retireReturnForReentry
 */
 func (rt *Runtime) retireReturnForReentry(division string, c *enterworld.Character) {
 	rt.jobDresses.Delete(simulation.WorldKey(division, c.Name))
-	rt.endJobActivation(division, c)
+	// A mode-3 reload re-enters the same actor in place (4E0B50 keeps the
+	// object and its state timers), so a suit's activation wait survives
+	// the reload that follows its dress (reloadJobDress).
+	if c.NativeTeleportMode != skinTeleportMode {
+		rt.endJobActivation(division, c)
+	}
 	rt.deps.Update(c, "return-scroll-retire-reentry", func() bool {
 		rt.returnCasts.Delete(simulation.WorldKey(division, c.Name))
 		if c.NativeTeleportMode == 0 {
