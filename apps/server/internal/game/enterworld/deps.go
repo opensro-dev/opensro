@@ -61,6 +61,9 @@ type Deps struct {
 	// StorageAutoStack publishes the port-only SRO_STORAGE_AUTO_STACK rule
 	// (action/storageautostack.go); false is native.
 	StorageAutoStack bool
+	// FastDenReturn publishes the port-only SRO_FAST_DEN_RETURN rule
+	// (action/denreturn.go); false is native.
+	FastDenReturn bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

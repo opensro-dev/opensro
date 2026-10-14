@@ -355,6 +355,8 @@ export function createGameplay(
 	let gmItems = gmItemReferences( {} );
 	// The server's port-only storage auto-stack rule (storageAutoStack).
 	let storageAutoStack = false;
+	// The server's port-only Bandit Den countdown rule (fastDenReturn).
+	let fastDenReturn = false;
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
@@ -1103,6 +1105,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			inventory.takeBindingMoves();
 			gmItems = gmItemReferences( value );
 			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
+			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
 			);
@@ -3555,7 +3558,7 @@ Packet handling must not depend on which HUD panel is currently open.
 						i.slot === frame.payload[1] && i.typeFlags === (frame.payload[4]! | frame.payload[5]! << 8)
 					) :
 					undefined;
-				const cast = used ? returnScrollCast( used, now ) : undefined;
+				const cast = used ? returnScrollCast( used, now, fastDenReturn ) : undefined;
 				// 756CF0 compares the bag slot before and after a 0xB06D pickup.
 				const pickupSlot = frame.opcode === 0xb06d && frame.payload[0] === 1 && frame.payload[1] === 6 &&
 						frame.payload.length > 3 && frame.payload[2] !== 254 ?

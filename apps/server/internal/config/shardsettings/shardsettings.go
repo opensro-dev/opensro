@@ -55,6 +55,8 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "50"},
 	{Env: "SRO_PARTY_MASTERIES", NomadVar: "party_masteries", Default: "on", Source: Built},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
+	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
+	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},
 	{Env: "SRO_REVERSE_RETURN_MAP", NomadVar: "reverse_return_map", Default: ""},
 	{Env: "SRO_GM_SETSPEED", NomadVar: "gm_setspeed", Default: "on"},
 	{Env: "SRO_ALCHEMY_RATES", NomadVar: "alchemy_rates", Default: "on", Catalogue: true},

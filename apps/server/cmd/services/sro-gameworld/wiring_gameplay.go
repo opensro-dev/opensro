@@ -539,6 +539,13 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	game.deps.MasteryTotalOverride = masteryOverride
 	// Port-only, not native: storage quick moves prefer a matching stack.
 	game.deps.StorageAutoStack = action.StorageAutoStackFromEnv()
+	// Port-only, not native: the Bandit Den scroll counts down half as long,
+	// and the client's delay bar learns it at world entry.
+	game.items.FastDenReturn = action.FastDenReturnFromEnv()
+	game.deps.FastDenReturn = game.items.FastDenReturn
+	if game.items.FastDenReturn {
+		log.Infof("return: Bandit Den scroll countdown halved (%s)", action.EnvFastDenReturn)
+	}
 	// Port-only, not native: a GM's /SETSPEED.
 	game.items.GMSetSpeed = action.GMSetSpeedFromEnv()
 	if game.items.GMSetSpeed {

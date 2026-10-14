@@ -256,6 +256,9 @@ type BootstrapResult struct {
 	// StorageAutoStack tells the client's storage quick move to prefer a
 	// matching stack (port-only, not native; false is native).
 	StorageAutoStack bool
+	// FastDenReturn tells the client's delay bar that the Bandit Den scroll
+	// counts down half its Param1 (port-only, not native; false is native).
+	FastDenReturn bool
 }
 
 /*
@@ -307,6 +310,7 @@ type bootstrapSuccessView struct {
 	UnlimitedItems            []uint32                 `json:"unlimitedItems,omitempty"`
 	MasteryTotalOverride      int64                    `json:"masteryTotalOverride,omitempty"`
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
+	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 }
 
 /*
@@ -383,6 +387,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		UnlimitedItems:            r.UnlimitedItems,
 		MasteryTotalOverride:      r.MasteryTotalOverride,
 		StorageAutoStack:          r.StorageAutoStack,
+		FastDenReturn:             r.FastDenReturn,
 	})
 }
 

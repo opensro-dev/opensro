@@ -11,6 +11,10 @@ stack disappears. Repair also binds its source-effect token for cancellation.
 import type { InventoryItem } from "@/engine/contracts/gameplay";
 import { isReturnScroll } from "./travel";
 
+// The server's port-only SRO_FAST_DEN_RETURN divides the Bandit Den scroll's
+// countdown by this (apps/server action/denreturn.go).
+const DEN_RETURN_SPEEDUP = 2;
+
 /*
 ================
 ReturnScrollCast
@@ -35,9 +39,16 @@ returnScrollCast
 
 755E40 and 6B1B30: mode 0 reads the return parameter; mode 4 follows the
 repair kit's first associated skill and reads its authored duration.
+fastDenReturn is the server's port-only rule: the Bandit Den scroll, the
+one return scroll whose Param2 is 0 (teleport mode 2), counts down half its
+Param1, as the server does.
 ================
 */
-export function returnScrollCast( item: InventoryItem | undefined, now: number ): ReturnScrollCast | undefined {
+export function returnScrollCast(
+	item: InventoryItem | undefined,
+	now: number,
+	fastDenReturn = false
+): ReturnScrollCast | undefined {
 	if ( !item ) return undefined;
 	const repair = (item.typeFlags & 0x7fe) === 0xec && item.typeFlags >>> 11 === 10;
 	if ( !repair && !isReturnScroll( item.typeFlags ) ) return undefined;
@@ -50,11 +61,12 @@ export function returnScrollCast( item: InventoryItem | undefined, now: number )
 	if ( repair && (!Number.isInteger( skillId ) || !skillId || skillId < 0 || skillId > 0xffffffff) ) {
 		throw Error( "Missing repair skill authority" );
 	}
+	const den = !repair && fastDenReturn && fields?.itemParam2_2a0 === 0;
 	return {
 		refObjId: item.refObjId,
 		name: item.name ?? "",
 		startedAtMs: now,
-		durationMs: duration,
+		durationMs: den ? Math.trunc( duration / DEN_RETURN_SPEEDUP ) : duration,
 		...(repair ? { skillId } : {})
 	};
 }

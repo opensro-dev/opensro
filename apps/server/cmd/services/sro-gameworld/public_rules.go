@@ -118,6 +118,10 @@ func publicRules() publicstats.RulesResponse {
 				Native: "A caravan ambush has as many bandits as its cargo's value calls for, with no limit.",
 				Now:    fmt.Sprintf("At most %d bandits per ambush.", banditCap),
 				Why:    "A full load drew dozens of bandits at once; the cap keeps an ambush fightable."},
+			{Flag: action.EnvFastDenReturn, On: action.FastDenReturnFromEnv(),
+				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
+				Now:    "It counts down 2 minutes 30 seconds.",
+				Why:    "Owner-approved for the beta; the original countdown returns with one setting."},
 		},
 		Deviations: []publicstats.Deviation{
 			{Title: "Storage Ctrl+click",

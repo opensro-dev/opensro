@@ -300,6 +300,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		UnlimitedItems:       StarterKitRefObjIDs(deps.StarterKit),
 		MasteryTotalOverride: deps.MasteryTotalOverride,
 		StorageAutoStack:     deps.StorageAutoStack,
+		FastDenReturn:        deps.FastDenReturn,
 	}
 }
 

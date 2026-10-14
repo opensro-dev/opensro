@@ -91,6 +91,37 @@ test("production scroll use retains reference before last unit disappears and wa
 	assert.equal( cast.name, "Return Scroll" );
 	game.dispose();
 });
+/*
+================
+denCast
+
+The delay row a scroll of these Param1/Param2 starts on a shard that does
+or does not publish the port-only fastDenReturn rule.
+================
+*/
+function denCast( fastDenReturn, fields ) {
+	const game = createGameplay( () => {} );
+	game.bootstrap( {
+		simulationProtocolVersion: 1,
+		...(fastDenReturn ? { fastDenReturn } : {}),
+		refItemSnapshot: [ { refObjId: 61, typeFlags: 0x9ec, name: "Scroll", nativeFields: fields } ],
+		equipItems: [ { refObjId: 61, slot: 13, body: [ 61, 0, 0, 0, 1, 0 ] } ]
+	} );
+	game.seed( { ...pose, gid: 7, heading: 0 } );
+	game.take();
+	game.command( { kind: "item-use", slot: 13 }, 100 );
+	game.receive( status( 7, 2 ), 100 );
+	game.receive( receipt( 0 ), 101 );
+	const cast = game.take().returnScroll;
+	game.dispose();
+	return cast?.durationMs;
+}
+test("the Bandit Den scroll's bar halves only under the server's fastDenReturn rule", () => {
+	const den = { itemParam1_29c: 300000, itemParam2_2a0: 0 }, ordinary = { itemParam1_29c: 30000, itemParam2_2a0: 1 };
+	assert.equal( denCast( false, den ), 300000, "off is the native countdown" );
+	assert.equal( denCast( true, den ), 150000 );
+	assert.equal( denCast( true, ordinary ), 30000, "a blocking return scroll keeps its countdown" );
+});
 test("replacement, dead actor, reset and malformed response transitions use the gameplay owner", () => {
 	const { game } = fixture( 3 );
 	for ( let n = 2; n >= 0; n-- ) {

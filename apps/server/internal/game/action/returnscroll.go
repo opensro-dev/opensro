@@ -202,6 +202,7 @@ func (rt *Runtime) beginReturnScroll(division string, c *enterworld.Character, r
 			return false
 		}
 		destination = &gate
+		duration = denReturnDuration(duration, rt.FastDenReturn)
 	default:
 		return false
 	}

@@ -34,10 +34,13 @@ const (
 	cosSummonDuplicateFamily     uint8  = 0xa9
 	cosSummonCancelDistance      uint8  = 0x97
 	// UIIT_MSG_COSPETERR_CANT_SUMMON_FREEBATTLE (item-use code 0xB9).
-	cosSummonFreeBattle uint8  = 0xb9
-	cosItemStateOpcode  uint16 = 0x3645
-	cosItemStateMask    uint8  = 0x40
-	cosItemLeaseMask    uint8  = 0x80
+	cosSummonFreeBattle uint8 = 0xb9
+	// 493100 answers 0x1869 to an owner in teleport mode 1 (49314A); the
+	// v1.150 client consumes the byte silently, as at the transport summon.
+	cosSummonTeleporting uint8  = 0x69
+	cosItemStateOpcode   uint16 = 0x3645
+	cosItemStateMask     uint8  = 0x40
+	cosItemLeaseMask     uint8  = 0x80
 	// Spawn sub-state 1: the pet was just called out (854CD0 plays
 	// SYSTEM_PET_APPEAR and the summon sound for it).
 	cosSpawnFresh uint8 = 1
@@ -72,7 +75,13 @@ record and 4E8FC0 toggles the existing actor. Family admission is 4FCEF0.
 */
 func (rt *Runtime) usePersistentSummoner(use persistentSummonUse, result *OpResult) bool {
 	c, row := use.character, &use.character.MissionInventory[use.row]
-	if row.StackCount != 1 || c.NativeTeleportMode != 0 || rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
+	if row.StackCount != 1 || rt.PlayerAttackLocked(use.division, c.Name) || rt.objectActionCommitted(use.division, c.Name) {
+		return false
+	}
+	// 493140..49314C: only teleport mode 1 refuses. A free countdown (mode 2,
+	// the Bandit Den scroll) summons, as the transport summoner already does.
+	if c.NativeTeleportMode == teleportModeBlocking {
+		*result = itemUseFailure(cosSummonTeleporting)
 		return false
 	}
 	// Native for pets too: CGItemCOSSummoner_Use (493100) tests the battle

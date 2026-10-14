@@ -317,6 +317,10 @@ type Runtime struct {
 	// value is native.
 	MaterialDrops progression.MaterialDrops
 
+	// FastDenReturn halves the Bandit Den scroll's countdown (denreturn.go;
+	// port-only, not native; owner 2026-10-14). False is native.
+	FastDenReturn bool
+
 	// ShopOnly keeps degree-9 alchemy goods out of every drop (port-only,
 	// not native, beta balance; owner 2026-10-13). The zero value is off.
 	ShopOnly progression.ShopOnlyDegree9
