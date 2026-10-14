@@ -402,6 +402,15 @@ variable "job_monster_speed" {
   default = "on"
 }
 
+# transport_follow has a trade transport the trader stepped off walk after
+# the trader instead of holding the trader within 100 m of it (port-only,
+# not native; owner decision 2026-10-15). "off" is the original parked
+# transport and its tether.
+variable "transport_follow" {
+  type    = string
+  default = "on"
+}
+
 # beta_shop_only_degree9 keeps degree-9 Lucky Powder, magic stones and
 # attribute stones out of every monster drop (port-only, not native, beta
 # balance; owner 2026-10-13): players buy them from the Jangan shops. "off"
@@ -667,6 +676,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CARAVAN_BANDIT_CAP             = var.caravan_bandit_cap
         SRO_CARAVAN_STAR_AMBUSH            = var.caravan_star_ambush
         SRO_JOB_MONSTER_SPEED              = var.job_monster_speed
+        SRO_TRANSPORT_FOLLOW               = var.transport_follow
         SRO_ELIXIR_DROPS_OFF               = var.elixir_drops_off
         SRO_ALCHEMY_MATERIAL_DROPS_OFF     = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9         = var.beta_shop_only_degree9

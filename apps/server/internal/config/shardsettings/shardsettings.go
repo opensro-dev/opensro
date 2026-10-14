@@ -96,6 +96,8 @@ var Settings = []Setting{
 	{Env: "SRO_CARAVAN_STAR_AMBUSH", NomadVar: "caravan_star_ambush", Default: "on"},
 	// Owner, 2026-10-15: thief and hunter monsters move 20% faster.
 	{Env: "SRO_JOB_MONSTER_SPEED", NomadVar: "job_monster_speed", Default: "on"},
+	// Owner, 2026-10-15: a dismounted trade transport follows its trader.
+	{Env: "SRO_TRANSPORT_FOLLOW", NomadVar: "transport_follow", Default: "on"},
 	{Env: "SRO_ELIXIR_DROPS_OFF", NomadVar: "elixir_drops_off", Default: "on", Catalogue: true},
 	// Owner, 2026-10-14: alchemy materials no longer drop; "off" is native.
 	{Env: "SRO_ALCHEMY_MATERIAL_DROPS_OFF", NomadVar: "alchemy_material_drops_off", Default: "on", Catalogue: true},

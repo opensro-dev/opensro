@@ -72,7 +72,11 @@ type Runtime struct {
 	// CaravanStarAmbush replaces an ambush's count with the fixed per-star
 	// table (port-only, SRO_CARAVAN_STAR_AMBUSH; false is native).
 	CaravanStarAmbush bool
-	BerserkRoll       combat.Roll32767
+	// TransportFollow has a dismounted trade transport follow its trader
+	// instead of tethering it (port-only, SRO_TRANSPORT_FOLLOW; false is
+	// native, transportfollow.go).
+	TransportFollow bool
+	BerserkRoll     combat.Roll32767
 	// WearRoll is CGObjPC_RollEquipmentWear's rand(); nil is the secure roll.
 	WearRoll combat.Roll32767
 	// RevivalRoll is 51D260's rand() for a fortress revival gate; nil is the

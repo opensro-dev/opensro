@@ -1,0 +1,57 @@
+/*
+===========================================================================
+
+transportfollow.go - a dismounted trade transport follows its trader
+(port-only, not native)
+
+Natively a trade transport the trader steps off stays where it stands and
+holds the trader within 1000 units of it (CCOSManager_ValidateOwnerMovement
+Tethers 4FD1D0 through 4FD720, CGObj_IsVehicleCOS 4827F0; petai.go's
+tether). The owner approved the balance advisor's ask as a server setting
+(2026-10-15): with SRO_TRANSPORT_FOLLOW on, the dismounted transport walks
+after its trader on the same PetFollower path as a captured quest monster
+(advancePet's plain Advance), and no tether holds the trader.
+
+Everything else stays native: mounting still needs the trader within
+cosMountRange of the transport, thieves and bandits still target it at its
+own pose (companionTargets reads the follower's presentation), and its
+cargo still drops where it dies. Unset or "off" is native.
+
+===========================================================================
+*/
+package action
+
+import (
+	"os"
+	"strings"
+)
+
+// EnvTransportFollow turns the following trade transport on ("on", "1",
+// "true").
+const EnvTransportFollow = "SRO_TRANSPORT_FOLLOW"
+
+/*
+================
+TransportFollowFromEnv
+================
+*/
+func TransportFollowFromEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvTransportFollow))) {
+	case "on", "1", "true":
+		return true
+	}
+	return false
+}
+
+/*
+================
+Runtime.companionFollows
+
+Whether a summoned, unmounted companion of this TID walks after its owner:
+the native following bands (followingCOSBand), plus the trade transport
+while the port-only SRO_TRANSPORT_FOLLOW is on.
+================
+*/
+func (rt *Runtime) companionFollows(tid uint16) bool {
+	return followingCOSBand(tid>>11) || rt.TransportFollow && isVehicleCOS(tid)
+}

@@ -620,6 +620,10 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.CaravanStarAmbush {
 		log.Infof("caravan: a fixed ambush per star replaces the rolled count (%s)", caravan.EnvStarAmbush)
 	}
+	game.items.TransportFollow = action.TransportFollowFromEnv()
+	if game.items.TransportFollow {
+		log.Infof("cos: a dismounted trade transport follows its trader (%s)", action.EnvTransportFollow)
+	}
 	if game.deps.StorageAutoStack {
 		log.Infof("storage: quick moves auto-stack ON (%s)", action.EnvStorageAutoStack)
 	}
