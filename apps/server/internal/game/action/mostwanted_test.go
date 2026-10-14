@@ -68,13 +68,9 @@ The streak's writes reach the stat block the client is sent.
 */
 func TestMostWantedRaisesTheProjectedStrength(t *testing.T) {
 	rt, _, actor, _ := newCombatTestRuntime(t, 100)
-	native, err := rt.PlayerBaseStats(testDivision, actor)
-	if err != nil {
-		t.Fatal(err)
-	}
 	actor.MostWanted = &domain.MostWanted{Streak: 30}
 	dressForJob(rt, actor, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
-	native, err = rt.PlayerBaseStats(testDivision, actor)
+	native, err := rt.PlayerBaseStats(testDivision, actor)
 	if err != nil {
 		t.Fatal(err)
 	}
