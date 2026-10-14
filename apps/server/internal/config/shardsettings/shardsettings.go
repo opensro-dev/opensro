@@ -53,7 +53,10 @@ var Settings = []Setting{
 	{Env: "SRO_BETA_PLAYER_MAP", NomadVar: "beta_player_map", Default: "on"},
 	{Env: "SRO_BETA_MASTERY", NomadVar: "beta_mastery", Default: "on", Catalogue: true, Source: Built},
 	{Env: "SRO_BETA_SILK", NomadVar: "beta_silk", Default: "50"},
-	{Env: "SRO_PARTY_MASTERIES", NomadVar: "party_masteries", Default: "on", Source: Built},
+	{Env: "SRO_PARTY_MASTERIES", NomadVar: "party_masteries", Default: "on"},
+	// Grab and growth pets at four fifths of their run speed (#320): never
+	// deployed, so the deployment default stays native.
+	{Env: "SRO_PET_PACING", NomadVar: "pet_pacing", Default: "off"},
 	{Env: "SRO_STORAGE_AUTO_STACK", NomadVar: "storage_auto_stack", Default: "on"},
 	// Owner, 2026-10-14: the Bandit Den scroll counts down half as long.
 	{Env: "SRO_FAST_DEN_RETURN", NomadVar: "fast_den_return", Default: "on"},

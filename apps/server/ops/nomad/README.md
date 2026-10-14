@@ -124,9 +124,10 @@ character names; the prefix alone grants no permissions.
 
 ### Bug reports
 
-The quick party board shows each member's two main mastery trees. It is on
-by default; deploying with `SRO_PARTY_MASTERIES=off` in the environment
-(`off`, `0` or `false`) sends the native roster rows without them.
+The quick party board shows each member's two main mastery trees
+(port-only). A deployment turns it on by default; deploying with
+`SRO_PARTY_MASTERIES=off` in the environment sends the native roster rows
+without them. The GameWorld itself treats an unset value as native (off).
 
 In-game bug reports (the bug button and `/bug` in chat) are off unless the
 deployer sets a Discord webhook or a report directory. `sro-nomad deploy` reads these variables from

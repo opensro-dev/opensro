@@ -104,8 +104,8 @@ TestMasteriesSwitch
 */
 func TestMasteriesSwitch(t *testing.T) {
 	for raw, want := range map[string]bool{
-		"": true, "on": true, "1": true, "true": true, "typo": true,
-		"off": false, " OFF\n": false, "0": false, "false": false,
+		"on": true, " ON\n": true, "1": true, "true": true,
+		"": false, "typo": false, "off": false, "0": false, "false": false,
 	} {
 		if got := masteriesEnabled(raw); got != want {
 			t.Errorf("%q: got %v want %v", raw, got, want)

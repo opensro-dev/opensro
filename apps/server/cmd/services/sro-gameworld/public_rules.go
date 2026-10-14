@@ -6,7 +6,9 @@ public_rules.go - the "Original vs OpenSRO" list the public API serves (P9)
 Every player-facing port-only switch, read through the same function the
 game reads it with, so the site shows the shard's live setting, plus the
 deliberate deviations that have no switch. Operator-only switches (movement
-clip telemetry, data paths) are not player-facing and are left out.
+clip telemetry, data paths, GM commands) are not player-facing and are left
+out; unlistedSettings names each shard setting left out and why, and a test
+keeps every setting either here or there.
 
 ===========================================================================
 */
@@ -21,11 +23,18 @@ import (
 	"opensro.online/server/internal/game/companion"
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/alchemy"
+	"opensro.online/server/internal/game/item/commerce"
 	"opensro.online/server/internal/game/progression"
 	"opensro.online/server/internal/game/quest"
 	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/game/world/simulation"
 )
+
+// unlistedSettings are the shard settings the rules page leaves out, each
+// with the reason; every other setting is a rule (public_rules_test.go).
+var unlistedSettings = map[string]string{
+	action.EnvGMSetSpeed: "a GM command, not a rule players meet",
+}
 
 /*
 ================
@@ -44,6 +53,10 @@ func publicRules() publicstats.RulesResponse {
 	noAssimilation, _ := alchemy.NoAssimilationFromEnv()
 	banditCap, _ := caravan.BanditCapFromEnv()
 	dropMix, _ := progression.BetaDropMixFromEnv()
+	growth := progression.BetaGrowthFromEnv()
+	betaMastery, _ := progression.BetaMasteryFromEnv()
+	shopGoods, _ := commerce.ExtraGoodsFromEnv()
+	mallGoods, _ := commerce.MallExtraGoodsFromEnv()
 	return publicstats.RulesResponse{
 		Rules: []publicstats.Rule{
 			{Flag: progression.EnvBetaGrowth, On: progression.BetaGrowthFromEnv().Enabled,
@@ -54,6 +67,30 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Every kind of item drops at the retail rate.",
 				Now:    "Each item kind has its own beta drop rate; by default equipment keeps the raised rate while potions, pills, scrolls, arrows and alchemy materials drop at the retail rate.",
 				Why:    "So raised drops bring gear rather than a floor of potions."},
+			{Flag: progression.EnvBetaSkillExpRate, On: growth.Enabled,
+				Native: "Skill experience comes at the retail rate.",
+				Now:    fmt.Sprintf("Skill experience comes %d times as fast.", growth.SkillExpRate),
+				Why:    "Testers can train skills without long grinding."},
+			{Flag: progression.EnvBetaDropRate, On: growth.Enabled,
+				Native: "A kill rolls each of its drops once.",
+				Now:    fmt.Sprintf("A kill rolls each of its drops %d times.", growth.DropRate),
+				Why:    "So plus upgrades and alchemy can be tried without long farming."},
+			{Flag: progression.EnvBetaDropCap, On: growth.Enabled && growth.DropCap > 0,
+				Native: "A monster drops as many items as its rolls give, within its own capacity.",
+				Now:    fmt.Sprintf("A kill drops at most %d ordinary items.", growth.DropCap),
+				Why:    "The raised rate shows as better finds rather than a carpet of potions."},
+			{Flag: progression.EnvBetaGoldRate, On: growth.Enabled,
+				Native: "Gold heaps hold the retail amount.",
+				Now:    fmt.Sprintf("Each gold heap holds %d times the retail amount.", growth.GoldRate),
+				Why:    "Testers can afford the shop goods the beta sells for gold."},
+			{Flag: progression.EnvBetaRareRate, On: growth.Enabled,
+				Native: "Rare (Seal) equipment drops at the retail chance.",
+				Now:    fmt.Sprintf("Rare (Seal) equipment drops %d times as often.", growth.RareRate),
+				Why:    "Beta balance, so testers can try seal gear."},
+			{Flag: progression.EnvBetaMastery, On: betaMastery > 0,
+				Native: "The total of all mastery levels is capped at 300 for Chinese characters and at twice the level, up to 240, for Europeans.",
+				Now:    fmt.Sprintf("Every character may train masteries up to a total of %d; each mastery's own limits stay.", betaMastery),
+				Why:    "Testers can try every mastery tree on one character."},
 			{Flag: progression.EnvBetaSealRates, On: progression.BetaSealRatesFromEnv().Enabled(),
 				Native: "Each Seal of Star, Moon and Sun drops at the rare rate, and degree-9 Star and Moon only from monsters of level 76 to 85.",
 				Now:    "Seals of degrees 1 to 8 drop three times as often; at degree 9 Star drops three times and Moon five times as often, Sun as before, and Star and Moon also from monsters of level 86 to 94.",
@@ -90,6 +127,22 @@ func publicRules() publicstats.RulesResponse {
 				Native: "Grab and growth pets run at their full projected speed.",
 				Now:    "Grab and growth pets run at four fifths of it.",
 				Why:    "Owner-approved beta pacing for pets."},
+			{Flag: action.EnvStorageAutoStack, On: action.StorageAutoStackFromEnv(),
+				Native: "A quick move into or out of storage takes the first empty slot.",
+				Now:    "A quick move lands on a matching stack with room first.",
+				Why:    "Owner decision: storage fills less with split stacks."},
+			{Flag: action.EnvReverseReturnMap, On: action.ReverseReturnMapFromEnv(),
+				Native: "The reverse return scroll offers the last recall point and the last death point.",
+				Now:    "It also offers town gates and unique monster areas on the map.",
+				Why:    "Later clients offer a map choice; the destinations are places the original already sends players to."},
+			{Flag: commerce.EnvShopExtraGoods, On: len(shopGoods) > 0,
+				Native: "NPC shops sell the v1.150 stock.",
+				Now:    "Some NPC shops also sell extra goods for gold, such as elixirs and degree-9 stones.",
+				Why:    "Beta balance: gold buys enhancement."},
+			{Flag: commerce.EnvMallExtraGoods, On: len(mallGoods) > 0,
+				Native: "The Item Mall lists the v1.150 goods.",
+				Now:    "It also lists avatar outfits the client ships but its mall never listed.",
+				Why:    "Beta balance: the outfits were already in the game data."},
 			{Flag: party.EnvPartyMasteries, On: party.MasteriesFromEnv(),
 				Native: "The party board shows the basic member row.",
 				Now:    "The party board also shows each member's two main masteries.",

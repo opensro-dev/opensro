@@ -10,7 +10,7 @@ shardsettings): the operator's value wins, otherwise the table's default.
 The GameWorld parses what arrives; its own unset value is always native.
 
 Settings the deployment computes itself (the beta mastery policy file,
-the party masteries switch, the parsed stack sizes) are filled in
+the parsed stack sizes) are filled in
 deployment.go; the table still holds their defaults for the job file and
 the catalogue build.
 

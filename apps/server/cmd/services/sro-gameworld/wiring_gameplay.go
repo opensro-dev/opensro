@@ -333,7 +333,7 @@ func newGameplayPlane(
 	parties.UseLivePose(items.LiveSpawnFor)
 	parties.UseMasteries(party.MasteriesFromEnv())
 	if party.MasteriesFromEnv() {
-		log.Infof("party: member rows carry the two main masteries ON (%s=off disables)", party.EnvPartyMasteries)
+		log.Infof("party: member rows carry the two main masteries (%s, port-only)", party.EnvPartyMasteries)
 	}
 	items.NextPartyLootMember = parties.Registry().NextLootMember
 	items.RewardActorPresent = func(division, name string) bool {

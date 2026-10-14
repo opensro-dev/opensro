@@ -5,8 +5,9 @@ masteries.go - the party roster's mastery pair, switched by the operator
 
 The quick party board shows each member's two main mastery trees. The wire
 carries them in the member row's 0x08 pair (+0x50/+0x54 of 75DB30). The pair
-is a port feature, so the operator can turn it off and every roster row goes
-back to the plain full-info subset.
+is port-only, not native: off (unset, the GameWorld's default) every roster
+row is the plain full-info subset; the deployment default (shardsettings)
+turns it on.
 
 ===========================================================================
 */
@@ -17,8 +18,8 @@ import (
 	"strings"
 )
 
-// EnvPartyMasteries turns the mastery pair off ("off", "0", "false"). Any
-// other value, or none, leaves it on.
+// EnvPartyMasteries turns the mastery pair on ("on", "1", "true"). Any
+// other value, or none, is native: no pair.
 const EnvPartyMasteries = "SRO_PARTY_MASTERIES"
 
 /*
@@ -37,10 +38,10 @@ masteriesEnabled
 */
 func masteriesEnabled(raw string) bool {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "off", "0", "false":
-		return false
+	case "on", "1", "true":
+		return true
 	}
-	return true
+	return false
 }
 
 /*

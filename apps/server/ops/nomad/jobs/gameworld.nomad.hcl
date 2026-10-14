@@ -173,6 +173,13 @@ variable "party_masteries" {
   default = "on"
 }
 
+# pet_pacing moves grab and growth pets at four fifths of their run speed
+# (port-only, not native). "off" is native.
+variable "pet_pacing" {
+  type    = string
+  default = "off"
+}
+
 # storage_auto_stack lets a storage quick move (right-click, Ctrl+click) land
 # on a matching stack (port-only, not native; owner decision 2026-10-11).
 # "off" restores the native empty-slot rule.
@@ -592,6 +599,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_BETA_SILK                      = var.beta_silk
         SRO_MAINTENANCE_GATE_PATH          = var.maintenance_gate_path
         SRO_PARTY_MASTERIES                = var.party_masteries
+        SRO_PET_PACING                     = var.pet_pacing
         SRO_STORAGE_AUTO_STACK             = var.storage_auto_stack
         SRO_FAST_DEN_RETURN                = var.fast_den_return
         SRO_MOST_WANTED                    = var.most_wanted

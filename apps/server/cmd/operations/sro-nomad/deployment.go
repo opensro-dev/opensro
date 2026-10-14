@@ -31,7 +31,6 @@ import (
 	"opensro.online/server/internal/config/shardsettings"
 	"opensro.online/server/internal/data/store"
 	"opensro.online/server/internal/game/enterworld"
-	"opensro.online/server/internal/game/social/party"
 	"opensro.online/server/internal/gamedata"
 	"opensro.online/server/internal/security/auth"
 	"opensro.online/server/internal/transport"
@@ -74,8 +73,6 @@ type deployment struct {
 	BetaMastery    string
 	// StackSizes is the validated, port-only SRO_STACK_SIZES override.
 	StackSizes string
-	// PartyMasteries comes from the deployer's SRO_PARTY_MASTERIES.
-	PartyMasteries bool
 	// PortOnly are the port-only GameWorld switches (portonly.go).
 	PortOnly              portOnlySettings
 	TransportCert         string
@@ -410,7 +407,6 @@ func resolveDeployment(
 		GMCharacters:          gmCharacters,
 		BetaMastery:           betaMastery,
 		StackSizes:            stackSizes.String(),
-		PartyMasteries:        party.MasteriesFromEnv(),
 		PortOnly:              portOnlySettingsFromEnv(),
 		TransportCert:         transportCert,
 		TransportKey:          transportKey,
@@ -661,7 +657,6 @@ func (deployment *deployment) gameVariables(
 		"beta_mastery":        deployment.BetaMastery,
 		"stack_sizes":         deployment.StackSizes,
 		"public_api_addr":     game.PublicAPIAddr,
-		"party_masteries":     boolEnvValue(deployment.PartyMasteries),
 		"transport_pprof":     boolEnvValue(game.PprofAddr != ""),
 		"pprof_addr":          pprofAddrValue(game.PprofAddr),
 	}))
