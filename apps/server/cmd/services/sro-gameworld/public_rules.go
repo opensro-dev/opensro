@@ -204,6 +204,10 @@ func publicRules() publicstats.RulesResponse {
 					"Stars follow the cargo's gold value: 1 star below 10M, 2 from 10M, 3 from 20M, 4 from 35M, 5 from 50M (bandits, the trade-scale menu and the stars in the transport's bag follow them). " +
 					"Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +50%, Hotan +100%, Samarkand +200%, Constantinople +300%.",
 				Why: "Requested for the beta so bigger loads and longer roads pay; the original returns with one setting."},
+			{Flag: action.EnvJobSuitHidesArmor, On: action.JobSuitHidesArmorFromEnv(),
+				Native: "Only a thief suit hides the armour worn under it; trader and hunter suits are drawn over it.",
+				Now:    "Trader and hunter suits hide worn armour too.",
+				Why:    "Requested for the beta, so every job suit reads clearly; the original look returns with one setting."},
 			{Flag: action.EnvFastDenReturn, On: action.FastDenReturnFromEnv(),
 				Native: "The Bandit Den Return Scroll counts down 5 minutes before the thief arrives.",
 				Now:    "It counts down 2 minutes 30 seconds.",

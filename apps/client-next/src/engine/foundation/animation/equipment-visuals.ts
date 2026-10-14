@@ -42,6 +42,21 @@ const WEAPON_SLOT = 6;
 const SHIELD_SLOT = 7;
 const WORN_SLOT_COUNT = 9;
 const JOB_PRIORITY = 50;
+// Port-only, not native (the server's SRO_JOB_SUIT_HIDES_ARMOR): the armour
+// sockets 0-5 a thief suit's mask (0x73F) covers and a trader's or hunter's
+// (0x700) does not.
+const JOB_SUIT_ARMOR_MASK = 0x3f;
+
+/*
+================
+hiddenArmorSocket
+
+An armour socket (0-5) a job suit covers under SRO_JOB_SUIT_HIDES_ARMOR.
+================
+*/
+function hiddenArmorSocket( slot: number ): boolean {
+	return slot >= 0 && slot < WORN_SLOT_COUNT && (JOB_SUIT_ARMOR_MASK & 1 << slot) !== 0;
+}
 
 /*
 ================
@@ -57,10 +72,18 @@ export function selectDefaultWear(
 	items: readonly WornVisual[],
 	accepted: readonly WornVisual[],
 	rules: Readonly<Record<string, DefaultWearRule>>,
-	chinesePlayer: boolean
+	chinesePlayer: boolean,
+	jobSuitHidesArmor = false
 ): readonly string[] {
 	if ( !chinesePlayer || items.some( i => !i.avatar && i.slot === JOB_SLOT && rules[i.refObjId]?.thiefSuit ) ) {
 		return [];
+	}
+	// Port-only, not native: under SRO_JOB_SUIT_HIDES_ARMOR a trader's or
+	// hunter's suit is only a back prop (no body cover), so the armour it
+	// hides counts as unworn and the body gets the garments an unarmoured
+	// character wears, rather than showing bare.
+	if ( jobSuitHidesArmor && items.some( i => !i.avatar && i.slot === JOB_SLOT ) ) {
+		items = items.filter( i => i.avatar || !hiddenArmorSocket( i.slot ) );
 	}
 	const first = [ ...items ].filter( i => !i.avatar && i.slot >= 0 && i.slot < WORN_SLOT_COUNT ).sort( ( a, b ) =>
 		a.slot - b.slot
@@ -81,7 +104,9 @@ selectEquipmentVisuals
 8E8710/8E8010/8E9A10/8E9B30/8E9C00: job50, avatar head/dress70,
 attachment90, flag110, armor150. Only strictly higher priority masks
 suppress. The job reference mask applies even when its resource cannot be
-attached.
+attached. Port-only, not native: jobSuitHidesArmor (the server's
+SRO_JOB_SUIT_HIDES_ARMOR) adds the armour sockets to every job suit's mask,
+so trader and hunter suits hide worn armour as thief suits do.
 ================
 */
 export function selectEquipmentVisuals<T extends WornVisual>(
@@ -90,10 +115,11 @@ export function selectEquipmentVisuals<T extends WornVisual>(
 	resolvable: ReadonlySet<number>,
 	hwanHair: boolean,
 	mounted: boolean,
-	fortress = false
+	fortress = false,
+	jobSuitHidesArmor = false
 ) {
 	const job = items.find( i => !i.avatar && i.slot === JOB_SLOT ),
-		jobMask = job ? rules[job.refObjId]?.visualMask ?? 0 : 0;
+		jobMask = job ? (rules[job.refObjId]?.visualMask ?? 0) | (jobSuitHidesArmor ? JOB_SUIT_ARMOR_MASK : 0) : 0;
 	const accepted: T[] = [];
 	const ordered = items.map( ( item, index ) => ({ item, index, rule: rules[item.refObjId] }) ).filter( (
 		row

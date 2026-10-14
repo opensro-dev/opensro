@@ -112,3 +112,43 @@ test("default clothing uses raw occupancy, first armor socket, CH gate, thief su
 		assert.deepEqual( selectDefaultWear( [ avatar ], [], r, true ), [ "clothes_BA", "clothes_LA" ] );
 	}
 });
+
+test("SRO_JOB_SUIT_HIDES_ARMOR: a trader or hunter suit hides armour only with the flag", () => {
+	// The shipped masks: a trader/hunter suit 0x700, a thief suit 0x73F;
+	// armour pieces carry 1 << socket at priority 150.
+	const suits = {
+		...rules,
+		20: { slot: 8, visualMask: 0x700, visualPriority: 50 },
+		21: { slot: 8, visualMask: 0x73f, visualPriority: 50 },
+		22: { slot: 4, visualMask: 0x10, visualPriority: 150 }
+	};
+	const worn = ids => ids.map( id => ({ refObjId: id, slot: suits[id].slot }) );
+	const pick = ( ids, flag ) =>
+		selectEquipmentVisuals( worn( ids ), suits, new Set( ids ), false, false, false, flag ).map( i => i.refObjId );
+	// Native: the trader suit is drawn over the chest and legs; the thief hides them.
+	assert.deepEqual( pick( [ 2, 22, 20 ], false ), [ 2, 22, 20 ] );
+	assert.deepEqual( pick( [ 2, 22, 21 ], false ), [ 21 ] );
+	// Flag on: the trader suit hides them as the thief suit does; weapons stay.
+	assert.deepEqual( pick( [ 2, 22, 20 ], true ), [ 20 ] );
+	assert.deepEqual( pick( [ 2, 6, 20 ], true ), [ 6, 20 ] );
+	// Without a job suit the flag changes nothing.
+	assert.deepEqual( pick( [ 2, 22 ], true ), [ 2, 22 ] );
+	// Default wear: the suit is only a back prop, so the hidden armour counts
+	// as unworn and the body gets an unarmoured character's garments instead
+	// of showing bare. Natively the worn light chest and legs block them.
+	const wear = {
+		20: { armorClass: 0, thiefSuit: false, visualMask: 0x700 },
+		21: { armorClass: 0, thiefSuit: true, visualMask: 0x73f },
+		30: { armorClass: 2, thiefSuit: false, visualMask: 0x2 },
+		31: { armorClass: 2, thiefSuit: false, visualMask: 0x10 }
+	};
+	const armoured = [ { refObjId: 30, slot: 1 }, { refObjId: 31, slot: 4 }, { refObjId: 20, slot: 8 } ];
+	assert.deepEqual( selectDefaultWear( armoured, armoured, wear, true, false ), [] );
+	assert.deepEqual( selectDefaultWear( armoured, armoured, wear, true, true ), [ "clothes_BA", "clothes_LA" ] );
+	// Without a job suit the flag keeps the native occupancy.
+	assert.deepEqual( selectDefaultWear( armoured.slice( 0, 2 ), armoured.slice( 0, 2 ), wear, true, true ), [] );
+	// A thief suit still clears them, flag or not; EU bodies never get them.
+	const thief = [ ...armoured.slice( 0, 2 ), { refObjId: 21, slot: 8 } ];
+	assert.deepEqual( selectDefaultWear( thief, thief, wear, true, true ), [] );
+	assert.deepEqual( selectDefaultWear( armoured, armoured, wear, false, true ), [] );
+});

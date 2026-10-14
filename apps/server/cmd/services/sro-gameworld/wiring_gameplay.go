@@ -573,6 +573,12 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.TradeTiers {
 		log.Infof("trade: stars by cargo gold and Jangan route profit (%s)", action.EnvTradeTiers)
 	}
+	// Port-only, not native: trader and hunter suits hide worn armour
+	// (presentation, published to the client).
+	game.deps.JobSuitHidesArmor = action.JobSuitHidesArmorFromEnv()
+	if game.deps.JobSuitHidesArmor {
+		log.Infof("job: trader and hunter suits hide worn armour (%s)", action.EnvJobSuitHidesArmor)
+	}
 	game.items.FastDenReturn = action.FastDenReturnFromEnv()
 	game.deps.FastDenReturn = game.items.FastDenReturn
 	if game.items.FastDenReturn {

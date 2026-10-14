@@ -100,6 +100,8 @@ export interface AppearanceInput {
 	readonly freezeWear: boolean;
 	// Port-only, not native: the Experimental enchant sparks are on.
 	readonly enchantSparks?: boolean;
+	// Port-only, not native: the server's SRO_JOB_SUIT_HIDES_ARMOR rule.
+	readonly jobSuitHidesArmor?: boolean;
 }
 
 export interface AppearanceAssembly {
@@ -224,7 +226,8 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 		resolvable,
 		input.hwanHair,
 		input.mounted,
-		input.fortressIndex >= 0
+		input.fortressIndex >= 0,
+		input.jobSuitHidesArmor === true
 	);
 	const equipmentIds = new Set( selectedVisuals.filter( i => !i.avatar ).map( i => i.refObjId ) ),
 		avatarIds = new Set( selectedVisuals.filter( i => i.avatar ).map( i => i.refObjId ) );
@@ -237,7 +240,8 @@ export function assembleEquipmentAppearance( input: AppearanceInput ): Appearanc
 				selectedVisuals,
 				dress.equipment ?? {},
 				// Only player bodies wear default garments; previews pass the gate for both races.
-				!!race && (input.ownerless || race === "CH" || !input.player)
+				!!race && (input.ownerless || race === "CH" || !input.player),
+				input.jobSuitHidesArmor === true
 			),
 		input.freezeWear
 	);

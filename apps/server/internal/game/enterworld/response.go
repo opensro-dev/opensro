@@ -262,6 +262,9 @@ type BootstrapResult struct {
 	// TradeTiers tells the client's TRADESCALE combo to rate a purchase by
 	// gold against the shard's tiers (port-only, not native; false is native).
 	TradeTiers bool
+	// JobSuitHidesArmor tells the client that trader and hunter suits hide
+	// worn armour as thief suits do (port-only, not native; false is native).
+	JobSuitHidesArmor bool
 }
 
 /*
@@ -315,6 +318,7 @@ type bootstrapSuccessView struct {
 	StorageAutoStack          bool                     `json:"storageAutoStack,omitempty"`
 	FastDenReturn             bool                     `json:"fastDenReturn,omitempty"`
 	TradeTiers                bool                     `json:"tradeTiers,omitempty"`
+	JobSuitHidesArmor         bool                     `json:"jobSuitHidesArmor,omitempty"`
 }
 
 /*
@@ -393,6 +397,7 @@ func (r *BootstrapResult) MarshalJSON() ([]byte, error) {
 		StorageAutoStack:          r.StorageAutoStack,
 		FastDenReturn:             r.FastDenReturn,
 		TradeTiers:                r.TradeTiers,
+		JobSuitHidesArmor:         r.JobSuitHidesArmor,
 	})
 }
 

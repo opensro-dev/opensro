@@ -368,6 +368,8 @@ export function createGameplay(
 	let fastDenReturn = false;
 	// The server's port-only trade-scale rule (tradeTiers).
 	let tradeTiers = false;
+	// The server's port-only job-suit armour rule (jobSuitHidesArmor).
+	let jobSuitHidesArmor = false;
 	// The port-only reverse return map table (reverse-return-map.ts).
 	let reverseMapPoints: readonly ReverseMapPoint[] = [];
 	let warnings = [ false, false ];
@@ -1134,6 +1136,7 @@ resends nothing. Wiping them here made the next 0x3E58 type-6 row throw
 			storageAutoStack = (value as { storageAutoStack?: unknown; } | null)?.storageAutoStack === true;
 			fastDenReturn = (value as { fastDenReturn?: unknown; } | null)?.fastDenReturn === true;
 			tradeTiers = (value as { tradeTiers?: unknown; } | null)?.tradeTiers === true;
+			jobSuitHidesArmor = (value as { jobSuitHidesArmor?: unknown; } | null)?.jobSuitHidesArmor === true;
 			reverseMapPoints = decodeReverseMapPoints(
 				(value as { reverseMapPoints?: unknown; } | null)?.reverseMapPoints
 			);
@@ -4184,6 +4187,7 @@ The published plane when something changed since the last take, else null.
 				reverseReturnChoice: countJobs.choosing() !== null,
 				...(storageAutoStack ? { storageAutoStack } : {}),
 				...(tradeTiers ? { tradeTiers } : {}),
+				...(jobSuitHidesArmor ? { jobSuitHidesArmor } : {}),
 				...(reverseMapPoints.length ? { reverseMapPoints } : {}),
 				storage: presentedStorage(),
 				playerModels: localPlayerModels(),

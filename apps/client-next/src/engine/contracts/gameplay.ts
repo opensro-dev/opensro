@@ -633,6 +633,9 @@ export interface GameplayState {
 	// The server's port-only SRO_TRADE_TIERS rule, published at world entry:
 	// the trade-scale combo rates a purchase by gold (specialty-deal.ts).
 	readonly tradeTiers?: boolean;
+	// The server's port-only SRO_JOB_SUIT_HIDES_ARMOR rule, published at world
+	// entry: trader and hunter suits hide worn armour (equipment-visuals.ts).
+	readonly jobSuitHidesArmor?: boolean;
 	// The reverse return scroll's map table: empty unless the server's
 	// port-only SRO_REVERSE_RETURN_MAP option is on (reverse-return-map.ts).
 	readonly reverseMapPoints?: readonly import("@/engine/foundation/gameplay/reverse-return-map").ReverseMapPoint[];

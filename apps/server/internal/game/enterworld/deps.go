@@ -67,6 +67,9 @@ type Deps struct {
 	// TradeTiers publishes the port-only SRO_TRADE_TIERS rule
 	// (action/tradetiers.go); false is native.
 	TradeTiers bool
+	// JobSuitHidesArmor publishes the port-only SRO_JOB_SUIT_HIDES_ARMOR
+	// rule (action/jobsuitarmor.go); false is native.
+	JobSuitHidesArmor bool
 	// StarterRefills are the beta's HP/MP potion refills (starterrefill.go);
 	// empty when the kit is disabled.
 	StarterRefills []StarterRefill

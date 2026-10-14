@@ -302,6 +302,7 @@ func buildCharacterProjection(deps *Deps, divisionID string, character *Characte
 		StorageAutoStack:     deps.StorageAutoStack,
 		FastDenReturn:        deps.FastDenReturn,
 		TradeTiers:           deps.TradeTiers,
+		JobSuitHidesArmor:    deps.JobSuitHidesArmor,
 	}
 }
 

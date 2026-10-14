@@ -220,6 +220,14 @@ variable "trade_tiers" {
   default = "on"
 }
 
+# job_suit_hides_armor makes trader and hunter suits hide the armour worn
+# under them, as thief suits do (port-only, not native; owner decision
+# 2026-10-14). "off" is native.
+variable "job_suit_hides_armor" {
+  type    = string
+  default = "on"
+}
+
 # den_no_transport_summon refuses a transport summon during the Bandit Den
 # Return Scroll's countdown (port-only, not native; owner decision
 # 2026-10-14). "off" restores the native rule, which allows it.
@@ -656,6 +664,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_MOST_WANTED                    = var.most_wanted
         SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer
         SRO_TRADE_TIERS                    = var.trade_tiers
+        SRO_JOB_SUIT_HIDES_ARMOR           = var.job_suit_hides_armor
         SRO_DEN_NO_TRANSPORT_SUMMON        = var.den_no_transport_summon
         SRO_TRADER_CARGO_DROP              = var.trader_cargo_drop
         SRO_MALL_TRANSPORT_SPEED           = var.mall_transport_speed
