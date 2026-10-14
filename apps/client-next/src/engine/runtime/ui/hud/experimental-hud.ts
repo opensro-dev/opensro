@@ -191,6 +191,11 @@ export const EXPERIMENTAL_TABS: readonly {
 			id: "experimental-fit-window-labels",
 			label: "Fit window labels",
 			description: "Wrap a label wider than its box; open a list upward inside its window."
+		}, {
+			key: "dropOnBagTab",
+			id: "experimental-drop-on-bag-tab",
+			label: "Drop on bag tabs",
+			description: "Drop an item on a bag tab to move it to that page."
 		} ]
 	}
 ];

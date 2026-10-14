@@ -486,6 +486,7 @@ import {
 } from "@/engine/foundation/gameplay/auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
 import { textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
+import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
 import { createSpeech } from "./hud/speech";
 import { createMessageScroll } from "./hud/scroll";
 import { createHudMessages } from "./hud/messages";
@@ -6177,6 +6178,32 @@ export function createUi(
 						} else {hudMessages.append(
 								hudCopy( "UIIT_MSG_STRGERR_CANT_DROP_EQUIPED_ITEM_DIRECTLY" )
 							);}
+						dirty = true;
+						return;
+					}
+					// Port-only (Experimental "Drop on bag tabs"): a drop on the other
+					// page's tab sends the item to that page's first free slot.
+					if (
+						item && target?.id.startsWith( "inventory-page:" ) && !target.disabled &&
+						experimental.state().saved.dropOnBagTab
+					) {
+						const page = Number( target.id.slice( 15 ) ),
+							destination = bagTabDropSlot(
+								game.inventory,
+								game.inventorySlotCount ?? 0,
+								equipmentEnd,
+								page,
+								carried.slot
+							);
+						if ( destination !== null ) {
+							inventoryPage = page;
+							sendGameplay( {
+								kind: "inventory-move",
+								source: carried.slot,
+								destination,
+								quantity: item.quantity
+							} );
+						}
 						dirty = true;
 						return;
 					}

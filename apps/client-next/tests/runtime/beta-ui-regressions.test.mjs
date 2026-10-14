@@ -687,3 +687,52 @@ test("a worn job suit dragged to the bag sends the move and shows the server's r
 		f.ui.dispose();
 	}
 });
+
+/*
+================
+Drop on bag tabs
+
+A player dragged the first item of the bag's second page onto the first
+page's tab and nothing happened (the original's tabs answer a press only).
+With the port-only Experimental "Drop on bag tabs" on, the drop moves it to
+that page's first free slot; off, it does nothing, as the original.
+================
+*/
+for ( const on of [ true, false ] ) {
+	test(`an item dropped on the other page's tab ${on ? "moves to its first free slot" : "stays (row off)"}`, () => {
+		const f = createFixture();
+		try {
+			const earring = {
+				slot: 46,
+				refObjId: 1,
+				typeFlags: 0x8ec,
+				quantity: 1,
+				name: "Earring",
+				plus: 0,
+				durability: 0,
+				variance: "0",
+				magic: []
+			};
+			f.ui.event( /** @type {any} */ ({ kind: "experimental-preferences", value: { dropOnBagTab: on } }) );
+			f.setGame( { inventorySlotCount: 59, equipmentSlotCount: 13, inventory: [ earring ] } );
+			f.ui.event( { kind: "key", code: "KeyI" } );
+			f.step();
+			f.ui.event( { kind: "activate", id: "inventory-page:1" } );
+			const tab = defined( f.step()?.controls.find( c => c.id === "inventory-page:0" ) );
+			f.ui.event( { kind: "drag", id: "slot:46", dx: 50, dy: 50 } );
+			f.ui.event( { kind: "drag-end", id: "slot:46", x: tab.rect[0] + 5, y: tab.rect[1] + 5 } );
+			f.step();
+			assert.deepEqual(
+				f.commands,
+				on ?
+					[ {
+						kind: "gameplay",
+						command: { kind: "inventory-move", source: 46, destination: 13, quantity: 1 }
+					} ] :
+					[]
+			);
+		} finally {
+			f.ui.dispose();
+		}
+	});
+}

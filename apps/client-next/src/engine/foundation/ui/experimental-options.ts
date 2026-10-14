@@ -78,6 +78,11 @@ export interface ExperimentalOptions {
 	// list below the box). On unless turned off (the owner's choice,
 	// 2026-10-15); off is the original look.
 	readonly fitWindowLabels: boolean;
+	// Port-only, not native: an item dropped on the other bag page's tab
+	// moves to that page's first free slot (bag-tab-drop.ts). On unless
+	// turned off (the owner's choice, 2026-10-15); off is the original,
+	// where a drop on a tab does nothing.
+	readonly dropOnBagTab: boolean;
 }
 
 /*
@@ -115,9 +120,9 @@ export function renderScales(): readonly RenderScale[] {
 experimentalOptions
 
 Only an explicit true enables a toggle, except compressedTextures,
-sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices and
-fitWindowLabels, which only an explicit false turns off. Missing or invalid render scales
-restore full resolution; legacy Video settings cannot enable scaling. Keys
+sharedActorRoom, greyDisabledTabs, jobKillNotices, dropPlusNotices,
+fitWindowLabels and dropOnBagTab, which only an explicit false turns off.
+Missing or invalid render scales restore full resolution; legacy Video settings cannot enable scaling. Keys
 of retired rows (terrainRelief and texturedHorizon, removed at the owner's
 request on 2026-10-11) are never read, so a saved preference holding them
 loads cleanly.
@@ -149,7 +154,8 @@ export function experimentalOptions( value: unknown = null ): ExperimentalOption
 		jobKillNotices: record.jobKillNotices !== false,
 		dropPlusNotices: record.dropPlusNotices !== false,
 		vHidesCompanions: enabled( "vHidesCompanions" ),
-		fitWindowLabels: record.fitWindowLabels !== false
+		fitWindowLabels: record.fitWindowLabels !== false,
+		dropOnBagTab: record.dropOnBagTab !== false
 	};
 }
 

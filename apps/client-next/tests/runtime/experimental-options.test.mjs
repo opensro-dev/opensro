@@ -49,7 +49,9 @@ const OFF = Object.freeze( {
 	// Off by default: V hides only monsters and players, as the original does.
 	vHidesCompanions: false,
 	// On by default (owner 2026-10-15): labels and lists stay inside their window.
-	fitWindowLabels: true
+	fitWindowLabels: true,
+	// On by default (owner 2026-10-15): a drop on a bag tab moves the item there.
+	dropOnBagTab: true
 } );
 
 test("only an explicit boolean enables chat timestamps", () => {
@@ -407,4 +409,13 @@ test("fit window labels is on unless explicitly false and stays out of the worke
 	assert.equal( experimentalOptions( { fitWindowLabels: false } ).fitWindowLabels, false );
 	assert.equal( "fitWindowLabels" in experimentalVideo( experimentalOptions( {} ) ), false );
 	assert.equal( "fitWindowLabels" in experimentalGameplay( experimentalOptions( {} ) ), false );
+});
+
+test("drop on bag tabs is on unless explicitly false and stays out of the worker's slices", () => {
+	for ( const value of [ undefined, null, {}, { dropOnBagTab: 1 }, { dropOnBagTab: "false" } ] ) {
+		assert.equal( experimentalOptions( value ).dropOnBagTab, true );
+	}
+	assert.equal( experimentalOptions( { dropOnBagTab: false } ).dropOnBagTab, false );
+	assert.equal( "dropOnBagTab" in experimentalVideo( experimentalOptions( {} ) ), false );
+	assert.equal( "dropOnBagTab" in experimentalGameplay( experimentalOptions( {} ) ), false );
 });
