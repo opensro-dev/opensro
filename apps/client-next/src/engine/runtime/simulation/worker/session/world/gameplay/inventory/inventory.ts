@@ -1534,13 +1534,26 @@ receive
 			if ( op === 0xb373 || op === 0xb651 ) {
 				if ( p[0] !== 1 ) {
 					if ( p.length !== (p[0] === 2 ? 2 : 1) ) throw Error( "Invalid alchemy rejection" );
+					// A stone whose roll failed (0xB651 [2, 0x23]; native 50338F/
+					// 50376F spend the stone) is a finished attempt: 62B0B0's 0x80
+					// arm plays the failure effect and writes the failure line, so
+					// it records an outcome. Every other code is a refusal and
+					// finishes nothing.
+					const stoneFailed = op === 0xb651 && p[0] === 2 && p[1] === 0x23;
+					const target = stoneFailed ? slots.get( alchemy.state().slot ?? -1 ) : undefined;
+					const detail = stoneFailed ?
+						{
+							plus: target?.plus ?? 0,
+							previousPlus: target?.plus ?? 0,
+							durability: target?.durability ?? 0,
+							previousDurability: target?.durability ?? 0
+						} :
+						undefined;
 					for (
-						const cue of alchemy.result(
-							0,
-							op === 0xb651 && p[0] === 2 && p[1] === 0x23 ? 0x80 : 0,
-							p[0] === 2 ? p[1]! : null
-						)
-					) play( cue );
+						const cue of alchemy.result( 0, stoneFailed ? 0x80 : 0, p[0] === 2 ? p[1]! : null, detail )
+					) {
+						play( cue );
+					}
 					return true;
 				}
 				if ( p.length < 3 || p[2]! < 13 ) throw Error( "Invalid alchemy slot" );

@@ -343,6 +343,31 @@ test("a reinforcement records its outcome for the window (62B0B0)", () => {
 	owner.receive( 0xb373, Uint8Array.of( 2, 0x10 ) );
 	assert.equal( defined( owner.state().alchemy.outcome ).sequence, 2 );
 });
+test("a stone whose roll failed records a failure outcome; a stone refusal records none (62B0B0 0x80)", () => {
+	const { owner } = setup();
+	owner.process( { kind: "alchemy-open" }, 0 );
+	owner.process( { kind: "alchemy-start", mode: "attribute", slots: [ 13, 14 ] }, 0 );
+	const target = defined( owner.state().inventory.find( i => i.slot === 13 ) );
+	// 0xB651 [2, 0x23]: the roll failed and the stone is spent. The window
+	// must show the failure effect and line, not stay silent.
+	owner.receive( 0xb651, Uint8Array.of( 2, 0x23 ) );
+	assert.deepEqual( owner.state().alchemy.outcome, {
+		sequence: 1,
+		flags: 0x80,
+		plus: target.plus,
+		previousPlus: target.plus,
+		durability: target.durability,
+		previousDurability: target.durability
+	} );
+	assert.deepEqual( result.alchemyResultLines( defined( owner.state().alchemy.outcome ), key => key ), [
+		"UIIT_MSG_REINFORCERR_FAIL"
+	] );
+	// A refused stone (wrong degree, 0x21) finishes nothing: the new attempt
+	// cleared the last outcome and the refusal records none.
+	owner.process( { kind: "alchemy-start", mode: "attribute", slots: [ 13, 14 ] }, 0 );
+	owner.receive( 0xb651, Uint8Array.of( 2, 0x21 ) );
+	assert.equal( owner.state().alchemy.outcome, undefined );
+});
 const result = await import( "../../src/engine/foundation/ui/alchemy-result.ts" );
 test("62B0B0 words the outcome and plays its effect once", () => {
 	const copy = key =>
