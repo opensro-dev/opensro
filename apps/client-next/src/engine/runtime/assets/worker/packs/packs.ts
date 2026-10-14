@@ -40,6 +40,37 @@ export class AssetAbsentError extends Error {
 	}
 }
 
+/*
+================
+untilCancelled
+
+A shared wait (the manifest, a whole small pack, the device's texture
+variant) seen from one request: it rejects as soon as the request is
+cancelled, while the shared work goes on for its other callers. The loader
+acknowledges a cancellation only when the request settles (loader.ts
+"released"), so a request parked on a slow shared download held its
+cancellation for the whole download: "did not acknowledge cancelling
+/assets/effects/programs.json within 30 s".
+================
+*/
+function untilCancelled<T>( work: Promise<T>, signal: AbortSignal ): Promise<T> {
+	if ( signal.aborted ) return Promise.reject( new Error( "Asset request cancelled" ) );
+	return new Promise<T>( ( resolve, reject ) => {
+		const cancel = () => reject( new Error( "Asset request cancelled" ) );
+		signal.addEventListener( "abort", cancel, { once: true } );
+		work.then(
+			value => {
+				signal.removeEventListener( "abort", cancel );
+				resolve( value );
+			},
+			error => {
+				signal.removeEventListener( "abort", cancel );
+				reject( error );
+			}
+		);
+	} );
+}
+
 // Packs up to this size are fetched and persisted whole; larger ones by member.
 const SMALL_PACK_BYTES = 4 << 20;
 // Whole small packs kept in memory after their read: eight of them. A
@@ -251,10 +282,10 @@ export function createPacks(
 		if ( disposed || signal.aborted ) throw new Error( "Asset request cancelled" );
 		if ( report ) activity( url.pathname, "start" );
 		try {
-			const registry = await manifest( url.origin );
+			const registry = await untilCancelled( manifest( url.origin ), signal );
 			// Manifest paths are filenames; URL pathname preserves percent escapes.
 			const pathname = decodeURIComponent( url.pathname ).toLowerCase();
-			let entry = await servedEntry( registry, pathname ), gzip = false;
+			let entry = await untilCancelled( servedEntry( registry, pathname ), signal ), gzip = false;
 			if ( !entry && pathname.endsWith( ".json" ) ) {
 				entry = registry.assets.get( pathname + ".gz" );
 				gzip = Boolean( entry );
@@ -274,7 +305,10 @@ export function createPacks(
 			}
 			if ( saved ) bytes = saved;
 			else if ( cache.has( entry.packPath ) ) {
-				const loaded = await pack( url.origin, registry.packs.get( entry.packPath )! );
+				const loaded = await untilCancelled(
+					pack( url.origin, registry.packs.get( entry.packPath )! ),
+					signal
+				);
 				bytes = await decoded(
 					entry,
 					loaded.bytes.slice( loaded.start + entry.offset, loaded.start + entry.offset + entry.span )
@@ -286,7 +320,7 @@ export function createPacks(
 					if ( descriptor.bytes > SMALL_PACK_BYTES ) {
 						bytes = await member( url.origin, descriptor, entry, signal );
 					} else {
-						const loaded = await pack( url.origin, descriptor );
+						const loaded = await untilCancelled( pack( url.origin, descriptor ), signal );
 						bytes = await decoded(
 							entry,
 							loaded.bytes.slice(
