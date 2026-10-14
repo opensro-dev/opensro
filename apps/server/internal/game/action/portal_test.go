@@ -8,6 +8,7 @@ import (
 	"opensro.online/server/internal/game/world/simulation"
 	"opensro.online/server/internal/testsupport/gamedatatest"
 	"opensro.online/server/internal/testsupport/licensed"
+	"strings"
 	"testing"
 )
 
@@ -171,9 +172,9 @@ func TestFortressGateFeeTaxFillsTheTreasury(t *testing.T) {
 TestGateRefusesAFarTransport
 
 4F2B50 case 2: a summoned transport standing beyond gateTransportRange is
-refused 0x1C13 on any gate, after the quest bit and before the link's own
-conditions; a near transport passes a town gate (no transport condition),
-and nothing changes without a transport.
+refused 0x1C13 on any link, after the quest bit and before the link's own
+conditions. A near transport then meets the link's Restrict: kind 2 (the
+town gates) refuses it 0x1C10, a link without it (a ferry) lets it pass.
 ================
 */
 func TestGateRefusesAFarTransport(t *testing.T) {
@@ -181,7 +182,7 @@ func TestGateRefusesAFarTransport(t *testing.T) {
 	hp, gold := int64(100), int64(50000)
 	c.CurrentHP, c.Gold = &hp, &gold
 	town := portalDestination{building: true}
-	ferry := portalLink{conditions: []portalCondition{{kind: 2}}}
+	restricted := portalLink{conditions: []portalCondition{{kind: portalConditionTransport}}}
 	for _, tc := range []struct {
 		name      string
 		source    portalDestination
@@ -189,15 +190,82 @@ func TestGateRefusesAFarTransport(t *testing.T) {
 		traveller portalTraveller
 		want      byte
 	}{
-		{"near transport through a town gate", town, portalLink{}, portalTraveller{transportCOS: true}, 0},
-		{"far transport through a town gate", town, portalLink{}, portalTraveller{transportCOS: true, transportFar: true}, 0x13},
-		{"far transport on a ferry", portalDestination{}, ferry, portalTraveller{transportCOS: true, transportFar: true}, 0x13},
-		{"near transport on a ferry", portalDestination{}, ferry, portalTraveller{transportCOS: true}, 0x10},
-		{"quest bit before range", town, portalLink{}, portalTraveller{questMask: 0x40000, transportCOS: true, transportFar: true}, 0x17},
-		{"no transport", town, portalLink{}, portalTraveller{transportFar: true}, 0},
+		{"near transport through a town gate", town, restricted, portalTraveller{transportCOS: true}, 0x10},
+		{"far transport through a town gate", town, restricted, portalTraveller{transportCOS: true, transportFar: true}, 0x13},
+		{"far transport on a ferry", portalDestination{}, portalLink{}, portalTraveller{transportCOS: true, transportFar: true}, 0x13},
+		{"near transport on a ferry", portalDestination{}, portalLink{}, portalTraveller{transportCOS: true}, 0},
+		{"quest bit before range", town, restricted, portalTraveller{questMask: 0x40000, transportCOS: true, transportFar: true}, 0x17},
+		{"no transport", town, restricted, portalTraveller{transportFar: true}, 0},
 	} {
 		if got := portalAdmission(c, tc.source, tc.link, tc.traveller); got != tc.want {
 			t.Errorf("%s: %#x, want %#x", tc.name, got, tc.want)
 		}
 	}
+}
+
+/*
+================
+TestShippedTownGatesRefuseATransportAndFerriesAllowIt
+
+The shipped links take Restrict kind 2 from the server databases
+(portaltransport_generated.go), not from the client's teleportlink.txt:
+the four town gate links (Jangan-Donwhang, Donwhang-Hotan) refuse a near summoned
+transport 0x1C10, and all 30 ferry, flyship and tunnel links let it through, still
+behind the 1000-unit range (#916).
+================
+*/
+func TestShippedTownGatesRefuseATransportAndFerriesAllowIt(t *testing.T) {
+	licensed.RequireGameData(t)
+	catalog, err := loadPortalCatalog(gamedatatest.TextdataDir(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &enterworld.Character{}
+	hp, gold, level := int64(100), int64(50000), int64(30)
+	c.CurrentHP, c.Gold, c.Level = &hp, &gold, &level
+	near := portalTraveller{transportCOS: true}
+	far := portalTraveller{transportCOS: true, transportFar: true}
+	gates, crossings := 0, 0
+	for key, link := range catalog.links {
+		source, target := catalog.destinations[key[0]], catalog.destinations[key[1]]
+		got := portalAdmission(c, source, link, near)
+		switch {
+		case isTownGate(source.code) && isTownGate(target.code):
+			gates++
+			if got != 0x10 {
+				t.Errorf("%s -> %s admitted a transport: %#x", source.code, target.code, got)
+			}
+		case isCrossing(source.code):
+			crossings++
+			if got != 0 {
+				t.Errorf("%s -> %s refused a near transport: %#x", source.code, target.code, got)
+			}
+			if got := portalAdmission(c, source, link, far); got != 0x13 {
+				t.Errorf("%s -> %s admitted a far transport: %#x", source.code, target.code, got)
+			}
+		}
+	}
+	if gates != 4 || crossings != 30 {
+		t.Fatalf("census: %d town gate links, %d crossings", gates, crossings)
+	}
+}
+
+/*
+================
+isTownGate
+================
+*/
+func isTownGate(code string) bool {
+	return code == "GATE_CH" || code == "GATE_WC" || code == "GATE_KT"
+}
+
+/*
+================
+isCrossing
+
+A ferry, flyship or tunnel teleport.
+================
+*/
+func isCrossing(code string) bool {
+	return strings.Contains(code, "_FERRY") || strings.Contains(code, "_FLYSHIP") || strings.Contains(code, "_TUNNEL")
 }

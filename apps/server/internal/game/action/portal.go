@@ -52,6 +52,30 @@ portalCondition
 */
 type portalCondition struct{ kind, minimum, maximum uint32 }
 
+// portalConditionTransport is Restrict kind 2: CRefTeleportLink_CheckState
+// (513A70, 513B1A..513B34) refuses 0x1C10 while the player's first summoned
+// COS is a transport (vt+0x2EC -> 4827F0 tests TID band 2).
+const portalConditionTransport uint32 = 2
+
+/*
+================
+linkRefusesTransport
+
+Whether a link refuses a summoned transport. The server reads Restrict from
+its database, and both research databases (portaltransport_generated.go)
+put kind 2 on the town gates and none on the ferries, flyships and tunnels,
+as the v1.150 client's own text says (UIIT_MSG_STRGERR_CANT_TELEPORT_WITH_CART:
+"... ferries can be used"). The client's teleportlink.txt carries the kind
+on the reverse links, so it is used only for a link the databases lack.
+================
+*/
+func linkRefusesTransport(source, target string, clientTransport bool) bool {
+	if refuses, known := serverTransportLinks[[2]string{source, target}]; known {
+		return refuses
+	}
+	return clientTransport
+}
+
 /*
 ================
 portalLink
@@ -201,6 +225,7 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 		if _, ok := c.destinations[link.target]; !ok {
 			return nil, fmt.Errorf("missing destination teleport %d", link.target)
 		}
+		clientTransport := false
 		for j := 5; j < 20; j += 3 {
 			k, a, b := values[j], values[j+1], values[j+2]
 			if k == 0 {
@@ -212,7 +237,14 @@ func loadPortalCatalog(dir string) (*portalCatalog, error) {
 			if k > 2 || k == 1 && a > b || k == 2 && (a != 0 || b != 0) {
 				return nil, fmt.Errorf("teleportlink row %d unsupported condition %d", i+1, k)
 			}
+			if k == portalConditionTransport {
+				clientTransport = true
+				continue
+			}
 			link.conditions = append(link.conditions, portalCondition{k, a, b})
+		}
+		if linkRefusesTransport(c.destinations[link.source].code, c.destinations[link.target].code, clientTransport) {
+			link.conditions = append(link.conditions, portalCondition{kind: portalConditionTransport})
 		}
 		key := [2]uint32{link.source, link.target}
 		if _, ok := c.links[key]; ok {
@@ -589,7 +621,7 @@ func portalAdmission(c *enterworld.Character, source portalDestination, link por
 			if level < condition.minimum || level > condition.maximum {
 				return 0x15
 			}
-		case 2:
+		case portalConditionTransport:
 			if traveller.transportCOS {
 				return 0x10
 			}
