@@ -248,11 +248,21 @@ function drawDistribution( distribution, failure ) {
 	const sox = Array.isArray( distribution.sox ) ? distribution.sox : [];
 	if ( sox.length === 0 ) message( "sox", "No seal items counted yet." );
 	else {
-		byID( "sox" ).replaceChildren( table(
-			[ "Degree", "Star", "Moon", "Sun" ],
-			sox.map( row => [ String( row.degree ), ...[ row.star, row.moon, row.sun ].map( countText ) ] ),
-			[ 1, 2, 3 ]
-		) );
+		const soxTable = rows =>
+			table(
+				[ "Seal", "Star", "Moon", "Sun" ],
+				rows.map( row => [ "Degree " + row.degree, ...[ row.star, row.moon, row.sun ].map( countText ) ] ),
+				[ 1, 2, 3 ]
+			);
+		const parts = [ element( "h3", "Every character", "economy-subhead" ), soxTable( sox ) ];
+		// The same count over accounts active in 14 days: what is in play now.
+		if ( Array.isArray( distribution.soxAccounts14d ) ) {
+			parts.push(
+				element( "h3", "Accounts active in 14 days", "economy-subhead" ),
+				soxTable( distribution.soxAccounts14d )
+			);
+		}
+		byID( "sox" ).replaceChildren( ...parts );
 	}
 }
 
