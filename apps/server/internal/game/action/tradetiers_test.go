@@ -38,6 +38,27 @@ func TestTradeTierForGold(t *testing.T) {
 
 /*
 ================
+TestFullTransportsReachTheirStars
+
+A full bag of 40-stacks under SRO_TRADE_TIERS' factor: the level-120
+transport (177 slots) reaches 5 stars, the level-105 (159) and level-90
+(141) 4. At the native 348 every one of them is 1 star.
+================
+*/
+func TestFullTransportsReachTheirStars(t *testing.T) {
+	full := func(slots, price uint64) uint64 { return slots * 40 * price }
+	for slots, want := range map[uint64]uint8{177: 5, 159: 4, 141: 4} {
+		if got := TradeTierForGold(full(slots, 348*enterworld.TradeGoodsPriceFactor)); got != want {
+			t.Fatalf("a full %d-slot transport: %d stars, want %d", slots, got, want)
+		}
+		if got := TradeTierForGold(full(slots, 348)); got != 1 {
+			t.Fatalf("a full %d-slot transport at the native price: %d stars, want 1", slots, got)
+		}
+	}
+}
+
+/*
+================
 TestRoutePercentBothWays
 
 Jangan to and from each town, nothing between two other towns, nothing
@@ -126,7 +147,7 @@ func TestJanganRouteRaisesTheSaleProfit(t *testing.T) {
 TestCaravanTierFollowsCargoGold
 
 A full horse (101 stacks of 40 goods) at the shipped reference price 348 is
-about 1.4M, one star; at SRO_TRADE_TIERS' scaled 6,960 it is about 28.1M,
+about 1.4M, one star; at SRO_TRADE_TIERS' scaled 7,308 it is about 29.5M,
 three stars. Off, the native units rule applies.
 ================
 */

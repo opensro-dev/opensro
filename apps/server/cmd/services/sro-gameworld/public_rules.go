@@ -192,7 +192,7 @@ func publicRules() publicstats.RulesResponse {
 				Why: "Requested for the beta, to reward job-war streaks and put a price on them; the original returns with one setting."},
 			{Flag: action.EnvTradeTiers, On: action.TradeTiersFromEnv(),
 				Native: "Every trade good is worth 348 gold, a caravan's stars count its goods against the trader's level, and every route pays its listed price.",
-				Now: "Trade goods are worth 20 times as much (6,960 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 20 times larger too. " +
+				Now: "Trade goods are worth 21 times as much (7,308 for a 348 good): buying, selling, stolen goods at the Den and the cargo value all scale, so profit, trader job EXP, hunter shares, the weekly trade pool and the fortress trade tax are 21 times larger too. " +
 					"Stars follow the cargo's gold value: 1 star below 10M, 2 from 10M, 3 from 20M, 4 from 35M, 5 from 50M (bandits, the trade-scale menu and the stars in the transport's bag follow them). " +
 					"Selling between Jangan and another town raises the PROFIT (sale minus cost), both ways: Donwhang +50%, Hotan +100%, Samarkand +200%, Constantinople +300%.",
 				Why: "Requested for the beta so bigger loads and longer roads pay; the original returns with one setting."},

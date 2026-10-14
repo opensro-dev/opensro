@@ -1,7 +1,7 @@
 /*
 ===========================================================================
 
-tradegoodsprice.go - trade goods worth twenty times their v1.150 price
+tradegoodsprice.go - trade goods worth 21 times their v1.150 price
 
 Port-only, not native (owner decision 2026-10-14, SRO_TRADE_TIERS, for the
 balance advisor). Every v1.150 trade good (TID 3/3/8) has reference price
@@ -12,7 +12,10 @@ reads them, and the shops' policy prices with them (commerce): purchase,
 sale quotation, thief valuation, origin buyback, cargo value and stars,
 the client's tooltips (the published references) and the website all agree.
 Profit, and the job EXP, hunter share and weekly pool that derive from it,
-scale by the same factor.
+scale by the same factor. The factor was 20 until 2026-10-15, when the
+owner raised it to 21 (the advisor's choice over moving the 5-star mark):
+at 20 no transport could reach 50M, the largest bag (177 stacks of 40)
+holding 49.28M; at 21 it holds 51.74M.
 
 ===========================================================================
 */
@@ -21,7 +24,7 @@ package enterworld
 import "fmt"
 
 // TradeGoodsPriceFactor multiplies a trade good's prices under the rule.
-const TradeGoodsPriceFactor = 20
+const TradeGoodsPriceFactor = 21
 
 /*
 ================
