@@ -15,6 +15,8 @@ import (
 
 	"opensro.online/server/internal/game/enterworld"
 	"opensro.online/server/internal/game/item/grounditem"
+	"opensro.online/server/internal/game/item/wire"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 /*
@@ -86,6 +88,56 @@ func TestThiefPartyBonusFollowsTheFlag(t *testing.T) {
 	rt.applyThiefPartyGold(testDivision, &outsider, solo)
 	if solo[0].GoldAmount != 1000 {
 		t.Fatalf("a thief without a party raised its own gold: %+v", solo)
+	}
+}
+
+/*
+================
+TestThiefPartyGoldThroughAKill
+
+Through the real kill settlement (HandleTargetInteract): the drop owner's
+party holds two dressed thieves, so its 28-gold heap and its kill EXP are
+20% larger with the flag on and native with it off.
+================
+*/
+func TestThiefPartyGoldThroughAKill(t *testing.T) {
+	earned := map[bool]int64{}
+	for on, want := range map[bool]uint32{false: 28, true: 33} {
+		rt, _, actor, target := newCombatTestRuntime(t, 100)
+		rt.ThiefPartyBonus = on
+		deps := rt.deps.(*enterworld.Deps)
+		source := fixtureCharacters(deps.Characters)
+		owner, thief := *actor, *actor
+		owner.ID, owner.Name, owner.MissionInventory = 4, "gold-owner", nil
+		thief.ID, thief.Name, thief.MissionInventory = 5, "party-thief", nil
+		dressThief(&owner)
+		dressThief(&thief)
+		source[testDivision] = append(source[testDivision], &owner, &thief)
+		ownerGID := enterworld.ObjectIDForCharacter(&owner)
+		party := []uint32{ownerGID, enterworld.ObjectIDForCharacter(&thief)}
+		rt.RewardParties = func(string) []RewardParty { return []RewardParty{{Members: party}} }
+		hits := rt.Monsters.ApplyDamageSequence(testDivision, target.Gid, 100, []simulation.MonsterDamagePlan{
+			{GID: target.Gid, Damage: 99, CreditGID: ownerGID},
+		})
+		if len(hits) != 1 || hits[0].Fatal {
+			t.Fatal("nonfatal contribution setup failed")
+		}
+		installSmallGoldRef(rt)
+		rt.DropRoll = goldOnlyMonsterDropRoll(0, 0)
+		rt.UpdateExperience = func(c *enterworld.Character, delta, _ int64, _ uint32) ([]wire.Frame, bool) {
+			if c.Name == owner.Name {
+				earned[on] += delta
+			}
+			return nil, true
+		}
+		rt.HandleTargetInteract(testDivision, actor, wire.SkillAction{ActionId: 2, HasTarget: true, TargetGid: target.Gid}.Encode())
+		drops := rt.Ground.All(testDivision)
+		if len(drops) != 1 || drops[0].OwnerJID != ownerGID || drops[0].GoldAmount != want {
+			t.Fatalf("on=%v: drops %+v, want one %d-gold heap", on, drops, want)
+		}
+	}
+	if earned[false] <= 0 || earned[true] != thiefPartyExp(earned[false], 20) {
+		t.Fatalf("owner EXP off %d, on %d, want on = off + 20%%", earned[false], earned[true])
 	}
 }
 
