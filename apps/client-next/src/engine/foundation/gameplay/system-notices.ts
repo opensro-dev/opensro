@@ -59,9 +59,10 @@ export function fortressNotice( opcode: number, p: Uint8Array ): SystemNotice | 
 }
 
 // Port-only, not native: the shard's job-kill announcement channel (server
-// wire.JobKillNoticeChannel). v1.150 (753760) routes only channels 1..16, so
-// it is the browser's own; it shows as channel 7 unless the Experimental
-// "Job kill notices" row is off.
+// wire.JobKillNoticeChannel). v1.150 (753760) sends any channel outside its
+// table, 0x80 included, to its named-sender arm (753D8A), so the channel is
+// safe only because the browser client is the only client. Here it shows as
+// channel 7 unless the Experimental "Job kill notices" row is off.
 export const JOB_KILL_NOTICE_CHANNEL = 0x80;
 
 /*

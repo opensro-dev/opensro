@@ -3,11 +3,12 @@ package wire
 import "unicode/utf16"
 
 // JobKillNoticeChannel is the 0x3667 channel of the job-kill announcement.
-// Port-only, not native: v1.150 (753760) routes channels 1..16 through its
-// lookup table and nothing outside it, so a channel of its own lets the
-// browser client hide these notices (the Experimental "Job kill notices"
-// row) while showing them exactly like channel 7. A client without the
-// row drops the unknown channel.
+// Port-only, not native: v1.150 (753760) sends any channel outside its
+// table, 0x80 included, to its named-sender arm (753D8A), so this channel
+// is safe only because the browser client is the only client. A channel of
+// its own lets that client hide these notices (the Experimental "Job kill
+// notices" row) while showing them exactly like channel 7; a browser
+// client without the row drops it (decodeChatBroadcast returns null).
 const JobKillNoticeChannel = 0x80
 
 // noticeChannel is v1.150's server notification channel (753A6F).
