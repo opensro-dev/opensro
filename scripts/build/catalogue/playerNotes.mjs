@@ -14,6 +14,11 @@ request's reviewed commits and which cannot change after the merge: a
 pull request description stays editable after review, so it is never the
 source of public text. No network is involved.
 
+A later change withdraws an earlier note with "Player-note-retract: #<pr>"
+(several numbers may share the line): every note of that pull request in
+the release's range is left out, so a note a later change made false
+never ships. The retracting change may carry its own corrected note.
+
 ===========================================================================
 */
 import { execFileSync } from "node:child_process";
@@ -24,6 +29,8 @@ export const NOTE_AREAS = [ "UI", "Party", "Combat", "Items", "Animation", "Audi
 // NOTE_TRAILER is one note line of a commit message; NOTE_LABEL is the
 // optional "Area:" that opens its body (its sentence may be empty).
 const NOTE_TRAILER = /^\s*\*?\s*Player-note:\s*(.+)$/i;
+// NOTE_RETRACT withdraws earlier notes by pull request number.
+const NOTE_RETRACT = /^\s*\*?\s*Player-note-retract:\s*(.+)$/i;
 const NOTE_LABEL = /^([A-Za-z]+)\s*:\s*(.*)$/;
 
 // NOTE_FALLBACK_AREA files a note with an unknown area or none.
@@ -67,6 +74,45 @@ export function parsePlayerNotes( message ) {
 
 /*
 ================
+parsePlayerNoteRetractions
+
+The pull request numbers a commit message's "Player-note-retract:" lines
+withdraw. A line naming no "#<number>" withdraws nothing.
+================
+*/
+export function parsePlayerNoteRetractions( message ) {
+	const numbers = new Set();
+	for ( const line of String( message ?? "" ).split( /\r?\n/ ) ) {
+		const match = NOTE_RETRACT.exec( line );
+		if ( !match ) continue;
+		for ( const pr of match[1].matchAll( /#(\d+)/g ) ) numbers.add( Number( pr[1] ) );
+	}
+	return [ ...numbers ].sort( ( a, b ) => a - b );
+}
+
+/*
+================
+notesOfMerges
+
+The notes.json entries of squash merges in merge order, each record a
+{ date, subject, message }: a merge without "(#<pr>)" in its subject is
+not a pull request and adds nothing, and every note of a retracted pull
+request is left out.
+================
+*/
+export function notesOfMerges( records ) {
+	const entries = [], retracted = new Set();
+	for ( const { date, subject, message } of records ) {
+		const pr = /\(#(\d+)\)\s*$/.exec( subject ?? "" );
+		if ( !pr ) continue;
+		for ( const number of parsePlayerNoteRetractions( message ) ) retracted.add( number );
+		for ( const note of parsePlayerNotes( message ) ) entries.push( { date, ...note, pr: Number( pr[1] ) } );
+	}
+	return entries.filter( entry => !retracted.has( entry.pr ) );
+}
+
+/*
+================
 playerNotes
 
 The notes.json entries of the squash merges after since, in merge order.
@@ -83,12 +129,10 @@ export function playerNotes( repositoryRoot, since ) {
 		"--format=" + RECORD + "%cs" + FIELD + "%s" + FIELD + "%B",
 		since + "..HEAD"
 	], { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 64 << 20 } );
-	const entries = [];
-	for ( const record of log.split( RECORD ).slice( 1 ) ) {
-		const [date, subject, message] = record.split( FIELD );
-		const pr = /\(#(\d+)\)\s*$/.exec( subject ?? "" );
-		if ( !pr ) continue;
-		for ( const note of parsePlayerNotes( message ) ) entries.push( { date, ...note, pr: Number( pr[1] ) } );
-	}
-	return entries;
+	return notesOfMerges(
+		log.split( RECORD ).slice( 1 ).map( record => {
+			const [date, subject, message] = record.split( FIELD );
+			return { date, subject, message };
+		} )
+	);
 }

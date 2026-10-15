@@ -7,13 +7,14 @@ playerNotes.test.mjs - the "Player-note:" trailers a merge carries
 area; a note under any other label, or none, is filed under Other rather
 than dropped, with its text whole; a label with no sentence is no note.
 A repeated note counts once, and a line that is not a Player-note trailer
-adds nothing to the catalogue's notes.json.
+adds nothing to the catalogue's notes.json. A later merge's
+"Player-note-retract: #<pr>" withdraws every note of that pull request.
 
 ===========================================================================
 */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parsePlayerNotes } from "../../build/catalogue/playerNotes.mjs";
+import { notesOfMerges, parsePlayerNoteRetractions, parsePlayerNotes } from "../../build/catalogue/playerNotes.mjs";
 
 test("player-note trailers yield one entry per distinct note", () => {
 	const message = [
@@ -63,4 +64,47 @@ test("a note that names no area is filed under Other with its whole sentence", (
 test("a message without a trailer yields nothing", () => {
 	assert.deepEqual( parsePlayerNotes( "perf: faster packs (#600)\n\nNo player-visible change." ), [] );
 	assert.deepEqual( parsePlayerNotes( undefined ), [] );
+});
+
+test("a retract line names the pull requests it withdraws and is no note itself", () => {
+	const message = [
+		"Player-note-retract: #1060",
+		"player-note-retract: #12, #1060 and #7",
+		"Player-note-retract: none"
+	].join( "\n" );
+	assert.deepEqual( parsePlayerNoteRetractions( message ), [ 7, 12, 1060 ] );
+	assert.deepEqual( parsePlayerNotes( message ), [] );
+	assert.deepEqual( parsePlayerNoteRetractions( undefined ), [] );
+});
+
+test("a later merge's retraction leaves the earlier note out and keeps its own", () => {
+	// F9's shape: #1060's test-pacing note was made false by #1073.
+	const records = [
+		{
+			date: "2026-10-15",
+			subject: "feat(job): Most Wanted test pacing (#1060)",
+			message: "Player-note: Other: Most Wanted is in a test mode."
+		},
+		{
+			date: "2026-10-15",
+			subject: "feat(chat): notice links (#1068)",
+			message: "Player-note: UI: Drop and reinforcement notices link the player and the item."
+		},
+		{
+			date: "2026-10-15",
+			subject: "fix(ops): Most Wanted test pacing ships off (#1073)",
+			message: "Player-note-retract: #1060\nPlayer-note: Other: Most Wanted keeps its ordinary pace."
+		},
+		// Not a pull request merge: its retraction counts for nothing.
+		{ date: "2026-10-15", subject: "Merge branch 'x'", message: "Player-note-retract: #1068" }
+	];
+	assert.deepEqual( notesOfMerges( records ), [
+		{
+			date: "2026-10-15",
+			area: "UI",
+			text: "Drop and reinforcement notices link the player and the item.",
+			pr: 1068
+		},
+		{ date: "2026-10-15", area: "Other", text: "Most Wanted keeps its ordinary pace.", pr: 1073 }
+	] );
 });
