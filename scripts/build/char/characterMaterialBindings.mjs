@@ -22,8 +22,9 @@ publishedCharacterAssets
 
 Every GLB the roster references, with its recorded provenance. Walks the
 whole dress section, so a catalog added later is covered without a change
-here. A referenced GLB without provenance, or one GLB recorded with two
-different sources, is an error.
+here, including a variant nested inside a published entry (the port-only
+Moonlit Ash `moonlit` model under its body entry). A referenced GLB without
+provenance, or one GLB recorded with two different sources, is an error.
 ================
 */
 export function publishedCharacterAssets( roster ) {
@@ -52,9 +53,11 @@ export function publishedCharacterAssets( roster ) {
 			const sources = {};
 			for ( const [part, source] of Object.entries( node.sources ) ) sources["part:" + part] = source;
 			record( node.glb, sources );
-			continue;
 		}
-		for ( const value of Object.values( node ) ) pending.push( value );
+		for ( const [key, value] of Object.entries( node ) ) {
+			// A part's provenance is not itself a published entry.
+			if ( key !== "sources" ) pending.push( value );
+		}
 	}
 	return assets;
 }
