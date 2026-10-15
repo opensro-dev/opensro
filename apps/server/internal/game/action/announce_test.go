@@ -389,3 +389,39 @@ func TestTickSendsQueuedNotices(t *testing.T) {
 		t.Fatalf("second tick resent %d notices", n)
 	}
 }
+
+/*
+================
+TestJobKillNoticeRepeatLiftsThePairWindow
+
+SRO_JOB_KILL_NOTICE_REPEAT: off, a pair killing eight times in a minute
+is announced once; on, every kill is, up to the per-minute shard cap.
+================
+*/
+func TestJobKillNoticeRepeatLiftsThePairWindow(t *testing.T) {
+	for _, tc := range []struct {
+		repeat bool
+		want   int
+	}{{false, 1}, {true, announcementsPerMinute}} {
+		rt, _, thief, trader := newPvpPair(t)
+		dressForJob(rt, thief, 9302, "ITEM_CH_M_TRADE_THIEF_04", 2)
+		dressForJob(rt, trader, 9303, "ITEM_CH_M_TRADE_TRADER_04", 1)
+		rt.Announce.JobKill, rt.Announce.JobKillRepeat = true, tc.repeat
+		for i := int64(0); i < announcementsPerMinute+2; i++ {
+			k := playerKill{kind: rt.playerKillKind(testDivision, trader, thief)}.withVictim(thief, trader)
+			_, _, after := rt.payPlayerKillInDoor(testDivision, thief, trader, k, i*1000)
+			rt.payJobKillShares(after)
+		}
+		if got := drainedNotices(t, rt); len(got) != tc.want {
+			t.Fatalf("repeat=%v: %d notices %q, want %d", tc.repeat, len(got), got, tc.want)
+		}
+	}
+	t.Setenv(EnvJobKillNoticeRepeat, "on")
+	if !AnnouncementsFromEnv().JobKillRepeat {
+		t.Fatal("the repeat flag does not read on")
+	}
+	t.Setenv(EnvJobKillNoticeRepeat, "")
+	if AnnouncementsFromEnv().JobKillRepeat {
+		t.Fatal("the repeat flag reads on when unset")
+	}
+}

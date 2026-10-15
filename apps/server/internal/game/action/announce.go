@@ -18,6 +18,11 @@ notice is queued and the next tick sends it, outside every door. Each kind
 is capped shard-wide per minute, and a job kill repeats for the same pair
 only after jobKillRepeatMs, so a farm cannot flood chat.
 
+SRO_JOB_KILL_NOTICE_REPEAT (port-only, not native; owner decision
+2026-10-15, so the balance advisor can see a farmed pair) lifts the pair
+window: every job kill between the same pair is announced, still under the
+per-minute shard cap. Off here keeps the window.
+
 ===========================================================================
 */
 package action
@@ -43,6 +48,8 @@ const (
 	EnvAnnounceSoxDrop = "SRO_ANNOUNCE_SOX_DROP"
 	EnvAnnouncePlus    = "SRO_ANNOUNCE_PLUS"
 	EnvAnnounceJobKill = "SRO_ANNOUNCE_JOB_KILL"
+	// EnvJobKillNoticeRepeat announces every kill of a pair (no window).
+	EnvJobKillNoticeRepeat = "SRO_JOB_KILL_NOTICE_REPEAT"
 )
 
 const (
@@ -86,10 +93,12 @@ const (
 Announcements
 
 Which notices the shard sends. The zero value is native: none.
+JobKillRepeat drops the pair window (EnvJobKillNoticeRepeat).
 ================
 */
 type Announcements struct {
 	SoxDrop, Plus, JobKill bool
+	JobKillRepeat          bool
 }
 
 /*
@@ -105,7 +114,8 @@ func AnnouncementsFromEnv() Announcements {
 		}
 		return false
 	}
-	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), JobKill: on(EnvAnnounceJobKill)}
+	return Announcements{SoxDrop: on(EnvAnnounceSoxDrop), Plus: on(EnvAnnouncePlus), JobKill: on(EnvAnnounceJobKill),
+		JobKillRepeat: on(EnvJobKillNoticeRepeat)}
 }
 
 /*
@@ -343,11 +353,15 @@ Runtime.postJobKillNotice
 
 Item 3: queues a committed job kill's notice by the pair's job aliases,
 in the client's bracketed style (UIIT_MSG_ANYONE_DEAD_UNIC "[%s]has killed
-[%s]."), unless the pair was announced within jobKillRepeatMs.
+[%s]."), unless the pair was announced within jobKillRepeatMs and the
+repeat rule is off.
 ================
 */
 func (rt *Runtime) postJobKillNotice(n jobKillNotice) {
-	if !rt.Announce.JobKill || !rt.jobKillPairQuiet(n.killer, n.victim, n.nowMs) {
+	if !rt.Announce.JobKill {
+		return
+	}
+	if !rt.Announce.JobKillRepeat && !rt.jobKillPairQuiet(n.killer, n.victim, n.nowMs) {
 		return
 	}
 	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", n.nowMs)

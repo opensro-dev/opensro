@@ -305,6 +305,14 @@ variable "announce_job_kill" {
   default = "on"
 }
 
+# job_kill_notice_repeat announces every job kill between the same pair,
+# with no 10-minute pair window (port-only, not native; owner decision
+# 2026-10-15). The per-minute shard cap stays. "off" restores the window.
+variable "job_kill_notice_repeat" {
+  type    = string
+  default = "on"
+}
+
 # thief_party_bonus gives a party +10% monster EXP and gold per member
 # dressed as a thief, up to +50% (port-only, not native; owner decision
 # 2026-10-14). "off" is native.
@@ -718,6 +726,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ANNOUNCE_SOX_DROP              = var.announce_sox_drop
         SRO_ANNOUNCE_PLUS                  = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
+        SRO_JOB_KILL_NOTICE_REPEAT         = var.job_kill_notice_repeat
         SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
         SRO_TRADE_JOB_BONUS                = var.trade_job_bonus
         SRO_REVERSE_RETURN_MAP             = var.reverse_return_map
