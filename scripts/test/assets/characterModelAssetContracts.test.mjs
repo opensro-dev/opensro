@@ -462,7 +462,10 @@ test("mission NPC, monster and COS manifest exactly covers its rosters", () => {
 		assert.ok( entry, `${ref.codename} is absent from the model manifest` );
 		assert.equal( entry.refObjId, ref.refObjId, `${ref.codename} RefObj identity drift` );
 	}
-	assert.equal( npcRoster.length, 174, "the authored CH/EU town roster lost model coverage" );
+	// 174 npcpos types, plus #976's Magic Pang machine and Exchanger Gori
+	// (NPC_CH_GACHA_MACHINE 9251, NPC_CH_GACHA_OPERATOR 9252), placed from
+	// the later server's nest table.
+	assert.equal( npcRoster.length, 176, "the authored CH/EU town roster lost model coverage" );
 	for ( const codename of [ "NPC_CH_SMITH", "NPC_EU_SMITH", "NPC_EU_ADVICE3", "STRUCTURE_GATE_PULLEY_JA_01" ] ) {
 		assert.ok( npcRoster.some( ( ref ) => ref.codename === codename ), `${codename} left the server roster` );
 	}
