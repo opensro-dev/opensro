@@ -38,6 +38,12 @@ import (
 // with the reason; every other setting is a rule (public_rules_test.go).
 var unlistedSettings = map[string]string{
 	action.EnvGMSetSpeed: "a GM command, not a rule players meet",
+	// The tunables a rule's own text shows (game/tunables).
+	"SRO_MOST_WANTED_TEST_KILLS":         "shown in the Most Wanted test pacing rule",
+	"SRO_MOST_WANTED_TEST_BOUNTY":        "shown in the Most Wanted test pacing rule",
+	"SRO_JOB_KILL_NOTICES_PER_MINUTE":    "shown in the job-kill repeat rule",
+	"SRO_JOB_KILL_REPEAT_MINUTES":        "shown in the job-kill repeat rule",
+	"SRO_MOST_WANTED_NOTICES_PER_MINUTE": "a cap on the Most Wanted notices, an operator throttle",
 }
 
 /*

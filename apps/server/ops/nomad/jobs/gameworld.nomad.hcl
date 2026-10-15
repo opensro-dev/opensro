@@ -224,6 +224,38 @@ variable "most_wanted_test" {
   default = "off"
 }
 
+# most_wanted_test_kills and most_wanted_test_bounty are the test pacing's
+# kills per wanted level (1, 2, 5 or 10) and gold per level (0..100000000);
+# they act only with most_wanted_test on (port-only, game/tunables).
+variable "most_wanted_test_kills" {
+  type    = string
+  default = "5"
+}
+
+variable "most_wanted_test_bounty" {
+  type    = string
+  default = "1000000"
+}
+
+# job_kill_notices_per_minute and most_wanted_notices_per_minute cap each
+# notice kind per division a minute (1..30); job_kill_repeat_minutes is how
+# long one killer/victim pair stays quiet (1..60) with the repeat rule off
+# (port-only, game/tunables).
+variable "job_kill_notices_per_minute" {
+  type    = string
+  default = "6"
+}
+
+variable "most_wanted_notices_per_minute" {
+  type    = string
+  default = "6"
+}
+
+variable "job_kill_repeat_minutes" {
+  type    = string
+  default = "10"
+}
+
 # most_wanted_bounty_transfer pays a wanted player's bounty out of that
 # player's own gold, at most what they carry, instead of minting it
 # (port-only, not native; owner decision 2026-10-15). "off" mints it.
@@ -724,6 +756,8 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_CLOSED_OBJECT_RESCUE           = var.closed_object_rescue
         SRO_MOST_WANTED                    = var.most_wanted
         SRO_MOST_WANTED_TEST               = var.most_wanted_test
+        SRO_MOST_WANTED_TEST_KILLS         = var.most_wanted_test_kills
+        SRO_MOST_WANTED_TEST_BOUNTY        = var.most_wanted_test_bounty
         SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer
         SRO_TRADE_TIERS                    = var.trade_tiers
         SRO_JOB_SUIT_HIDES_ARMOR           = var.job_suit_hides_armor
@@ -736,6 +770,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ANNOUNCE_PLUS                  = var.announce_plus
         SRO_ANNOUNCE_JOB_KILL              = var.announce_job_kill
         SRO_JOB_KILL_NOTICE_REPEAT         = var.job_kill_notice_repeat
+        SRO_JOB_KILL_NOTICES_PER_MINUTE    = var.job_kill_notices_per_minute
+        SRO_MOST_WANTED_NOTICES_PER_MINUTE = var.most_wanted_notices_per_minute
+        SRO_JOB_KILL_REPEAT_MINUTES        = var.job_kill_repeat_minutes
         SRO_ANNOUNCE_MOST_WANTED           = var.announce_most_wanted
         SRO_THIEF_PARTY_BONUS              = var.thief_party_bonus
         SRO_TRADE_JOB_BONUS                = var.trade_job_bonus

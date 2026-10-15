@@ -67,6 +67,9 @@ var Settings = []Setting{
 	{Env: "SRO_MOST_WANTED", NomadVar: "most_wanted", Default: "on"},
 	// Owner, 2026-10-15: temporary Most Wanted test pacing.
 	{Env: "SRO_MOST_WANTED_TEST", NomadVar: "most_wanted_test", Default: "off"},
+	// Owner, 2026-10-15 (F10): the test pacing's numbers (game/tunables).
+	{Env: "SRO_MOST_WANTED_TEST_KILLS", NomadVar: "most_wanted_test_kills", Default: "5"},
+	{Env: "SRO_MOST_WANTED_TEST_BOUNTY", NomadVar: "most_wanted_test_bounty", Default: "1000000"},
 	// Owner and the balance advisor, 2026-10-15: the bounty is the victim's gold.
 	{Env: "SRO_MOST_WANTED_BOUNTY_TRANSFER", NomadVar: "most_wanted_bounty_transfer", Default: "on"},
 	// Owner, 2026-10-14: trade stars by cargo gold, Jangan route profit.
@@ -89,6 +92,10 @@ var Settings = []Setting{
 	{Env: "SRO_ANNOUNCE_JOB_KILL", NomadVar: "announce_job_kill", Default: "on"},
 	// Owner, 2026-10-15: every job kill of a pair is announced (no window).
 	{Env: "SRO_JOB_KILL_NOTICE_REPEAT", NomadVar: "job_kill_notice_repeat", Default: "on"},
+	// Owner, 2026-10-15 (F10): the notice caps and the pair window (game/tunables).
+	{Env: "SRO_JOB_KILL_NOTICES_PER_MINUTE", NomadVar: "job_kill_notices_per_minute", Default: "6"},
+	{Env: "SRO_MOST_WANTED_NOTICES_PER_MINUTE", NomadVar: "most_wanted_notices_per_minute", Default: "6"},
+	{Env: "SRO_JOB_KILL_REPEAT_MINUTES", NomadVar: "job_kill_repeat_minutes", Default: "10"},
 	// Owner, 2026-10-15: Most Wanted levels and claimed bounties are announced.
 	{Env: "SRO_ANNOUNCE_MOST_WANTED", NomadVar: "announce_most_wanted", Default: "on"},
 	// Owner, 2026-10-14: +10% party EXP and gold per thief (cap 50%).

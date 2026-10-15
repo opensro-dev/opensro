@@ -166,3 +166,33 @@ func TestHandlerAnswersOnlyTheGuardedConsole(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestEveryTunableIsAShardSetting
+
+sro-nomad passes only shard settings to the job, so a tunable outside the
+table could never be set in production. Each registry variable is a shard
+setting whose deployment default the registry accepts.
+================
+*/
+func TestEveryTunableIsAShardSetting(t *testing.T) {
+	table := map[string]string{}
+	for _, setting := range shardsettings.Settings {
+		table[setting.Env] = setting.Default
+	}
+	for _, row := range tunables.Registry {
+		value, listed := table[row.Env]
+		if !listed {
+			t.Fatalf("%s is a tunable but not a shard setting: production cannot set it", row.Env)
+		}
+		if _, err := tunables.Parse(func(name string) string {
+			if name == row.Env {
+				return value
+			}
+			return ""
+		}); err != nil {
+			t.Fatalf("%s: its deployment default %q is refused: %v", row.Env, value, err)
+		}
+	}
+}
