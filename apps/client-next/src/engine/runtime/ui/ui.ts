@@ -722,6 +722,11 @@ const FORTRESS_TAX_ARROW_RIGHT = 270;
 const FORTRESS_TAX_TRAVEL = 234;
 // CIFJobRank and CIFJobContributionRank share one panel (job-hud.ts).
 const JOB_RANK_PANEL = "Job ranking";
+// CIFNpcTalk_AppendFortressServiceRows (5D7AD0) and the employ question
+// (5D3880) quote one fee for every fortress staff member: 0x7530 gold and
+// 0xBB8 guild points.
+const FORTRESS_STAFF_FEE_GOLD = 30000;
+const FORTRESS_STAFF_FEE_GP = 3000;
 // The smith's avatar magic option window (CIFGrantMagicAttributeWnd).
 const GRANT_PANEL = "Magic option";
 // The panels that show the bag in the main popup beside their own window, and
@@ -14246,8 +14251,12 @@ export function createUi(
 						fortressStaffRows: fortressStaffHud.target() ?
 							[ [ 1, "BATTLEAIDE" ], [ 2, "SMITH" ], [ 4, "TRAINER" ] ].map( ( [flag, name] ) => ({
 								id: "npc-fortress-hire:" + flag,
+								// 5D7AD0 fills the fee line with swprintf before it joins the row.
 								label: copy( "SN_FORTRESS_MANAGER_EMPLOY_" + name ) + " " +
-									copy( "SN_FORTRESS_MANAGER_EMPLOY_FEE" ),
+									fortressWarFormat( copy( "SN_FORTRESS_MANAGER_EMPLOY_FEE" ), [
+										FORTRESS_STAFF_FEE_GOLD,
+										FORTRESS_STAFF_FEE_GP
+									] ),
 								disabled: !fortressStaffView().commander ||
 									!!(fortressStaffView().flags & Number( flag ))
 							}) ) :
@@ -20473,8 +20482,8 @@ export function createUi(
 										"SMITH" :
 										"TRAINER")
 							),
-							30000,
-							3000
+							FORTRESS_STAFF_FEE_GOLD,
+							FORTRESS_STAFF_FEE_GP
 						] :
 						[ name, row?.requestFee ?? 0 ]
 				);

@@ -322,3 +322,18 @@ test("the staff employ question grows to its widest line, as 52BCF0 grows the bo
 	assert.ok( widest + 60 > 360, "the employ text is wider than the minimum box's body" );
 	assert.equal( width, Math.ceil( widest ) + 60 );
 });
+
+test("the staff hire rows quote the filled fee, as 5D7AD0 prints it", t => {
+	const { f, step } = managerFixture( t, "Holders" );
+	step();
+	f.ui.event( { kind: "activate", id: "npc-fortress-staff" } );
+	const presentation = step();
+	const rows = [ 1, 2, 4 ].map( flag => presentation?.controls.find( c => c.id === "npc-fortress-hire:" + flag ) );
+	assert.ok( rows.every( Boolean ), "the three hire rows" );
+	// 5D7AD0 swprintfs SN_FORTRESS_MANAGER_EMPLOY_FEE with 0x7530 and 0xBB8.
+	const fee = fortressWarFormat( TEXT.SN_FORTRESS_MANAGER_EMPLOY_FEE, [ 30000, 3000 ] );
+	for ( const row of rows ) {
+		assert.ok( row.label.endsWith( " " + fee ), row.label );
+		assert.ok( !row.label.includes( "%d" ), row.label );
+	}
+});
