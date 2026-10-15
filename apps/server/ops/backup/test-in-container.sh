@@ -7,9 +7,11 @@
 #
 # A local rclone remote stands in for Google Drive and a tiny HTTP server
 # for the Discord webhook. A writer keeps inserting rows while the backup
-# runs, as a live game would. Checks: a verified nightly run, an
-# incremental second run, restore contents, the weekly deep check, the
-# failure alert, and the freshness alert.
+# runs, as a live game would, into the authority store and into a
+# .sqlite history journal. Checks: a verified nightly run, an incremental
+# second run, restore contents (both databases snapshotted online and
+# intact, no raw WAL copied), the weekly deep check, the failure alert,
+# and the freshness alert.
 #
 # ===========================================================================
 set -Eeuo pipefail
@@ -46,6 +48,11 @@ sqlite3 "$DB" "PRAGMA journal_mode=WAL; CREATE TABLE items (id INTEGER PRIMARY K
 echo '{"secret": true}' >"$STATE/cluster/agent-session-keys.json"
 ( while true; do sqlite3 "$DB" ".timeout 5000" "INSERT INTO items (name) VALUES (hex(randomblob(16)));"; done ) &
 WRITER=$!
+# The operator history journal is a .sqlite file in WAL mode, written live.
+HISTORY="$STATE/shards/global-official/authority/history.sqlite"
+sqlite3 "$HISTORY" "PRAGMA journal_mode=WAL; CREATE TABLE events (seq INTEGER PRIMARY KEY, data TEXT);"
+( while true; do sqlite3 "$HISTORY" ".timeout 5000" "INSERT INTO events (data) VALUES (hex(randomblob(64)));"; done ) &
+HISTORY_WRITER=$!
 
 install -d -m 0700 /etc/opensro-backup
 sed -e "s|^RCLONE_REMOTE=.*|RCLONE_REMOTE=drive:/backups/repo|" /src/backup.conf.example >/etc/opensro-backup/backup.conf
@@ -61,24 +68,31 @@ grep -qx "GET /ping" /tmp/hook.log || fail "no heartbeat ping after success"
 
 echo "== second run, weekly path"
 sqlite3 "$DB" ".timeout 5000" "INSERT INTO items (name) VALUES ('marker');"
+sqlite3 "$HISTORY" ".timeout 5000" "INSERT INTO events (data) VALUES ('history-marker');"
 OPENSRO_BACKUP_WEEKLY_DAY="$(date +%u)" opensro-backup run
 grep -q "Weekly backup check passed" /tmp/hook.log || fail "no weekly summary posted"
 [[ "$(opensro-backup status | grep -c nightly)" -ge 2 ]] || fail "expected two snapshots"
 
 echo "== restore"
-kill "$WRITER"; wait "$WRITER" 2>/dev/null || true
+kill "$WRITER" "$HISTORY_WRITER"; wait "$WRITER" "$HISTORY_WRITER" 2>/dev/null || true
 opensro-backup restore latest /tmp/restored
 RESTORED=/tmp/restored/var/backups/opensro/staging
 [[ "$(sqlite3 "$RESTORED/state/shards/global-official/authority/state.db" "SELECT count(*) FROM items WHERE name='marker'")" == 1 ]] || fail "marker row missing"
 grep -q secret "$RESTORED/state/cluster/agent-session-keys.json" || fail "secret file missing"
+RESTORED_HISTORY="$RESTORED/state/shards/global-official/authority/history.sqlite"
+[[ "$(sqlite3 "$RESTORED_HISTORY" "SELECT count(*) FROM events WHERE data='history-marker'")" == 1 ]] || fail "history marker row missing"
+[[ "$(sqlite3 "$RESTORED_HISTORY" "PRAGMA integrity_check;")" == "ok" ]] || fail "restored history journal is corrupt"
+[[ ! -e "$RESTORED_HISTORY-wal" && ! -e "$RESTORED_HISTORY-shm" ]] || fail "a raw WAL side file was backed up"
 opensro-backup restore latest /tmp/restored 2>/dev/null && fail "restored into a non-empty directory"
 
 echo "== failure alert"
 mv "$DB" /tmp/db.moved
+mv "$HISTORY" /tmp/history.moved
 if opensro-backup run 2>/dev/null; then fail "run without databases succeeded"; fi
 grep -q "Backup FAILED" /tmp/hook.log || fail "no failure alert posted"
 grep -qx "GET /ping/fail" /tmp/hook.log || fail "no failure heartbeat"
 mv /tmp/db.moved "$DB"
+mv /tmp/history.moved "$HISTORY"
 
 echo "== freshness alert"
 echo $(( $(date +%s) - 30 * 3600 )) >/var/lib/opensro-backup/last-success

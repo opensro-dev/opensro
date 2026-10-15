@@ -151,17 +151,22 @@ collect() {
 	rm -rf "$STAGING"
 	mkdir -p "$STAGING/state" "$STAGING/host" "$STAGING/postgres"
 
-	# Game state: every SQLite database under the state root, online.
+	# Game state: every SQLite database under the state root, online. The
+	# authority and settings stores end in .db; the operator history
+	# journals end in .sqlite. A live database is never copied as a file
+	# with its WAL beside it: that is not a snapshot.
 	local db count=0
 	while IFS= read -r -d '' db; do
 		copy_sqlite "$db" "$STAGING/state/${db#"$STATE_ROOT"/}"
 		count=$((count + 1))
-	done < <(find "$STATE_ROOT" -type f -name '*.db' -print0)
+	done < <(find "$STATE_ROOT" -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print0)
 	[[ $count -gt 0 ]] || { log "no databases found under $STATE_ROOT"; return 1; }
 
 	# Everything else in the state root (secrets, catalogs, leases, certs),
 	# skipping the databases already copied and their WAL side files.
-	rsync -a --exclude='*.db' --exclude='*.db-wal' --exclude='*.db-shm' --exclude='releases/' \
+	rsync -a --exclude='*.db' --exclude='*.db-wal' --exclude='*.db-shm' \
+		--exclude='*.sqlite' --exclude='*.sqlite-wal' --exclude='*.sqlite-shm' \
+		--exclude='*.sqlite3' --exclude='*.sqlite3-wal' --exclude='*.sqlite3-shm' --exclude='releases/' \
 		"$STATE_ROOT/" "$STAGING/state/"
 
 	# Host configuration (Caddy, Nomad, systemd units, website env).
@@ -212,7 +217,7 @@ verify_latest() {
 	local db
 	while IFS= read -r -d '' db; do
 		[[ "$(sqlite3 "$db" 'PRAGMA integrity_check;')" == "ok" ]] || { log "restored $db is corrupt"; return 1; }
-	done < <(find "$VERIFY" -type f \( -name '*.db' -o -name '*.sqlite3' \) -print0)
+	done < <(find "$VERIFY" -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \) -print0)
 	rm -rf "$VERIFY"
 }
 
