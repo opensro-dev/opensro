@@ -230,7 +230,13 @@ func withProposals(out Response, service *Service) Response {
 		if row.Class != "restart" {
 			continue
 		}
-		if raw, stored := overrides[row.Key]; stored && raw != currentRaw(row.Key) {
+		raw, stored := overrides[row.Key]
+		if !stored {
+			continue
+		}
+		want, err := tunables.Validate(row.Key, raw)
+		running := tunables.Current().Value(row.Key)
+		if err == nil && (want.Number != running.Number || want.Enabled != running.Enabled) {
 			queued := raw
 			row.RestartQueued = &queued
 		}

@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"opensro.online/server/internal/game/tunables"
@@ -146,6 +147,13 @@ type Service struct {
 	Store Store
 	Now   func() int64
 	NewID func() string
+	// mu holds one whole operation (store commit and live swap) at a time,
+	// so two approvals of one key can never leave the stored value and the
+	// running one apart.
+	mu sync.Mutex
+	// afterCommit, when set, runs between an approval's commit and its live
+	// swap: the window the lock closes (tests only).
+	afterCommit func()
 }
 
 /*
@@ -157,6 +165,8 @@ the registry's rules or the reason is empty or too long.
 ================
 */
 func (s *Service) Propose(who Staff, key, to, reason string) (Proposal, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	reason = strings.TrimSpace(reason)
 	from := currentRaw(key)
 	entry := AuditEntry{At: s.Now(), Who: who.ID, Name: who.Name, Action: ActionPropose, Key: key, From: from,
@@ -188,6 +198,8 @@ store has committed; a Restart value waits for the next boot.
 ================
 */
 func (s *Service) Approve(who Staff, id string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	var result string
 	p, err := s.decide(who, id, ActionApprove, func(p Proposal, entry *AuditEntry) (bool, error) {
 		if who.ID == p.By {
@@ -210,12 +222,18 @@ func (s *Service) Approve(who Staff, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if s.afterCommit != nil {
+		s.afterCommit()
+	}
 	if result == ResultApplied {
 		if _, applyErr := tunables.Apply(p.Key, p.To); applyErr != nil {
 			// Stored but not live: the next boot applies it. Not expected,
 			// since the check validated the value.
 			log.WithError(applyErr).WithField("key", p.Key).Warn("settings: approved value stored but not applied live")
 			result = ResultQueued
+			// The approval's entry said applied; this one corrects it.
+			_ = s.Store.Refuse(AuditEntry{At: s.Now(), Who: who.ID, Name: who.Name, Action: ActionApprove, Key: p.Key,
+				From: p.From, To: p.To, Reason: p.Reason, Result: ResultQueued, Error: applyErr.Error()})
 		}
 	}
 	return result, nil
@@ -229,6 +247,8 @@ A different staff member rejects id with a reason.
 ================
 */
 func (s *Service) Reject(who Staff, id, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	reason = strings.TrimSpace(reason)
 	if err := checkReason(reason); err != nil {
 		return s.refuse(AuditEntry{At: s.Now(), Who: who.ID, Name: who.Name, Action: ActionReject, Reason: reason}, err)
@@ -251,6 +271,8 @@ The proposer takes id back; nobody else may.
 ================
 */
 func (s *Service) Withdraw(who Staff, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, err := s.decide(who, id, ActionWithdraw, func(p Proposal, entry *AuditEntry) (bool, error) {
 		entry.Result = ResultRejected
 		if who.ID != p.By {

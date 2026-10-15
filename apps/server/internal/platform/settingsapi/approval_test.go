@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"opensro.online/server/internal/game/tunables"
 )
@@ -64,7 +65,9 @@ func (m *memStore) Decide(id string, check func(Proposal) (AuditEntry, bool, err
 		return p, err
 	}
 	delete(m.pending, id)
-	if override {
+	if override && p.To == tunables.ClearOverride {
+		delete(m.overrides, p.Key)
+	} else if override {
 		m.overrides[p.Key] = p.To
 	}
 	m.append(entry)
@@ -228,5 +231,101 @@ func TestRejectAndWithdrawEndAProposal(t *testing.T) {
 	last := store.audit[len(store.audit)-1]
 	if last.Action != ActionWithdraw || last.Who != alice.ID {
 		t.Fatalf("last audit %+v", last)
+	}
+}
+
+/*
+================
+TestASecondApprovalCannotLandInsideTheFirst
+
+opensro1's #1082 race: approval A commits 3, and before it swaps 3 live a
+second proposal and approval B of the same key commit 9 and swap it; A
+then swaps 3, leaving stored 9, live 3. A second approval is started in
+exactly that window (afterCommit). With the service's lock it waits for A
+to finish, so the end state is stored 9, live 9.
+================
+*/
+func TestASecondApprovalCannotLandInsideTheFirst(t *testing.T) {
+	service, store := newService(t)
+	a, err := service.Propose(alice, tunables.JobKillNoticesPerMinute, "3", "first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	service.afterCommit = func() {
+		service.afterCommit = nil
+		go func() {
+			defer close(done)
+			b, err := service.Propose(alice, tunables.JobKillNoticesPerMinute, "9", "second")
+			if err == nil {
+				_, _ = service.Approve(bob, b.ID)
+			}
+		}()
+		// Without the lock the second approval finishes here, inside A.
+		select {
+		case <-done:
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	if _, err := service.Approve(bob, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	stored, live := store.overrides[tunables.JobKillNoticesPerMinute], tunables.Current().Int(tunables.JobKillNoticesPerMinute)
+	if stored != "9" || live != 9 {
+		t.Fatalf("stored %q, live %d: want both 9", stored, live)
+	}
+}
+
+/*
+================
+TestClearingAnOverrideReturnsToTheEnvironment
+
+Approving the value "env" removes the stored override and puts the
+environment's value back live.
+================
+*/
+func TestClearingAnOverrideReturnsToTheEnvironment(t *testing.T) {
+	t.Setenv("SRO_JOB_KILL_NOTICES_PER_MINUTE", "8")
+	service, store := newService(t)
+	p, _ := service.Propose(alice, tunables.JobKillNoticesPerMinute, "3", "quieter")
+	if _, err := service.Approve(bob, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	q, err := service.Propose(alice, tunables.JobKillNoticesPerMinute, tunables.ClearOverride, "back to the deployment")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := service.Approve(bob, q.ID); err != nil || result != ResultApplied {
+		t.Fatalf("clear %q %v", result, err)
+	}
+	if _, stored := store.overrides[tunables.JobKillNoticesPerMinute]; stored || tunables.Current().Int(tunables.JobKillNoticesPerMinute) != 8 {
+		t.Fatalf("override kept or live not the environment's 8 (%d)", tunables.Current().Int(tunables.JobKillNoticesPerMinute))
+	}
+}
+
+/*
+================
+TestRestartQueuedComparesValuesNotSpelling
+================
+*/
+func TestRestartQueuedComparesValuesNotSpelling(t *testing.T) {
+	service, store := newService(t)
+	store.overrides[tunables.MostWantedTestKills] = "05"
+	row := func() SettingRow {
+		for _, r := range withProposals(Build(tunables.Current(), func(string) string { return "" }), service).Settings {
+			if r.Key == tunables.MostWantedTestKills {
+				return r
+			}
+		}
+		t.Fatal("no row")
+		return SettingRow{}
+	}
+	if row().RestartQueued != nil {
+		t.Fatal(`"05" read as queued against a running 5`)
+	}
+	store.overrides[tunables.MostWantedTestKills] = "2"
+	if q := row().RestartQueued; q == nil || *q != "2" {
+		t.Fatalf("a different stored value is not queued: %v", q)
 	}
 }

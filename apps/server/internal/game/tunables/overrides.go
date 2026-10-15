@@ -95,13 +95,17 @@ Validate
 
 The value raw would give key, by the same rules the boot applies; the
 refusal names the variable and the accepted values. An unknown key is
-refused too: a proposal for it could never apply.
+refused too: a proposal for it could never apply. ClearOverride gives
+the environment's value.
 ================
 */
 func Validate(key, raw string) (Value, error) {
 	s, ok := Lookup(key)
 	if !ok {
 		return Value{}, fmt.Errorf("unknown setting %q", key)
+	}
+	if strings.TrimSpace(raw) == ClearOverride {
+		return parseOne(s, strings.TrimSpace(os.Getenv(s.Env)))
 	}
 	return parseOne(s, strings.TrimSpace(raw))
 }
@@ -159,6 +163,10 @@ func layer(base *Settings, overrides map[string]string, keep func(Setting) bool)
 	return &Settings{values: values}, nil
 }
 
+// ClearOverride is the proposal value that removes a stored override, so
+// the key reads its environment value (or its default) again.
+const ClearOverride = "env"
+
 /*
 ================
 Apply
@@ -173,6 +181,10 @@ func Apply(key, raw string) (applied bool, err error) {
 	s, ok := Lookup(key)
 	if !ok {
 		return false, fmt.Errorf("unknown setting %q", key)
+	}
+	if strings.TrimSpace(raw) == ClearOverride {
+		// Back to the environment's value, as a boot without the override.
+		raw = os.Getenv(s.Env)
 	}
 	if _, err := parseOne(s, strings.TrimSpace(raw)); err != nil {
 		return false, err

@@ -27,6 +27,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"opensro.online/server/internal/game/tunables"
+
 	// The pure-Go SQLite driver, as platform/history uses.
 	_ "modernc.org/sqlite"
 )
@@ -80,6 +82,8 @@ SQLiteStore.initialize
 ================
 */
 func (s *SQLiteStore) initialize() error {
+	// The pool holds one connection (SetMaxOpenConns(1)), so these
+	// per-connection pragmas hold for every statement, as in history.
 	if _, err := s.db.Exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;`); err != nil {
 		return err
 	}
@@ -209,7 +213,11 @@ func (s *SQLiteStore) Decide(id string, check func(Proposal) (AuditEntry, bool, 
 	if _, err := tx.Exec(`DELETE FROM proposals WHERE id = ?`, id); err != nil {
 		return p, err
 	}
-	if override {
+	if override && p.To == tunables.ClearOverride {
+		if _, err := tx.Exec(`DELETE FROM overrides WHERE key = ?`, p.Key); err != nil {
+			return p, err
+		}
+	} else if override {
 		if _, err := tx.Exec(`INSERT INTO overrides (key, value, at, by) VALUES (?, ?, ?, ?)
 ON CONFLICT(key) DO UPDATE SET value = excluded.value, at = excluded.at, by = excluded.by`,
 			p.Key, p.To, entry.At, entry.Who); err != nil {
