@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
-const { guideTokens, guideContent, hasSml2Markup, groupedNumber } = await import(
+const { guideTokens, guideContent, hasSml2Markup, groupedNumber, markupArg } = await import(
 	"../../src/engine/foundation/ui/guide-content.ts"
 );
 const { tooltipDescription } = await import( "../../src/engine/foundation/ui/tooltip-description.ts" );
@@ -30,9 +30,23 @@ test("SML2 is recognised as 843100 does", () => {
 	assert.equal( hasSml2Markup( "<sml2>Join?</sml2>" ), true );
 	assert.equal( hasSml2Markup( "<sml2></sml2>" ), false, "13 characters is the bare wrapper" );
 	assert.equal( hasSml2Markup( "Join job league?" ), false );
-	assert.equal( hasSml2Markup( "<sml2>no closing tag here" ), false );
+	// 843100's closing-tag search never refuses (opensro2's BN read).
+	assert.equal( hasSml2Markup( "<sml2>no closing tag here" ), true );
 	assert.equal( groupedNumber( 40 * 50000 ), "2,000,000" );
 	assert.equal( groupedNumber( 999 ), "999" );
+	assert.equal( hasSml2Markup( "<SML2>Join job league?</SML2>" ), false, "843100 compares case-sensitively" );
+	// Typed text never opens or closes a scope (6461C0 refuses it natively);
+	// unescaped, "a<b" opens a tag the tokenizer refuses.
+	assert.throws( () =>
+		guideTokens( table["UIIT_STT_ALIAS_CREATE_WINDOW"].replace( "%s", "Player" ).replace( "%s", "a<b" ) )
+	);
+	assert.equal( markupArg( "a<b" ), "ab" );
+	assert.equal( markupArg( '<font color="1,2,3,4">x' ), 'font color="1,2,3,4"x' );
+	assert.doesNotThrow( () =>
+		guideTokens(
+			table["UIIT_STT_ALIAS_CREATE_WINDOW"].replace( "%s", "Player" ).replace( "%s", markupArg( "a<b" ) )
+		)
+	);
 });
 
 test("center, left and right scope whole lines and must balance", () => {
@@ -146,6 +160,24 @@ test("the job league's confirm box draws its words, not its tags", async () => {
 		for ( let i = 0; i < 30; i++ ) f.ui.step( f.state, 1100 + i * 50 );
 		assert.ok( f.hasText( "Join job league?" ), "the question's words are drawn" );
 		assert.ok( !f.hasText( "<sml2>" ) && !f.hasText( "<center>" ), "no raw tag reaches the screen" );
+	} finally {
+		f.dispose();
+	}
+});
+
+test("an alias typed with angle brackets still draws the box", async () => {
+	const { uiFixture } = await import( "../helpers/ui-fixture.mjs" );
+	const f = uiFixture();
+	try {
+		f.ui.step( f.state, 1000 );
+		f.state.gameplay = { ...f.state.gameplay, npcConversation: { gid: 77, phase: "menu" } };
+		f.ui.step( f.state, 1050 );
+		f.ui.event( { kind: "activate", id: "npc-job-alias:3" } );
+		f.ui.step( f.state, 1100 );
+		f.ui.event( { kind: "edit", id: "job-alias-text", value: "a<b", start: 3, end: 3, composing: false } );
+		for ( let i = 0; i < 30; i++ ) f.ui.step( f.state, 1150 + i * 50 );
+		assert.ok( f.hasText( "Create [" ), "the question still draws" );
+		assert.ok( !f.hasText( "<sml2>" ), "no raw tag reaches the screen" );
 	} finally {
 		f.dispose();
 	}

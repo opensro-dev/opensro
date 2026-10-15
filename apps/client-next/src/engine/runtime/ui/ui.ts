@@ -634,7 +634,7 @@ import {
 import { messageBoxLines, textMessageBoxLayout } from "@/engine/foundation/ui/text-message-box";
 import { systemMenu, SYSTEM_MENU_HEIGHT, EXPERIMENTAL_MENU_ID } from "@/engine/foundation/ui/system-menu";
 import { inventorySlots, inventoryLattice } from "@/engine/foundation/ui/inventory-layout";
-import { groupedNumber, guideTokens, hasSml2Markup } from "@/engine/foundation/ui/guide-content";
+import { groupedNumber, guideTokens, hasSml2Markup, markupArg } from "@/engine/foundation/ui/guide-content";
 import type { AssetOwner } from "@/engine/contracts/assets";
 import type { SessionCommand, ServerRecord, CharacterRecord } from "@/engine/contracts/session";
 import type { UiView, UiEvent, UiRect, UiQuad, UiControl, UiSemantics, UiScene } from "@/engine/contracts/ui";
@@ -8665,16 +8665,19 @@ export function createUi(
 				// SML2 markup (843100) renders through the text board's layout, never
 				// as plain characters: the Item Mall subtitles and alchemy texts.
 				if ( hasSml2Markup( value ) ) {
-					const out = text.guide(
-						guideTokens( value ),
-						box,
-						clipToControl ? box : full,
-						node.color,
-						resources.size
-					);
-					quads.push( ...out.quads );
-					paths.push( ...out.paths );
-					return;
+					// Markup the guide layout cannot read falls back to plain text.
+					let tokens: ReturnType<typeof guideTokens> | null = null;
+					try {
+						tokens = guideTokens( value );
+					} catch {
+						tokens = null;
+					}
+					if ( tokens ) {
+						const out = text.guide( tokens, box, clipToControl ? box : full, node.color, resources.size );
+						quads.push( ...out.quads );
+						paths.push( ...out.paths );
+						return;
+					}
 				}
 				// Port-only (Experimental "Fit window labels", off is the original):
 				// an English label that would run past its window's left edge (the
@@ -20499,7 +20502,7 @@ export function createUi(
 							groupedNumber( (view?.gameplay?.progression?.level ?? 0) * JOB_ALIAS_MODIFY_GOLD_PER_LEVEL )
 						] :
 						[ view?.session?.character ?? "", aliasWindow.text ];
-				const filled = args.reduce( ( value, arg ) => value.replace( "%s", arg ), message );
+				const filled = args.reduce( ( value, arg ) => value.replace( "%s", markupArg( arg ) ), message );
 				const markup = hasSml2Markup( filled ) ? guideTokens( filled ) : null;
 				const layout = guildQuestionLayout(
 					w,

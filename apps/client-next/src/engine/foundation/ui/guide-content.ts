@@ -27,8 +27,9 @@ export type GuideToken =
 // A line's horizontal alignment (the text board's <left>, <center> and
 // <right> scopes).
 export type GuideAlign = "left" | "center" | "right";
-// Text_HasSml2Markup (843100): longer than its 13-character wrapper, opening
-// <sml2> and closing </sml2>.
+// Text_HasSml2Markup (843100): longer than the 13-character wrapper and
+// opening "<sml2>" (case-sensitive). Its "</sml2>" search is a no-op natively
+// (neg/sbb/neg on the find position is true for npos too), so it is not tested.
 const SML2_MIN_LENGTH = 13;
 
 /*
@@ -40,7 +41,20 @@ board or message box renders it as markup rather than plain lines.
 ================
 */
 export function hasSml2Markup( value: string ): boolean {
-	return value.length > SML2_MIN_LENGTH && /^<sml2>/i.test( value ) && /<\/sml2>/i.test( value );
+	return value.length > SML2_MIN_LENGTH && value.startsWith( "<sml2>" );
+}
+
+/*
+================
+markupArg
+
+A value filled into SML2 text (a name or a typed alias) with its angle
+brackets removed, so typed text can never open or close a markup scope.
+Natively 6461C0 refuses such a name before the confirm exists.
+================
+*/
+export function markupArg( value: string ): string {
+	return value.replace( /[<>]/g, "" );
 }
 
 /*

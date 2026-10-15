@@ -104,7 +104,8 @@ guildQuestionLayout
 guildProposalLayout grown to fit a message measureHeight tall, as
 CIFSimpleMessageBox_ResizeToText (52BCF0) grows the native box to its text:
 the box gains the overflow, and the field and buttons below move down by
-it. A message that fits leaves the native 308 x 148 box unchanged.
+it. A message that fits leaves the port's 308 x 148 box unchanged (the
+native box is 360 x 151, 6888C0).
 ================
 */
 export function guildQuestionLayout( width: number, height: number, messageHeight: number, field: boolean ) {
