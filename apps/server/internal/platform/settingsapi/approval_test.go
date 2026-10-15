@@ -329,3 +329,25 @@ func TestRestartQueuedComparesValuesNotSpelling(t *testing.T) {
 		t.Fatalf("a different stored value is not queued: %v", q)
 	}
 }
+
+/*
+================
+TestApprovingAStaleProposalIsRefused
+
+A proposal made against 6 is refused once the running value is no longer
+6 (here changed live by another proposal), so nobody approves blind.
+================
+*/
+func TestApprovingAStaleProposalIsRefused(t *testing.T) {
+	service, store := newService(t)
+	p, _ := service.Propose(alice, tunables.JobKillRepeatMinutes, "30", "longer")
+	if _, err := tunables.Apply(tunables.JobKillRepeatMinutes, "20"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Approve(bob, p.ID); !errors.Is(err, ErrStale) {
+		t.Fatalf("stale approval: %v", err)
+	}
+	if _, stored := store.overrides[tunables.JobKillRepeatMinutes]; stored || len(store.pending) != 1 {
+		t.Fatal("a stale approval changed something")
+	}
+}

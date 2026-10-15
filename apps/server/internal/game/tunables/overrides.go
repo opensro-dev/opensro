@@ -41,24 +41,37 @@ var (
 InstallBoot
 
 The boot's snapshot: the environment with the stored overrides laid over
-it. A stored value the registry refuses stops the boot, as an
-environment value does.
+it. A refused environment value stops the boot (err): it is the
+deployment's own mistake. A stored override the registry now refuses, an
+unknown key or a value outside a narrowed bound, is left out and named in
+rejected, and its key boots on the environment or its default: a release
+that tightens a rule must never crash-loop the shard on an old approved
+value.
 ================
 */
-func InstallBoot(overrides map[string]string) error {
-	s, err := WithOverrides(os.Getenv, overrides)
+func InstallBoot(overrides map[string]string) (rejected map[string]error, err error) {
+	base, err := Parse(os.Getenv)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	copied := make(map[string]string, len(overrides))
+	kept := make(map[string]string, len(overrides))
+	rejected = map[string]error{}
 	for key, raw := range overrides {
-		copied[key] = raw
+		if _, err := layer(base, map[string]string{key: raw}, func(Setting) bool { return true }); err != nil {
+			rejected[key] = err
+			continue
+		}
+		kept[key] = raw
+	}
+	s, err := layer(base, kept, func(Setting) bool { return true })
+	if err != nil {
+		return nil, err
 	}
 	writeMu.Lock()
-	bootOverrides = copied
+	bootOverrides = kept
 	current.Store(s)
 	writeMu.Unlock()
-	return nil
+	return rejected, nil
 }
 
 /*
@@ -171,9 +184,10 @@ const ClearOverride = "env"
 ================
 Apply
 
-Installs a live change of key to raw over the current snapshot and
-returns whether it applied now: a Restart key is not swapped (false, it
-waits for the next boot's stored overrides). The value is validated first;
+Installs a change of key to raw over the current snapshot and returns
+whether it applied now: a Live key acts at once and an Entry key at each
+player's next world entry; a Restart key is not swapped (false, it waits
+for the next boot's stored overrides). The value is validated first;
 nothing changes on a refusal.
 ================
 */
@@ -182,22 +196,30 @@ func Apply(key, raw string) (applied bool, err error) {
 	if !ok {
 		return false, fmt.Errorf("unknown setting %q", key)
 	}
-	if strings.TrimSpace(raw) == ClearOverride {
+	clear := strings.TrimSpace(raw) == ClearOverride
+	if clear {
 		// Back to the environment's value, as a boot without the override.
 		raw = os.Getenv(s.Env)
 	}
-	if _, err := parseOne(s, strings.TrimSpace(raw)); err != nil {
-		return false, err
-	}
-	if s.Class != Live {
-		return false, nil
-	}
-	writeMu.Lock()
-	defer writeMu.Unlock()
-	next, err := layer(Current(), map[string]string{key: raw}, func(Setting) bool { return true })
+	v, err := parseOne(s, strings.TrimSpace(raw))
 	if err != nil {
 		return false, err
 	}
-	current.Store(next)
+	if s.Class == Restart {
+		return false, nil
+	}
+	if !clear {
+		v.Source = "store"
+	}
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	values := make(map[string]Value, len(Current().values))
+	for k, old := range Current().values {
+		values[k] = old
+	}
+	// A cleared key reads as the environment's again (Source "env" or
+	// "default"), not as a stored value.
+	values[key] = v
+	current.Store(&Settings{values: values})
 	return true, nil
 }

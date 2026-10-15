@@ -47,17 +47,23 @@ const (
 	ActionApprove  = "approve"
 	ActionReject   = "reject"
 	ActionWithdraw = "withdraw"
-	ResultApplied  = "applied"
-	ResultQueued   = "queued"
-	ResultRejected = "rejected"
-	ResultPending  = "pending"
-	ResultRefused  = "refused"
+	// ActionBoot records a stored override a boot refused.
+	ActionBoot      = "boot"
+	ResultApplied   = "applied"
+	ResultWithdrawn = "withdrawn"
+	ResultQueued    = "queued"
+	ResultRejected  = "rejected"
+	ResultPending   = "pending"
+	ResultRefused   = "refused"
 )
 
 // Errors a Store returns; the handler maps them to HTTP statuses.
 var (
 	ErrNotFound = errors.New("no such proposal")
 	ErrConflict = errors.New("a proposal is already pending for this setting")
+	// ErrStale: the setting's running value is no longer the one the
+	// proposal was made against, so its approver would decide blind.
+	ErrStale = errors.New("the setting changed since this proposal; propose again")
 )
 
 /*
@@ -205,6 +211,9 @@ func (s *Service) Approve(who Staff, id string) (string, error) {
 		if who.ID == p.By {
 			return false, errSelfApproval
 		}
+		if currentRaw(p.Key) != p.From {
+			return false, ErrStale
+		}
 		setting, ok := tunables.Lookup(p.Key)
 		if !ok {
 			return false, fmt.Errorf("unknown setting %q", p.Key)
@@ -213,7 +222,7 @@ func (s *Service) Approve(who Staff, id string) (string, error) {
 			return false, err
 		}
 		result = ResultQueued
-		if setting.Class == tunables.Live {
+		if setting.Class != tunables.Restart {
 			result = ResultApplied
 		}
 		entry.Result = result
@@ -274,7 +283,7 @@ func (s *Service) Withdraw(who Staff, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.decide(who, id, ActionWithdraw, func(p Proposal, entry *AuditEntry) (bool, error) {
-		entry.Result = ResultRejected
+		entry.Result = ResultWithdrawn
 		if who.ID != p.By {
 			return false, errNotProposer
 		}

@@ -196,8 +196,11 @@ className
 ================
 */
 func className(class tunables.Class) string {
-	if class == tunables.Live {
+	switch class {
+	case tunables.Live:
 		return "live"
+	case tunables.Entry:
+		return "entry"
 	}
 	return "restart"
 }

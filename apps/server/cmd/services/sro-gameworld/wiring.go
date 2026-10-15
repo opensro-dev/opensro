@@ -123,8 +123,19 @@ func newGameWorldApplication(
 	if err != nil {
 		return nil, fmt.Errorf("settings store: %w", err)
 	}
-	if err := tunables.InstallBoot(overrides); err != nil {
+	rejected, err := tunables.InstallBoot(overrides)
+	if err != nil {
 		return nil, fmt.Errorf("tunables: %w", err)
+	}
+	for key, cause := range rejected {
+		// A stored value this build no longer accepts: the key boots on the
+		// environment or its default, and the audit says why.
+		log.WithError(cause).WithField("key", key).Warn("tunables: stored override refused at boot; using the environment")
+		if err := settingsStore.Refuse(settingsapi.AuditEntry{At: time.Now().UnixMilli(), Who: "gameworld", Name: "boot",
+			Action: settingsapi.ActionBoot, Key: key, To: overrides[key], Result: settingsapi.ResultRefused,
+			Error: cause.Error()}); err != nil {
+			return nil, fmt.Errorf("settings store: %w", err)
+		}
 	}
 	if len(overrides) > 0 {
 		log.Infof("tunables: %d stored override(s) from %s", len(overrides), settingsapi.FileName)

@@ -53,6 +53,9 @@ const (
 	Restart Class = iota
 	// Live values are read per action from the snapshot.
 	Live
+	// Entry values are sent to a client at world entry from the snapshot:
+	// a change reaches each player at their next world entry.
+	Entry
 )
 
 // The registry's keys, as code reads them.

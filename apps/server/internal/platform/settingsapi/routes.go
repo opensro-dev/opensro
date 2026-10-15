@@ -95,7 +95,7 @@ func serveWrite(w http.ResponseWriter, r *http.Request, service *Service, route 
 			writeServiceError(w, err)
 			return
 		}
-		writeJSON(w, map[string]string{"result": ResultRejected})
+		writeJSON(w, map[string]string{"result": ResultWithdrawn})
 	default:
 		writeError(w, http.StatusNotFound, "no_route", "no such route")
 	}
@@ -142,6 +142,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, "not_found", err.Error())
 	case errors.Is(err, ErrConflict):
 		writeError(w, http.StatusConflict, "pending", err.Error())
+	case errors.Is(err, ErrStale):
+		writeError(w, http.StatusConflict, "stale", err.Error())
 	case errors.Is(err, errSelfApproval), errors.Is(err, errNotProposer):
 		writeError(w, http.StatusForbidden, "not_allowed", err.Error())
 	default:

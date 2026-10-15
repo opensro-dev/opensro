@@ -120,15 +120,17 @@ func TestConcurrentAppliesNeverLoseAWrite(t *testing.T) {
 TestBootOverridesReachRestartValues
 
 A restart-class value stored earlier is the one FromEnv gives the boot,
-marked as from the store; a stored value the registry refuses stops the
-boot and installs nothing.
+marked as from the store. A stored value the registry now refuses (an
+unknown key, a value past a narrowed bound) is left out and named, and
+its key boots on the environment; the boot does not fail.
 ================
 */
 func TestBootOverridesReachRestartValues(t *testing.T) {
-	t.Cleanup(func() { _ = InstallBoot(nil) })
+	t.Cleanup(func() { _, _ = InstallBoot(nil) })
 	t.Setenv("SRO_MOST_WANTED_TEST_KILLS", "5")
-	if err := InstallBoot(map[string]string{MostWantedTestKills: "2", JobKillNoticesPerMinute: "4"}); err != nil {
-		t.Fatal(err)
+	if rejected, err := InstallBoot(map[string]string{MostWantedTestKills: "2", JobKillNoticesPerMinute: "4"}); err != nil ||
+		len(rejected) != 0 {
+		t.Fatal(rejected, err)
 	}
 	if v, err := FromEnv(MostWantedTestKills); err != nil || v.Number != 2 || v.Source != "store" {
 		t.Fatalf("boot read %+v %v, want the stored 2", v, err)
@@ -136,8 +138,63 @@ func TestBootOverridesReachRestartValues(t *testing.T) {
 	if Current().Int(JobKillNoticesPerMinute) != 4 {
 		t.Fatal("the boot snapshot does not hold the stored live value")
 	}
-	before := Current()
-	if err := InstallBoot(map[string]string{MostWantedTestKills: "3"}); err == nil || Current() != before {
-		t.Fatalf("a refused stored value was installed: %v", err)
+	t.Setenv("SRO_JOB_KILL_REPEAT_MINUTES", "15")
+	rejected, err := InstallBoot(map[string]string{
+		MostWantedTestKills:     "3",
+		"a_removed_setting":     "1",
+		JobKillRepeatMinutes:    "500",
+		JobKillNoticesPerMinute: "4",
+	})
+	if err != nil || len(rejected) != 3 || rejected[MostWantedTestKills] == nil || rejected["a_removed_setting"] == nil ||
+		rejected[JobKillRepeatMinutes] == nil {
+		t.Fatalf("rejected %v, err %v", rejected, err)
+	}
+	if v, _ := FromEnv(MostWantedTestKills); v.Number != 5 || v.Source != "env" {
+		t.Fatalf("a refused stored restart value was used: %+v", v)
+	}
+	if Current().Int(JobKillRepeatMinutes) != 15 || Current().Int(JobKillNoticesPerMinute) != 4 {
+		t.Fatal("the refused key did not fall back to the environment, or a good one was dropped")
+	}
+	t.Setenv("SRO_JOB_KILL_REPEAT_MINUTES", "999")
+	if _, err := InstallBoot(nil); err == nil {
+		t.Fatal("a refused environment value booted")
+	}
+}
+
+/*
+================
+TestClearAndEntryClass
+
+Clearing a live override puts the environment's value back with its own
+source, not "store"; an Entry-class key is swapped at approval like a
+live one (its readers take Current() at each world entry).
+================
+*/
+func TestClearAndEntryClass(t *testing.T) {
+	base, err := Parse(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(Swap(base))
+	t.Setenv("SRO_JOB_KILL_NOTICES_PER_MINUTE", "8")
+	if _, err := Apply(JobKillNoticesPerMinute, "3"); err != nil || Current().Value(JobKillNoticesPerMinute).Source != "store" {
+		t.Fatalf("live apply: %v %+v", err, Current().Value(JobKillNoticesPerMinute))
+	}
+	if _, err := Apply(JobKillNoticesPerMinute, ClearOverride); err != nil {
+		t.Fatal(err)
+	}
+	if v := Current().Value(JobKillNoticesPerMinute); v.Number != 8 || v.Source != "env" {
+		t.Fatalf("cleared value %+v, want the environment's 8 from env", v)
+	}
+	Registry = append(Registry, Setting{Key: "test_entry", Env: "SRO_TEST_ENTRY", Kind: Int, Default: 1, Min: 1, Max: 9,
+		Class: Entry})
+	t.Cleanup(func() { Registry = Registry[:len(Registry)-1] })
+	withEntry, err := Parse(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(Swap(withEntry))
+	if applied, err := Apply("test_entry", "4"); err != nil || !applied || Current().Int("test_entry") != 4 {
+		t.Fatalf("entry apply: %v %v", applied, err)
 	}
 }
