@@ -562,6 +562,11 @@ func (game *gameplayPlane) register(hub *transport.Hub, loadQuests questDefiniti
 	if game.items.MostWanted {
 		log.Infof("job: most wanted streaks, bonuses and bounties ON (%s)", action.EnvMostWanted)
 	}
+	// Port-only, not native, temporary: Most Wanted's test pacing.
+	game.items.MostWantedTest = action.MostWantedTestFromEnv()
+	if game.items.MostWantedTest {
+		log.Infof("job: most wanted test pacing ON: 5 kills a level, no anti-farm window, 1M bounty a level (%s)", action.EnvMostWantedTest)
+	}
 	// Port-only, not native: the bounty comes out of the victim's gold.
 	game.items.MostWantedBountyTransfer = action.MostWantedBountyTransferFromEnv()
 	if game.items.MostWantedBountyTransfer {

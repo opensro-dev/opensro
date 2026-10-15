@@ -212,6 +212,14 @@ variable "most_wanted" {
   default = "on"
 }
 
+# most_wanted_test is Most Wanted's temporary test pacing: 5 kills a level,
+# no anti-farm window, a 1,000,000 gold bounty a level (port-only, not
+# native; owner decision 2026-10-15). "off" is the ordinary rule.
+variable "most_wanted_test" {
+  type    = string
+  default = "on"
+}
+
 # most_wanted_bounty_transfer pays a wanted player's bounty out of that
 # player's own gold, at most what they carry, instead of minting it
 # (port-only, not native; owner decision 2026-10-15). "off" mints it.
@@ -695,6 +703,7 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_FAST_DEN_RETURN                = var.fast_den_return
         SRO_CLOSED_OBJECT_RESCUE           = var.closed_object_rescue
         SRO_MOST_WANTED                    = var.most_wanted
+        SRO_MOST_WANTED_TEST               = var.most_wanted_test
         SRO_MOST_WANTED_BOUNTY_TRANSFER    = var.most_wanted_bounty_transfer
         SRO_TRADE_TIERS                    = var.trade_tiers
         SRO_JOB_SUIT_HIDES_ARMOR           = var.job_suit_hides_armor

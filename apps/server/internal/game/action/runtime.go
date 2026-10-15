@@ -360,7 +360,10 @@ type Runtime struct {
 	// not native, beta balance; owner 2026-10-13). The zero value is off.
 	// MostWanted turns on the job-kill streak, its bonuses and bounty
 	// (mostwanted.go; port-only, not native). False is native.
-	MostWanted      bool
+	MostWanted bool
+	// MostWantedTest is the rule's temporary test pacing (port-only,
+	// SRO_MOST_WANTED_TEST; false is the ordinary rule, mostwantedtest.go).
+	MostWantedTest  bool
 	mostWantedPairs mostWantedPairs
 	// MostWantedBountyTransfer pays the bounty from the victim's gold, not
 	// new gold (mostwanted.go; port-only, not native). False mints it.

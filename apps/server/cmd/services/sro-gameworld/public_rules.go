@@ -199,6 +199,10 @@ func publicRules() publicstats.RulesResponse {
 					"and 1%/2%/3% more damage dealt and less taken at levels 3/5/10. Killing a wanted player pays 100,000,000 gold per level. " +
 					"Kills of your own account, party, guild or union never count, and one victim counts at most 3 times an hour. Death or taking the suit off ends the streak.",
 				Why: "Requested for the beta, to reward job-war streaks and put a price on them; the original returns with one setting."},
+			{Flag: action.EnvMostWantedTest, On: action.MostWantedFromEnv() && action.MostWantedTestFromEnv(),
+				Native: "There is no Most Wanted rule.",
+				Now:    "Most Wanted is in test pacing: 5 job kills a wanted level (level 10 at 50), the same player counts every time, and the bounty is 1,000,000 gold per level.",
+				Why:    "Temporary, for testing the rule quickly without moving real gold; the ordinary rule returns with one setting."},
 			{Flag: action.EnvMostWantedBountyTransfer, On: action.MostWantedFromEnv() && action.MostWantedBountyTransferFromEnv(),
 				Native: "There is no bounty; a kill moves no gold.",
 				Now:    "A wanted player's bounty comes out of their own gold: the killer takes up to 100,000,000 per wanted level, never more than the wanted player carries. No new gold enters the game.",

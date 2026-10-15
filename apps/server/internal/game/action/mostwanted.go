@@ -278,6 +278,10 @@ Whether killer may count victim now, recording it when so.
 ================
 */
 func (rt *Runtime) countMostWantedPair(division, killer, victim string, nowMs int64) bool {
+	// Port-only test pacing (mostwantedtest.go): no anti-farm window.
+	if rt.MostWantedTest {
+		return true
+	}
 	p := &rt.mostWantedPairs
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -323,9 +327,9 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	}
 	if kill.victimWanted > 0 && kill.mostWantedStrangers && rt.MostWantedBountyTransfer {
 		owed = append(owed, mostWantedBounty{division: division, killer: killer, victim: victim, wanted: kill.victimWanted,
-			gold: uint64(kill.victimWanted) * mostWantedBountyPerLevel})
+			gold: rt.mostWantedBountyGold(kill.victimWanted)})
 	} else if kill.victimWanted > 0 && kill.mostWantedStrangers {
-		bounty := uint64(kill.victimWanted) * mostWantedBountyPerLevel
+		bounty := rt.mostWantedBountyGold(kill.victimWanted)
 		setGold(killer, goldOf(killer)+bounty)
 		actor = append(actor, goldFrame(killer))
 		log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
@@ -339,7 +343,7 @@ func (rt *Runtime) mostWantedKillInDoor(division string, killer, victim *enterwo
 	if killer.MostWanted == nil {
 		killer.MostWanted = &domain.MostWanted{}
 	}
-	killer.MostWanted.Streak++
+	killer.MostWanted.Streak += rt.mostWantedStreakStep()
 	log.WithFields(log.Fields{"division": division, "killer": killer.Name, "victim": victim.Name,
 		"streak": killer.MostWanted.Streak}).Info("most wanted: kill counted")
 	if mostWantedLevel(killer) != before {
