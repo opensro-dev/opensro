@@ -143,7 +143,6 @@ apps/client-next/src/engine/foundation/ui/frame-ring.ts
 apps/client-next/src/engine/foundation/ui/ground-item-label.ts
 apps/client-next/src/engine/foundation/ui/guide-catalog.ts
 apps/client-next/src/engine/foundation/ui/guild-crest.ts
-apps/client-next/src/engine/foundation/ui/helper-bubble.ts
 apps/client-next/src/engine/foundation/ui/hit-test.ts
 apps/client-next/src/engine/foundation/ui/input-options.ts
 apps/client-next/src/engine/foundation/ui/inventory-layout.ts

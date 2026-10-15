@@ -150,12 +150,12 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "predictedRunUp",
 			id: "experimental-predicted-run-up",
 			label: "Predicted run-up",
-			description: "Walk toward a far target at the press; may jump at the cast."
+			description: "Walk to a far target on press; may jump at the cast."
 		}, {
 			key: "smoothCamera",
 			id: "experimental-smooth-camera",
 			label: "Smooth camera",
-			description: "Ease small camera height jumps and the return after a wall."
+			description: "Ease small camera jumps and the return from a wall."
 		}, {
 			key: "greyDisabledTabs",
 			id: "experimental-grey-disabled-tabs",
@@ -180,12 +180,12 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "dropPlusNotices",
 			id: "experimental-drop-plus-notices",
 			label: "Drop & plus notices",
-			description: "Show the shard's seal drop and +8 to +11 announcements."
+			description: "Show the shard's seal drop and +8 to +11 notices."
 		}, {
 			key: "noticeLinks",
 			id: "experimental-notice-links",
 			label: "Links in notices",
-			description: "Hover a notice's item for its details; click a name to whisper."
+			description: "Hover an item for details; click a name to whisper."
 		}, {
 			key: "shortNotices",
 			id: "experimental-short-notices",
@@ -205,7 +205,7 @@ export const EXPERIMENTAL_TABS: readonly {
 			key: "fitWindowLabels",
 			id: "experimental-fit-window-labels",
 			label: "Fit window labels",
-			description: "Wrap a label wider than its box; open a list upward inside its window."
+			description: "Fit long labels and captions; open lists upward."
 		}, {
 			key: "dropOnBagTab",
 			id: "experimental-drop-on-bag-tab",

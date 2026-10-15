@@ -30,10 +30,12 @@ const FRIEND_VISIBLE_ROWS = 11;
 // the one multiline letter control.
 const LETTER_VISIBLE_ROWS = 11;
 const LETTER_BODY_EDIT = "letter-body";
-// The read and write windows (ifletter.txt ids 51 and 55) cover the letter
-// page from its origin.
+// The read and write windows (ifletter.txt ids 55 and 51): 439 x 271
+// popups framed by LETTER_CHILD_FRAME.
 const LETTER_CHILD_WIDTH = 439;
 const LETTER_CHILD_HEIGHT = 271;
+// A fitted button caption keeps this far inside each side of its plate.
+const CAPTION_MARGIN = 4;
 const FRIEND_ROW_STEP = 23;
 const FRIEND_SCROLL_TRACK = 224;
 // 695420 case 9 opens the own stall's title prompt, case 0xD toggles the
@@ -510,7 +512,7 @@ import {
 	type AutoPotionDraft
 } from "@/engine/foundation/gameplay/auto-potion";
 import { selectChatTab, composeChat, chatTabPrefix, chatFeedbackText } from "@/engine/foundation/ui/chat-presentation";
-import { textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
+import { captionWords, textBoardLines, textBoxLines, textLines } from "@/engine/foundation/ui/text-lines";
 import { bagTabDropSlot } from "@/engine/foundation/ui/bag-tab-drop";
 import { PET_NAME_MAX, petNameError } from "@/engine/foundation/gameplay/pet-name";
 import { createSpeech } from "./hud/speech";
@@ -670,6 +672,9 @@ const ROOT = "/assets/images/Media_extracted/",
 const MALL_NOTICE_FRAME = ROOT + "interface/mall/mall_communicate.png";
 const PARTS = frameParts();
 const FRAME = ROOT + "interface/frame/mframe_wnd_";
+// msgbox2_window_ has no centre tile: the letter popups' own tiles and black
+// squares (ifletterread / ifletterwrite ids 1-6) fill them.
+const LETTER_CHILD_FRAME = ROOT + "interface/messagebox/msgbox2_window_";
 const PARTY_MATCH_RANGE_SEPARATOR_ID = 43;
 // The bug reporter (issue #90): its chat command and its Option window row.
 const BUG_COMMAND = /^\/bug(?:\s+|$)/i;
@@ -16835,24 +16840,29 @@ export function createUi(
 					);
 					authoredLabeledButton( at( 44 ), gx, gy, "letter-guild", hudCopy( at( 44 ).text ), true );
 					authoredLabeledButton( at( 45 ), gx, gy, "letter-union", hudCopy( at( 45 ).text ), true );
-					letterChildWindow( gx, gy );
+					letterChildWindow();
 				}
 				/*
 				================
 				letterChildWindow
 
-				The read window (CIFLetterRead, ifletterread.txt, opened by 607830)
-				or the write window (CIFLetterWrite, ifletterwrite.txt) over the
-				letter page; nothing when neither is open.
+				The read window (CIFLetterRead, ifletterread.txt) or the write
+				window (CIFLetterWrite, ifletterwrite.txt); nothing when neither is
+				open. CIFLetter_OpenReadWindow (607830) and OpenWriteWindow (607A10)
+				create each as its own popup and centre it on the screen
+				(CGInterface_CenterWindowOnScreen); the letter list stays beneath.
 				================
 				*/
-				function letterChildWindow( ox: number, oy: number, width = LETTER_CHILD_WIDTH ) {
+				function letterChildWindow() {
 					const letters = game?.letters, windows = hudData?.windows;
 					const reading = letters && letters.reading >= 0 ? letters.rows[letters.reading] : undefined;
 					const native = reading ? windows?.ifletterread : letterDraft ? windows?.ifletterwrite : undefined;
 					if ( !native ) return;
-					// A narrow screen narrows the window's columns, never its text.
-					const sx = Math.min( 1, width / LETTER_CHILD_WIDTH );
+					// Port-only fit: a screen narrower than the window narrows its
+					// columns, never its text.
+					const width = Math.min( w, LETTER_CHILD_WIDTH ), sx = width / LETTER_CHILD_WIDTH;
+					const ox = Math.floor( (w - width) / 2 ),
+						oy = Math.max( 0, Math.floor( (h - LETTER_CHILD_HEIGHT) / 2 ) );
 					const layout: AuthoredLayout = sx === 1 ? native : Object.fromEntries(
 						Object.entries( native ).map( ( [key, node] ) => [ key, {
 							...node,
@@ -16865,10 +16875,34 @@ export function createUi(
 						} ] )
 					);
 					const at = ( id: number ) => Object.values( layout ).find( n => n.id === id )!;
-					const area: UiRect = [ ox, oy, Math.round( LETTER_CHILD_WIDTH * sx ), LETTER_CHILD_HEIGHT ];
-					rect( area, [ 0, 0, 0, .92 ] );
-					// The child covers the list: its controls alone answer the pointer.
+					const area: UiRect = [ ox, oy, width, LETTER_CHILD_HEIGHT ];
+					paths.push( ...PARTS.map( p => LETTER_CHILD_FRAME + p + ".png" ) );
+					quads.push(
+						...frameRing(
+							area,
+							LETTER_CHILD_FRAME,
+							PARTS.map( p => resources.size( LETTER_CHILD_FRAME + p + ".png" ) ),
+							full
+						)
+					);
+					blocks.push( area );
+					// The popup covers what lies beneath: its controls alone answer the pointer.
 					controls.push( { id: "letter-child", label: "", rect: area, kind: "region" } );
+					/*
+					================
+					caption
+
+					Port-only, not native (Experimental "Fit window labels"): a
+					caption wider than its plate ("Delete message", "Send message"
+					on the 76-pixel com_button) keeps the leading words that fit.
+					================
+					*/
+					const caption = ( id: number ) => {
+						const node = at( id ), value = hudCopy( node.text );
+						if ( !experimental.state().saved.fitWindowLabels ) return value;
+						const room = authoredRect( node, ox, oy )[2] - 2 * CAPTION_MARGIN;
+						return captionWords( value, room, line => text.run( line, 0, node.fontIndex ).width );
+					};
 					if ( reading ) {
 						nativePage( layout, ox, oy, [ 11, 12, 13, 20, 21 ] );
 						authoredText( at( 20 ), ox, oy, reading.sender );
@@ -16894,17 +16928,17 @@ export function createUi(
 								)
 							);
 						} );
-						authoredLabeledButton( at( 11 ), ox, oy, "letter-read-reply", hudCopy( at( 11 ).text ) );
-						authoredLabeledButton( at( 12 ), ox, oy, "letter-read-delete", hudCopy( at( 12 ).text ) );
-						authoredLabeledButton( at( 13 ), ox, oy, "letter-read-close", hudCopy( at( 13 ).text ) );
+						authoredLabeledButton( at( 11 ), ox, oy, "letter-read-reply", caption( 11 ) );
+						authoredLabeledButton( at( 12 ), ox, oy, "letter-read-delete", caption( 12 ) );
+						authoredLabeledButton( at( 13 ), ox, oy, "letter-read-close", caption( 13 ) );
 						return;
 					}
 					if ( !letterDraft ) return;
 					nativePage( layout, ox, oy, [ 11, 12, 20, 21 ] );
 					partyEdit( at( 20 ), ox, oy, "letter-receiver", letterDraft.receiver, LETTER_RECEIVER_LIMIT );
 					partyEdit( at( 21 ), ox, oy, LETTER_BODY_EDIT, letterDraft.body, LETTER_BODY_LIMIT );
-					authoredLabeledButton( at( 11 ), ox, oy, "letter-write-send", hudCopy( at( 11 ).text ) );
-					authoredLabeledButton( at( 12 ), ox, oy, "letter-write-cancel", hudCopy( at( 12 ).text ) );
+					authoredLabeledButton( at( 11 ), ox, oy, "letter-write-send", caption( 11 ) );
+					authoredLabeledButton( at( 12 ), ox, oy, "letter-write-cancel", caption( 12 ) );
 				}
 				/*
 				================
@@ -17699,12 +17733,7 @@ export function createUi(
 								third - 2,
 								letterSelected < 0
 							);
-							const childWidth = Math.min( w, LETTER_CHILD_WIDTH );
-							letterChildWindow(
-								Math.floor( (w - childWidth) / 2 ),
-								Math.max( 0, Math.floor( (h - LETTER_CHILD_HEIGHT) / 2 ) ),
-								childWidth
-							);
+							letterChildWindow();
 							return;
 						}
 						const contentTop = top + 30;

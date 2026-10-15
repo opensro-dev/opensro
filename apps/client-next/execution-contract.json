@@ -1520,6 +1520,7 @@
 			"functions": [
 				"callback:tooltipBubble:3",
 				"callback:textLines:2",
+				"callback:captionWords:2",
 				"callback:textBoxLines:2",
 				"callback:textBoardLines:2",
 				"callback:textBoxLines:2",

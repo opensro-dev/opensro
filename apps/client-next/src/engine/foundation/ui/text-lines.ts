@@ -57,6 +57,25 @@ export function textLines(
 
 /*
 ================
+captionWords
+
+Port-only, not native (Experimental "Fit window labels"): the leading
+words of a one-line caption that fit width. The whole caption comes back
+when it fits, or when not even its first word does.
+================
+*/
+export function captionWords( value: string, width: number, measure: ( value: string ) => number ): string {
+	if ( measure( value ) <= width ) return value;
+	const words = value.split( " " );
+	for ( let count = words.length - 1; count > 0; count-- ) {
+		const head = words.slice( 0, count ).join( " " );
+		if ( measure( head ) <= width ) return head;
+	}
+	return value;
+}
+
+/*
+================
 textBoxParagraphs
 
 CIFTextBox 5395A0..5395DD: raw LF and backslash+'n' end a logical segment;
