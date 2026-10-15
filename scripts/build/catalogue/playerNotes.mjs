@@ -15,9 +15,12 @@ pull request description stays editable after review, so it is never the
 source of public text. No network is involved.
 
 A later change withdraws an earlier note with "Player-note-retract: #<pr>"
-(several numbers may share the line): every note of that pull request in
-the release's range is left out, so a note a later change made false
-never ships. The retracting change may carry its own corrected note.
+(several numbers may share the line): every note of that pull request
+merged before it in the release's range is left out, so a note a later
+change made false never ships. The retracting change may carry its own
+corrected note. A note an earlier release already published stays in that
+release's notes (they never change); only the range being built is
+filtered.
 
 ===========================================================================
 */
@@ -96,19 +99,20 @@ notesOfMerges
 
 The notes.json entries of squash merges in merge order, each record a
 { date, subject, message }: a merge without "(#<pr>)" in its subject is
-not a pull request and adds nothing, and every note of a retracted pull
-request is left out.
+not a pull request and adds nothing, and a retraction withdraws the notes
+of the named pull request merged before it, never one merged after.
 ================
 */
 export function notesOfMerges( records ) {
-	const entries = [], retracted = new Set();
+	let entries = [];
 	for ( const { date, subject, message } of records ) {
 		const pr = /\(#(\d+)\)\s*$/.exec( subject ?? "" );
 		if ( !pr ) continue;
-		for ( const number of parsePlayerNoteRetractions( message ) ) retracted.add( number );
+		const retracted = new Set( parsePlayerNoteRetractions( message ) );
+		if ( retracted.size ) entries = entries.filter( entry => !retracted.has( entry.pr ) );
 		for ( const note of parsePlayerNotes( message ) ) entries.push( { date, ...note, pr: Number( pr[1] ) } );
 	}
-	return entries.filter( entry => !retracted.has( entry.pr ) );
+	return entries;
 }
 
 /*

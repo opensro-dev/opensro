@@ -12,7 +12,9 @@ branch's commit messages, and the release's patch notes (catalogue
 notes.json) are read from there word for word, so the note is reviewed
 with the code and cannot change after the merge. Public, plain words: no
 security details, no reporter names. Repeat the line here for reviewers,
-or write "None".
+or write "None". If this change makes an earlier pull request's note false,
+add "Player-note-retract: #<pr>" too: that note is left out of the next
+patch notes (an already published release's notes never change).
 -->
 
 ## Native claims

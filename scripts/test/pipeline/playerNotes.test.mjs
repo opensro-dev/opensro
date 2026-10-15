@@ -108,3 +108,13 @@ test("a later merge's retraction leaves the earlier note out and keeps its own",
 		{ date: "2026-10-15", area: "Other", text: "Most Wanted keeps its ordinary pace.", pr: 1073 }
 	] );
 });
+
+test("a retraction never reaches a pull request merged after it", () => {
+	const records = [
+		{ date: "2026-10-16", subject: "fix: an early withdrawal (#20)", message: "Player-note-retract: #21" },
+		{ date: "2026-10-16", subject: "feat: a later note (#21)", message: "Player-note: UI: The later note stays." }
+	];
+	assert.deepEqual( notesOfMerges( records ), [
+		{ date: "2026-10-16", area: "UI", text: "The later note stays.", pr: 21 }
+	] );
+});
