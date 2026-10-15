@@ -54,7 +54,8 @@ const (
 	Current = 10
 	// The notice contract: 1 carries the job-kill announcement on 0x3667
 	// channel 0x80 (#1011) and the seal-drop and +8..+11 announcements on
-	// 0x81 (#1019), laid out like channel 7 so a player can hide them. A
+	// 0x81 (#1019), laid out like channel 7 so a player can hide them; 0x81
+	// also carries the player and item it names after its text (#1068). A
 	// protocol-9 client decodes the packet but drops both channels
 	// (decodeChatBroadcast returns null), so its player never sees them;
 	// the bump (F9) sends every open tab the 426 that reloads it onto a

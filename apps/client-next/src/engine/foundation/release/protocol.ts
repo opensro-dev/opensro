@@ -19,7 +19,8 @@ checks) reads the same numbers the client ships.
 */
 
 // Protocol 10 shows the port-only 0x3667 notice channels 0x80 (job kills)
-// and 0x81 (seal drops, +8..+11), which 9 dropped (system-notices.ts).
+// and 0x81 (seal drops, +8..+11), which 9 dropped (system-notices.ts); 0x81
+// also carries the player and item it names after its text (notice-links.ts).
 // Protocol 9 answers the friend request's prompt (S->C 0x7164, C->S 0x3012
 // consent; #965/#966), which 8 ignored until the request cancelled.
 // Protocol 8 retires the token-0 attached effects every heal, cure and
