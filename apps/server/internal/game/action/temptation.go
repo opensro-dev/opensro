@@ -182,6 +182,8 @@ func (rt *Runtime) monsterHitMonster(division string, instance, target monster.I
 	fatal := committed[len(committed)-1].Fatal
 	if fatal {
 		rt.queueMonsterDefeat(division, target.Gid, nowMs+monsterDeathPresentationRetention.Milliseconds())
+		// Port-only shard notice for a seal drop (announce.go).
+		rt.announceSealDrops(division, target.Ref.Name, settlement.drops, nowMs)
 		public = append(public, rt.monsterKillBurst(target.Gid, settlement.drops)...)
 		public = append(public, settlement.public...)
 		rt.queueMonsterLegRecipients(division, settlement.others)

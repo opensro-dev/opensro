@@ -545,6 +545,9 @@ func (rt *Runtime) acceptSkillStagePhaseAt(divisionID string, character, snapsho
 		broadcastFrames = append(broadcastFrames, life)
 	}
 	if finalImpact.Fatal {
+		// Port-only shard notice for a seal drop (announce.go), as the area,
+		// periodic and credited-hit kills post it.
+		rt.announceSealDrops(divisionID, target.Ref.Name, killDrops, nowMs)
 		references := rt.groundReferences(killDrops)
 		actorFrames = append(actorFrames, references...)
 		broadcastFrames = append(broadcastFrames, references...)

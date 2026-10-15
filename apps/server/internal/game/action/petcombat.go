@@ -438,6 +438,8 @@ func (rt *Runtime) petStrike(step petCombatStep, target monster.Instance, skill 
 	var actorFrames []wire.Frame
 	if fatal {
 		rt.queueMonsterDefeat(division, target.Gid, step.nowMs+monsterDeathPresentationRetention.Milliseconds())
+		// Port-only shard notice for a seal drop (announce.go).
+		rt.announceSealDrops(division, target.Ref.Name, settlement.drops, step.nowMs)
 		burst := rt.monsterKillBurst(target.Gid, settlement.drops)
 		public = append(public, burst...)
 		actorFrames = append(actorFrames, settlement.actorFrames...)
