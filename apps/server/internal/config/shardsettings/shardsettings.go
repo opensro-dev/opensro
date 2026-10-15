@@ -131,6 +131,12 @@ var Settings = []Setting{
 	// Owner, 2026-10-13 (F7): Lucky Powder stacks to 500; 2026-10-14:
 	// arrows and bolts stack to 2500. "off" is native.
 	{Env: "SRO_STACK_SIZES", NomadVar: "stack_sizes", Default: "arrow=2500,bolt=2500,luckypowder=500", Source: Built},
+	// Port-only, not native (issue #520): automatic best-gear on level-up.
+	// Off by default; a shard turns it on with its own value. The seal names
+	// the tier and the plus bounds the seated grant.
+	{Env: "SRO_AUTO_MAXGEAR", NomadVar: "auto_maxgear", Default: "off"},
+	{Env: "SRO_AUTO_MAXGEAR_SEAL", NomadVar: "auto_maxgear_seal", Default: "sun"},
+	{Env: "SRO_AUTO_MAXGEAR_PLUS", NomadVar: "auto_maxgear_plus", Default: "12"},
 }
 
 // NotSettings are the job's other SRO_ variables: what a deployment

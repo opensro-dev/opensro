@@ -570,6 +570,26 @@ variable "stack_sizes" {
   default = "arrow=2500,bolt=2500,luckypowder=500"
 }
 
+# Port-only, not native (issue #520): a level increase upgrades every worn
+# piece to the best seal-tier variant the level and the equip gate allow and
+# fills an empty armour or accessory socket. "off" (the default) is native.
+# auto_maxgear_seal names the tier (sun, moon or star) and auto_maxgear_plus
+# the plus of a seated grant (0..12).
+variable "auto_maxgear" {
+  type    = string
+  default = "off"
+}
+
+variable "auto_maxgear_seal" {
+  type    = string
+  default = "sun"
+}
+
+variable "auto_maxgear_plus" {
+  type    = string
+  default = "12"
+}
+
 # The community site's public read API listener (internal/agent/publicstats):
 # a loopback address, or "off". sro-nomad gives the first shard the default
 # and every other shard "off".
@@ -766,6 +786,9 @@ job "sro-gameworld-__SHARD_ID__" {
         SRO_ALCHEMY_MATERIAL_DROPS_OFF     = var.alchemy_material_drops_off
         SRO_BETA_SHOP_ONLY_DEGREE9         = var.beta_shop_only_degree9
         SRO_STACK_SIZES                    = var.stack_sizes
+        SRO_AUTO_MAXGEAR                   = var.auto_maxgear
+        SRO_AUTO_MAXGEAR_SEAL              = var.auto_maxgear_seal
+        SRO_AUTO_MAXGEAR_PLUS              = var.auto_maxgear_plus
         SRO_PUBLIC_API_ADDR                = var.public_api_addr
         SRO_PUBLIC_API_TOKEN_PATH          = "${NOMAD_SECRETS_DIR}/public-api-token"
         TRANSPORT_WT_ADDR                  = "${NOMAD_IP_transport}:${NOMAD_PORT_transport}"
