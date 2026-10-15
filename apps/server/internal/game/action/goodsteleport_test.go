@@ -14,6 +14,7 @@ import (
 
 	"opensro.online/server/internal/domain"
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/item/wire"
 	"opensro.online/server/internal/game/world/simulation"
 )
 
@@ -173,5 +174,62 @@ func TestReverseReturnKeepsATransportOutOfADungeon(t *testing.T) {
 	c.ActiveCOS = nil
 	if rt.transportBarredFromDestination(c, cave) {
 		t.Fatal("a trader without a transport is barred from a dungeon")
+	}
+}
+
+/*
+================
+TestReverseScrollKeepsATransportOutOfADungeon
+
+The scroll path of the dungeon bar (reversereturn.go, 0x5E): with the rule
+on, a reverse return scroll aimed at a death point inside a dungeon (the
+Donwhang cave, 0x8001) refuses a summoned transport, from the bag (0x75BD)
+and from a gate alike, spending nothing and starting no cast; the same
+scroll without the transport, or to a town, starts.
+================
+*/
+func TestReverseScrollKeepsATransportOutOfADungeon(t *testing.T) {
+	cave := simulation.Spawn{RegionID: 0x8001, X: 100, Y: 0, Z: 100}
+	town := simulation.Spawn{RegionID: 25000, X: 812, Y: 30, Z: 1204}
+	if !simulation.IsDungeonRegion(cave.RegionID) || simulation.IsDungeonRegion(town.RegionID) {
+		t.Fatal("fixture: 0x8001 must be a dungeon and 25000 must not")
+	}
+	for _, path := range []string{"bag", "gate"} {
+		for _, c := range []struct {
+			name      string
+			died      simulation.Spawn
+			transport bool
+			refused   bool
+		}{
+			{"transport into a dungeon", cave, true, true},
+			{"no transport into a dungeon", cave, false, false},
+			{"transport to a town", town, true, false},
+		} {
+			rt, ch, _ := reverseReturnFixture(t)
+			rt.JobGoodsTeleport = true
+			ch.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(c.died)}
+			if c.transport {
+				summonTestTransport(rt, ch)
+			}
+			var out OpResult
+			if path == "bag" {
+				out = useReverseScroll(rt, ch, reverseReturnLastDeath)
+			} else {
+				out = reverseReturn(rt, ch, reverseReturnLastDeath)
+			}
+			scrolls := ch.MissionInventory[len(ch.MissionInventory)-1].StackCount
+			if c.refused {
+				if len(out.Frames) == 0 || !bytes.Equal(out.Frames[0].Payload, wire.EncodeItemUseError(0x5e)) {
+					t.Fatalf("%s, %s: a transport was taken into a dungeon: %+v", path, c.name, out.Frames)
+				}
+				if scrolls != 2 || ch.NativeTeleportMode != 0 {
+					t.Fatalf("%s, %s: a refused scroll was spent (%d left) or cast (mode %d)", path, c.name, scrolls, ch.NativeTeleportMode)
+				}
+				continue
+			}
+			if scrolls != 1 || ch.NativeTeleportMode != 1 {
+				t.Fatalf("%s, %s: the scroll did not start (%d left, mode %d): %+v", path, c.name, scrolls, ch.NativeTeleportMode, out.Frames)
+			}
+		}
 	}
 }
