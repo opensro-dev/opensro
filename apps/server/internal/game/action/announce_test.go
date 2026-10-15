@@ -10,6 +10,7 @@ Port-only, not native: off (the zero value) every hook is silent.
 package action
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -423,5 +424,51 @@ func TestJobKillNoticeRepeatLiftsThePairWindow(t *testing.T) {
 	t.Setenv(EnvJobKillNoticeRepeat, "")
 	if AnnouncementsFromEnv().JobKillRepeat {
 		t.Fatal("the repeat flag reads on when unset")
+	}
+}
+
+/*
+================
+noticeLinkTail
+
+The bytes a drop or plus notice carries after its text.
+================
+*/
+func noticeLinkTail(t *testing.T, rt *Runtime) []byte {
+	t.Helper()
+	routed := rt.drainAnnouncements(0)
+	if len(routed) != 1 || len(routed[0].Frames) != 1 {
+		t.Fatalf("notices %+v, want one", routed)
+	}
+	p := routed[0].Frames[0].Payload
+	return p[3+2*(int(p[1])|int(p[2])<<8):]
+}
+
+/*
+================
+TestDropAndPlusNoticesLinkThePlayerAndItem
+
+A seal drop links its owner and the ground item in the form a pickup
+grants; a +8..+11 links the player and the advanced item after its plus.
+================
+*/
+func TestDropAndPlusNoticesLinkThePlayerAndItem(t *testing.T) {
+	rt, _ := newTestRuntime(testCharacter(), testItems())
+	rt.Announce.SoxDrop, rt.Announce.Plus = true, true
+	drop := grounditem.Item{Codename: "ITEM_CH_BLADE_09_C_RARE", DroppedBy: "Looter", RefObjID: 0x01020304,
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Plus: 3, Durability: 40}
+	rt.announceSealDrops(testDivision, "Tiger Girl", []grounditem.Item{drop}, 0)
+	body := groundInventoryItem(drop, 1).Body().Encode()
+	want := append(wire.NewWriter(0).Str("Looter").U16(uint16(len(body))).Payload(), body...)
+	if got := noticeLinkTail(t, rt); !bytes.Equal(got, want) {
+		t.Fatalf("drop link % X, want % X", got, want)
+	}
+	advanced := inventory.Item{Slot: 13, RefObjID: 0x01020304, Codename: "ITEM_CH_SWORD_01_A_DEF",
+		TypeFlags: wire.PackTypeFlags(3, 1, 6, 2), Plus: 9, Durability: 40}
+	rt.announcePlus(testDivision, "Smith", alchemy.Outcome{Success: true, Target: 13, Items: []inventory.Item{advanced}}, 0)
+	body = advanced.Body().Encode()
+	want = append(wire.NewWriter(0).Str("Smith").U16(uint16(len(body))).Payload(), body...)
+	if got := noticeLinkTail(t, rt); !bytes.Equal(got, want) || body[4] != 9 {
+		t.Fatalf("plus link % X, want % X", got, want)
 	}
 }

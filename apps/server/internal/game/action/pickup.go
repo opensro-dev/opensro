@@ -231,10 +231,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 
 	groundItem.Summon.RefreshRentalTimes(rt.Now().Unix())
 	stackCap := rt.maxStackFor(groundItem.TypeFlags, groundItem.Codename)
-	stack := groundItem.StackCount
-	if stack == 0 {
-		stack = 1
-	}
+	stack := groundStack(groundItem)
 
 	// TWO-PLANE COMMIT (ADR-1 S7): ground despawn (or over-cap remainder
 	// write-back) + bag grant in one unit. The Remove cannot miss under the
@@ -250,19 +247,7 @@ func (rt *Runtime) grantPickupTo(g pickupGrant) (result OpResult) {
 		}
 		inv := bagOf(character)
 		var fault *inventory.Fault
-		grant, fault = inv.GrantStack(inventory.Item{
-			RecordID:          groundItem.RecordID,
-			TradeOwner:        groundItem.TradeOwner,
-			RefObjID:          groundItem.RefObjID,
-			Codename:          groundItem.Codename,
-			TypeFlags:         groundItem.TypeFlags,
-			Plus:              groundItem.Plus,
-			VarianceBits:      groundItem.VarianceBits,
-			Durability:        groundItem.Durability,
-			Quantity:          stack,
-			MagicOptions:      groundItem.MagicOptions,
-			TransformRefObjID: groundItem.TransformRefObjID, Summon: domain.CloneCOS(groundItem.Summon),
-		}, stackCap)
+		grant, fault = inv.GrantStack(groundInventoryItem(groundItem, stack), stackCap)
 		if fault != nil {
 			result = pickupRefusal(fault.Code)
 			return false
@@ -319,4 +304,43 @@ func (rt *Runtime) updateQuestInventory(character *enterworld.Character) []wire.
 	}
 	frames, _ := rt.UpdateQuestInventory(character)
 	return frames
+}
+
+/*
+================
+groundStack
+
+How many a ground item holds: its stack count, or one for a single item.
+================
+*/
+func groundStack(g grounditem.Item) uint16 {
+	if g.StackCount == 0 {
+		return 1
+	}
+	return g.StackCount
+}
+
+/*
+================
+groundInventoryItem
+
+The bag item a pickup grants for quantity of a ground item. The drop
+notice links this same form, so its tooltip shows what the bag will hold.
+================
+*/
+func groundInventoryItem(g grounditem.Item, quantity uint16) inventory.Item {
+	return inventory.Item{
+		RecordID:          g.RecordID,
+		TradeOwner:        g.TradeOwner,
+		RefObjID:          g.RefObjID,
+		Codename:          g.Codename,
+		TypeFlags:         g.TypeFlags,
+		Plus:              g.Plus,
+		VarianceBits:      g.VarianceBits,
+		Durability:        g.Durability,
+		Quantity:          quantity,
+		MagicOptions:      g.MagicOptions,
+		TransformRefObjID: g.TransformRefObjID,
+		Summon:            domain.CloneCOS(g.Summon),
+	}
 }

@@ -13,9 +13,27 @@ func TestNotificationFrameNativeTextOnly(t *testing.T) {
 }
 
 func TestDropPlusNotificationFrameUsesItsOwnChannel(t *testing.T) {
-	f := DropPlusNotificationFrame("A")
-	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, []byte{DropPlusNoticeChannel, 1, 0, 65, 0}) {
-		t.Fatalf("drop/plus notification wire opcode=%04x payload=%x", f.Opcode, f.Payload)
+	// No player and no item: the text, then nameLen 0 and bodyLen 0.
+	f := DropPlusNotificationFrame("A", NoticeLink{})
+	want := []byte{DropPlusNoticeChannel, 1, 0, 65, 0, 0, 0, 0, 0}
+	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, want) {
+		t.Fatalf("drop/plus notification wire opcode=%04x payload=% X, want % X", f.Opcode, f.Payload, want)
+	}
+}
+
+// TestDropPlusNotificationFrameLinksThePlayerAndItem pins the vector the
+// client decodes: "A" naming Looter and three of an ETC potion, refObjID
+// 0x01020304, in its inventory body ([u32 refObjID][u16 quantity]).
+func TestDropPlusNotificationFrameLinksThePlayerAndItem(t *testing.T) {
+	potion := ItemBody{RefObjID: 0x01020304, TypeFlags: PackTypeFlags(3, 3, 1, 1), Quantity: 3}
+	f := DropPlusNotificationFrame("A", NoticeLink{Player: "Looter", Body: potion.Encode()})
+	want := []byte{
+		DropPlusNoticeChannel, 1, 0, 65, 0,
+		6, 0, 'L', 'o', 'o', 't', 'e', 'r',
+		6, 0, 0x04, 0x03, 0x02, 0x01, 3, 0,
+	}
+	if f.Opcode != 0x3667 || !bytes.Equal(f.Payload, want) {
+		t.Fatalf("linked notice payload % X, want % X", f.Payload, want)
 	}
 }
 
