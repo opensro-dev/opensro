@@ -9,9 +9,12 @@ layout, and image paths remain within the published interface assets.
 
 ===========================================================================
 */
-import type { FontAtlas } from "@/engine/foundation/rendering/ui-glyphs";
+import type { FontAtlas, Glyph } from "@/engine/foundation/rendering/ui-glyphs";
 import { titleText, drawableGlyph } from "@/engine/foundation/rendering/ui-glyphs";
 import type { UiQuad, UiRect } from "@/engine/contracts/ui";
+
+const PML_LINE_MARGIN = 5;
+const BOARD_EXTRA_HEIGHT = 5;
 /*
 ================
 GuideToken
@@ -36,7 +39,7 @@ export function guideTokens( source: string ): readonly GuideToken[] {
 	const out: GuideToken[] = [], colors: (UiQuad["color"] | null)[] = [ null ];
 	let strong = 0;
 	const fontBold: boolean[] = [];
-	const margins = [ 5 ];
+	const margins = [ PML_LINE_MARGIN ];
 	for ( const token of source.split( /(<[^>]*>)/ ).filter( Boolean ) ) {
 		if ( /^<\/?sml2>$/i.test( token ) ) continue;
 		if ( /^<br\s*\/?\s*>$/i.test( token ) ) {
@@ -116,7 +119,44 @@ export function guideTokens( source: string ): readonly GuideToken[] {
 }
 /*
 ================
+fitPmlText
+
+782AC0 fits a CTextBoard to the remaining line width. The first glyph is
+always admitted, even when wider than the remaining width (782B51..782B61).
+
+Port-only, not native (owner-approved 2026-10-13): on overflow this rolls
+back to the last admitted ASCII space, keeping that space on the old line,
+and keeps the fitted prefix only when there is none. Native v1.150 wraps per
+character: CEnvironmentConfig's constructor (4BCA61) sets
+g_GlobalEnvironmentConfig+0x12C = 1, which 83E9BF passes to 782AC0, and that
+skips the rollback (782B82, 782BDC).
+================
+*/
+function fitPmlText( glyphs: Record<string, Glyph>, chars: readonly string[], start: number, available: number ) {
+	let end = start, width = 0, spaceEnd = start, spaceWidth = 0;
+	while ( end < chars.length ) {
+		const c = chars[end]!, advance = drawableGlyph( glyphs, c )?.advanceX ?? 0;
+		if ( width + advance > available && width !== 0 ) break;
+		width += advance;
+		end++;
+		if ( c === " " ) {
+			spaceEnd = end;
+			spaceWidth = width;
+		}
+	}
+	if ( end < chars.length && spaceEnd > start ) {
+		end = spaceEnd;
+		width = spaceWidth;
+	}
+	return { end, width };
+}
+/*
+================
 guideContent
+
+83E8F0 lays out each PML text resource through the fitted CTextBoard and
+continues its returned suffix on the next line. Keep run boundaries and
+spaces: fitPmlText applies the owner-approved word-wrap deviation.
 ================
 */
 export function guideContent(
@@ -128,7 +168,7 @@ export function guideContent(
 	size: ( path: string ) => readonly [number, number] | undefined
 ) {
 	const quads: UiQuad[] = [], paths: string[] = [];
-	let x = r[0], y = r[1], margin = 5, line = atlas.fonts["0"]!.recordHeight + margin;
+	let x = r[0], y = r[1], margin = PML_LINE_MARGIN, line = atlas.fonts["0"]!.recordHeight + margin;
 	/*
 	================
 	newline
@@ -169,20 +209,26 @@ export function guideContent(
 		}
 		const font = atlas.fonts[token.strong ? "0:2" : "0"];
 		if ( !font ) throw Error( "Missing native emphasis font" );
-		for ( const word of token.value.split( /(\s+)/ ).filter( Boolean ) ) {
-			const width = Array.from( word ).reduce(
-				( n, c ) => n + (drawableGlyph( font.glyphs, c )?.advanceX ?? 0),
-				0
-			);
-			if ( x > r[0] && x + width > r[0] + r[2] ) newline();
-			if ( x === r[0] && !word.trim() ) continue;
+		const chars = Array.from( token.value );
+		let start = 0;
+		while ( start < chars.length ) {
+			const fit = fitPmlText( font.glyphs, chars, start, r[0] + r[2] - x );
 			quads.push(
-				...titleText( atlas, word, [ x, y, width, font.recordHeight + 5 ], clip, token.color ?? color, {
-					fontStyle: token.strong ? 2 : 0,
-					vAlign: 0
-				} )
+				...titleText(
+					atlas,
+					chars.slice( start, fit.end ).join( "" ),
+					[ x, y, fit.width, font.recordHeight + BOARD_EXTRA_HEIGHT ],
+					clip,
+					token.color ?? color,
+					{
+						fontStyle: token.strong ? 2 : 0,
+						vAlign: 0
+					}
+				)
 			);
-			x += width;
+			x += fit.width;
+			start = fit.end;
+			if ( start < chars.length ) newline();
 		}
 	}
 	return { quads, paths, height: y - r[1] + line };
