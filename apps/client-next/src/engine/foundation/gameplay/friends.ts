@@ -347,3 +347,29 @@ export function applyFriendEvent( rows: readonly FriendRow[], event: FriendEvent
 	if ( event.kind === "deleted" ) return rows.filter( row => row.jid !== event.jid );
 	return rows.map( row => row.jid === event.jid ? { ...row, online: event.online } : row );
 }
+
+/*
+================
+friendAddPrefill
+
+The name CIFFriend_OnAddButton (602010) puts in the add box: the selected
+target when it is another player, or the rider of a selected mounted pet
+or transport (the target has a player on it), else nothing.
+================
+*/
+export function friendAddPrefill(
+	target: number | undefined,
+	entities: readonly {
+		readonly gid: number;
+		readonly kind: string;
+		readonly name?: string;
+		readonly mountedOn?: number;
+	}[],
+	localGid: number | undefined
+): string {
+	if ( !target || target === localGid ) return "";
+	const selected = entities.find( entity => entity.gid === target );
+	if ( !selected ) return "";
+	if ( selected.kind === "player" ) return selected.name ?? "";
+	return entities.find( entity => entity.kind === "player" && entity.mountedOn === target )?.name ?? "";
+}

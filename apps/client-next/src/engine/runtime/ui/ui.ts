@@ -57,7 +57,7 @@ const STALL_CHAT_TEXT = "stall-chat-text";
 const STALL_CHAT_ROW = 15;
 const EDIT_CARET_WIDTH = 1;
 import { ACTION_FORTRESS_RETURN } from "@/engine/foundation/gameplay/fortress-return";
-import { FRIEND_LIST_LIMIT, FRIEND_NAME_LIMIT } from "@/engine/foundation/gameplay/friends";
+import { FRIEND_LIST_LIMIT, FRIEND_NAME_LIMIT, friendAddPrefill } from "@/engine/foundation/gameplay/friends";
 import {
 	LETTER_BODY_LIMIT,
 	LETTER_MAILBOX_LIMIT,
@@ -849,7 +849,7 @@ export function createUi(
 	let blockDialog: "add" | "remove" | null = null;
 	// The Friends tab (CIFFriend, community panel member +0x7DC): the selected
 	// row's jid, the list scroll and the add/delete dialog.
-	let friendSelected = 0, friendOffset = 0, friendInput = "", friendSortDescending = false;
+	let friendSelected = 0, friendOffset = 0, friendInput = "";
 	let friendDialog: "add" | "remove" | null = null;
 	// The Letter tab (CIFLetter, 605B80): the selected letter's mailbox index,
 	// the list scroll and sort, the write window's draft, and the letter the
@@ -3087,7 +3087,8 @@ export function createUi(
 			return;
 		}
 		if ( id.startsWith( "friend-row:" ) ) friendSelected = Number( id.slice( 11 ) );
-		else if ( id === "friend-sort" ) friendSortDescending = !friendSortDescending;
+		// 605230 re-sorts by name, always ascending (the list is drawn sorted).
+		else if ( id === "friend-sort" ) friendOffset = 0;
 		else if ( id === "friend-up" ) friendOffset = Math.max( 0, friendOffset - 1 );
 		else if ( id === "friend-down" ) friendOffset++;
 		else if ( id === "friend-whisper" ) {
@@ -3096,10 +3097,14 @@ export function createUi(
 		} else if ( id === "friend-add" || id === "friend-remove" ) {
 			if ( id === "friend-remove" && !view.gameplay?.friends?.rows.some( r => r.jid === friendSelected ) ) return;
 			friendDialog = id === "friend-add" ? "add" : "remove";
-			friendInput = "";
+			// 602010: the add box opens with the selected player's name, or a
+			// selected mounted pet's rider (friendAddPrefill).
+			friendInput = friendDialog === "add" ?
+				friendAddPrefill( view.gameplay?.target, view.entities ?? [], view.gameplay?.localGid ) :
+				"";
 			focus = friendDialog === "add" ? "friend-name" : null;
-			selection = [ 0, 0 ];
-			focusRequest = { id: focus, revision: ++focusRevision, caret: 0 };
+			selection = [ friendInput.length, friendInput.length ];
+			focusRequest = { id: focus, revision: ++focusRevision, caret: friendInput.length };
 		} else if ( id === "cos-name" ) {
 			// 6A5990: the name box for the shown, still unnamed pet.
 			const record = view.gameplay?.cosRecords?.find( r => r.gid === cosGid );
@@ -16604,10 +16609,8 @@ export function createUi(
 				*/
 				function friendPage( page: AuthoredLayout, slot: AuthoredLayout, gx: number, gy: number ) {
 					const state = game?.friends,
-						// The FriendList header (id 22) sorts by name, each press reversing.
-						rows = [ ...state?.rows ?? [] ].sort( ( a, b ) =>
-							(friendSortDescending ? -1 : 1) * a.name.localeCompare( b.name )
-						),
+						// 604FD0 fills the list from a name-ordered tree: always ascending.
+						rows = [ ...state?.rows ?? [] ].sort( ( a, b ) => a.name.localeCompare( b.name ) ),
 						at = ( id: number ) => Object.values( page ).find( n => n.id === id )!,
 						slotAt = ( id: number ) => Object.values( slot ).find( n => n.id === id )!;
 					if ( friendSelected && !rows.some( row => row.jid === friendSelected ) ) friendSelected = 0;
@@ -16669,11 +16672,13 @@ export function createUi(
 						gx,
 						gy,
 						"friend-whisper",
-						hudCopy( at( 41 ).text ),
-						!selected?.online
+						hudCopy( at( 41 ).text )
 					);
 					authoredLabeledButton( at( 42 ), gx, gy, "friend-add", hudCopy( at( 42 ).text ) );
-					authoredLabeledButton( at( 43 ), gx, gy, "friend-remove", hudCopy( at( 43 ).text ), !selected );
+					// The original never disables Whisper or Delete (no CIFButton_SetEnabled
+					// from 6054D0, 604390 or 604FD0): each does nothing without a selection,
+					// and Whisper reaches an offline friend too (600740).
+					authoredLabeledButton( at( 43 ), gx, gy, "friend-remove", hudCopy( at( 43 ).text ) );
 				}
 				/*
 				================
@@ -17696,8 +17701,7 @@ export function createUi(
 								hudCopy( "UIIT_STT_GET_WHISPER" ),
 								left,
 								actionY + 28,
-								third - 2,
-								!selected?.online
+								third - 2
 							);
 							button(
 								"friend-add",
@@ -17711,8 +17715,7 @@ export function createUi(
 								hudCopy( "UIIT_CTL_FRIENDDEL" ),
 								left + third * 2,
 								actionY + 28,
-								third - 2,
-								!selected
+								third - 2
 							);
 							return;
 						}
