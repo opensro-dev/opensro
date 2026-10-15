@@ -76,6 +76,20 @@ func sealTierLetter(seal string) (string, bool) {
 	return "", false
 }
 
+// autoMaxGearSealName is the operator-facing name of a tier letter, for the
+// rules page.
+func autoMaxGearSealName(tier string) string {
+	switch tier {
+	case "C":
+		return "sun"
+	case "B":
+		return "moon"
+	case "A":
+		return "star"
+	}
+	return tier
+}
+
 /*
 ================
 autoMaxGearConfigFromEnv
