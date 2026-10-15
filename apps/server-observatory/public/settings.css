@@ -1,0 +1,329 @@
+/*
+===========================================================================
+
+settings.css - the Shard rules page, on the Jangan theme's tokens
+
+Colours, frames and type come from theme.css. Each tone has one job: amber
+marks a rule changed from its default, jade a live rule and a switch that
+is on, sky a value set from this console. A chip always carries its words,
+so no state is colour alone. Below 640px each rule stacks its value under
+its name, for a phone.
+
+===========================================================================
+*/
+
+.rules {
+	padding-bottom: 32px;
+}
+
+.rules-note {
+	margin: 0 0 12px;
+	padding: 8px 14px;
+	border: 1px solid var(--gold-soft);
+	border-left: 4px solid var(--sky);
+	border-radius: 6px;
+	background: var(--surface);
+	color: var(--text);
+	font-size: 13px;
+}
+
+.rules-status {
+	margin: 0 0 12px;
+	color: var(--cream);
+	font-size: 13px;
+}
+
+.rules-status:empty {
+	display: none;
+}
+
+/* ----- Summary plaques ----- */
+
+.rules-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 10px;
+	margin-bottom: 14px;
+}
+
+.rules-tile {
+	display: grid;
+	gap: 2px;
+	padding: 10px 14px;
+	border: 1px solid var(--bronze);
+	border-left: 4px solid var(--line);
+	border-radius: 6px;
+	background: var(--surface);
+	box-shadow: var(--shadow);
+}
+
+.rules-tile strong {
+	font: 700 26px/1.1 var(--serif);
+	color: var(--heading);
+	font-variant-numeric: tabular-nums;
+}
+
+.rules-tile span {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.rules-tile.amber {
+	border-left-color: var(--amber);
+}
+
+/* ----- Filters ----- */
+
+.rules-filter {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	gap: 12px 16px;
+	padding: 12px 16px;
+	margin-bottom: 10px;
+}
+
+.rules-server,
+.rules-search {
+	display: grid;
+	gap: 4px;
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.rules-search {
+	flex: 1 1 220px;
+}
+
+.rules-search input,
+.rules-server select {
+	padding: 7px 10px;
+}
+
+.rules-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.rules-group {
+	padding: 5px 12px;
+	border: 1px solid var(--bronze);
+	border-radius: 999px;
+	background: var(--wood);
+	color: var(--text);
+	font: 13px var(--serif);
+	cursor: pointer;
+}
+
+.rules-group.active {
+	background: linear-gradient(180deg, #c03a26, #8a1d12);
+	border-color: var(--gold-soft);
+	color: #fff2d6;
+}
+
+.rules-check {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text);
+	font-size: 13px;
+}
+
+.rules-check input {
+	width: 16px;
+	height: 16px;
+	margin: 0;
+	padding: 0;
+	box-shadow: none;
+	accent-color: var(--lacquer);
+}
+
+/* ----- Board ----- */
+
+.rules-board {
+	display: grid;
+	gap: 14px;
+	margin-bottom: 14px;
+	min-width: 0;
+}
+
+.rules-group-panel {
+	min-width: 0;
+	margin-bottom: 14px;
+}
+
+.rules-rows {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.rules-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(200px, 280px);
+	gap: 10px 18px;
+	padding: 12px 4px;
+	border-top: 1px solid var(--line);
+}
+
+.rules-row:first-child {
+	border-top: 0;
+}
+
+.rules-row.changed {
+	box-shadow: inset 3px 0 0 var(--amber);
+	padding-left: 12px;
+}
+
+.rules-name {
+	display: grid;
+	gap: 4px;
+	min-width: 0;
+}
+
+.rules-title strong {
+	color: var(--heading);
+	font: 700 16px var(--serif);
+}
+
+.rules-help,
+.rules-native {
+	margin: 0;
+	color: var(--text);
+	font-size: 13px;
+	max-width: 62ch;
+}
+
+.rules-native {
+	color: var(--muted);
+	font-style: italic;
+}
+
+.rules-key {
+	justify-self: start;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: var(--surface-raised);
+	color: var(--muted);
+	font: 11px ui-monospace, Consolas, monospace;
+	overflow-wrap: anywhere;
+}
+
+.rules-value {
+	display: grid;
+	align-content: start;
+	justify-items: start;
+	gap: 6px;
+}
+
+.rules-now {
+	color: var(--heading);
+	font: 700 18px var(--serif);
+	font-variant-numeric: tabular-nums;
+}
+
+.rules-range {
+	color: var(--muted);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+.rules-chips-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.rules-chip {
+	padding: 1px 8px;
+	border: 1px solid;
+	border-radius: 999px;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+
+.rules-chip.live,
+.rules-chip.on {
+	color: var(--jade);
+	background: var(--jade-deep);
+}
+
+.rules-chip.restart,
+.rules-chip.changed {
+	color: var(--amber);
+	background: #f6e4bd;
+}
+
+.rules-chip.store {
+	color: var(--sky);
+	background: #dbe6f2;
+}
+
+.rules-chip.off,
+.rules-chip.value {
+	color: var(--muted);
+	background: var(--surface-raised);
+}
+
+.rules-empty {
+	margin: 0;
+	padding: 18px;
+	color: var(--muted);
+}
+
+/* ----- Shard settings and fixed rules ----- */
+
+.rules-flags {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+	gap: 0 18px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 13px;
+}
+
+.rules-flags li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 4px 10px;
+	min-width: 0;
+	padding: 6px 4px;
+	border-bottom: 1px solid var(--line);
+}
+
+.rules-fixed-list {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.rules-fixed-list li {
+	display: grid;
+	grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+	gap: 4px 14px;
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.rules-fixed-list strong {
+	color: var(--text);
+}
+
+/* ----- Narrow screens ----- */
+
+@media (max-width: 640px) {
+	.rules-tile:last-child:nth-child(odd) {
+		grid-column: 1 / -1;
+	}
+	.rules-row,
+	.rules-fixed-list li {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

@@ -13,6 +13,7 @@ answer. Phase 1 is read-only: there is no write route here.
 
 ===========================================================================
 */
+import { boundedText } from "./bounded-body.mjs";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10000;
@@ -110,7 +111,7 @@ export function createEconomy( shards, token, fetcher = fetch ) {
 					signal: AbortSignal.timeout( REQUEST_TIMEOUT_MS ),
 					redirect: "error"
 				} );
-				const text = await boundedText( response );
+				const text = await boundedText( response, MAX_RESPONSE_BYTES );
 				let body;
 				try {
 					body = JSON.parse( text );
@@ -135,26 +136,4 @@ export function createEconomy( shards, token, fetcher = fetch ) {
 			}
 		}
 	};
-}
-
-/*
-================
-boundedText
-================
-*/
-async function boundedText( response ) {
-	const reader = response.body.getReader(), chunks = [];
-	let size = 0;
-	try {
-		for ( ;; ) {
-			const { done, value } = await reader.read();
-			if ( done ) break;
-			size += value.byteLength;
-			if ( size > MAX_RESPONSE_BYTES ) throw Error( "response exceeded 4 MiB" );
-			chunks.push( value );
-		}
-	} finally {
-		await reader.cancel();
-	}
-	return Buffer.concat( chunks ).toString( "utf8" );
 }

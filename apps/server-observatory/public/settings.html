@@ -1,0 +1,75 @@
+<!doctype html>
+<!-- settings.html - shard rules: every tunable rule and shard setting beside its default (read-only until staff sign-in). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3d0d09">
+<title>Shard rules · Silkroad Observatory</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/theme-boards.css">
+<link rel="stylesheet" href="/theme-fit.css">
+<link rel="stylesheet" href="/settings.css">
+<script type="module" src="/settings.js"></script>
+</head>
+<body>
+<aside class="rail">
+<a class="brand" href="/" aria-label="Silkroad Observatory home"><span class="seal" aria-hidden="true">長</span><span class="brand-text"><strong>SILKROAD</strong><em>ONLINE</em></span><b>OBSERVATORY</b><small>World operations</small></a>
+<nav aria-label="Dashboard views">
+<a href="/#overview">Overview</a>
+<a href="/#players">Players</a>
+<a href="/#world">World census</a>
+<a href="/#health">Runtime</a>
+<a href="/#items">Items</a>
+<a href="/#recovery">Player recovery</a>
+<a href="/history.html">Session history</a>
+<a href="/economy.html">Economy</a>
+<a href="/settings.html" class="active" aria-current="page">Shard rules</a>
+</nav>
+<div class="rail-foot"><span class="rail-label">SILKROAD CONNECTS THE WORLD</span><span class="rail-bottom">v 1.150</span></div>
+</aside>
+<div class="shell">
+<main class="rules">
+<div class="page-heading">
+<div>
+<div class="eyebrow">SHARD RULES</div>
+<h1>Live settings</h1>
+<p>Every tunable rule of this shard and every shard setting, with its default and the values it accepts. Live rules change on the next action, restart rules at the next restart.</p>
+</div>
+</div>
+
+<p class="rules-note" role="note">Read-only for now. Changes will be proposed here with a reason and applied once a second staff member approves them, when staff sign-in reaches this console.</p>
+
+<form id="rules-filter" class="panel rules-filter" aria-label="Filter settings">
+<label class="rules-server">Server<select id="rules-shard"></select></label>
+<label class="rules-search">Find<input id="rules-query" type="search" placeholder="Name, key or SRO_ variable" autocomplete="off"></label>
+<div id="rules-groups" class="rules-chips" role="group" aria-label="Groups"></div>
+<label class="rules-check"><input id="rules-changed" type="checkbox"> Changed only</label>
+</form>
+<p id="rules-status" class="rules-status" role="status" aria-live="polite">Loading…</p>
+
+<div id="rules-summary" class="rules-summary" aria-label="Summary"></div>
+
+<div id="rules-board" class="rules-board"></div>
+
+<section class="panel rules-group-panel" aria-labelledby="flags-title">
+<div class="panel-heading"><div><div class="eyebrow">DEPLOYMENT</div><h2 id="flags-title">Shard settings</h2></div><span id="flags-count" class="tag">0</span></div>
+<p class="rules-help">The switches this deployment sets, as the GameWorld reads them. They change with a deployment, not from here.</p>
+<ul id="flags-body" class="rules-flags" aria-label="Shard settings and their state"></ul>
+</section>
+
+<section class="panel rules-group-panel rules-fixed" aria-labelledby="fixed-title">
+<div class="panel-heading"><div><div class="eyebrow">NOT TUNABLE</div><h2 id="fixed-title">Fixed rules</h2></div></div>
+<ul class="rules-fixed-list">
+<li><strong>Server tick</strong><span>Every timing rule is counted in ticks.</span></li>
+<li><strong>Pet and transport ranges</strong><span>Mirrored by the client; a change would desync it.</span></li>
+<li><strong>Wire limits</strong><span>Part of the protocol both sides agree on.</span></li>
+</ul>
+</section>
+
+<footer><span><span class="tiny-star">◆</span>SILKROAD OBSERVATORY / SHARD RULES</span></footer>
+</main>
+</div>
+</body>
+</html>
