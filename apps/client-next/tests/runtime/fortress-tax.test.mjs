@@ -11,12 +11,17 @@ boxes (665BA0, 664CE0), through the production HUD and the 0xB1E1 notices.
 */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { uiFixture } from "../helpers/ui-fixture.mjs";
+import { readFileSync } from "node:fs";
+import { CLIENT_PUBLIC_ROOT } from "../../../../scripts/lib/generatedRoot.mjs";
+import { fontAtlas, uiFixture } from "../helpers/ui-fixture.mjs";
 const fortress = await import( "../../src/engine/foundation/gameplay/fortress.ts" );
 const services = await import( "../../src/engine/foundation/gameplay/fortress-services.ts" );
 const { noticeText } = await import( "../../src/engine/foundation/ui/notice-text.ts" );
 const { emptySocial } = await import( "../../src/engine/foundation/gameplay/social.ts" );
 const { fortressTaxAmount } = await import( "../../src/engine/runtime/ui/hud/fortress-tax-hud.ts" );
+const { fortressWarFormat } = await import( "../../src/engine/foundation/ui/fortress-war-apply.ts" );
+const TEXT_FILE = JSON.parse( readFileSync( CLIENT_PUBLIC_ROOT + "/assets/text/textuisystem.en.json", "utf8" ) );
+const TEXT = TEXT_FILE.entries ?? TEXT_FILE;
 
 const MANAGER = 23;
 const SELF = 5;
@@ -289,4 +294,31 @@ test("the tax requests are 0x71E1 actions 0, 1 and 2", () => {
 		0,
 		0
 	] );
+});
+
+test("the staff employ question grows to its widest line, as 52BCF0 grows the box", t => {
+	const { f, step } = managerFixture( t, "Holders" );
+	step();
+	// 5D8930 opens the staff window (its target) before a hire row asks.
+	f.ui.event( { kind: "activate", id: "npc-fortress-staff" } );
+	step();
+	// 5D3880 shows UIIT_MSG_FORT_MANAGER_EMPLOY_WINDOW in a plain simple box.
+	f.ui.event( { kind: "activate", id: "npc-fortress-hire:1" } );
+	const presentation = step();
+	assert.ok( presentation?.controls.some( c => c.id === "fortress-staff-yes" ), "the question is up" );
+	const frame = f.scenes.at( -1 ).quads.filter( q => q.texture.includes( "messagebox" ) );
+	assert.ok( frame.length > 0, "the box frame is drawn" );
+	const width = Math.max( ...frame.map( q => q.rect[0] + q.rect[2] ) ) - Math.min( ...frame.map( q => q.rect[0] ) );
+	// 6888C0 seeds 360; 52BCF0 widens to the widest line plus 60.
+	const glyphs = fontAtlas.fonts["0"].glyphs;
+	const advance = line =>
+		Array.from( line ).reduce( ( sum, c ) => sum + (glyphs[c.codePointAt( 0 )] ?? glyphs["63"]).advanceX, 0 );
+	const lines = fortressWarFormat( TEXT.UIIT_MSG_FORT_MANAGER_EMPLOY_WINDOW, [
+		TEXT.SN_FORTRESS_MANAGER_NPC_NAME_BATTLEAID,
+		30000,
+		3000
+	] ).split( "\n" );
+	const widest = Math.max( ...lines.map( advance ) );
+	assert.ok( widest + 60 > 360, "the employ text is wider than the minimum box's body" );
+	assert.equal( width, Math.ceil( widest ) + 60 );
 });
