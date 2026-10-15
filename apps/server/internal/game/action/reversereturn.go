@@ -286,6 +286,10 @@ func (rt *Runtime) beginReverseReturnScroll(division string, c *enterworld.Chara
 			return false
 		}
 	}
+	if rt.transportBarredFromDestination(c, destination.spawn) {
+		*result = itemUseFailure(0x5e)
+		return false
+	}
 	// Reverse return has its own siege admission, not the gate's guild or
 	// population rules. Job mode is refused before active-war mode (4A02CE).
 	if world, ok := instance.Lookup(destination.world.Definition()); ok && world.Siege() {
@@ -329,6 +333,9 @@ func (rt *Runtime) guideReverseReturn(division string, c *enterworld.Character, 
 	point, refusal := reverseReturnPoint(c, choice)
 	if refusal != 0 {
 		return portalFailure(errCodeGuideNoPoint)
+	}
+	if rt.transportBarredFromDestination(c, point.spawn) {
+		return portalFailure(errCodeGuideTransport)
 	}
 	return rt.commitGateTravel(gateTravel{division: division, character: c, destination: point.spawn, world: point.world, reason: "guide-reverse-return"}, func() (int64, OpResult, bool) {
 		if c.DeletePending || !enterworld.CharacterAlive(c) {

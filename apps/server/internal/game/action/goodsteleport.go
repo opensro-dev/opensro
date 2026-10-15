@@ -11,8 +11,10 @@ a town gate's link carries Restrict kind 2 (CRefTeleportLink_CheckState
 With SRO_JOB_GOODS_TELEPORT on, those three let the trader through and
 the transport travels with them, as it does on a ferry
 (relocateReturningPet). A transport standing too far from the gate still
-cannot come along (4F2B50's range rule, 0x13), and the premium limited
-commands keep their native refusal, which the client applies itself.
+cannot come along (4F2B50's range rule, 0x13); a reverse return to a point
+in a dungeon still refuses a transport, since no COS ever enters one
+natively; and the premium limited commands keep their native refusal,
+which the client applies itself.
 
 Off, the default here, is native. The GameWorld's Nomad job turns it on.
 
@@ -25,6 +27,7 @@ import (
 	"strings"
 
 	"opensro.online/server/internal/game/enterworld"
+	"opensro.online/server/internal/game/world/simulation"
 )
 
 // EnvJobGoodsTeleport turns the rule on ("on", "1", "true").
@@ -54,4 +57,17 @@ the port-only rule on.
 */
 func (rt *Runtime) townTravelTransportRefused(c *enterworld.Character) bool {
 	return !rt.JobGoodsTeleport && rt.hasSummonedTransportCOS(c)
+}
+
+/*
+================
+transportBarredFromDestination
+
+With the rule on, a transport still may not follow its trader into a
+dungeon: a reverse return to a death point there refuses it. Natively the
+transport was refused earlier, so this never fires with the rule off.
+================
+*/
+func (rt *Runtime) transportBarredFromDestination(c *enterworld.Character, destination simulation.Spawn) bool {
+	return rt.JobGoodsTeleport && rt.hasSummonedTransportCOS(c) && simulation.IsDungeonRegion(destination.RegionID)
 }

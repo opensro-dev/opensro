@@ -140,3 +140,38 @@ func TestReverseReturnWithATransportOnlyWithTheRule(t *testing.T) {
 		}
 	}
 }
+
+/*
+================
+TestReverseReturnKeepsATransportOutOfADungeon
+
+With the rule on, a reverse return to a death point inside a dungeon
+(the Donwhang cave, 0x8001) still refuses the transport (0x10) and moves
+nobody; the same return without a transport goes.
+================
+*/
+func TestReverseReturnKeepsATransportOutOfADungeon(t *testing.T) {
+	rt, c := guideFixture(t)
+	rt.JobGoodsTeleport = true
+	cave := simulation.Spawn{RegionID: 0x8001, X: 100, Y: 0, Z: 100}
+	if !simulation.IsDungeonRegion(cave.RegionID) {
+		t.Fatal("fixture: 0x8001 is not a dungeon region")
+	}
+	c.World.LastDeathPoint = &domain.WorldPoint{WorldSpawn: *worldSpawnFromMission(cave)}
+	summonTestTransport(rt, c)
+	before := missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{})
+	out := guideReturn(rt, c, reverseReturnLastDeath)
+	if len(out.Frames) == 0 || !bytes.Equal(out.Frames[0].Payload, portalFailure(errCodeGuideTransport).Frames[0].Payload) {
+		t.Fatalf("a transport was taken into a dungeon: %+v", out.Frames)
+	}
+	if missionSpawnFromWorld(c.World.Spawn, simulation.Spawn{}) != before {
+		t.Fatal("a refused return moved the trader")
+	}
+	if !rt.transportBarredFromDestination(c, cave) || rt.transportBarredFromDestination(c, simulation.Spawn{RegionID: 25000}) {
+		t.Fatal("the dungeon bar does not follow the destination")
+	}
+	c.ActiveCOS = nil
+	if rt.transportBarredFromDestination(c, cave) {
+		t.Fatal("a trader without a transport is barred from a dungeon")
+	}
+}
