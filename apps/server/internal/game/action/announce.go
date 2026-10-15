@@ -146,10 +146,12 @@ type announcedLine struct {
 ================
 Runtime.announce
 
-Queues one notice when its kind is under the per-minute cap.
+Queues one notice when its kind is under the per-minute cap. link is what
+a drop or plus notice links (wire.DropPlusNotificationFrame); a job kill
+links nothing, so its aliases never lead to a character.
 ================
 */
-func (rt *Runtime) announce(division string, kind announceKind, text string, nowMs int64) {
+func (rt *Runtime) announce(division string, kind announceKind, text string, link wire.NoticeLink, nowMs int64) {
 	a := &rt.announcer
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -171,7 +173,7 @@ func (rt *Runtime) announce(division string, kind announceKind, text string, now
 	text = clampNotice(text)
 	// Port-only: each kind has its own channel, so a player can hide it
 	// (wire.JobKillNoticeChannel, wire.DropPlusNoticeChannel).
-	frame := wire.DropPlusNotificationFrame(text)
+	frame := wire.DropPlusNotificationFrame(text, link)
 	if kind == announceJobKill {
 		frame = wire.JobKillNotificationFrame(text)
 	}
@@ -256,7 +258,8 @@ func (rt *Runtime) announceSealDrops(division, monsterName string, drops []groun
 				}
 			}
 		}
-		rt.announce(division, announceSoxDrop, drop.DroppedBy+" has dropped "+name+" from "+monsterName, nowMs)
+		link := wire.NoticeLink{Player: drop.DroppedBy, Body: groundInventoryItem(drop, groundStack(drop)).Body().Encode()}
+		rt.announce(division, announceSoxDrop, drop.DroppedBy+" has dropped "+name+" from "+monsterName, link, nowMs)
 	}
 }
 
@@ -291,7 +294,7 @@ func (rt *Runtime) announcePlus(division, player string, outcome alchemy.Outcome
 		if len(utf16.Encode([]rune(text))) > noticeMaxUnits {
 			text = fmt.Sprintf("%s advanced %s to +%d", player, name, item.Plus)
 		}
-		rt.announce(division, announcePlus, text, nowMs)
+		rt.announce(division, announcePlus, text, wire.NoticeLink{Player: player, Body: item.Body().Encode()}, nowMs)
 		return
 	}
 }
@@ -364,7 +367,7 @@ func (rt *Runtime) postJobKillNotice(n jobKillNotice) {
 	if !rt.Announce.JobKillRepeat && !rt.jobKillPairQuiet(n.killer, n.victim, n.nowMs) {
 		return
 	}
-	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", n.nowMs)
+	rt.announce(n.division, announceJobKill, "["+n.killerAlias+"] killed ["+n.victimAlias+"]", wire.NoticeLink{}, n.nowMs)
 }
 
 // noticeMaxUnits is wire.NotificationFrame's UTF-16 budget (753A6F).

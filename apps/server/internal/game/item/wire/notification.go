@@ -14,8 +14,18 @@ const JobKillNoticeChannel = 0x80
 // DropPlusNoticeChannel is the 0x3667 channel of the seal-drop and +8..+11
 // announcements. Port-only, not native, like JobKillNoticeChannel: the
 // browser client shows it as channel 7 unless the Experimental "Drop & plus
-// notices" row is off.
+// notices" row is off. Its payload extends channel 7's with the player and
+// the item the notice names, so the client can link them
+// (DropPlusNotificationFrame); a protocol-9 client drops the channel.
 const DropPlusNoticeChannel = 0x81
+
+// NoticeLink is what a drop or plus notice links: the player it names
+// (empty for none) and the item's CSOItem body as the inventory sends it,
+// ItemBody.Encode, which opens with the refObjID (empty for none).
+type NoticeLink struct {
+	Player string
+	Body   []byte
+}
 
 // noticeChannel is v1.150's server notification channel (753A6F).
 const noticeChannel = 7
@@ -32,9 +42,20 @@ func JobKillNotificationFrame(message string) Frame {
 	return notificationFrameOn(JobKillNoticeChannel, message)
 }
 
-// DropPlusNotificationFrame is NotificationFrame on DropPlusNoticeChannel.
-func DropPlusNotificationFrame(message string) Frame {
-	return notificationFrameOn(DropPlusNoticeChannel, message)
+// DropPlusNotificationFrame is a notice on DropPlusNoticeChannel, always in
+// its extended layout:
+//
+//	[u8 0x81][u16 n][n UTF-16 units][u16 nameLen][name][u16 bodyLen][body]
+//
+// nameLen 0 names no player; bodyLen 0 links no item.
+func DropPlusNotificationFrame(message string, link NoticeLink) Frame {
+	if len(link.Player) > 0xffff || len(link.Body) > 0xffff {
+		panic("notice link exceeds its length fields")
+	}
+	text := notificationFrameOn(DropPlusNoticeChannel, message).Payload
+	w := NewWriter(len(text) + 4 + len(link.Player) + len(link.Body)).Bytes(text).
+		Str(link.Player).U16(uint16(len(link.Body))).Bytes(link.Body)
+	return Frame{Opcode: 0x3667, Payload: w.Payload()}
 }
 
 // notificationFrameOn writes one notification on a channel.
